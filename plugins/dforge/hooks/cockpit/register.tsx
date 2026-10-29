@@ -364,43 +364,15 @@ function applyNotify(o: Live) {
 }
 
 export const register: Register = on => {
-  // The settings' autoCompactWindow, read at the start and after each main
-  // turn rather than on every tool call.
-  let compactWindow: number | undefined
-
   on('session.start', async ($, e, next) => {
-    await $.command.register({
-      name: 'cockpit',
-      description: 'Show context, usage, subagents, the plan and the repo in a pane',
-      argumentHint: '[settings | notify test | notify url <url> | notify mention <id>]',
-    })
-    await loadSettings($)
-    const o = await live($)
-    // Open first: the reads below run processes, and each fills its section as it lands.
-    if (o.isMinimized) {
-      if ((await read($, view)) !== 'settings') await shutPane($)
-    } else if (o.openAtStart) void $.ui.open(paneFor(o.layout))
-    compactWindow = await readCompactWindow($)
-    await onBudget($, await refresh($, o.tuning, compactWindow))
-    await readAccount($)
-    await readPlace($)
-    await readBreakdown($)
-    await readEngine($)
-    await readWhere($)
-    await readNotifier($)
-    S.runKey = ''
-    await readRun($)
-    await trackAutoRun($)
+    await readSession($)
     S.watchedSince = await $.clock.now()
     S.reconciledAt = null
     S.reconcileSeen = { key: '', count: 0 }
-    await beat($)
     S.watchdog?.cancel()
     S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($).catch(() => undefined))
     S.poll?.cancel()
     S.poll = $.clock.every(POLL_MS, () => void pollTick($).catch(() => undefined))
-    await readVersion($)
-    await readRemote($)
 
     return next(e)
   })
@@ -480,9 +452,10 @@ export const register: Register = on => {
     }
     S.ticker?.cancel()
     S.ticker = null
-    // The process goes on after /clear and no session.start re-arms the timers:
-    // keep them, and start the cleared session's stall grace now.
-    if (e.reason === 'clear') S.watchedSince = await $.clock.now()
+    // The process goes on after /clear and /resume and no session.start re-arms
+    // the timers: keep them, so the poll reads the next session, and start its
+    // stall grace now.
+    if (e.reason === 'clear' || e.reason === 'resume') S.watchedSince = await $.clock.now()
     else {
       S.watchdog?.cancel()
       S.watchdog = null
@@ -658,10 +631,10 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       S.isMainTurn = false
       await trackAutoRun($)
-      compactWindow = await readCompactWindow($)
+      S.compactWindow = await readCompactWindow($)
       await readStyle($)
       await readRun($)
-      await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
+      await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
       const turnUsage = e.usage as TurnUsage | undefined
       if (turnUsage !== undefined) {
         const cache = cacheOf(turnUsage)
@@ -768,7 +741,7 @@ export const register: Register = on => {
     }
     // The response asking for this call already measured the window: show it while the tool
     // runs. Only shown: the note and the alert wait for the ledger this call may write.
-    if (e.agentId === undefined) await refresh($, (await live($)).tuning, compactWindow, { isShownOnly: true })
+    if (e.agentId === undefined) await refresh($, (await live($)).tuning, S.compactWindow, { isShownOnly: true })
     let ran: Awaited<ReturnType<typeof next>>
     try {
       ran = await next(e)
@@ -798,7 +771,7 @@ export const register: Register = on => {
       // The controller writes its ledger with its own tool calls; read it
       // before the budget, which measures a plan's tail by it.
       if (isMove || touchesRun(e)) await readRun($)
-      await onBudget($, await refresh($, (await live($)).tuning, compactWindow))
+      await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
     }
 
     return ran
@@ -2452,6 +2425,8 @@ const S = {
   autoActedAt: null as number | null,
   // When this session started: one with no turn yet ages from it.
   watchedSince: null as number | null,
+  /** The session startSession last read for; null when its id could not be read. */
+  sessionId: null as string | null,
   // When background work began deferring the pending stage; null while nothing
   // does or a turn is live.
   autoDeferredSince: null as number | null,
@@ -2485,6 +2460,9 @@ const S = {
   poll: null as Timer | null,
   isPolling: false,
   polls: 0,
+  // The settings' autoCompactWindow, read at the start and after each main
+  // turn rather than on every tool call.
+  compactWindow: undefined as number | undefined,
   detailAt: 0,
   // The settings file's modification time and the engine's settings, as last put in force.
   seen: { config: null as number | null, claude: '' },
@@ -3698,10 +3676,50 @@ async function engineSettings($: EngineInterface): Promise<string> {
  * then changed settings and the run, and every DETAIL_EVERY ticks the slower
  * readings and the auto run.
  */
+/**
+ * Registers /cockpit and reads every section. session.start runs it once per
+ * process; the poll runs it again in a session /clear or /resume carried the
+ * process into, whose values the host keeps apart and no session.start
+ * announces.
+ */
+async function readSession($: EngineInterface) {
+  S.sessionId = await $.session.id().catch(() => null)
+  await $.command.register({
+    name: 'cockpit',
+    description: 'Show context, usage, subagents, the plan and the repo in a pane',
+    argumentHint: '[settings | notify test | notify url <url> | notify mention <id>]',
+  })
+  await loadSettings($)
+  const o = await live($)
+  // Open first: the reads below run processes, and each fills its section as it lands.
+  if (o.isMinimized) {
+    if ((await read($, view)) !== 'settings') await shutPane($)
+  } else if (o.openAtStart) void $.ui.open(paneFor(o.layout))
+  S.compactWindow = await readCompactWindow($)
+  await onBudget($, await refresh($, o.tuning, S.compactWindow))
+  await readAccount($)
+  await readPlace($)
+  await readBreakdown($)
+  await readEngine($)
+  await readWhere($)
+  await readNotifier($)
+  S.runKey = ''
+  await readRun($)
+  await trackAutoRun($)
+  await beat($)
+  await readVersion($)
+  await readRemote($)
+}
+
 async function pollTick($: EngineInterface) {
   if (S.isPolling) return
   S.isPolling = true
   try {
+    const id = await $.session.id().catch(() => null)
+    if (id !== null && id !== S.sessionId) {
+      await readSession($)
+      return
+    }
     if (!(await live($)).isMinimized && !(await isPaneUp($))) return
     S.polls += 1
     await rereadSettings($)

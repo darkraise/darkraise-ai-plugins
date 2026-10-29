@@ -565,6 +565,24 @@ function world(on: On, w: World) {
   return clock
 }
 
+// The host keeps the cockpit's values per session: after the returned call,
+// as in the session a /clear or /resume carries the process into, each reads
+// as never written until the cockpit writes it again.
+function wipesState(on: On) {
+  let kept: Set<string> | null = null
+  on('state.get', { plugin: 'dforge' } as never, (async (_$: unknown, e: { key: string }, next: (e: unknown) => Promise<{ value: { version: number } }>) => {
+    const held = await next(e)
+    return kept !== null && !kept.has(e.key) ? { value: { value: undefined, version: held.value.version } } : held
+  }) as never)
+  on('state.set', { plugin: 'dforge' } as never, ((_$: unknown, e: { key: string }, next: (e: unknown) => unknown) => {
+    kept?.add(e.key)
+    return next(e)
+  }) as never)
+  return () => {
+    kept = new Set()
+  }
+}
+
 // A signed-in account working in a repository under home. In a linked
 // worktree the engine names the main working tree as the repository's root.
 const SIGNED_IN = { tokens: 284_000, env: { HOME: '/home/me' }, settings: { effortLevel: 'xhigh' } }
@@ -2854,6 +2872,23 @@ describe('account', () => {
     expect(await ui.find({ type: 'Text', text: 'config ~/.claude' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: 'subscription' })).toBeDefined()
   })
+
+  for (const reason of ['clear', 'resume'] as const) {
+    test(`shows the card again in the session a ${reason} carries the process into`, async ($, on) => {
+      const wipe = wipesState(on)
+      const w: World = { ...SIGNED_IN }
+      const clock = world(on, w)
+      on('session.end', (_$, e) => e as never)
+      signedIn(on)
+      await $.session.start(START)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      await $.session.end({ reason, sessionId: 'sess-1', resume: { id: 'sess-1' } })
+      wipe()
+      w.sessionId = 'sess-2'
+      await clock.advance(2_000)
+      expect(await ui.find({ type: 'Text', text: /● me@example\.com/ })).toBeDefined()
+    })
+  }
 
   test('leaves the card out when no account is found', async ($, on) => {
     world(on, { tokens: 284_000 })
@@ -6443,7 +6478,7 @@ describe('auto run', () => {
     await clock.advance(120_000)
     await $.session.end({ reason: 'clear', sessionId: 'sess-1', resume: { id: 'sess-1' } })
     w.sessionId = 'sess-2'
-    files[AUTO].text = files[AUTO].text.replace('"session":"sess-1"', '"session":"sess-2"')
+    files[AUTO]!.text = files[AUTO]!.text.replace('"session":"sess-1"', '"session":"sess-2"')
     await clock.advance(60_000)
     expect(written['/home/me/.claude/dforge/sessions/cockpit/sess-2']).toBe('1180\n')
     // The stall grace starts again at the clear, not at the process's start.
