@@ -308,6 +308,8 @@ declare module 'claude-code' {
       isRunSession: boolean
       /** The auto run bound to this session, as last read; null without one. */
       autoRun: CockpitAutoRun | null
+      /** The session id the cockpit last read every section for; '' when the id could not be read, null before the first read. */
+      sessionRead: string | null
     }
   }
 }

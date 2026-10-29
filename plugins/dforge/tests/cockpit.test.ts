@@ -2874,9 +2874,9 @@ describe('account', () => {
   })
 
   for (const reason of ['clear', 'resume'] as const) {
-    test(`shows the card again in the session a ${reason} carries the process into`, async ($, on) => {
+    test(`shows the card and the context again in the session a ${reason} carries the process into, the pane left shut`, async ($, on) => {
       const wipe = wipesState(on)
-      const w: World = { ...SIGNED_IN }
+      const w: World = { ...SIGNED_IN, opened: [], closed: [] }
       const clock = world(on, w)
       on('session.end', (_$, e) => e as never)
       signedIn(on)
@@ -2885,10 +2885,29 @@ describe('account', () => {
       await $.session.end({ reason, sessionId: 'sess-1', resume: { id: 'sess-1' } })
       wipe()
       w.sessionId = 'sess-2'
+      w.isPaneShut = true
+      w.opened!.length = 0
       await clock.advance(2_000)
       expect(await ui.find({ type: 'Text', text: /● me@example\.com/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /System tools/ })).toBeDefined()
+      expect(w.opened).toEqual([])
+      expect(w.closed).toEqual([])
     })
   }
+
+  test('reads nothing again after a session end that ends the process', async ($, on) => {
+    const wipe = wipesState(on)
+    const w: World = { ...SIGNED_IN }
+    const clock = world(on, w)
+    on('session.end', (_$, e) => e as never)
+    signedIn(on)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await $.session.end({ reason: 'other', sessionId: 'sess-1', resume: { id: 'sess-1' } })
+    wipe()
+    await clock.advance(2_000)
+    expect(await ui.find({ type: 'Text', text: /● me@example\.com/ })).toBeUndefined()
+  })
 
   test('leaves the card out when no account is found', async ($, on) => {
     world(on, { tokens: 284_000 })

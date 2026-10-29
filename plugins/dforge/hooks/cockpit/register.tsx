@@ -244,6 +244,7 @@ const alerted = atom({ plugin: 'dforge', key: 'alerted' } as const, [])
 const trend = atom({ plugin: 'dforge', key: 'trend' } as const, [])
 const view = atom({ plugin: 'dforge', key: 'view' } as const, 'cockpit')
 const account = atom({ plugin: 'dforge', key: 'account' } as const, null)
+const sessionRead = atom({ plugin: 'dforge', key: 'sessionRead' } as const, null)
 const place = atom({ plugin: 'dforge', key: 'place' } as const, null)
 const engine = atom({ plugin: 'dforge', key: 'engine' } as const, { model: null, effort: null, cache: null, style: null })
 const IDLE: CockpitActivity = { kind: 'idle', since: 0, turnStartedAt: null, step: 0, tool: null, agent: null, detail: null, lastTurnMs: null, endedAt: null, isSent: false }
@@ -365,7 +366,7 @@ function applyNotify(o: Live) {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await readSession($)
+    await readSession($, true)
     S.watchedSince = await $.clock.now()
     S.reconciledAt = null
     S.reconcileSeen = { key: '', count: 0 }
@@ -2425,8 +2426,6 @@ const S = {
   autoActedAt: null as number | null,
   // When this session started: one with no turn yet ages from it.
   watchedSince: null as number | null,
-  /** The session startSession last read for; null when its id could not be read. */
-  sessionId: null as string | null,
   // When background work began deferring the pending stage; null while nothing
   // does or a turn is live.
   autoDeferredSince: null as number | null,
@@ -3672,18 +3671,14 @@ async function engineSettings($: EngineInterface): Promise<string> {
 }
 
 /**
- * One poll tick: nothing unless the pane is placed or the cockpit minimized;
- * then changed settings and the run, and every DETAIL_EVERY ticks the slower
- * readings and the auto run.
+ * Registers /cockpit and reads every section, then marks the session read.
+ * session.start runs it once per process, opening or shutting the pane first;
+ * the poll runs it again in a session /clear or /resume carried the process
+ * into, whose values the host keeps apart and no session.start announces, and
+ * leaves the pane as the person left it.
  */
-/**
- * Registers /cockpit and reads every section. session.start runs it once per
- * process; the poll runs it again in a session /clear or /resume carried the
- * process into, whose values the host keeps apart and no session.start
- * announces.
- */
-async function readSession($: EngineInterface) {
-  S.sessionId = await $.session.id().catch(() => null)
+async function readSession($: EngineInterface, isStart: boolean) {
+  const id = await $.session.id().catch(() => null)
   await $.command.register({
     name: 'cockpit',
     description: 'Show context, usage, subagents, the plan and the repo in a pane',
@@ -3692,9 +3687,9 @@ async function readSession($: EngineInterface) {
   await loadSettings($)
   const o = await live($)
   // Open first: the reads below run processes, and each fills its section as it lands.
-  if (o.isMinimized) {
+  if (isStart && o.isMinimized) {
     if ((await read($, view)) !== 'settings') await shutPane($)
-  } else if (o.openAtStart) void $.ui.open(paneFor(o.layout))
+  } else if (isStart && o.openAtStart) void $.ui.open(paneFor(o.layout))
   S.compactWindow = await readCompactWindow($)
   await onBudget($, await refresh($, o.tuning, S.compactWindow))
   await readAccount($)
@@ -3709,17 +3704,28 @@ async function readSession($: EngineInterface) {
   await beat($)
   await readVersion($)
   await readRemote($)
+  // Last, so a read that failed is tried again at the next poll. '' when the
+  // id could not be read: the poll adopts the first id it reads.
+  await update($, sessionRead, () => id ?? '')
 }
 
+/**
+ * One poll tick: first a session the cockpit has not read, which a /clear or
+ * /resume leaves with no values or another id; then nothing unless the pane is
+ * placed or the cockpit minimized; then changed settings and the run, and
+ * every DETAIL_EVERY ticks the slower readings and the auto run.
+ */
 async function pollTick($: EngineInterface) {
   if (S.isPolling) return
   S.isPolling = true
   try {
+    const seen = await read($, sessionRead)
     const id = await $.session.id().catch(() => null)
-    if (id !== null && id !== S.sessionId) {
-      await readSession($)
+    if (seen === null || (id !== null && seen !== '' && id !== seen)) {
+      await readSession($, false)
       return
     }
+    if (seen === '' && id !== null) await update($, sessionRead, () => id)
     if (!(await live($)).isMinimized && !(await isPaneUp($))) return
     S.polls += 1
     await rereadSettings($)
