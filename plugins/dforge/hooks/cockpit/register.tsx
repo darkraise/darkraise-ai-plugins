@@ -1323,6 +1323,7 @@ export const register: Register = on => {
     const engineNow = await read($, engine)
     const turnsLeft = head === null ? null : turnsToBudget(await read($, turnTokens), head.limit)
     // Why the plan section reads checkout paths rather than the roots.
+    const isFinishingPast = head !== null && head.isFinishing && head.tokens >= head.limit
     const rootsLine = rootsNow !== null && (
       <Text key="plan-roots" color="red" wrap="truncate-end">
         {rootsNow}
@@ -1484,13 +1485,14 @@ export const register: Register = on => {
             <Text color={rampColor((head.tokens / head.limit) * 100)} bold>
               {Math.round((head.tokens / head.limit) * 100)}% of handoff
             </Text>
-            {turnsLeft !== null && (
+            {turnsLeft !== null && !isFinishingPast && (
               <Text color={turnsLeft <= 3 ? '#ffaf5f' : undefined} bold={turnsLeft <= 3} dimColor={turnsLeft > 3}>
                 {' '}
                 · ≈{turnsLeft} {turnsLeft === 1 ? 'turn' : 'turns'}
               </Text>
             )}
           </Text>
+            {isFinishingPast && <Text dimColor> · finishing</Text>}
         ),
         ...contextBody,
         actions,
@@ -3202,6 +3204,7 @@ async function readRun($: EngineInterface) {
     }
     if (reading !== S.runReads) return
     // A plan the ledger names but no checkout holds yet is looked for again at the next read.
+      isPlanRead: planPath !== null,
     S.runKey = ledger.plan !== null && planPath === null ? '' : runKey
     S.runPlan = planPath
     // A run whose every task was done before this session started is history:
@@ -3404,35 +3407,40 @@ async function refresh(
   const window = figures.context.window
   const auto = await read($, autoRun)
   const isAuto = auto !== null && auto.active
-  // A plan's last tasks and its final phase share the final-phase limit, as
-  // the budget line measures them; the handoff note follows the same limit.
+  // A plan's last tasks and its final phase never hand off, as the budget line
+  // measures them: strict keeps the handoff budget and runs past it to finish
+  // the plan, relaxed measures against the final-phase limit.
   const summary = await read($, run)
   // Only a session running the plan: a darkmem pull at the start writes the
   // ledgers of a finished plan anew, and the newest one then reads as this session's.
   const isTail = summary !== null && isPlanTail(summary) && (await read($, isRunSession))
   const limit = isAuto
     ? autoLimitFor(auto.regime, handoffTokens, window, compactWindow)
-    : tuning.isRelaxed || isTail
+    : tuning.isRelaxed
       ? finalLimitFor(window, compactWindow)
       : budgetFor(handoffTokens, undefined, window, compactWindow)
   const usd = figures.cost?.usd ?? null
   const before = await read($, budget)
   if (
+  const isFinishing = !isAuto && !tuning.isRelaxed && isTail
     before?.tokens !== tokens ||
     before.limit !== limit ||
     before.usd !== usd ||
     before.window !== window ||
-    before.compactWindow !== (compactWindow ?? null)
+    before.compactWindow !== (compactWindow ?? null) ||
+    before.isFinishing !== isFinishing
   ) {
-    const now: CockpitBudget = { tokens, limit, window, compactWindow: compactWindow ?? null, usd }
+    const now: CockpitBudget = { tokens, limit, window, compactWindow: compactWindow ?? null, usd, isFinishing }
     await update($, budget, () => now)
     if (before?.tokens !== tokens) await update($, trend, readings => [...readings, tokens].slice(-TREND_LENGTH))
   }
 
   if (isShownOnly) return
   const level = levelOf(tokens, limit, tuning.warnAt)
-  const reading = { now: { tokens, limit, window, compactWindow: compactWindow ?? null, usd }, isPast: level === 'handoff' }
-  if (level !== 'handoff') {
+  // Finishing the plan past the budget is no handoff.
+  const isPast = level === 'handoff' && !isFinishing
+  const reading = { now: { tokens, limit, window, compactWindow: compactWindow ?? null, usd, isFinishing }, isPast }
+  if (!isPast) {
     if (await read($, isNudged)) await update($, isNudged, () => false)
     return reading
   }

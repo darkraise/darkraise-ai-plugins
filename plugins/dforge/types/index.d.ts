@@ -10,6 +10,8 @@ export type CockpitBudget = {
   compactWindow: number | null
   /** What the session has cost so far, in US dollars, when the host says. */
   usd: number | null
+  /** A plan's last tasks or its final phase in strict mode: past the limit it runs on to finish the plan. */
+  isFinishing: boolean
 }
 
 /** One rate-limit window as the last response reported it. */
@@ -186,6 +188,8 @@ export type CockpitRun = {
   done: number
   total: number
   isFinished: boolean
+  /** Whether the plan file was read; otherwise `total` counts only the tasks the ledger names. */
+  isPlanRead: boolean
 }
 
 /**

@@ -994,11 +994,12 @@ const TAIL_TASKS = 2
 
 /**
  * Whether a run is at its plan's tail or in its final phase: at most
- * TAIL_TASKS tasks left by its ledger, or its final review clean. The budget
- * line measures both against the final-phase limit.
+ * TAIL_TASKS tasks left by its plan, or its final review clean. Neither hands
+ * off. Without the plan the ledger names only the tasks begun, so only the
+ * final review counts.
  */
-export function isPlanTail(run: { done: number; total: number; isFinished: boolean }): boolean {
-  return run.isFinished || (run.total > 0 && run.total - run.done <= TAIL_TASKS)
+export function isPlanTail(run: { done: number; total: number; isFinished: boolean; isPlanRead: boolean }): boolean {
+  return run.isFinished || (run.isPlanRead && run.total > 0 && run.total - run.done <= TAIL_TASKS)
 }
 
 const RUN_ORDER: Readonly<Record<string, number>> = { assigned: 0, blocked: 1, pending: 2, complete: 3 }

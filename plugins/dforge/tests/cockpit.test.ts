@@ -4339,9 +4339,9 @@ describe('run card', () => {
     expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
   })
 
-  // Five tasks in the 650k window: the handoff budget is 464,500 and the
-  // final-phase limit 552,500. A plan's last two tasks and its final phase
-  // measure against the latter, as scripts/lib/context.sh's tail does.
+  // Five tasks in the 650k window: the handoff budget is 464,500. In strict
+  // mode a plan's last two tasks and its final phase keep that limit but run
+  // past it to finish the plan, as scripts/lib/context.sh's tail does.
   const TAIL_PLAN = `# Plan\n\n${[1, 2, 3, 4, 5].map(n => `### Task ${n}: Step ${n}\n`).join('\n')}`
   const tailLedger = (done: number, isFinished: boolean) =>
     [
@@ -4351,11 +4351,17 @@ describe('run card', () => {
     ].join('\n')
 
   test('a run is at its tail with two tasks left or fewer, or once its final review is clean', () => {
-    expect(isPlanTail({ done: 2, total: 5, isFinished: false })).toBe(false)
-    expect(isPlanTail({ done: 3, total: 5, isFinished: false })).toBe(true)
-    expect(isPlanTail({ done: 5, total: 5, isFinished: false })).toBe(true)
-    expect(isPlanTail({ done: 0, total: 0, isFinished: false })).toBe(false)
-    expect(isPlanTail({ done: 0, total: 0, isFinished: true })).toBe(true)
+    expect(isPlanTail({ done: 2, total: 5, isFinished: false, isPlanRead: true })).toBe(false)
+    expect(isPlanTail({ done: 3, total: 5, isFinished: false, isPlanRead: true })).toBe(true)
+    expect(isPlanTail({ done: 5, total: 5, isFinished: false, isPlanRead: true })).toBe(true)
+    expect(isPlanTail({ done: 0, total: 0, isFinished: false, isPlanRead: true })).toBe(false)
+    expect(isPlanTail({ done: 0, total: 0, isFinished: true, isPlanRead: true })).toBe(true)
+  })
+
+  test('a run whose plan was not read counts only its finished final review as the tail', () => {
+    // The ledger alone lists the tasks done and the one in flight, never the rest.
+    expect(isPlanTail({ done: 12, total: 13, isFinished: false, isPlanRead: false })).toBe(false)
+    expect(isPlanTail({ done: 12, total: 13, isFinished: true, isPlanRead: false })).toBe(true)
   })
 
   for (const [name, done, isFinished, tokens, note] of [
@@ -4363,7 +4369,7 @@ describe('run card', () => {
     ['two tasks left', 3, false, 500_000, null],
     ['every task complete', 5, false, 500_000, null],
     ['the final review clean', 5, true, 500_000, null],
-    ['two tasks left, past the final-phase limit', 3, false, 560_000, /^dforge: budget: 560k of 553k — handoff\. /],
+    ['two tasks left, far past the budget', 3, false, 700_000, null],
   ] as const) {
     test(`the handoff note with ${name} at ${tokens / 1000}k`, async ($, on) => {
       const notes: string[] = []
@@ -4407,14 +4413,21 @@ describe('run card', () => {
     return /handoff (\d+k)/.exec(legend ?? '')?.[1]
   }
 
-  test('a plan at its tail keeps the handoff budget in a session that does not run it', async ($, on) => {
+  const finishingShown = async ($: Parameters<TestBody>[0]) => {
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const isShown = (await ui.find({ type: 'Text', text: /· finishing$/ })) !== undefined
+    await ui.unmount()
+    return isShown
+  }
+
+  test('a plan at its tail finishes past the budget only in the session that runs it', async ($, on) => {
     // Written as the session started, as a darkmem pull on a new machine writes it.
     const files: World['files'] = {
       '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(5, true), mtimeMs: 2_000_000 },
       '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
       [CONFIG]: { text: JSON.stringify({ handoffTokens: 350_000 }) },
     }
-    world(on, { ...SIGNED_IN, tokens: 300_000, files })
+    world(on, { ...SIGNED_IN, tokens: 500_000, files })
     signedIn(on, files)
     await $.session.start(START)
     await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
@@ -4425,7 +4438,24 @@ describe('run card', () => {
     expect(await handoffShown($)).toBe('350k')
     await spawn('dforge:impl-sonnet-low')
     await $.tool.call({ tool: 'Bash', command: 'ls' })
-    expect(await handoffShown($)).toBe('553k')
+    expect(await handoffShown($)).toBe('465k')
+    expect(await finishingShown($)).toBe(true)
+  })
+
+  test('a ledger whose plan cannot be read is not taken for the tail', async ($, on) => {
+    const notes: string[] = []
+    const ledger = [
+      '# SDD ledger — plan: p.md',
+      ...Array.from({ length: 12 }, (_, i) => `Task ${i + 1}: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none`),
+      'Task 13: implementer dforge:impl-sonnet-high (assigned 2026-10-28)',
+    ].join('\n')
+    const files: World['files'] = { '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: ledger, mtimeMs: 2_000_000 } }
+    world(on, { ...SIGNED_IN, tokens: 500_000, notes, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    expect(notes.filter(text => /— handoff\./.test(text))).toEqual([expect.stringMatching(/^dforge: budget: 500k of 465k — handoff\. /)])
+    expect(await finishingShown($)).toBe(false)
   })
 
   test('a ledger that moves during the session puts it at its tail', async ($, on) => {
@@ -4433,14 +4463,16 @@ describe('run card', () => {
       '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(2, false), mtimeMs: 2_000_000 },
       '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
     }
-    world(on, { ...SIGNED_IN, tokens: 300_000, files })
+    world(on, { ...SIGNED_IN, tokens: 400_000, files })
     signedIn(on, files)
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(await handoffShown($)).toBe('465k')
     files['/home/me/code/shop/.dforge/sdd/p/progress.md'] = { text: tailLedger(3, false), mtimeMs: 2_100_000 }
     await $.tool.call({ tool: 'Bash', command: 'echo "Task 3: complete" >> .dforge/sdd/p/progress.md' })
-    expect(await handoffShown($)).toBe('553k')
+    expect(await handoffShown($)).toBe('350k')
+    expect(await finishingShown($)).toBe(true)
+    expect(await finishingShown($)).toBe(false)
   })
 
   test('a recorded finish choice starts no once-a-second redraw', async ($, on) => {
@@ -4456,6 +4488,7 @@ describe('run card', () => {
     })
     signedIn(on, files)
     await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    expect(await finishingShown($)).toBe(false)
     await $.session.start(START)
     await clock.advance(5_000)
     expect(redraws).toBe(0)

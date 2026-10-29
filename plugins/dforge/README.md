@@ -718,7 +718,9 @@ desktop window joins the session, unless you closed it.
 - **Context** is the main session against its handoff budget, the window and
   where auto-compaction runs, and the largest `/context` categories, estimated
   locally with no API calls. The title adds about how many turns are left to
-  the budget at the pace of the last few. Until a response measures the window
+  the budget at the pace of the last few; past the budget in a plan's last two
+  tasks or its final phase it says `finishing` instead, since strict mode runs
+  on there to finish the plan. Until a response measures the window
   (a new session, or just after a compaction) it shows the estimate instead,
   `≈37k estimated`, with the categories. A tool call's reading shows as the
   tool starts. **⇣ Compact** stays on the card, and **↪ Hand off** appears in
