@@ -1175,11 +1175,13 @@ check_tracked() {
 # plan_named_commands TASK STEP_FILE: the baseline commands the plan names for
 # TASK, one per line: the step file's suite command, the header's Integration
 # check, then the first code span of each of the task's Run: and **Check:**
-# lines outside fenced blocks. Reads $src, the amended plan. A suite command
-# with a newline is left out: a one-line item can never equal it.
+# lines outside fenced blocks. The suite and Integration check commands are
+# trimmed of edge blanks, as settle_item trims the seat's text. Reads $src, the
+# amended plan. A suite command with a newline is left out: a one-line item can
+# never equal it.
 plan_named_commands() {
   local n=$1 step=$2 suite line integ
-  suite=$(jq -r '.suite // empty' "$step" | tr -d '\r')
+  suite=$(jq -r '.suite // empty' "$step" | tr -d '\r' | sed -E 's/^[[:blank:]]+//; s/[[:blank:]]+$//')
   case $suite in '' | *$'\n'*) ;; *) printf '%s\n' "$suite" ;; esac
   line=$(plan_header "$src" | plan_lines 'Integration check' | sed -n 1p)
   integ=$(printf '%s' "${line#\*\*Integration check:\*\*}" | sed -E 's/^[[:blank:]]+//; s/[[:blank:]]+$//; s/^`(.*)`$/\1/')
@@ -1257,8 +1259,9 @@ settle_item() {
       cmd=${cmd#"${cmd%%[![:blank:]]*}"}
       cmd=${cmd%"${cmd##*[![:blank:]]}"}
       [ -n "$cmd" ] || return 1
-      # The seat's text runs only when it is byte for byte a command the plan
-      # names, so a review seat cannot choose what runs on the controller host.
+      # The seat's text runs only when, after trimming, it is byte for byte a
+      # command the plan names, so a review seat cannot choose what runs on the
+      # controller host.
       [ -n "${named_file:-}" ] && [ -r "$named_file" ] && LC_ALL=C grep -qxF -- "$cmd" "$named_file" || return 2
       [ -n "$base" ] || return 1
       code=$(run_at_base "$base" "$cmd" "$log") || return 1
@@ -1538,10 +1541,10 @@ do_verdict() {
   # line counting the rest when there is one, leave this many. A group too
   # large for that still gets one line saying how many items wait.
   room=$((20 - nv - 7))
+  [ "$suite_more" -eq 0 ] || room=$((room - 1))
   [ "$room" -ge 1 ] || room=1
   nc=${#cvs[@]}
   if [ "$nc" -le "$room" ]; then
-  [ "$suite_more" -eq 0 ] || room=$((room - 1))
     for i in ${cvs[@]+"${!cvs[@]}"}; do printf 'cannot-verify: %s\n' "${cvs[$i]}"; done
   else
     for ((i = 0; i < room - 1; i++)); do printf 'cannot-verify: %s\n' "${cvs[$i]}"; done

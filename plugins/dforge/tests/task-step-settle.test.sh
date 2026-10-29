@@ -270,6 +270,8 @@ sed 's/^|//' > "$REPO/docs/named.md" <<'PLAN'
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Run: `bash mark.sh task2-run 0`
+|Run: `bash mark.sh unclosed 0
+|Run: `bash mark.sh dblclose 0``
 PLAN
 g add -A && g commit -qm "named commands fixture"
 ts start docs/named.md 1 --suite 'bash mark.sh suite 0'
@@ -327,6 +329,38 @@ cannot-verify: baseline bash mark.sh dbl 0, expect pass — a double-backtick sp
 cannot-verify: baseline bash mark.sh prose 0, expect pass — a line that does not begin with Run: (command not named in the plan)
 cannot-verify: baseline bash mark.sh task2-run 0, expect pass — a command only Task 2 names (command not named in the plan)"
 check "named: no temporary worktree is left" "$(g worktree list | wc -l | tr -d ' ')" "1"
+
+# A suite command recorded with edge blanks is named trimmed, as the seat's text
+# is; an unclosed span and a span closed by a double backtick name nothing.
+rm -f "$MARK_DIR"/*
+ts start docs/named.md 2 --suite ' bash mark.sh suite2 0 '
+printf 'echo two\n' >> "$REPO/lib/new.sh"
+g add -A && g commit -qm "named work 2"
+(cd "$REPO" && MARK_DIR="$TMP/marks-sr" bash "$S/suite-run" -- bash -c ' bash mark.sh suite2 0 ' >/dev/null 2>&1)
+ts review docs/named.md 2
+cat > "$NWS/task-2-review-report.md" <<'REPORT'
+## Verdict
+spec: cannot-verify
+quality: approved
+scores: spec 15 / scope 17 / verification 12 / quality 16
+
+## Strengths
+Fine.
+
+## Findings
+
+## Cannot verify
+- cannot-verify: baseline bash mark.sh suite2 0, expect pass — the suite command, recorded with edge blanks
+- cannot-verify: baseline bash mark.sh unclosed 0, expect pass — an unclosed span
+- cannot-verify: baseline bash mark.sh dblclose 0, expect pass — a span closed by a double backtick
+
+## Assessment
+Fine.
+REPORT
+ts verdict docs/named.md 2
+check "named spans: verdict exits 0" "$rc" "0"
+check "named spans: only the trimmed suite command ran" "$(ls "$MARK_DIR" | sort | tr '\n' ' ')" "suite2 "
+check "named spans: the spans name nothing" "$(grep -c '(command not named in the plan)$' <<<"$out")" "2"
 
 # A symbol that only a binary file holds is absent, and a root file written ./<name>
 # reads as a path when verdict runs from a subdirectory.
