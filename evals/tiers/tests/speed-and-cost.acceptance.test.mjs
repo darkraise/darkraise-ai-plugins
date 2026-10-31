@@ -56,8 +56,10 @@ const REWORDED = [
 // "review light plans once" in writing-plans, the strict-mode tail in the
 // execution skills, the drafting threshold in writing-plans, the plan
 // header's waves-only Integration check placeholder, which the test tiers
-// change widened to every plan, and the inline full-suite-before-commit rule,
-// which it replaced with the task check. The split cannot have lost them.
+// change widened to every plan, the inline full-suite-before-commit rule,
+// which it replaced with the task check, and the merged-result verification's
+// gates-or-suite choice, which it replaced with gates then the full suite as
+// `bash -c`. The split cannot have lost them.
 const REMOVED = [
   '- **Once the plan is reviewed** (at depth light, once it is linted):',
   'Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.',
@@ -79,6 +81,9 @@ const REMOVED = [
   '**Integration check:** [waves only:',
   'the command that proves a merged wave works, normally the full suite]',
   'Run the focused test while you work and the full suite once before committing.',
+  'gates when the project declares a manifest # (dforge:running-gates, with the sha printed above as its base), otherwise # the full test suite through suite-run.',
+  'Gates that passed on the branch say # nothing about the merged tree, and the merged HEAD is new, so suite-run runs.',
+  'bash <plugin-root>/scripts/suite-run -- <test command> ```',
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 
