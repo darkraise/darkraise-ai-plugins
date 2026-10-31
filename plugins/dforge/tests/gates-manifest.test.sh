@@ -25,20 +25,24 @@ absent() { # absent <name> <file> <needle>
   if grep -qF -- "$3" "$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
   else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
 }
+present_flat() { # present_flat <name> <file> <needle> — the file with line breaks folded
+  if tr -d '\r' < "$2" | tr '\n' ' ' | tr -s ' ' | grep -qF -- "$3"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
+  else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
+}
 
 check "exists: skills/running-gates/SKILL.md" \
   "$([ -f "$SKILL" ] && echo yes || echo no)" "yes"
 
 present "gates names the manifest path" "$SKILL" '<docs>/gates.md'
 
-# Two required fields and seven optional ones.
+# Two required fields and nine optional ones.
 for f in Command Green; do
   present "required field $f" "$SKILL" "**\`$f\`**"
 done
-for f in Applies Evidence Repo Setup Teardown Known-flaky Why; do
+for f in Applies Evidence Repo Setup Teardown Known-flaky Why Tier Budget; do
   present "optional field $f" "$SKILL" "**\`$f\`**"
 done
-present "gates says seven optional fields" "$SKILL" 'Optional, seven of them'
+present "gates says nine optional fields" "$SKILL" 'Optional, nine of them'
 
 # The four evidence values and the default. Defaulting to exit would make every
 # Green line decorative in a manifest that omits the field.
@@ -64,6 +68,13 @@ present "gates states a skip" "$SKILL" 'silent skip'
 present "a merged caller names the base" "$SKILL" 'a caller that has already merged names the'
 present "finishing passes the pre-merge base" "$(skill_view finishing-a-development-branch)" 'PRE_MERGE=$(git rev-parse HEAD)'
 present "milestone closure runs every gate" "$P/skills/closing-a-milestone/SKILL.md" 'with the base `all`'
+present_flat "Tier takes task, branch or sweep" "$SKILL" '**`Tier`:** `task`, `branch` or `sweep`. Absent means `branch`'
+present_flat "a manifest without Tier means what it meant before" "$SKILL" 'a manifest written before the field means what it meant before'
+present_flat "task and branch gates run alike, in order" "$SKILL" 'this skill runs `task` and `branch` gates alike, in manifest order'
+present_flat "a sweep gate is skipped with one line" "$SKILL" 'this skill skips it and prints `gate <n> (<title>): skipped — Tier sweep runs in CI`'
+present_flat "step 3 skips a sweep gate" "$SKILL" 'A `sweep` gate is not selected'
+present_flat "Budget takes seconds" "$SKILL" '**`Budget`:** `<seconds>s`, for example `Budget: 900s`'
+present_flat "Budget is read on the integration-check gate only" "$SKILL" 'read only on the gate whose `Command` equals the `**Integration check:**` command of the plan'
 
 TPL="$P/skills/running-gates/references/gates-template.md"
 check "exists: references/gates-template.md" \
@@ -72,10 +83,10 @@ check "exists: references/gates-template.md" \
 # The template is the worked example the format documents, so it must satisfy
 # the format. Line classes are enumerated rather than rejected by exclusion:
 # an H1, prose before the first gate, a gate heading, a blank line, a Field:
-# line with one of the nine names, a two-space continuation, or a fenced line.
+# line with one of the eleven names, a two-space continuation, or a fenced line.
 awk_out=$(awk '
   BEGIN {
-    split("Command Green Applies Evidence Repo Setup Teardown Known-flaky Why", f, " ")
+    split("Command Green Applies Evidence Repo Setup Teardown Known-flaky Why Tier Budget", f, " ")
     for (i in f) field[f[i]] = 1
     split("output exit image judgment", e, " ")
     for (i in e) ev[e[i]] = 1
@@ -105,6 +116,14 @@ awk_out=$(awk '
       v = $0; sub(/^Evidence:[ \t]*/, "", v); gsub(/`/, "", v); sub(/[ \t]+$/, "", v)
       if (!(v in ev)) print "bad evidence: " v
     }
+    if (name == "Tier") {
+      v = $0; sub(/^Tier:[ \t]*/, "", v); sub(/[ \t]+$/, "", v)
+      if (v != "task" && v != "branch" && v != "sweep") print "bad tier: " v
+    }
+    if (name == "Budget") {
+      v = $0; sub(/^Budget:[ \t]*/, "", v); sub(/[ \t]+$/, "", v)
+      if (v !~ /^[0-9]+s$/) print "bad budget: " v
+    }
     next
   }
   { print "stray line: " $0 }
@@ -115,6 +134,10 @@ check "template satisfies the documented format" "$awk_out" ""
 present "template shows the fenced Setup form" "$TPL" 'Setup:'
 present "template shows an image gate" "$TPL" 'Evidence: image'
 present "template carries a blank skeleton" "$TPL" 'Copy the block below for a new gate'
+present "template says nine optional fields" "$TPL" 'the nine optional ones'
+present "template shows a task-tier gate" "$TPL" 'Tier: task'
+present "template shows a sweep gate" "$TPL" 'Tier: sweep'
+present "template shows a budget" "$TPL" 'Budget: 900s'
 
 FIN="$(skill_view finishing-a-development-branch)"
 VBC="$P/skills/verification-before-completion/SKILL.md"

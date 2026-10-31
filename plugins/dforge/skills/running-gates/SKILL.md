@@ -24,10 +24,11 @@ sessions read it the same way.
 - Each gate is `## <n>. <title>`, `<n>` the run order, contiguous from 1.
 - Under the heading, one `Field: value` line per field, in any order.
 - Required: **`Command`** and **`Green`** (what output or observation proves it).
-- Optional, seven of them: **`Applies`** (default `always`), **`Evidence`**
+- Optional, nine of them: **`Applies`** (default `always`), **`Evidence`**
   (default `output`), **`Repo`**, **`Setup`**, **`Teardown`**,
-  **`Known-flaky`** — the specific failure that is known noise — and **`Why`**,
-  the reason the gate exists, which is what stops a later session deleting it.
+  **`Known-flaky`** — the specific failure that is known noise — **`Why`**,
+  the reason the gate exists, which is what stops a later session deleting it,
+  **`Tier`** and **`Budget`**.
 - **Value form:** when a value both begins and ends with a backtick, those two
   delimiters are stripped and the rest is the value. Otherwise the value is the
   remainder of the line verbatim, backticks included.
@@ -44,6 +45,16 @@ sessions read it the same way.
   environment variable set in a separate call dies with it, and the gate then
   runs the reduced thing it exists to catch and reports green. `Teardown` runs
   whatever `Command` returned.
+- **`Tier`:** `task`, `branch` or `sweep`. Absent means `branch`, so a manifest
+  written before the field means what it meant before. A `task` gate is the kind
+  dforge:writing-plans offers as a plan's `**Task check:**`; this skill runs
+  `task` and `branch` gates alike, in manifest order. A `sweep` gate belongs to
+  CI: this skill skips it and prints
+  `gate <n> (<title>): skipped — Tier sweep runs in CI`.
+- **`Budget`:** `<seconds>s`, for example `Budget: 900s`. It is read only on the
+  gate whose `Command` equals the `**Integration check:**` command of the plan;
+  this skill ignores it, and dforge:closing-a-milestone compares the full
+  suite's duration with it.
 
 A complete example, and a blank skeleton, are in
 [gates-template.md](references/gates-template.md).
@@ -95,7 +106,10 @@ red. An `image` gate is never passed off numbers; the numbers say where to look.
    it, and every gate runs, conditional ones included. A computed base equal
    to HEAD with no caller-named base is the same trap: ask, or run every
    gate.
-3. **Select the gates.** `Applies: always` runs. A conditional gate runs when its
+3. **Select the gates.** A `sweep` gate is not selected; print the one line from
+   the `Tier` bullet for it, so its absence is not a silent skip. A `task` or
+   `branch` gate, or a gate with no `Tier`, is selected by `Applies` exactly as
+   before. `Applies: always` runs. A conditional gate runs when its
    own repository's change set touches what it names. Report every skipped
    conditional gate with the reason it did not apply: a silent skip is
    indistinguishable from a forgotten one.

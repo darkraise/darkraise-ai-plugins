@@ -2,20 +2,23 @@
 
 What proves a change works in this project, in the order it must run. This file
 is read by the running-gates skill. Every gate needs a `Command` field and a
-`Green` field; the seven optional ones are `Applies`, `Evidence`, `Repo`,
-`Setup`, `Teardown`, `Known-flaky` and `Why`.
+`Green` field; the nine optional ones are `Applies`, `Evidence`, `Repo`,
+`Setup`, `Teardown`, `Known-flaky`, `Why`, `Tier` and `Budget`.
 
 ## 1. Build
 Command: `pwsh -NoProfile -File scripts/build.ps1 -Repo both`
 Green: 0 errors in both repos
 Evidence: output
+Tier: task
 
 ## 2. Layout suite
 Command: `pwsh -NoProfile -File scripts/test-framework.ps1 layout`
 Green: `Passed!`
 Known-flaky: the routing timing gate under load
+Budget: 900s
 
 ## 3. Script-schema corpus sweep
+Tier: sweep
 Setup:
 ```powershell
 $env:DARKRAISE_SCRIPT_CORPUS = "D:/Games Modding/SRHD;D:/Repositories/Personal/SRHD-Mods"
