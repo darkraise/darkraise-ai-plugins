@@ -3,6 +3,7 @@ name: impl-opus-max
 description: "Task implementer running Opus 5.5 at max effort. Reserve tier in dforge: reached from impl-opus-xhigh on the reserve chain, or by a human override."
 model: opus
 effort: max
+disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:
   - dforge:verification-before-completion
 color: purple

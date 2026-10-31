@@ -3,6 +3,7 @@ name: impl-opus-medium
 description: "Task implementer running Opus 5.5 at medium effort. Escalation rung for impl-sonnet-medium and impl-opus-low in dforge: no score assigns it."
 model: opus
 effort: medium
+disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:
   - dforge:verification-before-completion
 color: purple

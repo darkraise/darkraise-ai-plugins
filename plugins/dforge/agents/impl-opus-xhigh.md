@@ -3,6 +3,7 @@ name: impl-opus-xhigh
 description: "Task implementer running Opus 5.5 at xhigh effort. Reserve tier in dforge: the entry rung for a task that has already been split and still exhausted impl-opus-high."
 model: opus
 effort: xhigh
+disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:
   - dforge:verification-before-completion
 color: purple

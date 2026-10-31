@@ -72,6 +72,11 @@ One drafter, `drafter-sonnet`, writes a slice of 3-4 tasks of a plan of 9 or
 more whose header is written (writing-plans' Drafting the tasks); it searches
 with `Bash` and writes its slice file, so it carries `Bash`, `Write` and
 `Edit`, but never `Agent`.
+Every implementer keeps its tools, browser and device servers included, but
+its `disallowedTools:` frontmatter drops `Agent`, `Skill` and the session-only
+tools (Artifact, Workflow, plan mode, cron, messaging): their definitions and
+the skill listing are re-read on every implementer call and roughly doubled
+its starting context.
 
 The reserve exists so that a human ruling, and a task that genuinely cannot be
 split any further, both have somewhere to go. It is not a way around the gate:

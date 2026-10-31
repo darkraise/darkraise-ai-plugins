@@ -3,6 +3,7 @@ name: impl-fable-high
 description: "Task implementer running Fable 5.1 at high effort. Reserve tier in dforge: where the reserve chain enters Fable, after every Opus rung has been exhausted."
 model: fable
 effort: high
+disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:
   - dforge:verification-before-completion
 color: red

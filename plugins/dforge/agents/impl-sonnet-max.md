@@ -3,6 +3,7 @@ name: impl-sonnet-max
 description: "Task implementer running Sonnet 5.5 at max effort. Reserve tier in dforge: no score reaches it, so it runs only on a human override."
 model: sonnet
 effort: max
+disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:
   - dforge:verification-before-completion
 color: green

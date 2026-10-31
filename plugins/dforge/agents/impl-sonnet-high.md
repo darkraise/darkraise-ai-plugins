@@ -3,6 +3,7 @@ name: impl-sonnet-high
 description: "Task implementer running Sonnet 5.5 at high effort. Dispatched by dforge for score 5: coupled work carrying a shared-path or data-shape risk."
 model: sonnet
 effort: high
+disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:
   - dforge:verification-before-completion
 color: green

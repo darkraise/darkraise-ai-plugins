@@ -3,6 +3,7 @@ name: impl-fable-xhigh
 description: "Task implementer running Fable 5.1 at xhigh effort. Reserve tier in dforge: reached from impl-fable-high on the reserve chain, or by a human override."
 model: fable
 effort: xhigh
+disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:
   - dforge:verification-before-completion
 color: red

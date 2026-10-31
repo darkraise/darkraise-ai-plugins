@@ -3,6 +3,7 @@ name: impl-sonnet-low
 description: "Task implementer running Sonnet 5.5 at low effort. Dispatched by dforge for scores 0 to 2: small, well-specified changes with near-complete code supplied."
 model: sonnet
 effort: low
+disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:
   - dforge:verification-before-completion
 color: green

@@ -40,6 +40,7 @@ EXPECTED="drafter-sonnet impl-fable-high impl-fable-low impl-fable-max impl-fabl
 JUDGE_TOOLS="Read, Grep, Glob, WebFetch, Write"
 SCOUT_TOOLS="Read, Grep, Glob, WebFetch"
 DRAFTER_TOOLS="Read, Grep, Glob, Bash, Write, Edit"
+IMPL_DISALLOWED="Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications"
 
 is_reserve() { case " $RESERVE " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
@@ -85,6 +86,7 @@ for f in "$AGENTS"/*.md; do
       fi
 
       check "$base: does not set tools" "$(grep -c '^tools:' "$f")" "0"
+      check "$base: drops the session-only tools" "$(fm "$f" disallowedTools)" "$IMPL_DISALLOWED"
       check "$base: preloads verification-before-completion" \
         "$(grep -c '^  - dforge:verification-before-completion$' "$f")" "1"
       ;;

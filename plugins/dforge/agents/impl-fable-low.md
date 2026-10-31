@@ -3,6 +3,7 @@ name: impl-fable-low
 description: "Task implementer running Fable 5.1 at low effort. Reserve tier in dforge: no score and no automatic escalation reaches it, so it runs only on a human override."
 model: fable
 effort: low
+disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:
   - dforge:verification-before-completion
 color: red

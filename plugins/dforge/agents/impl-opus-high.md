@@ -3,6 +3,7 @@ name: impl-opus-high
 description: "Task implementer running Opus 5.5 at high effort. Dispatched by dforge for scores 6 to 8: the top execution rung, above which a task is split rather than escalated."
 model: opus
 effort: high
+disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:
   - dforge:verification-before-completion
 color: purple

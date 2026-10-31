@@ -3,6 +3,7 @@ name: impl-fable-max
 description: "Task implementer running Fable 5.1 at max effort. Top of the dforge reserve chain: nothing outranks it, so its BLOCKED report is final."
 model: fable
 effort: max
+disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:
   - dforge:verification-before-completion
 color: red

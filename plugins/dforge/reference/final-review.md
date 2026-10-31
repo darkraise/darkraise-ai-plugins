@@ -345,7 +345,9 @@ finding, the covering tests, the command and its output. With one list the
 fixer first checks each finding against the code under
 dforge:receiving-code-review, fixes the real ones, and records each one
 it rejects under `REJECTED: <finding>` with its evidence. In subagent mode the
-fix subagent writes it as its report file; in inline mode you write it before
+fix subagent writes it as its report file, and its prompt names
+`<plugin-root>/skills/receiving-code-review/SKILL.md` to read, since an
+implementer has no Skill tool; in inline mode you write it before
 the re-review. Then run exactly one scoped re-review of the fix wave
 (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range, with
 [re-review-prompt.md](../skills/subagent-driven-development/references/re-review-prompt.md),
