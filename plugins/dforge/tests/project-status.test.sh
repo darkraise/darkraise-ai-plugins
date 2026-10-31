@@ -155,6 +155,33 @@ else
   printf 'ok   - status: the old single-source rule is gone\n'; pass=$((pass + 1))
 fi
 
+# --- the suite-cost audit and the merge rows it reads (test tiers plan, part 3) ---
+FINREF="$P/skills/finishing-a-development-branch/references/execute-choice.md"
+says() { # says <name> <file> <needle> — the file with line breaks folded
+  if tr '\n' ' ' < "$2" | tr -s ' ' | grep -qF -- "$3"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
+  else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
+}
+step_line() { awk -v p="$1" 'index($0, p) == 1 { print NR; exit }' "$CLOSE"; }
+s7=$(step_line '7. **Owner sign-off.**'); s8=$(step_line '8. **Suite cost.**'); s9=$(step_line '9. **Next.**')
+check "closing: the suite audit sits between sign-off and Next" \
+  "$([ -n "$s7" ] && [ -n "$s8" ] && [ -n "$s9" ] && [ "$s7" -lt "$s8" ] && [ "$s8" -lt "$s9" ] && echo yes || echo no)" "yes"
+says "closing: reads suites.tsv of the checkout it runs in" "$CLOSE" 'reads `suites.tsv` from the state directory of the checkout it runs in'
+says "closing: names that checkout in the report" "$CLOSE" 'names that checkout in the report'
+says "closing: a six-column row has no duration" "$CLOSE" 'A six-column row has no duration and is skipped'
+says "closing: fewer than two rows recommends nothing" "$CLOSE" 'With fewer than two rows it says so and recommends nothing.'
+says "closing: growth of 20% or more recommends the cleanup" "$CLOSE" 'grew by 20% or more'
+says "closing: a passed budget recommends the cleanup" "$CLOSE" 'passes a declared `Budget:`'
+says "closing: the budget sits on the integration-check gate" "$CLOSE" 'whose `Command` equals the plan'
+says "closing: no such gate means the 20% rule only" "$CLOSE" 'When no such gate exists, the audit uses the 20% rule only.'
+says "closing: the recommendation is scoped to the milestone's modules" "$CLOSE" 'dforge:test-simplifier --modules <paths>'
+says "closing: it recommends and removes nothing" "$CLOSE" 'It recommends only and removes nothing.'
+says "closing: the rows come from finishing's merge verification" "$CLOSE" 'leaves one full-suite row at each merge head'
+says "finishing: the merged result runs through suite-run as bash -c" "$FINREF" "bash <plugin-root>/scripts/suite-run -- bash -c '<full suite command>'"
+says "finishing: the command is the plan's Integration check" "$FINREF" 'is the `**Integration check:**` command of the plan being finished'
+says "finishing: the suite runs whether or not gates are declared" "$FINREF" 'runs whether or not the project declares gates'
+says "finishing: one full-suite row per merge head" "$FINREF" 'leaves one full-suite row for each merge head'
+says "finishing: the milestone audit reads those rows" "$FINREF" 'dforge:closing-a-milestone reads these rows'
+
 # --- finishing resolves register rows ---
 FIN="$P/skills/finishing-a-development-branch/SKILL.md"
 present "finishing: the register gates the completion line" "$FIN" \

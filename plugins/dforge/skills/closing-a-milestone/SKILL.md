@@ -58,7 +58,42 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    run
    `scripts/roadmap close M<n> --note "audit <date> <sha7>: <k> MET, <d> deferred"`,
    and commit the registers and the roadmap together (or push them, while documents live in darkmem).
-8. **Next.** Run `scripts/roadmap status` and name the next milestone's first
+8. **Suite cost.** This step runs after `roadmap close`, in the checkout the
+   skill runs in: the main checkout. It holds the rows because finishing's
+   merged-result verification leaves one full-suite row at each merge head.
+   A plan's own worktree rows are gone with the worktree. The audit reads
+   `suites.tsv` from the state directory of the checkout it runs in
+   (`bash <plugin-root>/scripts/dforge-path state`). The full-suite command is
+   the `**Integration check:**` command of the plans the milestone merged, else
+   the project's full test command. A row counts when column 2 is `clean`,
+   column 4 is `0`, column 7 is a non-negative integer, and column 3 equals the
+   key suite-run writes for `bash -c '<command>'` run from the top level:
+   `printf '%q ' bash -c '<command>'` without the trailing space. A six-column
+   row has no duration and is skipped. `<d1>` is the duration of the last
+   counted row whose HEAD (column 1) is the milestone's head, the commit step 5
+   gave the judge, or one of its ancestors (`git merge-base --is-ancestor`).
+   `<d0>` is the duration of the last counted row at or before the previous
+   milestone's close, the sha7 in its `closed` note in `scripts/roadmap status`.
+   With no previous milestone, `<d0>` is the oldest counted row's duration.
+   With fewer than two rows it says so and recommends nothing. The same holds
+   when `<d0>` and `<d1>` come from the same row. It prints
+   `Suite cost: <state>/suites.tsv of <checkout top level> holds <n> full-suite row(s) with a duration; two are needed, so nothing is recommended.`
+   This is the expected answer until two plans have merged under this version.
+   Otherwise it prints
+   `Suite cost: <state>/suites.tsv of <checkout top level>: <d0>s at <sha7> to <d1>s at <sha7> (<change>%).`
+   The audit names that checkout in the report. It recommends the cleanup when
+   the full suite grew by 20% or more (`<d1> * 100 >= <d0> * 120` and
+   `<d1> > <d0>`) or passes a declared `Budget:`. The budget is the
+   `Budget: <seconds>s` line of the gate in `<docs>/gates.md` whose `Command`
+   equals the plan's `**Integration check:**`, byte for byte. Passing it means
+   `<d1>` is above the seconds. When no such gate exists, the audit uses the
+   20% rule only. The recommendation is the line
+   `Next: dforge:test-simplifier --modules <paths>`. `<paths>` are the distinct
+   directories of the files outside `<docs>` in
+   `git diff --name-only <previous close sha7>..<milestone head>`, from the root
+   commit when there is no previous milestone. It recommends only and removes
+   nothing.
+9. **Next.** Run `scripts/roadmap status` and name the next milestone's first
    open epic, or say the roadmap is complete.
 
 ## Red Flags

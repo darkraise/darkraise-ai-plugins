@@ -25,11 +25,19 @@ git merge <feature-branch>
 echo "$PRE_MERGE"
 
 # Verify the merged result: gates when the project declares a manifest
-# (dforge:running-gates, with the sha printed above as its base), otherwise
-# the full test suite through suite-run. Gates that passed on the branch say
-# nothing about the merged tree, and the merged HEAD is new, so suite-run runs.
-bash <plugin-root>/scripts/suite-run -- <test command>
+# (dforge:running-gates runs first, with the sha printed above as its base),
+# then the full suite through suite-run in every case. Gates that passed on
+# the branch say nothing about the merged tree.
+bash <plugin-root>/scripts/suite-run -- bash -c '<full suite command>'
 ```
+
+`<full suite command>` is the `**Integration check:**` command of the plan
+being finished, else the project's test command. `bash -c` keeps the row's
+key the one writing-plans, task-step and ci-mirror look up. The suite runs
+whether or not the project declares gates. suite-run reuses a pass a gate
+already recorded at this HEAD. The run in the main checkout leaves one
+full-suite row for each merge head. dforge:closing-a-milestone reads these
+rows.
 
 Shell variables do not survive between Bash calls, so `$PRE_MERGE` is gone by
 the time dforge:running-gates runs. Pass the base as the literal sha the
