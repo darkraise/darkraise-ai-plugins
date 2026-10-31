@@ -17,6 +17,8 @@ check() { # check <name> <got> <want>
 }
 in_loop() { sed '/^## The steps by hand/,$d' "$DT" | grep -cF -- "$1"; } # in_loop <text> — matching lines in the loop steps
 by_hand() { sed -n '/^## The steps by hand/,/^## Recovery/p' "$DT" | grep -cF -- "$1"; }
+by_hand_flat() { sed -n '/^## The steps by hand/,/^## Recovery/p' "$DT" | tr -d '\r' | tr '\n' ' ' | tr -s ' ' | grep -cF -- "$1"; }
+inline_flat() { tr -d '\r' < "$INLINE" | tr '\n' ' ' | tr -s ' ' | grep -cF -- "$1"; }
 in_loop_flat() { sed '/^## The steps by hand/,$d' "$DT" | tr -d '\r' | tr '\n' ' ' | tr -s ' ' | grep -cF -- "$1"; } # in_loop_flat <text> — the loop steps as one line, so a wrapped sentence matches
 has() { check "$1" "$([ "$("$2" "$3")" -ge 1 ] && echo yes || echo no)" "yes"; } # has <label> <in_loop|in_loop_flat|by_hand> <text>
 
@@ -37,6 +39,29 @@ has "a group's suite starts at the last held head" in_loop "last held member's h
 has "a Codex plan starts the suite by hand" in_loop '*The steps by hand* §2 starts'
 has "a fix head gets its own suite run" in_loop 'has its own suite run beside its re-review'
 
+has "no Task check line: runs as today" in_loop_flat 'A plan with no `**Task check:**` line runs as it does today'
+has "a command task check goes to every start" in_loop_flat 'A command task check is the suite command: every `task-step start` passes it, never the Integration check'
+has "none on a sequential plan: start passes no --suite" in_loop_flat 'With a task check of `none` on a sequential plan, `start` passes no `--suite`'
+has "none: scheduled by task number" in_loop_flat 'the integration check runs on every task whose number is a multiple of 3 and on the last task'
+has "none: decided at review time" in_loop_flat 'The controller decides at review time'
+has "none: review and review --group take the suite and its base" in_loop_flat '`task-step review` and `task-step review --group` take `--suite <integration check>` and `--suite-base <sha>`'
+has "none: the base is the last full run" in_loop_flat '`<sha>` is the head of the last full-suite run, or the plan base before the first run'
+has "none: an earlier regression is not excused" in_loop_flat 'a regression made by an earlier task is not excused as a base failure'
+has "none: a missing base row costs one run" in_loop_flat 'when `suites.tsv` has no row at `<sha>`, `verdict` runs the suite once there'
+has "none: a group with a scheduled task runs it" in_loop_flat 'A group runs the integration check when it holds a scheduled task'
+has "none: a fix round follows its review" in_loop_flat 'A fix round runs a suite only when the review of its task did'
+has "none on a waves plan: no per-task suite" in_loop_flat 'With a task check of `none` on a waves plan, no task gets a per-task suite'
+has "an unscheduled task starts no suite" in_loop_flat 'starts no suite and runs `task-step review` without `--suite`'
+has "a group suite waits for a scheduled member" in_loop_flat 'Under a `none` task check, start the group suite only when the group holds a scheduled task'
+has "a fix head's suite follows its review's" in_loop_flat 'under a `none` task check, only when the review of its task ran a suite'
+has "verdict reads the suite line: not scheduled" in_loop '`suite: not scheduled (next at Task <N>)`'
+has "not scheduled: the line says why" in_loop_flat 'no suite was scheduled for this task'
+has "completion accepts not scheduled" in_loop_flat 'a `suite:` line that is `pass`, `red` with 0 failing, `not scheduled` or `none recorded`'
+has "by hand: the task check, and the none schedule" by_hand_flat 'and under a `none` task check the integration check on the tasks §1 schedules'
+has "by hand: a none task compares with the last full run" by_hand_flat 'compare with `<sha>` from §1, not with the task base commit'
+has "inline mode runs the task check before committing" inline_flat 'Run the focused test while you work and the task check once before committing, in place of the full suite.'
+has "inline mode: none runs the integration check on multiples of 3 and the last task" inline_flat 'With a task check of `none`, run the integration check instead on tasks numbered a multiple of 3 and on the last task'
+has "inline mode: no Task check line keeps the full suite" inline_flat 'A plan with no `**Task check:**` line keeps the full suite once before committing'
 has "verdict reads the suite line: pass" in_loop '`suite: pass (clean|dirty)`'
 has "verdict reads the suite line: red" in_loop '`suite: red (<k> failing, <b> baseline)`'
 has "verdict reads the suite line: not run" in_loop '`suite: not run (<command>)`'
@@ -64,7 +89,6 @@ has "by hand: a non-baseline failure is §3's Important finding" by_hand "non-ba
 
 check "the loop steps still run date +%s once, for the cache rule" "$(in_loop 'date +%s')" "1"
 check "native-codex.md carries no suite-run call" "$(grep -cF 'suite-run' "$NC")" "0"
-check "inline mode keeps its full-suite-before-commit rule" "$(grep -cF 'and the full suite once before committing' "$INLINE")" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

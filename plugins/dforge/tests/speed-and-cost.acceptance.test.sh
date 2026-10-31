@@ -500,13 +500,13 @@ if selected A18; then
   if base_known; then
     check "A18: reference/native-codex.md is byte-identical to the base" \
       "$(git -C "$REPO_ROOT" diff --stat "$BASE" -- plugins/dforge/reference/native-codex.md | wc -l | tr -d ' ')" "0"
-    rule='Run the focused test while you work and the full suite once before committing.'
+    old_rule='Run the focused test while you work and the full suite once before committing.'
+    new_rule='Run the focused test while you work and the task check once before committing, in place of the full suite.'
     old=$(git -C "$REPO_ROOT" show "$BASE:plugins/dforge/skills/executing-plans/SKILL.md" | tr -d '\r' | tr '\n' ' ' | tr -s ' ')
-    has "A18: (control) the base executing-plans inline rule is the sentence tested here" "$old" "$rule"
+    has "A18: (control) the base executing-plans inline rule is the sentence this plan replaced" "$old" "$old_rule"
     now=$({ doc "$PLUGIN/skills/executing-plans/SKILL.md"; for r in "$PLUGIN"/skills/executing-plans/references/*.md; do doc "$r"; done; })
-    has "A18: executing-plans still tells the inline session to run the full suite once before committing" "$now" "$rule"
-    wrap=$(grep -o '4\. \*\*Run the verifications as written\.\*\*.\{0,330\}' <<<"$old" | head -n 1)
-    has "A18: the whole inline step 4 paragraph is unchanged" "$now" "$wrap"
+    has "A18: executing-plans tells the inline session to run the task check once before committing" "$now" "$new_rule"
+    lacks "A18: executing-plans no longer asks for the full suite before every commit" "$now" "$old_rule"
   else
     printf 'skip - A18: base %s is not in this repository\n' "$BASE"
   fi

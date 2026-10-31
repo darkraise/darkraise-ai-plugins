@@ -76,7 +76,7 @@ names "finishing verifies the merged result through suite-run" "$FIN" 'bash <plu
 lacks "implementers no longer run the full suite through suite-run" "$IP" 'scripts/suite-run'
 lacks "implementers no longer run the full suite before committing" "$IP" 'full suite once before committing, not after every edit.'
 names "implementers run the focused tests that cover their change" "$IP" 'Before each commit, run the focused tests that cover what you changed -'
-names "the controller runs the full suite beside the review" "$IP" 'The controller runs the full suite beside the review of your'
+names "the controller runs the task check beside the review" "$IP" 'The controller runs the task check beside the review of your'
 names "the run-control paragraph names context-size by plugin root" "$IP" 'Never run `[PLUGIN_ROOT]/scripts/context-size`, `scripts/auto-run` or'
 names "the report gains a Verified section" "$IP" '`## Verified`: one bullet per command you ran to check your work.'
 names "the reply ends with the Report line" "$IP" '`Report: <absolute path of the report file>`'

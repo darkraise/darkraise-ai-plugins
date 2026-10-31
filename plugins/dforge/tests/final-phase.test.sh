@@ -73,6 +73,14 @@ says "final review: the Codex round skip is said" "$FR" '`codex round skipped (d
 says "final review: the skipped round leaves nothing to wait for" "$FR" 'or depth light or standard), there is nothing to wait for'
 says "final review: lens-route reads the depth itself" "$FR" '`lens-route` reads the depth itself'
 says "final review: every lens-skipped line reaches the ledger" "$FR" 'as `final review lens-skipped <id> reason=<reason>`, whatever its reason'
+says "final review: the integration check starts beside the reviewers" "$FR" '**Integration check.** In the same message as the Claude review'
+says "final review: it runs through suite-run" "$FR" $'through `bash <plugin-root>/scripts/suite-run -- bash -c \'<integration check>\'`'
+says "final review: in the background at the review head" "$FR" 'as a background command at the same HEAD the Claude review reads'
+says "final review: a failure the merge base shares is no finding" "$FR" 'A failing line that does not also fail at MERGE_BASE is a finding'
+says "final review: the suite finding enters the fix wave as confirmed" "$FR" 'A `[suite]` finding enters the fix wave as confirmed, as a `[qa]` finding does'
+says "final review: the fix wave waits for the integration check" "$FR" 'The fix wave also waits for the integration check started in step 1'
+says "final review: the fix subagent runs the integration check in the same form" "$FR" $'Tell the fix subagent to run the plan\'s `**Integration check:**` command the same way, `bash <plugin-root>/scripts/suite-run -- bash -c \'<integration check>\'`'
+says "finishing: Step 1 runs the integration check in the form the final review recorded" "$FIN" $'`bash <plugin-root>/scripts/suite-run -- bash -c \'<integration check>\'`, the form the final review recorded, so its pass is reused'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

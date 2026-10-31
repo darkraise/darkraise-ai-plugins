@@ -50,7 +50,8 @@ these steps directly.
 **Open the task with one call:**
 `bash <plugin-root>/scripts/task-step start PLAN_FILE N` (a batch passes every
 task number, `N M …`; a wave task adds `--wave K`; every start adds
-`--suite '<suite command>'`, below). It runs `task-brief`,
+`--suite '<suite command>'`, below, unless the Suite command bullet says
+start passes none). It runs `task-brief`,
 records BASE in `<workspace>/task-<N>-step.json`, writes the
 assigned line (below), and writes `<workspace>/task-<N>-dispatch.md`:
 [implementer-prompt.md](../skills/subagent-driven-development/references/implementer-prompt.md)
@@ -71,16 +72,48 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
   the reserve table of [ladder.md](ladder.md) — any `xhigh` or
   `max` agent, or any Fable tier — is a human ruling: dispatch it as written
   and note `reserve tier`. See [escalation.md](../skills/subagent-driven-development/references/escalation.md).
-- **Suite command.** Resolve the plan's suite command once and pass it to
-  every `task-step start` as `--suite '<suite command>'`, a wave task's too:
-  the command on the plan header's `**Integration check:**` line; else the
-  test command `<docs>/gates.md` declares (the `Command` of the gate that runs
-  the project's tests); else one you decide from the project's manifest
-  (`package.json` `scripts.test`, a Makefile `test` target, `cargo test`,
-  `go test ./...`, `pytest`) and keep for the rest of the plan. `start` records
-  it as the step file's `suite`, and the first `start --suite` on a plan
-  logs `Task <N>: Ruling: suite command — <command> — none`. The implementer
-  runs only the focused tests that cover its change; §2 has you run the suite.
+- **Suite command.** Read the plan header's `**Task check:**` line first,
+  then resolve the plan's suite command once:
+  - A plan with no `**Task check:**` line runs as it does today. Pass the
+    suite command to every `task-step start` as `--suite '<suite command>'`,
+    a wave task's too. It is the command on the plan header's
+    `**Integration check:**` line; else the test command
+    `<docs>/gates.md` declares (the `Command` of the gate that runs the
+    project's tests); else one you decide from the project's manifest
+    (`package.json` `scripts.test`, a Makefile `test` target, `cargo test`,
+    `go test ./...`, `pytest`) and keep for the rest of the plan. `start`
+    records it as the step file's `suite`, and the first `start --suite` on
+    a plan logs `Task <N>: Ruling: suite command — <command> — none`. The
+    implementer runs only the focused tests that cover its change; §2 has
+    you run the suite.
+  - A command task check is the suite command: every `task-step start`
+    passes it, never the Integration check. The rest of the loop is
+    unchanged.
+  - With a task check of `none` on a sequential plan, `start` passes no
+    `--suite`. The integration check is the command the first sub-bullet
+    resolves. The schedule is by task number: the integration check runs on
+    every task whose number is a multiple of 3 and on the last task. The
+    controller decides at review time, in the same turn it starts the run,
+    because `start` runs before anyone knows whether the task will be held
+    or grouped. For a scheduled task, `task-step review` and
+    `task-step review --group` take `--suite <integration check>` and
+    `--suite-base <sha>`; `review --group` records them on the group's last
+    member. `<sha>` is the head of the last full-suite run, or the plan base
+    before the first run. The last full-suite run is the last row of
+    `<state>/suites.tsv` (`dforge-path state`) whose command column is the
+    key `suite-run` records for `bash -c '<integration check>'`, whatever its
+    exit. The plan base is the `base` in the step file of the plan's first
+    task. So a regression made by an earlier task is not excused as a base
+    failure. Normally `suites.tsv` already holds a row at `<sha>`, so the
+    comparison costs nothing, but when `suites.tsv` has no row at `<sha>`,
+    `verdict` runs the suite once there (for example after a fix round),
+    bounded at 3600 seconds (`TASK_STEP_BASE_TIMEOUT`). A group runs the
+    integration check when it holds a scheduled task. A fix round runs a
+    suite only when the review of its task did.
+  - With a task check of `none` on a waves plan, no task gets a per-task
+    suite, because the merged wave check is the suite of the wave's grouped
+    tasks (§2). A command task check on a waves plan still runs per task in
+    its worktree, as it does today.
 - **Task brief:** `task-step start` extracted it to
   `<workspace>/task-<N>-brief.md` (see using-dforge §Session Budget). The
   brief stays the single source of requirements: the dispatch file tells the
@@ -185,6 +218,11 @@ no suite now: its group's suite starts with the group review (§3a), and a
 wave's grouped tasks get none, because the wave's merged check is their suite.
 On a `Host: codex` plan `task-step` does not run: *The steps by hand* §2 starts
 the suite.
+
+Under a `none` task check, a task that §1's schedule skips starts no suite and
+runs `task-step review` without `--suite`. A task the schedule names starts the
+integration check as this section describes and passes `--suite` and
+`--suite-base` to `task-step review`.
 
 **NEEDS_CONTEXT:** The implementer needs information that wasn't provided.
 If the answer is mechanical - a path, a name, a value that the header, an
@@ -376,6 +414,9 @@ digest carries exactly one `suite:` line, read from the run §2 started:
 - `suite: not run (<command>)`: no run was recorded at the review head, and
   `verdict` exits 7 with no fix file. Run the suite (§2) at the review head
   and call `verdict` again.
+- `suite: not scheduled (next at Task <N>)`: the plan's task check is `none`
+  and no suite was scheduled for this task. `verdict` exits 0, and the task
+  may complete.
 - `suite: none recorded`: the task was started before `--suite` existed; the
   loop is as it was.
 
@@ -504,8 +545,10 @@ On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
   `seat:` line's judge as §3 says for a judge, with the prompt "your complete
   instructions are in `<prompt file>`: read it first and follow it". In
   sequential mode start the group's suite (§2) once, in that same turn, at the
-  last held member's head; a wave's group gets none. When the group's seat
-  returns and that suite's notification is in, run
+  last held member's head; a wave's group gets none. Under a `none` task
+  check, start the group suite only when the group holds a scheduled task,
+  and pass `--suite` and `--suite-base` to `review --group`. When the
+  group's seat returns and that suite's notification is in, run
   `bash <plugin-root>/scripts/task-step verdict PLAN_FILE N M … --group`
   with every member's number and act on its digest: it reads
   `group-<list>-review-report.md`, prints one verdict line per member
@@ -612,7 +655,8 @@ the fix report contains the covering tests, the command run, and the
 output; dispatch the re-review once all three are present. Name the
 covering test files in the fix message — a one-line fix does not need the
 whole suite. The full suite is yours: when the fix is committed, start it at
-the new head as §2 says and run `rereview` in the same turn, so the fix head
+the new head as §2 says (under a `none` task check, only when the review of
+its task ran a suite) and run `rereview` in the same turn, so the fix head
 has its own suite run beside its re-review.
 
 **The fix message** is the file `<workspace>/task-<N>-fix-<R>.md`, `R` being
@@ -693,8 +737,9 @@ discard is forbidden.
 
 A task is marked complete only after `task-step verdict` passes: its digest
 shows `fix: none` and a `suite:` line that is `pass`, `red` with 0 failing,
-or `none recorded`. A `suite: not run` (exit 7) or a `red` with failing lines
-leaves the task open, and the fix loop (§4) or a suite run (§2) comes first.
+`not scheduled` or `none recorded`. A `suite: not run` (exit 7) or a `red`
+with failing lines leaves the task open, and the fix loop (§4) or a suite run
+(§2) comes first.
 
 When the review comes back clean — or every open finding is parked, or
 confirmed and carried into a later task, with a ruling at the cap — append the
@@ -764,10 +809,13 @@ writing nothing, when `lens-route` does. Then run the mechanics yourself:
 - **§2.** On a DONE report, run
   `bash <plugin-root>/scripts/suite-run -- <suite command>` yourself in the
   background at the task's head and treat a non-baseline failure as §3's
-  Important finding. `<suite command>` is resolved as §1's Suite command says.
+  Important finding. `<suite command>` is resolved as §1's Suite command
+  says: the task check, and under a `none` task check the integration check
+  on the tasks §1 schedules.
   A failing line that the task's base commit also fails is baseline: run the
   suite once there, in a temporary worktree, and compare the failing lines as
-  [parallel-waves.md](parallel-waves.md) §1 does.
+  [parallel-waves.md](parallel-waves.md) §1 does. Under a `none` task check,
+  compare with `<sha>` from §1, not with the task base commit.
 - **§3.** Run `scripts/review-package PLAN_FILE BASE HEAD` (or, without bash:
   `git log --oneline`, `git diff --stat` and `git diff -U10` for the range,
   redirected to one uniquely named file) and pass the reviewer the path it

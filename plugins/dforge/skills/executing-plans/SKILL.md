@@ -123,14 +123,7 @@ whole branch at the end.
 continue?" prompts and progress summaries waste your human partner's time -
 they asked you to execute the plan, so execute it.
 
-**Rulings, not stalls.** Decide the mechanical problems yourself - a missing
-directory, a tool failure, a plan that is silent where you need
-an answer - and record each in the ledger as `Ruling: <what you decided> —
-<why> — <what it costs if wrong>`, said aloud. Everything that needs judgment
-about the plan, the spec or a finding goes to the ruling seat, which reads the
-whole plan and the spec you never read. A wrong ruling costs rework your human
-partner can see and undo; a session parked on a question costs their whole day
-and buys nothing.
+Read [ruling-seat.md](references/ruling-seat.md) for when to rule on a mechanical problem yourself.
 
 **Surgical execution.** Change only what the task names. Note adjacent problems
 in the ledger as `Task <N>: minor (deferred): <one-liner>` instead of fixing
@@ -282,7 +275,12 @@ For each task, in order:
    bonus.
 4. **Run the verifications as written.** A step that says `Expected: PASS` is
    not done until you have seen it pass. Run the focused test while you work
-   and the full suite once before committing.
+   and the task check once before committing, in place of the full suite.
+   The task check is the plan header's `**Task check:**` line, read with
+   `scripts/task-brief --header PLAN_FILE`. With a task check of `none`, run
+   the integration check instead on tasks numbered a multiple of 3 and on the
+   last task. A plan with no `**Task check:**` line keeps the full suite once
+   before committing.
 5. **Self-review your own diff** against the brief before you commit. This is
    the only per-task gate this mode has, so it is not a formality: read
    `git diff`, and check that every step is done, that nothing outside the

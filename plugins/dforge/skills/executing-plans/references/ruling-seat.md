@@ -5,6 +5,15 @@ to you, whatever model you run on. It reads the whole plan, the spec,
 `amendments.md` and the ledger; you read the header and one brief at a time. It
 and delegated tasks are all this mode dispatches before the final review.
 
+**Rulings, not stalls.** Decide the mechanical problems yourself - a missing
+directory, a tool failure, a plan that is silent where you need
+an answer - and record each in the ledger as `Ruling: <what you decided> —
+<why> — <what it costs if wrong>`, said aloud. Everything that needs judgment
+about the plan, the spec or a finding goes to the ruling seat, which reads the
+whole plan and the spec you never read. A wrong ruling costs rework your human
+partner can see and undo; a session parked on a question costs their whole day
+and buys nothing.
+
 **When.** These points arise in this mode:
 
 | Kind | Decision point |

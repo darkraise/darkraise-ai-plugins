@@ -81,7 +81,11 @@ dforge:running-gates — it determines its own base, so it works here even
 though Step 3 has not established one yet. Otherwise run the project's full test
 suite (`npm test` / `cargo test` / `pytest` / `go test ./...`) through
 `bash <plugin-root>/scripts/suite-run -- <test command>`, in the background
-when it can outrun Bash's ten-minute cap. It prints a digest, never the whole
+when it can outrun Bash's ten-minute cap. A plan with an
+`**Integration check:**` line runs that command instead, as
+`bash <plugin-root>/scripts/suite-run -- bash -c '<integration check>'`, the
+form the final review recorded, so its pass is reused; a plan without one
+keeps `suite-run -- <test command>`. It prints a digest, never the whole
 output, and reuses a recorded pass (`suite: reused pass at <sha7>`) only at
 the same HEAD, with a clean tree then and now, for the same command: a fix
 wave's passing run at this HEAD stands, and any other tree runs the suite.

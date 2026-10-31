@@ -198,6 +198,19 @@ your own: QA commits on this branch.
    and include the printed path in each dispatch below, so a reviewer reads
    one file instead of re-deriving the branch diff with git commands.
 
+   **Integration check.** In the same message as the Claude review, start the
+   plan header's `**Integration check:**` command through
+   `bash <plugin-root>/scripts/suite-run -- bash -c '<integration check>'`
+   as a background command at the same HEAD the Claude review reads, from the
+   checkout's top level, at every depth and in either execution mode. A
+   failing line that does not also fail at MERGE_BASE is a finding: run the
+   command once at MERGE_BASE in a temporary worktree and compare the failing
+   lines, as [parallel-waves.md](parallel-waves.md) §1 does. Write each such
+   finding as `[suite] <failing line>`. A `[suite]` finding enters the fix
+   wave as confirmed, as a `[qa]` finding does. The fix subagent runs the
+   command again after its last commit through `suite-run` (**Suites.**
+   below), and finishing reuses a pass at the same commit.
+
    **Lenses.** Run `scripts/lens-route PLAN_FILE --final MERGE_BASE HEAD`. In
    the same message as the Claude review, dispatch each printed `seat` with
    the prompt below, so they run in parallel; on a Codex host, a native judge
@@ -257,6 +270,8 @@ your own: QA commits on this branch.
    report is never a clean round.
 3. **Wait for QA.** When step 0.5 dispatched QA, nothing below runs until its
    (c) to (e) are done and its `[qa]` findings have joined the Claude list.
+   The fix wave also waits for the integration check started in step 1: end
+   the turn and resume on its notification.
 
    **Wait for the round's status line first.** When step 2 launched the
    runner, there is no step 3 until it has printed `OK`, `FALLBACK`,
@@ -380,10 +395,11 @@ so finishing's test run is green and the statement is not lost.
 check after the fix wave, or the project's full suite in inline mode — goes
 through `bash <plugin-root>/scripts/suite-run -- <command>`, which records the
 HEAD it ran at and prints a digest in place of the output. Tell the fix
-subagent to run the project's full suite the same way after its last commit,
-on a clean tree: finishing's verification then reuses that pass at the
-unchanged HEAD instead of running the suite again. A fix wave whose commits
-moved HEAD past that run is not reused.
+subagent to run the plan's `**Integration check:**` command the same way,
+`bash <plugin-root>/scripts/suite-run -- bash -c '<integration check>'`,
+after its last commit, on a clean tree: finishing's verification then
+reuses that pass at the unchanged HEAD instead of running the suite again. A
+fix wave whose commits moved HEAD past that run is not reused.
 
 There is no second fix wave. Residual load-bearing findings surface to your
 human partner when dforge:finishing-a-development-branch presents the options.
