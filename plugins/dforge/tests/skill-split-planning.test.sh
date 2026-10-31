@@ -41,6 +41,7 @@ writing-plans:task-check-line
 writing-plans:test-step-forms
 writing-plans:lint-and-review
 writing-plans:execution-handoff
+writing-plans:ci-line
 "
 
 for entry in $MOVED; do

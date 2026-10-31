@@ -111,6 +111,8 @@ Constraints and Contracts.
 
 **Integration check:** [`<command>`: the full suite, on every plan]
 
+**CI:** [none, or the line ci-line.md builds from the CI configuration]
+
 **Worktree setup:** [waves only: what a fresh worktree runs before its tests, or `none`]
 
 **Wave check:** [waves only, optional: a faster command — a build and the fast unit suite, say — run after the waves the full check skips; omit the line when there is none]
@@ -166,6 +168,8 @@ and errors on an inline pair below that score.
 **Read the settings first, then choose the Execution line.**
 
 Read [execution-line.md](references/execution-line.md) before you write the header's Execution line.
+
+Read [ci-line.md](references/ci-line.md) before you write the header's CI line and its Early CI line.
 
 ## Parallel waves
 

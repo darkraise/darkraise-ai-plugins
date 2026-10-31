@@ -9,6 +9,9 @@ when the setting is `ask`. Then:
    acceptance question first. One spec covers the whole request: no
    sub-project decomposition, no program spec, no `**Program:**` line. A new
    product still goes to dforge:planning-a-product.
+   While writing the spec, read the CI configuration as
+   [ci-parity.md](../../../reference/ci-parity.md) says, so the spec review
+   can tell whether a platform is uncovered.
 2. **Record the decisions.** Below its `**Execution strategy:**` and
    `**Depth:**` lines the spec carries a `## Decisions` section: every
    clarifying question and approach
@@ -40,6 +43,12 @@ when the setting is `ask`. Then:
      as Opening an item register says;
    - every item Fable left undecided, and every critic Blocker it did not
      settle, with the recommended option first;
+   - when the CI configuration has an uncovered platform, ask whether to run
+     CI early on the pushed branch, with the options
+     `No early run (Recommended)`, `After the first wave or task` and
+     `Midway through the plan`; record the answer in `## Decisions` as
+     `Early CI: none` or `Early CI: <first|midway> — consented <YYYY-MM-DD>`;
+     the answer is the consent for the push and the workflow dispatch;
    - when `finishAction` is `ask`: merge into `<current branch>`, open a pull
      request, or keep the branch, recorded as its own paragraph (no list
      marker, nothing after the value) holding one

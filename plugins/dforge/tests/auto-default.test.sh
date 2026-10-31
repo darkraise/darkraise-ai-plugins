@@ -90,6 +90,57 @@ says "auto-run.md: finishing lists every lens-skipped line" "$AR" '`final review
 says "auto-run.md: light finishing lists the unverified test statements" "$AR" 'every `test` statement of the spec under `not verified (depth light)`'
 says "brainstorming: the open line decides a second round only at full" "$P/skills/brainstorming/references/architecture-critic.md" 'decides whether a second round runs at depth `full`; at `standard` none runs.'
 
+# CI parity (test tiers plan, part 5): the reference, the plan header's CI line,
+# the early-CI offer and the spec review's question.
+CIP="$P/reference/ci-parity.md"
+CIL="$P/skills/writing-plans/references/ci-line.md"
+ABD="$P/skills/brainstorming/references/auto-by-default.md"
+check "ci-parity.md exists" "$([ -s "$CIP" ] && echo yes || echo no)" "yes"
+for h in '## Finding the CI configuration' '## Reading jobs, platforms and commands' '## Pitfalls'; do
+  names "ci-parity.md: $h" "$CIP" "$h"
+done
+says "ci-parity.md: the search order" "$CIP" '`.github/workflows/*.yml` first, then `.gitlab-ci.yml`, `azure-pipelines.yml`, `.circleci/config.yml`'
+names "ci-parity.md: the table columns" "$CIP" '| Platform | Pitfall | Do instead |'
+rows_for() { # rows_for <platform> — Pitfalls rows whose Platform cell is exactly <platform>
+  awk -F'|' -v p="$1" '
+    /^## / { on = ($0 == "## Pitfalls"); next }
+    on && /^\|/ { c = $2; gsub(/^ +| +$/, "", c); if (c == p) n++ }
+    END { print n + 0 }' "$CIP"
+}
+check "ci-parity.md: five Windows Git Bash rows" "$(rows_for 'Windows Git Bash')" "5"
+check "ci-parity.md: three macOS rows" "$(rows_for macOS)" "3"
+check "ci-parity.md: two uutils rows" "$(rows_for 'uutils (ubuntu-latest)')" "2"
+check "ci-parity.md: the table holds those ten rows and no other" \
+  "$(awk '/^## / { on = ($0 == "## Pitfalls"); next } on && /^\|/ { n++ } END { print n + 0 }' "$CIP")" "12"
+pit=$(awk '/^## / { on = ($0 == "## Pitfalls"); next } on' "$CIP")
+for needle in 'MSYS_NO_PATHCONV' 'dr_native_path' '/c/' 'C:/' "tr -d '\\r'" 'ENVIRON' 'pathToFileURL' \
+              'sed -i' 'date -d' 'readlink -f' 'mkdir' 'timeout'; do
+  case $pit in *"$needle"*) got=yes ;; *) got=no ;; esac
+  check "ci-parity.md Pitfalls names $needle" "$got" "yes"
+done
+says "ci-parity.md: uncovered means the host is not that platform" "$CIP" 'A platform is uncovered when the host running dforge is not that platform.'
+says "ci-parity.md: uutils is covered only by a uutils host" "$CIP" 'only when `cp --version` names uutils'
+says "ci-parity.md: only workflow_dispatch workflows start early" "$CIP" '`workflow_dispatch`'
+
+names "writing-plans: the header template has a CI line" "$W" '**CI:** '
+says "writing-plans: the CI line grammar" "$CIL" '`<workflow files>` — platforms: <list> — local: `<cmd>`; `<cmd>` — uncovered: <platforms or none>'
+says "writing-plans: none when no CI configuration is found" "$CIL" 'write `**CI:** none` when no CI configuration is found'
+says "writing-plans: uncovered names come from the Platform column" "$CIL" '`uncovered:` lists names from the Platform column of the Pitfalls table'
+says "writing-plans: uncovered platforms copy their pitfalls rows" "$CIL" "copy that platform's rows of the Pitfalls table in [ci-parity.md](../../../reference/ci-parity.md) into \`## Global Constraints\`"
+says "writing-plans: the early-CI offer needs an uncovered platform" "$CIL" 'Offer the early CI run only when the CI line names an uncovered platform'
+says "writing-plans: the owner's answer is the consent" "$CIL" "your human partner's answer is the consent"
+says "writing-plans: the early-CI wave form" "$CIL" '**Early CI:** after wave <k> — consented <YYYY-MM-DD>'
+says "writing-plans: the early-CI task form" "$CIL" '**Early CI:** after task <n> — consented <YYYY-MM-DD>'
+says "writing-plans: an auto run copies the recorded decision" "$CIL" 'ask nothing and copy the `Early CI:` line of the spec'"'"'s `## Decisions`'
+says "writing-plans: first and midway resolve to a point" "$CIL" '`first` is `after wave 1` on a waves plan and `after task 1` on a sequential plan'
+says "writing-plans: no line without an uncovered platform" "$CIL" 'Write no `**Early CI:**` line when every platform is covered'
+
+says "brainstorming: the spec phase reads the CI configuration" "$ABD" 'read the CI configuration as [ci-parity.md](../../../reference/ci-parity.md) says'
+says "brainstorming: the early-CI question needs an uncovered platform" "$ABD" 'when the CI configuration has an uncovered platform, ask whether to run CI early on the pushed branch'
+says "brainstorming: the no-run option is recommended" "$ABD" 'No early run (Recommended)'
+says "brainstorming: the answer goes to Decisions" "$ABD" 'record the answer in `## Decisions` as `Early CI: none` or `Early CI: <first|midway> — consented <YYYY-MM-DD>`'
+says "brainstorming: the answer is the consent for the push and dispatch" "$ABD" 'the answer is the consent for the push and the workflow dispatch'
+
 # Docs pointers and test cleanups: pointers name the file that holds their target.
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
