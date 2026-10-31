@@ -68,10 +68,10 @@ registry rather than a request in a prompt. The scout carries no `Write`
 either; a judge writes only its report file, whose path its prompt names,
 replies in at most ten lines, and `scripts/task-step verdict` checks that no
 tracked file changed during a task review.
-One drafter, `drafter-sonnet`, writes a slice of 2-3 tasks of a plan whose
-header is written (writing-plans' Drafting the tasks); it may run code in a
-scratch worktree of its own, so it carries `Bash`, `Write` and `Edit`, but
-never `Agent`.
+One drafter, `drafter-sonnet`, writes a slice of 3-4 tasks of a plan of 9 or
+more whose header is written (writing-plans' Drafting the tasks); it searches
+with `Bash` and writes its slice file, so it carries `Bash`, `Write` and
+`Edit`, but never `Agent`.
 
 The reserve exists so that a human ruling, and a task that genuinely cannot be
 split any further, both have somewhere to go. It is not a way around the gate:

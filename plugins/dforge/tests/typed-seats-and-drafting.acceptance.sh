@@ -140,13 +140,13 @@ if sel A7; then
   echo "# A7"
   dt=$(section "$WP" "## Drafting the tasks")
   matches "A7: writing-plans has a Drafting the tasks section" "$dt" '.'
-  matches "A7: 1-3 tasks are drafted in the session" "$dt" 'A plan of 1-3 tasks is drafted in the session'
-  matches "A7: 4 or more tasks are drafted in slices" "$dt" 'For 4 or more'
-  matches "A7: slices of 2-3 consecutive tasks" "$dt" 'slices of 2-3 consecutive tasks'
+  matches "A7: 1-8 tasks are drafted in the session" "$dt" 'A plan of 1-8 tasks is drafted in the session'
+  matches "A7: 9 or more tasks are drafted in slices" "$dt" 'For 9 or more'
+  matches "A7: slices of 3-4 consecutive tasks" "$dt" 'slices of 3-4 consecutive tasks'
   matches "A7: one drafter per slice" "$dt" 'one `dforge:drafter-sonnet` per slice'
   matches "A7: every slice dispatched in one message" "$dt" 'every slice in one message'
   dp=$(tr '\n' ' ' < "$PLUGIN/skills/writing-plans/references/drafter-prompt.md" | tr -s ' ')
-  matches "A7: the drafter prompt dispatches one slice of 2-3 consecutive tasks, every slice at once" "$dp" 'one dispatch per slice of 2-3 consecutive tasks, every slice in one message'
+  matches "A7: the drafter prompt dispatches one slice of 3-4 consecutive tasks, every slice at once" "$dp" 'one dispatch per slice of 3-4 consecutive tasks, every slice in one message'
 fi
 
 if sel A9; then

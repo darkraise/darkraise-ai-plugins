@@ -53,8 +53,9 @@ const REWORDED = [
   "Write `diff -u <workspace>/plan-round-<r-1>.md PLAN_FILE > <workspace>/plan-delta-<r>.diff`, dispatch the seat with the Later rounds template, passing that file and the previous round's findings file, with `[REPORT_FILE]` set to `<workspace>/plan-review-round-<r>.md`.",
 ];
 // Sentences later changes on the main branch removed or reworded after BASE:
-// "review light plans once" in writing-plans, and the strict-mode tail in the
-// execution skills. The split cannot have lost them.
+// "review light plans once" in writing-plans, the strict-mode tail in the
+// execution skills, and the drafting threshold in writing-plans. The split
+// cannot have lost them.
 const REMOVED = [
   '- **Once the plan is reviewed** (at depth light, once it is linted):',
   'Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.',
@@ -69,6 +70,10 @@ const REMOVED = [
   "The plan's last two tasks are measured against the final-phase limit:",
   "- The plan's last two tasks are measured against the final-phase limit:",
   "their brief prints `budget (last 2 tasks)` or `budget (last task)`, and only that line's verdict decides.",
+  'A plan of 1-3 tasks is drafted in the session.',
+  'For 4 or more, write the header yourself, through the Task index, and save it as the plan file.',
+  'Then split the index into slices of 2-3 consecutive tasks and dispatch one `dforge:drafter-sonnet` per slice, every slice in one message, with [drafter-prompt.md].',
+  "Each dispatch names the spec path, the plan path, the slice range, the slice path (`<state>/drafts/<plan basename without .md>/tasks-A-B.md`) and the plugin root, as the template's placeholders; paste nothing else.",
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 

@@ -235,12 +235,14 @@ If a plan ends up with no wave of two or more tasks, say so and write
 
 ## Drafting the tasks
 
-A plan of 1-3 tasks is drafted in the session. For 4 or more, write the
-header yourself, through the Task index, and save it as the plan file. Then
-split the index into slices of 2-3 consecutive tasks and dispatch one
-`dforge:drafter-sonnet` per slice, every slice in one message, with
-[drafter-prompt.md](references/drafter-prompt.md). Each dispatch names the
-spec path, the plan path, the slice range, the slice path
+A plan of 1-8 tasks is drafted in the session: you have already read the
+code it changes, and every drafter would read it again from nothing. For 9
+or more, write the header yourself, through the Task index, and save it as
+the plan file. Then split the index into slices of 3-4 consecutive tasks and
+dispatch one `dforge:drafter-sonnet` per slice, every slice in one message,
+with [drafter-prompt.md](references/drafter-prompt.md). Each dispatch names
+the spec path, the plan path, the slice range, the files the slice changes
+or its tests join, as far as your exploration found them, the slice path
 (`<state>/drafts/<plan basename without .md>/tasks-A-B.md`) and the plugin
 root, as the template's placeholders; paste nothing else.
 

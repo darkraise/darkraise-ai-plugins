@@ -1,6 +1,6 @@
 ---
 name: drafter-sonnet
-description: "Plan drafter running Sonnet 5.5 at high effort. Dispatched by dforge's writing-plans to draft one slice of 2-3 consecutive tasks of a plan whose header is written."
+description: "Plan drafter running Sonnet 5.5 at high effort. Dispatched by dforge's writing-plans to draft one slice of 3-4 consecutive tasks of a plan of 9 or more whose header is written."
 model: sonnet
 effort: high
 tools: Read, Grep, Glob, Bash, Write, Edit
