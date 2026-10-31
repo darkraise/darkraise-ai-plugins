@@ -4,9 +4,11 @@
 # record lets the session skip a rerun at a HEAD that already passed.
 #
 # One row per run goes to <state>/suites.tsv (<state> is `dforge-path state`):
-#   <HEAD sha> <clean|dirty> <command> <exit> <log path> <epoch>
+#   <HEAD sha> <clean|dirty> <command> <exit> <log path> <epoch> <duration seconds>
 # separated by tabs, the command's arguments shell-quoted (printf %q) so two
-# commands that split the same text differently never share a row; the output
+# commands that split the same text differently never share a row. The
+# duration is the command's wall time in whole seconds; a row written by an
+# earlier version has six columns and no duration. The output
 # goes to <state>/suites/<epoch>-<pid>.log. Clean
 # means `git status --porcelain --untracked-files=all` printed nothing before
 # and after the run; ignored files, such as a local .env, are outside the
@@ -117,10 +119,11 @@ trap - INT TERM
 kill "$ticker" 2>/dev/null
 wait "$ticker" 2>/dev/null
 [ "$code" -ne 137 ] || code=124
+end=$(date +%s)
 
 recorded=$clean_before
 if [ "$recorded" = clean ] && ! is_clean; then recorded=dirty; fi
-printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$head" "$recorded" "$command_text" "$code" "$log" "$(date +%s)" >> "$record"
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$head" "$recorded" "$command_text" "$code" "$log" "$end" "$((end - start))" >> "$record"
 
 counts=$(tr -d '\r' < "$log" | awk '
   /^# pass [0-9][0-9]*[ \t]*$/ { tp = $3; tap = 1 }

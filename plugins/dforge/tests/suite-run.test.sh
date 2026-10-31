@@ -73,11 +73,12 @@ has "a pass prints its verdict" "$out" "suite: pass (exit 0)"
 has "a pass prints the counts it read" "$out" "counts: 3 pass, 0 fail"
 check "the digest ends with the log path" "$(printf '%s\n' "$out" | tail -n 1 | cut -c1-5)" "log: "
 check "the command ran once" "$(runs)" "1"
-check "the row has six fields" "$(last_row | awk -F'\t' '{print NF}')" "6"
+check "the row has seven fields" "$(last_row | awk -F'\t' '{print NF}')" "7"
 check "the row records HEAD" "$(field 1)" "$HEAD1"
 check "the row records a clean tree" "$(field 2)" "clean"
 check "the row records the command" "$(field 3)" "bash $TMP/probe.sh 0 $TMP/out-tap-pass"
 check "the row records the exit" "$(field 4)" "0"
+check "the row records a whole-second duration" "$(field 7 | grep -cE '^[0-9]+$')" "1"
 check "the logged output is kept" "$(cat "$(field 5)")" "$(cat "$TMP/out-tap-pass")"
 check "the run leaves the tree clean" "$(git -C "$REPO" status --porcelain --untracked-files=all)" ""
 
@@ -186,6 +187,7 @@ run --timeout 1 -- sleep 5
 check "a timeout exits 124" "$rc" "124"
 has "a timeout is a FAIL" "$out" "suite: FAIL (exit 124)"
 check "a timeout is recorded" "$(field 4)" "124"
+check "a timed-out run records its wall time" "$([ "$(field 7)" -ge 1 ] && [ "$(field 7)" -le 4 ] && echo yes || echo no)" "yes"
 
 out=$(cd "$REPO" && SUITE_RUN_KILL_AFTER=1 bash "$SUITE" --timeout 1 -- bash -c 'trap "" TERM; sleep 30' 2>&1); rc=$?
 check "a command that ignores TERM is still a timeout" "$rc" "124"
@@ -228,6 +230,17 @@ run -- bash -c 'echo x >> "$PROBE_RUNS"; exit 0' x
 run -- bash -c 'echo x >> "$PROBE_RUNS";' exit 0 x
 check "arguments split differently do not reuse a pass" "$(runs)" "$((before + 2))"
 check "the row keeps the argument boundaries" "$(field 3)" "bash -c echo\\ x\\ \\>\\>\\ \\\"\\\$PROBE_RUNS\\\"\\; exit 0 x"
+
+# --- a six-column row from before the duration column is still reused ----------
+commit six
+HEAD6=$(git -C "$REPO" rev-parse HEAD)
+legacy_log="$TMP/legacy.log"
+: > "$legacy_log"
+printf '%s\tclean\t%s\t0\t%s\t%s\n' "$HEAD6" "bash $TMP/probe.sh 0 $TMP/out-tap-pass" "$legacy_log" "$(date +%s)" >> "$REPO/.dforge/suites.tsv"
+before=$(runs)
+probe 0 "$TMP/out-tap-pass"
+has "a six-column row is reused" "$out" "suite: reused pass at ${HEAD6:0:7} ("
+check "reusing a six-column row does not run the command" "$(runs)" "$before"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
