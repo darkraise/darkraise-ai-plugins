@@ -75,9 +75,13 @@ fresh reviewer's gate. When drawing task boundaries: fold setup,
 configuration, scaffolding, and documentation steps into the task whose
 deliverable needs them; split only where a reviewer could meaningfully
 reject one task while approving its neighbor. Each task ends with an
-independently testable deliverable. A task is a feature slice: on a Claude
-plan its code task carries no implementation code and is scored with spec 2
-(Assign an implementer, step 1).
+independently testable deliverable. Every task pays a fixed cost whatever
+its size: an implementer dispatch, a review, and the session's turns
+around both. So merge a small task, one or two files with one test cycle,
+into the neighbour that shares its files or its deliverable, whenever the
+merged task still passes Rule S (Assign an implementer, step 2). A task is
+a feature slice: on a Claude plan its code task carries no implementation
+code and is scored with spec 2 (Assign an implementer, step 1).
 
 ## Plan Document Header
 
