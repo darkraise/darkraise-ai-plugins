@@ -202,8 +202,8 @@ your own: QA commits on this branch.
    plan header's `**Integration check:**` command through
    `bash <plugin-root>/scripts/suite-run -- bash -c '<integration check>'`
    as a background command at the same HEAD the Claude review reads, from the
-   checkout's top level, at every depth and in either execution mode. A
-   failing line that does not also fail at MERGE_BASE is a finding: run the
+   checkout's top level, on every final review and in either execution mode.
+   A failing line that does not also fail at MERGE_BASE is a finding: run the
    command once at MERGE_BASE in a temporary worktree and compare the failing
    lines, as [parallel-waves.md](parallel-waves.md) §1 does. Write each such
    finding as `[suite] <failing line>`. A `[suite]` finding enters the fix
