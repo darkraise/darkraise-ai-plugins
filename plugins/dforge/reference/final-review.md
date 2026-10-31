@@ -391,6 +391,14 @@ skipped with a reason naming its register row, commit it, and run
 `scripts/register add <register> "A<n>: <statement>" --state deferred --note "<the upheld rejection>"`,
 so finishing's test run is green and the statement is not lost.
 
+**Redundant tests.** A `[lens:test-quality]` finding on a redundant test goes
+to the fix wave, which merges the tests into a row of one table or deletes the
+redundant one. The fix wave may delete only a test added on the branch, a test
+that does not exist at MERGE_BASE, under the REFACTOR rule in
+dforge:test-driven-development, and never a regression test that names a fixed
+bug; a test that exists at MERGE_BASE is left for dforge:test-simplifier. The
+commit body names the faults the covering test catches.
+
 **Suites.** Any test or validation suite you run in the final review — the
 check after the fix wave, or the project's full suite in inline mode — goes
 through `bash <plugin-root>/scripts/suite-run -- <command>`, which records the

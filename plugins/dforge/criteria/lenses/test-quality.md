@@ -31,3 +31,7 @@ it. Ignore missing cases, which the next criterion owns.
 Look at the branches the diff adds in the code under test. Report a finding
 when an error path, a boundary value or a "must not happen" case has no test
 that reaches it.
+
+### Redundant Tests {#redundant}
+
+Among the tests added or changed on the branch, report one that fails for no fault that another branch test or an existing test does not also catch, and name the test that covers it. The fix is to merge the tests into a row of a table, or to delete the redundant one. Ignore tests that cannot fail, which the first criterion owns.

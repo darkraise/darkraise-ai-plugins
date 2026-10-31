@@ -194,6 +194,9 @@ After green only:
 - Improve names
 - Extract helpers
 - Fold a new test that varies a sibling into the sibling's table as a row
+- Delete a test written on this branch when a broader test written on this branch fails for every fault the narrower one catches
+
+The commit body names those faults. The rule covers only tests that do not exist at the branch's merge base (`git merge-base <default branch> HEAD`), and never a regression test that names a fixed bug. A test that predates the branch goes through dforge:test-simplifier.
 
 Keep tests green. Don't add behavior.
 
@@ -205,7 +208,7 @@ Next failing test for next feature.
 
 | Quality | Good | Bad |
 |---------|------|-----|
-| **Minimal** | One thing. "and" in name? Split it. | `test('validates email and domain and whitespace')` |
+| **One behaviour** | Variants of one behaviour are rows of one parametrized or table-driven test; distinct behaviours get distinct tests. | `test('validates email and domain and whitespace')`, or copy-pasted tests that differ only in their input |
 | **Clear** | Name describes behavior | `test('test1')` |
 | **Shows intent** | Demonstrates desired API | Obscures what code should do |
 | **Lowest layer** | The cheapest layer that fails for the change; e2e only for a user journey | An edge case driven through the browser |

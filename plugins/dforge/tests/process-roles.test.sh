@@ -205,6 +205,27 @@ says "writing-plans forms: a Covered by task names the fault" "$WPF" $'The step 
 says "writing-plans forms: a Covered by task writes no test of its own" "$WPF" 'The task has no step that writes its own failing test, and its verification runs the covering test'
 says "writing-plans forms: tests are planned per behaviour" "$WPF" 'Plan tests per behaviour: one test per acceptance statement or behaviour, at the lowest layer that can fail for it, rather than one per task'
 says "writing-plans forms: the Extend step must fail first" "$WPF" 'it must fail before the implementation, as a new test would'
+TDD="$P/skills/test-driven-development/SKILL.md"
+WGT="$P/skills/test-driven-development/references/writing-good-tests.md"
+LENS="$P/criteria/lenses/test-quality.md"
+says "TDD: the Minimal row is replaced by the one-behaviour rule" "$TDD" '| **One behaviour** | Variants of one behaviour are rows of one parametrized or table-driven test; distinct behaviours get distinct tests. |'
+lacks "TDD: the Minimal row is gone" "$TDD" '| **Minimal** |'
+says "TDD REFACTOR: a branch test may go for a broader branch test" "$TDD" 'Delete a test written on this branch when a broader test written on this branch fails for every fault the narrower one catches'
+says "TDD REFACTOR: the commit body names the faults" "$TDD" 'The commit body names those faults'
+says "TDD REFACTOR: only tests absent at the merge base" "$TDD" $'covers only tests that do not exist at the branch\'s merge base'
+says "TDD REFACTOR: never a regression test" "$TDD" 'never a regression test that names a fixed bug'
+says "TDD REFACTOR: older tests go to test-simplifier" "$TDD" 'A test that predates the branch goes through dforge:test-simplifier'
+says "good tests: find an existing test that fails for the change" "$WGT" 'After naming the change, find whether an existing test already fails for it. If one does, extend it, or write no test.'
+says "good tests: the gate function asks the same" "$WGT" 'An existing test already fails for it'
+says "plan review: Redundant test scores LOW under Executability" "$PR" 'Redundant test: score LOW when a planned test fails for no fault that an existing test or another planned test does not already catch'
+says "plan review: the reviewer names the overlapping test" "$PR" 'name the overlapping test in the finding'
+says "plan review: a Covered by task is judged by its named fault" "$PR" 'judge its Executability by the fault the step names'
+check "plan review: Redundant test is no fifth criterion" "$(grep -c '^### ' "$PR")" "4"
+names "lens: the redundant criterion" "$LENS" '### Redundant Tests {#redundant}'
+says "lens: a redundant branch test names its cover" "$LENS" 'report one that fails for no fault that another branch test or an existing test does not also catch, and name the test that covers it'
+says "final review: the fix wave deletes only branch tests" "$FR" 'The fix wave may delete only a test added on the branch, a test that does not exist at MERGE_BASE'
+says "final review: never a regression test" "$FR" 'never a regression test that names a fixed bug'
+says "final review: older tests are test-simplifier's" "$FR" 'a test that exists at MERGE_BASE is left for dforge:test-simplifier'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

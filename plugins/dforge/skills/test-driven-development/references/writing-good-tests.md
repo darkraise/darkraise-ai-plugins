@@ -24,6 +24,8 @@ make this test fail — and is that change a bug or a decision?** A test
 earns its place by catching a wrong branch, missing side effect, wrong
 argument, boundary case, or broken contract.
 
+After naming the change, find whether an existing test already fails for it. If one does, extend it, or write no test.
+
 **Derive expectations independently.** Use literals and hand-checked
 fixtures; table-driven tests with literal `want` values are the preferred
 shape. An expectation computed by the code under test — or its helpers —
@@ -67,7 +69,9 @@ otherwise assert the first consumer-visible result that depends on them.
 ```
 BEFORE writing the test body:
   Name the production change that would make this test fail.
+  Find whether an existing test already fails for that change.
 
+  An existing test already fails for it → extend that test, or write none
   Cannot name one            → redesign around an observable behavior
   "The source text changed"  → run the artifact and assert its effects
   Only intentional decisions → change detector; test the behavior
