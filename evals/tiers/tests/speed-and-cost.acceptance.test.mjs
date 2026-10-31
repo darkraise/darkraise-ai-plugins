@@ -54,8 +54,9 @@ const REWORDED = [
 ];
 // Sentences later changes on the main branch removed or reworded after BASE:
 // "review light plans once" in writing-plans, the strict-mode tail in the
-// execution skills, and the drafting threshold in writing-plans. The split
-// cannot have lost them.
+// execution skills, the drafting threshold in writing-plans, and the plan
+// header's waves-only Integration check placeholder, which the test tiers
+// change widened to every plan. The split cannot have lost them.
 const REMOVED = [
   '- **Once the plan is reviewed** (at depth light, once it is linted):',
   'Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.',
@@ -74,6 +75,8 @@ const REMOVED = [
   'For 4 or more, write the header yourself, through the Task index, and save it as the plan file.',
   'Then split the index into slices of 2-3 consecutive tasks and dispatch one `dforge:drafter-sonnet` per slice, every slice in one message, with [drafter-prompt.md].',
   "Each dispatch names the spec path, the plan path, the slice range, the slice path (`<state>/drafts/<plan basename without .md>/tasks-A-B.md`) and the plugin root, as the template's placeholders; paste nothing else.",
+  '**Integration check:** [waves only:',
+  'the command that proves a merged wave works, normally the full suite]',
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 
