@@ -66,6 +66,12 @@ claude_plan() {
 
 **Program:** `docs/program.md` — sub-project 1 of 2 — next: Second part
 
+**Task check:** `bash quick.sh` — gate 1 has Tier: task
+
+**Integration check:** `bash test.sh`
+
+**CI:** none
+
 **Plan review:** 2026-09-12 — dforge:judge-fable — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
 ## Global Constraints
@@ -125,6 +131,12 @@ Routing policy: codex-v4
 **Spec:** docs/spec.md
 
 **Execution:** subagent — codex gpt-6.1-sol / high — native pair
+
+**Task check:** `bash quick.sh` — gate 1 has Tier: task
+
+**Integration check:** `bash test.sh`
+
+**CI:** none
 
 **Plan review:** 2026-09-12 — codex gpt-6-astra / high — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
@@ -1019,6 +1031,10 @@ waves_plan() { # waves_plan <Parallelism value> — three tasks; Tasks 2 and 3 s
 
 **Worktree setup:** none
 
+**Task check:** \`bash quick.sh\` — gate 1 has Tier: task
+
+**CI:** none
+
 **Plan review:** 2026-10-10 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
 ## Global Constraints
@@ -1111,6 +1127,7 @@ waves_plan 'waves — 1 | 2-3' | sed '/^\*\*Integration check:\*\*/d; s/^\*\*Exe
 lint waves-inline.md --no-probe
 has "waves: inline is refused" "$out" "ERROR header: parallel waves need a subagent Execution line"
 has "waves: the integration check is required" "$out" "ERROR header: a waves plan needs its **Integration check:** line"
+lacks "waves: the missing Integration check is an error, not a warning" "$out" "WARN header: no **Integration check:** line yet"
 # An optional **Wave check:** line runs between the full checks of a waves plan.
 with_wave_check() { # with_wave_check <line> — stdin plan with <line> after the Worktree setup line
   awk -v l="$1" '{ print } /^\*\*Worktree setup:\*\*/ { print ""; print l }'
@@ -1125,6 +1142,71 @@ waves_plan 'sequential — one chain' | with_wave_check '**Wave check:** `bash q
 lint seq-check.md --no-probe
 has "sequential: a Wave check line is flagged" "$out" "WARN header: **Wave check:** runs only between the waves of a waves plan"
 lacks "sequential: a Wave check line is not an error" "$out" "ERROR header: the **Wave check:**"
+
+# --- test tier and CI header lines ---
+# The fixtures carry well-formed lines, so each case edits one line. A missing
+# line warns, as a missing Plan review line does; a malformed line fails.
+variant hdr-missing.md '/^\*\*Task check:\*\*/d; /^\*\*Integration check:\*\*/d; /^\*\*CI:\*\*/d'
+lint hdr-missing.md
+check "missing tier and CI lines: warnings only, exit 0" "$status" "0"
+has "a missing Task check warns" "$out" "WARN header: no **Task check:** line yet"
+has "a missing Integration check warns on a sequential plan" "$out" "WARN header: no **Integration check:** line yet"
+has "a missing CI line warns" "$out" "WARN header: no **CI:** line yet"
+has "the three warnings add to the fixture's two" "$out" "plan-lint: 0 errors, 5 warnings"
+
+for bad in 'run the quick tests' 'none' '`bash a.sh` `bash b.sh` — two commands'; do
+  variant tc-bad.md "s#^\*\*Task check:\*\* .*#**Task check:** $bad#"
+  lint tc-bad.md
+  check "Task check '$bad': exit 1" "$status" "1"
+  has "Task check '$bad': malformed" "$out" 'ERROR header: **Task check:** must be one command code span or "none — full suite every 3 tasks"'
+done
+
+variant ic-empty.md 's#^\*\*Integration check:\*\* .*#**Integration check:**#'
+lint ic-empty.md
+has "an Integration check with no command is an error" "$out" "ERROR header: **Integration check:** names no command"
+
+CI_FULL='**CI:** `.github/workflows/validate.yml` — platforms: ubuntu-latest, windows-latest — local: `node scripts/test-all.mjs` — uncovered: Windows Git Bash'
+variant tc-none.md "s#^\*\*Task check:\*\* .*#**Task check:** none — full suite every 3 tasks#; s#^\*\*CI:\*\* none\$#${CI_FULL}#"
+lint tc-none.md
+check "the none form and a full CI line: exit 0" "$status" "0"
+has "the none form and a full CI line add no finding" "$out" "plan-lint: 0 errors, 2 warnings"
+
+for bad in 'maybe' \
+  '`ci.yml` — platforms: linux — uncovered: none' \
+  '`ci.yml` — platforms: linux — local: make test — uncovered: none' \
+  '`ci.yml` — platforms: linux — local: `make test`' \
+  '`ci.yml` — platforms: linux — local: `make test` — uncovered:'; do
+  variant ci-bad.md "s#^\*\*CI:\*\* none\$#**CI:** $bad#"
+  lint ci-bad.md
+  check "CI '$bad': exit 1" "$status" "1"
+  has "CI '$bad': malformed" "$out" 'ERROR header: **CI:** must be "none" or "<files> — platforms: … — local: … — uncovered: …"'
+done
+
+early() { # early <Early CI value> — the plan with a full CI line and that Early CI line; sets out and status
+  variant early.md "s#^\*\*CI:\*\* none\$#${CI_FULL}\n\n**Early CI:** $1#"
+  lint early.md
+}
+early 'after task 2 — consented 2026-10-31'
+check "Early CI after the last task, consented: exit 0" "$status" "0"
+lacks "Early CI after the last task, consented: no finding" "$out" "Early CI"
+early 'after task 2'
+check "Early CI without consent: exit 1" "$status" "1"
+has "Early CI without consent" "$out" 'ERROR header: **Early CI:** lacks "— consented <YYYY-MM-DD>"'
+early 'after task 2 — consented tomorrow'
+has "Early CI with a malformed date lacks consent" "$out" 'ERROR header: **Early CI:** lacks "— consented <YYYY-MM-DD>"'
+early 'after wave 2'
+has "Early CI naming a wave on a sequential plan" "$out" "ERROR header: **Early CI:** names a wave on a sequential plan"
+has "Early CI naming a wave, unconsented, also lacks consent" "$out" 'ERROR header: **Early CI:** lacks "— consented <YYYY-MM-DD>"'
+early 'after task 3 — consented 2026-10-31'
+has "Early CI naming a task past the last" "$out" "ERROR header: **Early CI:** names Task 3, past the last task"
+early 'whenever — consented 2026-10-31'
+has "Early CI with no recognised point" "$out" 'ERROR header: **Early CI:** must be "after wave <k>" or "after task <n>", then "— consented <YYYY-MM-DD>"'
+
+waves_plan 'waves — 1 | 2-3' | sed '/^\*\*Task check:\*\*/d' | sed "s#^\*\*CI:\*\* none\$#${CI_FULL}\n\n**Early CI:** after wave 2 — consented 2026-10-31#" > waves-early.md
+lint waves-early.md --no-probe
+check "waves: no Task check and a wave Early CI: exit 0" "$status" "0"
+has "waves: a missing Task check warns" "$out" "WARN header: no **Task check:** line yet"
+lacks "waves: a wave Early CI is accepted" "$out" "Early CI"
 
 # --- documents kept in darkmem: Spec paths resolve in the mirror ---
 . "$HERE/fixtures/darkmem-stores.sh"

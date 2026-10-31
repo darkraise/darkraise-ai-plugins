@@ -622,6 +622,62 @@ elif [ -n "$wave_check" ]; then
   say WARN header "**Wave check:** runs only between the waves of a waves plan; this plan is sequential"
 fi
 
+# --- test tier and CI header lines (reference/test-tiers.md, reference/ci-parity.md) ---
+bt='`'
+header_value() { # header_value <label> <line> — the line without its label, trimmed
+  local v=${2#"**$1:**"}
+  v=${v#"${v%%[![:space:]]*}"}
+  printf '%s' "${v%"${v##*[![:space:]]}"}"
+}
+
+task_check=$(first_label 'Task check' "$unfenced_header")
+if [ -z "$task_check" ]; then
+  say WARN header "no **Task check:** line yet"
+else
+  value=$(header_value 'Task check' "$task_check")
+  if ! [[ "$value" =~ ^$bt[^$bt]+$bt($|$SEP) || "$value" =~ ^none${SEP}full\ suite\ every\ 3\ tasks$ ]]; then
+    say ERROR header '**Task check:** must be one command code span or "none — full suite every 3 tasks"'
+  fi
+fi
+
+integration_check=$(first_label 'Integration check' "$unfenced_header")
+if [ -z "$integration_check" ]; then
+  [ "$parallelism" != sequential ] || say WARN header "no **Integration check:** line yet"
+elif [ -z "$(header_value 'Integration check' "$integration_check")" ]; then
+  say ERROR header "**Integration check:** names no command"
+fi
+
+ci_line=$(first_label 'CI' "$unfenced_header")
+if [ -z "$ci_line" ]; then
+  say WARN header "no **CI:** line yet"
+else
+  value=$(header_value 'CI' "$ci_line")
+  ci_shape="^$bt[^$bt]+$bt${SEP}platforms: .+${SEP}local: $bt[^$bt]+$bt(; $bt[^$bt]+$bt)*${SEP}uncovered: .+\$"
+  if [ "$value" != none ] && ! [[ "$value" =~ $ci_shape ]]; then
+    say ERROR header '**CI:** must be "none" or "<files> — platforms: … — local: … — uncovered: …"'
+  fi
+fi
+
+early_ci=$(first_label 'Early CI' "$unfenced_header")
+if [ -n "$early_ci" ]; then
+  value=$(header_value 'Early CI' "$early_ci")
+  if ! [[ "$value" =~ ^after\ (wave|task)\ ([1-9][0-9]*)([[:space:]]|$) ]]; then
+    say ERROR header '**Early CI:** must be "after wave <k>" or "after task <n>", then "— consented <YYYY-MM-DD>"'
+  else
+    early_kind=${BASH_REMATCH[1]} early_n=${BASH_REMATCH[2]}
+    if [ "$early_kind" = wave ]; then
+      [ "$parallelism" != sequential ] || say ERROR header "**Early CI:** names a wave on a sequential plan"
+    else
+      last_task=$(tail -n 1 <<<"$nums")
+      if [ -n "$last_task" ] && [ "$early_n" -gt "$last_task" ]; then
+        say ERROR header "**Early CI:** names Task $early_n, past the last task"
+      fi
+    fi
+    [[ "$value" =~ ${SEP}consented\ [0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
+      || say ERROR header '**Early CI:** lacks "— consented <YYYY-MM-DD>"'
+  fi
+fi
+
 # --- UI/UX contract (dforge:ui-ux) ---
 # A spec with a "## UI/UX contract" makes every task that touches a UI file
 # name the contract items it delivers, and every UI- and UX- item reach some
