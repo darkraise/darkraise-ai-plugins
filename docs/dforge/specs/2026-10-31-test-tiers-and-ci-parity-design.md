@@ -29,47 +29,54 @@ There are three tiers. One shared reference, `reference/test-tiers.md`, defines 
 | Tier | Command source | Runs |
 |---|---|---|
 | Task check | the plan header's `**Task check:**` line | beside every task review, every fix round, and inline before every task commit |
-| Full suite | the plan header's `**Integration check:**` line | each wave's merged check, every third completed task when the task check is `none`, the final review, the fix wave, finishing |
+| Full suite | the plan header's `**Integration check:**` line | each wave's merged check, tasks whose number is a multiple of 3 (and the last task) when the task check is `none`, the final review, the fix wave, finishing |
 | Sweep | the project's CI | after push (part 5) |
 
-**Plan header.** `**Integration check:**` becomes required for every plan, not only wave plans. It holds the full suite command. A new required line, `**Task check:**`, holds one of:
+**Plan header.** writing-plans always writes two lines. `**Integration check:**` holds the full suite command, on every plan, not only wave plans. `**Task check:**` holds one of:
 
-- a command, the first that applies: a gate in `<docs>/gates.md` with `Tier: task`; else the full suite itself when its last recorded passing run in `<state>/suites.tsv` took 300 seconds or less (tiering a fast suite saves nothing); else an impact-selection command for the project's runner from `reference/test-tiers.md` (for example `npx jest --changedSince=main`, `pytest --testmon`, `vitest --changed main`);
+- a command, the first that applies: a gate in `<docs>/gates.md` with `Tier: task`; else the full suite itself when its last recorded passing run took 300 seconds or less (tiering a fast suite saves nothing); else an impact-selection command for the project's runner from `reference/test-tiers.md` (for example `npx jest --changedSince=main`, `pytest --testmon`, `vitest --changed main`);
 - `none — full suite every 3 tasks`, when none of those applies.
 
-writing-plans resolves the value once and states the source in a trailing `— <why>`. plan-lint fails a plan missing either line, and fails a `**Task check:**` that is neither a command code span nor the `none` form.
+writing-plans states the source in a trailing `— <why>`. For the 300-second rule it reads only rows in `suites.tsv` of the checkout it runs in, matched by suite-run's quoted key for `bash -c '<cmd>'` run from the top level (`scripts/task-step:78-82`). When the row is missing, or is a six-column row with no duration, the suite counts as not fast.
 
-**gates.md.** Gates gain an optional `Tier:` field with the values `task`, `branch` or `sweep`. The default is `branch`, so an existing manifest means what it meant before. running-gates runs the `task` and `branch` gates and skips `sweep` gates, saying they belong to CI.
+**plan-lint compatibility.** Plans written before this change lack these lines, and so do the existing lint fixtures. A missing `**Task check:**` or `**Integration check:**` line is a WARN (`no **Task check:** line yet`), as a missing `Plan review` line is today (`scripts/plan-lint:108`). A present but malformed line is an ERROR. A wave plan still requires `**Integration check:**`, as today. A `**Task check:**` that is neither one command code span nor the `none` form is malformed.
 
-**suite-run gains duration.** `suites.tsv` gains a seventh column, the run's duration in seconds. Readers that take six columns keep working. writing-plans reads this column for the 300-second rule.
+**gates.md.** Gates gain an optional `Tier:` field with the values `task`, `branch` or `sweep`. The default is `branch`, so an existing manifest means what it meant before. running-gates runs the `task` and `branch` gates. For each `sweep` gate it skips, it prints one line naming the gate and saying it belongs to CI.
 
-**Controller, subagent mode** (`reference/delegated-task.md` §1 "Suite command", §2):
+**suite-run gains duration.** `suites.tsv` gains a seventh column, the run's duration in seconds. Every current reader stays correct. suite-run's reuse check reads columns 1-6 (`suite-run:81-83`). `suite_row`'s callers cut columns 4 and 5 (`task-step:219-220, 257-259`). `read -r _ kind _ code log _` absorbs the extra column (`:1364`).
 
-- A command task check: every `task-step start` passes `--suite '<task check>'`. The rest of the loop is unchanged: the run starts beside the review, `verdict` reads it, and a red line not failing at the base is an Important finding.
-- `none`: `task-step start` passes `--suite '<integration check>' --suite-base <sha>` only on every third completed task and on the plan's last task. `<sha>` is the base of the first task since the last full run, so a regression made two tasks earlier is not excused as a base failure. Other tasks start without `--suite`, and their verdict prints `suite: not scheduled (next at Task <N>)`. This is a new digest line, distinct from `suite: none recorded`. A group review counts its members as completed tasks: it runs the integration check when the count crosses a multiple of three or the group holds the last task. A fix round runs a suite only when its task's review did.
-- The final review starts the integration check through `suite-run` in the background, beside its reviewers, at the branch head. A failing line that does not fail at the merge base is a final-review finding. The fix subagent runs it again after its last commit (as now), and finishing reuses that pass at the same commit.
+**Controller, subagent mode** (`reference/delegated-task.md` §1 "Suite command", §2, §5):
 
-**task-step.** `start` accepts `--suite-base SHA` and stores it in the step file as `suiteBase`. `suite_base_sha` prefers `suiteBase` over the group rule and the task's own base. `verdict` accepts a step file with no `suite` and prints the `not scheduled` line when the plan's task check is `none`.
+- **A plan with no `**Task check:**` line** runs as it does today: the Integration check, else gates, else the project manifest, at every task.
+- **A command task check:** every `task-step start` passes `--suite '<task check>'`. The rest of the loop is unchanged: the run starts beside the review, `verdict` reads it, and a red line not failing at the base is an Important finding.
+- **`none`, sequential plan.** The schedule is by task number: the integration check runs on every task whose number is a multiple of 3, and on the last task. The controller decides at review time, in the same turn it starts the run, because `start` runs before anyone knows whether the task will be held or grouped.
+  - `task-step review` and `task-step review --group` accept `--suite CMD` and `--suite-base SHA`. They write `suite` and `suiteBase` onto the step file `verdict` reads (for a group, the last member's: `task-step:1351-1355`), overriding what `start` recorded.
+  - `<sha>` is the head of the last full-suite run, or the plan's base before the first run. So a regression made two tasks earlier is not excused as a base failure. Normally `suites.tsv` already holds a row at `<sha>`, so the base comparison costs nothing. When that task had a fix round, `<sha>` has no row, and `verdict` runs the suite once there (bounded at 3600 seconds, `TASK_STEP_BASE_TIMEOUT`).
+  - A group runs the integration check when it holds a scheduled task.
+  - A fix round runs a suite only when its task's review did.
+- **`none`, wave plan:** no per-task suite at all. The merged wave check is the suite of the wave's grouped tasks (`reference/delegated-task.md:184-185`), and writing-plans' wave schedule stands (`skills/writing-plans/SKILL.md:221-225`). A command task check still runs per task in the task's worktree, as today.
+- **The `not scheduled` line.** When the plan's `**Task check:**` is `none` and the step file has no `suite`, `verdict` prints `suite: not scheduled (next at Task <N>)`, computed from the plan alone, and does not exit 7. A step file with no `suite` on any other plan keeps printing `suite: none recorded`. §5's completion rule (`:694-697`) adds `not scheduled` to `pass`, `red` with 0 failing, and `none recorded`.
+- **The final review** starts the integration check through `suite-run` in the background, beside its reviewers, at the branch head. A failing line that does not fail at the merge base is a final-review finding. The fix subagent runs it again after its last commit (as now), and finishing reuses that pass at the same commit.
 
-**Inline mode** (`skills/executing-plans/SKILL.md` step 4): run the focused tests while working and the task check once before committing, in place of the full suite. With a task check of `none`, run the integration check on every third task and the last one.
+**Inline mode** (`skills/executing-plans/SKILL.md` step 4): run the focused tests while working and the task check once before committing, in place of the full suite. With a task check of `none`, run the integration check on tasks numbered a multiple of 3 and on the last one.
 
-**Implementer prompt.** Unchanged in substance: focused tests only, never the whole suite. The sentence that names the controller's run says "the task check" instead of "the full suite".
+**Implementer prompt.** Unchanged in substance: focused tests only, never the whole suite. The sentence naming the controller's run says "the task check" instead of "the full suite".
 
-**Native Codex** (`reference/native-codex.md`): wherever it runs a suite per task, it runs the task check, under the same `none` rule.
+**Codex hosts.** The per-task suite on a `Host: codex` plan is in `reference/delegated-task.md`, "The steps by hand" §2 (`:764-770`). It runs the task check, under the same `none` schedule.
 
 ### 2. Fewer tests in the plan (B, register row 2)
 
 **Task template** (`skills/writing-plans/SKILL.md`). Step 1 takes one of three forms:
 
 - **Write the failing test** — a behaviour no existing or planned test reaches. This is the current form.
-- **Extend the test `<file>::<name>`** — a variant of a behaviour already tested. The step gives the added row, case or assertion in full, and it must fail before the implementation, as a new test would.
-- **Covered by Task `<N>`'s test `<name>`** — the behaviour is pinned by a test another task of this plan writes. The step names the fault in this task's code that the test catches. The task has no step that writes or runs its own failing test, and its verification runs that test.
+- **Extend the test `<file>::<name>`** — a variant of a behaviour already tested, or new behaviour that belongs in an existing test. The step gives the added row, case or assertion in full, and it must fail before the implementation, as a new test would.
+- **Covered by Task `<N>`'s test `<name>`** — only for a task that adds no new observable behaviour: wiring, extraction or configuration whose result an earlier task's test exercises end to end. A task adding behaviour uses "Extend" instead. The step names the fault in this task's code that the test would catch. The task has no step that writes its own failing test, and its verification runs the covering test. The plan reviewer judges such a task's Executability by the named fault.
 
 Plans are written per behaviour: one test per acceptance statement or behaviour, at the lowest layer that can fail for it, rather than one per task. The existing rule against end-to-end tests for edge cases stays.
 
-**plan-lint** accepts the three forms. It fails a `Covered by Task <N>` when Task `<N>` does not exist, has no test step of its own, or does not run before the citing task: in a sequential plan `<N>` must be lower than the citing task's number, and in a wave plan Task `<N>` must sit in an earlier wave.
+**plan-lint** accepts the three forms. It fails a `Covered by Task <N>` when Task `<N>` does not exist, has no test step of its own, or does not run before the citing task. In a sequential plan `<N>` must be lower than the citing task's number. In a wave plan Task `<N>` must sit in an earlier wave.
 
-**Plan review** (`criteria/plan-review.md`). A new criterion, "Redundant test": a planned test that fails for no fault that an existing test, or another planned test, does not already catch. It scores the task LOW in the same dimension as a test that cannot fail. The reviewer names the overlapping test.
+**Plan review** (`criteria/plan-review.md`). A new criterion, "Redundant test": a planned test that fails for no fault an existing test or another planned test does not already catch. It scores the task LOW under Executability, as a test that cannot fail does (`criteria/plan-review.md:20-35`). The reviewer names the overlapping test.
 
 **TDD skill** (`skills/test-driven-development/SKILL.md`). The "Minimal" row becomes "One behaviour: variants of one behaviour are rows of one parametrized or table-driven test; distinct behaviours get distinct tests." `references/writing-good-tests.md` adds a step after "Name the production change that would make the test fail": find whether an existing test already fails for that change. If one does, extend it, or write no test.
 
@@ -77,9 +84,14 @@ Plans are written per behaviour: one test per acceptance statement or behaviour,
 
 **TDD REFACTOR step.** After green, a test written on the current branch may be deleted when a broader test written on the branch fails for every fault the narrower one catches. The commit body names those faults. The rule covers only tests that do not exist at the branch's merge base, and never a regression test that names a fixed bug. A test that predates the branch goes through test-simplifier.
 
-**Final review.** The `test-quality` lens (`criteria/lenses/test-quality.md`) gains a criterion, "Redundant tests" `{#redundant}`: among tests added or changed on the branch, report one that fails for no fault another branch test or an existing test does not also catch, and name the test that covers it. Findings go to the fix wave, which merges the tests into a row of a table, or deletes the redundant one. The fix wave may delete only tests added on the branch, under the same rule as the REFACTOR step.
+**Final review.** The `test-quality` lens (`criteria/lenses/test-quality.md`) gains a criterion, "Redundant tests" `{#redundant}`: among tests added or changed on the branch, report one that fails for no fault another branch test or an existing test does not also catch, and name the test that covers it. Findings go to the fix wave, which merges the tests into a row of a table or deletes the redundant one. The fix wave may delete only tests added on the branch, under the same rule as the REFACTOR step.
 
-**closing-a-milestone.** The audit compares two durations from `suites.tsv`: the last passing full-suite run at or before the milestone's head, against the last one at or before the previous milestone's close (or the oldest row when there is none). With fewer than two such rows it says so and recommends nothing. When the full suite grew by 20% or more, or passes the budget `<docs>/gates.md` declares in an optional `Budget:` line on the full-suite gate, the closing report recommends dforge:test-simplifier scoped to the modules the milestone touched, as the next step. It recommends only and removes nothing.
+**closing-a-milestone.**
+- The audit compares two durations from `suites.tsv` in the checkout it runs in: the last passing full-suite run at or before the milestone's head, and the last one at or before the previous milestone's close (or the oldest row when there is none).
+- The rows exist because finishing's merged-result verification in the main checkout goes through `suite-run`, leaving one full-suite row at each merge head. A plan's own worktree rows are removed with the worktree.
+- The audit names the checkout whose rows it read. With fewer than two rows it says so and recommends nothing. That is the expected answer until two plans have merged under this version.
+- When the full suite grew by 20% or more, or passes a declared budget, the closing report recommends dforge:test-simplifier, scoped to the modules the milestone touched, as the next step. It recommends only and removes nothing.
+- The budget is an optional `Budget:` line on the gate whose `Command` equals the plan's `**Integration check:**`. When no such gate exists, the audit uses the 20% rule only.
 
 ### 4. test-simplifier matches the plan (register row 4)
 
@@ -94,74 +106,137 @@ Plans are written per behaviour: one test per acceptance statement or behaviour,
 **Reference** `reference/ci-parity.md`:
 - how to find the CI configuration (`.github/workflows/*.yml` first, then `.gitlab-ci.yml`, `azure-pipelines.yml`, `.circleci/config.yml`);
 - how to read jobs, platforms and commands from it;
-- a pitfalls table per platform that the local host may not run: Windows Git Bash (`MSYS_NO_PATHCONV` paths for native tools, `/c/` against `C:/`, CR stripping, gawk `-v` escapes, ESM drive-letter imports), macOS (BSD `sed -i`, `date`, `readlink -f`), and uutils coreutils on `ubuntu-latest` (non-exclusive `mkdir`, `timeout` signalling only the command).
+- a pitfalls table per platform the local host may not run: Windows Git Bash (`MSYS_NO_PATHCONV` paths for native tools, `/c/` against `C:/`, CR stripping, gawk `-v` escapes, ESM drive-letter imports), macOS (BSD `sed -i`, `date`, `readlink -f`), and uutils coreutils on `ubuntu-latest` (non-exclusive `mkdir`, `timeout` signalling only the command).
 
-**Plan header** `**CI:**`, required. It reads `none` (no CI configuration found), or:
+**Plan header** `**CI:**`, which writing-plans always writes. It reads `none` (no CI configuration found), or:
 
 `` `<workflow files>` — platforms: <list> — local: `<cmd>`; `<cmd>` — uncovered: <platforms or none> ``
 
-writing-plans fills it from the CI configuration. For every uncovered platform, it copies that platform's rows of the pitfalls table into `## Global Constraints`, so every task brief carries them. plan-lint fails a missing line and a malformed one.
+writing-plans fills it from the CI configuration. For every uncovered platform, it copies that platform's rows of the pitfalls table into `## Global Constraints`, so every task brief carries them. plan-lint warns on a missing line, like the part 1 lines, and fails a malformed one.
 
-**Header line** `**Early CI:**`, optional: `after wave <k>` or `after task <n>`, then `— consented <YYYY-MM-DD>`. writing-plans offers it only when the CI line has an uncovered platform, and asks the owner. The answer is the consent. An auto run writes the plan unattended, so there brainstorming reads the CI configuration while writing the spec and asks the early-CI question at the spec review when a platform is uncovered. The answer goes in the spec's `## Decisions`, and writing-plans copies it into the header (`skills/brainstorming/references/auto-by-default.md` gains this question). When the controller reaches that point:
-1. it pushes the branch (`git push -u origin <branch>`);
-2. it starts the CI run: `gh workflow run <workflow> --ref <branch>` when the workflow declares `workflow_dispatch`, else it says so in one line and skips the early run (it never opens a pull request on its own);
-3. it watches the run in the background and keeps working.
+**Header line** `**Early CI:**`, optional: `after wave <k>` or `after task <n>`, then `— consented <YYYY-MM-DD>`.
+- **When it is offered.** writing-plans offers it only when the CI line has an uncovered platform, and asks the owner; the answer is the consent. An auto run writes the plan unattended, so there brainstorming reads the CI configuration while writing the spec. When a platform is uncovered, it asks the early-CI question at the spec review and records the answer in `## Decisions`, and writing-plans copies it into the header (`skills/brainstorming/references/auto-by-default.md` gains this question).
+- **Lint.** plan-lint fails the line when the consent clause is missing, or when the point is malformed: a wave reference on a sequential plan, or a task number past the last.
+- **Auto runs.** `reference/auto-run.md`'s never-performed list (`:181-185`) gains a second exception beside the finish action: the `**Early CI:**` push and workflow dispatch, performed only when the header line carries `— consented <date>`.
 
-A red early run becomes a finding for the next task's review. When no task is left, it becomes a final-review finding, debugged with dforge:systematic-debugging. Each red job, and each step in it, is named.
+When the controller reaches the early-CI point:
+1. It pushes the branch (`git push -u origin <branch>`).
+2. It starts CI with `gh workflow run <workflow> --ref <branch>` when the workflow declares `workflow_dispatch`. Otherwise it says so in one line and skips the early run. It never opens a pull request on its own.
+3. `gh workflow run` prints no run id, so the controller finds the run with `gh run list --workflow <file> --branch <branch> --limit 1 --json databaseId,headSha`, retrying for up to 60 seconds, and checks that `headSha` is the pushed commit.
+4. It runs `gh run watch <id>` in the background and keeps working.
 
-**Script** `scripts/ci-mirror PLAN_FILE`. It reads the plan's `**CI:**` line and runs each `local:` command through `suite-run`, which records each run and reuses a pass at the same commit. It prints one digest line per command, then `uncovered: <platforms>`, and exits non-zero when any command fails. A line reading `none` prints `ci: none` and exits 0. The final review runs it before dispatching reviewers. A failure is a final-review finding.
+Ledger lines: `Early CI: dispatched run <id> at <sha7>`, `Early CI: green run <id>`, `Early CI: red run <id> — <job>/<step>[, ...]`. Any failure of `git push` or `gh` (no remote, not logged in, the API refusing) prints one line and writes `Early CI: skipped — <reason>`, never a stop. A red run becomes a bullet the controller writes into the next task's fix file, the route §4 already gives a mechanical check's finding. With no task left, it becomes a final-review finding, debugged with dforge:systematic-debugging.
 
-**Finishing** (`skills/finishing-a-development-branch/SKILL.md`). After a push, a merge that is then pushed, or a pull request, it waits for the CI run of the pushed commit:
-- `gh run list --commit <sha>`, then `gh run watch <id>` in the background, bounded by 90 minutes;
-- green completes the branch;
-- red reopens it through dforge:systematic-debugging, with each failed job and step named; the fix is pushed and the wait repeats;
-- a run still going at the bound is reported as not done, never as done;
-- with `keep`, no `gh`, or a CI line of `none`, it says why in one line and skips the wait.
+**Script** `scripts/ci-mirror PLAN_FILE`. It reads the plan's `**CI:**` line and runs each `local:` command through `suite-run`, which records each run and reuses a pass at the same commit. It prints one digest line per command, then `uncovered: <platforms>`. It exits non-zero when any command fails or cannot launch, with the digest line naming that command. A line reading `none` prints `ci: none` and exits 0.
+- The final review runs it at step 0, before the gates. A failure is a final-review finding.
+- running-gates reports a gate whose `Command` equals, byte for byte, a ci-mirror command that passed at this HEAD as passed from that record, naming its log. It runs every other gate as today.
+
+**Finishing** (`skills/finishing-a-development-branch/SKILL.md`). When finishing itself pushed (the open-a-pull-request option, and an Early CI push whose head equals the final head), it waits for the CI run of the pushed commit:
+- `gh run list --commit <sha>`, then `gh run watch <id>` in the background. The Bash call's `timeout` is set to (90 × 60 + 120) × 1000 ms, because a background call otherwise stops at 30 minutes (`reference/final-review.md:131-132`). In an auto run the controller ends the turn and resumes on the notification.
+- It records `CI: <sha7> run <id> <green|red|still running at 90 min>` on the ledger, and the final message quotes it.
+- Green completes the branch.
+- Red reopens it through dforge:systematic-debugging, with each failed job and step named; the fix is pushed and the wait repeats.
+- A run still going at the bound is reported as not done, never as done.
+- With `keep`, no `gh`, `gh` not logged in, or a CI line of `none`, it prints why in one line and skips the wait without calling the branch CI-green.
+- After a local merge on a plan with an `**Early CI:**` line, it runs `git push origin --delete <branch>`. With `keep`, it says the remote branch exists.
 
 ### 6. This repository's CI checks (register row 5, repo-specific)
 
-- **`scripts/lint-portability.mjs`**, run by `scripts/validate-repository.mjs` over `plugins/*/scripts/**`, `plugins/*/tests/**` and `scripts/**`, with one rule per pitfall in the memory note on CI runner quirks:
-  - `git -C "$PWD"` or `git -C "$(pwd)"` without the native-path helper;
+- **`scripts/lint-portability.mjs`**, run by `scripts/validate-repository.mjs` over `plugins/*/scripts/**`, `plugins/*/tests/**` and `scripts/**`. It has four rules, taken from `reference/ci-parity.md`'s Windows Git Bash rows:
+  - `git -C "$PWD"` or `git -C "$(pwd)"` without `dr_native_path` (`plugins/dforge/scripts/lib/native-path.sh:13`);
   - `awk -v` carrying a backslash;
   - a dynamic `import()` of an absolute path variable not wrapped in `pathToFileURL`;
   - `jq` given a file argument built from `$PWD`, `$(pwd)` or `$TMPDIR` in a file that exports `MSYS_NO_PATHCONV`.
-  
+
   A line ending `# portability: ok — <reason>` (or `// portability: ok — <reason>`) is exempt. Each hit prints `file:line rule message` and fails validation.
-- **Shard weights.** `tests/test-shards.test.mjs` fails when a suite that `scripts/test-all.mjs` discovers has no weight in `scripts/test-shards.mjs`. It also fails when a weight exceeds 80% of that suite's limit (`suiteSeconds`, else 600), with the message "raise its suiteSeconds or split it".
-- **Drift warning.** `scripts/test-all.mjs` prints a GitHub `::warning::` line naming the suite when its duration passes 75% of its limit, so growth shows up before it fails a run.
+- **Shard weights.** `tests/test-shards.test.mjs` fails when a shell suite has no weight in `scripts/test-shards.mjs`. The shell suites are `plugins/dforge/tests/*.test.sh` and `plugins/dr-status/tests/run-all.sh`, read through `test-all.mjs --list`. The other jobs (`validate-repository.mjs`, the `--test` jobs, `claude plugin test`, `tsc`) keep the default weight. It also fails when a weight exceeds 80% of that suite's limit (`suiteSeconds`, else 600), with the message "raise its suiteSeconds or split it". The comments at `test-shards.mjs:8-9` and `tests/test-shards.test.mjs:24`, which describe new suites as weighted by default, change to match.
+- **Drift warning.** `scripts/test-all.mjs` prints a GitHub `::warning::` line naming a suite whose duration passes 75% of its limit, so growth shows up before it fails a run.
 
 ### Tests for this work
 
-This plan follows part 2 itself. A new behaviour gets a new test. A variant extends an existing test as a row. Pins of skill wording that this work changes are updated in place, not duplicated. New script behaviour (`task-step --suite-base`, `suite-run`'s duration column, `ci-mirror`, `lint-portability.mjs`, the plan-lint rules) gets tests in the existing suite for that script, or in one new suite per new script.
+This plan follows part 2 itself. A new behaviour gets a new test. A variant extends an existing test as a row. Pins of skill wording that this work changes are updated in place, not duplicated; one of them is `tests/suite-run.test.sh:76`, "the row has six fields". New script behaviour gets tests in the existing suite for that script, or in one new suite per new script: `task-step review --suite`/`--suite-base`, `suite-run`'s duration column, `ci-mirror`, `lint-portability.mjs`, and the plan-lint rules.
 
 ## Acceptance
 
-A1. [test, high] A plan without a `**Task check:**` or an `**Integration check:**` line fails plan-lint, and a plan with both lines passes plan-lint.
+A1. [test, high] plan-lint warns on a plan without a `**Task check:**` or an `**Integration check:**` line and fails one where either line is malformed. A plan with both lines well formed passes, and a wave plan without `**Integration check:**` still fails.
 A2. [test, high] With a command task check, the subagent-mode controller passes that command, never the integration check, to every `task-step start` (`reference/delegated-task.md` says so, and `tests/delegated-suite.test.sh` pins it).
-A3. [test, high] `task-step start --suite-base <sha>` stores `suiteBase`, and `verdict` excuses only the failing lines that also fail at that sha, so a regression made by an earlier task since the last full run is reported as a finding.
-A4. [test, neg, high] With a task check of `none`, a task that is not every third and not the last runs no suite, and its verdict prints `suite: not scheduled (next at Task <N>)`, never `suite: not run`, and never exits 7.
+A3. [test, high] `task-step review --suite <cmd> --suite-base <sha>` (and `review --group`) writes `suite` and `suiteBase` onto the step file `verdict` reads. `verdict` then excuses only the failing lines that also fail at that sha, so a regression made by an earlier task since the last full run is reported as a finding.
+A4. [test, neg, high] On a sequential plan whose task check is `none`, a task whose number is not a multiple of 3 and is not the last runs no suite. Its verdict prints `suite: not scheduled (next at Task <N>)`, never `suite: not run`, never exits 7, and the task can complete.
 A5. [test, high] `suite-run` writes a seventh duration column to `suites.tsv`, and a six-column row still parses everywhere `suites.tsv` is read.
 A6. [test, high] The final review runs the integration check at the branch head through `suite-run`, and finishing reuses a pass recorded at the same commit on a clean tree instead of running again.
-A7. [test, medium] writing-plans picks the full suite as the task check when its last passing run took 300 seconds or less. Q: Is 300 seconds the right threshold below which tiering is not worth it, or should it be lower or higher?
-A8. [test, high] plan-lint accepts the three Step 1 forms, and fails a `Covered by Task <N>` naming a missing task, a task with no test step, or a task that does not run before the citing task (a higher number in a sequential plan, the same or a later wave in a wave plan).
-A9. [test, high] `criteria/plan-review.md` carries the "Redundant test" criterion, scored LOW, with the reviewer naming the overlapping test.
+A7. [test, medium] writing-plans picks the full suite as the task check when its last passing run took 300 seconds or less, and treats a missing duration as not fast. Q: Is 300 seconds the right threshold below which tiering is not worth it, or should it be lower or higher?
+A8. [test, high] plan-lint accepts the three Step 1 forms. It fails a `Covered by Task <N>` naming a missing task, a task with no test step, or a task that does not run before the citing task (a higher number in a sequential plan, the same or a later wave in a wave plan).
+A9. [test, high] `criteria/plan-review.md` carries the "Redundant test" criterion, scored LOW under Executability, with the reviewer naming the overlapping test.
 A10. [test, high] The TDD skill's "Minimal" row is replaced by the one-behaviour, parametrized-variants rule, and `writing-good-tests.md` asks whether an existing test already fails for the change.
 A11. [test, neg, high] Neither the REFACTOR rule nor the final-review fix wave deletes a test that exists at the branch's merge base, or a regression test naming a fixed bug.
 A12. [test, high] The `test-quality` lens carries a `{#redundant}` criterion that names the covering test.
-A13. [test, medium] closing-a-milestone recommends a scoped test-simplifier run when the full suite grew by 20% or more, or passes a declared `Budget:`. Q: Is 20% growth the right trigger?
+A13. [test, medium] closing-a-milestone recommends a scoped test-simplifier run when the full suite grew by 20% or more, or passes a declared `Budget:`, names the checkout whose rows it read, and recommends nothing with fewer than two rows. Q: Is 20% growth the right trigger?
 A14. [test, high] test-simplifier's Phase 3 uses the tier names of `reference/test-tiers.md`, accepts `--modules` and `--since` scopes, lists the "Subsumed scaffolding" class, and states the division of labour with the branch-level cleanup.
-A15. [test, high] plan-lint fails a plan without a `**CI:**` line, and a malformed one; `none` passes.
+A15. [test, high] plan-lint warns on a plan without a `**CI:**` line, fails a malformed one, and passes `none`.
 A16. [test, high] `ci-mirror` runs every `local:` command of the CI line through `suite-run`, prints `uncovered: <platforms>`, exits non-zero when one command fails, and prints `ci: none` with exit 0 for `none`.
-A17. [test, neg, high] With no `**Early CI:**` line, no step of the controller pushes the branch or triggers CI before finishing. With the line present, the controller never opens a pull request to start CI.
-A18. [test, high] Finishing waits for the CI run of the pushed commit, bounded at 90 minutes, and never reports the branch done while that run is red or still running.
+A17. [test, neg, high] With no `**Early CI:**` line, no step of the controller pushes the branch or triggers CI before finishing. With the line present, the controller never opens a pull request to start CI. `reference/auto-run.md` names the consented early-CI push and dispatch as the second exception to its never-performed list.
+A18. [test, high] When finishing pushed, it waits for the CI run of the pushed commit, bounded at 90 minutes, records the `CI:` ledger line, and never reports the branch done while that run is red or still running.
 A19. [test, high] writing-plans copies the pitfalls-table rows for each uncovered platform into `## Global Constraints`.
 A20. [test, high] `lint-portability.mjs` flags each of its four rules on a fixture line, passes the same line carrying the exemption comment, and runs from `validate-repository.mjs`.
-A21. [test, high] `test-shards.test.mjs` fails for a discovered suite with no weight, and for a weight above 80% of its limit.
+A21. [test, high] `test-shards.test.mjs` fails for a shell suite with no weight and for a weight above 80% of its limit, and does not fail for the non-shell jobs.
 A22. [test, high] `test-all.mjs` prints a `::warning::` naming a suite whose duration passes 75% of its limit.
 A23. [test, neg, high] An existing `gates.md` with no `Tier:` field runs exactly the gates it ran before.
+A24. [test, neg, high] plan-lint fails an `**Early CI:**` line without `— consented <YYYY-MM-DD>`, one naming a wave on a sequential plan, and one naming a task past the last.
+A25. [test, high] running-gates prints one line per skipped `Tier: sweep` gate naming it as CI's, and still runs every `task` and `branch` gate.
+A26. [test, neg, high] `ci-mirror` with a `local:` command that cannot launch prints the digest line naming it and exits non-zero. Finishing with `gh` absent or not logged in prints one line and skips the wait without calling the branch done.
 
 ## Riskiest assumption
 
 That a fast task check, plus the full suite only at wave checks, the final review and every third task when there is no fast check, catches regressions early enough that the final-review fix wave does not grow to cost what the per-task suite runs saved.
 
 Evidence: Meta reports catching over 99.9% of regressions while running about a third of the tests through predictive selection ([engineering.fb.com, 2018](https://engineering.fb.com/2018/11/21/developer-tools/predictive-test-selection/)). Google defers broad testing until after submission for the same cost reason ([research.google/pubs/pub52465](https://research.google/pubs/pub52465)). Locally, attribution to the right task is already supported: `task-step` compares a sequential group with its first member's base (`plugins/dforge/scripts/task-step:126`), which `--suite-base` generalises. No local history measures how often the per-task suite caught a regression that focused tests missed: the ledgers in `.dforge/sdd` hold no suite verdicts (checked 2026-10-31), and the darkmem mirror was unreachable this session. Residual risk is bounded by the early CI run and the every-third-task fallback. The first plan executed after this work records, in its final review, how many final-suite failing lines no task check caught.
+
+## Review rulings
+
+- Required header lines warn when missing and fail when malformed; a plan with no `**Task check:**` runs as today.
+- The `none` schedule is by task number (multiples of 3 and the last task), computed from the plan alone.
+- `task-step review` and `review --group` take `--suite`/`--suite-base`, so the schedule is decided at review time.
+- On a wave plan, `none` means no per-task suite; the wave schedule stands.
+- `not scheduled` joins §5's completion rule, printed only when the task check is `none` and the step file has no `suite`.
+- The Codex per-task suite lives in delegated-task.md "The steps by hand" §2, not native-codex.md.
+- The seventh `suites.tsv` column is safe for every reader. `tests/suite-run.test.sh:76` is updated in place, and a missing duration counts as not fast.
+- auto-run.md gains the consented early-CI push and dispatch as a second exception.
+- plan-lint fails an `**Early CI:**` line without consent or with a malformed point (A24).
+- Early CI finds its run id with `gh run list`, writes three ledger line forms, and treats any `git push`/`gh` failure as a one-line skip.
+- After a local merge, finishing deletes the remote branch an early push created.
+- The 90-minute watch sets its Bash timeout explicitly and records a `CI:` ledger line.
+- ci-mirror runs before the gates, and a gate with the same command reuses its pass.
+- The shard-weight rule is scoped to the shell suites; the two comments describing default weights change.
+- The portability lint has four rules sourced from `reference/ci-parity.md`, with `dr_native_path` named.
+- `Covered by Task <N>` applies only to tasks adding no observable behaviour.
+- The Redundant test criterion scores LOW under Executability.
+- `Budget:` sits on the gate whose `Command` equals the Integration check.
+- Milestone durations come from the main checkout's rows, recorded by finishing's merged-result verification.
+- The cost of a `--suite-base` run when no row exists at the base is stated.
+- A25 covers skipping `sweep` gates.
+- A26 covers a `ci-mirror` command that cannot launch and finishing without `gh`.
+
+## Critic findings
+
+Folded into Fable's review. 0 Blocker, 5 High, 10 Medium, 5 Nit.
+
+- [High] The early-CI push contradicted auto-run's never-performed rule. Fixed: auto-run.md gains the consented exception (part 5).
+- [High] The `none` schedule could not be applied at `task-step start` for a grouped task. Fixed: `review` takes `--suite`/`--suite-base` (part 1).
+- [High] Three required header lines broke existing plans and lint fixtures. Fixed: warn when missing, fail when malformed (parts 1 and 5).
+- [High] The 80% shard-weight rule is red on today's weights (`faster-plans`, `task-step.test.sh`, `next-step`, `auto-run`). Open: asked at the spec review.
+- [High] The wait for CI had no trigger on the local-merge path. Open: asked at the spec review.
+- [Medium] `Covered by Task <N>` could not be failing-first. Fixed: restricted to behaviour-free tasks.
+- [Medium] ci-mirror duplicated the gates at the same HEAD. Fixed: gates reuse its pass.
+- [Medium] The milestone comparison read rows that cleanup deletes. Fixed: rows come from the main checkout.
+- [Medium] The early run had no run id, ledger line or `gh` failure outcome. Fixed.
+- [Medium] Consent sat in a header line nothing checked. Fixed: A24.
+- [Medium] The early push left `origin/<branch>` behind after a local merge. Fixed.
+- [Medium] A 90-minute background watch outlived the Bash default limit. Fixed.
+- [Medium] The missing-weight rule flagged jobs with no weight by design. Fixed: scoped to shell suites.
+- [Medium] native-codex.md had nothing to change. Fixed: repointed.
+- [Medium] The lint's rule set was misdescribed and sourced from a private file. Fixed.
+- [Nit] The `suite-run.test.sh:76` pin was unnamed. Fixed.
+- [Nit] A six-column row had no duration. Fixed: treated as not fast.
+- [Nit] The LOW dimension was unnamed. Fixed: Executability.
+- [Nit] "The full-suite gate" was undefined. Fixed.
+- [Nit] The base run after a fix round was unpriced. Fixed.
