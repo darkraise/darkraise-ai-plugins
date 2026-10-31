@@ -37,6 +37,7 @@ writing-plans:auto-run-plan
 writing-plans:execution-line
 writing-plans:assignment-procedure
 writing-plans:register-rows
+writing-plans:task-check-line
 writing-plans:lint-and-review
 writing-plans:execution-handoff
 "

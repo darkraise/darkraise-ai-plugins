@@ -223,6 +223,8 @@ only_older "inline mode names R/5 only for older runs" "$INLINE"
 
 # --- the wave check cadence (faster-plans §4) ---
 WP="$P/skills/writing-plans/SKILL.md"
+WPR="$P/skills/writing-plans/references/task-check-line.md"
+TIERS="$P/reference/test-tiers.md"
 names "waves ask check-due which check closes a wave" "$PW" '`bash <plugin-root>/scripts/wave check-due PLAN_FILE <k>`'
 names "every wave closes" "$PW" 'Every wave closes with an `integrated` or a `merged` line, one-task and serialized waves included.'
 names "the merged line" "$PW" 'Wave <k>: merged (head <sha7>; check at wave <m>)'
@@ -241,6 +243,28 @@ lacks "waves no longer count five rounds" "$PW" 'It counts toward the five'
 only_older "waves name R/5 only for older runs" "$PW"
 names "writing-plans: the optional Wave check header line" "$WP" '**Wave check:** [waves only, optional:'
 names "writing-plans: the waves rule names the Wave check" "$WP" '`**Wave check:**`, optional, names a faster command'
+# --- the Task check and Integration check header lines (test tiers) ---
+names "writing-plans: the header template has a Task check line" "$WP" '**Task check:** [`<fast command>` — <why>, or `none — full suite every 3 tasks`]'
+names "writing-plans: the Integration check line holds the full suite on every plan" "$WP" '**Integration check:** [`<command>`: the full suite, on every plan]'
+lacks "writing-plans: the Integration check line is no longer waves only" "$WP" '**Integration check:** [waves only'
+check "task check: the reference exists" "$([ -s "$WPR" ] && echo yes || echo no)" "yes"
+names_flat "task check: the first source that applies wins" "$WPR" 'Choose the first that applies'
+names_flat "task check: a gate with Tier: task comes first" "$WPR" 'a gate in `<docs>/gates.md` with `Tier: task`'
+names_flat "task check: a fast full suite is its own task check" "$WPR" 'the full suite itself, when its last passing run in `suites.tsv` took 300 seconds or less'
+names_flat "task check: impact selection comes from test-tiers.md" "$WPR" 'an impact-selection command for the runner the project uses, from [test-tiers.md](../../../reference/test-tiers.md)'
+names_flat "task check: none is the last resort" "$WPR" '`none — full suite every 3 tasks`, when none of those applies'
+names_flat "task check: a missing or six-column row is not fast" "$WPR" 'A row that is missing, or has six columns and so no duration, counts as not fast.'
+names_flat "task check: only the checkout's own rows are read" "$WPR" 'Read only rows of the checkout you run in'
+names_flat "task check: the row is found by suite-run's quoted key" "$WPR" 'the quoted key suite-run records for `bash -c <cmd>` run from the top level'
+names_flat "task check: the duration is column 7" "$WPR" 'column 7'
+names_flat "task check: the line ends with its reason" "$WPR" 'End the line with `— <why>`'
+names_flat "integration check: on every plan, not only a waves plan" "$WPR" '`**Integration check:**` holds the full suite command on every plan, not only on a waves plan.'
+names "test-tiers: the reference exists" "$TIERS" '# Test tiers'
+names "test-tiers: the Task check tier" "$TIERS" '| Task check |'
+names "test-tiers: the Full suite tier" "$TIERS" '| Full suite |'
+names "test-tiers: the Sweep tier" "$TIERS" '| Sweep |'
+names "test-tiers: the impact-selection heading" "$TIERS" '## Impact selection'
+names "test-tiers: the impact-selection table" "$TIERS" '| pytest-testmon |'
 names "subagent mode: the merged grammar" "$SDD_LEDGER" 'Wave <k>: merged (head <sha7>; check at wave <m>)'
 names "subagent mode: the integrated grammar" "$SDD_LEDGER" 'Wave <k>: integrated (head <sha7>; <command> → pass[; baseline failures only])'
 names "subagent mode: compaction reads a merged line as closed" "$SDD" 'A `Wave <k>: started` line with no later `integrated` or `merged` line'

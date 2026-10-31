@@ -34,20 +34,9 @@ Vitest `--shard=i/n`; Playwright `--workers`, `--shard`; Go runs packages in
 parallel by default (`-p`); cargo-nextest is parallel by default; Gradle
 `maxParallelForks`; Maven Surefire `forkCount`.
 
-## Impact selection for the inner loop
+## Impact selection
 
-| Tool | Selects |
-|---|---|
-| pytest-testmon | tests whose recorded coverage touches changed code |
-| `jest --changedSince=<base>` / `--onlyChanged` | tests importing changed files |
-| `vitest --changed <base>` | the same, for Vitest |
-| `nx affected -t test` | projects downstream of the change |
-| bazel-diff, target-determinator | Bazel targets downstream of the change |
-| `go test` on changed packages and their importers | `go list -deps` gives the graph |
-| Gradle build cache with `--continue` | skips tasks whose inputs did not change |
-
-Selection serves the inner loop only. The branch gate and full sweep still run
-what they declare, which is what catches a dependency the selector missed.
+The impact-selection table is in [test-tiers.md](../../../reference/test-tiers.md).
 
 ## Mutation tools
 

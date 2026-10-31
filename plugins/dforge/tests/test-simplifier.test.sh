@@ -9,6 +9,7 @@ P="$HERE/.."
 SKILL="$P/skills/test-simplifier/SKILL.md"
 JUDGE="$P/skills/test-simplifier/references/simplify-judge.md"
 RUNNERS="$P/skills/test-simplifier/references/runners.md"
+TIERS="$P/reference/test-tiers.md"
 PROFILE="$P/scripts/test-profile"
 
 pass=0 fail=0
@@ -21,9 +22,14 @@ present() { # present <name> <file> <needle>
   else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
 
-for f in "$SKILL" "$JUDGE" "$RUNNERS"; do
+for f in "$SKILL" "$JUDGE" "$RUNNERS" "$TIERS"; do
   check "exists: ${f#"$P"/}" "$([ -f "$f" ] && echo yes || echo no)" "yes"
 done
+
+# The impact-selection table lives in the shared tiers reference.
+present "runners points to the tiers reference" "$RUNNERS" '[test-tiers.md](../../../reference/test-tiers.md)'
+check "runners keeps no copy of the impact table" "$(grep -c 'pytest-testmon' "$RUNNERS")" "0"
+present "the tiers reference holds the impact table" "$TIERS" '| `jest --changedSince=<base>` / `--onlyChanged` |'
 
 # Coverage is never the proof. This is the finding the skill is built on.
 present "coverage never proves redundancy" "$SKILL" 'Coverage never proves a test redundant'

@@ -107,7 +107,9 @@ Constraints and Contracts.
 
 **Parallelism:** [sequential — <why> | waves — <ranges, e.g. 1 | 2-4 | 5>] (see Parallel waves)
 
-**Integration check:** [waves only: the command that proves a merged wave works, normally the full suite]
+**Task check:** [`<fast command>` — <why>, or `none — full suite every 3 tasks`]
+
+**Integration check:** [`<command>`: the full suite, on every plan]
 
 **Worktree setup:** [waves only: what a fresh worktree runs before its tests, or `none`]
 
@@ -149,6 +151,8 @@ Task N contains the verifying step. When the spec's riskiest assumption reads
 
 ---
 ```
+
+Read [task-check-line.md](references/task-check-line.md) before you write the header's Task check and Integration check lines.
 
 Codex plans also carry `Host: codex` and `Routing policy: codex-v4` lines
 ([native-codex.md](../../reference/native-codex.md)), and their Execution line
