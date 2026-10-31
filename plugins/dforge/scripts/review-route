@@ -384,7 +384,7 @@ for id in "$@"; do
 done
 
 band() { # band <total> - the Claude judge for a score band
-  if [ "$1" -le 3 ]; then echo "$SONNET"
+  if [ "$1" -le 5 ]; then echo "$SONNET"
   else echo "$OPUS"
   fi
 }

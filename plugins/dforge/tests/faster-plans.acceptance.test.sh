@@ -440,7 +440,7 @@ a5() {
   route docs/plan.md --task 1 6
   check "A5: two light tasks route to the light judge" "$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$out")" "dforge:judge-sonnet-high"
   route docs/plan.md --task 1 5
-  check "A5: a batch holding a total-5 task routes to the heavy judge" "$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$out")" "dforge:judge-opus"
+  check "A5: a batch holding a total-5 task stays on the light judge" "$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$out")" "dforge:judge-sonnet-high"
 }
 
 # --- A6 ----------------------------------------------------------------------

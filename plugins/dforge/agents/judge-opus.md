@@ -1,6 +1,6 @@
 ---
 name: judge-opus
-description: "Verifier, ruling seat and approach ranker running Opus 5.5 at medium effort; it writes only its report file. Dispatched by dforge as the task reviewer for totals 4 to 6 when Codex is not the reviewer, for every plan-review round Codex does not take, for every ruling including Header-amendment confirmations, every final whole-branch review and its two-list dedupe, risk-3 task reviews, approach ranking and distillation checks."
+description: "Verifier, ruling seat and approach ranker running Opus 5.5 at medium effort; it writes only its report file. Dispatched by dforge as the task reviewer for total 6 when Codex is not the reviewer, for every plan-review round Codex does not take, for every ruling including Header-amendment confirmations, every final whole-branch review and its two-list dedupe, risk-3 task reviews, approach ranking and distillation checks."
 model: opus
 effort: medium
 tools: Read, Grep, Glob, WebFetch, Write

@@ -61,6 +61,7 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |9. broken
 |10. band five
 |11. executor risk three
+|12. band six
 |
 |### Task 1: light low
 |
@@ -126,6 +127,11 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |**Implementer:** dforge:impl-sonnet-high
 |**Executor:** codex gpt-6.1-sol / high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4
+|
+|### Task 12: band six
+|
+|**Implementer:** dforge:impl-opus-high
+|**Evaluation:** files 2 - spec 2 - coupling 2 - risk 0 = 6
 EOF
 
 route() { # route <args...>; sets out and rc
@@ -153,9 +159,9 @@ check "a routed task exits 0" "$rc" "0"
 route --task 2
 check "total 3 with em dashes: light Codex, Sonnet fallback" "$out" "review-seat task=2 primary=codex:light fallback=dforge:judge-sonnet-high review=group reason=band"
 route --task 3
-check "total 4 at risk 1: light Codex, Opus fallback" "$out" "review-seat task=3 primary=codex:light fallback=dforge:judge-opus review=group reason=band"
+check "total 4 at risk 1: light Codex, Sonnet fallback" "$out" "review-seat task=3 primary=codex:light fallback=dforge:judge-sonnet-high review=group reason=band"
 route --task 4
-check "risk 2 takes its band: light Codex, Opus fallback" "$out" "review-seat task=4 primary=codex:light fallback=dforge:judge-opus review=task reason=band"
+check "risk 2 takes its band: light Codex, Sonnet fallback" "$out" "review-seat task=4 primary=codex:light fallback=dforge:judge-sonnet-high review=task reason=band"
 route --task 5
 check "an Executor task is reviewed by its band judge, never Codex" "$out" "review-seat task=5 primary=dforge:judge-sonnet-high fallback=- review=group reason=executor"
 route --task 6
@@ -165,18 +171,20 @@ check "an Executor task at risk 3 goes to Opus alone" "$out" "review-seat task=1
 route --task 7A
 check "a part routes on its own Evaluation" "$out" "review-seat task=7A primary=codex:light fallback=dforge:judge-sonnet-high review=group reason=band"
 route --task 7B
-check "the risk-2 part takes light Codex, Opus fallback" "$out" "review-seat task=7B primary=codex:light fallback=dforge:judge-opus review=task reason=band"
+check "the risk-2 part takes light Codex, Sonnet fallback" "$out" "review-seat task=7B primary=codex:light fallback=dforge:judge-sonnet-high review=task reason=band"
 route --task 7
-check "a split task without a part routes on its heaviest part" "$out" "review-seat task=7 primary=codex:light fallback=dforge:judge-opus review=task reason=band"
+check "a split task without a part routes on its heaviest part" "$out" "review-seat task=7 primary=codex:light fallback=dforge:judge-sonnet-high review=task reason=band"
 route --task 8
 check "risk 3 goes to Astra then Opus" "$out" "review-seat task=8 primary=codex:heavy+judge-opus fallback=dforge:judge-opus review=task reason=risk"
 route --task 10
-check "total 5 at risk 0: light Codex, Opus fallback" "$out" "review-seat task=10 primary=codex:light fallback=dforge:judge-opus review=task reason=band"
+check "total 5 at risk 0: light Codex, Sonnet fallback" "$out" "review-seat task=10 primary=codex:light fallback=dforge:judge-sonnet-high review=task reason=band"
+route --task 12
+check "total 6 below risk 3: light Codex, Opus fallback" "$out" "review-seat task=12 primary=codex:light fallback=dforge:judge-opus review=task reason=band"
 
 route --task 1 2
 check "a batch takes its highest total" "$out" "review-seat task=1,2 primary=codex:light fallback=dforge:judge-sonnet-high reason=band"
-route --task 1 3
-check "a batch crossing into the Opus fallback band" "$out" "review-seat task=1,3 primary=codex:light fallback=dforge:judge-opus reason=band"
+route --task 1 12
+check "a batch crossing into the Opus fallback band" "$out" "review-seat task=1,12 primary=codex:light fallback=dforge:judge-opus reason=band"
 route --task 1 5
 check "one Executor task makes the whole batch Claude-reviewed" "$out" "review-seat task=1,5 primary=dforge:judge-sonnet-high fallback=- reason=executor"
 
@@ -315,15 +323,17 @@ check "codex off: a routed task still exits 0" "$rc" "0"
 route --task 2
 check "codex off: total 3 goes to Sonnet alone" "$out" "review-seat task=2 primary=dforge:judge-sonnet-high fallback=- review=group reason=codex-off"
 route --task 3
-check "codex off: total 4 goes to Opus alone" "$out" "review-seat task=3 primary=dforge:judge-opus fallback=- review=group reason=codex-off"
+check "codex off: total 4 goes to Sonnet alone" "$out" "review-seat task=3 primary=dforge:judge-sonnet-high fallback=- review=group reason=codex-off"
 route --task 10
-check "codex off: total 5 goes to Opus alone" "$out" "review-seat task=10 primary=dforge:judge-opus fallback=- review=task reason=codex-off"
+check "codex off: total 5 goes to Sonnet alone" "$out" "review-seat task=10 primary=dforge:judge-sonnet-high fallback=- review=task reason=codex-off"
+route --task 12
+check "codex off: total 6 goes to Opus alone" "$out" "review-seat task=12 primary=dforge:judge-opus fallback=- review=task reason=codex-off"
 route --task 4
-check "codex off: risk 2 at total 4 takes its band" "$out" "review-seat task=4 primary=dforge:judge-opus fallback=- review=task reason=codex-off"
+check "codex off: risk 2 at total 4 takes its band" "$out" "review-seat task=4 primary=dforge:judge-sonnet-high fallback=- review=task reason=codex-off"
 route --task 8
 check "codex off: risk 3 goes to Opus alone" "$out" "review-seat task=8 primary=dforge:judge-opus fallback=- review=task reason=codex-off"
 route --task 7
-check "codex off: a split task routes on its heaviest part" "$out" "review-seat task=7 primary=dforge:judge-opus fallback=- review=task reason=codex-off"
+check "codex off: a split task routes on its heaviest part" "$out" "review-seat task=7 primary=dforge:judge-sonnet-high fallback=- review=task reason=codex-off"
 route --task 1 2
 check "codex off: a batch takes its highest total" "$out" "review-seat task=1,2 primary=dforge:judge-sonnet-high fallback=- reason=codex-off"
 route --task 5
@@ -338,7 +348,7 @@ rround "$TMP/round.md" 2
 check "codex off: plan round 2 is unchanged" "$out" "review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=2"
 review_surface absent
 route --task 3
-check "no session file is off" "$out" "review-seat task=3 primary=dforge:judge-opus fallback=- review=group reason=codex-off"
+check "no session file is off" "$out" "review-seat task=3 primary=dforge:judge-sonnet-high fallback=- review=group reason=codex-off"
 rround "$TMP/round.md" 1
 check "no session file keeps plan round 1 off Codex" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=2"
 review_surface true
@@ -376,7 +386,7 @@ present "a Codex-host plan names native-codex.md" "$TMP/err" "native-codex.md"
 
 sed 's/$/\r/' "$TMP/plan.md" > "$TMP/crlf.md"
 out=$(bash "$ROUTE" "$TMP/crlf.md" --task 4 2>/dev/null)
-check "a CRLF plan routes" "$out" "review-seat task=4 primary=codex:light fallback=dforge:judge-opus review=task reason=band"
+check "a CRLF plan routes" "$out" "review-seat task=4 primary=codex:light fallback=dforge:judge-sonnet-high review=task reason=band"
 
 # --- plan review prose ---------------------------------------------------------
 WP="$P/skills/writing-plans/SKILL.md"
@@ -501,8 +511,8 @@ present "no route names judge-fable" "$P/agents/judge-fable.md" 'No dforge route
 present "an auto run dispatches judge-fable" "$P/agents/judge-fable.md" 'an auto run (reference/auto-run.md) dispatches it for the spec review and the batched rulings'
 present "judge-opus grades by consequence" "$P/agents/judge-opus.md" 'not by how small the fix is'
 absent "review-route never prints judge-fable" "$ROUTE" 'judge-fable'
-present "judge-sonnet-high reviews totals 0 to 3" "$P/agents/judge-sonnet-high.md" 'totals 0 to 3'
-present "judge-opus reviews totals 4 to 6" "$P/agents/judge-opus.md" 'totals 4 to 6'
+present "judge-sonnet-high reviews totals 0 to 5" "$P/agents/judge-sonnet-high.md" 'totals 0 to 5'
+present "judge-opus reviews total 6" "$P/agents/judge-opus.md" 'for total 6 when Codex'
 
 # --- risk3-spread is retired -----------------------------------------------------
 for f in "$P/skills/subagent-driven-development/SKILL.md" "$SDD_RULING_SEAT" "$SDD_LEDGER" "$SDD_GRAPH" "$SDD_BATCHING" "$SDD_BUDGET" "$SDD_EXAMPLE" "$SDD_FINISH_RULINGS" "$SDD_RATIONALE" "$SDD_RATIONALIZATIONS" "$SDD_SETUP" \

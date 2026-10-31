@@ -270,15 +270,15 @@ A different machine, account, or Codex version must verify the tables against
 its own account before relying on them. Do not make paid capability probes.
 
 **Cross-family review.** Codex reviews are opt-in. By default every review runs
-on Claude judges: `judge-sonnet-high` for tasks totalling 0 to 3, `judge-opus`
-for 4 to 6 and at risk 3, plan review and the final review. For a one-off Codex
+on Claude judges: `judge-sonnet-high` for tasks totalling 0 to 5, `judge-opus`
+for 6 and at risk 3, plan review and the final review. For a one-off Codex
 review, run `/codex:review` or `/codex:adversarial-review` from the codex
 plugin. Turning the `codexReview` setting on gives Codex the review seats below
 for every run. With it on, Codex is the default task reviewer: `gpt-6.1-sol` for
 tasks totalling 0 to 6, and `gpt-6-astra` followed by `judge-opus` at risk 3. A task the executor lane implemented is always
 reviewed by a Claude judge, so Codex never reviews its own work there; when a
-Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 3 and
-`judge-opus` 4 to 6 and at risk 3. Plan review takes Astra for round 1
+Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 5 and
+`judge-opus` 6 and at risk 3. Plan review takes Astra for round 1
 (`judge-opus` when Codex is off) and `judge-opus` for the delta round:
 at most two rounds on a Claude plan.
 The final whole-branch review runs on `judge-opus`, its one fix subagent on

@@ -965,7 +965,7 @@ check "review --group: the prompt names the package" "$([ "$(grep -cF "$GPKG" "$
 check "review --group: the prompt names the report file" "$([ "$(grep -cF "$GR_WS/group-$GL-review-report.md" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
 check "review --group: the prompt names the criteria file" "$([ "$(grep -cF "$PR/criteria/task-review.md" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
 check "review --group: the prompt names the group" "$([ "$(grep -cF "$GL" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
-check "review --group: the seat is the route's Claude judge" "$(grep '^seat:' <<<"$gr_out")" "seat: dforge:judge-opus prompt: $GPR"
+check "review --group: the seat is the route's Claude judge" "$(grep '^seat:' <<<"$gr_out")" "seat: dforge:judge-sonnet-high prompt: $GPR"
 check "review --group: no Codex seat runs" "$(grep -cE '^(codex|timeout):' <<<"$gr_out")" "0"
 check "review --group: no Codex prompt is written" "$(ls "$GR_WS" | grep -c 'codex')" "0"
 check "review --group: the identity check" "$(grep '^check identity' <<<"$gr_out")" "check identity: clean"
