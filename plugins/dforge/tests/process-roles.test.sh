@@ -195,6 +195,16 @@ says "spec review: the folded critic gets no second Fable round" "$P/skills/brai
 lacks "spec review: no unconditional answer check" <(cat "$P/skills/brainstorming/SKILL.md" "$P/skills/brainstorming/references/"*.md) 'which checks each Blocker and High answer'
 says "auto-run.md: Fable's second round needs an open Blocker or High" "$P/reference/auto-run.md" 'A second runs only when round 1 leaves a Blocker or High finding open'
 lacks "auto-run.md: no unconditional second round" "$P/reference/auto-run.md" 'At most two Fable rounds run (review, revise, re-review)'
+WPF="$P/skills/writing-plans/references/test-step-forms.md"
+says "writing-plans forms: Step 1 takes one of three forms" "$WPF" 'Step 1 takes one of three forms'
+says "writing-plans forms: the Extend form heading" "$WPF" '- [ ] **Step 1: Extend the test `<file>::<name>`**'
+says "writing-plans forms: the Covered by form heading" "$WPF" $'- [ ] **Step 1: Covered by Task <N>\'s test `<name>`**'
+says "writing-plans forms: Covered by is for behaviour-free tasks only" "$WPF" 'only for a task that adds no new observable behaviour'
+says "writing-plans forms: a task adding behaviour uses Extend" "$WPF" 'A task that adds behaviour uses Extend'
+says "writing-plans forms: a Covered by task names the fault" "$WPF" $'The step names the fault in this task\'s code that the test would catch'
+says "writing-plans forms: a Covered by task writes no test of its own" "$WPF" 'The task has no step that writes its own failing test, and its verification runs the covering test'
+says "writing-plans forms: tests are planned per behaviour" "$WPF" 'Plan tests per behaviour: one test per acceptance statement or behaviour, at the lowest layer that can fail for it, rather than one per task'
+says "writing-plans forms: the Extend step must fail first" "$WPF" 'it must fail before the implementation, as a new test would'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -347,6 +347,8 @@ git commit -m "feat: add specific feature"
 ```
 ````
 
+Read [test-step-forms.md](references/test-step-forms.md) before you write a task's Step 1.
+
 ## Assign an implementer to every task
 
 Read [assignment-procedure.md](references/assignment-procedure.md) before you score the tasks or write their assignment lines.

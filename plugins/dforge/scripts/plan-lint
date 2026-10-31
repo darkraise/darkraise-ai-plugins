@@ -678,6 +678,56 @@ if [ -n "$early_ci" ]; then
   fi
 fi
 
+# --- Step 1 forms ---
+# The forms are defined in skills/writing-plans/references/test-step-forms.md.
+# One awk pass and no other subprocess unless a task cites a Covered by test,
+# because the plan-lint suite already runs slowly on Windows.
+step1_lines=$(awk "$_PLAN_AWK"'
+  { f = in_fence($0); k = f ? -1 : is_task($0) }
+  k >= 0 { task = k; in_task = 1; next }
+  f || !in_task || (task in seen) { next }
+  /^- \[[ xX]\] \*\*Step 1: / {
+    t = $0; sub(/^- \[[ xX]\] \*\*Step 1: /, "", t); sub(/\*\*.*$/, "", t)
+    print task "\t" t; seen[task] = 1
+  }
+' "$src")
+step1_class=() step1_covered=""
+covered_re="^Covered by Task ([0-9]+)'s test $bt"
+while IFS=$'\t' read -r m heading; do
+  [ -n "$m" ] || continue
+  if [[ "$heading" == "Write the failing test"* ]]; then step1_class[m]=write
+  elif [[ "$heading" == "Extend the test $bt"* ]]; then step1_class[m]=extend
+  elif [[ "$heading" =~ $covered_re ]]; then
+    step1_class[m]=covered
+    step1_covered="$step1_covered$m $((10#${BASH_REMATCH[1]}))"$'\n'
+  fi
+done <<<"$step1_lines"
+if [ -n "$step1_covered" ]; then
+  step1_waves="" step1_waves_ok=0
+  if [ "$parallelism" = waves ] && step1_waves=$(plan_waves "$src"); then step1_waves_ok=1; fi
+  step1_wave() { awk -F'\t' -v n="$1" '$2 <= n && n <= $3 { print $1; exit }' <<<"$step1_waves"; }
+  while read -r m n; do
+    [ -n "$m" ] || continue
+    if [[ $'\n'"$nums"$'\n' != *$'\n'"$n"$'\n'* ]]; then
+      say ERROR "Task $m" "Covered by Task $n — no such task"
+      continue
+    fi
+    case ${step1_class[n]:-} in
+      write|extend) ;;
+      *) say ERROR "Task $m" "Covered by Task $n — Task $n has no test step" ;;
+    esac
+    if [ "$parallelism" != waves ]; then
+      [ "$n" -lt "$m" ] || say ERROR "Task $m" "Covered by Task $n — Task $n does not run before Task $m"
+    elif [ "$step1_waves_ok" -eq 1 ]; then
+      # A task outside every wave is the waves section's finding, not this one.
+      wn=$(step1_wave "$n") wm=$(step1_wave "$m")
+      if [ -n "$wn" ] && [ -n "$wm" ] && [ "$wn" -ge "$wm" ]; then
+        say ERROR "Task $m" "Covered by Task $n — Task $n does not run before Task $m"
+      fi
+    fi
+  done <<<"$step1_covered"
+fi
+
 # --- UI/UX contract (dforge:ui-ux) ---
 # A spec with a "## UI/UX contract" makes every task that touches a UI file
 # name the contract items it delivers, and every UI- and UX- item reach some

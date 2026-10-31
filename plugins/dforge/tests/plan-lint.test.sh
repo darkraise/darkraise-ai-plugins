@@ -1208,6 +1208,35 @@ check "waves: no Task check and a wave Early CI: exit 0" "$status" "0"
 has "waves: a missing Task check warns" "$out" "WARN header: no **Task check:** line yet"
 lacks "waves: a wave Early CI is accepted" "$out" "Early CI"
 
+# --- Step 1 forms ---
+step1() { # step1 <Task 1 heading text> <Task 2 heading text> — the Claude plan with both Step 1 headings replaced
+  claude_plan | sed -E \
+    -e "s#^- \[ \] \*\*Step 1: Write it\*\*\$#- [ ] **Step 1: $1**#" \
+    -e "s#^- \[ \] \*\*Step 1: Mark the .+ column\*\*\$#- [ ] **Step 1: $2**#"
+}
+with_steps() { # with_steps <Task 1 heading> <Task 2 heading> <Task 3 heading> — a Step 1 line after each Evaluation line of the three-task plan on stdin
+  S1=$1 S2=$2 S3=$3 awk '/^\*\*Evaluation:\*\*/ { n++; print; print ""; print "- [ ] **Step 1: " ENVIRON["S" n] "**"; next } { print }'
+}
+step1 'Write the failing test' $'Covered by Task 1\'s test `first`' > cov-ok.md
+lint cov-ok.md
+lacks "Step 1 forms: Write the failing test and a Covered by Task earlier in order are accepted" "$out" "Covered by Task"
+step1 $'Covered by Task 2\'s test `second`' 'Extend the test `t/b.test.sh::second`' > cov-late.md
+lint cov-late.md
+has "Covered by a later task: it does not run before" "$out" "ERROR Task 1: Covered by Task 2 — Task 2 does not run before Task 1"
+lacks "an Extend step counts as a test step" "$out" "Task 2 has no test step"
+waves_plan 'sequential — one chain' | with_steps 'Write the failing test' $'Covered by Task 7\'s test `a`' $'Covered by Task 2\'s test `b`' > cov-seq.md
+lint cov-seq.md --no-probe
+has "Covered by a missing task" "$out" "ERROR Task 2: Covered by Task 7 — no such task"
+has "Covered by a task with no test step" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 has no test step"
+lacks "a sequential plan: a lower task number runs before" "$out" "Task 3: Covered by Task 2 — Task 2 does not run before"
+waves_plan 'waves — 1 | 2-3' | with_steps 'Write the failing test' 'Extend the test `t/b.test.sh::second`' $'Covered by Task 2\'s test `second`' > cov-wave.md
+lint cov-wave.md --no-probe
+has "a waves plan: Covered by a task in the same wave" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 does not run before Task 3"
+lacks "a waves plan: the covered task has a test step" "$out" "Task 2 has no test step"
+waves_plan 'waves — 1 | 2 | 3' | with_steps 'Write the failing test' 'Extend the test `t/b.test.sh::second`' $'Covered by Task 2\'s test `second`' > cov-wave-ok.md
+lint cov-wave-ok.md --no-probe
+lacks "a waves plan: Covered by a task in an earlier wave is accepted" "$out" "Covered by Task"
+
 # --- documents kept in darkmem: Spec paths resolve in the mirror ---
 . "$HERE/fixtures/darkmem-stores.sh"
 SH="$TMP/stores-home"; mkdir -p "$SH"
