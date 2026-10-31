@@ -71,6 +71,37 @@ present "TDD folds variants into a table" "$P/skills/test-driven-development/SKI
 present "TDD asks for the lowest layer" "$P/skills/test-driven-development/SKILL.md" '**Lowest layer**'
 present "plans keep e2e for user journeys" "$P/skills/writing-plans/SKILL.md" 'only for a new user journey'
 
+# Test tiers plan, part 4: the skill uses the tier names of reference/test-tiers.md,
+# takes a scope, lists candidate class 6 and says who cleans up what.
+says() { # says <name> <file> <needle> — the file with line breaks folded
+  if tr '\n' ' ' < "$2" | tr -s ' ' | grep -qF -- "$3"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
+  else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
+}
+gone() { # gone <name> <file> <needle> — absent, ignoring case
+  if tr '\n' ' ' < "$2" | tr -s ' ' | grep -qiF -- "$3"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
+  else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
+}
+for tier in 'Task check' 'Full suite' 'Sweep'; do
+  present "phase 3 names the tier: $tier" "$SKILL" "| $tier |"
+done
+for old in 'Inner loop' 'Branch gate' 'full sweep'; do
+  gone "the old tier name is gone: $old" "$SKILL" "$old"
+done
+present "phase 3 takes its tier sources from the shared reference" "$SKILL" '[test-tiers.md](../../reference/test-tiers.md)'
+says "phase 3 proposes a gates.md diff" "$SKILL" 'as a diff to `<docs>/gates.md`'
+says "phase 3 proposes a Tier: task gate" "$SKILL" 'a gate with `Tier: task`'
+says "phase 3 proposes a Budget line" "$SKILL" 'a `Budget: <seconds>s` line on the gate whose `Command` equals'
+says "scope: --modules" "$SKILL" '`--modules <paths>`'
+says "scope: the closing-a-milestone recommendation passes the modules" "$SKILL" 'the dforge:closing-a-milestone recommendation passes the milestone'
+says "scope: --since" "$SKILL" '`--since <ref>`'
+says "scope: phase 1 still profiles the whole suite" "$SKILL" 'Phase 1 still profiles the whole suite'
+says "scope: phase 4 waves stay inside the scope" "$SKILL" 'Phase 4 waves take candidates only from inside the scope'
+present "candidate class 6" "$SKILL" '6. **Subsumed scaffolding.**'
+says "class 6 uses the same evidence" "$SKILL" 'uses the same evidence as every other class'
+present "division of labour heading" "$SKILL" '## Division of labour'
+says "branch tests go to the REFACTOR step and the lens" "$SKILL" 'Tests added on the current branch are merged or removed by the REFACTOR step of dforge:test-driven-development and the `test-quality` lens of the final review'
+says "this skill handles the default branch's tests" "$SKILL" 'This skill handles tests already on the default branch.'
+
 # scripts/test-profile against fixture reports.
 T=$(mktemp -d) || exit 1
 trap 'rm -rf "$T"' EXIT

@@ -27,6 +27,21 @@ after, every removal with its evidence, and every judge verdict with the SHA it
 was given. It is how a later session resumes and how a reviewer audits a
 deletion. Commit it with each wave.
 
+## Scope
+
+The skill takes an optional scope. `--modules <paths>` limits the run to those
+paths; the dforge:closing-a-milestone recommendation passes the milestone's
+modules. `--since <ref>` limits it to tests added after the ref: the test files
+`git diff --diff-filter=A --name-only <ref>..HEAD` lists and the cases added to
+existing test files. With a scope, Phase 1 still profiles the whole suite, and
+Phase 4 waves take candidates only from inside the scope.
+
+## Division of labour
+
+Tests added on the current branch are merged or removed by the REFACTOR step of
+dforge:test-driven-development and the `test-quality` lens of the final review.
+This skill handles tests already on the default branch.
+
 ## Phase 1. Measure
 
 Run the suite once with JUnit XML output (every major runner emits it; the
@@ -54,31 +69,33 @@ test runs and not what it asserts:
 - the runner runs in parallel or sharded;
 - a non-deterministic test is quarantined, never deleted, with a ledger line
   naming its failure. Quarantine means a separate tag or tier that still runs in
-  the full sweep.
+  the Sweep tier.
 
 After each fix the test still passes, and it still fails when the behaviour it
 names is broken: break it once by hand and watch it go red. Commit fixes in
 small batches and add a `--brief` row per batch. Phases 2 and 3 alone often take
-the inner loop from hours to minutes; when they meet the goal your human partner
+the task check from hours to minutes; when they meet the goal your human partner
 set, offer to stop here.
 
 ## Phase 3. Tier the run
 
-Split the run into three tiers. Nothing is deleted.
+Split the run into three tiers. Nothing is deleted. The tier names and the
+impact-selection table come from [test-tiers.md](../../reference/test-tiers.md).
 
 | Tier | What runs | When |
 |---|---|---|
-| Inner loop | tests affected by the change set (impact selection, see [runners.md](references/runners.md)) | during TDD and per task |
-| Branch gate | the fast layers in full | before merge, through dforge:running-gates |
-| Full sweep | everything, slow layers and quarantine included | in CI after merge, or nightly |
+| Task check | tests affected by the change set, or the fast layers | beside every task review and before each task commit |
+| Full suite | everything the plan's Integration check names | wave checks, the final review, the fix wave, finishing |
+| Sweep | everything, slow layers and quarantine included | in CI after push, or nightly |
 
-Propose the tiers to your human partner as a diff to
-`<docs>/gates.md` (the branch gate, with a `Why:`) and one line for
-`CLAUDE.md` or `AGENTS.md` naming the inner-loop command, then apply them only
-on approval. Moving a slow layer out of the branch gate changes what proves a
-merge; it is their call, not yours. A full sweep that no longer runs anywhere
-is a deletion in disguise: the CI job that runs it must exist before the gate
-narrows.
+Propose the tiers to your human partner as a diff to `<docs>/gates.md`: a gate
+with `Tier: task` and a `Why:` for the Task check, and a `Budget: <seconds>s`
+line on the gate whose `Command` equals the plan's `**Integration check:**`.
+Add one line for `CLAUDE.md` or `AGENTS.md` naming the task-check command,
+then apply them only on approval. Moving a slow layer out of the Full suite tier
+changes what proves a merge; it is their call, not yours. A Sweep that no
+longer runs anywhere is a deletion in disguise: the CI job that runs it must
+exist before the gate narrows.
 
 ## Phase 4. Remove or merge, mutation-gated
 
@@ -101,6 +118,11 @@ comparable; a production change goes in its own commit outside the wave.
    user journey.
 5. **No outcome asserted.** A test that only executes code. Give it the
    assertion its name promises, or remove it.
+6. **Subsumed scaffolding.** A narrow test whose every fault a broader test of
+   the same behaviour also catches, typically written first to drive a unit and
+   kept after a wider test landed. It uses the same evidence as every other
+   class: mutation runs, or named faults applied as patches, plus the judge
+   verdict. The never-removed list applies unchanged.
 
 ### Never removed
 
@@ -169,7 +191,7 @@ test, and the tier changes still awaiting approval.
 | Thought | Reality |
 |---------|---------|
 | "Coverage didn't drop, so the test was redundant" | Coverage counts execution, not assertions. Only mutants or named faults prove it. |
-| "Deleting the slow e2e suite is the quickest win" | Phases 2 and 3 first. Moving it to the full sweep keeps it; deleting it does not. |
+| "Deleting the slow e2e suite is the quickest win" | Phases 2 and 3 first. Moving it to the Sweep tier keeps it; deleting it does not. |
 | "I'll fix this production bug while I'm in the wave" | The wave changes test files only, or the before and after mutants differ. |
 | "This flaky test is noise, remove it" | Quarantine it. A flake is a bug in the test or the code, not evidence of redundancy. |
 | "The mutation run is slow, I'll skip it for this wave" | Then the wave removes nothing. Scope the run to the module instead. |
