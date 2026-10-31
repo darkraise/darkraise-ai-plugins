@@ -57,9 +57,10 @@ const REWORDED = [
 // execution skills, the drafting threshold in writing-plans, the plan
 // header's waves-only Integration check placeholder, which the test tiers
 // change widened to every plan, the inline full-suite-before-commit rule,
-// which it replaced with the task check, and the merged-result verification's
+// which it replaced with the task check, the merged-result verification's
 // gates-or-suite choice, which it replaced with gates then the full suite as
-// `bash -c`. The split cannot have lost them.
+// `bash -c`, and the spec review's bullet run, which the CI parity change
+// split with the early-CI question. The split cannot have lost them.
 const REMOVED = [
   '- **Once the plan is reviewed** (at depth light, once it is linted):',
   'Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.',
@@ -84,6 +85,7 @@ const REMOVED = [
   'gates when the project declares a manifest # (dforge:running-gates, with the sha printed above as its base), otherwise # the full test suite through suite-run.',
   'Gates that passed on the branch say # nothing about the merged tree, and the merged HEAD is new, so suite-run runs.',
   'bash <plugin-root>/scripts/suite-run -- <test command> ```',
+  '<question>"`; with no register open, first open `<docs>/registers/<date>-<spec-slug>.md` as Opening an item register says; - every item Fable left undecided, and every critic Blocker it did not settle, with the recommended option first; - when `finishAction` is `ask`:',
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 
