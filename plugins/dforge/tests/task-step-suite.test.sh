@@ -112,8 +112,10 @@ step start docs/plan.md 3
 check "start without --suite: no suite field" "$(jq -r '.suite // "absent"' "$WS/task-3-step.json" | tr -d '\r')" "absent"
 step start docs/plan.md 3 --suite
 check "start --suite without a command exits 2" "$rc" "2"
-step review docs/plan.md 1 --suite x
-check "review does not take --suite" "$rc" "2"
+step review docs/plan.md 1 --suite-base nope
+check "review --suite-base: a ref that is no commit exits 2" "$rc $(grep -cF 'bad --suite-base: nope' <<<"$err")" "2 1"
+step start docs/plan.md 1 --suite-base "$(git rev-parse HEAD)"
+check "start does not take --suite-base" "$rc" "2"
 
 # --- verdict: no suite recorded ---
 HEAD_SHA=$(git rev-parse HEAD | tr -d '\r')
@@ -282,6 +284,39 @@ step verdict docs/plan.md 1 2 --group
 check "verdict --group: a wave group has no per-group suite" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: none recorded"
 
 git worktree remove --force "$WT"
+
+# --- verdict: a none task check schedules the suite by task number ---
+awk '{ print } /^\*\*Execution:\*\*/ { print ""; print "**Task check:** none — full suite every 3 tasks" }' docs/plan.md > docs/plan-none.md
+printf '\n### Task 4: fourth\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n\nBody four.\n' >> docs/plan-none.md
+WS_MAIN=$WS
+WS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan-none.md)")
+rm -f "$WS"/*
+HEAD_SHA=$(git rev-parse HEAD | tr -d '\r')
+for t in 1 2 3 4; do
+  step start docs/plan-none.md "$t"
+  set_review "$t" "$HEAD_SHA" "$REPO"
+  report "$WS/task-$t-review-report.md"
+done
+step verdict docs/plan-none.md 1
+check "none task check, Task 1: not scheduled, never exit 7" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: not scheduled (next at Task 3)"
+check "none task check, Task 1: the task may complete" "$(grep '^fix: ' <<<"$out")" "fix: none"
+step verdict docs/plan-none.md 2
+check "none task check, Task 2: next at the multiple of 3" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: not scheduled (next at Task 3)"
+step verdict docs/plan-none.md 3
+check "none task check, Task 3 of 4: the last task caps the next multiple" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: not scheduled (next at Task 4)"
+step start docs/plan-none.md 3 --suite "$CMD"
+step verdict docs/plan-none.md 3
+check "none task check: a recorded suite is still read, so no row exits 7" "$rc $(grep '^suite: ' <<<"$out")" "7 suite: not run ($CMD)"
+sed 's/^\*\*Task check:\*\* none.*$/**Task check:** `bash suite.sh` — fixture/' docs/plan-none.md > docs/plan-cmd.md
+WS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan-cmd.md)")
+rm -f "$WS"/*
+step start docs/plan-cmd.md 1
+set_review 1 "$HEAD_SHA" "$REPO"
+report "$WS/task-1-review-report.md"
+step verdict docs/plan-cmd.md 1
+check "a command task check with no suite recorded keeps none recorded" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: none recorded"
+WS=$WS_MAIN
+rm -f docs/plan-none.md docs/plan-cmd.md
 
 # --- the doc says so ---
 dt=$(tr -d '\r' < "$DT" | tr '\n' ' ' | tr -s ' ')

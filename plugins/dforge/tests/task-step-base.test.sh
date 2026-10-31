@@ -565,6 +565,63 @@ EARLIER=$(g rev-parse HEAD~2 | tr -d '\r')
 ts rereview docs/plan.md 18 --base "$EARLIER"
 check "task 18: rereview --base on a grouped wave task is accepted and recorded" "$rc $(jq -r '.base' "$WS/task-18-step.json" | tr -d '\r')" "0 $EARLIER"
 
+# Tasks 19 to 21 join the fixture plan: review takes the suite and its base.
+for n in 19 20 21; do
+  printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$n" "$n"
+done >> "$REPO/docs/plan.md"
+
+# Task 19: a regression an earlier task made after the last full run is not
+# baseline. Task 19's own base already fails, so only --suite-base finds it.
+set_failing ''
+commit "green at the last full run"
+sr
+LAST_FULL=$(g rev-parse HEAD | tr -d '\r')
+set_failing $'not ok 1 - regress\n'
+commit "an earlier task breaks a test"
+sr
+ts start docs/plan.md 19
+printf 'impl 19\n' >> "$REPO/app.txt"
+commit "work 19"
+sr
+ts review docs/plan.md 19 --suite 'bash suite.sh' --suite-base "$LAST_FULL"
+check "task 19: review --suite --suite-base exits 0" "$rc" "0"
+check "task 19: the step file holds the suite and its base" "$(jq -r '"\(.suite) \(.suiteBase)"' < "$WS/task-19-step.json" | tr -d '\r')" "bash suite.sh $LAST_FULL"
+clean_report 19
+ts verdict docs/plan.md 19
+check "task 19: a failure that passes at the suite base is new" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
+
+# Tasks 20 and 21: review --group writes both onto the last member's step file.
+set_failing ''
+commit "green at the last full run before the group"
+sr
+G_FULL=$(g rev-parse HEAD | tr -d '\r')
+set_failing $'not ok 1 - regress\n'
+commit "an earlier task breaks a test before the group"
+sr
+ts start docs/plan.md 20
+printf 'impl 20\n' >> "$REPO/app.txt"
+commit "member 1"
+ts start docs/plan.md 21
+printf 'impl 21\n' >> "$REPO/app.txt"
+commit "member 2"
+sr
+for t in 20 21; do
+  printf 'Task %s: awaiting group review (commits aaaaaaa..bbbbbbb)\n' "$t" >> "$WS/progress.md"
+  jq --arg h "$(g rev-parse HEAD | tr -d '\r')" '.heldHead = $h' < "$WS/task-$t-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-$t-step.json"
+done
+ts review --group docs/plan.md 20 21 --suite 'bash suite.sh' --suite-base "$G_FULL"
+check "group: review --group --suite --suite-base exits 0" "$rc" "0"
+check "group: the last member's step file holds the suite and its base" "$(jq -r '"\(.suite) \(.suiteBase)"' < "$WS/task-21-step.json" | tr -d '\r')" "bash suite.sh $G_FULL"
+check "group: the first member's step file holds neither" "$(jq -r '"\(.suite // "none") \(.suiteBase // "none")"' < "$WS/task-20-step.json" | tr -d '\r')" "none none"
+{
+  printf '## Verdict\n'
+  for t in 20 21; do
+    printf 'Task %s spec: pass\nTask %s quality: approved\nTask %s scores: spec 17 / scope 17 / verification 17 / quality 17\n' "$t" "$t" "$t"
+  done
+} > "$WS/group-20,21-review-report.md"
+ts verdict docs/plan.md 20 21 --group
+check "group: the suite base beats the group rule, so the regression is new" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
+
 # Row 29: the stale ten-minute figure for a red fix-head suite is gone.
 dt=$(tr -d '\r' < "$DT" | tr '\n' ' ' | tr -s ' ')
 check "the doc says a base run under rereview --covered takes up to an hour" "$(grep -cF 'which takes up to an hour (`TASK_STEP_BASE_TIMEOUT`)' <<<"$dt")" "1"

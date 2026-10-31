@@ -7,9 +7,9 @@
 # <workspace>/group-<list>-step.json.
 #
 # Usage: task-step start  PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND]
-#        task-step review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR]
+#        task-step review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA]
 #        task-step hold   PLAN_FILE N [--head REF] [--cwd DIR]
-#        task-step review --group PLAN_FILE N M ... [--cwd DIR]
+#        task-step review --group PLAN_FILE N M ... [--cwd DIR] [--suite COMMAND] [--suite-base SHA]
 #        task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]
 #        task-step verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]
 # A start that finds the task's state file keeps it (and writes no second
@@ -35,7 +35,7 @@ plan_budget_line() {
   read -r -a mode <<<"$(. "$1/lib/context.sh" && ctx_plan_mode "$3" "$4" 2>/dev/null)" || mode=()
   DFORGE_BUDGET_CALLER=$2 bash "$1/context-size" ${mode[@]+"${mode[@]}"} 2>/dev/null
 }
-usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]"; }
+usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]"; }
 
 # dirty_list DIR: "<path>\t<hash>" for each tracked path that differs from
 # HEAD, sorted; the hash is git's content hash, or "deleted". Paths are
@@ -120,11 +120,14 @@ suite_unfinished() {
 }
 
 # suite_base_sha STEP_FILE: the commit a step file's suite is compared with.
-# A member of a sequential group (its step file names the group and has no
-# head ref) starts at the previous member's head, so the group is compared
-# with its first member's base; anything else uses its own.
+# A suiteBase recorded by review wins. Otherwise a member of a sequential
+# group (its step file names the group and has no head ref) starts at the
+# previous member's head, so the group is compared with its first member's
+# base; anything else uses its own.
 suite_base_sha() {
   local group first fstep base
+  base=$(jq -r '.suiteBase // empty' "$1" | tr -d '\r')
+  if [ -n "$base" ]; then printf '%s\n' "$base"; return 0; fi
   base=$(jq -r '.base // empty' "$1" | tr -d '\r')
   group=$(jq -r '.group // empty' "$1" | tr -d '\r')
   if [ -n "$group" ] && [ -z "$(jq -r '.head // empty' "$1" | tr -d '\r')" ]; then
@@ -487,12 +490,13 @@ if [ "$sub" = review ] && [ "$1" = --group ]; then
 fi
 plan_arg=$1; shift
 
-ids=() wave="" reset=0 base_arg="" head_arg="" cwd_arg="" vgroup=0 rereview_arg="" suite_arg=""
+ids=() wave="" reset=0 base_arg="" head_arg="" cwd_arg="" vgroup=0 rereview_arg="" suite_arg="" suite_base_arg="" suite_base_sha_arg=""
 while [ $# -gt 0 ]; do
   case $1 in
     --wave) [ "$sub" = start ] && [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; wave=$2; shift 2 ;;
     --reset) [ "$sub" = start ] || usage; reset=1; shift ;;
-    --suite) [ "$sub" = start ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_arg=$2; shift 2 ;;
+    --suite) [[ $sub =~ ^(start|review|group)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_arg=$2; shift 2 ;;
+    --suite-base) [[ $sub =~ ^(review|group)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_base_arg=$2; shift 2 ;;
     --base) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; base_arg=$2; shift 2 ;;
     --head) [[ $sub =~ ^(review|hold)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; head_arg=$2; shift 2 ;;
     --cwd) [[ $sub =~ ^(review|hold|group|verdict)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; cwd_arg=$2; shift 2 ;;
@@ -506,6 +510,9 @@ done
 [ "$sub" != hold ] || [ ${#ids[@]} -eq 1 ] || usage
 # A group member's fix round is re-reviewed alone, so a group has no re-review report.
 [ "$vgroup" -eq 0 ] || [ -z "$rereview_arg" ] || usage
+if [ -n "$suite_base_arg" ]; then
+  suite_base_sha_arg=$(git rev-parse --verify --quiet "$suite_base_arg^{commit}") || die "bad --suite-base: $suite_base_arg"
+fi
 first=${ids[0]}
 idlist=$(IFS=,; echo "${ids[*]}")
 
@@ -860,8 +867,9 @@ do_review() {
 
   snap=$(tracked_snapshot "$top") || die "cannot record the tracked files of $top for the verdict check"
   jq --arg rh "$headsha" --argjson t0 "$t0" --arg base "$base_arg" --arg bsha "$basesha" --arg head "$head_arg" --argjson chk "$snap" \
+    --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
     '.reviewHead = $rh | .t0 = $t0 | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
-     | .reviewCheck = $chk' \
+     | .reviewCheck = $chk | (if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state"
 
   printf 'task %s: reviewed %s..%s (%s commit(s)), diff %s\n' "$idlist" "${basesha:0:7}" "${headsha:0:7}" \
@@ -1027,6 +1035,11 @@ do_group() {
       '.reviewHead = (if (.head // "") != "" then .heldHead else $g end) | .t0 = $t0 | .round = 0 | .group = $list' \
       "$mstate" > "$mstate.tmp" && mv "$mstate.tmp" "$mstate" || die "cannot update $mstate"
   done
+  # suite_check reads a group's suite from its last member's step file.
+  mstate="$ws/task-${members[${#members[@]}-1]}-step.json"
+  jq --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
+    '(if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
+    "$mstate" > "$mstate.tmp" && mv "$mstate.tmp" "$mstate" || die "cannot update $mstate"
 
   printf 'group %s: packaged %s task(s) at head %s, package %s\n' "$list" "${#members[@]}" "${ghead:0:7}" "$pkg"
   printf 'seat: %s prompt: %s%s\n' "$judge" "$prompt" "$note"
@@ -1345,14 +1358,23 @@ verdict_val() {
 # written to $TMP/suite-findings, one "task, severity, file, line, summary" row
 # per new failing line, uncapped.
 suite_check() {
-  local target st rh head7 row kind code log fails nfail nnew nbase line suite_cmd
+  local target st rh head7 row kind code log fails nfail nnew nbase line suite_cmd next last
+  local none_re='^\*\*Task check:\*\*[[:space:]]*none([[:space:]]|$)'
   suite_state=none suite_line="suite: none recorded"
   : > "$TMP/suite-findings"
   target=${members[${#members[@]}-1]}
   st=$ws/task-$target-step.json
   require_step_file "$st"
   suite_cmd=$(jq -r '.suite // empty' "$st" | tr -d '\r')
-  [ -n "$suite_cmd" ] || return 0
+  if [ -z "$suite_cmd" ]; then
+    if [[ $(plan_header_line "$src" "Task check") =~ $none_re ]]; then
+      next=$(( (target / 3 + 1) * 3 ))
+      last=$(plan_tasks "$src" | awk -F'\t' '$1 + 0 > m { m = $1 + 0 } END { print m + 0 }')
+      [ "$last" -ge "$next" ] || next=$last
+      suite_line="suite: not scheduled (next at Task $next)"
+    fi
+    return 0
+  fi
   if [ "$vgroup" -eq 1 ] && [ -n "$(jq -r '.wave // empty' "$st" | tr -d '\r')" ]; then return 0; fi
   rh=$(jq -r '.reviewHead // empty' "$vstate" | tr -d '\r')
   head7=${rh:0:7}
