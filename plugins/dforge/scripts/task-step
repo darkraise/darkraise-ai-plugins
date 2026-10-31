@@ -249,6 +249,16 @@ suite_base_lines() {
   cat "$file"
 }
 
+# drop_base_cache STEP_FILE N SHA: removes task N's cached base run when SHA is
+# set and differs from the step file's suiteBase. The cache is keyed by task,
+# not by commit, so it would otherwise answer for a base it was not run at.
+drop_base_cache() {
+  local ws
+  [ -n "$3" ] && [ "$(jq -r '.suiteBase // empty' "$1" | tr -d '\r')" != "$3" ] || return 0
+  ws=$(dirname "$1")
+  rm -f "$ws/task-$2-base-failures.txt" "$ws/task-$2-base-timeout" "$ws/task-$2-base.log" "$ws/task-$2-base.log.setup.log"
+}
+
 # suite_gap STEP_FILE N SHA [DIR]: nothing when the step file records no suite
 # or SHA's suite row passes or fails with baseline lines only; otherwise "not
 # run" (no row) or "red". STEP_FILE has passed require_step_file in the caller.
@@ -866,6 +876,7 @@ do_review() {
   rm -f "$ws/task-$first-review-report.md"
 
   snap=$(tracked_snapshot "$top") || die "cannot record the tracked files of $top for the verdict check"
+  drop_base_cache "$state" "$first" "$suite_base_sha_arg"
   jq --arg rh "$headsha" --argjson t0 "$t0" --arg base "$base_arg" --arg bsha "$basesha" --arg head "$head_arg" --argjson chk "$snap" \
     --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
     '.reviewHead = $rh | .t0 = $t0 | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
@@ -1037,6 +1048,7 @@ do_group() {
   done
   # suite_check reads a group's suite from its last member's step file.
   mstate="$ws/task-${members[${#members[@]}-1]}-step.json"
+  drop_base_cache "$mstate" "${members[${#members[@]}-1]}" "$suite_base_sha_arg"
   jq --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
     '(if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
     "$mstate" > "$mstate.tmp" && mv "$mstate.tmp" "$mstate" || die "cannot update $mstate"

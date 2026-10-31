@@ -589,6 +589,13 @@ check "task 19: the step file holds the suite and its base" "$(jq -r '"\(.suite)
 clean_report 19
 ts verdict docs/plan.md 19
 check "task 19: a failure that passes at the suite base is new" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
+# The cached base run is keyed by task, so only a review that moves the base drops it.
+base_cache() { for f in base-failures.txt base-timeout base.log base.log.setup.log; do [ -e "$WS/task-19-$f" ] && printf 'y' || printf 'n'; done; }
+for f in base-failures.txt base-timeout base.log base.log.setup.log; do printf 'not ok - regress\n' > "$WS/task-19-$f"; done
+ts review docs/plan.md 19 --suite-base "$LAST_FULL"
+check "task 19: a review at the same suite base keeps the cached base run" "$rc $(base_cache)" "0 yyyy"
+ts review docs/plan.md 19 --suite-base "$(g rev-parse HEAD~1 | tr -d '\r')"
+check "task 19: a review that moves the suite base drops the cached base run" "$rc $(base_cache)" "0 nnnn"
 
 # Tasks 20 and 21: review --group writes both onto the last member's step file.
 set_failing ''
