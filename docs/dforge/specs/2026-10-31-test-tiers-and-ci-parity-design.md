@@ -10,7 +10,13 @@
 - **Repo suite.** Question: "Should this work also slim this repo's own test suite now?" Answer: "Skills only (Recommended)": "Change dforge's skills and scripts and add this repo's CI checks. Slimming this repo's suite becomes a later, separate test-simplifier run that uses the new process."
 - **Per-task tier (A).** Question: "What should the controller run for each task?" Answer: "Two tiers (Recommended)": "`Task check:` fast command for each task; full suite at wave checks, final review and finishing; a passing run at the same commit is reused. If a project has no fast command, the full suite runs every 3 tasks instead of every task." Rejected: dropping the per-task controller run (do-less), and dforge working out which tests a diff affects by itself, per language.
 - **CI mechanism.** Question: "For CI prevention in every dforge project: how far should dforge go?" Answer: "Three points + early run (Recommended)": "`CI:` plan line and portability constraints, local `ci-mirror` before the final review, wait for CI after the push, and an optional early CI run on the pushed branch with consent per plan." Rejected: waiting for CI after the push only (do-less).
+- **Spec review (2026-10-31), shard rule.** Question: "What should part 6 do?" Answer: "Fix weights in the same task (Recommended)": "Part 6 also splits task-step.test.sh into parts, gives faster-plans a third part, and raises next-step and auto-run to 700 s, so the check is green at merge."
+- **Spec review (2026-10-31), CI wait.** Question: "Which finish paths should wait for CI?" Answer: "Wait when finishing pushed (Recommended)": "Wait after a pull request or an early-CI push of the final head. After a local merge, print the exact `gh run list --commit` / `gh run watch` lines to run after you push, without calling the branch CI-green."
+- **Spec review (2026-10-31), A7.** Answer: "300 seconds (Recommended)".
+- **Spec review (2026-10-31), A13.** Answer: "20% growth (Recommended)".
 - **Execution strategy.** No `executionStrategy` setting is in force and `autoRun=on` does not ask; sequential, for the reason on the line above.
+
+Finish: merge
 
 ## Problem
 
@@ -138,6 +144,7 @@ Ledger lines: `Early CI: dispatched run <id> at <sha7>`, `Early CI: green run <i
 - Red reopens it through dforge:systematic-debugging, with each failed job and step named; the fix is pushed and the wait repeats.
 - A run still going at the bound is reported as not done, never as done.
 - With `keep`, no `gh`, `gh` not logged in, or a CI line of `none`, it prints why in one line and skips the wait without calling the branch CI-green.
+- After a local merge, which pushes nothing, it does not wait. It prints the exact `gh run list --commit <merge sha>` and `gh run watch <id>` lines for the owner to run after pushing, and does not call the branch CI-green.
 - After a local merge on a plan with an `**Early CI:**` line, it runs `git push origin --delete <branch>`. With `keep`, it says the remote branch exists.
 
 ### 6. This repository's CI checks (register row 5, repo-specific)
@@ -149,7 +156,7 @@ Ledger lines: `Early CI: dispatched run <id> at <sha7>`, `Early CI: green run <i
   - `jq` given a file argument built from `$PWD`, `$(pwd)` or `$TMPDIR` in a file that exports `MSYS_NO_PATHCONV`.
 
   A line ending `# portability: ok — <reason>` (or `// portability: ok — <reason>`) is exempt. Each hit prints `file:line rule message` and fails validation.
-- **Shard weights.** `tests/test-shards.test.mjs` fails when a shell suite has no weight in `scripts/test-shards.mjs`. The shell suites are `plugins/dforge/tests/*.test.sh` and `plugins/dr-status/tests/run-all.sh`, read through `test-all.mjs --list`. The other jobs (`validate-repository.mjs`, the `--test` jobs, `claude plugin test`, `tsc`) keep the default weight. It also fails when a weight exceeds 80% of that suite's limit (`suiteSeconds`, else 600), with the message "raise its suiteSeconds or split it". The comments at `test-shards.mjs:8-9` and `tests/test-shards.test.mjs:24`, which describe new suites as weighted by default, change to match.
+- **Shard weights.** `tests/test-shards.test.mjs` fails when a shell suite has no weight in `scripts/test-shards.mjs`. The shell suites are `plugins/dforge/tests/*.test.sh` and `plugins/dr-status/tests/run-all.sh`, read through `test-all.mjs --list`. The other jobs (`validate-repository.mjs`, the `--test` jobs, `claude plugin test`, `tsc`) keep the default weight. It also fails when a weight exceeds 80% of that suite's limit (`suiteSeconds`, else 600), with the message "raise its suiteSeconds or split it". The comments at `test-shards.mjs:8-9` and `tests/test-shards.test.mjs:24`, which describe new suites as weighted by default, change to match. The same task brings today's weights inside the rule, so the check is green at merge: `task-step.test.sh` is split into parts through `suiteParts` (a larger limit cannot fit the 25-minute Windows job, `.github/workflows/validate.yml:115`), `faster-plans` gets a third part, and `next-step` and `auto-run` get `suiteSeconds` of 700.
 - **Drift warning.** `scripts/test-all.mjs` prints a GitHub `::warning::` line naming a suite whose duration passes 75% of its limit, so growth shows up before it fails a run.
 
 ### Tests for this work
@@ -164,26 +171,27 @@ A3. [test, high] `task-step review --suite <cmd> --suite-base <sha>` (and `revie
 A4. [test, neg, high] On a sequential plan whose task check is `none`, a task whose number is not a multiple of 3 and is not the last runs no suite. Its verdict prints `suite: not scheduled (next at Task <N>)`, never `suite: not run`, never exits 7, and the task can complete.
 A5. [test, high] `suite-run` writes a seventh duration column to `suites.tsv`, and a six-column row still parses everywhere `suites.tsv` is read.
 A6. [test, high] The final review runs the integration check at the branch head through `suite-run`, and finishing reuses a pass recorded at the same commit on a clean tree instead of running again.
-A7. [test, medium] writing-plans picks the full suite as the task check when its last passing run took 300 seconds or less, and treats a missing duration as not fast. Q: Is 300 seconds the right threshold below which tiering is not worth it, or should it be lower or higher?
+A7. [test, confirmed] writing-plans picks the full suite as the task check when its last passing run took 300 seconds or less, and treats a missing duration as not fast.
 A8. [test, high] plan-lint accepts the three Step 1 forms. It fails a `Covered by Task <N>` naming a missing task, a task with no test step, or a task that does not run before the citing task (a higher number in a sequential plan, the same or a later wave in a wave plan).
 A9. [test, high] `criteria/plan-review.md` carries the "Redundant test" criterion, scored LOW under Executability, with the reviewer naming the overlapping test.
 A10. [test, high] The TDD skill's "Minimal" row is replaced by the one-behaviour, parametrized-variants rule, and `writing-good-tests.md` asks whether an existing test already fails for the change.
 A11. [test, neg, high] Neither the REFACTOR rule nor the final-review fix wave deletes a test that exists at the branch's merge base, or a regression test naming a fixed bug.
 A12. [test, high] The `test-quality` lens carries a `{#redundant}` criterion that names the covering test.
-A13. [test, medium] closing-a-milestone recommends a scoped test-simplifier run when the full suite grew by 20% or more, or passes a declared `Budget:`, names the checkout whose rows it read, and recommends nothing with fewer than two rows. Q: Is 20% growth the right trigger?
+A13. [test, confirmed] closing-a-milestone recommends a scoped test-simplifier run when the full suite grew by 20% or more, or passes a declared `Budget:`, names the checkout whose rows it read, and recommends nothing with fewer than two rows.
 A14. [test, high] test-simplifier's Phase 3 uses the tier names of `reference/test-tiers.md`, accepts `--modules` and `--since` scopes, lists the "Subsumed scaffolding" class, and states the division of labour with the branch-level cleanup.
 A15. [test, high] plan-lint warns on a plan without a `**CI:**` line, fails a malformed one, and passes `none`.
 A16. [test, high] `ci-mirror` runs every `local:` command of the CI line through `suite-run`, prints `uncovered: <platforms>`, exits non-zero when one command fails, and prints `ci: none` with exit 0 for `none`.
 A17. [test, neg, high] With no `**Early CI:**` line, no step of the controller pushes the branch or triggers CI before finishing. With the line present, the controller never opens a pull request to start CI. `reference/auto-run.md` names the consented early-CI push and dispatch as the second exception to its never-performed list.
-A18. [test, high] When finishing pushed, it waits for the CI run of the pushed commit, bounded at 90 minutes, records the `CI:` ledger line, and never reports the branch done while that run is red or still running.
+A18. [test, confirmed] When finishing pushed, it waits for the CI run of the pushed commit, bounded at 90 minutes, records the `CI:` ledger line, and never reports the branch done while that run is red or still running.
 A19. [test, high] writing-plans copies the pitfalls-table rows for each uncovered platform into `## Global Constraints`.
 A20. [test, high] `lint-portability.mjs` flags each of its four rules on a fixture line, passes the same line carrying the exemption comment, and runs from `validate-repository.mjs`.
-A21. [test, high] `test-shards.test.mjs` fails for a shell suite with no weight and for a weight above 80% of its limit, and does not fail for the non-shell jobs.
+A21. [test, confirmed] `test-shards.test.mjs` fails for a shell suite with no weight and for a weight above 80% of its limit, does not fail for the non-shell jobs, and passes on the repository's weights at merge.
 A22. [test, high] `test-all.mjs` prints a `::warning::` naming a suite whose duration passes 75% of its limit.
 A23. [test, neg, high] An existing `gates.md` with no `Tier:` field runs exactly the gates it ran before.
 A24. [test, neg, high] plan-lint fails an `**Early CI:**` line without `— consented <YYYY-MM-DD>`, one naming a wave on a sequential plan, and one naming a task past the last.
 A25. [test, high] running-gates prints one line per skipped `Tier: sweep` gate naming it as CI's, and still runs every `task` and `branch` gate.
 A26. [test, neg, high] `ci-mirror` with a `local:` command that cannot launch prints the digest line naming it and exits non-zero. Finishing with `gh` absent or not logged in prints one line and skips the wait without calling the branch done.
+A27. [test, neg, confirmed] After a local merge, finishing prints the `gh run list --commit <sha>` and `gh run watch` lines and never calls the branch CI-green.
 
 ## Riskiest assumption
 
@@ -223,8 +231,8 @@ Folded into Fable's review. 0 Blocker, 5 High, 10 Medium, 5 Nit.
 - [High] The early-CI push contradicted auto-run's never-performed rule. Fixed: auto-run.md gains the consented exception (part 5).
 - [High] The `none` schedule could not be applied at `task-step start` for a grouped task. Fixed: `review` takes `--suite`/`--suite-base` (part 1).
 - [High] Three required header lines broke existing plans and lint fixtures. Fixed: warn when missing, fail when malformed (parts 1 and 5).
-- [High] The 80% shard-weight rule is red on today's weights (`faster-plans`, `task-step.test.sh`, `next-step`, `auto-run`). Open: asked at the spec review.
-- [High] The wait for CI had no trigger on the local-merge path. Open: asked at the spec review.
+- [High] The 80% shard-weight rule is red on today's weights (`faster-plans`, `task-step.test.sh`, `next-step`, `auto-run`). Answered at the spec review: part 6 brings today's weights inside the rule in the same task.
+- [High] The wait for CI had no trigger on the local-merge path. Answered at the spec review: finishing waits only when it pushed, and after a local merge prints the commands to run.
 - [Medium] `Covered by Task <N>` could not be failing-first. Fixed: restricted to behaviour-free tasks.
 - [Medium] ci-mirror duplicated the gates at the same HEAD. Fixed: gates reuse its pass.
 - [Medium] The milestone comparison read rows that cleanup deletes. Fixed: rows come from the main checkout.
