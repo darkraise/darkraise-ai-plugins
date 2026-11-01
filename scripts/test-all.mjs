@@ -1,51 +1,70 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { driftWarning, selectShard } from './test-shards.mjs';
 
-const { values: options } = parseArgs({ options: { shard: { type: 'string' }, list: { type: 'boolean' }, limits: { type: 'boolean' } } });
+const { values: options } = parseArgs({ options: { shard: { type: 'string' }, list: { type: 'boolean' }, limits: { type: 'boolean' }, jobs: { type: 'string' } } });
 if (options.limits && !options.list) {
   console.error('test-all: --limits only changes what --list prints');
   process.exit(2);
 }
+if (options.jobs !== undefined && !/^[1-9]\d*$/.test(options.jobs)) {
+  console.error('test-all: --jobs takes a whole number of at least 1');
+  process.exit(2);
+}
+// Windows shards stay sequential: their weights and limits were measured that way.
+const parallelJobs = options.jobs !== undefined ? Number(options.jobs) : process.platform === 'win32' ? 1 : availableParallelism();
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bash = process.env.DR_TEST_BASH ?? 'bash';
-let child;
-let timer;
-let forceTimer;
+const running = new Set();
 let interrupted = false;
-function terminate(force = false) {
-  if (!child?.pid) return;
-  if (process.platform === 'win32') spawnSync('taskkill', ['/F', '/T', '/PID', String(child.pid)], { timeout: 10000, stdio: 'ignore', windowsHide: true });
-  else { try { process.kill(-child.pid, force ? 'SIGKILL' : 'SIGTERM'); } catch {} }
+function terminate(job, force = false) {
+  if (!job.child?.pid) return;
+  if (process.platform === 'win32') spawnSync('taskkill', ['/F', '/T', '/PID', String(job.child.pid)], { timeout: 10000, stdio: 'ignore', windowsHide: true });
+  else { try { process.kill(-job.child.pid, force ? 'SIGKILL' : 'SIGTERM'); } catch {} }
 }
-function stop() {
-  terminate();
-  forceTimer ??= setTimeout(() => terminate(true), 5000);
+function stop(job) {
+  terminate(job);
+  job.forceTimer ??= setTimeout(() => terminate(job, true), 5000);
 }
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { interrupted = true; stop(); process.exitCode = 1; });
-async function run(executable, args, seconds) {
-  console.log(`\nRunning ${args.join(' ')}`);
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { interrupted = true; for (const job of running) stop(job); process.exitCode = 1; });
+// A parallel job's output is held and printed as one block when it ends, so
+// the log reads suite by suite.
+async function run(executable, args, seconds, buffered) {
+  const chunks = [];
+  const say = (text, log = console.log) => { if (buffered) chunks.push(Buffer.from(`${text}\n`)); else log(text); };
+  say(`\nRunning ${args.join(' ')}`);
   const started = Date.now();
   let timedOut = false;
-  return new Promise((resolveRun, reject) => {
-    child = spawn(executable, args, { cwd: root, stdio: 'inherit', windowsHide: true, detached: process.platform !== 'win32', env: { ...process.env, DR_TEST_BASH: bash, DR_TEST_ALL: '1' } });
-    timer = setTimeout(() => { timedOut = true; console.error(`Timeout after ${seconds}s`); stop(); }, seconds * 1000);
-    child.on('error', error => { clearTimeout(timer); clearTimeout(forceTimer); forceTimer = undefined; child = undefined; reject(error); });
-    child.on('exit', (code, signal) => {
+  const job = {};
+  running.add(job);
+  const ok = await new Promise((resolveRun, reject) => {
+    job.child = spawn(executable, args, { cwd: root, stdio: buffered ? ['inherit', 'pipe', 'pipe'] : 'inherit', windowsHide: true, detached: process.platform !== 'win32', env: { ...process.env, DR_TEST_BASH: bash, DR_TEST_ALL: '1' } });
+    const closed = buffered ? Promise.all([job.child.stdout, job.child.stderr].map(stream => new Promise(done => { stream.on('data', chunk => chunks.push(chunk)); stream.on('close', done); }))) : Promise.resolve();
+    job.timer = setTimeout(() => { timedOut = true; say(`Timeout after ${seconds}s`, console.error); stop(job); }, seconds * 1000);
+    job.child.on('error', error => { clearTimeout(job.timer); clearTimeout(job.forceTimer); running.delete(job); reject(error); });
+    job.child.on('exit', async (code, signal) => {
       const elapsed = (Date.now() - started) / 1000;
-      console.log(`Finished ${args.join(' ')} in ${elapsed.toFixed(1)}s (exit ${code ?? signal})`);
+      clearTimeout(job.timer); clearTimeout(job.forceTimer);
+      if (process.platform !== 'win32') terminate(job, true);
+      // A process the suite left behind may hold the pipes open past the kill.
+      let grace;
+      await Promise.race([closed, new Promise(done => { grace = setTimeout(done, 5000); })]);
+      clearTimeout(grace);
+      say(`Finished ${args.join(' ')} in ${elapsed.toFixed(1)}s (exit ${code ?? signal})`);
       // A timed-out or killed job has already failed; a warning would repeat it.
       const warning = timedOut || signal || interrupted ? undefined : driftWarning(args, elapsed, seconds);
-      if (warning !== undefined) console.log(warning);
-      clearTimeout(timer); clearTimeout(forceTimer); forceTimer = undefined;
-      if (process.platform !== 'win32') terminate(true);
-      child = undefined; resolveRun(code === 0 && !signal);
+      if (warning !== undefined) say(warning);
+      running.delete(job);
+      resolveRun(code === 0 && !signal);
     });
   });
+  if (buffered) process.stdout.write(Buffer.concat(chunks));
+  return ok;
 }
 // The cockpit's tests need the claude CLI; CI runs them in their own pinned-CLI step.
 const hasClaude = !options.list && process.platform !== 'win32' && spawnSync('claude', ['--version'], { stdio: 'ignore', timeout: 5000 }).status === 0;
@@ -92,10 +111,19 @@ const jobs = [
 if (!options.list && !hasTsc) {
   console.log(`Skipped tsc --noEmit -p plugins/dforge: ${typesGenerated ? 'tsc not found' : 'the generated types are missing (Claude Code writes them when it loads plugins/dforge from the folder)'}`);
 }
-let success = true;
-for (const [executable, args, seconds] of selectShard(jobs, options.shard)) {
-  if (options.list) { console.log(options.limits ? `${seconds}\t${args.join(' ')}` : args.join(' ')); continue; }
-  if (interrupted) break;
-  if (!await run(executable, args, seconds)) success = false;
+const selected = selectShard(jobs, options.shard);
+if (options.list) {
+  for (const [, args, seconds] of selected) console.log(options.limits ? `${seconds}\t${args.join(' ')}` : args.join(' '));
+} else {
+  const workers = Math.min(parallelJobs, selected.length);
+  if (workers > 1) console.log(`Running ${selected.length} jobs, ${workers} at a time (--jobs 1 runs them in order)`);
+  let next = 0;
+  let success = true;
+  await Promise.all(Array.from({ length: workers }, async () => {
+    while (next < selected.length && !interrupted) {
+      const [executable, args, seconds] = selected[next++];
+      if (!await run(executable, args, seconds, workers > 1)) success = false;
+    }
+  }));
+  process.exitCode = success && !interrupted ? 0 : 1;
 }
-process.exitCode = success && !interrupted ? 0 : 1;

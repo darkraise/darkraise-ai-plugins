@@ -52,7 +52,10 @@ claude plugin test plugins/dforge
 ```
 
 `node scripts/test-all.mjs` runs the full maintained suite and prints each
-suite's duration. Unset `CLAUDE_CONFIG_DIR` first, since a value leaking in from
+suite's duration. On Linux and macOS it runs one suite per core and prints each
+suite's output when that suite ends; `--jobs N` sets the count, and `--jobs 1`
+runs the suites in order with their output streamed, as Windows does by
+default. Unset `CLAUDE_CONFIG_DIR` first, since a value leaking in from
 your shell changes the budget tests. A suite that runs against the real home
 directory sets `DFORGE_NO_SETTINGS=1`, under which every `dforge_setting`
 answers its default without reading `~/.dforge/config.json`. Installation and upgrade tests use
