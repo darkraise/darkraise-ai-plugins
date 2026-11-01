@@ -65,7 +65,21 @@ it is the branch head. QA's own tests reach an independent reader in the scoped
 re-review instead (Fixing what it finds). While QA runs, make no commit of
 your own: QA commits on this branch.
 
-0. **Gates.** When the project declares `<docs>/gates.md`, run
+0. **Gates.** Before the gates, run
+   `bash <plugin-root>/scripts/ci-mirror PLAN_FILE`, in the background when it
+   can outrun Bash's ten-minute cap. Wait for it to exit before the gates run
+   and before step 1 starts the integration check. A gate or an integration
+   check whose command equals a `**CI:**`-line command then reuses ci-mirror's
+   pass at this HEAD instead of running a second time. Exit 0 goes on. Exit 1
+   prints one `ci: <command> — FAIL (exit <code>)` line per failing command.
+   Each such line becomes a finding on the Claude list (step 1), written
+   `[ci] <command> — FAIL (exit <code>)`. A `ci-mirror` failure is a
+   final-review finding, and it does not stop the review. In an auto run it
+   goes on the fix wave's list the same way. Exit 2 means the plan has no
+   usable `**CI:**` line (an older plan): say so in one line and go on, with
+   no finding. Run it again whenever the gates run again.
+
+   When the project declares `<docs>/gates.md`, run
    dforge:running-gates before dispatching any reviewer. A red gate stops
    the review, and so does a manifest defect: reviewing a branch that does not
    build, or whose suites fail, spends both reviewer seats on findings the gate

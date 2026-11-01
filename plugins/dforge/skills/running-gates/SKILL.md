@@ -117,6 +117,19 @@ red. An `image` gate is never passed off numbers; the numbers say where to look.
    ones — a manifest whose `Repo` fields put a framework before its consumer
    encodes a build dependency — so results after a red are not unknown, they are
    meaningless.
+
+   When the caller names a plan file, read the local commands of its `**CI:**`
+   line (the commands `scripts/ci-mirror` runs). A gate with no `Setup`,
+   `Teardown` or `Repo` field whose `Command` equals, byte for byte, a command
+   in the plan's `**CI:**` line is run as
+   `bash <plugin-root>/scripts/suite-run -- bash -c` with the Command as that
+   one argument, from the repository's top level. When suite-run prints
+   `suite: reused pass at <sha7>`, the gate has passed at this HEAD from
+   ci-mirror's record. Report it as `passed from the ci-mirror record at <sha7>`,
+   naming the `log:` line, and judge its `Evidence` against that log, which
+   holds the command's output. Any other suite-run output is an ordinary run of
+   the gate, judged as step 5 says. Every other gate runs as before. Step 7's
+   report row for such a gate carries the log path.
 5. **Judge by `Evidence`.** For an `image` gate, open the artifact and write the
    sentence before recording a result.
 6. **`Known-flaky` never auto-passes.** Re-run once **only** when the observed

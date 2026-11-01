@@ -12,6 +12,7 @@ const windowsSeconds = {
   'run-all.sh': 157,
   'auto-run.test.sh': 507,
   'budget-line.test.sh': 123,
+  'ci-mirror.test.sh': 60,
   'codex-gate.test.sh': 122,
   'codex-review.test.sh': 141,
   'context-size.test.sh': 222,

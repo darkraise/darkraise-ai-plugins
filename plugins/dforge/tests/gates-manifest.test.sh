@@ -158,5 +158,24 @@ present "a prose merge request is a red flag" "$FIN" '"I'"'"'ll ask for the merg
 # manifest.
 absent "verification-before-completion never names running-gates" "$VBC" 'running-gates'
 
+# ci-mirror runs before the gates, and a gate whose command it already passed
+# is reported from that record (test tiers plan, part 5).
+says_flat() { present_flat "$@"; }
+FR="$P/reference/final-review.md"
+says_flat "final review runs ci-mirror before the gates" "$FR" 'Before the gates, run `bash <plugin-root>/scripts/ci-mirror PLAN_FILE`'
+says_flat "a ci-mirror failure is a final-review finding" "$FR" 'A `ci-mirror` failure is a final-review finding'
+says_flat "a ci-mirror failure does not stop the review" "$FR" 'it does not stop the review'
+says_flat "an older plan with no CI line goes on" "$FR" 'Exit 2 means the plan has no usable `**CI:**` line'
+flat_fr=$(tr '\n' ' ' < "$FR" | tr -s ' ')
+head_ci=${flat_fr%%scripts/ci-mirror*}
+head_gates=${flat_fr%%dforge:running-gates before dispatching*}
+check "ci-mirror comes before the gates in step 0" "$([ "${#head_ci}" -lt "${#head_gates}" ] && echo yes || echo no)" "yes"
+says_flat "running-gates matches a gate to a CI-line command byte for byte" "$SKILL" 'whose `Command` equals, byte for byte, a command in the plan'"'"'s `**CI:**` line'
+says_flat "running-gates runs such a gate through suite-run as bash -c" "$SKILL" 'bash <plugin-root>/scripts/suite-run -- bash -c'
+says_flat "running-gates reports a reused pass as ci-mirror's" "$SKILL" 'passed from the ci-mirror record at <sha7>'
+says_flat "running-gates names the log" "$SKILL" 'naming the `log:` line'
+says_flat "running-gates excludes gates with Setup, Teardown or Repo" "$SKILL" 'no `Setup`, `Teardown` or `Repo` field'
+says_flat "running-gates runs every other gate as before" "$SKILL" 'Every other gate runs as before.'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
