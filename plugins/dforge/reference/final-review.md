@@ -67,7 +67,9 @@ your own: QA commits on this branch.
 
 0. **Gates.** Before the gates, run
    `bash <plugin-root>/scripts/ci-mirror PLAN_FILE`, in the background when it
-   can outrun Bash's ten-minute cap. Wait for it to exit before the gates run
+   can outrun Bash's ten-minute cap, with the call's `timeout` set to
+   (3600 × <the CI line's local commands> + 120) × 1000 ms, since suite-run
+   bounds each command at 3600 seconds. Wait for it to exit before the gates run
    and before step 1 starts the integration check. A gate or an integration
    check whose command equals a `**CI:**`-line command then reuses ci-mirror's
    pass at this HEAD instead of running a second time. When you run
@@ -217,8 +219,18 @@ your own: QA commits on this branch.
    **Integration check.** In the same message as the Claude review, start the
    plan header's `**Integration check:**` command through
    `bash <plugin-root>/scripts/suite-run -- bash -c '<integration check>'`
-   as a background command at the same HEAD the Claude review reads, from the
-   checkout's top level, on every final review and in either execution mode.
+   as a background command at the same HEAD the Claude review reads, on
+   every final review and in either execution mode, with the Bash call's
+   `timeout` set to (3600 + 120) × 1000 ms. A plan with no such line runs
+   the suite command [delegated-task.md](delegated-task.md) §1 resolves.
+   With QA skipped, run it from the checkout's top level. QA commits in the
+   checkout while it runs, so the run must not share it: when step 0's
+   ci-mirror printed a pass for the same command, that pass is this run and
+   nothing starts; otherwise run it from the top level of a temporary
+   detached worktree at that HEAD
+   (`git worktree add --detach <workspace>/integration <sha>`, then the
+   header's `**Worktree setup:**` command), and remove the worktree with
+   `git worktree remove --force` once step 3 has read the run's log.
    A failing line that does not also fail at MERGE_BASE is a finding: run the
    command once at MERGE_BASE in a temporary worktree and compare the failing
    lines, as [parallel-waves.md](parallel-waves.md) §1 does. Write each such

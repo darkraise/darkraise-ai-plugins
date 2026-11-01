@@ -76,6 +76,7 @@ says "final review: every lens-skipped line reaches the ledger" "$FR" 'as `final
 says "final review: the integration check starts beside the reviewers" "$FR" '**Integration check.** In the same message as the Claude review'
 says "final review: it runs through suite-run" "$FR" $'through `bash <plugin-root>/scripts/suite-run -- bash -c \'<integration check>\'`'
 says "final review: in the background at the review head" "$FR" 'as a background command at the same HEAD the Claude review reads'
+says "final review: the check never shares the checkout QA writes in" "$FR" 'QA commits in the checkout while it runs, so the run must not share it'
 says "final review: a failure the merge base shares is no finding" "$FR" 'A failing line that does not also fail at MERGE_BASE is a finding'
 says "final review: the suite finding enters the fix wave as confirmed" "$FR" 'A `[suite]` finding enters the fix wave as confirmed, as a `[qa]` finding does'
 says "final review: the fix wave waits for the integration check" "$FR" 'The fix wave also waits for the integration check started in step 1'
