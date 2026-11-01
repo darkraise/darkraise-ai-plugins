@@ -85,7 +85,7 @@ impact-selection table come from [test-tiers.md](../../reference/test-tiers.md).
 | Tier | What runs | When |
 |---|---|---|
 | Task check | tests affected by the change set, or the fast layers | beside every task review and before each task commit |
-| Full suite | everything the plan's Integration check names | wave checks, the final review, the fix wave, finishing |
+| Full suite | everything the plan's Integration check names | wave checks, tasks numbered a multiple of 3 and the last task when the task check is `none`, the final review, the fix wave, finishing |
 | Sweep | everything, slow layers and quarantine included | in CI after push, or nightly |
 
 Propose the tiers to your human partner as a diff to `<docs>/gates.md`: a gate

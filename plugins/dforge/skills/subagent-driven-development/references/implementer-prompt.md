@@ -51,8 +51,9 @@ Subagent ([IMPLEMENTER]):
     Before each commit, run the focused tests that cover what you changed -
     the test files or cases for the code you touched - and never the whole
     suite. The controller runs the task check beside the review of your
-    final commit, and a failure it finds there comes back to you as a
-    finding. Write each command you ran, with its result, under `## Verified`
+    final commit (under a `none` task check, the integration check on the
+    tasks it schedules), and a failure it finds there comes back to you as
+    a finding. Write each command you ran, with its result, under `## Verified`
     in your report (see Report Format).
 
     ## You Do Not Dispatch Subagents

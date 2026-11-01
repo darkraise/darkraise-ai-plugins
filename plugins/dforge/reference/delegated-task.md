@@ -866,7 +866,7 @@ writing nothing, when `lens-route` does. Then run the mechanics yourself:
   background at the task's head and treat a non-baseline failure as §3's
   Important finding. `<suite command>` is resolved as §1's Suite command
   says: the task check, and under a `none` task check the integration check
-  on the tasks §1 schedules.
+  on the tasks §1 schedules, and no suite on the others.
   A failing line that the task's base commit also fails is baseline: run the
   suite once there, in a temporary worktree, and compare the failing lines as
   [parallel-waves.md](parallel-waves.md) §1 does. Under a `none` task check,

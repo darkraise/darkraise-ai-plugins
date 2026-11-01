@@ -223,7 +223,7 @@ never invents parallelism the work does not have:
 7. **Write the header lines.** `**Parallelism:** waves — 1 | 2-4 | 5`
    lists the waves in order, a single task or an `A-B` range each, covering
    every task once. `**Integration check:**` names the command that proves a
-   merged wave works together — normally the whole suite.
+   merged wave works together — the full suite, as on every plan.
    `**Worktree setup:**` is what a fresh checkout needs before its tests run
    (`npm ci`, a code generator), or `none`.
    `**Wave check:**`, optional, names a faster command run after the waves

@@ -109,8 +109,8 @@ red. An `image` gate is never passed off numbers; the numbers say where to look.
 3. **Select the gates.** A `sweep` gate is not selected; print the one line from
    the `Tier` bullet for it, so its absence is not a silent skip. A `task` or
    `branch` gate, or a gate with no `Tier`, is selected by `Applies` exactly as
-   before. `Applies: always` runs. A conditional gate runs when its
-   own repository's change set touches what it names. Report every skipped
+   before: `Applies: always` runs, and a conditional gate runs when its own
+   repository's change set touches what it names. Report every skipped
    conditional gate with the reason it did not apply: a silent skip is
    indistinguishable from a forgotten one.
 4. **Run in order, stop at the first red.** Later gates usually depend on earlier

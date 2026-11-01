@@ -24,7 +24,9 @@ Read each job's platform from its configuration:
 
 Map each platform to a Platform name of the Pitfalls table below. A
 `windows-*` image is `Windows Git Bash`. A `macos-*` image is `macOS`.
-`ubuntu-latest` is `uutils (ubuntu-latest)`. Other images have no row.
+`ubuntu-latest` is `uutils (ubuntu-latest)`. Any other image, such as
+`ubuntu-22.04`, has no row and is never listed under `uncovered:`, which
+names only Platform-column names.
 
 Read the local platform with `uname -s`. `Linux` is a GNU Linux host.
 `Darwin` is macOS. `MINGW*` or `MSYS*` is Git Bash on Windows.

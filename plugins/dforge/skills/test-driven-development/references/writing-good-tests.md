@@ -72,10 +72,10 @@ BEFORE writing the test body:
   Find whether an existing test already fails for that change.
 
   An existing test already fails for it → extend that test, or write none
-  Cannot name one            → redesign around an observable behavior
-  "The source text changed"  → run the artifact and assert its effects
-  Only intentional decisions → change detector; test the behavior
-                               that depends on the decision
+  Cannot name one                       → redesign around an observable behavior
+  "The source text changed"             → run the artifact and assert its effects
+  Only intentional decisions            → change detector; test the behavior
+                                          that depends on the decision
 
   Confirm the expected value is derived without the code under test.
   IF it reuses the code's logic or helpers:
