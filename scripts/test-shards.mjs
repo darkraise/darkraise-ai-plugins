@@ -3,8 +3,9 @@
 // their checks that ran, and ui-proof, which keeps its weight from 39725084214.
 // Run 40753974623 (2026-10-29) supplied the suites the speed-and-cost plans
 // added and those that had grown; task-step-base, cut off there, is
-// extrapolated from task-step-settle's Windows-to-Linux ratio, and
-// speed-and-cost-followups weighs three times its A12 part, the longest.
+// extrapolated from task-step-settle's Windows-to-Linux ratio,
+// speed-and-cost-followups weighs three times its A12 part, the longest, and
+// typed-seats-and-drafting.acceptance.sh is about ten times its 4 s Linux time.
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -88,6 +89,7 @@ export const windowsSeconds = {
   'task-step.test.sh': 1340,
   'test-simplifier.test.sh': 10,
   'turn-end.test.sh': 251,
+  'typed-seats-and-drafting.acceptance.sh': 40,
   'ui-hooks.test.sh': 65,
   'ui-lint.test.sh': 10,
   'ui-proof.test.sh': 195,
@@ -126,7 +128,7 @@ export function selectShard(jobs, shard) {
 export function checkShellWeights(jobs, weights = windowsSeconds) {
   const suites = new Map();
   for (const [, args, limit] of jobs) {
-    if (args[0] !== 'plugins/dr-status/tests/run-all.sh' && !/^plugins\/dforge\/tests\/[^/]+\.test\.sh$/.test(args[0])) continue;
+    if (args[0] !== 'plugins/dr-status/tests/run-all.sh' && !/^plugins\/dforge\/tests\/[^/]+\.(test|acceptance)\.sh$/.test(args[0])) continue;
     const name = args[0].split('/').at(-1);
     const suite = suites.get(name) ?? { parts: 0, limit };
     suite.parts += 1;
