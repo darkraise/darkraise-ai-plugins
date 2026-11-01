@@ -58,6 +58,10 @@ delete the branch:
 git branch -d <feature-branch>
 ```
 
+After a local merge, nothing was pushed, so do not wait: print `gh run list --commit <merge sha>` and `gh run watch <id>` for your human partner to run after pushing, and never call the branch CI-green.
+
+On a plan with an `**Early CI:**` line, run `git push origin --delete <feature-branch>` after the local merge. The delete applies only when `git ls-remote --exit-code --heads origin <feature-branch>` finds the branch. A delete that fails prints one line and does not stop finishing.
+
 ### Option 2: Push and Create PR
 
 First record the plan in the completed index (Step 5b) and commit it on the
@@ -76,9 +80,30 @@ present, and report the URL to your human partner.
 
 Keep the worktree — your human partner iterates on PR feedback there.
 
+Then wait for CI as `### Wait for CI` says, with `sha` being `git rev-parse HEAD` at the push.
+
 ### Option 3: Keep As-Is
 
 Report: "Keeping branch <name>. Worktree preserved at <path>."
+
+With keep on such a plan, say that the remote branch `origin/<feature-branch>` exists. This applies only when `git ls-remote --exit-code --heads origin <feature-branch>` finds the branch, so a failed early push says nothing false.
+
+### Wait for CI
+
+Finishing waits for CI only when it pushed: Option 2, or an Early CI push whose head is the final head. An Early CI push whose head is the final head means the ledger's last `Early CI: dispatched run <id> at <sha7>` line names `git rev-parse --short HEAD`, and its run id is the one to watch.
+
+Run `gh run list --commit <sha>`, then `gh run watch <id>` as a background Bash command. Set the call's `timeout` to (90 × 60 + 120) × 1000 ms, because a background call otherwise stops at 30 minutes. In an auto run, end the turn and resume on the notification.
+
+When no run for the commit appears within 60 seconds, print one line saying so and skip the wait; never call the branch CI-green.
+
+Record `CI: <sha7> run <id> <green|red|still running at 90 min>` on the ledger. Read the result with `gh run view <id> --json conclusion,jobs`.
+
+- Green completes the branch.
+- Red reopens the branch through dforge:systematic-debugging, naming each failed job and step; push the fix and wait again.
+- A run still going after 90 minutes is reported as not done, never as done.
+- In an auto run, a run still going after 90 minutes runs `scripts/auto-run stop --reason "CI run <id> still running at 90 min"` before the final message.
+
+With keep, no `gh` (`command -v gh` fails), `gh` not logged in (`gh auth status` exits non-zero), or a CI line of `none`, print why in one line and skip the wait; never call the branch CI-green. The CI line is the plan's `**CI:**` header line, read from the plan file finishing was given. A plan with no such line counts as `none`.
 
 ### If your human partner asks to discard the work
 

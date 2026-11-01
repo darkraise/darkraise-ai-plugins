@@ -376,6 +376,8 @@ finding awaiting a ruling), run
 block it prints, verbatim. When nothing follows, end with: "No plan file — no
 follow-on work recorded."
 
+When the ledger holds a `CI:` line, the final message quotes it.
+
 ## Quick Reference
 
 | Option | Merge | Push | Keep Worktree | Cleanup Branch |

@@ -82,5 +82,24 @@ says "final review: the fix wave waits for the integration check" "$FR" 'The fix
 says "final review: the fix subagent runs the integration check in the same form" "$FR" $'Tell the fix subagent to run the plan\'s `**Integration check:**` command the same way, `bash <plugin-root>/scripts/suite-run -- bash -c \'<integration check>\'`'
 says "finishing: Step 1 runs the integration check in the form the final review recorded" "$FIN" $'`bash <plugin-root>/scripts/suite-run -- bash -c \'<integration check>\'`, the form the final review recorded, so its pass is reused'
 
+# Waiting for CI (docs/dforge/specs/2026-10-31-test-tiers-and-ci-parity-design.md, part 5).
+ER="$P/skills/finishing-a-development-branch/references/execute-choice.md"
+names "execute-choice: the wait section" "$ER" '### Wait for CI'
+says "execute-choice: wait only when finishing pushed" "$ER" 'Finishing waits for CI only when it pushed: Option 2, or an Early CI push whose head is the final head.'
+says "execute-choice: the run is found by commit" "$ER" 'Run `gh run list --commit <sha>`, then `gh run watch <id>` as a background Bash command.'
+says "execute-choice: the Bash timeout" "$ER" 'Set the call'"'"'s `timeout` to (90 × 60 + 120) × 1000 ms, because a background call otherwise stops at 30 minutes.'
+says "execute-choice: an auto run ends the turn" "$ER" 'In an auto run, end the turn and resume on the notification.'
+says "execute-choice: no run appears" "$ER" 'When no run for the commit appears within 60 seconds, print one line saying so and skip the wait; never call the branch CI-green.'
+says "execute-choice: the CI ledger line" "$ER" 'Record `CI: <sha7> run <id> <green|red|still running at 90 min>` on the ledger.'
+says "execute-choice: green completes the branch" "$ER" 'Green completes the branch.'
+says "execute-choice: red reopens through debugging" "$ER" 'Red reopens the branch through dforge:systematic-debugging, naming each failed job and step; push the fix and wait again.'
+says "execute-choice: a run still going is not done" "$ER" 'A run still going after 90 minutes is reported as not done, never as done.'
+says "execute-choice: an auto run stops on a run still going" "$ER" 'In an auto run, a run still going after 90 minutes runs `scripts/auto-run stop --reason "CI run <id> still running at 90 min"` before the final message.'
+says "execute-choice: the skips print one line" "$ER" 'With keep, no `gh` (`command -v gh` fails), `gh` not logged in (`gh auth status` exits non-zero), or a CI line of `none`, print why in one line and skip the wait; never call the branch CI-green.'
+says "execute-choice: a local merge waits for nothing" "$ER" 'After a local merge, nothing was pushed, so do not wait: print `gh run list --commit <merge sha>` and `gh run watch <id>` for your human partner to run after pushing, and never call the branch CI-green.'
+says "execute-choice: a merge deletes the early remote branch" "$ER" 'On a plan with an `**Early CI:**` line, run `git push origin --delete <feature-branch>` after the local merge.'
+says "execute-choice: keep names the remote branch" "$ER" 'With keep on such a plan, say that the remote branch `origin/<feature-branch>` exists.'
+says "finishing: the final message quotes the CI line" "$FIN" 'When the ledger holds a `CI:` line, the final message quotes it.'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
