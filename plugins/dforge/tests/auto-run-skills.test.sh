@@ -158,6 +158,9 @@ says "delegated-task.md: recovery" "$D" 'On recovery, a `dispatched` line with n
 for line in 'Early CI: dispatched run <id> at <sha7>' 'Early CI: green run <id>' 'Early CI: red run <id> — <job>/<step>[, <job>/<step> ...]' 'Early CI: skipped — <reason>' 'CI: <sha7> run <id> <green|red|still running at 90 min>'; do
   names "ledger.md: the grammar holds $line" "$LEDGER_MD" "$line"
 done
+RECOVERY_MD="$P/skills/executing-plans/references/recovery.md"
+says "ledger.md: an unfinished early CI run is resumed first" "$LEDGER_MD" 'Whatever the task lines say, a ledger that holds an `Early CI: dispatched run <id> at <sha7>` line with no later `Early CI: green run <id>` or `Early CI: red run <id>` line for that run is resumed first, by applying [delegated-task.md](../../../reference/delegated-task.md) §Early CI'"'"'s recovery sentence.'
+says "recovery.md: an unfinished early CI run is resumed first" "$RECOVERY_MD" 'Whatever the task lines say, a ledger that holds an `Early CI: dispatched run <id> at <sha7>` line with no later `Early CI: green run <id>` or `Early CI: red run <id>` line for that run is resumed first, by applying [delegated-task.md](../../../reference/delegated-task.md) §Early CI'"'"'s recovery sentence.'
 says "subagent-driven-development: Early CI runs at the point the line names" "$SDDF" 'When the plan header has an `**Early CI:**` line, run [delegated-task.md](../../reference/delegated-task.md) §Early CI at the point the line names.'
 says "executing-plans: step 7 runs Early CI" "$EPF" 'run [delegated-task.md](../../reference/delegated-task.md) §Early CI when the header'"'"'s `**Early CI:**` line names this task.'
 # With no Early CI line no step may push or start CI, so these commands appear

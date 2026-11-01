@@ -108,7 +108,12 @@ A ledger written by an older version of this skill may carry an assigned line
 without `base`: take the previous task's complete-line head, or the branch's
 merge base for Task 1. An old `(scored at dispatch)` line reads as assigned.
 
-**Plan state.** Every task complete and no `Final review:` line: go to Final
+**Plan state.** Whatever the task lines say, a ledger that holds an
+`Early CI: dispatched run <id> at <sha7>` line with no later
+`Early CI: green run <id>` or `Early CI: red run <id>` line for that run is
+resumed first, by applying
+[delegated-task.md](../../../reference/delegated-task.md) §Early CI's recovery
+sentence. Every task complete and no `Final review:` line: go to Final
 Review; an `Acceptance QA: dispatched` line with no `complete` line resumes at
 its step 0.5. A `Final fix:` line and no `Final review:` line: the fix wave was
 dispatched; after compaction the agent id is gone, so re-dispatch that agent

@@ -16,7 +16,12 @@
 | An agent-named `implementer <agent> (assigned …)` line, or `fix round R/2` (a Codex plan's `fix round R/5`) | A delegated task: apply [delegated-task.md](../../../reference/delegated-task.md) §Recovery |
 | none | Not started |
 
-**Plan state.** First, whatever the per-task lines say: if the ledger holds a
+**Plan state.** Whatever the task lines say, a ledger that holds an
+`Early CI: dispatched run <id> at <sha7>` line with no later
+`Early CI: green run <id>` or `Early CI: red run <id>` line for that run is
+resumed first, by applying
+[delegated-task.md](../../../reference/delegated-task.md) §Early CI's recovery
+sentence. First, whatever the per-task lines say: if the ledger holds a
 `Task <N>: escalated inline -> subagent` line with no later
 `implementer inline (assigned` line after it, this plan has left inline mode -
 use dforge:subagent-driven-development, exactly as `scripts/next-step`
