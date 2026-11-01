@@ -10,7 +10,8 @@
 # Usage:
 #   bash speed-and-cost.acceptance.test.sh            run every test
 #   bash speed-and-cost.acceptance.test.sh A5 A9      run the named tests only
-# SKIP_PINS=1 skips A2's run of the pre-split pin tests (about four minutes).
+# SKIP_PINS=1 skips A2's run of the pre-split pin tests (about four minutes),
+# as does DR_TEST_ALL=1, which test-all sets because it runs each of them.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -107,7 +108,9 @@ if selected A2; then
     done < <(git -C "$REPO_ROOT" ls-tree --name-only "$BASE" plugins/dforge/tests/ | sed 's|.*/||')
     check "A2: no test file that existed before the split is gone" "$gone" ""
 
-    if [ -z "${SKIP_PINS:-}" ]; then
+    if [ -n "${SKIP_PINS:-}${DR_TEST_ALL:-}" ]; then
+      printf 'skip - A2: the pre-split pin tests (SKIP_PINS or DR_TEST_ALL is set)\n'
+    else
       bad=""
       while IFS= read -r t; do
         case $t in *.sh) ;; *) continue ;; esac

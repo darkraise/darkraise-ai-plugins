@@ -3,9 +3,11 @@
 // their checks that ran, and ui-proof, which keeps its weight from 39725084214.
 // Run 40753974623 (2026-10-29) supplied the suites the speed-and-cost plans
 // added and those that had grown; task-step-base, cut off there, is
-// extrapolated from task-step-settle's Windows-to-Linux ratio,
-// speed-and-cost-followups weighs three times its A12 part, the longest, and
-// typed-seats-and-drafting.acceptance.sh is about ten times its 4 s Linux time.
+// extrapolated from task-step-settle's Windows-to-Linux ratio.
+// speed-and-cost-followups weighs its two other parts in run 41287948837
+// (307 s and 108 s), since under test-all its A12 part no longer re-runs
+// two suites; typed-seats-and-drafting.acceptance.sh is about ten times its
+// 4 s Linux time.
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -77,7 +79,7 @@ export const windowsSeconds = {
   'skill-size.test.sh': 10,
   'skill-split-planning.test.sh': 10,
   'snapshot.test.sh': 10,
-  'speed-and-cost-followups.acceptance.test.sh': 2250,
+  'speed-and-cost-followups.acceptance.test.sh': 420,
   'speed-and-cost.acceptance.test.sh': 230,
   'suite-run.test.sh': 54,
   'task-loop-steps.acceptance.test.sh': 720,

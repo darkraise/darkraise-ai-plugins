@@ -334,10 +334,15 @@ if selected A12; then
   check "A12: and a passing base row (no base run)" "$(grep -ciE 'passing (suites.tsv )?(base )?row|0 baseline' "$BT" | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes"
   check "A12: task-step-settle.test.sh has a ./<name> exists item run from a subdirectory" \
     "$(grep -cE 'exists \./[A-Za-z_.]+ at head, expect present' "$ST" | awk '{ print ($1 >= 1) ? "yes" : "no" }') $(grep -cE '\(cd "\$REPO/[a-z]+" && .*task-step' "$ST" | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes yes"
-  out=$(cd "$HERE" && timeout 900 bash "$BT" 2>&1); rc=$?
-  check "A12: task-step-base.test.sh passes" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
-  out=$(cd "$HERE" && timeout 600 bash "$ST" 2>&1); rc=$?
-  check "A12: task-step-settle.test.sh passes" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
+  # test-all runs both suites as jobs of their own.
+  if [ -n "${DR_TEST_ALL:-}" ]; then
+    printf 'skip - A12: task-step-base.test.sh and task-step-settle.test.sh run as their own test-all jobs\n'
+  else
+    out=$(cd "$HERE" && timeout 900 bash "$BT" 2>&1); rc=$?
+    check "A12: task-step-base.test.sh passes" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
+    out=$(cd "$HERE" && timeout 600 bash "$ST" 2>&1); rc=$?
+    check "A12: task-step-settle.test.sh passes" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
+  fi
 fi
 
 # ------------------------------------------------------------------ A6

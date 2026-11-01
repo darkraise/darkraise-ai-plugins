@@ -32,7 +32,7 @@ async function run(executable, args, seconds) {
   const started = Date.now();
   let timedOut = false;
   return new Promise((resolveRun, reject) => {
-    child = spawn(executable, args, { cwd: root, stdio: 'inherit', windowsHide: true, detached: process.platform !== 'win32', env: { ...process.env, DR_TEST_BASH: bash } });
+    child = spawn(executable, args, { cwd: root, stdio: 'inherit', windowsHide: true, detached: process.platform !== 'win32', env: { ...process.env, DR_TEST_BASH: bash, DR_TEST_ALL: '1' } });
     timer = setTimeout(() => { timedOut = true; console.error(`Timeout after ${seconds}s`); stop(); }, seconds * 1000);
     child.on('error', error => { clearTimeout(timer); clearTimeout(forceTimer); forceTimer = undefined; child = undefined; reject(error); });
     child.on('exit', (code, signal) => {
@@ -69,8 +69,8 @@ const suiteSeconds = { 'plan-lint.test.sh': 1200, 'speed-and-cost-followups.acce
 const suiteParts = {
   'faster-plans.acceptance.test.sh': [Array.from({ length: 8 }, (_, i) => `a${i + 1}`), Array.from({ length: 8 }, (_, i) => `a${i + 9}`), Array.from({ length: 7 }, (_, i) => `a${i + 17}`)],
   'task-step.test.sh': [['start'], ['rereview'], ['group'], ['verdict']],
-  // speed-and-cost-followups ran past 600 s on a Windows runner; A12 alone
-  // re-runs two whole suites.
+  // speed-and-cost-followups ran past 600 s on a Windows runner while its A12
+  // re-ran two whole suites, which it skips under test-all.
   'speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11'], ['A12'], ['A13', 'A14', 'A15', 'A16', 'A19', 'A20', 'A21', 'A23']],
 };
 const jobs = [
@@ -83,6 +83,8 @@ const jobs = [
   // in-flight scanner, so it is POSIX only too.
   ...(process.platform === 'win32' ? [] : [[process.execPath, ['--test', ...readdirSync(resolve(root, 'evals/controller/tests')).filter(name => name.endsWith('.test.mjs')).map(name => `evals/controller/tests/${name}`)], 300]]),
   [bash, ['plugins/dr-status/tests/run-all.sh'], 420],
+  // DR_TEST_ALL tells a suite that every other suite runs as its own job, so
+  // the acceptance checks that re-run whole suites skip those re-runs.
   ...readdirSync(resolve(root, 'plugins/dforge/tests')).filter(name => name.endsWith('.test.sh') || name.endsWith('.acceptance.sh')).sort().flatMap(name => (suiteParts[name] ?? [[]]).map(part => [bash, [`plugins/dforge/tests/${name}`, ...part], suiteSeconds[name] ?? 600])),
   ...(hasClaude ? [['claude', ['plugin', 'test', 'plugins/dforge'], 300]] : []),
   ...(hasTsc ? [[tscExecutable, [...tscPrefix, '--noEmit', '-p', 'plugins/dforge'], 300]] : []),
