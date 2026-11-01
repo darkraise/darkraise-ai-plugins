@@ -249,14 +249,45 @@ suite_base_lines() {
   cat "$file"
 }
 
-# drop_base_cache STEP_FILE N SHA: removes task N's cached base run when SHA is
-# set and differs from the step file's suiteBase. The cache is keyed by task,
-# not by commit, so it would otherwise answer for a base it was not run at.
+# drop_base_cache STEP_FILE N OLD_BASE: removes task N's cached base run when
+# the step file's suite base (suite_base_sha) is no longer OLD_BASE, the one
+# read before the step file was rewritten. The cache is keyed by task, not by
+# commit, so it would otherwise answer for a base it was not run at.
 drop_base_cache() {
   local ws
-  [ -n "$3" ] && [ "$(jq -r '.suiteBase // empty' "$1" | tr -d '\r')" != "$3" ] || return 0
+  [ "$(suite_base_sha "$1")" != "$3" ] || return 0
   ws=$(dirname "$1")
   rm -f "$ws/task-$2-base-failures.txt" "$ws/task-$2-base-timeout" "$ws/task-$2-base.log" "$ws/task-$2-base.log.setup.log"
+}
+
+NONE_RE='^\*\*Task check:\*\*[[:space:]]*none([[:space:]]|$)'
+
+# require_scheduled_suite STEP_FILE N...: exits 2 when the plan is sequential,
+# its task check is none, one of tasks N... is due the integration check (a
+# multiple of 3, or the last task), and neither --suite nor STEP_FILE names a
+# suite. verdict would otherwise read the task as not scheduled.
+require_scheduled_suite() {
+  local step=$1 n last
+  shift
+  [ -z "$suite_arg" ] || return 0
+  [ -z "$(jq -r '.suite // empty' "$step" 2>/dev/null | tr -d '\r')" ] || return 0
+  [[ $(plan_header_line "$src" "Task check") =~ $NONE_RE ]] || return 0
+  [ "$(plan_parallelism "$src")" = sequential ] || return 0
+  last=$(plan_tasks "$src" | awk -F'\t' '$1 + 0 > m { m = $1 + 0 } END { print m + 0 }')
+  for n in "$@"; do
+    if [ $((n % 3)) -eq 0 ] || [ "$n" -eq "$last" ]; then
+      die "Task $n is due the integration check (task check none): pass --suite <integration check> --suite-base <sha>"
+    fi
+  done
+}
+
+# require_suite_base BASE_SHA N: exits 2 unless --suite-base is BASE_SHA, task
+# N's base, or an ancestor of it. A commit inside the task's own range, such
+# as its earlier head, would excuse the task's regressions as base failures.
+require_suite_base() {
+  [ -n "$suite_base_sha_arg" ] || return 0
+  git merge-base --is-ancestor "$suite_base_sha_arg" "$1" 2>/dev/null \
+    || die "--suite-base ${suite_base_sha_arg:0:7} is not Task $2's base ${1:0:7} or an ancestor of it"
 }
 
 # suite_gap STEP_FILE N SHA [DIR]: nothing when the step file records no suite
@@ -314,7 +345,7 @@ rr_render() { # rr_render TEMPLATE FINDINGS_FILE — the fenced prompt body, de-
 cmd_rereview() (
   local here plan_arg plan tmp src header ws state first t scores row risk
   local fix bullets nopen file review_head round new_round head_ref head_sha fix_base fix_base_sha
-  local pkg diff_file numstat a d f lines over touched risk3 skip why now prompt tpl ids group gstate check_dir snap suite_why suite_dir
+  local pkg diff_file numstat a d f lines over touched risk3 skip why now prompt tpl ids group gstate check_dir snap suite_why suite_dir old_base
   local tasks=() base_arg="" head_arg="" covered=0
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   . "$here/lib/plan.sh"
@@ -464,11 +495,13 @@ cmd_rereview() (
     exit 2
   }
   now=$(date +%s)
+  old_base=$(suite_base_sha "$state")
   jq --arg rh "$head_sha" --argjson r "$new_round" --argjson t "$now" \
     --arg base "$base_arg" --arg bsha "$fix_base_sha" --arg head "$head_arg" --argjson chk "$snap" \
     '.reviewHead = $rh | .round = $r | .t0 = $t | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
      | .reviewCheck = $chk' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
+  drop_base_cache "$state" "$first" "$old_base"
   if [ -n "$gstate" ]; then
     jq --arg rh "$head_sha" '.reviewHead = $rh' "$gstate" > "$gstate.tmp" && mv "$gstate.tmp" "$gstate" || die "cannot update $gstate"
   fi
@@ -520,8 +553,11 @@ done
 [ "$sub" != hold ] || [ ${#ids[@]} -eq 1 ] || usage
 # A group member's fix round is re-reviewed alone, so a group has no re-review report.
 [ "$vgroup" -eq 0 ] || [ -z "$rereview_arg" ] || usage
+# Without its base, a review's suite would be compared with the task's own base.
+[ -z "$suite_arg" ] || [ "$sub" = start ] || [ -n "$suite_base_arg" ] || usage
 if [ -n "$suite_base_arg" ]; then
-  suite_base_sha_arg=$(git rev-parse --verify --quiet "$suite_base_arg^{commit}") || die "bad --suite-base: $suite_base_arg"
+  suite_base_sha_arg=$(git -C "${cwd_arg:-.}" rev-parse --verify --quiet "$suite_base_arg^{commit}" 2>/dev/null | tr -d '\r') \
+    && [ -n "$suite_base_sha_arg" ] || die "bad --suite-base: $suite_base_arg"
 fi
 first=${ids[0]}
 idlist=$(IFS=,; echo "${ids[*]}")
@@ -793,7 +829,7 @@ do_start() {
 route_field() { sed -n "s/.* $1=\\([^ ]*\\).*/\\1/p" <<<"$route" | tr -d '\r'; }
 
 do_review() {
-  local base head basesha headsha diff pkgout rc t0 gate route rrc primary fallback reason note="" tier="" judge
+  local base head basesha headsha diff pkgout rc t0 gate route rrc primary fallback reason note="" tier="" judge old_base
   local lens_files="" lout lrc n line secs timeout_ms cmd top drops=() unexpanded snap
   local template="$plugin_root/skills/subagent-driven-development/references/task-reviewer-prompt.md"
   local judge_prompt="$ws/task-$first-review-prompt.md" codex_prompt="$ws/task-$first-review-codex-prompt.md"
@@ -812,6 +848,8 @@ do_review() {
   [ -n "$head" ] || head=HEAD
   basesha=$(git rev-parse --verify --quiet "$base^{commit}") || die "bad BASE: $base"
   headsha=$(git rev-parse --verify --quiet "$head^{commit}") || die "bad head: $head"
+  require_scheduled_suite "$state" "${ids[@]}"
+  require_suite_base "$basesha" "$first"
 
   gate=$(bash "${TASK_STEP_CODEX_GATE:-$HERE/codex-gate}" 2>/dev/null | tail -n 1 | tr -d '\r')
   route=$(bash "$HERE/review-route" "$plan" --task "${ids[@]}" 2>"$TMP/route.err"); rrc=$?
@@ -876,12 +914,13 @@ do_review() {
   rm -f "$ws/task-$first-review-report.md"
 
   snap=$(tracked_snapshot "$top") || die "cannot record the tracked files of $top for the verdict check"
-  drop_base_cache "$state" "$first" "$suite_base_sha_arg"
+  old_base=$(suite_base_sha "$state")
   jq --arg rh "$headsha" --argjson t0 "$t0" --arg base "$base_arg" --arg bsha "$basesha" --arg head "$head_arg" --argjson chk "$snap" \
     --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
     '.reviewHead = $rh | .t0 = $t0 | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
      | .reviewCheck = $chk | (if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state"
+  drop_base_cache "$state" "$first" "$old_base"
 
   printf 'task %s: reviewed %s..%s (%s commit(s)), diff %s\n' "$idlist" "${basesha:0:7}" "${headsha:0:7}" \
     "$(git rev-list --count "$basesha..$headsha")" "$diff"
@@ -939,7 +978,7 @@ do_hold() {
 do_group() {
   local n i list pending="" rounds ghead mstate sbase sheld lout lrc lenses pkgout rc
   local route rrc primary fallback note="" judge unexpanded t0 line id_line at_line budget
-  local mcwd default_cwd snaps="" snap seen
+  local mcwd default_cwd snaps="" snap seen last_step old_base
   local members=() bases=() helds=() check_dirs=()
   local template="$plugin_root/skills/subagent-driven-development/references/group-reviewer-prompt.md"
 
@@ -961,6 +1000,9 @@ do_group() {
     if grep -qxF "$n" <<<"$rounds"; then pending="${pending:+$pending, }Task $n"; fi
   done
   [ -z "$pending" ] || die "already in group review rounds: $pending; re-review a member with task-step rereview" 4
+  # suite_check reads a group's suite from its last member's step file.
+  last_step="$ws/task-${members[${#members[@]}-1]}-step.json"
+  require_scheduled_suite "$last_step" "${members[@]}"
 
   if [ -n "$cwd_arg" ]; then
     [ -d "$cwd_arg" ] || die "bad --cwd: $cwd_arg"
@@ -996,6 +1038,8 @@ do_group() {
       tail -n +2 "$TMP/task-$n.diff" | sed 's/^## /### /'
     } >> "$TMP/package.md"
   done
+
+  require_suite_base "$(git rev-parse --verify --quiet "${bases[0]}^{commit}")" "${members[0]}"
 
   route=$(bash "$HERE/review-route" "$plan" --task "${members[@]}" 2>"$TMP/route.err"); rrc=$?
   if [ "$rrc" -eq 0 ]; then
@@ -1035,6 +1079,7 @@ do_group() {
     snap=$(tracked_snapshot "$mcwd") || die "cannot record the tracked files of $mcwd for the verdict check"
     snaps="$snaps$snap"$'\n'
   done
+  old_base=$(suite_base_sha "$last_step")
   t0=$(date +%s)
   jq -n --argjson tasks "$(printf '%s\n' "${members[@]}" | jq -sc .)" --arg rh "$ghead" --argjson t0 "$t0" \
     --argjson checks "$(printf '%s' "$snaps" | jq -sc .)" \
@@ -1046,12 +1091,10 @@ do_group() {
       '.reviewHead = (if (.head // "") != "" then .heldHead else $g end) | .t0 = $t0 | .round = 0 | .group = $list' \
       "$mstate" > "$mstate.tmp" && mv "$mstate.tmp" "$mstate" || die "cannot update $mstate"
   done
-  # suite_check reads a group's suite from its last member's step file.
-  mstate="$ws/task-${members[${#members[@]}-1]}-step.json"
-  drop_base_cache "$mstate" "${members[${#members[@]}-1]}" "$suite_base_sha_arg"
   jq --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
     '(if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
-    "$mstate" > "$mstate.tmp" && mv "$mstate.tmp" "$mstate" || die "cannot update $mstate"
+    "$last_step" > "$last_step.tmp" && mv "$last_step.tmp" "$last_step" || die "cannot update $last_step"
+  drop_base_cache "$last_step" "${members[${#members[@]}-1]}" "$old_base"
 
   printf 'group %s: packaged %s task(s) at head %s, package %s\n' "$list" "${#members[@]}" "${ghead:0:7}" "$pkg"
   printf 'seat: %s prompt: %s%s\n' "$judge" "$prompt" "$note"
@@ -1371,7 +1414,6 @@ verdict_val() {
 # per new failing line, uncapped.
 suite_check() {
   local target st rh head7 row kind code log fails nfail nnew nbase line suite_cmd next last
-  local none_re='^\*\*Task check:\*\*[[:space:]]*none([[:space:]]|$)'
   suite_state=none suite_line="suite: none recorded"
   : > "$TMP/suite-findings"
   target=${members[${#members[@]}-1]}
@@ -1379,7 +1421,7 @@ suite_check() {
   require_step_file "$st"
   suite_cmd=$(jq -r '.suite // empty' "$st" | tr -d '\r')
   if [ -z "$suite_cmd" ]; then
-    if [[ $(plan_header_line "$src" "Task check") =~ $none_re ]]; then
+    if [[ $(plan_header_line "$src" "Task check") =~ $NONE_RE ]]; then
       next=$(( (target / 3 + 1) * 3 ))
       last=$(plan_tasks "$src" | awk -F'\t' '$1 + 0 > m { m = $1 + 0 } END { print m + 0 }')
       [ "$last" -ge "$next" ] || next=$last

@@ -114,6 +114,8 @@ step start docs/plan.md 3 --suite
 check "start --suite without a command exits 2" "$rc" "2"
 step review docs/plan.md 1 --suite-base nope
 check "review --suite-base: a ref that is no commit exits 2" "$rc $(grep -cF 'bad --suite-base: nope' <<<"$err")" "2 1"
+step review docs/plan.md 1 --suite "$CMD"
+check "review --suite without --suite-base exits 2" "$rc" "2"
 step start docs/plan.md 1 --suite-base "$(git rev-parse HEAD)"
 check "start does not take --suite-base" "$rc" "2"
 
@@ -302,6 +304,8 @@ check "none task check, Task 1: not scheduled, never exit 7" "$rc $(grep '^suite
 check "none task check, Task 1: the task may complete" "$(grep '^fix: ' <<<"$out")" "fix: none"
 step verdict docs/plan-none.md 2
 check "none task check, Task 2: next at the multiple of 3" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: not scheduled (next at Task 3)"
+step review docs/plan-none.md 3
+check "none task check, Task 3: review without --suite is refused" "$rc $(grep -cF 'Task 3 is due the integration check' <<<"$err")" "2 1"
 step verdict docs/plan-none.md 3
 check "none task check, Task 3 of 4: the last task caps the next multiple" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: not scheduled (next at Task 4)"
 step start docs/plan-none.md 3 --suite "$CMD"

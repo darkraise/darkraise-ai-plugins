@@ -583,6 +583,8 @@ ts start docs/plan.md 19
 printf 'impl 19\n' >> "$REPO/app.txt"
 commit "work 19"
 sr
+ts review docs/plan.md 19 --suite 'bash suite.sh' --suite-base "$(g rev-parse HEAD | tr -d '\r')"
+check "task 19: a suite base inside the task's own range is refused" "$rc $(jq -r '.suiteBase // "none"' < "$WS/task-19-step.json" | tr -d '\r')" "2 none"
 ts review docs/plan.md 19 --suite 'bash suite.sh' --suite-base "$LAST_FULL"
 check "task 19: review --suite --suite-base exits 0" "$rc" "0"
 check "task 19: the step file holds the suite and its base" "$(jq -r '"\(.suite) \(.suiteBase)"' < "$WS/task-19-step.json" | tr -d '\r')" "bash suite.sh $LAST_FULL"

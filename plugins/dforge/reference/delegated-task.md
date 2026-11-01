@@ -102,9 +102,15 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
     before the first run. The last full-suite run is the last row of
     `<state>/suites.tsv` (`dforge-path state`) whose command column is the
     key `suite-run` records for `bash -c '<integration check>'`, whatever its
-    exit. The plan base is the `base` in the step file of the plan's first
-    task. So a regression made by an earlier task is not excused as a base
-    failure. Normally `suites.tsv` already holds a row at `<sha>`, so the
+    exit, and whose HEAD is the task's base or an ancestor of it
+    (`git merge-base --is-ancestor <row head> <task base>`; for a group, its
+    first member's base). A row at the task's own head, left by an earlier
+    review of the task, never counts. The plan base is the `base` in the step
+    file of the plan's first task. So a regression made by an earlier task is
+    not excused as a base failure. `review` exits 2 when `--suite` comes
+    without `--suite-base`, when `--suite-base` is not the task's base or an
+    ancestor of it, and when a scheduled task gets no `--suite` and its step
+    file records none. Normally `suites.tsv` already holds a row at `<sha>`, so the
     comparison costs nothing, but when `suites.tsv` has no row at `<sha>`,
     `verdict` runs the suite once there (for example after a fix round),
     bounded at 3600 seconds (`TASK_STEP_BASE_TIMEOUT`). A group runs the
