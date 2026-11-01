@@ -18,6 +18,10 @@ check() { # check <name> <got> <want>
 names() { # names <label> <file> <text>
   check "$1" "$(grep -qF -- "$3" "$2" && echo yes || echo no)" "yes"
 }
+flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
+says() { # says <label> <file> <text> — the text, with line breaks folded
+  check "$1" "$(flat "$2" | grep -qF -- "$3" && echo yes || echo no)" "yes"
+}
 
 for skill in subagent-driven-development executing-plans; do
   F="$P/skills/$skill/SKILL.md"
@@ -43,7 +47,7 @@ for skill in subagent-driven-development executing-plans; do
   names "$skill: compact ends the turn" "$F" '`Auto run: compacting` as its last line'
   names "$skill: the step owns the clear" "$F" 'then run `scripts/auto-run clear` and end as auto-run.md §Clears says'
   names "$skill: a handoff line waits for the task in flight" "$F" 'On `handoff`, finish the task in'
-  names "$skill: the finish is the one outside action" "$F" '(the finish action is the one exception)'
+  says "$skill: the finish and the consented early CI are the outside actions" "$F" '(the finish action and the consented Early CI push and dispatch are the exceptions)'
   names "$skill: final review" "$F" 'run `scripts/auto-run phase final`'
   names "$skill: the four stops give way" "$F" 'except in an auto run'
 done
@@ -127,6 +131,40 @@ names "README: the autoRun row" "$P/README.md" '| Workflow | `autoRun` | `on` |'
 names "README: the strategy row" "$P/README.md" '| Workflow | `executionStrategy` | `parallel` |'
 # The rename to dforge rewrote "the forge" (the code host) as "the dforge".
 check "no prose names the code host 'the dforge'" "$(grep -rlF "the dforge's" "$P/skills" "$P/reference" | tr '\n' ' ')" ""
+
+# Early CI: the controller step, the ledger grammar and the auto-run exception
+# (docs/dforge/specs/2026-10-31-test-tiers-and-ci-parity-design.md, part 5).
+D="$P/reference/delegated-task.md"
+SDDF="$P/skills/subagent-driven-development/SKILL.md"
+LEDGER_MD="$P/skills/subagent-driven-development/references/ledger.md"
+says "auto-run.md: the early CI push and dispatch are the second exception" "$R" 'The finish action is the first exception. The second is the `**Early CI:**` push and workflow dispatch, performed only when the header line carries `— consented <YYYY-MM-DD>`.'
+names "delegated-task.md: the Early CI section" "$D" '## Early CI'
+says "delegated-task.md: without the line nothing pushes" "$D" 'With no `**Early CI:**` line in the plan header, nothing in this loop pushes the branch or starts CI before finishing.'
+says "delegated-task.md: consent gates the push" "$D" 'Push only when the line carries `— consented <YYYY-MM-DD>`.'
+says "delegated-task.md: the task point" "$D" 'For `after task <n>`, run these steps right after the `Task <n>: complete` line.'
+says "delegated-task.md: the wave point" "$D" 'For `after wave <k>`, run them right after the `Wave <k>: integrated` or `Wave <k>: merged` line.'
+says "delegated-task.md: the push" "$D" 'Push the branch with `git push -u origin <branch>`.'
+says "delegated-task.md: dispatch only with workflow_dispatch" "$D" 'Start CI with `gh workflow run <workflow> --ref <branch>` only when the workflow file declares `workflow_dispatch`; otherwise print one line saying so and skip the early run.'
+says "delegated-task.md: the workflow is the first dispatchable one" "$D" '`<workflow>` is the first workflow file the plan'"'"'s `**CI:**` line names that declares `workflow_dispatch`.'
+says "delegated-task.md: never a pull request" "$D" 'Never open a pull request to start CI.'
+says "delegated-task.md: run discovery" "$D" 'Find the run with `gh run list --workflow <file> --branch <branch> --limit 1 --json databaseId,headSha`, retrying for up to 60 seconds until `headSha` is the pushed commit.'
+says "delegated-task.md: the dispatched line" "$D" 'Write `Early CI: dispatched run <id> at <sha7>` once the run is found.'
+says "delegated-task.md: the background watch" "$D" 'Run `gh run watch <id>` as a background Bash command, with the call'"'"'s `timeout` set to (90 × 60 + 120) × 1000 ms, and keep working.'
+says "delegated-task.md: the outcome lines" "$D" 'When the watch ends, read `gh run view <id> --json conclusion,jobs` and write `Early CI: green run <id>`, or `Early CI: red run <id> — <job>/<step>[, <job>/<step> ...]` naming each failed job and its failed step.'
+says "delegated-task.md: a git or gh failure is a skip" "$D" 'Any failure of `git push` or `gh` prints one line, writes `Early CI: skipped — <reason>`, and never stops the run.'
+says "delegated-task.md: a red run is a fix bullet" "$D" 'A red run is a bullet you write into the next task'"'"'s fix file, as §4 does for a mechanical check'"'"'s finding.'
+says "delegated-task.md: a red run with no task left" "$D" 'With no task left, a red run is a final-review finding, debugged with dforge:systematic-debugging.'
+says "delegated-task.md: recovery" "$D" 'On recovery, a `dispatched` line with no `green` or `red` line after it gets `gh run view <id> --json status,conclusion` once, and a new background watch when the run is still going.'
+for line in 'Early CI: dispatched run <id> at <sha7>' 'Early CI: green run <id>' 'Early CI: red run <id> — <job>/<step>[, <job>/<step> ...]' 'Early CI: skipped — <reason>' 'CI: <sha7> run <id> <green|red|still running at 90 min>'; do
+  names "ledger.md: the grammar holds $line" "$LEDGER_MD" "$line"
+done
+says "subagent-driven-development: Early CI runs at the point the line names" "$SDDF" 'When the plan header has an `**Early CI:**` line, run [delegated-task.md](../../reference/delegated-task.md) §Early CI at the point the line names.'
+says "executing-plans: step 7 runs Early CI" "$EPF" 'run [delegated-task.md](../../reference/delegated-task.md) §Early CI when the header'"'"'s `**Early CI:**` line names this task.'
+# With no Early CI line no step may push or start CI, so these commands appear
+# nowhere in the controller text outside the Early CI section.
+outside() { awk '/^## / { skip = ($0 == "## Early CI") } !skip' "$1"; }
+check "delegated-task.md: no step outside Early CI pushes the branch or starts CI" "$(outside "$D" | grep -cE 'git push|gh workflow run|gh run ')" "0"
+check "subagent-driven-development: nothing in the skill pushes the branch or starts CI" "$(grep -cE 'git push|gh workflow run|gh run ' "$SDDF")" "0"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

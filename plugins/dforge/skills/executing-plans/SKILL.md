@@ -48,7 +48,8 @@ What changes here:
 - **Nothing stops for your human partner.** A ruling-seat or exhausted
   `BLOCKED` goes on the pending list and one Fable batch runs at once. An
   irreversible, security-sensitive or outside-the-worktree action is never
-  performed (the finish action is the one exception).
+  performed (the finish action and the consented Early CI push and dispatch
+  are the exceptions).
   A task Fable gives no ruling for, or whose action is never performed, is
   deferred, and every task that depends on it (its `**Depends on:**` line
   names the task; in a plan without those lines, its `Consumes:` line cites
@@ -291,7 +292,9 @@ For each task, in order:
 7. **Close the task.** Append the complete line with its checkpoint, in the
    same message as your other bookkeeping, and mark the todo complete. In an
    auto run, run `scripts/auto-run task-complete`, then the Fable batch when
-   `scripts/auto-run decision list` prints anything.
+   `scripts/auto-run decision list` prints anything. Then
+   run [delegated-task.md](../../reference/delegated-task.md) §Early CI when
+   the header's `**Early CI:**` line names this task.
 8. **Check the budget after the last task.** Run
    `scripts/context-size --final`; in an auto run it moves the run to the
    final phase, and a `compact` line still ends the turn on

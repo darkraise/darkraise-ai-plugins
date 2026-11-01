@@ -790,6 +790,43 @@ Then mark the todo complete and move on. Never move to the next task while
 the review has open Critical/Important issues that are neither fixed nor
 parked or carried with a ruling at the cap.
 
+## Early CI
+
+An `**Early CI:**` line in the plan header names one point, `after task <n>`
+or `after wave <k>`, and the date your human partner consented to an early
+push. With no `**Early CI:**` line in the plan header, nothing in this loop
+pushes the branch or starts CI before finishing. Push only when the line
+carries `— consented <YYYY-MM-DD>`. For `after task <n>`, run these steps
+right after the `Task <n>: complete` line. For `after wave <k>`, run them
+right after the `Wave <k>: integrated` or `Wave <k>: merged` line.
+
+1. **Push.** Push the branch with `git push -u origin <branch>`.
+2. **Start CI.** Start CI with `gh workflow run <workflow> --ref <branch>`
+   only when the workflow file declares `workflow_dispatch`; otherwise print
+   one line saying so and skip the early run. `<workflow>` is the first
+   workflow file the plan's `**CI:**` line names that declares
+   `workflow_dispatch`. Never open a pull request to start CI.
+3. **Find the run.** `<file>` below is the `<workflow>` of step 2. Find the
+   run with `gh run list --workflow <file> --branch <branch> --limit 1 --json databaseId,headSha`,
+   retrying for up to 60 seconds until `headSha` is the pushed commit. Write
+   `Early CI: dispatched run <id> at <sha7>` once the run is found.
+4. **Watch it in the background.** Run `gh run watch <id>` as a background
+   Bash command, with the call's `timeout` set to (90 × 60 + 120) × 1000 ms,
+   and keep working.
+
+When the watch ends, read `gh run view <id> --json conclusion,jobs` and write
+`Early CI: green run <id>`, or
+`Early CI: red run <id> — <job>/<step>[, <job>/<step> ...]` naming each
+failed job and its failed step. Any failure of `git push` or `gh` prints one
+line, writes `Early CI: skipped — <reason>`, and never stops the run. A
+`**CI:**` line that names no workflow declaring `workflow_dispatch` writes the
+same `skipped` line. A red run is a bullet you write into the next task's fix file, as §4 does for a mechanical
+check's finding. With no task left, a red run is a final-review finding,
+debugged with dforge:systematic-debugging. On recovery, a `dispatched` line
+with no `green` or `red` line after it gets
+`gh run view <id> --json status,conclusion` once, and a new background watch
+when the run is still going.
+
 ## The steps by hand
 
 `task-step` exits 2 on a `Host: codex` plan, and `task-step review` exits 2,

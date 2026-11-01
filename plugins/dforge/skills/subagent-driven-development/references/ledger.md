@@ -31,8 +31,17 @@ Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> 
 Acceptance QA: skipped (depth light)
 Final fix: implementer <agent> (assigned; base <sha7>)
 Final review: clean (commits <merge-base7>..<head7>[, K parked])
+Early CI: dispatched run <id> at <sha7>
+Early CI: green run <id>
+Early CI: red run <id> — <job>/<step>[, <job>/<step> ...]
+Early CI: skipped — <reason>
+CI: <sha7> run <id> <green|red|still running at 90 min>
 ```
 
+- The four `Early CI:` lines are written by
+  [delegated-task.md](../../../reference/delegated-task.md) §Early CI, and the
+  `CI:` line by finishing. No Recovery row reads them: Recovery keys on `Task`
+  and `Group` lines.
 - `Acceptance QA:` lines are written by
   [final-review.md](../../../reference/final-review.md) step 0.5. On recovery:
   a `complete` line skips step 0.5; a `dispatched` line with no `complete`

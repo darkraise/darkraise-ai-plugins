@@ -181,8 +181,9 @@ not depend on a deferred task keep running.
 **Never performed in an auto run,** whatever a ruling says: an irreversible or
 destructive operation, a security-sensitive action, or a side effect outside
 the worktree (a push, a publish, a merge before finishing). Defer the task, as
-above, with a register row naming the operation. The finish action is the one
-exception.
+above, with a register row naming the operation. The finish action is the
+first exception. The second is the `**Early CI:**` push and workflow dispatch,
+performed only when the header line carries `— consented <YYYY-MM-DD>`.
 
 ## The budget line
 

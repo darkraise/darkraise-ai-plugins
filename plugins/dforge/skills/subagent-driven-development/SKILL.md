@@ -60,7 +60,8 @@ What changes here:
 - **Nothing stops for your human partner.** A ruling-seat or exhausted
   `BLOCKED` goes on the pending list and one Fable batch runs at once. An
   irreversible, security-sensitive or outside-the-worktree action is never
-  performed (the finish action is the one exception).
+  performed (the finish action and the consented Early CI push and dispatch
+  are the exceptions).
   A task Fable gives no ruling for, or whose action is never performed, is
   deferred, and every task that depends on it (its `**Depends on:**` line
   names the task; in a plan without those lines, its `Consumes:` line cites
@@ -256,6 +257,11 @@ checked together before the next wave starts.
 A wave of one task runs in the checkout, proves its base first and closes by §5: run [parallel-waves.md](../../reference/parallel-waves.md) §1 step 2, then the loop above, then §5 (`wave check-due`, then its `integrated` or `merged` line) before the next wave starts.
 Every task of a plan without that line runs here exactly as above. Batching
 never crosses a wave boundary.
+
+**Early CI.** When the plan header has an `**Early CI:**` line, run
+[delegated-task.md](../../reference/delegated-task.md) §Early CI at the point
+the line names. Without that line, nothing in this loop pushes the branch or
+starts CI.
 
 ## Final Review
 
