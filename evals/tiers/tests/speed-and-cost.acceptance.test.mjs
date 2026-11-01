@@ -92,6 +92,7 @@ const REMOVED = [
   'clean (commits <merge-base7>..<head7>[, K parked]) ```',
   '**Plan state.** First, whatever the per-task lines say:',
   '**Plan state.** Every task complete and no `Final review:` line:',
+  '`**Integration check:**` names the command that proves a merged wave works together — normally the whole suite.',
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 
