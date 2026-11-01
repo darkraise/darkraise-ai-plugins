@@ -60,7 +60,7 @@ git branch -d <feature-branch>
 
 After a local merge, nothing was pushed, so do not wait: print `gh run list --commit <merge sha>` and `gh run watch <id>` for your human partner to run after pushing, and never call the branch CI-green.
 
-On a plan with an `**Early CI:**` line, run `git push origin --delete <feature-branch>` after the local merge. The delete applies only when `git ls-remote --exit-code --heads origin <feature-branch>` finds the branch. A delete that fails prints one line and does not stop finishing.
+On a plan with an `**Early CI:**` line, run `git push origin --delete <feature-branch>` after the local merge. The delete applies only when `git ls-remote --exit-code --heads origin <feature-branch>` finds the branch and the sha it prints is an ancestor of the merge (`git merge-base --is-ancestor <sha> HEAD`), so a remote branch holding a commit the merge lacks, such as one pushed by someone else, is kept with one line saying so. A delete that fails prints one line and does not stop finishing.
 
 ### Option 2: Push and Create PR
 
@@ -90,9 +90,9 @@ With keep on such a plan, say that the remote branch `origin/<feature-branch>` e
 
 ### Wait for CI
 
-Finishing waits for CI only when it pushed: Option 2, or an Early CI push whose head is the final head. An Early CI push whose head is the final head means the ledger's last `Early CI: dispatched run <id> at <sha7>` line names `git rev-parse --short HEAD`, and its run id is the one to watch.
+Finishing waits for CI only when it pushed: Option 2, or an Early CI push whose head is the final head. An Early CI push whose head is the final head means the ledger's last `Early CI: dispatched run <id> at <sha7>` line names `git rev-parse --short HEAD`, and its run id is the one to watch. Only keep reaches that case, since Option 1 never waits and Option 2 pushes again: with keep, the skip below does not apply to such a push.
 
-Run `gh run list --commit <sha>`, then `gh run watch <id>` as a background Bash command. Set the call's `timeout` to (90 × 60 + 120) × 1000 ms, because a background call otherwise stops at 30 minutes. In an auto run, end the turn and resume on the notification.
+Run `gh run list --commit <sha>`, then `gh run watch <id>` as a background Bash command. When it lists several runs, add `--workflow <file>` for each workflow file the `**CI:**` line names and watch each run found, one background watch and one `CI:` line per run. Set the call's `timeout` to (90 × 60 + 120) × 1000 ms, because a background call otherwise stops at 30 minutes. In an auto run, end the turn and resume on the notification.
 
 When no run for the commit appears within 60 seconds, print one line saying so and skip the wait; never call the branch CI-green.
 

@@ -99,6 +99,7 @@ says "execute-choice: an auto run stops on a run still going" "$ER" 'In an auto 
 says "execute-choice: the skips print one line" "$ER" 'With keep, no `gh` (`command -v gh` fails), `gh` not logged in (`gh auth status` exits non-zero), or a CI line of `none`, print why in one line and skip the wait; never call the branch CI-green.'
 says "execute-choice: a local merge waits for nothing" "$ER" 'After a local merge, nothing was pushed, so do not wait: print `gh run list --commit <merge sha>` and `gh run watch <id>` for your human partner to run after pushing, and never call the branch CI-green.'
 says "execute-choice: a merge deletes the early remote branch" "$ER" 'On a plan with an `**Early CI:**` line, run `git push origin --delete <feature-branch>` after the local merge.'
+says "execute-choice: the delete keeps a branch holding unmerged commits" "$ER" 'the sha it prints is an ancestor of the merge (`git merge-base --is-ancestor <sha> HEAD`)'
 says "execute-choice: keep names the remote branch" "$ER" 'With keep on such a plan, say that the remote branch `origin/<feature-branch>` exists.'
 says "finishing: the final message quotes the CI line" "$FIN" 'When the ledger holds a `CI:` line, the final message quotes it.'
 
