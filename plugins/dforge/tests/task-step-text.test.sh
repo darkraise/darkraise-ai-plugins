@@ -256,7 +256,7 @@ names_flat "task check: none is the last resort" "$WPR" '`none — full suite ev
 names_flat "task check: a missing or six-column row is not fast" "$WPR" 'A row that is missing, or has six columns and so no duration, counts as not fast.'
 names_flat "task check: only the checkout's own rows are read" "$WPR" 'Read only rows of the checkout you run in'
 names_flat "task check: the row is found by suite-run's quoted key" "$WPR" 'the quoted key suite-run records for `bash -c <cmd>` run from the top level'
-names_flat "task check: the duration is column 7" "$WPR" 'column 7'
+names_flat "task check: the duration is column 7" "$WPR" 'read its column 7, the duration in'
 names_flat "task check: the line ends with its reason" "$WPR" 'End the line with `— <why>`'
 names_flat "integration check: on every plan, not only a waves plan" "$WPR" '`**Integration check:**` holds the full suite command on every plan, not only on a waves plan.'
 names "test-tiers: the reference exists" "$TIERS" '# Test tiers'

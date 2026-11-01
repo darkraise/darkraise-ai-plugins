@@ -110,7 +110,7 @@ rows_for() { # rows_for <platform> — Pitfalls rows whose Platform cell is exac
 check "ci-parity.md: five Windows Git Bash rows" "$(rows_for 'Windows Git Bash')" "5"
 check "ci-parity.md: three macOS rows" "$(rows_for macOS)" "3"
 check "ci-parity.md: two uutils rows" "$(rows_for 'uutils (ubuntu-latest)')" "2"
-check "ci-parity.md: the table holds those ten rows and no other" \
+check "ci-parity.md: the table holds those ten rows, a header and a separator, and no other" \
   "$(awk '/^## / { on = ($0 == "## Pitfalls"); next } on && /^\|/ { n++ } END { print n + 0 }' "$CIP")" "12"
 pit=$(awk '/^## / { on = ($0 == "## Pitfalls"); next } on' "$CIP")
 for needle in 'MSYS_NO_PATHCONV' 'dr_native_path' '/c/' 'C:/' "tr -d '\\r'" 'ENVIRON' 'pathToFileURL' \

@@ -175,6 +175,10 @@ says "closing: the budget sits on the integration-check gate" "$CLOSE" 'whose `C
 says "closing: no such gate means the 20% rule only" "$CLOSE" 'When no such gate exists, the audit uses the 20% rule only.'
 says "closing: the recommendation is scoped to the milestone's modules" "$CLOSE" 'dforge:test-simplifier --modules <paths>'
 says "closing: it recommends and removes nothing" "$CLOSE" 'It recommends only and removes nothing.'
+says "closing: a row counts only under suite-run's key" "$CLOSE" "\`printf '%q ' bash -c '<command>'\` without the trailing space"
+says "closing: the report line with too few rows" "$CLOSE" '`Suite cost: <state>/suites.tsv of <checkout top level> holds <n> full-suite row(s) with a duration; two are needed, so nothing is recommended.`'
+says "closing: the report line with two rows" "$CLOSE" '`Suite cost: <state>/suites.tsv of <checkout top level>: <d0>s at <sha7> to <d1>s at <sha7> (<change>%).`'
+says "closing: the 20% arithmetic" "$CLOSE" '(`<d1> * 100 >= <d0> * 120` and `<d1> > <d0>`)'
 says "closing: the rows come from finishing's merge verification" "$CLOSE" 'leaves one full-suite row at each merge head'
 says "finishing: the merged result runs through suite-run as bash -c" "$FINREF" "bash <plugin-root>/scripts/suite-run -- bash -c '<full suite command>'"
 says "finishing: the command is the plan's Integration check" "$FINREF" 'is the `**Integration check:**` command of the plan being finished'

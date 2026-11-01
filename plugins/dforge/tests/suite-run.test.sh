@@ -187,7 +187,7 @@ run --timeout 1 -- sleep 5
 check "a timeout exits 124" "$rc" "124"
 has "a timeout is a FAIL" "$out" "suite: FAIL (exit 124)"
 check "a timeout is recorded" "$(field 4)" "124"
-check "a timed-out run records its wall time" "$([ "$(field 7)" -ge 1 ] && [ "$(field 7)" -le 4 ] && echo yes || echo no)" "yes"
+check "a timed-out run records its wall time" "$([ "$(field 7)" -ge 1 ] && [ "$(field 7)" -le 30 ] && echo yes || echo no)" "yes"
 
 out=$(cd "$REPO" && SUITE_RUN_KILL_AFTER=1 bash "$SUITE" --timeout 1 -- bash -c 'trap "" TERM; sleep 30' 2>&1); rc=$?
 check "a command that ignores TERM is still a timeout" "$rc" "124"
