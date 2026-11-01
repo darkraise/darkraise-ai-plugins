@@ -166,6 +166,7 @@ says_flat "final review runs ci-mirror before the gates" "$FR" 'Before the gates
 says_flat "a ci-mirror failure is a final-review finding" "$FR" 'A `ci-mirror` failure is a final-review finding'
 says_flat "a ci-mirror failure does not stop the review" "$FR" 'it does not stop the review'
 says_flat "an older plan with no CI line goes on" "$FR" 'Exit 2 means the plan has no usable `**CI:**` line'
+says_flat "final review names the plan file to running-gates" "$FR" 'When you run dforge:running-gates, name PLAN_FILE to it'
 flat_fr=$(tr '\n' ' ' < "$FR" | tr -s ' ')
 head_ci=${flat_fr%%scripts/ci-mirror*}
 head_gates=${flat_fr%%dforge:running-gates before dispatching*}

@@ -70,7 +70,9 @@ your own: QA commits on this branch.
    can outrun Bash's ten-minute cap. Wait for it to exit before the gates run
    and before step 1 starts the integration check. A gate or an integration
    check whose command equals a `**CI:**`-line command then reuses ci-mirror's
-   pass at this HEAD instead of running a second time. Exit 0 goes on. Exit 1
+   pass at this HEAD instead of running a second time. When you run
+   dforge:running-gates, name PLAN_FILE to it, so its step 4 can match a gate
+   to the plan's `**CI:**` commands. Exit 0 goes on. Exit 1
    prints one `ci: <command> — FAIL (exit <code>)` line per failing command.
    Each such line becomes a finding on the Claude list (step 1), written
    `[ci] <command> — FAIL (exit <code>)`. A `ci-mirror` failure is a
