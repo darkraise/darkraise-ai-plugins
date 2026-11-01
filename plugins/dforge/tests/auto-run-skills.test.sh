@@ -144,6 +144,7 @@ says "delegated-task.md: consent gates the push" "$D" 'Push only when the line c
 says "delegated-task.md: the task point" "$D" 'For `after task <n>`, run these steps right after the `Task <n>: complete` line.'
 says "delegated-task.md: the wave point" "$D" 'For `after wave <k>`, run them right after the `Wave <k>: integrated` or `Wave <k>: merged` line.'
 says "delegated-task.md: the push" "$D" 'Push the branch with `git push -u origin <branch>`.'
+says "delegated-task.md: only a feature branch is pushed" "$D" 'push nothing and write `Early CI: skipped — <branch> is not a feature branch`.'
 says "delegated-task.md: dispatch only with workflow_dispatch" "$D" 'Start CI with `gh workflow run <workflow> --ref <branch>` only when the workflow file declares `workflow_dispatch`; otherwise print one line saying so and skip the early run.'
 says "delegated-task.md: the workflow is the first dispatchable one" "$D" '`<workflow>` is the first workflow file the plan'"'"'s `**CI:**` line names that declares `workflow_dispatch`.'
 says "delegated-task.md: never a pull request" "$D" 'Never open a pull request to start CI.'
@@ -151,16 +152,17 @@ says "delegated-task.md: run discovery" "$D" 'Find the run with `gh run list --w
 says "delegated-task.md: the dispatched line" "$D" 'Write `Early CI: dispatched run <id> at <sha7>` once the run is found.'
 says "delegated-task.md: the background watch" "$D" 'Run `gh run watch <id>` as a background Bash command, with the call'"'"'s `timeout` set to (90 × 60 + 120) × 1000 ms, and keep working.'
 says "delegated-task.md: the outcome lines" "$D" 'When the watch ends, read `gh run view <id> --json conclusion,jobs` and write `Early CI: green run <id>`, or `Early CI: red run <id> — <job>/<step>[, <job>/<step> ...]` naming each failed job and its failed step.'
+says "delegated-task.md: every watch outcome writes a line" "$D" 'writes `Early CI: skipped — run <id> still running at 90 min`.'
 says "delegated-task.md: a git or gh failure is a skip" "$D" 'Any failure of `git push` or `gh` prints one line, writes `Early CI: skipped — <reason>`, and never stops the run.'
 says "delegated-task.md: a red run is a fix bullet" "$D" 'A red run is a bullet you write into the next task'"'"'s fix file, as §4 does for a mechanical check'"'"'s finding.'
 says "delegated-task.md: a red run with no task left" "$D" 'With no task left, a red run is a final-review finding, debugged with dforge:systematic-debugging.'
-says "delegated-task.md: recovery" "$D" 'On recovery, a `dispatched` line with no `green` or `red` line after it gets `gh run view <id> --json status,conclusion` once, and a new background watch when the run is still going.'
+says "delegated-task.md: recovery" "$D" 'On recovery, a `dispatched` line with no `green`, `red` or `skipped` line after it gets `gh run view <id> --json status,conclusion` once, and a new background watch when the run is still going.'
 for line in 'Early CI: dispatched run <id> at <sha7>' 'Early CI: green run <id>' 'Early CI: red run <id> — <job>/<step>[, <job>/<step> ...]' 'Early CI: skipped — <reason>' 'CI: <sha7> run <id> <green|red|still running at 90 min>'; do
   names "ledger.md: the grammar holds $line" "$LEDGER_MD" "$line"
 done
 RECOVERY_MD="$P/skills/executing-plans/references/recovery.md"
-says "ledger.md: an unfinished early CI run is resumed first" "$LEDGER_MD" 'Whatever the task lines say, a ledger that holds an `Early CI: dispatched run <id> at <sha7>` line with no later `Early CI: green run <id>` or `Early CI: red run <id>` line for that run is resumed first, by applying [delegated-task.md](../../../reference/delegated-task.md) §Early CI'"'"'s recovery sentence.'
-says "recovery.md: an unfinished early CI run is resumed first" "$RECOVERY_MD" 'Whatever the task lines say, a ledger that holds an `Early CI: dispatched run <id> at <sha7>` line with no later `Early CI: green run <id>` or `Early CI: red run <id>` line for that run is resumed first, by applying [delegated-task.md](../../../reference/delegated-task.md) §Early CI'"'"'s recovery sentence.'
+says "ledger.md: an unfinished early CI run is resumed first" "$LEDGER_MD" 'Whatever the task lines say, a ledger that holds an `Early CI: dispatched run <id> at <sha7>` line with no later `Early CI: green run <id>`, `Early CI: red run <id>` or `Early CI: skipped — run <id>` line for that run is resumed first, by applying [delegated-task.md](../../../reference/delegated-task.md) §Early CI'"'"'s recovery sentence;'
+says "recovery.md: an unfinished early CI run is resumed first" "$RECOVERY_MD" 'Whatever the task lines say, a ledger that holds an `Early CI: dispatched run <id> at <sha7>` line with no later `Early CI: green run <id>`, `Early CI: red run <id>` or `Early CI: skipped — run <id>` line for that run is resumed first, by applying [delegated-task.md](../../../reference/delegated-task.md) §Early CI'"'"'s recovery sentence;'
 says "subagent-driven-development: Early CI runs at the point the line names" "$SDDF" 'When the plan header has an `**Early CI:**` line, run [delegated-task.md](../../reference/delegated-task.md) §Early CI at the point the line names.'
 says "executing-plans: step 7 runs Early CI" "$EPF" 'run [delegated-task.md](../../reference/delegated-task.md) §Early CI when the header'"'"'s `**Early CI:**` line names this task.'
 # With no Early CI line no step may push or start CI, so these commands appear

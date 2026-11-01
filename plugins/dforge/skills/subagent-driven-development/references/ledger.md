@@ -40,8 +40,8 @@ CI: <sha7> run <id> <green|red|still running at 90 min>
 
 - The four `Early CI:` lines are written by
   [delegated-task.md](../../../reference/delegated-task.md) §Early CI, and the
-  `CI:` line by finishing. No Recovery row reads them: Recovery keys on `Task`
-  and `Group` lines.
+  `CI:` line by finishing. No per-task Recovery row reads them, since those
+  key on `Task` and `Group` lines; the Plan state paragraph below does.
 - `Acceptance QA:` lines are written by
   [final-review.md](../../../reference/final-review.md) step 0.5. On recovery:
   a `complete` line skips step 0.5; a `dispatched` line with no `complete`
@@ -110,10 +110,11 @@ merge base for Task 1. An old `(scored at dispatch)` line reads as assigned.
 
 **Plan state.** Whatever the task lines say, a ledger that holds an
 `Early CI: dispatched run <id> at <sha7>` line with no later
-`Early CI: green run <id>` or `Early CI: red run <id>` line for that run is
-resumed first, by applying
+`Early CI: green run <id>`, `Early CI: red run <id>` or
+`Early CI: skipped — run <id>` line for that run is resumed first, by applying
 [delegated-task.md](../../../reference/delegated-task.md) §Early CI's recovery
-sentence. Every task complete and no `Final review:` line: go to Final
+sentence; a ledger with no `Early CI:` line whose `**Early CI:**` point is
+already complete runs that section now. Neither ends the turn. Every task complete and no `Final review:` line: go to Final
 Review; an `Acceptance QA: dispatched` line with no `complete` line resumes at
 its step 0.5. A `Final fix:` line and no `Final review:` line: the fix wave was
 dispatched; after compaction the agent id is gone, so re-dispatch that agent

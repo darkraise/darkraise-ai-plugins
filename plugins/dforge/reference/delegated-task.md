@@ -806,7 +806,12 @@ carries `— consented <YYYY-MM-DD>`. For `after task <n>`, run these steps
 right after the `Task <n>: complete` line. For `after wave <k>`, run them
 right after the `Wave <k>: integrated` or `Wave <k>: merged` line.
 
-1. **Push.** Push the branch with `git push -u origin <branch>`.
+1. **Push.** Check the branch first: when HEAD is detached, or `<branch>` is
+   `main`, `master`, the remote's default branch
+   (`git symbolic-ref --short refs/remotes/origin/HEAD`) or the branch this
+   one was created from, push nothing and write
+   `Early CI: skipped — <branch> is not a feature branch`. Push the branch
+   with `git push -u origin <branch>`.
 2. **Start CI.** Start CI with `gh workflow run <workflow> --ref <branch>`
    only when the workflow file declares `workflow_dispatch`; otherwise print
    one line saying so and skip the early run. `<workflow>` is the first
@@ -815,7 +820,8 @@ right after the `Wave <k>: integrated` or `Wave <k>: merged` line.
 3. **Find the run.** `<file>` below is the `<workflow>` of step 2. Find the
    run with `gh run list --workflow <file> --branch <branch> --limit 1 --json databaseId,headSha`,
    retrying for up to 60 seconds until `headSha` is the pushed commit. Write
-   `Early CI: dispatched run <id> at <sha7>` once the run is found.
+   `Early CI: dispatched run <id> at <sha7>` once the run is found. When none
+   appears, write `Early CI: skipped — no run for <sha7> within 60 s`.
 4. **Watch it in the background.** Run `gh run watch <id>` as a background
    Bash command, with the call's `timeout` set to (90 × 60 + 120) × 1000 ms,
    and keep working.
@@ -823,13 +829,19 @@ right after the `Wave <k>: integrated` or `Wave <k>: merged` line.
 When the watch ends, read `gh run view <id> --json conclusion,jobs` and write
 `Early CI: green run <id>`, or
 `Early CI: red run <id> — <job>/<step>[, <job>/<step> ...]` naming each
-failed job and its failed step. Any failure of `git push` or `gh` prints one
-line, writes `Early CI: skipped — <reason>`, and never stops the run. A
-`**CI:**` line that names no workflow declaring `workflow_dispatch` writes the
-same `skipped` line. A red run is a bullet you write into the next task's fix file, as §4 does for a mechanical
-check's finding. With no task left, a red run is a final-review finding,
-debugged with dforge:systematic-debugging. On recovery, a `dispatched` line
-with no `green` or `red` line after it gets
+failed job and its failed step. Any other conclusion (`cancelled`,
+`timed_out`) with no failed step writes `Early CI: red run <id> — <conclusion>`.
+A watch that ends with no conclusion, the run still going at 90 minutes,
+writes `Early CI: skipped — run <id> still running at 90 min`. Any failure of
+`git push` or `gh` prints one line, writes `Early CI: skipped — <reason>`, and
+never stops the run. A `**CI:**` line that names no workflow declaring
+`workflow_dispatch` writes the same `skipped` line. A red run is a bullet you
+write into the next task's fix file, as §4 does for a mechanical check's
+finding. Inline mode writes no fix files: there, debug a red run with
+dforge:systematic-debugging before the next task's first step. With no task
+left, a red run is a final-review finding, debugged with
+dforge:systematic-debugging. On recovery, a `dispatched` line with no
+`green`, `red` or `skipped` line after it gets
 `gh run view <id> --json status,conclusion` once, and a new background watch
 when the run is still going.
 

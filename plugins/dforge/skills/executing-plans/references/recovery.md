@@ -18,10 +18,11 @@
 
 **Plan state.** Whatever the task lines say, a ledger that holds an
 `Early CI: dispatched run <id> at <sha7>` line with no later
-`Early CI: green run <id>` or `Early CI: red run <id>` line for that run is
-resumed first, by applying
+`Early CI: green run <id>`, `Early CI: red run <id>` or
+`Early CI: skipped — run <id>` line for that run is resumed first, by applying
 [delegated-task.md](../../../reference/delegated-task.md) §Early CI's recovery
-sentence. First, whatever the per-task lines say: if the ledger holds a
+sentence; a ledger with no `Early CI:` line whose `**Early CI:**` point is
+already complete runs that section now. Neither ends the turn. Then, whatever the per-task lines say: if the ledger holds a
 `Task <N>: escalated inline -> subagent` line with no later
 `implementer inline (assigned` line after it, this plan has left inline mode -
 use dforge:subagent-driven-development, exactly as `scripts/next-step`
