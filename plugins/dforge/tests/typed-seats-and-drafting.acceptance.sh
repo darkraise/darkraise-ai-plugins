@@ -66,7 +66,8 @@ if sel A5; then
   absent "A5: code-reviewer.md names no general-purpose seat" "$cr" 'general-purpose'
   matches "A5: requesting-code-review requires the diff file" "$rcr" '`\[DIFF_FILE\]` - REQUIRED'
   matches "A5: requesting-code-review writes the diff file with git diff for BASE..HEAD" "$rcr" 'git diff -U10 "\$BASE_SHA\.\.\$HEAD_SHA"'
-  matches "A5: code-reviewer.md requires the diff file" "$cr" '`\[DIFF_FILE\]` . REQUIRED'
+  # An em dash is three bytes, so `.` would miss it in the C locale CI runs in.
+  matches "A5: code-reviewer.md requires the diff file" "$cr" '`\[DIFF_FILE\]` (-|—) REQUIRED'
   absent "A5: code-reviewer.md offers no none option for the diff file" "$cr" '`none`|"none"'
   absent "A5: code-reviewer.md has no git fallback for the diff" "$cr" 'git diff \[BASE_SHA\]|derive it yourself'
 
