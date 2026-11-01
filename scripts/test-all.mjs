@@ -6,6 +6,10 @@ import { parseArgs } from 'node:util';
 import { driftWarning, selectShard } from './test-shards.mjs';
 
 const { values: options } = parseArgs({ options: { shard: { type: 'string' }, list: { type: 'boolean' }, limits: { type: 'boolean' } } });
+if (options.limits && !options.list) {
+  console.error('test-all: --limits only changes what --list prints');
+  process.exit(2);
+}
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bash = process.env.DR_TEST_BASH ?? 'bash';
@@ -26,14 +30,16 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { interrupt
 async function run(executable, args, seconds) {
   console.log(`\nRunning ${args.join(' ')}`);
   const started = Date.now();
+  let timedOut = false;
   return new Promise((resolveRun, reject) => {
     child = spawn(executable, args, { cwd: root, stdio: 'inherit', windowsHide: true, detached: process.platform !== 'win32', env: { ...process.env, DR_TEST_BASH: bash } });
-    timer = setTimeout(() => { console.error(`Timeout after ${seconds}s`); stop(); }, seconds * 1000);
+    timer = setTimeout(() => { timedOut = true; console.error(`Timeout after ${seconds}s`); stop(); }, seconds * 1000);
     child.on('error', error => { clearTimeout(timer); clearTimeout(forceTimer); forceTimer = undefined; child = undefined; reject(error); });
     child.on('exit', (code, signal) => {
       const elapsed = (Date.now() - started) / 1000;
       console.log(`Finished ${args.join(' ')} in ${elapsed.toFixed(1)}s (exit ${code ?? signal})`);
-      const warning = driftWarning(args, elapsed, seconds);
+      // A timed-out or killed job has already failed; a warning would repeat it.
+      const warning = timedOut || signal || interrupted ? undefined : driftWarning(args, elapsed, seconds);
       if (warning !== undefined) console.log(warning);
       clearTimeout(timer); clearTimeout(forceTimer); forceTimer = undefined;
       if (process.platform !== 'win32') terminate(true);
