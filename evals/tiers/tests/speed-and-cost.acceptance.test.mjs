@@ -61,8 +61,8 @@ const REWORDED = [
 // gates-or-suite choice, which it replaced with gates then the full suite as
 // `bash -c`, the spec review's bullet run, which the CI parity change
 // split with the early-CI question, and the auto run's one-exception
-// sentence and the ledger grammar block's end, which early CI extended. The
-// split cannot have lost them.
+// sentence, the ledger grammar block's end and the two Plan state openings,
+// which early CI extended. The split cannot have lost them.
 const REMOVED = [
   '- **Once the plan is reviewed** (at depth light, once it is linted):',
   'Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.',
@@ -90,6 +90,8 @@ const REMOVED = [
   '<question>"`; with no register open, first open `<docs>/registers/<date>-<spec-slug>.md` as Opening an item register says; - every item Fable left undecided, and every critic Blocker it did not settle, with the recommended option first; - when `finishAction` is `ask`:',
   'An irreversible, security-sensitive or outside-the-worktree action is never performed (the finish action is the one exception).',
   'clean (commits <merge-base7>..<head7>[, K parked]) ```',
+  '**Plan state.** First, whatever the per-task lines say:',
+  '**Plan state.** Every task complete and no `Final review:` line:',
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 
