@@ -3,9 +3,9 @@ import { existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { selectShard } from './test-shards.mjs';
+import { driftWarning, selectShard } from './test-shards.mjs';
 
-const { values: options } = parseArgs({ options: { shard: { type: 'string' }, list: { type: 'boolean' } } });
+const { values: options } = parseArgs({ options: { shard: { type: 'string' }, list: { type: 'boolean' }, limits: { type: 'boolean' } } });
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bash = process.env.DR_TEST_BASH ?? 'bash';
@@ -31,7 +31,10 @@ async function run(executable, args, seconds) {
     timer = setTimeout(() => { console.error(`Timeout after ${seconds}s`); stop(); }, seconds * 1000);
     child.on('error', error => { clearTimeout(timer); clearTimeout(forceTimer); forceTimer = undefined; child = undefined; reject(error); });
     child.on('exit', (code, signal) => {
-      console.log(`Finished ${args.join(' ')} in ${((Date.now() - started) / 1000).toFixed(1)}s (exit ${code ?? signal})`);
+      const elapsed = (Date.now() - started) / 1000;
+      console.log(`Finished ${args.join(' ')} in ${elapsed.toFixed(1)}s (exit ${code ?? signal})`);
+      const warning = driftWarning(args, elapsed, seconds);
+      if (warning !== undefined) console.log(warning);
       clearTimeout(timer); clearTimeout(forceTimer); forceTimer = undefined;
       if (process.platform !== 'win32') terminate(true);
       child = undefined; resolveRun(code === 0 && !signal);
@@ -50,12 +53,16 @@ const [tscExecutable, tscPrefix] = process.platform === 'win32' ? [process.env.C
 // Detected under --list too, so a listing shows the job that a run would start.
 const hasTsc = typesGenerated && spawnSync(tscExecutable, [...tscPrefix, '--version'], { stdio: 'ignore', timeout: 10000, windowsHide: true }).status === 0;
 // plan-lint runs about 240 checks of a few processes each, which take over ten
-// minutes on a Windows runner and under a minute on Linux.
-const suiteSeconds = { 'plan-lint.test.sh': 1200, 'speed-and-cost-followups.acceptance.test.sh': 1200, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step-base.test.sh': 900, 'task-step.test.sh': 1450 };
+// minutes on a Windows runner and under a minute on Linux. next-step and
+// auto-run take about 500 s on a Windows runner; 700 s keeps that under 80% of
+// their limit. task-step's limit applies to each of its parts.
+const suiteSeconds = { 'plan-lint.test.sh': 1200, 'speed-and-cost-followups.acceptance.test.sh': 1200, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step-base.test.sh': 900, 'task-step.test.sh': 900, 'next-step.test.sh': 700, 'auto-run.test.sh': 700 };
 // faster-plans takes about 20 minutes on a Windows runner, more than a shard
-// can hold beside anything else, so it runs as two halves of its tests.
+// can hold beside anything else, so it runs as three parts of its tests.
+// task-step runs as four parts, one per section of the suite.
 const suiteParts = {
-  'faster-plans.acceptance.test.sh': [Array.from({ length: 12 }, (_, i) => `a${i + 1}`), Array.from({ length: 11 }, (_, i) => `a${i + 13}`)],
+  'faster-plans.acceptance.test.sh': [Array.from({ length: 8 }, (_, i) => `a${i + 1}`), Array.from({ length: 8 }, (_, i) => `a${i + 9}`), Array.from({ length: 7 }, (_, i) => `a${i + 17}`)],
+  'task-step.test.sh': [['start'], ['rereview'], ['group'], ['verdict']],
   // speed-and-cost-followups ran past 600 s on a Windows runner; A12 alone
   // re-runs two whole suites.
   'speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11'], ['A12'], ['A13', 'A14', 'A15', 'A16', 'A19', 'A20', 'A21', 'A23']],
@@ -79,7 +86,7 @@ if (!options.list && !hasTsc) {
 }
 let success = true;
 for (const [executable, args, seconds] of selectShard(jobs, options.shard)) {
-  if (options.list) { console.log(args.join(' ')); continue; }
+  if (options.list) { console.log(options.limits ? `${seconds}\t${args.join(' ')}` : args.join(' ')); continue; }
   if (interrupted) break;
   if (!await run(executable, args, seconds)) success = false;
 }

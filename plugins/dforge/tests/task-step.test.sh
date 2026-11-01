@@ -2,6 +2,20 @@
 # task-step runs one phase of the delegated task loop in a single call. Each
 # case runs against a throwaway repository and plan; no case starts Codex.
 set -uo pipefail
+# Usage:
+#   bash task-step.test.sh            run every part
+#   bash task-step.test.sh verdict    run the named parts only
+ALL="start rereview group verdict"
+sel=""
+for n in "$@"; do
+  n=$(tr 'A-Z' 'a-z' <<<"$n")
+  case " $ALL " in
+    *" $n "*) sel="$sel $n" ;;
+    *) printf 'task-step.test.sh: unknown part %s (parts: %s)\n' "$n" "$ALL" >&2; exit 2 ;;
+  esac
+done
+[ $# -gt 0 ] || sel=$ALL
+want() { case " $sel " in *" $1 "*) return 0 ;; esac; return 1; }
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
@@ -138,6 +152,15 @@ rm -f "$WS"/*
 step() { out=$(bash "$STEP" "$@" 2>"$TMP/err"); rc=$?; }
 count_lines() { printf '%s\n' "$1" | grep -c .; }
 
+PR=$(cd "$P" && pwd)
+TOP=$(git rev-parse --show-toplevel)
+short() { git rev-parse --short "$1"; }
+placeholders() { grep -cE '\[[A-Z][A-Z_]*\]' "$1"; }
+ws_count() { ls -A "$WS" | wc -l | tr -d ' '; }
+state_of() { jq -r "$2" "$WS/task-$1-step.json" | tr -d '\r'; }
+RR_S="$HERE/../scripts"
+
+if want start; then
 # start: the assigned line, the dispatch file, the state and the digest.
 step start docs/plan.md 1
 check "start: exit 0" "$rc" "0"
@@ -252,12 +275,6 @@ check "start: an amendment that does not apply exits 4" "$rc" "4"
 rm -f "$WS/amendments.md"
 
 # review: the preconditions.
-PR=$(cd "$P" && pwd)
-TOP=$(git rev-parse --show-toplevel)
-short() { git rev-parse --short "$1"; }
-placeholders() { grep -cE '\[[A-Z][A-Z_]*\]' "$1"; }
-ws_count() { ls -A "$WS" | wc -l | tr -d ' '; }
-state_of() { jq -r "$2" "$WS/task-$1-step.json" | tr -d '\r'; }
 before=$(ws_count)
 step review docs/plan.md 7
 check "review: before start exits 6" "$rc" "6"
@@ -470,10 +487,11 @@ check "review report: the Codex prompt carries no report-file rule" \
 check "review report: the Codex prompt keeps the implementer's report" \
   "$(grep -cF "Read the implementer's report: $WS/task-1-report.md" "$WS/task-1-review-codex-prompt.md")" "1"
 review_surface absent
+fi
 
+if want rereview || want verdict; then
 # --- rereview: the skip rule, the package and the state ---
 # The fixture plan's lines carry a leading | so a plan that quotes this suite still lints.
-RR_S="$HERE/../scripts"
 RR_TMP=$TMP/rr
 mkdir -p "$RR_TMP"
 RR_REPO=$RR_TMP/repo
@@ -587,7 +605,9 @@ RR_WS=$(winpath "$(cd "$RR_REPO" && env HOME="$RR_TMP/home" bash "$RR_S/sdd-work
 RR_R0=$(rr_git rev-parse HEAD)
 cp "$RR_WS/task-1-step.json" "$RR_TMP/state1.0"
 cp "$RR_WS/task-2-step.json" "$RR_TMP/state2.0"
+fi
 
+if want rereview; then
 # The skip rule: one open finding, at most 3 changed lines (test files
 # included) touching the finding's file, a task below risk 3, and --covered.
 rr_case "skips a one-line fix" 1 --covered "- app.txt: wrong value" "app.txt:mod" "0 re-review: skipped (2 changed lines, 1 finding, app.txt)"
@@ -751,7 +771,9 @@ rr_run rereview docs/plan.md 1 --base ""
 check "rereview with an empty --base exits 2" "$rr_rc" "2"
 rr_run rereview docs/plan.md 1 --head ""
 check "rereview with an empty --head exits 2" "$rr_rc" "2"
+fi
 
+if want group; then
 # --- hold and review --group: grouped tasks reviewed together ---
 # The fixture plan's lines carry a leading | so a plan that quotes this suite still lints.
 GR_TMP=$TMP/gr
@@ -1087,7 +1109,9 @@ check "verdict, five members: the extra Verdict lines are cut" "$(grep -c '^note
 check "verdict, five members: the cannot-verify list is cut" "$(grep -c '^cannot-verify: (Task 6)' <<<"$gr_out")" "0"
 check "verdict, five members: and says how many it cut" "$(grep -c '^cannot-verify: 12 more in the report$' <<<"$gr_out")" "1"
 check "verdict, five members: at most 20 lines besides the finding lines" "$(grep -cvE '^(Critical|Important) ' <<<"$gr_out")" "20"
+fi
 
+if want verdict; then
 # The re-review judge writes its report where the prompt says; a fresh round
 # discards a stale one at that path.
 rr_reset
@@ -1505,5 +1529,6 @@ rr_run verdict docs/plan.md 99
 check "verdict: no such task exits 3" "$rr_rc" "3"
 rr_run verdict docs/codex-plan.md 1
 check "verdict: a Host: codex plan exits 2" "$rr_rc" "2"
+fi
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

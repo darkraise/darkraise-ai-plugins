@@ -5,36 +5,63 @@
 // added and those that had grown; task-step-base, cut off there, is
 // extrapolated from task-step-settle's Windows-to-Linux ratio, and
 // speed-and-cost-followups weighs three times its A12 part, the longest.
-// These are scheduling weights, not timeouts; newly discovered suites receive
-// the default weight. A suite test-all runs in parts splits its weight evenly
-// among them.
-const windowsSeconds = {
+// These are scheduling weights, not timeouts. The jobs that are not shell
+// suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
+// take the default weight of 10. Every shell suite needs an entry here, with a
+// weight of at most 80% of the suite's limit; tests/test-shards.test.mjs
+// enforces both. A suite test-all runs in parts splits its weight evenly among
+// them.
+export const windowsSeconds = {
   'run-all.sh': 157,
+  'auto-default.test.sh': 10,
+  'auto-run-skills.test.sh': 10,
   'auto-run.test.sh': 507,
   'budget-line.test.sh': 123,
   'ci-mirror.test.sh': 60,
+  'codex-client.test.sh': 10,
   'codex-gate.test.sh': 122,
   'codex-review.test.sh': 141,
   'context-size.test.sh': 222,
+  'criteria.test.sh': 10,
   'darkmem-sync.test.sh': 155,
+  'delegated-suite.test.sh': 10,
   'depth-route.test.sh': 88,
   'detect.test.sh': 137,
   'dforge-config.test.sh': 34,
+  'dforge-dir.test.sh': 10,
   'dforge-migrate.test.sh': 64,
+  'dforge-state.test.sh': 10,
+  'distilling-docs.test.sh': 10,
   'draft-pack.test.sh': 40,
   'executor-recovery.test.sh': 295,
+  'executor-session.test.sh': 10,
+  'executors.test.sh': 10,
   'faster-plans.acceptance.test.sh': 1200,
+  'final-phase.test.sh': 10,
   'finish-choice.test.sh': 78,
+  'fleet.test.sh': 10,
+  'gates-manifest.test.sh': 10,
   'hook.test.sh': 75,
+  'impl-clauses.test.sh': 10,
   'impl-stop-gate.test.sh': 64,
   'in-flight.test.sh': 36,
   'inline-mode.test.sh': 65,
+  'ladder.test.sh': 10,
+  'lanes.test.sh': 10,
   'lens-route.test.sh': 185,
+  'lock.test.sh': 10,
+  'migrate-skill.test.sh': 10,
+  'native-routing.test.sh': 10,
   'next-step.test.sh': 500,
+  'parallel-grouping.test.sh': 10,
   'plan-amend.test.sh': 333,
   'plan-lib.test.sh': 43,
   'plan-lint.test.sh': 814,
   'plan-revise.test.sh': 355,
+  'polluter.test.sh': 10,
+  'process-roles.test.sh': 10,
+  'project-status.test.sh': 10,
+  'readme-unattended.test.sh': 10,
   'register.test.sh': 68,
   'repo-audit.test.sh': 53,
   'review-depth-qa.acceptance.test.sh': 288,
@@ -42,6 +69,13 @@ const windowsSeconds = {
   'review-route.test.sh': 458,
   'roadmap.test.sh': 125,
   'roots.test.sh': 84,
+  'run-codex-task.test.sh': 10,
+  'sdd-references.test.sh': 10,
+  'seats.test.sh': 10,
+  'settings-skills.test.sh': 10,
+  'skill-size.test.sh': 10,
+  'skill-split-planning.test.sh': 10,
+  'snapshot.test.sh': 10,
   'speed-and-cost-followups.acceptance.test.sh': 2250,
   'speed-and-cost.acceptance.test.sh': 230,
   'suite-run.test.sh': 54,
@@ -50,13 +84,19 @@ const windowsSeconds = {
   'task-step-base.test.sh': 550,
   'task-step-settle.test.sh': 180,
   'task-step-suite.test.sh': 150,
+  'task-step-text.test.sh': 10,
   'task-step.test.sh': 1340,
+  'test-simplifier.test.sh': 10,
   'turn-end.test.sh': 251,
   'ui-hooks.test.sh': 65,
+  'ui-lint.test.sh': 10,
   'ui-proof.test.sh': 195,
   'ui-ux-skill.acceptance.test.sh': 362,
+  'ui-ux-skill.test.sh': 10,
+  'waiting-text.test.sh': 10,
   'wave.test.sh': 75,
   'working-directory.test.sh': 82,
+  'worktree-instructions.test.sh': 10,
 };
 
 export function selectShard(jobs, shard) {
@@ -81,4 +121,30 @@ export function selectShard(jobs, shard) {
   }
   const selected = new Set(buckets[index - 1].positions);
   return jobs.filter((_, position) => selected.has(position));
+}
+
+export function checkShellWeights(jobs, weights = windowsSeconds) {
+  const suites = new Map();
+  for (const [, args, limit] of jobs) {
+    if (args[0] !== 'plugins/dr-status/tests/run-all.sh' && !/^plugins\/dforge\/tests\/[^/]+\.test\.sh$/.test(args[0])) continue;
+    const name = args[0].split('/').at(-1);
+    const suite = suites.get(name) ?? { parts: 0, limit };
+    suite.parts += 1;
+    suites.set(name, suite);
+  }
+  const problems = [];
+  for (const [name, { parts, limit }] of suites) {
+    if (!Object.hasOwn(weights, name)) {
+      problems.push(`${name}: no weight in scripts/test-shards.mjs; add it to windowsSeconds`);
+      continue;
+    }
+    const each = weights[name] / parts;
+    if (each > 0.8 * limit) problems.push(`${name}: weight ${each} s is above 80% of its ${limit} s limit: raise its suiteSeconds or split it`);
+  }
+  return problems;
+}
+
+export function driftWarning(args, seconds, limit) {
+  if (!(seconds > 0.75 * limit)) return undefined;
+  return `::warning::${args.join(' ').slice(0, 120)} took ${Math.round(seconds)}s of its ${limit}s limit`;
 }
