@@ -244,7 +244,7 @@ only_older "waves name R/5 only for older runs" "$PW"
 names "writing-plans: the optional Wave check header line" "$WP" '**Wave check:** [waves only, optional:'
 names "writing-plans: the waves rule names the Wave check" "$WP" '`**Wave check:**`, optional, names a faster command'
 # --- the Task check and Integration check header lines (test tiers) ---
-names "writing-plans: the header template has a Task check line" "$WP" '**Task check:** [`<fast command>` — <why>, or `none — full suite every 3 tasks`]'
+names "writing-plans: the header template has a Task check line" "$WP" '**Task check:** [`<fast command>` — <why>, or none — full suite every 3 tasks]'
 names "writing-plans: the Integration check line holds the full suite on every plan" "$WP" '**Integration check:** [`<command>`: the full suite, on every plan]'
 lacks "writing-plans: the Integration check line is no longer waves only" "$WP" '**Integration check:** [waves only'
 check "task check: the reference exists" "$([ -s "$WPR" ] && echo yes || echo no)" "yes"

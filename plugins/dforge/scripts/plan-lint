@@ -635,7 +635,10 @@ if [ -z "$task_check" ]; then
   say WARN header "no **Task check:** line yet"
 else
   value=$(header_value 'Task check' "$task_check")
-  if ! [[ "$value" =~ ^$bt[^$bt]+$bt($|$SEP) || "$value" =~ ^none${SEP}full\ suite\ every\ 3\ tasks$ ]]; then
+  # A code span that starts with none is the none form in backticks, which
+  # task-step would not read as none.
+  if [[ "$value" =~ ^${bt}none([^[:alnum:]_-]|$) ]] \
+    || ! [[ "$value" =~ ^$bt[^$bt]+$bt($|$SEP) || "$value" =~ ^none${SEP}full\ suite\ every\ 3\ tasks$ ]]; then
     say ERROR header '**Task check:** must be one command code span or "none — full suite every 3 tasks"'
   fi
 fi
@@ -665,11 +668,20 @@ if [ -n "$early_ci" ]; then
     say ERROR header '**Early CI:** must be "after wave <k>" or "after task <n>", then "— consented <YYYY-MM-DD>"'
   else
     early_kind=${BASH_REMATCH[1]} early_n=${BASH_REMATCH[2]}
+    # More than nine digits is past any plan, and would overflow the test.
     if [ "$early_kind" = wave ]; then
-      [ "$parallelism" != sequential ] || say ERROR header "**Early CI:** names a wave on a sequential plan"
+      if [ "$parallelism" = sequential ]; then
+        say ERROR header "**Early CI:** names a wave on a sequential plan"
+      elif [ "$parallelism" = waves ]; then
+        wave_count=$(grep -c . <<<"${waves:-}" || true)
+        if [ "$wave_count" -gt 0 ] && { [ "${#early_n}" -gt 9 ] || [ "$early_n" -gt "$wave_count" ]; }; then
+          say ERROR header "**Early CI:** names wave $early_n, past the last wave"
+        fi
+      fi
     else
+      [ "$parallelism" != waves ] || say ERROR header "**Early CI:** names a task on a waves plan; use after wave <k>"
       last_task=$(tail -n 1 <<<"$nums")
-      if [ -n "$last_task" ] && [ "$early_n" -gt "$last_task" ]; then
+      if [ -n "$last_task" ] && { [ "${#early_n}" -gt 9 ] || [ "$early_n" -gt "$last_task" ]; }; then
         say ERROR header "**Early CI:** names Task $early_n, past the last task"
       fi
     fi

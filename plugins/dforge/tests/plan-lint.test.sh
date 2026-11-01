@@ -1154,7 +1154,7 @@ has "a missing Integration check warns on a sequential plan" "$out" "WARN header
 has "a missing CI line warns" "$out" "WARN header: no **CI:** line yet"
 has "the three warnings add to the fixture's two" "$out" "plan-lint: 0 errors, 5 warnings"
 
-for bad in 'run the quick tests' 'none' '`bash a.sh` `bash b.sh` — two commands'; do
+for bad in 'run the quick tests' 'none' '`bash a.sh` `bash b.sh` — two commands' '`none — full suite every 3 tasks`'; do
   variant tc-bad.md "s#^\*\*Task check:\*\* .*#**Task check:** $bad#"
   lint tc-bad.md
   check "Task check '$bad': exit 1" "$status" "1"

@@ -107,7 +107,7 @@ Constraints and Contracts.
 
 **Parallelism:** [sequential — <why> | waves — <ranges, e.g. 1 | 2-4 | 5>] (see Parallel waves)
 
-**Task check:** [`<fast command>` — <why>, or `none — full suite every 3 tasks`]
+**Task check:** [`<fast command>` — <why>, or none — full suite every 3 tasks]
 
 **Integration check:** [`<command>`: the full suite, on every plan]
 
