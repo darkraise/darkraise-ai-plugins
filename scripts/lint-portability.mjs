@@ -33,7 +33,8 @@ function awkVBackslash(line) {
 function jqPwdFile(line) {
   const at = line.search(/\bjq\b/);
   if (at < 0) return false;
-  let rest = line.slice(at).replaceAll('$(pwd)', '$PWD').replace(/'[^']*'/g, "''");
+  let rest = line.slice(at).replaceAll('$(pwd)', '$PWD').replace(/'[^']*'/g, "''")
+    .replace(/"(?:\\.|[^"\\])*"/g, quoted => quoted.replace(/[|;&)]/g, ' '));
   const cut = rest.search(/\|\||&&|\||;|\)/);
   if (cut >= 0) rest = rest.slice(0, cut);
   rest = rest
@@ -84,13 +85,25 @@ export function lintText(path, text) {
   return hits.sort((a, b) => a.line - b.line);
 }
 
-function filesUnder(dir) {
+// statSync follows a symbolic link; a dangling one has no target to stat.
+function isDirectory(path) {
+  try { return statSync(path).isDirectory(); } catch { return false; }
+}
+
+function isFile(path) {
+  try { return statSync(path).isFile(); } catch { return false; }
+}
+
+// A symbolic link to a file is linted as that file. Any other link is not
+// followed, so a link cycle cannot loop, and is reported in `skipped`.
+function filesUnder(dir, skipped) {
   if (!existsSync(dir)) return [];
   const files = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) { if (entry.name !== 'node_modules') files.push(...filesUnder(path)); }
+    if (entry.isDirectory()) { if (entry.name !== 'node_modules') files.push(...filesUnder(path, skipped)); }
     else if (entry.isFile()) files.push(path);
+    else if (entry.isSymbolicLink()) { if (isFile(path)) files.push(path); else skipped.push(path); }
   }
   return files;
 }
@@ -101,12 +114,14 @@ export function lintTree(root) {
   const dirs = [join(root, 'scripts')];
   if (existsSync(plugins)) {
     for (const name of readdirSync(plugins)) {
-      if (statSync(join(plugins, name)).isDirectory()) dirs.push(join(plugins, name, 'scripts'), join(plugins, name, 'tests'));
+      if (isDirectory(join(plugins, name))) dirs.push(join(plugins, name, 'scripts'), join(plugins, name, 'tests'));
     }
   }
-  const files = dirs.flatMap(filesUnder)
+  const skipped = [];
+  const files = dirs.flatMap(dir => filesUnder(dir, skipped))
     .map(path => ({ path, name: relative(root, path).split(sep).join('/') }))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const path of skipped) console.error(`lint-portability: not linted, a symbolic link to no file: ${relative(root, path).split(sep).join('/')}`);
   const out = [];
   for (const { path, name } of files) {
     const text = readFileSync(path, 'utf8');
