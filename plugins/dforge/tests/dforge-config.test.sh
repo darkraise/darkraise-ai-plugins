@@ -273,7 +273,8 @@ if ! command -v cygpath > /dev/null 2>&1; then
   # a system whose kernel allows longer chains would: the loop refuses it.
   capped=$(DFORGE_CONFIG_MJS="$HERE/../scripts/lib/dforge-config.mjs" node --input-type=module -e '
     import fs from "node:fs";
-    const { main } = await import(process.env.DFORGE_CONFIG_MJS);
+    import { pathToFileURL } from "node:url";
+    const { main } = await import(pathToFileURL(process.env.DFORGE_CONFIG_MJS).href);
     // After the import: the module loader resolves paths with realpathSync too.
     fs.realpathSync = () => { throw Object.assign(new Error("ENOENT: realpath stubbed"), { code: "ENOENT" }); };
     process.exitCode = main(["set", "autoCompactWindow", "520000"]);

@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, relative, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { lintTree } from './lint-portability.mjs';
 
 const names = ['darkraise-ui', 'darkraise-win32ui', 'dforge', 'dr-status'];
 const claudeOnly = ['dr-status'];
@@ -237,7 +238,7 @@ export async function validateSchema(root) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = process.argv[2] ?? fileURLToPath(new URL('../', import.meta.url));
-  const errors = [...validateRepository(root), ...await validateSchema(root)];
+  const errors = [...validateRepository(root), ...await validateSchema(root), ...lintTree(root)];
   if (errors.length) { console.error(errors.join('\n')); process.exitCode = 1; }
   else console.log('Repository catalogs, manifests, versions, bundled links and the settings schema are valid.');
 }
