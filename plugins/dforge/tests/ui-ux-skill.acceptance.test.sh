@@ -854,8 +854,10 @@ t_A19() {
   fin=$(flat "$PLUGIN/skills/finishing-a-development-branch/references/ui-proof.md")
   has "A19: the final review names ui-proof check --base MERGE_BASE --spec" "$fr" "ui-proof check --base MERGE_BASE --spec"
   has "A19: the finishing skill names ui-proof check --base MERGE_BASE --spec" "$fin" "ui-proof check --base MERGE_BASE --spec"
-  matches "A19: the final review says exit 1 stops it" "$fr" 'ui-proof check --base MERGE_BASE --spec.{0,600}[Ee]xit 1 stops'
-  matches "A19: the finishing skill says exit 1 stops (blocks) integration" "$fin" 'ui-proof check --base MERGE_BASE --spec.{0,1500}[Ee]xit 1.{0,200}(stop|block)'
+  # GNU grep takes over a minute on these bounded repeats in a UTF-8 locale
+  # and a few seconds in C; a byte window is never wider than a character one.
+  LC_ALL=C matches "A19: the final review says exit 1 stops it" "$fr" 'ui-proof check --base MERGE_BASE --spec.{0,600}[Ee]xit 1 stops'
+  LC_ALL=C matches "A19: the finishing skill says exit 1 stops (blocks) integration" "$fin" 'ui-proof check --base MERGE_BASE --spec.{0,1500}[Ee]xit 1.{0,200}(stop|block)'
   matches "A19: the final review names the auto-run path: prove, check again, stop for unverifiable" "$fr" \
     '[Ii]n an auto run, run the dforge:ui-ux Prove phase, then check again.{0,300}unverifiable.{0,200}auto-run stop'
 }
