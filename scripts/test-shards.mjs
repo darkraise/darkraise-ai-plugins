@@ -4,10 +4,9 @@
 // Run 40753974623 (2026-10-29) supplied the suites the speed-and-cost plans
 // added and those that had grown; task-step-base, cut off there, is
 // extrapolated from task-step-settle's Windows-to-Linux ratio.
-// speed-and-cost-followups weighs its two other parts in run 41287948837
-// (307 s and 108 s), since under test-all its A12 part no longer re-runs
-// two suites; typed-seats-and-drafting.acceptance.sh is about ten times its
-// 4 s Linux time.
+// Run 41307035161 (2026-11-01) supplied speed-and-cost-followups, whose A12
+// part no longer re-runs two suites under test-all (371 s, 0.4 s and 98 s),
+// and typed-seats-and-drafting.acceptance.sh.
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -79,7 +78,7 @@ export const windowsSeconds = {
   'skill-size.test.sh': 10,
   'skill-split-planning.test.sh': 10,
   'snapshot.test.sh': 10,
-  'speed-and-cost-followups.acceptance.test.sh': 420,
+  'speed-and-cost-followups.acceptance.test.sh': 470,
   'speed-and-cost.acceptance.test.sh': 230,
   'suite-run.test.sh': 54,
   'task-loop-steps.acceptance.test.sh': 720,
@@ -91,7 +90,7 @@ export const windowsSeconds = {
   'task-step.test.sh': 1340,
   'test-simplifier.test.sh': 10,
   'turn-end.test.sh': 251,
-  'typed-seats-and-drafting.acceptance.sh': 40,
+  'typed-seats-and-drafting.acceptance.sh': 75,
   'ui-hooks.test.sh': 65,
   'ui-lint.test.sh': 10,
   'ui-proof.test.sh': 195,
