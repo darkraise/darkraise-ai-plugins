@@ -8,6 +8,7 @@
 # available, which is the silent downgrade the roster was written to avoid.
 #
 # Usage: executors list
+#        executors ranked
 #        executors get  <id> <dotted.key>
 #        executors path <id> <dotted.key>
 # Exit: 0 answered; 1 unknown id or key; 2 usage error or missing jq.
@@ -22,7 +23,7 @@ DIR="${DR_EXECUTORS_DIR:-$ROOT/reference/executors}"
 die() { printf 'executors: %s\n' "$1" >&2; exit 2; }
 
 command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
-[ $# -ge 1 ] || die "usage: executors list | get <id> <key> | path <id> <key>"
+[ $# -ge 1 ] || die "usage: executors list | ranked | get <id> <key> | path <id> <key>"
 
 # An entry is valid when it parses, carries every required field, its id
 # matches the pattern, and its id matches its filename stem. The stem check is
@@ -73,6 +74,25 @@ case "$1" in
   list)
     [ $# -eq 1 ] || die "usage: executors list"
     list_ids
+    ;;
+  ranked)
+    [ $# -eq 1 ] || die "usage: executors ranked"
+    # Each id gets a sort key: 0 and its priority when it has a valid one, 1
+    # when it has none, so every prioritised entry ranks first. The keys are
+    # stripped with read rather than cut: tests/detect.test.sh seals PATH.
+    list_ids | while IFS= read -r id; do
+      priority=$(jq -r 'if has("priority") | not then "absent"
+        elif (.priority | type) == "number" and .priority >= 0
+          and .priority == (.priority | floor) then .priority | floor
+        else "invalid" end' < "$DIR/$id.json" 2>/dev/null | tr -d '\r')
+      case "$priority" in
+        absent) printf '1 0 %s\n' "$id" ;;
+        invalid|'')
+          printf 'executors: %s: priority is not a non-negative integer\n' "$id" >&2
+          printf '1 0 %s\n' "$id" ;;
+        *) printf '0 %s %s\n' "$priority" "$id" ;;
+      esac
+    done | LC_ALL=C sort -k1,1n -k2,2g -k3,3 | while read -r _ _ id; do printf '%s\n' "$id"; done
     ;;
   get|path)
     [ $# -eq 3 ] || die "usage: executors $1 <id> <key>"

@@ -98,6 +98,40 @@ check "the shipped codex locator resolves to a real file" \
 check "the shipped codex probe resolves to a real file" \
   "$([ -f "$(bash "$EXEC" path codex probe.command)" ] && echo yes || echo no)" "yes"
 
+# --- ranked ------------------------------------------------------------------
+# Priority decides which executor planning tries first. A malformed value must
+# neither drop the entry nor abort the listing: it ranks as if absent, with one
+# line on stderr.
+mkdir -p "$TMP/rank"
+rentry() { # rentry <id> [priority as a JSON literal]; no second argument leaves priority out
+  jq -n --arg id "$1" --arg p "${2-}" '{id:$id, locator:"scripts/x-plugin",
+    probe:{command:"scripts/lib/x-client.mjs", op:"auth"},
+    wrapper:"scripts/run-x-task.sh", session_dir:($id + "-sessions"),
+    surfaces:["lane"], blocks:{gate:"gate"}}
+    + (if $p == "" then {} else {priority: ($p | fromjson)} end)' > "$TMP/rank/$1.json"
+}
+rentry alpha 20; rentry beta 10; rentry aardvark 10; rentry eta 0
+rentry lambda 9; rentry theta 100
+rentry gamma; rentry delta '"x"'; rentry epsilon -1; rentry zeta 1.5
+
+check "ranked orders by ascending priority, numerically, ties by id, then the unranked by id" \
+  "$(run "$TMP/rank" ranked 2>/dev/null | tr '\n' ' ')" \
+  "eta lambda aardvark beta alpha theta delta epsilon gamma zeta "
+check "ranked exits 0" "$(run "$TMP/rank" ranked >/dev/null 2>&1; echo $?)" "0"
+check "ranked reports each invalid priority once on stderr and nothing else" \
+  "$(run "$TMP/rank" ranked 2>&1 >/dev/null | sort | tr '\n' '|')" \
+  "executors: delta: priority is not a non-negative integer|executors: epsilon: priority is not a non-negative integer|executors: zeta: priority is not a non-negative integer|"
+check "ranked takes no argument" "$(run "$TMP/rank" ranked extra >/dev/null 2>&1; echo $?)" "2"
+check "list ignores priority and stays silent about it" \
+  "$(run "$TMP/rank" list 2>&1 | tr '\n' ' ')" \
+  "aardvark alpha beta delta epsilon eta gamma lambda theta zeta "
+check "a registry without priorities ranks by id" "$(run "$TMP/reg" ranked | tr '\n' ' ')" "alpha beta "
+check "an empty registry ranks nothing and still exits 0" "$(run "$TMP/empty" ranked; echo "rc=$?")" "rc=0"
+check "ranked skips a malformed entry like list does" \
+  "$(printf 'not json\n' > "$TMP/reg/broken.json"; run "$TMP/reg" ranked 2>/dev/null | tr '\n' ' '; rm -f "$TMP/reg/broken.json")" "alpha beta "
+check "the shipped codex entry carries priority 20" "$(bash "$EXEC" get codex priority)" "20"
+check "the shipped registry ranks codex" "$(bash "$EXEC" ranked | grep -cx codex)" "1"
+
 # --- usage -----------------------------------------------------------------
 check "no arguments is a usage error" "$(bash "$EXEC" >/dev/null 2>&1; echo $?)" "2"
 check "an unknown subcommand is a usage error" "$(bash "$EXEC" frobnicate >/dev/null 2>&1; echo $?)" "2"
@@ -127,6 +161,9 @@ check "the stub probe can fail without an authed field" \
 # streamed --json event that the wrapper no longer writes.
 check "no prose describes the retired --json error stream" \
   "$(grep -lF -e '`--json` stream into a `## Codex error`' -e 'events on its `--json` stream' "$HERE/../README.md" "$HERE/../reference/executor-lane.md" | tr '\n' ' ')" ""
+
+check "the fixture registry ranks the prioritised codex entry before the unranked ones" \
+  "$(run "$FIX" ranked | tr '\n' ' ')" "codex opencode stub "
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
