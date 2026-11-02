@@ -543,7 +543,7 @@ absent "the precedence gap is closed" "$AP" 'No precedence rule is introduced he
 present "writing-plans routes to the first admitting executor" "$AP" 'the first ticked executor in `executors ranked` order whose gate admits it'
 present "dispatch runs the gate before guarding the roster" "$EXEC" '1. **Gate, then guard the roster.**'
 present "a failed run refreshes the gate" "$EXEC" 'bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)" --refresh'
-present "a refused model hands back at once" "$EXEC" '| Refusal - `refusal=true` in the report'"'"'s `## Codex error` section | `HANDBACK` now'
+present "a refused model hands back at once" "$EXEC" '| Refusal - a refusal marker in the report'"'"'s `## <Id> error` section (`refusal=true` for Codex, `reason=unknown-model` for agy) | `HANDBACK` now'
 present "a refusal never takes the successor" "$LAD" 'A refused initial run never reads it'
 present "the final Codex round needs the review surface" "$EXEC" 'Unless it prints `review=true`, skip the round'
 present "the task seats name the runner's gate" "$EXEC" 'codex is off for this session (<reason>)'

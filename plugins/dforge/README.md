@@ -193,15 +193,25 @@ for every task running at once. Running a wave one task after another is always
 correct, so every doubt serializes it; `reference/parallel-waves.md` holds the
 procedure. A plan without a `**Parallelism:**` line runs exactly as before.
 
-**An external executor lane.** A task scoring 2 to 4 with `risk <= 1` can run on
-the Codex CLI instead of a Claude implementer, for quota offload onto a separate
-ChatGPT subscription and for a second model family in the loop. The lane is a
+**An external executor lane.** A task can run on an external CLI instead of a
+Claude implementer, for quota offload onto a separate subscription and for a
+second model family in the loop. Two executors are registered. `agy`, the
+Antigravity CLI (priority 10, wrapper `scripts/run-agy-task.sh`), takes totals 0-8 at risk 2 or below,
+implementation only: totals 0-2 run on `gemini-3.8-flash` at medium effort, as
+the calibration record in `docs/dforge/notes/2026-11-02-agy-calibration.md`
+decided, and totals 3-8 on Claude Sonnet or Opus. Codex (priority 20) keeps the
+tasks `agy` refuses. Planning gives each task to the first ticked executor, in
+`executors ranked` order, whose gate admits it. The `agyLane` setting (`Agy
+tasks`) turns the agy lane off. `agy` runs unsandboxed, with the reach of a
+native Claude implementer subagent, so its recovery fingerprints cover only the
+linked worktree and its refs. A per-plan breaker, `scripts/lane-breaker`, turns
+the agy lane off for the rest of a plan after two handbacks. The lane is a
 gate in front of the assignment table, never a rung on the escalation ladder:
 offload selects downward at the cheap end while the ladder only moves upward, and
 one total order cannot express both. The Claude ladder stays the sole backstop,
 so its termination proof is untouched.
 
-The gate floors at score 2 and stops at 4 on purpose: `codex-assignment` has
+Codex's gate floors at score 2 and stops at 4 on purpose: `codex-assignment` has
 rows for totals 2 to 4 only, and Rule S admits a Claude task up to `reducible`
 5, so `max_score 4` keeps a total-5 or total-6 task at risk 1 or below on the
 Claude ladder. Without the floor the gate would reduce to `risk <= 1` and
@@ -309,6 +319,10 @@ Claude seats take over; a quota error mid-run turns Codex off the same way. A
 usable Codex is still used only on a surface whose shipping gate passed,
 recorded per surface in `reference/codex-plugin.json`: the calibration replay
 opens the review seats, and the executor-lane smoke test opens the lane.
+`scripts/agy-gate` does the same for Antigravity once per session: `agy` found
+at an allowed version, signed in, within quota, `agyLane` on and the smoke result
+in `reference/agy-policy.json` passing; a quota failure keeps the lane off for
+the session.
 
 **Project state.** `docs/dforge/` holds what a project knows about
   itself, not just its specs and plans: `gates.md` declares the verification
@@ -1258,10 +1272,11 @@ validates raw scores and history before returning a native routing decision.
 
 `reference/executors/` holds one JSON entry per external executor and
 `scripts/executors` is the only reader of it: `executors list` prints every
-valid id, `executors get <id> <dotted.key>` one field, and
+valid id, `executors ranked` the same ids by ascending `priority`,
+`executors get <id> <dotted.key>` one field, and
 `executors path <id> <dotted.key>` that field resolved against the plugin root.
 An entry names the executor's locator, probe, wrapper, gate, session directory,
-surfaces and ladder blocks, so adding an executor is an entry, a wrapper and a
+surfaces, priority and ladder blocks, so adding an executor is an entry, a wrapper and a
 ladder block rather than an edit to every script. `reference/executor-lane.md`
 states the entry schema and holds the Claude-hosted external executor lanes,
 `reference/session-budget.md` holds the budget numbers, checkpoints,
@@ -1308,6 +1323,20 @@ review, `codex-review-schema.json` for the Codex task seats, and
   the shape of the verdict it parses back.
 - `codex-task-contract.md` is appended to every prompt the wrapper sends,
   resume rounds included.
+- `agy-locate` finds the Antigravity CLI and checks its version against
+  `reference/agy-policy.json`; `agy-gate` is the session gate built on it and on
+  `lib/agy-probe.mjs`, the sign-in probe.
+- `run-agy-task.sh` runs one plan task on `agy` with the same flags, control
+  operations, task record and exit codes as `run-codex-task.sh`. Its status line
+  carries `exit=` and the `note=timed-out` and `note=writer-unconfirmed` markers,
+  and a failed run's report holds an `## Agy error` section with
+  `reason=quota`, `timeout`, `unknown-model` or `error`. It compares git refs
+  before and after the run and blocks the task on any difference.
+- `agy-report-schema.json` is the `--json-schema` the wrapper passes, byte-identical
+  to `codex-report-schema.json`, and `agy-task-contract.md` is appended to every
+  prompt it sends.
+- `lane-breaker` reads a plan's ledger and reports whether an executor's lane is
+  `open` or `tripped` for that plan.
 
 ### Item registers
 

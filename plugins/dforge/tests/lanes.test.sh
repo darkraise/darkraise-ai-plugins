@@ -410,5 +410,36 @@ if [ "$smoke" = pass ]; then
     "$(grep -c '^\*\*Smoke:\*\* pass' "$NOTES" 2>/dev/null)" "1"
 fi
 
+# --- the lane reference is executor-neutral, with a section per executor ---
+outside() { awk 'BEGIN { on = 1 } /^## / { on = ($0 != "## Codex task review seats" && $0 != "## Final-review Codex round" && $0 != "## Per-executor: codex") } on' "$EL"; }
+section() { awk -v h="$1" '/^## / { on = ($0 == "## " h) } on' "$EL" | tr '\n' ' ' | tr -s ' '; }
+
+for gone in 'codex-timeout' 'codex-assignment' 'codex-successor' '## Codex error' 'codex lane is off' \
+            'run-codex-task.sh' 'Codex ran' 'Codex finished cleanly' 'codex quota exhausted' \
+            'Codex read the findings' 'Codex runs every task turn'; do
+  check "executor-lane outside the Codex sections no longer says: $gone" "$(outside | grep -cF -- "$gone")" "0"
+done
+check "the exit-2 text is executor-neutral" \
+  "$(grep -cF '`<id> lane is off for this session (<reason>)`' "$EL")" "1"
+check "the registry table lists priority" "$(grep -c '^| `priority` |' "$EL")" "1"
+check "the lane reference has a Per-executor: agy section" "$(grep -cxF '## Per-executor: agy' "$EL")" "1"
+
+agy_sec=$(section 'Per-executor: agy')
+for need in 'unsandboxed' 'fingerprints cover only the linked worktree and its refs' 'fixed pointer sentence' \
+            'keeps a cached `reason=quota`' 'git for-each-ref' 'finished_reason' 'efforts `low`, `medium` and `high`' \
+            'lane-breaker'; do
+  check "Per-executor: agy says: $need" "$(grep -cF -- "$need" <<<"$agy_sec")" "1"
+done
+codex_sec=$(section 'Per-executor: codex')
+check "the piped Node rule lives in the Codex section" \
+  "$(grep -cF 'Tasks whose tests spawn piped Node child processes stay on the Claude lane' <<<"$codex_sec")" "1"
+check "reaped is explained in the Codex section" \
+  "$(grep -cF 'phase` and `reaped` as **evidence, not proof**' <<<"$codex_sec")" "1"
+
+RD="$HERE/../README.md"
+for need in 'Antigravity' 'scripts/run-agy-task.sh' 'scripts/agy-gate' 'scripts/lane-breaker' 'executors ranked'; do
+  check "the README names $need" "$([ "$(grep -cF -- "$need" "$RD")" -ge 1 ] && echo yes || echo no)" "yes"
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

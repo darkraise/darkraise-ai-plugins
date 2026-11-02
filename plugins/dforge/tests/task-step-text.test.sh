@@ -194,7 +194,7 @@ lacks "the breaker item no longer waits five rounds" "$RUL" 'fifth fix round'
 
 names "executor: round 1 resumes the session" "$EL" "Fix round 1 resumes that executor's own session"
 names "executor: round 2 hands back" "$EL" '**Round 2 is `HANDBACK`.**'
-names "executor: the failed-resume example is round 1 of 2" "$EL" 'Task <N>: fix round 1/2 (0 addressed, 2 open - codex quota exhausted'
+names "executor: the failed-resume example is round 1 of 2" "$EL" 'Task <N>: fix round 1/2 (0 addressed, 2 open - executor quota exhausted'
 for gone in 'Round 4 is' 'Fix rounds 1 to 3' 'five-round cap' 'stalled at round 3' 'rounds 4 and 5' 'two in a row' '§Rounds 1-3'; do
   lacks "executor-lane drops: $gone" "$EL" "$gone"
 done

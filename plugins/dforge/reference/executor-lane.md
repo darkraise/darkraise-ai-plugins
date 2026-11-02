@@ -14,9 +14,9 @@ reads everything else. A native Codex host never uses these lanes: it follows
 starts recursive CLI offload in a Codex host.
 
 The lane is a gate in front of the Claude assignment table, never a rung on the
-escalation ladder. [ladder.md](ladder.md) explains why, and holds the `gate`,
-`codex-assignment`, `codex-successor`, and `codex-timeout` blocks read below,
-plus the `codex-judge` block the review seats' runner reads.
+escalation ladder. [ladder.md](ladder.md) explains why, and holds the blocks the registry entry
+names (`gate`, assignment, successor, timeout) that are read below, plus the
+`codex-judge` block, which is Codex's review seats'.
 
 ## Planning
 
@@ -117,14 +117,6 @@ executor is an override on a second line, never a replacement on the first:
 several tasks, which a per-task `**Executor:**` line and per-task thread id
 cannot represent. Do not write an `**Executor:**` line on a batched task.
 
-**Tasks whose tests spawn piped Node child processes stay on the Claude lane.**
-Codex runs every task turn in its `workspace-write` sandbox, where Node's
-`spawnSync`, `execSync` and `execFileSync` with piped stdio fail with `EPERM`:
-the child runs but its output never arrives, so such a test cannot pass there
-and the task ends in a handback. Bash pipes, and child processes with stdio
-`inherit` or `ignore`, are unaffected. Do not write an `**Executor:**` line on
-such a task.
-
 ## Dispatch
 
 A task carrying an `**Executor:**` line runs on that CLI instead of its
@@ -137,10 +129,10 @@ call. It prints one status line and writes everything else to files.
 
 **Background is not a preference here, it is the only shape that works.** The
 Bash tool's `timeout` caps at 600000 ms - ten minutes - and every rung in
-`codex-timeout` is longer than that, from 900 seconds to 2400. There is no
+an executor's timeout block is longer than that, from 900 seconds. There is no
 foreground timeout you can pass that outlasts even the cheapest rung, so a
-foreground call is cut mid-run and a controller reading that as a Codex failure
-has misdiagnosed its own harness.
+foreground call is cut mid-run and a controller reading that as an executor
+failure has misdiagnosed its own harness.
 
 A background call is bounded too: its `timeout` defaults to 1800000 ms (30
 minutes) and caps at 7200000 ms (two hours), and the host kills the shell when
@@ -200,7 +192,7 @@ breaker.
    `reason` (`untrusted` when it printed `usable=true`). The substitution
    always lands on the task's `**Implementer:**` agent,
    never to the next ranked executor. The wrapper reads the
-   gate again and exits 2 with `codex lane is off for this session (<reason>)`
+   gate again and exits 2 with `<id> lane is off for this session (<reason>)`
    when the lane has closed since. Otherwise run
    `bash "<plugin-root>/scripts/detect-executors.sh"` and read the entry
    for the named executor. **Never trust the plan's copy** - it records what was
@@ -284,13 +276,13 @@ wrapper's exit code says which case you are in:
 | Exit | Meaning |
 |------|---------|
 | 0 | `status=DONE`. Proceed to review, unless the report carries the empty-diff note below |
-| 1 | Codex ran and did not reach DONE. Read the `status=` field on the same line |
+| 1 | The executor ran and did not reach DONE. Read the `status=` field on the same line |
 | 2 | No status line was printed. Read the wrapper's own stderr before doing anything - see below |
 
 **Refresh the gate first.** After any run whose status is not `DONE`, run
-`bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)" --refresh` before the next Codex use of
+`bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)" --refresh` before the next use of that executor of
 any kind - a retry, a successor rung, a resume or a review seat - so a quota or
-login failure turns Codex off for the rest of the session. When the refreshed
+login failure turns that executor off for the rest of the session. When the refreshed
 line no longer says `lane=true`, the response is `HANDBACK` whatever the tables
 below say; record it with the gate's `reason`.
 
@@ -315,19 +307,20 @@ hand, which would bypass the scoped staging the write set exists to enforce.
 
 | Failure | Response |
 |---------|----------|
-| `note=writer-unconfirmed`, after a timeout or a transport error | The turn was not confirmed stopped, so the task is `blocked`. Do not retry or hand back: confirm the Codex turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
-| Transient - network, rate limit, quota, 5xx, named in the report's `## Codex error` section, without `note=writer-unconfirmed` | Retry once at the same rung |
-| Timeout - `note=timed-out` on the status line, `exit=124`, without `note=writer-unconfirmed` | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
-| Refusal - `refusal=true` in the report's `## Codex error` section | `HANDBACK` now. The account does not offer that model or effort, and every successor rung is the same model, so a retry or a successor would be refused too |
+| `note=writer-unconfirmed`, after a timeout or a transport error | The turn was not confirmed stopped, so the task is `blocked`. Do not retry or hand back: confirm the executor's turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
+| Transient - network, rate limit, quota, 5xx, named in the report's `## <Id> error` section, without `note=writer-unconfirmed` | Retry once at the same rung |
+| Timeout - `note=timed-out` on the status line, `exit=124` or `timedOut=true` in the error section, without `note=writer-unconfirmed` | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
+| Refusal - a refusal marker in the report's `## <Id> error` section (`refusal=true` for Codex, `reason=unknown-model` for agy) | `HANDBACK` now. The account does not offer that model or effort, and every successor rung is the same model, so a retry or a successor would be refused too |
 | Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via that executor's successor block (`executors get <id> blocks.successor`) and run once |
 | `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
 | Any failure a second time | `HANDBACK` |
 
-**Read `## Codex error` in the report, not `<report>.stderr`.** The Codex
+**Read `## <Id> error` in the report, not `<report>.stderr`.** The executor's
 client classifies a failed turn - quota, refusal, timeout, a plugin fault - in
-the one result object it returns, which the wrapper keeps as `<report>.jsonl`.
-The wrapper copies that object's `reason`, `refusal=true`, `quota=true`,
-`timedOut=true` and `stderr` text into that section for you.
+the one result object it returns, which the wrapper keeps beside the report.
+The wrapper copies that object's `reason=`, `timedOut=true` and the
+executor-specific marker (`refusal=true` and `quota=true` for Codex) and the
+error text into that section for you.
 `<report>.stderr` holds only the client process's own complaints, and the
 report still tails it underneath.
 
@@ -335,13 +328,13 @@ report still tails it underneath.
 `BLOCKED` on any non-zero exit. Two other fields separate the cases:
 
 - **`exit=`** on the status line, and `- exit:` in the report, is the wrapper's
-  normalized code for the turn, not Codex's own: `run-codex-task.sh` sets 0 when
-  the client reports `ok`, 1 when it does not, and 124 on a deadline. It is
+  normalized code for the turn, not the CLI's own: any executor's wrapper sets 0
+  when the client reports success, 1 when it does not, and 124 on a deadline. It is
   never 2, because a wrapper that exits 2 dies before printing a status line at
   all - which is why the exit table above reads exit 2 as "no status line was
   printed" and sends you to stderr. Do not read this field as a CLI exit code.
-  `exit=1` with a `## Codex error` section is an ordinary failed run. `exit=0`
-  with `status=BLOCKED` is the odd one: Codex finished cleanly and wrote no
+  `exit=1` with a `## <Id> error` section is an ordinary failed run. `exit=0`
+  with `status=BLOCKED` is the odd one: the executor finished cleanly and wrote no
   verdict, which is a capability failure.
 - **`note=timed-out`**, with `exit=124`, means the client reported that its own
   deadline expired and it interrupted the turn. You do not have to infer this
@@ -365,7 +358,7 @@ loop is already writing, never as a line of its own.
 
 **Exit 2 requires inspecting durable state before retry.** It can mean preflight,
 state persistence, staging, or commit failure. Read the task record's phase and
-error; never infer that Codex did not run from the exit code alone. Follow
+error; never infer that the executor did not run from the exit code alone. Follow
 [external-task-recovery.md](external-task-recovery.md). A failed commit can be
 recovered without a model call. Never recover through whole-tree staging or
 infer ownership from an old report. Scope changes and manual repairs need a
@@ -427,7 +420,7 @@ bounded by their own rule below and by the two-round cap.
 
 | Resume outcome | Response |
 |----------------|----------|
-| Transient - the report's `## Codex error` names a rate limit, quota, network, or 5xx | Retry the same resume once, same rung, same thread |
+| Transient - the report's `## <Id> error` names a rate limit, quota, network, or 5xx | Retry the same resume once, same rung, same thread |
 | `note=timed-out` with `exit=124`, without `note=writer-unconfirmed` | Retry the same resume once with `--timeout` raised |
 | `note=writer-unconfirmed` | As for an initial run: confirm the turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
 | `exit=2` | **Read the durable record's `phase` first: exit 2 does not prove nothing ran.** The wrapper also exits 2 after the turn, on thread-persistence, reap-persistence, scope-validation, staging, commit or report-copy failure. On a preflight phase, nothing ran and the thread is untouched: fix what you passed and re-issue the same resume, which does not count as a failed round. On any later phase, follow [external-task-recovery.md](external-task-recovery.md) before re-issuing anything |
@@ -448,7 +441,7 @@ Record any of this inside the fix-round line the loop is already writing, never
 as a line of its own:
 
 ```
-Task <N>: fix round 1/2 (0 addressed, 2 open - codex quota exhausted, retried once then handed back; commits a7f..a7f; HANDBACK to impl-sonnet-low)
+Task <N>: fix round 1/2 (0 addressed, 2 open - executor quota exhausted, retried once then handed back; commits a7f..a7f; HANDBACK to impl-sonnet-low)
 ```
 
 A handback from a failed resume is still a handback: say it aloud, and let the
@@ -608,12 +601,12 @@ rules on every rejection ([final-review.md](final-review.md)).
 | Task has an `**Executor:**` line and that executor's gate does not print `lane=true` | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the gate's `reason` in the assigned line |
 | Task has an `**Executor:**` line, the gate prints `lane=true`, and the CLI is usable | Run the wrapper; do not dispatch a subagent for it |
 | Task has an `**Executor:**` line and the CLI is missing, unauthenticated, or not batch-capable | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the roster's `reason` in the assigned line |
-| The `**Executor:**` line names a model outside `codex-assignment`, an effort outside `low`/`medium`/`high`/`xhigh`, or a pair with no `codex-timeout` row | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
+| The `**Executor:**` line names a model outside the executor's assignment block, an effort its wrapper does not admit, or a pair with no row in its timeout block | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
 | Wrapper exits 2 during staging or commit | Read the durable record; use commit recovery after exact snapshot validation, or explicit reconciliation. Never rerun the model merely to retry a commit |
 | Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching Codex, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the `**Implementer:**` agent and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
 | Two executor runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
 | A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: that executor's successor block (`executors get <id> blocks.successor`) is read only by a failed initial run |
-| A fix round returned DONE with an empty diff | Codex read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as an `executor-empty-diff` item rather than re-dispatching; round 2 is the `HANDBACK` |
+| A fix round returned DONE with an empty diff | The executor read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as an `executor-empty-diff` item rather than re-dispatching; round 2 is the `HANDBACK` |
 | A review seat's status line says `FALLBACK` | The preferred judge rung refused the run and the runner already used the fallback once. Not a failure: record the substitution and its reason in the ledger line you are already writing |
 
 Every ruling above is logged as `Ruling: <what> — <why> — <cost if wrong>` and
@@ -639,11 +632,14 @@ and its `id` equals its filename stem; an invalid entry is skipped by
 | `gate` | no | The executor's own gate script |
 | `reference` | no | A reference file for this executor |
 | `session_dir_env` | no | An environment variable that replaces `session_dir` |
+| `priority` | no | A non-negative integer; lower ranks first in `executors ranked`; an entry without one ranks after every entry with one |
 | `blocks.assignment`, `blocks.successor`, `blocks.timeout`, `blocks.judge` | no | The executor's other ladder blocks |
 | `reasons.not_enabled`, `reasons.not_installed`, `reasons.missing`, `reasons.logged_out`, `reasons.probe_failed` | no | The roster message for each unusable state |
 
-`${DR_EXECUTORS_DIR}` replaces the registry directory when set; it does not add
-to it. Adding an executor is an entry here, a wrapper, and its ladder blocks.
+`executors ranked` prints every valid id by ascending `priority`, then id: the
+order planning and dispatch try the executors in. `${DR_EXECUTORS_DIR}` replaces
+the registry directory when set; it does not add to it. Adding an executor is an
+entry here, a wrapper, and its ladder blocks.
 
 ## Per-executor: codex
 
@@ -669,8 +665,16 @@ specific to it:
 - **Effort values.** `low`, `medium`, `high` and `xhigh`; `minimal` and
   `ultra` are rejected. Another executor's efforts are whatever its assignment block
   names, and its wrapper validates them.
+- **Tasks whose tests spawn piped Node child processes stay on the Claude lane.**
+  This applies to Codex only. Codex runs every task turn in its `workspace-write`
+  sandbox, where Node's `spawnSync`, `execSync` and `execFileSync` with piped
+  stdio fail with `EPERM`: the child runs but its output never arrives, so such a
+  test cannot pass there and the task ends in a handback. Bash pipes, and child
+  processes with stdio `inherit` or `ignore`, are unaffected. Do not write a
+  Codex `**Executor:**` line on such a task. `agy` has no sandbox, so such a
+  task is not barred from it.
 
-## When the client itself wedges
+### When the client itself wedges
 
 The wrapper bounds its client with `timeout $((timeout_s + 60))`, which fires
 only when the client fails to honour its own deadline. That run reports
@@ -685,3 +689,42 @@ recorded pre-existing broker, or a client that never answered — reconcile
 process ownership before retrying, resuming or handing back. A retry into an
 unreconciled worktree puts two runs in one tree, which is the hazard the old
 survivor note gestured at without ever being able to fire.
+
+## Per-executor: agy
+
+Everything above applies to Antigravity with `<id>` read as `agy`. What is
+specific to it:
+
+- **Surfaces.** `agy` staffs the `lane` surface only, so no review seat exists
+  for it: a Claude judge reviews its work, as for any executor-lane task. Its
+  gate is `scripts/agy-gate` and its wrapper `scripts/run-agy-task.sh`; the
+  `agyLane` setting (`Agy tasks`) is the manual switch.
+- **Reach.** `agy` runs unsandboxed, with the reach of a native Claude
+  implementer subagent: it can write anywhere the user can, including other
+  worktrees, the primary checkout and the home directory. The owner accepted
+  this, so a recovery reader must know that the fingerprints cover only the
+  linked worktree and its refs: a write outside them leaves no trace the
+  wrapper can see. Tasks whose tests spawn piped Node child processes are fine
+  on this lane.
+- **The brief.** The brief reaches `agy` as a file under `$DR_TASK_DIR/prompt/`,
+  never as an argument, and `--add-dir` names only that directory. The `-p`
+  argument is a fixed pointer sentence naming that file, so a long brief never
+  meets an argument-length limit or a shell quoting rule.
+- **Git.** The task contract forbids every git command that writes. The wrapper
+  compares `git for-each-ref` output and the symbolic `HEAD` before and after the
+  run and blocks the task on any difference; a change to HEAD or the index is
+  caught by the scope check before staging.
+- **Timeout.** A print timeout exits 0 with `finished_reason: "print_timeout"`.
+  The wrapper classifies it as `exit=124`, `reason=timeout`, as it does the outer
+  `timeout` firing.
+- **Quota.** Antigravity publishes no reset time, so a quota failure marks the
+  lane off for the session, and `agy-gate --refresh` keeps a cached
+  `reason=quota` instead of re-probing it.
+- **Error reasons.** The `## Agy error` section's `reason=` is one of `quota`,
+  `timeout`, `unknown-model` and `error`. `unknown-model` is the refusal marker:
+  the account does not offer that model, so the response is `HANDBACK` now.
+- **Efforts.** The wrapper accepts efforts `low`, `medium` and `high`; the
+  assignment block names which of them each total uses.
+- **The breaker.** After two handbacks in a plan the lane is off for that plan:
+  `scripts/lane-breaker PLAN_FILE agy` reports it, and Dispatch says when to
+  run it.
