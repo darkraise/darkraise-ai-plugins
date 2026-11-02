@@ -10,6 +10,12 @@ Set by: owner, 2026-09-15 review-routing design session
 Scope: every plan written for this repository on a Claude host
 Source: docs/superpowers/specs/2026-09-15-dr-superpowers-review-routing-design.md@18a00a7
 
+### The Antigravity executor lane is on
+When `scripts/agy-gate` reports `lane=true`, the planner ticks `agy` without asking and lists it before `codex` on the External executors line.
+Set by: owner, 2026-11-02 spec review ("Auto-tick (Recommended)")
+Scope: every plan written for this repository on a Claude host
+Source: docs/dforge/specs/2026-11-02-antigravity-executor-lane-design.md
+
 ### Codex reviews run only on demand
 dforge never routes a task, plan or final review to Codex unless the `codexReview` setting is on, and it ships off. A one-off Codex review runs through `/codex:review` or `/codex:adversarial-review`. `trust.calibration` stays `pass`, so turning the setting on is all it takes. This covers reviews only; the executor lane above is unchanged.
 Set by: owner, 2026-10-21 ("codex review should be optional and on demand, do not auto review with codex")
