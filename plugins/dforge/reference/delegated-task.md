@@ -47,6 +47,9 @@ that CLI — follow [executor-lane.md](executor-lane.md)
 §Dispatch — and the steps here are its fallback. A task without one takes
 these steps directly.
 
+For an `agy` task the dispatch first runs `scripts/lane-breaker`
+([executor-lane.md](executor-lane.md) §Dispatch).
+
 **Open the task with one call:**
 `bash <plugin-root>/scripts/task-step start PLAN_FILE N` (a batch passes every
 task number, `N M …`; a wave task adds `--wave K`; every start adds

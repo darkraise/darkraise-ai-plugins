@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Say whether an external executor is off for the rest of a plan: two of the
+# plan's tasks assigned to it were handed back, or the ledger already records
+# it off. The ledger is the only memory a resumed controller has, so the answer
+# comes from it alone (reference/executor-lane.md §Dispatch).
+#
+# Usage: lane-breaker PLAN_FILE <id>
+# Output: lane-breaker <id> state=<open|tripped> handbacks=<n>
+# Exit: 0 answered; 2 usage error, a malformed id, or a missing plan file.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/plan.sh"
+
+die() { printf 'lane-breaker: %s\n' "$1" >&2; exit 2; }
+
+[ $# -eq 2 ] || die "usage: lane-breaker PLAN_FILE <id>"
+id=$2
+[[ "$id" =~ ^[a-z][a-z0-9-]*$ ]] || die "malformed executor id: $id"
+plan=$(plan_locate "$1")
+[ -f "$plan" ] || die "no such plan file: $plan"
+
+ledger=$(plan_ledger "$plan")
+if [ -z "$ledger" ]; then
+  printf 'lane-breaker %s state=open handbacks=0\n' "$id"
+  exit 0
+fi
+
+# `^Task [0-9]+:` keys on the whole number, so Task 10 is never Task 1. The
+# trailing space in `executor <id> ` keeps one id from matching a longer one.
+tr -d '\r' < "$ledger" | LB_ID="$id" awk '
+  BEGIN { id = ENVIRON["LB_ID"]; mark = "executor " id " "; off = "Plan: executor " id " off - unreliable (" }
+  index($0, off) == 1 { plan_off = 1; next }
+  !/^Task [0-9]+:/ { next }
+  {
+    n = $2; sub(/:$/, "", n)
+    if (index($0, mark)) assigned[n] = 1
+    if (index($0, "HANDBACK")) handed[n] = 1
+  }
+  END {
+    k = 0
+    for (n in assigned) if (n in handed) k++
+    printf "lane-breaker %s state=%s handbacks=%d\n", id, (k >= 2 || plan_off) ? "tripped" : "open", k
+  }
+'

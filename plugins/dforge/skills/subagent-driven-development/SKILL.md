@@ -31,6 +31,8 @@ back. Before anything else:
    A `Wave <k>: started` line with no later `integrated` or `merged` line
    is a parallel wave in flight: follow
    [parallel-waves.md](../../reference/parallel-waves.md) §Recovery.
+   A `Plan: executor <id> off - unreliable` line keeps that executor off;
+   dispatch reads it through `scripts/lane-breaker`.
 3. When every task has its `complete` line, run `scripts/context-size --final`
    and go on to Final Review or finishing whatever it prints: the final phase
    never hands off. In an auto run it also moves the run to the final phase,

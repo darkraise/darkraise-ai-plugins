@@ -165,6 +165,33 @@ checkout. Fingerprints detect drift, not who wrote it. Never remove a blocked or
 unreconciled worktree. Read [external-task-recovery.md](external-task-recovery.md)
 for ownership, artifacts, approved write sets, and recovery operations.
 
+**The per-plan breaker (agy only).** Before step 1 for a task whose
+`**Executor:**` line names `agy`, run
+`bash "<plugin-root>/scripts/lane-breaker" PLAN_FILE agy`. On `state=tripped`
+run neither the gate, the roster nor the wrapper: dispatch the task's
+`**Implementer:**` agent, say `agy off — unreliable (2 handbacks)` aloud, and
+record the assigned line
+`Task <N>: implementer <agent> (assigned; base <sha7>; executor agy unavailable - off for this plan: unreliable (2 handbacks))`.
+The breaker counts a task as handed back when one of its lines names
+`executor agy ` and one says `HANDBACK`, so every handback must carry the word.
+A review-loop handback already does, on its `HANDBACK to <agent>` fix-round
+line. A run that fails before review (a refusal, a second failed run, a gate
+closed after `--refresh`, a preflight exit 2) hands back on the
+`**Implementer:**` agent's assigned line, in its substitution slot:
+
+```
+Task <N>: implementer <agent> (assigned; base <sha7>; executor <id> HANDBACK - <reason>)
+```
+
+After the line recording any agy task's handback is written, run the breaker
+again; when it prints `state=tripped` and the ledger holds no
+`Plan: executor agy off - unreliable` line, say the same sentence aloud and
+append `Plan: executor agy off - unreliable (2 handbacks)`. The breaker is
+additive to the per-task rules below, which still decide each task's own
+retries and handback; `agyLane` stays the manual switch. A resumed controller
+needs nothing more, because every dispatch reads the ledger through the
+breaker.
+
 1. **Gate, then guard the roster.** Run `bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)"`
    first, saying its line aloud when it ends `source=probe`.
    Unless it prints `lane=true`, run neither the roster nor the wrapper:

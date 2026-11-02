@@ -25,6 +25,7 @@ Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
 Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
 Task <N>: complete (commits a..b[; merged <sha7>], review clean | K parked[, C carried to Task M | C carried to final review][; parts A, B][; scores spec s / scope c / verification v / quality q, seat <seat>]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
+Plan: executor <id> off - unreliable (<k> handbacks)
 Review depth: <light|standard|full> (<reason>)
 Acceptance QA: dispatched (base <sha7>)
 Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo
@@ -42,6 +43,9 @@ CI: <sha7> run <id> <green|red|still running at 90 min>
   [delegated-task.md](../../../reference/delegated-task.md) §Early CI, and the
   `CI:` line by finishing. No per-task Recovery row reads them, since those
   key on `Task` and `Group` lines; the Plan state paragraph below does.
+- `Plan: executor <id> off - unreliable (<k> handbacks)` is written by
+  [executor-lane.md](../../../reference/executor-lane.md) §Dispatch. It names
+  no task, so no per-task Recovery row reads it; `scripts/lane-breaker` does.
 - `Acceptance QA:` lines are written by
   [final-review.md](../../../reference/final-review.md) step 0.5. On recovery:
   a `complete` line skips step 0.5; a `dispatched` line with no `complete`
@@ -120,4 +124,6 @@ its step 0.5. A `Final fix:` line and no `Final review:` line: the fix wave was
 dispatched; after compaction the agent id is gone, so re-dispatch that agent
 fresh, then continue Final Review at the scoped re-review. A
 `Final review: clean` line: the review is done — go to
-dforge:finishing-a-development-branch.
+dforge:finishing-a-development-branch. A ledger holding a
+`Plan: executor <id> off - unreliable (<k> handbacks)` line keeps that executor
+off for the rest of the plan.

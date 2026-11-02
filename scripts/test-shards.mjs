@@ -50,6 +50,7 @@ export const windowsSeconds = {
   'in-flight.test.sh': 36,
   'inline-mode.test.sh': 65,
   'ladder.test.sh': 10,
+  'lane-breaker.test.sh': 10,
   'lanes.test.sh': 10,
   'lens-route.test.sh': 185,
   'lock.test.sh': 10,
