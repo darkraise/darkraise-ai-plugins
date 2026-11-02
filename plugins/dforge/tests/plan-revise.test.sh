@@ -179,6 +179,25 @@ check "no Executor line reports none" "$(field executor "$(unit1)")" "none"
 check "the header reports the execution mode" "$(field execution "$(run | grep '^header')")" "inline"
 check "a complete header reports sections ok" "$(field sections "$(run | grep '^header')")" "ok"
 check "a ticked executor is reported" "$(field executors "$(run | grep '^header')")" "codex"
+agyrung() { # agyrung <total> - "<model>/<effort>" from the shipped agy-assignment block
+  tr -d '\r' < "$HERE/../reference/ladder.md" \
+    | awk -v t="$1" '$0 == "```agy-assignment" { f = 1; next } f && /^```/ { exit } f && $1 == t { print $2 "/" $3 }'
+}
+both() { hdr '
+> **External executors:** codex, agy
+' "$1"; }
+
+plan "$(mktask 1 0 1 0 2)"
+check "codex alone ticked: rungs are unchanged" "$(field rungs "$(unit1)")" "codex:gpt-6.1-sol/low"
+both "$(mktask 1 0 1 0 2)"
+check "both ticked: rungs follow priority, not the header order" \
+  "$(field rungs "$(unit1)")" "agy:$(agyrung 2),codex:gpt-6.1-sol/low"
+check "both ticked: the unit passes the gate" "$(field gate "$(unit1)")" "pass"
+both "$(mktask 0 0 1 0 1)"
+check "both ticked: a total-1 unit is admitted by agy alone" "$(field rungs "$(unit1)")" "agy:$(agyrung 1)"
+both "$(mktask 1 1 1 3 6)"
+check "both ticked: a risk-3 unit is admitted by neither" "$(field gate "$(unit1)")" "fail:risk"
+check "both ticked: a risk-3 unit has no rung" "$(field rungs "$(unit1)")" ""
 
 # The selection is a header line. A fenced example in a task body is not it.
 plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n> **External executors:** stub\n```\n')"
