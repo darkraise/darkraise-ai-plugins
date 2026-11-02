@@ -6,3 +6,4 @@
 - 2026-10-28 `docs/dforge/plans/2026-10-28-speed-and-cost.md` — merged into `main` at 7814032e
 - 2026-10-29 `docs/dforge/plans/2026-10-28-speed-and-cost-followups.md` — merged into `main` at 565e3570
 - 2026-11-01 `docs/dforge/plans/2026-10-31-test-tiers-and-ci-parity.md` — merged into `main` at f7210e3
+- 2026-11-03 `docs/dforge/plans/2026-11-02-antigravity-executor-lane.md` — merged into `main` at bc0ebceb
