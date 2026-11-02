@@ -218,5 +218,123 @@ printf '%s\n' "$assignment" | awk '{print $2}' | grep -qxF gpt-6-astra && leak=a
 printf '%s\n' "$successor" | tr ' ' '\n' | grep -qF gpt-6-astra && leak=successor
 check "no judge model appears in the execution blocks" "$leak" "NONE"
 
+# --- the agy lane --------------------------------------------------------------
+# agy admits wider bands than Codex, so its blocks are checked on their own.
+AGY_MODELS="gemini-3.8-flash gemini-4-argon claude-sonnet-5-5 claude-opus-5-5"
+AGY_EFFORTS="low medium high"
+
+agy_gate=$(block agy-lane-gate)
+agy_gate_field() { printf '%s\n' "$agy_gate" | awk -v k="$1" '$1 == k {print $2}'; }
+check "agy-lane-gate has five lines" "$(printf '%s\n' "$agy_gate" | grep -c .)" "5"
+check "agy-lane-gate min_score is 0" "$(agy_gate_field min_score)" "0"
+check "agy-lane-gate max_score is 8" "$(agy_gate_field max_score)" "8"
+check "agy-lane-gate max_risk is 2" "$(agy_gate_field max_risk)" "2"
+check "agy-lane-gate requires a clean Rule S pass" "$(agy_gate_field require_rule_s_clean)" "true"
+check "agy-lane-gate requires an enabled executor" "$(agy_gate_field require_external_enabled)" "true"
+
+agy_assignment=$(block agy-assignment)
+check "agy-assignment has 9 rows" "$(printf '%s\n' "$agy_assignment" | grep -c .)" "9"
+bad_agy=NONE agy_scores=""
+while read -r score model effort extra; do
+  [ -n "$score" ] || continue
+  in_list "$model" "$AGY_MODELS" || bad_agy="model:$score:$model"
+  in_list "$effort" "$AGY_EFFORTS" || bad_agy="effort:$score:$effort"
+  [ -z "$extra" ] || bad_agy="extra-field:$score"
+  agy_scores="$agy_scores $score"
+done <<< "$agy_assignment"
+check "every agy-assignment rung names a known model and effort" "$bad_agy" "NONE"
+check "agy-assignment has one row for each total 0 through 8" \
+  "$(printf '%s\n' $agy_scores | sort -n | tr '\n' ' ')" "0 1 2 3 4 5 6 7 8 "
+check "agy-assignment rows 3 to 8 mirror the native Claude table" \
+  "$(printf '%s\n' "$agy_assignment" | awk '$1 >= 3' | tr '\n' ',')" \
+  "3 claude-sonnet-5-5 medium,4 claude-sonnet-5-5 medium,5 claude-sonnet-5-5 high,6 claude-opus-5-5 high,7 claude-opus-5-5 high,8 claude-opus-5-5 high,"
+check "the lowest agy-assignment row is the gate's min_score" \
+  "$(printf '%s\n' "$agy_assignment" | awk 'NR == 1 || $1 < m { m = $1 } END { print m }')" "$(agy_gate_field min_score)"
+check "the highest agy-assignment row is the gate's max_score" \
+  "$(printf '%s\n' "$agy_assignment" | awk '$1 > m { m = $1 } END { print m }')" "$(agy_gate_field max_score)"
+
+agy_rank() { # agy_rank <model>/<effort>: model_rank * 10 + effort_rank, or -1
+  local m="${1%%/*}" e="${1##*/}" mr er
+  case "$m" in gemini-*) mr=0 ;; claude-sonnet-5-5) mr=1 ;; claude-opus-5-5) mr=2 ;; *) echo -1; return ;; esac
+  case "$e" in low) er=0 ;; medium) er=1 ;; high) er=2 ;; *) echo -1; return ;; esac
+  echo $((mr * 10 + er))
+}
+
+agy_successor=$(block agy-successor)
+agy_succ_of() { printf '%s\n' "$agy_successor" | awk -v k="$1" '$1 == k {print $2}'; }
+
+bad_agy_rank=NONE
+while read -r from to; do
+  [ -n "$from" ] || continue
+  [ "$to" = HANDBACK ] && continue
+  from_rank=$(agy_rank "$from"); to_rank=$(agy_rank "$to")
+  { [ "$from_rank" -lt 0 ] || [ "$to_rank" -lt 0 ]; } && { bad_agy_rank="unrankable:$from->$to"; continue; }
+  [ "$to_rank" -gt "$from_rank" ] || bad_agy_rank="not-increasing:$from->$to"
+done <<< "$agy_successor"
+check "every agy-successor ranks strictly above its source" "$bad_agy_rank" "NONE"
+
+bad_agy_family=NONE
+while read -r from to; do
+  case "$from" in gemini-*) case "$to" in claude-*) ;; *) bad_agy_family="$from->$to" ;; esac ;; esac
+done <<< "$agy_successor"
+check "a failed Gemini rung moves to a Claude rung, never to another Gemini effort" "$bad_agy_family" "NONE"
+
+bad_agy_walk=NONE
+while read -r start _; do
+  [ -n "$start" ] || continue
+  cur="$start"
+  for _ in 1 2 3 4 5 6; do
+    [ "$cur" = HANDBACK ] && break
+    cur=$(agy_succ_of "$cur")
+    [ -n "$cur" ] || { bad_agy_walk="dead-end-from:$start"; break; }
+  done
+  [ "$cur" = HANDBACK ] || bad_agy_walk="${bad_agy_walk#NONE}no-terminal-from:$start"
+  [ "$bad_agy_walk" = NONE ] || break
+done <<< "$agy_successor"
+check "every agy-successor rung reaches HANDBACK without cycling" "$bad_agy_walk" "NONE"
+
+bad_agy_entry=NONE
+while read -r _ model effort; do
+  [ -n "$model" ] || continue
+  [ -n "$(agy_succ_of "$model/$effort")" ] || bad_agy_entry="$model/$effort"
+done <<< "$agy_assignment"
+check "every agy-assignment rung has a successor" "$bad_agy_entry" "NONE"
+
+agy_timeouts=$(block agy-timeout)
+bad_agy_timeout=NONE
+while read -r from to; do
+  [ -n "$from" ] || continue
+  for rung in "$from" "$to"; do
+    [ "$rung" = HANDBACK ] && continue
+    secs=$(printf '%s\n' "$agy_timeouts" | awk -v k="$rung" '$1 == k {print $2}')
+    [ -n "$secs" ] || { bad_agy_timeout="missing:$rung"; continue; }
+    printf '%s' "$secs" | grep -qE '^[1-9][0-9]*$' || bad_agy_timeout="non-numeric:$rung"
+  done
+done <<< "$agy_successor"
+while read -r _ model effort; do
+  [ -n "$model" ] || continue
+  [ -n "$(printf '%s\n' "$agy_timeouts" | awk -v k="$model/$effort" '$1 == k {print $2}')" ] || bad_agy_timeout="missing:$model/$effort"
+done <<< "$agy_assignment"
+check "every agy rung named in an assignment or a successor row has a numeric timeout" "$bad_agy_timeout" "NONE"
+
+agy_too_long=NONE
+while read -r pair secs; do
+  [ -n "$pair" ] || continue
+  [ $(( (secs + 120) * 1000 )) -le 7200000 ] || agy_too_long="$pair:$secs"
+done <<< "$agy_timeouts"
+check "every agy-timeout bound plus 120 s fits a background call's 7200000 ms cap" "$agy_too_long" "NONE"
+
+check "no agy block names a Codex model" \
+  "$(printf '%s\n' "$agy_gate" "$agy_assignment" "$agy_successor" "$agy_timeouts" | grep -c 'gpt-')" "0"
+
+# --- ladder.md prose, one subsection per executor ------------------------------
+check "ladder.md has a lane-gate subsection for each executor" \
+  "$(grep -cE '^### The (Codex|agy) lane gate$' "$LADDER")" "2"
+check "the single, executor-neutral lane-gate heading is gone" "$(grep -cxF '### The lane gate' "$LADDER")" "0"
+check "ladder.md gives agy its assignment, successor and timeout subsections" \
+  "$(grep -cE '^### Agy (assignment|successor|timeout)$' "$LADDER")" "3"
+check "the agy gate subsection states why its floor is 0" \
+  "$(grep -cF '`agy-lane-gate` has a floor of 0 because' "$LADDER")" "1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

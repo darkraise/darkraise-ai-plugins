@@ -226,10 +226,12 @@ something, and the fix is a better task description or a smaller task.
 
 An external executor is not a rung on the escalation ladder above. Offload
 selects downward at the cheap end while the ladder only moves upward, and one
-total order cannot express both. The Claude ladder remains the sole backstop, so
+total order cannot express both. Each registered executor has its own gate
+block, named in its registry entry, and planning consults executors in
+`executors ranked` order. The Claude ladder remains the sole backstop, so
 its termination proof is unchanged by anything in this section.
 
-### The lane gate
+### The Codex lane gate
 
 ```gate
 min_score 2
@@ -371,3 +373,73 @@ inside 3600 on 2026-09-21 after exceeding 1800 twice at `high`. The astra row
 was raised to 5400 on 2026-09-21 for headroom above that single completion, on
 the owner's instruction; nothing measures where its ceiling actually is.
 Revise them when real runs warrant it.
+
+### The agy lane gate
+
+```agy-lane-gate
+min_score 0
+max_score 8
+max_risk 2
+require_rule_s_clean true
+require_external_enabled true
+```
+
+All five conditions must hold. `max_score 8` is Rule S's own ceiling,
+`reducible` 5 plus risk 3, so the gate adds no cap beyond it. `max_risk 2`
+keeps risk-3 tasks on the Claude ladder.
+
+`agy-lane-gate` has a floor of 0 because the lane exists for a different reason.
+Codex's floor of 2 exists because a score-0 offload costs more to orchestrate
+than `impl-sonnet-low` costs to run, whereas `agy`'s purpose is to move work
+onto another quota, so even a score-0 task it takes is Claude quota saved.
+
+### Agy assignment
+
+```agy-assignment
+0 gemini-3.8-flash medium
+1 gemini-3.8-flash medium
+2 gemini-3.8-flash medium
+3 claude-sonnet-5-5 medium
+4 claude-sonnet-5-5 medium
+5 claude-sonnet-5-5 high
+6 claude-opus-5-5 high
+7 claude-opus-5-5 high
+8 claude-opus-5-5 high
+```
+
+Totals 3 to 8 mirror the native Claude assignment table: Sonnet at `medium`,
+Sonnet at `high`, then Opus at `high`. The models are those `agy models` lists.
+
+### Agy successor
+
+```agy-successor
+gemini-3.8-flash/medium claude-sonnet-5-5/medium
+claude-sonnet-5-5/medium claude-sonnet-5-5/high
+claude-sonnet-5-5/high claude-opus-5-5/high
+claude-opus-5-5/high HANDBACK
+```
+
+This is a single-successor column consulted at most once per task, not a
+walkable chain, the same shape as `codex-successor`. A failed Gemini run moves
+to Claude rather than to a higher Gemini effort, because the second attempt
+should differ in model family.
+
+`HANDBACK` is an action, not an executor. It resolves to the Claude
+assignment-table row for the task's score, after which the ordinary ladder
+governs.
+
+Ranking a rung as `model_rank * 10 + effort_rank`, where every `gemini-` model
+ranks 0, `claude-sonnet-5-5` 1 and `claude-opus-5-5` 2, and efforts rank `low`
+0, `medium` 1 and `high` 2, gives every successor a strictly higher rank than
+its source, so the column is acyclic and every walk reaches `HANDBACK`.
+
+### Agy timeout
+
+```agy-timeout
+gemini-3.8-flash/medium 900
+claude-sonnet-5-5/medium 1200
+claude-sonnet-5-5/high 1800
+claude-opus-5-5/high 2400
+```
+
+The values are seconds.
