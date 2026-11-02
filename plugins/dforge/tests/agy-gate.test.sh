@@ -136,5 +136,127 @@ else
   skip "the probe cases: Node cannot run the bash-script stub on this platform"
 fi
 
+UNTRUSTED="$TMP/untrusted.json"
+jq '.trust.smoke = "fail"' "$P/reference/agy-policy.json" > "$UNTRUSTED" 2>/dev/null
+
+# --- the gate ------------------------------------------------------------------
+REG="$TMP/reg"
+mkdir -p "$REG"
+jq -n '{id:"agy", locator:"scripts/agy-locate",
+  probe:{command:"scripts/lib/agy-probe.mjs", op:"auth"},
+  gate:"scripts/agy-gate", wrapper:"scripts/run-agy-task.sh",
+  reference:"reference/executor-lane.md", session_dir:"agy-sessions",
+  session_dir_env:"DR_AGY_SESSION_DIR", surfaces:["lane"], blocks:{gate:"agy-lane-gate"}}' > "$REG/agy.json"
+SESS="$TMP/sessions"
+ARGS="$TMP/args.log"
+gate() { # gate [args...]; sets out and rc. GATE_PATH, GATE_POLICY and SID override the defaults.
+  out=$(cd "$TMP/work" && PATH="${GATE_PATH:-$STUBDIR:$SEAL}" DR_AGY_POLICY="${GATE_POLICY:-$POLICY}" \
+    DR_EXECUTORS_DIR="$REG" DR_AGY_SESSION_DIR="$SESS" CLAUDE_CODE_SESSION_ID="${SID-s1}" \
+    STUB_AGY_ARGS_LOG="$ARGS" "$BASH" "$P/scripts/agy-gate" "$@" 2>"$TMP/err"); rc=$?
+}
+field() { jq -r ".$1 | tostring" "$SESS/s1.json" 2>/dev/null | tr -d '\r'; }
+fresh() { rm -rf "$SESS" "$ARGS"; }
+setting() { mkdir -p "$HOME/.dforge"; printf '%s\n' "$1" > "$HOME/.dforge/config.json"; }
+mark_off() { (export DR_EXECUTORS_DIR="$REG" DR_AGY_SESSION_DIR="$SESS" CLAUDE_CODE_SESSION_ID=s1
+  . "$P/scripts/lib/executor-session.sh"; executor_session_mark_off agy "$1"); }
+
+check "agy-gate exists" "$([ -f "$P/scripts/agy-gate" ] && echo yes || echo no)" "yes"
+
+fresh; GATE_PATH="$SEAL" gate
+check "no agy on PATH turns the gate off" "$out" \
+  "agy-gate usable=false reason=plugin-not-installed review=false lane=false resets_at=- source=probe"
+check "the gate exits 0 when it answers" "$rc" "0"
+fresh; STUB_AGY_VERSION=1.4.11 gate
+check "a version out of range turns the gate off" "$out" \
+  "agy-gate usable=false reason=plugin-version:1.4.11 review=false lane=false resets_at=- source=probe"
+check "a version out of range never runs the auth probe" "$(grep -c '^models$' "$ARGS" 2>/dev/null)" "0"
+
+# A quota mark needs no probe: the gate keeps it for the session, --refresh included.
+fresh; mark_off quota
+gate
+check "a quota mark is reported from the session file" "$out" \
+  "agy-gate usable=false reason=quota review=false lane=false resets_at=- source=cache"
+gate --refresh
+check "--refresh keeps a cached quota instead of probing it away" "$out" \
+  "agy-gate usable=false reason=quota review=false lane=false resets_at=- source=cache"
+check "keeping a quota starts no agy" "$([ -f "$ARGS" ] && echo yes || echo no)" "no"
+check "the kept quota stays in the session file" "$(field usable)/$(field reason)" "false/quota"
+SID=s2 gate
+check "another session does not inherit the quota" \
+  "$(case "$out" in *reason=quota*) echo inherited ;; *) echo own ;; esac)" "own"
+
+fresh; GATE_POLICY="$TMP/none.json" gate
+check "a missing policy file is a usage-level failure" "$rc" "2"
+gate --bogus
+check "an unknown flag is a usage error" "$rc" "2"
+gate --refresh extra
+check "an extra argument is a usage error" "$rc" "2"
+
+setting '{"agyLane":false}'
+fresh; gate
+check "agyLane off answers without a probe" "$out" \
+  "agy-gate usable=false reason=setting review=false lane=false resets_at=- source=setting"
+check "agyLane off starts no agy" "$([ -f "$ARGS" ] && echo yes || echo no)" "no"
+check "agyLane off is written for the readers" "$(field usable)/$(field reason)/$(field lane)" "false/setting/false"
+setting '{}'
+
+if [ "$SPAWNABLE" = yes ]; then
+  fresh; gate
+  check "a usable, trusted agy opens the lane" "$out" \
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- source=probe"
+  check "the session file records the answer" \
+    "$(field session_id)/$(field usable)/$(field review)/$(field lane)/$(field reason)/$(field agy_version)" "s1/true/false/true/ok/1.4.12"
+  check "the session file carries no reset time" "$(field resets_at)/$(field resets_at_epoch)" "null/null"
+  check "the probe ran once" "$(grep -c '^models$' "$ARGS")" "1"
+  gate
+  check "a second call answers from the cache" "$out" \
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- source=cache"
+  check "a cached answer runs no agy" "$(grep -c '^models$' "$ARGS")" "1"
+  GATE_POLICY="$UNTRUSTED" gate
+  check "trust is read on every call, cache hit included" "$out" \
+    "agy-gate usable=true reason=ok review=false lane=false resets_at=- source=cache"
+  gate --refresh
+  check "--refresh re-probes an ordinary cached answer" "$out" \
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- source=probe"
+  check "the re-probe ran agy models again" "$(grep -c '^models$' "$ARGS")" "2"
+
+  fresh; GATE_POLICY="$UNTRUSTED" gate
+  check "a usable but untrusted agy opens no lane" "$out" \
+    "agy-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+
+  fresh; STUB_AGY_AUTH=logged-out gate
+  check "a logged-out agy is off" "$out" \
+    "agy-gate usable=false reason=logged-out review=false lane=false resets_at=- source=probe"
+  gate
+  check "a cached logged-out answer is reused without --refresh" "$out" \
+    "agy-gate usable=false reason=logged-out review=false lane=false resets_at=- source=cache"
+  gate --refresh
+  check "--refresh re-probes a logged-out answer and finds the login" "$out" \
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- source=probe"
+
+  fresh; STUB_AGY_AUTH=broken gate
+  check "an auth probe that answers nothing is probe-failed" "$out" \
+    "agy-gate usable=false reason=probe-failed review=false lane=false resets_at=- source=probe"
+
+  fresh; gate
+  mark_off quota
+  gate --refresh
+  check "a quota mark made after a good probe also survives --refresh" "$out" \
+    "agy-gate usable=false reason=quota review=false lane=false resets_at=- source=cache"
+  check "the quota survives with the probe never re-run" "$(grep -c '^models$' "$ARGS")" "1"
+
+  fresh; SID= gate
+  check "no session id still answers, with the lane closed" "$out" \
+    "agy-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+  check "no session id writes no file" "$(ls "$SESS" 2>/dev/null | wc -l | tr -d ' ')" "0"
+
+  fresh; setting '{"agyLane":false}'; gate
+  setting '{}'; gate
+  check "switching agyLane back on probes again" "$out" \
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- source=probe"
+else
+  skip "the gate cases that need a usable probe: Node cannot run the bash-script stub on this platform"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
