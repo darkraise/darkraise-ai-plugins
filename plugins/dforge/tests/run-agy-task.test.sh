@@ -363,5 +363,44 @@ check "an index change is named in the report" "$(grep -c 'agy changed the git i
 check "an index change blocks the task" "$(jq -r .phase "$(state_of "$W")")" "blocked"
 check "an index change commits nothing" "$(git -C "$W" log --format=%s | grep -c 'feat(stub)')" "0"
 check "an index change leaves the staged file in place" "$(git -C "$W" diff --cached --name-only | tr -d '\r')" "out.txt"
+
+# --- a quota closes the lane for the rest of the session (A8) ------------------
+session_file="$DR_AGY_SESSION_DIR/run-agy-task-test.json"
+session_state() { jq -r '[.usable, .lane, .reason] | map(tostring) | join("/")' "$session_file" 2>/dev/null | tr -d '\r'; }
+rm -rf "$DR_AGY_SESSION_DIR"
+newwork session-plain
+STUB_AGY_MODE=error STUB_AGY_ERROR="something failed" run
+check "a plain error leaves the session file absent" "$([ -e "$session_file" ] && echo yes || echo no)" "no"
+newwork session-model
+STUB_AGY_MODE=error STUB_AGY_ERROR="unknown model gemini-9-flash" run
+check "an unknown model leaves the session file absent" "$([ -e "$session_file" ] && echo yes || echo no)" "no"
+newwork session-quota
+STUB_AGY_MODE=error STUB_AGY_ERROR="Quota exceeded for this account" run
+check "a quota error turns agy off for the session" "$(session_state)" "false/false/quota"
+
+# The same quota through the real gate: it keeps the answer past --refresh. Node
+# cannot run a bash-script stub on Windows, and the gate's probe spawns agy.
+SPAWNABLE=$(node -e 'const r = require("child_process").spawnSync(process.argv[1], ["--version"], { encoding: "utf8" }); console.log(r.status === 0 ? "yes" : "no")' "$STUBDIR/agy" 2>/dev/null | tr -d '\r')
+if [ "$SPAWNABLE" = yes ]; then
+  saved_gate="$AGY_TASK_GATE"
+  unset AGY_TASK_GATE
+  rm -rf "$DR_AGY_SESSION_DIR"
+  gate_fields() { bash "$P/scripts/agy-gate" "$@" 2>/dev/null | tail -1 | tr -d '\r' \
+    | sed -n 's/.* usable=\([a-z]*\) reason=\([^ ]*\) .* lane=\([a-z]*\) .*/\1 \2 \3/p'; }
+  check "the real gate opens the lane on a trusted, signed-in stub" "$(gate_fields)" "true ok true"
+  newwork quota
+  STUB_AGY_MODE=error STUB_AGY_ERROR="quota exceeded" run
+  check "a quota run through the real gate is not DONE" "$?" "1"
+  check "the gate reports quota after the run" "$(gate_fields)" "false quota false"
+  check "the gate keeps quota through --refresh" "$(gate_fields --refresh)" "false quota false"
+  n=$(calls)
+  run --task-id task-two
+  check "the next wrapper call is refused" "$?" "2"
+  check "the next wrapper call names quota" "$(grep -c 'agy lane is off for this session (quota)' "$fixture/err")" "1"
+  check "the next wrapper call never runs agy" "$(calls)" "$n"
+  export AGY_TASK_GATE="$saved_gate"
+else
+  skip "the real-gate quota chain needs a probe that can run the stub"
+fi
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -5,7 +5,7 @@
 #
 # batch_capable is a static fact about a tool, not a probe result: it records
 # whether the CLI can run a task headlessly and return a result a script can
-# read. Antigravity fails that test on its interface, not on its installation.
+# read.
 #
 # `usable` means dispatchable, which is what both skills read it as, so it also
 # requires that this plugin ships a lane for the CLI. A batch-capable tool with
@@ -144,5 +144,4 @@ emit() { # emit <id> <batch_capable> <incapable_reason>
   path_row() { grep -qxF "$1" <<<"$registered" || emit "$1" "$2" "$3"; }
   path_row cursor-agent true ""
   path_row opencode true ""
-  path_row antigravity false "installed, but its only agent mode (antigravity chat -m agent) opens a GUI editor session with no output file, no completion signal, and no exit code tied to the work"
 } | jq -s '.'

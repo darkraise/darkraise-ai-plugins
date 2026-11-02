@@ -98,6 +98,35 @@ check "the shipped codex locator resolves to a real file" \
 check "the shipped codex probe resolves to a real file" \
   "$([ -f "$(bash "$EXEC" path codex probe.command)" ] && echo yes || echo no)" "yes"
 
+# --- the shipped agy entry -----------------------------------------------------
+check "the shipped registry lists agy before codex" \
+  "$(bash "$EXEC" list | tr '\n' ' ')" "agy codex "
+check "the shipped registry ranks agy before codex" \
+  "$(bash "$EXEC" ranked | tr '\n' ' ')" "agy codex "
+check "the shipped agy entry has priority 10" "$(bash "$EXEC" get agy priority)" "10"
+check "the shipped agy entry names the real locator" \
+  "$(bash "$EXEC" get agy locator)" "scripts/agy-locate"
+check "the shipped agy entry names its gate" "$(bash "$EXEC" get agy gate)" "scripts/agy-gate"
+check "the shipped agy entry names its wrapper" \
+  "$(bash "$EXEC" get agy wrapper)" "scripts/run-agy-task.sh"
+check "the shipped agy entry names its session directory" \
+  "$(bash "$EXEC" get agy session_dir)" "agy-sessions"
+check "the shipped agy entry names its session directory override" \
+  "$(bash "$EXEC" get agy session_dir_env)" "DR_AGY_SESSION_DIR"
+check "the shipped agy entry opens only the lane" \
+  "$(bash "$EXEC" get agy surfaces | tr '\n' ',')" "lane,"
+check "the shipped agy entry declares no missing reason" \
+  "$(bash "$EXEC" get agy reasons.missing >/dev/null 2>&1; echo $?)" "1"
+for key in locator probe.command gate wrapper; do
+  check "the shipped agy $key resolves to a real file" \
+    "$([ -f "$(bash "$EXEC" path agy "$key")" ] && echo yes || echo no)" "yes"
+done
+for key in gate assignment successor timeout; do
+  block=$(bash "$EXEC" get agy "blocks.$key")
+  check "the shipped agy $key block exists in the ladder" \
+    "$(grep -cx "\`\`\`$block" "$P/reference/ladder.md")" "1"
+done
+
 # --- ranked ------------------------------------------------------------------
 # Priority decides which executor planning tries first. A malformed value must
 # neither drop the entry nor abort the listing: it ranks as if absent, with one

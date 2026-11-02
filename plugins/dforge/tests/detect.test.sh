@@ -37,7 +37,7 @@ make_stub() { printf '#!%s\necho "%s"\n' "$BASH_BIN" "$2" > "$TMP/bin/$1"; chmod
 # cygpath is shimmed only where it exists: scripts/lib/native-path.sh probes for
 # it and converts nothing without it, which is correct off Windows, so a stub
 # standing in for an absent cygpath would test a path production never takes.
-for dep in jq timeout head tr node bash dirname cygpath sort grep; do
+for dep in jq timeout head tr node bash dirname cygpath sort grep sed awk cat cut uname tail; do
   dep_path=$(command -v "$dep") || continue
   printf '#!%s\nexec "%s" "$@"\n' "$BASH_BIN" "$dep_path" > "$TMP/bin/$dep"
   chmod +x "$TMP/bin/$dep"
@@ -49,6 +49,9 @@ done
 # Required of every suite touching detect-executors.sh: a fixed session id and a
 # temporary directory keep the machine's real session file out of every case.
 export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=detect-test
+export HOME="$TMP/home" DR_AGY_SESSION_DIR="$TMP/agy-sessions"
+mkdir -p "$HOME"
+jq -nc '{cli:"agy", min_version:"1.4.12", max_major:1, calibrated:"1.4.12", trust:{smoke:"fail"}}' > "$TMP/agy-policy.json"
 STUB_PLUGIN="$HERE/fixtures/stub-codex-plugin"
 mkdir -p "$TMP/config/plugins"
 printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$TMP/config/settings.json"
@@ -64,7 +67,8 @@ jq -nc '{plugin:"codex@openai-codex", min_version:"1.0.3", max_major:1,
 # a project's own .claude/settings*.json.
 run() { PATH="$TMP/bin" CLAUDE_CONFIG_DIR="$TMP/config" CLAUDE_PROJECT_DIR= \
         DR_CODEX_POLICY="$TMP/policy.json" STUB_MODE="${STUB_MODE:-ok}" \
-        "$BASH_BIN" "$SCRIPT"; }
+        DR_AGY_POLICY="$TMP/agy-policy.json" STUB_AGY_VERSION="${STUB_AGY_VERSION:-1.4.12}" \
+        STUB_AGY_AUTH="${STUB_AGY_AUTH:-ok}" "$BASH_BIN" "$SCRIPT"; }
 field() { jq -r --arg i "$1" --arg f "$2" '.[] | select(.id==$i) | .[$f]' <<< "$3"; }
 
 check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
@@ -72,7 +76,8 @@ check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
 # --- nothing installed ------------------------------------------------------
 out=$(run)
 check "empty PATH: emits valid JSON" "$(jq -e 'type=="array"' >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
-check "empty PATH: reports all four executors" "$(jq 'length' <<<"$out")" "4"
+check "empty PATH: reports the four executors by id" \
+  "$(jq -r '[.[].id] | sort | join(",")' <<<"$out")" "agy,codex,cursor-agent,opencode"
 # No plugin enabled in the fixture profile, so there is no codex lane at all.
 printf '{"enabledPlugins":{}}\n' > "$TMP/config/settings.json"
 out=$(run)
@@ -135,16 +140,51 @@ STUB_EVENT_LOG="$TMP/cwd.log" run >/dev/null
 check "the auth probe receives a native-form cwd" \
   "$(sed -n 's/^getCodexAuthStatus //p' "$TMP/cwd.log" | head -1)" "$expected_cwd"
 
-# --- antigravity is present but never dispatchable --------------------------
-# Its only agent-shaped subcommand opens a GUI chat session: no output file, no
-# completion signal, no exit code tied to the work. Present is not usable.
+# --- agy is a registered executor, and antigravity has no row ----------------
+# The old antigravity row said its only agent mode opens a GUI session. agy is
+# the headless Antigravity CLI, so a registered lane replaces that row instead
+# of a PATH probe sitting beside it.
+install_agy() { printf '#!%s\nexec "%s" "%s" "$@"\n' "$BASH_BIN" "$BASH_BIN" "$HERE/fixtures/stub-agy/agy" > "$TMP/bin/agy"; chmod +x "$TMP/bin/agy"; }
 make_stub antigravity "Antigravity 1.107.0"
 out=$(run)
-check "antigravity present" "$(field antigravity present "$out")" "true"
-check "antigravity not batch capable" "$(field antigravity batch_capable "$out")" "false"
-check "antigravity not usable" "$(field antigravity usable "$out")" "false"
-check "antigravity reason mentions the GUI" \
-  "$(field antigravity reason "$out" | grep -qi 'gui' && echo yes || echo no)" "yes"
+check "an antigravity binary adds no row" "$(jq '[.[] | select(.id == "antigravity")] | length' <<<"$out")" "0"
+rm -f "$TMP/bin/antigravity"
+
+check "agy absent is not present" "$(field agy present "$out")" "false"
+check "agy absent is not usable" "$(field agy usable "$out")" "false"
+check "agy absent uses the entry's not_installed reason" \
+  "$(field agy reason "$out")" "agy is not on PATH; install the Antigravity CLI"
+
+install_agy
+out=$(run)
+check "agy present from its locator" "$(field agy present "$out")" "true"
+check "agy version from its locator" "$(field agy version "$out")" "1.4.12"
+check "agy is batch capable" "$(field agy batch_capable "$out")" "true"
+check "agy yields exactly one row" "$(jq '[.[] | select(.id == "agy")] | length' <<<"$out")" "1"
+check "the agy row's path is the directory holding agy" "$(field agy path "$out" | grep -c '/bin$')" "1"
+out=$(STUB_AGY_VERSION=0.9.0 run)
+check "an agy below the version floor is not usable" "$(field agy usable "$out")" "false"
+check "an agy below the version floor names the version" "$(field agy reason "$out" | grep -c '0\.9\.0')" "1"
+
+# The auth probe spawns agy from Node, which cannot run a bash-script stub on
+# Windows.
+SPAWNABLE=$(node -e 'const r = require("child_process").spawnSync(process.argv[1], ["--version"], { encoding: "utf8" }); console.log(r.status === 0 ? "yes" : "no")' "$TMP/bin/agy" 2>/dev/null | tr -d '\r')
+if [ "$SPAWNABLE" = yes ]; then
+  out=$(run)
+  check "agy authed from its probe" "$(field agy authed "$out")" "true"
+  check "agy is usable" "$(field agy usable "$out")" "true"
+  check "a usable agy carries no reason" "$(field agy reason "$out")" "null"
+  out=$(STUB_AGY_AUTH=logged-out run)
+  check "a signed-out agy is explicit" "$(field agy auth_status "$out")" "logged_out"
+  check "a signed-out agy is not usable" "$(field agy usable "$out")" "false"
+  check "a signed-out agy uses the entry's remedy" "$(field agy reason "$out" | grep -c 'run agy and sign in')" "1"
+  out=$(STUB_AGY_AUTH=broken run)
+  check "an agy whose models call fails is a failed probe" "$(field agy auth_status "$out")" "probe_failed"
+  check "a failed agy probe uses the entry's reason" "$(field agy reason "$out" | grep -c 'agy models')" "1"
+else
+  printf 'skip - the agy probe cases: Node cannot run the bash-script stub on this platform\n'
+fi
+rm -f "$TMP/bin/agy"
 
 # --- batch-capable tools with no lane ---------------------------------------
 # Both CLIs can run a task headlessly, so batch_capable is honestly true, but

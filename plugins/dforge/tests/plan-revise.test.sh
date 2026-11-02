@@ -244,7 +244,7 @@ mkdir -p "$SUR/docs"
 git -C "$SUR" init -q
 git -C "$SUR" config user.email t@t
 git -C "$SUR" config user.name t
-survey() { (cd "$SUR" && bash "$SCRIPT" --survey docs); }
+survey() { (cd "$SUR" && DR_EXECUTORS_DIR="$FIXREG" bash "$SCRIPT" --survey docs); }
 row() { survey | grep -m 1 "^plan  $1"; }
 splan() { # splan <name> <body>
   printf '# P\n\n**Execution:** inline — `claude --model sonnet --effort high` — x\n\n### Task 1: One\n\n**Files:**\n- Create: `x`\n\n%s\n' "$2" > "$SUR/docs/$1.md"

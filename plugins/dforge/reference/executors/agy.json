@@ -1,0 +1,24 @@
+{
+  "id": "agy",
+  "locator": "scripts/agy-locate",
+  "probe": { "command": "scripts/lib/agy-probe.mjs", "op": "auth" },
+  "gate": "scripts/agy-gate",
+  "wrapper": "scripts/run-agy-task.sh",
+  "reference": "reference/executor-lane.md",
+  "session_dir": "agy-sessions",
+  "session_dir_env": "DR_AGY_SESSION_DIR",
+  "surfaces": ["lane"],
+  "priority": 10,
+  "blocks": {
+    "gate": "agy-lane-gate",
+    "assignment": "agy-assignment",
+    "successor": "agy-successor",
+    "timeout": "agy-timeout"
+  },
+  "reasons": {
+    "not_installed": "agy is not on PATH; install the Antigravity CLI",
+    "not_enabled": "agy is not usable on this machine",
+    "logged_out": "agy is installed but not signed in; run agy and sign in",
+    "probe_failed": "the agy auth probe failed; run agy models to see why"
+  }
+}
