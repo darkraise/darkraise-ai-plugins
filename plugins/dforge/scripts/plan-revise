@@ -292,15 +292,18 @@ fi
 ticked=$(header_executors "$plan")
 if [ -n "$ticked" ]; then execs=$(tr -s ' ' ',' <<<"$ticked" | sed 's/,$//'); else execs=missing; fi
 # Priority, not the order the header lists them in, decides which admitting
-# executor comes first. A ticked id the registry does not print is kept, after
-# the ranked ones, so the missing-thresholds diagnostic still names it.
+# executor comes first. Every other word of the line is kept after the ranked
+# ids, as written and repeats included, exactly as the line was read before
+# ranking: the missing-thresholds diagnostic then names each word of a prose
+# header line once per occurrence, as it always has.
 ticked_ids=$(tr ', \t' '\n\n\n' <<<"$ticked" | grep -v '^$')
 ranked_ticked=""
 for eid in $(bash "$HERE/executors" ranked 2>/dev/null); do
   grep -qxF "$eid" <<<"$ticked_ids" && ranked_ticked="$ranked_ticked $eid"
 done
-for eid in $ticked_ids; do
-  [[ " $ranked_ticked " == *" $eid "* ]] || ranked_ticked="$ranked_ticked $eid"
+ranked_only=$ranked_ticked
+for word in $ticked; do
+  [[ " $ranked_only " == *" ${word%,} "* ]] || ranked_ticked="$ranked_ticked $word"
 done
 
 header_headings=$(plan_header "$plan" | awk "$_PLAN_AWK"'in_fence($0) { next } /^## / { print }')
