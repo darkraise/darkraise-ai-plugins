@@ -121,6 +121,9 @@ fi
 # and the run is reported as BLOCKED - the exact opposite of what raising the
 # timeout was meant to do.
 printf '%s' "$timeout_s" | grep -qE '^[0-9]+$' || die "--timeout must be whole seconds: $timeout_s"
+# Base 10 now: a leading zero ("08") would otherwise be read as octal by the
+# arithmetic that builds the outer bound, after the phase is already running.
+timeout_s=$((10#$timeout_s))
 if [ -n "$review_round" ]; then
   [[ "$review_round" =~ ^[1-5]$ ]] && [ -n "$thread" ] || die '--review-round requires a resume and a round from 1 to 5'
 fi
@@ -302,7 +305,14 @@ esac
 
 # An agy that died before printing leaves no object behind, and every jq below
 # would then fail and take the runner with it. One guard here covers all of them.
-jq -se 'length == 1 and (.[0] | type == "object")' < "$result" >/dev/null 2>&1 || printf '{}\n' > "$result"
+# Text that is not one JSON object (a banner, a plain-text complaint) is kept
+# first, because it can be the only place agy said why it failed.
+raw_stdout=no
+if ! jq -se 'length == 1 and (.[0] | type == "object")' < "$result" >/dev/null 2>&1; then
+  raw_stdout=yes
+  cp -- "$result" "$report.stdout" 2>/dev/null || : > "$report.stdout"
+  printf '{}\n' > "$result"
+fi
 
 # The verdict file. Lines below parse $last for status, summary and
 # commit_subject, so writing it here is what keeps the runner able to commit.
@@ -330,9 +340,18 @@ rc=0
 
 # The reason is what the controller acts on: a quota waits, an unknown model
 # needs a ladder fix, a timeout a larger --timeout, and only an error is the
-# model's own failure.
-if grep -qiE 'quota|rate.?limit|RESOURCE_EXHAUSTED|429' <<<"$agy_error"; then reason=quota
-elif grep -qiE 'unknown model|model .* not (found|available|supported|recognized)' <<<"$agy_error"; then reason=unknown-model
+# model's own failure. Without an .error field, a failed run is classified from
+# the raw stdout and the stderr tail instead. A timeout is not, and neither is a
+# run that ended cleanly with a JSON result, whose response is the model's own
+# text and may well mention a quota.
+cause=$agy_error
+if [ -z "$cause" ] && [ "$timed_out" = no ] && { [ "$rc" -ne 0 ] || [ "$raw_stdout" = yes ]; }; then
+  cause=$({ [ "$raw_stdout" = no ] || tail -20 "$report.stdout"; tail -20 "$report.stderr"; } 2>/dev/null | tr -d '\r')
+fi
+# 429 only as a whole number: a sha, a UUID or a line number can carry those
+# digits, and a false quota turns agy off for the rest of the session.
+if grep -qiE 'quota|rate.?limit|RESOURCE_EXHAUSTED|(^|[^[:alnum:]])429([^[:alnum:]]|$)' <<<"$cause"; then reason=quota
+elif grep -qiE 'unknown model|model .* not (found|available|supported|recognized)' <<<"$cause"; then reason=unknown-model
 elif [ "$timed_out" = yes ]; then reason=timeout
 else reason=error
 fi
@@ -420,6 +439,11 @@ head=$(git -C "$cwd" rev-parse HEAD)
     printf '\n## Agy error\n\n```\nreason=%s\n' "$reason"
     [ "$timed_out" = no ] || printf 'timedOut=true\n'
     printf '%s\n```\n' "${agy_error:-agy returned no error text}"
+    if [ "$raw_stdout" = yes ] && [ -s "$report.stdout" ]; then
+      printf '\nagy printed no JSON result. Last 20 stdout lines:\n\n```\n'
+      tail -20 "$report.stdout" | tr -d '\r' | awk '{ print }'
+      printf '```\n'
+    fi
     printf '\n## Working tree\n\nLeft uncommitted on purpose. Last 20 stderr lines:\n\n```\n'
     tail -20 "$report.stderr" 2>/dev/null || true
     printf '```\n'

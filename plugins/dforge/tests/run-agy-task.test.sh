@@ -210,6 +210,15 @@ check "a finished handed-back task releases ownership" "$?" "0"
 run --task-id task-two
 check "a released worktree accepts a new task" "$?" "0"
 
+newwork needs
+STUB_AGY_MODE=needs-context run
+check "a NEEDS_CONTEXT verdict is not DONE" "$?" "1"
+check "a NEEDS_CONTEXT verdict reports its status" "$(status_line | grep -c 'status=NEEDS_CONTEXT exit=0 ')" "1"
+check "a NEEDS_CONTEXT report lists the questions" \
+  "$(grep -A2 '^## Questions$' "$R" | tail -1 | tr -d '\r')" "- Which file holds the setting?"
+check "a NEEDS_CONTEXT verdict leaves pending work" "$(jq -r .phase "$(state_of "$W")")" "pending"
+check "a NEEDS_CONTEXT verdict commits nothing" "$(git -C "$W" log --format=%s | wc -l | tr -d ' ')" "1"
+
 # --- a failed commit is recovered without agy ---------------------------------
 newwork recover
 printf '#!/usr/bin/env bash\nexit 1\n' > "$fixture/primary/.git/hooks/pre-commit"
@@ -255,6 +264,24 @@ errcase "a quota error" error "Quota exceeded for this account" quota 1
 errcase "a 429" error "HTTP 429 Too Many Requests" quota 1
 errcase "a rate limit in any case" error "Rate-Limit reached" quota 1
 errcase "a resource exhaustion" error "RESOURCE_EXHAUSTED: try later" quota 1
+errcase "429 inside a sha" error "cannot read object 3f429ab" error 1
+errcase "429 inside a line number" error "parse failed at line 1429" error 1
+STUB_AGY_TEXT="Error: quota exhausted for this account" errcase "a plain-text quota" text "" quota 1
+check "a plain-text failure is shown in the report" "$(grep -c '^Error: quota exhausted for this account$' "$R")" "1"
+check "a plain-text failure is kept beside the report" \
+  "$(tr -d '\r' < "$(jq -r .artifacts.report "$(state_of "$W")").stdout" 2>/dev/null)" "Error: quota exhausted for this account"
+STUB_AGY_TEXT="Something unexpected happened" errcase "a plain-text error" text "" error 1
+check "a plain-text error is shown in the report" "$(grep -c '^Something unexpected happened$' "$R")" "1"
+mkdir -p "$fixture/stderrshim"
+cat > "$fixture/stderrshim/agy" <<'SHIM'
+#!/usr/bin/env bash
+printf 'HTTP 429 Too Many Requests\n' >&2
+printf '{"conversation_id":"","status":"ERROR","response":""}\n'
+exit 1
+SHIM
+chmod +x "$fixture/stderrshim/agy"
+PATH="$fixture/stderrshim:$PATH" run
+check "a failure with no error field is classified from stderr" "$(grep -c '^reason=quota$' "$R")" "1"
 errcase "a print timeout" print-timeout "" timeout 124
 check "a print timeout reports timedOut" "$(grep -c '^timedOut=true$' "$R")" "1"
 check "a print timeout is flagged on the status line" "$(status_line | grep -c ' note=timed-out')" "1"
@@ -265,6 +292,10 @@ check "a stopped print timeout leaves pending work" "$(jq -r .phase "$(state_of 
 newwork clean
 run
 check "a clean run carries no note" "$(status_line | grep -c 'note=')" "0"
+newwork padded
+run --timeout 08
+check "a zero-padded timeout runs" "$?" "0"
+check "a zero-padded timeout is read in base 10" "$(arg_after --print-timeout)" "8s"
 
 sleepers() { ps -eo pid=,args= 2>/dev/null | awk '$2 == "sleep" && $3 == "300" { print $1 }' | sort; }
 newwork outer
@@ -377,6 +408,10 @@ check "an unknown model leaves the session file absent" "$([ -e "$session_file" 
 newwork session-quota
 STUB_AGY_MODE=error STUB_AGY_ERROR="Quota exceeded for this account" run
 check "a quota error turns agy off for the session" "$(session_state)" "false/false/quota"
+rm -rf "$DR_AGY_SESSION_DIR"
+newwork session-text
+STUB_AGY_MODE=text STUB_AGY_TEXT="RESOURCE_EXHAUSTED: try later" run
+check "a plain-text quota turns agy off for the session" "$(session_state)" "false/false/quota"
 
 # The same quota through the real gate: it keeps the answer past --refresh. Node
 # cannot run a bash-script stub on Windows, and the gate's probe spawns agy.

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Stand-in for the Antigravity CLI. STUB_AGY_* variables choose what it does;
-# STUB_AGY_ERROR must not contain a double quote or a backslash.
+# STUB_AGY_ERROR must not contain a double quote or a backslash; STUB_AGY_TEXT
+# is printed as it is.
 set -u
 
 if [ -n "${STUB_AGY_ARGS_LOG:-}" ]; then
@@ -29,26 +30,28 @@ for arg in "$@"; do [ "$arg" = -p ] && print_mode=yes; done
 
 conv="${STUB_AGY_CONV:-conv-1}"
 write_file() { printf 'stub\n' > "${STUB_AGY_WRITE:-out.txt}"; }
-structured() { # structured <status>
-  printf '{"status":"%s","summary":"stub summary","commit_subject":"feat(stub): add out","questions":[],"discovered_issues":[],"assumptions":[]}' "$1"
+structured() { # structured <status> [questions as a JSON array]
+  printf '{"status":"%s","summary":"stub summary","commit_subject":"feat(stub): add out","questions":%s,"discovered_issues":[],"assumptions":[]}' "$1" "${2:-[]}"
 }
-emit() { # emit <structured_output status | none>
+emit() { # emit <structured_output status | none> [questions as a JSON array]
   if [ "$1" = none ]; then
     printf '{"conversation_id":"%s","status":"SUCCESS","response":"ok","usage":{"total_tokens":10}}\n' "$conv"
   else
     printf '{"conversation_id":"%s","status":"SUCCESS","response":"ok","structured_output":%s,"usage":{"total_tokens":10}}\n' \
-      "$conv" "$(structured "$1")"
+      "$conv" "$(structured "$1" "${2:-[]}")"
   fi
 }
 
 case "${STUB_AGY_MODE:-done}" in
   done) write_file; emit DONE ;;
   blocked) emit BLOCKED ;;
+  needs-context) emit NEEDS_CONTEXT '["Which file holds the setting?"]' ;;
   no-schema) write_file; emit none ;;
   error)
     printf '{"conversation_id":"","status":"ERROR","response":"","error":"%s","finished_reason":"error"}\n' \
       "${STUB_AGY_ERROR:-something failed}"
     exit 1 ;;
+  text) printf '%s\n' "${STUB_AGY_TEXT:-something failed}"; exit 1 ;;
   print-timeout)
     printf '{"conversation_id":"conv-1","status":"SUCCESS","response":"","finished_reason":"print_timeout"}\n'
     printf '[agy] print timeout after 5s with turn in progress; returning partial output\n' >&2 ;;
