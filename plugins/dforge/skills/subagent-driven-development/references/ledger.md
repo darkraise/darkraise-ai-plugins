@@ -25,7 +25,6 @@ Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
 Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
 Task <N>: complete (commits a..b[; merged <sha7>], review clean | K parked[, C carried to Task M | C carried to final review][; parts A, B][; scores spec s / scope c / verification v / quality q, seat <seat>]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
-Plan: executor <id> off - unreliable (<k> handbacks)
 Review depth: <light|standard|full> (<reason>)
 Acceptance QA: dispatched (base <sha7>)
 Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo
@@ -37,6 +36,7 @@ Early CI: green run <id>
 Early CI: red run <id> — <job>/<step>[, <job>/<step> ...]
 Early CI: skipped — <reason>
 CI: <sha7> run <id> <green|red|still running at 90 min>
+Plan: executor <id> off - unreliable (<k> handbacks)
 ```
 
 - The four `Early CI:` lines are written by
