@@ -336,5 +336,79 @@ check "ladder.md gives agy its assignment, successor and timeout subsections" \
 check "the agy gate subsection states why its floor is 0" \
   "$(grep -cF '`agy-lane-gate` has a floor of 0 because' "$LADDER")" "1"
 
+# --- the agy calibration record and the lane's trust ---
+# Rows 0-2 of agy-assignment, that rung's successor and timeout rows, and the
+# trust flag all come from replayed runs, so the record of those runs is
+# checked against what it decided.
+NOTES="$HERE/../../../docs/dforge/notes/2026-11-02-agy-calibration.md"
+POLICY="$HERE/../reference/agy-policy.json"
+CONSTRAINTS="$HERE/../../../docs/superpowers/distilled/constraints.md"
+
+check "the calibration record exists" "$([ -f "$NOTES" ] && echo yes || echo no)" "yes"
+check "the record's table has the agreed header" \
+  "$(grep -cxF '| Task replayed | Rung | Status | Tests | Scope | Judge | Wall s | Tokens |' "$NOTES" 2>/dev/null)" "1"
+
+passes() { # passes <rung> - replayed tasks (R rows) that rung passed on every column
+  awk -F'|' -v r="$1" '
+    function t(s) { gsub(/^ +| +$/, "", s); return s }
+    t($3) == r && t($2) ~ /^R[0-9]/ && t($4) == "DONE" && t($5) == "pass" && t($6) == "clean" && t($7) == "pass" { seen[t($2)] = 1 }
+    END { n = 0; for (k in seen) n++; print n }
+  ' "$NOTES" 2>/dev/null
+}
+decision=$(sed -n 's|^\*\*Decision:\*\* totals 0-2 run \([a-z0-9.-]*/[a-z]*\).*$|\1|p' "$NOTES" 2>/dev/null | head -n 1)
+expected=claude-sonnet-5-5/low
+for c in gemini-3.8-flash/low gemini-3.8-flash/medium gemini-4-argon/low; do
+  if [ "$(passes "$c")" = 3 ]; then expected=$c; break; fi
+done
+check "the decision is the cheapest candidate that passed all three replays, else the Claude rung" \
+  "${decision:-none}" "$expected"
+
+tried=yes
+for c in gemini-3.8-flash/low gemini-3.8-flash/medium gemini-4-argon/low; do
+  [ "$c" != "$decision" ] || break
+  [ "$(grep -cF -- "| $c |" "$NOTES" 2>/dev/null || true)" -ge 1 ] 2>/dev/null || tried=no
+done
+check "every candidate cheaper than the decision was run" "$tried" "yes"
+
+band=$(block agy-assignment | awk '$1 + 0 <= 2 { print $2 "/" $3 }' | sort -u | tr '\n' ' ' | sed 's/ $//')
+check "agy-assignment rows 0, 1 and 2 all name the decision" "$band" "${decision:-none}"
+check "agy-assignment has exactly three rows at or below total 2" \
+  "$(block agy-assignment | awk '$1 + 0 <= 2' | grep -c .)" "3"
+check "the 0-2 rung's successor is claude-sonnet-5-5/medium" \
+  "$(block agy-successor | awk -v k="$decision" '$1 == k { print $2 }')" "claude-sonnet-5-5/medium"
+secs=$(block agy-timeout | awk -v k="$decision" '$1 == k { print $2 }')
+check "the 0-2 rung has a timeout between 900 and 6900 seconds" \
+  "$([ "${secs:-0}" -ge 900 ] && [ "${secs:-0}" -le 6900 ] && echo yes || echo no)" "yes"
+
+reach=$( { block agy-assignment | awk '{ print $2 "/" $3 }'; block agy-successor | awk '$2 != "HANDBACK" { print $2 }'; } | sort -u)
+stale=$( { block agy-successor | awk '{ print $1 }'; block agy-timeout | awk '{ print $1 }'; } \
+  | sort -u | grep -vxF -f <(printf '%s\n' "$reach") | tr '\n' ' ' | sed 's/ $//')
+check "no successor or timeout row names a rung that nothing reaches" "${stale:-NONE}" "NONE"
+
+badnum=$(awk -F'|' '
+  function t(s) { gsub(/^ +| +$/, "", s); return s }
+  t($2) ~ /^[RS][0-9]/ && (t($8) !~ /^[0-9]+$/ || t($9) !~ /^[0-9]+$/) { n++ }
+  END { print n + 0 }' "$NOTES" 2>/dev/null)
+check "every run row carries numeric wall seconds and tokens" "${badnum:-x}" "0"
+
+check "the record states a smoke result" \
+  "$(grep -cE '^\*\*Smoke:\*\* (pass|fail)' "$NOTES" 2>/dev/null)" "1"
+smoke_rung=$(block agy-assignment | awk '$1 == 5 { print $2 "/" $3 }')
+check "the smoke run used the rung that total 5 is assigned" \
+  "$(awk -F'|' -v r="$smoke_rung" '
+    function t(s) { gsub(/^ +| +$/, "", s); return s }
+    t($2) ~ /^S1/ && t($3) == r { n++ }
+    END { print n + 0 }' "$NOTES" 2>/dev/null)" "1"
+
+smoke=$(jq -r '.trust.smoke // "absent"' < "$POLICY" 2>/dev/null | tr -d '\r')
+want=0
+[ "$smoke" != pass ] || want=1
+check "the auto-tick constraint exists exactly when trust.smoke is pass" \
+  "$(grep -cxF '### The Antigravity executor lane is on' "$CONSTRAINTS")" "$want"
+if [ "$smoke" = pass ]; then
+  check "a smoke pass is recorded before the lane opens" \
+    "$(grep -c '^\*\*Smoke:\*\* pass' "$NOTES" 2>/dev/null)" "1"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
