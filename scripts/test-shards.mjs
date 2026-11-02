@@ -16,6 +16,7 @@
 export const windowsSeconds = {
   'run-all.sh': 157,
   'agy-gate.test.sh': 20,
+  'antigravity-executor-lane.acceptance.test.sh': 250,
   'auto-default.test.sh': 10,
   'auto-run-skills.test.sh': 10,
   'auto-run.test.sh': 507,
