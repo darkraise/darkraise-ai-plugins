@@ -129,6 +129,17 @@ if [ "$SPAWNABLE" = yes ]; then
   check "a failure that asks for nothing is unknown" "$(STUB_AGY_AUTH=broken probe "$STUBDIR")" "null"
   mkdir -p "$TMP/empty-root"
   check "a root without agy falls back to agy on PATH" "$(probe "$TMP/empty-root")" "true"
+  # Windows looks for a bare name in the working directory before PATH; a "."
+  # entry on PATH does the same here, so an agy a project plants in its own
+  # directory would run if the fallback ran there.
+  mkdir -p "$TMP/planted" "$TMP/probe-tmp"
+  printf '#!/usr/bin/env bash\n: > "%s"\nprintf "m\\tM\\n"\n' "$TMP/planted-ran" > "$TMP/planted/agy"
+  chmod +x "$TMP/planted/agy"
+  check "the PATH fallback does not run an agy in the request's cwd" \
+    "$(jq -cn --arg cwd "$TMP/planted" '{op:"auth",cwd:$cwd}' \
+      | PATH="$SEAL:." TMPDIR="$TMP/probe-tmp" node "$P/scripts/lib/agy-probe.mjs" "$TMP/empty-root" 2>/dev/null \
+      | tail -1 | tr -d '\r' | jq -r '.authed | tostring') $([ -e "$TMP/planted-ran" ] && echo ran || echo not-run)" \
+    "null not-run"
   check "an op other than auth answers null" "$(probe "$STUBDIR" '{"op":"quota","cwd":"."}')" "null"
   check "an op other than auth exits 2" \
     "$(printf '{"op":"quota","cwd":"."}' | PATH="$STUBDIR:$SEAL" node "$P/scripts/lib/agy-probe.mjs" "$STUBDIR" >/dev/null 2>&1; echo $?)" "2"

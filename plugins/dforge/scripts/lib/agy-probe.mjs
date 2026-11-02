@@ -10,6 +10,7 @@
 // sign-in. Anything else (a timeout, a spawn failure, an unrelated error)
 // proves nothing either way and answers null.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -43,8 +44,10 @@ const request = readRequest();
 if (!request || request.op !== "auth") answer(null, 2);
 else {
   const cwd = typeof request.cwd === "string" && request.cwd !== "" ? request.cwd : null;
-  let result = listModels(path.join(root, "agy"), cwd);
-  if (result.error && result.error.code === "ENOENT") result = listModels("agy", cwd);
+  // A relative root would resolve against cwd, and Windows searches the cwd
+  // for a bare name before PATH: a project directory could plant an agy.
+  let result = path.isAbsolute(root) ? listModels(path.join(root, "agy"), cwd) : { error: { code: "ENOENT" } };
+  if (result.error && result.error.code === "ENOENT") result = listModels("agy", os.tmpdir());
   if (result.error) answer(null, 0);
   else {
     const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`.replace(/\r/g, "");

@@ -75,8 +75,10 @@ if [ "$source" = probe ]; then
       # ships none) the probe runs without it.
       bound=()
       command -v timeout >/dev/null 2>&1 && bound=(timeout 45)
-      answer=$(jq -cn --arg cwd "$(dr_native_path "$PWD")" '{op:"auth",cwd:$cwd}' \
-        | MSYS_NO_PATHCONV=1 ${bound[@]+"${bound[@]}"} node "$HERE/lib/agy-probe.mjs" "$(dr_native_path "$root")" 2>/dev/null \
+      export MSYS_NO_PATHCONV=1
+      cwd=$(dr_native_path "$PWD")
+      answer=$(jq -cn --arg cwd "$cwd" '{op:"auth",cwd:$cwd}' \
+        | ${bound[@]+"${bound[@]}"} node "$HERE/lib/agy-probe.mjs" "$(dr_native_path "$root")" 2>/dev/null \
         | tail -1 | tr -d '\r')
       case "$(jq -r '.authed | tostring' <<<"$answer" 2>/dev/null | tr -d '\r')" in
         true) usable=true reason=ok ;;

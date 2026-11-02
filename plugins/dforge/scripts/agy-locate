@@ -33,11 +33,13 @@ else
 fi
 [ -n "$version" ] || off plugin-not-installed
 
+# jq reads on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /d/...
+# form pwd gives on Git Bash.
 jq -e --arg v "$version" '
   def semver: split(".") | map(sub("[^0-9].*$"; "") | tonumber? // 0);
   ($v | semver) as $cur
   | ($cur >= (.min_version | semver)) and ($cur[0] <= .max_major)
-' "$POLICY" >/dev/null 2>&1 \
+' < "$POLICY" >/dev/null 2>&1 \
   || off "plugin-version:$version"
 
 printf 'agy-locate ok version=%s root=%s\n' "$version" "$(dirname "$agy")"
