@@ -21,16 +21,16 @@ plus the `codex-judge` block the review seats' runner reads.
 ## Planning
 
 Run this once per plan, after scoring every task and before writing any
-assignment line. Run the session gate first:
+assignment line. Run the session gate of each registered executor in `executors ranked` order:
 
 ```bash
 bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)"
 ```
 
-Say its line aloud when it ends `source=probe`. Unless it prints `lane=true`, stop here:
-ask nothing, run no roster, and write the plan Claude-only, saying
-`<id> off — <reason>` in one line, `<reason>` being the gate's `reason`
-(`untrusted` when it printed `usable=true`). Otherwise run the roster:
+Say a gate's line aloud when it ends `source=probe`. A gate that does not print `lane=true` drops only its own executor:
+say `<id> off — <reason>` in one line, `<reason>` being the gate's `reason`
+(`untrusted` when it printed `usable=true`). Unless at least one gate prints `lane=true`, stop here:
+ask nothing, run no roster, and write the plan Claude-only. Otherwise run the roster:
 
 ```bash
 bash "<plugin-root>/scripts/detect-executors.sh"
@@ -42,9 +42,10 @@ that executor `usable`, tick it without asking and say so in one line; the
 question below then covers only the other executors. An absent file is not an
 error.
 
-Offer every executor whose `usable` is `true` through the timed question below,
-naming every other detected executor with its `reason` in prose. **If no
-executor is usable, ask nothing** and write the plan Claude-only - an empty
+An executor is offerable when its gate printed `lane=true` and the roster
+reports it `usable`. Offer every offerable executor through the timed question
+below, naming every other detected executor with its `reason` in prose. **If no
+executor is offerable, ask nothing** and write the plan Claude-only - an empty
 offer is a worse answer than no question.
 
 ### Timed lane question
@@ -77,17 +78,26 @@ Claude-only writes no header line. Record a tick as one appended blockquote
 line in the plan header:
 
 ```markdown
-> **External executors:** <id>
+> **External executors:** agy, codex
 ```
 
-Then apply the lane gate from the `gate` block of [ladder.md](ladder.md) to each
-task. All five conditions must hold:
+The line lists the ticked ids comma-separated, in `executors ranked` order.
 
-- the executor named on the line was ticked,
+Then apply the lane gate from the `gate` block of [ladder.md](ladder.md) to each
+task.
+Each task goes to the first ticked executor, in priority order, whose gate block admits it.
+All five conditions must hold:
+
+- the executor was ticked,
 - the task cleared Rule S without a human override,
 - `total >= min_score`,
 - `total <= max_score`,
 - `risk <= max_risk`.
+
+With both agy and codex ticked, totals 0-8 at risk 2 or below go to agy and
+Codex receives nothing; with agy unticked or off, Codex's routing is unchanged.
+The task's `**Executor:**` line names that executor's rung from its assignment
+block.
 
 A task that passes the gate takes its model and effort from that executor's
 assignment block (`executors get <id> blocks.assignment`) and gains one extra
@@ -160,7 +170,9 @@ for ownership, artifacts, approved write sets, and recovery operations.
    Unless it prints `lane=true`, run neither the roster nor the wrapper:
    dispatch the task's `**Implementer:**` agent on the Claude lane, say the
    substitution aloud, and record it with the line below, quoting the gate's
-   `reason` (`untrusted` when it printed `usable=true`). The wrapper reads the
+   `reason` (`untrusted` when it printed `usable=true`). The substitution
+   always lands on the task's `**Implementer:**` agent,
+   never to the next ranked executor. The wrapper reads the
    gate again and exits 2 with `codex lane is off for this session (<reason>)`
    when the lane has closed since. Otherwise run
    `bash "<plugin-root>/scripts/detect-executors.sh"` and read the entry

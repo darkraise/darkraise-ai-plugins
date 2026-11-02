@@ -366,6 +366,7 @@ present "the skill ticks only an executor the roster reports usable" "$SK" "and 
 present "the skill filters the roster by the gate" "$SK" "ignore every row whose gate did not print"
 present "the skill re-runs the report before settling execution" "$SK" "Re-run plan-revise after writing the Executor"
 present "the skill reconciles an existing Executor line" "$SK" "replace it with the printed rung"
+present "the skill takes the first rung when several are listed" "$SK" "take the first, the highest-priority executor that admits the unit"
 present "the skill leaves a thin task unscored" "$SK" "A guessed score is worse than a visible gap"
 present "the skill allows the split Rule S requires" "$SK" "Splitting a task Rule S rejects is part of this skill"
 present "the routing table lists the skill" "$HERE/../skills/using-dforge/SKILL.md" "dforge:revising-plans"
