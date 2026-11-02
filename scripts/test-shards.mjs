@@ -72,7 +72,7 @@ export const windowsSeconds = {
   'review-route.test.sh': 458,
   'roadmap.test.sh': 125,
   'roots.test.sh': 84,
-  'run-agy-task.test.sh': 30,
+  'run-agy-task.test.sh': 100,
   'run-codex-task.test.sh': 10,
   'sdd-references.test.sh': 10,
   'seats.test.sh': 10,

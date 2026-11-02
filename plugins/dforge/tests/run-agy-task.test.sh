@@ -231,5 +231,137 @@ check "an out-of-scope file blocks committing" "$?" "2"
 check "an out-of-scope file is preserved" "$(cat "$W/rogue.txt" 2>/dev/null)" "stub"
 check "an out-of-scope file is not committed" "$(git -C "$W" ls-tree --name-only HEAD rogue.txt)" ""
 check "an out-of-scope file blocks the task record" "$(jq -r .phase "$(state_of "$W")")" "blocked"
+# --- a failed run says why, in the keys the controller reads ------------------
+case "$(uname -s)" in MINGW*|MSYS*) windows=yes ;; *) windows=no ;; esac
+skip() { printf 'skip - %s\n' "$1"; }
+
+newwork classify
+errcase() { # errcase <label> <mode> <error text> <reason> <exit>
+  STUB_AGY_MODE="$2" STUB_AGY_ERROR="$3" run
+  check "$1: the run is not DONE" "$?" "1"
+  check "$1: the status line is BLOCKED with exit $5" \
+    "$(status_line | sed -n 's/.* status=\([A-Z_]*\) exit=\([0-9]*\) .*/\1 \2/p')" "BLOCKED $5"
+  check "$1: the report names reason $4" "$(grep -c "^reason=$4\$" "$R")" "1"
+}
+errcase "a plain error" error "something failed" error 1
+check "a plain error carries the raw error text" "$(grep -c '^something failed$' "$R")" "1"
+check "a plain error is not a timeout" "$(grep -c '^timedOut=true$' "$R")" "0"
+check "a plain error has no timeout note" "$(status_line | grep -c 'note=')" "0"
+check "a plain error leaves pending work" "$(jq -r .phase "$(state_of "$W")")" "pending"
+errcase "an unrecognised failure with no text" no-schema "" error 0
+errcase "an unknown model" error "unknown model gemini-9-flash" unknown-model 1
+errcase "a withdrawn model" error "Model foo-1 not found" unknown-model 1
+errcase "a quota error" error "Quota exceeded for this account" quota 1
+errcase "a 429" error "HTTP 429 Too Many Requests" quota 1
+errcase "a rate limit in any case" error "Rate-Limit reached" quota 1
+errcase "a resource exhaustion" error "RESOURCE_EXHAUSTED: try later" quota 1
+errcase "a print timeout" print-timeout "" timeout 124
+check "a print timeout reports timedOut" "$(grep -c '^timedOut=true$' "$R")" "1"
+check "a print timeout is flagged on the status line" "$(status_line | grep -c ' note=timed-out')" "1"
+check "a print timeout is never DONE" "$(status_line | grep -c 'status=DONE')" "0"
+check "a stopped print timeout leaves pending work" "$(jq -r .phase "$(state_of "$W")")" "pending"
+
+# --- a clean run is confirmed stopped, a hung one is bounded ------------------
+newwork clean
+run
+check "a clean run carries no note" "$(status_line | grep -c 'note=')" "0"
+
+sleepers() { ps -eo pid=,args= 2>/dev/null | awk '$2 == "sleep" && $3 == "300" { print $1 }' | sort; }
+newwork outer
+before="$(sleepers)"
+AGY_TASK_GRACE=1 STUB_AGY_MODE=hang run --timeout 1
+check "an outer timeout is not DONE" "$?" "1"
+check "an outer timeout reports exit 124" "$(status_line | grep -c 'status=BLOCKED exit=124 ')" "1"
+check "an outer timeout is flagged timed-out" "$(status_line | grep -c ' note=timed-out')" "1"
+check "an outer timeout reports reason timeout" "$(grep -c '^reason=timeout$' "$R")" "1"
+check "an outer timeout reports timedOut" "$(grep -c '^timedOut=true$' "$R")" "1"
+check "an outer timeout names its bound in the report" "$(grep -c '^- note: timed out after 1s$' "$R")" "1"
+if [ "$windows" = no ]; then
+  leaked="$(comm -13 <(printf '%s\n' "$before") <(sleepers))"
+  check "an outer timeout leaves no process in the group" "$leaked" ""
+  [ -z "$leaked" ] || kill -KILL $leaked 2>/dev/null
+  check "a confirmed stop leaves pending work" "$(jq -r .phase "$(state_of "$W")")" "pending"
+  check "a confirmed stop carries no unconfirmed note" "$(status_line | grep -c 'writer-unconfirmed')" "0"
+else
+  check "on Windows an outer kill is never confirmed" "$(status_line | grep -c ' note=writer-unconfirmed')" "1"
+fi
+
+# A process that ignores TERM outlives the run: nothing proves the writer stopped.
+if [ "$windows" = no ]; then
+  mkdir -p "$fixture/stubborn"
+  cat > "$fixture/stubborn/agy" <<SHIM
+#!/usr/bin/env bash
+( trap '' TERM; exec sleep 25 ) &
+printf '%s\n' "\$!" > "$fixture/stubborn.pid"
+exec "$STUBDIR/agy" "\$@"
+SHIM
+  chmod +x "$fixture/stubborn/agy"
+  newwork survivor
+  PATH="$fixture/stubborn:$PATH" run
+  check "a surviving process is not DONE" "$?" "1"
+  check "a surviving process is flagged unconfirmed" "$(status_line | grep -c ' note=writer-unconfirmed')" "1"
+  check "a surviving process is not reported as a timeout" "$(status_line | grep -c 'note=timed-out')" "0"
+  check "a surviving process blocks the task" "$(jq -r .phase "$(state_of "$W")")" "blocked"
+  check "a surviving process commits nothing" "$(git -C "$W" log --format=%s | grep -c 'feat(stub)')" "0"
+  check "the report says the stop was not confirmed" \
+    "$(grep -c '^- note: agy run not confirmed stopped; the task is blocked until it is$' "$R")" "1"
+  run
+  check "a blocked unconfirmed task cannot relaunch" "$?" "2"
+  kill -KILL "$(cat "$fixture/stubborn.pid")" 2>/dev/null || true
+else
+  skip "a TERM-proof survivor needs POSIX process groups"
+fi
+
+# An interrupt stops the group it started and blocks the task.
+if [ "$windows" = no ]; then
+  newwork interrupted
+  before="$(sleepers)"
+  n=$(calls)
+  STUB_AGY_MODE=hang bash "$SCRIPT" --cwd "$W" --task-id task-one --write-set "$fixture/scope.json" \
+    --brief "$fixture/brief.md" --report "$R" --model claude-sonnet-5-5 --effort medium --timeout 120 \
+    > "$fixture/out" 2> "$fixture/err" &
+  wrapper=$!
+  for _ in $(seq 1 50); do [ "$(calls)" -gt "$n" ] && break; sleep 0.2; done
+  kill -TERM "$wrapper"
+  wait "$wrapper"
+  check "an interrupted run exits 143" "$?" "143"
+  check "an interrupted run blocks the task" "$(jq -r .phase "$(state_of "$W")")" "blocked"
+  leaked="$(comm -13 <(printf '%s\n' "$before") <(sleepers))"
+  check "an interrupted run leaves no process in the group" "$leaked" ""
+  [ -z "$leaked" ] || kill -KILL $leaked 2>/dev/null
+else
+  skip "an interrupt test needs POSIX signals"
+fi
+
+# --- agy may not move refs or the index (A7) ----------------------------------
+guard_case() { # guard_case <name> <mode> <file agy writes> <ref the report names>
+  newwork "$1"
+  STUB_AGY_MODE="$2" STUB_AGY_WRITE="$3" run
+  check "$1: the run is not DONE" "$?" "1"
+  check "$1: the status line is BLOCKED exit 1" "$(status_line | grep -c 'status=BLOCKED exit=1 ')" "1"
+  check "$1: the report names the moved ref" "$(grep -c "agy changed git refs: $4" "$R")" "1"
+  check "$1: the task is blocked" "$(jq -r .phase "$(state_of "$W")")" "blocked"
+  check "$1: nothing is committed under the reported subject" "$(git -C "$W" log --format=%s HEAD | grep -c 'feat(stub): add out')" "0"
+}
+guard_case guard-commit git-commit base.txt refs/heads/guard-commit
+guard_case guard-stash git-stash base.txt refs/stash
+guard_case guard-branch git-branch out.txt refs/heads/stub-branch
+
+mkdir -p "$fixture/indexshim"
+cat > "$fixture/indexshim/agy" <<SHIM
+#!/usr/bin/env bash
+"$STUBDIR/agy" "\$@"
+rc=\$?
+git add -- out.txt
+exit \$rc
+SHIM
+chmod +x "$fixture/indexshim/agy"
+newwork guard-index
+PATH="$fixture/indexshim:$PATH" run
+check "an index change is not DONE" "$?" "1"
+check "an index change is named in the report" "$(grep -c 'agy changed the git index' "$R")" "1"
+check "an index change blocks the task" "$(jq -r .phase "$(state_of "$W")")" "blocked"
+check "an index change commits nothing" "$(git -C "$W" log --format=%s | grep -c 'feat(stub)')" "0"
+check "an index change leaves the staged file in place" "$(git -C "$W" diff --cached --name-only | tr -d '\r')" "out.txt"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

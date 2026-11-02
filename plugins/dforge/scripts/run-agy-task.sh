@@ -208,9 +208,24 @@ prefix=$(git -C "$cwd" rev-parse --show-prefix) || die "not a git repository: $c
 [ -z "$prefix" ] || die "cwd must be the repository root, but sits under $prefix"
 base=$(git -C "$cwd" rev-parse HEAD) || die "cannot resolve HEAD in $cwd"
 
+# agy may not write to git (the contract forbids it), but nothing enforces that,
+# so the refs and HEAD are recorded here and compared after the run.
+record_refs() { # record_refs <file>
+  local refs head symref
+  refs=$(git -C "$cwd" for-each-ref --format='%(refname) %(objectname)') || return 1
+  head=$(git -C "$cwd" rev-parse HEAD) || return 1
+  symref=$(git -C "$cwd" symbolic-ref -q HEAD) || symref=detached
+  { [ -z "$refs" ] || printf '%s\n' "$refs"; printf 'HEAD %s %s\n' "$head" "$symref"; } | tr -d '\r' > "$1"
+}
+record_refs "$DR_TASK_DIR/refs-before.txt" || die 'cannot record git refs'
+
 # The interrupted-run guard and the unlock both live here, because the EXIT
-# trap is the only thing that releases the worktree lock.
+# trap is the only thing that releases the worktree lock. An interrupt also
+# stops agy's process group, which would otherwise keep writing to the worktree
+# after the lock is gone.
+agy_pid=''
 cleanup() {
+  [ -z "$agy_pid" ] || kill -TERM -- "-$agy_pid" 2>/dev/null
   if [ "$(jq -r .phase < "$record" 2>/dev/null)" = running ]; then
     dr_task_update '.processes = []' && dr_task_block 'execution interrupted; reconcile the recorded snapshot' || true
   fi
@@ -256,6 +271,34 @@ agy_args+=(-p "$pointer")
 agy_pid=$!
 wait "$agy_pid"
 agy_rc=$?
+# GNU timeout exits 137 when the grace period ran out and it had to send KILL.
+outer_fired=no
+[ "$agy_rc" -eq 124 ] || [ "$agy_rc" -eq 137 ] && outer_fired=yes
+
+# agy exiting proves nothing about what it started: a child left in its group
+# can still be writing to the worktree. Zombies are not writers, and a
+# container whose init does not reap would otherwise list one forever. On
+# Windows ps does not list native processes, so only a run that ended by
+# itself counts as stopped there.
+group_alive() {
+  local n
+  n=$(ps -eo pid=,pgid=,stat= | tr -d '\r' | awk -v g="$agy_pid" '$2 == g && $3 !~ /^Z/ { n++ } END { print n + 0 }') || return 0
+  [ "$n" -gt 0 ]
+}
+writer_stopped=yes
+case "$(uname -s)" in
+  MINGW*|MSYS*) [ "$outer_fired" = no ] || writer_stopped=no ;;
+  *)
+    if group_alive; then
+      kill -TERM -- "-$agy_pid" 2>/dev/null
+      writer_stopped=no
+      for _ in 1 2 3 4 5 6; do
+        sleep 0.5
+        group_alive || { writer_stopped=yes; break; }
+      done
+    fi ;;
+esac
+[ "$writer_stopped" = no ] || agy_pid=''
 
 # An agy that died before printing leaves no object behind, and every jq below
 # would then fail and take the runner with it. One guard here covers all of them.
@@ -278,8 +321,24 @@ else
 fi
 
 agy_error=$(jq -r '.error // ""' < "$result" | tr -d '\r')
+finished_reason=$(jq -r '.finished_reason // ""' < "$result" | tr -d '\r')
+timed_out=no
+{ [ "$finished_reason" = print_timeout ] || [ "$outer_fired" = yes ]; } && timed_out=yes
 rc=0
 { [ "$agy_rc" -eq 0 ] && [ "$(jq -r '.status // ""' < "$result" | tr -d '\r')" != ERROR ]; } || rc=1
+[ "$timed_out" = no ] || rc=124
+
+# The reason is what the controller acts on: a quota waits, an unknown model
+# needs a ladder fix, a timeout a larger --timeout, and only an error is the
+# model's own failure.
+if grep -qiE 'quota|rate.?limit|RESOURCE_EXHAUSTED|429' <<<"$agy_error"; then reason=quota
+elif grep -qiE 'unknown model|model .* not (found|available|supported|recognized)' <<<"$agy_error"; then reason=unknown-model
+elif [ "$timed_out" = yes ]; then reason=timeout
+else reason=error
+fi
+# A quota is account-wide, so it turns agy off for the session; otherwise every
+# later task pays for the same answer.
+[ "$reason" != quota ] || executor_session_mark_off agy quota
 
 status=BLOCKED
 summary=""
@@ -299,8 +358,32 @@ fi
 # at 50 ms and a model that gave up after 20 minutes read identically.
 [ "$rc" -eq 0 ] || status=BLOCKED
 
+# A ref or index agy moved would be folded into the task commit or silently
+# kept, so either blocks the task before anything is staged. An added, removed
+# or moved ref all show as a differing line.
+record_refs "$DR_TASK_DIR/refs-after.txt" || die 'cannot record git refs'
+guard=''
+moved_ref=$(LC_ALL=C comm -3 \
+  <(awk '/^refs\//' "$DR_TASK_DIR/refs-before.txt" | LC_ALL=C sort) \
+  <(awk '/^refs\//' "$DR_TASK_DIR/refs-after.txt" | LC_ALL=C sort) | head -1 | sed 's/^[[:space:]]*//' | awk '{ print $1 }')
+if [ -n "$moved_ref" ]; then
+  guard="agy changed git refs: $moved_ref"
+elif [ "$(grep '^HEAD ' "$DR_TASK_DIR/refs-before.txt")" != "$(grep '^HEAD ' "$DR_TASK_DIR/refs-after.txt")" ]; then
+  guard='agy changed git refs: HEAD'
+elif [ "$(git -C "$cwd" ls-files --stage -z | base64 | tr -d '\r\n')" != "$(jq -r .index < "$before_snapshot" | tr -d '\r')" ]; then
+  guard='agy changed the git index'
+fi
+if [ -n "$guard" ] || [ "$writer_stopped" = no ]; then
+  status=BLOCKED
+  [ "$rc" -ne 0 ] || rc=1
+fi
+
 committed=no
-if [ "$status" = DONE ]; then
+if [ -n "$guard" ]; then
+  dr_task_block "$guard" || die 'cannot persist blocked task'
+elif [ "$writer_stopped" = no ]; then
+  dr_task_block 'agy run not confirmed stopped; confirm it ended before recovery' || die 'cannot persist blocked task'
+elif [ "$status" = DONE ]; then
   dr_task_stage "$before_snapshot" "$subject" || die 'staging/commit failed; inspect durable task record and recover explicitly'
   if [ "$(git -C "$cwd" rev-parse HEAD)" = "$base" ]; then committed=empty; else committed=yes; fi
 else
@@ -318,6 +401,9 @@ head=$(git -C "$cwd" rev-parse HEAD)
   printf -- '- status: %s\n' "$status"
   printf -- '- exit: %s\n' "$rc"
   printf -- '- commits: %s..%s\n' "${base:0:7}" "${head:0:7}"
+  [ -z "$guard" ] || printf -- '- note: %s; the task is blocked\n' "$guard"
+  [ "$writer_stopped" = yes ] || printf -- '- note: agy run not confirmed stopped; the task is blocked until it is\n'
+  [ "$timed_out" = no ] || printf -- '- note: timed out after %ss\n' "$timeout_s"
   [ "$committed" = empty ] && printf -- '- note: DONE with an empty diff; nothing was committed\n'
   printf '\n## Summary\n\n%s\n' "$summary"
   printf '\n## Discovered issues (not fixed)\n\n%s\n' "${discovered:-None}"
@@ -331,7 +417,9 @@ head=$(git -C "$cwd" rev-parse HEAD)
     # that separates a transient failure from a capability one. stderr follows
     # as a fallback: it carries agy's own complaints, which are the failures
     # that leave no error in its result.
-    printf '\n## Agy error\n\n```\n%s\n```\n' "${agy_error:-agy returned no error text}"
+    printf '\n## Agy error\n\n```\nreason=%s\n' "$reason"
+    [ "$timed_out" = no ] || printf 'timedOut=true\n'
+    printf '%s\n```\n' "${agy_error:-agy returned no error text}"
     printf '\n## Working tree\n\nLeft uncommitted on purpose. Last 20 stderr lines:\n\n```\n'
     tail -20 "$report.stderr" 2>/dev/null || true
     printf '```\n'
@@ -339,7 +427,10 @@ head=$(git -C "$cwd" rev-parse HEAD)
 } > "$report"
 cp -- "$report" "$human_report" || die 'cannot write human-readable report; authoritative report retained in task directory'
 
-printf 'agy %s/%s status=%s exit=%s commits=%s..%s thread=%s report=%s\n' \
-  "$model" "$effort" "$status" "$rc" "${base:0:7}" "${head:0:7}" "$thread_id" "$human_report"
+notes=""
+[ "$timed_out" = no ] || notes="$notes note=timed-out"
+[ "$writer_stopped" = yes ] || notes="$notes note=writer-unconfirmed"
+printf 'agy %s/%s status=%s exit=%s commits=%s..%s thread=%s report=%s%s\n' \
+  "$model" "$effort" "$status" "$rc" "${base:0:7}" "${head:0:7}" "$thread_id" "$human_report" "$notes"
 
 [ "$status" = DONE ]
