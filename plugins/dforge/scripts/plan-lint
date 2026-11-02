@@ -318,6 +318,10 @@ done < <(bash "$HERE/executors" ranked 2>/dev/null)
 externals=$(grep -E '^> \*\*External executors:\*\*' <<<"$header" || true)
 # Space-delimited words, so one id is never matched inside another.
 ticked=" $(sed -E 's/^> \*\*External executors:\*\*//' <<<"$externals" | tr ',\t\n' '   ') "
+any_ticked=no
+while IFS=$'\t' read -r lid _; do
+  [ -n "$lid" ] && [[ "$ticked" == *" $lid "* ]] && any_ticked=yes
+done <<<"$lane_gates"
 r5_bad="" max_total=0 max_score=0 lane=""
 
 # A task the ruling seat split carries `#### Part A: …` / `#### Part B: …`
@@ -441,11 +445,13 @@ for n in $nums; do
         [[ "$externals" == *"$eid"* ]] || say ERROR "$where" "Executor used but the header's '> **External executors:**' line does not name $eid"
       fi
     elif [ "$sev" = ERROR ] && [ $((a + b + c)) -lt "$rule_s_limit" ] && [ "$b" -lt 3 ]; then
-      # One candidate row per executor whose own gate admits the task. The
-      # header tick is deliberately not read: p1.md carries none and still
-      # expects the warning.
+      # One candidate row per executor whose own gate admits the task. Once
+      # the header ticks any executor, an unticked one is no candidate: a line
+      # naming it fails the header check above. A header that ticks nothing
+      # leaves every executor a candidate, so p1.md still gets the warning.
       while IFS=$'\t' read -r lid lmin lmax ltop; do
         [ -n "$lid" ] || continue
+        [ "$any_ticked" = no ] || [[ "$ticked" == *" $lid "* ]] || continue
         { [ "$t" -ge "$lmin" ] && [ "$t" -le "$ltop" ] && [ "$d" -le "$lmax" ]; } || continue
         rung=$(executor_rung "$lid" "$t")
         [ -z "$rung" ] || lane="$lane$where"$'\t'"$lid"$'\t'"$rung"$'\n'

@@ -858,6 +858,13 @@ lacks "both usable: the second admitting executor is not named" "$out" \
 has "agy alone admits a risk-2 task" "$out" \
   "WARN Task 2: lane-eligible with no **Executor:** line (agy $R4)"
 check "both usable: the roster still runs once" "$(calls)" "1"
+variant w2.md "$T2; $(TICK 'codex')"
+rm -f probe-calls; lint w2.md
+has "agy on but only codex ticked: the warning names codex" "$out" \
+  "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-6.1-sol / low)"
+lacks "agy on but only codex ticked: agy is never named" "$out" \
+  "lane-eligible with no **Executor:** line (agy"
+lacks "agy on but only codex ticked: a risk-2 task is not named" "$out" "WARN Task 2: lane-eligible"
 rm -f "$DR_AGY_SESSION_DIR/plan-lint-test.json"
 rm -f probe-calls; lint w1.md
 has "agy off: codex is named as before" "$out" \
