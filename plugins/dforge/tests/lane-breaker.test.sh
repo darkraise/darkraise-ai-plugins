@@ -91,6 +91,18 @@ ledger "$AGY1" "$HB1" "$AGY4" "$HB4"
 sed -i 's/$/\r/' "$LEDGER"
 check "a CRLF ledger reads the same" "$(breaker agy)" "lane-breaker agy state=tripped handbacks=2"
 
+ledger "$AGY1" "Task 1: Ruling: the round-1 diff is kept — not a HANDBACK — one more round" \
+  "$AGY4" "Task 4: parked: HANDBACK question for the owner" "Task 4: minor (deferred): a.txt:1 — HANDBACK wording"
+check "Ruling, parked and minor lines never count as a handback" "$(breaker agy)" "lane-breaker agy state=open handbacks=0"
+
+printf '%s\n' '# SDD ledger — plan: docs/other.md' "$AGY1" "$HB1" "$AGY4" "$HB4" > "$LEDGER"
+check "a ledger naming another plan still answers open" \
+  "$(bash "$BREAKER" "$PLAN" agy 2>/dev/null)" "lane-breaker agy state=open handbacks=0"
+check "and says on stderr that it counted nothing" \
+  "$(bash "$BREAKER" "$PLAN" agy 2>&1 >/dev/null | grep -c 'does not name this plan; no handback was counted$')" "1"
+rm -f "$LEDGER"
+check "a plan not started says nothing on stderr" "$(bash "$BREAKER" "$PLAN" agy 2>&1 >/dev/null)" ""
+
 bash "$BREAKER" >/dev/null 2>&1; check "no argument exits 2" "$?" "2"
 bash "$BREAKER" "$PLAN" >/dev/null 2>&1; check "no executor id exits 2" "$?" "2"
 bash "$BREAKER" "$PLAN" 'Agy!' >/dev/null 2>&1; check "a malformed executor id exits 2" "$?" "2"

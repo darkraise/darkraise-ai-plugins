@@ -189,6 +189,13 @@ retries and handback; `agyLane` stays the manual switch. A resumed controller
 needs nothing more, because every dispatch reads the ledger through the
 breaker.
 
+The breaker answers `state=open handbacks=0` whenever it reads no ledger, which
+is also the answer for a plan not yet started. When a `progress.md` exists but
+does not name this plan, it adds a stderr line ending `does not name this plan;
+no handback was counted`. That line, or `handbacks=0` right after you recorded
+an agy handback, means the breaker read nothing: find out why before the next
+agy dispatch.
+
 1. **Gate, then guard the roster.** Run `bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)"`
    first, saying its line aloud when it ends `source=probe`.
    Unless it prints `lane=true`, run neither the roster nor the wrapper:
