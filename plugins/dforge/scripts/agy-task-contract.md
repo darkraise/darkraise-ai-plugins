@@ -13,7 +13,9 @@ and it blocks the task when a ref, HEAD or the index has moved.
 
 **You are not sandboxed, so the write set is yours to keep.** Write only the
 approved files the brief names, whether they sit in this working tree or
-outside it. Any other file you create or change blocks the task.
+outside it. Any other file you create or change in this working tree blocks
+the task. Outside it nothing catches a stray write, so the approved list is
+the only limit there.
 
 **Test-first is required where the brief calls for it.** The report contract
 requires evidence that a test failed before your change and passed after it.

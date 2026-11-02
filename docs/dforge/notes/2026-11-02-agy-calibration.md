@@ -10,7 +10,7 @@ Three completed tasks scored 0-2 were replayed through `scripts/run-agy-task.sh`
 | R3 ui-ux-proof | gemini-3.8-flash/medium | DONE | pass | clean | pass | 127 | 135271 |
 | S1 plan-lint-header-lines | claude-sonnet-5-5/high | DONE | pass | clean | pass | 189 | 104108 |
 
-- R1 on `gemini-3.8-flash/low` failed: the agent ended DONE with the replayed brief's 55-character commit subject, which breaks the contract's 50-character limit, so the wrapper refused to commit and blocked the task (`invalid commit subject`).
+- R1 on `gemini-3.8-flash/low` failed: the agent ended DONE with the replayed brief's 55-character commit subject, which breaks the contract's 50-character limit, so the wrapper refused to commit and blocked the task (`invalid commit subject`). The fault was in the replayed brief, not in the rung's work, which was never judged: the selection rule counts any failed run, so `low` was rejected without a capability result, and a replay of R1 with a valid subject could still choose it.
 - R1 on `gemini-3.8-flash/medium`: the judge found 2 Minor issues, both in test text the brief mandates (a doubled clause and the clause order are checked loosely).
 - R2 on `gemini-3.8-flash/medium`: the judge found 3 Minor issues in `ui-lint` (a missing file is skipped silently, one `focus-visible` suppresses every `outline-removed` finding in a file, `awk -v` mangles backslashes in a path).
 - R3 on `gemini-3.8-flash/medium`: the judge found 1 Minor issue (test evidence summarised, not quoted with its exit status).

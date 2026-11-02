@@ -32,7 +32,7 @@ user's inline or delegation preference on either host.
    tier. Only a human edit puts one in a plan.
 4. **Offer an external executor** and apply the lane gate — see
    [executor-lane.md](../../../reference/executor-lane.md) §Planning. Every id
-   `scripts/executors list` prints has its own gate; run each, resolved with
+   `scripts/executors ranked` prints has its own gate; run each in that order, resolved with
    `bash "$(bash scripts/executors path <id> gate)"`, before the roster, and
    make the offer once per plan
    for every executor whose gate prints `lane=true`, writing the offer's ticks

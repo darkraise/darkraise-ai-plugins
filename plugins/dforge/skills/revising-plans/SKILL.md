@@ -105,8 +105,8 @@ the scores, so scoring cannot follow the executor question.
    List the ticked ids in `executors ranked` order.
 
 7. **Write the Executor lines.** Re-run `plan-revise`, which now sees the tick.
-   Every unit row reading `gate=pass` takes an `**Executor:**` line naming one
-   of the executors in its `rungs=` field, at that executor's rung, written
+   Every unit row reading `gate=pass` takes an `**Executor:**` line naming the
+   first executor in its `rungs=` field, at that executor's rung, written
    below the unit's `**Implementer:**` line and above its `**Evaluation:**`
    line. Where `rungs=` lists several, take the first, the highest-priority executor that admits the unit; a unit carries at most
    one `**Executor:**` line.

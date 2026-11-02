@@ -83,8 +83,8 @@ line in the plan header:
 
 The line lists the ticked ids comma-separated, in `executors ranked` order.
 
-Then apply the lane gate from the `gate` block of [ladder.md](ladder.md) to each
-task.
+Then apply each ticked executor's lane gate to each task: the [ladder.md](ladder.md)
+block its registry entry names (`executors get <id> blocks.gate`).
 Each task goes to the first ticked executor, in priority order, whose gate block admits it.
 All five conditions must hold:
 
@@ -173,7 +173,7 @@ The breaker counts a task as handed back when one of its lines names
 `executor agy ` and one says `HANDBACK`, so every handback must carry the word.
 A review-loop handback already does, on its `HANDBACK to <agent>` fix-round
 line. A run that fails before review (a refusal, a second failed run, a gate
-closed after `--refresh`, a preflight exit 2) hands back on the
+closed after `--refresh`, a preflight exit 2, a git-guard block once recovered) hands back on the
 `**Implementer:**` agent's assigned line, in its substitution slot:
 
 ```
@@ -320,9 +320,10 @@ hand, which would bypass the scoped staging the write set exists to enforce.
 | Failure | Response |
 |---------|----------|
 | `note=writer-unconfirmed`, after a timeout or a transport error | The turn was not confirmed stopped, so the task is `blocked`. Do not retry or hand back: confirm the executor's turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
+| Git guard - the report's `- note:` line says `agy changed git refs: <ref>` or `agy changed the git index`, and the task is `blocked` | Do not retry, take the successor rung or resume: the wrapper refuses a `blocked` task, and `--handback` accepts only a `pending` or `complete` one. Compare `refs-before.txt` with `refs-after.txt` beside the task's `state.json` to see what moved. Undo agy's own git writes, or judge the change a concurrent writer's and leave it, with the index clean either way; then follow [external-task-recovery.md](external-task-recovery.md): `--accept-baseline`, with the user's approval, returns the task to `pending`, and `--handback` follows. Record the handback on the assigned line, `executor agy HANDBACK - git guard: <ref or index>`, so the per-plan breaker counts it |
 | Transient - network, rate limit, quota, 5xx, named in the report's `## <Id> error` section, without `note=writer-unconfirmed` | Retry once at the same rung |
 | Timeout - `note=timed-out` on the status line, `exit=124` or `timedOut=true` in the error section, without `note=writer-unconfirmed` | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
-| Refusal - a refusal marker in the report's `## <Id> error` section (`refusal=true` for Codex, `reason=unknown-model` for agy) | `HANDBACK` now. The account does not offer that model or effort, and every successor rung is the same model, so a retry or a successor would be refused too |
+| Refusal - a refusal marker in the report's `## <Id> error` section (`refusal=true` for Codex, `reason=unknown-model` for agy) | `HANDBACK` now. The account does not offer that model or effort, so a retry would be refused too. A successor is no answer either: Codex's successor rungs are the same model, and an agy refusal means the ladder names a model the account lacks, which needs a ladder fix rather than a second paid run |
 | Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via that executor's successor block (`executors get <id> blocks.successor`) and run once |
 | `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
 | Any failure a second time | `HANDBACK` |
@@ -615,7 +616,7 @@ rules on every rejection ([final-review.md](final-review.md)).
 | Task has an `**Executor:**` line and the CLI is missing, unauthenticated, or not batch-capable | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the roster's `reason` in the assigned line |
 | The `**Executor:**` line names a model outside the executor's assignment block, an effort its wrapper does not admit, or a pair with no row in its timeout block | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
 | Wrapper exits 2 during staging or commit | Read the durable record; use commit recovery after exact snapshot validation, or explicit reconciliation. Never rerun the model merely to retry a commit |
-| Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching Codex, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the `**Implementer:**` agent and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
+| Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching the executor, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the `**Implementer:**` agent and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
 | Two executor runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
 | A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: that executor's successor block (`executors get <id> blocks.successor`) is read only by a failed initial run |
 | A fix round returned DONE with an empty diff | The executor read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as an `executor-empty-diff` item rather than re-dispatching; round 2 is the `HANDBACK` |
@@ -727,7 +728,8 @@ specific to it:
   and the staged index with their state before the run, and blocks the task on
   any difference, naming the first differing ref
   (`agy changed git refs: <ref>`), `HEAD` (`agy changed git refs: HEAD`) or the
-  index (`agy changed the git index`).
+  index (`agy changed the git index`). The Git guard row of When a run fails
+  says how to recover and record that block.
 - **Timeout.** A print timeout exits 0 with `finished_reason: "print_timeout"`.
   The wrapper classifies it as `exit=124`, `reason=timeout`, as it does the outer
   `timeout` firing.
