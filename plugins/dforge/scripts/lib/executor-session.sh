@@ -68,7 +68,8 @@ executor_session_write() {
 #
 # Every surface the registry lists is cleared, and the metadata fields the
 # gate reads back out of the cache are written: reason, checked_at, both
-# resets_at fields, and whatever plugin_version the prior file carried.
+# resets_at fields, plugin_version (null when the prior file had none), and
+# every other `*_version` field the prior file carried, such as agy_version.
 executor_session_mark_off() {
   local f prior surfaces; f=$(executor_session_file "$1") || return 0
   # Parsed, not cat: an empty or torn file would make the jq below produce
@@ -84,5 +85,6 @@ executor_session_mark_off() {
     {session_id: $sid, usable: false, reason: $r, checked_at: $at,
      resets_at: null, resets_at_epoch: null,
      plugin_version: (.plugin_version // null)}
+    + with_entries(select(.key | endswith("_version")))
     + (reduce $surfaces[] as $s ({}; . + {($s): false}))' <<<"$prior" 2>/dev/null)"
 }

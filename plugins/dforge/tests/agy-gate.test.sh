@@ -255,6 +255,12 @@ if [ "$SPAWNABLE" = yes ]; then
   check "a quota mark made after a good probe also survives --refresh" "$out" \
     "agy-gate usable=false reason=quota review=false lane=false resets_at=- source=cache"
   check "the quota survives with the probe never re-run" "$(grep -c '^models$' "$ARGS")" "1"
+  check "a quota mark keeps the recorded agy version" "$(field agy_version)" "1.4.12"
+
+  fresh; STUB_AGY_VERSION='1.4.12 (build 7)' gate
+  check "a version holding a space still opens the lane" "$out" \
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- source=probe"
+  check "a version holding a space is recorded whole" "$(field agy_version)" "1.4.12 (build 7)"
 
   fresh; SID= gate
   check "no session id still answers, with the lane closed" "$out" \

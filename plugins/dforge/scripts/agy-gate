@@ -68,8 +68,11 @@ if [ "$source" = probe ]; then
   line=$(bash "$HERE/agy-locate"); rc=$?
   case "$rc" in
     0)
-      version=$(sed -n 's/^agy-locate ok version=\([^ ]*\) root=.*/\1/p' <<<"$line")
-      root=$(sed -n 's/^agy-locate ok version=[^ ]* root=//p' <<<"$line")
+      # Split at the first " root=": the version is agy's own first line and
+      # may hold a space, and the root is a path that may too.
+      fields=${line#agy-locate ok version=}
+      version=${fields%% root=*}
+      root=${fields#* root=}
       # The probe owns its 30 s deadline; this outer bound only guarantees the
       # gate returns if node itself wedges, so where timeout is missing (macOS
       # ships none) the probe runs without it.
