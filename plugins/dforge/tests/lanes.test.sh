@@ -261,6 +261,8 @@ agy_rank() { # agy_rank <model>/<effort>: model_rank * 10 + effort_rank, or -1
 }
 
 agy_successor=$(block agy-successor)
+# The checks below loop over the rows, so an empty block would pass them all.
+check "agy-successor block is present" "$([ -n "$agy_successor" ] && echo yes || echo no)" "yes"
 agy_succ_of() { printf '%s\n' "$agy_successor" | awk -v k="$1" '$1 == k {print $2}'; }
 
 bad_agy_rank=NONE
@@ -301,6 +303,7 @@ done <<< "$agy_assignment"
 check "every agy-assignment rung has a successor" "$bad_agy_entry" "NONE"
 
 agy_timeouts=$(block agy-timeout)
+check "agy-timeout block is present" "$([ -n "$agy_timeouts" ] && echo yes || echo no)" "yes"
 bad_agy_timeout=NONE
 while read -r from to; do
   [ -n "$from" ] || continue

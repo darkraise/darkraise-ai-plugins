@@ -150,6 +150,17 @@ check "ranked exits 0" "$(run "$TMP/rank" ranked >/dev/null 2>&1; echo $?)" "0"
 check "ranked reports each invalid priority once on stderr and nothing else" \
   "$(run "$TMP/rank" ranked 2>&1 >/dev/null | sort | tr '\n' '|')" \
   "executors: delta: priority is not a non-negative integer|executors: epsilon: priority is not a non-negative integer|executors: zeta: priority is not a non-negative integer|"
+# The edge literals are written verbatim, not through jq, which may reformat 1.0.
+mkdir -p "$TMP/rank-edge"
+edge() { # edge <id> <priority literal>
+  printf '{"id":"%s","locator":"scripts/x-plugin","probe":{"command":"scripts/lib/x-client.mjs","op":"auth"},"wrapper":"scripts/run-x-task.sh","session_dir":"%s-sessions","surfaces":["lane"],"blocks":{"gate":"gate"},"priority":%s}\n' \
+    "$1" "$1" "$2" > "$TMP/rank-edge/$1.json"
+}
+edge one 1.0; edge two 2; edge nul null
+check "priority 1.0 is an integer and ranks; null ranks as absent" \
+  "$(run "$TMP/rank-edge" ranked 2>/dev/null | tr '\n' ' ')" "one two nul "
+check "only the null priority is reported" \
+  "$(run "$TMP/rank-edge" ranked 2>&1 >/dev/null | tr '\n' '|')" "executors: nul: priority is not a non-negative integer|"
 check "ranked takes no argument" "$(run "$TMP/rank" ranked extra >/dev/null 2>&1; echo $?)" "2"
 check "list ignores priority and stays silent about it" \
   "$(run "$TMP/rank" list 2>&1 | tr '\n' ' ')" \

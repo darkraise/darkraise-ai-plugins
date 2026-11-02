@@ -29,7 +29,7 @@ make_stub() { printf '#!%s\necho "%s"\n' "$BASH_BIN" "$2" > "$TMP/bin/$1"; chmod
 # A wide PATH hides the real executors only as long as none of them shares a
 # directory with the script's own dependencies - and on most Linux distros both
 # jq and codex land in /usr/bin, which would resolve the real binary and flip
-# every not-present assertion. Shim just the four commands the script needs, so
+# every not-present assertion. Shim just the commands the script needs, so
 # PATH can be exactly one directory this test controls.
 # dirname is external: both detect-executors.sh's HERE line and
 # scripts/codex-plugin:16 call it, and a sealed PATH without it resolves HERE
