@@ -117,6 +117,11 @@ executor is an override on a second line, never a replacement on the first:
 several tasks, which a per-task `**Executor:**` line and per-task thread id
 cannot represent. Do not write an `**Executor:**` line on a batched task.
 
+**No Codex line for piped Node spawns.** A task whose tests spawn Node child
+processes with piped stdio (`spawnSync`, `execSync`, `execFileSync`) gets no
+Codex `**Executor:**` line; it may still go to `agy`. `## Per-executor: codex`
+says why.
+
 ## Dispatch
 
 A task carrying an `**Executor:**` line runs on that CLI instead of its
@@ -710,10 +715,12 @@ specific to it:
   never as an argument, and `--add-dir` names only that directory. The `-p`
   argument is a fixed pointer sentence naming that file, so a long brief never
   meets an argument-length limit or a shell quoting rule.
-- **Git.** The task contract forbids every git command that writes. The wrapper
-  compares `git for-each-ref` output and the symbolic `HEAD` before and after the
-  run and blocks the task on any difference; a change to HEAD or the index is
-  caught by the scope check before staging.
+- **Git.** The task contract forbids every git command that writes. Before
+  staging, the wrapper compares `git for-each-ref` output, the symbolic `HEAD`
+  and the staged index with their state before the run, and blocks the task on
+  any difference, naming the first differing ref
+  (`agy changed git refs: <ref>`), `HEAD` (`agy changed git refs: HEAD`) or the
+  index (`agy changed the git index`).
 - **Timeout.** A print timeout exits 0 with `finished_reason: "print_timeout"`.
   The wrapper classifies it as `exit=124`, `reason=timeout`, as it does the outer
   `timeout` firing.
