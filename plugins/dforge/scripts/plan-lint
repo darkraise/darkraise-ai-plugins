@@ -297,9 +297,9 @@ executor_rung() { # executor_rung <id> <total>
   [ -n "$block" ] || return 1
   awk -v t="$2" '$1 == t { print $2 " / " $3 }' <<<"$(ladder_block "$block")"
 }
-# `<id>\t<min_score>\t<max_risk>\t<max_score>` per registered executor, read
-# once: the loop below tests every task against every executor's gate, and each
-# `executors` call is a subprocess.
+# `<id>\t<min_score>\t<max_risk>\t<max_score>` per registered executor in
+# ranked order, read once: the loop below tests every task against every
+# executor's gate, and each `executors` call is a subprocess.
 lane_gates=""
 while read -r eid; do
   [ -n "$eid" ] || continue
@@ -314,8 +314,14 @@ while read -r eid; do
     continue
   fi
   lane_gates="$lane_gates$eid"$'\t'"$gmin"$'\t'"$gmax"$'\t'"$gtop"$'\n'
-done < <(bash "$HERE/executors" list 2>/dev/null)
+done < <(bash "$HERE/executors" ranked 2>/dev/null)
 externals=$(grep -E '^> \*\*External executors:\*\*' <<<"$header" || true)
+# Space-delimited words, so one id is never matched inside another.
+ticked=" $(sed -E 's/^> \*\*External executors:\*\*//' <<<"$externals" | tr ',\t\n' '   ') "
+any_ticked=no
+while IFS=$'\t' read -r lid _; do
+  [ -n "$lid" ] && [[ "$ticked" == *" $lid "* ]] && any_ticked=yes
+done <<<"$lane_gates"
 r5_bad="" max_total=0 max_score=0 lane=""
 
 # A task the ruling seat split carries `#### Part A: …` / `#### Part B: …`
@@ -420,17 +426,32 @@ for n in $nums; do
         else
           { [ "$t" -ge "$emin" ] && [ "$t" -le "$etop" ] && [ "$d" -le "$emax" ]; } \
             || say ERROR "$where" "total $t / risk $d fails the lane gate (min_score $emin, max_score $etop, max_risk $emax)"
+          # The task belongs to the first ticked executor, in ranked order,
+          # whose gate admits it. An overridden or Rule S task is admitted by
+          # none, so it is never reported as misrouted.
+          if [ "$sev" = ERROR ] && [ $((a + b + c)) -lt "$rule_s_limit" ] && [ "$b" -lt 3 ]; then
+            while IFS=$'\t' read -r lid lmin lmax ltop; do
+              [ -n "$lid" ] || continue
+              [ "$lid" != "$eid" ] || break
+              [[ "$ticked" == *" $lid "* ]] || continue
+              { [ "$t" -ge "$lmin" ] && [ "$t" -le "$ltop" ] && [ "$d" -le "$lmax" ]; } || continue
+              say ERROR "$where" "Executor names $eid but $lid ranks first and admits total $t"
+              break
+            done <<<"$lane_gates"
+          fi
         fi
         rung=$(executor_rung "$eid" "$t")
         { [ -n "$rung" ] && [[ "$executor" == *"$eid $rung"* ]]; } || say ERROR "$where" "Executor does not name the $(executor_field "$eid" blocks.assignment) rung for total $t ($eid ${rung:-none})"
         [[ "$externals" == *"$eid"* ]] || say ERROR "$where" "Executor used but the header's '> **External executors:**' line does not name $eid"
       fi
     elif [ "$sev" = ERROR ] && [ $((a + b + c)) -lt "$rule_s_limit" ] && [ "$b" -lt 3 ]; then
-      # One candidate row per executor whose own gate admits the task. The
-      # header tick is deliberately not read: p1.md carries none and still
-      # expects the warning.
+      # One candidate row per executor whose own gate admits the task. Once
+      # the header ticks any executor, an unticked one is no candidate: a line
+      # naming it fails the header check above. A header that ticks nothing
+      # leaves every executor a candidate, so p1.md still gets the warning.
       while IFS=$'\t' read -r lid lmin lmax ltop; do
         [ -n "$lid" ] || continue
+        [ "$any_ticked" = no ] || [[ "$ticked" == *" $lid "* ]] || continue
         { [ "$t" -ge "$lmin" ] && [ "$t" -le "$ltop" ] && [ "$d" -le "$lmax" ]; } || continue
         rung=$(executor_rung "$lid" "$t")
         [ -z "$rung" ] || lane="$lane$where"$'\t'"$lid"$'\t'"$rung"$'\n'
@@ -474,10 +495,15 @@ if [ -n "$lane" ] && [ "$probe" -eq 1 ] && [ "$mode" != inline ]; then
   if [ -n "$on_ids" ]; then
     roster=$(timeout 30 bash "${PLAN_LINT_ROSTER:-$HERE/detect-executors.sh}" 2>/dev/null) || roster=""
     usable_ids=$(jq -r '.[]? | select(.usable == true) | .id' <<<"$roster" 2>/dev/null | tr -d '\r')
+    # The rows are in ranked order, so the first one that survives the filters
+    # names the executor the task would go to; later rows for it are dropped.
+    warned=""
     while IFS=$'\t' read -r w eid r; do
       [ -n "$w" ] || continue
       [[ "$on_ids" == *" $eid "* ]] || continue
       grep -qxF "$eid" <<<"$usable_ids" || continue
+      ! grep -qxF "$w" <<<"$warned" || continue
+      warned="$warned$w"$'\n'
       say WARN "$w" "lane-eligible with no **Executor:** line ($eid $r)"
     done <<<"$lane"
   fi

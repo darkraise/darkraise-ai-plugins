@@ -2,6 +2,21 @@
 # plan-lint is the one mechanical checker for plan shape; each fixture below
 # pins one finding class so a planner of any size gets the same verdict.
 set -uo pipefail
+# Usage:
+#   bash plan-lint.test.sh          run every part
+#   bash plan-lint.test.sh two      run the named parts only
+# test-all runs the parts as separate jobs: together they outgrow one Windows
+# shard.
+ALL="one two"
+sel=""
+for n in "$@"; do
+  case " $ALL " in
+    *" $n "*) sel="$sel $n" ;;
+    *) printf 'plan-lint.test.sh: unknown part %s (parts: %s)\n' "$n" "$ALL" >&2; exit 2 ;;
+  esac
+done
+[ $# -gt 0 ] || sel=$ALL
+want() { case " $sel " in *" $1 "*) return 0 ;; esac; return 1; }
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LINT="$HERE/../scripts/plan-lint"
@@ -174,6 +189,7 @@ variant() { # variant <name> <sed expression> — the Claude plan with one edit
   claude_plan | sed -E "$2" > "$1"
 }
 
+if want one; then
 # --- clean plans ---
 claude_plan > clean.md
 lint clean.md
@@ -802,6 +818,79 @@ OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
 lacks "plan-lint: no register means no register findings" "$OUT" "register row"
 lacks "plan-lint: no register means no premature-last finding" "$OUT" "register rows are open"
 
+fi
+if want two; then
+# --- priority routing: agy ranks before codex ---
+export DR_AGY_SESSION_DIR="$TMP/agy-sessions"
+agy_rung() { # agy_rung <total> - "<model> / <effort>" from the shipped agy-assignment block
+  tr -d '\r' < "$HERE/../reference/ladder.md" \
+    | awk -v t="$1" '$0 == "```agy-assignment" { f = 1; next } f && /^```/ { exit } f && $1 == t { print $2 " / " $3 }'
+}
+esc() { printf '%s' "${1//\//\\/}"; }
+R2=$(agy_rung 2); R4=$(agy_rung 4); R5=$(agy_rung 5)
+T2='s/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/'
+EV2='s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** '
+TICK() { printf 's/^(\\*\\*Program:\\*\\* .*)$/\\1\\n\\n> **External executors:** %s/' "$1"; }
+
+variant r1.md "$T2; ${EV2}agy $(esc "$R2")/; $(TICK 'agy, codex')"
+lint r1.md
+lacks "agy named while both are ticked: the line is accepted" "$out" "ERROR Task 1"
+variant r2.md "$T2; ${EV2}codex gpt-6.1-sol \/ low/; $(TICK 'agy, codex')"
+lint r2.md
+has "codex named while agy ranks first and admits the task" "$out" \
+  "ERROR Task 1: Executor names codex but agy ranks first and admits total 2"
+variant r3.md "$T2; ${EV2}codex gpt-6.1-sol \/ low/; $(TICK 'codex, agy')"
+lint r3.md
+has "rank decides, not the order of the header line" "$out" \
+  "ERROR Task 1: Executor names codex but agy ranks first and admits total 2"
+variant r4.md "$T2; ${EV2}codex gpt-6.1-sol \/ low/; $(TICK 'codex')"
+lint r4.md
+lacks "agy unticked: a codex line is unchanged" "$out" "ERROR Task 1"
+lacks "agy unticked: no ranking finding" "$out" "ranks first"
+
+variant r5.md "s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 1 - coupling 1 - risk 3 = 5/; s/impl-sonnet-medium\$/impl-sonnet-high/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 3 = 5)\$/\1\n**Executor:** agy $(esc "$R5")/; $(TICK 'agy, codex')"
+lint r5.md
+has "a risk-3 task never takes an agy line" "$out" \
+  "ERROR Task 2: total 5 / risk 3 fails the lane gate (min_score 0, max_score 8, max_risk 2)"
+variant r6.md "s/^(\*\*Approach:\*\* .*)\$/\1\n**Override:** kept\n**Executor:** agy $(esc "$R4")/; $(TICK 'agy')"
+lint r6.md
+has "a human override never takes an agy line" "$out" \
+  "ERROR Task 2: an Executor line on an overridden task fails the lane gate"
+
+OLD_ROSTER="${PLAN_LINT_ROSTER:-}"
+lane_surface true
+variant w1.md "$T2"
+mkdir -p "$DR_AGY_SESSION_DIR"
+printf '{"session_id":"plan-lint-test","usable":true,"review":false,"lane":true}\n' \
+  > "$DR_AGY_SESSION_DIR/plan-lint-test.json"
+cat > both.sh <<EOF
+printf 'called\n' >> "$TMP/probe-calls"
+echo '[{"id":"agy","usable":true,"reason":null},{"id":"codex","usable":true,"reason":null}]'
+EOF
+export PLAN_LINT_ROSTER="$TMP/both.sh"
+rm -f probe-calls; lint w1.md
+has "both usable: the warning names the first admitting executor" "$out" \
+  "WARN Task 1: lane-eligible with no **Executor:** line (agy $R2)"
+lacks "both usable: the second admitting executor is not named" "$out" \
+  "lane-eligible with no **Executor:** line (codex"
+has "agy alone admits a risk-2 task" "$out" \
+  "WARN Task 2: lane-eligible with no **Executor:** line (agy $R4)"
+check "both usable: the roster still runs once" "$(calls)" "1"
+variant w2.md "$T2; $(TICK 'codex')"
+rm -f probe-calls; lint w2.md
+has "agy on but only codex ticked: the warning names codex" "$out" \
+  "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-6.1-sol / low)"
+lacks "agy on but only codex ticked: agy is never named" "$out" \
+  "lane-eligible with no **Executor:** line (agy"
+lacks "agy on but only codex ticked: a risk-2 task is not named" "$out" "WARN Task 2: lane-eligible"
+rm -f "$DR_AGY_SESSION_DIR/plan-lint-test.json"
+rm -f probe-calls; lint w1.md
+has "agy off: codex is named as before" "$out" \
+  "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-6.1-sol / low)"
+lacks "agy off: a risk-2 task is not named" "$out" "WARN Task 2: lane-eligible"
+export PLAN_LINT_ROSTER="$OLD_ROSTER"
+unset DR_AGY_SESSION_DIR
+
 # --- Executor lines are validated against their own executor ----------------
 # DR_LADDER points at a fixture ladder that is the shipped one plus the stub's
 # blocks: ladder_block reads one file, and the shipped ladder must not carry
@@ -844,6 +933,20 @@ variant s3.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - c
 lint s3.md
 has "the header must name the line's executor" "$out" "ERROR Task 1: Executor used but the header's '> **External executors:**' line does not name stub"
 
+# --- ranking is by priority, not by name ---
+RANKED="$TMP/ranked-reg"; mkdir -p "$RANKED"
+jq '. + {priority: 20}' < "$HERE/fixtures/executors/codex.json" > "$RANKED/codex.json"
+jq '. + {priority: 10}' < "$HERE/fixtures/executors/stub.json" > "$RANKED/stub.json"
+export DR_EXECUTORS_DIR="$RANKED"
+variant k1.md "$T2; ${EV2}codex gpt-6.1-sol \/ low/; $(TICK 'codex, stub')"
+lint k1.md
+has "a lower priority number outranks a lower name" "$out" \
+  "ERROR Task 1: Executor names codex but stub ranks first and admits total 2"
+variant k2.md "$T2; ${EV2}stub stub-model \/ medium/; $(TICK 'codex, stub')"
+lint k2.md
+lacks "the executor that ranks first may be named" "$out" "ranks first"
+export DR_EXECUTORS_DIR="$HERE/fixtures/executors"
+
 # --- the lane-eligible warning is per executor ------------------------------
 # The generalisation is invisible while codex is the only entry, so prove it
 # where it can be seen: the stub's lane surface is on and its roster row is
@@ -862,6 +965,7 @@ printf 'called\n' >> "$TMP/probe-calls"
 echo '[{"id":"codex","usable":false,"reason":"off"},{"id":"stub","usable":true,"reason":null}]'
 EOF
 export PLAN_LINT_ROSTER="$TMP/stub-roster.sh"
+variant p1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/'
 rm -f probe-calls; lint p1.md
 has "a second executor warns with its own rung" "$out" \
   "WARN Task 1: lane-eligible with no **Executor:** line (stub stub-model / medium)"
@@ -1332,5 +1436,6 @@ sed 's#docs/ui-spec.md#docs/spec.md#' ui-bad.md > ui-nocontract.md
 out=$(bash "$LINT" ui-nocontract.md --no-probe 2>&1)
 lacks "ui: a spec without a contract asks for no line" "$out" "UI/UX"
 
+fi
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

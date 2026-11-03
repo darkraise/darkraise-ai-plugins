@@ -53,6 +53,10 @@ executor_session_write stub '{"session_id":"session-test","usable":true,"lane":t
 executor_session_mark_off codex quota
 check "marking one executor off leaves another untouched" \
   "$(executor_session_on stub lane && echo on || echo off)" "on"
+executor_session_write stub '{"session_id":"session-test","usable":true,"lane":true,"stub_version":"0.0.0-stub"}'
+executor_session_mark_off stub quota
+check "mark_off keeps an executor's own version field" \
+  "$(jq -r '[.stub_version, (.plugin_version | tostring), .reason] | join(",")' "$TMP/stub/session-test.json")" "0.0.0-stub,null,quota"
 
 # --- no session id ---------------------------------------------------------
 check "without a session id the file call fails" \

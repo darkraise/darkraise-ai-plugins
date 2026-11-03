@@ -5,8 +5,10 @@
 # arithmetic done by hand across a long plan.
 #
 # This script writes nothing. Every mechanical rule lives here, where a test can
-# reach it; every judgment — scoring a task, splitting one, choosing between
-# eligible executors, and the edits themselves — stays with the skill.
+# reach it, including the choice between eligible executors: a unit's rungs are
+# listed in `executors ranked` order, so the first one is the executor the unit
+# goes to. Every judgment — scoring a task, splitting one, and the edits
+# themselves — stays with the skill.
 #
 # Usage: plan-revise PLAN_FILE
 #        plan-revise --survey DIR
@@ -289,6 +291,20 @@ fi
 
 ticked=$(header_executors "$plan")
 if [ -n "$ticked" ]; then execs=$(tr -s ' ' ',' <<<"$ticked" | sed 's/,$//'); else execs=missing; fi
+# Priority, not the order the header lists them in, decides which admitting
+# executor comes first. Every other word of the line is kept after the ranked
+# ids, as written and repeats included, exactly as the line was read before
+# ranking: the missing-thresholds diagnostic then names each word of a prose
+# header line once per occurrence, as it always has.
+ticked_ids=$(tr ', \t' '\n\n\n' <<<"$ticked" | grep -v '^$')
+ranked_ticked=""
+for eid in $(bash "$HERE/executors" ranked 2>/dev/null); do
+  grep -qxF "$eid" <<<"$ticked_ids" && ranked_ticked="$ranked_ticked $eid"
+done
+ranked_only=$ranked_ticked
+for word in $ticked; do
+  [[ " $ranked_only " == *" ${word%,} "* ]] || ranked_ticked="$ranked_ticked $word"
+done
 
 header_headings=$(plan_header "$plan" | awk "$_PLAN_AWK"'in_fence($0) { next } /^## / { print }')
 missing_sections=""
@@ -327,7 +343,7 @@ while IFS=$'\t' read -r id text; do
         # Each ticked executor is asked on its own thresholds; a unit no ticked
         # executor admits has not passed, whatever its score.
         gate="" asked=0
-        for eid in $ticked; do
+        for eid in $ranked_ticked; do
           mn=$(exec_gate "$eid" min_score) || true
           mx=$(exec_gate "$eid" max_risk) || true
           top=$(exec_gate "$eid" max_score) || true

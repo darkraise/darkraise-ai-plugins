@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# Decide, once per session, whether this session may hand plan tasks to the
+# Antigravity CLI (agy).
+#
+# agy is usable only when it is on PATH at an allowed version (scripts/agy-locate)
+# and signed in (scripts/lib/agy-probe.mjs). A usable agy is then used only when
+# its smoke test has passed (reference/agy-policy.json `trust.smoke`), which
+# opens the executor lane; agy has no review surface.
+# Anything else turns the lane off for the session, so an agy outage degrades
+# the process instead of failing a task. The answer is cached per session; a
+# quota mark has no reset time and stays for the session, --refresh included.
+#
+# Usage: agy-gate [--refresh]
+# Output: agy-gate usable=<bool> reason=<r> review=false lane=<bool> resets_at=- source=<probe|cache|setting>
+#
+# The agyLane setting (scripts/dforge-config) switches the lane off whatever the
+# probe says; off, the gate answers `reason=setting` without probing.
+# Exit: 0 answered, either way; 2 usage error, missing jq or node, or an
+# unreadable policy file.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+POLICY="${DR_AGY_POLICY:-$HERE/../reference/agy-policy.json}"
+. "$HERE/lib/executor-session.sh"
+. "$HERE/lib/native-path.sh"
+. "$HERE/lib/dforge-env.sh"
+
+die() { printf 'agy-gate: %s\n' "$1" >&2; exit 2; }
+
+refresh=0
+case "$#:${1:-}" in
+  0:) ;;
+  1:--refresh) refresh=1 ;;
+  *) die "usage: agy-gate [--refresh]" ;;
+esac
+command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
+command -v node >/dev/null 2>&1 || die "node is required but not on PATH"
+[ -r "$POLICY" ] || die "policy file not found: $POLICY"
+
+want_lane=$(dforge_setting agyLane true)
+
+usable="" reason="" version="" source=probe
+file=$(executor_session_file agy) || file=""
+if [ "$want_lane" = false ]; then
+  usable=false reason=setting source=setting
+fi
+if [ "$source" = probe ] && [ -n "$file" ] && [ -r "$file" ]; then
+  # A unit separator, not a tab: read collapses runs of whitespace separators,
+  # which would shift every field after an empty one.
+  cached=$(jq -r '[(.usable | tostring), (.reason // ""), (.agy_version // "")] | join("\u001f")' \
+    < "$file" 2>/dev/null | tr -d '\r')
+  IFS=$'\x1f' read -r c_usable c_reason c_version <<<"$cached"
+  # An answer the setting forced says nothing about agy itself, so it is never
+  # reused once the setting is back on. A quota has no reset time to wait for,
+  # so --refresh keeps it rather than probing it away: the auth probe cannot
+  # see a quota and would turn the lane back on.
+  case "$c_usable" in
+    true|false)
+      if [ -n "$c_reason" ] && [ "$c_reason" != setting ] \
+         && { [ "$refresh" -eq 0 ] || [ "$c_usable:$c_reason" = false:quota ]; }; then
+        usable=$c_usable reason=$c_reason version=$c_version source=cache
+      fi
+      ;;
+  esac
+fi
+
+if [ "$source" = probe ]; then
+  line=$(bash "$HERE/agy-locate"); rc=$?
+  case "$rc" in
+    0)
+      # Split at the first " root=": the version is agy's own first line and
+      # may hold a space, and the root is a path that may too.
+      fields=${line#agy-locate ok version=}
+      version=${fields%% root=*}
+      root=${fields#* root=}
+      # The probe owns its 30 s deadline; this outer bound only guarantees the
+      # gate returns if node itself wedges, so where timeout is missing (macOS
+      # ships none) the probe runs without it.
+      bound=()
+      command -v timeout >/dev/null 2>&1 && bound=(timeout 45)
+      export MSYS_NO_PATHCONV=1
+      cwd=$(dr_native_path "$PWD")
+      answer=$(jq -cn --arg cwd "$cwd" '{op:"auth",cwd:$cwd}' \
+        | ${bound[@]+"${bound[@]}"} node "$HERE/lib/agy-probe.mjs" "$(dr_native_path "$root")" 2>/dev/null \
+        | tail -1 | tr -d '\r')
+      case "$(jq -r '.authed | tostring' <<<"$answer" 2>/dev/null | tr -d '\r')" in
+        true) usable=true reason=ok ;;
+        false) usable=false reason=logged-out ;;
+        *) usable=false reason=probe-failed ;;
+      esac
+      ;;
+    1) usable=false reason=$(sed -n 's/^agy-locate off reason=//p' <<<"$line") ;;
+    *) die "agy-locate failed" ;;
+  esac
+fi
+
+# Trust is read on every call, cache hit or probe, and written back, so a trust
+# commit mid-session reaches the readers without a --refresh.
+# jq reads on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /d/...
+# form pwd gives on Git Bash.
+smoke=$(jq -r '.trust.smoke' < "$POLICY" 2>/dev/null | tr -d '\r')
+lane=false
+# Without a session id there is no session file, and every reader of the file
+# answers off, so the gate's line says off too rather than disagree with them.
+if [ "$usable" = true ] && [ -n "$file" ] && [ "$smoke" = pass ] && [ "$want_lane" != false ]; then
+  lane=true
+fi
+
+if [ -n "$file" ]; then
+  executor_session_write agy "$(jq -cn --arg sid "$(executor_session_id)" \
+    --argjson usable "$usable" --argjson lane "$lane" \
+    --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg version "$version" \
+    '{session_id: $sid, usable: $usable, review: false, lane: $lane, reason: $reason,
+      checked_at: $at, resets_at: null, resets_at_epoch: null,
+      agy_version: (if $version == "" then null else $version end)}')"
+fi
+
+printf 'agy-gate usable=%s reason=%s review=false lane=%s resets_at=- source=%s\n' \
+  "$usable" "$reason" "$lane" "$source"

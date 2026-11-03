@@ -77,17 +77,20 @@ const typesGenerated = ['plugins/dforge/tsconfig.json', 'plugins/dforge/.claude-
 const [tscExecutable, tscPrefix] = process.platform === 'win32' ? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'tsc']] : ['tsc', []];
 // Detected under --list too, so a listing shows the job that a run would start.
 const hasTsc = typesGenerated && spawnSync(tscExecutable, [...tscPrefix, '--version'], { stdio: 'ignore', timeout: 10000, windowsHide: true }).status === 0;
-// plan-lint runs about 240 checks of a few processes each, which take over ten
-// minutes on a Windows runner and under a minute on Linux. next-step and
+// plan-lint runs about 320 checks of a few processes each, which take over
+// twenty minutes on a Windows runner and under a minute on Linux. next-step and
 // auto-run take about 500 s on a Windows runner; 700 s keeps that under 80% of
-// their limit. task-step's limit applies to each of its parts.
-const suiteSeconds = { 'plan-lint.test.sh': 1200, 'speed-and-cost-followups.acceptance.test.sh': 1200, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step-base.test.sh': 900, 'task-step.test.sh': 900, 'next-step.test.sh': 700, 'auto-run.test.sh': 700 };
+// their limit. plan-revise grew to about 560 s there. task-step's limit
+// applies to each of its parts.
+const suiteSeconds = { 'plan-lint.test.sh': 1200, 'speed-and-cost-followups.acceptance.test.sh': 1200, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step-base.test.sh': 900, 'task-step.test.sh': 900, 'next-step.test.sh': 700, 'plan-revise.test.sh': 900, 'auto-run.test.sh': 700 };
 // faster-plans takes about 20 minutes on a Windows runner, more than a shard
 // can hold beside anything else, so it runs as three parts of its tests.
-// task-step runs as four parts, one per section of the suite.
+// task-step runs as four parts, one per section of the suite, and plan-lint as
+// two, whose limit applies to each.
 const suiteParts = {
   'faster-plans.acceptance.test.sh': [Array.from({ length: 8 }, (_, i) => `a${i + 1}`), Array.from({ length: 8 }, (_, i) => `a${i + 9}`), Array.from({ length: 7 }, (_, i) => `a${i + 17}`)],
   'task-step.test.sh': [['start'], ['rereview'], ['group'], ['verdict']],
+  'plan-lint.test.sh': [['one'], ['two']],
   // speed-and-cost-followups ran past 600 s on a Windows runner while its A12
   // re-ran two whole suites, which it skips under test-all.
   'speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11'], ['A12'], ['A13', 'A14', 'A15', 'A16', 'A19', 'A20', 'A21', 'A23']],

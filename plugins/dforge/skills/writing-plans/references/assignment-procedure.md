@@ -32,11 +32,11 @@ user's inline or delegation preference on either host.
    tier. Only a human edit puts one in a plan.
 4. **Offer an external executor** and apply the lane gate — see
    [executor-lane.md](../../../reference/executor-lane.md) §Planning. Every id
-   `scripts/executors list` prints has its own gate; run each, resolved with
+   `scripts/executors ranked` prints has its own gate; run each in that order, resolved with
    `bash "$(bash scripts/executors path <id> gate)"`, before the roster, and
    make the offer once per plan
-   for every executor whose gate prints `lane=true`. If none is usable, ask
-   nothing.
+   for every executor whose gate prints `lane=true`, writing the offer's ticks
+   in `executors ranked` order. If none is usable, ask nothing.
 5. **Write the lines** directly below the task's `**Depends on:**` line, or
    its `**Items:**` line, or its `**Interfaces:**` block when it has neither,
    in this order:
@@ -64,12 +64,10 @@ user's inline or delegation preference on either host.
 6. **Keep the heading form** `### Task N: <name>`: `scripts/task-brief` finds a
    task by a heading that begins with `Task <N>`.
 
-**A task carries at most one `**Executor:**` line, and you choose it.** When
-two ticked executors' gates both admit a task, nothing mechanical picks
-between them: write one line, and `plan-lint` validates only what is written.
-No precedence rule is introduced here — with one registered executor there is
-no choice to make, and a rule invented now would be untested against a real
-second executor.
+**A task carries at most one `**Executor:**` line.** The line names
+the first ticked executor in `executors ranked` order whose gate admits it.
+`plan-lint` rejects a line naming another executor while a higher-priority
+ticked executor admits the task, so no choice is left to the planner.
 
 A human may edit any `**Implementer:**` line by hand;
 dforge:subagent-driven-development obeys it and never recomputes.

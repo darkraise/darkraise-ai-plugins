@@ -117,6 +117,11 @@ export default {
     label: 'Codex reviews', title: 'Let Codex review',
     description: 'On lets Codex take review seats when its gate passes. Off, the default, keeps every review on Claude; /codex:review or /codex:adversarial-review runs a Codex review on demand.',
   },
+  agyLane: {
+    type: 'boolean', default: true, enforcedBy: 'script', group: 'Workflow', target: 'dforge',
+    label: 'Agy tasks', title: 'Give tasks to Antigravity',
+    description: 'Give plan tasks to the Antigravity CLI (agy) when its gate passes. Off keeps those tasks on Claude or Codex.',
+  },
   lensCap: {
     type: 'number', default: 4, min: 0, max: 9, step: 1, zero: 'off', env: 'DFORGE_LENS_CAP', enforcedBy: 'script', group: 'Workflow', target: 'dforge',
     label: 'Review lenses', title: 'Final-review lens cap',

@@ -391,8 +391,8 @@ band() { # band <total> - the Claude judge for a score band
 
 # Executor first: a task Codex implemented is never reviewed by Codex, whatever
 # its risk. Risk 3 (security, data loss, migration, concurrency) takes Opus
-# whatever its total; every other task takes its band. The lane gate admits risk <= 1,
-# so the executor risk-3 row is a guard.
+# whatever its total; every other task takes its band. No executor's lane gate
+# admits risk 3 (Codex's stops at 1, agy's at 2), so the executor risk-3 row is a guard.
 if [ "$executor" -eq 1 ] && [ "$max_risk" -ge 3 ]; then
   primary=$OPUS fallback=- reason=executor
 elif [ "$executor" -eq 1 ]; then

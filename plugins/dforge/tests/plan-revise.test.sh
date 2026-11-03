@@ -179,6 +179,25 @@ check "no Executor line reports none" "$(field executor "$(unit1)")" "none"
 check "the header reports the execution mode" "$(field execution "$(run | grep '^header')")" "inline"
 check "a complete header reports sections ok" "$(field sections "$(run | grep '^header')")" "ok"
 check "a ticked executor is reported" "$(field executors "$(run | grep '^header')")" "codex"
+agyrung() { # agyrung <total> - "<model>/<effort>" from the shipped agy-assignment block
+  tr -d '\r' < "$HERE/../reference/ladder.md" \
+    | awk -v t="$1" '$0 == "```agy-assignment" { f = 1; next } f && /^```/ { exit } f && $1 == t { print $2 "/" $3 }'
+}
+both() { hdr '
+> **External executors:** codex, agy
+' "$1"; }
+
+plan "$(mktask 1 0 1 0 2)"
+check "codex alone ticked: rungs are unchanged" "$(field rungs "$(unit1)")" "codex:gpt-6.1-sol/low"
+both "$(mktask 1 0 1 0 2)"
+check "both ticked: rungs follow priority, not the header order" \
+  "$(field rungs "$(unit1)")" "agy:$(agyrung 2),codex:gpt-6.1-sol/low"
+check "both ticked: the unit passes the gate" "$(field gate "$(unit1)")" "pass"
+both "$(mktask 0 0 1 0 1)"
+check "both ticked: a total-1 unit is admitted by agy alone" "$(field rungs "$(unit1)")" "agy:$(agyrung 1)"
+both "$(mktask 1 1 1 3 6)"
+check "both ticked: a risk-3 unit is admitted by neither" "$(field gate "$(unit1)")" "fail:risk"
+check "both ticked: a risk-3 unit has no rung" "$(field rungs "$(unit1)")" ""
 
 # The selection is a header line. A fenced example in a task body is not it.
 plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n> **External executors:** stub\n```\n')"
@@ -244,7 +263,7 @@ mkdir -p "$SUR/docs"
 git -C "$SUR" init -q
 git -C "$SUR" config user.email t@t
 git -C "$SUR" config user.name t
-survey() { (cd "$SUR" && bash "$SCRIPT" --survey docs); }
+survey() { (cd "$SUR" && DR_EXECUTORS_DIR="$FIXREG" bash "$SCRIPT" --survey docs); }
 row() { survey | grep -m 1 "^plan  $1"; }
 splan() { # splan <name> <body>
   printf '# P\n\n**Execution:** inline — `claude --model sonnet --effort high` — x\n\n### Task 1: One\n\n**Files:**\n- Create: `x`\n\n%s\n' "$2" > "$SUR/docs/$1.md"
@@ -347,6 +366,7 @@ present "the skill ticks only an executor the roster reports usable" "$SK" "and 
 present "the skill filters the roster by the gate" "$SK" "ignore every row whose gate did not print"
 present "the skill re-runs the report before settling execution" "$SK" "Re-run plan-revise after writing the Executor"
 present "the skill reconciles an existing Executor line" "$SK" "replace it with the printed rung"
+present "the skill takes the first rung when several are listed" "$SK" "take the first, the highest-priority executor that admits the unit"
 present "the skill leaves a thin task unscored" "$SK" "A guessed score is worse than a visible gap"
 present "the skill allows the split Rule S requires" "$SK" "Splitting a task Rule S rejects is part of this skill"
 present "the routing table lists the skill" "$HERE/../skills/using-dforge/SKILL.md" "dforge:revising-plans"

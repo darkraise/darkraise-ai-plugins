@@ -218,5 +218,231 @@ printf '%s\n' "$assignment" | awk '{print $2}' | grep -qxF gpt-6-astra && leak=a
 printf '%s\n' "$successor" | tr ' ' '\n' | grep -qF gpt-6-astra && leak=successor
 check "no judge model appears in the execution blocks" "$leak" "NONE"
 
+# --- the agy lane --------------------------------------------------------------
+# agy admits wider bands than Codex, so its blocks are checked on their own.
+AGY_MODELS="gemini-3.8-flash gemini-4-argon claude-sonnet-5-5 claude-opus-5-5"
+AGY_EFFORTS="low medium high"
+
+agy_gate=$(block agy-lane-gate)
+agy_gate_field() { printf '%s\n' "$agy_gate" | awk -v k="$1" '$1 == k {print $2}'; }
+check "agy-lane-gate has five lines" "$(printf '%s\n' "$agy_gate" | grep -c .)" "5"
+check "agy-lane-gate min_score is 0" "$(agy_gate_field min_score)" "0"
+check "agy-lane-gate max_score is 8" "$(agy_gate_field max_score)" "8"
+check "agy-lane-gate max_risk is 2" "$(agy_gate_field max_risk)" "2"
+check "agy-lane-gate requires a clean Rule S pass" "$(agy_gate_field require_rule_s_clean)" "true"
+check "agy-lane-gate requires an enabled executor" "$(agy_gate_field require_external_enabled)" "true"
+
+agy_assignment=$(block agy-assignment)
+check "agy-assignment has 9 rows" "$(printf '%s\n' "$agy_assignment" | grep -c .)" "9"
+bad_agy=NONE agy_scores=""
+while read -r score model effort extra; do
+  [ -n "$score" ] || continue
+  in_list "$model" "$AGY_MODELS" || bad_agy="model:$score:$model"
+  in_list "$effort" "$AGY_EFFORTS" || bad_agy="effort:$score:$effort"
+  [ -z "$extra" ] || bad_agy="extra-field:$score"
+  agy_scores="$agy_scores $score"
+done <<< "$agy_assignment"
+check "every agy-assignment rung names a known model and effort" "$bad_agy" "NONE"
+check "agy-assignment has one row for each total 0 through 8" \
+  "$(printf '%s\n' $agy_scores | sort -n | tr '\n' ' ')" "0 1 2 3 4 5 6 7 8 "
+check "agy-assignment rows 3 to 8 mirror the native Claude table" \
+  "$(printf '%s\n' "$agy_assignment" | awk '$1 >= 3' | tr '\n' ',')" \
+  "3 claude-sonnet-5-5 medium,4 claude-sonnet-5-5 medium,5 claude-sonnet-5-5 high,6 claude-opus-5-5 high,7 claude-opus-5-5 high,8 claude-opus-5-5 high,"
+check "the lowest agy-assignment row is the gate's min_score" \
+  "$(printf '%s\n' "$agy_assignment" | awk 'NR == 1 || $1 < m { m = $1 } END { print m }')" "$(agy_gate_field min_score)"
+check "the highest agy-assignment row is the gate's max_score" \
+  "$(printf '%s\n' "$agy_assignment" | awk '$1 > m { m = $1 } END { print m }')" "$(agy_gate_field max_score)"
+
+agy_rank() { # agy_rank <model>/<effort>: model_rank * 10 + effort_rank, or -1
+  local m="${1%%/*}" e="${1##*/}" mr er
+  case "$m" in gemini-*) mr=0 ;; claude-sonnet-5-5) mr=1 ;; claude-opus-5-5) mr=2 ;; *) echo -1; return ;; esac
+  case "$e" in low) er=0 ;; medium) er=1 ;; high) er=2 ;; *) echo -1; return ;; esac
+  echo $((mr * 10 + er))
+}
+
+agy_successor=$(block agy-successor)
+# The checks below loop over the rows, so an empty block would pass them all.
+check "agy-successor block is present" "$([ -n "$agy_successor" ] && echo yes || echo no)" "yes"
+agy_succ_of() { printf '%s\n' "$agy_successor" | awk -v k="$1" '$1 == k {print $2}'; }
+
+bad_agy_rank=NONE
+while read -r from to; do
+  [ -n "$from" ] || continue
+  [ "$to" = HANDBACK ] && continue
+  from_rank=$(agy_rank "$from"); to_rank=$(agy_rank "$to")
+  { [ "$from_rank" -lt 0 ] || [ "$to_rank" -lt 0 ]; } && { bad_agy_rank="unrankable:$from->$to"; continue; }
+  [ "$to_rank" -gt "$from_rank" ] || bad_agy_rank="not-increasing:$from->$to"
+done <<< "$agy_successor"
+check "every agy-successor ranks strictly above its source" "$bad_agy_rank" "NONE"
+
+bad_agy_family=NONE
+while read -r from to; do
+  case "$from" in gemini-*) case "$to" in claude-*) ;; *) bad_agy_family="$from->$to" ;; esac ;; esac
+done <<< "$agy_successor"
+check "a failed Gemini rung moves to a Claude rung, never to another Gemini effort" "$bad_agy_family" "NONE"
+
+bad_agy_walk=NONE
+while read -r start _; do
+  [ -n "$start" ] || continue
+  cur="$start"
+  for _ in 1 2 3 4 5 6; do
+    [ "$cur" = HANDBACK ] && break
+    cur=$(agy_succ_of "$cur")
+    [ -n "$cur" ] || { bad_agy_walk="dead-end-from:$start"; break; }
+  done
+  [ "$cur" = HANDBACK ] || bad_agy_walk="${bad_agy_walk#NONE}no-terminal-from:$start"
+  [ "$bad_agy_walk" = NONE ] || break
+done <<< "$agy_successor"
+check "every agy-successor rung reaches HANDBACK without cycling" "$bad_agy_walk" "NONE"
+
+bad_agy_entry=NONE
+while read -r _ model effort; do
+  [ -n "$model" ] || continue
+  [ -n "$(agy_succ_of "$model/$effort")" ] || bad_agy_entry="$model/$effort"
+done <<< "$agy_assignment"
+check "every agy-assignment rung has a successor" "$bad_agy_entry" "NONE"
+
+agy_timeouts=$(block agy-timeout)
+check "agy-timeout block is present" "$([ -n "$agy_timeouts" ] && echo yes || echo no)" "yes"
+bad_agy_timeout=NONE
+while read -r from to; do
+  [ -n "$from" ] || continue
+  for rung in "$from" "$to"; do
+    [ "$rung" = HANDBACK ] && continue
+    secs=$(printf '%s\n' "$agy_timeouts" | awk -v k="$rung" '$1 == k {print $2}')
+    [ -n "$secs" ] || { bad_agy_timeout="missing:$rung"; continue; }
+    printf '%s' "$secs" | grep -qE '^[1-9][0-9]*$' || bad_agy_timeout="non-numeric:$rung"
+  done
+done <<< "$agy_successor"
+while read -r _ model effort; do
+  [ -n "$model" ] || continue
+  [ -n "$(printf '%s\n' "$agy_timeouts" | awk -v k="$model/$effort" '$1 == k {print $2}')" ] || bad_agy_timeout="missing:$model/$effort"
+done <<< "$agy_assignment"
+check "every agy rung named in an assignment or a successor row has a numeric timeout" "$bad_agy_timeout" "NONE"
+
+agy_too_long=NONE
+while read -r pair secs; do
+  [ -n "$pair" ] || continue
+  [ $(( (secs + 120) * 1000 )) -le 7200000 ] || agy_too_long="$pair:$secs"
+done <<< "$agy_timeouts"
+check "every agy-timeout bound plus 120 s fits a background call's 7200000 ms cap" "$agy_too_long" "NONE"
+
+check "no agy block names a Codex model" \
+  "$(printf '%s\n' "$agy_gate" "$agy_assignment" "$agy_successor" "$agy_timeouts" | grep -c 'gpt-')" "0"
+
+# --- ladder.md prose, one subsection per executor ------------------------------
+check "ladder.md has a lane-gate subsection for each executor" \
+  "$(grep -cE '^### The (Codex|agy) lane gate$' "$LADDER")" "2"
+check "the single, executor-neutral lane-gate heading is gone" "$(grep -cxF '### The lane gate' "$LADDER")" "0"
+check "ladder.md gives agy its assignment, successor and timeout subsections" \
+  "$(grep -cE '^### Agy (assignment|successor|timeout)$' "$LADDER")" "3"
+check "the agy gate subsection states why its floor is 0" \
+  "$(grep -cF '`agy-lane-gate` has a floor of 0 because' "$LADDER")" "1"
+
+# --- the agy calibration record and the lane's trust ---
+# Rows 0-2 of agy-assignment, that rung's successor and timeout rows, and the
+# trust flag all come from replayed runs, so the record of those runs is
+# checked against what it decided.
+NOTES="$HERE/../../../docs/dforge/notes/2026-11-02-agy-calibration.md"
+POLICY="$HERE/../reference/agy-policy.json"
+CONSTRAINTS="$HERE/../../../docs/superpowers/distilled/constraints.md"
+
+check "the calibration record exists" "$([ -f "$NOTES" ] && echo yes || echo no)" "yes"
+check "the record's table has the agreed header" \
+  "$(grep -cxF '| Task replayed | Rung | Status | Tests | Scope | Judge | Wall s | Tokens |' "$NOTES" 2>/dev/null)" "1"
+
+passes() { # passes <rung> - replayed tasks (R rows) that rung passed on every column
+  awk -F'|' -v r="$1" '
+    function t(s) { gsub(/^ +| +$/, "", s); return s }
+    t($3) == r && t($2) ~ /^R[0-9]/ && t($4) == "DONE" && t($5) == "pass" && t($6) == "clean" && t($7) == "pass" { seen[t($2)] = 1 }
+    END { n = 0; for (k in seen) n++; print n }
+  ' "$NOTES" 2>/dev/null
+}
+decision=$(sed -n 's|^\*\*Decision:\*\* totals 0-2 run \([a-z0-9.-]*/[a-z]*\).*$|\1|p' "$NOTES" 2>/dev/null | head -n 1)
+expected=claude-sonnet-5-5/low
+for c in gemini-3.8-flash/low gemini-3.8-flash/medium gemini-4-argon/low; do
+  if [ "$(passes "$c")" = 3 ]; then expected=$c; break; fi
+done
+check "the decision is the cheapest candidate that passed all three replays, else the Claude rung" \
+  "${decision:-none}" "$expected"
+
+tried=yes
+for c in gemini-3.8-flash/low gemini-3.8-flash/medium gemini-4-argon/low; do
+  [ "$c" != "$decision" ] || break
+  [ "$(grep -cF -- "| $c |" "$NOTES" 2>/dev/null || true)" -ge 1 ] 2>/dev/null || tried=no
+done
+check "every candidate cheaper than the decision was run" "$tried" "yes"
+
+band=$(block agy-assignment | awk '$1 + 0 <= 2 { print $2 "/" $3 }' | sort -u | tr '\n' ' ' | sed 's/ $//')
+check "agy-assignment rows 0, 1 and 2 all name the decision" "$band" "${decision:-none}"
+check "agy-assignment has exactly three rows at or below total 2" \
+  "$(block agy-assignment | awk '$1 + 0 <= 2' | grep -c .)" "3"
+check "the 0-2 rung's successor is claude-sonnet-5-5/medium" \
+  "$(block agy-successor | awk -v k="$decision" '$1 == k { print $2 }')" "claude-sonnet-5-5/medium"
+secs=$(block agy-timeout | awk -v k="$decision" '$1 == k { print $2 }')
+check "the 0-2 rung has a timeout between 900 and 6900 seconds" \
+  "$([ "${secs:-0}" -ge 900 ] && [ "${secs:-0}" -le 6900 ] && echo yes || echo no)" "yes"
+
+reach=$( { block agy-assignment | awk '{ print $2 "/" $3 }'; block agy-successor | awk '$2 != "HANDBACK" { print $2 }'; } | sort -u)
+stale=$( { block agy-successor | awk '{ print $1 }'; block agy-timeout | awk '{ print $1 }'; } \
+  | sort -u | grep -vxF -f <(printf '%s\n' "$reach") | tr '\n' ' ' | sed 's/ $//')
+check "no successor or timeout row names a rung that nothing reaches" "${stale:-NONE}" "NONE"
+
+badnum=$(awk -F'|' '
+  function t(s) { gsub(/^ +| +$/, "", s); return s }
+  t($2) ~ /^[RS][0-9]/ && (t($8) !~ /^[0-9]+$/ || t($9) !~ /^[0-9]+$/) { n++ }
+  END { print n + 0 }' "$NOTES" 2>/dev/null)
+check "every run row carries numeric wall seconds and tokens" "${badnum:-x}" "0"
+
+check "the record states a smoke result" \
+  "$(grep -cE '^\*\*Smoke:\*\* (pass|fail)' "$NOTES" 2>/dev/null)" "1"
+smoke_rung=$(block agy-assignment | awk '$1 == 5 { print $2 "/" $3 }')
+check "the smoke run used the rung that total 5 is assigned" \
+  "$(awk -F'|' -v r="$smoke_rung" '
+    function t(s) { gsub(/^ +| +$/, "", s); return s }
+    t($2) ~ /^S1/ && t($3) == r { n++ }
+    END { print n + 0 }' "$NOTES" 2>/dev/null)" "1"
+
+smoke=$(jq -r '.trust.smoke // "absent"' < "$POLICY" 2>/dev/null | tr -d '\r')
+want=0
+[ "$smoke" != pass ] || want=1
+check "the auto-tick constraint exists exactly when trust.smoke is pass" \
+  "$(grep -cxF '### The Antigravity executor lane is on' "$CONSTRAINTS")" "$want"
+if [ "$smoke" = pass ]; then
+  check "a smoke pass is recorded before the lane opens" \
+    "$(grep -c '^\*\*Smoke:\*\* pass' "$NOTES" 2>/dev/null)" "1"
+fi
+
+# --- the lane reference is executor-neutral, with a section per executor ---
+outside() { awk 'BEGIN { on = 1 } /^## / { on = ($0 != "## Codex task review seats" && $0 != "## Final-review Codex round" && $0 != "## Per-executor: codex") } on' "$EL"; }
+section() { awk -v h="$1" '/^## / { on = ($0 == "## " h) } on' "$EL" | tr '\n' ' ' | tr -s ' '; }
+
+for gone in 'codex-timeout' 'codex-assignment' 'codex-successor' '## Codex error' 'codex lane is off' \
+            'run-codex-task.sh' 'Codex ran' 'Codex finished cleanly' 'codex quota exhausted' \
+            'Codex read the findings' 'Codex runs every task turn'; do
+  check "executor-lane outside the Codex sections no longer says: $gone" "$(outside | grep -cF -- "$gone")" "0"
+done
+check "the exit-2 text is executor-neutral" \
+  "$(grep -cF '`<id> lane is off for this session (<reason>)`' "$EL")" "1"
+check "the registry table lists priority" "$(grep -c '^| `priority` |' "$EL")" "1"
+check "the lane reference has a Per-executor: agy section" "$(grep -cxF '## Per-executor: agy' "$EL")" "1"
+
+agy_sec=$(section 'Per-executor: agy')
+for need in 'unsandboxed' 'fingerprints cover only the linked worktree and its refs' 'fixed pointer sentence' \
+            'keeps a cached `reason=quota`' 'git for-each-ref' 'finished_reason' 'efforts `low`, `medium` and `high`' \
+            'lane-breaker'; do
+  check "Per-executor: agy says: $need" "$(grep -cF -- "$need" <<<"$agy_sec")" "1"
+done
+codex_sec=$(section 'Per-executor: codex')
+check "the piped Node rule lives in the Codex section" \
+  "$(grep -cF 'Tasks whose tests spawn piped Node child processes stay on the Claude lane' <<<"$codex_sec")" "1"
+check "reaped is explained in the Codex section" \
+  "$(grep -cF 'phase` and `reaped` as **evidence, not proof**' <<<"$codex_sec")" "1"
+
+RD="$HERE/../README.md"
+for need in 'Antigravity' 'scripts/run-agy-task.sh' 'scripts/agy-gate' 'scripts/lane-breaker' 'executors ranked'; do
+  check "the README names $need" "$([ "$(grep -cF -- "$need" "$RD")" -ge 1 ] && echo yes || echo no)" "yes"
+done
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

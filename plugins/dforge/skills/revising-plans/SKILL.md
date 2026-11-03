@@ -99,18 +99,21 @@ the scores, so scoring cannot follow the executor question.
    in the header:
 
    ```markdown
-   > **External executors:** <id>
+   > **External executors:** <id>[, <id>]
    ```
 
+   List the ticked ids in `executors ranked` order.
+
 7. **Write the Executor lines.** Re-run `plan-revise`, which now sees the tick.
-   Every unit row reading `gate=pass` takes an `**Executor:**` line naming one
-   of the executors in its `rungs=` field, at that executor's rung, written
+   Every unit row reading `gate=pass` takes an `**Executor:**` line naming the
+   first executor in its `rungs=` field, at that executor's rung, written
    below the unit's `**Implementer:**` line and above its `**Evaluation:**`
-   line. Where `rungs=` lists several, you choose one; a unit carries at most
+   line. Where `rungs=` lists several, take the first, the highest-priority executor that admits the unit; a unit carries at most
    one `**Executor:**` line.
    A unit that already reads `executor=<id>` is reconciled, not preserved: if
-   its id is absent from `rungs=`, or its rung differs from the one printed for
-   that id, replace it with the printed rung; if the unit no longer reads
+   its id is absent from `rungs=`, or is not its first id, or its rung differs
+   from the one printed for that id, replace it with the printed rung of the
+   first id; if the unit no longer reads
    `gate=pass`, delete the line. A stale assignment survives otherwise and fails
    at verification with nothing to explain it.
    `gate=fail:not_enabled` means the scores pass but no ticked executor admits

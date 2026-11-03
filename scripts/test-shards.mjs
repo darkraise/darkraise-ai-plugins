@@ -7,6 +7,10 @@
 // Run 41307035161 (2026-11-01) supplied speed-and-cost-followups, whose A12
 // part no longer re-runs two suites under test-all (371 s, 0.4 s and 98 s),
 // and typed-seats-and-drafting.acceptance.sh.
+// Run 41563118629 (2026-11-03) supplied run-agy-task. plan-lint crossed its
+// 1200 s cap in run 41566860573; its weight is the last green run's 1049 s
+// scaled by the 21% its Linux time grew since. The same run supplied
+// plan-revise; task-step is the sum of its parts in 41311901567.
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -15,6 +19,8 @@
 // them.
 export const windowsSeconds = {
   'run-all.sh': 157,
+  'agy-gate.test.sh': 20,
+  'antigravity-executor-lane.acceptance.test.sh': 250,
   'auto-default.test.sh': 10,
   'auto-run-skills.test.sh': 10,
   'auto-run.test.sh': 507,
@@ -49,6 +55,7 @@ export const windowsSeconds = {
   'in-flight.test.sh': 36,
   'inline-mode.test.sh': 65,
   'ladder.test.sh': 10,
+  'lane-breaker.test.sh': 10,
   'lanes.test.sh': 10,
   'lens-route.test.sh': 185,
   'lock.test.sh': 10,
@@ -58,8 +65,8 @@ export const windowsSeconds = {
   'parallel-grouping.test.sh': 10,
   'plan-amend.test.sh': 333,
   'plan-lib.test.sh': 43,
-  'plan-lint.test.sh': 814,
-  'plan-revise.test.sh': 355,
+  'plan-lint.test.sh': 1270,
+  'plan-revise.test.sh': 560,
   'polluter.test.sh': 10,
   'process-roles.test.sh': 10,
   'project-status.test.sh': 10,
@@ -71,6 +78,7 @@ export const windowsSeconds = {
   'review-route.test.sh': 458,
   'roadmap.test.sh': 125,
   'roots.test.sh': 84,
+  'run-agy-task.test.sh': 390,
   'run-codex-task.test.sh': 10,
   'sdd-references.test.sh': 10,
   'seats.test.sh': 10,
@@ -87,7 +95,7 @@ export const windowsSeconds = {
   'task-step-settle.test.sh': 180,
   'task-step-suite.test.sh': 150,
   'task-step-text.test.sh': 10,
-  'task-step.test.sh': 1340,
+  'task-step.test.sh': 1470,
   'test-simplifier.test.sh': 10,
   'turn-end.test.sh': 251,
   'typed-seats-and-drafting.acceptance.sh': 75,

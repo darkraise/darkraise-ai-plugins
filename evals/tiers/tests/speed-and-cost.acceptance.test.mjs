@@ -62,7 +62,9 @@ const REWORDED = [
 // `bash -c`, the spec review's bullet run, which the CI parity change
 // split with the early-CI question, and the auto run's one-exception
 // sentence, the ledger grammar block's end and the two Plan state openings,
-// which early CI extended. The split cannot have lost them.
+// which early CI extended, and the assignment procedure's one-executor gate
+// and precedence sentences, which the executor routing rule (Task 8)
+// replaced. The split cannot have lost them.
 const REMOVED = [
   '- **Once the plan is reviewed** (at depth light, once it is linted):',
   'Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.',
@@ -93,6 +95,10 @@ const REMOVED = [
   '**Plan state.** First, whatever the per-task lines say:',
   '**Plan state.** Every task complete and no `Final review:` line:',
   '`**Integration check:**` names the command that proves a merged wave works together — normally the whole suite.',
+  'Every id `scripts/executors list` prints has its own gate; run each, resolved with `bash "$(bash scripts/executors path <id> gate)"`, before the roster, and make the offer once per plan for every executor whose gate prints `lane=true`.',
+  "**A task carries at most one `**Executor:**` line, and you choose it.** When two ticked executors' gates both admit a task, nothing mechanical picks between them:",
+  'write one line, and `plan-lint` validates only what is written.',
+  'No precedence rule is introduced here — with one registered executor there is no choice to make, and a rule invented now would be untested against a real second executor.',
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 

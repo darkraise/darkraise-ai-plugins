@@ -7,6 +7,7 @@
   "reference": "reference/executor-lane.md",
   "session_dir": "codex-sessions",
   "session_dir_env": "DR_CODEX_SESSION_DIR",
+  "priority": 20,
   "surfaces": ["review", "lane"],
   "blocks": {
     "gate": "gate",
