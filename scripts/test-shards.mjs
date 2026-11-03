@@ -13,7 +13,8 @@
 // plan-revise; task-step is the sum of its parts in 41311901567.
 // run-agy-task's weight was scaled by its Linux growth on 2026-11-03.
 // Run 41632296991 (2026-11-03) took 847 s for task-step-base and timed out
-// its shard at 25 minutes; its weight is now the 720 s ceiling of its 900 s limit.
+// its shard at 25 minutes. Run 41639945723 hit its 900 s limit (main's push run
+// 41577294934 took 889 s), so the limit is 1200 s and the weight 900 s.
 // Run 41636062852 (2026-11-03) timed shard 1 out; lane-breaker, plan-amend, roadmap,
 // speed-and-cost.acceptance, task-loop-steps.acceptance, task-step-settle,
 // task-step-suite and turn-end take the seconds that run measured.
@@ -98,7 +99,7 @@ export const windowsSeconds = {
   'suite-run.test.sh': 54,
   'task-loop-steps.acceptance.test.sh': 920,
   'task-state.test.sh': 47,
-  'task-step-base.test.sh': 720,
+  'task-step-base.test.sh': 900,
   'task-step-settle.test.sh': 220,
   'task-step-suite.test.sh': 250,
   'task-step-text.test.sh': 10,

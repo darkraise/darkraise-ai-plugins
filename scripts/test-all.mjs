@@ -82,7 +82,7 @@ const hasTsc = typesGenerated && spawnSync(tscExecutable, [...tscPrefix, '--vers
 // auto-run take about 500 s on a Windows runner; 700 s keeps that under 80% of
 // their limit. plan-revise grew to about 560 s there. task-step's limit
 // applies to each of its parts.
-const suiteSeconds = { 'plan-lint.test.sh': 1200, 'speed-and-cost-followups.acceptance.test.sh': 1200, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step-base.test.sh': 900, 'task-step.test.sh': 900, 'next-step.test.sh': 700, 'plan-revise.test.sh': 900, 'auto-run.test.sh': 700 };
+const suiteSeconds = { 'plan-lint.test.sh': 1200, 'speed-and-cost-followups.acceptance.test.sh': 1200, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step-base.test.sh': 1200, 'task-step.test.sh': 900, 'next-step.test.sh': 700, 'plan-revise.test.sh': 900, 'auto-run.test.sh': 700 };
 // faster-plans takes about 20 minutes on a Windows runner, more than a shard
 // can hold beside anything else, so it runs as three parts of its tests.
 // task-step runs as four parts, one per section of the suite, and plan-lint as
