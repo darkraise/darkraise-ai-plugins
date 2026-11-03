@@ -2,6 +2,21 @@
 # plan-lint is the one mechanical checker for plan shape; each fixture below
 # pins one finding class so a planner of any size gets the same verdict.
 set -uo pipefail
+# Usage:
+#   bash plan-lint.test.sh          run every part
+#   bash plan-lint.test.sh two      run the named parts only
+# test-all runs the parts as separate jobs: together they outgrow one Windows
+# shard.
+ALL="one two"
+sel=""
+for n in "$@"; do
+  case " $ALL " in
+    *" $n "*) sel="$sel $n" ;;
+    *) printf 'plan-lint.test.sh: unknown part %s (parts: %s)\n' "$n" "$ALL" >&2; exit 2 ;;
+  esac
+done
+[ $# -gt 0 ] || sel=$ALL
+want() { case " $sel " in *" $1 "*) return 0 ;; esac; return 1; }
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LINT="$HERE/../scripts/plan-lint"
@@ -174,6 +189,7 @@ variant() { # variant <name> <sed expression> — the Claude plan with one edit
   claude_plan | sed -E "$2" > "$1"
 }
 
+if want one; then
 # --- clean plans ---
 claude_plan > clean.md
 lint clean.md
@@ -802,6 +818,8 @@ OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
 lacks "plan-lint: no register means no register findings" "$OUT" "register row"
 lacks "plan-lint: no register means no premature-last finding" "$OUT" "register rows are open"
 
+fi
+if want two; then
 # --- priority routing: agy ranks before codex ---
 export DR_AGY_SESSION_DIR="$TMP/agy-sessions"
 agy_rung() { # agy_rung <total> - "<model> / <effort>" from the shipped agy-assignment block
@@ -947,6 +965,7 @@ printf 'called\n' >> "$TMP/probe-calls"
 echo '[{"id":"codex","usable":false,"reason":"off"},{"id":"stub","usable":true,"reason":null}]'
 EOF
 export PLAN_LINT_ROSTER="$TMP/stub-roster.sh"
+variant p1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/'
 rm -f probe-calls; lint p1.md
 has "a second executor warns with its own rung" "$out" \
   "WARN Task 1: lane-eligible with no **Executor:** line (stub stub-model / medium)"
@@ -1417,5 +1436,6 @@ sed 's#docs/ui-spec.md#docs/spec.md#' ui-bad.md > ui-nocontract.md
 out=$(bash "$LINT" ui-nocontract.md --no-probe 2>&1)
 lacks "ui: a spec without a contract asks for no line" "$out" "UI/UX"
 
+fi
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
