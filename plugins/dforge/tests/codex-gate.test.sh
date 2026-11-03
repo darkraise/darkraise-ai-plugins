@@ -290,6 +290,14 @@ jq '.resets_at_epoch = 1577836800' "$SESS/s1.json" > "$TMP/s.json" && mv "$TMP/s
 gate usable
 check "a quota past its reset time is probed again" "$out" \
   "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+# Past 18 digits the -gt overflows; sed, not jq, so the digits reach the file as written.
+fresh; gate quota
+jq '.resets_at_epoch = 1577836800' "$SESS/s1.json" | sed 's/1577836800/99999999999999999999/' > "$TMP/s.json" \
+  && mv "$TMP/s.json" "$SESS/s1.json"
+gate usable
+check "a 20-digit reset epoch is stale and probed again" "$out" \
+  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+check "a 20-digit reset epoch writes nothing to stderr" "$(cat "$TMP/err")" ""
 gate quota --refresh
 check "--refresh probes even with a cached answer" "$out" \
   "codex-gate usable=false reason=quota review=false lane=false resets_at=2026-09-20T10:03:27Z source=probe"

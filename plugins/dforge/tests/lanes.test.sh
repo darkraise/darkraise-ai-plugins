@@ -245,9 +245,11 @@ done <<< "$agy_assignment"
 check "every agy-assignment rung names a known model and effort" "$bad_agy" "NONE"
 check "agy-assignment has one row for each total 0 through 8" \
   "$(printf '%s\n' $agy_scores | sort -n | tr '\n' ' ')" "0 1 2 3 4 5 6 7 8 "
-check "agy-assignment rows 3 to 8 mirror the native Claude table" \
-  "$(printf '%s\n' "$agy_assignment" | awk '$1 >= 3' | tr '\n' ',')" \
-  "3 claude-sonnet-5-5 medium,4 claude-sonnet-5-5 medium,5 claude-sonnet-5-5 high,6 claude-opus-5-5 high,7 claude-opus-5-5 high,8 claude-opus-5-5 high,"
+check "agy-assignment runs Flash medium on 0-2, Argon low on 3-4 and Argon high on 5-8" \
+  "$(printf '%s\n' "$agy_assignment" | tr '\n' ',')" \
+  "0 gemini-3.8-flash medium,1 gemini-3.8-flash medium,2 gemini-3.8-flash medium,3 gemini-4-argon low,4 gemini-4-argon low,5 gemini-4-argon high,6 gemini-4-argon high,7 gemini-4-argon high,8 gemini-4-argon high,"
+check "no agy-assignment row starts on a Claude model" \
+  "$(printf '%s\n' "$agy_assignment" | awk '$2 ~ /^claude-/' | grep -c .)" "0"
 check "the lowest agy-assignment row is the gate's min_score" \
   "$(printf '%s\n' "$agy_assignment" | awk 'NR == 1 || $1 < m { m = $1 } END { print m }')" "$(agy_gate_field min_score)"
 check "the highest agy-assignment row is the gate's max_score" \
@@ -263,6 +265,14 @@ agy_rank() { # agy_rank <model>/<effort>: model_rank * 10 + effort_rank, or -1
 agy_successor=$(block agy-successor)
 # The checks below loop over the rows, so an empty block would pass them all.
 check "agy-successor block is present" "$([ -n "$agy_successor" ] && echo yes || echo no)" "yes"
+check "agy-successor sends each Gemini rung to Sonnet and each Sonnet rung back" \
+  "$(printf '%s\n' "$agy_successor" | tr '\n' ',')" \
+  "gemini-3.8-flash/medium claude-sonnet-5-5/medium,gemini-4-argon/low claude-sonnet-5-5/medium,gemini-4-argon/high claude-sonnet-5-5/high,claude-sonnet-5-5/medium HANDBACK,claude-sonnet-5-5/high HANDBACK,"
+bad_agy_claude=NONE
+while read -r from to; do
+  case "$from" in claude-*) [ "$to" = HANDBACK ] || bad_agy_claude="$from->$to" ;; esac
+done <<< "$agy_successor"
+check "every Claude agy-successor source hands back" "$bad_agy_claude" "NONE"
 agy_succ_of() { printf '%s\n' "$agy_successor" | awk -v k="$1" '$1 == k {print $2}'; }
 
 bad_agy_rank=NONE
@@ -304,6 +314,11 @@ check "every agy-assignment rung has a successor" "$bad_agy_entry" "NONE"
 
 agy_timeouts=$(block agy-timeout)
 check "agy-timeout block is present" "$([ -n "$agy_timeouts" ] && echo yes || echo no)" "yes"
+check "agy-timeout gives Argon 900 s at low and 1500 s at high, one row per reachable rung" \
+  "$(printf '%s\n' "$agy_timeouts" | tr '\n' ',')" \
+  "gemini-3.8-flash/medium 900,gemini-4-argon/low 900,gemini-4-argon/high 1500,claude-sonnet-5-5/medium 1200,claude-sonnet-5-5/high 1800,"
+check "no agy block names claude-opus-5-5" \
+  "$(printf '%s\n' "$agy_assignment" "$agy_successor" "$agy_timeouts" | grep -c 'claude-opus-5-5')" "0"
 bad_agy_timeout=NONE
 while read -r from to; do
   [ -n "$from" ] || continue
@@ -338,6 +353,12 @@ check "ladder.md gives agy its assignment, successor and timeout subsections" \
   "$(grep -cE '^### Agy (assignment|successor|timeout)$' "$LADDER")" "3"
 check "the agy gate subsection states why its floor is 0" \
   "$(grep -cF '`agy-lane-gate` has a floor of 0 because' "$LADDER")" "1"
+check "ladder.md names the 3-8 calibration note as the source of agy rows 3-8" \
+  "$(grep -cF 'docs/dforge/notes/2026-11-03-agy-calibration-3-8.md' "$LADDER")" "1"
+check "the note ladder.md names is committed" \
+  "$(git -C "$HERE/../../.." ls-files --error-unmatch docs/dforge/notes/2026-11-03-agy-calibration-3-8.md >/dev/null 2>&1 && echo yes || echo no)" "yes"
+check "ladder.md no longer says agy rows 3 to 8 mirror the native table" \
+  "$(grep -cF 'Totals 3 to 8 mirror the native Claude assignment table' "$LADDER")" "0"
 
 # --- the agy calibration record and the lane's trust ---
 # Rows 0-2 of agy-assignment, that rung's successor and timeout rows, and the
@@ -396,8 +417,9 @@ check "every run row carries numeric wall seconds and tokens" "${badnum:-x}" "0"
 
 check "the record states a smoke result" \
   "$(grep -cE '^\*\*Smoke:\*\* (pass|fail)' "$NOTES" 2>/dev/null)" "1"
-smoke_rung=$(block agy-assignment | awk '$1 == 5 { print $2 "/" $3 }')
-check "the smoke run used the rung that total 5 is assigned" \
+# The 2026-11-02 record is history: its smoke run used total 5's rung of the time.
+smoke_rung=claude-sonnet-5-5/high
+check "the 2026-11-02 smoke run used claude-sonnet-5-5/high" \
   "$(awk -F'|' -v r="$smoke_rung" '
     function t(s) { gsub(/^ +| +$/, "", s); return s }
     t($2) ~ /^S1/ && t($3) == r { n++ }
@@ -443,6 +465,32 @@ RD="$HERE/../README.md"
 for need in 'Antigravity' 'scripts/run-agy-task.sh' 'scripts/agy-gate' 'scripts/lane-breaker' 'executors ranked'; do
   check "the README names $need" "$([ "$(grep -cF -- "$need" "$RD")" -ge 1 ] && echo yes || echo no)" "yes"
 done
+
+# --- the Gemini-first lane in the reference and the README ---
+check "the capability row hands back when the agy successor is Claude and the fallback is off" \
+  "$(grep -E '^\| Capability' "$EL" | grep -cF 'executor agy HANDBACK - fallback quota until <iso>')" "1"
+check "the resume table hands back on the wrapper's fallback refusal" \
+  "$(grep -E '^\|' "$EL" | grep -F 'the agy Claude fallback is off until' | grep -cF 'executor agy HANDBACK - fallback quota until <iso>')" "1"
+check "no table row of the reference carries a bare <iso|session end> template" \
+  "$(grep -E '^\|' "$EL" | grep -cF '<iso|session end>')" "0"
+check "neither transient row retries a quota the wrapper marked" \
+  "$(grep -E '^\| Transient' "$EL" | grep -cF 'is not retried')" "2"
+check "an agy Executor line may name a successor rung" \
+  "$(grep -cF 'outside its assignment and successor blocks' "$EL")" "1"
+for need in 'separate limits' 'Individual quota reached' 'Resets in' 'fallback=off' 'fallback_resets_at=' 'marked=none' 'next gate call'; do
+  check "Per-executor: agy's quota bullet says: $need" "$(grep -cF -- "$need" <<<"$agy_sec")" "1"
+done
+check "the agy section no longer says Antigravity publishes no reset time" \
+  "$(grep -cF 'Antigravity publishes no reset time' <<<"$agy_sec")" "0"
+check "the README no longer keeps the lane off for the session on every quota" \
+  "$(tr '\n' ' ' < "$RD" | tr -s ' ' | grep -cF 'a quota failure keeps the lane off for the session')" "0"
+check "the README says a Claude quota closes only the Claude fallback" \
+  "$(tr '\n' ' ' < "$RD" | tr -s ' ' | grep -cF 'closes only the Claude fallback')" "1"
+check "the README has a 4.11 migration section" "$(grep -cxF '## Migrating to 4.11' "$RD")" "1"
+check "the 4.11 migration section says old Claude agy lines fail plan-lint" \
+  "$(awk '/^## / { on = ($0 == "## Migrating to 4.11") } on' "$RD" | tr '\n' ' ' | grep -cF 'fails `plan-lint`')" "1"
+check "the README no longer says agy takes totals 3-8 on Claude Sonnet or Opus" \
+  "$(tr '\n' ' ' < "$RD" | tr -s ' ' | grep -cF 'totals 3-8 on Claude Sonnet or Opus')" "0"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

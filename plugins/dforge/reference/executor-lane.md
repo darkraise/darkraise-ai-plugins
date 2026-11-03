@@ -321,10 +321,10 @@ hand, which would bypass the scoped staging the write set exists to enforce.
 |---------|----------|
 | `note=writer-unconfirmed`, after a timeout or a transport error | The turn was not confirmed stopped, so the task is `blocked`. Do not retry or hand back: confirm the executor's turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
 | Git guard - the report's `- note:` line says `agy changed git refs: <ref>` or `agy changed the git index`, and the task is `blocked` | Do not retry, take the successor rung or resume: the wrapper refuses a `blocked` task, and `--handback` accepts only a `pending` or `complete` one. Compare `refs-before.txt` with `refs-after.txt` beside the task's `state.json` to see what moved. Undo agy's own git writes, or judge the change a concurrent writer's and leave it, with the index clean either way; then follow [external-task-recovery.md](external-task-recovery.md): `--accept-baseline`, with the user's approval, returns the task to `pending`, and `--handback` follows. Record the handback on the assigned line, `executor agy HANDBACK - git guard: <ref or index>`, so the per-plan breaker counts it |
-| Transient - network, rate limit, quota, 5xx, named in the report's `## <Id> error` section, without `note=writer-unconfirmed` | Retry once at the same rung |
+| Transient - network, rate limit, quota, 5xx, named in the report's `## <Id> error` section, without `note=writer-unconfirmed` | Retry once at the same rung. An `agy` quota the wrapper marked (`marked=lane` or `marked=fallback` under `reason=quota`) is not retried: read `agy-gate --refresh`, then `HANDBACK` now. A lane quota records `executor agy HANDBACK - quota`, plus ` until <iso>` taking `<iso>` from that line's `resets_at` when it is not `-`; a fallback quota records `executor agy HANDBACK - fallback quota until <iso>`, taking `<iso>` from its `fallback_resets_at` (`until session end` when it is `-`). A `marked=none` quota keeps the one retry |
 | Timeout - `note=timed-out` on the status line, `exit=124` or `timedOut=true` in the error section, without `note=writer-unconfirmed` | Retry once at the same rung with `--timeout` raised. Do not take the successor rung: it is a slower model and would time out too |
 | Refusal - a refusal marker in the report's `## <Id> error` section (`refusal=true` for Codex, `reason=unknown-model` for agy) | `HANDBACK` now. The account does not offer that model or effort, so a retry would be refused too. A successor is no answer either: Codex's successor rungs are the same model, and an agy refusal means the ladder names a model the account lacks, which needs a ladder fix rather than a second paid run |
-| Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via that executor's successor block (`executors get <id> blocks.successor`) and run once |
+| Capability - empty diff, or `status=BLOCKED` with no transient cause | Move one rung via that executor's successor block (`executors get <id> blocks.successor`) and run once. For `agy`, read `agy-gate --refresh` first: when the successor is a `claude-` rung and the line says `fallback=off`, `HANDBACK` now and record `executor agy HANDBACK - fallback quota until <iso>`, taking `<iso>` from `fallback_resets_at` (`until session end` when it is `-`). The hand-back counts toward the per-plan breaker |
 | `status=NEEDS_CONTEXT` | Answer the questions the report lists, then resume (below). Not a failure and not a retry, even though it also exits 1 |
 | Any failure a second time | `HANDBACK` |
 
@@ -433,9 +433,10 @@ bounded by their own rule below and by the two-round cap.
 
 | Resume outcome | Response |
 |----------------|----------|
-| Transient - the report's `## <Id> error` names a rate limit, quota, network, or 5xx | Retry the same resume once, same rung, same thread |
+| Transient - the report's `## <Id> error` names a rate limit, quota, network, or 5xx | Retry the same resume once, same rung, same thread. An `agy` quota the wrapper marked is not retried: `HANDBACK` now, recorded as in When a run fails |
 | `note=timed-out` with `exit=124`, without `note=writer-unconfirmed` | Retry the same resume once with `--timeout` raised |
 | `note=writer-unconfirmed` | As for an initial run: confirm the turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
+| `exit=2` whose stderr says `the agy Claude fallback is off until …` | `HANDBACK` now, recorded on the fix-round line as `executor agy HANDBACK - fallback quota until <iso>` (`until session end` when the message says the end of the session). Re-issuing the resume would be refused again |
 | `exit=2` | **Read the durable record's `phase` first: exit 2 does not prove nothing ran.** The wrapper also exits 2 after the turn, on thread-persistence, reap-persistence, scope-validation, staging, commit or report-copy failure. On a preflight phase, nothing ran and the thread is untouched: fix what you passed and re-issue the same resume, which does not count as a failed round. On any later phase, follow [external-task-recovery.md](external-task-recovery.md) before re-issuing anything |
 | `status=BLOCKED`, or `exit=0` with no verdict, and no transient cause | `HANDBACK` now, rather than at round 2: the Claude implementer takes this round |
 | A second failure of any kind in the same round | `HANDBACK` |
@@ -614,7 +615,7 @@ rules on every rejection ([final-review.md](final-review.md)).
 | Task has an `**Executor:**` line and that executor's gate does not print `lane=true` | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the gate's `reason` in the assigned line |
 | Task has an `**Executor:**` line, the gate prints `lane=true`, and the CLI is usable | Run the wrapper; do not dispatch a subagent for it |
 | Task has an `**Executor:**` line and the CLI is missing, unauthenticated, or not batch-capable | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the roster's `reason` in the assigned line |
-| The `**Executor:**` line names a model outside the executor's assignment block, an effort its wrapper does not admit, or a pair with no row in its timeout block | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
+| The `**Executor:**` line names a model outside the executor's assignment block (for `agy`, outside its assignment and successor blocks), an effort its wrapper does not admit, or a pair with no row in its timeout block | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
 | Wrapper exits 2 during staging or commit | Read the durable record; use commit recovery after exact snapshot validation, or explicit reconciliation. Never rerun the model merely to retry a commit |
 | Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching the executor, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the `**Implementer:**` agent and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
 | Two executor runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
@@ -741,12 +742,22 @@ specific to it:
 - **Timeout.** A print timeout exits 0 with `finished_reason: "print_timeout"`.
   The wrapper classifies it as `exit=124`, `reason=timeout`, as it does the outer
   `timeout` firing.
-- **Quota.** Antigravity publishes no reset time, so a quota failure marks the
-  lane off for the session, and `agy-gate --refresh` keeps a cached
-  `reason=quota` instead of re-probing it. Only `agy`'s own `.error` text or
-  non-JSON stdout marks it off: a quota word found only in stderr, which can
-  carry the output of commands the model ran, gives `reason=quota` for that run
-  and leaves the lane on.
+- **Quota.** Antigravity counts Claude and Gemini against separate limits,
+  and its error names the reset: `RESOURCE_EXHAUSTED (code 429): Individual
+  quota reached. Please upgrade your subscription to increase your limits.
+  Resets in 4h47m34s.` The wrapper reads `Resets in <n>d<n>h<n>m<n>s` into a
+  reset counted from when `agy` exits. A quota on a Gemini run marks the lane
+  off until then, and `agy-gate --refresh` keeps a cached `reason=quota`
+  instead of re-probing it until the reset passes, printing it as
+  `resets_at=`. A quota on a `claude-` run marks only the Claude fallback,
+  which the gate prints as
+  `fallback=off` with `fallback_resets_at=`, and the wrapper refuses `claude-`
+  models at preflight while it holds. A quota with no reset time keeps its
+  mark for the session. Only `agy`'s own `.error` text or non-JSON stdout
+  marks anything: a quota word found only in stderr, which can carry the
+  output of commands the model ran, gives `reason=quota` with `marked=none`.
+  Readers of the session file, such as `plan-lint`, see a mark lift only after
+  the next gate call rewrites the file.
 - **Error reasons.** The `## Agy error` section's `reason=` is one of `quota`,
   `timeout`, `unknown-model` and `error`. `unknown-model` is the refusal marker:
   the account does not offer that model, so the response is `HANDBACK` now.

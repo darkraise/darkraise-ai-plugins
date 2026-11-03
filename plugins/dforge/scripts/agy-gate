@@ -8,10 +8,13 @@
 # opens the executor lane; agy has no review surface.
 # Anything else turns the lane off for the session, so an agy outage degrades
 # the process instead of failing a task. The answer is cached per session; a
-# quota mark has no reset time and stays for the session, --refresh included.
+# quota mark lasts until the reset time the error named, or for the session
+# when it named none, --refresh included. A quota on a Claude model marks only
+# the Claude fallback, which the line reports as fallback= and
+# fallback_resets_at=.
 #
 # Usage: agy-gate [--refresh]
-# Output: agy-gate usable=<bool> reason=<r> review=false lane=<bool> resets_at=- source=<probe|cache|setting>
+# Output: agy-gate usable=<bool> reason=<r> review=false lane=<bool> resets_at=<iso|-> fallback=<on|off> fallback_resets_at=<iso|-> source=<probe|cache|setting>
 #
 # The agyLane setting (scripts/dforge-config) switches the lane off whatever the
 # probe says; off, the gate answers `reason=setting` without probing.
@@ -40,28 +43,63 @@ command -v node >/dev/null 2>&1 || die "node is required but not on PATH"
 want_lane=$(dforge_setting agyLane true)
 
 usable="" reason="" version="" source=probe
+resets_at="" resets_epoch=""
+now=$(date -u +%s)
 file=$(executor_session_file agy) || file=""
 if [ "$want_lane" = false ]; then
   usable=false reason=setting source=setting
 fi
-if [ "$source" = probe ] && [ -n "$file" ] && [ -r "$file" ]; then
+c_usable="" c_reason="" c_version="" c_resets="" c_epoch="" f_has="" f_resets="" f_epoch=""
+if [ -n "$file" ] && [ -r "$file" ]; then
   # A unit separator, not a tab: read collapses runs of whitespace separators,
   # which would shift every field after an empty one.
-  cached=$(jq -r '[(.usable | tostring), (.reason // ""), (.agy_version // "")] | join("\u001f")' \
+  cached=$(jq -r '
+    def str: if type == "string" then . else "" end;
+    def epoch: if . == null then "" else tostring end;
+    [(.usable | tostring), (.reason // ""), (.agy_version // ""),
+     (.resets_at | str), (.resets_at_epoch | epoch),
+     (if (.fallback | type) == "object" then "yes" else "" end),
+     (.fallback | objects | .resets_at | str) // "",
+     (.fallback | objects | .resets_at_epoch | epoch) // ""] | join("\u001f")' \
     < "$file" 2>/dev/null | tr -d '\r')
-  IFS=$'\x1f' read -r c_usable c_reason c_version <<<"$cached"
+  IFS=$'\x1f' read -r c_usable c_reason c_version c_resets c_epoch f_has f_resets f_epoch <<<"$cached"
+  # At most 18 digits: a longer number overflows [ -gt ], whose error would
+  # read as an expired reset and reopen a quota.
+  [[ $c_epoch =~ ^[0-9]{1,18}$ ]] || c_epoch=""
+  [[ $f_epoch =~ ^[0-9]{1,18}$ ]] || f_epoch=""
+fi
+if [ "$source" = probe ]; then
   # An answer the setting forced says nothing about agy itself, so it is never
-  # reused once the setting is back on. A quota has no reset time to wait for,
-  # so --refresh keeps it rather than probing it away: the auth probe cannot
-  # see a quota and would turn the lane back on.
+  # reused once the setting is back on. --refresh keeps a quota rather than
+  # probing it away: the auth probe cannot see a quota and would turn the lane
+  # back on. The one quota that probes is one whose reset time has passed.
   case "$c_usable" in
     true|false)
-      if [ -n "$c_reason" ] && [ "$c_reason" != setting ] \
-         && { [ "$refresh" -eq 0 ] || [ "$c_usable:$c_reason" = false:quota ]; }; then
-        usable=$c_usable reason=$c_reason version=$c_version source=cache
+      if [ -n "$c_reason" ] && [ "$c_reason" != setting ]; then
+        if [ "$c_usable:$c_reason" = false:quota ]; then
+          if [ -z "$c_epoch" ] || [ "$c_epoch" -gt "$now" ]; then
+            usable=$c_usable reason=$c_reason version=$c_version source=cache
+            resets_epoch=$c_epoch
+            [ -z "$c_epoch" ] || resets_at=$c_resets
+          fi
+        elif [ "$refresh" -eq 0 ]; then
+          usable=$c_usable reason=$c_reason version=$c_version source=cache
+        fi
       fi
       ;;
   esac
+fi
+
+# The Claude fallback has its own quota, so its mark is read whatever answered
+# for the lane. An expired mark is dropped from the file by the write below.
+fallback=on fallback_resets_at="" fallback_expired=false
+if [ "$f_has" = yes ]; then
+  if [ -z "$f_epoch" ] || [ "$f_epoch" -gt "$now" ]; then
+    fallback=off
+    [ -z "$f_epoch" ] || fallback_resets_at=$f_resets
+  else
+    fallback_expired=true
+  fi
 fi
 
 if [ "$source" = probe ]; then
@@ -110,10 +148,14 @@ if [ -n "$file" ]; then
   executor_session_write agy "$(jq -cn --arg sid "$(executor_session_id)" \
     --argjson usable "$usable" --argjson lane "$lane" \
     --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg version "$version" \
+    --arg resets "$resets_at" --arg epoch "$resets_epoch" --argjson drop "$fallback_expired" \
     '{session_id: $sid, usable: $usable, review: false, lane: $lane, reason: $reason,
-      checked_at: $at, resets_at: null, resets_at_epoch: null,
-      agy_version: (if $version == "" then null else $version end)}')"
+      checked_at: $at,
+      resets_at: (if $resets == "" then null else $resets end),
+      resets_at_epoch: (if $epoch == "" then null else ($epoch | tonumber) end),
+      agy_version: (if $version == "" then null else $version end)}
+     + (if $drop then {fallback: null} else {} end)')"
 fi
 
-printf 'agy-gate usable=%s reason=%s review=false lane=%s resets_at=- source=%s\n' \
-  "$usable" "$reason" "$lane" "$source"
+printf 'agy-gate usable=%s reason=%s review=false lane=%s resets_at=%s fallback=%s fallback_resets_at=%s source=%s\n' \
+  "$usable" "$reason" "$lane" "${resets_at:--}" "$fallback" "${fallback_resets_at:--}" "$source"

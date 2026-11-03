@@ -11,6 +11,13 @@
 // 1200 s cap in run 41566860573; its weight is the last green run's 1049 s
 // scaled by the 21% its Linux time grew since. The same run supplied
 // plan-revise; task-step is the sum of its parts in 41311901567.
+// run-agy-task's weight was scaled by its Linux growth on 2026-11-03.
+// Run 41632296991 (2026-11-03) took 847 s for task-step-base and timed out
+// its shard at 25 minutes. Run 41639945723 hit its 900 s limit (main's push run
+// 41577294934 took 889 s), so the limit is 1200 s and the weight 900 s.
+// Run 41636062852 (2026-11-03) timed shard 1 out; lane-breaker, plan-amend, roadmap,
+// speed-and-cost.acceptance, task-loop-steps.acceptance, task-step-settle,
+// task-step-suite and turn-end take the seconds that run measured.
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -20,6 +27,7 @@
 export const windowsSeconds = {
   'run-all.sh': 157,
   'agy-gate.test.sh': 20,
+  'agy-gemini-first.acceptance.test.sh': 120,
   'antigravity-executor-lane.acceptance.test.sh': 250,
   'auto-default.test.sh': 10,
   'auto-run-skills.test.sh': 10,
@@ -55,7 +63,7 @@ export const windowsSeconds = {
   'in-flight.test.sh': 36,
   'inline-mode.test.sh': 65,
   'ladder.test.sh': 10,
-  'lane-breaker.test.sh': 10,
+  'lane-breaker.test.sh': 50,
   'lanes.test.sh': 10,
   'lens-route.test.sh': 185,
   'lock.test.sh': 10,
@@ -63,7 +71,7 @@ export const windowsSeconds = {
   'native-routing.test.sh': 10,
   'next-step.test.sh': 500,
   'parallel-grouping.test.sh': 10,
-  'plan-amend.test.sh': 333,
+  'plan-amend.test.sh': 390,
   'plan-lib.test.sh': 43,
   'plan-lint.test.sh': 1270,
   'plan-revise.test.sh': 560,
@@ -76,9 +84,9 @@ export const windowsSeconds = {
   'review-depth-qa.acceptance.test.sh': 288,
   'review-depth.acceptance.test.sh': 160,
   'review-route.test.sh': 458,
-  'roadmap.test.sh': 125,
+  'roadmap.test.sh': 170,
   'roots.test.sh': 84,
-  'run-agy-task.test.sh': 390,
+  'run-agy-task.test.sh': 450,
   'run-codex-task.test.sh': 10,
   'sdd-references.test.sh': 10,
   'seats.test.sh': 10,
@@ -87,17 +95,17 @@ export const windowsSeconds = {
   'skill-split-planning.test.sh': 10,
   'snapshot.test.sh': 10,
   'speed-and-cost-followups.acceptance.test.sh': 470,
-  'speed-and-cost.acceptance.test.sh': 230,
+  'speed-and-cost.acceptance.test.sh': 280,
   'suite-run.test.sh': 54,
-  'task-loop-steps.acceptance.test.sh': 720,
+  'task-loop-steps.acceptance.test.sh': 920,
   'task-state.test.sh': 47,
-  'task-step-base.test.sh': 550,
-  'task-step-settle.test.sh': 180,
-  'task-step-suite.test.sh': 150,
+  'task-step-base.test.sh': 900,
+  'task-step-settle.test.sh': 220,
+  'task-step-suite.test.sh': 250,
   'task-step-text.test.sh': 10,
   'task-step.test.sh': 1470,
   'test-simplifier.test.sh': 10,
-  'turn-end.test.sh': 251,
+  'turn-end.test.sh': 290,
   'typed-seats-and-drafting.acceptance.sh': 75,
   'ui-hooks.test.sh': 65,
   'ui-lint.test.sh': 10,

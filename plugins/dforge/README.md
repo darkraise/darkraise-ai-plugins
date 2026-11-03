@@ -198,8 +198,10 @@ Claude implementer, for quota offload onto a separate subscription and for a
 second model family in the loop. Two executors are registered. `agy`, the
 Antigravity CLI (priority 10, wrapper `scripts/run-agy-task.sh`), takes totals 0-8 at risk 2 or below,
 implementation only: totals 0-2 run on `gemini-3.8-flash` at medium effort, as
-the calibration record in `docs/dforge/notes/2026-11-02-agy-calibration.md`
-decided, and totals 3-8 on Claude Sonnet or Opus. Codex (priority 20) keeps the
+the 2026-11-02 calibration record decided, totals 3-4 on `gemini-4-argon` at
+low effort and totals 5-8 on `gemini-4-argon` at high effort, as
+`docs/dforge/notes/2026-11-03-agy-calibration-3-8.md` decided; Claude Sonnet
+runs through `agy` only as the single retry after a Gemini run fails. Codex (priority 20) keeps the
 tasks `agy` refuses. Planning gives each task to the first ticked executor, in
 `executors ranked` order, whose gate admits it. The `agyLane` setting (`Agy
 tasks`) turns the agy lane off. `agy` runs unsandboxed, with the reach of a
@@ -321,8 +323,9 @@ recorded per surface in `reference/codex-plugin.json`: the calibration replay
 opens the review seats, and the executor-lane smoke test opens the lane.
 `scripts/agy-gate` does the same for Antigravity once per session: `agy` found
 at an allowed version, signed in, within quota, `agyLane` on and the smoke result
-in `reference/agy-policy.json` passing; a quota failure keeps the lane off for
-the session.
+in `reference/agy-policy.json` passing. A quota on a Gemini model closes the
+lane, and one on a Claude model closes only the Claude fallback, each until the
+reset time the error names, or for the session when it names none.
 
 **Project state.** `docs/dforge/` holds what a project knows about
   itself, not just its specs and plans: `gates.md` declares the verification
@@ -1016,6 +1019,16 @@ claude --plugin-dir plugins/dforge
 The last loads the working copy into a session and reloads it on save. The
 engine lays its type declarations under `.claude-plugin/types/` when it loads
 the folder; they are not committed.
+
+## Migrating to 4.11
+
+dforge 4.11 runs the `agy` lane Gemini first (`gemini-3.8-flash medium` for
+totals 0-2, `gemini-4-argon low` for 3-4, `gemini-4-argon high` for 5-8), runs
+Claude through `agy` only as the retry after a Gemini run fails, and adds
+`fallback=` and `fallback_resets_at=` to the `agy-gate` line before `source=`.
+A plan whose `**Executor:** agy` lines name a `claude-` rung fails `plan-lint`
+until those lines are rewritten from the new block: `scripts/plan-revise`
+prints each task's rung, and dforge:revising-plans makes the edit.
 
 ## Migrating to 4.0
 

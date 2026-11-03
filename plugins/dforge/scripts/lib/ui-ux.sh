@@ -82,14 +82,19 @@ uiux_filter() {
     }
     function lit(c) { return c ~ /[A-Za-z0-9_\/ -]/ ? c : (c == "\\" ? "\\\\" : c == "^" ? "\\^" : "[" c "]") }
     BEGIN {
-      ni = split(ENVIRON["UIUX_INC"], g, "\n"); for (k = 1; k <= ni; k++) if (g[k] != "") inc[k] = re(g[k])
-      ne = split(ENVIRON["UIUX_EXC"], g, " "); for (k = 1; k <= ne; k++) if (g[k] != "") exc[k] = re(g[k])
+      inc = any(ENVIRON["UIUX_INC"], "\n"); exc = any(ENVIRON["UIUX_EXC"], " ")
     }
-    $0 == "" { next }
-    {
-      for (k in exc) if ($0 ~ exc[k]) next
-      for (k in inc) if ($0 ~ inc[k]) { print; next }
+    # One alternation per list, not a loop over patterns: gawk caches only the
+    # last dynamic regex an expression saw, so cycling patterns recompiled one
+    # per test and 50000 paths took seconds instead of a tenth of one.
+    function any(list, sep,   g, n, k, out) {
+      n = split(list, g, sep)
+      for (k = 1; k <= n; k++) if (g[k] != "") out = out (out == "" ? "" : "|") "(" re(g[k]) ")"
+      return out
     }
+    $0 == "" || inc == "" { next }
+    exc != "" && $0 ~ exc { next }
+    $0 ~ inc { print }
   '
 }
 
