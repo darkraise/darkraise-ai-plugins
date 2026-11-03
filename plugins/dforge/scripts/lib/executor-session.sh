@@ -99,6 +99,7 @@ _executor_session_iso() {
 # gate reads back out of the cache are written: reason, checked_at, both
 # resets_at fields, plugin_version (null when the prior file had none), and
 # every other `*_version` field the prior file carried, such as agy_version.
+# An <epoch> of more than 18 digits is no reset: the gate could not compare it.
 #
 # Both mark functions fail when the mark was not written, and succeed without
 # writing when there is no session id, as executor_session_write does.
@@ -106,7 +107,7 @@ executor_session_mark_off() {
   local f prior surfaces record epoch=${3:-} iso=''
   [ -n "$(executor_session_id)" ] || return 0
   f=$(executor_session_file "$1") || return 1
-  if [[ $epoch =~ ^[0-9]+$ ]]; then iso=$(_executor_session_iso "$epoch"); else epoch=''; fi
+  if [[ $epoch =~ ^[0-9]{1,18}$ ]]; then iso=$(_executor_session_iso "$epoch"); else epoch=''; fi
   # Parsed, not cat: an empty or torn file would make the jq below produce
   # nothing, and the empty file that writes reads back as a cache miss, so the
   # next gate call re-probes and can turn the executor on again.
@@ -135,7 +136,7 @@ executor_session_mark_fallback_off() {
   local f prior record epoch=${2:-} iso=''
   [ -n "$(executor_session_id)" ] || return 0
   f=$(executor_session_file "$1") || return 1
-  if [[ $epoch =~ ^[0-9]+$ ]]; then iso=$(_executor_session_iso "$epoch"); else epoch=''; fi
+  if [[ $epoch =~ ^[0-9]{1,18}$ ]]; then iso=$(_executor_session_iso "$epoch"); else epoch=''; fi
   prior=$(jq -cs 'if length == 1 and (.[0] | type) == "object" then .[0] else {} end' 2>/dev/null < "$f") \
     || prior='{}'
   [ -n "$prior" ] || prior='{}'

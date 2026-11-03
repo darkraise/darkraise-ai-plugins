@@ -229,6 +229,12 @@ gate --refresh
 check "a non-numeric reset reads as none, so the quota holds for the session" "$out" \
   "agy-gate usable=false reason=quota review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=cache"
 
+# Twenty digits overflow [ -gt ]; a string keeps every jq from reformatting them.
+fresh; seed '{session_id:"s1", usable:false, review:false, lane:false, reason:"quota", resets_at:"far", resets_at_epoch:"99999999999999999999", agy_version:"1.4.12", fallback:{usable:false, reason:"quota", resets_at:"far", resets_at_epoch:"99999999999999999999"}}'
+gate --refresh
+check "a reset past 18 digits reads as none, so both quotas hold for the session" "$out" \
+  "agy-gate usable=false reason=quota review=false lane=false resets_at=- fallback=off fallback_resets_at=- source=cache"
+
 fresh; seed "{session_id:\"s1\", usable:true, review:false, lane:true, reason:\"ok\", resets_at:null, resets_at_epoch:null, agy_version:\"1.4.12\", fallback:{usable:false, reason:\"quota\", resets_at:\"$FAR_ISO\", resets_at_epoch:$FAR}}"
 gate
 check "an unexpired fallback mark turns the fallback off and leaves the lane on" "$out" \

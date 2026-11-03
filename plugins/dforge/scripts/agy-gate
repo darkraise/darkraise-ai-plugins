@@ -63,8 +63,10 @@ if [ -n "$file" ] && [ -r "$file" ]; then
      (.fallback | objects | .resets_at_epoch | epoch) // ""] | join("\u001f")' \
     < "$file" 2>/dev/null | tr -d '\r')
   IFS=$'\x1f' read -r c_usable c_reason c_version c_resets c_epoch f_has f_resets f_epoch <<<"$cached"
-  [[ $c_epoch =~ ^[0-9]+$ ]] || c_epoch=""
-  [[ $f_epoch =~ ^[0-9]+$ ]] || f_epoch=""
+  # At most 18 digits: a longer number overflows [ -gt ], whose error would
+  # read as an expired reset and reopen a quota.
+  [[ $c_epoch =~ ^[0-9]{1,18}$ ]] || c_epoch=""
+  [[ $f_epoch =~ ^[0-9]{1,18}$ ]] || f_epoch=""
 fi
 if [ "$source" = probe ]; then
   # An answer the setting forced says nothing about agy itself, so it is never

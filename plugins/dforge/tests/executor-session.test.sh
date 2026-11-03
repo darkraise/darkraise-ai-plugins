@@ -75,6 +75,9 @@ check "mark_off with a reset epoch records it in ISO 8601 UTC" "$(jq -r '.resets
 executor_session_mark_off stub quota ""
 check "mark_off with an empty reset writes both reset fields null" \
   "$(jq -r '[.resets_at, .resets_at_epoch] | map(tostring) | join(",")' "$srec")" "null,null"
+executor_session_mark_off stub quota 99999999999999999999
+check "mark_off with a reset past 18 digits writes both reset fields null" \
+  "$(jq -r '[.resets_at, .resets_at_epoch] | map(tostring) | join(",")' "$srec")" "null,null"
 
 executor_session_write stub '{"session_id":"session-test","usable":true,"lane":true,"reason":"ok","stub_version":"0.0.0-stub"}'
 executor_session_mark_fallback_off stub "$FAR"
