@@ -724,12 +724,20 @@ specific to it:
   argument is a fixed pointer sentence naming that file, so a long brief never
   meets an argument-length limit or a shell quoting rule.
 - **Git.** The task contract forbids every git command that writes. Before
-  staging, the wrapper compares `git for-each-ref` output, the symbolic `HEAD`
-  and the staged index with their state before the run, and blocks the task on
-  any difference, naming the first differing ref
-  (`agy changed git refs: <ref>`), `HEAD` (`agy changed git refs: HEAD`) or the
-  index (`agy changed the git index`). The Git guard row of When a run fails
-  says how to recover and record that block.
+  staging, the wrapper compares `git for-each-ref` output, the stash entries,
+  the symbolic `HEAD` and the staged index with their state before the run.
+  Refs are shared with every other worktree, so it blocks only on what this
+  worktree owns or what can lose work: `HEAD`, the index, the worktree's own
+  branch, `refs/bisect` and `refs/worktree`, a stash entry made on its branch
+  (any new one when `HEAD` is detached), a deleted ref or stash entry, any tag
+  change, and a branch moved to a commit that does not descend from where it
+  was. The block names the ref (`agy changed git refs: <ref>`), `HEAD`
+  (`agy changed git refs: HEAD`) or the index (`agy changed the git index`).
+  `refs/remotes` is ignored. Any other change - a sibling worktree's commit in
+  a parallel wave, a new branch, a stash made elsewhere - does not block; the
+  report lists it in `- note: refs outside this worktree changed during the
+  run: <refs>`, and the reviewer judges whether `agy` made it. The Git guard
+  row of When a run fails says how to recover and record a block.
 - **Timeout.** A print timeout exits 0 with `finished_reason: "print_timeout"`.
   The wrapper classifies it as `exit=124`, `reason=timeout`, as it does the outer
   `timeout` firing.

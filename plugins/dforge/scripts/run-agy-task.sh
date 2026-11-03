@@ -218,7 +218,10 @@ record_refs() { # record_refs <file>
   refs=$(git -C "$cwd" for-each-ref --format='%(refname) %(objectname)') || return 1
   head=$(git -C "$cwd" rev-parse HEAD) || return 1
   symref=$(git -C "$cwd" symbolic-ref -q HEAD) || symref=detached
-  { [ -z "$refs" ] || printf '%s\n' "$refs"; printf 'HEAD %s %s\n' "$head" "$symref"; } | tr -d '\r' > "$1"
+  { [ -z "$refs" ] || printf '%s\n' "$refs"; printf 'HEAD %s %s\n' "$head" "$symref"; } | tr -d '\r' > "$1" || return 1
+  # refs/stash is shared by every worktree; its entries' subjects name the
+  # branch each stash was made on, which is what attributes one to this task.
+  git -C "$cwd" stash list --format='%H %gs' | tr -d '\r' > "$1.stash"
 }
 record_refs "$DR_TASK_DIR/refs-before.txt" || die 'cannot record git refs'
 
@@ -378,15 +381,49 @@ fi
 [ "$rc" -eq 0 ] || status=BLOCKED
 
 # A ref or index agy moved would be folded into the task commit or silently
-# kept, so either blocks the task before anything is staged. An added, removed
-# or moved ref all show as a differing line.
+# kept, so either blocks the task before anything is staged. The refs are shared
+# with every other worktree, though, and those move during a run too (a parallel
+# wave's sibling commits on its own branch, a fetch, a stash elsewhere). So only
+# what this worktree owns blocks - its branch, per-worktree refs, stash entries
+# made on its branch - plus any change that can lose work: a deleted ref or
+# stash entry, a tag, or a branch moved to a commit that does not descend from
+# where it was. Other changes are listed in the report; refs/remotes is ignored.
 record_refs "$DR_TASK_DIR/refs-after.txt" || die 'cannot record git refs'
 guard=''
-moved_ref=$(LC_ALL=C comm -3 \
-  <(awk '/^refs\//' "$DR_TASK_DIR/refs-before.txt" | LC_ALL=C sort) \
-  <(awk '/^refs\//' "$DR_TASK_DIR/refs-after.txt" | LC_ALL=C sort) | head -1 | sed 's/^[[:space:]]*//' | awk '{ print $1 }')
-if [ -n "$moved_ref" ]; then
-  guard="agy changed git refs: $moved_ref"
+outside=''
+own=$(awk '$1 == "HEAD" { print $3 }' "$DR_TASK_DIR/refs-before.txt")
+while read -r ref old new; do
+  [ -n "$ref" ] || continue
+  if [ "$new" = - ] || [ "$ref" = "$own" ] || [[ "$ref" == refs/tags/* || "$ref" == refs/bisect/* || "$ref" == refs/worktree/* ]] ||
+     { [ "$old" != - ] && ! git -C "$cwd" merge-base --is-ancestor "$old" "$new" 2>/dev/null; }; then
+    guard="agy changed git refs: $ref"
+    break
+  fi
+  outside="$outside $ref"
+done < <(awk 'FILENAME == ARGV[1] && /^refs\// { b[$1] = $2 } FILENAME == ARGV[2] && /^refs\// { a[$1] = $2 }
+  END {
+    for (r in b) if (!(r in a)) print r, b[r], "-"; else if (a[r] != b[r]) print r, b[r], a[r]
+    for (r in a) if (!(r in b)) print r, "-", a[r]
+  }' "$DR_TASK_DIR/refs-before.txt" "$DR_TASK_DIR/refs-after.txt" | awk '$1 != "refs/stash" && $1 !~ /^refs\/remotes\//' | LC_ALL=C sort)
+if [ -z "$guard" ]; then
+  stash_dropped=$(awk 'FILENAME == ARGV[1] { b[$1]; next } { a[$1] } END { for (s in b) if (!(s in a)) print s }' \
+    "$DR_TASK_DIR/refs-before.txt.stash" "$DR_TASK_DIR/refs-after.txt.stash")
+  stash_mine=no stash_other=no
+  while read -r _ stash_subject; do
+    if [ "$own" = detached ] || [[ "$stash_subject" == "WIP on ${own#refs/heads/}:"* || "$stash_subject" == "On ${own#refs/heads/}:"* ]]; then
+      stash_mine=yes
+    else
+      stash_other=yes
+    fi
+  done < <(awk 'FILENAME == ARGV[1] { b[$1]; next } !($1 in b)' "$DR_TASK_DIR/refs-before.txt.stash" "$DR_TASK_DIR/refs-after.txt.stash")
+  if [ -n "$stash_dropped" ] || [ "$stash_mine" = yes ]; then
+    guard='agy changed git refs: refs/stash'
+  elif [ "$stash_other" = yes ]; then
+    outside="$outside refs/stash"
+  fi
+fi
+if [ -n "$guard" ]; then
+  :
 elif [ "$(grep '^HEAD ' "$DR_TASK_DIR/refs-before.txt")" != "$(grep '^HEAD ' "$DR_TASK_DIR/refs-after.txt")" ]; then
   guard='agy changed git refs: HEAD'
 elif [ "$(git -C "$cwd" ls-files --stage -z | base64 | tr -d '\r\n')" != "$(jq -r .index < "$before_snapshot" | tr -d '\r')" ]; then
@@ -430,6 +467,7 @@ head=$(git -C "$cwd" rev-parse HEAD)
   if [ "$status" = NEEDS_CONTEXT ]; then
     printf '\n## Questions\n\n'
     jq -r '.questions[]? | "- " + .' < "$last" 2>/dev/null | tr -d '\r' || true
+  [ -n "$guard" ] || [ -z "$outside" ] || printf -- '- note: refs outside this worktree changed during the run:%s\n' "$outside"
   fi
   if [ "$status" != DONE ]; then
     # agy's own failure text comes first because it is the only thing here

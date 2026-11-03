@@ -109,6 +109,7 @@ case "${STUB_MODE:-done}" in
   git-commit) work; git add -A >/dev/null 2>&1; git commit -qm 'stub commit' >/dev/null 2>&1; emit DONE ;;
   git-stash) work; git stash push -u -q >/dev/null 2>&1; emit DONE ;;
   git-branch) work; git branch stub-branch >/dev/null 2>&1; emit DONE ;;
+  git-run) work; eval "$STUB_GIT" >/dev/null 2>&1; emit DONE ;;
   index) work; git add out.txt >/dev/null 2>&1; emit DONE ;;
   *) printf 'stub agy: unknown STUB_MODE\n' >&2; exit 64 ;;
 esac
@@ -504,8 +505,21 @@ if selected A7; then
     }
     git_case commit git-commit 'refs/heads/wt-commit|HEAD' 1
     git_case stash git-stash 'refs/stash' 0
-    git_case branch git-branch 'refs/heads/stub-branch' 0
     git_case index index '[Ii]ndex' 0
+    git -C "$PRIMARY" branch a7-keep
+    STUB_GIT='git branch -D a7-keep' git_case delete git-run 'refs/heads/a7-keep' 0
+    # Refs outside the worktree are reported, not blocked: a new branch, and a
+    # commit another worktree makes on its own branch during the run.
+    git -C "$PRIMARY" worktree add -q -b wt-a7-sibling "$TMP/wt-a7-sibling"
+    for c in "branch|git branch stub-branch|refs/heads/stub-branch" \
+             "sibling|git -C '$TMP/wt-a7-sibling' commit -q --allow-empty -m sibling|refs/heads/wt-a7-sibling"; do
+      IFS='|' read -r name cmd ref <<<"$c"
+      newwork "out-$name"
+      STUB_MODE=git-run STUB_GIT="$cmd" runw
+      check "A7 ($name): the run is DONE" "$?" "0"
+      check "A7 ($name): the task completes" "$(jq -r .phase "$(state_file "$W" "$TID")")" "complete"
+      matches "A7 ($name): the report names the outside ref" "$(cat "$R")" "refs outside this worktree changed during the run:.* $ref"
+    done
     # Control: an unrelated string never blocks.
     newwork ctl7
     runw

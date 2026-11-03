@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stand-in for the Antigravity CLI. STUB_AGY_* variables choose what it does;
 # STUB_AGY_ERROR must not contain a double quote or a backslash; STUB_AGY_TEXT
-# is printed as it is.
+# is printed as it is; git-run evals STUB_AGY_GIT in the worktree.
 set -u
 
 if [ -n "${STUB_AGY_ARGS_LOG:-}" ]; then
@@ -59,6 +59,7 @@ case "${STUB_AGY_MODE:-done}" in
   git-commit) write_file; git add -A && git commit -qm stub; emit DONE ;;
   git-stash) write_file; git stash -q -u; emit DONE ;;
   git-branch) write_file; git branch stub-branch; emit DONE ;;
+  git-run) write_file; eval "$STUB_AGY_GIT"; emit DONE ;;
   outside-write) write_file; printf 'stub\n' > "$STUB_AGY_OUTSIDE"; emit DONE ;;
   *) printf 'stub-agy: unknown STUB_AGY_MODE\n' >&2; exit 64 ;;
 esac

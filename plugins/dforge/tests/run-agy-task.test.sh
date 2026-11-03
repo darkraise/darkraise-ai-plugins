@@ -376,7 +376,43 @@ guard_case() { # guard_case <name> <mode> <file agy writes> <ref the report name
 }
 guard_case guard-commit git-commit base.txt refs/heads/guard-commit
 guard_case guard-stash git-stash base.txt refs/stash
-guard_case guard-branch git-branch out.txt refs/heads/stub-branch
+
+# Other worktrees, fetches and sessions move shared refs while a task runs (a
+# parallel wave's sibling commits on its own branch), so those are reported
+# rather than blocked; a deleted ref, a tag or a rewritten branch still blocks.
+git -C "$fixture/primary" worktree add -qb sibling "$fixture/sibling"
+git -C "$fixture/primary" branch keep
+git -C "$fixture/primary" update-ref refs/heads/rewind \
+  "$(git -C "$fixture/primary" commit-tree 'HEAD^{tree}' -p HEAD -m next)"
+outside_case() { # outside_case <name> <git command run during agy's turn> <ref the note names | ->
+  newwork "$1"
+  STUB_AGY_MODE=git-run STUB_AGY_GIT="$2" run
+  check "$1: the run is DONE" "$?" "0"
+  check "$1: the task completes" "$(jq -r .phase "$(state_of "$W")")" "complete"
+  check "$1: the work is committed" "$(git -C "$W" log -1 --format=%s | tr -d '\r')" "feat(stub): add out"
+  if [ "$3" = - ]; then
+    check "$1: the report has no outside-refs note" "$(grep -c 'refs outside this worktree' "$R")" "0"
+  else
+    check "$1: the report names the outside ref" \
+      "$(grep -cE "^- note: refs outside this worktree changed during the run:.* $3( |\$)" "$R")" "1"
+  fi
+}
+outside_case outside-sibling "git -C '$fixture/sibling' commit -q --allow-empty -m sibling" refs/heads/sibling
+outside_case outside-branch "git branch stub-branch" refs/heads/stub-branch
+outside_case outside-stash "printf 'x\n' > '$fixture/sibling/base.txt' && git -C '$fixture/sibling' stash -q" refs/stash
+outside_case outside-remote "git update-ref refs/remotes/origin/main HEAD" -
+
+block_case() { # block_case <name> <git command run during agy's turn> <ref the report names>
+  newwork "$1"
+  STUB_AGY_MODE=git-run STUB_AGY_GIT="$2" run
+  check "$1: the run is not DONE" "$?" "1"
+  check "$1: the report names the ref" "$(grep -c "agy changed git refs: $3;" "$R")" "1"
+  check "$1: the task is blocked" "$(jq -r .phase "$(state_of "$W")")" "blocked"
+}
+block_case block-delete "git branch -D keep" refs/heads/keep
+block_case block-rewind "git update-ref refs/heads/rewind HEAD" refs/heads/rewind
+block_case block-tag "git tag stub-tag" refs/tags/stub-tag
+block_case block-stash-drop "git stash drop -q" refs/stash
 
 mkdir -p "$fixture/indexshim"
 cat > "$fixture/indexshim/agy" <<SHIM
