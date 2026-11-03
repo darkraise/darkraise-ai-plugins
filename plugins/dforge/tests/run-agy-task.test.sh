@@ -448,6 +448,13 @@ rm -rf "$DR_AGY_SESSION_DIR"
 newwork session-text
 STUB_AGY_MODE=text STUB_AGY_TEXT="RESOURCE_EXHAUSTED: try later" run
 check "a plain-text quota turns agy off for the session" "$(session_state)" "false/false/quota"
+# stderr can carry output of the commands the model ran, so a quota word there
+# labels the run but does not close the lane.
+rm -rf "$DR_AGY_SESSION_DIR"
+newwork session-stderr
+PATH="$fixture/stderrshim:$PATH" run
+check "a quota seen only on stderr is still reported as quota" "$(grep -c '^reason=quota$' "$R")" "1"
+check "a quota seen only on stderr leaves the session file absent" "$([ -e "$session_file" ] && echo yes || echo no)" "no"
 
 # The same quota through the real gate: it keeps the answer past --refresh. Node
 # cannot run a bash-script stub on Windows, and the gate's probe spawns agy.

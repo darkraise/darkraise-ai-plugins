@@ -348,19 +348,28 @@ rc=0
 # run that ended cleanly with a JSON result, whose response is the model's own
 # text and may well mention a quota.
 cause=$agy_error
+stderr_cause=''
 if [ -z "$cause" ] && [ "$timed_out" = no ] && { [ "$rc" -ne 0 ] || [ "$raw_stdout" = yes ]; }; then
-  cause=$({ [ "$raw_stdout" = no ] || tail -20 "$report.stdout"; tail -20 "$report.stderr"; } 2>/dev/null | tr -d '\r')
+  [ "$raw_stdout" = no ] || cause=$(tail -20 "$report.stdout" 2>/dev/null | tr -d '\r')
+  stderr_cause=$(tail -20 "$report.stderr" 2>/dev/null | tr -d '\r')
 fi
 # 429 only as a whole number: a sha, a UUID or a line number can carry those
 # digits, and a false quota turns agy off for the rest of the session.
-if grep -qiE 'quota|rate.?limit|RESOURCE_EXHAUSTED|(^|[^[:alnum:]])429([^[:alnum:]]|$)' <<<"$cause"; then reason=quota
-elif grep -qiE 'unknown model|model .* not (found|available|supported|recognized)' <<<"$cause"; then reason=unknown-model
+is_quota() { grep -qiE 'quota|rate.?limit|RESOURCE_EXHAUSTED|(^|[^[:alnum:]])429([^[:alnum:]]|$)' <<<"$1"; }
+quota_source=''
+if is_quota "$cause"; then reason=quota quota_source=agy
+elif is_quota "$stderr_cause"; then reason=quota quota_source=stderr
+elif grep -qiE 'unknown model|model .* not (found|available|supported|recognized)' <<<"$cause"$'\n'"$stderr_cause"; then reason=unknown-model
 elif [ "$timed_out" = yes ]; then reason=timeout
 else reason=error
 fi
 # A quota is account-wide, so it turns agy off for the session; otherwise every
-# later task pays for the same answer.
-[ "$reason" != quota ] || executor_session_mark_off agy quota
+# later task pays for the same answer. Only agy's own error text or stdout is
+# trusted for that: stderr can carry output of the commands the model ran, and
+# in a repository whose tests talk about quotas that would close the lane on a
+# word. A stderr-only quota still labels the run, so the controller's transient
+# retry and the lane breaker bound what a real one costs.
+[ "$quota_source" != agy ] || executor_session_mark_off agy quota
 
 status=BLOCKED
 summary=""
@@ -458,6 +467,7 @@ head=$(git -C "$cwd" rev-parse HEAD)
   printf -- '- exit: %s\n' "$rc"
   printf -- '- commits: %s..%s\n' "${base:0:7}" "${head:0:7}"
   [ -z "$guard" ] || printf -- '- note: %s; the task is blocked\n' "$guard"
+  [ -n "$guard" ] || [ -z "$outside" ] || printf -- '- note: refs outside this worktree changed during the run:%s\n' "$outside"
   [ "$writer_stopped" = yes ] || printf -- '- note: agy run not confirmed stopped; the task is blocked until it is\n'
   [ "$timed_out" = no ] || printf -- '- note: timed out after %ss\n' "$timeout_s"
   [ "$committed" = empty ] && printf -- '- note: DONE with an empty diff; nothing was committed\n'
@@ -467,7 +477,6 @@ head=$(git -C "$cwd" rev-parse HEAD)
   if [ "$status" = NEEDS_CONTEXT ]; then
     printf '\n## Questions\n\n'
     jq -r '.questions[]? | "- " + .' < "$last" 2>/dev/null | tr -d '\r' || true
-  [ -n "$guard" ] || [ -z "$outside" ] || printf -- '- note: refs outside this worktree changed during the run:%s\n' "$outside"
   fi
   if [ "$status" != DONE ]; then
     # agy's own failure text comes first because it is the only thing here

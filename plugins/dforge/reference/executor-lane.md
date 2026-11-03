@@ -743,7 +743,10 @@ specific to it:
   `timeout` firing.
 - **Quota.** Antigravity publishes no reset time, so a quota failure marks the
   lane off for the session, and `agy-gate --refresh` keeps a cached
-  `reason=quota` instead of re-probing it.
+  `reason=quota` instead of re-probing it. Only `agy`'s own `.error` text or
+  non-JSON stdout marks it off: a quota word found only in stderr, which can
+  carry the output of commands the model ran, gives `reason=quota` for that run
+  and leaves the lane on.
 - **Error reasons.** The `## Agy error` section's `reason=` is one of `quota`,
   `timeout`, `unknown-model` and `error`. `unknown-model` is the refusal marker:
   the account does not offer that model, so the response is `HANDBACK` now.
