@@ -17,8 +17,9 @@ function bash(args, { cwd, env, input }) {
       resolve({ code: error ? (typeof error.code === "number" ? error.code : -1) : 0, stdout, stderr });
     });
     // A child may exit before reading its input; its exit code and output
-    // still decide the test, and an unheard EPIPE would fail whichever test runs.
-    child.stdin.on("error", error => { if (error.code !== "EPIPE") throw error; });
+    // still decide the test, and an unheard write error would fail whichever
+    // test runs. Windows pipes report it as EOF rather than EPIPE.
+    child.stdin.on("error", error => { if (error.code !== "EPIPE" && error.code !== "EOF") throw error; });
     child.stdin.end(input ?? "");
   });
 }
