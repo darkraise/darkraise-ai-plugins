@@ -2,10 +2,11 @@
 # written by that executor's gate and marked off by a runner that hits a
 # quota or a rate limit.
 #
-# The file is keyed by session id rather than kept in the project: a quota is
-# account-wide, so the answer belongs to the session, not to any one project
-# the session works in. Readers fail closed - any state that is not a positive
-# answer for this session is off.
+# The file is keyed by session id rather than kept in the project: a quota
+# belongs to the account, not to any one project, so the answer belongs to the
+# session. For agy, Claude and Gemini models are limited separately, which is
+# why the file carries a separate `fallback` mark. Readers fail closed - any
+# state that is not a positive answer for this session is off.
 #
 # Every function takes the executor id first. One shared file would mean one
 # executor's mark-off closing another's surfaces, and review-route and
@@ -55,23 +56,46 @@ executor_session_on() {
 # executor_session_write <id> <json> - replace this session's file in one
 # rename, so a concurrent reader never sees half a file, and prune week-old
 # sessions for this executor only.
+#
+# A <json> without a `fallback` key carries the prior file's fallback object
+# over, so a gate or lane write never clears a fallback mark; `"fallback": null`
+# drops it. A <json> that does not parse is written as given.
 executor_session_write() {
-  local f dir; f=$(executor_session_file "$1") || return 0
+  local f dir prior json; f=$(executor_session_file "$1") || return 0
   dir=$(executor_session_dir "$1") || return 0
   mkdir -p "$dir" 2>/dev/null || return 0
-  printf '%s\n' "$2" > "$f.tmp.$$" && mv -f "$f.tmp.$$" "$f"
+  prior=$(jq -cs 'if length == 1 and (.[0] | type) == "object" then .[0] else {} end' 2>/dev/null < "$f") \
+    || prior='{}'
+  [ -n "$prior" ] || prior='{}'
+  json=$(jq -c --argjson prior "$prior" '
+    if type != "object" then .
+    elif has("fallback") then (if .fallback == null then del(.fallback) else . end)
+    elif ($prior.fallback | type) == "object" then . + {fallback: $prior.fallback}
+    else . end' <<<"$2" 2>/dev/null) || json=$2
+  [ -n "$json" ] || json=$2
+  printf '%s\n' "$json" > "$f.tmp.$$" && mv -f "$f.tmp.$$" "$f"
   find "$dir" -maxdepth 1 -name '*.json' -mtime +7 -delete 2>/dev/null || true
 }
 
-# executor_session_mark_off <id> <reason> - this executor is unusable for the
-# rest of the session: no reset time, so the gate's cache keeps the answer.
+# _executor_session_iso <epoch> - the epoch in ISO 8601 UTC; prints nothing
+# when neither GNU nor BSD date can convert it.
+_executor_session_iso() {
+  { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+    || date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null; } | tr -d '\r'
+}
+
+# executor_session_mark_off <id> <reason> [<epoch>] - this executor is
+# unusable until <epoch>, the reset time the caller read from the error. The
+# reset is the caller's to supply: without one the mark lasts the session,
+# because the gate's cache keeps the answer.
 #
 # Every surface the registry lists is cleared, and the metadata fields the
 # gate reads back out of the cache are written: reason, checked_at, both
 # resets_at fields, plugin_version (null when the prior file had none), and
 # every other `*_version` field the prior file carried, such as agy_version.
 executor_session_mark_off() {
-  local f prior surfaces; f=$(executor_session_file "$1") || return 0
+  local f prior surfaces epoch=${3:-} iso=''; f=$(executor_session_file "$1") || return 0
+  if [[ $epoch =~ ^[0-9]+$ ]]; then iso=$(_executor_session_iso "$epoch"); else epoch=''; fi
   # Parsed, not cat: an empty or torn file would make the jq below produce
   # nothing, and the empty file that writes reads back as a cache miss, so the
   # next gate call re-probes and can turn the executor on again.
@@ -81,10 +105,30 @@ executor_session_mark_off() {
   [ -n "$surfaces" ] || surfaces='[]'
   executor_session_write "$1" "$(jq -c \
     --arg sid "$(executor_session_id)" --arg r "$2" \
-    --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson surfaces "$surfaces" '
+    --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson surfaces "$surfaces" \
+    --arg epoch "$epoch" --arg iso "$iso" '
     {session_id: $sid, usable: false, reason: $r, checked_at: $at,
-     resets_at: null, resets_at_epoch: null,
+     resets_at: (if $iso == "" then null else $iso end),
+     resets_at_epoch: (if $epoch == "" then null else ($epoch | tonumber) end),
      plugin_version: (.plugin_version // null)}
     + with_entries(select(.key | endswith("_version")))
     + (reduce $surfaces[] as $s ({}; . + {($s): false}))' <<<"$prior" 2>/dev/null)"
+}
+
+# executor_session_mark_fallback_off <id> [<epoch>] - only the Claude fallback
+# is out of quota, until <epoch> or, without one, for the session. It marks the
+# fallback alone and leaves usable, lane and reason as the gate wrote them.
+executor_session_mark_fallback_off() {
+  local f prior epoch=${2:-} iso=''; f=$(executor_session_file "$1") || return 0
+  if [[ $epoch =~ ^[0-9]+$ ]]; then iso=$(_executor_session_iso "$epoch"); else epoch=''; fi
+  prior=$(jq -cs 'if length == 1 and (.[0] | type) == "object" then .[0] else {} end' 2>/dev/null < "$f") \
+    || prior='{}'
+  [ -n "$prior" ] || prior='{}'
+  executor_session_write "$1" "$(jq -c \
+    --arg sid "$(executor_session_id)" --arg epoch "$epoch" --arg iso "$iso" '
+    . + {session_id: $sid,
+         fallback: {usable: false, reason: "quota",
+                    resets_at: (if $iso == "" then null else $iso end),
+                    resets_at_epoch: (if $epoch == "" then null else ($epoch | tonumber) end)}}' \
+    <<<"$prior" 2>/dev/null)"
 }

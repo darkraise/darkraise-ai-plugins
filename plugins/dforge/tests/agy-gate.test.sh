@@ -175,21 +175,21 @@ check "agy-gate exists" "$([ -f "$P/scripts/agy-gate" ] && echo yes || echo no)"
 
 fresh; GATE_PATH="$SEAL" gate
 check "no agy on PATH turns the gate off" "$out" \
-  "agy-gate usable=false reason=plugin-not-installed review=false lane=false resets_at=- source=probe"
+  "agy-gate usable=false reason=plugin-not-installed review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=probe"
 check "the gate exits 0 when it answers" "$rc" "0"
 fresh; STUB_AGY_VERSION=1.4.11 gate
 check "a version out of range turns the gate off" "$out" \
-  "agy-gate usable=false reason=plugin-version:1.4.11 review=false lane=false resets_at=- source=probe"
+  "agy-gate usable=false reason=plugin-version:1.4.11 review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=probe"
 check "a version out of range never runs the auth probe" "$(grep -c '^models$' "$ARGS" 2>/dev/null)" "0"
 
 # A quota mark needs no probe: the gate keeps it for the session, --refresh included.
 fresh; mark_off quota
 gate
 check "a quota mark is reported from the session file" "$out" \
-  "agy-gate usable=false reason=quota review=false lane=false resets_at=- source=cache"
+  "agy-gate usable=false reason=quota review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=cache"
 gate --refresh
 check "--refresh keeps a cached quota instead of probing it away" "$out" \
-  "agy-gate usable=false reason=quota review=false lane=false resets_at=- source=cache"
+  "agy-gate usable=false reason=quota review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=cache"
 check "keeping a quota starts no agy" "$([ -f "$ARGS" ] && echo yes || echo no)" "no"
 check "the kept quota stays in the session file" "$(field usable)/$(field reason)" "false/quota"
 SID=s2 gate
@@ -206,71 +206,119 @@ check "an extra argument is a usage error" "$rc" "2"
 setting '{"agyLane":false}'
 fresh; gate
 check "agyLane off answers without a probe" "$out" \
-  "agy-gate usable=false reason=setting review=false lane=false resets_at=- source=setting"
+  "agy-gate usable=false reason=setting review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=setting"
 check "agyLane off starts no agy" "$([ -f "$ARGS" ] && echo yes || echo no)" "no"
 check "agyLane off is written for the readers" "$(field usable)/$(field reason)/$(field lane)" "false/setting/false"
 setting '{}'
 
+# --- reset times and the Claude fallback mark (A6, A7, A9, A10) ------------
+FAR=4070908800 FAR_ISO=2099-01-01T00:00:00Z
+seed() { mkdir -p "$SESS"; jq -cn "$1" > "$SESS/s1.json"; }
+fresh; seed "{session_id:\"s1\", usable:false, review:false, lane:false, reason:\"quota\", checked_at:\"2026-11-03T00:00:00Z\", resets_at:\"$FAR_ISO\", resets_at_epoch:$FAR, agy_version:\"1.4.12\"}"
+gate
+check "an unexpired lane quota is kept and prints its reset" "$out" \
+  "agy-gate usable=false reason=quota review=false lane=false resets_at=$FAR_ISO fallback=on fallback_resets_at=- source=cache"
+gate --refresh
+check "--refresh keeps an unexpired lane quota" "$out" \
+  "agy-gate usable=false reason=quota review=false lane=false resets_at=$FAR_ISO fallback=on fallback_resets_at=- source=cache"
+check "keeping the quota writes its reset time back" "$(field resets_at_epoch)/$(field resets_at)" "$FAR/$FAR_ISO"
+check "keeping an unexpired quota starts no agy" "$([ -f "$ARGS" ] && echo yes || echo no)" "no"
+
+fresh; seed '{session_id:"s1", usable:false, review:false, lane:false, reason:"quota", resets_at:"soon", resets_at_epoch:"soon"}'
+gate --refresh
+check "a non-numeric reset reads as none, so the quota holds for the session" "$out" \
+  "agy-gate usable=false reason=quota review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=cache"
+
+fresh; seed "{session_id:\"s1\", usable:true, review:false, lane:true, reason:\"ok\", resets_at:null, resets_at_epoch:null, agy_version:\"1.4.12\", fallback:{usable:false, reason:\"quota\", resets_at:\"$FAR_ISO\", resets_at_epoch:$FAR}}"
+gate
+check "an unexpired fallback mark turns the fallback off and leaves the lane on" "$out" \
+  "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=off fallback_resets_at=$FAR_ISO source=cache"
+check "the gate's write keeps the unexpired fallback mark" "$(field fallback.resets_at_epoch)" "$FAR"
+
+fresh; seed '{session_id:"s1", usable:true, review:false, lane:true, reason:"ok", agy_version:"1.4.12", fallback:{usable:false, reason:"quota", resets_at:null, resets_at_epoch:null}}'
+gate --refresh
+check "a fallback mark with no reset holds for the session, --refresh included" \
+  "$(sed 's/ source=.*//' <<<"$out")" \
+  "agy-gate usable=$(field usable) reason=$(field reason) review=false lane=$(field lane) resets_at=- fallback=off fallback_resets_at=-"
+
+fresh; seed '{session_id:"s1", usable:true, review:false, lane:true, reason:"ok", agy_version:"1.4.12", fallback:{usable:false, reason:"quota", resets_at:"1970-01-01T00:16:40Z", resets_at_epoch:1000}}'
+gate
+check "an expired fallback mark turns the fallback back on" "$out" \
+  "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=on fallback_resets_at=- source=cache"
+check "the gate drops an expired fallback mark from the file" "$(jq -r 'has("fallback")' "$SESS/s1.json" | tr -d '\r')" "false"
+
 if [ "$SPAWNABLE" = yes ]; then
   fresh; gate
   check "a usable, trusted agy opens the lane" "$out" \
-    "agy-gate usable=true reason=ok review=false lane=true resets_at=- source=probe"
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=on fallback_resets_at=- source=probe"
   check "the session file records the answer" \
     "$(field session_id)/$(field usable)/$(field review)/$(field lane)/$(field reason)/$(field agy_version)" "s1/true/false/true/ok/1.4.12"
   check "the session file carries no reset time" "$(field resets_at)/$(field resets_at_epoch)" "null/null"
   check "the probe ran once" "$(grep -c '^models$' "$ARGS")" "1"
   gate
   check "a second call answers from the cache" "$out" \
-    "agy-gate usable=true reason=ok review=false lane=true resets_at=- source=cache"
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=on fallback_resets_at=- source=cache"
   check "a cached answer runs no agy" "$(grep -c '^models$' "$ARGS")" "1"
   GATE_POLICY="$UNTRUSTED" gate
   check "trust is read on every call, cache hit included" "$out" \
-    "agy-gate usable=true reason=ok review=false lane=false resets_at=- source=cache"
+    "agy-gate usable=true reason=ok review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=cache"
   gate --refresh
   check "--refresh re-probes an ordinary cached answer" "$out" \
-    "agy-gate usable=true reason=ok review=false lane=true resets_at=- source=probe"
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=on fallback_resets_at=- source=probe"
   check "the re-probe ran agy models again" "$(grep -c '^models$' "$ARGS")" "2"
 
   fresh; GATE_POLICY="$UNTRUSTED" gate
   check "a usable but untrusted agy opens no lane" "$out" \
-    "agy-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+    "agy-gate usable=true reason=ok review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=probe"
 
   fresh; STUB_AGY_AUTH=logged-out gate
   check "a logged-out agy is off" "$out" \
-    "agy-gate usable=false reason=logged-out review=false lane=false resets_at=- source=probe"
+    "agy-gate usable=false reason=logged-out review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=probe"
   gate
   check "a cached logged-out answer is reused without --refresh" "$out" \
-    "agy-gate usable=false reason=logged-out review=false lane=false resets_at=- source=cache"
+    "agy-gate usable=false reason=logged-out review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=cache"
   gate --refresh
   check "--refresh re-probes a logged-out answer and finds the login" "$out" \
-    "agy-gate usable=true reason=ok review=false lane=true resets_at=- source=probe"
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=on fallback_resets_at=- source=probe"
 
   fresh; STUB_AGY_AUTH=broken gate
   check "an auth probe that answers nothing is probe-failed" "$out" \
-    "agy-gate usable=false reason=probe-failed review=false lane=false resets_at=- source=probe"
+    "agy-gate usable=false reason=probe-failed review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=probe"
 
   fresh; gate
   mark_off quota
   gate --refresh
   check "a quota mark made after a good probe also survives --refresh" "$out" \
-    "agy-gate usable=false reason=quota review=false lane=false resets_at=- source=cache"
+    "agy-gate usable=false reason=quota review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=cache"
   check "the quota survives with the probe never re-run" "$(grep -c '^models$' "$ARGS")" "1"
   check "a quota mark keeps the recorded agy version" "$(field agy_version)" "1.4.12"
 
   fresh; STUB_AGY_VERSION='1.4.12 (build 7)' gate
   check "a version holding a space still opens the lane" "$out" \
-    "agy-gate usable=true reason=ok review=false lane=true resets_at=- source=probe"
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=on fallback_resets_at=- source=probe"
   check "a version holding a space is recorded whole" "$(field agy_version)" "1.4.12 (build 7)"
 
   fresh; SID= gate
   check "no session id still answers, with the lane closed" "$out" \
-    "agy-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+    "agy-gate usable=true reason=ok review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=probe"
   check "no session id writes no file" "$(ls "$SESS" 2>/dev/null | wc -l | tr -d ' ')" "0"
 
   fresh; setting '{"agyLane":false}'; gate
   setting '{}'; gate
   check "switching agyLane back on probes again" "$out" \
-    "agy-gate usable=true reason=ok review=false lane=true resets_at=- source=probe"
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=on fallback_resets_at=- source=probe"
+
+  fresh; seed '{session_id:"s1", usable:false, review:false, lane:false, reason:"quota", resets_at:"1970-01-01T00:16:40Z", resets_at_epoch:1000, agy_version:"1.4.12"}'
+  gate
+  check "an expired lane quota is probed again and the lane reopens" "$out" \
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=on fallback_resets_at=- source=probe"
+  check "the reopened lane carries no reset time" "$(field resets_at)/$(field resets_at_epoch)" "null/null"
+
+  fresh; seed "{session_id:\"s1\", usable:false, review:false, lane:false, reason:\"logged-out\", agy_version:\"1.4.12\", fallback:{usable:false, reason:\"quota\", resets_at:\"$FAR_ISO\", resets_at_epoch:$FAR}}"
+  gate --refresh
+  check "a probe write keeps an unexpired fallback mark" "$out" \
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=off fallback_resets_at=$FAR_ISO source=probe"
+  check "the probe left the fallback object in the file" "$(field fallback.reason)/$(field fallback.resets_at_epoch)" "quota/$FAR"
 else
   skip "the gate cases that need a usable probe: Node cannot run the bash-script stub on this platform"
 fi

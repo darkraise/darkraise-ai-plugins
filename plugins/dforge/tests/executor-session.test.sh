@@ -64,6 +64,42 @@ check "without a session id the file call fails" \
 check "without a session id a surface reads off" \
   "$(CLAUDE_CODE_SESSION_ID= ; executor_session_on codex review && echo on || echo off)" "off"
 
+# --- reset times and the fallback mark -------------------------------------
+FAR=4070908800 FAR_ISO=2099-01-01T00:00:00Z
+srec="$TMP/stub/session-test.json"
+executor_session_write stub '{"session_id":"session-test","usable":true,"lane":true,"reason":"ok"}'
+executor_session_mark_off stub quota "$FAR"
+check "mark_off with a reset epoch records it as a number" \
+  "$(jq -r '.resets_at_epoch | type' "$srec")/$(jq -r '.resets_at_epoch' "$srec")" "number/$FAR"
+check "mark_off with a reset epoch records it in ISO 8601 UTC" "$(jq -r '.resets_at' "$srec")" "$FAR_ISO"
+executor_session_mark_off stub quota ""
+check "mark_off with an empty reset writes both reset fields null" \
+  "$(jq -r '[.resets_at, .resets_at_epoch] | map(tostring) | join(",")' "$srec")" "null,null"
+
+executor_session_write stub '{"session_id":"session-test","usable":true,"lane":true,"reason":"ok","stub_version":"0.0.0-stub"}'
+executor_session_mark_fallback_off stub "$FAR"
+check "mark_fallback_off leaves usable, lane, reason and versions alone" \
+  "$(jq -r '[.usable, .lane, .reason, .stub_version] | map(tostring) | join(",")' "$srec")" "true,true,ok,0.0.0-stub"
+check "mark_fallback_off writes the fallback object" \
+  "$(jq -c '.fallback' "$srec")" "{\"usable\":false,\"reason\":\"quota\",\"resets_at\":\"$FAR_ISO\",\"resets_at_epoch\":$FAR}"
+executor_session_mark_off stub quota
+check "a lane mark_off keeps the fallback object" "$(jq -r '.fallback.resets_at_epoch' "$srec")" "$FAR"
+executor_session_write stub '{"session_id":"session-test","usable":true,"lane":true,"reason":"ok"}'
+check "a write without a fallback key keeps the prior fallback object" "$(jq -r '.fallback.reason' "$srec")" "quota"
+executor_session_write stub '{"session_id":"session-test","usable":true,"lane":true,"reason":"ok","fallback":null}'
+check "a write with fallback null drops the object" "$(jq -r 'has("fallback")' "$srec")" "false"
+executor_session_mark_fallback_off stub ""
+check "mark_fallback_off with no reset writes both reset fields null" \
+  "$(jq -c '.fallback' "$srec")" '{"usable":false,"reason":"quota","resets_at":null,"resets_at_epoch":null}'
+rm -f "$srec"
+executor_session_mark_fallback_off stub "$FAR"
+check "mark_fallback_off with no prior file writes the session id and the mark" \
+  "$(jq -r '[.session_id, .fallback.reason, (.usable | tostring)] | join(",")' "$srec")" "session-test,quota,null"
+rm -f "$srec"
+check "mark_fallback_off without a session id succeeds" \
+  "$(CLAUDE_CODE_SESSION_ID= executor_session_mark_fallback_off stub "$FAR"; echo $?)" "0"
+check "mark_fallback_off without a session id writes no file" "$([ -e "$srec" ] && echo yes || echo no)" "no"
+
 # --- pruning ---------------------------------------------------------------
 touch -d '8 days ago' "$TMP/codex/ancient.json" 2>/dev/null || touch -t 200001010000 "$TMP/codex/ancient.json"
 executor_session_write codex '{"session_id":"session-test","usable":true}'
