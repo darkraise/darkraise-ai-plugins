@@ -12,6 +12,8 @@
 // scaled by the 21% its Linux time grew since. The same run supplied
 // plan-revise; task-step is the sum of its parts in 41311901567.
 // run-agy-task's weight was scaled by its Linux growth on 2026-11-03.
+// Run 41632296991 (2026-11-03) took 847 s for task-step-base and timed out
+// its shard at 25 minutes; its weight is now the 720 s ceiling of its 900 s limit.
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -93,7 +95,7 @@ export const windowsSeconds = {
   'suite-run.test.sh': 54,
   'task-loop-steps.acceptance.test.sh': 720,
   'task-state.test.sh': 47,
-  'task-step-base.test.sh': 550,
+  'task-step-base.test.sh': 720,
   'task-step-settle.test.sh': 180,
   'task-step-suite.test.sh': 150,
   'task-step-text.test.sh': 10,
