@@ -53,6 +53,19 @@ executor_session_on() {
   [ "$(jq -r --arg s "$2" '.[$s] == true' "$f" 2>/dev/null | tr -d '\r')" = true ]
 }
 
+# _executor_session_prior <file> - the file's one JSON object, compact, or {}.
+# An empty, torn or multi-object file reads as {}: echoed as is, it would make
+# the caller's jq produce nothing or several records, and an empty file reads
+# back as a cache miss, so the next gate call re-probes and can turn the
+# executor on again.
+_executor_session_prior() {
+  local prior
+  prior=$(jq -cs 'if length == 1 and (.[0] | type) == "object" then .[0] else {} end' 2>/dev/null < "$1") \
+    || prior='{}'
+  [ -n "$prior" ] || prior='{}'
+  printf '%s' "$prior"
+}
+
 # executor_session_write <id> <json> - replace this session's file in one
 # rename, so a concurrent reader never sees half a file, and prune week-old
 # sessions for this executor only.
@@ -69,9 +82,7 @@ executor_session_write() {
   f=$(executor_session_file "$1") || return 1
   dir=$(executor_session_dir "$1") || return 1
   mkdir -p "$dir" 2>/dev/null || return 1
-  prior=$(jq -cs 'if length == 1 and (.[0] | type) == "object" then .[0] else {} end' 2>/dev/null < "$f") \
-    || prior='{}'
-  [ -n "$prior" ] || prior='{}'
+  prior=$(_executor_session_prior "$f")
   json=$(jq -c --argjson prior "$prior" '
     if type != "object" then .
     elif has("fallback") then (if .fallback == null then del(.fallback) else . end)
@@ -83,9 +94,9 @@ executor_session_write() {
   find "$dir" -maxdepth 1 -name '*.json' -mtime +7 -delete 2>/dev/null || true
 }
 
-# _executor_session_iso <epoch> - the epoch in ISO 8601 UTC; prints nothing
+# executor_session_iso <epoch> - the epoch in ISO 8601 UTC; prints nothing
 # when neither GNU nor BSD date can convert it.
-_executor_session_iso() {
+executor_session_iso() {
   { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
     || date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null; } | tr -d '\r'
 }
@@ -107,12 +118,8 @@ executor_session_mark_off() {
   local f prior surfaces record epoch=${3:-} iso=''
   [ -n "$(executor_session_id)" ] || return 0
   f=$(executor_session_file "$1") || return 1
-  if [[ $epoch =~ ^[0-9]{1,18}$ ]]; then iso=$(_executor_session_iso "$epoch"); else epoch=''; fi
-  # Parsed, not cat: an empty or torn file would make the jq below produce
-  # nothing, and the empty file that writes reads back as a cache miss, so the
-  # next gate call re-probes and can turn the executor on again.
-  prior=$(jq -c . "$f" 2>/dev/null) || prior=''
-  [ -n "$prior" ] || prior='{}'
+  if [[ $epoch =~ ^[0-9]{1,18}$ ]]; then iso=$(executor_session_iso "$epoch"); else epoch=''; fi
+  prior=$(_executor_session_prior "$f")
   surfaces=$(_executor_session_field "$1" surfaces | jq -R . | jq -sc .)
   [ -n "$surfaces" ] || surfaces='[]'
   record=$(jq -c \
@@ -136,10 +143,8 @@ executor_session_mark_fallback_off() {
   local f prior record epoch=${2:-} iso=''
   [ -n "$(executor_session_id)" ] || return 0
   f=$(executor_session_file "$1") || return 1
-  if [[ $epoch =~ ^[0-9]{1,18}$ ]]; then iso=$(_executor_session_iso "$epoch"); else epoch=''; fi
-  prior=$(jq -cs 'if length == 1 and (.[0] | type) == "object" then .[0] else {} end' 2>/dev/null < "$f") \
-    || prior='{}'
-  [ -n "$prior" ] || prior='{}'
+  if [[ $epoch =~ ^[0-9]{1,18}$ ]]; then iso=$(executor_session_iso "$epoch"); else epoch=''; fi
+  prior=$(_executor_session_prior "$f")
   record=$(jq -c \
     --arg sid "$(executor_session_id)" --arg epoch "$epoch" --arg iso "$iso" '
     . + {session_id: $sid,

@@ -102,6 +102,10 @@ rm -f "$srec"
 check "mark_fallback_off without a session id succeeds" \
   "$(CLAUDE_CODE_SESSION_ID= executor_session_mark_fallback_off stub "$FAR"; echo $?)" "0"
 check "mark_fallback_off without a session id writes no file" "$([ -e "$srec" ] && echo yes || echo no)" "no"
+printf '{"usable":true}\n{"usable":true}\n' > "$srec"
+executor_session_mark_off stub quota
+check "mark_off over a file holding two objects writes one object" "$(jq -s length "$srec")" "1"
+check "executor_session_iso converts an epoch to ISO 8601 UTC" "$(executor_session_iso "$FAR")" "$FAR_ISO"
 
 # --- pruning ---------------------------------------------------------------
 touch -d '8 days ago' "$TMP/codex/ancient.json" 2>/dev/null || touch -t 200001010000 "$TMP/codex/ancient.json"

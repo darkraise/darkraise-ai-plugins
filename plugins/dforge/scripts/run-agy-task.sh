@@ -391,8 +391,7 @@ if [ "$quota_source" = agy ]; then
   if [[ "$cause" =~ $reset_re ]] && [ -n "${BASH_REMATCH[1]}${BASH_REMATCH[3]}${BASH_REMATCH[5]}${BASH_REMATCH[7]}" ]; then
     reset_epoch=$(( $(date -u +%s) + 10#${BASH_REMATCH[2]:-0} * 86400 + 10#${BASH_REMATCH[4]:-0} * 3600 \
       + 10#${BASH_REMATCH[6]:-0} * 60 + 10#${BASH_REMATCH[8]:-0} ))
-    reset_iso=$({ date -u -d "@$reset_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
-      || date -u -r "$reset_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null; } | tr -d '\r')
+    reset_iso=$(executor_session_iso "$reset_epoch")
   fi
   # A mark that was not written stays marked=none, which keeps the
   # controller's one retry instead of a hand-back on a lane still open.
