@@ -201,10 +201,10 @@ a7() {
   local at; at=$(gfield "$line" fallback_resets_at)
   check "A7: fallback_resets_at is 3723 s after the wrapper exits, give or take 5 s" \
     "$(within "$(epoch_of "$at")" "$((after + 3723))" 5)" "yes"
-  local n; n=$(calls)
-  run "${GEMINI[@]}"
+  local n rc; n=$(calls)
+  run "${GEMINI[@]}"; rc=$?
   check "A7: a Gemini run still launches agy" "$(calls)" "$((n + 1))"
-  check "A7: a Gemini run still finishes" "$?" "0"
+  check "A7: a Gemini run still finishes" "$rc" "0"
 }
 
 # --- A8 (neg) ----------------------------------------------------------------
