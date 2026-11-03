@@ -311,6 +311,10 @@ a11() {
         "$(gfield "$line" lane)/$(gfield "$line" fallback)" "true/on"
     fi
   done
+  if [ "$SPAWNABLE" != yes ]; then
+    skip "A11: with no session file the real gate must probe, and the probe cannot run the stub"
+    return
+  fi
   rm -rf "$DR_AGY_SESSION_DIR"
   PATH="$TMP/stderrshim:$PATH" run "${GEMINI[@]}"
   check "A11: with no prior session file a stderr-only quota marks neither lane nor fallback" \
