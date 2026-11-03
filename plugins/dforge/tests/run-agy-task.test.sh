@@ -519,6 +519,19 @@ check "a Claude quota with no reset marks the fallback for the session" \
   "$(session_state)/$(sfield .fallback.usable)/$(sfield .fallback.resets_at_epoch)" "true/true/ok/false/null"
 check "the report says the fallback was marked" "$(quota_lines 1)" "reason=quota marked=fallback "
 
+# A mark the session file never received is not reported as made: the session
+# directory sits under a regular file, so it cannot be created, even as root.
+saved_sessions=$DR_AGY_SESSION_DIR
+printf 'not a directory\n' > "$fixture/blocker"
+export DR_AGY_SESSION_DIR="$fixture/blocker/sessions"
+newwork mark-failed-lane
+STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_RESET" run --model gemini-3.8-flash --effort medium
+check "a lane mark that cannot be written reports marked=none" "$(quota_lines 1)" "reason=quota marked=none "
+newwork mark-failed-fallback
+STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_RESET" run
+check "a fallback mark that cannot be written reports marked=none" "$(quota_lines 1)" "reason=quota marked=none "
+export DR_AGY_SESSION_DIR=$saved_sessions
+
 rm -rf "$DR_AGY_SESSION_DIR"
 newwork session-text
 STUB_AGY_MODE=text STUB_AGY_TEXT="RESOURCE_EXHAUSTED: try later" run --model gemini-3.8-flash --effort medium

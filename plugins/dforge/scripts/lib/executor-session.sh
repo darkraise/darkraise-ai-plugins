@@ -60,10 +60,15 @@ executor_session_on() {
 # A <json> without a `fallback` key carries the prior file's fallback object
 # over, so a gate or lane write never clears a fallback mark; `"fallback": null`
 # drops it. A <json> that does not parse is written as given.
+#
+# Without a session id there is nothing to write, which succeeds; any other
+# write that leaves no file fails, so a runner never reports a mark it lost.
 executor_session_write() {
-  local f dir prior json; f=$(executor_session_file "$1") || return 0
-  dir=$(executor_session_dir "$1") || return 0
-  mkdir -p "$dir" 2>/dev/null || return 0
+  local f dir prior json
+  [ -n "$(executor_session_id)" ] || return 0
+  f=$(executor_session_file "$1") || return 1
+  dir=$(executor_session_dir "$1") || return 1
+  mkdir -p "$dir" 2>/dev/null || return 1
   prior=$(jq -cs 'if length == 1 and (.[0] | type) == "object" then .[0] else {} end' 2>/dev/null < "$f") \
     || prior='{}'
   [ -n "$prior" ] || prior='{}'
@@ -73,7 +78,8 @@ executor_session_write() {
     elif ($prior.fallback | type) == "object" then . + {fallback: $prior.fallback}
     else . end' <<<"$2" 2>/dev/null) || json=$2
   [ -n "$json" ] || json=$2
-  printf '%s\n' "$json" > "$f.tmp.$$" && mv -f "$f.tmp.$$" "$f"
+  printf '%s\n' "$json" > "$f.tmp.$$" && mv -f "$f.tmp.$$" "$f" \
+    || { rm -f "$f.tmp.$$" 2>/dev/null; return 1; }
   find "$dir" -maxdepth 1 -name '*.json' -mtime +7 -delete 2>/dev/null || true
 }
 
@@ -93,8 +99,13 @@ _executor_session_iso() {
 # gate reads back out of the cache are written: reason, checked_at, both
 # resets_at fields, plugin_version (null when the prior file had none), and
 # every other `*_version` field the prior file carried, such as agy_version.
+#
+# Both mark functions fail when the mark was not written, and succeed without
+# writing when there is no session id, as executor_session_write does.
 executor_session_mark_off() {
-  local f prior surfaces epoch=${3:-} iso=''; f=$(executor_session_file "$1") || return 0
+  local f prior surfaces record epoch=${3:-} iso=''
+  [ -n "$(executor_session_id)" ] || return 0
+  f=$(executor_session_file "$1") || return 1
   if [[ $epoch =~ ^[0-9]+$ ]]; then iso=$(_executor_session_iso "$epoch"); else epoch=''; fi
   # Parsed, not cat: an empty or torn file would make the jq below produce
   # nothing, and the empty file that writes reads back as a cache miss, so the
@@ -103,7 +114,7 @@ executor_session_mark_off() {
   [ -n "$prior" ] || prior='{}'
   surfaces=$(_executor_session_field "$1" surfaces | jq -R . | jq -sc .)
   [ -n "$surfaces" ] || surfaces='[]'
-  executor_session_write "$1" "$(jq -c \
+  record=$(jq -c \
     --arg sid "$(executor_session_id)" --arg r "$2" \
     --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson surfaces "$surfaces" \
     --arg epoch "$epoch" --arg iso "$iso" '
@@ -112,23 +123,29 @@ executor_session_mark_off() {
      resets_at_epoch: (if $epoch == "" then null else ($epoch | tonumber) end),
      plugin_version: (.plugin_version // null)}
     + with_entries(select(.key | endswith("_version")))
-    + (reduce $surfaces[] as $s ({}; . + {($s): false}))' <<<"$prior" 2>/dev/null)"
+    + (reduce $surfaces[] as $s ({}; . + {($s): false}))' <<<"$prior" 2>/dev/null) || return 1
+  [ -n "$record" ] || return 1
+  executor_session_write "$1" "$record"
 }
 
 # executor_session_mark_fallback_off <id> [<epoch>] - only the Claude fallback
 # is out of quota, until <epoch> or, without one, for the session. It marks the
 # fallback alone and leaves usable, lane and reason as the gate wrote them.
 executor_session_mark_fallback_off() {
-  local f prior epoch=${2:-} iso=''; f=$(executor_session_file "$1") || return 0
+  local f prior record epoch=${2:-} iso=''
+  [ -n "$(executor_session_id)" ] || return 0
+  f=$(executor_session_file "$1") || return 1
   if [[ $epoch =~ ^[0-9]+$ ]]; then iso=$(_executor_session_iso "$epoch"); else epoch=''; fi
   prior=$(jq -cs 'if length == 1 and (.[0] | type) == "object" then .[0] else {} end' 2>/dev/null < "$f") \
     || prior='{}'
   [ -n "$prior" ] || prior='{}'
-  executor_session_write "$1" "$(jq -c \
+  record=$(jq -c \
     --arg sid "$(executor_session_id)" --arg epoch "$epoch" --arg iso "$iso" '
     . + {session_id: $sid,
          fallback: {usable: false, reason: "quota",
                     resets_at: (if $iso == "" then null else $iso end),
                     resets_at_epoch: (if $epoch == "" then null else ($epoch | tonumber) end)}}' \
-    <<<"$prior" 2>/dev/null)"
+    <<<"$prior" 2>/dev/null) || return 1
+  [ -n "$record" ] || return 1
+  executor_session_write "$1" "$record"
 }

@@ -394,12 +394,12 @@ if [ "$quota_source" = agy ]; then
     reset_iso=$({ date -u -d "@$reset_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
       || date -u -r "$reset_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null; } | tr -d '\r')
   fi
+  # A mark that was not written stays marked=none, which keeps the
+  # controller's one retry instead of a hand-back on a lane still open.
   if [[ "$model" == claude-* ]]; then
-    executor_session_mark_fallback_off agy "$reset_epoch"
-    marked=fallback
+    executor_session_mark_fallback_off agy "$reset_epoch" && marked=fallback
   else
-    executor_session_mark_off agy quota "$reset_epoch"
-    marked=lane
+    executor_session_mark_off agy quota "$reset_epoch" && marked=lane
   fi
 fi
 
