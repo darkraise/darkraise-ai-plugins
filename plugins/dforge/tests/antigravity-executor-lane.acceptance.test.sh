@@ -58,6 +58,14 @@ while IFS= read -r dir; do
     [ -e "$SEAL/$name" ] || ln -s "$tool" "$SEAL/$name" 2>/dev/null
   done
 done < <(for tool in bash node jq git cat date awk sed grep timeout ps tr; do dirname "$(type -P "$tool")"; done | sort -u)
+# A Chocolatey shim such as jq.exe finds its program from its own directory, so
+# these run from where they are. The link goes first: writing to it would
+# overwrite the program it names.
+for tool in jq node git; do
+  rm -f "$SEAL/$tool"
+  printf '#!%s\nexec "%s" "$@"\n' "$BASH" "$(type -P "$tool")" > "$SEAL/$tool"
+  chmod +x "$SEAL/$tool"
+done
 
 cat > "$STUBBIN/agy" <<'STUB'
 #!/usr/bin/env bash
