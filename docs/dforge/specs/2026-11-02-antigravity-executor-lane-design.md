@@ -379,6 +379,19 @@ outer-timeout outputs, and optionally to run `git commit`, `git stash` or
   `codex-report-schema.json`.
 - New suites get Windows shard weights in `scripts/test-all.mjs`.
 
+### Amendment (2026-11-03)
+
+Ruled on register `docs/dforge/registers/2026-11-02-antigravity-executor-lane-auto.md`:
+
+- Row 1, Wrapper item 5 and A7: refs are shared with every other worktree, so
+  the git guard blocks only on `HEAD`, the index, this worktree's branch and
+  per-worktree refs, a stash entry made on its branch, a deleted ref or stash
+  entry, a tag change, or a branch moved to a commit that does not descend from
+  where it was. Other ref changes are listed in the report, `refs/remotes` is
+  ignored, and `git branch` no longer blocks.
+- Row 3, Wrapper item 4: a quota matched only in stderr gives `reason=quota`
+  without marking the lane off; `.error` and non-JSON stdout still mark it off.
+
 ## Acceptance
 
 A1. [test, high] With `agy` registered and its gate open, `detect-executors.sh` reports `agy` as `usable: true` with its version, and reports no `antigravity` row.
