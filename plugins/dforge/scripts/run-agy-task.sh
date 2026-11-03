@@ -148,6 +148,13 @@ if [[ "$gate_line" != *" lane=true "* ]]; then
   gate_reason=$(sed -n 's/.* reason=\([^ ]*\).*/\1/p' <<<"$gate_line")
   die "agy lane is off for this session (${gate_reason:-no gate answer})"
 fi
+# Fails closed: a gate line that does not say fallback=on, an older gate's
+# included, refuses the Claude fallback.
+if [[ "$model" == claude-* && "$gate_line" != *" fallback=on "* ]]; then
+  fallback_until=$(sed -n 's/.* fallback_resets_at=\([^ ]*\).*/\1/p' <<<"$gate_line")
+  { [ -n "$fallback_until" ] && [ "$fallback_until" != - ]; } || fallback_until='the end of the session'
+  die "the agy Claude fallback is off until $fallback_until (quota)"
+fi
 cwd="$(dr_canonical "$cwd")" || die 'cannot resolve worktree'
 report="$(realpath -m -- "$report")" || die 'cannot resolve report path'
 case "$report" in
@@ -365,13 +372,36 @@ elif grep -qiE 'unknown model|model .* not (found|available|supported|recognized
 elif [ "$timed_out" = yes ]; then reason=timeout
 else reason=error
 fi
-# A quota is account-wide, so it turns agy off for the session; otherwise every
-# later task pays for the same answer. Only agy's own error text or stdout is
-# trusted for that: stderr can carry output of the commands the model ran, and
-# in a repository whose tests talk about quotas that would close the lane on a
-# word. A stderr-only quota still labels the run, so the controller's transient
-# retry and the lane breaker bound what a real one costs.
-[ "$quota_source" != agy ] || executor_session_mark_off agy quota
+# Antigravity counts Claude and Gemini against separate limits, so a quota marks
+# only the family that hit it - the Claude fallback for a claude- model, the
+# lane for any other - until the reset the error names, or for the session when
+# it names none; otherwise every later task pays for the same answer. Only agy's
+# own error text or stdout is trusted for that: stderr can carry output of the
+# commands the model ran, and in a repository whose tests talk about quotas that
+# would close the lane on a word. A stderr-only quota still labels the run, so
+# the controller's transient retry and the lane breaker bound what a real one
+# costs.
+#
+# The reset is matched with bash's own regex rather than grep -o or sed -E,
+# whose extensions GNU, uutils and Git Bash do not share. Every unit is
+# optional, so a match that caught none is no match.
+marked=none reset_epoch='' reset_iso=''
+reset_re='Resets in (([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?'
+if [ "$quota_source" = agy ]; then
+  if [[ "$cause" =~ $reset_re ]] && [ -n "${BASH_REMATCH[1]}${BASH_REMATCH[3]}${BASH_REMATCH[5]}${BASH_REMATCH[7]}" ]; then
+    reset_epoch=$(( $(date -u +%s) + 10#${BASH_REMATCH[2]:-0} * 86400 + 10#${BASH_REMATCH[4]:-0} * 3600 \
+      + 10#${BASH_REMATCH[6]:-0} * 60 + 10#${BASH_REMATCH[8]:-0} ))
+    reset_iso=$({ date -u -d "@$reset_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+      || date -u -r "$reset_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null; } | tr -d '\r')
+  fi
+  if [[ "$model" == claude-* ]]; then
+    executor_session_mark_fallback_off agy "$reset_epoch"
+    marked=fallback
+  else
+    executor_session_mark_off agy quota "$reset_epoch"
+    marked=lane
+  fi
+fi
 
 status=BLOCKED
 summary=""
@@ -486,6 +516,8 @@ head=$(git -C "$cwd" rev-parse HEAD)
     # as a fallback: it carries agy's own complaints, which are the failures
     # that leave no error in its result.
     printf '\n## Agy error\n\n```\nreason=%s\n' "$reason"
+    [ "$reason" != quota ] || printf 'marked=%s\n' "$marked"
+    [ -z "$reset_iso" ] || printf 'until=%s\n' "$reset_iso"
     [ "$timed_out" = no ] || printf 'timedOut=true\n'
     printf '%s\n```\n' "${agy_error:-agy returned no error text}"
     if [ "$raw_stdout" = yes ] && [ -s "$report.stdout" ]; then

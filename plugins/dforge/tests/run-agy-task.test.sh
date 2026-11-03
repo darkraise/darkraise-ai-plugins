@@ -28,7 +28,7 @@ export STUB_AGY_ARGS_LOG="$fixture/args.log"
 export PATH="$STUBDIR:$PATH"
 check "agy resolves to the stub" "$([ "$(command -v agy)" -ef "$STUBDIR/agy" ] && echo yes || echo no)" "yes"
 
-printf '#!/usr/bin/env bash\nprintf "%%s\\n" "${GATE_STUB_LINE:-agy-gate usable=true reason=ok review=false lane=true resets_at=- source=cache}"\n' > "$fixture/gate-stub"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "${GATE_STUB_LINE:-agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=on fallback_resets_at=- source=cache}"\n' > "$fixture/gate-stub"
 export AGY_TASK_GATE="$fixture/gate-stub"
 
 native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
@@ -112,6 +112,28 @@ GATE_STUB_LINE='agy-gate usable=false reason=quota review=false lane=false reset
 check "a closed lane is refused" "$?" "2"
 check "a closed lane names the gate reason" "$(grep -c 'agy lane is off for this session (quota)' "$fixture/err")" "1"
 check "a closed lane never launches agy" "$(calls)" "0"
+
+# --- the Claude fallback runs only while the gate says fallback=on (A8) -------
+FB_OFF='agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=off fallback_resets_at=2099-01-01T00:00:00Z source=cache'
+n=$(calls)
+newwork fallback-off
+GATE_STUB_LINE="$FB_OFF" run
+check "a Claude model is refused while the fallback is off" "$?" "2"
+check "the refusal names the reset time" \
+  "$(grep -c 'the agy Claude fallback is off until 2099-01-01T00:00:00Z (quota)' "$fixture/err")" "1"
+newwork fallback-session
+GATE_STUB_LINE='agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=off fallback_resets_at=- source=cache' run
+check "a fallback mark with no reset refuses a Claude model" "$?" "2"
+check "that refusal says the end of the session" \
+  "$(grep -c 'the agy Claude fallback is off until the end of the session (quota)' "$fixture/err")" "1"
+newwork fallback-absent
+GATE_STUB_LINE='agy-gate usable=true reason=ok review=false lane=true resets_at=- source=cache' run
+check "a gate line without the fallback field refuses a Claude model" "$?" "2"
+check "the refused Claude runs never launch agy" "$(calls)" "$n"
+newwork fallback-gemini
+GATE_STUB_LINE="$FB_OFF" run --model gemini-3.8-flash --effort medium
+check "a Gemini model still runs while the fallback is off" "$?" "0"
+check "the Gemini run launched agy" "$(calls)" "$((n + 1))"
 
 # --- a DONE run commits the approved write set (A6) ----------------------------
 newwork happy
@@ -450,19 +472,64 @@ check "a plain error leaves the session file absent" "$([ -e "$session_file" ] &
 newwork session-model
 STUB_AGY_MODE=error STUB_AGY_ERROR="unknown model gemini-9-flash" run
 check "an unknown model leaves the session file absent" "$([ -e "$session_file" ] && echo yes || echo no)" "no"
-newwork session-quota
-STUB_AGY_MODE=error STUB_AGY_ERROR="Quota exceeded for this account" run
-check "a quota error turns agy off for the session" "$(session_state)" "false/false/quota"
+sfield() { jq -r "$1 | tostring" "$session_file" 2>/dev/null | tr -d '\r'; }
+iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ; }
+in_window() { # in_window <epoch> <before> <after> <seconds>
+  if [ "$1" -ge $(( $2 + $4 )) ] 2>/dev/null && [ "$1" -le $(( $3 + $4 )) ]; then echo yes; else echo no; fi; }
+seed_open() { rm -rf "$DR_AGY_SESSION_DIR"; mkdir -p "$DR_AGY_SESSION_DIR"
+  printf '{"session_id":"run-agy-task-test","usable":true,"review":false,"lane":true,"reason":"ok","resets_at":null,"resets_at_epoch":null}\n' > "$session_file"; }
+quota_lines() { grep -A"$1" '^reason=quota$' "$R" | tr -d '\r' | tr '\n' ' '; }
+QUOTA_RESET='RESOURCE_EXHAUSTED (code 429): Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 1h2m3s.'
+QUOTA_BARE='Quota exceeded for this account'
+
+# A Gemini quota closes the lane until the reset the error names (A6, A14).
+seed_open; newwork lane-reset
+before=$(date -u +%s)
+STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_RESET" run --model gemini-3.8-flash --effort medium
+after=$(date -u +%s)
+epoch=$(sfield .resets_at_epoch)
+check "a Gemini quota closes the lane" "$(session_state)" "false/false/quota"
+check "a Gemini quota's reset is 3723 s after agy exits" "$(in_window "$epoch" "$before" "$after" 3723)" "yes"
+check "a Gemini quota's reset is written in ISO 8601 UTC" "$(sfield .resets_at)" "$(iso "$epoch")"
+check "a Gemini quota writes no fallback mark" "$(sfield 'has("fallback")')" "false"
+check "the report says the lane was marked until the reset" "$(quota_lines 2)" "reason=quota marked=lane until=$(iso "$epoch") "
+
+# Without a reset the lane stays closed for the session (A10).
+seed_open; newwork lane-bare
+STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_BARE" run --model gemini-3.8-flash --effort medium
+check "a Gemini quota with no reset closes the lane for the session" \
+  "$(session_state)/$(sfield .resets_at_epoch)" "false/false/quota/null"
+check "the report says the lane was marked" "$(quota_lines 1)" "reason=quota marked=lane "
+check "a quota with no reset prints no until line" "$(grep -c '^until=' "$R")" "0"
+
+# A Claude quota closes only the fallback (A7, A10, A14).
+seed_open; newwork fallback-reset
+before=$(date -u +%s)
+STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_RESET" run
+after=$(date -u +%s)
+epoch=$(sfield .fallback.resets_at_epoch)
+check "a Claude quota leaves the lane open" "$(session_state)" "true/true/ok"
+check "a Claude quota marks the fallback off" "$(sfield .fallback.usable)/$(sfield .fallback.reason)" "false/quota"
+check "a Claude quota's reset is 3723 s after agy exits" "$(in_window "$epoch" "$before" "$after" 3723)" "yes"
+check "a Claude quota's reset is written in ISO 8601 UTC" "$(sfield .fallback.resets_at)" "$(iso "$epoch")"
+check "the report says the fallback was marked until the reset" "$(quota_lines 2)" "reason=quota marked=fallback until=$(iso "$epoch") "
+seed_open; newwork fallback-bare
+STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_BARE" run
+check "a Claude quota with no reset marks the fallback for the session" \
+  "$(session_state)/$(sfield .fallback.usable)/$(sfield .fallback.resets_at_epoch)" "true/true/ok/false/null"
+check "the report says the fallback was marked" "$(quota_lines 1)" "reason=quota marked=fallback "
+
 rm -rf "$DR_AGY_SESSION_DIR"
 newwork session-text
-STUB_AGY_MODE=text STUB_AGY_TEXT="RESOURCE_EXHAUSTED: try later" run
+STUB_AGY_MODE=text STUB_AGY_TEXT="RESOURCE_EXHAUSTED: try later" run --model gemini-3.8-flash --effort medium
 check "a plain-text quota turns agy off for the session" "$(session_state)" "false/false/quota"
 # stderr can carry output of the commands the model ran, so a quota word there
-# labels the run but does not close the lane.
+# labels the run but marks nothing (A11).
 rm -rf "$DR_AGY_SESSION_DIR"
 newwork session-stderr
-PATH="$fixture/stderrshim:$PATH" run
+PATH="$fixture/stderrshim:$PATH" run --model gemini-3.8-flash --effort medium
 check "a quota seen only on stderr is still reported as quota" "$(grep -c '^reason=quota$' "$R")" "1"
+check "a quota seen only on stderr reports marked=none" "$(quota_lines 1)" "reason=quota marked=none "
 check "a quota seen only on stderr leaves the session file absent" "$([ -e "$session_file" ] && echo yes || echo no)" "no"
 
 # The same quota through the real gate: it keeps the answer past --refresh. Node
@@ -476,15 +543,46 @@ if [ "$SPAWNABLE" = yes ]; then
     | sed -n 's/.* usable=\([a-z]*\) reason=\([^ ]*\) .* lane=\([a-z]*\) .*/\1 \2 \3/p'; }
   check "the real gate opens the lane on a trusted, signed-in stub" "$(gate_fields)" "true ok true"
   newwork quota
-  STUB_AGY_MODE=error STUB_AGY_ERROR="quota exceeded" run
+  STUB_AGY_MODE=error STUB_AGY_ERROR="quota exceeded" run --model gemini-3.8-flash --effort medium
   check "a quota run through the real gate is not DONE" "$?" "1"
   check "the gate reports quota after the run" "$(gate_fields)" "false quota false"
   check "the gate keeps quota through --refresh" "$(gate_fields --refresh)" "false quota false"
   n=$(calls)
-  run --task-id task-two
+  run --task-id task-two --model gemini-3.8-flash --effort medium
   check "the next wrapper call is refused" "$?" "2"
   check "the next wrapper call names quota" "$(grep -c 'agy lane is off for this session (quota)' "$fixture/err")" "1"
   check "the next wrapper call never runs agy" "$(calls)" "$n"
+  gate_line() { bash "$P/scripts/agy-gate" "$@" 2>/dev/null | tail -1 | tr -d '\r'; }
+  # A reset time ends the lane mark: once it has passed, the gate probes again (A6).
+  rm -rf "$DR_AGY_SESSION_DIR"; gate_line >/dev/null
+  newwork quota-reset
+  STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_RESET" run --model gemini-3.8-flash --effort medium
+  epoch=$(sfield .resets_at_epoch)
+  check "the gate prints the lane's reset time" "$(gate_line)" \
+    "agy-gate usable=false reason=quota review=false lane=false resets_at=$(iso "$epoch") fallback=on fallback_resets_at=- source=cache"
+  jq '.resets_at_epoch = 1000' "$session_file" > "$session_file.tmp" && mv -f "$session_file.tmp" "$session_file"
+  check "a passed reset reopens the lane through a fresh probe" "$(gate_line)" \
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=on fallback_resets_at=- source=probe"
+
+  # A Claude quota closes only the fallback (A7, A10).
+  newwork fallback-gate
+  STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_RESET" run
+  epoch=$(sfield .fallback.resets_at_epoch)
+  check "after a Claude quota the gate keeps the lane and turns the fallback off" "$(gate_line)" \
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=off fallback_resets_at=$(iso "$epoch") source=cache"
+  n=$(calls)
+  newwork fallback-gate-gemini
+  run --model gemini-3.8-flash --effort medium
+  check "a Gemini run still launches agy while the fallback is off" "$(calls)" "$((n + 1))"
+  newwork fallback-gate-claude
+  run
+  check "a Claude run is refused while the fallback is off" "$?" "2"
+  check "the refused Claude run never launches agy" "$(calls)" "$((n + 1))"
+  rm -rf "$DR_AGY_SESSION_DIR"; gate_line >/dev/null
+  newwork fallback-gate-bare
+  STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_BARE" run
+  check "a Claude quota with no reset keeps the fallback off through --refresh" "$(gate_line --refresh)" \
+    "agy-gate usable=true reason=ok review=false lane=true resets_at=- fallback=off fallback_resets_at=- source=probe"
   export AGY_TASK_GATE="$saved_gate"
 else
   skip "the real-gate quota chain needs a probe that can run the stub"

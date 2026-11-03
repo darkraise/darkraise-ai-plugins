@@ -553,7 +553,7 @@ if selected A8; then
       i=$((i + 1))
       fresh_session "quota$i"
       newwork "q$i"
-      STUB_MODE=error STUB_ERROR="$text" runw
+      STUB_MODE=error STUB_ERROR="$text" runw --model gemini-3.8-flash --effort medium
       check "A8 [$text]: the failing run is not DONE" "$(status_line | grep -c 'status=DONE')" "0"
       g=$(gate)
       matches "A8 [$text]: agy-gate prints lane=false" "$g" 'lane=false'
@@ -567,11 +567,17 @@ if selected A8; then
       check "A8 [$text]: the next wrapper call exits 2" "$?" "2"
       check "A8 [$text]: and never runs agy" "$(pcalls)" "$before"
     done
-    # A different error text leaves the lane open.
+    # A different error text, or a quota on the Claude fallback, leaves the lane open.
     fresh_session quota-ctl
     newwork qctl
     STUB_MODE=error STUB_ERROR='something failed' runw
     matches "A8: control: a non-quota error leaves the lane on" "$(gate --refresh)" 'lane=true'
+    fresh_session quota-claude
+    newwork qclaude
+    STUB_MODE=error STUB_ERROR='Quota exceeded for this account' runw
+    g=$(gate --refresh)
+    matches "A8: control: a Claude quota leaves the lane on" "$g" 'lane=true'
+    has "A8: control: a Claude quota turns the fallback off" "$g" 'fallback=off'
   else
     skip "A8: node cannot spawn a bash stub on this host"
   fi
