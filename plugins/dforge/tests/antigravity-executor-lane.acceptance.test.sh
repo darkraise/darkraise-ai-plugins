@@ -66,6 +66,14 @@ for tool in jq node git; do
   printf '#!%s\nexec "%s" "$@"\n' "$BASH" "$(type -P "$tool")" > "$SEAL/$tool"
   chmod +x "$SEAL/$tool"
 done
+# Node finds git through the Windows PATH, where neither a link nor a wrapper
+# script runs: darkmem-config.mjs then sees no repository. On Git Bash, give
+# native callers git's own directory instead; it holds no agy.
+GITDIR=''
+if command -v cygpath >/dev/null 2>&1; then
+  rm -f "$SEAL/git.exe"
+  GITDIR=$(dirname "$(type -P git)")
+fi
 
 cat > "$STUBBIN/agy" <<'STUB'
 #!/usr/bin/env bash
@@ -128,7 +136,7 @@ printf '#!/bin/sh\nexit 0\n' > "$STUBBIN/antigravity"; chmod +x "$STUBBIN/antigr
 # Node cannot run a bash-script stub on Windows; the probe needs it to.
 SPAWNABLE=$(PATH="$STUBBIN:$SEAL" node -e 'const r = require("child_process").spawnSync(process.argv[1], ["--version"], { encoding: "utf8" }); console.log(r.status === 0 ? "yes" : "no")' "$STUBBIN/agy" 2>/dev/null | tr -d '\r')
 
-export PATH="$STUBBIN:$SEAL"
+export PATH="$STUBBIN:$SEAL${GITDIR:+:$GITDIR}"
 export HOME="$TMP/home"; mkdir -p "$HOME"
 unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
