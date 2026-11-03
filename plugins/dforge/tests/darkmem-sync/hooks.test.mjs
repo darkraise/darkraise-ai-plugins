@@ -16,6 +16,9 @@ function bash(args, { cwd, env, input }) {
     const child = execFile(process.env.DR_TEST_BASH ?? "bash", args, { cwd, env, timeout: 120000 }, (error, stdout, stderr) => {
       resolve({ code: error ? (typeof error.code === "number" ? error.code : -1) : 0, stdout, stderr });
     });
+    // A child may exit before reading its input; its exit code and output
+    // still decide the test, and an unheard EPIPE would fail whichever test runs.
+    child.stdin.on("error", error => { if (error.code !== "EPIPE") throw error; });
     child.stdin.end(input ?? "");
   });
 }
@@ -23,6 +26,11 @@ function bash(args, { cwd, env, input }) {
 const sessionLines = (dir, sid, env, room = "", seconds = "") => bash(["-c", '. "$1"; darkmem_session_lines "$2" "$3" "$4" "$5"', "hook-test", LIB, dir, sid, room, seconds], { cwd: dir, env });
 const MORE = /^darkmem-sync: (\d+) more lines; run darkmem-sync reconcile or status to see them$/m;
 const pushQuietly = (dir, sid, env) => bash(["-c", '. "$1"; darkmem_push_quietly "$2" "$3"', "hook-test", LIB, dir, sid], { cwd: dir, env });
+test("a child that exits without reading its input still reports its exit code", async () => {
+  const result = await bash(["-c", "exit 3"], { cwd: scratch("dmh-epipe-"), env: process.env, input: "x".repeat(1 << 20) });
+  assert.equal(result.code, 3);
+});
+
 const fit = (input, lines, chars) => bash(["-c", '. "$1"; _darkmem_fit "$2" "$3"', "hook-test", LIB, String(lines), String(chars)], { cwd: scratch("dmh-fit-"), env: process.env, input });
 
 // The hooks must export the session id themselves, so the test environment
