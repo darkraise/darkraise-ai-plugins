@@ -104,8 +104,10 @@ case "$report" in /*|[A-Za-z]:*) ;; *) report="$(pwd)/$report" ;; esac
 # costing the controller a rung for a typo.
 [ -d "$(dirname "$report")" ] || die "report directory not found: $(dirname "$report")"
 
-block agy-assignment | awk '{print $2}' | sort -u | grep -qxF -- "$model" \
-  || die "model is not a rung in agy-assignment: $model"
+{ block agy-assignment | awk '{print $2}'
+  block agy-successor | awk '$2 != "HANDBACK" { sub(/\/.*/, "", $2); print $2 }'
+} | sort -u | grep -qxF -- "$model" \
+  || die "model is not an agy-assignment or agy-successor rung: $model"
 # Word-exact, mirroring the model check above. A containment test on the padded
 # string admits a multi-word value like "medium high", which would then fail far
 # downstream in the timeout lookup instead of here.

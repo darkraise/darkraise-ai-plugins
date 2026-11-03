@@ -80,7 +80,16 @@ check "rejects a model absent from agy-assignment" "$(dry_rc --model gpt-4o --ef
 check "rejects a codex model" "$(dry_rc --model gpt-6.1-sol --effort medium)" "2"
 check "rejects xhigh, which only codex accepts" "$(dry_rc --model claude-sonnet-5-5 --effort xhigh)" "2"
 check "rejects a multi-word effort" "$(dry_rc --model claude-sonnet-5-5 --effort 'medium high')" "2"
-check "rejects a rung with no agy-timeout row" "$(dry_rc --model claude-opus-5-5 --effort low)" "2"
+check "rejects a rung with no agy-timeout row" "$(dry_rc --model gemini-3.8-flash --effort low)" "2"
+check "names the missing agy-timeout row" "$(grep -c 'no agy-timeout row for gemini-3.8-flash/low' "$fixture/err")" "1"
+check "rejects claude-opus-5-5, which no agy block names" "$(dry_rc --model claude-opus-5-5 --effort high)" "2"
+check "the refusal names both blocks" \
+  "$(grep -c 'model is not an agy-assignment or agy-successor rung: claude-opus-5-5' "$fixture/err")" "1"
+check "admits Argon low from agy-assignment" \
+  "$(dry --model gemini-4-argon --effort low | sed -n '2p' | jq -r '.timeoutSeconds')" "900"
+check "admits Argon high from agy-assignment" \
+  "$(dry --model gemini-4-argon --effort high | sed -n '2p' | jq -r '.timeoutSeconds')" "1500"
+check "admits a Claude rung named only in agy-successor" "$(dry_rc --model claude-sonnet-5-5 --effort high)" "0"
 check "rejects a non-numeric timeout" "$(dry_rc --model claude-sonnet-5-5 --effort medium --timeout 30m)" "2"
 check "rejects an unknown flag" "$(dry_rc --model claude-sonnet-5-5 --effort medium --bogus x)" "2"
 check "rejects a missing brief" \
@@ -182,7 +191,7 @@ run --resume other-thread
 check "a resume with another thread is refused" "$?" "2"
 run --effort high --resume conv-1
 check "a resume with another effort is refused" "$?" "2"
-run --model claude-opus-5-5 --effort high --resume conv-1
+run --model gemini-4-argon --effort high --resume conv-1
 check "a resume with another model is refused" "$?" "2"
 check "a refused resume never reaches agy" "$(calls)" "$n"
 

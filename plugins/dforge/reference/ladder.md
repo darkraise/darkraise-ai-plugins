@@ -399,30 +399,39 @@ onto another quota, so even a score-0 task it takes is Claude quota saved.
 0 gemini-3.8-flash medium
 1 gemini-3.8-flash medium
 2 gemini-3.8-flash medium
-3 claude-sonnet-5-5 medium
-4 claude-sonnet-5-5 medium
-5 claude-sonnet-5-5 high
-6 claude-opus-5-5 high
-7 claude-opus-5-5 high
-8 claude-opus-5-5 high
+3 gemini-4-argon low
+4 gemini-4-argon low
+5 gemini-4-argon high
+6 gemini-4-argon high
+7 gemini-4-argon high
+8 gemini-4-argon high
 ```
 
-Totals 3 to 8 mirror the native Claude assignment table: Sonnet at `medium`,
-Sonnet at `high`, then Opus at `high`. The models are those `agy models` lists.
+Totals 3 to 8 come from the replayed runs recorded in
+`docs/dforge/notes/2026-11-03-agy-calibration-3-8.md`: Argon at `low` passed
+all three tasks scored 3-4, and Argon at `high` passed all three scored 6-7.
+Total 5 runs Argon at `high` because that is the only rung measured on all
+three high tasks. The models are those `agy models` lists.
+
+No row starts on Claude. The Claude quota on Antigravity is small (the
+calibration drained it after about 500k tokens), so it is spent only on the
+single retry after a Gemini run fails.
 
 ### Agy successor
 
 ```agy-successor
 gemini-3.8-flash/medium claude-sonnet-5-5/medium
-claude-sonnet-5-5/medium claude-sonnet-5-5/high
-claude-sonnet-5-5/high claude-opus-5-5/high
-claude-opus-5-5/high HANDBACK
+gemini-4-argon/low claude-sonnet-5-5/medium
+gemini-4-argon/high claude-sonnet-5-5/high
+claude-sonnet-5-5/medium HANDBACK
+claude-sonnet-5-5/high HANDBACK
 ```
 
 This is a single-successor column consulted at most once per task, not a
 walkable chain, the same shape as `codex-successor`. A failed Gemini run moves
 to Claude rather than to a higher Gemini effort, because the second attempt
-should differ in model family.
+should differ in model family. Every row is a Gemini source with a Claude
+target, or a Claude source with `HANDBACK`, and no row names `claude-opus-5-5`.
 
 `HANDBACK` is an action, not an executor. It resolves to the Claude
 assignment-table row for the task's score, after which the ordinary ladder
@@ -437,9 +446,13 @@ its source, so the column is acyclic and every walk reaches `HANDBACK`.
 
 ```agy-timeout
 gemini-3.8-flash/medium 900
+gemini-4-argon/low 900
+gemini-4-argon/high 1500
 claude-sonnet-5-5/medium 1200
 claude-sonnet-5-5/high 1800
-claude-opus-5-5/high 2400
 ```
 
-The values are seconds.
+The values are seconds. The Argon rows follow the 2026-11-02 rule, the larger
+of 900 and three times the slowest passing run rounded up to a multiple of 300:
+at `low`, 3 × 137 s = 411 s, so 900; at `high`, 3 × 426 s = 1278 s, so 1500.
+The Claude rows keep their values.

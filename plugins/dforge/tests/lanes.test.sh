@@ -245,9 +245,11 @@ done <<< "$agy_assignment"
 check "every agy-assignment rung names a known model and effort" "$bad_agy" "NONE"
 check "agy-assignment has one row for each total 0 through 8" \
   "$(printf '%s\n' $agy_scores | sort -n | tr '\n' ' ')" "0 1 2 3 4 5 6 7 8 "
-check "agy-assignment rows 3 to 8 mirror the native Claude table" \
-  "$(printf '%s\n' "$agy_assignment" | awk '$1 >= 3' | tr '\n' ',')" \
-  "3 claude-sonnet-5-5 medium,4 claude-sonnet-5-5 medium,5 claude-sonnet-5-5 high,6 claude-opus-5-5 high,7 claude-opus-5-5 high,8 claude-opus-5-5 high,"
+check "agy-assignment runs Flash medium on 0-2, Argon low on 3-4 and Argon high on 5-8" \
+  "$(printf '%s\n' "$agy_assignment" | tr '\n' ',')" \
+  "0 gemini-3.8-flash medium,1 gemini-3.8-flash medium,2 gemini-3.8-flash medium,3 gemini-4-argon low,4 gemini-4-argon low,5 gemini-4-argon high,6 gemini-4-argon high,7 gemini-4-argon high,8 gemini-4-argon high,"
+check "no agy-assignment row starts on a Claude model" \
+  "$(printf '%s\n' "$agy_assignment" | awk '$2 ~ /^claude-/' | grep -c .)" "0"
 check "the lowest agy-assignment row is the gate's min_score" \
   "$(printf '%s\n' "$agy_assignment" | awk 'NR == 1 || $1 < m { m = $1 } END { print m }')" "$(agy_gate_field min_score)"
 check "the highest agy-assignment row is the gate's max_score" \
@@ -263,6 +265,14 @@ agy_rank() { # agy_rank <model>/<effort>: model_rank * 10 + effort_rank, or -1
 agy_successor=$(block agy-successor)
 # The checks below loop over the rows, so an empty block would pass them all.
 check "agy-successor block is present" "$([ -n "$agy_successor" ] && echo yes || echo no)" "yes"
+check "agy-successor sends each Gemini rung to Sonnet and each Sonnet rung back" \
+  "$(printf '%s\n' "$agy_successor" | tr '\n' ',')" \
+  "gemini-3.8-flash/medium claude-sonnet-5-5/medium,gemini-4-argon/low claude-sonnet-5-5/medium,gemini-4-argon/high claude-sonnet-5-5/high,claude-sonnet-5-5/medium HANDBACK,claude-sonnet-5-5/high HANDBACK,"
+bad_agy_claude=NONE
+while read -r from to; do
+  case "$from" in claude-*) [ "$to" = HANDBACK ] || bad_agy_claude="$from->$to" ;; esac
+done <<< "$agy_successor"
+check "every Claude agy-successor source hands back" "$bad_agy_claude" "NONE"
 agy_succ_of() { printf '%s\n' "$agy_successor" | awk -v k="$1" '$1 == k {print $2}'; }
 
 bad_agy_rank=NONE
@@ -304,6 +314,11 @@ check "every agy-assignment rung has a successor" "$bad_agy_entry" "NONE"
 
 agy_timeouts=$(block agy-timeout)
 check "agy-timeout block is present" "$([ -n "$agy_timeouts" ] && echo yes || echo no)" "yes"
+check "agy-timeout gives Argon 900 s at low and 1500 s at high, one row per reachable rung" \
+  "$(printf '%s\n' "$agy_timeouts" | tr '\n' ',')" \
+  "gemini-3.8-flash/medium 900,gemini-4-argon/low 900,gemini-4-argon/high 1500,claude-sonnet-5-5/medium 1200,claude-sonnet-5-5/high 1800,"
+check "no agy block names claude-opus-5-5" \
+  "$(printf '%s\n' "$agy_assignment" "$agy_successor" "$agy_timeouts" | grep -c 'claude-opus-5-5')" "0"
 bad_agy_timeout=NONE
 while read -r from to; do
   [ -n "$from" ] || continue
@@ -338,6 +353,12 @@ check "ladder.md gives agy its assignment, successor and timeout subsections" \
   "$(grep -cE '^### Agy (assignment|successor|timeout)$' "$LADDER")" "3"
 check "the agy gate subsection states why its floor is 0" \
   "$(grep -cF '`agy-lane-gate` has a floor of 0 because' "$LADDER")" "1"
+check "ladder.md names the 3-8 calibration note as the source of agy rows 3-8" \
+  "$(grep -cF 'docs/dforge/notes/2026-11-03-agy-calibration-3-8.md' "$LADDER")" "1"
+check "the note ladder.md names is committed" \
+  "$(git -C "$HERE/../../.." ls-files --error-unmatch docs/dforge/notes/2026-11-03-agy-calibration-3-8.md >/dev/null 2>&1 && echo yes || echo no)" "yes"
+check "ladder.md no longer says agy rows 3 to 8 mirror the native table" \
+  "$(grep -cF 'Totals 3 to 8 mirror the native Claude assignment table' "$LADDER")" "0"
 
 # --- the agy calibration record and the lane's trust ---
 # Rows 0-2 of agy-assignment, that rung's successor and timeout rows, and the
@@ -396,8 +417,9 @@ check "every run row carries numeric wall seconds and tokens" "${badnum:-x}" "0"
 
 check "the record states a smoke result" \
   "$(grep -cE '^\*\*Smoke:\*\* (pass|fail)' "$NOTES" 2>/dev/null)" "1"
-smoke_rung=$(block agy-assignment | awk '$1 == 5 { print $2 "/" $3 }')
-check "the smoke run used the rung that total 5 is assigned" \
+# The 2026-11-02 record is history: its smoke run used total 5's rung of the time.
+smoke_rung=claude-sonnet-5-5/high
+check "the 2026-11-02 smoke run used claude-sonnet-5-5/high" \
   "$(awk -F'|' -v r="$smoke_rung" '
     function t(s) { gsub(/^ +| +$/, "", s); return s }
     t($2) ~ /^S1/ && t($3) == r { n++ }

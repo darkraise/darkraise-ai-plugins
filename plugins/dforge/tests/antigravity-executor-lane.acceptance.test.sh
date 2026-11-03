@@ -352,8 +352,8 @@ if selected A3; then
     matches "A3: total $t at risk <= 2 lists agy first with the agy-assignment rung ($want)" "$unit" "rungs=agy:$want(,|$)"
     has "A3: total $t clears the gate" "$unit" "gate=pass"
   done
-  # Totals 3 to 8 mirror the native table: Sonnet medium, Sonnet medium, Sonnet high, Opus high.
-  for pair in "3 claude-sonnet-5-5 medium" "4 claude-sonnet-5-5 medium" "5 claude-sonnet-5-5 high" "6 claude-opus-5-5 high" "7 claude-opus-5-5 high" "8 claude-opus-5-5 high"; do
+  # Totals 3 to 8 run on Argon (docs/dforge/notes/2026-11-03-agy-calibration-3-8.md).
+  for pair in "3 gemini-4-argon low" "4 gemini-4-argon low" "5 gemini-4-argon high" "6 gemini-4-argon high" "7 gemini-4-argon high" "8 gemini-4-argon high"; do
     set -- $pair
     check "A3: agy-assignment row $1 is $2 $3" "$(block agy-assignment | awk -v t="$1" '$1 == t { print $2 " " $3 }')" "$2 $3"
   done
@@ -598,7 +598,7 @@ if selected A9; then
       check "A9 ($first): another thread is refused" "$([ "$?" -ne 0 ] && echo refused || echo ran)" "refused"
       runw --effort high --resume conv-pin
       check "A9 ($first): another effort is refused" "$([ "$?" -ne 0 ] && echo refused || echo ran)" "refused"
-      runw --model claude-opus-5-5 --effort high --resume conv-pin
+      runw --model gemini-4-argon --effort high --resume conv-pin
       check "A9 ($first): another model is refused" "$([ "$?" -ne 0 ] && echo refused || echo ran)" "refused"
       check "A9 ($first): a refused resume never reaches agy" "$(pcalls)" "$n"
     done
@@ -751,7 +751,8 @@ if selected A16; then
     [ "$(rank "$nxt")" -gt "$(rank "$src")" ] || worse="$worse$src->$nxt "
   done <<<"$succ"
   check "A16: every successor ranks strictly above its source" "$worse" ""
-  check "A16: HANDBACK appears" "$(awk '$2 == "HANDBACK"' <<<"$succ" | wc -l | tr -d ' ')" "1"
+  check "A16: HANDBACK ends every Claude rung" "$(awk '$2 == "HANDBACK"' <<<"$succ" | wc -l | tr -d ' ')" \
+    "$(awk '$1 ~ /^claude-/' <<<"$succ" | wc -l | tr -d ' ')"
   starts=$( { awk '{ print $1 }' <<<"$succ"; block agy-assignment | awk '{ print $2 "/" $3 }'; } | sort -u)
   stuck=""
   while read -r start; do
