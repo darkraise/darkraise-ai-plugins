@@ -466,5 +466,31 @@ for need in 'Antigravity' 'scripts/run-agy-task.sh' 'scripts/agy-gate' 'scripts/
   check "the README names $need" "$([ "$(grep -cF -- "$need" "$RD")" -ge 1 ] && echo yes || echo no)" "yes"
 done
 
+# --- the Gemini-first lane in the reference and the README ---
+check "the capability row hands back when the agy successor is Claude and the fallback is off" \
+  "$(grep -E '^\| Capability' "$EL" | grep -cF 'executor agy HANDBACK - fallback quota until <iso>')" "1"
+check "the resume table hands back on the wrapper's fallback refusal" \
+  "$(grep -E '^\|' "$EL" | grep -F 'the agy Claude fallback is off until' | grep -cF 'executor agy HANDBACK - fallback quota until <iso>')" "1"
+check "no table row of the reference carries a bare <iso|session end> template" \
+  "$(grep -E '^\|' "$EL" | grep -cF '<iso|session end>')" "0"
+check "neither transient row retries a quota the wrapper marked" \
+  "$(grep -E '^\| Transient' "$EL" | grep -cF 'is not retried')" "2"
+check "an agy Executor line may name a successor rung" \
+  "$(grep -cF 'outside its assignment and successor blocks' "$EL")" "1"
+for need in 'separate limits' 'Individual quota reached' 'Resets in' 'fallback=off' 'fallback_resets_at=' 'marked=none' 'next gate call'; do
+  check "Per-executor: agy's quota bullet says: $need" "$(grep -cF -- "$need" <<<"$agy_sec")" "1"
+done
+check "the agy section no longer says Antigravity publishes no reset time" \
+  "$(grep -cF 'Antigravity publishes no reset time' <<<"$agy_sec")" "0"
+check "the README no longer keeps the lane off for the session on every quota" \
+  "$(tr '\n' ' ' < "$RD" | tr -s ' ' | grep -cF 'a quota failure keeps the lane off for the session')" "0"
+check "the README says a Claude quota closes only the Claude fallback" \
+  "$(tr '\n' ' ' < "$RD" | tr -s ' ' | grep -cF 'closes only the Claude fallback')" "1"
+check "the README has a 4.11 migration section" "$(grep -cxF '## Migrating to 4.11' "$RD")" "1"
+check "the 4.11 migration section says old Claude agy lines fail plan-lint" \
+  "$(awk '/^## / { on = ($0 == "## Migrating to 4.11") } on' "$RD" | tr '\n' ' ' | grep -cF 'fails `plan-lint`')" "1"
+check "the README no longer says agy takes totals 3-8 on Claude Sonnet or Opus" \
+  "$(tr '\n' ' ' < "$RD" | tr -s ' ' | grep -cF 'totals 3-8 on Claude Sonnet or Opus')" "0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
