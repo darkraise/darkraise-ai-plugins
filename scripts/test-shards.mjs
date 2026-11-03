@@ -7,6 +7,7 @@
 // Run 41307035161 (2026-11-01) supplied speed-and-cost-followups, whose A12
 // part no longer re-runs two suites under test-all (371 s, 0.4 s and 98 s),
 // and typed-seats-and-drafting.acceptance.sh.
+// Run 41563118629 (2026-11-03) supplied run-agy-task.
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -74,7 +75,7 @@ export const windowsSeconds = {
   'review-route.test.sh': 458,
   'roadmap.test.sh': 125,
   'roots.test.sh': 84,
-  'run-agy-task.test.sh': 100,
+  'run-agy-task.test.sh': 390,
   'run-codex-task.test.sh': 10,
   'sdd-references.test.sh': 10,
   'seats.test.sh': 10,
