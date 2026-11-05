@@ -308,6 +308,8 @@ declare module 'claude-code' {
       notifier: CockpitNotifier
       isNudged: boolean
       isPlanSession: boolean
+      /** The main loop's latest `Process:` line is `Process: fast` (reference/fast-mode.md): the seat check stands down. */
+      isFastMode: boolean
       /** This session runs a plan: an execution skill ran, an implementer was spawned, or the ledger moved. */
       isRunSession: boolean
       /** The auto run bound to this session, as last read; null without one. */

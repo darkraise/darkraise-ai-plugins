@@ -35,6 +35,15 @@ names "brainstorming: an inline plan is sequential" "$B" 'and when `executionMod
 names "brainstorming: specReview" "$B" '`specReview=false`: after the spec self-review block, skip the User Review'
 names "brainstorming: the path rule points at processBias" "$B" '(`processBias` moves where doubt lands; see Settings). The'
 names "brainstorming: the question rule points at questionStyle" "$B" '(`questionStyle=batched` asks them all in one message; see Settings)'
+D="$P/skills/systematic-debugging/SKILL.md"
+U="$P/skills/using-dforge/SKILL.md"
+names "brainstorming offers fast mode" "$B" 'Fast mode, or the full dforge flow?'
+names "brainstorming: the fast Process line" "$B" '`Process: fast — <why>`'
+names "brainstorming: fastMode=always" "$B" '`fastMode=always`: take fast mode without asking'
+names "brainstorming: fastMode=off" "$B" '`fastMode=off`: never offer fast mode'
+names "systematic-debugging offers fast mode" "$D" 'Fast mode, or the full dforge flow?'
+names "using-dforge: a fast-mode choice outranks skills" "$U" 'direct requests, fast mode) outrank skills'
+names "fast-mode.md: no further dforge skill" "$P/reference/fast-mode.md" 'Invoke no further dforge skill for that request.'
 names "brainstorming: the strategy question is skipped by the setting" "$P/skills/brainstorming/references/design-phase.md" 'When `executionStrategy` is `sequential` or `parallel` (see Settings), skip the'
 names "brainstorming: the section rule points at designApproval" "$P/skills/brainstorming/references/design-phase.md" 'with `designApproval=whole`, present every section in one message and ask once (see Settings)'
 names "brainstorming: the review gate is skipped by the setting" "$P/skills/brainstorming/references/user-review-gate.md" 'With `specReview=false` (see Settings), skip this gate and go to Implementation.'

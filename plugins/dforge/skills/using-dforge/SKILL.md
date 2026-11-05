@@ -72,4 +72,4 @@ With the darkmem MCP, prefer its `code_search` over Explore subagents.
 
 - Codex: read `references/codex-tools.md`. It has no Stop hook: run `scripts/next-step` on every early stop.
 - No todo tool? Use the ledger or a checklist.
-- User instructions (CLAUDE.md, AGENTS.md, direct requests) outrank skills, which outrank defaults.
+- User instructions (CLAUDE.md, AGENTS.md, direct requests, fast mode) outrank skills, which outrank defaults.
