@@ -540,6 +540,23 @@ a passing `ui-proof check` in a project with a UI profile (or a session that
 ran the skill); the line `UI proof: pending — <why>` releases it, and it
 stands down while an auto run is bound.
 
+### Fast mode
+
+Before the full flow starts for a request, `dforge:brainstorming` and
+`dforge:systematic-debugging` ask "Fast mode, or the full dforge flow?". Fast
+mode works the request the way plain Claude Code would: Claude says
+`Process: fast — <why>` and then invokes no further dforge skill for that
+request, so there is no spec, plan, register, review, worktree question,
+finishing menu or next-step block, and choosing fast mode stands in for the
+design approval. Your own instructions (CLAUDE.md, direct requests) still
+apply. While the latest `Process:` line the main session wrote is
+`Process: fast`, the unplanned-work hold, the UI proof hold, the UI edit hook
+and the cockpit's seat check stand down; a later full-flow `Process:` line
+turns them back on. Plan ledger and auto run holds are unchanged. The next
+request is offered the choice again. The `fastMode` setting takes fast mode
+without asking (`always`) or never offers it (`off`). See
+[reference/fast-mode.md](reference/fast-mode.md).
+
 ## Unattended runs
 
 Two Claude Code settings keep a parallel plan moving while nobody is at the
@@ -971,6 +988,7 @@ The same settings can be set with
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
 | Workflow | `autoRun` | `on` | `on` runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; `off` on Codex); `ask` offers that once the design is approved; `off` never runs one. See [Auto run](#auto-run). |
 | Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
+| Process | `fastMode` | `ask` | `ask` offers fast mode before brainstorming or debugging a request; `always` takes it without asking; `off` never offers it. See [Fast mode](#fast-mode). |
 | Process | `designApproval` | `sections` | `sections` approves each design section in turn; `whole` presents the design once with one approval. No effect under `autoRun=on` on Claude Code, which presents no design. |
 | Process | `specReview` | `true` | Stop for you to review the written spec before the plan is written. No effect under `autoRun=on` on Claude Code: the spec review always happens. |
 | Process | `questionStyle` | `single` | `single` asks one clarifying question per message; `batched` asks them all in one. |

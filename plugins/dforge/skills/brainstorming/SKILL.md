@@ -16,8 +16,27 @@ Do NOT invoke any implementation skill, write any code, scaffold any
 project, or take any implementation action until you have told your
 human partner what you intend and they have approved it. This applies
 to EVERY task on EVERY path below — the ceremony scales with the task;
-the approval gate never does.
+the approval gate never does. Fast mode is the one exception: your human
+partner choosing it is the approval.
 </HARD-GATE>
+
+## Fast Mode
+
+Unless `fastMode=off`, offer fast mode in the message that states your
+Process line, before your first clarifying question, as one question (the
+AskUserQuestion tool where the host has it):
+"Fast mode, or the full dforge flow?" Fast mode works the request the way
+plain Claude Code would; the full flow is the path the Process line named.
+Recommend fast mode for a spike or a bounded request, the full flow when a
+trigger holds. Take fast mode without asking when the request already asks
+for it or for speed ("fast mode", "quick", "just do it"), or under
+`fastMode=always`. Never offer it during an auto run
+(`scripts/auto-run status` exits 0).
+
+On fast mode, say `Process: fast — <why>` on a line of its own and follow
+[fast-mode.md](../../reference/fast-mode.md): this skill, and every other
+dforge skill, ends there for the request. On the full flow, go on with your
+path below.
 
 ## Three Paths
 
@@ -73,8 +92,11 @@ settings in force (…): key=value; …`. With no such line in context, run
 `scripts/dforge-config workflow` once before your first question; it prints the
 same line, or nothing when every setting is at its default. A key the line does
 not name is at its default. Your human partner's own instructions outrank a
-setting, and no setting removes the approval gate.
+setting, and no setting removes the approval gate. `fastMode=always` records
+your human partner's standing choice of fast mode, which is itself the approval.
 
+- `fastMode=always`: take fast mode without asking (see Fast Mode).
+  `fastMode=off`: never offer fast mode; classify and go on as below.
 - `processBias=lighter`: take the architectural path only when a trigger
   plainly holds; doubt resolves to bounded. `processBias=heavier`: doubt
   resolves to architectural. A request for a spec and the irreducible-risk
@@ -124,7 +146,8 @@ artifact, never the approval.
 ## Checklist
 
 Classify first, announce the path, then create a task for each item on
-your path and complete them in order.
+your path and complete them in order. When your human partner takes fast mode,
+there is no checklist: see Fast Mode.
 
 **Spike:**
 1. **Explore project context** — enough to frame the probe

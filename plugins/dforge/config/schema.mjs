@@ -157,6 +157,11 @@ export default {
     label: 'Path bias', title: 'Path bias',
     description: 'How readily a request gets a written spec and plan. lighter resolves doubt to a short in-chat design; heavier resolves it to a spec.',
   },
+  fastMode: {
+    type: 'enum', values: ['ask', 'always', 'off'], default: 'ask', enforcedBy: 'skill', group: 'Process', target: 'dforge',
+    label: 'Fast mode', title: 'Fast mode',
+    description: 'Fast mode runs a request the way plain Claude Code would: no spec, plan, reviews or finish menu. ask offers it before brainstorming or debugging a request; always takes it without asking; off never offers it.',
+  },
   designApproval: {
     type: 'enum', values: ['sections', 'whole'], default: 'sections', enforcedBy: 'skill', group: 'Process', target: 'dforge',
     label: 'Design approval', title: 'Design approval',
