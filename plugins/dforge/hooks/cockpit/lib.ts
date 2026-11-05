@@ -196,6 +196,21 @@ export type SeatSpawn = {
  */
 export const FORK_DRAFTING = false
 
+/**
+ * Whether the last `Process:` line of a response puts its request in fast mode
+ * (reference/fast-mode.md): true for `Process: fast`, false for any other
+ * Process line, null when the text has none. scripts/lib/fast-mode.sh reads
+ * the same line for the Stop and edit hooks.
+ */
+export function fastModeLine(text: string): boolean | null {
+  let found: boolean | null = null
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/^[\s`*]+/, '')
+    if (line.startsWith('Process:')) found = /^Process:\s*fast(?![\w-])/.test(line)
+  }
+  return found
+}
+
 /** The engine's catch-all agent types: what a dispatch naming no type resolves to. */
 const CATCH_ALL = ['general-purpose', 'claude']
 

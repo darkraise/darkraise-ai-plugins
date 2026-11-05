@@ -78,6 +78,7 @@ import {
   BAND_SEGMENTS,
   FORK_DRAFTING,
   seatDenial,
+  fastModeLine,
   bandLines,
   bandLinesFrom,
   bandLineToggled,
@@ -238,6 +239,7 @@ const repo = atom({ plugin: 'dforge', key: 'repo' } as const, null)
 const refusals = atom({ plugin: 'dforge', key: 'refusals' } as const, [])
 const isNudged = atom({ plugin: 'dforge', key: 'isNudged' } as const, false)
 const isPlanSession = atom({ plugin: 'dforge', key: 'isPlanSession' } as const, false)
+const isFastMode = atom({ plugin: 'dforge', key: 'isFastMode' } as const, false)
 const isRunSession = atom({ plugin: 'dforge', key: 'isRunSession' } as const, false)
 const autoRun = atom({ plugin: 'dforge', key: 'autoRun' } as const, null)
 const alerted = atom({ plugin: 'dforge', key: 'alerted' } as const, [])
@@ -488,7 +490,7 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('agent.spawn', async ($, e, next) => {
-    const denial = seatDenial(e, await read($, isPlanSession), FORK_DRAFTING)
+    const denial = seatDenial(e, (await read($, isPlanSession)) && !(await read($, isFastMode)), FORK_DRAFTING)
     if (denial !== null) {
       const refusal: CockpitRefusal = { at: await $.clock.now(), tool: 'Agent', line: denial }
       await update($, refusals, list => [...list, refusal].slice(-20))
@@ -559,6 +561,9 @@ export const register: Register = on => {
     if (e.message.role === 'user') {
       const text = e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n')
       if (text.includes('<task-notification>')) await endShells($, text)
+    } else if (e.message.role === 'assistant' && e.agentId === undefined) {
+      const fast = fastModeLine(e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n'))
+      if (fast !== null) await update($, isFastMode, () => fast)
     }
     return kept
   }).catch(($, e, next) => next(e))

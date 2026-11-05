@@ -406,6 +406,25 @@ sleep 1; prompt s-4 "$outside"
 check "unplanned: a prompt outside git records no heads" \
   "$([ -f "$HOME/.claude/dforge/sessions/turns/s-4.refs" ] && echo yes || echo no)" "no"
 
+# --- fast mode: the latest Process line the main session wrote is `Process: fast` ---
+said() { # said <transcript> <text> [sidechain]: an assistant message, stamped now
+  jq -nc --arg x "$2" --argjson side "${3:-false}" --arg t "$(date -u +%Y-%m-%dT%H:%M:%S.999Z)" \
+    '{type:"assistant",isSidechain:$side,timestamp:$t,message:{content:[{type:"text",text:$x}]}}' >> "$1"
+}
+FT="$TMP/fast.jsonl"; : > "$FT"
+sleep 1; prompt s-fast
+used "$FT" dforge:brainstorming
+said "$FT" $'Process: fast — a one-file fix\n\nOn it.'
+commit_in "$REPO" fast
+check "fast mode: a commit after Process: fast passes" "$(stop s-fast 'Fixed and committed.' false "$FT")" ""
+said "$FT" 'Process: bounded, inline — no trigger'
+check "fast mode: a later full-flow Process line holds again" "$(decision "$(stop s-fast 'Fixed and committed.' false "$FT")")" "block"
+check "fast mode: Process: fast in the last message passes" "$(stop s-fast $'Process: fast — tiny\n\nDone.' false "$FT")" ""
+said "$FT" 'Process: fast — a subagent says so' true
+check "fast mode: a subagent's Process line does not count" "$(decision "$(stop s-fast 'Done.' false "$FT")")" "block"
+said "$FT" 'Process: faster — not the marker'
+check "fast mode: another word after Process: does not count" "$(decision "$(stop s-fast 'Done.' false "$FT")")" "block"
+
 # --- a stamp written before the worktree column ---
 . "$HERE/../scripts/lib/turn-refs.sh"
 STAMPED="$TMP/stamped"; git init -q "$STAMPED"; commit_in "$STAMPED" first

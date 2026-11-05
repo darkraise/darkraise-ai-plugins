@@ -50,6 +50,10 @@ jq -nc '{type:"assistant",message:{content:[{type:"tool_use",name:"Skill",input:
 check "edit: a session that loaded the skill gets no reminder" "$(edit e-2 "$REPO/src/App.tsx" "$TR")" ""
 check "edit: a relative path resolves against cwd" "$(ctx "$(edit e-3 src/Bad.tsx)" | grep -c 'img-alt')" "1"
 check "edit: malformed stdin exits 0 silently" "$(printf 'nope' | bash "$EDIT"; echo "exit $?")" "exit 0"
+FAST="$TMP/fast.jsonl"
+jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Process: fast — a one-line tweak"}]}}' > "$FAST"
+check "edit: fast mode prints neither findings nor the reminder" "$(edit e-4 "$REPO/src/Bad.tsx" "$FAST")" ""
+check "edit: fast mode leaves the session's reminder for later" "$(ctx "$(edit e-4 "$REPO/src/Bad.tsx")" | grep -c 'Load dforge:ui-ux')" "1"
 rm src/Bad.tsx
 
 # --- hooks.json wiring ---
@@ -96,6 +100,14 @@ check "stop: the pending line with no reason is held" "$(decision "$(stop s-2 $'
 check "stop: the pending line with an empty reason is held" "$(decision "$(stop s-2 $'Done.\n\nUI proof: pending —  ')")" "block"
 prompt s-3
 check "stop: a turn that changed no UI file passes" "$(stop s-3 'Done.')" ""
+prompt s-8
+printf '// change 8\n' >> src/App.tsx
+check "stop: fast mode passes a UI change without proof" "$(stop s-8 'Done.' false "$FAST")" ""
+FULL="$TMP/full.jsonl"
+cp "$FAST" "$FULL"
+jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Process: bounded, inline — no trigger"}]}}' >> "$FULL"
+check "stop: a later full-flow Process line holds again" "$(decision "$(stop s-8 'Done.' false "$FULL")")" "block"
+git checkout -q -- src/App.tsx
 
 mv docs/dforge/ui-ux/profile.md "$TMP/profile.md"
 prompt s-4

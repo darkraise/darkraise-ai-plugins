@@ -5,8 +5,9 @@
 # records it), committed or not; a passing proof is `ui-proof check` exit 0.
 # It applies only where the gate is on: the project has a UI profile, or the
 # session ran dforge:ui-ux. It stands down while an auto run is bound to the
-# session (turn-end.sh owns those stops), on the retry (stop_hook_active), and
-# when the last message ends with "UI proof: pending — <why>". Anything
+# session (turn-end.sh owns those stops), on the retry (stop_hook_active), in
+# fast mode (lib/fast-mode.sh), and when the last message ends with
+# "UI proof: pending — <why>". Anything
 # missing (jq, the turn stamp, a branch head for this checkout) passes.
 set -uo pipefail
 
@@ -40,6 +41,8 @@ last=$(sed -E 's/^[[:space:]`]+//; s/[[:space:]`]+$//' <<<"$last")
 # Only the closing line counts, so quoting the hook's own wording mid-message
 # does not release it.
 if grep -qE '^UI proof: pending[[:space:]]+(—|–|-)[[:space:]]*[^[:space:]]' <<<"$last"; then exit 0; fi
+. "$SCRIPT_DIR/lib/fast-mode.sh"
+fast_mode_on "$transcript_path" "$(jq -r '.last_assistant_message // empty' <<<"$stdin_json")" && exit 0
 
 out=$(cd "$root" && bash "$SCRIPT_DIR/ui-proof" check --base "$base" ${active[@]+"${active[@]}"} 2>&1)
 status=$?

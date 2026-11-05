@@ -16,6 +16,7 @@ import {
   attributionIn,
   FORK_DRAFTING,
   seatDenial,
+  fastModeLine,
   bar,
   billingLabel,
   budgetFor,
@@ -828,6 +829,37 @@ describe('seat check', () => {
     expect((await $.agent.spawn({ ...(spawn as object), tool_use_id: 'toolu_3', model: 'sonnet' } as never)).deny).toBeUndefined()
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /✗ Agent: dforge: name a seat/ })).toBeDefined()
+  })
+
+  test('reads the last Process line of a text: fast, the full flow, or none', () => {
+    expect(fastModeLine('Process: fast — a one-file fix\n\nOn it.')).toBe(true)
+    expect(fastModeLine('`Process: fast`')).toBe(true)
+    expect(fastModeLine('Process: fast — x\nProcess: bounded, inline — no trigger')).toBe(false)
+    expect(fastModeLine('Process: faster — not the marker')).toBe(false)
+    expect(fastModeLine('Here is the answer.')).toBeNull()
+  })
+
+  test('stands down while the main loop is in fast mode, and a full-flow Process line turns it back on', async ($, on) => {
+    world(on, { tokens: 10_000 })
+    await $.session.start(START)
+    const said = (text: string, agentId?: string) =>
+      $.session.append({
+        message: { type: 'assistant', role: 'assistant', content: [{ type: 'text', text }] },
+        door: 'response',
+        origin: { kind: 'model' },
+        uuid: `row-${text.length}-${agentId ?? 'main'}`,
+        ...(agentId === undefined ? {} : { agentId }),
+      } as never)
+    const spawn = (id: string) => ({ tool_use_id: id, prompt: 'Look', description: 'Look around', subagentType: 'general-purpose', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: false }) as never
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
+    await said('Process: fast — a one-file fix')
+    expect((await $.agent.spawn(spawn('toolu_1'))).deny).toBeUndefined()
+    await said('Here is what changed.')
+    expect((await $.agent.spawn(spawn('toolu_2'))).deny).toBeUndefined()
+    await said('Process: bounded, inline — a subagent wrote this', 'agent-1')
+    expect((await $.agent.spawn(spawn('toolu_3'))).deny).toBeUndefined()
+    await said('Process: bounded, inline — no trigger')
+    expect((await $.agent.spawn(spawn('toolu_4'))).deny).toMatch(/^dforge: name a seat/)
   })
 })
 

@@ -17,7 +17,8 @@
 # (a commit, a merge, a deleted branch) in a project with dforge docs is
 # unplanned work, and owes the same ending: the next-step block
 # (`next-step --adhoc`) or finishing's menu. A turn that ran no dforge skill is
-# not dforge's to hold, whatever it committed.
+# not dforge's to hold, whatever it committed, and neither is one in fast mode
+# (lib/fast-mode.sh), which the user chose to run without dforge's flow.
 # An auto run is the exception to holding once: nobody is watching to send the
 # next prompt, so its retries are held too, up to AUTO_HOLD_CAP in a row; past
 # that the run stops and one last hold asks for the attended ending. Every hold
@@ -194,6 +195,8 @@ if [ -z "$ledger" ]; then
   ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" 'Must fix before completing' \
             'Worktree removal refused' 'Ask me then: show the finish menu' 'No plan file — no follow-on work recorded.' && exit 0
   ran_dforge "$transcript_path" "$(head -n 1 "$stamp.at" 2>/dev/null | tr -d '\r')" || exit 0
+  . "${SCRIPT_DIR}/lib/fast-mode.sh"
+  fast_mode_on "$transcript_path" "$last" && exit 0
   reason="This turn moved a branch (a commit, a merge or a deleted branch) without a plan's ledger, but your message ends without the next step. If work remains for this session, continue it: a ruling you can make with a recommendation in hand is yours to make and record, not a reason to stop. If you are waiting on an agent or command you started in the background, end the turn without the block: its notification will start the next turn. If the turn did only the one change you were asked for and nothing follows from it, end the turn as you were. If the branch's work is complete and not yet integrated, invoke dforge:finishing-a-development-branch with the Skill tool and end on its menu. If you are stopping, run \`bash \"${root_shown}/scripts/next-step\" --adhoc --phase <design|build> --next \"<the next action>\"\` (design when what remains is rulings, a spec or a plan) and end your message with the block it prints, verbatim."
   hold "$reason" "dforge held the stop: this turn moved a branch and the message ends without the next step"
   exit 0
