@@ -176,8 +176,9 @@ Parallel waves apply only when the Execution line is `subagent` (deprecated):
 otherwise write `**Parallelism:** sequential — inline execution` and ask
 nothing.
 
-**Ask first** (subagent plans only). Read the spec's `**Execution strategy:**` line. When the spec has
-none, take the `executionStrategy` setting (dforge:brainstorming §Settings;
+**Ask first** (subagent plans only). Read the spec's `**Execution strategy:**` line;
+brainstorming's [design-phase.md](../brainstorming/references/design-phase.md)
+writes it as `sequential` on every new spec. When the spec has none, take the `executionStrategy` setting (dforge:brainstorming §Settings;
 the default is `sequential`). Under `ask`, ask your human partner one question
 before you draft any task, "Parallel subagent waves or sequential execution?",
 and wait for the answer. On a Codex host do not ask:

@@ -156,7 +156,7 @@ says "executing-plans setup: the Recovery table is in recovery.md" "$P/skills/ex
 lacks "no Recovery pointer goes through The Ledger" <(cat "$P/skills/subagent-driven-development/SKILL.md" "$SDD_REFS/setup.md" "$P/skills/executing-plans/SKILL.md" "$P/skills/executing-plans/references/setup.md") "under The Ledger"
 lacks "no Recovery pointer names The Ledger's Recovery" "$P/skills/subagent-driven-development/SKILL.md" "The Ledger's Recovery"
 check "the Recovery pointers resolve" "$([ -s "$SDD_REFS/ledger.md" ] && [ -s "$P/skills/executing-plans/references/recovery.md" ] && echo yes || echo no)" "yes"
-says "writing-plans: the execution-strategy question is in design-phase.md" "$W" '[design-phase.md](../brainstorming/references/design-phase.md)'
+says "writing-plans: the spec's strategy line comes from design-phase.md" "$W" '[design-phase.md](../brainstorming/references/design-phase.md)'
 lacks "writing-plans: the question is not named by a section of brainstorming's SKILL.md" "$W" 'dforge:brainstorming §Choosing the execution strategy'
 check "the review-depth acceptance tests carry no unused SD= line" "$(cat "$HERE/review-depth.acceptance.test.sh" "$HERE/review-depth-qa.acceptance.test.sh" | grep -c '^SD=')" "0"
 check "review-depth-qa builds the finishing text with flat_skill" "$(grep -c 'FN=\$(flat_skill "\$FIN")' "$HERE/review-depth-qa.acceptance.test.sh")" "1"
