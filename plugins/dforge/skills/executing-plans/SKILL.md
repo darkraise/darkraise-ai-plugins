@@ -164,7 +164,6 @@ mode writes:
 # SDD ledger — plan: <path>
 Task <N>: implementer inline (assigned; base <sha7>)
 Task <N>: fix round R/3 (<what failed>; commits a..b; passing | still failing)
-Task <N>: escalated inline -> subagent — <trigger>
 Task <N>: minor (deferred): <one-liner>
 Task <N>: parked — <finding> — Ruling: <why the code stands>
 Task <N>: Ruling: <finding> — <what was decided and why>
@@ -208,9 +207,8 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   when the task's verifications now pass, `still failing` otherwise.
   After `fix round 3/3`, the task goes to the ruling seat as a `breaker` item.
   In an auto run it goes on the pending list, as an exhausted ladder does.
-- The escalated line appears only in a ledger written before this mode stopped
-  leaving inline mode; nothing writes it now. It is still the only line
-  `scripts/next-step` and subagent mode's recovery read as a switch.
+- An older ledger may hold an escalation line, which this mode no longer
+  writes; recovery.md and `scripts/next-step` still read it as a switch.
 - A ruling-seat `BLOCKED` that belongs to no task (a Header amendment) is
   logged against the lowest-numbered task without a complete line, so
   recovery reads it as that task's terminal line.

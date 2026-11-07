@@ -62,7 +62,7 @@ names "executing-plans: recovery sends an old switch to subagent mode" "$EPF" '|
 names "delegated-task.md: task-complete after the complete line" "$P/reference/delegated-task.md" 'In an auto run, run `scripts/auto-run task-complete`, then the Fable batch when'
 names "parallel-waves.md: task-complete after the merge" "$P/reference/parallel-waves.md" '`; merged <sha7>`. In an auto run, run `scripts/auto-run task-complete`'
 names "parallel-waves.md: before any budget check" "$P/reference/parallel-waves.md" 'right after it, before any budget check or dispatch; the Fable batch runs'
-names "handoff: the mode switch hands off too" "$P/skills/handoff/SKILL.md" 'mode hands off too, and the step that invoked this skill runs'
+check "handoff: no mode switch clears by phase" "$(grep -c 'clear --phase' "$P/skills/handoff/SKILL.md")" "0"
 
 R="$P/reference/auto-run.md"
 names "auto-run.md: an unwritten handoff stops the run" "$R" 'If `scripts/next-step` exits 4, do not run `scripts/auto-run clear`'

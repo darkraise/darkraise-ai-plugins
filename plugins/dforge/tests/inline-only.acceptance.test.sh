@@ -192,6 +192,21 @@ present "the session loop starts inline" "$DT" "task-step start PLAN_FILE <N> --
 present "the session loop's fix slot" "$DT" '; session)'
 present "recovery resumes the session loop" "$P/skills/executing-plans/references/recovery.md" 'after an `implementer inline` assigned line'
 present "the breaker row covers any task at its cap" "$P/skills/executing-plans/references/ruling-seat.md" "A task's findings or verifications still open at its cap"
+# --- Task 8 ---
+EL="$P/reference/executor-lane.md"
+present "A19: the unavailable line names the session" "$EL" 'implementer inline (assigned; base <sha7>; executor <id> unavailable - <reason>)'
+present "A19: a handback goes to the session" "$EL" 'HANDBACK to inline'
+absent "A19: no handback to an implementer agent" "$EL" 'HANDBACK to impl-'
+absent "handoff has no subagent-mode stop" "$P/skills/handoff/SKILL.md" "inline to subagent mode"
+absent "session-budget has no subagent-mode stop" "$P/reference/session-budget.md" "switches from inline to subagent mode"
+allow="$P/skills/executing-plans/references/recovery.md|$P/skills/resume-execution/SKILL.md|$P/skills/subagent-driven-development/"
+check "A11: only the allowlist names the escalation line" \
+  "$(grep -rlF 'escalated inline -> subagent' "$P/skills" "$P/reference" | grep -vE "^($allow)" | wc -l | tr -d ' ')" "0"
+check "A11: no reference names switching to subagent mode" \
+  "$(grep -rliF 'switching to subagent mode' "$P/skills" "$P/reference" | grep -v "$P/skills/subagent-driven-development/" | wc -l | tr -d ' ')" "0"
+. "$S/lib/plan.sh"
+printf 'Task 1: escalated inline -> subagent — fix cap\n' > "$TMP/old-ledger.md"
+check "A11: an old escalation line still parses" "$(ledger_left_inline "$TMP/old-ledger.md")" "1"
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -840,7 +840,7 @@ if selected A18; then
   check "A18: with the plan line and two handbacks it stays tripped" "$(breaker agy)" "lane-breaker agy state=tripped handbacks=2"
   lane=$(doc "$PLUGIN/reference/executor-lane.md")
   has "A18: the lane reference states the ledger line" "$lane" 'Plan: executor agy off - unreliable (2 handbacks)'
-  has "A18: and sends a tripped agy task to its Implementer agent" "$lane" "On \`state=tripped\` run neither the gate, the roster nor the wrapper: dispatch the task's \`**Implementer:**\` agent"
+  has "A18: and sends a tripped agy task to the session" "$lane" "On \`state=tripped\` run neither the gate, the roster nor the wrapper: fall back to the session"
   has "A18: and tells a resumed controller the ledger is enough" "$lane" "A resumed controller needs nothing more"
 fi
 

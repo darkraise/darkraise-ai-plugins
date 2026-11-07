@@ -158,6 +158,7 @@ const REMOVED = [
   "only its `implementer inline (assigned` line records the return, so delegated tasks before it still run under subagent mode.",
   "| | \"This task is harder than it scored - I'll just take more rounds\" | Three rounds, then the switch.",
   "| | \"The owner said switch, but there is no fix round to mark\" | The escalated line is its own ledger line.",
+  'escalated inline -> subagent — <trigger> Task <N>:',
   "Write it; nothing else records the switch.",
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];

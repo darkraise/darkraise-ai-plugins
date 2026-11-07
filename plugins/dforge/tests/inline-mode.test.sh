@@ -125,7 +125,8 @@ present "a task at its cap goes to the breaker, not to subagent mode" "$INLINE" 
 
 # The fix cap, and the escalation clause both skills key on.
 present "states the fix cap" "$INLINE" "fix round R/3"
-present "inline writes the escalation line" "$INLINE" "Task <N>: escalated inline -> subagent — <trigger>"
+absent "inline no longer writes the escalation line" "$INLINE" "Task <N>: escalated inline -> subagent — <trigger>"
+present "inline recovery still reads an old escalation line" "$INLINE" '| `escalated inline -> subagent` | This plan has left inline mode'
 present "subagent mode reads the escalation line" "$SDD" "escalated inline -> subagent"
 ESC="$P/skills/subagent-driven-development/references/escalation.md"
 present "the inline recovery row ranks above both" "$SDD_LEDGER" "ranked strictly above both the task's \`**Implementer:**\` agent and the inline session's rung"
