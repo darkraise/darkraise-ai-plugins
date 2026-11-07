@@ -177,12 +177,10 @@ otherwise write `**Parallelism:** sequential — inline execution` and ask
 nothing.
 
 **Ask first** (subagent plans only). Read the spec's `**Execution strategy:**` line. When the spec has
-none — it predates the question, or there is no spec — ask your human partner
-the question in dforge:brainstorming's
-[design-phase.md](../brainstorming/references/design-phase.md) (Choosing the execution strategy)
-before you draft any task, and wait for the answer; when the `executionStrategy`
-setting is `sequential` or `parallel` (dforge:brainstorming §Settings; the
-default is `parallel`), take that value and do not ask. On a Codex host do not ask:
+none, take the `executionStrategy` setting (dforge:brainstorming §Settings;
+the default is `sequential`). Under `ask`, ask your human partner one question
+before you draft any task, "Parallel subagent waves or sequential execution?",
+and wait for the answer. On a Codex host do not ask:
 the plan is sequential. Sequential writes
 `**Parallelism:** sequential — <why>` and nothing below applies.
 
