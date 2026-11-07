@@ -2,9 +2,9 @@
 
 A standalone fork of [superpowers](https://github.com/obra/superpowers) 6.3.0
 (MIT — see `LICENSES/`) for Claude Code and Codex, built around one idea: a
-strong model writes the plan, a Sonnet-class session or small tiered
-implementers execute it literally, and every judgment call goes to one strong
-ruling seat. Install `dforge@darkraise` from the repository-root
+strong model writes the plan, the session executes it literally, one task at a
+time, at the model and effort its hardest task needs, and every judgment call
+goes to one strong ruling seat. Install `dforge@darkraise` from the repository-root
 marketplace, then disable the upstream `superpowers` plugin,
 `dcc-superpower-companions` and `andrej-karpathy-skills`: same-named skills in
 two enabled plugins can double-trigger.
@@ -17,15 +17,15 @@ Four findings from real transcripts drove the fork; the numbers are in
 - **Cost.** The main session was 92% of token spend, most of it re-reading a
   400–700k context. The plugin hands off at a budget printed by its own
   scripts (the compaction point minus one task's growth, 465k at a 650000
-  window), keeps the execution
-  controller on Sonnet, and reads the plan one task at a time instead of whole.
+  window), runs execution at the lowest model and effort that covers the
+  plan's hardest task, and reads the plan one task at a time instead of whole.
 - **Small models executing literally.** Upstream advises picking a model per
   task but has no field for the choice, and the Agent tool could not pass
   reasoning effort before Claude Code 2.1.292 (it now can, but a fleet
   dispatch still passes neither model nor effort, so the pinned pair is what
   runs). Here every task records an implementer from a model ×
-  effort grid, the plan's `**Execution:**` line decides inline or subagent
-  mode, and `plan-lint` checks the header, the scores and the mode before a
+  effort grid, the plan's `**Execution:**` line names the session's model and
+  effort, and `plan-lint` checks the header, the scores and the mode before a
   plan is saved.
 - **Judgment in one seat.** Executors and controllers rule only on mechanical
   conflicts and log every ruling. Plan defects, contested findings and
@@ -51,7 +51,7 @@ before offloading.
 
 ## What you get
 
-**Twenty-one agents in four classes.** Seven execution implementers - Sonnet 5.5
+**Nineteen agents in three classes.** Seven execution implementers - Sonnet 5.5
 and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
 everything the assignment table and the escalation ladder can reach; no score
 assigns `impl-opus-low` or `impl-opus-medium`; both are reached only by

@@ -7,7 +7,7 @@
   },
   "skills": "./skills/",
   "interface": {
-    "shortDescription": "Planned work with task scoring, tiered dispatch, criteria-based review, and external Antigravity and Codex executors.",
+    "shortDescription": "Planned work with task scoring, in-session execution, criteria-based review, and external Antigravity and Codex executors.",
     "category": "Development",
     "displayName": "dforge",
     "developerName": "Darkraise"
