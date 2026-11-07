@@ -65,7 +65,7 @@ the seat marks its rulings provisional.
   dforge:subagent-driven-development instead.
 - The plan has no Execution line, because it was written before 1.4.0: log
   `Ruling: inline by invocation — plan predates the Execution line — if wrong,
-  the run escalates at the first task that will not converge` and continue.
+  a task that will not converge goes to the breaker` and continue.
 
 A `**Parallelism:** waves` line is read only by subagent mode. When your human
 partner has put a waves plan in this mode, run its tasks in index order and
@@ -76,15 +76,15 @@ Never re-score the tasks. `scripts/plan-lint` enforced the eligibility rule
 when the plan was saved, and a plan whose Execution line says `inline` has
 passed it.
 
-A task whose brief's second line marks it delegated is dispatched, never
-implemented here, and its `**Executor:**` line is read by
+A task whose brief's second line marks it delegated carries an `**Executor:**`
+line: it is offloaded, never implemented here, and that line is read by
 [delegated-task.md](../../../reference/delegated-task.md) §1, which runs that
-executor's wrapper in place of an implementer subagent. `**Implementer:**` lines are inert for the tasks
-you implement.
+executor's wrapper. `**Implementer:**` lines are inert for the tasks you
+implement, heavy ones included.
 
-**Preflight.** When `plan-header.md` ends with a `**Dispatch:** delegated`
-line naming at least one `(heavy)` task, send one `preflight` item to the
-ruling seat before Task 1 and carry out its verdicts. A plan with no heavy task
+**Preflight.** The `preflight` item runs when `plan-header.md` ends with a `**Heavy:**` line.
+Send it to the ruling seat before Task 1 and carry out its verdicts. A plan
+with no heavy task
 has no pre-flight scan, even when it offloads tasks: it is one
 whole-plan judge dispatch, and a plan of small tasks is low-coupling by
 construction. A plan defect that surfaces while you work goes to the seat as a

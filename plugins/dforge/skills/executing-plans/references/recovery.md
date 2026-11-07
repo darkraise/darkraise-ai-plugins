@@ -11,9 +11,10 @@
 | `escalated inline -> subagent` | This plan has left inline mode: use dforge:subagent-driven-development |
 | `fix round R/3 (…; passing)` | Re-run the task's verifications; if they pass, commit anything uncommitted and write the complete line, else treat as `still failing` |
 | `fix round R/3 (…; still failing)`, R < 3 | Resume the loop at round R+1 |
-| `fix round 3/3 (…; still failing)` | Go to Switching to subagent mode |
-| `implementer inline (assigned; base <sha7>)` | If `git log <base>..HEAD` is non-empty, re-run the task's verifications and finish it from where those commits leave it; otherwise start the task |
-| An agent-named `implementer <agent> (assigned …)` line, or `fix round R/2` (a Codex plan's `fix round R/5`) | A delegated task: apply [delegated-task.md](../../../reference/delegated-task.md) §Recovery |
+| `fix round 3/3 (…; still failing)` | Send the task to the ruling seat as a `breaker` item (in an auto run, the pending list) |
+| `implementer inline (assigned; base <sha7>[; executor <id> unavailable - <reason>])` | A task whose brief's second line is `**Review:** per-task — risk 3`, or an executor fallback, resumes the session review loop at its first step not yet done. Otherwise: if `git log <base>..HEAD` is non-empty, re-run the task's verifications and finish it from where those commits leave it; otherwise start the task |
+| `fix round R/2` after an `implementer inline` assigned line, its last slot `session` or `HANDBACK to inline` | The session review loop ([delegated-task.md](../../../reference/delegated-task.md) §The session review loop): R < 2 resumes it at round R+1; `2/2` goes to the breaker |
+| An agent-named `implementer <agent> (assigned …)` line, or a `fix round R/2` line that follows one (a Codex plan's `fix round R/5`) | A delegated task: apply [delegated-task.md](../../../reference/delegated-task.md) §Recovery |
 | none | Not started |
 
 **Plan state.** Whatever the task lines say, a ledger that holds an

@@ -177,6 +177,21 @@ check "A8: no skill or reference names the scout" \
   "$(grep -rlF 'scout-sonnet' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "0"
 present "selecting-approaches has two modes" "$P/skills/selecting-approaches/SKILL.md" "Two modes: \`inline\` and \`advisor\`."
 check "codex routing has no scout floor" "$(jq -r '.role_floors.scout // "none"' < "$P/reference/codex-routing.json" | tr -d '\r')" "none"
+# --- Task 7 ---
+SKILL_VIEW_DIR="$TMP/views"; . "$P/tests/skill-view.sh"
+EP=$(skill_view executing-plans)
+DT="$P/reference/delegated-task.md"
+present "A17: a task at fix round 3/3 goes to the breaker" "$EP" 'After `fix round 3/3`, the task goes to the ruling seat as a `breaker` item.'
+absent "A17: no switch to subagent mode" "$EP" "Switching to subagent mode"
+check "A17: switching.md is gone" "$([ -e "$P/skills/executing-plans/references/switching.md" ] && echo yes || echo no)" "no"
+present "the session implements heavy tasks" "$EP" "You implement every task that carries no \`**Executor:**\` line, heavy tasks included."
+present "risk-3 tasks run the session loop" "$EP" '`**Review:** per-task — risk 3`'
+present "setup keys preflight on the Heavy line" "$P/skills/executing-plans/references/setup.md" 'The `preflight` item runs when `plan-header.md` ends with a `**Heavy:**` line.'
+present "delegated-task documents the session loop" "$DT" "## The session review loop"
+present "the session loop starts inline" "$DT" "task-step start PLAN_FILE <N> --inline"
+present "the session loop's fix slot" "$DT" '; session)'
+present "recovery resumes the session loop" "$P/skills/executing-plans/references/recovery.md" 'after an `implementer inline` assigned line'
+present "the breaker row covers any task at its cap" "$P/skills/executing-plans/references/ruling-seat.md" "A task's findings or verifications still open at its cap"
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

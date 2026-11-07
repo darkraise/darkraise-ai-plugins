@@ -65,8 +65,10 @@ const REWORDED = [
 // which early CI extended, and the assignment procedure's one-executor gate
 // and precedence sentences, which the executor routing rule (Task 8)
 // replaced, and the plan drafter's slice bullets, which inline-only execution
-// removed when every plan came to be drafted in the session. The split cannot
-// have lost them.
+// removed when every plan came to be drafted in the session, and the
+// execution skill's heavy-task delegation and switch to subagent mode, which
+// inline-only execution replaced with the session review loop and the
+// breaker. The split cannot have lost them.
 const REMOVED = [
   '- **Contracts settle what slices share.** A drafter that reports `NEEDS_CONTEXT` needs a contract:',
   'add it to the header and re-dispatch that slice.',
@@ -110,6 +112,53 @@ const REMOVED = [
   "**A task carries at most one `**Executor:**` line, and you choose it.** When two ticked executors' gates both admit a task, nothing mechanical picks between them:",
   'write one line, and `plan-lint` validates only what is written.',
   'No precedence rule is introduced here — with one registered executor there is no choice to make, and a rule invented now would be untested against a real second executor.',
+  "Everything else here is host-neutral - inline mode dispatches nothing but the ruling seat, delegated tasks and the final review.",
+  "**Why this mode.** The plan's `**Execution:**` line chose it because at most half the tasks are heavy (total 5 or more, or risk 3).",
+  "The rest are small changes whose text carries the code, and a subagent per task would cost more in context rebuild than the task itself.",
+  "The line's model is Sonnet, and its effort follows the highest score among the tasks you implement, at least high when the plan delegates.",
+  "**Delegated tasks.** A delegated task is not yours to implement:",
+  "every heavy task, and every task carrying an `**Executor:**` line.",
+  "An offloaded task is delegated for the same reason the others are — the session does not implement it — and it runs on its executor's wrapper rather than an implementer subagent.",
+  "Its brief's second line is `**Dispatch:** delegated — total <t>, risk <r>`, and `plan-header.md` ends with `**Dispatch:** delegated — Task <a> (heavy), Task <b> (executor)`.",
+  "an implementer subagent, the review seat `scripts/review-route` prints, fix rounds up to 2 and a reviewed complete line.",
+  "**Why no per-task review of your own tasks.** The eligibility bar is the gate, applied when the plan was written.",
+  "A task too large or too risky to implement here is delegated and reviewed; what catches the rest is the plan's own verification steps, your self-review of each diff, and one broad review of the whole branch at the end.",
+  "**Every session ends with the next step.** Whenever this session ends before the plan is finished - one of those four stops, a context-budget handoff, a switch to subagent mode, or your human partner asking you to stop - first reconcile live children exactly as dforge:handoff step 0 says:",
+  "inline by invocation — plan predates the Execution line — if wrong, the run escalates at the first task that will not converge` and continue.",
+  "A task whose brief's second line marks it delegated is dispatched, never implemented here, and its `**Executor:**` line is read by [delegated-task.md] §1, which runs that executor's wrapper in place of an implementer subagent.",
+  "`**Implementer:**` lines are inert for the tasks you implement.",
+  "**Preflight.** When `plan-header.md` ends with a `**Dispatch:** delegated` line naming at least one `(heavy)` task, send one `preflight` item to the ruling seat before Task 1 and carry out its verdicts.",
+  "You are fixing your own work, so a fourth round is not a better round - it is the trigger in Switching to subagent mode.",
+  "- The escalated line is the switch itself.",
+  "Every trigger in Switching to subagent mode writes it, whether or not a fix round preceded it, and it is the only line `scripts/next-step` and subagent mode's recovery read as a switch.",
+  "use dforge:subagent-driven-development | | `fix round R/3 (…; passing)` | Re-run the task's verifications; if they pass, commit anything uncommitted and write the complete line, else treat as `still failing` | | `fix round R/3 (…; still failing)`, R < 3 | Resume the loop at round R+1 | | `fix round 3/3 (…; still failing)` | Go to Switching to subagent mode | | `implementer inline (assigned; base <sha7>)` | If `git log <base>..HEAD` is non-empty, re-run the task's verifications and finish it from where those commits leave it; otherwise start the task | | An agent-named `implementer <agent> (assigned …)` line, or `fix round R/2` (a Codex plan's `fix round R/5`) | A delegated task:",
+  "A switch to subagent mode is always a handoff.",
+  "A task still failing after `3/3` goes to Switching to subagent mode - not to a fourth round, and not to a complete line.",
+  "It and delegated tasks are all this mode dispatches before the final review.",
+  "| Kind | Decision point | |---|---| | `preflight` | Once, before Task 1, when the plan has a heavy task (Setup) | | `blocked-plan` | The plan is wrong and no path forward is a mechanical choice | | `plan-conflict` | A final-review finding, or a delegated task's review finding, that conflicts with what the plan's text requires, or is labelled plan-mandated | | `cannot-verify` | A delegated task's `cannot-verify:` digest line | | `breaker` | A delegated task's findings still open after round 2/2 | | `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument | | `final-residual` | Findings still open after the final review's one fix wave |",
+  "A CONFIRMED-GAP whose fix you attempt and fail is a trigger in Switching to subagent mode.",
+  "## Switching to subagent mode",
+  "Inline mode has one exit, and it runs in one direction.",
+  "- your human partner says to; - a task is still failing its own verifications after `fix round 3/3`; - a ruling-seat CONFIRMED-GAP names a fix you have attempted and failed.",
+  "The trigger is mechanical, so the switch is your ruling, not a seat verdict:",
+  "the seat's four verdicts say nothing about execution mode.",
+  "It happens only at a task boundary where every earlier task is complete.",
+  "escalated inline -> subagent — <trigger>`, where `<N>` is the task that will run first under subagent mode - the failing task, or, on your human partner's instruction, the next task not yet started.",
+  "every trigger writes it, with or without a preceding fix-round line.",
+  "Log, and say aloud, `Ruling:",
+  "switch to subagent mode at Task <N> — <trigger> — if wrong, the remaining tasks each cost one dispatch that inline would not have spent`.",
+  "`**Execution:**` is one of the lines `scripts/plan-amend` refuses to touch, and the ledger is where the switch is recorded.",
+  "The switch is always a handoff:",
+  "subagent mode's value is a fresh controller that reads the header and one brief at a time, and this session's context is full of implementation detail it does not need.",
+  "In an auto run, run dforge:handoff steps 0-4, then `scripts/auto-run clear --phase`, and end the turn with `Auto run:",
+  "clearing` as its last line; a `next-step` exit 4 or 5 there is handled as auto-run.md §Clears says; a phase clear never counts as a self-resume.",
+  "Your human partner may also move a plan the other way, from subagent mode to this one.",
+  "Only their explicit instruction does that, and only at the same kind of boundary.",
+  "The return takes effect at the first remaining task that is not delegated:",
+  "only its `implementer inline (assigned` line records the return, so delegated tasks before it still run under subagent mode.",
+  "| | \"This task is harder than it scored - I'll just take more rounds\" | Three rounds, then the switch.",
+  "| | \"The owner said switch, but there is no fix round to mark\" | The escalated line is its own ledger line.",
+  "Write it; nothing else records the switch.",
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 

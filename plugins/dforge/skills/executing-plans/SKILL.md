@@ -84,7 +84,8 @@ On Codex, the ruling seat is a native judge at Astra high or above
 carries a measured number but no verdict: hand off after every 3 completed
 tasks, or after any task that needed 3 or more fix rounds. Everything else
 here is host-neutral - inline mode
-dispatches nothing but the ruling seat, delegated tasks and the final review.
+dispatches nothing but the ruling seat, delegated tasks, risk-3 task reviews
+and the final review.
 
 ## Overview
 
@@ -93,30 +94,30 @@ the gate.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-**Why this mode.** The plan's `**Execution:**` line chose it because at most
-half the tasks are heavy (total 5 or more, or risk 3). The rest are small
-changes whose text carries the code, and a subagent per task would cost more in
-context rebuild than the task itself. The line's model is Sonnet, and its
-effort follows the highest score among the tasks you implement, at least high
-when the plan delegates.
+**Why this mode.** Every plan runs inline: this session has read the code the
+plan changes, and a subagent per task would rebuild that context from nothing.
+You implement every task that carries no `**Executor:**` line, heavy tasks included.
+The `**Execution:**` line's model and effort cover the hardest task you
+implement, at least high effort when a task has risk 3 or the plan offloads one.
 Subagent availability has nothing to do with it - the line decides, and only
 your human partner overrides it.
 
-**Delegated tasks.** A delegated task is not yours to implement: every heavy
-task, and every task carrying an `**Executor:**` line. An offloaded task is
-delegated for the same reason the others are — the session does not implement
-it — and it runs on its executor's wrapper rather than an implementer
-subagent. Its brief's second line is
-`**Dispatch:** delegated — total <t>, risk <r>`, and `plan-header.md` ends with
-`**Dispatch:** delegated — Task <a> (heavy), Task <b> (executor)`. Run
-[delegated-task.md](../../reference/delegated-task.md) for it: an implementer
-subagent, the review seat `scripts/review-route` prints, fix rounds up to 2 and
+**Delegated tasks.** A delegated task is one carrying an `**Executor:**` line:
+it runs on its executor's wrapper, not in this session. Its brief's second line
+is `**Dispatch:** delegated — total <t>, risk <r>`, and `plan-header.md` carries
+`**Dispatch:** delegated — Task <a> (executor)`. Run
+[delegated-task.md](../../reference/delegated-task.md) for it: the executor's
+wrapper, the review seat `scripts/review-route` prints, fix rounds up to 2 and
 a reviewed complete line. Read that file the first time a delegated task comes
 up, not before. Delegated tasks are never batched.
 
-**Why no per-task review of your own tasks.** The eligibility bar is the gate,
-applied when the plan was written. A task too large or too risky to implement
-here is delegated and reviewed; what catches the rest is the plan's own
+**Risk-3 tasks.** A brief whose second line is `**Review:** per-task — risk 3`
+is yours to implement, and a judge reviews it before its complete line: run
+[delegated-task.md](../../reference/delegated-task.md) §The session review
+loop for it; its Codex form covers a Codex host.
+
+**Why no per-task review of your own tasks.** Risk 3 is the one exception, and
+the session review loop is its gate. What catches the rest is the plan's own
 verification steps, your self-review of each diff, and one broad review of the
 whole branch at the end.
 
@@ -137,8 +138,8 @@ ruling-seat `BLOCKED` verdict. For those, stop and ask — except in an auto run
 which asks nothing (see Auto run).
 
 **Every session ends with the next step.** Whenever this session ends before
-the plan is finished - one of those four stops, a context-budget handoff, a
-switch to subagent mode, or your human partner asking you to stop - first
+the plan is finished - one of those four stops, a context-budget handoff, or
+your human partner asking you to stop - first
 reconcile live children exactly as dforge:handoff step 0 says: wait
 for them, or `TaskStop` them and record a Ruling. Tell your partner which you
 did. Then run `scripts/next-step PLAN_FILE` (see using-dforge §Session
@@ -202,14 +203,14 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
 - There is no scores clause. A scores clause appears only when a judge scored
   the task.
 - The fix cap is 3 for a task you implement, not subagent mode's 5; a delegated task keeps 5. You are fixing your own work, so a
-  fourth round is not a better round - it is the trigger in Switching to
-  subagent mode. A fix-round line is written after the round, with its
-  outcome, exactly as subagent mode writes its own: `passing` when the
-  task's verifications now pass, `still failing` otherwise.
-- The escalated line is the switch itself. Every trigger in Switching to
-  subagent mode writes it, whether or not a fix round preceded it, and it is
-  the only line `scripts/next-step` and subagent mode's recovery read as a
-  switch.
+  fourth round is not a better round. A fix-round line is written after the
+  round, with its outcome, exactly as subagent mode writes its own: `passing`
+  when the task's verifications now pass, `still failing` otherwise.
+  After `fix round 3/3`, the task goes to the ruling seat as a `breaker` item.
+  In an auto run it goes on the pending list, as an exhausted ladder does.
+- The escalated line appears only in a ledger written before this mode stopped
+  leaving inline mode; nothing writes it now. It is still the only line
+  `scripts/next-step` and subagent mode's recovery read as a switch.
 - A ruling-seat `BLOCKED` that belongs to no task (a Header amendment) is
   logged against the lowest-numbered task without a complete line, so
   recovery reads it as that task's terminal line.
@@ -224,6 +225,8 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   dispatch `Ruling:` lines, `BLOCKED — <agent> exhausted`, and the complete line
   with `review clean` or `K parked` and its scores clause
   (dforge:subagent-driven-development §The Ledger).
+- A risk-3 task writes `fix round R/2` lines ending `; session)` and a
+  reviewed complete line (delegated-task.md §The session review loop).
 
 Read [recovery.md](references/recovery.md) before you resume a task from its last ledger line.
 
@@ -252,8 +255,7 @@ run to the final phase, and a `compact` line still ends the turn on
 The last task completing is never a stop: the final review, its fix wave and
 finishing run in this session whatever `context-size --final` prints, and a
 `review-package` budget line saying `handoff` does not stop them. If the
-context fills, Claude Code's own compaction is the backstop. A switch to
-subagent mode is always a handoff.
+context fills, Claude Code's own compaction is the backstop.
 
 ## The Task Loop
 
@@ -266,7 +268,9 @@ For each task, in order:
    directly skips the amendments. If the brief's second line is
    `**Dispatch:** delegated`, run
    [delegated-task.md](../../reference/delegated-task.md) for this task instead
-   of steps 2 to 7, then go to step 8.
+   of steps 2 to 7, then go to step 8. If it is
+   `**Review:** per-task — risk 3`, run that file's §The session review loop
+   instead of steps 2 to 7, then go to step 8.
 2. **Open the task.** Take the base commit (`git rev-parse --short HEAD`) and
    append `Task <N>: implementer inline (assigned; base <sha7>)`.
 3. **Implement exactly what the task names.** Follow its steps in order. Where
@@ -304,8 +308,8 @@ For each task, in order:
 **When a verification will not pass.** Fix, re-run, then append
 `Task <N>: fix round R/3 (<what failed>; commits a..b; passing | still failing)`
 with the round's outcome. Rounds 1 through 3 are yours. A task still failing
-after `3/3` goes to Switching to subagent mode - not to a fourth round, and
-not to a complete line.
+after `3/3` goes to the ruling seat as a `breaker` item (in an auto run, the
+pending list) - not to a fourth round, and not to a complete line.
 
 **When the plan is silent** - it does not say which of two reasonable things to
 do - rule, log it, and carry on.
@@ -319,10 +323,6 @@ branch against the spec, not against what you meant.
 ## The Ruling Seat
 
 Read [ruling-seat.md](references/ruling-seat.md) before you send the ruling seat an item or carry out its verdict.
-
-## Switching to subagent mode
-
-Read [switching.md](references/switching.md) before you leave inline mode for subagent mode.
 
 ## Final Review
 

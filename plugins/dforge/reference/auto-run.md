@@ -302,9 +302,7 @@ Run dforge:handoff first (`scripts/auto-run clear` reads the first prompt
 and launch command `scripts/next-step` wrote to `latest.md`), then:
 
 - **A compaction that left too much:** `scripts/auto-run clear`.
-- **A switch from inline to subagent mode** (dforge:executing-plans
-  §Switching to subagent mode): `scripts/auto-run clear --phase`. A phase
-  clear never counts as a self-resume.
+- **A plan that left inline mode before this change** (a ledger dforge:executing-plans' recovery.md sends to dforge:subagent-driven-development): `scripts/auto-run clear --phase`. A phase clear never counts as a self-resume.
 
 Plan saved is no clear: the session switches in place (§The switch). A run
 started under `autoRun=ask` writes its plan in the same session too.
