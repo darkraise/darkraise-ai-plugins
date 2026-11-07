@@ -133,14 +133,14 @@ export default {
     description: 'The plan size, in tasks, from which final-review lenses also report Minor findings. A smaller plan gets Critical and Important lens findings only. 0 always asks for Minor findings. DFORGE_LENS_MINOR_FROM overrides it.',
   },
   executionStrategy: {
-    type: 'enum', values: ['ask', 'sequential', 'parallel'], default: 'parallel', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
+    type: 'enum', values: ['ask', 'sequential', 'parallel'], default: 'sequential', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
     label: 'Strategy', title: 'Execution strategy',
-    description: 'How a plan executes. parallel, the default, runs independent tasks in waves and falls back to sequential when no two tasks can share a wave, in inline mode, and on Codex; ask keeps the question.',
+    description: 'How a plan executes. sequential, the default, runs one task at a time. parallel and ask take effect only with a subagent Execution line (executionMode=subagent, deprecated); an inline plan is always sequential.',
   },
   executionMode: {
     type: 'enum', values: ['auto', 'inline', 'subagent'], default: 'auto', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
     label: 'Execution mode', title: 'Execution mode',
-    description: "Who implements plan tasks. auto follows the planner's rule; inline and subagent fix the plan's Execution line, and inline also makes the plan sequential.",
+    description: 'Who implements plan tasks. auto and inline: the session implements every task, executor tasks excepted. subagent (deprecated) dispatches an implementer per task.',
   },
   worktree: {
     type: 'enum', values: ['ask', 'always', 'never'], default: 'ask', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',

@@ -228,7 +228,7 @@ export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean, forkDraftin
     return "dforge: forks are kept out of dforge sessions. Use dforge:judge-sonnet-high for a read-only check and writing-plans' drafting seat for plan drafting; see using-dforge §Seats."
   }
   if (CATCH_ALL.includes(spawn.subagentType) && spawn.model === undefined) {
-    return 'dforge: name a seat for this dispatch: dforge:judge-sonnet-high or dforge:judge-opus for a review or read-only check, the task\'s **Implementer:** agent (such as dforge:impl-sonnet-medium) for implementation, or pass an explicit model (model: "sonnet") to general-purpose; see using-dforge §Seats.'
+    return 'dforge: name a seat for this dispatch: dforge:judge-sonnet-high or dforge:judge-opus for a review or read-only check, or pass an explicit model (model: "sonnet") to general-purpose. The session implements plan tasks itself, as the plan\'s Execution line says; an implementer seat such as dforge:impl-sonnet-medium runs only for a deprecated subagent plan. See using-dforge §Seats.'
   }
   return null
 }

@@ -782,7 +782,8 @@ describe('seat check', () => {
   test('denies an untyped dispatch and a fork in a dforge session, and passes typed ones', () => {
     const untyped = seatDenial(base, true, false)
     expect(untyped).toMatch(/dforge:judge-sonnet-high/)
-    expect(untyped).toMatch(/\*\*Implementer:\*\*/)
+    expect(untyped).toMatch(/Execution line/)
+    expect(untyped).not.toMatch(/for implementation/)
     expect(untyped).toMatch(/dforge:impl-sonnet-medium/)
     expect(untyped).toMatch(/model: "sonnet"/)
     expect(untyped).toMatch(/using-dforge §Seats/)

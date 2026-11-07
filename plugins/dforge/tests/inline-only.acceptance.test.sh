@@ -160,6 +160,11 @@ check "A14: next-step reads the session walk as complete" \
   "$(bash "$S/next-step" loop.md 2>/dev/null | grep '^\*\*Next:\*\*' | grep -c 'Task 2')" "1"
 wave_out=$(bash "$S/task-step" start loop.md 2 --inline --wave 1 2>&1); wave_rc=$?
 check "A14: --inline with --wave is a usage error" "$wave_rc" "2"
+# --- Task 4 ---
+check "A7: executionStrategy defaults to sequential" "$(bash "$S/dforge-config" get executionStrategy | tr -d '\r')" "sequential"
+check "A7: the workflow line is empty at defaults" "$(bash "$S/dforge-config" workflow | tr -d '\r')" ""
+present "A7: the schema says parallel needs subagent mode" "$P/config/schema.mjs" "only with a subagent Execution line"
+absent "cockpit nudge: no Implementer agent for implementation" "$P/hooks/cockpit/lib.ts" "for implementation"
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -149,7 +149,7 @@ check "through a linked directory: get answers" "$(node "$TMP/linked-scripts/lib
 # --- the workflow keys: defaults and refusals ---
 fresh w
 check "workflow keys: defaults" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log([v.handoffMode, v.codexLane, v.codexReview, v.executionStrategy, v.executionMode, v.worktree, v.processBias, v.designApproval, v.specReview, v.questionStyle, v.finishAction, v.autoRun, v.fastMode].join(" "))')" \
-  "strict true false parallel auto ask standard sections true single ask on ask"
+  "strict true false sequential auto ask standard sections true single ask on ask"
 # Each key: its default, a value it accepts, and one it refuses.
 while read -r key default valid invalid; do
   fresh "m-$key"
@@ -165,7 +165,7 @@ codexReview false true 0
 agyLane true false maybe
 lensCap 4 2 10
 lensMinorFrom 20 10 501
-executionStrategy parallel sequential fast
+executionStrategy sequential parallel fast
 autoRun on ask maybe
 executionMode auto subagent agent
 worktree ask always sometimes
