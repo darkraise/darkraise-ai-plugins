@@ -11,10 +11,10 @@
     {
       "name": "dforge",
       "source": "./plugins/dforge",
-      "description": "Brainstorm, plan and execute with scored tasks, tiered implementers, criteria-based review, UI/UX work proven in the running UI and external Antigravity and Codex executors; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget, usage limits and the repo, with Discord notifications and an attribution guard.",
+      "description": "Brainstorm, plan and execute with scored tasks, in-session execution, criteria-based review, UI/UX work proven in the running UI and external Antigravity and Codex executors; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget, usage limits and the repo, with Discord notifications and an attribution guard.",
       "category": "workflow",
       "keywords": [
-        "subagents",
+        "spec-driven",
         "planning",
         "effort",
         "model-selection",

@@ -61,7 +61,7 @@ export const windowsSeconds = {
   'impl-stop-gate.test.sh': 64,
   'in-flight.test.sh': 36,
   'inline-mode.test.sh': 65,
-  'inline-only.acceptance.test.sh': 30,
+  'inline-only.acceptance.test.sh': 12,
   'ladder.test.sh': 10,
   'lane-breaker.test.sh': 50,
   'lanes.test.sh': 10,

@@ -357,15 +357,13 @@ check "a self-implemented brief carries no Dispatch line" \
 
 rm -rf "$DTMP"
 # --- the third delegation reason, in every place that defines the set -------
-# The README keeps one sentence fragment verbatim, so a later edit to it is
-# caught here rather than in a plan that misroutes a task. Inline mode, the
-# delegated loop, writing-plans' Execution line and using-dforge, which
-# delegate executor tasks only, state the reason in their own words.
-EXEC_REASON='and every task carrying an `**Executor:**` line'
+# Every place that defines the delegated set names the Executor line, each in
+# its own words, so a later edit to any one is caught here rather than in a
+# plan that misroutes a task.
 present "inline mode delegates every Executor line" "$INLINE" 'A delegated task is one carrying an `**Executor:**` line'
 present "writing-plans delegates every Executor line" "$P/skills/writing-plans/references/execution-line.md" 'A task carrying an `**Executor:**` line is delegated'
 present "using-dforge delegates every Executor line" "$P/skills/using-dforge/SKILL.md" 'every task but those carrying an `**Executor:**` line'
-present "README delegates every Executor line" "$P/README.md" "$EXEC_REASON"
+present "README delegates every Executor line" "$P/README.md" 'exception is every task carrying an `**Executor:**` line'
 present "the delegated loop delegates every Executor line" "$P/reference/delegated-task.md" '`**Dispatch:** delegated`: a task carrying an `**Executor:**` line'
 present "writing-plans gates the roster per executor" "$P/skills/writing-plans/references/assignment-procedure.md" 'for every executor whose gate prints `lane=true`'
 present "writing-plans allows one Executor line per task" "$P/skills/writing-plans/references/assignment-procedure.md" 'A task carries at most one `**Executor:**` line'

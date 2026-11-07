@@ -407,7 +407,7 @@ present "writing-plans dispatches the native plan-review seat" "$P/skills/writin
 present "final review records the native fix seat" "$P/reference/final-review.md" 'On a Codex-host plan it prints `primary=native:<model>/<effort>`'
 present "the plan reviewer prompt names both round-1 Claude seats" "$PRP" 'round produced nothing (`dforge:judge-opus`)'
 present "using-dforge states the inline rule" "$P/skills/using-dforge/SKILL.md" 'Every plan executes inline: the session implements every task but those carrying an `**Executor:**` line, heavy tasks included.'
-present "README states mixed mode" "$P/README.md" '`--effort high` once it delegates'
+present "README states the inline floor" "$P/README.md" '`--effort high` at risk 3 or once it delegates'
 present "README caps plan review at two rounds" "$P/README.md" 'at most two rounds on a Claude plan'
 absent "README no longer caps plan review by task total" "$P/README.md" 'capped by the plan'"'"'s highest task total'
 absent "writing-plans no longer dispatches a fresh full review each round" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'dispatch a fresh full review'
