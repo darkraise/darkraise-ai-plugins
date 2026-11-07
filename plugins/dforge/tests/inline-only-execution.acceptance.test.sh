@@ -275,11 +275,14 @@ fi
 # ---------------------------------------------------------------------- A11
 if selected A11; then
   hits=$( { grep -rlE 'escalated inline -> subagent' "$SKILLS" "$REFS"; grep -rliE 'Switching to subagent mode' "$SKILLS" "$REFS"; } 2>/dev/null \
-    | sed "s#^$PLUGIN/##" | grep -vE '^skills/(executing-plans/references/recovery\.md|resume-execution/|subagent-driven-development/)' | sort -u | tr '\n' ' ')
+    | sed "s#^$PLUGIN/##" | grep -vE '^skills/(executing-plans/references/(recovery|setup)\.md|resume-execution/|subagent-driven-development/)' | sort -u | tr '\n' ' ')
   check "A11: nothing outside the allowlist names the escalation line or the switch" "$hits" ""
   printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: implementer inline (assigned; base abc1234)\nTask 3: escalated inline -> subagent — three fix rounds at or above the assigned tier\n' > "$TMP/a11-ledger.md"
   got=$(bash -c '. "$1"; ledger_left_inline "$2"' _ "$S/lib/plan.sh" "$TMP/a11-ledger.md" 2>&1 | tr -d '\r')
   check "A11: ledger_left_inline returns the task number for the old escalation line" "$got" "3"
+  printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: implementer inline (assigned; base abc1234)\nTask 1: complete (unreviewed)\nTask 2: escalated inline -> subagent — owner request\n' > "$TMP/a11-owner.md"
+  got=$(bash -c '. "$1"; ledger_left_inline "$2"' _ "$S/lib/plan.sh" "$TMP/a11-owner.md" 2>&1 | tr -d '\r')
+  check "A11: ledger_left_inline returns the task number for an owner-request switch" "$got" "2"
 fi
 
 # ---------------------------------------------------------------------- A12

@@ -63,10 +63,14 @@ the seat marks its rulings provisional.
 - It names `subagent`: log `Ruling: routed to subagent mode — the plan's
   Execution line names it — none` and use
   dforge:subagent-driven-development instead.
-- Your human partner asks for subagent mode, at the start or mid-run: change
-  the plan's Execution line to `subagent` and commit that edit, so a resumed
-  session reads the choice from the plan, then log the ruling above with the
-  reason `owner request` and continue as that bullet says.
+- Your human partner asks for subagent mode, at the start or mid-run: append
+  `Task <N>: escalated inline -> subagent — owner request`, where `<N>` is the
+  next task not yet started, log `Ruling: routed to subagent mode — owner
+  request — none`, and use dforge:subagent-driven-development. Do not edit the
+  plan: `**Execution:**` is a line `scripts/plan-amend` refuses to touch, and
+  a resumed session reads the switch from the ledger. Only their explicit
+  instruction moves the plan back; the next `implementer inline (assigned`
+  line records the return.
 - The plan has no Execution line, because it was written before 1.4.0: log
   `Ruling: inline by invocation — plan predates the Execution line — if wrong,
   a task that will not converge goes to the breaker` and continue.

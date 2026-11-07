@@ -207,7 +207,7 @@ present "A19: a handback goes to the session" "$EL" 'HANDBACK to inline'
 absent "A19: no handback to an implementer agent" "$EL" 'HANDBACK to impl-'
 absent "handoff has no subagent-mode stop" "$P/skills/handoff/SKILL.md" "inline to subagent mode"
 absent "session-budget has no subagent-mode stop" "$P/reference/session-budget.md" "switches from inline to subagent mode"
-allow="$P/skills/executing-plans/references/recovery.md|$P/skills/resume-execution/SKILL.md|$P/skills/subagent-driven-development/"
+allow="$P/skills/executing-plans/references/recovery.md|$P/skills/executing-plans/references/setup.md|$P/skills/resume-execution/SKILL.md|$P/skills/subagent-driven-development/"
 check "A11: only the allowlist names the escalation line" \
   "$(grep -rlF 'escalated inline -> subagent' "$P/skills" "$P/reference" | grep -vE "^($allow)" | wc -l | tr -d ' ')" "0"
 check "A11: no reference names switching to subagent mode" \

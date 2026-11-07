@@ -230,7 +230,7 @@ A7. [test, high] `scripts/dforge-config get executionStrategy` with no settings 
 A8. [test, neg, high] No file under `plugins/dforge/skills` or `plugins/dforge/reference` tells the session to dispatch `dforge:drafter-sonnet` or `dforge:scout-sonnet`, and neither agent file exists.
 A9. [test, high] `scripts/plan-revise` on an old inline plan with delegated heavy tasks recommends `execution=inline` with the model and effort that cover its hardest task, and counts only executor tasks as delegated.
 A10. [test, high] The subagent-driven-development skill's description starts with `Deprecated`, and using-dforge's routing table names dforge:executing-plans for executing a plan.
-A11. [test, neg, high] Outside an allowlist (executing-plans' recovery.md, resume-execution, scripts/lib/plan.sh, scripts/next-step and the deprecated skill), no skill or reference names `escalated inline -> subagent` or "Switching to subagent mode"; `ledger_left_inline` still returns the task number for a fixture ledger holding that line.
+A11. [test, neg, high] Outside an allowlist (executing-plans' recovery.md and setup.md, resume-execution, scripts/lib/plan.sh, scripts/next-step and the deprecated skill), no skill or reference names `escalated inline -> subagent` or "Switching to subagent mode"; `ledger_left_inline` still returns the task number for a fixture ledger holding that line.
 A12. [test, high] A Codex-host plan with one heavy task and `**Execution:** inline` whose pair ranks at or above its highest score lints with no ERROR.
 A13. [test, high] `node scripts/validate-repository.mjs`, `claude plugin validate` and `claude plugin test plugins/dforge` pass, and CI's `Validate marketplace` run for the pushed commit is green.
 A14. [test, high] On a fixture plan with a risk-3 task, `task-step start <N> --inline` writes step state and no dispatch file, `task-step review <N>` routes a seat, and a ledger walking `implementer inline (assigned` → `fix round 1/2 (…; session)` → the reviewed complete line is read by `next-step` as complete.
@@ -266,6 +266,7 @@ return to delegation.
 - Fable, spec: Codex host — A12's question removed; plan-lint's all-or-nothing ERROR and native-codex.md's rule go; risk-3 review by hand with a native judge.
 - Fable, spec: plan-lint majority rule — drop both branches.
 - Fable, spec: A11 — a named allowlist plus a positive `ledger_left_inline` test.
+- Register row 1: an owner request for subagent mode writes `Task <N>: escalated inline -> subagent — owner request` (executing-plans' setup.md, added to A11's allowlist) and never edits the plan's Execution line.
 
 ## Critic findings
 

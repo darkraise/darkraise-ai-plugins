@@ -208,8 +208,9 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   when the task's verifications now pass, `still failing` otherwise.
   After `fix round 3/3`, the task goes to the ruling seat as a `breaker` item.
   In an auto run it goes on the pending list, as an exhausted ladder does.
-- An older ledger may hold an escalation line, which this mode no longer
-  writes; recovery.md and `scripts/next-step` still read it as a switch.
+- This mode writes an escalation line only on an owner request
+  ([setup.md](references/setup.md)); an older ledger may hold one from a
+  failed task. recovery.md and `scripts/next-step` read either as a switch.
 - A ruling-seat `BLOCKED` that belongs to no task (a Header amendment) is
   logged against the lowest-numbered task without a complete line, so
   recovery reads it as that task's terminal line.
