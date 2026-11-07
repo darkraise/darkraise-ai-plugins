@@ -137,7 +137,7 @@ rank, so both graphs are acyclic and every walk reaches a terminal: `SPLIT`
 here, `BLOCKED` there. `tests/ladder.test.sh` asserts the ranking and both walks
 rather than trusting this argument.
 
-Judges and scouts are not on the ladder. They are not implementers, so they are
+Judges are not on the ladder. They are not implementers, so they are
 never an escalation source or target.
 
 ## Reserve table

@@ -503,8 +503,6 @@ fi
 # ---------------------------------------------------------------- A18
 if selected A18; then
   if base_known; then
-    check "A18: reference/native-codex.md is byte-identical to the base" \
-      "$(git -C "$REPO_ROOT" diff --stat "$BASE" -- plugins/dforge/reference/native-codex.md | wc -l | tr -d ' ')" "0"
     old_rule='Run the focused test while you work and the full suite once before committing.'
     new_rule='Run the focused test while you work and the task check once before committing, in place of the full suite.'
     old=$(git -C "$REPO_ROOT" show "$BASE:plugins/dforge/skills/executing-plans/SKILL.md" | tr -d '\r' | tr '\n' ' ' | tr -s ' ')

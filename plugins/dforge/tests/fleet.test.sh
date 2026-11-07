@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# The fleet is twenty agents in three classes. Seven execution implementers
+# The fleet is nineteen agents in two classes. Seven execution implementers
 # pin one model/effort pairing each and are everything the assignment table and
 # the escalation ladder can reach. Nine reserve implementers - the xhigh and max
 # efforts, and every Fable tier - are never an output of scoring: they are
 # reachable only by a human override, or by the reserve chain after a split has
-# already been spent. Four role agents - three judges and one scout - never
-# carry Edit, NotebookEdit, Bash or Agent, so "reviewers do not spawn
-# subagents" is enforced rather than requested. A judge carries Write for one
-# file, the report its prompt names; task-step verdict checks that no tracked
-# file changed during the review. The scout carries no Write at all.
+# already been spent. Three judges never carry Edit, NotebookEdit, Bash or
+# Agent, so "reviewers do not spawn subagents" is enforced rather than
+# requested. A judge carries Write for one file, the report its prompt names;
+# task-step verdict checks that no tracked file changed during the review.
 #
 # Haiku 4.5 does not support reasoning effort at all, so impl-haiku must NOT
 # carry an effort field. xhigh, max, and the Fable model are legal for reserve
@@ -34,9 +33,8 @@ fm() {
 }
 
 RESERVE="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-opus-max impl-opus-xhigh impl-sonnet-max impl-sonnet-xhigh"
-EXPECTED="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-haiku impl-opus-high impl-opus-low impl-opus-max impl-opus-medium impl-opus-xhigh impl-sonnet-high impl-sonnet-low impl-sonnet-max impl-sonnet-medium impl-sonnet-xhigh judge-fable judge-opus judge-sonnet-high scout-sonnet"
+EXPECTED="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-haiku impl-opus-high impl-opus-low impl-opus-max impl-opus-medium impl-opus-xhigh impl-sonnet-high impl-sonnet-low impl-sonnet-max impl-sonnet-medium impl-sonnet-xhigh judge-fable judge-opus judge-sonnet-high"
 JUDGE_TOOLS="Read, Grep, Glob, WebFetch, Write"
-SCOUT_TOOLS="Read, Grep, Glob, WebFetch"
 IMPL_DISALLOWED="Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications"
 
 is_reserve() { case " $RESERVE " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
@@ -87,27 +85,20 @@ for f in "$AGENTS"/*.md; do
       check "$base: preloads verification-before-completion" \
         "$(grep -c '^  - dforge:verification-before-completion$' "$f")" "1"
       ;;
-    judge-*|scout-*)
+    judge-*)
       # The absent tools are the point: no Edit, no Bash, no Agent. A judge's
-      # one Write is its report file; the scout writes nothing.
-      case "$base" in
-        judge-*)
-          check "$base: carries the judge toolset" "$(fm "$f" tools)" "$JUDGE_TOOLS"
-          check "$base: writes only the report file" "$(grep -c 'write only the report file' "$f")" "1"
-          check "$base: no longer says it cannot modify files" "$(grep -c 'You cannot modify files' "$f")" "0"
-          check "$base: its reply is not its whole verdict" "$(grep -c 'Your verdict is the whole of your output' "$f")" "0"
-          check "$base: the description does not call it read-only" "$(fm "$f" description | grep -c 'Read-only')" "0"
-          ;;
-        *)
-          check "$base: carries the read-only toolset" "$(fm "$f" tools)" "$SCOUT_TOOLS"
-          ;;
-      esac
+      # one Write is its report file.
+      check "$base: carries the judge toolset" "$(fm "$f" tools)" "$JUDGE_TOOLS"
+      check "$base: writes only the report file" "$(grep -c 'write only the report file' "$f")" "1"
+      check "$base: no longer says it cannot modify files" "$(grep -c 'You cannot modify files' "$f")" "0"
+      check "$base: its reply is not its whole verdict" "$(grep -c 'Your verdict is the whole of your output' "$f")" "0"
+      check "$base: the description does not call it read-only" "$(fm "$f" description | grep -c 'Read-only')" "0"
       check "$base: effort is high or medium" \
         "$(case "$effort" in high|medium) echo ok ;; *) echo "invalid:$effort" ;; esac)" "ok"
       check "$base: preloads no skills" "$(grep -c '^skills:' "$f")" "0"
       ;;
     *)
-      check "$base: name matches a known agent class" "unknown-class" "impl|judge|scout"
+      check "$base: name matches a known agent class" "unknown-class" "impl|judge"
       ;;
   esac
 

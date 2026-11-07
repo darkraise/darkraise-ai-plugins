@@ -76,6 +76,7 @@ const REMOVED = [
   'It appends the slices in task order and deletes them; on exit 3 it names the gap or overlap and leaves the plan unchanged.',
   'Then continue at Assign an implementer.',
   '- **On a Codex host, draft every task in the session.**',
+  '`inline`, `advisor`, or `best-of-3`, a dash, and a one-line reason; an `inline` reason cites a skip condition by number - `**Lenses:**` — only on a task scored risk 3, and optional there:',
   '- **Once the plan is reviewed** (at depth light, once it is linted):',
   'Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.',
   "At depth light (step 1's line) skip `scripts/codex-gate`:",

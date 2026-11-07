@@ -78,7 +78,7 @@ describe('typed seats and drafting: acceptance', () => {
     expect((await $.agent.spawn(spawn({ model: 'sonnet' }))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({ model: 'opus' }))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({ subagentType: 'claude', model: 'sonnet' }))).deny).toBeUndefined()
-    for (const subagentType of ['dforge:judge-opus', 'dforge:judge-sonnet-high', 'dforge:impl-sonnet-medium', 'dforge:scout-sonnet']) {
+    for (const subagentType of ['dforge:judge-opus', 'dforge:judge-sonnet-high', 'dforge:impl-sonnet-medium']) {
       expect((await $.agent.spawn(spawn({ subagentType }))).deny).toBeUndefined()
     }
     for (const subagentType of ['Explore', 'Plan']) expect((await $.agent.spawn(spawn({ subagentType }))).deny).toBeUndefined()

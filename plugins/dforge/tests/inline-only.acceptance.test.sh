@@ -171,6 +171,12 @@ check "A8: no draft-pack" "$([ -e "$S/draft-pack" ] && echo yes || echo no)" "no
 check "A8: no skill or reference names the drafter" \
   "$(grep -rlF 'drafter-sonnet' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "0"
 present "writing-plans drafts every task in the session" "$P/skills/writing-plans/SKILL.md" "Draft every task in the session, at any plan size."
+# --- Task 6 ---
+check "A8: no scout agent" "$([ -e "$P/agents/scout-sonnet.md" ] && echo yes || echo no)" "no"
+check "A8: no skill or reference names the scout" \
+  "$(grep -rlF 'scout-sonnet' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "0"
+present "selecting-approaches has two modes" "$P/skills/selecting-approaches/SKILL.md" "Two modes: \`inline\` and \`advisor\`."
+check "codex routing has no scout floor" "$(jq -r '.role_floors.scout // "none"' < "$P/reference/codex-routing.json" | tr -d '\r')" "none"
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

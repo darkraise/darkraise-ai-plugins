@@ -19,7 +19,7 @@ jq -e -s --slurpfile policy "$HERE/../reference/codex-routing.json" '
   require(.policy == $p.version; "unsupported routing policy; conversion required before using \($p.version)") |
   require(
     (.operation == "assign" or .operation == "escalate") and
-    (.role == "implementer" or .role == "scout" or .role == "judge") and
+    (.role == "implementer" or .role == "judge") and
     (.assignment_source == "rubric" or .assignment_source == "human") and
     (.available_pairs | type == "array" and all(.[]; pair)) and
     (.split_consumed | type == "boolean") and

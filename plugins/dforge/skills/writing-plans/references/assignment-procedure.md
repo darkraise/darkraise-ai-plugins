@@ -47,7 +47,8 @@ user's inline or delegation preference on either host.
    - `**Evaluation:**` — always, for example
      `files 0 - spec 1 - coupling 1 - risk 0 = 2`
    - `**Approach:**` — only when the task involved an approach decision:
-     `inline`, `advisor`, or `best-of-3`, a dash, and a one-line reason; an
+     `inline` or `advisor` (an older plan's `best-of-3` still lints), a dash,
+     and a one-line reason; an
      `inline` reason cites a skip condition by number
    - `**Lenses:**` — only on a task scored risk 3, and optional there: the
      lens ids under `criteria/lenses/` that match why the task is risky,
