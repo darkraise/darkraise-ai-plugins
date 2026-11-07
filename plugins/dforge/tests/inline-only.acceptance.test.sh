@@ -207,6 +207,13 @@ check "A11: no reference names switching to subagent mode" \
 . "$S/lib/plan.sh"
 printf 'Task 1: escalated inline -> subagent — fix cap\n' > "$TMP/old-ledger.md"
 check "A11: an old escalation line still parses" "$(ledger_left_inline "$TMP/old-ledger.md")" "1"
+# --- Task 9 ---
+SKILL_VIEW_DIR="$TMP/views"; . "$P/tests/skill-view.sh"
+WP=$(skill_view writing-plans)
+present "execution line is always inline" "$P/skills/writing-plans/references/execution-line.md" 'Write `inline` on every plan.'
+absent "no heavy-majority rule" "$WP" "more than half the tasks are heavy"
+present "parallel needs an explicit subagent line" "$WP" "Parallel waves apply only when the Execution line is \`subagent\`"
+absent "Codex has no all-or-nothing inline rule" "$P/reference/native-codex.md" "all-or-nothing inline rule"
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -357,13 +357,13 @@ check "a self-implemented brief carries no Dispatch line" \
 
 rm -rf "$DTMP"
 # --- the third delegation reason, in every place that defines the set -------
-# One sentence fragment, repeated verbatim in three files, so a later edit to
+# One sentence fragment, repeated verbatim in two files, so a later edit to
 # any one of them is caught here rather than in a plan that misroutes a task.
-# Inline mode and the delegated loop, which delegate executor tasks only, state
-# the reason in their own words.
+# Inline mode, the delegated loop and writing-plans' Execution line, which
+# delegate executor tasks only, state the reason in their own words.
 EXEC_REASON='and every task carrying an `**Executor:**` line'
 present "inline mode delegates every Executor line" "$INLINE" 'A delegated task is one carrying an `**Executor:**` line'
-present "writing-plans delegates every Executor line" "$P/skills/writing-plans/references/execution-line.md" "$EXEC_REASON"
+present "writing-plans delegates every Executor line" "$P/skills/writing-plans/references/execution-line.md" 'A task carrying an `**Executor:**` line is delegated'
 present "using-dforge delegates every Executor line" "$P/skills/using-dforge/SKILL.md" "$EXEC_REASON"
 present "README delegates every Executor line" "$P/README.md" "$EXEC_REASON"
 present "the delegated loop delegates every Executor line" "$P/reference/delegated-task.md" '`**Dispatch:** delegated`: a task carrying an `**Executor:**` line'

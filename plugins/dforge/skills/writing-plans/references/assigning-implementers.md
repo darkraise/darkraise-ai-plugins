@@ -39,7 +39,9 @@ degradation free: a machine without Codex, a cold session, and an executor whose
 auth has lapsed all fall back by reading a line that is already there, rather
 than re-deriving the assignment at dispatch time. It also keeps every
 `**Implementer:**` value inside the assignment or reserve table, so the checks
-still mean what they say.
+still mean what they say. The `**Implementer:**` line is read only by the
+deprecated subagent mode: under inline mode the session implements the task,
+and an executor task that falls back lands on the session.
 
 ## Why the lane gate excludes an overridden Rule S pass
 

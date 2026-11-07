@@ -68,7 +68,9 @@ const REWORDED = [
 // removed when every plan came to be drafted in the session, and the
 // execution skill's heavy-task delegation and switch to subagent mode, which
 // inline-only execution replaced with the session review loop and the
-// breaker. The split cannot have lost them.
+// breaker, and writing-plans' majority rule and subagent Execution line,
+// which it replaced with an inline line on every plan. The split cannot have
+// lost them.
 const REMOVED = [
   '- **Contracts settle what slices share.** A drafter that reports `NEEDS_CONTEXT` needs a contract:',
   'add it to the header and re-dispatch that slice.',
@@ -160,6 +162,32 @@ const REMOVED = [
   "| | \"The owner said switch, but there is no fix round to mark\" | The escalated line is its own ledger line.",
   'escalated inline -> subagent — <trigger> Task <N>:',
   "Write it; nothing else records the switch.",
+  "- **The execution strategy:** take the spec's `**Execution strategy:**` line; with none, take the `executionStrategy` setting (`parallel` by default) as Parallel waves says, and write `sequential` when it is `ask`.",
+  "**Execution:** [inline|subagent] — `claude --model <model> --effort <effort>` — [why]",
+  "`**Execution:** <inline|subagent> — codex <model> / <effort> — <why>`.",
+  "That pair runs the main session for the whole plan.",
+  "A subagent plan names `codex gpt-6.1-sol / high`; an inline plan names the execution tier at its highest weighted routing score.",
+  "**Choosing the Execution line.** The plan decides its execution mode:",
+  "An inline plan delegates its heavy tasks and every task carrying an `**Executor:**` line:",
+  "each runs through [delegated-task.md] with an implementer subagent — or, for an Executor line, that executor's wrapper — and the full per-task review.",
+  "The tasks not delegated are the **self-implemented** tasks.",
+  "- `subagent` when more than half the tasks are heavy, and always when the plan runs parallel waves (see Parallel waves):",
+  "The controller owns no judgment calls — the ruling seat does — so it needs no stronger model.",
+  "- Otherwise `inline`, the default, on `sonnet`:",
+  "every self-implemented task (total 4 or less, risk below 3) is assigned to Sonnet, and heavy tasks are delegated.",
+  "`<e>` is the assignment-table effort of the highest self-implemented total (`impl-haiku` counts as `low`), raised to `high` when any task is delegated:",
+  "`claude --model sonnet --effort <e>`.",
+  "When every task is heavy and your human partner overrides the line to inline, use `claude --model opus --effort high`.",
+  "- Your human partner may override the line; `plan-lint` checks its grammar, warns when it disputes the majority rule, and lists the delegated tasks with their reasons.",
+  "- The `executionMode` setting fixes the line when it is `inline` or `subagent`, in place of the majority rule.",
+  "`inline` also makes the plan sequential, whatever the spec's `**Execution strategy:**` line or the `executionStrategy` setting says, because an inline session implements its own tasks one after another:",
+  "write `**Parallelism:** sequential — executionMode is inline` and group no waves.",
+  "An inline plan still delegates its heavy tasks and every task carrying an `**Executor:**` line.",
+  "**Ask first.** Read the spec's `**Execution strategy:**` line.",
+  "**The Execution line names `subagent`**, `claude --model sonnet --effort high`, whatever the heavy-task count:",
+  "inline mode implements the tasks it does not delegate in the session itself, one after another, so it has nothing to run in parallel.",
+  "`plan-lint` skips the majority-rule warning for a waves plan.",
+  "Under dforge:executing-plans the lines are read for the delegated tasks, which include every task carrying an `**Executor:**` line.",
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 

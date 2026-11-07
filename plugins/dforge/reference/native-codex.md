@@ -145,13 +145,14 @@ A Claude `Executor: codex` line never starts recursive CLI offload in a Codex ho
 ## Execution modes and session ends
 
 Both execution skills run on this host, and the plan's `**Execution:**` line
-names the mode and the native pair. `scripts/plan-lint` holds a Codex-host plan
-to the all-or-nothing inline rule: an inline plan needs every task at total 4 or
-less and risk below 3. A Codex plan therefore carries no delegated task, and
-`scripts/task-brief` writes it no `**Dispatch:**` line: the mixed inline
-delegation Claude plans use has no Codex form, so
-dforge:executing-plans dispatches nothing here but its ruling seat and
-the final review.
+names the mode and the native pair. A Codex-host plan is inline, heavy tasks
+included, and its session implements every task.
+A Codex plan therefore carries no delegated task, and `scripts/task-brief`
+writes it no `**Dispatch:**` or `**Review:**` line. A task whose `**Evaluation:**` line
+reads `risk=3` is reviewed by hand with a native judge at Astra high or above
+([delegated-task.md](delegated-task.md) §The session review loop); otherwise
+dforge:executing-plans dispatches nothing here but its ruling seat and the
+final review.
 
 The Execution pair runs the main session, so it is sized to what that session
 does, not to the judge floor. A subagent session coordinates and dispatches, and

@@ -76,8 +76,8 @@ configuration, scaffolding, and documentation steps into the task whose
 deliverable needs them; split only where a reviewer could meaningfully
 reject one task while approving its neighbor. Each task ends with an
 independently testable deliverable. Every task pays a fixed cost whatever
-its size: an implementer dispatch, a review, and the session's turns
-around both. So merge a small task, one or two files with one test cycle,
+its size: the session's own implementation turns, its verification, and
+its share of the review. So merge a small task, one or two files with one test cycle,
 into the neighbour that shares its files or its deliverable, whenever the
 merged task still passes Rule S (Assign an implementer, step 2). A task is
 a feature slice: on a Claude plan its code task carries no implementation
@@ -103,7 +103,7 @@ Constraints and Contracts.
 
 **Spec:** [repository-relative path to the spec/design doc this plan implements]
 
-**Execution:** [inline|subagent] — `claude --model <model> --effort <effort>` — [why]
+**Execution:** inline — `claude --model <model> --effort <effort>` — [why]
 
 **Parallelism:** [sequential — <why> | waves — <ranges, e.g. 1 | 2-4 | 5>] (see Parallel waves)
 
@@ -159,10 +159,9 @@ Read [task-check-line.md](references/task-check-line.md) before you write the he
 Codex plans also carry `Host: codex` and `Routing policy: codex-v4` lines
 ([native-codex.md](../../reference/native-codex.md)), and their Execution line
 names the native pair:
-`**Execution:** <inline|subagent> — codex <model> / <effort> — <why>`.
-That pair runs the main session for the whole plan. A subagent plan names
-`codex gpt-6.1-sol / high`; an inline plan names the execution tier at its
-highest weighted routing score. `scripts/plan-lint` warns on any other pair,
+`**Execution:** inline — codex <model> / <effort> — <why>`.
+That pair runs the main session for the whole plan, and names the execution
+tier at its highest weighted routing score. `scripts/plan-lint` warns on any other pair,
 and errors on an inline pair below that score.
 
 **Read the settings first, then choose the Execution line.**
@@ -173,7 +172,11 @@ Read [ci-line.md](references/ci-line.md) before you write the header's CI line a
 
 ## Parallel waves
 
-**Ask first.** Read the spec's `**Execution strategy:**` line. When the spec has
+Parallel waves apply only when the Execution line is `subagent` (deprecated):
+otherwise write `**Parallelism:** sequential — inline execution` and ask
+nothing.
+
+**Ask first** (subagent plans only). Read the spec's `**Execution strategy:**` line. When the spec has
 none — it predates the question, or there is no spec — ask your human partner
 the question in dforge:brainstorming's
 [design-phase.md](../brainstorming/references/design-phase.md) (Choosing the execution strategy)
@@ -232,10 +235,9 @@ never invents parallelism the work does not have:
    task and the last wave; without a Wave check those waves rest on each
    task's own tests and a clean merge.
 8. **The Execution line names `subagent`**, `claude --model sonnet --effort
-   high`, whatever the heavy-task count: inline mode implements the tasks it
-   does not delegate in the session itself, one after another, so it has
-   nothing to run in parallel. `plan-lint`
-   skips the majority-rule warning for a waves plan.
+   high`: inline mode implements its tasks in the session itself, one after
+   another, so it has nothing to run in parallel. Parallel waves apply only
+   to a subagent plan, which `plan-lint` warns is deprecated.
 
 `plan-lint` checks the waves mechanically — ranges, dependencies, shared
 files, the tasks that must run alone, the header lines — and the pre-flight
@@ -337,6 +339,11 @@ Read [test-step-forms.md](references/test-step-forms.md) before you write a task
 ## Assign an implementer to every task
 
 Read [assignment-procedure.md](references/assignment-procedure.md) before you score the tasks or write their assignment lines.
+
+The scores still set the Execution line's floor and mark the risk-3 tasks a
+judge reviews. The `**Implementer:**` lines are kept for the deprecated
+subagent mode and for scoring an executor task's fallback; under inline mode
+the session implements the task.
 
 ## Assign the register rows
 

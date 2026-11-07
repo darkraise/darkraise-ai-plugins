@@ -122,8 +122,9 @@ The ladder for anything you would have asked:
    and telling it to write nothing else, and reply in at most 10 lines; the
    report opens with `## Verdict` holding `ruling: <choice> — <reason>` or
    `no ruling`.
-2. **The pending list.** An Opus `BLOCKED` or `no ruling`, or an implementer
-   that exhausted the ladder, is added:
+2. **The pending list.** An Opus `BLOCKED` or `no ruling`, a task the session
+   implements still open at its fix cap, or an implementer that exhausted the
+   ladder, is added:
 
        scripts/auto-run decision add --id <id> --question "<q>" --options "<recommended | other>" --opus-reason "<why Opus did not rule>" [--task <N>]
 

@@ -77,7 +77,8 @@ choice is the interesting part. A hand edit that breaks a checked rule — a
 reserve tier, a kept `spec = 3`, a table mismatch — carries an
 `**Override:** <reason>` line below the Evaluation line, and `plan-lint` then
 reports it as a warning. Never write an Override line yourself. Under
-dforge:executing-plans the lines are read for the delegated tasks,
-which include every task carrying an `**Executor:**` line.
+dforge:executing-plans the session implements every task that carries no
+`**Executor:**` line, so the `**Implementer:**` line is read only by the
+deprecated subagent mode; an executor task's lines are read for its dispatch.
 [assigning-implementers.md](assigning-implementers.md) explains why
 each of these rules exists.
