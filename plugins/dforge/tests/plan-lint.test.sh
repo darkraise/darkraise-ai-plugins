@@ -256,7 +256,7 @@ lint v9b.md
 lacks "inline at total 4 on opus is clean" "$out" "ERROR header: inline"
 variant v9c.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9c.md
-has "inline that delegates needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
+has "a total-5 task needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
 lacks "a heavy minority no longer breaks inline" "$out" "inline execution needs every task"
 lacks "inline does not delegate the heavy task" "$out" "(heavy)"
 variant v9c2.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model sonnet --effort high` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
@@ -302,7 +302,7 @@ codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high
 lint codex-inline-reserve.md
 has "Codex inline on a reserve pair warns" "$out" "WARN header: inline Execution pair codex gpt-6-astra / max is a reserve tier; the highest task score is 3"
 
-# --- R5 delegation: heavy tasks; a total-4 task stays in session ----------
+# --- R5: no task is delegated for its score, heavy or total 4 -------------
 ev() { # ev <total> — "<agent> <evaluation>" for a lint-clean task at that total
   case $1 in
     0) echo 'impl-sonnet-low files 0 - spec 0 - coupling 0 - risk 0 = 0' ;;
@@ -391,7 +391,7 @@ lint r17.md
 check "opus where sonnet would do: exit 0" "$status" "0"
 tplan r18.md subagent sonnet high 1 4 4 1 1 1
 lint r18.md
-lacks "total-4 tasks never count toward subagent mode" "$out" "tasks are heavy"
+lacks "a subagent plan gets no majority-rule warning" "$out" "tasks are heavy"
 
 variant v9e.md 's/^### Task 1: First thing$/### Task 1: -v flag/; s/^1\. First thing$/1. -v flag/'
 lint v9e.md

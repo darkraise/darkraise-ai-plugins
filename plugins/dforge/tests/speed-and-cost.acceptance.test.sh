@@ -513,6 +513,15 @@ if selected A18; then
   else
     printf 'skip - A18: base %s is not in this repository\n' "$BASE"
   fi
+  # native-codex.md was last edited on purpose by the inline-only plan (its
+  # scout clauses and all-or-nothing rule), so identity is checked from there.
+  native_base=${SPEED_AND_COST_NATIVE_BASE:-0987d053afdd1c921444ee55416ae49ce853ebff}
+  if git -C "$REPO_ROOT" cat-file -e "$native_base^{commit}" 2>/dev/null; then
+    check "A18: reference/native-codex.md is byte-identical to its last planned edit" \
+      "$(git -C "$REPO_ROOT" diff --stat "$native_base" -- plugins/dforge/reference/native-codex.md | wc -l | tr -d ' ')" "0"
+  else
+    printf 'skip - A18: base %s is not in this repository\n' "$native_base"
+  fi
   text=$(doc "$PLUGIN/reference/delegated-task.md")
   byhand=$(sed -e 's/.*## The steps by hand//' -e 's/ ## Recovery.*//' <<<"$text")
   step2=$(sed -e 's/.*- \*\*§2\.\*\*//' -e 's/- \*\*§3\.\*\*.*//' <<<"$byhand")
