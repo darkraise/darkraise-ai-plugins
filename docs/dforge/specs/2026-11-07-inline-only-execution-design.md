@@ -54,6 +54,17 @@ the review seats stay.
   A Codex-host plan is always inline, and its Execution pair covers the
   highest task score, instead of the all-or-nothing rule that sends a plan
   with one heavy task to native subagents.
+- **Research subagents.** Asked whether read-only research subagents stay;
+  answer: "Leave them (Recommended)" — Explore and general-purpose research
+  dispatch are outside the Scope answer.
+- **Heavy-task budget margin.** Asked whether to widen the margin now; answer:
+  "Measure first (Recommended)" — `CTX_TASK_MARGIN` stays at 140k, and the
+  first plan run under this rule records a before/after measurement for its
+  first heavy task.
+
+Early CI: none
+
+Finish: pr
 
 ## Design
 
