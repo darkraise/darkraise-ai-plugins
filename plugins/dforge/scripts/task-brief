@@ -50,10 +50,12 @@ fi
 # task, heavy ones included. A self-implemented risk-3 task carries the review
 # marker, and the header names the heavy tasks. The kind is interpolated, so a
 # new row kind needs no change here. The lines are computed here so an
-# executing session never re-scores a task.
+# executing session never re-scores a task. A plan with no Execution line
+# predates it and runs inline by invocation, so it gets the same lines.
 dispatch=0
+exec_line=$(plan_header_line "$src" Execution)
 if ! grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")" \
-   && grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$(plan_header_line "$src" Execution)"; then
+   && { [ -z "$exec_line" ] || grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$exec_line"; }; then
   dispatch=1
 fi
 delegated="" heavy=""
