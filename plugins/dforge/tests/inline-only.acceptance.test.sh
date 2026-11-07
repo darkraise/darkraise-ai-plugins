@@ -115,6 +115,12 @@ check "A16: the header names the heavy task" "$(tail -n 1 "$TMP/h.md")" "**Heavy
 io_plan "$INLINE_OPUS" "0 1 1 0" "0 1 1 1" > light.md
 bash "$S/task-brief" --header light.md "$TMP/hl.md" > /dev/null 2>&1
 absent "A16: no Heavy line without a heavy task" "$TMP/hl.md" "**Heavy:**"
+grep -v '^\*\*Execution:\*\*' heavy.md > noexec.md
+bash "$S/task-brief" --header noexec.md "$TMP/hn.md" > /dev/null 2>&1
+check "A16: a plan with no Execution line names its heavy task" "$(tail -n 1 "$TMP/hn.md")" "**Heavy:** Task 1 (total 7, risk 2)"
+grep -v '^\*\*Execution:\*\*' risk3.md > noexec-r3.md
+bash "$S/task-brief" noexec-r3.md 1 "$TMP/rn.md" > /dev/null 2>&1
+check "A5: a plan with no Execution line marks its risk-3 task" "$(sed -n 2p "$TMP/rn.md")" "**Review:** per-task — risk 3"
 
 # --- Task 2 ---
 io_plan "$INLINE_OPUS" "1 2 2 2" "1 2 1 2" > allheavy.md
@@ -190,7 +196,9 @@ present "setup keys preflight on the Heavy line" "$P/skills/executing-plans/refe
 present "delegated-task documents the session loop" "$DT" "## The session review loop"
 present "the session loop starts inline" "$DT" "task-step start PLAN_FILE <N> --inline"
 present "the session loop's fix slot" "$DT" '; session)'
-present "recovery resumes the session loop" "$P/skills/executing-plans/references/recovery.md" 'after an `implementer inline` assigned line'
+present "recovery resumes the session loop" "$P/skills/executing-plans/references/recovery.md" '`fix round R/2` whose last slot is `session` or `HANDBACK to inline`, whatever the assigned line names'
+present "an executor handback mid-loop stays in the session" "$P/reference/delegated-task.md" '| `fix round 1/2` whose last slot is `session` or `HANDBACK to inline` | The session finishes it'
+present "the pre-review handback line resumes the session loop" "$P/skills/executing-plans/references/recovery.md" 'executor <id> HANDBACK - <reason>])`'
 present "the breaker row covers any task at its cap" "$P/skills/executing-plans/references/ruling-seat.md" "A task's findings or verifications still open at its cap"
 # --- Task 8 ---
 EL="$P/reference/executor-lane.md"

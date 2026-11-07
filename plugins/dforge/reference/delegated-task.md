@@ -882,7 +882,8 @@ with the session in the implementer's place.
 5. **Close.** A clean verdict writes §5's reviewed complete line, its scores
    clause ending `, seat <seat>`. After `2/2` with findings still open, send
    them to the ruling seat as one `breaker` item and carry out its verdicts
-   (§4 The breaker); in an auto run the item goes on the pending list.
+   (§4 The breaker); in an auto run the item goes on the pending list. Then
+   run §Early CI when the header's `**Early CI:**` line names this task.
 
 **Executor fallback.** An executor task whose executor is unavailable or
 refuses it is implemented by the session, never by its `**Implementer:**`
@@ -953,6 +954,7 @@ For a task whose last ledger line, read by the caller's Recovery rule, is:
 |---|---|
 | `implementer <agent> (assigned …)`, the agent not `inline` | If the report file has a status and `git log <base>..HEAD` is non-empty, review it (§3); otherwise dispatch the same agent fresh (§1) |
 | `fix round R/5` on a `Host: codex` plan | Codex: R < 5 resumes the loop at round R+1 by the five-round schedule (§4); `fix round 5/5` goes to the breaker (§4) |
+| `fix round 1/2` whose last slot is `session` or `HANDBACK to inline` | The session finishes it: §The session review loop, from round 2 |
 | `fix round 1/2`, or `fix round 1/5` from an older run | Resume the loop at round 2 — a fresh dispatch on the successor rung (§4) |
 | `fix round 2/2`, or `fix round R/5` with R >= 2 from an older run | Go to the breaker (§4) |
 | `awaiting group review (commits …)` | Held: never re-dispatch its implementer. It is reviewed by the next group dispatch (§3a), which the trigger above starts |
