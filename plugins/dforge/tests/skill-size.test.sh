@@ -42,7 +42,7 @@ linked() { # linked <skill> <reference> — SKILL.md has the Read line and the f
   check "$1 links references/$2" \
     "$(grep -cF "Read [$2](references/$2) before you " "$P/skills/$1/SKILL.md") $([ -s "$P/skills/$1/references/$2" ] && echo present || echo missing)" "1 present"
 }
-for ref in setup.md recovery.md ruling-seat.md switching.md finish-rulings.md rationalizations.md; do linked executing-plans "$ref"; done
+for ref in setup.md recovery.md ruling-seat.md finish-rulings.md rationalizations.md; do linked executing-plans "$ref"; done
 for ref in ui-proof.md execute-choice.md cleanup.md rationalizations.md; do linked finishing-a-development-branch "$ref"; done
 for ref in discovery-optimization.md match-the-form.md; do linked writing-skills "$ref"; done
 

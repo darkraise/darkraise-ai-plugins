@@ -78,7 +78,7 @@ describe('typed seats and drafting: acceptance', () => {
     expect((await $.agent.spawn(spawn({ model: 'sonnet' }))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({ model: 'opus' }))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({ subagentType: 'claude', model: 'sonnet' }))).deny).toBeUndefined()
-    for (const subagentType of ['dforge:judge-opus', 'dforge:judge-sonnet-high', 'dforge:impl-sonnet-medium', 'dforge:scout-sonnet', 'dforge:drafter-sonnet']) {
+    for (const subagentType of ['dforge:judge-opus', 'dforge:judge-sonnet-high', 'dforge:impl-sonnet-medium']) {
       expect((await $.agent.spawn(spawn({ subagentType }))).deny).toBeUndefined()
     }
     for (const subagentType of ['Explore', 'Plan']) expect((await $.agent.spawn(spawn({ subagentType }))).deny).toBeUndefined()
@@ -138,7 +138,7 @@ describe('typed seats and drafting: acceptance', () => {
     expect(seatDenial({ ...base, description: 'Please draft plan tasks 1-2' }, true, true)).toMatch(REASON)
     // Forks do not draft: even the drafting description is denied.
     expect(seatDenial(base, true, false)).toMatch(REASON)
-    // The shipped constant is the measurement's decision: the typed drafter won, so forks do not draft.
+    // The shipped constant is the measurement's decision: forks do not draft.
     expect(FORK_DRAFTING).toBe(false)
   })
 

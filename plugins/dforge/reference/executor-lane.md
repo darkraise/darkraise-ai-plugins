@@ -129,6 +129,18 @@ A task carrying an `**Executor:**` line runs on that CLI instead of its
 the ledger, the two-round cap - is unchanged, because the contract the loop
 enforces is files and commits, not a particular runtime.
 
+**The fallback is the session.** Wherever this file says a task falls back -
+its gate is closed, its CLI is unusable, the per-plan breaker has tripped, a
+run or a fix round hands back - dforge:executing-plans implements the task
+itself under [delegated-task.md](delegated-task.md) §The session review loop,
+never closing it `unreviewed`, and its assigned line's agent slot reads
+`inline`. A task that falls back before any run joins that loop at its
+implement step after the plain `task-step start` the executor path already ran
+(never `--inline`, which refuses an executor task); a handback mid-loop joins
+it at the round it was in. Deprecated dforge:subagent-driven-development
+dispatches the task's `**Implementer:**` agent instead, with that agent in the
+slot.
+
 **There is no driver subagent.** Run the wrapper yourself as a background Bash
 call. It prints one status line and writes everything else to files.
 
@@ -165,19 +177,18 @@ for ownership, artifacts, approved write sets, and recovery operations.
 **The per-plan breaker (agy only).** Before step 1 for a task whose
 `**Executor:**` line names `agy`, run
 `bash "<plugin-root>/scripts/lane-breaker" PLAN_FILE agy`. On `state=tripped`
-run neither the gate, the roster nor the wrapper: dispatch the task's
-`**Implementer:**` agent, say `agy off — unreliable (2 handbacks)` aloud, and
-record the assigned line
-`Task <N>: implementer <agent> (assigned; base <sha7>; executor agy unavailable - off for this plan: unreliable (2 handbacks))`.
+run neither the gate, the roster nor the wrapper: fall back to the session,
+say `agy off — unreliable (2 handbacks)` aloud, and record the assigned line
+`Task <N>: implementer inline (assigned; base <sha7>; executor agy unavailable - off for this plan: unreliable (2 handbacks))`.
 The breaker counts a task as handed back when one of its lines names
 `executor agy ` and one says `HANDBACK`, so every handback must carry the word.
-A review-loop handback already does, on its `HANDBACK to <agent>` fix-round
+A review-loop handback already does, on its `HANDBACK to inline` fix-round
 line. A run that fails before review (a refusal, a second failed run, a gate
 closed after `--refresh`, a preflight exit 2, a git-guard block once recovered) hands back on the
-`**Implementer:**` agent's assigned line, in its substitution slot:
+fallback's assigned line, in its substitution slot:
 
 ```
-Task <N>: implementer <agent> (assigned; base <sha7>; executor <id> HANDBACK - <reason>)
+Task <N>: implementer inline (assigned; base <sha7>; executor <id> HANDBACK - <reason>)
 ```
 
 After the line recording any agy task's handback is written, run the breaker
@@ -199,10 +210,9 @@ agy dispatch.
 1. **Gate, then guard the roster.** Run `bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)"`
    first, saying its line aloud when it ends `source=probe`.
    Unless it prints `lane=true`, run neither the roster nor the wrapper:
-   dispatch the task's `**Implementer:**` agent on the Claude lane, say the
-   substitution aloud, and record it with the line below, quoting the gate's
-   `reason` (`untrusted` when it printed `usable=true`). The substitution
-   always lands on the task's `**Implementer:**` agent,
+   fall back to the session, say the substitution aloud, and record it with
+   the line below, quoting the gate's `reason` (`untrusted` when it printed
+   `usable=true`). The substitution always goes to the session,
    never to the next ranked executor. The wrapper reads the
    gate again and exits 2 with `<id> lane is off for this session (<reason>)`
    when the lane has closed since. Otherwise run
@@ -210,12 +220,11 @@ agy dispatch.
    for the named executor. **Never trust the plan's copy** - it records what was
    available when the plan was written.
 
-   If `usable` is false, dispatch the task's `**Implementer:**` agent on the
-   Claude lane instead, say the substitution aloud, and record it, quoting the
-   entry's `reason` field:
+   If `usable` is false, fall back to the session instead, say the
+   substitution aloud, and record it, quoting the entry's `reason` field:
 
    ```
-   Task <N>: implementer impl-sonnet-low (assigned; base <sha7>; executor <id> unavailable - <reason>)
+   Task <N>: implementer inline (assigned; base <sha7>; executor <id> unavailable - <reason>)
    ```
 
    Never fall back silently. A silent fallback makes the whole lane invisible.
@@ -365,8 +374,8 @@ after one clarification will not resolve it after two.
 
 At most two executor runs may *fail* per task before Claude takes over. Fix-round
 resumes are not failures and do not count against that budget. `HANDBACK` is an
-action, not a rung: dispatch the task's `**Implementer:**` agent on the Claude
-lane and let the ordinary ladder govern from there. Record it inside the line the
+action, not a rung: the task falls back to the session, which finishes it in
+the session review loop. Record it inside the line the
 loop is already writing, never as a line of its own.
 
 **Exit 2 requires inspecting durable state before retry.** It can mean preflight,
@@ -402,15 +411,13 @@ that directory is git-ignored. If that workspace is not ignored, write reports
 outside the checkout, because the wrapper only un-stages the artefacts of the
 report path it was given.
 
-**Round 2 is `HANDBACK`.** It goes to the task's `**Implementer:**` agent. The
-Claude implementer inherits the working tree, the commits, and the report,
-which is the loop's own "supply the context and re-dispatch" case.
+**Round 2 is `HANDBACK`.** It goes to the session. The session inherits the
+working tree, the commits, and the report, and makes round 2's fix itself in
+the session review loop.
 
-Handing back lands the task on the Claude assignment-table row for its score -
-the tier the rubric picked before the fix rounds happened. The change of model
-family plus a fresh context is the capability change round 2 exists to
-buy. Say the handback aloud when it happens. A finding still open after
-round 2 goes to the breaker ([delegated-task.md](delegated-task.md) §4).
+The change of model family is the capability change round 2 exists to buy.
+Say the handback aloud when it happens. A finding still open after round 2
+goes to the breaker ([delegated-task.md](delegated-task.md) §4).
 
 ## When the resume itself fails
 
@@ -438,7 +445,7 @@ bounded by their own rule below and by the two-round cap.
 | `note=writer-unconfirmed` | As for an initial run: confirm the turn ended, then follow [external-task-recovery.md](external-task-recovery.md) |
 | `exit=2` whose stderr says `the agy Claude fallback is off until …` | `HANDBACK` now, recorded on the fix-round line as `executor agy HANDBACK - fallback quota until <iso>` (`until session end` when the message says the end of the session). Re-issuing the resume would be refused again |
 | `exit=2` | **Read the durable record's `phase` first: exit 2 does not prove nothing ran.** The wrapper also exits 2 after the turn, on thread-persistence, reap-persistence, scope-validation, staging, commit or report-copy failure. On a preflight phase, nothing ran and the thread is untouched: fix what you passed and re-issue the same resume, which does not count as a failed round. On any later phase, follow [external-task-recovery.md](external-task-recovery.md) before re-issuing anything |
-| `status=BLOCKED`, or `exit=0` with no verdict, and no transient cause | `HANDBACK` now, rather than at round 2: the Claude implementer takes this round |
+| `status=BLOCKED`, or `exit=0` with no verdict, and no transient cause | `HANDBACK` now, rather than at round 2: the session takes this round |
 | A second failure of any kind in the same round | `HANDBACK` |
 
 **An empty diff means something different here.** When a run fails calls
@@ -455,11 +462,11 @@ Record any of this inside the fix-round line the loop is already writing, never
 as a line of its own:
 
 ```
-Task <N>: fix round 1/2 (0 addressed, 2 open - executor quota exhausted, retried once then handed back; commits a7f..a7f; HANDBACK to impl-sonnet-low)
+Task <N>: fix round 1/2 (0 addressed, 2 open - executor quota exhausted, retried once then handed back; commits a7f..a7f; HANDBACK to inline)
 ```
 
-A handback from a failed resume is still a handback: say it aloud, and let the
-ordinary Claude ladder govern from there.
+A handback from a failed resume is still a handback: say it aloud, and the
+session finishes the task in the session review loop.
 
 ## Codex task review seats
 
@@ -612,13 +619,13 @@ rules on every rejection ([final-review.md](final-review.md)).
 
 | Situation | Response |
 |-----------|----------|
-| Task has an `**Executor:**` line and that executor's gate does not print `lane=true` | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the gate's `reason` in the assigned line |
+| Task has an `**Executor:**` line and that executor's gate does not print `lane=true` | Fall back to the session, say the substitution aloud, record the gate's `reason` in the assigned line |
 | Task has an `**Executor:**` line, the gate prints `lane=true`, and the CLI is usable | Run the wrapper; do not dispatch a subagent for it |
-| Task has an `**Executor:**` line and the CLI is missing, unauthenticated, or not batch-capable | Dispatch the `**Implementer:**` agent, say the substitution aloud, record the roster's `reason` in the assigned line |
-| The `**Executor:**` line names a model outside the executor's assignment block (for `agy`, outside its assignment and successor blocks), an effort its wrapper does not admit, or a pair with no row in its timeout block | Ruling: dispatch the `**Implementer:**` agent (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
+| Task has an `**Executor:**` line and the CLI is missing, unauthenticated, or not batch-capable | Fall back to the session, say the substitution aloud, record the roster's `reason` in the assigned line |
+| The `**Executor:**` line names a model outside the executor's assignment block (for `agy`, outside its assignment and successor blocks), an effort its wrapper does not admit, or a pair with no row in its timeout block | Ruling: fall back to the session (`HANDBACK`), say it aloud. The wrapper refuses all three with exit 2 anyway |
 | Wrapper exits 2 during staging or commit | Read the durable record; use commit recovery after exact snapshot validation, or explicit reconciliation. Never rerun the model merely to retry a commit |
-| Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching the executor, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the `**Implementer:**` agent and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
-| Two executor runs have failed | `HANDBACK` to the `**Implementer:**` agent and continue on the Claude ladder |
+| Wrapper exits 2 on an initial run with any other message | Read the durable record's `phase` before ruling: only a preflight phase means it refused before launching the executor, and that is a validation error rather than a run failure, so the ruling is `HANDBACK` to the session and never a retry unchanged. A later phase is a post-execution failure and takes the recovery row above |
+| Two executor runs have failed | `HANDBACK` to the session, which finishes the task in the session review loop |
 | A fix-round resume failed to run at all | See When the resume itself fails. Never take the successor rung: that executor's successor block (`executors get <id> blocks.successor`) is read only by a failed initial run |
 | A fix round returned DONE with an empty diff | The executor read the findings and changed nothing on purpose. Send the report's argument to the ruling seat as an `executor-empty-diff` item rather than re-dispatching; round 2 is the `HANDBACK` |
 | A review seat's status line says `FALLBACK` | The preferred judge rung refused the run and the runner already used the fallback once. Not a failure: record the substitution and its reason in the ledger line you are already writing |

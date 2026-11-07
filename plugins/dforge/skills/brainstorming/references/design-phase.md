@@ -10,47 +10,11 @@
 
 **Choosing the execution strategy:**
 
-When `executionStrategy` is `sequential` or `parallel` (see Settings), skip the
-question and record that value. Otherwise, once the approach is settled and
-before you present the design, ask your human partner one multiple-choice
-question, on its own:
-
-> How should the plan execute?
-> 1. **Sequential** (default) — one task at a time; the safest choice, and the
->    right one when the work is one chain of dependent changes.
-> 2. **Parallel subagents** — independent tasks run at the same time, each in
->    its own worktree, merged and checked together after each wave; faster
->    when the work splits into parts that share no files.
-
-Recommend one: parallel only when you can already name two or more parts that
-share no file and do not consume each other's output; sequential otherwise.
-Parallel runs only in subagent mode on Claude Code. On a Codex host do not
-ask: the plan is sequential, and you say so in one line.
-
-Record the answer near the top of the spec, below its title, as
-`**Execution strategy:** parallel — <reason>` or
-`**Execution strategy:** sequential — <reason>`. The plan inherits it.
-
-When the answer is parallel, the design leans toward independence, because a
-part that shares nothing is a part that cannot break its sibling:
-
-- **Settle shared things first.** Types, interfaces, schemas, configuration
-  keys and file layout that several parts use belong to one foundation part
-  that runs before the others.
-- **Give every file one owner.** Registries, barrels and index files, route
-  tables, dependency manifests and lockfiles, migrations and version files are
-  where parallel work collides; assign each to exactly one part, or to the
-  foundation part.
-- **Keep risk alone.** Security, data-loss, migration and concurrency work
-  runs on its own, never beside a sibling.
-- **Isolate the tests.** Say how parts' tests avoid each other at run time —
-  ports, databases, fixed paths, global state — or that they share nothing.
-- Add a `## Parallel decomposition` section to the spec: the parts, the files
-  each owns, what each consumes from the foundation, and which parts may run
-  together. writing-plans turns it into waves.
-
-Never bend a design out of shape to make it parallel: a part that genuinely
-needs another's output waits for it.
+Ask nothing. Every plan executes inline, one task after another, so record
+`**Execution strategy:** sequential — inline execution` near the top of the
+spec, below its title. The plan inherits it. The `executionStrategy` setting is
+honoured only for a plan whose Execution line names `subagent` (deprecated),
+where dforge:writing-plans §Parallel waves decides the waves.
 
 **Presenting the design:**
 

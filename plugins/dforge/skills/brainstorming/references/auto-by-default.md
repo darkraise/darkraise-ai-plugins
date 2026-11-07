@@ -1,9 +1,9 @@
 ## Auto by default (`autoRun=on`)
 
 The default on Claude Code. Only the architectural path changes: a spike or a
-bounded task runs as above, and on a Codex host `on` behaves as `off`. Steps 1-5
-of the checklist run as written; the execution-strategy question is asked only
-when the setting is `ask`. Then:
+bounded task runs as above, and on a Codex host `on` behaves as `off`. Steps 1-4
+of the checklist run as written, and no execution-strategy question is asked.
+Then:
 
 1. **Write the spec directly.** Present no design section and ask no
    acceptance question first. One spec covers the whole request: no

@@ -419,6 +419,11 @@ if selected A4; then
 fi
 
 # ---------------------------------------------------------------- A5
+# Delegation and the Execution-line floor changed after BASE by design, so the
+# lines they own are left out of the comparison; every other line must not move.
+a5_scope() {
+  grep -vE '^(NOTE header: delegated:|WARN header: Execution line is (inline|subagent) but|WARN header: subagent execution is deprecated|ERROR header: inline execution needs|plan-lint: [0-9]+ errors?, [0-9]+ warnings?$|recommend  )' || true
+}
 if selected A5; then
   if base_known; then
     baseplugin=$(base_tree)
@@ -444,9 +449,9 @@ if selected A5; then
       if [ "$scenario" = agyLane-off ]; then conf set agyLane false; plans_run="a5-codex.md a5-none.md a5-bad.md"; fi
       for p in $plans_run; do
         head_out=$(lint "$p"); base_out=$(lint "$p" "$baseplugin/scripts")
-        check "A5 ($scenario): plan-lint on $p is unchanged from BASE" "$head_out" "$base_out"
+        check "A5 ($scenario): plan-lint on $p is unchanged from BASE" "$(a5_scope <<<"$head_out")" "$(a5_scope <<<"$base_out")"
         head_rev=$(revise_stdout "$p"); base_rev=$(revise_stdout "$p" "$baseplugin/scripts")
-        check "A5 ($scenario): plan-revise stdout on $p is unchanged from BASE" "$head_rev" "$base_rev"
+        check "A5 ($scenario): plan-revise stdout on $p is unchanged from BASE" "$(a5_scope <<<"$head_rev")" "$(a5_scope <<<"$base_rev")"
         head_err=$(revise_stderr "$p"); base_err=$(revise_stderr "$p" "$baseplugin/scripts")
         check "A5 ($scenario): plan-revise stderr on $p is unchanged from BASE" "$head_err" "$base_err"
       done
@@ -464,7 +469,7 @@ if selected A5; then
     mkplan "$LREPO/docs/a5-probe.md" "codex" "0 1 1 0" "0 1 1 1" "0 1 1 2"
     probe_head=$(cd "$LREPO" && PLAN_LINT_ROSTER="$TMP/p5/both-roster.sh" timeout 120 bash "$S/plan-lint" docs/a5-probe.md 2>&1 | tr -d '\r')
     probe_base=$(cd "$LREPO" && PLAN_LINT_ROSTER="$TMP/p5/codex-roster.sh" timeout 120 bash "$baseplugin/scripts/plan-lint" docs/a5-probe.md 2>&1 | tr -d '\r')
-    check "A5: with agyLane=false the lane-eligible warnings equal BASE's" "$probe_head" "$probe_base"
+    check "A5: with agyLane=false the lane-eligible warnings equal BASE's" "$(a5_scope <<<"$probe_head")" "$(a5_scope <<<"$probe_base")"
     has "A5: and Codex is still named" "$probe_head" "lane-eligible with no **Executor:** line (codex"
     conf set agyLane true
     # Survey mode pinned to the fixture registry.
@@ -835,7 +840,7 @@ if selected A18; then
   check "A18: with the plan line and two handbacks it stays tripped" "$(breaker agy)" "lane-breaker agy state=tripped handbacks=2"
   lane=$(doc "$PLUGIN/reference/executor-lane.md")
   has "A18: the lane reference states the ledger line" "$lane" 'Plan: executor agy off - unreliable (2 handbacks)'
-  has "A18: and sends a tripped agy task to its Implementer agent" "$lane" "On \`state=tripped\` run neither the gate, the roster nor the wrapper: dispatch the task's \`**Implementer:**\` agent"
+  has "A18: and sends a tripped agy task to the session" "$lane" "On \`state=tripped\` run neither the gate, the roster nor the wrapper: fall back to the session"
   has "A18: and tells a resumed controller the ledger is enough" "$lane" "A resumed controller needs nothing more"
 fi
 

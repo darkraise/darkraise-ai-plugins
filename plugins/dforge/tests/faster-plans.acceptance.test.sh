@@ -275,9 +275,8 @@ lint_probe() { # lint_probe <file> — the same, with the lane probe on
 # --- A1 ----------------------------------------------------------------------
 
 a1() {
-  local skill drafter reviewer criteria
+  local skill reviewer criteria
   skill=$(skill_doc "$PLUGIN/skills/writing-plans/SKILL.md")
-  drafter=$(doc "$PLUGIN/skills/writing-plans/references/drafter-prompt.md")
   reviewer=$(doc "$PLUGIN/skills/writing-plans/references/plan-reviewer-prompt.md")
   criteria=$(doc "$PLUGIN/criteria/plan-review.md")
 
@@ -288,11 +287,6 @@ a1() {
   matches "A1: writing-plans names generated-file or migration commands" "$skill" 'a generated-file or migration command'
   matches "A1: writing-plans names a fixed constant the spec names" "$skill" 'a fixed constant the spec names'
   matches "A1: writing-plans gives Step 3 no implementation code" "$skill" 'Step 3 describes the implementation; it carries no implementation code'
-
-  matches "A1: the drafter prompt asks for each task's interfaces" "$drafter" 'names its exact files and its interfaces'
-  matches "A1: the drafter prompt asks for the complete code of its tests" "$drafter" 'gives the complete code of its tests'
-  matches "A1: the drafter prompt limits implementation code to the same three cases" "$drafter" 'implementation code appears only for a configuration value, a generated-file or migration command, or a fixed constant the spec names'
-  matches "A1: the drafter prompt ends each task with its verify commands" "$drafter" 'ends with the commands that verify it'
 
   matches "A1: the plan-reviewer prompt expects interfaces, test code and verify commands in a code task" "$reviewer" 'a code task gives its interfaces, the complete code of its tests and its verify commands'
   matches "A1: the plan-reviewer prompt treats a missing or stub test as a finding" "$reviewer" 'a missing or stub test is'

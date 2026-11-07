@@ -491,8 +491,8 @@ a12() {
 a14() {
   local ud bs spec_text
   ud=$(doc "$UD"); bs=$(skill_doc "$BS")
-  has "A14: using-dforge states the architectural Process line" "$ud" 'Process: architectural, <inline|subagent>, depth <d> — <triggers>'
-  has "A14: brainstorming states it too" "$bs" 'Process: architectural, <inline|subagent>, depth <d> — <triggers>'
+  has "A14: using-dforge states the architectural Process line" "$ud" 'Process: architectural, depth <d> — <triggers>'
+  has "A14: brainstorming states it too" "$bs" 'Process: architectural, depth <d> — <triggers>'
   matches "A14: brainstorming writes the Depth line" "$bs" '\*\*Depth:\*\* <[^>]+> — <reason'
   matches "A14: and the owner's Depth line" "$bs" '\*\*Depth:\*\* <[^>]+> — owner'
   spec_text="$REPO_ROOT/docs/dforge/specs/2026-10-27-review-depth-design.md"

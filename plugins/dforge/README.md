@@ -2,9 +2,9 @@
 
 A standalone fork of [superpowers](https://github.com/obra/superpowers) 6.3.0
 (MIT — see `LICENSES/`) for Claude Code and Codex, built around one idea: a
-strong model writes the plan, a Sonnet-class session or small tiered
-implementers execute it literally, and every judgment call goes to one strong
-ruling seat. Install `dforge@darkraise` from the repository-root
+strong model writes the plan, the session executes it literally, one task at a
+time, at the model and effort its hardest task needs, and every judgment call
+goes to one strong ruling seat. Install `dforge@darkraise` from the repository-root
 marketplace, then disable the upstream `superpowers` plugin,
 `dcc-superpower-companions` and `andrej-karpathy-skills`: same-named skills in
 two enabled plugins can double-trigger.
@@ -17,15 +17,15 @@ Four findings from real transcripts drove the fork; the numbers are in
 - **Cost.** The main session was 92% of token spend, most of it re-reading a
   400–700k context. The plugin hands off at a budget printed by its own
   scripts (the compaction point minus one task's growth, 465k at a 650000
-  window), keeps the execution
-  controller on Sonnet, and reads the plan one task at a time instead of whole.
+  window), runs execution at the lowest model and effort that covers the
+  plan's hardest task, and reads the plan one task at a time instead of whole.
 - **Small models executing literally.** Upstream advises picking a model per
   task but has no field for the choice, and the Agent tool could not pass
   reasoning effort before Claude Code 2.1.292 (it now can, but a fleet
   dispatch still passes neither model nor effort, so the pinned pair is what
   runs). Here every task records an implementer from a model ×
-  effort grid, the plan's `**Execution:**` line decides inline or subagent
-  mode, and `plan-lint` checks the header, the scores and the mode before a
+  effort grid, the plan's `**Execution:**` line names the session's model and
+  effort, and `plan-lint` checks the header, the scores and the mode before a
   plan is saved.
 - **Judgment in one seat.** Executors and controllers rule only on mechanical
   conflicts and log every ruling. Plan defects, contested findings and
@@ -38,7 +38,7 @@ Four findings from real transcripts drove the fork; the numbers are in
 
 **Codex host.** Read [native-codex.md](reference/native-codex.md). Its
 `codex-v4` policy routes scores 0–9 through Luna, Sol and Astra with
-the same four raw axes; scouts start at Sol medium, judges at Astra high; the
+the same four raw axes; judges start at Astra high; the
 Claude hooks are disabled in the native manifest. Native reviewers have
 independent contexts; enforce read-only restrictions where the host allows and
 disclose instruction-only restrictions where it does not.
@@ -51,7 +51,7 @@ before offloading.
 
 ## What you get
 
-**Twenty-one agents in four classes.** Seven execution implementers - Sonnet 5.5
+**Nineteen agents in three classes.** Seven execution implementers - Sonnet 5.5
 and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
 everything the assignment table and the escalation ladder can reach; no score
 assigns `impl-opus-low` or `impl-opus-medium`; both are reached only by
@@ -60,18 +60,14 @@ escalation. Since 1.27.0 no score assigns `impl-haiku` either: total 0 runs on
 is reached only by a human `**Implementer:**` override. Nine reserve implementers - the `xhigh` and `max` efforts, and
 every Fable 5.1 tier - are reachable only by a human override, or by a task
 that has already been split once and still exhausted `impl-opus-high`.
-Four role agents - the judges `judge-opus`, `judge-sonnet-high` and
-`judge-fable` (an auto run's spec review and rulings, or a human override),
-and `scout-sonnet` - whose `tools:` frontmatter omits `Edit`, `Bash` and
+Three role agents - the judges `judge-opus`, `judge-sonnet-high` and
+`judge-fable` (an auto run's spec review and rulings, or a human override) -
+whose `tools:` frontmatter omits `Edit`, `Bash` and
 `Agent`, so a reviewer that cannot spawn subagents is a fact about the
-registry rather than a request in a prompt. The scout carries no `Write`
-either; a judge writes only its report file, whose path its prompt names,
+registry rather than a request in a prompt; a judge writes only its report file, whose path its prompt names,
 replies in at most ten lines, and `scripts/task-step verdict` checks that no
 tracked file changed during a task review.
-One drafter, `drafter-sonnet`, writes a slice of 3-4 tasks of a plan of 9 or
-more whose header is written (writing-plans' Drafting the tasks); it searches
-with `Bash` and writes its slice file, so it carries `Bash`, `Write` and
-`Edit`, but never `Agent`.
+Every plan is drafted in the session that read the code, whatever its size.
 Every implementer keeps its tools, browser and device servers included, but
 its `disallowedTools:` frontmatter drops `Agent`, `Skill` and the session-only
 tools (Artifact, Workflow, plan mode, cron, messaging): their definitions and
@@ -149,36 +145,32 @@ REJECTED on every Codex finding in the same pass. Every judge
 writes its full report to a file in the plan's workspace and replies in at most
 ten lines; `scripts/task-step verdict` prints the digest the session reads.
 
-**Best-of-3 approach selection.** `selecting-approaches` gates an open approach
-decision to inline, one advisory pass, or three scouts ranked by a judge in a
-ring pass that cancels positional bias. Five numbered skip conditions send most
-decisions to inline, including bug fixes with a located root cause - where
-ranking candidates generated before the root cause is known would launder
+**Approach selection.** `selecting-approaches` gates an open approach
+decision to inline or one advisory judge pass. Five numbered skip conditions
+send most decisions to inline, including bug fixes with a located root cause -
+where an advisor consulted before the root cause is known would launder
 guesses into a confident pick.
 
-**Two execution modes, chosen by the plan.** The `**Execution:**` line decides
-whether a plan runs under subagent-driven-development, a dispatch and a scored
-review per task, or under executing-plans, where one session implements every
-task itself. Inline mode is the default unless more than half the tasks are
-heavy (total 5 or more, or risk 3). An inline plan delegates its heavy
-tasks, which are too large or risky to implement in the session,
-and every task carrying an `**Executor:**` line, which runs on that executor
-rather than in the session. Each delegated task runs through an implementer
-subagent — or, for an Executor line, that executor's wrapper — with the full
-per-task review loop, shared with subagent mode in
-`reference/delegated-task.md`; the session implements the rest itself, trading
-their per-task review for one whole-branch review at the end, which both modes
-share. `plan-lint` requires the session's effort to cover the highest score it
-implements, and `--effort high` once it delegates. A task that will not
-converge after three fix rounds escalates to subagent mode at the next task
-boundary, recorded in the ledger both modes write.
+**Every plan runs inline.** Under executing-plans the session that read the
+code implements every task, heavy ones (total 5 or more, or risk 3) included;
+an implementer subagent would rebuild that context from nothing. The one
+exception is every task carrying an `**Executor:**` line, which runs on that
+executor (Codex or Antigravity) with the full per-task review loop in
+`reference/delegated-task.md`. A risk-3 task the session implements gets a
+per-task judge review too, through that file's session review loop; the other
+tasks are covered by one whole-branch review at the end. `plan-lint` requires
+the Execution line's model and effort to cover the hardest task the session
+implements, and `--effort high` at risk 3 or once it delegates. A task that will
+not converge after three fix rounds goes to the ruling seat as a `breaker`
+item. subagent-driven-development, a dispatch and a scored review per task, is
+deprecated: it runs only for a plan whose Execution line names `subagent`, and
+`plan-lint` warns on that line.
 
-**Parallel waves by default.** The `executionStrategy` setting defaults to
-`parallel`: a plan runs its independent tasks in waves, and falls back to
-sequential when no two tasks can share a wave, on Codex, and in inline mode.
-Set it to `sequential` to turn waves off, or to `ask` to have brainstorming ask
-once the approach is settled (and writing-plans when a spec carries no answer).
-Brainstorming records the result in the spec as `**Execution strategy:**`. A parallel
+**Parallel waves, subagent plans only.** The `executionStrategy` setting
+defaults to `sequential`, and an inline plan always runs one task after
+another. `parallel` and `ask` take effect only for a plan whose Execution line
+names `subagent`. Brainstorming records `**Execution strategy:** sequential —
+inline execution` in the spec. A parallel
 plan groups its tasks into waves, written `**Parallelism:** waves — 1 | 2-4 | 5`:
 contiguous task ranges whose tasks share no file and consume nothing from each
 other, with a `**Depends on:**` line on every task. Subagent mode runs a wave's
@@ -601,7 +593,7 @@ needs. dforge hands off instead.
   skill writes `latest.md` and the plan's `handoff.md` and ends with the
   resume guide from `scripts/next-step`.
 - **Stops.** A saved plan outside an auto run (an auto run switches in place)
-  and a switch from inline to subagent mode are hard stops.
+  is a hard stop.
   The last task completing is never a stop: the final whole-branch review and
   finishing always run in the same session. In strict mode the plan's last two
   tasks and the final phase keep the handoff budget and run past it; in relaxed
@@ -986,8 +978,8 @@ The same settings can be set with
 | Workflow | `agyLane` | `true` | Give plan tasks to the Antigravity CLI (`agy`) when its gate passes. `false` makes `scripts/agy-gate` report `lane=false reason=setting` without probing, and keeps those tasks on Claude or Codex. |
 | Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DFORGE_LENS_CAP` overrides it. |
 | Workflow | `lensMinorFrom` | `20` | The plan size, in tasks, from which the final review's lenses also report Minor findings. A smaller plan's lenses report Critical and Important findings only, so the fix wave does not triage a long Minor tail. `0` always asks for Minor findings. `DFORGE_LENS_MINOR_FROM` overrides it. |
-| Workflow | `executionStrategy` | `parallel` | `parallel` runs independent tasks in waves and falls back to sequential when no two tasks can share a wave, and on Codex; `sequential` runs one task at a time; `ask` asks "how should the plan execute". |
-| Workflow | `executionMode` | `auto` | `auto` follows the planner's rule; `inline` and `subagent` fix the plan's Execution line, and `inline` also makes the plan sequential. |
+| Workflow | `executionStrategy` | `sequential` | `sequential` runs one task at a time; `parallel` (independent tasks in waves) and `ask` take effect only with a subagent Execution line. |
+| Workflow | `executionMode` | `auto` | `auto` means inline; `inline` and `subagent` fix the plan's Execution line, and `subagent` (deprecated) is the only mode that runs waves. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
 | Workflow | `autoRun` | `on` | `on` runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; `off` on Codex); `ask` offers that once the design is approved; `off` never runs one. See [Auto run](#auto-run). |
 | Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
@@ -1257,9 +1249,9 @@ differences:
     the `**Execution:**` line decides and is binding: `executing-plans` is a
     full inline mode that writes the same ledger, sends its judgment to the
     same ruling seat, and ends at the same shared
-    [final-review.md](reference/final-review.md), with no per-task review. A
-    task it cannot land in three fix rounds escalates to subagent mode at the
-    next task boundary.
+    [final-review.md](reference/final-review.md); only risk-3 and executor
+    tasks get a per-task review. A task it cannot land in three fix rounds
+    goes to the ruling seat as a `breaker` item.
 
 ## Licenses
 

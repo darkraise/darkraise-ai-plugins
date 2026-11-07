@@ -20,7 +20,7 @@ names "the section" "$B" '## Auto by default (`autoRun=on`)'
 names "the setting" "$B" '- `autoRun=on`, the default: the architectural path runs as Auto by default'
 names "designApproval has no effect" "$B" '`autoRun=on`, which presents no design.'
 names "specReview has no effect" "$B" 'Gate and go on to Implementation. It has no effect under `autoRun=on`:'
-names "the checklist points at the section" "$B" '**Architectural:** (under `autoRun=on`, the default on Claude Code, steps 6-8'
+names "the checklist points at the section" "$B" '**Architectural:** (under `autoRun=on`, the default on Claude Code, steps 5-7'
 names "no sub-project split" "$B" 'Under `autoRun=ask` or `autoRun=off` only (under `on`, one spec covers the whole request)'
 names "one spec" "$P/skills/brainstorming/references/auto-by-default.md" 'One spec covers the whole request: no'
 names "acceptance waits for the review" "$P/skills/brainstorming/references/drafting-acceptance.md" 'Under `autoRun=on` skip this step and the offer below: the statements are'
@@ -47,7 +47,7 @@ names "finishing: a deferred task keeps its rows deferred" "$FIN" '`(deferred by
 check "finishing: no read-the-spec-and-set clause" "$(cat "$FIN" "$P/skills/finishing-a-development-branch/references/"*.md | tr '\n' ' ' | tr -s ' ' | grep -c 'first run `scripts/finish-choice set <action> --plan PLAN_FILE`:')" "0"
 names "rulings are imported" "$P/skills/brainstorming/references/auto-by-default.md" '`scripts/auto-run ruling add "Fable, spec: <line>"`'
 names "the old pin survives" "$B" '`autoRun=off`: never offer an auto run'
-names "a Codex host runs attended" "$P/skills/brainstorming/references/auto-by-default.md" 'and on a Codex host `on` behaves as `off`. Steps 1-5'
+names "a Codex host runs attended" "$P/skills/brainstorming/references/auto-by-default.md" 'and on a Codex host `on` behaves as `off`. Steps 1-4'
 names "Fable's open items are asked at the review" "$P/skills/brainstorming/references/auto-by-default.md" '- every item Fable left undecided, and every critic Blocker it did not'
 names "critic prompt: the decisions" "$P/skills/brainstorming/references/architecture-critic-prompt.md" 'or under `autoRun=on` the spec'"'"'s'
 names "using-dforge: the approval is the spec review" "$P/skills/using-dforge/SKILL.md" 'still get approval (under `autoRun=on`, the spec review).'
@@ -61,7 +61,7 @@ lacks() { # lacks <label> <file> <text>
   check "$1" "$(flat "$2" | grep -qF -- "$3" && echo yes || echo no)" "no"
 }
 AR="$P/reference/auto-run.md"
-PROC='`Process: architectural, <inline|subagent>, depth <d> — <triggers>`'
+PROC='`Process: architectural, depth <d> — <triggers>`'
 says "using-dforge: the Process line names the depth" "$P/skills/using-dforge/SKILL.md" "$PROC"
 says "using-dforge: the depth comes from depth-route" "$P/skills/using-dforge/SKILL.md" '`<d>` from `scripts/depth-route --spec-triggers`'
 says "brainstorming: the Process line names the depth" "$B" "$PROC"
@@ -156,7 +156,7 @@ says "executing-plans setup: the Recovery table is in recovery.md" "$P/skills/ex
 lacks "no Recovery pointer goes through The Ledger" <(cat "$P/skills/subagent-driven-development/SKILL.md" "$SDD_REFS/setup.md" "$P/skills/executing-plans/SKILL.md" "$P/skills/executing-plans/references/setup.md") "under The Ledger"
 lacks "no Recovery pointer names The Ledger's Recovery" "$P/skills/subagent-driven-development/SKILL.md" "The Ledger's Recovery"
 check "the Recovery pointers resolve" "$([ -s "$SDD_REFS/ledger.md" ] && [ -s "$P/skills/executing-plans/references/recovery.md" ] && echo yes || echo no)" "yes"
-says "writing-plans: the execution-strategy question is in design-phase.md" "$W" '[design-phase.md](../brainstorming/references/design-phase.md)'
+says "writing-plans: the spec's strategy line comes from design-phase.md" "$W" '[design-phase.md](../brainstorming/references/design-phase.md)'
 lacks "writing-plans: the question is not named by a section of brainstorming's SKILL.md" "$W" 'dforge:brainstorming §Choosing the execution strategy'
 check "the review-depth acceptance tests carry no unused SD= line" "$(cat "$HERE/review-depth.acceptance.test.sh" "$HERE/review-depth-qa.acceptance.test.sh" | grep -c '^SD=')" "0"
 check "review-depth-qa builds the finishing text with flat_skill" "$(grep -c 'FN=\$(flat_skill "\$FIN")' "$HERE/review-depth-qa.acceptance.test.sh")" "1"

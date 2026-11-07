@@ -118,9 +118,9 @@ check "exactly one terminal rung, and it is impl-opus-high" \
 sources=$(printf '%s\n' "$escalation" | awk 'NF {print $1}' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
 check "every implementer appears exactly once as an escalation source" "$sources" "$IMPLEMENTERS"
 
-# Judges and scouts are not on the ladder; they are never escalation targets.
-offladder=$(printf '%s\n' "$escalation" | awk 'NF {print $1; print $2}' | grep -E '^(judge|scout)-' | tr '\n' ' ' | sed 's/ $//')
-check "no judge or scout appears in the escalation table" "${offladder:-NONE}" "NONE"
+# Judges are not on the ladder; they are never escalation targets.
+offladder=$(printf '%s\n' "$escalation" | awk 'NF {print $1; print $2}' | grep -E '^judge-' | tr '\n' ' ' | sed 's/ $//')
+check "no judge appears in the escalation table" "${offladder:-NONE}" "NONE"
 
 # --- rank monotonicity ------------------------------------------------------
 rank() { # rank <agent> - model_rank * 10 + effort_rank
@@ -243,8 +243,8 @@ for start in $RESERVE_AGENTS; do
 done
 check "reserve from every reserve agent reaches BLOCKED without cycling" "$bad_rwalk" "NONE"
 
-offreserve=$(printf '%s\n' "$reserve" | awk 'NF {print $1; print $2}' | grep -E '^(judge|scout)-' | tr '\n' ' ' | sed 's/ $//')
-check "no judge or scout appears in the reserve table" "${offreserve:-NONE}" "NONE"
+offreserve=$(printf '%s\n' "$reserve" | awk 'NF {print $1; print $2}' | grep -E '^judge-' | tr '\n' ' ' | sed 's/ $//')
+check "no judge appears in the reserve table" "${offreserve:-NONE}" "NONE"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

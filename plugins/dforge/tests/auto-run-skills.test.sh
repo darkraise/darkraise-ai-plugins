@@ -57,12 +57,12 @@ names "executing-plans: step 7 runs task-complete" "$EPF" 'auto run, run `script
 names "executing-plans: step 8 moves to the final phase" "$EPF" '`scripts/context-size --final`; in an auto run it moves the run to the'
 names "executing-plans: the budget section says so too" "$EPF" 'Finishing is never budget-checked. In an auto run `--final` also moves the'
 names "subagent-driven-development: the budget section says so" "$P/skills/subagent-driven-development/references/budget.md" 'from the ledger. In an auto run `--final` also moves the run to the final'
-names "executing-plans: the mode switch clears by phase" "$EPF" '`scripts/auto-run clear --phase`, and end the turn with'
-names "executing-plans: the mode switch in an auto run" "$EPF" 'not need. In an auto run, run dforge:handoff steps 0-4, then'
+names "executing-plans: a task at its cap goes on the pending list" "$EPF" 'In an auto run it goes on the pending list, as an exhausted ladder does.'
+names "executing-plans: recovery sends an old switch to subagent mode" "$EPF" '| `escalated inline -> subagent` | This plan has left inline mode: use dforge:subagent-driven-development |'
 names "delegated-task.md: task-complete after the complete line" "$P/reference/delegated-task.md" 'In an auto run, run `scripts/auto-run task-complete`, then the Fable batch when'
 names "parallel-waves.md: task-complete after the merge" "$P/reference/parallel-waves.md" '`; merged <sha7>`. In an auto run, run `scripts/auto-run task-complete`'
 names "parallel-waves.md: before any budget check" "$P/reference/parallel-waves.md" 'right after it, before any budget check or dispatch; the Fable batch runs'
-names "handoff: the mode switch hands off too" "$P/skills/handoff/SKILL.md" 'mode hands off too, and the step that invoked this skill runs'
+check "handoff: no mode switch clears by phase" "$(grep -c 'clear --phase' "$P/skills/handoff/SKILL.md")" "0"
 
 R="$P/reference/auto-run.md"
 names "auto-run.md: an unwritten handoff stops the run" "$R" 'If `scripts/next-step` exits 4, do not run `scripts/auto-run clear`'
@@ -104,8 +104,8 @@ names "auto-run.md: the switching line" "$R" '- `Auto run: switching` after `scr
 names "auto-run.md: plan saved is no clear" "$R" 'Plan saved is no clear: the session switches in place (§The switch).'
 names "auto-run.md: finishing reads the recorded choice" "$R" 'the choice `scripts/finish-choice get --plan PLAN_FILE` prints, which the spec'
 names "auto-run.md: a spec-review deferral keeps a merge" "$R" 'deferred at the spec review, before the run started, counts as one the run'
-check "auto-run.md: the one phase clear is the mode switch" "$(grep -c 'clear --phase' "$R")" "1"
-names "auto-run.md: the mode switch clears by phase" "$R" '- **A switch from inline to subagent mode** (dforge:executing-plans'
+check "auto-run.md: the one phase clear is for an old switch" "$(grep -c 'clear --phase' "$R")" "1"
+names "auto-run.md: an old switch clears by phase" "$R" '- **A plan that left inline mode before this change** (a ledger dforge:executing-plans'
 names "auto-run.md: the switch starts at Setup" "$R" 'execution skill starts at its Setup, worktree first: `scripts/auto-run status`'
 names "auto-run.md: a listed launch is waited for" "$R" 'listed: run `scripts/in-flight`, wait for or stop each launch it lists, and'
 names "auto-run.md: a second exit 5 stops the run" "$R" '`scripts/auto-run stop --reason "background work still running at the switch: <next-step'"'"'s message>"`'
@@ -118,7 +118,7 @@ names "final-review.md: a red gate in an auto run" "$P/reference/final-review.md
 names "final-review.md: a second red stops the run" "$P/reference/final-review.md" '`scripts/auto-run stop --reason "gate <name> red"` and ends as auto-run.md'
 GWF="$P/skills/using-git-worktrees/SKILL.md"
 names "final-review.md: a manifest defect has its own reason" "$P/reference/final-review.md" 'a manifest defect does the same with the reason'
-names "executing-plans: the mode switch handles next-step exits" "$EPF" 'a `next-step` exit 4 or 5 there is'
+check "executing-plans: no mode switch clears by phase" "$(grep -c 'clear --phase' "$EPF")" "0"
 names "using-git-worktrees: never is not read" "$GWF" 'The `worktree` setting is not read: `worktree=never` creates it too'
 names "using-git-worktrees: the sandbox stops the run" "$GWF" 'In an auto run, do not work in place: run `scripts/auto-run stop --reason "the sandbox refused the execution worktree"`'
 names "using-git-worktrees: a red baseline is a ruling" "$GWF" 'In an auto run, ask nothing: run `scripts/auto-run ruling add "Setup: baseline tests red — <failing summary>"` and continue'
@@ -128,7 +128,7 @@ names "finish-preference.md: the spec review's answer" "$P/reference/finish-pref
 names "README: the default" "$P/README.md" 'The default on Claude Code (`autoRun=on`). Brainstorming asks its clarifying'
 names "README: the opt-outs" "$P/README.md" '`autoRun=ask` offers the run once the design is approved instead, and'
 names "README: the autoRun row" "$P/README.md" '| Workflow | `autoRun` | `on` |'
-names "README: the strategy row" "$P/README.md" '| Workflow | `executionStrategy` | `parallel` |'
+names "README: the strategy row" "$P/README.md" '| Workflow | `executionStrategy` | `sequential` |'
 # The rename to dforge rewrote "the forge" (the code host) as "the dforge".
 check "no prose names the code host 'the dforge'" "$(grep -rlF "the dforge's" "$P/skills" "$P/reference" | tr '\n' ' ')" ""
 

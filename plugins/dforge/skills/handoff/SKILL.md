@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Use when a budget line says handoff, at a hard phase stop (plan saved outside an auto run, except a light plan of 1-3 tasks with room to continue, or a switch from inline to subagent mode), on Codex after 3 tasks or a task that needed 3+ fix rounds, or when your human partner steps away or asks to stop - ends the session with durable handoff files and a resume guide
+description: Use when a budget line says handoff, at a hard phase stop (plan saved outside an auto run, except a light plan of 1-3 tasks with room to continue), on Codex after 3 tasks or a task that needed 3+ fix rounds, or when your human partner steps away or asks to stop - ends the session with durable handoff files and a resume guide
 ---
 
 # Handoff
@@ -20,8 +20,7 @@ cleanly."
   and `scripts/context-size` — said `handoff`. Finish the task in flight
   through its `Task N: complete` line, then hand off; start no new task. The
   budget leaves room for one task to finish.
-- A hard stop: the plan is saved outside an auto run, or a plan has just
-  switched from inline to subagent mode. A saved plan at depth light is a stop
+- A hard stop: the plan is saved outside an auto run. A saved plan at depth light is a stop
   only when it has 4 or more tasks, or when `scripts/context-size` does not
   say `ok` after steps 0-4 (dforge:writing-plans §Execution Handoff): a light
   plan of 1-3 tasks runs steps 0-4 and continues in this session.
@@ -40,10 +39,7 @@ cleanly."
   not end. On a handoff the steps below run as always, but the turn does not
   end on the next-step block: return to the step that invoked this skill,
   which runs `scripts/auto-run clear` and ends the turn (auto-run.md §Clears).
-  This skill never runs `scripts/auto-run clear` itself. A switch from inline
-  to subagent mode hands off too, and the step that invoked this skill runs
-  `scripts/auto-run clear --phase` (dforge:executing-plans §Switching to
-  subagent mode).
+  This skill never runs `scripts/auto-run clear` itself.
 - Your human partner says they are stepping away for more than an hour, or
   asks you to stop. Reconcile live children first, exactly as step 0 says:
   wait for them, or stop them and record a Ruling. Tell your partner which you

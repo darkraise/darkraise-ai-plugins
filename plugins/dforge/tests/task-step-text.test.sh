@@ -218,7 +218,7 @@ done
 only_older "subagent mode names R/5 only for older runs" "$SDD"
 only_older "the ledger names R/5 only for older runs" "$SDD_LEDGER"
 names "inline mode: delegated fix rounds stop at 2" "$INLINE" 'fix rounds up to 2 and'
-names "inline mode: the breaker row" "$INLINE" "| \`breaker\` | A delegated task's findings still open after round 2/2 |"
+names "inline mode: the breaker row" "$INLINE" "| \`breaker\` | A task's findings or verifications still open at its cap: a reviewed task's after round 2/2, your own task's after \`fix round 3/3\` |"
 only_older "inline mode names R/5 only for older runs" "$INLINE"
 
 # --- the wave check cadence (faster-plans §4) ---

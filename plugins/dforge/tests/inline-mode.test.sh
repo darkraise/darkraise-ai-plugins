@@ -104,11 +104,12 @@ present "links the delegated loop" "$INLINE" "../../reference/delegated-task.md"
 present "a handoff waits for the task in flight" "$INLINE" 'Never hand off in the middle of a task,'
 present "subagent mode finishes the task before a handoff" "$SDD_BUDGET" 'finish the task in flight — its reviews, fix rounds and'
 present "subagent mode's last task is a soft stop" "$SDD_BUDGET" 'continue to Final Review in this session'
-present "a delegating plan gets a preflight" "$INLINE" 'send one `preflight` item'
-present "the preflight keys on a heavy task" "$INLINE" 'naming at least one `(heavy)` task'
+present "a plan with heavy tasks gets a preflight" "$INLINE" 'The `preflight` item runs when `plan-header.md` ends with a `**Heavy:**` line.'
+absent "the preflight no longer keys on a heavy Dispatch entry" "$INLINE" 'naming at least one `(heavy)` task'
 absent "the kinds table no longer keys the preflight on any delegation" "$INLINE" 'when the plan delegates any task'
 present "the preflight arises only for a heavy task" "$INLINE" '`preflight` arises only for a plan with a heavy task'
-present "inline mode names both delegation reasons" "$INLINE" '`**Dispatch:** delegated — Task <a> (heavy), Task <b> (executor)`'
+present "inline mode names only the executor delegation reason" "$INLINE" '`**Dispatch:** delegated — Task <a> (executor)`'
+absent "inline mode no longer delegates a heavy task" "$INLINE" 'Task <a> (heavy)'
 absent "writing-plans no longer defines four-band tasks" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'four-band'
 absent "inline mode no longer delegates total-4 tasks" "$INLINE" 'total-4'
 absent "using-dforge no longer delegates total-4 tasks" "$P/skills/using-dforge/SKILL.md" 'total-4'
@@ -120,11 +121,12 @@ absent "inline drops the no-preflight sentence" "$INLINE" 'There is no pre-fligh
 absent "inline no longer names judge-fable as the ruling seat" "$INLINE" '`dforge:judge-fable` (`dforge:judge-opus` when Fable is'
 absent "inline no longer translates older plugin prefixes" "$INLINE" "translate a delegated task's \`**Implementer:**\` agent before dispatching it"
 absent "inline drops the all-inert legacy sentence" "$INLINE" 'no task is dispatched, so their names need no translation'
-present "a return to inline starts at a task that is not delegated" "$INLINE" 'The return takes effect at the first remaining task that is not delegated'
+present "a task at its cap goes to the breaker, not to subagent mode" "$INLINE" 'goes to the ruling seat as a `breaker` item (in an auto run, the'
 
 # The fix cap, and the escalation clause both skills key on.
 present "states the fix cap" "$INLINE" "fix round R/3"
-present "inline writes the escalation line" "$INLINE" "Task <N>: escalated inline -> subagent — <trigger>"
+absent "inline no longer writes the escalation line" "$INLINE" "Task <N>: escalated inline -> subagent — <trigger>"
+present "inline recovery still reads an old escalation line" "$INLINE" '| `escalated inline -> subagent` | This plan has left inline mode'
 present "subagent mode reads the escalation line" "$SDD" "escalated inline -> subagent"
 ESC="$P/skills/subagent-driven-development/references/escalation.md"
 present "the inline recovery row ranks above both" "$SDD_LEDGER" "ranked strictly above both the task's \`**Implementer:**\` agent and the inline session's rung"
@@ -282,11 +284,12 @@ brief() { bash "$P/scripts/task-brief" "$@" >/dev/null 2>&1; }
 brief "$DTMP/plan.md" 1 "$DTMP/b1.md"
 check "a light task has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/b1.md")" "0"
 brief "$DTMP/plan.md" 2 "$DTMP/b2.md"
-check "a heavy task's second line is the Dispatch line" "$(sed -n 2p "$DTMP/b2.md")" "**Dispatch:** delegated — total 5, risk 2"
+check "a heavy task has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/b2.md")" "0"
 brief "$DTMP/plan.md" 3 "$DTMP/b3.md"
-check "a split task carries its highest total and risk" "$(sed -n 2p "$DTMP/b3.md")" "**Dispatch:** delegated — total 4, risk 3"
+check "a split task with a risk-3 part carries the review marker" "$(sed -n 2p "$DTMP/b3.md")" "**Review:** per-task — risk 3"
 brief --header "$DTMP/plan.md" "$DTMP/h.md"
-check "the header lists the delegated tasks with reasons" "$(tail -n 1 "$DTMP/h.md")" "**Dispatch:** delegated — Task 2 (heavy), Task 3 (heavy)"
+check "the header lists the heavy tasks with their scores" "$(tail -n 1 "$DTMP/h.md")" "**Heavy:** Task 2 (total 5, risk 2), Task 3 (total 4, risk 3)"
+check "a header with no executor task has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/h.md")" "0"
 sed 's/^\*\*Evaluation:\*\* files 1 - spec 1 - coupling 1 - risk 2 = 5$/**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4/; s/risk 3 = 4$/risk 0 = 1/' "$DTMP/plan.md" > "$DTMP/light.md"
 brief --header "$DTMP/light.md" "$DTMP/hl.md"
 check "a lone total-4 task in three is not delegated" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/hl.md")" "0"
@@ -354,21 +357,21 @@ check "a self-implemented brief carries no Dispatch line" \
 
 rm -rf "$DTMP"
 # --- the third delegation reason, in every place that defines the set -------
-# One sentence fragment, repeated verbatim in five files, so a later edit to
-# any one of them is caught here rather than in a plan that misroutes a task.
-EXEC_REASON='and every task carrying an `**Executor:**` line'
-present "inline mode delegates every Executor line" "$INLINE" "$EXEC_REASON"
-present "writing-plans delegates every Executor line" "$P/skills/writing-plans/references/execution-line.md" "$EXEC_REASON"
-present "using-dforge delegates every Executor line" "$P/skills/using-dforge/SKILL.md" "$EXEC_REASON"
-present "README delegates every Executor line" "$P/README.md" "$EXEC_REASON"
-present "the delegated loop delegates every Executor line" "$P/reference/delegated-task.md" "$EXEC_REASON"
+# Every place that defines the delegated set names the Executor line, each in
+# its own words, so a later edit to any one is caught here rather than in a
+# plan that misroutes a task.
+present "inline mode delegates every Executor line" "$INLINE" 'A delegated task is one carrying an `**Executor:**` line'
+present "writing-plans delegates every Executor line" "$P/skills/writing-plans/references/execution-line.md" 'A task carrying an `**Executor:**` line is delegated'
+present "using-dforge delegates every Executor line" "$P/skills/using-dforge/SKILL.md" 'every task but those carrying an `**Executor:**` line'
+present "README delegates every Executor line" "$P/README.md" 'exception is every task carrying an `**Executor:**` line'
+present "the delegated loop delegates every Executor line" "$P/reference/delegated-task.md" '`**Dispatch:** delegated`: a task carrying an `**Executor:**` line'
 present "writing-plans gates the roster per executor" "$P/skills/writing-plans/references/assignment-procedure.md" 'for every executor whose gate prints `lane=true`'
 present "writing-plans allows one Executor line per task" "$P/skills/writing-plans/references/assignment-procedure.md" 'A task carries at most one `**Executor:**` line'
 absent "inline mode no longer calls executor lines inert" "$INLINE" '`**Executor:**` lines are inert for the tasks you'
 absent "writing-plans no longer reads executor lines only when delegated" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'the lines are read only for the delegated tasks'
 
-# Inline mode delegates heavy and executor tasks, so no text may say it
-# implements every task.
+# Inline mode delegates executor tasks, so no text may say it implements every
+# task.
 for doc in "$P"/skills/executing-plans/SKILL.md "$P"/skills/executing-plans/references/*.md "$P"/skills/writing-plans/SKILL.md "$P"/skills/writing-plans/references/*.md "$P"/reference/native-codex.md; do
   absent "${doc#"$P"/} does not say inline mode implements every task itself" "$doc" 'implements every task itself'
   absent "${doc#"$P"/} does not say inline mode implements every task in the session" "$doc" 'implements every task in'

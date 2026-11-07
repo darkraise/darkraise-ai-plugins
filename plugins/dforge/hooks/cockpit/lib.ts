@@ -191,8 +191,8 @@ export type SeatSpawn = {
 
 /**
  * Whether a fork described `Draft plan tasks …` may run in a dforge session:
- * docs/dforge/notes/2026-10-25-drafter-measurement.md picked the drafter.
- * Changing it takes a plugin release.
+ * docs/dforge/notes/2026-10-25-drafter-measurement.md ruled forks out, and
+ * plans are now drafted in the session. Changing it takes a plugin release.
  */
 export const FORK_DRAFTING = false
 
@@ -225,10 +225,10 @@ export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean, forkDraftin
   if (!isPlanSession || spawn.parentAgentId !== undefined || spawn.workflow !== undefined || spawn.isTeammate === true || spawn.resume !== undefined) return null
   if (spawn.fork) {
     if (forkDrafting && spawn.description.startsWith('Draft plan tasks')) return null
-    return "dforge: forks are kept out of dforge sessions. Use dforge:judge-sonnet-high for a read-only check and writing-plans' drafting seat for plan drafting; see using-dforge §Seats."
+    return "dforge: forks are kept out of dforge sessions. Use dforge:judge-sonnet-high for a read-only check; plans are drafted in the session. See using-dforge §Seats."
   }
   if (CATCH_ALL.includes(spawn.subagentType) && spawn.model === undefined) {
-    return 'dforge: name a seat for this dispatch: dforge:judge-sonnet-high or dforge:judge-opus for a review or read-only check, the task\'s **Implementer:** agent (such as dforge:impl-sonnet-medium) for implementation, or pass an explicit model (model: "sonnet") to general-purpose; see using-dforge §Seats.'
+    return 'dforge: name a seat for this dispatch: dforge:judge-sonnet-high or dforge:judge-opus for a review or read-only check, or pass an explicit model (model: "sonnet") to general-purpose. The session implements plan tasks itself, as the plan\'s Execution line says; an implementer seat such as dforge:impl-sonnet-medium runs only for a deprecated subagent plan. See using-dforge §Seats.'
   }
   return null
 }

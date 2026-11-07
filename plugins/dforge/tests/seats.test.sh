@@ -247,8 +247,8 @@ names "walkthrough judge: names the report file" "$WT" 'Write your full report t
 names "walkthrough judge: caps the reply" "$WT" 'Then reply in at most 10 lines'
 names "walkthrough judge: the verdict key" "$WT" 'verdict: ship | fix [FINGERPRINT]'
 lacks "walkthrough: the controller no longer saves the reply" "$WT" 'Save the reply verbatim'
-check "approaches: the ranker and the advisor cap their reply" "$(count_of "$SA" 'write nothing else, and reply in at most 10 lines')" "2"
-names "approaches: the ranking's report file" "$SA" '`<state>/approaches-<decision>-rank-report.md`'
+check "approaches: the advisor caps its reply" "$(count_of "$SA" 'write nothing else, and reply in at most 10 lines')" "1"
+names "approaches: the advisor's report file" "$SA" '`<state>/approaches-<decision>-advisor-report.md`'
 lacks "README: the judges are no longer described as Write-free" "$RM" 'frontmatter omits `Edit`, `Write`, and `Agent`'
 names "README: a judge writes only its report file" "$RM" 'a judge writes only its report file'
 names "native Codex: a judge writes only its report file" "$P/reference/native-codex.md" 'no file writes except the one report file the prompt names'

@@ -115,8 +115,8 @@ under `ok` is not a reason to stop.
 
 ## Stops
 
-- **Hard:** the plan is saved; a plan switches from inline to subagent mode.
-  Both launch the execution model the Execution line names. writing-plans runs
+- **Hard:** the plan is saved. It launches the execution model the Execution
+  line names. writing-plans runs
   dforge:handoff once the plan is reviewed. In an auto run the plan saved is
   no stop: the cockpit switches the session in place
   ([auto-run.md](auto-run.md) §The switch).
