@@ -69,7 +69,9 @@ const REWORDED = [
 // execution skill's heavy-task delegation and switch to subagent mode, which
 // inline-only execution replaced with the session review loop and the
 // breaker, and writing-plans' majority rule and subagent Execution line,
-// which it replaced with an inline line on every plan. The split cannot have
+// which it replaced with an inline line on every plan, and brainstorming's
+// mode slot and execution-strategy question and subagent mode's description,
+// which it removed when it deprecated subagent mode. The split cannot have
 // lost them.
 const REMOVED = [
   '- **Contracts settle what slices share.** A drafter that reports `NEEDS_CONTEXT` needs a contract:',
@@ -188,6 +190,45 @@ const REMOVED = [
   "inline mode implements the tasks it does not delegate in the session itself, one after another, so it has nothing to run in parallel.",
   "`plan-lint` skips the majority-rule warning for a waves plan.",
   "Under dforge:executing-plans the lines are read for the delegated tasks, which include every task carrying an `**Executor:**` line.",
+  "<spike|bounded|architectural>, <inline|subagent> — <trigger | no trigger>` — so your human partner can override it.",
+  "The mode slot is your expectation only; the plan's Execution line decides.",
+  "architectural, <inline|subagent>, depth <d> — <triggers>`.",
+  "- `executionStrategy=sequential` or `executionStrategy=parallel`:",
+  "do not ask the execution-strategy question; record the value as the answer.",
+  "`parallel` still becomes sequential when you cannot name two parts that share no file, on a Codex host, and when `executionMode=inline`, which makes the plan sequential.",
+  "**Architectural:** (under `autoRun=on`, the default on Claude Code, steps 6-8 and 12-13 run as Auto by default says) 1.",
+  "**Ask the execution strategy** — parallel subagent waves or sequential execution, one question (see Choosing the execution strategy) 6.",
+  "**Present design** — in sections scaled to their complexity, get user approval after each section 7.",
+  "**Draft acceptance** — numbered, tagged, rated statements; ask your human partner about every one rated below `high` (see Drafting acceptance) 8.",
+  "one question once the acceptance statements are settled (see After the Design) 9.",
+  "**Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` with its `**Depth:**` line, and commit 10.",
+  "**Spec self-review** — one round for placeholders, contradictions, ambiguity, scope, acceptance and the riskiest assumption; post its block before the user review (see below) 11.",
+  "depth light skips it, and depth standard folds it into Fable's first round when Fable reviews) 12.",
+  "**User reviews written spec** — ask user to review the spec file before proceeding; under `autoRun=on` this is Auto by default's spec review message, after Fable's review at depth standard or full (an auto run started from the offer has Fable review it instead, at those depths) 13.",
+  "spike / bounded / architectural\" [shape=diamond]; \"Present question + probe (2-3 sentences)\" [shape=box]; \"Ask clarifying questions (bounded)\" [shape=box]; \"Present short design in chat\\n+ self-review block\" [shape=box]; \"Human approves?\" [shape=diamond]; \"Investigate; report recommendation\" [shape=doublecircle]; \"Implement via normal workflow (no plan doc)\" [shape=doublecircle]; \"Explore project context\" [shape=box]; \"Ask clarifying questions\" [shape=box]; \"Propose 2-3 approaches\" [shape=box]; \"Ask execution strategy\\n(parallel or sequential)\" [shape=box]; \"Present design sections\" [shape=box]; \"User approves design?\" [shape=diamond]; \"Draft acceptance\\n(rate; ask below high)\" [shape=box]; \"Offer an auto run\\n(once, unless autoRun=off)\" [shape=box]; \"Write design doc\" [shape=box]; \"Spec self-review\\n(one round, shown)\" [shape=box]; \"Architecture critic\\n(one judge-opus round)\" [shape=box]; \"User reviews spec?\" [shape=diamond]; \"Invoke writing-plans skill\" [shape=doublecircle]; \"Hidden complexity?",
+  "spike / bounded / architectural\"; \"Explore project context\" -> \"Ask clarifying questions\"; \"Ask clarifying questions\" -> \"Propose 2-3 approaches\"; \"Propose 2-3 approaches\" -> \"Ask execution strategy\\n(parallel or sequential)\"; \"Ask execution strategy\\n(parallel or sequential)\" -> \"Present design sections\"; \"Present design sections\" -> \"User approves design?\"; \"User approves design?\" -> \"Present design sections\" [label=\"no, revise\"]; \"User approves design?\" -> \"Draft acceptance\\n(rate; ask below high)\" [label=\"yes\"]; \"Draft acceptance\\n(rate; ask below high)\" -> \"Offer an auto run\\n(once, unless autoRun=off)\"; \"Offer an auto run\\n(once, unless autoRun=off)\" -> \"Write design doc\"; \"Write design doc\" -> \"Spec self-review\\n(one round, shown)\"; \"Spec self-review\\n(one round, shown)\" -> \"Architecture critic\\n(one judge-opus round)\"; \"Architecture critic\\n(one judge-opus round)\" -> \"User reviews spec?\"; \"User reviews spec?\" -> \"Write design doc\" [label=\"changes requested\"]; \"User reviews spec?\" -> \"Invoke writing-plans skill\" [label=\"approved\"]; \"Ask execution strategy\\n(parallel or sequential)\" -> \"Write spec directly\\n(autoRun=on, with ## Decisions)\" [label=\"autoRun=on\"]; \"Write spec directly\\n(autoRun=on, with ## Decisions)\" -> \"Draft acceptance in the spec\\n(ask nothing yet)\"; \"Draft acceptance in the spec\\n(ask nothing yet)\" -> \"Spec self-review\\n(one round, shown)\"; \"Architecture critic\\n(one judge-opus round)\" -> \"Fable spec review\\n(at most two rounds)\" [label=\"autoRun=on\"]; \"Spec self-review\\n(one round, shown)\" -> \"Fable spec review\\n(at most two rounds)\" [label=\"Fable reviews;\\ndepth standard\"]; \"Spec self-review\\n(one round, shown)\" -> \"Spec review\\n(the one stop)\" [label=\"depth light\\n(autoRun=on)\"]; \"Spec self-review\\n(one round, shown)\" -> \"User reviews spec?\" [label=\"depth light\\n(attended)\"]; \"Fable spec review\\n(at most two rounds)\" -> \"Spec review\\n(the one stop)\"; \"Spec review\\n(the one stop)\" -> \"Revise spec\\n+ one new self-review round\" [label=\"changes needed\"]; \"Revise spec\\n+ one new self-review round\" -> \"Spec review\\n(the one stop)\"; \"Spec review\\n(the one stop)\" -> \"Invoke writing-plans skill\" [label=\"either approval\"]; } ```",
+  "When `executionStrategy` is `sequential` or `parallel` (see Settings), skip the question and record that value.",
+  "Otherwise, once the approach is settled and before you present the design, ask your human partner one multiple-choice question, on its own:",
+  "> How should the plan execute?",
+  "**Sequential** (default) — one task at a time; the safest choice, and the > right one when the work is one chain of dependent changes.",
+  "**Parallel subagents** — independent tasks run at the same time, each in > its own worktree, merged and checked together after each wave; faster > when the work splits into parts that share no files.",
+  "parallel only when you can already name two or more parts that share no file and do not consume each other's output; sequential otherwise.",
+  "Parallel runs only in subagent mode on Claude Code.",
+  "On a Codex host do not ask:",
+  "the plan is sequential, and you say so in one line.",
+  "Record the answer near the top of the spec, below its title, as `**Execution strategy:** parallel — <reason>` or `**Execution strategy:** sequential — <reason>`.",
+  "When the answer is parallel, the design leans toward independence, because a part that shares nothing is a part that cannot break its sibling:",
+  "- **Settle shared things first.** Types, interfaces, schemas, configuration keys and file layout that several parts use belong to one foundation part that runs before the others.",
+  "- **Give every file one owner.** Registries, barrels and index files, route tables, dependency manifests and lockfiles, migrations and version files are where parallel work collides; assign each to exactly one part, or to the foundation part.",
+  "- **Keep risk alone.** Security, data-loss, migration and concurrency work runs on its own, never beside a sibling.",
+  "- **Isolate the tests.** Say how parts' tests avoid each other at run time — ports, databases, fixed paths, global state — or that they share nothing.",
+  "- Add a `## Parallel decomposition` section to the spec:",
+  "the parts, the files each owns, what each consumes from the foundation, and which parts may run together.",
+  "writing-plans turns it into waves.",
+  "Never bend a design out of shape to make it parallel:",
+  "a part that genuinely needs another's output waits for it.",
+  "Steps 1-5 of the checklist run as written; the execution-strategy question is asked only when the setting is `ask`.",
+  "Use when executing implementation plans with independent tasks in the current session ---",
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 

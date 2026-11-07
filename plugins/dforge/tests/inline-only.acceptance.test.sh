@@ -214,6 +214,16 @@ present "execution line is always inline" "$P/skills/writing-plans/references/ex
 absent "no heavy-majority rule" "$WP" "more than half the tasks are heavy"
 present "parallel needs an explicit subagent line" "$WP" "Parallel waves apply only when the Execution line is \`subagent\`"
 absent "Codex has no all-or-nothing inline rule" "$P/reference/native-codex.md" "all-or-nothing inline rule"
+# --- Task 10 ---
+SDD="$P/skills/subagent-driven-development/SKILL.md"
+check "A10: the subagent skill is deprecated" \
+  "$(case "$(sed -n 's/^description: //p' "$SDD")" in "Deprecated —"*) echo yes ;; *) echo no ;; esac)" "yes"
+present "A10: routing names executing-plans" "$P/skills/using-dforge/SKILL.md" "| Executing a plan | dforge:executing-plans"
+for f in "$P/skills/brainstorming/SKILL.md" "$P/skills/using-dforge/SKILL.md"; do
+  present "A18: $(basename "$(dirname "$f")") states the Process line" "$f" 'Process: <spike|bounded|architectural> — <trigger | no trigger>'
+  absent "A18: $(basename "$(dirname "$f")") has no mode slot" "$f" '<inline|subagent>'
+done
+absent "brainstorming asks no strategy question" "$P/skills/brainstorming/SKILL.md" "**Ask the execution strategy**"
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

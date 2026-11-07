@@ -33,7 +33,7 @@ names "qa: rerun mode" "$QA" '`rerun`: the acceptance file may already exist'
 check "qa: the report lists only the statements given" "$(grep -qF -- 'demo — not executed' "$QA" && echo yes || echo no)" "no"
 
 BS="$P/skills/brainstorming/SKILL.md"
-names "analyst: the checklist step" "$BS" '7. **Draft acceptance** — numbered, tagged, rated statements'
+names "analyst: the checklist step" "$BS" '6. **Draft acceptance** — numbered, tagged, rated statements'
 names "analyst: auto-run offer follows it" "$P/skills/brainstorming/references/auto-run-offer.md" 'right after the Draft acceptance step and before you'
 names "analyst: the line format" "$P/skills/brainstorming/references/drafting-acceptance.md" '`A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>`'
 names "analyst: the verdict options" "$P/skills/brainstorming/references/drafting-acceptance.md" '**Right**, **Wrong, or not wanted** and **Not sure**'
@@ -59,7 +59,7 @@ CP="$P/skills/brainstorming/references/architecture-critic-prompt.md"
 names "critic: the prompt does not score" "$CP" 'do not score them 1-20'
 names "critic: ranked findings" "$CP" 'Blocker / High / Medium / Nit'
 names "critic: one change" "$CP" 'If I could change one thing, it would be'
-names "critic: checklist step" "$BS" '11. **Architecture critic** — one `dforge:judge-opus` round'
+names "critic: checklist step" "$BS" '10. **Architecture critic** — one `dforge:judge-opus` round'
 names "critic: findings section" "$P/skills/brainstorming/references/architecture-critic.md" 'answered in a `## Critic findings` section'
 names "critic: counts in the review request" "$P/skills/brainstorming/references/architecture-critic.md" 'Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium'
 names "critic: live Fable review checks answers" "$P/reference/auto-run.md" \

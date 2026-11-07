@@ -577,9 +577,9 @@ fi
 # =====================================================================
 if want A14; then
   UT=$(flat "$UD"); BT=$(flat_skill "$BR")
-  present "A14: using-dforge states the architectural Process line" "$UT" 'Process: architectural, <[^>]+>, depth <d> — <triggers>'
-  present "A14: brainstorming states the architectural Process line" "$BT" 'Process: architectural, <[^>]+>, depth <d> — <triggers>'
-  present "A14: the spike and bounded Process line is kept" "$BT" 'Process: <spike\|bounded\|architectural>, <inline\|subagent> — <trigger \| no trigger>'
+  present "A14: using-dforge states the architectural Process line" "$UT" 'Process: architectural, depth <d> — <triggers>'
+  present "A14: brainstorming states the architectural Process line" "$BT" 'Process: architectural, depth <d> — <triggers>'
+  present "A14: the spike and bounded Process line is kept" "$BT" 'Process: <spike\|bounded\|architectural> — <trigger \| no trigger>'
   present "A14: brainstorming writes the Depth line directly below Execution strategy" "$BT" '`\*\*Depth:\*\*` line directly below its `\*\*Execution strategy:\*\*` line'
   present "A14: the Depth line comes from depth-route --spec-triggers" "$BT" 'Depth:\*\* <light\|standard\|full> — <reason ids>.{0,200}depth-route --spec-triggers'
   es=$(grep -n '^\*\*Execution strategy:\*\*' "$SPEC_DOC" | head -n 1 | cut -d: -f1)

@@ -406,7 +406,7 @@ present "writing-plans falls back to Opus on exit 2" "$P/skills/writing-plans/re
 present "writing-plans dispatches the native plan-review seat" "$P/skills/writing-plans/references/lint-and-review.md" '**`primary=native:<model>/<effort>`** (every round of a Codex-host plan)'
 present "final review records the native fix seat" "$P/reference/final-review.md" 'On a Codex-host plan it prints `primary=native:<model>/<effort>`'
 present "the plan reviewer prompt names both round-1 Claude seats" "$PRP" 'round produced nothing (`dforge:judge-opus`)'
-present "using-dforge states the mixed-mode rule" "$P/skills/using-dforge/SKILL.md" 'an inline plan delegates those'
+present "using-dforge states the inline rule" "$P/skills/using-dforge/SKILL.md" 'Every plan executes inline: the session implements every task but those carrying an `**Executor:**` line, heavy tasks included.'
 present "README states mixed mode" "$P/README.md" '`--effort high` once it delegates'
 present "README caps plan review at two rounds" "$P/README.md" 'at most two rounds on a Claude plan'
 absent "README no longer caps plan review by task total" "$P/README.md" 'capped by the plan'"'"'s highest task total'
