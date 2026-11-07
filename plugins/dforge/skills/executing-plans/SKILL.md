@@ -114,7 +114,8 @@ up, not before. Delegated tasks are never batched.
 **Risk-3 tasks.** A brief whose second line is `**Review:** per-task — risk 3`
 is yours to implement, and a judge reviews it before its complete line: run
 [delegated-task.md](../../reference/delegated-task.md) §The session review
-loop for it; its Codex form covers a Codex host.
+loop for it. On a Codex host, which writes no such line, the trigger is an
+`**Evaluation:**` line reading `risk=3`.
 
 **Why no per-task review of your own tasks.** Risk 3 is the one exception, and
 the session review loop is its gate. What catches the rest is the plan's own
