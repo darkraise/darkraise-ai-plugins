@@ -227,7 +227,7 @@ E2='**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2'
 three "$E5" "$E4" "$E2"
 out=$(run | grep '^recommend')
 check "one heavy of three stays inline" "$(field execution "$out")" "inline"
-check "a total-4 task beside a heavy one is not delegated" "$(field delegated "$out")" "1/3"
+check "neither a heavy nor a total-4 task is delegated" "$(field delegated "$out")" "0/3"
 
 three "$E5" "$E5" "$E2"
 check "a heavy majority recommends subagent" "$(field execution "$(run | grep '^recommend')")" "subagent"

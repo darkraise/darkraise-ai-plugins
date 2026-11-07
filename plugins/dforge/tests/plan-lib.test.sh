@@ -167,7 +167,7 @@ check "plan_heavy: total 5 or risk 3 on any part" "$(plan_heavy "$TMP/scores.md"
 sed 's/$/\r/' "$TMP/scores.md" > "$TMP/scores-crlf.md"
 check "plan_scores: CRLF" "$(plan_scores "$TMP/scores-crlf.md" | tr '\t\n' ' |')" "1 1 0|2 5 2|3 4 3|4 - -|5 ? ?|"
 
-# --- plan_delegated: heavy tasks and Executor tasks, never a total-4 task ---
+# --- plan_delegated: executor tasks only ---
 deleg_plan() { # deleg_plan <file> <total/risk ...> — one task per argument
   local f=$1 i=0 tr; shift
   printf '# Delegation\n' > "$f"
@@ -181,7 +181,7 @@ deleg() { plan_delegated "$1" | tr '\t\n' ' |'; }
 deleg_plan "$TMP/d1.md" 1/0 4/2 1/0 1/0 1/0 1/0
 check "plan_delegated: a lone total-4 task stays in session" "$(deleg "$TMP/d1.md")" ""
 deleg_plan "$TMP/d4.md" 5/2 4/2 1/0 4/3 1/0 1/0
-check "plan_delegated: heavy tasks beside a total-4 task" "$(deleg "$TMP/d4.md")" "1 heavy|4 heavy|"
+check "plan_delegated: heavy tasks beside a total-4 task stay in session" "$(deleg "$TMP/d4.md")" ""
 sed 's/^|//' > "$TMP/d6.md" <<'EOF'
 |# Split
 |
@@ -202,7 +202,7 @@ sed 's/^|//' > "$TMP/d6.md" <<'EOF'
 |### Task 3: unscored
 EOF
 check "plan_delegated: a split task with a total-4 part stays in session" "$(deleg "$TMP/d6.md")" ""
-check "plan_delegated: the scores fixture" "$(deleg "$TMP/scores.md")" "2 heavy|3 heavy|"
+check "plan_delegated: the scores fixture delegates nothing" "$(deleg "$TMP/scores.md")" ""
 
 # --- plan_ledger and ledger_left_inline ---
 REPO="$TMP/repo"
@@ -280,8 +280,8 @@ check "an offloaded task is delegated as executor" \
   "$(plan_delegated "$TMP/exec.md" | awk -F'\t' '$1 == 2 { print $2 }')" "executor"
 check "a plain task is not delegated" \
   "$(plan_delegated "$TMP/exec.md" | awk -F'\t' '$1 == 1 { print $2 }')" ""
-check "heavy wins over executor on a split task" \
-  "$(plan_delegated "$TMP/exec.md" | awk -F'\t' '$1 == 4 { print $2 }')" "heavy"
+check "a split task with an executor part is delegated as executor" \
+  "$(plan_delegated "$TMP/exec.md" | awk -F'\t' '$1 == 4 { print $2 }')" "executor"
 
 # --- only an Executor line delegates a total-4 task ------------------------
 # Six tasks, two at total 4, one of them offloaded. Two in six is within the
@@ -350,14 +350,14 @@ check "plan_lines: a fenced label line is not a line" \
   "$(plan_task_text "$TMP/exec.md" 1 | plan_lines Executor | grep -c .)" "1"
 
 # A split task routes on its parts. With the stale parent line Task 1 would be
-# heavy and delegated; its parts top out at 4, so nothing is delegated.
+# heavy; its parts top out at 4, so it is not.
 printf '# P\n\n### Task 1: One\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 0 = 5\n\n#### Part A: a\n\n**Evaluation:** files 1 - spec 1 - coupling 2 - risk 0 = 4\n\n#### Part B: b\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n### Task 2: Two\n\n**Evaluation:** files 1 - spec 1 - coupling 2 - risk 0 = 4\n\n### Task 3: Three\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/fourband.md"
-check "plan_delegated: the corrected score leaves the split task in session" \
-  "$(plan_delegated "$TMP/fourband.md" | tr '\t\n' ' |')" ""
+check "plan_heavy: the corrected score leaves the split task light" \
+  "$(plan_heavy "$TMP/fourband.md" | tr '\n' ' ')" ""
 
 printf '# P\n\n### Task 1: One\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 0 = 5\n\n### Task 2: Two\n\n**Evaluation:** files 1 - spec 1 - coupling 2 - risk 0 = 4\n\n### Task 3: Three\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/unsplit.md"
-check "plan_delegated: an unsplit plan is unchanged by the fix" \
-  "$(plan_delegated "$TMP/unsplit.md" | tr '\t\n' ' |')" "1 heavy|"
+check "plan_heavy: an unsplit plan is unchanged by the fix" \
+  "$(plan_heavy "$TMP/unsplit.md" | tr '\n' ' ')" "1 "
 
 check "plan_executors: unchanged by the fix" \
   "$(plan_executors "$TMP/exec.md" | tr '\t\n' ' |')" "1 codex|"

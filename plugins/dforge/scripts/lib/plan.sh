@@ -232,23 +232,21 @@ plan_executors() {
   done < <(plan_tasks "$1")
 }
 
-# plan_heavy FILE — the task numbers mixed mode delegates: a highest total of 5
-# or more, or a highest risk of 3. One per line, ascending.
+# plan_heavy FILE — the heavy task numbers: a highest total of 5 or more, or a
+# highest risk of 3, which task-brief lists on the **Heavy:** header line. One
+# per line, ascending.
 plan_heavy() {
   plan_scores "$1" | awk -F'\t' '$2 != "-" && $2 != "?" && ($2 + 0 >= 5 || $3 + 0 == 3) { print $1 }'
 }
 
-# plan_delegated FILE — the tasks an inline plan delegates, one "N<TAB>heavy"
-# or "N<TAB>executor" line each, ascending: heavy tasks always, and otherwise
-# the tasks an Executor line marks for an external executor.
+# plan_delegated FILE — the tasks an inline plan delegates, one "N<TAB>executor"
+# line each, ascending: the scored tasks an Executor line marks for an external
+# executor. A heavy task is never delegated: the session implements it.
 plan_delegated() {
   local execs
   execs=$(plan_executors "$1" | cut -f1 | tr '\n' ' ')
   plan_scores "$1" | awk -F'\t' -v execs=" $execs" '
     $2 == "-" || $2 == "?" { next }
-    # Heavy first: a heavy task is delegated whatever else it is, and the
-    # (heavy) label is what the preflight ruling keys on.
-    $2 + 0 >= 5 || $3 + 0 == 3 { print $1 "\theavy"; next }
     index(execs, " " $1 " ") > 0 { print $1 "\texecutor" }
   '
 }

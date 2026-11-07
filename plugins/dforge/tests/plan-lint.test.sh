@@ -258,7 +258,7 @@ variant v9c.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --mod
 lint v9c.md
 has "inline that delegates needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
 lacks "a heavy minority no longer breaks inline" "$out" "inline execution needs every task"
-has "inline names the delegated task" "$out" "NOTE header: delegated: Task 2 (heavy)"
+lacks "inline does not delegate the heavy task" "$out" "(heavy)"
 variant v9c2.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model sonnet --effort high` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9c2.md
 check "a heavy minority inline at effort high: exit 0" "$status" "0"
@@ -266,18 +266,18 @@ lacks "the model follows the tasks the session implements" "$out" "needs --model
 lacks "a heavy minority on inline does not warn" "$out" "Execution line is inline but"
 variant v9d.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 0 - coupling 1 - risk 3 = 4/'
 lint v9d.md
-has "risk 3 is delegated" "$out" "NOTE header: delegated: Task 2 (heavy)"
-has "risk 3 inline needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
+lacks "risk 3 is not delegated" "$out" "(heavy)"
+has "risk 3 inline needs the effort of its row" "$out" "ERROR header: inline execution needs --effort medium or above (effort low)"
 variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dforge:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
 lint v9j.md
-has "a split task is heavy when one part is" "$out" "NOTE header: delegated: Task 2 (heavy)"
+lacks "a split task with a heavy part is not delegated" "$out" "(heavy)"
 check "a split task with a heavy part inline at effort high: exit 0" "$status" "0"
 variant v9h.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9h.md
-has "a heavy majority on inline warns" "$out" "WARN header: Execution line is inline but 2 of 2 tasks are heavy"
+lacks "a heavy majority on inline does not warn" "$out" "Execution line is inline but"
 variant v9i.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9i.md
-lacks "a heavy majority on subagent does not warn" "$out" "Execution line is subagent but"
+has "heavy tasks no longer count toward subagent mode" "$out" "Execution line is subagent but only 0 of 2 tasks are heavy"
 codex_plan | sed -E 's/^\*\*Execution:\*\* subagent/**Execution:** inline/; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline.md
 lint codex-inline.md
 has "a Codex-host inline plan keeps the old eligibility error" "$out" "ERROR header: inline execution needs every task at total <= 4 and risk < 3; fails on Task 1"
@@ -340,7 +340,7 @@ check "three total-4 tasks in six on opus high: exit 0" "$status" "0"
 tplan r5.md inline sonnet high 5 4 1 1 1 1
 lint r5.md
 check "a heavy and a total-4 task on sonnet high: exit 0" "$status" "0"
-has "only the heavy task is delegated" "$out" "NOTE header: delegated: Task 1 (heavy)"
+lacks "the heavy task is not delegated" "$out" "(heavy)"
 lacks "total 4 is no delegation reason" "$out" "(total 4)"
 tplan r6.md inline sonnet medium 1 4 1 1 1 1
 lint r6.md
@@ -378,7 +378,7 @@ has "a model id naming neither family is a model error" "$out" "ERROR header: in
 tplan r15.md subagent opus high 5 5 5 5 1 1
 lint r15.md
 has "a subagent line at opus warns" "$out" "WARN header: subagent Execution line should be claude --model sonnet --effort high"
-lacks "a heavy majority on subagent is not disputed" "$out" "Execution line is subagent but"
+has "a heavy majority on subagent counts no heavy task" "$out" "Execution line is subagent but only 0 of 6 tasks are heavy"
 tplan r16.md subagent sonnet high 5 5 5 5 1 1
 lint r16.md
 lacks "a subagent line at sonnet high does not warn" "$out" "subagent Execution line should be"
