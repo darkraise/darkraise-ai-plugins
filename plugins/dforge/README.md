@@ -163,8 +163,8 @@ the Execution line's model and effort to cover the hardest task the session
 implements, and `--effort high` at risk 3 or once it delegates. A task that will
 not converge after three fix rounds goes to the ruling seat as a `breaker`
 item. subagent-driven-development, a dispatch and a scored review per task, is
-deprecated: it runs only for a plan whose Execution line names `subagent`, and
-`plan-lint` warns on that line.
+deprecated: it runs only for a plan whose Execution line names `subagent` or
+on your instruction, and `plan-lint` warns on that line.
 
 **Parallel waves, subagent plans only.** The `executionStrategy` setting
 defaults to `sequential`, and an inline plan always runs one task after
@@ -457,8 +457,8 @@ message instead.
 A `SessionStart` hook (matcher `startup|resume|clear|compact`) injects the
 `dforge:using-dforge` entry point as `additionalContext`, so every
 session starts with the skill-routing rules — including the pointers to
-`selecting-approaches`, implementer assignment in `writing-plans`, and tiered
-dispatch in `subagent-driven-development` that a PreToolUse nudge used to add. The same
+`selecting-approaches`, implementer assignment in `writing-plans`, and plan
+execution in `executing-plans` that a PreToolUse nudge used to add. The same
 script persists the session's `transcript_path`, `session_id`, `cwd`, and
 `source` to `~/.claude/dforge/sessions/by-id/<sanitized-session-id>.json`
 and to `~/.claude/dforge/sessions/<sanitized-cwd>.json` (last writer
@@ -1162,8 +1162,8 @@ since a 2.x client no longer sees the moved documents.
 
 ## What a plan looks like
 
-A plan opens with a header block: Goal, Spec, the `**Execution:**` line that
-decides inline or subagent execution, Global Constraints, Contracts (every name
+A plan opens with a header block: Goal, Spec, the `**Execution:**` line
+(inline on every new plan, with the session's model and effort), Global Constraints, Contracts (every name
 one task produces and another consumes), Assumptions with evidence, and a Task
 index. `scripts/plan-lint` checks it, and a judge reviews it against
 `criteria/plan-review.md` before it is saved. That Execution line is binding: a
@@ -1244,14 +1244,15 @@ differences:
    `review-route --ruling` prints). Its plan corrections
    land in an append-only `amendments.md` through `scripts/plan-amend`; the
    plan file is never edited during execution.
-10. **Two modes, chosen by the plan.** Upstream picks `executing-plans` when
-    subagents are unavailable and recommends subagent execution otherwise. Here
-    the `**Execution:**` line decides and is binding: `executing-plans` is a
-    full inline mode that writes the same ledger, sends its judgment to the
-    same ruling seat, and ends at the same shared
+10. **Inline by default.** Upstream picks `executing-plans` when subagents are
+    unavailable and recommends subagent execution otherwise. Here every new
+    plan's `**Execution:**` line names inline: `executing-plans` is a full
+    inline mode that writes the same ledger, sends its judgment to the same
+    ruling seat, and ends at the same shared
     [final-review.md](reference/final-review.md); only risk-3 and executor
     tasks get a per-task review. A task it cannot land in three fix rounds
-    goes to the ruling seat as a `breaker` item.
+    goes to the ruling seat as a `breaker` item. Subagent mode is deprecated
+    and runs only for an older plan's subagent line or on your instruction.
 
 ## Licenses
 
