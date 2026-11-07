@@ -195,7 +195,7 @@ claude_plan > clean.md
 lint clean.md
 check "clean Claude plan: exit 0" "$status" "0"
 has "clean Claude plan: summary" "$out" "plan-lint: 0 errors, 2 warnings"
-has "a light plan on subagent warns" "$out" "WARN header: Execution line is subagent but only 0 of 2 tasks are heavy"
+has "a light plan on subagent is deprecated" "$out" "WARN header: subagent execution is deprecated; inline is the default"
 lacks "a plan with no heavy task gets no delegation note" "$out" "NOTE header"
 has "fenced TODO is a warning" "$out" "WARN Task 1: placeholder: # a fenced TODO is only a warning"
 lacks "inline-code TODO is not a finding" "$out" "Mark the"
@@ -267,7 +267,7 @@ lacks "a heavy minority on inline does not warn" "$out" "Execution line is inlin
 variant v9d.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 0 - coupling 1 - risk 3 = 4/'
 lint v9d.md
 lacks "risk 3 is not delegated" "$out" "(heavy)"
-has "risk 3 inline needs the effort of its row" "$out" "ERROR header: inline execution needs --effort medium or above (effort low)"
+has "risk 3 inline needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
 variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dforge:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
 lint v9j.md
 lacks "a split task with a heavy part is not delegated" "$out" "(heavy)"
@@ -277,12 +277,16 @@ lint v9h.md
 lacks "a heavy majority on inline does not warn" "$out" "Execution line is inline but"
 variant v9i.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9i.md
-has "heavy tasks no longer count toward subagent mode" "$out" "Execution line is subagent but only 0 of 2 tasks are heavy"
+lacks "a heavy majority on subagent gets no majority warning" "$out" "tasks are heavy"
 codex_plan | sed -E 's/^\*\*Execution:\*\* subagent/**Execution:** inline/; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline.md
 lint codex-inline.md
-has "a Codex-host inline plan keeps the old eligibility error" "$out" "ERROR header: inline execution needs every task at total <= 4 and risk < 3; fails on Task 1"
+lacks "A12: a Codex-host inline plan with a heavy task has no eligibility error" "$out" "inline execution needs every task"
 lacks "a Codex-host plan gets no delegation note" "$out" "NOTE header"
 has "a Codex inline pair below the highest score errors" "$out" "ERROR header: inline Execution rank 5 is below the highest task score 9"
+codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6-astra / xhigh#; s#^\*\*Implementer:\*\* codex gpt-6.1-sol / low#**Implementer:** codex gpt-6-astra / xhigh#; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline-heavy-fit.md
+lint codex-inline-heavy-fit.md
+check "A12: a heavy Codex inline plan at its rank: exit 0" "$status" "0"
+lacks "A12: a heavy Codex inline plan at its rank lints without error" "$out" "ERROR"
 codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** subagent — codex gpt-6-astra / high#' > codex-sub-astra.md
 lint codex-sub-astra.md
 check "Codex subagent on Astra: exit 0" "$status" "0"
@@ -378,7 +382,7 @@ has "a model id naming neither family is a model error" "$out" "ERROR header: in
 tplan r15.md subagent opus high 5 5 5 5 1 1
 lint r15.md
 has "a subagent line at opus warns" "$out" "WARN header: subagent Execution line should be claude --model sonnet --effort high"
-has "a heavy majority on subagent counts no heavy task" "$out" "Execution line is subagent but only 0 of 6 tasks are heavy"
+lacks "a heavy majority on subagent is not disputed" "$out" "tasks are heavy"
 tplan r16.md subagent sonnet high 5 5 5 5 1 1
 lint r16.md
 lacks "a subagent line at sonnet high does not warn" "$out" "subagent Execution line should be"
@@ -387,7 +391,7 @@ lint r17.md
 check "opus where sonnet would do: exit 0" "$status" "0"
 tplan r18.md subagent sonnet high 1 4 4 1 1 1
 lint r18.md
-has "total-4 tasks never count toward subagent mode" "$out" "WARN header: Execution line is subagent but only 0 of 6 tasks are heavy"
+lacks "total-4 tasks never count toward subagent mode" "$out" "tasks are heavy"
 
 variant v9e.md 's/^### Task 1: First thing$/### Task 1: -v flag/; s/^1\. First thing$/1. -v flag/'
 lint v9e.md
@@ -1194,10 +1198,12 @@ EOF
 waves_plan 'waves — 1 | 2-3' > waves.md
 lint waves.md --no-probe
 check "waves: a clean plan exits 0" "$status" "0"
-check "waves: no majority-rule warning" "$out" "plan-lint: 0 errors, 0 warnings"
+lacks "waves: no majority-rule warning" "$out" "tasks are heavy"
+check "waves: only the deprecation warning" "$out" "WARN header: subagent execution is deprecated; inline is the default
+plan-lint: 0 errors, 1 warnings"
 waves_plan 'sequential — one chain' > waves-seq.md
 lint waves-seq.md --no-probe
-has "sequential: the majority rule still warns" "$out" "Execution line is subagent but only 0 of 3 tasks are heavy"
+lacks "sequential: the majority rule is gone" "$out" "tasks are heavy"
 lacks "sequential: Depends on lines are not checked" "$out" "Depends on"
 waves_plan 'waves — 1 | two' > waves-bad.md
 lint waves-bad.md --no-probe
@@ -1238,7 +1244,8 @@ with_wave_check() { # with_wave_check <line> — stdin plan with <line> after th
 }
 waves_plan 'waves — 1 | 2-3' | with_wave_check '**Wave check:** `bash quick.sh`' > waves-check.md
 lint waves-check.md --no-probe
-check "waves: a Wave check line is accepted" "$out" "plan-lint: 0 errors, 0 warnings"
+check "waves: a Wave check line is accepted" "$out" "WARN header: subagent execution is deprecated; inline is the default
+plan-lint: 0 errors, 1 warnings"
 waves_plan 'waves — 1 | 2-3' | with_wave_check '**Wave check:**' > waves-check-empty.md
 lint waves-check-empty.md --no-probe
 has "waves: a Wave check line needs a command" "$out" "ERROR header: the **Wave check:** line names no command"

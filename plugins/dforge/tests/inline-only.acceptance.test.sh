@@ -116,6 +116,25 @@ io_plan "$INLINE_OPUS" "0 1 1 0" "0 1 1 1" > light.md
 bash "$S/task-brief" --header light.md "$TMP/hl.md" > /dev/null 2>&1
 absent "A16: no Heavy line without a heavy task" "$TMP/hl.md" "**Heavy:**"
 
+# --- Task 2 ---
+io_plan "$INLINE_OPUS" "1 2 2 2" "1 2 1 2" > allheavy.md
+lint allheavy.md
+lacks "A1: no Execution warning on an all-heavy inline plan" "$out" "WARN header: Execution"
+lacks "A1: no inline error on an all-heavy inline plan" "$out" "ERROR header: inline"
+io_plan 'inline — `claude --model sonnet --effort high` — x' "1 2 1 2" "0 1 1 0" > sonnet6.md
+lint sonnet6.md
+has "A2: total 6 on sonnet is the model-floor error" "$out" "ERROR header: inline execution needs --model opus (model sonnet)"
+io_plan 'subagent — `claude --model sonnet --effort high` — x' "0 1 1 0" "0 1 1 1" > sub.md
+lint sub.md
+has "A3: a subagent line is deprecated" "$out" "WARN header: subagent execution is deprecated; inline is the default"
+lacks "A3: no majority-rule warning" "$out" "tasks are heavy"
+lacks "A3: no mode error" "$out" "ERROR header: subagent"
+io_plan 'inline — `claude --model sonnet --effort medium` — x' "0 0 0 3" "0 1 1 0" > risk3m.md
+lint risk3m.md
+has "A15: risk 3 raises the effort floor to high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
+io_plan 'inline — `claude --model sonnet --effort high` — x' "1 2 2 2" "0 1 1 0" > old.md
+rev=$(bash "$S/plan-revise" old.md 2>&1)
+has "A9: plan-revise recommends the covering pair" "$rev" "recommend  execution=inline  model=opus  effort=high  delegated=0/2"
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -469,7 +469,7 @@ if selected A5; then
     mkplan "$LREPO/docs/a5-probe.md" "codex" "0 1 1 0" "0 1 1 1" "0 1 1 2"
     probe_head=$(cd "$LREPO" && PLAN_LINT_ROSTER="$TMP/p5/both-roster.sh" timeout 120 bash "$S/plan-lint" docs/a5-probe.md 2>&1 | tr -d '\r')
     probe_base=$(cd "$LREPO" && PLAN_LINT_ROSTER="$TMP/p5/codex-roster.sh" timeout 120 bash "$baseplugin/scripts/plan-lint" docs/a5-probe.md 2>&1 | tr -d '\r')
-    check "A5: with agyLane=false the lane-eligible warnings equal BASE's" "$probe_head" "$probe_base"
+    check "A5: with agyLane=false the lane-eligible warnings equal BASE's" "$(a5_scope <<<"$probe_head")" "$(a5_scope <<<"$probe_base")"
     has "A5: and Codex is still named" "$probe_head" "lane-eligible with no **Executor:** line (codex"
     conf set agyLane true
     # Survey mode pinned to the fixture registry.
