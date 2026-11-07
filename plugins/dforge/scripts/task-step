@@ -7,13 +7,17 @@
 # <workspace>/group-<list>-step.json.
 #
 # Usage: task-step start  PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND]
+#        task-step start  PLAN_FILE N --inline [--reset] [--suite COMMAND]
 #        task-step review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA]
 #        task-step hold   PLAN_FILE N [--head REF] [--cwd DIR]
 #        task-step review --group PLAN_FILE N M ... [--cwd DIR] [--suite COMMAND] [--suite-base SHA]
 #        task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]
 #        task-step verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]
 # A start that finds the task's state file keeps it (and writes no second
-# assigned line) unless --reset is given.
+# assigned line) unless --reset is given. --inline starts the session's own
+# review loop for a task it implements: step state and the ledger's identity
+# line, but no dispatch file and no task line, since the session writes its own
+# `implementer inline` assigned line. An executor task never takes it.
 # Exit: 0 ok; 2 usage, or any subcommand on a Host: codex plan; 3 no such task;
 # 4 an amendment does not apply, hold was refused because review-route reviews
 # the task alone, or review --group was given a task with no awaiting group
@@ -35,7 +39,7 @@ plan_budget_line() {
   read -r -a mode <<<"$(. "$1/lib/context.sh" && ctx_plan_mode "$3" "$4" 2>/dev/null)" || mode=()
   DFORGE_BUDGET_CALLER=$2 bash "$1/context-size" ${mode[@]+"${mode[@]}"} 2>/dev/null
 }
-usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]"; }
+usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND] | start PLAN_FILE N --inline [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]"; }
 
 # dirty_list DIR: "<path>\t<hash>" for each tracked path that differs from
 # HEAD, sorted; the hash is git's content hash, or "deleted". Paths are
@@ -533,11 +537,12 @@ if [ "$sub" = review ] && [ "$1" = --group ]; then
 fi
 plan_arg=$1; shift
 
-ids=() wave="" reset=0 base_arg="" head_arg="" cwd_arg="" vgroup=0 rereview_arg="" suite_arg="" suite_base_arg="" suite_base_sha_arg=""
+ids=() wave="" reset=0 inline=0 base_arg="" head_arg="" cwd_arg="" vgroup=0 rereview_arg="" suite_arg="" suite_base_arg="" suite_base_sha_arg=""
 while [ $# -gt 0 ]; do
   case $1 in
     --wave) [ "$sub" = start ] && [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; wave=$2; shift 2 ;;
     --reset) [ "$sub" = start ] || usage; reset=1; shift ;;
+    --inline) [ "$sub" = start ] || usage; inline=1; shift ;;
     --suite) [[ $sub =~ ^(start|review|group)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_arg=$2; shift 2 ;;
     --suite-base) [[ $sub =~ ^(review|group)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_base_arg=$2; shift 2 ;;
     --base) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; base_arg=$2; shift 2 ;;
@@ -551,6 +556,7 @@ while [ $# -gt 0 ]; do
 done
 [ ${#ids[@]} -ge 1 ] || usage
 [ "$sub" != hold ] || [ ${#ids[@]} -eq 1 ] || usage
+[ "$inline" -eq 0 ] || { [ -z "$wave" ] && [ ${#ids[@]} -eq 1 ]; } || usage
 # A group member's fix round is re-reviewed alone, so a group has no re-review report.
 [ "$vgroup" -eq 0 ] || [ -z "$rereview_arg" ] || usage
 # Without its base, a review's suite would be compared with the task's own base.
@@ -766,9 +772,12 @@ do_start() {
   if [ ${#ids[@]} -eq 1 ]; then
     exec_id=$(plan_executors "$src" | awk -F'\t' -v n="$first" '$1 == n { print $2 }' | tr -d '\r')
   fi
+  [ "$inline" -eq 0 ] || [ -z "$exec_id" ] || usage
 
   [ -z "$wave" ] || suffix="; wave $wave)"
-  if [ -n "$agent" ] && [ -z "$exec_id" ] && [ "$kept" -eq 0 ]; then
+  if [ "$inline" -eq 1 ]; then
+    ledger_init
+  elif [ -n "$agent" ] && [ -z "$exec_id" ] && [ "$kept" -eq 0 ]; then
     ledger_init
     for n in "${ids[@]}"; do
       printf 'Task %s: implementer %s (assigned; base %s%s\n' "$n" "$agent" "$base7" "$suffix" >> "$ledger"
@@ -789,7 +798,7 @@ do_start() {
     fi
   fi
 
-  if [ -z "$exec_id" ]; then
+  if [ -z "$exec_id" ] && [ "$inline" -eq 0 ]; then
     if [ ${#ids[@]} -eq 1 ]; then
       label="Task $first: $(title_of "$first")"
     else
@@ -812,10 +821,13 @@ do_start() {
 
   printf 'task %s: briefed %s, base %s' "$idlist" "$brief" "$base7"
   if [ "$kept" -eq 1 ]; then printf '; state kept, no assigned line written (--reset discards the state)\n'
+  elif [ "$inline" -eq 1 ]; then printf '; inline, no dispatch file written\n'
   elif [ -n "$exec_id" ]; then printf '; executor task, no dispatch file written\n'
   elif [ -n "$agent" ]; then printf '; assigned %s\n' "$agent"
   else printf '; no assigned line written\n'; fi
-  if [ -n "$exec_id" ]; then
+  if [ "$inline" -eq 1 ]; then
+    printf 'seat: inline\n'
+  elif [ -n "$exec_id" ]; then
     printf 'executor %s: follow executor-lane.md §Dispatch\n' "$exec_id"
   elif [ -n "$agent" ]; then
     printf 'seat: dforge:%s prompt: %s\n' "$agent" "$dispatch"

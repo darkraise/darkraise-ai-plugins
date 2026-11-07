@@ -135,6 +135,31 @@ has "A15: risk 3 raises the effort floor to high" "$out" "ERROR header: inline e
 io_plan 'inline — `claude --model sonnet --effort high` — x' "1 2 2 2" "0 1 1 0" > old.md
 rev=$(bash "$S/plan-revise" old.md 2>&1)
 has "A9: plan-revise recommends the covering pair" "$rev" "recommend  execution=inline  model=opus  effort=high  delegated=0/2"
+# --- Task 3 ---
+io_plan "$INLINE_OPUS" "0 2 1 3" "0 1 1 0" > loop.md
+git add -A && git commit -qm plans
+ws=$(bash "$S/sdd-workspace" loop.md | tail -n 1)
+start_out=$(bash "$S/task-step" start loop.md 1 --inline 2>&1); start_rc=$?
+check "A14: start --inline exits 0" "$start_rc" "0"
+has "A14: start --inline says no dispatch file" "$start_out" "; inline, no dispatch file written"
+has "A14: start --inline names the inline seat" "$start_out" "seat: inline"
+check "A14: step state written" "$([ -f "$ws/task-1-step.json" ] && echo yes)" "yes"
+check "A14: no dispatch file" "$([ -e "$ws/task-1-dispatch.md" ] && echo yes || echo no)" "no"
+check "A14: only the identity line is written" "$(case "$(head -n 1 "$ws/progress.md")" in "# SDD ledger — plan: "*) echo yes ;; *) echo no ;; esac)" "yes"
+check "A14: no task line written" "$(grep -c '^Task ' "$ws/progress.md" || true)" "0"
+printf 'Task 1: implementer inline (assigned; base %s)\n' "$(git rev-parse --short=7 HEAD)" >> "$ws/progress.md"
+printf 'x\n' > a1.txt && git add a1.txt && git commit -qm "task 1"
+printf '# Task 1 report\n\n**Status:** DONE\n' > "$ws/task-1-report.md"
+review_out=$(bash "$S/task-step" review loop.md 1 2>&1); review_rc=$?
+check "A14: review routes after an inline start" "$review_rc" "0"
+has "A14: review prints a seat" "$review_out" "seat: "
+h7=$(git rev-parse --short=7 HEAD)
+printf 'Task 1: fix round 1/2 (1 addressed, 0 open; commits %s..%s; session)\n' "$h7" "$h7" >> "$ws/progress.md"
+printf 'Task 1: complete (commits %s..%s, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat dforge:judge-opus) — done: x; verified: x; remaining: none; discovered: none; assumptions: none\n' "$h7" "$h7" >> "$ws/progress.md"
+check "A14: next-step reads the session walk as complete" \
+  "$(bash "$S/next-step" loop.md 2>/dev/null | grep '^\*\*Next:\*\*' | grep -c 'Task 2')" "1"
+wave_out=$(bash "$S/task-step" start loop.md 2 --inline --wave 1 2>&1); wave_rc=$?
+check "A14: --inline with --wave is a usage error" "$wave_rc" "2"
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
