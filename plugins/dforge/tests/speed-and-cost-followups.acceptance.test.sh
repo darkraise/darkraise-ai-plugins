@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Acceptance tests for the speed-and-cost-followups spec
 # (docs/dforge/specs/2026-10-28-speed-and-cost-followups-design.md), the
-# plugin-side statements A1 to A4 and A6 to A16, A19 to A21 and the fast part
-# of A23. A5 is the `A5:` describe block in cockpit.test.ts; A17 and A18 are in
+# plugin-side statements A1 to A4, A6 to A16, A20, A21 and the fast part
+# of A23 (A19 went with draft-pack). A5 is the `A5:` describe block in
+# cockpit.test.ts; A17 and A18 are in
 # evals/tiers/tests/speed-and-cost-followups.acceptance.test.mjs. Each test is
 # written from the statement's text and reaches the behaviour through the
-# scripts the spec names (task-step, impl-stop-gate, draft-pack), the files the
+# scripts the spec names (task-step, impl-stop-gate), the files the
 # plugin ships, or, for a statement about text, the text itself.
 # Usage:
 #   bash speed-and-cost-followups.acceptance.test.sh            run every test
@@ -19,7 +20,6 @@ S="$PLUGIN/scripts"
 STEP="$S/task-step"
 SUITE="$S/suite-run"
 GATE="$S/impl-stop-gate"
-DP="$S/draft-pack"
 ONLY=" $* "
 
 pass=0 fail=0
@@ -438,27 +438,6 @@ if selected A16; then
   out=$(cd "$HERE" && env -u MSYS_NO_PATHCONV XDG_STATE_HOME="$TMP/xdg-host" timeout 300 bash "$HERE/impl-stop-gate.test.sh" 2>&1); rc=$?
   check "A16: impl-stop-gate.test.sh passes with XDG_STATE_HOME set in the calling environment" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
   check "A16: and writes nothing under it" "$(find "$TMP/xdg-host" -mindepth 1 | wc -l | tr -d ' ')" "0"
-fi
-
-# ------------------------------------------------------------------ A19
-if selected A19; then
-  REPO="$TMP/dp"; init_repo "$REPO"; mkdir -p "$REPO/docs"
-  printf '# Demo Implementation Plan\n\n## Task index\n\n1. Step 1\n2. Step 2\n\n---\n' > "$REPO/docs/plan.md"
-  DST=$(cd "$REPO" && bash "$S/dforge-path" state | tr -d '\r')
-  mkdir -p "$DST/drafts/plan"
-  printf '### Task 1: Step 1\n\nBody 1.\n' > "$DST/drafts/plan/tasks-1-1.md"
-  printf '### Task 2: Step 2\n\nBody 2.\n' > "$DST/drafts/plan/tasks-2-2.md"
-  out=$(cd "$REPO" && timeout 60 bash "$DP" --join docs/plan.md 2>&1); rc=$?
-  check "A19: draft-pack joins the slices" "$rc $(grep -c '^### Task' "$REPO/docs/plan.md")" "0 2"
-  check "A19: the plan's drafts directory is gone" "$([ -e "$DST/drafts/plan" ] && echo present || echo gone)" "gone"
-  check "A19: and the emptied drafts directory too" "$([ -e "$DST/drafts" ] && echo present || echo gone)" "gone"
-
-  printf '# Other Plan\n\n## Task index\n\n1. Step 1\n\n---\n' > "$REPO/docs/other.md"
-  mkdir -p "$DST/drafts/other" "$DST/drafts/elsewhere"
-  printf '### Task 1: Step 1\n\nBody.\n' > "$DST/drafts/other/tasks-1-1.md"
-  printf 'keep\n' > "$DST/drafts/elsewhere/tasks-1-1.md"
-  (cd "$REPO" && timeout 60 bash "$DP" --join docs/other.md >/dev/null 2>&1)
-  check "A19: a drafts directory that still holds another plan's slices stays" "$([ -e "$DST/drafts/other" ] && echo present || echo gone) $([ -f "$DST/drafts/elsewhere/tasks-1-1.md" ] && echo kept || echo lost)" "gone kept"
 fi
 
 # ------------------------------------------------------------------ A20

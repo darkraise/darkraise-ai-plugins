@@ -48,7 +48,6 @@ export const windowsSeconds = {
   'dforge-migrate.test.sh': 64,
   'dforge-state.test.sh': 10,
   'distilling-docs.test.sh': 10,
-  'draft-pack.test.sh': 40,
   'executor-recovery.test.sh': 295,
   'executor-session.test.sh': 10,
   'executors.test.sh': 10,

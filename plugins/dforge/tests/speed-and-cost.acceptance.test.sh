@@ -102,9 +102,11 @@ if selected A2; then
     matches "A2: the split added reference files" "$count" '^([1-9][0-9]+)$'
     check "A2: every new reference file is linked from its SKILL.md on a 'before you' line" "$missing" ""
 
+    # A test retired with the script it tested is not lost by the split.
+    retired=" draft-pack.test.sh "
     gone=""
     while IFS= read -r t; do
-      [ -e "$HERE/$t" ] || gone="$gone$t "
+      [ -e "$HERE/$t" ] || [[ "$retired" == *" $t "* ]] || gone="$gone$t "
     done < <(git -C "$REPO_ROOT" ls-tree --name-only "$BASE" plugins/dforge/tests/ | sed 's|.*/||')
     check "A2: no test file that existed before the split is gone" "$gone" ""
 
@@ -406,7 +408,7 @@ fi
 # ---------------------------------------------------------------- A10
 if selected A10; then
   report "$TMP/reports/ok.md" ok
-  for kind in dforge:judge-opus general-purpose Explore dforge:judge-sonnet-high dforge:drafter-sonnet; do
+  for kind in dforge:judge-opus general-purpose Explore dforge:judge-sonnet-high; do
     gate "$kind" "$(newid)" $'**Status:** DONE\nno report line'
     check "A10: $kind with a DONE stop and no report exits 0" "$grc" "0"
   done

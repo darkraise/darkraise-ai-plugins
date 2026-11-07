@@ -64,8 +64,18 @@ const REWORDED = [
 // sentence, the ledger grammar block's end and the two Plan state openings,
 // which early CI extended, and the assignment procedure's one-executor gate
 // and precedence sentences, which the executor routing rule (Task 8)
-// replaced. The split cannot have lost them.
+// replaced, and the plan drafter's slice bullets, which inline-only execution
+// removed when every plan came to be drafted in the session. The split cannot
+// have lost them.
 const REMOVED = [
+  '- **Contracts settle what slices share.** A drafter that reports `NEEDS_CONTEXT` needs a contract:',
+  'add it to the header and re-dispatch that slice.',
+  'An amendment that changes an existing Contract, rather than adding one, re-dispatches every slice:',
+  'a slice drafted against the old Contract is stale, and nothing downstream can tell.',
+  '- **Join without reading.** Once every slice reports `DONE`, run `scripts/draft-pack --join PLAN_FILE`.',
+  'It appends the slices in task order and deletes them; on exit 3 it names the gap or overlap and leaves the plan unchanged.',
+  'Then continue at Assign an implementer.',
+  '- **On a Codex host, draft every task in the session.**',
   '- **Once the plan is reviewed** (at depth light, once it is linted):',
   'Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`.',
   "At depth light (step 1's line) skip `scripts/codex-gate`:",

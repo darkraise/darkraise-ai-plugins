@@ -165,6 +165,12 @@ check "A7: executionStrategy defaults to sequential" "$(bash "$S/dforge-config" 
 check "A7: the workflow line is empty at defaults" "$(bash "$S/dforge-config" workflow | tr -d '\r')" ""
 present "A7: the schema says parallel needs subagent mode" "$P/config/schema.mjs" "only with a subagent Execution line"
 absent "cockpit nudge: no Implementer agent for implementation" "$P/hooks/cockpit/lib.ts" "for implementation"
+# --- Task 5 ---
+check "A8: no drafter agent" "$([ -e "$P/agents/drafter-sonnet.md" ] && echo yes || echo no)" "no"
+check "A8: no draft-pack" "$([ -e "$S/draft-pack" ] && echo yes || echo no)" "no"
+check "A8: no skill or reference names the drafter" \
+  "$(grep -rlF 'drafter-sonnet' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "0"
+present "writing-plans drafts every task in the session" "$P/skills/writing-plans/SKILL.md" "Draft every task in the session, at any plan size."
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
