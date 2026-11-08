@@ -329,6 +329,18 @@ arun "$REPO" fx start --spec "$SPEC" --register docs/r.md --isolation in-place >
 git -C "$REPO" switch -q -c auto/widget
 arun "$REPO" fx setup-branch auto/widget >/dev/null
 check "the run's own register is not carried" "$(arun "$REPO" fx carried | tr -d '\r' | tr '\n' ' ')" "a.txt "
+for form in relative absolute; do
+  fresh
+  reg=./docs/r.md
+  [ "$form" = absolute ] && reg="$(git -C "$REPO" rev-parse --show-toplevel | tr -d '\r')/docs/r.md"
+  mkdir -p "$REPO/docs"
+  printf 'reg\n' > "$REPO/docs/r.md"
+  printf 'mine\n' >> "$REPO/a.txt"
+  arun "$REPO" fx start --spec "$SPEC" --register "$reg" --isolation in-place >/dev/null
+  git -C "$REPO" switch -q -c auto/widget
+  arun "$REPO" fx setup-branch auto/widget >/dev/null
+  check "the run's own register in $form form is not carried" "$(arun "$REPO" fx carried | tr -d '\r' | tr '\n' ' ')" "a.txt "
+done
 
 fresh
 printf 'mine\n' >> "$REPO/b.txt"
@@ -360,6 +372,7 @@ has "with the reason" "$out" "git could not check the carried paths"
 
 present "waves: an in-place run's plan is sequential" "$P/skills/writing-plans/references/auto-run-plan.md" 'In place, write `sequential` whatever the spec says'
 present "waves: exit 3 never stashes a carried path" "$P/reference/parallel-waves.md" 'never stash a carried path'
+present "Step 0: no branch and HEAD off the base stops the run" "$P/skills/using-git-worktrees/SKILL.md" "With no branch recorded and HEAD on a branch other than the run's base"
 present "Step 0: a staged-changes refusal returns HEAD" "$P/skills/using-git-worktrees/SKILL.md" 'run `git checkout -` and `git branch -d <name>`'
 present "resume: HEAD is checked in the recorded workspace" "$P/skills/resume-execution/SKILL.md" 'after step 3 has entered it when that is a linked worktree'
 

@@ -42,6 +42,7 @@ Report with branch state:
 
 - When the status names `branch <name>`, switch to that branch if HEAD is elsewhere (`git switch <name>`), then go to Step 2.
 - With no branch recorded, when HEAD is the run's base (the status's `base`) or detached, and the run is `isolation in-place` or this is a linked worktree under either isolation: run `git switch -c auto/<plan slug>`, the slug being the plan filename without `.md` and its `YYYY-MM-DD-` prefix, suffixed `-2`, `-3`, … until `git show-ref --verify --quiet refs/heads/<name>` fails. Unstaged and untracked changes come along. Then run `scripts/auto-run setup-branch <name>`, which records the branch and every uncommitted path as carried: the run never commits those. When it refuses with `staged changes in this checkout: <paths>`, run `git checkout -` and `git branch -d <name>`, so HEAD is back where it was, then `scripts/auto-run stop --reason "staged changes in this checkout: <paths>"` and end as auto-run.md §Stopping says. Then go to Step 2.
+- With no branch recorded and HEAD on a branch other than the run's base, run `scripts/auto-run stop --reason "HEAD is on <branch>, not the run's base, and the run has no branch"` and end as auto-run.md §Stopping says.
 - Under `isolation worktree` in the primary checkout, create the worktree without asking (Step 1).
 
 Outside an auto run:

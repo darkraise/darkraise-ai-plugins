@@ -233,7 +233,7 @@ ar_pending() { ar_state | ar_jq -r '.pending // "none"'; }
 # run's base, a HEAD on another branch, and staged changes, which a task's
 # commit would take along.
 ar_setup_branch() {
-  local name=$1 entry xy path staged=() paths=() carried recorded register head tmp
+  local name=$1 entry xy path staged=() paths=() carried recorded register head tmp top
   recorded=$(ar_get branch)
   if [ -n "$recorded" ]; then
     echo "auto-run: the run's branch is already recorded: $recorded" >&2
@@ -248,7 +248,9 @@ ar_setup_branch() {
     return 4
   fi
   head=$(git rev-parse HEAD) && [ -n "$head" ] || return 1
-  register=$(ar_get register)
+  top=$(git rev-parse --show-toplevel) || return 1
+  register=$(dforge_resolve "$(ar_get register)" "$top")
+  register=${register#"$top"/}
   tmp=$(mktemp) || return 1
   if ! git status --porcelain=v1 -z --untracked-files=all >"$tmp"; then
     rm -f "$tmp"
