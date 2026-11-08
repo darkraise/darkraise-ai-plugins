@@ -31,6 +31,7 @@ export const windowsSeconds = {
   'antigravity-executor-lane.acceptance.test.sh': 250,
   'auto-default.test.sh': 10,
   'auto-run-skills.test.sh': 10,
+  'auto-run-worktree-setting-qa.acceptance.test.sh': 20,
   'auto-run-worktree-setting.acceptance.test.sh': 150,
   'auto-run.test.sh': 507,
   'budget-line.test.sh': 123,
