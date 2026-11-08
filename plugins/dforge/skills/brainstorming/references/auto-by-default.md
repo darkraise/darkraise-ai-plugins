@@ -53,6 +53,12 @@ Then:
      request, or keep the branch, recorded as its own paragraph (no list
      marker, nothing after the value) holding one
      `Finish: <merge|pr|keep>` line in `## Decisions`;
+   - when the `worktree` setting is `ask` (read as Settings says), the
+     worktree question, in the last call, beside the approval question, with the options
+     **Isolated worktree (Recommended)** and
+     **Work in place on a new branch — leave this checkout alone until the run finishes**,
+     recorded as the `Finish:` line is: its own paragraph holding one
+     `Worktree: <worktree|in-place>` line in `## Decisions`;
    - **Approve and run unattended**, **Approve, keep the normal stops**, or
      **Changes needed**.
 
@@ -70,7 +76,11 @@ Then:
 6. **Start the run.** On **Approve and run unattended**, commit the spec and
    the register, run `scripts/auto-run start --spec <spec>` (add
    `--register <path>` when a register is open, and always the register
-   step 5's deferrals went to), then import each
+   step 5's deferrals went to). The command
+   passes `--isolation <worktree|in-place>`: the `Worktree:` line's value
+   under `ask`, `worktree` under `always`, `in-place` under `never`; a
+   preference your human partner's instructions name outranks the setting.
+   Then import each
    `## Review rulings` line with
    `scripts/auto-run ruling add "Fable, spec: <line>"` (none at depth light).
    Invoke dforge:writing-plans in this session: `scripts/context-size --plan`

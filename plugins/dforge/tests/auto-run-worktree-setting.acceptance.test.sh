@@ -275,6 +275,22 @@ present "A18: phase finish refusal stops the run" "$F" 'is a carried path and wa
 present "A18: a red merged suite lists the carried paths" "$F" 'list the carried paths (`scripts/auto-run carried`) with the failure'
 present "A18: pr and keep name the branch" "$F" 'This checkout is on `auto/<slug>`; your uncommitted changes are here'
 
+# --- Task 5 ---
+D="$P/skills/brainstorming/references/auto-by-default.md"
+present "A14: the spec review asks under ask only" "$D" 'when the `worktree` setting is `ask`'
+present "A14: in the last call beside the approval" "$D" 'in the last call, beside the approval question'
+present "A14: the worktree option" "$D" '**Isolated worktree (Recommended)**'
+present "A14: the in-place option" "$D" '**Work in place on a new branch — leave this checkout alone until the run finishes**'
+present "A14: the Decisions line" "$D" '`Worktree: <worktree|in-place>`'
+present "A14: step 6 passes the isolation" "$D" 'passes `--isolation <worktree|in-place>`'
+O="$P/skills/brainstorming/references/auto-run-offer.md"
+present "A14: offer option 1" "$O" '1. Yes, in an isolated worktree'
+present "A14: offer option 2" "$O" '2. Yes, in place on a new branch (leave this checkout alone until the run finishes)'
+present "A14: offer option 3" "$O" '3. No, keep the normal stops'
+present "A14: the offer passes in-place" "$O" '--isolation in-place'
+present "auto-run.md: start names the flag" "$P/reference/auto-run.md" '--isolation <worktree|in-place>'
+present "schema: the worktree setting names auto runs" "$P/config/schema.mjs" 'an auto run asks at the spec review'
+
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

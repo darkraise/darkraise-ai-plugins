@@ -245,6 +245,9 @@ const REMOVED = [
   "an irreversible or destructive operation; a security-sensitive action; a side effect outside this worktree that norms say you ask about first (a merge, a push to a shared branch, a publish); and a ruling-seat `BLOCKED` verdict — a plan so broken that every path forward is a guess.",
   "When `scripts/auto-run status` exits 0 ([auto-run.md]), run `scripts/auto-run phase finish`, then follow this skill with these changes:",
   "- **Where an unattended finish stops** (failing tests at Step 1, a merged result failing its tests, a rejected push, a refused worktree removal), run `scripts/auto-run stop --reason \"<what stopped it>\"` first, then stop as Step 1 or Step 5's \"Whose choice it is\" says.",
+  "<merge|pr|keep>` line in `## Decisions`; - **Approve and run unattended**, **Approve, keep the normal stops**, or **Changes needed**.",
+  "**Start the run.** On **Approve and run unattended**, commit the spec and the register, run `scripts/auto-run start --spec <spec>` (add `--register <path>` when a register is open, and always the register step 5's deferrals went to), then import each `## Review rulings` line with `scripts/auto-run ruling add \"Fable, spec:",
+  "On yes, run `scripts/auto-run start --spec <the spec's path>` (add `--register <path>` when an item register is open) from this checkout, before writing the spec, and follow [auto-run.md] from here to the finished branch.",
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 

@@ -21,7 +21,11 @@ Under `autoRun=ask` it offers it once, after the last design section is
 approved and before the spec is written, and starts it on yes. Either way,
 from the checkout the design was made in:
 
-    scripts/auto-run start --spec <spec path> [--register <register path>]
+    scripts/auto-run start --spec <spec path> --isolation <worktree|in-place> [--register <register path>]
+
+`--isolation` is the spec review's `Worktree:` answer, or the offer's choice,
+under `worktree=ask`; `worktree` under `always`; `in-place` under `never`. A
+preference your human partner's instructions name outranks the setting.
 
 `--register` names the item register when one is open; without it the script
 creates `<docs>/registers/<date>-<slug>-auto.md` in this checkout and prints
