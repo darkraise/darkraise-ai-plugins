@@ -111,6 +111,121 @@ out=$(arun "$REPO" t1 setup-branch auto/widget 2>&1); status=$?
 check "A21: staged changes: exit 4, nothing recorded" "$status:$(field branch):$(field carried)" "4:null:null"
 has "A21: the refusal names the staged path" "$out" "auto-run: staged changes in the primary checkout: a.txt"
 
+# --- Task 2 ---
+fresh
+arun "$REPO" t2 start --spec "$SPEC" --register docs/r.md --isolation in-place >/dev/null
+out=$(arun "$REPO" t2 phase execute 2>&1); status=$?
+check "A4: phase execute on the base in the primary checkout: exit 4, phase unchanged" "$status:$(field phase)" "4:spec"
+has "A4: the refusal points at Step 0" "$out" "follow dforge:using-git-worktrees Step 0 for the run"
+git -C "$REPO" worktree add -q -b side "$TMP/side"
+arun "$TMP/side" t2 start --spec "$SPEC" --register docs/r.md --isolation worktree --force >/dev/null
+check "A4: a run started in a linked worktree takes its branch as base" "$(field base)" "side"
+arun "$TMP/side" t2 phase execute >/dev/null 2>&1; status=$?
+check "A4: phase execute on the base in a linked worktree: exit 4" "$status:$(field phase)" "4:spec"
+git -C "$TMP/side" switch -q -c auto/widget
+arun "$TMP/side" t2 setup-branch auto/widget >/dev/null
+arun "$TMP/side" t2 phase execute; status=$?
+check "A12: a linked-worktree run reaches execute on its own branch" "$status:$(field phase)" "0:execute"
+
+inplace t2
+arun "$REPO" t2 phase execute; status=$?
+check "A5: in place on the recorded branch: exit 0" "$status:$(field phase)" "0:execute"
+git -C "$REPO" switch -q main
+arun "$REPO" t2 phase execute >/dev/null 2>&1; status=$?
+check "A6: phase execute on the base with a recorded branch: exit 4" "$status" "4"
+git -C "$REPO" switch -q -c elsewhere
+arun "$REPO" t2 phase execute >/dev/null 2>&1; status=$?
+check "A6: phase execute off the recorded branch: exit 4" "$status" "4"
+out=$(arun "$REPO" t2 task-complete 2>&1); status=$?
+check "A6: task-complete off the recorded branch stops the run" "$status:$(field active)" "5:false"
+has "A6: and says why" "$out" "a task was completed off the run's branch"
+inplace t2
+arun "$REPO" t2 phase execute >/dev/null
+git -C "$REPO" switch -q main
+out=$(arun "$REPO" t2 task-complete 2>&1); status=$?
+check "A6: task-complete on the base with a recorded branch stops the run" "$status:$(field active)" "5:false"
+has "A6: and names the base" "$out" "a task was completed on the run's base branch"
+
+fresh
+arun "$REPO" t2 start --spec "$SPEC" --register docs/r.md --isolation worktree >/dev/null
+git -C "$REPO" switch -q -c feature
+out=$(arun "$REPO" t2 phase execute 2>&1); status=$?
+check "A7: a worktree run in the primary checkout: exit 4 off the base too" "$status:$(field phase)" "4:spec"
+has "A7: with today's message" "$out" "create the execution worktree first (dforge:using-git-worktrees)"
+
+fresh
+git -C "$REPO" switch -q --detach
+arun "$REPO" t2 start --spec "$SPEC" --register docs/r.md --isolation in-place >/dev/null
+check "A8: a detached start has no base" "$(field base)" "null"
+arun "$REPO" t2 phase execute >/dev/null 2>&1; status=$?
+check "A8: detached in the primary checkout with no base: exit 4" "$status" "4"
+git -C "$REPO" switch -q -c auto/widget
+arun "$REPO" t2 setup-branch auto/widget >/dev/null
+arun "$REPO" t2 phase execute; status=$?
+check "A8: on the recorded branch: exit 0" "$status" "0"
+fresh
+git -C "$REPO" worktree add -q --detach "$TMP/side"
+arun "$TMP/side" t2 start --spec "$SPEC" --register docs/r.md --isolation worktree >/dev/null
+arun "$TMP/side" t2 phase execute >/dev/null 2>&1; status=$?
+check "A8: detached in a linked worktree with no base: exit 4" "$status:$(field phase)" "4:spec"
+git -C "$TMP/side" switch -q -c auto/widget
+arun "$TMP/side" t2 setup-branch auto/widget >/dev/null
+arun "$TMP/side" t2 phase execute; status=$?
+check "A8: that worktree on the recorded branch: exit 0" "$status" "0"
+
+fresh
+printf 'mine\n' >> "$REPO/a.txt"
+arun "$REPO" t2 start --spec "$SPEC" --register docs/r.md --isolation in-place >/dev/null
+git -C "$REPO" switch -q -c auto/widget
+arun "$REPO" t2 setup-branch auto/widget >/dev/null
+arun "$REPO" t2 phase execute
+printf 'task\n' > "$REPO/t.txt"
+git -C "$REPO" add t.txt && git -C "$REPO" commit -qm task
+arun "$REPO" t2 task-complete; status=$?
+check "A10: a commit of other paths: task-complete exits 0" "$status:$(field active)" "0:true"
+arun "$REPO" t2 phase final; status=$?
+check "A20: phase final with no carried path committed: exit 0" "$status:$(field phase)" "0:final"
+arun "$REPO" t2 phase finish; status=$?
+check "A20: phase finish with no carried path committed: exit 0" "$status:$(field phase)" "0:finish"
+arun "$REPO" t2 phase final >/dev/null
+git -C "$REPO" add a.txt && git -C "$REPO" commit -qm carried
+out=$(arun "$REPO" t2 phase finish 2>&1); status=$?
+check "A20: phase finish after a carried path was committed: exit 4" "$status:$(field phase)" "4:final"
+has "A20: names the path" "$out" "auto-run: carried path a.txt was committed; stop the run"
+out=$(arun "$REPO" t2 task-complete 2>&1); status=$?
+check "A10: task-complete after a carried path was committed stops the run" "$status:$(field active)" "5:false"
+has "A10: the stop reason names the path" "$out" "carried path a.txt was committed"
+
+fresh
+printf 'mine\n' >> "$REPO/a.txt"
+arun "$REPO" t2 start --spec "$SPEC" --register docs/r.md --isolation in-place >/dev/null
+git -C "$REPO" switch -q -c auto/widget
+arun "$REPO" t2 setup-branch auto/widget >/dev/null
+arun "$REPO" t2 phase execute
+git -C "$REPO" add a.txt && git -C "$REPO" commit -qm carried
+out=$(arun "$REPO" t2 phase final 2>&1); status=$?
+check "A20: phase final after a carried path was committed: exit 4" "$status:$(field phase)" "4:execute"
+
+fresh
+printf 'mine\n' >> "$REPO/a.txt"
+printf 'draft\n' > "$REPO/draft.md"
+before=$(cd "$REPO" && git hash-object a.txt draft.md | tr -d '\r' | tr '\n' ' ')
+arun "$REPO" t2 start --spec "$SPEC" --register docs/r.md --isolation in-place >/dev/null
+git -C "$REPO" switch -q -c auto/widget
+arun "$REPO" t2 setup-branch auto/widget >/dev/null
+arun "$REPO" t2 phase execute
+printf 'task\n' > "$REPO/t.txt"
+git -C "$REPO" add t.txt && git -C "$REPO" commit -qm task
+arun "$REPO" t2 task-complete; status=$?
+git -C "$REPO" switch -q main
+git -C "$REPO" merge -q --no-edit auto/widget
+git -C "$REPO" branch -q -d auto/widget
+check "A11: the flow's task-complete passed" "$status" "0"
+check "A11: carried files are byte for byte unchanged" "$(cd "$REPO" && git hash-object a.txt draft.md | tr -d '\r' | tr '\n' ' ')" "$before"
+check "A11: and still uncommitted" "$(git -C "$REPO" status --porcelain | tr -d '\r' | sort | tr '\n' '|')" " M a.txt|?? draft.md|"
+check "A11: the task's commit reached main" "$(git -C "$REPO" log -1 --format=%s -- t.txt)" "task"
+check "A11: the run's branch is deleted" "$(git -C "$REPO" branch --list auto/widget)" ""
+
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

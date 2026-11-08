@@ -195,7 +195,7 @@ case $cmd in
     [ -n "$budget" ] || budget=$(ctx_budget "$model")
     window=$(ctx_window "$model")
     due=""
-    [ "$(ar_get setupDue)" != true ] || due="; setup due: begin at the execution skill's Setup, worktree first"
+    [ "$(ar_get setupDue)" != true ] || due="; setup due: begin at the execution skill's Setup, workspace first"
     if [ -z "$tokens" ]; then
       [ "$pending" != after-compact ] || ar_update '.pending = null' || exit $?
       echo "continue — the size after compaction is unknown; record that with auto-run ruling add, and Claude Code's own compaction stays the backstop$due"
