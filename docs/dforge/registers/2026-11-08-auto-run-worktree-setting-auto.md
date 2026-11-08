@@ -10,4 +10,4 @@
 | 3 | Task 2 minor: the --no-renames choice has no test | - | - | done | fixed in f71f0cd: a committed rename of a carried path stops the run |
 | 4 | Task 4 parked: by-name staging is stated only in executing-plans Setup, which QA and deprecated subagent mode never read | - | - | deferred | ruling r1 PARK: spec places it there; phase finish's carried check refuses a stray commit |
 | 5 | The execution skills' phase final exit-4 stop reason assumes a carried path; the git-error refusal prints another line | - | - | open | - |
-| 6 | Replace the estimated Windows shard weights of both auto-run-worktree-setting suites (300, 150) with times measured on CI | - | - | open | - |
+| 6 | Replace the estimated Windows shard weights of both auto-run-worktree-setting suites (300, 150) with times measured on CI | - | - | done | measured in run 42498131582: 255 s and 148 s |

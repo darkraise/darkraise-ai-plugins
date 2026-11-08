@@ -18,6 +18,8 @@
 // Run 41636062852 (2026-11-03) timed shard 1 out; lane-breaker, plan-amend, roadmap,
 // speed-and-cost.acceptance, task-loop-steps.acceptance, task-step-settle,
 // task-step-suite and turn-end take the seconds that run measured.
+// Run 42498131582 (2026-11-08) supplied both auto-run-worktree-setting
+// acceptance suites (255 s for the QA one, 148 s for the plan's).
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -31,9 +33,8 @@ export const windowsSeconds = {
   'antigravity-executor-lane.acceptance.test.sh': 250,
   'auto-default.test.sh': 10,
   'auto-run-skills.test.sh': 10,
-  // auto-run-worktree-setting suites: estimates scaled from Linux time, not yet measured on Windows.
-  'auto-run-worktree-setting-qa.acceptance.test.sh': 300,
-  'auto-run-worktree-setting.acceptance.test.sh': 150,
+  'auto-run-worktree-setting-qa.acceptance.test.sh': 255,
+  'auto-run-worktree-setting.acceptance.test.sh': 148,
   'auto-run.test.sh': 507,
   'budget-line.test.sh': 123,
   'ci-mirror.test.sh': 60,
