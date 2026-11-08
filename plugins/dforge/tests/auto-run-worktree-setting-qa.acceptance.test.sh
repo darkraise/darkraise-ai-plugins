@@ -338,7 +338,7 @@ t_A13() {
   check "A13: HEAD is the base or detached" "$(has "$body" 'the run'"'"'s base')$(has "$body" 'detached')" "yesyes"
   check "A13: under in-place, or in a linked worktree" "$(has "$body" 'isolation in-place')$(has "$body" 'linked worktree')" "yesyes"
   check "A13: calls setup-branch" "$(has "$body" 'scripts/auto-run setup-branch <name>')" "yes"
-  check "A13: stops the run on staged changes" "$(has "$body" 'staged changes in the primary checkout: <paths>')$(has "$body" 'scripts/auto-run stop --reason')" "yesyes"
+  check "A13: stops the run on staged changes" "$(has "$body" 'staged changes in this checkout: <paths>')$(has "$body" 'scripts/auto-run stop --reason')" "yesyes"
   check "A13: creates the worktree without asking under worktree in the primary checkout" \
     "$(has "$body" 'Under `isolation worktree` in the primary checkout, create the worktree without asking')" "yes"
 }

@@ -27,10 +27,12 @@ session from memory or from a summary.
    - Missing, and the branch is gone: stop and ask your human partner. The
      work may have been merged or discarded; guessing either way is worse than
      asking.
-   - In an auto run whose `scripts/auto-run status` names `branch <name>`:
-     when `git branch --list <name>` prints nothing, run
-     `scripts/auto-run stop --reason "the run's branch <name> is gone"` and ask.
-     When HEAD is not on it, run `git switch <name>`; a refused switch stops the run the same way.
+
+   In an auto run whose `scripts/auto-run status` names `branch <name>`, whichever case above held:
+   when `git branch --list <name>` prints nothing, run
+   `scripts/auto-run stop --reason "the run's branch <name> is gone"` and ask.
+   Check HEAD in the recorded workspace, after step 3 has entered it when that is a linked worktree:
+   When HEAD is not on it, run `git switch <name>`; a refused switch stops the run the same way.
 3. **Enter the worktree** (EnterWorktree with its path on Claude Code; `cd`
    elsewhere). Skip EnterWorktree when the recorded workspace is the primary checkout. Take the head commit of the ledger's last `Task N: complete`
    line (or the branch's merge base with main when no task has completed) and

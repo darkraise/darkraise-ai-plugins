@@ -109,7 +109,7 @@ printf 'staged\n' >> "$REPO/a.txt"
 git -C "$REPO" add a.txt
 out=$(arun "$REPO" t1 setup-branch auto/widget 2>&1); status=$?
 check "A21: staged changes: exit 4, nothing recorded" "$status:$(field branch):$(field carried)" "4:null:null"
-has "A21: the refusal names the staged path" "$out" "auto-run: staged changes in the primary checkout: a.txt"
+has "A21: the refusal names the staged path" "$out" "auto-run: staged changes in this checkout: a.txt"
 
 # --- Task 2 ---
 fresh
@@ -232,7 +232,7 @@ present "A13: Step 0 reads the run state" "$G" 'read the auto-run state (`script
 present "A13: a recorded branch is switched back to" "$G" 'When the status names `branch <name>`, switch to that branch'
 present "A13: a base or detached HEAD gets the run's branch" "$G" '`git switch -c auto/<plan slug>`'
 present "A13: setup-branch records it" "$G" '`scripts/auto-run setup-branch <name>`'
-present "A13: staged changes stop the run" "$G" 'staged changes in the primary checkout: <paths>'
+present "A13: staged changes stop the run" "$G" 'staged changes in this checkout: <paths>'
 present "A13: a worktree run in the primary checkout creates it unasked" "$G" 'Under `isolation worktree` in the primary checkout, create the worktree without asking'
 check "A15: no skill says never creates the worktree in an auto run" \
   "$(grep -rlF -- '`worktree=never` creates' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "0"
@@ -293,8 +293,75 @@ present "schema: the worktree setting names auto runs" "$P/config/schema.mjs" 'a
 
 # --- Task 6 ---
 present "README: auto runs follow the worktree setting" "$P/README.md" 'An auto run follows the `worktree` setting'
-check "release: both manifests at 4.14.0" \
-  "$(jq -r .version < "$P/.claude-plugin/plugin.json" | tr -d '\r') $(jq -r .version < "$P/.codex-plugin/plugin.json" | tr -d '\r')" "4.14.0 4.14.0"
+v1=$(jq -r .version < "$P/.claude-plugin/plugin.json" | tr -d '\r')
+v2=$(jq -r .version < "$P/.codex-plugin/plugin.json" | tr -d '\r')
+check "release: both manifests agree, at 4.14.0 or later" "$v2:$(printf '4.14.0\n%s\n' "$v1" | sort -V | head -n 1)" "$v1:4.14.0"
+
+# --- Final review fixes ---
+fresh
+arun "$REPO" fx start --spec "$SPEC" --register docs/r.md --isolation in-place >/dev/null
+git -C "$REPO" switch -q -c feature
+out=$(arun "$REPO" fx phase execute 2>&1); status=$?
+check "an in-place run with no recorded branch: phase execute exits 4 off the base" "$status:$(field phase)" "4:spec"
+has "and points at Step 0" "$out" "follow dforge:using-git-worktrees Step 0 for the run"
+
+fresh
+arun "$REPO" fx start --spec "$SPEC" --register docs/r.md --isolation worktree >/dev/null
+jq 'del(.isolation)' < "$STATE" > "$TMP/state.json" && mv "$TMP/state.json" "$STATE"
+git -C "$REPO" switch -q -c feature
+out=$(arun "$REPO" fx phase execute 2>&1); status=$?
+check "A2: a state without isolation is guarded as worktree in the primary checkout" "$status:$(field phase)" "4:spec"
+has "A2: with the worktree message" "$out" "create the execution worktree first (dforge:using-git-worktrees)"
+
+inplace fx
+before=$(field branchBase)
+printf 'task\n' > "$REPO/t.txt"
+git -C "$REPO" add t.txt && git -C "$REPO" commit -qm task
+out=$(arun "$REPO" fx setup-branch auto/widget 2>&1); status=$?
+check "a second setup-branch exits 4 and keeps the branch's start commit" "$status:$(field branchBase)" "4:$before"
+has "and names the recorded branch" "$out" "auto-run: the run's branch is already recorded: auto/widget"
+
+fresh
+mkdir -p "$REPO/docs"
+printf 'reg\n' > "$REPO/docs/r.md"
+printf 'mine\n' >> "$REPO/a.txt"
+arun "$REPO" fx start --spec "$SPEC" --register docs/r.md --isolation in-place >/dev/null
+git -C "$REPO" switch -q -c auto/widget
+arun "$REPO" fx setup-branch auto/widget >/dev/null
+check "the run's own register is not carried" "$(arun "$REPO" fx carried | tr -d '\r' | tr '\n' ' ')" "a.txt "
+
+fresh
+printf 'mine\n' >> "$REPO/b.txt"
+arun "$REPO" fx start --spec "$SPEC" --register docs/r.md --isolation in-place >/dev/null
+git -C "$REPO" switch -q -c auto/widget
+arun "$REPO" fx setup-branch auto/widget >/dev/null
+arun "$REPO" fx phase execute
+git -C "$REPO" mv b.txt z.txt
+git -C "$REPO" commit -qm rename
+out=$(arun "$REPO" fx phase final 2>&1); status=$?
+check "a committed rename of a carried path: phase final exits 4" "$status:$(field phase)" "4:execute"
+has "and names the carried path's old name" "$out" "auto-run: carried path b.txt was committed; stop the run"
+out=$(arun "$REPO" fx task-complete 2>&1); status=$?
+check "a committed rename of a carried path stops the run" "$status:$(field active)" "5:false"
+
+fresh
+printf 'mine\n' >> "$REPO/a.txt"
+arun "$REPO" fx start --spec "$SPEC" --register docs/r.md --isolation in-place >/dev/null
+git -C "$REPO" switch -q -c auto/widget
+arun "$REPO" fx setup-branch auto/widget >/dev/null
+arun "$REPO" fx phase execute
+jq '.branchBase = "0000000000000000000000000000000000000001"' < "$STATE" > "$TMP/state.json" && mv "$TMP/state.json" "$STATE"
+out=$(arun "$REPO" fx phase final 2>&1); status=$?
+check "an unreadable branch base: phase final exits 4" "$status:$(field phase)" "4:execute"
+has "and says git could not tell" "$out" "auto-run: git could not list the commits since the run's branch base; stop the run"
+out=$(arun "$REPO" fx task-complete 2>&1); status=$?
+check "an unreadable branch base stops the run at task-complete" "$status:$(field active)" "5:false"
+has "with the reason" "$out" "git could not check the carried paths"
+
+present "waves: an in-place run's plan is sequential" "$P/skills/writing-plans/references/auto-run-plan.md" 'In place, write `sequential` whatever the spec says'
+present "waves: exit 3 never stashes a carried path" "$P/reference/parallel-waves.md" 'never stash a carried path'
+present "Step 0: a staged-changes refusal returns HEAD" "$P/skills/using-git-worktrees/SKILL.md" 'run `git checkout -` and `git branch -d <name>`'
+present "resume: HEAD is checked in the recorded workspace" "$P/skills/resume-execution/SKILL.md" 'after step 3 has entered it when that is a linked worktree'
 
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

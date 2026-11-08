@@ -241,7 +241,9 @@ bash scripts/wave merge PLAN_FILE <N> <task base>
   state line it prints then shows it as the task's base, which is the
   `wave merge` argument.
 - **Exit 3, the checkout is not clean.** Something wrote into your checkout.
-  Run `git status`, keep the change recoverable with
+  In an in-place auto run (`scripts/auto-run status` prints `isolation in-place`), never stash a carried path (`scripts/auto-run carried`):
+  run `scripts/auto-run stop --reason "wave <k> merge: the checkout holds carried paths"` and end as auto-run.md §Stopping says.
+  Otherwise run `git status`, keep the change recoverable with
   `git stash push -m "wave <k> stray changes"`, log a Ruling naming it, and
   merge again.
 

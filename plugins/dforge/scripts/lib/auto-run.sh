@@ -227,11 +227,18 @@ ar_pending() { ar_state | ar_jq -r '.pending // "none"'; }
 
 # ar_setup_branch NAME — an in-place run's branch, checked out here: records
 # it, the commit it starts from, and every path git status lists as carried,
-# the user's uncommitted changes the run must never commit. Refuses (return 4,
-# recording nothing) the run's base, a HEAD on another branch, and staged
-# changes, which a task's commit would take along.
+# the user's uncommitted changes the run must never commit (the run's own
+# register excepted). Refuses (return 4, recording nothing) a second call,
+# which would move the carried check's start past commits already made, the
+# run's base, a HEAD on another branch, and staged changes, which a task's
+# commit would take along.
 ar_setup_branch() {
-  local name=$1 entry xy path staged=() paths=() carried
+  local name=$1 entry xy path staged=() paths=() carried recorded register head tmp
+  recorded=$(ar_get branch)
+  if [ -n "$recorded" ]; then
+    echo "auto-run: the run's branch is already recorded: $recorded" >&2
+    return 4
+  fi
   if [ "$name" = "$(ar_get base)" ]; then
     echo "auto-run: $name is the run's base branch" >&2
     return 4
@@ -240,21 +247,29 @@ ar_setup_branch() {
     echo "auto-run: HEAD is not on $name" >&2
     return 4
   fi
+  head=$(git rev-parse HEAD) && [ -n "$head" ] || return 1
+  register=$(ar_get register)
+  tmp=$(mktemp) || return 1
+  if ! git status --porcelain=v1 -z --untracked-files=all >"$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
   while IFS= read -r -d '' entry; do
     xy=${entry:0:2} path=${entry:3}
-    paths+=("$path")
     case ${xy:0:1} in ' ' | '?') ;; *) staged+=("$path") ;; esac
+    [ "$path" = "$register" ] || paths+=("$path")
     case $xy in
-      *R* | *C*) IFS= read -r -d '' path && paths+=("$path") ;;
+      *R* | *C*) IFS= read -r -d '' path && { [ "$path" = "$register" ] || paths+=("$path"); } ;;
     esac
-  done < <(git status --porcelain=v1 -z --untracked-files=all)
+  done <"$tmp"
+  rm -f "$tmp"
   if [ ${#staged[@]} -gt 0 ]; then
-    echo "auto-run: staged changes in the primary checkout: ${staged[*]}" >&2
+    echo "auto-run: staged changes in this checkout: ${staged[*]}" >&2
     return 4
   fi
   carried=$( { [ ${#paths[@]} -eq 0 ] || printf '%s\0' "${paths[@]}"; } | ar_jq -Rsc 'split("\u0000") | map(select(. != ""))') || return 1
   ar_update '.branch = $b | .branchBase = $h | .carried = $c' \
-    --arg b "$name" --arg h "$(git rev-parse HEAD)" --argjson c "$carried"
+    --arg b "$name" --arg h "$head" --argjson c "$carried"
 }
 
 ar_carried() { ar_state | ar_jq -r '(.carried // [])[]'; }
@@ -262,7 +277,8 @@ ar_carried() { ar_state | ar_jq -r '(.carried // [])[]'; }
 # ar_guard — true (0) when a task step here would land where the run must not
 # commit, with AR_GUARD_RULE naming the rule: 1, HEAD is the run's base (or
 # detached with no base); 2, an in-place run's HEAD is off its recorded
-# branch; 3, a worktree run is in the primary checkout. A worktree run checks
+# branch, or no branch is recorded, so Setup's Step 0 never ran and the
+# carried paths are unknown; 3, a worktree run is in the primary checkout. A worktree run checks
 # 3 before 1, so its primary-checkout case keeps rule 3's message.
 ar_guard() {
   local iso head base branch
@@ -277,25 +293,34 @@ ar_guard() {
   fi
   if [ "$iso" = in-place ]; then
     branch=$(ar_get branch)
-    if [ -n "$branch" ] && [ "$head" != "$branch" ]; then AR_GUARD_RULE=2; return 0; fi
+    if [ -z "$branch" ] || [ "$head" != "$branch" ]; then AR_GUARD_RULE=2; return 0; fi
   fi
   return 1
 }
 
 # ar_carried_hit — prints the first path committed since branchBase that the
-# run carried, the user's own uncommitted change; fails when there is none.
+# run carried, the user's own uncommitted change; returns 1 when there is
+# none, and 2 when git cannot tell, which callers treat as a hit rather than
+# as clean. --no-renames lists a renamed carried path under its old name too.
 ar_carried_hit() {
-  local bb carried path
+  local bb carried path tmp
   bb=$(ar_get branchBase)
   [ -n "$bb" ] || return 1
-  carried=$(ar_carried)
+  carried=$(ar_carried) || return 2
   [ -n "$carried" ] || return 1
+  tmp=$(mktemp) || return 2
+  if ! git diff --no-renames --name-only -z "$bb..HEAD" >"$tmp"; then
+    rm -f "$tmp"
+    return 2
+  fi
   while IFS= read -r -d '' path; do
     if grep -Fxq -- "$path" <<<"$carried"; then
+      rm -f "$tmp"
       printf '%s\n' "$path"
       return 0
     fi
-  done < <(git diff --no-renames --name-only -z "$bb..HEAD" 2>/dev/null)
+  done <"$tmp"
+  rm -f "$tmp"
   return 1
 }
 
@@ -307,7 +332,7 @@ ar_stop() { # ar_stop [REASON]
 # the workspace Setup prepares is missing, and final or finish once a carried
 # path was committed. execute and final settle Setup.
 ar_set_phase() {
-  local hit
+  local hit rc
   if [ "$1" = execute ] && ar_guard; then
     if [ "$AR_GUARD_RULE" = 3 ]; then
       echo "auto-run: this is the primary checkout; create the execution worktree first (dforge:using-git-worktrees), then run auto-run phase execute from it" >&2
@@ -317,8 +342,13 @@ ar_set_phase() {
     return 4
   fi
   if [ "$1" = final ] || [ "$1" = finish ]; then
-    if hit=$(ar_carried_hit); then
+    hit=$(ar_carried_hit)
+    rc=$?
+    if [ "$rc" = 0 ]; then
       echo "auto-run: carried path $hit was committed; stop the run" >&2
+      return 4
+    elif [ "$rc" = 2 ]; then
+      echo "auto-run: git could not list the commits since the run's branch base; stop the run" >&2
       return 4
     fi
   fi
@@ -349,7 +379,7 @@ ar_enter_final() {
 # is the user's change: the run stops (return 5) rather than finish there. The
 # spec and plan phases belong in the primary checkout.
 ar_task_complete() {
-  local phase reason="" hit
+  local phase reason="" hit rc
   phase=$(ar_get phase)
   if { [ "$phase" = execute ] || [ "$phase" = final ]; } && ar_guard; then
     case $AR_GUARD_RULE in
@@ -357,8 +387,14 @@ ar_task_complete() {
       2) reason="a task was completed off the run's branch" ;;
       *) reason="a task was completed in the primary checkout" ;;
     esac
-  elif hit=$(ar_carried_hit); then
-    reason="carried path $hit was committed"
+  else
+    hit=$(ar_carried_hit)
+    rc=$?
+    if [ "$rc" = 0 ]; then
+      reason="carried path $hit was committed"
+    elif [ "$rc" = 2 ]; then
+      reason="git could not check the carried paths"
+    fi
   fi
   if [ -n "$reason" ]; then
     ar_stop "$reason" || return $?
