@@ -41,7 +41,7 @@ names "subagent mode: recovery resumes the final phase" "$SDD" '3. When every ta
 names "inline mode: recovery resumes the final phase" "$EP" '3. When every task has its `complete` line, run `scripts/context-size --final`'
 names "handoff: a saved plan switches in place" "$H" 'a compaction that left too much. A saved plan switches in place instead'
 names "subagent mode: phase final right after the last task" "$SDD" '`scripts/auto-run phase final` next, before any budget check and before the'
-names "inline mode: phase final right after the last task" "$EP" 'merge), run `scripts/auto-run phase final` next, before any budget check and'
+names "inline mode: phase final right after the last task" "$EP" 'run `scripts/auto-run phase final` next, before any budget check and'
 names "finishing: get reads the spec's line" "$FIN" 'with nothing recorded in this checkout'"'"'s plan workspace it reads the spec'"'"'s'
 names "README: the last task completing is never a stop" "$P/README.md" 'The last task completing is never a stop'
 names "subagent mode: the spec's Finish line replaces the question" "$SDD_SETUP" '`scripts/finish-choice set <action> --plan PLAN_FILE` instead of asking.'

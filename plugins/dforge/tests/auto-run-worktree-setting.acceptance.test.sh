@@ -254,6 +254,27 @@ for f in "$P/skills/executing-plans/SKILL.md" "$P/skills/subagent-driven-develop
 done
 present "auto-run.md: the switch starts at Setup, workspace first" "$P/reference/auto-run.md" 'execution skill starts at its Setup, workspace first: `scripts/auto-run status`'
 
+# --- Task 4 ---
+X="$P/reference/executor-lane.md"
+present "A16: the lane falls back in the primary checkout" "$X" 'executor <id> unavailable - no linked worktree'
+present "A16: after the plain task-step start" "$X" 'run `task-step start` as the executor path does'
+present "A16: users keep the primary checkout only in worktree runs" "$X" 'In a worktree run the user can continue in the primary checkout'
+present "A16: the auto-run offer ticks nothing in place" "$P/skills/writing-plans/references/auto-run-plan.md" 'tick nothing when `scripts/auto-run status` prints `isolation in-place`'
+present "A17: recovery leaves carried paths uncommitted" "$P/skills/executing-plans/references/recovery.md" 'commit anything uncommitted except the carried paths (`scripts/auto-run carried`)'
+present "A17: QA cleanup never touches a carried path" "$P/reference/final-review.md" 'Never restore or delete a carried path (`scripts/auto-run carried`)'
+present "A17: tasks stage by name" "$P/skills/executing-plans/references/setup.md" 'stage the paths it changed by name, never `git add -A` or `git add .`'
+stray=$(cat "$P/skills/executing-plans/SKILL.md" "$P"/skills/executing-plans/references/*.md "$P/skills/subagent-driven-development/SKILL.md" \
+  "$P/reference/auto-run.md" "$P/reference/delegated-task.md" "$P/skills/using-git-worktrees/SKILL.md" \
+  | grep -E 'git add (-A|\.)([ `]|$)' | grep -vcF 'never `git add -A` or `git add .`')
+check "A17: no auto-run setup or task-loop text stages everything" "$stray" "0"
+present "executing-plans: a carried commit at phase final stops the run" "$P/skills/executing-plans/SKILL.md" 'is a carried path and was committed'
+present "subagent-driven-development: a carried commit at phase final stops the run" "$P/skills/subagent-driven-development/SKILL.md" 'is a carried path and was committed'
+F="$P/skills/finishing-a-development-branch/SKILL.md"
+present "A18: the stop list names checkout, pull and merge" "$F" 'a refused checkout, pull or merge of the base'
+present "A18: phase finish refusal stops the run" "$F" 'is a carried path and was committed'
+present "A18: a red merged suite lists the carried paths" "$F" 'list the carried paths (`scripts/auto-run carried`) with the failure'
+present "A18: pr and keep name the branch" "$F" 'This checkout is on `auto/<slug>`; your uncommitted changes are here'
+
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

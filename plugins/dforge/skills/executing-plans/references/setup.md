@@ -5,6 +5,14 @@ dforge:using-git-worktrees to create one or verify the existing one.
 Never start implementation on a main/master branch without your human partner's
 explicit consent.
 
+**An in-place auto run** (`scripts/auto-run status` prints `isolation in-place`)
+works beside the user's uncommitted changes, the carried paths
+(`scripts/auto-run carried`). Every task, fix round and QA commit must
+stage the paths it changed by name, never `git add -A` or `git add .`, so no carried path is committed.
+A change the task needs to a carried path stops the run:
+`scripts/auto-run stop --reason "<task> needs carried path <path>"`, then end
+as auto-run.md §Stopping says.
+
 **Ask the finish preference first.** Before this run writes anything to its
 ledger, follow [finish-preference.md](../../../reference/finish-preference.md):
 ask what finishing should do once the final review is clean, record the

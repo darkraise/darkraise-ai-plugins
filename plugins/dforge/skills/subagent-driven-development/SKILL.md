@@ -84,7 +84,8 @@ What changes here:
   prints anything. When that line leaves every task with its `complete` line
   (in subagent mode, after the last wave's merge), run
   `scripts/auto-run phase final` next, before any budget check and before the
-  turn ends, so a compaction from there on never hands off.
+  turn ends, so a compaction from there on never hands off. On its exit 4,
+  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` and end as auto-run.md §Stopping says.
   A `task-complete` exit 5 means the run stopped (a task was completed
   on the run base, off its branch or in the primary checkout, or a carried path was committed):
   end as auto-run.md §Stopping says.
@@ -94,8 +95,9 @@ What changes here:
   flight, then invoke dforge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
   The tail rule and the final-phase limit do not apply;
   `scripts/context-size --final` prints the auto line too.
-- **Final review:** run `scripts/auto-run phase final` and, when the pending
-  list is not empty, the Fable batch first; the review's findings take the
+- **Final review:** run `scripts/auto-run phase final`; on exit 4,
+  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` and end as auto-run.md §Stopping says. When the pending
+  list is not empty, run the Fable batch first; the review's findings take the
   same ladder.
 - **A turn ends** only on `Auto run: compacting` or `Auto run: clearing` as
   its last line, or after `scripts/auto-run stop --reason "<why>"` when the

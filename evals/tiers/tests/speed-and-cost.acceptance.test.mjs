@@ -229,6 +229,22 @@ const REMOVED = [
   "a part that genuinely needs another's output waits for it.",
   "Steps 1-5 of the checklist run as written; the execution-strategy question is asked only when the setting is `ask`.",
   "Use when executing implementation plans with independent tasks in the current session ---",
+  // Reworded when auto runs began following the worktree setting: the
+  // execution workspace, the run's own branch and its carried paths.
+  "- **After any compaction**, whether or not a prompt asks for it (the cockpit's prompt does; a compaction Claude Code starts on its own comes with none), run `scripts/auto-run after-compact` before step 0 above.",
+  "- **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute` from the execution worktree, once dforge:using-git-worktrees has created it.",
+  "Exit 4 means the worktree step was skipped:",
+  "create the worktree, then run the command again from it.",
+  "complete (deferred by the auto run) — done:",
+  "<the item>[; partial commits <a7>..<b7>, kept for the final review]; discovered:",
+  "<why> — <cost if wrong>` and a deferred register row for each.",
+  "When that line leaves every task with its `complete` line (in subagent mode, after the last wave's merge), run `scripts/auto-run phase final` next, before any budget check and before the turn ends, so a compaction from there on never hands off.",
+  "A `task-complete` exit 5 means the run stopped (a task was completed in the primary checkout):",
+  "- **Final review:** run `scripts/auto-run phase final` and, when the pending list is not empty, the Fable batch first; the review's findings take the same ladder.",
+  "an irreversible or destructive operation; a security-sensitive action; a side effect outside this worktree that norms say you ask about first (a merge, a push to a shared branch, a publish); and a ruling-seat `BLOCKED` verdict.",
+  "an irreversible or destructive operation; a security-sensitive action; a side effect outside this worktree that norms say you ask about first (a merge, a push to a shared branch, a publish); and a ruling-seat `BLOCKED` verdict — a plan so broken that every path forward is a guess.",
+  "When `scripts/auto-run status` exits 0 ([auto-run.md]), run `scripts/auto-run phase finish`, then follow this skill with these changes:",
+  "- **Where an unattended finish stops** (failing tests at Step 1, a merged result failing its tests, a rejected push, a refused worktree removal), run `scripts/auto-run stop --reason \"<what stopped it>\"` first, then stop as Step 1 or Step 5's \"Whose choice it is\" says.",
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 

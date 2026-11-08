@@ -121,7 +121,8 @@ your own: QA commits on this branch.
   when `<workspace>/qa-status-before.txt` exists, remove QA's uncommitted work
   as (b) does when its timer finishes first, and log
   `Ruling: QA cut off — its uncommitted files were removed — none`; without
-  that file, remove nothing. Then, when
+  that file, remove nothing.
+  Never restore or delete a carried path (`scripts/auto-run carried`), whatever its status line shows. Then, when
   `<workspace>/acceptance-report.md` exists, read it, complete it yourself
   with `cannot-test: timeout` for every `test` statement it does not cover,
   and go to (c) below; otherwise re-dispatch once with `[MODE]` `rerun`, under
@@ -164,6 +165,7 @@ your own: QA commits on this branch.
       `git restore --staged --worktree -- <path>`, delete an untracked one,
       and log
       `Ruling: QA timed out — its uncommitted files were removed — none`.
+      Never restore or delete a carried path (`scripts/auto-run carried`), whatever its status line shows.
       Then write or complete `<workspace>/acceptance-report.md` yourself,
       with `cannot-test: timeout` for every statement it does not cover.
       When QA finishes first, stop the timer.

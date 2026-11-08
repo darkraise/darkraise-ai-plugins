@@ -12,7 +12,7 @@ first. Then nothing in this skill waits on your human partner:
   `dforge:judge-opus` first, then the ladder in auto-run.md §Rulings.
   dforge:selecting-approaches runs as usual otherwise.
 - **The executor offer:** tick only what a constraint ticks without asking;
-  start no timed question.
+  start no timed question. In place, tick nothing when `scripts/auto-run status` prints `isolation in-place`.
 - **At the review cap,** a Critical finding or a score of 8 or below goes on
   the pending list, and the Fable batch rules on it with the rest.
 - **Once the plan is reviewed:**
