@@ -241,7 +241,8 @@ check "plugin keyword swapped" "$(jq -r '.keywords | index("spec-driven") != nul
 for needle in "delegates its heavy" "drafter-sonnet" "scout-sonnet" "Best-of-3"; do
   absent "README drops: $needle" "$P/README.md" "$needle"
 done
-check "version bumped to 4.13.0" "$(jq -r .version < "$P/.claude-plugin/plugin.json" | tr -d '\r')" "4.13.0"
+v=$(jq -r .version < "$P/.claude-plugin/plugin.json" | tr -d '\r')
+check "version is 4.13.0 or later" "$(printf '4.13.0\n%s\n' "$v" | sort -V | head -n 1)" "4.13.0"
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -291,6 +291,11 @@ present "A14: the offer passes in-place" "$O" '--isolation in-place'
 present "auto-run.md: start names the flag" "$P/reference/auto-run.md" '--isolation <worktree|in-place>'
 present "schema: the worktree setting names auto runs" "$P/config/schema.mjs" 'an auto run asks at the spec review'
 
+# --- Task 6 ---
+present "README: auto runs follow the worktree setting" "$P/README.md" 'An auto run follows the `worktree` setting'
+check "release: both manifests at 4.14.0" \
+  "$(jq -r .version < "$P/.claude-plugin/plugin.json" | tr -d '\r') $(jq -r .version < "$P/.codex-plugin/plugin.json" | tr -d '\r')" "4.14.0 4.14.0"
+
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
