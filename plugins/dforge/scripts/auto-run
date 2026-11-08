@@ -8,8 +8,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 usage() {
   cat >&2 <<'EOF'
-usage: auto-run [--session ID] start --spec P [--register R] [--force]
-       auto-run [--session ID] status | pending | task-complete | resumed | switch | stalled
+usage: auto-run [--session ID] start --spec P [--register R] [--isolation worktree|in-place] [--force]
+       auto-run [--session ID] status | pending | task-complete | resumed | switch | stalled | carried
+       auto-run [--session ID] setup-branch NAME
        auto-run [--session ID] compacted [--switch]
        auto-run [--session ID] attach --plan P
        auto-run [--session ID] phase spec|plan|execute|final|finish
@@ -59,18 +60,23 @@ reason_arg() { # sets reason from [--reason TEXT]
 
 case $cmd in
   start)
-    spec="" register="" force=0
+    spec="" register="" force=0 isolation=worktree
     while [ $# -gt 0 ]; do
       case $1 in
         --spec) [ $# -ge 2 ] || usage; spec=$2; shift 2 ;;
         --register) [ $# -ge 2 ] || usage; register=$2; shift 2 ;;
+        --isolation) [ $# -ge 2 ] || usage; isolation=$2; shift 2 ;;
         --force) force=1; shift ;;
         *) usage ;;
       esac
     done
     [ -n "$spec" ] || usage
+    case $isolation in
+      worktree | in-place) ;;
+      *) echo "auto-run: --isolation must be worktree or in-place" >&2; exit 2 ;;
+    esac
     [ -n "$AR_SESSION" ] || { echo "auto-run: no session id; CLAUDE_CODE_SESSION_ID is unset and no --session was given" >&2; exit 2; }
-    ar_start "$spec" "$register" "$force"
+    ar_start "$spec" "$register" "$force" "$isolation"
     ;;
   status) [ $# -eq 0 ] || usage; bound; ar_status ;;
   pending) [ $# -eq 0 ] || usage; bound; ar_pending ;;
@@ -84,6 +90,8 @@ case $cmd in
     bound; ar_set_phase "$1"
     ;;
   task-complete) [ $# -eq 0 ] || usage; bound; ar_task_complete ;;
+  setup-branch) [ $# -eq 1 ] && [ -n "$1" ] || usage; bound; ar_setup_branch "$1" ;;
+  carried) [ $# -eq 0 ] || usage; bound; ar_carried ;;
   stalled) [ $# -eq 0 ] || usage; bound; ar_stalled ;;
   clear)
     case "$#:${1:-}" in

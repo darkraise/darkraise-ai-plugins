@@ -85,7 +85,7 @@ ar --session s-2 stop >/dev/null 2>&1; status=$?
 check "another session cannot stop it" "$status:$(field active)" "3:true"
 out=$(ar --session s-1 status); status=$?
 check "status: exit 0" "$status" "0"
-check "status: one line" "$out" "auto run: spec — regime normal — pending none — 0 compactions — 0 resumes — 0 pending decisions — spec $SPEC — plan none — base main — register $reg"
+check "status: one line" "$out" "auto run: spec — regime normal — pending none — 0 compactions — 0 resumes — 0 pending decisions — spec $SPEC — plan none — base main — register $reg — isolation worktree"
 check "pending: none" "$(ar --session s-1 pending)" "none"
 check "the environment names the session" "$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=s-1 bash "$AR" pending)" "none"
 

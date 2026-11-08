@@ -178,10 +178,11 @@ ar_create_unless_busy() {
   ar_create "$@"
 }
 
-# ar_start SPEC REGISTER FORCE — prints the register path. A register it
-# creates goes in the checkout the run starts from, where its path resolves.
+# ar_start SPEC REGISTER FORCE [ISOLATION] — prints the register path. A
+# register it creates goes in the checkout the run starts from, where its path
+# resolves. ISOLATION is worktree (the default) or in-place.
 ar_start() {
-  local spec=$1 register=$2 force=$3 path top slug base regfile age
+  local spec=$1 register=$2 force=$3 iso=${4:-worktree} path top slug base regfile age
   path=$(ar_path) || { echo "auto-run: not inside a git repository" >&2; return 2; }
   # Nothing would compact, switch or wake the run without the cockpit.
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
@@ -207,21 +208,56 @@ ar_start() {
   # Under the update lock, so a --force start never lands between another
   # session's read and write of the state and is lost.
   dr_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
-    --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
+    --arg iso "$iso" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
     active: true, session: $s, rebind: false, stopped: null, startedAt: $now,
     spec: $spec, plan: null, register: $reg, base: (if $base == "" then null else $base end),
     phase: "spec", regime: "normal", pending: null, resumePrompt: null, launch: null,
     failures: 0, compactions: 0, resumes: 0, decisions: [], rulings: [],
-    setupDue: false, stalls: 0, stalledAt: null, compactionsSinceTask: 0
+    setupDue: false, stalls: 0, stalledAt: null, compactionsSinceTask: 0,
+    isolation: $iso, branch: null, branchBase: null, carried: null
   }' || return $?
   printf '%s\n' "$register"
 }
 
 ar_status() {
-  ar_state | ar_jq -r '"auto run: \(.phase) — regime \(.regime) — pending \(.pending // "none") — \(.compactions) compactions — \(.resumes) resumes — \(.decisions | length) pending decisions — spec \(.spec) — plan \(.plan // "none") — base \(.base // "none") — register \(.register)\(if .setupDue == true then " — setup due" else "" end)"'
+  ar_state | ar_jq -r '"auto run: \(.phase) — regime \(.regime) — pending \(.pending // "none") — \(.compactions) compactions — \(.resumes) resumes — \(.decisions | length) pending decisions — spec \(.spec) — plan \(.plan // "none") — base \(.base // "none") — register \(.register) — isolation \(.isolation // "worktree")\(if .branch then " — branch \(.branch)" else "" end)\(if .setupDue == true then " — setup due" else "" end)"'
 }
 
 ar_pending() { ar_state | ar_jq -r '.pending // "none"'; }
+
+# ar_setup_branch NAME — an in-place run's branch, checked out here: records
+# it, the commit it starts from, and every path git status lists as carried,
+# the user's uncommitted changes the run must never commit. Refuses (return 4,
+# recording nothing) the run's base, a HEAD on another branch, and staged
+# changes, which a task's commit would take along.
+ar_setup_branch() {
+  local name=$1 entry xy path staged=() paths=() carried
+  if [ "$name" = "$(ar_get base)" ]; then
+    echo "auto-run: $name is the run's base branch" >&2
+    return 4
+  fi
+  if [ "$(git symbolic-ref --short -q HEAD 2>/dev/null)" != "$name" ]; then
+    echo "auto-run: HEAD is not on $name" >&2
+    return 4
+  fi
+  while IFS= read -r -d '' entry; do
+    xy=${entry:0:2} path=${entry:3}
+    paths+=("$path")
+    case ${xy:0:1} in ' ' | '?') ;; *) staged+=("$path") ;; esac
+    case $xy in
+      *R* | *C*) IFS= read -r -d '' path && paths+=("$path") ;;
+    esac
+  done < <(git status --porcelain=v1 -z --untracked-files=all)
+  if [ ${#staged[@]} -gt 0 ]; then
+    echo "auto-run: staged changes in the primary checkout: ${staged[*]}" >&2
+    return 4
+  fi
+  carried=$( { [ ${#paths[@]} -eq 0 ] || printf '%s\0' "${paths[@]}"; } | ar_jq -Rsc 'split("\u0000") | map(select(. != ""))') || return 1
+  ar_update '.branch = $b | .branchBase = $h | .carried = $c' \
+    --arg b "$name" --arg h "$(git rev-parse HEAD)" --argjson c "$carried"
+}
+
+ar_carried() { ar_state | ar_jq -r '(.carried // [])[]'; }
 
 ar_stop() { # ar_stop [REASON]
   ar_update '.active = false | .stopped = (if $r == "" then null else $r end) | .pending = null' --arg r "${1:-}"
