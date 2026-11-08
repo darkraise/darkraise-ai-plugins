@@ -226,6 +226,34 @@ check "A11: and still uncommitted" "$(git -C "$REPO" status --porcelain | tr -d 
 check "A11: the task's commit reached main" "$(git -C "$REPO" log -1 --format=%s -- t.txt)" "task"
 check "A11: the run's branch is deleted" "$(git -C "$REPO" branch --list auto/widget)" ""
 
+# --- Task 3 ---
+G="$P/skills/using-git-worktrees/SKILL.md"
+present "A13: Step 0 reads the run state" "$G" 'read the auto-run state (`scripts/auto-run status`), not the `worktree` setting'
+present "A13: a recorded branch is switched back to" "$G" 'When the status names `branch <name>`, switch to that branch'
+present "A13: a base or detached HEAD gets the run's branch" "$G" '`git switch -c auto/<plan slug>`'
+present "A13: setup-branch records it" "$G" '`scripts/auto-run setup-branch <name>`'
+present "A13: staged changes stop the run" "$G" 'staged changes in the primary checkout: <paths>'
+present "A13: a worktree run in the primary checkout creates it unasked" "$G" 'Under `isolation worktree` in the primary checkout, create the worktree without asking'
+check "A15: no skill says never creates the worktree in an auto run" \
+  "$(grep -rlF -- '`worktree=never` creates' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "0"
+R="$P/skills/resume-execution/SKILL.md"
+present "A19: resume switches back to the run's branch" "$R" 'When HEAD is not on it, run `git switch <name>`'
+present "A19: a gone branch stops the run" "$R" "the run's branch <name> is gone"
+present "A19: no EnterWorktree into the primary checkout" "$R" 'Skip EnterWorktree when the recorded workspace is the primary checkout'
+present "A19: auto-run.md lists the stop" "$P/reference/auto-run.md" "the run's branch is gone"
+present "auto-run.md: the worktree consent is asked under ask" "$P/reference/auto-run.md" 'the worktree consent (asked at the spec review under `worktree=ask`)'
+for f in "$P/skills/executing-plans/SKILL.md" "$P/skills/subagent-driven-development/SKILL.md" "$P/reference/auto-run.md"; do
+  absent "$(basename "$(dirname "$f")")/$(basename "$f"): no execution worktree wording" "$f" 'from the execution worktree'
+  present "$(basename "$(dirname "$f")")/$(basename "$f"): side effects outside the workspace" "$f" 'outside the execution workspace'
+done
+present "executing-plans: Setup runs from the workspace" "$P/skills/executing-plans/SKILL.md" 'from the execution workspace'
+present "executing-plans: exit 4 points at Step 0" "$P/skills/executing-plans/SKILL.md" 'follow dforge:using-git-worktrees Step 0 for the run, then run the command again'
+present "subagent-driven-development: exit 4 points at Step 0" "$P/skills/subagent-driven-development/SKILL.md" 'follow dforge:using-git-worktrees Step 0 for the run, then run the command again'
+for f in "$P/skills/executing-plans/SKILL.md" "$P/skills/subagent-driven-development/SKILL.md"; do
+  present "$(basename "$(dirname "$f")"): exit 5 names every stop" "$f" 'on the run base, off its branch or in the primary checkout, or a carried path was committed'
+done
+present "auto-run.md: the switch starts at Setup, workspace first" "$P/reference/auto-run.md" 'execution skill starts at its Setup, workspace first: `scripts/auto-run status`'
+
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

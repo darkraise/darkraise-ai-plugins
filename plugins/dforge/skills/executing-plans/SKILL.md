@@ -42,9 +42,9 @@ What changes here:
   `handoff` (exit 5), invoke dforge:handoff,
   then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
 - **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute`
-  from the execution worktree, once dforge:using-git-worktrees has created it.
-  Exit 4 means the worktree step was skipped: create the worktree, then run
-  the command again from it.
+  from the execution workspace once dforge:using-git-worktrees Step 0 has prepared it.
+  Exit 4 means the workspace step was skipped:
+  follow dforge:using-git-worktrees Step 0 for the run, then run the command again.
 - **Nothing stops for your human partner.** A ruling-seat or exhausted
   `BLOCKED` goes on the pending list and one Fable batch runs at once. An
   irreversible, security-sensitive or outside-the-worktree action is never
@@ -54,16 +54,17 @@ What changes here:
   deferred, and every task that depends on it (its `**Depends on:**` line
   names the task; in a plan without those lines, its `Consumes:` line cites
   a Contracts entry the deferred task's `Produces:` line cites): write
-  `Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>`
-  and a deferred register row for each. Other tasks keep running.
+  the `Task <N>: complete (deferred by the auto run)` line auto-run.md §Rulings
+  gives, and a deferred register row for each. Other tasks keep running.
 - **Each task:** right after its `Task N: complete` line, run
   `scripts/auto-run task-complete`. After each task, run the Fable batch when
   `scripts/auto-run decision list` prints anything. When that line leaves every
   task with its `complete` line (in subagent mode, after the last wave's
   merge), run `scripts/auto-run phase final` next, before any budget check and
   before the turn ends, so a compaction from there on never hands off.
-  A `task-complete` exit 5 means the run stopped (a task was completed in the
-  primary checkout): end as auto-run.md §Stopping says.
+  A `task-complete` exit 5 means the run stopped (a task was completed
+  on the run base, off its branch or in the primary checkout, or a carried path was committed):
+  end as auto-run.md §Stopping says.
 - **The budget line** reads `budget (auto…)`. On `compact` (exit 6), finish
   the task in flight, then end the turn with
   `Auto run: compacting` as its last line. On `handoff`, finish the task in
@@ -133,7 +134,7 @@ in the ledger as `Task <N>: minor (deferred): <one-liner>` instead of fixing
 them.
 
 Four things stop you, and only these: an irreversible or destructive operation;
-a security-sensitive action; a side effect outside this worktree that norms say
+a security-sensitive action; a side effect outside the execution workspace that norms say
 you ask about first (a merge, a push to a shared branch, a publish); and a
 ruling-seat `BLOCKED` verdict. For those, stop and ask — except in an auto run,
 which asks nothing (see Auto run).
