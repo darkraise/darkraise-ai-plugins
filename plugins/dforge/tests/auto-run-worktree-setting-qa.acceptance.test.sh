@@ -36,8 +36,8 @@ beat() { # the heartbeat a live cockpit writes
 }
 ar() { beat s-1; (cd "$CWD" && bash "$AR" --session s-1 "$@"); }
 gi() { git -C "$CWD" "$@"; }
-fld() { jq -r --arg f "$1" '.[$f] | tostring' "$STATE"; }
-snap() { jq -c '[.branch, .branchBase, .carried, .isolation, .phase, .base]' "$STATE"; }
+fld() { jq -r --arg f "$1" '.[$f] | tostring' "$STATE" | tr -d '\r'; }
+snap() { jq -c '[.branch, .branchBase, .carried, .isolation, .phase, .base]' "$STATE" | tr -d '\r'; }
 
 newrepo() { # newrepo <name>: a repository on main with tracked files
   REPO="$TMP/$1" CWD="$TMP/$1" STATE="$TMP/$1/.dforge/sdd/auto-run.json"
@@ -80,17 +80,17 @@ fingerprint() { # the content of every dirty path and the full status
 
 t_A1() {
   newrepo a1; startrun --isolation in-place
-  check "A1: start --isolation in-place records isolation \"in-place\"" "$(jq -c '.isolation' "$STATE")" '"in-place"'
+  check "A1: start --isolation in-place records isolation \"in-place\"" "$(jq -c '.isolation' "$STATE" | tr -d '\r')" '"in-place"'
   check "A1: status prints isolation in-place" "$(ar status | grep -c 'isolation in-place')" "1"
   newrepo a1w; startrun --isolation worktree
-  check "A1: start --isolation worktree records isolation \"worktree\"" "$(jq -c '.isolation' "$STATE")" '"worktree"'
+  check "A1: start --isolation worktree records isolation \"worktree\"" "$(jq -c '.isolation' "$STATE" | tr -d '\r')" '"worktree"'
 }
 
 t_A2() {
   newrepo a2; startrun
   check "A2: a start without --isolation reads as isolation worktree" "$(ar status | grep -c 'isolation worktree')" "1"
   jq 'del(.isolation)' "$STATE" > "$STATE.new" && mv "$STATE.new" "$STATE"
-  check "A2: the old state file has no isolation field" "$(jq 'has("isolation")' "$STATE")" "false"
+  check "A2: the old state file has no isolation field" "$(jq 'has("isolation")' "$STATE" | tr -d '\r')" "false"
   check "A2: a state file without isolation reads as isolation worktree" "$(ar status | grep -c 'isolation worktree')" "1"
   gi switch -q -c feature
   ar phase execute >/dev/null 2>&1; local status=$?
@@ -208,7 +208,7 @@ t_A9() {
   check "A9: records the branch" "$(fld branch)" "auto/widget"
   check "A9: records branchBase, the commit the branch was created at" "$(fld branchBase)" "$head0"
   check "A9: carried holds every modified and untracked path, both sides of the rename, each file of an untracked directory" \
-    "$(jq -r '.carried[]' "$STATE" | LC_ALL=C sort)" "$DIRTY_WANT"
+    "$(jq -r '.carried[]' "$STATE" | tr -d '\r' | LC_ALL=C sort)" "$DIRTY_WANT"
   check "A9: carried lists them one per line" "$(ar carried | LC_ALL=C sort)" "$DIRTY_WANT"
   check "A9: status names the branch" "$(ar status | grep -c 'branch auto/widget')" "1"
 
@@ -311,10 +311,11 @@ t_A12() {
 # Text helpers: the file at HEAD, an extract between two line patterns, a flat extract.
 txt() { cat "$PLUGIN/$1"; }
 between() { # between <file> <start regexp> <end regexp>: from the first start line up to the next end line
-  awk -v s="$2" -v e="$3" '
-    !on && $0 ~ s { on = 1; print; next }
-    on && $0 ~ e { exit }
-    on { print }' "$PLUGIN/$1"
+  # The patterns go through the environment: gawk -v would process their backslash escapes.
+  BETWEEN_S="$2" BETWEEN_E="$3" awk '
+    !on && $0 ~ ENVIRON["BETWEEN_S"] { on = 1; print; next }
+    on && $0 ~ ENVIRON["BETWEEN_E"] { exit }
+    on { print }' "$PLUGIN/$1" | tr -d '\r'
 }
 flat() { tr '\n' ' ' | tr -s ' '; }
 has() { # has <text> <literal>
