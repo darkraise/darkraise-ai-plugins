@@ -76,8 +76,8 @@ configuration, scaffolding, and documentation steps into the task whose
 deliverable needs them; split only where a reviewer could meaningfully
 reject one task while approving its neighbor. Each task ends with an
 independently testable deliverable. Every task pays a fixed cost whatever
-its size: an implementer dispatch, a review, and the session's turns
-around both. So merge a small task, one or two files with one test cycle,
+its size: the session's own implementation turns, its verification, and
+its share of the review. So merge a small task, one or two files with one test cycle,
 into the neighbour that shares its files or its deliverable, whenever the
 merged task still passes Rule S (Assign an implementer, step 2). A task is
 a feature slice: on a Claude plan its code task carries no implementation
@@ -103,7 +103,7 @@ Constraints and Contracts.
 
 **Spec:** [repository-relative path to the spec/design doc this plan implements]
 
-**Execution:** [inline|subagent] — `claude --model <model> --effort <effort>` — [why]
+**Execution:** inline — `claude --model <model> --effort <effort>` — [why]
 
 **Parallelism:** [sequential — <why> | waves — <ranges, e.g. 1 | 2-4 | 5>] (see Parallel waves)
 
@@ -159,10 +159,9 @@ Read [task-check-line.md](references/task-check-line.md) before you write the he
 Codex plans also carry `Host: codex` and `Routing policy: codex-v4` lines
 ([native-codex.md](../../reference/native-codex.md)), and their Execution line
 names the native pair:
-`**Execution:** <inline|subagent> — codex <model> / <effort> — <why>`.
-That pair runs the main session for the whole plan. A subagent plan names
-`codex gpt-6.1-sol / high`; an inline plan names the execution tier at its
-highest weighted routing score. `scripts/plan-lint` warns on any other pair,
+`**Execution:** inline — codex <model> / <effort> — <why>`.
+That pair runs the main session for the whole plan, and names the execution
+tier at its highest weighted routing score. `scripts/plan-lint` warns on any other pair,
 and errors on an inline pair below that score.
 
 **Read the settings first, then choose the Execution line.**
@@ -173,13 +172,16 @@ Read [ci-line.md](references/ci-line.md) before you write the header's CI line a
 
 ## Parallel waves
 
-**Ask first.** Read the spec's `**Execution strategy:**` line. When the spec has
-none — it predates the question, or there is no spec — ask your human partner
-the question in dforge:brainstorming's
-[design-phase.md](../brainstorming/references/design-phase.md) (Choosing the execution strategy)
-before you draft any task, and wait for the answer; when the `executionStrategy`
-setting is `sequential` or `parallel` (dforge:brainstorming §Settings; the
-default is `parallel`), take that value and do not ask. On a Codex host do not ask:
+Parallel waves apply only when the Execution line is `subagent` (deprecated):
+otherwise write `**Parallelism:** sequential — inline execution` and ask
+nothing.
+
+**Ask first** (subagent plans only). Read the spec's `**Execution strategy:**` line;
+brainstorming's [design-phase.md](../brainstorming/references/design-phase.md)
+writes it as `sequential` on every new spec. When the spec has none, take the `executionStrategy` setting (dforge:brainstorming §Settings;
+the default is `sequential`). Under `ask`, ask your human partner one question
+before you draft any task, "Parallel subagent waves or sequential execution?",
+and wait for the answer. On a Codex host do not ask:
 the plan is sequential. Sequential writes
 `**Parallelism:** sequential — <why>` and nothing below applies.
 
@@ -232,10 +234,9 @@ never invents parallelism the work does not have:
    task and the last wave; without a Wave check those waves rest on each
    task's own tests and a clean merge.
 8. **The Execution line names `subagent`**, `claude --model sonnet --effort
-   high`, whatever the heavy-task count: inline mode implements the tasks it
-   does not delegate in the session itself, one after another, so it has
-   nothing to run in parallel. `plan-lint`
-   skips the majority-rule warning for a waves plan.
+   high`: inline mode implements its tasks in the session itself, one after
+   another, so it has nothing to run in parallel. Parallel waves apply only
+   to a subagent plan, which `plan-lint` warns is deprecated.
 
 `plan-lint` checks the waves mechanically — ranges, dependencies, shared
 files, the tasks that must run alone, the header lines — and the pre-flight
@@ -247,27 +248,8 @@ If a plan ends up with no wave of two or more tasks, say so and write
 
 ## Drafting the tasks
 
-A plan of 1-8 tasks is drafted in the session: you have already read the
-code it changes, and every drafter would read it again from nothing. For 9
-or more, write the header yourself, through the Task index, and save it as
-the plan file. Then split the index into slices of 3-4 consecutive tasks and
-dispatch one `dforge:drafter-sonnet` per slice, every slice in one message,
-with [drafter-prompt.md](references/drafter-prompt.md). Each dispatch names
-the spec path, the plan path, the slice range, the files the slice changes
-or its tests join, as far as your exploration found them, the slice path
-(`<state>/drafts/<plan basename without .md>/tasks-A-B.md`) and the plugin
-root, as the template's placeholders; paste nothing else.
-
-- **Contracts settle what slices share.** A drafter that reports
-  `NEEDS_CONTEXT` needs a contract: add it to the header and re-dispatch that
-  slice. An amendment that changes an existing Contract, rather than adding
-  one, re-dispatches every slice: a slice drafted against the old Contract is
-  stale, and nothing downstream can tell.
-- **Join without reading.** Once every slice reports `DONE`, run
-  `scripts/draft-pack --join PLAN_FILE`. It appends the slices in task order
-  and deletes them; on exit 3 it names the gap or overlap and leaves the plan
-  unchanged. Then continue at Assign an implementer.
-- **On a Codex host, draft every task in the session.**
+Draft every task in the session, at any plan size. You have already read the
+code the plan changes; a drafter would read it again from nothing.
 
 ## Task Structure
 
@@ -356,6 +338,11 @@ Read [test-step-forms.md](references/test-step-forms.md) before you write a task
 ## Assign an implementer to every task
 
 Read [assignment-procedure.md](references/assignment-procedure.md) before you score the tasks or write their assignment lines.
+
+The scores still set the Execution line's floor and mark the risk-3 tasks a
+judge reviews. The `**Implementer:**` lines are kept for the deprecated
+subagent mode and for scoring an executor task's fallback; under inline mode
+the session implements the task.
 
 ## Assign the register rows
 

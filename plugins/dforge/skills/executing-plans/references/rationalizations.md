@@ -4,8 +4,7 @@
 |--------|---------|
 | "Subagents are available, so I should switch to the other skill" | The Execution line chose this mode, not the absence of subagents. Only your human partner overrides it. |
 | "I'll read the whole plan, it's faster than one brief at a time" | The plan on disk has no amendments applied. `task-brief` is how corrections reach you. |
-| "This task is harder than it scored - I'll just take more rounds" | Three rounds, then the switch. A fourth round on your own work is what not converging looks like. |
-| "The owner said switch, but there is no fix round to mark" | The escalated line is its own ledger line. Write it; nothing else records the switch. |
+| "This task is harder than it scored - I'll just take more rounds" | Three rounds, then the breaker. A fourth round on your own work is what not converging looks like. |
 | "The plan is wrong here, I'll fix it as I go" | You read one brief; the seat reads the plan and the spec. Send a blocked-plan item. |
 | "No reviewer is watching, so the self-review is optional" | It is the only per-task gate this mode has. Skipping it makes the final review the first time anyone reads the diff. |
 | "I'll mention the ruling in my final message instead of the ledger" | Your message dies with the session; the ledger survives compaction. |

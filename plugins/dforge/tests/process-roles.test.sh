@@ -33,7 +33,7 @@ names "qa: rerun mode" "$QA" '`rerun`: the acceptance file may already exist'
 check "qa: the report lists only the statements given" "$(grep -qF -- 'demo — not executed' "$QA" && echo yes || echo no)" "no"
 
 BS="$P/skills/brainstorming/SKILL.md"
-names "analyst: the checklist step" "$BS" '7. **Draft acceptance** — numbered, tagged, rated statements'
+names "analyst: the checklist step" "$BS" '6. **Draft acceptance** — numbered, tagged, rated statements'
 names "analyst: auto-run offer follows it" "$P/skills/brainstorming/references/auto-run-offer.md" 'right after the Draft acceptance step and before you'
 names "analyst: the line format" "$P/skills/brainstorming/references/drafting-acceptance.md" '`A<n>. [<test|demo>[, neg], <high|confirmed>] <statement>`'
 names "analyst: the verdict options" "$P/skills/brainstorming/references/drafting-acceptance.md" '**Right**, **Wrong, or not wanted** and **Not sure**'
@@ -59,7 +59,7 @@ CP="$P/skills/brainstorming/references/architecture-critic-prompt.md"
 names "critic: the prompt does not score" "$CP" 'do not score them 1-20'
 names "critic: ranked findings" "$CP" 'Blocker / High / Medium / Nit'
 names "critic: one change" "$CP" 'If I could change one thing, it would be'
-names "critic: checklist step" "$BS" '11. **Architecture critic** — one `dforge:judge-opus` round'
+names "critic: checklist step" "$BS" '10. **Architecture critic** — one `dforge:judge-opus` round'
 names "critic: findings section" "$P/skills/brainstorming/references/architecture-critic.md" 'answered in a `## Critic findings` section'
 names "critic: counts in the review request" "$P/skills/brainstorming/references/architecture-critic.md" 'Critic: <b> Blocker, <h> High (<f> fixed, <a> answered), <m> Medium'
 names "critic: live Fable review checks answers" "$P/reference/auto-run.md" \
@@ -134,18 +134,7 @@ names "codex: critic and lens seats" "$NC" 'The architecture critic and every re
 names "codex: QA seat" "$NC" 'Acceptance QA is a native implementer at `gpt-6.1-sol / high`'
 
 WP="$P/skills/writing-plans/SKILL.md"
-DPR="$P/skills/writing-plans/references/drafter-prompt.md"
-names "drafting: plans of up to 8 tasks stay in the session" "$WP" 'A plan of 1-8 tasks is drafted in the session'
-names "drafting: slices of 3-4, all at once" "$WP" 'split the index into slices of 3-4 consecutive tasks'
-wp_flat=$(tr '\n' ' ' < "$WP" | tr -s ' ')
-check "drafting: one drafter per slice, every slice in one message" "$(grep -cF 'dispatch one `dforge:drafter-sonnet` per slice, every slice in one message' <<<"$wp_flat")" "1"
-check "drafting: the dispatch names the plugin root" "$(grep -cF 'the slice path (`<state>/drafts/<plan basename without .md>/tasks-A-B.md`) and the plugin root, as the template' <<<"$wp_flat")" "1"
-check "drafting: the dispatch names the files exploration found" "$(grep -cF 'the files the slice changes or its tests join, as far as your exploration found them' <<<"$wp_flat")" "1"
-names "drafting: joined without reading" "$WP" 'scripts/draft-pack --join PLAN_FILE'
-names "drafting: a changed Contract re-dispatches every slice" "$WP" 're-dispatches every slice: a slice drafted against the old Contract'
-names "drafting: Codex drafts in the session" "$WP" 'On a Codex host, draft every task in the session'
-names "drafter prompt: the slice path" "$DPR" '**Write to:** [SLICE_PATH]'
-names "drafter prompt: the scratch worktree" "$DPR" 'Write nothing in this checkout except [SLICE_PATH].'
+names "drafting: every task is drafted in the session" "$WP" 'Draft every task in the session, at any plan size.'
 
 # The contract-and-test plan shape (docs/dforge/specs/2026-10-26-faster-plans-design.md §1, §5).
 # Matched with line breaks and runs of spaces folded, so a phrase may wrap.
@@ -174,14 +163,6 @@ says "shape: a Claude code task scores spec 2" "$P/skills/writing-plans/referenc
 says "shape: Rule S at 6 on a Claude plan" "$P/skills/writing-plans/references/assignment-procedure.md" 'On a Claude plan, if `files + spec + coupling >= 6`'
 says "shape: Rule S at 4 on a Codex plan" "$P/skills/writing-plans/references/assignment-procedure.md" 'on a `Host: codex` plan, if it is `>= 4`'
 lacks "shape: no host-blind Rule S at 4" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'If `files + spec + coupling >= 4`, split'
-says "drafter prompt: tests and interfaces, not code" "$DPR" 'gives the complete code of its tests'
-says "drafter prompt: implementation code only where no test pins it" "$DPR" "$ALLOWED"
-says "drafter prompt: tests fail on the current tree" "$DPR" 'Write each test to fail on the current tree for the reason its task fixes'
-says "drafter prompt: the drafter leaves the red run to the implementer" "$DPR" 'but do not run it: the implementer runs it red before writing any code'
-says "drafter prompt: reads the files the session found" "$DPR" 'Read the files under **Files:**, which the session found while exploring'
-lacks "drafter prompt: no scratch worktree" "$DPR" 'scratch worktree'
-lacks "drafter prompt: no complete code of every step" "$DPR" 'gives the complete code of every step'
-lacks "drafter prompt: no prototyping" "$DPR" 'You may prototype'
 says "plan reviewer: a missing implementation body is not a finding" "$PRP" 'a missing implementation body is not a finding'
 says "plan reviewer: a stub or missing test is" "$PRP" 'a missing or stub test is'
 says "plan review criteria: a precise description is not a gap" "$PR" 'a task that describes its implementation precisely without its code is not a gap'

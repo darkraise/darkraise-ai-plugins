@@ -1,6 +1,6 @@
 ---
 name: selecting-approaches
-description: Use when an approach decision is open - during brainstorming, or when a plan task scores 3 on spec completeness - gates the decision to inline, advisor, or a best-of-3 pairwise ranking
+description: Use when an approach decision is open - during brainstorming, or when a plan task scores 3 on spec completeness - gates the decision to inline or one advisor pass
 ---
 
 # Selecting Approaches
@@ -8,15 +8,14 @@ description: Use when an approach decision is open - during brainstorming, or wh
 ## Select the host first
 
 Identify the active host from callable native tools, not installed
-executables. On Codex, keep the gate and the best-of-three procedure below but
-dispatch scouts and judges as [native-codex.md](../../reference/native-codex.md)
-describes: scouts start at Sol medium, judges at Astra high, read-only
-restrictions enforced where the host allows and disclosed where it does not.
-On Claude, use the registered fleet.
+executables. On Codex, keep the gate below but dispatch the advisor judge as
+[native-codex.md](../../reference/native-codex.md) describes: judges at Astra
+high, read-only restrictions enforced where the host allows and disclosed where
+it does not. On Claude, use the registered fleet.
 
 Settle an open approach decision at a cost that matches what the decision is
-worth. Most decisions are settled inline; a few earn one advisory pass; a small
-number earn a ranked competition.
+worth. Two modes: `inline` and `advisor`. Most decisions are settled inline;
+a load-bearing one earns one advisory pass.
 
 **Announce at start:** "I'm using the selecting-approaches skill to settle this
 approach decision."
@@ -35,17 +34,16 @@ Two entry points:
 ## The gate decides who decides, not whether
 
 Every decision that reaches this skill gets settled before implementation. The
-gate chooses which of three seats settles it:
+gate chooses which of two seats settles it:
 
 | Outcome | Cost | Who settles it |
 |---------|------|----------------|
 | `inline` | 0 subagent calls | You do, and record why |
 | `advisor` | 1 call | You choose; one judge checks the choice |
-| `best-of-3` | 4 calls | Three scouts draft; one judge ranks |
 
-The middle rung exists because a load-bearing decision with only one plausible
-approach asks a verification question - "is this one wrong" - not a selection
-question. Ranking one candidate against nothing is not a ranking.
+A load-bearing decision asks a verification question - "is this choice
+wrong" - and one judge reading your chosen approach answers it. You draft the
+candidates yourself: you have already read the code they would change.
 
 ## Skip to inline
 
@@ -62,74 +60,34 @@ cost is inconvenient, which is exactly what the gate is here to stop.
    is theatre.
 4. **Trivially reversible and confined to one file.** Being wrong costs a
    revert.
-5. **You cannot name two structurally distinct candidates, and the decision is
-   not load-bearing** (as When best-of-3 runs defines it). Write each
-   candidate in one sentence before dispatching anything. Differing in naming,
-   ordering, or wording is not structural difference. A load-bearing decision
-   with one plausible approach goes to `advisor`: it is the case that rung
-   exists for.
+5. **The decision is not load-bearing** (as When advisor runs defines it).
+   Write each candidate in one sentence before dispatching anything.
 
 ### Bugs are excluded on correctness grounds, not cost
 
 Generating candidate approaches before a root cause is located produces N
 guesses, and a ranking pass returns a winner whether or not any candidate is
-right - laundering speculation into a confident pick. An unlocated root cause is
+right - laundering speculation into a confident pick, and a judge checking one
+guess does no better. An unlocated root cause is
 a debugging problem: use dforge:systematic-debugging. Come back here only
 if, with the cause in hand, more than one structurally distinct fix exists.
 
-## When best-of-3 runs
+## When advisor runs
 
-All three must hold:
+Both must hold:
 
-- At least two structurally distinct candidates you can state in one sentence
-  each.
 - The decision is load-bearing: it constrains later tasks, or it is expensive to
   reverse - an interface others consume, a data shape, a stored format, a
   migration, a public API, a dependency choice.
 - Neither the repository nor the spec already answers it.
 
-Everything not skipped and not qualifying lands on `advisor`.
-
-## Run best-of-3
-
-**Draft.** Dispatch three `dforge:scout-sonnet` agents in
-parallel, one per candidate, dispatched in a single message so they run
-concurrently. Give
-each the same decision statement and the same constraints, and name its
-candidate's angle so the three do not converge. Each returns one committed
-approach, not a survey. With only two named candidates, the third scout gets
-both of their one-sentence statements and is asked for a structurally
-distinct third; if it can only return a variant of one of them, the ring still
-runs over its three drafts.
-
-**Rank.** Dispatch one `dforge:judge-opus` to run the ring
-pass: three comparisons, **A vs B, B vs C, C vs A**, scoring both candidates
-against every criterion in
-[`../../criteria/approach-selection.md`](../../criteria/approach-selection.md)
-each time. It writes its full report to
-`<state>/approaches-<decision>-rank-report.md` (`<decision>` a short slug of
-the decision): write nothing else, and reply in at most 10 lines. The report
-opens with `## Verdict` holding `winner: <candidate>` and
-`wins: A <a> / B <b> / C <c>`, then the three comparisons and the grafts.
-
-The ring is the whole reason for three comparisons rather than one. Every
-candidate sits in slot A exactly once and slot B exactly once, so a judge's
-preference for whichever candidate it read first cancels out exactly. Do not
-reorder the ring, and do not drop a comparison to save a pass - two comparisons
-leave one candidate unbalanced and the bias comes back.
-
-**Select.** Aggregate the three comparisons into a win count per candidate. The
-highest wins. Report the winner, the ranking, and the **grafts** - the ideas
-from the losing candidates worth folding into the winner. A ring pass that
-returns only a winner has thrown away two thirds of what it paid for.
-
-If the ring produces a three-way tie, the candidates are equivalent on these
-criteria. Say so and choose the simplest; do not run a second ring to break a
-tie the criteria could not see.
+Everything else is `inline`. Draft the candidates yourself, choose one, and
+send that choice to the advisor.
 
 ## Run advisor
 
-State your chosen approach in a paragraph, then dispatch one judge to score it,
+State your chosen approach in a paragraph, with the candidates you rejected and
+why, then dispatch one `dforge:judge-opus` to score it,
 naming the report file `<state>/approaches-<decision>-advisor-report.md`:
 write nothing else, and reply in at most 10 lines; its `## Verdict` section
 holds `verdict: sound | wrong`. The judge scores it against the same criteria
@@ -147,9 +105,8 @@ Write one line into the plan task or the design document:
 ```markdown
 **Approach:** inline - skip 2: follows the existing hook-script pattern
 **Approach:** advisor - load-bearing (produces the criteria file format)
-**Approach:** best-of-3 - file-per-criterion vs single-registry vs inline-in-skill
 ```
 
-For `best-of-3`, also record the grafts wherever the decision itself is written
-down. The losing candidates are the most expensive thing this skill produces
-that is not the winner, and they are gone the moment the session ends.
+An existing `**Approach:** best-of-3 - …` line is the record of a decision made
+before best-of-3 was removed; `plan-lint` still accepts it, and nothing reruns
+it.

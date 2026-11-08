@@ -1,6 +1,6 @@
 # Architecture Critic Prompt Template
 
-Use this template when dispatching the architecture critic: step 11 of the
+Use this template when dispatching the architecture critic: step 10 of the
 architectural checklist, after the spec self-review and before the spec review.
 
 ```

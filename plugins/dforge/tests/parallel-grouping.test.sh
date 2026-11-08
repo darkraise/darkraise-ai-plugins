@@ -28,7 +28,7 @@ namesin "one plan in an auto run" "$R/auto-run-plan.md" '**One plan.** An auto r
 namesin "the finish line is recorded" "$R/auto-run-plan.md" 'holds a `Finish: <action>` line, `scripts/finish-choice set <action> --plan'
 namesin "the switch ends the turn" "$R/auto-run-plan.md" '`scripts/auto-run switch` and end the turn with `Auto run: switching`'
 namesin "the handoff note" "$R/execution-handoff.md" 'an auto run the session switches in place instead; see Auto run'
-names "parallel is the default" 'default is `parallel`), take that value and do not ask.'
+names "sequential is the default" 'the default is `sequential`). Under `ask`, ask your human partner one question'
 names "no split under autoRun=on" 'Under `autoRun=on` the spec covers the whole request by design: write one plan for it, never suggest a split'
 check "no clear --phase is left" "$(cat "$W" "$R"/*.md | grep -c 'clear --phase')" "0"
 

@@ -3,9 +3,9 @@
 One task's dispatch, review, fix loop and complete line.
 dforge:subagent-driven-development runs it for every task, and
 dforge:executing-plans runs it for each task whose brief carries
-`**Dispatch:** delegated`: a heavy task, too large or risky to implement in the
-session, and every task carrying an `**Executor:**` line, which runs on that
-executor's wrapper instead of an implementer subagent.
+`**Dispatch:** delegated`: a task carrying an `**Executor:**` line, which runs
+on that executor's wrapper. A task the session implements itself and a judge
+reviews runs §The session review loop instead.
 
 ## Contract
 
@@ -627,7 +627,8 @@ That is not an escalation.
 A task on an external executor resumes that executor's own session instead
 — see [executor-lane.md](executor-lane.md) §Resuming an executor task.
 
-**Round 2 — a fresh dispatch on the successor rung.** Dispatch a fresh
+**Round 2 — a fresh dispatch on the successor rung.** For a dispatched
+implementer (the session review loop has its own rounds), dispatch a fresh
 implementer on the successor rung from [ladder.md](ladder.md)'s escalation
 table, with the brief path, the report-file path, the open findings, and this
 framing: "A prior implementer attempted this task [N] times; you own it now.
@@ -726,8 +727,9 @@ command and end the turn.
 **After each round,** append to the ledger:
 `Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)`
 
-Never fix findings yourself in the controller session — your context stays
-clean for coordination, and controller fixes skip review.
+Never fix a dispatched implementer's findings yourself in the controller
+session — your context stays clean for coordination, and controller fixes skip
+review. In the session review loop the fixes are the session's own.
 
 **The breaker.** When round 2's re-review still leaves findings open, stop
 dispatching and send every open finding to the ruling seat in one `breaker`
@@ -848,6 +850,57 @@ dforge:systematic-debugging. On recovery, a `dispatched` line with no
 `gh run view <id> --json status,conclusion` once, and a new background watch
 when the run is still going.
 
+## The session review loop
+
+dforge:executing-plans runs this loop for a task the session implements and a
+judge reviews: a task whose brief's second line is
+`**Review:** per-task — risk 3`. Nothing is dispatched to implement it; §3's
+review, §4's verdicts and re-reviews and §5's complete line run as written,
+with the session in the implementer's place.
+
+1. **Start.** Run `bash <plugin-root>/scripts/task-step start PLAN_FILE <N> --inline`.
+   It records BASE and the suite in `<workspace>/task-<N>-step.json` and
+   writes no dispatch file and no task line. Append
+   `Task <N>: implementer inline (assigned; base <sha7>)` yourself.
+2. **Implement and report.** Implement, verify, self-review and commit as
+   dforge:executing-plans §The Task Loop steps 3 to 6 say. Then write
+   `<workspace>/task-<N>-report.md` in the implementer report shape
+   ([implementer-prompt.md](../skills/subagent-driven-development/references/implementer-prompt.md)
+   §Report Format): status, commits, `## Verified`,
+   `## Discovered issues (not fixed)` and `## Assumptions made`. The reviewer
+   prompt names that file.
+3. **Review.** Start the suite as §2's *The suite runs beside the review*
+   says, run `bash <plugin-root>/scripts/task-step review PLAN_FILE <N>`,
+   dispatch the seat it prints, and run `task-step verdict` once both are in
+   (§3).
+4. **Fix rounds, two at most.** Each round is your own fix, its covering
+   tests appended to the report file under a new `## Verified` section, and
+   the scoped `task-step rereview` (§4, its skip rule included). After each
+   round append
+   `Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>[; re-review skipped (<n> lines)]; session)`.
+   Minor and plan-mandated findings leave the loop as §4 says.
+5. **Close.** A clean verdict writes §5's reviewed complete line, its scores
+   clause ending `, seat <seat>`. After `2/2` with findings still open, send
+   them to the ruling seat as one `breaker` item and carry out its verdicts
+   (§4 The breaker); in an auto run the item goes on the pending list. Then
+   run §Early CI when the header's `**Early CI:**` line names this task.
+
+**Executor fallback.** An executor task whose executor is unavailable or
+refuses it is implemented by the session, never by its `**Implementer:**`
+agent: start it with plain `task-step start PLAN_FILE <N>` (an executor task
+writes state and no assigned line), append
+`Task <N>: implementer inline (assigned; base <sha7>; executor <id> unavailable - <reason>)`,
+and join the loop at step 2. A handback mid-loop writes `HANDBACK to inline`
+as its fix-round line's last slot, and the session finishes the task in this
+loop from the round it was in, never closing it `unreviewed`.
+[executor-lane.md](executor-lane.md)'s "Never fall back silently" still holds.
+
+**Codex host.** `task-brief` writes the `**Review:**` line on Claude-host
+plans only, and `task-step` and `review-route --task` exit 2 on a
+`Host: codex` plan. There the loop runs for a task whose `**Evaluation:**`
+line reads `risk=3`, through §The steps by hand §3 and §4, with a native judge
+at Astra high or above as the seat ([native-codex.md](native-codex.md)).
+
 ## The steps by hand
 
 `task-step` exits 2 on a `Host: codex` plan, and `task-step review` exits 2,
@@ -901,6 +954,7 @@ For a task whose last ledger line, read by the caller's Recovery rule, is:
 |---|---|
 | `implementer <agent> (assigned …)`, the agent not `inline` | If the report file has a status and `git log <base>..HEAD` is non-empty, review it (§3); otherwise dispatch the same agent fresh (§1) |
 | `fix round R/5` on a `Host: codex` plan | Codex: R < 5 resumes the loop at round R+1 by the five-round schedule (§4); `fix round 5/5` goes to the breaker (§4) |
+| `fix round 1/2` whose last slot is `session` or `HANDBACK to inline` | The session finishes it: §The session review loop, from round 2 |
 | `fix round 1/2`, or `fix round 1/5` from an older run | Resume the loop at round 2 — a fresh dispatch on the successor rung (§4) |
 | `fix round 2/2`, or `fix round R/5` with R >= 2 from an older run | Go to the breaker (§4) |
 | `awaiting group review (commits …)` | Held: never re-dispatch its implementer. It is reviewed by the next group dispatch (§3a), which the trigger above starts |

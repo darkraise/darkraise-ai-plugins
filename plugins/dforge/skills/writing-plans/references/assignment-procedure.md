@@ -47,7 +47,8 @@ user's inline or delegation preference on either host.
    - `**Evaluation:**` — always, for example
      `files 0 - spec 1 - coupling 1 - risk 0 = 2`
    - `**Approach:**` — only when the task involved an approach decision:
-     `inline`, `advisor`, or `best-of-3`, a dash, and a one-line reason; an
+     `inline` or `advisor` (an older plan's `best-of-3` still lints), a dash,
+     and a one-line reason; an
      `inline` reason cites a skip condition by number
    - `**Lenses:**` — only on a task scored risk 3, and optional there: the
      lens ids under `criteria/lenses/` that match why the task is risky,
@@ -76,7 +77,8 @@ choice is the interesting part. A hand edit that breaks a checked rule — a
 reserve tier, a kept `spec = 3`, a table mismatch — carries an
 `**Override:** <reason>` line below the Evaluation line, and `plan-lint` then
 reports it as a warning. Never write an Override line yourself. Under
-dforge:executing-plans the lines are read for the delegated tasks,
-which include every task carrying an `**Executor:**` line.
+dforge:executing-plans the session implements every task that carries no
+`**Executor:**` line, so the `**Implementer:**` line is read only by the
+deprecated subagent mode; an executor task's lines are read for its dispatch.
 [assigning-implementers.md](assigning-implementers.md) explains why
 each of these rules exists.

@@ -2,8 +2,9 @@
 
 Judgment about the plan, the spec or a finding belongs to the ruling seat, not
 to you, whatever model you run on. It reads the whole plan, the spec,
-`amendments.md` and the ledger; you read the header and one brief at a time. It
-and delegated tasks are all this mode dispatches before the final review.
+`amendments.md` and the ledger; you read the header and one brief at a time. It,
+delegated tasks and risk-3 task reviews are all this mode dispatches before
+the final review.
 
 **Rulings, not stalls.** Decide the mechanical problems yourself - a missing
 directory, a tool failure, a plan that is silent where you need
@@ -18,11 +19,11 @@ and buys nothing.
 
 | Kind | Decision point |
 |---|---|
-| `preflight` | Once, before Task 1, when the plan has a heavy task (Setup) |
+| `preflight` | Once, before Task 1, when `plan-header.md` ends with a `**Heavy:**` line (Setup) |
 | `blocked-plan` | The plan is wrong and no path forward is a mechanical choice |
 | `plan-conflict` | A final-review finding, or a delegated task's review finding, that conflicts with what the plan's text requires, or is labelled plan-mandated |
 | `cannot-verify` | A delegated task's `cannot-verify:` digest line |
-| `breaker` | A delegated task's findings still open after round 2/2 |
+| `breaker` | A task's findings or verifications still open at its cap: a reviewed task's after round 2/2, your own task's after `fix round 3/3` |
 | `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument |
 | `final-residual` | Findings still open after the final review's one fix wave |
 
@@ -59,8 +60,7 @@ seat is the native judge named in Select the host first.
 verbatim:
 
 - **CONFIRMED-GAP** - the finding is real. For a task you implement, make
-  the smallest fix the ruling names. A CONFIRMED-GAP whose fix you attempt and
-  fail is a trigger in Switching to subagent mode. A delegated task's gap is
+  the smallest fix the ruling names. A CONFIRMED-GAP whose fix you attempt and fail counts toward the task's fix cap, and at the cap the task goes to the breaker. A delegated task's gap is
   never yours to fix: mid-task it enters that task's fix loop, and at the
   breaker it is logged `Task <N>: Ruling: <finding> — <ruling>` and carried
   into the next dependent task's dispatch (with none, the next task in plan

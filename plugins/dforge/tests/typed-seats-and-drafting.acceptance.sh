@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance tests for docs/dforge/specs/2026-10-25-typed-seats-and-drafting-design.md
-# (the shell-reachable statements: A5, A6, A7, A9, A10, A12, A13, A14; the
+# (the shell-reachable statements: A5, A6, A12, A13, A14 - A7, A9 and A10
+# went with the plan drafter; the
 # cockpit statements A1-A4 and A8 are in typed-seats-and-drafting.acceptance.test.ts).
 # Each test is written from the spec's acceptance statement. Usage:
 #   bash typed-seats-and-drafting.acceptance.sh            run every test
@@ -54,7 +55,6 @@ RCR="$PLUGIN/skills/requesting-code-review/SKILL.md"
 CR="$PLUGIN/skills/requesting-code-review/references/code-reviewer.md"
 UD="$PLUGIN/skills/using-dforge/SKILL.md"
 WP="$PLUGIN/skills/writing-plans/SKILL.md"
-DRAFTER="$PLUGIN/agents/drafter-sonnet.md"
 
 if sel A5; then
   echo "# A5"
@@ -137,105 +137,6 @@ if sel A6; then
   matches "A6: judge-opus for checks across several files" "$seats" '`dforge:judge-opus` across several files'
 fi
 
-if sel A7; then
-  echo "# A7"
-  dt=$(section "$WP" "## Drafting the tasks")
-  matches "A7: writing-plans has a Drafting the tasks section" "$dt" '.'
-  matches "A7: 1-8 tasks are drafted in the session" "$dt" 'A plan of 1-8 tasks is drafted in the session'
-  matches "A7: 9 or more tasks are drafted in slices" "$dt" 'For 9 or more'
-  matches "A7: slices of 3-4 consecutive tasks" "$dt" 'slices of 3-4 consecutive tasks'
-  matches "A7: one drafter per slice" "$dt" 'one `dforge:drafter-sonnet` per slice'
-  matches "A7: every slice dispatched in one message" "$dt" 'every slice in one message'
-  dp=$(tr '\n' ' ' < "$PLUGIN/skills/writing-plans/references/drafter-prompt.md" | tr -s ' ')
-  matches "A7: the drafter prompt dispatches one slice of 3-4 consecutive tasks, every slice at once" "$dp" 'one dispatch per slice of 3-4 consecutive tasks, every slice in one message'
-fi
-
-if sel A9; then
-  echo "# A9"
-  DP="$S/draft-pack"
-  R="$TMP/a9-repo"
-  git init -q -b main "$R"
-  cd "$R" || exit 1
-  mkdir -p docs
-  state=$(bash "$S/dforge-path" state)
-  D="$state/drafts/plan"
-  header() { # header N - a plan header whose Task index lists tasks 1..N
-    printf '# Demo Implementation Plan\n\n## Task index\n\n'
-    local i=1; while [ "$i" -le "$1" ]; do printf '%d. Step %d\n' "$i" "$i"; i=$((i + 1)); done
-    printf '\n---\n'
-  }
-  slice() { # slice A B - a slice file holding tasks A..B
-    mkdir -p "$D"
-    local i=$1; while [ "$i" -le "$2" ]; do printf '### Task %d: Step %d\n\nBody of task %d.\n' "$i" "$i" "$i"; [ "$i" -lt "$2" ] && printf '\n'; i=$((i + 1)); done > "$D/tasks-$1-$2.md"
-  }
-  reset() { rm -rf "$state/drafts"; header "$1" > docs/plan.md; cp docs/plan.md "$TMP/a9-before.md"; }
-  same() { cmp -s docs/plan.md "$TMP/a9-before.md" && echo yes || echo no; }
-  run() { out=$(timeout 60 bash "$DP" "$@" 2>&1); code=$?; }
-
-  reset 6; slice 5 6; slice 1 2; slice 3 4
-  run --join docs/plan.md
-  check "A9: join exit 0" "$code" "0"
-  check "A9: join keeps the header byte-identical at the front" "$(head -c "$(wc -c < "$TMP/a9-before.md")" docs/plan.md | cmp -s - "$TMP/a9-before.md" && echo yes || echo no)" "yes"
-  check "A9: join appends every task in task order" "$(grep -o '^### Task [0-9]*' docs/plan.md | tr -d '\n')" "### Task 1### Task 2### Task 3### Task 4### Task 5### Task 6"
-  check "A9: join keeps each task body" "$(grep -c '^Body of task [1-6]\.$' docs/plan.md)" "6"
-  check "A9: join deletes the slice files" "$(ls "$D"/tasks-*.md 2>/dev/null | wc -l | tr -d ' ')" "0"
-  cp docs/plan.md "$TMP/a9-before.md"
-  run --join docs/plan.md
-  check "A9: nothing missing and no slice: exit 0" "$code" "0"
-  check "A9: nothing missing and no slice: plan unchanged" "$(same)" "yes"
-
-  reset 6; slice 1 2; slice 5 6
-  run --join docs/plan.md
-  check "A9: a gap exits 3" "$code" "3"
-  check "A9: a gap leaves the plan byte-identical" "$(same)" "yes"
-
-  reset 6; slice 1 3; slice 3 4; slice 5 6
-  run --join docs/plan.md
-  check "A9: an overlap exits 3" "$code" "3"
-  check "A9: an overlap leaves the plan byte-identical" "$(same)" "yes"
-
-  reset 6; slice 1 2; slice 3 4
-  run --join docs/plan.md
-  check "A9: slices short of the last task exit 3" "$code" "3"
-  check "A9: slices short of the last task leave the plan byte-identical" "$(same)" "yes"
-
-  reset 3
-  run
-  check "A9: no arguments is a usage error (2)" "$code" "2"
-  cd "$HERE" || exit 1
-fi
-
-if sel A10; then
-  echo "# A10"
-  check "A10: drafter-sonnet runs the sonnet model" "$(fm "$DRAFTER" model)" "sonnet"
-  check "A10: drafter-sonnet runs at high effort" "$(fm "$DRAFTER" effort)" "high"
-  check "A10: drafter-sonnet has exactly Read, Grep, Glob, Bash, Write, Edit" "$(fm "$DRAFTER" tools | tr -d ' ' | tr ',' '\n' | LC_ALL=C sort | tr '\n' ' ')" "Bash Edit Glob Grep Read Write "
-  matches "A10: drafter-sonnet says it runs Sonnet 5.5 at high effort" "$(tr '\n' ' ' < "$DRAFTER" | tr -s ' ')" 'Sonnet 5\.5 at high effort'
-  check "A10: the roster is 21 agents" "$(ls "$PLUGIN"/agents/*.md | wc -l | tr -d ' ')" "21"
-
-  fleet() { # fleet <dir> - fleet.test.sh's exit code on a copy
-    (cd "$1" && timeout 120 bash tests/fleet.test.sh >/dev/null 2>&1; echo $?)
-  }
-  mkfleet() { rm -rf "$1"; mkdir -p "$1/tests"; cp -r "$PLUGIN/agents" "$1/"; cp "$HERE/fleet.test.sh" "$1/tests/"; }
-  mkfleet "$TMP/a10-ok"
-  check "A10: fleet.test.sh passes on the repository's agents" "$(fleet "$TMP/a10-ok")" "0"
-  mkfleet "$TMP/a10-agent"
-  sed 's/^tools: .*/tools: Read, Grep, Glob, Bash, Write, Edit, Agent/' "$DRAFTER" > "$TMP/a10-agent/agents/drafter-sonnet.md"
-  check "A10: fleet.test.sh fails when the drafter gains the Agent tool" "$([ "$(fleet "$TMP/a10-agent")" != 0 ] && echo fails || echo passes)" "fails"
-  mkfleet "$TMP/a10-tools"
-  sed 's/^tools: .*/tools: Read, Grep, Glob, Bash, Write/' "$DRAFTER" > "$TMP/a10-tools/agents/drafter-sonnet.md"
-  check "A10: fleet.test.sh fails when the drafter loses a tool" "$([ "$(fleet "$TMP/a10-tools")" != 0 ] && echo fails || echo passes)" "fails"
-  mkfleet "$TMP/a10-effort"
-  sed 's/^effort: .*/effort: medium/' "$DRAFTER" > "$TMP/a10-effort/agents/drafter-sonnet.md"
-  check "A10: fleet.test.sh fails when the drafter drops below high effort" "$([ "$(fleet "$TMP/a10-effort")" != 0 ] && echo fails || echo passes)" "fails"
-  mkfleet "$TMP/a10-roster"
-  cp "$DRAFTER" "$TMP/a10-roster/agents/drafter-extra.md"
-  check "A10: fleet.test.sh fails on a 22nd agent" "$([ "$(fleet "$TMP/a10-roster")" != 0 ] && echo fails || echo passes)" "fails"
-  mkfleet "$TMP/a10-missing"
-  rm "$TMP/a10-missing/agents/drafter-sonnet.md"
-  check "A10: fleet.test.sh fails on a roster of 20" "$([ "$(fleet "$TMP/a10-missing")" != 0 ] && echo fails || echo passes)" "fails"
-fi
-
 if sel A12; then
   echo "# A12"
   # The note's table: Run | USD total | USD per task | lint errors | lint warnings | Critical | Important | Messages
@@ -254,15 +155,10 @@ if sel A12; then
   matches "A12: the note states the tie goes to the typed drafter" "$(tr '\n' ' ' < "$NOTE" | tr -s ' ')" 'a tie goes to the typed drafter'
   check "A12: the Critical findings the note lists match its counts (fork)" "$(grep -c '^- Fork review Critical' "$NOTE")" "$fork_crit"
   check "A12: the Critical findings the note lists match its counts (typed)" "$(grep -c '^- Typed review Critical' "$NOTE")" "$typed_crit"
-  # The decision is carried through to the build: typed means the agent exists and forks do not draft.
+  # Forks still do not draft; the typed drafter itself was removed when plans
+  # came to be drafted in the session.
   ff=$(grep -E '^export const FORK_DRAFTING = ' "$PLUGIN/hooks/cockpit/lib.ts" | sed 's/.*= *//')
-  if [ "$decision" = typed ]; then
-    check "A12: typed decision - agents/drafter-sonnet.md is built" "$([ -f "$DRAFTER" ] && echo yes || echo no)" "yes"
-    check "A12: typed decision - the cockpit's FORK_DRAFTING is false" "$ff" "false"
-  else
-    check "A12: fork decision - agents/drafter-sonnet.md is not built" "$([ -f "$DRAFTER" ] && echo yes || echo no)" "no"
-    check "A12: fork decision - the cockpit's FORK_DRAFTING is true" "$ff" "true"
-  fi
+  check "A12: the cockpit's FORK_DRAFTING is false" "$ff" "false"
 fi
 
 if sel A13; then
@@ -280,7 +176,7 @@ fi
 if sel A14; then
   echo "# A14"
   dt=$(section "$WP" "## Drafting the tasks")
-  matches "A14: writing-plans has the session draft every task on a Codex host" "$dt" 'On a Codex host, draft every task in the session'
+  matches "A14: writing-plans has the session draft every task, on any host" "$dt" 'Draft every task in the session, at any plan size.'
   check "A14: no Codex reference dispatches a drafting seat" "$(grep -rilE 'drafter|drafting seat' "$PLUGIN/reference"/*codex* "$PLUGIN/.codex-plugin" 2>/dev/null | wc -l | tr -d ' ')" "0"
 fi
 

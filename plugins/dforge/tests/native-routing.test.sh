@@ -66,7 +66,7 @@ decision 'missing Luna effort promotes within Luna' '.axes={files:1,spec:0,coupl
 decision 'missing Luna promotes to Sol low' '.axes={files:1,spec:1,coupling:0,risk:0} | .available_pairs |= map(select(.model != "gpt-6-luna"))' '[.score,.rank,.model,.effort]' '[2,3,"gpt-6.1-sol","low"]'
 decision 'initial assignment neither demotes nor enters reserve' '.axes={files:1,spec:1,coupling:1,risk:3} | .available_pairs=[{model:"gpt-6.1-sol",effort:"xhigh"},{model:"gpt-6-astra",effort:"max"}]' '.action' '"blocked"'
 decision 'empty capabilities block initial assignment' '.available_pairs=[]' '.action' '"blocked"'
-decision 'scout retains Sol medium floor' '.role="scout"' '[.rank,.model,.effort]' '[4,"gpt-6.1-sol","medium"]'
+expect_error 'the scout role is gone' '.role="scout"' 'invalid request'
 decision 'judge retains Astra high floor' '.role="judge"' '[.rank,.model,.effort]' '[8,"gpt-6-astra","high"]'
 decision 'judge never drops below its floor' '.role="judge" | .available_pairs=[{model:"gpt-6.1-sol",effort:"xhigh"}]' '.action' '"blocked"'
 decision 'judge exhaustion never enters implementer reserve' '.role="judge" | .operation="escalate" | .attempted_ranks=[8,9] | .split_consumed=true' '.action' '"blocked"'

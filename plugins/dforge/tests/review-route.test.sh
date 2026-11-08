@@ -400,14 +400,14 @@ present "writing-plans re-rounds only on Critical or a low score" "$P/skills/wri
 present "writing-plans gives a Codex plan's Critical at the cap one more round" "$P/skills/writing-plans/references/lint-and-review.md" 'earns exactly one more'
 present "writing-plans caps a Claude plan at two rounds" "$P/skills/writing-plans/references/lint-and-review.md" 'On a Claude plan the cap is 2 whatever the task totals'
 absent "writing-plans no longer derives a Claude cap from the totals" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'printed: 1 when the plan'"'"'s highest'
-present "writing-plans states the heavy-majority rule" "$P/skills/writing-plans/references/execution-line.md" '`subagent` when more than half the tasks are heavy'
-present "writing-plans raises a delegating inline effort" "$P/skills/writing-plans/references/execution-line.md" 'raised to `high` when any task is'
+present "writing-plans writes inline on every plan" "$P/skills/writing-plans/references/execution-line.md" 'Write `inline` on every plan.'
+present "writing-plans raises the inline effort at risk 3 or an executor task" "$P/skills/writing-plans/references/execution-line.md" 'raised to `high` when a self-implemented task has risk 3 or any task'
 present "writing-plans falls back to Opus on exit 2" "$P/skills/writing-plans/references/lint-and-review.md" 'exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native'
 present "writing-plans dispatches the native plan-review seat" "$P/skills/writing-plans/references/lint-and-review.md" '**`primary=native:<model>/<effort>`** (every round of a Codex-host plan)'
 present "final review records the native fix seat" "$P/reference/final-review.md" 'On a Codex-host plan it prints `primary=native:<model>/<effort>`'
 present "the plan reviewer prompt names both round-1 Claude seats" "$PRP" 'round produced nothing (`dforge:judge-opus`)'
-present "using-dforge states the mixed-mode rule" "$P/skills/using-dforge/SKILL.md" 'an inline plan delegates those'
-present "README states mixed mode" "$P/README.md" '`--effort high` once it delegates'
+present "using-dforge states the inline rule" "$P/skills/using-dforge/SKILL.md" 'Every plan executes inline: the session implements every task but those carrying an `**Executor:**` line, heavy tasks included.'
+present "README states the inline floor" "$P/README.md" '`--effort high` at risk 3 or once it delegates'
 present "README caps plan review at two rounds" "$P/README.md" 'at most two rounds on a Claude plan'
 absent "README no longer caps plan review by task total" "$P/README.md" 'capped by the plan'"'"'s highest task total'
 absent "writing-plans no longer dispatches a fresh full review each round" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'dispatch a fresh full review'
@@ -815,7 +815,7 @@ check "native final-fix: the highest of the matched tasks" "$out" "$NATIVE:gpt-6
 
 # --- README, version and program amendment -------------------------------------
 RD="$P/README.md"
-present "README counts twenty-one agents" "$RD" '**Twenty-one agents in four classes.**'
+present "README counts nineteen agents" "$RD" '**Nineteen agents in three classes.**'
 absent "README drops the three-seat risk-3 mean" "$RD" 'spread above 6 points'
 present "README names review-route" "$RD" '`scripts/review-route` prints the review seat'
 present "README names the plan-review schema" "$RD" '`codex-plan-review-schema.json`'
@@ -824,8 +824,8 @@ version=$(sed -nE 's/^[[:space:]]*"version": "([^"]+)".*/\1/p' "$P/.claude-plugi
 check "the Claude manifest names a release version" "$([[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && echo yes || echo no)" "yes"
 present "the Codex manifest carries the Claude manifest's version" "$P/.codex-plugin/plugin.json" "\"version\": \"$version\""
 present "the program design names sub-project 10" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-17 (sub-project 10 spec).**'
-present "approach ranking runs on Opus" "$P/skills/selecting-approaches/SKILL.md" 'Dispatch one `dforge:judge-opus` to run the ring'
-present "a load-bearing single candidate reaches the advisor" "$P/skills/selecting-approaches/SKILL.md" 'with one plausible approach goes to `advisor`'
+present "the approach advisor runs on Opus" "$P/skills/selecting-approaches/SKILL.md" 'dispatch one `dforge:judge-opus` to score it'
+present "a load-bearing decision reaches the advisor" "$P/skills/selecting-approaches/SKILL.md" 'Everything else is `inline`.'
 present "the budget reference derives the budget" "$P/reference/session-budget.md" 'min(`autoCompactWindow`, model window) × 93% − 140,000'
 present "the budget checkpoints finish the task in flight" "$P/reference/session-budget.md" 'finish the task in flight through its'
 present "the program design records sub-project 8" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-15 (sub-project 8 spec).**'

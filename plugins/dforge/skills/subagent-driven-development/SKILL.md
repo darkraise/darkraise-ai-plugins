@@ -1,9 +1,12 @@
 ---
 name: subagent-driven-development
-description: Use when executing implementation plans with independent tasks in the current session
+description: Deprecated — use only when a plan's Execution line names subagent or your human partner asks for subagent mode
 ---
 
 # Subagent-Driven Development
+
+> **Deprecated.** dforge:executing-plans replaces this skill: every new plan runs inline.
+> It stays runnable for plans whose Execution line names `subagent`; a later release deletes it.
 
 ## After compaction
 

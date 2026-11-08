@@ -8,3 +8,4 @@
 - 2026-11-01 `docs/dforge/plans/2026-10-31-test-tiers-and-ci-parity.md` — merged into `main` at f7210e3
 - 2026-11-03 `docs/dforge/plans/2026-11-02-antigravity-executor-lane.md` — merged into `main` at bc0ebceb
 - 2026-11-03 `docs/dforge/plans/2026-11-03-agy-gemini-first.md` — via PR
+- 2026-11-07 `docs/dforge/plans/2026-11-07-inline-only-execution.md` — via PR

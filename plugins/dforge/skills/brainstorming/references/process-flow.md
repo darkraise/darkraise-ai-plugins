@@ -12,7 +12,6 @@ digraph brainstorming {
     "Explore project context" [shape=box];
     "Ask clarifying questions" [shape=box];
     "Propose 2-3 approaches" [shape=box];
-    "Ask execution strategy\n(parallel or sequential)" [shape=box];
     "Present design sections" [shape=box];
     "User approves design?" [shape=diamond];
     "Draft acceptance\n(rate; ask below high)" [shape=box];
@@ -40,8 +39,7 @@ digraph brainstorming {
     "Hidden complexity? Upgrade path" -> "Classify: spike / bounded / architectural";
     "Explore project context" -> "Ask clarifying questions";
     "Ask clarifying questions" -> "Propose 2-3 approaches";
-    "Propose 2-3 approaches" -> "Ask execution strategy\n(parallel or sequential)";
-    "Ask execution strategy\n(parallel or sequential)" -> "Present design sections";
+    "Propose 2-3 approaches" -> "Present design sections";
     "Present design sections" -> "User approves design?";
     "User approves design?" -> "Present design sections" [label="no, revise"];
     "User approves design?" -> "Draft acceptance\n(rate; ask below high)" [label="yes"];
@@ -52,7 +50,7 @@ digraph brainstorming {
     "Architecture critic\n(one judge-opus round)" -> "User reviews spec?";
     "User reviews spec?" -> "Write design doc" [label="changes requested"];
     "User reviews spec?" -> "Invoke writing-plans skill" [label="approved"];
-    "Ask execution strategy\n(parallel or sequential)" -> "Write spec directly\n(autoRun=on, with ## Decisions)" [label="autoRun=on"];
+    "Propose 2-3 approaches" -> "Write spec directly\n(autoRun=on, with ## Decisions)" [label="autoRun=on"];
     "Write spec directly\n(autoRun=on, with ## Decisions)" -> "Draft acceptance in the spec\n(ask nothing yet)";
     "Draft acceptance in the spec\n(ask nothing yet)" -> "Spec self-review\n(one round, shown)";
     "Architecture critic\n(one judge-opus round)" -> "Fable spec review\n(at most two rounds)" [label="autoRun=on"];

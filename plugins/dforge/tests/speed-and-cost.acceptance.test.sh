@@ -102,9 +102,11 @@ if selected A2; then
     matches "A2: the split added reference files" "$count" '^([1-9][0-9]+)$'
     check "A2: every new reference file is linked from its SKILL.md on a 'before you' line" "$missing" ""
 
+    # A test retired with the script it tested is not lost by the split.
+    retired=" draft-pack.test.sh "
     gone=""
     while IFS= read -r t; do
-      [ -e "$HERE/$t" ] || gone="$gone$t "
+      [ -e "$HERE/$t" ] || [[ "$retired" == *" $t "* ]] || gone="$gone$t "
     done < <(git -C "$REPO_ROOT" ls-tree --name-only "$BASE" plugins/dforge/tests/ | sed 's|.*/||')
     check "A2: no test file that existed before the split is gone" "$gone" ""
 
@@ -406,7 +408,7 @@ fi
 # ---------------------------------------------------------------- A10
 if selected A10; then
   report "$TMP/reports/ok.md" ok
-  for kind in dforge:judge-opus general-purpose Explore dforge:judge-sonnet-high dforge:drafter-sonnet; do
+  for kind in dforge:judge-opus general-purpose Explore dforge:judge-sonnet-high; do
     gate "$kind" "$(newid)" $'**Status:** DONE\nno report line'
     check "A10: $kind with a DONE stop and no report exits 0" "$grc" "0"
   done
@@ -501,8 +503,6 @@ fi
 # ---------------------------------------------------------------- A18
 if selected A18; then
   if base_known; then
-    check "A18: reference/native-codex.md is byte-identical to the base" \
-      "$(git -C "$REPO_ROOT" diff --stat "$BASE" -- plugins/dforge/reference/native-codex.md | wc -l | tr -d ' ')" "0"
     old_rule='Run the focused test while you work and the full suite once before committing.'
     new_rule='Run the focused test while you work and the task check once before committing, in place of the full suite.'
     old=$(git -C "$REPO_ROOT" show "$BASE:plugins/dforge/skills/executing-plans/SKILL.md" | tr -d '\r' | tr '\n' ' ' | tr -s ' ')
@@ -512,6 +512,15 @@ if selected A18; then
     lacks "A18: executing-plans no longer asks for the full suite before every commit" "$now" "$old_rule"
   else
     printf 'skip - A18: base %s is not in this repository\n' "$BASE"
+  fi
+  # native-codex.md was last edited on purpose by the inline-only plan (its
+  # scout clauses and all-or-nothing rule), so identity is checked from there.
+  native_base=${SPEED_AND_COST_NATIVE_BASE:-0987d053afdd1c921444ee55416ae49ce853ebff}
+  if git -C "$REPO_ROOT" cat-file -e "$native_base^{commit}" 2>/dev/null; then
+    check "A18: reference/native-codex.md is byte-identical to its last planned edit" \
+      "$(git -C "$REPO_ROOT" diff --stat "$native_base" -- plugins/dforge/reference/native-codex.md | wc -l | tr -d ' ')" "0"
+  else
+    printf 'skip - A18: base %s is not in this repository\n' "$native_base"
   fi
   text=$(doc "$PLUGIN/reference/delegated-task.md")
   byhand=$(sed -e 's/.*## The steps by hand//' -e 's/ ## Recovery.*//' <<<"$text")

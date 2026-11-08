@@ -41,10 +41,9 @@ path below.
 ## Three Paths
 
 Before your first question, classify the request and say it in one
-line — `Process: <spike|bounded|architectural>, <inline|subagent> —
-<trigger | no trigger>` — so your human partner can override it. The mode
-slot is your expectation only; the plan's Execution line decides. The
-triggers are the seven in dforge:using-dforge's Process Depth:
+line — `Process: <spike|bounded|architectural> — <trigger | no trigger>` — so
+your human partner can override it. Every plan executes inline, so the line
+names no mode. The triggers are the seven in dforge:using-dforge's Process Depth:
 a new project or subsystem; an interface that something outside its own
 files depends on changes; the files touched cannot be enumerated after
 exploring; a load-bearing approach question is open; irreducible risk
@@ -52,7 +51,7 @@ exploring; a load-bearing approach question is open; irreducible risk
 a chat design; or your human partner asked for a spec.
 
 On the architectural path the line also names the depth,
-`Process: architectural, <inline|subagent>, depth <d> — <triggers>`. Name each
+`Process: architectural, depth <d> — <triggers>`. Name each
 trigger that holds by its id (`new-subsystem`, `interface`, `unenumerable`,
 `approach`, `risk`, `intricate`, `asked`, in the order of the list above), and
 take `<d>` from `scripts/depth-route --spec-triggers <ids>`: `full` for `risk`
@@ -106,11 +105,10 @@ your human partner's standing choice of fast mode, which is itself the approval.
 - `designApproval=whole`: present every design section in one message and ask
   for approval once, instead of after each section. It has no effect on Claude
   Code under `autoRun=on`, which presents no design.
-- `executionStrategy=sequential` or `executionStrategy=parallel`: do not ask
-  the execution-strategy question; record the value as the answer. `parallel`
-  still becomes sequential when you cannot name two parts that share no file,
-  on a Codex host,
-  and when `executionMode=inline`, which makes the plan sequential.
+- `executionStrategy`: honoured only for a plan whose Execution line names
+  `subagent` (deprecated, chosen by `executionMode=subagent` or your human
+  partner). Ask no execution-strategy question: the spec
+  records `**Execution strategy:** sequential — inline execution`.
 - `specReview=false`: after the spec self-review block, skip the User Review
   Gate and go on to Implementation. It has no effect under `autoRun=on`:
   on Claude Code the spec review always happens.
@@ -164,22 +162,21 @@ there is no checklist: see Fast Mode.
 5. **Get approval** — STOP and wait for an explicit yes; presenting the design and starting in the same breath is skipping the gate
 6. **Implement** — proceed with the normal development workflow (TDD applies); no plan document
 
-**Architectural:** (under `autoRun=on`, the default on Claude Code, steps 6-8
-and 12-13 run as Auto by default says)
+**Architectural:** (under `autoRun=on`, the default on Claude Code, steps 5-7
+and 11-12 run as Auto by default says)
 1. **Open the item register** — when the request or a review carries two or
    more distinct items, before the spec
 2. **Explore project context** — check files, docs, recent commits
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
-5. **Ask the execution strategy** — parallel subagent waves or sequential execution, one question (see Choosing the execution strategy)
-6. **Present design** — in sections scaled to their complexity, get user approval after each section
-7. **Draft acceptance** — numbered, tagged, rated statements; ask your human partner about every one rated below `high` (see Drafting acceptance)
-8. **Offer an auto run** — unless `autoRun=off` or on a Codex host: one question once the acceptance statements are settled (see After the Design)
-9. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` with its `**Depth:**` line, and commit
-10. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope, acceptance and the riskiest assumption; post its block before the user review (see below)
-11. **Architecture critic** — one `dforge:judge-opus` round on the written spec; fix or answer every Blocker and High finding (see Architecture critic: depth light skips it, and depth standard folds it into Fable's first round when Fable reviews)
-12. **User reviews written spec** — ask user to review the spec file before proceeding; under `autoRun=on` this is Auto by default's spec review message, after Fable's review at depth standard or full (an auto run started from the offer has Fable review it instead, at those depths)
-13. **Transition to implementation** — invoke writing-plans skill to create implementation plan
+5. **Present design** — in sections scaled to their complexity, get user approval after each section
+6. **Draft acceptance** — numbered, tagged, rated statements; ask your human partner about every one rated below `high` (see Drafting acceptance)
+7. **Offer an auto run** — unless `autoRun=off` or on a Codex host: one question once the acceptance statements are settled (see After the Design)
+8. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` with its `**Depth:**` line, and commit
+9. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope, acceptance and the riskiest assumption; post its block before the user review (see below)
+10. **Architecture critic** — one `dforge:judge-opus` round on the written spec; fix or answer every Blocker and High finding (see Architecture critic: depth light skips it, and depth standard folds it into Fable's first round when Fable reviews)
+11. **User reviews written spec** — ask user to review the spec file before proceeding; under `autoRun=on` this is Auto by default's spec review message, after Fable's review at depth standard or full (an auto run started from the offer has Fable review it instead, at those depths)
+12. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
 
@@ -261,9 +258,9 @@ Below the design, in the same message, post `Self-review (round 1 of 1):` with
 one line per item: clean, or what you fixed. Do not re-review after fixing.
 A revision your human partner asks for gets one new round.
 
-**Exploring approaches, choosing the execution strategy, presenting the design:**
+**Exploring approaches, recording the execution strategy, presenting the design:**
 
-Read [design-phase.md](references/design-phase.md) before you propose approaches, ask the execution strategy or present the design.
+Read [design-phase.md](references/design-phase.md) before you propose approaches, record the execution strategy or present the design.
 
 ## Auto by default (`autoRun=on`)
 

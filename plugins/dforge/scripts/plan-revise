@@ -382,29 +382,28 @@ while IFS=$'\t' read -r id text; do
 done <<<"$units"
 
 # --- the recommendation ---
-# It counts tasks, not units. plan_delegated already reduces a split task to its
-# highest band, so reading it here is what keeps this report and the execution
-# skills agreeing.
-heavy=$(plan_heavy "$plan" | grep -c . || true)
+# It counts tasks, not units. plan_delegated (executor tasks only) and
+# plan_scores already reduce a split task to its highest band, so reading them
+# here keeps this report, plan-lint's R5 floor and the execution skills agreeing.
 deleg_ids=$(plan_delegated "$plan" | cut -f1 | tr '\n' ' ')
 delegated=$(printf '%s' "$deleg_ids" | wc -w | tr -d ' ')
-max_self=-1
+max_self=-1 self_risk3=0
 while IFS=$'\t' read -r tn total trisk; do
   [ -n "$tn" ] || continue
   case "$total" in '-'|'?') continue ;; esac
   case " $deleg_ids " in *" $tn "*) continue ;; esac
   [ "$total" -gt "$max_self" ] && max_self=$total
+  [ "$trisk" != 3 ] || self_risk3=1
 done <<<"$(plan_scores "$plan")"
 
-if [ $((heavy * 2)) -gt "$tasks" ]; then
-  rec_mode=subagent rec_model=sonnet rec_effort=high
+rec_mode=inline rec_model=sonnet
+case "$(block assignment | awk -v t="$max_self" '$1 == t { print $2; exit }')" in
+  impl-opus-*) rec_model=opus ;;
+esac
+if [ "$delegated" -gt 0 ] || [ "$self_risk3" -eq 1 ] || [ "$max_self" -lt 0 ]; then
+  rec_effort=high
 else
-  rec_mode=inline rec_model=sonnet
-  if [ "$delegated" -gt 0 ] || [ "$max_self" -lt 0 ]; then
-    rec_effort=high
-  else
-    rec_effort=$(effort_of "$max_self")
-  fi
+  rec_effort=$(effort_of "$max_self")
 fi
 printf 'recommend  execution=%s  model=%s  effort=%s  delegated=%s/%s\n' \
   "$rec_mode" "$rec_model" "$rec_effort" "$delegated" "$tasks"

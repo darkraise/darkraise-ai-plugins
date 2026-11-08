@@ -16,6 +16,6 @@
     {"model":"gpt-6-astra","effort":"max"},
     {"model":"gpt-6-astra","effort":"ultra"}
   ],
-  "role_floors": {"implementer":0,"scout":4,"judge":8},
+  "role_floors": {"implementer":0,"judge":8},
   "review_cap": 5
 }

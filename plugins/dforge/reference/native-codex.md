@@ -145,13 +145,14 @@ A Claude `Executor: codex` line never starts recursive CLI offload in a Codex ho
 ## Execution modes and session ends
 
 Both execution skills run on this host, and the plan's `**Execution:**` line
-names the mode and the native pair. `scripts/plan-lint` holds a Codex-host plan
-to the all-or-nothing inline rule: an inline plan needs every task at total 4 or
-less and risk below 3. A Codex plan therefore carries no delegated task, and
-`scripts/task-brief` writes it no `**Dispatch:**` line: the mixed inline
-delegation Claude plans use has no Codex form, so
-dforge:executing-plans dispatches nothing here but its ruling seat and
-the final review.
+names the mode and the native pair. A Codex-host plan is inline, heavy tasks
+included, and its session implements every task.
+A Codex plan therefore carries no delegated task, and `scripts/task-brief`
+writes it no `**Dispatch:**` or `**Review:**` line. A task whose `**Evaluation:**` line
+reads `risk=3` is reviewed by hand with a native judge at Astra high or above
+([delegated-task.md](delegated-task.md) §The session review loop); otherwise
+dforge:executing-plans dispatches nothing here but its ruling seat and the
+final review.
 
 The Execution pair runs the main session, so it is sized to what that session
 does, not to the judge floor. A subagent session coordinates and dispatches, and
@@ -200,7 +201,7 @@ bash <plugin-root>/scripts/select-native-tier.sh --request <request-file>
 ```
 
 Provide exactly one JSON object with `policy`, `operation` (`assign` or `escalate`),
-`role` (`implementer`, `scout`, or `judge`), `assignment_source`, `available_pairs`
+`role` (`implementer` or `judge`), `assignment_source`, `available_pairs`
 objects with model/effort, `attempted_ranks`, `attempted_reserves` (effort names),
 `split_consumed`, and `review_rounds`. Rubric requests require
 `axes: {files,spec,coupling,risk}`. The selector enforces Rule S and calculates
@@ -255,7 +256,7 @@ An ultra implementer may run subagents in parallel inside its own task: that is
 this plugin's policy, not a property of the ultra effort level, so the brief
 says so explicitly. The task's approved write set, the before/after snapshot
 and the review still apply to the task as a whole. Only implementers reach the
-reserve, so the no-delegation instruction for scouts and judges is unaffected.
+reserve, so the no-delegation instruction for judges is unaffected.
 
 ## Dispatch and review
 
@@ -263,11 +264,11 @@ Use the active native dispatch schema with an isolated context and explicit
 model and reasoning effort. Never assume full-history forks accept overrides.
 Include all of the following directly in each child's task message:
 
-- Its implementer, scout, or judge role and the applicable role instructions.
+- Its implementer or judge role and the applicable role instructions.
 - Task brief, approved files, repository instructions, and relevant criteria.
 - The verification-before-completion instructions and required evidence.
 - Its exact model/effort and the expected report format.
-- For scouts/judges: no file writes except the one report file the prompt names, and no further delegation. The judge writes the full report there and replies in at most 10 lines; read the report from the file.
+- For judges: no file writes except the one report file the prompt names, and no further delegation. The judge writes the full report there and replies in at most 10 lines; read the report from the file.
 
 Claude agent frontmatter does not supply native restrictions or skill context.
 Apply enforced per-agent read-only restrictions when the active tool supports
@@ -293,12 +294,12 @@ pair and task state. If resume is unsupported, report the lost context and use
 a fresh isolated implementer with the complete fix package under the recorded
 assignment; do not silently inherit the controller's model.
 
-Scouts start at rank 4 (Sol medium) or above, judges at rank 8 (Astra high) or above.
-For rubric routing, evaluate the bounded scout or review brief itself. An
+Judges start at rank 8 (Astra high) or above.
+For rubric routing, evaluate the bounded review brief itself. An
 implementer task with spec=3 must first receive approach work; do not submit its
-unresolved implementation axes as the scout assignment or invent passing axes.
+unresolved implementation axes as a judge assignment or invent passing axes.
 Every review uses a separate agent context with the full review package, never the implementer's
-conversation. Preserve existing criteria scoring, best-of-three approach
+conversation. Preserve existing criteria scoring, advisor approach
 selection, three independent evaluations for raw risk 3, and the five-round
 review cap. Raw risk stays 0–3; its doubled score contribution is not a new risk
 category. Ten execution tiers do not grant ten review rounds.

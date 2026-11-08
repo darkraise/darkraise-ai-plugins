@@ -5,8 +5,9 @@ When `scripts/auto-run status` exits 0, this plan is written unattended
 first. Then nothing in this skill waits on your human partner:
 
 - **The execution strategy:** take the spec's `**Execution strategy:**` line;
-  with none, take the `executionStrategy` setting (`parallel` by default) as
-  Parallel waves says, and write `sequential` when it is `ask`.
+  with none, write `sequential` unless the Execution line is `subagent`, where
+  the `executionStrategy` setting decides as Parallel waves says (`sequential`
+  when it is `ask`).
 - **An approach or planning choice** you would ask about goes to
   `dforge:judge-opus` first, then the ladder in auto-run.md §Rulings.
   dforge:selecting-approaches runs as usual otherwise.

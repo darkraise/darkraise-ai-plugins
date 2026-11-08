@@ -77,10 +77,12 @@ INIT6='Task 6: implementer impl-sonnet-low (assigned; base fffffff; executor agy
 HB6='Task 6: implementer impl-sonnet-low (assigned; base fffffff; executor agy HANDBACK - capability failed twice)'
 ledger "$INIT6" "$HB6"
 check "a handback before review counts" "$(breaker agy)" "lane-breaker agy state=open handbacks=1"
+ledger "$INIT6" 'Task 6: implementer inline (assigned; base fffffff; executor agy HANDBACK - capability failed twice)'
+check "a handback to the session counts" "$(breaker agy)" "lane-breaker agy state=open handbacks=1"
 ledger "$INIT6" "$HB6" "$AGY4" "$HB4"
 check "a handback before review and a round-2 handback trip the breaker" "$(breaker agy)" "lane-breaker agy state=tripped handbacks=2"
 present "the lane reference records a handback before review where the breaker reads it" "$P/reference/executor-lane.md" \
-  'Task <N>: implementer <agent> (assigned; base <sha7>; executor <id> HANDBACK - <reason>)'
+  'Task <N>: implementer inline (assigned; base <sha7>; executor <id> HANDBACK - <reason>)'
 
 ledger 'Plan: executor agy off - unreliable (2 handbacks)'
 check "the Plan line trips the breaker whatever the count" "$(breaker agy)" "lane-breaker agy state=tripped handbacks=0"
