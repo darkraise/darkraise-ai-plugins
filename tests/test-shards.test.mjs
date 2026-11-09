@@ -25,11 +25,11 @@ const shell = (name, limit, ...part) => ['bash', [`plugins/dforge/tests/${name}`
 
 test('Windows shards cover every discovered suite exactly once', () => {
   const all = list();
-  const shards = Array.from({ length: 12 }, (_, i) => list('--shard', `${i + 1}/12`));
+  const shards = Array.from({ length: 14 }, (_, i) => list('--shard', `${i + 1}/14`));
   assert.ok(shards.every(shard => shard.length > 0));
   assert.deepEqual(shards.flat().sort(), all.sort());
   assert.equal(new Set(shards.flat()).size, all.length);
-  assert.deepEqual(list('--shard', '1/12'), shards[0]);
+  assert.deepEqual(list('--shard', '1/14'), shards[0]);
 });
 
 test('a job without a weight is scheduled at the default weight and unsharded runs retain their order', () => {
