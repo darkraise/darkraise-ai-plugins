@@ -433,12 +433,12 @@ ar_handoff() {
   fi
 }
 
-# ar_switch — at plan saved, the in-place move to execution: the first prompt
+# ar_switch — at plan saved, the move to execution: the first prompt
 # and launch as ar_clear reads them. Refuses (return 4) without an attached
-# plan, or when the first prompt names another plan. Never a self-resume. The
-# phase moves to execute, so the switch's compaction is measured under
-# execution's rules and an oversized one still hands off. Setup is due until
-# a phase execute from the execution workspace, a task-complete or phase final.
+# plan, or when the first prompt names another plan. Never a self-resume.
+# The phase moves to execute before the cockpit clears the session. Setup is
+# due until a phase execute from the execution workspace, a task-complete or
+# phase final.
 ar_switch() {
   local plan
   plan=$(ar_get plan)
@@ -488,29 +488,23 @@ ar_rebind_locked() { # ar_rebind_locked PATH ID
   ar_put "$1" '.session = $id | .rebind = false | .pending = "resume" | .failures = 0 | .regime = "normal"' --arg id "$2"
 }
 
-# ar_resumed — the cockpit submitted its stage's prompt. After a switch the
-# compaction is still to be measured, so after-compact becomes due.
+# ar_resumed — the cockpit submitted its stage's prompt.
 ar_resumed() {
   ar_update '.failures = 0
-    | if .pending == "resume" then .pending = null
-      elif .pending == "switch-resume" then .pending = "after-compact"
-      else . end'
+    | if .pending == "resume" then .pending = null else . end'
 }
 
-# ar_compacted [--switch] — book a compaction; the switch's own leaves its
-# resume stage due. One in the final or finish phase sets finalCompacted, after
-# which every budget line of the run says ok. An execute-phase compaction other
-# than the switch's counts toward AR_COMPACTION_CAP, reached without a
+# ar_compacted — book a compaction. One in the final or finish phase sets
+# finalCompacted, after which every budget line of the run says ok. An
+# execute-phase compaction counts toward AR_COMPACTION_CAP, reached without a
 # completed task, which stops the run (return 5): a task that cannot fit in a
 # window would otherwise loop.
 ar_compacted() {
-  local next=after-compact n
-  [ "${1:-}" = --switch ] && next=switch-resume
-  ar_update '.compactions += 1 | .failures = 0 | .pending = $n
+  local n
+  ar_update '.compactions += 1 | .failures = 0 | .pending = "after-compact"
     | .finalCompacted = ((.finalCompacted // false) or .phase == "final" or .phase == "finish")
-    | if $n == "after-compact" and .phase == "execute"
-      then .compactionsSinceTask = ((.compactionsSinceTask // 0) + 1) else . end' --arg n "$next" || return $?
-  [ "$next" = after-compact ] || return 0
+    | if .phase == "execute"
+      then .compactionsSinceTask = ((.compactionsSinceTask // 0) + 1) else . end' || return $?
   n=$(ar_get compactionsSinceTask)
   if [ "${n:-0}" -ge "$AR_COMPACTION_CAP" ]; then
     ar_stop "$AR_COMPACTION_CAP compactions without a completed task" || return $?
@@ -584,7 +578,7 @@ ar_after() {
 }
 
 # ar_holds_session — true in the phases no compaction hands off from: the plan
-# is written, and the final review and finishing run, in this session.
+# is written, the final review runs, and finishing runs in its own session.
 ar_holds_session() {
   ar_state | ar_jq -e '.phase == "plan" or .phase == "final" or .phase == "finish"' >/dev/null 2>&1
 }
