@@ -68,8 +68,10 @@ export type CockpitSpawn = {
   outcome?: 'done' | 'failed' | null
   /** When it started, in milliseconds since the epoch. */
   startedAt: number
-  /** For a judge seat, the report paths its dispatch named under a state root, as written: the only files it may write. */
+  /** For a judge seat, the report paths its dispatch, or the prompt file the dispatch points at, named under a state root, as written: the only files it may write. */
   reports?: string[]
+  /** For a judge seat, the state roots of the repository's worktrees when it was dispatched. */
+  reportRoots?: string[]
 }
 
 /** One background shell the session started and has not heard the end of. */

@@ -445,7 +445,9 @@ text. A plan-named command still runs on the controller host, unsandboxed and
 with your rights, as the suite is run there. Any other `baseline` command is
 not run: it stays for the ruling seat, its digest line ending
 ` (command not named in the plan)`. Review seats can write only their report
-files (the cockpit refuses any other write), so a seat cannot add a command to
+files, the `-report.md` path under `.dforge` that the dispatch names or that
+the "Write your full report to" line of its prompt file names (the cockpit
+refuses any other write), so a seat cannot add a command to
 the plan, its amendments or the step file. An item whose check could not
 run (an unknown commit, a git error, a command that timed out or was not
 found) stays for the ruling seat. An answer that matches
