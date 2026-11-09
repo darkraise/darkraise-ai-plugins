@@ -13,6 +13,8 @@
 # notification starts the next turn. The reverse is held once: a next-step
 # block or finishing menu printed over running work would invite the human to
 # end a session whose work is still in flight.
+# A plan's hold also stands down while a task notification is still queued: its
+# delivery starts another turn as soon as this one ends.
 # An auto run is the exception to holding once: nobody is watching to send the
 # next prompt, so its retries are held too, up to AUTO_HOLD_CAP in a row; past
 # that the run stops and one last hold asks for the attended ending. Every hold
@@ -56,7 +58,8 @@ if command -v cygpath >/dev/null 2>&1; then root_shown=$(cygpath -m "$PLUGIN_ROO
 # Background work this session started that is still listed (lib/in-flight.sh):
 # no finished notification yet, or an agent that reported but left work of its
 # own running.
-running=$(inflight_scan "$transcript_path" "$(inflight_since "$session_id")") \
+since=$(inflight_since "$session_id")
+running=$(inflight_scan "$transcript_path" "$since") \
   || running="(unknown: the transcript could not be scanned; check your background shells and agents by hand)"
 pending=$(grep -c . <<<"$running" || true)
 has_pending_background() { [ "$pending" -gt 0 ]; }
@@ -157,6 +160,7 @@ while IFS= read -r candidate; do
 done < <([ -z "$sdd" ] || find "$sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | sort)
 
 [ -n "$ledger" ] || exit 0
+inflight_queued "$transcript_path" "$since" && exit 0
 
 plan=$(head -n 1 "$ledger" | sed -n 's/^# SDD ledger — plan: //p' | tr -d '\r')
 [ -n "$plan" ] || plan="PLAN_FILE"

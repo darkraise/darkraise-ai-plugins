@@ -94,6 +94,27 @@ check "a long transcript: still exit 1" "$code" "1"
 check "a long transcript: the launch is named" "$(grep -c '^- shell b10 - idle - Watch the build$' <<<"$out")" "1"
 result toolu_stop2 '{"message":"Successfully stopped task: b10 (Watch the build)","task_id":"b10"}'
 
+# A resumed agent is one running launch, listed under its original description.
+use toolu_a21 'Implement task 7'
+result toolu_a21 $'Async agent launched successfully.\nagentId: a21 (internal ID)'
+notify toolu_a21 completed
+check "a finished agent: exit 0" "$(bash "$INFLIGHT" >/dev/null; echo $?)" "0"
+use toolu_send 'Fix round 1'
+result toolu_send '{"success":true,"message":"Resuming agent a21","resumedAgentId":"a21","pin":{"id":"a21"}}'
+out=$(bash "$INFLIGHT"); code=$?
+check "a resumed agent: exit 1" "$code" "1"
+check "a resumed agent is listed once, as first described" "$(grep -c '^- agent a21 - idle - Implement task 7$' <<<"$out"):$(grep -c 'a21' <<<"$out")" "1:1"
+fjq -nc '{type:"attachment",attachment:{type:"queued_command",prompt:"<task-notification>\n<task-id>a21</task-id>\n<tool-use-id>toolu_send</tool-use-id>\n<status>completed</status>\n</task-notification>"}}' >> "$TP"
+check "a resumed agent's notification: exit 0" "$(bash "$INFLIGHT" >/dev/null; echo $?)" "0"
+
+use toolu_m7 'Watch the deploy'
+result toolu_m7 'Monitor started (task m7, expires in 30m unless the source ends first; you get one notice at expiry). You will be notified on each event.'
+out=$(bash "$INFLIGHT"); code=$?
+check "a running Monitor: exit 1" "$code" "1"
+check "the Monitor is named" "$(grep -c '^- monitor m7 - idle - Watch the deploy$' <<<"$out")" "1"
+notify toolu_m7 completed
+check "a finished Monitor: exit 0" "$(bash "$INFLIGHT" >/dev/null; echo $?)" "0"
+
 # --- start time and idle age ---
 result_at() { # result_at <tool_use_id> <iso timestamp> <text>
   fjq -nc --arg id "$1" --arg ts "$2" --arg t "$3" '{type:"user",timestamp:$ts,message:{role:"user",content:[{type:"tool_result",tool_use_id:$id,content:$t}]}}' >> "$TP"

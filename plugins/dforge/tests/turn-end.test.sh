@@ -118,9 +118,13 @@ launch() { # launch <tool_use_id> <result text> [as_array]
     jq -nc --arg id "$1" --arg t "$2" '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:$id,content:$t}]}}'
   fi >> "$BG"
 }
-notify() { # notify <tool_use_id> <status>
-  jq -nc --arg id "$1" --arg st "$2" \
-    '{type:"attachment",attachment:{type:"queued_command",prompt:("<task-notification>\n<task-id>x</task-id>\n<tool-use-id>" + $id + "</tool-use-id>\n<output-file>/tmp/x.output</output-file>\n<status>" + $st + "</status>\n</task-notification>")}}' >> "$BG"
+notify() { # notify <tool_use_id> <status> [task id]
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -nc --arg id "$1" --arg st "$2" --arg task "${3:-x}" \
+    '{type:"attachment",attachment:{type:"queued_command",prompt:("<task-notification>\n<task-id>" + $task + "</task-id>\n<tool-use-id>" + $id + "</tool-use-id>\n<output-file>/tmp/x.output</output-file>\n<status>" + $st + "</status>\n</task-notification>")}}' >> "$BG"
+}
+queue() { # queue <operation> [content] [timestamp]
+  MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq -nc --arg op "$1" --arg c "${2:-}" --arg ts "${3:-}" \
+    '{type:"queue-operation",operation:$op} + (if $c == "" then {} else {content:$c} end) + (if $ts == "" then {} else {timestamp:$ts} end)' >> "$BG"
 }
 : > "$BG"
 jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"Dispatched."}]}}' >> "$BG"
@@ -147,6 +151,28 @@ notify toolu_bash killed
 check "all background work finished: blocks" "$(decision "$(stop s-1 'Waiting on the reviewer.' false "$BG")")" "block"
 check "the block says to wait without the next-step block" \
   "$(jq -r .reason <<<"$(stop s-1 'Done.' false "$BG")" | grep -c 'end the turn without the block')" "1"
+
+# A finished launch whose notification is still queued starts the next turn as
+# soon as this one ends, so the stop is not the end of the work.
+QN=$'<task-notification>\n<task-id>q1</task-id>\n<status>completed</status>\n</task-notification>'
+queue enqueue "$QN"
+check "a queued notification: passes" "$(stop s-1 'Waiting on the verdict.' false "$BG")" ""
+queue dequeue
+check "a dequeued notification: blocks" "$(decision "$(stop s-1 'Waiting on the verdict.' false "$BG")")" "block"
+queue enqueue "$QN"
+queue remove "$QN"
+check "a notification absorbed mid-turn: blocks" "$(decision "$(stop s-1 'Waiting on the verdict.' false "$BG")")" "block"
+queue enqueue 'a typed prompt'
+check "a queued prompt is not a notification: blocks" "$(decision "$(stop s-1 'Waiting on the verdict.' false "$BG")")" "block"
+queue enqueue "$QN"
+queue dequeue
+check "dequeue takes the oldest entry: a notification behind a prompt passes" "$(stop s-1 'Waiting on the verdict.' false "$BG")" ""
+queue dequeue
+printf '2026-10-11T08:00:00.000Z\n' > "$HOME/.claude/dforge/sessions/turns/s-1.since"
+queue enqueue "$QN" 2026-10-10T08:00:00.000Z
+check "a notification queued before the resume: blocks" "$(decision "$(stop s-1 'Waiting on the verdict.' false "$BG")")" "block"
+rm -f "$HOME/.claude/dforge/sessions/turns/s-1.since"
+queue dequeue
 
 # A launch stopped by TaskStop never sends a notification; it is not running.
 # Neither is one whose ID only shows up later in some other tool's output.
@@ -175,6 +201,20 @@ check "the hold names it" "$(jq -r .reason <<<"$out" | grep -c '^- agent a8 ')" 
 check "the hold shows its start and idle age fields" "$(jq -r .reason <<<"$out" | grep -c '^- agent a8 - idle - ')" "1"
 notify toolu_agent3 completed
 check "its final notification: passes" "$(stop s-1 "$NEXT" false "$BG")" ""
+
+# An agent resumed with SendMessage is running again, whatever it reported before.
+launch toolu_agent5 $'Async agent launched successfully.\nagentId: a20' array
+notify toolu_agent5 completed a20
+check "a finished agent: a plain stop blocks" "$(decision "$(stop s-1 'Waiting.' false "$BG")")" "block"
+launch toolu_send '{"success":true,"message":"Resuming agent a20","resumedAgentId":"a20","pin":{"id":"a20"}}' array
+check "a resumed agent: a plain stop passes" "$(stop s-1 'Waiting for its report.' false "$BG")" ""
+check "a resumed agent is counted once" "$(jq -r .reason <<<"$(stop s-1 "$NEXT" false "$BG")" | grep -c '1 background launch')" "1"
+notify toolu_send completed a20
+check "a resumed agent's final notification: blocks" "$(decision "$(stop s-1 'Waiting.' false "$BG")")" "block"
+launch toolu_mon 'Monitor started (task m1, expires in 30m unless the source ends first; you get one notice at expiry). You will be notified on each event.'
+check "a running Monitor: a plain stop passes" "$(stop s-1 'Watching the deploy.' false "$BG")" ""
+notify toolu_mon completed m1
+check "a finished Monitor: blocks" "$(decision "$(stop s-1 'Watching the deploy.' false "$BG")")" "block"
 
 # Work launched before the session last started or resumed died with that
 # process, so its missing notification does not count.
