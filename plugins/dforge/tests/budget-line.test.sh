@@ -270,5 +270,54 @@ check "task-brief: the items come after the excerpt" \
 bash "$P/scripts/task-brief" docs/ui-plan.md 2 "$TMP/ui2.md" >/dev/null 2>&1
 check "task-brief: a task without a UI/UX line gets no items" "$(grep -c 'UI/UX contract items' "$TMP/ui2.md")" "0"
 
+# --- the package leaves out the branch's own design documents ---
+# The suite's MSYS_NO_PATHCONV would hide a pathspec Git Bash rewrites.
+PKG="$TMP/pkg"
+git init -q "$PKG"
+mkdir -p "$PKG/docs/dforge/specs" "$PKG/docs/dforge/plans" "$PKG/docs/dforge/registers" "$PKG/docs/superpowers/plans" "$PKG/docs/guide" "$PKG/src/deep"
+printf '# Plan\n\n### Task 1: First\n\nBody.\n' > "$PKG/docs/dforge/plans/p.md"
+printf 'a\n' > "$PKG/src/deep/code.txt"
+printf 'a\n' > "$PKG/docs/guide/g.md"
+printf 'a\n' > "$PKG/docs/dforge/specs/s.md"
+printf 'a\n' > "$PKG/docs/dforge/registers/r.md"
+printf 'a\n' > "$PKG/docs/superpowers/plans/old.md"
+git -C "$PKG" add -A && git -C "$PKG" commit -qm pkg-base
+PBASE=$(git -C "$PKG" rev-parse HEAD)
+for f in docs/dforge/specs/s.md docs/dforge/plans/p.md docs/dforge/registers/r.md docs/superpowers/plans/old.md; do printf 'b\n' >> "$PKG/$f"; done
+git -C "$PKG" add -A && git -C "$PKG" commit -qm pkg-docs
+PDOCS=$(git -C "$PKG" rev-parse HEAD)
+printf 'b\n' >> "$PKG/src/deep/code.txt"
+printf 'b\n' >> "$PKG/docs/guide/g.md"
+git -C "$PKG" add -A && git -C "$PKG" commit -qm pkg-code
+pkg() { # pkg <directory to run from> <base> <head> <output name>
+  (cd "$1" && env -u MSYS_NO_PATHCONV bash "$P/scripts/review-package" "$PKG/docs/dforge/plans/p.md" "$2" "$3" "$TMP/$4" >/dev/null 2>&1)
+}
+count() { grep -cF -- "$2" "$TMP/$1"; }
+pkg "$PKG" "$PBASE" HEAD mixed.diff
+check "package: the code is diffed" "$(count mixed.diff 'diff --git a/src/deep/code.txt')" "1"
+for f in docs/dforge/specs/s.md docs/dforge/plans/p.md docs/dforge/registers/r.md docs/superpowers/plans/old.md; do
+  check "package: $f is not diffed" "$(count mixed.diff "diff --git a/$f")" "0"
+  check "package: $f is not in the stat" "$(grep -cE -- " ${f//./\\.} +\\|" "$TMP/mixed.diff")" "0"
+done
+check "package: the left-out line names each file" "$(grep '^Left out: ' "$TMP/mixed.diff")" \
+  "Left out: docs/dforge/plans/p.md, docs/dforge/registers/r.md, docs/dforge/specs/s.md, docs/superpowers/plans/old.md — the seat has the spec and plan by path, or the brief"
+check "package: another document stays" "$(count mixed.diff 'diff --git a/docs/guide/g.md')" "1"
+check "package: the commit list keeps every commit" "$(count mixed.diff ' pkg-docs'):$(count mixed.diff ' pkg-code')" "1:1"
+pkg "$PKG" "$PBASE" "$PDOCS" docs-only.diff
+check "package: a documents-only range keeps its diff" "$(count docs-only.diff 'diff --git a/docs/dforge/specs/s.md')" "1"
+check "package: a documents-only range leaves nothing out" "$(count docs-only.diff 'Left out:')" "0"
+pkg "$PKG/src/deep" "$PBASE" HEAD subdir.diff
+check "package: the same from a subdirectory" "$(cat "$TMP/subdir.diff")" "$(cat "$TMP/mixed.diff")"
+check "task reviewer: may open a left-out file" "$(grep -c 'named on a `Left out:` line' "$P/skills/subagent-driven-development/references/task-reviewer-prompt.md")" "1"
+. "$HERE/fixtures/darkmem-stores.sh"
+SH="$TMP/stores-home"; mkdir -p "$SH"
+MIRROR=$(stores_home "$SH" "$PKG" p darkmem local)
+# plan_locate reads a plan from the applied store, never the checkout's copy.
+mkdir -p "$MIRROR/dforge/plans"
+cp "$PKG/docs/dforge/plans/p.md" "$MIRROR/dforge/plans/p.md"
+(cd "$PKG" && HOME="$SH" env -u MSYS_NO_PATHCONV bash "$P/scripts/review-package" "$PKG/docs/dforge/plans/p.md" "$PBASE" HEAD "$TMP/store.diff" >/dev/null 2>&1); status=$?
+check "package: a document store: exit 0" "$status" "0"
+check "package: a document store: the code is still diffed" "$(count store.diff 'diff --git a/src/deep/code.txt')" "1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

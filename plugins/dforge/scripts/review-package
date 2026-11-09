@@ -32,6 +32,28 @@ else
   out="$dir/review-$(git rev-parse --short "$base")..$(git rev-parse --short "$head").diff"
 fi
 
+top=$(git rev-parse --show-toplevel)
+docs_name=$(dforge_name "$(dforge_docs_root "$top")" "$top")
+own_dirs=()
+excludes=()
+while IFS= read -r spelling; do
+  for kind in specs plans registers; do
+    own_dirs+=("$spelling/$kind")
+    excludes+=(":(exclude)$spelling/$kind")
+  done
+done < <(dforge_name_spellings "$docs_name")
+
+left=$(MSYS_NO_PATHCONV=1 git -C "$top" diff --name-only "${base}..${head}" -- "${own_dirs[@]}" | tr -d '\r')
+kept=$(MSYS_NO_PATHCONV=1 git -C "$top" diff --name-only "${base}..${head}" -- . "${excludes[@]}" | tr -d '\r')
+
+# A range that is only documents keeps its diff: the documents are the change.
+pathspec=()
+left_out=
+if [ -n "$left" ] && [ -n "$kept" ]; then
+  pathspec=(-- . "${excludes[@]}")
+  left_out="Left out: ${left//$'\n'/, } — the seat has the spec and plan by path, or the brief"
+fi
+
 {
   echo "# Review package: ${base}..${head}"
   echo
@@ -39,10 +61,11 @@ fi
   git log --oneline "${base}..${head}"
   echo
   echo "## Files changed"
-  git diff --stat "${base}..${head}"
+  MSYS_NO_PATHCONV=1 git -C "$top" diff --stat "${base}..${head}" ${pathspec[@]+"${pathspec[@]}"}
+  if [ -n "$left_out" ]; then echo "$left_out"; fi
   echo
   echo "## Diff"
-  git diff -U10 "${base}..${head}"
+  MSYS_NO_PATHCONV=1 git -C "$top" diff -U10 "${base}..${head}" ${pathspec[@]+"${pathspec[@]}"}
 } > "$out"
 
 commits=$(git rev-list --count "${base}..${head}")
