@@ -315,6 +315,8 @@ type World = {
   gitRuns?: string[]
   /** What `git rev-parse --git-common-dir` answers; `<primary>/.git` unless said. */
   commonDir?: string
+  /** What `git worktree list --porcelain` names. */
+  worktrees?: string[]
   /** What `git rev-parse --show-toplevel` answers in the session's directory: the work tree it is in; the session repository's unless said. */
   checkout?: string
   /** Runs inside each scripts/auto-run call, given its command word, before the call answers. */
@@ -500,6 +502,10 @@ function world(on: On, w: World) {
     }
     if (argv === 'git rev-parse --show-toplevel') {
       return { value: { exitCode: 0, stdout: `${w.checkout ?? '/home/me/code/shop'}\n`, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    if (argv === 'git worktree list --porcelain') {
+      const stdout = (w.worktrees ?? []).map(dir => `worktree ${dir}\nHEAD 1234567\nbranch refs/heads/work\n`).join('\n')
+      return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
     const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? `${common}\n` : PORCELAIN
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
@@ -953,6 +959,62 @@ describe('review seat write guard', () => {
     await $.session.start(START)
     await $.agent.spawn(dispatch('Review task 1 and reply in 10 lines.', 'dforge:judge-opus', 1))
     expect((await write($, 'judge-1', REVIEW)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (none); ${REVIEW} is not one.`)
+  })
+
+  describe('a dispatch that only points at its prompt file', () => {
+    const PROMPT = `${WS}/task-1-review-prompt.md`
+    const LOOSE = '/tmp/task-1-review-prompt.md'
+    const EARLIER = `${WS}/task-1-rereview-1-report.md`
+    const FILLED = `    Read the implementer's report: ${WS}/task-1-report.md\n    The earlier round is in ${EARLIER}.\n    Write your full report to ${REVIEW} and write nothing else: it is\n`
+    const pointed = async ($: Parameters<TestBody>[0], on: On, promptFile: string, files: NonNullable<World['files']>) => {
+      world(on, { tokens: 10_000, agentIds: ['judge-1'], files })
+      on('agent.list', () => ({ value: [] }) as never)
+      on('fs.read', (_$, e) => {
+        const file = files[e.path]
+        if (file === undefined) throw new Error('ENOENT')
+        return { value: file.text }
+      })
+      await $.session.start(START)
+      await $.agent.spawn(dispatch(`Your complete instructions are in \`${promptFile}\`: read it first and follow it.`, 'dforge:judge-sonnet-high', 1))
+    }
+
+    test('allows only the report on the prompt file\'s report line', async ($, on) => {
+      await pointed($, on, PROMPT, { [PROMPT]: { text: FILLED } })
+      expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
+      expect((await write($, 'judge-1', EARLIER)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (${REVIEW}); ${EARLIER} is not one.`)
+    })
+
+    const NOTHING: [string, string, NonNullable<World['files']>][] = [
+      ['lies outside every state root', LOOSE, { [LOOSE]: { text: FILLED } }],
+      ['cannot be read', PROMPT, {}],
+      ['has no report line', PROMPT, { [PROMPT]: { text: `Read ${REVIEW} for context.\n` } }],
+    ]
+    for (const [name, promptFile, files] of NOTHING) {
+      test(`allows nothing when the prompt file ${name}`, async ($, on) => {
+        await pointed($, on, promptFile, files)
+        expect((await write($, 'judge-1', REVIEW)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (none); ${REVIEW} is not one.`)
+      })
+    }
+  })
+
+  test('allows a report under a worktree the session is not in when dispatching or writing', async ($, on) => {
+    const primary = '/home/me/code/shop'
+    const worktree = `${primary}/.claude/worktrees/feature`
+    const report = `${worktree}/.dforge/sdd/p/task-1-review-report.md`
+    const place: World = { tokens: 10_000, agentIds: ['judge-1', 'judge-2'], checkout: primary, primary, worktrees: [primary, worktree] }
+    world(on, place)
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(dispatch(`Write your report to ${report}.`, 'dforge:judge-sonnet-high', 1))
+    expect((await write($, 'judge-1', report)).deny).toBeUndefined()
+
+    place.checkout = worktree
+    await $.tool.call({ tool: 'EnterWorktree' } as never)
+    await $.agent.spawn(dispatch(`Write your report to ${report}.`, 'dforge:judge-sonnet-high', 2))
+    place.checkout = primary
+    place.worktrees = [primary]
+    await $.tool.call({ tool: 'ExitWorktree' } as never)
+    expect((await write($, 'judge-2', report)).deny).toBeUndefined()
   })
 
   test('takes a judge the spawn record does not hold from $.agent.list()', async ($, on) => {

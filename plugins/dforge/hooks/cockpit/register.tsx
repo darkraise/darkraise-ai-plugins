@@ -197,11 +197,20 @@ const RUN_SKILLS = ['dforge:subagent-driven-development', 'dforge:executing-plan
 const WORKTREE_TOOLS = ['EnterWorktree', 'ExitWorktree']
 // The tools a review seat's write guard looks at.
 const REVIEW_WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
-// An absolute path ending -report.md, as a dispatch prompt spells it: not
-// begun inside a relative path, not ending before more of a name.
-const REPORT_PATH = /(?<![\w.~/\\-])(?:\/|[A-Za-z]:[\\/])[^\s'"`<>()|*?[\]{},;]*-report\.md(?![\w-]|\.[\w-])/g
-// The rest of a report path, read from just past a root matched literally.
-const REPORT_TAIL = /^[\\/][^\s'"`<>()|*?[\]{},;]*-report\.md(?![\w-]|\.[\w-])/
+const PATH_BODY = /[^\s'"`<>()|*?[\]{},;]*/.source
+const PATH_STOP = /(?![\w-]|\.[\w-])/.source
+// `whole` is an absolute path as a dispatch prompt spells it: not begun inside
+// a relative path, not ending before more of a name. `tail` is the rest of
+// one, read from just past a root matched literally.
+const pathShape = (suffix: string) => ({
+  whole: new RegExp(`(?<![\\w.~/\\\\-])(?:/|[A-Za-z]:[\\\\/])${PATH_BODY}${suffix}${PATH_STOP}`, 'g'),
+  tail: new RegExp(`^[\\\\/]${PATH_BODY}${suffix}${PATH_STOP}`),
+})
+const REPORT_PATH = pathShape('-report\\.md')
+const PROMPT_PATH = pathShape('-prompt\\.md')
+// Every judge prompt template names its report on this line; a prompt also
+// names reports the judge only reads.
+const REPORT_LINE = /^\s*Write your full report to /
 // How many main-turn context readings the forecast keeps.
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
@@ -506,7 +515,7 @@ export const register: Register = on => {
       isDone: false,
       outcome: null,
       startedAt: await $.clock.now(),
-      ...(isJudgeSeat(e.subagentType) ? { reports: reportPathsIn(e.prompt, reviewRoots()) } : {}),
+      ...(isJudgeSeat(e.subagentType) ? await judgeReports($, e.prompt) : {}),
     }
     await update($, spawns, list => trimmedSpawns([...list, spawn]))
     await syncTicker($)
@@ -4069,9 +4078,18 @@ function pathKey(canon: string): string {
   return /^[a-z]:\//.test(canon) ? canon.toLowerCase() : canon
 }
 
-function reviewRoots(): string[] {
-  return [S.where.checkout, S.where.primary].flatMap(dir => {
-    const root = dir === null ? null : canonPath(`${dir}/.dforge`)
+// Every worktree counts, not only the two the session knows: its directory
+// can sit in the primary checkout while the work and the report are in a
+// worktree, and S.where follows it only after the next shell call.
+async function reviewDirs($: EngineInterface): Promise<string[]> {
+  const listed = await $.process.run(['git', 'worktree', 'list', '--porcelain'], { timeoutMs: 2000 }).catch(() => null)
+  const worktrees = listed?.exitCode === 0 ? listed.stdout.split('\n').flatMap(line => (line.startsWith('worktree ') ? [line.slice('worktree '.length).trim()] : [])) : []
+  return [...new Set([S.where.checkout, S.where.primary, ...worktrees].filter(dir => dir !== null))]
+}
+
+function rootsOf(dirs: readonly string[]): string[] {
+  return dirs.flatMap(dir => {
+    const root = canonPath(`${dir}/.dforge`)
     return root === null ? [] : [root]
   })
 }
@@ -4083,25 +4101,22 @@ function rootOf(canon: string, roots: readonly string[]): string | undefined {
 
 // Each root is also matched literally, in either slash, so a path under a root
 // that holds spaces or parentheses is captured whole; below the root a path
-// still stops at them, as REPORT_TAIL says. The implementer's report
-// (task-<N>-report.md), which a review dispatch also names, is never a judge's
-// to write.
-function reportPathsIn(prompt: string, roots: readonly string[]): string[] {
+// still stops at them, as the shape's tail says.
+function pathsIn(text: string, dirs: readonly string[], shape: ReturnType<typeof pathShape>): string[] {
+  const roots = rootsOf(dirs)
   const found: string[] = []
   const add = (path: string) => {
     const canon = canonPath(path)
-    if (canon === null || /\/task-\d+-report\.md$/i.test(canon)) return
-    if (rootOf(canon, roots) !== undefined && !found.includes(path)) found.push(path)
+    if (canon !== null && rootOf(canon, roots) !== undefined && !found.includes(path)) found.push(path)
   }
-  for (const [path] of prompt.matchAll(REPORT_PATH)) add(path)
-  for (const dir of [S.where.checkout, S.where.primary]) {
-    if (dir === null) continue
+  for (const [path] of text.matchAll(shape.whole)) add(path)
+  for (const dir of dirs) {
     const raw = `${dir}/.dforge`
     for (const spelling of new Set([raw, raw.replace(/\\/g, '/'), raw.replace(/\//g, '\\')])) {
       const literal = spelling.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const head = new RegExp(`(?<![\\w.~/\\\\-])${literal}`, /^[A-Za-z]:/.test(spelling) ? 'gi' : 'g')
-      for (const at of prompt.matchAll(head)) {
-        const tail = REPORT_TAIL.exec(prompt.slice(at.index + at[0].length))
+      for (const at of text.matchAll(head)) {
+        const tail = shape.tail.exec(text.slice(at.index + at[0].length))
         if (tail !== null) add(at[0] + tail[0])
       }
     }
@@ -4109,11 +4124,35 @@ function reportPathsIn(prompt: string, roots: readonly string[]): string[] {
   return found
 }
 
+// The implementer's report (task-<N>-report.md), which a review dispatch also
+// names, is never a judge's to write.
+function reportPathsIn(text: string, dirs: readonly string[]): string[] {
+  return pathsIn(text, dirs, REPORT_PATH).filter(path => !/[\\/]task-\d+-report\.md$/i.test(path))
+}
+
+// The documented dispatch is only a pointer to the prompt file, so a dispatch
+// that names no report is answered from the prompt files it names. The roots
+// are kept with the paths: the session may move before the judge writes.
+async function judgeReports($: EngineInterface, prompt: string): Promise<{ reports: string[]; reportRoots: string[] }> {
+  const dirs = await reviewDirs($)
+  const reportRoots = rootsOf(dirs)
+  const named = reportPathsIn(prompt, dirs)
+  if (named.length > 0) return { reports: named, reportRoots }
+  const reports = new Set<string>()
+  for (const file of pathsIn(prompt, dirs, PROMPT_PATH)) {
+    const text = await $.fs.read(canonPath(file) ?? file).catch(() => '')
+    for (const line of text.split('\n').filter(one => REPORT_LINE.test(one))) {
+      for (const path of reportPathsIn(line, dirs)) reports.add(path)
+    }
+  }
+  return { reports: [...reports], reportRoots }
+}
+
 // The root is trusted as an existing directory; each path below it down to
 // the target must not be a symbolic link. A stat rejection that statMissing
 // does not read as a missing path refuses. The walk stops at the first missing
 // path, as nothing below it exists.
-async function isNamedReport($: EngineInterface, target: string, allowed: readonly string[]): Promise<boolean> {
+async function isNamedReport($: EngineInterface, target: string, allowed: readonly string[], roots: readonly string[]): Promise<boolean> {
   const canon = canonPath(target)
   if (canon === null) return false
   const key = pathKey(canon)
@@ -4122,7 +4161,7 @@ async function isNamedReport($: EngineInterface, target: string, allowed: readon
     return one !== null && pathKey(one) === key
   })
   if (!isAllowed) return false
-  const root = rootOf(canon, reviewRoots())
+  const root = rootOf(canon, roots)
   if (root === undefined) return false
   const parts = canon.split('/')
   let isAboveDir = true
@@ -4155,7 +4194,7 @@ async function judgeWriteDenial($: EngineInterface, tool: string, e: { agentId?:
     const named = tool === 'NotebookEdit' ? paths.notebook_path : paths.file_path
     const target = typeof named === 'string' ? named : ''
     const allowed = spawn?.reports ?? []
-    if (await isNamedReport($, target, allowed)) return null
+    if (await isNamedReport($, target, allowed, spawn?.reportRoots ?? [])) return null
     return `dforge: a review seat writes only the report file its dispatch names (${allowed.length === 0 ? 'none' : allowed.join(', ')}); ${target} is not one.`
   } catch (error) {
     return `dforge: the review-seat write guard could not check this write (${error instanceof Error && error.message !== '' ? error.message : String(error)}); it is refused.`
