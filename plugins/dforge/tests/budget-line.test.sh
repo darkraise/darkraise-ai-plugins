@@ -309,6 +309,7 @@ check "package: a documents-only range leaves nothing out" "$(count docs-only.di
 pkg "$PKG/src/deep" "$PBASE" HEAD subdir.diff
 check "package: the same from a subdirectory" "$(cat "$TMP/subdir.diff")" "$(cat "$TMP/mixed.diff")"
 check "task reviewer: may open a left-out file" "$(grep -c 'named on a `Left out:` line' "$P/skills/subagent-driven-development/references/task-reviewer-prompt.md")" "1"
+check "group reviewer: may open a left-out file" "$(grep -c 'named on a `Left out:` line' "$P/skills/subagent-driven-development/references/group-reviewer-prompt.md")" "1"
 . "$HERE/fixtures/darkmem-stores.sh"
 SH="$TMP/stores-home"; mkdir -p "$SH"
 MIRROR=$(stores_home "$SH" "$PKG" p darkmem local)

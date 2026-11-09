@@ -69,6 +69,7 @@ R="$P/reference/auto-run.md"
 says "auto-run.md: finishing runs alone" "$R" 'Finishing runs in a session of its own.'
 says "auto-run.md: finishing's clear" "$R" '**Finishing** (§Finishing): `scripts/auto-run clear --phase`.'
 says "auto-run.md: where the clean session reads" "$R" 'the ledger'"'"'s parked and `Ruling:` lines, the `final review residual` register rows, and the workspace'"'"'s `final-fix-report.md` and `final-rereview-report.md`'
+says "auto-run.md: the clean session also reads the review's own reports" "$R" '`final-review-report.md`, `final-dedupe-report.md` and `lens-<id>-report.md`. Read those that exist'
 says "auto-run.md: after-compact in finish" "$R" 'since the plan and the final review stay in this session and finishing runs in one of its own.'
 says "handoff: a saved plan goes through the switch" "$H" 'A saved plan moves through the switch instead'
 says "final review: depth-route runs before step 0" "$FR" 'Before step 0 run `scripts/depth-route PLAN_FILE`'

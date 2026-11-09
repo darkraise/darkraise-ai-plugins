@@ -2690,8 +2690,7 @@ function scheduleAutoAct($: EngineInterface, stage: AutoStage, ms: number) {
 
 // Carries the bound run through its pending stages: compact, then the
 // continue prompt; or clear, rebind, model and effort, then the first prompt;
-// or switch: compact, then model and effort and the first prompt in the same
-// session.
+// or switch: `auto-run clear --phase`, then the same path as clear.
 // Each attempt first re-checks that the stage is still due and the session
 // idle. A failure is booked and the failed stage tried again; the script stops
 // the run at the second (exit 5).

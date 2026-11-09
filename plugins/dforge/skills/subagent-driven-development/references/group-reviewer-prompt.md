@@ -25,7 +25,10 @@ Subagent (the judge seat task-step review --group prints):
     its commit list, a stat summary and the full diff with surrounding
     context; the context lines ARE the changed files. Do not Read a changed
     file separately unless a hunk you must judge is cut off mid-function —
-    and say so in your report. Do not run git commands: you have no shell.
+    and say so in your report.
+    A file named on a `Left out:` line of a diff is not in that diff;
+    Read it only if the task's change depends on it. Do not run git commands:
+    you have no shell.
     If the package is missing, stop and report that the controller must pass
     one. Do not crawl the broader codebase. Inspect code outside the package
     only to evaluate a concrete risk you can name — one focused check per

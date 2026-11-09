@@ -304,7 +304,8 @@ and launch command `scripts/next-step` wrote to `latest.md`), then:
 - **Finishing** (§Finishing): `scripts/auto-run clear --phase`.
 
 A saved plan moves through §The switch, where the cockpit runs the phase clear. A run
-started under `autoRun=ask` writes its plan in the same session too.
+started under `autoRun=ask` also writes its plan in the session that wrote the
+spec.
 
 If `scripts/next-step` exits 4, do not run `scripts/auto-run clear`: the
 `latest.md` it would read is an older handoff's. Run `scripts/auto-run stop
@@ -355,8 +356,10 @@ first step. `next-step`'s exits 4 and 5 are handled as §Clears says; a nonzero
 through dforge:resume-execution with phase `finish`, and has no conversation
 behind it: what the final review left open is in the ledger's parked and
 `Ruling:` lines, the `final review residual` register rows, and the
-workspace's `final-fix-report.md` and `final-rereview-report.md`; read them
-for Step 5b's findings and for the review's report.
+workspace's `final-fix-report.md` and `final-rereview-report.md`, which exist
+only when a fix wave or a scoped re-review wrote them, and its
+`final-review-report.md`, `final-dedupe-report.md` and `lens-<id>-report.md`.
+Read those that exist for Step 5b's findings and for the review's report.
 
 Finishing carries out at once, into the base `scripts/auto-run status` names,
 the choice `scripts/finish-choice get --plan PLAN_FILE` prints, which the spec
