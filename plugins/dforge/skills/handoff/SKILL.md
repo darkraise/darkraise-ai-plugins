@@ -34,7 +34,9 @@ cleanly."
   more fix rounds. The budget line there reports a measured number with an
   `unknown` verdict, and the measured number does not override it.
 - An auto run ([auto-run.md](../../reference/auto-run.md)) hands off for
-  a compaction that left too much. A saved plan moves through the switch instead
+  a compaction that left too much. It also clears before finishing
+  (auto-run.md §Finishing), through dforge:finishing-a-development-branch.
+  A saved plan moves through the switch instead
   (auto-run.md §The switch): only steps 0-3 below run, and the cockpit clears
   the session. On a handoff the steps below run as always, but the turn does not
   end on the next-step block: return to the step that invoked this skill,

@@ -590,6 +590,22 @@ ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 ar --session s-1 compacted --what >/dev/null 2>&1; status=$?
 check "compacted with another flag: exit 2" "$status" "2"
 
+# --- finishing in a clean session: phase finish first, then a phase clear ---
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+ar --session s-1 attach --plan docs/plan.md
+ar --session s-1 phase final
+ar --session s-1 phase finish
+# The prompt next-step writes for a clean final review (next-step.test.sh).
+finish_prompt='Resume `docs/plan.md` with dforge:resume-execution. Run dforge:finishing-a-development-branch.'
+cp "$REPO/.dforge/handoff/latest.md" "$TMP/latest.keep"
+sed "s|^Execute docs/plan.md with dforge:subagent-driven-development\.$|$finish_prompt|" "$TMP/latest.keep" > "$REPO/.dforge/handoff/latest.md"
+ar --session s-1 clear --phase; status=$?
+check "finishing's clear: exit 0, phase finish, clear pending" "$status:$(field phase):$(field pending)" "0:finish:clear"
+check "finishing's clear: no self-resume" "$(field resumes)" "0"
+check "finishing's clear: next-step's finishing prompt" "$(field resumePrompt)" "$finish_prompt"
+cp "$TMP/latest.keep" "$REPO/.dforge/handoff/latest.md"
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+
 # --- the plan, final and finish phases never hand off ---
 for phase in plan final finish; do
   ar --session s-1 phase "$phase"

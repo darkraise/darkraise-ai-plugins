@@ -84,7 +84,6 @@ names "auto-run.md: the final message lists demos and lenses" "$R" 'every `demo`
 FIN="$(skill_view finishing-a-development-branch)"
 names "finishing: unverified acceptance keeps the branch" "$FIN" '`merge` also keeps when the `Acceptance QA: complete` line reports a nonzero count of'
 names "finishing: an untested statement keeps the branch" "$FIN" '`cannot-test`, or when the run added a deferred register'
-names "finishing: fail and flaky counts are not read" "$FIN" 'The line'"'"'s `fail` and `flaky` counts are not read: they are taken before'
 for f in "$R" "$FIN"; do
   check "$(basename "$f"): a fixed QA failure does not keep the branch" \
     "$(grep -qF -- 'nonzero count of' "$f" && grep -A1 -F -- 'nonzero count of' "$f" | grep -qF -- '`fail`, `flaky` or' && echo yes || echo no)" "no"

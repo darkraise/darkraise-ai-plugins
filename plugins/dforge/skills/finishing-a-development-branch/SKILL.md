@@ -17,8 +17,10 @@ complete this work."
 ## Auto run
 
 When `scripts/auto-run status` exits 0
-([auto-run.md](../../reference/auto-run.md)), run
-`scripts/auto-run phase finish` (exit 4: `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`), and stop), then follow this skill with these changes:
+([auto-run.md](../../reference/auto-run.md)) and its phase is not `finish`, run
+`scripts/auto-run phase finish` (exit 4: `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`), and stop),
+dforge:handoff steps 0-3, `scripts/next-step PLAN_FILE` and `scripts/auto-run clear --phase`, and end the turn with `Auto run: clearing`.
+In phase `finish`, follow this skill with these changes:
 
 - **Step 3** asks nothing: the base branch is
   the base `scripts/auto-run status` names.
@@ -48,9 +50,7 @@ When `scripts/auto-run status` exits 0
   went unchecked.
   `merge` and `pr` also keep when Step 1b's `ui-proof check` exited 1
   after the Prove re-run.
-  The line's `fail` and `flaky` counts are not read: they are taken before the
-  fix wave, a failure that survives it is a deferred `A<n>:` row or a red test
-  at Step 1, and one the fix wave fixed does not keep the branch. The mapping
+  The mapping
   keeps the recorded-choice block's first call: once these cases settle the
   option (`merge`, `pr` or `keep`), run
   `scripts/finish-choice answer <action> --plan PLAN_FILE` with it before

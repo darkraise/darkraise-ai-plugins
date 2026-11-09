@@ -595,7 +595,7 @@ needs. dforge hands off instead.
 - **Stops.** A saved plan outside an auto run (an auto run clears the session
   and goes on) is a hard stop.
   The last task completing is never a stop: the final whole-branch review and
-  finishing always run in the same session. In strict mode the plan's last two
+  finishing always run in the same session. In an auto run, finishing runs in a session of its own. In strict mode the plan's last two
   tasks and the final phase keep the handoff budget and run past it; in relaxed
   mode they measure against 85% of the compaction window. Finishing itself is
   never budget-checked. A

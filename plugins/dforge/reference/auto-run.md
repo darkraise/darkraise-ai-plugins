@@ -245,8 +245,8 @@ Run `scripts/auto-run after-compact` first after any compaction, whether or
 not a prompt asks for it: the cockpit's prompt asks after the compactions it
 runs, but a compaction Claude Code starts on its own comes with no prompt.
 It prints `continue` (exit 0) or `handoff` (exit 5); in the `plan`, `final`
-and `finish` phases it always prints `continue`, since the plan, the final
-review and finishing stay in this session. It settles only a
+and `finish` phases it always prints `continue`, since the plan and the final
+review stay in this session and finishing runs in one of its own. It settles only a
 compaction that was booked (`pending` is `after-compact`): while a `clear` or
 `handoff` is pending it prints `handoff` and changes nothing.
 
@@ -301,6 +301,7 @@ and launch command `scripts/next-step` wrote to `latest.md`), then:
 - **A compaction that left too much:** `scripts/auto-run clear`.
 - **A plan that left inline mode before this change** (a ledger dforge:executing-plans' recovery.md sends to dforge:subagent-driven-development): `scripts/auto-run clear --phase`. A phase clear never counts as a self-resume.
 - **The switch** (§The switch): the cockpit runs `scripts/auto-run clear --phase` itself.
+- **Finishing** (§Finishing): `scripts/auto-run clear --phase`.
 
 A saved plan moves through §The switch, where the cockpit runs the phase clear. A run
 started under `autoRun=ask` writes its plan in the same session too.
@@ -342,6 +343,20 @@ stopped, it has already stopped: end with the next-step block. The cockpit
 sends one Discord `blocked` notice when a run stops with a reason.
 
 ## Finishing
+
+Finishing runs in a session of its own. At the entry of
+dforge:finishing-a-development-branch, a run whose phase is not `finish` runs,
+in order, `scripts/auto-run phase finish`, dforge:handoff steps 0-3 (do not
+end the session), `scripts/next-step PLAN_FILE` and
+`scripts/auto-run clear --phase`, and ends the turn with `Auto run: clearing`.
+A commit in handoff step 2 moves HEAD and costs one suite run at finishing's
+first step. `next-step`'s exits 4 and 5 are handled as §Clears says; a nonzero
+`clear --phase` stops the run as §Stopping says. The cleared session arrives
+through dforge:resume-execution with phase `finish`, and has no conversation
+behind it: what the final review left open is in the ledger's parked and
+`Ruling:` lines, the `final review residual` register rows, and the
+workspace's `final-fix-report.md` and `final-rereview-report.md`; read them
+for Step 5b's findings and for the review's report.
 
 Finishing carries out at once, into the base `scripts/auto-run status` names,
 the choice `scripts/finish-choice get --plan PLAN_FILE` prints, which the spec
