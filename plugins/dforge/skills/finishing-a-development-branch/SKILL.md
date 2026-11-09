@@ -18,7 +18,7 @@ complete this work."
 
 When `scripts/auto-run status` exits 0
 ([auto-run.md](../../reference/auto-run.md)), run
-`scripts/auto-run phase finish` (exit 4: `scripts/auto-run stop --reason "<path> is a carried path and was committed"`, and stop), then follow this skill with these changes:
+`scripts/auto-run phase finish` (exit 4: `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`), and stop), then follow this skill with these changes:
 
 - **Step 3** asks nothing: the base branch is
   the base `scripts/auto-run status` names.
