@@ -208,7 +208,8 @@ git -C "$RR" add -A
 git -C "$RR" commit -qm "code and own documents"
 C1=$(git -C "$RR" rev-parse HEAD)
 rp() { # rp <dir> <out> <base> <head>
-  (cd "$1" && bash "$RP" "$PLAN" "$3" "$4" "$2" >/dev/null 2>"$TMP/rp-stderr")
+  # A real session has no MSYS_NO_PATHCONV; only the script's own prefix may protect the pathspecs.
+  (cd "$1" && env -u MSYS_NO_PATHCONV bash "$RP" "$PLAN" "$3" "$4" "$2" >/dev/null 2>"$TMP/rp-stderr")
 }
 files_section() { awk '/^## Files changed$/ { on = 1; next } /^## Diff$/ { on = 0 } on' "$1"; }
 diff_section() { awk '/^## Diff$/ { on = 1; next } on' "$1"; }

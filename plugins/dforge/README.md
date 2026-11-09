@@ -626,10 +626,10 @@ one spec review message: the open questions, the finish choice when
 in the same session; the cockpit clears the session and starts it on the
 plan's launch model, and the plan executes, is reviewed and finished
 into the branch the run started from, with no question to you. Finishing runs
-in a session of its own, after one more clear. What Opus cannot rule goes to Fable in one batch;
-what Fable cannot rule is deferred on the run's register. Instead of handing
-off, the session compacts at the handoff budget, and the cockpit clears and
-resumes it when a compaction leaves too much.
+in a session of its own, after one more clear. What Opus cannot rule goes to
+Fable in one batch; what Fable cannot rule is deferred on the run's register.
+Instead of handing off, the session compacts at the handoff budget, and the
+cockpit clears and resumes it when a compaction leaves too much.
 An auto run follows the `worktree` setting: `always` makes the execution
 worktree unasked, `never` works in this checkout on an `auto/<plan>` branch and
 leaves your uncommitted changes uncommitted, and `ask` asks at the spec review,
