@@ -20,6 +20,8 @@
 // task-step-suite and turn-end take the seconds that run measured.
 // Run 42498131582 (2026-11-08) supplied both auto-run-worktree-setting
 // acceptance suites (255 s for the QA one, 148 s for the plan's).
+// clean-session-phases.acceptance has no Windows run yet: 40 s is an estimate
+// from its 3 s on Linux (2026-11-09).
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -38,6 +40,7 @@ export const windowsSeconds = {
   'auto-run.test.sh': 507,
   'budget-line.test.sh': 123,
   'ci-mirror.test.sh': 60,
+  'clean-session-phases.acceptance.test.sh': 40,
   'codex-client.test.sh': 10,
   'codex-gate.test.sh': 122,
   'codex-review.test.sh': 141,
