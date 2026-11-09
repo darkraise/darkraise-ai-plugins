@@ -25,6 +25,8 @@
 // suites, clean-session-phases.acceptance and faster-plans take the seconds
 // measured there; task-step is the sum of its parts, the start part
 // extrapolated to 600 s from the 140 of 147 checks reached before the cut.
+// Run 42591467307 (2026-11-09) supplied inline-only and inline-only-execution
+// (110 s and about 200 s), which had weights of 12 s and 40 s.
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -71,8 +73,8 @@ export const windowsSeconds = {
   'impl-stop-gate.test.sh': 64,
   'in-flight.test.sh': 36,
   'inline-mode.test.sh': 65,
-  'inline-only.acceptance.test.sh': 12,
-  'inline-only-execution.acceptance.test.sh': 40,
+  'inline-only.acceptance.test.sh': 110,
+  'inline-only-execution.acceptance.test.sh': 200,
   'ladder.test.sh': 10,
   'lane-breaker.test.sh': 50,
   'lanes.test.sh': 10,
