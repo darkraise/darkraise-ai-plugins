@@ -592,8 +592,8 @@ needs. dforge hands off instead.
   `scripts/context-size` prints it on demand. At `handoff`, the `handoff`
   skill writes `latest.md` and the plan's `handoff.md` and ends with the
   resume guide from `scripts/next-step`.
-- **Stops.** A saved plan outside an auto run (an auto run switches in place)
-  is a hard stop.
+- **Stops.** A saved plan outside an auto run (an auto run clears the session
+  and goes on) is a hard stop.
   The last task completing is never a stop: the final whole-branch review and
   finishing always run in the same session. In strict mode the plan's last two
   tasks and the final phase keep the handoff budget and run past it; in relaxed
@@ -622,8 +622,8 @@ questions and approaches, writes the whole spec with no design-section
 approvals, and has the architecture critic and Fable review it. You then get
 one spec review message: the open questions, the finish choice when
 `finishAction` is `ask`, and the approval. Approve it and the plan is written
-in the same session; the cockpit compacts and switches the session to the
-plan's launch model in place, and the plan executes, is reviewed and finished
+in the same session; the cockpit clears the session and starts it on the
+plan's launch model, and the plan executes, is reviewed and finished
 into the branch the run started from, with no question to you and no handoff
 once the last task is done. What Opus cannot rule goes to Fable in one batch;
 what Fable cannot rule is deferred on the run's register. Instead of handing

@@ -228,7 +228,7 @@ A run's turn ends only with one of three lines as the last line of the message:
 - `Auto run: switching` after `scripts/auto-run switch` exits 0.
 
 `scripts/auto-run pending` prints `compact`, `after-compact`, `handoff`,
-`clear`, `resume`, `switch`, `switch-resume` or `none`. `handoff` is a
+`clear`, `resume`, `switch` or `none`. `handoff` is a
 compaction that left too much
 behind; it stays until `scripts/auto-run clear` turns it into `clear`, and the
 Stop hook holds a turn that tries to end before that.
@@ -263,8 +263,8 @@ compaction that was booked (`pending` is `after-compact`): while a `clear` or
 
 ## The switch
 
-Once the plan is reviewed and attached, the session moves to execution in
-place; dforge:handoff does not end it. In order:
+Once the plan is reviewed and attached, the run moves to execution in a
+cleared session; dforge:handoff does not end the run. In order:
 
 1. When the spec's `## Decisions` holds a `Finish: <action>` line,
    `scripts/finish-choice set <action> --plan PLAN_FILE`.
@@ -283,22 +283,14 @@ place; dforge:handoff does not end it. In order:
    way. On exit 0, end the turn with
    `Auto run: switching` as its last line.
 
-The cockpit then compacts the session, keeping the spec, plan, register and
-base paths and dropping the design conversation (`compacted --switch` leaves
-`switch-resume` pending), runs `/model` and `/effort` from the plan's launch
-command, puts back the user's default model and effort, and submits the plan's
-first prompt behind "Run `scripts/auto-run after-compact` first." Run it, then
-follow the first prompt in this same session. No ledger exists yet, so the
+The cockpit then runs `scripts/auto-run clear --phase`, clears the session and
+binds the new one, runs `/model` and `/effort` from the plan's launch command,
+puts back the user's default model and effort, and submits the plan's first
+prompt. Follow it in the new session. No ledger exists yet, so the
 execution skill starts at its Setup, workspace first: `scripts/auto-run status`
 says setup is due until `phase execute` runs from the execution workspace. A
-switch is a phase transition:
-it never counts as a self-resume. Its compaction is measured in the `execute`
-phase, so one that leaves 85% of the window or more hands off as Clears says.
-When the engine refuses the compaction, the cockpit clears the session
-instead, as a phase clear (§Clears), and binds the new one: it gets the
-launch model and effort and the first prompt, with no `after-compact` lead,
-so the launch model never runs over the design conversation. A failure in either stage is retried once in that stage; the
-second stops the run.
+switch is a phase transition: it never counts as a self-resume. A failure in
+either stage is retried once in that stage; the second stops the run.
 
 ## Clears
 
@@ -308,8 +300,9 @@ and launch command `scripts/next-step` wrote to `latest.md`), then:
 
 - **A compaction that left too much:** `scripts/auto-run clear`.
 - **A plan that left inline mode before this change** (a ledger dforge:executing-plans' recovery.md sends to dforge:subagent-driven-development): `scripts/auto-run clear --phase`. A phase clear never counts as a self-resume.
+- **The switch** (§The switch): the cockpit runs `scripts/auto-run clear --phase` itself.
 
-Plan saved is no clear: the session switches in place (§The switch). A run
+A saved plan moves through §The switch, where the cockpit runs the phase clear. A run
 started under `autoRun=ask` writes its plan in the same session too.
 
 If `scripts/next-step` exits 4, do not run `scripts/auto-run clear`: the

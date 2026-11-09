@@ -118,7 +118,7 @@ under `ok` is not a reason to stop.
 - **Hard:** the plan is saved. It launches the execution model the Execution
   line names. writing-plans runs
   dforge:handoff once the plan is reviewed. In an auto run the plan saved is
-  no stop: the cockpit switches the session in place
+  no stop: the cockpit clears the session and starts execution
   ([auto-run.md](auto-run.md) §The switch).
 - **Never a stop:** the last task completing, in either mode. The final review
   and finishing follow in the same session whatever `context-size --final`

@@ -39,7 +39,6 @@ names "finishing: the recorded choice first" "$FIN" 'Read `scripts/finish-choice
 names "finishing: a spec-review deferral keeps a merge" "$FIN" 'A row deferred at the spec review, before the run started, counts as one'
 names "subagent mode: recovery resumes the final phase" "$SDD" '3. When every task has its `complete` line, run `scripts/context-size --final`'
 names "inline mode: recovery resumes the final phase" "$EP" '3. When every task has its `complete` line, run `scripts/context-size --final`'
-names "handoff: a saved plan switches in place" "$H" 'a compaction that left too much. A saved plan switches in place instead'
 names "subagent mode: phase final right after the last task" "$SDD" '`scripts/auto-run phase final` next, before any budget check and before the'
 names "inline mode: phase final right after the last task" "$EP" 'run `scripts/auto-run phase final` next, before any budget check and'
 names "finishing: get reads the spec's line" "$FIN" 'with nothing recorded in this checkout'"'"'s plan workspace it reads the spec'"'"'s'
@@ -56,6 +55,7 @@ flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
 says() { # says <label> <file> <text>
   check "$1" "$(flat "$2" | grep -qF -- "$3" && echo yes || echo no)" "yes"
 }
+says "handoff: a saved plan goes through the switch" "$H" 'A saved plan moves through the switch instead'
 says "final review: depth-route runs before step 0" "$FR" 'Before step 0 run `scripts/depth-route PLAN_FILE`'
 says "final review: the depth is ledgered" "$FR" 'append `Review depth: <depth> (<reason>)` to the ledger'
 says "final review: a recovered review reads the ledgered depth" "$FR" 'read that line and run no new route'
