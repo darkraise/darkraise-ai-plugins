@@ -134,6 +134,13 @@ out=$(stop s-7 'Done.')
 check "stop: a check that cannot run holds instead of passing" "$(decision "$out")" "block"
 check "stop: the hold carries the check's own error" "$(jq -r .reason <<<"$out" | grep -c 'bad --base')" "1"
 
+prompt s-9
+for i in $(seq 1 120); do printf '// page\n' > "src/LongGeneratedPageName$i.tsx"; done
+git add src && git commit -q -m 'many UI files'
+out=$(stop s-9 'Done.')
+check "stop: many changed files: held" "$(decision "$out")" "block"
+check "stop: many changed files: the reason stays short" "$(r=$(jq -r .reason <<<"$out"); [ "${#r}" -lt 1000 ] && echo short || echo "long: ${#r}")" "short"
+
 prompt s-6
 printf '// change 6\n' >> src/App.tsx
 git commit -q -am 'ui change 6'

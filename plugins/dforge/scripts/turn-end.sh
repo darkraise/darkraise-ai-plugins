@@ -86,9 +86,9 @@ if has_pending_background; then
   [ "$is_retry" = true ] && exit 0
   case "$last" in
     *'## Next session'* | *'Which option?'*)
-      reason="Your message ends the session (the next-step block or the finishing menu), but ${pending} background launch(es) you started this session are still running:
+      reason="Your message ends the session, but ${pending} background launch(es) are still running:
 $(inflight_text <<<"$running" | sed 's/^/- /')
-An agent that already sent its report is still running when work it started is alive. Do not hand off or finish over running work. Either wait for each (end the turn without the block; its notification starts the next turn), or stop it with TaskStop <id> and, if its result is not in hand, record a Ruling line in the ledger for the task it served. Then run next-step again and end with the fresh block."
+Wait for each (end the turn without the block), or stop it with TaskStop <id>, then run next-step again."
       hold "$reason" "dforge held the stop: this message ends the session while ${pending} background launch(es) still run"
       ;;
   esac
@@ -166,10 +166,10 @@ plan=$(head -n 1 "$ledger" | sed -n 's/^# SDD ledger — plan: //p' | tr -d '\r'
 [ -n "$plan" ] || plan="PLAN_FILE"
 
 if [ "$clean" = 1 ]; then
-  reason="This turn advanced plan ${plan} and its final review is clean, but your message ends without the finishing menu or the next step. Invoke dforge:finishing-a-development-branch with the Skill tool now and follow it: tests, the rulings and amendments, then the finishing menu, or the next-step block once a recorded choice is carried out, as the last thing in your message."
+  reason="Plan ${plan} passed its final review. Invoke dforge:finishing-a-development-branch with the Skill tool now and end on its menu or next-step block."
   shown="dforge held the stop: plan ${plan} passed its final review, and the message ends without the finishing menu"
 else
-  reason="This turn advanced plan ${plan}, but your message ends without the next step. If work remains for this session, continue it. If you are waiting on an agent or command you started in the background, end the turn without the block: its notification will start the next turn. If you are stopping, run \`bash \"${root_shown}/scripts/next-step\" ${plan}\` and end your message with the block it prints, verbatim."
+  reason="Plan ${plan} advanced, but this message has no next step. Continue the work, or run \`bash \"${root_shown}/scripts/next-step\" ${plan}\` and end with the block it prints, verbatim; if background work is running, end the turn without the block."
   shown="dforge held the stop: plan ${plan} advanced, and the message ends without the next step"
 fi
 hold "$reason" "$shown"

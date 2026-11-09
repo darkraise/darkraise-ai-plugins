@@ -63,6 +63,7 @@ check "mid-plan summary: names next-step and the plan" \
 check "mid-plan summary: the plugin root is quoted" \
   "$(jq -r .reason <<<"$out" | grep -cF "\`bash \"$SHOWN/scripts/next-step\" docs/superpowers/plans/2026-10-08-example.md\`")" "1"
 check "mid-plan summary: tells the user why" "$(jq -r .systemMessage <<<"$out" | grep -c 'dforge held the stop')" "1"
+check "mid-plan summary: the reason stays short" "$(r=$(jq -r .reason <<<"$out"); [ "${#r}" -lt 420 ] && echo short || echo "long: ${#r}")" "short"
 check "retry with stop_hook_active: passes" "$(stop s-1 'Task 1 is done.' true)" ""
 check "next-step block: passes" "$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x')" ""
 # Without last_assistant_message the transcript's last assistant entry is read,
