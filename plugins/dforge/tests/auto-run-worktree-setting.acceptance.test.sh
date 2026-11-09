@@ -269,7 +269,11 @@ stray=$(cat "$P/skills/executing-plans/SKILL.md" "$P"/skills/executing-plans/ref
 check "A17: no auto-run setup or task-loop text stages everything" "$stray" "0"
 present "executing-plans: a carried commit at phase final stops the run" "$P/skills/executing-plans/SKILL.md" 'is a carried path and was committed'
 present "subagent-driven-development: a carried commit at phase final stops the run" "$P/skills/subagent-driven-development/SKILL.md" 'is a carried path and was committed'
+git_error_reason='(no path: `--reason "git could not check the carried paths"`)'
+present "executing-plans: the git-error refusal has its own stop reason" "$P/skills/executing-plans/SKILL.md" "$git_error_reason"
+check "subagent-driven-development: both exit-4 lines give the git-error stop reason" "$(grep -cF "$git_error_reason" "$P/skills/subagent-driven-development/SKILL.md")" "2"
 F="$P/skills/finishing-a-development-branch/SKILL.md"
+present "A18: the git-error refusal of phase finish has its own stop reason" "$F" "$git_error_reason"
 present "A18: the stop list names checkout, pull and merge" "$F" 'a refused checkout, pull or merge of the base'
 present "A18: phase finish refusal stops the run" "$F" 'is a carried path and was committed'
 present "A18: a red merged suite lists the carried paths" "$F" 'list the carried paths (`scripts/auto-run carried`) with the failure'

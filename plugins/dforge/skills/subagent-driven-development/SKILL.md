@@ -85,7 +85,7 @@ What changes here:
   (in subagent mode, after the last wave's merge), run
   `scripts/auto-run phase final` next, before any budget check and before the
   turn ends, so a compaction from there on never hands off. On its exit 4,
-  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` and end as auto-run.md §Stopping says.
+  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`) and end as auto-run.md §Stopping says.
   A `task-complete` exit 5 means the run stopped (a task was completed
   on the run base, off its branch or in the primary checkout, or a carried path was committed):
   end as auto-run.md §Stopping says.
@@ -96,7 +96,7 @@ What changes here:
   The tail rule and the final-phase limit do not apply;
   `scripts/context-size --final` prints the auto line too.
 - **Final review:** run `scripts/auto-run phase final`; on exit 4,
-  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` and end as auto-run.md §Stopping says. When the pending
+  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`) and end as auto-run.md §Stopping says. When the pending
   list is not empty, run the Fable batch first; the review's findings take the
   same ladder.
 - **A turn ends** only on `Auto run: compacting` or `Auto run: clearing` as

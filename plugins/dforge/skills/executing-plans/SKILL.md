@@ -68,9 +68,9 @@ What changes here:
   flight, then invoke dforge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
   The tail rule and the final-phase limit do not apply;
   `scripts/context-size --final` prints the auto line too.
-- **Final review:** run `scripts/auto-run phase final`; on its exit 4 (here or after the last task),
-  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` and end as auto-run.md §Stopping says. When the pending
-  list is not empty, run the Fable batch first; the review's findings take the
+- **Final review:** run `scripts/auto-run phase final`; on exit 4 (here or after the last task),
+  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`) and end as auto-run.md §Stopping says. With pending items,
+  run the Fable batch first; the review's findings take the
   same ladder.
 - **A turn ends** only on `Auto run: compacting` or `Auto run: clearing` as
   its last line, or after `scripts/auto-run stop --reason "<why>"` when the
