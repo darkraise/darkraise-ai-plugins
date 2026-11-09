@@ -379,7 +379,7 @@ done
 
 # The refusal is the caller's own status, not a generic failure, from every
 # update that follows a cap check or a read.
-for fn in ar_failure ar_stalled ar_compacted "ar_compacted --switch"; do
+for fn in ar_failure ar_stalled ar_compacted; do
   ar --session s-2 start --spec "$SPEC" --register docs/r.md --force >/dev/null
   ( cd "$REPO" && . "$HERE/../scripts/lib/context.sh" && . "$HERE/../scripts/lib/auto-run.sh" && AR_SESSION=s-1 $fn ) 2>/dev/null
   status=$?
@@ -577,25 +577,34 @@ check "switch: the first prompt" "$(field resumePrompt)" "Execute docs/plan.md w
 check "switch: the launch" "$(jq -r '.launch | "\(.model) \(.effort)"' "$STATE")" "sonnet high"
 check "switch: not a self-resume, no rebind" "$(field resumes):$(field rebind)" "0:false"
 check "pending prints switch" "$(ar --session s-1 pending)" "switch"
-ar --session s-1 compacted --switch
-check "compacted --switch: counted, switch-resume pending" "$(field compactions):$(field pending)" "1:switch-resume"
-check "the switch's compaction is not a final-phase one" "$(field finalCompacted)" "false"
-ar --session s-1 resumed
-check "resumed after a switch: after-compact is due" "$(field pending)" "after-compact"
-asst 700000 > "$T"
-out=$(after); status=$?
-check "after a switch, an oversized context still hands off" "$status:${out%% *}" "5:handoff"
+ar --session s-1 compacted --switch >/dev/null 2>&1; status=$?
+check "compacted --switch: a usage error, nothing booked" "$status:$(field compactions):$(field pending)" "2:0:switch"
+usage_text=$(ar --session s-1 compacted --what 2>&1)
+check "usage: compacted has no --switch" "$(grep -c -- '--switch' <<<"$usage_text")" "0"
+check "usage: no switch-resume" "$(grep -c 'switch-resume' <<<"$usage_text")" "0"
+ar --session s-1 clear --phase; status=$?
+check "the switch's clear: exit 0, clear pending" "$status:$(field pending)" "0:clear"
+check "the switch's clear: phase execute, setup due, no self-resume" "$(field phase):$(field setupDue):$(field resumes)" "execute:true:0"
+check "status after the switch's clear: execute and setup due" "$(ar --session s-1 status | grep -c '^auto run: execute .* — 0 resumes .* — setup due$')" "1"
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
-ar --session s-1 attach --plan docs/plan.md
-ar --session s-1 phase plan
-ar --session s-1 switch
-ar --session s-1 compacted --switch
-ar --session s-1 resumed
-asst 30000 > "$T"
-out=$(after); status=$?
-check "after a switch, a small context continues" "$status:${out%% *}:$(field pending)" "0:continue:null"
 ar --session s-1 compacted --what >/dev/null 2>&1; status=$?
 check "compacted with another flag: exit 2" "$status" "2"
+
+# --- finishing in a clean session: phase finish first, then a phase clear ---
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+ar --session s-1 attach --plan docs/plan.md
+ar --session s-1 phase final
+ar --session s-1 phase finish
+# The prompt next-step writes for a clean final review (next-step.test.sh).
+finish_prompt='Resume `docs/plan.md` with dforge:resume-execution. Run dforge:finishing-a-development-branch.'
+cp "$REPO/.dforge/handoff/latest.md" "$TMP/latest.keep"
+sed "s|^Execute docs/plan.md with dforge:subagent-driven-development\.$|$finish_prompt|" "$TMP/latest.keep" > "$REPO/.dforge/handoff/latest.md"
+ar --session s-1 clear --phase; status=$?
+check "finishing's clear: exit 0, phase finish, clear pending" "$status:$(field phase):$(field pending)" "0:finish:clear"
+check "finishing's clear: no self-resume" "$(field resumes)" "0"
+check "finishing's clear: next-step's finishing prompt" "$(field resumePrompt)" "$finish_prompt"
+cp "$TMP/latest.keep" "$REPO/.dforge/handoff/latest.md"
+ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 
 # --- the plan, final and finish phases never hand off ---
 for phase in plan final finish; do
@@ -631,8 +640,7 @@ ar --session s-1 phase plan
 ar --session s-1 switch
 check "switch: setup is due" "$(field setupDue)" "true"
 check "status: says setup is due" "$(ar --session s-1 status | grep -c ' — setup due$')" "1"
-ar --session s-1 compacted --switch
-ar --session s-1 resumed
+ar --session s-1 compacted
 asst 30000 > "$T"
 out=$(after); status=$?
 check "after a switch, continue names Setup" "$status:$out" "0:continue — 30k after compaction; regime normal; setup due: begin at the execution skill's Setup, workspace first"
@@ -673,9 +681,6 @@ ar --session s-1 compacted
 ar --session s-1 compacted; status=$?
 check "plan-phase compactions are not counted" "$status:$(field active):$(field compactionsSinceTask)" "0:true:0"
 ar --session s-1 switch
-ar --session s-1 compacted --switch
-check "the switch's compaction is not counted" "$(field compactionsSinceTask)" "0"
-ar --session s-1 resumed
 side --session s-1 phase execute
 ar --session s-1 compacted
 ar --session s-1 compacted
@@ -727,8 +732,7 @@ ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 ar --session s-1 attach --plan docs/plan.md
 ar --session s-1 phase plan
 ar --session s-1 switch
-ar --session s-1 compacted --switch
-ar --session s-1 resumed
+ar --session s-1 compacted
 printf '{}\n' > "$T"
 out=$(after); status=$?
 check "after-compact: an unknown size with setup due names Setup" "$status:$out:$(field pending)" "0:continue — the size after compaction is unknown; record that with auto-run ruling add, and Claude Code's own compaction stays the backstop; setup due: begin at the execution skill's Setup, workspace first:null"

@@ -105,7 +105,8 @@ under `ok` is not a reason to stop.
   `budget (last task)` (`context-size --tail R`). Once every task is complete
   they read `budget (final)`. In strict mode neither hands off.
 - **Finishing:** never checked. Once the final review is clean, finishing
-  runs in the same session.
+  runs in the same session. In an auto run it runs in a session of its own
+  ([auto-run.md](auto-run.md) §Finishing).
 - **Acting on `handoff`:** finish the task in flight through its
   `Task N: complete` line, then hand off. Start no new task.
 - **brainstorming:** `context-size --plan` once, after the spec is committed.
@@ -118,7 +119,7 @@ under `ok` is not a reason to stop.
 - **Hard:** the plan is saved. It launches the execution model the Execution
   line names. writing-plans runs
   dforge:handoff once the plan is reviewed. In an auto run the plan saved is
-  no stop: the cockpit switches the session in place
+  no stop: the cockpit clears the session and starts execution
   ([auto-run.md](auto-run.md) §The switch).
 - **Never a stop:** the last task completing, in either mode. The final review
   and finishing follow in the same session whatever `context-size --final`
@@ -126,6 +127,7 @@ under `ok` is not a reason to stop.
   inside the final phase does not stop it. When the context fills there,
   Claude Code's own compaction is the backstop, and the execution skill's
   After compaction steps resume the final phase from the ledger.
+  In an auto run finishing clears the session first.
 - **Budget:** a `handoff` verdict at any checkpoint.
 - **Codex:** the count rule above.
 
@@ -157,7 +159,7 @@ compaction that leaves 85% of the window or more hands off, and the cockpit
 clears and resumes the session, except in the `plan`, `final` and `finish`
 phases, which never hand off; after one compaction in `final` or `finish`
 every budget line of the run says `ok`. The tail rule, the final-phase limit and
-relaxed mode do not apply to it.
+relaxed mode do not apply to it. Finishing runs in a session of its own.
 
 ## Idle
 

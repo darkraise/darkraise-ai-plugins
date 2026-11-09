@@ -20,6 +20,11 @@
 // task-step-suite and turn-end take the seconds that run measured.
 // Run 42498131582 (2026-11-08) supplied both auto-run-worktree-setting
 // acceptance suites (255 s for the QA one, 148 s for the plan's).
+// Run 42575761658 (2026-11-09) timed shard 11 out three times with both
+// auto-run-worktree-setting suites beside task-step's start part. Those
+// suites, clean-session-phases.acceptance and faster-plans take the seconds
+// measured there; task-step is the sum of its parts, the start part
+// extrapolated to 600 s from the 140 of 147 checks reached before the cut.
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -33,11 +38,12 @@ export const windowsSeconds = {
   'antigravity-executor-lane.acceptance.test.sh': 250,
   'auto-default.test.sh': 10,
   'auto-run-skills.test.sh': 10,
-  'auto-run-worktree-setting-qa.acceptance.test.sh': 255,
-  'auto-run-worktree-setting.acceptance.test.sh': 148,
+  'auto-run-worktree-setting-qa.acceptance.test.sh': 330,
+  'auto-run-worktree-setting.acceptance.test.sh': 190,
   'auto-run.test.sh': 507,
   'budget-line.test.sh': 123,
   'ci-mirror.test.sh': 60,
+  'clean-session-phases.acceptance.test.sh': 70,
   'codex-client.test.sh': 10,
   'codex-gate.test.sh': 122,
   'codex-review.test.sh': 141,
@@ -55,7 +61,7 @@ export const windowsSeconds = {
   'executor-recovery.test.sh': 295,
   'executor-session.test.sh': 10,
   'executors.test.sh': 10,
-  'faster-plans.acceptance.test.sh': 1200,
+  'faster-plans.acceptance.test.sh': 900,
   'final-phase.test.sh': 10,
   'finish-choice.test.sh': 78,
   'fleet.test.sh': 10,
@@ -108,7 +114,7 @@ export const windowsSeconds = {
   'task-step-settle.test.sh': 220,
   'task-step-suite.test.sh': 250,
   'task-step-text.test.sh': 10,
-  'task-step.test.sh': 1470,
+  'task-step.test.sh': 1400,
   'test-simplifier.test.sh': 10,
   'turn-end.test.sh': 290,
   'typed-seats-and-drafting.acceptance.sh': 75,

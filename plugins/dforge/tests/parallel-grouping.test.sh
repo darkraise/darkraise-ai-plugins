@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # writing-plans sorts tasks into alone and parallel groups, orders waves by
-# dependency depth, and an auto run's plan switches in place.
+# dependency depth, and an auto run's plan clears the session at the switch.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,7 +27,7 @@ names "the worked example" 'Task 6 on Tasks 3-5 give `waves — 1-2 | 3-5 | 6`. 
 namesin "one plan in an auto run" "$R/auto-run-plan.md" '**One plan.** An auto run writes one plan for the whole spec and amends it'
 namesin "the finish line is recorded" "$R/auto-run-plan.md" 'holds a `Finish: <action>` line, `scripts/finish-choice set <action> --plan'
 namesin "the switch ends the turn" "$R/auto-run-plan.md" '`scripts/auto-run switch` and end the turn with `Auto run: switching`'
-namesin "the handoff note" "$R/execution-handoff.md" 'an auto run the session switches in place instead; see Auto run'
+namesin "the handoff note" "$R/execution-handoff.md" 'an auto run the cockpit clears the session instead; see Auto run'
 names "sequential is the default" 'the default is `sequential`). Under `ask`, ask your human partner one question'
 names "no split under autoRun=on" 'Under `autoRun=on` the spec covers the whole request by design: write one plan for it, never suggest a split'
 check "no clear --phase is left" "$(cat "$W" "$R"/*.md | grep -c 'clear --phase')" "0"

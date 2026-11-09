@@ -248,6 +248,12 @@ const REMOVED = [
   "<merge|pr|keep>` line in `## Decisions`; - **Approve and run unattended**, **Approve, keep the normal stops**, or **Changes needed**.",
   "**Start the run.** On **Approve and run unattended**, commit the spec and the register, run `scripts/auto-run start --spec <spec>` (add `--register <path>` when a register is open, and always the register step 5's deferrals went to), then import each `## Review rulings` line with `scripts/auto-run ruling add \"Fable, spec:",
   "On yes, run `scripts/auto-run start --spec <the spec's path>` (add `--register <path>` when an item register is open) from this checkout, before writing the spec, and follow [auto-run.md] from here to the finished branch.",
+  // Finishing's own entry grew past the 20,000-byte limit; auto-run.md
+  // §Finishing keeps this statement, pinned by its own check.
+  "The line's `fail` and `flaky` counts are not read:",
+  "they are taken before the fix wave, a failure that survives it is a deferred `A<n>:` row or a red test at Step 1, and one the fix wave fixed does not keep the branch.",
+  // Reworded when the switch began clearing the session instead of compacting it.
+  "execution starts in a fresh session (in an auto run the session switches in place instead; see Auto run).",
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 

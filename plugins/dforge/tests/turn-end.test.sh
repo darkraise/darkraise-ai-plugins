@@ -286,8 +286,6 @@ check "auto run: the switch hold names the switching line" "$(jq -r .reason <<<"
 check "auto run: the switch hold quotes the plugin root" "$(jq -r .reason <<<"$out" | grep -cF "run \`bash \"$SHOWN/scripts/auto-run\" stop --reason")" "1"
 pend compact
 check "auto run: the switching line does not answer compact" "$(decision "$(stop s-1 $'Done.\n\nAuto run: switching')")" "block"
-pend switch-resume
-check "auto run: a pending switch-resume is held" "$(decision "$(stop s-1 $'Done.\n\nAuto run: switching')")" "block"
 pend after-compact
 out=$(stop s-1 $'Task 3: complete.\n\nAuto run: compacting')
 check "auto run: after a booked compaction the hold says to settle it" "$(jq -r .reason <<<"$out" | grep -c 'auto-run" after-compact')" "1"

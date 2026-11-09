@@ -84,7 +84,6 @@ names "auto-run.md: the final message lists demos and lenses" "$R" 'every `demo`
 FIN="$(skill_view finishing-a-development-branch)"
 names "finishing: unverified acceptance keeps the branch" "$FIN" '`merge` also keeps when the `Acceptance QA: complete` line reports a nonzero count of'
 names "finishing: an untested statement keeps the branch" "$FIN" '`cannot-test`, or when the run added a deferred register'
-names "finishing: fail and flaky counts are not read" "$FIN" 'The line'"'"'s `fail` and `flaky` counts are not read: they are taken before'
 for f in "$R" "$FIN"; do
   check "$(basename "$f"): a fixed QA failure does not keep the branch" \
     "$(grep -qF -- 'nonzero count of' "$f" && grep -A1 -F -- 'nonzero count of' "$f" | grep -qF -- '`fail`, `flaky` or' && echo yes || echo no)" "no"
@@ -101,12 +100,19 @@ names "finishing: a skipped QA line carries no counts" "$FIN" 'An `Acceptance QA
 names "auto-run.md: the default" "$R" 'The default on Claude Code (`autoRun=on`): once your human partner approves the'
 names "auto-run.md: the switch section" "$R" '## The switch'
 names "auto-run.md: the switching line" "$R" '- `Auto run: switching` after `scripts/auto-run switch` exits 0.'
-names "auto-run.md: plan saved is no clear" "$R" 'Plan saved is no clear: the session switches in place (§The switch).'
+says "auto-run.md: a saved plan goes through the switch" "$R" 'A saved plan moves through §The switch, where the cockpit runs the phase clear.'
+says "auto-run.md: the switch clears the session" "$R" 'The cockpit then runs `scripts/auto-run clear --phase`, clears the session and binds the new one,'
+says "auto-run.md: the switch's prompt has no after-compact lead" "$R" 'and submits the plan'"'"'s first prompt. Follow it in the new session.'
+says "auto-run.md: clears names the switch" "$R" '**The switch** (§The switch): the cockpit runs `scripts/auto-run clear --phase` itself.'
+check "auto-run.md: no switch-resume" "$(grep -c 'switch-resume' "$R")" "0"
+check "auto-run.md: no compacted --switch" "$(grep -c 'compacted --switch' "$R")" "0"
+says "session-budget: the switch clears" "$P/reference/session-budget.md" 'no stop: the cockpit clears the session and starts execution'
+says "handoff: the switch clears" "$P/skills/handoff/SKILL.md" 'only steps 0-3 below run, and the cockpit clears the session.'
+says "readme: the switch clears" "$P/README.md" 'the cockpit clears the session and starts it on the plan'"'"'s launch model'
 names "auto-run.md: finishing reads the recorded choice" "$R" 'the choice `scripts/finish-choice get --plan PLAN_FILE` prints, which the spec'
 names "auto-run.md: a spec-review deferral keeps a merge" "$R" 'deferred at the spec review, before the run started, counts as one the run'
-check "auto-run.md: the one phase clear is for an old switch" "$(grep -c 'clear --phase' "$R")" "1"
 names "auto-run.md: an old switch clears by phase" "$R" '- **A plan that left inline mode before this change** (a ledger dforge:executing-plans'
-names "auto-run.md: the switch starts at Setup" "$R" 'execution skill starts at its Setup, workspace first: `scripts/auto-run status`'
+says "auto-run.md: the switch starts at Setup" "$R" 'execution skill starts at its Setup, workspace first: `scripts/auto-run status`'
 names "auto-run.md: a listed launch is waited for" "$R" 'listed: run `scripts/in-flight`, wait for or stop each launch it lists, and'
 names "auto-run.md: a second exit 5 stops the run" "$R" '`scripts/auto-run stop --reason "background work still running at the switch: <next-step'"'"'s message>"`'
 names "auto-run.md: dependents come from the plan" "$R" '`**Depends on:**` line names it, or, in a plan without those lines, a later'

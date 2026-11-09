@@ -39,7 +39,6 @@ names "finishing: the recorded choice first" "$FIN" 'Read `scripts/finish-choice
 names "finishing: a spec-review deferral keeps a merge" "$FIN" 'A row deferred at the spec review, before the run started, counts as one'
 names "subagent mode: recovery resumes the final phase" "$SDD" '3. When every task has its `complete` line, run `scripts/context-size --final`'
 names "inline mode: recovery resumes the final phase" "$EP" '3. When every task has its `complete` line, run `scripts/context-size --final`'
-names "handoff: a saved plan switches in place" "$H" 'a compaction that left too much. A saved plan switches in place instead'
 names "subagent mode: phase final right after the last task" "$SDD" '`scripts/auto-run phase final` next, before any budget check and before the'
 names "inline mode: phase final right after the last task" "$EP" 'run `scripts/auto-run phase final` next, before any budget check and'
 names "finishing: get reads the spec's line" "$FIN" 'with nothing recorded in this checkout'"'"'s plan workspace it reads the spec'"'"'s'
@@ -56,6 +55,23 @@ flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
 says() { # says <label> <file> <text>
   check "$1" "$(flat "$2" | grep -qF -- "$3" && echo yes || echo no)" "yes"
 }
+says "finishing: phases other than finish clear first" "$FIN" 'and its phase is not `finish`, run `scripts/auto-run phase finish`'
+says "finishing: the clear's steps" "$FIN" 'dforge:handoff steps 0-3, `scripts/next-step PLAN_FILE` and `scripts/auto-run clear --phase`, and end the turn with `Auto run: clearing`.'
+says "finishing: phase finish continues" "$FIN" 'In phase `finish`, follow this skill with these changes:'
+check "finishing: only the Auto run section names auto-run clear" "$(awk '/^## /{sec=$0} /auto-run clear/ && sec!="## Auto run"{c++} END{print c+0}' "$FIN")" "0"
+says "session budget: attended finishing stays" "$P/reference/session-budget.md" 'Once the final review is clean, finishing runs in the same session.'
+says "session budget: the auto-run exception" "$P/reference/session-budget.md" 'In an auto run it runs in a session of its own ([auto-run.md](auto-run.md) §Finishing).'
+says "handoff: attended finishing stays" "$H" 'nothing stops finishing once the final review is clean'
+says "handoff: the auto run clears before finishing" "$H" 'It also clears before finishing (auto-run.md §Finishing), through dforge:finishing-a-development-branch.'
+says "final review: the auto-run exception" "$FR" 'In an auto run finishing clears the session first (auto-run.md §Finishing).'
+says "readme: the auto-run exception" "$P/README.md" 'In an auto run, finishing runs in a session of its own.'
+R="$P/reference/auto-run.md"
+says "auto-run.md: finishing runs alone" "$R" 'Finishing runs in a session of its own.'
+says "auto-run.md: finishing's clear" "$R" '**Finishing** (§Finishing): `scripts/auto-run clear --phase`.'
+says "auto-run.md: where the clean session reads" "$R" 'the ledger'"'"'s parked and `Ruling:` lines, the `final review residual` register rows, and the workspace'"'"'s `final-fix-report.md` and `final-rereview-report.md`'
+says "auto-run.md: the clean session also reads the review's own reports" "$R" '`final-review-report.md`, `final-dedupe-report.md` and `lens-<id>-report.md`. Read those that exist'
+says "auto-run.md: after-compact in finish" "$R" 'since the plan and the final review stay in this session and finishing runs in one of its own.'
+says "handoff: a saved plan goes through the switch" "$H" 'A saved plan moves through the switch instead'
 says "final review: depth-route runs before step 0" "$FR" 'Before step 0 run `scripts/depth-route PLAN_FILE`'
 says "final review: the depth is ledgered" "$FR" 'append `Review depth: <depth> (<reason>)` to the ledger'
 says "final review: a recovered review reads the ledgered depth" "$FR" 'read that line and run no new route'

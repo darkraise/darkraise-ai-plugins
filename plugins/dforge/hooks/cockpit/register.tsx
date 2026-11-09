@@ -139,10 +139,6 @@ const RESUME_WITHIN = 3 * 86_400_000
 // What an auto run's compaction keeps (reference/auto-run.md).
 const AUTO_COMPACT_INSTRUCTIONS =
   'Preserve verbatim: the worktree path; the plan, ledger, handoff and auto-run state file paths; the current HEAD; every Ruling: line; and the auto run pending decisions. Name the task in progress and its fix round.'
-// What the switch's compaction keeps: once the plan is saved, the spec and the
-// plan hold what the design conversation decided.
-const AUTO_SWITCH_INSTRUCTIONS =
-  "Preserve verbatim: the spec, plan, register and auto-run state file paths; the base branch; the current HEAD. Drop the design conversation: the spec and the plan hold what it decided. No task has started and no execution worktree exists yet; execution begins at the execution skill's Setup."
 // A failed stage is tried again after this long; a live turn or background work defers it as long.
 const AUTO_RETRY_MS = 5_000
 // The restored default model is written this many times at most, each write
@@ -150,7 +146,7 @@ const AUTO_RETRY_MS = 5_000
 const RESTORE_WRITES = 3
 const RESTORE_WAIT_MS = 3_000
 const RESTORE_POLL_MS = 500
-type AutoStage = 'compact' | 'continue' | 'clear' | 'resume' | 'switch' | 'switch-resume'
+type AutoStage = 'compact' | 'continue' | 'clear' | 'resume' | 'switch'
 // The pending action the state file holds while each stage is due.
 const AUTO_STAGE_PENDING: Record<AutoStage, string> = {
   compact: 'compact',
@@ -158,7 +154,6 @@ const AUTO_STAGE_PENDING: Record<AutoStage, string> = {
   clear: 'clear',
   resume: 'resume',
   switch: 'switch',
-  'switch-resume': 'switch-resume',
 }
 function autoContinuePrompt(root: string, plan: string | null): string {
   const where = plan === null ? '' : ` for plan ${plan}, through the After compaction steps of the execution skill its Execution line names`
@@ -185,7 +180,7 @@ const POLL_MS = 2_000
 const DETAIL_EVERY = 5
 // The pending actions whose stage the watchdog arms again when no timer holds
 // it; a pending resume resubmits the run's first prompt.
-const WATCHED_STAGES: Readonly<Record<string, AutoStage>> = { compact: 'compact', clear: 'clear', resume: 'resume', switch: 'switch', 'switch-resume': 'switch-resume' }
+const WATCHED_STAGES: Readonly<Record<string, AutoStage>> = { compact: 'compact', clear: 'clear', resume: 'resume', switch: 'switch' }
 function stallPrompt(root: string): string {
   return `The auto run stalled: the last turn ended without its sentinel line. Run \`bash "${root}/scripts/auto-run" status\`, continue the phase it names, and end the turn as reference/auto-run.md §Ending a turn says.`
 }
@@ -2695,8 +2690,7 @@ function scheduleAutoAct($: EngineInterface, stage: AutoStage, ms: number) {
 
 // Carries the bound run through its pending stages: compact, then the
 // continue prompt; or clear, rebind, model and effort, then the first prompt;
-// or switch: compact, then model and effort and the first prompt in the same
-// session.
+// or switch: `auto-run clear --phase`, then the same path as clear.
 // Each attempt first re-checks that the stage is still due and the session
 // idle. A failure is booked and the failed stage tried again; the script stops
 // the run at the second (exit 5).
@@ -2774,24 +2768,9 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       return
     }
     if (at === 'switch') {
-      const done = await $.session.compact({ instructions: AUTO_SWITCH_INSTRUCTIONS })
-      if ('skip' in done && typeof done.skip === 'string') {
-        // A refused compaction must not leave the launch model on the whole
-        // design conversation: a phase clear drops it instead.
-        const cleared = await autoRunCall($, bound, ['clear', '--phase'])
-        if (cleared !== 0) throw new Error(`${done.skip}, and the phase clear exited ${cleared}`)
-        at = 'clear'
-      } else {
-        await update($, budget, () => null)
-        await update($, isNudged, () => false)
-        // As for compact: the compaction happened, so it is never repeated.
-        if ((await autoRunCall($, bound, ['compacted', '--switch'])) !== 0) {
-          await endUnboundRun($, bound, "the cockpit could not book the switch's compaction")
-          return
-        }
-        await trackAutoRun($)
-        at = 'switch-resume'
-      }
+      const cleared = await autoRunCall($, bound, ['clear', '--phase'])
+      if (cleared !== 0) throw new Error(`the phase clear exited ${cleared}`)
+      at = 'clear'
     }
     if (at === 'clear') {
       await $.command.run({ command: 'clear' })
@@ -2826,18 +2805,12 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
     if (refused.length > 0) notes.push(`The cockpit could not run ${refused.join(' or ')}; this session runs on ${await $.session.model()}.`)
     if (!isRestored) notes.push('The cockpit could not put back the default model and effort that /model and /effort saved in your user settings.')
     const note = notes.length === 0 ? '' : `\n\n${notes.join(' ')} Record that with scripts/auto-run ruling add.`
-    const lead = at === 'switch-resume' ? `Run \`bash "${$.plugin.root}/scripts/auto-run" after-compact\` first. ` : ''
-    await $.prompt.submit({ text: `${lead}${auto.resumePrompt ?? resumePrompt()}${note}`, asUser: true })
-    // After a switch an unbooked resume leaves switch-resume pending, which no
-    // stage retries; the prompt is already submitted, so stop rather than resend it.
-    if ((await autoRunCall($, bound, ['resumed'])) !== 0 && at === 'switch-resume') {
-      await endUnboundRun($, bound, 'the cockpit switched but could not book it')
-      return
-    }
+    await $.prompt.submit({ text: `${auto.resumePrompt ?? resumePrompt()}${note}`, asUser: true })
+    await autoRunCall($, bound, ['resumed'])
     await trackAutoRun($)
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error)
-    const action = at === 'compact' || at === 'continue' ? 'compact' : at === 'switch' || at === 'switch-resume' ? 'switch' : 'clear'
+    const action = at === 'compact' || at === 'continue' ? 'compact' : at === 'switch' ? 'switch' : 'clear'
     const code = await autoRunCall($, bound, ['failure', '--reason', `the cockpit could not ${action}: ${why}`])
     if (code === 0) scheduleAutoAct($, at, AUTO_RETRY_MS)
     else if (code === 5) await endStoppedRun($)
@@ -3006,7 +2979,7 @@ async function bookAutoCompaction($: EngineInterface, fromPane = false) {
   // A pending clear or switch supersedes the compaction: booking it would drop
   // that stage. A pending handoff still needs its clear, and a pending compact
   // is the cockpit's own stage, which books itself unless the pane ran it first.
-  if (auto === null || !auto.active || ['clear', 'switch', 'switch-resume', 'handoff'].includes(auto.pending ?? '')) return
+  if (auto === null || !auto.active || ['clear', 'switch', 'handoff'].includes(auto.pending ?? '')) return
   if (auto.pending === 'compact' && !fromPane) return
   const code = await autoRunCall($, await $.session.id(), ['compacted'])
   // Exit 5: the compaction cap stopped the run.

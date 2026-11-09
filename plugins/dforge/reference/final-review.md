@@ -12,6 +12,7 @@ of the work being done.
   the final-phase limit in relaxed mode, and its `budget (final)` lines say
   `ok` past either; a plain budget line saying `handoff` here does not stop it.
   Once the review is clean, finishing follows with no budget check.
+  In an auto run finishing clears the session first (auto-run.md §Finishing).
 - **In an auto run** ([auto-run.md](auto-run.md)) the budget line prints the
   run's verdict, and a `compact` line does end the turn here: finish the step
   in flight, with no reviewer or fixer still running, and end the turn as

@@ -2,7 +2,7 @@
 
 A saved, reviewed plan is a hard stop (except at depth light, below): execution
 starts in a fresh session (in
-an auto run the session switches in place instead; see Auto run).
+an auto run the cockpit clears the session instead; see Auto run).
 Invoke dforge:handoff. It commits (or pushes) the plan and the spec, writes
 `<latest.md>`, runs `scripts/next-step PLAN_FILE`, and ends
 your message with the resume guide — the launch command from the Execution
