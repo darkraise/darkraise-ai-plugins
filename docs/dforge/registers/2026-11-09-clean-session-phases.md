@@ -1,7 +1,7 @@
 # Clean-session phases
 
 **Source:** the owner's answer on 2026-11-09 naming the three token-saving changes to apply
-**Covers:** -
+**Covers:** docs/dforge/specs/2026-11-09-clean-session-phases-design.md
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
