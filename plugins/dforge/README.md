@@ -545,8 +545,8 @@ request, so there is no spec, plan, register, review, worktree question,
 finishing menu or next-step block, and choosing fast mode stands in for the
 design approval. Your own instructions (CLAUDE.md, direct requests) still
 apply. While the latest `Process:` line the main session wrote is
-`Process: fast`, the unplanned-work hold, the UI proof hold, the UI edit hook
-and the cockpit's seat check stand down; a later full-flow `Process:` line
+`Process: fast`, the UI proof hold, the UI edit hook and the cockpit's seat
+check stand down; a later full-flow `Process:` line
 turns them back on. Plan ledger and auto run holds are unchanged. The next
 request is offered the choice again. The `fastMode` setting takes fast mode
 without asking (`always`) or never offers it (`off`). See

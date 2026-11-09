@@ -346,89 +346,20 @@ printf '# SDD ledger — plan: docs/dforge/plans/2026-10-11-other.md\nTask 1: co
 check "darkmem progress: another worktree's ledger does not block" "$(stop s-3 'Task 1 is done.')" ""
 rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
 
-# --- unplanned work: a turn that ran a dforge skill and moved a branch without writing a ledger ---
+# --- a branch moved without a plan's ledger is not held ---
 commit_in() { git -C "$1" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m "$2"; }
-used() { # used <transcript> <skill>: a Skill call, stamped now
-  jq -nc --arg s "$2" --arg t "$(date -u +%Y-%m-%dT%H:%M:%S.999Z)" \
-    '{type:"assistant",timestamp:$t,message:{content:[{type:"tool_use",id:"toolu_s",name:"Skill",input:{skill:$s}}]}}' >> "$1"
-}
-UT="$TMP/unplanned.jsonl"; : > "$UT"
+UT="$TMP/unplanned.jsonl"
 mkdir -p "$REPO/docs/dforge"
 sleep 1; prompt s-4
-check "unplanned: turn-start records the branch heads" \
-  "$([ -f "$HOME/.claude/dforge/sessions/turns/s-4.refs" ] && echo yes || echo no)" "yes"
-check "unplanned: no branch moved: passes" "$(stop s-4 'Here is the answer.')" ""
-git -C "$REPO" branch -q fresh
-check "unplanned: a new branch on an existing commit: passes" "$(stop s-4 'Here is the answer.')" ""
-commit_in "$REPO" adhoc
-check "unplanned: a commit in a turn that ran no dforge skill: passes" "$(stop s-4 'Fixed and committed.' false "$UT")" ""
-used "$UT" simplify
-check "unplanned: another plugin's skill: passes" "$(stop s-4 'Fixed and committed.' false "$UT")" ""
-used "$UT" dforge:test-driven-development
-check "unplanned: no transcript: passes" "$(stop s-4 'Fixed and committed.')" ""
-out=$(stop s-4 'Fixed and committed. Tell me whether to merge.' false "$UT")
-check "unplanned: a commit and a summary: blocks" "$(decision "$out")" "block"
-check "unplanned: the hold says to continue" "$(jq -r .reason <<<"$out" | grep -c 'If work remains for this session, continue it')" "1"
-check "unplanned: the hold names next-step --adhoc" "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step" --adhoc --phase')" "1"
-check "unplanned: the hold names finishing" "$(jq -r .reason <<<"$out" | grep -c 'dforge:finishing-a-development-branch')" "1"
-check "unplanned: the retry passes" "$(stop s-4 'Fixed.' true)" ""
-check "unplanned: the next-step block passes" "$(stop s-4 "$NEXT")" ""
-check "unplanned: the finishing menu passes" "$(stop s-4 $'1. Merge back to main locally\n\nWhich option?')" ""
-check "unplanned: finishing's no-plan ending passes" "$(stop s-4 'Merged. No plan file — no follow-on work recorded.')" ""
-sleep 1; prompt s-4
-git -C "$REPO" branch -q -D fresh
-check "unplanned: deleting a branch whose commit another keeps: passes" "$(stop s-4 'Done.')" ""
-git -C "$REPO" checkout -q -b gone && commit_in "$REPO" side && git -C "$REPO" checkout -q -
-sleep 1; prompt s-4
-git -C "$REPO" branch -q -D gone
-check "unplanned: a dforge skill in an earlier turn only: passes" "$(stop s-4 'Done.' false "$UT")" ""
-used "$UT" dforge:brainstorming
-check "unplanned: deleting a branch with its own commit: blocks" "$(decision "$(stop s-4 'Done.' false "$UT")")" "block"
-sleep 1; prompt s-4
-commit_in "$TMP/wt" from-worktree
 jq -nc --arg t "$(date -u +%Y-%m-%dT%H:%M:%S.999Z)" \
-  '{type:"user",timestamp:$t,message:{content:"<command-name>/dforge:brainstorming</command-name>"}}' >> "$UT"
-check "unplanned: a typed dforge command, a commit in a worktree, stop there: blocks" "$(decision "$(stop_in "$TMP/wt" s-4 'Done.' "$UT")")" "block"
-git -C "$REPO" worktree add -q -b elsewhere "$TMP/elsewhere"
-sleep 1; prompt s-4
-commit_in "$TMP/elsewhere" another-session
-check "unplanned: a commit on a branch another worktree holds: passes" "$(stop s-4 'Here is the answer.')" ""
-OTHER="$TMP/other"; git init -q "$OTHER"; commit_in "$OTHER" init
-sleep 1; prompt s-4
-commit_in "$OTHER" more
-check "unplanned: a stop in another repository than the prompt's: passes" "$(stop_in "$OTHER" s-4 'Done.')" ""
-sleep 1; prompt s-4 "$OTHER"
-commit_in "$OTHER" again
-check "unplanned: a repository without dforge docs: passes" "$(stop_in "$OTHER" s-4 'Done.')" ""
+  '{type:"assistant",timestamp:$t,message:{content:[{type:"tool_use",id:"toolu_s",name:"Skill",input:{skill:"dforge:test-driven-development"}}]}}' > "$UT"
+check "turn-start records the branch heads" \
+  "$([ -f "$HOME/.claude/dforge/sessions/turns/s-4.refs" ] && echo yes || echo no)" "yes"
+commit_in "$REPO" adhoc
+check "a dforge turn that committed without a plan: passes" "$(stop s-4 'Fixed and committed.' false "$UT")" ""
 sleep 1; prompt s-4 "$outside"
-check "unplanned: a prompt outside git records no heads" \
+check "a prompt outside git records no heads" \
   "$([ -f "$HOME/.claude/dforge/sessions/turns/s-4.refs" ] && echo yes || echo no)" "no"
-
-# --- fast mode: the latest Process line the main session wrote is `Process: fast` ---
-said() { # said <transcript> <text> [sidechain]: an assistant message, stamped now
-  jq -nc --arg x "$2" --argjson side "${3:-false}" --arg t "$(date -u +%Y-%m-%dT%H:%M:%S.999Z)" \
-    '{type:"assistant",isSidechain:$side,timestamp:$t,message:{content:[{type:"text",text:$x}]}}' >> "$1"
-}
-FT="$TMP/fast.jsonl"; : > "$FT"
-sleep 1; prompt s-fast
-used "$FT" dforge:brainstorming
-said "$FT" $'Process: fast — a one-file fix\n\nOn it.'
-commit_in "$REPO" fast
-check "fast mode: a commit after Process: fast passes" "$(stop s-fast 'Fixed and committed.' false "$FT")" ""
-said "$FT" 'Process: bounded, inline — no trigger'
-check "fast mode: a later full-flow Process line holds again" "$(decision "$(stop s-fast 'Fixed and committed.' false "$FT")")" "block"
-check "fast mode: Process: fast in the last message passes" "$(stop s-fast $'Process: fast — tiny\n\nDone.' false "$FT")" ""
-said "$FT" 'Process: fast — a subagent says so' true
-check "fast mode: a subagent's Process line does not count" "$(decision "$(stop s-fast 'Done.' false "$FT")")" "block"
-said "$FT" 'Process: faster — not the marker'
-check "fast mode: another word after Process: does not count" "$(decision "$(stop s-fast 'Done.' false "$FT")")" "block"
-
-# --- a stamp written before the worktree column ---
-. "$HERE/../scripts/lib/turn-refs.sh"
-STAMPED="$TMP/stamped"; git init -q "$STAMPED"; commit_in "$STAMPED" first
-was=$(printf '%s\n%s\n' "$(git -C "$STAMPED" rev-parse --path-format=absolute --git-common-dir)" "$(git -C "$STAMPED" rev-parse HEAD)")
-turn_refs_moved "$was" "$(turn_refs "$STAMPED")" "$STAMPED"
-check "turn_refs_moved: a stamp in the old format is not read as moved" "$?" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

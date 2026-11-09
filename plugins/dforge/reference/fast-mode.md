@@ -18,9 +18,9 @@ Once fast mode is taken:
 - Your human partner's own instructions (CLAUDE.md, AGENTS.md, direct
   requests) still apply, including how they verify, commit and push.
 
-dforge's unplanned-work stop hold, its UI proof hold, its UI edit hook and the
-cockpit's seat check stand down while the latest `Process:` line the main
-session wrote is `Process: fast`. Plan ledger and auto run holds do not.
+dforge's UI proof hold, its UI edit hook and the cockpit's seat check stand
+down while the latest `Process:` line the main session wrote is
+`Process: fast`. Plan ledger and auto run holds do not.
 
 Fast mode covers one request. The next request is routed as usual and offered
 the choice again; a full-flow `Process:` line turns the hooks back on.
