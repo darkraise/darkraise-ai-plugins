@@ -6,8 +6,10 @@
 # opens "Command running in background with ID: <id>" or, for a command moved
 # there by its foreground timeout, "Command did not complete within its <n>s
 # timeout and was moved to the background (ID: <id>)" (Bash), or "Async agent
-# launched" with an "agentId: <id>" line (Agent). Its task notification names
-# the launch's tool_use id and a status. A launch is still running when:
+# launched" with an "agentId: <id>" line (Agent), a {"success":true,...} object
+# with "resumedAgentId" (SendMessage resuming an agent), or "Monitor started
+# (task <id>" (Monitor). Its task notification names the launch's tool_use id
+# and a status. A launch is still running when:
 #   - it has no notification with a finished status yet, or
 #   - its latest notification says the agent "stopped with background work of
 #     its own still running": the agent sent its report, but a shell or agent it
@@ -72,6 +74,10 @@ inflight_scan() {
               "L\t\(.tool_use_id // "-")\t\(($text | capture("(with ID: |\\(ID: )(?<id>[A-Za-z0-9_-]+)").id) // "-")\tshell\t\(hm($ts))\t\(([$text | capture("Output is being written to: (?<p>[^\\s]+)").p | sub("\\.$"; "")] | first) // "-")"
             elif ($text | test("^Async agent launched")) then
               "L\t\(.tool_use_id // "-")\t\(($text | capture("agentId: (?<id>[A-Za-z0-9_-]+)").id) // "-")\tagent\t\(hm($ts))\t\(([$text | capture("output_file: (?<p>[^\\s]+)").p] | first) // "-")"
+            elif ($text | test("^\\{\"success\":true,\"message\":\"Resuming agent ")) then
+              "L\t\(.tool_use_id // "-")\t\(($text | capture("\"resumedAgentId\":\"(?<id>[A-Za-z0-9_-]+)\"").id) // "-")\tagent\t\(hm($ts))\t-"
+            elif ($text | test("^Monitor started \\(task ")) then
+              "L\t\(.tool_use_id // "-")\t\(($text | capture("^Monitor started \\(task (?<id>[A-Za-z0-9_-]+)").id) // "-")\tmonitor\t\(hm($ts))\t-"
             elif ($text | test("^(\\{\"message\":\")?Successfully (stopped task|killed shell): ")) then
               "S\t\(($text | capture("Successfully (stopped task|killed shell): (?<id>[A-Za-z0-9_-]+)").id) // "-")"
             elif ($text | test("^(<tool_use_error>)?No task found with ID: ")) then
@@ -84,10 +90,17 @@ inflight_scan() {
   # The latest notification per launch decides. Notifications are read only
   # where Claude Code delivers them (a queued command, a queue operation, or a
   # user message's own text), never from tool output that quotes one. Each is
-  # copied into several entries, in order, so the last copy is the latest.
+  # copied into several entries, in order, so the last copy is the latest. A
+  # resume reads as a running notification at its place in the transcript, so
+  # the agent's earlier finished notification no longer decides.
   latest=$(set -o pipefail; jq -rR 'fromjson? | select(.isSidechain? != true)
       | [ .attachment.prompt?, (select(.type? == "queue-operation") | .content?),
-          (select(.type? == "user") | .message.content? | if type == "string" then . elif type == "array" then (.[] | select(.type? == "text") | .text?) else empty end) ]
+          (select(.type? == "user") | .message.content? | if type == "string" then . elif type == "array" then (.[] | select(.type? == "text") | .text?) else empty end),
+          (select(.type? == "user") | .message.content? | arrays | .[] | select(.type? == "tool_result")
+            | (.content | if type == "array" then (.[0].text? // "") else tostring end)
+            | select(test("^\\{\"success\":true,\"message\":\"Resuming agent "))
+            | capture("\"resumedAgentId\":\"(?<id>[A-Za-z0-9_-]+)\"").id
+            | "<task-notification><task-id>\(.)</task-id><status>running</status></task-notification>") ]
       | .[] | strings | select(contains("<task-notification>")) | gsub("[\r\n]+"; " ")' 2>/dev/null <"$tp" \
       | awk '
         # One line per delivered text; a text can carry several notifications.
@@ -114,13 +127,29 @@ inflight_scan() {
         if (u in seq) k = u
         if ((t in seq) && (k == "" || seq[t] > seq[k])) k = t
         if (k != "" && state[k] == "done") next }
-      ($3 in gone) || seen[$2]++ { next }
+      ($3 in gone) || seen[$2]++ || ($3 != "-" && listed[$3]++) { next }
       { w = what[$2]; if (w == "") w = "(no description)"; print $4 "\t" $3 "\t" $5 "\t" $6 "\t" w }' \
       <(printf '%s\n' "$stopped") <(printf '%s\n' "$latest") <(printf '%s\n' "$events") - <<<"$launched") || return 1
   [ -z "$running" ] && return 0
   while IFS=$'\t' read -r kind id start out what; do
     printf '%s\t%s\t%s\t%s\t%s\n' "$kind" "$id" "$start" "$(inflight_idle "$kind" "$id" "$out" "$tp")" "$what"
   done <<<"$running"
+}
+
+# inflight_queued TRANSCRIPT [SINCE]: status 0 when a task notification is
+# still queued, so its delivery will start another turn. A dequeue names no
+# entry and takes the oldest; a remove names its entry by content. Other
+# queued entries stay in the queue so a dequeue still takes the right one.
+inflight_queued() {
+  local tp=$1 since=${2:-}
+  [ -n "$tp" ] && [ -f "$tp" ] || return 1
+  jq -rR --arg since "$since" 'fromjson? | select(.type? == "queue-operation" and .isSidechain? != true)
+      | select($since == "" or ((.timestamp? // $since) >= $since))
+      | [.operation // "", ((.content? // "") | tostring)] | @tsv' 2>/dev/null <"$tp" | tr -d '\r' | awk -F '\t' '
+      $1 == "enqueue" { q[++last] = $2; next }
+      $1 == "dequeue" { while (first < last) { first++; if (first in q) { delete q[first]; break } } next }
+      $1 == "remove" { for (i = first + 1; i <= last; i++) if ((i in q) && q[i] == $2) { delete q[i]; break } }
+      END { for (i in q) if (index(q[i], "<task-notification>")) exit 0; exit 1 }'
 }
 
 # inflight_text: inflight_scan's lines on stdin with single spaces between the
