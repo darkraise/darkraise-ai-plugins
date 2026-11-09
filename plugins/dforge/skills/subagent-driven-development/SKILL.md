@@ -59,9 +59,10 @@ What changes here:
   `handoff` (exit 5), invoke dforge:handoff,
   then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
 - **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute`
-  from the execution worktree, once dforge:using-git-worktrees has created it.
-  Exit 4 means the worktree step was skipped: create the worktree, then run
-  the command again from it.
+  from the execution workspace (the worktree, or the checkout on the run's
+  branch) once dforge:using-git-worktrees Step 0 has prepared it.
+  Exit 4 means the workspace step was skipped:
+  follow dforge:using-git-worktrees Step 0 for the run, then run the command again.
 - **Nothing stops for your human partner.** A ruling-seat or exhausted
   `BLOCKED` goes on the pending list and one Fable batch runs at once. An
   irreversible, security-sensitive or outside-the-worktree action is never
@@ -83,17 +84,20 @@ What changes here:
   prints anything. When that line leaves every task with its `complete` line
   (in subagent mode, after the last wave's merge), run
   `scripts/auto-run phase final` next, before any budget check and before the
-  turn ends, so a compaction from there on never hands off.
-  A `task-complete` exit 5 means the run stopped (a task was completed in the
-  primary checkout): end as auto-run.md §Stopping says.
+  turn ends, so a compaction from there on never hands off. On its exit 4,
+  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` and end as auto-run.md §Stopping says.
+  A `task-complete` exit 5 means the run stopped (a task was completed
+  on the run base, off its branch or in the primary checkout, or a carried path was committed):
+  end as auto-run.md §Stopping says.
 - **The budget line** reads `budget (auto…)`. On `compact` (exit 6), finish
   the task in flight (a wave through its merge), then end the turn with
   `Auto run: compacting` as its last line. On `handoff`, finish the task in
   flight, then invoke dforge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
   The tail rule and the final-phase limit do not apply;
   `scripts/context-size --final` prints the auto line too.
-- **Final review:** run `scripts/auto-run phase final` and, when the pending
-  list is not empty, the Fable batch first; the review's findings take the
+- **Final review:** run `scripts/auto-run phase final`; on exit 4,
+  run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` and end as auto-run.md §Stopping says. When the pending
+  list is not empty, run the Fable batch first; the review's findings take the
   same ladder.
 - **A turn ends** only on `Auto run: compacting` or `Auto run: clearing` as
   its last line, or after `scripts/auto-run stop --reason "<why>"` when the
@@ -131,7 +135,7 @@ carry out. A wrong ruling costs rework your human partner can see and undo; a
 session parked on a question costs their whole day and buys nothing.
 
 Four things stop you, and only these: an irreversible or destructive
-operation; a security-sensitive action; a side effect outside this worktree
+operation; a security-sensitive action; a side effect outside the execution workspace
 that norms say you ask about first (a merge, a push to a shared branch, a
 publish); and a ruling-seat `BLOCKED` verdict — a plan so broken that every
 path forward is a guess. For those, stop and ask — except in an auto run,

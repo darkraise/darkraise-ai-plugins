@@ -167,10 +167,15 @@ If you have a reason to run one in the foreground anyway, the ceiling is raised
 by the `BASH_MAX_TIMEOUT_MS` environment variable, which your human partner sets
 before the session starts. You cannot raise it from inside one.
 
-**Reserve an exclusive linked worktree.** Refuse the primary checkout. Stop other
+**Reserve an exclusive linked worktree.** Refuse the primary checkout: there,
+as in an in-place auto run, run `task-step start` as the executor path does (it needs no linked worktree),
+then neither the gate nor the wrapper, and fall back to the session review loop
+as the unavailable-executor fallback describes, recording
+`Task <N>: implementer inline (assigned; base <sha7>; executor <id> unavailable - no linked worktree)`.
+Stop other
 controller-owned writing agents/watchers there before offload; require manual
-editing to cease in that worktree. The user can continue in the primary
-checkout. Fingerprints detect drift, not who wrote it. Never remove a blocked or
+editing to cease in that worktree.
+In a worktree run the user can continue in the primary checkout. Fingerprints detect drift, not who wrote it. Never remove a blocked or
 unreconciled worktree. Read [external-task-recovery.md](external-task-recovery.md)
 for ownership, artifacts, approved write sets, and recovery operations.
 

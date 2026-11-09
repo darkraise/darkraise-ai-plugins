@@ -21,7 +21,11 @@ Under `autoRun=ask` it offers it once, after the last design section is
 approved and before the spec is written, and starts it on yes. Either way,
 from the checkout the design was made in:
 
-    scripts/auto-run start --spec <spec path> [--register <register path>]
+    scripts/auto-run start --spec <spec path> --isolation <worktree|in-place> [--register <register path>]
+
+`--isolation` is the spec review's `Worktree:` answer, or the offer's choice,
+under `worktree=ask`; `worktree` under `always`; `in-place` under `never`. A
+preference your human partner's instructions name outranks the setting.
 
 `--register` names the item register when one is open; without it the script
 creates `<docs>/registers/<date>-<slug>-auto.md` in this checkout and prints
@@ -40,9 +44,9 @@ when refused, 5 when the run stopped (`handoff` for `verdict` and
 
 - **Ask nothing.** No clarifying question, approval or menu. What you would
   have asked goes to the ladder under Rulings.
-- **Skipped questions:** the spec review stop, the worktree consent (create
-  the worktree), the finish-preference question, and the execution stops
-  under Rulings.
+- **Skipped questions:** the spec review stop,
+  the worktree consent (asked at the spec review under `worktree=ask`),
+  the finish-preference question, and the execution stops under Rulings.
 - **Phases:** `scripts/auto-run phase plan` when writing-plans starts,
   `scripts/auto-run attach --plan <plan>` once the plan is reviewed, then
   `scripts/auto-run switch` (see The switch),
@@ -180,8 +184,8 @@ wave (each task in sequential mode) and before the final review. Tasks that do
 not depend on a deferred task keep running.
 
 **Never performed in an auto run,** whatever a ruling says: an irreversible or
-destructive operation, a security-sensitive action, or a side effect outside
-the worktree (a push, a publish, a merge before finishing). Defer the task, as
+destructive operation, a security-sensitive action, or a side effect
+outside the execution workspace (a push, a publish, a merge before finishing). Defer the task, as
 above, with a register row naming the operation. The finish action is the
 first exception. The second is the `**Early CI:**` push and workflow dispatch,
 performed only when the header line carries `— consented <YYYY-MM-DD>`.
@@ -285,8 +289,8 @@ base paths and dropping the design conversation (`compacted --switch` leaves
 command, puts back the user's default model and effort, and submits the plan's
 first prompt behind "Run `scripts/auto-run after-compact` first." Run it, then
 follow the first prompt in this same session. No ledger exists yet, so the
-execution skill starts at its Setup, worktree first: `scripts/auto-run status`
-says setup is due until `phase execute` runs from the execution worktree. A
+execution skill starts at its Setup, workspace first: `scripts/auto-run status`
+says setup is due until `phase execute` runs from the execution workspace. A
 switch is a phase transition:
 it never counts as a self-resume. Its compaction is measured in the `execute`
 phase, so one that leaves 85% of the window or more hands off as Clears says.
@@ -334,7 +338,7 @@ ends as finished. Run it, then end as the attended flow would, when:
 
 - your human partner asks you to stop;
 - dforge:resume-execution would stop to ask (a worktree whose branch is
-  gone);
+  gone, or the run's branch is gone);
 - finishing hits one of its unattended stops (failing tests at its first
   step or on the merged result, a rejected push, a refused worktree removal);
 - `scripts/next-step` exits 4 during a clear (see Clears).

@@ -85,7 +85,7 @@ ar --session s-2 stop >/dev/null 2>&1; status=$?
 check "another session cannot stop it" "$status:$(field active)" "3:true"
 out=$(ar --session s-1 status); status=$?
 check "status: exit 0" "$status" "0"
-check "status: one line" "$out" "auto run: spec — regime normal — pending none — 0 compactions — 0 resumes — 0 pending decisions — spec $SPEC — plan none — base main — register $reg"
+check "status: one line" "$out" "auto run: spec — regime normal — pending none — 0 compactions — 0 resumes — 0 pending decisions — spec $SPEC — plan none — base main — register $reg — isolation worktree"
 check "pending: none" "$(ar --session s-1 pending)" "none"
 check "the environment names the session" "$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=s-1 bash "$AR" pending)" "none"
 
@@ -166,8 +166,13 @@ beat s-5
 out=$(cd "$TMP/side" && bash "$AR" --session s-5 start --spec "$SPEC" --force 2>&1); status=$?
 check "worktree: the register is created in that checkout" "$status:$([ -f "$TMP/side/$reg" ] && echo yes)" "0:yes"
 check "worktree: the state stays in the primary checkout" "$(field session) $(field base)" "s-5 side"
+side --session s-5 phase execute >/dev/null 2>&1; status=$?
+check "a run started in a linked worktree: phase execute on its base is refused" "$status:$(field phase)" "4:spec"
+git -C "$TMP/side" switch -q -c auto/side-run
+side --session s-5 setup-branch auto/side-run
 side --session s-5 phase execute; status=$?
-check "a run started in a linked worktree: phase execute there passes" "$status:$(field phase)" "0:execute"
+check "a run started in a linked worktree: phase execute on its own branch passes" "$status:$(field phase)" "0:execute"
+git -C "$TMP/side" switch -q side
 git -C "$REPO" worktree add -q --detach "$TMP/loose"
 beat s-6
 (cd "$TMP/loose" && bash "$AR" --session s-6 start --spec "$SPEC" --register docs/r.md --force >/dev/null)
@@ -630,7 +635,7 @@ ar --session s-1 compacted --switch
 ar --session s-1 resumed
 asst 30000 > "$T"
 out=$(after); status=$?
-check "after a switch, continue names Setup" "$status:$out" "0:continue — 30k after compaction; regime normal; setup due: begin at the execution skill's Setup, worktree first"
+check "after a switch, continue names Setup" "$status:$out" "0:continue — 30k after compaction; regime normal; setup due: begin at the execution skill's Setup, workspace first"
 ar --session s-1 phase execute 2>/dev/null; status=$?
 check "phase execute in the primary checkout keeps setup due" "$status:$(field setupDue)" "4:true"
 side --session s-1 phase execute
@@ -726,7 +731,7 @@ ar --session s-1 compacted --switch
 ar --session s-1 resumed
 printf '{}\n' > "$T"
 out=$(after); status=$?
-check "after-compact: an unknown size with setup due names Setup" "$status:$out:$(field pending)" "0:continue — the size after compaction is unknown; record that with auto-run ruling add, and Claude Code's own compaction stays the backstop; setup due: begin at the execution skill's Setup, worktree first:null"
+check "after-compact: an unknown size with setup due names Setup" "$status:$out:$(field pending)" "0:continue — the size after compaction is unknown; record that with auto-run ruling add, and Claude Code's own compaction stays the backstop; setup due: begin at the execution skill's Setup, workspace first:null"
 
 # --- every suite that runs the run-control scripts names its own session ---
 # A subagent's shell carries the controller's CLAUDE_CODE_SESSION_ID, so a

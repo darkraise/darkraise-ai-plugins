@@ -38,7 +38,14 @@ Report with branch state:
 
 **If `GIT_DIR == GIT_COMMON` (or in a submodule):** You are in a normal repo checkout.
 
-In an auto run (`scripts/auto-run status` exits 0), create the worktree without asking, as `worktree=always` does ([auto-run.md](../../reference/auto-run.md)). The `worktree` setting is not read: `worktree=never` creates it too, since an auto run never commits to its base branch.
+**In an auto run** (`scripts/auto-run status` exits 0, [auto-run.md](../../reference/auto-run.md)), read the auto-run state (`scripts/auto-run status`), not the `worktree` setting, and do it before the linked-worktree check above, in any checkout: the run's `isolation` was settled when it started, and it never commits to its base branch.
+
+- When the status names `branch <name>`, switch to that branch if HEAD is elsewhere (`git switch <name>`), then go to Step 2.
+- With no branch recorded, when HEAD is the run's base (the status's `base`) or detached, and the run is `isolation in-place` or this is a linked worktree under either isolation: run `git switch -c auto/<plan slug>`, the slug being the plan filename without `.md` and its `YYYY-MM-DD-` prefix, suffixed `-2`, `-3`, … until `git show-ref --verify --quiet refs/heads/<name>` fails. Unstaged and untracked changes come along. Then run `scripts/auto-run setup-branch <name>`, which records the branch and every uncommitted path as carried: the run never commits those. When it refuses with `staged changes in this checkout: <paths>`, run `git checkout -` and `git branch -d <name>`, so HEAD is back where it was, then `scripts/auto-run stop --reason "staged changes in this checkout: <paths>"` and end as auto-run.md §Stopping says. Then go to Step 2.
+- With no branch recorded and HEAD on a branch other than the run's base, run `scripts/auto-run stop --reason "HEAD is on <branch>, not the run's base, and the run has no branch"` and end as auto-run.md §Stopping says.
+- Under `isolation worktree` in the primary checkout, create the worktree without asking (Step 1).
+
+Outside an auto run:
 
 Has the user already indicated their worktree preference in your instructions? If not, the `worktree` setting decides (read it from the session-start line `dforge settings in force (…)`, or run `scripts/dforge-config workflow` when no such line is in context): `worktree=always` creates the worktree without asking, `worktree=never` works in place and skips to Step 2, and `ask`, the default and the value when the line does not name the key, asks for consent before creating a worktree:
 
@@ -101,7 +108,7 @@ git worktree add "$path" -b "$BRANCH_NAME"
 cd "$path"
 ```
 
-**Sandbox fallback:** If `git worktree add` fails with a permission error (sandbox denial), tell the user the sandbox blocked worktree creation and you're working in the current directory instead. Then run setup and baseline tests in place. In an auto run, do not work in place: run `scripts/auto-run stop --reason "the sandbox refused the execution worktree"` and end as [auto-run.md](../../reference/auto-run.md) §Stopping says.
+**Sandbox fallback:** If `git worktree add` fails with a permission error (sandbox denial), tell the user the sandbox blocked worktree creation and you're working in the current directory instead. Then run setup and baseline tests in place. In an auto run under `isolation worktree`, do not work in place: run `scripts/auto-run stop --reason "the sandbox refused the execution worktree"` and end as [auto-run.md](../../reference/auto-run.md) §Stopping says.
 
 ## Step 2: Project Setup
 

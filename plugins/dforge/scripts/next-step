@@ -559,7 +559,7 @@ else
     elif [ "$has_ledger" -eq 1 ]; then
       prompt="Resume \`$rel\` with dforge:resume-execution. $next_line"
     else
-      prompt="Continue \`$rel\` with dforge:$skill. No ledger exists yet: begin at the skill's Setup, worktree first; the first task is Task $first_open ($open_title)."
+      prompt="Continue \`$rel\` with dforge:$skill. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task $first_open ($open_title)."
     fi
     if [ "$root" != "$primary" ]; then
       prompt="$prompt First enter the existing worktree \`$root\`."

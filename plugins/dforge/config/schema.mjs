@@ -145,7 +145,7 @@ export default {
   worktree: {
     type: 'enum', values: ['ask', 'always', 'never'], default: 'ask', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
     label: 'Worktree', title: 'Worktree',
-    description: 'Whether work is isolated in a git worktree before it starts. ask keeps the consent question.',
+    description: 'Whether work is isolated in a git worktree before it starts. ask keeps the consent question; an auto run asks at the spec review, or at the auto-run offer under autoRun=ask.',
   },
   autoRun: {
     type: 'enum', values: ['on', 'ask', 'off'], default: 'on', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',

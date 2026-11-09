@@ -27,9 +27,9 @@ ar_primary_root() {
   git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null || return 1
 }
 
-# ar_in_primary — true in the primary checkout. An auto run's tasks run in a
-# linked worktree (dforge:using-git-worktrees), so a task step here would land
-# on the run's base.
+# ar_in_primary — true in the primary checkout. A worktree run's tasks run in
+# a linked worktree (dforge:using-git-worktrees), so a task step here would
+# land on the run's base; ar_guard applies it to worktree runs only.
 ar_in_primary() {
   local dir common
   dir=$(git rev-parse --absolute-git-dir 2>/dev/null) || return 1
@@ -178,10 +178,11 @@ ar_create_unless_busy() {
   ar_create "$@"
 }
 
-# ar_start SPEC REGISTER FORCE — prints the register path. A register it
-# creates goes in the checkout the run starts from, where its path resolves.
+# ar_start SPEC REGISTER FORCE [ISOLATION] — prints the register path. A
+# register it creates goes in the checkout the run starts from, where its path
+# resolves. ISOLATION is worktree (the default) or in-place.
 ar_start() {
-  local spec=$1 register=$2 force=$3 path top slug base regfile age
+  local spec=$1 register=$2 force=$3 iso=${4:-worktree} path top slug base regfile age
   path=$(ar_path) || { echo "auto-run: not inside a git repository" >&2; return 2; }
   # Nothing would compact, switch or wake the run without the cockpit.
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
@@ -207,32 +208,151 @@ ar_start() {
   # Under the update lock, so a --force start never lands between another
   # session's read and write of the state and is lost.
   dr_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
-    --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
+    --arg iso "$iso" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
     active: true, session: $s, rebind: false, stopped: null, startedAt: $now,
     spec: $spec, plan: null, register: $reg, base: (if $base == "" then null else $base end),
     phase: "spec", regime: "normal", pending: null, resumePrompt: null, launch: null,
     failures: 0, compactions: 0, resumes: 0, decisions: [], rulings: [],
-    setupDue: false, stalls: 0, stalledAt: null, compactionsSinceTask: 0
+    setupDue: false, stalls: 0, stalledAt: null, compactionsSinceTask: 0,
+    isolation: $iso, branch: null, branchBase: null, carried: null
   }' || return $?
   printf '%s\n' "$register"
 }
 
 ar_status() {
-  ar_state | ar_jq -r '"auto run: \(.phase) — regime \(.regime) — pending \(.pending // "none") — \(.compactions) compactions — \(.resumes) resumes — \(.decisions | length) pending decisions — spec \(.spec) — plan \(.plan // "none") — base \(.base // "none") — register \(.register)\(if .setupDue == true then " — setup due" else "" end)"'
+  ar_state | ar_jq -r '"auto run: \(.phase) — regime \(.regime) — pending \(.pending // "none") — \(.compactions) compactions — \(.resumes) resumes — \(.decisions | length) pending decisions — spec \(.spec) — plan \(.plan // "none") — base \(.base // "none") — register \(.register) — isolation \(.isolation // "worktree")\(if .branch then " — branch \(.branch)" else "" end)\(if .setupDue == true then " — setup due" else "" end)"'
 }
 
 ar_pending() { ar_state | ar_jq -r '.pending // "none"'; }
+
+# ar_setup_branch NAME — an in-place run's branch, checked out here: records
+# it, the commit it starts from, and every path git status lists as carried,
+# the user's uncommitted changes the run must never commit (the run's own
+# register excepted). Refuses (return 4, recording nothing) a second call,
+# which would move the carried check's start past commits already made, the
+# run's base, a HEAD on another branch, and staged changes, which a task's
+# commit would take along.
+ar_setup_branch() {
+  local name=$1 entry xy path staged=() paths=() carried recorded register head tmp top
+  recorded=$(ar_get branch)
+  if [ -n "$recorded" ]; then
+    echo "auto-run: the run's branch is already recorded: $recorded" >&2
+    return 4
+  fi
+  if [ "$name" = "$(ar_get base)" ]; then
+    echo "auto-run: $name is the run's base branch" >&2
+    return 4
+  fi
+  if [ "$(git symbolic-ref --short -q HEAD 2>/dev/null)" != "$name" ]; then
+    echo "auto-run: HEAD is not on $name" >&2
+    return 4
+  fi
+  head=$(git rev-parse HEAD) && [ -n "$head" ] || return 1
+  top=$(git rev-parse --show-toplevel) || return 1
+  register=$(dforge_resolve "$(ar_get register)" "$top")
+  register=${register#"$top"/}
+  tmp=$(mktemp) || return 1
+  if ! git status --porcelain=v1 -z --untracked-files=all >"$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  while IFS= read -r -d '' entry; do
+    xy=${entry:0:2} path=${entry:3}
+    case ${xy:0:1} in ' ' | '?') ;; *) staged+=("$path") ;; esac
+    [ "$path" = "$register" ] || paths+=("$path")
+    case $xy in
+      *R* | *C*) IFS= read -r -d '' path && { [ "$path" = "$register" ] || paths+=("$path"); } ;;
+    esac
+  done <"$tmp"
+  rm -f "$tmp"
+  if [ ${#staged[@]} -gt 0 ]; then
+    echo "auto-run: staged changes in this checkout: ${staged[*]}" >&2
+    return 4
+  fi
+  carried=$( { [ ${#paths[@]} -eq 0 ] || printf '%s\0' "${paths[@]}"; } | ar_jq -Rsc 'split("\u0000") | map(select(. != ""))') || return 1
+  ar_update '.branch = $b | .branchBase = $h | .carried = $c' \
+    --arg b "$name" --arg h "$head" --argjson c "$carried"
+}
+
+ar_carried() { ar_state | ar_jq -r '(.carried // [])[]'; }
+
+# ar_guard — true (0) when a task step here would land where the run must not
+# commit, with AR_GUARD_RULE naming the rule: 1, HEAD is the run's base (or
+# detached with no base); 2, an in-place run's HEAD is off its recorded
+# branch, or no branch is recorded, so Setup's Step 0 never ran and the
+# carried paths are unknown; 3, a worktree run is in the primary checkout. A worktree run checks
+# 3 before 1, so its primary-checkout case keeps rule 3's message.
+ar_guard() {
+  local iso head base branch
+  AR_GUARD_RULE=""
+  iso=$(ar_get isolation)
+  head=$(git symbolic-ref --short -q HEAD 2>/dev/null || true)
+  base=$(ar_get base)
+  if [ "$iso" != in-place ] && ar_in_primary; then AR_GUARD_RULE=3; return 0; fi
+  if { [ -n "$base" ] && [ "$head" = "$base" ]; } || { [ -z "$base" ] && [ -z "$head" ]; }; then
+    AR_GUARD_RULE=1
+    return 0
+  fi
+  if [ "$iso" = in-place ]; then
+    branch=$(ar_get branch)
+    if [ -z "$branch" ] || [ "$head" != "$branch" ]; then AR_GUARD_RULE=2; return 0; fi
+  fi
+  return 1
+}
+
+# ar_carried_hit — prints the first path committed since branchBase that the
+# run carried, the user's own uncommitted change; returns 1 when there is
+# none, and 2 when git cannot tell, which callers treat as a hit rather than
+# as clean. --no-renames lists a renamed carried path under its old name too.
+ar_carried_hit() {
+  local bb carried path tmp
+  bb=$(ar_get branchBase)
+  [ -n "$bb" ] || return 1
+  carried=$(ar_carried) || return 2
+  [ -n "$carried" ] || return 1
+  tmp=$(mktemp) || return 2
+  if ! git diff --no-renames --name-only -z "$bb..HEAD" >"$tmp"; then
+    rm -f "$tmp"
+    return 2
+  fi
+  while IFS= read -r -d '' path; do
+    if grep -Fxq -- "$path" <<<"$carried"; then
+      rm -f "$tmp"
+      printf '%s\n' "$path"
+      return 0
+    fi
+  done <"$tmp"
+  rm -f "$tmp"
+  return 1
+}
 
 ar_stop() { # ar_stop [REASON]
   ar_update '.active = false | .stopped = (if $r == "" then null else $r end) | .pending = null' --arg r "${1:-}"
 }
 
-# ar_set_phase PHASE — refuses execute in the primary checkout (return 4): the
-# execution worktree Setup makes is missing. execute and final settle Setup.
+# ar_set_phase PHASE — refuses (return 4) execute where ar_guard does, since
+# the workspace Setup prepares is missing, and final or finish once a carried
+# path was committed. execute and final settle Setup.
 ar_set_phase() {
-  if [ "$1" = execute ] && ar_in_primary; then
-    echo "auto-run: this is the primary checkout; create the execution worktree first (dforge:using-git-worktrees), then run auto-run phase execute from it" >&2
+  local hit rc
+  if [ "$1" = execute ] && ar_guard; then
+    if [ "$AR_GUARD_RULE" = 3 ]; then
+      echo "auto-run: this is the primary checkout; create the execution worktree first (dforge:using-git-worktrees), then run auto-run phase execute from it" >&2
+    else
+      echo "auto-run: HEAD is not on the run's branch; follow dforge:using-git-worktrees Step 0 for the run, then run auto-run phase execute again" >&2
+    fi
     return 4
+  fi
+  if [ "$1" = final ] || [ "$1" = finish ]; then
+    hit=$(ar_carried_hit)
+    rc=$?
+    if [ "$rc" = 0 ]; then
+      echo "auto-run: carried path $hit was committed; stop the run" >&2
+      return 4
+    elif [ "$rc" = 2 ]; then
+      echo "auto-run: git could not list the commits since the run's branch base; stop the run" >&2
+      return 4
+    fi
   fi
   ar_update '.phase = $p | if $p == "execute" or $p == "final" then .setupDue = false else . end' --arg p "$1"
 }
@@ -256,15 +376,31 @@ ar_enter_final() {
 }
 
 # ar_task_complete — a task's complete line is written, so the progress counts
-# start again. In the primary checkout during the execute or final phase that
-# task ran on the run's base: the run stops (return 5) rather than finish
-# there. The spec and plan phases belong in the primary checkout.
+# start again. During the execute or final phase a task where ar_guard refuses
+# ran where the run must not commit, and in any phase a committed carried path
+# is the user's change: the run stops (return 5) rather than finish there. The
+# spec and plan phases belong in the primary checkout.
 ar_task_complete() {
-  local phase
+  local phase reason="" hit rc
   phase=$(ar_get phase)
-  if { [ "$phase" = execute ] || [ "$phase" = final ]; } && ar_in_primary; then
-    ar_stop "a task was completed in the primary checkout" || return $?
-    echo "auto-run: a task was completed in the primary checkout; the run has stopped. End as reference/auto-run.md §Stopping says." >&2
+  if { [ "$phase" = execute ] || [ "$phase" = final ]; } && ar_guard; then
+    case $AR_GUARD_RULE in
+      1) reason="a task was completed on the run's base branch" ;;
+      2) reason="a task was completed off the run's branch" ;;
+      *) reason="a task was completed in the primary checkout" ;;
+    esac
+  else
+    hit=$(ar_carried_hit)
+    rc=$?
+    if [ "$rc" = 0 ]; then
+      reason="carried path $hit was committed"
+    elif [ "$rc" = 2 ]; then
+      reason="git could not check the carried paths"
+    fi
+  fi
+  if [ -n "$reason" ]; then
+    ar_stop "$reason" || return $?
+    echo "auto-run: $reason; the run has stopped. End as reference/auto-run.md §Stopping says." >&2
     return 5
   fi
   ar_update '.resumes = 0 | .stalls = 0 | .stalledAt = null | .compactionsSinceTask = 0 | .setupDue = false'
@@ -302,7 +438,7 @@ ar_handoff() {
 # plan, or when the first prompt names another plan. Never a self-resume. The
 # phase moves to execute, so the switch's compaction is measured under
 # execution's rules and an oversized one still hands off. Setup is due until
-# a phase execute from the execution worktree, a task-complete or phase final.
+# a phase execute from the execution workspace, a task-complete or phase final.
 ar_switch() {
   local plan
   plan=$(ar_get plan)

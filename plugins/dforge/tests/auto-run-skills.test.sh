@@ -27,11 +27,11 @@ for skill in subagent-driven-development executing-plans; do
   F="$P/skills/$skill/SKILL.md"
   names "$skill: the section" "$F" '## Auto run'
   names "$skill: after a compaction" "$F" '`scripts/auto-run after-compact` before step 0 above'
-  names "$skill: setup asks nothing, from the worktree" "$F" 'from the execution worktree, once dforge:using-git-worktrees has created it.'
-  names "$skill: exit 4 is a skipped worktree" "$F" 'Exit 4 means the worktree step was skipped: create the worktree, then run'
+  names "$skill: setup asks nothing, from the worktree" "$F" 'from the execution workspace'
+  names "$skill: exit 4 is a skipped workspace step" "$F" 'Exit 4 means the workspace step was skipped:'
   names "$skill: no ledger goes to Setup" "$F" 'no ledger names this plan, no task has started: skip the rest of this'
   names "$skill: setup due goes to Setup" "$F" '0. In an auto run, when `scripts/auto-run status` says setup is due, or when'
-  names "$skill: a task-complete stop" "$F" 'A `task-complete` exit 5 means the run stopped (a task was completed in the'
+  names "$skill: a task-complete stop" "$F" 'A `task-complete` exit 5 means the run stopped (a task was completed'
   names "$skill: dependents come from the plan" "$F" 'names the task; in a plan without those lines, its `Consumes:` line cites'
   names "$skill: compact still ends the turn at the final check" "$F" 'a `compact` line still ends the turn on `Auto run: compacting`.'
   check "$skill: no handoff rule at the final check" "$(grep -c "Auto run section's \`handoff\`" "$F")" "0"
@@ -106,7 +106,7 @@ names "auto-run.md: finishing reads the recorded choice" "$R" 'the choice `scrip
 names "auto-run.md: a spec-review deferral keeps a merge" "$R" 'deferred at the spec review, before the run started, counts as one the run'
 check "auto-run.md: the one phase clear is for an old switch" "$(grep -c 'clear --phase' "$R")" "1"
 names "auto-run.md: an old switch clears by phase" "$R" '- **A plan that left inline mode before this change** (a ledger dforge:executing-plans'
-names "auto-run.md: the switch starts at Setup" "$R" 'execution skill starts at its Setup, worktree first: `scripts/auto-run status`'
+names "auto-run.md: the switch starts at Setup" "$R" 'execution skill starts at its Setup, workspace first: `scripts/auto-run status`'
 names "auto-run.md: a listed launch is waited for" "$R" 'listed: run `scripts/in-flight`, wait for or stop each launch it lists, and'
 names "auto-run.md: a second exit 5 stops the run" "$R" '`scripts/auto-run stop --reason "background work still running at the switch: <next-step'"'"'s message>"`'
 names "auto-run.md: dependents come from the plan" "$R" '`**Depends on:**` line names it, or, in a plan without those lines, a later'
@@ -119,8 +119,8 @@ names "final-review.md: a second red stops the run" "$P/reference/final-review.m
 GWF="$P/skills/using-git-worktrees/SKILL.md"
 names "final-review.md: a manifest defect has its own reason" "$P/reference/final-review.md" 'a manifest defect does the same with the reason'
 check "executing-plans: no mode switch clears by phase" "$(grep -c 'clear --phase' "$EPF")" "0"
-names "using-git-worktrees: never is not read" "$GWF" 'The `worktree` setting is not read: `worktree=never` creates it too'
-names "using-git-worktrees: the sandbox stops the run" "$GWF" 'In an auto run, do not work in place: run `scripts/auto-run stop --reason "the sandbox refused the execution worktree"`'
+names "using-git-worktrees: an auto run reads its state" "$GWF" 'read the auto-run state (`scripts/auto-run status`), not the `worktree` setting'
+names "using-git-worktrees: the sandbox stops the run" "$GWF" 'In an auto run under `isolation worktree`, do not work in place: run `scripts/auto-run stop --reason "the sandbox refused the execution worktree"`'
 names "using-git-worktrees: a red baseline is a ruling" "$GWF" 'In an auto run, ask nothing: run `scripts/auto-run ruling add "Setup: baseline tests red — <failing summary>"` and continue'
 names "finish-preference.md: get reads the spec line" "$P/reference/finish-preference.md" 'the plan'"'"'s spec carries a `Finish: <merge|pr|keep>` line in `## Decisions`,'
 names "session-budget.md: the last task is never a stop" "$P/reference/session-budget.md" '- **Never a stop:** the last task completing, in either mode. The final review'

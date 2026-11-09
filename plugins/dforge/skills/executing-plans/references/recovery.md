@@ -9,7 +9,7 @@
 | `complete` | Done; never redo |
 | `BLOCKED` | Terminal. It is a stop of the fourth class for any task that depends on it; name it in your final message |
 | `escalated inline -> subagent` | This plan has left inline mode: use dforge:subagent-driven-development |
-| `fix round R/3 (…; passing)` | Re-run the task's verifications; if they pass, commit anything uncommitted and write the complete line, else treat as `still failing` |
+| `fix round R/3 (…; passing)` | Re-run the task's verifications; if they pass, commit anything uncommitted except the carried paths (`scripts/auto-run carried`) and write the complete line, else treat as `still failing` |
 | `fix round R/3 (…; still failing)`, R < 3 | Resume the loop at round R+1 |
 | `fix round 3/3 (…; still failing)` | Send the task to the ruling seat as a `breaker` item (in an auto run, the pending list) |
 | `implementer inline (assigned; base <sha7>[; executor <id> unavailable - <reason> \| executor <id> HANDBACK - <reason>])` | A task whose brief's second line is `**Review:** per-task — risk 3`, or an executor fallback, resumes the session review loop at its first step not yet done. Otherwise: if `git log <base>..HEAD` is non-empty, re-run the task's verifications and finish it from where those commits leave it; otherwise start the task |

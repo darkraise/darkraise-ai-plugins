@@ -79,7 +79,7 @@ names "brainstorming: the review gate gives way to the Fable review" "$P/skills/
 names "writing-plans: an auto run asks nothing" "$P/skills/writing-plans/references/auto-run-plan.md" 'nothing in this skill waits on your human partner'
 names "writing-plans: planning choices go to Opus first" "$P/skills/writing-plans/references/auto-run-plan.md" '`dforge:judge-opus` first, then the ladder'
 names "writing-plans: the plan step switches in place" "$P/skills/writing-plans/references/auto-run-plan.md" '`scripts/auto-run switch` and end the turn with `Auto run: switching`'
-names "using-git-worktrees: an auto run creates the worktree" "$G" 'In an auto run (`scripts/auto-run status` exits 0), create the worktree without asking'
+names "using-git-worktrees: a worktree run creates the worktree" "$G" 'Under `isolation worktree` in the primary checkout, create the worktree without asking'
 names "handoff: the caller owns the clear" "$P/skills/handoff/SKILL.md" 'never runs `scripts/auto-run clear` itself'
 names "resume-execution: an auto run stops before asking" "$P/skills/resume-execution/SKILL.md" 'scripts/auto-run stop --reason'
 names "finishing: an auto run shows no menu" "$P/skills/finishing-a-development-branch/SKILL.md" '**Step 4 shows no menu.**'

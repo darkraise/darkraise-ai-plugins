@@ -629,6 +629,10 @@ once the last task is done. What Opus cannot rule goes to Fable in one batch;
 what Fable cannot rule is deferred on the run's register. Instead of handing
 off, the session compacts at the handoff budget, and the cockpit clears and
 resumes it when a compaction leaves too much.
+An auto run follows the `worktree` setting: `always` makes the execution
+worktree unasked, `never` works in this checkout on an `auto/<plan>` branch and
+leaves your uncommitted changes uncommitted, and `ask` asks at the spec review,
+or at the auto-run offer under `autoRun=ask`.
 `autoRun=ask` offers the run once the design is approved instead, and
 `autoRun=off` never runs one. The pane shows the
 run and a **Stop auto** button. A run's turn that ends without its sentinel
