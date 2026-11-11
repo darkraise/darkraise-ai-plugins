@@ -359,7 +359,9 @@ your own: QA commits on this branch.
 
 A confirmed finding gates the handoff whichever reviewer raised it; a rejected
 one never does. With one list, every finding gates the handoff until the fixer
-fixes it or rejects it with evidence the re-review upholds.
+fixes it or rejects it with evidence the re-review upholds. A finding whose
+one-liner begins `deferred: test-simplifier — ` gates nothing on either list
+(**Redundant tests.** below).
 
 If confirmed findings remain, fix them in ONE wave with the complete list,
 given as report paths (the dedupe report with two lists; the Claude review's
@@ -392,7 +394,10 @@ Whoever fixes writes `<workspace>/final-fix-report.md`: what changed per
 finding, the covering tests, the command and its output. With one list the
 fixer first checks each finding against the code under
 dforge:receiving-code-review, fixes the real ones, and records each one
-it rejects under `REJECTED: <finding>` with its evidence. Each per-finding
+it rejects under `REJECTED: <finding>` with its evidence. The fixer skips a
+finding whose one-liner begins `deferred: test-simplifier — ` and lists it
+under `DEFERRED: <finding>`; the session leaves each `DEFERRED:` finding out
+of the findings the scoped re-review verifies. Each per-finding
 entry and each `REJECTED:` line keeps the finding's `[lens:<id>]` tag, and the
 scoped re-review quotes that tag in its verdict on each rejection. In subagent
 mode the fix subagent writes it as its report file, and its prompt names
