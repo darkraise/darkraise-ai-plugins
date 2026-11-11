@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# The review record a finished plan leaves behind once finishing deletes its
+# ledger, and the per-plan test ratio its final review writes to the ledger.
+#
+# Usage: review-record retain PLAN_FILE [--from CHECKOUT]
+#        review-record ratio MERGE_BASE HEAD
+# Exit: retain 0 written (prints the record's path), 2 usage, 3 the ledger
+#              holds no review line, 4 no ledger names the plan, 1 the
+#              record could not be written
+#       ratio  0 printed, 2 usage, an unknown revision, or a test-quality
+#              lens with no paths clause
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/roots.sh"
+. "$HERE/lib/plan.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: review-record retain PLAN_FILE [--from CHECKOUT]
+       review-record ratio MERGE_BASE HEAD
+USAGE
+  exit 2
+}
+
+REVIEW_LINES='^(Review depth:|Acceptance QA: complete|Acceptance QA: skipped|final review lens|Final review:|Test ratio:)'
+
+retain() {
+  local plan="" from="" have_from=0 slug ctx name key top wt dir file c seen named lines="" ledger="" docs target tmp
+  local -a dirs=() candidates=()
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --from) [ $# -ge 2 ] && [ "$have_from" -eq 0 ] || usage; from=$2 have_from=1; shift 2 ;;
+      -*) usage ;;
+      *) [ -z "$plan" ] || usage; plan=$1; shift ;;
+    esac
+  done
+  [ -n "$plan" ] || usage
+  [ "$have_from" -eq 0 ] || [ -n "$from" ] || usage
+
+  slug=$(basename "$plan" .md)
+  ctx=$(_plan_ctx "$plan")
+  dforge_stores_init "$ctx"
+  name=$(dforge_name "$plan" "$ctx")
+  key=$(dforge_name_key "$name")
+
+  if [ "$have_from" -eq 1 ]; then
+    dirs=("$from")
+  else
+    top=$(git rev-parse --show-toplevel 2>/dev/null) || top=$PWD
+    dirs=("$top")
+    while IFS= read -r wt; do
+      [ -n "$wt" ] && dirs+=("$wt")
+    done < <(git -C "$(dr_native_path "$top")" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
+  fi
+
+  for dir in "${dirs[@]}"; do
+    dforge_stores_init "$dir"
+    file="$(dforge_ledger_dir "$slug" "$dir")/progress.md"
+    seen=0
+    for c in ${candidates[@]+"${candidates[@]}"}; do [ "$c" != "$file" ] || seen=1; done
+    [ "$seen" -eq 0 ] || continue
+    candidates+=("$file")
+    [ -f "$file" ] || continue
+    named=$(ledger_plan "$file")
+    [ -n "$named" ] || continue
+    if command -v cygpath >/dev/null 2>&1; then
+      named=$(cygpath -m "$named" 2>/dev/null || printf '%s' "$named")
+    fi
+    if [ "$(dforge_name_key "$(cd "$dir" && dforge_name "$named")")" = "$key" ]; then
+      ledger=$file
+      break
+    fi
+  done
+
+  if [ -z "$ledger" ]; then
+    printf 'review-record: no ledger for %s; searched:\n' "$name" >&2
+    printf '%s\n' "${candidates[@]}" >&2
+    exit 4
+  fi
+
+  lines=$(tr -d '\r' < "$ledger" | grep -E "$REVIEW_LINES")
+  if [ -z "$lines" ]; then
+    printf 'review-record: %s has no review lines in %s\n' "$name" "$ledger" >&2
+    exit 3
+  fi
+
+  dforge_stores_init
+  docs=$(dforge_docs_root)
+  target="$docs/reviews/$slug.md"
+  mkdir -p "$docs/reviews" || exit 1
+  tmp=$(mktemp "$docs/reviews/.$slug.md.XXXXXX") || exit 1
+  if ! printf '# Review record: %s\n\nPlan: %s\nRetained: %s\n\n%s\n' \
+       "$slug" "$name" "$(date +%Y-%m-%d)" "$lines" > "$tmp" || ! mv -f "$tmp" "$target"; then
+    rm -f "$tmp"
+    exit 1
+  fi
+  printf '%s\n' "$target"
+}
+
+case ${1:-} in
+  retain) shift; retain "$@" ;;
+  *) usage ;;
+esac

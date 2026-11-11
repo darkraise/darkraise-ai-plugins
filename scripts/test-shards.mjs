@@ -96,6 +96,7 @@ export const windowsSeconds = {
   'repo-audit.test.sh': 53,
   'review-depth-qa.acceptance.test.sh': 288,
   'review-depth.acceptance.test.sh': 160,
+  'review-record.test.sh': 20,
   'review-route.test.sh': 458,
   'roadmap.test.sh': 170,
   'roots.test.sh': 84,
