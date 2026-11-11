@@ -513,9 +513,9 @@ if selected A18; then
   else
     printf 'skip - A18: base %s is not in this repository\n' "$BASE"
   fi
-  # native-codex.md was last edited on purpose by the inline-only plan (its
-  # scout clauses and all-or-nothing rule), so identity is checked from there.
-  native_base=${SPEED_AND_COST_NATIVE_BASE:-0987d053afdd1c921444ee55416ae49ce853ebff}
+  # native-codex.md was last edited on purpose when the final review began
+  # ledgering its lens skips and review lines, so identity is checked from there.
+  native_base=${SPEED_AND_COST_NATIVE_BASE:-4bf4e4d2b943b78fa13fcc0bc09ecdf9e25679da}
   if git -C "$REPO_ROOT" cat-file -e "$native_base^{commit}" 2>/dev/null; then
     check "A18: reference/native-codex.md is byte-identical to its last planned edit" \
       "$(git -C "$REPO_ROOT" diff --stat "$native_base" -- plugins/dforge/reference/native-codex.md | wc -l | tr -d ' ')" "0"

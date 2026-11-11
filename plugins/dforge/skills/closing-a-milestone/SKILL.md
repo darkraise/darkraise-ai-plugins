@@ -92,7 +92,14 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    directories of the files outside `<docs>` in
    `git diff --name-only <previous close sha7>..<milestone head>`, from the root
    commit when there is no previous milestone. It recommends only and removes
-   nothing.
+   nothing. When it recommends the cleanup, the report also lists the
+   `Test ratio:` line of each `<docs>/reviews/*.md` file that
+   `git diff --name-only --diff-filter=A <previous close sha7>..<milestone head> -- <docs>/reviews`
+   names, or, while documents live in the darkmem mirror, of each whose
+   `Retained:` date is after the previous close's commit date
+   (`git log -1 --format=%cs <previous close sha7>`), every one when there is
+   no previous milestone. The lines inform the reader and do not change the
+   recommendation.
 9. **Next.** Run `scripts/roadmap status` and name the next milestone's first
    open epic, or say the roadmap is complete.
 
