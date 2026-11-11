@@ -8,7 +8,7 @@ One StrykerJS run with bail disabled on darkcloud `web/src/features/downloads`, 
 - Clone: `/root/mutation-runs/darkcloud-downloads`, made with `git clone --no-hardlinks`, no `origin` remote.
 - Node v24.18.0, StrykerJS 10.1.1, Vitest 2.1.9, with `@stryker-mutator/vitest-runner@10.1.1`.
 - Run start 2026-11-11T10:04:33Z, run end 2026-11-11T10:43:02Z, wall time about 38 minutes 29 seconds (Stryker reports "Done in 38 minutes and 23 seconds"). `estimate-at-30m`: elapsed ~28m, remaining ~6m (81%, 3709/5364 tested). `narrowed`: no.
-- Stryker's own dry run ran 1539 tests against 5747 mutants, not the baseline's 5132 tests: its Vitest runner runs only the test files related to the mutated sources (`vitest.related`, default true). The population below is therefore the tests that import the downloads module directly or transitively, and a test outside it cannot kill these mutants.
+- Stryker's own dry run ran 1539 tests against 5747 mutants, not the baseline's 5132 tests (the report names 1535 distinct tests, 543 + 992, so 4 of the dry run's 1539 are unexplained): its Vitest runner runs only the test files related to the mutated sources (`vitest.related`, default true). The population below is therefore the tests that import the downloads module directly or transitively, and a test outside it is not expected to kill these mutants (inference: the related selection follows the static import graph, so a test that reaches the module only through a mock or a dynamic import could be missing).
 
 Configuration (`web/stryker.config.json`, no narrowing):
 
@@ -26,7 +26,7 @@ Configuration (`web/stryker.config.json`, no narrowing):
 }
 ```
 
-Commands run:
+Commands run (the clone was made with `git clone --no-hardlinks /root/repositories/darkcloud /root/mutation-runs/darkcloud-downloads` and `git remote remove origin`):
 
 - `timeout 900 npm ci`
 - `timeout 600 npm install --no-save @stryker-mutator/core@10.1.1 @stryker-mutator/vitest-runner@10.1.1`
@@ -37,7 +37,7 @@ Commands run:
 - `timeout 1800 npx vitest run --poolOptions.threads.maxThreads=4 --poolOptions.threads.minThreads=1 --poolOptions.forks.maxForks=4 --poolOptions.forks.minForks=1`
 - `timeout 3600 npx stryker run --dryRunOnly`
 - `timeout 3600 npx stryker run --mutate src/features/downloads/lib/when.ts`
-- `setsid --wait bash -c 'echo $$ > pgid; exec timeout 8h npx stryker run' (cwd clone web/)`
+- `setsid --wait bash -c "echo \$\$ > <run directory>/pgid; exec timeout 8h npx stryker run" > <run directory>/run.log 2>&1`, from the clone's web/ directory
 
 Baseline. The default `vitest run` was not green in this environment: it failed twice under full parallel load, on different tests each time, and the failing files pass when run alone. The baseline used is the third run, capped at four workers, which was green. Recorded lines:
 
@@ -79,7 +79,7 @@ No load flake is credited as a killer, so none of them inflates the redundancy c
 | downloads (`downloads-*` files) | 543 | 533 | 0 | 275 | 290 | 253 |
 | other | 992 | 77 | 0 | 45 | 36 | 956 |
 
-Greedy minimum killing set, total size: 326 tests (each step takes the test killing the most still-uncovered Killed mutants, ties to the lowest id). "No unique kill" counts tests that kill at least one mutant where every mutant they kill is also killed by another test.
+Greedy minimum killing set, total size: 326 tests (each step takes the test killing the most still-uncovered Killed mutants, ties to the lowest id by string comparison, so "10" sorts before "9"). "No unique kill" counts tests that kill at least one mutant where every mutant they kill is also killed by another test.
 
 ## 4. A<n> tests
 
@@ -87,7 +87,7 @@ Greedy minimum killing set, total size: 326 tests (each step takes the test kill
 |---|---|---|---|
 | 159 | 0 | 29 | 8 |
 
-An A<n> test is a test in a `.acceptance.` file whose name contains `A<number>`.
+An A<n> test is a test in a `.acceptance.` file whose name contains `A<number>`. The count is 159, against the 130 `it("A<n>` tests the plan found in all of web/tests, and this report does not reconcile the two (inference: tests that inherit an A id from a `describe` prefix are counted, and they then count as same-id tests in the row 15 figure).
 
 ## 5. Per file
 
@@ -155,7 +155,7 @@ Downloads-population files, sorted by "no unique kill" descending. This is row 8
 
 ## 6. Reading
 
-Of 543 downloads tests, 275 (50.6%) have no unique kill and 253 (46.6%) lie outside a greedy killing set, so about half of them add no kill that another test does not already make. No covering test kills nothing, so the "too many tests" claim shows up as overlap, not as dead tests. undefined of 3623 killed mutants have two or more killers, which is why the overlap is so large. 10 downloads tests cover no mutant at all, a separate group worth a look. Among 159 A<n> tests, 29 have every kill also made by a non-A<n> test and 8 have every kill also made by a same-id test in the same file. The limits: one module of one project, mutants are a proxy for faults, 1117 Survived mutants and 617 with no coverage mean some faults no test catches, and the greedy set is an approximation, not the true minimum. Outside greedy does not mean deletable: a test can guard a fault no mutator models. These counts are evidence for row 1's claim, not for removing any test.
+Of 543 downloads tests, 275 (50.6%) have no unique kill and 253 (46.6%) lie outside a greedy killing set, so about half of them add no kill that another test does not already make; this is a per-test property, and removing several such tests together can lose kills they share only with each other. No covering test kills nothing, so the "too many tests" claim shows up as overlap, not as dead tests. 2187 of 3623 killed mutants have two or more killers, which is why the overlap is so large. 10 downloads tests have no per-test coverage of any mutant (six of them in tests/downloads-hub.test.ts); a likely cause, not verified, is that they reach only static code, which `ignoreStatic` excludes, so this does not mean they exercise no downloads code. Among 159 A<n> tests, 29 have every kill also made by a non-A<n> test and 8 have every kill also made by a same-id test in the same file. The limits: one module of one project, mutants are a proxy for faults, 1117 Survived mutants and 617 with no coverage mean some faults no test catches, and the greedy set is an approximation, not the true minimum. Outside greedy does not mean deletable: a test can guard a fault no mutator models. These counts are evidence for row 1's claim, not for removing any test.
 
 ## 7. Reproduce
 

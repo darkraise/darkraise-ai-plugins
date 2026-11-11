@@ -63,4 +63,6 @@ Most runners stop a mutant at its first killing test, so the report names one
 killer per mutant. Finding tests that no mutant needs takes every killer: for
 StrykerJS set `disableBail: true` with `coverageAnalysis: "perTest"` and read
 each mutant's `killedBy` in the JSON reporter's `mutation.json`. Its Vitest
-runner applies both across every project of a Vitest workspace.
+runner applies both across every project of a Vitest workspace. It also runs
+only the test files related to the mutated sources (`vitest.related`, on by
+default), so `mutation.json` lists no test outside that set.
