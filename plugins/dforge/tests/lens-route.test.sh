@@ -145,17 +145,26 @@ out=$(DFORGE_LENS_MINOR_FROM=4 bash "$ROUTE" light-plan.md --final "$BASE" "$HEA
 check "light: the floor counts the one lens printed" "$(short <<<"$out")" \
   "lens security;lens-skipped lang-bash reason=depth;lens-floor important tasks=1 from=4;"
 out=$(bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
-check "standard: two lenses, the rest past the cap" "$(short <<<"$out")" \
-  "lens security;lens silent-failures;lens-skipped test-quality reason=cap;lens-skipped lang-bash reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
+check "standard: two lenses plus test-quality, the rest past the cap" "$(short <<<"$out")" \
+  "lens security;lens silent-failures;lens test-quality;lens-skipped lang-bash reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
 out=$(DFORGE_LENS_CAP=1 bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
 check "standard: a lower lensCap wins" "$(grep -c '^lens ' <<<"$out")" "1"
+out=$(DFORGE_LENS_CAP=2 bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
+check "standard: lensCap 2 skips test-quality for the cap" "$(short <<<"$out")" \
+  "lens security;lens silent-failures;lens-skipped test-quality reason=cap;lens-skipped lang-bash reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
 out=$(DFORGE_LENS_CAP=3 bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
-check "standard: a lensCap of 3 is cut to 2" "$(grep -c '^lens ' <<<"$out")" "2"
+check "standard: lensCap 3 keeps test-quality as the third" "$(grep -c '^lens ' <<<"$out")" "3"
+commit_file src/b.ts 'run() ?? fallback()'
+commit_file NOTES.md 'Notes.'
+HEAD3=$(git rev-parse HEAD)
+out=$(bash "$ROUTE" standard-plan.md --final "$HEAD2" "$HEAD3")
+check "standard: with no test file changed, two lenses only" "$(short <<<"$out")" \
+  "lens security;lens silent-failures;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
 out=$(bash "$ROUTE" full-plan.md --final "$BASE" "$HEAD2")
 check "full: the default cap of 4, as before" "$(short <<<"$out")" \
   "lens security;lens silent-failures;lens test-quality;lens lang-bash;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
 out=$(bash "$ROUTE" light-risk2.md --final "$BASE" "$HEAD2")
-check "a light spec with a risk-2 task is standard: two lenses" "$(grep -c '^lens ' <<<"$out")" "2"
+check "a light spec with a risk-2 task is standard: three lenses with test-quality" "$(grep -c '^lens ' <<<"$out")" "3"
 out=$(bash "$ROUTE" light-risk3.md --final "$BASE" "$HEAD2")
 check "a light spec with a risk-3 task is full: four lenses" "$(grep -c '^lens ' <<<"$out")" "4"
 out=$(bash "$ROUTE" nospec-plan.md --final "$BASE" "$HEAD2")
@@ -171,6 +180,9 @@ sed 's/^Applies: always$/Applies: paths nothing\/*/' "$HERE/../criteria/lenses/s
 out=$(bash "$TMP/plug/scripts/lens-route" light-plan.md --final "$BASE" "$HEAD2")
 check "light: security prints nothing when its Applies clause does not match" "$(short <<<"$out")" \
   "lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped lang-bash reason=depth;lens-skipped lang-typescript reason=depth;lens-skipped docs-comments reason=depth;"
+out=$(bash "$TMP/plug/scripts/lens-route" standard-plan.md --final "$BASE" "$HEAD2")
+check "standard: without security, test-quality does not use a slot" "$(short <<<"$out")" \
+  "lens silent-failures;lens test-quality;lens lang-bash;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
 { cat light-plan.md; printf '**Lenses:** lang-bash\n'; } > light-lenses.md
 out=$(bash "$ROUTE" light-lenses.md --task 1); status=$?
 check "light: --task names its lenses as before" "$status:$(sed -E 's/ criteria=[^ ]*//' <<<"$out")" "0:lens lang-bash"

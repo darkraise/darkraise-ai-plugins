@@ -353,9 +353,9 @@ a8() {
 
   lr docs/dforge/plans/p8s.md --final "$base" "$head"
   out_std=$out
-  check "A8: standard prints at most 2 lens lines" "$(grep -c '^lens ' <<<"$out_std")" "2"
+  check "A8: standard prints the 2 lenses and test-quality" "$(grep -c '^lens ' <<<"$out_std")" "3"
   check "A8: standard skips the rest for the cap" "$(short <<<"$out_std")" \
-    "lens security;lens silent-failures;lens-skipped test-quality reason=cap;lens-skipped lang-bash reason=cap;lens-skipped lang-python reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
+    "lens security;lens silent-failures;lens test-quality;lens-skipped lang-bash reason=cap;lens-skipped lang-python reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
   out=$(cd "$R" && DFORGE_LENS_CAP=1 timeout 60 bash "$LENS" docs/dforge/plans/p8s.md --final "$base" "$head" 2>&1)
   check "A8: standard with lensCap 1 prints 1 lens line" "$(grep -c '^lens ' <<<"$out")" "1"
 

@@ -47,7 +47,7 @@ keys on. The depth sizes the steps below:
 | 0.2 UI proof | runs | runs | runs |
 | 0.5 Acceptance QA | skipped | runs | runs |
 | 1 Claude review | runs | runs | runs |
-| 1 Lenses | `security` only, when it applies | at most 2 | up to `lensCap` |
+| 1 Lenses | `security` only, when it applies | at most 2, plus `test-quality` when it applies, within `lensCap` | up to `lensCap` |
 | 2 Codex round | skipped | skipped | as today |
 | 3 Dedupe judge | never (one list) | never (one list) | with two lists |
 
@@ -258,8 +258,9 @@ your own: QA commits on this branch.
    every lens finding enters the fix wave, and on a short plan the Minor tail
    costs the fixer more triage than it yields fixes. `lens-route` reads the
    depth itself: at light it prints a `lens` line only for `security`, and
-   only when its Applies clause matches; at standard it prints at most two,
-   fewer when `lensCap` is lower. A lens it drops prints
+   only when its Applies clause matches; at standard it prints at most two
+   lenses besides `test-quality`, which it adds whenever its Applies clause
+   matches, and never more than `lensCap` in all. A lens it drops prints
    `lens-skipped <id> reason=depth` (light) or `reason=cap`.
 
    ```
