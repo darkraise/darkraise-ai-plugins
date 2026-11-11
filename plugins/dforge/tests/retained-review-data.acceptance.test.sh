@@ -28,6 +28,11 @@ lacks() { # lacks <name> <haystack> <needle>
 }
 
 TMP="$(mktemp -d)"
+# Under MSYS_NO_PATHCONV, git.exe reads /tmp/... as a drive-root path; the
+# long form matches the paths git prints, where TEMP is an 8.3 name.
+if command -v cygpath >/dev/null 2>&1; then
+  TMP=$(cygpath -m -l "$TMP" 2>/dev/null || cygpath -m "$TMP")
+fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
 unset CLAUDE_CONFIG_DIR DFORGE_DOCUMENT_STORE DFORGE_PROGRESS_STORE CLAUDE_PROJECT_DIR
