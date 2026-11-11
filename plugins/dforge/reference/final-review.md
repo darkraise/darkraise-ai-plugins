@@ -342,7 +342,8 @@ your own: QA commits on this branch.
    light)`). Append each
    `lens-skipped <id> reason=<reason>` line step 1 printed to the ledger as
    `final review lens-skipped <id> reason=<reason>`, whatever its reason
-   (`cap` or `depth`), one line per lens, unless the
+   (`cap` or `depth`; a lens seat that leaves no report is ledgered as
+   `reason=failed` under Retained lines), one line per lens, unless the
    ledger already holds it: finishing lists them from there, because after a
    merge `scripts/lens-route` has no diff left to read. With two lists:
    confirmed findings ranked most severe first, then the rejected ones with
@@ -402,7 +403,8 @@ entry and each `REJECTED:` line keeps the finding's `[lens:<id>]` tag, and the
 scoped re-review quotes that tag in its verdict on each rejection. In subagent
 mode the fix subagent writes it as its report file, and its prompt names
 `<plugin-root>/skills/receiving-code-review/SKILL.md` to read, since an
-implementer has no Skill tool; in inline mode you write it before
+implementer has no Skill tool, and states the `DEFERRED:` skip rule above,
+which no file the subagent reads carries; in inline mode you write it before
 the re-review. Then run exactly one scoped re-review of the fix wave
 (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range, with
 [re-review-prompt.md](../skills/subagent-driven-development/references/re-review-prompt.md),
@@ -438,7 +440,8 @@ that does not exist at MERGE_BASE, under the REFACTOR rule in
 dforge:test-driven-development, and never a regression test that names a fixed
 bug; a test that exists at MERGE_BASE is left for dforge:test-simplifier. The
 commit body names the faults the covering test catches. A finding whose
-one-liner begins `deferred: test-simplifier — ` is not given to the fixer. The
+one-liner begins `deferred: test-simplifier — ` reaches the fixer, which skips
+it and lists it under `DEFERRED:` (**The fix subagent** above). The
 session records it with
 `scripts/register add <register> "<old test> is covered by <new test>" --state deferred --note "final review: for dforge:test-simplifier"`
 in the register that covers the plan's spec, or names it in the final message
@@ -464,8 +467,8 @@ Only the four stop classes stop you here.
 After the fix wave, its scoped re-review and the ruling seat's verdicts on
 any residual findings, or straight after step 4 when no fix wave ran, append
 these lines to the ledger, each unless the ledger already holds a line with
-its prefix (`final review lens <id> —`, `final review lenses off`,
-`Test ratio:`), before the execution skill appends `Final review: clean`.
+its prefix (`final review lens <id> —`, `final review lens-skipped <id>`,
+`final review lenses off`, `Test ratio:`), before the execution skill appends `Final review: clean`.
 dforge:finishing-a-development-branch copies them into the plan's review
 record, because cleanup deletes the ledger.
 
