@@ -45,4 +45,8 @@ The mutant sets match by mutator, location and replacement; no mutant killed bef
 
 ## Judge
 
-Pending: dforge:judge-opus ruling on `0ca6d998`.
+dforge:judge-opus ruling on `0ca6d99834d383f7c28449c9ab1c3a9055e20c1e`: **KEPT**. Every assertion of the five rows maps to a kept row on the same path, no killed mutant is lost, and every refusal path keeps a test. The judge has no shell, so it took the diff from its prompt and the before counts from the session's comparison; `git show --stat 0ca6d998` confirms the commit changes only `web/tests/downloads-submit.test.ts`. Report: `.dforge/test-simplifier/downloads-phase4/ruling-report.md`.
+
+## Report
+
+Five tests removed (class 2), none merged, 0 mutants lost, coverage unchanged, nothing quarantined, no tier changes proposed. Time recovered: none measurable. The 2026-11-11 redundancy count (275 of 543 with no unique kill) overstates what can be removed: most of those tests check one entry of a static table that `ignoreStatic` hides from mutation, and all 253 outside the greedy set together cost 2.6 s.
