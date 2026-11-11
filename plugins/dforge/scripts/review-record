@@ -98,7 +98,88 @@ retain() {
   printf '%s\n' "$target"
 }
 
+LOCK_FILES=' package-lock.json yarn.lock pnpm-lock.yaml bun.lock bun.lockb Cargo.lock poetry.lock uv.lock Pipfile.lock Gemfile.lock composer.lock go.sum packages.lock.json flake.lock '
+
+ratio() {
+  local rev lens value clause kind globs="" top docs docs_rel="" rec added rest path
+  local gen="" info glob kind_of tests=0 code=0 i b7 h7
+  local -a paths=() counts=()
+  [ $# -eq 2 ] || usage
+  for rev in "$1" "$2"; do
+    if ! git rev-parse --verify --quiet "$rev^{commit}" >/dev/null; then
+      printf 'review-record: unknown revision %s\n' "$rev" >&2
+      exit 2
+    fi
+  done
+  b7=$(git rev-parse --short=7 "$1") h7=$(git rev-parse --short=7 "$2")
+
+  lens="$HERE/../criteria/lenses/test-quality.md"
+  value=$(sed -n 's/^Applies: //p' "$lens" 2>/dev/null | head -n 1 | tr -d '\r')
+  while IFS= read -r clause; do
+    clause=${clause#"${clause%%[![:space:]]*}"}
+    clause=${clause%"${clause##*[![:space:]]}"}
+    kind=${clause%% *}
+    if [ "$kind" = paths ]; then
+      globs=${clause#paths}
+      break
+    fi
+  done < <(awk '{ gsub(/ ; /, "\n"); print }' <<<"$value")
+  if [ -z "${globs// /}" ]; then
+    printf 'review-record: %s has no paths clause\n' "$lens" >&2
+    exit 2
+  fi
+
+  top=$(git rev-parse --show-toplevel) || exit 2
+  dforge_stores_init
+  docs=$(dforge_docs_root)
+  case $docs in "$top"/*) docs_rel=${docs#"$top"/}/ ;; esac
+
+  while IFS= read -r -d '' rec; do
+    added=${rec%%$'\t'*}
+    rest=${rec#*$'\t'}
+    path=${rest#*$'\t'}
+    if [ -z "$path" ]; then
+      IFS= read -r -d '' _
+      IFS= read -r -d '' path
+    fi
+    paths+=("$path")
+    counts+=("$added")
+  done < <(git -C "$top" -c core.quotepath=off diff --numstat -z -M "$1" "$2")
+  if [ ${#paths[@]} -gt 0 ]; then
+    while IFS= read -r -d '' path && IFS= read -r -d '' _ && IFS= read -r -d '' info; do
+      case $info in set|true) gen+=$'\n'"$path" ;; esac
+    done < <(printf '%s\0' "${paths[@]}" | git -C "$top" check-attr -z --stdin linguist-generated)
+  fi
+  gen+=$'\n'
+
+  for i in ${paths[@]+"${!paths[@]}"}; do
+    path=${paths[$i]} added=${counts[$i]}
+    [ "$added" != - ] || continue
+    kind_of=code
+    case "/$path/" in
+      */fixtures/*|*/snapshots/*|*/__snapshots__/*|*/testdata/*) continue ;;
+    esac
+    case $gen in *$'\n'"$path"$'\n'*) continue ;; esac
+    set -f
+    for glob in $globs; do
+      # shellcheck disable=SC2254
+      case $path in $glob) kind_of='test'; break ;; esac
+    done
+    set +f
+    if [ "$kind_of" = code ]; then
+      case $path in docs/*) continue ;; esac
+      if [ -n "$docs_rel" ]; then case $path in "$docs_rel"*) continue ;; esac; fi
+      case $LOCK_FILES in *" ${path##*/} "*) continue ;; esac
+      code=$((code + added))
+    else
+      tests=$((tests + added))
+    fi
+  done
+  printf 'Test ratio: %d test / %d code lines (%s..%s)\n' "$tests" "$code" "$b7" "$h7"
+}
+
 case ${1:-} in
   retain) shift; retain "$@" ;;
+  ratio) shift; ratio "$@" ;;
   *) usage ;;
 esac
