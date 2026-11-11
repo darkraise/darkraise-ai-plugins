@@ -12,7 +12,9 @@ answer. Each statement is one line:
 - `A<n>` numbers are never reused. A deferred statement leaves the line
   `A<n>. deferred — register row <id>`.
 - `test` means an automated test can check it; `demo` means only a person
-  watching the result can (visual output, an interactive screen).
+  watching the result can (visual output, an interactive screen). A statement
+  about the wording of a document no script reads is `demo`: acceptance QA
+  turns a `test` statement into a test, and that test would only pin wording.
 - `neg` marks a statement about what must not happen; at least one carries it.
 - Rate each statement while drafting: `high` when it follows directly from what
   your human partner said, from code you read this session, or from a recorded
