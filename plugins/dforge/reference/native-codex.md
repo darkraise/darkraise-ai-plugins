@@ -318,8 +318,11 @@ line against the branch diff and run the matching lenses in priority order
 (security, ui-ux, silent-failures, test-quality, the `lang-*` lenses
 alphabetically, type-design, docs-comments), at most `lensCap` of them
 (`scripts/dforge-config get lensCap`; `0` runs none), and name the rest as
-skipped in the report. An `Applies: ui-paths` clause matches a changed file
-that `scripts/ui-proof paths` lists, and only when the project has a UI
+skipped in the report. Ledger each lens you skip as
+`final review lens-skipped <id> reason=cap`; with `lensCap` 0, write
+`final review lenses off` instead of skipped lines. Then write the lines
+final-review.md's Retained lines names. An `Applies: ui-paths` clause
+matches a changed file that `scripts/ui-proof paths` lists, and only when the project has a UI
 profile (`<docs>/ui-ux/profile.md`) or the plan's spec has a
 `## UI/UX contract`.
 
