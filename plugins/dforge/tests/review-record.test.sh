@@ -114,6 +114,7 @@ lines docs/guide.md 4
 lines package-lock.json 7
 lines tests/fixtures/data.txt 6
 lines src/__snapshots__/a.snap 2
+lines src/snapshots/b.txt 3
 lines testdata/x.txt 1
 lines gen/out.js 9
 printf 'gen/* linguist-generated\n' > "$R/.gitattributes"
@@ -121,15 +122,15 @@ printf '\000\001\002' > "$R/bin.dat"
 git -C "$R" add -A && git -C "$R" commit -q -m c1
 H1=$(git -C "$R" rev-parse HEAD)
 out=$(cd "$R" && bash "$P/scripts/review-record" ratio "$B" "$H1"); rc=$?
-check "A1-A4: tests, code, Markdown and .gitattributes counted; fixtures, snapshots, testdata, generated, docs, lock and binary left out" \
+check "A1-A4: tests, code, Markdown and .gitattributes counted; fixtures, both snapshot dirs, testdata, generated, docs, lock and binary left out" \
   "$rc:$out" "0:Test ratio: 3 test / 8 code lines ($(short "$B")..$(short "$H1"))"
 
-git -C "$R" mv src/app.js src/main.js
-echo 'line 6' >> "$R/src/main.js"
+git -C "$R" mv src/app.js tests/app.test.js
+echo 'line 6' >> "$R/tests/app.test.js"
 git -C "$R" commit -q -am c2
 H2=$(git -C "$R" rev-parse HEAD)
 out=$(cd "$R" && bash "$P/scripts/review-record" ratio "$H1" "$H2"); rc=$?
-check "A4: a rename counts only its changed lines" "$rc:$out" "0:Test ratio: 0 test / 1 code lines ($(short "$H1")..$(short "$H2"))"
+check "A4: a rename counts only its changed lines, under its new path" "$rc:$out" "0:Test ratio: 1 test / 0 code lines ($(short "$H1")..$(short "$H2"))"
 
 lines tests/b.test.sh 2
 git -C "$R" add -A && git -C "$R" commit -q -m c3
