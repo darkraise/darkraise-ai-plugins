@@ -94,6 +94,7 @@ export const windowsSeconds = {
   'readme-unattended.test.sh': 10,
   'register.test.sh': 68,
   'repo-audit.test.sh': 53,
+  'retained-review-data.acceptance.test.sh': 30,
   'review-depth-qa.acceptance.test.sh': 288,
   'review-depth.acceptance.test.sh': 160,
   'review-record.test.sh': 20,
