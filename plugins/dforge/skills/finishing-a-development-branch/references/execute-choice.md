@@ -109,6 +109,8 @@ darkmem.
   the ledger and rerun with `--from`. When it cannot be found, tell your
   human partner that the review record will be lost before Step 6 runs;
   in an auto run, name the loss in the final message.
+- Any other non-zero exit: no record was written. Treat it as exit 4, and
+  name the script's message.
 
 Option 3 and a discard write no review record.
 

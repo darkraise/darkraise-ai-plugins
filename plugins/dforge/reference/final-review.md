@@ -350,7 +350,8 @@ your own: QA commits on this branch.
    one list: the findings ranked most severe first, then, after the fix wave,
    which were fixed and which the fixer rejected, with the re-review's verdict
    on each rejection. The report is not where the turn ends: after the fix
-   wave, the execution skill's Finish section goes straight on to
+   wave and the Retained lines (below), the execution skill's Finish section
+   goes straight on to
    dforge:finishing-a-development-branch, and the report sits above its menu.
 
 ## Fixing what it finds
@@ -450,8 +451,9 @@ Only the four stop classes stop you here.
 
 After the fix wave, its scoped re-review and the ruling seat's verdicts on
 any residual findings, or straight after step 4 when no fix wave ran, append
-these lines to the ledger, each unless the ledger already holds it, before
-the execution skill appends `Final review: clean`.
+these lines to the ledger, each unless the ledger already holds a line with
+its prefix (`final review lens <id> —`, `final review lenses off`,
+`Test ratio:`), before the execution skill appends `Final review: clean`.
 dforge:finishing-a-development-branch copies them into the plan's review
 record, because cleanup deletes the ledger.
 
@@ -462,12 +464,14 @@ record, because cleanup deletes the ledger.
   and with two lists from the dedupe report's `REJECTED` marks, counted by
   each finding's `[lens:<id>]` tag. `rejected` counts a judge's rejection
   and a fixer's rejection the re-review upheld. A parked finding is in the
-  raised counts only. A lens with no findings still gets its line.
+  raised counts only. A lens with no findings still gets its line. A lens
+  whose seat left no report, or a report with no readable `## Verdict`, is
+  ledgered as `final review lens-skipped <id> reason=failed`, never as a
+  zero-count line.
 - `final review lenses off`, once, when `lensCap` is 0: step 1 printed
   `lenses off`, or, on a Codex host, `scripts/dforge-config get lensCap`
   prints `0`.
-- The test ratio, unless the ledger already holds a `Test ratio:` line:
-  run `bash <plugin-root>/scripts/review-record ratio <MERGE_BASE> HEAD`
+- The test ratio: run `bash <plugin-root>/scripts/review-record ratio <MERGE_BASE> HEAD`
   and append the line it prints. On exit 2 append nothing; the review
   still ends clean.
 

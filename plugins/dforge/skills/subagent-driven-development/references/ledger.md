@@ -30,7 +30,7 @@ Acceptance QA: dispatched (base <sha7>)
 Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo
 Acceptance QA: skipped (depth light)
 Final fix: implementer <agent> (assigned; base <sha7>)
-final review lens-skipped <id> reason=<cap|depth>
+final review lens-skipped <id> reason=<cap|depth|failed>
 final review lens <id> — <c> Critical, <i> Important, <m> Minor; fixed <f>, rejected <r>
 final review lenses off
 Test ratio: <t> test / <c> code lines (<base7>..<head7>)
