@@ -111,7 +111,7 @@ ratio() {
       exit 2
     fi
   done
-  b7=$(git rev-parse --short=7 "$1") h7=$(git rev-parse --short=7 "$2")
+  b7=$(git rev-parse --short=7 "$1^{commit}") h7=$(git rev-parse --short=7 "$2^{commit}")
 
   lens="$HERE/../criteria/lenses/test-quality.md"
   value=$(sed -n 's/^Applies: //p' "$lens" 2>/dev/null | head -n 1 | tr -d '\r')
@@ -129,7 +129,10 @@ ratio() {
     exit 2
   fi
 
-  top=$(git rev-parse --show-toplevel) || exit 2
+  if ! top=$(git rev-parse --show-toplevel 2>/dev/null); then
+    printf 'review-record: not in a work tree\n' >&2
+    exit 2
+  fi
   dforge_stores_init
   docs=$(dforge_docs_root)
   case $docs in "$top"/*) docs_rel=${docs#"$top"/}/ ;; esac
