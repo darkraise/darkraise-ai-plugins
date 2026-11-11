@@ -50,6 +50,9 @@ If tests fail on the merged result: stop, leave the worktree and branch in
 place, and investigate — nothing has been pushed, so the merge is local
 and recoverable.
 
+Step 5b also writes the plan's review record before its commit (The review
+record, below).
+
 Once the merged result is green: record the plan (Step 5b), clean up the
 worktree (Step 6), then
 delete the branch:
@@ -63,6 +66,9 @@ After a local merge, nothing was pushed, so do not wait: print `gh run list --co
 On a plan with an `**Early CI:**` line, run `git push origin --delete <feature-branch>` after the local merge. The delete applies only when `git ls-remote --exit-code --heads origin <feature-branch>` finds the branch and the sha it prints is an ancestor of the merge (`git merge-base --is-ancestor <sha> HEAD`), so a remote branch holding a commit the merge lacks, such as one pushed by someone else, is kept with one line saying so. A delete that fails prints one line and does not stop finishing.
 
 ### Option 2: Push and Create PR
+
+Write the plan's review record before Step 5b's commit (The review record,
+below) and commit it with the index line.
 
 First record the plan in the completed index (Step 5b) and commit it on the
 branch, so the line travels with the PR. Then:
@@ -81,6 +87,32 @@ present, and report the URL to your human partner.
 Keep the worktree — your human partner iterates on PR feedback there.
 
 Then wait for CI as `### Wait for CI` says, with `sha` being `git rev-parse HEAD` at the push.
+
+### The review record
+
+When the plan has a ledger, write its review record before Step 5b's commit:
+
+```bash
+bash <plugin-root>/scripts/review-record retain PLAN_FILE [--from <worktree path>]
+```
+
+On Option 1 from a linked worktree, pass the literal `WORKTREE_PATH` Step 2
+captured as `--from`: Step 5b runs in the main checkout, and the ledger is
+in the worktree. Option 2 runs where the ledger is and needs no `--from`.
+Add the path the script prints to the commit that holds the index line, or
+push it with the mirror, as `completed.md` is, while documents live in
+darkmem.
+
+- Exit 3: the ledger holds no review lines. Say so in one line and go on.
+- Exit 4: no ledger was found, and the script printed where it looked. Do
+  not go on to Step 6, which deletes the workspace, until you have found
+  the ledger and rerun with `--from`. When it cannot be found, tell your
+  human partner that the review record will be lost before Step 6 runs;
+  in an auto run, name the loss in the final message.
+- Any other non-zero exit: no record was written. Treat it as exit 4, and
+  name the script's message.
+
+Option 3 and a discard write no review record.
 
 ### Option 3: Keep As-Is
 

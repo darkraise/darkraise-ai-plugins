@@ -254,6 +254,9 @@ const REMOVED = [
   "they are taken before the fix wave, a failure that survives it is a deferred `A<n>:` row or a red test at Step 1, and one the fix wave fixed does not keep the branch.",
   // Reworded when the switch began clearing the session instead of compacting it.
   "execution starts in a fresh session (in an auto run the session switches in place instead; see Auto run).",
+  // Split when the final review began ledgering lens counts and the test
+  // ratio between the Final fix and Final review grammar lines.
+  'implementer <agent> (assigned; base <sha7>) Final review:',
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 

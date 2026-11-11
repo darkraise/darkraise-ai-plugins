@@ -13,6 +13,7 @@ code.
   plans/                 authored, permanent, never deleted by a skill
     completed.md         append-only index of merged plans
   registers/             one file per incoming list of source items
+  reviews/               one review record per finished plan
   roadmap.md             greenfield milestones in order, each with a register
   gates.md               what proves a change works here, in order
   distilled/
@@ -31,6 +32,7 @@ it does without it.
 - `<docs>/gates.md`
 - `<docs>/plans/completed.md`
 - `<docs>/registers/*.md`
+- `<docs>/reviews/*.md`
 - `<docs>/roadmap.md`
 - `<docs>/distilled/constraints.md`
 - `<docs>/distilled/gotchas.md`
@@ -44,6 +46,7 @@ it does without it.
 | `gates.md` | a human, or dforge:running-gates' bootstrap on approval | dforge:running-gates |
 | `plans/completed.md` | dforge:finishing-a-development-branch | dforge:project-status |
 | `registers/*.md` | dforge:brainstorming, dforge:writing-plans, both execution skills, dforge:finishing-a-development-branch — all through `scripts/register` | `scripts/next-step`, `scripts/plan-lint`, `scripts/repo-audit`, dforge:project-status, dforge:brainstorming |
+| `reviews/*.md` | dforge:finishing-a-development-branch, through `scripts/review-record` | dforge:closing-a-milestone, and a person weighing review depth |
 | `roadmap.md` | dforge:planning-a-product and dforge:closing-a-milestone, through `scripts/roadmap` | `scripts/next-step`, `scripts/repo-audit`, the SessionStart hook, dforge:project-status, dforge:brainstorming, dforge:finishing-a-development-branch |
 | `distilled/*.md` | dforge:distilling-docs, or a human recording an approved spec's owner decision | dforge:project-status, dforge:brainstorming, dforge:resume-execution, both execution skills; `constraints.md` also dforge:writing-plans |
 
@@ -69,7 +72,9 @@ name, citing that spec as its `Source`. distilling-docs deletes sources under
 its own rules and never touches a spec, a plan, `completed.md`, or anything
 outside `<docs>/notes/` and `<docs>/findings/`. `gates.md`
 is edited by a human or by an approved bootstrap, never silently.
-`completed.md` is append-only.
+`completed.md` is append-only. `reviews/*.md` is written only by
+`scripts/review-record`, one file per plan; nothing deletes it, and
+dforge:distilling-docs never touches it.
 
 ## Where `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` are
 

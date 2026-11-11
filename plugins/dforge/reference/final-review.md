@@ -324,8 +324,8 @@ your own: QA commits on this branch.
    `- [<severity>] <file>:<line> — [CONFIRMED|REJECTED] [claude|codex|both] <one-liner>`,
    its evidence on indented lines. It merges findings that
    name the same defect in the same place (not merely the same file), tags each
-   `claude`, `codex`, or `both`, and
-   marks each `CONFIRMED` or `REJECTED` with its evidence in that report. The verifier is a
+   `claude`, `codex`, or `both`, and keeps each lens finding's `[lens:<id>]`
+   tag, and marks each `CONFIRMED` or `REJECTED` with its evidence in that report. The verifier is a
    third seat that wrote neither list, so neither reviewer grades its own work.
    A `[qa]` finding is not given to the verifier: it enters the fix wave as
    confirmed, because only the scoped re-review decides a `REJECTED: A<n>`
@@ -350,7 +350,8 @@ your own: QA commits on this branch.
    one list: the findings ranked most severe first, then, after the fix wave,
    which were fixed and which the fixer rejected, with the re-review's verdict
    on each rejection. The report is not where the turn ends: after the fix
-   wave, the execution skill's Finish section goes straight on to
+   wave and the Retained lines (below), the execution skill's Finish section
+   goes straight on to
    dforge:finishing-a-development-branch, and the report sits above its menu.
 
 ## Fixing what it finds
@@ -390,8 +391,10 @@ Whoever fixes writes `<workspace>/final-fix-report.md`: what changed per
 finding, the covering tests, the command and its output. With one list the
 fixer first checks each finding against the code under
 dforge:receiving-code-review, fixes the real ones, and records each one
-it rejects under `REJECTED: <finding>` with its evidence. In subagent mode the
-fix subagent writes it as its report file, and its prompt names
+it rejects under `REJECTED: <finding>` with its evidence. Each per-finding
+entry and each `REJECTED:` line keeps the finding's `[lens:<id>]` tag, and the
+scoped re-review quotes that tag in its verdict on each rejection. In subagent
+mode the fix subagent writes it as its report file, and its prompt names
 `<plugin-root>/skills/receiving-code-review/SKILL.md` to read, since an
 implementer has no Skill tool; in inline mode you write it before
 the re-review. Then run exactly one scoped re-review of the fix wave
@@ -443,3 +446,34 @@ fix wave whose commits moved HEAD past that run is not reused.
 There is no second fix wave. Residual load-bearing findings surface to your
 human partner when dforge:finishing-a-development-branch presents the options.
 Only the four stop classes stop you here.
+
+## Retained lines
+
+After the fix wave, its scoped re-review and the ruling seat's verdicts on
+any residual findings, or straight after step 4 when no fix wave ran, append
+these lines to the ledger, each unless the ledger already holds a line with
+its prefix (`final review lens <id> —`, `final review lenses off`,
+`Test ratio:`), before the execution skill appends `Final review: clean`.
+dforge:finishing-a-development-branch copies them into the plan's review
+record, because cleanup deletes the ledger.
+
+- One line per lens that ran:
+  `final review lens <id> — <c> Critical, <i> Important, <m> Minor; fixed <f>, rejected <r>`.
+  The raised counts come from that lens report's `## Verdict`. `fixed` and
+  `rejected` come from `final-fix-report.md` and `final-rereview-report.md`,
+  and with two lists from the dedupe report's `REJECTED` marks, counted by
+  each finding's `[lens:<id>]` tag. `rejected` counts a judge's rejection
+  and a fixer's rejection the re-review upheld. A parked finding is in the
+  raised counts only. A lens with no findings still gets its line. A lens
+  whose seat left no report, or a report with no readable `## Verdict`, is
+  ledgered as `final review lens-skipped <id> reason=failed`, never as a
+  zero-count line.
+- `final review lenses off`, once, when `lensCap` is 0: step 1 printed
+  `lenses off`, or, on a Codex host, `scripts/dforge-config get lensCap`
+  prints `0`.
+- The test ratio: run `bash <plugin-root>/scripts/review-record ratio <MERGE_BASE> HEAD`
+  and append the line it prints. On exit 2 append nothing; the review
+  still ends clean.
+
+Name the `Test ratio:` line in the report above the finishing menu. No gate,
+route or finish decision reads these lines.
