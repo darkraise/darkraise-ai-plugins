@@ -63,7 +63,7 @@ Subagent (dforge:judge-opus):
 
     **Testing:**
     - Tests verify real behavior, not mocks?
-    - Edge cases covered?
+    - Is there an input that reaches an untested branch and produces a wrong result? Name both, or report nothing.
     - Integration tests where they matter?
     - All tests passing?
     - For each test named `A<n>:` or `a<n>_` (an acceptance test): would it fail if the code violated spec statement A<n>?
@@ -154,7 +154,7 @@ ready to merge: with fixes
 
 ## Strengths
 - Clean database schema with proper migrations (db.ts:15-42)
-- Comprehensive test coverage (18 tests, all edge cases)
+- An empty batch and a duplicate id each have a test that fails on the bug it names (summarizer.test.ts:12-40)
 - Good error handling with fallbacks (summarizer.ts:85-92)
 
 ## Findings

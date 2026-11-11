@@ -257,6 +257,9 @@ const REMOVED = [
   // Split when the final review began ledgering lens counts and the test
   // ratio between the Final fix and Final review grammar lines.
   'implementer <agent> (assigned; base <sha7>) Final review:',
+  // a bounded design names its tests
+  '**Present short design in chat** — approach, files touched, testing 4.',
+  '**Testing:** the design says how the change will be verified.',
 ];
 const SPLIT = ['brainstorming', 'executing-plans', 'finishing-a-development-branch', 'subagent-driven-development', 'writing-plans', 'writing-skills'];
 

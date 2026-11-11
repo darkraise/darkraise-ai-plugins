@@ -23,13 +23,11 @@ names "qa: expectations first" "$QA" 'the spec text alone, as literal values in 
 names "qa: test names" "$QA" 'Each test name starts with `A<n>:`'
 names "qa: never fixes the code" "$QA" 'An assertion failure is a finding, which you never fix'
 names "qa: detached mutation worktree" "$QA" 'git worktree add --detach [WORKSPACE]/qa-mutation HEAD'
-names "qa: the committed tests reach the mutation worktree" "$QA" 'committed the acceptance file, so `HEAD` has it'
 names "qa: tests are committed as they run" "$QA" 'Commit as you go: once a statement'"'"'s test has run'
 names "qa: the mutation baseline passes first" "$QA" 'run that statement'"'"'s test there before changing anything'
 names "qa: a setup error is not red" "$QA" 'A missing file, an import or a'
 names "qa: report path" "$QA" '`[WORKSPACE]/acceptance-report.md`'
 names "qa: ambiguous result" "$QA" '`cannot-test: ambiguous`'
-names "qa: rerun mode" "$QA" '`rerun`: the acceptance file may already exist'
 check "qa: the report lists only the statements given" "$(grep -qF -- 'demo — not executed' "$QA" && echo yes || echo no)" "no"
 
 BS="$P/skills/brainstorming/SKILL.md"
@@ -177,14 +175,12 @@ lacks "spec review: no unconditional answer check" <(cat "$P/skills/brainstormin
 says "auto-run.md: Fable's second round needs an open Blocker or High" "$P/reference/auto-run.md" 'A second runs only when round 1 leaves a Blocker or High finding open'
 lacks "auto-run.md: no unconditional second round" "$P/reference/auto-run.md" 'At most two Fable rounds run (review, revise, re-review)'
 WPF="$P/skills/writing-plans/references/test-step-forms.md"
-says "writing-plans forms: Step 1 takes one of three forms" "$WPF" 'Step 1 takes one of three forms'
 says "writing-plans forms: the Extend form heading" "$WPF" '- [ ] **Step 1: Extend the test `<file>::<name>`**'
 says "writing-plans forms: the Covered by form heading" "$WPF" $'- [ ] **Step 1: Covered by Task <N>\'s test `<name>`**'
 says "writing-plans forms: Covered by is for behaviour-free tasks only" "$WPF" 'only for a task that adds no new observable behaviour'
 says "writing-plans forms: a task adding behaviour uses Extend" "$WPF" 'A task that adds behaviour uses Extend'
 says "writing-plans forms: a Covered by task names the fault" "$WPF" $'The step names the fault in this task\'s code that the test would catch'
 says "writing-plans forms: a Covered by task writes no test of its own" "$WPF" 'The task has no step that writes its own failing test, and its verification runs the covering test'
-says "writing-plans forms: tests are planned per behaviour" "$WPF" 'Plan tests per behaviour: one test per acceptance statement or behaviour, at the lowest layer that can fail for it, rather than one per task'
 says "writing-plans forms: the Extend step must fail first" "$WPF" 'it must fail before the implementation, as a new test would'
 TDD="$P/skills/test-driven-development/SKILL.md"
 WGT="$P/skills/test-driven-development/references/writing-good-tests.md"
@@ -203,7 +199,6 @@ says "plan review: the reviewer names the overlapping test" "$PR" 'name the over
 says "plan review: a Covered by task is judged by its named fault" "$PR" 'judge its Executability by the fault the step names'
 check "plan review: Redundant test is no fifth criterion" "$(grep -c '^### ' "$PR")" "4"
 names "lens: the redundant criterion" "$LENS" '### Redundant Tests {#redundant}'
-says "lens: a redundant branch test names its cover" "$LENS" 'report one that fails for no fault that another branch test or an existing test does not also catch, and name the test that covers it'
 says "final review: the fix wave deletes only branch tests" "$FR" 'The fix wave may delete only a test added on the branch, a test that does not exist at MERGE_BASE'
 says "final review: never a regression test" "$FR" 'never a regression test that names a fixed bug'
 says "final review: older tests are test-simplifier's" "$FR" 'a test that exists at MERGE_BASE is left for dforge:test-simplifier'

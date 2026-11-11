@@ -18,13 +18,14 @@ Write the test first. Watch it fail. Write minimal code to pass.
 **Always:**
 - New features
 - Bug fixes
-- Refactoring
 - Behavior changes
 
 **Exceptions (ask your human partner):**
 - Throwaway prototypes
 - Generated code
 - Configuration files
+
+**Refactoring** keeps existing tests green and writes no test, except one characterization test written first when no existing test reaches the code being moved.
 
 **Under a plan, the task's steps decide.** An implementer dispatched with a
 brief cannot ask: where the brief's steps call for a test first, follow this
@@ -36,7 +37,7 @@ Thinking "skip TDD just this once"? Stop. That's rationalization.
 ## The Iron Law
 
 ```
-NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
+NO PRODUCTION BEHAVIOUR WITHOUT A FAILING TEST FIRST
 ```
 
 Write code before the test? Delete it. Start over.
@@ -228,7 +229,7 @@ the deletion that would make it fail.
 
 | Excuse | Reality |
 |--------|---------|
-| "Too simple to test" | Simple code breaks. Test takes 30 seconds. |
+| "Too simple to test" | Code that validates, derives or has side effects breaks: test it. Code that does none of these earns no test. |
 | "I'll test after" | Tests written after pass immediately — which proves nothing. They may test the wrong thing, test the implementation instead of the behavior, or miss the edge case you forgot. You never watched it fail, so you never proved it can catch the bug. Test-first forces that failure. |
 | "Tests after achieve same goals (spirit not ritual)" | Tests-after answer "what does this do?"; tests-first answer "what should this do?" Tests written after are biased by the code you already wrote — you verify the cases you remembered, not the ones you'd have discovered. Coverage without proof the tests work. |
 | "Already manually tested" | Manual testing is ad-hoc: no record of what you covered, no way to re-run it when the code changes, easy to forget cases under pressure. "Worked when I tried it" ≠ comprehensive. Automated tests run the same way every time. |
@@ -238,7 +239,7 @@ the deletion that would make it fail.
 | "Test hard = design unclear" | Listen to test. Hard to test = hard to use. |
 | "TDD will slow me down" | TDD IS the pragmatic path: catches bugs before commit, prevents regressions, lets you refactor without fear. "Pragmatic" shortcuts mean debugging in production — slower, not faster. |
 | "Manual test faster" | Manual doesn't prove edge cases. You'll re-test every change. |
-| "Existing code has no tests" | You're improving it. Add tests for existing code. |
+| "Existing code has no tests" | Add tests for the behaviour you change, not for the rest of the code. |
 
 ## Red Flags - STOP and Start Over
 
@@ -300,14 +301,14 @@ Extract validation for multiple fields if needed.
 
 Before marking work complete:
 
-- [ ] Every new function/method has a test
+- [ ] Every behaviour with a realistic fault has a test
 - [ ] Watched each test fail before implementing
 - [ ] Each test failed for expected reason (feature missing, not typo)
 - [ ] Wrote minimal code to pass each test
 - [ ] All tests pass
 - [ ] Output pristine (no errors, warnings)
 - [ ] Tests use real code (mocks only if unavoidable)
-- [ ] Edge cases and errors covered
+- [ ] The mutation check (writing-good-tests.md) finds no realistic mutation that every test survives
 
 Can't check all boxes? You skipped TDD. Start over.
 
@@ -329,7 +330,7 @@ Never fix bugs without a test.
 ## Final Rule
 
 ```
-Production code → test exists and failed first
+Production behaviour → test exists and failed first
 Otherwise → not TDD
 ```
 

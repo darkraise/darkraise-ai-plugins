@@ -20,11 +20,12 @@ native implementer `gpt-6.1-sol / high`) with this file and:
 - `[WORKSPACE]` — the plan's workspace directory.
 - `[MODE]` — one of:
   - `first`: write and run a test for every statement;
-  - `rerun`: the acceptance file may already exist from an earlier run that
-    was cut off. Run it as it is, never rewrite a test in it, and write tests
-    only for statements it does not cover yet;
+  - `rerun`: the acceptance files may already exist from an earlier run that
+    was cut off. Run them as they are, never rewrite a test in them, and write
+    tests only for statements they do not cover yet;
   - `reword A<n>[, A<m>]`: the spec's text for those statements changed.
-    Rewrite only their tests, from the new text, and run the whole file.
+    Rewrite only their tests, from the new text, and run every acceptance
+    file.
 
 ## What you may read
 
@@ -42,21 +43,24 @@ seat: the plan's tests were written by the same author as its code.
    routes, the exported API, and the files the code writes. When the code
    disagrees with the statement, the test follows the statement.
 2. **Where tests live.** Put the tests in the project's existing test layout,
-   in one file named `<spec-slug>.acceptance.<ext>` (the spec's file name
-   without its date and `-design.md`), or the nearest name the test framework
-   accepts. Each test name starts with `A<n>:`; where a test name cannot hold a
+   in one file per test project the statements reach, each named
+   `<spec-slug>.acceptance.<ext>` (the spec's file name without its date and
+   `-design.md`), or the nearest name the test framework accepts. A test
+   project is a directory with its own test runner or project file.
+   Each test name starts with `A<n>:`; where a test name cannot hold a
    colon, use `a<n>_<words>`. Test only through the public surface.
    A statement whose text starts with a contract ID (`UI-<n>`, `UX-<n>`,
    `OP-<n>`) is written for the UI test runner the project's UI profile names
    (`<docs>/ui-ux/profile.md`, its `**UI test runner:**` line), driving the
    running UI through it.
-3. **Run, with a timeout.** Run the file with `[TEST_COMMAND]` scoped to it,
-   or the framework's own runner, always under `timeout`. A setup or import
+3. **Run, with a timeout.** Run each file with its own project's runner,
+   `[TEST_COMMAND]` scoped to it or the framework's own, always under
+   `timeout`. A setup or import
    error is your own bug: fix the test. An assertion failure is a finding, which you never fix: you do not
    edit the code under test. Re-run a failing test once; when the two runs
    disagree, record `flaky`.
    Commit as you go: once a statement's test has run, whatever its result,
-   commit the acceptance file and the fixtures it needs, and nothing else, as
+   commit the acceptance files and the fixtures they need, and nothing else, as
    `test(<scope>): add acceptance test A<n> for <spec-slug>` (several
    statements written together may share one commit). The session removes
    your uncommitted files when its timer stops you, so a test that is not
@@ -64,7 +68,7 @@ seat: the plan's tests were written by the same author as its code.
 4. **Mutation check on every `neg` statement.** For each statement tagged
    `neg` whose test passed:
    - `git worktree add --detach [WORKSPACE]/qa-mutation HEAD`: step 3
-     committed the acceptance file, so `HEAD` has it;
+     committed the acceptance files, so `HEAD` has them;
    - in that worktree, link the dependency directories the tests need from the
      main worktree (for example `node_modules` or a virtualenv), or run the
      plan's `**Worktree setup:**` command when the session gave you one;
@@ -87,8 +91,8 @@ file, and nothing else outside the test layout. It opens with a
 `## Verdict` section of fixed `key: value` lines, then `## Findings` with one
 line per `fail`, `flaky`, mutation `green` or `cannot-test: no-surface` row,
 as `- [Important] <file>:<line> — [qa] A<n>: <result> — <one-liner>` (the
-acceptance file and the test's line), then `## Results`, the table and the
-command:
+test's acceptance file and line), then `## Results`, the table and one
+`Command:` line per acceptance file:
 
 ```markdown
 ## Verdict

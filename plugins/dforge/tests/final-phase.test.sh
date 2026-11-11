@@ -79,7 +79,6 @@ names "final review: gates run at every depth" "$FR" '| 0 Gates | runs | runs | 
 names "final review: UI proof runs at every depth" "$FR" '| 0.2 UI proof | runs | runs | runs |'
 names "final review: QA is skipped at light only" "$FR" '| 0.5 Acceptance QA | skipped | runs | runs |'
 names "final review: the Claude review runs at every depth" "$FR" '| 1 Claude review | runs | runs | runs |'
-names "final review: the lens column by depth" "$FR" '| 1 Lenses | `security` only, when it applies | at most 2 | up to `lensCap` |'
 names "final review: the Codex round is skipped below full" "$FR" '| 2 Codex round | skipped | skipped | as today |'
 names "final review: the dedupe judge needs two lists" "$FR" '| 3 Dedupe judge | never (one list) | never (one list) | with two lists |'
 says "final review: the fix wave runs at every depth" "$FR" 'The fix wave and its scoped re-review run at every depth.'

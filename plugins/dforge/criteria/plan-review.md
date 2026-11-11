@@ -37,7 +37,15 @@ does not already catch, as for a test that cannot fail, and name the
 overlapping test in the finding. A task whose Step 1 reads "Covered by Task
 <N>'s test" has no test of its own: judge its Executability by the fault the
 step names, and score LOW when it names none or the cited test would not
-catch it. Ignore whether the spec is covered; Coverage owns that. Ignore cross-task agreement; Coherence owns that.
+catch it. A task whose Step 1 reads "No new test, because" is judged by its
+reason: score LOW when the reason names neither a property that rules a fault
+out nor an existing test that catches it, or when a realistic fault exists
+that no existing test catches. Score LOW a task whose Step 1 heading is none
+of the four forms in test-step-forms.md; a line in the plan's Assumptions does
+not excuse it. Score LOW a plan that writes one test per task where one test
+per behaviour would do, and name the tasks whose tests one test would cover.
+Score LOW a planned test that checks the wording of a document no script
+reads. Ignore whether the spec is covered; Coverage owns that. Ignore cross-task agreement; Coherence owns that.
 
 ### Coherence {#coherence}
 

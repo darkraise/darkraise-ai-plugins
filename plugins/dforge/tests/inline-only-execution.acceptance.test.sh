@@ -127,7 +127,7 @@ plan() {
     printf '**Implementer:** %s\n' "$(agent_for "$total")"
     [ -z "$ex" ] || printf '**Executor:** %s\n' "$ex"
     printf '**Evaluation:** files %d - spec %d - coupling %d - risk %d = %d\n\n' "$f" "$s" "$c" "$r" "$total"
-    printf -- '- [ ] **Step 1: Do it**\n\n```bash\necho hi\n```\n'
+    printf -- '- [ ] **Step 1: Write the failing test**\n\n```bash\necho hi\n```\n'
     i=$((i + 1))
   done
 }

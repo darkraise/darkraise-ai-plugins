@@ -723,6 +723,7 @@ step1_lines=$(awk "$_PLAN_AWK"'
 ' "$src")
 step1_class=() step1_covered=""
 covered_re="^Covered by Task ([0-9]+)'s test $bt"
+no_test_re='^No new test, because .*[A-Za-z0-9]'
 while IFS=$'\t' read -r m heading; do
   [ -n "$m" ] || continue
   if [[ "$heading" == "Write the failing test"* ]]; then step1_class[m]=write
@@ -730,6 +731,11 @@ while IFS=$'\t' read -r m heading; do
   elif [[ "$heading" =~ $covered_re ]]; then
     step1_class[m]=covered
     step1_covered="$step1_covered$m $((10#${BASH_REMATCH[1]}))"$'\n'
+  elif [[ "$heading" =~ $no_test_re ]]; then step1_class[m]=none
+  elif [[ "$heading" == "No new test"* ]]; then
+    say ERROR "Task $m" 'Step 1 must read "No new test, because <reason>"'
+  else
+    say WARN "Task $m" "Step 1 \"$heading\" is none of the forms in test-step-forms.md"
   fi
 done <<<"$step1_lines"
 if [ -n "$step1_covered" ]; then

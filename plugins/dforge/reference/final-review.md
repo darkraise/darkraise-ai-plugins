@@ -47,7 +47,7 @@ keys on. The depth sizes the steps below:
 | 0.2 UI proof | runs | runs | runs |
 | 0.5 Acceptance QA | skipped | runs | runs |
 | 1 Claude review | runs | runs | runs |
-| 1 Lenses | `security` only, when it applies | at most 2 | up to `lensCap` |
+| 1 Lenses | `security` only, when it applies | at most 2, plus `test-quality` when it applies, within `lensCap` | up to `lensCap` |
 | 2 Codex round | skipped | skipped | as today |
 | 3 Dedupe judge | never (one list) | never (one list) | with two lists |
 
@@ -258,8 +258,9 @@ your own: QA commits on this branch.
    every lens finding enters the fix wave, and on a short plan the Minor tail
    costs the fixer more triage than it yields fixes. `lens-route` reads the
    depth itself: at light it prints a `lens` line only for `security`, and
-   only when its Applies clause matches; at standard it prints at most two,
-   fewer when `lensCap` is lower. A lens it drops prints
+   only when its Applies clause matches; at standard it prints at most two
+   lenses besides `test-quality`, which it adds whenever its Applies clause
+   matches, and never more than `lensCap` in all. A lens it drops prints
    `lens-skipped <id> reason=depth` (light) or `reason=cap`.
 
    ```
@@ -341,7 +342,8 @@ your own: QA commits on this branch.
    light)`). Append each
    `lens-skipped <id> reason=<reason>` line step 1 printed to the ledger as
    `final review lens-skipped <id> reason=<reason>`, whatever its reason
-   (`cap` or `depth`), one line per lens, unless the
+   (`cap` or `depth`; a lens seat that leaves no report is ledgered as
+   `reason=failed` under Retained lines), one line per lens, unless the
    ledger already holds it: finishing lists them from there, because after a
    merge `scripts/lens-route` has no diff left to read. With two lists:
    confirmed findings ranked most severe first, then the rejected ones with
@@ -358,7 +360,9 @@ your own: QA commits on this branch.
 
 A confirmed finding gates the handoff whichever reviewer raised it; a rejected
 one never does. With one list, every finding gates the handoff until the fixer
-fixes it or rejects it with evidence the re-review upholds.
+fixes it or rejects it with evidence the re-review upholds. A finding whose
+one-liner begins `deferred: test-simplifier — ` gates nothing on either list
+(**Redundant tests.** below).
 
 If confirmed findings remain, fix them in ONE wave with the complete list,
 given as report paths (the dedupe report with two lists; the Claude review's
@@ -391,12 +395,16 @@ Whoever fixes writes `<workspace>/final-fix-report.md`: what changed per
 finding, the covering tests, the command and its output. With one list the
 fixer first checks each finding against the code under
 dforge:receiving-code-review, fixes the real ones, and records each one
-it rejects under `REJECTED: <finding>` with its evidence. Each per-finding
+it rejects under `REJECTED: <finding>` with its evidence. The fixer skips a
+finding whose one-liner begins `deferred: test-simplifier — ` and lists it
+under `DEFERRED: <finding>`; the session leaves each `DEFERRED:` finding out
+of the findings the scoped re-review verifies. Each per-finding
 entry and each `REJECTED:` line keeps the finding's `[lens:<id>]` tag, and the
 scoped re-review quotes that tag in its verdict on each rejection. In subagent
 mode the fix subagent writes it as its report file, and its prompt names
 `<plugin-root>/skills/receiving-code-review/SKILL.md` to read, since an
-implementer has no Skill tool; in inline mode you write it before
+implementer has no Skill tool, and states the `DEFERRED:` skip rule above,
+which no file the subagent reads carries; in inline mode you write it before
 the re-review. Then run exactly one scoped re-review of the fix wave
 (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range, with
 [re-review-prompt.md](../skills/subagent-driven-development/references/re-review-prompt.md),
@@ -417,7 +425,7 @@ still gets an independent reader.
 `A<n>:`, or with `a<n>_` where the framework forbids a colon in a test name
 ([acceptance-qa.md](acceptance-qa.md)), or which the QA report identifies as an
 acceptance test; to dispute one it records `REJECTED: A<n> — <evidence>`, and the
-scoped re-review decides. The fix wave's verification runs the acceptance file
+scoped re-review decides. The fix wave's verification runs the acceptance files
 again. A `fail` or `flaky` acceptance test that survives the fix wave (the
 rejection upheld, or the ruling seat parking it), or one step 0.5 left to a
 deferred task, is the one edit allowed on an acceptance test: mark that test
@@ -431,7 +439,14 @@ redundant one. The fix wave may delete only a test added on the branch, a test
 that does not exist at MERGE_BASE, under the REFACTOR rule in
 dforge:test-driven-development, and never a regression test that names a fixed
 bug; a test that exists at MERGE_BASE is left for dforge:test-simplifier. The
-commit body names the faults the covering test catches.
+commit body names the faults the covering test catches. A finding whose
+one-liner begins `deferred: test-simplifier — ` reaches the fixer, which skips
+it and lists it under `DEFERRED:` (**The fix subagent** above). The
+session records it with
+`scripts/register add <register> "<old test> is covered by <new test>" --state deferred --note "final review: for dforge:test-simplifier"`
+in the register that covers the plan's spec, or names it in the final message
+when no register covers it, and counts it in its lens line's Important count
+only, neither fixed nor rejected.
 
 **Suites.** Any test or validation suite you run in the final review — the
 check after the fix wave, or the project's full suite in inline mode — goes
@@ -452,8 +467,8 @@ Only the four stop classes stop you here.
 After the fix wave, its scoped re-review and the ruling seat's verdicts on
 any residual findings, or straight after step 4 when no fix wave ran, append
 these lines to the ledger, each unless the ledger already holds a line with
-its prefix (`final review lens <id> —`, `final review lenses off`,
-`Test ratio:`), before the execution skill appends `Final review: clean`.
+its prefix (`final review lens <id> —`, `final review lens-skipped <id>`,
+`final review lenses off`, `Test ratio:`), before the execution skill appends `Final review: clean`.
 dforge:finishing-a-development-branch copies them into the plan's review
 record, because cleanup deletes the ledger.
 

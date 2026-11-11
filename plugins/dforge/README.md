@@ -126,7 +126,7 @@ final review scales as follows:
 | 0.2 UI proof | runs | runs | runs |
 | 0.5 Acceptance QA | skipped | runs | runs |
 | 1 Claude review (`dforge:judge-opus`) | runs | runs | runs |
-| 1 Lenses | security only, when it applies | at most 2 | up to `lensCap` |
+| 1 Lenses | security only, when it applies | at most 2, plus test-quality when it applies, within `lensCap` | up to `lensCap` |
 | 2 Codex round | skipped | skipped | as today |
 | 3 Dedupe judge | never (one list) | never (one list) | with two lists |
 

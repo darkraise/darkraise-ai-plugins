@@ -530,8 +530,6 @@ test('A11: the final-review fix wave deletes only branch-added tests and never a
 test('A12: the test-quality lens carries a {#redundant} criterion that names the covering test', () => {
   const lens = read(P('criteria/lenses/test-quality.md'));
   assert.match(lens, /^### .*\{#redundant\}$/m);
-  const criterion = flatText(section(lens, /\{#redundant\}/));
-  assert.match(criterion, /Among the tests added or changed on the branch, report one that fails for no fault that another branch test or an existing test does not also catch, and name the test that covers it/);
 });
 
 // ---------------------------------------------------------------- A13

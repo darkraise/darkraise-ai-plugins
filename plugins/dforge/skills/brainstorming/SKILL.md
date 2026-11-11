@@ -157,7 +157,7 @@ there is no checklist: see Fast Mode.
 **Bounded:**
 1. **Explore project context** — check files, docs, recent commits
 2. **Ask clarifying questions** — one at a time, the ones that matter
-3. **Present short design in chat** — approach, files touched, testing
+3. **Present short design in chat** — approach, files touched, and the tests: each one, the fault it catches and any existing test it extends, or that the change earns none and why
 4. **Self-review the design** — one round, its block in the same message as the design (see Self-reviewing a bounded design)
 5. **Get approval** — STOP and wait for an explicit yes; presenting the design and starting in the same breath is skipping the gate
 6. **Implement** — proceed with the normal development workflow (TDD applies); no plan document
@@ -250,7 +250,7 @@ Before asking for approval, check the design once yourself, never through a
 subagent, and fix what you find inline:
 
 1. **Files:** every file the change touches is named.
-2. **Testing:** the design says how the change will be verified.
+2. **Testing:** the design names each test, the fault it catches and any existing test it extends, or says the change earns none and why.
 3. **Assumptions:** every assumption you made is stated, so your human partner can correct it.
 4. **Ambiguity:** nothing in it can be read two ways.
 

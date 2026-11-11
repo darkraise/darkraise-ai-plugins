@@ -122,7 +122,8 @@ Subagent ([JUDGE]):
 
     **Tests:**
     - Do the new and changed tests verify real behavior, not mocks?
-    - Are the task's edge cases covered?
+    - Is there an input that reaches an untested branch of the task's code and
+      gives a wrong result? Report a missing case only when you can name both.
 
     **Structure:**
     - Does each file have one clear responsibility with a well-defined interface?
@@ -143,8 +144,7 @@ Subagent ([JUDGE]):
     Important means this task cannot be trusted until it is fixed: incorrect
     or fragile behavior, a missed requirement, or maintainability damage you
     would block a merge over — verbatim duplication of a logic block,
-    swallowed errors, tests that assert nothing. "Coverage could be broader"
-    and polish suggestions are Minor.
+    swallowed errors, tests that assert nothing. Polish suggestions are Minor.
     If the plan or brief explicitly mandates something this rubric calls a
     defect (a test that asserts nothing, verbatim duplication of a logic
     block), that IS a finding — report it as Important, labeled
