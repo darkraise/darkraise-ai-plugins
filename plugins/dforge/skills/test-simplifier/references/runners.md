@@ -58,3 +58,9 @@ Count `Killed` and `Timeout` as caught on both sides of a comparison.
 `NoCoverage` and `Survived` before the wave are not losses: the wave only has
 to keep what was caught. Keep the configuration, test command and seed
 identical between the before and after runs.
+
+Most runners stop a mutant at its first killing test, so the report names one
+killer per mutant. Finding tests that no mutant needs takes every killer: for
+StrykerJS set `disableBail: true` with `coverageAnalysis: "perTest"` and read
+each mutant's `killedBy` in the JSON reporter's `mutation.json`. Its Vitest
+runner applies both across every project of a Vitest workspace.
