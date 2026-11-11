@@ -320,6 +320,13 @@ integration test reaches, and add a variant of an existing test as a row in its
 table, not as a new test. Suites grown one task at a time otherwise end up
 dforge:test-simplifier's job.
 
+Plan tests per behaviour: one test per acceptance statement or behaviour, at
+the lowest layer that can fail for it, rather than one per task. A sentence in
+a skill, reference or prompt gets a test only when a script reads it
+([writing-good-tests.md](../test-driven-development/references/writing-good-tests.md),
+"Behavior, not text"); wording a script parses, such as the Step 1 forms and a
+template's placeholders, is the exception.
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/path/test.py::test_name -v`

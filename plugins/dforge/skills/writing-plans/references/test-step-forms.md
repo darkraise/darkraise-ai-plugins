@@ -1,6 +1,6 @@
-## The three Step 1 forms
+## The Step 1 forms
 
-Step 1 takes one of three forms.
+Step 1 takes one of four forms.
 
 The first, `- [ ] **Step 1: Write the failing test**`, is for a behaviour no
 existing or planned test reaches.
@@ -21,5 +21,11 @@ judges such a task's Executability by the named fault. plan-lint fails a
 `Covered by Task <N>` when Task `<N>` does not exist, has no test step of its
 own, or does not run before the citing task.
 
-Plan tests per behaviour: one test per acceptance statement or behaviour, at
-the lowest layer that can fail for it, rather than one per task.
+The fourth, `- [ ] **Step 1: No new test, because <reason>**`, is for a task
+with no realistic fault that an existing test does not already catch, such as
+a refactor or prose that no script reads. The reason names the property that
+rules a fault out, or the existing test that catches it as `<file>::<name>`.
+The task's later steps run the existing checks. The plan reviewer judges such
+a task's Executability by its reason. plan-lint fails a heading that begins
+`No new test` without `, because ` and a reason, and warns on any Step 1
+heading that is none of the four forms.
