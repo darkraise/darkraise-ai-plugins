@@ -120,6 +120,7 @@ export const windowsSeconds = {
   'task-step-text.test.sh': 10,
   'task-step.test.sh': 1400,
   'test-simplifier.test.sh': 10,
+  'test-volume-rules.acceptance.test.sh': 40,
   'turn-end.test.sh': 290,
   'typed-seats-and-drafting.acceptance.sh': 75,
   'ui-hooks.test.sh': 65,
