@@ -32,7 +32,9 @@
 // take the default weight of 10. Every shell suite needs an entry here, with a
 // weight of at most 80% of the suite's limit; tests/test-shards.test.mjs
 // enforces both. A suite test-all runs in parts splits its weight evenly among
-// them.
+// them, unless its entry maps each part to its own weight, as task-step's does:
+// run 43064426015 (2026-11-11) timed shard 12 out twice with its start part
+// (615-664 s) and verdict part (390-418 s) together, each weighted 350 s.
 export const windowsSeconds = {
   'run-all.sh': 157,
   'agy-gate.test.sh': 20,
@@ -118,7 +120,7 @@ export const windowsSeconds = {
   'task-step-settle.test.sh': 220,
   'task-step-suite.test.sh': 250,
   'task-step-text.test.sh': 10,
-  'task-step.test.sh': 1400,
+  'task-step.test.sh': { start: 700, verdict: 450, rereview: 420, group: 280 },
   'test-simplifier.test.sh': 10,
   'test-volume-rules.acceptance.test.sh': 40,
   'turn-end.test.sh': 290,
@@ -134,7 +136,12 @@ export const windowsSeconds = {
   'worktree-instructions.test.sh': 10,
 };
 
-export function selectShard(jobs, shard) {
+function partWeight(entry, part, parts) {
+  if (entry === undefined) return 10 / parts;
+  return typeof entry === 'object' ? entry[part] ?? 10 : entry / parts;
+}
+
+export function selectShard(jobs, shard, weights = windowsSeconds) {
   if (shard === undefined) return jobs;
   if (!/^[1-9]\d*\/[1-9]\d*$/.test(shard)) throw new Error('Shard must be INDEX/TOTAL (for example 1/4)');
   const [index, total] = shard.split('/').map(Number);
@@ -147,7 +154,7 @@ export function selectShard(jobs, shard) {
   for (const job of jobs) parts.set(name(job), (parts.get(name(job)) ?? 0) + 1);
   const weighted = jobs.map((job, position) => ({
     position,
-    seconds: (windowsSeconds[name(job)] ?? 10) / parts.get(name(job)),
+    seconds: partWeight(weights[name(job)], job[1].slice(1).join(' '), parts.get(name(job))),
   })).sort((a, b) => b.seconds - a.seconds || a.position - b.position);
   for (const { position, seconds } of weighted) {
     const bucket = buckets.reduce((best, current) => current.seconds < best.seconds ? current : best);
@@ -163,8 +170,8 @@ export function checkShellWeights(jobs, weights = windowsSeconds) {
   for (const [, args, limit] of jobs) {
     if (args[0] !== 'plugins/dr-status/tests/run-all.sh' && !/^plugins\/dforge\/tests\/[^/]+\.(test|acceptance)\.sh$/.test(args[0])) continue;
     const name = args[0].split('/').at(-1);
-    const suite = suites.get(name) ?? { parts: 0, limit };
-    suite.parts += 1;
+    const suite = suites.get(name) ?? { parts: [], limit };
+    suite.parts.push(args.slice(1).join(' '));
     suites.set(name, suite);
   }
   const problems = [];
@@ -173,8 +180,15 @@ export function checkShellWeights(jobs, weights = windowsSeconds) {
       problems.push(`${name}: no weight in scripts/test-shards.mjs; add it to windowsSeconds`);
       continue;
     }
-    const each = weights[name] / parts;
-    if (each > 0.8 * limit) problems.push(`${name}: weight ${each} s is above 80% of its ${limit} s limit: raise its suiteSeconds or split it`);
+    for (const part of typeof weights[name] === 'object' ? parts : parts.slice(0, 1)) {
+      const label = typeof weights[name] === 'object' ? `${name} ${part}` : name;
+      if (typeof weights[name] === 'object' && !Object.hasOwn(weights[name], part)) {
+        problems.push(`${label}: no weight for this part in scripts/test-shards.mjs; add it to windowsSeconds`);
+        continue;
+      }
+      const each = partWeight(weights[name], part, parts.length);
+      if (each > 0.8 * limit) problems.push(`${label}: weight ${each} s is above 80% of its ${limit} s limit: raise its suiteSeconds or split it`);
+    }
   }
   return problems;
 }

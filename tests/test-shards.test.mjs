@@ -50,6 +50,14 @@ test('a suite run in parts splits its weight among them', () => {
   assert.deepEqual(selectShard(jobs, '2/2'), [first, second]);
 });
 
+test('a suite with per-part weights schedules each part by its own weight', () => {
+  const part = name => ['bash', ['plugins/dforge/tests/a.test.sh', name], 900];
+  const jobs = ['start', 'verdict', 'x', 'y'].map(part);
+  const weights = { 'a.test.sh': { start: 700, verdict: 450, x: 100, y: 100 } };
+  assert.deepEqual(selectShard(jobs, '1/2', weights), [jobs[0]]);
+  assert.deepEqual(selectShard(jobs, '2/2', weights), jobs.slice(1));
+});
+
 test('invalid shard arguments fail instead of silently skipping tests', () => {
   const jobs = [['bash', ['a'], 10], ['bash', ['b'], 10]];
   for (const shard of ['', '0/2', '3/2', '1/0', '1/3', '1.5/2', '1', '1/2/3', '1/9007199254740992']) {
@@ -70,6 +78,13 @@ test('a shell suite needs a weight of at most 80% of its limit', () => {
     { name: 'a larger limit raises the bound', jobs: [shell('a.test.sh', 1200)], weights: { 'a.test.sh': 900 }, want: [] },
     { name: 'parts split the weight', jobs: [shell('a.test.sh', 600, 'a1'), shell('a.test.sh', 600, 'a2')], weights: { 'a.test.sh': 960 }, want: [] },
     { name: 'parts do not hide a heavy weight', jobs: [shell('a.test.sh', 600, 'a1'), shell('a.test.sh', 600, 'a2')], weights: { 'a.test.sh': 962 }, want: [/raise its suiteSeconds or split it/] },
+    { name: 'per-part weights within 80% pass', jobs: [shell('a.test.sh', 600, 'a1'), shell('a.test.sh', 600, 'a2')], weights: { 'a.test.sh': { a1: 480, a2: 100 } }, want: [] },
+    {
+      name: 'per-part weights name a heavy or missing part',
+      jobs: [shell('a.test.sh', 600, 'a1'), shell('a.test.sh', 600, 'a2')],
+      weights: { 'a.test.sh': { a1: 481 } },
+      want: [/a\.test\.sh a1: weight 481 s .*raise its suiteSeconds or split it/, /a\.test\.sh a2: no weight for this part/],
+    },
     {
       name: 'jobs that are not shell suites keep the default weight',
       jobs: [['node', ['scripts/validate-repository.mjs'], 60], ['node', ['--test', 'tests/a.test.mjs'], 120], ['claude', ['plugin', 'test', 'plugins/dforge'], 300], ['tsc', ['--noEmit', '-p', 'plugins/dforge'], 300]],
