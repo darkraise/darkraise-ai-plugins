@@ -105,8 +105,9 @@ bash "$ROUTE" codex.md --task 1 >/dev/null 2>&1; check "a Codex-host plan exits 
 
 # --- the depth of the plan sizes the final lenses ---
 # A plan's depth is the higher of its spec's Depth line and its riskiest task
-# (lib/depth.sh). Light keeps security only, standard at most two lenses, full
-# up to lensCap. The change set is HEAD2's: shell, a TypeScript test and a README.
+# (lib/depth.sh). Light keeps security only, standard at most two lenses
+# besides test-quality, which it adds when it applies, full up to lensCap.
+# The change set is HEAD2's: shell, a TypeScript test and a README.
 mkdir -p specs
 for d in light standard full; do
   printf '# Spec\n\n**Depth:** %s — fixture\n' "$d" > "specs/$d.md"
