@@ -1,7 +1,7 @@
 # TDD and lifecycle review
 
 **Source:** the owner's request on 2026-11-09, "Let review the TDD in dforge, I see in all projects, we created too many tests. Also review the ADLC in dforge", and the proposal review that followed. "ADLC" appears nowhere in the repository and was read as the agent development lifecycle from brainstorm to finish.
-**Covers:** docs/dforge/specs/2026-11-10-retained-review-data-design.md, docs/dforge/specs/2026-11-11-downloads-mutation-measurement-design.md
+**Covers:** docs/dforge/specs/2026-11-10-retained-review-data-design.md, docs/dforge/specs/2026-11-11-downloads-mutation-measurement-design.md, docs/dforge/specs/2026-11-11-test-volume-rules-design.md
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
