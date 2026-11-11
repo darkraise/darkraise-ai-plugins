@@ -114,7 +114,7 @@ None
 **Implementer:** dforge:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
-- [ ] **Step 1: Write it**
+- [ ] **Step 1: Write the failing test**
 
 ```bash
 # a fenced TODO is only a warning
@@ -130,7 +130,7 @@ echo hi
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 **Approach:** inline - skip 2: follows the pattern
 
-- [ ] **Step 1: Mark the `TODO` column**
+- [ ] **Step 1: Write the failing test for the `TODO` column**
 EOF
 }
 
@@ -198,7 +198,7 @@ has "clean Claude plan: summary" "$out" "plan-lint: 0 errors, 2 warnings"
 has "a light plan on subagent is deprecated" "$out" "WARN header: subagent execution is deprecated; inline is the default"
 lacks "a plan with no heavy task gets no delegation note" "$out" "NOTE header"
 has "fenced TODO is a warning" "$out" "WARN Task 1: placeholder: # a fenced TODO is only a warning"
-lacks "inline-code TODO is not a finding" "$out" "Mark the"
+lacks "inline-code TODO is not a finding" "$out" 'for the `TODO` column'
 codex_plan > codex.md
 lint codex.md
 check "clean Codex plan: exit 0" "$status" "0"
@@ -236,7 +236,7 @@ lacks "a heading with trailing blanks is still found" "$out" "Task index"
 variant v5b.md 's/^### Task 2: Second thing$/### Task 2b: Second thing/'
 lint v5b.md
 has "malformed heading with a letter after the number" "$out" "ERROR header: malformed task heading: ### Task 2b: Second thing"
-variant v6.md 's/^- \[ \] \*\*Step 1: Write it\*\*$/#### Step 1: Run Task 2 tests/'
+variant v6.md 's/^- \[ \] \*\*Step 1: Write the failing test\*\*$/#### Step 1: Run Task 2 tests/'
 lint v6.md
 lacks "a step heading mentioning a task is not a finding" "$out" "malformed task heading"
 variant v7.md 's/^### Task 2: Second thing$/### Task 3: Second thing/; s/^2\. Second thing$/3. Second thing/'
@@ -703,7 +703,7 @@ $2
 **Implementer:** dforge:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 
-- [ ] **Step 1: Do it**
+- [ ] **Step 1: Write the failing test**
 
 \`\`\`bash
 echo hi > a.txt
@@ -1322,8 +1322,8 @@ lacks "waves: a wave Early CI is accepted" "$out" "Early CI"
 # --- Step 1 forms ---
 step1() { # step1 <Task 1 heading text> <Task 2 heading text> — the Claude plan with both Step 1 headings replaced
   claude_plan | sed -E \
-    -e "s#^- \[ \] \*\*Step 1: Write it\*\*\$#- [ ] **Step 1: $1**#" \
-    -e "s#^- \[ \] \*\*Step 1: Mark the .+ column\*\*\$#- [ ] **Step 1: $2**#"
+    -e "s#^- \[ \] \*\*Step 1: Write the failing test\*\*\$#- [ ] **Step 1: $1**#" \
+    -e "s#^- \[ \] \*\*Step 1: Write the failing test for the .+ column\*\*\$#- [ ] **Step 1: $2**#"
 }
 with_steps() { # with_steps <Task 1 heading> <Task 2 heading> <Task 3 heading> — a Step 1 line after each Evaluation line of the three-task plan on stdin
   S1=$1 S2=$2 S3=$3 awk '/^\*\*Evaluation:\*\*/ { n++; print; print ""; print "- [ ] **Step 1: " ENVIRON["S" n] "**"; next } { print }'
@@ -1347,6 +1347,36 @@ lacks "a waves plan: the covered task has a test step" "$out" "Task 2 has no tes
 waves_plan 'waves — 1 | 2 | 3' | with_steps 'Write the failing test' 'Extend the test `t/b.test.sh::second`' $'Covered by Task 2\'s test `second`' > cov-wave-ok.md
 lint cov-wave-ok.md --no-probe
 lacks "a waves plan: Covered by a task in an earlier wave is accepted" "$out" "Covered by Task"
+lint cov-ok.md
+lacks "a Covered by heading draws no form WARN" "$out" "none of the forms"
+step1 'No new test, because the change is prose no script reads' 'Write the failing test' > nnt-ok.md
+lint nnt-ok.md
+check "No new test with a reason: exit 0" "$status" "0"
+lacks "No new test with a reason: no Step 1 ERROR" "$out" "Step 1 must read"
+lacks "No new test with a reason: no form WARN" "$out" "none of the forms"
+for h in 'No new test' 'No new test, because' 'No new test, because .' 'No new test because x'; do
+  step1 "$h" 'Write the failing test' > nnt-bad.md
+  lint nnt-bad.md
+  check "No new test without a reason ($h): exit 1" "$status" "1"
+  has "No new test without a reason ($h): the ERROR" "$out" 'ERROR Task 1: Step 1 must read "No new test, because <reason>"'
+  lacks "No new test without a reason ($h): no form WARN" "$out" "none of the forms"
+done
+step1 'Do it' 'Write the failing test' > nnt-warn.md
+lint nnt-warn.md
+check "an unrecognized Step 1 heading: exit 0" "$status" "0"
+has "an unrecognized Step 1 heading: the WARN" "$out" 'WARN Task 1: Step 1 "Do it" is none of the forms in test-step-forms.md'
+for h in 'Write the failing tests' 'Extend the test `t/a.test.sh::first`'; do
+  step1 "$h" 'Write the failing test' > nnt-known.md
+  lint nnt-known.md
+  lacks "a recognized Step 1 heading draws no form WARN ($h)" "$out" "none of the forms"
+done
+waves_plan 'sequential — one chain' > nnt-nostep.md
+lint nnt-nostep.md --no-probe
+lacks "a task with no Step 1 line draws no form WARN" "$out" "none of the forms"
+waves_plan 'sequential — one chain' | with_steps 'Write the failing test' 'No new test, because prose only' $'Covered by Task 2\'s test `b`' > nnt-cov.md
+lint nnt-cov.md --no-probe
+has "Covered by a No new test task: it has no test step" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 has no test step"
+lacks "a No new test task with a reason draws no form WARN" "$out" 'Task 2: Step 1'
 
 # --- documents kept in darkmem: Spec paths resolve in the mirror ---
 . "$HERE/fixtures/darkmem-stores.sh"

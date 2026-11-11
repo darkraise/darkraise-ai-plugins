@@ -422,7 +422,7 @@ fi
 # Delegation and the Execution-line floor changed after BASE by design, so the
 # lines they own are left out of the comparison; every other line must not move.
 a5_scope() {
-  grep -vE '^(NOTE header: delegated:|WARN header: Execution line is (inline|subagent) but|WARN header: subagent execution is deprecated|ERROR header: inline execution needs|plan-lint: [0-9]+ errors?, [0-9]+ warnings?$|recommend  )' || true
+  grep -vE '^(NOTE header: delegated:|WARN header: Execution line is (inline|subagent) but|WARN header: subagent execution is deprecated|ERROR header: inline execution needs|WARN Task [0-9]+: Step 1 ".*" is none of the forms in test-step-forms\.md|ERROR Task [0-9]+: Step 1 must read "No new test, because <reason>"|plan-lint: [0-9]+ errors?, [0-9]+ warnings?$|recommend  )' || true
 }
 if selected A5; then
   if base_known; then
