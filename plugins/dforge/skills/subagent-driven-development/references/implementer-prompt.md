@@ -133,7 +133,9 @@ Subagent ([IMPLEMENTER]):
     **Testing:**
     - Do tests actually verify behavior (not just mock behavior)?
     - Did I follow TDD if required?
-    - Are tests comprehensive?
+    - Does every behaviour with a realistic fault have a test? Add a case only
+      when you can name the input that reaches the untested branch and the
+      wrong result it produces.
     - Is the test output pristine (no stray warnings or noise)?
 
     If you find issues during self-review, fix them now before reporting.

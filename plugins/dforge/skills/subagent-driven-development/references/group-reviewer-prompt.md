@@ -100,9 +100,10 @@ Subagent (the judge seat task-step review --group prints):
     **Part 2: Code Quality**, for each task: clean separation of concerns,
     proper error handling, DRY without premature abstraction, edge cases
     handled; new and changed tests that verify real behaviour, not mocks,
-    and cover the task's edge cases; files with one clear responsibility,
-    following the file structure from its brief. Do not flag pre-existing
-    file sizes — focus on what the task contributed.
+    and reach every branch for which you can name an input that gives a
+    wrong result; files with one clear responsibility, following the file
+    structure from its brief. Do not flag pre-existing file sizes — focus
+    on what the task contributed.
 
     Where a task's section carries a `**Lenses:**` line, read each lens file it names and report each hit as an issue of that task tagged `[lens:<id>]`.
     Lens criteria are defect-pattern checks: report hits at your own
@@ -117,8 +118,7 @@ Subagent (the judge seat task-step review --group prints):
     Important means that task cannot be trusted until it is fixed: incorrect
     or fragile behavior, a missed requirement, or maintainability damage you
     would block a merge over — verbatim duplication of a logic block,
-    swallowed errors, tests that assert nothing. "Coverage could be broader"
-    and polish suggestions are Minor.
+    swallowed errors, tests that assert nothing. Polish suggestions are Minor.
     If a plan or brief explicitly mandates something this rubric calls a
     defect, that IS a finding — report it as Important, labeled
     plan-mandated. The plan's authorship does not grade its own work; the

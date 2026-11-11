@@ -418,7 +418,7 @@ still gets an independent reader.
 `A<n>:`, or with `a<n>_` where the framework forbids a colon in a test name
 ([acceptance-qa.md](acceptance-qa.md)), or which the QA report identifies as an
 acceptance test; to dispute one it records `REJECTED: A<n> — <evidence>`, and the
-scoped re-review decides. The fix wave's verification runs the acceptance file
+scoped re-review decides. The fix wave's verification runs the acceptance files
 again. A `fail` or `flaky` acceptance test that survives the fix wave (the
 rejection upheld, or the ruling seat parking it), or one step 0.5 left to a
 deferred task, is the one edit allowed on an acceptance test: mark that test
@@ -432,7 +432,13 @@ redundant one. The fix wave may delete only a test added on the branch, a test
 that does not exist at MERGE_BASE, under the REFACTOR rule in
 dforge:test-driven-development, and never a regression test that names a fixed
 bug; a test that exists at MERGE_BASE is left for dforge:test-simplifier. The
-commit body names the faults the covering test catches.
+commit body names the faults the covering test catches. A finding whose
+one-liner begins `deferred: test-simplifier — ` is not given to the fixer. The
+session records it with
+`scripts/register add <register> "<old test> is covered by <new test>" --state deferred --note "final review: for dforge:test-simplifier"`
+in the register that covers the plan's spec, or names it in the final message
+when no register covers it, and counts it in its lens line's Important count
+only, neither fixed nor rejected.
 
 **Suites.** Any test or validation suite you run in the final review — the
 check after the fix wave, or the project's full suite in inline mode — goes
