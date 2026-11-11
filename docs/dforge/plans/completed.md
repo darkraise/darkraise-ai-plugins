@@ -11,3 +11,4 @@
 - 2026-11-07 `docs/dforge/plans/2026-11-07-inline-only-execution.md` — via PR
 - 2026-11-08 `docs/dforge/plans/2026-11-08-auto-run-worktree-setting.md` — via PR
 - 2026-11-09 `docs/dforge/plans/2026-11-09-clean-session-phases.md` — merged into `feat/dforge-clean-session-phases` at 82c0308
+- 2026-11-11 `docs/dforge/plans/2026-11-11-downloads-mutation-measurement.md` — merged into `main` at 07eb83bb
