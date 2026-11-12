@@ -73,11 +73,6 @@ check "depth_rank full" "$(depth_rank full)" "2"
 out=$(depth_rank medium); st=$?
 check "depth_rank of another word prints nothing" "$out" ""
 check "depth_rank of another word exits 1" "$st" "1"
-check "depth_name 0" "$(depth_name 0)" "light"
-check "depth_name 1" "$(depth_name 1)" "standard"
-check "depth_name 2" "$(depth_name 2)" "full"
-out=$(depth_name 3); st=$?
-check "depth_name 3 prints nothing, exits 1" "$out:$st" ":1"
 check "the seven trigger ids" "${DEPTH_TRIGGERS[*]}" "new-subsystem interface unenumerable approach risk intricate asked"
 . "$P/scripts/lib/depth.sh"
 check "sourcing the lib twice is harmless" "$?" "0"

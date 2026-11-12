@@ -15,16 +15,6 @@ depth_rank() {
   esac
 }
 
-# depth_name RANK — the depth a rank names; status 1 for any other value.
-depth_name() {
-  case ${1:-} in
-    0) echo light ;;
-    1) echo standard ;;
-    2) echo full ;;
-    *) return 1 ;;
-  esac
-}
-
 # depth_from_triggers LIST — "<depth><TAB><reason>" for a comma-separated list
 # of trigger ids. Status 2 and a stderr message, with no stdout, for an empty
 # list or an id outside DEPTH_TRIGGERS.
