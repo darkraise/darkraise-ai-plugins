@@ -4,18 +4,13 @@ import { availableParallelism } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { driftWarning, selectShard } from './test-shards.mjs';
 
-const { values: options } = parseArgs({ options: { shard: { type: 'string' }, list: { type: 'boolean' }, limits: { type: 'boolean' }, jobs: { type: 'string' } } });
-if (options.limits && !options.list) {
-  console.error('test-all: --limits only changes what --list prints');
-  process.exit(2);
-}
+const { values: options } = parseArgs({ options: { jobs: { type: 'string' } } });
 if (options.jobs !== undefined && !/^[1-9]\d*$/.test(options.jobs)) {
   console.error('test-all: --jobs takes a whole number of at least 1');
   process.exit(2);
 }
-// Windows shards stay sequential: their weights and limits were measured that way.
+// Windows stays sequential: its limits were measured that way.
 const parallelJobs = options.jobs !== undefined ? Number(options.jobs) : process.platform === 'win32' ? 1 : availableParallelism();
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -56,9 +51,6 @@ async function run(executable, args, seconds, buffered) {
       await Promise.race([closed, new Promise(done => { grace = setTimeout(done, 5000); })]);
       clearTimeout(grace);
       say(`Finished ${args.join(' ')} in ${elapsed.toFixed(1)}s (exit ${code ?? signal})`);
-      // A timed-out or killed job has already failed; a warning would repeat it.
-      const warning = timedOut || signal || interrupted ? undefined : driftWarning(args, elapsed, seconds);
-      if (warning !== undefined) say(warning);
       running.delete(job);
       resolveRun(code === 0 && !signal);
     });
@@ -67,7 +59,7 @@ async function run(executable, args, seconds, buffered) {
   return ok;
 }
 // The cockpit's tests need the claude CLI; CI runs them in their own pinned-CLI step.
-const hasClaude = !options.list && process.platform !== 'win32' && spawnSync('claude', ['--version'], { stdio: 'ignore', timeout: 5000 }).status === 0;
+const hasClaude = process.platform !== 'win32' && spawnSync('claude', ['--version'], { stdio: 'ignore', timeout: 5000 }).status === 0;
 // The mod's type check needs tsc on PATH and the declarations Claude Code lays
 // beside a mod it loads from a folder, which are gitignored: a fresh clone has none.
 const typesGenerated = ['plugins/dforge/tsconfig.json', 'plugins/dforge/.claude-plugin/types/tsconfig.json'].every(path => existsSync(resolve(root, path)));
@@ -75,7 +67,6 @@ const typesGenerated = ['plugins/dforge/tsconfig.json', 'plugins/dforge/.claude-
 // shell (EINVAL without one since the April 2024 security releases), so there
 // both the probe and the job run it through cmd.exe.
 const [tscExecutable, tscPrefix] = process.platform === 'win32' ? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'tsc']] : ['tsc', []];
-// Detected under --list too, so a listing shows the job that a run would start.
 const hasTsc = typesGenerated && spawnSync(tscExecutable, [...tscPrefix, '--version'], { stdio: 'ignore', timeout: 10000, windowsHide: true }).status === 0;
 // plan-lint runs about 320 checks of a few processes each, which take over
 // twenty minutes on a Windows runner and under a minute on Linux. next-step and
@@ -83,8 +74,8 @@ const hasTsc = typesGenerated && spawnSync(tscExecutable, [...tscPrefix, '--vers
 // their limit. plan-revise grew to about 560 s there. task-step's limit
 // applies to each of its parts.
 const suiteSeconds = { 'plan-lint.test.sh': 1200, 'speed-and-cost-followups.acceptance.test.sh': 1200, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step-base.test.sh': 1200, 'task-step.test.sh': 900, 'next-step.test.sh': 700, 'plan-revise.test.sh': 900, 'auto-run.test.sh': 700 };
-// faster-plans takes about 20 minutes on a Windows runner, more than a shard
-// can hold beside anything else, so it runs as three parts of its tests.
+// faster-plans takes about 20 minutes on a Windows runner, so it runs as three
+// parts of its tests.
 // task-step runs as four parts, one per section of the suite, and plan-lint as
 // two, whose limit applies to each.
 const suiteParts = {
@@ -105,22 +96,17 @@ const jobs = [
   ...(hasClaude ? [['claude', ['plugin', 'test', 'plugins/dforge'], 300]] : []),
   ...(hasTsc ? [[tscExecutable, [...tscPrefix, '--noEmit', '-p', 'plugins/dforge'], 300]] : []),
 ];
-if (!options.list && !hasTsc) {
+if (!hasTsc) {
   console.log(`Skipped tsc --noEmit -p plugins/dforge: ${typesGenerated ? 'tsc not found' : 'the generated types are missing (Claude Code writes them when it loads plugins/dforge from the folder)'}`);
 }
-const selected = selectShard(jobs, options.shard);
-if (options.list) {
-  for (const [, args, seconds] of selected) console.log(options.limits ? `${seconds}\t${args.join(' ')}` : args.join(' '));
-} else {
-  const workers = Math.min(parallelJobs, selected.length);
-  if (workers > 1) console.log(`Running ${selected.length} jobs, ${workers} at a time (--jobs 1 runs them in order)`);
-  let next = 0;
-  let success = true;
-  await Promise.all(Array.from({ length: workers }, async () => {
-    while (next < selected.length && !interrupted) {
-      const [executable, args, seconds] = selected[next++];
-      if (!await run(executable, args, seconds, workers > 1)) success = false;
-    }
-  }));
-  process.exitCode = success && !interrupted ? 0 : 1;
-}
+const workers = Math.min(parallelJobs, jobs.length);
+if (workers > 1) console.log(`Running ${jobs.length} jobs, ${workers} at a time (--jobs 1 runs them in order)`);
+let next = 0;
+let success = true;
+await Promise.all(Array.from({ length: workers }, async () => {
+  while (next < jobs.length && !interrupted) {
+    const [executable, args, seconds] = jobs[next++];
+    if (!await run(executable, args, seconds, workers > 1)) success = false;
+  }
+}));
+process.exitCode = success && !interrupted ? 0 : 1;

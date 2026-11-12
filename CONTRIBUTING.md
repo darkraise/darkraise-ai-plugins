@@ -13,7 +13,7 @@ an issue first so the scope can be agreed before you write code.
 | `.agents/plugins/marketplace.json` | The Codex catalog: `dforge` and the two UI plugins. Codex discovers it from the repository root. |
 | `plugins/<name>/` | One plugin: its manifests, skills, hooks, scripts and tests. |
 | `scripts/` | Repository validation and the full test runner. |
-| `tests/` | Repository-level tests (catalog layout, shards, UI discovery). |
+| `tests/` | Repository-level tests (catalog layout, UI discovery). |
 | `docs/` | Design records, testing notes and the migration guide. |
 
 ## Conventions
@@ -62,13 +62,8 @@ answers its default without reading `~/.dforge/config.json`. Installation and up
 disposable profiles, caches and Git repositories; they must never modify your
 installed plugins or call a paid model.
 
-CI runs the same checks on Ubuntu, and on Windows split across twelve shards
-(`--shard 1/12` through `--shard 12/12`; add `--list` to inspect a shard without
-running it). A new shell suite is discovered automatically, but it needs a
-weight in `scripts/test-shards.mjs`: `tests/test-shards.test.mjs` fails without
-one. A weight above 80% of the suite's limit (its `suiteSeconds` in
-`scripts/test-all.mjs`, else 600 s) fails the same test until the limit is
-raised or the suite is split.
+CI runs the same checks on Ubuntu and, in one job, on Windows. A new shell
+suite is discovered automatically and gets a 600 s limit.
 
 ### Tests
 
