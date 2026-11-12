@@ -155,7 +155,7 @@ export function taskBrief(ctx, active, task, { designLimit = 40 } = {}) {
     `Plan: ${plan.title} (${active.rel})`,
     `Goal: ${plan.fields.goal ?? ''}`,
   ];
-  const design = sectionText(plan, 'design', designLimit);
+  const design = designLimit > 0 ? sectionText(plan, 'design', designLimit) : [];
   if (design.length) lines.push('', '## Design', ...design);
   lines.push('', ...taskText(plan, task));
   const notes = plan.log.filter(entry => entry.task === task.number);
