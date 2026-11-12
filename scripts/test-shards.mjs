@@ -125,6 +125,7 @@ export const windowsSeconds = {
   'wave.test.sh': 75,
   'working-directory.test.sh': 82,
   'worktree-instructions.test.sh': 10,
+  'wording-pin-deletion.acceptance.test.sh': 20,
 };
 
 function partWeight(entry, part, parts) {
