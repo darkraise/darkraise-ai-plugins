@@ -30,7 +30,8 @@ export function read(root, relative) {
 }
 
 export function makeRepo(t, { branch = 'feat/x' } = {}) {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dflow-test-')));
+  // The native form expands a Windows short name, as git does.
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'dflow-test-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   git(root, 'init', '-q', '-b', 'main');
   git(root, 'config', 'user.name', 'Test');

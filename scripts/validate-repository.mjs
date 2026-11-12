@@ -3,8 +3,8 @@ import { resolve, relative, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { lintTree } from './lint-portability.mjs';
 
-const names = ['darkraise-ui', 'darkraise-win32ui', 'dforge', 'dr-status'];
-const claudeOnly = ['dr-status'];
+const names = ['darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status'];
+const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
 // A file's lines for the name sweeps, or null for a binary file (one holding a
 // NUL character), whose bytes are not text to read names in. UTF-16 text holds

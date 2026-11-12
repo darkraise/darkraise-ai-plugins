@@ -7,9 +7,9 @@ import test from 'node:test';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const json = path => JSON.parse(readFileSync(resolve(root, path), 'utf8'));
-test('Claude offers four maintained plugins', () => {
+test('Claude offers five maintained plugins', () => {
   assert.deepEqual(json('.claude-plugin/marketplace.json').plugins.map(p => p.name).sort(),
-    ['darkraise-ui', 'darkraise-win32ui', 'dforge', 'dr-status']);
+    ['darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status']);
 });
 test('Codex root discovery offers only supported plugins', () => {
   assert.ok(existsSync(resolve(root, '.agents/plugins/marketplace.json')), 'dedicated Codex catalog is required');

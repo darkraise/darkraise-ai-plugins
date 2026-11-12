@@ -1,7 +1,9 @@
 # dflow — design
 
-Status: proposal, revised 2026-11-12 after owner decisions (section 19).
-Nothing is built yet. Version 1.0 is the complete design below, not a subset.
+Status: implemented on 2026-11-12 as `plugins/dflow/` (plan
+`docs/dflow/plans/2026-11-12-dflow-v1.md`). This is the design record; the
+user guide is `plugins/dflow/README.md`. Where the build departed from the
+proposal, this text describes what was built.
 
 dflow is a Claude Code workflow plugin for planning, building, reviewing and
 shipping changes. It is independent of dforge: no shared scripts, skills,
@@ -77,8 +79,9 @@ docs/dflow/
 Maintenance rules, all checked by `dflow doctor` without a model:
 
 - **Budgets.** `project.md` at most 150 lines, `gotchas.md` at most 100.
-- **Dead references.** Every repository path named in a living doc must
-  exist.
+- **Dead references.** Every repository path named in `project.md` or
+  `gotchas.md` must exist. `decisions.md` is history and may name files that
+  are gone.
 - **Docs delta.** A plan's `Docs:` line names the living docs the change
   invalidates, or `none` with a reason. `ship` refuses when a named doc has
   no diff on the branch.
@@ -285,11 +288,13 @@ because on the 5.5 models it does not.
 
 **Tasks inside one plan run as subagents.** A wave starts only when two or
 more ready tasks have disjoint `Files:`. Each `worker` runs in a worktree
-and returns a typed result; the session merges in task order and runs
-`dflow done` for each. Worker prompts open with the same text (plan head and
-decisions) and end with the task, so siblings can reuse one cache write.
-This fits subagents because the tasks are short, the session needs each
-result to continue, and the result comes back summarised.
+and commits there; the session stages those commits on the plan branch and
+runs `dflow done`, so a worker task ends in the same single commit as an
+inline one. A worker's prompt is one line naming a brief file the CLI wrote
+(the plan's goal and design, the task, the rules), so dispatching a worker
+costs the session a line, not a copy of the task. This fits subagents because
+the tasks are short, the session needs each result to continue, and the
+result comes back summarised.
 
 The CLI creates each worker's worktree from the current head. The harness's
 own worktree isolation starts from the remote default branch unless the
@@ -335,8 +340,8 @@ Three layers:
    then compacts with instructions to keep only the plan path, the next task
    and unlogged notes, and submits `/dflow:build` to continue. The
    SessionStart hook re-injects the task brief.
-3. **Fallback without the mod.** `init` offers to set the project's
-   automatic compaction window to a lower value. When compaction happens,
+3. **Fallback without the mod.** `init` suggests a lower automatic
+   compaction window (`/autocompact 300k`). When compaction happens,
    the PreCompact hook supplies the same summary instructions and the
    SessionStart hook re-injects the brief, so the build continues from the
    plan and `git log`. Hooks receive no context size, so here the CLI reads
@@ -386,8 +391,8 @@ the CLI over REST; no mirror directory and no reconcile step.
 | Board register | `dflow/board.md`, the six-column table of section 5 |
 | Board plans | `dflow/plans/*.md`; `### Task N: title` headings with checkbox steps |
 | Row to plan link | the Assigned cell holds `docs/dflow/plans/<file>.md` |
-| Workstream | one per plan, keyed by the plan's file name, property `plan_uri` |
-| Task state | a ledger entry with properties `task`, `state` (`wip review blocked done`), `commit`; the body of a `blocked` entry is the reason |
+| Workstream | one per plan, keyed by the plan's file name without `.md`, property `plan_uri` |
+| Task state | a ledger entry with properties `task`, `state` (`todo wip review blocked done`), `commit`; the body of a `blocked` entry is the reason; `todo` is sent when a task is unblocked |
 | Client header | `X-Darkmem-Client: dflow` |
 
 The routes are the ones darkmem has today (documents, work log, board row
@@ -416,17 +421,17 @@ edit). The darkmem change is to read the two board prefixes and map
   --max-cost-usd`, replays a fixed set of tasks and reports pass rate, cost
   and duration. The same cases are run through dforge for the comparison.
 
-Sizes measured on dforge 4.17.1 on 2026-11-12, against dflow's caps:
+Sizes measured on 2026-11-12, dforge 4.17.1 against dflow 1.0.0 as built:
 
-| | dforge 4.17.1 | dflow |
+| | dforge 4.17.1 | dflow 1.0.0 |
 |---|---|---|
-| Skills | 23 files, 262 KB | 7 files, 42 KB cap |
-| Reference and criteria text | 297 KB | on-demand files, about 20 KB |
+| Skills | 23 files, 262 KB | 7 files, 16 KB (cap 6 KB each) |
+| Reference and criteria text | 297 KB | one on-demand file, 2.5 KB |
 | Agent definitions | 19 | 2 |
-| Scripts | 52 files, about 19,300 lines | one CLI, target under 2,500 lines |
-| darkmem sync code | about 4,000 lines, two-way | one-way push, target under 400 lines |
+| Scripts | 52 files, about 19,300 lines | one CLI, about 3,100 lines (the proposal's target was 2,500) |
+| darkmem sync code | about 4,000 lines, two-way | 365 lines, one-way |
 
-No token figure for dflow exists until the comparison run.
+No token comparison exists: the same plan has not been built with both.
 
 ## 17. Build order
 
@@ -442,14 +447,26 @@ All seven steps are in version 1.0; the order only sequences the work.
 6. Worker waves and parallel plan sessions.
 7. `dflow cost`, the eval suite, the comparison run, threshold tuning.
 
-## 18. To verify during the build
+## 18. Verified, and not
 
-- Whether a workflow agent accepts an effort setting.
-- That the mod can compact and then submit the next prompt from the end of
-  a turn, and that it can answer the plugin skill's `/dflow:hud` command.
-- Whether a session may start a background session itself through the
-  CLI, or the owner has to; and that a background session gets the one-hour
-  cache (the docs imply it and do not state it).
+Verified during the build:
+
+- A workflow agent accepts a model and an effort setting.
+- The harness's own worktree isolation starts from the remote default branch,
+  so the CLI creates worker worktrees itself.
+- The mod loads, its hooks and state contract validate, and its command,
+  band, pane and reset flag behave as designed in the engine's test kit.
+
+Not verified in a live session:
+
+- That compaction requested by the mod at the end of a turn, followed by
+  `/dflow:build`, resumes the build unattended.
+- That `/dflow:hud` reaches the mod's hook under the name `dflow:hud`. If it
+  does not, the skill prints the status as text.
+- That a background session gets the one-hour cache. Starting one is left to
+  the owner: `dflow session` prints the command.
+- dflow's tests on Windows. They are written for it and enrolled in every
+  shard, but have only run on Linux.
 
 ## 19. Decisions taken (2026-11-12)
 

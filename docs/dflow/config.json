@@ -1,0 +1,19 @@
+{
+  "gates": [
+    {
+      "name": "validate",
+      "cmd": "node scripts/validate-repository.mjs"
+    },
+    {
+      "name": "dflow-tests",
+      "cmd": "node --test \"plugins/dflow/tests/*.test.mjs\""
+    },
+    {
+      "name": "repo-tests",
+      "cmd": "node --test \"tests/*.test.mjs\""
+    }
+  ],
+  "darkmem": {
+    "project": ""
+  }
+}

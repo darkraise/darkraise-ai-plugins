@@ -9,7 +9,7 @@ an issue first so the scope can be agreed before you write code.
 
 | Path | Contents |
 | --- | --- |
-| `.claude-plugin/marketplace.json` | The Claude Code catalog: `dforge`, `dr-status`, `darkraise-ui`, `darkraise-win32ui`. |
+| `.claude-plugin/marketplace.json` | The Claude Code catalog: `dforge`, `dflow`, `dr-status`, `darkraise-ui`, `darkraise-win32ui`. |
 | `.agents/plugins/marketplace.json` | The Codex catalog: `dforge` and the two UI plugins. Codex discovers it from the repository root. |
 | `plugins/<name>/` | One plugin: its manifests, skills, hooks, scripts and tests. |
 | `scripts/` | Repository validation and the full test runner. |
@@ -21,8 +21,8 @@ an issue first so the scope can be agreed before you write code.
 - The marketplace ID is `darkraise`. A plugin's directory name, its catalog
   entries and its client manifest names must agree.
 - Keep the Claude (`.claude-plugin/plugin.json`) and Codex
-  (`.codex-plugin/plugin.json`) manifest versions equal. `dr-status` is Claude
-  Code only and has no Codex manifest; add a Codex manifest only for a plugin
+  (`.codex-plugin/plugin.json`) manifest versions equal. `dflow` and `dr-status` are Claude
+  Code only and have no Codex manifest; add a Codex manifest only for a plugin
   Codex supports. `plugins/dr-status/scripts/VERSION` must match its manifest.
 - Preserve existing `DCC_*` environment variables and the statusline's user
   storage paths.
@@ -49,6 +49,7 @@ node scripts/test-all.mjs
 claude plugin validate .
 claude plugin validate plugins/<plugin>
 claude plugin test plugins/dforge
+claude plugin test plugins/dflow
 ```
 
 `node scripts/test-all.mjs` runs the full maintained suite and prints each

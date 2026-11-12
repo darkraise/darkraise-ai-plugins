@@ -96,6 +96,12 @@ jobs:
             timeout 30s "$CLAUDE" plugin validate "plugins/$plugin"
           done
 
+      - name: Validate and test dflow
+        timeout-minutes: 3
+        run: |
+          timeout 60s "$CLAUDE" plugin validate plugins/dflow
+          timeout 90s "$CLAUDE" plugin test plugins/dflow
+
       # The cockpit's 397 tests took 51 to 81 s on the runner, an npx
       # download included.
       - name: Validate and test dforge

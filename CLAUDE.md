@@ -18,7 +18,7 @@ A plugin marketplace for Claude Code and Codex. The marketplace ID is `darkraise
 
 Run `node scripts/validate-repository.mjs`, the maintained test suites, and
 `claude plugin validate` on the marketplace and every Claude plugin, and
-`claude plugin test plugins/dforge`. Bound test
+`claude plugin test` on `plugins/dforge` and `plugins/dflow`. Bound test
 and CLI execution and clean up all processes started by the validation run.
 
 A task that ends in a push is done only when the CI run for the pushed

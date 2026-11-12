@@ -30,6 +30,24 @@
       ]
     },
     {
+      "name": "dflow",
+      "source": "./plugins/dflow",
+      "description": "Plan, build, review and ship with a task gate that only a passing command can open: lean plans tracked on a board, one evidence-bound review per branch, UI proof, living docs checked mechanically, a HUD, and a one-way darkmem projection.",
+      "category": "workflow",
+      "keywords": [
+        "workflow",
+        "planning",
+        "verification",
+        "code-review",
+        "board",
+        "docs",
+        "darkmem",
+        "hud",
+        "mod",
+        "token-efficiency"
+      ]
+    },
+    {
       "name": "dr-status",
       "source": "./plugins/dr-status",
       "description": "A Claude Code status line: git detail, model and session state, plus context, prompt-cache and rate-limit meters colored by usage level, framed in the color of the Claude account the session belongs to.",
