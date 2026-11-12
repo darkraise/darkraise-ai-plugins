@@ -42,9 +42,19 @@ export async function main(argv, { cwd = process.cwd(), env = process.env, out =
     err(`dflow: unknown command ${JSON.stringify(name)}; run \`dflow help\``);
     return 2;
   }
+  let ctx;
+  try {
+    ctx = context(cwd, env);
+  } catch (error) {
+    // A hook that fires outside a repository has nothing to do and says nothing.
+    if (name === 'hook') return 0;
+    if (!(error instanceof CliError)) throw error;
+    err(`dflow ${name}: ${error.message}`);
+    return error.code;
+  }
   try {
     const module = await import(new URL(entry[0], import.meta.url));
-    const code = await module.run(context(cwd, env), rest, { out, err, name });
+    const code = await module.run(ctx, rest, { out, err, name });
     return code ?? 0;
   } catch (error) {
     if (!(error instanceof CliError)) throw error;
