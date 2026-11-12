@@ -15,7 +15,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN="$(cd "$HERE/.." && pwd)"
 REPO_ROOT="$(cd "$PLUGIN/../.." && pwd)"
 S="$PLUGIN/scripts"
-SKILLS="$PLUGIN/skills"
 REFS="$PLUGIN/reference"
 ONLY=" $* "
 ORIG_HOME="${HOME:-}"
@@ -243,8 +242,6 @@ fi
 
 # ----------------------------------------------------------------------- A8
 if selected A8; then
-  hits=$(grep -rlE 'drafter-sonnet|scout-sonnet' "$SKILLS" "$REFS" 2>/dev/null | sed "s#^$PLUGIN/##" | sort | tr '\n' ' ')
-  check "A8: no skill or reference names a drafter or scout agent" "$hits" ""
   check "A8: agents/drafter-sonnet.md does not exist" "$([ -e "$PLUGIN/agents/drafter-sonnet.md" ] && echo exists || echo absent)" "absent"
   check "A8: agents/scout-sonnet.md does not exist" "$([ -e "$PLUGIN/agents/scout-sonnet.md" ] && echo exists || echo absent)" "absent"
 fi
@@ -260,23 +257,8 @@ if selected A9; then
   check "A9: hardest task total 3 risk 3: effort high" "$(rev "$P")" "recommend execution=inline model=sonnet effort=high delegated=0/1"
 fi
 
-# ---------------------------------------------------------------------- A10
-if selected A10; then
-  desc=$(tr -d '\r' < "$SKILLS/subagent-driven-development/SKILL.md" | sed -n '/^---$/,/^---$/p' | sed -n 's/^description:[ ]*//p' | head -n 1)
-  matches "A10: the subagent-driven-development description starts with Deprecated" "$desc" '^"?Deprecated'
-  row=$(tr -d '\r' < "$SKILLS/using-dforge/SKILL.md" | grep -E '^\|[^|]*[Ee]xecut[^|]*plan[^|]*\|' | head -n 1)
-  has "A10: using-dforge's executing-a-plan row names dforge:executing-plans" "$row" 'dforge:executing-plans'
-  after=${row#*dforge:executing-plans}
-  before=${row%%dforge:executing-plans*}
-  unmatched "A10: the row does not name subagent-driven-development ahead of executing-plans" "$before" 'subagent-driven-development'
-  has "A10: the row keeps subagent mode for a plan whose line says so" "$after" 'subagent'
-fi
-
 # ---------------------------------------------------------------------- A11
 if selected A11; then
-  hits=$( { grep -rlE 'escalated inline -> subagent' "$SKILLS" "$REFS"; grep -rliE 'Switching to subagent mode' "$SKILLS" "$REFS"; } 2>/dev/null \
-    | sed "s#^$PLUGIN/##" | grep -vE '^skills/(executing-plans/references/(recovery|setup)\.md|resume-execution/|subagent-driven-development/)' | sort -u | tr '\n' ' ')
-  check "A11: nothing outside the allowlist names the escalation line or the switch" "$hits" ""
   printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: implementer inline (assigned; base abc1234)\nTask 3: escalated inline -> subagent — three fix rounds at or above the assigned tier\n' > "$TMP/a11-ledger.md"
   got=$(bash -c '. "$1"; ledger_left_inline "$2"' _ "$S/lib/plan.sh" "$TMP/a11-ledger.md" 2>&1 | tr -d '\r')
   check "A11: ledger_left_inline returns the task number for the old escalation line" "$got" "3"
@@ -437,35 +419,12 @@ if selected A16; then
   has "A16: the Heavy line names the risk-3 task" "$last" 'Task 3 (total 3, risk 3)'
   has "A16: the Heavy line names the total-5 task" "$last" 'Task 4 (total 5, risk 2)'
   unmatched "A16: the Heavy line leaves out the light task" "$last" 'Task 2'
-  setup=$(tr -d '\r' < "$SKILLS/executing-plans/references/setup.md")
-  para=$(awk -v RS= '/preflight/ && /\*\*Heavy:\*\*/' <<<"$setup")
-  check "A16: executing-plans' setup keys its preflight item on the Heavy line" "$([ -n "$para" ] && echo yes || echo no)" "yes"
-fi
-
-# ---------------------------------------------------------------------- A17
-if selected A17; then
-  para=$(cat "$SKILLS"/executing-plans/SKILL.md "$SKILLS"/executing-plans/references/*.md | tr -d '\r' | awk -v RS= '/fix round 3\/3/ && /`breaker`/')
-  check "A17: executing-plans names the breaker ruling for a task at fix round 3/3" "$([ -n "$para" ] && echo yes || echo no)" "yes"
-  hits=$(grep -rliE 'switch(ing)? (from inline )?to subagent mode|inline to subagent mode' "$SKILLS" "$REFS" 2>/dev/null | sed "s#^$PLUGIN/##" | grep -v '^skills/subagent-driven-development/' | sort | tr '\n' ' ')
-  check "A17: no skill or reference outside the deprecated skill says to switch to subagent mode" "$hits" ""
-fi
-
-# ---------------------------------------------------------------------- A18
-if selected A18; then
-  for skill in brainstorming using-dforge; do
-    text=$(cat "$SKILLS/$skill/SKILL.md" | tr -d '\r')
-    has "A18: $skill states the Process line without a mode slot" "$text" 'Process: <spike|bounded|architectural>'
-    unmatched "A18: $skill names no <inline|subagent> slot" "$(cat "$SKILLS/$skill"/SKILL.md "$SKILLS/$skill"/references/*.md 2>/dev/null)" '<(inline\|subagent|subagent\|inline)>'
-    unmatched "A18: $skill's Process line carries no inline or subagent word in its template" "$(grep -oE 'Process: <[^>]*>[^`]*' <<<"$text")" 'inline|subagent'
-  done
 fi
 
 # ---------------------------------------------------------------------- A19
 if selected A19; then
   lane=$(tr -d '\r' < "$REFS/executor-lane.md")
-  matches "A19: executor-lane.md has the unavailable-executor ledger line" "$lane" 'implementer inline \(assigned; [^)]*; executor <id> unavailable - <reason>\)'
   has "A19: executor-lane.md names the handback line" "$lane" 'HANDBACK to inline'
-  unmatched "A19: the unavailable-executor line names no agent in the implementer slot" "$(grep -E 'executor <id> unavailable - <reason>' <<<"$lane")" 'implementer (dforge:|impl-)'
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

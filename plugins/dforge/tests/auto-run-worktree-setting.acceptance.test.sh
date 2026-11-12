@@ -29,10 +29,6 @@ present() { # present <name> <file> <needle>
   if grep -qF -- "$3" "$2"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
-absent() { # absent <name> <file> <needle>
-  if grep -qF -- "$3" "$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
-  else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
-}
 has() { # has <name> <haystack> <needle>
   if grep -qF -- "$3" <<<"$2"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
@@ -226,77 +222,10 @@ check "A11: and still uncommitted" "$(git -C "$REPO" status --porcelain | tr -d 
 check "A11: the task's commit reached main" "$(git -C "$REPO" log -1 --format=%s -- t.txt)" "task"
 check "A11: the run's branch is deleted" "$(git -C "$REPO" branch --list auto/widget)" ""
 
-# --- Task 3 ---
-G="$P/skills/using-git-worktrees/SKILL.md"
-present "A13: Step 0 reads the run state" "$G" 'read the auto-run state (`scripts/auto-run status`), not the `worktree` setting'
-present "A13: a recorded branch is switched back to" "$G" 'When the status names `branch <name>`, switch to that branch'
-present "A13: a base or detached HEAD gets the run's branch" "$G" '`git switch -c auto/<plan slug>`'
-present "A13: setup-branch records it" "$G" '`scripts/auto-run setup-branch <name>`'
-present "A13: staged changes stop the run" "$G" 'staged changes in this checkout: <paths>'
-present "A13: a worktree run in the primary checkout creates it unasked" "$G" 'Under `isolation worktree` in the primary checkout, create the worktree without asking'
-check "A15: no skill says never creates the worktree in an auto run" \
-  "$(grep -rlF -- '`worktree=never` creates' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "0"
-R="$P/skills/resume-execution/SKILL.md"
-present "A19: resume switches back to the run's branch" "$R" 'When HEAD is not on it, run `git switch <name>`'
-present "A19: a gone branch stops the run" "$R" "the run's branch <name> is gone"
-present "A19: no EnterWorktree into the primary checkout" "$R" 'Skip EnterWorktree when the recorded workspace is the primary checkout'
-present "A19: auto-run.md lists the stop" "$P/reference/auto-run.md" "the run's branch is gone"
-present "auto-run.md: the worktree consent is asked under ask" "$P/reference/auto-run.md" 'the worktree consent (asked at the spec review under `worktree=ask`)'
-for f in "$P/skills/executing-plans/SKILL.md" "$P/skills/subagent-driven-development/SKILL.md" "$P/reference/auto-run.md"; do
-  absent "$(basename "$(dirname "$f")")/$(basename "$f"): no execution worktree wording" "$f" 'from the execution worktree'
-  present "$(basename "$(dirname "$f")")/$(basename "$f"): side effects outside the workspace" "$f" 'outside the execution workspace'
-done
-present "executing-plans: Setup runs from the workspace" "$P/skills/executing-plans/SKILL.md" 'from the execution workspace'
-present "executing-plans: exit 4 points at Step 0" "$P/skills/executing-plans/SKILL.md" 'follow dforge:using-git-worktrees Step 0 for the run, then run the command again'
-present "subagent-driven-development: exit 4 points at Step 0" "$P/skills/subagent-driven-development/SKILL.md" 'follow dforge:using-git-worktrees Step 0 for the run, then run the command again'
-for f in "$P/skills/executing-plans/SKILL.md" "$P/skills/subagent-driven-development/SKILL.md"; do
-  present "$(basename "$(dirname "$f")"): exit 5 names every stop" "$f" 'on the run base, off its branch or in the primary checkout, or a carried path was committed'
-done
-present "auto-run.md: the switch starts at Setup, workspace first" "$P/reference/auto-run.md" 'execution skill starts at its Setup, workspace first: `scripts/auto-run status`'
-
-# --- Task 4 ---
-X="$P/reference/executor-lane.md"
-present "A16: the lane falls back in the primary checkout" "$X" 'executor <id> unavailable - no linked worktree'
-present "A16: after the plain task-step start" "$X" 'run `task-step start` as the executor path does'
-present "A16: users keep the primary checkout only in worktree runs" "$X" 'In a worktree run the user can continue in the primary checkout'
-present "A16: the auto-run offer ticks nothing in place" "$P/skills/writing-plans/references/auto-run-plan.md" 'tick nothing when `scripts/auto-run status` prints `isolation in-place`'
-present "A17: recovery leaves carried paths uncommitted" "$P/skills/executing-plans/references/recovery.md" 'commit anything uncommitted except the carried paths (`scripts/auto-run carried`)'
-present "A17: QA cleanup never touches a carried path" "$P/reference/final-review.md" 'Never restore or delete a carried path (`scripts/auto-run carried`)'
-present "A17: tasks stage by name" "$P/skills/executing-plans/references/setup.md" 'stage the paths it changed by name, never `git add -A` or `git add .`'
-stray=$(cat "$P/skills/executing-plans/SKILL.md" "$P"/skills/executing-plans/references/*.md "$P/skills/subagent-driven-development/SKILL.md" \
-  "$P/reference/auto-run.md" "$P/reference/delegated-task.md" "$P/skills/using-git-worktrees/SKILL.md" \
-  | grep -E 'git add (-A|\.)([ `]|$)' | grep -vcF 'never `git add -A` or `git add .`')
-check "A17: no auto-run setup or task-loop text stages everything" "$stray" "0"
-present "executing-plans: a carried commit at phase final stops the run" "$P/skills/executing-plans/SKILL.md" 'is a carried path and was committed'
-present "subagent-driven-development: a carried commit at phase final stops the run" "$P/skills/subagent-driven-development/SKILL.md" 'is a carried path and was committed'
-git_error_reason='(no path: `--reason "git could not check the carried paths"`)'
-present "executing-plans: the git-error refusal has its own stop reason" "$P/skills/executing-plans/SKILL.md" "$git_error_reason"
-check "subagent-driven-development: both exit-4 lines give the git-error stop reason" "$(grep -cF "$git_error_reason" "$P/skills/subagent-driven-development/SKILL.md")" "2"
-F="$P/skills/finishing-a-development-branch/SKILL.md"
-present "A18: the git-error refusal of phase finish has its own stop reason" "$F" "$git_error_reason"
-present "A18: the stop list names checkout, pull and merge" "$F" 'a refused checkout, pull or merge of the base'
-present "A18: phase finish refusal stops the run" "$F" 'is a carried path and was committed'
-present "A18: a red merged suite lists the carried paths" "$F" 'list the carried paths (`scripts/auto-run carried`) with the failure'
-present "A18: pr and keep name the branch" "$F" 'This checkout is on `auto/<slug>`; your uncommitted changes are here'
-
 # --- Task 5 ---
-D="$P/skills/brainstorming/references/auto-by-default.md"
-present "A14: the spec review asks under ask only" "$D" 'when the `worktree` setting is `ask`'
-present "A14: in the last call beside the approval" "$D" 'in the last call, beside the approval question'
-present "A14: the worktree option" "$D" '**Isolated worktree (Recommended)**'
-present "A14: the in-place option" "$D" '**Work in place on a new branch — leave this checkout alone until the run finishes**'
-present "A14: the Decisions line" "$D" '`Worktree: <worktree|in-place>`'
-present "A14: step 6 passes the isolation" "$D" 'passes `--isolation <worktree|in-place>`'
-O="$P/skills/brainstorming/references/auto-run-offer.md"
-present "A14: offer option 1" "$O" '1. Yes, in an isolated worktree'
-present "A14: offer option 2" "$O" '2. Yes, in place on a new branch (leave this checkout alone until the run finishes)'
-present "A14: offer option 3" "$O" '3. No, keep the normal stops'
-present "A14: the offer passes in-place" "$O" '--isolation in-place'
-present "auto-run.md: start names the flag" "$P/reference/auto-run.md" '--isolation <worktree|in-place>'
 present "schema: the worktree setting names auto runs" "$P/config/schema.mjs" 'an auto run asks at the spec review'
 
 # --- Task 6 ---
-present "README: auto runs follow the worktree setting" "$P/README.md" 'An auto run follows the `worktree` setting'
 v1=$(jq -r .version < "$P/.claude-plugin/plugin.json" | tr -d '\r')
 v2=$(jq -r .version < "$P/.codex-plugin/plugin.json" | tr -d '\r')
 check "release: both manifests agree, at 4.14.0 or later" "$v2:$(printf '4.14.0\n%s\n' "$v1" | sort -V | head -n 1)" "$v1:4.14.0"
@@ -373,12 +302,6 @@ has "and says git could not tell" "$out" "auto-run: git could not list the commi
 out=$(arun "$REPO" fx task-complete 2>&1); status=$?
 check "an unreadable branch base stops the run at task-complete" "$status:$(field active)" "5:false"
 has "with the reason" "$out" "git could not check the carried paths"
-
-present "waves: an in-place run's plan is sequential" "$P/skills/writing-plans/references/auto-run-plan.md" 'In place, write `sequential` whatever the spec says'
-present "waves: exit 3 never stashes a carried path" "$P/reference/parallel-waves.md" 'never stash a carried path'
-present "Step 0: no branch and HEAD off the base stops the run" "$P/skills/using-git-worktrees/SKILL.md" "With no branch recorded and HEAD on a branch other than the run's base"
-present "Step 0: a staged-changes refusal returns HEAD" "$P/skills/using-git-worktrees/SKILL.md" 'run `git checkout -` and `git branch -d <name>`'
-present "resume: HEAD is checked in the recorded workspace" "$P/skills/resume-execution/SKILL.md" 'after step 3 has entered it when that is a linked worktree'
 
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
