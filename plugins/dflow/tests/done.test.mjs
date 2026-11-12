@@ -218,6 +218,20 @@ test('moving a test file is not weakening it, and a file name with a space is ma
   assert.equal(parsePlan(read(root, PLAN_FILE)).log.length, 0);
 });
 
+test('a test file renamed out of the test patterns counts as removed', t => {
+  const root = makeProject(t, { plan: PLAN.replace('**Files:** src/meter.mjs', '**Files:** src/meter.mjs, tests/, notes/') });
+  stageTask1(root);
+  dflow(root, ['done', '1', '-m', 'feat: parse']);
+  write(root, 'verify2.mjs', PASS);
+  write(root, 'src/meter.mjs', '1\n');
+  fs.mkdirSync(path.join(root, 'notes'));
+  git(root, 'mv', 'tests/limit.test.mjs', 'notes/limit.txt');
+  git(root, 'add', '-A', 'src', 'tests', 'notes');
+  const refused = dflow(root, ['done', '2', '-m', 'feat: draw']);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /tests\/limit\.test\.mjs: test file moved to notes\/limit\.txt, which no test pattern matches/);
+});
+
 test('a verify command that exits 0 but leaves a background process is a pass, not a hang', t => {
   const root = makeProject(t, { plan: PLAN.replace('`node verify1.mjs`', '`sleep 30 & echo started`') });
   write(root, 'src/limit.mjs', '1\n');
