@@ -4,4 +4,4 @@
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
-| 1 | dflow 1.0: the workflow plugin | docs/dflow/plans/2026-11-12-dflow-v1.md | Every acceptance line of the plan passes | verify | all 11 tasks done 2026-11-12 |
+| 1 | dflow 1.0: the workflow plugin | docs/dflow/plans/2026-11-12-dflow-v1.md | Every acceptance line of the plan passes | done | shipped 2026-11-12 |
