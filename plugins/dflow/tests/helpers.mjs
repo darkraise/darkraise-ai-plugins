@@ -80,16 +80,20 @@ export const PLAN = `# Rate-limit meter
 ## Log
 `;
 
-// A repository with dflow initialised and PLAN approved and committed.
+// A repository with dflow set up on main, and PLAN approved and committed on
+// the branch feat/x.
 export function makeProject(t, { plan = PLAN, config } = {}) {
-  const root = makeRepo(t);
+  const root = makeRepo(t, { branch: null });
   const init = dflow(root, ['init']);
   if (init.status !== 0) throw new Error(init.stderr);
   if (config) write(root, 'docs/dflow/config.json', JSON.stringify(config));
   write(root, 'docs/dflow/board.md', '# board\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Meter | - | It works | open | - |\n');
-  write(root, 'docs/dflow/plans/2026-11-12-meter.md', plan);
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', 'docs: set up dflow');
+  git(root, 'switch', '-q', '-c', 'feat/x');
+  write(root, 'docs/dflow/plans/2026-11-12-meter.md', plan);
+  git(root, 'add', '-A');
+  git(root, 'commit', '-q', '-m', 'docs: draft the plan');
   const approved = dflow(root, ['plan', 'approve']);
   if (approved.status !== 0) throw new Error(approved.stderr + approved.stdout);
   return root;
