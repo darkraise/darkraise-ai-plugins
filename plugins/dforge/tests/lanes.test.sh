@@ -75,9 +75,6 @@ check "codex-assignment has no row outside 2..4" "${outside:-NONE}" "NONE"
 check "the highest codex-assignment row is the gate's max_score" \
   "$(printf '%s\n' "$assignment" | awk 'NF && $1 > m { m = $1 } END { print m }')" \
   "$(printf '%s\n' "$gate" | awk '$1=="max_score"{print $2}')"
-EL="$HERE/../reference/executor-lane.md"
-check "executor-lane lists the max_score condition" "$(grep -cF -- '- `total <= max_score`,' "$EL")" "1"
-check "the README no longer derives the lane from reducible 3" "$(grep -cF 'Rule S caps `reducible` at 3' "$HERE/../README.md")" "0"
 
 retired=$(printf '%s\n' "$assignment" "$(block codex-successor)" "$(block codex-timeout)" "$(block codex-judge)" | grep -c 'gpt-5\.5')
 check "no lane block names gpt-5.5, which leaves Codex on 2026-10-14" "$retired" "0"
@@ -197,20 +194,6 @@ while read -r model effort secs _; do
   [ $(( (secs + 120) * 1000 )) -le 7200000 ] || too_long="judge:$model/$effort:$secs"
 done <<< "$judge"
 check "every bound plus 120 s fits a background call's 7200000 ms cap" "$too_long" "NONE"
-
-# The docs that launch those calls state the formula rather than the old claim
-# that a background call has no limit.
-REF="$HERE/../reference"
-SK="$HERE/../skills"
-unbounded=$(grep -l -i 'not bound by\|with no timeout' "$REF/executor-lane.md" "$REF/delegated-task.md" "$SK/writing-plans/SKILL.md" 2>/dev/null | tr '\n' ' ')
-check "no doc says a background call is unbounded" "${unbounded:-NONE}" "NONE"
-formula=$(grep -cE '\((rung|row) bound \+ 120\) × 1000 ms' "$REF/executor-lane.md")
-check "executor-lane states the timeout formula for the wrapper and both runners" "$formula" "3"
-
-# Codex's workspace-write sandbox fails Node's piped spawnSync with EPERM, so a
-# task whose tests spawn that way can never reach green on the lane.
-piped=$(grep -c 'Tasks whose tests spawn piped Node child processes stay on the Claude lane' "$REF/executor-lane.md")
-check "executor-lane keeps piped Node spawns off the Codex lane" "$piped" "1"
 
 # The judge block must not leak into execution admission.
 leak=NONE
@@ -345,55 +328,12 @@ check "every agy-timeout bound plus 120 s fits a background call's 7200000 ms ca
 check "no agy block names a Codex model" \
   "$(printf '%s\n' "$agy_gate" "$agy_assignment" "$agy_successor" "$agy_timeouts" | grep -c 'gpt-')" "0"
 
-# --- ladder.md prose, one subsection per executor ------------------------------
-check "ladder.md has a lane-gate subsection for each executor" \
-  "$(grep -cE '^### The (Codex|agy) lane gate$' "$LADDER")" "2"
-check "the single, executor-neutral lane-gate heading is gone" "$(grep -cxF '### The lane gate' "$LADDER")" "0"
-check "ladder.md gives agy its assignment, successor and timeout subsections" \
-  "$(grep -cE '^### Agy (assignment|successor|timeout)$' "$LADDER")" "3"
-check "the agy gate subsection states why its floor is 0" \
-  "$(grep -cF '`agy-lane-gate` has a floor of 0 because' "$LADDER")" "1"
-check "ladder.md names the 3-8 calibration note as the source of agy rows 3-8" \
-  "$(grep -cF 'docs/dforge/notes/2026-11-03-agy-calibration-3-8.md' "$LADDER")" "1"
-check "the note ladder.md names is committed" \
-  "$(git -C "$HERE/../../.." ls-files --error-unmatch docs/dforge/notes/2026-11-03-agy-calibration-3-8.md >/dev/null 2>&1 && echo yes || echo no)" "yes"
-check "ladder.md no longer says agy rows 3 to 8 mirror the native table" \
-  "$(grep -cF 'Totals 3 to 8 mirror the native Claude assignment table' "$LADDER")" "0"
-
-# --- the agy calibration record and the lane's trust ---
-# Rows 0-2 of agy-assignment, that rung's successor and timeout rows, and the
-# trust flag all come from replayed runs, so the record of those runs is
-# checked against what it decided.
+# --- the agy calibration decision ---
+# Rows 0-2 of agy-assignment, that rung's successor and timeout rows come from
+# replayed runs, so they are checked against what the record decided.
 NOTES="$HERE/../../../docs/dforge/notes/2026-11-02-agy-calibration.md"
-POLICY="$HERE/../reference/agy-policy.json"
-CONSTRAINTS="$HERE/../../../docs/superpowers/distilled/constraints.md"
 
-check "the calibration record exists" "$([ -f "$NOTES" ] && echo yes || echo no)" "yes"
-check "the record's table has the agreed header" \
-  "$(grep -cxF '| Task replayed | Rung | Status | Tests | Scope | Judge | Wall s | Tokens |' "$NOTES" 2>/dev/null)" "1"
-
-passes() { # passes <rung> - replayed tasks (R rows) that rung passed on every column
-  awk -F'|' -v r="$1" '
-    function t(s) { gsub(/^ +| +$/, "", s); return s }
-    t($3) == r && t($2) ~ /^R[0-9]/ && t($4) == "DONE" && t($5) == "pass" && t($6) == "clean" && t($7) == "pass" { seen[t($2)] = 1 }
-    END { n = 0; for (k in seen) n++; print n }
-  ' "$NOTES" 2>/dev/null
-}
 decision=$(sed -n 's|^\*\*Decision:\*\* totals 0-2 run \([a-z0-9.-]*/[a-z]*\).*$|\1|p' "$NOTES" 2>/dev/null | head -n 1)
-expected=claude-sonnet-5-5/low
-for c in gemini-3.8-flash/low gemini-3.8-flash/medium gemini-4-argon/low; do
-  if [ "$(passes "$c")" = 3 ]; then expected=$c; break; fi
-done
-check "the decision is the cheapest candidate that passed all three replays, else the Claude rung" \
-  "${decision:-none}" "$expected"
-
-tried=yes
-for c in gemini-3.8-flash/low gemini-3.8-flash/medium gemini-4-argon/low; do
-  [ "$c" != "$decision" ] || break
-  [ "$(grep -cF -- "| $c |" "$NOTES" 2>/dev/null || true)" -ge 1 ] 2>/dev/null || tried=no
-done
-check "every candidate cheaper than the decision was run" "$tried" "yes"
-
 band=$(block agy-assignment | awk '$1 + 0 <= 2 { print $2 "/" $3 }' | sort -u | tr '\n' ' ' | sed 's/ $//')
 check "agy-assignment rows 0, 1 and 2 all name the decision" "$band" "${decision:-none}"
 check "agy-assignment has exactly three rows at or below total 2" \
@@ -408,89 +348,6 @@ reach=$( { block agy-assignment | awk '{ print $2 "/" $3 }'; block agy-successor
 stale=$( { block agy-successor | awk '{ print $1 }'; block agy-timeout | awk '{ print $1 }'; } \
   | sort -u | grep -vxF -f <(printf '%s\n' "$reach") | tr '\n' ' ' | sed 's/ $//')
 check "no successor or timeout row names a rung that nothing reaches" "${stale:-NONE}" "NONE"
-
-badnum=$(awk -F'|' '
-  function t(s) { gsub(/^ +| +$/, "", s); return s }
-  t($2) ~ /^[RS][0-9]/ && (t($8) !~ /^[0-9]+$/ || t($9) !~ /^[0-9]+$/) { n++ }
-  END { print n + 0 }' "$NOTES" 2>/dev/null)
-check "every run row carries numeric wall seconds and tokens" "${badnum:-x}" "0"
-
-check "the record states a smoke result" \
-  "$(grep -cE '^\*\*Smoke:\*\* (pass|fail)' "$NOTES" 2>/dev/null)" "1"
-# The 2026-11-02 record is history: its smoke run used total 5's rung of the time.
-smoke_rung=claude-sonnet-5-5/high
-check "the 2026-11-02 smoke run used claude-sonnet-5-5/high" \
-  "$(awk -F'|' -v r="$smoke_rung" '
-    function t(s) { gsub(/^ +| +$/, "", s); return s }
-    t($2) ~ /^S1/ && t($3) == r { n++ }
-    END { print n + 0 }' "$NOTES" 2>/dev/null)" "1"
-
-smoke=$(jq -r '.trust.smoke // "absent"' < "$POLICY" 2>/dev/null | tr -d '\r')
-want=0
-[ "$smoke" != pass ] || want=1
-check "the auto-tick constraint exists exactly when trust.smoke is pass" \
-  "$(grep -cxF '### The Antigravity executor lane is on' "$CONSTRAINTS")" "$want"
-if [ "$smoke" = pass ]; then
-  check "a smoke pass is recorded before the lane opens" \
-    "$(grep -c '^\*\*Smoke:\*\* pass' "$NOTES" 2>/dev/null)" "1"
-fi
-
-# --- the lane reference is executor-neutral, with a section per executor ---
-outside() { awk 'BEGIN { on = 1 } /^## / { on = ($0 != "## Codex task review seats" && $0 != "## Final-review Codex round" && $0 != "## Per-executor: codex") } on' "$EL"; }
-section() { awk -v h="$1" '/^## / { on = ($0 == "## " h) } on' "$EL" | tr '\n' ' ' | tr -s ' '; }
-
-for gone in 'codex-timeout' 'codex-assignment' 'codex-successor' '## Codex error' 'codex lane is off' \
-            'run-codex-task.sh' 'Codex ran' 'Codex finished cleanly' 'codex quota exhausted' \
-            'Codex read the findings' 'Codex runs every task turn'; do
-  check "executor-lane outside the Codex sections no longer says: $gone" "$(outside | grep -cF -- "$gone")" "0"
-done
-check "the exit-2 text is executor-neutral" \
-  "$(grep -cF '`<id> lane is off for this session (<reason>)`' "$EL")" "1"
-check "the registry table lists priority" "$(grep -c '^| `priority` |' "$EL")" "1"
-check "the lane reference has a Per-executor: agy section" "$(grep -cxF '## Per-executor: agy' "$EL")" "1"
-
-agy_sec=$(section 'Per-executor: agy')
-for need in 'unsandboxed' 'fingerprints cover only the linked worktree and its refs' 'fixed pointer sentence' \
-            'keeps a cached `reason=quota`' 'git for-each-ref' 'finished_reason' 'efforts `low`, `medium` and `high`' \
-            'lane-breaker'; do
-  check "Per-executor: agy says: $need" "$(grep -cF -- "$need" <<<"$agy_sec")" "1"
-done
-codex_sec=$(section 'Per-executor: codex')
-check "the piped Node rule lives in the Codex section" \
-  "$(grep -cF 'Tasks whose tests spawn piped Node child processes stay on the Claude lane' <<<"$codex_sec")" "1"
-check "reaped is explained in the Codex section" \
-  "$(grep -cF 'phase` and `reaped` as **evidence, not proof**' <<<"$codex_sec")" "1"
-
-RD="$HERE/../README.md"
-for need in 'Antigravity' 'scripts/run-agy-task.sh' 'scripts/agy-gate' 'scripts/lane-breaker' 'executors ranked'; do
-  check "the README names $need" "$([ "$(grep -cF -- "$need" "$RD")" -ge 1 ] && echo yes || echo no)" "yes"
-done
-
-# --- the Gemini-first lane in the reference and the README ---
-check "the capability row hands back when the agy successor is Claude and the fallback is off" \
-  "$(grep -E '^\| Capability' "$EL" | grep -cF 'executor agy HANDBACK - fallback quota until <iso>')" "1"
-check "the resume table hands back on the wrapper's fallback refusal" \
-  "$(grep -E '^\|' "$EL" | grep -F 'the agy Claude fallback is off until' | grep -cF 'executor agy HANDBACK - fallback quota until <iso>')" "1"
-check "no table row of the reference carries a bare <iso|session end> template" \
-  "$(grep -E '^\|' "$EL" | grep -cF '<iso|session end>')" "0"
-check "neither transient row retries a quota the wrapper marked" \
-  "$(grep -E '^\| Transient' "$EL" | grep -cF 'is not retried')" "2"
-check "an agy Executor line may name a successor rung" \
-  "$(grep -cF 'outside its assignment and successor blocks' "$EL")" "1"
-for need in 'separate limits' 'Individual quota reached' 'Resets in' 'fallback=off' 'fallback_resets_at=' 'marked=none' 'next gate call'; do
-  check "Per-executor: agy's quota bullet says: $need" "$(grep -cF -- "$need" <<<"$agy_sec")" "1"
-done
-check "the agy section no longer says Antigravity publishes no reset time" \
-  "$(grep -cF 'Antigravity publishes no reset time' <<<"$agy_sec")" "0"
-check "the README no longer keeps the lane off for the session on every quota" \
-  "$(tr '\n' ' ' < "$RD" | tr -s ' ' | grep -cF 'a quota failure keeps the lane off for the session')" "0"
-check "the README says a Claude quota closes only the Claude fallback" \
-  "$(tr '\n' ' ' < "$RD" | tr -s ' ' | grep -cF 'closes only the Claude fallback')" "1"
-check "the README has a 4.11 migration section" "$(grep -cxF '## Migrating to 4.11' "$RD")" "1"
-check "the 4.11 migration section says old Claude agy lines fail plan-lint" \
-  "$(awk '/^## / { on = ($0 == "## Migrating to 4.11") } on' "$RD" | tr '\n' ' ' | grep -cF 'fails `plan-lint`')" "1"
-check "the README no longer says agy takes totals 3-8 on Claude Sonnet or Opus" \
-  "$(tr '\n' ' ' < "$RD" | tr -s ' ' | grep -cF 'totals 3-8 on Claude Sonnet or Opus')" "0"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

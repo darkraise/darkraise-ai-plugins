@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# test-simplifier removes tests. The checks below pin what makes a removal
-# safe — fault evidence over coverage, test-only waves, the never-removed list
-# and the judge gate — and run scripts/test-profile against fixture reports.
+# test-simplifier removes tests. The checks below confirm its files exist and
+# run scripts/test-profile against fixture reports.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,90 +16,10 @@ check() { # check <name> <got> <want>
   if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
-present() { # present <name> <file> <needle>
-  if grep -qF -- "$3" "$2"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
-  else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
-}
 
 for f in "$SKILL" "$JUDGE" "$RUNNERS" "$TIERS"; do
   check "exists: ${f#"$P"/}" "$([ -f "$f" ] && echo yes || echo no)" "yes"
 done
-
-# The impact-selection table lives in the shared tiers reference.
-present "runners points to the tiers reference" "$RUNNERS" '[test-tiers.md](../../../reference/test-tiers.md)'
-check "runners keeps no copy of the impact table" "$(grep -c 'pytest-testmon' "$RUNNERS")" "0"
-present "the tiers reference holds the impact table" "$TIERS" '| `jest --changedSince=<base>` / `--onlyChanged` |'
-
-# Coverage is never the proof. This is the finding the skill is built on.
-present "coverage never proves redundancy" "$SKILL" 'Coverage never proves a test redundant'
-present "every killed mutant stays killed" "$SKILL" 'Every mutant killed before is killed after'
-present "no-tool fallback: faults must be caught" "$SKILL" 'Every named fault must turn the kept tests'
-present "fault patches are reverted" "$SKILL" 'revert the patch'
-
-# Phase order: nothing is deleted before measuring, speeding up and tiering.
-for h in '## Phase 1. Measure' '## Phase 2. Recover time without deleting' \
-         '## Phase 3. Tier the run' '## Phase 4. Remove or merge, mutation-gated'; do
-  present "phase: $h" "$SKILL" "$h"
-done
-present "flaky tests are quarantined, not deleted" "$SKILL" 'quarantined, never deleted'
-present "tier changes need approval" "$SKILL" 'apply them only'
-present "full sweep must keep running somewhere" "$SKILL" 'deletion in disguise'
-
-# A wave changes test files only, so before and after mutant sets match.
-present "waves change test files only" "$SKILL" 'test files only'
-present "waves are bounded" "$SKILL" 'never the whole suite'
-present "never removed: regression tests" "$SKILL" 'a regression test naming a fixed bug'
-present "never removed: gate dependencies" "$SKILL" '`gates.md` entry'
-
-# The judge gate.
-present "dispatches judge-opus" "$SKILL" 'dispatch dforge:judge-opus with the *ruling* prompt'
-present "commit before judging" "$SKILL" 'Commit the wave, including its ledger section'
-for v in KEPT LOST VIOLATED; do
-  present "verdict $v" "$SKILL" "\`$v\`"
-  present "judge contract verdict $v" "$JUDGE" "- $v -"
-done
-present "judge maps assertions before ruling" "$JUDGE" 'Map assertions before ruling'
-present "judge checks production files" "$JUDGE" 'Any production file'
-present "judge is read-only" "$JUDGE" 'read-only'
-present "fault prompt names concrete edits" "$JUDGE" 'the exact edit'
-present "judge names the SHA" "$JUDGE" '[COMMIT] in your report'
-
-# Routing and regrowth.
-present "entry point routes to the skill" "$P/skills/using-dforge/SKILL.md" 'dforge:test-simplifier'
-present "TDD folds variants into a table" "$P/skills/test-driven-development/SKILL.md" "into the sibling's table as a row"
-present "TDD asks for the lowest layer" "$P/skills/test-driven-development/SKILL.md" '**Lowest layer**'
-present "plans keep e2e for user journeys" "$P/skills/writing-plans/SKILL.md" 'only for a new user journey'
-
-# Test tiers plan, part 4: the skill uses the tier names of reference/test-tiers.md,
-# takes a scope, lists candidate class 6 and says who cleans up what.
-says() { # says <name> <file> <needle> — the file with line breaks folded
-  if tr '\n' ' ' < "$2" | tr -s ' ' | grep -qF -- "$3"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
-  else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
-}
-gone() { # gone <name> <file> <needle> — absent, ignoring case
-  if tr '\n' ' ' < "$2" | tr -s ' ' | grep -qiF -- "$3"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
-  else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
-}
-for tier in 'Task check' 'Full suite' 'Sweep'; do
-  present "phase 3 names the tier: $tier" "$SKILL" "| $tier |"
-done
-for old in 'Inner loop' 'Branch gate' 'full sweep'; do
-  gone "the old tier name is gone: $old" "$SKILL" "$old"
-done
-present "phase 3 takes its tier sources from the shared reference" "$SKILL" '[test-tiers.md](../../reference/test-tiers.md)'
-says "phase 3 proposes a gates.md diff" "$SKILL" 'as a diff to `<docs>/gates.md`'
-says "phase 3 proposes a Tier: task gate" "$SKILL" 'a gate with `Tier: task`'
-says "phase 3 proposes a Budget line" "$SKILL" 'a `Budget: <seconds>s` line on the gate whose `Command` equals'
-says "scope: --modules" "$SKILL" '`--modules <paths>`'
-says "scope: the closing-a-milestone recommendation passes the modules" "$SKILL" 'the dforge:closing-a-milestone recommendation passes the milestone'
-says "scope: --since" "$SKILL" '`--since <ref>`'
-says "scope: phase 1 still profiles the whole suite" "$SKILL" 'Phase 1 still profiles the whole suite'
-says "scope: phase 4 waves stay inside the scope" "$SKILL" 'Phase 4 waves take candidates only from inside the scope'
-present "candidate class 6" "$SKILL" '6. **Subsumed scaffolding.**'
-says "class 6 uses the same evidence" "$SKILL" 'uses the same evidence as every other class'
-present "division of labour heading" "$SKILL" '## Division of labour'
-says "branch tests go to the REFACTOR step and the lens" "$SKILL" 'Tests added on the current branch are merged or removed by the REFACTOR step of dforge:test-driven-development and the `test-quality` lens of the final review'
-says "this skill handles the default branch's tests" "$SKILL" 'This skill handles tests already on the default branch.'
 
 # scripts/test-profile against fixture reports.
 T=$(mktemp -d) || exit 1

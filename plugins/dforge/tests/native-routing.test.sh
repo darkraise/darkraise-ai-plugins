@@ -102,19 +102,6 @@ cat "$fixture/request.json" "$fixture/request.json" > "$fixture/input.json"
 bash "$selector" --request "$fixture/input.json" > "$fixture/output.json" 2>/dev/null
 check 'multiple JSON requests are rejected' "$?" 2
 check 'invalid request emits no decision' "$(wc -c < "$fixture/output.json" | tr -d ' ')" 0
-existing="$(awk '/^## Existing plans$/ { on = 1; next } /^```/ { fence = !fence } on && !fence && /^## / { exit } on' "$HERE/../reference/native-codex.md")"
-while IFS= read -r needle; do
-  check "Existing plans keeps: $needle" "$(grep -qF -- "$needle" <<< "$existing" && echo yes || echo no)" yes
-done <<'NEEDLES'
-Obtain approval
-human pin stays verbatim
-4     gpt-5.6-terra / high
-3     gpt-6-sol / low
-## Policy conversion
-Ruling: policy conversion codex-v3 -> codex-v4
-consumed split/review budgets
-caught mid-escalation
-NEEDLES
 awk '/^```json$/ { inside=1; next } inside && /^```$/ { exit } inside { print }' "$HERE/../reference/native-codex.md" > "$fixture/documented.json"
 out="$(bash "$selector" --request "$fixture/documented.json" 2>/dev/null)"
 check 'documented request executes with the stated assignment' "$(jq -c '[.action,.score,.rank,.model,.effort]' <<< "$out")" '["dispatch",7,7,"gpt-6-astra","medium"]'

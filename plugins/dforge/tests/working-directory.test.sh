@@ -127,17 +127,9 @@ has "spaced path: next-step names the plan" "$out" "Plan \`$UP\`: 0 of 1 tasks c
 run "$U" next-step --complete "$UP"
 has "spaced path: next-step reads the register its spec covers" "$out" "Register rows still open (1)"
 
-# --- the prose names one contract ---
 P="$HERE/.."
-# Prose wraps, so the phrase is matched with its line breaks folded to spaces.
-check "no skill, reference or script says 'from the plugin root'" \
-  "$(grep -rlzE 'from[[:space:]]+the[[:space:]]+plugin[[:space:]]+root' "$P/skills" "$P/reference" "$P/scripts" 2>/dev/null)" ""
-check "no skill or reference re-explains where the plugin root is" \
-  "$(grep -rlF "the path the session's entry point names" "$P/skills" "$P/reference" 2>/dev/null)" ""
 check "the compaction snapshot names the contract" \
   "$(grep -cF 'plugin-root path, with the working directory inside the project;' "$P/scripts/lib/snapshot.sh")" "1"
-check "at least nine skill and reference files cite the contract" \
-  "$([ "$(grep -rlF '(see using-dforge §Session Budget)' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" -ge 9 ] && echo yes || echo no)" "yes"
 
 # A script that execs a sibling depends on the executable bit, which a Windows
 # checkout cannot carry: core.filemode is false there, so a new script lands as

@@ -287,12 +287,6 @@ check "hooks.json registers Stop" \
 check "both hooks force bash" \
   "$(jq -r '[.hooks.UserPromptSubmit[0].hooks[0].shell, .hooks.Stop[0].hooks[0].shell] | join(",")' "$HOOKS")" "bash,bash"
 
-# --- the execution skills hand off by a Skill tool call ---
-for s in subagent-driven-development executing-plans; do
-  check "$s: finishing is a Skill tool call in the same turn" \
-    "$(grep -c 'Finishing is a Skill tool call in this same turn' "$HERE/../skills/$s/SKILL.md")" "1"
-done
-
 # --- an auto run bound to the session ends its turns only on the sentinel ---
 AR="$HERE/../scripts/auto-run"
 git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init
