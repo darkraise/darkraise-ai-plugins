@@ -31,8 +31,14 @@ _dcc_icons_clear() {
 dcc_icons_init() { # -> DCC_ICON_MODE, DCC_ICON_W, DCC_I_*
   local mode="" width="" cm cw home
 
-  # Cache first, so config and environment can override it below.
-  home="${DCC_STATUSLINE_HOME:-${HOME:-}/.claude/dcc-statusline}"
+  # Cache first, so config and environment can override it below. Claude Code
+  # runs the installed copy without DCC_STATUSLINE_HOME, so a copy at a custom
+  # destination finds the probe result beside itself.
+  home="${DCC_STATUSLINE_HOME:-}"
+  if [ -z "$home" ]; then
+    home="${BASH_SOURCE[0]%/*}/.."
+    [ -r "$home/icons.detected" ] || home="${HOME:-}/.claude/dcc-statusline"
+  fi
   if [ -r "$home/icons.detected" ]; then
     read -r cm cw < "$home/icons.detected" || true
     case "${cm:-}" in nerd|unicode) mode="$cm" ;; esac
