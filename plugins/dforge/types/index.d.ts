@@ -45,6 +45,8 @@ export type CockpitBreakdown = {
   compactAt: number | null
   /** The engine has auto-compaction off; absent on a reading saved before it was kept. */
   isAutoCompactOff?: boolean
+  /** The context window the threshold was read in; absent on a reading saved before it was kept. */
+  window?: number
   /** The estimate's total, all the pane has before a response measures the window. */
   total?: number | null
 }

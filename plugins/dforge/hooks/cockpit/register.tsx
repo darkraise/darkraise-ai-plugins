@@ -561,7 +561,7 @@ export const register: Register = on => {
     }
     const id = e.tool_use_id
     const seat = e.agentId === undefined ? null : ((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat ?? null)
-    if ((await read($, activity)).kind === 'running') await setActivity($, now => ({ ...now, tool, agent: seat === null ? null : seat }))
+    if ((await read($, activity)).kind === 'running') await setActivity($, now => ({ ...now, tool, agent: seat }))
     if (id !== undefined && e.agentId === undefined && ASKING_TOOLS.includes(tool)) {
       await startWait($, id, 'asking', {
         kind: 'question',
@@ -2285,7 +2285,7 @@ async function refresh($: EngineInterface, compactWindow: number | undefined) {
   const window = figures.context.window
   const detail = await read($, breakdown)
   const isAutoCompactOff = detail?.isAutoCompactOff === true
-  const limit = isAutoCompactOff ? window : compactLimitFor(window, compactWindow, detail?.compactAt)
+  const limit = isAutoCompactOff ? window : compactLimitFor(window, compactWindow, detail)
   const usd = figures.cost?.usd ?? null
   const before = await read($, budget)
   if (
@@ -2353,7 +2353,7 @@ async function readSettingsFile($: EngineInterface, path: string): Promise<Setti
  * read; absent, the file is timed now.
  */
 async function applySettings($: EngineInterface, file: SettingsFile, mtime?: number | null) {
-  // $.env.get takes only a literal name: each variable the schema names is listed here.
+  // $.env.get takes only a literal name, so a variable a schema key names is listed here; none does now.
   const env: Record<string, string | undefined> = {}
   const userRead = await $.settings.read({ source: 'user' }).catch(() => null)
   const mergedRead = await $.settings.read().catch(() => null)
@@ -2624,6 +2624,7 @@ async function readBreakdown($: EngineInterface) {
           .map(row => ({ name: row.name, tokens: row.tokens })),
         compactAt: detail.isAutoCompactEnabled ? (detail.autoCompactThreshold ?? null) : null,
         isAutoCompactOff: !detail.isAutoCompactEnabled,
+        window: figures.context.window,
         total: detail.totalTokens,
       }
       if (JSON.stringify(await read($, breakdown)) !== JSON.stringify(next)) await update($, breakdown, () => next)

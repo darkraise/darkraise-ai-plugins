@@ -3,9 +3,10 @@
 /**
  * The context limit the pane measures against, the auto-compact point: the
  * engine's own threshold when known, else min(autoCompactWindow, window), else the window.
+ * A threshold read in another window (before a model switch) says nothing about this one.
  */
-export function compactLimitFor(window: number, compactWindow?: number, threshold?: number | null): number {
-  if (threshold !== undefined && threshold !== null && threshold > 0) return threshold
+export function compactLimitFor(window: number, compactWindow?: number, reading?: { compactAt: number | null; window?: number } | null): number {
+  if (reading !== undefined && reading !== null && reading.window === window && reading.compactAt !== null && reading.compactAt > 0) return reading.compactAt
   return compactWindow !== undefined && compactWindow > 0 ? Math.min(window, compactWindow) : window
 }
 

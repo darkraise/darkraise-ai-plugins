@@ -418,13 +418,19 @@ function signedIn(on: On, files: World['files'] = {}, reads?: string[], repoRoot
 
 describe('budget rule', () => {
   test('measures against the engine threshold, then the compaction window, then the window', () => {
-    expect(compactLimitFor(650_000, undefined, 604_000)).toBe(604_000)
-    expect(compactLimitFor(1_000_000, 800_000, 760_000)).toBe(760_000)
+    expect(compactLimitFor(650_000, undefined, { compactAt: 604_000, window: 650_000 })).toBe(604_000)
+    expect(compactLimitFor(1_000_000, 800_000, { compactAt: 760_000, window: 1_000_000 })).toBe(760_000)
     expect(compactLimitFor(1_000_000, 800_000)).toBe(800_000)
     expect(compactLimitFor(1_000_000, 800_000, null)).toBe(800_000)
+    expect(compactLimitFor(1_000_000, 800_000, { compactAt: null, window: 1_000_000 })).toBe(800_000)
     expect(compactLimitFor(650_000, 800_000)).toBe(650_000)
     expect(compactLimitFor(650_000)).toBe(650_000)
-    expect(compactLimitFor(650_000, 0, 0)).toBe(650_000)
+    expect(compactLimitFor(650_000, 0, { compactAt: 0, window: 650_000 })).toBe(650_000)
+  })
+
+  test('ignores a threshold read in another window, as after a model switch', () => {
+    expect(compactLimitFor(200_000, undefined, { compactAt: 967_000, window: 1_000_000 })).toBe(200_000)
+    expect(compactLimitFor(1_000_000, 800_000, { compactAt: 167_000, window: 200_000 })).toBe(800_000)
   })
 
   test('reads autoCompactWindow from the settings when no threshold is known', async ($, on) => {
