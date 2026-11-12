@@ -1,5 +1,5 @@
 // The desktop's drawings: meters, the context trend, the category stack, the
-// run's tasks and the account's badge, as SVG documents for its Svg element.
+// plan's tasks and the account's badge, as SVG documents for its Svg element.
 // The desktop draws them as images, so they carry their own colors: mid tones
 // and a translucent track that read on its light and dark themes alike.
 
@@ -202,8 +202,8 @@ export function gaugeSvg(share: number, color: string, size: number, value: stri
   )
 }
 
-export type Segment = 'done' | 'active' | 'blocked' | 'todo'
-const SEGMENT_COLORS: Record<Segment, string> = { done: PALETTE.green, active: PALETTE.blue, blocked: PALETTE.red, todo: TRACK }
+export type Segment = 'done' | 'active' | 'todo'
+const SEGMENT_COLORS: Record<Segment, string> = { done: PALETTE.green, active: PALETTE.blue, todo: TRACK }
 
 /** One segment per task, colored by where it stands. */
 export function segmentsSvg(states: readonly Segment[], width: number, height = 8): string {

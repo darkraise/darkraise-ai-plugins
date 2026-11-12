@@ -5,6 +5,7 @@ export type SettingSpecShape = {
   max?: number
   floor?: number
   values?: readonly string[]
+  retired?: readonly string[]
 }
 export function isValidValue(spec: SettingSpecShape, value: unknown): boolean
 declare const schema: Record<string, Record<string, unknown>>

@@ -204,10 +204,10 @@ export function inProgress(cfg) {
     const run = JSON.parse(readRegular(path.join(dforgeDir("state", cfg.repoRoot), "sdd", "auto-run.json"), { follow: true }).toString("utf8"));
     if (run?.active === true) found.push("an auto run is active");
   } catch {
-    // No auto run, or an unreadable record, which auto-run.sh reads as inactive
-    // too. The record is read through a link, as auto-run.sh reads it; one that
-    // is not a regular file holds no run, since auto-run.sh writes the record
-    // with tmp+mv, which replaces a link or a pipe at the path.
+    // No auto run, or an unreadable record, which counts as inactive. The
+    // record is read through a link; one that is not a regular file holds no
+    // run, since an earlier release wrote the record with tmp+mv, which
+    // replaces a link or a pipe at the path.
   }
   for (const { sdd, checkout } of ledgerSources(cfg)) {
     for (const { name: slug, linked } of dirEntries(sdd)) {

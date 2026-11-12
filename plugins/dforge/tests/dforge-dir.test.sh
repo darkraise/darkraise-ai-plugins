@@ -53,21 +53,14 @@ check "dforge-path: usage exit 2" "$?" "2"
 H=$HOME
 git -C "$G" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 FP="$HERE/../scripts/dforge-path"
-check "dforge-path: ledger, local" "$(cd "$G" && HOME=$H bash "$FP" ledger p1)" "$TOP/.dforge/sdd/p1"
-check "dforge-path: ledger of a plan path" "$(cd "$G" && HOME=$H bash "$FP" ledger docs/dforge/plans/2026-10-19-greet.md)" "$TOP/.dforge/sdd/2026-10-19-greet"
-check "dforge-path: ledger of a backslashed plan path" "$(cd "$G" && HOME=$H bash "$FP" ledger 'docs\dforge\plans\2026-10-19-greet.md')" "$TOP/.dforge/sdd/2026-10-19-greet"
-check "dforge-path: ledger of a bare plan file name" "$(cd "$G" && HOME=$H bash "$FP" ledger 2026-10-19-greet.md)" "$TOP/.dforge/sdd/2026-10-19-greet"
-check "dforge-path: latest, local" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$TOP/.dforge/handoff/latest.md"
 check "dforge-path: store, local" "$(cd "$G" && HOME=$H bash "$FP" store | tr '\n' '|')" "documents local|progress local|"
 M=$(stores_home "$H" "$G" proj darkmem darkmem)
 check "dforge-path: docs, darkmem" "$(cd "$G" && HOME=$H bash "$FP" docs plans/p1.md)" "$M/dforge/plans/p1.md"
-check "dforge-path: ledger, darkmem" "$(cd "$G" && HOME=$H bash "$FP" ledger p1)" "$M/work/sdd/p1"
-check "dforge-path: latest, darkmem" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$M/work/handoff/latest.md"
 check "dforge-path: state stays local" "$(cd "$G" && HOME=$H bash "$FP" state)" "$TOP/.dforge"
 check "dforge-path: store, darkmem" "$(cd "$G" && HOME=$H bash "$FP" store | tr '\n' '|')" "documents darkmem|progress darkmem|"
 check "dforge-path: name" "$(cd "$G" && HOME=$H bash "$FP" name "$M/dforge/plans/p1.md")" "docs/dforge/plans/p1.md"
-(cd "$G" && HOME=$H bash "$FP" ledger > /dev/null 2>&1)
-check "dforge-path: ledger needs a slug" "$?" "2"
+(cd "$G" && HOME=$H bash "$FP" ledger p1 > /dev/null 2>&1)
+check "dforge-path: ledger is no longer a subcommand" "$?" "2"
 
 # --- dforge_legacy_layout: a linked worktree's git dir and the primary's state ---
 W="$TMP/wt"

@@ -27,8 +27,8 @@ restate them here.
 NO UI WORK IS DONE WITHOUT A PASSING ui-proof check
 ```
 
-The final review, finishing and every "done" claim run it. On Claude Code a
-Stop hook holds a turn that leaves UI changes unproven.
+Every "done" claim runs it. On Claude Code a Stop hook holds a turn that
+leaves UI changes unproven.
 
 ## Depth
 
@@ -43,8 +43,8 @@ and name `ui-proof check` as the done condition.
 
 | Depth | When | What it takes |
 |---|---|---|
-| touch | a bug fix, a copy or styling change, one surface | a `## Delta` of 5 to 15 items in the proof report, a proof of that surface, the judge-sonnet-high seat |
-| feature | a new or changed flow or screen | a `## UI/UX contract` section in the spec, a walkthrough of every flow it touches, the judge-opus seat |
+| touch | a bug fix, a copy or styling change, one surface | a `## Delta` of 5 to 15 items in the proof report, a proof of that surface |
+| feature | a new or changed flow or screen | a `## UI/UX contract` section in the spec, a walkthrough of every flow it touches |
 | product | a new product or surface family | the feature depth plus the profile's design decisions, written or extended |
 
 ## The project UI profile
@@ -59,8 +59,8 @@ the gate on for the project.
 
 ## Shape
 
-Run before acceptance statements are drafted (from dforge:brainstorming) and
-before the fix (from dforge:systematic-debugging, at touch depth).
+Run before the work is planned, and before the fix when the work starts from
+dforge:systematic-debugging (touch depth).
 
 1. Read the profile, or create it.
 2. Write the contract (feature, product) or the delta (touch) from
@@ -74,35 +74,24 @@ before the fix (from dforge:systematic-debugging, at touch depth).
 4. Define the worst-case dataset the proof will use
    ([state-catalogue.md](references/state-catalogue.md) §Worst-case data).
 
-Under `autoRun=on`, brainstorming asks nothing after its clarifying
-questions: ask the profile and state-board questions among them, and quote
-the answers in the spec's `## Decisions`.
-
 Every contract item becomes one or more acceptance statements whose text
-starts with its ID, for example `A12. [test, high] UX-4: Escape closes the
-dialog and returns focus to its trigger.` A behaviour statement is tagged
-`test` when the profile names a UI test runner the project can run, and
-is tagged `demo` when the profile names no UI test runner. Either way, its
-proof-report row proves it.
+starts with its ID, for example `UX-4: Escape closes the dialog and returns
+focus to its trigger.` Its proof-report row proves it.
 
 ## Carry
 
-- **The plan.** Every task whose files match `ui-proof paths` carries a
-  `**UI/UX:**` line naming the contract IDs it delivers, and every `UI-` and
-  `UX-` ID reaches some task. `scripts/plan-lint` enforces both.
-- **The brief.** `scripts/task-brief` appends the cited items verbatim under
-  `## UI/UX contract items`.
-- **The implementer** renders its work through the profile's harness before
-  reporting, and maps each cited ID to a screenshot path or a test name.
+Where the work is planned, name the contract IDs each piece delivers, so
+every `UI-` and `UX-` ID is built by something. Render the work through the
+profile's harness as it is built, and map each ID to a screenshot path or a
+test name.
 
 ## Prove
 
 Follow [walkthrough.md](references/walkthrough.md): launch through the
 platform guide, seed the worst-case data, walk every flow by pointer and by
 keyboard at every viewport and theme, force every state, run the automated
-checks, screenshot each item, write the proof report, stamp it with
-`ui-proof stamp`, and have the judge seat review it. Run the walkthrough in
-the session or an implementer seat: judge seats have no browser.
+checks, screenshot each item, write the proof report, and stamp it with
+`ui-proof stamp`.
 
 ## The gate
 
@@ -111,8 +100,7 @@ bash <plugin-root>/scripts/ui-proof check --base <ref> [--spec <spec>]
 ```
 
 That is `scripts/ui-proof check --base <ref> [--spec <spec>]`, where `<ref>`
-is the commit the work started from: the final review and finishing pass
-`MERGE_BASE` and the plan's spec, a "done" claim passes the branch's base.
+is the commit the work started from, normally the branch's base.
 Exit 1 names each failed step; fix the UI or the proof, never the check.
 
 An `unverifiable` row (no harness for the platform on this host; macOS and
@@ -131,8 +119,8 @@ On Claude Code, after each edit to a UI file a hook returns `scripts/ui-lint`
 findings and, once per session, names this skill; at each stop a hook holds a
 turn whose UI changes have no passing proof, once (its retry passes). Codex
 runs no hooks: run `bash <plugin-root>/scripts/ui-lint <files>` after UI
-edits and `ui-proof check` before claiming done. Whether a Codex native
-implementer can drive a browser is unverified.
+edits and `ui-proof check` before claiming done. Whether a Codex session can
+drive a browser is unverified.
 
 ## Red Flags
 
@@ -143,7 +131,6 @@ implementer can drive a browser is unverified.
 | "One full-page screenshot shows it works" | A thumbnail hides the failures that matter. Screenshot each item and state. |
 | "The demo data looks fine" | Demo data is chosen to look good. Prove with the worst-case data. |
 | "Keyboard users are an edge case" | Walk every flow by keyboard alone. |
-| "The judge will catch it" | The judge reads your evidence. Missing evidence is a fail. |
 | "I'll mark it unverifiable" | Only the user can accept an unverifiable item. |
 | "It's only a styling fix" | Touch depth still has a delta and a proof. |
 
@@ -154,6 +141,6 @@ implementer can drive a browser is unverified.
 | `ui-proof paths` | the globs that count as UI files |
 | `ui-proof fingerprint` | the current UI fingerprint |
 | `ui-proof contract <spec> [ID...]` | the contract's IDs, or the items verbatim |
-| `ui-proof stamp <report>` | write the fingerprint; drop a stale judge line |
+| `ui-proof stamp <report>` | write the fingerprint |
 | `ui-proof check --base <ref> [--spec <spec>]` | the gate |
 | `ui-lint <file>...` | high-precision UI defect patterns |

@@ -32,11 +32,11 @@ test('repository validator rejects broken distribution contracts', async t => {
     ['name mismatch', c => { c.plugins[0].name = 'wrong'; }, /name|membership/],
     ['client version mismatch', c => { c.version = '0.9.0'; }, /version mismatch/, 'plugins/dforge/.codex-plugin/plugin.json'],
     ['implicit Claude hooks', c => { delete c.hooks; }, /empty Codex hooks/, 'plugins/dforge/.codex-plugin/plugin.json'],
-    ['missing bundled reference', (c, dir) => { rmSync(resolve(dir, 'plugins/dforge/reference/native-codex.md')); }, /missing bundled reference/],
+    ['missing bundled reference', (c, dir) => { rmSync(resolve(dir, 'plugins/dforge/reference/project-state.md')); }, /missing bundled reference/],
     ['reintroduced dependency', c => { c.dependencies = [{ name: 'superpowers', marketplace: 'claude-plugins-official' }]; }, /must not declare dependencies/, 'plugins/dforge/.claude-plugin/plugin.json'],
     ['reintroduced allowlist', c => { c.allowCrossMarketplaceDependenciesOn = ['claude-plugins-official']; }, /allowlist/],
-    ['legacy name reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
-    ['pre-2.0 plugin prefix', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'see dr-superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
+    ['legacy name reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'superpowers:ui-ux\n'); }, /legacy plugin-name reference/],
+    ['pre-2.0 plugin prefix', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'see dr-superpowers:ui-ux\n'); }, /legacy plugin-name reference/],
     ['unresolved dforge reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'see dforge:no-such-skill\n'); }, /unresolved dforge reference no-such-skill/],
     ['retired superpowers name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'mkdir -p .superpowers/sdd\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired superpowers name/],
     ['retired name in the Claude catalog entry', c => { c.plugins.find(p => p.name === 'dforge').keywords.push('superpowers'); }, /\.claude-plugin\/marketplace\.json: dforge entry: retired superpowers name/],
@@ -76,11 +76,11 @@ test('bundled-link check ignores links inside fenced code blocks', async () => {
     for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
       cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
     }
-    const file = resolve(dir, 'plugins/dforge/skills/selecting-approaches/fenced.md');
+    const file = resolve(dir, 'plugins/dforge/skills/systematic-debugging/fenced.md');
     writeFileSync(file, '````markdown\n```\n[inner](missing-inner.md)\n```\n[example](missing-example.md)\n````\n');
     assert.deepEqual(validateRepository(dir), []);
     writeFileSync(file, '````\n[example](missing-example.md)\n````\n[live](missing-live.md)\n');
-    assert.deepEqual(validateRepository(dir), [`plugins${sep}dforge${sep}skills${sep}selecting-approaches${sep}fenced.md: missing bundled reference missing-live.md`]);
+    assert.deepEqual(validateRepository(dir), [`plugins${sep}dforge${sep}skills${sep}systematic-debugging${sep}fenced.md: missing bundled reference missing-live.md`]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -115,7 +115,7 @@ test('the retired dr-forge names are allowed only in the allowlisted files', asy
     writeFileSync(resolve(dir, 'plugins/dforge/reference/dated.md'), 'see docs/dforge/plans/2026-10-12-dr-forge-settings.md; git forges forget\n');
     const retired = () => validateRepository(dir).filter(error => error.includes('retired dr-forge name'));
     assert.deepEqual(retired(), []);
-    writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'run dr-forge:brainstorming\n');
+    writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'run dr-forge:ui-ux\n');
     assert.deepEqual(retired(), ['plugins/dforge/reference/stray.md:1: retired dr-forge name']);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -151,7 +151,7 @@ test('the name sweeps skip binary files', async () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('reference check skips template placeholders and resolves agents', async () => {
+test('reference check skips template placeholders and resolves skills', async () => {
   const { validateRepository } = await import('../scripts/validate-repository.mjs');
   const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));
   try {
@@ -159,7 +159,7 @@ test('reference check skips template placeholders and resolves agents', async ()
       cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
     }
     writeFileSync(resolve(dir, 'plugins/dforge/reference/placeholder.md'),
-      'subagent_type: dforge:impl-<model>-<effort>\nagent dforge:judge-fable\nskill dforge:writing-plans\n');
+      'skill dforge:ui-<part>\nskill dforge:ui-ux\nskill dforge:migrate\n');
     assert.deepEqual(validateRepository(dir), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -183,12 +183,16 @@ test('the settings schema is valid, and broken schemas are caught', async () => 
   assert.match(await broken("export default { n: { type: 'number', default: Infinity, group: 'Cockpit', title: 't', description: 'd', target: 'dforge' } }\n"), /schema n: default does not fit its type/);
   const entry = extra => `export default { n: { type: 'number', default: 0, min: 0, max: 10, group: 'Cockpit', label: 'N', title: 't', description: 'd', target: 'dforge', ${extra} } }\n`;
   assert.match(await broken(real.replace("label: 'Layout'", "label: 'A label that is far too long'")), /schema layout: label is required, at most 16 characters/);
-  assert.match(await broken(real.replace("group: 'Finish'", "group: 'Elsewhere'")), /group must be one of Cockpit, Minimized, Context, Workflow, Process, Finish, Notifications/);
+  assert.match(await broken(real.replace("group: 'Minimized'", "group: 'Elsewhere'")), /group must be one of Cockpit, Minimized, Context, Notifications, darkmem/);
   assert.match(await broken(entry("unit: 'parsecs'")), /schema n: unit must be one of k, %, s, min, on a number/);
   assert.match(await broken(entry("zero: 'nil'")), /schema n: zero must be one of auto, off, any, hidden, unset, on a number/);
   assert.match(await broken(entry('floor: 5').replace('default: 0', 'default: 3')), /schema n: default does not fit its type/);
   assert.match(await broken(entry('step: 1').replace('default: 0', 'default: 2.5')), /schema n: default does not fit its type/);
-  assert.match(await broken(entry("enforcedBy: 'luck'")), /schema n: enforcedBy must be script or skill/);
+  const list = extra => `export default { l: { type: 'string', values: ['a', 'b'], default: '', group: 'Cockpit', label: 'L', title: 't', description: 'd', target: 'dforge', ${extra} } }\n`;
+  assert.equal(await broken(list("retired: ['c']")), '');
+  assert.match(await broken(list("retired: ['a']")), /schema l: retired must list lowercase names that values no longer holds/);
+  assert.match(await broken(list('retired: []')), /schema l: retired must list lowercase names/);
+  assert.match(await broken(entry("retired: ['c']")), /schema n: retired must list lowercase names that values no longer holds, on a string with values/);
   assert.match(await broken(entry('floor: 50')), /schema n: floor must lie between 1 and max, on a number whose min is 0/);
   assert.match(await broken(entry('floor: 5').replace('min: 0', 'min: 1').replace('default: 0', 'default: 5')), /schema n: floor must lie between 1 and max, on a number whose min is 0/);
   const flag = extra => `export default { b: { type: 'boolean', default: false, group: 'Cockpit', label: 'B', title: 't', description: 'd', target: 'dforge', ${extra} } }\n`;

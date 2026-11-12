@@ -1,7 +1,0 @@
-{
-  "cli": "agy",
-  "min_version": "1.4.12",
-  "max_major": 1,
-  "calibrated": "1.4.12",
-  "trust": { "smoke": "pass" }
-}

@@ -1,21 +1,18 @@
 // Discord notifications: what each event sends, kept pure so tests reach it.
 // register.tsx holds the sender, since only it may reach the host.
-export const NOTIFY_KINDS = ['ask', 'question', 'done', 'error', 'blocked', 'budget', 'limit', 'task', 'session', 'agent'] as const
+export const NOTIFY_KINDS = ['ask', 'question', 'done', 'error', 'limit', 'session', 'agent'] as const
 export type NotifyKind = (typeof NOTIFY_KINDS)[number]
 
 /** The kinds that send unless the settings say otherwise. */
-export const DEFAULT_NOTIFY_ON: readonly NotifyKind[] = ['ask', 'question', 'done', 'error', 'blocked', 'budget', 'limit']
+export const DEFAULT_NOTIFY_ON: readonly NotifyKind[] = ['ask', 'question', 'done', 'error', 'limit']
 
 // The kinds that need the person: they mention them, the rest post silently.
-const PINGS: readonly NotifyKind[] = ['ask', 'question', 'error', 'blocked']
+const PINGS: readonly NotifyKind[] = ['ask', 'question', 'error']
 const COLORS: Record<NotifyKind, number> = {
   ask: 0xffaf00,
   question: 0xffaf00,
   done: 0x57d787,
-  task: 0x57d787,
   error: 0xff5f5f,
-  blocked: 0xff5f5f,
-  budget: 0x5f87ff,
   limit: 0x5f87ff,
   session: 0x5f87ff,
   agent: 0x5f87ff,

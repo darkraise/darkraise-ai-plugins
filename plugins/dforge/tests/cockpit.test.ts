@@ -6,64 +6,41 @@ import {
   accountColor,
   accountKey,
   agentGroups,
-  autoLimitFor,
-  autoRunFor,
   isAbsolutePath,
-  isDforge,
   gitTextFiles,
-  isPlanTail,
   kTokens,
   attributionIn,
-  FORK_DRAFTING,
-  seatDenial,
-  fastModeLine,
   bar,
   billingLabel,
-  budgetFor,
   cellWidth,
   collapsedFrom,
   collapsedToggled,
+  compactLimitFor,
   denseLabel,
   denseLine,
   duration,
   elapsed,
-  endsOnSentinel,
-  finalLimitFor,
-  finishLine,
   BAND_DEFAULT_LINES,
   bandLineToggled,
   bandLines,
   bandLinesFrom,
   fitBand,
   folderRuns,
-  handedOff,
-  hasUnresolvedRows,
   isAtLeast,
   isServiceCommand,
-  reconcileStep,
-  levelOf,
   limitForecast,
   modelName,
   nowLine,
-  parseFinish,
-  parseLedger,
-  parseModeLines,
-  planCandidates,
-  planTasks,
   planWithUpdate,
-  promptRegisters,
   remoteRuns,
   repoFromPorcelain,
   repoName,
-  resumeOfferOf,
-  runList,
   runsWidth,
   runsCut,
   sectionsToggled,
   sparkline,
   stackedRuns,
   shellAge,
-  statMissing,
   tasksEnded,
   termColor,
   themeColor,
@@ -163,65 +140,6 @@ const COCKPIT: CommandRunInput = {
 // A terminal session starting in the repository.
 const START = { cwd: '/home/me/code/shop/web', surface: 'terminal', isInteractive: true } as never
 
-// Handoff notes as scripts/next-step writes them: a next session to start, or none.
-const RESUMABLE = [
-  '# Handoff',
-  '',
-  '## Next session',
-  '',
-  '**Status:** Plan `docs/dforge/plans/2026-10-14-band.md`: 3 of 6 tasks complete.',
-  '**Next:** Task 4 — wire the band into the pane.',
-  '',
-  'Launch in `/home/me/code/shop`:',
-  '',
-  '```',
-  'claude --model opus',
-  '```',
-  '',
-  'Paste as the first prompt:',
-  '',
-  '```',
-  'Execute docs/dforge/plans/2026-10-14-band.md.',
-  '```',
-  '',
-  '## State',
-  '',
-  'Worktree: /home/me/code/shop-wt',
-  '',
-].join('\n')
-const FINISHED = '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/dforge/plans/x.md` is complete.\n**Next:** Nothing — the plan records no follow-on work.\n'
-const BLOCKED =
-  '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/dforge/plans/x.md`: 2 of 5 tasks complete; Task 3 is BLOCKED (needs a key).\n**Next:** Your human partner decides: needs a key.\n'
-
-const UNFENCED = RESUMABLE.replace('```\nExecute docs/dforge/plans/2026-10-14-band.md.\n```\n', 'Execute the plan.\n')
-const REGISTER = '/home/me/code/shop/docs/dforge/registers/r.md'
-function registerPrompt(names: string): string {
-  return `Continue the work recorded in ${names}: 1 rows are open (#2 item 2). Rule on the open rows with dforge:brainstorming.`
-}
-/** A next-step handoff for a finished plan whose register still had rows to rule on. */
-function rulingHandoff(): string {
-  return [
-    '# Handoff',
-    '',
-    '## Next session',
-    '',
-    '**Status:** Plan `docs/dforge/plans/x.md` is complete.',
-    '**Next:** Register rows still open (1) in `docs/dforge/registers/r.md`: #2 item 2.',
-    '',
-    'Paste as the first prompt:',
-    '',
-    '```',
-    registerPrompt('`docs/dforge/registers/r.md`'),
-    '```',
-    '',
-  ].join('\n')
-}
-/** A register whose rows carry these states, in order. */
-function register(states: string[]): string {
-  const rows = states.map((state, i) => `| ${i + 1} | item ${i + 1} | - | - | ${state} | - |`)
-  return ['# Register', '', '**Source:** test', '**Covers:** -', '', '| # | Item | Assigned | Acceptance | State | Note |', '|---|---|---|---|---|---|', ...rows, ''].join('\n')
-}
-
 // What a compaction leaves: one row standing for the conversation.
 const SUMMARY: SessionMessage = { role: 'user', text: 'Summary.', toolUses: [] }
 
@@ -235,6 +153,8 @@ function configured(values: Record<string, unknown>): NonNullable<World['files']
 type World = {
   tokens: number | undefined
   window?: number
+  /** The /context breakdown the engine answers, in place of BREAKDOWN. */
+  breakdown?: unknown
   startedAt?: number
   settings?: Record<string, unknown>
   /** What the user's own Claude settings file holds, when it differs from the merged `settings`. */
@@ -243,21 +163,14 @@ type World = {
   runs?: string[]
   /** dforge-config refuses, as on a Claude settings file it cannot parse. */
   isDforgeConfigRefusing?: boolean
-  /** How many claude-restore writes the engine misses, as one landing right after its own save. */
-  missedRestores?: number
-  /** The session refuses every row the plugin appends. */
-  isAppendFailing?: boolean
   toasts?: string[]
   notes?: string[]
   env?: Record<string, string>
   /** Files the plugin reads, by path, with their modification time. */
-  files?: Record<string, { text: string; mtimeMs?: number; kind?: 'file' | 'dir' | 'other'; isLink?: boolean }>
-  /** Paths whose stat rejects; the kit drops the code, so the mod sees a rejection with none. */
-  statErrors?: Record<string, string>
+  files?: Record<string, { text: string; mtimeMs?: number; kind?: 'file' | 'dir' | 'other' }>
   /** What the plugin writes, by path. */
   written?: Record<string, string>
   /** Each request the plugin sends through $.http.fetch. */
-  prompts?: string[]
   fetches?: { url: string; method: string; body: Record<string, unknown> }[]
   /** How Claude Code answers the pane opening; placed unless said. */
   open?: { isPlaced: true } | { isPlaced: false; reason: string }
@@ -281,48 +194,14 @@ type World = {
   sessionId?: string
   /** Each compaction the engine runs, as `<trigger>:<instructions>`. */
   compacts?: string[]
-  /** Every compaction is vetoed, as a PreCompact hook would. */
-  isCompactVetoed?: boolean
-  /** Each slash command the plugin runs, as typed. */
-  commands?: string[]
-  /** Slash commands that refuse to run, by name. */
-  refusedCommands?: string[]
-  /** How many prompt submissions fail before one goes through. */
-  submitFailures?: number
-  /** Each scripts/auto-run call, after the script's path. */
-  autoRuns?: string[]
-  /** The exit code of an auto-run command, by its command word; 0 unless said. */
-  autoRunExits?: Record<string, number>
-  /** The auto-run state file the fake script updates, as the real one would. */
-  autoFile?: { text: string }
-  /** What `darkmem-config.mjs --mode` answers; `missing` rejects as a missing node does. Git porcelain with exit 0 unless said. */
-  modeOut?: { exitCode: number; stdout: string; stderr: string } | 'missing' | 'rejects' | 'timeout'
-  /** The directory each `--mode` call names. */
-  modeRuns?: string[]
-  /** The primary checkout `git rev-parse --git-common-dir` points into; the session's repository unless said. */
-  primary?: string
   /** The agent ids the spawns get, in turn; `agent-1` once they run out. */
   agentIds?: string[]
   /** `node --version` cannot start, as on a machine without node. */
   isNodeMissing?: boolean
-  /** Reading the user settings rejects. */
-  isUserSettingsUnreadable?: boolean
-  /** How long each compaction takes, in the clock's milliseconds; at once unless said. */
-  compactMs?: number
   /** `git status` outruns its timeout, or cannot start. */
   gitStatusOut?: 'timeout' | 'missing'
   /** Each git command the plugin runs, as one line. */
   gitRuns?: string[]
-  /** What `git rev-parse --git-common-dir` answers; `<primary>/.git` unless said. */
-  commonDir?: string
-  /** What `git worktree list --porcelain` names. */
-  worktrees?: string[]
-  /** What `git rev-parse --show-toplevel` answers in the session's directory: the work tree it is in; the session repository's unless said. */
-  checkout?: string
-  /** Runs inside each scripts/auto-run call, given its command word, before the call answers. */
-  onAutoRun?: (word: string) => unknown
-  /** How many `$.session.id()` calls fail before one answers. */
-  sessionIdFailures?: number
   /** Runs after each settings read has taken its answer, given the source it named. */
   afterSettingsRead?: (source: string | undefined) => void
 }
@@ -341,14 +220,13 @@ function world(on: On, w: World) {
       context: {
         tokens: w.tokens,
         window: w.window ?? 650_000,
-        ...(e.breakdown === undefined ? {} : { breakdown: BREAKDOWN }),
+        ...(e.breakdown === undefined ? {} : { breakdown: (w.breakdown ?? BREAKDOWN) as never }),
       },
       rateLimits: [],
       cost: { usd: 1.5 },
     },
   }))
   on('settings.read', (_$, e) => {
-    if (e?.source === 'user' && w.isUserSettingsUnreadable) throw new Error('EACCES: the user settings cannot be read')
     const value = e?.source === 'user' && w.userSettings !== undefined ? w.userSettings : (w.settings ?? {})
     w.afterSettingsRead?.(e?.source)
     return { value }
@@ -361,14 +239,7 @@ function world(on: On, w: World) {
     if (w.version === undefined) throw new Error('no version')
     return { value: { version: w.version, base: w.version } }
   })
-  on('prompt.submit', (_$, e) => {
-    if ((w.submitFailures ?? 0) > 0) {
-      w.submitFailures = (w.submitFailures ?? 1) - 1
-      throw new Error('busy')
-    }
-    w.prompts?.push(e.text)
-    return { text: e.text }
-  })
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
   on('session.attach', (_$, e) => ({ clientId: e.clientId }))
   on('session.detach', (_$, e) => ({ clientId: e.clientId }))
   on('session.surfaces', () => ({ value: ['terminal'] }))
@@ -389,64 +260,18 @@ function world(on: On, w: World) {
   })
   on('session.compact', (_$, e) => {
     w.compacts?.push(`${e.trigger}:${(e as { instructions?: string }).instructions ?? ''}`)
-    const done = w.isCompactVetoed ? ({ skip: 'vetoed' } as never) : { messages: e.messages ?? [SUMMARY] }
-    return w.compactMs === undefined ? done : clock.sleep(w.compactMs).then(() => done)
+    return { messages: e.messages ?? [SUMMARY] }
   })
-  on('command.run', (_$, e) => {
-    if (w.refusedCommands?.includes(e.command)) throw new Error(`/${e.command} refused`)
-    w.commands?.push(e.args === '' ? `/${e.command}` : `/${e.command} ${e.args}`)
-    if (e.command === 'clear') w.sessionId = 'sess-2'
-    if (e.command === 'model' && w.userSettings !== undefined) w.userSettings = { ...w.userSettings, model: e.args }
-    if (e.command === 'effort' && w.userSettings !== undefined) {
-      w.userSettings = { ...w.userSettings, modelSettings: { ...(w.userSettings.modelSettings as object | undefined), 'claude-sonnet-5-5': { effortLevel: e.args } } }
-    }
-    return { text: '' } as never
-  })
+  on('command.run', () => ({ text: '' }) as never)
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('process.run', (_$, e) => {
     const argv = e.argv.join(' ')
-    const script = '/scripts/auto-run '
-    if (argv.includes(script)) {
-      const call = argv.slice(argv.indexOf(script) + script.length)
-      w.autoRuns?.push(call)
-      const words = call.split(' ')
-      const word = words[2] ?? ''
-      const exitCode = w.autoRunExits?.[word] ?? 0
-      if (w.autoFile !== undefined) {
-        const state = JSON.parse(w.autoFile.text) as Record<string, unknown>
-        if (exitCode === 0 && word === 'compacted') Object.assign(state, { pending: 'after-compact', compactions: Number(state.compactions) + 1 })
-        if (exitCode === 0 && word === 'clear') Object.assign(state, { pending: 'clear', rebind: true })
-        if (exitCode === 0 && word === 'rebind') Object.assign(state, { session: words[4], pending: 'resume', regime: 'normal' })
-        if (exitCode === 0 && word === 'resumed' && state.pending === 'resume') state.pending = null
-        if (exitCode === 0 && word === 'stop') Object.assign(state, { active: false, stopped: call.split(' --reason ')[1] ?? null, pending: null })
-        if (exitCode === 5 && word === 'failure') Object.assign(state, { active: false, stopped: 'the cockpit could not compact twice', pending: null })
-        if (exitCode === 5 && word === 'compacted') Object.assign(state, { active: false, stopped: '3 compactions without a completed task', pending: null })
-        if (exitCode === 0 && word === 'stalled') Object.assign(state, { stalls: Number(state.stalls ?? 0) + 1, stalledAt: Math.floor(clock.now() / 1000) })
-        if (exitCode === 5 && word === 'stalled') Object.assign(state, { active: false, stopped: '3 stalls without a completed task', pending: null })
-        w.autoFile.text = JSON.stringify(state)
-      }
-      const answer = { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
-      const during = w.onAutoRun?.(word)
-      return during instanceof Promise ? during.then(() => answer) : answer
-    }
     if (argv.includes('/scripts/lib/dforge-config.mjs ')) {
       w.runs?.push(argv)
       // dforge-config's first run creates the settings file with dr-cockpit's
       // options (importLegacy), unless the file exists or it refuses.
       if (e.argv.includes('get') && w.config === undefined && !w.isDforgeConfigRefusing && w.written !== undefined && !(CONFIG in w.written)) {
         w.written[CONFIG] = `${JSON.stringify(importedSettings(SCHEMA, w.userSettings ?? w.settings ?? {}), null, 2)}\n`
-      }
-      const restore = e.argv[e.argv.indexOf('claude-restore') + 1]
-      if (e.argv.includes('claude-restore') && !w.isDforgeConfigRefusing && w.userSettings !== undefined) {
-        if ((w.missedRestores ?? 0) > 0) w.missedRestores = (w.missedRestores ?? 0) - 1
-        else {
-          const next: Record<string, unknown> = { ...w.userSettings }
-          for (const [key, value] of Object.entries(JSON.parse(restore!) as Record<string, unknown>)) {
-            if (value === null) delete next[key]
-            else next[key] = value
-          }
-          w.userSettings = next
-        }
       }
       // A dforge-target set rewrites the settings file as the cockpit's own
       // fallback write would, and fails as that write does.
@@ -467,16 +292,6 @@ function world(on: On, w: World) {
       const stderr = w.isDforgeConfigRefusing ? 'dforge-config: /home/me/.claude/settings.json is not valid JSON; fix or remove it\n' : ''
       return { value: { exitCode: w.isDforgeConfigRefusing ? 1 : 0, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false } }
     }
-    if (argv.includes('/scripts/lib/darkmem-config.mjs ')) {
-      w.modeRuns?.push(e.argv[e.argv.length - 1] ?? '')
-      if (w.modeOut === 'missing') {
-        return clock.advance(5_000).then(() => ({ deny: 'dforge: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"' }))
-      }
-      if (w.modeOut === 'rejects') return { deny: 'the engine refused to start the process' }
-      if (w.modeOut === 'timeout') return { deny: 'dforge: $.process.run(node) aborted: still running after 5000ms' }
-      const out = w.modeOut ?? { exitCode: 0, stdout: PORCELAIN, stderr: '' }
-      return { value: { ...out, isStdoutTruncated: false, isStderrTruncated: false } }
-    }
     if (argv === 'node --version') {
       if (w.isNodeMissing) return { deny: 'dforge: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"' }
       return { value: { exitCode: 0, stdout: 'v24.18.0\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
@@ -484,7 +299,7 @@ function world(on: On, w: World) {
     if (argv.startsWith('git --no-optional-locks') && w.gitStatusOut === 'timeout') return { deny: 'dforge: $.process.run(git) aborted: still running after 3000ms' }
     if (argv.startsWith('git --no-optional-locks') && w.gitStatusOut === 'missing') return { deny: 'dforge: $.process.run(git) failed to start: ENOENT' }
     if (argv.startsWith('git ')) w.gitRuns?.push(argv)
-    const common = w.commonDir ?? `${w.primary ?? '/home/me/code/shop'}/.git`
+    const common = '/home/me/code/shop/.git'
     // A directory is a work tree when the common directory is its .git: a
     // primary checkout is; a submodule's modules directory is not.
     const toplevel = /^git -C (.+) rev-parse --show-toplevel$/.exec(argv)
@@ -500,29 +315,14 @@ function world(on: On, w: World) {
         },
       }
     }
-    if (argv === 'git rev-parse --show-toplevel') {
-      return { value: { exitCode: 0, stdout: `${w.checkout ?? '/home/me/code/shop'}\n`, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
-    }
-    if (argv === 'git worktree list --porcelain') {
-      const stdout = (w.worktrees ?? []).map(dir => `worktree ${dir}\nHEAD 1234567\nbranch refs/heads/work\n`).join('\n')
-      return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
-    }
     const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? `${common}\n` : PORCELAIN
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
-  on('session.id', () => {
-    if ((w.sessionIdFailures ?? 0) > 0) {
-      w.sessionIdFailures = (w.sessionIdFailures ?? 1) - 1
-      throw new Error('no session id')
-    }
-    return { value: w.sessionId ?? 'sess-1' }
-  })
+  on('session.id', () => ({ value: w.sessionId ?? 'sess-1' }))
   on('fs.stat', (_$, e) => {
-    const code = w.statErrors?.[e.path]
-    if (code !== undefined) throw Object.assign(new Error(code), { code })
     const file = w.files?.[e.path]
     if (file === undefined) throw new Error('ENOENT')
-    return { value: { kind: file.kind ?? 'file', size: file.text.length, mtimeMs: file.mtimeMs ?? 0, isLink: file.isLink ?? false } }
+    return { value: { kind: file.kind ?? 'file', size: file.text.length, mtimeMs: file.mtimeMs ?? 0, isLink: false } }
   })
   on('fs.list', (_$, e) => {
     const prefix = `${e.path}/`
@@ -552,7 +352,6 @@ function world(on: On, w: World) {
   })
   on('ui.panes', () => ({ value: w.isPaneShut ? [] : [{ id: 'dforge', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
   on('session.append', (_$, e, next) => {
-    if (w.isAppendFailing) return { deny: 'append refused' }
     const part = (e.message as { content?: { text?: string }[] }).content?.[0]
     if (part?.text !== undefined) w.notes?.push(part.text)
     return next(e)
@@ -617,61 +416,52 @@ function signedIn(on: On, files: World['files'] = {}, reads?: string[], repoRoot
   on('session.model', () => ({ value: 'claude-opus-5-5[1m]' }))
 }
 
-test('only a dforge name marks a workflow session', () => {
-  expect(isDforge('dforge:brainstorming')).toBe(true)
-  expect(isDforge('dr-superpowers:brainstorming')).toBe(false)
-  expect(isDforge('feature-dev:code-reviewer')).toBe(false)
-})
-
 describe('budget rule', () => {
-  test('follows the setting, then the env, then dforge', () => {
-    expect(budgetFor(200_000, '465000', 650_000)).toBe(200_000)
-    expect(budgetFor(0, '465000', 650_000)).toBe(465_000)
-    expect(budgetFor(0, undefined, 650_000)).toBe(464_500)
-    expect(budgetFor(0, 'junk', 200_000)).toBe(46_000)
-    expect(budgetFor(0, undefined, 100_000)).toBe(20_000)
-    expect(levelOf(300_000, 465_000)).toBe('quiet')
-    expect(levelOf(400_000, 465_000)).toBe('warn')
-    expect(levelOf(465_000, 465_000)).toBe('handoff')
+  test('measures against the engine threshold, then the compaction window, then the window', () => {
+    expect(compactLimitFor(650_000, undefined, 604_000)).toBe(604_000)
+    expect(compactLimitFor(1_000_000, 800_000, 760_000)).toBe(760_000)
+    expect(compactLimitFor(1_000_000, 800_000)).toBe(800_000)
+    expect(compactLimitFor(1_000_000, 800_000, null)).toBe(800_000)
+    expect(compactLimitFor(650_000, 800_000)).toBe(650_000)
+    expect(compactLimitFor(650_000)).toBe(650_000)
+    expect(compactLimitFor(650_000, 0, 0)).toBe(650_000)
   })
 
-  test('measures against the compaction window when it is smaller', () => {
-    expect(budgetFor(0, undefined, 1_000_000, 800_000)).toBe(604_000)
-    expect(budgetFor(0, undefined, 650_000, 800_000)).toBe(464_500)
-  })
-
-  test('reads autoCompactWindow from the settings', async ($, on) => {
+  test('reads autoCompactWindow from the settings when no threshold is known', async ($, on) => {
     world(on, { tokens: 610_000, window: 1_000_000, settings: { autoCompactWindow: 800_000 } })
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-0', reason: 'answer' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /610k of 1\.0M ┃ handoff 604k/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^101% of handoff$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /610k of 1\.0M ┃ compacts 800k/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^76% of compaction$/ })).toBeDefined()
+  })
+
+  test("takes the engine's own compaction threshold once the breakdown names it", async ($, on) => {
+    world(on, { tokens: 302_000, settings: { autoCompactWindow: 800_000 } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /302k of 650k ┃ compacts 604k/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^50% of compaction$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /┊/ })).toBeUndefined()
+  })
+
+  test('with auto-compaction off, measures against the window and marks no compaction point', async ($, on) => {
+    world(on, { tokens: 325_000, settings: { autoCompactWindow: 400_000 }, breakdown: { ...(BREAKDOWN as object), isAutoCompactEnabled: false } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^50% of window$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /325k of 650k · auto-compact off/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /compact(s|ion)|┃/ })).toBeUndefined()
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    const alts = (await desk.findAll({ type: 'Svg' })).map(one => String(one.props.alt)).join('\n')
+    expect(alts).toContain('325k of 650k tokens, auto-compact off')
+    expect(alts).toContain('50% of the window')
+    expect(alts).not.toMatch(/compacts|compaction/)
+    const [, line] = bandLines({ cwd: null, root: null, home: null, repo: null, context: { tokens: 325_000, limit: 650_000, window: 650_000 }, turnsLeft: null, limits: [], agents: 0, shells: { count: 0, longest: 0 }, now: 0 }, 0)
+    expect(line.map(run => run.text).join('')).not.toContain('┃')
   })
 })
 
 describe('pane helpers', () => {
-  test('reconcileStep prompts three times for the same launches, then fails the stage in place of a fourth prompt', () => {
-    let seen = { key: '', count: 0 }
-    const actions: string[] = []
-    for (let i = 0; i < 4; i++) {
-      const step = reconcileStep(seen, 'compact|a:agent-1', true, 3)
-      actions.push(step.action)
-      seen = step.seen
-    }
-    expect(actions).toEqual(['prompt', 'prompt', 'prompt', 'fail'])
-    expect(seen).toEqual({ key: '', count: 0 })
-  })
-
-  test('reconcileStep restarts its count when a launch ends or the pending action changes, and never fails without a stage', () => {
-    let seen = reconcileStep({ key: '', count: 0 }, 'compact|a:agent-1,a:agent-2', true, 3).seen
-    seen = reconcileStep(seen, 'compact|a:agent-1,a:agent-2', true, 3).seen
-    seen = reconcileStep(seen, 'compact|a:agent-1,a:agent-2', true, 3).seen
-    expect(seen.count).toBe(3)
-    expect(reconcileStep(seen, 'compact|a:agent-1', true, 3)).toEqual({ action: 'prompt', seen: { key: 'compact|a:agent-1', count: 1 } })
-    expect(reconcileStep(seen, 'clear|a:agent-1,a:agent-2', true, 3).action).toBe('prompt')
-    expect(reconcileStep({ key: '|a:agent-1', count: 9 }, '|a:agent-1', false, 3)).toEqual({ action: 'prompt', seen: { key: '|a:agent-1', count: 10 } })
-  })
-
   test('draw meters, durations and git state', () => {
     expect(bar(0.5, 10)).toBe('▰▰▰▰▰▱▱▱▱▱')
     expect(bar(0.99, 10)).toBe('▰▰▰▰▰▰▰▰▰▱')
@@ -779,476 +569,93 @@ describe('attribution guard', () => {
     const ran = await $.tool.call({ tool: 'Bash', command: 'git commit -m "x" -m "Claude-Session: y"' })
     expect(ran.deny).toBeUndefined()
   })
-})
 
-describe('seat check', () => {
-  const base = { subagentType: 'general-purpose', description: 'Look around', fork: false }
-
-  test('denies an untyped dispatch and a fork in a dforge session, and passes typed ones', () => {
-    const untyped = seatDenial(base, true, false)
-    expect(untyped).toMatch(/dforge:judge-sonnet-high/)
-    expect(untyped).toMatch(/Execution line/)
-    expect(untyped).not.toMatch(/for implementation/)
-    expect(untyped).toMatch(/dforge:impl-sonnet-medium/)
-    expect(untyped).toMatch(/model: "sonnet"/)
-    expect(untyped).toMatch(/using-dforge §Seats/)
-    for (const subagentType of ['general-purpose', 'claude']) expect(seatDenial({ ...base, subagentType }, true, false)).toBe(untyped)
-    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, true, false)).toMatch(/^dforge: forks are kept out of dforge sessions\./)
-    expect(seatDenial({ ...base, model: 'sonnet' }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, subagentType: 'dforge:judge-opus' }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, subagentType: 'Explore' }, true, false)).toBeNull()
-  })
-
-  test('passes everything before a dforge skill runs, and spawns the main loop does not make', () => {
-    expect(seatDenial(base, false, false)).toBeNull()
-    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, false, false)).toBeNull()
-    expect(seatDenial({ ...base, parentAgentId: 'agent-1' }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, workflow: { runId: 'wf_1', agentIndex: 1 } }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, isTeammate: true }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, resume: { agentId: 'agent-1' } }, true, false)).toBeNull()
-  })
-
-  test('admits a drafting fork only when forks draft', () => {
-    const fork = { ...base, subagentType: 'fork', fork: true, description: 'Draft plan tasks 1-2' }
-    expect(seatDenial(fork, true, true)).toBeNull()
-    expect(seatDenial({ ...fork, description: 'Verify the register rows' }, true, true)).toMatch(/^dforge: forks are kept out/)
-    expect(seatDenial(fork, true, false)).toMatch(/^dforge: forks are kept out/)
-    expect(FORK_DRAFTING).toBe(false)
-  })
-
-  test('denies a drafting fork through the hook once a dforge skill ran', async ($, on) => {
+  test('refuses an AI Co-Authored-By commit and fails closed when it errors', async ($, on) => {
+    let isStoreGone = false
+    on('state.set', { plugin: 'dforge' } as never, ((_$: unknown, e: { key: string }, next: (e: unknown) => unknown) => {
+      if (isStoreGone && e.key === 'refusals') return { deny: 'the state store is gone' }
+      return next(e)
+    }) as never)
     world(on, { tokens: 10_000 })
-    await $.session.start(START)
-    const fork = { tool_use_id: 'toolu_1', prompt: 'Draft the tasks', description: 'Draft plan tasks 1-2', subagentType: 'fork', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: true } as never
-    expect((await $.agent.spawn(fork)).deny).toBeUndefined()
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:writing-plans' })
-    expect((await $.agent.spawn({ ...(fork as object), tool_use_id: 'toolu_2' } as never)).deny).toMatch(/^dforge: forks are kept out of dforge sessions\./)
-  })
-
-  test('refuses an untyped spawn once a dforge skill ran, and lists the refusal', async ($, on) => {
-    world(on, { tokens: 10_000 })
-    await $.session.start(START)
-    const spawn = { tool_use_id: 'toolu_1', prompt: 'Check the rows', description: 'Check rows', subagentType: 'general-purpose', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: false } as never
-    expect((await $.agent.spawn(spawn)).deny).toBeUndefined()
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    expect((await $.agent.spawn({ ...(spawn as object), tool_use_id: 'toolu_2' } as never)).deny).toMatch(/^dforge: name a seat/)
-    expect((await $.agent.spawn({ ...(spawn as object), tool_use_id: 'toolu_3', model: 'sonnet' } as never)).deny).toBeUndefined()
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /✗ Agent: dforge: name a seat/ })).toBeDefined()
-  })
-
-  test('reads the last Process line of a text: fast, the full flow, or none', () => {
-    expect(fastModeLine('Process: fast — a one-file fix\n\nOn it.')).toBe(true)
-    expect(fastModeLine('`Process: fast`')).toBe(true)
-    expect(fastModeLine('Process: fast — x\nProcess: bounded, inline — no trigger')).toBe(false)
-    expect(fastModeLine('Process: faster — not the marker')).toBe(false)
-    expect(fastModeLine('Here is the answer.')).toBeNull()
-  })
-
-  test('stands down while the main loop is in fast mode, and a full-flow Process line turns it back on', async ($, on) => {
-    world(on, { tokens: 10_000 })
-    await $.session.start(START)
-    const said = (text: string, agentId?: string) =>
-      $.session.append({
-        message: { type: 'assistant', role: 'assistant', content: [{ type: 'text', text }] },
-        door: 'response',
-        origin: { kind: 'model' },
-        uuid: `row-${text.length}-${agentId ?? 'main'}`,
-        ...(agentId === undefined ? {} : { agentId }),
-      } as never)
-    const spawn = (id: string) => ({ tool_use_id: id, prompt: 'Look', description: 'Look around', subagentType: 'general-purpose', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: false }) as never
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
-    await said('Process: fast — a one-file fix')
-    expect((await $.agent.spawn(spawn('toolu_1'))).deny).toBeUndefined()
-    await said('Here is what changed.')
-    expect((await $.agent.spawn(spawn('toolu_2'))).deny).toBeUndefined()
-    await said('Process: bounded, inline — a subagent wrote this', 'agent-1')
-    expect((await $.agent.spawn(spawn('toolu_3'))).deny).toBeUndefined()
-    await said('Process: bounded, inline — no trigger')
-    expect((await $.agent.spawn(spawn('toolu_4'))).deny).toMatch(/^dforge: name a seat/)
+    const command = 'git commit -m "fix" -m "Co-Authored-By: Claude Opus <noreply@anthropic.com>"'
+    expect((await $.tool.call({ tool: 'Bash', command })).deny).toBe(
+      'dforge: this project keeps AI attribution out of git. Remove "Co-Authored-By: Claude Opus <noreply@anthropic.com>" and try again.',
+    )
+    isStoreGone = true
+    expect((await $.tool.call({ tool: 'Bash', command })).deny).toBe('dforge: its attribution guard failed.')
   })
 })
 
-describe('review seat write guard', () => {
-  const STATE = '/home/me/code/shop/.dforge'
-  const WS = `${STATE}/sdd/2026-10-28-plan`
-  const REVIEW = `${WS}/task-1-review-report.md`
-  const GUARD = /^dforge: a review seat writes only the report file its dispatch names \(/
-  const dispatch = (prompt: string, subagentType: string, n: number) =>
-    ({ tool_use_id: `toolu_${n}`, prompt, description: 'Review task 1', subagentType, provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false }) as never
-  const write = ($: Parameters<TestBody>[0], agentId: string | undefined, path: string, tool = 'Write') =>
-    $.tool.call({ tool, ...(tool === 'NotebookEdit' ? { notebook_path: path } : { file_path: path }), content: 'x', ...(agentId === undefined ? {} : { agentId }) } as never)
-  // A judge (agent judge-1) that names `named`, and an implementer (impl-1), started in a session at /home/me/code/shop.
-  const started = async ($: Parameters<TestBody>[0], on: On, named: string[] = [REVIEW], extra: Partial<World> = {}, list: () => unknown = () => ({ value: [] })) => {
-    world(on, { tokens: 10_000, agentIds: ['judge-1', 'impl-1'], ...extra })
-    on('agent.list', list as never)
-    await $.session.start(START)
-    await $.agent.spawn(dispatch(`Review task 1 of the plan. Write your full report to ${named.join(' and ')}, then reply in 10 lines.`, 'dforge:judge-sonnet-high', 1))
-    await $.agent.spawn(dispatch('Implement task 1.', 'dforge:impl-sonnet-low', 2))
-  }
-
-  test('refuses a judge write to anything but the report its dispatch names, and allows that report', async ($, on) => {
-    await started($, on)
-    const refused = [
-      `${WS}/amendments.md`,
-      `${WS}/task-1-step.json`,
-      '/home/me/code/shop/docs/dforge/plans/2026-10-28-plan.md',
-      '/home/me/code/shop/src/index.ts',
-      '/etc/passwd',
-      `${WS}/task-1-report.md`,
-      `${WS}/task-2-review-report.md`,
-      'task-1-review-report.md',
-      `${WS}/../amendments.md`,
-      `${WS}/other/../task-1-review-report.md`,
-    ]
-    const tools = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
-    const got: (string | undefined)[] = []
-    const want: string[] = []
-    for (const path of refused) {
-      for (const tool of tools) {
-        got.push((await write($, 'judge-1', path, tool)).deny)
-        want.push(`dforge: a review seat writes only the report file its dispatch names (${REVIEW}); ${path} is not one.`)
-      }
-    }
-    expect(got).toEqual(want)
-    expect(await Promise.all(tools.map(async tool => (await write($, 'judge-1', REVIEW, tool)).deny))).toEqual([undefined, undefined, undefined, undefined])
-    expect((await write($, 'judge-1', `${WS}/./task-1-review-report.md`)).deny).toBeUndefined()
-    // Only the four write tools are looked at.
-    expect((await $.tool.call({ tool: 'Read', file_path: `${WS}/amendments.md`, agentId: 'judge-1' } as never)).deny).toBeUndefined()
-  })
-
-  test('lists a refused write with the other refusals', async ($, on) => {
-    await started($, on)
-    await write($, 'judge-1', `${WS}/amendments.md`)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /✗ Write: dforge: a review seat writes only the report file/ })).toBeDefined()
-  })
-
-  test('leaves an implementer, the main loop and an unknown loop alone', async ($, on) => {
-    await started($, on)
-    expect((await write($, 'impl-1', `${WS}/amendments.md`)).deny).toBeUndefined()
-    expect((await write($, undefined, `${WS}/amendments.md`)).deny).toBeUndefined()
-    expect((await write($, 'workflow-agent-9', `${WS}/amendments.md`)).deny).toBeUndefined()
-  })
-
-  test('lists every report path the dispatch names under a state root, and none that lies elsewhere', async ($, on) => {
-    const second = `${WS}/task-1-rereview-1-report.md`
-    await started($, on, [REVIEW, second, '/tmp/elsewhere-report.md', 'docs/relative-report.md', `${WS}/../escape-report.md`, `${WS}/task-9-report.md.bak`])
-    expect((await write($, 'judge-1', second)).deny).toBeUndefined()
-    expect((await write($, 'judge-1', '/tmp/elsewhere-report.md')).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (${REVIEW}, ${second}); /tmp/elsewhere-report.md is not one.`)
-  })
-
-  test('leaves out the implementer report a review dispatch also names', async ($, on) => {
-    const implementer = `${WS}/task-1-report.md`
-    await started($, on, [implementer, REVIEW])
-    expect((await write($, 'judge-1', implementer)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (${REVIEW}); ${implementer} is not one.`)
-    expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
-  })
-
-  test('refuses every judge write while no root is known', async ($, on) => {
-    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: '', commonDir: '/home/me/code/shop/.git/modules/sub' })
-    on('agent.list', () => ({ value: [] }) as never)
-    await $.session.start(START)
-    await $.agent.spawn(dispatch(`Write your report to ${REVIEW}.`, 'dforge:judge-sonnet-high', 1))
-    expect((await write($, 'judge-1', REVIEW)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (none); ${REVIEW} is not one.`)
-  })
-
-  test('a judge whose dispatch names no report file may write no file', async ($, on) => {
-    world(on, { tokens: 10_000, agentIds: ['judge-1'] })
-    on('agent.list', () => ({ value: [] }) as never)
-    await $.session.start(START)
-    await $.agent.spawn(dispatch('Review task 1 and reply in 10 lines.', 'dforge:judge-opus', 1))
-    expect((await write($, 'judge-1', REVIEW)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (none); ${REVIEW} is not one.`)
-  })
-
-  describe('a dispatch that only points at its prompt file', () => {
-    const PROMPT = `${WS}/task-1-review-prompt.md`
-    const LOOSE = '/tmp/task-1-review-prompt.md'
-    const EARLIER = `${WS}/task-1-rereview-1-report.md`
-    const FILLED = `    Read the implementer's report: ${WS}/task-1-report.md\n    The earlier round is in ${EARLIER}.\n    Write your full report to ${REVIEW} and write nothing else: it is\n`
-    const pointed = async ($: Parameters<TestBody>[0], on: On, promptFile: string, files: NonNullable<World['files']>) => {
-      world(on, { tokens: 10_000, agentIds: ['judge-1'], files })
-      on('agent.list', () => ({ value: [] }) as never)
-      on('fs.read', (_$, e) => {
-        const file = files[e.path]
-        if (file === undefined) throw new Error('ENOENT')
-        return { value: file.text }
-      })
-      await $.session.start(START)
-      await $.agent.spawn(dispatch(`Your complete instructions are in \`${promptFile}\`: read it first and follow it.`, 'dforge:judge-sonnet-high', 1))
-    }
-
-    test('allows only the report on the prompt file\'s report line', async ($, on) => {
-      await pointed($, on, PROMPT, { [PROMPT]: { text: FILLED } })
-      expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
-      expect((await write($, 'judge-1', EARLIER)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (${REVIEW}); ${EARLIER} is not one.`)
-    })
-
-    const NOTHING: [string, string, NonNullable<World['files']>][] = [
-      ['lies outside every state root', LOOSE, { [LOOSE]: { text: FILLED } }],
-      ['cannot be read', PROMPT, {}],
-      ['has no report line', PROMPT, { [PROMPT]: { text: `Read ${REVIEW} for context.\n` } }],
-    ]
-    for (const [name, promptFile, files] of NOTHING) {
-      test(`allows nothing when the prompt file ${name}`, async ($, on) => {
-        await pointed($, on, promptFile, files)
-        expect((await write($, 'judge-1', REVIEW)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (none); ${REVIEW} is not one.`)
-      })
-    }
-  })
-
-  test('allows a report under a worktree the session is not in when dispatching or writing', async ($, on) => {
-    const primary = '/home/me/code/shop'
-    const worktree = `${primary}/.claude/worktrees/feature`
-    const report = `${worktree}/.dforge/sdd/p/task-1-review-report.md`
-    const place: World = { tokens: 10_000, agentIds: ['judge-1', 'judge-2'], checkout: primary, primary, worktrees: [primary, worktree] }
-    world(on, place)
-    on('agent.list', () => ({ value: [] }) as never)
-    await $.session.start(START)
-    await $.agent.spawn(dispatch(`Write your report to ${report}.`, 'dforge:judge-sonnet-high', 1))
-    expect((await write($, 'judge-1', report)).deny).toBeUndefined()
-
-    place.checkout = worktree
-    await $.tool.call({ tool: 'EnterWorktree' } as never)
-    await $.agent.spawn(dispatch(`Write your report to ${report}.`, 'dforge:judge-sonnet-high', 2))
-    place.checkout = primary
-    place.worktrees = [primary]
-    await $.tool.call({ tool: 'ExitWorktree' } as never)
-    expect((await write($, 'judge-2', report)).deny).toBeUndefined()
-  })
-
-  test('takes a judge the spawn record does not hold from $.agent.list()', async ($, on) => {
-    world(on, { tokens: 10_000 })
-    on('agent.list', () => ({ value: [{ id: 'listed-1', type: 'dforge:judge-opus', description: 'Review', status: 'running' }] }) as never)
-    await $.session.start(START)
-    expect((await write($, 'listed-1', REVIEW)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (none); ${REVIEW} is not one.`)
-  })
-
-  test('refuses a report reached through a symlinked directory or itself a symlink', async ($, on) => {
-    const linkedDir = `${STATE}/sdd/linked`
-    const linkedFile = `${WS}/task-2-review-report.md`
-    const through = `${linkedDir}/task-1-review-report.md`
-    await started($, on, [REVIEW, linkedFile, through], {
-      files: {
-        [`${STATE}/sdd`]: { text: '', kind: 'dir' },
-        [WS]: { text: '', kind: 'dir' },
-        [linkedDir]: { text: '', kind: 'dir', isLink: true },
-        [linkedFile]: { text: 'x', isLink: true },
-      },
-    })
-    expect((await write($, 'judge-1', through)).deny).toMatch(GUARD)
-    expect((await write($, 'judge-1', linkedFile)).deny).toMatch(GUARD)
-    expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
-  })
-
-  // The test engine passes the mod no error code, so this pins the no-code
-  // rule: a stat rejection below a file refuses.
-  test('refuses a report whose directory is a file', async ($, on) => {
-    await started($, on, [REVIEW], { files: { [`${STATE}/sdd`]: { text: '', kind: 'dir' }, [WS]: { text: 'x', kind: 'file' } } })
-    expect((await write($, 'judge-1', REVIEW)).deny).toMatch(GUARD)
-  })
-
-  test('allows a report whose directory is not there yet', async ($, on) => {
-    await started($, on, [REVIEW], { files: { [`${STATE}/sdd`]: { text: '', kind: 'dir' } }, statErrors: { [WS]: 'ENOENT' } })
-    expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
-  })
-
-  // The kit drops a stat rejection's code, so the coded branches are pinned on
-  // the rule itself.
-  test('reads a stat rejection as a missing path only for ENOENT, or with no code below a directory', () => {
-    const coded = (code: unknown) => Object.assign(new Error(String(code)), { code })
-    expect(statMissing(coded('ENOENT'), false)).toBe(true)
-    expect(statMissing(coded('EACCES'), true)).toBe(false)
-    expect(statMissing(coded('ENOTDIR'), true)).toBe(false)
-    expect(statMissing(new Error('gone'), true)).toBe(true)
-    expect(statMissing(new Error('gone'), false)).toBe(false)
-    expect(statMissing(coded(13), true)).toBe(true)
-    expect(statMissing(null, true)).toBe(true)
-  })
-
-  test('keeps a POSIX root under a one-letter directory exact, and walks it for links', async ($, on) => {
-    const w: World = { tokens: 10_000, agentIds: ['judge-1'], checkout: '/x/repo' }
-    world(on, w)
-    on('agent.list', () => ({ value: [] }) as never)
-    await $.session.start(START)
-    const named = '/x/repo/.dforge/sdd/p/task-1-review-report.md'
-    await $.agent.spawn(dispatch(`Write your report to ${named}.`, 'dforge:judge-sonnet-high', 1))
-    expect((await write($, 'judge-1', named)).deny).toBeUndefined()
-    expect((await write($, 'judge-1', '/X/repo/.dforge/sdd/p/task-1-review-report.md')).deny).toMatch(GUARD)
-    expect((await write($, 'judge-1', 'X:/repo/.dforge/sdd/p/task-1-review-report.md')).deny).toMatch(GUARD)
-    w.files = { '/x/repo/.dforge/sdd': { text: '', kind: 'dir', isLink: true } }
-    expect((await write($, 'judge-1', named)).deny).toMatch(GUARD)
-  })
-
-  test('refuses a judge write the refusal list cannot take, whatever guardAttribution says', async ($, on) => {
-    world(on, { tokens: 10_000, config: { guardAttribution: false } })
-    on('agent.list', () => ({ value: [{ id: 'listed-1', type: 'dforge:judge-opus', description: 'Review', status: 'running' }] }) as never)
-    on('state.set', { plugin: 'dforge', key: 'refusals' } as never, (() => ({ deny: 'state unavailable' })) as never)
-    await $.session.start(START)
-    expect((await write($, 'listed-1', REVIEW)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (none); ${REVIEW} is not one.`)
-  })
-
-  test('takes the roots from the checkout and the primary, and a moved checkout', async ($, on) => {
-    const world1: World = { tokens: 10_000, agentIds: ['judge-1', 'judge-2', 'judge-3'], checkout: '/home/me/code/shop-wt', primary: '/home/me/code/shop' }
-    world(on, world1)
-    on('agent.list', () => ({ value: [] }) as never)
-    await $.session.start(START)
-    const fromWorktree = '/home/me/code/shop-wt/.dforge/sdd/p/task-1-review-report.md'
-    const fromPrimary = '/home/me/code/shop/.dforge/sdd/p/task-1-review-report.md'
-    await $.agent.spawn(dispatch(`Write your report to ${fromWorktree} and ${fromPrimary}.`, 'dforge:judge-sonnet-high', 1))
-    expect((await write($, 'judge-1', fromWorktree)).deny).toBeUndefined()
-    expect((await write($, 'judge-1', fromPrimary)).deny).toBeUndefined()
-    // The session moves into another worktree: its .dforge is a root from then on.
-    world1.checkout = '/home/me/code/shop-wt2'
-    await $.tool.call({ tool: 'EnterWorktree' } as never)
-    const moved = '/home/me/code/shop-wt2/.dforge/sdd/p/task-1-review-report.md'
-    await $.agent.spawn(dispatch(`Write your report to ${moved}.`, 'dforge:judge-sonnet-high', 2))
-    expect((await write($, 'judge-2', moved)).deny).toBeUndefined()
-    // A path under no root is not captured.
-    await $.agent.spawn(dispatch(`Write your report to ${fromWorktree.replace('shop-wt', 'other')}.`, 'dforge:judge-sonnet-high', 3))
-    expect((await write($, 'judge-3', fromWorktree.replace('shop-wt', 'other'))).deny).toMatch(GUARD)
-  })
-
-  test('compares a Windows path without regard to slashes, case or the drive letter case', async ($, on) => {
-    const root = 'C:/Users/me/shop'
-    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: root, primary: root })
-    on('agent.list', () => ({ value: [] }) as never)
-    await $.session.start(START)
-    await $.agent.spawn(dispatch('Write your report to C:\\Users\\me\\shop\\.dforge\\sdd\\p\\task-1-review-report.md and reply.', 'dforge:judge-sonnet-high', 1))
-    expect((await write($, 'judge-1', 'c:/users/ME/shop/.dforge/sdd/p/task-1-review-report.md')).deny).toBeUndefined()
-    expect((await write($, 'judge-1', 'C:\\Users\\me\\shop\\.dforge\\sdd\\p\\task-1-review-report.md')).deny).toBeUndefined()
-    expect((await write($, 'judge-1', 'C:\\Users\\me\\shop\\.dforge\\sdd\\p\\amendments.md')).deny).toMatch(GUARD)
-  })
-
-  test('captures a report path whose root holds spaces and parentheses', async ($, on) => {
-    const root = '/x/John Smith (dev)/repo'
-    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: root })
-    on('agent.list', () => ({ value: [] }) as never)
-    await $.session.start(START)
-    const named = `${root}/.dforge/sdd/p/task-1-review-report.md`
-    await $.agent.spawn(dispatch(`Write your full report to ${named}, then reply in 10 lines.`, 'dforge:judge-sonnet-high', 1))
-    expect((await write($, 'judge-1', named)).deny).toBeUndefined()
-    expect((await write($, 'judge-1', `${root}/.dforge/sdd/p/amendments.md`)).deny).toMatch(GUARD)
-    expect((await write($, 'judge-1', `${root}/.dforge/sdd/p/task-2-review-report.md`)).deny).toMatch(GUARD)
-  })
-
-  test('captures a Windows report path whose root holds a space, in either slash', async ($, on) => {
-    const root = 'C:\\Users\\John Smith\\repo'
-    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: root })
-    on('agent.list', () => ({ value: [] }) as never)
-    await $.session.start(START)
-    await $.agent.spawn(dispatch('Write your report to C:/Users/John Smith/repo/.dforge/sdd/p/task-1-review-report.md and reply.', 'dforge:judge-sonnet-high', 1))
-    expect((await write($, 'judge-1', 'C:\\Users\\John Smith\\repo\\.dforge\\sdd\\p\\task-1-review-report.md')).deny).toBeUndefined()
-    expect((await write($, 'judge-1', 'C:\\Users\\John Smith\\repo\\.dforge\\sdd\\p\\amendments.md')).deny).toMatch(GUARD)
-  })
-
-  test('takes the Git Bash /c/ spelling of a report path on a drive host', async ($, on) => {
-    const root = 'C:/Users/me/shop'
-    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: root, primary: root })
-    on('agent.list', () => ({ value: [] }) as never)
-    await $.session.start(START)
-    await $.agent.spawn(dispatch('Write your report to /c/Users/me/shop/.dforge/sdd/p/task-1-review-report.md and reply.', 'dforge:judge-sonnet-high', 1))
-    expect((await write($, 'judge-1', 'C:/Users/me/shop/.dforge/sdd/p/task-1-review-report.md')).deny).toBeUndefined()
-    expect((await write($, 'judge-1', 'C:/Users/me/shop/.dforge/sdd/p/amendments.md')).deny).toMatch(GUARD)
-  })
-
-  test('keeps a running judge in the spawn record past fifty later dispatches', async ($, on) => {
-    world(on, { tokens: 10_000, agentIds: ['judge-1', ...Array.from({ length: 55 }, (_, i) => `impl-${i}`)] })
-    on('agent.list', () => ({ value: [] }) as never)
-    await $.session.start(START)
-    await $.agent.spawn(dispatch(`Write your report to ${REVIEW}.`, 'dforge:judge-sonnet-high', 1))
-    for (let n = 0; n < 55; n++) await $.agent.spawn(dispatch('Implement a task.', 'dforge:impl-sonnet-low', n + 2))
-    expect((await write($, 'judge-1', `${WS}/amendments.md`)).deny).toMatch(GUARD)
-    expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
-  })
-
-  test('refuses a judge write when the check itself fails, whatever guardAttribution says', async ($, on) => {
-    await started($, on, [REVIEW], { config: { guardAttribution: false } }, () => {
-      throw new Error('agent list unavailable')
-    })
-    const ran = await write($, 'judge-1', REVIEW)
-    expect(ran.deny).toMatch(/^dforge: the review-seat write guard could not check this write \(.+\); it is refused\.$/)
-    expect((await write($, 'impl-1', `${WS}/amendments.md`)).deny).toBeUndefined()
-    expect((await write($, undefined, `${WS}/amendments.md`)).deny).toBeUndefined()
-  })
-
-  test('a failing agent list blocks no implementer write while the attribution guard is on', async ($, on) => {
-    await started($, on, [REVIEW], { config: { guardAttribution: true } }, () => {
-      throw new Error('agent list unavailable')
-    })
-    expect((await write($, 'judge-1', REVIEW)).deny).toMatch(/^dforge: the review-seat write guard could not check this write \(.+\); it is refused\.$/)
-    expect((await write($, 'impl-1', `${WS}/notes.md`)).deny).toBeUndefined()
-    expect((await write($, 'unrecorded-1', `${WS}/notes.md`)).deny).toBeUndefined()
-    expect((await write($, undefined, `${WS}/notes.md`)).deny).toBeUndefined()
-  })
-})
-
-describe('handoff reading', () => {
-  test('shows in no band and no hint line, past the budget too', async ($, on) => {
-    world(on, { tokens: 470_000 })
+describe('compaction reading', () => {
+  test('shows in no band and no hint line, past the compaction point too', async ($, on) => {
+    world(on, { tokens: 620_000 })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     for (const surface of SURFACES) {
       const band = await $.ui.mount({ ...BAND, surface })
-      expect(await band.find({ text: /hand ?off/i })).toBeUndefined()
+      expect(await band.find({ text: /hand ?off|compact/i })).toBeUndefined()
       await band.unmount()
       const hint = await $.ui.mount({ ...HINT, surface })
-      expect(await hint.find({ text: /handoff/ })).toBeUndefined()
+      expect(await hint.find({ text: /handoff|compact/ })).toBeUndefined()
       await hint.unmount()
     }
   })
 
-  test('the band reads the context against the budget', async ($, on) => {
+  test('the band reads the context against the compaction point', async ($, on) => {
     const w: World = { ...SIGNED_IN, tokens: 284_000 }
     world(on, w)
     signedIn(on)
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     let ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^61%$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^47%$/ })).toBeDefined()
     await ui.unmount()
 
     w.tokens = 400_000
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^86%$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^66%$/ })).toBeDefined()
   })
 
-  test('in a plan session, offers the handoff in the pane and sends the note once', async ($, on) => {
+  test('past the compaction point, tells the model nothing and offers no Hand off', async ($, on) => {
     const notes: string[] = []
-    world(on, { tokens: 470_000, notes })
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    world(on, { tokens: 620_000, notes })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:ui-ux' })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
-    expect(notes).toHaveLength(1)
-    expect(notes[0]).toMatch(/budget: 470k of 465k — handoff/)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ key: 'pane-handoff' })).toBeDefined()
-  })
-
-  test('stays quiet to the model outside a plan session', async ($, on) => {
-    const notes: string[] = []
-    world(on, { tokens: 470_000, notes })
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-0', reason: 'answer' })
     expect(notes).toEqual([])
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^103% of compaction$/ })).toBeDefined()
+    expect(await ui.find({ key: 'pane-handoff' })).toBeUndefined()
+    expect(await ui.find({ text: /Hand off/ })).toBeUndefined()
+    expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
   })
 
-  test('clears after a compaction and re-arms the note', async ($, on) => {
-    const notes: string[] = []
-    const w: World = { tokens: 470_000, notes }
+  test('clears after a compaction', async ($, on) => {
+    const w: World = { tokens: 470_000 }
     world(on, w)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
-    expect(notes).toHaveLength(1)
-
     await $.session.compact({ trigger: 'manual', messages: [SUMMARY] })
     w.tokens = undefined
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const cleared = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await cleared.find({ type: 'Text', text: /≈218k estimated/ })).toBeDefined()
     await cleared.unmount()
+  })
+})
 
-    w.tokens = 480_000
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    expect(notes).toHaveLength(2)
+describe('agent spawns', () => {
+  test('starts an untyped general-purpose agent with no model, after a dforge skill ran too', async ($, on) => {
+    world(on, { tokens: 10_000 })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:ui-ux' })
+    const spawn = { tool_use_id: 'toolu_1', prompt: 'Check the rows', description: 'Check rows', subagentType: 'general-purpose', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: false } as never
+    const started = await $.agent.spawn(spawn)
+    expect(started.deny).toBeUndefined()
+    expect(started.agentId).toBe('agent-1')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /● general-purpose Check rows/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /✗ Agent/ })).toBeUndefined()
   })
 })
 
@@ -1259,7 +666,7 @@ describe('cockpit pane', () => {
       tool_use_id: 'toolu_1',
       prompt: 'Implement task 3',
       description: 'Task 3',
-      subagentType: 'dforge:impl-sonnet-low',
+      subagentType: 'acme-builder-01',
       provider: { plugin: 'dforge', tier: 'user' },
       parentModel: 'claude-opus-5-5',
       background: false,
@@ -1268,8 +675,8 @@ describe('cockpit pane', () => {
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
       // The desktop draws its panels' rows as its own text.
-      if (surface === 'desktop') expect(await boxTexts(ui)).toContain('●  impl-sonnet-low  Task 3')
-      else expect(await ui.find({ type: 'Text', text: /● impl-sonnet-low Task 3/ })).toBeDefined()
+      if (surface === 'desktop') expect(await boxTexts(ui)).toContain('●  acme-builder-01  Task 3')
+      else expect(await ui.find({ type: 'Text', text: /● acme-builder-01 Task 3/ })).toBeDefined()
       await ui.unmount()
     }
     await $.turn.complete({
@@ -1291,12 +698,12 @@ describe('cockpit pane', () => {
       const ui = await $.ui.mount({ ...PANE, surface })
       if (surface === 'desktop') {
         const texts = await boxTexts(ui)
-        expect(texts).toContain('impl-sonnet-low ×1')
+        expect(texts).toContain('acme-builder-01 ×1')
         expect(texts).toContain('40k in · 75% cached · 3k out')
-        expect(texts).toContain('✓  impl-sonnet-low  Task 3')
+        expect(texts).toContain('✓  acme-builder-01  Task 3')
       } else {
         expect(await ui.find({ type: 'Text', text: /40k in · 75% cached · 3k out/ })).toBeDefined()
-        expect(await ui.find({ type: 'Text', text: /✓ impl-sonnet-low Task 3/ })).toBeDefined()
+        expect(await ui.find({ type: 'Text', text: /✓ acme-builder-01 Task 3/ })).toBeDefined()
       }
       await ui.unmount()
     }
@@ -1334,7 +741,7 @@ describe('cockpit pane', () => {
     await $.session.start(START)
     await $.turn.start({ text: 'go', turnId: 't1' })
     for (const n of [1, 2, 3, 4]) {
-      await $.agent.spawn({ tool_use_id: `toolu_${n}`, prompt: 'Implement', description: `Task ${n}`, subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
+      await $.agent.spawn({ tool_use_id: `toolu_${n}`, prompt: 'Implement', description: `Task ${n}`, subagentType: 'acme-builder-01', provider: { plugin: 'acme', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
     }
     await $.turn.complete({ answer: '', durationMs: 1000, isAborted: false, turnId: 'turn-3', agentId: 'agent-3', reason: 'error' })
     await $.turn.complete({ answer: 'done', durationMs: 1000, isAborted: false, turnId: 'turn-4', agentId: 'agent-4', reason: 'answer' })
@@ -1350,10 +757,10 @@ describe('cockpit pane', () => {
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...PANE, surface })
       const at = await order(ui, surface, [
-        /^Waiting on you · 1$/, /^⏳ +impl-sonnet-low +Task 1/,
-        /^Working · 1$/, /^● +impl-sonnet-low +Task 2/,
-        /^Failed · 1$/, /^✗ +impl-sonnet-low +Task 3/,
-        /^Done · 1$/, /^✓ +impl-sonnet-low +Task 4/,
+        /^Waiting on you · 1$/, /^⏳ +acme-builder-01 +Task 1/,
+        /^Working · 1$/, /^● +acme-builder-01 +Task 2/,
+        /^Failed · 1$/, /^✗ +acme-builder-01 +Task 3/,
+        /^Done · 1$/, /^✓ +acme-builder-01 +Task 4/,
       ])
       expect(at.every(index => index >= 0)).toBe(true)
       expect([...at].sort((a, b) => a - b)).toEqual(at)
@@ -1420,16 +827,16 @@ describe('cockpit pane', () => {
         // The desktop draws its panels' rows and chips as its own text, its
         // gauges and meters as pictures that name their figures in the alt.
         expect((await ui.find({ key: 'usage-headline' }))?.text).toMatch(/^\$1\.50/)
-        expect(drawn).toContain('61% of the handoff budget')
+        expect(drawn).toContain('47% of the compaction point')
         expect(drawn).toContain('5h limit 23% used')
-        expect(drawn).toContain('284k of 650k tokens, handoff at 465k')
+        expect(drawn).toContain('284k of 650k tokens, compacts at 604k')
         for (const chip of ['⎇ feat/pane', '↑2', '↓1', '~1 changed', '?1 untracked']) expect(drawn).toContain(`"children":["${chip}"]`)
       } else {
         expect(await ui.find({ type: 'Text', text: /\$1\.50/ })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: /23%/ })).toBeDefined()
-        expect(await ui.find({ type: 'Text', text: /61%/ })).toBeDefined()
-        expect(await ui.find({ type: 'Text', text: /284k of 650k ┃ handoff 465k/ })).toBeDefined()
+        expect(await ui.find({ type: 'Text', text: /47%/ })).toBeDefined()
+        expect(await ui.find({ type: 'Text', text: /284k of 650k ┃ compacts 604k/ })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: /~1 changed \?1 untracked/ })).toBeDefined()
         // Rows sit two cells in under their section, details two more.
         expect(drawn).toContain('"paddingLeft":2')
@@ -1485,58 +892,6 @@ describe('cockpit pane', () => {
 })
 
 describe('settings', () => {
-  test('warnAt moves where the strip shows the handoff', async ($, on) => {
-    world(on, { tokens: 340_000, config: { warnAt: 70 } })
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^73%$/ })).toBeDefined()
-  })
-
-  test('relaxed handoff measures the context against the final-phase limit', async ($, on) => {
-    // The same worked figure tests/budget-line.test.sh asserts for the scripts.
-    expect(finalLimitFor(1_000_000, 800_000)).toBe(680_000)
-    expect(finalLimitFor(650_000)).toBe(552_500)
-    expect(finalLimitFor(650_000, 0)).toBe(552_500)
-    // 276,250 is half of 85% of the 650k window; strict would read 59%.
-    world(on, { tokens: 276_250, config: { handoffMode: 'relaxed' } })
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^50%$/ })).toBeDefined()
-  })
-
-  test('strict handoff reads the same context against the handoff budget', async ($, on) => {
-    // 276,250 of the 464,500 budget: 59%, where relaxed reads 50%.
-    world(on, { tokens: 276_250, config: { handoffMode: 'strict' } })
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^59%$/ })).toBeDefined()
-  })
-
-  test('relaxed handoff warns and hands off against the final-phase limit', async ($, on) => {
-    const notes: string[] = []
-    const w: World = { tokens: 440_000, notes, config: { handoffMode: 'relaxed' } }
-    world(on, w)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    // 440,000 of 552,500 is under warnAt's 80%: Hand off is not the one to press.
-    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect((await ui.find({ key: 'pane-handoff-box' }))?.props.borderColor).toBe('inactive')
-    await ui.unmount()
-    // Past the strict budget and warnAt, short of the limit: the warning, no note.
-    w.tokens = 470_000
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect((await ui.find({ key: 'pane-handoff-box' }))?.props.borderColor).toBe('permission')
-    await ui.unmount()
-    expect(notes.filter(text => /— handoff\./.test(text))).toEqual([])
-    w.tokens = 560_000
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    expect(notes.filter(text => /— handoff\./.test(text))).toEqual([expect.stringMatching(/^dforge: budget: 560k of 553k — handoff\. /)])
-  })
-
   test('sections picks and orders the pane', async ($, on) => {
     world(on, { tokens: 50_000, config: { sections: 'plan, repo' } })
     await $.session.start(START)
@@ -1569,7 +924,7 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: /^\$1\.50/ })).toBeDefined()
     expect(await ui.find({ key: 'limit-five_hour' })).toBeUndefined()
     // Context loses its meter but keeps its buttons.
-    expect(await ui.find({ type: 'Text', text: /handoff 465k/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /compacts 604k/ })).toBeUndefined()
     expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
     await ui.press({ key: 'usage-title' })
     expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ collapsed: 'context' })
@@ -1591,7 +946,7 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: /^\$1\.50/ })).toBeDefined()
     expect(await ui.find({ key: 'limit-five_hour' })).toBeUndefined()
     expect((await ui.find({ key: 'context-title' }))?.children).toEqual([])
-    expect(await ui.find({ type: 'Text', text: /handoff 465k/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /compacts 604k/ })).toBeUndefined()
     expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
   })
 
@@ -1642,36 +997,20 @@ describe('settings', () => {
     expect(opened).toEqual([])
   })
 
-  test('a budget override above the schema maximum is ignored', async ($, on) => {
-    world(on, { tokens: 340_000, config: {}, env: { DFORGE_BUDGET: '3000000' } })
+  test('no budget variable moves the context limit', async ($, on) => {
+    world(on, { tokens: 340_000, config: {}, env: { DFORGE_BUDGET: '500000', DR_SUPERPOWERS_BUDGET: '400000' } })
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^73%$/ })).toBeDefined()
-  })
-
-  test('the pre-2.0 budget name is not read', async ($, on) => {
-    world(on, { tokens: 340_000, config: {}, env: { DR_SUPERPOWERS_BUDGET: '400000' } })
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^73%$/ })).toBeDefined()
-  })
-
-  test('DFORGE_BUDGET sets the budget', async ($, on) => {
-    world(on, { tokens: 340_000, config: {}, env: { DFORGE_BUDGET: '500000' } })
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^68%$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^56%$/ })).toBeDefined()
   })
 
   test('the settings view says which saved values it ignored', async ($, on) => {
-    world(on, { tokens: 284_000, config: { warnAt: 500 } })
+    world(on, { tokens: 284_000, config: { limitAlertAt: 500 } })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
-    expect(await ui.find({ type: 'Text', text: /warnAt in ~\/\.dforge\/config\.json is not valid; ignored/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /limitAlertAt in ~\/\.dforge\/config\.json is not valid; ignored/ })).toBeDefined()
   })
 
   test('every setting has a row in exactly one tab', async ($, on) => {
@@ -1718,7 +1057,7 @@ describe('settings', () => {
     on('store.keys', () => ({ value: [...kept.keys()] }))
     return kept
   }
-  const legacy = (warnAt: number) => ({ pluginConfigs: { 'dr-cockpit@darkraise': { options: { warnAt } } } })
+  const legacy = (limitAlertAt: number) => ({ pluginConfigs: { 'dr-cockpit@darkraise': { options: { limitAlertAt } } } })
   // world's fs.list names the store file through `files`.
   const LISTED = { [STORE_FILE]: { text: '' } }
 
@@ -1728,7 +1067,7 @@ describe('settings', () => {
     disk(on, written, OLD_FILES)
     const store = memory(on)
     await $.session.start(START)
-    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70 })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ limitAlertAt: 70 })
     expect(store.get('notifyUrl')).toBe('https://discord.com/api/webhooks/1/abc')
     expect(store.get('notifyMention')).toBe('42')
   })
@@ -1743,7 +1082,7 @@ describe('settings', () => {
     w.settings = legacy(60)
     store.delete('notifyUrl')
     await $.session.start(START)
-    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70 })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ limitAlertAt: 70 })
     expect(store.get('notifyUrl')).toBeUndefined()
   })
 
@@ -1765,10 +1104,10 @@ describe('settings', () => {
     memory(on)
     await $.session.start(START)
     expect(runs).toEqual([expect.stringMatching(/^node .*\/scripts\/lib\/dforge-config\.mjs get --json$/)])
-    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70 })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ limitAlertAt: 70 })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'settings-tab-Notifications' })
     expect(await ui.find({ type: 'Text', text: /^70%\s*$/ })).toBeDefined()
   })
 
@@ -1780,7 +1119,7 @@ describe('settings', () => {
     memory(on)
     await $.session.start(START)
     expect(runs).toEqual([])
-    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70 })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ limitAlertAt: 70 })
   })
 
   test('when dforge-config fails before creating the file the first session writes the import itself', async ($, on) => {
@@ -1791,7 +1130,7 @@ describe('settings', () => {
     memory(on)
     await $.session.start(START)
     expect(runs[0]).toMatch(/^node .*\/scripts\/lib\/dforge-config\.mjs get --json$/)
-    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 70 })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ limitAlertAt: 70 })
   })
 
   test('a settings file dforge-config wrote first is kept, and the webhook still comes over', async ($, on) => {
@@ -1819,7 +1158,7 @@ describe('minimized band', () => {
     expect(await ui.find({ type: 'Text', text: /^╭─ me@example\.com · subscription · Remote ○ not connected ─+ $/ })).toBeDefined()
     expect(await ui.find({ key: 'band-expand' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /~\/code\/shop\/web ⎇ feat\/pane\* ↑2 ↓1 ~1 \?1.*\$ 1 shell · longest 0s/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 61%.*5h ▰+▱*┊?▱* 23%.*7d .* 61%/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 47%.*5h ▰+▱*┊?▱* 23%.*7d .* 61%/ })).toBeDefined()
     // No buttons beside Expand, and no commands.
     expect(await ui.find({ key: 'pane-compact' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /npm run dev/ })).toBeUndefined()
@@ -1845,11 +1184,11 @@ describe('minimized band', () => {
     const ui = await $.ui.mount({ ...INLINE, props: { ...INLINE.props, bodyColumns: 40 }, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /╭/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: 'me@example.com' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^ctx 61% ≈?.*· 5h 23%.*· 7d 61%/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^ctx 47% ≈?.*· 5h 23%.*· 7d 61%/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^shop.* ⎇ feat\/pane\*/ })).toBeDefined()
   })
 
-  test('says what is blocked or refused on a line of its own', async ($, on) => {
+  test('says what is refused on a line of its own', async ($, on) => {
     world(on, { tokens: 284_000 })
     await $.tool.call({ tool: 'Bash', command: 'git commit -m "x" -m "Co-Authored-By: Claude <noreply@anthropic.com>"' })
     const ui = await $.ui.mount({ ...INLINE, surface: 'terminal' })
@@ -1921,7 +1260,7 @@ describe('minimized band', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
     expect(await ui.find({ type: 'Button', text: '▸ Context' })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 61%/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /ctx ▰+▱*┃?▱* 47%/ })).toBeDefined()
   })
 
   for (const surface of SURFACES) {
@@ -2128,7 +1467,7 @@ describe('dense pane', () => {
     await $.session.measure(MEASURE)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Context' })).toBeUndefined()
-    expect((await ui.find({ key: 'dense-context' }))?.text).toMatch(/^ctx  ▰+▱* 61% 284k\/465k/)
+    expect((await ui.find({ key: 'dense-context' }))?.text).toMatch(/^ctx  ▰+▱* 47% 284k\/604k/)
     expect((await ui.find({ key: 'dense-usage' }))?.text).toMatch(/^lim  5h ▰+▱* 23% · 7d ▰+▱* 61%$/)
     expect((await ui.find({ key: 'dense-shells' }))?.text).toBe('$    1 shell · npm run dev · 0s')
     expect(await ui.find({ key: 'dense-agents' })).toBeUndefined()
@@ -2240,7 +1579,7 @@ describe('dense pane', () => {
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const read = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await read.find({ type: 'Text', text: /estimated/ })).toBeUndefined()
-    expect(await read.find({ type: 'Text', text: /% of handoff/ })).toBeDefined()
+    expect(await read.find({ type: 'Text', text: /% of compaction/ })).toBeDefined()
   })
 
   test('reads the context as a tool starts, not only once it ends', async ($, on) => {
@@ -2268,36 +1607,22 @@ describe('dense pane', () => {
     expect(log.length).toBeGreaterThan(1)
   })
 
-  test('offers Hand off as a one-line button, the main one near the budget', async ($, on) => {
-    const prompts: string[] = []
-    world(on, { ...SIGNED_IN, tokens: 470_000, prompts })
+  test('offers Compact as a one-line button that compacts, and no Hand off', async ($, on) => {
+    const compacts: string[] = []
+    world(on, { ...SIGNED_IN, tokens: 620_000, compacts })
     signedIn(on, configured({ density: 'dense' }))
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:ui-ux' })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ key: 'pane-handoff-box' })).toBeUndefined()
-    const handoff = await ui.find({ key: 'pane-handoff' })
-    expect(handoff?.type).toBe('Button')
-    expect(handoff?.props).toMatchObject({ label: '↪ Hand off', hotkey: 'h', variant: 'primary' })
-    await ui.press({ key: 'pane-handoff' })
-    expect(prompts).toHaveLength(1)
-  })
-
-  test('offers Stop auto as a one-line button that stops the run', async ($, on) => {
-    const files = { ...autoFiles({ pending: null }), ...configured({ density: 'dense' }) }
-    const w: World = { ...SIGNED_IN, autoRuns: [], autoFile: files[AUTO] }
-    world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    const stop = await ui.find({ key: 'pane-stop-auto' })
-    expect(stop?.type).toBe('Button')
-    expect(stop?.props).toMatchObject({ label: '■ Stop auto' })
-    expect(await ui.find({ key: 'pane-stop-auto-box' })).toBeUndefined()
     expect(await ui.find({ key: 'pane-handoff' })).toBeUndefined()
-    await ui.press({ key: 'pane-stop-auto' })
-    expect(w.autoRuns).toContain('--session sess-1 stop --reason owner pressed Stop auto')
+    expect(await ui.find({ key: 'pane-stop-auto' })).toBeUndefined()
+    expect(await ui.find({ key: 'pane-compact-box' })).toBeUndefined()
+    const compact = await ui.find({ key: 'pane-compact' })
+    expect(compact?.type).toBe('Button')
+    expect(compact?.props).toMatchObject({ label: '⇣ Compact', hotkey: 'c' })
+    await ui.press({ key: 'pane-compact' })
+    expect(compacts).toHaveLength(1)
   })
 
   test('draws the same rows as text on the desktop', async ($, on) => {
@@ -2335,23 +1660,15 @@ describe('/cockpit', () => {
 })
 
 describe('buttons', () => {
-  test('wear a rounded box, the accent on the one that matters', async ($, on) => {
-    const w: World = { ...SIGNED_IN, tokens: 200_000 }
-    world(on, w)
-    signedIn(on, configured({ handoffTokens: 400_000 }))
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+  test('wear a rounded box, gray at rest', async ($, on) => {
+    world(on, { ...SIGNED_IN, tokens: 620_000 })
+    signedIn(on)
     await $.session.start(START)
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
-    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect((await ui.find({ key: 'pane-handoff-box' }))?.props).toMatchObject({ borderStyle: 'round', borderColor: 'inactive' })
-    expect((await ui.find({ key: 'pane-handoff' }))?.props).toMatchObject({ hotkey: 'h', plain: true })
-    await ui.unmount()
-    // Past warnAt, Hand off is the one to press.
-    w.tokens = 350_000
-    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
-    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect((await ui.find({ key: 'pane-handoff-box' }))?.props.borderColor).toBe('permission')
-    expect((await ui.find({ key: 'pane-compact-box' }))?.props.borderColor).toBe('inactive')
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ key: 'pane-compact-box' }))?.props).toMatchObject({ borderStyle: 'round', borderColor: 'inactive' })
+    expect((await ui.find({ key: 'pane-compact' }))?.props).toMatchObject({ hotkey: 'c', plain: true })
+    expect((await ui.find({ key: 'pane-settings-box' }))?.props).toMatchObject({ borderStyle: 'round', borderColor: 'inactive' })
   })
 
   test('underline the hotkey letter where Claude Code draws styled labels', async ($, on) => {
@@ -2398,7 +1715,7 @@ describe('buttons', () => {
     expect((await ui.find({ key: 'set-layout-full' }))?.props.dimColor).toBe(true)
     expect((await ui.find({ key: 'set-openAtStart-toggle' }))?.props.label).toBe('● On')
     await ui.press({ key: 'settings-tab-Notifications' })
-    expect((await ui.find({ key: 'set-notify-kind-task' }))?.props).toMatchObject({ label: '○ task', dimColor: true })
+    expect((await ui.find({ key: 'set-notify-kind-agent' }))?.props).toMatchObject({ label: '○ agent', dimColor: true })
     expect((await ui.find({ key: 'settings-back' }))?.props.hotkey).toBe('b')
   })
 })
@@ -2441,7 +1758,7 @@ describe('settings view', () => {
     expect((await ui.find({ key: 'set-bandLine1-model' }))?.props.label).toBe('✓ model')
     expect((await ui.find({ key: 'set-bandLine2-model' }))?.props).toMatchObject({ label: '○ model', dimColor: true })
     await ui.press({ key: 'set-bandLine2-model' })
-    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ bandLine1: 'dir,git,effort,style,turn,run,agents,shells', bandLine2: 'ctx,cache,cost,5h,7d,model' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ bandLine1: 'dir,git,effort,style,turn,agents,shells', bandLine2: 'ctx,cache,cost,5h,7d,model' })
     expect((await ui.find({ key: 'set-bandLine1-model' }))?.props.label).toBe('○ model')
     expect(await ui.find({ type: 'Text', text: 'ctx · cache · cost · 5h · 7d · model' })).toBeDefined()
   })
@@ -2470,10 +1787,10 @@ describe('settings view', () => {
         await ui.press({ key: 'set-layout-compact' })
       }
       await ui.press({ key: 'set-section-guard' })
-      await ui.press({ key: 'settings-tab-Context' })
-      await ui.press({ key: 'set-warnAt-more' })
+      await ui.press({ key: 'settings-tab-Notifications' })
+      await ui.press({ key: 'set-limitAlertAt-more' })
       expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({
-        warnAt: 85,
+        limitAlertAt: 95,
         layout: 'compact',
         sections: 'account,context,usage,shells,agents,plan,repo',
       })
@@ -2510,13 +1827,13 @@ describe('settings view', () => {
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
     expect(await ui.find({ key: 'set-openAtStart-toggle' })).toBeDefined()
-    expect(await ui.find({ key: 'set-warnAt-more' })).toBeUndefined()
+    expect(await ui.find({ key: 'set-limitAlertAt-more' })).toBeUndefined()
     expect((await ui.find({ key: 'settings-tab-Cockpit' }))?.props).toMatchObject({ variant: 'primary', hotkey: '1' })
     expect(await ui.find({ type: 'Text', text: 'all defaults' })).toBeDefined()
-    await ui.press({ key: 'settings-tab-Context' })
-    expect(await ui.find({ key: 'set-warnAt-more' })).toBeDefined()
+    await ui.press({ key: 'settings-tab-Notifications' })
+    expect(await ui.find({ key: 'set-limitAlertAt-more' })).toBeDefined()
     expect(await ui.find({ key: 'set-openAtStart-toggle' })).toBeUndefined()
-    expect((await ui.find({ key: 'settings-tab-Context' }))?.props).toMatchObject({ variant: 'primary', hotkey: '3' })
+    expect((await ui.find({ key: 'settings-tab-Notifications' }))?.props).toMatchObject({ variant: 'primary', hotkey: '4' })
   })
 
   test('the terminal card has no fill, marks the open tab and spaces its rows while help shows', async ($, on) => {
@@ -2568,16 +1885,16 @@ describe('settings view', () => {
 
   test('a changed row shows its default and resets', async ($, on) => {
     const written: Record<string, string> = {}
-    world(on, { tokens: 284_000, config: { warnAt: 70 }, written })
+    world(on, { tokens: 284_000, config: { limitAlertAt: 70 }, written })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'settings-tab-Notifications' })
     expect(await ui.find({ type: 'Text', text: '1 changed' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'default 80%' })).toBeDefined()
-    await ui.press({ key: 'set-warnAt-reset' })
+    expect(await ui.find({ type: 'Text', text: 'default 90%' })).toBeDefined()
+    await ui.press({ key: 'set-limitAlertAt-reset' })
     expect(JSON.parse(written[CONFIG] ?? 'null')).toEqual({})
-    expect(await ui.find({ key: 'set-warnAt-reset' })).toBeUndefined()
+    expect(await ui.find({ key: 'set-limitAlertAt-reset' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: 'all defaults' })).toBeDefined()
   })
 
@@ -2587,18 +1904,18 @@ describe('settings view', () => {
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-tab-Context' })
-    await ui.press({ key: 'set-warnAt-edit' })
+    await ui.press({ key: 'settings-tab-Notifications' })
+    await ui.press({ key: 'set-limitAlertAt-edit' })
     // The field starts empty, so what is typed replaces the value instead of following it.
-    const field = await ui.find({ key: 'set-warnAt-input' })
+    const field = await ui.find({ key: 'set-limitAlertAt-input' })
     expect(field?.props.value).toBeUndefined()
-    expect(field?.props.placeholder).toBe('80')
-    await ui.input({ key: 'set-warnAt-input', text: '500', kind: 'submit' })
-    expect(await ui.find({ type: 'Text', text: /Enter a whole number from 1 to 99/ })).toBeDefined()
+    expect(field?.props.placeholder).toBe('90')
+    await ui.input({ key: 'set-limitAlertAt-input', text: '500', kind: 'submit' })
+    expect(await ui.find({ type: 'Text', text: /Enter a whole number from 0 to 100/ })).toBeDefined()
     expect(written[CONFIG]).toBeUndefined()
-    await ui.input({ key: 'set-warnAt-input', text: '65', kind: 'submit' })
-    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ warnAt: 65 })
-    expect(await ui.find({ key: 'set-warnAt-input' })).toBeUndefined()
+    await ui.input({ key: 'set-limitAlertAt-input', text: '65', kind: 'submit' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ limitAlertAt: 65 })
+    expect(await ui.find({ key: 'set-limitAlertAt-input' })).toBeUndefined()
   })
 
   test('the desktop draws dropdowns and open fields, and a refused entry below its field', async ($, on) => {
@@ -2620,25 +1937,25 @@ describe('settings view', () => {
     await desk.select({ key: 'set-openAtStart-select', value: 'false' })
     await desk.select({ key: 'set-layout-select', value: 'full' })
     expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ openAtStart: false, layout: 'full' })
-    await desk.press({ key: 'settings-tab-Context' })
-    expect((await desk.find({ key: 'set-warnAt-input' }))?.props).toMatchObject({ label: 'Warn at', value: '80' })
-    expect(await desk.find({ key: 'set-warnAt-edit' })).toBeUndefined()
-    await desk.input({ key: 'set-warnAt-input', text: '500' })
-    const block = JSON.stringify(await desk.find({ key: 'set-warnAt-block' }))
-    expect(block).toContain('✗ Enter a whole number from 1 to 99')
-    expect(block.indexOf('"set-warnAt-error"')).toBeGreaterThan(block.indexOf('"set-warnAt-input"'))
-    await desk.input({ key: 'set-warnAt-input', text: '65' })
-    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ openAtStart: false, layout: 'full', warnAt: 65 })
-    expect(await desk.find({ key: 'set-warnAt-error' })).toBeUndefined()
+    await desk.press({ key: 'settings-tab-Notifications' })
+    expect((await desk.find({ key: 'set-limitAlertAt-input' }))?.props).toMatchObject({ label: 'Limit alert at', value: '90' })
+    expect(await desk.find({ key: 'set-limitAlertAt-edit' })).toBeUndefined()
+    await desk.input({ key: 'set-limitAlertAt-input', text: '500' })
+    const block = JSON.stringify(await desk.find({ key: 'set-limitAlertAt-block' }))
+    expect(block).toContain('✗ Enter a whole number from 0 to 100')
+    expect(block.indexOf('"set-limitAlertAt-error"')).toBeGreaterThan(block.indexOf('"set-limitAlertAt-input"'))
+    await desk.input({ key: 'set-limitAlertAt-input', text: '65' })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ openAtStart: false, layout: 'full', limitAlertAt: 65 })
+    expect(await desk.find({ key: 'set-limitAlertAt-error' })).toBeUndefined()
     await desk.unmount()
     const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await term.find({ type: 'Select' })).toBeUndefined()
-    expect(await term.find({ key: 'set-warnAt-edit' })).toBeDefined()
+    expect(await term.find({ key: 'set-limitAlertAt-edit' })).toBeDefined()
   })
 
   test('the desktop draws a locked row as text and a custom row with its mark and default', async ($, on) => {
     const written: Record<string, string> = {}
-    world(on, { tokens: 284_000, config: { sections: 'plan,repo', handoffTokens: 300_000 }, written, env: { DFORGE_BUDGET: '465000' } })
+    world(on, { tokens: 284_000, config: { sections: 'plan,repo' }, written, settings: { autoCompactWindow: 500_000 }, userSettings: {} })
     await $.session.start(START)
     const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
     await desk.press({ key: 'pane-settings' })
@@ -2649,26 +1966,26 @@ describe('settings view', () => {
     expect(await desk.find({ key: 'set-sections-mark' })).toBeDefined()
     expect((await desk.find({ key: 'set-sections-default' }))?.text).toBe('changed from the defaultReset')
     await desk.press({ key: 'set-section-usage' })
-    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ sections: 'plan,repo,usage', handoffTokens: 300_000 })
+    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ sections: 'plan,repo,usage' })
     await desk.press({ key: 'settings-tab-Context' })
-    // The budget is forced by the environment: its value and the reason, nothing to change.
-    expect((await desk.find({ key: 'set-handoffTokens-controls' }))?.text).toBe('465k set by DFORGE_BUDGET')
-    expect(await desk.find({ key: 'set-handoffTokens-input' })).toBeUndefined()
-    expect(await desk.find({ key: 'set-handoffTokens-less' })).toBeUndefined()
-    expect(await desk.find({ key: 'set-handoffTokens-mark' })).toBeUndefined()
-    expect(await desk.find({ key: 'set-handoffTokens-default' })).toBeUndefined()
-    expect(await desk.find({ key: 'set-warnAt-input' })).toBeDefined()
+    // The window is forced by a project or managed file: its value and the reason, nothing to change.
+    expect((await desk.find({ key: 'set-autoCompactWindow-controls' }))?.text).toBe('500k set by a project or managed settings file')
+    expect(await desk.find({ key: 'set-autoCompactWindow-input' })).toBeUndefined()
+    expect(await desk.find({ key: 'set-autoCompactWindow-less' })).toBeUndefined()
+    expect(await desk.find({ key: 'set-autoCompactWindow-mark' })).toBeUndefined()
+    expect(await desk.find({ key: 'set-autoCompactWindow-default' })).toBeUndefined()
+    expect(await desk.find({ key: 'set-autoCompactEnabled-select' })).toBeDefined()
   })
 
-  test('every variable the schema names locks its row', async ($, on) => {
-    const named = Object.entries(SCHEMA).filter(([, spec]) => spec.env !== undefined)
-    world(on, { tokens: 284_000, config: { lensCap: 3 }, env: Object.fromEntries(named.map(([, spec]) => [spec.env, String(spec.max)])) })
+  test('no setting names a variable, so a retired one locks no row', async ($, on) => {
+    expect(Object.values(SCHEMA).filter(spec => spec.env !== undefined)).toEqual([])
+    world(on, { tokens: 284_000, config: {}, env: { DFORGE_BUDGET: '400000', DFORGE_LENS_CAP: '1', DFORGE_LENS_MINOR_FROM: '0' } })
     await $.session.start(START)
     const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
     await desk.press({ key: 'pane-settings' })
-    for (const [key, spec] of named) {
-      await desk.press({ key: `settings-tab-${spec.group}` })
-      expect((await desk.find({ key: `set-${key}-controls` }))?.text).toMatch(new RegExp(` set by ${spec.env}$`))
+    for (const tab of tabsOf(SCHEMA)) {
+      await desk.press({ key: `settings-tab-${tab}` })
+      expect(JSON.stringify(await desk.drawn())).not.toMatch(/set by DFORGE_/)
     }
   })
 
@@ -2694,11 +2011,11 @@ describe('settings view', () => {
 
   test('a group resets only after a second press', async ($, on) => {
     const written: Record<string, string> = {}
-    world(on, { tokens: 284_000, config: { warnAt: 70, nudgeModel: false, layout: 'full' }, written })
+    world(on, { tokens: 284_000, config: { limitAlertAt: 70, notifyDetail: 'brief', layout: 'full' }, written })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'settings-tab-Notifications' })
     await ui.press({ key: 'settings-reset' })
     expect(written[CONFIG]).toBeUndefined()
     await ui.press({ key: 'settings-reset-cancel' })
@@ -2728,7 +2045,7 @@ describe('settings view', () => {
 })
 
 describe('desktop', () => {
-  test('draws meters, a trend, a stack, run segments and a badge as SVG', () => {
+  test('draws meters, a trend, a stack, plan segments and a badge as SVG', () => {
     expect(paint('cyan')).toBe('#1fa8c9')
     expect(paint('#ff8700')).toBe('#ff8700')
     expect(paint('promptBorder')).toBe('#8a8a99')
@@ -2743,35 +2060,35 @@ describe('desktop', () => {
     expect(trendSvg([1], 100, 'cyan')).not.toContain('<path')
     expect(trendSvg([1, 3, 2], 100, 'cyan')).toContain('<circle cx="96"')
     expect(stackSvg([3, 1], ['cyan', 'magenta'], 100)).toContain('<rect x="75" y="0" width="25" height="10" fill="#c056d6"/>')
-    const segments = segmentsSvg(['done', 'active', 'todo', 'blocked'], 100)
-    expect(segments.match(/<rect /g)).toHaveLength(4)
+    const segments = segmentsSvg(['done', 'active', 'todo'], 100)
+    expect(segments.match(/<rect /g)).toHaveLength(3)
     expect(segments).toContain('#4f7cff')
-    expect(segments).toContain('#e5534b')
+    expect(segments).toContain('#3fb36b')
     expect(avatarSvg('<me>', undefined)).toContain('>&#60;</text>')
     const named = labelledMeterSvg(0.4, 300, 'cyan', [{ at: 0.6 }], [
       { at: 0, text: '412k / 1.0M' },
-      { at: 0.6, text: 'handoff 604k' },
-      { at: 0.62, text: 'compacts 620k' },
+      { at: 0.6, text: 'compacts 604k' },
+      { at: 0.62, text: 'threshold 620k' },
     ])
     expect(named).toContain('text-anchor="start"')
-    expect(named).toContain('>handoff 604k</text>')
-    expect(named).not.toContain('compacts 620k')
+    expect(named).toContain('>compacts 604k</text>')
+    expect(named).not.toContain('threshold 620k')
     // A label that would overlap its neighbour slides clear instead.
     const slid = labelledMeterSvg(0.44, 300, 'cyan', [{ at: 0.72 }], [
       { at: 0, text: '284k / 650k' },
-      { at: 0.92, text: 'compacts 600k' },
-      { at: 0.72, text: 'handoff 465k' },
+      { at: 0.92, text: 'window 600k' },
+      { at: 0.72, text: 'compacts 465k' },
     ])
-    expect(slid).toContain('>handoff 465k</text>')
-    expect(slid).toContain('>compacts 600k</text>')
-    expect(slid.indexOf('handoff')).toBeGreaterThan(slid.indexOf('compacts'))
+    expect(slid).toContain('>compacts 465k</text>')
+    expect(slid).toContain('>window 600k</text>')
+    expect(slid.indexOf('compacts')).toBeGreaterThan(slid.indexOf('window'))
     expect(trendSvg([1, 3], 100, 'cyan', 40, { top: '+2k', bottom: '2 turns' })).toContain('>+2k</text>')
     const dial = gaugeSvg(0.5, 'warning', 100, '50%', 0.25)
     expect(dial).toContain('fill="#d4a017">50%</text>')
     expect(dial.match(/<path /g)).toHaveLength(2)
     expect(dial).toContain('<line ')
     expect(gaugeSvg(0, 'success', 100, '0%').match(/<path /g)).toHaveLength(1)
-    const row = gaugeTileSvg({ dial: gaugeSvg(0.5, 'warning', 100, '50%', null, true), key: 'Context', notes: [[{ text: 'of handoff' }]] }, 140)
+    const row = gaugeTileSvg({ dial: gaugeSvg(0.5, 'warning', 100, '50%', null, true), key: 'Context', notes: [[{ text: 'of compaction' }]] }, 140)
     expect(row).toContain('class="fg">50%</text>')
     expect(row).toContain('>CONTEXT</text>')
     const seat = seatSvg(0.5, 0.8, 200, 'magenta')
@@ -2790,15 +2107,16 @@ describe('desktop', () => {
     const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
     const drawn = JSON.stringify(await desk.drawn())
     // Each panel and the gauges are one drawing, saying in its alt what it shows.
-    expect(drawn).toContain('160k of 650k tokens, handoff at 465k')
+    expect(drawn).toContain('160k of 650k tokens, compacts at 604k')
     expect(drawn).toContain('Context over the last 2 readings, +60k on the last')
     expect(drawn).toContain('5h limit 23% used')
-    expect(drawn).toContain('34% of the handoff budget')
+    expect(drawn).toContain('26% of the compaction point')
     // The flight deck: the account first, then the activity, then the gauges.
     expect(drawn.indexOf('"key":"account"')).toBeGreaterThan(-1)
     expect(drawn.indexOf('"key":"account"')).toBeLessThan(drawn.indexOf('"key":"gauges"'))
     expect(drawn.indexOf('"key":"gauges"')).toBeLessThan(drawn.indexOf('"key":"context"'))
-    expect(drawn).toContain('handoff 465k')
+    expect(drawn).toContain('compacts 604k')
+    expect(drawn).not.toContain('handoff')
     expect(await desk.find({ type: 'Text', text: /trend/ })).toBeUndefined()
     expect(await desk.find({ type: 'Text', text: '▁█' })).toBeUndefined()
     expect(await desk.find({ key: 'pane-compact' })).toBeDefined()
@@ -2820,7 +2138,7 @@ describe('desktop', () => {
     expect((await ui.find({ key: 'usage-headline' }))?.text).toMatch(/^\$1\.50/)
     expect(await ui.find({ key: 'usage-line-0' })).toBeUndefined()
     // A collapsed Context keeps its buttons and drops its meter.
-    const meterAlt = async () => (await ui.findAll({ type: 'Svg' })).map(one => one.props.alt).filter(alt => alt === '284k of 650k tokens, handoff at 465k')
+    const meterAlt = async () => (await ui.findAll({ type: 'Svg' })).map(one => one.props.alt).filter(alt => alt === '284k of 650k tokens, compacts at 604k')
     expect(await meterAlt()).toEqual([])
     expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
     await ui.press({ key: 'context-title' })
@@ -2930,10 +2248,10 @@ describe('pane graphics', () => {
   test('draw sparklines, marked tracks, stacked bars and window pace', () => {
     expect(sparkline([0, 50, 100])).toBe('▁▅█')
     expect(sparkline([7, 7])).toBe('▄▄')
-    expect(track(0.5, 10, [{ at: 0.8, glyph: '┃', name: 'handoff' }])).toEqual([
+    expect(track(0.5, 10, [{ at: 0.8, glyph: '┃', name: 'compact' }])).toEqual([
       { text: '▰▰▰▰▰', kind: 'fill' },
       { text: '▱▱▱', kind: 'empty' },
-      { text: '┃', kind: 'mark', mark: 'handoff' },
+      { text: '┃', kind: 'mark', mark: 'compact' },
       { text: '▱', kind: 'empty' },
     ])
     expect(stackedRuns([180, 38, 1], 20)).toEqual([15, 4, 1])
@@ -3077,20 +2395,19 @@ describe('band lines', () => {
     cache: 0.93,
     usd: 1.2,
     turn: { kind: 'running' as const, since: -134_000, tool: 'Bash' },
-    run: { done: 3, total: 6, round: '2/5', blocked: 0 },
   }
 
-  test('draws what dr-status drew: model, effort, style, turn, run, cache and cost', () => {
+  test('draws what dr-status drew: model, effort, style, turn, cache and cost', () => {
     const [one, two] = bandLines(full, 0)
     expect(text(one)).toBe(
-      '~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2  ·  Opus 5.5  ·  xhigh  ·  Explanatory  ·  ▸ 2m14s · Bash  ·  run 3/6 r2/5  ·  ● 1 agent  ·  $ 2 shells · longest 12m',
+      '~/code/shop/web/src ⎇ feat/a-rather-long-branch-name* ↑2 ↓1 ~1 ?2  ·  Opus 5.5  ·  xhigh  ·  Explanatory  ·  ▸ 2m14s · Bash  ·  ● 1 agent  ·  $ 2 shells · longest 12m',
     )
     expect(text(two)).toBe('ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  cache ▰▰▰▰▰▰▰▱ 93%  ·  $1.20  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 2h0m  ·  7d ▰▰▰┊▰▱▱▱ 61% out in 2d4h')
     // The cache ramp runs on what missed: 93% hit is green.
     expect(two.find(run => run.text === '93%')?.color).toBe('success')
     expect(one.find(run => run.text === 'xhigh')?.color).toBe('#af87ff')
     const [small, smallTwo] = bandLines(full, 3)
-    expect(text(small)).toBe('shop ⎇ feat/a-rather-l…* · Opus · xhigh · Explanatory · ▸ 2m14s · run 3/6 · ● 1 · $ 2')
+    expect(text(small)).toBe('shop ⎇ feat/a-rather-l…* · Opus · xhigh · Explanatory · ▸ 2m14s · ● 1 · $ 2')
     expect(text(smallTwo)).toBe('ctx 61% · cache 93% · $1.20 · 5h 23% · 7d 61%')
     for (const width of [200, 120, 80, 50]) {
       const [a, b] = fitBand(full, width)
@@ -3099,13 +2416,13 @@ describe('band lines', () => {
     }
   })
 
-  test('says a turn waiting on the person, a failed turn and a blocked run', () => {
-    const line = (change: object) => text(bandLines({ ...full, lines: [['turn', 'run'], []], ...change }, 0)[0])
-    expect(line({ turn: { kind: 'waiting', since: -12_000, tool: null } })).toBe('approve? 12s  ·  run 3/6 r2/5')
-    expect(line({ turn: { kind: 'asking', since: -12_000, tool: null } })).toBe('asking 12s  ·  run 3/6 r2/5')
-    expect(line({ turn: { kind: 'failed', since: 0, tool: null }, run: { done: 3, total: 6, round: null, blocked: 1 } })).toBe('turn failed  ·  run 3/6 blocked')
-    expect(line({ turn: null, run: null })).toBe('')
-    expect(line({ turn: { kind: 'running', since: 0, tool: 'mcp__darkmem__memory_search' } })).toBe('▸ 0s · mcp__darkmem__memor…  ·  run 3/6 r2/5')
+  test('says a turn waiting on the person and a failed turn', () => {
+    const line = (change: object) => text(bandLines({ ...full, lines: [['turn', 'agents'], []], ...change }, 0)[0])
+    expect(line({ turn: { kind: 'waiting', since: -12_000, tool: null } })).toBe('approve? 12s  ·  ● 1 agent')
+    expect(line({ turn: { kind: 'asking', since: -12_000, tool: null } })).toBe('asking 12s  ·  ● 1 agent')
+    expect(line({ turn: { kind: 'failed', since: 0, tool: null } })).toBe('turn failed  ·  ● 1 agent')
+    expect(line({ turn: null, agents: 0 })).toBe('')
+    expect(line({ turn: { kind: 'running', since: 0, tool: 'mcp__darkmem__memory_search' } })).toBe('▸ 0s · mcp__darkmem__memor…  ·  ● 1 agent')
   })
 
   test('draws the lines the settings pick, in their order', () => {
@@ -3121,9 +2438,9 @@ describe('band lines', () => {
     // A segment both lines name stays on the first.
     expect(bandLinesFrom('cost', '')).toEqual([['cost'], ['ctx', 'cache', '5h', '7d']])
     const lines = bandLinesFrom('', '')
-    expect(bandLineToggled(lines, 1, 'dir')).toEqual(['git,model,effort,style,turn,run,agents,shells', 'ctx,cache,cost,5h,7d,dir'])
+    expect(bandLineToggled(lines, 1, 'dir')).toEqual(['git,model,effort,style,turn,agents,shells', 'ctx,cache,cost,5h,7d,dir'])
     expect(bandLineToggled(lines, 1, 'ctx')).toEqual(['', 'cache,cost,5h,7d'])
-    expect(bandLineToggled(lines, 0, 'time')).toEqual(['dir,git,model,effort,style,turn,run,agents,shells,time', ''])
+    expect(bandLineToggled(lines, 0, 'time')).toEqual(['dir,git,model,effort,style,turn,agents,shells,time', ''])
     expect(bandLineToggled([['time'], []], 0, 'time')).toEqual(['none', 'none'])
     expect(bandLineToggled(bandLinesFrom('', 'ctx,cache,cost,5h'), 1, '7d')).toEqual(['', ''])
   })
@@ -3174,13 +2491,14 @@ const IDLE: ActivityInput = { kind: 'idle', since: 0, turnStartedAt: null, step:
 const flat = (runs: { text: string }[]) => runs.map(run => run.text).join('')
 
 describe('forecasts', () => {
-  test('count the turns left to the budget from recent growth', () => {
-    expect(turnsToBudget([100_000, 120_000], 465_000)).toBeNull()
-    expect(turnsToBudget([100_000, 120_000, 140_000, 160_000], 465_000)).toBe(16)
+  test('count the turns left to the compaction point from recent growth', () => {
+    expect(turnsToBudget([100_000, 120_000], 604_000)).toBeNull()
+    expect(turnsToBudget([100_000, 120_000, 140_000, 160_000], 604_000)).toBe(23)
     // A compaction's drop is not growth.
-    expect(turnsToBudget([300_000, 40_000, 60_000, 80_000], 465_000)).toBe(20)
-    expect(turnsToBudget([400_000, 420_000, 470_000], 465_000)).toBeNull()
-    expect(turnsToBudget([200_000, 200_000, 200_000], 465_000)).toBeNull()
+    expect(turnsToBudget([300_000, 40_000, 60_000, 80_000], 604_000)).toBe(27)
+    expect(turnsToBudget([400_000, 420_000, 470_000], 604_000)).toBe(4)
+    expect(turnsToBudget([400_000, 420_000, 610_000], 604_000)).toBeNull()
+    expect(turnsToBudget([200_000, 200_000, 200_000], 604_000)).toBeNull()
   })
 
   test('say whether a limit lasts to its reset at the pace so far', () => {
@@ -3197,7 +2515,8 @@ describe('forecasts', () => {
   test('mark the context card and the limit meters', async ($, on) => {
     const w: World = { tokens: 100_000 }
     world(on, w)
-    for (const tokens of [100_000, 300_000, 400_000]) {
+    // No breakdown read: the limit is the 650k window, 150k past 500k at 200k a turn.
+    for (const tokens of [100_000, 300_000, 500_000]) {
       w.tokens = tokens
       await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
     }
@@ -3213,8 +2532,8 @@ describe('now row', () => {
   test('reads each state on one line', () => {
     const at = 200_000
     expect(flat(nowLine({ ...IDLE }, at))).toBe('○ idle')
-    expect(flat(nowLine({ ...IDLE, kind: 'running', since: 66_000, turnStartedAt: 66_000, step: 18, tool: 'Bash', agent: 'impl-sonnet-low' }, at))).toBe(
-      '● running 2m14s · step 18 · Bash in impl-sonnet-low',
+    expect(flat(nowLine({ ...IDLE, kind: 'running', since: 66_000, turnStartedAt: 66_000, step: 18, tool: 'Bash', agent: 'acme-builder-01' }, at))).toBe(
+      '● running 2m14s · step 18 · Bash in acme-builder-01',
     )
     expect(flat(nowLine({ ...IDLE, kind: 'waiting', since: 158_000, detail: 'Bash: git push', isSent: true }, at))).toBe('⏳ approve? Bash: git push · 42s · Discord ✓')
     expect(flat(nowLine({ ...IDLE, kind: 'idle', lastTurnMs: 760_000, endedAt: 20_000 }, at))).toBe('○ idle · last turn 12m40s · ended 3m ago')
@@ -3237,7 +2556,7 @@ describe('now row', () => {
     expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, blank))).toBe('◐ background · 1 shell · npm test · 3m')
     const empty = { shells: [{ command: ' \n', startedAt: 20_000 }], agents: 0 }
     expect(flat(nowLine({ ...IDLE, kind: 'background' }, at, empty))).toBe('◐ background · 1 shell · 3m')
-    const dense: DenseInput = { email: null, billing: null, remote: [], context: null, estimate: null, turnsLeft: null, limits: [], shells: blank.shells, agents: [], run: null, todos: null, repo: null, refused: 0, isGuardOn: true, now: at }
+    const dense: DenseInput = { email: null, billing: null, remote: [], context: null, estimate: null, turnsLeft: null, limits: [], shells: blank.shells, agents: [], todos: null, repo: null, refused: 0, isGuardOn: true, now: at }
     expect(flat(denseLine('shells', dense) ?? [])).toBe('$    1 shell · npm test · 3m')
     expect(flat(denseLine('shells', { ...dense, shells: empty.shells }) ?? [])).toBe('$    1 shell · 3m')
   })
@@ -3289,9 +2608,8 @@ describe('dense rows', () => {
       { command: 'npm test', startedAt: 100_000 },
       { command: 'node codex-companion.mjs review --background\nmore', startedAt: 160_000 },
     ],
-    agents: ['impl-sonnet-medium', 'judge-opus'],
-    run: { done: 3, total: 5, current: 'Task 4: Draw the card' },
-    todos: null,
+    agents: ['acme-builder-large', 'acme-check'],
+    todos: { done: 3, total: 5, current: 'Draw the card' },
     repo: { branch: 'main', ahead: 2, behind: 0, changed: 3, untracked: 1 },
     refused: 0,
     isGuardOn: true,
@@ -3303,8 +2621,8 @@ describe('dense rows', () => {
     expect(flat(denseLine('context', INPUT) ?? [])).toBe('ctx  ▰▰▰▰▰▰▱▱▱▱ 61% 284k/465k · ≈8 turns')
     expect(flat(denseLine('usage', INPUT) ?? [])).toBe('lim  5h ▰▱▱▱▱▱ 23% · 7d ▰▰▰▰▱▱ 61%')
     expect(flat(denseLine('shells', INPUT) ?? [])).toBe('$    2 shells · node codex-companion.mjs review --backg… · 3m')
-    expect(flat(denseLine('agents', INPUT) ?? [])).toBe('agt  2 running · impl-sonnet-medium, judge-opus')
-    expect(flat(denseLine('plan', INPUT) ?? [])).toBe('plan ▰▰▰▱▱ 3/5 · Task 4: Draw the card')
+    expect(flat(denseLine('agents', INPUT) ?? [])).toBe('agt  2 running · acme-builder-large, acme-check')
+    expect(flat(denseLine('plan', INPUT) ?? [])).toBe('plan ▰▰▰▱▱ 3/5 · Draw the card')
     expect(flat(denseLine('repo', INPUT) ?? [])).toBe('⎇    main ↑2 · ~3 changed · ?1')
     expect(flat(denseLine('guard', INPUT) ?? [])).toBe('grd  on · none refused')
     expect(flat(denseLine('guard', { ...INPUT, isGuardOn: false }) ?? [])).toBe('grd  off')
@@ -3352,10 +2670,9 @@ describe('dense rows', () => {
   })
 
   test('draw no plan row for a plan with no tasks', () => {
-    expect(denseLine('plan', { ...INPUT, run: { done: 0, total: 0, current: null } })).toBeNull()
-    expect(denseLine('plan', { ...INPUT, run: { done: 0, total: 0, current: null }, todos: { done: 1, total: 2, current: 'Write it' } })).toBeNull()
-    expect(denseLine('plan', { ...INPUT, run: null, todos: { done: 0, total: 0, current: null } })).toBeNull()
-    expect(flat(denseLine('plan', { ...INPUT, run: { done: 2, total: 2, current: null } }) ?? [])).toBe('plan ▰▰ 2/2')
+    expect(denseLine('plan', { ...INPUT, todos: { done: 0, total: 0, current: null } })).toBeNull()
+    expect(denseLine('plan', { ...INPUT, todos: null })).toBeNull()
+    expect(flat(denseLine('plan', { ...INPUT, todos: { done: 2, total: 2, current: null } }) ?? [])).toBe('plan ▰▰ 2/2')
   })
 
   test('pad each label to five cells, whatever cells its characters take', () => {
@@ -3371,7 +2688,7 @@ describe('dense rows', () => {
   })
 
   test('leave out what has nothing to show, and say when nothing was read yet', () => {
-    const empty: DenseInput = { ...INPUT, email: null, context: null, limits: [], shells: [], agents: [], run: null, todos: null, repo: null }
+    const empty: DenseInput = { ...INPUT, email: null, context: null, limits: [], shells: [], agents: [], todos: null, repo: null }
     expect(denseLine('account', empty)).toBeNull()
     expect(flat(denseLine('context', empty) ?? [])).toBe('ctx  no reading yet')
     expect(flat(denseLine('context', { ...empty, estimate: 218_000 }) ?? [])).toBe('ctx  ≈218k estimated')
@@ -3455,7 +2772,7 @@ describe('shells and remote', () => {
     world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL } })
     signedIn(on)
     await $.session.start(START)
-    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement', description: 'Task 1', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement', description: 'Task 1', subagentType: 'acme-builder-01', provider: { plugin: 'acme', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
     await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true, agentId: 'agent-1' } as never)
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^\$ npm test/ })).toBeDefined()
@@ -3474,7 +2791,7 @@ describe('shells and remote', () => {
       next({ ...e, value: e.value.map(({ agentId, ...rest }) => (rest.command === 'make watch' ? rest : { ...rest, agentId })) })) as never)
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'make watch', run_in_background: true } as never)
-    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement', description: 'Task 1', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement', description: 'Task 1', subagentType: 'acme-builder-01', provider: { plugin: 'acme', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
     await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
     await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true, agentId: 'agent-1' } as never)
     await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-1' })
@@ -3498,7 +2815,7 @@ describe('shells and remote', () => {
     world(on, { ...SIGNED_IN, tools: { TaskStop: () => ({ result: { task_id: 'agent-1' }, text: 'stopped' }) } })
     signedIn(on)
     await $.session.start(START)
-    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Review', description: 'Review the branch', subagentType: 'dforge:judge-opus', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Review', description: 'Review the branch', subagentType: 'acme-check', provider: { plugin: 'acme', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
     await $.tool.call({ tool: 'TaskStop', task_id: 'agent-1' } as never)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^Failed · 1$/ })).toBeDefined()
@@ -3631,7 +2948,7 @@ describe('shells and remote', () => {
       expect(titles(fetches)).toEqual(['✅ Done in 1m15s'])
     })
 
-    test("auto run's prompt starts a new chain", async ($, on) => {
+    test("a plugin's prompt starts a new chain", async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)
       await clock.advance(60_000)
@@ -3853,15 +3170,21 @@ describe('discord', () => {
   })
 
   test('picks kinds and keeps the default set as the empty setting', () => {
-    expect(notifyKindsFrom('')).toEqual(['ask', 'question', 'done', 'error', 'blocked', 'budget', 'limit'])
+    expect(notifyKindsFrom('')).toEqual(['ask', 'question', 'done', 'error', 'limit'])
     expect(notifyKindsFrom('done, nope, done')).toEqual(['done'])
     expect(notifyKindsFrom('none')).toEqual([])
     expect(notifyKindsFrom(' None ')).toEqual([])
     expect(notifyKindsFrom('off')).toEqual([])
     expect(notifyKindsFrom(notifyKindsToggled(['done'], 'done'))).toEqual([])
-    expect(notifyKindsToggled(notifyKindsFrom(''), 'agent')).toBe('ask,question,done,error,blocked,budget,limit,agent')
-    expect(notifyKindsToggled(['ask', 'question', 'done', 'error', 'blocked', 'budget', 'limit', 'agent'], 'agent')).toBe('')
+    expect(notifyKindsToggled(notifyKindsFrom(''), 'agent')).toBe('ask,question,done,error,limit,agent')
+    expect(notifyKindsToggled(['ask', 'question', 'done', 'error', 'limit', 'agent'], 'agent')).toBe('')
     expect(notifyKindsToggled(['done'], 'done')).toBe('none')
+  })
+
+  test('drops the kinds an earlier release sent, keeping a list of only those silent', () => {
+    expect(notifyKindsFrom('ask,blocked,budget,task')).toEqual(['ask'])
+    expect(notifyKindsFrom('blocked, task')).toEqual([])
+    expect(notifyKindsToggled(notifyKindsFrom('ask,blocked,budget,task'), 'done')).toBe('ask,done')
   })
 
   test('mentions the person only for what needs them', () => {
@@ -4073,1161 +3396,24 @@ describe('discord', () => {
   })
 })
 
-describe('run card', () => {
-  const LEDGER = [
-    '# SDD ledger — plan: docs/plans/p.md',
-    'Task 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)',
-    'Task 1: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none',
-    'Task 2: implementer dforge:impl-sonnet-low (assigned; base def5678)',
-    'Task 2: fix round 2/5 (1 addressed, 1 open — meter width; commits c..d; fresh)',
-  ].join('\n')
-  const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n\n### Task 3: Ship it\n'
-  const runFiles = (ledger: string): World['files'] => ({
-    '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: ledger, mtimeMs: 2_000_000 },
-    '/home/me/code/shop/docs/plans/p.md': { text: PLAN },
-  })
-
-  test('reads the ledger and the plan', () => {
-    const ledger = parseLedger(`${LEDGER}\nGroup 3-4: review round 1/5 (open)\nTask 5: BLOCKED — impl exhausted — pick a rule\nFinal review: clean (commits a..b)`)
-    expect(ledger.plan).toBe('docs/plans/p.md')
-    expect(ledger.tasks.map(task => [task.n, task.state, task.round])).toEqual([
-      [1, 'complete', null],
-      [2, 'assigned', '2/5'],
-      [3, 'assigned', '1/5'],
-      [4, 'assigned', '1/5'],
-      [5, 'blocked', null],
-    ])
-    expect(ledger.tasks[0]?.isClean).toBe(true)
-    expect(ledger.tasks[4]?.reason).toBe('impl exhausted — pick a rule')
-    expect(ledger.isFinished).toBe(true)
-    expect(planTasks(PLAN)).toEqual([
-      { n: 1, title: 'Add the helpers' },
-      { n: 2, title: 'Draw the card' },
-      { n: 3, title: 'Ship it' },
-    ])
-  })
-
-  test('reads no task heading inside a fence, as plan.sh does', () => {
-    const plan = ['# Plan', '', '````md', '```', '### Task 99: Example', '```', '````', '~~~', '## Task 98: Also an example', '~~~', '#### Task 1: Real', '# Task 2: Top level', '  ### Task 3: Indented'].join('\n')
-    expect(planTasks(plan)).toEqual([
-      { n: 1, title: 'Real' },
-      { n: 2, title: 'Top level' },
-    ])
-  })
-
-  test('reads a task number only where it ends, as plan.sh does', () => {
-    const plan = ['# Plan', '### Task 10x: Not a task', '### Task 7th: Nor this', '### Task 4', '### Task 5. Dotted', '### Task 6 - Dashed'].join('\n')
-    expect(planTasks(plan)).toEqual([
-      { n: 4, title: '' },
-      { n: 5, title: 'Dotted' },
-      { n: 6, title: 'Dashed' },
-    ])
-  })
-
-  test('starts no task from a Ruling, parked or deferred line', () => {
-    const ledger = parseLedger(`${LEDGER}\nTask 1: Ruling: the meter — kept\nTask 3: parked — width — Ruling: fine\nTask 4: minor (deferred): rename\nTask 5: escalated inline -> subagent — two rounds`)
-    expect(ledger.tasks.map(task => [task.n, task.state])).toEqual([
-      [1, 'complete'],
-      [2, 'assigned'],
-    ])
-  })
-
-  const GROUPED = [
-    '# SDD ledger — plan: docs/plans/p.md',
-    'Task 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)',
-    'Task 1: awaiting group review (commits abc1234..bcd2345)',
-    'Task 2: implementer dforge:impl-sonnet-low (assigned; base bcd2345)',
-    'Task 3: implementer dforge:impl-sonnet-low (assigned; base bcd2345)',
-    'Task 3: awaiting group review (commits bcd2345..cde3456)',
-    'Group 1,3: review round 1/2 (Task 1: 1 open — meter width; Task 3: clean; commits cde3456..def4567 (Task 1))',
-  ].join('\n')
-
-  test('reads a group review line with a comma list beside a range', () => {
-    const ledger = parseLedger(`${GROUPED}\nTask 8: implementer dforge:impl-sonnet-low (assigned; base def4567)\nGroup 8-9: review round 2/5 (1 addressed, 0 open; commits def4567..efa5678; fresh)`)
-    expect(ledger.tasks.map(task => [task.n, task.state, task.round])).toEqual([
-      [1, 'assigned', '1/2'],
-      [2, 'assigned', null],
-      [3, 'assigned', '1/2'],
-      [8, 'assigned', '2/5'],
-      [9, 'assigned', '2/5'],
-    ])
-  })
-
-  test('clears a group round when each member completes', () => {
-    const ledger = parseLedger(`${GROUPED}\nTask 1: complete (commits abc1234..bcd2345, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none\nGroup 1,3: review round 2/2 (Task 1: clean; Task 3: clean; commits def4567..efa5678 (Task 1))`)
-    expect(ledger.tasks.map(task => [task.n, task.state, task.round])).toEqual([
-      [1, 'complete', null],
-      [2, 'assigned', null],
-      [3, 'assigned', '2/2'],
-    ])
-  })
-
-  test('shows a group review round on the run card', async ($, on) => {
-    const files = runFiles(GROUPED)
-    world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /round 1\/2 · impl-sonnet-low/ })).toBeDefined()
-    expect(JSON.stringify(await ui.drawn())).not.toContain('round 2/5')
-  })
-
-  test('lists running, blocked and pending tasks before done ones', () => {
-    const states = ['complete', 'assigned', 'pending', 'blocked', 'pending', 'complete', 'assigned', 'pending'] as const
-    const tasks = states.map((state, i) => ({ n: i + 1, state }))
-    expect(runList(tasks, 6).map(task => task.n)).toEqual([2, 7, 4, 3, 5, 8])
-    expect(runList(tasks.slice(0, 3), 6).map(task => task.n)).toEqual([2, 3, 1])
-  })
-
-  test('replaces the plan card in a dforge run', async ($, on) => {
-    const files = runFiles(LEDGER)
-    world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^round 2\/5$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^1\/3$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers · clean/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /round 2\/5 · impl-sonnet-low/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Task 3: Ship it/ })).toBeDefined()
-    const drawn = JSON.stringify(await ui.drawn())
-    expect(drawn.indexOf('Task 2: Draw the card')).toBeLessThan(drawn.indexOf('Task 3: Ship it'))
-    expect(drawn.indexOf('Task 3: Ship it')).toBeLessThan(drawn.indexOf('Task 1: Add the helpers'))
-  })
-
-  test('reads an unchanged ledger no more, however many ticks pass', async ($, on) => {
-    const files = runFiles(LEDGER) ?? {}
-    const reads: string[] = []
-    const clock = world(on, { ...SIGNED_IN, files })
-    signedIn(on, files, reads)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    await clock.advance(4_000)
-    const ledgerReads = () => reads.filter(path => path.endsWith('/progress.md')).length
-    const before = ledgerReads()
-    await clock.advance(10_000)
-    expect(ledgerReads()).toBe(before)
-  })
-
-  test('reads the ledger again at a new session start, unchanged as it is', async ($, on) => {
-    const files = runFiles(LEDGER) ?? {}
-    const reads: string[] = []
-    world(on, { ...SIGNED_IN, files })
-    signedIn(on, files, reads)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ledgerReads = () => reads.filter(path => path.endsWith('/progress.md')).length
-    const before = ledgerReads()
-    await $.session.start(START)
-    expect(ledgerReads()).toBe(before + 1)
-  })
-
-  test('reads the run again when only its plan changes', async ($, on) => {
-    const files = runFiles(LEDGER) ?? {}
-    files['/home/me/code/shop/docs/plans/p.md'] = { text: PLAN, mtimeMs: 1 }
-    const clock = world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    files['/home/me/code/shop/docs/plans/p.md'] = { text: PLAN.replace('Ship it', 'Ship the card'), mtimeMs: 2 }
-    await clock.advance(2_000)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 3: Ship the card/ })).toBeDefined()
-  })
-
-  test('writes no run for a ledger saved again with the same tasks', async ($, on) => {
-    const files = runFiles(LEDGER) ?? {}
-    let writes = 0
-    on('state.set', { plugin: 'dforge', key: 'run' } as never, ((_$: unknown, e: unknown, next: (e: unknown) => unknown) => {
-      writes += 1
-      return next(e)
-    }) as never)
-    const clock = world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const before = writes
-    expect(before).toBeGreaterThan(0)
-    files['/home/me/code/shop/.dforge/sdd/p/progress.md']!.mtimeMs = 2_100_000
-    await clock.advance(2_000)
-    expect(writes).toBe(before)
-  })
-
-  test('reads a finished ledger from before the session once', async ($, on) => {
-    const files = runFiles(`${LEDGER}\nFinal review: clean (commits a..b)`) ?? {}
-    const reads: string[] = []
-    const clock = world(on, { ...SIGNED_IN, files, startedAt: 3_000_000 })
-    signedIn(on, files, reads)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    await clock.advance(4_000)
-    const ledgerReads = () => reads.filter(path => path.endsWith('/progress.md')).length
-    const before = ledgerReads()
-    await clock.advance(10_000)
-    expect(ledgerReads()).toBe(before)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
-  })
-
-  test("reads the ledger after a call naming it, not after one whose content does", async ($, on) => {
-    const files = runFiles(LEDGER) ?? {}
-    const reads: string[] = []
-    world(on, { ...SIGNED_IN, files, isPaneShut: true })
-    signedIn(on, files, reads)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const stats = () => reads.filter(path => path.endsWith('/progress.md')).length
-    files['/home/me/code/shop/.dforge/sdd/p/progress.md']!.mtimeMs = 2_100_000
-    const before = stats()
-    await $.tool.call({ tool: 'Write', file_path: '/home/me/notes.md', content: 'see .dforge/sdd/p/progress.md' } as never)
-    expect(stats()).toBe(before)
-    await $.tool.call({ tool: 'Edit', file_path: '/home/me/code/shop/.dforge/sdd/p/progress.md', old_string: 'a', new_string: 'b' } as never)
-    expect(stats()).toBe(before + 1)
-  })
-
-  test('reads a plan created after its ledger within one poll tick', async ($, on) => {
-    const files: NonNullable<World['files']> = { '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 } }
-    const clock = world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    await clock.advance(4_000)
-    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Add the helpers/ })).toBeUndefined()
-    await ui.unmount()
-    files['/home/me/code/shop/docs/plans/p.md'] = { text: PLAN }
-    await clock.advance(2_000)
-    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers · clean/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Task 3: Ship it/ })).toBeDefined()
-  })
-
-  test('picks up a ledger change within one poll tick', async ($, on) => {
-    const files = runFiles(LEDGER) ?? {}
-    const clock = world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    await clock.advance(4_000)
-    files['/home/me/code/shop/.dforge/sdd/p/progress.md'] = {
-      text: `${LEDGER}\nTask 2: complete (commits c..e, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none`,
-      mtimeMs: 2_100_000,
-    }
-    await clock.advance(2_000)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^2\/3$/ })).toBeDefined()
-  })
-
-  test('reads no ledger left under the pre-3.0 .superpowers', async ($, on) => {
-    const files: World['files'] = {
-      '/home/me/code/shop/.superpowers/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
-      '/home/me/code/shop/docs/plans/p.md': { text: PLAN },
-    }
-    world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^round 2\/5$/ })).toBeUndefined()
-  })
-
-  test('says a blocked task once, in red and on Discord', async ($, on) => {
-    const files = runFiles(LEDGER)
-    const fetches: World['fetches'] = []
-    world(on, { ...SIGNED_IN, files, fetches })
-    signedIn(on, files)
-    mock.store(on, { notifyUrl: WEBHOOK })
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    expect(fetches).toHaveLength(0)
-    const ledger = files?.['/home/me/code/shop/.dforge/sdd/p/progress.md']
-    if (ledger !== undefined) ledger.text += '\nTask 2: BLOCKED — impl exhausted — pick a meter width rule'
-    await $.tool.call({ tool: 'Bash', command: 'echo x >> .dforge/sdd/p/progress.md' })
-    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
-    expect(fetches).toHaveLength(1)
-    expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.title).toBe('🛑 Task 2 blocked')
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^1 blocked$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /BLOCKED · impl exhausted/ })).toBeDefined()
-  })
-
-  test("says a second plan's tasks though the first had the same numbers", async ($, on) => {
-    const files: NonNullable<World['files']> = { ...runFiles(LEDGER), [CONFIG]: { text: JSON.stringify({ notifyOn: 'task' }) } }
-    const fetches: World['fetches'] = []
-    world(on, { ...SIGNED_IN, files, fetches })
-    signedIn(on, files)
-    mock.store(on, { notifyUrl: WEBHOOK })
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const next = '# SDD ledger — plan: docs/plans/q.md\nTask 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)'
-    files['/home/me/code/shop/.dforge/sdd/q/progress.md'] = { text: next, mtimeMs: 2_100_000 }
-    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/q/progress.md' })
-    files['/home/me/code/shop/.dforge/sdd/q/progress.md'] = { text: `${next}\nTask 1: complete (commits a..b, review clean) — done: x`, mtimeMs: 2_200_000 }
-    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/q/progress.md' })
-    expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[])[0]?.title)).toEqual(['✅ Task 1 complete, review clean'])
-  })
-
-  test("masks a secret in a blocked task's reason", async ($, on) => {
-    const files = runFiles(LEDGER) ?? {}
-    const fetches: World['fetches'] = []
-    world(on, { ...SIGNED_IN, files, fetches })
-    signedIn(on, files)
-    mock.store(on, { notifyUrl: WEBHOOK })
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    files['/home/me/code/shop/.dforge/sdd/p/progress.md']!.text += '\nTask 2: BLOCKED — impl exhausted — rotate password=hunter2'
-    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
-    expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('impl exhausted — rotate password=[hidden]')
-  })
-
-  test('a brief message names no task title and no agent description', async ($, on) => {
-    const files: NonNullable<World['files']> = { ...runFiles(LEDGER), [CONFIG]: { text: JSON.stringify({ notifyOn: 'task,agent', notifyDetail: 'brief' }) } }
-    const fetches: World['fetches'] = []
-    world(on, { ...SIGNED_IN, files, fetches })
-    signedIn(on, files)
-    mock.store(on, { notifyUrl: WEBHOOK })
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    files['/home/me/code/shop/.dforge/sdd/p/progress.md']!.text += '\nTask 2: complete (commits c..e, review clean) — done: x'
-    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
-    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement', description: 'Migrate the billing secrets', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
-    await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-1' })
-    const embeds = fetches.map(one => (one.body.embeds as Record<string, unknown>[])[0])
-    expect(embeds.map(embed => embed?.title)).toEqual(['✅ Task 2 complete, review clean', '🤖 impl-sonnet-low finished'])
-    expect(embeds.map(embed => embed?.description)).toEqual([undefined, undefined])
-  })
-
-  test('the desktop band draws its git chips and its blocked and refused warning as rows', async ($, on) => {
-    const files = runFiles(`${LEDGER}\nTask 2: BLOCKED — impl exhausted — pick a meter width rule`)
-    world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
-    await $.tool.call({ tool: 'Bash', command: 'git commit -m "x" -m "Co-Authored-By: Claude <noreply@anthropic.com>"' })
-    await $.session.measure(MEASURE)
-    const desk = await $.ui.mount({ ...INLINE, surface: 'desktop' })
-    // The chips follow the facts row, each on a pill: the branch, then the changes.
-    const chips = await desk.find({ key: 'band-rest-2' })
-    expect(chips?.props).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap', gap: 'xs' })
-    expect(chips?.children).toMatchObject([
-      { type: 'Text', props: { color: 'planMode', size: 'caption', backgroundColor: 'subtle' }, children: ['⎇ feat/pane ↑2 ↓1'] },
-      { type: 'Text', props: { color: 'warning', size: 'caption', backgroundColor: 'subtle' }, children: ['~1 changed'] },
-      { type: 'Text', props: { size: 'caption', backgroundColor: 'subtle' }, children: ['?1 untracked'] },
-    ])
-    // The warning is one red line below them, its separator dim.
-    const warning = await desk.find({ key: 'band-rest-3-left' })
-    expect(warning?.text).toBe('✗ Task 2 blocked  ·  ✗ 1 refused')
-    expect(JSON.stringify(warning?.children)).toContain('{"type":"Text","props":{"color":"error"},"children":["Task 2 blocked"]}')
-    expect(JSON.stringify(warning?.children)).toContain('{"type":"Text","props":{"dimColor":true},"children":["  ·  "]}')
-    expect(JSON.stringify(warning?.children)).toContain('{"type":"Text","props":{"color":"error"},"children":["1 refused"]}')
-    expect(await desk.find({ key: 'band-rest-4' })).toBeUndefined()
-    expect((await desk.find({ key: 'band-rest-0-left' }))?.text).toContain('run 1/3 blocked')
-  })
-
-  test('clears a run finished before the session started', async ($, on) => {
-    const done = [
-      '# SDD ledger — plan: docs/plans/p.md',
-      ...[1, 2, 3].map(n => `Task ${n}: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none`),
-    ].join('\n')
-    const files = runFiles(done)
-    world(on, { ...SIGNED_IN, files, startedAt: 3_000_000 })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
-    await $.session.start(START)
-    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
-    expect(await ui.find({ type: 'Button', text: '▸ Run' })).toBeUndefined()
-    await ui.unmount()
-    // A run still open from before keeps its card.
-    const ledger = files?.['/home/me/code/shop/.dforge/sdd/p/progress.md']
-    if (ledger !== undefined) ledger.text = LEDGER
-    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
-    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
-  })
-
-  // Five tasks in the 650k window: the handoff budget is 464,500. In strict
-  // mode a plan's last two tasks and its final phase keep that limit but run
-  // past it to finish the plan, as scripts/lib/context.sh's tail does.
-  const TAIL_PLAN = `# Plan\n\n${[1, 2, 3, 4, 5].map(n => `### Task ${n}: Step ${n}\n`).join('\n')}`
-  const tailLedger = (done: number, isFinished: boolean) =>
-    [
-      '# SDD ledger — plan: docs/plans/p.md',
-      ...Array.from({ length: done }, (_, i) => `Task ${i + 1}: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none`),
-      ...(isFinished ? ['Final review: clean (commits a..b)'] : []),
-    ].join('\n')
-
-  test('a run is at its tail with two tasks left or fewer, or once its final review is clean', () => {
-    expect(isPlanTail({ done: 2, total: 5, isFinished: false, isPlanRead: true })).toBe(false)
-    expect(isPlanTail({ done: 3, total: 5, isFinished: false, isPlanRead: true })).toBe(true)
-    expect(isPlanTail({ done: 5, total: 5, isFinished: false, isPlanRead: true })).toBe(true)
-    expect(isPlanTail({ done: 0, total: 0, isFinished: false, isPlanRead: true })).toBe(false)
-    expect(isPlanTail({ done: 0, total: 0, isFinished: true, isPlanRead: true })).toBe(true)
-  })
-
-  test('a run whose plan was not read counts only its finished final review as the tail', () => {
-    // The ledger alone lists the tasks done and the one in flight, never the rest.
-    expect(isPlanTail({ done: 12, total: 13, isFinished: false, isPlanRead: false })).toBe(false)
-    expect(isPlanTail({ done: 12, total: 13, isFinished: true, isPlanRead: false })).toBe(true)
-  })
-
-  for (const [name, done, isFinished, tokens, note] of [
-    ['three tasks left', 2, false, 500_000, /^dforge: budget: 500k of 465k — handoff\. /],
-    ['two tasks left', 3, false, 500_000, null],
-    ['every task complete', 5, false, 500_000, null],
-    ['the final review clean', 5, true, 500_000, null],
-    ['two tasks left, far past the budget', 3, false, 700_000, null],
-  ] as const) {
-    test(`the handoff note with ${name} at ${tokens / 1000}k`, async ($, on) => {
-      const notes: string[] = []
-      const files: World['files'] = {
-        '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(done, isFinished), mtimeMs: 2_000_000 },
-        '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
-      }
-      world(on, { ...SIGNED_IN, tokens, notes, files })
-      signedIn(on, files)
-      // The session start reads the ledger; the Skill call makes it a plan session.
-      await $.session.start(START)
-      await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-      const sent = notes.filter(text => /— handoff\./.test(text))
-      if (note === null) expect(sent).toEqual([])
-      else expect(sent).toEqual([expect.stringMatching(note)])
-    })
-  }
-
-  test('a ledger write that reaches the tail is read before the budget in the same call', async ($, on) => {
-    const notes: string[] = []
-    const files: World['files'] = {
-      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(2, false), mtimeMs: 2_000_000 },
-      '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
-    }
-    const w: World = { ...SIGNED_IN, tokens: 400_000, notes, files }
-    world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    // One call both completes Task 3 (two tasks left) and crosses the 465k budget.
-    files['/home/me/code/shop/.dforge/sdd/p/progress.md'] = { text: tailLedger(3, false), mtimeMs: 2_100_000 }
-    w.tokens = 500_000
-    await $.tool.call({ tool: 'Bash', command: 'echo "Task 3: complete" >> .dforge/sdd/p/progress.md' })
-    expect(notes.filter(text => /— handoff\./.test(text))).toEqual([])
-  })
-
-  const handoffShown = async ($: Parameters<TestBody>[0]) => {
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    const legend = (await ui.findAll({ type: 'Text' })).map(one => one.text).find(text => /^\d+k of /.test(text))
-    await ui.unmount()
-    return /handoff (\d+k)/.exec(legend ?? '')?.[1]
-  }
-
-  const finishingShown = async ($: Parameters<TestBody>[0]) => {
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    const isShown = (await ui.find({ type: 'Text', text: /· finishing$/ })) !== undefined
-    await ui.unmount()
-    return isShown
-  }
-
-  test('a plan at its tail finishes past the budget only in the session that runs it', async ($, on) => {
-    // Written as the session started, as a darkmem pull on a new machine writes it.
-    const files: World['files'] = {
-      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(5, true), mtimeMs: 2_000_000 },
-      '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
-      [CONFIG]: { text: JSON.stringify({ handoffTokens: 350_000 }) },
-    }
-    world(on, { ...SIGNED_IN, tokens: 400_000, files })
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
-    const spawn = (subagentType: string) =>
-      $.agent.spawn({ tool_use_id: `toolu_${subagentType}`, prompt: 'Go', description: 'Go', subagentType, provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
-    await spawn('dforge:judge-opus')
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    expect(await handoffShown($)).toBe('350k')
-    expect(await finishingShown($)).toBe(false)
-    await spawn('dforge:impl-sonnet-low')
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    expect(await handoffShown($)).toBe('350k')
-    expect(await finishingShown($)).toBe(true)
-  })
-
-  test('a ledger that moves during the session puts it at its tail', async ($, on) => {
-    const files: World['files'] = {
-      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: tailLedger(2, false), mtimeMs: 2_000_000 },
-      '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
-    }
-    world(on, { ...SIGNED_IN, tokens: 500_000, files })
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    expect(await handoffShown($)).toBe('465k')
-    expect(await finishingShown($)).toBe(false)
-    files['/home/me/code/shop/.dforge/sdd/p/progress.md'] = { text: tailLedger(3, false), mtimeMs: 2_100_000 }
-    await $.tool.call({ tool: 'Bash', command: 'echo "Task 3: complete" >> .dforge/sdd/p/progress.md' })
-    expect(await handoffShown($)).toBe('465k')
-    expect(await finishingShown($)).toBe(true)
-  })
-
-  test('a ledger whose plan cannot be read is not taken for the tail', async ($, on) => {
-    const notes: string[] = []
-    const ledger = [
-      '# SDD ledger — plan: p.md',
-      ...Array.from({ length: 12 }, (_, i) => `Task ${i + 1}: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none`),
-      'Task 13: implementer dforge:impl-sonnet-high (assigned 2026-10-28)',
-    ].join('\n')
-    const files: World['files'] = { '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: ledger, mtimeMs: 2_000_000 } }
-    world(on, { ...SIGNED_IN, tokens: 500_000, notes, files })
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    expect(notes.filter(text => /— handoff\./.test(text))).toEqual([expect.stringMatching(/^dforge: budget: 500k of 465k — handoff\. /)])
-    expect(await finishingShown($)).toBe(false)
-  })
-
-  test('a recorded finish choice starts no once-a-second redraw', async ($, on) => {
-    const files = {
-      ...runFiles(LEDGER),
-      '/home/me/code/shop/.dforge/sdd/p/finish.json': { text: '{"action":"merge","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' },
-    }
-    let redraws = 0
-    const clock = world(on, { ...SIGNED_IN, files })
-    on('ui.invalidate', () => {
-      redraws++
-      return { value: undefined } as never
-    })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    await clock.advance(5_000)
-    expect(redraws).toBe(0)
-    // A live turn does tick: the count above would have seen a ticker.
-    await $.turn.start({ text: 'go', turnId: 't1' })
-    await clock.advance(2_000)
-    expect(redraws).toBeGreaterThan(0)
-  })
-
-  test('reads the finish choice', () => {
-    const chosen = parseFinish('{"action":"pr","base":"main","chosenAt":900}')
-    expect(chosen).toEqual({ action: 'pr', base: 'main', answer: null })
-    expect(parseFinish('{"action":"merge","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800,"job":"cron-7","firedAt":2800}')).toEqual({ action: 'merge', base: 'main', answer: null })
-    expect(parseFinish('{"action":"later"}')).toBeNull()
-    expect(parseFinish('{broken')).toBeNull()
-    if (chosen === null) return
-    expect(runsText(finishLine(chosen))).toBe('Finish push and open a PR when done')
-    expect(runsText(finishLine({ ...chosen, action: 'merge' }))).toBe('Finish merge into main when done')
-    expect(runsText(finishLine({ ...chosen, action: 'merge', base: null }))).toBe('Finish merge into the base branch when done')
-    expect(runsText(finishLine({ ...chosen, action: 'keep' }))).toBe('Finish keep the branch when done')
-    expect(runsText(finishLine({ ...chosen, action: 'wait' }))).toBe('Finish ask me when done')
-    expect(finishLine({ ...chosen, answer: 'keep' })).toEqual([])
-  })
-
-  test('shows the finish choice on the Run card', async ($, on) => {
-    const files = {
-      ...runFiles(LEDGER),
-      '/home/me/code/shop/.dforge/sdd/p/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' },
-    }
-    world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    // A file an older version armed shows the choice, with no countdown.
-    expect(await ui.find({ type: 'Text', text: /Finish push and open a PR when done/ })).toBeDefined()
-    expect(JSON.stringify(await ui.drawn())).not.toContain('⏱')
-  })
-
-  test('shows the finish choice for work without a plan or a todo list', async ($, on) => {
-    const files = { '/home/me/code/shop/.dforge/sdd/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900,"armedAt":1000,"dueAt":2800}' } }
-    world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Finish push and open a PR when done/ })).toBeDefined()
-    await ui.unmount()
-    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
-    const drawn = JSON.stringify(await desk.drawn())
-    expect(drawn).toContain('Finish push and open a PR when done')
-    expect(drawn).not.toContain('⏱')
-  })
-
-  test('offers no Resume for a handoff left under the pre-3.0 .superpowers', async ($, on) => {
-    const files: World['files'] = { '/home/me/code/shop/.superpowers/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
-    world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
-  })
-
-  test('offers Resume for a handoff under .dforge', async ($, on) => {
-    const files: World['files'] = { '/home/me/code/shop/.dforge/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
-    const prompts: string[] = []
-    world(on, { ...SIGNED_IN, files, prompts })
-    signedIn(on, files)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
-    await ui.press({ key: 'pane-resume' })
-    expect(prompts).toEqual(['Execute docs/dforge/plans/2026-10-14-band.md.'])
-  })
-})
-
-describe('resume offer', () => {
-  const LATEST = '/home/me/code/shop/.dforge/handoff/latest.md'
-  const COMPACT = configured({ layout: 'compact' })
-  const start = async ($: Parameters<TestBody>[0], on: On, text: string, more: World['files'] = {}, mtimeMs = 900_000) => {
-    const files: World['files'] = { [LATEST]: { text, mtimeMs }, ...more }
-    const prompts: string[] = []
-    world(on, { ...SIGNED_IN, files, prompts })
-    signedIn(on, files)
-    await $.session.start(START)
-    return prompts
-  }
-
-  test('reads the next action and the first prompt of a handoff', () => {
-    expect(resumeOfferOf(RESUMABLE)).toEqual({ next: 'Task 4 — wire the band into the pane.', prompt: 'Execute docs/dforge/plans/2026-10-14-band.md.' })
-  })
-
-  test('reads no first prompt when its block has no fence', () => {
-    expect(resumeOfferOf(UNFENCED)).toEqual({ next: 'Task 4 — wire the band into the pane.', prompt: null })
-  })
-
-  test('reads the registers a ruling prompt names', () => {
-    expect(promptRegisters(registerPrompt('`docs/dforge/registers/a.md`, `docs/dforge/registers/b.md`'))).toEqual([
-      'docs/dforge/registers/a.md',
-      'docs/dforge/registers/b.md',
-    ])
-    expect(promptRegisters('Execute `docs/dforge/plans/x.md`.')).toEqual([])
-  })
-
-  test('counts a row as unresolved while it is open, planned, doing or awaiting a check', () => {
-    for (const state of ['open', 'planned', 'doing', 'verify']) expect(hasUnresolvedRows(register(['done', state]))).toBe(true)
-    expect(hasUnresolvedRows(register(['done', 'deferred', 'n/a']))).toBe(false)
-    // An escaped pipe stays inside its cell.
-    expect(hasUnresolvedRows(register(['done']).replace('item 1', 'a \\| b'))).toBe(false)
-    expect(hasUnresolvedRows('# Not a register\n')).toBe(false)
-  })
-
-  test('says a handoff under a minute old was just handed off', () => {
-    expect(handedOff(59_999)).toBe('handed off just now')
-    expect(handedOff(100_000)).toBe('handed off 1m ago')
-  })
-
-  test('reads no offer from a finished, blocked or bare handoff', () => {
-    expect(resumeOfferOf(FINISHED)).toBeNull()
-    expect(resumeOfferOf(BLOCKED)).toBeNull()
-    expect(resumeOfferOf('# Handoff')).toBeNull()
-  })
-
-  test('reads no offer from a first prompt outside the Next session block', () => {
-    expect(resumeOfferOf(`${FINISHED}\n## Notes\n\nPaste as the first prompt:\n\n\`\`\`\nold\n\`\`\`\n`)).toBeNull()
-  })
-
-  test('draws a resume card at the top of the pane', async ($, on) => {
-    await start($, on, RESUMABLE)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ key: 'resume-card' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Resumable work · handed off 1m ago/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Next: Task 4 — wire the band into the pane\./ })).toBeDefined()
-    expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
-  })
-
-  for (const surface of SURFACES) {
-    test(`draws the resume band above the prompt on ${surface}, the pane open`, async ($, on) => {
-      await start($, on, RESUMABLE)
-      const band = await $.ui.mount({ ...BAND, surface })
-      expect(await band.find({ key: 'band-resume' })).toBeDefined()
-      expect(await band.find({ key: 'band-resume-dismiss' })).toBeDefined()
-      expect(await band.find({ type: 'Text', text: /Resumable work · handed off 1m ago/ })).toBeDefined()
-      expect(await band.find({ key: 'band-expand' })).toBeUndefined()
-    })
-
-    test(`stacks the resume band on the minimized band on ${surface}`, async ($, on) => {
-      await start($, on, RESUMABLE, COMPACT)
-      const band = await $.ui.mount({ ...BAND, surface })
-      expect(await band.find({ key: 'band-resume' })).toBeDefined()
-      const site = await $.ui.mount(minimized(surface))
-      expect(await site.find({ key: 'band-expand' })).toBeDefined()
-    })
-  }
-
-  for (const [name, text] of [['finished', FINISHED], ['blocked', BLOCKED]] as const) {
-    test(`offers nothing for a ${name} plan`, async ($, on) => {
-      await start($, on, text)
-      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-      const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-      expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
-      expect(await band.find({ key: 'band-resume' })).toBeUndefined()
-    })
-  }
-
-  test('offers nothing for a handoff older than three days', async ($, on) => {
-    await start($, on, RESUMABLE, {}, 1_000_000 - 3 * 86_400_000 - 1)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
-    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
-  })
-
-  test('offers nothing once the session runs a plan', async ($, on) => {
-    await start($, on, RESUMABLE)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
-  })
-
-  test('leaves the slot above the prompt to a survey', async ($, on) => {
-    await start($, on, RESUMABLE)
-    const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true }, surface: 'terminal' })
-    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
-  })
-
-  test("the band's Resume submits the handoff's first prompt and removes the offer", async ($, on) => {
-    const prompts = await start($, on, RESUMABLE)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    await band.press({ key: 'band-resume' })
-    expect(prompts).toEqual(['Execute docs/dforge/plans/2026-10-14-band.md.'])
-    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
-    expect(await ui.find({ key: 'resume-card' })).toBeUndefined()
-  })
-
-  test("the pane's Resume removes the band too", async ($, on) => {
-    const prompts = await start($, on, RESUMABLE)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    await ui.press({ key: 'pane-resume' })
-    expect(prompts).toHaveLength(1)
-    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
-    expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
-  })
-
-  test('Resume falls back to resume-execution for a handoff with no fenced first prompt', async ($, on) => {
-    const prompts = await start($, on, UNFENCED)
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    await band.press({ key: 'band-resume' })
-    expect(prompts).toEqual([expect.stringContaining('resume-execution')])
-  })
-
-  test('offers a ruling handoff while its register has an unresolved row', async ($, on) => {
-    await start($, on, rulingHandoff(), { [REGISTER]: { text: register(['done', 'open']), mtimeMs: 1 } })
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await band.find({ key: 'band-resume' })).toBeDefined()
-  })
-
-  test('offers nothing for a ruling handoff whose register rows are all resolved', async ($, on) => {
-    await start($, on, rulingHandoff(), { [REGISTER]: { text: register(['done', 'deferred', 'n/a']), mtimeMs: 1 } })
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
-  })
-
-  test('withdraws a ruling handoff at the next turn once its last row closes', async ($, on) => {
-    const files: NonNullable<World['files']> = { [LATEST]: { text: rulingHandoff(), mtimeMs: 900_000 }, [REGISTER]: { text: register(['done', 'open']), mtimeMs: 1 } }
-    world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.session.start(START)
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await band.find({ key: 'band-resume' })).toBeDefined()
-    files[REGISTER] = { text: register(['done', 'done']), mtimeMs: 2 }
-    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
-    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
-  })
-
-  test('keeps a ruling handoff whose register cannot be read', async ($, on) => {
-    await start($, on, rulingHandoff())
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await band.find({ key: 'band-resume' })).toBeDefined()
-  })
-
-  test('Dismiss removes the offer without a prompt', async ($, on) => {
-    const prompts = await start($, on, RESUMABLE)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    await band.press({ key: 'band-resume-dismiss' })
-    expect(prompts).toEqual([])
-    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
-    expect(await ui.find({ key: 'resume-card' })).toBeUndefined()
-  })
-})
-
-describe('cockpit roots', () => {
-  const MIRROR = '/home/me/.dforge/mirror/shop'
-  const MODE = [
-    `documents\tdarkmem\t${MIRROR}/superpowers`,
-    `progress\tdarkmem\t${MIRROR}/work/sdd\t${MIRROR}/work/handoff/latest.md`,
-    'project\tshop',
-    '',
-  ].join('\n')
-  const LEDGER = '# SDD ledger — plan: docs/superpowers/plans/p.md\nTask 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)\n'
-  const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n'
-  // darkmem-config runs only once one of the ~/.dforge files exists.
-  const storesFile = (): NonNullable<World['files']> => ({ '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 } })
-  const checkoutFiles = (): NonNullable<World['files']> => ({
-    ...storesFile(),
-    '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
-    '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
-  })
-
-  test('reads the roots --mode prints', () => {
-    expect(parseModeLines(MODE)).toEqual({
-      docs: { store: 'darkmem', root: `${MIRROR}/superpowers` },
-      progress: { store: 'darkmem', ledgerRoot: `${MIRROR}/work/sdd`, latestFile: `${MIRROR}/work/handoff/latest.md` },
-      project: 'shop',
-    })
-    expect(parseModeLines('documents\tlocal\t/r/docs/dforge\nprogress\tlocal\t/r/.dforge/sdd\t/r/.dforge/handoff/latest.md\n')?.project).toBeNull()
-    expect(parseModeLines(PORCELAIN)).toBeNull()
-    expect(parseModeLines('documents\tlocal\t/r/docs/dforge\n')).toBeNull()
-    expect(parseModeLines('documents\telsewhere\t/r\nprogress\tlocal\t/a\t/b\n')).toBeNull()
-  })
-
-  test('a failing --mode keeps the checkout paths and says why', async ($, on) => {
-    const files = checkoutFiles()
-    const stderr = 'darkmem-config: /home/me/.dforge/stores.json is not valid JSON: Unexpected token\nat line 2\n'
-    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 2, stdout: '', stderr } })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^darkmem-config: \/home\/me\/\.dforge\/stores\.json is not valid JSON: Unexpected token$/ })).toBeDefined()
-    await ui.unmount()
-    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
-    expect(JSON.stringify(await desk.drawn())).toContain('stores.json is not valid JSON')
-  })
-
-  test('without node the checkout paths stay silently', async ($, on) => {
-    const files = checkoutFiles()
-    world(on, { ...SIGNED_IN, files, modeOut: 'missing' })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-    expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
-  })
-
-  for (const [name, modeOut] of [
-    ['a run that fails at once without naming node', 'rejects'],
-    ['an exit 127', { exitCode: 127, stdout: '', stderr: 'sh: 1: node: not found\n' }],
-  ] as const) {
-    test(`${name} keeps the checkout paths silently`, async ($, on) => {
-      const files = checkoutFiles()
-      world(on, { ...SIGNED_IN, files, modeOut })
-      signedIn(on, files)
-      await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-      await $.session.start(START)
-      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-      expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-      expect(JSON.stringify(await ui.drawn())).not.toMatch(/gave no answer|exited 127|not found/)
-    })
-  }
-
-  test('a run the engine stops at its timeout says it gave no answer', async ($, on) => {
-    const files = checkoutFiles()
-    world(on, { ...SIGNED_IN, files, modeOut: 'timeout' })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /darkmem-config\.mjs --mode gave no answer within 5 seconds/ })).toBeDefined()
-  })
-
-  test('a run that prints no mode lines keeps the checkout paths silently', async ($, on) => {
-    const files = checkoutFiles()
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, modeRuns })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(modeRuns).toEqual(['/home/me/code/shop'])
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-    expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
-  })
-
-  test('reads the roots once per stores.json change, re-read from a mirror path', async ($, on) => {
-    const files: NonNullable<World['files']> = { ...checkoutFiles(), '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 } }
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, modeRuns })
-    signedIn(on, files)
-    await $.session.start(START)
-    expect(modeRuns).toEqual(['/home/me/code/shop'])
-    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dforge/mirror/shop/work/sdd/p/progress.md' })
-    expect(modeRuns).toHaveLength(1)
-    files['/home/me/.dforge/stores.json']!.mtimeMs = 2
-    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dforge/mirror/shop/work/sdd/p/progress.md' })
-    expect(modeRuns).toEqual(['/home/me/code/shop', '/home/me/code/shop'])
-  })
-
-  test('reads the roots again when ~/.dforge/config.json changes', async ($, on) => {
-    const files: NonNullable<World['files']> = { ...checkoutFiles(), [CONFIG]: { text: '{}', mtimeMs: 1 } }
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, modeRuns })
-    signedIn(on, files)
-    await $.session.start(START)
-    expect(modeRuns).toEqual(['/home/me/code/shop'])
-    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dforge/config.json' })
-    expect(modeRuns).toHaveLength(1)
-    files[CONFIG]!.mtimeMs = 2
-    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dforge/config.json' })
-    expect(modeRuns).toHaveLength(2)
-  })
-
-  test('a --mode failure that names a missing file is shown, not taken for a missing node', async ($, on) => {
-    const files = checkoutFiles()
-    const stderr = "darkmem-config: ENOENT: no such file or directory, open '/home/me/.dforge/mirror/shop/.sync-state.json'\n"
-    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 1, stdout: '', stderr } })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^darkmem-config: ENOENT: no such file or directory/ })).toBeDefined()
-  })
-
-  test('a run that timed out is tried again at the next read', async ($, on) => {
-    const files = checkoutFiles()
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, modeRuns, modeOut: 'timeout' })
-    signedIn(on, files)
-    await $.session.start(START)
-    expect(modeRuns).toHaveLength(1)
-    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
-    expect(modeRuns).toHaveLength(2)
-  })
-
-  test('runs no node while neither ~/.dforge/config.json nor stores.json exists', async ($, on) => {
-    const files: NonNullable<World['files']> = {
-      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
-      '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
-    }
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, modeRuns })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    expect(modeRuns).toEqual([])
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-  })
-
-  test('resolves a plan under the docs root in darkmem, under the docs directory of each checkout otherwise', () => {
-    const darkmem = { store: 'darkmem' as const, root: `${MIRROR}/superpowers` }
-    const w = { root: '/w', docsDir: '/w/docs/dforge' }
-    const p = { root: '/p', docsDir: '/p/docs/dforge' }
-    for (const name of ['docs/superpowers/plans/p.md', 'docs/forge/plans/p.md', 'docs/dforge/plans/p.md', './docs/dforge/plans/p.md']) {
-      expect(planCandidates(name, darkmem, [w, p])).toEqual([`${MIRROR}/superpowers/plans/p.md`])
-      // Every prefix names the same document: an older citation reads under each checkout's docs/dforge.
-      expect(planCandidates(name, { store: 'local', root: '/p/docs/dforge' }, [w, p])).toEqual(['/w/docs/dforge/plans/p.md', '/p/docs/dforge/plans/p.md'])
-      expect(planCandidates(name, null, [p, p])).toEqual(['/p/docs/dforge/plans/p.md'])
-    }
-    expect(planCandidates('docs/plans/p.md', null, [w, p])).toEqual(['/w/docs/plans/p.md', '/p/docs/plans/p.md'])
-    expect(planCandidates('/abs/plans/p.md', darkmem, [w])).toEqual(['/abs/plans/p.md'])
-    expect(planCandidates('docs/superpowersx/p.md', darkmem, [w])).toEqual(['/w/docs/superpowersx/p.md'])
-    expect(planCandidates('docs/forgex/p.md', darkmem, [w])).toEqual(['/w/docs/forgex/p.md'])
-  })
-
-  test('reads a plan named under docs/superpowers from a checkout that has only docs/dforge', async ($, on) => {
-    const files: World['files'] = {
-      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
-      '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
-    }
-    world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
-  })
-
-  test('reads no plan from a pre-3.0 docs/superpowers directory', async ($, on) => {
-    const files: World['files'] = {
-      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER.replace('docs/superpowers', 'docs/dforge'), mtimeMs: 2_000_000 },
-      '/home/me/code/shop/docs/superpowers/plans/p.md': { text: PLAN },
-    }
-    world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeUndefined()
-  })
-
-  test('reads the ledger and the plan from the mirror when both families are in darkmem', async ($, on) => {
-    const files: World['files'] = {
-      ...storesFile(),
-      [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
-      [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
-    }
-    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
-    expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
-  })
-
-  test('offers Resume for latest.md in the mirror, naming it when the note has no first prompt', async ($, on) => {
-    const files: World['files'] = { ...storesFile(), [`${MIRROR}/work/handoff/latest.md`]: { text: UNFENCED, mtimeMs: 900_000 } }
-    const prompts: string[] = []
-    world(on, { ...SIGNED_IN, files, prompts, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
-    signedIn(on, files)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await ui.press({ key: 'pane-resume' })
-    expect(prompts).toEqual([expect.stringContaining(`${MIRROR}/work/handoff/latest.md`)])
-  })
-
-  test("reads finish.json and a local plan from the session's worktree before the primary", async ($, on) => {
-    const files: World['files'] = {
-      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
-      '/home/me/code/main/.dforge/sdd/p/finish.json': { text: '{"action":"merge","base":"main","chosenAt":900}' },
-      '/home/me/code/main/docs/dforge/plans/p.md': { text: '# Plan\n\n### Task 1: Old title\n' },
-      '/home/me/code/shop/.dforge/sdd/p/finish.json': { text: '{"action":"pr","base":"main","chosenAt":900}' },
-      '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
-    }
-    world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main' })
-    signedIn(on, files, undefined, '/home/me/code/main')
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Finish push and open a PR/ })).toBeDefined()
-  })
-
-  test('takes the primary checkout from the common directory, as the scripts do', async ($, on) => {
-    // stores.json makes the cockpit ask darkmem-config for the primary's roots.
-    const files: NonNullable<World['files']> = { '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 } }
-    const gitRuns: string[] = []
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main', gitRuns, modeRuns })
-    signedIn(on, files, undefined, '/home/me/code/main')
-    await $.session.start(START)
-    expect(gitRuns).toContain('git -C /home/me/code/main rev-parse --show-toplevel')
-    // The roots are the linked worktree's, as sdd-workspace resolves them there.
-    expect(modeRuns).toEqual(['/home/me/code/shop'])
-  })
-
-  test("reads a linked worktree's own ledger, not the primary checkout's", async ($, on) => {
-    const files: World['files'] = {
-      '/home/me/code/main/.dforge/sdd/q/progress.md': { text: LEDGER.replace('p.md', 'q.md'), mtimeMs: 2_500_000 },
-      '/home/me/code/main/docs/dforge/plans/q.md': { text: '# Plan\n\n### Task 1: Primary task\n' },
-      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
-      '/home/me/code/shop/docs/dforge/plans/p.md': { text: PLAN },
-    }
-    world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main' })
-    signedIn(on, files, undefined, '/home/me/code/main')
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Primary task/ })).toBeUndefined()
-  })
-
-  test('follows the session into a worktree it enters mid-session, as an auto run does', async ($, on) => {
-    const tree = '/home/me/code/main/.claude/worktrees/w'
-    const files: World['files'] = {
-      [`${tree}/.dforge/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
-      [`${tree}/docs/dforge/plans/p.md`]: { text: PLAN },
-    }
-    const w: World = { ...SIGNED_IN, files, primary: '/home/me/code/main', checkout: '/home/me/code/main' }
-    world(on, w)
-    signedIn(on, files, undefined, '/home/me/code/main')
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
-    w.checkout = tree
-    await $.tool.call({ tool: 'EnterWorktree', path: tree } as never)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-  })
-
-  test('follows the session into a worktree it cds into, as the worktree fallback does', async ($, on) => {
-    const tree = '/home/me/code/main/.worktrees/w'
-    const files: World['files'] = {
-      [`${tree}/.dforge/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
-      [`${tree}/docs/dforge/plans/p.md`]: { text: PLAN },
-    }
-    const w: World = { ...SIGNED_IN, files, primary: '/home/me/code/main', checkout: '/home/me/code/main' }
-    let cwd = '/home/me/code/main'
-    world(on, w)
-    signedIn(on, files, undefined, '/home/me/code/main', () => cwd)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
-    w.checkout = tree
-    cwd = tree
-    await $.tool.call({ tool: 'Bash', command: `cd ${tree}` } as never)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-  })
-
-  test('a shell call that stays in the same directory runs no git', async ($, on) => {
-    const gitRuns: string[] = []
-    world(on, { ...SIGNED_IN, gitRuns })
-    signedIn(on)
-    await $.session.start(START)
-    const before = gitRuns.length
-    await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
-    expect(gitRuns.slice(before)).toEqual([])
-  })
-
-  test('a submodule has no primary checkout, as in the scripts', async ($, on) => {
-    const files: NonNullable<World['files']> = { '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 } }
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, commonDir: '/home/me/code/shop/.git/modules/web', modeRuns })
-    signedIn(on, files)
-    await $.session.start(START)
-    // With no primary, the session's own repository stands in.
-    expect(modeRuns).toEqual(['/home/me/code/shop'])
-  })
-
-  test('a changed stores.json moves the card to the new roots', async ($, on) => {
-    const files: NonNullable<World['files']> = {
-      '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 },
-      [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
-      [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
-    }
-    const w: World = { ...SIGNED_IN, files }
-    world(on, w)
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
-    expect(await ui.find({ type: 'Button', text: '▸ Run' })).toBeUndefined()
-    await ui.unmount()
-    w.modeOut = { exitCode: 0, stdout: MODE, stderr: '' }
-    files['/home/me/.dforge/stores.json']!.mtimeMs = 2
-    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dforge/stores.json' })
-    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
-  })
-})
-
 describe('flight deck', () => {
   test('draws every panel the way the approved preview does', async ($, on) => {
-    const ledger = [
-      '# SDD ledger — plan: docs/plans/cockpit.md',
-      'Task 3: implementer dforge:impl-sonnet-low (assigned; base abc1234)',
-      'Task 3: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none',
-      'Task 4: implementer dforge:impl-sonnet-low (assigned; base def5678)',
-      'Task 4: fix round 2/5 (1 addressed, 1 open — meter width; commits c..d; fresh)',
-      'Task 5: BLOCKED — needs the ledger format',
-    ].join('\n')
-    const now = 1_000_000
-    const files: World['files'] = {
-      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: ledger, mtimeMs: now },
-      '/home/me/code/shop/docs/plans/cockpit.md': { text: '# Plan\n\n### Task 1: Read the budget\n\n### Task 2: Draw the strip\n\n### Task 3: Draw the context section\n\n### Task 4: Draw usage and agents\n\n### Task 5: Track the plan and repo\n\n### Task 6: Write the README\n' },
-    }
+    const files: World['files'] = {}
     const w: World = { ...SIGNED_IN, files, remoteControl: 'true' }
     world(on, w)
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
     await $.session.start(START)
+    await $.tool.call({
+      tool: 'TodoWrite',
+      todos: [
+        { content: 'Read the budget', status: 'completed', activeForm: 'Reading' },
+        { content: 'Draw the strip', status: 'in_progress', activeForm: 'Drawing' },
+        { content: 'Draw the context section', status: 'pending', activeForm: 'Drawing' },
+        { content: 'Draw usage and agents', status: 'pending', activeForm: 'Drawing' },
+        { content: 'Track the plan and repo', status: 'pending', activeForm: 'Tracking' },
+        { content: 'Write the README', status: 'pending', activeForm: 'Writing' },
+      ],
+    })
     for (const [i, t] of [180_000, 205_000, 228_000, 251_000, 270_000, 284_000].entries()) { w.tokens = t; await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: `turn-${i}`, reason: 'answer' }) }
     await $.session.measure({ context: { tokens: 284_000, window: 650_000 }, rateLimits: [{ kind: 'five_hour', percentUsed: 23, resetsAt: new Date(1_000_000 + 220 * 60_000).toISOString() }, { kind: 'seven_day', percentUsed: 61, resetsAt: new Date(1_000_000 + 86 * 3600_000).toISOString() }], cost: { usd: 4.85 }, changed: ['context', 'rateLimits'], breakdown: true } as never)
     w.tools = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: `b${Math.random()}` }, text: 'Running in the background' }) }
@@ -5235,9 +3421,9 @@ describe('flight deck', () => {
     await $.tool.call({ tool: 'Bash', command: 'pytest -x --watch', run_in_background: true } as never)
     w.tools = {}
     await $.tool.call({ tool: 'Bash', command: 'git commit -m "fix" -m "Co-Authored-By: Claude <noreply@anthropic.com>"' })
-    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement task 3', description: 'Review task 3', subagentType: 'dforge:judge-opus', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement task 3', description: 'Review task 3', subagentType: 'acme-check', provider: { plugin: 'acme', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
     await $.turn.complete({ answer: 'done', durationMs: 1000, isAborted: false, turnId: 'turn-9', agentId: 'agent-1', reason: 'answer', usage: { model: 'claude-opus-5-5', input_tokens: 4_000, cache_read_input_tokens: 46_000, cache_creation_input_tokens: 14_000, output_tokens: 3_000 } })
-    await $.agent.spawn({ tool_use_id: 'toolu_2', prompt: 'Implement task 4', description: 'Task 4', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
+    await $.agent.spawn({ tool_use_id: 'toolu_2', prompt: 'Implement task 4', description: 'Task 4', subagentType: 'acme-builder-01', provider: { plugin: 'acme', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
     const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 46, scroll: { offset: 0, bodyRows: 300 } }, surface: 'desktop' })
     const drawn = JSON.stringify(await ui.drawn())
     // The gauge tiles split each row by share and wrap when the dials won't
@@ -5253,9 +3439,9 @@ describe('flight deck', () => {
         .filter(node => /^gauges-\d+$/.test(node.props?.key ?? ''))
         .map(row => (row.children ?? []).map(tile => `${tile.props?.key?.slice(6)}:${tile.props?.width}/${tile.props?.flexGrow}`))
     }
-    // The gauges are one drawing per tile: context against the handoff, then
-    // each window with its reset and forecast; figures take the page's tone.
-    expect(drawn).toContain('of handoff · ≈')
+    // The gauges are one drawing per tile: context against the compaction
+    // point, then each window with its reset and forecast; figures take the page's tone.
+    expect(drawn).toContain('of compaction · ≈')
     expect(drawn).toContain('5h limit 23% used, resets 3h40m, on pace')
     expect(drawn).toMatch(/7d limit 61% used, resets 3d14h, out in /)
     expect(drawn).toContain('class=\\"fg\\">23%</text>')
@@ -5270,13 +3456,12 @@ describe('flight deck', () => {
     for (const chip of ['xhigh effort', 'Remote ○ on · no device yet', 'config ~/.claude']) expect(drawn).toContain(`"children":["${chip}"]`)
     // No picture stands in for a panel's rows; the gauges stay pictures.
     const alts = (await ui.findAll({ type: 'Svg' })).map(one => String(one.props.alt))
-    for (const alt of alts) expect(alt).not.toMatch(/Opus 5\.5|npm run dev|judge-opus|Task 4|feat\/pane|running/)
+    for (const alt of alts) expect(alt).not.toMatch(/Opus 5\.5|npm run dev|acme-check|Task 4|feat\/pane|running/)
     expect(alts).toContain('5h limit 23% used, resets 3h40m, on pace')
     // A badge row holds its picture beside its lines; a small row is a
-    // footnote, a wrapped one wraps, and an indent is counted in cells.
+    // footnote, and a wrapped one wraps.
     expect((await ui.find({ key: 'account-line-0' }))?.children[0]).toMatchObject({ type: 'Svg' })
     expect(drawn).toContain('"size":"footnote","wrap":"wrap"')
-    expect(drawn).toContain('"columnGap":"sm","paddingLeft":2}')
     // Usage leaves the windows to their gauges and says what the ticks mean.
     expect(drawn).toContain("The gauges' ticks mark how far each window has run: 27% of 5h, 49% of 7d.")
     expect(drawn).not.toContain('of the window gone')
@@ -5284,18 +3469,19 @@ describe('flight deck', () => {
     expect((await ui.find({ key: 'shells-line-0-left' }))?.text).toBe('$ npm run dev')
     expect((await ui.find({ key: 'shells-line-0-right' }))?.text).toBe('0s')
     // Each seat's counts sit on a row above its bar, with no title or caption.
-    expect(await boxTexts(ui)).toContain('judge-opus ×1')
+    expect(await boxTexts(ui)).toContain('acme-check ×1')
     expect(await boxTexts(ui)).toContain('64k in · 72% cached · 3k out')
     expect(drawn).not.toContain('Seats by input')
     expect(drawn).not.toContain('prompt cache.')
-    // The window's labels slide clear of each other rather than drop out.
+    // The window carries one label at the compaction point.
     expect(drawn).toContain('>compacts 604k</text>')
-    expect(drawn).toContain('>handoff 465k</text>')
+    expect(drawn).not.toContain('handoff')
     expect(drawn).toContain('+14k · 7 turns</text>')
-    expect((await ui.find({ key: 'plan-headline' }))?.text).toBe('1 blocked · round 2/5 · 1/6')
-    expect(drawn).toContain('round 2/5 · impl-sonnet-low')
+    expect((await ui.find({ key: 'plan-headline' }))?.text).toBe('1/6')
+    expect(await boxTexts(ui)).toContain('▸  Draw the strip')
     // The buttons stay the desktop's own.
-    expect(await ui.find({ key: 'pane-handoff' })).toBeDefined()
+    expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
+    expect(await ui.find({ key: 'pane-handoff' })).toBeUndefined()
     await ui.unmount()
     expect(await tileRows(80)).toEqual([['Context:0/1.35', '5h:0/1', '7d:0/1']])
     expect(await tileRows(46)).toEqual([['Context:0/1.35'], ['5h:0/1', '7d:0/1']])
@@ -5377,7 +3563,74 @@ describe('settings file', () => {
   test('every default in the real schema fits its own type', () => {
     for (const spec of Object.values(SCHEMA)) expect(isValidSetting(spec, spec.default)).toBe(true)
   })
+
+  test("a previous version's file loads without a problem: removed keys and retired list names are ignored", () => {
+    const resolved = resolveSettings(SCHEMA, PREVIOUS_CONFIG, {})
+    expect(settingProblems(SCHEMA, PREVIOUS_CONFIG, {})).toEqual([])
+    expect(Object.keys(resolved).sort()).toEqual(Object.keys(SCHEMA).sort())
+    for (const key of REMOVED_KEYS) expect(resolved[key]).toBeUndefined()
+    expect(resolved.layout).toBe('full')
+    expect(bandLinesFrom(String(resolved.bandLine1), String(resolved.bandLine2))).toEqual([['dir'], []])
+    expect(notifyKindsFrom(String(resolved.notifyOn))).toEqual(['ask'])
+    expect(isValidSetting(SCHEMA.bandLine1!, 'dir,RUN')).toBe(true)
+    expect(isValidSetting(SCHEMA.notifyOn!, 'blocked budget task')).toBe(true)
+    expect(isValidSetting(SCHEMA.sections!, 'run')).toBe(false)
+  })
+
+  test("a previous version's file opens the settings view with no problem line and no retired chip", async ($, on) => {
+    world(on, { tokens: 284_000, config: PREVIOUS_CONFIG })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    for (const tab of tabsOf(SCHEMA)) {
+      await ui.press({ key: `settings-tab-${tab}` })
+      expect(JSON.stringify(await ui.drawn())).not.toMatch(/config\.json(:| is)|not valid|unknown /)
+    }
+    await ui.press({ key: 'settings-tab-Minimized' })
+    expect(await ui.find({ key: 'set-bandLine1-run' })).toBeUndefined()
+    expect((await ui.find({ key: 'set-bandLine1-dir' }))?.props.label).toBe('✓ dir')
+    expect((await ui.find({ key: 'set-bandLine1-git' }))?.props.label).toBe('○ git')
+    expect((await ui.find({ key: 'set-bandLine2-ctx' }))?.props.label).toBe('○ ctx')
+    expect((await ui.find({ key: 'set-bandLine2-controls' }))?.text).toMatch(/^hidden/)
+    await ui.press({ key: 'settings-tab-Notifications' })
+    for (const kind of ['blocked', 'budget', 'task']) expect(await ui.find({ key: `set-notify-kind-${kind}` })).toBeUndefined()
+    expect((await ui.find({ key: 'set-notify-kind-ask' }))?.text).toMatch(/^✓/)
+    expect((await ui.find({ key: 'set-notify-kind-done' }))?.text).toMatch(/^○/)
+  })
 })
+
+// The keys the plan-run removal dropped, each as the previous version saved it.
+const REMOVED_KEYS = [
+  'handoffTokens', 'handoffMode', 'warnAt', 'nudgeModel',
+  'codexLane', 'codexReview', 'agyLane', 'lensCap', 'lensMinorFrom', 'executionStrategy', 'executionMode', 'worktree', 'autoRun',
+  'processBias', 'fastMode', 'designApproval', 'specReview', 'questionStyle',
+  'finishAction',
+]
+const PREVIOUS_CONFIG: SettingsFile = {
+  handoffTokens: 300_000,
+  handoffMode: 'relaxed',
+  warnAt: 70,
+  nudgeModel: false,
+  codexLane: false,
+  codexReview: true,
+  agyLane: false,
+  lensCap: 2,
+  lensMinorFrom: 10,
+  executionStrategy: 'parallel',
+  executionMode: 'inline',
+  worktree: 'always',
+  autoRun: 'off',
+  processBias: 'lighter',
+  fastMode: 'off',
+  designApproval: 'whole',
+  specReview: false,
+  questionStyle: 'batched',
+  finishAction: 'pr',
+  bandLine1: 'dir,run',
+  bandLine2: 'run',
+  notifyOn: 'ask,blocked,budget,task',
+  layout: 'full',
+}
 
 describe('polling', () => {
   test('puts an edited settings file in force within one tick', async ($, on) => {
@@ -5534,7 +3787,7 @@ describe('settings rows', () => {
 
   test('the tabs are the groups in schema order', () => {
     expect(tabsOf(ROWS)).toEqual(['Cockpit', 'Context', 'Finish'])
-    expect(tabsOf(SCHEMA)).toEqual(['Cockpit', 'Minimized', 'Context', 'Workflow', 'Process', 'Finish', 'Notifications', 'darkmem'])
+    expect(tabsOf(SCHEMA)).toEqual(['Cockpit', 'Minimized', 'Context', 'Notifications', 'darkmem'])
   })
 
   test('a value reads through its unit and zero word', () => {
@@ -5623,23 +3876,21 @@ describe('settings rows', () => {
 })
 
 describe('settings held outside the file', () => {
-  const NOTE = 'dforge settings changed'
-
-  test('a value the environment forces shows locked, and a group reset leaves it alone', async ($, on) => {
-    const written: Record<string, string> = {}
-    world(on, { tokens: 284_000, config: { warnAt: 70, handoffTokens: 300_000 }, written, env: { DFORGE_BUDGET: '465000' } })
+  test('a value a project file forces shows locked, and a group reset leaves it alone', async ($, on) => {
+    const runs: string[] = []
+    world(on, { tokens: 284_000, config: {}, runs, settings: { autoCompactWindow: 500_000, autoCompactEnabled: false }, userSettings: { autoCompactEnabled: false } })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'settings-tab-Context' })
-    expect(await ui.find({ type: 'Text', text: 'set by DFORGE_BUDGET' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^465k/ })).toBeDefined()
-    expect(await ui.find({ key: 'set-handoffTokens-more' })).toBeUndefined()
-    expect(await ui.find({ key: 'set-warnAt-more' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'set by a project or managed settings file' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^500k/ })).toBeDefined()
+    expect(await ui.find({ key: 'set-autoCompactWindow-more' })).toBeUndefined()
+    expect(await ui.find({ key: 'set-autoCompactEnabled-toggle' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '1 changed' })).toBeDefined()
     await ui.press({ key: 'settings-reset' })
     await ui.press({ key: 'settings-reset-confirm' })
-    expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ handoffTokens: 300_000 })
+    expect(runs.filter(run => run.includes(' set '))).toEqual([expect.stringMatching(/ set autoCompactEnabled true$/)])
   })
 
   test('the pre-2.0 variable locks nothing', async ($, on) => {
@@ -5752,1397 +4003,5 @@ describe('settings held outside the file', () => {
     await ui.press({ key: 'set-autoCompactEnabled-toggle' })
     expect(await ui.find({ type: 'Text', text: 'set by a project or managed settings file' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^650k/ })).toBeDefined()
-  })
-
-  test('a changed skill setting is told to the model once, when the settings close', async ($, on) => {
-    const notes: string[] = []
-    world(on, { tokens: 50_000, config: {}, notes, written: {} })
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-tab-Workflow' })
-    await ui.press({ key: 'set-worktree-always' })
-    await ui.press({ key: 'set-worktree-never' })
-    await ui.press({ key: 'set-codexLane-toggle' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
-    await ui.press({ key: 'settings-back' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
-      'dforge settings changed: worktree=never. Each replaces the matching question or default in the skills.',
-    ])
-    await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-back' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toHaveLength(1)
-  })
-
-  test('leaving the settings through /cockpit tells the model too', async ($, on) => {
-    const notes: string[] = []
-    world(on, { tokens: 50_000, config: {}, notes, written: {} })
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-tab-Workflow' })
-    await ui.press({ key: 'set-worktree-always' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
-    await $.command.run({ ...COCKPIT, args: '' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
-      'dforge settings changed: worktree=always. Each replaces the matching question or default in the skills.',
-    ])
-  })
-
-  test('a note the session refuses is sent at the next close', async ($, on) => {
-    const notes: string[] = []
-    const w: World = { tokens: 50_000, config: {}, notes, written: {}, isAppendFailing: true }
-    world(on, w)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-tab-Workflow' })
-    await ui.press({ key: 'set-worktree-always' })
-    await ui.press({ key: 'settings-back' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
-    w.isAppendFailing = false
-    await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-back' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
-      'dforge settings changed: worktree=always. Each replaces the matching question or default in the skills.',
-    ])
-  })
-
-  test('outside a dforge session the note waits for one', async ($, on) => {
-    const notes: string[] = []
-    world(on, { tokens: 50_000, config: {}, notes, written: {} })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-tab-Process' })
-    await ui.press({ key: 'set-designApproval-whole' })
-    await ui.press({ key: 'settings-back' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
-      'dforge settings changed: designApproval=whole. Each replaces the matching question or default in the skills.',
-    ])
-  })
-
-  test('a dforge subagent spawn sends the waiting note once', async ($, on) => {
-    const notes: string[] = []
-    world(on, { tokens: 50_000, config: {}, notes, written: {} })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-tab-Process' })
-    await ui.press({ key: 'set-designApproval-whole' })
-    await ui.press({ key: 'settings-back' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
-    const spawn = (n: number) =>
-      $.agent.spawn({ tool_use_id: `toolu_${n}`, prompt: 'Implement', description: `Task ${n}`, subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
-    await spawn(1)
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
-      'dforge settings changed: designApproval=whole. Each replaces the matching question or default in the skills.',
-    ])
-    await spawn(2)
-    expect(notes.filter(note => note.startsWith(NOTE))).toHaveLength(1)
-  })
-
-  test('closing the pane sends the note once', async ($, on) => {
-    const notes: string[] = []
-    const closed: string[] = []
-    // The kit cannot raise the person's close, so the mod's own Minimize closes
-    // the pane. Settings-back sends the note too, so the append is refused there
-    // to keep the note waiting for the close.
-    const w: World = { tokens: 50_000, config: {}, notes, closed, written: {}, isAppendFailing: true }
-    world(on, w)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-tab-Workflow' })
-    await ui.press({ key: 'set-worktree-always' })
-    await ui.press({ key: 'settings-back' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
-    w.isAppendFailing = false
-    await ui.press({ key: 'pane-minimize' })
-    expect(closed).toEqual(['dforge'])
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
-      'dforge settings changed: worktree=always. Each replaces the matching question or default in the skills.',
-    ])
-    await ui.unmount()
-    // Nothing is left waiting: the next point that sends the note sends none.
-    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement', description: 'Task 1', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: false, fork: false })
-    expect(notes.filter(note => note.startsWith(NOTE))).toHaveLength(1)
-  })
-
-  test('a dforge skill started as a slash command marks the session and sends the waiting note', async ($, on) => {
-    const notes: string[] = []
-    world(on, { tokens: 50_000, config: {}, notes, written: {} })
-    on('skill.prompt', ($, e) => ({ text: e.text }))
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-tab-Process' })
-    await ui.press({ key: 'set-designApproval-whole' })
-    await ui.press({ key: 'settings-back' })
-    expect(await $.skill.prompt({ skill: 'commit', text: 'Commit.' })).toEqual({ text: 'Commit.' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
-    expect(await $.skill.prompt({ skill: 'dforge:brainstorming', text: 'Brainstorm.' })).toEqual({ text: 'Brainstorm.' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toEqual([
-      'dforge settings changed: designApproval=whole. Each replaces the matching question or default in the skills.',
-    ])
-    await ui.press({ key: 'pane-settings' })
-    await ui.press({ key: 'settings-tab-Workflow' })
-    await ui.press({ key: 'set-worktree-never' })
-    await ui.press({ key: 'settings-back' })
-    expect(notes.filter(note => note.startsWith(NOTE))).toHaveLength(2)
-  })
-})
-
-// An auto run's state file in the primary checkout the world names.
-const AUTO = '/home/me/code/shop/.dforge/sdd/auto-run.json'
-const SENTINEL = 'Task 3: complete.\n\nAuto run: compacting'
-function autoFiles(fields: Record<string, unknown> = {}): NonNullable<World['files']> {
-  return {
-    [AUTO]: {
-      text: JSON.stringify({
-        active: true,
-        session: 'sess-1',
-        phase: 'execute',
-        regime: 'normal',
-        pending: 'compact',
-        plan: 'docs/plan.md',
-        compactions: 0,
-        resumes: 0,
-        stopped: null,
-        resumePrompt: null,
-        launch: null,
-        ...fields,
-      }),
-    },
-  }
-}
-/** Lets timers at the current instant fire and their work finish. */
-async function settle(clock: ReturnType<typeof world>) {
-  for (let i = 0; i < 10; i++) await clock.advance(1)
-}
-const pendingOf = (files: NonNullable<World['files']>) => (JSON.parse(files[AUTO]!.text) as { pending: unknown }).pending
-
-describe('auto run', () => {
-  const spawnTask4 = ($: Parameters<TestBody>[0]) =>
-    $.agent.spawn({
-      tool_use_id: 'toolu_1',
-      prompt: 'Implement task 4',
-      description: 'Task 4',
-      subagentType: 'dforge:impl-sonnet-low',
-      provider: { plugin: 'dforge', tier: 'user' },
-      parentModel: 'claude-opus-5-5',
-      background: true,
-      fork: false,
-    })
-
-  const RECONCILE_PROMPT =
-    /^Background work has run 20 minutes since the last turn with no notification\. Run `bash "[^"]*\/scripts\/in-flight"`\. Stop with TaskStop each launch idle 30 minutes or more, and record a `Ruling:` line naming the task it served and that its result is void; leave the others running\. Then continue the run, and end the turn again if only waiting remains\.$/
-
-  test('compacts on the sentinel, books it and submits the continue prompt', async ($, on) => {
-    const files = autoFiles()
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.compacts).toHaveLength(1)
-    expect(w.compacts?.[0]).toMatch(/Ruling: line/)
-    expect(w.autoRuns).toContain('--session sess-1 compacted')
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/`bash "[^"]*\/scripts\/auto-run" after-compact`/)
-    expect(w.prompts?.[0]).toMatch(/`bash "[^"]*\/scripts\/auto-run" status` names/)
-    expect(w.prompts?.[0]).toMatch(/docs\/plan\.md/)
-    expect(pendingOf(files)).toBe('after-compact')
-  })
-
-  test('stays still without the sentinel, on an interrupted turn, or for another session', async ($, on) => {
-    const w: World = { ...SIGNED_IN, compacts: [], prompts: [] }
-    const clock = world(on, w)
-    const files = autoFiles()
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: true, turnId: 't2', reason: 'aborted' })
-    files[AUTO] = autoFiles({ session: 'another' })[AUTO]!
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't3', reason: 'answer' })
-    await settle(clock)
-    expect(w.compacts).toEqual([])
-    expect(w.prompts).toEqual([])
-  })
-
-  test('waits while a subagent runs', async ($, on) => {
-    const w: World = { ...SIGNED_IN, compacts: [] }
-    const clock = world(on, w)
-    signedIn(on, autoFiles())
-    await $.session.start(START)
-    await $.agent.spawn({
-      tool_use_id: 'toolu_1',
-      prompt: 'Implement task 4',
-      description: 'Task 4',
-      subagentType: 'dforge:impl-sonnet-low',
-      provider: { plugin: 'dforge', tier: 'user' },
-      parentModel: 'claude-opus-5-5',
-      background: true,
-      fork: false,
-    })
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    await clock.advance(5_000)
-    await settle(clock)
-    expect(w.compacts).toEqual([])
-  })
-
-  test('waits for a turn that started first, then compacts', async ($, on) => {
-    const w: World = { ...SIGNED_IN, compacts: [] }
-    const clock = world(on, w)
-    signedIn(on, autoFiles())
-    await $.session.start(START)
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await $.turn.start({ text: 'How is it going?', turnId: 't2' })
-    await settle(clock)
-    expect(w.compacts).toEqual([])
-    await $.turn.complete({ answer: 'Going well.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
-    await clock.advance(5_000)
-    await settle(clock)
-    expect(w.compacts).toHaveLength(1)
-  })
-
-  test('clears, binds the cleared session, sets its model and submits its first prompt', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
-    expect(w.autoRuns).toContain('--session sess-2 rebind --to sess-2')
-    expect(w.autoRuns).toContain('--session sess-2 resumed')
-    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
-    expect(pendingOf(files)).toBeNull()
-  })
-
-  test('puts back the default model and effort that /model and /effort save', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const userSettings = { model: 'opus[1m]', modelSettings: { 'claude-opus-5-5': { effortLevel: 'max' } }, theme: 'dark' }
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([
-      expect.stringContaining(`claude-restore ${JSON.stringify({ model: 'opus[1m]', modelSettings: { 'claude-opus-5-5': { effortLevel: 'max' } } })}`),
-    ])
-    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
-  })
-
-  test('removes the defaults /model and /effort added where none were set', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: {}, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([expect.stringContaining('claude-restore {"model":null,"modelSettings":null}')])
-  })
-
-  test('restores nothing when the clear sets no model', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: null })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([])
-  })
-
-  test('tells the cleared session when its default model could not be put back', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, isDforgeConfigRefusing: true, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/^Execute docs\/plan\.md\./)
-    expect(w.prompts?.[0]).toMatch(/could not put back the default model and effort/)
-    expect(w.prompts?.[0]).toMatch(/scripts\/auto-run ruling add/)
-  })
-
-  test('writes the defaults again when the engine misses the first write', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, missedRestores: 1, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.prompts).toEqual([])
-    for (let i = 0; i < 8; i++) await clock.advance(500)
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toHaveLength(2)
-    expect(w.userSettings).toEqual({ model: 'opus[1m]' })
-    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
-  })
-
-  test('tells the cleared session when the engine never takes the restored defaults', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, missedRestores: 3, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    for (let i = 0; i < 30; i++) await clock.advance(500)
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toHaveLength(3)
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/could not put back the default model and effort/)
-  })
-
-  test('shows the cleared session\'s run at once', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', regime: 'high', resumePrompt: 'Execute docs/plan.md.' })
-    const w: World = { ...SIGNED_IN, commands: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Auto run · execute · high/ })).toBeDefined()
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal/ })).toBeDefined()
-  })
-
-  test('shows the compaction at once', async ($, on) => {
-    const files = autoFiles()
-    const w: World = { ...SIGNED_IN, compacts: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 1 compaction · 0 resumes/ })).toBeDefined()
-  })
-
-  test('tells the cleared session when its model was refused', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], prompts: [], autoFile: files[AUTO], refusedCommands: ['model'] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/could not run \/model sonnet/)
-    expect(w.commands).toContain('/effort high')
-    expect(w.prompts?.[0]).toMatch(/auto-run ruling add/)
-  })
-
-  test('stops the run when the cleared session cannot be bound', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.' })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { rebind: 1 } }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.autoRuns).toContain('--session sess-1 stop --reason the cleared session could not be bound')
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/could not be bound/)
-  })
-
-  test('retries the stage that failed', async ($, on) => {
-    const files = autoFiles()
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], submitFailures: 1 }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.prompts).toEqual([])
-    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toHaveLength(1)
-    await clock.advance(5_000)
-    await settle(clock)
-    expect(w.compacts).toHaveLength(1)
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/after-compact/)
-    // The submitted retry clears the booked failure, so a later one does not stop the run.
-    expect(w.autoRuns?.at(-1)).toBe('--session sess-1 resumed')
-    expect(pendingOf(files)).toBe('after-compact')
-  })
-
-  test('retries the first prompt after /clear without clearing again', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: null })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO], submitFailures: 1 }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.prompts).toEqual([])
-    expect(w.autoRuns?.filter(call => call.startsWith('--session sess-2 failure '))).toHaveLength(1)
-    expect(pendingOf(files)).toBe('resume')
-    await clock.advance(5_000)
-    await settle(clock)
-    expect(w.commands).toEqual(['/clear'])
-    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
-    expect(w.autoRuns?.at(-1)).toBe('--session sess-2 resumed')
-    expect(pendingOf(files)).toBeNull()
-  })
-
-  test('books a refused compaction and retries it once', async ($, on) => {
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], isCompactVetoed: true }
-    const clock = world(on, w)
-    signedIn(on, autoFiles())
-    await $.session.start(START)
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.compacts).toHaveLength(1)
-    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toHaveLength(1)
-    await clock.advance(5_000)
-    await settle(clock)
-    expect(w.compacts).toHaveLength(2)
-    expect(w.prompts).toEqual([])
-  })
-
-  test('at the second failure, says so once and asks for the ending', async ($, on) => {
-    const fetches: World['fetches'] = []
-    const files = autoFiles()
-    const w: World = { ...SIGNED_IN, fetches, compacts: [], prompts: [], isCompactVetoed: true, autoRunExits: { failure: 5 }, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    mock.store(on, { notifyUrl: WEBHOOK })
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    await clock.advance(5_000)
-    await settle(clock)
-    expect(w.compacts).toHaveLength(1)
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/auto run stopped/i)
-    const titles = fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)
-    expect(titles.filter(title => title === '⛔ Auto run stopped')).toHaveLength(1)
-  })
-
-  test('stops the run when a failure cannot be booked', async ($, on) => {
-    const fetches: World['fetches'] = []
-    const files = autoFiles()
-    const w: World = { ...SIGNED_IN, fetches, autoRuns: [], prompts: [], isCompactVetoed: true, autoRunExits: { failure: 1 }, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    mock.store(on, { notifyUrl: WEBHOOK })
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    await clock.advance(5_000)
-    await settle(clock)
-    expect(w.prompts?.filter(text => /could not book/.test(text))).toHaveLength(1)
-    const titles = fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)
-    expect(titles.filter(title => title === '⛔ Auto run stopped')).toHaveLength(1)
-    expect(w.autoRuns?.some(call => call.includes(' stop --reason '))).toBe(true)
-  })
-
-  test('books a compaction the engine made', async ($, on) => {
-    const w: World = { ...SIGNED_IN, autoRuns: [] }
-    world(on, w)
-    signedIn(on, autoFiles({ pending: null }))
-    await $.session.start(START)
-    await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
-    expect(w.autoRuns).toContain('--session sess-1 compacted')
-  })
-
-  test("books the pane's Compact", async ($, on) => {
-    const w: World = { ...SIGNED_IN, autoRuns: [], compacts: [] }
-    world(on, w)
-    signedIn(on, autoFiles({ pending: null }))
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await ui.press({ key: 'pane-compact' })
-    expect(w.compacts).toHaveLength(1)
-    expect(w.autoRuns).toEqual(['--session sess-1 compacted'])
-  })
-
-  test("satisfies a pending compact stage with the pane's Compact, once", async ($, on) => {
-    const files = autoFiles({ pending: 'compact' })
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await ui.press({ key: 'pane-compact' })
-    await settle(clock)
-    expect(w.compacts).toHaveLength(1)
-    expect(w.autoRuns?.filter(call => call.endsWith(' compacted'))).toHaveLength(1)
-    expect(pendingOf(files)).toBe('after-compact')
-    expect(w.prompts).toHaveLength(1)
-  })
-
-  test('books no engine compaction over a pending clear', async ($, on) => {
-    const w: World = { ...SIGNED_IN, autoRuns: [] }
-    world(on, w)
-    signedIn(on, autoFiles({ pending: 'clear' }))
-    await $.session.start(START)
-    await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
-    expect(w.autoRuns).toEqual([])
-  })
-
-  test('switches by clearing: no compaction, the launch model, then the first prompt', async ($, on) => {
-    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md` with dforge:subagent-driven-development.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, compacts: [], commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Plan saved.\n\nAuto run: switching', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.compacts).toEqual([])
-    expect(w.autoRuns?.filter(call => call.includes(' compacted'))).toEqual([])
-    expect(w.autoRuns).toContain('--session sess-1 clear --phase')
-    expect(w.autoRuns).toContain('--session sess-2 rebind --to sess-2')
-    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
-    expect(w.prompts).toEqual(['Continue `docs/plan.md` with dforge:subagent-driven-development.'])
-    expect(pendingOf(files)).toBeNull()
-  })
-
-  test('retries a failed switch clear, naming the switch in each failure', async ($, on) => {
-    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md`.', launch: null })
-    const w: World = { ...SIGNED_IN, compacts: [], commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { clear: 1 } }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Plan saved.\n\nAuto run: switching', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    const failures = () => w.autoRuns?.filter(call => call.includes(' failure --reason the cockpit could not switch: the phase clear exited 1'))
-    expect(failures()).toHaveLength(1)
-    expect(w.compacts).toEqual([])
-    expect(w.prompts).toEqual([])
-    expect(pendingOf(files)).toBe('switch')
-    await clock.advance(5_000)
-    await settle(clock)
-    expect(w.autoRuns?.filter(call => call === '--session sess-1 clear --phase')).toHaveLength(2)
-    expect(failures()).toHaveLength(2)
-  })
-
-  test('stops the run when a failed switch clear reaches the failure cap', async ($, on) => {
-    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md`.', launch: null })
-    const w: World = { ...SIGNED_IN, compacts: [], commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { clear: 1, failure: 5 } }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Plan saved.\n\nAuto run: switching', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.autoRuns?.filter(call => call.includes(' failure --reason the cockpit could not switch: '))).toHaveLength(1)
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/auto run stopped/i)
-    expect(pendingOf(files)).toBeNull()
-  })
-
-  test('books no engine compaction over a pending switch', async ($, on) => {
-    const w: World = { ...SIGNED_IN, autoRuns: [] }
-    world(on, w)
-    signedIn(on, autoFiles({ pending: 'switch' }))
-    await $.session.start(START)
-    await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
-    expect(w.autoRuns).toEqual([])
-  })
-
-  test('books nothing without a run', async ($, on) => {
-    const w: World = { ...SIGNED_IN, autoRuns: [] }
-    world(on, w)
-    signedIn(on, {})
-    await $.session.start(START)
-    await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
-    expect(w.autoRuns).toEqual([])
-  })
-
-  test('ends the run when its compaction reaches the cap', async ($, on) => {
-    const files = autoFiles()
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { compacted: 5 } }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.compacts).toHaveLength(1)
-    expect(w.prompts).toEqual(['The auto run stopped: 3 compactions without a completed task. End as reference/auto-run.md §Stopping says.'])
-    expect(w.autoRuns?.some(call => call.includes(' stop '))).toBe(false)
-  })
-
-  test('ends the run when an engine compaction reaches the cap', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { compacted: 5 } }
-    world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
-    expect(w.autoRuns).toContain('--session sess-1 compacted')
-    expect(w.prompts).toEqual(['The auto run stopped: 3 compactions without a completed task. End as reference/auto-run.md §Stopping says.'])
-  })
-
-  for (const pending of ['handoff', 'compact']) {
-    test(`books no engine compaction over a pending ${pending}`, async ($, on) => {
-      const w: World = { ...SIGNED_IN, autoRuns: [] }
-      world(on, w)
-      signedIn(on, autoFiles({ pending }))
-      await $.session.start(START)
-      await $.session.compact({ trigger: 'auto', messages: [SUMMARY] })
-      expect(w.autoRuns).toEqual([])
-    })
-  }
-
-  for (const [why, flag] of [['node cannot run the restore', { isNodeMissing: true }], ['the user settings cannot be read', { isUserSettingsUnreadable: true }]] as const) {
-    test(`runs neither /model nor /effort when ${why}`, async ($, on) => {
-      const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-      const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, ...flag, autoFile: files[AUTO] }
-      const clock = world(on, w)
-      signedIn(on, files)
-      await $.session.start(START)
-      await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-      await settle(clock)
-      expect(w.commands).toEqual(['/clear'])
-      expect(w.userSettings).toEqual({ model: 'opus[1m]' })
-      expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([])
-      expect(w.prompts).toHaveLength(1)
-      expect(w.prompts?.[0]).toMatch(/^Execute docs\/plan\.md\./)
-      expect(w.prompts?.[0]).toMatch(/kept this session on .+ because it could not put back your default model afterwards\. Record that with scripts\/auto-run ruling add\./)
-    })
-  }
-
-  test('sends a blocked notice naming the settings file when the defaults cannot be put back', async ($, on) => {
-    const fetches: World['fetches'] = []
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, fetches, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, isDforgeConfigRefusing: true, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    mock.store(on, { notifyUrl: WEBHOOK })
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    const notice = fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]).find(embed => embed?.title === '⛔ Default model not restored')
-    expect(notice).toBeDefined()
-    expect(JSON.stringify(notice)).toMatch(/\/home\/me\/\.claude\/settings\.json/)
-  })
-
-  test('writes the heartbeat at the start and on every watchdog tick', async ($, on) => {
-    const written: Record<string, string> = {}
-    const clock = world(on, { ...SIGNED_IN, written })
-    signedIn(on, {})
-    await $.session.start(START)
-    expect(written['/home/me/.claude/dforge/sessions/cockpit/sess-1']).toBe('1000\n')
-    await clock.advance(60_000)
-    expect(written['/home/me/.claude/dforge/sessions/cockpit/sess-1']).toBe('1060\n')
-  })
-
-  test('books a failure once background work has deferred a stage for 30 minutes', async ($, on) => {
-    const files = autoFiles()
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.agent.spawn({
-      tool_use_id: 'toolu_1',
-      prompt: 'Implement task 4',
-      description: 'Task 4',
-      subagentType: 'dforge:impl-sonnet-low',
-      provider: { plugin: 'dforge', tier: 'user' },
-      parentModel: 'claude-opus-5-5',
-      background: true,
-      fork: false,
-    })
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    await clock.advance(1_795_000)
-    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
-    await clock.advance(10_000)
-    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual(['--session sess-1 failure --reason a background launch kept the compact waiting 30 minutes'])
-    expect(w.compacts).toEqual([])
-  })
-
-  test('a dev server left running in the background defers no stage', async ($, on) => {
-    const files = autoFiles()
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO], tools: { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b7k2' }, text: 'Running in the background' }) } }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.compacts).toHaveLength(1)
-  })
-
-  test('a live turn restarts the deferral, so the cap counts background work alone', async ($, on) => {
-    const files = autoFiles()
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.agent.spawn({
-      tool_use_id: 'toolu_1',
-      prompt: 'Implement task 4',
-      description: 'Task 4',
-      subagentType: 'dforge:impl-sonnet-low',
-      provider: { plugin: 'dforge', tier: 'user' },
-      parentModel: 'claude-opus-5-5',
-      background: true,
-      fork: false,
-    })
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    await $.turn.start({ text: 'How is Task 4 going?', turnId: 't2' })
-    await clock.advance(1_795_000)
-    await $.turn.complete({ answer: 'Still running.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
-    await clock.advance(10_000)
-    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
-    expect(w.compacts).toEqual([])
-  })
-
-  for (const [code, prompt] of [
-    [5, 'The auto run stopped: the cockpit could not compact twice. End as reference/auto-run.md §Stopping says.'],
-    [1, 'The auto run stopped: a background launch kept the compact waiting 30 minutes, and the failure could not be booked (exit 1). End as reference/auto-run.md §Stopping says.'],
-  ] as const) {
-    test(`ends the run when the deferral cap's failure exits ${code}`, async ($, on) => {
-      const files = autoFiles()
-      const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { failure: code } }
-      const clock = world(on, w)
-      signedIn(on, files)
-      await $.session.start(START)
-      await $.agent.spawn({
-        tool_use_id: 'toolu_1',
-        prompt: 'Implement task 4',
-        description: 'Task 4',
-        subagentType: 'dforge:impl-sonnet-low',
-        provider: { plugin: 'dforge', tier: 'user' },
-        parentModel: 'claude-opus-5-5',
-        background: true,
-        fork: false,
-      })
-      await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-      await settle(clock)
-      await clock.advance(1_805_000)
-      expect(w.prompts).toEqual([expect.stringMatching(RECONCILE_PROMPT), prompt])
-      expect(w.compacts).toEqual([])
-      if (code === 1) {
-        expect(w.autoRuns).toContain('--session sess-1 stop --reason a background launch kept the compact waiting 30 minutes, and the failure could not be booked (exit 1)')
-      }
-    })
-  }
-
-  test("starts a new run's deferral afresh after the last one stopped", async ($, on) => {
-    const files = autoFiles()
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.agent.spawn({
-      tool_use_id: 'toolu_1',
-      prompt: 'Implement task 4',
-      description: 'Task 4',
-      subagentType: 'dforge:impl-sonnet-low',
-      provider: { plugin: 'dforge', tier: 'user' },
-      parentModel: 'claude-opus-5-5',
-      background: true,
-      fork: false,
-    })
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    await clock.advance(1_740_000)
-    files[AUTO]!.text = autoFiles({ active: false, pending: null })[AUTO]!.text
-    await clock.advance(10_000)
-    files[AUTO]!.text = autoFiles()[AUTO]!.text
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
-    await settle(clock)
-    await clock.advance(120_000)
-    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
-  })
-
-  test('nudges a stalled run, and again only once its last nudge is as old', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await clock.advance(180_000)
-    expect(w.prompts).toEqual([])
-    await clock.advance(60_000)
-    expect(w.autoRuns?.filter(call => call === '--session sess-1 stalled')).toHaveLength(1)
-    expect(w.prompts).toEqual([
-      expect.stringMatching(/^The auto run stalled: the last turn ended without its sentinel line\. Run `bash "[^"]*\/scripts\/auto-run" status`, continue the phase it names, and end the turn as reference\/auto-run\.md §Ending a turn says\.$/),
-    ])
-    await clock.advance(180_000)
-    expect(w.prompts).toHaveLength(1)
-    await clock.advance(60_000)
-    expect(w.prompts).toHaveLength(2)
-  })
-
-  test('books no stall once the session has ended', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    on('session.end', (_$, e) => e as never)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await $.session.end({ reason: 'other', sessionId: 'sess-1', resume: { id: 'sess-1' } })
-    await clock.advance(300_000)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-    expect(w.prompts).toEqual([])
-  })
-
-  test('keeps the heartbeat and the watchdog across a /clear', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const written: Record<string, string> = {}
-    const w: World = { ...SIGNED_IN, written, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    on('session.end', (_$, e) => e as never)
-    signedIn(on, files)
-    await $.session.start(START)
-    await clock.advance(120_000)
-    await $.session.end({ reason: 'clear', sessionId: 'sess-1', resume: { id: 'sess-1' } })
-    w.sessionId = 'sess-2'
-    files[AUTO]!.text = files[AUTO]!.text.replace('"session":"sess-1"', '"session":"sess-2"')
-    await clock.advance(60_000)
-    expect(written['/home/me/.claude/dforge/sessions/cockpit/sess-2']).toBe('1180\n')
-    // The stall grace starts again at the clear, not at the process's start.
-    await clock.advance(120_000)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-    await clock.advance(60_000)
-    expect(w.autoRuns?.filter(call => call === '--session sess-2 stalled')).toHaveLength(1)
-  })
-
-  test('nudges a run whose turn failed', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'error' })
-    await clock.advance(240_000)
-    expect(w.autoRuns).toContain('--session sess-1 stalled')
-    expect(w.prompts).toHaveLength(1)
-  })
-
-  test("a subagent's approval after a failed turn leaves the turn ended", async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    on('tool.check', () => ({ decision: 'ask' }))
-    await $.session.start(START)
-    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement task 4', description: 'Task 4', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
-    await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'error' })
-    await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
-    await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'toolu_9', agentId: 'agent-1' } as never)
-    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-1' })
-    await clock.advance(240_000)
-    expect(w.autoRuns).toContain('--session sess-1 stalled')
-  })
-
-  test("a subagent's approvals around an Esc leave the turn interrupted", async ($, on) => {
-    world(on, { tokens: 50_000 })
-    on('tool.check', () => ({ decision: 'ask' }))
-    await $.session.start(START)
-    await $.turn.start({ text: 'go', turnId: 't1' })
-    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement task 4', description: 'Task 4', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
-    await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
-    await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't1', reason: 'aborted' })
-    await $.tool.check({ tool: 'Bash', input: { command: 'ls -a' }, tool_use_id: 'toolu_10', agentId: 'agent-1' })
-    await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'toolu_9', agentId: 'agent-1' } as never)
-    await $.tool.call({ tool: 'Bash', command: 'ls -a', tool_use_id: 'toolu_10', agentId: 'agent-1' } as never)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^■ interrupted · 1 agent still running/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /running \d/ })).toBeUndefined()
-  })
-
-  test('leaves the run to the owner after an Esc', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Task 3', durationMs: 1, isAborted: true, turnId: 't1', reason: 'aborted' })
-    await clock.advance(600_000)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-    expect(w.prompts).toEqual([])
-  })
-
-  test('leaves the run alone while a subagent runs', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.agent.spawn({
-      tool_use_id: 'toolu_1',
-      prompt: 'Implement task 4',
-      description: 'Task 4',
-      subagentType: 'dforge:impl-sonnet-low',
-      provider: { plugin: 'dforge', tier: 'user' },
-      parentModel: 'claude-opus-5-5',
-      background: true,
-      fork: false,
-    })
-    await $.turn.complete({ answer: 'Waiting for Task 4.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await clock.advance(600_000)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-    expect(w.prompts).toEqual([])
-  })
-
-  test('ends the run at the stall that stops it', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { stalled: 5 } }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await clock.advance(240_000)
-    expect(w.prompts).toEqual(['The auto run stopped: 3 stalls without a completed task. End as reference/auto-run.md §Stopping says.'])
-  })
-
-  test('arms a pending stage that no timer holds', async ($, on) => {
-    const files = autoFiles({ pending: 'compact' })
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await clock.advance(240_000)
-    await settle(clock)
-    expect(w.compacts).toHaveLength(1)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-    expect(pendingOf(files)).toBe('after-compact')
-  })
-
-  test('resubmits the first prompt of a pending resume that no timer holds', async ($, on) => {
-    const files = autoFiles({ pending: 'resume', resumePrompt: 'Execute docs/plan.md.', launch: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await clock.advance(240_000)
-    await settle(clock)
-    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-    expect(w.autoRuns).toContain('--session sess-1 resumed')
-    expect(pendingOf(files)).toBeNull()
-  })
-
-  test('nudges a bound run in a session that has had no turn yet', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await clock.advance(180_000)
-    expect(w.prompts).toEqual([])
-    await clock.advance(60_000)
-    expect(w.autoRuns).toContain('--session sess-1 stalled')
-    expect(w.prompts).toHaveLength(1)
-  })
-
-  test('recovers a cleared session whose first prompt started no turn', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: null })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
-    await clock.advance(240_000)
-    expect(w.autoRuns).toContain('--session sess-2 stalled')
-    expect(w.prompts).toHaveLength(2)
-  })
-
-  test('waits STALL_MS after a stage before it nudges', async ($, on) => {
-    const files = autoFiles({ pending: 'compact' })
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await clock.advance(240_000)
-    await settle(clock)
-    expect(w.compacts).toHaveLength(1)
-    expect(w.prompts).toHaveLength(1)
-    await clock.advance(60_000)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-    await clock.advance(120_000)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-    await clock.advance(60_000)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toHaveLength(1)
-  })
-
-  test('leaves the run alone while a background shell runs', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b9w1' }, text: 'Running in the background' }) } }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true } as never)
-    await $.turn.complete({ answer: 'Waiting for the tests.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await clock.advance(600_000)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-    expect(w.prompts).toEqual([])
-  })
-
-  test('a dev server in the background does not hide a stall', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b9w1' }, text: 'Running in the background' }) } }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
-    await $.turn.complete({ answer: 'The server is up.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await clock.advance(600_000)
-    expect(w.autoRuns).toContain('--session sess-1 stalled')
-  })
-
-  test('a background agent alone holds a bound run, and its ending frees the run', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await spawnTask4($)
-    await $.turn.complete({ answer: 'Waiting for the implementer.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await clock.advance(1_100_000)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-    expect(w.prompts).toEqual([])
-    await $.turn.complete({ answer: 'Done.', durationMs: 1, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-1' })
-    await clock.advance(60_000)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toHaveLength(1)
-  })
-
-  for (const holder of ['agent', 'shell'] as const) {
-    test(`submits one reconcile prompt when a background ${holder} alone holds a bound run for 20 minutes`, async ($, on) => {
-      const files = autoFiles({ pending: null })
-      const bash = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b9w1' }, text: 'Running in the background' }) }
-      const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: bash }
-      const clock = world(on, w)
-      signedIn(on, files)
-      await $.session.start(START)
-      if (holder === 'agent') await spawnTask4($)
-      else await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true } as never)
-      await $.turn.complete({ answer: 'Waiting for the implementer.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-      await clock.advance(1_200_000)
-      expect(w.prompts).toEqual([])
-      await clock.advance(60_000)
-      expect(w.prompts).toEqual([expect.stringMatching(RECONCILE_PROMPT)])
-      await clock.advance(1_200_000)
-      expect(w.prompts).toHaveLength(1)
-      await clock.advance(60_000)
-      expect(w.prompts).toHaveLength(2)
-      expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-    })
-  }
-
-  test('submits no reconcile prompt outside an auto run', async ($, on) => {
-    const files = autoFiles({ active: false, pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await spawnTask4($)
-    await $.turn.complete({ answer: 'Waiting for the implementer.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await clock.advance(1_500_000)
-    expect(w.prompts).toEqual([])
-  })
-
-  test('submits no reconcile prompt while a turn is live', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await spawnTask4($)
-    await $.turn.complete({ answer: 'Waiting for the implementer.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await $.turn.start({ text: 'How is Task 4 going?', turnId: 't2' })
-    await clock.advance(1_500_000)
-    expect(w.prompts).toEqual([])
-  })
-
-  test("a pending stage's reconcile prompt comes before its 30-minute failure", async ($, on) => {
-    const files = autoFiles()
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await spawnTask4($)
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    await clock.advance(1_265_000)
-    expect(w.prompts).toEqual([expect.stringMatching(RECONCILE_PROMPT)])
-    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
-    await clock.advance(545_000)
-    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toHaveLength(1)
-    expect(w.compacts).toEqual([])
-  })
-
-  test('leaves the run alone while a turn runs', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await $.turn.start({ text: 'Continue.', turnId: 't2' })
-    await clock.advance(600_000)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-    expect(w.prompts).toEqual([])
-  })
-
-  test('arms nothing while a stage runs, a long compaction included', async ($, on) => {
-    const files = autoFiles()
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], compactMs: 240_000 }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    await clock.advance(250_000)
-    expect(w.compacts).toHaveLength(1)
-    expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
-  })
-
-  test('after a stalled call that fails, waits STALL_MS before the next', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { stalled: 1 } }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    const stalls = () => w.autoRuns?.filter(call => call === '--session sess-1 stalled').length
-    await clock.advance(240_000)
-    expect(stalls()).toBe(1)
-    await clock.advance(180_000)
-    expect(stalls()).toBe(1)
-    await clock.advance(60_000)
-    expect(stalls()).toBe(2)
-    expect(w.prompts).toEqual([])
-  })
-
-  test('a heartbeat that fails leaves the rest of the tick to run', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await clock.advance(180_000)
-    // The tick at 240 s: its heartbeat's session id read fails once.
-    w.sessionIdFailures = 1
-    await clock.advance(60_000)
-    expect(w.autoRuns).toContain('--session sess-1 stalled')
-  })
-
-  test('submits no stall prompt once a turn has started during the stalled call', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Task 3: complete.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    // The activity read before the call was idle; the person's prompt starts a
-    // turn while scripts/auto-run books the stall, so only the turn guard
-    // holds the stall prompt back.
-    w.onAutoRun = word => (word === 'stalled' ? $.turn.start({ text: 'Continue.', turnId: 't2' }) : undefined)
-    await clock.advance(240_000)
-    expect(w.autoRuns).toContain('--session sess-1 stalled')
-    expect(w.prompts).toEqual([])
-  })
-
-  test('reads a run only for its session, and its sentinel only as the last line', () => {
-    const text = autoFiles({ session: 'b', launch: { model: 'sonnet', effort: 'high' } })[AUTO]!.text
-    expect(autoRunFor(text, 'b')?.launch).toEqual({ model: 'sonnet', effort: 'high' })
-    expect(autoRunFor(text, 'b')?.plan).toBe('docs/plan.md')
-    expect(autoRunFor(text, 'b')?.stalledAt).toBeNull()
-    expect(autoRunFor(autoFiles({ session: 'b', stalledAt: 1240 })[AUTO]!.text, 'b')?.stalledAt).toBe(1240)
-    expect(autoRunFor(text, 'a')).toBeNull()
-    expect(autoRunFor('not json', 'b')).toBeNull()
-    expect(endsOnSentinel('x\n\nAuto run: compacting  \n\n', 'compact')).toBe(true)
-    expect(endsOnSentinel('Auto run: compacting\nmore', 'compact')).toBe(false)
-    expect(endsOnSentinel('Auto run: clearing', 'compact')).toBe(false)
-    expect(endsOnSentinel('Auto run: clearing', 'clear')).toBe(true)
-    expect(endsOnSentinel('Auto run: compacting', null)).toBe(false)
-  })
-})
-
-describe('auto run in the pane', () => {
-  test('the limit follows the regime', () => {
-    expect(autoLimitFor('normal', 465_000, 1_000_000, 800_000)).toBe(465_000)
-    expect(autoLimitFor('normal', 0, 1_000_000, 800_000)).toBe(604_000)
-    expect(autoLimitFor('high', 465_000, 1_000_000, 800_000)).toBe(720_000)
-    expect(autoLimitFor('high', 0, 650_000)).toBe(585_000)
-  })
-
-  test('shows the run and stops it from the pane', async ($, on) => {
-    const files = autoFiles({ pending: null, compactions: 2 })
-    const w: World = { ...SIGNED_IN, autoRuns: [], autoFile: files[AUTO] }
-    world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 2 compactions · 0 resumes/ })).toBeDefined()
-    await ui.press({ key: 'pane-stop-auto' })
-    expect(w.autoRuns).toContain('--session sess-1 stop --reason owner pressed Stop auto')
-  })
-
-  test('hides Hand off while a run is active and brings it back when the run stops', async ($, on) => {
-    const files = autoFiles({ pending: null })
-    const w: World = { ...SIGNED_IN, tokens: 470_000, autoRuns: [], autoFile: files[AUTO] }
-    world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ key: 'pane-stop-auto' })).toBeDefined()
-    expect(await ui.find({ key: 'pane-handoff' })).toBeUndefined()
-    await ui.press({ key: 'pane-stop-auto' })
-    expect(await ui.find({ key: 'pane-stop-auto' })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: /Auto run ·/ })).toBeUndefined()
-    expect(await ui.find({ key: 'pane-handoff' })).toBeDefined()
-  })
-
-  test('hides Resume while a run is active and brings it back when the run stops', async ($, on) => {
-    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), '/home/me/code/shop/.dforge/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
-    const w: World = { ...SIGNED_IN, files, autoRuns: [], autoFile: files[AUTO] }
-    world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ key: 'pane-stop-auto' })).toBeDefined()
-    expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
-    await ui.press({ key: 'pane-stop-auto' })
-    expect(await ui.find({ key: 'pane-stop-auto' })).toBeUndefined()
-    expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
-  })
-
-  test('says the handoff budget again after a run that stopped', async ($, on) => {
-    const fetches: World['fetches'] = []
-    const w: World = { tokens: 100_000, env: { HOME: '/home/me' }, fetches }
-    world(on, w)
-    mock.store(on, { notifyUrl: WEBHOOK })
-    const files: NonNullable<World['files']> = {}
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    w.tokens = 470_000
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const sent = () => fetches.filter(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title === '🔶 Handoff budget reached').length
-    expect(sent()).toBe(1)
-    files[AUTO] = autoFiles({ pending: null })[AUTO]!
-    w.tokens = 100_000
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    files[AUTO] = autoFiles({ pending: null, active: false })[AUTO]!
-    w.tokens = 470_000
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    expect(sent()).toBe(2)
-  })
-
-  test('picks up a run started during the turn, and mutes the handoff note', async ($, on) => {
-    const notes: string[] = []
-    world(on, { ...SIGNED_IN, tokens: 470_000, notes })
-    const files: NonNullable<World['files']> = {}
-    signedIn(on, files)
-    await $.session.start(START)
-    files[AUTO] = autoFiles({ pending: null })[AUTO]!
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    expect(notes).toEqual([])
-  })
-
-  test('measures against the high regime', async ($, on) => {
-    world(on, { ...SIGNED_IN, tokens: 470_000 })
-    signedIn(on, autoFiles({ pending: null, regime: 'high' }))
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /80% of handoff/ })).toBeDefined()
-  })
-})
-
-describe('A5: the judge write guard (speed-and-cost-followups acceptance)', () => {
-  const STATE = '/home/me/code/shop/.dforge'
-  const WS = `${STATE}/sdd/2026-10-28-plan`
-  const NAMED = `${WS}/task-1-review-report.md`
-  const REFUSED = /^dforge: a review seat writes only the report file its dispatch names \(/
-  const refusal = (named: string, path: string) => `dforge: a review seat writes only the report file its dispatch names (${named}); ${path} is not one.`
-  const spawn = (prompt: string, subagentType: string, n: number) =>
-    ({ tool_use_id: `toolu_a5_${n}`, prompt, description: 'Review task 1', subagentType, provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false }) as never
-  const write = ($: Parameters<TestBody>[0], agentId: string | undefined, path: string, tool = 'Write') =>
-    $.tool.call({ tool, ...(tool === 'NotebookEdit' ? { notebook_path: path } : { file_path: path }), content: 'x', ...(agentId === undefined ? {} : { agentId }) } as never)
-  const judgeNaming = async ($: Parameters<TestBody>[0], on: On, named: string, extra: Partial<World> = {}, list: () => unknown = () => ({ value: [] })) => {
-    world(on, { tokens: 10_000, agentIds: ['judge-1', 'impl-1'], ...extra })
-    on('agent.list', list as never)
-    await $.session.start(START)
-    await $.agent.spawn(spawn(`Review task 1. Write your full report to ${named}, then reply in 10 lines.`, 'dforge:judge-sonnet-high', 1))
-    await $.agent.spawn(spawn('Implement task 1.', 'dforge:impl-sonnet-low', 2))
-  }
-
-  test('A5: a judge Write to amendments.md, a step file, a plan file or a path outside the state directory is refused with the guard message', async ($, on) => {
-    await judgeNaming($, on, NAMED)
-    const paths = [`${WS}/amendments.md`, `${WS}/task-1-step.json`, '/home/me/code/shop/docs/dforge/plans/2026-10-28-plan.md', '/etc/passwd', '/home/me/code/shop/src/index.ts']
-    expect(await Promise.all(paths.map(async path => (await write($, 'judge-1', path)).deny))).toEqual(paths.map(path => refusal(NAMED, path)))
-    for (const tool of ['Edit', 'MultiEdit', 'NotebookEdit']) expect((await write($, 'judge-1', `${WS}/amendments.md`, tool)).deny).toMatch(REFUSED)
-  })
-
-  test('A5: a judge Write to another report name, a relative path or a .. path is refused when the dispatch named only task-1-review-report.md', async ($, on) => {
-    await judgeNaming($, on, NAMED)
-    const paths = [`${WS}/task-1-report.md`, `${WS}/task-2-review-report.md`, 'task-1-review-report.md', `${WS}/../task-1-review-report.md`, `${WS}/sub/../../amendments.md`]
-    expect(await Promise.all(paths.map(async path => (await write($, 'judge-1', path)).deny))).toEqual(paths.map(path => refusal(NAMED, path)))
-  })
-
-  test('A5: a judge Write through a symlinked directory is refused even when the dispatch named that path', async ($, on) => {
-    const linked = `${STATE}/sdd/linked`
-    const through = `${linked}/task-1-review-report.md`
-    await judgeNaming($, on, through, {
-      files: { [`${STATE}/sdd`]: { text: '', kind: 'dir' }, [linked]: { text: '', kind: 'dir', isLink: true } },
-    })
-    expect((await write($, 'judge-1', through)).deny).toMatch(REFUSED)
-  })
-
-  test('A5: a judge Write to the named report is allowed', async ($, on) => {
-    await judgeNaming($, on, NAMED)
-    expect((await write($, 'judge-1', NAMED)).deny).toBeUndefined()
-  })
-
-  test('A5: a judge Write to a C:\\ report its dispatch named is allowed, and another file of that directory is not', async ($, on) => {
-    const root = 'C:/Users/me/shop'
-    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: root, primary: root })
-    on('agent.list', () => ({ value: [] }) as never)
-    await $.session.start(START)
-    const named = 'C:\\Users\\me\\shop\\.dforge\\sdd\\p\\task-1-review-report.md'
-    await $.agent.spawn(spawn(`Review task 1. Write your full report to ${named}, then reply.`, 'dforge:judge-opus', 1))
-    expect((await write($, 'judge-1', named)).deny).toBeUndefined()
-    expect((await write($, 'judge-1', 'C:\\Users\\me\\shop\\.dforge\\sdd\\p\\amendments.md')).deny).toMatch(REFUSED)
-  })
-
-  test('A5: a write-tool call from a judge loop is refused while $.agent.list() throws and the attribution guard is off', async ($, on) => {
-    await judgeNaming($, on, NAMED, { config: { guardAttribution: false } }, () => {
-      throw new Error('agent list unavailable')
-    })
-    const denied = (await write($, 'judge-1', `${WS}/amendments.md`)).deny
-    expect(typeof denied).toBe('string')
-    expect(denied).toMatch(/review.seat/i)
-    expect(denied).toMatch(/write/i)
-  })
-
-  test('A5: a dforge:impl-* subagent and the main loop are not affected', async ($, on) => {
-    await judgeNaming($, on, NAMED)
-    expect((await write($, 'impl-1', `${WS}/amendments.md`)).deny).toBeUndefined()
-    expect((await write($, undefined, `${WS}/amendments.md`)).deny).toBeUndefined()
-    expect((await write($, 'impl-1', '/etc/hosts')).deny).toBeUndefined()
   })
 })

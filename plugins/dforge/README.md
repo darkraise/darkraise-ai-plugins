@@ -1,348 +1,30 @@
 # dforge
 
-A standalone fork of [superpowers](https://github.com/obra/superpowers) 6.3.0
-(MIT — see `LICENSES/`) for Claude Code and Codex, built around one idea: a
-strong model writes the plan, the session executes it literally, one task at a
-time, at the model and effort its hardest task needs, and every judgment call
-goes to one strong ruling seat. Install `dforge@darkraise` from the repository-root
-marketplace, then disable the upstream `superpowers` plugin,
-`dcc-superpower-companions` and `andrej-karpathy-skills`: same-named skills in
-two enabled plugins can double-trigger.
-
-## Why
-
-Four findings from real transcripts drove the fork; the numbers are in
-`docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md`.
-
-- **Cost.** The main session was 92% of token spend, most of it re-reading a
-  400–700k context. The plugin hands off at a budget printed by its own
-  scripts (the compaction point minus one task's growth, 465k at a 650000
-  window), runs execution at the lowest model and effort that covers the
-  plan's hardest task, and reads the plan one task at a time instead of whole.
-- **Small models executing literally.** Upstream advises picking a model per
-  task but has no field for the choice, and the Agent tool could not pass
-  reasoning effort before Claude Code 2.1.292 (it now can, but a fleet
-  dispatch still passes neither model nor effort, so the pinned pair is what
-  runs). Here every task records an implementer from a model ×
-  effort grid, the plan's `**Execution:**` line names the session's model and
-  effort, and `plan-lint` checks the header, the scores and the mode before a
-  plan is saved.
-- **Judgment in one seat.** Executors and controllers rule only on mechanical
-  conflicts and log every ruling. Plan defects, contested findings and
-  cannot-verify items go to an Opus judge whose verdicts —
-  CONFIRMED-GAP, PARK, AMEND, BLOCKED — are carried out verbatim; AMEND edits
-  the plan through `scripts/plan-amend` so the plan on disk stays immutable.
-- **Karpathy guidelines baked in.** Think before coding, simplicity first,
-  surgical changes, goal-driven verification: in the entry point, the plan
-  template, the implementer template and TDD.
-
-**Codex host.** Read [native-codex.md](reference/native-codex.md). Its
-`codex-v4` policy routes scores 0–9 through Luna, Sol and Astra with
-the same four raw axes; judges start at Astra high; the
-Claude hooks are disabled in the native manifest. Native reviewers have
-independent contexts; enforce read-only restrictions where the host allows and
-disclose instruction-only restrictions where it does not.
-
-**External CLI lane.** On Claude, a task scoring 2–4 at risk ≤ 1 may run on the
-Codex CLI instead of a Claude implementer. The lane needs an exclusively
-assigned linked worktree, stable task IDs, approved file paths and durable
-recovery; read [external-task-recovery.md](reference/external-task-recovery.md)
-before offloading.
+A plugin for Claude Code and Codex. Planning and execution are the harness's
+own (plan mode, its task list, its review); dforge adds UI/UX work proven in
+the running UI, root-cause debugging, an optional darkmem mirror for a
+project's documents, and on Claude Code a cockpit pane with Discord
+notifications and an attribution guard. It began as a fork of
+[superpowers](https://github.com/obra/superpowers) 6.3.0 (MIT — see
+`LICENSES/`). Install `dforge@darkraise` from the repository-root marketplace,
+then disable the upstream `superpowers` plugin, `dcc-superpower-companions`
+and `andrej-karpathy-skills`: same-named skills in two enabled plugins can
+double-trigger.
 
 ## What you get
 
-**Nineteen agents in three classes.** Seven execution implementers - Sonnet 5.5
-and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
-everything the assignment table and the escalation ladder can reach; no score
-assigns `impl-opus-low` or `impl-opus-medium`; both are reached only by
-escalation. Since 1.27.0 no score assigns `impl-haiku` either: total 0 runs on
-`impl-sonnet-low`, which cost less per pass in the tier evaluation, and Haiku
-is reached only by a human `**Implementer:**` override. Nine reserve implementers - the `xhigh` and `max` efforts, and
-every Fable 5.1 tier - are reachable only by a human override, or by a task
-that has already been split once and still exhausted `impl-opus-high`.
-Three role agents - the judges `judge-opus`, `judge-sonnet-high` and
-`judge-fable` (an auto run's spec review and rulings, or a human override) -
-whose `tools:` frontmatter omits `Edit`, `Bash` and
-`Agent`, so a reviewer that cannot spawn subagents is a fact about the
-registry rather than a request in a prompt; a judge writes only its report file, whose path its prompt names,
-replies in at most ten lines, and `scripts/task-step verdict` checks that no
-tracked file changed during a task review.
-Every plan is drafted in the session that read the code, whatever its size.
-Every implementer keeps its tools, browser and device servers included, but
-its `disallowedTools:` frontmatter drops `Agent`, `Skill` and the session-only
-tools (Artifact, Workflow, plan mode, cron, messaging): their definitions and
-the skill listing are re-read on every implementer call and roughly doubled
-its starting context.
+**UI/UX work proven in the running UI.** `dforge:ui-ux` turns a design into a
+numbered UI/UX contract (UI, UX and an Output promise), and a walkthrough
+proves each item on the running UI — web, Windows, Linux desktop, Android or
+terminal — with screenshots and test names as evidence. `scripts/ui-proof check`
+holds every "done" claim until the proof covers the current UI files.
 
-The reserve exists so that a human ruling, and a task that genuinely cannot be
-split any further, both have somewhere to go. It is not a way around the gate:
-above `impl-opus-high` the first answer to a hard task is still to split it, and
-the reserve is only entered when that split has already been spent.
+**Root-cause debugging.** `dforge:systematic-debugging` finds the cause before
+any fix and reproduces the bug with a failing test first.
 
-**A four-axis rubric that gates the plan.** Files, spec completeness, coupling,
-and risk, each scored 0 to 3. Three of those four measure how the task was
-drawn, not how hard the change is, so Rule S sends a task scoring 6 or more
-across them on a Claude plan, or 4 or more on a Codex plan, back to be split
-rather than to a larger model. That cap is what makes the assignment table stop
-at 8.
-
-**An escalation ladder.** Every execution implementer has exactly one successor,
-changing model before effort except at the two Opus effort rows, where Opus is
-already the top model and there is nowhere else to go. Walks terminate at a
-SPLIT action rather than an agent, and only a task that survives that split
-enters the reserve chain, which terminates at BLOCKED. Used at fix round 2
-and at the BLOCKED handler: a task gets at most two fix rounds, then the
-ruling seat.
-
-**Review groups and wave checks.** A task at risk 0 or 1 with a total under 5 is
-reviewed in groups: one judge dispatch for up to four such tasks, or for a
-wave's such tasks before they merge. Riskier tasks keep their own review. Waves
-run the plan's full integration check every third wave, after any risk-3 wave and after the last; a red baseline
-whose failures do not grow counts as a pass. A `Host: codex` plan keeps
-`review_cap: 5` and per-task review.
-
-**Review depth.** An architectural plan runs at one of three depths, sized by
-risk rather than length. `scripts/depth-route` prints the depth: `full` for a
-risk trigger (security, data loss, migration, concurrency), a new subsystem, or
-any task at risk 3; `standard` when an interface that something outside its own
-files depends on changes, or any task is at risk 2; `light` for everything else,
-however many tasks the plan has. The spec records it on a `**Depth:**` line,
-your human partner may set it there by hand (`**Depth:** light — owner`), and
-the check after the plan is written can only raise it, from the tasks' real
-scores. A spec with no `**Depth:**` line, a plan whose spec has none, and a
-`Host: codex` plan run at `full`, so every plan written before depth routing
-keeps today's process. The spec phase and the plan phase follow the depth:
-light runs the self-review round alone and one plan review round, and a light plan of
-1-3 tasks goes on to execution in the same session when the budget allows,
-standard folds the architecture critic into one Fable round when Fable reviews
-the spec (the separate critic runs when attended) and runs one plan review
-round, and full runs the separate critic, one or two Fable rounds and
-one or two plan review rounds. Execution is unchanged at every depth. The
-final review scales as follows:
-
-| Stage | light | standard | full |
-|---|---|---|---|
-| 0 Gates | runs | runs | runs |
-| 0.2 UI proof | runs | runs | runs |
-| 0.5 Acceptance QA | skipped | runs | runs |
-| 1 Claude review (`dforge:judge-opus`) | runs | runs | runs |
-| 1 Lenses | security only, when it applies | at most 2, plus test-quality when it applies, within `lensCap` | up to `lensCap` |
-| 2 Codex round | skipped | skipped | as today |
-| 3 Dedupe judge | never (one list) | never (one list) | with two lists |
-
-At light, finishing lists the spec's `test` statements under
-`not verified (depth light)`, since no acceptance QA checked them.
-
-**Criteria-scored reviews.** `criteria/` holds narrow scored criteria adapted
-from LLM-as-a-Verifier (arXiv:2607.05391): a ground-truth note the judge sees on
-every evaluation, and 2 to 4 criteria that each say where to look, what scores
-high, what scores low, and what to ignore. Task reviews score four criteria -
-spec, scope, verification, quality - 1 to 20 each, alongside the spec and
-quality verdicts and never replacing them, because the fix loop keys on those
-verdicts. With Codex reviews on (`codexReview`), tasks at risk 3 are reviewed
-by Codex `gpt-6-astra` and then by `judge-opus`, which rules CONFIRMED or
-REJECTED on every Codex finding in the same pass. Every judge
-writes its full report to a file in the plan's workspace and replies in at most
-ten lines; `scripts/task-step verdict` prints the digest the session reads.
-
-**Approach selection.** `selecting-approaches` gates an open approach
-decision to inline or one advisory judge pass. Five numbered skip conditions
-send most decisions to inline, including bug fixes with a located root cause -
-where an advisor consulted before the root cause is known would launder
-guesses into a confident pick.
-
-**Every plan runs inline.** Under executing-plans the session that read the
-code implements every task, heavy ones (total 5 or more, or risk 3) included;
-an implementer subagent would rebuild that context from nothing. The one
-exception is every task carrying an `**Executor:**` line, which runs on that
-executor (Codex or Antigravity) with the full per-task review loop in
-`reference/delegated-task.md`. A risk-3 task the session implements gets a
-per-task judge review too, through that file's session review loop; the other
-tasks are covered by one whole-branch review at the end. `plan-lint` requires
-the Execution line's model and effort to cover the hardest task the session
-implements, and `--effort high` at risk 3 or once it delegates. A task that will
-not converge after three fix rounds goes to the ruling seat as a `breaker`
-item. subagent-driven-development, a dispatch and a scored review per task, is
-deprecated: it runs only for a plan whose Execution line names `subagent` or
-on your instruction, and `plan-lint` warns on that line.
-
-**Parallel waves, subagent plans only.** The `executionStrategy` setting
-defaults to `sequential`, and an inline plan always runs one task after
-another. `parallel` and `ask` take effect only for a plan whose Execution line
-names `subagent`. Brainstorming records `**Execution strategy:** sequential —
-inline execution` in the spec. A parallel
-plan groups its tasks into waves, written `**Parallelism:** waves — 1 | 2-4 | 5`:
-contiguous task ranges whose tasks share no file and consume nothing from each
-other, with a `**Depends on:**` line on every task. Subagent mode runs a wave's
-tasks at once, each in its own git worktree, reviews each exactly as it would a
-sequential task, merges each reviewed task with `scripts/wave merge` (which
-refuses a task whose files overlap what the wave already merged), and runs the
-plan's `**Integration check:**` before the next wave starts. `plan-lint` keeps
-risk-3 tasks, executor tasks and dependency-manifest changes alone in their
-wave, the pre-flight ruling seat checks every same-wave pair for coupling the
-file lists cannot show, and `context-size --wave W` keeps room in the session
-for every task running at once. Running a wave one task after another is always
-correct, so every doubt serializes it; `reference/parallel-waves.md` holds the
-procedure. A plan without a `**Parallelism:**` line runs exactly as before.
-
-**An external executor lane.** A task can run on an external CLI instead of a
-Claude implementer, for quota offload onto a separate subscription and for a
-second model family in the loop. Two executors are registered. `agy`, the
-Antigravity CLI (priority 10, wrapper `scripts/run-agy-task.sh`), takes totals 0-8 at risk 2 or below,
-implementation only: totals 0-2 run on `gemini-3.8-flash` at medium effort, as
-the 2026-11-02 calibration record decided, totals 3-4 on `gemini-4-argon` at
-low effort and totals 5-8 on `gemini-4-argon` at high effort, as
-`docs/dforge/notes/2026-11-03-agy-calibration-3-8.md` decided; Claude Sonnet
-runs through `agy` only as the single retry after a Gemini run fails. Codex (priority 20) keeps the
-tasks `agy` refuses. Planning gives each task to the first ticked executor, in
-`executors ranked` order, whose gate admits it. The `agyLane` setting (`Agy
-tasks`) turns the agy lane off. `agy` runs unsandboxed, with the reach of a
-native Claude implementer subagent, so its recovery fingerprints cover only the
-linked worktree and its refs. A per-plan breaker, `scripts/lane-breaker`, turns
-the agy lane off for the rest of a plan after two handbacks. The lane is a
-gate in front of the assignment table, never a rung on the escalation ladder:
-offload selects downward at the cheap end while the ladder only moves upward, and
-one total order cannot express both. The Claude ladder stays the sole backstop,
-so its termination proof is untouched.
-
-Codex's gate floors at score 2 and stops at 4 on purpose: `codex-assignment` has
-rows for totals 2 to 4 only, and Rule S admits a Claude task up to `reducible`
-5, so `max_score 4` keeps a total-5 or total-6 task at risk 1 or below on the
-Claude ladder. Without the floor the gate would reduce to `risk <= 1` and
-capture nearly every task by count, and it would offload score-0 work where the
-displaced agent is `impl-sonnet-low` and the wrapper costs more to orchestrate
-than it saves.
-
-`**Implementer:**` still names the Claude agent for the score. `**Executor:**` is
-an override on a second line, which is what makes a machine without Codex, a cold
-session, and an executor whose auth has lapsed all degrade by reading a line that
-is already there rather than re-deriving the assignment at dispatch. Under
-`dforge:executing-plans` both lines are read only for the tasks an
-inline plan delegates; for the tasks the session implements itself they are
-inert, so nothing falls back.
-
-`revising-plans` brings a plan written before the external executor lane up to the current format, scoring what is unscored and writing the `**Executor:**` and `**Execution:**` lines from `scripts/plan-revise`.
-
-The following observations were made against the external CLI lane on Windows
-with ChatGPT-subscription auth on 2026-08-31. They are historical CLI policy
-evidence, not native Codex capability declarations:
-
-- Only `gpt-5.5` and `gpt-5.6-sol` were available. `luna` and `terra` were
-  rejected with HTTP 400 and Codex held no metadata for either.
-- Valid reasoning efforts are `low`, `medium`, `high`, `xhigh`, `ultra`.
-  `minimal` is rejected. The CLI validates neither model nor effort locally - it
-  echoes any string and fails at the API - so `scripts/run-codex-task.sh`
-  validates both before spawning anything.
-- Codex **cannot commit**. Its Windows restricted-token sandbox denies writes to
-  `.git` under `-s workspace-write`, which `codex sandbox -- git add -A`
-  reproduces with no model call. The wrapper owns the commit, so the ledger's
-  commit range is measured rather than reported. It also inlines the repository's
-  `CLAUDE.md` into every prompt, because Codex natively reads only `AGENTS.md`,
-  and passes the model's own conventional-commit subject to `git commit`
-  unmodified.
-- Resume is a request field, not a subcommand. `scripts/lib/codex-client.mjs`
-  passes `resumeThreadId`, and the runner re-sends the model and the effort on
-  every resumed turn, because a resumed thread that fell back to the user's
-  config defaults would run a fix round at a tier the ledger does not record.
-
-Every Codex interaction — the session gate, both runners and the executor
-roster — goes through the official `codex@openai-codex` plugin.
-`scripts/codex-plugin` locates it for the active profile and enforces a version
-allowlist; `scripts/lib/codex-client.mjs` runs one turn through the plugin's own
-client and reaps the broker it causes to exist. This plugin never names the
-`codex` executable and never reads Codex-owned state.
-
-That probe is a dated observation, not a standing fact: the same two models were
-listed in the local catalog on 2026-09-14, and `gpt-6-astra` ran there on that
-date. This plugin reads no model catalog at all: the judge seats attempt the preferred
-rung and fall back once on a refusal, which is the only evidence of entitlement
-that has ever been reliable.
-
-On 2026-09-23 the lane and the judge fallback moved to `gpt-6-sol`: `gpt-5.5`
-retires from Codex with ChatGPT sign-in on 2026-10-14, and Codex 0.155.1's
-catalog lists `gpt-6-sol` as the upgrade for `gpt-5.6-sol`, with every lane
-effort advertised for a ChatGPT Pro sign-in.
-
-On 2026-10-07 they moved again, to `gpt-6.1-sol`, Codex's default since
-0.159.1, and the review seat for totals 4 to 6 moved from Astra to it. The move
-rests on OpenAI's description of 6.1 Sol as near-Astra on software work, at
-about a fifth of Astra's price; no calibration replay was run, because no Codex
-client was available to run one. Native Codex plans moved to `codex-v4`, which
-puts `gpt-6.1-sol` at ranks 3 to 6.
-
-A different machine, account, or Codex version must verify the tables against
-its own account before relying on them. Do not make paid capability probes.
-
-**Cross-family review.** Codex reviews are opt-in. By default every review runs
-on Claude judges: `judge-sonnet-high` for tasks totalling 0 to 5, `judge-opus`
-for 6 and at risk 3, plan review and the final review. For a one-off Codex
-review, run `/codex:review` or `/codex:adversarial-review` from the codex
-plugin. Turning the `codexReview` setting on gives Codex the review seats below
-for every run. With it on, Codex is the default task reviewer: `gpt-6.1-sol` for
-tasks totalling 0 to 6, and `gpt-6-astra` followed by `judge-opus` at risk 3. A task the executor lane implemented is always
-reviewed by a Claude judge, so Codex never reviews its own work there; when a
-Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 5 and
-`judge-opus` 6 and at risk 3. Plan review takes Astra for round 1
-(`judge-opus` when Codex is off) and `judge-opus` for the delta round:
-at most two rounds on a Claude plan.
-The final whole-branch review runs on `judge-opus`, its one fix subagent on
-the highest tier among the tasks the findings touch, and with `codexReview` on gains a Codex round. When both reviewers return findings,
-a fresh `judge-opus` dedupes and verifies them. No review route names `judge-fable`:
-on 2026-09-23 Opus 5.5 at high effort matched or beat Fable 5.1 on two replayed reviews with
-known defects, at about 40% of the cost, so Fable takes a review seat only
-when you ask for it. An auto run is the exception: it dispatches `judge-fable`
-for the spec review and for each batch of rulings
-(`reference/auto-run.md`). With one list there is no third seat:
-the fixer triages each finding against the code and the scoped re-review rules
-on every rejection. The Codex round is not self-review-free, because the branch
-contains whatever the executor lane produced, which is why no finding is acted
-on unchecked.
-`scripts/review-route` prints the review seat for a task or plan round, and
-every Codex seat runs through `scripts/run-codex-review.sh`, which checks
-availability on each run and falls back once to `gpt-6.1-sol` when Astra
-refuses the run. Selection, the run bound and the four
-outcomes live in those scripts rather than in prose, so a refused model is a
-recorded substitution instead of a silently missing seat.
-
-**The Codex session gate.** Before any Codex use, `scripts/codex-gate` checks the official codex plugin
-once per session - enabled, installed at an allowed version, logged in, not on
-a free ChatGPT plan, and within quota - through the plugin's own client, and
-caches the answer per session. When Codex is unusable, every Codex seat, the final-review Codex round,
-the executor lane and `plan-lint`'s lane probe are skipped for the session and
-Claude seats take over; a quota error mid-run turns Codex off the same way. A
-usable Codex is still used only on a surface whose shipping gate passed,
-recorded per surface in `reference/codex-plugin.json`: the calibration replay
-opens the review seats, and the executor-lane smoke test opens the lane.
-`scripts/agy-gate` does the same for Antigravity once per session: `agy` found
-at an allowed version, signed in, within quota, `agyLane` on and the smoke result
-in `reference/agy-policy.json` passing. A quota on a Gemini model closes the
-lane, and one on a Claude model closes only the Claude fallback, each until the
-reset time the error names, or for the session when it names none.
-
-**Project state.** `docs/dforge/` holds what a project knows about
-  itself, not just its specs and plans: `gates.md` declares the verification
-  gates in order, `plans/completed.md` indexes merged plans, and `distilled/`
-  holds four durable files — constraints, gotchas, reference, rejected —
-  collapsed from session notes. Three skills use it. `project-status` reports
-  where the work stands and exactly one next step, and writes nothing.
-  `running-gates` runs the declared gates in order and stops at the first red,
-  judging each by its `Evidence` type so a gate whose proof is a picture is
-  never passed off a metric. `distilling-docs` distils notes into the four files
-  and deletes the tracked sources it absorbed, once an independent judge has
-  confirmed every enumerated fact was carried. Every one of these files is
-  optional; a project without them behaves exactly as before.
-
-**Test simplification.** `test-simplifier` shrinks a suite that TDD has grown
-  slow, in the order that risks the least. `scripts/test-profile` reads the
-  JUnit XML reports a runner already emits and prints a short table of where
-  the time goes. Then the skill speeds tests up without deleting any, tiers the
-  run into an inner loop, a branch gate and a full sweep, and only then merges
-  or removes tests, one module per wave. A wave changes test files only, and
-  stands only when every mutant the old tests killed is still killed (or, with
-  no mutation tool, every fault a judge named still turns the suite red) and
-  `judge-opus` returns `KEPT`. Coverage alone never proves a test redundant.
-  `test-driven-development` and `writing-plans` now place each test at the
-  lowest layer that can fail for its change, so the suite stops regrowing.
+**Migration from the older names.** `dforge:migrate` moves a repository or
+home that dr-superpowers or dr-forge set up (see the migration sections
+below).
 
 **darkmem mirror (optional, off by default).** `scripts/darkmem-sync` keeps
   a repository's planning documents and progress in a darkmem instance over
@@ -393,10 +75,8 @@ reset time the error names, or for the session when it names none.
   you set it either way. A repository with no mapping but a record that still
   places a family in the mirror is read and reconciled the same way: the
   scripts read the mirror until a session start with no plan in progress
-  moves the family back. Without the darkmem MCP tools, or with darkmem off,
-  the durable facts the skills would file with `memory_add` go to
-  `<docs>/notes/<date>-facts.md` instead. Session start runs `reconcile` and
-  `pull`; the skills' stop points run `push`, and a
+  moves the family back. Session start runs `reconcile` and
+  `pull`, and a
   background Stop hook pushes as a safety net in at most 140 seconds: its
   config lookup is bounded at 30 seconds and its push at 100, each sent
   SIGTERM at its bound and SIGKILL 5 seconds later. `push` waits up to 100
@@ -414,232 +94,46 @@ reset time the error names, or for the session when it names none.
   A conflict is reported, never merged. Without a mapping every command but
   `import` prints one line and does nothing.
 
-**UI/UX work proven in the running UI.** `dforge:ui-ux` turns a design into a
-numbered UI/UX contract (UI, UX and an Output promise) in the spec,
-`plan-lint` makes every UI task name the items it delivers, `task-brief`
-hands them to the implementer verbatim, and a walkthrough proves each one on
-the running UI — web, Windows, Linux desktop, Android or terminal — with a
-judge seat reading the screenshots. `scripts/ui-proof check` blocks the final
-review, finishing and every "done" claim until the proof covers the current
-UI files.
-
 ## Requirements
 
-**The upstream workflow ships in-plugin.** The fork carries the full skill
-set — brainstorming through finishing-a-development-branch — frozen at upstream
-6.3.0, so no other plugin is required: every agent definition preloads
-`dforge:verification-before-completion` through its `skills:`
-frontmatter, and writing-plans and subagent-driven-development use the plugin's own
-`scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
-`context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
-action and keeps `.dforge/handoff/latest.md` pointing at it. Disable the
-upstream `superpowers` plugin: same-named skills in two enabled plugins can
-double-trigger.
-
-**Bash, jq, Git, and GNU timeout/coreutils.** The scripts need Git 2.31 or
-later: they ask `git rev-parse` for `--path-format=absolute`. The rest are
-requirements of the external executor lane:
-`scripts/detect-executors.sh` builds every field with `jq`, and
-`scripts/run-codex-task.sh` parses Codex's verdict with it. Each exits 2 with a
-message naming the dependency rather than degrading, because a missing `jq`
-would otherwise read as "no executor usable" or as a task Codex blocked on. The
-SessionStart hook is the lenient case: without `jq` it still injects the entry
-point and only skips persisting the session record, and `bash` is required for
-it to run at all. On Windows that means Git for
-Windows. The hook declares `"shell": "bash"` so it takes the Git Bash
-route explicitly: without that key Claude Code falls back to PowerShell on a
-machine with no Git Bash, where the command is meaningless, and with it the
-user gets Claude Code's actionable "requires bash but Git Bash was not found"
-message instead.
+**Bash, jq and Git.** The scripts need Git 2.31 or later: they ask
+`git rev-parse` for `--path-format=absolute`. The hooks read their input with
+`jq`; without it the SessionStart hook still injects the entry point and only
+skips the session record, and the UI hooks do nothing. `bash` is required for
+any hook to run at all. On Windows that means Git for Windows. Each hook
+declares `"shell": "bash"` so it takes the Git Bash route explicitly: without
+that key Claude Code falls back to PowerShell on a machine with no Git Bash,
+where the command is meaningless, and with it the user gets Claude Code's
+actionable "requires bash but Git Bash was not found" message instead.
 
 ## How it fires
 
 A `SessionStart` hook (matcher `startup|resume|clear|compact`) injects the
-`dforge:using-dforge` entry point as `additionalContext`, so every
-session starts with the skill-routing rules — including the pointers to
-`selecting-approaches`, implementer assignment in `writing-plans`, and plan
-execution in `executing-plans` that a PreToolUse nudge used to add. The same
-script persists the session's `transcript_path`, `session_id`, `cwd`, and
-`source` to `~/.claude/dforge/sessions/by-id/<sanitized-session-id>.json`
-and to `~/.claude/dforge/sessions/<sanitized-cwd>.json` (last writer
-wins per directory). `scripts/context-size` reads the session's own record by
-`CLAUDE_CODE_SESSION_ID`, so two sessions in one checkout each measure their
-own transcript, and falls back to the directory's record. A record no
-session start has rewritten for 30 days is deleted. On the
-`compact` source it also appends a compaction snapshot (see Session budget).
-Malformed stdin skips persistence but never blocks the injection, and the
-hook always exits 0.
+`dforge:using-dforge` entry point as `additionalContext`, so every session
+starts with the routing to dforge's skills. It adds one line when the
+repository still uses an older layout, and darkmem's reconcile and pull
+lines for a repository mapped to darkmem. The same script records the
+session's `transcript_path`, `session_id`, `cwd` and `source` in
+`~/.claude/dforge/sessions/<sanitized-cwd>.json` (last writer wins per
+directory), which darkmem's push reads; a record no session start has
+rewritten for 30 days is deleted. Malformed stdin skips the record but never
+blocks the injection, and the hook always exits 0.
 
-A run must end on its next step: the finishing menu once the final review is
-clean, otherwise the `## Next session` block from `next-step`. Controllers,
-Sonnet especially, tend to summarize the run and stop instead. A
-`UserPromptSubmit` hook stamps the start of each turn under
-`~/.claude/dforge/sessions/turns/`, and a `Stop` hook checks whether
-that turn wrote a plan ledger (`.dforge/sdd/*/progress.md`). If it did and
-the last message carries neither ending, the hook blocks the stop once and
-tells Claude which one is missing. The retry always passes, and without `jq`,
-a stamp or a ledger written this turn, the hook does nothing. While an agent or
-command the session started in the background has not reported back, a plain
-stop passes (the controller is waiting on it), and a message that ends the
-session over it, with the next-step block or the finishing menu, is held once
-in any turn: a handoff there would invite ending a session whose work is still
-in flight. Work stopped with `TaskStop`, and work launched before the session
-last started or resumed, sends no notification and does not count as running.
-An agent that sent its report but left a shell or agent of its own alive still
-counts: Claude Code keeps listing it, and its notification says so.
-`scripts/in-flight` prints the same list on demand; handoff step 0 and the
-finishing menu run it, and `scripts/next-step` prints no block (exit 5) while
-anything is on it.
-When the turn wrote more than one ledger, each one must have its
-ending. Each hold also shows you a one-line note saying why the session went
-on.
-
-Unplanned work gets the same hold. The prompt hook also records which commits
-the repository's local branches point at. A turn that wrote no ledger but
-changed that set (a commit, a merge, or deleting a branch's only pointer to a
-commit) in a project with dforge docs must end on the `## Next session` block
-from `next-step --adhoc`, the finishing menu, or finishing's "No plan file"
-line. Otherwise the hook holds the stop once and tells Claude to continue
-remaining work, finish a branch that is ready to integrate, or print the block. Creating
-a branch on an existing commit, or a stop in another repository than the
-prompt's, does not count. Neither does a turn that ran no dforge skill (no
-Skill call and no typed `/dforge:` command since the prompt): a commit made
-without dforge is never held for dforge's ending.
-
-A run also asks one question before its first task: what finishing should do
-once the final review is clean (merge locally, push and open a pull request,
-keep the branch, or ask then). `scripts/finish-choice` keeps the answer beside
-the ledger (`.dforge/sdd/<plan>/finish.json`, or `.dforge/sdd/finish.json` for
-work done without a plan). Finishing carries out that choice at once, with no
-menu, and stops wherever an attended finish would ask (failing tests, a
-rejected push, a refused worktree removal), ending on the menu. "Ask me then"
-shows the menu and waits for your answer. The cockpit Run card shows the
-choice.
-
-With the `finishAction` setting at `merge`, `pr`, `keep` or `wait`, the run does
-not ask that question: `scripts/finish-choice` records the configured action
-the first time it is read.
-
-See [reference/finish-preference.md](reference/finish-preference.md).
-
-Codex has no Stop hook: the Codex manifest declares no hooks, so nothing
-catches a summarize-and-stop there. On Codex you must run `next-step` yourself
-on every early stop.
+A `UserPromptSubmit` hook records the commits the repository's local branches
+point at when a turn starts, under `~/.claude/dforge/sessions/turns/`.
 
 A `PostToolUse` hook on `Edit`, `Write` and `MultiEdit` runs
 `scripts/ui-edit-hook.sh`: for a UI file (`scripts/ui-proof paths`) it
 returns `scripts/ui-lint` findings as additional context and, once per
-session, names `dforge:ui-ux`; it never blocks. A third `Stop` hook,
+session, names `dforge:ui-ux`; it never blocks. A `Stop` hook,
 `scripts/ui-turn-end.sh`, holds a turn once when it leaves UI changes without
 a passing `ui-proof check` in a project with a UI profile (or a session that
-ran the skill); the line `UI proof: pending — <why>` releases it, and it
-stands down while an auto run is bound.
+ran the skill); the line `UI proof: pending — <why>` releases it. A second
+`Stop` hook pushes to darkmem in the background.
 
-### Fast mode
-
-Before the full flow starts for a request, `dforge:brainstorming` and
-`dforge:systematic-debugging` ask "Fast mode, or the full dforge flow?". Fast
-mode works the request the way plain Claude Code would: Claude says
-`Process: fast — <why>` and then invokes no further dforge skill for that
-request, so there is no spec, plan, register, review, worktree question,
-finishing menu or next-step block, and choosing fast mode stands in for the
-design approval. Your own instructions (CLAUDE.md, direct requests) still
-apply. While the latest `Process:` line the main session wrote is
-`Process: fast`, the UI proof hold, the UI edit hook and the cockpit's seat
-check stand down; a later full-flow `Process:` line
-turns them back on. Plan ledger and auto run holds are unchanged. The next
-request is offered the choice again. The `fastMode` setting takes fast mode
-without asking (`always`) or never offers it (`off`). See
-[reference/fast-mode.md](reference/fast-mode.md).
-
-## Unattended runs
-
-Two Claude Code settings keep a parallel plan moving while nobody is at the
-keyboard. They belong to Claude Code, and dforge neither sets nor reads them.
-
-**Auto mode.** Start the session with `claude --permission-mode auto`. A wave
-runs its implementers as subagents, several at once, and a tool call that needs
-a permission prompt makes that implementer wait for an answer you are not there
-to give, which holds up the whole wave. In auto mode a classifier approves
-routine calls and blocks risky ones, so no implementer stops on a prompt. This is Claude Code's permission mode; dforge's
-own auto run (see [reference/auto-run.md](reference/auto-run.md)) keeps a plan
-going from approval to finishing and works under any permission mode.
-
-**Wave worktrees from your local HEAD.** Set `worktree.baseRef` to `"head"` in
-your user settings (`~/.claude/settings.json`):
-
-```json
-{ "worktree": { "baseRef": "head" } }
-```
-
-Claude Code creates each wave implementer's worktree itself. Its default,
-`"fresh"`, branches from `origin/<default-branch>`, so when your local main is
-ahead of origin, or the plan sits on a feature branch, the worktree lacks the
-unpushed commits: the plan and the earlier waves' merged tasks. dforge's
-dispatch detaches the implementer to the wave's base afterwards, but a worktree
-that starts from your HEAD begins in the right place. The setting applies to
-every worktree Claude Code creates for you, not only dforge's.
-
-## Session budget
-
-Long sessions cost more than they look: every request re-reads the whole
-context, and compaction drops the reports, findings and rulings a controller
-needs. dforge hands off instead.
-
-- **The budget line.** `scripts/task-brief` and `scripts/review-package` end
-  with `budget: 312k of 465k (67%) — ok — source: record`, so the controller
-  checks before every task and every review at no extra request;
-  `scripts/context-size` prints it on demand. At `handoff`, the `handoff`
-  skill writes `latest.md` and the plan's `handoff.md` and ends with the
-  resume guide from `scripts/next-step`.
-- **Stops.** A saved plan outside an auto run (an auto run clears the session
-  and goes on) is a hard stop.
-  The last task completing is never a stop: the final whole-branch review and
-  finishing always run in the same session. In an auto run, finishing runs in
-  a session of its own. In strict mode the plan's last two
-  tasks and the final phase keep the handoff budget and run past it; in relaxed
-  mode they measure against 85% of the compaction window. Finishing itself is
-  never budget-checked. A
-  `handoff` verdict waits for the task in flight to complete. The
-  budget is the compaction point minus one task's worst growth, derived from
-  `autoCompactWindow` and the model's window; see
-  [session-budget.md](reference/session-budget.md) for the numbers and the
-  full Stops table.
-- **Resuming.** `resume-execution` runs `scripts/repo-audit` — one read-only
-  snapshot of branch, worktrees, dirty files, plans in flight and handoff
-  staleness — verifies the worktree, and hands control back to the plan's
-  execution skill.
-- **Compaction.** The SessionStart hook appends a snapshot of what summaries
-  drop. Compaction fires at about 93-96% of `autoCompactWindow`, so set the
-  window to suit you — the budget follows it, 465k at 650000 — and paste the
-  Compact Instructions block from
-  [session-budget.md](reference/session-budget.md) into your project's
-  CLAUDE.md.
-
-### Auto run
-
-The default on Claude Code (`autoRun=on`). Brainstorming asks its clarifying
-questions and approaches, writes the whole spec with no design-section
-approvals, and has the architecture critic and Fable review it. You then get
-one spec review message: the open questions, the finish choice when
-`finishAction` is `ask`, and the approval. Approve it and the plan is written
-in the same session; the cockpit clears the session and starts it on the
-plan's launch model, and the plan executes, is reviewed and finished
-into the branch the run started from, with no question to you. Finishing runs
-in a session of its own, after one more clear. What Opus cannot rule goes to
-Fable in one batch; what Fable cannot rule is deferred on the run's register.
-Instead of handing off, the session compacts at the handoff budget, and the
-cockpit clears and resumes it when a compaction leaves too much.
-An auto run follows the `worktree` setting: `always` makes the execution
-worktree unasked, `never` works in this checkout on an `auto/<plan>` branch and
-leaves your uncommitted changes uncommitted, and `ask` asks at the spec review,
-or at the auto-run offer under `autoRun=ask`.
-`autoRun=ask` offers the run once the design is approved instead, and
-`autoRun=off` never runs one. The pane shows the
-run and a **Stop auto** button. A run's turn that ends without its sentinel
-line is held up to three times in a row, retries included; then the run stops
-with a reason, which the cockpit sends to Discord. See
-[auto-run.md](reference/auto-run.md).
+Codex runs no hooks: the Codex manifest declares none. There,
+`skills/using-dforge/references/codex-tools.md` names the commands to run by
+hand.
 
 ## Cockpit
 
@@ -657,7 +151,7 @@ headline on the title line, under one **Now** row that says what the
 session is doing:
 
 ```
-● running 2m14s · step 18 · Bash in impl-sonnet-low
+● running 2m14s · step 18 · Bash in Explore
 ╭ Account ──────────────────────────── subscription ╮
 │ ● you@example.com                                 │
 │   You · Acme (admin)                              │
@@ -665,40 +159,42 @@ session is doing:
 │   Remote ● connected · phone                      │
 │   config ~/.claude                                │
 ╰───────────────────────────────────────────────────╯
-╭ Context ─────────────────── 68% of handoff · ≈7 turns ╮
-│ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱┃▱▱▱▱▱┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱ │
-│ 412k of 1.0M ┃ handoff 604k ┊ compacts 744k      │
+╭ Context ──────────── 68% of compaction · ≈7 turns ╮
+│ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱┃▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ │
+│ 412k of 1.0M ┃ compacts 604k                      │
 │ trend ▁▂▃▃▄▄▅▆▆▇▇█ +23k                           │
-│ ██████████████████████████████████████▓▓▓▓▒▒▒░░  │
+│ ██████████████████████████████████████▓▓▓▓▒▒▒░░   │
 │   ■ Messages              318k  78%               │
 │   ■ System tools           41k  10%               │
-│ ╭──────────╮ ╭─────────╮ ╭──────────╮             │
-│ │ Hand off │ │ Compact │ │ Settings │             │
-│ ╰──────────╯ ╰─────────╯ ╰──────────╯             │
+│ ╭───────────╮                                     │
+│ │ ⇣ Compact │                                     │
+│ ╰───────────╯                                     │
 ╰───────────────────────────────────────────────────╯
-╭ Usage ──────────────────────────── $4.85 · $2.35/h ╮
+╭ Usage ─────────────────────────── $4.85 · $2.35/h ╮
 │ 5h  ▰▰▰▰▰┊▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  23%     │
 │     resets in 3h40m · on pace                     │
 ╰───────────────────────────────────────────────────╯
-╭ Shells ─────────────────────────────── $ 1 running ╮
+╭ Shells ────────────────────────────── $ 1 running ╮
 │ $ npm run dev 12m04s                              │
 ╰───────────────────────────────────────────────────╯
-╭ Agents ───────────────────────── ● 1 running ✓ 2 ╮
-│ ● impl-sonnet-low Task 4 4m17s                    │
-│ ✓ reviewer-opus Review task 3                     │
+╭ Agents ────────────────────────── ● 1 running ✓ 2 ╮
+│ Working · 1                                       │
+│ ● Explore Map the settings code 4m17s             │
+│ Done · 2                                          │
+│ ✓ general-purpose Check the band widths           │
+│ ✓ Explore Find the poll timer                     │
 │ Seats by input                                    │
-│   impl-sonnet-low ×1                              │
+│   Explore ×2                                      │
 │   ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰ 120k in · 80% cached · 7k out  │
 ╰───────────────────────────────────────────────────╯
-╭ Run ────────────────────────────── round 2/2 · 3/6 ╮
-│ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ │
-│ plan docs/plans/cockpit.md                        │
-│ ✓ Task 3: Draw the context section · clean        │
-│ ▸ Task 4: Draw usage and agents                   │
-│   round 2/2 · impl-sonnet-low                     │
-│ ○ Task 5: Track the plan and repo                 │
+╭ Plan ──────────────────────────────────────── 2/4 ╮
+│ ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱  │
+│ ✓ Draw the context section                        │
+│ ✓ Draw usage and agents                           │
+│ ▸ Track the plan and repo                         │
+│ ○ Update the README                               │
 ╰───────────────────────────────────────────────────╯
-╭ Repo ─────────────────────────────────── ● dirty ╮
+╭ Repo ──────────────────────────────────── ● dirty ╮
 │ repo darkraise/darkraise-ai-plugins               │
 │ dir  ~/code/darkraise-ai-plugins/plugins          │
 │ ⎇ feat/cockpit-pane-overhaul ↑3                   │
@@ -706,16 +202,15 @@ session is doing:
 ╰───────────────────────────────────────────────────╯
 ```
 
-The context track runs over the whole window: the fill is the reading, `┃` the
-handoff budget and `┊` where auto-compaction runs. The trend line is the
-session's recent readings. The colored bar splits the context by `/context`
-category, each color matching its row. On a usage-limit meter `┊` marks how far
-through its window the limit is, so a fill past it is spending faster than the
-window refills.
+The context track runs over the whole window: the fill is the reading and `┃`
+the point where auto-compaction runs. The trend line is the session's recent
+readings. The colored bar splits the context by `/context` category, each color
+matching its row. On a usage-limit meter `┊` marks how far through its window
+the limit is, so a fill past it is spending faster than the window refills.
 
 In the Claude desktop app (its Code tab) the pane is laid out as a flight
 deck. The account comes first, then what Claude is doing, then three gauges:
-the context against its handoff budget with the turns left, and the 5-hour and
+the context against its compaction point with the turns left, and the 5-hour and
 7-day limits, each with a tick where its window has run to, its reset and its
 forecast. The gauges sit in framed tiles that span the same width as the
 panels; a narrow pane moves the context to its own row, then stacks every
@@ -733,14 +228,14 @@ desktop window joins the session, unless you closed it.
   idle with the last turn's length; the last turn failed; or Esc
   interrupted it, with the background shells and agents still running after
   it (Esc stops the turn, not them). When a turn ends with its own background
-  shells or subagents still running (a Codex review, a test run), it reads
+  shells or subagents still running (a review, a test run), it reads
   `◐ background` with the shells, the newest command and the subagents, and the
   Done notification waits: one Done goes out after the turn their notification
-  wakes ends, timed from the first turn. A prompt you send (or auto run's)
-  starts the count again; a subagent's own shells and a service that runs
-  until stopped (a dev server, a `--watch` run, `tail -f`) hold nothing; and
-  after 30 minutes the Done goes out anyway. It adds `Discord ✓` once a
-  notification went out for what it shows.
+  wakes ends, timed from the first turn. A prompt you send starts the count
+  again; a subagent's own shells and a service that runs until stopped (a dev
+  server, a `--watch` run, `tail -f`) hold nothing; and after 30 minutes the
+  Done goes out anyway. It adds `Discord ✓` once a notification went out for
+  what it shows.
 - **Account** is who the session runs as: the email, name, organization and
   role from the account's `.claude.json` (under `CLAUDE_CONFIG_DIR` when set),
   the billing type, the model and effort the last request used, Remote Control,
@@ -751,25 +246,17 @@ desktop window joins the session, unless you closed it.
   directory, so each account keeps its own. Below it a row holds the pane's own
   buttons: **≡ Dense** (`d`), **⚙ Settings** (`s`) and **▁ Minimize** (`m`);
   with Account hidden the row leads the pane.
-- **Context** is the main session against its handoff budget, the window and
-  where auto-compaction runs, and the largest `/context` categories, estimated
-  locally with no API calls. The title adds about how many turns are left to
-  the budget at the pace of the last few; past the budget in a plan's last two
-  tasks or its final phase it says `finishing` instead, since strict mode runs
-  on there to finish the plan. Until a response measures the window
-  (a new session, or just after a compaction) it shows the estimate instead,
-  `≈37k estimated`, with the categories. A tool call's reading shows as the
-  tool starts. **⇣ Compact** stays on the card, and **↪ Hand off** appears in
-  `dforge` sessions.
-- **Resumable work** is a card at the top of the pane, framed in the accent
-  color, when `.dforge/handoff/latest.md` is under three days old and its
-  `## Next session` block has a first prompt to paste (a finished plan, or a
-  task blocked on your ruling, has none). It names the note's age and its
-  **Next:** line, and **Resume** (`r`) queues the prompt that resumes it. The
-  same offer rides in a band above the prompt, over the minimized band when
-  there is one, with **Resume** and **Dismiss**. Pressing either in one place
-  removes both for this session; so does an auto run, or the session starting
-  on a plan.
+- **Context** is the main session against the point where auto-compaction runs
+  (the engine's own threshold once the `/context` breakdown names it, else the
+  smaller of `autoCompactWindow` and the window), the window, and the largest
+  `/context` categories, estimated locally with no API calls. The title adds
+  about how many turns are left to that point at the pace of the last few.
+  With auto-compaction off the session is measured against the whole window:
+  the title reads `of window`, the legend `auto-compact off`, and no point is
+  marked. Until a response measures the window (a new session, or just after a
+  compaction) it shows the estimate instead, `≈37k estimated`, with the
+  categories. A tool call's reading shows as the tool starts. **⇣ Compact**
+  stays on the card.
 - **Usage** is the account's 5-hour and 7-day limits with their resets, and the
   session's cost and cost per hour. Once a window is ten minutes old each meter
   says whether the limit lasts to its reset at the pace so far (`on pace`), or
@@ -783,17 +270,10 @@ desktop window joins the session, unless you closed it.
   **Working**, **Failed** (it ended aborted, refused or with an error) and
   **Done** (recently finished). Running ones are timed to the second. Then
   each subagent type (seat) with its runs, input tokens, the share served from
-  the prompt cache and output tokens. Use it to see where a plan's tokens go.
-- **Plan** follows the main session's todo list or task list, centred on the
-  item in progress. In a `dforge` run it becomes **Run**, read from the
-  run's ledger (`.dforge/sdd/<run>/progress.md`) and its plan: the review
-  round in flight, the tasks done, which were reviewed clean, and a blocked
-  task in red with its reason. A run whose tasks were all done before the
-  session started is left out, so a new session starts without it. Its
-  **Finish** row shows what dforge will do once the final review is clean
-  (the option chosen before the run: `Finish push and open a PR when done`).
-  It disappears once finishing carries the choice out or you answer the menu
-  yourself. Work done without a plan shows the row on the Plan card.
+  the prompt cache and output tokens.
+- **Plan** follows the main session's todo list (TodoWrite) or task list
+  (TaskCreate and TaskUpdate), centred on the item in progress. The card shows
+  only while the list has items.
 - **Repo** names the repository (`owner/name` from its remote, else its folder)
   and the working folder, then the branch, ahead and behind counts and changes.
 - **Guard** says whether the attribution guard is on (`on · none refused`, or
@@ -802,15 +282,13 @@ desktop window joins the session, unless you closed it.
 **Collapsing.** Each section's title is a button: `▾ Usage` collapses the
 section to its title row and headline, and `▸ Usage` expands it again. Each
 press saves the `collapsed` setting, so the next session opens the same way. A
-collapsed Context section keeps its buttons, and the resumable-work card never
-collapses. The Run card is the `plan` section during a dforge run, so collapsing
-either one collapses the other.
+collapsed Context section keeps its **Compact** button.
 
 **Dense** (`d`) turns the pane into one line per section, in the `sections`
-order: the Now row, then `ctx` with a bar, the share of the handoff budget and
+order: the Now row, then `ctx` with a bar, the share of the compaction point and
 the turns left, `lim` with the 5-hour and 7-day limits, the background shells
-with the newest command, the running subagents, the plan or run's progress
-and its task in flight, the branch and changes, and refusals. A section with
+with the newest command, the running subagents, the plan's progress and its
+item in progress, the branch and changes, and refusals. A section with
 nothing to show is left out; the buttons shrink to one line, and
 **Detailed** (`d`) brings the cards back. Each press saves the `density`
 setting. In the desktop app the dense rows are text, without the gauges.
@@ -819,11 +297,10 @@ setting. In the desktop app the dense rows are text, without the gauges.
 `~/.dforge/config.json` and the dforge keys in Claude's settings every two
 seconds and puts a change in force, so an edit from `dforge-config`, by hand or
 in another session shows without a restart; a file that stops being a JSON
-object keeps the settings in force and says so in the settings view. The run
-ledger is re-read when it changes, and the git state and the `/context`
-breakdown every ten seconds. Nothing is read while the cockpit is hidden. The
-account, Remote Control's `/config` row and the usage limits keep their own
-timing.
+object keeps the settings in force and says so in the settings view. The git
+state and the `/context` breakdown are read every ten seconds. Nothing is read
+while the cockpit is hidden. The account, Remote Control's `/config` row and
+the usage limits keep their own timing.
 
 **Minimize** (`m`) closes the pane. The cockpit then draws as a band directly
 above the prompt, across the transcript's width, in the terminal and the
@@ -841,20 +318,20 @@ the segments the **Minimized** settings tab picks, as dr-status did. By
 default the first line has the folder with the branch, ahead and behind counts
 and changes, the model and effort, the output style when it is not the
 default, the turn (`▸ 2m14s · Bash` while it runs, `approve?` or `asking`
-while it waits on you, `turn failed`), a dforge run's tasks done and review
-round, the subagents running, and the background shells with how long the
-longest has run. The second has the context against the handoff budget with
-the turns left, the prompt-cache hit rate of the last turn, the session's cost,
-and the 5-hour and 7-day limits with their pace (`on pace`, or when the window
-runs out before it resets). The line holding the agents, shells or turn leads
-with `◐` while the background state shows. A blocked run task or a refused
+while it waits on you, `turn failed`), the subagents running, and the
+background shells with how long the longest has run. The second has the
+context against the compaction point with the turns left (no mark while
+auto-compaction is off), the prompt-cache hit rate of the last turn, the
+session's cost, and the 5-hour and 7-day limits with their pace (`on pace`, or
+when the window runs out before it resets). The line holding the agents,
+shells or turn leads with `◐` while the background state shows. A refused
 command adds a red line.
 
 ```
-╭─ you@example.com · subscription · Remote ● connected ──────────────────────────────────────────────────── Expand ─╮
-│ ~/code/shop/web ⎇ feat/pane* ↑2 ↓1 ~1 ?1  ·  Opus 5.5  ·  xhigh  ·  ▸ 2m14s · Bash  ·  run 3/6 r2/2  ·  ● 1 agent │
-│ ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  cache ▰▰▰▰▰▰▰▱ 93%  ·  $1.20  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 3h40m  ·  7d 61%     │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ you@example.com · subscription · Remote ● connected ──────────────────────────────────────────────── Expand ─╮
+│ ~/code/shop/web ⎇ feat/pane* ↑2 ↓1 ~1 ?1  ·  Opus 5.5  ·  xhigh  ·  ▸ 2m14s · Bash  ·  ● 1 agent              │
+│ ctx ▰▰▰▰▱▱▱┃▱▱ 61% · ≈9 turns  ·  cache ▰▰▰▰▰▰▰▱ 93%  ·  $1.20  ·  5h ▰▰▱▱┊▱▱▱ 23% on pace · 3h40m  ·  7d 61% │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 Each line shrinks a step at a time until it fits: the meters narrow and then
@@ -865,18 +342,18 @@ one card with slim meters whose ticks mark how far each window has run.
 
 Each button sits in a rounded box, the letter of its hotkey underlined in the
 label as a desktop app marks one; the hotkey presses it while the pane has the
-keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `d` **Dense** or **Detailed**, `s` **Settings**, `m` **Minimize**,
+keyboard: `c` **Compact**, `d` **Dense** or **Detailed**, `s` **Settings**, `m` **Minimize**,
 and `b` **Back** in the settings view. Before Claude Code 2.1.295, which first
-draws a styled label, the hotkey leads the label instead (`c: Compact`). The box is gray at rest and takes the accent color on the one
-that matters: **Hand off** once the context passes `warnAt`, **Resume**
-whenever it shows. In the terminal's settings view a switch reads `● On` or `○ Off`, the
-chosen option of a row takes the accent, and what is off is drawn dim.
+draws a styled label, the hotkey leads the label instead (`c: Compact`). The
+box is gray at rest. In the terminal's settings view a switch reads `● On` or
+`○ Off`, the open tab and the chosen option of a row take the accent color,
+and what is off is drawn dim.
 
 **Settings view.** **Settings** (or `/cockpit settings`) turns the pane into the
-mod's settings: whether it shows at session start, the layout, which sections
-show, the handoff budget, where Hand off takes the accent and the Discord limit
-message goes out, how many context rows to list, the note and guard switches, and the
-Discord notifications. Each press saves
+mod's settings: whether it shows at session start, the layout and density,
+which sections show and which are collapsed, how many context rows to list, the
+attribution guard, the minimized band's lines, Claude's auto-compaction
+settings, the Discord notifications and the darkmem stores. Each press saves
 the setting to `~/.dforge/config.json`, and the pane redraws with it. **Back** (`b`)
 returns to the cockpit. In the desktop app each switch and choice is a
 dropdown, and each number and text setting an open field that saves when you
@@ -888,19 +365,8 @@ when it opens; nothing in the pane costs the model context.
 
 The cockpit pops up nothing in the normal course: usage limits show in the
 gauges and the band, and a Discord message that fails to send shows in the
-settings view. A toast appears only when it cannot do what was asked: a
-setting that could not be saved, or a handoff note the session would not take.
+settings view. A toast appears only when a setting could not be saved.
 `/cockpit` with an argument it does not know answers with its usage.
-
-**Handoff reading.** The handoff reading shows only in the cockpit: the
-Context card and the band. The main session re-reads its whole context on every request, so a session that
-runs past its budget pays for it on each turn after. In a session running
-`dforge` (one that has loaded one of its skills or started one of its
-agents), **Hand off** queues a prompt asking the controller to finish the task
-in flight and hand off with the `handoff` skill. Past the budget the mod also
-adds one note to the conversation saying the same, so a controller deep in a
-long turn sees it before its next task. A compaction clears the reading until
-the next response, and re-arms the note.
 
 **Discord notifications.** The mod can post to a Discord channel when the
 session needs you, which works the same over ssh and tmux. Create a webhook
@@ -918,10 +384,7 @@ that need you; everything else posts silently.
 | `question` | Claude asks you something or has a plan ready, likewise | on | yes |
 | `done` | A turn ends after running at least `notifyAfter` seconds | on | no |
 | `error` | A turn fails | on | yes |
-| `blocked` | A `dforge` task is blocked | on | yes |
-| `budget` | The context crosses the handoff budget | on | no |
 | `limit` | A usage limit crosses `limitAlertAt` | on | no |
-| `task` | A run's task completes, or its final review is clean | off | no |
 | `session` | The session ends, with its resume command | off | no |
 | `agent` | A subagent finishes | off | no |
 
@@ -937,29 +400,29 @@ trailer to commits and a "Generated with Claude Code" footer to pull requests.
 The mod blanks both where the engine composes them, and refuses a `git commit`,
 `gh pr create`/`edit` or GitHub pull-request tool call that still carries AI
 attribution (an AI `Co-Authored-By`, `Claude-Session`, "Generated with Claude
-Code" or a Claude session link). Human co-authors pass.
+Code" or a Claude session link). Human co-authors pass. A call the guard cannot
+check is refused.
 
 ### Settings
 
 Open the settings with **Settings** in the pane or `/cockpit settings`. They are
-one tab per group: press `1` to `8` to switch, `i` to hide or show each
+one tab per group: press `1` to `5` to switch, `i` to hide or show each
 setting's description, and `b` to go back. A row whose value differs from its
 default is marked `*` and shows the default with a **Reset**; `r` resets the
 whole tab after a second press. Numbers step with `−` and `+` or take a typed
-value with **Edit**. A value forced from outside (an environment variable, or
-a project or managed Claude settings file) shows what forces it and no
-controls.
+value with **Edit**. A value forced from outside (a project or managed Claude
+settings file) shows what forces it and no controls.
 
 The same settings can be set with
 `bash <plugin-root>/scripts/dforge-config set <key> <value>` or by editing
 `~/.dforge/config.json`:
 
 ```json
-{ "layout": "compact", "handoffMode": "relaxed", "finishAction": "pr" }
+{ "layout": "compact", "density": "dense", "notifyDetail": "brief" }
 ```
 
-`dforge-config get --json` prints every value in force, and
-`dforge-config workflow` prints the line the skills read.
+`dforge-config get --json` prints every value in force. A key the file holds
+that no setting names any more is ignored.
 
 | Tab | Option | Default | Effect |
 | --- | --- | --- | --- |
@@ -970,29 +433,10 @@ The same settings can be set with
 | Cockpit | `collapsed` | empty | Sections drawn as their title row and headline only, comma-separated, from the same eight names. Pressing a section's title collapses or expands it and saves this setting. Empty expands all eight. |
 | Cockpit | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |
 | Cockpit | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
-| Minimized | `bandLine1` | empty | The minimized band's first line, in order, comma-separated: `dir`, `git`, `model`, `effort`, `style`, `turn`, `run`, `agents`, `shells`, `ctx`, `cache`, `cost`, `5h`, `7d`, `time`. Empty shows `dir`, `git`, `model`, `effort`, `style`, `turn`, `run`, `agents`, `shells`; `none` hides the line. The tab's chips add a segment last on a line and take it off the other. |
+| Minimized | `bandLine1` | empty | The minimized band's first line, in order, comma-separated: `dir`, `git`, `model`, `effort`, `style`, `turn`, `agents`, `shells`, `ctx`, `cache`, `cost`, `5h`, `7d`, `time`. Empty shows `dir`, `git`, `model`, `effort`, `style`, `turn`, `agents`, `shells`; `none` hides the line. The tab's chips add a segment last on a line and take it off the other. |
 | Minimized | `bandLine2` | empty | The second line, from the same names. Empty shows `ctx`, `cache`, `cost`, `5h`, `7d`; `none` hides it. A name on both lines shows on the first. In the desktop app the picked `ctx`, `cache`, `5h` and `7d` are its meters and the rest its text rows. |
-| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dforge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DFORGE_BUDGET` overrides it; `relaxed` handoff mode ignores it. |
-| Context | `handoffMode` | `strict` | `strict` hands off at the handoff budget, except that a plan's last two tasks and its final phase run past it to finish the plan. `relaxed` measures every task against the final-phase limit, 85% of the window, so a session carries a plan further; a worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on. |
-| Context | `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
-| Context | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dforge` sessions. |
 | Context | `autoCompactWindow` | `0` | Claude's own `autoCompactWindow`, written to Claude's user settings file: `0` leaves it unset, else 100,000 to 1,000,000. Applies from the next session. |
 | Context | `autoCompactEnabled` | `true` | Claude's own `autoCompactEnabled`, written to the same file. Applies from the next session. |
-| Workflow | `codexLane` | `true` | Give plan tasks to Codex when its gate passes. `false` makes `scripts/codex-gate` report `lane=false`. |
-| Workflow | `codexReview` | `false` | `true` lets Codex take review seats when its gate passes. `false`, the default, makes the gate report `review=false` and keeps every review on Claude; `/codex:review` runs a Codex review on demand. With `codexLane` off too, the gate does not probe Codex at all. |
-| Workflow | `agyLane` | `true` | Give plan tasks to the Antigravity CLI (`agy`) when its gate passes. `false` makes `scripts/agy-gate` report `lane=false reason=setting` without probing, and keeps those tasks on Claude or Codex. |
-| Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DFORGE_LENS_CAP` overrides it. |
-| Workflow | `lensMinorFrom` | `20` | The plan size, in tasks, from which the final review's lenses also report Minor findings. A smaller plan's lenses report Critical and Important findings only, so the fix wave does not triage a long Minor tail. `0` always asks for Minor findings. `DFORGE_LENS_MINOR_FROM` overrides it. |
-| Workflow | `executionStrategy` | `sequential` | `sequential` runs one task at a time; `parallel` (independent tasks in waves) and `ask` take effect only with a subagent Execution line. |
-| Workflow | `executionMode` | `auto` | `auto` means inline; `inline` and `subagent` fix the plan's Execution line, and `subagent` (deprecated) is the only mode that runs waves. |
-| Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
-| Workflow | `autoRun` | `on` | `on` runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; `off` on Codex); `ask` offers that once the design is approved; `off` never runs one. See [Auto run](#auto-run). |
-| Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
-| Process | `fastMode` | `ask` | `ask` offers fast mode before brainstorming or debugging a request; `always` takes it without asking; `off` never offers it. See [Fast mode](#fast-mode). |
-| Process | `designApproval` | `sections` | `sections` approves each design section in turn; `whole` presents the design once with one approval. No effect under `autoRun=on` on Claude Code, which presents no design. |
-| Process | `specReview` | `true` | Stop for you to review the written spec before the plan is written. No effect under `autoRun=on` on Claude Code: the spec review always happens. |
-| Process | `questionStyle` | `single` | `single` asks one clarifying question per message; `batched` asks them all in one. |
-| Finish | `finishAction` | `ask` | What finishing does once the final review is clean. `ask` keeps the question before the first task; `merge`, `pr` or `keep` skips it and runs that action at once; `wait` skips it and shows the finish menu then. |
 | Notifications | `limitAlertAt` | `90` | The share at which a usage limit sends the Discord `limit` message, in percent. `0` turns it off. |
 | Notifications | `notifyOn` | empty | The Discord events to send, comma-separated (see above). Empty sends the default set; `none` sends nothing. `dforge-config` rejects a value naming an unknown event; one written by hand into the settings file sends nothing. |
 | Notifications | `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |
@@ -1002,15 +446,9 @@ The same settings can be set with
 | darkmem | `documentStore` | `darkmem` | While darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: `local` in the repository, `darkmem` through the mirror. A mapping entry's own `documentStore` outranks it; an unmapped repository is local, though a family its record still places in the mirror is read there until a session start with no plan in progress moves it back. |
 | darkmem | `progressSource` | `darkmem` | The same choice for plan ledgers and handoffs. A mapping entry's own `progressSource` outranks it. |
 
-The cockpit settings (Cockpit, Minimized, Context, Notifications) apply at once, whether
-you change them in the pane, with `dforge-config` or in the file, except the
-two Claude keys, which Claude reads at its next session start. A
-Workflow or Process setting reaches the skills through one line injected at
-session start; when you change one mid-session, the cockpit adds a note to the
-conversation as the settings close. The Codex switches, the handoff mode and
-the finish settings are read by the scripts each time they run. Your own
-instructions always outrank a setting, and no setting removes the approval
-before implementation.
+The Cockpit, Minimized and Notifications settings apply at once, whether you
+change them in the pane, with `dforge-config` or in the file. The two Context
+keys are Claude's own, which Claude reads at its next session start.
 
 ### Install
 
@@ -1034,16 +472,6 @@ claude --plugin-dir plugins/dforge
 The last loads the working copy into a session and reloads it on save. The
 engine lays its type declarations under `.claude-plugin/types/` when it loads
 the folder; they are not committed.
-
-## Migrating to 4.11
-
-dforge 4.11 runs the `agy` lane Gemini first (`gemini-3.8-flash medium` for
-totals 0-2, `gemini-4-argon low` for 3-4, `gemini-4-argon high` for 5-8), runs
-Claude through `agy` only as the retry after a Gemini run fails, and adds
-`fallback=` and `fallback_resets_at=` to the `agy-gate` line before `source=`.
-A plan whose `**Executor:** agy` lines name a `claude-` rung fails `plan-lint`
-until those lines are rewritten from the new block: `scripts/plan-revise`
-prints each task's rung, and dforge:revising-plans makes the edit.
 
 ## Migrating to 4.0
 
@@ -1083,8 +511,8 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
    would move, asks once, then moves every checkout and the home, rewrites the
    old plugin prefixes (`dr-forge`, `dr-superpowers`) in plans still in
    progress, and offers to commit what moved. It takes a dr-superpowers
-   repository straight to 4.0 as well. Session start and `repo-audit` name
-   any older path still present.
+   repository straight to 4.0 as well. Session start names any older path
+   still present.
 3. Rename any `DR_FORGE_*` variable a shell profile sets to `DFORGE_*`.
 
 darkmem's documents move from `forge/` to `dforge/` at the first sync after
@@ -1132,7 +560,7 @@ dr-forge 3.0.0 reads and writes only its own names: `.forge/`, `docs/forge/`,
 the git directory's `dr-forge/`, `~/.dr-forge/`, the `DR_FORGE_*` variables
 and the `dr-forge:` prefix. The pre-2.0 `.superpowers/`, `docs/superpowers/`,
 `dr-superpowers/` and `DR_SUPERPOWERS_*` names and the `dr-superpowers`
-prefix are no longer read. Session start and `repo-audit` print one line naming
+prefix are no longer read. Session start prints one line naming
 any pre-3.0 directory a repository still has; run, once per repository:
 
     bash <plugin-root>/scripts/forge-migrate [DIR]
@@ -1150,8 +578,7 @@ refused.
 
 No other file is edited: plans, specs and ledgers that cite
 `docs/superpowers/<rest>` keep that spelling, and dr-forge still reads it as
-`docs/forge/<rest>`. A plan whose `**Implementer:**` lines name agents under an
-older plugin prefix fails `scripts/plan-lint` until they name `dr-forge:`.
+`docs/forge/<rest>`.
 Rename any `DR_SUPERPOWERS_*` variable you set to its `DR_FORGE_*` name.
 `DR_FORGE_DOCUMENT_STORE` and `DR_FORGE_PROGRESS_SOURCE`, which 2.x read, are
 no longer read at all: set `documentStore` and `progressSource` instead.
@@ -1165,99 +592,6 @@ has none, and each `~/.dr-superpowers/mirror/<project>/` that
 documents to `forge/`; upgrade every machine that shares a darkmem project,
 since a 2.x client no longer sees the moved documents.
 
-## What a plan looks like
-
-A plan opens with a header block: Goal, Spec, the `**Execution:**` line
-(inline on every new plan, with the session's model and effort), Global Constraints, Contracts (every name
-one task produces and another consumes), Assumptions with evidence, and a Task
-index. `scripts/plan-lint` checks it, and a judge reviews it against
-`criteria/plan-review.md` before it is saved. That Execution line is binding: a
-session does not change mode because subagents happen to be available, and only
-your explicit instruction overrides it. Each task
-carries its interfaces and the complete code of its tests, and gives
-implementation code only for configuration values, generated-file or migration
-commands and constants the spec names; the implementer writes the rest. Each
-task then reads:
-
-```markdown
-### Task 4: Wire the export pipeline
-
-**Files:**
-- Create: `src/export/pipeline.ts`
-
-**Interfaces:**
-- Consumes: `formatRow(row: Row): string` from Task 2
-- Produces: `runExport(cfg: Config): Promise<Report>`
-
-**Implementer:** dforge:impl-sonnet-high
-**Evaluation:** files 1 - spec 2 - coupling 1 - risk 1 = 5
-**Approach:** inline - skip 2: follows the existing exporter pattern
-```
-
-Edit the `**Implementer:**` line to override. `subagent-driven-development`
-obeys the line and never recomputes when it is present. Add
-`**Override:** <reason>` below the Evaluation line so that `plan-lint` reports
-the deviation as a warning instead of an error.
-
-The heading keeps upstream's `### Task N: <name>` form on purpose.
-`scripts/task-brief` finds a task by matching a heading that starts with
-`Task <N>`, so a heading like `### Wire the export pipeline (Task 4)` yields an
-empty brief and a non-zero exit — and, because the extractor keeps copying
-until the next heading it recognizes, quietly appends that task's body to the
-previous task's brief.
-
-## Differences from upstream 6.3.0
-
-The upstream loop is kept - the brief and report protocol, the review
-package, the breaker (whose adjudication now goes to the ruling seat), and the
-handoff to dforge:finishing-a-development-branch - with these
-differences:
-
-1. **Named seats.** The implementer is the fleet agent the plan's
-   `**Implementer:**` line names, dispatched with no `model` argument: passing
-   one would override the agent file's model while `effort` kept its
-   frontmatter value. The task reviewer is a judge agent scoring the criteria
-   file. General-purpose seats still name their model explicitly.
-2. **Scores.** Task reviews add four 1-to-20 scores alongside the
-   verdicts.
-3. **Escalation ladder.** Round 2 and the BLOCKED handler climb
-   [ladder.md](reference/ladder.md)'s table, ending in one split and then the
-   reserve chain. An external task hands back to its Claude implementer instead.
-   A `Host: codex` plan escalates through the `codex-v4` selector over its
-   five rounds instead.
-4. **Cache-aware resumes.** Fix round 1 resumes the implementer only while
-   its cache is warm - returned under five minutes ago, or under about 100k
-   tokens of context - and otherwise dispatches a fresh copy on the same tier;
-   round 2 goes to the successor rung. On a `Host: codex` plan rounds 1-3
-   resume by that rule and rounds 4 and 5 are fresh dispatches.
-5. **One ledger grammar.** Every task gets an assigned line and a complete line
-   carrying its scores and a checkpoint (done, verified, remaining, discovered
-   issues, assumptions), which crash recovery and the final review read.
-6. **Cross-family final review, on request.** With `codexReview` on, the final
-   whole-branch review adds a Codex round, and a judge verifies the union of
-   both reviewers' findings.
-7. **Rulings, not stops.** Dispatch problems - an unknown agent name, an
-   unavailable model, an Executor line the wrapper refuses - are logged
-   rulings, never silent fallbacks and never stops.
-8. **Session budget.** A budget line, a compaction snapshot, and the
-   dforge:handoff / dforge:resume-execution pair replace
-   upstream's unmeasured sessions - see [Session budget](#session-budget).
-9. **Small-model planning.** A strong model plans once; small models execute.
-   Every task brief carries the header's Global Constraints and Contracts, the
-   controller reads only the header and one brief at a time, and judgment
-   calls go to a read-only ruling seat (`judge-opus`, with the reason
-   `review-route --ruling` prints). Its plan corrections
-   land in an append-only `amendments.md` through `scripts/plan-amend`; the
-   plan file is never edited during execution.
-10. **Inline by default.** Upstream picks `executing-plans` when subagents are
-    unavailable and recommends subagent execution otherwise. Here every new
-    plan's `**Execution:**` line names inline: `executing-plans` is a full
-    inline mode that writes the same ledger, sends its judgment to the same
-    ruling seat, and ends at the same shared
-    [final-review.md](reference/final-review.md); only risk-3 and executor
-    tasks get a per-task review. A task it cannot land in three fix rounds
-    goes to the ruling seat as a `breaker` item. Subagent mode is deprecated
-    and runs only for an older plan's subagent line or on your instruction.
 
 ## Licenses
 
@@ -1273,151 +607,18 @@ frozen at 6.3.0 with no upstream sync, and
 for t in plugins/dforge/tests/*.test.sh; do bash "$t"; done
 ```
 
-Requires `jq` and `git`. No model calls: the executor suites run against a stub
-`codex` on `PATH` and a synthetic roster, never the real CLI.
-`gates-manifest.test.sh` checks that the running-gates skill and its template
-exist and validates the template against the documented format.
-`test-simplifier.test.sh` checks that the test-simplifier skill's files exist
-and runs `scripts/test-profile` against fixture reports. `roadmap.test.sh` runs every
-`scripts/roadmap` verb against a temporary repository. `turn-end.test.sh`
-drives the turn-stamp and Stop hooks against a temporary repository, its
-ledgers and its branch heads;
-`darkmem-sync/hooks.test.mjs` drives darkmem's session-start sync and the
-background Stop push (`scripts/darkmem-stop-push.sh`) against the stub.
-`codex-review.test.sh` covers the judge seats' selection and outcome policy
-against a stub `codex`, so every branch — refusal, fallback, timeout, empty
-report — is exercised without a model call.
-`darkmem-sync.test.sh` runs the `node:test` suites under
-`tests/darkmem-sync/` against an in-memory stub of darkmem's routes, so no
-darkmem instance is needed.
-The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one passing fixture per rule), `ui-hooks.test.sh` and `ui-ux-skill.test.sh` — run against temporary repositories and the skill text.
+Requires `jq` and `git`. No model calls. `hook.test.sh` drives the
+SessionStart hook against temporary homes and repositories.
+`darkmem-sync.test.sh` runs the `node:test` suites under `tests/darkmem-sync/`
+against an in-memory stub of darkmem's routes, so no darkmem instance is
+needed; `darkmem-sync/hooks.test.mjs` drives darkmem's session-start sync and
+the background Stop push (`scripts/darkmem-stop-push.sh`) against the stub.
+The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one
+passing fixture per rule), `ui-hooks.test.sh` and `ui-ux-skill.test.sh` — run
+against temporary repositories and the skill text. `cockpit.test.ts` runs
+under `claude plugin test plugins/dforge`.
 
 ## Reference
 
-`reference/ladder.md` holds the raw rubric, Rule S, and Claude assignment,
-escalation, reserve, and external CLI tables. Native Codex reads
-`reference/codex-routing.json`; `reference/native-codex.md` explains its weighted
-score, request format, and plan conversion. `scripts/select-native-tier.sh`
-validates raw scores and history before returning a native routing decision.
-
-`reference/executors/` holds one JSON entry per external executor and
-`scripts/executors` is the only reader of it: `executors list` prints every
-valid id, `executors ranked` the same ids by ascending `priority`,
-`executors get <id> <dotted.key>` one field, and
-`executors path <id> <dotted.key>` that field resolved against the plugin root.
-An entry names the executor's locator, probe, wrapper, gate, session directory,
-surfaces, priority and ladder blocks, so adding an executor is an entry, a wrapper and a
-ladder block rather than an edit to every script. `reference/executor-lane.md`
-states the entry schema and holds the Claude-hosted external executor lanes,
-`reference/session-budget.md` holds the budget numbers, checkpoints,
-stops and the Compact Instructions block, and `reference/final-review.md` holds
-the whole-branch review both execution skills end at.
-`scripts/run-codex-review.sh` runs every Codex review seat: it
-selects the judge rung from `codex-judge`, bounds the run, and classifies the
-outcome as `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`.
-
-`reference/parallel-waves.md` runs a waves plan: opening a wave, the parallel
-implementer dispatch, the merge and the integration check, and recovery.
-`scripts/wave` holds its mechanics: `list` the waves, the `ref` a parallel
-task commits to, `status` of a wave's tasks, `merge` one reviewed task, and
-`clean` a merged wave's worktrees and refs without ever forcing.
-
-`reference/project-state.md` describes the committed project-declared state —
-`gates.md`, `plans/completed.md` and `distilled/` — and the precedence order that
-settles a disagreement between them.
-
-`criteria/` holds the verifier criteria, including `plan-review.md` for plan
-review, `codex-review-schema.json` for the Codex task seats, and
-`codex-plan-review-schema.json` for the Codex plan-review round;
-`criteria/TEMPLATE.md` documents the format.
-`tests/criteria.test.sh` validates every file in that directory.
-
-`scripts/` holds the external executor lane:
-
-- `detect-executors.sh` emits the JSON roster read at plan time and again as a
-  dispatch guard. `usable` means dispatchable, so a batch-capable CLI this
-  plugin ships no wrapper for reports `usable: false` with the reason.
-- `run-codex-task.sh` runs one plan task on Codex, owns the commit, and prints
-  one status line. Exit 0 is `DONE`, 1 is a run that did not reach it, and 2 is
-  no status line - either a refusal before launch or a git failure after the run,
-  which the dispatching skill tells the controller apart and recovers from
-  differently. The status line also carries the wrapper's normalized `exit=`
-  code for the turn (0 when the client reports `ok`, 1 when it does not, 124 on
-  a deadline) and a `note=timed-out` marker, and the report copies the client
-  result's `reason`, `refusal`, `quota`, `timedOut` and `stderr` fields into a
-  `## Codex error` section; the whole client result is kept as `<report>.jsonl`.
-  All three exist because `status` is forced to `BLOCKED` on any non-zero exit,
-  so on its own it cannot separate a parse failure, a timeout, and a model that
-  gave up.
-- `codex-report-schema.json` is the `--output-schema` the wrapper passes, and
-  the shape of the verdict it parses back.
-- `codex-task-contract.md` is appended to every prompt the wrapper sends,
-  resume rounds included.
-- `agy-locate` finds the Antigravity CLI and checks its version against
-  `reference/agy-policy.json`; `agy-gate` is the session gate built on it and on
-  `lib/agy-probe.mjs`, the sign-in probe.
-- `run-agy-task.sh` runs one plan task on `agy` with the same flags, control
-  operations, task record and exit codes as `run-codex-task.sh`. Its status line
-  carries `exit=` and the `note=timed-out` and `note=writer-unconfirmed` markers,
-  and a failed run's report holds an `## Agy error` section with
-  `reason=quota`, `timeout`, `unknown-model` or `error`. It compares git refs
-  before and after the run and blocks the task on any difference.
-- `agy-report-schema.json` is the `--json-schema` the wrapper passes, byte-identical
-  to `codex-report-schema.json`, and `agy-task-contract.md` is appended to every
-  prompt it sends.
-- `lane-breaker` reads a plan's ledger and reports whether an executor's lane is
-  `open` or `tripped` for that plan.
-
-### Item registers
-
-A register is the list of source items a body of work must answer, and the
-authority on whether that work is finished. One file per incoming list —
-an owner's list, a review's findings, a batch — at
-`docs/dforge/registers/YYYY-MM-DD-<slug>.md`, committed, and required whenever a request carries two or more
-distinct items.
-
-Each row carries an identifier, the requester's words, an assignment, an
-acceptance, a state and a note. The states are
-open, planned, doing, verify, done, deferred, n/a
-— the first four unresolved, with `verify` meaning built and the owner's
-confirmation still owed. A note is mandatory for verify, deferred and n/a,
-because those three record a decision rather than progress.
-
-`scripts/register` reads and writes them: `check` validates a file, `open`
-reports the unresolved rows for a file or a spec and exits 1 while any remain,
-and `set` and `add` are the only writers. Readers resolve a register from a
-plan's `**Spec:**` and `**Program:**` spec paths rather than from a pointer in
-the plan, so the link cannot go stale.
-
-No surface may claim a body of work complete while a row is unresolved:
-`next-step` reports the open rows instead of "every sub-project is done",
-`plan-lint` rejects a `last` Program line that a register contradicts,
-`repo-audit` counts the open rows, and `project-status` lists them. When no register covers a spec, every
-surface behaves exactly as it did before.
-
-### Greenfield roadmap
-
-A project built from scratch spans many specs and many sessions, and what goes
-missing there is whole epics: decided once in prose, then forgotten when a later
-session calls the phase done. `planning-a-product` runs discovery first and
-writes `docs/dforge/roadmap.md`, the milestones in order (by default M0
-Discovery, M1 Foundations, the feature milestones, Hardening, Release), each
-with exit criteria and one item register whose rows are its epics. Each epic's
-spec then gets its own register of requirements, which `plan-lint` already ties
-to plan tasks through `**Items:**`.
-
-`scripts/roadmap` computes a milestone's progress from those registers rather
-than storing it: `status` reports it, `open` lists every unresolved row below a
-milestone, including the requirements under an epic someone marked done too
-early, and `settle` moves an integrated epic to `verify`, never to `done`.
-`close` is the only writer of `closed`; it refuses while anything below the
-milestone is unresolved or an earlier milestone is open, and
-`closing-a-milestone` runs it only after a fresh `judge-opus` has ruled every
-row `MET` on evidence and your human partner has signed off.
-
-`next-step` takes the next epic from the current milestone instead of a copied
-Program line, `repo-audit` and `project-status` show the milestones, and the
-SessionStart hook injects one line, such as
-`Roadmap: M2 Beta, 3 of 5 epics resolved, open: #4 Billing, #5 Search`, so a
-fresh or compacted session starts knowing where the project stands. Without a
-roadmap every surface behaves exactly as before.
+`reference/project-state.md` says where a project's dforge files live, in the
+checkout or in the darkmem mirror, and when darkmem syncs them.

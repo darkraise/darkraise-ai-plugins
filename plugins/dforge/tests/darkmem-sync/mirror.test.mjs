@@ -122,9 +122,9 @@ test("splitAtBlankLines keeps each blank line at the end of its piece", () => {
 test("a ledger line yields its task, state and commit; a blank line joins the entry before it", () => {
   const rows = [
     ["Task 3: complete (commits a1b2c3d..f0e1d2c, review clean) — done: x\n", { task: 3, state: "done", commit: "f0e1d2c" }],
-    ["Task 4: BLOCKED — impl-opus-high exhausted — decide\n", { task: 4, state: "blocked" }],
+    ["Task 4: BLOCKED — a-seat exhausted — decide\n", { task: 4, state: "blocked" }],
     ["Task 5: fix round 2/5 (1 addressed, 0 open — x; commits 1234567..89abcde; resumed)\n", { task: 5, state: "review", commit: "89abcde" }],
-    ["Task 6: implementer dforge:impl-sonnet-low (assigned; base 1a2b3c4)\n", { task: 6, state: "wip" }],
+    ["Task 6: implementer a-seat (assigned; base 1a2b3c4)\n", { task: 6, state: "wip" }],
     ["Task 7: implementer (assigned)\n", { task: 7 }],
     ["Task 8: minor (deferred): complete (later)\n", { task: 8 }],
     ["Group 1-2: review round 1/5 (commits a..b)\n", {}],

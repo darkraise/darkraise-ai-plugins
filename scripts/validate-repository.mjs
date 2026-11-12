@@ -101,7 +101,6 @@ export function validateRepository(root) {
   // dforge-migrate rewrites the older prefixes in active plans, so it and its
   // tests and the migrate skill must spell them.
   const legacyAllowed = new Set([
-    'plugins/dforge/tests/cockpit.test.ts',
     'plugins/dforge/scripts/dforge-migrate',
     'plugins/dforge/tests/dforge-migrate.test.sh',
     'plugins/dforge/skills/migrate/SKILL.md',
@@ -111,16 +110,10 @@ export function validateRepository(root) {
   // specs, or credits upstream.
   const superpowersAllowed = new Set([
     'plugins/dforge/README.md',
-    'plugins/dforge/hooks/cockpit/lib.ts',
     'plugins/dforge/scripts/dforge-migrate',
     'plugins/dforge/scripts/lib/dforge-dir.sh',
     'plugins/dforge/scripts/lib/roots.sh',
     'plugins/dforge/reference/project-state.md',
-    'plugins/dforge/skills/project-status/SKILL.md',
-    'plugins/dforge/skills/finishing-a-development-branch/SKILL.md',
-    'plugins/dforge/reference/auto-run.md',
-    'plugins/dforge/reference/parallel-waves.md',
-    'plugins/dforge/reference/session-budget.md',
     'plugins/dforge/skills/migrate/SKILL.md',
   ]);
   // Third-party licence texts and the test suites spell every retired name.
@@ -134,7 +127,6 @@ export function validateRepository(root) {
   const retiredForge = /dr-forge|(?<!D)FORGE|(?<![A-Za-z0-9d])forge(?![a-z])/;
   const forgeAllowed = new Set([
     'plugins/dforge/README.md',
-    'plugins/dforge/hooks/cockpit/lib.ts',
     'plugins/dforge/scripts/dforge-migrate',
     'plugins/dforge/scripts/lib/dforge-dir.sh',
     'plugins/dforge/scripts/lib/roots.sh',
@@ -163,11 +155,10 @@ export function validateRepository(root) {
           if (legacyAllowed.has(rel)) return;
           if (legacyPattern.test(line)) errors.push(`${rel}:${index + 1}: legacy plugin-name reference`);
           for (const match of line.matchAll(/dforge:([a-z0-9-]+)/g)) {
-            // A name followed by `<` is a template placeholder such as impl-<model>-<effort>.
+            // A name followed by `<` is a template placeholder such as ui-<part>.
             if (line[match.index + match[0].length] === '<') continue;
             const name = match[1];
-            if (!existsSync(resolve(root, 'plugins/dforge/skills', name)) &&
-                !existsSync(resolve(root, 'plugins/dforge/agents', `${name}.md`))) {
+            if (!existsSync(resolve(root, 'plugins/dforge/skills', name))) {
               errors.push(`${rel}:${index + 1}: unresolved dforge reference ${name}`);
             }
           }
@@ -198,7 +189,7 @@ export function validateRepository(root) {
   return errors;
 }
 
-const GROUPS = ['Cockpit', 'Minimized', 'Context', 'Workflow', 'Process', 'Finish', 'Notifications', 'darkmem'];
+const GROUPS = ['Cockpit', 'Minimized', 'Context', 'Notifications', 'darkmem'];
 const UNITS = ['k', '%', 's', 'min'];
 const ZEROS = ['auto', 'off', 'any', 'hidden', 'unset'];
 
@@ -222,7 +213,7 @@ export async function validateSchema(root) {
     if (typeof spec.label !== 'string' || !spec.label || spec.label.length > 16) errors.push(`${at}: label is required, at most 16 characters`);
     if (spec.unit !== undefined && !(spec.type === 'number' && UNITS.includes(spec.unit))) errors.push(`${at}: unit must be one of ${UNITS.join(', ')}, on a number`);
     if (spec.zero !== undefined && !(spec.type === 'number' && ZEROS.includes(spec.zero))) errors.push(`${at}: zero must be one of ${ZEROS.join(', ')}, on a number`);
-    if (spec.enforcedBy !== undefined && !['script', 'skill'].includes(spec.enforcedBy)) errors.push(`${at}: enforcedBy must be script or skill`);
+    if (spec.retired !== undefined && !(spec.type === 'string' && Array.isArray(spec.values) && Array.isArray(spec.retired) && spec.retired.length > 0 && spec.retired.every(name => typeof name === 'string' && /^[a-z0-9]+$/.test(name) && !spec.values.includes(name)))) errors.push(`${at}: retired must list lowercase names that values no longer holds, on a string with values`);
     if (spec.keepDefault !== undefined && spec.keepDefault !== true) errors.push(`${at}: keepDefault must be true when present`);
     if (spec.floor !== undefined && !(spec.type === 'number' && spec.min === 0 && Number.isFinite(spec.floor) && spec.floor >= 1 && (spec.max === undefined || spec.floor <= spec.max))) errors.push(`${at}: floor must lie between 1 and max, on a number whose min is 0`);
     const fits = spec.type === 'boolean' ? typeof spec.default === 'boolean'

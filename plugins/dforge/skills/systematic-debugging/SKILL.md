@@ -11,22 +11,6 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 
 **Violating the letter of this process is violating the spirit of debugging.**
 
-## Fast Mode
-
-Before Phase 1, unless `fastMode=off`, ask once:
-"Fast mode, or the full dforge flow?" (the AskUserQuestion tool where the
-host has it). Fast mode fixes the bug the way plain Claude Code would; the full
-flow is the four phases below.
-Recommend the full flow when the failure is intermittent, spans components or
-has already resisted a fix, and fast mode for a plain, local failure. Take fast
-mode without asking when the request asks for it or for speed, or under
-`fastMode=always`. Never offer it as a dispatched subagent, while a plan is
-executing, or during an auto run.
-
-On fast mode, say `Process: fast — <why>` on a line of its own and follow
-[fast-mode.md](../../reference/fast-mode.md); this skill ends there for the
-request.
-
 ## The Iron Law
 
 ```
@@ -191,7 +175,7 @@ You MUST complete each phase before proceeding to the next.
    - Automated test if possible
    - One-off test script if no framework
    - MUST have before fixing
-   - Use the `dforge:test-driven-development` skill for writing proper failing tests
+   - Write it against behaviour: it fails for the bug's reason now and passes once the cause is fixed
 
 2. **Implement Single Fix**
    - Address the root cause identified
@@ -203,7 +187,7 @@ You MUST complete each phase before proceeding to the next.
    - Test passes now?
    - No other tests broken?
    - Issue actually resolved?
-   - Use the `dforge:verification-before-completion` skill before claiming success
+   - Run the check and read its output before claiming success
    - Fix changes anything a user sees or does? Run `dforge:ui-ux` at touch depth: its delta and proof come before you claim the bug fixed
 
 4. **If Fix Doesn't Work**

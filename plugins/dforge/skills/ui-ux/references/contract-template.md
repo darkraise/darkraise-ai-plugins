@@ -68,7 +68,7 @@ supported platforms).
 Which state boards are binding and how closely; the viewports, themes and
 platforms it is proven on; the accessibility level; the budgets; every
 declared deviation from the mockup with its reason; what is out of scope.
-`OP-` items are proven, not built: no plan task has to name them, every proof
+`OP-` items are proven, not built: nothing has to build them, every proof
 must cover them.
 
 ## From items to acceptance
@@ -77,13 +77,11 @@ Each item becomes one or more acceptance statements whose text starts with
 its ID:
 
 ```
-A12. [test, high] UX-1: Escape restores the saved display name and keeps focus on the field.
-A13. [demo, high] UI-1: The settings page matches its board in light and dark themes.
+UX-1: Escape restores the saved display name and keeps focus on the field.
+UI-1: The settings page matches its board in light and dark themes.
 ```
 
-Tag a behaviour statement `test` when the profile's `**UI test runner:**`
-names a runner the project can run; otherwise tag it `demo`. Either way, its
-row in the proof report proves it.
+Its row in the proof report proves it.
 
 ## The touch delta
 

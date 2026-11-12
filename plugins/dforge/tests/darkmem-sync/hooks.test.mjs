@@ -179,13 +179,10 @@ const hasJq = spawnSync("jq", ["--version"]).status === 0;
 const hasGnuTimeout = /GNU coreutils/.test(spawnSync("timeout", ["--version"], { encoding: "utf8" }).stdout ?? "");
 const runHook = (name, payload, options) => bash([path.join(SCRIPTS, name)], { ...options, input: JSON.stringify(payload) });
 
-test("the hooks are bounded: SessionStart 300 seconds, Stop 120 then the UI proof hold at 60, and the darkmem push runs in the background", () => {
+test("the hooks are bounded: SessionStart 300 seconds, the UI proof hold at 60, and the darkmem push runs in the background", () => {
   const hooks = JSON.parse(fs.readFileSync(HOOKS_JSON, "utf8")).hooks;
   assert.equal(hooks.SessionStart[0].hooks[0].timeout, 300);
-  const [turnEnd, stopPush, ...more] = hooks.Stop[0].hooks;
-  assert.match(turnEnd.command, /scripts\/turn-end\.sh/);
-  assert.equal(turnEnd.async, false);
-  assert.equal(turnEnd.timeout, 120);
+  const [stopPush, ...more] = hooks.Stop[0].hooks;
   assert.match(stopPush.command, /scripts\/darkmem-stop-push\.sh/);
   assert.equal(stopPush.async, true);
   assert.equal(stopPush.timeout, undefined, "Claude Code does not enforce an async hook's timeout; the push bounds itself");
@@ -212,28 +209,25 @@ test("session start adds the darkmem lines on every source, compaction included"
 test("session start with under 100 characters of room still syncs, and adds no darkmem line", { skip: !hasJq && "jq is not on PATH" }, async t => {
   const s = await setup(t);
   await s.seed.putDocument({ project: "proj", uri: "dforge/specs/a.md", content: "# A\n" });
-  // A roadmap line longer than the hook's whole cap leaves the darkmem lines no room.
-  const name = "x".repeat(9200);
-  write(path.join(s.home.docsRoot, "registers", "m1.md"), "# M1 — item register\n\n**Source:** roadmap\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Search | - | - | open | - |\n");
-  write(path.join(s.home.docsRoot, "roadmap.md"), `# Shop — roadmap\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | ${name} | every epic resolved | docs/dforge/registers/m1.md | open | - |\n`);
+  // An entry point as long as the hook's whole cap leaves the darkmem lines no room.
+  const plugin = scratch("dmh-entry-");
+  for (const dir of ["scripts", "config"]) fs.cpSync(path.join(SCRIPTS, "..", dir), path.join(plugin, dir), { recursive: true });
+  write(path.join(plugin, "skills", "using-dforge", "SKILL.md"), `${"x".repeat(9200)}\n`);
   const payload = { hook_event_name: "SessionStart", session_id: "sid-start", transcript_path: "", cwd: s.repo, source: "startup" };
-  const result = await runHook("session-start.sh", payload, { cwd: s.repo, env: s.env });
+  const result = await bash([path.join(plugin, "scripts", "session-start.sh")], { cwd: s.repo, env: s.env, input: JSON.stringify(payload) });
   assert.equal(result.code, 0, result.stderr);
   const context = JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
-  assert.match(context, /^Roadmap: M1 x{9200}/m, "the roadmap line took the room");
+  assert.match(context, /x{9200}/, "the entry point took the room");
   assert.doesNotMatch(context, /darkmem-sync/);
   assert.equal(fs.readFileSync(path.join(s.home.docsRoot, "specs", "a.md"), "utf8"), "# A\n", "the pull still ran");
 });
 
-test("the Stop push sends under its session id, a retried stop too, and prints nothing; turn-end.sh sends nothing", { skip: !hasJq && "jq is not on PATH" }, async t => {
+test("the Stop push sends under its session id, a retried stop too, and prints nothing", { skip: !hasJq && "jq is not on PATH" }, async t => {
   const s = await setup(t);
   const ledger = path.join(s.home.workRoot, "sdd", "p1", "progress.md");
   write(ledger, "# SDD ledger — plan: docs/dforge/plans/p1.md\nTask 1: a\n");
   const payload = active => ({ hook_event_name: "Stop", session_id: "sid-stop", cwd: s.repo, transcript_path: "", stop_hook_active: active });
   const appends = () => s.stub.db.requests.filter(r => r.method === "POST" && r.path === "/api/v1/worklog/entries");
-  const requests = s.stub.db.requests.length;
-  assert.deepEqual(await runHook("turn-end.sh", payload(false), { cwd: s.repo, env: s.env }), { code: 0, stdout: "", stderr: "" });
-  assert.equal(s.stub.db.requests.length, requests, "turn-end.sh makes no darkmem request");
   assert.deepEqual(await runHook("darkmem-stop-push.sh", payload(false), { cwd: s.repo, env: s.env }), { code: 0, stdout: "", stderr: "" });
   assert.equal(appends().length, 1, "the Stop push sent the ledger");
   fs.appendFileSync(ledger, "Task 1: complete (commits abc1234..def5678, review clean)\n");

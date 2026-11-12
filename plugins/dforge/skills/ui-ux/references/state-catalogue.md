@@ -2,7 +2,7 @@
 
 Walk this catalogue for every surface and control in the contract. Each state
 the surface can reach goes into its state matrix item; a state it cannot reach
-is named as unreachable, so the judge does not count it missing.
+is named as unreachable, so a reader does not count it missing.
 
 ## Data states (per surface)
 

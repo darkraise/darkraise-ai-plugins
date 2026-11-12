@@ -18,13 +18,14 @@ export type SettingSpec = {
   max?: number
   step?: number
   values?: readonly string[]
+  /** List items an earlier release offered, accepted in the file and ignored. */
+  retired?: readonly string[]
   /** How a number reads: thousands of tokens, a percentage, seconds or minutes. */
   unit?: 'k' | '%' | 's' | 'min'
   /** The word shown at 0. */
   zero?: string
   /** The smallest value allowed other than 0, on a number where 0 means unset. */
   floor?: number
-  enforcedBy?: 'script' | 'skill'
   /** Written even at its default, because an absent key means something else. */
   keepDefault?: boolean
 }

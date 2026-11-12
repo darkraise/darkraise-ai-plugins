@@ -7,8 +7,8 @@
 
 A plugin marketplace for [Claude Code](https://github.com/anthropics/claude-code)
 and [Codex](https://github.com/openai/codex), published as `darkraise`. It
-carries a spec-to-merge development workflow, a session cockpit, an
-account-aware status line and coding-agent skills for two design systems.
+carries a development plugin with a session cockpit, an account-aware status
+line and coding-agent skills for two design systems.
 
 <p align="center">
   <picture>
@@ -21,7 +21,7 @@ account-aware status line and coding-agent skills for two design systems.
 
 | Plugin | What it does | Claude Code | Codex |
 | --- | --- | :---: | :---: |
-| [dforge](plugins/dforge/README.md) | Turns a request into a reviewed spec, a scored plan and an in-session execution run. On Claude Code it adds the cockpit pane, Discord notifications and an attribution guard. | ✓ | ✓ (no cockpit) |
+| [dforge](plugins/dforge/README.md) | Adds UI/UX work proven in the running UI and root-cause debugging to the harness's own planning. On Claude Code it adds the cockpit pane, Discord notifications and an attribution guard. | ✓ | ✓ (no cockpit) |
 | [dr-status](plugins/dr-status/README.md) | A status line with git detail and usage meters, framed in the color of the Claude account. | ✓ | |
 | [darkraise-ui](plugins/darkraise-ui/README.md) | Teaches agents to write idiomatic darkraise-ui code. | ✓ | ✓ |
 | [darkraise-win32ui](plugins/darkraise-win32ui/README.md) | Teaches agents to write idiomatic Darkraise.Win32UI code. | ✓ | ✓ |
@@ -58,9 +58,7 @@ Register the repository root (its Git URL or a local checkout's absolute path),
 not the catalog file: Codex 0.153.4's CLI rejects direct catalog-file
 registration, and root discovery selects the dedicated Codex catalog
 (`.agents/plugins/marketplace.json`). That catalog lists `dforge` and the two
-UI plugins; `dr-status` is Claude Code only. On Codex, dforge uses the
-client's native agent tools; see
-[native-codex.md](plugins/dforge/reference/native-codex.md).
+UI plugins; `dr-status` is Claude Code only.
 
 ### Requirements
 
@@ -70,62 +68,21 @@ uses is early access and may change between releases.
 
 ## dforge in brief
 
-dforge is a standalone fork of
-[superpowers](https://github.com/obra/superpowers) 6.3.0. A strong model plans,
-cheaper implementers execute each task literally, and one strong judge seat
-makes every judgment call. Its skills fire on their own: a `SessionStart` hook
-loads the routing rules, so you describe what you want and the right skill takes
-over. You can also name one, for example "use dforge:brainstorming".
-
-```mermaid
-flowchart LR
-  A[Your request] --> B[brainstorming<br/>spec]
-  B --> C[writing-plans<br/>scored plan]
-  C --> D{Execution line}
-  D -->|inline| E[executing-plans]
-  D -->|subagent| F[subagent-driven-development]
-  E --> G[final review]
-  F --> G
-  G --> H[finishing-a-development-branch]
-  E -. budget reached .-> I[handoff]
-  F -. budget reached .-> I
-  I -. new session .-> J[resume-execution]
-  J --> D
-```
-
-A feature, start to finish:
-
-1. **Describe the change.** "Add CSV export to the reports page." `brainstorming`
-   asks clarifying questions one at a time, proposes approaches and writes a
-   spec under `docs/dforge/specs/`.
-2. **Approve the spec.** `writing-plans` turns it into a plan under
-   `docs/dforge/plans/`. Each task is scored on four axes (files, spec
-   completeness, coupling, risk), and the score picks its implementer, such as
-   `impl-sonnet-low` or `impl-opus-high`. `plan-lint` checks the plan and a judge
-   reviews it before it is saved. Saving a plan ends the session.
-3. **Start a fresh session and say "resume".** `resume-execution` hands over to
-   the mode the plan's `**Execution:**` line names: inline, where the session
-   implements the tasks itself, or subagent, where each task goes to its
-   implementer and is reviewed against scored criteria.
-4. **Let it run.** Progress goes to `.dforge/sdd/<plan>/progress.md`. A
-   whole-branch review follows the last task, then
-   `finishing-a-development-branch` offers to merge, open a pull request, keep
-   the branch or wait.
-
-Every request re-reads the whole context, so dforge prints a budget line
-before each task and review and hands off to a fresh session when the budget is
-reached. Other skills include `project-status`, `planning-a-product`,
-`systematic-debugging`, `running-gates` and `test-simplifier`. The
-[dforge README](plugins/dforge/README.md) covers the scoring rubric, the
-agent roster, the escalation ladder, parallel waves, the Codex executor lane,
-the settings and the cockpit in full.
+dforge began as a fork of
+[superpowers](https://github.com/obra/superpowers) 6.3.0. Planning and
+execution are the harness's own; dforge adds UI/UX work proven in the running
+UI, root-cause debugging and migration from its older names. Its skills fire
+on their own: a `SessionStart` hook loads the routing rules, so you describe
+what you want and the right skill takes over. You can also name one, for
+example "use dforge:ui-ux". The [dforge README](plugins/dforge/README.md)
+covers the skills, the settings and the cockpit in full.
 
 ## The cockpit
 
 On Claude Code, dforge ships a cockpit: a mod, not a set of skills, so it
 costs the model no context. It shows a long session at a glance: context
-against its handoff budget, usage limits with forecasts, running shells and
-subagents, the dforge run, and the repository. It can post to Discord when a
+against the auto-compact point, usage limits with forecasts, running shells
+and subagents, and the repository. It can post to Discord when a
 turn needs you, and its attribution guard keeps AI attribution out of your
 commits and pull requests. It opens by itself once the terminal is 144 columns
 wide, `/cockpit` opens it at any width, and **Minimize** folds it into a

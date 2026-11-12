@@ -2,7 +2,29 @@
 # fingerprint of their contents, the project UI profile, a spec's UI/UX
 # contract and a proof report's rows. Globs are bash case patterns matched
 # against repository-relative paths, so * crosses /.
-declare -F plan_header >/dev/null 2>&1 || . "$(dirname "${BASH_SOURCE[0]}")/plan.sh"
+declare -F dforge_docs_root >/dev/null 2>&1 || . "$(dirname "${BASH_SOURCE[0]}")/roots.sh"
+
+# CommonMark fence rule, the one scripts/validate-repository.mjs uses: a fence
+# closes only at a bare marker of the same character at least as long as the
+# opener, so a 4-backtick block may hold 3-backtick fences. in_fence(line)
+# returns 1 for fence markers and fenced lines.
+_UIUX_AWK='
+function close_marker(t, open) {
+  sub(/^ ? ? ?/, "", t); sub(/[ \t]+$/, "", t)
+  return t ~ /^(`+|~+)$/ && substr(t, 1, 1) == substr(open, 1, 1) && length(t) >= length(open)
+}
+function in_fence(line,   mk) {
+  if (FENCE != "") {
+    if (close_marker(line, FENCE)) FENCE = ""
+    return 1
+  }
+  if (match(line, /^ ? ? ?(`+|~+)/)) {
+    mk = substr(line, RSTART, RLENGTH); sub(/^ +/, "", mk)
+    if (length(mk) >= 3) { FENCE = mk; return 1 }
+  }
+  return 0
+}
+'
 
 UIUX_DEFAULT_GLOBS='*.tsx *.jsx *.vue *.svelte *.astro *.html *.css *.scss *.sass *.less *.xaml *.axaml *.rc *.Designer.cs *.razor *.cshtml *res/layout/*.xml *res/values/*.xml *res/drawable/*.xml *.ui *.qml *.glade *.blp'
 UIUX_EXCLUDE_GLOBS='*.test.* *.spec.* *.stories.* *.acceptance.*'
@@ -16,7 +38,7 @@ uiux_proofs_dir() { printf '%s/ui-ux/proofs\n' "$(dforge_docs_root "$1")"; }
 # uiux_field FILE LABEL — the value of FILE's first "**LABEL:**" line outside
 # fences, trimmed, backticks removed; nothing when there is none.
 uiux_field() {
-  tr -d '\r' < "$1" | awk -v p="**$2:**" "$_PLAN_AWK"'
+  tr -d '\r' < "$1" | awk -v p="**$2:**" "$_UIUX_AWK"'
     stop { next }
     in_fence($0) { next }
     index($0, p) == 1 {
@@ -130,7 +152,7 @@ uiux_fingerprint() {
 # uiux_section FILE HEADING — FILE's "## HEADING" section up to the next "## "
 # heading, fenced lines included; a "## " line inside a fence does not end it.
 uiux_section() {
-  tr -d '\r' < "$1" | awk -v h="## $2" "$_PLAN_AWK"'
+  tr -d '\r' < "$1" | awk -v h="## $2" "$_UIUX_AWK"'
     in_fence($0) { if (on) print; next }
     /^## / { t = $0; sub(/[ \t]+$/, "", t); on = (t == h); next }
     on { print }
@@ -140,7 +162,7 @@ uiux_section() {
 # uiux_ids — the item IDs the text on stdin defines, in order, unique: a
 # "- **ID**" bullet or a "| ID |" table row at column 0, outside fences.
 uiux_ids() {
-  awk "$_PLAN_AWK"'
+  awk "$_UIUX_AWK"'
     in_fence($0) { next }
     match($0, /^- \*\*(UI|UX|OP)-[0-9]+\*\*/) {
       id = substr($0, 5, RLENGTH - 6); if (!seen[id]++) print id; next
@@ -163,7 +185,7 @@ uiux_items() {
   shift 2
   text=$(uiux_section "$file" "$section")
   for id in "$@"; do
-    awk -v id="$id" "$_PLAN_AWK"'
+    awk -v id="$id" "$_UIUX_AWK"'
       in_fence($0) { if (on) print; next }
       on && /^(  |\t)/ { print; next }
       on { on = 0 }
@@ -182,7 +204,7 @@ uiux_items() {
 # uiux_rows REPORT — one "ID\037verdict\037evidence\037note" line per row of
 # the report's "## Results" table whose first cell is an ID.
 uiux_rows() {
-  uiux_section "$1" Results | awk "$_PLAN_AWK"'
+  uiux_section "$1" Results | awk "$_UIUX_AWK"'
     in_fence($0) { next }
     /^\|/ {
       n = split($0, c, "|")

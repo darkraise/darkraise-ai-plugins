@@ -152,7 +152,7 @@ test("a ledger goes up one entry per complete line, with the line's properties, 
   const s = await setup(t);
   write(path.join(s.docsRoot, "plans", "p1.md"), "# P1\n\n**Spec:** `docs/superpowers/specs/s.md`\n");
   const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
-  write(file, "# SDD ledger — plan: docs/superpowers/plans/p1.md\n\nTask 1: implementer dforge:impl-sonnet-low (assigned; base 1a2b3c4)\n");
+  write(file, "# SDD ledger — plan: docs/superpowers/plans/p1.md\n\nTask 1: implementer a-seat (assigned; base 1a2b3c4)\n");
   assert.equal((await s.push()).code, 0);
   fs.appendFileSync(file, "Task 1: complete (commits 1a2b3c4..5d6e7f8, review clean)\n\n| a | b |\n|---|---|\nTask 2: held");
   const second = await s.push();
@@ -161,7 +161,7 @@ test("a ledger goes up one entry per complete line, with the line's properties, 
   const entries = await s.ledger("p1");
   assert.deepEqual(entries.map(e => [e.body, e.properties]), [
     ["# SDD ledger — plan: docs/superpowers/plans/p1.md\n\n", {}],
-    ["Task 1: implementer dforge:impl-sonnet-low (assigned; base 1a2b3c4)\n", { task: 1, state: "wip" }],
+    ["Task 1: implementer a-seat (assigned; base 1a2b3c4)\n", { task: 1, state: "wip" }],
     ["Task 1: complete (commits 1a2b3c4..5d6e7f8, review clean)\n\n", { task: 1, state: "done", commit: "5d6e7f8" }],
     ["| a | b |\n", {}],
     ["|---|---|\n", {}],

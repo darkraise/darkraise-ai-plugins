@@ -1,9 +1,8 @@
 # The walkthrough
 
-The Prove phase. Run it in the session or in an implementer seat: judge seats
-have no browser or device tools. Every step writes evidence the proof report
-cites. A step you cannot run becomes an `unverifiable` row with its reason,
-never a silent skip.
+The Prove phase. Every step writes evidence the proof report cites. A step
+you cannot run becomes an `unverifiable` row with its reason, never a silent
+skip.
 
 ## Before you start
 
@@ -44,22 +43,18 @@ never a silent skip.
 7. **Write the report** (format below) at
    `<docs>/ui-ux/proofs/<YYYY-MM-DD>-<slug>.md`.
 8. **Stamp it:** `bash <plugin-root>/scripts/ui-proof stamp <report>`.
-9. **Have it judged** (below), copy its report beside the proof report as
-   `<report name>.judge.md`, and add the Judge line.
-10. **Check:** `bash <plugin-root>/scripts/ui-proof check --base <ref>`, adding
-    `--spec <spec>` when the work has a contract. `<ref>` is the commit the
-    work started from. Fix the UI or the proof until it exits 0.
-11. **Clean up:** close the browser or app, stop every process you started
+9. **Check:** `bash <plugin-root>/scripts/ui-proof check --base <ref>`, adding
+   `--spec <spec>` when the work has a contract. `<ref>` is the commit the
+   work started from. Fix the UI or the proof until it exits 0.
+10. **Clean up:** close the browser or app, stop every process you started
     (`pkill -P <pid>` then `kill <pid>`, repeated for grandchildren), and
     remove the `.playwright-mcp/` files you created. Confirm with `ps` that
     nothing you started is left.
-12. **Commit** the report and its `.judge.md`, and on a first run
-    `<docs>/ui-ux/profile.md`: they are not UI files, so committing them
-    leaves the stamp current, and the report is the record that survives the
-    worktree.
+11. **Commit** the report, and on a first run `<docs>/ui-ux/profile.md`: they
+    are not UI files, so committing them leaves the stamp current, and the
+    report is the record that survives the worktree.
 
-Any UI edit after step 8 makes the stamp stale: stamp again, and since the
-stamp drops a judge line for another fingerprint, judge again.
+Any UI edit after step 8 makes the stamp stale: stamp again.
 
 ## The report
 
@@ -72,7 +67,6 @@ stamp drops a judge line for another fingerprint, judge again.
 **Themes:** light, dark
 **Evidence:** local
 **Fingerprint:** 3f9a0c1e5b7d2a46
-**Judge:** ship 3f9a0c1e5b7d2a46 — docs/dforge/ui-ux/proofs/2026-10-24-settings.judge.md
 
 ## Results
 
@@ -107,48 +101,3 @@ stamp drops a judge line for another fingerprint, judge again.
   the worktree is removed, and the verdict rows are what remains. With the
   profile's `**Screenshots:** commit`, put them beside the report and write
   `committed`.
-
-## The judge
-
-Dispatch `dforge:judge-opus` at feature and product depth and
-`dforge:judge-sonnet-high` at touch depth (on a Codex host, the native judge
-`reference/native-codex.md` names for that rank):
-
-```
-Subagent (judge seat):
-  description: "Judge the UI proof"
-  prompt: |
-    You judge whether a built UI keeps its UI/UX contract. Assume every item
-    is unproven until a screenshot you opened or a test you read shows it.
-
-    **Criteria:** [PLUGIN_ROOT]/criteria/ui-ux-proof.md
-    **Contract:** [SPEC_PATH and its "## UI/UX contract", or the report's "## Delta"]
-    **Report:** [REPORT_PATH]
-    **Evidence:** every file the report cites, under [EVIDENCE_DIR], and the state boards the contract names
-    **Fingerprint:** [FINGERPRINT]
-    **Report file:** [REPORT_FILE]
-
-    Read the criteria, the contract and the report. Open every cited
-    screenshot and board.
-    Write your full report to [REPORT_FILE] and write nothing else: it is
-    the only file you may create or change. Then reply in at most 10 lines:
-    the verdict, the scores, the count of disputed items, and the report
-    path. The report opens with a Verdict section, written without the indent:
-
-        ## Verdict
-        verdict: ship | fix [FINGERPRINT]
-        scores: <criterion> <1-20> / …
-
-    then answers as the criteria's Output section says, and ends with
-    exactly one line: "Verdict: ship [FINGERPRINT]" or "Verdict: fix [FINGERPRINT]".
-```
-
-Its `[REPORT_FILE]` is the absolute path
-`<checkout>/.dforge/ui-proof-<report name>-report.md`, where `<report name>`
-is the proof report's file name without `.md`: a judge seat may write only a
-`-report.md` file under `.dforge`. A judge report that does not end with the
-verdict line is re-dispatched once with that instruction repeated. When it
-returns ending with that line, copy that file to `<report name>.judge.md` beside the report,
-then set the report header's `**Judge:** <ship|fix> <fingerprint> — <the copy's repository path>`
-line, replacing any earlier one. On `fix`, correct what the judge disputes,
-then rerun from step 8.

@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # Every SKILL.md stays at or under 20,000 bytes: after a compaction Claude Code
 # re-attaches only the first 5,000 tokens of an invoked skill, so text past the
-# cap is lost to a long session. Text a step reads only at that step lives in
-# references/, linked from the step by a "Read [x](references/x) before you ..."
-# line.
+# cap is lost to a long session.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,14 +35,6 @@ check "a skill at the cap passes; each skill over it is named with its size" "$(
 over=$(over_cap "$P/skills")
 [ -z "$over" ] || printf '%s\n' "$over"
 check "every SKILL.md is at most $CAP bytes" "$over" ""
-
-linked() { # linked <skill> <reference> — SKILL.md has the Read line and the file exists
-  check "$1 links references/$2" \
-    "$(grep -cF "Read [$2](references/$2) before you " "$P/skills/$1/SKILL.md") $([ -s "$P/skills/$1/references/$2" ] && echo present || echo missing)" "1 present"
-}
-for ref in setup.md recovery.md ruling-seat.md finish-rulings.md rationalizations.md; do linked executing-plans "$ref"; done
-for ref in ui-proof.md execute-choice.md cleanup.md rationalizations.md; do linked finishing-a-development-branch "$ref"; done
-for ref in discovery-optimization.md match-the-form.md; do linked writing-skills "$ref"; done
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

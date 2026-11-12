@@ -1,6 +1,6 @@
 ---
 name: migrate
-description: Use when session start or repo-audit says a repository or home still uses an older layout, or when moving from dr-superpowers or dr-forge to dforge - previews the move with a dry run, migrates on one confirmation, and offers the commit
+description: Use when session start says a repository or home still uses an older layout, or when moving from dr-superpowers or dr-forge to dforge - previews the move with a dry run, migrates on one confirmation, and offers the commit
 ---
 
 # Migrate

@@ -159,22 +159,15 @@ report() { # report <name> <contract> <rows> [extra header line]
     printf '\n## Results\n\n| ID | Verdict | Evidence | Note |\n|---|---|---|---|\n%s\n' "$3"
   } > "$PROOFS/$1.md"
 }
-judge() { # judge <name> <verdict> — the judge file and the report's Judge line
-  local fp; fp=$(up fingerprint)
-  printf 'The proof holds.\n\nVerdict: %s %s\n' "$2" "$fp" > "$PROOFS/$1.judge.md"
-  printf '\n**Judge:** %s %s — %s/%s.judge.md\n' "$2" "$fp" "$PROOFS" "$1" >> "$PROOFS/$1.md"
-}
 PASSROW='| UX-1 | pass | .dforge/ui-ux/t/a.png | |'
 report 2026-10-24-t touch "$PASSROW"
 out=$(up stamp "$PROOFS/2026-10-24-t.md")
 check "stamp: reports the fingerprint" "$(grep -c "^ui-proof: stamped $(up fingerprint)" <<<"$out")" "1"
 check "stamp: writes one fingerprint line under Contract" "$(grep -A1 '^\*\*Contract:\*\*' "$PROOFS/2026-10-24-t.md" | grep -c '^\*\*Fingerprint:\*\*')" "1"
-judge 2026-10-24-t ship
 out=$(up check --base "$BASE"); st=$?
-check "check: a stamped, judged touch report passes" "$st" "0"
+check "check: a stamped touch report with run evidence passes, with no judge" "$st" "0"
 check "check: says ok" "$(grep -c '^ui-proof: ok' <<<"$out")" "1"
 up stamp "$PROOFS/2026-10-24-t.md" >/dev/null
-check "stamp: keeps a judge line for the current fingerprint" "$(grep -c '^\*\*Judge:\*\*' "$PROOFS/2026-10-24-t.md")" "1"
 check "stamp: never duplicates the fingerprint line" "$(grep -c '^\*\*Fingerprint:\*\*' "$PROOFS/2026-10-24-t.md")" "1"
 
 printf '// v3\n' >> src/App.tsx
@@ -182,12 +175,13 @@ out=$(up check --base "$BASE"); st=$?
 check "check: a UI edit after the stamp fails" "$st" "1"
 check "check: names the stale report" "$(grep -c '^ui-proof: FAIL freshness:' <<<"$out")" "1"
 up stamp "$PROOFS/2026-10-24-t.md" >/dev/null
-check "stamp: a judge line for another fingerprint is removed" "$(grep -c '^\*\*Judge:\*\*' "$PROOFS/2026-10-24-t.md")" "0"
-out=$(up check --base "$BASE"); st=$?
-check "check: no judge line fails" "$st" "1"
-check "check: names the judge step" "$(grep -c '^ui-proof: FAIL judge:' <<<"$out")" "1"
-judge 2026-10-24-t ship
-check "check: judged again, it passes" "$(up check --base "$BASE" >/dev/null; echo $?)" "0"
+check "check: stamped again, it passes" "$(up check --base "$BASE" >/dev/null; echo $?)" "0"
+git commit -q -am 'ui v3'
+check "check: the report still passes once the UI change it was stamped on is committed" "$(up check --base "$BASE" >/dev/null; echo $?)" "0"
+printf '// v4\n' >> src/App.tsx
+git commit -q -am 'ui v4'
+check "check: a committed UI edit after the stamp fails too" "$(up check --base "$BASE" | grep -c '^ui-proof: FAIL freshness:')" "1"
+up stamp "$PROOFS/2026-10-24-t.md" >/dev/null
 report 2026-10-24-u touch '| UX-1 | fail | .dforge/ui-ux/t/a.png | abandoned |'
 up stamp "$PROOFS/2026-10-24-u.md" >/dev/null
 out=$(up check --base "$BASE"); st=$?
@@ -200,11 +194,10 @@ check "check: names the last report it checked" "$(grep -c '^ui-proof: report .*
 mv "$TMP/t.md" "$PROOFS/2026-10-24-t.md"
 rm "$PROOFS/2026-10-24-u.md"
 
-try() { # try <rows> [extra header line] [judge verdict] — a fresh touch report; prints check's status
+try() { # try <rows> [extra header line] — a fresh touch report; prints check's status
   rm -f "$PROOFS"/2026-10-24-t.*
   report 2026-10-24-t touch "$1" "${2:-}"
   up stamp "$PROOFS/2026-10-24-t.md" >/dev/null
-  judge 2026-10-24-t "${3:-ship}"
   up check --base "$BASE" >/dev/null; echo "$?"
 }
 check "verdicts: a fail row fails" "$(try '| UX-1 | fail | .dforge/ui-ux/t/a.png | the dialog stays open |')" "1"
@@ -217,13 +210,15 @@ check "verdicts: unverifiable without acceptance fails" "$(try '| UX-1 | unverif
 check "verdicts: unverifiable with the user's acceptance passes" "$(try '| UX-1 | unverifiable | - | no emulator here |' '**Accepted by:** "ship it without the Android run"')" "0"
 check "verdicts: an unknown verdict fails" "$(try '| UX-1 | ok | .dforge/ui-ux/t/a.png | |')" "1"
 check "coverage: a delta item with no row fails" "$(try '| UX-2 | pass | .dforge/ui-ux/t/a.png | |')" "1"
-check "judge: a fix verdict fails" "$(try "$PASSROW" '' fix)" "1"
+# --- a report an earlier version had judged: the judge's line and file are not read ---
 try "$PASSROW" >/dev/null
-rm "$PROOFS/2026-10-24-t.judge.md"
-check "judge: a missing judge file fails" "$(up check --base "$BASE" >/dev/null; echo $?)" "1"
-try "$PASSROW" >/dev/null
-printf 'Verdict: fix %s\n' "$(up fingerprint)" > "$PROOFS/2026-10-24-t.judge.md"
-check "judge: a judge file whose verdict differs fails" "$(up check --base "$BASE" >/dev/null; echo $?)" "1"
+printf '\n**Judge:** fix 0000000000000000 — %s/2026-10-24-t.judge.md\n' "$PROOFS" >> "$PROOFS/2026-10-24-t.md"
+printf '**Fingerprint:** 0000000000000000\n\nVerdict: fix 0000000000000000\n' > "$PROOFS/2026-10-24-t.judge.md"
+out=$(up check --base "$BASE"); st=$?
+check "earlier judge: a Judge line that said fix does not fail the report" "$st" "0"
+check "earlier judge: the judge file is not taken for a report" "$(grep -c '^ui-proof: ok — .*2026-10-24-t\.md' <<<"$out")" "1"
+up stamp "$PROOFS/2026-10-24-t.md" >/dev/null
+check "earlier judge: stamping leaves the report's other lines alone" "$(grep -c '^\*\*Judge:\*\* fix' "$PROOFS/2026-10-24-t.md")" "1"
 
 # --- a spec with a contract binds the report ---
 try "$PASSROW" >/dev/null
@@ -236,22 +231,22 @@ ROWS='| UI-1 | pass | .dforge/ui-ux/t/a.png | |
 | UI-2 | pass | .dforge/ui-ux/t/a.png | |
 | UX-1 | pass | .dforge/ui-ux/t/a.png | |
 | OP-1 | pass | .dforge/ui-ux/t/a.png | |'
-report 2026-10-24-o docs/dforge/specs/other.md "$ROWS"; up stamp "$PROOFS/2026-10-24-o.md" >/dev/null; judge 2026-10-24-o ship
+report 2026-10-24-o docs/dforge/specs/other.md "$ROWS"; up stamp "$PROOFS/2026-10-24-o.md" >/dev/null
 check "spec: a report bound to another spec does not count" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "1"
 rm -f "$PROOFS"/2026-10-24-o.*
-report 2026-10-24-s docs/dforge/specs/s.md "$(head -n 3 <<<"$ROWS")"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
+report 2026-10-24-s docs/dforge/specs/s.md "$(head -n 3 <<<"$ROWS")"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null
 out=$(up check --base "$BASE" --spec docs/dforge/specs/s.md); st=$?
 check "spec: a contract ID with no row fails" "$st" "1"
 check "spec: names the missing ID" "$(grep -c 'FAIL coverage: OP-1' <<<"$out")" "1"
 check "spec: coverage applies without --spec too" "$(up check --base "$BASE" >/dev/null; echo $?)" "1"
-report 2026-10-24-s docs/dforge/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
+report 2026-10-24-s docs/dforge/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null
 check "spec: a full report bound to the spec passes" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "0"
 TWO='| UI-1 | pass | .dforge/ui-ux/t/a.png | |
 | UI-2 | pass | .dforge/ui-ux/t/a.png | |
 | UX-1 | unverifiable | - | no emulator here |
 | OP-1 | unverifiable | - | no tablet here |'
-accept() { # accept <header lines> — the two-unverifiable report, stamped and judged; prints check's status
-  report 2026-10-24-s docs/dforge/specs/s.md "$TWO" "$1"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
+accept() { # accept <header lines> — the two-unverifiable report, stamped; prints check's status
+  report 2026-10-24-s docs/dforge/specs/s.md "$TWO" "$1"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null
   up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?
 }
 check "accepted: one nameless line does not cover two unverifiable rows" "$(accept '**Accepted by:** "fine without the emulator"')" "1"
@@ -259,12 +254,6 @@ check "accepted: a line naming only one of two rows fails" "$(accept '**Accepted
 check "accepted: a line per row passes" "$(accept '**Accepted by:** UX-1: "fine without the emulator"
 **Accepted by:** OP-1: "fine without the tablet"')" "0"
 report 2026-10-24-s docs/dforge/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null
-printf 'The proof holds.\n\nVerdict: ship 0000000000000000\n' > "$PROOFS/2026-10-24-s.judge.md"
-printf '\n**Judge:** ship %s — %s/2026-10-24-s.judge.md\n' "$(up fingerprint)" "$PROOFS" >> "$PROOFS/2026-10-24-s.md"
-out=$(up check --base "$BASE" --spec docs/dforge/specs/s.md); st=$?
-check "judge: a judge file for another fingerprint fails" "$st" "1"
-check "judge: names the judge file's missing verdict" "$(grep -c 'FAIL judge:.*does not end with' <<<"$out")" "1"
-report 2026-10-24-s docs/dforge/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
 rm docs/dforge/ui-ux/profile.md
 check "active: a spec with a contract turns the gate on" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "0"
 rm -f "$PROOFS"/*.md

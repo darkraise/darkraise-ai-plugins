@@ -4,15 +4,10 @@ import type { EngineInterface, PromptOrigin, Register, RenderChildren, RenderInp
 import type {
   CockpitAccount,
   CockpitActivity,
-  CockpitAutoRun,
   CockpitBreakdown,
   CockpitBudget,
-  CockpitFinish,
   CockpitPlanItem,
   CockpitRefusal,
-  CockpitResumeOffer,
-  CockpitRoots,
-  CockpitRun,
   CockpitSeat,
   CockpitSettingsView,
   CockpitShell,
@@ -23,62 +18,40 @@ import {
   accountColor,
   accountKey,
   attributionIn,
-  autoLimitFor,
-  autoRunFor,
   agentGroups,
   bar,
   billingLabel,
-  budgetFor,
   collapsedFrom,
   collapsedToggled,
   commandLine,
+  compactLimitFor,
   denseLine,
   duration,
   elapsed,
-  endsOnSentinel,
-  finalLimitFor,
-  finishLine,
   fitBand,
   folderRuns,
-  handedOff,
   isAtLeast,
   isGitWriteTool,
-  isDforge,
   gitTextFiles,
   isAbsolutePath,
-  isPlanTail,
   isServiceCommand,
   kTokens,
-  levelOf,
   limitForecast,
   limitLabel,
   modelName,
   nowLine,
-  parseFinish,
-  parseLedger,
-  parseModeLines,
-  planCandidates,
-  planTasks,
   planFromTodos,
   planWithUpdate,
   positive,
   rampColor,
-  reconcileStep,
   remoteRuns,
   repoFromPorcelain,
   repoName,
-  resumeOfferOf,
-  promptRegisters,
-  hasUnresolvedRows,
-  runList,
   shellAge,
   runsCut,
   runsWidth,
   SECTIONS,
   BAND_SEGMENTS,
-  FORK_DRAFTING,
-  seatDenial,
-  fastModeLine,
   bandLines,
   bandLinesFrom,
   bandLineToggled,
@@ -86,14 +59,12 @@ import {
   sectionsToggled,
   sparkline,
   stackedRuns,
-  statMissing,
   tasksEnded,
   termColor,
   themeColor,
   track,
   turnsToBudget,
   windowElapsed,
-  warnShare,
   writesGitText,
 } from './lib'
 import type { AgentGroupKey, BandInput, BandSegment, DenseInput, Run, Section, TrackPart } from './lib'
@@ -113,7 +84,7 @@ import {
 } from './notify'
 import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
 import { CELL_PX, avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
-import type { BandMeter, PanelLine, PanelRun, Segment } from './svg'
+import type { BandMeter, PanelLine, PanelRun } from './svg'
 
 const PANE = 'dforge'
 const PANE_COLUMNS = 56
@@ -129,88 +100,22 @@ const UNDERLINE_SINCE = '2.1.295'
 const MAX_BREAKDOWN_ROWS = 12
 // Below this the band drops its frame.
 const FRAME_MIN_COLUMNS = 48
-const HANDOFF_PROMPT =
-  'Finish the task in flight through its completion line, then hand off with the dforge handoff skill. Start no new task.'
-function resumePrompt(): string {
-  return `Resume the work in ${S.latestName ?? '.dforge/handoff/latest.md'} with the dforge resume-execution skill.`
-}
-// A handoff older than this is not offered for resuming.
-const RESUME_WITHIN = 3 * 86_400_000
-// What an auto run's compaction keeps (reference/auto-run.md).
-const AUTO_COMPACT_INSTRUCTIONS =
-  'Preserve verbatim: the worktree path; the plan, ledger, handoff and auto-run state file paths; the current HEAD; every Ruling: line; and the auto run pending decisions. Name the task in progress and its fix round.'
-// A failed stage is tried again after this long; a live turn or background work defers it as long.
-const AUTO_RETRY_MS = 5_000
-// The restored default model is written this many times at most, each write
-// watched this long for the engine to read it back.
-const RESTORE_WRITES = 3
-const RESTORE_WAIT_MS = 3_000
-const RESTORE_POLL_MS = 500
-type AutoStage = 'compact' | 'continue' | 'clear' | 'resume' | 'switch'
-// The pending action the state file holds while each stage is due.
-const AUTO_STAGE_PENDING: Record<AutoStage, string> = {
-  compact: 'compact',
-  continue: 'after-compact',
-  clear: 'clear',
-  resume: 'resume',
-  switch: 'switch',
-}
-function autoContinuePrompt(root: string, plan: string | null): string {
-  const where = plan === null ? '' : ` for plan ${plan}, through the After compaction steps of the execution skill its Execution line names`
-  return `Continue the auto run: run \`bash "${root}/scripts/auto-run" after-compact\` first, then continue the phase \`bash "${root}/scripts/auto-run" status\` names${where}, as reference/auto-run.md §After a compaction says.`
-}
-// The watchdog's period, and how long background work may defer a pending
-// stage before that books a failure. A bound run idle STALL_MS since its last
-// turn ended, stage ran or nudge went is stalled.
+// The watchdog's period, and how long background work may hold a Done.
 const WATCHDOG_MS = 60_000
 const DEFER_CAP_MS = 1_800_000
-const STALL_MS = 180_000
-// How long a bound run may go with no live turn while only background work
-// holds it before the watchdog asks the session to look at that work, and how
-// many such prompts in a row may find the same launches running before the
-// pending stage's failure is booked in place of a further prompt.
-const RECONCILE_MS = 1_200_000
-const RECONCILE_CAP = 3
 // How long a Done held for background work waits, once the work ends, for the turn its notification wakes.
 const RELEASE_GRACE_MS = 5_000
-// The prompt.submit origins that are the person's own request, or auto run's.
+// The prompt.submit origins that are the person's own request, or a plugin's.
 const NEW_CHAIN_ORIGINS = new Set<PromptOrigin['kind']>(['composer', 'bridge', 'sdk', 'channel', 'slack-ping', 'plugin'])
 // While the cockpit is drawn its files are checked every POLL_MS, git and the context breakdown every DETAIL_EVERY ticks.
 const POLL_MS = 2_000
 const DETAIL_EVERY = 5
-// The pending actions whose stage the watchdog arms again when no timer holds
-// it; a pending resume resubmits the run's first prompt.
-const WATCHED_STAGES: Readonly<Record<string, AutoStage>> = { compact: 'compact', clear: 'clear', resume: 'resume', switch: 'switch' }
-function stallPrompt(root: string): string {
-  return `The auto run stalled: the last turn ended without its sentinel line. Run \`bash "${root}/scripts/auto-run" status\`, continue the phase it names, and end the turn as reference/auto-run.md §Ending a turn says.`
-}
-function reconcilePrompt(root: string): string {
-  return `Background work has run 20 minutes since the last turn with no notification. Run \`bash "${root}/scripts/in-flight"\`. Stop with TaskStop each launch idle 30 minutes or more, and record a \`Ruling:\` line naming the task it served and that its result is void; leave the others running. Then continue the run, and end the turn again if only waiting remains.`
-}
 // The tools that wait on the person by their nature: their dialog is the question.
 const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 // Permission modes in which an "ask" is settled without the person.
 const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
-// The skills that run a plan's tasks in this session.
-const RUN_SKILLS = ['dforge:subagent-driven-development', 'dforge:executing-plans', 'dforge:resume-execution']
 // The tools that move the session into or out of a worktree.
 const WORKTREE_TOOLS = ['EnterWorktree', 'ExitWorktree']
-// The tools a review seat's write guard looks at.
-const REVIEW_WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
-const PATH_BODY = /[^\s'"`<>()|*?[\]{},;]*/.source
-const PATH_STOP = /(?![\w-]|\.[\w-])/.source
-// `whole` is an absolute path as a dispatch prompt spells it: not begun inside
-// a relative path, not ending before more of a name. `tail` is the rest of
-// one, read from just past a root matched literally.
-const pathShape = (suffix: string) => ({
-  whole: new RegExp(`(?<![\\w.~/\\\\-])(?:/|[A-Za-z]:[\\\\/])${PATH_BODY}${suffix}${PATH_STOP}`, 'g'),
-  tail: new RegExp(`^[\\\\/]${PATH_BODY}${suffix}${PATH_STOP}`),
-})
-const REPORT_PATH = pathShape('-report\\.md')
-const PROMPT_PATH = pathShape('-prompt\\.md')
-// Every judge prompt template names its report on this line; a prompt also
-// names reports the judge only reads.
-const REPORT_LINE = /^\s*Write your full report to /
 // How many main-turn context readings the forecast keeps.
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
@@ -223,12 +128,10 @@ const BREAKDOWN_COLORS = ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red'] a
 // The usage windows the desktop draws as gauges, in order.
 const GAUGED: readonly string[] = ['five_hour', 'seven_day']
 // The band segments the desktop band writes as text rather than draws as meters.
-const BAND_WORDS: readonly BandSegment[] = ['model', 'effort', 'style', 'turn', 'run', 'cost', 'time']
+const BAND_WORDS: readonly BandSegment[] = ['model', 'effort', 'style', 'turn', 'cost', 'time']
 // The desktop's panel fill: a faint gray that lifts a card off the pane in
 // the light theme and the dark alike.
 const CARD = '#8080800f'
-// How the desktop's run bar colors a task by its state.
-const RUN_SEGMENTS: Record<string, Segment> = { complete: 'done', assigned: 'active', blocked: 'blocked' }
 const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'status', '--porcelain=v2', '--branch']
 
 const budget = atom({ plugin: 'dforge', key: 'budget' } as const, null)
@@ -241,11 +144,6 @@ const remote = atom({ plugin: 'dforge', key: 'remote' } as const, { clients: [],
 const plan = atom({ plugin: 'dforge', key: 'plan' } as const, [])
 const repo = atom({ plugin: 'dforge', key: 'repo' } as const, null)
 const refusals = atom({ plugin: 'dforge', key: 'refusals' } as const, [])
-const isNudged = atom({ plugin: 'dforge', key: 'isNudged' } as const, false)
-const isPlanSession = atom({ plugin: 'dforge', key: 'isPlanSession' } as const, false)
-const isFastMode = atom({ plugin: 'dforge', key: 'isFastMode' } as const, false)
-const isRunSession = atom({ plugin: 'dforge', key: 'isRunSession' } as const, false)
-const autoRun = atom({ plugin: 'dforge', key: 'autoRun' } as const, null)
 const alerted = atom({ plugin: 'dforge', key: 'alerted' } as const, [])
 const trend = atom({ plugin: 'dforge', key: 'trend' } as const, [])
 const view = atom({ plugin: 'dforge', key: 'view' } as const, 'cockpit')
@@ -256,11 +154,6 @@ const engine = atom({ plugin: 'dforge', key: 'engine' } as const, { model: null,
 const IDLE: CockpitActivity = { kind: 'idle', since: 0, turnStartedAt: null, step: 0, tool: null, agent: null, detail: null, lastTurnMs: null, endedAt: null, isSent: false }
 const activity = atom({ plugin: 'dforge', key: 'activity' } as const, IDLE)
 const turnTokens = atom({ plugin: 'dforge', key: 'turnTokens' } as const, [])
-const run = atom({ plugin: 'dforge', key: 'run' } as const, null)
-const finish = atom({ plugin: 'dforge', key: 'finish' } as const, null)
-const resumeOffer = atom({ plugin: 'dforge', key: 'resumeOffer' } as const, null)
-const resumeDismissed = atom({ plugin: 'dforge', key: 'resumeDismissed' } as const, null)
-const rootsNote = atom({ plugin: 'dforge', key: 'rootsNote' } as const, null)
 const settings = atom({ plugin: 'dforge', key: 'settings' } as const, null)
 const SETTINGS_VIEW: CockpitSettingsView = { tab: '', isHelpShown: true, editing: null, error: null, isConfirmingReset: false }
 const settingsView = atom({ plugin: 'dforge', key: 'settingsView' } as const, SETTINGS_VIEW)
@@ -274,11 +167,7 @@ const notifier = atom({ plugin: 'dforge', key: 'notifier' } as const, {
 })
 
 type Options = {
-  handoffTokens: number
-  handoffMode: string
-  nudgeModel: boolean
   guardAttribution: boolean
-  warnAt: number
   layout: string
   density: string
   sections: string
@@ -294,14 +183,10 @@ type Options = {
   bandLine2: string
 }
 
-/** What the budget reading is judged by. */
-type Tuning = { handoffTokens: number; nudgeModel: boolean; warnAt: number; isRelaxed: boolean }
-
 /** The options with their defaults filled in, and what the pane derives from them. */
 type Live = Omit<Options, 'layout' | 'density'> & {
   layout: 'auto' | 'full' | 'compact'
   density: 'detailed' | 'dense'
-  tuning: Tuning
   shown: Section[]
   shownCollapsed: Section[]
   bandLayout: [BandSegment[], BandSegment[]]
@@ -310,11 +195,7 @@ type Live = Omit<Options, 'layout' | 'density'> & {
 
 function liveFrom(values: Partial<Options>): Live {
   const {
-    handoffTokens = 0,
-    handoffMode = 'strict',
-    nudgeModel = true,
     guardAttribution = true,
-    warnAt = 80,
     layout: layoutSetting = 'auto',
     density: densitySetting = 'detailed',
     sections = '',
@@ -332,11 +213,7 @@ function liveFrom(values: Partial<Options>): Live {
   // Anything but the three words reads as auto.
   const layout = layoutSetting === 'full' || layoutSetting === 'compact' ? layoutSetting : 'auto'
   return {
-    handoffTokens,
-    handoffMode,
-    nudgeModel,
     guardAttribution,
-    warnAt,
     layout,
     density: densitySetting === 'dense' ? 'dense' : 'detailed',
     sections,
@@ -350,7 +227,6 @@ function liveFrom(values: Partial<Options>): Live {
     notifyDetail,
     bandLine1,
     bandLine2,
-    tuning: { handoffTokens, nudgeModel, warnAt: warnShare(warnAt), isRelaxed: handoffMode === 'relaxed' },
     shown: sectionsFrom(sections),
     shownCollapsed: collapsedFrom(collapsed),
     bandLayout: bandLinesFrom(bandLine1, bandLine2),
@@ -373,9 +249,6 @@ function applyNotify(o: Live) {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await readSession($, true)
-    S.watchedSince = await $.clock.now()
-    S.reconciledAt = null
-    S.reconcileSeen = { key: '', count: 0 }
     S.watchdog?.cancel()
     S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($).catch(() => undefined))
     S.poll?.cancel()
@@ -393,10 +266,7 @@ export const register: Register = on => {
       return { text: `Unknown argument "${e.args.trim()}". Usage: /cockpit [settings | notify test | notify url <url> | notify mention <id>]` }
     }
     if (wantsSettings) await showSettings($)
-    else {
-      await flushSettingNote($)
-      await update($, view, () => 'cockpit')
-    }
+    else await update($, view, () => 'cockpit')
     await readAccount($)
     // The settings take the keyboard and as many rows as they need.
     const opened = wantsSettings
@@ -460,10 +330,8 @@ export const register: Register = on => {
     S.ticker?.cancel()
     S.ticker = null
     // The process goes on after /clear and /resume and no session.start re-arms
-    // the timers: keep them, so the poll reads the next session, and start its
-    // stall grace now.
-    if (e.reason === 'clear' || e.reason === 'resume') S.watchedSince = await $.clock.now()
-    else {
+    // the timers: keep them, so the poll reads the next session.
+    if (e.reason !== 'clear' && e.reason !== 'resume') {
       S.watchdog?.cancel()
       S.watchdog = null
       S.poll?.cancel()
@@ -477,36 +345,21 @@ export const register: Register = on => {
     return next(e)
   }).catch(($, e, next) => next(e))
 
-  // A compaction leaves no reading until the next response: drop the stale
-  // one and re-arm the note, so it does not stay latched.
+  // A compaction leaves no reading until the next response: drop the stale one.
   on('session.compact', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId === undefined && e.trigger !== 'precompute' && 'messages' in done && done.messages !== undefined) {
       await update($, budget, () => null)
-      await update($, isNudged, () => false)
       // The estimate stands in until the next response; the old one is the window before.
       await readBreakdown($)
-      // The engine's or the person's compaction: the run's rule still applies after it.
-      if ((e.trigger === 'auto' || e.trigger === 'manual') && !S.isPaneCompacting) await bookAutoCompaction($)
     }
 
     return done
   }).catch(($, e, next) => next(e))
 
   on('agent.spawn', async ($, e, next) => {
-    const denial = seatDenial(e, (await read($, isPlanSession)) && !(await read($, isFastMode)), FORK_DRAFTING)
-    if (denial !== null) {
-      const refusal: CockpitRefusal = { at: await $.clock.now(), tool: 'Agent', line: denial }
-      await update($, refusals, list => [...list, refusal].slice(-20))
-      return { deny: denial }
-    }
     const started = await next(e)
     if (started.deny !== undefined || started.agentId === undefined) return started
-    if (isDforge(e.subagentType)) {
-      await update($, isPlanSession, () => true)
-      await flushSettingNote($)
-      if (e.subagentType.split(':')[1]?.startsWith('impl-')) await markRunSession($)
-    }
     const spawn: CockpitSpawn = {
       agentId: started.agentId,
       seat: e.subagentType,
@@ -515,7 +368,6 @@ export const register: Register = on => {
       isDone: false,
       outcome: null,
       startedAt: await $.clock.now(),
-      ...(isJudgeSeat(e.subagentType) ? await judgeReports($, e.prompt) : {}),
     }
     await update($, spawns, list => trimmedSpawns([...list, spawn]))
     await syncTicker($)
@@ -534,20 +386,8 @@ export const register: Register = on => {
     return joined
   }).catch(($, e, next) => next(e))
 
-  // A skill typed as a slash command makes no Skill tool call; its prompt is expanded on every path.
-  on('skill.prompt', async ($, e, next) => {
-    const expanded = await next(e)
-    if (isDforge(e.skill)) {
-      await update($, isPlanSession, () => true)
-      await flushSettingNote($)
-    }
-    if (RUN_SKILLS.includes(e.skill)) await markRunSession($)
-    return expanded
-  }).catch(($, e, next) => next(e))
-
   on('ui.close', { id: PANE }, async ($, e, next) => {
     if (e.origin.kind === 'person') S.isClosedByPerson = true
-    await flushSettingNote($)
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -565,14 +405,11 @@ export const register: Register = on => {
     if (e.message.role === 'user') {
       const text = e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n')
       if (text.includes('<task-notification>')) await endShells($, text)
-    } else if (e.message.role === 'assistant' && e.agentId === undefined) {
-      const fast = fastModeLine(e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n'))
-      if (fast !== null) await update($, isFastMode, () => fast)
     }
     return kept
   }).catch(($, e, next) => next(e))
 
-  // A prompt from the person, or auto run's, starts a new chain: the Done held
+  // A prompt from the person, or a plugin's, starts a new chain: the Done held
   // for the last one is dropped. A wake-up keeps it, and so does an origin not
   // listed, since a Done covering more work beats a lost one.
   on('prompt.submit', async ($, e, next) => {
@@ -609,7 +446,7 @@ export const register: Register = on => {
       kind: 'ask',
       title: '⏳ Waiting for approval',
       detail: `${e.tool}${callSummary(e.tool, e.input) === '' ? '' : `: ${excerpt(callSummary(e.tool, e.input), 200)}`}`,
-      fields: [...(seat === null ? [] : [{ name: 'Agent', value: shortSeat(seat) }]), ...(await turnFields($)).slice(0, 1)],
+      fields: [...(seat === null ? [] : [{ name: 'Agent', value: seat }]), ...(await turnFields($)).slice(0, 1)],
     }, e.agentId ?? null)
     return decided
   }).catch(($, e, next) => next(e))
@@ -640,11 +477,9 @@ export const register: Register = on => {
     const done = await next(e)
     if (e.agentId === undefined) {
       S.isMainTurn = false
-      await trackAutoRun($)
       S.compactWindow = await readCompactWindow($)
       await readStyle($)
-      await readRun($)
-      await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
+      await refresh($, S.compactWindow)
       const turnUsage = e.usage as TurnUsage | undefined
       if (turnUsage !== undefined) {
         const cache = cacheOf(turnUsage)
@@ -682,7 +517,6 @@ export const register: Register = on => {
       } else if (e.reason === 'answer' && !isHeld) {
         await sendDone($, e.answer, e.durationMs)
       }
-      if (e.reason === 'answer') await armAutoRun($, e.answer)
       return done
     }
     const agentId = e.agentId
@@ -703,7 +537,7 @@ export const register: Register = on => {
     if (e.usage !== undefined) await update($, seats, all => addRun(all, spawn.seat, e.usage as TurnUsage))
     await notify($, {
       kind: 'agent',
-      title: `🤖 ${shortSeat(spawn.seat)} finished`,
+      title: `🤖 ${spawn.seat} finished`,
       detail: spawn.description,
       fields: [{ name: 'Took', value: elapsed(e.durationMs) }],
     })
@@ -715,23 +549,10 @@ export const register: Register = on => {
   on('attribution.text', { kind: 'pr' }, async ($, e, next) => ((await live($)).guardAttribution ? { text: '' } : next(e)))
 
   // One hook for every tool: the attribution guard judges before anything
-  // runs, and the main loop's budget and plan are read after each call, the
+  // runs, and the main loop's context and plan are read after each call, the
   // only point its context grows between turns.
   on('tool.call', async ($, e, next) => {
     const tool = String(e.tool)
-    if (e.agentId !== undefined && REVIEW_WRITE_TOOLS.includes(tool)) {
-      const denial = await judgeWriteDenial($, tool, e)
-      if (denial !== null) {
-        try {
-          const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line: denial }
-          await update($, refusals, list => [...list, refusal].slice(-20))
-        } catch {
-          // The refusal stands unlisted: the .catch below knows no judge
-          // that only $.agent.list() names.
-        }
-        return { deny: denial }
-      }
-    }
     const line = (await live($)).guardAttribution ? await attributionLine($, tool, e) : undefined
     if (line !== undefined) {
       const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line }
@@ -740,7 +561,7 @@ export const register: Register = on => {
     }
     const id = e.tool_use_id
     const seat = e.agentId === undefined ? null : ((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat ?? null)
-    if ((await read($, activity)).kind === 'running') await setActivity($, now => ({ ...now, tool, agent: seat === null ? null : shortSeat(seat) }))
+    if ((await read($, activity)).kind === 'running') await setActivity($, now => ({ ...now, tool, agent: seat === null ? null : seat }))
     if (id !== undefined && e.agentId === undefined && ASKING_TOOLS.includes(tool)) {
       await startWait($, id, 'asking', {
         kind: 'question',
@@ -749,9 +570,8 @@ export const register: Register = on => {
         fields: (await turnFields($)).slice(0, 1),
       }, null)
     }
-    // The response asking for this call already measured the window: show it while the tool
-    // runs. Only shown: the note and the alert wait for the ledger this call may write.
-    if (e.agentId === undefined) await refresh($, (await live($)).tuning, S.compactWindow, { isShownOnly: true })
+    // The response asking for this call already measured the window: show it while the tool runs.
+    if (e.agentId === undefined) await refresh($, S.compactWindow)
     let ran: Awaited<ReturnType<typeof next>>
     try {
       ran = await next(e)
@@ -763,32 +583,17 @@ export const register: Register = on => {
       await endWait($, id, ran.deny !== undefined ? '✗ Denied' : ASKING_TOOLS.includes(tool) ? '✓ Answered' : '✓ Approved')
     }
     if ((await read($, activity)).tool === tool) await setActivity($, now => (now.kind === 'running' ? { ...now, tool: null, agent: null } : now))
-    const skill = tool === 'Skill' ? String((e as { skill?: unknown }).skill ?? '') : ''
-    if (isDforge(skill)) {
-      await update($, isPlanSession, () => true)
-      await flushSettingNote($)
-    }
-    if (RUN_SKILLS.includes(skill)) await markRunSession($)
     if (ran.deny === undefined && !ran.isError) await trackShells($, tool, e, ran.result)
     if (e.agentId === undefined) {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
-      // A run starts, stops and changes regime through the model's own calls.
-      await trackAutoRun($)
-      // A worktree move takes the session's ledger with it.
-      // A shell cd moves it too, as using-git-worktrees' fallback does.
+      // A worktree move, or a shell cd, changes where the session is.
       const isMove = ran.deny === undefined && !ran.isError && (WORKTREE_TOOLS.includes(tool) || (tool === 'Bash' && (await hasMoved($))))
       if (isMove) await readPlace($)
-      // The controller writes its ledger with its own tool calls; read it
-      // before the budget, which measures a plan's tail by it.
-      if (isMove || touchesRun(e)) await readRun($)
-      await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
+      await refresh($, S.compactWindow)
     }
 
     return ran
   }).catch(async ($, e, next) => {
-    if (!next.called && e.agentId !== undefined && REVIEW_WRITE_TOOLS.includes(String(e.tool)) && isJudgeSeat((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat)) {
-      return { deny: `dforge: the review-seat write guard could not check this write (${next.error.message || next.error.kind}); it is refused.` }
-    }
     return next.called || !(await live($)).guardAttribution ? next(e) : { deny: 'dforge: its attribution guard failed.' }
   })
 
@@ -807,8 +612,6 @@ export const register: Register = on => {
     const canMinimize = e.surface === 'terminal' || e.surface === 'desktop'
     const minimize = async () => {
       if (!(await setOption($, 'layout', 'compact'))) return
-      // Under claude plugin test this plugin's own $.ui.close did not run its ui.close hook, so the waiting note goes here.
-      await flushSettingNote($)
       await $.ui.close({ id: PANE })
     }
     const head = await read($, budget)
@@ -823,12 +626,7 @@ export const register: Register = on => {
     const git = await read($, repo)
     const placeNow = await read($, place)
     const refused = await read($, refusals)
-    const canHandOff = await read($, isPlanSession)
     const act = await read($, activity)
-    const summary = await read($, run)
-    const finishNow = await read($, finish)
-    const rootsNow = await read($, rootsNote)
-    const offer = await offerNow($, now)
     const drawRuns = (key: string, runs: Run[]) =>
       runs.map((one, index) => (
         <Text key={`${key}-${index}`} color={one.color} bold={one.bold} dimColor={one.dim}>
@@ -875,30 +673,10 @@ export const register: Register = on => {
         </Box>
       )
     }
-    const isNearHandoff = head !== null && levelOf(head.tokens, head.limit, o.tuning.warnAt) !== 'quiet'
-    const resumeCard = offer !== null && (
-      <Box key="resume-card" flexDirection="column" borderStyle="round" borderColor={BUTTON_MAIN} paddingX={1}>
-        <Text key="resume-title" color={BUTTON_MAIN} bold wrap="truncate-end">
-          {`↻ Resumable work · ${handedOff(now - offer.at)}`}
-        </Text>
-        <Text key="resume-next" wrap="truncate-end">{`Next: ${offer.next}`}</Text>
-        <Box key="resume-actions" flexDirection="row">
-          {button('pane-resume', 'Resume', () => resume($, offer), { hotkey: 'r', isMain: true })}
-        </Box>
-      </Box>
-    )
-    const autoNow = await read($, autoRun)
     const isDense = o.density === 'dense'
     const actions = (
       <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
-        {autoNow?.active && (
-          <Text key="auto-line" color="magenta">
-            {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} ${autoNow.compactions === 1 ? 'compaction' : 'compactions'} · ${autoNow.resumes} ${autoNow.resumes === 1 ? 'resume' : 'resumes'}`}
-          </Text>
-        )}
-        {autoNow?.active && button('pane-stop-auto', '■ Stop auto', () => void stopAutoRun($), { isCompact: isDense })}
-        {canHandOff && !autoNow?.active && button('pane-handoff', '↪ Hand off', () => $.prompt.submit({ text: HANDOFF_PROMPT, asUser: true }), { hotkey: 'h', isMain: isNearHandoff, isCompact: isDense })}
-        {button('pane-compact', '⇣ Compact', () => compactFromPane($), { hotkey: 'c', isCompact: isDense })}
+        {button('pane-compact', '⇣ Compact', () => $.session.compact(), { hotkey: 'c', isCompact: isDense })}
       </Box>
     )
     // The pane's own buttons, in a row below the account: they act on the pane, not the context.
@@ -1117,7 +895,6 @@ export const register: Register = on => {
           cancelReset: () => show({}),
           back: async () => {
             await show({})
-            await flushSettingNote($)
             await update($, view, () => 'cockpit')
             // Minimized, the settings were all the pane was open for.
             if (o.isMinimized) await $.ui.close({ id: PANE })
@@ -1162,7 +939,6 @@ export const register: Register = on => {
     }
 
     if (isDense) {
-      const inFlight = summary?.tasks.find(task => task.state === 'assigned') ?? null
       const dense: DenseInput = {
         email: who?.email ?? null,
         billing,
@@ -1172,8 +948,7 @@ export const register: Register = on => {
         turnsLeft: head === null ? null : turnsToBudget(await read($, turnTokens), head.limit),
         limits,
         shells: background,
-        agents: running.map(one => shortSeat(one.seat)),
-        run: summary === null || summary.total === 0 ? null : { done: summary.done, total: summary.total, current: inFlight === null ? null : `Task ${inFlight.n}${inFlight.title === '' ? '' : `: ${inFlight.title}`}` },
+        agents: running.map(one => one.seat),
         todos: items.length === 0 ? null : { done: doneCount, total: items.length, current: items.find(item => item.status === 'in_progress')?.text ?? null },
         repo: git,
         refused: refused.length,
@@ -1186,7 +961,6 @@ export const register: Register = on => {
       })
       return (
         <Box flexDirection="column">
-          {resumeCard}
           <Box key="dense-now" flexDirection="row" alignItems="center" columnGap={1}>
             <Box key="dense-now-text" flexGrow={1} flexShrink={1}>
               <Text key="now" wrap="truncate-end">
@@ -1263,26 +1037,16 @@ export const register: Register = on => {
     const readings = await read($, trend)
 
     // The context track runs over the whole window: filled to the reading,
-    // with the handoff line and the compaction point marked on it.
+    // with the compaction point marked on it.
     const contextBody: RenderChildren[] = []
     if (head !== null) {
       const percent = (head.tokens / head.limit) * 100
-      const compactAt = rows?.compactAt ?? null
       contextBody.push(
-        drawTrack(
-          'ctx-track',
-          percent,
-          track(head.tokens / head.window, inner, [
-            ...(compactAt === null ? [] : [{ at: compactAt / head.window, glyph: '┊', name: 'compact' }]),
-            { at: head.limit / head.window, glyph: '┃', name: 'handoff' },
-          ]),
-          { handoff: rampColor(percent), compact: 'gray' },
-        ),
+        drawTrack('ctx-track', percent, track(head.tokens / head.window, inner, head.isAutoCompactOff ? [] : [{ at: head.limit / head.window, glyph: '┃', name: 'compact' }]), { compact: rampColor(percent) }),
         <Text key="ctx-legend" wrap="truncate-end">
           <Text bold>{kTokens(head.tokens)}</Text>
           <Text dimColor> of {kTokens(head.window)}</Text>
-          <Text color={rampColor(percent)}> ┃ handoff {kTokens(head.limit)}</Text>
-          {compactAt !== null && <Text dimColor> ┊ compacts {kTokens(compactAt)}</Text>}
+          {head.isAutoCompactOff ? <Text dimColor> · auto-compact off</Text> : <Text color={rampColor(percent)}> ┃ compacts {kTokens(head.limit)}</Text>}
         </Text>,
       )
       if (readings.length > 1) {
@@ -1332,104 +1096,6 @@ export const register: Register = on => {
 
     const engineNow = await read($, engine)
     const turnsLeft = head === null ? null : turnsToBudget(await read($, turnTokens), head.limit)
-    const isFinishingPast = head !== null && head.isFinishing && head.tokens >= head.limit
-    // Why the plan section reads checkout paths rather than the roots.
-    const rootsLine = rootsNow !== null && (
-      <Text key="plan-roots" color="red" wrap="truncate-end">
-        {rootsNow}
-      </Text>
-    )
-    const runCard = () => {
-      if (summary === null) return null
-      const blocked = summary.tasks.filter(task => task.state === 'blocked')
-      const round = runRound(summary)
-      const color = blocked.length > 0 ? 'red' : 'yellow'
-      return section(
-        'plan',
-        'Run',
-        color,
-        <Text key="plan-head">
-          {blocked.length > 0 ? (
-            <Text color="red" bold>
-              {blocked.length} blocked
-            </Text>
-          ) : (
-            round !== null && <Text dimColor>round {round}</Text>
-          )}
-          {(blocked.length > 0 || round !== null) && <Text dimColor> · </Text>}
-          <Text bold>
-            {summary.done}/{summary.total}
-          </Text>
-        </Text>,
-        <Text key="plan-progress" color={color}>
-          {bar(summary.done / summary.total, inner)}
-        </Text>,
-        summary.plan !== null && (
-          <Text key="plan-path" dimColor wrap="truncate-end">
-            plan {summary.plan}
-          </Text>
-        ),
-        rootsLine,
-        finishNow !== null && finishLine(finishNow).length > 0 && (
-          <Text key="plan-finish" wrap="truncate-end">
-            {drawRuns('plan-finish-runs', finishLine(finishNow))}
-          </Text>
-        ),
-        runList(summary.tasks, 6).map(task => {
-          const label = `Task ${task.n}${task.title === '' ? '' : `: ${task.title}`}`
-          if (task.state === 'complete') {
-            return (
-              <Text key={`plan-${task.n}`} wrap="truncate-end">
-                <Text color="green">✓ </Text>
-                <Text dimColor>
-                  {label}
-                  {task.isClean ? ' · clean' : ''}
-                </Text>
-              </Text>
-            )
-          }
-          if (task.state === 'blocked') {
-            return (
-              <Box key={`plan-${task.n}`} flexDirection="column">
-                <Text color="red" bold wrap="truncate-end">
-                  ✗ {label}
-                </Text>
-                <Box paddingLeft={INDENT}>
-                  <Text color="red">BLOCKED{task.reason === null ? '' : ` · ${task.reason}`}</Text>
-                </Box>
-              </Box>
-            )
-          }
-          if (task.state === 'assigned') {
-            return (
-              <Box key={`plan-${task.n}`} flexDirection="column">
-                <Text wrap="truncate-end">
-                  <Text color="yellow">▸ </Text>
-                  <Text bold>{label}</Text>
-                </Text>
-                {(task.round !== null || task.seat !== null) && (
-                  <Text dimColor wrap="truncate-end">
-                    {'  '}
-                    {[task.round === null ? 'implementing' : `round ${task.round}`, task.seat === null ? null : shortSeat(task.seat)].filter(Boolean).join(' · ')}
-                  </Text>
-                )}
-              </Box>
-            )
-          }
-          return (
-            <Text key={`plan-${task.n}`} wrap="truncate-end">
-              <Text dimColor>○ </Text>
-              {label}
-            </Text>
-          )
-        }),
-        summary.isFinished && (
-          <Text key="plan-finished" color="green">
-            Final review clean.
-          </Text>
-        ),
-      )
-    }
     // How far each gauged window has run, for the usage panel's note.
     const gaugedPace = GAUGED.flatMap(kind =>
       limits
@@ -1493,15 +1159,14 @@ export const register: Register = on => {
         ) : (
           <Text key="ctx-head">
             <Text color={rampColor((head.tokens / head.limit) * 100)} bold>
-              {Math.round((head.tokens / head.limit) * 100)}% of handoff
+              {Math.round((head.tokens / head.limit) * 100)}% of {head.isAutoCompactOff ? 'window' : 'compaction'}
             </Text>
-            {turnsLeft !== null && !isFinishingPast && (
+            {turnsLeft !== null && (
               <Text color={turnsLeft <= 3 ? '#ffaf5f' : undefined} bold={turnsLeft <= 3} dimColor={turnsLeft > 3}>
                 {' '}
                 · ≈{turnsLeft} {turnsLeft === 1 ? 'turn' : 'turns'}
               </Text>
             )}
-            {isFinishingPast && <Text dimColor> · finishing</Text>}
           </Text>
         ),
         ...contextBody,
@@ -1603,7 +1268,7 @@ export const register: Register = on => {
             <Text key={`spawn-${spawn.agentId}`} wrap="truncate-end">
               <Text color={AGENT_MARKS[group.key].color}>{AGENT_MARKS[group.key].mark} </Text>
               <Text bold={!spawn.isDone} dimColor={spawn.isDone}>
-                {shortSeat(spawn.seat)}
+                {spawn.seat}
               </Text>
               <Text dimColor={spawn.isDone}> {spawn.description}</Text>
               {!spawn.isDone && <Text color="cyan"> {elapsed(now - spawn.startedAt)}</Text>}
@@ -1621,7 +1286,7 @@ export const register: Register = on => {
             sortedSeats.map(seat => (
               <Box key={`seat-${seat.seat}`} flexDirection="column">
                 <Text wrap="truncate-end">
-                  {shortSeat(seat.seat)}
+                  {seat.seat}
                   <Text dimColor> ×{seat.runs}</Text>
                 </Text>
                 <Text wrap="truncate-end">
@@ -1636,12 +1301,8 @@ export const register: Register = on => {
             )),
           ),
       ),
-      // In a dforge run the card reads the run's ledger instead: the
-      // round in flight, reviews that came back clean, and blocked tasks.
       plan:
-        summary !== null && summary.total > 0 ? (
-          runCard()
-        ) : items.length > 0 ? (
+        items.length > 0 &&
         section(
           'plan',
           'Plan',
@@ -1662,29 +1323,6 @@ export const register: Register = on => {
               </Text>
             </Text>
           )),
-          finishNow !== null && finishLine(finishNow).length > 0 && (
-            <Text key="plan-finish" wrap="truncate-end">
-              {drawRuns('plan-finish-runs', finishLine(finishNow))}
-            </Text>
-          ),
-          rootsLine,
-        )
-        ) : (
-          (rootsLine !== false || (finishNow !== null && finishLine(finishNow).length > 0)) &&
-          section(
-            'plan',
-            'Plan',
-            rootsLine !== false ? 'red' : 'yellow',
-            <Text key="plan-head" dimColor>
-              {rootsLine !== false ? 'checkout paths' : 'no plan'}
-            </Text>,
-            finishNow !== null && finishLine(finishNow).length > 0 && (
-              <Text key="plan-finish" wrap="truncate-end">
-                {drawRuns('plan-finish-runs', finishLine(finishNow))}
-              </Text>
-            ),
-            rootsLine,
-          )
         ),
       repo:
         git !== null &&
@@ -1818,7 +1456,6 @@ export const register: Register = on => {
             return panel('context', 'Context', 'cyan', [{ text: estimate === null ? 'no reading yet' : `≈${kTokens(estimate)} estimated` }], breakdownLines, actions)
           }
           const percent = (head.tokens / head.limit) * 100
-          const compactAt = rows?.compactAt ?? null
           const lines: PanelLine[] = [
             {
               kind: 'picture',
@@ -1826,15 +1463,14 @@ export const register: Register = on => {
                 head.tokens / head.window,
                 width,
                 rampColor(percent),
-                [...(compactAt === null ? [] : [{ at: compactAt / head.window, isDashed: true }]), { at: head.limit / head.window }],
-                // The ends are placed first, so the handoff slides clear of them.
+                head.isAutoCompactOff ? [] : [{ at: head.limit / head.window }],
+                // The ends are placed first, so the compaction point slides clear of them.
                 [
                   { at: 0, text: `${kTokens(head.tokens)} / ${kTokens(head.window)}` },
-                  ...(compactAt === null ? [] : [{ at: compactAt / head.window, text: `compacts ${kTokens(compactAt)}` }]),
-                  { at: head.limit / head.window, text: `handoff ${kTokens(head.limit)}`, color: rampColor(percent) },
+                  ...(head.isAutoCompactOff ? [] : [{ at: head.limit / head.window, text: `compacts ${kTokens(head.limit)}`, color: rampColor(percent) }]),
                 ],
               ),
-              alt: `${kTokens(head.tokens)} of ${kTokens(head.window)} tokens, handoff at ${kTokens(head.limit)}`,
+              alt: `${kTokens(head.tokens)} of ${kTokens(head.window)} tokens, ${head.isAutoCompactOff ? 'auto-compact off' : `compacts at ${kTokens(head.limit)}`}`,
             },
           ]
           if (readings.length > 1) {
@@ -1891,7 +1527,7 @@ export const register: Register = on => {
                   kind: 'text',
                   left: [
                     { text: `${AGENT_MARKS[group.key].mark}  `, color: AGENT_MARKS[group.key].color },
-                    pill(shortSeat(spawn.seat)),
+                    pill(spawn.seat),
                     { text: `  ${spawn.description}`, dim: spawn.isDone },
                   ],
                   right: spawn.isDone ? [] : [{ text: elapsed(now - spawn.startedAt), mono: true, dim: true }],
@@ -1904,60 +1540,16 @@ export const register: Register = on => {
               {
                 kind: 'text',
                 small: true,
-                left: [{ text: shortSeat(seat.seat) }, { text: ` ×${seat.runs}`, dim: true }],
+                left: [{ text: seat.seat }, { text: ` ×${seat.runs}`, dim: true }],
                 right: [{ text: `${kTokens(totalIn(seat))} in · ${cacheShare(seat)}% cached · ${kTokens(seat.output)} out`, mono: true, dim: true }],
               },
               { kind: 'picture', svg: seatSvg(totalIn(seat) / mostIn, cacheShare(seat) / 100, width, 'magenta') },
             ]),
           ],
         ),
-        plan: (() => {
-          if (summary !== null && summary.total > 0) {
-            const blocked = summary.tasks.filter(task => task.state === 'blocked')
-            const round = runRound(summary)
-            const lines: PanelLine[] = [{ kind: 'picture', svg: segmentsSvg(summary.tasks.map(task => RUN_SEGMENTS[task.state] ?? 'todo'), width, 6) }]
-            if (summary.plan !== null) lines.push({ kind: 'text', small: true, left: [{ text: summary.plan, mono: true, dim: true }] })
-            if (rootsNow !== null) lines.push({ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] })
-            if (finishNow !== null && finishLine(finishNow).length > 0) lines.push({ kind: 'chips', chips: [{ ...pill(finishLine(finishNow).map(run => run.text).join('')), color: 'yellow' }] })
-            for (const task of runList(summary.tasks, 6)) {
-              const label = `Task ${task.n}${task.title === '' ? '' : `: ${task.title}`}`
-              const meta =
-                task.state === 'complete' ? (task.isClean ? 'reviewed clean' : null)
-                : task.state === 'blocked' ? `BLOCKED${task.reason === null ? '' : ` · ${task.reason}`}`
-                : task.state === 'assigned' && (task.round !== null || task.seat !== null)
-                  ? [task.round === null ? 'implementing' : `round ${task.round}`, task.seat === null ? null : shortSeat(task.seat)].filter(Boolean).join(' · ')
-                  : null
-              const icon: PanelRun =
-                task.state === 'complete' ? { text: '✓', color: 'green' }
-                : task.state === 'blocked' ? { text: '✗', color: 'red' }
-                : task.state === 'assigned' ? { text: '▸', color: 'blue' }
-                : { text: '○', faint: true }
-              lines.push({
-                kind: 'text',
-                left: [
-                  { ...icon, text: `${icon.text}  ` },
-                  { text: label, bold: task.state === 'assigned' || task.state === 'blocked', color: task.state === 'blocked' ? 'red' : undefined, dim: task.state === 'pending' },
-                ],
-              })
-              if (meta !== null) lines.push({ kind: 'text', small: true, indent: 18, left: [{ text: meta, color: task.state === 'blocked' ? 'red' : undefined, dim: task.state !== 'blocked' }] })
-            }
-            if (summary.isFinished) lines.push({ kind: 'text', left: [{ text: 'Final review clean.', color: 'green' }] })
-            return panel(
-              'plan',
-              'Run',
-              blocked.length > 0 ? 'red' : 'yellow',
-              [...(blocked.length > 0 ? [{ text: `${blocked.length} blocked · `, color: 'red' }] : []), { text: [round === null ? '' : `round ${round}`, `${summary.done}/${summary.total}`].filter(Boolean).join(' · ') }],
-              lines,
-            )
-          }
-          const finishChips: PanelLine[] = finishNow !== null && finishLine(finishNow).length > 0 ? [{ kind: 'chips', chips: [{ ...pill(finishLine(finishNow).map(run => run.text).join('')), color: 'yellow' }] }] : []
-          if (items.length === 0) {
-            return (rootsNow !== null || finishChips.length > 0) && panel('plan', 'Plan', rootsNow !== null ? 'red' : 'yellow', [{ text: rootsNow !== null ? 'checkout paths' : 'no plan' }], [
-              ...finishChips,
-              ...(rootsNow !== null ? [{ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] } as PanelLine] : []),
-            ])
-          }
-          return panel('plan', 'Plan', 'yellow', [{ text: `${doneCount}/${items.length}` }], [
+        plan:
+          items.length > 0 &&
+          panel('plan', 'Plan', 'yellow', [{ text: `${doneCount}/${items.length}` }], [
             { kind: 'picture', svg: segmentsSvg(items.map(item => (item.status === 'completed' ? 'done' : item.status === 'in_progress' ? 'active' : 'todo')), width, 6) },
             ...shownItems.map(
               (item): PanelLine => ({
@@ -1968,10 +1560,7 @@ export const register: Register = on => {
                 ],
               }),
             ),
-            ...finishChips,
-            ...(rootsNow !== null ? [{ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] } as PanelLine] : []),
-          ])
-        })(),
+          ]),
         repo:
           git !== null &&
           panel(
@@ -2011,8 +1600,8 @@ export const register: Register = on => {
         tiles.push({
           dial: gaugeSvg(share, rampColor(share * 100), 120, `${Math.round(share * 100)}%`, null, true),
           key: 'Context',
-          alt: `${Math.round(share * 100)}% of the handoff budget`,
-          notes: [[{ text: `of handoff${turnsLeft === null ? '' : ` · ≈${turnsLeft} ${turnsLeft === 1 ? 'turn' : 'turns'}`}`, color: turnsLeft !== null && turnsLeft <= 3 ? 'warning' : undefined }]],
+          alt: `${Math.round(share * 100)}% of the ${head.isAutoCompactOff ? 'window' : 'compaction point'}`,
+          notes: [[{ text: `of ${head.isAutoCompactOff ? 'window' : 'compaction'}${turnsLeft === null ? '' : ` · ≈${turnsLeft} ${turnsLeft === 1 ? 'turn' : 'turns'}`}`, color: turnsLeft !== null && turnsLeft <= 3 ? 'warning' : undefined }]],
         })
       }
       for (const limit of gauged) {
@@ -2061,7 +1650,6 @@ export const register: Register = on => {
       }
       return (
         <Box flexDirection="column" gap="md">
-          {resumeCard}
           {o.shown.includes('account') && panels.account}
           {controls}
           <Box key="now-row" flexDirection="row" alignItems="center" columnGap={1}>
@@ -2084,7 +1672,6 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        {resumeCard}
         <Text key="now" wrap="truncate-end">
           {drawRuns('now', nowLine(actNow, now, work))}
         </Text>
@@ -2095,42 +1682,11 @@ export const register: Register = on => {
     )
   })
 
-  // Minimized, the band sits above the prompt in place of the pane. A handoff
-  // to resume rides above it, or alone while the pane is open.
+  // Minimized, the band sits above the prompt in place of the pane.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey) return next(e)
-    const o = await live($)
-    const offer = await offerNow($, await $.clock.now())
-    const band = o.isMinimized ? await drawBand($, e, () => expand($, e.viewport?.isFullscreen === true), e.props.bodyColumns) : null
-    if (offer === null) return band ?? next(e)
-    const { Box } = $.ui.resolve(e)
-    return (
-      <Box flexDirection="column">
-        {await drawResumeBand($, e, offer)}
-        {band}
-      </Box>
-    )
+    if (e.props.hasSurvey || !(await live($)).isMinimized) return next(e)
+    return drawBand($, e, () => expand($, e.viewport?.isFullscreen === true), e.props.bodyColumns)
   })
-}
-
-/** One framed line above the prompt: the handoff to resume, Resume and Dismiss. */
-async function drawResumeBand($: EngineInterface, e: RenderInput<'AbovePrompt'>, offer: CockpitResumeOffer) {
-  const { Box, Button, Text } = $.ui.resolve(e)
-  // No hotkeys: the prompt holds the focus here, and a letter would be typed.
-  return (
-    <Box key="resume-band" flexDirection="row" alignItems="center" columnGap={1} borderStyle="round" borderColor={BUTTON_MAIN} paddingX={1}>
-      <Box key="resume-band-text" flexGrow={1} flexShrink={1}>
-        <Text key="resume-band-line" wrap="truncate-end">
-          <Text color={BUTTON_MAIN} bold>
-            {`↻ Resumable work · ${handedOff((await $.clock.now()) - offer.at)}`}
-          </Text>
-          <Text dimColor>{` — Next: ${offer.next}`}</Text>
-        </Text>
-      </Box>
-      <Button key="band-resume" label="Resume" variant="primary" onPress={() => resume($, offer)} />
-      <Button key="band-resume-dismiss" label="Dismiss" plain dimColor hover={{ bold: true }} onPress={() => update($, resumeDismissed, () => offer.at)} />
-    </Box>
-  )
 }
 
 const pill = (text: string, color?: string): PanelRun => ({ text, color, chip: true })
@@ -2157,7 +1713,6 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
   const remoteNow = await read($, remote)
   const git = await read($, repo)
   const refused = await read($, refusals)
-  const summary = await read($, run)
   const who = await read($, account)
   const tint = termColor(who?.color)
   const billing = billingLabel(who?.billing ?? null)
@@ -2176,7 +1731,6 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
   const layout = (await live($)).bandLayout
   const engineNow = await read($, engine)
   const doing = await read($, activity)
-  const inFlight = summary === null || summary.isFinished ? [] : summary.tasks.filter(task => task.state === 'assigned' && task.round !== null)
   const band: BandInput = {
     lines: layout,
     cwd: where?.cwd ?? null,
@@ -2200,20 +1754,9 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
         : doing.kind === 'waiting' || doing.kind === 'asking' || doing.kind === 'failed'
           ? { kind: doing.kind, since: doing.since, tool: null }
           : null,
-    run:
-      summary === null || summary.isFinished
-        ? null
-        : { done: summary.done, total: summary.total, round: inFlight.length === 1 ? (inFlight[0]?.round ?? null) : null, blocked: summary.tasks.filter(task => task.state === 'blocked').length },
     isBackground: doing.kind === 'background',
   }
-  const blocked = summary?.tasks.filter(task => task.state === 'blocked') ?? []
-  const warning: Run[] = [
-    ...(blocked.length === 0
-      ? []
-      : [{ text: '✗ ', color: 'red', bold: true }, { text: blocked.length === 1 ? `Task ${blocked[0]?.n} blocked` : `${blocked.length} tasks blocked`, color: 'red' }]),
-    ...(blocked.length > 0 && refused.length > 0 ? [{ text: '  ·  ', dim: true }] : []),
-    ...(refused.length === 0 ? [] : [{ text: '✗ ', color: 'red', bold: true }, { text: `${refused.length} refused`, color: 'red' }]),
-  ]
+  const warning: Run[] = refused.length === 0 ? [] : [{ text: '✗ ', color: 'red', bold: true }, { text: `${refused.length} refused`, color: 'red' }]
   const remoteBand: Run[] =
     remoteNow.clients.length > 0
       ? [{ text: 'Remote ● ', color: 'green' }, { text: 'connected', color: 'green' }]
@@ -2393,20 +1936,15 @@ const S = {
   settingProblems: [] as string[],
   // Keys something outside the settings file forces, with the words their rows show.
   locks: {} as Record<string, string>,
-  // Skill-enforced settings changed since the model was last told, with their new values.
-  changed: {} as Record<string, SettingValue>,
   // Claude keys this session saved: the engine's settings snapshot may not show another process's write at once.
   claudeSaved: {} as Record<string, SettingValue | undefined>,
   kinds: [] as NotifyKind[],
   isBrief: false,
   notifyAskAfter: 20,
-  where: { host: null, tmux: null, primary: null, checkout: null } as {
+  where: { host: null, tmux: null, primary: null } as {
     host: string | null
     tmux: string | null
     primary: string | null
-    // The work tree the session is in: a linked worktree's own, where
-    // $.session.repo() names the main working tree.
-    checkout: string | null
   },
   // An approval or question the person has not answered yet, by tool call: its
   // timer, the Discord message sent for it (edited once it is answered), and
@@ -2419,50 +1957,14 @@ const S = {
   isTurnLive: false,
   // Whether a main-loop turn is running; a subagent's approval wait does not set it, as it does isTurnLive.
   isMainTurn: false,
-  isBudgetSent: false,
-  // The pane's Compact runs: it books its compaction itself.
-  isPaneCompacting: false,
-  // Ledger events already seen, by the plan the ledger names; the first read
-  // of a plan's ledger only records them, so a reload, a re-read or a resumed
-  // plan sends nothing twice.
-  ledgerSeen: new Map<string, Set<string>>(),
   isUnattended: false,
   // Whether this Claude Code draws a Button's label from styled children,
   // so the hotkey's letter can be underlined in it.
   canUnderline: null as boolean | null,
   // The person closed the pane this session: a desktop joining reopens nothing.
   isClosedByPerson: false,
-  // The auto run's scheduled stage, at most one.
-  autoTimer: null as Timer | null,
-  // True while autoAct runs a stage, a long compaction included, and when it
-  // last finished one: a prompt it just submitted has not started its turn yet.
-  autoBusy: false,
-  autoActedAt: null as number | null,
-  // When this session started: one with no turn yet ages from it.
-  watchedSince: null as number | null,
-  // When background work began deferring the pending stage; null while nothing
-  // does or a turn is live.
-  autoDeferredSince: null as number | null,
-  // When the last stalled call failed: the watchdog waits STALL_MS before the next.
-  stallFailedAt: null as number | null,
-  // When the watchdog last submitted a reconcile prompt, and how many in a row
-  // found the same launches running under the same pending action.
-  reconciledAt: null as number | null,
-  reconcileSeen: { key: '', count: 0 },
   // The watchdog's timer, every WATCHDOG_MS.
   watchdog: null as Timer | null,
-  // The roots --mode last named, and the checkout and the
-  // modification times of stores.json and config.json they were read for.
-  roots: { key: '', value: null } as { key: string; value: CockpitRoots | null },
-  // latest.md's absolute path while progress is in darkmem; null while it is
-  // in the checkout, where the resume prompt names it by its state directory.
-  latestName: null as string | null,
-  // The latest.md path and modification time the resume offer was read for.
-  offerRead: '',
-  // What that note offers, and the modification times of the registers its
-  // prompt names when the offer was last decided.
-  offerFound: null as { next: string; prompt: string | null } | null,
-  offerRegisters: null as string | null,
   // A Done held while the main conversation's background work runs: when its
   // chain of turns began, when a turn last ended with the work pending, and
   // that turn's answer, which a Done released with no turn carries.
@@ -2479,10 +1981,6 @@ const S = {
   detailAt: 0,
   // The settings file's modification time and the engine's settings, as last put in force.
   seen: { config: null as number | null, claude: '' },
-  // The ledger, its modification time and its plan's, as the run was last read; the plan file found then.
-  runKey: '',
-  runPlan: null as string | null,
-  runReads: 0,
 }
 
 // Sends one event to Discord when it is on and a webhook is set; resolves
@@ -2573,12 +2071,10 @@ async function releaseHeld($: EngineInterface) {
 async function turnFields($: EngineInterface): Promise<{ name: string; value: string }[]> {
   const head = await read($, budget)
   const items = await read($, plan)
-  const summary = await read($, run)
   const fields: { name: string; value: string }[] = []
-  if (head !== null) fields.push({ name: 'Context', value: `${kTokens(head.tokens)} · ${Math.round((head.tokens / head.limit) * 100)}% of handoff` })
+  if (head !== null) fields.push({ name: 'Context', value: `${kTokens(head.tokens)} · ${Math.round((head.tokens / head.limit) * 100)}% of ${head.isAutoCompactOff ? 'window' : 'compaction'}` })
   if (head?.usd != null) fields.push({ name: 'Cost', value: `$${head.usd.toFixed(2)}` })
-  if (summary !== null && summary.total > 0) fields.push({ name: 'Run', value: `${summary.done}/${summary.total}` })
-  else if (items.length > 0) fields.push({ name: 'Plan', value: `${items.filter(item => item.status === 'completed').length}/${items.length}` })
+  if (items.length > 0) fields.push({ name: 'Plan', value: `${items.filter(item => item.status === 'completed').length}/${items.length}` })
   return fields
 }
 
@@ -2637,7 +2133,7 @@ async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'aski
 
 // Back to running once nothing S.waits on the person, or, after the main
 // turn ended, back to how it ended: a subagent's wait never leaves a turn
-// live that no turn will end, which would hold the auto run's stages.
+// live that no turn will end.
 async function endWait($: EngineInterface, id: string, outcome: string) {
   await settleWait($, id, outcome)
   if (S.waits.size > 0) return
@@ -2653,364 +2149,21 @@ async function endWait($: EngineInterface, id: string, outcome: string) {
   if (kind === 'background') await settleBackground($)
 }
 
-// The auto run state file in the primary checkout, as the run bound to this
-// session; null when there is none or another session owns it.
-async function readAutoRun($: EngineInterface): Promise<CockpitAutoRun | null> {
-  const root = S.where.primary ?? (await read($, place))?.root ?? null
-  if (root === null) return null
-  const text = await $.fs.read(`${root}/.dforge/sdd/auto-run.json`).catch(() => null)
-  if (typeof text !== 'string') return null
-  return autoRunFor(text, await $.session.id())
-}
-
-// Runs scripts/auto-run as `sessionId`; resolves its exit code, 1 when it could not run.
-async function autoRunCall($: EngineInterface, sessionId: string, args: string[]): Promise<number> {
-  const ran = await $.process.run(['bash', `${$.plugin.root}/scripts/auto-run`, '--session', sessionId, ...args], { timeoutMs: 15_000 }).catch(() => null)
-  return ran?.exitCode ?? 1
-}
-
-// Keeps the pane's copy of the bound run, and says once on Discord when the
-// run stopped with a reason.
-async function trackAutoRun($: EngineInterface) {
-  const now = await readAutoRun($)
-  const before = await read($, autoRun)
-  if (JSON.stringify(now) === JSON.stringify(before)) return
-  await update($, autoRun, () => now)
-  if (before?.active === true && now !== null && !now.active && now.stopped !== null) {
-    await notify($, { kind: 'blocked', title: '⛔ Auto run stopped', detail: now.stopped, isPlain: true })
-  }
-}
-
-// A main turn of the bound run ended on the sentinel its pending action asks
-// for: schedule the stage from a timer, so it never runs inside this hook
-// (compact and /clear refuse there).
-async function armAutoRun($: EngineInterface, answer: string) {
-  const auto = await readAutoRun($)
-  if (auto === null || !auto.active || !endsOnSentinel(answer, auto.pending)) return
-  // A stage armed now starts its own deferral, whatever the timer it replaces had.
-  S.autoDeferredSince = null
-  scheduleAutoAct($, auto.pending === 'clear' ? 'clear' : auto.pending === 'switch' ? 'switch' : 'compact', 0)
-}
-
-function scheduleAutoAct($: EngineInterface, stage: AutoStage, ms: number) {
-  S.autoTimer?.cancel()
-  S.autoTimer = $.clock.after(ms, () => void autoAct($, stage))
-}
-
-// Carries the bound run through its pending stages: compact, then the
-// continue prompt; or clear, rebind, model and effort, then the first prompt;
-// or switch: `auto-run clear --phase`, then the same path as clear.
-// Each attempt first re-checks that the stage is still due and the session
-// idle. A failure is booked and the failed stage tried again; the script stops
-// the run at the second (exit 5).
-async function autoAct($: EngineInterface, stage: AutoStage) {
-  S.autoTimer = null
-  // The watchdog arms nothing while a stage is in flight.
-  S.autoBusy = true
-  try {
-    await autoStage($, stage)
-  } finally {
-    S.autoBusy = false
-    S.autoActedAt = await $.clock.now()
-  }
-}
-
-// A launch that never reports would hold the stage forever: book it as a
-// failure, so the second one stops the run with a reason.
-async function bookStageFailure($: EngineInterface, stage: AutoStage, why: string) {
-  S.autoDeferredSince = null
-  const owner = await $.session.id()
-  const code = await autoRunCall($, owner, ['failure', '--reason', why])
-  if (code === 0) scheduleAutoAct($, stage, AUTO_RETRY_MS)
-  else if (code === 5) await endStoppedRun($)
-  else await endUnboundRun($, owner, `${why}, and the failure could not be booked (exit ${code})`)
-}
-
-async function autoStage($: EngineInterface, stage: AutoStage) {
-  const auto = await readAutoRun($)
-  if (auto === null || !auto.active || auto.pending !== AUTO_STAGE_PENDING[stage]) {
-    // The run stopped or moved on: its deferral, if any, ends with it.
-    S.autoDeferredSince = null
-    return
-  }
-  const isBackground = await isMainBackground($)
-  if (S.isTurnLive || isBackground) {
-    const stamp = await $.clock.now()
-    // Only background work with no turn live counts toward the cap: a live
-    // turn restarts it.
-    S.autoDeferredSince = S.isTurnLive ? null : (S.autoDeferredSince ?? stamp)
-    if (S.autoDeferredSince === null || stamp - S.autoDeferredSince < DEFER_CAP_MS) {
-      scheduleAutoAct($, stage, AUTO_RETRY_MS)
-      return
-    }
-    await bookStageFailure($, stage, `a background launch kept the ${stage} waiting 30 minutes`)
-    return
-  }
-  S.autoDeferredSince = null
-  let bound = await $.session.id()
-  let at: AutoStage = stage
-  try {
-    if (at === 'compact') {
-      const done = await $.session.compact({ instructions: AUTO_COMPACT_INSTRUCTIONS })
-      if ('skip' in done && typeof done.skip === 'string') throw new Error(done.skip)
-      await update($, budget, () => null)
-      await update($, isNudged, () => false)
-      // The compaction happened: never repeat it. Unbooked, pending stays
-      // compact and no later stage would run, so stop the run instead. Exit 5
-      // is the script's own stop: the compaction cap was reached.
-      const booked = await autoRunCall($, bound, ['compacted'])
-      if (booked === 5) {
-        await endStoppedRun($)
-        return
-      }
-      if (booked !== 0) {
-        await endUnboundRun($, bound, 'the cockpit compacted but could not book it')
-        return
-      }
-      await trackAutoRun($)
-      at = 'continue'
-    }
-    if (at === 'continue') {
-      await $.prompt.submit({ text: autoContinuePrompt($.plugin.root, auto.plan), asUser: true })
-      // Clears a failure booked before this retry; pending stays after-compact.
-      await autoRunCall($, bound, ['resumed'])
-      return
-    }
-    if (at === 'switch') {
-      const cleared = await autoRunCall($, bound, ['clear', '--phase'])
-      if (cleared !== 0) throw new Error(`the phase clear exited ${cleared}`)
-      at = 'clear'
-    }
-    if (at === 'clear') {
-      await $.command.run({ command: 'clear' })
-      const cleared = await $.session.id()
-      if ((await autoRunCall($, cleared, ['rebind', '--to', cleared])) !== 0) {
-        // The run is still bound to the session /clear ended: stop it from there.
-        await endUnboundRun($, bound, 'the cleared session could not be bound')
-        return
-      }
-      bound = cleared
-      at = 'resume'
-    }
-    const refused: string[] = []
-    let isRestored = true
-    let isKept = false
-    if (auto.launch !== null) {
-      // /model and /effort save the user's defaults: run them only when those
-      // can be read now and put back after (the restore runs node).
-      const saved = await userDefaults($)
-      if (saved !== null && (await nodeRuns($))) {
-        for (const [command, args] of [['model', auto.launch.model], ['effort', auto.launch.effort]] as const) {
-          await $.command.run({ command, args }).catch(() => refused.push(`/${command} ${args}`))
-        }
-        isRestored = await restoreUserDefaults($, saved)
-        if (!isRestored) {
-          await notify($, { kind: 'blocked', title: '⛔ Default model not restored', detail: `/model and /effort left the auto run's launch model as the default in ${await userSettingsPath($)}.`, isPlain: true })
-        }
-      } else isKept = true
-    }
-    const notes: string[] = []
-    if (isKept) notes.push(`The cockpit kept this session on ${await $.session.model()} because it could not put back your default model afterwards.`)
-    if (refused.length > 0) notes.push(`The cockpit could not run ${refused.join(' or ')}; this session runs on ${await $.session.model()}.`)
-    if (!isRestored) notes.push('The cockpit could not put back the default model and effort that /model and /effort saved in your user settings.')
-    const note = notes.length === 0 ? '' : `\n\n${notes.join(' ')} Record that with scripts/auto-run ruling add.`
-    await $.prompt.submit({ text: `${auto.resumePrompt ?? resumePrompt()}${note}`, asUser: true })
-    await autoRunCall($, bound, ['resumed'])
-    await trackAutoRun($)
-  } catch (error) {
-    const why = error instanceof Error ? error.message : String(error)
-    const action = at === 'compact' || at === 'continue' ? 'compact' : at === 'switch' ? 'switch' : 'clear'
-    const code = await autoRunCall($, bound, ['failure', '--reason', `the cockpit could not ${action}: ${why}`])
-    if (code === 0) scheduleAutoAct($, at, AUTO_RETRY_MS)
-    else if (code === 5) await endStoppedRun($)
-    // Unbooked, nothing would retry the stage: stop rather than stall unseen.
-    else await endUnboundRun($, bound, `the cockpit could not ${action} and could not book the failure (exit ${code})`)
-  }
-}
-
-// What /model and /effort save as the user's defaults, as the engine has them
-// loaded; null when the settings cannot be read, so nothing is restored from a guess.
-async function userDefaults($: EngineInterface): Promise<{ model: unknown; modelSettings: unknown } | null> {
-  const user = (await $.settings.read({ source: 'user' }).catch(() => null)) as Record<string, unknown> | null
-  if (user === null) return null
-  return { model: user.model ?? null, modelSettings: user.modelSettings ?? null }
-}
-
-// Whether node starts: the restore below runs dforge-config.mjs with it.
+// Whether node starts: the settings import runs dforge-config.mjs with it.
 async function nodeRuns($: EngineInterface): Promise<boolean> {
   const ran = await $.process.run(['node', '--version'], { timeoutMs: 5_000 }).catch(() => null)
   return ran?.exitCode === 0
 }
 
-// The user settings file /model and /effort write, for the notice that names it.
-async function userSettingsPath($: EngineInterface): Promise<string> {
-  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
-  const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || (home ? `${home.replace(/[\\/]+$/, '')}/.claude` : '~/.claude')
-  return `${configDir}/settings.json`
-}
-
-// /model and /effort save their values as the user's defaults for every new
-// session; the cleared session keeps running on them after the file is put back.
-// The engine never reloads a write that lands right after its own save, and its
-// next settings write would save the launch model again, so the restore counts
-// only once the engine reads it back; a later write is outside that window.
-async function restoreUserDefaults($: EngineInterface, saved: { model: unknown; modelSettings: unknown }): Promise<boolean> {
-  for (let write = 0; write < RESTORE_WRITES; write++) {
-    const ran = await $.process
-      .run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'claude-restore', JSON.stringify(saved)], { timeoutMs: 15_000 })
-      .catch(() => null)
-    if (ran?.exitCode !== 0) return false
-    for (let waited = 0; ; waited += RESTORE_POLL_MS) {
-      if (JSON.stringify(await userDefaults($)) === JSON.stringify(saved)) return true
-      if (waited >= RESTORE_WAIT_MS) break
-      await $.clock.sleep(RESTORE_POLL_MS)
-    }
-  }
-  return false
-}
-
-// The heartbeat scripts/auto-run reads (reference/auto-run.md §Starting): the
-// epoch seconds of the last beat, in a file named for this session's id with
-// each character outside A-Za-z0-9 a dash.
-async function beat($: EngineInterface) {
-  try {
-    const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
-    if (!home) return
-    const id = (await $.session.id()).replace(/[^A-Za-z0-9]/g, '-')
-    const seconds = Math.floor((await $.clock.now()) / 1000)
-    await $.fs.write(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/cockpit/${id}`, `${seconds}\n`)
-  } catch {
-    // A beat that cannot be written is skipped; the watchdog's tick goes on.
-  }
-}
-
-// Each WATCHDOG_MS: the heartbeat, then a wake-up for a bound run nothing
-// else will carry on. A turn that ended on an error, or without its sentinel
-// and unheld, arms no stage, and a pending stage can lose its timer. Never
-// while a turn, background work, a stage or an Esc holds the session, and
-// never within STALL_MS of the latest of this session's start, its last
-// turn's end, the last stage and the last nudge.
+// Each WATCHDOG_MS: a Done held longer than DEFER_CAP_MS by background work
+// that never reported its end is sent.
 async function watchdogTick($: EngineInterface) {
-  await beat($)
   if (S.heldDone !== null && !S.isMainTurn && (await $.clock.now()) - S.heldDone.heldAt > DEFER_CAP_MS) {
     if ((await read($, activity)).kind === 'background') await setActivity($, now => ({ ...now, kind: 'idle' }))
     await sendDone($, '', 0)
   }
-  if (S.isTurnLive || S.autoBusy) return
-  const auto = await readAutoRun($)
-  if (auto === null || !auto.active) return
-  if (await isMainBackground($)) {
-    await reconcileBackground($, auto)
-    return
-  }
-  const now = await read($, activity)
-  if (now.kind !== 'idle' && now.kind !== 'failed') return
-  const last = Math.max(S.watchedSince ?? 0, now.endedAt ?? 0, S.autoActedAt ?? 0, (auto.stalledAt ?? 0) * 1000)
-  if ((await $.clock.now()) - last <= STALL_MS) return
-  const stage = WATCHED_STAGES[auto.pending ?? '']
-  if (stage !== undefined) {
-    if (S.autoTimer === null) {
-      S.autoDeferredSince = null
-      scheduleAutoAct($, stage, 0)
-    }
-    return
-  }
-  const stamp = await $.clock.now()
-  if (S.stallFailedAt !== null && stamp - S.stallFailedAt <= STALL_MS) return
-  const code = await autoRunCall($, await $.session.id(), ['stalled'])
-  S.stallFailedAt = code === 0 || code === 5 ? null : stamp
-  if (code === 5) await endStoppedRun($)
-  else if (code === 0 && !S.isTurnLive) await $.prompt.submit({ text: stallPrompt($.plugin.root), asUser: true }).catch(() => undefined)
 }
 
-async function backgroundKey($: EngineInterface): Promise<string> {
-  const agents = (await read($, spawns)).filter(one => !one.isDone).map(one => `a:${one.agentId}`)
-  const commands = (await read($, shells)).filter(one => (one.agentId ?? null) === null && !isServiceCommand(one.command)).map(one => `s:${one.id}`)
-  return [...agents, ...commands].sort().join(',')
-}
-
-// A bound run with no live turn that only background work holds: a launch that
-// hangs never notifies, so each RECONCILE_MS the session is asked to look at
-// its launches. That prompt's turn restarts autoStage's deferral clock, so a
-// stage held by work that never changes is failed here instead, once
-// RECONCILE_CAP prompts in a row found the same launches running.
-async function reconcileBackground($: EngineInterface, auto: CockpitAutoRun) {
-  const now = await read($, activity)
-  if (now.kind !== 'idle' && now.kind !== 'background' && now.kind !== 'failed') return
-  const stamp = await $.clock.now()
-  const last = Math.max(S.watchedSince ?? 0, now.endedAt ?? 0, S.reconciledAt ?? 0)
-  if (stamp - last <= RECONCILE_MS) return
-  const stage = WATCHED_STAGES[auto.pending ?? '']
-  const step = reconcileStep(S.reconcileSeen, `${auto.pending ?? ''}|${await backgroundKey($)}`, stage !== undefined, RECONCILE_CAP)
-  S.reconciledAt = stamp
-  S.reconcileSeen = step.seen
-  if (step.action === 'fail' && stage !== undefined) {
-    await bookStageFailure($, stage, `${RECONCILE_CAP} reconcile prompts left the ${stage} waiting on background work`)
-    return
-  }
-  if (!S.isTurnLive) await $.prompt.submit({ text: reconcilePrompt($.plugin.root), asUser: true }).catch(() => undefined)
-}
-
-// The run stopped while the session was idle: record it, and give the model a
-// turn to end the run as the attended flow would.
-async function endStoppedRun($: EngineInterface) {
-  await trackAutoRun($)
-  const reason = (await read($, autoRun))?.stopped ?? 'the cockpit could not act'
-  await $.prompt.submit({ text: `The auto run stopped: ${reason}. End as reference/auto-run.md §Stopping says.`, asUser: true }).catch(() => undefined)
-}
-
-// The state file cannot be trusted to record the stop (the run moved to
-// another session, or the script failed): stop the run as the session that
-// owned it, best effort, and say so here without reading the file back.
-async function endUnboundRun($: EngineInterface, owner: string, reason: string) {
-  await autoRunCall($, owner, ['stop', '--reason', reason])
-  await update($, autoRun, () => null)
-  await notify($, { kind: 'blocked', title: '⛔ Auto run stopped', detail: reason, isPlain: true })
-  await $.prompt.submit({ text: `The auto run stopped: ${reason}. End as reference/auto-run.md §Stopping says.`, asUser: true }).catch(() => undefined)
-}
-
-// The person's compaction from the pane, booked as /compact is. The mod's own
-// session.compact hook did not see it under claude plugin test; where it
-// does, it leaves the booking to this.
-async function compactFromPane($: EngineInterface) {
-  S.isPaneCompacting = true
-  try {
-    const done = await $.session.compact()
-    if (!('skip' in done)) await bookAutoCompaction($, true)
-  } finally {
-    S.isPaneCompacting = false
-  }
-}
-
-// A compaction the cockpit did not make, booked so the run's rule applies after it.
-async function bookAutoCompaction($: EngineInterface, fromPane = false) {
-  const auto = await readAutoRun($)
-  // A pending clear or switch supersedes the compaction: booking it would drop
-  // that stage. A pending handoff still needs its clear, and a pending compact
-  // is the cockpit's own stage, which books itself unless the pane ran it first.
-  if (auto === null || !auto.active || ['clear', 'switch', 'handoff'].includes(auto.pending ?? '')) return
-  if (auto.pending === 'compact' && !fromPane) return
-  const code = await autoRunCall($, await $.session.id(), ['compacted'])
-  // Exit 5: the compaction cap stopped the run.
-  if (code === 5) await endStoppedRun($)
-  // The pane did the compact stage's work, so only its continue prompt is left.
-  else if (code === 0 && auto.pending === 'compact') {
-    await trackAutoRun($)
-    scheduleAutoAct($, 'continue', 0)
-  }
-}
-
-async function stopAutoRun($: EngineInterface) {
-  await autoRunCall($, await $.session.id(), ['stop', '--reason', 'owner pressed Stop auto'])
-  await trackAutoRun($)
-}
-
-// The roots darkmem-config.mjs --mode names for the session's checkout (store
-// options spec §7.3). Read again when the checkout, ~/.dforge/stores.json or
-// ~/.dforge/config.json changes, so the session that ran a move or mapped the
-// repository sees the new roots. Null keeps the checkout paths: silently
-// without node, mode lines or either file, with a note in the pane when the
-// run fails or outruns its 5 seconds.
 // A node that cannot start: the engine's "failed to start", or a shell's
 // "node: not found" (exit 127). Any other stderr is the script's own, ENOENT
 // included.
@@ -3019,240 +2172,6 @@ const NO_NODE = /failed to start|\bnode: (?:command )?not found/i
 // 2.1.299: "…aborted: still running after 5000ms"); a command that cannot
 // start rejects "…failed to start: ENOENT…" instead.
 const TIMED_OUT = /still running after/i
-
-async function readRoots($: EngineInterface, checkout: string): Promise<CockpitRoots | null> {
-  const home = (await read($, place))?.home ?? null
-  const mtimeOf = async (name: string) => (home === null ? null : ((await $.fs.stat(`${home}/.dforge/${name}`).catch(() => null))?.mtimeMs ?? null))
-  const stores = await mtimeOf('stores.json')
-  const config = await mtimeOf('config.json')
-  const key = `${checkout}|${stores ?? 'none'}|${config ?? 'none'}`
-  if (S.roots.key === key) return S.roots.value
-  let value: CockpitRoots | null = null
-  let note: string | null = null
-  let isTimedOut = false
-  // Without either file every store is local, which the checkout paths
-  // already are: there is nothing to ask node.
-  if (stores !== null || config !== null) {
-    try {
-      const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/darkmem-config.mjs`, '--mode', checkout], { timeoutMs: 5000 })
-      if (ran.exitCode === 0) value = parseModeLines(ran.stdout)
-      else if (!NO_NODE.test(ran.stderr)) {
-        note = ran.stderr.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? `darkmem-config.mjs --mode exited ${ran.exitCode}`
-      }
-    } catch (error) {
-      // run rejects only when the command cannot start or outlives timeoutMs;
-      // any other wording, a later engine's included, keeps the paths silently.
-      if (TIMED_OUT.test(String(error))) {
-        isTimedOut = true
-        note = 'darkmem-config.mjs --mode gave no answer within 5 seconds'
-      }
-    }
-  }
-  // A run that timed out is not kept: the next read tries again.
-  S.roots = isTimedOut ? { key: '', value: null } : { key, value }
-  if ((await read($, rootsNote)) !== note) await update($, rootsNote, () => note)
-  return value
-}
-
-// finish.json for the newest ledger's slug, or the no-plan one: it stays in
-// the workspace of the worktree that ran the plan, so the session's checkout
-// is read first, then the primary; the primary's path when neither has one.
-async function finishPath($: EngineInterface, checkouts: readonly string[], slug: string | null): Promise<string> {
-  const paths: string[] = []
-  for (const dir of checkouts) {
-    paths.push(slug === null ? `${dir}/.dforge/sdd/finish.json` : `${dir}/.dforge/sdd/${slug}/finish.json`)
-  }
-  for (const path of paths) {
-    if ((await $.fs.stat(path).catch(() => null))?.kind === 'file') return path
-  }
-  return paths[paths.length - 1] ?? ''
-}
-
-// The note is read again only when it changes, and the registers its prompt
-// names only when theirs do: readRun runs at every turn. A ruling handoff is
-// withdrawn once every register it names is readable and fully resolved, since
-// nothing rewrites the note when the last row closes.
-async function readResumeOffer($: EngineInterface, latest: string, at: number | null, root: string) {
-  const key = `${latest}\t${at}`
-  if (S.offerRead !== key) {
-    S.offerRead = key
-    const text = at === null ? null : await $.fs.read(latest).catch(() => null)
-    S.offerFound = typeof text === 'string' ? resumeOfferOf(text) : null
-    S.offerRegisters = null
-  }
-  const found = S.offerFound
-  const registers = (found?.prompt == null ? [] : promptRegisters(found.prompt)).map(path => (/^(?:[A-Za-z]:)?[\\/]/.test(path) ? path : `${root}/${path}`))
-  const stats = await Promise.all(registers.map(path => $.fs.stat(path).catch(() => null)))
-  const registerKey = stats.map(info => (info?.kind === 'file' ? info.mtimeMs : '-')).join('\t')
-  if (S.offerRegisters === registerKey) return
-  S.offerRegisters = registerKey
-  let isSettled = registers.length > 0
-  for (const path of registers) {
-    const text = await $.fs.read(path).catch(() => null)
-    if (typeof text !== 'string' || hasUnresolvedRows(text)) {
-      isSettled = false
-      break
-    }
-  }
-  const offer: CockpitResumeOffer | null = found === null || at === null || isSettled ? null : { at, next: found.next, prompt: found.prompt }
-  if (JSON.stringify(await read($, resumeOffer)) !== JSON.stringify(offer)) await update($, resumeOffer, () => offer)
-}
-
-/** The handoff the resume card and band offer now; null while nothing is to resume. */
-async function offerNow($: EngineInterface, now: number): Promise<CockpitResumeOffer | null> {
-  const offer = await read($, resumeOffer)
-  if (offer === null || now - offer.at >= RESUME_WITHIN) return null
-  if ((await read($, resumeDismissed)) === offer.at || (await read($, isPlanSession)) || (await read($, autoRun))?.active) return null
-  return offer
-}
-
-async function resume($: EngineInterface, offer: CockpitResumeOffer) {
-  await update($, resumeDismissed, () => offer.at)
-  await $.prompt.submit({ text: offer.prompt ?? resumePrompt(), asUser: true })
-}
-
-// The run's ledger, its plan's tasks, and the newest handoff, read where the
-// roots put them (store options spec §7.3): while progress is local, the
-// ledgers under the session worktree's .dforge/, as sdd-workspace writes them,
-// and the handoff under the primary checkout's; the darkmem mirror while it is not.
-async function readRun($: EngineInterface) {
-  // A poll tick's read and a tool call's can overlap: only the latest writes.
-  const reading = ++S.runReads
-  const session = S.where.checkout ?? (await read($, place))?.root ?? null
-  const root = S.where.primary ?? session
-  if (root === null) return
-  const state = `${root}/.dforge`
-  const roots = await readRoots($, session ?? root)
-  const latest = roots?.progress.latestFile ?? `${state}/handoff/latest.md`
-  S.latestName = roots?.progress.store === 'darkmem' ? latest : null
-  const checkouts = [...new Set([session, root].filter((dir): dir is string => dir !== null))]
-  try {
-    const handoff = await $.fs.stat(latest).catch(() => null)
-    const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
-    await readResumeOffer($, latest, handoffTime, root)
-    const base = roots?.progress.ledgerRoot ?? `${session ?? root}/.dforge/sdd`
-    const entries = await $.fs.list(base).catch(() => [])
-    let newest: { slug: string; path: string; at: number } | null = null
-    for (const entry of entries) {
-      if (entry.kind !== 'dir') continue
-      const info = await $.fs.stat(`${base}/${entry.name}/progress.md`).catch(() => null)
-      if (info?.kind === 'file' && (newest === null || info.mtimeMs > newest.at)) newest = { slug: entry.name, path: `${base}/${entry.name}/progress.md`, at: info.mtimeMs }
-    }
-    await readFinish($, await finishPath($, checkouts, newest?.slug ?? null))
-    const startedAt = (await read($, usage))?.startedAt ?? (await $.session.usage().catch(() => null))?.startedAt ?? 0
-    const isOlder = newest !== null && newest.at < startedAt
-    const clear = async () => {
-      if ((await read($, run)) !== null) await update($, run, () => null)
-    }
-    // A ledger counts once this session works on it, or when it is the one
-    // the session started next to.
-    if (newest === null || (!(await read($, isPlanSession)) && isOlder)) {
-      if (reading !== S.runReads) return
-      S.runKey = ''
-      return clear()
-    }
-    const planStat = S.runPlan === null ? null : await $.fs.stat(S.runPlan).catch(() => null)
-    const runKey = `${newest.path}:${newest.at}:${planStat?.mtimeMs ?? ''}`
-    // The key stays set while the card shows its run, or a run set aside as history.
-    if (runKey === S.runKey) return
-    const ledger = parseLedger(String(await $.fs.read(newest.path)))
-    let titles: { n: number; title: string }[] = []
-    let planPath: string | null = null
-    if (ledger.plan !== null) {
-      const places: { root: string; docsDir: string }[] = []
-      for (const dir of checkouts) places.push({ root: dir, docsDir: `${dir}/docs/dforge` })
-      for (const candidate of planCandidates(ledger.plan, roots?.docs ?? null, places)) {
-        try {
-          titles = planTasks(String(await $.fs.read(candidate)))
-          if (titles.length > 0) {
-            planPath = candidate
-            break
-          }
-        } catch {
-          // Try the next checkout.
-        }
-      }
-    }
-    const numbers = [...new Set([...titles.map(one => one.n), ...ledger.tasks.map(one => one.n)])].sort((a, b) => a - b)
-    const summary: CockpitRun = {
-      plan: ledger.plan,
-      tasks: numbers.map(n => {
-        const known = ledger.tasks.find(one => one.n === n)
-        return {
-          n,
-          title: titles.find(one => one.n === n)?.title ?? '',
-          state: known?.state ?? 'pending',
-          round: known?.round ?? null,
-          seat: known?.seat ?? null,
-          isClean: known?.isClean ?? false,
-          reason: known?.reason ?? null,
-        }
-      }),
-      done: ledger.tasks.filter(one => one.state === 'complete').length,
-      total: numbers.length,
-      isFinished: ledger.isFinished,
-      isPlanRead: planPath !== null,
-    }
-    if (reading !== S.runReads) return
-    // A plan the ledger names but no checkout holds yet is looked for again at the next read.
-    S.runKey = ledger.plan !== null && planPath === null ? '' : runKey
-    S.runPlan = planPath
-    // A run whose every task was done before this session started is history:
-    // a new session starts with no Run card.
-    if (isOlder && (summary.isFinished || (summary.total > 0 && summary.done === summary.total))) return clear()
-    if (JSON.stringify(await read($, run)) !== JSON.stringify(summary)) await update($, run, () => summary)
-    await sendLedgerEvents($, summary)
-  } catch {
-    // No readable ledger: the Plan card stays as it is.
-  }
-}
-
-// The finish action dforge asked for before the run, from the run's
-// finish.json, or the one beside the workspaces for work without a plan.
-async function readFinish($: EngineInterface, path: string) {
-  const text = await $.fs.read(path).catch(() => null)
-  const next: CockpitFinish | null = text === null ? null : parseFinish(String(text))
-  if (JSON.stringify(await read($, finish)) === JSON.stringify(next)) return
-  await update($, finish, () => next)
-  await syncTicker($)
-}
-
-// A task that became blocked or complete since the last read, said once.
-async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
-  const keys = summary.tasks.flatMap(task =>
-    task.state === 'blocked' ? [`blocked:${task.n}:${task.reason ?? ''}`] : task.state === 'complete' ? [`complete:${task.n}`] : [],
-  )
-  if (summary.isFinished) keys.push('finished')
-  const seen = S.ledgerSeen.get(summary.plan ?? '')
-  if (seen === undefined) {
-    S.ledgerSeen.set(summary.plan ?? '', new Set(keys))
-    return
-  }
-  for (const key of keys) {
-    if (seen.has(key)) continue
-    seen.add(key)
-    await markRunSession($)
-    const [what, n] = key.split(':')
-    const task = summary.tasks.find(one => String(one.n) === n)
-    if (what === 'blocked' && task !== undefined) {
-      await notify($, {
-        kind: 'blocked',
-        title: `🛑 Task ${task.n} blocked`,
-        detail: task.reason ?? undefined,
-        fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }],
-      })
-    } else if (what === 'complete' && task !== undefined) {
-      await notify($, {
-        kind: 'task',
-        title: `✅ Task ${task.n} complete${task.isClean ? ', review clean' : ''}`,
-        detail: task.title || undefined,
-        fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }],
-      })
-    } else if (what === 'finished') {
-      await notify($, { kind: 'task', title: '🏁 Final review clean', fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }] })
-    }
-  }
-}
 
 // The webhook and mention, from the environment or the mod's own store.
 async function readNotifier($: EngineInterface) {
@@ -3272,7 +2191,7 @@ async function readNotifier($: EngineInterface) {
   }
 }
 
-// Where the messages come from and S.where the state file goes, read once.
+// Where the messages come from, read once.
 async function readWhere($: EngineInterface) {
   try {
     const settings = (await $.settings.read()) as { permissions?: { defaultMode?: unknown } }
@@ -3291,36 +2210,11 @@ async function readWhere($: EngineInterface) {
   }
   S.where.host = (await $.env.get('HOSTNAME')) || (await firstLine(['hostname']))
   S.where.tmux = (await $.env.get('TMUX')) ? await firstLine(['tmux', 'display-message', '-p', '#S']) : null
-  // A worktree's .dforge/ lives in the primary checkout: the work tree of the
-  // common git directory's parent, as ar_primary_root (scripts/lib/auto-run.sh)
-  // finds it, so a layout the scripts resolve no primary for (a submodule)
-  // has none here either.
+  // The primary checkout: the work tree of the common git directory's parent,
+  // so a layout with none (a submodule) has none here either.
   const common = await firstLine(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
   const parent = common === null ? '' : common.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '')
   S.where.primary = parent === '' ? null : await firstLine(['git', '-C', parent, 'rev-parse', '--show-toplevel'])
-}
-
-// The context crossed its handoff budget: said once per crossing.
-async function onBudget($: EngineInterface, reading: { now: CockpitBudget; isPast: boolean } | undefined) {
-  if (reading === undefined) return
-  if ((await read($, autoRun))?.active) {
-    // A run compacts at its own limit: the crossing it passes does not count.
-    S.isBudgetSent = false
-    return
-  }
-  const { now, isPast } = reading
-  if (!isPast) {
-    S.isBudgetSent = false
-    return
-  }
-  if (S.isBudgetSent) return
-  S.isBudgetSent = true
-  await notify($, {
-    kind: 'budget',
-    title: '🔶 Handoff budget reached',
-    detail: `${kTokens(now.tokens)} of ${kTokens(now.limit)}.${(await read($, isPlanSession)) ? ' The controller hands off after the task in flight.' : ''}`,
-    isPlain: true,
-  })
 }
 
 // Saves the webhook, or says why not; an empty value removes it.
@@ -3382,34 +2276,16 @@ async function notifyCommand($: EngineInterface, words: string[]): Promise<{ tex
 }
 
 
-// Reads the status line's figures (free without a breakdown) and, past the
-// budget in a dforge session, tells the model once.
-async function refresh(
-  $: EngineInterface,
-  tuning: Tuning,
-  compactWindow: number | undefined,
-  { isShownOnly = false } = {},
-): Promise<{ now: CockpitBudget; isPast: boolean } | undefined> {
-  const { handoffTokens, nudgeModel } = tuning
+// Reads the status line's figures, measured against the auto-compact point,
+// or against the window while the engine has auto-compaction off.
+async function refresh($: EngineInterface, compactWindow: number | undefined) {
   const figures = await $.session.usage()
   const tokens = figures.context.tokens
   if (tokens === undefined) return
   const window = figures.context.window
-  const auto = await read($, autoRun)
-  const isAuto = auto !== null && auto.active
-  // A plan's last tasks and its final phase never hand off, as the budget line
-  // measures them: strict keeps the handoff budget and runs past it to finish
-  // the plan, relaxed measures against the final-phase limit.
-  const summary = await read($, run)
-  // Only a session running the plan: a darkmem pull at the start writes the
-  // ledgers of a finished plan anew, and the newest one then reads as this session's.
-  const isTail = summary !== null && isPlanTail(summary) && (await read($, isRunSession))
-  const limit = isAuto
-    ? autoLimitFor(auto.regime, handoffTokens, window, compactWindow)
-    : tuning.isRelaxed
-      ? finalLimitFor(window, compactWindow)
-      : budgetFor(handoffTokens, undefined, window, compactWindow)
-  const isFinishing = !isAuto && !tuning.isRelaxed && isTail
+  const detail = await read($, breakdown)
+  const isAutoCompactOff = detail?.isAutoCompactOff === true
+  const limit = isAutoCompactOff ? window : compactLimitFor(window, compactWindow, detail?.compactAt)
   const usd = figures.cost?.usd ?? null
   const before = await read($, budget)
   if (
@@ -3418,33 +2294,12 @@ async function refresh(
     before.usd !== usd ||
     before.window !== window ||
     before.compactWindow !== (compactWindow ?? null) ||
-    before.isFinishing !== isFinishing
+    before.isAutoCompactOff !== isAutoCompactOff
   ) {
-    const now: CockpitBudget = { tokens, limit, window, compactWindow: compactWindow ?? null, usd, isFinishing }
+    const now: CockpitBudget = { tokens, limit, window, compactWindow: compactWindow ?? null, usd, isAutoCompactOff }
     await update($, budget, () => now)
     if (before?.tokens !== tokens) await update($, trend, readings => [...readings, tokens].slice(-TREND_LENGTH))
   }
-
-  if (isShownOnly) return
-  const level = levelOf(tokens, limit, tuning.warnAt)
-  // Finishing the plan past the budget is no handoff.
-  const isPast = level === 'handoff' && !isFinishing
-  const reading = { now: { tokens, limit, window, compactWindow: compactWindow ?? null, usd, isFinishing }, isPast }
-  if (!isPast) {
-    if (await read($, isNudged)) await update($, isNudged, () => false)
-    return reading
-  }
-  // An auto run compacts at its limit rather than handing off: no note.
-  if (!nudgeModel || isAuto || (await read($, isNudged)) || !(await read($, isPlanSession))) return reading
-  await update($, isNudged, () => true)
-  const note = `dforge: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`
-  try {
-    await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } })
-  } catch {
-    // The host would not take the row: say it to the person instead.
-    $.ui.toast(note)
-  }
-  return reading
 }
 
 /** What the pane asks the surface for under a layout: the band's rows unless it is full. */
@@ -3498,8 +2353,8 @@ async function readSettingsFile($: EngineInterface, path: string): Promise<Setti
  * read; absent, the file is timed now.
  */
 async function applySettings($: EngineInterface, file: SettingsFile, mtime?: number | null) {
-  // $.env.get takes only a literal name: each variable the schema names is listed.
-  const env = { DFORGE_BUDGET: await $.env.get('DFORGE_BUDGET'), DFORGE_LENS_CAP: await $.env.get('DFORGE_LENS_CAP'), DFORGE_LENS_MINOR_FROM: await $.env.get('DFORGE_LENS_MINOR_FROM') }
+  // $.env.get takes only a literal name: each variable the schema names is listed here.
+  const env: Record<string, string | undefined> = {}
   const userRead = await $.settings.read({ source: 'user' }).catch(() => null)
   const mergedRead = await $.settings.read().catch(() => null)
   const engineUser = (userRead ?? {}) as Record<string, unknown>
@@ -3558,7 +2413,6 @@ async function importWebhook($: EngineInterface) {
 /** Reads ~/.dforge/config.json into force, importing the pre-2.0 settings on the first run. */
 async function loadSettings($: EngineInterface) {
   S.claudeSaved = {}
-  S.changed = {}
   const { path, mtime } = await configStamp($)
   if (path === null) return applySettings($, {}, null)
   let file = await readSettingsFile($, path)
@@ -3598,7 +2452,6 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
       await $.fs.write(path, `${JSON.stringify(next, null, 2)}\n`)
       await applySettings($, next)
     }
-    if (spec?.enforcedBy === 'skill') S.changed[key] = value
     return true
   } catch (error) {
     $.ui.toast(`dforge: ${key} not saved: ${error instanceof Error ? error.message : String(error)}`)
@@ -3631,27 +2484,6 @@ async function openField($: EngineInterface, key: string, open: () => Promise<un
   const focusing = $.ui.focus({ requestId: PANE, key }).catch(() => undefined)
   await open()
   await focusing
-}
-
-async function markRunSession($: EngineInterface) {
-  if (!(await read($, isRunSession))) await update($, isRunSession, () => true)
-}
-
-/** Tells the model, once, which skill-enforced settings changed; outside a dforge session the change waits for one. */
-async function flushSettingNote($: EngineInterface) {
-  const sent = { ...S.changed }
-  const keys = Object.keys(sent)
-  if (keys.length === 0 || !(await read($, isPlanSession))) return
-  const note = `dforge settings changed: ${keys.map(key => `${key}=${String(sent[key])}`).join('; ')}. Each replaces the matching question or default in the skills.`
-  try {
-    const appended = await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } })
-    if (appended.deny !== undefined) return
-  } catch {
-    // The host would not take the row: the changes stay pending for the next close.
-    return
-  }
-  // A key changed again while the row was being appended stays pending.
-  for (const key of keys) if (S.changed[key] === sent[key]) delete S.changed[key]
 }
 
 /** The settings file's path and modification time; the time is null when there is no file. */
@@ -3689,17 +2521,14 @@ async function readSession($: EngineInterface, isStart: boolean) {
     if ((await read($, view)) !== 'settings') await shutPane($)
   } else if (isStart && o.openAtStart) void $.ui.open(paneFor(o.layout))
   S.compactWindow = await readCompactWindow($)
-  await onBudget($, await refresh($, o.tuning, S.compactWindow))
+  // The breakdown first: the engine's compaction threshold sets the context limit.
+  await readBreakdown($)
+  await refresh($, S.compactWindow)
   await readAccount($)
   await readPlace($)
-  await readBreakdown($)
   await readEngine($)
   await readWhere($)
   await readNotifier($)
-  S.runKey = ''
-  await readRun($)
-  await trackAutoRun($)
-  await beat($)
   await readVersion($)
   await readRemote($)
   // Last, so a read that failed is tried again at the next poll. '' when the
@@ -3710,8 +2539,8 @@ async function readSession($: EngineInterface, isStart: boolean) {
 /**
  * One poll tick: first a session the cockpit has not read, which a /clear or
  * /resume leaves with no values or another id; then nothing unless the pane is
- * placed or the cockpit minimized; then changed settings and the run, and
- * every DETAIL_EVERY ticks the slower readings and the auto run.
+ * placed or the cockpit minimized; then changed settings, and every
+ * DETAIL_EVERY ticks the slower readings.
  */
 async function pollTick($: EngineInterface) {
   if (S.isPolling) return
@@ -3727,10 +2556,8 @@ async function pollTick($: EngineInterface) {
     if (!(await live($)).isMinimized && !(await isPaneUp($))) return
     S.polls += 1
     await rereadSettings($)
-    await readRun($)
     if (S.polls % DETAIL_EVERY !== 0) return
     if ((await $.clock.now()) - S.detailAt >= DETAIL_EVERY * POLL_MS) await refreshDetail($)
-    await trackAutoRun($)
   } finally {
     S.isPolling = false
   }
@@ -3796,6 +2623,7 @@ async function readBreakdown($: EngineInterface) {
           .slice(0, MAX_BREAKDOWN_ROWS)
           .map(row => ({ name: row.name, tokens: row.tokens })),
         compactAt: detail.isAutoCompactEnabled ? (detail.autoCompactThreshold ?? null) : null,
+        isAutoCompactOff: !detail.isAutoCompactEnabled,
         total: detail.totalTokens,
       }
       if (JSON.stringify(await read($, breakdown)) !== JSON.stringify(next)) await update($, breakdown, () => next)
@@ -3862,8 +2690,6 @@ async function readPlace($: EngineInterface) {
   } catch {
     // No working directory on this host: the strip starts at the branch.
   }
-  const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { timeoutMs: 2000 }).catch(() => null)
-  S.where.checkout = top?.exitCode === 0 ? (top.stdout.split('\n')[0] ?? '').trim() || null : null
 }
 
 // Until the first request goes out: the session's model and the effort setting.
@@ -4037,12 +2863,7 @@ function planWindow(items: readonly CockpitPlanItem[], size: number): CockpitPla
   return items.slice(start, start + size)
 }
 
-function isJudgeSeat(seat: string | undefined): boolean {
-  return seat !== undefined && isDforge(seat) && seat.slice(seat.indexOf(':') + 1).startsWith('judge-')
-}
-
-// Past 50 records the oldest finished ones go; a running one stays, as the
-// review-seat write guard reads its reports.
+// Past 50 records the oldest finished ones go; a running one stays.
 function trimmedSpawns(list: CockpitSpawn[]): CockpitSpawn[] {
   let excess = list.length - 50
   return list.filter(one => {
@@ -4050,155 +2871,6 @@ function trimmedSpawns(list: CockpitSpawn[]): CockpitSpawn[] {
     excess--
     return false
   })
-}
-
-// Windows is told from the roots: the engine names no platform.
-function isDriveHost(): boolean {
-  return [S.where.checkout, S.where.primary].some(dir => dir !== null && /^[A-Za-z]:\//.test(dir.replace(/\\/g, '/')))
-}
-
-// A `..` segment is refused, not resolved: `<dir>/x/../f` is not `<dir>/f`
-// when x is a symbolic link, which the guard cannot see.
-function canonPath(path: string): string | null {
-  let rest = path.replace(/\\/g, '/')
-  let drive = ''
-  const letter = isDriveHost() ? (/^\/([A-Za-z])\//.exec(rest) ?? /^([A-Za-z]):\//.exec(rest)) : null
-  if (letter !== null) {
-    drive = `${(letter[1] ?? '').toLowerCase()}:`
-    rest = rest.slice(2)
-  }
-  if (!rest.startsWith('/')) return null
-  const segments = rest.split('/').filter(one => one !== '' && one !== '.')
-  if (segments.includes('..')) return null
-  return `${drive}/${segments.join('/')}`
-}
-
-// Only a drive host spells a canonical path with a drive letter.
-function pathKey(canon: string): string {
-  return /^[a-z]:\//.test(canon) ? canon.toLowerCase() : canon
-}
-
-// Every worktree counts, not only the two the session knows: its directory
-// can sit in the primary checkout while the work and the report are in a
-// worktree, and S.where follows it only after the next shell call.
-async function reviewDirs($: EngineInterface): Promise<string[]> {
-  const listed = await $.process.run(['git', 'worktree', 'list', '--porcelain'], { timeoutMs: 2000 }).catch(() => null)
-  const worktrees = listed?.exitCode === 0 ? listed.stdout.split('\n').flatMap(line => (line.startsWith('worktree ') ? [line.slice('worktree '.length).trim()] : [])) : []
-  return [...new Set([S.where.checkout, S.where.primary, ...worktrees].filter(dir => dir !== null))]
-}
-
-function rootsOf(dirs: readonly string[]): string[] {
-  return dirs.flatMap(dir => {
-    const root = canonPath(`${dir}/.dforge`)
-    return root === null ? [] : [root]
-  })
-}
-
-function rootOf(canon: string, roots: readonly string[]): string | undefined {
-  const key = pathKey(canon)
-  return roots.find(root => key.startsWith(`${pathKey(root)}/`))
-}
-
-// Each root is also matched literally, in either slash, so a path under a root
-// that holds spaces or parentheses is captured whole; below the root a path
-// still stops at them, as the shape's tail says.
-function pathsIn(text: string, dirs: readonly string[], shape: ReturnType<typeof pathShape>): string[] {
-  const roots = rootsOf(dirs)
-  const found: string[] = []
-  const add = (path: string) => {
-    const canon = canonPath(path)
-    if (canon !== null && rootOf(canon, roots) !== undefined && !found.includes(path)) found.push(path)
-  }
-  for (const [path] of text.matchAll(shape.whole)) add(path)
-  for (const dir of dirs) {
-    const raw = `${dir}/.dforge`
-    for (const spelling of new Set([raw, raw.replace(/\\/g, '/'), raw.replace(/\//g, '\\')])) {
-      const literal = spelling.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const head = new RegExp(`(?<![\\w.~/\\\\-])${literal}`, /^[A-Za-z]:/.test(spelling) ? 'gi' : 'g')
-      for (const at of text.matchAll(head)) {
-        const tail = shape.tail.exec(text.slice(at.index + at[0].length))
-        if (tail !== null) add(at[0] + tail[0])
-      }
-    }
-  }
-  return found
-}
-
-// The implementer's report (task-<N>-report.md), which a review dispatch also
-// names, is never a judge's to write.
-function reportPathsIn(text: string, dirs: readonly string[]): string[] {
-  return pathsIn(text, dirs, REPORT_PATH).filter(path => !/[\\/]task-\d+-report\.md$/i.test(path))
-}
-
-// The documented dispatch is only a pointer to the prompt file, so a dispatch
-// that names no report is answered from the prompt files it names. The roots
-// are kept with the paths: the session may move before the judge writes.
-async function judgeReports($: EngineInterface, prompt: string): Promise<{ reports: string[]; reportRoots: string[] }> {
-  const dirs = await reviewDirs($)
-  const reportRoots = rootsOf(dirs)
-  const named = reportPathsIn(prompt, dirs)
-  if (named.length > 0) return { reports: named, reportRoots }
-  const reports = new Set<string>()
-  for (const file of pathsIn(prompt, dirs, PROMPT_PATH)) {
-    const text = await $.fs.read(canonPath(file) ?? file).catch(() => '')
-    for (const line of text.split('\n').filter(one => REPORT_LINE.test(one))) {
-      for (const path of reportPathsIn(line, dirs)) reports.add(path)
-    }
-  }
-  return { reports: [...reports], reportRoots }
-}
-
-// The root is trusted as an existing directory; each path below it down to
-// the target must not be a symbolic link. A stat rejection that statMissing
-// does not read as a missing path refuses. The walk stops at the first missing
-// path, as nothing below it exists.
-async function isNamedReport($: EngineInterface, target: string, allowed: readonly string[], roots: readonly string[]): Promise<boolean> {
-  const canon = canonPath(target)
-  if (canon === null) return false
-  const key = pathKey(canon)
-  const isAllowed = allowed.some(path => {
-    const one = canonPath(path)
-    return one !== null && pathKey(one) === key
-  })
-  if (!isAllowed) return false
-  const root = rootOf(canon, roots)
-  if (root === undefined) return false
-  const parts = canon.split('/')
-  let isAboveDir = true
-  for (let at = root.split('/').length + 1; at <= parts.length; at++) {
-    let info: Awaited<ReturnType<EngineInterface['fs']['stat']>>
-    try {
-      info = await $.fs.stat(parts.slice(0, at).join('/'))
-    } catch (error) {
-      return statMissing(error, isAboveDir)
-    }
-    if (info.isLink === true) return false
-    isAboveDir = info.kind === 'dir'
-  }
-  return true
-}
-
-// A failing agent list refuses no write of a loop the spawn record does not
-// call a judge's; for one it does, the hook's .catch refuses the write.
-async function judgeWriteDenial($: EngineInterface, tool: string, e: { agentId?: string }): Promise<string | null> {
-  const spawn = (await read($, spawns)).find(one => one.agentId === e.agentId)
-  const isRecordedJudge = isJudgeSeat(spawn?.seat)
-  const agents = await $.agent.list().catch(error => {
-    if (isRecordedJudge) throw error
-    return null
-  })
-  if (agents === null) return null
-  if (!isRecordedJudge && !isJudgeSeat(agents.find(one => one.id === e.agentId)?.type)) return null
-  try {
-    const paths = e as { file_path?: unknown; notebook_path?: unknown }
-    const named = tool === 'NotebookEdit' ? paths.notebook_path : paths.file_path
-    const target = typeof named === 'string' ? named : ''
-    const allowed = spawn?.reports ?? []
-    if (await isNamedReport($, target, allowed, spawn?.reportRoots ?? [])) return null
-    return `dforge: a review seat writes only the report file its dispatch names (${allowed.length === 0 ? 'none' : allowed.join(', ')}); ${target} is not one.`
-  } catch (error) {
-    return `dforge: the review-seat write guard could not check this write (${error instanceof Error && error.message !== '' ? error.message : String(error)}); it is refused.`
-  }
 }
 
 async function attributionLine($: EngineInterface, tool: string, e: object): Promise<string | undefined> {
@@ -4239,10 +2911,6 @@ function addRun(all: CockpitSeat[], seat: string, usage: TurnUsage): CockpitSeat
   return found ? all.map(one => (one.seat === seat ? next : one)) : [...all, next]
 }
 
-function shortSeat(seat: string): string {
-  return seat.replace(/^dforge:/, '')
-}
-
 function costRate(usd: number, startedAt: number | undefined, now: number): string {
   if (startedAt === undefined) return ''
   const hours = (now - startedAt) / 3_600_000
@@ -4256,20 +2924,6 @@ function totalIn(seat: CockpitSeat): number {
 function cacheShare(seat: CockpitSeat): number {
   const total = totalIn(seat)
   return total === 0 ? 0 : Math.round((seat.cacheRead / total) * 100)
-}
-
-// The round of the task in flight, as the ledger writes it ("2/5"), for the Run card's head.
-function runRound(summary: CockpitRun): string | null {
-  return summary.tasks.find(task => task.state === 'assigned' && task.round !== null)?.round ?? null
-}
-
-// Whether a call's command or file names a .dforge path or finish-choice, as a ledger write or the finish choice does.
-function touchesRun(e: object): boolean {
-  const args = e as Record<string, unknown>
-  return ['command', 'file_path', 'notebook_path', 'path'].some(key => {
-    const value = args[key]
-    return typeof value === 'string' && /\.dforge|finish-choice/.test(value)
-  })
 }
 
 // What a call asks permission for, in a line: the command, the file, or the URL.

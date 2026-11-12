@@ -94,73 +94,10 @@ dforge_stores_init() { # [DIR]
 dforge_docs_root() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_DOCS_ROOT"; }
 dforge_docs_store() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_DOCS_STORE"; }
 dforge_progress_store() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_PROGRESS_STORE"; }
-dforge_ledger_root() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_LEDGER_ROOT"; }
-dforge_latest_file() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_LATEST"; }
-dforge_ledger_dir() { dforge_stores_init "${2:-}"; printf '%s/%s\n' "$_DFORGE_LEDGER_ROOT" "$1"; } # SLUG [DIR]
 
 # dforge_project [DIR] — the darkmem project the repository is mapped to;
 # status 1 with nothing printed when it is unmapped, outside git or without node.
 dforge_project() { dforge_stores_init "${1:-}"; [ -n "$_DFORGE_PROJECT" ] || return 1; printf '%s\n' "$_DFORGE_PROJECT"; }
-
-dforge_workspace() { # SLUG [DIR]
-  dforge_stores_init "${2:-}"
-  printf '%s/sdd/%s\n' "$(dforge_dir state "${_DFORGE_TOP:-${2:-$PWD}}")" "$1"
-}
-
-# dforge_ledger_files [DIR] — "<ledger>\t<checkout>" for every worktree's
-# ledgers when progress is local; "<ledger>\tmirror" for the mirror's when it
-# is darkmem, listed once, since every worktree shares the mirror.
-dforge_ledger_files() {
-  local wt f
-  dforge_stores_init "${1:-}"
-  if [ "$_DFORGE_PROGRESS_STORE" = darkmem ]; then
-    for f in "$_DFORGE_LEDGER_ROOT"/*/progress.md; do
-      [ -f "$f" ] && printf '%s\tmirror\n' "$f"
-    done
-    return 0
-  fi
-  [ -n "$_DFORGE_TOP" ] || return 0
-  git -C "$_DFORGE_TOP" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p' |
-  while IFS= read -r wt; do
-    for f in "$(dforge_dir state "$wt")"/sdd/*/progress.md; do
-      [ -f "$f" ] && printf '%s\t%s\n' "$f" "$wt"
-    done
-  done
-  return 0
-}
-
-# dforge_name_key NAME — the one name every docs prefix shares (store options
-# spec §7.1): docs/superpowers/<rest> (before 3.0) and docs/forge/<rest> (3.x)
-# are docs/dforge/<rest>. dforge has written only docs/dforge since 4.0.0, but
-# plans, specs, ledgers and registers written before it cite an old prefix and
-# are never rewritten, so every comparison of two document names compares
-# their keys.
-dforge_name_key() {
-  local name=${1#./}
-  [ "$name" = / ] || name=${name%/}
-  case $name in
-    docs/superpowers|docs/forge) printf 'docs/dforge\n' ;;
-    docs/superpowers/*) printf 'docs/dforge/%s\n' "${name#docs/superpowers/}" ;;
-    docs/forge/*) printf 'docs/dforge/%s\n' "${name#docs/forge/}" ;;
-    *) printf '%s\n' "$name" ;;
-  esac
-}
-
-# dforge_name_spellings NAME — the key, then for a document name the same name
-# under the 3.x docs/forge and the pre-3.0 docs/superpowers. completed.md and
-# register cells keep the spelling they were written with, so a search runs
-# once per line and accepts any.
-dforge_name_spellings() {
-  local key rest
-  key=$(dforge_name_key "$1")
-  printf '%s\n' "$key"
-  case $key in
-    docs/dforge) printf 'docs/forge\ndocs/superpowers\n' ;;
-    docs/dforge/*)
-      rest=${key#docs/dforge/}
-      printf 'docs/forge/%s\ndocs/superpowers/%s\n' "$rest" "$rest" ;;
-  esac
-}
 
 # dforge_resolve NAME [DIR] — a document name under the docs root, any other
 # relative name under the worktree, an absolute path unchanged. A historical

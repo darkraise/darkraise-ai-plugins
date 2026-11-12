@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The ui-ux skill's proof tool: which files are UI files, their fingerprint, a
-# spec's contract items, stamping a proof report, and the gate that blocks the
-# final review, finishing and a "done" claim until the UI is proven.
+# spec's contract items, stamping a proof report, and the gate that holds a
+# "done" claim until the UI is proven.
 #
 # Usage: ui-proof paths | fingerprint | changed --base REF
 #        ui-proof contract SPEC [ID...]
@@ -56,15 +56,9 @@ case $cmd in
     has=0
     if [ -n "$(uiux_field "$report" Fingerprint)" ]; then has=1; fi
     tmp=$(mktemp) || die "mktemp failed"
-    # A judge line for another fingerprint judged other code: drop it, so an
-    # edit after the verdict needs a new verdict.
-    tr -d '\r' < "$report" | awk -v fp="$fp" -v has="$has" "$_PLAN_AWK"'
+    tr -d '\r' < "$report" | awk -v fp="$fp" -v has="$has" "$_UIUX_AWK"'
       in_fence($0) { print; next }
       index($0, "**Fingerprint:**") == 1 { print "**Fingerprint:** " fp; next }
-      index($0, "**Judge:**") == 1 {
-        v = substr($0, 11); sub(/^[ \t]+/, "", v); split(v, w, /[ \t]+/)
-        if (w[2] != fp) next
-      }
       { print }
       !has && !put && index($0, "**Contract:**") == 1 { print "**Fingerprint:** " fp; put = 1 }
     ' > "$tmp" && cat "$tmp" > "$report"
@@ -100,6 +94,7 @@ case $cmd in
       fi
       newest=$r
       if [ "$(uiux_field "$r" Fingerprint)" = "$fp" ]; then reports+=("$r"); fi
+    # A .judge.md file is an earlier version's review of a report, not a report.
     done < <(ls "$dir"/*.md 2>/dev/null | grep -v '\.judge\.md$' | LC_ALL=C sort)
     report=""
     if [ ${#reports[@]} -eq 0 ]; then
@@ -133,7 +128,7 @@ case $cmd in
       for id in $want; do
         grep -q "^$id"$'\037' <<<"$rows" || failed coverage "$id has no row in ## Results"
       done
-      accepted=$(tr -d '\r' < "$report" | awk "$_PLAN_AWK"'in_fence($0) { next } index($0, "**Accepted by:**") == 1 { print }')
+      accepted=$(tr -d '\r' < "$report" | awk "$_UIUX_AWK"'in_fence($0) { next } index($0, "**Accepted by:**") == 1 { print }')
       unv=$(awk -F"$(printf '\037')" '$2 == "unverifiable" { n++ } END { print n + 0 }' <<<"$rows")
       while IFS=$'\037' read -r id verdict ev note; do
         [ -n "$id" ] || continue
@@ -163,27 +158,6 @@ case $cmd in
           *) failed verdicts "$id has the unknown verdict \"$verdict\" (pass, deviation, fail or unverifiable)" ;;
         esac
       done <<<"$rows"
-      judge=$(uiux_field "$report" Judge)
-      if [ -z "$judge" ]; then
-        failed judge "no **Judge:** line; dispatch the judge seat (references/walkthrough.md)"
-      else
-        jv=$(awk '{ print $1 }' <<<"$judge")
-        jfp=$(awk '{ print $2 }' <<<"$judge")
-        jfile=$(sed -E 's/^[^ ]+ +[^ ]+ +(—|-) +//' <<<"$judge")
-        if [ "$jv" != ship ]; then
-          failed judge "the judge said $jv"
-        elif [ "$jfp" != "$fp" ]; then
-          failed judge "the verdict is for $jfp; the UI files are at $fp; judge again"
-        else
-          jpath=$(dforge_resolve "$jfile" "$root")
-          if [ ! -f "$jpath" ]; then
-            failed judge "the judge file $jfile does not exist"
-          else
-            last=$(tr -d '\r' < "$jpath" | sed '/^[[:space:]]*$/d' | tail -n 1 | sed 's/[[:space:]]*$//')
-            [ "$last" = "Verdict: ship $fp" ] || failed judge "$jfile does not end with \"Verdict: ship $fp\""
-          fi
-        fi
-      fi
       if [ ${#fails[@]} -eq 0 ]; then
         printf 'ui-proof: ok — %s proves the UI at %s\n' "$(dforge_name "$report" "$root")" "$fp"
         exit 0

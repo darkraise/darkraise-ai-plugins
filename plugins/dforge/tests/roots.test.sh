@@ -31,8 +31,6 @@ WT=$(git -C "$TMP/wt" rev-parse --show-toplevel)
 # --- no config: both families local ---
 check "no config: docs root" "$(cd "$REPO" && dforge_docs_root)" "$TOP/docs/dforge"
 check "no config: stores" "$(cd "$REPO" && dforge_docs_store) $(cd "$REPO" && dforge_progress_store)" "local local"
-check "no config: a worktree's ledger dir" "$(cd "$WT" && dforge_ledger_dir p1)" "$WT/.dforge/sdd/p1"
-check "no config: latest.md from a worktree" "$(cd "$WT" && dforge_latest_file)" "$TOP/.dforge/handoff/latest.md"
 check "no config: a DIR argument" "$(dforge_docs_root "$WT")" "$WT/docs/dforge"
 check "outside git: local under the directory" "$(cd "$TMP" && dforge_docs_root)" "$TMP/docs/dforge"
 
@@ -43,16 +41,8 @@ for docs in local darkmem; do
     for where in "$TOP" "$WT"; do
       label="$docs/$progress from $(basename "$where")"
       if [ "$docs" = darkmem ]; then want_docs="$MIRROR/dforge"; else want_docs="$where/docs/dforge"; fi
-      if [ "$progress" = darkmem ]; then
-        want_ledger="$MIRROR/work/sdd/p1" want_latest="$MIRROR/work/handoff/latest.md"
-      else
-        want_ledger="$where/.dforge/sdd/p1" want_latest="$TOP/.dforge/handoff/latest.md"
-      fi
       check "$label: stores" "$(cd "$where" && dforge_docs_store) $(cd "$where" && dforge_progress_store)" "$docs $progress"
       check "$label: docs root" "$(cd "$where" && dforge_docs_root)" "$want_docs"
-      check "$label: ledger dir" "$(cd "$where" && dforge_ledger_dir p1)" "$want_ledger"
-      check "$label: latest.md" "$(cd "$where" && dforge_latest_file)" "$want_latest"
-      check "$label: the workspace stays local" "$(cd "$where" && dforge_workspace p1)" "$where/.dforge/sdd/p1"
       check "$label: a document name" "$(cd "$where" && dforge_resolve docs/dforge/plans/p1.md)" "$want_docs/plans/p1.md"
       check "$label: a pre-2.0 document name" "$(cd "$where" && dforge_resolve docs/superpowers/plans/p1.md)" "$want_docs/plans/p1.md"
       check "$label: a working name" "$(cd "$where" && dforge_resolve .dforge/sdd/p1/brief.md)" "$where/.dforge/sdd/p1/brief.md"
@@ -65,18 +55,6 @@ for docs in local darkmem; do
   done
 done
 
-# --- ledger listings: every worktree's when local, the mirror's once when darkmem ---
-mkdir -p "$REPO/.dforge/sdd/a" "$WT/.dforge/sdd/b"
-printf 'x\n' > "$REPO/.dforge/sdd/a/progress.md"
-printf 'x\n' > "$WT/.dforge/sdd/b/progress.md"
-stores_home "$HOME" "$REPO" superpowers local local > /dev/null
-check "ledger files: local lists each worktree's" "$(cd "$WT" && dforge_ledger_files | sort)" \
-  "$(printf '%s\t%s\n%s\t%s' "$TOP/.dforge/sdd/a/progress.md" "$TOP" "$WT/.dforge/sdd/b/progress.md" "$WT" | sort)"
-MIRROR=$(stores_home "$HOME" "$REPO" superpowers local darkmem)
-mkdir -p "$MIRROR/work/sdd/c"
-printf 'x\n' > "$MIRROR/work/sdd/c/progress.md"
-check "ledger files: darkmem lists the mirror's once" "$(cd "$WT" && dforge_ledger_files)" "$(printf '%s\tmirror' "$MIRROR/work/sdd/c/progress.md")"
-
 # --- a relative file spelled from a subdirectory is named from the checkout ---
 stores_home "$HOME" "$REPO" superpowers local local > /dev/null
 mkdir -p "$WT/docs/dforge/plans"
@@ -88,27 +66,6 @@ check "a 3.x citation resolves to the file" "$(cd "$WT" && cat "$(dforge_resolve
 check "a bare 3.x docs directory resolves to the docs root" "$(cd "$WT" && dforge_resolve docs/forge)" "$WT/docs/dforge"
 check "DIR: a relative file is a path from the working directory" \
   "$(cd "$WT/docs/dforge" && dforge_name plans/p.md plans)" "docs/dforge/plans/p.md"
-
-# --- one name under either docs prefix (spec §7.1) ---
-check "name key: the pre-2.0 prefix" "$(dforge_name_key docs/superpowers/plans/p.md)" "docs/dforge/plans/p.md"
-check "name key: the 3.x prefix" "$(dforge_name_key docs/forge/plans/p.md)" "docs/dforge/plans/p.md"
-check "name key: a bare docs/forge" "$(dforge_name_key docs/forge)" "docs/dforge"
-check "name key: docs/forgex is another name" "$(dforge_name_key docs/forgex/a.md)" "docs/forgex/a.md"
-check "name key: the dforge prefix" "$(dforge_name_key docs/dforge/plans/p.md)" "docs/dforge/plans/p.md"
-check "name key: a bare docs/superpowers" "$(dforge_name_key docs/superpowers)" "docs/dforge"
-check "name key: a trailing slash" "$(dforge_name_key docs/superpowers/)" "docs/dforge"
-check "name key: a trailing slash after a name" "$(dforge_name_key docs/forge/plans/)" "docs/dforge/plans"
-check "name key: a leading ./" "$(dforge_name_key ./docs/superpowers/specs/s.md)" "docs/dforge/specs/s.md"
-check "name key: docs/superpowersx is another name" "$(dforge_name_key docs/superpowersx/a.md)" "docs/superpowersx/a.md"
-check "name key: a name outside the docs directory" "$(dforge_name_key .dforge/sdd/p/progress.md)" ".dforge/sdd/p/progress.md"
-check "name key: an absolute path stays" "$(dforge_name_key /x/docs/superpowers/a.md)" "/x/docs/superpowers/a.md"
-check "name spellings: a document name" \
-  "$(dforge_name_spellings docs/superpowers/plans/p.md | tr '\n' '|')" "docs/dforge/plans/p.md|docs/forge/plans/p.md|docs/superpowers/plans/p.md|"
-check "name spellings: the docs directory itself" \
-  "$(dforge_name_spellings ./docs/dforge | tr '\n' '|')" "docs/dforge|docs/forge|docs/superpowers|"
-check "name spellings: a trailing slash" \
-  "$(dforge_name_spellings docs/forge/ | tr '\n' '|')" "docs/dforge|docs/forge|docs/superpowers|"
-check "name spellings: any other name" "$(dforge_name_spellings .dforge/x.md | tr '\n' '|')" ".dforge/x.md|"
 
 # --- the mapped project, from roots.sh and from dforge-path ---
 FP="$HERE/../scripts/dforge-path"

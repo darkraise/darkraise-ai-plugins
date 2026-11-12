@@ -12,7 +12,7 @@ import { acquireLock } from "./darkmem-mirror.mjs";
 
 export class SettingError extends Error {}
 
-const USAGE = "usage: dforge-config get KEY | get --json | set KEY VALUE | unset KEY | claude-restore JSON | workflow";
+const USAGE = "usage: dforge-config get KEY | get --json | set KEY VALUE | unset KEY";
 
 function homeOf(env) {
   return env.HOME || os.homedir();
@@ -164,28 +164,6 @@ function writeClaudeKeys(env, entries) {
   writeFile(file, data);
 }
 
-// What /model and /effort save as the user's defaults. An auto run's cleared
-// session runs both, and the cockpit puts the saved values back afterwards.
-const RESTORABLE = ["model", "modelSettings"];
-
-// claude-restore JSON — sets each named key of Claude's user settings to its
-// value, removing a key whose value is null, in one write.
-export function restoreClaude(text, env = process.env) {
-  let values;
-  try {
-    values = JSON.parse(text);
-  } catch {
-    throw new SettingError("claude-restore takes a JSON object");
-  }
-  if (values === null || typeof values !== "object" || Array.isArray(values)) {
-    throw new SettingError("claude-restore takes a JSON object");
-  }
-  for (const key of Object.keys(values)) {
-    if (!RESTORABLE.includes(key)) throw new SettingError(`claude-restore restores only ${RESTORABLE.join(" and ")}, not ${key}`);
-  }
-  writeClaudeKeys(env, Object.entries(values).map(([key, value]) => [key, value === null ? undefined : value]));
-}
-
 function readJson(file) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -227,16 +205,6 @@ export function resolve(env = process.env, warn = message => process.stderr.writ
     values[key] = spec.default;
   }
   return values;
-}
-
-// One line naming the skill-enforced keys that differ from their defaults, for
-// the session-start hook and the skills; empty when every one is at its default.
-export function workflowLine(env = process.env) {
-  const values = resolve(env, () => {});
-  const parts = Object.entries(SCHEMA)
-    .filter(([key, spec]) => spec.enforcedBy === "skill" && values[key] !== spec.default)
-    .map(([key]) => `${key}=${values[key]}`);
-  return parts.length === 0 ? "" : `dforge settings in force (each replaces the matching question or default in the skills): ${parts.join("; ")}`;
 }
 
 export function setValue(key, text, env = process.env) {
@@ -314,12 +282,6 @@ export function main(argv, env = process.env, out = process.stdout) {
     }
     if (command === "set" && rest.length === 2) { setValue(rest[0], rest[1], env); return 0; }
     if (command === "unset" && rest.length === 1) { unsetValue(rest[0], env); return 0; }
-    if (command === "claude-restore" && rest.length === 1) { restoreClaude(rest[0], env); return 0; }
-    if (command === "workflow" && rest.length === 0) {
-      const line = workflowLine(env);
-      if (line) out.write(`${line}\n`);
-      return 0;
-    }
     process.stderr.write(`${USAGE}\n`);
     return 2;
   } catch (error) {

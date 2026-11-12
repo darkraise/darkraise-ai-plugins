@@ -17,7 +17,7 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
-unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -45,6 +45,7 @@ printf '<img src="a.png">\n' > src/Bad.tsx
 out=$(edit e-1 "$REPO/src/Bad.tsx")
 check "edit: lint findings name the rule and line" "$(ctx "$out" | grep -c 'src/Bad.tsx:1: img-alt')" "1"
 check "edit: no second reminder" "$(ctx "$out" | grep -c 'Load dforge:ui-ux')" "0"
+check "edit: another session's first UI edit names the skill again" "$(ctx "$(edit e-5 "$REPO/src/App.tsx")" | grep -c 'Load dforge:ui-ux')" "1"
 TR="$TMP/skill.jsonl"
 jq -nc '{type:"assistant",message:{content:[{type:"tool_use",name:"Skill",input:{skill:"dforge:ui-ux"}}]}}' > "$TR"
 check "edit: a session that loaded the skill gets no reminder" "$(edit e-2 "$REPO/src/App.tsx" "$TR")" ""
@@ -52,8 +53,7 @@ check "edit: a relative path resolves against cwd" "$(ctx "$(edit e-3 src/Bad.ts
 check "edit: malformed stdin exits 0 silently" "$(printf 'nope' | bash "$EDIT"; echo "exit $?")" "exit 0"
 FAST="$TMP/fast.jsonl"
 jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Process: fast — a one-line tweak"}]}}' > "$FAST"
-check "edit: fast mode prints neither findings nor the reminder" "$(edit e-4 "$REPO/src/Bad.tsx" "$FAST")" ""
-check "edit: fast mode leaves the session's reminder for later" "$(ctx "$(edit e-4 "$REPO/src/Bad.tsx")" | grep -c 'Load dforge:ui-ux')" "1"
+check "edit: a Process: fast line in the transcript silences nothing" "$(ctx "$(edit e-4 "$REPO/src/Bad.tsx" "$FAST")" | grep -c -e 'img-alt' -e 'Load dforge:ui-ux')" "2"
 rm src/Bad.tsx
 
 # --- hooks.json wiring ---
@@ -65,7 +65,6 @@ check "hooks.json: the edit hook is synchronous, bash, 30 s" \
 # --- Stop ---
 END="$HERE/../scripts/ui-turn-end.sh"
 START="$HERE/../scripts/turn-start.sh"
-AR="$HERE/../scripts/auto-run"
 prompt() { # prompt <session>
   jq -n --arg sid "$1" --arg cwd "$REPO" '{hook_event_name:"UserPromptSubmit",session_id:$sid,cwd:$cwd,prompt:"go"}' | bash "$START"
 }
@@ -102,11 +101,7 @@ prompt s-3
 check "stop: a turn that changed no UI file passes" "$(stop s-3 'Done.')" ""
 prompt s-8
 printf '// change 8\n' >> src/App.tsx
-check "stop: fast mode passes a UI change without proof" "$(stop s-8 'Done.' false "$FAST")" ""
-FULL="$TMP/full.jsonl"
-cp "$FAST" "$FULL"
-jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Process: bounded, inline — no trigger"}]}}' >> "$FULL"
-check "stop: a later full-flow Process line holds again" "$(decision "$(stop s-8 'Done.' false "$FULL")")" "block"
+check "stop: a Process: fast line in the transcript releases nothing" "$(decision "$(stop s-8 'Done.' false "$FAST")")" "block"
 git checkout -q -- src/App.tsx
 
 mv docs/dforge/ui-ux/profile.md "$TMP/profile.md"
@@ -116,11 +111,6 @@ check "stop: no profile but the skill ran: held" "$(decision "$(stop s-4 'Done.'
 check "stop: no profile and no skill: passes" "$(stop s-4 'Done.')" ""
 mv "$TMP/profile.md" docs/dforge/ui-ux/profile.md
 
-mkdir -p "$HOME/.claude/dforge/sessions/cockpit"
-date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-5"
-(cd "$REPO" && bash "$AR" --session s-5 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1)
-prompt s-5
-check "stop: an auto run bound to the session: passes" "$(stop s-5 'Done.')" ""
 check "stop: another session in the checkout is still held" "$(decision "$(stop s-2 'Done.')")" "block"
 check "stop: no stamp for the session: passes" "$(stop s-unknown 'Done.')" ""
 
@@ -150,17 +140,18 @@ printf '*\n' > .dforge/.gitignore
 printf 'png' > .dforge/ui-ux/t/a.png
 printf '# UI proof: t\n\n**Contract:** touch\n**Platform:** web\n**Evidence:** local\n\n## Delta\n\n**UI/UX depth:** touch — a fix\n\n- **UX-1** — the fix\n\n## Results\n\n| ID | Verdict | Evidence | Note |\n|---|---|---|---|\n| UX-1 | pass | .dforge/ui-ux/t/a.png | |\n' > "$PR/t.md"
 bash "$UP" stamp "$PR/t.md" >/dev/null
-fp=$(bash "$UP" fingerprint)
-printf 'The proof holds.\n\nVerdict: ship %s\n' "$fp" > "$PR/t.judge.md"
-printf '\n**Judge:** ship %s — %s/t.judge.md\n' "$fp" "$PR" >> "$PR/t.md"
-check "stop: a passing proof releases the hold" "$(stop s-6 'Done.')" ""
+check "stop: a proof with run evidence and no judge releases the hold" "$(stop s-6 'Done.')" ""
+awk '{ print } index($0, "- **UX-1**") == 1 { print "- **UX-2** — its focus ring" }' "$PR/t.md" > "$PR/t.md.tmp" && mv "$PR/t.md.tmp" "$PR/t.md"
+out=$(stop s-6 'Done.')
+check "stop: a report missing a contract item is held" "$(decision "$out")" "block"
+check "stop: the reason names the missing item" "$(jq -r .reason <<<"$out" | grep -c 'coverage: UX-2 has no row')" "1"
 
 check "hooks.json registers the UI Stop check once" \
   "$(jq -r '[.hooks.Stop[0].hooks[].command | select(contains("ui-turn-end.sh"))] | length' "$HOOKS")" "1"
 check "hooks.json: the Stop check is synchronous, bash, 60 s" \
   "$(jq -r '.hooks.Stop[0].hooks[] | select(.command | contains("ui-turn-end.sh")) | [.async, .shell, .timeout] | map(tostring) | join(",")' "$HOOKS")" "false,bash,60"
-check "hooks.json: turn-end.sh stays the first Stop hook" \
-  "$(jq -r '.hooks.Stop[0].hooks[0].command' "$HOOKS")" 'bash "${CLAUDE_PLUGIN_ROOT}/scripts/turn-end.sh"'
+check "hooks.json: the Stop hooks are darkmem's push and the UI check" \
+  "$(jq -r '[.hooks.Stop[0].hooks[].command | sub(".*/scripts/"; "") | sub("\"$"; "")] | join(" ")' "$HOOKS")" "darkmem-stop-push.sh ui-turn-end.sh"
 check "hooks.json: the description names the UI hooks" "$(jq -r .description "$HOOKS" | grep -c 'UI proof')" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

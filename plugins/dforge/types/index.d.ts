@@ -1,8 +1,8 @@
-/** The main session's context against its handoff budget, as last read. */
+/** The main session's context against its auto-compact point, as last read. */
 export type CockpitBudget = {
   /** Input tokens the last main-loop response was answered over. */
   tokens: number
-  /** The handoff budget in tokens. */
+  /** The auto-compact point in tokens: the engine's threshold, else min(window, compactWindow), else the window; the window while auto-compaction is off. */
   limit: number
   /** The model's context window in tokens. */
   window: number
@@ -10,8 +10,8 @@ export type CockpitBudget = {
   compactWindow: number | null
   /** What the session has cost so far, in US dollars, when the host says. */
   usd: number | null
-  /** A plan's last tasks or its final phase in strict mode: past the limit it runs on to finish the plan. */
-  isFinishing: boolean
+  /** The engine has auto-compaction off: nothing compacts at `limit`. */
+  isAutoCompactOff: boolean
 }
 
 /** One rate-limit window as the last response reported it. */
@@ -43,6 +43,8 @@ export type CockpitBreakdown = {
   rows: CockpitContextRow[]
   /** The token count at which auto-compaction runs, when it is on. */
   compactAt: number | null
+  /** The engine has auto-compaction off; absent on a reading saved before it was kept. */
+  isAutoCompactOff?: boolean
   /** The estimate's total, all the pane has before a response measures the window. */
   total?: number | null
 }
@@ -68,10 +70,6 @@ export type CockpitSpawn = {
   outcome?: 'done' | 'failed' | null
   /** When it started, in milliseconds since the epoch. */
   startedAt: number
-  /** For a judge seat, the report paths its dispatch, or the prompt file the dispatch points at, named under a state root, as written: the only files it may write. */
-  reports?: string[]
-  /** For a judge seat, the state roots of the repository's worktrees when it was dispatched. */
-  reportRoots?: string[]
 }
 
 /** One background shell the session started and has not heard the end of. */
@@ -171,79 +169,6 @@ export type CockpitActivity = {
   isSent: boolean
 }
 
-/** One task of a dforge run, from its plan and its ledger. */
-export type CockpitRunTask = {
-  n: number
-  title: string
-  state: 'pending' | 'assigned' | 'complete' | 'blocked'
-  /** The fix or review round in flight, "2/5". */
-  round: string | null
-  seat: string | null
-  isClean: boolean
-  reason: string | null
-}
-
-/** A dforge run as its SDD ledger tells it. */
-export type CockpitRun = {
-  plan: string | null
-  tasks: CockpitRunTask[]
-  done: number
-  total: number
-  isFinished: boolean
-  /** Whether the plan file was read; otherwise `total` counts only the tasks the ledger names. */
-  isPlanRead: boolean
-}
-
-/**
- * What dforge finishing does once the final review is clean, as its
- * `finish-choice` script keeps it (finish.json).
- */
-export type CockpitFinish = {
-  action: 'merge' | 'pr' | 'keep' | 'wait'
-  base: string | null
-  /** Set once finishing carried the choice out or you answered the menu. */
-  answer: string | null
-}
-
-/** Where a repository's documents and progress live, as `darkmem-config.mjs --mode` prints them. */
-export type CockpitRoots = {
-  docs: { store: 'local' | 'darkmem'; root: string }
-  progress: { store: 'local' | 'darkmem'; ledgerRoot: string; latestFile: string }
-  /** The darkmem project the repository is mapped to; null when it is not. */
-  project: string | null
-}
-
-/** A handoff note that starts a next session, as the resume card and band offer it. */
-export type CockpitResumeOffer = {
-  /** When the note was written, in milliseconds since the epoch. */
-  at: number
-  /** The note's `**Next:**` line. */
-  next: string
-  /** The note's fenced first prompt; null when it has none, and Resume falls back to resume-execution. */
-  prompt: string | null
-}
-
-/** An auto run as its state file says (reference/auto-run.md), for the session it is bound to. */
-export type CockpitAutoRun = {
-  active: boolean
-  phase: string
-  regime: string
-  /** `compact`, `after-compact`, `clear`, `resume`, `switch`, `handoff`, or null. */
-  pending: string | null
-  /** The plan's repository-relative path, once attached. */
-  plan: string | null
-  compactions: number
-  resumes: number
-  /** Why the run stopped; null while it runs or once it finished. */
-  stopped: string | null
-  /** The first prompt of the session a clear starts. */
-  resumePrompt: string | null
-  /** When `auto-run stalled` last ran, in epoch seconds; null before. */
-  stalledAt: number | null
-  /** The model and effort that session runs on. */
-  launch: { model: string; effort: string } | null
-}
-
 /** The Discord webhook's state, as the settings view shows it. */
 export type CockpitNotifier = {
   /** The webhook URL; never drawn, only masked. */
@@ -299,23 +224,7 @@ declare module 'claude-code' {
       activity: CockpitActivity
       /** The main session's context at the end of each turn, oldest first, for the forecast. */
       turnTokens: number[]
-      run: CockpitRun | null
-      finish: CockpitFinish | null
-      /** The handoff this session could resume; null when the note starts no next session. */
-      resumeOffer: CockpitResumeOffer | null
-      /** The handoff time whose offer this session resumed or dismissed. */
-      resumeDismissed: number | null
-      /** Why the plan section reads checkout paths, not the roots `--mode` names: its first line of stderr; null otherwise. */
-      rootsNote: string | null
       notifier: CockpitNotifier
-      isNudged: boolean
-      isPlanSession: boolean
-      /** The main loop's latest `Process:` line is `Process: fast` (reference/fast-mode.md): the seat check stands down. */
-      isFastMode: boolean
-      /** This session runs a plan: an execution skill ran, an implementer was spawned, or the ledger moved. */
-      isRunSession: boolean
-      /** The auto run bound to this session, as last read; null without one. */
-      autoRun: CockpitAutoRun | null
       /** The session id the cockpit last read every section for; '' when the id could not be read, null before the first read. */
       sessionRead: string | null
     }

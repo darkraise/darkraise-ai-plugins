@@ -20,8 +20,7 @@ These plugins run on your machine with your permissions, so the following are in
 scope:
 
 - Hooks and scripts that run shell commands, read or write files, or call a
-  network service (for example the Discord webhook, the darkmem sync and the
-  Codex executor lane).
+  network service (for example the Discord webhook and the darkmem sync).
 - The attribution guard and the redactor that filters notification excerpts.
 - Storage of credentials and tokens: the Discord webhook URL, and the darkmem API
   key, which is read from an environment variable and should never be written to

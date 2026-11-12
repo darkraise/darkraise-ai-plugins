@@ -2,8 +2,7 @@
 # PostToolUse hook (Edit, Write, MultiEdit): when the edited file is a UI file
 # (scripts/ui-proof paths), return scripts/ui-lint's findings as additional
 # context, and on the first UI edit of a session that has not loaded
-# dforge:ui-ux, name the skill once; in fast mode (lib/fast-mode.sh) it does
-# neither. It never blocks: it prints nothing or one
+# dforge:ui-ux, name the skill once. It never blocks: it prints nothing or one
 # hookSpecificOutput object, and always exits 0.
 set -uo pipefail
 
@@ -27,8 +26,6 @@ prefix=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null) || exit 0
 . "$SCRIPT_DIR/lib/ui-ux.sh"
 rel="$prefix$(basename "$file")"
 uiux_is_ui "$rel" "$(uiux_globs "$root")" || exit 0
-. "$SCRIPT_DIR/lib/fast-mode.sh"
-fast_mode_on "$transcript_path" && exit 0
 
 lint=$(cd "$root" && bash "$SCRIPT_DIR/ui-lint" "$rel" 2>/dev/null)
 lint_status=$?

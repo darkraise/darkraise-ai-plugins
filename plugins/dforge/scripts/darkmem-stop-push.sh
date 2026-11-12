@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Async Stop hook: darkmem's safety-net push (darkmem store options spec §5),
-# apart from turn-end.sh so a slow darkmem never delays a turn's end or its
-# decision. Claude Code waits for nothing here and enforces no timeout, so the
+# apart from the synchronous Stop hook so a slow darkmem never delays a turn's
+# end or its decision. Claude Code waits for nothing here and enforces no timeout, so the
 # push bounds itself (lib/darkmem-hook.sh). Prints nothing; always exits 0.
 set -uo pipefail
 

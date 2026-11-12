@@ -1,75 +1,37 @@
 ---
 name: using-dforge
-description: Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions
+description: Use when starting any conversation - establishes how dforge works with the harness's own planning and which dforge skills apply
 ---
 
 <SUBAGENT-STOP>
 If you were dispatched as a subagent to execute a specific task, ignore this skill.
 </SUBAGENT-STOP>
 
-## The Rule
+## How to work
 
-If a skill might apply to what you are doing, invoke it before any response or action, clarifying questions and exploration included. Announce "Using [skill] to [purpose]" and follow it; a checklist gets a todo per item. Before entering plan mode, brainstorm.
-
-| Thought | Reality |
-|---|---|
-| "This is just a simple question" | Questions are tasks. Check for skills. |
-| "Let me explore first" | Skills tell you how to explore. Check first. |
-| "I remember this skill" | Skills evolve. Read the current version. |
+- **Plan in the harness.** Non-trivial work goes through the harness's own plan mode; trivial work is done directly.
+- **Think before coding.** State assumptions. Ask while planning; during execution, decide and say what you decided.
+- **Simplicity first.** The least code that meets the goal; no speculative abstraction.
+- **Surgical changes.** Touch only what the task needs; report adjacent problems instead of fixing them.
+- **Goal-driven.** Define a verifiable success check up front, run it, and show its output before you claim done.
 
 ## Routing
 
+Invoke the skill before any response or action on that kind of work.
+
 | When | Skill |
 |---|---|
-| A new product from scratch | dforge:planning-a-product |
-| Building or changing behaviour | dforge:brainstorming |
 | Anything a user sees or does | dforge:ui-ux |
 | A bug, failing test or surprise | dforge:systematic-debugging |
-| An approach decision is open | dforge:selecting-approaches |
-| A spec is approved | dforge:writing-plans |
-| A plan predates the executor lane | dforge:revising-plans |
-| Executing a plan | dforge:executing-plans; dforge:subagent-driven-development only for a plan whose Execution line names subagent |
-| Writing code | dforge:test-driven-development |
-| Isolating work | dforge:using-git-worktrees |
-| Before claiming done | dforge:verification-before-completion |
-| Asking for or receiving review | dforge:requesting-code-review, dforge:receiving-code-review |
-| Work complete | dforge:finishing-a-development-branch |
-| Stopping mid-work, or picking it up | dforge:handoff, dforge:resume-execution |
-| Writing a skill | dforge:writing-skills |
-| Where the work stands, what to do next | dforge:project-status |
-| A phase or milestone done | dforge:closing-a-milestone |
-| Before the final review or merge, when `gates.md` exists | dforge:running-gates |
-| Session notes have accumulated | dforge:distilling-docs |
-| Slow or heavy tests | dforge:test-simplifier |
 | A repository or home on an older layout | dforge:migrate |
 
-## Principles
+## Scripts and paths
 
-- **Think before coding.** State assumptions. Ask only in design phases; during execution, rule and log the ruling.
-- **Simplicity first.** The least code that meets the goal; no speculative abstraction.
-- **Surgical changes.** Touch only what the task needs; report adjacent problems instead of fixing them.
-- **Goal-driven.** Define a verifiable success check up front, and run it before you claim done.
-
-## Seats
-
-Every dispatch names a seat: a `dforge:` agent or a typed built-in (`Explore`); `general-purpose` takes an explicit `model`. No forks. Read-only checks (register rows, findings, a claim) go to `dforge:judge-sonnet-high`, or `dforge:judge-opus` across several files.
-
-## Process Depth
-
-Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural> — <trigger | no trigger>`, and still get approval (under `autoRun=on`, the spec review). That is on Claude Code; Codex runs `on` as `off`. Architectural: `Process: architectural, depth <d> — <triggers>`, `<d>` from `scripts/depth-route --spec-triggers`. Every plan executes inline: the session implements every task but those carrying an `**Executor:**` line, heavy tasks included.
-
-With the darkmem MCP, prefer its `code_search` over Explore subagents.
-
-## Session Budget
-
-- Call every `scripts/…` command as `bash <plugin-root>/scripts/<name>`, with the working directory inside the project's worktree; a relative `PLAN_FILE` resolves against it. The plugin root is printed below this entry point (on Codex: the parent of the `skills/` directory).
-- The goal is a finished plan; the budget only guards against auto-compaction. `scripts/task-brief`, `scripts/review-package` and `scripts/context-size` print a budget line. `ok`: continue at any percentage; `handoff`: finish the task in flight, then use dforge:handoff. See [session-budget.md](../../reference/session-budget.md).
-- Picking up earlier work: run `scripts/repo-audit` first; a plan with a ledger resumes through dforge:resume-execution.
-- After compaction, trust the snapshot, ledger and `git log` over the summary.
-- `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` in these skills: `bash <plugin-root>/scripts/dforge-path state|docs [RELATIVE]|ledger <plan>|latest` prints each in the checkout it runs in, or in the darkmem mirror where `documentStore` or `progressSource` keeps it ([project-state.md](../../reference/project-state.md)).
+- Call every `scripts/…` command as `bash <plugin-root>/scripts/<name>`, with the working directory inside the project's worktree. The plugin root is printed below this entry point (on Codex: the parent of the `skills/` directory).
+- `<state>` and `<docs>` in these skills: `bash <plugin-root>/scripts/dforge-path state|docs [RELATIVE]` prints each in the checkout it runs in, or in the darkmem mirror where `documentStore` keeps it ([project-state.md](../../reference/project-state.md)).
+- With the darkmem MCP, prefer its `code_search` over Explore subagents.
 
 ## Platform and Precedence
 
-- Codex: read `references/codex-tools.md`. It has no Stop hook: run `scripts/next-step` on every early stop.
-- No todo tool? Use the ledger or a checklist.
-- User instructions (CLAUDE.md, AGENTS.md, direct requests, fast mode) outrank skills, which outrank defaults.
+- Codex: read `references/codex-tools.md`.
+- User instructions (CLAUDE.md, AGENTS.md, direct requests) outrank skills, which outrank defaults.

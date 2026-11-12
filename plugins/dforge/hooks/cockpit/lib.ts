@@ -1,51 +1,18 @@
-import type { CockpitAutoRun, CockpitFinish, CockpitRoots } from '../../types'
-
 // Pure helpers, kept apart from the hooks so tests can reach them directly.
 
-/** The strip's handoff reading shows from this share of the budget. */
-export const WARN_AT = 0.8
-
 /**
- * The handoff budget: `configured`, else `env`, else dforge's own rule
- * (reference/session-budget.md): the compaction point minus one task's worst
- * growth, min(autoCompactWindow, window) × 93% − 140,000. Small windows, where
- * that comes out near zero, hold a fifth of the window. `configured` is
- * handoffTokens as the settings resolve it, where DFORGE_BUDGET already
- * overrides the file; `env` is a raw DFORGE_BUDGET for a caller without them.
+ * The context limit the pane measures against, the auto-compact point: the
+ * engine's own threshold when known, else min(autoCompactWindow, window), else the window.
  */
-export function budgetFor(configured: number, env: string | undefined, window: number, compactWindow?: number): number {
-  if (configured > 0) return Math.round(configured)
-  const pinned = Number(env)
-  if (Number.isFinite(pinned) && pinned > 0) return Math.round(pinned)
-  const room = compactWindow !== undefined && compactWindow > 0 ? Math.min(window, compactWindow) : window
-  return Math.max(Math.floor(room * 0.93) - 140_000, Math.floor(room / 5))
-}
-
-/**
- * The final-phase limit (reference/session-budget.md): 85% of min(autoCompactWindow, window).
- * Relaxed handoff measures every task against it.
- */
-export function finalLimitFor(window: number, compactWindow?: number): number {
-  const room = compactWindow !== undefined && compactWindow > 0 ? Math.min(window, compactWindow) : window
-  return Math.floor(room * 0.85)
+export function compactLimitFor(window: number, compactWindow?: number, threshold?: number | null): number {
+  if (threshold !== undefined && threshold !== null && threshold > 0) return threshold
+  return compactWindow !== undefined && compactWindow > 0 ? Math.min(window, compactWindow) : window
 }
 
 /** A positive whole number from a settings value, else undefined. */
 export function positive(value: unknown): number | undefined {
   const n = Number(value)
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined
-}
-
-export type Level = 'quiet' | 'warn' | 'handoff'
-
-export function levelOf(tokens: number, limit: number, warnAt: number = WARN_AT): Level {
-  if (tokens >= limit) return 'handoff'
-  return tokens >= limit * warnAt ? 'warn' : 'quiet'
-}
-
-/** The warnAt setting, a percentage, as a share: 80 → 0.8, held to 1-99. */
-export function warnShare(percent: number): number {
-  return Number.isFinite(percent) && percent > 0 ? Math.min(Math.max(Math.round(percent), 1), 99) / 100 : WARN_AT
 }
 
 export const SECTIONS = ['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo', 'guard'] as const
@@ -172,67 +139,6 @@ export function isGitWriteTool(tool: string): boolean {
   return /pull_request|create_or_update_file|push_files/.test(tool) && !/read|list|search|get_/.test(tool)
 }
 
-/** Whether a subagent type or skill name belongs to dforge. */
-export function isDforge(name: string): boolean {
-  return name.startsWith('dforge:')
-}
-
-/** The agent.spawn fields the seat check reads. */
-export type SeatSpawn = {
-  subagentType: string
-  description: string
-  fork: boolean
-  model?: string
-  parentAgentId?: string
-  workflow?: unknown
-  isTeammate?: true
-  resume?: unknown
-}
-
-/**
- * Whether a fork described `Draft plan tasks …` may run in a dforge session:
- * docs/dforge/notes/2026-10-25-drafter-measurement.md ruled forks out, and
- * plans are now drafted in the session. Changing it takes a plugin release.
- */
-export const FORK_DRAFTING = false
-
-/**
- * Whether the last `Process:` line of a response puts its request in fast mode
- * (reference/fast-mode.md): true for `Process: fast`, false for any other
- * Process line, null when the text has none. scripts/lib/fast-mode.sh reads
- * the same line for the Stop and edit hooks.
- */
-export function fastModeLine(text: string): boolean | null {
-  let found: boolean | null = null
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.replace(/^[\s`*]+/, '')
-    if (line.startsWith('Process:')) found = /^Process:\s*fast(?![\w-])/.test(line)
-  }
-  return found
-}
-
-/** The engine's catch-all agent types: what a dispatch naming no type resolves to. */
-const CATCH_ALL = ['general-purpose', 'claude']
-
-/**
- * Why a dforge session's main loop may not start this agent, or null. A fork
- * inherits the session's context and model, and an untyped agent given no
- * model inherits the model: the costs typed seats exist to avoid. Workflow
- * agents, teammates, resumes and spawns inside a subagent are not the main
- * loop's dispatch, and nothing is checked before a dforge skill or agent ran.
- */
-export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean, forkDrafting: boolean): string | null {
-  if (!isPlanSession || spawn.parentAgentId !== undefined || spawn.workflow !== undefined || spawn.isTeammate === true || spawn.resume !== undefined) return null
-  if (spawn.fork) {
-    if (forkDrafting && spawn.description.startsWith('Draft plan tasks')) return null
-    return "dforge: forks are kept out of dforge sessions. Use dforge:judge-sonnet-high for a read-only check; plans are drafted in the session. See using-dforge §Seats."
-  }
-  if (CATCH_ALL.includes(spawn.subagentType) && spawn.model === undefined) {
-    return 'dforge: name a seat for this dispatch: dforge:judge-sonnet-high or dforge:judge-opus for a review or read-only check, or pass an explicit model (model: "sonnet") to general-purpose. The session implements plan tasks itself, as the plan\'s Execution line says; an implementer seat such as dforge:impl-sonnet-medium runs only for a deprecated subagent plan. See using-dforge §Seats.'
-  }
-  return null
-}
-
 /** 0.8 → "▰▰▰▰▰▰▰▰▱▱" at width 10; never full below 100%. */
 export function bar(share: number, width: number): string {
   const clamped = Math.min(Math.max(share, 0), 1)
@@ -256,11 +162,6 @@ export function duration(ms: number): string {
   const hours = Math.floor((minutes % 1440) / 60)
   if (days > 0) return `${days}d${hours}h`
   return hours > 0 ? `${hours}h${minutes % 60}m` : `${minutes}m`
-}
-
-/** A handoff's age as the resume offer says it: "handed off 2h5m ago", "handed off just now". */
-export function handedOff(ms: number): string {
-  return ms < 60_000 ? 'handed off just now' : `handed off ${duration(ms)} ago`
 }
 
 /** five_hour → "5h", seven_day → "7d", spend_limit → "spend". */
@@ -390,12 +291,12 @@ export function windowElapsed(kind: string, resetsAt: number | null, now: number
 export type Run = { text: string; color?: string; bold?: boolean; dim?: boolean }
 
 /** What the band can show, as the bandLine1 and bandLine2 settings name them. */
-export const BAND_SEGMENTS = ['dir', 'git', 'model', 'effort', 'style', 'turn', 'run', 'agents', 'shells', 'ctx', 'cache', 'cost', '5h', '7d', 'time'] as const
+export const BAND_SEGMENTS = ['dir', 'git', 'model', 'effort', 'style', 'turn', 'agents', 'shells', 'ctx', 'cache', 'cost', '5h', '7d', 'time'] as const
 export type BandSegment = (typeof BAND_SEGMENTS)[number]
 export type BandLayout = readonly [readonly BandSegment[], readonly BandSegment[]]
 
 export const BAND_DEFAULT_LINES: BandLayout = [
-  ['dir', 'git', 'model', 'effort', 'style', 'turn', 'run', 'agents', 'shells'],
+  ['dir', 'git', 'model', 'effort', 'style', 'turn', 'agents', 'shells'],
   ['ctx', 'cache', 'cost', '5h', '7d'],
 ]
 
@@ -444,7 +345,7 @@ export type BandInput = {
   root: string | null
   home: string | null
   repo: RepoState | null
-  /** The context against the handoff budget, over the model's window. */
+  /** The context against the auto-compact point, over the model's window. */
   context: { tokens: number; limit: number; window: number } | null
   turnsLeft: number | null
   limits: readonly { kind: string; percent: number; resetsAt: number | null }[]
@@ -461,8 +362,6 @@ export type BandInput = {
   usd?: number | null
   /** The main turn while it runs, waits on the person or has failed. */
   turn?: { kind: 'running' | 'waiting' | 'asking' | 'failed'; since: number; tool: string | null } | null
-  /** A dforge run's tasks, and the review round of the task in flight. */
-  run?: { done: number; total: number; round: string | null; blocked: number } | null
   /** True while the main conversation's background work runs: the line holding agents, shells or the turn leads with ◐. */
   isBackground?: boolean
 }
@@ -505,7 +404,7 @@ export function bandLines(input: BandInput, tier: number): [Run[], Run[]] {
     const turns = input.turnsLeft
     ctx = [
       { text: 'ctx ', dim: true },
-      ...(widths.ctx > 0 ? [...meter(track(tokens / window, widths.ctx, [{ at: limit / window, glyph: '┃', name: 'handoff' }]), color, { handoff: color }), { text: ' ' }] : []),
+      ...(widths.ctx > 0 ? [...meter(track(tokens / window, widths.ctx, limit < window ? [{ at: limit / window, glyph: '┃', name: 'compact' }] : []), color, { compact: color }), { text: ' ' }] : []),
       { text: `${Math.round(percent)}%`, color, bold: true },
       ...(turns === null || tier >= 3 ? [] : [{ text: tier < 2 ? ` · ≈${turns} ${turns === 1 ? 'turn' : 'turns'}` : ` ≈${turns}t`, color: turns <= 3 ? AMBER_RUN : undefined, dim: turns > 3 }]),
     ]
@@ -608,15 +507,6 @@ export function bandLines(input: BandInput, tier: number): [Run[], Run[]] {
           : [{ text: kind === 'waiting' ? 'approve? ' : 'asking ', color: 'yellow', bold: true }, { text: age, color: 'yellow' }]
   }
 
-  let run: Run[] | null = null
-  if (input.run != null && input.run.total > 0) {
-    const { done, total, round, blocked } = input.run
-    run =
-      blocked > 0
-        ? [{ text: `run ${done}/${total}`, color: 'red', bold: true }, ...(tier < 2 ? [{ text: ' blocked', color: 'red' }] : [])]
-        : [{ text: `run ${done}/${total}`, color: 'yellow' }, ...(tier < 2 && round !== null ? [{ text: ` r${round}`, color: 'yellow' }] : [])]
-  }
-
   const pieces: Record<BandSegment, Run[] | null> = {
     dir,
     git,
@@ -624,7 +514,6 @@ export function bandLines(input: BandInput, tier: number): [Run[], Run[]] {
     effort,
     style,
     turn,
-    run,
     agents,
     shells,
     ctx,
@@ -790,35 +679,6 @@ export function isAbsolutePath(path: string): boolean {
   return /^([\\/]|[a-z]:[\\/])/i.test(path)
 }
 
-/**
- * Whether a stat rejection means the path does not exist: only for ENOENT, or,
- * with no code, when the path above it is a directory and not a link. Any other
- * code refuses.
- */
-export function statMissing(error: unknown, isAboveDir: boolean): boolean {
-  const code = (error as { code?: unknown } | null)?.code
-  return typeof code === 'string' ? code === 'ENOENT' : isAboveDir
-}
-
-/**
- * Where a ledger's plan name may be read, in order (darkmem store options spec
- * §7.1 and §7.3): an absolute name as written; a document name under the docs
- * root while documents are in darkmem, else under each checkout's own docs
- * directory; any other name under each checkout. The session's checkout comes
- * first. A ledger written before 4.0.0 cites its plan as docs/forge/<rest>,
- * or before 3.0.0 as docs/superpowers/<rest>; both still name
- * docs/dforge/<rest>: ledgers are never rewritten.
- */
-export function planCandidates(plan: string, docs: CockpitRoots['docs'] | null, checkouts: readonly { root: string; docsDir: string }[]): string[] {
-  if (isAbsolutePath(plan)) return [plan]
-  const name = plan.replace(/^\.\//, '')
-  const doc = /^docs\/(?:dforge|forge|superpowers)(?:\/(.*))?$/.exec(name)
-  const under = (dir: string) => (doc?.[1] ? `${dir}/${doc[1]}` : dir)
-  if (doc && docs?.store === 'darkmem') return [under(docs.root)]
-  const seen = new Set<string>()
-  return checkouts.filter(one => !seen.has(one.root) && Boolean(seen.add(one.root))).map(one => (doc ? under(one.docsDir) : `${one.root}/${name}`))
-}
-
 function slashes(path: string): string {
   return path.replace(/\\/g, '/').replace(/\/+$/, '')
 }
@@ -869,7 +729,7 @@ export function folderRuns(cwd: string, root: string | null, home: string | null
 }
 
 /**
- * How many main turns until the context reaches the budget, at the average
+ * How many main turns until the context reaches the limit, at the average
  * growth of the last few turns; null with too little to go on, no growth, or
  * already past it.
  */
@@ -895,133 +755,6 @@ export function limitForecast(kind: string, percent: number, resetsAt: number | 
   if (spent < 10 * 60_000) return null
   const left = ((100 - percent) / percent) * spent
   return now + left < resetsAt ? left : 'pace'
-}
-
-/** One task's state in a dforge SDD ledger. */
-export type LedgerTask = {
-  n: number
-  state: 'assigned' | 'complete' | 'blocked'
-  /** The fix or review round in flight, "2/5" or "1/2". */
-  round: string | null
-  /** The seat the task was assigned to. */
-  seat: string | null
-  isClean: boolean
-  reason: string | null
-}
-
-/** What a run's ledger says: its plan, each task it names, and whether the final review came back clean. */
-export type Ledger = { plan: string | null; tasks: LedgerTask[]; isFinished: boolean }
-
-/** Reads the subagent-driven-development ledger (progress.md) as its grammar writes it. */
-export function parseLedger(text: string): Ledger {
-  const tasks = new Map<number, LedgerTask>()
-  const task = (n: number) => {
-    const found = tasks.get(n) ?? { n, state: 'assigned' as const, round: null, seat: null, isClean: false, reason: null }
-    tasks.set(n, found)
-    return found
-  }
-  let plan: string | null = null
-  let isFinished = false
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim()
-    const header = /^#\s*SDD ledger\s*[—-]+\s*plan:\s*(.+)$/.exec(line)
-    if (header) {
-      plan = header[1]?.trim() ?? null
-      continue
-    }
-    if (/^Final review: clean/.test(line)) {
-      isFinished = true
-      continue
-    }
-    const group = /^Group (\d+-\d+|\d+(?:,\d+)*): review round (\d+\/\d+)/.exec(line)
-    if (group) {
-      const list = group[1] ?? ''
-      const range = /^(\d+)-(\d+)$/.exec(list)
-      const named: number[] = []
-      if (range) for (let n = Number(range[1]); n <= Number(range[2]); n++) named.push(n)
-      else named.push(...list.split(',').map(Number))
-      for (const n of named) {
-        const one = task(n)
-        if (one.state === 'assigned') one.round = group[2] ?? null
-      }
-      continue
-    }
-    const match = /^Task (\d+): (.*)$/.exec(line)
-    if (!match) continue
-    // A Ruling, parked or deferred line names a task without starting it.
-    const n = Number(match[1])
-    const rest = match[2] ?? ''
-    const assigned = /^implementer (\S+) \(assigned/.exec(rest)
-    if (assigned) {
-      const one = task(n)
-      one.seat = assigned[1] ?? null
-      if (one.state !== 'complete') one.state = 'assigned'
-      one.reason = null
-      continue
-    }
-    const round = /^fix round (\d+\/\d+)/.exec(rest)
-    if (round) {
-      task(n).round = round[1] ?? null
-      continue
-    }
-    if (/^complete\b/.test(rest)) {
-      const one = task(n)
-      one.state = 'complete'
-      one.round = null
-      one.isClean = /review clean/.test(rest)
-      continue
-    }
-    const blocked = /^BLOCKED\s*[—-]+\s*(.*)$/.exec(rest)
-    if (blocked) {
-      const one = task(n)
-      one.state = 'blocked'
-      one.reason = blocked[1]?.trim() || null
-    }
-  }
-  return { plan, tasks: [...tasks.values()].sort((a, b) => a.n - b.n), isFinished }
-}
-
-/** A plan file's tasks, from its "### Task N: title" headings outside fenced blocks, as plan_tasks in scripts/lib/plan.sh reads them. */
-export function planTasks(text: string): { n: number; title: string }[] {
-  const out: { n: number; title: string }[] = []
-  // CommonMark's rule, as plan.sh has it: a fence closes only at a bare marker of its character at least as long.
-  let fence = ''
-  for (const line of text.split(/\r?\n/)) {
-    if (fence !== '') {
-      const marker = line.replace(/^ {0,3}/, '').trimEnd()
-      if (/^(`+|~+)$/.test(marker) && marker[0] === fence[0] && marker.length >= fence.length) fence = ''
-      continue
-    }
-    const open = /^ {0,3}(`{3,}|~{3,})/.exec(line)
-    if (open) {
-      fence = open[1] ?? ''
-      continue
-    }
-    const match = /^#+[ \t]+Task[ \t]+(\d+)(?=[ \t:.-]|$)[ \t]*[:.\-—]?[ \t]*(.*)$/.exec(line)
-    if (match && !out.some(one => one.n === Number(match[1]))) out.push({ n: Number(match[1]), title: (match[2] ?? '').trim() })
-  }
-  return out
-}
-
-// A plan's last tasks join its final phase once this many or fewer remain
-// (CTX_TAIL_TASKS in scripts/lib/context.sh).
-const TAIL_TASKS = 2
-
-/**
- * Whether a run is at its plan's tail or in its final phase: at most
- * TAIL_TASKS tasks left by its plan, or its final review clean. Neither hands
- * off. Without the plan the ledger names only the tasks begun, so only the
- * final review counts.
- */
-export function isPlanTail(run: { done: number; total: number; isFinished: boolean; isPlanRead: boolean }): boolean {
-  return run.isFinished || (run.isPlanRead && run.total > 0 && run.total - run.done <= TAIL_TASKS)
-}
-
-const RUN_ORDER: Readonly<Record<string, number>> = { assigned: 0, blocked: 1, pending: 2, complete: 3 }
-
-/** The first `size` of a run's tasks as the Run card lists them: in flight, blocked, not started, then done, each in plan order. */
-export function runList<T extends { n: number; state: string }>(tasks: readonly T[], size: number): T[] {
-  return [...tasks].sort((a, b) => (RUN_ORDER[a.state] ?? 2) - (RUN_ORDER[b.state] ?? 2) || a.n - b.n).slice(0, size)
 }
 
 /** Milliseconds → "42s", "2m14s", "1h05m": a turn's clock, to the second under an hour. */
@@ -1132,7 +865,7 @@ export type DenseInput = {
   email: string | null
   billing: string | null
   remote: Run[]
-  /** The context against the handoff budget. */
+  /** The context against the auto-compact point. */
   context: { tokens: number; limit: number } | null
   /** The breakdown's estimate, shown while there is no context reading. */
   estimate: number | null
@@ -1141,7 +874,6 @@ export type DenseInput = {
   shells: readonly { command: string; startedAt: number }[]
   /** The running subagents' seats, short names. */
   agents: readonly string[]
-  run: { done: number; total: number; current: string | null } | null
   todos: { done: number; total: number; current: string | null } | null
   repo: RepoState | null
   refused: number
@@ -1206,7 +938,7 @@ export function denseLine(section: Section, input: DenseInput): Run[] | null {
       if (input.agents.length === 0) return null
       return [denseLabel('agt', 'cyan'), ...join([[{ text: `${input.agents.length} running`, color: 'cyan' }], [{ text: input.agents.join(', ') }]])]
     case 'plan': {
-      const plan = input.run ?? input.todos
+      const plan = input.todos
       if (plan === null || plan.total === 0) return null
       return [
         denseLabel('plan', 'magenta'),
@@ -1259,97 +991,6 @@ export function isAtLeast(base: string | undefined, least: string): boolean {
   return true
 }
 
-/**
- * What a handoff note offers to resume: the `**Next:**` line of its
- * `## Next session` block. scripts/next-step writes a first prompt into that
- * block only when a next session has work to start, so without one (a finished
- * plan, or a blocked task its human partner must rule on) there is no offer.
- */
-export function resumeOfferOf(text: string): { next: string; prompt: string | null } | null {
-  const lines = text.split(/\r?\n/)
-  const start = lines.findIndex(line => /^## Next session\s*$/.test(line))
-  if (start < 0) return null
-  const end = lines.findIndex((line, index) => index > start && line.startsWith('## '))
-  const block = lines.slice(start + 1, end < 0 ? undefined : end)
-  const paste = block.findIndex(line => line.trim() === 'Paste as the first prompt:')
-  if (paste < 0) return null
-  const next = block.find(line => line.startsWith('**Next:**'))?.slice('**Next:**'.length).trim() ?? ''
-  if (next === '') return null
-  const open = block.findIndex((line, index) => index > paste && line.trim() !== '')
-  const close = open < 0 || !block[open]?.startsWith('```') ? -1 : block.findIndex((line, index) => index > open && line.startsWith('```'))
-  const prompt = close < 0 ? '' : block.slice(open + 1, close).join('\n').trim()
-  return { next, prompt: prompt === '' ? null : prompt }
-}
-
-/** The registers a next-step ruling prompt names: "Continue the work recorded in `a.md`, `b.md`: …". */
-export function promptRegisters(prompt: string): string[] {
-  const names = /^Continue the work recorded in (.*?): /.exec(prompt)?.[1] ?? ''
-  return [...names.matchAll(/`([^`]+\.md)`/g)].map(match => match[1] ?? '')
-}
-
-// The states scripts/lib/register.sh counts as unresolved (REGISTER_UNRESOLVED).
-const UNRESOLVED_STATES = ['open', 'planned', 'doing', 'verify']
-
-/** Whether a register's table holds a row whose state is still unresolved. */
-export function hasUnresolvedRows(text: string): boolean {
-  return text.split(/\r?\n/).some(line => {
-    const cells = line.split(/(?<!\\)\|/)
-    return cells.length === 8 && /^\d+$/.test(cells[1]?.trim() ?? '') && UNRESOLVED_STATES.includes(cells[5]?.trim() ?? '')
-  })
-}
-
-/** finish.json as dforge's finish-choice writes it; null when unreadable. */
-export function parseFinish(text: string): CockpitFinish | null {
-  try {
-    const raw = JSON.parse(text) as Record<string, unknown>
-    const action = raw.action
-    if (action !== 'merge' && action !== 'pr' && action !== 'keep' && action !== 'wait') return null
-    return {
-      action,
-      base: typeof raw.base === 'string' ? raw.base : null,
-      answer: typeof raw.answer === 'string' ? raw.answer : null,
-    }
-  } catch {
-    return null
-  }
-}
-
-/**
- * The roots `darkmem-config.mjs --mode` prints (darkmem store options spec
- * §7.3): a documents and a progress line, then a project line when the
- * repository is mapped. Null when either family's line is missing.
- */
-export function parseModeLines(text: string): CockpitRoots | null {
-  let docs: CockpitRoots['docs'] | null = null
-  let progress: CockpitRoots['progress'] | null = null
-  let project: string | null = null
-  for (const line of text.split(/\r?\n/)) {
-    const [kind, store, root, extra] = line.split('\t')
-    if (kind === 'project' && store) project = store
-    if (store !== 'local' && store !== 'darkmem') continue
-    if (kind === 'documents' && root) docs = { store, root }
-    if (kind === 'progress' && root && extra) progress = { store, ledgerRoot: root, latestFile: extra }
-  }
-  return docs === null || progress === null ? null : { docs, progress, project }
-}
-
-/**
- * The Run card's finish row: the option chosen before the run, until
- * finishing carries it out or you answer the menu yourself.
- */
-export function finishLine(finish: CockpitFinish): Run[] {
-  if (finish.answer !== null) return []
-  const label =
-    finish.action === 'merge'
-      ? `merge into ${finish.base ?? 'the base branch'}`
-      : finish.action === 'pr'
-        ? 'push and open a PR'
-        : finish.action === 'keep'
-          ? 'keep the branch'
-          : 'ask me'
-  return [{ text: 'Finish ', dim: true }, { text: label, bold: finish.action !== 'wait' }, { text: ' when done', dim: true }]
-}
-
 /** A background task's end as its notification reads: `<task-id>` and `<status>`. */
 export function tasksEnded(text: string): { id: string; status: string }[] {
   const ended: { id: string; status: string }[] = []
@@ -1375,71 +1016,4 @@ export function remoteRuns(clients: readonly { surface: string }[], setting: str
   }
   if (setting === 'true') return [{ text: '○ ', color: 'green' }, { text: 'on', color: 'green' }, { text: ' · no device yet', dim: true }]
   return [{ text: '○ not connected', dim: true }]
-}
-
-/** The run in an auto-run state file when it is bound to `sessionId`, active or not; else null. */
-export function autoRunFor(text: string, sessionId: string): CockpitAutoRun | null {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    return null
-  }
-  if (typeof parsed !== 'object' || parsed === null) return null
-  const s = parsed as Record<string, unknown>
-  if (s.session !== sessionId) return null
-  const word = (value: unknown) => (typeof value === 'string' ? value : null)
-  const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
-  const launch = (typeof s.launch === 'object' && s.launch !== null ? s.launch : {}) as Record<string, unknown>
-  return {
-    active: s.active === true,
-    phase: word(s.phase) ?? 'spec',
-    regime: word(s.regime) ?? 'normal',
-    pending: word(s.pending),
-    plan: word(s.plan),
-    compactions: count(s.compactions),
-    resumes: count(s.resumes),
-    stopped: word(s.stopped),
-    resumePrompt: word(s.resumePrompt),
-    stalledAt: typeof s.stalledAt === 'number' && Number.isFinite(s.stalledAt) ? s.stalledAt : null,
-    launch: typeof launch.model === 'string' && typeof launch.effort === 'string' ? { model: launch.model, effort: launch.effort } : null,
-  }
-}
-
-/** The line an auto run's turn ends on, by the pending action it answers. */
-export const AUTO_SENTINELS: Readonly<Record<string, string>> = { compact: 'Auto run: compacting', clear: 'Auto run: clearing', switch: 'Auto run: switching' }
-
-/** Whether `answer`'s last non-blank line is the sentinel for `pending`. */
-export function endsOnSentinel(answer: string, pending: string | null): boolean {
-  const sentinel = pending === null ? undefined : AUTO_SENTINELS[pending]
-  if (sentinel === undefined) return false
-  const lines = answer.split('\n').map(line => line.trimEnd()).filter(line => line !== '')
-  return lines[lines.length - 1] === sentinel
-}
-
-/**
- * The next step for a bound run held only by background work, taken every
- * RECONCILE_MS: another prompt, or, once `cap` prompts in a row found the same
- * launches under the same pending action, the failure of the stage that action
- * names (`isStaged`) in place of a further prompt.
- */
-export function reconcileStep(
-  seen: { key: string; count: number },
-  key: string,
-  isStaged: boolean,
-  cap: number,
-): { action: 'prompt' | 'fail'; seen: { key: string; count: number } } {
-  const count = seen.key === key ? seen.count : 0
-  if (isStaged && count >= cap) return { action: 'fail', seen: { key: '', count: 0 } }
-  return { action: 'prompt', seen: { key, count: count + 1 } }
-}
-
-/**
- * An auto run's compaction point (reference/auto-run.md): the task budget, or
- * 90% of min(autoCompactWindow, window) in the high regime.
- */
-export function autoLimitFor(regime: string, configured: number, window: number, compactWindow?: number): number {
-  if (regime !== 'high') return budgetFor(configured, undefined, window, compactWindow)
-  const room = compactWindow !== undefined && compactWindow > 0 ? Math.min(window, compactWindow) : window
-  return Math.floor(room * 0.9)
 }
