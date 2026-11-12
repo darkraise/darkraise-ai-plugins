@@ -1,6 +1,6 @@
 # Test Quality Lens - Review Criteria
 
-Applies: paths *tests/* *test/* *__tests__/* *.test.* *_test.* *.spec.* *test_*.py
+Applies: paths tests/* */tests/* test/* */test/* *__tests__/* *.test.* *_test.* *.spec.* test_*.py */test_*.py
 
 A review lens, not a scored rubric: report each hit as a finding tagged
 [lens:test-quality] at your own severity.

@@ -431,7 +431,7 @@ if want A8; then
   lr "$pf" DFORGE_LENS_CAP=3
   check "A8: full, lensCap 3, prints 3 lens lines" "$(lens_lines)" 3
   if [ "$have_base" -eq 1 ]; then
-    norm() { sed -E 's#criteria=[^ ]*/criteria/#criteria=#'; }
+    norm() { sed -E 's#criteria=[^ ]*/criteria/#criteria=#; s#reason=paths:[^ ]*#reason=paths#'; }
     for cap in 0 1 2 3 4 9; do
       lr "$pf" DFORGE_LENS_CAP=$cap; new=$(norm <<<"$out")
       old=$(cd "$REPO" && env DFORGE_LENS_CAP=$cap timeout 60 bash "$BASE_DIR/plugins/dforge/scripts/lens-route" "$pf" --final "$BASE_C" "$HEAD_C" 2>&1 | norm)
