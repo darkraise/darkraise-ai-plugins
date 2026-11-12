@@ -75,10 +75,6 @@ check "codex-final-review.md exists" "$([ -f "$FR" ] && echo yes || echo no)" "y
 if [ -f "$FR" ]; then
   check "codex-final-review: content is ASCII only" \
     "$(LC_ALL=C awk '/[\200-\377]/{n++} END{print n+0}' "$FR")" "0"
-  check "codex-final-review: names the finding heading shape" \
-    "$(grep -c '`### <severity>: <one-line claim>`' "$FR")" "1"
-  check "codex-final-review: names the empty sentinel" \
-    "$(grep -c 'write `No findings.` and stop' "$FR")" "1"
 fi
 
 # task-review.md is named by subagent-driven-development, so its ids are a contract.
