@@ -90,9 +90,8 @@ State your chosen approach in a paragraph, with the candidates you rejected and
 why, then dispatch one `dforge:judge-opus` to score it,
 naming the report file `<state>/approaches-<decision>-advisor-report.md`:
 write nothing else, and reply in at most 10 lines; its `## Verdict` section
-holds `verdict: sound | wrong`. The judge scores it against the same criteria
-file and answers one question: is this approach wrong for this repository, and
-if so, what specifically would fail?
+holds `verdict: sound | wrong`. The judge answers one question: is this
+approach wrong for this repository, and if so, what specifically would fail?
 
 A judge that finds nothing is not a rubber stamp - it is the cheap outcome you
 were paying for. A judge that finds something is why the seat exists; treat its
