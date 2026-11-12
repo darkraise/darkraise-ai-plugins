@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Each check pins a line form that a script parses from what the document tells a session to write.
+# Each check pins a line form a script parses from what the document tells a session to write, or a file the skills link to.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
