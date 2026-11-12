@@ -211,6 +211,9 @@ export function setValue(key, text, env = process.env) {
   const spec = need(key);
   const value = fromText(spec, text);
   if (value === undefined) throw new SettingError(`${text} is not a valid ${key}`);
+  // A retired name is tolerated in a file an earlier release wrote, never written anew.
+  const gone = typeof value === "string" ? value.split(/[\s,]+/).find(name => (spec.retired ?? []).includes(name.toLowerCase())) : undefined;
+  if (gone !== undefined) throw new SettingError(`${gone} is no longer a ${key} value`);
   if (spec.target === "claude") {
     // 0 on a floored key means "unset"; any other value is written as given,
     // a default included, because Claude's own default is not ours to assume.
