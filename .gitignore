@@ -20,3 +20,6 @@ npm-debug.log*
 # Type declarations Claude Code lays beside a mod it loads from a folder
 plugins/*/.claude-plugin/types/
 plugins/*/tsconfig.json
+
+# dflow run state (task in progress, logs, review findings, proofs)
+.dflow/
