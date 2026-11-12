@@ -1,5 +1,5 @@
 // Acceptance tests for the test-tiers-and-ci-parity spec
-// (docs/dforge/specs/2026-10-31-test-tiers-and-ci-parity-design.md), A1-A27.
+// (docs/dforge/specs/2026-10-31-test-tiers-and-ci-parity-design.md), statements A1-A6, A8, A15, A16, A20-A22, A24 and A26.
 // Each test is written from the statement's text and reaches the behaviour
 // through the public surface: plan-lint, task-step, suite-run, ci-mirror,
 // lint-portability.mjs, validate-repository.mjs, test-all.mjs and
