@@ -171,8 +171,8 @@ See `references/graphviz-conventions.dot` for graphviz style rules.
 
 **Visualizing for your human partner:** Use `references/render-graphs.js` to render a skill's flowcharts to SVG:
 ```bash
-./references/render-graphs.js ../some-skill           # Each diagram separately
-./references/render-graphs.js ../some-skill --combine # All diagrams in one SVG
+node <plugin-root>/skills/writing-skills/references/render-graphs.js <skill directory>           # Each diagram separately
+node <plugin-root>/skills/writing-skills/references/render-graphs.js <skill directory> --combine # All diagrams in one SVG
 ```
 
 ## Code Examples

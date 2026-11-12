@@ -101,7 +101,7 @@ If something appears during tests but you don't know which test:
 Use the bisection script `find-polluter.sh` in this directory:
 
 ```bash
-./find-polluter.sh 'packages/core/.git' 'src/**/*.test.ts'
+bash <plugin-root>/skills/systematic-debugging/references/find-polluter.sh 'packages/core/.git' 'src/**/*.test.ts'
 ```
 
 Runs tests one-by-one, stops at first polluter. Name a path that does not
