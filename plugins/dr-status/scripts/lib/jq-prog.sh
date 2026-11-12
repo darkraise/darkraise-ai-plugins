@@ -3,15 +3,14 @@ set -uo pipefail
 # The single jq call's program text, its default config, and the theme table.
 #
 # Split out of config.sh so that file holds only path resolution, the payload
-# globals and the fallback chain. The program parses four things at once --
-# the payload on stdin, the user config, the account's .claude.json, and
-# dr-cockpit's state file for the session --
+# globals and the fallback chain. The program parses three things at once --
+# the payload on stdin, the user config and the account's .claude.json --
 # because each extra jq process costs a fork, and the render path budgets five
 # processes total.
 
 DCC_DEFAULT_CONFIG='{
   "lines": [
-    ["dir","git","model","effort","fast","agent","style","turn","run","account"],
+    ["dir","git","model","effort","fast","agent","style","account"],
     ["ctx","cache","cost","5h","7d"]
   ],
   "separator": "  \u00b7  ",
@@ -177,7 +176,6 @@ DCC_JQ_PROG='
   @sh "P_MODEL=\(str(($p.model.display_name)? // null))",
   @sh "P_EFFORT=\(str(($p.effort.level)? // null))",
   @sh "P_FAST=\(if (($p.fast_mode)? // false) then 1 else 0 end)",
-  @sh "P_THINK=\(if (($p.thinking.enabled)? // false) then 1 else 0 end)",
   @sh "P_AGENT=\(str(($p.agent.name)? // null))",
   @sh "P_STYLE=\(str(($p.output_style.name)? // null) | if . == "default" then "" else . end)",
   @sh "P_CTX_PCT=\(num(($p.context_window.used_percentage)? // null; ""))",
@@ -199,18 +197,5 @@ DCC_JQ_PROG='
   @sh "P_5H_PCT=\(num(($p.rate_limits.five_hour.used_percentage)? // null; ""))",
   @sh "P_5H_RESET=\(num(($p.rate_limits.five_hour.resets_at)? // null; ""))",
   @sh "P_7D_PCT=\(num(($p.rate_limits.seven_day.used_percentage)? // null; ""))",
-  @sh "P_7D_RESET=\(num(($p.rate_limits.seven_day.resets_at)? // null; ""))",
-  # The dr-cockpit state file for this session, when it has one. Bound the same
-  # way as current_usage: an object or nothing, then every field type-checked.
-  ((if ($ck|length) > 0 and ($ck[0]|type) == "object" then $ck[0] else {} end) as $k
-   | (if ($k.activity|type) == "object" then $k.activity else {} end) as $a
-   | (if ($k.run|type) == "object" then $k.run else {} end) as $r
-   | @sh "P_TURN_KIND=\(str($a.kind) | if . == "running" or . == "waiting" or . == "asking" or . == "failed" then . else "" end)",
-     @sh "P_TURN_SINCE=\(num($a.since; ""))",
-     @sh "P_TURN_TOOL=\(str($a.tool))",
-     @sh "P_RUN_DONE=\(num($r.done; ""))",
-     @sh "P_RUN_TOTAL=\(num($r.total; ""))",
-     @sh "P_RUN_ROUND=\(num($r.round; ""))",
-     @sh "P_RUN_BLOCKED=\(num($r.blocked; 0))",
-     @sh "P_CK_UPDATED=\(num($k.updatedAt; ""))")
+  @sh "P_7D_RESET=\(num(($p.rate_limits.seven_day.resets_at)? // null; ""))"
 '

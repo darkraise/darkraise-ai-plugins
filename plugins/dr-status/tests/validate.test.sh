@@ -27,6 +27,8 @@ check "an unknown theme is named" \
   "$(vout '{ "theme": "nonesuch" }' | grep -c 'nonesuch')" "1"
 check "an unknown segment name is named" \
   "$(vout '{ "lines": [["dir","bogus"],[]] }' | grep -c 'bogus')" "1"
+check "the retired turn and run names still pass" \
+  "$(vout '{ "lines": [["dir","turn","run"],[]] }' | grep -c '^FAIL')" "0"
 check "an invalid colour is named" \
   "$(vout '{ "palette": { "dir": "puce" } }' | grep -c 'puce')" "1"
 check "a 256-colour number is accepted" \
