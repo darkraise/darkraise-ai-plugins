@@ -6,36 +6,36 @@ is read by the running-gates skill. Every gate needs a `Command` field and a
 `Setup`, `Teardown`, `Known-flaky`, `Why`, `Tier` and `Budget`.
 
 ## 1. Build
-Command: `pwsh -NoProfile -File scripts/build.ps1 -Repo both`
-Green: 0 errors in both repos
+Command: `npm run build`
+Green: exit 0 with no error lines
 Evidence: output
 Tier: task
 
-## 2. Layout suite
-Command: `pwsh -NoProfile -File scripts/test-framework.ps1 layout`
-Green: `Passed!`
-Known-flaky: the routing timing gate under load
+## 2. Test suite
+Command: `npm test`
+Green: `0 failed`
+Known-flaky: the reconnect timing test under load
 Budget: 900s
 
-## 3. Script-schema corpus sweep
+## 3. Full-corpus sweep
 Tier: sweep
 Setup:
-```powershell
-$env:DARKRAISE_SCRIPT_CORPUS = "D:/Games Modding/SRHD;D:/Repositories/Personal/SRHD-Mods"
+```sh
+export SAMPLE_CORPUS="$HOME/data/sample-corpus"
 ```
-Command: `pwsh -NoProfile -File scripts/test-framework.ps1 ScriptSchemaCorpus`
-Green: `Passed!`
-Teardown: `Remove-Item Env:DARKRAISE_SCRIPT_CORPUS`
-Applies: changes touching ScriptSchema, ScriptValueTables, or any payload-mask or choice read
-Why: the regression runner never sets the corpus variable, so these suites otherwise
-  sweep only the handful of in-repo fixtures and pass green over a real mapping error
+Command: `npm run test:corpus`
+Green: `0 failed`
+Teardown: `unset SAMPLE_CORPUS`
+Applies: changes touching the parser or any decoder table
+Why: the regular run never sets the corpus variable, so the suite otherwise
+  reads only the handful of in-repo fixtures and passes green over a real decoding error
 
-## 4. Graph capture
-Command: `pwsh -NoProfile -File scripts/capture-graph.ps1 begin.svr -Sheet`
-Green: no card on card, no edge through a card, no edge crossing the whole graph
+## 4. Screenshot of the changed screen
+Command: `npm run screenshot -- dashboard`
+Green: no card on card, no clipped text, nothing drawn off the screen
 Evidence: image
-Applies: changes touching the script canvas, NodeGraph, layout, routing or rendering
-Why: metrics have reported zero overlaps over a sheet that was visibly wrong
+Applies: changes touching layout, routing or rendering
+Why: metrics have reported zero overlaps over a screen that was visibly wrong
 
 ```markdown
 Copy the block below for a new gate. It lives inside this fence so the format
