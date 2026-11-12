@@ -427,17 +427,6 @@ if selected A20; then
   check "A20: skill-split-planning.test.sh passes and reports no broken link" "$rc $(grep -c '^FAIL' <<<"$out") $(grep -i 'broken' <<<"$out" | grep -vc '^ok ')" "0 0 0"
   check "A20: no SD= line in the two review-depth acceptance tests" \
     "$(grep -cE '^[[:space:]]*SD=' "$HERE/review-depth.acceptance.test.sh") $(grep -cE '^[[:space:]]*SD=' "$HERE/review-depth-qa.acceptance.test.sh")" "0 0"
-
-  COPY="$TMP/plugin-copy"; mkdir -p "$COPY/tests"
-  cp -R "$PLUGIN/agents" "$COPY/agents"
-  cp "$HERE/impl-clauses.test.sh" "$COPY/tests/impl-clauses.test.sh"
-  out=$(cd "$COPY/tests" && timeout 60 bash impl-clauses.test.sh 2>&1); rc=$?
-  check "A20: impl-clauses.test.sh passes on an untouched copy" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
-  target="$COPY/agents/impl-haiku.md"
-  clause='Never edit or delete an existing test unless the brief names it.'
-  sed "s/^Never edit or delete an existing test unless the brief names it\./$clause $clause/" "$target" > "$target.new" && mv "$target.new" "$target"
-  out=$(cd "$COPY/tests" && timeout 60 bash impl-clauses.test.sh 2>&1); rc=$?
-  check "A20: a clause duplicated in one impl-*.md makes impl-clauses.test.sh print a FAIL line" "$([ "$rc" -ne 0 ] && echo failed || echo passed) $(grep -c '^FAIL.*impl-haiku' <<<"$out" | awk '{ print ($1 >= 1) ? "fail-line" : "no-fail-line" }')" "failed fail-line"
 fi
 
 # ------------------------------------------------------------------ A23

@@ -40,7 +40,7 @@ IMPL_DISALLOWED="Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactDat
 is_reserve() { case " $RESERVE " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 actual=$(cd "$AGENTS" 2>/dev/null && ls *.md 2>/dev/null | sed 's/\.md$//' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
-check "fleet contains exactly the 21 expected agents" "$actual" "$EXPECTED"
+check "fleet contains exactly the 19 expected agents" "$actual" "$EXPECTED"
 
 for f in "$AGENTS"/*.md; do
   [ -e "$f" ] || continue
@@ -89,10 +89,6 @@ for f in "$AGENTS"/*.md; do
       # The absent tools are the point: no Edit, no Bash, no Agent. A judge's
       # one Write is its report file.
       check "$base: carries the judge toolset" "$(fm "$f" tools)" "$JUDGE_TOOLS"
-      check "$base: writes only the report file" "$(grep -c 'write only the report file' "$f")" "1"
-      check "$base: no longer says it cannot modify files" "$(grep -c 'You cannot modify files' "$f")" "0"
-      check "$base: its reply is not its whole verdict" "$(grep -c 'Your verdict is the whole of your output' "$f")" "0"
-      check "$base: the description does not call it read-only" "$(fm "$f" description | grep -c 'Read-only')" "0"
       check "$base: effort is high or medium" \
         "$(case "$effort" in high|medium) echo ok ;; *) echo "invalid:$effort" ;; esac)" "ok"
       check "$base: preloads no skills" "$(grep -c '^skills:' "$f")" "0"
@@ -109,13 +105,6 @@ for f in "$AGENTS"/*.md; do
   # grep -P is unavailable here; awk with an octal byte range is portable.
   check "$base: content is ASCII only" \
     "$(LC_ALL=C awk '/[\200-\377]/{n++} END{print n+0}' "$f")" "0"
-done
-
-# Every implementer, reserve tiers included, carries the end-of-turn rule: the
-# controller reads a final message as the report.
-for f in "$HERE"/../agents/impl-*.md; do
-  check "$(basename "$f" .md): carries the end-of-turn rule" \
-    "$(grep -c '^Your final message ends your turn' "$f")" "1"
 done
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

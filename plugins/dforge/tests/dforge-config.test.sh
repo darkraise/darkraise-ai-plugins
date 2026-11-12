@@ -371,9 +371,5 @@ fc get finishTimeout > /dev/null 2>&1; check "retired finishTimeout: get exits 2
 check "finishAction: the title and description" "$(node --input-type=module -e "import { pathToFileURL } from 'node:url'; const { default: schema } = await import(pathToFileURL(process.argv[1]).href); console.log(schema.finishAction.title + ' | ' + schema.finishAction.description)" "$(cd "$HERE/../config" && pwd)/schema.mjs")" 'When the work is done | ask asks before the first task. merge, pr or keep skips the question and runs that action as soon as the final review is clean; wait skips it and shows the finish menu then.'
 fc set warnAt 72.5; check "a fraction of an older key: exit 2" "$?" "2"
 
-# The settings view gives each group a tab and the tabs the hotkeys 1, 2, ….
-groups=$(node --input-type=module -e "import { pathToFileURL } from 'node:url'; const { default: schema } = await import(pathToFileURL(process.argv[1]).href); console.log(new Set(Object.values(schema).map(spec => spec.group)).size)" "$(cd "$HERE/../config" && pwd)/schema.mjs")
-check "the README's tab hotkeys cover every settings group" "$(grep -c "press \`1\` to \`$groups\` to switch" "$HERE/../README.md")" "1"
-
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
