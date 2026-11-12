@@ -338,7 +338,7 @@ a8() {
   check "A8: light keeps security" "$(grep -c '^lens security ' <<<"$out")" "1"
   check "A8: light skips every other applicable lens for the depth" "$(short <<<"$out")" \
     "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped lang-bash reason=depth;lens-skipped lang-python reason=depth;lens-skipped lang-typescript reason=depth;lens-skipped docs-comments reason=depth;"
-  check "A8: light skips no lens for the cap" "$(grep -c 'reason=cap' <<<"$out")" "0"
+  check "A8: light skips no lens for the cap" "$rc:$(grep -c 'reason=cap' <<<"$out")" "0:0"
 
   lr docs/dforge/plans/p8s.md --final "$base" "$head"
   out_std=$out
@@ -359,7 +359,7 @@ a8() {
   cp -R "$PLUGIN/criteria" "$PLUGIN/config" "$copy/"
   sed -i.bak 's#^Applies: .*#Applies: paths docs/never/*#' "$copy/criteria/lenses/security.md"
   LENS_SCRIPT="$copy/scripts/lens-route" lr docs/dforge/plans/p8l.md --final "$base" "$head"
-  check "A8: light prints no security line when its clause does not match" "$(grep -c 'security' <<<"$out")" "0"
+  check "A8: light prints no security line when its clause does not match" "$rc:$(grep -c 'security' <<<"$out")" "0:0"
   check "A8: and still skips the other lenses for the depth" "$(grep -c '^lens-skipped .* reason=depth$' <<<"$out")" "6"
   LENS_SCRIPT="$copy/scripts/lens-route" lr docs/dforge/plans/p8f.md --final "$base" "$head"
   check "A8: full is unchanged without a matching security lens" "$(grep -c '^lens ' <<<"$out")" "4"
