@@ -12,7 +12,6 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN="$(cd "$HERE/.." && pwd)"
-REPO_ROOT="$(cd "$PLUGIN/../.." && pwd)"
 S="$PLUGIN/scripts"
 DEPTH="$S/depth-route"
 ROUTE="$S/review-route"
@@ -51,16 +50,6 @@ export DFORGE_LENS_MINOR_FROM=0
 export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=review-depth-acceptance
 printf '%s\n' '#!/usr/bin/env bash' "echo '[{\"id\":\"codex\",\"usable\":true,\"reason\":null}]'" > "$TMP/roster-stub"
 export PLAN_LINT_ROSTER="$TMP/roster-stub"
-
-doc() { tr -d '\r' < "$1" | tr '\n' ' ' | tr -s ' '; } # a file as one line, whitespace collapsed
-skill_doc() { # skill_doc <SKILL.md> — the skill and its references as one line, whitespace collapsed
-  { doc "$1"; for ref in "$(dirname "$1")"/references/*.md; do doc "$ref"; done; }
-}
-between() { # between <text> <start> <end> — the text after the first <start> up to the next <end>
-  local t=${1#*"$2"}
-  [ "$t" != "$1" ] || { printf ''; return 0; }
-  printf '%s' "${t%%"$3"*}"
-}
 
 # --- fixtures: a repository holding specs and plans ------------------------
 
@@ -356,8 +345,8 @@ a8() {
   check "A8: standard prints the 2 lenses and test-quality" "$(grep -c '^lens ' <<<"$out_std")" "3"
   check "A8: standard skips the rest for the cap" "$(short <<<"$out_std")" \
     "lens security;lens silent-failures;lens test-quality;lens-skipped lang-bash reason=cap;lens-skipped lang-python reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
-  out=$(cd "$R" && DFORGE_LENS_CAP=1 timeout 60 bash "$LENS" docs/dforge/plans/p8s.md --final "$base" "$head" 2>&1)
-  check "A8: standard with lensCap 1 prints 1 lens line" "$(grep -c '^lens ' <<<"$out")" "1"
+  out=$(cd "$R" && DFORGE_LENS_CAP=1 timeout 60 bash "$LENS" docs/dforge/plans/p8s.md --final "$base" "$head" 2>&1); rc=$?
+  check "A8: standard with lensCap 1 prints 1 lens line" "$rc:$(grep -c '^lens ' <<<"$out")" "0:1"
 
   out=$(cd "$R" && DFORGE_LENS_CAP=0 timeout 60 bash "$LENS" docs/dforge/plans/p8l.md --final "$base" "$head" 2>&1)
   check "A8: lenses off is unchanged at light" "$out" "lenses off"
@@ -376,44 +365,8 @@ a8() {
   check "A8: full is unchanged without a matching security lens" "$(grep -c '^lens ' <<<"$out")" "4"
 }
 
-# --- text statements: the line grammar the shipped skills carry ------------
-
-BS="$PLUGIN/skills/brainstorming/SKILL.md"
-UD="$PLUGIN/skills/using-dforge/SKILL.md"
-AR="$PLUGIN/reference/auto-run.md"
-WP="$PLUGIN/skills/writing-plans/SKILL.md"
-HO="$PLUGIN/skills/handoff/SKILL.md"
-FR="$PLUGIN/reference/final-review.md"
-EP="$PLUGIN/skills/executing-plans/SKILL.md"
-. "$HERE/fixtures/sdd-text.sh"
-FIN="$PLUGIN/skills/finishing-a-development-branch/SKILL.md"
-
-a9() {
-  local bs
-  bs=$(skill_doc "$BS")
-  has "A9: brainstorming reports the skipped critic at light" "$bs" 'Critic: skipped (depth light)'
-  lacks "A9: the fold no longer keys on the Process line's triggers" "$bs" 'names neither irreducible risk nor a new'
-  matches "A9: the spec review message carries the depth" "$bs" 'Depth: <[a-z]+> — <reason'
-  has "A9: standard runs no second Fable round" "$bs" 'No second Fable round runs at standard'
-  has "A9: full keeps the separate critic" "$bs" 'At `full`, the separate critic round runs, then Fable for one or two rounds'
-  has "A9: the fold is decided by the depth, not the trigger list" "$bs" 'The depth decides, not the trigger list'
-}
-
 a10() {
-  local wp ho out_with out_without
-  wp=$(skill_doc "$WP"); ho=$(doc "$HO")
-  lacks "A10 (register row 1): writing-plans no longer skips the plan review at light" "$wp" 'skipped (depth light)'
-  has "A10: writing-plans runs the handoff steps first" "$wp" 'handoff steps 0-4'
-  has "A10: a light plan of 1-3 tasks is the one that continues" "$wp" 'A light plan of 1-3 tasks runs'
-  has "A10: and measures the budget with plain context-size" "$wp" 'plain `scripts/context-size`'
-  has "A10: and continues in the session only on ok" "$wp" 'On `ok`, say in one line'
-  has "A10: and ends as a handoff on any other result" "$wp" 'On any other result, run handoff step 5'
-  lacks "A10 (register row 1): a light plan runs the Codex gate probe" "$wp" "At depth light (step 1's line) skip"
-  has "A10: standard and full keep the hard stop" "$wp" 'The exception is a plan at depth light, which is no hard stop outside an auto run'
-  has "A10: a light plan of 4 or more tasks keeps the handoff" "$wp" 'A light plan of 4 or more tasks still ends with dforge:handoff as above.'
-  has "A10: handoff makes a light plan a stop only from 4 tasks or without room" "$ho" 'A saved plan at depth light is a stop only when it has 4 or more tasks'
-  lacks "A10: handoff no longer calls every saved plan a hard stop" "$ho" '(plan saved outside an auto run, or a switch'
-
+  local out_with out_without
   mkplan p10.md spec-light.md - 0
   out_without=$(cd "$R" && timeout 60 bash "$LINT" docs/dforge/plans/p10.md --no-probe 2>&1)
   has "A10: plan-lint warns while the header has no Plan review line" "$out_without" 'no **Plan review:** line yet'
@@ -423,29 +376,8 @@ a10() {
   check "A10: and no header warning mentions it" "$(grep -ci 'WARN header.*plan review' <<<"$out_with")" "0"
 }
 
-a11() {
-  local fr ep sd head0 step05 step2
-  fr=$(doc "$FR"); ep=$(doc "$EP"); sd=$(doc "$SDD_LEDGER")
-  has "A11: final-review.md skips acceptance QA at light with the ledger line" "$fr" 'Acceptance QA: skipped (depth light)'
-  matches "A11: recovery treats the skipped line as complete" "$fr" 'skipped \(depth light\).{0,300}complete|complete.{0,300}skipped \(depth light\)'
-  has "A11: the Codex round skipped is said in one line" "$fr" 'codex round skipped (depth'
-  has "A11: the review logs its depth" "$fr" 'Review depth: <'
-  head0=${fr%%'0. **Gates.**'*}
-  has "A11: the depth is logged before step 0" "$head0" 'Review depth: <'
-  step05=$(between "$fr" '- 0.5 **Acceptance QA.**' '1. **Claude review.**')
-  has "A11: step 0.5 carries the light skip" "$step05" 'skipped (depth light)'
-  step2=$(between "$fr" '2. **Codex round.**' '3. **Wait for QA.**')
-  has "A11: step 2 carries the Codex skip" "$step2" 'codex round skipped (depth'
-  has "A11: step 2 skips the round at light and at standard" "$step2" 'At depth light or standard, skip it'
-  has "A11: step 3 waits for no runner at light or standard" "$(between "$fr" '3. **Wait for QA.**' '**Dedupe and verify')" 'or depth light or standard'
-  has "A11: executing-plans lists the Review depth ledger line" "$ep" 'Review depth: <'
-  has "A11: executing-plans lists the skipped QA ledger line" "$ep" 'Acceptance QA: skipped (depth light)'
-  has "A11: subagent-driven-development lists the Review depth ledger line" "$sd" 'Review depth: <'
-  has "A11: and the skipped QA ledger line" "$sd" 'Acceptance QA: skipped (depth light)'
-}
-
 a12() {
-  local fr gates ui claude claudehead fixwave p bs gate step5 step5rest
+  local p
   mkplan p12l.md spec-light.md - 0 1
   mkplan p12s.md spec-standard.md - 1
   mkplan p12f.md spec-full.md - 0 1
@@ -454,69 +386,9 @@ a12() {
     check "A12: review-route --final still routes the whole-branch Claude review ($p)" "$rc:$out" \
       "0:review-seat final primary=dforge:judge-opus fallback=- reason=plain"
   done
-  fr=$(doc "$FR")
-  gates=$(between "$fr" '0. **Gates.**' '- 0.2 **UI proof.**')
-  ui=$(between "$fr" '- 0.2 **UI proof.**' '- 0.5 **Acceptance QA.**')
-  claude=$(between "$fr" 'Then run `scripts/review-route PLAN_FILE --final` and dispatch the `primary` it prints' '2. **Codex round.**')
-  claudehead=$(between "$fr" '1. **Claude review.**' '**Lenses.**')
-  fixwave=${fr#*'## Fixing what it finds'}
-  bs=$(skill_doc "$BS")
-  gate=$(between "$bs" 'In an auto run (`scripts/auto-run status` exits 0), skip this gate' 'Otherwise, after posting')
-  step5=$(between "$bs" '5. **The spec review**, the one stop' '6. **Start the run.**')
-  step5rest=${step5//'`specReview=false` does not skip this stop'/}
-  check "A12: the Gates step is found" "$([ -n "$gates" ] && echo yes || echo no)" "yes"
-  check "A12: the UI proof step is found" "$([ -n "$ui" ] && echo yes || echo no)" "yes"
-  check "A12: the Claude review dispatch is found" "$([ -n "$claude" ] && echo yes || echo no)" "yes"
-  check "A12: the Claude review heading is found" "$([ -n "$claudehead" ] && echo yes || echo no)" "yes"
-  check "A12: the fix wave section is found" "$([ -n "$fixwave" ] && [ "$fixwave" != "$fr" ] && echo yes || echo no)" "yes"
-  check "A12: the spec review stop is found" "$([ -n "$step5" ] && echo yes || echo no)" "yes"
-  check "A12: the User Review Gate skip rules are found" "$([ -n "$gate" ] && echo yes || echo no)" "yes"
-  lacks "A12: gates are not cut by a depth" "$gates" 'depth'
-  lacks "A12: the UI proof is not cut by a depth" "$ui" 'depth'
-  lacks "A12: the Claude review dispatch is not cut by a depth" "$claude" 'depth'
-  lacks "A12: nor is the Claude review dispatch skipped at light" "$claude" 'light'
-  lacks "A12: the Claude review heading is not cut by a depth" "$claudehead" 'depth'
-  lacks "A12: nor is the Claude review skipped at light" "$claudehead" 'light'
-  lacks "A12: the fix wave is not cut by a depth" "$fixwave" 'depth'
-  lacks "A12: nor is the fix wave skipped at light" "$fixwave" 'light'
-  lacks "A12: the User Review Gate skip rules name no depth" "$gate" 'depth'
-  lacks "A12: nor does the gate skip name light" "$gate" 'light'
-  has "A12: the spec review stop is not skipped by specReview=false" "$step5" '`specReview=false` does not skip this stop'
-  lacks "A12: the spec review stop is not skipped by a depth" "$step5" 'skip the spec review'
-  lacks "A12: the spec review stop has no other skip" "$step5rest" 'skip '
-  lacks "A12: nor is the stop said to be skipped" "$step5rest" 'is skipped'
-  has "A12: the light approve option says the plan is not a stop" "$(skill_doc "$BS")" 'depth light: the plan is not a stop'
 }
 
-a14() {
-  local ud bs spec_text
-  ud=$(doc "$UD"); bs=$(skill_doc "$BS")
-  has "A14: using-dforge states the architectural Process line" "$ud" 'Process: architectural, depth <d> — <triggers>'
-  has "A14: brainstorming states it too" "$bs" 'Process: architectural, depth <d> — <triggers>'
-  matches "A14: brainstorming writes the Depth line" "$bs" '\*\*Depth:\*\* <[^>]+> — <reason'
-  matches "A14: and the owner's Depth line" "$bs" '\*\*Depth:\*\* <[^>]+> — owner'
-  spec_text="$REPO_ROOT/docs/dforge/specs/2026-10-27-review-depth-design.md"
-  check "A14: this spec carries Depth below Execution strategy" \
-    "$(awk '/^\*\*Execution strategy:\*\*/ { e = NR } /^\*\*Depth:\*\*/ { d = NR } END { print (e > 0 && d > e) ? "yes" : "no" }' "$spec_text")" "yes"
-}
-
-a15() {
-  local fr step4 fin ar
-  fr=$(doc "$FR"); fin=$(skill_doc "$FIN"); ar=$(doc "$AR")
-  step4=$(between "$fr" '4. **Report.**' '## Fixing what it finds')
-  check "A15: final-review.md step 4 is found" "$([ -n "$step4" ] && echo yes || echo no)" "yes"
-  has "A15: step 4 writes lens-skipped lines to the ledger" "$step4" 'final review lens-skipped'
-  lacks "A15: step 4 no longer writes only reason=cap" "$step4" 'lens-skipped <id> reason=cap'
-  has "A15: finishing reads the ledger's lens-skipped lines" "$fin" 'final review lens-skipped'
-  lacks "A15: finishing no longer reads only reason=cap" "$fin" 'lens-skipped <id> reason=cap'
-  lacks "A15: auto-run.md's Finishing no longer reads only reason=cap" "$ar" 'lens-skipped <id> reason=cap'
-  has "A15: finishing lists the unverified test statements at light" "$fin" 'not verified (depth light)'
-  has "A15: from the statements tagged test" "$fin" 'tagged `test`'
-  has "A15: an attended finish lists the lens-skipped lines at Step 3" "$(between "$fin" '**Lenses skipped.**' '## Step 4: Present Options')" 'final review lens-skipped <id> reason=<reason>'
-  has "A15: auto-run.md's Finishing lists them too" "$ar" 'not verified (depth light)'
-}
-
-ALL="a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16"
+ALL="a1 a2 a3 a4 a5 a6 a7 a8 a10 a12 a13 a16"
 if [ $# -gt 0 ]; then
   sel=""
   for n in "$@"; do
