@@ -847,33 +847,6 @@ t_A18() {
   matches "A18: setup: the route still ran (lang-typescript matched)" "$o" "^lens(-skipped)? lang-typescript( |\$)"
 }
 
-flat() { tr '\n' ' ' < "$1" | sed -E 's/[[:space:]]+/ /g'; }
-t_A19() {
-  local fr fin
-  fr=$(flat "$PLUGIN/reference/final-review.md")
-  fin=$(flat "$PLUGIN/skills/finishing-a-development-branch/references/ui-proof.md")
-  has "A19: the final review names ui-proof check --base MERGE_BASE --spec" "$fr" "ui-proof check --base MERGE_BASE --spec"
-  has "A19: the finishing skill names ui-proof check --base MERGE_BASE --spec" "$fin" "ui-proof check --base MERGE_BASE --spec"
-  # GNU grep takes over a minute on these bounded repeats in a UTF-8 locale
-  # and a few seconds in C; a byte window is never wider than a character one.
-  LC_ALL=C matches "A19: the final review says exit 1 stops it" "$fr" 'ui-proof check --base MERGE_BASE --spec.{0,600}[Ee]xit 1 stops'
-  LC_ALL=C matches "A19: the finishing skill says exit 1 stops (blocks) integration" "$fin" 'ui-proof check --base MERGE_BASE --spec.{0,1500}[Ee]xit 1.{0,200}(stop|block)'
-  matches "A19: the final review names the auto-run path: prove, check again, stop for unverifiable" "$fr" \
-    '[Ii]n an auto run, run the dforge:ui-ux Prove phase, then check again.{0,300}unverifiable.{0,200}auto-run stop'
-}
-
-t_A21() {
-  local qa skill
-  qa=$(flat "$PLUGIN/reference/acceptance-qa.md")
-  skill=$(flat "$PLUGIN/skills/ui-ux/SKILL.md")
-  matches "A21: acceptance-qa.md says a statement starting with a contract ID is written for the profile's UI test runner" "$qa" \
-    'starts with a contract ID.{0,120}is written for the UI test runner.{0,80}profile'
-  has "A21: SKILL.md says a behaviour statement is tagged demo when the profile names no UI test runner" "$skill" \
-    'tagged `demo` when the profile names no UI test runner'
-  matches "A21: SKILL.md says a behaviour statement is tagged test when the profile names a runner" "$skill" \
-    'tagged `test` when the profile names a UI test runner|`test` when the profile names a UI test runner'
-}
-
 t_A22() {
   new_repo a22ctl none
   ui_file "$REPO"
@@ -922,7 +895,7 @@ t_A22() {
   check "A22: a fix wave adds an untracked UI file after the verdict: exit 1" "$status" "1"
 }
 
-for id in A1 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A18 A19 A21 A22; do
+for id in A1 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A18 A22; do
   if [ $# -eq 0 ]; then run=1; else run=0; for a in "$@"; do [ "$a" = "$id" ] && run=1; done; fi
   [ "$run" -eq 1 ] && "t_$id"
 done

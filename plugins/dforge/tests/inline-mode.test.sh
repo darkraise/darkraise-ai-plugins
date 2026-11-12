@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Inline mode is a document, and the claims that make it work are structural:
-# which scripts it calls, which references it links, which ledger lines it
-# shares with subagent mode, and which ruling-seat kinds it claims. A model is
-# not needed to check any of them, so they are checked here instead of in a
-# review.
+# which ledger lines it shares with subagent mode and which files it links to.
+# A model is not needed to check any of them, so they are checked here instead
+# of in a review.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,109 +35,29 @@ present() { # present <name> <file> <needle>
   if grep -qF -- "$3" "$2"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
-absent() { # absent <name> <file> <needle>
-  if grep -qF -- "$3" "$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
-  else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
-}
 
 for f in "$INLINE" "$SDD" "$FINAL"; do
   check "exists: $(basename "$(dirname "$f")")/$(basename "$f")" \
     "$([ -f "$f" ] && echo yes || echo no)" "yes"
 done
 
-# The scripts inline mode must call. Reading the plan directly would skip
-# amendments; skipping next-step would end a session without a next action.
-for s in 'task-brief --header' 'task-brief PLAN_FILE N' 'sdd-workspace' 'context-size' 'next-step' 'plan-amend'; do
-  present "calls $s" "$INLINE" "$s"
-done
-
-# The two skills a finished or interrupted run hands control to. Dropping
-# either would strand a session with nowhere to go.
-present "names handoff" "$INLINE" "dforge:handoff"
-present "names finishing" "$INLINE" "dforge:finishing-a-development-branch"
-
-# Only the first 5,000 tokens of a skill body come back after compaction, so
-# the recovery instructions have to be at the top.
-check "opens with After compaction" \
-  "$(grep -m 1 '^## ' "$INLINE")" "## After compaction"
-
 # Links, and the files they point at.
-present "links the shared final review" "$INLINE" "../../reference/final-review.md"
-present "links the ruling prompt" "$INLINE" "../subagent-driven-development/references/ruling-prompt.md"
 check "the shared final review exists" \
   "$([ -f "$P/reference/final-review.md" ] && echo yes || echo no)" "yes"
 check "the ruling prompt exists" \
   "$([ -f "$P/skills/subagent-driven-development/references/ruling-prompt.md" ] && echo yes || echo no)" "yes"
-
-# final-review.md's own links are outside validate-repository.mjs's coverage
-# (it walks skills/, not reference/), so this suite is the only thing pinning
-# them.
-present "final review links the code reviewer" "$FINAL" "../skills/requesting-code-review/references/code-reviewer.md"
 check "the code reviewer reference exists" \
   "$([ -f "$P/skills/requesting-code-review/references/code-reviewer.md" ] && echo yes || echo no)" "yes"
-present "final review links the external executor" "$FINAL" "executor-lane.md"
 check "the external executor reference exists" \
   "$([ -f "$P/reference/executor-lane.md" ] && echo yes || echo no)" "yes"
-present "final review links the re-review prompt" "$FINAL" "../skills/subagent-driven-development/references/re-review-prompt.md"
 check "the re-review prompt exists" \
   "$([ -f "$P/skills/subagent-driven-development/references/re-review-prompt.md" ] && echo yes || echo no)" "yes"
 
-# The mode is chosen by the plan, not by whether subagents exist.
-absent "drops the upstream subagent-availability note" "$INLINE" \
-  "works much better with access to subagents"
-
-# The three ruling-seat kinds this mode can reach, and the four it cannot.
-for k in blocked-plan plan-conflict final-residual; do
-  present "claims the $k kind" "$INLINE" "\`$k\`"
-done
-# The skill names all seven kinds - three it runs and four it explains away -
-# so "states the three and no others" is not greppable. Assert the three plus
-# the sentence that excludes the rest.
-present "inline mode routes the executor empty-diff kind" "$INLINE" 'executor-empty-diff'
-absent "inline mode no longer says it never runs an external executor" "$INLINE" 'no external executor'
-for k in preflight cannot-verify breaker; do
-  present "claims the $k kind for delegated work" "$INLINE" "\`$k\`"
-done
-present "reads the Dispatch line" "$INLINE" '`**Dispatch:** delegated'
-present "links the delegated loop" "$INLINE" "../../reference/delegated-task.md"
-present "a handoff waits for the task in flight" "$INLINE" 'Never hand off in the middle of a task,'
-present "subagent mode finishes the task before a handoff" "$SDD_BUDGET" 'finish the task in flight — its reviews, fix rounds and'
-present "subagent mode's last task is a soft stop" "$SDD_BUDGET" 'continue to Final Review in this session'
-present "a plan with heavy tasks gets a preflight" "$INLINE" 'The `preflight` item runs when `plan-header.md` ends with a `**Heavy:**` line.'
-absent "the preflight no longer keys on a heavy Dispatch entry" "$INLINE" 'naming at least one `(heavy)` task'
-absent "the kinds table no longer keys the preflight on any delegation" "$INLINE" 'when the plan delegates any task'
-present "the preflight arises only for a heavy task" "$INLINE" '`preflight` arises only for a plan with a heavy task'
-present "inline mode names only the executor delegation reason" "$INLINE" '`**Dispatch:** delegated — Task <a> (executor)`'
-absent "inline mode no longer delegates a heavy task" "$INLINE" 'Task <a> (heavy)'
-absent "writing-plans no longer defines four-band tasks" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'four-band'
-absent "inline mode no longer delegates total-4 tasks" "$INLINE" 'total-4'
-absent "using-dforge no longer delegates total-4 tasks" "$P/skills/using-dforge/SKILL.md" 'total-4'
-absent "README no longer delegates total-4 tasks" "$P/README.md" 'total-4'
-absent "the delegated loop no longer delegates total-4 tasks" "$P/reference/delegated-task.md" 'total-4'
-present "inline routes the ruling seat" "$INLINE" '`scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]`'
-present "inline confirms a Header amendment" "$INLINE" 'A Header amendment is confirmed by a second, independent `judge-opus` dispatch'
-absent "inline drops the no-preflight sentence" "$INLINE" 'There is no pre-flight scan.'
-absent "inline no longer names judge-fable as the ruling seat" "$INLINE" '`dforge:judge-fable` (`dforge:judge-opus` when Fable is'
-absent "inline no longer translates older plugin prefixes" "$INLINE" "translate a delegated task's \`**Implementer:**\` agent before dispatching it"
-absent "inline drops the all-inert legacy sentence" "$INLINE" 'no task is dispatched, so their names need no translation'
-present "a task at its cap goes to the breaker, not to subagent mode" "$INLINE" 'goes to the ruling seat as a `breaker` item (in an auto run, the'
-
-# The fix cap, and the escalation clause both skills key on.
-present "states the fix cap" "$INLINE" "fix round R/3"
-absent "inline no longer writes the escalation line" "$INLINE" "Task <N>: escalated inline -> subagent — <trigger>"
+# The escalation clause both skills key on.
 present "an owner request switches through the ledger line" "$INLINE" '`Task <N>: escalated inline -> subagent — owner request`'
-absent "an owner request never edits the plan's Execution line" "$INLINE" "change the plan's Execution line"
-present "inline recovery still reads an old escalation line" "$INLINE" '| `escalated inline -> subagent` | This plan has left inline mode'
 present "subagent mode reads the escalation line" "$SDD" "escalated inline -> subagent"
 ESC="$P/skills/subagent-driven-development/references/escalation.md"
-present "the inline recovery row ranks above both" "$SDD_LEDGER" "ranked strictly above both the task's \`**Implementer:**\` agent and the inline session's rung"
-present "escalation names the inline exit" "$ESC" '## Escalating out of inline mode'
-present "escalation walks from the higher rung" "$ESC" 'dispatch its successor on the'
-present "escalation gives the worked example" "$ESC" '`impl-opus-high`, not `impl-opus-low`'
-present "escalation names the session rung" "$ESC" '`impl-<model>-<effort>` (`haiku` as `impl-haiku`)'
 present "an unavailable substitute ends in BLOCKED, not a loop" "$ESC" '`Task <N>: BLOCKED — no available implementer — <the models found unavailable>`'
-present "inline fix rounds record their outcome" "$INLINE" "passing | still failing"
-absent "inline no longer marks the switch on a fix-round line" "$INLINE" "escalated inline -> subagent)"
 
 # One ledger grammar for both modes.
 for line in 'minor (deferred)' 'parked' 'BLOCKED' 'Ruling:' 'Final review: clean' 'Review depth: <light|standard|full> (<reason>)' 'Acceptance QA: skipped (depth light)'; do
@@ -147,110 +66,16 @@ for line in 'minor (deferred)' 'parked' 'BLOCKED' 'Ruling:' 'Final review: clean
 done
 for f in "$INLINE" "$SDD_LEDGER"; do
   s=$(basename "$(dirname "$f")")/$(basename "$f")
-  present "$s: a skipped QA line counts as complete on recovery" "$f" 'Acceptance QA: skipped (depth light)` counts as `complete` on recovery.'
-  present "$s: the Review depth line is never recomputed" "$f" 'and is read on recovery, never recomputed; it is'
   for line in 'Review depth: <light|standard|full> (<reason>)' 'Acceptance QA: skipped (depth light)'; do
     check "$s: the ledger grammar block holds the line $line" "$(grep -Fxc -- "$line" "$f")" "1"
   done
 done
-present "inline marks an unreviewed completion" "$INLINE" "unreviewed"
-present "inline assigns itself" "$INLINE" "implementer inline"
-
-# The final review lives in one place now.
-present "subagent mode links the shared final review" "$SDD" "final-review.md"
-absent "subagent mode no longer spells out the package call" "$SDD" \
-  "review-package PLAN_FILE MERGE_BASE HEAD"
-absent "inline mode does not spell out the package call" "$INLINE" \
-  "review-package PLAN_FILE MERGE_BASE HEAD"
-present "the shared reference spells out the package call" "$FINAL" \
-  "review-package PLAN_FILE MERGE_BASE HEAD"
-present "the shared reference covers both modes" "$FINAL" "Either execution mode"
-present "final review routes the Claude seat" "$FINAL" '`scripts/review-route PLAN_FILE --final` and dispatch'
-absent "final review drops the most capable model" "$FINAL" 'most capable'
-present "final review routes the fix subagent" "$FINAL" '`scripts/review-route PLAN_FILE --final-fix <file> [<file> ...]`'
-present "final review ledgers the fix subagent" "$FINAL" '`Final fix: implementer <agent> (assigned; base <sha7>)`'
-absent "subagent mode drops the most capable final seat" <(sdd_text) 'most capable available'
-absent "subagent mode drops the most capable final reviewer" <(sdd_text) 'final reviewer on the most capable model'
-present "subagent ledger has the Final fix line" "$SDD_LEDGER" 'Final fix: implementer <agent> (assigned; base <sha7>)'
-present "subagent mode recovers a lost fix wave" "$SDD_LEDGER" 'A `Final fix:` line and no `Final review:` line'
-present "inline mode names the final seat" "$INLINE" '`scripts/review-route PLAN_FILE --final` prints'
-present "judge-opus takes every final review" "$P/agents/judge-opus.md" 'every final whole-branch review'
-present "README names the final seat" "$P/README.md" 'The final whole-branch review runs on `judge-opus`'
-
-# A standing project constraint outranks a spec, so both execution skills read
-# it at Setup. Without this, a plan can be executed against a constraint and
-# nothing notices until a handoff.
-for f in "$INLINE" "$SDD_SETUP"; do
-  present "setup loads distilled constraints: $(basename "$(dirname "$f")")/$(basename "$f")" \
-    "$f" 'distilled/constraints.md'
-done
-
-# Gates run before the reviewers are dispatched: reviewing a branch that does
-# not build wastes both reviewer seats.
-present "final review runs gates first" "$FINAL" 'dforge:running-gates'
-present "a red gate stops the review" "$FINAL" 'A red gate stops'
-
-# The dedupe seat runs only over two lists; one list goes to the fixer's triage
-# and the re-review rules on every rejection.
-RRP="$P/skills/subagent-driven-development/references/re-review-prompt.md"
-present "final review dedupes only two lists" "$FINAL" '**Dedupe and verify, only with two lists.**'
-present "final review names the one-list case" "$FINAL" '**With one list**'
-present "the fixer records rejections" "$FINAL" 'under `REJECTED: <finding>`'
-present "disputed rejections go to the ruling seat" "$FINAL" '`REJECTION DISPUTED` in the'
-present "the re-review rules on rejections" "$RRP" 'REJECTION UPHELD |'
-present "an upheld rejection closes" "$RRP" 'An upheld rejection is closed; a disputed one is open.'
-present "the Codex round rationale covers one list" "$P/reference/executor-lane.md" 'with one list the'
-absent "README drops the always-third-seat claim" "$P/README.md" 'which is why every finding goes through a third seat'
 
 # --- the delegated loop: one copy, shared by both execution skills ---
 DT="$P/reference/delegated-task.md"
 check "exists: reference/delegated-task.md" "$([ -f "$DT" ] && echo yes || echo no)" "yes"
-for h in '## Contract' '## Seats' '## 1. Dispatch the implementer' '## 2. Handle the report' \
-         '## 3. Review the task' '## 4. The fix loop' '## 5. Complete the task' '## Recovery'; do
-  check "delegated loop heading: $h" "$(grep -cxF -- "$h" "$DT")" "1"
-done
-for h in '### 1. Dispatch the implementer' '### 2. Handle the report' '### 3. Review the task' \
-         '### 4. The fix loop' '### 5. Complete the task'; do
-  check "subagent mode no longer holds: $h" "$(sdd_text | grep -cxF -- "$h")" "0"
-done
-present "subagent mode links the delegated loop" "$SDD" "../../reference/delegated-task.md"
-present "subagent mode defers per-task recovery" "$SDD_LEDGER" 'Apply [delegated-task.md](../../../reference/delegated-task.md) §Recovery'
-
-# A Codex host reaches both documents by the same paths a Claude host does, and
-# `review-route` exits 2 for task and ruling seats on every `Host: codex` plan. Each place that reads an
-# exit 2 must name the native judge there, not a Claude agent that host has no
-# way to dispatch.
 NC="$P/reference/native-codex.md"
 check "exists: reference/native-codex.md" "$([ -f "$NC" ] && echo yes || echo no)" "yes"
-present "the delegated loop routes a Codex host's exit 2" "$DT"   'the seat is a native judge at Astra high or above'
-present "the delegated loop names the Codex escalation source" "$DT"   'come from the `codex-v4` selector'
-present "the delegated loop handles a reply with no status" "$DT"   '**No status line:**'
-present "a reply with no status is never DONE" "$DT"   'A reply without a status is not DONE'
-present "no-status continuations are bounded" "$DT"   'After two continuations with no status'
-present "a lost agent id means a fresh dispatch" "$DT"   'dispatch the same agent fresh with the brief path'
-present "inline mode routes a Codex host's exit 2" "$INLINE"   'Codex host, where `review-route --ruling` exits 2 on every'
-present "native Codex claims the exit 2" "$NC"   '`scripts/review-route` exits 2 for a task, a ruling or the final review on'
-present "native Codex routes the plan-review cap" "$NC"   'task'"'"'s raw total (files+spec+coupling+risk, 0-6) under Claude'"'"'s bands'
-present "native Codex routes the final fix" "$NC"   'rank 5 (`gpt-6.1-sol / high`) and capped at rank 9 (`gpt-6-astra / xhigh`)'
-present "native Codex states plans carry no delegated task" "$NC"   'A Codex plan therefore carries no delegated task'
-# The budget line exists on Codex now, and carries no verdict. Four documents
-# said it did not exist at all.
-SB="$P/reference/session-budget.md"
-present "the budget reference names the rollout source" "$SB" 'source: rollout'
-present "the budget reference states the Codex line carries no verdict" "$SB" \
-  'measured — unknown'
-present "the budget reference names the observations mode" "$SB" '--observations'
-present "native Codex names the measured line" "$NC" 'measured — unknown — source: rollout'
-absent "subagent mode no longer denies the Codex budget line" "$SDD_BUDGET" \
-  'On Codex there is no budget line'
-absent "inline mode no longer denies the Codex budget line" "$INLINE" \
-  'and there is no budget'
-present "subagent mode names the measured Codex line" "$SDD_BUDGET" \
-  'carries a measured number but no verdict'
-present "inline mode names the measured Codex line" "$INLINE" \
-  'carries a measured number but no verdict'
-present "the handoff skill keeps the count rule authoritative" "$P/skills/handoff/SKILL.md" \
-  'the measured number does not override it'
 # validate-repository.mjs checks links only under skills/, so this suite pins
 # the reference file's links.
 for link in $(grep -oE '\]\([^)#]+\.md' "$DT" | sed 's/^](//' | sort -u); do
@@ -358,26 +183,6 @@ check "a self-implemented brief carries no Dispatch line" \
   "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/ob2.md")" "0"
 
 rm -rf "$DTMP"
-# --- the third delegation reason, in every place that defines the set -------
-# Every place that defines the delegated set names the Executor line, each in
-# its own words, so a later edit to any one is caught here rather than in a
-# plan that misroutes a task.
-present "inline mode delegates every Executor line" "$INLINE" 'A delegated task is one carrying an `**Executor:**` line'
-present "writing-plans delegates every Executor line" "$P/skills/writing-plans/references/execution-line.md" 'A task carrying an `**Executor:**` line is delegated'
-present "using-dforge delegates every Executor line" "$P/skills/using-dforge/SKILL.md" 'every task but those carrying an `**Executor:**` line'
-present "README delegates every Executor line" "$P/README.md" 'exception is every task carrying an `**Executor:**` line'
-present "the delegated loop delegates every Executor line" "$P/reference/delegated-task.md" '`**Dispatch:** delegated`: a task carrying an `**Executor:**` line'
-present "writing-plans gates the roster per executor" "$P/skills/writing-plans/references/assignment-procedure.md" 'for every executor whose gate prints `lane=true`'
-present "writing-plans allows one Executor line per task" "$P/skills/writing-plans/references/assignment-procedure.md" 'A task carries at most one `**Executor:**` line'
-absent "inline mode no longer calls executor lines inert" "$INLINE" '`**Executor:**` lines are inert for the tasks you'
-absent "writing-plans no longer reads executor lines only when delegated" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'the lines are read only for the delegated tasks'
-
-# Inline mode delegates executor tasks, so no text may say it implements every
-# task.
-for doc in "$P"/skills/executing-plans/SKILL.md "$P"/skills/executing-plans/references/*.md "$P"/skills/writing-plans/SKILL.md "$P"/skills/writing-plans/references/*.md "$P"/reference/native-codex.md; do
-  absent "${doc#"$P"/} does not say inline mode implements every task itself" "$doc" 'implements every task itself'
-  absent "${doc#"$P"/} does not say inline mode implements every task in the session" "$doc" 'implements every task in'
-done
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

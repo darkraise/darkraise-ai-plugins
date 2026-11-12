@@ -36,21 +36,6 @@ matches() { # matches <name> <haystack> <extended regex>
   if grep -qiE -- "$3" <<<"$2"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       no match: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
-ordered() { # ordered <name> <text> <needle>... : the needles occur in this order
-  local name=$1 rest=$2 needle
-  shift 2
-  for needle in "$@"; do
-    if [[ $rest != *"$needle"* ]]; then
-      printf 'FAIL - %s\n       missing or out of order: [%s]\n' "$name" "$needle"; fail=$((fail + 1)); return
-    fi
-    rest=${rest#*"$needle"}
-  done
-  printf 'ok   - %s\n' "$name"; pass=$((pass + 1))
-}
-section() { # section <file> <heading line>: the heading's body up to the next level-2 heading
-  awk -v h="$2" '$0 == h { on = 1; next } on && /^## / { exit } on { print }' "$1"
-}
-flat() { tr '\n' ' ' | tr -s ' '; }
 
 # --- the script statements: A3, A4, A5 ---
 REPO="$TMP/repo"
@@ -121,7 +106,6 @@ usage_text=$(bash "$AR" 2>&1)
 has "A4: the usage text is printed" "$usage_text" "usage: auto-run"
 lacks "A4: the usage text does not name switch-resume" "$usage_text" "switch-resume"
 lacks "A4: the usage text has no compacted --switch" "$usage_text" "compacted --switch"
-check "A4: auto-run.md does not name switch-resume" "$(grep -c 'switch-resume' "$P/reference/auto-run.md")" "0"
 
 # A5
 arun s-3 stop >/dev/null
@@ -149,24 +133,7 @@ check "A5: the first prompt is next-step's finishing prompt" "$(field resumeProm
 has "A5: the first prompt reaches finishing through resume-execution" "$(field resumePrompt)" "with dforge:resume-execution. Run dforge:finishing-a-development-branch."
 check "A5: the resume count is unchanged" "$(resumes s-4)" "$resumes_before"
 
-# --- the document statements: A6, A7, A11, A15 ---
-FIN="$P/skills/finishing-a-development-branch/SKILL.md"
-auto_section=$(section "$FIN" "## Auto run" | flat)
-ordered "A6: the Auto run section orders phase finish, handoff steps 0-3, next-step, clear --phase, Auto run: clearing" "$auto_section" \
-  'phase finish' 'handoff' 'steps 0-3' 'next-step' 'clear --phase' 'Auto run: clearing'
-matches "A6: it says the rule applies on a phase other than finish" "$auto_section" '(not|other than) `?finish`?'
-matches "A6: it says phase finish continues the skill" "$auto_section" 'phase `?finish`?[^.]*(continue|follow)'
-
-budget=$(flat < "$P/reference/session-budget.md")
-has "A7: session-budget keeps the same-session sentence" "$budget" "Once the final review is clean, finishing runs in the same session"
-tail_after=${budget#*"Once the final review is clean, finishing runs in the same session"}
-matches "A7: the auto-run exception follows the sentence" "${tail_after:0:160}" "auto run"
-handoff_when=$(section "$P/skills/handoff/SKILL.md" "## When" | flat)
-has "A7: handoff's When keeps nothing stops finishing" "$handoff_when" "nothing stops finishing once the final review is clean"
-outside_auto=$(awk '$0 == "## Auto run" { skip = 1; next } skip && /^## / { skip = 0 } !skip { print }' "$FIN")
-check "A7: nothing outside the Auto run section names auto-run clear" "$(grep -c 'auto-run clear' <<<"$outside_auto")" "0"
-check "A7: the Auto run section names auto-run clear" "$(section "$FIN" "## Auto run" | grep -c 'auto-run clear')" "1"
-
+# --- the document statements: A11 ---
 over=""
 count=0
 for f in "$P"/skills/*/SKILL.md; do
@@ -178,11 +145,6 @@ check "A11: every SKILL.md is at most 20000 bytes" "${over:- }" " "
 check "A11: skills were found" "$([ "$count" -gt 0 ] && echo yes || echo no)" "yes"
 timeout 120 bash "$HERE/skill-size.test.sh" >/dev/null 2>&1; status=$?
 check "A11: the skill-size test passes" "$status" "0"
-
-finishing=$(section "$P/reference/auto-run.md" "## Finishing" | flat)
-for needle in 'parked' 'Ruling:' 'final review residual' 'final-fix-report.md' 'final-rereview-report.md'; do
-  has "A15: auto-run.md Finishing names $needle" "$finishing" "$needle"
-done
 
 # --- review-package: A8, A9, A10, A14 ---
 RP="$S/review-package"

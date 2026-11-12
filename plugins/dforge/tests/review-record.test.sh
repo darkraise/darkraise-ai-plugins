@@ -138,6 +138,20 @@ H3=$(git -C "$R" rev-parse HEAD)
 out=$(cd "$R" && bash "$P/scripts/review-record" ratio "$H2" "$H3"); rc=$?
 check "A1: zero code lines still exits 0" "$rc:$out" "0:Test ratio: 2 test / 0 code lines ($(short "$H2")..$(short "$H3"))"
 
+D="$TMP/ratio-dirs"
+git init -q -b main "$D"
+printf 'base\n' > "$D/README"
+git -C "$D" add -A && git -C "$D" commit -q -m base
+DB=$(git -C "$D" rev-parse HEAD)
+for f in latest/a.txt contest/b.txt protests/c.txt src/latest_news.py test/a.txt pkg/test/b.txt tests/c.txt pkg/tests/d.txt test_e.py pkg/test_f.py; do
+  mkdir -p "$(dirname "$D/$f")"; echo line > "$D/$f"
+done
+git -C "$D" add -A && git -C "$D" commit -q -m dirs
+DH=$(git -C "$D" rev-parse HEAD)
+out=$(cd "$D" && bash "$P/scripts/review-record" ratio "$DB" "$DH"); rc=$?
+check "A1: only test directories and test files count as tests, not names that merely contain test" \
+  "$rc:$out" "0:Test ratio: 6 test / 4 code lines ($(git -C "$D" rev-parse --short=7 "$DB")..$(git -C "$D" rev-parse --short=7 "$DH"))"
+
 PLUG="$TMP/plug"
 mkdir -p "$PLUG/criteria/lenses"
 cp -R "$P/scripts" "$PLUG/scripts"

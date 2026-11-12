@@ -2,11 +2,10 @@
 # Acceptance tests for the "agy lane: Gemini first" spec
 # (docs/dforge/specs/2026-11-03-agy-gemini-first-design.md), statements A1-A14.
 # Each test is written from the statement's text and reaches the behaviour
-# through the files the plugin ships (reference/ladder.md, reference/
-# executor-lane.md), scripts/run-agy-task.sh, scripts/agy-gate, the session
-# file the two share, and scripts/lib/executor-session.sh. The agy CLI is the
-# repository's stub (tests/fixtures/stub-agy); the real agy, ~/.claude and
-# ~/.gemini are never reached.
+# through the file the plugin ships (reference/ladder.md), scripts/run-agy-task.sh,
+# scripts/agy-gate, the session file the two share, and scripts/lib/executor-session.sh.
+# The agy CLI is the repository's stub (tests/fixtures/stub-agy); the real agy,
+# ~/.claude and ~/.gemini are never reached.
 # Usage:
 #   bash agy-gemini-first.acceptance.test.sh            run every test
 #   bash agy-gemini-first.acceptance.test.sh A5 A9      run the named tests
@@ -14,12 +13,9 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN="$(cd "$HERE/.." && pwd)"
-REPO_ROOT="$(cd "$PLUGIN/../.." && pwd)"
 S="$PLUGIN/scripts"
 LADDER="$PLUGIN/reference/ladder.md"
-LANE_DOC="$PLUGIN/reference/executor-lane.md"
 STUBDIR="$HERE/fixtures/stub-agy"
-NOTE="docs/dforge/notes/2026-11-03-agy-calibration-3-8.md"
 ONLY=" $* "
 
 pass=0 fail=0 skipped=0
@@ -321,46 +317,6 @@ a11() {
     "$(sfield '[.usable, .lane, (.fallback // "none" | tostring)] | map(tostring) | join("/")')" "true/true/none"
 }
 
-# --- A12 ---------------------------------------------------------------------
-a12() {
-  local fail_sec resume_sec cap trans_fail trans_resume resume_row
-  fail_sec=$(section "$LANE_DOC" '## When a run fails')
-  resume_sec=$(section "$LANE_DOC" '## When the resume itself fails')
-  cap=$(grep '^| Capability' <<<"$fail_sec")
-  check "A12: When a run fails has one Capability row" "$(grep -c . <<<"$cap")" "1"
-  check "A12: the capability row names the claude- successor" "$(grep -c 'claude-' <<<"$cap")" "1"
-  check "A12: the capability row reads the refreshed gate" "$(grep -c -e '--refresh' <<<"$cap")" "1"
-  check "A12: the capability row tests fallback=off" "$(grep -c 'fallback=off' <<<"$cap")" "1"
-  check "A12: the capability row hands back now" "$(grep -c 'HANDBACK' <<<"$cap")" "1"
-  check "A12: the capability row records the fallback-quota handback" "$(grep -c 'executor agy HANDBACK - fallback quota until' <<<"$cap")" "1"
-  check "A12: the capability row covers the session-end case" "$(grep -c 'session end' <<<"$cap")" "1"
-
-  resume_row=$(grep 'the agy Claude fallback is off until' <<<"$resume_sec")
-  check "A12: When the resume itself fails has one row for the wrapper's fallback refusal" "$(grep -c . <<<"$resume_row")" "1"
-  check "A12: that row hands back now" "$(grep -c 'HANDBACK' <<<"$resume_row")" "1"
-  check "A12: that row records the fallback-quota handback" "$(grep -c 'executor agy HANDBACK - fallback quota until' <<<"$resume_row")" "1"
-  check "A12: that row covers the session-end case" "$(grep -c 'session end' <<<"$resume_row")" "1"
-  check "A12: that row is keyed on exit 2" "$(grep -c '^| `exit=2`' <<<"$resume_row")" "1"
-
-  trans_fail=$(grep '^| Transient' <<<"$fail_sec")
-  trans_resume=$(grep '^| Transient' <<<"$resume_sec")
-  check "A12: the run table's transient row exempts a marked quota from the retry" \
-    "$(grep -cE 'marked.*HANDBACK' <<<"$trans_fail")" "1"
-  check "A12: the resume table's transient row exempts a marked quota from the retry" \
-    "$(grep -cE 'marked.*HANDBACK' <<<"$trans_resume")" "1"
-}
-
-# --- A13 ---------------------------------------------------------------------
-a13() {
-  check "A13: the calibration note exists" "$([ -f "$REPO_ROOT/$NOTE" ] && echo yes || echo no)" "yes"
-  check "A13: the calibration note is tracked by git" \
-    "$(git -C "$REPO_ROOT" ls-files --error-unmatch -- "$NOTE" >/dev/null 2>&1 && echo yes || echo no)" "yes"
-  check "A13: the calibration note has no uncommitted change" "$(git -C "$REPO_ROOT" status --porcelain -- "$NOTE" | wc -l | tr -d ' ')" "0"
-  local sec; sec=$(awk '$0 == "### Agy assignment" { f = 1; next } f && /^#/ { exit } f { print }' "$LADDER" | tr -d '\r')
-  check "A13: the ladder's agy-assignment section names the note" "$(grep -cF "$NOTE" <<<"$sec")" "1"
-  check "A13: and ties it to rows 3 to 8" "$(grep -cE 'otals? 3( to |-)8' <<<"$sec")" "1"
-}
-
 # --- A14 ---------------------------------------------------------------------
 agy_error_section() { section "$R" '## Agy error'; }
 a14() {
@@ -400,7 +356,7 @@ a14() {
   check "A14: and carries no marked=lane or marked=fallback" "$(grep -cE '^marked=(lane|fallback)$' <<<"$sec")" "0"
 }
 
-for t in 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+for t in 1 2 3 4 5 6 7 8 9 10 11 14; do
   selected "A$t" && "a$t"
 done
 

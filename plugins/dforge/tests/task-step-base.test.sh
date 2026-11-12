@@ -7,7 +7,6 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
 S="$P/scripts"
-DT="$P/reference/delegated-task.md"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -630,12 +629,6 @@ check "group: the first member's step file holds neither" "$(jq -r '"\(.suite //
 } > "$WS/group-20,21-review-report.md"
 ts verdict docs/plan.md 20 21 --group
 check "group: the suite base beats the group rule, so the regression is new" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
-
-# Row 29: the stale ten-minute figure for a red fix-head suite is gone.
-dt=$(tr -d '\r' < "$DT" | tr '\n' ' ' | tr -s ' ')
-check "the doc says a base run under rereview --covered takes up to an hour" "$(grep -cF 'which takes up to an hour (`TASK_STEP_BASE_TIMEOUT`)' <<<"$dt")" "1"
-check "the doc no longer says it takes up to ten minutes" "$(grep -cF 'which takes up to ten minutes' <<<"$dt")" "0"
-check "the doc gives a Worktree setup its own time limit, twice" "$(grep -oF 'as long again for a **Worktree setup:**' <<<"$dt" | wc -l | tr -d ' ')" "2"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

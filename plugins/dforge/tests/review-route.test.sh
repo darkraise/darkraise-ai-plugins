@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # review-route is the review routing table as code. Each fixture task below
-# pins one row, so a controller of any size reaches the same seat. The prose
-# checks appended later pin the skill text that tells a controller to call it.
+# pins one row, so a controller of any size reaches the same seat.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,10 +23,6 @@ absent() { # absent <name> <file> <needle>
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-SKILL_VIEW_DIR="$TMP/views"
-mkdir "$SKILL_VIEW_DIR"
-. "$HERE/skill-view.sh"
-EP_VIEW="$(skill_view executing-plans)"
 
 # Routing reads this session's Codex gate file. A fixed session id and a
 # temporary directory keep the machine's real session state out of every case.
@@ -388,165 +383,8 @@ sed 's/$/\r/' "$TMP/plan.md" > "$TMP/crlf.md"
 out=$(bash "$ROUTE" "$TMP/crlf.md" --task 4 2>/dev/null)
 check "a CRLF plan routes" "$out" "review-seat task=4 primary=codex:light fallback=dforge:judge-sonnet-high review=task reason=band"
 
-# --- plan review prose ---------------------------------------------------------
-WP="$P/skills/writing-plans/SKILL.md"
-PRP="$P/skills/writing-plans/references/plan-reviewer-prompt.md"
-present "writing-plans routes each round" "$P/skills/writing-plans/references/lint-and-review.md" 'scripts/review-route PLAN_FILE --plan-round <r>'
-present "writing-plans snapshots the plan before each round" "$P/skills/writing-plans/references/lint-and-review.md" '<workspace>/plan-round-<r>.md'
-present "writing-plans runs the Codex plan kind" "$P/skills/writing-plans/references/lint-and-review.md" '--kind plan'
-present "writing-plans writes the delta" "$P/skills/writing-plans/references/lint-and-review.md" '<workspace>/plan-delta-<r>.diff'
-present "writing-plans caps rounds by score" "$P/skills/writing-plans/references/lint-and-review.md" 'below the `cap=` that `review-route` printed'
-present "writing-plans re-rounds only on Critical or a low score" "$P/skills/writing-plans/references/lint-and-review.md" 'Run the next round only when a round returned'
-present "writing-plans gives a Codex plan's Critical at the cap one more round" "$P/skills/writing-plans/references/lint-and-review.md" 'earns exactly one more'
-present "writing-plans caps a Claude plan at two rounds" "$P/skills/writing-plans/references/lint-and-review.md" 'On a Claude plan the cap is 2 whatever the task totals'
-absent "writing-plans no longer derives a Claude cap from the totals" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'printed: 1 when the plan'"'"'s highest'
-present "writing-plans writes inline on every plan" "$P/skills/writing-plans/references/execution-line.md" 'Write `inline` on every plan.'
-present "writing-plans raises the inline effort at risk 3 or an executor task" "$P/skills/writing-plans/references/execution-line.md" 'raised to `high` when a self-implemented task has risk 3 or any task'
-present "writing-plans falls back to Opus on exit 2" "$P/skills/writing-plans/references/lint-and-review.md" 'exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native'
-present "writing-plans dispatches the native plan-review seat" "$P/skills/writing-plans/references/lint-and-review.md" '**`primary=native:<model>/<effort>`** (every round of a Codex-host plan)'
-present "final review records the native fix seat" "$P/reference/final-review.md" 'On a Codex-host plan it prints `primary=native:<model>/<effort>`'
-present "the plan reviewer prompt names both round-1 Claude seats" "$PRP" 'round produced nothing (`dforge:judge-opus`)'
-present "using-dforge states the inline rule" "$P/skills/using-dforge/SKILL.md" 'Every plan executes inline: the session implements every task but those carrying an `**Executor:**` line, heavy tasks included.'
-present "README states the inline floor" "$P/README.md" '`--effort high` at risk 3 or once it delegates'
-present "README caps plan review at two rounds" "$P/README.md" 'at most two rounds on a Claude plan'
-absent "README no longer caps plan review by task total" "$P/README.md" 'capped by the plan'"'"'s highest task total'
-absent "writing-plans no longer dispatches a fresh full review each round" <(cat "$P/skills/writing-plans/SKILL.md" "$P/skills/writing-plans/references/"*.md) 'dispatch a fresh full review'
-present "the prompt file has a Codex round-1 section" "$PRP" '## Round 1 on Codex'
-present "the Codex round-1 prompt names its schema" "$PRP" 'codex-plan-review-schema.json'
-# A Claude judge reads files with a Read tool; Codex has none, and its only
-# file access is a command. Sent the template's no-commands line unchanged, the
-# seat's own approval layer refuses the read and it returns a well-formed
-# review of nothing - scoring every criterion 10, the schema's "uncertain".
-present "the Codex round-1 prompt permits read-only commands" "$PRP" 'You are running read-only'
-present "the Codex round-1 prompt still forbids edits and subagents" "$PRP" 'Do not modify any file, and do not dispatch subagents'
-present "a native Codex judge gets the read-only line in every round" "$PRP" 'In this template and the Later rounds one, make change 3 of'
-present "the prompt file has a delta template" "$PRP" '## Later rounds'
-present "the delta template takes the delta file" "$PRP" '[DELTA_FILE]'
-present "the delta template verdicts prior findings" "$PRP" '[ADDRESSED|NOT ADDRESSED]'
-present "the delta template may read beyond the delta" "$PRP" 'The delta is where to look first, not the limit of'
-
-# --- the session gate in writing-plans -------------------------------------------
-present "writing-plans runs the gate before each round" "$P/skills/writing-plans/references/lint-and-review.md" 'run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),'
-present "writing-plans routes a codex-off round 1 by intricacy" "$P/skills/writing-plans/references/lint-and-review.md" '**`reason=codex-off`** (round 1 while the gate has not opened the review'
-present "writing-plans offers the lane only on lane=true" "$P/skills/writing-plans/references/assignment-procedure.md" 'for every executor whose gate prints `lane=true`'
-
-# --- planning self-review ------------------------------------------------------
-BS="$P/skills/brainstorming/SKILL.md"
-present "brainstorming names the self-review block" "$BS" '`Self-review (round 1 of 1):`'
-present "writing-plans names the self-review block" "$WP" '`Self-review (round 1 of 1):`'
-present "brainstorming self-reviews a bounded design" "$BS" '4. **Self-review the design**'
-present "brainstorming keeps the round with the main agent" "$P/skills/brainstorming/references/spec-self-review.md" 'never through a subagent'
-present "writing-plans keeps the round with the main agent" "$WP" 'never through a subagent'
-present "brainstorming gives a revision one new round" "$BS" 'A revision your human partner asks for gets one new round'
-present "writing-plans gives a revision one new round" "$WP" 'A revision your human partner asks for gets one new round'
-present "writing-plans posts the block before plan review" "$WP" 'before the first plan-review round'
-present "brainstorming flags a skipped round" "$BS" 'I'"'"'ll skip the self-review'
-absent "brainstorming no longer re-runs a review loop" <(cat "$P/skills/brainstorming/SKILL.md" "$P/skills/brainstorming/references/"*.md) 're-run the spec review loop'
-
-# --- what a spec must carry -------------------------------------------------------
-present "brainstorming proposes a do-less approach" "$P/skills/brainstorming/references/design-phase.md" 'Make one of them the do-less option'
-present "a spec carries an Acceptance section" "$P/skills/brainstorming/references/spec-document.md" 'Every spec has an `## Acceptance` section'
-present "acceptance names what must not happen" "$P/skills/brainstorming/references/spec-document.md" 'at least one thing that must not happen'
-present "a spec carries its riskiest assumption" "$P/skills/brainstorming/references/spec-document.md" 'Every spec has a `## Riskiest assumption` section'
-present "an unverified riskiest assumption goes first in the plan" "$P/skills/brainstorming/references/spec-document.md" '`unverified — the plan'"'"'s first task verifies it`'
-present "the spec self-review checks acceptance" "$P/skills/brainstorming/references/spec-self-review.md" '6. **Acceptance:**'
-present "the spec self-review checks the riskiest assumption" "$P/skills/brainstorming/references/spec-self-review.md" '7. **Riskiest assumption:**'
-present "the plan's first task verifies the spec's riskiest assumption" "$WP" 'Task 1 is that verifying step'
-present "the live spec self-review checks acceptance ratings" "$P/skills/brainstorming/references/spec-self-review.md" 'no rating other than `high` or `confirmed` appears'
-present "the live spec self-review requires assumption evidence" "$P/skills/brainstorming/references/spec-self-review.md" 'section is present and names its evidence'
-
-# --- task review prose -----------------------------------------------------------
-SDD="$P/skills/subagent-driven-development/SKILL.md"
-. "$HERE/fixtures/sdd-text.sh"
-DT="$P/reference/delegated-task.md"
-TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
-present "the Seats table routes the task reviewer" "$DT" '| Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints'
-present "the delegated loop runs the light tier for codex:light" "$DT" '`codex:light` is `--tier light`'
-present "the delegated loop has the risk 3 section" "$DT" '**Risk 3.** On `primary=codex:heavy+judge-opus`'
-absent "the delegated loop drops the risk 2 section" "$DT" '**Risk 2 and above.**'
-present "the delegated loop falls back to Opus on a failed route" "$DT" 'seat it names as printed, and say why, quoting that'
-present "the task seats pair Codex with Opus at risk 3" "$P/reference/executor-lane.md" 'and `codex:heavy+judge-opus` at risk 3.'
-present "the second pass points at the delegated loop" "$P/reference/executor-lane.md" 'per [delegated-task.md](delegated-task.md) §3 Review the task.'
-absent "README drops risk 2 Fable reviews" "$P/README.md" 'at risk 2 or above'
-present "the second pass runs at risk 3 only" "$P/skills/subagent-driven-development/references/task-reviewer-prompt.md" '[Include this section only on a risk 3 task whose Codex seat'
-check "SDD no longer averages three seats" "$(sdd_text | grep -cF -- 'average each criterion')" "0"
-absent "the delegated loop does not average three seats" "$DT" 'average each criterion'
-check "SDD no longer writes K=3" "$(sdd_text | grep -cF -- 'K=3')" "0"
-absent "the delegated loop does not write K=3" "$DT" 'K=3'
-present "the delegated loop writes the seat clause" "$DT" ', seat <seat>'
-present "the delegated loop keeps the runner name" "$DT" 'run-codex-review.sh'
-present "the scoped re-review names its judge seats" "$DT" '| Scoped re-review | `dforge:judge-sonnet-high`; `dforge:judge-opus` for a subtle concurrency fix | None |'
-# A breaker CONFIRMED-GAP is carried into the next dependent task; completion
-# has to accept it, or the loop has no legal next step.
-present "a carried breaker gap lets the task complete" "$DT" 'confirmed and carried into a later task, with a ruling at the cap'
-present "the dependent task's dispatch takes the carried gap" "$DT" 'carried a CONFIRMED-GAP to this task, the dispatch names the gap'
-present "the flow graph completes a task whose gap is carried" "$SDD_GRAPH" '"Carry the fix or amendment forward; BLOCKED stops" -> "Append completion to ledger, mark todo complete"'
-present "inline mode never fixes a delegated task's gap itself" "$EP_VIEW" "A delegated task's gap is"
-present "inline mode carries a delegated breaker gap forward" "$EP_VIEW" 'into the next dependent task'"'"'s dispatch (with none, the next task in plan'
-present "a gap with no dependent task goes to the next task in plan order" "$DT" 'the next task in plan order; after the last task, to the final review'
-present "a gap past the last task goes to the final review" "$DT" '`carried to final review`, where it is a confirmed finding'
-present "the final review fixes a carried gap without triage" "$P/reference/final-review.md" 'it goes on the fix list without triage'
-# ladder.test.sh holds every implementer to one escalation-table row, so an
-# agent known to the escalation table is a real one a human may pin.
-present "a pinned escalation-only implementer is not unknown" "$DT" "A name in none of [ladder.md](ladder.md)'s assignment, escalation or reserve tables"
-present "the delegated loop keeps the FAILED deferral" "$DT" 'TIMEOUT or FAILED'
-present "the delegated loop keeps the no-redispatch rule" "$DT" 'never re-dispatch the Codex seat'
-present "the delegated loop refreshes the gate before the review" "$DT" 'Run `scripts/codex-gate --refresh` before `task-step review` when'
-present "the delegated loop names a codex-off route" "$DT" 'was routed with `reason=codex-off`: the'
-present "the delegated loop records a codex-off seat" "$DT" '` (codex off — <reason>)` when §3'"'"'s `gate:` and `seat:` lines say Codex is off'
-present "the reviewer prompt has the second pass" "$TRP" '## Second Pass: The Codex Review'
-present "the second pass names the Codex file by path" "$TRP" '[CODEX_REVIEW_FILE]'
-present "the second pass comes after the judge's own review" "$TRP" 'Do this only after your Spec Compliance'
-present "a Codex finding never raises a score" "$TRP" 'review raises a score, and nothing else you wrote before reading it changes.'
-
 # --- ruling seat prose -----------------------------------------------------------
-RULP="$P/skills/subagent-driven-development/references/ruling-prompt.md"
-present "SDD routes the ruling seat" "$SDD" '`scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]`'
-check "SDD no longer pins the ruling seat to Fable" "$(sdd_text | grep -cF -- '`dforge:judge-fable` (`judge-opus` under the Fable-unavailable rule,')" "0"
-present "SDD confirms a header amendment on a second seat" "$SDD_RULING_SEAT" 'a second, independent `dforge:judge-opus` dispatch'
-check "SDD no longer keeps the confirmation off Opus" "$(sdd_text | grep -cF -- 'never hand it')" "0"
-present "the ruling prompt has the confirmation note" "$RULP" '[CONFIRM_NOTE]'
-present "the ruling prompt routes its judge" "$RULP" 'the `primary` that `scripts/review-route PLAN_FILE --ruling <kind>'
-present "no route names judge-fable" "$P/agents/judge-fable.md" 'No dforge route names it'
-present "an auto run dispatches judge-fable" "$P/agents/judge-fable.md" 'an auto run (reference/auto-run.md) dispatches it for the spec review and the batched rulings'
-present "judge-opus grades by consequence" "$P/agents/judge-opus.md" 'not by how small the fix is'
 absent "review-route never prints judge-fable" "$ROUTE" 'judge-fable'
-present "judge-sonnet-high reviews totals 0 to 5" "$P/agents/judge-sonnet-high.md" 'totals 0 to 5'
-present "judge-opus reviews total 6" "$P/agents/judge-opus.md" 'for total 6 when Codex'
-
-# --- risk3-spread is retired -----------------------------------------------------
-for f in "$P/skills/subagent-driven-development/SKILL.md" "$SDD_RULING_SEAT" "$SDD_LEDGER" "$SDD_GRAPH" "$SDD_BATCHING" "$SDD_BUDGET" "$SDD_EXAMPLE" "$SDD_FINISH_RULINGS" "$SDD_RATIONALE" "$SDD_RATIONALIZATIONS" "$SDD_SETUP" \
-         "$P/skills/subagent-driven-development/references/ruling-prompt.md" \
-         "$P/skills/executing-plans/SKILL.md" "$P/skills/executing-plans/references/"*.md; do
-  absent "no risk3-spread in ${f#"$P/"}" "$f" 'risk3-spread'
-done
-present "inline mode reaches the executor empty-diff kind" "$EP_VIEW" 'executor-empty-diff'
-
-# --- executor-lane and ladder prose ------------------------------------------
-EXEC="$P/reference/executor-lane.md"
-LAD="$P/reference/ladder.md"
-present "the lane reference has the task seats section" "$EXEC" '## Codex task review seats'
-absent "the lane reference drops the risk-3 seat section" "$EXEC" '## Risk-3 Codex seat'
-present "planning reads the distilled constraints" "$EXEC" 'Read `<docs>/distilled/constraints.md` first'
-present "a declared lane is ticked without asking" "$EXEC" 'tick it without asking'
-present "an executor task routes to a Claude judge" "$EXEC" 'always routes to a Claude judge'
-absent "the final round no longer cites the risk-3 seat" "$EXEC" 'Unlike the risk-3 seat'
-present "the ladder names the light tier" "$LAD" '`--tier light` runs the last row directly'
-present "planning runs the gate before the roster" "$EXEC" 'Unless at least one gate prints `lane=true`, stop here:'
-present "planning runs every gate in priority order" "$EXEC" 'Run the session gate of each registered executor in `executors ranked` order'
-present "a closed gate drops only its own executor" "$EXEC" 'A gate that does not print `lane=true` drops only its own executor'
-present "the header lists ticked ids in priority order" "$EXEC" '> **External executors:** agy, codex'
-present "each task takes the first admitting ticked executor" "$EXEC" 'Each task goes to the first ticked executor, in priority order, whose gate block admits it'
-present "a closed gate never hops to the next executor" "$EXEC" 'never to the next ranked executor'
-AP="$P/skills/writing-plans/references/assignment-procedure.md"
-absent "the precedence gap is closed" "$AP" 'No precedence rule is introduced here'
-present "writing-plans routes to the first admitting executor" "$AP" 'the first ticked executor in `executors ranked` order whose gate admits it'
-present "dispatch runs the gate before guarding the roster" "$EXEC" '1. **Gate, then guard the roster.**'
-present "a failed run refreshes the gate" "$EXEC" 'bash "$(bash "<plugin-root>/scripts/executors" path <id> gate)" --refresh'
-present "a refused model hands back at once" "$EXEC" '| Refusal - a refusal marker in the report'"'"'s `## <Id> error` section (`refusal=true` for Codex, `reason=unknown-model` for agy) | `HANDBACK` now'
-present "a refusal never takes the successor" "$LAD" 'A refused initial run never reads it'
-present "the final Codex round needs the review surface" "$EXEC" 'Unless it prints `review=true`, skip the round'
-present "the task seats name the runner's gate" "$EXEC" 'codex is off for this session (<reason>)'
 
 # --- the final whole-branch review ---
 shape_plan "$TMP/final-plain.md" '**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1' \
@@ -814,25 +652,10 @@ native --final-fix a.txt b.txt c.txt
 check "native final-fix: the highest of the matched tasks" "$out" "$NATIVE:gpt-6-astra/high fallback=- reason=tasks:1,2,3"
 
 # --- README, version and program amendment -------------------------------------
-RD="$P/README.md"
-present "README counts nineteen agents" "$RD" '**Nineteen agents in three classes.**'
-absent "README drops the three-seat risk-3 mean" "$RD" 'spread above 6 points'
-present "README names review-route" "$RD" '`scripts/review-route` prints the review seat'
-present "README names the plan-review schema" "$RD" '`codex-plan-review-schema.json`'
 # The version is read from the Claude manifest, so a release bump needs no edit here.
 version=$(sed -nE 's/^[[:space:]]*"version": "([^"]+)".*/\1/p' "$P/.claude-plugin/plugin.json" | head -n 1)
 check "the Claude manifest names a release version" "$([[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && echo yes || echo no)" "yes"
 present "the Codex manifest carries the Claude manifest's version" "$P/.codex-plugin/plugin.json" "\"version\": \"$version\""
-present "the program design names sub-project 10" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-17 (sub-project 10 spec).**'
-present "the approach advisor runs on Opus" "$P/skills/selecting-approaches/SKILL.md" 'dispatch one `dforge:judge-opus` to score it'
-present "a load-bearing decision reaches the advisor" "$P/skills/selecting-approaches/SKILL.md" 'Everything else is `inline`.'
-present "the budget reference derives the budget" "$P/reference/session-budget.md" 'min(`autoCompactWindow`, model window) × 93% − 140,000'
-present "the budget checkpoints finish the task in flight" "$P/reference/session-budget.md" 'finish the task in flight through its'
-present "the program design records sub-project 8" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-15 (sub-project 8 spec).**'
-present "README names the session gate" "$RD" '`scripts/codex-gate` checks the official codex plugin'
-present "README records trust per surface" "$RD" 'recorded per surface in `reference/codex-plugin.json`'
-present "the program design records the session gate" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" 'A session gate (`scripts/codex-gate`) reads'
-present "the program design names sub-project 9" "$P/../../docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md" '**Amendment 2026-09-16 (sub-project 9 spec).**'
 
 # --- ruling kinds are executor-neutral --------------------------------------
 # --ruling calls plan_shape, which scans every task's score regardless of
@@ -887,28 +710,6 @@ check "the neutral reference exists" "$([ -f "$LANE" ] && echo yes || echo no)" 
 OLDREF="external-""executor.md"
 check "the Codex-only reference is gone" \
   "$([ -f "$P/reference/$OLDREF" ] && echo present || echo gone)" "gone"
-present "the reference resolves the gate through the registry" "$LANE" 'executors path <id> gate'
-present "the reference names the blocks through the registry" "$LANE" 'executors get <id> blocks.assignment'
-present "the reference resolves the wrapper through the registry" "$LANE" 'executors path <id> wrapper'
-present "the reference keeps a per-executor section" "$LANE" '## Per-executor: codex'
-present "the reference names the neutral ruling kind" "$LANE" 'executor-empty-diff'
-present "the reference keeps the background-call rule" "$LANE" 'background Bash call'
-present "the reference keeps the two-failure budget" "$LANE" 'At most two executor runs may *fail* per task before Claude takes over'
-present "the reference documents the wedged-client case" "$LANE" "Read the durable task record's \`phase\` and \`reaped\` as **evidence, not proof**"
-present "the reference resumes an executor task, not a Codex one" "$LANE" '## Resuming an executor task'
-absent "the reference no longer claims a wrapper poll loop" "$LANE" "wrapper's own poll loop"
-absent "the reference no longer names the unreachable survivor note" "$LANE" 'codex-may-still-be-running'
-
-RP="$P/skills/subagent-driven-development/references/ruling-prompt.md"
-ESC="$P/skills/subagent-driven-development/references/escalation.md"
-LOOP="$P/reference/delegated-task.md"
-present "the ruling prompt explains the neutral kind" "$RP" 'executor-empty-diff'
-absent "the ruling prompt no longer names the Codex-only kind" "$RP" 'codex-empty-diff'
-present "the ledger grammar is executor-neutral" "$SDD_LEDGER" 'executor <id> <model>/<effort>, thread'
-present "escalation resumes the executor's own session" "$ESC" "Its fix rounds resume that executor's own session"
-absent "escalation no longer names a Codex session" "$ESC" 'rounds resume the same Codex session'
-present "the loop resumes the executor's own session" "$LOOP" "A task on an external executor resumes that executor's own session instead"
-absent "the loop no longer names a Codex session" "$LOOP" 'resumes its Codex'
 
 # --- the shared Evaluation reader ---
 # Two shipped defects: a fenced example line escalated the seat to the risk-3
@@ -954,10 +755,6 @@ out=$(bash "$ROUTE" "$TMP/round.md" --ruling acceptance-ambiguous 2>&1); status=
 check "acceptance-ambiguous: exit 0" "$status" "0"
 check "acceptance-ambiguous goes to the ruling seat" "$out" \
   "review-seat ruling=acceptance-ambiguous tasks=plan primary=dforge:judge-opus fallback=- reason=routine"
-present "ruling prompt: the REWORD verdict" "$P/skills/subagent-driven-development/references/ruling-prompt.md" \
-  'REWORD: the spec statement is what is wrong'
-present "ruling prompt: the kind" "$P/skills/subagent-driven-development/references/ruling-prompt.md" \
-  '- acceptance-ambiguous: the final review'"'"'s QA seat could not test a spec'
 
 # --- the review tier ---
 # A task is reviewed alone (review=task) at risk 2 or more or a total of 5 or

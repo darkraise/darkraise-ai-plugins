@@ -1274,11 +1274,11 @@ for t in plugins/dforge/tests/*.test.sh; do bash "$t"; done
 ```
 
 Requires `jq` and `git`. No model calls: the executor suites run against a stub
-`codex` on `PATH` and a synthetic roster, never the real CLI. `project-status.test.sh`,
-`gates-manifest.test.sh` and `distilling-docs.test.sh` check the project-state
-skills the same way — structurally, against the documents themselves.
-`test-simplifier.test.sh` does the same for that skill and runs
-`scripts/test-profile` against fixture reports. `roadmap.test.sh` runs every
+`codex` on `PATH` and a synthetic roster, never the real CLI.
+`gates-manifest.test.sh` checks that the running-gates skill and its template
+exist and validates the template against the documented format.
+`test-simplifier.test.sh` checks that the test-simplifier skill's files exist
+and runs `scripts/test-profile` against fixture reports. `roadmap.test.sh` runs every
 `scripts/roadmap` verb against a temporary repository. `turn-end.test.sh`
 drives the turn-stamp and Stop hooks against a temporary repository, its
 ledgers and its branch heads;

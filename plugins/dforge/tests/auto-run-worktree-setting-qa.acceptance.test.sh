@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance QA for "Auto runs follow the worktree setting": each statement
-# A1-A21 of docs/dforge/specs/2026-11-08-auto-run-worktree-setting-design.md
-# is checked through the CLI (scripts/auto-run) in throwaway repositories, or,
-# for the skill and reference statements, through the texts themselves.
+# A1-A12, A20 and A21 of docs/dforge/specs/2026-11-08-auto-run-worktree-setting-design.md
+# is checked through the CLI (scripts/auto-run) in throwaway repositories.
 # ONLY="A3 A4" runs just those statements.
 set -uo pipefail
 
@@ -308,123 +307,8 @@ t_A12() {
   done
 }
 
-# Text helpers: the file at HEAD, an extract between two line patterns, a flat extract.
-txt() { cat "$PLUGIN/$1"; }
-between() { # between <file> <start regexp> <end regexp>: from the first start line up to the next end line
-  # The patterns go through the environment: gawk -v would process their backslash escapes.
-  BETWEEN_S="$2" BETWEEN_E="$3" awk '
-    !on && $0 ~ ENVIRON["BETWEEN_S"] { on = 1; print; next }
-    on && $0 ~ ENVIRON["BETWEEN_E"] { exit }
-    on { print }' "$PLUGIN/$1" | tr -d '\r'
-}
-flat() { tr '\n' ' ' | tr -s ' '; }
 has() { # has <text> <literal>
   case "$1" in *"$2"*) echo yes ;; *) echo no ;; esac
-}
-before_in() { # before_in <text> <first> <second>: <first> occurs ahead of <second>
-  local pre=${1%%"$3"*}
-  has "$pre" "$2"
-}
-
-t_A13() {
-  local file=skills/using-git-worktrees/SKILL.md body
-  body=$(between "$file" '^\*\*In an auto run\*\*' '^Outside an auto run:' | flat)
-  check "A13: the auto-run paragraph exists" "$([ -n "$body" ] && echo yes || echo no)" "yes"
-  check "A13: reads the run's state with scripts/auto-run status" "$(has "$body" 'scripts/auto-run status')" "yes"
-  check "A13: not the worktree setting" "$(has "$body" 'not the `worktree` setting')" "yes"
-  check "A13: done before the linked-worktree check, in any checkout" "$(has "$body" 'before the linked-worktree check')$(has "$body" 'in any checkout')" "yesyes"
-  check "A13: switches to a recorded branch when HEAD is elsewhere" "$(has "$body" 'branch <name>')$(has "$body" 'git switch <name>')" "yesyes"
-  check "A13: creates auto/<plan slug> with git switch -c" "$(has "$body" 'git switch -c auto/<plan slug>')" "yes"
-  check "A13: with a collision suffix" "$(has "$body" '-2')" "yes"
-  check "A13: HEAD is the base or detached" "$(has "$body" 'the run'"'"'s base')$(has "$body" 'detached')" "yesyes"
-  check "A13: under in-place, or in a linked worktree" "$(has "$body" 'isolation in-place')$(has "$body" 'linked worktree')" "yesyes"
-  check "A13: calls setup-branch" "$(has "$body" 'scripts/auto-run setup-branch <name>')" "yes"
-  check "A13: stops the run on staged changes" "$(has "$body" 'staged changes in this checkout: <paths>')$(has "$body" 'scripts/auto-run stop --reason')" "yesyes"
-  check "A13: creates the worktree without asking under worktree in the primary checkout" \
-    "$(has "$body" 'Under `isolation worktree` in the primary checkout, create the worktree without asking')" "yes"
-}
-
-t_A14() {
-  local file=skills/brainstorming/references/auto-by-default.md s5 s6 off
-  s5=$(between "$file" '^5\. \*\*The spec review' '^6\. \*\*Start the run' | flat)
-  s6=$(between "$file" '^6\. \*\*Start the run' '^7\. \*\*Approve, keep' | flat)
-  check "A14: step 5 asks the worktree question only when the worktree setting is ask" "$(has "$s5" 'when the `worktree` setting is `ask`')" "yes"
-  check "A14: the question offers the isolated worktree and the in-place branch" \
-    "$(has "$s5" '**Isolated worktree (Recommended)**')$(has "$s5" '**Work in place on a new branch')" "yesyes"
-  check "A14: asked in the last call, beside the approval question" "$(has "$s5" 'in the last call')$(has "$s5" 'beside the approval question')" "yesyes"
-  check "A14: the question comes before the approval options in the list" "$(before_in "$s5" 'Worktree: <worktree|in-place>' '**Approve and run unattended**')" "yes"
-  check "A14: the answer is a Worktree: <worktree|in-place> line in ## Decisions" "$(has "$s5" '`Worktree: <worktree|in-place>` line in `## Decisions`')" "yes"
-  check "A14: step 6 passes --isolation" "$(has "$s6" '--isolation <worktree|in-place>')" "yes"
-  check "A14: step 6 takes the value from the line under ask, and from the setting under always and never" \
-    "$(has "$s6" 'under `ask`')$(has "$s6" '`worktree` under `always`')$(has "$s6" '`in-place` under `never`')" "yesyesyes"
-
-  off=$(txt skills/brainstorming/references/auto-run-offer.md | flat)
-  check "A14: the offer keeps its two options by default" "$(has "$off" '1. Yes, run unattended')$(has "$off" '2. No, keep the normal stops')" "yesyes"
-  check "A14: under worktree=ask the offer has three options" \
-    "$(has "$off" 'When the `worktree` setting is `ask`')$(has "$off" '1. Yes, in an isolated worktree')$(has "$off" '2. Yes, in place on a new branch (leave this checkout alone until the run finishes)')$(has "$off" '3. No, keep the normal stops')" "yesyesyesyes"
-  check "A14: the offer passes --isolation, in-place for option 2" "$(has "$off" 'scripts/auto-run start --spec')$(has "$off" '--isolation <worktree|in-place>')$(has "$off" '--isolation in-place')" "yesyesyes"
-}
-
-t_A15() {
-  local hits
-  # A clause is the text between a period, comma, semicolon, colon or parenthesis.
-  hits=$(cd "$PLUGIN" && { find skills reference -name '*.md'; echo README.md; echo config/schema.mjs; } | while IFS= read -r f; do
-    tr '.,;:()' '\n\n\n\n\n\n' < "$f" | grep -iE -e '`(worktree=)?never`.*(creat|isolat|mak(e|es|ing) (a|the|it))' -e '(creat|isolat)[a-z]* .*`(worktree=)?never`' \
-      -e '(creates?|making|makes) (it|the (execution )?worktree|a worktree).*every auto.?run' -e 'worktree. setting is not read' | sed "s|^|$f: |"
-  done)
-  check "A15: no skill or reference text says an auto run creates the worktree when worktree=never is set" "$hits" ""
-  check "A15: the corrected paragraph says what never does" "$(txt skills/using-git-worktrees/SKILL.md | grep -c 'worktree=never` works in place')" "1"
-  check "A15: the README says an in-place auto run for never" "$(txt README.md | grep -c '`never` works in this checkout')" "1"
-}
-
-t_A16() {
-  local lane plan
-  lane=$(between reference/executor-lane.md '^\*\*Reserve an exclusive linked worktree' '^Stop other' | flat)
-  check "A16: executor-lane.md refuses the primary checkout for the lane" "$(has "$lane" 'Refuse the primary checkout')" "yes"
-  check "A16: runs task-step start first" "$(has "$lane" 'run `task-step start`')" "yes"
-  check "A16: then neither the gate nor the wrapper, and the session review loop" "$(has "$lane" 'neither the gate nor the wrapper')$(has "$lane" 'session review loop')" "yesyes"
-  check "A16: task-step start comes before the neither-gate-nor-wrapper step" "$(before_in "$lane" 'task-step start' 'neither the gate nor the wrapper')" "yes"
-  check "A16: records the executor unavailable line" "$(has "$lane" 'Task <N>: implementer inline (assigned; base <sha7>; executor <id> unavailable - no linked worktree)')" "yes"
-  check "A16: continuing in the primary checkout is limited to worktree runs" "$(txt reference/executor-lane.md | grep -c 'In a worktree run the user can continue in the primary checkout')" "1"
-  check "A16: no other line lets the user continue in the primary checkout unqualified" \
-    "$(txt reference/executor-lane.md | grep -i 'user can continue in the primary checkout' | grep -vc 'worktree run')" "0"
-  plan=$(txt skills/writing-plans/references/auto-run-plan.md | flat)
-  check "A16: auto-run-plan.md ticks no executor when isolation is in-place" "$(has "$plan" 'tick nothing when `scripts/auto-run status` prints `isolation in-place`')" "yes"
-}
-
-t_A17() {
-  local rec qa nclean nnever setup viol
-  rec=$(txt skills/executing-plans/references/recovery.md | grep 'commit anything uncommitted')
-  check "A17: recovery.md's commit-anything-uncommitted excludes the carried paths" "$(has "$rec" 'except the carried paths')" "yes"
-  check "A17: recovery.md says it once per row that has it" "$(printf '%s\n' "$rec" | grep -c .):$(printf '%s\n' "$rec" | grep -c 'carried')" "1:1"
-  nclean=$(txt reference/final-review.md | grep -c "its uncommitted files were removed")
-  nnever=$(txt reference/final-review.md | grep -c 'Never restore or delete a carried path')
-  check "A17: final-review.md has QA timeout cleanup sites" "$([ "$nclean" -ge 1 ] && echo yes || echo no)" "yes"
-  check "A17: every QA timeout cleanup site excludes carried paths" "$nnever" "$nclean"
-  setup=$(txt skills/executing-plans/references/setup.md | flat)
-  check "A17: executing-plans Setup states by-name staging" "$(has "$setup" 'stage the paths it changed by name')$(has "$setup" 'never `git add -A` or `git add .`')" "yesyes"
-  viol=$(cd "$PLUGIN" && grep -rnE --include='*.md' 'git add (-A|--all|-u|\.)([^A-Za-z0-9_/.-]|$)' skills reference | grep -viE 'never|not |do not|don.t' || true)
-  check "A17: no Setup or task-loop text stages with git add -A or git add ." "$viol" ""
-}
-
-t_A18() {
-  local stops inplace
-  stops=$(between skills/finishing-a-development-branch/SKILL.md '^- \*\*Where an unattended finish stops' '^- \*\*' | flat)
-  check "A18: the unattended-finish stop list names a refused checkout, pull or merge of the base" "$(has "$stops" 'a refused checkout, pull or merge of the base')" "yes"
-  check "A18: and stops the run with scripts/auto-run stop" "$(has "$stops" 'scripts/auto-run stop --reason')" "yes"
-  inplace=$(between skills/finishing-a-development-branch/SKILL.md '^- \*\*In place,\*\*' '^- \*\*' | flat)
-  check "A18: in place, pr and keep end with the branch line" \
-    "$(has "$inplace" '`pr` and `keep`')$(has "$inplace" 'This checkout is on `auto/<slug>`; your uncommitted changes are here')" "yesyes"
-}
-
-t_A19() {
-  local step2
-  step2=$(between skills/resume-execution/SKILL.md '^2\. \*\*Verify the worktree' '^3\. \*\*Enter' | flat)
-  check "A19: step 2 covers an auto run whose status names a recorded branch" "$(has "$step2" 'In an auto run whose `scripts/auto-run status` names `branch <name>`')" "yes"
-  check "A19: a vanished branch stops the run with the reason and asks" \
-    "$(has "$step2" '`git branch --list <name>` prints nothing')$(has "$step2" 'scripts/auto-run stop --reason "the run'"'"'s branch <name> is gone"')$(has "$step2" 'ask')" "yesyesyes"
-  check "A19: a HEAD that is elsewhere is switched back with git switch <name>" "$(has "$step2" 'When HEAD is not on it, run `git switch <name>`')" "yes"
-  check "A19: a refused switch stops the run the same way" "$(has "$step2" 'a refused switch stops the run the same way')" "yes"
 }
 
 # A final or finish phase after commits since branchBase.
@@ -492,7 +376,7 @@ t_A21() {
   check "A21: a staged deletion: exit 4, nothing recorded, path printed" "$status:$(fld branch):$(has "$out" 'tracked/c.txt')" "4:null:yes"
 }
 
-for a in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 A20 A21; do
+for a in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A20 A21; do
   want "$a" && "t_$a"
 done
 

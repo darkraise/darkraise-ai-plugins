@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance tests for the Antigravity executor lane spec
 # (docs/dforge/specs/2026-11-02-antigravity-executor-lane-design.md), the
-# statements A1-A11, A14-A19 (A12 and A13 are demos). Each test is written from
+# statements A1-A11, A14-A18 (A12 and A13 are demos). Each test is written from
 # the statement's text and reaches the behaviour through the scripts the spec
 # names (executors, agy-gate, detect-executors.sh, run-agy-task.sh, plan-lint,
 # plan-revise, lane-breaker), the files the plugin ships, or, where a statement
@@ -412,10 +412,6 @@ if selected A4; then
   # Control: the same task without the override takes the line.
   mkplan "$LREPO/docs/a4-ctl.md" "agy, codex" "0 1 1 2|**Executor:** agy $(rung_of agy-assignment 4)"
   lacks "A4: control: the same task without an override takes the agy line" "$(lint a4-ctl.md)" "ERROR Task"
-  # A batch is one dispatch over several tasks, which has no plan-file form: the rule is the shipped text.
-  lane=$(doc "$PLUGIN/reference/executor-lane.md")
-  has "A4: the lane reference keeps batched tasks off the lane" "$lane" "Batched tasks stay on the Claude lane"
-  has "A4: and forbids an Executor line on a batched task" "$lane" 'Do not write an `**Executor:**` line on a batched task'
 fi
 
 # ---------------------------------------------------------------- A5
@@ -694,10 +690,6 @@ fi
 
 # ---------------------------------------------------------------- A14
 if selected A14; then
-  cons="$REPO_ROOT/docs/superpowers/distilled/constraints.md"
-  entry=$(doc "$cons")
-  has "A14: the constraints file carries the Antigravity lane entry" "$entry" "The Antigravity executor lane is on"
-  matches "A14: the entry says to tick agy without asking when the gate says lane=true" "$entry" 'lane=true.*ticks `agy` without asking|ticks `agy` without asking'
   check "A14: the shipped policy has trust.smoke pass" "$(jq -r .trust.smoke "$PLUGIN/reference/agy-policy.json")" "pass"
   if [ "$(git -C "$REPO_ROOT" rev-parse --is-shallow-repository 2>/dev/null)" = false ]; then
     introduced=$(git -C "$REPO_ROOT" log --format=%H --diff-filter=A -S'The Antigravity executor lane is on' -- docs/superpowers/distilled/constraints.md 2>/dev/null; \
@@ -840,17 +832,6 @@ if selected A18; then
   check "A18: with the plan line and two handbacks it stays tripped" "$(breaker agy)" "lane-breaker agy state=tripped handbacks=2"
   lane=$(doc "$PLUGIN/reference/executor-lane.md")
   has "A18: the lane reference states the ledger line" "$lane" 'Plan: executor agy off - unreliable (2 handbacks)'
-  has "A18: and sends a tripped agy task to the session" "$lane" "On \`state=tripped\` run neither the gate, the roster nor the wrapper: fall back to the session"
-  has "A18: and tells a resumed controller the ledger is enough" "$lane" "A resumed controller needs nothing more"
-fi
-
-# ---------------------------------------------------------------- A19
-if selected A19; then
-  ref="$PLUGIN/reference/executor-lane.md"
-  section=$(tr -d '\r' < "$ref" | awk '/^## Per-executor: agy$/ { f = 1; next } f && /^## / { exit } f' | tr '\n' ' ' | tr -s ' ')
-  check "A19: the lane reference has a Per-executor: agy section" "$(grep -c '^## Per-executor: agy' "$ref")" "1"
-  matches "A19: the section states agy is unsandboxed" "$section" '[Uu]nsandboxed'
-  matches "A19: the section states the fingerprints cover only the linked worktree and its refs" "$section" 'fingerprints cover only the linked worktree and its refs'
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

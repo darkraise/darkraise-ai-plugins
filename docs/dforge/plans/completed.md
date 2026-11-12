@@ -14,3 +14,4 @@
 - 2026-11-11 `docs/dforge/plans/2026-11-11-downloads-mutation-measurement.md` — merged into `main` at 07eb83bb
 - 2026-11-11 `docs/dforge/plans/2026-11-11-retained-review-data.md` — via PR
 - 2026-11-11 `docs/dforge/plans/2026-11-11-test-volume-rules.md` — via PR
+- 2026-11-12 `docs/dforge/plans/2026-11-12-wording-pin-deletion.md` — via PR

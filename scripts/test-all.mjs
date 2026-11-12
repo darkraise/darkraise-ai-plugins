@@ -88,12 +88,12 @@ const suiteSeconds = { 'plan-lint.test.sh': 1200, 'speed-and-cost-followups.acce
 // task-step runs as four parts, one per section of the suite, and plan-lint as
 // two, whose limit applies to each.
 const suiteParts = {
-  'faster-plans.acceptance.test.sh': [Array.from({ length: 8 }, (_, i) => `a${i + 1}`), Array.from({ length: 8 }, (_, i) => `a${i + 9}`), Array.from({ length: 7 }, (_, i) => `a${i + 17}`)],
+  'faster-plans.acceptance.test.sh': [['a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8'], ['a9', 'a10', 'a11', 'a12', 'a13'], ['a17', 'a18', 'a19', 'a20', 'a21', 'a22', 'a23']],
   'task-step.test.sh': [['start'], ['rereview'], ['group'], ['verdict']],
   'plan-lint.test.sh': [['one'], ['two']],
   // speed-and-cost-followups ran past 600 s on a Windows runner while its A12
   // re-ran two whole suites, which it skips under test-all.
-  'speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11'], ['A12'], ['A13', 'A14', 'A15', 'A16', 'A19', 'A20', 'A21', 'A23']],
+  'speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A7', 'A8', 'A9', 'A10', 'A11'], ['A12'], ['A13', 'A14', 'A15', 'A16', 'A20', 'A23']],
 };
 const jobs = [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],

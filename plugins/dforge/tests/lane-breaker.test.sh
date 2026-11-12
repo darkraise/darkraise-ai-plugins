@@ -14,10 +14,6 @@ check() { # check <name> <got> <want>
   if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
-present() { # present <name> <file> <needle>
-  if grep -qF -- "$3" "$2" 2>/dev/null; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
-  else printf 'FAIL - %s\n       missing: [%s] in %s\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
-}
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -81,8 +77,6 @@ ledger "$INIT6" 'Task 6: implementer inline (assigned; base fffffff; executor ag
 check "a handback to the session counts" "$(breaker agy)" "lane-breaker agy state=open handbacks=1"
 ledger "$INIT6" "$HB6" "$AGY4" "$HB4"
 check "a handback before review and a round-2 handback trip the breaker" "$(breaker agy)" "lane-breaker agy state=tripped handbacks=2"
-present "the lane reference records a handback before review where the breaker reads it" "$P/reference/executor-lane.md" \
-  'Task <N>: implementer inline (assigned; base <sha7>; executor <id> HANDBACK - <reason>)'
 
 ledger 'Plan: executor agy off - unreliable (2 handbacks)'
 check "the Plan line trips the breaker whatever the count" "$(breaker agy)" "lane-breaker agy state=tripped handbacks=0"
@@ -110,19 +104,6 @@ bash "$BREAKER" "$PLAN" >/dev/null 2>&1; check "no executor id exits 2" "$?" "2"
 bash "$BREAKER" "$PLAN" 'Agy!' >/dev/null 2>&1; check "a malformed executor id exits 2" "$?" "2"
 bash "$BREAKER" "$PLAN" agy extra >/dev/null 2>&1; check "an extra argument exits 2" "$?" "2"
 bash "$BREAKER" "$REPO/docs/missing.md" agy >/dev/null 2>&1; check "a missing plan exits 2" "$?" "2"
-
-# --- the documents that tell a controller to run it ---
-EL="$P/reference/executor-lane.md"
-LG="$P/skills/subagent-driven-development/references/ledger.md"
-SK="$P/skills/subagent-driven-development/SKILL.md"
-DT="$P/reference/delegated-task.md"
-present "dispatch runs the breaker before the gate" "$EL" 'bash "<plugin-root>/scripts/lane-breaker" PLAN_FILE agy'
-present "dispatch writes the plan line" "$EL" 'Plan: executor agy off - unreliable (2 handbacks)'
-present "a tripped breaker dispatches the Implementer agent" "$EL" 'executor agy unavailable - off for this plan: unreliable (2 handbacks)'
-present "the ledger grammar holds the plan line" "$LG" 'Plan: executor <id> off - unreliable (<k> handbacks)'
-present "recovery reads the plan line through the breaker" "$LG" 'scripts/lane-breaker'
-present "after compaction the breaker keeps the lane off" "$SK" 'scripts/lane-breaker'
-present "the delegated loop points at the breaker" "$DT" 'scripts/lane-breaker'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

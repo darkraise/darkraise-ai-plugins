@@ -36,8 +36,6 @@ check "well-formed: names the plugin root" \
   "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c '^Plugin root: ')" "1"
 check "well-formed: the plugin root line states the working-directory contract" \
   "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c ' — call scripts by this path, with the working directory inside the project$')" "1"
-check "using-dforge states the working-directory contract" \
-  "$(grep -cF "with the working directory inside the project's worktree" "$HERE/../skills/using-dforge/SKILL.md")" "1"
 check "well-formed: additionalContext is non-empty" \
   "$(jq -r '(.hookSpecificOutput.additionalContext // "") | length > 0' <<<"$out" 2>/dev/null)" "true"
 check "well-formed: context names the entry-point skill" \
@@ -214,22 +212,6 @@ check "session-start.sh parses" \
 # snapshot about 4,500.
 check "entry point is at most 5,500 bytes" \
   "$([ "$(wc -c < "$HERE/../skills/using-dforge/SKILL.md")" -le 5500 ] && echo yes || echo no)" "yes"
-
-# The project-state skills and test-simplifier must be reachable from the entry point, which
-# is the only skill list a cold session sees.
-ENTRY="$HERE/../skills/using-dforge/SKILL.md"
-for s in project-status running-gates distilling-docs test-simplifier planning-a-product closing-a-milestone; do
-  if grep -qF -- "dforge:$s" "$ENTRY"; then
-    printf 'ok   - routing names dforge:%s\n' "$s"; pass=$((pass + 1))
-  else
-    printf 'FAIL - routing names dforge:%s\n' "$s"; fail=$((fail + 1))
-  fi
-done
-if grep -qF -- 'Before the final review or merge' "$ENTRY"; then
-  printf 'ok   - gates row is worded by workflow position\n'; pass=$((pass + 1))
-else
-  printf 'FAIL - gates row is worded by workflow position\n'; fail=$((fail + 1))
-fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

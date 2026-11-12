@@ -8,7 +8,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
 STEP="$P/scripts/task-step"
 SUITE="$P/scripts/suite-run"
-DT="$P/reference/delegated-task.md"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -321,15 +320,6 @@ step verdict docs/plan-cmd.md 1
 check "a command task check with no suite recorded keeps none recorded" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: none recorded"
 WS=$WS_MAIN
 rm -f docs/plan-none.md docs/plan-cmd.md
-
-# --- the doc says so ---
-dt=$(tr -d '\r' < "$DT" | tr '\n' ' ' | tr -s ' ')
-check "the doc: every failing line is in the fix file and the digest shows 20" \
-  "$(grep -cF 'is in the fix file, however many; the digest shows the first 20 and then `suite: <k> more failing lines in <fix file>`.' <<<"$dt")" "1"
-check "the doc: the last Verified section is the current evidence" \
-  "$(grep -cF 'The last `## Verified` section of the report is the current evidence' <<<"$dt")" "1"
-check "the doc: past round 2 the line names the suite log" \
-  "$(grep -cF 'Past round 2 `verdict` writes no fix file, and that line reads `suite: <k> more failing lines in the suite log <log>`' <<<"$dt")" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

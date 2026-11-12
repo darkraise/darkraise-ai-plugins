@@ -1,15 +1,10 @@
 #!/usr/bin/env bash
-# The gates manifest is a format that adopting projects depend on, and the
-# skill is the only specification of it. These checks pin the parts two
-# sessions could otherwise read differently: the field set, the evidence
-# values, the default, and the retry rule.
+# The gates manifest is a format that adopting projects depend on. The template
+# is its worked example, so it must satisfy the format.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
-SKILL_VIEW_DIR=$(mktemp -d)
-trap 'rm -rf "$SKILL_VIEW_DIR"' EXIT
-. "$HERE/skill-view.sh"
 SKILL="$P/skills/running-gates/SKILL.md"
 
 pass=0 fail=0
@@ -17,64 +12,9 @@ check() { # check <name> <got> <want>
   if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
-present() { # present <name> <file> <needle>
-  if grep -qF -- "$3" "$2"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
-  else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
-}
-absent() { # absent <name> <file> <needle>
-  if grep -qF -- "$3" "$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
-  else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
-}
-present_flat() { # present_flat <name> <file> <needle> — the file with line breaks folded
-  if tr -d '\r' < "$2" | tr '\n' ' ' | tr -s ' ' | grep -qF -- "$3"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
-  else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
-}
 
 check "exists: skills/running-gates/SKILL.md" \
   "$([ -f "$SKILL" ] && echo yes || echo no)" "yes"
-
-present "gates names the manifest path" "$SKILL" '<docs>/gates.md'
-
-# Two required fields and nine optional ones.
-for f in Command Green; do
-  present "required field $f" "$SKILL" "**\`$f\`**"
-done
-for f in Applies Evidence Repo Setup Teardown Known-flaky Why Tier Budget; do
-  present "optional field $f" "$SKILL" "**\`$f\`**"
-done
-present "gates says nine optional fields" "$SKILL" 'Optional, nine of them'
-
-# The four evidence values and the default. Defaulting to exit would make every
-# Green line decorative in a manifest that omits the field.
-for v in output exit image judgment; do
-  present "evidence value $v" "$SKILL" "\`$v\`"
-done
-present "evidence default is output" "$SKILL" 'default is `output`'
-present "output evidence needs the Green text" "$SKILL" 'The declared `Green` text appears in this run'
-present "every gate also requires exit 0" "$SKILL" 'requires its command to exit 0'
-
-# Branch-level only. A pointer from verification-before-completion would reach
-# all sixteen implementer agents.
-present "gates are branch level" "$SKILL" 'branch level'
-
-# The rules that stop a rotted or flaky manifest passing silently.
-present "stop at the first red" "$SKILL" 'first red'
-present "known-flaky retries only its own failure" "$SKILL" 'matches the `Known-flaky`'
-present "a non-launching gate is a manifest defect" "$SKILL" 'manifest defect'
-present "gates computes its own base" "$SKILL" 'merge-base'
-present "gates states a skip" "$SKILL" 'silent skip'
-# After a merge, merge-base is HEAD and the change set is empty; a post-merge
-# caller must name the base or every conditional gate is skipped.
-present "a merged caller names the base" "$SKILL" 'a caller that has already merged names the'
-present "finishing passes the pre-merge base" "$(skill_view finishing-a-development-branch)" 'PRE_MERGE=$(git rev-parse HEAD)'
-present "milestone closure runs every gate" "$P/skills/closing-a-milestone/SKILL.md" 'with the base `all`'
-present_flat "Tier takes task, branch or sweep" "$SKILL" '**`Tier`:** `task`, `branch` or `sweep`. Absent means `branch`'
-present_flat "a manifest without Tier means what it meant before" "$SKILL" 'a manifest written before the field means what it meant before'
-present_flat "task and branch gates run alike, in order" "$SKILL" 'this skill runs `task` and `branch` gates alike, in manifest order'
-present_flat "a sweep gate is skipped with one line" "$SKILL" 'this skill skips it and prints `gate <n> (<title>): skipped — Tier sweep runs in CI`'
-present_flat "step 3 skips a sweep gate" "$SKILL" 'A `sweep` gate is not selected'
-present_flat "Budget takes seconds" "$SKILL" '**`Budget`:** `<seconds>s`, for example `Budget: 900s`'
-present_flat "Budget is read on the integration-check gate only" "$SKILL" 'read only on the gate whose `Command` equals the `**Integration check:**` command of the plan'
 
 TPL="$P/skills/running-gates/references/gates-template.md"
 check "exists: references/gates-template.md" \
@@ -130,53 +70,6 @@ awk_out=$(awk '
   END { if (seen_gate && !(cmd && grn)) print "gate " prev " missing Command or Green" }
 ' <(tr -d '\r' < "$TPL") 2>&1)
 check "template satisfies the documented format" "$awk_out" ""
-
-present "template shows the fenced Setup form" "$TPL" 'Setup:'
-present "template shows an image gate" "$TPL" 'Evidence: image'
-present "template carries a blank skeleton" "$TPL" 'Copy the block below for a new gate'
-present "template says nine optional fields" "$TPL" 'the nine optional ones'
-present "template shows a task-tier gate" "$TPL" 'Tier: task'
-present "template shows a sweep gate" "$TPL" 'Tier: sweep'
-present "template shows a budget" "$TPL" 'Budget: 900s'
-
-FIN="$(skill_view finishing-a-development-branch)"
-VBC="$P/skills/verification-before-completion/SKILL.md"
-
-present "finishing prefers the gates manifest" "$FIN" 'dforge:running-gates'
-present "finishing verifies the merged result with gates" "$FIN" 'gates when the project declares a manifest'
-present "finishing writes the completed index" "$FIN" '<docs>/plans/completed.md'
-present "index write is bound to the outcome" "$FIN" 'not to Step 6'
-present "option 2 records via PR" "$FIN" 'via PR'
-present "a discard records nothing" "$FIN" 'write nothing'
-present "the menu previews what follows the plan" "$FIN" 'After integration:'
-present "the menu ends the message" "$FIN" 'The menu is the last thing in your message'
-present "open findings outlive the workspace" "$FIN" '<docs>/notes/<slug>-followups.md'
-present "a prose merge request is a red flag" "$FIN" '"I'"'"'ll ask for the merge in prose"'
-
-# All sixteen implementer agents preload verification-before-completion. A
-# gates pointer there would tell every task implementer to run a branch-level
-# manifest.
-absent "verification-before-completion never names running-gates" "$VBC" 'running-gates'
-
-# ci-mirror runs before the gates, and a gate whose command it already passed
-# is reported from that record (test tiers plan, part 5).
-says_flat() { present_flat "$@"; }
-FR="$P/reference/final-review.md"
-says_flat "final review runs ci-mirror before the gates" "$FR" 'Before the gates, run `bash <plugin-root>/scripts/ci-mirror PLAN_FILE`'
-says_flat "a ci-mirror failure is a final-review finding" "$FR" 'A `ci-mirror` failure is a final-review finding'
-says_flat "a ci-mirror failure does not stop the review" "$FR" 'it does not stop the review'
-says_flat "an older plan with no CI line goes on" "$FR" 'Exit 2 means the plan has no usable `**CI:**` line'
-says_flat "final review names the plan file to running-gates" "$FR" 'When you run dforge:running-gates, name PLAN_FILE to it'
-flat_fr=$(tr '\n' ' ' < "$FR" | tr -s ' ')
-head_ci=${flat_fr%%scripts/ci-mirror*}
-head_gates=${flat_fr%%dforge:running-gates before dispatching*}
-check "ci-mirror comes before the gates in step 0" "$([ "${#head_ci}" -lt "${#head_gates}" ] && echo yes || echo no)" "yes"
-says_flat "running-gates matches a gate to a CI-line command byte for byte" "$SKILL" 'whose `Command` equals, byte for byte, a command in the plan'"'"'s `**CI:**` line'
-says_flat "running-gates runs such a gate through suite-run as bash -c" "$SKILL" 'bash <plugin-root>/scripts/suite-run -- bash -c'
-says_flat "running-gates reports a reused pass as ci-mirror's" "$SKILL" 'passed from the ci-mirror record at <sha7>'
-says_flat "running-gates names the log" "$SKILL" 'naming the `log:` line'
-says_flat "running-gates excludes gates with Setup, Teardown or Repo" "$SKILL" 'no `Setup`, `Teardown` or `Repo` field'
-says_flat "running-gates runs every other gate as before" "$SKILL" 'Every other gate runs as before.'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

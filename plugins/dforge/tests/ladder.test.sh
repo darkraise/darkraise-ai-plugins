@@ -64,21 +64,6 @@ check "assignment has no row above score 8" "${above:-NONE}" "NONE"
 check "assignment rows 0-6 are the tier-eval table and 7-8 name impl-opus-high" "$(printf '%s\n' "$assignment" | tr '\n' ',')" \
   "0 impl-sonnet-low,1 impl-sonnet-low,2 impl-sonnet-low,3 impl-sonnet-medium,4 impl-sonnet-medium,5 impl-sonnet-high,6 impl-opus-high,7 impl-opus-high,8 impl-opus-high,"
 
-# Rule S is stated by host in the prose the planner reads. Each phrase sits on
-# one line of ladder.md.
-prose() { grep -cF -- "$1" "$LADDER"; }
-check "Rule S splits a Claude task at reducible 6" "$(prose '**If `reducible >= 6`, or if `spec = 3`, the task must be split or re-designed.')" "1"
-check "a Codex plan keeps Rule S at reducible 4" "$(prose 'A `Host: codex` plan keeps `reducible >= 4`')" "1"
-check "the cap is derived from reducible 5" "$(prose 'Rule S caps a compliant Claude total: `reducible <= 5` and `spec <= 2`, so')" "1"
-check "the old cap derivation is gone" "$(prose 'caps a compliant total: `reducible <= 3`')" "0"
-check "a total of 9 means the gate was skipped" "$(prose 'A computed total of 9 or more means the gate was skipped')" "1"
-check "Opus takes totals 6 to 8" "$(prose 'Sonnet takes totals 0 to 5; Opus takes 6 to 8')" "1"
-check "a relaxed-gate plan fails an older plan-lint" "$(prose 'fails `plan-lint` on a plugin older than the relaxed gate')" "1"
-check "the lane envelope no longer derives from reducible 3" "$(prose 'Rule S caps `reducible` at 3, so under')" "0"
-check "the lane envelope names max_score" "$(prose '`max_score 4` keeps them on the Claude ladder')" "1"
-check "the light Codex judge covers totals 0 to 8" "$(prose 'for tasks totalling 0 to 8 below')" "1"
-check "impl-opus-high is dispatched for scores 6 to 8" "$(grep -cF 'Dispatched by dforge for scores 6 to 8' "$AGENTS/impl-opus-high.md")" "1"
-
 # not_implementers <rows> — "score:agent" for every row whose agent is not an
 # execution implementer, comma-separated; NONE when there is none.
 not_implementers() {

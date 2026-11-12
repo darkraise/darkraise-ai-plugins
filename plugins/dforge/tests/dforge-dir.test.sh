@@ -137,8 +137,5 @@ mkdir -p "$G/.forge" "$GD/dr-forge"
 check "primary: its .forge and git dir, each named once" "$(dforge_legacy_layout "$G" | tr '\n' '|')" "$G/.forge|$GD/dr-forge|"
 rm -rf "$G/.forge" "$GD/dr-forge"
 
-# Codex runs no session-start hook, so its tool notes carry the check.
-check "codex-tools: names the older-layout check" "$(grep -c 'an `older layout` line' "$HERE/../skills/using-dforge/references/codex-tools.md")" "1"
-
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

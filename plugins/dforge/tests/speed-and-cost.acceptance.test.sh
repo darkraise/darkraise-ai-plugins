@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Acceptance tests for the speed-and-cost spec
 # (docs/dforge/specs/2026-10-27-speed-and-cost-design.md), the plugin-side
-# statements A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A16 and A18. A12 and
-# A13 (the eval pipeline) are in evals/tiers/tests/speed-and-cost.acceptance.test.mjs.
+# statements A1, A3, A4, A5, A6, A7, A9, A10 and A11. A12 and A13 (the eval
+# pipeline) are in evals/tiers/tests/speed-and-cost.acceptance.test.mjs.
 # Each test is written from the statement's text and reaches the behaviour
 # through the scripts the spec names (task-step, suite-run, impl-stop-gate), the
 # files the plugin ships, or, where a statement is about what a skill tells a
@@ -10,18 +10,14 @@
 # Usage:
 #   bash speed-and-cost.acceptance.test.sh            run every test
 #   bash speed-and-cost.acceptance.test.sh A5 A9      run the named tests only
-# SKIP_PINS=1 skips A2's run of the pre-split pin tests (about four minutes),
-# as does DR_TEST_ALL=1, which test-all sets because it runs each of them.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN="$(cd "$HERE/.." && pwd)"
-REPO_ROOT="$(cd "$PLUGIN/../.." && pwd)"
 S="$PLUGIN/scripts"
 STEP="$S/task-step"
 SUITE="$S/suite-run"
 GATE="$S/impl-stop-gate"
-BASE=${SPEED_AND_COST_BASE:-e6f88a653e365585ad446e3bbe505e4dc4155819}
 ONLY=" $* "
 
 pass=0 fail=0
@@ -56,7 +52,6 @@ export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 
 doc() { tr -d '\r' < "$1" | tr '\n' ' ' | tr -s ' '; } # a file as one line, whitespace collapsed
 winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
-base_known() { git -C "$REPO_ROOT" cat-file -e "$BASE^{commit}" 2>/dev/null; }
 
 # ---------------------------------------------------------------- A1
 if selected A1; then
@@ -85,46 +80,6 @@ if selected A1; then
   out=$(timeout 60 bash "$TMP/a1/tests/skill-size.test.sh" 2>&1)
   check "A1: with every skill at or under the cap, skill-size.test.sh names none" "$(grep -c 'bytes (cap' <<<"$out")" "0"
   check "A1: and reports no over-cap failure" "$(grep -c 'FAIL.*at most' <<<"$out")" "0"
-fi
-
-# ---------------------------------------------------------------- A2
-if selected A2; then
-  if base_known; then
-    missing=""
-    count=0
-    while IFS= read -r ref; do
-      [ -n "$ref" ] || continue
-      count=$((count + 1))
-      skill=$(cut -d/ -f4 <<<"$ref"); name=$(basename "$ref")
-      linked=$(grep -F "references/$name" "$PLUGIN/skills/$skill/SKILL.md" | grep -i 'before' | head -n 1)
-      [ -n "$linked" ] || missing="$missing$skill/$name "
-    done < <(git -C "$REPO_ROOT" diff --diff-filter=A --name-only "$BASE" HEAD -- 'plugins/dforge/skills/*/references/*.md')
-    matches "A2: the split added reference files" "$count" '^([1-9][0-9]+)$'
-    check "A2: every new reference file is linked from its SKILL.md on a 'before you' line" "$missing" ""
-
-    # A test retired with the script it tested is not lost by the split.
-    retired=" draft-pack.test.sh "
-    gone=""
-    while IFS= read -r t; do
-      [ -e "$HERE/$t" ] || [[ "$retired" == *" $t "* ]] || gone="$gone$t "
-    done < <(git -C "$REPO_ROOT" ls-tree --name-only "$BASE" plugins/dforge/tests/ | sed 's|.*/||')
-    check "A2: no test file that existed before the split is gone" "$gone" ""
-
-    if [ -n "${SKIP_PINS:-}${DR_TEST_ALL:-}" ]; then
-      printf 'skip - A2: the pre-split pin tests (SKIP_PINS or DR_TEST_ALL is set)\n'
-    else
-      bad=""
-      while IFS= read -r t; do
-        case $t in *.sh) ;; *) continue ;; esac
-        [ -f "$HERE/$t" ] || continue
-        grep -qE 'SKILL\.md|skills/' "$HERE/$t" || continue
-        (cd "$HERE" && timeout 300 bash "$t" > "$TMP/pin.out" 2>&1) || bad="$bad$t "
-      done < <(git -C "$REPO_ROOT" ls-tree --name-only "$BASE" plugins/dforge/tests/ | sed 's|.*/||')
-      check "A2: every pre-split test that reads skill text still runs and passes" "$bad" ""
-    fi
-  else
-    printf 'skip - A2: base %s is not in this repository\n' "$BASE"
-  fi
 fi
 
 # ------------------------------------------------- fixture for A3, A5, A6, A7
@@ -173,32 +128,12 @@ if selected A3; then
   for src in "$IP" "$DISPATCH"; do
     label=$(basename "$src")
     text=$(doc "$src")
-    lacks "A3: $label does not tell the implementer to run the full suite" "$text" "run the full suite"
-    lacks "A3: $label does not tell the implementer to run the whole suite" "$text" "run the whole suite"
-    lacks "A3: $label does not hand the implementer suite-run" "$text" "suite-run"
-    has "A3: $label tells it to run the focused tests that cover its change" "$text" "focused tests that cover what you changed"
     has "A3: $label names the Verified section" "$text" '## Verified'
-    has "A3: $label gives the pass bullet grammar" "$text" '- `<command>` — pass: <n> passed, <m> failed'
-    has "A3: $label gives the fail bullet grammar" "$text" '- `<command>` — fail: <n> passed, <m> failed'
-    has "A3: $label ends the reply with a Report: line" "$text" '`Report: <absolute path of the report file>`'
   done
-  # The reply format puts the Report: line last in the "report back" list.
-  last_item=$(doc "$IP" | sed 's/.*Then report back with ONLY//')
-  matches "A3: the Report: line is the last element of the reply format" "$last_item" 'As the last line of your reply.*Report: <absolute path'
 fi
 
 # ---------------------------------------------------------------- A4
 if selected A4; then
-  DT="$PLUGIN/reference/delegated-task.md"
-  text=$(doc "$DT")
-  section=$(sed -e 's/.*\*\*The suite runs beside the review\.\*\*//' -e 's/\*\*NEEDS_CONTEXT:\*\*.*//' <<<"$text")
-  has "A4: on a DONE report the controller starts suite-run" "$section" "scripts/suite-run -- bash -c '<suite command>'"
-  has "A4: as a background command" "$section" "background"
-  has "A4: at the task's head" "$section" "at the task's head"
-  has "A4: and in the same turn runs the review step" "$section" "in the same turn run \`task-step review\`"
-  has "A4: and dispatches the review seat" "$section" "dispatch its seat"
-  has "A4: for DONE_WITH_CONCERNS too" "$section" "DONE or DONE_WITH_CONCERNS report"
-  has "A4: the SKILL.md sends each task through delegated-task.md" "$(doc "$PLUGIN/skills/subagent-driven-development/SKILL.md")" "For each task, or batch, run [delegated-task.md]"
   # suite-run itself records a row at the head the controller runs it at.
   (cd "$FIX" && timeout 60 bash "$SUITE" -- bash -c "$CMD" >/dev/null 2>&1)
   row=$(awk -F'\t' -v h="$(g rev-parse HEAD | tr -d '\r')" '$1 == h { print $4 }' "$FIX/.dforge/suites.tsv" 2>/dev/null | tail -n 1)
@@ -243,9 +178,6 @@ if selected A5; then
   check "A5: a failure the base also has: exit 0" "$rc" "0"
   lacks "A5: a baseline-only failure is no finding" "$(grep -E '^(Critical|Important) ' <<<"$out")" "alpha"
   check "A5: a baseline-only failure writes no fix file" "$(ls "$WS"/task-2-fix-*.md 2>/dev/null | wc -l | tr -d ' ')" "0"
-
-  text=$(doc "$PLUGIN/reference/delegated-task.md")
-  has "A5: delegated-task.md says a task is marked complete only after verdict passes" "$text" 'A task is marked complete only after `task-step verdict` passes'
 fi
 
 # ---------------------------------------------------------------- A6, A7
@@ -304,23 +236,6 @@ if selected A7; then
   has "A7: a plain free-text item reaches the digest for the ruling seat" "$out5" "cannot-verify: the caller passes the flag to the new function"
   has "A7: a free-text item written with the cannot-verify prefix reaches it too" "$out5" "cannot-verify: the retry path is covered by an integration test I could not find"
   check "A7: no free-text item is logged as settled by task-step" "$ledger5" ""
-fi
-
-# ---------------------------------------------------------------- A8
-if selected A8; then
-  agents=("$PLUGIN"/agents/impl-*.md)
-  matches "A8: there are implementer agent files" "${#agents[@]}" '^([1-9][0-9]+)$'
-  for f in "${agents[@]}"; do
-    n=$(basename "$f" .md)
-    t=$(doc "$f" | tr 'A-Z' 'a-z')
-    matches "A8: $n carries the anti-hardcoding clause" "$t" 'general solution.*never one that only passes.*(hardcoded|hardcod)'
-    matches "A8: $n carries the report-incorrect-tests clause" "$t" 'when a test looks wrong, report it'
-    has "A8: $n carries the tests-are-immutable clause" "$t" "never edit or delete an existing test unless the brief names it"
-    case $n in
-      impl-sonnet-*) ;;
-      *) has "A8: $n (non-Sonnet) carries the scope-limit clause" "$t" "change only what the brief asks for" ;;
-    esac
-  done
 fi
 
 # ---------------------------------------------------------------- gate fixtures
@@ -485,50 +400,6 @@ if selected A11; then
   check "A11: the pass-through path passes" "$grc" "0"
   export PATH=$OLDPATH
   check "A11: no test runner or network tool stub was invoked by any gate run" "$(cat "$STUBLOG")" ""
-fi
-
-# ---------------------------------------------------------------- A16
-if selected A16; then
-  readme=$(doc "$PLUGIN/README.md")
-  section=$(sed -e 's/.*## Unattended runs//' -e 's/ ## Session budget.*//' <<<"$readme")
-  matches "A16: the README has an unattended-runs section" "$readme" '## Unattended runs'
-  has "A16: it documents auto mode" "$section" "Auto mode"
-  has "A16: it ties auto mode to wave implementers" "$section" "wave"
-  matches "A16: and gives the reason: a permission prompt stalls an unattended implementer" "$section" 'permission prompt.*(wait|stall|hold)'
-  has "A16: it documents worktree.baseRef" "$section" 'worktree.baseRef'
-  has "A16: set to \"head\"" "$section" '"baseRef": "head"'
-  matches "A16: and gives the reason: the default branches from origin while local main may be ahead" "$section" 'origin/<default-branch>.*ahead'
-fi
-
-# ---------------------------------------------------------------- A18
-if selected A18; then
-  if base_known; then
-    old_rule='Run the focused test while you work and the full suite once before committing.'
-    new_rule='Run the focused test while you work and the task check once before committing, in place of the full suite.'
-    old=$(git -C "$REPO_ROOT" show "$BASE:plugins/dforge/skills/executing-plans/SKILL.md" | tr -d '\r' | tr '\n' ' ' | tr -s ' ')
-    has "A18: (control) the base executing-plans inline rule is the sentence this plan replaced" "$old" "$old_rule"
-    now=$({ doc "$PLUGIN/skills/executing-plans/SKILL.md"; for r in "$PLUGIN"/skills/executing-plans/references/*.md; do doc "$r"; done; })
-    has "A18: executing-plans tells the inline session to run the task check once before committing" "$now" "$new_rule"
-    lacks "A18: executing-plans no longer asks for the full suite before every commit" "$now" "$old_rule"
-  else
-    printf 'skip - A18: base %s is not in this repository\n' "$BASE"
-  fi
-  # native-codex.md was last edited on purpose when the final review began
-  # ledgering its lens skips and review lines, so identity is checked from there.
-  native_base=${SPEED_AND_COST_NATIVE_BASE:-4bf4e4d2b943b78fa13fcc0bc09ecdf9e25679da}
-  if git -C "$REPO_ROOT" cat-file -e "$native_base^{commit}" 2>/dev/null; then
-    check "A18: reference/native-codex.md is byte-identical to its last planned edit" \
-      "$(git -C "$REPO_ROOT" diff --stat "$native_base" -- plugins/dforge/reference/native-codex.md | wc -l | tr -d ' ')" "0"
-  else
-    printf 'skip - A18: base %s is not in this repository\n' "$native_base"
-  fi
-  text=$(doc "$PLUGIN/reference/delegated-task.md")
-  byhand=$(sed -e 's/.*## The steps by hand//' -e 's/ ## Recovery.*//' <<<"$text")
-  step2=$(sed -e 's/.*- \*\*§2\.\*\*//' -e 's/- \*\*§3\.\*\*.*//' <<<"$byhand")
-  has "A18: the by-hand §2 runs suite-run itself" "$step2" 'scripts/suite-run -- <suite command>'
-  has "A18: on a DONE report" "$step2" "On a DONE report"
-  has "A18: in the background at the task's head" "$step2" "in the background at the task's head"
-  has "A18: and treats a non-baseline failure as the Important finding of §3" "$step2" "non-baseline failure as §3's Important finding"
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

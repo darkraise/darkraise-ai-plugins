@@ -1,16 +1,13 @@
 // Acceptance tests for the test-tiers-and-ci-parity spec
-// (docs/dforge/specs/2026-10-31-test-tiers-and-ci-parity-design.md), A1-A27.
+// (docs/dforge/specs/2026-10-31-test-tiers-and-ci-parity-design.md), statements A1-A6, A8, A15, A16, A20-A22, A24 and A26.
 // Each test is written from the statement's text and reaches the behaviour
 // through the public surface: plan-lint, task-step, suite-run, ci-mirror,
 // lint-portability.mjs, validate-repository.mjs, test-all.mjs and
 // tests/test-shards.test.mjs, run as commands against throwaway repositories
-// and trees; and, where a statement is about what a skill or reference tells a
-// session to do (no script reaches it), the text of the shipped file.
-// A13, A18, A19 and A23 have no code behind them: a session carries them out
-// by reading the skill, so they are pinned by the skill's text only.
+// and trees.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
@@ -76,25 +73,6 @@ function commit(dir, message) {
   git(dir, 'commit', '-q', '-m', message);
   return git(dir, 'rev-parse', 'HEAD');
 }
-
-const read = relative => readFileSync(join(REPO, relative), 'utf8').replace(/\r/g, '');
-const flat = relative => read(relative).replace(/\s+/g, ' ');
-const flatText = text => text.replace(/\s+/g, ' ');
-// The body of the markdown section whose heading line matches `heading`, up to
-// the next heading of the same or a higher level.
-function section(text, heading) {
-  const lines = text.split('\n');
-  let fenced = false;
-  const headings = lines.map(line => {
-    if (/^```/.test(line)) fenced = !fenced;
-    return !fenced && /^#+ /.test(line) ? line.match(/^#+/)[0].length : 0;
-  });
-  const start = lines.findIndex((line, i) => headings[i] > 0 && heading.test(line));
-  assert.ok(start >= 0, `no heading matching ${heading}`);
-  const end = headings.findIndex((level, i) => i > start && level > 0 && level <= headings[start]);
-  return lines.slice(start, end < 0 ? undefined : end).join('\n');
-}
-const P = relative => `plugins/dforge/${relative}`;
 
 // ---------------------------------------------------------------- plan fixtures
 const REVIEW_LINE = '**Plan review:** 2026-10-10 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)';
@@ -226,12 +204,6 @@ function work(repo) {
 }
 
 // ---------------------------------------------------------------- A2
-test('A2: delegated-task.md has the controller pass a command task check, never the integration check, to every start', () => {
-  const text = flat(P('reference/delegated-task.md'));
-  assert.match(text, /A command task check is the suite command: every `task-step start` passes it, never the Integration check/);
-  assert.match(read(P('tests/delegated-suite.test.sh')), /never the Integration check/);
-});
-
 test('A2: task-step start --suite records exactly the task check, not the integration check, on the step file', () => {
   const repo = stepRepo('a2', { taskCheck: '`bash quick.sh` — gate 1 has Tier: task', tasks: 2 });
   for (const n of [1, 2]) {
@@ -397,15 +369,6 @@ test('A5: task-step verdict reads a six-column failing row and its failing lines
 });
 
 // ---------------------------------------------------------------- A6
-test('A6: the final review starts the integration check at the branch head through suite-run, and finishing reuses the pass', () => {
-  const review = flat(P('reference/final-review.md'));
-  assert.match(review, /start the plan header's `\*\*Integration check:\*\*` command through `bash <plugin-root>\/scripts\/suite-run -- bash -c '<integration check>'` as a background command at the same HEAD the Claude review reads/);
-  assert.match(review, /finishing reuses a pass at the same commit/);
-  const finishing = flat(P('skills/finishing-a-development-branch/SKILL.md'));
-  assert.match(finishing, /A plan with an `\*\*Integration check:\*\*` line runs that command instead, as `bash <plugin-root>\/scripts\/suite-run -- bash -c '<integration check>'`/);
-  assert.match(finishing, /reuses a recorded pass \(`suite: reused pass at <sha7>`\) only at the same HEAD, with a clean tree then and now, for the same command/);
-});
-
 test('A6: suite-run reuses a pass at the same commit on a clean tree, and runs again on a dirty one', () => {
   const repo = stepRepo('a6');
   const marker = join(repo.dir, '..', `a6-runs-${counter}`);
@@ -422,19 +385,6 @@ test('A6: suite-run reuses a pass at the same commit on a clean tree, and runs a
   commit(repo.dir, 'next commit');
   assert.match(suite(repo, 'bash', '-c', command).out, /^suite: pass \(exit 0\)$/m);
   assert.equal(readFileSync(marker, 'utf8'), 'run\nrun\nrun\n');
-});
-
-// ---------------------------------------------------------------- A7
-test('A7: writing-plans picks the full suite as the task check when its last passing run took 300 seconds or less', () => {
-  assert.match(read(P('skills/writing-plans/SKILL.md')), /references\/task-check-line\.md/);
-  const text = flat(P('skills/writing-plans/references/task-check-line.md'));
-  assert.match(text, /the full suite itself, when its last passing run in `suites\.tsv` took 300 seconds or less/);
-  assert.match(text, /Take the last matching row whose column 4 is `0`, and read its column 7, the duration in seconds/);
-});
-
-test('A7: writing-plans treats a missing duration as not fast', () => {
-  const text = flat(P('skills/writing-plans/references/task-check-line.md'));
-  assert.match(text, /A row that is missing, or has six columns and so no duration, counts as not fast/);
 });
 
 // ---------------------------------------------------------------- A8
@@ -481,99 +431,6 @@ test('A8: in a waves plan, a Covered by Task needs a task in an earlier wave', (
   assert.equal(earlier.status, 0, earlier.out);
   const firstWave = lint(plan({ lines, waves: 'waves — 1 | 2-3', steps: [FAILING, EXTEND, covered(1)] }));
   assert.equal(firstWave.status, 0, firstWave.out);
-});
-
-// ---------------------------------------------------------------- A9
-test('A9: plan-review.md carries the Redundant test criterion under Executability, scored LOW, naming the overlapping test', () => {
-  const executability = flatText(section(read(P('criteria/plan-review.md')), /^### Executability/));
-  assert.match(executability, /Redundant test: score LOW when a planned test fails for no fault that an existing test or another planned test does not already catch/);
-  assert.match(executability, /name the overlapping test/);
-  const coherence = flatText(section(read(P('criteria/plan-review.md')), /^### Coherence/));
-  assert.doesNotMatch(coherence, /Redundant test/);
-});
-
-// ---------------------------------------------------------------- A10
-test('A10: the TDD skill replaces the Minimal row with the one-behaviour rule', () => {
-  const skill = read(P('skills/test-driven-development/SKILL.md'));
-  const table = section(skill, /^## Good Tests/);
-  assert.doesNotMatch(table, /\*\*Minimal\*\*/);
-  assert.match(flatText(table), /\*\*One behaviour\*\* \| Variants of one behaviour are rows of one parametrized or table-driven test; distinct behaviours get distinct tests\./);
-});
-
-test('A10: writing-good-tests.md asks whether an existing test already fails for the change', () => {
-  const text = read(P('skills/test-driven-development/references/writing-good-tests.md'));
-  const principle = flatText(section(text, /^## Principle 1/));
-  const named = principle.indexOf('what production change should make this test fail');
-  const asked = principle.indexOf('find whether an existing test already fails for it');
-  assert.ok(named >= 0 && asked > named, 'the question follows the naming of the production change');
-  assert.match(principle, /If one does, extend it, or write no test/);
-});
-
-// ---------------------------------------------------------------- A11
-test('A11: the REFACTOR rule deletes only branch-added tests and never a regression test naming a fixed bug', () => {
-  const refactor = flatText(section(read(P('skills/test-driven-development/SKILL.md')), /^### REFACTOR/));
-  assert.match(refactor, /Delete a test written on this branch when a broader test written on this branch fails for every fault the narrower one catches/);
-  assert.match(refactor, /The commit body names those faults/);
-  assert.match(refactor, /covers only tests that do not exist at the branch's merge base/);
-  assert.match(refactor, /never a regression test that names a fixed bug/);
-  assert.match(refactor, /A test that predates the branch goes through dforge:test-simplifier/);
-});
-
-test('A11: the final-review fix wave deletes only branch-added tests and never a regression test naming a fixed bug', () => {
-  const redundant = flatText(read(P('reference/final-review.md')).split('\n\n').find(block => block.startsWith('**Redundant tests.**')));
-  assert.match(redundant, /The fix wave may delete only a test added on the branch, a test that does not exist at MERGE_BASE/);
-  assert.match(redundant, /never a regression test that names a fixed bug/);
-  assert.match(redundant, /a test that exists at MERGE_BASE is left for dforge:test-simplifier/);
-});
-
-// ---------------------------------------------------------------- A12
-test('A12: the test-quality lens carries a {#redundant} criterion that names the covering test', () => {
-  const lens = read(P('criteria/lenses/test-quality.md'));
-  assert.match(lens, /^### .*\{#redundant\}$/m);
-});
-
-// ---------------------------------------------------------------- A13
-test('A13: closing-a-milestone recommends a scoped test-simplifier run on 20% growth or a passed Budget', () => {
-  const text = flat(P('skills/closing-a-milestone/SKILL.md'));
-  const cost = text.slice(text.indexOf('8. **Suite cost.**'), text.indexOf('9. **Next.**'));
-  assert.ok(cost.length > 0, 'step 8 is the suite cost audit');
-  assert.match(cost, /grew by 20% or more/);
-  assert.match(cost, /or passes a declared `Budget:`/);
-  assert.match(cost, /`Budget: <seconds>s` line of the gate in `<docs>\/gates\.md` whose `Command` equals the plan's `\*\*Integration check:\*\*`/);
-  assert.match(cost, /When no such gate exists, the audit uses the 20% rule only/);
-  assert.match(cost, /`Next: dforge:test-simplifier --modules <paths>`/);
-  assert.match(cost, /It recommends only and removes nothing/);
-});
-
-test('A13: closing-a-milestone names the checkout whose rows it read and recommends nothing with fewer than two rows', () => {
-  const text = flat(P('skills/closing-a-milestone/SKILL.md'));
-  const cost = text.slice(text.indexOf('8. **Suite cost.**'), text.indexOf('9. **Next.**'));
-  assert.match(cost, /reads `suites\.tsv` from the state directory of the checkout it runs in/);
-  assert.match(cost, /The audit names that checkout in the report/);
-  assert.match(cost, /With fewer than two rows it says so and recommends nothing/);
-  assert.match(cost, /Suite cost: <state>\/suites\.tsv of <checkout top level> holds <n> full-suite row\(s\) with a duration; two are needed, so nothing is recommended\./);
-});
-
-// ---------------------------------------------------------------- A14
-test('A14: test-simplifier Phase 3 uses the tier names of reference/test-tiers.md', () => {
-  const tiers = read(P('reference/test-tiers.md'));
-  for (const name of ['Task check', 'Full suite', 'Sweep']) assert.match(tiers, new RegExp(`^\\| ${name} \\|`, 'm'));
-  const phase3 = flatText(section(read(P('skills/test-simplifier/SKILL.md')), /^## Phase 3/));
-  assert.match(phase3, /The tier names and the impact-selection table come from \[test-tiers\.md\]\(\.\.\/\.\.\/reference\/test-tiers\.md\)/);
-  for (const name of ['Task check', 'Full suite', 'Sweep']) assert.match(phase3, new RegExp(`\\| ${name} \\|`));
-  assert.match(phase3, /`Tier: task` and a `Why:`/);
-  assert.match(phase3, /`Budget: <seconds>s` line/);
-  const runners = read(P('skills/test-simplifier/references/runners.md'));
-  assert.match(runners, /test-tiers\.md/);
-});
-
-test('A14: test-simplifier accepts --modules and --since scopes, lists Subsumed scaffolding and states the division of labour', () => {
-  const skill = flat(P('skills/test-simplifier/SKILL.md'));
-  assert.match(skill, /`--modules <paths>` limits the run to those paths/);
-  assert.match(skill, /`--since <ref>` limits it to tests added after the ref/);
-  assert.match(skill, /With a scope, Phase 1 still profiles the whole suite, and Phase 4 waves take candidates only from inside the scope/);
-  assert.match(skill, /6\. \*\*Subsumed scaffolding\.\*\* A narrow test whose every fault a broader test of the same behaviour also catches/);
-  assert.match(skill, /Tests added on the current branch are merged or removed by the REFACTOR step of dforge:test-driven-development and the `test-quality` lens of the final review\. This skill handles tests already on the default branch\./);
 });
 
 // ---------------------------------------------------------------- A15, A24
@@ -699,74 +556,6 @@ test('A26: ci-mirror prints the digest line naming a command that cannot launch 
   const naming = result.out.split('\n').filter(line => line.includes('/nonexistent/launcher --flag'));
   assert.equal(naming.length, 1, result.out);
   assert.match(naming[0], /FAIL/);
-});
-
-test('A26: finishing prints one line and skips the wait when gh is absent or not logged in, never calling the branch done', () => {
-  const text = flat(P('skills/finishing-a-development-branch/references/execute-choice.md'));
-  assert.match(text, /With keep, no `gh` \(`command -v gh` fails\), `gh` not logged in \(`gh auth status` exits non-zero\), or a CI line of `none`, print why in one line and skip the wait; never call the branch CI-green/);
-  const wait = section(read(P('skills/finishing-a-development-branch/references/execute-choice.md')), /^### Wait for CI/);
-  assert.ok(wait.includes('skip the wait'), 'the skip lives in the Wait for CI section');
-});
-
-// ---------------------------------------------------------------- A17
-test('A17: with no Early CI line nothing in the controller pushes the branch or starts CI before finishing', () => {
-  const delegated = read(P('reference/delegated-task.md'));
-  const early = flatText(section(delegated, /^## Early CI/));
-  assert.match(early, /With no `\*\*Early CI:\*\*` line in the plan header, nothing in this loop pushes the branch or starts CI before finishing/);
-  assert.match(early, /Push only when the line carries `— consented <YYYY-MM-DD>`/);
-  const controllerFiles = [
-    'reference/delegated-task.md', 'reference/parallel-waves.md', 'reference/final-review.md', 'reference/executor-lane.md',
-    'skills/subagent-driven-development/SKILL.md', 'skills/executing-plans/SKILL.md', 'skills/resume-execution/SKILL.md',
-    ...readdirSync(join(PLUGIN, 'skills/subagent-driven-development/references')).map(name => `skills/subagent-driven-development/references/${name}`),
-  ];
-  for (const file of controllerFiles) {
-    const text = read(P(file));
-    const outside = file === 'reference/delegated-task.md' ? text.replace(section(text, /^## Early CI/), '') : text;
-    const pushes = outside.split('\n').filter(line => /git push|gh workflow run/.test(line) && !/never|do not|don't/i.test(line));
-    assert.deepEqual(pushes, [], `${file} pushes or starts CI outside the Early CI section`);
-  }
-});
-
-test('A17: with an Early CI line the controller never opens a pull request to start CI', () => {
-  const early = flatText(section(read(P('reference/delegated-task.md')), /^## Early CI/));
-  assert.match(early, /Never open a pull request to start CI/);
-  assert.doesNotMatch(early, /gh pr create/);
-});
-
-test('A17: auto-run.md names the consented early-CI push and dispatch as the second exception to its never-performed list', () => {
-  const autoRun = read(P('reference/auto-run.md'));
-  const paragraph = flatText(autoRun.split('\n\n').find(block => block.startsWith('**Never performed in an auto run,**')));
-  assert.match(paragraph, /The finish action is the first exception\. The second is the `\*\*Early CI:\*\*` push and workflow dispatch, performed only when the header line carries `— consented <YYYY-MM-DD>`/);
-});
-
-// ---------------------------------------------------------------- A18
-test('A18: finishing waits for the CI run of the pushed commit, bounded at 90 minutes, and records the CI ledger line', () => {
-  const choice = read(P('skills/finishing-a-development-branch/references/execute-choice.md'));
-  const pr = flatText(section(choice, /^### Option 2/));
-  assert.match(pr, /Then wait for CI as `### Wait for CI` says, with `sha` being `git rev-parse HEAD` at the push/);
-  const wait = flatText(section(choice, /^### Wait for CI/));
-  assert.match(wait, /Finishing waits for CI only when it pushed: Option 2, or an Early CI push whose head is the final head/);
-  assert.match(wait, /Run `gh run list --commit <sha>`, then `gh run watch <id>` as a background Bash command/);
-  assert.match(wait, /Set the call's `timeout` to \(90 × 60 \+ 120\) × 1000 ms/);
-  assert.match(wait, /Record `CI: <sha7> run <id> <green\|red\|still running at 90 min>` on the ledger/);
-  assert.match(flat(P('skills/finishing-a-development-branch/SKILL.md')), /When the ledger holds a `CI:` line, the final message quotes it/);
-});
-
-test('A18: finishing never reports the branch done while the CI run is red or still running', () => {
-  const wait = flatText(section(read(P('skills/finishing-a-development-branch/references/execute-choice.md')), /^### Wait for CI/));
-  assert.match(wait, /Green completes the branch/);
-  assert.match(wait, /Red reopens the branch through dforge:systematic-debugging, naming each failed job and step; push the fix and wait again/);
-  assert.match(wait, /A run still going after 90 minutes is reported as not done, never as done/);
-});
-
-// ---------------------------------------------------------------- A19
-test('A19: writing-plans copies the pitfalls-table rows of each uncovered platform into Global Constraints', () => {
-  assert.match(read(P('skills/writing-plans/SKILL.md')), /references\/ci-line\.md/);
-  const text = flat(P('skills/writing-plans/references/ci-line.md'));
-  assert.match(text, /For every uncovered platform, copy that platform's rows of the Pitfalls table in \[ci-parity\.md\]\(\.\.\/\.\.\/\.\.\/reference\/ci-parity\.md\) into `## Global Constraints`, one line per row, so every task brief carries them/);
-  const pitfalls = section(read(P('reference/ci-parity.md')), /^## Pitfalls/);
-  const platforms = new Set(pitfalls.split('\n').filter(line => line.startsWith('| ') && !line.startsWith('| Platform') && !line.startsWith('|---')).map(line => line.split('|')[1].trim()));
-  assert.deepEqual([...platforms].sort(), ['Windows Git Bash', 'macOS', 'uutils (ubuntu-latest)'].sort());
 });
 
 // ---------------------------------------------------------------- A20
@@ -896,30 +685,4 @@ test('A22: test-all.mjs prints a ::warning:: naming a suite whose duration passe
   assert.match(warnings[0], /^::warning::/);
   assert.ok(warnings[0].includes('scripts/validate-repository.mjs'), warnings[0]);
   assert.ok(warnings[0].includes('60'), warnings[0]);
-});
-
-// ---------------------------------------------------------------- A23, A25
-test('A23: a gates.md with no Tier field runs exactly the gates it ran before', () => {
-  const skill = read(P('skills/running-gates/SKILL.md'));
-  const text = flatText(skill);
-  assert.match(text, /Required: \*\*`Command`\*\* and \*\*`Green`\*\* \(what output or observation proves it\)\./);
-  assert.match(text, /\*\*`Tier`:\*\* `task`, `branch` or `sweep`\. Absent means `branch`, so a manifest written before the field means what it meant before/);
-  assert.match(text, /this skill runs `task` and `branch` gates alike, in manifest order/);
-  assert.match(text, /A `task` or `branch` gate, or a gate with no `Tier`, is selected by `Applies` exactly as before/);
-  assert.doesNotMatch(text, /Required: [^.]*Tier/);
-});
-
-test('A25: running-gates prints one line per skipped sweep gate naming it as CI\'s and still runs task and branch gates', () => {
-  const skill = flatText(read(P('skills/running-gates/SKILL.md')));
-  assert.match(skill, /A `sweep` gate belongs to CI: this skill skips it and prints `gate <n> \(<title>\): skipped — Tier sweep runs in CI`/);
-  assert.match(skill, /A `sweep` gate is not selected; print the one line from the `Tier` bullet for it, so its absence is not a silent skip/);
-  assert.match(skill, /this skill runs `task` and `branch` gates alike/);
-});
-
-// ---------------------------------------------------------------- A27
-test('A27: after a local merge finishing prints the gh run list and gh run watch lines and never calls the branch CI-green', () => {
-  const choice = read(P('skills/finishing-a-development-branch/references/execute-choice.md'));
-  const merge = flatText(section(choice, /^### Option 1/));
-  assert.match(merge, /After a local merge, nothing was pushed, so do not wait: print `gh run list --commit <merge sha>` and `gh run watch <id>` for your human partner to run after pushing, and never call the branch CI-green/);
-  assert.doesNotMatch(merge, /wait for CI as/i);
 });

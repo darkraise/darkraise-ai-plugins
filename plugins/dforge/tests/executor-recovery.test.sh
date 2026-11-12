@@ -262,28 +262,5 @@ STUB_WRITE_PATH=produced.txt run --cwd "$fixture/consecutive" --task-id offload-
 check 'a second task without a release is refused for ownership' \
   "$([ "$rc" -ne 0 ] && grep -qF 'reserved by another task' "$fixture/err" && echo refused || echo allowed)" refused
 
-# The deliverable is the instruction, so assert it directly.
-LOOP="$HERE/../reference/delegated-task.md"
-check 'the loop tells the controller to release the worktree' \
-  "$(grep -c 'Release the worktree when the task is complete' "$LOOP")" 1
-check 'the release resolves the wrapper through the registry' \
-  "$(grep -cF 'executors" path <id> wrapper' "$LOOP")" 1
-check 'a HANDBACK reconciles instead of releasing' \
-  "$(grep -c 'reconcile rather than release' "$LOOP")" 1
-check 'a finished HANDBACK task is released' \
-  "$(grep -c 'release the handed-back task' "$LOOP")" 1
-
-present() { # present <name> <file> <needle>
-  if grep -qF -- "$3" "$2" 2>/dev/null; then printf 'ok - %s\n' "$1"; pass=$((pass+1))
-  else printf 'FAIL - %s: missing [%s] in %s\n' "$1" "$3" "$2"; fail=$((fail+1)); fi
-}
-absent() { # absent <name> <file> <needle>
-  if grep -qF -- "$3" "$2" 2>/dev/null; then printf 'FAIL - %s: unexpected [%s] in %s\n' "$1" "$3" "$2"; fail=$((fail+1))
-  else printf 'ok - %s\n' "$1"; pass=$((pass+1)); fi
-}
-REC="$(cd "$(dirname "$SCRIPT")/.." && pwd)/reference/external-task-recovery.md"
-present "the recovery guide resolves the wrapper through the registry" "$REC" 'path <id> wrapper'
-absent "the recovery guide no longer hardcodes the Codex wrapper" "$REC" 'run-codex-task.sh'
-
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

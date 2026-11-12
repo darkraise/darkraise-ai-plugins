@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Acceptance tests for the faster-plans spec
-# (docs/dforge/specs/2026-10-26-faster-plans-design.md), statements A1-A23.
-# Each test is written from the statement's text and reaches the behaviour
-# through the scripts and documents the spec names: plan-lint, plan-revise,
-# review-route, task-step, wave, next-step, plan-amend, the cockpit's ledger
-# reader, the agent definitions and the shipped skills, prompts and references.
+# (docs/dforge/specs/2026-10-26-faster-plans-design.md), statements A2-A13 and
+# A17-A23. Each test is written from the statement's text and reaches the
+# behaviour through the scripts and documents the spec names: plan-lint,
+# plan-revise, review-route, task-step, wave, next-step, plan-amend, the
+# cockpit's ledger reader, the agent definitions and the shipped prompts and
+# references.
 # Usage:
 #   bash faster-plans.acceptance.test.sh            run every test
 #   bash faster-plans.acceptance.test.sh A5 A9      run the named tests only
@@ -72,9 +73,6 @@ session() { # session <review true|false> <lane true|false> | absent — this se
 session absent
 
 doc() { tr -d '\r' < "$1" | tr '\n' ' ' | tr -s ' '; } # a file as one line, whitespace collapsed
-skill_doc() { # skill_doc <SKILL.md> — the skill and its references as one line, whitespace collapsed
-  { doc "$1"; for ref in "$(dirname "$1")"/references/*.md; do doc "$ref"; done; }
-}
 lines_of() { printf '%s\n' "$1" | grep -c .; }
 
 # --- fixtures: a task-loop repository --------------------------------------
@@ -270,29 +268,6 @@ lint() { # lint <file> [args...] — run from the lint directory; sets out and r
 }
 lint_probe() { # lint_probe <file> — the same, with the lane probe on
   out=$(cd "$LINTDIR" && timeout 120 bash "$LINT" "$1" 2>&1); rc=$?
-}
-
-# --- A1 ----------------------------------------------------------------------
-
-a1() {
-  local skill reviewer criteria
-  skill=$(skill_doc "$PLUGIN/skills/writing-plans/SKILL.md")
-  reviewer=$(doc "$PLUGIN/skills/writing-plans/references/plan-reviewer-prompt.md")
-  criteria=$(doc "$PLUGIN/criteria/plan-review.md")
-
-  matches "A1: writing-plans says a task carries its interfaces" "$skill" 'A task carries its files, its interfaces'
-  matches "A1: writing-plans says it carries the complete code of its tests" "$skill" 'the complete code of its tests'
-  matches "A1: writing-plans says it carries the commands that verify it" "$skill" 'the commands that verify it'
-  matches "A1: writing-plans limits implementation code to a configuration value" "$skill" 'Implementation code appears only where no test can pin the behaviour: a configuration value'
-  matches "A1: writing-plans names generated-file or migration commands" "$skill" 'a generated-file or migration command'
-  matches "A1: writing-plans names a fixed constant the spec names" "$skill" 'a fixed constant the spec names'
-  matches "A1: writing-plans gives Step 3 no implementation code" "$skill" 'Step 3 describes the implementation; it carries no implementation code'
-
-  matches "A1: the plan-reviewer prompt expects interfaces, test code and verify commands in a code task" "$reviewer" 'a code task gives its interfaces, the complete code of its tests and its verify commands'
-  matches "A1: the plan-reviewer prompt treats a missing or stub test as a finding" "$reviewer" 'a missing or stub test is'
-  matches "A1: the plan-reviewer prompt sends the reviewer to the plan-review criteria" "$reviewer" 'criteria/plan-review.md'
-  matches "A1: the plan-review criteria require interfaces and the complete code of the tests" "$criteria" 'every task gives its interfaces and the complete code of its tests'
-  matches "A1: the plan-review criteria limit implementation code to the three cases" "$criteria" 'implementation code appears only for a configuration value, a generated-file or migration command, or a fixed constant the spec names'
 }
 
 # --- A2 ----------------------------------------------------------------------
@@ -507,29 +482,11 @@ a7() {
   lacks "A7: nor resume Task 1" "$out" "Resume at Task 1"
   lacks "A7: nor resume Task 3" "$out" "Resume at Task 3"
   has "A7: and the prompt tells the next session to write the members' complete lines" "$out" "then write their complete lines"
-
-  local sdd delegated
-  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")
-  delegated=$(doc "$PLUGIN/reference/delegated-task.md")
-  matches "A7: the skill's recovery table reads awaiting group review as the next group dispatch" "$sdd" 'awaiting group review. \| Reviewed by the next group dispatch .* never re-dispatch its implementer'
-  matches "A7: delegated-task's recovery table says the same" "$delegated" 'awaiting group review \(commits …\). \| Held: never re-dispatch its implementer'
 }
 
 # --- A8 ----------------------------------------------------------------------
 
 a8() {
-  local delegated sdd
-  delegated=$(doc "$PLUGIN/reference/delegated-task.md")
-  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/references/process-graph.md")
-  matches "A8: held tasks accumulate in sequential mode" "$delegated" 'In sequential mode held tasks accumulate'
-  matches "A8: the group review runs when 4 tasks are held" "$delegated" 'runs when 4 tasks are held'
-  matches "A8: and before a task review-route reviews alone is dispatched" "$delegated" 'before you dispatch a task .review-route. reviews alone'
-  matches "A8: and after the plan's last task" "$delegated" 'and after the plan.s last task'
-  matches "A8: once triggered no new task is dispatched until the group is clean" "$delegated" 'no new task is dispatched until the group is clean'
-  matches "A8: fixes inside a group run one task at a time" "$delegated" 'fixes inside a group run one task at a time'
-  matches "A8: each member gets its own complete line once the group is clean" "$delegated" 'each member gets its own .complete. line once the group is clean'
-  matches "A8: the skill's flow reviews the group at 4 held, before a review=task dispatch and after the last task" "$sdd" 'review the group at 4 held, before a review=task dispatch, and after the last task'
-
   # Recovery: a group in its fix rounds blocks every new dispatch.
   new_repo a8
   local i
@@ -616,10 +573,6 @@ a9() {
   lacks "A9: and not Task 7's" "$s1" "f7.txt"
   has "A9: Task 7's section holds its ref's file" "$s3" "f7.txt"
   lacks "A9: and not Task 6's" "$s3" "f6.txt"
-
-  local waves
-  waves=$(doc "$PLUGIN/reference/parallel-waves.md")
-  matches "A9: parallel-waves dispatches the group once every grouped task in the wave is held" "$waves" 'once every grouped task in the wave is held, before any of them merges, run one .task-step review --group'
 }
 
 # --- A10 ---------------------------------------------------------------------
@@ -638,12 +591,9 @@ EOF
 }
 
 a10() {
-  local sdd waves
-  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")
+  local waves
   waves=$(doc "$PLUGIN/reference/parallel-waves.md")
-  matches "A10: the skill's ledger grammar attributes each finding clause to its task" "$sdd" 'Group <list>: review round R/2 \(Task <N>: <k> open — <one-liners> \| clean; …; commits <a7>\.\.<b7> \(Task <N>\)\[, <a7>\.\.<b7> \(Task <M>\)\]\)'
   matches "A10: parallel-waves shows the same attributed line" "$waves" 'Group <list>: review round R/2 \(Task <N>: <k> open — <one-liners> \| clean; …; commits <a7>\.\.<b7> \(Task <N>\)'
-  matches "A10: the delegated-task reference puts one range per fixed member in the commits clause" "$(doc "$PLUGIN/reference/delegated-task.md")" 'one .<a7>\.\.<b7> \(Task <N>\). range per member fixed in that round'
 
   # next-step reads the per-task clauses: only the member with open findings is named.
   new_repo a10
@@ -706,20 +656,6 @@ a11() {
   check "A11: a third round is refused with exit 7" "$rc" "7"
   has "A11: and the refusal names the cap of 2" "$err" "past the cap of 2"
   matches "A11: and sends the findings to the breaker" "$err" 'breaker'
-
-  local esc delegated exec_doc
-  esc=$(doc "$PLUGIN/skills/subagent-driven-development/references/escalation.md")
-  delegated=$(doc "$PLUGIN/reference/delegated-task.md")
-  exec_doc=$(doc "$PLUGIN/reference/executor-lane.md")
-  matches "A11: round 2 is a fresh dispatch on the successor rung" "$esc" 'Fix round 2\.\*\* Dispatch a fresh implementer on the successor rung'
-  matches "A11: the same rung when the successor is SPLIT" "$esc" 'the same rung when that successor is .SPLIT.'
-  matches "A11: a split is reached only through the breaker's AMEND" "$esc" 'a split is reached only through the breaker.s AMEND'
-  matches "A11: an executor task's round 2 leaves the lane by HANDBACK" "$esc" 'round 2 leaves the lane by .HANDBACK. instead of climbing a rung'
-  matches "A11: executor-lane.md hands round 2 back to the task's Implementer" "$exec_doc" 'HANDBACK'
-  matches "A11: a finding still open after round 2 goes to the breaker" "$delegated" 'A finding still open after round 2 goes to the breaker|still open after (fix )?round 2 (goes|go) to the breaker|round 2 .{0,80}(goes|go) to the breaker'
-  matches "A11: the ledger's fix-round line is R/2" "$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")" 'Task <N>: fix round R/2'
-  absent "A11: the re-review prompt no longer carries a Progress section" "$(cat "$PLUGIN/skills/subagent-driven-development/references/re-review-prompt.md")" '\*\*Progress:\*\*'
-  absent "A11: nor the stall rule's progress field in the fix-round grammar" "$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")" 'progress [a-z-]+ -> '
 }
 
 # --- A12 ---------------------------------------------------------------------
@@ -768,17 +704,6 @@ a12() {
     'Group 4-5: review round 1/5 (1 addressed, 1 open — meter width; commits def4567..efa5678; resumed)')")
   check "A12: and a Group range line of an older run keeps its R/5" "$got" "4=1/5 5=1/5"
 
-  # Task and Wave lines are read by the controller from the recovery tables.
-  local sdd delegated waves
-  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")
-  delegated=$(doc "$PLUGIN/reference/delegated-task.md")
-  waves=$(doc "$PLUGIN/reference/parallel-waves.md")
-  matches "A12: the skill maps R/5 on a Task, Group or Wave line: R = 1 resumes at round 2, R >= 2 goes to the breaker" "$sdd" 'A .Task., .Group. or .Wave. round line written before the two-round cap reads .R/5.: R = 1 resumes at round 2, and R >= 2 goes to the breaker'
-  matches "A12: the Task recovery table resumes fix round 1/5 at round 2" "$delegated" 'fix round 1/2., or .fix round 1/5. from an older run \| Resume the loop at round 2'
-  matches "A12: and sends fix round R/5 with R >= 2 to the breaker" "$delegated" 'fix round 2/2., or .fix round R/5. with R >= 2 from an older run \| Go to the breaker'
-  matches "A12: the Group recovery row maps review round 1/5 to round 2" "$sdd" 'review round 1/5. from an older run \| Resume the group.s loop at round 2'
-  matches "A12: and review round R/5 with R >= 2 to the breaker" "$sdd" 'review round R/5. with R >= 2 from an older run \| Go to the breaker'
-  matches "A12: a Wave R/5 line follows the same rule in parallel-waves" "$waves" 'Wave <k>: fix round R/5. line: R = 1 resumes at round 2, R >= 2 goes to the breaker'
 }
 
 # --- A13 ---------------------------------------------------------------------
@@ -838,53 +763,6 @@ a13() {
   check "A13: a wave the plan lacks exits 2" "$rc" "2"
 }
 
-# --- A14 ---------------------------------------------------------------------
-
-a14() {
-  local waves sdd
-  waves=$(doc "$PLUGIN/reference/parallel-waves.md")
-  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")
-  matches "A14: a wave of one task closes like any wave" "$waves" 'A wave of one task is an ordinary task: .* and it closes by §5 like any wave'
-  matches "A14: every wave closes with an integrated or a merged line, one-task and serialized waves included" "$waves" 'Every wave closes with an .integrated. or a .merged. line, one-task and serialized waves included'
-  matches "A14: the ledger grammar has the merged line" "$waves" 'Wave <k>: merged \(head <sha7>; check at wave <m>\)'
-  matches "A14: merged closes a wave as integrated does" "$waves" '.merged. closes a wave as .integrated. does'
-  matches "A14: the skill's ledger grammar has the merged line" "$sdd" 'Wave <k>: merged \(head <sha7>; check at wave <m>\)'
-  matches "A14: a merged line whose head is HEAD proves the next wave's base with nothing rerun" "$waves" 'proves the base when its head is .HEAD., or an ancestor of .HEAD. with no task commits between'
-  matches "A14: and then nothing reruns" "$waves" 'Then nothing reruns'
-  matches "A14: a wave of one task runs the base proof only, then the task loop" "$waves" 'For a wave of one task, run step 2 only, then the task loop in the checkout'
-  matches "A14: the next wave starts on a closing line" "$waves" 'every earlier wave closed by its .integrated. or .merged. line'
-}
-
-# --- A15 ---------------------------------------------------------------------
-
-a15() {
-  local waves
-  waves=$(doc "$PLUGIN/reference/parallel-waves.md")
-  matches "A15: the base proof writes its failing test names to base-proof-failures.txt" "$waves" 'writes .<workspace>/base-proof-failures.txt.'
-  matches "A15: a failing check whose lines all appear in the file counts as passing" "$waves" 'A failing check whose failing lines, taken as in §1, all appear in .<workspace>/base-proof-failures.txt. counts as passing'
-  matches "A15: a full check is then logged integrated with baseline failures only" "$waves" 'Wave <k>: integrated \(head <sha7>; <command> → pass; baseline failures only\)'
-  matches "A15: the comparison is a subset test" "$waves" 'the failures are a subset when'
-  matches "A15: a new failure logs check failed and runs the fix loop" "$waves" 'any other failure logs .Wave <k>: check failed'
-  matches "A15: the fix dispatch gets every task diff since the last passing check" "$waves" 'The fix dispatch gets every task diff since the last passing check, the last .Wave <j>: integrated. line'
-  matches "A15: the diff runs from that line's head to HEAD through review-package" "$waves" 'review-package PLAN_FILE <its head> HEAD'
-  matches "A15: from the first wave's base when there is no passing check" "$waves" 'from the first wave.s base when there is none'
-  matches "A15: the skill's ledger grammar has the baseline clause" "$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")" 'Wave <k>: integrated \(head <sha7>; <command> → pass\[; baseline failures only\]\)'
-}
-
-# --- A16 ---------------------------------------------------------------------
-
-a16() {
-  local waves
-  waves=$(doc "$PLUGIN/reference/parallel-waves.md")
-  matches "A16: a merged or integrated line proves the base when its sha is an ancestor of HEAD" "$waves" 'git merge-base --is-ancestor <sha7> HEAD. holds'
-  matches "A16: with only bookkeeping commits between" "$waves" 'every commit .git log --format=.%h %s. --name-only <sha7>\.\.HEAD. lists is your own bookkeeping'
-  matches "A16: bookkeeping is the ledger, amendments, a register or the roadmap" "$waves" 'bookkeeping \(the ledger, amendments, a register or the roadmap; no path any task.s .\*\*Files:\*\*. names\)'
-  matches "A16: and then nothing reruns" "$waves" 'Then nothing reruns'
-  matches "A16: only a task commit outside any wave forces the fallback proof" "$waves" 'Only a task commit outside any wave forces the fallback proof'
-  matches "A16: the fallback is the Wave check, else the full Integration check" "$waves" 'the header.s Wave check \(amendments applied\) when it has one, else the full Integration check'
-  matches "A16: a ledger with no closing line yet proves its base with the full check" "$waves" 'With no closing line yet \(the first wave\), the proof is the full check'
-}
-
 # --- A17 ---------------------------------------------------------------------
 
 a17() {
@@ -901,18 +779,6 @@ a17() {
   gen_plan "" "0 0 1 0 sonnet-low" > "$LINTDIR/pr-light.md"
   out=$(cd "$LINTDIR" && timeout 60 bash "$ROUTE" pr-light.md --plan-round 3 2>&1); rc=$?
   check "A17: a plan of light tasks is capped at 2 as well" "$rc" "2"
-
-  local wp bs ar
-  wp=$(skill_doc "$PLUGIN/skills/writing-plans/SKILL.md")
-  bs=$(skill_doc "$PLUGIN/skills/brainstorming/SKILL.md")
-  ar=$(doc "$PLUGIN/reference/auto-run.md")
-  matches "A17: the next plan-review round runs only on a Critical finding or a score of 8 or below" "$wp" 'Run the next round only when a round returned a Critical finding or any score of 8 or below'
-  matches "A17: on a Claude plan the cap is 2 and there is no third" "$wp" 'On a Claude plan the cap is 2 whatever the task totals: round 2 is the delta round, and there is no third'
-  matches "A17: the Fable spec review runs one round" "$ar" 'Fable runs one round'
-  matches "A17: a second only when round 1 leaves a Blocker or High finding open" "$ar" 'A second runs only when round 1 leaves a Blocker or High finding open'
-  matches "A17: and checks only those answers" "$ar" 'checks only those answers'
-  matches "A17: brainstorming caps the Fable spec review at two rounds" "$bs" 'Fable spec review.{0,10}\(at most two rounds\)|at most two rounds'
-  matches "A17: brainstorming runs the second round only for a Blocker or High left open" "$bs" 'Blocker or High'
 }
 
 # --- A18 ---------------------------------------------------------------------
@@ -929,34 +795,15 @@ a18() {
   for t in \
     "skills/subagent-driven-development/references/task-reviewer-prompt.md|yes" \
     "skills/subagent-driven-development/references/group-reviewer-prompt.md|yes" \
-    "skills/subagent-driven-development/references/re-review-prompt.md|yes" \
-    "skills/subagent-driven-development/references/ruling-prompt.md|no" \
-    "skills/writing-plans/references/plan-reviewer-prompt.md|yes" \
-    "skills/brainstorming/references/architecture-critic-prompt.md|yes" \
-    "skills/requesting-code-review/references/code-reviewer.md|yes" \
-    "skills/closing-a-milestone/references/milestone-judge.md|no" \
-    "skills/distilling-docs/references/distil-judge.md|no"; do
+    "skills/subagent-driven-development/references/re-review-prompt.md|yes"; do
     name=${t%%|*}; findings=${t##*|}
     text=$(cat "$PLUGIN/$name")
     matches "A18: $(basename "$name") names the report file" "$text" '\[REPORT_FILE\]|Report file:.*-report\.md'
     matches "A18: $(basename "$name") fixes the ## Verdict section" "$text" '^ *## Verdict'
-    matches "A18: $(basename "$name") limits the final message to 10 lines" "$(doc "$PLUGIN/$name")" 'at most 10 lines'
     if [ "$findings" = yes ]; then
       matches "A18: $(basename "$name") fixes the finding-line grammar" "$text" '- \[[A-Za-z|]+\] (\(Task <N>\) )?<file>:<line> — <one-liner>'
     fi
   done
-
-  # The final review and its dedupe are dispatched from final-review.md.
-  text=$(doc "$PLUGIN/reference/final-review.md")
-  matches "A18: final-review.md names the final review's report file" "$text" '\[REPORT_FILE\]. set to .<workspace>/final-review-report.md'
-  matches "A18: and the dedupe's report file" "$text" 'final-dedupe-report.md'
-  matches "A18: and limits both to 10 lines" "$text" 'write nothing else, and reply in at most 10 lines'
-
-  # The spec lists acceptance QA among the judge prompt templates.
-  text=$(cat "$PLUGIN/reference/acceptance-qa.md")
-  matches "A18: acceptance-qa.md names a report file" "$text" '\[REPORT_FILE\]|acceptance-report\.md'
-  matches "A18: acceptance-qa.md fixes a ## Verdict section" "$text" '^ *## Verdict'
-  matches "A18: acceptance-qa.md limits the final message to 10 lines" "$(doc "$PLUGIN/reference/acceptance-qa.md")" 'at most 10 lines'
 }
 
 # --- A19 / A20 ---------------------------------------------------------------
@@ -1248,22 +1095,9 @@ a23() {
 
   # Five fix rounds.
   check "A23: the Codex routing policy keeps review_cap 5" "$(jq -r '.review_cap' < "$PLUGIN/reference/codex-routing.json" | tr -d '\r')" "5"
-  local nc delegated sdd lad
-  nc=$(doc "$PLUGIN/reference/native-codex.md")
-  delegated=$(doc "$PLUGIN/reference/delegated-task.md")
-  sdd=$(doc "$PLUGIN/skills/subagent-driven-development/references/ledger.md")
-  lad=$(doc "$PLUGIN/reference/ladder.md")
-  matches "A23: native-codex.md preserves the five-round review cap" "$nc" 'the five-round review cap'
-  matches "A23: delegated-task.md keeps five rounds on a Host: codex plan" "$delegated" 'On a .Host: codex. plan the loop keeps five rounds'
-  matches "A23: and the Codex ledger line is fix round R/5" "$delegated" 'Task <N>: fix round <R>/5'
-  matches "A23: the Codex recovery row reads fix round R/5 as live" "$delegated" '.fix round R/5. on a .Host: codex. plan \| Codex: R < 5 resumes the loop at round R\+1'
-  matches "A23: the skill reads a Codex R/5 line as live, not older" "$sdd" 'On a .Host: codex. plan a .Task. or .Wave. round line reading .R/5. is live, not older'
-  matches "A23: native-codex.md keeps Rule S at 4 for the Codex score" "$nc" 'Apply Rule S first: files \+ spec \+ coupling must be'
-  matches "A23: the ladder keeps the Codex carve-out at reducible >= 4" "$lad" 'Host: codex. plan keeps .reducible >= 4.|keeps .reducible >= 4.'
-  matches "A23: writing-plans keeps code-given tasks on a Codex host" "$(skill_doc "$PLUGIN/skills/writing-plans/SKILL.md")" 'On a Codex host, tasks keep the code-given shape'
 }
 
-ALL="a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23"
+ALL="a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a17 a18 a19 a20 a21 a22 a23"
 if [ $# -gt 0 ]; then
   sel=""
   for n in "$@"; do sel="$sel $(tr 'A-Z' 'a-z' <<<"$n")"; done

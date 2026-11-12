@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance tests for the task-loop steps spec
 # (docs/dforge/specs/2026-10-26-task-loop-steps-design.md), statements
-# A1-A11, A14 and A15. Each test is written from the statement's text and
+# A1-A11 and A15. Each test is written from the statement's text and
 # reaches the behaviour through the scripts and documents the spec names. The
 # cockpit statements (A12, A13) are in task-loop-steps.acceptance.test.ts.
 # Usage:
@@ -646,43 +646,9 @@ a11() {
   export CLAUDE_CODE_SESSION_ID=$ENV_SID
 }
 
-# --- A14 ---------------------------------------------------------------------
-
-a14() {
-  local SKILL="$PLUGIN/skills/subagent-driven-development/SKILL.md"
-  local CODEX="$PLUGIN/skills/using-dforge/references/codex-tools.md"
-  local skill codex
-  skill=$(cat "$SKILL")
-  codex=$(cat "$CODEX")
-  matches "A14: the skill tells a session to end the turn when only waiting remains" "$skill" '[Ee]nd the turn'
-  matches "A14: and says it for the case where waiting is all that remains" "$skill" '[Oo]nly waiting remains|nothing left but waiting'
-  absent "A14: the skill no longer carries the 290-second sleep wait" "$skill" 'sleep 29[0-9]'
-  absent "A14: nor the stretch-over marker" "$skill" 'stretch-over'
-  local lines
-  lines=$(grep -nE 'Monitor|sleep' "$SKILL")
-  check "A14: every mention of Monitor or sleep in the skill is a prohibition" \
-    "$(grep -vE '[Nn]ever|[Nn]ot |[Nn]o longer|[Ii]nstead of|without' <<<"$lines" | grep -c .)" "0"
-  absent "A14: the skill does not prescribe a Monitor call" "$skill" '(Run|Use|Call|Dispatch|Launch|Start|run|use|call|launch|start) (a |the )?`?Monitor'
-  matches "A14: codex-tools.md keeps wait_agent" "$codex" 'wait_agent'
-  matches "A14: codex-tools.md keeps bounded stretches" "$codex" 'bounded stretches'
-}
-
 # --- A15 ---------------------------------------------------------------------
 
 a15() {
-  local RRP="$PLUGIN/skills/subagent-driven-development/references/re-review-prompt.md" text
-  text=$(cat "$RRP")
-  has "A15: the re-review prompt names dforge:judge-sonnet-high" "$text" "dforge:judge-sonnet-high"
-  has "A15: and dforge:judge-opus for a subtle concurrency fix" "$text" "dforge:judge-opus for a subtle concurrency fix"
-  absent "A15: it names no general-purpose seat" "$text" 'general-purpose'
-  absent "A15: it carries no model argument line" "$text" '^[ ]*model:'
-  matches "A15: it requires the diff file" "$text" 'DIFF_FILE.*(REQUIRED|mandatory|required)'
-  absent "A15: it carries no git diff fallback" "$text" 'git (diff|show|log)'
-  absent "A15: it carries no fallback wording" "$text" '[Ff]all ?back|[Ii]f no diff file|[Ii]f the diff file is (missing|absent)'
-  local DT="$PLUGIN/reference/delegated-task.md" row
-  row=$(grep -E '^\| Scoped re-review' "$DT")
-  absent "A15: delegated-task.md's Scoped re-review row names no general-purpose seat" "$row" 'general-purpose'
-  has "A15: and names dforge:judge-sonnet-high" "$row" "dforge:judge-sonnet-high"
   local seats seats_rc
   seats=$(cd "$PLUGIN" && env -u AR_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR timeout 600 bash tests/seats.test.sh 2>&1); seats_rc=$?
   check "A15: tests/seats.test.sh exits 0" "$seats_rc" "0"
@@ -690,7 +656,7 @@ a15() {
   matches "A15: tests/seats.test.sh reports no failure count" "$seats" ' 0 failed$'
 }
 
-ALL="a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a14 a15"
+ALL="a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a15"
 if [ $# -gt 0 ]; then
   sel=""
   for n in "$@"; do sel="$sel $(tr 'A-Z' 'a-z' <<<"$n")"; done
