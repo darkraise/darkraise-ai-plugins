@@ -739,19 +739,25 @@ export const register: Register = on => {
       return { deny: `dforge: this project keeps AI attribution out of git. Remove "${line}" and try again.` }
     }
     const id = e.tool_use_id
-    const seat = e.agentId === undefined ? null : ((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat ?? null)
-    if ((await read($, activity)).kind === 'running') await setActivity($, now => ({ ...now, tool, agent: seat === null ? null : shortSeat(seat) }))
-    if (id !== undefined && e.agentId === undefined && ASKING_TOOLS.includes(tool)) {
-      await startWait($, id, 'asking', {
-        kind: 'question',
-        title: tool === 'ExitPlanMode' ? '📋 Plan ready for review' : '❓ Claude is asking',
-        detail: questionOf(e) || undefined,
-        fields: (await turnFields($)).slice(0, 1),
-      }, null)
+    // The guards have judged. What follows before next() only feeds the pane,
+    // and a throw here would reach the .catch below, which refuses the call.
+    try {
+      const seat = e.agentId === undefined ? null : ((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat ?? null)
+      if ((await read($, activity)).kind === 'running') await setActivity($, now => ({ ...now, tool, agent: seat === null ? null : shortSeat(seat) }))
+      if (id !== undefined && e.agentId === undefined && ASKING_TOOLS.includes(tool)) {
+        await startWait($, id, 'asking', {
+          kind: 'question',
+          title: tool === 'ExitPlanMode' ? '📋 Plan ready for review' : '❓ Claude is asking',
+          detail: questionOf(e) || undefined,
+          fields: (await turnFields($)).slice(0, 1),
+        }, null)
+      }
+      // The response asking for this call already measured the window: show it while the tool
+      // runs. Only shown: the note and the alert wait for the ledger this call may write.
+      if (e.agentId === undefined) await refresh($, (await live($)).tuning, S.compactWindow, { isShownOnly: true })
+    } catch {
+      // The pane misses this call; the tool still runs.
     }
-    // The response asking for this call already measured the window: show it while the tool
-    // runs. Only shown: the note and the alert wait for the ledger this call may write.
-    if (e.agentId === undefined) await refresh($, (await live($)).tuning, S.compactWindow, { isShownOnly: true })
     let ran: Awaited<ReturnType<typeof next>>
     try {
       ran = await next(e)
