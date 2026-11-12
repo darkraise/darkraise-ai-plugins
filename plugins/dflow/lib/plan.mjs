@@ -80,13 +80,16 @@ export function parsePlan(text) {
       closeTask(index);
       task = {
         number: Number(taskMatch[2]), label: taskMatch[1].trimEnd(), title: taskMatch[3].trim(),
-        line: number, endLine: lines.length, files: [], after: [], run: 'inline', size: 'M', risk: 'none',
+        level: heading[1].length, line: number, endLine: lines.length, files: [], after: [], run: 'inline', size: 'M', risk: 'none',
         steps: [], verify: [],
       };
       return;
     }
     if (heading) {
       const level = heading[1].length;
+      // A heading at the task's own level or above ends the task, so a
+      // checklist under `### Rollout` is never read as the task's steps.
+      if (task && level <= task.level) closeTask(index);
       if (level === 1 && plan.title === null) plan.title = heading[2];
       if (level <= 2) {
         closeTask(index);
@@ -275,8 +278,14 @@ export function setVerify(text, number, commands) {
   const task = parsePlan(text).tasks.find(candidate => candidate.number === number);
   const verifySteps = task.steps.filter(step => /^verify:/i.test(step.text));
   return replaceLines(text, lines => {
-    const first = verifySteps[0].line - 1;
-    const indent = /^[ \t]*/.exec(lines[first])[0];
+    // A task with no verify step gets one after its last step, or after its
+    // last non-blank line when it has no steps at all.
+    let first = verifySteps[0]?.line - 1;
+    if (verifySteps.length === 0) {
+      first = task.steps.length ? task.steps.at(-1).line : task.endLine;
+      while (!task.steps.length && first > task.line && lines[first - 1].trim() === '') first -= 1;
+    }
+    const indent = verifySteps.length ? /^[ \t]*/.exec(lines[first])[0] : '';
     for (const step of [...verifySteps].reverse()) lines.splice(step.line - 1, 1);
     lines.splice(first, 0, ...commands.map(command => `${indent}- [ ] Verify: \`${command}\``));
   });

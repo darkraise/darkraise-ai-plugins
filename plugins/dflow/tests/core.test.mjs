@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { parseBoard } from '../lib/board.mjs';
 import { parsePlan } from '../lib/plan.mjs';
-import { PLAN_FILE, dflow, git, makeProject, makeRepo, read, write } from './helpers.mjs';
+import { PLAN, PLAN_FILE, dflow, git, makeProject, makeRepo, read, write } from './helpers.mjs';
 
 test('init scaffolds the docs once and ignores .dflow', t => {
   const root = makeRepo(t);
@@ -71,4 +71,38 @@ test('status says so when no plan is active, and the brief is empty', t => {
   assert.match(dflow(root, ['status']).stdout, /no active plan on feat\/x/);
   assert.equal(dflow(root, ['status', '--brief']).stdout, '');
   assert.equal(dflow(root, ['nonsense']).status, 2);
+});
+
+test('a refused approval commit leaves the plan unapproved', t => {
+  const root = makeRepo(t);
+  dflow(root, ['init']);
+  write(root, PLAN_FILE, PLAN);
+  write(root, 'docs/dflow/board.md', '# board\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Meter | - | It works | open | - |\n');
+  git(root, 'add', '-A');
+  git(root, 'commit', '-q', '-m', 'docs: draft');
+  write(root, '.git/hooks/pre-commit', '#!/bin/sh\nexit 1\n');
+  fs.chmodSync(path.join(root, '.git/hooks/pre-commit'), 0o755);
+  const refused = dflow(root, ['plan', 'approve']);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /the plan is not approved/);
+  assert.equal(parsePlan(read(root, PLAN_FILE)).fields.approved, undefined);
+  assert.equal(parseBoard(read(root, 'docs/dflow/board.md')).rows[0].state, 'open');
+  assert.equal(git(root, 'status', '--porcelain'), '');
+  fs.rmSync(path.join(root, '.git/hooks/pre-commit'));
+  assert.equal(dflow(root, ['plan', 'approve']).status, 0);
+});
+
+test('a board row that belongs to an open plan is not handed to another', t => {
+  const root = makeProject(t);
+  const taken = dflow(root, ['plan', 'new', 'second', '--title', 'Second', '--board', '1']);
+  assert.equal(taken.status, 1);
+  assert.match(taken.stderr, /board row 1 already belongs to the open plan docs\/dflow\/plans\/2026-11-12-meter\.md/);
+});
+
+test('init accepts a configuration without gates', t => {
+  const root = makeRepo(t);
+  write(root, 'docs/dflow/config.json', '{"darkmem": {"project": "x"}}');
+  const result = dflow(root, ['init', '--darkmem', 'y']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(read(root, 'docs/dflow/config.json')), { darkmem: { project: 'y' }, gates: [] });
 });

@@ -43,10 +43,15 @@ export function runCommand(command, { cwd, timeoutSeconds, logFile, env = proces
       timedOut = true;
       killTree(child);
     }, timeoutSeconds * 1000);
+    let settled = false;
     const finish = status => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       if (process.platform !== 'win32') killTree(child);
       const seconds = (Date.now() - started) / 1000;
+      child.stdout.destroy();
+      child.stderr.destroy();
       log.end(`[exit ${timedOut ? `timeout after ${timeoutSeconds}s` : status}]\n`, () => {
         resolve({ ok: status === 0 && !timedOut, status, timedOut, seconds, output: kept.toString('utf8') });
       });
@@ -55,6 +60,11 @@ export function runCommand(command, { cwd, timeoutSeconds, logFile, env = proces
       collect(Buffer.from(`${error.message}\n`));
       finish(127);
     });
+    // `close` waits for every process that inherited the pipes, so a command
+    // that exits 0 but leaves a background child would look hung. Its exit is
+    // the result; the grace only lets the last output arrive, and finish then
+    // kills what the command left behind.
+    child.on('exit', status => setTimeout(() => finish(status ?? 1), 300));
     child.on('close', status => finish(status ?? 1));
   });
 }

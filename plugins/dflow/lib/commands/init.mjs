@@ -41,6 +41,7 @@ export async function run(ctx, argv, { out }) {
   fs.mkdirSync(paths.plans, { recursive: true });
 
   const config = readJson(paths.config, null) ?? { gates: [], darkmem: { project: '' } };
+  config.gates ??= [];
   for (const gate of values.gate ?? []) {
     const at = gate.indexOf('=');
     if (at < 1) fail(`--gate takes name=command, got ${JSON.stringify(gate)}`);

@@ -5,7 +5,7 @@ import { addRow, emptyBoard, parseBoard, rewriteRow } from '../board.mjs';
 import { lintPlan, setField, template } from '../plan.mjs';
 import { currentBranch, relative } from '../repo.mjs';
 import { appendEvent, loadState, saveState } from '../state.mjs';
-import { activePlan, loadPlan, refreshHud } from '../status.mjs';
+import { activePlan, loadPlan, openPlans, refreshHud } from '../status.mjs';
 import { fail, git, mustGit, readText, today } from '../util.mjs';
 
 function resolvePlan(ctx, name) {
@@ -25,6 +25,8 @@ export function linkBoardRow(ctx, { number, item, planRel, acceptance }) {
   if (number !== undefined) {
     const row = parseBoard(text).rows.find(candidate => candidate.number === number);
     if (!row) fail(`board row ${number} does not exist in ${relative(ctx.root, ctx.paths.board)}`);
+    const owner = openPlans(ctx).find(entry => entry.rel === row.assigned && entry.rel !== planRel);
+    if (owner) fail(`board row ${number} already belongs to the open plan ${owner.rel}; give this plan a row of its own`);
     const changes = { assigned: planRel };
     if (row.state === 'open') changes.state = 'planned';
     text = rewriteRow(text, number, changes);
@@ -78,16 +80,26 @@ function approve(ctx, argv, out) {
   const { errors } = lintPlan(entry.plan);
   if (errors.length) fail(`${entry.rel} does not lint (${errors.length} problem(s)); run \`dflow plan check\``);
   if (entry.plan.fields.approved) fail(`${entry.rel} was approved on ${entry.plan.fields.approved}`);
-  fs.writeFileSync(entry.file, setField(entry.text, 'Approved', today(ctx.env)));
+  const boardBefore = readText(ctx.paths.board);
   const committed = [entry.rel];
   const row = Number(entry.plan.fields.board);
-  if (Number.isInteger(row) && fs.existsSync(ctx.paths.board)) {
+  // The row is linked first: it is the step that can refuse, and nothing has
+  // been written yet.
+  if (Number.isInteger(row) && boardBefore !== null) {
     linkBoardRow(ctx, { number: row, planRel: entry.rel });
     committed.push(relative(ctx.root, ctx.paths.board));
   }
+  fs.writeFileSync(entry.file, setField(entry.text, 'Approved', today(ctx.env)));
   mustGit(ctx.root, ['add', '--', ...committed]);
   const commit = git(ctx.root, ['commit', '-q', '-m', `docs(dflow): approve plan ${entry.slug}`.slice(0, 72), '--', ...committed]);
-  if (!commit.ok) fail(`the approval commit failed: ${(commit.stderr || commit.stdout).trim()}`);
+  if (!commit.ok) {
+    // An approval without its commit would leave no baseline to compare
+    // later verify edits against.
+    fs.writeFileSync(entry.file, entry.text);
+    if (boardBefore !== null) fs.writeFileSync(ctx.paths.board, boardBefore);
+    git(ctx.root, ['reset', '-q', '--', ...committed]);
+    fail(`the approval commit failed and the plan is not approved:\n${(commit.stderr || commit.stdout).trim()}`);
+  }
   const state = loadState(ctx.paths);
   state.plan = entry.rel;
   saveState(ctx.paths, state);

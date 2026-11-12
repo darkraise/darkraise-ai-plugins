@@ -19,8 +19,13 @@ export function amendedVerify(ctx, active) {
   const before = new Map(approved.plan.tasks.map(task => [task.number, task.verify]));
   return active.plan.tasks.flatMap(task => {
     const was = before.get(task.number);
-    if (!was || JSON.stringify(was) === JSON.stringify(task.verify)) return [];
-    const logged = active.plan.log.some(entry => entry.task === task.number && entry.kind === 'V');
+    const notes = active.plan.log.filter(entry => entry.task === task.number);
+    // A task the approved plan did not have is explained by a logged
+    // amendment; a changed command only by a V line that names that command,
+    // so one `dflow amend` does not excuse a later hand edit.
+    if (!was) return [{ task: task.number, was: [], now: task.verify, added: true, logged: notes.some(entry => entry.kind === 'A' || entry.kind === 'V') }];
+    if (JSON.stringify(was) === JSON.stringify(task.verify)) return [];
+    const logged = notes.some(entry => entry.kind === 'V' && task.verify.every(command => entry.text.includes(`\`${command}\``)));
     return [{ task: task.number, was, now: task.verify, logged }];
   });
 }

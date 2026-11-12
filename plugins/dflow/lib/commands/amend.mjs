@@ -18,7 +18,7 @@ export async function run(ctx, argv, { out }) {
   const amended = setVerify(active.text, number, values.verify);
   fs.writeFileSync(active.file, appendLog(amended, {
     date: today(ctx.env), task: number, kind: 'V',
-    message: `verify was ${task.verify.map(command => `\`${command}\``).join(', ')} — ${values.reason}`,
+    message: `verify is now ${values.verify.map(command => `\`${command}\``).join(', ')}, was ${task.verify.map(command => `\`${command}\``).join(', ') || 'missing'} — ${values.reason}`,
   }));
   taskRecord(state, active.slug, number).attempts = 0;
   saveState(ctx.paths, state);

@@ -83,3 +83,16 @@ test('file patterns match paths, directories and globs', () => {
   assert.ok(!matchesPath('*.md', 'docs/README.md'));
   assert.ok(!matchesPath('src/limit.mjs', 'src/limit.mjs.bak'));
 });
+
+test('a heading at the task level that is not a task ends the task', () => {
+  const plan = parsePlan(PLAN.replace('## Log', '### Rollout checklist\n- [ ] announce it\n**Files:** elsewhere\n\n## Log'));
+  assert.equal(plan.tasks[1].steps.length, 2);
+  assert.deepEqual(plan.tasks[1].files, ['src/meter.mjs']);
+  assert.equal(tickTask(PLAN.replace('## Log', '### Rollout checklist\n- [ ] announce it\n\n## Log'), 2).includes('- [ ] announce it'), true);
+});
+
+test('a verify step can be added to a task that has none', () => {
+  const bare = PLAN.replace('- [ ] Verify: `node verify2.mjs`\n', '');
+  assert.deepEqual(parsePlan(setVerify(bare, 2, ['node v.mjs'])).tasks[1].verify, ['node v.mjs']);
+  assert.deepEqual(parsePlan(setVerify(bare, 2, ['node v.mjs'])).tasks[0].verify, ['node verify1.mjs']);
+});

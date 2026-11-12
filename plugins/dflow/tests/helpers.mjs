@@ -44,9 +44,9 @@ export function makeRepo(t, { branch = 'feat/x' } = {}) {
   return root;
 }
 
-export function dflow(root, args, { env = {}, input } = {}) {
+export function dflow(root, args, { env = {}, input, cwd = '.' } = {}) {
   const home = path.join(root, '.test-home');
-  return sh(root, process.execPath, [BIN, ...args], {
+  return sh(path.join(root, cwd), process.execPath, [BIN, ...args], {
     input,
     env: { ...process.env, HOME: home, DFLOW_HOME: path.join(home, '.dflow'), DFLOW_TODAY: '2026-11-12', CLAUDE_CONFIG_DIR: '', ...env },
   });
@@ -88,6 +88,10 @@ export function makeProject(t, { plan = PLAN, config } = {}) {
   const init = dflow(root, ['init']);
   if (init.status !== 0) throw new Error(init.stderr);
   if (config) write(root, 'docs/dflow/config.json', JSON.stringify(config));
+  // The scripts a test stands in for a project's test commands with are
+  // ignored, as build output would be: `dflow done` refuses a tree that holds
+  // changes it would not commit.
+  fs.appendFileSync(path.join(root, '.gitignore'), 'verify*.mjs\ncheck.mjs\nsuite.mjs\nlint.mjs\nprobe.mjs\nshot.png\n.transcripts/\n');
   write(root, 'docs/dflow/board.md', '# board\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Meter | - | It works | open | - |\n');
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', 'docs: set up dflow');

@@ -10,7 +10,7 @@ import { runCommand } from '../run.mjs';
 import { appendEvent, loadState, planState, saveState, taskRecord } from '../state.mjs';
 import { refreshHud, taskBrief } from '../status.mjs';
 import { weakenedTests } from '../tests-check.mjs';
-import { fail, git, matchesAny, mustGit, readText, shortSha, tail, today, writeJson } from '../util.mjs';
+import { fail, git, gitList, matchesAny, mustGit, readText, shortSha, tail, today, writeJson } from '../util.mjs';
 import { requireActive } from './next.mjs';
 import { flush } from './sync.mjs';
 
@@ -23,12 +23,13 @@ const CHOICE = [
 ];
 
 function staged(ctx) {
-  return mustGit(ctx.root, ['diff', '--cached', '--name-only', '--no-renames']).split('\n').filter(Boolean);
+  return gitList(ctx.root, ['diff', '--cached', '--name-only', '--no-renames', '-z']);
 }
 
-function unstagedIn(ctx, patterns) {
-  const lines = mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=all', '--no-renames']).split('\n').filter(Boolean);
-  return lines.filter(line => line[1] !== ' ').map(line => line.slice(3)).filter(file => matchesAny(patterns, file));
+// Every path whose working copy differs from the index: an unstaged edit or
+// an untracked file that is not ignored.
+function unstaged(ctx) {
+  return gitList(ctx.root, ['status', '--porcelain', '--untracked-files=all', '--no-renames', '-z']).filter(entry => entry[1] !== ' ').map(entry => entry.slice(3));
 }
 
 export async function run(ctx, argv, { out }) {
@@ -49,16 +50,25 @@ export async function run(ctx, argv, { out }) {
   if (task.state === 'blocked') fail(`Task ${number} is blocked (${task.blockedReason}); clear it with \`dflow unblock ${number} "<what changed>"\``);
   if (!task.ready) fail(`Task ${number} waits on Task ${task.after.filter(dependency => !tasks.find(candidate => candidate.number === dependency)?.done).join(', ')}`);
 
+  if (!task.verify.length) fail(`Task ${number} has no \`Verify:\` step, and a task is done only when a command proves it; add one with \`dflow amend ${number} --verify "<command>" --reason "<why>"\``);
   const amended = amendedVerify(ctx, active).find(entry => entry.task === number && !entry.logged);
-  if (amended) fail(`Task ${number}'s verify command differs from the approved plan and no log line explains it; use \`dflow amend ${number} --verify "<command>" --reason "<why>"\``);
+  if (amended?.added) fail(`Task ${number} is not in the approved plan and no log line explains it; record the amendment with \`dflow log ${number} A "<what was added and why>"\``);
+  if (amended) fail(`Task ${number}'s verify command differs from the approved plan and no log line names the current command; use \`dflow amend ${number} --verify "<command>" --reason "<why>"\``);
 
   const boardRel = relative(ctx.root, ctx.paths.board);
   const own = file => file === active.rel || file === boardRel;
   const stagedFiles = staged(ctx).filter(file => !own(file));
   if (!stagedFiles.length && !values['allow-empty']) fail(`nothing is staged; \`git add\` Task ${number}'s files first (or pass --allow-empty for a task that changes no file)`);
-  const forgotten = unstagedIn(ctx, task.files).filter(file => !own(file));
-  if (forgotten.length) fail(`these files of Task ${number} have changes that are not staged: ${forgotten.join(', ')}; stage or revert them`);
-  const outside = stagedFiles.filter(file => !matchesAny(task.files, file) && !file.startsWith('docs/dflow/'));
+  // Verify runs on the working tree, so the working tree has to be what gets
+  // committed: anything not staged would be verified and then left out.
+  const forgotten = unstaged(ctx).filter(file => !own(file));
+  if (forgotten.length) {
+    fail(`the working tree holds changes that are not staged, so the verified tree would not be the committed one: ${forgotten.slice(0, 12).join(', ')}${forgotten.length > 12 ? `, and ${forgotten.length - 12} more` : ''}\nstage what belongs to Task ${number}; stash, revert or ignore the rest`);
+  }
+  // The living docs may change in any task. The configuration may not ride
+  // along unseen: it sets the gates and what counts as a test.
+  const living = file => file.startsWith('docs/dflow/') && file.endsWith('.md');
+  const outside = stagedFiles.filter(file => !matchesAny(task.files, file) && !living(file));
   if (outside.length && !values.extra) fail(`staged files outside Task ${number}'s Files: ${outside.join(', ')}; unstage them, or pass --extra "<why they belong to this task>"`);
   const weakened = weakenedTests(ctx, ['--cached']);
   if (weakened.length && !values.weaken) fail(`this commit makes the tests prove less:\n${weakened.map(line => `  ${line}`).join('\n')}\nrestore them, or pass --weaken "<why this is right>"`);

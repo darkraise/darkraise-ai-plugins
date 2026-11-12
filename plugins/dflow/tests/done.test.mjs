@@ -72,7 +72,9 @@ test('done refuses out of order, with nothing staged, and with unstaged task fil
   assert.match(dflow(root, ['done', '1', '-m', 'x']).stderr, /nothing is staged/);
   stageTask1(root);
   write(root, 'src/limit.mjs', 'export const parseLimit = () => 1;\n');
-  assert.match(dflow(root, ['done', '1', '-m', 'x']).stderr, /not staged: src\/limit\.mjs/);
+  write(root, 'notes with space.txt', 'scratch\n');
+  const refused = dflow(root, ['done', '1', '-m', 'x']).stderr;
+  assert.match(refused, /the verified tree would not be the committed one: src\/limit\.mjs, notes with space\.txt/);
 });
 
 test('files outside the task stop done until explained, and the reason is logged', t => {
@@ -119,7 +121,11 @@ test('a verify line edited by hand stops done; amend changes it with a logged re
   assert.equal(amended.status, 0, amended.stderr);
   const plan = parsePlan(read(root, PLAN_FILE));
   assert.deepEqual(plan.tasks[0].verify, ['node verify1.mjs --strict']);
-  assert.match(plan.log[0].text, /verify was `node verify1\.mjs` — the flag is required/);
+  assert.equal(plan.log[0].text, 'verify is now `node verify1.mjs --strict`, was `node verify1.mjs` — the flag is required');
+  // One logged amendment does not excuse a later edit by hand.
+  write(root, PLAN_FILE, read(root, PLAN_FILE).replace('- [ ] Verify: `node verify1.mjs --strict`', '- [ ] Verify: `true`'));
+  assert.match(dflow(root, ['done', '1', '-m', 'x']).stderr, /no log line names the current command/);
+  write(root, PLAN_FILE, read(root, PLAN_FILE).replace('- [ ] Verify: `true`', '- [ ] Verify: `node verify1.mjs --strict`'));
   assert.equal(dflow(root, ['done', '1', '-m', 'feat: parse']).status, 0);
 });
 
@@ -162,4 +168,62 @@ test('log appends a decision line and rejects kinds the CLI writes itself', t =>
   assert.equal(dflow(root, ['log', '-', 'G', 'the suite needs TZ=UTC']).status, 0);
   assert.equal(dflow(root, ['log', '1', 'B', 'x']).status, 1);
   assert.deepEqual(parsePlan(read(root, PLAN_FILE)).log.map(entry => [entry.task, entry.kind]), [[1, 'D'], [null, 'G']]);
+});
+
+test('a task without a verify command cannot be done, and a task added after approval needs a logged amendment', t => {
+  const root = makeProject(t);
+  stageTask1(root);
+  write(root, PLAN_FILE, read(root, PLAN_FILE).replace('- [ ] Verify: `node verify1.mjs`\n', ''));
+  const refused = dflow(root, ['done', '1', '-m', 'x']);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /Task 1 has no `Verify:` step/);
+  assert.equal(parsePlan(read(root, PLAN_FILE)).tasks[0].done, false);
+  assert.equal(dflow(root, ['amend', '1', '--verify', 'node verify1.mjs', '--reason', 'restored']).status, 0);
+  assert.deepEqual(parsePlan(read(root, PLAN_FILE)).tasks[0].verify, ['node verify1.mjs']);
+  assert.equal(dflow(root, ['done', '1', '-m', 'feat: parse']).status, 0);
+
+  write(root, 'verify2.mjs', PASS);
+  write(root, 'src/meter.mjs', '1\n');
+  git(root, 'add', 'src');
+  dflow(root, ['done', '2', '-m', 'feat: draw']);
+  write(root, PLAN_FILE, read(root, PLAN_FILE).replace('## Log', '### Task 3: Added later\n**Files:** src/late.mjs · **After:** 2 · **Run:** inline · **Size:** S\n- [ ] Implement it\n- [ ] Verify: `true`\n\n## Log'));
+  write(root, 'src/late.mjs', '1\n');
+  git(root, 'add', 'src');
+  assert.match(dflow(root, ['done', '3', '-m', 'feat: late']).stderr, /Task 3 is not in the approved plan/);
+  dflow(root, ['log', '3', 'A', 'added a task for the late module the owner asked for']);
+  assert.equal(dflow(root, ['done', '3', '-m', 'feat: late']).status, 0);
+});
+
+test('the dflow configuration cannot ride along in a task commit unseen', t => {
+  const root = makeProject(t);
+  stageTask1(root);
+  write(root, 'docs/dflow/config.json', JSON.stringify({ gates: [] }));
+  write(root, 'docs/dflow/project.md', '# updated\n');
+  git(root, 'add', 'docs');
+  const refused = dflow(root, ['done', '1', '-m', 'feat: parse']);
+  assert.match(refused.stderr, /outside Task 1's Files: docs\/dflow\/config\.json;/);
+  assert.equal(dflow(root, ['done', '1', '-m', 'feat: parse', '--extra', 'the gate list moved']).status, 0);
+});
+
+test('moving a test file is not weakening it, and a file name with a space is matched', t => {
+  const root = makeProject(t, { plan: PLAN.replace('**Files:** src/meter.mjs', '**Files:** src/meter.mjs, src/my meter.mjs, tests/') });
+  stageTask1(root);
+  dflow(root, ['done', '1', '-m', 'feat: parse']);
+  write(root, 'verify2.mjs', PASS);
+  write(root, 'src/my meter.mjs', '1\n');
+  git(root, 'mv', 'tests/limit.test.mjs', 'tests/parse.test.mjs');
+  git(root, 'add', '-A', 'src', 'tests');
+  const done = dflow(root, ['done', '2', '-m', 'feat: draw']);
+  assert.equal(done.status, 0, done.stderr);
+  assert.equal(parsePlan(read(root, PLAN_FILE)).log.length, 0);
+});
+
+test('a verify command that exits 0 but leaves a background process is a pass, not a hang', t => {
+  const root = makeProject(t, { plan: PLAN.replace('`node verify1.mjs`', '`sleep 30 & echo started`') });
+  write(root, 'src/limit.mjs', '1\n');
+  git(root, 'add', 'src');
+  const started = Date.now();
+  const done = dflow(root, ['done', '1', '-m', 'feat: parse']);
+  assert.equal(done.status, 0, done.stdout + done.stderr);
+  assert.ok(Date.now() - started < 10000);
 });

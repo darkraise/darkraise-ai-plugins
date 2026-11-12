@@ -43,6 +43,51 @@ export function gitOut(root, args) {
   return result.ok ? result.stdout.trim() : null;
 }
 
+// Paths as git knows them: NUL-separated output is never quoted or escaped,
+// whatever characters a file name holds.
+export function gitList(root, args) {
+  const result = git(root, args);
+  return result.ok ? result.stdout.split('\0').filter(Boolean) : [];
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+// Returns a release function, or null when another process still holds the
+// lock after waitMs. A lock older than staleMs was left by a killed process.
+export function acquireLock(file, { waitMs = 5000, staleMs = 30000 } = {}) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try {
+      fs.closeSync(fs.openSync(file, 'wx'));
+      return () => fs.rmSync(file, { force: true });
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+    let age = 0;
+    try {
+      age = Date.now() - fs.statSync(file).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (age > staleMs) fs.rmSync(file, { force: true });
+    else if (Date.now() >= deadline) return null;
+    else sleepSync(20);
+  }
+}
+
+export function withLock(file, action, options) {
+  const release = acquireLock(file, options);
+  if (!release) fail(`${file} is locked by another dflow command; try again`);
+  try {
+    return action();
+  } finally {
+    release();
+  }
+}
+
 export function mustGit(root, args) {
   const result = git(root, args);
   if (!result.ok) fail(`git ${args.join(' ')} failed: ${(result.stderr || result.stdout).trim()}`);
