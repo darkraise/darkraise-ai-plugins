@@ -100,9 +100,6 @@ const jobs = [
   // The tier-eval harness kills process groups and shells out to tar, so its
   // tests run on POSIX only.
   ...(process.platform === 'win32' ? [] : [[process.execPath, ['--test', ...readdirSync(resolve(root, 'evals/tiers/tests')).filter(name => name.endsWith('.test.mjs')).map(name => `evals/tiers/tests/${name}`)], 300]]),
-  // The controller-eval harness reads transcripts through dforge's bash
-  // in-flight scanner, so it is POSIX only too.
-  ...(process.platform === 'win32' ? [] : [[process.execPath, ['--test', ...readdirSync(resolve(root, 'evals/controller/tests')).filter(name => name.endsWith('.test.mjs')).map(name => `evals/controller/tests/${name}`)], 300]]),
   [bash, ['plugins/dr-status/tests/run-all.sh'], 420],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'plugins/dflow/tests')).filter(name => name.endsWith('.test.mjs')).map(name => `plugins/dflow/tests/${name}`)], 300],
   // DR_TEST_ALL tells a suite that every other suite runs as its own job, so

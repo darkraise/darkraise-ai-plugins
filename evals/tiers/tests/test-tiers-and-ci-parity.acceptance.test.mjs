@@ -625,7 +625,7 @@ test('A20: the repository itself passes its portability lint over plugins and sc
 // ---------------------------------------------------------------- A21
 function shardTree() {
   const root = scratch('shards');
-  for (const dir of ['scripts', 'tests', 'plugins/dforge/tests', 'plugins/dr-status/tests', 'plugins/dflow/tests', 'evals/tiers/tests', 'evals/controller/tests']) {
+  for (const dir of ['scripts', 'tests', 'plugins/dforge/tests', 'plugins/dr-status/tests', 'plugins/dflow/tests', 'evals/tiers/tests']) {
     cpSync(join(REPO, dir), join(root, dir), { recursive: true });
   }
   return root;
@@ -674,7 +674,6 @@ test('A22: test-all.mjs prints a ::warning:: naming a suite whose duration passe
   write(root, 'scripts/validate-repository.mjs', 'await new Promise(resolve => setTimeout(resolve, 46000));\n');
   write(root, 'tests/quick.test.mjs', "import test from 'node:test';\ntest('quick', () => {});\n");
   write(root, 'evals/tiers/tests/quick.test.mjs', "import test from 'node:test';\ntest('quick', () => {});\n");
-  write(root, 'evals/controller/tests/quick.test.mjs', "import test from 'node:test';\ntest('quick', () => {});\n");
   write(root, 'plugins/dr-status/tests/run-all.sh', 'exit 0\n');
   write(root, 'plugins/dflow/tests/quick.test.mjs', "import test from 'node:test';\ntest('quick', () => {});\n");
   write(root, 'plugins/dforge/tests/quick.test.sh', 'exit 0\n');
