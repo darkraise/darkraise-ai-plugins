@@ -20,5 +20,6 @@
     "hud",
     "mod",
     "token-efficiency"
-  ]
+  ],
+  "types": "./types/index.d.ts"
 }

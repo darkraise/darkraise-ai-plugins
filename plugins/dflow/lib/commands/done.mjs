@@ -10,7 +10,7 @@ import { runCommand } from '../run.mjs';
 import { appendEvent, loadState, planState, saveState, taskRecord } from '../state.mjs';
 import { refreshHud, taskBrief } from '../status.mjs';
 import { weakenedTests } from '../tests-check.mjs';
-import { fail, git, matchesAny, mustGit, readText, shortSha, tail, today } from '../util.mjs';
+import { fail, git, matchesAny, mustGit, readText, shortSha, tail, today, writeJson } from '../util.mjs';
 import { requireActive } from './next.mjs';
 import { flush } from './sync.mjs';
 
@@ -121,6 +121,7 @@ export async function run(ctx, argv, { out }) {
   if (task.risk !== 'none') out(`Task ${number} carries risk "${task.risk}": review its commit now (dflow review pack --task ${number}) before building on it.`);
   const size = contextSize(ctx, state);
   if (size && size.tokens >= ctx.config.context.resetAt) {
+    writeJson(path.join(ctx.paths.stateDir, 'reset.json'), { plan: active.slug, at: new Date().toISOString() });
     out(`RESET: the context is ${formatTokens(size.tokens)}, past the ${formatTokens(ctx.config.context.resetAt)} threshold. End this turn now with one line; the build resumes from the plan in a compacted context.`);
   }
   const reloaded = { ...active, text: planText, plan: after };

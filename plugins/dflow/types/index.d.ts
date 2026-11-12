@@ -1,0 +1,30 @@
+export type Mode = 'band' | 'pane' | 'off'
+
+export type HudTask = { number: number; title: string; state: string; attempts?: number }
+
+export type Hud = {
+  branch: string | null
+  next: string
+  plan: null | {
+    title: string
+    file: string
+    done: number
+    total: number
+    current: HudTask | null
+    blocked: { number: number; reason: string }[]
+  }
+  gates: null | { ok: boolean; stale: boolean; failed: string[] }
+  review: null | { recorded: null | { tier: number }; open: number; blocking: number }
+  board: null | { counts: Record<string, number>; row: null | { number: number; state: string } }
+  sync: { enabled: boolean; queued?: number; conflict?: string | null; error?: string | null }
+  context: null | { resetAt: number }
+  workers: { task: number }[]
+}
+
+export type HudContext = { tokens?: number; window: number }
+
+declare module 'claude-code' {
+  interface PluginState {
+    dflow: { hud: Shaped<Hud | null>; mode: Mode; context: HudContext | null }
+  }
+}
