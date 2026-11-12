@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -100,3 +100,24 @@ export function makeProject(t, { plan = PLAN, config } = {}) {
 }
 
 export const PLAN_FILE = 'docs/dflow/plans/2026-11-12-meter.md';
+
+// spawnSync would block the event loop that serves a stub server in the same
+// process, so tests that talk to one run the CLI asynchronously.
+export function dflowAsync(root, args, { env = {} } = {}) {
+  const home = path.join(root, '.test-home');
+  return new Promise(resolve => {
+    const child = spawn(process.execPath, [BIN, ...args], {
+      cwd: root,
+      env: { ...process.env, HOME: home, DFLOW_HOME: path.join(home, '.dflow'), DFLOW_TODAY: '2026-11-12', CLAUDE_CONFIG_DIR: '', ...env },
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    const timer = setTimeout(() => child.kill('SIGKILL'), 60000);
+    child.on('close', status => {
+      clearTimeout(timer);
+      resolve({ status, stdout, stderr });
+    });
+  });
+}

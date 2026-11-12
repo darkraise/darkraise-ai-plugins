@@ -114,8 +114,7 @@ export async function run(ctx, argv, { out }) {
   entry.commit = sha;
   if (task.risk !== 'none') entry.reviewPending = true;
   saveState(ctx.paths, state);
-  appendEvent(ctx, { plan: active.slug, event: 'done', task: number, commit: sha });
-  await flush(ctx, { quiet: true });
+  appendEvent(ctx, { plan: active.slug, event: 'done', task: number, commit: sha, ...(task.risk !== 'none' ? { review: true } : {}) });
 
   const doneCount = after.tasks.filter(candidate => candidate.done).length;
   out(`Task ${number} done · ${shortSha(sha)} · ${doneCount}/${after.tasks.length}`);
@@ -139,6 +138,7 @@ export async function run(ctx, argv, { out }) {
     }
     for (const line of taskBrief(ctx, reloaded, upcoming, { designLimit: 0 })) out(line);
   }
+  await flush(ctx, { quiet: true });
   refreshHud(ctx);
   return 0;
 }

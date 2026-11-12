@@ -1,9 +1,52 @@
-export async function flush() {}
-export async function pull() {}
-export async function checkpoint() {}
-export async function closeWorkstream() {}
+import { closeStream, loadSync, pull as pullBoard, push, settings, writeCheckpoint } from '../darkmem.mjs';
+import { readEvents } from '../state.mjs';
+import { refreshHud } from '../status.mjs';
+import { fail } from '../util.mjs';
+
+// The quiet callers (done, ship, the hooks) get a short timeout so a slow or
+// absent server never holds up the build; whatever is not sent stays queued.
+export async function flush(ctx, { quiet = false } = {}) {
+  return push(ctx, { timeoutMs: quiet ? 3000 : 10000 });
+}
+
+export async function pull(ctx, { quiet = false } = {}) {
+  return pullBoard(ctx, { timeoutMs: quiet ? 3000 : 10000 });
+}
+
+export async function checkpoint(ctx) {
+  return writeCheckpoint(ctx, { timeoutMs: 3000 });
+}
+
+export async function closeWorkstream(ctx, slug) {
+  return closeStream(ctx, slug, { timeoutMs: 3000 });
+}
+
+function say(out, verb, report) {
+  if (report.error) out(`darkmem ${verb} stopped: ${report.error}. What was not sent stays queued.`);
+  if (report.conflict) out(`darkmem conflict: ${report.conflict}`);
+  const parts = [];
+  if (report.documents.length) parts.push(`${report.documents.length} document(s): ${report.documents.join(', ')}`);
+  if (report.rows.length) parts.push(`board row ${report.rows.join(', ')}`);
+  if (report.entries) parts.push(`${report.entries} work-log entr${report.entries === 1 ? 'y' : 'ies'}`);
+  if (!report.error) out(parts.length ? `darkmem ${verb}: ${parts.join('; ')}` : `darkmem ${verb}: nothing to do`);
+}
 
 export async function run(ctx, argv, { out }) {
-  out('darkmem is off for this repository');
-  return 0;
+  const action = argv[0] ?? 'status';
+  const cfg = settings(ctx);
+  if (cfg.off) {
+    out(`darkmem is off: ${cfg.off}`);
+    return 0;
+  }
+  if (action === 'status') {
+    const sync = loadSync(ctx);
+    out(`darkmem project ${cfg.project} at ${cfg.url}: ${Object.keys(sync.documents).length} document(s) tracked, ${readEvents(ctx.paths).length - sync.cursor} work-log entr(ies) queued`);
+    return 0;
+  }
+  if (action !== 'push' && action !== 'pull') fail('usage: dflow sync push|pull|status');
+  const report = action === 'push' ? await flush(ctx) : await pull(ctx);
+  if (!report) out('darkmem pull: the board is pulled only on the default branch');
+  else say(out, action, report);
+  refreshHud(ctx);
+  return report?.error || report?.conflict ? 1 : 0;
 }
