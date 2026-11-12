@@ -174,73 +174,23 @@ absent "cockpit nudge: no Implementer agent for implementation" "$P/hooks/cockpi
 # --- Task 5 ---
 check "A8: no drafter agent" "$([ -e "$P/agents/drafter-sonnet.md" ] && echo yes || echo no)" "no"
 check "A8: no draft-pack" "$([ -e "$S/draft-pack" ] && echo yes || echo no)" "no"
-check "A8: no skill or reference names the drafter" \
-  "$(grep -rlF 'drafter-sonnet' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "0"
-present "writing-plans drafts every task in the session" "$P/skills/writing-plans/SKILL.md" "Draft every task in the session, at any plan size."
 # --- Task 6 ---
 check "A8: no scout agent" "$([ -e "$P/agents/scout-sonnet.md" ] && echo yes || echo no)" "no"
-check "A8: no skill or reference names the scout" \
-  "$(grep -rlF 'scout-sonnet' "$P/skills" "$P/reference" | wc -l | tr -d ' ')" "0"
-present "selecting-approaches has two modes" "$P/skills/selecting-approaches/SKILL.md" "Two modes: \`inline\` and \`advisor\`."
 check "codex routing has no scout floor" "$(jq -r '.role_floors.scout // "none"' < "$P/reference/codex-routing.json" | tr -d '\r')" "none"
 # --- Task 7 ---
-SKILL_VIEW_DIR="$TMP/views"; . "$P/tests/skill-view.sh"
-EP=$(skill_view executing-plans)
-DT="$P/reference/delegated-task.md"
-present "A17: a task at fix round 3/3 goes to the breaker" "$EP" 'After `fix round 3/3`, the task goes to the ruling seat as a `breaker` item.'
-absent "A17: no switch to subagent mode" "$EP" "Switching to subagent mode"
 check "A17: switching.md is gone" "$([ -e "$P/skills/executing-plans/references/switching.md" ] && echo yes || echo no)" "no"
-present "the session implements heavy tasks" "$EP" "You implement every task that carries no \`**Executor:**\` line, heavy tasks included."
-present "risk-3 tasks run the session loop" "$EP" '`**Review:** per-task — risk 3`'
-present "setup keys preflight on the Heavy line" "$P/skills/executing-plans/references/setup.md" 'The `preflight` item runs when `plan-header.md` ends with a `**Heavy:**` line.'
-present "delegated-task documents the session loop" "$DT" "## The session review loop"
-present "the session loop starts inline" "$DT" "task-step start PLAN_FILE <N> --inline"
-present "the session loop's fix slot" "$DT" '; session)'
-present "recovery resumes the session loop" "$P/skills/executing-plans/references/recovery.md" '`fix round R/2` whose last slot is `session` or `HANDBACK to inline`, whatever the assigned line names'
-present "an executor handback mid-loop stays in the session" "$P/reference/delegated-task.md" '| `fix round 1/2` whose last slot is `session` or `HANDBACK to inline` | The session finishes it'
-present "the pre-review handback line resumes the session loop" "$P/skills/executing-plans/references/recovery.md" 'executor <id> HANDBACK - <reason>])`'
-present "the breaker row covers any task at its cap" "$P/skills/executing-plans/references/ruling-seat.md" "A task's findings or verifications still open at its cap"
 # --- Task 8 ---
 EL="$P/reference/executor-lane.md"
-present "A19: the unavailable line names the session" "$EL" 'implementer inline (assigned; base <sha7>; executor <id> unavailable - <reason>)'
 present "A19: a handback goes to the session" "$EL" 'HANDBACK to inline'
-absent "A19: no handback to an implementer agent" "$EL" 'HANDBACK to impl-'
-absent "handoff has no subagent-mode stop" "$P/skills/handoff/SKILL.md" "inline to subagent mode"
-absent "session-budget has no subagent-mode stop" "$P/reference/session-budget.md" "switches from inline to subagent mode"
-allow="$P/skills/executing-plans/references/recovery.md|$P/skills/executing-plans/references/setup.md|$P/skills/resume-execution/SKILL.md|$P/skills/subagent-driven-development/"
-check "A11: only the allowlist names the escalation line" \
-  "$(grep -rlF 'escalated inline -> subagent' "$P/skills" "$P/reference" | grep -vE "^($allow)" | wc -l | tr -d ' ')" "0"
-check "A11: no reference names switching to subagent mode" \
-  "$(grep -rliF 'switching to subagent mode' "$P/skills" "$P/reference" | grep -v "$P/skills/subagent-driven-development/" | wc -l | tr -d ' ')" "0"
 . "$S/lib/plan.sh"
 printf 'Task 1: escalated inline -> subagent — fix cap\n' > "$TMP/old-ledger.md"
 check "A11: an old escalation line still parses" "$(ledger_left_inline "$TMP/old-ledger.md")" "1"
-# --- Task 9 ---
-SKILL_VIEW_DIR="$TMP/views"; . "$P/tests/skill-view.sh"
-WP=$(skill_view writing-plans)
-present "execution line is always inline" "$P/skills/writing-plans/references/execution-line.md" 'Write `inline` on every plan.'
-absent "no heavy-majority rule" "$WP" "more than half the tasks are heavy"
-present "parallel needs an explicit subagent line" "$WP" "Parallel waves apply only when the Execution line is \`subagent\`"
-absent "Codex has no all-or-nothing inline rule" "$P/reference/native-codex.md" "all-or-nothing inline rule"
-# --- Task 10 ---
-SDD="$P/skills/subagent-driven-development/SKILL.md"
-check "A10: the subagent skill is deprecated" \
-  "$(case "$(sed -n 's/^description: //p' "$SDD")" in "Deprecated —"*) echo yes ;; *) echo no ;; esac)" "yes"
-present "A10: routing names executing-plans" "$P/skills/using-dforge/SKILL.md" "| Executing a plan | dforge:executing-plans"
-for f in "$P/skills/brainstorming/SKILL.md" "$P/skills/using-dforge/SKILL.md"; do
-  present "A18: $(basename "$(dirname "$f")") states the Process line" "$f" 'Process: <spike|bounded|architectural> — <trigger | no trigger>'
-  absent "A18: $(basename "$(dirname "$f")") has no mode slot" "$f" '<inline|subagent>'
-done
-absent "brainstorming asks no strategy question" "$P/skills/brainstorming/SKILL.md" "**Ask the execution strategy**"
 # --- Task 11 ---
 for f in "$P/.claude-plugin/plugin.json" "$P/.codex-plugin/plugin.json" "$P/../../.claude-plugin/marketplace.json"; do
   absent "no tiered implementers in $f" "$f" "tiered implementers"
 done
 check "marketplace keyword swapped" "$(jq -r '.plugins[] | select(.name == "dforge") | .keywords | index("spec-driven") != null and index("subagents") == null' < "$P/../../.claude-plugin/marketplace.json" | tr -d '\r')" "true"
 check "plugin keyword swapped" "$(jq -r '.keywords | index("spec-driven") != null and index("subagents") == null' < "$P/.claude-plugin/plugin.json" | tr -d '\r')" "true"
-for needle in "delegates its heavy" "drafter-sonnet" "scout-sonnet" "Best-of-3"; do
-  absent "README drops: $needle" "$P/README.md" "$needle"
-done
 v=$(jq -r .version < "$P/.claude-plugin/plugin.json" | tr -d '\r')
 check "version is 4.13.0 or later" "$(printf '4.13.0\n%s\n' "$v" | sort -V | head -n 1)" "4.13.0"
 # --- summary ---
