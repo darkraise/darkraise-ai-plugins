@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { head, relative } from '../repo.mjs';
-import { addFinding, buildPack, factLines, findingLine, quotePresent, saveFindings, writePack } from '../review.mjs';
+import { addFinding, buildPack, factLines, findingLine, quotePresent, updateFindings, writePack } from '../review.mjs';
 import { runCommand } from '../run.mjs';
 import { appendEvent, loadState, planState, saveState } from '../state.mjs';
 import { loadFindings, refreshHud } from '../status.mjs';
@@ -66,24 +66,31 @@ function list(ctx, active, argv, out) {
 // A command finding is proven while its command fails and fixed once the
 // command passes after having failed; one that never failed proves nothing.
 async function verify(ctx, active, argv, out) {
-  const findings = loadFindings(ctx, active.slug);
-  const selected = findings.filter(finding => finding.status === 'open' && (!argv[0] || finding.id === argv[0]));
+  const selected = loadFindings(ctx, active.slug).filter(finding => finding.status === 'open' && (!argv[0] || finding.id === argv[0]));
   if (argv[0] && !selected.length) fail(`no open finding ${argv[0]}`);
+  const results = new Map();
   for (const finding of selected) {
+    const change = {};
     if (finding.evidence.kind === 'command') {
       const logFile = path.join(ctx.paths.logs, active.slug, `finding-${finding.id}.log`);
       const result = await runCommand(finding.evidence.value, { cwd: ctx.root, timeoutSeconds: ctx.config.verifyTimeout, logFile, env: ctx.env });
-      if (!result.ok) finding.reproduced = true;
-      else if (finding.reproduced) finding.status = 'fixed';
+      if (!result.ok) change.reproduced = true;
+      else if (finding.reproduced) change.status = 'fixed';
       else {
-        finding.status = 'unproven';
-        finding.note = 'the evidence command passes, so it does not show the defect';
+        change.status = 'unproven';
+        change.note = 'the evidence command passes, so it does not show the defect';
       }
-    } else if (quotePresent(ctx, finding)) finding.reproduced = true;
-    else finding.note = 'the quoted text is no longer at that place; confirm the fix with `dflow review resolve`';
-    out(findingLine(finding));
+    } else if (quotePresent(ctx, finding)) change.reproduced = true;
+    else change.note = 'the quoted text is no longer at that place; confirm the fix with `dflow review resolve`';
+    results.set(finding.id, change);
   }
-  saveFindings(ctx, active.slug, findings);
+  // The commands ran without the lock; their results are merged into whatever
+  // the file holds now, so a finding added meanwhile is kept.
+  const findings = updateFindings(ctx, active.slug, current => {
+    for (const finding of current) Object.assign(finding, results.get(finding.id) ?? {});
+    return current;
+  });
+  for (const finding of findings.filter(entry => results.has(entry.id))) out(findingLine(finding));
   const open = findings.filter(finding => finding.status === 'open');
   const proven = open.filter(finding => finding.reproduced);
   out(`${open.length} open (${open.filter(finding => finding.severity === 'blocking').length} blocking); fix the ${proven.length} with reproduced evidence, then run verify again.`);
@@ -96,13 +103,14 @@ function settle(ctx, active, argv, out, { statuses, verb }) {
   const note = words.join(' ').trim();
   if (!id || !statuses.includes(status)) fail(`usage: dflow review ${verb} <id> ${statuses.join('|')} "<note>"`);
   if (status !== 'fixed' && status !== 'confirmed' && !note) fail(`${status} needs a note saying why`);
-  const findings = loadFindings(ctx, active.slug);
-  const finding = findings.find(entry => entry.id === id);
-  if (!finding) fail(`no finding ${id}`);
-  if (status === 'confirmed') finding.confirmed = true;
-  else finding.status = status;
-  if (note) finding.note = note;
-  saveFindings(ctx, active.slug, findings);
+  const finding = updateFindings(ctx, active.slug, findings => {
+    const found = findings.find(entry => entry.id === id);
+    if (!found) fail(`no finding ${id}`);
+    if (status === 'confirmed') found.confirmed = true;
+    else found.status = status;
+    if (note) found.note = note;
+    return found;
+  });
   out(findingLine(finding));
   refreshHud(ctx);
   return 0;

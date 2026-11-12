@@ -10,7 +10,7 @@ import { buildPack } from '../review.mjs';
 import { runCommand } from '../run.mjs';
 import { appendEvent, loadState, planState, saveState } from '../state.mjs';
 import { loadFindings, refreshHud } from '../status.mjs';
-import { git, gitOut, mustGit, readText, shortSha, tail, today } from '../util.mjs';
+import { git, gitList, gitOut, mustGit, readText, shortSha, tail, today } from '../util.mjs';
 import { diagnose } from './doctor.mjs';
 import { runGates } from './gate.mjs';
 import { requireActive } from './next.mjs';
@@ -18,14 +18,18 @@ import { closeWorkstream, flush } from './sync.mjs';
 
 const PROMOTED = { D: 'decisions.md', G: 'gotchas.md' };
 
+// Runs the acceptance commands that have not passed on this commit. Under
+// --check nothing is run: those lines are returned as pending, since only
+// running them can show whether they hold.
 async function acceptance(ctx, active, record, sha, checkOnly, out) {
   const problems = [];
+  const pending = [];
   record.acceptance ??= {};
   for (const line of active.plan.acceptance.filter(candidate => !candidate.ui)) {
     const known = record.acceptance[line.id];
     if (known?.ok && known.sha === sha) continue;
     if (checkOnly) {
-      problems.push(`${line.id} has not passed on this commit`);
+      pending.push(`${line.id}: ${line.commands.map(command => `\`${command}\``).join(', ')}`);
       continue;
     }
     for (const command of line.commands) {
@@ -43,7 +47,7 @@ async function acceptance(ctx, active, record, sha, checkOnly, out) {
     if (line.state === 'missing') problems.push(`${line.id} (UI) has no proof; drive it in the running app and record it with \`dflow proof ${line.id}\``);
     if (line.state === 'stale') problems.push(`${line.id} (UI) was proven at ${shortSha(line.proof.sha)}, before ${line.touched.join(', ')} changed; prove it again`);
   }
-  return problems;
+  return { problems, pending };
 }
 
 function docsDelta(ctx, active, base) {
@@ -95,20 +99,25 @@ export async function run(ctx, argv, { out }) {
   const record = planState(state, active.slug);
   const sha = head(ctx.root);
   const problems = [];
+  const pending = [];
 
   const open = active.plan.tasks.filter(task => !task.done);
   const blocked = blockedTasks(active.plan);
   if (open.length) problems.push(`not every task is done: ${open.map(task => `Task ${task.number}${blocked.has(task.number) ? ' (blocked)' : ''}`).join(', ')}`);
 
-  const dirty = mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=no']).split('\n').filter(Boolean);
-  if (dirty.length) problems.push(`uncommitted changes: ${dirty.map(line => line.slice(3)).join(', ')}`);
+  const dirty = gitList(ctx.root, ['status', '--porcelain', '--untracked-files=no', '--no-renames', '-z']);
+  if (dirty.length) problems.push(`uncommitted changes: ${dirty.map(entry => entry.slice(3)).join(', ')}`);
 
   if (!problems.length) {
-    if (ctx.config.gates.length && !(record.gates?.ok && record.gates.sha === sha)) {
-      if (values.check) problems.push('the gates have not passed on this commit; run `dflow gate`');
+    // A recorded pass counts only for this commit and a clean tree.
+    const gatesHold = record.gates?.ok && record.gates.sha === sha && !record.gates.dirty;
+    if (ctx.config.gates.length && !gatesHold) {
+      if (values.check) pending.push(`the gates: ${ctx.config.gates.map(gate => gate.name).join(', ')}`);
       else if (!await runGates(ctx, { out })) problems.push('a gate fails');
     }
-    problems.push(...await acceptance(ctx, active, record, sha, values.check, out));
+    const accepted = await acceptance(ctx, active, record, sha, values.check, out);
+    problems.push(...accepted.problems);
+    pending.push(...accepted.pending);
     // runGates saved its own result meanwhile, so merge into the file's state.
     const latest = loadState(ctx.paths);
     planState(latest, active.slug).acceptance = record.acceptance;
@@ -118,37 +127,58 @@ export async function run(ctx, argv, { out }) {
   const required = buildPack(ctx, active).tier;
   const review = planState(loadState(ctx.paths), active.slug).review;
   if (!review) problems.push(`no review is recorded; this diff needs tier ${required} (/dflow:review)`);
-  else if (review.tier < required) problems.push(`the recorded review is tier ${review.tier}; this diff needs tier ${required}`);
+  else {
+    if (review.tier < required) problems.push(`the recorded review is tier ${review.tier}; this diff needs tier ${required}`);
+    // Fixes made after the review are expected, so the review is recorded
+    // once they are in. Code committed after that has been seen by nobody.
+    const since = gitList(ctx.root, ['diff', '--name-only', '--no-renames', '-z', `${review.sha}..HEAD`]).filter(file => !(file.startsWith('docs/dflow/') && file.endsWith('.md')));
+    if (since.length) problems.push(`${since.length} file(s) changed after the recorded review (${since.slice(0, 5).join(', ')}${since.length > 5 ? ', …' : ''}); review them and run \`dflow review record\` again`);
+  }
   const findings = loadFindings(ctx, active.slug);
   const blocking = findings.filter(finding => finding.status === 'open' && finding.severity === 'blocking');
   if (blocking.length) problems.push(`${blocking.length} blocking finding(s) are open: ${blocking.map(finding => finding.id).join(', ')}`);
 
   const base = baseCommit(ctx.root, ctx.config) ?? approvedPlan(ctx, active)?.commit;
   if (base) problems.push(...docsDelta(ctx, active, base));
-  problems.push(...diagnose(ctx).map(problem => `doctor: ${problem}`));
+  problems.push(...diagnose(ctx, { plans: [active] }).map(problem => `doctor: ${problem}`));
 
   if (problems.length) {
     out(`Not done: ${problems.length} condition(s) of the definition of done are unmet.`);
     for (const problem of problems) out(`- ${problem}`);
+    if (pending.length) out(`Not yet run, \`dflow ship\` runs them: ${pending.join('; ')}`);
     return 1;
   }
   const declined = findings.filter(finding => finding.status === 'declined');
   if (values.check) {
-    out(`Ready to ship: every condition of the definition of done holds at ${shortSha(sha)}.`);
+    if (pending.length) out(`Nothing is unmet at ${shortSha(sha)}. \`dflow ship\` still has to run: ${pending.join('; ')}`);
+    else out(`Ready to ship: every condition of the definition of done holds at ${shortSha(sha)}.`);
     return 0;
   }
+
+  // Everything ship writes, so that a refused closing commit can be undone
+  // and so that nothing else under docs/dflow rides along.
+  const boardText = readText(ctx.paths.board);
+  const row = boardText && parseBoard(boardText).rows.find(candidate => String(candidate.number) === String(active.plan.fields.board));
+  const touched = [active.file, path.join(ctx.paths.docs, 'decisions.md'), path.join(ctx.paths.docs, 'gotchas.md'), ...(row ? [ctx.paths.board] : [])];
+  const before = new Map(touched.map(file => [file, readText(file)]));
+  const restore = () => {
+    git(ctx.root, ['reset', '-q', '--', ...touched.map(file => relative(ctx.root, file))]);
+    for (const [file, text] of before) {
+      if (text === null) fs.rmSync(file, { force: true });
+      else fs.writeFileSync(file, text);
+    }
+  };
 
   const { written, decisions } = promote(ctx, active);
   const date = today(ctx.env);
   fs.writeFileSync(active.file, setField(readText(active.file), 'Shipped', date));
-  const boardText = readText(ctx.paths.board);
-  const row = boardText && parseBoard(boardText).rows.find(candidate => String(candidate.number) === String(active.plan.fields.board));
   if (row) fs.writeFileSync(ctx.paths.board, rewriteRow(boardText, row.number, { state: 'done', note: `shipped ${date}` }));
-  const docs = relative(ctx.root, ctx.paths.docs);
-  mustGit(ctx.root, ['add', '--', docs]);
-  const commit = git(ctx.root, ['commit', '-q', '-m', `docs(dflow): ship ${active.slug}`.slice(0, 72), '--', docs]);
+  const changed = touched.filter(file => readText(file) !== before.get(file)).map(file => relative(ctx.root, file));
+  mustGit(ctx.root, ['add', '--', ...changed]);
+  const commit = git(ctx.root, ['commit', '-q', '-m', `docs(dflow): ship ${active.slug}`.slice(0, 72), '--', ...changed]);
   if (!commit.ok) {
-    out(`The closing commit failed: ${(commit.stderr || commit.stdout).trim()}`);
+    restore();
+    out(`The closing commit failed, so the plan is not shipped and nothing was changed:\n${(commit.stderr || commit.stdout).trim()}`);
     return 1;
   }
   appendEvent(ctx, { plan: active.slug, event: 'shipped', commit: head(ctx.root) });

@@ -4,7 +4,7 @@ import { currentBranch, head, relative } from '../repo.mjs';
 import { runCommand } from '../run.mjs';
 import { loadState, planState, saveState } from '../state.mjs';
 import { activePlan, refreshHud } from '../status.mjs';
-import { fail, nowIso, tail } from '../util.mjs';
+import { fail, mustGit, nowIso, tail } from '../util.mjs';
 
 // Runs the configured gates in order. A run of every gate is recorded against
 // the head commit; a run of a named subset is not, since it proves less.
@@ -16,6 +16,8 @@ export async function runGates(ctx, { names = [], out }) {
   const state = loadState(ctx.paths);
   const active = activePlan(ctx, state);
   const results = [];
+  // A pass on uncommitted changes says nothing about the commit.
+  const dirty = Boolean(mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=no']).trim());
   for (const gate of selected) {
     const logFile = path.join(ctx.paths.logs, active?.slug ?? '_', `gate-${gate.name}.log`);
     fs.rmSync(logFile, { force: true });
@@ -33,7 +35,7 @@ export async function runGates(ctx, { names = [], out }) {
   const sha = head(ctx.root);
   if (!names.length) {
     if (active) {
-      planState(state, active.slug).gates = { sha, at: nowIso(ctx.env), ok, results };
+      planState(state, active.slug).gates = { sha, at: nowIso(ctx.env), ok, dirty, results };
       saveState(ctx.paths, state);
     }
     fs.mkdirSync(ctx.paths.stateDir, { recursive: true });

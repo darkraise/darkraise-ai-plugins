@@ -54,3 +54,10 @@ test('hooks.json wires the three events to the CLI', () => {
   for (const [name, hook] of Object.entries(commands)) assert.match(hook.command, /^node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/dflow" hook /, name);
   assert.equal(commands.Stop.async, true);
 });
+
+test('no hook writes into a repository that does not use dflow', t => {
+  const root = makeRepo(t);
+  for (const name of ['session-start', 'pre-compact', 'stop']) dflow(root, ['hook', name], { input: event({ source: 'startup' }) });
+  dflow(root, ['status']);
+  assert.ok(!fs.existsSync(path.join(root, '.dflow')));
+});

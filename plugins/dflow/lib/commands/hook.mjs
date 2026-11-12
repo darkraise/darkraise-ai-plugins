@@ -63,6 +63,7 @@ async function stop(ctx, event) {
 // A hook must never break the session: every failure ends in exit 0.
 export async function run(ctx, argv, { out }) {
   try {
+    if (!fs.existsSync(ctx.paths.docs)) return 0;
     const event = input();
     if (argv[0] === 'session-start') await sessionStart(ctx, event, out);
     else if (argv[0] === 'pre-compact') preCompact(ctx, event, out);

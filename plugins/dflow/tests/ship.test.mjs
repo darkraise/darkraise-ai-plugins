@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseBoard } from '../lib/board.mjs';
 import { parsePlan } from '../lib/plan.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
 import { PLAN, PLAN_FILE, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const UI_PLAN = PLAN.replace('- A1:', '- A2 UI: the meter turns red below 10%\n- A3 UI visual: the meter fills the bar\n- A1:')
@@ -27,14 +29,13 @@ test('ship --check names every unmet condition', t => {
   buildAll(root);
   check = dflow(root, ['ship', '--check']);
   assert.deepEqual(check.stdout.trim().split('\n'), [
-    'Not done: 7 condition(s) of the definition of done are unmet.',
-    '- the gates have not passed on this commit; run `dflow gate`',
-    '- A1 has not passed on this commit',
+    'Not done: 5 condition(s) of the definition of done are unmet.',
     '- A2 (UI) has no proof; drive it in the running app and record it with `dflow proof A2`',
     '- A3 (UI) has no proof; drive it in the running app and record it with `dflow proof A3`',
     '- no review is recorded; this diff needs tier 0 (/dflow:review)',
     '- Docs names project.md, but this branch does not change it',
     '- Docs names decisions.md, but the plan log has no `D:` line to promote and the file is unchanged',
+    'Not yet run, `dflow ship` runs them: the gates: test; A1: `node check.mjs`',
   ]);
 });
 
@@ -83,7 +84,9 @@ test('ship runs gates and acceptance, promotes the log, closes the plan and the 
 
   write(root, 'suite.mjs', '\n');
   write(root, 'check.mjs', '\n');
-  assert.match(dflow(root, ['ship', '--check']).stdout, /gates have not passed/);
+  const check = dflow(root, ['ship', '--check']);
+  assert.equal(check.status, 0);
+  assert.match(check.stdout, /^Nothing is unmet at [0-9a-f]{7}\. `dflow ship` still has to run: the gates: test; A1: `node check\.mjs`/);
   shipped = dflow(root, ['ship']);
   assert.equal(shipped.status, 0, shipped.stdout + shipped.stderr);
   assert.match(shipped.stdout, /^Shipped docs\/dflow\/plans\/2026-11-12-meter\.md at [0-9a-f]{7}; promoted 1 decision\(s\) to decisions\.md and 1 gotcha\(s\) to gotchas\.md\. Board row 1 is done\./m);
@@ -106,4 +109,55 @@ test('an open blocking finding or a review below the needed tier stops ship', t 
   const check = dflow(root, ['ship', '--check']);
   assert.match(check.stdout, /no review is recorded; this diff needs tier 2/);
   assert.match(check.stdout, /1 blocking finding\(s\) are open: F1/);
+});
+
+function readyToShip(t, options) {
+  const root = makeProject(t, options);
+  buildAll(root);
+  dflow(root, ['review', 'record', '--tier', '0']);
+  return root;
+}
+
+test('a refused closing commit leaves the plan unshipped and every file as it was', t => {
+  const root = readyToShip(t, { plan: PLAN.replace('**Docs:** none — the fixture has no living docs', '**Docs:** decisions.md') });
+  dflow(root, ['log', '1', 'D', 'a function, not a class']);
+  git(root, 'commit', '-q', '-am', 'docs: log');
+  dflow(root, ['review', 'record', '--tier', '0']);
+  write(root, '.git/hooks/pre-commit', '#!/bin/sh\necho refused by the hook >&2\nexit 1\n');
+  fs.chmodSync(path.join(root, '.git/hooks/pre-commit'), 0o755);
+  const before = [PLAN_FILE, 'docs/dflow/board.md', 'docs/dflow/decisions.md'].map(file => read(root, file));
+  const shipped = dflow(root, ['ship']);
+  assert.equal(shipped.status, 1);
+  assert.match(shipped.stdout, /closing commit failed, so the plan is not shipped and nothing was changed:\nrefused by the hook/);
+  assert.deepEqual([PLAN_FILE, 'docs/dflow/board.md', 'docs/dflow/decisions.md'].map(file => read(root, file)), before);
+  assert.equal(git(root, 'status', '--porcelain', '--untracked-files=no'), '');
+  fs.rmSync(path.join(root, '.git/hooks/pre-commit'));
+  assert.equal(dflow(root, ['ship']).status, 0);
+});
+
+test('ship commits only what it wrote, and a draft of other work does not block it', t => {
+  const root = readyToShip(t);
+  write(root, 'docs/dflow/plans/2026-11-13-draft.md', '# Draft\n\n**Branch:** feat/later\n**Goal:** …\n');
+  write(root, 'docs/dflow/scratch.md', 'notes\n');
+  const shipped = dflow(root, ['ship']);
+  assert.equal(shipped.status, 0, shipped.stdout);
+  assert.deepEqual(git(root, 'show', '--name-only', '--format=', 'HEAD').split('\n').sort(), ['docs/dflow/board.md', PLAN_FILE]);
+  assert.match(git(root, 'status', '--porcelain'), /\?\? docs\/dflow\/plans\/2026-11-13-draft\.md/);
+});
+
+test('code committed after the review, and a gate that passed on uncommitted changes, both stop ship', t => {
+  const root = readyToShip(t, { config: { gates: [{ name: 'test', cmd: 'node suite.mjs' }] } });
+  write(root, 'suite.mjs', '\n');
+  write(root, 'src/meter.mjs', 'export const b = 99;\n');
+  assert.equal(dflow(root, ['gate']).status, 0);
+  git(root, 'checkout', '-q', '--', 'src/meter.mjs');
+  assert.match(dflow(root, ['ship', '--check']).stdout, /still has to run: the gates: test/);
+
+  write(root, 'src/meter.mjs', 'export const b = 3;\n');
+  git(root, 'commit', '-q', '-am', 'fix: meter');
+  const check = dflow(root, ['ship', '--check']);
+  assert.equal(check.status, 1);
+  assert.match(check.stdout, /1 file\(s\) changed after the recorded review \(src\/meter\.mjs\); review them and run `dflow review record` again/);
+  dflow(root, ['review', 'record', '--tier', '0']);
+  assert.equal(dflow(root, ['ship']).status, 0);
 });

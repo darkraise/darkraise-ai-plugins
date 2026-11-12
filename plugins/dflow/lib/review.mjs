@@ -6,7 +6,7 @@ import { baseCommit, currentBranch, defaultBranch, relative } from './repo.mjs';
 import { planState, loadState } from './state.mjs';
 import { findingsFile, loadFindings } from './status.mjs';
 import { isTestFile, weakenedTests } from './tests-check.mjs';
-import { fail, git, gitOut, matchesAny, readText, shortSha, writeJson } from './util.mjs';
+import { fail, gitList, gitOut, matchesAny, readText, shortSha, withLock, writeJson } from './util.mjs';
 
 export const SEVERITIES = ['blocking', 'should', 'nit'];
 const OWN = ':(exclude)docs/dflow';
@@ -82,6 +82,7 @@ export function buildPack(ctx, active, taskNumber) {
       tests: { testLines, sourceLines, ratio, newTestFiles: testFiles.filter(entry => newFiles.has(entry.file)).length, overBudget: ratio > ctx.config.tests.maxRatio },
       suite: growth && { ...growth, overBudget: growth.growth > ctx.config.tests.maxSuiteGrowth },
       todos: added.filter(line => /\b(TODO|FIXME|XXX)\b/.test(line)).length,
+      configuration: gitList(ctx.root, ['diff', '--name-only', '--no-renames', '-z', diffRange, '--', 'docs/dflow']).filter(file => !file.endsWith('.md')),
       deviations: active.plan.log.filter(entry => 'XWVA'.includes(entry.kind) && (taskNumber === undefined || entry.task === taskNumber)),
     },
   };
@@ -99,6 +100,7 @@ export function factLines(pack) {
   lines.push(`Tests: ${tests.testLines} test lines against ${tests.sourceLines} source lines added (${ratio}), ${tests.newTestFiles} new test file(s)${tests.overBudget ? ' — OVER the test budget: trim or justify' : ''}`);
   if (facts.suite) lines.push(`Suite time: ${facts.suite.before.toFixed(1)}s on the default branch, ${facts.suite.after.toFixed(1)}s here (${(facts.suite.growth * 100).toFixed(0)}%)${facts.suite.overBudget ? ' — OVER the growth budget' : ''}`);
   else lines.push('Suite time: unknown (no recorded gate run on both branches)');
+  if (facts.configuration.length) lines.push(`dflow configuration changed (gates, test patterns, thresholds): ${facts.configuration.join(', ')} — read the change`);
   if (facts.todos) lines.push(`${facts.todos} added line(s) carry TODO, FIXME or XXX`);
   for (const entry of facts.deviations) lines.push(`Logged deviation, ${entry.task ? `Task ${entry.task}` : 'plan'} ${entry.kind}: ${entry.text}`);
   return lines;
@@ -147,30 +149,51 @@ export function quotePresent(ctx, finding) {
   return normalise(lines.slice(from, finding.line + 5).join(' ')).includes(normalise(finding.evidence.value));
 }
 
+// Reviewers add findings side by side, so every read-modify-write of the
+// findings file happens under a lock.
+export function updateFindings(ctx, slug, mutate) {
+  const file = findingsFile(ctx, slug);
+  return withLock(`${file}.lock`, () => {
+    const findings = loadFindings(ctx, slug);
+    const result = mutate(findings);
+    writeJson(file, findings);
+    return result;
+  });
+}
+
+// A path given from a subdirectory is taken as typed there, like every other
+// path argument; otherwise from the repository root.
+function repositoryPath(ctx, given) {
+  if (!given) return null;
+  for (const candidate of [path.resolve(ctx.cwd, given), path.resolve(ctx.root, given)]) {
+    const inside = relative(ctx.root, candidate);
+    if (!inside.startsWith('..') && fs.existsSync(candidate)) return inside;
+  }
+  return null;
+}
+
 export function addFinding(ctx, slug, fields) {
-  const findings = loadFindings(ctx, slug);
-  const { file, line, severity, claim, breaks, command, quote } = fields;
-  if (!file || !fs.existsSync(path.join(ctx.root, file))) fail(`--file ${JSON.stringify(file ?? '')} does not exist in the repository`);
+  const { line, severity, claim, breaks, command, quote } = fields;
+  const file = repositoryPath(ctx, fields.file);
+  if (!file) fail(`--file ${JSON.stringify(fields.file ?? '')} does not exist in the repository`);
   if (!Number.isInteger(line) || line < 1) fail('--line takes a line number');
   if (!SEVERITIES.includes(severity)) fail(`--severity is one of ${SEVERITIES.join(', ')}`);
   if (!claim?.trim()) fail('--claim is required: one sentence stating the defect');
   if (!breaks?.trim()) fail('--breaks is required: what goes wrong for whom');
   if (Boolean(command) === Boolean(quote)) fail('give exactly one piece of evidence: --cmd "<command that exits non-zero while the defect exists>" or --quote "<the exact text at file:line>"');
   const finding = {
-    id: `F${Math.max(0, ...findings.map(entry => Number(entry.id.slice(1)))) + 1}`,
+    id: null,
     file, line, severity, claim: claim.trim(), breaks: breaks.trim(),
     evidence: command ? { kind: 'command', value: command } : { kind: 'quote', value: quote },
     task: fields.task ?? null, lens: fields.lens ?? null,
     status: 'open', reproduced: null, note: null,
   };
   if (finding.evidence.kind === 'quote' && !quotePresent(ctx, finding)) fail(`the quoted text is not within five lines of ${file}:${line}; quote the file exactly`);
-  findings.push(finding);
-  writeJson(findingsFile(ctx, slug), findings);
-  return finding;
-}
-
-export function saveFindings(ctx, slug, findings) {
-  writeJson(findingsFile(ctx, slug), findings);
+  return updateFindings(ctx, slug, findings => {
+    finding.id = `F${Math.max(0, ...findings.map(entry => Number(entry.id.slice(1)))) + 1}`;
+    findings.push(finding);
+    return finding;
+  });
 }
 
 export function findingLine(finding) {

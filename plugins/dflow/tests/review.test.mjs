@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PLAN, dflow, git, makeProject, read, write } from './helpers.mjs';
+import { PLAN, dflow, dflowAsync, git, makeProject, read, write } from './helpers.mjs';
 
 function build(root, { sourceLines = 30, testLines = 10 } = {}) {
   write(root, 'verify1.mjs', '\n');
@@ -133,4 +133,35 @@ test('a task with a risk waits in review until its own review is recorded', t =>
   assert.deepEqual(states(), ['review', 'wip']);
   assert.equal(dflow(root, ['review', 'record', '--tier', '1', '--task', '1']).status, 0);
   assert.deepEqual(states(), ['done', 'wip']);
+});
+
+test('findings recorded at the same moment are all kept', async t => {
+  const root = makeProject(t);
+  build(root);
+  const add = index => dflowAsync(root, ['review', 'add', '--file', 'src/meter.mjs', '--line', '1', '--severity', 'nit', '--claim', `claim ${index}`, '--breaks', 'b', '--cmd', 'false']);
+  const results = await Promise.all(Array.from({ length: 24 }, (_, index) => add(index)));
+  assert.deepEqual(results.filter(result => result.status !== 0).map(result => result.stderr), []);
+  const findings = JSON.parse(dflow(root, ['review', 'list', '--json']).stdout);
+  assert.equal(findings.length, 24);
+  assert.equal(new Set(findings.map(finding => finding.id)).size, 24);
+});
+
+test('a file named from a subdirectory is taken as typed there', t => {
+  const root = makeProject(t);
+  build(root);
+  const added = dflow(root, ['review', 'add', '--file', 'meter.mjs', '--line', '1', '--severity', 'nit', '--claim', 'c', '--breaks', 'b', '--cmd', 'false'], { cwd: 'src' });
+  assert.equal(added.status, 0, added.stderr);
+  assert.equal(JSON.parse(dflow(root, ['review', 'list', '--json']).stdout)[0].file, 'src/meter.mjs');
+});
+
+test('a changed dflow configuration is a fact of the pack', t => {
+  const root = makeProject(t);
+  write(root, 'verify1.mjs', '\n');
+  write(root, 'verify2.mjs', '\n');
+  write(root, 'src/limit.mjs', '1\n');
+  write(root, 'docs/dflow/config.json', JSON.stringify({ gates: [] }));
+  git(root, 'add', 'src', 'docs');
+  dflow(root, ['done', '1', '-m', 'feat: parse', '--extra', 'gates emptied']);
+  assert.deepEqual(pack(root).facts.configuration, ['docs/dflow/config.json']);
+  assert.match(dflow(root, ['review', 'pack']).stdout, /dflow configuration changed \(gates, test patterns, thresholds\): docs\/dflow\/config\.json/);
 });

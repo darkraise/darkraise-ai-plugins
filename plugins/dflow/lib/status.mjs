@@ -79,7 +79,7 @@ export function buildModel(ctx) {
     tasks: tasks.map(task => ({ number: task.number, title: task.title, state: task.state, run: task.run })),
     allDone: tasks.length > 0 && done === tasks.length,
   };
-  if (record.gates) model.gates = { ok: record.gates.ok, sha: record.gates.sha, stale: record.gates.sha !== sha, failed: record.gates.results.filter(result => !result.ok).map(result => result.name) };
+  if (record.gates) model.gates = { ok: record.gates.ok, sha: record.gates.sha, stale: record.gates.sha !== sha || Boolean(record.gates.dirty), failed: record.gates.results.filter(result => !result.ok).map(result => result.name) };
   model.review = {
     recorded: record.review ?? null,
     open: open.length,
@@ -109,7 +109,7 @@ function recommend(model, ctx) {
   }
   if (model.review.blocking) return `fix ${model.review.blocking} blocking finding(s), then dflow review verify`;
   if (!model.review.recorded) return '/dflow:review — every task is done';
-  if (ctx.config.gates.length && (!model.gates || !model.gates.ok || model.gates.stale)) return 'dflow gate — the gates have not passed on this commit';
+  if (ctx.config.gates.length && (!model.gates || !model.gates.ok || model.gates.stale)) return '/dflow:ship — it runs the gates, which have not passed on this commit';
   return '/dflow:ship';
 }
 
@@ -164,6 +164,8 @@ export function taskBrief(ctx, active, task, { designLimit = 40 } = {}) {
 }
 
 export function refreshHud(ctx) {
+  // Only a repository that uses dflow gets a .dflow directory.
+  if (!fs.existsSync(ctx.paths.docs)) return;
   try {
     writeJson(ctx.paths.hud, buildModel(ctx));
   } catch {

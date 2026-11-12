@@ -28,7 +28,9 @@ function deadReferences(ctx, name, text) {
   return problems;
 }
 
-export function diagnose(ctx) {
+// `plans` narrows the plan lint: ship checks the plan it ships, not a draft
+// of other work that happens to sit beside it.
+export function diagnose(ctx, { plans = openPlans(ctx) } = {}) {
   const problems = [];
   for (const [name, budget] of Object.entries(ctx.config.budgets)) {
     const text = readText(path.join(ctx.paths.docs, name));
@@ -42,7 +44,7 @@ export function diagnose(ctx) {
   }
   const board = readText(ctx.paths.board);
   if (board !== null) problems.push(...lintBoard(parseBoard(board)));
-  for (const entry of openPlans(ctx)) {
+  for (const entry of plans) {
     for (const error of lintPlan(entry.plan).errors) problems.push(`${entry.rel}: ${error}`);
   }
   return problems;
