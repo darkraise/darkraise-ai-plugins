@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# The delegated task loop, the waves, the final review and finishing call the
-# step and suite scripts instead of describing their mechanics. Each call is a
-# whole instruction a session follows, so each is pinned by the text that
-# carries it.
+# The line forms and template placeholders the step scripts read from the
+# delegated task loop's prompts and ledger grammar.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

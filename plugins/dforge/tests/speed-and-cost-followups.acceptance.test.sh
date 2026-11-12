@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance tests for the speed-and-cost-followups spec
 # (docs/dforge/specs/2026-10-28-speed-and-cost-followups-design.md), the
-# plugin-side statements A1 to A4, A6 to A16, A20, A21 and the fast part
+# plugin-side statements A1 to A4, A7 to A16, A20 and the fast part
 # of A23 (A19 went with draft-pack). A5 is the `A5:` describe block in
 # cockpit.test.ts; A17 and A18 are in
 # evals/tiers/tests/speed-and-cost-followups.acceptance.test.mjs. Each test is

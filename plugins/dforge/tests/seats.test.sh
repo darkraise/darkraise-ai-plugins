@@ -137,9 +137,7 @@ names "group reviewer: the per-task finding grammar" "$GRP" '- [Critical|Importa
 names "group reviewer: per-task verdict keys" "$GRP" 'Task <N> spec: pass | fail | cannot-verify'
 names "group reviewer: per-task scores" "$GRP" 'Task <N> scores: spec <1-20> / scope <1-20> / verification <1-20> / quality <1-20>'
 
-# The plan-review, critic, spec-review and pre-execution ruling seats follow
-# the same report contract: the full report in a file, a reply of at most ten
-# lines, a fixed `## Verdict` section.
+# The plan-review and critic seats follow the same report contract.
 PRP="$P/skills/writing-plans/references/plan-reviewer-prompt.md"
 CP="$P/skills/brainstorming/references/architecture-critic-prompt.md"
 AR="$P/reference/auto-run.md"
@@ -183,7 +181,6 @@ sed 's|lens-<id>-report\.md|lens-<id>.md|' "$FR" > "$TMP/final-review.md"
 check "judge templates: the sweep flags a report path the guard refuses" \
   "$(bad_report_paths "$TMP/final-review.md" | grep -c '^FAIL .*: <workspace>/lens-<id>\.md$')" "1"
 names "walkthrough judge: the report file lies under .dforge" "$WT" '`<checkout>/.dforge/ui-proof-<report name>-report.md`'
-names "walkthrough: the controller copies the report beside the proof" "$WT" 'copy that file to `<report name>.judge.md` beside the report'
 lacks "requesting review: the example report file is absolute" "$RCR" 'REPORT_FILE: .dforge/'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

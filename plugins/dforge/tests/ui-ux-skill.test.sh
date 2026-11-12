@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# The ui-ux skill and the instructions that route to it and gate on it: each
-# check is a whole instruction, not a keyword, so a rewording that drops the
-# rule fails here.
+# The ui-ux skill's files, its UI proof line form and the entry point's size
+# cap.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -68,8 +68,8 @@ check "the lenses exist" "$got" \
   "docs-comments lang-bash lang-csharp lang-python lang-typescript security silent-failures test-quality type-design ui-ux"
 
 # The final round's prompt. run-codex-review.sh cats it into every --kind final
-# request, so its presence, its encoding and its two load-bearing instructions
-# are pinned even though it is not a rubric.
+# request, so its presence and its encoding are pinned even though it is not a
+# rubric.
 FR="$CRITERIA/codex-final-review.md"
 check "codex-final-review.md exists" "$([ -f "$FR" ] && echo yes || echo no)" "yes"
 if [ -f "$FR" ]; then

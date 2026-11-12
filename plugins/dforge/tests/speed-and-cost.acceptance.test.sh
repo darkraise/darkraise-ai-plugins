@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Acceptance tests for the speed-and-cost spec
 # (docs/dforge/specs/2026-10-27-speed-and-cost-design.md), the plugin-side
-# statements A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A16 and A18. A12 and
-# A13 (the eval pipeline) are in evals/tiers/tests/speed-and-cost.acceptance.test.mjs.
+# statements A1, A3, A4, A5, A6, A7, A9, A10 and A11. A12 and A13 (the eval
+# pipeline) are in evals/tiers/tests/speed-and-cost.acceptance.test.mjs.
 # Each test is written from the statement's text and reaches the behaviour
 # through the scripts the spec names (task-step, suite-run, impl-stop-gate), the
 # files the plugin ships, or, where a statement is about what a skill tells a

@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Acceptance tests for docs/dforge/specs/2026-10-25-typed-seats-and-drafting-design.md
-# (the shell-reachable statements: A5, A12, A13 - A7, A9 and A10
-# went with the plan drafter; the
-# cockpit statements A1-A4 and A8 are in typed-seats-and-drafting.acceptance.test.ts).
+# (the shell-reachable statements: A5, A12, A13; the cockpit statements A1-A4
+# and A8 are in typed-seats-and-drafting.acceptance.test.ts).
 # Each test is written from the spec's acceptance statement. Usage:
 #   bash typed-seats-and-drafting.acceptance.sh            run every test
-#   bash typed-seats-and-drafting.acceptance.sh A9 A10     run the named tests only
+#   bash typed-seats-and-drafting.acceptance.sh A5 A12     run the named tests only
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

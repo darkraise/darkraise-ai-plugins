@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Acceptance tests for the review-depth spec
-# (docs/dforge/specs/2026-10-27-review-depth-design.md), statements A1-A16.
-# Each test is written from the statement's text and reaches the behaviour
-# through the scripts the spec names (depth-route, review-route, lens-route,
-# plan-lint) or, where the statement is about what a skill tells a session to
-# do, through the line grammar the shipped skills and references must carry.
+# (docs/dforge/specs/2026-10-27-review-depth-design.md), statements A1-A8,
+# A10, A12, A13 and A16. Each test is written from the statement's text and
+# reaches the behaviour through the scripts the spec names (depth-route,
+# review-route, lens-route, plan-lint).
 # Usage:
 #   bash review-depth.acceptance.test.sh            run every test
 #   bash review-depth.acceptance.test.sh A5 A9      run the named tests only

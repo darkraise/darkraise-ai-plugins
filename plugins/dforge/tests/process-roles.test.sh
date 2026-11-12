@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The process roles (analyst, architecture critic, QA and review lenses) live
-# in skill and reference text; each check pins one whole instruction.
+# The process roles (architecture critic, QA and review lenses) keep the line
+# forms, placeholders and criterion ids that scripts and plans read.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

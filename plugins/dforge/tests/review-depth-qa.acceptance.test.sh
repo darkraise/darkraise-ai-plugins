@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Acceptance tests for the review-depth spec
-# (docs/dforge/specs/2026-10-27-review-depth-design.md), statements A1-A16.
-# Written from the statements' text and run through the public surface:
-# depth-route, review-route, lens-route and plan-lint as commands, and the
-# shipped skills and references as text.
+# (docs/dforge/specs/2026-10-27-review-depth-design.md), statements A1-A8,
+# A10, A12, A13 and A16. Written from the statements' text and run through the
+# public surface: depth-route, review-route, lens-route and plan-lint as
+# commands.
 # Usage:
 #   bash review-depth-qa.acceptance.test.sh            run every test
 #   bash review-depth-qa.acceptance.test.sh A5 A9      run the named tests only
