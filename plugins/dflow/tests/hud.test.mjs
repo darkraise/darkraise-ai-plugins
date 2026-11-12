@@ -53,6 +53,8 @@ test('the band fits its width and the mode cycles', () => {
   assert.deepEqual(['band', 'pane', 'off'].map(mode => nextMode(mode, '')), ['pane', 'off', 'band']);
   assert.deepEqual([nextMode('band', 'off'), nextMode('band', 'sideways')], ['off', null]);
   assert.deepEqual(paneRows({ branch: 'main', next: '/dflow:plan', plan: null }, null, 60).map(row => row[0]), ['', 'Next']);
+  const sync = fields => paneRows({ ...model, gates: null, review: null, board: null, sync: { enabled: true, queued: 3, ...fields } }, null, 80).find(row => row[0] === 'darkmem')[1];
+  assert.deepEqual([sync({}), sync({ error: 'x', offline: true }), sync({ error: 'x', offline: false }), sync({ refused: 1 })], ['3 queued', 'offline · 3 queued', 'refused: run dflow sync push · 3 queued', '1 refused: run dflow sync push · 3 queued']);
 });
 
 test('the mod is wired into hooks.json and the manifest names its state contract', () => {

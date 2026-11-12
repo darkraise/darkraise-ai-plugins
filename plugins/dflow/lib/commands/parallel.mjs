@@ -9,15 +9,21 @@ import { refreshHud, taskBrief } from '../status.mjs';
 import { fail, git, gitOut, mustGit, readText, shortSha } from '../util.mjs';
 import { requireActive } from './next.mjs';
 
-// The fixed part of a Files entry, up to its first wildcard.
+// The fixed part of a Files entry, up to its first wildcard, and whether a
+// wildcard follows it.
 function stem(pattern) {
-  return pattern.replace(/^\.\//, '').split('*')[0].replace(/\/+$/, '');
+  const clean = pattern.replace(/^\.\//, '');
+  return { text: clean.split('*')[0].replace(/\/+$/, ''), wild: clean.includes('*') };
 }
 
+// Errs toward overlap: `src/limit*.mjs` can match `src/limit.test.mjs`, so
+// with a wildcard on either side a shared prefix is enough. Two plain paths
+// overlap when they are equal or one is a directory holding the other.
 export function filesOverlap(left, right) {
   return left.some(a => right.some(b => {
     const [x, y] = [stem(a), stem(b)];
-    return x === '' || y === '' || x === y || x.startsWith(`${y}/`) || y.startsWith(`${x}/`);
+    if (x.wild || y.wild) return x.text.startsWith(y.text) || y.text.startsWith(x.text);
+    return x.text === y.text || x.text.startsWith(`${y.text}/`) || y.text.startsWith(`${x.text}/`);
   }));
 }
 
@@ -121,7 +127,10 @@ function merge(ctx, argv, out, { keep }) {
   if (mustGit(ctx.root, ['diff', '--cached', '--name-only']).trim()) fail('the index already holds staged changes; commit or unstage them before merging a worker');
   const picked = git(ctx.root, ['cherry-pick', '-n', ...commits]);
   if (!picked.ok) {
+    // Back to exactly where the plan branch was: the index and tree first,
+    // then the sequencer state a multi-commit pick leaves behind.
     git(ctx.root, ['reset', '-q', '--merge']);
+    git(ctx.root, ['cherry-pick', '--quit']);
     fail(`Task ${number}'s commits do not apply onto the plan branch:\n${(picked.stderr || picked.stdout).trim()}\nThe worktree is kept at ${worker.path}; resolve by hand or drop it and build inline.`);
   }
   release(ctx, state, number);
@@ -171,7 +180,10 @@ function session(ctx, argv, out) {
   if (!row) fail('usage: dflow session <board row>; the row must exist on the board');
   const plan = /^docs\/dflow\/plans\//.test(row.assigned) && fs.existsSync(path.join(ctx.root, row.assigned));
   out('Start this in your own terminal; a background session keeps running after the terminal closes:');
-  out(plan ? `  claude --bg "/dflow:build ${row.assigned}"` : `  claude --bg "/dflow:plan board row ${row.number}: ${row.item.replaceAll('"', '\\"')}"`);
+  // Single quotes: a board item may hold `$(...)` or backticks, and the row
+  // text can come from another person through darkmem.
+  const quoted = text => `'${text.replaceAll("'", "'\\''")}'`;
+  out(`  claude --bg ${quoted(plan ? `/dflow:build ${row.assigned}` : `/dflow:plan board row ${row.number}: ${row.item}`)}`);
   out('It works in a worktree of its own. A permission prompt makes it wait: attach with `claude attach` to answer.');
   out('Before starting a second plan, check `dflow plans --conflicts`.');
   return 0;

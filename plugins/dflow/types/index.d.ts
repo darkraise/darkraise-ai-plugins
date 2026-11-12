@@ -16,7 +16,14 @@ export type Hud = {
   gates: null | { ok: boolean; stale: boolean; failed: string[] }
   review: null | { recorded: null | { tier: number }; open: number; blocking: number }
   board: null | { counts: Record<string, number>; row: null | { number: number; state: string } }
-  sync: { enabled: boolean; queued?: number; conflict?: string | null; error?: string | null }
+  sync: {
+    enabled: boolean
+    queued?: number
+    conflict?: string | null
+    error?: string | null
+    offline?: boolean
+    refused?: number
+  }
   context: null | { resetAt: number }
   workers: { task: number }[]
 }

@@ -37,6 +37,8 @@ test('file sets overlap by path prefix', () => {
   assert.ok(filesOverlap(['src/'], ['src/a.mjs']));
   assert.ok(filesOverlap(['src/**/*.ts'], ['src/x/y.ts']));
   assert.ok(!filesOverlap(['src/a.mjs'], ['src/ab.mjs']));
+  assert.ok(filesOverlap(['src/limit*.mjs'], ['src/limit.test.mjs']));
+  assert.ok(filesOverlap(['*.md'], ['docs/a.md']));
   assert.ok(!filesOverlap(['lib/'], ['src/', 'tests/']));
 });
 
@@ -85,6 +87,7 @@ test('a worker whose commits do not apply keeps its worktree; drop removes it', 
   assert.equal(merged.status, 1);
   assert.match(merged.stderr, /do not apply onto the plan branch/);
   assert.equal(git(root, 'status', '--porcelain', '--untracked-files=no'), '');
+  assert.ok(!fs.existsSync(path.join(root, '.git/sequencer')), 'no cherry-pick is left in progress');
   assert.ok(fs.existsSync(directory));
   assert.equal(dflow(root, ['worktree', 'drop', '3']).status, 0);
   assert.ok(!fs.existsSync(directory));
@@ -109,6 +112,11 @@ test('plans --conflicts reports two open plans with overlapping files', t => {
 
 test('session prints the background command for a board row', t => {
   const root = ready(t);
-  assert.match(dflow(root, ['session', '1']).stdout, /claude --bg "\/dflow:build docs\/dflow\/plans\/2026-11-12-meter\.md"/);
+  assert.match(dflow(root, ['session', '1']).stdout, /claude --bg '\/dflow:build docs\/dflow\/plans\/2026-11-12-meter\.md'/);
+  // A board item is other people's text: it must not reach the shell live.
+  write(root, 'docs/dflow/board.md', `${read(root, 'docs/dflow/board.md')}| 2 | Fix $(touch pwned) and it's \`id\` | - | Passes | open | - |\n`);
+  const printed = dflow(root, ['session', '2']).stdout.split('\n')[1].trim();
+  assert.equal(sh(root, 'sh', ['-c', printed.replace(/^claude --bg/, 'printf %s')]).stdout, "/dflow:plan board row 2: Fix $(touch pwned) and it's `id`");
+  assert.ok(!fs.existsSync(path.join(root, 'pwned')));
   assert.equal(dflow(root, ['session', '9']).status, 1);
 });

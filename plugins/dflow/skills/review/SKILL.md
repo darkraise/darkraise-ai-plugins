@@ -23,7 +23,7 @@ It prints the tier, the mechanical facts and the pack's path. Act on the facts f
 - **Tier 1.** Dispatch one `dflow:reviewer` (model opus; effort medium, or high when the plan has a risk). Its whole prompt: `Review pack: <path>`.
 - **Tier 2.** Run the workflow script `${CLAUDE_PLUGIN_ROOT}/workflows/deep-review.js` with the Workflow tool, `args: { "pack": "<path>" }`. Invoking this skill is the owner's request for it. Without the Workflow tool, dispatch two reviewers in one message (one told to look at correctness and plan conformance, one at the plan's risk), then a third to refute their findings with `dflow review judge`.
 
-The reviewer writes findings to disk. Do not ask it to repeat them in its reply.
+The reviewer writes findings to disk. Do not ask it to repeat them in its reply. If the workflow returns `complete: false`, a lens or the verifier did not run: run it again before recording the review.
 
 ## 3. Prove and fix
 

@@ -24,6 +24,7 @@ export async function closeWorkstream(ctx, slug) {
 function say(out, verb, report) {
   if (report.error) out(`darkmem ${verb} stopped: ${report.error}. What was not sent stays queued.`);
   if (report.conflict) out(`darkmem conflict: ${report.conflict}`);
+  for (const refusal of report.refused) out(`darkmem refused ${refusal}`);
   const parts = [];
   if (report.documents.length) parts.push(`${report.documents.length} document(s): ${report.documents.join(', ')}`);
   if (report.rows.length) parts.push(`board row ${report.rows.join(', ')}`);
@@ -45,8 +46,8 @@ export async function run(ctx, argv, { out }) {
   }
   if (action !== 'push' && action !== 'pull') fail('usage: dflow sync push|pull|status');
   const report = action === 'push' ? await flush(ctx) : await pull(ctx);
-  if (!report) out('darkmem pull: the board is pulled only on the default branch');
+  if (!report) out(action === 'pull' ? 'darkmem pull: the board is pulled only on the default branch, and one projection runs at a time' : 'darkmem push: another push is running in this checkout');
   else say(out, action, report);
   refreshHud(ctx);
-  return report?.error || report?.conflict ? 1 : 0;
+  return report?.error || report?.conflict || report?.refused.length ? 1 : 0;
 }

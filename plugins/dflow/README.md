@@ -100,14 +100,16 @@ when every task is done, `done` at ship.
 
 ## Definition of done
 
-A **task** is done when `dflow done` saw its verify command pass, the change is
-committed, files outside the task's `Files` are explained, no existing test was
-weakened without a reason, and an amended verify line carries a reason.
+A **task** is done when `dflow done` saw its verify command pass on a working
+tree that matches what it commits, files outside the task's `Files` are
+explained, no existing test was weakened without a reason, and an amended
+verify line carries a reason. A task without a verify command cannot be done.
 
 A **plan** is done when `dflow ship` finds every task done, the gates and every
 acceptance command passing on the current commit, a fresh proof for every `UI`
-line, a review at the required tier with no blocking finding open, the named
-docs changed, and `dflow doctor` clean.
+line, a review at the required tier that covers the current code with no
+blocking finding open, the named docs changed, and `dflow doctor` clean. A task
+the owner drops is removed from the plan with a logged amendment.
 
 ## Commands
 
@@ -189,6 +191,9 @@ The repository is the source of truth; darkmem is a projection.
 | Task state | a `ledger` entry with properties `task`, `state` (`todo`, `wip`, `review`, `blocked`, `done`) and `commit`; a blocked entry's body is the reason |
 | Checkpoint | a `checkpoint` entry at each stop: progress, next task, branch, commit |
 | Client | header `X-Darkmem-Client: dflow` |
+
+darkmem's board row edit route has to accept the API key; where it does not,
+the row is reported as refused and the rest of the projection goes on.
 
 On the default branch every document under `docs/dflow` is pushed by content
 hash. On a plan branch only that plan and its own board row are, so branches

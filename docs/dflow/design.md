@@ -125,9 +125,9 @@ marks a task `wip`; `dflow done` marks it `done`; `dflow block` marks it
 `blocked` with a reason; `review` is a task with a risk flag waiting for its
 mid-plan check. Each transition is recorded in four places by the CLI: the
 plan's checkboxes (committed), the task's commit, `.dflow/state.json` (for
-the HUD and hooks), and a darkmem work-log entry. `dflow status` cross-checks
-them and flags a tick without a commit or a commit that touched files outside
-the task's `Files:`.
+the HUD and hooks), and a darkmem work-log entry. `dflow status` flags a tick
+that no `dflow done` recorded. Files outside the task's `Files:` are refused
+by `dflow done` itself, before the commit.
 
 `dflow done 1 -m "feat(status): parse limit header"` runs the task's verify
 command with a timeout. On success it ticks the boxes, commits the staged
@@ -154,7 +154,8 @@ only its own row, so parallel branches merge without conflict.
 
 **A plan is done** when all of these hold, checked by `dflow ship`:
 
-1. Every task is `done`, or deferred with a reason the owner accepted.
+1. Every task is `done`. A task the owner drops is taken out of the plan
+   with a logged amendment; the CLI has no deferred state.
 2. The project gates (lint, type check, full test suite, build) pass on the
    current head, run fresh.
 3. Every Acceptance line has evidence at the current head: a passing
@@ -396,8 +397,11 @@ the CLI over REST; no mirror directory and no reconcile step.
 | Client header | `X-Darkmem-Client: dflow` |
 
 The routes are the ones darkmem has today (documents, work log, board row
-edit). The darkmem change is to read the two board prefixes and map
-`docs/dflow/` in the Assigned cell.
+edit). darkmem has to change in three places: read the two board prefixes,
+map `docs/dflow/` in the Assigned cell, and accept an API key on the board
+row edit route, which today takes a login session only. Until the last one,
+a plan branch's row is refused and reported; the plan and the work log still
+go through, and the board's task progress comes from the work log.
 
 - **Push.** By content hash after `done`, at `ship` and from the Stop hook.
   The whole `board.md` is pushed only from the default branch; a plan branch

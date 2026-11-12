@@ -62,10 +62,19 @@ export function paneRows(hud, context, columns) {
     const counts = Object.entries(hud.board.counts).map(([state, count]) => `${count} ${state}`).join(' · ');
     rows.push(['Board', fit(`${hud.board.row ? `#${hud.board.row.number} ${hud.board.row.state} · ` : ''}${counts}`, width), true]);
   }
-  if (hud.sync?.enabled) rows.push(['darkmem', hud.sync.conflict ? 'conflict' : hud.sync.error ? `offline · ${hud.sync.queued} queued` : `${hud.sync.queued ?? 0} queued`, !hud.sync.conflict]);
+  if (hud.sync?.enabled) rows.push(['darkmem', fit(syncText(hud.sync), width), !hud.sync.conflict && !hud.sync.error && !hud.sync.refused]);
   if (hud.workers?.length) rows.push(['Workers', fit(hud.workers.map(worker => `T${worker.task}`).join(', '), width), true]);
   rows.push(['Next', fit(hud.next, width), false]);
   return rows;
+}
+
+// A server that cannot be reached and one that answered with a refusal need
+// different things from the owner, so they read differently.
+function syncText(sync) {
+  if (sync.conflict) return 'conflict: run dflow sync pull';
+  const queued = `${sync.queued ?? 0} queued`;
+  if (sync.error) return sync.offline ? `offline · ${queued}` : `refused: run dflow sync push · ${queued}`;
+  return sync.refused ? `${sync.refused} refused: run dflow sync push · ${queued}` : queued;
 }
 
 export function isFreshReset(flag, now) {

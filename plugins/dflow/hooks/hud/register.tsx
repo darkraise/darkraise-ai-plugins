@@ -13,6 +13,7 @@ import {
 const PANE = 'dflow-hud'
 const COMMAND = 'dflow:hud'
 const POLL_MS = 2000
+const REWRITE_MS = 5 * 60 * 1000
 
 // Bump the tag when Hud's fields change: it declines what an earlier version
 // stored, which outlives a reload.
@@ -25,17 +26,21 @@ const contextAtom = atom(
   null as HudContext | null,
 )
 
-let root = ''
+// `root` is '' until looked up and null once known not to be a repository,
+// so a session started outside one does not run git on every poll.
+let root: string | null = ''
 let lastText = ''
+let lastTokens = -1
+let lastWrite = 0
 let sessionId = ''
 let timer: { cancel: () => void } | null = null
 
-async function locate($: any): Promise<string> {
+async function locate($: any): Promise<string | null> {
   const found = await $.process.run(['git', 'rev-parse', '--show-toplevel'], {
     timeoutMs: 5000,
   })
 
-  return found.exitCode === 0 ? found.stdout.trim() : ''
+  return found.exitCode === 0 ? found.stdout.trim() : null
 }
 
 async function loadMode($: any): Promise<void> {
@@ -64,11 +69,12 @@ async function readState($: any): Promise<void> {
   if (id !== sessionId) {
     sessionId = id
     lastText = ''
+    lastTokens = -1
     root = ''
     await loadMode($)
   }
 
-  if (!root) {
+  if (root === '') {
     root = await locate($)
   }
 
@@ -78,12 +84,23 @@ async function readState($: any): Promise<void> {
 
   const { context } = await $.session.usage()
   await update($, contextAtom, () => context)
+  const now = await $.clock.now()
 
-  if (typeof context.tokens === 'number') {
-    const at = new Date(await $.clock.now()).toISOString()
+  // Written when the figure changes, and every few minutes so that the CLI
+  // still finds it fresh; a write every poll would wake file watchers.
+  if (
+    typeof context.tokens === 'number' &&
+    (context.tokens !== lastTokens || now - lastWrite > REWRITE_MS)
+  ) {
+    lastTokens = context.tokens
+    lastWrite = now
     await $.fs.write(
       `${root}/.dflow/context.json`,
-      JSON.stringify({ tokens: context.tokens, window: context.window, at }),
+      JSON.stringify({
+        tokens: context.tokens,
+        window: context.window,
+        at: new Date(now).toISOString(),
+      }),
     )
   }
 

@@ -8,13 +8,18 @@ import path from 'node:path';
 const WEIGHT = { input: 1, write5m: 1.25, write1h: 2, read: 0.1, output: 5 };
 
 export function transcriptRoots(ctx) {
-  if (ctx.env.DFLOW_TRANSCRIPTS) return [ctx.env.DFLOW_TRANSCRIPTS];
+  if (ctx.env.DFLOW_TRANSCRIPTS) return [{ directory: ctx.env.DFLOW_TRANSCRIPTS, exact: true }];
   const projects = path.join(ctx.env.CLAUDE_CONFIG_DIR || path.join(ctx.env.HOME || os.homedir(), '.claude'), 'projects');
   const encoded = ctx.root.replace(/[^A-Za-z0-9]/g, '-');
   if (!fs.existsSync(projects)) return [];
   // Sessions started in a subdirectory or in a worktree of this repository
   // are stored under a name that extends the repository's own.
-  return fs.readdirSync(projects).filter(name => name === encoded || name.startsWith(`${encoded}-`)).map(name => path.join(projects, name));
+  return fs.readdirSync(projects).filter(name => name === encoded || name.startsWith(`${encoded}-`)).map(name => ({ directory: path.join(projects, name), exact: name === encoded }));
+}
+
+function inside(root, directory) {
+  const rel = path.relative(root, directory);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
 function transcriptFiles(directory) {
@@ -42,7 +47,7 @@ function transcriptFiles(directory) {
 // under one message id, so the largest output count per id is kept.
 export function readUsage(ctx, { from, to, branch }) {
   const byId = new Map();
-  for (const directory of transcriptRoots(ctx)) {
+  for (const { directory, exact } of transcriptRoots(ctx)) {
     for (const { file, agent } of transcriptFiles(directory)) {
       for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
         if (!line.includes('"usage"')) continue;
@@ -56,6 +61,11 @@ export function readUsage(ctx, { from, to, branch }) {
         const at = Date.parse(entry.timestamp);
         if (entry.type !== 'assistant' || !usage || !(at >= from && at <= to)) continue;
         if (branch && entry.gitBranch && entry.gitBranch !== branch) continue;
+        // The directory name alone cannot tell /x/app-web from a worktree of
+        // /x/app, so each record is held to its own working directory; one
+        // without it counts only from the directory named exactly for this
+        // repository.
+        if (typeof entry.cwd === 'string' ? !inside(ctx.root, entry.cwd) : !exact) continue;
         const id = entry.message.id ?? entry.uuid;
         const known = byId.get(id);
         if (known && known.output >= (usage.output_tokens ?? 0)) continue;

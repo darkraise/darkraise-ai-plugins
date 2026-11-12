@@ -41,15 +41,21 @@ const LENSES = [
 ]
 
 phase('Review')
-const reviews = (await parallel(LENSES.map(lens => () => agent(
+const results = await parallel(LENSES.map(lens => () => agent(
   `Review the change described in the pack at ${input.pack}. Your lens: ${lens.focus}\n\nRecord every finding with \`dflow review add ... --lens ${lens.key}\`. Return the ids you recorded and what you did not check.`,
   { label: `review:${lens.key}`, phase: 'Review', agentType: 'dflow:reviewer', model: 'opus', effort: 'high', schema: SUMMARY },
-)))).filter(Boolean)
+)))
+
+// A reviewer that failed or was skipped comes back as null. Its lens was not
+// reviewed, and the caller must not record the review as complete.
+const missingLenses = LENSES.filter((lens, index) => !results[index]).map(lens => lens.key)
+const reviews = results.filter(Boolean)
+if (missingLenses.length) log(`Not reviewed: the ${missingLenses.join(' and ')} lens did not run. Do not record this review as tier 2.`)
 
 const recorded = reviews.flatMap(review => review.recorded)
 if (!recorded.length) {
-  log('No findings were recorded; nothing to verify.')
-  return { recorded: [], confirmed: [], refuted: [], notChecked: reviews.map(review => review.notChecked).filter(Boolean) }
+  log(missingLenses.length ? 'No findings were recorded by the reviewers that ran.' : 'No findings were recorded; nothing to verify.')
+  return { complete: missingLenses.length === 0, missingLenses, recorded: [], confirmed: [], refuted: [], notChecked: reviews.map(review => review.notChecked).filter(Boolean) }
 }
 
 phase('Verify')
@@ -58,7 +64,11 @@ const verdicts = await agent(
   { label: 'verify', phase: 'Verify', agentType: 'dflow:reviewer', model: 'sonnet', effort: 'high', schema: VERDICTS },
 )
 
+if (!verdicts) log('Not verified: the verifier did not run. The findings stand as recorded.')
+
 return {
+  complete: missingLenses.length === 0 && Boolean(verdicts),
+  missingLenses,
   recorded,
   confirmed: verdicts ? verdicts.confirmed : [],
   refuted: verdicts ? verdicts.refuted : [],

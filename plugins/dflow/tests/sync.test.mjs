@@ -9,7 +9,7 @@ const hash = text => createHash('sha256').update(text).digest('hex').slice(0, 16
 
 // A stand-in for the darkmem routes dflow uses, with the same conflict codes.
 async function stub(t) {
-  const server = { documents: new Map(), entries: [], closed: [], requests: [] };
+  const server = { documents: new Map(), entries: [], closed: [], requests: [], blockFirst: new Set() };
   const listener = http.createServer((request, response) => {
     let raw = '';
     request.on('data', chunk => { raw += chunk; });
@@ -22,13 +22,18 @@ async function stub(t) {
         response.end(JSON.stringify(value));
       };
       if (request.headers.authorization !== 'Bearer secret' || request.headers['x-darkmem-client'] !== 'dflow') return send(401, { detail: 'bad key' });
-      const byId = id => [...server.documents.values()].find(document => document.id === id);
+      const byId = id => [...server.documents.values()].find(document => document.document_id === id);
       const row = /^\/api\/v1\/board\/registers\/([^/]+)\/rows\/(\d+)$/.exec(url.pathname);
       if (request.method === 'POST' && url.pathname === '/api/v1/documents') {
         const current = server.documents.get(body.uri);
         if (body.expected_hash && current && current.content_hash !== body.expected_hash) return send(409, { detail: 'hash mismatch' });
-        const document = { id: current?.id ?? `doc-${server.documents.size + 1}`, uri: body.uri, content: body.content, content_hash: hash(body.content) };
+        if (server.blockFirst.has(body.uri)) return send(409, { detail: 'document is block-first' });
+        const document = { document_id: current?.document_id ?? `doc-${server.documents.size + 1}`, uri: body.uri, content: body.content, content_hash: hash(body.content) };
         server.documents.set(body.uri, document);
+        if (server.dropNextAnswer) {
+          server.dropNextAnswer = false;
+          return response.destroy();
+        }
         return send(200, document);
       }
       if (request.method === 'GET' && url.pathname === '/api/v1/documents/by-uri') {
@@ -36,18 +41,26 @@ async function stub(t) {
         return document ? send(200, document) : send(404, { detail: 'no document is filed at uri' });
       }
       if (request.method === 'PATCH' && row) {
+        if (server.rowsNeedLogin) return send(401, { detail: 'login required' });
         const document = byId(row[1]);
+        if (!document) return send(422, { detail: 'invalid document id' });
         if (document.content_hash !== body.expected_hash) return send(409, { detail: 'hash_conflict' });
         const { expected_hash: _, ...changes } = body;
         document.content = rewriteRow(document.content, Number(row[2]), changes);
         document.content_hash = hash(document.content);
-        return send(200, { document_id: document.id, content_hash: document.content_hash });
+        return send(200, { document_id: document.document_id, content_hash: document.content_hash });
       }
       if (request.method === 'POST' && url.pathname === '/api/v1/worklog/entries') {
         for (const entry of body.entries) server.entries.push({ workstream: body.workstream, run_key: body.run_key, plan_uri: body.properties.plan_uri, ...entry });
+        if (server.dropNextAppendAnswer) {
+          server.dropNextAppendAnswer = false;
+          return response.destroy();
+        }
         return send(201, { last_seq: server.entries.length });
       }
-      if (request.method === 'GET' && url.pathname === '/api/v1/worklog/resume') return send(200, { workstream: { id: 'ws-1' } });
+      if (request.method === 'GET' && url.pathname === '/api/v1/worklog/resume') {
+        return send(200, { workstream: { id: 'ws-1' }, ledger: server.entries.filter(entry => entry.kind === 'ledger' && entry.workstream === url.searchParams.get('workstream')).slice(-20) });
+      }
       if (request.method === 'PATCH' && url.pathname === '/api/v1/worklog/workstreams/ws-1') {
         server.closed.push(body.state);
         return send(200, {});
@@ -117,7 +130,8 @@ test('on a plan branch push sends the plan, its board row and the task transitio
 
   await dflowAsync(root, ['block', '2', 'the design is undecided'], { env: server.env });
   const blocked = server.entries.at(-1);
-  assert.deepEqual([blocked.body, blocked.properties], ['the design is undecided', { task: 2, state: 'blocked' }]);
+  assert.deepEqual([blocked.body, blocked.properties.task, blocked.properties.state], ['the design is undecided', 2, 'blocked']);
+  assert.match(blocked.properties.event_id, /^[0-9a-f]{16}$/);
 
   await dflowAsync(root, ['hook', 'stop'], { env: server.env });
   await dflowAsync(root, ['hook', 'stop'], { env: server.env });
@@ -166,4 +180,70 @@ test('an unreachable server leaves the work queued and does not fail the build',
   const push = await dflowAsync(root, ['sync', 'push'], { env });
   assert.equal(push.status, 1);
   assert.match(push.stdout, /darkmem push stopped: .*What was not sent stays queued/);
+});
+
+test('a board row the server refuses does not hold back the plan or the work log', async t => {
+  const server = await stub(t);
+  const root = makeProject(t, { config: CONFIG });
+  git(root, 'switch', '-q', 'main');
+  await dflowAsync(root, ['sync', 'push'], { env: server.env });
+  git(root, 'switch', '-q', 'feat/x');
+  server.rowsNeedLogin = true;
+  finishTask1(root);
+  await dflowAsync(root, ['done', '1', '-m', 'feat: parse'], { env: server.env });
+  assert.ok(server.entries.some(entry => entry.properties.task === 1 && entry.properties.state === 'done'));
+  assert.ok(server.documents.has('dflow/plans/2026-11-12-meter.md'));
+  const push = await dflowAsync(root, ['sync', 'push'], { env: server.env });
+  assert.equal(push.status, 1);
+  assert.match(push.stdout, /darkmem refused board row 1: PATCH .* answered 401/);
+  assert.equal(JSON.parse(dflow(root, ['status', '--json']).stdout).sync.refused, 1);
+});
+
+test('an answer lost after the server filed it does not file the entry or flag the board twice', async t => {
+  const server = await stub(t);
+  const root = makeProject(t, { config: CONFIG });
+  git(root, 'switch', '-q', 'main');
+  await dflowAsync(root, ['sync', 'push'], { env: server.env });
+  write(root, 'docs/dflow/board.md', rewriteRow(read(root, 'docs/dflow/board.md'), 1, { note: 'edited locally' }));
+  server.dropNextAnswer = true;
+  assert.equal((await dflowAsync(root, ['sync', 'push'], { env: server.env })).status, 1);
+  const again = await dflowAsync(root, ['sync', 'push'], { env: server.env });
+  assert.equal(again.status, 0, again.stdout);
+  assert.doesNotMatch(again.stdout, /conflict/);
+
+  git(root, 'commit', '-q', '-am', 'docs: note');
+  git(root, 'switch', '-q', 'feat/x');
+  finishTask1(root);
+  server.dropNextAppendAnswer = true;
+  await dflowAsync(root, ['done', '1', '-m', 'feat: parse'], { env: server.env });
+  await dflowAsync(root, ['sync', 'push'], { env: server.env });
+  const bodies = server.entries.filter(entry => entry.kind === 'ledger').map(entry => entry.body);
+  assert.equal(new Set(bodies).size, bodies.length, bodies.join(' | '));
+  assert.ok(bodies.some(body => /^Task 1: complete/.test(body)));
+});
+
+test('a document the server refuses is skipped until it changes, and the rest goes through', async t => {
+  const server = await stub(t);
+  const root = makeProject(t, { config: CONFIG });
+  git(root, 'switch', '-q', 'main');
+  server.blockFirst.add('dflow/decisions.md');
+  const push = await dflowAsync(root, ['sync', 'push'], { env: server.env });
+  assert.match(push.stdout, /darkmem refused dflow\/decisions\.md/);
+  assert.ok(server.documents.has('dflow/project.md'));
+  const posts = server.requests.length;
+  const again = await dflowAsync(root, ['sync', 'push'], { env: server.env });
+  assert.equal(again.status, 0, again.stdout);
+  assert.equal(server.requests.length, posts, 'the refused document is not sent again unchanged');
+});
+
+test('two pushes at once do not send the queued entries twice', async t => {
+  const server = await stub(t);
+  const root = makeProject(t, { config: CONFIG });
+  finishTask1(root);
+  const off = { DFLOW_DARKMEM_URL: 'http://127.0.0.1:9', DARKMEM_API_KEY: 'secret' };
+  await dflowAsync(root, ['done', '1', '-m', 'feat: parse'], { env: off });
+  await Promise.all(Array.from({ length: 4 }, () => dflowAsync(root, ['sync', 'push'], { env: server.env })));
+  const bodies = server.entries.filter(entry => entry.kind === 'ledger').map(entry => entry.body);
+  assert.ok(bodies.length >= 2);
+  assert.equal(new Set(bodies).size, bodies.length, bodies.join(' | '));
 });

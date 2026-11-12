@@ -29,6 +29,9 @@ test('cost sums usage once per message id, by phase and model, with subagents', 
     usage('m5', '2026-11-12T15:00:00.000Z', { input: 999 }),
     'not json',
   ].join('\n'));
+  // A sibling repository whose encoded name extends this one's is not this one.
+  write(root, '.transcripts/project/sibling.jsonl', usage('x1', '2026-11-12T11:45:00.000Z', { input: 5000 }, { cwd: `${root}-web` }));
+  write(root, '.transcripts/project/inside.jsonl', usage('x2', '2026-11-12T09:30:00.000Z', { input: 1 }, { cwd: `${root}/src` }));
   write(root, '.transcripts/project/session/subagents/agent-a1.jsonl', usage('s1', '2026-11-12T12:30:00.000Z', { input: 50, write: 2000, output: 100 }, { model: 'claude-sonnet-5-5' }));
   write(root, '.transcripts/project/session/subagents/agent-a1.meta.json', JSON.stringify({ agentType: 'dflow:worker' }));
 

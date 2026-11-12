@@ -67,7 +67,12 @@ test('the workflow script starts with a literal meta and runs to a result', asyn
     return options.schema.properties.recorded ? { recorded: [`F${calls.length}`], notChecked: '' } : { confirmed: ['F1'], refuted: ['F2'] };
   };
   const run = stubArgs => new AsyncFunction('args', 'agent', 'parallel', 'phase', 'log', body)(stubArgs, agent, thunks => Promise.all(thunks.map(thunk => thunk())), () => {}, () => {});
-  assert.deepEqual(await run({ pack: '.dflow/review/x/pack.md' }), { recorded: ['F1', 'F2'], confirmed: ['F1'], refuted: ['F2'], notChecked: [] });
+  assert.deepEqual(await run({ pack: '.dflow/review/x/pack.md' }), { complete: true, missingLenses: [], recorded: ['F1', 'F2'], confirmed: ['F1'], refuted: ['F2'], notChecked: [] });
   assert.deepEqual(calls.map(options => [options.agentType, options.model]), [['dflow:reviewer', 'opus'], ['dflow:reviewer', 'opus'], ['dflow:reviewer', 'sonnet']]);
   await assert.rejects(run(undefined), /deep-review needs args/);
+
+  // A reviewer that fails is named, and the review is not complete.
+  const failing = async (prompt, options) => (options.label === 'review:risk' ? null : agent(prompt, options));
+  const partial = await new AsyncFunction('args', 'agent', 'parallel', 'phase', 'log', body)({ pack: 'p' }, failing, thunks => Promise.all(thunks.map(thunk => thunk())), () => {}, () => {});
+  assert.deepEqual([partial.complete, partial.missingLenses], [false, ['risk']]);
 });
