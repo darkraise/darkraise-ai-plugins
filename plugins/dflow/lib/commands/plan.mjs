@@ -54,6 +54,7 @@ function create(ctx, argv, out) {
   const state = loadState(ctx.paths);
   state.plan = planRel;
   saveState(ctx.paths, state);
+  appendEvent(ctx, { plan: path.basename(file, '.md'), event: 'planned' });
   out(`Created ${planRel}, linked to board row ${number}. Fill it in, then run \`dflow plan check\`.`);
   refreshHud(ctx);
   return 0;
