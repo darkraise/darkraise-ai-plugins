@@ -141,9 +141,7 @@ says "brainstorming: the no-run option is recommended" "$ABD" 'No early run (Rec
 says "brainstorming: the answer goes to Decisions" "$ABD" 'record the answer in `## Decisions` as `Early CI: none` or `Early CI: <first|midway> — consented <YYYY-MM-DD>`'
 says "brainstorming: the answer is the consent for the push and dispatch" "$ABD" 'the answer is the consent for the push and the workflow dispatch'
 
-# Docs pointers and test cleanups: pointers name the file that holds their target.
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+# Docs pointers: pointers name the file that holds their target.
 SDD_REFS="$P/skills/subagent-driven-development/references"
 check "process-graph: no label points into ./references/" "$(grep -c '\./references/' "$SDD_REFS/process-graph.md")" "0"
 for template in implementer-prompt group-reviewer-prompt task-reviewer-prompt ruling-prompt re-review-prompt; do
@@ -158,18 +156,6 @@ lacks "no Recovery pointer names The Ledger's Recovery" "$P/skills/subagent-driv
 check "the Recovery pointers resolve" "$([ -s "$SDD_REFS/ledger.md" ] && [ -s "$P/skills/executing-plans/references/recovery.md" ] && echo yes || echo no)" "yes"
 says "writing-plans: the spec's strategy line comes from design-phase.md" "$W" '[design-phase.md](../brainstorming/references/design-phase.md)'
 lacks "writing-plans: the question is not named by a section of brainstorming's SKILL.md" "$W" 'dforge:brainstorming §Choosing the execution strategy'
-check "the review-depth acceptance tests carry no unused SD= line" "$(cat "$HERE/review-depth.acceptance.test.sh" "$HERE/review-depth-qa.acceptance.test.sh" | grep -c '^SD=')" "0"
-check "review-depth-qa builds the finishing text with flat_skill" "$(grep -c 'FN=\$(flat_skill "\$FIN")' "$HERE/review-depth-qa.acceptance.test.sh")" "1"
-
-# impl-clauses.test.sh counts occurrences, so a clause written twice in one agent fails it.
-mkdir -p "$TMP/clauses/tests" "$TMP/clauses/agents"
-cp "$HERE/impl-clauses.test.sh" "$TMP/clauses/tests/"
-cp "$P/agents"/impl-*.md "$TMP/clauses/agents/"
-check "impl-clauses: an unmodified copy prints no FAIL line" "$(bash "$TMP/clauses/tests/impl-clauses.test.sh" 2>&1 | grep -c '^FAIL')" "0"
-for twice in "$TMP/clauses/agents"/impl-*.md; do break; done
-printf '\nNever edit or delete an existing test unless the brief names it.\n' >> "$twice"
-check "impl-clauses: a clause written twice in one agent prints a FAIL line" \
-  "$(bash "$TMP/clauses/tests/impl-clauses.test.sh" 2>&1 | grep -c "^FAIL - $(basename "$twice" .md): existing tests are immutable")" "1"
 
 NOTE="$P/../../docs/dforge/notes/2026-10-28-pipeline-smoke.md"
 says "pipeline-smoke note: a Caveats section" "$NOTE" '## Caveats'

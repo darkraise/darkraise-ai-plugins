@@ -93,7 +93,7 @@ const suiteParts = {
   'plan-lint.test.sh': [['one'], ['two']],
   // speed-and-cost-followups ran past 600 s on a Windows runner while its A12
   // re-ran two whole suites, which it skips under test-all.
-  'speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11'], ['A12'], ['A13', 'A14', 'A15', 'A16', 'A19', 'A20', 'A21', 'A23']],
+  'speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A7', 'A8', 'A9', 'A10', 'A11'], ['A12'], ['A13', 'A14', 'A15', 'A16', 'A19', 'A20', 'A23']],
 };
 const jobs = [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],

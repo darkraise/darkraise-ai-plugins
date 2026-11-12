@@ -31,10 +31,6 @@ has() { # has <name> <haystack> <needle>
   if grep -qF -- "$3" <<<"$2"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       missing: [%s]\n' "$1" "$3"; fail=$((fail + 1)); fi
 }
-matches() { # matches <name> <haystack> <ERE> — case-insensitive
-  if grep -qiE -- "$3" <<<"$2"; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
-  else printf 'FAIL - %s\n       no match: [%s]\n' "$1" "$3"; fail=$((fail + 1)); fi
-}
 selected() { [ "$ONLY" = "  " ] || [[ "$ONLY" == *" $1 "* ]]; }
 
 TMP="$(mktemp -d)"
@@ -345,21 +341,6 @@ if selected A12; then
   fi
 fi
 
-# ------------------------------------------------------------------ A6
-if selected A6; then
-  doc() { tr -d '\r' < "$1" | tr '\n' ' ' | tr -s ' '; }
-  TRP=$(doc "$PLUGIN/skills/subagent-driven-development/references/task-reviewer-prompt.md")
-  DT=$(doc "$PLUGIN/reference/delegated-task.md")
-  matches "A6: task-reviewer-prompt.md says baseline runs only a command the plan names" "$TRP" 'baseline.{0,300}runs only.{0,60}plan names'
-  matches "A6: delegated-task.md says a baseline command runs only when the plan names it" "$DT" 'baseline. command runs only when the plan names it'
-  matches "A6: delegated-task.md says a plan-named command runs unsandboxed" "$DT" 'plan-named command.{0,80}unsandboxed'
-  matches "A6: delegated-task.md says review seats write only their report files" "$DT" 'review seats can write only their report files'
-  check "A6: delegated-suite.test.sh pins the baseline, unsandboxed and report-file sentences" \
-    "$(grep -c 'runs only when the plan names it' "$HERE/delegated-suite.test.sh") $(grep -c 'unsandboxed' "$HERE/delegated-suite.test.sh") $(grep -c 'write only their report files' "$HERE/delegated-suite.test.sh")" "1 1 1"
-  check "A6: task-step-text.test.sh pins the reviewer prompt's baseline sentence" \
-    "$(grep -cE 'names_flat .*(TRP|task-reviewer-prompt).*plan names' "$HERE/task-step-text.test.sh" | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes"
-fi
-
 # ---------------------------------------------------- A13, A14, A15 (gate)
 gate_setup() {
   GREPO="$TMP/gate-repo"; init_repo "$GREPO"
@@ -442,12 +423,6 @@ fi
 
 # ------------------------------------------------------------------ A20
 if selected A20; then
-  SK="$PLUGIN/skills"
-  check "A20: process-graph.md has no ./references/ label" "$(grep -c '\./references/' "$SK/subagent-driven-development/references/process-graph.md")" "0"
-  for f in "$SK/subagent-driven-development/SKILL.md" "$SK/executing-plans/SKILL.md" "$SK/subagent-driven-development/references/setup.md" "$SK/executing-plans/references/setup.md"; do
-    check "A20: ${f#"$PLUGIN/"} points at ledger.md or recovery.md for the Recovery table" "$(grep -i 'recovery' "$f" | grep -cE '(ledger|recovery)\.md' | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes"
-  done
-  check "A20: writing-plans/SKILL.md names design-phase.md" "$(grep -c 'design-phase\.md' "$SK/writing-plans/SKILL.md" | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes"
   out=$(cd "$HERE" && timeout 120 bash "$HERE/skill-split-planning.test.sh" 2>&1); rc=$?
   check "A20: skill-split-planning.test.sh passes and reports no broken link" "$rc $(grep -c '^FAIL' <<<"$out") $(grep -i 'broken' <<<"$out" | grep -vc '^ok ')" "0 0 0"
   check "A20: no SD= line in the two review-depth acceptance tests" \
@@ -463,16 +438,6 @@ if selected A20; then
   sed "s/^Never edit or delete an existing test unless the brief names it\./$clause $clause/" "$target" > "$target.new" && mv "$target.new" "$target"
   out=$(cd "$COPY/tests" && timeout 60 bash impl-clauses.test.sh 2>&1); rc=$?
   check "A20: a clause duplicated in one impl-*.md makes impl-clauses.test.sh print a FAIL line" "$([ "$rc" -ne 0 ] && echo failed || echo passed) $(grep -c '^FAIL.*impl-haiku' <<<"$out" | awk '{ print ($1 >= 1) ? "fail-line" : "no-fail-line" }')" "failed fail-line"
-fi
-
-# ------------------------------------------------------------------ A21
-if selected A21; then
-  NOTE="$REPO_ROOT/docs/dforge/notes/2026-10-28-pipeline-smoke.md"
-  cav=$(tr -d '\r' < "$NOTE" | awk '/^#+ Caveats[[:space:]]*$/ { on = 1; next } on && /^#+ / { exit } on { print }' | tr '\n' ' ')
-  check "A21: the note has a Caveats section" "$(grep -cE '^#+ Caveats[[:space:]]*$' "$NOTE")" "1"
-  matches "A21: it names the figures that come from the last result event" "$cav" 'last .?result.? event'
-  matches "A21: it names the subagent messages in the timeline" "$cav" 'subagent'
-  matches "A21: it names the p1_overlap change" "$cav" 'p1_overlap.{0,300}(changed|group)'
 fi
 
 # ------------------------------------------------------------------ A23
