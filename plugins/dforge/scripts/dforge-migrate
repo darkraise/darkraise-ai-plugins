@@ -320,7 +320,7 @@ rewrite_prefixes() {
 }
 
 # plan_done DOCS REL — the completed.md beside the plan DOCS/REL records it,
-# under any of the three docs spellings, as next-step's plan_finished reads it.
+# under any of the three docs spellings.
 plan_done() {
   local f="$1/$(dirname -- "$2")/completed.md" spelling
   [ -f "$f" ] || return 1

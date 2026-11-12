@@ -58,8 +58,7 @@ function dirEntries(dir) {
   }
 }
 
-// One document name under any docs prefix (spec §7.1), as dforge_name_key
-// and dforge_name_spellings spell it in roots.sh. The older docs/forge and
+// One document name under any docs prefix (spec §7.1). The older docs/forge and
 // docs/superpowers spellings stay readable because historical plans and
 // ledgers cite them.
 export function nameSpellings(name) {

@@ -96,8 +96,8 @@ jobs:
             timeout 30s "$CLAUDE" plugin validate "plugins/$plugin"
           done
 
-      # The cockpit's 397 tests took 51 to 81 s on the runner, an npx
-      # download included.
+      # The cockpit's tests took 51 to 81 s on the runner when there were 397
+      # of them, an npx download included.
       - name: Validate and test dforge
         timeout-minutes: 6
         run: |

@@ -333,7 +333,7 @@ async function pushLedger(context, slug, file) {
 }
 
 // Whether the completed.md beside the plan a ledger names records it, by its
-// backticked name under either docs prefix, as next-step's plan_finished does.
+// backticked name under either docs prefix.
 function planFinished(roots, named) {
   const uri = named ? pathToUri(roots, named) : null;
   const completed = uri ? uriToLocal(roots, `${path.posix.dirname(uri)}/completed.md`) : null;

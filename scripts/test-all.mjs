@@ -34,13 +34,12 @@ async function run(executable, args, seconds, buffered) {
   const say = (text, log = console.log) => { if (buffered) chunks.push(Buffer.from(`${text}\n`)); else log(text); };
   say(`\nRunning ${args.join(' ')}`);
   const started = Date.now();
-  let timedOut = false;
   const job = {};
   running.add(job);
   const ok = await new Promise((resolveRun, reject) => {
     job.child = spawn(executable, args, { cwd: root, stdio: buffered ? ['inherit', 'pipe', 'pipe'] : 'inherit', windowsHide: true, detached: process.platform !== 'win32', env: { ...process.env, DR_TEST_BASH: bash } });
     const closed = buffered ? Promise.all([job.child.stdout, job.child.stderr].map(stream => new Promise(done => { stream.on('data', chunk => chunks.push(chunk)); stream.on('close', done); }))) : Promise.resolve();
-    job.timer = setTimeout(() => { timedOut = true; say(`Timeout after ${seconds}s`, console.error); stop(job); }, seconds * 1000);
+    job.timer = setTimeout(() => { say(`Timeout after ${seconds}s`, console.error); stop(job); }, seconds * 1000);
     job.child.on('error', error => { clearTimeout(job.timer); clearTimeout(job.forceTimer); running.delete(job); reject(error); });
     job.child.on('exit', async (code, signal) => {
       const elapsed = (Date.now() - started) / 1000;
