@@ -11,22 +11,16 @@
     {
       "name": "dforge",
       "source": "./plugins/dforge",
-      "description": "Brainstorm, plan and execute with scored tasks, in-session execution, criteria-based review, UI/UX work proven in the running UI and external Antigravity and Codex executors; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget, usage limits and the repo, with Discord notifications and an attribution guard.",
+      "description": "UI/UX work proven in the running UI, root-cause debugging and an optional darkmem mirror, beside the harness's own planning; on Claude Code a cockpit pane shows the session, context against the auto-compact point, usage limits and the repo, with Discord notifications and an attribution guard.",
       "category": "workflow",
       "keywords": [
-        "spec-driven",
-        "planning",
-        "effort",
-        "model-selection",
         "verification",
-        "code-review",
-        "codex",
-        "external-executors",
         "mod",
         "context-window",
-        "handoff",
         "rate-limits",
-        "discord"
+        "discord",
+        "ui-ux",
+        "debugging"
       ]
     },
     {

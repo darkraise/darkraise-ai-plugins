@@ -12,8 +12,8 @@ darkmem is off unless the `darkmemEnabled` setting is on. A repository mapped
 to darkmem while it is on may keep its documents in the darkmem mirror instead
 (`documentStore`; `bash <plugin-root>/scripts/dforge-path store` prints which).
 Turned off or unmapped, they belong in the checkout: documents still in the
-mirror are read there until a session start's reconcile copies them back from
-the mirror, without asking darkmem.
+mirror are read there until the reconcile of a session start with no plan in
+progress copies them back from the mirror, without asking darkmem.
 
 | Token | Local | darkmem |
 |---|---|---|

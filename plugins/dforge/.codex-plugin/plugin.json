@@ -1,13 +1,13 @@
 {
   "name": "dforge",
   "version": "4.17.0",
-  "description": "Brainstorm, plan and execute with scored tasks, in-session execution, criteria-based review, UI/UX work proven in the running UI and external Antigravity and Codex executors; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget, usage limits and the repo, with Discord notifications and an attribution guard.",
+  "description": "UI/UX work proven in the running UI, root-cause debugging and an optional darkmem mirror, beside the harness's own planning; on Claude Code a cockpit pane shows the session, context against the auto-compact point, usage limits and the repo, with Discord notifications and an attribution guard.",
   "author": {
     "name": "Darkraise"
   },
   "skills": "./skills/",
   "interface": {
-    "shortDescription": "Planned work with task scoring, in-session execution, criteria-based review, and external Antigravity and Codex executors.",
+    "shortDescription": "UI/UX work proven in the running UI and root-cause debugging, beside the client's own planning.",
     "category": "Development",
     "displayName": "dforge",
     "developerName": "Darkraise"
