@@ -1,0 +1,98 @@
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+export const BIN = fileURLToPath(new URL('../bin/dflow', import.meta.url));
+export const PLUGIN = fileURLToPath(new URL('../', import.meta.url));
+
+export function sh(cwd, command, args, options = {}) {
+  const result = spawnSync(command, args, { cwd, encoding: 'utf8', timeout: 60000, ...options });
+  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+}
+
+export function git(cwd, ...args) {
+  const result = sh(cwd, 'git', args);
+  if (result.status !== 0) throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
+  return result.stdout.trim();
+}
+
+export function write(root, relative, text) {
+  const file = path.join(root, relative);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, text);
+  return file;
+}
+
+export function read(root, relative) {
+  return fs.readFileSync(path.join(root, relative), 'utf8');
+}
+
+export function makeRepo(t, { branch = 'feat/x' } = {}) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dflow-test-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  git(root, 'init', '-q', '-b', 'main');
+  git(root, 'config', 'user.name', 'Test');
+  git(root, 'config', 'user.email', 'test@example.com');
+  git(root, 'config', 'commit.gpgsign', 'false');
+  write(root, 'README.md', '# fixture\n');
+  git(root, 'add', '-A');
+  git(root, 'commit', '-q', '-m', 'chore: start');
+  if (branch) git(root, 'switch', '-q', '-c', branch);
+  return root;
+}
+
+export function dflow(root, args, { env = {}, input } = {}) {
+  const home = path.join(root, '.test-home');
+  return sh(root, process.execPath, [BIN, ...args], {
+    input,
+    env: { ...process.env, HOME: home, DFLOW_HOME: path.join(home, '.dflow'), DFLOW_TODAY: '2026-11-12', CLAUDE_CONFIG_DIR: '', ...env },
+  });
+}
+
+export const PLAN = `# Rate-limit meter
+
+**Board:** 1 · **Branch:** feat/x
+**Goal:** Show the remaining rate limit.
+**Acceptance:**
+- A1: \`node check.mjs\` passes
+**Docs:** none — the fixture has no living docs
+**Risk:** none
+
+## Design
+
+- D1: a parser function — one call site
+
+## Tasks
+
+### Task 1: Parse the header
+**Files:** src/limit.mjs, tests/ · **After:** — · **Run:** inline · **Size:** S
+- [ ] Test: a header parses
+- [ ] Implement \`parseLimit\`
+- [ ] Verify: \`node verify1.mjs\`
+
+### Task 2: Draw the meter
+**Files:** src/meter.mjs · **After:** 1 · **Run:** inline · **Size:** S
+- [ ] Implement \`drawMeter\`
+- [ ] Verify: \`node verify2.mjs\`
+
+## Log
+`;
+
+// A repository with dflow initialised and PLAN approved and committed.
+export function makeProject(t, { plan = PLAN, config } = {}) {
+  const root = makeRepo(t);
+  const init = dflow(root, ['init']);
+  if (init.status !== 0) throw new Error(init.stderr);
+  if (config) write(root, 'docs/dflow/config.json', JSON.stringify(config));
+  write(root, 'docs/dflow/board.md', '# board\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Meter | - | It works | open | - |\n');
+  write(root, 'docs/dflow/plans/2026-11-12-meter.md', plan);
+  git(root, 'add', '-A');
+  git(root, 'commit', '-q', '-m', 'docs: set up dflow');
+  const approved = dflow(root, ['plan', 'approve']);
+  if (approved.status !== 0) throw new Error(approved.stderr + approved.stdout);
+  return root;
+}
+
+export const PLAN_FILE = 'docs/dflow/plans/2026-11-12-meter.md';
