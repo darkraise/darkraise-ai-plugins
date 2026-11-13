@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { bandText, bar, isFreshReset, isResetFor, nextMode } from '../hooks/hud/view.mjs';
+import { isFreshReset, isResetFor, nextMode } from '../hooks/hud/view.mjs';
 import { bar as meterBar, cellWidth, duration, isAtLeast, kTokens, limitForecast, limitLabel, rampColor, runsCut, sparkline, stackedRuns, track, trackRuns, windowElapsed } from '../hooks/hud/meter.mjs';
 import { SECTIONS, boardCard, checksCard, collapsedFrom, nextRow, nowRow, planCard, taskWindow, workersCard } from '../hooks/hud/view.mjs';
 import { contextCard } from '../hooks/hud/view.mjs';
@@ -12,6 +12,7 @@ import { usageCard } from '../hooks/hud/view.mjs';
 import { repoFromPorcelain, repoName, shortDir } from '../hooks/hud/repo.mjs';
 import { repoCard } from '../hooks/hud/view.mjs';
 import { denseLines } from '../hooks/hud/view.mjs';
+import { BAND_TIERS, bandLines, bandTop, bandWarning, fitBand } from '../hooks/hud/band.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const hud = root => JSON.parse(read(root, '.dflow/hud.json'));
@@ -55,15 +56,6 @@ test('done leaves a reset flag for the mod when the context passes the threshold
   assert.ok(isFreshReset(flag, Date.now()));
   assert.ok(!isFreshReset(flag, Date.now() + 11 * 60 * 1000));
   assert.ok(!isFreshReset({}, Date.now()));
-});
-
-test('the band fits its width and the mode cycles', () => {
-  const model = { branch: 'feat/x', next: 'n', plan: { title: 'A long plan title for the meter', done: 1, total: 4, current: { number: 2, state: 'wip', title: 't' }, blocked: [] }, context: { resetAt: 150000 } };
-  assert.equal(bar(1, 4, 8), '██░░░░░░');
-  assert.equal(bandText(model, { tokens: 90000, window: 1000000 }, 200), 'dflow ▸ A long plan title for the meter · ██░░░░░░ 1/4 · Task 2 wip · ctx 90k/150k');
-  assert.equal(bandText(model, null, 30).length, 30);
-  assert.deepEqual(['band', 'pane', 'off'].map(mode => nextMode(mode, '')), ['pane', 'off', 'band']);
-  assert.deepEqual([nextMode('band', 'off'), nextMode('band', 'sideways')], ['off', null]);
 });
 
 test('the mod is wired into hooks.json and the manifest names its state contract', () => {
@@ -336,4 +328,45 @@ test('the dense layout is one labelled line per card', () => {
   assert.deepEqual(denseLines({ ...input, shown: ['repo', 'plan'] }, 56).map(line => text(line).split(' ')[0]), ['repo', 'plan', 'next']);
   const noReset = denseLines({ ...input, hud: { ...PLAN_HUD, context: null } }, 56).map(text).find(line => line.startsWith('ctx'));
   assert.match(noReset, /^ctx {3}[▰▱]{8} 118k of 1\.0M$/);
+});
+
+const BAND_INPUT = {
+  hud: PLAN_HUD,
+  where: { cwd: '/home/me/code/shop', root: '/home/me/code/shop', home: '/home/me', remote: 'git@github.com:darkraise/shop.git' },
+  repo: repoFromPorcelain(PORCELAIN),
+  engine: { model: 'claude-opus-5-5', effort: 'xhigh' },
+  account: accountFrom(CLAUDE_JSON, '', '/home/me'),
+  remote: { clients: [{ surface: 'mobile' }], setting: null },
+  context: { tokens: 118000, window: 1000000 },
+  usage: { limits: [{ kind: 'five_hour', percent: 23, resetsAt: 1_000_000_000_000 + 3 * H + 40 * 60_000 }, { kind: 'seven_day', percent: 61, resetsAt: 1_000_000_000_000 + 4 * 24 * H }], usd: 1.2, startedAt: 1_000_000_000_000 - H },
+  now: 1_000_000_000_000,
+};
+
+test('the band carries the folder, model, plan and workers, then the readings', () => {
+  const [one, two] = bandLines(BAND_INPUT, 0).map(text);
+  for (const part of ['~/code/shop', '⎇ feat/x', '↑3', 'Opus 5.5', 'xhigh', 'dflow 4/7 · Task 5', '● 1 worker']) assert.ok(one.includes(part), part);
+  for (const part of ['ctx ', '79%', '5h ', '23% on pace', '7d ', '61%', '$1.20']) assert.ok(two.includes(part), part);
+  assert.ok(!bandLines({ ...BAND_INPUT, hud: { ...PLAN_HUD, plan: null } }, 0).map(text)[0].includes('dflow'));
+  assert.equal(text(bandTop(BAND_INPUT)), 'you@example.com · subscription · Remote ● connected');
+});
+
+test('each band line shrinks a tier at a time until it fits', () => {
+  for (const width of [196, 116, 76, 44]) {
+    for (const line of fitBand(BAND_INPUT, width)) assert.ok(cellWidth(text(line)) <= width, `${width}: ${text(line)}`);
+  }
+  const widths = Array.from({ length: BAND_TIERS }, (_, tier) => cellWidth(text(bandLines(BAND_INPUT, tier)[1])));
+  assert.deepEqual([...widths].sort((a, b) => b - a), widths);
+  assert.ok(text(fitBand(BAND_INPUT, 44)[0]).startsWith('shop'));
+  const noReset = text(bandLines({ ...BAND_INPUT, hud: { ...PLAN_HUD, context: null } }, 0)[1]);
+  assert.ok(noReset.startsWith('ctx ') && noReset.includes('118k of 1.0M') && !noReset.includes('NaN') && !noReset.includes('┃'));
+});
+
+test('a blocked task, failed gates or a darkmem conflict make a warning line', () => {
+  assert.deepEqual(bandWarning({ ...PLAN_HUD, sync: { enabled: false } }).map(run => run.text).join(''), '✗ Task 6 blocked');
+  const all = bandWarning({ ...PLAN_HUD, gates: { ok: false, stale: false, failed: ['lint'] }, sync: { enabled: true, conflict: 'c' } });
+  assert.equal(text(all), '✗ Task 6 blocked · ✗ gates failed · ✗ darkmem conflict');
+  assert.ok(all.filter(run => run.text !== ' · ').every(run => run.color === 'red'));
+  assert.deepEqual(bandWarning({ ...PLAN_HUD, plan: { ...PLAN_HUD.plan, blocked: [] }, sync: { enabled: false } }), []);
+  assert.deepEqual(['band', 'pane', 'off'].map(mode => nextMode(mode, '')), ['pane', 'off', 'band']);
+  assert.deepEqual([nextMode('band', 'off'), nextMode('band', 'sideways')], ['off', null]);
 });

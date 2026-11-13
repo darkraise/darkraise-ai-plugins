@@ -14,33 +14,6 @@ export function nextMode(current, argument) {
   return MODES.includes(argument) ? argument : null;
 }
 
-export function tokens(count) {
-  if (count >= 1000000) return `${(count / 1000000).toFixed(count % 1000000 ? 1 : 0)}M`;
-  return count >= 1000 ? `${Math.round(count / 1000)}k` : String(count);
-}
-
-export function bar(done, total, width) {
-  const filled = total ? Math.round((done / total) * width) : 0;
-  return `${'█'.repeat(filled)}${'░'.repeat(width - filled)}`;
-}
-
-function fit(text, columns) {
-  return text.length <= columns ? text : `${text.slice(0, Math.max(0, columns - 1))}…`;
-}
-
-function taskText(current) {
-  if (!current) return 'no task ready';
-  return `Task ${current.number} ${current.state}${current.attempts ? ` · verify failed ${current.attempts}×` : ''}`;
-}
-
-export function bandText(hud, context, columns) {
-  const { plan } = hud;
-  const parts = [`dflow ▸ ${plan.title}`, `${bar(plan.done, plan.total, 8)} ${plan.done}/${plan.total}`, taskText(plan.current)];
-  if (plan.blocked.length) parts.push(`${plan.blocked.length} blocked`);
-  if (context && typeof context.tokens === 'number') parts.push(`ctx ${tokens(context.tokens)}${hud.context?.resetAt ? `/${tokens(hud.context.resetAt)}` : ''}`);
-  return fit(parts.join(' · '), columns);
-}
-
 export function isFreshReset(flag, now) {
   return Boolean(flag && typeof flag.at === 'string' && now - Date.parse(flag.at) < RESET_FRESH_MS);
 }

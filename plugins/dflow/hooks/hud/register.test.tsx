@@ -177,20 +177,35 @@ function world(on: any, given: Partial<World> & { files: Record<string, string> 
 const START = { cwd: '/repo', surface: 'terminal', isInteractive: true } as const
 const TURN = { answer: 'done', durationMs: 1, isAborted: false, reason: 'answer' } as const
 
-test('the band shows the plan, progress, task and context', async ($, on) => {
-  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
+test('the band is framed in the account color with Expand on its top rule', async ($, on) => {
+  const w = world(on, {
+    files: { [HUD_FILE]: JSON.stringify(HUD), '/home/me/.claude.json': JSON.stringify({ oauthAccount: { emailAddress: 'you@example.com', billingType: 'stripe_subscription' } }) },
+    porcelain: '# branch.head feat/x\n',
+  })
   await $.session.start(START)
+  await w.clock!.advance(10000)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ type: 'Text', text: /^╭─ you@example\.com · subscription/ })).toBeDefined()
+  const rows = (await band.findAll({ type: 'Text' })).map((one: any) => one.text).filter((text: string) => /^[│╰].*[│╯]$/.test(text))
+  expect(rows.length).toBe(4)
+  for (const row of rows) expect([...row].length).toBe(BAND.props.bodyColumns)
+  expect((await band.find({ key: 'band-line-0' }))?.text).toContain('dflow 4/7 · Task 5')
+  expect((await band.find({ key: 'band-warning' }))?.text).toContain('✗ Task 6 blocked')
+  expect((await band.find({ key: 'band-expand' }))?.props.hotkey).toBeUndefined()
+  await band.press({ key: 'band-expand' })
+  expect(w.stored.mode).toBe('pane')
+  expect(w.calls).toContain('open dflow-hud')
+  expect(w.calls).toContain('write /repo/.dflow/context/s1.json {"session":"s1","tokens":118000,"window":1000000,"at":"2026-11-12T12:00:00.000Z"}')
+})
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  const line = await ui.find({ type: 'Text', text: /dflow/ })
-  expect(line?.text).toBe(
-    'dflow ▸ Rate-limit meter · █████░░░ 4/7 · Task 5 wip · verify failed 1× · 1 blocked · ctx 118k/150k',
-  )
-  await ui.unmount()
-
-  expect(w.calls).toContain(
-    'write /repo/.dflow/context/s1.json {"session":"s1","tokens":118000,"window":1000000,"at":"2026-11-12T12:00:00.000Z"}',
-  )
+test('below 48 columns the band drops its frame', async ($, on) => {
+  world(on, { files: { [HUD_FILE]: JSON.stringify(HUD), '/home/me/.claude.json': JSON.stringify({ oauthAccount: { emailAddress: 'you@example.com' } }) } })
+  await $.session.start(START)
+  const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns: 47 }, surface: 'terminal' })
+  const texts = (await band.findAll({ type: 'Text' })).map((one: any) => one.text)
+  expect(texts.some((text: string) => /^[╭│╰]/.test(text))).toBe(false)
+  expect(texts[0]).toMatch(/^you@example\.com/)
+  for (const text of texts) expect([...text].length).toBeLessThanOrEqual(47)
 })
 
 test('/dflow:hud cycles band, pane, off and keeps the choice', async ($, on) => {

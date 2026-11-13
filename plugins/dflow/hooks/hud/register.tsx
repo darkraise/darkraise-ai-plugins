@@ -7,7 +7,6 @@ import { repoFromPorcelain } from './repo.mjs'
 import {
   RESET_INSTRUCTIONS,
   accountCard,
-  bandText,
   boardCard,
   checksCard,
   collapsedFrom,
@@ -24,7 +23,8 @@ import {
   usageCard,
   workersCard,
 } from './view.mjs'
-import { isAtLeast, runsCut } from './meter.mjs'
+import { bandTop, bandWarning, fitBand } from './band.mjs'
+import { cellWidth, isAtLeast, runsCut, runsWidth } from './meter.mjs'
 
 type Run = { text: string; color?: string; bold?: boolean; dim?: boolean; underline?: boolean }
 type Card = { key: string; title: string; color: string; headline: Run[]; rows: Run[][] }
@@ -40,6 +40,9 @@ const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 
 const READINGS_KEPT = 40
 const REWRITE_MS = 5 * 60 * 1000
 const PANE_COLUMNS = 56
+// Narrower than this, the band's frame leaves too little room for its lines.
+const BAND_FRAME_SINCE = 48
+const EXPAND = 'Expand'
 const BUTTON_MAIN = 'permission'
 const BUTTON_REST = 'inactive'
 const UNDERLINE_SINCE = '2.1.295'
@@ -638,20 +641,84 @@ export const register: Register = on => {
     return { text: `dflow HUD: ${mode}` }
   }).catch(($, e, next) => next(e))
 
+  // The prompt holds the keyboard, so Expand takes no hotkey.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const hud = await read($, hudAtom)
 
-    if (e.props.hasSurvey || !hud?.plan || (await read($, modeAtom)) !== 'band') {
+    if (e.props.hasSurvey || hud === null || (await read($, modeAtom)) !== 'band') {
       return next(e)
     }
 
-    const { Box, Text } = $.ui.resolve(e)
+    const columns = e.props.bodyColumns
+    const table = { ...$.ui.resolve(e), columns }
+    const { Box, Text } = table
+    const account = await read($, accountAtom)
+    const input = {
+      hud,
+      where: await read($, whereAtom),
+      repo: await read($, repoAtom),
+      engine: await read($, engineAtom),
+      account,
+      remote: await read($, remoteAtom),
+      context: await read($, contextAtom),
+      usage: await read($, usageAtom),
+      now: await $.clock.now(),
+    }
+    const expand = drawButton(table, 'band-expand', EXPAND, () => setMode($, 'pane'), { isCompact: true })
+    const isFramed = columns >= BAND_FRAME_SINCE
+    const width = isFramed ? columns - 4 : columns
+    const warning = bandWarning(hud)
+    const lines = [
+      ...fitBand(input, width).map((runs: Run[], index: number) => ({ key: `band-line-${index}`, runs })),
+      ...(warning.length > 0 ? [{ key: 'band-warning', runs: runsCut(warning, width) }] : []),
+    ]
+
+    if (!isFramed) {
+      const who = account?.email ? [{ text: account.email }] : bandTop(input)
+
+      return (
+        <Box flexDirection="column">
+          <Box key="band-top" flexDirection="row" columnGap={1}>
+            <Text wrap="truncate-end">{drawRuns(table, 'band-top', runsCut(who, columns - cellWidth(EXPAND) - 1))}</Text>
+            {expand}
+          </Box>
+          {lines.map(line => (
+            <Box key={line.key}>
+              <Text wrap="truncate-end">{drawRuns(table, line.key, line.runs)}</Text>
+            </Box>
+          ))}
+        </Box>
+      )
+    }
+
+    const frame = account?.color ?? BUTTON_REST
+    // `╭─ ` and ` ` before Expand, ` ─╮` after it; at least one `─` of fill.
+    const room = columns - 7 - cellWidth(EXPAND)
+    const top = runsCut(bandTop(input), room - 1)
 
     return (
-      <Box>
-        <Text dimColor>
-          {bandText(hud, await read($, contextAtom), e.props.bodyColumns)}
-        </Text>
+      <Box flexDirection="column">
+        <Box key="band-top" flexDirection="row">
+          <Text wrap="truncate-end">
+            <Text color={frame}>╭─ </Text>
+            {drawRuns(table, 'band-top', top)}
+            <Text color={frame}>{`${'─'.repeat(room - runsWidth(top))} `}</Text>
+          </Text>
+          {expand}
+          <Text color={frame}> ─╮</Text>
+        </Box>
+        {lines.map(line => (
+          <Box key={line.key}>
+            <Text wrap="truncate-end">
+              <Text color={frame}>│ </Text>
+              {drawRuns(table, line.key, line.runs)}
+              <Text color={frame}>{`${' '.repeat(width - runsWidth(line.runs))} │`}</Text>
+            </Text>
+          </Box>
+        ))}
+        <Box key="band-bottom">
+          <Text color={frame}>{`╰${'─'.repeat(columns - 2)}╯`}</Text>
+        </Box>
       </Box>
     )
   })
