@@ -161,7 +161,7 @@ while read -r key default valid invalid; do
 done <<'ROWS'
 handoffMode strict relaxed loose
 codexReview false true 0
-agyLane true false maybe
+agyReview false true maybe
 lensCap 4 2 10
 lensMinorFrom 20 10 501
 executionStrategy sequential parallel fast
@@ -177,9 +177,9 @@ finishAction ask merge discard
 documentStore darkmem local remote
 progressSource darkmem local remote
 ROWS
-check "agyLane: follows codexReview, labelled Agy tasks, enforced by script" \
-  "$(node --input-type=module -e "import { pathToFileURL } from 'node:url'; const { default: schema } = await import(pathToFileURL(process.argv[1]).href); const keys = Object.keys(schema); console.log([keys[keys.indexOf('codexReview') + 1], schema.agyLane?.label, schema.agyLane?.enforcedBy, schema.agyLane?.group].join(' | '))" "$(cd "$HERE/../config" && pwd)/schema.mjs")" \
-  'agyLane | Agy tasks | script | Workflow'
+check "agyReview: follows codexReview, labelled Agy reviews, off by default, enforced by script" \
+  "$(node --input-type=module -e "import { pathToFileURL } from 'node:url'; const { default: schema } = await import(pathToFileURL(process.argv[1]).href); const keys = Object.keys(schema); console.log([keys[keys.indexOf('codexReview') + 1], schema.agyReview?.label, schema.agyReview?.default, schema.agyReview?.enforcedBy, schema.agyReview?.group, 'agyLane' in schema].join(' | '))" "$(cd "$HERE/../config" && pwd)/schema.mjs")" \
+  'agyReview | Agy reviews | false | script | Workflow | false'
 fresh ar-off
 fc set autoRun off; check "autoRun: off is accepted" "$?" "0"
 check "autoRun: off is read back" "$(fc get autoRun)" "off"

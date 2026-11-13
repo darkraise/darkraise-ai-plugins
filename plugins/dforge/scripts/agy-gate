@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# Decide, once per session, whether this session may hand plan tasks to the
+# Decide, once per session, whether this session may hand review seats to the
 # Antigravity CLI (agy).
 #
 # agy is usable only when it is on PATH at an allowed version (scripts/agy-locate)
-# and signed in (scripts/lib/agy-probe.mjs). A usable agy is then used only when
-# its smoke test has passed (reference/agy-policy.json `trust.smoke`), which
-# opens the executor lane; agy has no review surface.
-# Anything else turns the lane off for the session, so an agy outage degrades
-# the process instead of failing a task. The answer is cached per session; a
-# quota mark lasts until the reset time the error named, or for the session
-# when it named none, --refresh included. A quota on a Claude model marks only
-# the Claude fallback, which the line reports as fallback= and
-# fallback_resets_at=.
+# and signed in (scripts/lib/agy-probe.mjs). A usable agy then takes review
+# seats only once its review surface is trusted (reference/agy-policy.json
+# `trust.review`).
+# Anything else turns the review surface off for the session, so an agy outage
+# degrades the process instead of failing a task. The answer is cached per
+# session; a quota mark lasts until the reset time the error named, or for the
+# session when it named none, --refresh included. A quota on a Claude model
+# marks only the Claude row, which the line reports as claude= and
+# claude_resets_at= (the session file keeps it under `fallback`).
 #
 # Usage: agy-gate [--refresh]
-# Output: agy-gate usable=<bool> reason=<r> review=false lane=<bool> resets_at=<iso|-> fallback=<on|off> fallback_resets_at=<iso|-> source=<probe|cache|setting>
+# Output: agy-gate usable=<bool> reason=<r> review=<bool> resets_at=<iso|-> claude=<on|off> claude_resets_at=<iso|-> source=<probe|cache|setting>
 #
-# The agyLane setting (scripts/dforge-config) switches the lane off whatever the
-# probe says; off, the gate answers `reason=setting` without probing.
+# The agyReview setting (scripts/dforge-config) is off unless set: agy reviews
+# are opt-in, and off the gate answers `reason=setting` without probing.
 # Exit: 0 answered, either way; 2 usage error, missing jq or node, or an
 # unreadable policy file.
 set -uo pipefail
@@ -40,13 +40,13 @@ command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
 command -v node >/dev/null 2>&1 || die "node is required but not on PATH"
 [ -r "$POLICY" ] || die "policy file not found: $POLICY"
 
-want_lane=$(dforge_setting agyLane true)
+want_review=$(dforge_setting agyReview false)
 
 usable="" reason="" version="" source=probe
 resets_at="" resets_epoch=""
 now=$(date -u +%s)
 file=$(executor_session_file agy) || file=""
-if [ "$want_lane" = false ]; then
+if [ "$want_review" = false ]; then
   usable=false reason=setting source=setting
 fi
 c_usable="" c_reason="" c_version="" c_resets="" c_epoch="" f_has="" f_resets="" f_epoch=""
@@ -71,8 +71,8 @@ fi
 if [ "$source" = probe ]; then
   # An answer the setting forced says nothing about agy itself, so it is never
   # reused once the setting is back on. --refresh keeps a quota rather than
-  # probing it away: the auth probe cannot see a quota and would turn the lane
-  # back on. The one quota that probes is one whose reset time has passed.
+  # probing it away: the auth probe cannot see a quota and would turn the
+  # surface back on. The one quota that probes is one whose reset time has passed.
   case "$c_usable" in
     true|false)
       if [ -n "$c_reason" ] && [ "$c_reason" != setting ]; then
@@ -90,15 +90,15 @@ if [ "$source" = probe ]; then
   esac
 fi
 
-# The Claude fallback has its own quota, so its mark is read whatever answered
-# for the lane. An expired mark is dropped from the file by the write below.
-fallback=on fallback_resets_at="" fallback_expired=false
+# The Claude row has its own quota, so its mark is read whatever answered for
+# the surface. An expired mark is dropped from the file by the write below.
+claude=on claude_resets_at="" claude_expired=false
 if [ "$f_has" = yes ]; then
   if [ -z "$f_epoch" ] || [ "$f_epoch" -gt "$now" ]; then
-    fallback=off
-    [ -z "$f_epoch" ] || fallback_resets_at=$f_resets
+    claude=off
+    [ -z "$f_epoch" ] || claude_resets_at=$f_resets
   else
-    fallback_expired=true
+    claude_expired=true
   fi
 fi
 
@@ -136,20 +136,20 @@ fi
 # commit mid-session reaches the readers without a --refresh.
 # jq reads on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /d/...
 # form pwd gives on Git Bash.
-smoke=$(jq -r '.trust.smoke' < "$POLICY" 2>/dev/null | tr -d '\r')
-lane=false
+trusted=$(jq -r '.trust.review' < "$POLICY" 2>/dev/null | tr -d '\r')
+review=false
 # Without a session id there is no session file, and every reader of the file
 # answers off, so the gate's line says off too rather than disagree with them.
-if [ "$usable" = true ] && [ -n "$file" ] && [ "$smoke" = pass ] && [ "$want_lane" != false ]; then
-  lane=true
+if [ "$usable" = true ] && [ -n "$file" ] && [ "$trusted" = pass ]; then
+  review=true
 fi
 
 if [ -n "$file" ]; then
   executor_session_write agy "$(jq -cn --arg sid "$(executor_session_id)" \
-    --argjson usable "$usable" --argjson lane "$lane" \
+    --argjson usable "$usable" --argjson review "$review" \
     --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg version "$version" \
-    --arg resets "$resets_at" --arg epoch "$resets_epoch" --argjson drop "$fallback_expired" \
-    '{session_id: $sid, usable: $usable, review: false, lane: $lane, reason: $reason,
+    --arg resets "$resets_at" --arg epoch "$resets_epoch" --argjson drop "$claude_expired" \
+    '{session_id: $sid, usable: $usable, review: $review, reason: $reason,
       checked_at: $at,
       resets_at: (if $resets == "" then null else $resets end),
       resets_at_epoch: (if $epoch == "" then null else ($epoch | tonumber) end),
@@ -157,5 +157,5 @@ if [ -n "$file" ]; then
      + (if $drop then {fallback: null} else {} end)')"
 fi
 
-printf 'agy-gate usable=%s reason=%s review=false lane=%s resets_at=%s fallback=%s fallback_resets_at=%s source=%s\n' \
-  "$usable" "$reason" "$lane" "${resets_at:--}" "$fallback" "${fallback_resets_at:--}" "$source"
+printf 'agy-gate usable=%s reason=%s review=%s resets_at=%s claude=%s claude_resets_at=%s source=%s\n' \
+  "$usable" "$reason" "$review" "${resets_at:--}" "$claude" "${claude_resets_at:--}" "$source"

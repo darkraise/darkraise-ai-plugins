@@ -112,8 +112,8 @@ if [ "$tier" = light ]; then
   model="$back_model"; effort="$back_effort"
 else
   model="$pref_model"; effort="$pref_effort"
-  # Fails closed: a line that does not say fallback=on keeps Claude out.
-  if [[ "$model" == claude-* && "$gate_line" != *" fallback=on "* ]]; then
+  # Fails closed: a line that does not say claude=on keeps Claude out.
+  if [[ "$model" == claude-* && "$gate_line" != *" claude=on "* ]]; then
     model="$back_model"; effort="$back_effort"; evidence=claude-off
   fi
 fi

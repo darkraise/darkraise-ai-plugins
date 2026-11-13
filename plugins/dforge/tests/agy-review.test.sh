@@ -25,7 +25,7 @@ git -C "$TMP/work" commit -q --allow-empty -m base
 export PATH="$P/tests/fixtures/stub-agy:$PATH"
 # A stub gate line, not the real gate: the real gate's probe spawns the stub
 # from Node, which Windows Git Bash cannot do.
-GATE_ON='agy-gate usable=true reason=ok review=false lane=false resets_at=- fallback=on fallback_resets_at=- source=cache'
+GATE_ON='agy-gate usable=true reason=ok review=false resets_at=- claude=on claude_resets_at=- source=cache'
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" "${GATE_LINE:-%s}"\n' "$GATE_ON" > "$TMP/gate"; chmod +x "$TMP/gate"
 run() { # run <args...>; sets out, rc
   rm -f "$TMP/args"
@@ -88,7 +88,7 @@ rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAU
 has "a Claude quota fails the Opus run" "$out" "agy-judge claude-opus-5-5/high status=FAILED"
 check "a Claude quota marks the Claude row" "$(field fallback.usable)" "false"
 check "a Claude quota leaves agy usable" "$([ "$(field usable)" = false ] && echo off || echo on)" "on"
-GATE_LINE="${GATE_ON/fallback=on/fallback=off}" STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
+GATE_LINE="${GATE_ON/claude=on/claude=off}" STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "the next heavy review runs Argon directly" "$out" "agy-judge gemini-4-argon/high status=OK exit=0 out=$TMP/out.json evidence=claude-off"
 
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota' run --kind task --tier light --prompt "$TMP/prompt.md"

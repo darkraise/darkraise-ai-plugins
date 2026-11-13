@@ -112,10 +112,10 @@ export default {
     label: 'Codex reviews', title: 'Let Codex review',
     description: 'On lets Codex take review seats when its gate passes. Off, the default, keeps every review on Claude; /codex:review or /codex:adversarial-review runs a Codex review on demand.',
   },
-  agyLane: {
-    type: 'boolean', default: true, enforcedBy: 'script', group: 'Workflow', target: 'dforge',
-    label: 'Agy tasks', title: 'Give tasks to Antigravity',
-    description: 'Give plan tasks to the Antigravity CLI (agy) when its gate passes. Off keeps those tasks on Claude or Codex.',
+  agyReview: {
+    type: 'boolean', default: false, enforcedBy: 'script', group: 'Workflow', target: 'dforge',
+    label: 'Agy reviews', title: 'Let Antigravity review',
+    description: 'On lets the Antigravity CLI (agy) take review seats when its gate passes and its review surface is trusted. Off, the default, keeps agy out of every review.',
   },
   lensCap: {
     type: 'number', default: 4, min: 0, max: 9, step: 1, zero: 'off', env: 'DFORGE_LENS_CAP', enforcedBy: 'script', group: 'Workflow', target: 'dforge',
@@ -135,7 +135,7 @@ export default {
   executionMode: {
     type: 'enum', values: ['auto', 'inline', 'subagent'], default: 'auto', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
     label: 'Execution mode', title: 'Execution mode',
-    description: 'Who implements plan tasks. auto and inline: the session implements every task, executor tasks excepted. subagent (deprecated) dispatches an implementer per task.',
+    description: 'Who implements plan tasks. auto and inline: the session implements every task. subagent (deprecated) dispatches an implementer per task.',
   },
   worktree: {
     type: 'enum', values: ['ask', 'always', 'never'], default: 'ask', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
