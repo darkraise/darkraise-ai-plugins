@@ -200,8 +200,7 @@ run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the resu
     '{op:"turn", kind:$kind, cwd:$cwd, model:$model, effort:$effort,
       prompt:$prompt,
       schemaPath:(if $schema == "" then null else $schema end),
-      sandbox:"read-only", resumeThreadId:null, persistThread:false,
-      threadName:null, deadlineMs:$deadline}')
+      sandbox:"read-only", deadlineMs:$deadline}')
   printf '%s' "$request" | timeout $(( $3 + 60 )) node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$4.stderr"
 }
 

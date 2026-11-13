@@ -469,7 +469,7 @@ unset CODEX_HOME
 
 # --- the observation log ---
 # It lives inside .dforge/sdd/, which self-ignores: an untracked file
-# elsewhere in the checkout enters task-state.sh's review snapshot.
+# elsewhere in the checkout enters worktree-snapshot.sh's review snapshot.
 export CODEX_HOME="$TMP/codex3"
 mkdir -p "$CODEX_HOME"
 LOG="$REPO/.dforge/sdd/budget-log.tsv"

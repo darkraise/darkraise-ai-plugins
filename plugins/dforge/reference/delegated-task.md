@@ -791,10 +791,8 @@ sequence, which makes this the ordinary case rather than a recovery step.
 
 **After a `HANDBACK`, reconcile rather than release.** The Claude implementer
 inherits the worktree, its commits and its report, so ownership passes to a
-task that is still in flight. Follow
-[external-task-recovery.md](external-task-recovery.md) before the
-implementer is dispatched; a bare `--release` there would drop the record the
-recovery procedure reads. Once that implementer's task reaches its reviewed
+task that is still in flight. Reconcile the worktree before the
+implementer is dispatched. Once that implementer's task reaches its reviewed
 complete line with a clean worktree, release the handed-back task with the
 same `--release` command, or every later offload into that worktree fails
 preflight.

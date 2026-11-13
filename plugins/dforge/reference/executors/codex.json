@@ -3,7 +3,7 @@
   "locator": "scripts/codex-plugin",
   "probe": { "command": "scripts/lib/codex-client.mjs", "op": "auth" },
   "gate": "scripts/codex-gate",
-  "wrapper": "scripts/run-codex-task.sh",
+  "wrapper": "scripts/run-codex-review.sh",
   "reference": "reference/executor-lane.md",
   "session_dir": "codex-sessions",
   "session_dir_env": "DR_CODEX_SESSION_DIR",

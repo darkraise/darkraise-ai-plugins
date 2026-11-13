@@ -92,7 +92,7 @@ check "the shipped codex entry keeps the session directory override" \
 check "the shipped codex entry opens both surfaces" \
   "$(bash "$EXEC" get codex surfaces | tr '\n' ',')" "review,lane,"
 check "the shipped codex entry names its wrapper" \
-  "$(bash "$EXEC" get codex wrapper)" "scripts/run-codex-task.sh"
+  "$(bash "$EXEC" get codex wrapper)" "scripts/run-codex-review.sh"
 check "the shipped codex locator resolves to a real file" \
   "$([ -f "$(bash "$EXEC" path codex locator)" ] && echo yes || echo no)" "yes"
 check "the shipped codex probe resolves to a real file" \
@@ -108,7 +108,7 @@ check "the shipped agy entry names the real locator" \
   "$(bash "$EXEC" get agy locator)" "scripts/agy-locate"
 check "the shipped agy entry names its gate" "$(bash "$EXEC" get agy gate)" "scripts/agy-gate"
 check "the shipped agy entry names its wrapper" \
-  "$(bash "$EXEC" get agy wrapper)" "scripts/run-agy-task.sh"
+  "$(bash "$EXEC" get agy wrapper)" "scripts/run-agy-review.sh"
 check "the shipped agy entry names its session directory" \
   "$(bash "$EXEC" get agy session_dir)" "agy-sessions"
 check "the shipped agy entry names its session directory override" \
