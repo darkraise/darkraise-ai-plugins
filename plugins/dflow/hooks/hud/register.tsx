@@ -574,8 +574,17 @@ async function readState($: any): Promise<void> {
     await readWhere($)
   }
 
+  // Atoms outlive a reload, so a Hud from an earlier run or checkout would
+  // still draw here.
   if (!(await $.fs.exists(`${root}/.dflow/hud.json`))) {
     isOfferDue = false
+
+    if ((await read($, hudAtom)) !== null || (await read($, offerAtom)) !== null) {
+      await update($, hudAtom, () => null)
+      await update($, offerAtom, () => null)
+      lastText = ''
+      $.ui.invalidate('ui.render')
+    }
 
     return
   }

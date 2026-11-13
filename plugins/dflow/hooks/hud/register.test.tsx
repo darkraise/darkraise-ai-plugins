@@ -383,6 +383,21 @@ test('before hud.json exists the pane says how to start and the band draws nothi
   expect(texts).toEqual(['dflow has no state in this repository yet.', 'Run /dflow:init, then /dflow:plan.'])
 })
 
+test('a Hud read earlier is dropped once hud.json is gone', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify({ ...HUD, plan: { ...HUD.plan, approved: '2026-11-12' } }) } })
+  on('ui.render', ($: any, e: any) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine</Text>
+  })
+  await $.session.start(START)
+  delete w.files[HUD_FILE]
+  w.sessionId = 's2'
+  await w.clock!.advance(2000)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await band.findAll({ type: 'Text' })).map((one: any) => one.text)).toEqual(['engine'])
+})
+
 test('worst-case data is cut to the pane, never wrapped', async ($, on) => {
   const long = (n: number) => 'x'.repeat(n)
   const WORST = {
