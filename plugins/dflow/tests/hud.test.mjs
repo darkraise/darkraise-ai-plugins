@@ -15,6 +15,7 @@ import { denseLines } from '../hooks/hud/view.mjs';
 import { BAND_TIERS, bandLines, bandTop, bandWarning, fitBand } from '../hooks/hud/band.mjs';
 import { sectionsArg, sectionsFrom, sectionsMoved, sectionsToggled } from '../hooks/hud/view.mjs';
 import { isOfferOver, resumeOffer } from '../hooks/hud/view.mjs';
+import { withoutControls } from '../hooks/hud/view.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const hud = root => JSON.parse(read(root, '.dflow/hud.json'));
@@ -398,4 +399,9 @@ test('an approved, unfinished plan with a current task is offered for resuming',
   assert.equal(isOfferOver(approved, approved), false);
   assert.equal(isOfferOver(approved, { ...approved, plan: { ...approved.plan, done: 5 } }), true);
   assert.equal(isOfferOver(approved, { ...approved, plan: { ...approved.plan, current: { ...approved.plan.current, number: 6 } } }), true);
+});
+
+test('control characters are stripped from every hud.json text', () => {
+  const read = withoutControls({ next: 'go\u001b[31mred\u0007', plan: { title: 'a\u009bb', tasks: [{ title: 'x\ny\u007f', number: 1 }] }, done: 3, gates: null, ok: true });
+  assert.deepEqual(read, { next: 'go[31mred', plan: { title: 'ab', tasks: [{ title: 'xy', number: 1 }] }, done: 3, gates: null, ok: true });
 });

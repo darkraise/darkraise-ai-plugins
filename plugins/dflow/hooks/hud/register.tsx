@@ -26,6 +26,7 @@ import {
   sectionsFrom,
   sectionsMoved,
   sectionsToggled,
+  withoutControls,
   usageCard,
   workersCard,
 } from './view.mjs'
@@ -598,7 +599,7 @@ async function readState($: any): Promise<void> {
   lastText = text
 
   try {
-    const hud = JSON.parse(text) as Hud
+    const hud = withoutControls(JSON.parse(text)) as Hud
     await update($, hudAtom, () => hud)
     await settleOffer($, hud)
     $.ui.invalidate('ui.render')

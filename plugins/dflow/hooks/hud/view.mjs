@@ -14,6 +14,15 @@ export function nextMode(current, argument) {
   return MODES.includes(argument) ? argument : null;
 }
 
+// hud.json carries titles and reasons from committed plan files: a control
+// character there would reach the terminal as an escape sequence.
+export function withoutControls(value) {
+  if (typeof value === 'string') return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
+  if (Array.isArray(value)) return value.map(withoutControls);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, withoutControls(inner)]));
+  return value;
+}
+
 export function isFreshReset(flag, now) {
   return Boolean(flag && typeof flag.at === 'string' && now - Date.parse(flag.at) < RESET_FRESH_MS);
 }
