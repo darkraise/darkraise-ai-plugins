@@ -59,6 +59,9 @@ side() {
     hook-link) mkdir -p "$(git rev-parse --git-path hooks)" && ln -s "$PWD/tracked.txt" "$(git rev-parse --git-path hooks)/post-checkout" ;;
     config) git config dforge.stub yes ;;
     global) git config --global dforge.stub yes ;;
+    hook-target) printf 'changed\n' >> "$STUB_AGY_HOOK_TARGET" ;;
+    hook-exec) chmod +x "$(git rev-parse --git-path hooks)/pre-commit" ;;
+    reorder) git config --unset-all dforge.order && git config --add dforge.order 2 && git config --add dforge.order 1 ;;
   esac
 }
 review_json() { printf '{"spec":%s,"scope":18,"verification":18,"quality":18,"spec_verdict":"%s","task_quality":"approved","findings":[%s],"cannot_verify":[]}' "${STUB_AGY_SCORE:-18}" "${STUB_AGY_VERDICT:-compliant}" "${STUB_AGY_FINDING:-}"; }

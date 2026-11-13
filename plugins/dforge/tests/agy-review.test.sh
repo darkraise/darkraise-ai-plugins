@@ -92,6 +92,25 @@ printf '\043\041\057\142\151\156\057\163\150\012\145\170\151\164\040\060\040\043
 STUB_AGY_HOOK='\043\041\057\142\151\156\057\163\150\012\145\170\151\164\040\060\040\043\040\316\312\307\224\173\064\377\243\012' STUB_AGY_SIDE=hook STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
 has "a hook rewritten to the same cksum is wrote" "$out" "evidence=wrote reason=wrote"
 reset_work
+# Git Bash copies on ln -s and reads the exec bit from a file's first bytes,
+# so each case below runs only where the host can show its change.
+printf 'base\n' > "$TMP/hook-target"; ln -s "$TMP/hook-target" "$hooks/post-checkout" 2>/dev/null
+if [ -L "$hooks/post-checkout" ]; then
+  STUB_AGY_HOOK_TARGET="$TMP/hook-target" STUB_AGY_SIDE=hook-target STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+  has "a change behind a symlinked hook is wrote" "$out" "evidence=wrote reason=wrote"
+fi
+reset_work
+printf 'echo hook\n' > "$hooks/pre-commit"; chmod -x "$hooks/pre-commit"
+if [ ! -x "$hooks/pre-commit" ] && chmod +x "$hooks/pre-commit" && [ -x "$hooks/pre-commit" ]; then
+  chmod -x "$hooks/pre-commit"
+  STUB_AGY_SIDE=hook-exec STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+  has "a hook made executable is wrote" "$out" "evidence=wrote reason=wrote"
+fi
+reset_work
+git -C "$TMP/work" config --add dforge.order 1; git -C "$TMP/work" config --add dforge.order 2
+STUB_AGY_SIDE=reorder STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+has "a config reorder that changes the last value is wrote" "$out" "evidence=wrote reason=wrote"
+git -C "$TMP/work" config --unset-all dforge.order
 
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_FINDING='{"severity":"Minor","where":"a","what":"quota wording"}' STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
 has "a clean answer mentioning quota is a list" "$out" "status=OK"

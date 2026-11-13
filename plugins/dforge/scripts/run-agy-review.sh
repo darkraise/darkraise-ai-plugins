@@ -181,22 +181,29 @@ fi
 # config and the hooks are read separately because the worktree snapshot does
 # not cover the git directory, and a planted hook or config entry runs code at
 # the session's next git command.
-git_state() { # git_state; prints `config<TAB>origin<TAB>key^Avalue` and `hook<TAB>hash<TAB>path` lines
-  local hooks hashes f files=()
+git_state() { # git_state; prints `config<TAB>origin<TAB>key^Avalue` and `hook<TAB>state<TAB>path` lines
+  local hooks hashes f h files=() modes=()
   hooks=$(git -C "$cwd" rev-parse --path-format=absolute --git-path hooks) || return 1
+  # Every scope and include file, one entry per line, in git's order, since the
+  # last of a repeated key wins. Values stay in the snapshot directory; only
+  # keys and origins reach <out>.wrote.
+  git -C "$cwd" config --list --show-origin -z | tr '\n\0' '\001\n' | paste - - | sed 's/^/config\t/' ||
+    return 1
+  [ -d "$hooks" ] || return 0
+  # A hook runs only when executable, and a symlinked one runs its target.
   {
-    # Every scope and include file, one entry per line. Values stay in the
-    # snapshot directory; only keys and origins reach <out>.wrote.
-    git -C "$cwd" config --list --show-origin -z | tr '\n\0' '\001\n' | paste - - | sed 's/^/config\t/' ||
-      exit 1
-    if [ -d "$hooks" ]; then
-      while IFS= read -r f; do
-        if [ -L "$f" ]; then printf 'hook\tlink:%s\t%s\n' "$(readlink "$f")" "$f"; else files+=("$f"); fi
-      done < <(find "$hooks" ! -type d | tr -d '\r')
-      if [ "${#files[@]}" -gt 0 ]; then
-        hashes=$(git -C "$cwd" hash-object --no-filters -- "${files[@]}" | tr -d '\r') || exit 1
-        paste <(printf '%s\n' "$hashes") <(printf '%s\n' "${files[@]}") | sed 's/^/hook\t/'
+    while IFS= read -r f; do
+      if [ -L "$f" ]; then
+        h=$(git -C "$cwd" hash-object --no-filters -- "$f" 2>/dev/null | tr -d '\r')
+        printf 'hook\tlink:%s:%s:%s\t%s\n' "$(readlink "$f")" "${h:-missing}" "$([ -x "$f" ] && echo x || echo -)" "$f"
+      else
+        files+=("$f"); modes+=("$([ -x "$f" ] && echo x || echo -)")
       fi
+    done < <(find "$hooks" ! -type d | tr -d '\r')
+    if [ "${#files[@]}" -gt 0 ]; then
+      hashes=$(git -C "$cwd" hash-object --no-filters -- "${files[@]}" | tr -d '\r') || exit 1
+      paste -d ':' <(printf '%s\n' "$hashes") <(printf '%s\n' "${modes[@]}") |
+        paste - <(printf '%s\n' "${files[@]}") | sed 's/^/hook\t/'
     fi
   } | LC_ALL=C sort
 }
@@ -253,6 +260,7 @@ wrote_check() { # wrote_check; succeeds when the run changed nothing
       NR == FNR { b[$0] = 1; next } { a[$0] = 1 }
       END { for (l in b) if (!(l in a)) print name(l); for (l in a) if (!(l in b)) print name(l) }' \
       "$snapdir/before.git" "$snapdir/after.git" | LC_ALL=C sort -u
+    cmp -s <(grep '^config' "$snapdir/before.git") <(grep '^config' "$snapdir/after.git") || echo 'git config'
   } > "$out.wrote"
   [ -s "$out.wrote" ] && return 1
   rm -f "$out.wrote"
