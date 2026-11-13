@@ -6,6 +6,8 @@ import { bandText, bar, isFreshReset, isResetFor, nextMode } from '../hooks/hud/
 import { bar as meterBar, cellWidth, duration, isAtLeast, kTokens, limitForecast, limitLabel, rampColor, runsCut, sparkline, stackedRuns, track, trackRuns, windowElapsed } from '../hooks/hud/meter.mjs';
 import { SECTIONS, boardCard, checksCard, collapsedFrom, nextRow, nowRow, planCard, taskWindow, workersCard } from '../hooks/hud/view.mjs';
 import { contextCard } from '../hooks/hud/view.mjs';
+import { accountColor, accountFrom, accountKey, billingLabel, modelName, remoteRuns } from '../hooks/hud/account.mjs';
+import { accountCard } from '../hooks/hud/view.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const hud = root => JSON.parse(read(root, '.dflow/hud.json'));
@@ -239,4 +241,24 @@ test('before a reading the Context card shows the estimate', () => {
   assert.equal(text(unset.headline), '118k of 1.0M');
   assert.ok(!text(unset.rows[0]).includes('┃'));
   assert.equal(text(unset.rows[1]), '118k of 1.0M');
+});
+
+const CLAUDE_JSON = { oauthAccount: { emailAddress: 'you@example.com', displayName: 'You', organizationName: 'Acme', organizationRole: 'admin', billingType: 'stripe_subscription' } };
+
+test('the account comes from .claude.json with a color of its own', () => {
+  const account = accountFrom(CLAUDE_JSON, '', '/home/me');
+  assert.deepEqual([account.email, account.name, account.organization, account.role, account.billing, account.key], ['you@example.com', 'You', 'Acme', 'admin', 'stripe_subscription', '~/.claude']);
+  assert.equal(account.color, accountColor('~/.claude'));
+  assert.equal(accountKey('/home/me/.claude-alt', '/home/me'), '~/.claude-alt');
+  assert.deepEqual([billingLabel('stripe_subscription'), billingLabel(null), modelName('claude-opus-5-5[1m]')], ['subscription', null, 'Opus 5.5']);
+  assert.equal(accountFrom({}, '', '/home/me').email, null);
+  assert.deepEqual([remoteRuns([{ surface: 'mobile' }], null), remoteRuns([], 'true'), remoteRuns([], null)].map(text), ['● connected · phone', '○ on · no device yet', '○ not connected']);
+});
+
+test('the Account card lists who, which model and where', () => {
+  const card = accountCard({ account: accountFrom(CLAUDE_JSON, '', '/home/me'), engine: { model: 'claude-opus-5-5', effort: 'xhigh' }, remote: { clients: [{ surface: 'mobile' }], setting: null } });
+  assert.deepEqual([card.key, card.title, text(card.headline)], ['account', 'Account', 'subscription']);
+  assert.deepEqual(rowsOf(card), ['● you@example.com', '  You · Acme (admin)', '  Opus 5.5 · xhigh effort', '  Remote ● connected · phone', '  config ~/.claude']);
+  const bare = accountCard({ account: accountFrom({}, '', '/home/me'), engine: { model: 'claude-opus-5-5', effort: 'xhigh' }, remote: { clients: [], setting: null } });
+  assert.deepEqual(rowsOf(bare), ['  config ~/.claude']);
 });

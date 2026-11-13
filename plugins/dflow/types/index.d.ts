@@ -33,6 +33,20 @@ export type Hud = {
 
 export type HudContext = { tokens?: number; window: number }
 
+export type HudAccount = {
+  email: string | null
+  name: string | null
+  organization: string | null
+  role: string | null
+  billing: string | null
+  key: string
+  color: string
+}
+
+export type HudEngine = { model: string | null; effort: string | null }
+
+export type HudRemote = { clients: { id: string; surface: string }[]; setting: string | null }
+
 export type HudBreakdown = {
   rows: { name: string; tokens: number }[]
   compactAt: number | null
@@ -48,6 +62,9 @@ declare module 'claude-code' {
       collapsed: string[]
       readings: number[]
       breakdown: HudBreakdown | null
+      account: HudAccount | null
+      engine: HudEngine
+      remote: HudRemote
     }
   }
 }

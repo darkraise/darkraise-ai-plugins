@@ -1,9 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { Hud, HudBreakdown, HudContext, Mode } from '../../types'
+import type { Hud, HudAccount, HudBreakdown, HudContext, HudEngine, HudRemote, Mode } from '../../types'
+import { accountFrom } from './account.mjs'
 import {
   RESET_INSTRUCTIONS,
+  accountCard,
   bandText,
   boardCard,
   checksCard,
@@ -50,6 +52,9 @@ const breakdownAtom = atom(
   { plugin: 'dflow', key: 'breakdown' } as const,
   null as HudBreakdown | null,
 )
+const accountAtom = atom({ plugin: 'dflow', key: 'account' } as const, null as HudAccount | null)
+const engineAtom = atom({ plugin: 'dflow', key: 'engine' } as const, { model: null, effort: null } as HudEngine)
+const remoteAtom = atom({ plugin: 'dflow', key: 'remote' } as const, { clients: [], setting: null } as HudRemote)
 
 // `root` is '' until looked up and null once known not to be a repository,
 // so a session started outside one does not run git on every poll.
@@ -60,6 +65,9 @@ let lastWrite = 0
 let sessionId = ''
 let timer: { cancel: () => void } | null = null
 let polls = 0
+// The account, model and Remote Control are read once a session, and never
+// while the mode is off.
+let hasReadAccount = false
 // Read on a session switch, since a render hook makes no engine call.
 let canUnderline = false
 
@@ -225,6 +233,52 @@ async function compactOrSay($: any, request: { instructions?: string }, failure:
   }
 }
 
+async function readAccount($: any): Promise<void> {
+  try {
+    const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+
+    if (!home) {
+      return
+    }
+
+    const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || ''
+    let state: unknown = {}
+
+    try {
+      state = JSON.parse(await $.fs.read(`${configDir || home}/.claude.json`))
+    } catch {
+      // No account file: the card shows the config directory alone.
+    }
+
+    await update($, accountAtom, () => accountFrom(state, configDir, home))
+  } catch {
+    // The card waits for the next session.
+  }
+}
+
+// Until the first request goes out: the session's model and the effort setting.
+async function readEngine($: any): Promise<void> {
+  try {
+    const model = await $.session.model()
+    const effortLevel = ((await $.settings.read()) as { effortLevel?: unknown }).effortLevel
+    const effort = typeof effortLevel === 'string' ? effortLevel : null
+    await update($, engineAtom, now => ({ model: now.model ?? model, effort: now.effort ?? effort }))
+  } catch {
+    // The first request fills them in.
+  }
+}
+
+// The /config row "Enable Remote Control for all sessions".
+async function readRemote($: any): Promise<void> {
+  try {
+    const row = (await $.config.list()).find((one: any) => one.key === 'remoteControl')
+    const setting = row === undefined ? null : String(row.value)
+    await update($, remoteAtom, now => ({ ...now, setting }))
+  } catch {
+    // Attach and detach still keep the clients.
+  }
+}
+
 async function readVersion($: any): Promise<void> {
   try {
     const { base } = await $.session.version()
@@ -277,12 +331,21 @@ async function readState($: any): Promise<void> {
     lastText = ''
     lastTokens = -1
     root = ''
+    hasReadAccount = false
     await loadMode($)
     await readVersion($)
 
     if ((await read($, modeAtom)) === 'pane' && !(await isPaneUp($))) {
       await openPane($)
     }
+  }
+
+  if (!hasReadAccount && (await read($, modeAtom)) !== 'off') {
+    hasReadAccount = true
+    await readAccount($)
+    await readEngine($)
+    await readRemote($)
+    $.ui.invalidate('ui.render')
   }
 
   if (root === '') {
@@ -427,6 +490,38 @@ export const register: Register = on => {
     return completed
   })
 
+  // The model and effort the main loop's requests go out with.
+  on('turn.step', async function* ($, e, next) {
+    if (e.agentId === undefined) {
+      const effort = typeof e.effort === 'string' ? e.effort : null
+      const before = await read($, engineAtom)
+
+      if (before.model !== e.model || before.effort !== effort) {
+        await update($, engineAtom, () => ({ model: e.model, effort }))
+      }
+    }
+
+    return yield* next(e)
+  })
+
+  // Remote Control clients joining and leaving; the terminal raises neither.
+  on('session.attach', async ($, e, next) => {
+    const joined = await next(e)
+    await update($, remoteAtom, now => ({
+      ...now,
+      clients: [...now.clients.filter(one => one.id !== e.clientId), { id: e.clientId, surface: e.surface }],
+    }))
+
+    return joined
+  }).catch(($, e, next) => next(e))
+
+  on('session.detach', async ($, e, next) => {
+    const left = await next(e)
+    await update($, remoteAtom, now => ({ ...now, clients: now.clients.filter(one => one.id !== e.clientId) }))
+
+    return left
+  }).catch(($, e, next) => next(e))
+
   // `/dflow:hud` is the plugin's `hud` skill, since a mod's own command name
   // cannot hold a colon. Answering it here spends no model turn; if this hook
   // fails, the skill runs and prints the status as text.
@@ -499,6 +594,11 @@ export const register: Register = on => {
       typeof context?.tokens === 'number' && typeof hud.context?.resetAt === 'number' && context.tokens >= hud.context.resetAt
     const compact = () =>
       compactOrSay($, hud.plan ? { instructions: RESET_INSTRUCTIONS } : {}, 'dflow: could not compact; run /compact')
+    const account = await read($, accountAtom)
+    const accountShown =
+      account === null
+        ? null
+        : accountCard({ account, engine: await read($, engineAtom), remote: await read($, remoteAtom) })
     const extras: Record<string, unknown[]> = {
       context: [drawButton(table, 'context-compact', '⇣ Compact', compact, { hotkey: 'c', isMain: isPastReset })],
     }
@@ -508,6 +608,8 @@ export const register: Register = on => {
         <Box key="now">
           <Text wrap="truncate-end">{drawRuns(table, 'now', runsCut(nowRow(hud), columns))}</Text>
         </Box>
+        {accountShown &&
+          drawCard(table, accountShown, collapsed.includes('account'), () => toggleCollapsed($, 'account'))}
         <Box key="controls" flexDirection="row" columnGap={1}>
           {drawButton(table, 'pane-minimize', '▁ Minimize', () => setMode($, 'band'), { hotkey: 'm' })}
         </Box>

@@ -454,3 +454,28 @@ test('the breakdown is read for an open Context card only, and the trend follows
   expect(w.calls.filter(call => call === 'usage breakdown').length).toBe(before)
   expect(await pane.find({ key: 'context-compact' })).toBeDefined()
 })
+
+test('the Account card reads the account file, the model, the effort and Remote Control', async ($, on) => {
+  const w = world(on, {
+    files: { [HUD_FILE]: JSON.stringify(HUD), '/home/me/.claude.json': JSON.stringify({ oauthAccount: { emailAddress: 'you@example.com', billingType: 'stripe_subscription' } }) },
+    settings: { effortLevel: 'xhigh' },
+    remoteControl: 'true',
+  })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ key: 'account-headline' }))?.text).toBe('subscription')
+  expect((await pane.find({ key: 'account-row-0' }))?.text).toBe('● you@example.com')
+  expect((await pane.find({ key: 'account-row-1' }))?.text).toBe('  Opus 5.5 · xhigh effort')
+  expect((await pane.find({ key: 'account-row-2' }))?.text).toBe('  Remote ○ on · no device yet')
+  expect(w.calls).toContain('read /home/me/.claude.json')
+})
+
+test('mode off reads no account file but still writes the context size', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
+  w.stored.mode = 'off'
+  await $.session.start(START)
+  await w.clock!.advance(10000)
+  expect(w.calls.some(call => call.includes('.claude.json'))).toBe(false)
+  expect(w.calls.some(call => call.startsWith('write /repo/.dflow/context/s1.json'))).toBe(true)
+})

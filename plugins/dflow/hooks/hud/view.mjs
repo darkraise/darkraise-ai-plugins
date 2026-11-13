@@ -1,6 +1,7 @@
 // Pure text for the HUD, shared by the mod and the Node tests. No engine
 // access here: the hooks module passes plain values in.
 
+import { billingLabel, modelName, remoteRuns } from './account.mjs';
 import { kTokens, bar as meterBar, rampColor, sparkline, stackedRuns, track, trackRuns } from './meter.mjs';
 
 export const MODES = ['band', 'pane', 'off'];
@@ -280,5 +281,25 @@ export function contextCard({ hud, context, breakdown, readings, width }) {
     if (readings.length >= 2) card.rows.push(trendRow(readings, width));
   }
   if (hasBreakdown) card.rows.push(...breakdownRows(breakdown, width));
+  return card;
+}
+
+// Who the session runs as. Without an email the account file was not read,
+// and only the config directory is known.
+export function accountCard({ account, engine, remote }) {
+  const billing = billingLabel(account.billing);
+  const card = { key: 'account', title: 'Account', color: account.color, headline: billing ? [{ text: billing, dim: true }] : [], rows: [] };
+  const config = [{ text: `  config ${account.key}`, dim: true }];
+  if (!account.email) {
+    card.rows.push(config);
+    return card;
+  }
+  card.rows.push([{ text: '●', color: account.color }, { text: ` ${account.email}` }]);
+  const where = account.organization ? `${account.organization}${account.role ? ` (${account.role})` : ''}` : null;
+  const who = [account.name, where].filter(Boolean);
+  if (who.length) card.rows.push([{ text: `  ${who.join(' · ')}` }]);
+  if (engine?.model) card.rows.push([{ text: `  ${modelName(engine.model)}${engine.effort ? ` · ${engine.effort} effort` : ''}` }]);
+  if (remote) card.rows.push([{ text: '  Remote ' }, ...remoteRuns(remote.clients, remote.setting)]);
+  card.rows.push(config);
   return card;
 }
