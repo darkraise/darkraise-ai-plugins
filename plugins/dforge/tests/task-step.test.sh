@@ -336,6 +336,7 @@ check "a light review prints the panel command" "$(grep -c '^panel: .*run-review
 check "a light panel's timeout covers both rows" "$(grep '^timeout:' <<<"$out")" "timeout: 2590000"
 check "the reviewers' prompt is written" "$([ -s "$WS/task-1-review-panel-prompt.md" ] && echo yes || echo no)" "yes"
 check "a light judge prompt keeps the Second Pass for two lists" "$(grep -c '^## Second Pass' "$WS/task-1-review-prompt.md")" "1"
+check "review: the judge prompt keeps no template instruction text" "$(grep -cE '^\[Include |otherwise\.\]$' "$WS/task-1-review-prompt.md")" "0"
 check "review: the light seat names the band fallback" "$(grep '^seat:' <<<"$out")" "seat: panel:light prompt: $JP fallback: dforge:judge-sonnet-high"
 check "review: the panel command in full" "$(grep '^panel:' <<<"$out")" \
   "panel: bash \"$PR\"/scripts/run-review-panel --kind task --tier light --cwd \"$TOP\" --out-dir \"$WS/task-1-review-panel\" --prompt \"$PP\""

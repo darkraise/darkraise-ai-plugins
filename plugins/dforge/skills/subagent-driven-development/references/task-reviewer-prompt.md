@@ -246,8 +246,7 @@ Subagent ([JUDGE]):
 
     ## Second Pass: The External Reviews
 
-    [Include this section only when the seat is a reviewer panel. Delete it
-    otherwise.]
+    [Include this section only when the seat is a reviewer panel. Delete it otherwise.]
 
     Do this only after your Spec Compliance verdict, findings and
     Verification Scores are written in full. Then read the external
