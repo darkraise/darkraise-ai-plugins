@@ -16,5 +16,7 @@ section=$(awk '/^## Migrating to 5\.0/ { f = 1; next } f && /^## / { exit } f' "
 for name in codexLane agyLane agyReview revising-plans plan-revise; do
   check "the 5.0 migration names $name" "$(grep -c -- "$name" <<<"$section" | awk '{ print ($1 > 0) ? "yes" : "no" }')" "yes"
 done
+check "the 5.0 migration says an Executor line draws a plan-lint WARN" "$(grep -c 'prints a WARN that the line is obsolete' <<<"$section")" "1"
+check "the 5.0 migration gives the mid-lane rule" "$(grep -c 'A task caught mid-lane' <<<"$section")" "1"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
