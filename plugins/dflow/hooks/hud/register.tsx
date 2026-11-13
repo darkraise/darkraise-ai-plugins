@@ -188,7 +188,11 @@ function drawCard(table: any, card: Card, isCollapsed: boolean, onToggle: () => 
             <Text wrap="truncate-end">{drawRuns(table, `${card.key}-row-${index}`, runsCut(row, inner))}</Text>
           </Box>
         ))}
-      {extra}
+      {extra.length > 0 && (
+        <Box key={`${card.key}-extra`} flexDirection="row" columnGap={1}>
+          {extra}
+        </Box>
+      )}
     </Box>
   )
 }
@@ -871,8 +875,9 @@ export const register: Register = on => {
     }
 
     const frame = account?.color ?? BUTTON_REST
-    // `╭─ ` and ` ` before Expand, ` ─╮` after it; at least one `─` of fill.
-    const room = columns - 7 - cellWidth(EXPAND)
+    // `╭─ `, a space either side of the fill, and ` ─╮` after Expand; at
+    // least one `─` of fill.
+    const room = columns - 8 - cellWidth(EXPAND)
     const top = runsCut(bandTop(input), room - 1)
 
     return (
@@ -882,7 +887,7 @@ export const register: Register = on => {
           <Text wrap="truncate-end">
             <Text color={frame}>╭─ </Text>
             {drawRuns(table, 'band-top', top)}
-            <Text color={frame}>{`${'─'.repeat(room - runsWidth(top))} `}</Text>
+            <Text color={frame}>{` ${'─'.repeat(room - runsWidth(top))} `}</Text>
           </Text>
           {expand}
           <Text color={frame}> ─╮</Text>
