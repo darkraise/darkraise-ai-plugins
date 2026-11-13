@@ -237,6 +237,8 @@ export function sectionsMoved(list, key, delta) {
 }
 
 const BREAKDOWN_COLORS = ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red'];
+// A fill per segment as well as a color, so the bar reads without color.
+const BREAKDOWN_FILLS = ['█', '▓', '▒', '░', '▚', '▞'];
 const BREAKDOWN_ROWS = 6;
 const TREND_LABEL = 16;
 
@@ -254,7 +256,7 @@ function breakdownRows(breakdown, width) {
   const top = [...breakdown.rows].sort((a, b) => b.tokens - a.tokens).slice(0, BREAKDOWN_ROWS);
   const sum = top.reduce((total, row) => total + row.tokens, 0);
   const cells = stackedRuns(top.map(row => row.tokens), width);
-  const stack = top.flatMap((row, index) => (cells[index] ? [{ text: '█'.repeat(cells[index]), color: BREAKDOWN_COLORS[index] }] : []));
+  const stack = top.flatMap((row, index) => (cells[index] ? [{ text: BREAKDOWN_FILLS[index].repeat(cells[index]), color: BREAKDOWN_COLORS[index] }] : []));
   const details = top.map((row, index) => [
     { text: '  ■ ', color: BREAKDOWN_COLORS[index] },
     { text: row.name.padEnd(20) },

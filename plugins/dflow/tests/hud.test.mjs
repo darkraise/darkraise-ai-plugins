@@ -223,6 +223,7 @@ test('the breakdown lists the six largest categories under a stacked bar', () =>
   const stack = card.rows[2];
   assert.equal(stack.reduce((sum, run) => sum + run.text.length, 0), 50);
   assert.deepEqual(stack.map(run => run.color), ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red']);
+  assert.deepEqual(stack.map(run => [...new Set(run.text)].join('')), ['█', '▓', '▒', '░', '▚', '▞']);
   const rows = card.rows.slice(3).map(text);
   assert.equal(rows.length, 6);
   assert.match(rows[0], /^ {2}■ Messages +318k +84%$/);
