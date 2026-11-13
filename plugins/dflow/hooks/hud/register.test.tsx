@@ -528,6 +528,36 @@ test('the breakdown is read for an open Context card only, and the trend follows
   expect(await pane.find({ key: 'context-compact' })).toBeDefined()
 })
 
+test("a session switch drops the previous session's breakdown, trend and branch", async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, breakdown: BREAKDOWN_READING, porcelain: '# branch.head feat/old\n' })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await w.clock!.advance(10000)
+  w.tokens = 100000
+  await $.turn.complete({ ...TURN, turnId: 't1' })
+  w.tokens = 118000
+  await $.turn.complete({ ...TURN, turnId: 't2' })
+  const texts = async () => {
+    const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const found: string[] = (await pane.findAll({ type: 'Text' })).map((one: any) => one.text)
+    await pane.unmount()
+    return found
+  }
+  const before = await texts()
+  expect(before.some(text => text.startsWith('trend'))).toBe(true)
+  expect(before.some(text => text.includes('Messages'))).toBe(true)
+  expect(before.some(text => text.includes('⎇ feat/old'))).toBe(true)
+  // Neither reader replaces a reading it cannot take, so only the reset clears them.
+  w.sessionId = 's2'
+  w.breakdown = undefined
+  w.porcelain = undefined
+  await w.clock!.advance(2000)
+  const after = await texts()
+  expect(after.some(text => text.startsWith('trend'))).toBe(false)
+  expect(after.some(text => text.includes('Messages'))).toBe(false)
+  expect(after.some(text => text.includes('⎇ feat/old'))).toBe(false)
+})
+
 test('the Account card reads the account file, the model, the effort and Remote Control', async ($, on) => {
   const w = world(on, {
     files: { [HUD_FILE]: JSON.stringify(HUD), '/home/me/.claude.json': JSON.stringify({ oauthAccount: { emailAddress: 'you@example.com', billingType: 'stripe_subscription' } }) },
@@ -564,6 +594,22 @@ test('the Usage card shows the limits and cost the engine reports', async ($, on
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'usage-headline' }))?.text).toBe('$4.80 · $2.40/h')
   expect((await pane.find({ key: 'usage-row-1' }))?.text).toBe('    resets in 3h40m · on pace')
+})
+
+test('a changed context or usage reading shows within a poll', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, usd: 1 })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  let pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ key: 'context-headline' }))?.text).toBe('79% of reset')
+  expect((await pane.find({ key: 'usage-headline' }))?.text).toBe('$1.00 · $0.50/h')
+  await pane.unmount()
+  w.tokens = 135000
+  w.usd = 4.8
+  await w.clock!.advance(2000)
+  pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ key: 'context-headline' }))?.text).toBe('90% of reset')
+  expect((await pane.find({ key: 'usage-headline' }))?.text).toBe('$4.80 · $2.40/h')
 })
 
 const GIT_STATUS = '--no-optional-locks -c core.fsmonitor=false status --porcelain=v2 --branch'
@@ -689,6 +735,21 @@ test('the Sections view hides, moves and resets the cards', async ($, on) => {
   const reads = w.calls.filter(call => call === 'usage breakdown').length
   await w.clock!.advance(10000)
   expect(w.calls.filter(call => call === 'usage breakdown').length).toBe(reads)
+})
+
+test('leaving the pane from the Sections view brings it back on the cards', async ($, on) => {
+  world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  let pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await pane.press({ key: 'pane-sections' })
+  expect(await pane.find({ key: 'sections-reset' })).toBeDefined()
+  await pane.unmount()
+  await $.command.run({ command: 'dflow:hud', args: 'band' })
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await pane.find({ key: 'sections-reset' })).toBeUndefined()
+  expect(await pane.find({ key: 'plan' })).toBeDefined()
 })
 
 test('/dflow:hud sections sets the list or names the valid cards', async ($, on) => {
