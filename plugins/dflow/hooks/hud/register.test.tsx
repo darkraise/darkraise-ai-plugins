@@ -383,6 +383,14 @@ test('before hud.json exists the pane says how to start and the band draws nothi
   expect(texts).toEqual(['dflow has no state in this repository yet.', 'Run /dflow:init, then /dflow:plan.'])
 })
 
+test('outside a dflow checkout a stored pane mode opens nothing and reads no account', async ($, on) => {
+  const w = world(on, { files: {}, hasState: false, stored: { mode: 'pane' } })
+  await $.session.start(START)
+  await w.clock!.advance(10000)
+  expect(w.calls).not.toContain('open dflow-hud')
+  expect(w.calls.some(call => call.includes('.claude.json'))).toBe(false)
+})
+
 test('a Hud read earlier is dropped once hud.json is gone', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify({ ...HUD, plan: { ...HUD.plan, approved: '2026-11-12' } }) } })
   on('ui.render', ($: any, e: any) => {

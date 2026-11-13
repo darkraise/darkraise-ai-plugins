@@ -105,6 +105,7 @@ let isSectionsFromBand = false
 // The resume offer is made once a session, from its first hud.json reading;
 // a compaction keeps the session and makes none.
 let isOfferDue = false
+let isPaneDue = false
 
 type ButtonLook = { hotkey?: string; isMain?: boolean; isOff?: boolean; isCompact?: boolean }
 
@@ -503,20 +504,13 @@ async function readState($: any): Promise<void> {
     hasReadAccount = false
     hasReadWhere = false
     isOfferDue = true
+    isPaneDue = true
+    // The previous session's figures would draw until the next reading.
+    await update($, breakdownAtom, () => null)
+    await update($, readingsAtom, () => [])
+    await update($, repoAtom, () => null)
     await loadMode($)
     await readVersion($)
-
-    if ((await read($, modeAtom)) === 'pane' && !(await isPaneUp($))) {
-      await openPane($)
-    }
-  }
-
-  if (!hasReadAccount && (await read($, modeAtom)) !== 'off') {
-    hasReadAccount = true
-    await readAccount($)
-    await readEngine($)
-    await readRemote($)
-    $.ui.invalidate('ui.render')
   }
 
   if (root === '') {
@@ -537,10 +531,26 @@ async function readState($: any): Promise<void> {
     return
   }
 
+  // A stored pane mode opens the pane only where it has something to show.
+  if (isPaneDue) {
+    isPaneDue = false
+
+    if ((await read($, modeAtom)) === 'pane' && !(await isPaneUp($))) {
+      await openPane($)
+    }
+  }
+
+  if (!hasReadAccount && (await read($, modeAtom)) !== 'off') {
+    hasReadAccount = true
+    await readAccount($)
+    await readEngine($)
+    await readRemote($)
+    $.ui.invalidate('ui.render')
+  }
+
   const figures = await $.session.usage()
   const { context } = figures
-  await update($, contextAtom, () => context)
-  await update($, usageAtom, () => ({
+  const usage: HudUsage = {
     limits: (figures.rateLimits ?? []).map((limit: any) => {
       const resetsAt = typeof limit.resetsAt === 'string' ? Date.parse(limit.resetsAt) : NaN
 
@@ -548,7 +558,16 @@ async function readState($: any): Promise<void> {
     }),
     usd: figures.cost?.usd ?? null,
     startedAt: figures.startedAt,
-  }))
+  }
+
+  if (
+    JSON.stringify(context) !== JSON.stringify(await read($, contextAtom)) ||
+    JSON.stringify(usage) !== JSON.stringify(await read($, usageAtom))
+  ) {
+    await update($, contextAtom, () => context)
+    await update($, usageAtom, () => usage)
+    $.ui.invalidate('ui.render')
+  }
   const now = await $.clock.now()
 
   // Written when the figure changes, and every few minutes so that the CLI
@@ -685,6 +704,7 @@ async function setMode($: any, mode: Mode): Promise<void> {
     await readBreakdown($)
   } else {
     await $.ui.close({ id: PANE })
+    await update($, viewAtom, () => 'cards')
   }
 
   $.ui.invalidate('ui.render')
