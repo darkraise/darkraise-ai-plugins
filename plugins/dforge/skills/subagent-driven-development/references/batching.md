@@ -7,6 +7,6 @@ dispatch one subagent per task. Compose ONE dispatch brief listing every file
 and its change, send the whole batch to a single subagent (the highest tier any
 of its tasks names), and review its diff as one unit. Reserve
 one-dispatch-per-task for work that needs its own judgment, its own tests, or
-its own review surface. A batched task never runs on an external executor.
+its own review surface.
 Decide batching from the briefs of the contiguous candidate tasks, extracted
 with `task-brief`; you never read task text any other way.

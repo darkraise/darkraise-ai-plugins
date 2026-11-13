@@ -44,7 +44,7 @@ Re-reviewer: report task-2-rereview-1-report.md — fix round addressed, 0 open
 ...
 
 [After the last task's complete line: context-size --final says ok — continue to Final Review]
-[final-review.md: package the branch; review-route --final prints judge-opus for this plain plan; Codex round in the background]
+[final-review.md: package the branch; review-route --final prints judge-opus for this plain plan; reviewer panel in the background at depth full]
 [a fresh judge-opus dedupes and verifies the union: 1 CONFIRMED (both), 1 REJECTED]
 [ONE fix dispatch, told to run the full suite through suite-run after its last commit; one scoped re-review; clean]
 

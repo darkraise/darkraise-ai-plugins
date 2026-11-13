@@ -20,12 +20,6 @@ agent (subject to the cache rule), which preserves its model, its effort, and
 its context. Re-dispatching a different tier there discards exactly what that
 round exists to preserve.
 
-Neither applies to a task running on an external executor.
-Its fix rounds resume that executor's own session at round 1 only - the one its
-`**Executor:**` line names - and round 2 leaves the lane by `HANDBACK` instead
-of climbing a rung - see
-[external-review.md](../../../reference/external-review.md).
-
 ## Escalating out of inline mode
 
 A task whose last ledger line is `escalated inline -> subagent` failed in an

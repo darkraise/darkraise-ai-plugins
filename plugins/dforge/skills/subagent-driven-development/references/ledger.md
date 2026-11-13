@@ -4,8 +4,8 @@ This skill owns every line in `<ledger dir>/progress.md`. The grammar:
 
 ```
 # SDD ledger — plan: <path>
-Task <N>: implementer <agent> (assigned; base <sha7>[; part A][; reserve tier][; scored at dispatch][; wave <k>][; executor <id> <model>/<effort>, thread <id>][; escalated from <old>: BLOCKED][; <substitution>])
-Task <N>: fix round R/2 (X addressed, Y open — <one-liners>; commits a..b[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)
+Task <N>: implementer <agent> (assigned; base <sha7>[; part A][; reserve tier][; scored at dispatch][; wave <k>][; escalated from <old>: BLOCKED][; <substitution>])
+Task <N>: fix round R/2 (X addressed, Y open — <one-liners>; commits a..b[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new>)
 Group <a>-<b>: review round R/2 (<same fields as a fix round>)
 Task <N>: awaiting group review (commits <a7>..<b7>)
 Group <list>: review round R/2 (Task <N>: <k> open — <one-liners> | clean; …; commits <a7>..<b7> (Task <N>)[, <a7>..<b7> (Task <M>)])
@@ -40,16 +40,12 @@ Early CI: green run <id>
 Early CI: red run <id> — <job>/<step>[, <job>/<step> ...]
 Early CI: skipped — <reason>
 CI: <sha7> run <id> <green|red|still running at 90 min>
-Plan: executor <id> off - unreliable (<k> handbacks)
 ```
 
 - The four `Early CI:` lines are written by
   [delegated-task.md](../../../reference/delegated-task.md) §Early CI, and the
   `CI:` line by finishing. No per-task Recovery row reads them, since those
   key on `Task` and `Group` lines; the Plan state paragraph below does.
-- `Plan: executor <id> off - unreliable (<k> handbacks)` is written by
-  [external-review.md](../../../reference/external-review.md) §Dispatch. It names
-  no task, so no per-task Recovery row reads it; `scripts/lane-breaker` does.
 - `Acceptance QA:` lines are written by
   [final-review.md](../../../reference/final-review.md) step 0.5. On recovery:
   a `complete` line skips step 0.5; a `dispatched` line with no `complete`
@@ -76,10 +72,10 @@ Plan: executor <id> off - unreliable (<k> handbacks)
   never writes them. `Wave <k>: merged` closes the wave as `integrated` does:
   the next wave starts on it, and its head proves that wave's base
   (parallel-waves.md §1).
-- The scores clause is present whenever a review seat, Codex or judge, scored the task.
+- The scores clause is present whenever a review seat, an external reviewer's list or a judge, scored the task.
 - The checkpoint after the `—` comes from the report's
   `## Discovered issues (not fixed)` and `## Assumptions made` sections — the
-  implementer's or the Codex wrapper's. `done` is a one-line summary of the
+  implementer's. `done` is a one-line summary of the
   task's deliverable, `verified` the covering command and its result, and
   `remaining` the parked findings. A batch report's sections are copied onto
   each task's complete line, attributed per task where the report names one.
@@ -128,6 +124,6 @@ its step 0.5. A `Final fix:` line and no `Final review:` line: the fix wave was
 dispatched; after compaction the agent id is gone, so re-dispatch that agent
 fresh, then continue Final Review at the scoped re-review. A
 `Final review: clean` line: the review is done — go to
-dforge:finishing-a-development-branch. A ledger holding a
-`Plan: executor <id> off - unreliable (<k> handbacks)` line keeps that executor
-off for the rest of the plan.
+dforge:finishing-a-development-branch. An older ledger's
+`Plan: executor <id> off - unreliable (<k> handbacks)` line is inert: no
+executor lane remains.

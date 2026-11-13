@@ -116,9 +116,10 @@ list adds ` (<id> <STATUS> — <reason>)`; no open surface adds
 ## Plan review round 1
 
 Round 1 runs `run-review-panel --kind plan --prompt <plan review prompt>` on
-the heavy rows, beside the Claude round, as a background Bash call with
+the heavy rows, in place of the Claude round, as a background Bash call with
 `timeout` 5590000 ms; `review-route` prints `primary=panel:plan
-fallback=dforge:judge-opus reason=round cap=<n>`. The plan writer reads every
+fallback=dforge:judge-opus reason=round cap=<n>`, and `dforge:judge-opus`
+reviews only when the panel returns `lists=0`. The plan writer reads every
 list. With two or more score sets, the lowest score per criterion decides the
 "any score of 8 or below" gate, and the `**Plan review:**` header line names
 every seat that returned a list.

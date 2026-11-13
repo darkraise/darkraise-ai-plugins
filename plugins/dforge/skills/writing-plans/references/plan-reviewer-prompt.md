@@ -77,8 +77,8 @@ Subagent ([JUDGE]):
 
 **Placeholders:**
 - `[JUDGE]` - the seat that `scripts/review-route PLAN_FILE --plan-round 1`
-  prints: its `primary` when Codex is off, or its `fallback` when the Codex
-  round produced nothing (`dforge:judge-opus`); no `model` or `effort` argument. On Codex, a native judge at the `primary=native:<model>/<effort>` pair it prints, or above.
+  prints: its `primary` when every reviewer is off, or its `fallback` when the
+  panel returned no list (`dforge:judge-opus`); no `model` or `effort` argument. On Codex, a native judge at the `primary=native:<model>/<effort>` pair it prints, or above.
 - `[PLUGIN_ROOT]` - REQUIRED: the resolved dforge plugin directory.
   Expand it before sending.
 - `[PLAN_FILE]`, `[SPEC_FILE]` - REQUIRED: absolute paths.
@@ -92,20 +92,20 @@ Bands: 1-8 fails, 9-13 borderline, 14-20 passes.
 
 **A native judge on Codex** has no Read tool either: running a command is its
 only file access. In this template and the Later rounds one, make change 3 of
-Round 1 on Codex below before dispatching it, or the judge cannot open the
+Round 1 on external reviewers below before dispatching it, or the judge cannot open the
 plan.
 
-## Round 1 on Codex
+## Round 1 on external reviewers
 
-When `scripts/review-route` prints `primary=codex:plan`, send the template
-above to `scripts/run-codex-review.sh --kind plan` with four changes:
+When `scripts/review-route` prints `primary=panel:plan`, send the template
+above to `scripts/run-review-panel --kind plan` with four changes:
 
 1. Send only the `prompt:` body, unindented: drop the `Subagent ([JUDGE]):` and
    `description:` lines, which mean nothing outside a subagent dispatch.
 2. Delete the `## Output Format` section - everything from that heading up to,
    but not including, `## Criteria`. The runner passes
    `criteria/codex-plan-review-schema.json`, and a prompt that orders markdown
-   while `--output-schema` forbids it gets neither.
+   while the schema forbids it gets neither.
 3. Replace the line
 
        You cannot run commands or dispatch subagents, and you write only the report file.
@@ -119,6 +119,8 @@ above to `scripts/run-codex-review.sh --kind plan` with four changes:
    A Claude judge reads a file with a Read tool, so forbidding commands costs
    it nothing. Codex has no such tool: running a command is its only file
    access, and the runner already confines it with `sandbox: "read-only"`.
+   agy reads with its own tools but denies every shell command in plan mode,
+   so the prompt names files to read and never a command to run.
    Sent unchanged, the line makes the seat's own approval layer refuse the
    read, and it returns a well-formed review of nothing - every criterion
    scored 10, the schema's "genuinely uncertain" - with a finding saying it
