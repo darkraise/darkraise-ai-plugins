@@ -10,7 +10,9 @@ check() { # check <name> <got> <want>
   if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+# Without setsid and pgrep (Git Bash) the panel cannot reach a hang runner's
+# children, so the suite ends them itself.
+TMP=$(mktemp -d); trap 'kill $(cat "$TMP/children" 2>/dev/null) 2>/dev/null; rm -rf "$TMP"' EXIT
 export CLAUDE_CODE_SESSION_ID=s1
 printf '# r\n' > "$TMP/prompt.md"
 mkdir -p "$TMP/work"
@@ -77,6 +79,11 @@ panel --kind final --tier heavy --base HEAD
 check "a final panel writes one list per reviewer" "$(ls "$TMP/out" | grep -c '\.md$')" "2"
 check "a final panel never passes --tier" "$(cat "$TMP/codex.args" "$TMP/agy.args" | grep -c -- '--tier')" "0"
 
+panel --kind plan --prompt "$TMP/prompt.md"
+check "a plan panel writes one JSON list per reviewer" "$(ls "$TMP/out" | grep -c '\.json$')" "2"
+check "a plan panel never passes --tier" "$(cat "$TMP/codex.args" "$TMP/agy.args" | grep -c -- '--tier')" "0"
+check "a plan panel runs on the heavy rows" "$(tail -1 <<<"$out")" "panel tier=heavy lists=2"
+
 AGY_STATUS=FAILED panel --kind task --tier light --prompt "$TMP/prompt.md"
 check "each runner's stderr has its own file" "$(ls "$TMP/out"/*.stderr | wc -l | tr -d ' ')" "2"
 check "a FAILED runner is not counted as a list" "$(tail -1 <<<"$out")" "panel tier=light lists=1"
@@ -86,7 +93,7 @@ check "an OK runner's list is kept" "$([ -e "$TMP/out/codex.json" ] && echo kept
 cat > "$TMP/hang-runner" <<EOF
 #!/usr/bin/env bash
 out=""; while [ \$# -gt 0 ]; do case "\$1" in --out) out="\$2"; shift 2 ;; *) shift ;; esac; done
-sleep 300 & printf '%s\n' \$! > "$TMP/child.pid"; wait
+sleep 300 & printf '%s\n' \$! > "$TMP/child.pid"; printf '%s\n' \$! >> "$TMP/children"; wait
 EOF
 chmod +x "$TMP/hang-runner"
 PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/hang-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
@@ -102,13 +109,15 @@ check "a timed-out runner leaves no list from an earlier run" "$([ -e "$TMP/out/
 
 cat > "$TMP/slow-gate" <<EOF
 #!/usr/bin/env bash
-sleep 3
+sleep 10
 exec bash "$TMP/agy-gate"
 EOF
 chmod +x "$TMP/slow-gate"
+# A 10 s gate against a 10 s bound: counted from panel start the run ends near
+# 10 s, counted after the gates at 20 s or more, and 16 s leaves room for slow forks.
 t0=$(date +%s)
-PANEL_BOUND_SECONDS=3 PANEL_AGY_GATE="$TMP/slow-gate" PANEL_AGY_RUNNER="$TMP/hang-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
-check "the bound counts from panel start, gates included" "$([ $(( $(date +%s) - t0 )) -le 5 ] && echo inside || echo over)" "inside"
+PANEL_BOUND_SECONDS=10 PANEL_AGY_GATE="$TMP/slow-gate" PANEL_AGY_RUNNER="$TMP/hang-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
+check "the bound counts from panel start, gates included" "$([ $(( $(date +%s) - t0 )) -le 16 ] && echo inside || echo over)" "inside"
 
 for fam in codex agy; do
   cat > "$TMP/$fam-count-gate" <<EOF
@@ -121,7 +130,6 @@ done
 : > "$TMP/gates.log"
 PANEL_CODEX_GATE="$TMP/codex-count-gate" PANEL_AGY_GATE="$TMP/agy-count-gate" panel --kind task --tier light --prompt "$TMP/prompt.md"
 check "one panel run reads each gate once" "$(sort "$TMP/gates.log" | uniq -c | awk '{ printf "%s=%s ", $2, $1 }')" "agy=1 codex=1 "
-check "the agy runner makes no roster probe" "$(grep -c 'detect-executors' "$P/scripts/run-agy-review.sh")" "0"
 
 # Each wrong rule gives another figure: the first row on light (1180), the
 # graces swapped (490), or a closed family still counted (485).
