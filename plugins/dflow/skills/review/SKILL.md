@@ -31,11 +31,14 @@ The reviewer writes findings to disk. Do not ask it to repeat them in its reply.
 dflow review verify
 ```
 
+It checks quote evidence itself and lists each evidence command without running it, because a reviewer wrote them. Read each command, run it from the repository root with Bash, and record its exit status: `dflow review check <id> --exit <status>`. A command that would change or send anything outside the repository is not evidence: resolve that finding as declined and say why.
+
 - `reproduced`: the defect is shown. Fix it here, in this session, and commit with a normal `fix(<scope>): …` commit.
 - `unproven`: the evidence did not show a defect. Do not fix blind; report it.
+- `could not run` (exit 126 or 127): the command is broken, not the code. Report it; resolve the finding by hand.
 - A finding you disagree with: `dflow review resolve <id> declined "<technical reason>"`. The owner sees every declined finding at ship.
 
-Run `dflow review verify` again after the fixes. A command finding closes itself once its command passes. A quote finding is closed by hand once you have checked the line: `dflow review resolve <id> fixed`.
+After the fixes, run each command again and record its status with `dflow review check`: a command finding closes itself once its command passes. A quote finding is closed by hand once you have checked the line: `dflow review resolve <id> fixed`.
 
 A fix to a `blocking` finding gets one re-check: send the same reviewer the fix commit's range and ask only whether that finding is closed.
 
@@ -45,4 +48,4 @@ A fix to a `blocking` finding gets one re-check: send the same reviewer the fix 
 dflow review record --tier <N>
 ```
 
-Tell the owner every finding at every severity (`dflow review list --all`), graded by what it breaks, with what you fixed, declined or left unproven. Then continue with the dflow:ship skill.
+Tell the owner every finding at every severity (`dflow review list --all`), graded by what it breaks, with what you fixed, declined or left unproven. Then do what the `Next:` line of `dflow review record` says. By default that is to end your turn: shipping closes the plan, and the owner decides when. Only a repository that sets `autoShip` sends you on to the dflow:ship skill.

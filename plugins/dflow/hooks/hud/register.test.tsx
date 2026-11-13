@@ -108,7 +108,7 @@ test('the band shows the plan, progress, task and context', async ($, on) => {
   await ui.unmount()
 
   expect(calls[0]).toBe(
-    'write /repo/.dflow/context.json {"tokens":118000,"window":1000000,"at":"2026-11-12T12:00:00.000Z"}',
+    'write /repo/.dflow/context/s1.json {"session":"s1","tokens":118000,"window":1000000,"at":"2026-11-12T12:00:00.000Z"}',
   )
 })
 
@@ -159,6 +159,15 @@ test('a fresh reset flag is cleared at the end of a turn; a stale one is left', 
   files['/repo/.dflow/reset.json'] = JSON.stringify({ plan: 'meter', at: '2026-11-12T11:59:30.000Z' })
   await $.turn.complete({ ...TURN, turnId: 't3', agentId: 'a1' })
   expect(JSON.parse(files['/repo/.dflow/reset.json']).plan).toBe('meter')
+
+  // A flag another session asked for is that session's to act on.
+  files['/repo/.dflow/reset.json'] = JSON.stringify({ plan: 'meter', session: 's2', at: '2026-11-12T11:59:30.000Z' })
+  await $.turn.complete({ ...TURN, turnId: 't4' })
+  expect(JSON.parse(files['/repo/.dflow/reset.json']).session).toBe('s2')
+
+  files['/repo/.dflow/reset.json'] = JSON.stringify({ plan: 'meter', session: 's1', at: '2026-11-12T11:59:30.000Z' })
+  await $.turn.complete({ ...TURN, turnId: 't5' })
+  expect(files['/repo/.dflow/reset.json']).toBe('{}')
 })
 
 test('with no dflow directory the mod draws nothing and writes nothing', async ($, on) => {

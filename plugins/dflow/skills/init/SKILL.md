@@ -24,7 +24,7 @@ disable-model-invocation: true
 
 4. **project.md.** Write it from the code, in at most 150 lines: what the system is, a module map (each top-level part and what it is responsible for, with real paths in backticks), and how to run and verify it. Describe the present; history belongs in `decisions.md`.
 
-5. **darkmem.** When the darkmem tools are connected, ask the owner for the project name, then `dflow init --darkmem <project>`. The server address lives in `~/.dflow/config.json` as `{"darkmem": {"url": "<address>"}}` and the key in the `DARKMEM_API_KEY` variable; ask the owner to set both, never write a key to a file. `dflow sync push` then files the docs and the board.
+5. **darkmem.** When the darkmem tools are connected, ask the owner for the project name, then `dflow init --darkmem <project>`. The server address lives in `~/.dflow/config.json` as `{"darkmem": {"url": "<address>"}}` and the key in the `DARKMEM_API_KEY` variable; ask the owner to set both, never write a key to a file. `--darkmem` also records the owner's consent for this machine in `~/.dflow/config.json`; on another machine, or for a clone that already names a project, the owner runs `dflow sync enable`. `dflow sync push` then files the docs and the board.
 
 6. **Context.** The HUD mod resets the context at task boundaries. Where mods are not loaded, suggest `/autocompact 300k` to the owner so that a long build compacts before it grows large.
 

@@ -5,7 +5,8 @@ import type { Hud, HudContext, Mode } from '../../types'
 import {
   RESET_INSTRUCTIONS,
   bandText,
-  isFreshReset,
+  contextFile,
+  isResetFor,
   nextMode,
   paneRows,
 } from './view.mjs'
@@ -95,8 +96,9 @@ async function readState($: any): Promise<void> {
     lastTokens = context.tokens
     lastWrite = now
     await $.fs.write(
-      `${root}/.dflow/context.json`,
+      `${root}/.dflow/${contextFile(sessionId)}`,
       JSON.stringify({
+        session: sessionId,
         tokens: context.tokens,
         window: context.window,
         at: new Date(now).toISOString(),
@@ -144,7 +146,7 @@ async function resetIfAsked($: any): Promise<void> {
     flag = null
   }
 
-  if (!isFreshReset(flag, await $.clock.now())) {
+  if (!isResetFor(flag, await $.clock.now(), await $.session.id())) {
     return
   }
 

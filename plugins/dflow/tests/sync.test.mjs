@@ -76,6 +76,14 @@ async function stub(t) {
 
 const CONFIG = { darkmem: { project: 'fixture' } };
 
+// A project mapped to darkmem and enabled by the user, as `dflow init
+// --darkmem` or `dflow sync enable` leaves it.
+function enabled(t) {
+  const root = makeProject(t, { config: CONFIG });
+  assert.equal(dflow(root, ['sync', 'enable']).status, 0);
+  return root;
+}
+
 function finishTask1(root) {
   write(root, 'verify1.mjs', '\n');
   write(root, 'src/limit.mjs', '1\n');
@@ -89,13 +97,23 @@ test('with no project, URL or key every sync command exits 0 with one line', asy
   assert.match(dflow(mapped, ['sync', 'status']).stdout, /^darkmem is off: no darkmem URL is configured/);
   const keyless = dflow(mapped, ['sync', 'pull'], { env: { DFLOW_DARKMEM_URL: 'http://127.0.0.1:1', DARKMEM_API_KEY: '' } });
   assert.deepEqual([keyless.status, keyless.stdout.trim()], [0, 'darkmem is off: the API key variable DARKMEM_API_KEY is not set']);
+  // The repository names a project; only the user's consent turns it on.
+  const env = { DFLOW_DARKMEM_URL: 'http://127.0.0.1:1', DARKMEM_API_KEY: 'secret' };
+  assert.equal(dflow(mapped, ['sync', 'push'], { env }).stdout.trim(), 'darkmem is off: not enabled for this repository; `dflow sync enable` sends its docs to project "fixture"');
+  assert.match(dflow(mapped, ['sync', 'enable']).stdout, /^darkmem enabled for .+: its docs go to project "fixture"$/m);
+  assert.match(dflow(mapped, ['sync', 'status'], { env }).stdout, /^darkmem project fixture at http:\/\/127\.0\.0\.1:1/);
+  write(mapped, 'docs/dflow/config.json', JSON.stringify({ darkmem: { project: 'someone-else' } }));
+  assert.match(dflow(mapped, ['sync', 'status'], { env }).stdout, /this repository now names project "someone-else", but you enabled "fixture" for it/);
+  write(mapped, 'docs/dflow/config.json', JSON.stringify(CONFIG));
+  assert.equal(dflow(mapped, ['sync', 'disable']).status, 0);
+  assert.match(dflow(mapped, ['sync', 'status'], { env }).stdout, /not enabled for this repository/);
   finishTask1(mapped);
   assert.equal(dflow(mapped, ['done', '1', '-m', 'feat: parse']).status, 0);
 });
 
 test('on the default branch push files every document by hash, once', async t => {
   const server = await stub(t);
-  const root = makeProject(t, { config: CONFIG });
+  const root = enabled(t);
   git(root, 'switch', '-q', 'main');
   const first = await dflowAsync(root, ['sync', 'push'], { env: server.env });
   assert.equal(first.status, 0, first.stdout + first.stderr);
@@ -110,7 +128,7 @@ test('on the default branch push files every document by hash, once', async t =>
 
 test('on a plan branch push sends the plan, its board row and the task transitions', async t => {
   const server = await stub(t);
-  const root = makeProject(t, { config: CONFIG });
+  const root = enabled(t);
   git(root, 'switch', '-q', 'main');
   await dflowAsync(root, ['sync', 'push'], { env: server.env });
   git(root, 'switch', '-q', 'feat/x');
@@ -142,7 +160,7 @@ test('on a plan branch push sends the plan, its board row and the task transitio
 
 test('a row edited on darkmem is pulled on the default branch; a two-sided change is reported and kept', async t => {
   const server = await stub(t);
-  const root = makeProject(t, { config: CONFIG });
+  const root = enabled(t);
   git(root, 'switch', '-q', 'main');
   await dflowAsync(root, ['sync', 'push'], { env: server.env });
   const remote = server.documents.get('dflow/board.md');
@@ -168,7 +186,7 @@ test('a row edited on darkmem is pulled on the default branch; a two-sided chang
 });
 
 test('an unreachable server leaves the work queued and does not fail the build', async t => {
-  const root = makeProject(t, { config: CONFIG });
+  const root = enabled(t);
   const env = { DFLOW_DARKMEM_URL: 'http://127.0.0.1:9', DARKMEM_API_KEY: 'secret' };
   finishTask1(root);
   const done = await dflowAsync(root, ['done', '1', '-m', 'feat: parse'], { env });
@@ -184,7 +202,7 @@ test('an unreachable server leaves the work queued and does not fail the build',
 
 test('a board row the server refuses does not hold back the plan or the work log', async t => {
   const server = await stub(t);
-  const root = makeProject(t, { config: CONFIG });
+  const root = enabled(t);
   git(root, 'switch', '-q', 'main');
   await dflowAsync(root, ['sync', 'push'], { env: server.env });
   git(root, 'switch', '-q', 'feat/x');
@@ -201,7 +219,7 @@ test('a board row the server refuses does not hold back the plan or the work log
 
 test('an answer lost after the server filed it does not file the entry or flag the board twice', async t => {
   const server = await stub(t);
-  const root = makeProject(t, { config: CONFIG });
+  const root = enabled(t);
   git(root, 'switch', '-q', 'main');
   await dflowAsync(root, ['sync', 'push'], { env: server.env });
   write(root, 'docs/dflow/board.md', rewriteRow(read(root, 'docs/dflow/board.md'), 1, { note: 'edited locally' }));
@@ -224,7 +242,7 @@ test('an answer lost after the server filed it does not file the entry or flag t
 
 test('a document the server refuses is skipped until it changes, and the rest goes through', async t => {
   const server = await stub(t);
-  const root = makeProject(t, { config: CONFIG });
+  const root = enabled(t);
   git(root, 'switch', '-q', 'main');
   server.blockFirst.add('dflow/decisions.md');
   const push = await dflowAsync(root, ['sync', 'push'], { env: server.env });
@@ -238,7 +256,7 @@ test('a document the server refuses is skipped until it changes, and the rest go
 
 test('two pushes at once do not send the queued entries twice', async t => {
   const server = await stub(t);
-  const root = makeProject(t, { config: CONFIG });
+  const root = enabled(t);
   finishTask1(root);
   const off = { DFLOW_DARKMEM_URL: 'http://127.0.0.1:9', DARKMEM_API_KEY: 'secret' };
   await dflowAsync(root, ['done', '1', '-m', 'feat: parse'], { env: off });

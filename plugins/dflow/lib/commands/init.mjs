@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { emptyBoard } from '../board.mjs';
-import { relative } from '../repo.mjs';
+import { primaryRoot, relative, setDarkmemConsent } from '../repo.mjs';
 import { fail, readJson, readText, writeJson } from '../util.mjs';
 
 const PROJECT = name => `# ${name}
@@ -59,7 +59,22 @@ export async function run(ctx, argv, { out }) {
     created.push('.gitignore (.dflow/ ignored)');
   }
 
+  // decisions.md and gotchas.md only grow at the end, so two branches that
+  // each add entries would conflict there; the union driver keeps both.
+  const attributesFile = path.join(root, '.gitattributes');
+  const attributes = readText(attributesFile) ?? '';
+  const union = ['docs/dflow/decisions.md merge=union', 'docs/dflow/gotchas.md merge=union'].filter(line => !attributes.split(/\r?\n/).some(existing => existing.trim() === line));
+  if (union.length) {
+    fs.writeFileSync(attributesFile, `${attributes}${attributes && !attributes.endsWith('\n') ? '\n' : ''}${union.join('\n')}\n`);
+    created.push('.gitattributes (decisions.md and gotchas.md merge by union)');
+  }
+
   out(created.length ? `dflow init: created ${created.join(', ')}` : 'dflow init: already set up; nothing created');
+  // The owner typed the project, so this is their consent for this machine.
+  if (values.darkmem) {
+    setDarkmemConsent(ctx.env, primaryRoot(root), values.darkmem);
+    out(`darkmem enabled for this repository on this machine: project "${values.darkmem}"`);
+  }
   if (!config.gates.length) out('No gates configured: add them with `dflow init --gate "test=<command>"` (lint, type check, full suite, build).');
   if (!config.darkmem?.project) out('darkmem is off for this repository: `dflow init --darkmem <project>` maps it.');
   return 0;

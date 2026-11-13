@@ -138,6 +138,10 @@ export function capLines(lines, count, more) {
   return lines.length <= count ? lines : [...lines.slice(0, count), more(lines.length - count)];
 }
 
+export function squash(text) {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 export function backticked(text) {
   return [...text.matchAll(/`([^`]+)`/g)].map(match => match[1].trim()).filter(Boolean);
 }

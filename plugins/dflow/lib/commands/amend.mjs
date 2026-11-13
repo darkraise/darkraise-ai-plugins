@@ -10,6 +10,8 @@ export async function run(ctx, argv, { out }) {
   const number = Number(positionals[0]);
   if (!Number.isInteger(number) || !values.verify?.length || !values.reason) fail('usage: dflow amend <N> --verify "<command>" [--verify "<command>"] --reason "<why the approved one was wrong>"');
   if (values.verify.some(command => command.includes('`'))) fail('a verify command cannot contain a backtick');
+  // The plan holds one command per line.
+  if (values.verify.some(command => /[\r\n]/.test(command))) fail('a verify command is one line; join the steps with && or put them in a script');
   const state = loadState(ctx.paths);
   const active = requireActive(ctx, state);
   const task = active.plan.tasks.find(candidate => candidate.number === number);

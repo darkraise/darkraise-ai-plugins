@@ -13,12 +13,17 @@ test('init scaffolds the docs once and ignores .dflow', t => {
   for (const file of ['project.md', 'decisions.md', 'gotchas.md', 'board.md', 'config.json']) assert.ok(fs.existsSync(path.join(root, 'docs/dflow', file)), file);
   assert.deepEqual(JSON.parse(read(root, 'docs/dflow/config.json')), { gates: [{ name: 'test', cmd: 'node t.mjs' }], darkmem: { project: 'fixture' } });
   assert.match(read(root, '.gitignore'), /^\.dflow\/$/m);
+  assert.match(read(root, '.gitattributes'), /^docs\/dflow\/decisions\.md merge=union\ndocs\/dflow\/gotchas\.md merge=union$/m);
+  // The owner typed the project, so init records their consent for this machine.
+  assert.match(first.stdout, /darkmem enabled for this repository on this machine: project "fixture"/);
+  assert.deepEqual(Object.values(JSON.parse(read(root, '.test-home/.dflow/config.json')).darkmem.repositories), ['fixture']);
 
   write(root, 'docs/dflow/project.md', '# mine\n');
   const second = dflow(root, ['init']);
   assert.match(second.stdout, /already set up/);
   assert.equal(read(root, 'docs/dflow/project.md'), '# mine\n');
   assert.equal(read(root, '.gitignore').match(/\.dflow/g).length, 1);
+  assert.equal(read(root, '.gitattributes').match(/merge=union/g).length, 2);
 });
 
 test('plan new creates the file and a linked board row', t => {
@@ -105,4 +110,24 @@ test('init accepts a configuration without gates', t => {
   const result = dflow(root, ['init', '--darkmem', 'y']);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(read(root, 'docs/dflow/config.json')), { darkmem: { project: 'y' }, gates: [] });
+});
+
+test('decisions added on two branches merge without a conflict', t => {
+  const root = makeRepo(t, { branch: null });
+  assert.equal(dflow(root, ['init']).status, 0);
+  git(root, 'add', '-A');
+  git(root, 'commit', '-q', '-m', 'docs: set up dflow');
+  const decide = (branch, text) => {
+    git(root, 'switch', '-q', '-c', branch, 'main');
+    fs.appendFileSync(path.join(root, 'docs/dflow/decisions.md'), `\n## D-${branch}/1 · 2026-11-12\n\n${text}\n`);
+    git(root, 'commit', '-q', '-am', `docs: decide on ${branch}`);
+  };
+  decide('one', 'the first plan\'s decision');
+  decide('two', 'the second plan\'s decision');
+  git(root, 'switch', '-q', 'main');
+  git(root, 'merge', '-q', '--no-edit', 'one');
+  git(root, 'merge', '-q', '--no-edit', 'two');
+  const text = read(root, 'docs/dflow/decisions.md');
+  assert.match(text, /## D-one\/1/);
+  assert.match(text, /## D-two\/1/);
 });

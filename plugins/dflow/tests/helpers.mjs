@@ -48,7 +48,7 @@ export function dflow(root, args, { env = {}, input, cwd = '.' } = {}) {
   const home = path.join(root, '.test-home');
   return sh(path.join(root, cwd), process.execPath, [BIN, ...args], {
     input,
-    env: { ...process.env, HOME: home, DFLOW_HOME: path.join(home, '.dflow'), DFLOW_TODAY: '2026-11-12', CLAUDE_CONFIG_DIR: '', ...env },
+    env: { ...process.env, HOME: home, DFLOW_HOME: path.join(home, '.dflow'), DFLOW_TODAY: '2026-11-12', CLAUDE_CONFIG_DIR: '', CLAUDE_CODE_SESSION_ID: '', ...env },
   });
 }
 
@@ -113,7 +113,7 @@ export function dflowAsync(root, args, { env = {} } = {}) {
   return new Promise(resolve => {
     const child = spawn(process.execPath, [BIN, ...args], {
       cwd: root,
-      env: { ...process.env, HOME: home, DFLOW_HOME: path.join(home, '.dflow'), DFLOW_TODAY: '2026-11-12', CLAUDE_CONFIG_DIR: '', ...env },
+      env: { ...process.env, HOME: home, DFLOW_HOME: path.join(home, '.dflow'), DFLOW_TODAY: '2026-11-12', CLAUDE_CONFIG_DIR: '', CLAUDE_CODE_SESSION_ID: '', ...env },
     });
     let stdout = '';
     let stderr = '';

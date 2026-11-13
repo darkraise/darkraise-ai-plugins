@@ -35,14 +35,49 @@ export function transcriptContext(file) {
   return null;
 }
 
+const KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+
+// The same name as contextFile in hooks/hud/view.mjs, which the mod writes.
+function contextFile(ctx, session) {
+  return path.join(ctx.paths.stateDir, 'context', `${session.replace(/[^A-Za-z0-9_-]/g, '_')}.json`);
+}
+
+// Inside a session the CLI reads that session's own figure (the harness sets
+// CLAUDE_CODE_SESSION_ID for its shell); run by hand, the freshest one.
+// Files of sessions gone for a week are removed on the way.
+function liveContext(ctx, now) {
+  const session = ctx.env.CLAUDE_CODE_SESSION_ID;
+  if (session) return readJson(contextFile(ctx, session), null);
+  const dir = path.join(ctx.paths.stateDir, 'context');
+  let names = [];
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return null;
+  }
+  const entries = names.flatMap(name => {
+    const file = path.join(dir, name);
+    const entry = readJson(file, null);
+    const at = Date.parse(entry?.at ?? '');
+    if (!Number.isFinite(at) || now - at > KEEP_MS) {
+      fs.rmSync(file, { force: true });
+      return [];
+    }
+    return [entry];
+  });
+  return entries.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
+}
+
 // The mod writes the live figure; without the mod the transcript is read.
 export function contextSize(ctx, state) {
-  const live = readJson(path.join(ctx.paths.stateDir, 'context.json'), null);
   const now = Date.parse(ctx.env.DFLOW_NOW || '') || Date.now();
+  const live = liveContext(ctx, now);
   if (live && typeof live.tokens === 'number' && now - Date.parse(live.at) < FRESH_MS) {
     return { tokens: live.tokens, window: live.window ?? null, source: 'mod' };
   }
-  const tokens = state.transcript ? transcriptContext(state.transcript) : null;
+  const session = ctx.env.CLAUDE_CODE_SESSION_ID;
+  const transcript = session ? state.transcripts?.[session] : state.transcript;
+  const tokens = transcript ? transcriptContext(transcript) : null;
   return tokens === null ? null : { tokens, window: null, source: 'transcript' };
 }
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { approvedPlan } from '../approval.mjs';
+import { amendedAcceptance, approvedPlan } from '../approval.mjs';
 import { parseBoard, rewriteRow } from '../board.mjs';
 import { blockedTasks, setField } from '../plan.mjs';
 import { proofStatus } from '../proof.mjs';
@@ -74,11 +74,12 @@ function promote(ctx, active) {
   if (decisions.length) {
     const file = path.join(ctx.paths.docs, 'decisions.md');
     let text = readText(file) ?? '# Decisions\n';
-    let number = Math.max(0, ...[...text.matchAll(/^## D-(\d+)/gm)].map(match => Number(match[1])));
-    for (const entry of decisions) {
-      number += 1;
-      text = `${text.replace(/\s*$/, '')}\n\n## D-${String(number).padStart(4, '0')} · ${date}\n\n${entry.text}\n\nSource: ${source}${entry.task ? `, Task ${entry.task}` : ''}\n`;
-    }
+    // Numbered within the plan: plans built side by side on separate branches
+    // both append here, and a counter over the file would give two entries
+    // the same number.
+    decisions.forEach((entry, index) => {
+      text = `${text.replace(/\s*$/, '')}\n\n## D-${active.slug}/${index + 1} · ${date}\n\n${entry.text}\n\nSource: ${source}${entry.task ? `, Task ${entry.task}` : ''}\n`;
+    });
     fs.writeFileSync(file, text);
     written.push(`${decisions.length} decision(s) to decisions.md`);
   }
@@ -104,6 +105,11 @@ export async function run(ctx, argv, { out }) {
   const open = active.plan.tasks.filter(task => !task.done);
   const blocked = blockedTasks(active.plan);
   if (open.length) problems.push(`not every task is done: ${open.map(task => `Task ${task.number}${blocked.has(task.number) ? ' (blocked)' : ''}`).join(', ')}`);
+  // Ship runs the acceptance commands the plan holds now, so a line changed
+  // after approval counts only once the owner's agreement is on record.
+  for (const change of amendedAcceptance(ctx, active).filter(entry => !entry.logged)) {
+    problems.push(`Acceptance ${change.id} changed after approval with no record of the owner agreeing (was: ${change.was ?? 'absent'}; now: ${change.now ?? 'removed'}); ask the owner, then \`dflow log - A "${change.id}: <what changed> — agreed by the owner"\`, naming each command it runs in backticks`);
+  }
 
   const dirty = gitList(ctx.root, ['status', '--porcelain', '--untracked-files=no', '--no-renames', '-z']);
   if (dirty.length) problems.push(`uncommitted changes: ${dirty.map(entry => entry.slice(3)).join(', ')}`);

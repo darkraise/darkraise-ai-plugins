@@ -80,3 +80,16 @@ function syncText(sync) {
 export function isFreshReset(flag, now) {
   return Boolean(flag && typeof flag.at === 'string' && now - Date.parse(flag.at) < RESET_FRESH_MS);
 }
+
+// A flag names the session whose `dflow done` asked for the reset, and only
+// that session compacts. One written outside a session names none, and any
+// session may take it.
+export function isResetFor(flag, now, session) {
+  return isFreshReset(flag, now) && (!flag.session || flag.session === session);
+}
+
+// One context file per session, so that two sessions open in one checkout
+// never read each other's size. lib/context.mjs builds the same name.
+export function contextFile(session) {
+  return `context/${String(session).replace(/[^A-Za-z0-9_-]/g, '_')}.json`;
+}

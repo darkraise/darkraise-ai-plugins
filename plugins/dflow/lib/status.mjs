@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { amendedAcceptance } from './approval.mjs';
 import { boardCounts, parseBoard } from './board.mjs';
 import { contextSize, formatTokens } from './context.mjs';
 import { nextTask, parsePlan, sectionText, taskStates, taskText } from './plan.mjs';
@@ -96,6 +97,7 @@ export function buildModel(ctx) {
       if (task.done && !committed.has(task.number)) model.checks.push(`Task ${task.number} is ticked without a recorded \`dflow done\``);
     }
   }
+  for (const change of amendedAcceptance(ctx, active).filter(entry => !entry.logged)) model.checks.push(`Acceptance ${change.id} changed after approval with no record of the owner agreeing; ship refuses it`);
   model.next = recommend(model, ctx);
   return model;
 }

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseBoard } from './board.mjs';
 import { nextTask, taskStates } from './plan.mjs';
-import { currentBranch, defaultBranch, head, relative, userConfig } from './repo.mjs';
+import { currentBranch, defaultBranch, head, primaryRoot, relative, userConfig } from './repo.mjs';
 import { loadState, planState, readEvents, saveState } from './state.mjs';
 import { activePlan } from './status.mjs';
 import { acquireLock, nowIso, readJson, readText, shortSha, writeJson } from './util.mjs';
@@ -19,8 +19,10 @@ export class HttpError extends Error {
 }
 export class TransportError extends Error {}
 
-// darkmem is on only when all three are present: the server URL and key
-// variable in the user's config, and the project name in the repository's.
+// darkmem is on only when all of these hold: the server URL and key variable
+// in the user's config, the project name in the repository's, and the user's
+// consent to that project for this repository. A cloned repository names any
+// project it likes, and must not steer writes made with the user's key.
 export function settings(ctx) {
   const user = userConfig(ctx.env).darkmem ?? {};
   const url = (ctx.env.DFLOW_DARKMEM_URL || user.url || '').replace(/\/+$/, '');
@@ -29,6 +31,9 @@ export function settings(ctx) {
   if (!project) return { off: 'the repository names no darkmem project (dflow init --darkmem <project>)' };
   if (!url) return { off: 'no darkmem URL is configured (~/.dflow/config.json: {"darkmem": {"url": "..."}})' };
   if (!ctx.env[keyEnv]) return { off: `the API key variable ${keyEnv} is not set` };
+  const enabled = user.repositories?.[primaryRoot(ctx.root)];
+  if (!enabled) return { off: `not enabled for this repository; \`dflow sync enable\` sends its docs to project "${project}"` };
+  if (enabled !== project) return { off: `this repository now names project "${project}", but you enabled "${enabled}" for it; \`dflow sync enable\` switches to "${project}"` };
   return { url, apiKey: ctx.env[keyEnv], project };
 }
 

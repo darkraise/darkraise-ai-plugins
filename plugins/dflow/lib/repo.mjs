@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fail, git, gitOut, readJson } from './util.mjs';
+import { fail, git, gitOut, readJson, writeJson } from './util.mjs';
 
 export const DEFAULTS = {
   defaultBranch: null,
@@ -18,6 +18,8 @@ export const DEFAULTS = {
   },
   ui: { paths: [] },
   darkmem: { project: '' },
+  // Off: the review ends the turn and shipping waits for the owner.
+  autoShip: false,
 };
 
 function merge(base, extra) {
@@ -35,7 +37,8 @@ export function findRoot(cwd) {
   return path.resolve(root);
 }
 
-// Every worktree of one repository shares the primary checkout's sync state.
+// The primary checkout of the repository, the same from each of its
+// worktrees: the key under which the user enables darkmem for it.
 export function primaryRoot(root) {
   const common = gitOut(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
   if (!common || !path.isAbsolute(common)) return root;
@@ -70,6 +73,18 @@ export function dflowHome(env = process.env) {
 
 export function userConfig(env = process.env) {
   return readJson(path.join(dflowHome(env), 'config.json'), {});
+}
+
+// Records, in the user's own config, that this repository may send its docs to
+// a darkmem project; null as the project withdraws it.
+export function setDarkmemConsent(env, root, project) {
+  const file = path.join(dflowHome(env), 'config.json');
+  const config = readJson(file, {}) ?? {};
+  const repositories = { ...(config.darkmem?.repositories ?? {}) };
+  if (project) repositories[root] = project;
+  else delete repositories[root];
+  config.darkmem = { ...(config.darkmem ?? {}), repositories };
+  writeJson(file, config);
 }
 
 export function currentBranch(root) {

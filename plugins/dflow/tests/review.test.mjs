@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 import { PLAN, dflow, dflowAsync, git, makeProject, read, write } from './helpers.mjs';
 
@@ -85,31 +87,42 @@ test('add validates a finding and a quote must be in the file', t => {
   assert.match(status.next, /fix 2 blocking finding/);
 });
 
-test('verify proves a command finding while it fails and marks it fixed once it passes', t => {
+test('verify never runs a reviewer\'s command; the session runs it and records the exit status with check', t => {
   const root = makeProject(t);
   build(root);
   const add = (...evidence) => dflow(root, ['review', 'add', '--file', 'src/meter.mjs', '--line', '1', '--severity', 'blocking', '--claim', 'c', '--breaks', 'b', ...evidence]);
-  write(root, 'probe.mjs', 'process.exit(1)\n');
+  write(root, 'probe.mjs', 'import fs from "node:fs";\nfs.writeFileSync("ran.txt", "");\nprocess.exit(1);\n');
   add('--cmd', 'node probe.mjs');
   add('--cmd', 'node -e 0');
   add('--quote', 'drawMeter = () => ""');
+  add('--cmd', 'nodee probe.mjs');
 
   let verified = dflow(root, ['review', 'verify']);
-  assert.match(verified.stdout, /^F1 blocking reproduced/m);
-  assert.match(verified.stdout, /^F2 blocking unproven/m);
+  assert.ok(!fs.existsSync(path.join(root, 'ran.txt')), 'verify ran an evidence command');
   assert.match(verified.stdout, /^F3 blocking reproduced/m);
-  assert.match(verified.stdout, /2 open \(2 blocking\); fix the 2 with reproduced evidence/);
+  assert.match(verified.stdout, /^3 finding\(s\) carry an evidence command a reviewer wrote\./m);
+  assert.match(verified.stdout, /^ {2}F1: node probe\.mjs\n {6}dflow review check F1 --exit <status>$/m);
 
-  write(root, 'probe.mjs', 'process.exit(0)\n');
+  const check = (id, status) => dflow(root, ['review', 'check', id, '--exit', String(status)]);
+  assert.match(check('F1', 1).stdout, /^F1 blocking reproduced/m);
+  assert.match(check('F2', 0).stdout, /^F2 blocking unproven/m);
+  const broken = check('F4', 127);
+  assert.match(broken.stdout, /^F4 blocking unchecked .*\n {3}the evidence command could not run \(exit 127\)/m);
+  assert.match(broken.stdout, /3 open \(3 blocking\); fix the 2 with reproduced evidence/);
+  assert.match(check('F3', 0).stderr, /F3 carries quote evidence/);
+  assert.match(check('F2', 1).stderr, /F2 is already unproven/);
+  assert.match(dflow(root, ['review', 'check', 'F1']).stderr, /usage: dflow review check <id> --exit <status>/);
+
+  assert.match(check('F1', 0).stdout, /^F1 blocking fixed/m);
   write(root, 'src/meter.mjs', 'export const drawMeter = value => String(value);\n');
   verified = dflow(root, ['review', 'verify']);
-  assert.match(verified.stdout, /^F1 blocking fixed/m);
-  assert.match(verified.stdout, /1 open \(1 blocking\)/);
+  assert.match(verified.stdout, /2 open \(2 blocking\)/);
   assert.match(dflow(root, ['review', 'list']).stdout, /quoted text is no longer at that place/);
   assert.match(dflow(root, ['review', 'resolve', 'F3', 'declined']).stderr, /needs a note/);
   assert.equal(dflow(root, ['review', 'resolve', 'F3', 'fixed']).status, 0);
+  assert.equal(dflow(root, ['review', 'resolve', 'F4', 'declined', 'the command cannot run here']).status, 0);
   assert.match(dflow(root, ['review', 'list']).stdout, /No open findings/);
-  assert.equal(dflow(root, ['review', 'list', '--all']).stdout.match(/^F\d/gm).length, 3);
+  assert.equal(dflow(root, ['review', 'list', '--all']).stdout.match(/^F\d/gm).length, 4);
 });
 
 test('judge refutes a finding and record stores the review at the head', t => {
@@ -117,9 +130,17 @@ test('judge refutes a finding and record stores the review at the head', t => {
   build(root);
   dflow(root, ['review', 'add', '--file', 'src/meter.mjs', '--line', '1', '--severity', 'should', '--claim', 'c', '--breaks', 'b', '--cmd', 'false', '--lens', 'correctness']);
   assert.equal(dflow(root, ['review', 'judge', 'F1', 'refuted', 'the caller never passes a value']).status, 0);
-  assert.equal(dflow(root, ['review', 'record', '--tier', '1']).status, 0);
+  const recorded = dflow(root, ['review', 'record', '--tier', '1']);
+  assert.equal(recorded.status, 0);
+  assert.match(recorded.stdout, /^Next: report the review to the owner and end your turn; shipping is their call \(\/dflow:ship\)\.$/m);
   const status = JSON.parse(dflow(root, ['status', '--json']).stdout);
   assert.deepEqual([status.review.recorded.tier, status.review.recorded.sha, status.review.open], [1, git(root, 'rev-parse', 'HEAD'), 0]);
+});
+
+test('with autoShip on, a recorded review goes straight on to ship', t => {
+  const root = makeProject(t, { config: { autoShip: true } });
+  build(root);
+  assert.match(dflow(root, ['review', 'record', '--tier', '1']).stdout, /^Next: continue with the dflow:ship skill\.$/m);
 });
 
 test('a task with a risk waits in review until its own review is recorded', t => {

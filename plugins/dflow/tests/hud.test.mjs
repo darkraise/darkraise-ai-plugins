@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { bandText, bar, isFreshReset, nextMode, paneRows } from '../hooks/hud/view.mjs';
+import { bandText, bar, isFreshReset, isResetFor, nextMode, paneRows } from '../hooks/hud/view.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const hud = root => JSON.parse(read(root, '.dflow/hud.json'));
@@ -36,10 +36,13 @@ test('done leaves a reset flag for the mod when the context passes the threshold
   write(root, 'verify1.mjs', '\n');
   write(root, 'src/limit.mjs', '1\n');
   git(root, 'add', 'src');
-  write(root, '.dflow/context.json', JSON.stringify({ tokens: 200000, window: 1000000, at: new Date().toISOString() }));
-  dflow(root, ['done', '1', '-m', 'feat: parse']);
+  write(root, '.dflow/context/sess-a.json', JSON.stringify({ session: 'sess-a', tokens: 200000, window: 1000000, at: new Date().toISOString() }));
+  dflow(root, ['done', '1', '-m', 'feat: parse'], { env: { CLAUDE_CODE_SESSION_ID: 'sess-a' } });
   const flag = JSON.parse(read(root, '.dflow/reset.json'));
-  assert.equal(flag.plan, '2026-11-12-meter');
+  assert.deepEqual([flag.plan, flag.session], ['2026-11-12-meter', 'sess-a']);
+  assert.ok(isResetFor(flag, Date.now(), 'sess-a'));
+  assert.ok(!isResetFor(flag, Date.now(), 'sess-b'), 'another session leaves the flag alone');
+  assert.ok(isResetFor({ ...flag, session: null }, Date.now(), 'sess-b'), 'a flag from outside a session is anyone\'s');
   assert.ok(isFreshReset(flag, Date.now()));
   assert.ok(!isFreshReset(flag, Date.now() + 11 * 60 * 1000));
   assert.ok(!isFreshReset({}, Date.now()));

@@ -47,7 +47,7 @@ When `dflow done` prints `RESET:`, end your turn at once with one line saying wh
 
 ## A task with a risk
 
-When `dflow done` says the task carries a risk, review it before building on it: `dflow review pack --task <N>`, dispatch one `dflow:reviewer` with the pack's path, fix what `dflow review verify` shows reproduced, then `dflow review record --tier 1 --task <N>`.
+When `dflow done` says the task carries a risk, review it before building on it: `dflow review pack --task <N>`, dispatch one `dflow:reviewer` with the pack's path, fix what reproduces (`dflow review verify`, then `dflow review check` for each evidence command), then `dflow review record --tier 1 --task <N>`.
 
 ## Waves
 

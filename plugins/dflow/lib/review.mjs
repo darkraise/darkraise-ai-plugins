@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { amendedVerify, approvedPlan } from './approval.mjs';
+import { amendedAcceptance, amendedFiles, amendedVerify, approvedPlan } from './approval.mjs';
 import { sectionText } from './plan.mjs';
 import { baseCommit, currentBranch, defaultBranch, relative } from './repo.mjs';
 import { planState, loadState } from './state.mjs';
@@ -78,6 +78,8 @@ export function buildPack(ctx, active, taskNumber) {
     facts: {
       outsidePlan: files.map(entry => entry.file).filter(file => !matchesAny(planned, file)),
       amendedVerify: amendedVerify(ctx, active).filter(entry => taskNumber === undefined || entry.task === taskNumber),
+      amendedFiles: amendedFiles(ctx, active).filter(entry => taskNumber === undefined || entry.task === taskNumber),
+      amendedAcceptance: taskNumber === undefined ? amendedAcceptance(ctx, active) : [],
       weakenedTests: weakenedTests(ctx, [diffRange]),
       tests: { testLines, sourceLines, ratio, newTestFiles: testFiles.filter(entry => newFiles.has(entry.file)).length, overBudget: ratio > ctx.config.tests.maxRatio },
       suite: growth && { ...growth, overBudget: growth.growth > ctx.config.tests.maxSuiteGrowth },
@@ -94,6 +96,8 @@ export function factLines(pack) {
   const lines = [];
   if (facts.outsidePlan.length) lines.push(`Changed outside every task's Files: ${facts.outsidePlan.join(', ')}`);
   for (const entry of facts.amendedVerify) lines.push(`Task ${entry.task} verify changed after approval${entry.logged ? '' : ' WITHOUT a logged reason'}: was ${entry.was.join(' && ')}; now ${entry.now.join(' && ')}`);
+  for (const entry of facts.amendedFiles) lines.push(`Task ${entry.task} Files changed after approval${entry.logged ? '' : ' WITHOUT a logged reason'}: was ${entry.was.join(', ')}; now ${entry.now.join(', ')}`);
+  for (const entry of facts.amendedAcceptance) lines.push(`Acceptance ${entry.id} changed after approval${entry.logged ? '' : ' WITHOUT a record of the owner agreeing'}: was ${entry.was ?? 'absent'}; now ${entry.now ?? 'removed'}`);
   for (const line of facts.weakenedTests) lines.push(`Weakened test: ${line}`);
   const tests = facts.tests;
   const ratio = Number.isFinite(tests.ratio) ? `${tests.ratio.toFixed(1)}×` : 'tests only';

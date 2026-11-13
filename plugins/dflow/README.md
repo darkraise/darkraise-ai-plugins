@@ -33,7 +33,7 @@ Requires Node 20 or later on `PATH`, and Git. Then, in a repository:
 | --- | --- | --- |
 | Plan | `/dflow:plan <what>` | Chooses the depth, writes the plan, links a board row, asks for one approval |
 | Build | `/dflow:build` | For each task: tests first, implement, `dflow done <N>` |
-| Review | `/dflow:review` | Tier 0, 1 or 2 by diff size and risk; findings with evidence |
+| Review | `/dflow:review` | Tier 0, 1 or 2 by diff size and risk; findings with evidence; then it stops for you |
 | Ship | `/dflow:ship` | Gates, acceptance, UI proof, docs, then closes the plan and the board row |
 | Any time | `/dflow:status`, `/dflow:hud` | Where the work stands and the one next step |
 
@@ -51,6 +51,11 @@ docs/dflow/
   plans/         one file per unit of work
 .dflow/          run state, gitignored
 ```
+
+`dflow init` also marks `decisions.md` and `gotchas.md` `merge=union` in
+`.gitattributes`: they only grow, so entries promoted on two branches merge
+without a conflict. Promoted decisions are numbered within their plan, as
+`D-<plan>/<n>`.
 
 `dflow doctor` checks the budgets, that every repository path named in
 `project.md` and `gotchas.md` exists, the board, and every open plan.
@@ -124,13 +129,13 @@ the owner drops is removed from the plan with a logged amendment.
 | `dflow log <N\|-> <D\|G\|A\|N> "<text>"` | Append a plan log line |
 | `dflow amend <N> --verify "<cmd>" --reason "<why>"` | Change a verify command, logged |
 | `dflow gate [name…]` | Run the project gates |
-| `dflow review pack\|add\|list\|verify\|resolve\|judge\|record` | The review |
+| `dflow review pack\|add\|list\|verify\|check\|resolve\|judge\|record` | The review |
 | `dflow proof <A-id> --shot <file> --text "<seen>"` | Record UI evidence |
 | `dflow ship [--check]` | Check the definition of done and close the plan |
 | `dflow doctor` | Docs, board and plan checks |
 | `dflow wave`, `dflow worktree add\|merge\|drop <N>` | Worker tasks side by side |
 | `dflow plans [--conflicts]`, `dflow session <row>` | Plans across worktrees |
-| `dflow sync push\|pull\|status` | The darkmem projection |
+| `dflow sync push\|pull\|status\|enable\|disable` | The darkmem projection, and your consent to it |
 | `dflow cost [--plan <slug>]` | Token use by phase and model |
 | `dflow context` | Context size and the reset threshold |
 
@@ -147,9 +152,18 @@ source lines, suite time against the default branch, added TODO lines.
 | 2 | a risk is set, over 800 lines or over 25 files | the `deep-review` workflow: two reviewers, one verifier |
 
 A finding has a file, a line, a claim, what it breaks, and either a command
-that exits non-zero while the defect exists or an exact quote. `dflow review
-verify` re-runs the commands: a failing one proves the finding, and the same
-command passing later closes it.
+that exits non-zero while the defect exists or an exact quote. A reviewer
+wrote the commands, so dflow never runs them: `dflow review verify` checks the
+quotes and lists the commands, the session runs each one with its own shell
+tool, where your permission settings apply, and records the result with
+`dflow review check <id> --exit <status>`. A failing command proves the
+finding, the same command passing later closes it, and exit 126 or 127 (the
+command could not run) proves nothing.
+
+Once the review is recorded the session reports it and stops: shipping closes
+the plan and promotes its decisions, so it waits for your `/dflow:ship`. Set
+`"autoShip": true` in `docs/dflow/config.json` to let the session go straight
+on to ship; it still asks before pushing.
 
 ## Context
 
@@ -157,6 +171,8 @@ Every tool call re-reads the whole context, so dflow keeps it small: CLI output
 is capped, the session works from a task brief, and when the context passes
 `context.resetAt` (150,000 tokens by default) `dflow done` prints a `RESET:`
 line at the task boundary. The HUD mod then compacts and resumes the build.
+The mod keeps the size and the reset request per session, so another session
+open in the same checkout is never compacted by it.
 Without the mod, the PreCompact and SessionStart hooks shape and follow the
 harness's own compaction.
 
@@ -176,9 +192,15 @@ refuses overlap.
 
 ## darkmem
 
-Off unless all three are set: the project in `docs/dflow/config.json`
+Off unless all four hold: the project in `docs/dflow/config.json`
 (`dflow init --darkmem <project>`), the server in `~/.dflow/config.json`
-(`{"darkmem": {"url": "…"}}`), and the key in `DARKMEM_API_KEY`.
+(`{"darkmem": {"url": "…"}}`), the key in `DARKMEM_API_KEY`, and your consent
+to that project for this repository. A repository can name any project, so a
+clone never sends anything with your key until you agree: `dflow init
+--darkmem` records the consent, and `dflow sync enable` records it for the
+project the repository names now (`dflow sync disable` withdraws it). It is
+kept per repository in `~/.dflow/config.json` under `darkmem.repositories`,
+and covers every worktree of the repository.
 
 The repository is the source of truth; darkmem is a projection.
 
@@ -216,6 +238,7 @@ both sides is reported and nothing is overwritten.
   "review": { "tier0Lines": 40, "tier2Lines": 800, "tier2Files": 25 },
   "tests": { "maxRatio": 2, "maxSuiteGrowth": 0.2 },
   "darkmem": { "project": "" },
+  "autoShip": false,
   "defaultBranch": "main"
 }
 ```

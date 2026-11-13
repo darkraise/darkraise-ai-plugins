@@ -86,7 +86,10 @@ Maintenance rules, all checked by `dflow doctor` without a model:
   invalidates, or `none` with a reason. `ship` refuses when a named doc has
   no diff on the branch.
 - **Promotion at ship.** Plan log lines marked `D:` are copied to
-  `decisions.md`, `G:` lines to `gotchas.md`. There is no distillation pass.
+  `decisions.md` as `D-<plan>/<n>`, numbered within the plan, `G:` lines to
+  `gotchas.md`. Both files merge by union (`.gitattributes`, written by
+  `init`), so plans shipped from parallel branches merge without a conflict.
+  There is no distillation pass.
 - **Narrow reads.** `plan` reads `project.md` whole and searches decisions
   and past plans by section. Merged plans are never loaded by default.
 
@@ -149,8 +152,8 @@ only its own row, so parallel branches merge without conflict.
    either absent from the commit or explained by a log line.
 3. No test that existed at the base commit was deleted, skipped or had
    assertions removed, unless a log line says why.
-4. A verify line edited after plan approval carries a logged reason; the
-   edit is listed in the review pack.
+4. A verify line edited after plan approval carries a logged reason, and so
+   does a change to the task's `Files:`; both are listed in the review pack.
 
 **A plan is done** when all of these hold, checked by `dflow ship`:
 
@@ -159,7 +162,9 @@ only its own row, so parallel branches merge without conflict.
 2. The project gates (lint, type check, full test suite, build) pass on the
    current head, run fresh.
 3. Every Acceptance line has evidence at the current head: a passing
-   command, or for a `UI` line a proof (section 10).
+   command, or for a `UI` line a proof (section 10). A line changed, added or
+   removed after approval needs a plan-level `A:` log line recording that the
+   owner agreed, naming the line and each command it now runs.
 4. The review ran at its tier, and no blocking finding is open.
 5. The docs delta is satisfied and `dflow doctor` passes.
 
@@ -180,7 +185,8 @@ before approval.
 2. `/dflow:build` — loop: `dflow next`, implement test-first, `dflow done`.
    Decisions made on the way are ruled and logged in the plan, not asked.
 3. `/dflow:review` — `dflow review-pack` computes the tier and the
-   mechanical facts.
+   mechanical facts. The session then reports the review and stops; the
+   owner starts ship. `autoShip` in `config.json` lets it continue.
 4. `/dflow:ship` — gates, UI proof check, `doctor`, docs delta, promotion,
    board row to `done`, one `memory_batch_add` of durable facts, then the
    offer to open a pull request or merge. Pushing asks first.
@@ -198,8 +204,11 @@ cheaper model can take over without discarding a warm cache.
 | 2 | a risk is set, or a very large diff | the workflow script: two lens reviewers in parallel, then one verifier over all findings |
 
 Every finding carries a file, a line, a claim, what it breaks, and evidence:
-a failing command or a quoted line. All findings are reported. Only findings
-whose evidence reproduces are fixed, in the session, followed by verify and
+a failing command or a quoted line. A reviewer wrote the commands, so the CLI
+never runs them: the session runs each with its own shell tool, under the
+owner's permission settings, and records the exit status with `dflow review
+check`. All findings are reported. Only findings whose evidence reproduces
+are fixed, in the session, followed by verify and
 gates; a fix to a blocking finding is re-checked once by the same reviewer
 against the fix diff only.
 
@@ -377,7 +386,10 @@ A mod's own commands cannot contain a colon, so `/dflow:hud` is the plugin's
 Where mods are unavailable the skill prints `dflow status` instead.
 
 The same mod is the context governor of section 13 and writes the live
-context size where the CLI reads it.
+context size where the CLI reads it, one file per session. `dflow done` tags
+its reset request with the session it ran in (`CLAUDE_CODE_SESSION_ID`), and
+only that session's mod compacts, so a second session in the same checkout
+is left alone.
 
 ## 15. darkmem
 
@@ -415,6 +427,10 @@ go through, and the board's task progress comes from the work log.
 - **Reads by the model.** `document_search`, `code_search` when the
   repository is indexed, `memory_search` at plan start, `worklog_resume` on a
   machine with no local state.
+- **Consent.** The repository names the project, but sync runs only after
+  the owner enables that project for the repository in their own
+  `~/.dflow/config.json` (`dflow init --darkmem`, `dflow sync enable`). A
+  cloned repository cannot steer writes made with the owner's key.
 - **Off or unreachable.** Every darkmem step is skipped with one line.
 
 ## 16. Measurement, and the comparison with dforge

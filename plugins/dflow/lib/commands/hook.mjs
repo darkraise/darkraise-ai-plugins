@@ -13,9 +13,18 @@ function input() {
   }
 }
 
+// The transcript the context size is read from without the mod, kept per
+// session so that `dflow done` in one session never reads another's. The
+// last 20 sessions are kept.
 function remember(ctx, state, event) {
-  if (typeof event.transcript_path !== 'string' || state.transcript === event.transcript_path) return;
+  if (typeof event.transcript_path !== 'string') return;
+  const session = typeof event.session_id === 'string' ? event.session_id : null;
+  if (state.transcript === event.transcript_path && (!session || state.transcripts?.[session] === event.transcript_path)) return;
   state.transcript = event.transcript_path;
+  if (session) {
+    const others = Object.entries(state.transcripts ?? {}).filter(([key]) => key !== session);
+    state.transcripts = Object.fromEntries([...others, [session, event.transcript_path]].slice(-20));
+  }
   saveState(ctx.paths, state);
 }
 

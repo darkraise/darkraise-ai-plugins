@@ -129,6 +129,26 @@ test('a verify line edited by hand stops done; amend changes it with a logged re
   assert.equal(dflow(root, ['done', '1', '-m', 'feat: parse']).status, 0);
 });
 
+test('a verify command amended with a run of spaces passes the gate; one with a newline is refused', t => {
+  const root = makeProject(t);
+  stageTask1(root);
+  assert.match(dflow(root, ['amend', '1', '--verify', 'node verify1.mjs\nnode verify2.mjs', '--reason', 'two steps']).stderr, /a verify command is one line/);
+  assert.equal(dflow(root, ['amend', '1', '--verify', 'node  verify1.mjs', '--reason', 'two spaces']).status, 0);
+  const done = dflow(root, ['done', '1', '-m', 'feat: parse']);
+  assert.equal(done.status, 0, done.stderr);
+});
+
+test('Files changed after approval stop done until an amendment is logged', t => {
+  const root = makeProject(t);
+  stageTask1(root);
+  write(root, PLAN_FILE, read(root, PLAN_FILE).replace('**Files:** src/limit.mjs, tests/ ·', '**Files:** src/, tests/ ·'));
+  assert.match(dflow(root, ['done', '1', '-m', 'x']).stderr, /Task 1's Files differ from the approved plan \(was src\/limit\.mjs, tests\/; now src\/, tests\/\) and no log line explains it/);
+  assert.equal(dflow(root, ['log', '1', 'A', 'the parser needs a helper module beside it']).status, 0);
+  const done = dflow(root, ['done', '1', '-m', 'feat: parse']);
+  assert.equal(done.status, 0, done.stderr);
+  assert.match(dflow(root, ['review', 'pack']).stdout, /Task 1 Files changed after approval: was src\/limit\.mjs, tests\/; now src\/, tests\//);
+});
+
 test('block is derived from the log, skips the task and unblock restores it', t => {
   const root = makeProject(t, { plan: PLAN.replace('**After:** 1', '**After:** —') });
   const blocked = dflow(root, ['block', '1', 'the API key is missing']);
@@ -156,10 +176,15 @@ test('a verify command that hangs is killed at the timeout', t => {
 test('the reset line appears once the context passes the threshold', t => {
   const root = makeProject(t);
   stageTask1(root);
-  write(root, '.dflow/context.json', JSON.stringify({ tokens: 162000, window: 1000000, at: new Date().toISOString() }));
-  const done = dflow(root, ['done', '1', '-m', 'feat: parse']);
+  write(root, '.dflow/context/sess-a.json', JSON.stringify({ session: 'sess-a', tokens: 162000, window: 1000000, at: new Date().toISOString() }));
+  const env = { CLAUDE_CODE_SESSION_ID: 'sess-a' };
+  const done = dflow(root, ['done', '1', '-m', 'feat: parse'], { env });
   assert.match(done.stdout, /RESET: the context is 162k, past the 150k threshold/);
-  assert.match(dflow(root, ['context']).stdout, /context 162k of 1M · resets at 150k · read from the mod/);
+  assert.match(dflow(root, ['context'], { env }).stdout, /context 162k of 1M · resets at 150k · read from the mod/);
+  // Another session open in this checkout has a figure of its own.
+  assert.match(dflow(root, ['context'], { env: { CLAUDE_CODE_SESSION_ID: 'sess-b' } }).stdout, /^context size unknown/);
+  // Run by hand, the CLI reads the freshest figure.
+  assert.match(dflow(root, ['context']).stdout, /context 162k of 1M/);
 });
 
 test('log appends a decision line and rejects kinds the CLI writes itself', t => {

@@ -93,13 +93,31 @@ test('ship runs gates and acceptance, promotes the log, closes the plan and the 
   assert.match(shipped.stdout, /- a parser function, not a class/);
   assert.match(shipped.stdout, /open a pull request, or merge into main/);
 
-  assert.match(read(root, 'docs/dflow/decisions.md'), /## D-0001 · 2026-11-12\n\na parser function, not a class, because there is one call site\n\nSource: plans\/2026-11-12-meter\.md, Task 1\n$/);
+  assert.match(read(root, 'docs/dflow/decisions.md'), /## D-2026-11-12-meter\/1 · 2026-11-12\n\na parser function, not a class, because there is one call site\n\nSource: plans\/2026-11-12-meter\.md, Task 1\n$/);
   assert.match(read(root, 'docs/dflow/gotchas.md'), /- the suite needs TZ=UTC or the date tests fail \(plans\/2026-11-12-meter\.md, 2026-11-12\)\n$/);
   assert.equal(parsePlan(read(root, PLAN_FILE)).fields.shipped, '2026-11-12');
   const row = parseBoard(read(root, 'docs/dflow/board.md')).rows[0];
   assert.deepEqual([row.state, row.note], ['done', 'shipped 2026-11-12']);
   assert.equal(git(root, 'log', '-1', '--format=%s'), 'docs(dflow): ship 2026-11-12-meter');
   assert.match(dflow(root, ['status']).stdout, /no active plan/);
+});
+
+test('an Acceptance line changed after approval stops ship until the owner\'s agreement is logged', t => {
+  const root = makeProject(t);
+  buildAll(root);
+  write(root, PLAN_FILE, read(root, PLAN_FILE).replace('- A1: `node check.mjs` passes', '- A1: `true` passes'));
+  git(root, 'commit', '-q', '-am', 'docs: loosen A1');
+  dflow(root, ['review', 'record', '--tier', '0']);
+  let check = dflow(root, ['ship', '--check']);
+  assert.equal(check.status, 1);
+  assert.match(check.stdout, /- Acceptance A1 changed after approval with no record of the owner agreeing \(was: `node check\.mjs` passes; now: `true` passes\)/);
+  assert.match(dflow(root, ['status']).stdout, /^Check {3}Acceptance A1 changed after approval/m);
+  assert.match(dflow(root, ['review', 'pack']).stdout, /Acceptance A1 changed after approval WITHOUT a record of the owner agreeing/);
+
+  dflow(root, ['log', '-', 'A', 'A1: the owner agreed to drop the check script; it now runs `true`']);
+  git(root, 'commit', '-q', '-am', 'docs: log the owner decision');
+  check = dflow(root, ['ship', '--check']);
+  assert.equal(check.status, 0, check.stdout);
 });
 
 test('an open blocking finding or a review below the needed tier stops ship', t => {

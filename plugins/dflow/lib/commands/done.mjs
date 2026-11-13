@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { amendedVerify } from '../approval.mjs';
+import { amendedFiles, amendedVerify } from '../approval.mjs';
 import { parseBoard, rewriteRow } from '../board.mjs';
 import { contextSize, formatTokens } from '../context.mjs';
 import { appendLog, nextTask, parsePlan, taskStates, tickTask } from '../plan.mjs';
@@ -54,6 +54,8 @@ export async function run(ctx, argv, { out }) {
   const amended = amendedVerify(ctx, active).find(entry => entry.task === number && !entry.logged);
   if (amended?.added) fail(`Task ${number} is not in the approved plan and no log line explains it; record the amendment with \`dflow log ${number} A "<what was added and why>"\``);
   if (amended) fail(`Task ${number}'s verify command differs from the approved plan and no log line names the current command; use \`dflow amend ${number} --verify "<command>" --reason "<why>"\``);
+  const widened = amendedFiles(ctx, active).find(entry => entry.task === number && !entry.logged);
+  if (widened) fail(`Task ${number}'s Files differ from the approved plan (was ${widened.was.join(', ')}; now ${widened.now.join(', ')}) and no log line explains it; record the amendment with \`dflow log ${number} A "<what changed and why>"\``);
 
   const boardRel = relative(ctx.root, ctx.paths.board);
   const own = file => file === active.rel || file === boardRel;
@@ -131,7 +133,9 @@ export async function run(ctx, argv, { out }) {
   if (task.risk !== 'none') out(`Task ${number} carries risk "${task.risk}": review its commit now (dflow review pack --task ${number}) before building on it.`);
   const size = contextSize(ctx, state);
   if (size && size.tokens >= ctx.config.context.resetAt) {
-    writeJson(path.join(ctx.paths.stateDir, 'reset.json'), { plan: active.slug, at: new Date().toISOString() });
+    // The session id names the conversation to compact: another session open
+    // in this checkout must leave the flag alone.
+    writeJson(path.join(ctx.paths.stateDir, 'reset.json'), { plan: active.slug, session: ctx.env.CLAUDE_CODE_SESSION_ID || null, at: new Date().toISOString() });
     out(`RESET: the context is ${formatTokens(size.tokens)}, past the ${formatTokens(ctx.config.context.resetAt)} threshold. End this turn now with one line; the build resumes from the plan in a compacted context.`);
   }
   const reloaded = { ...active, text: planText, plan: after };
