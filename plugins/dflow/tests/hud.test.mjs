@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { bandText, bar, isFreshReset, isResetFor, nextMode, paneRows } from '../hooks/hud/view.mjs';
+import { bandText, bar, isFreshReset, isResetFor, nextMode } from '../hooks/hud/view.mjs';
 import { bar as meterBar, cellWidth, duration, isAtLeast, kTokens, limitForecast, limitLabel, rampColor, runsCut, sparkline, stackedRuns, track, trackRuns, windowElapsed } from '../hooks/hud/meter.mjs';
 import { SECTIONS, boardCard, checksCard, collapsedFrom, nextRow, nowRow, planCard, taskWindow, workersCard } from '../hooks/hud/view.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
@@ -57,9 +57,6 @@ test('the band fits its width and the mode cycles', () => {
   assert.equal(bandText(model, null, 30).length, 30);
   assert.deepEqual(['band', 'pane', 'off'].map(mode => nextMode(mode, '')), ['pane', 'off', 'band']);
   assert.deepEqual([nextMode('band', 'off'), nextMode('band', 'sideways')], ['off', null]);
-  assert.deepEqual(paneRows({ branch: 'main', next: '/dflow:plan', plan: null }, null, 60).map(row => row[0]), ['', 'Next']);
-  const sync = fields => paneRows({ ...model, gates: null, review: null, board: null, sync: { enabled: true, queued: 3, ...fields } }, null, 80).find(row => row[0] === 'darkmem')[1];
-  assert.deepEqual([sync({}), sync({ error: 'x', offline: true }), sync({ error: 'x', offline: false }), sync({ refused: 1 })], ['3 queued', 'offline · 3 queued', 'refused: run dflow sync push · 3 queued', '1 refused: run dflow sync push · 3 queued']);
 });
 
 test('the mod is wired into hooks.json and the manifest names its state contract', () => {

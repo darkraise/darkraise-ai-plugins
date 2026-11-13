@@ -1,22 +1,32 @@
 import { expect, mock, test } from 'claude-code/testing'
 
+import { cellWidth } from './meter.mjs'
+
 const HUD = {
   branch: 'feat/x',
   next: '/dflow:build — Task 5: Wire the meter',
   plan: {
     title: 'Rate-limit meter',
     file: 'docs/dflow/plans/meter.md',
+    approved: null,
     done: 4,
     total: 7,
     current: { number: 5, title: 'Wire the meter', state: 'wip', attempts: 1 },
     blocked: [{ number: 6, reason: 'no API key' }],
+    tasks: [
+      ...[1, 2, 3, 4].map(number => ({ number, title: `Step ${number}`, state: 'done', run: 'inline' })),
+      { number: 5, title: 'Wire the meter', state: 'wip', run: 'inline' },
+      { number: 6, title: 'Cache the reading', state: 'blocked', run: 'inline' },
+      { number: 7, title: 'Draw the meter', state: 'todo', run: 'worker' },
+    ],
   },
   gates: null,
-  review: { recorded: null, open: 0, blocking: 0 },
+  review: { recorded: null, open: 2, blocking: 1 },
   board: { counts: { doing: 1, open: 3 }, row: { number: 12, state: 'doing' } },
   sync: { enabled: false },
   context: { resetAt: 150000 },
-  workers: [],
+  workers: [{ task: 7, path: '.dflow/workers/7', branch: 'dflow/w7' }],
+  checks: [],
 }
 
 const BAND = {
@@ -190,15 +200,8 @@ test('/dflow:hud cycles band, pane, off and keeps the choice', async ($, on) => 
   expect(w.calls).toContain('open dflow-hud')
 
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect((await pane.find({ type: 'Text', text: /^Plan/ }))?.text).toBe(
-    'Plan     ████████░░░░░░ 4/7 · Task 5 wip · verify failed 1×',
-  )
-  expect((await pane.find({ type: 'Text', text: /^Blocked/ }))?.text).toBe(
-    'Blocked  Task 6: no API key',
-  )
-  expect((await pane.find({ type: 'Text', text: /^Next/ }))?.text).toBe(
-    'Next     /dflow:build — Task 5: Wire the meter',
-  )
+  expect((await pane.find({ key: 'plan-headline' }))?.text).toBe('4/7 · 1 blocked')
+  expect((await pane.find({ key: 'next' }))?.text).toBe('Next  /dflow:build — Task 5: Wire the meter')
   await pane.unmount()
 
   expect((await $.command.run({ command: 'dflow:hud' })).text).toBe('dflow HUD: off')
@@ -288,4 +291,94 @@ test('/dflow:hud reopens a pane the person closed, and a new session keeps the m
   w.sessionId = 's2'
   await w.clock!.advance(2000)
   expect(w.calls.filter(call => call === 'open dflow-hud').length).toBe(3)
+})
+
+const order = async (ui: any, patterns: RegExp[]) => {
+  const texts: string[] = (await ui.findAll({ type: 'Text' })).map((one: any) => one.text)
+  return patterns.map(pattern => texts.findIndex(text => pattern.test(text)))
+}
+
+test('the pane draws the Now row, the cards in order and the Next row', async ($, on) => {
+  world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const at = await order(pane, [/^● Task 5 in progress/, /^▾ Plan$/, /^▾ Checks$/, /^▾ Board$/, /^▾ Workers$/, /^Next {2}/])
+  expect(at.every(index => index >= 0)).toBe(true)
+  expect([...at].sort((a, b) => a - b)).toEqual(at)
+  expect((await pane.find({ key: 'plan' }))?.props).toMatchObject({ borderStyle: 'round', borderColor: 'yellow' })
+  expect((await pane.find({ key: 'checks-headline' }))?.text).toBe('● 1 blocking')
+})
+
+test('a card title collapses the card and the choice is stored', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await pane.press({ key: 'plan-title' })
+  expect((await pane.find({ key: 'plan-title' }))?.props.label).toBe('▸ Plan')
+  expect((await pane.find({ key: 'plan-headline' }))?.text).toBe('4/7 · 1 blocked')
+  expect(await pane.find({ key: 'plan-row-0' })).toBeUndefined()
+  expect(w.stored.collapsed).toEqual(['plan'])
+  await pane.press({ key: 'plan-title' })
+  expect((await pane.find({ key: 'plan-row-0' }))?.text).toBe('Rate-limit meter')
+  expect(w.stored.collapsed).toEqual([])
+})
+
+test('a rewritten hud.json shows within a poll; a broken one keeps the last view', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  w.files[HUD_FILE] = JSON.stringify({ ...HUD, plan: { ...HUD.plan, done: 5 } })
+  await w.clock!.advance(2000)
+  let pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ key: 'plan-headline' }))?.text).toBe('5/7 · 1 blocked')
+  await pane.unmount()
+  w.files[HUD_FILE] = '{"plan": '
+  await w.clock!.advance(2000)
+  pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ key: 'plan-headline' }))?.text).toBe('5/7 · 1 blocked')
+})
+
+test('outside a dflow checkout the pane says how to start', async ($, on) => {
+  world(on, { files: {}, hasState: false })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const texts = (await pane.findAll({ type: 'Text' })).map((one: any) => one.text)
+  expect(texts).toEqual(['dflow has no state in this repository yet.', 'Run /dflow:init, then /dflow:plan.'])
+})
+
+test('worst-case data is cut to the pane, never wrapped', async ($, on) => {
+  const long = (n: number) => 'x'.repeat(n)
+  const WORST = {
+    ...HUD,
+    branch: `feature/${long(72)}`,
+    plan: {
+      ...HUD.plan,
+      title: long(120), done: 19, total: 40,
+      current: { number: 20, title: `🚀 é ñ ü ${long(110)}`, state: 'wip', attempts: 3 },
+      blocked: [{ number: 21, reason: long(200) }],
+      tasks: Array.from({ length: 40 }, (_, i) => ({
+        number: i + 1,
+        title: i === 18 ? 'aVeryLongUnbrokenIdentifierThatHasNoSpacesAnywhereInItAtAll_0123456789abcdef0123456' : i === 19 ? `🚀 é ñ ü ${long(110)}` : long(120),
+        state: i < 19 ? 'done' : i === 19 ? 'wip' : i === 20 ? 'blocked' : 'todo',
+        run: i === 21 ? 'worker' : 'inline',
+      })),
+    },
+    gates: { ok: false, stale: false, failed: ['lint', 'unit-tests', 'integration-tests', 'e2e', 'typecheck'] },
+    workers: Array.from({ length: 12 }, (_, i) => ({ task: 22 + i, branch: `dflow/w${22 + i}` })),
+  }
+  world(on, { files: { [HUD_FILE]: JSON.stringify(WORST) } })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 40 }, surface: 'terminal' })
+  const texts = await pane.findAll({ type: 'Text' })
+  const rows = (await pane.findAll({ type: 'Box' })).filter((one: any) => /^(plan|workers|checks)-row-\d+$/.test(String(one.key)))
+  expect(rows.length).toBeGreaterThan(8)
+  for (const row of rows) {
+    expect(texts.some((one: any) => one.text === row.text && one.props.wrap === 'truncate-end')).toBe(true)
+    expect(cellWidth(row.text)).toBeLessThanOrEqual(36)
+  }
+  expect((await pane.find({ key: 'plan-headline' }))?.text).toBe('19/40 · 1 blocked')
 })

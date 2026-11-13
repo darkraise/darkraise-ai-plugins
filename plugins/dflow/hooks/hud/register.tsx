@@ -5,12 +5,21 @@ import type { Hud, HudContext, Mode } from '../../types'
 import {
   RESET_INSTRUCTIONS,
   bandText,
+  boardCard,
+  checksCard,
+  collapsedFrom,
   contextFile,
   isResetFor,
   nextMode,
-  paneRows,
+  nextRow,
+  nowRow,
+  planCard,
+  workersCard,
 } from './view.mjs'
-import { isAtLeast } from './meter.mjs'
+import { isAtLeast, runsCut } from './meter.mjs'
+
+type Run = { text: string; color?: string; bold?: boolean; dim?: boolean; underline?: boolean }
+type Card = { key: string; title: string; color: string; headline: Run[]; rows: Run[][] }
 
 const PANE = 'dflow-hud'
 const COMMAND = 'dflow:hud'
@@ -24,13 +33,14 @@ const UNDERLINE_SINCE = '2.1.295'
 // Bump the tag when Hud's fields change: it declines what an earlier version
 // stored, which outlives a reload.
 const hudAtom = atom({ plugin: 'dflow', key: 'hud' } as const, null as Hud | null, {
-  shape: 'hud-1',
+  shape: 'hud-2',
 })
 const modeAtom = atom({ plugin: 'dflow', key: 'mode' } as const, 'band' as Mode)
 const contextAtom = atom(
   { plugin: 'dflow', key: 'context' } as const,
   null as HudContext | null,
 )
+const collapsedAtom = atom({ plugin: 'dflow', key: 'collapsed' } as any, [] as string[])
 
 // `root` is '' until looked up and null once known not to be a repository,
 // so a session started outside one does not run git on every poll.
@@ -85,6 +95,60 @@ function drawButton(table: any, key: string, label: string, onPress: () => unkno
   )
 }
 
+function drawRuns(table: any, key: string, runs: Run[]) {
+  const { Text } = table
+
+  return runs.map((run, index) => (
+    <Text key={`${key}-${index}`} color={run.color} bold={run.bold} dimColor={run.dim} underline={run.underline}>
+      {run.text}
+    </Text>
+  ))
+}
+
+// A rounded frame in the card's color: its title button and headline on the
+// first line, its rows below, each cut to the frame. Keys sit on wrapper
+// Boxes: the engine keeps no key on a Text. The title collapses it
+// to that line; `extra` (its buttons) shows either way.
+function drawCard(table: any, card: Card, isCollapsed: boolean, onToggle: () => unknown, extra: unknown[] = []) {
+  const { Box, Button, Text } = table
+  const inner = Math.max(10, table.columns - 4)
+  const label = `${isCollapsed ? '▸' : '▾'} ${card.title}`
+
+  return (
+    <Box key={card.key} flexDirection="column" borderStyle="round" borderColor={card.color} paddingX={1}>
+      <Box key={`${card.key}-head`} flexDirection="row" justifyContent="space-between">
+        {canUnderline ? (
+          <Button key={`${card.key}-title`} label={label} plain hover={{ bold: true }} onPress={onToggle}>
+            <Text color={card.color} bold>
+              {label}
+            </Text>
+          </Button>
+        ) : (
+          <Button key={`${card.key}-title`} label={label} plain hover={{ bold: true }} onPress={onToggle} />
+        )}
+        <Box key={`${card.key}-headline`}>
+          <Text wrap="truncate-end">{drawRuns(table, `${card.key}-headline`, card.headline)}</Text>
+        </Box>
+      </Box>
+      {!isCollapsed &&
+        card.rows.map((row, index) => (
+          <Box key={`${card.key}-row-${index}`}>
+            <Text wrap="truncate-end">{drawRuns(table, `${card.key}-row-${index}`, runsCut(row, inner))}</Text>
+          </Box>
+        ))}
+      {extra}
+    </Box>
+  )
+}
+
+async function toggleCollapsed($: any, key: string): Promise<void> {
+  const now = await read($, collapsedAtom)
+  const next = now.includes(key) ? now.filter(one => one !== key) : [...now, key]
+  await update($, collapsedAtom, () => next)
+  await $.store.set('collapsed', next)
+  $.ui.invalidate('ui.render')
+}
+
 async function readVersion($: any): Promise<void> {
   try {
     const { base } = await $.session.version()
@@ -116,6 +180,9 @@ async function loadMode($: any): Promise<void> {
   if (stored === 'band' || stored === 'pane' || stored === 'off') {
     await update($, modeAtom, () => stored)
   }
+
+  const collapsed = collapsedFrom(await $.store.get('collapsed'))
+  await update($, collapsedAtom, () => collapsed)
 }
 
 // The HUD is a view: a failure to read or draw it must never surface.
@@ -150,7 +217,15 @@ async function readState($: any): Promise<void> {
     root = await locate($)
   }
 
+  // A Hud stored earlier outlives a reload: outside a dflow checkout it must
+  // not draw.
   if (!root || !(await $.fs.exists(`${root}/.dflow`))) {
+    if ((await read($, hudAtom)) !== null) {
+      await update($, hudAtom, () => null)
+      lastText = ''
+      $.ui.invalidate('ui.render')
+    }
+
     return
   }
 
@@ -329,7 +404,8 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const table = $.ui.resolve(e)
+    const columns = e.props.bodyColumns
+    const table = { ...$.ui.resolve(e), columns }
     const { Box, Text } = table
     const hud = await read($, hudAtom)
 
@@ -342,19 +418,23 @@ export const register: Register = on => {
       )
     }
 
-    const rows = paneRows(hud, await read($, contextAtom), e.props.bodyColumns)
+    const collapsed = await read($, collapsedAtom)
+    const cards = [planCard(hud, Math.max(10, columns - 4)), checksCard(hud), boardCard(hud), workersCard(hud)].filter(
+      (card): card is Card => card !== null,
+    )
 
     return (
       <Box flexDirection="column">
-        <Box flexDirection="row" columnGap={1}>
+        <Box key="now">
+          <Text wrap="truncate-end">{drawRuns(table, 'now', runsCut(nowRow(hud), columns))}</Text>
+        </Box>
+        <Box key="controls" flexDirection="row" columnGap={1}>
           {drawButton(table, 'pane-minimize', '▁ Minimize', () => setMode($, 'band'), { hotkey: 'm' })}
         </Box>
-        {rows.map(([label, text, isDim]: [string, string, boolean]) => (
-          <Text dimColor={isDim}>
-            {label ? `${label.padEnd(8)} ` : ''}
-            {text}
-          </Text>
-        ))}
+        {cards.map(card => drawCard(table, card, collapsed.includes(card.key), () => toggleCollapsed($, card.key)))}
+        <Box key="next">
+          <Text wrap="truncate-end">{drawRuns(table, 'next', runsCut(nextRow(hud), columns))}</Text>
+        </Box>
       </Box>
     )
   })
