@@ -12,6 +12,8 @@ export type Hud = {
     total: number
     current: HudTask | null
     blocked: { number: number; reason: string }[]
+    approved: string | null
+    tasks: { number: number; title: string; state: string; run?: string }[]
   }
   gates: null | { ok: boolean; stale: boolean; failed: string[] }
   review: null | { recorded: null | { tier: number }; open: number; blocking: number }
@@ -25,7 +27,8 @@ export type Hud = {
     refused?: number
   }
   context: null | { resetAt: number }
-  workers: { task: number }[]
+  workers: { task: number; path?: string; branch?: string }[]
+  checks: string[]
 }
 
 export type HudContext = { tokens?: number; window: number }

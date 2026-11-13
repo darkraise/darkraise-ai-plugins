@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { bandText, bar, isFreshReset, isResetFor, nextMode, paneRows } from '../hooks/hud/view.mjs';
 import { bar as meterBar, cellWidth, duration, isAtLeast, kTokens, limitForecast, limitLabel, rampColor, runsCut, sparkline, stackedRuns, track, trackRuns, windowElapsed } from '../hooks/hud/meter.mjs';
+import { SECTIONS, boardCard, checksCard, collapsedFrom, nextRow, nowRow, planCard, taskWindow, workersCard } from '../hooks/hud/view.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const hud = root => JSON.parse(read(root, '.dflow/hud.json'));
@@ -110,4 +111,95 @@ test('widths count terminal cells and a cut row ends in an ellipsis', () => {
   assert.deepStrictEqual(runsCut([{ text: 'abcdef', bold: true }], 4), [{ text: 'abc', bold: true }, { text: '…', dim: true }]);
   assert.deepStrictEqual(runsCut([{ text: 'ab🚀' }], 3), [{ text: 'ab' }, { text: '…', dim: true }]);
   assert.deepStrictEqual(runsCut([{ text: 'abc' }], 3), [{ text: 'abc' }]);
+});
+
+const text = runs => runs.map(run => run.text).join('');
+const rowsOf = card => card.rows.map(text);
+const PLAN_HUD = {
+  branch: 'feat/x',
+  next: '/dflow:build — Task 5: Wire the meter',
+  plan: {
+    title: 'Rate-limit meter', file: 'docs/dflow/plans/meter.md', done: 4, total: 7,
+    current: { number: 5, title: 'Wire the meter', state: 'wip', attempts: 1 },
+    blocked: [{ number: 6, reason: 'no API key' }],
+    tasks: [
+      ...[1, 2, 3, 4].map(number => ({ number, title: `Step ${number}`, state: 'done', run: 'inline' })),
+      { number: 5, title: 'Wire the meter', state: 'wip', run: 'inline' },
+      { number: 6, title: 'Cache the reading', state: 'blocked', run: 'inline' },
+      { number: 7, title: 'Draw the meter', state: 'todo', run: 'worker' },
+    ],
+  },
+  gates: null,
+  review: { recorded: null, open: 2, blocking: 1 },
+  board: { counts: { todo: 3, doing: 1, blocked: 1 }, row: { number: 12, state: 'doing' } },
+  sync: { enabled: true, queued: 3 },
+  context: { resetAt: 150000 },
+  workers: [{ task: 7, path: '.dflow/workers/7', branch: 'dflow/w7' }],
+  checks: ['Task 2 is ticked without a recorded `dflow done`'],
+};
+const forty = Array.from({ length: 40 }, (_, index) => ({ number: index + 1, title: `T${index + 1}`, state: index < 19 ? 'done' : index === 19 ? 'wip' : 'todo', run: 'inline' }));
+
+test('the Now row names the state of the plan', () => {
+  assert.equal(text(nowRow(PLAN_HUD)), '● Task 5 in progress · verify failed 1×');
+  assert.equal(text(nowRow({ ...PLAN_HUD, plan: { ...PLAN_HUD.plan, current: { number: 5, title: 't', state: 'todo', attempts: 0 } } })), '● Task 5 ready');
+  assert.equal(text(nowRow({ ...PLAN_HUD, plan: { ...PLAN_HUD.plan, done: 7, current: null } })), '✓ All 7 tasks done');
+  assert.equal(text(nowRow({ ...PLAN_HUD, plan: { ...PLAN_HUD.plan, current: null } })), '✗ Every remaining task is blocked');
+  assert.equal(text(nowRow({ ...PLAN_HUD, plan: null })), '○ No active plan on feat/x');
+});
+
+test('the task window centres on the current task and counts what it cuts', () => {
+  const window = taskWindow(forty, 20, 8);
+  assert.deepEqual([window.rows[0].number, window.rows.at(-1).number, window.above, window.aboveDone, window.below, window.belowDone], [16, 23, 15, true, 17, false]);
+  const card = planCard({ ...PLAN_HUD, plan: { ...PLAN_HUD.plan, done: 19, total: 40, current: { number: 20, title: 'T20', state: 'wip', attempts: 0 }, blocked: [], tasks: forty } });
+  assert.equal(rowsOf(card).filter(row => /^[✓▸✗○] Task/.test(row)).length, 8);
+  assert.ok(rowsOf(card).includes('… 15 more done'));
+  assert.ok(rowsOf(card).includes('… 17 more'));
+});
+
+test('the Plan card lists tasks with their glyphs, details and checks', () => {
+  const card = planCard(PLAN_HUD);
+  assert.deepEqual([card.key, card.title, card.color, text(card.headline)], ['plan', 'Plan', 'yellow', '4/7 · 1 blocked']);
+  assert.equal(card.headline.find(run => run.text.includes('blocked')).color, 'red');
+  const rows = rowsOf(card);
+  for (const row of ['Rate-limit meter', 'docs/dflow/plans/meter.md', '✓ Task 4: Step 4', '▸ Task 5: Wire the meter', '  verify failed 1×', '✗ Task 6: Cache the reading', '  blocked: no API key', '○ Task 7: Draw the meter · worker', '⚠ Task 2 is ticked without a recorded `dflow done`']) assert.ok(rows.includes(row), row);
+  assert.equal(text(planCard({ ...PLAN_HUD, plan: { ...PLAN_HUD.plan, done: 7, current: null, blocked: [] } }).headline), '✓ done');
+  const none = planCard({ ...PLAN_HUD, plan: null });
+  assert.deepEqual([text(none.headline), rowsOf(none)], ['', ['No active plan on feat/x.']]);
+  assert.deepEqual(rowsOf(planCard({ ...PLAN_HUD, plan: { ...PLAN_HUD.plan, done: 0, total: 0, current: null, blocked: [], tasks: [] } })).slice(0, 2), ['Rate-limit meter', 'docs/dflow/plans/meter.md']);
+});
+
+test('the Checks card puts the worst reading in its headline', () => {
+  const headline = hud => text(checksCard(hud).headline);
+  assert.equal(checksCard({ ...PLAN_HUD, plan: null }), null);
+  assert.equal(headline(PLAN_HUD), '● 1 blocking');
+  assert.equal(headline({ ...PLAN_HUD, gates: { ok: false, stale: false, failed: ['lint', 'test'] } }), '✗ failed');
+  assert.equal(headline({ ...PLAN_HUD, review: { recorded: null, open: 0, blocking: 0 }, gates: { ok: true, stale: true, failed: [] } }), 'stale');
+  assert.equal(headline({ ...PLAN_HUD, review: { recorded: { tier: 2 }, open: 0, blocking: 0 }, gates: { ok: true, stale: false, failed: [] } }), '✓ passed');
+  assert.equal(headline({ ...PLAN_HUD, review: { recorded: null, open: 0, blocking: 0 } }), 'not run');
+  assert.deepEqual(rowsOf(checksCard({ ...PLAN_HUD, gates: { ok: false, stale: false, failed: ['lint', 'test'] } })), ['Gates   ✗ failed: lint, test', 'Review  not run · 2 open, 1 blocking']);
+  assert.deepEqual(rowsOf(checksCard({ ...PLAN_HUD, review: { recorded: { tier: 1 }, open: 2, blocking: 1 } })), ['Gates   not run', 'Review  tier 1 recorded · 2 open, 1 blocking']);
+  assert.equal(rowsOf(checksCard({ ...PLAN_HUD, gates: { ok: true, stale: false, failed: [] } }))[0], 'Gates   ✓ passed');
+  assert.equal(rowsOf(checksCard({ ...PLAN_HUD, gates: { ok: true, stale: true, failed: [] } }))[0], 'Gates   ✓ passed · stale, the head moved');
+});
+
+test('the Board card reads darkmem in five states', () => {
+  const card = boardCard(PLAN_HUD);
+  assert.deepEqual([text(card.headline), rowsOf(card)[0]], ['#12 doing', '3 todo · 1 doing · 1 blocked']);
+  const sync = fields => rowsOf(boardCard({ ...PLAN_HUD, sync: { enabled: true, queued: 3, ...fields } })).at(-1);
+  assert.deepEqual(
+    [sync({ queued: 0 }), sync({}), sync({ error: 'x', offline: true }), sync({ error: 'x', offline: false }), sync({ refused: 1 }), sync({ conflict: 'c' })],
+    ['darkmem ● synced · 0 queued', 'darkmem ◐ 3 queued', 'darkmem ○ offline · 3 queued', 'darkmem ✗ refused: run dflow sync push · 3 queued', 'darkmem ✗ refused: run dflow sync push · 3 queued', 'darkmem ✗ conflict: run dflow sync pull'],
+  );
+  assert.equal(boardCard({ ...PLAN_HUD, board: null, sync: { enabled: false } }), null);
+  assert.deepEqual(rowsOf(boardCard({ ...PLAN_HUD, board: null })), ['darkmem ◐ 3 queued']);
+  assert.equal(text(boardCard({ ...PLAN_HUD, board: { counts: { todo: 3, done: 1 }, row: null } }).headline), '4 rows');
+});
+
+test('the Workers card, the Next row and the stored collapse list', () => {
+  const card = workersCard({ ...PLAN_HUD, workers: [{ task: 6, branch: 'dflow/w6' }, { task: 7, branch: 'dflow/w7' }] });
+  assert.deepEqual([text(card.headline), rowsOf(card)], ['● 2 running', ['● Task 6: Cache the reading  dflow/w6', '● Task 7: Draw the meter  dflow/w7']]);
+  assert.equal(workersCard({ ...PLAN_HUD, workers: [] }), null);
+  assert.equal(text(nextRow(PLAN_HUD)), 'Next  /dflow:build — Task 5: Wire the meter');
+  assert.deepEqual(SECTIONS, ['account', 'plan', 'context', 'usage', 'checks', 'board', 'workers', 'repo']);
+  assert.deepEqual([collapsedFrom(['plan', 'nope', 'plan', 'repo']), collapsedFrom('plan'), collapsedFrom(undefined)], [['plan', 'repo'], [], []]);
 });
