@@ -29,6 +29,21 @@ arrives beside the Codex one.
   `.claude/worktrees/retire-executor-lanes` on `feat/retire-executor-lanes`,
   branched from `main`.
 
+- **Spec review (2026-11-13).** Risk-2 tasks: "Light pair (Recommended)".
+  Two light lists: "Judge every time". Billed verification runs: "Argon and
+  Opus". Plan mode stalls: "Ship agy review off (Recommended)". Light tier
+  unused in inline mode: "Accept, document it (Recommended)". The
+  `revising-plans` skill and `plan-revise`: "Delete it, and we will retire 5.0
+  plan".
+- **dforge 5 retired (2026-11-13).** The earlier dforge 5 rebuild on the
+  harness's plan mode (`refactor/dforge-5`, PR #54) is dropped: "retire version
+  5.0 spec, plan and branch, totally drop it, we will keep the dforge workflow
+  with some future improvement later." This change takes 5.0.0.
+
+Early CI: none
+
+Finish: pr
+
 Worktree: worktree
 - **Approach** (recorded here, not asked). Three were weighed:
   (a) *do-less*: delete the lanes and keep Codex review exactly as it is, with
@@ -297,10 +312,10 @@ A9. [test, neg, high] `plan-lint` on a plan whose task carries `**Executor:** co
 A10. [test, neg, high] No file under `plugins/dforge`'s `scripts/`, `reference/`, `skills/`, `hooks/`, `config/` or manifests names `run-codex-task.sh`, `run-agy-task.sh`, `lane-breaker`, `plan-revise`, `codexLane`, `agyLane` or `executor-lane.md` (tests feeding legacy input and the README's migration text are exempt), and `validate-repository.mjs` passes.
 A11. [test, high] `dforge-config` lists `agyReview` (default `false`, label "Agy reviews") right after `codexReview`, and neither `codexLane` nor `agyLane`; a settings file still holding `codexLane: false` resolves without an error.
 A12. [demo, high] The cockpit's Workflow tab shows "Codex reviews" and "Agy reviews" toggles, no "Codex tasks" or "Agy tasks" rows, and no `executionMode` description mentioning executor tasks.
-A13. [test, medium] Light-tier reviews map risk 0-2 to the light panel; risk 2 does not get the heavy panel. Q: should a risk-2 task (shared path or data-shape risk) get the heavy panel (Astra and agy Opus) instead of the light one?
-A14. [test, medium] The panel's tasks-with-two-lists judge is the band judge (`judge-sonnet-high` 0-5, `judge-opus` 6), which dedupes and rules on both lists before the fix loop reads them. Q: is a judge pass on every two-list light review worth its cost, or should the session read both lists directly as it reads one?
+A13. [test, confirmed] Light-tier reviews map risk 0-2 to the light panel; risk 2 does not get the heavy panel.
+A14. [test, confirmed] The panel's tasks-with-two-lists judge is the band judge (`judge-sonnet-high` 0-5, `judge-opus` 6), which dedupes and rules on both lists before the fix loop reads them.
 A15. [test, high] The final review's dedupe judge runs whenever two or more lists carry findings and tags each finding with a `+`-joined origin set from `claude`, `codex`, `agy`.
-A16. [test, medium] `agy-policy.json` ships with `trust.review: pass` after one real agy review run on this repository during the plan, and with `trust.review: pending` (agy review stays off whatever the setting) if that run is not made. Q: may the plan make one real, billed agy review run with Argon and one with Opus to open the surface?
+A16. [test, confirmed] The plan makes one real, billed agy review run on this repository with `gemini-4-argon` and one with `claude-opus-5-5`; `agy-policy.json` ships with `trust.review: pass` only when both return a schema-valid list without writing, and with `trust.review: pending` (agy review stays off whatever the setting) otherwise.
 A17. [test, high] One `run-review-panel` run makes exactly one Codex auth probe.
 A18. [test, high] The README carries a "Migrating to 5.0" section naming `codexLane`, `agyLane`, `agyReview`, `revising-plans` and `plan-revise`, and the plugin and marketplace manifests read 5.0.0.
 
@@ -314,8 +329,8 @@ print mode; the lane already ran `-p --output-format json --json-schema` with
 `--model gemini-4-argon` and `--effort high` (`scripts/run-agy-task.sh:271`).
 Whether plan mode answers in print mode without asking for permission is
 unverified — the plan's first task verifies it, with the owner's consent to the
-billed run (A16), and also checks for free (`agy models`) that
-`claude-opus-5-5` is offered. The verification run's agy version becomes
+billed runs (A16), one on Argon and one on Opus, after a free `agy models`
+check that `claude-opus-5-5` is offered. The verification run's agy version becomes
 `agy-policy.json`'s `min_version` and `calibrated`, since the flags were seen
 only on 1.5.6. If plan mode stalls or cannot answer, agy review ships with
 `trust.review: pending` and stays off; A6 is not relaxed.
@@ -339,7 +354,7 @@ Folded into Fable's round 1 (`.dforge/spec-review-2026-11-12-reviewer-only-exter
 
 - [High] Group reviews had an external panel nothing could run — fixed: groups keep the Claude band judge; the light tier serves per-task and batch reviews in subagent mode.
 - [High] The stalled-plan-mode fallback broke A6 and the write check saw too little — fixed: the fallback is gone (a failed check leaves `trust.review: pending`), and the check covers tracked and untracked files, `HEAD` and the stash list, names the paths, and the session restores them.
-- [Medium] Two-list verdict source, judge prompt and report grammar undefined — fixed in Consuming the lists (whose verdict counts, a Second Pass list of files, `## External findings`, the plan-round rule); the light two-list rule waits on A14.
+- [Medium] Two-list verdict source, judge prompt and report grammar undefined — fixed in Consuming the lists (whose verdict counts, a Second Pass list of files, `## External findings`, the plan-round rule); the light two-list rule is the band judge every time (A14, owner).
 - [Medium] Heavy panel bound above the host's background cap — fixed: first row plus grace, panel bound at or under 7080 s, `task-step` prints the timeout, no-`setsid` behaviour stated.
 - [Medium] agy runner rules lived in the deleted lane runner — fixed: the carried-over classification rules, the final-kind schema, the pointer file and `--add-dir` are listed.
 - [Medium] Each runner's roster call probed every family — fixed: the panel owns availability, each runner probes only its own family (A17).
@@ -349,7 +364,7 @@ Folded into Fable's round 1 (`.dforge/spec-review-2026-11-12-reviewer-only-exter
 - [Medium] A plan caught mid-lane had no path — fixed: the `git status` keep-or-discard rule, inert records, the `next-step` warning dropped.
 - [Medium] Opus-first heavy tier on a small quota — answered: the owner asked for agy Opus; the expected steady state and its ledger text are now stated.
 - [Medium] The controller eval stopped counting reviews — fixed: it adds `run-review-panel` to its pattern.
-- [Medium] Deleting `revising-plans` removes non-lane behaviour — asked at the spec review.
+- [Medium] Deleting `revising-plans` removes non-lane behaviour — answered: the owner chose to delete it (Decisions, spec review).
 - [Nit] Registry paragraph contradictions — fixed: `ranked` stays, `blocks` keeps only `judge`, `reference` moves.
 - [Nit] `fallback=off` would mean the preferred row is off — fixed: the gate prints `claude=on|off`.
 - [Nit] The review runner also sends the thread fields — fixed.
