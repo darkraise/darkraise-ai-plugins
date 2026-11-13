@@ -264,10 +264,11 @@ setting '{}'; fresh; gate usable
 check "codexReview is off by default" "$(grep -c 'reason=setting' <<<"$out")" "1"
 setting '{"codexReview":true,"codexLane":false}'; fresh; gate usable
 check "a stored codexLane is ignored" "$(grep -c 'reason=setting' <<<"$out")" "0"
+setting '{"codexReview":false}'; gate usable
 setting '{"codexReview":true}'
 gate usable
 check "switching Codex back on probes again" "$out" \
-  "codex-gate usable=true reason=ok review=true resets_at=- source=cache"
+  "codex-gate usable=true reason=ok review=true resets_at=- source=probe"
 cp "$TMP/policy.bak" "$POLICY"
 setting '{"codexReview":true}'
 
