@@ -181,16 +181,24 @@ fi
 # config and the hooks are read separately because the worktree snapshot does
 # not cover the git directory, and a planted hook or config entry runs code at
 # the session's next git command.
-git_state() { # git_state; prints `<crc> <size> <path>` for each config file and hook
-  local common gitdir hooks f files=()
-  common=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir) || return 1
-  gitdir=$(git -C "$cwd" rev-parse --absolute-git-dir) || return 1
+git_state() { # git_state; prints `config<TAB>origin<TAB>key^Avalue` and `hook<TAB>hash<TAB>path` lines
+  local hooks hashes f files=()
   hooks=$(git -C "$cwd" rev-parse --path-format=absolute --git-path hooks) || return 1
-  for f in "$common/config" "$gitdir/config.worktree"; do [ -f "$f" ] && files+=("$f"); done
-  if [ -d "$hooks" ]; then
-    while IFS= read -r f; do files+=("$f"); done < <(find "$hooks" -type f | tr -d '\r')
-  fi
-  [ "${#files[@]}" -eq 0 ] || cksum "${files[@]}" | tr -d '\r' | LC_ALL=C sort
+  {
+    # Every scope and include file, one entry per line. Values stay in the
+    # snapshot directory; only keys and origins reach <out>.wrote.
+    git -C "$cwd" config --list --show-origin -z | tr '\n\0' '\001\n' | paste - - | sed 's/^/config\t/' ||
+      exit 1
+    if [ -d "$hooks" ]; then
+      while IFS= read -r f; do
+        if [ -L "$f" ]; then printf 'hook\tlink:%s\t%s\n' "$(readlink "$f")" "$f"; else files+=("$f"); fi
+      done < <(find "$hooks" ! -type d | tr -d '\r')
+      if [ "${#files[@]}" -gt 0 ]; then
+        hashes=$(git -C "$cwd" hash-object --no-filters -- "${files[@]}" | tr -d '\r') || exit 1
+        paste <(printf '%s\n' "$hashes") <(printf '%s\n' "${files[@]}") | sed 's/^/hook\t/'
+      fi
+    fi
+  } | LC_ALL=C sort
 }
 take_state() { # take_state <name>
   dr_snapshot "$cwd" "$snapdir/$1.json" || return 1
@@ -238,9 +246,13 @@ wrote_check() { # wrote_check; succeeds when the run changed nothing
       (($x | keys) + ($y | keys) | unique)[] | select($x[.] != $y[.])' | tr -d '\r'
     [ "$(jq -r .head < "$snapdir/before.json")" = "$(jq -r .head < "$snapdir/after.json")" ] || echo HEAD
     cmp -s "$snapdir/before.stash" "$snapdir/after.stash" || echo stash
-    awk 'NR == FNR { b[$0] = 1; next } { a[$0] = 1 }
-      END { for (l in b) if (!(l in a)) print l; for (l in a) if (!(l in b)) print l }' \
-      "$snapdir/before.git" "$snapdir/after.git" | sed 's/^[0-9]* [0-9]* //' | LC_ALL=C sort -u
+    awk -F '\t' 'function name(l,  f, kv) {
+        split(l, f, "\t"); if (f[1] != "config") return f[3]
+        split(f[3], kv, "\001"); return "git config " kv[1] " " f[2]
+      }
+      NR == FNR { b[$0] = 1; next } { a[$0] = 1 }
+      END { for (l in b) if (!(l in a)) print name(l); for (l in a) if (!(l in b)) print name(l) }' \
+      "$snapdir/before.git" "$snapdir/after.git" | LC_ALL=C sort -u
   } > "$out.wrote"
   [ -s "$out.wrote" ] && return 1
   rm -f "$out.wrote"

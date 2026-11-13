@@ -232,7 +232,8 @@ registered id, and prints one roster row each.
 - Headless `--mode plan` denies every shell command, so a reviewer prompt
   names the files to read and never a command to run.
 - Before the run the runner records the tracked and untracked files, `HEAD`,
-  the stash list, the git config and the hooks of `--cwd`, and a run that
+  the stash list, the effective git config (every scope and include) and the
+  hooks of `--cwd`, and a run that
   changed any of them ends
   `status=FAILED evidence=wrote reason=wrote`. Never edit the worktree while
   an agy review runs: the check cannot tell your edit from agy's.

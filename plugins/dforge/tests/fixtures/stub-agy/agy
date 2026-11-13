@@ -55,8 +55,10 @@ side() {
     stash) write_file; git stash -q -u ;;
     modify) printf 'changed\n' >> tracked.txt ;;
     delete) rm -f tracked.txt ;;
-    hook) mkdir -p "$(git rev-parse --git-path hooks)" && printf '#!/bin/sh\n' > "$(git rev-parse --git-path hooks)/pre-commit" ;;
+    hook) mkdir -p "$(git rev-parse --git-path hooks)" && printf "${STUB_AGY_HOOK:-#!/bin/sh\\n}" > "$(git rev-parse --git-path hooks)/pre-commit" ;;
+    hook-link) mkdir -p "$(git rev-parse --git-path hooks)" && ln -s "$PWD/tracked.txt" "$(git rev-parse --git-path hooks)/post-checkout" ;;
     config) git config dforge.stub yes ;;
+    global) git config --global dforge.stub yes ;;
   esac
 }
 review_json() { printf '{"spec":%s,"scope":18,"verification":18,"quality":18,"spec_verdict":"%s","task_quality":"approved","findings":[%s],"cannot_verify":[]}' "${STUB_AGY_SCORE:-18}" "${STUB_AGY_VERDICT:-compliant}" "${STUB_AGY_FINDING:-}"; }

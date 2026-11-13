@@ -19,7 +19,7 @@ export DR_AGY_POLICY="$TMP/policy.json" STUB_AGY_ARGS_LOG="$TMP/args"
 mkdir -p "$HOME" "$TMP/work"
 cp "$P/reference/agy-policy.json" "$DR_AGY_POLICY"
 printf '# r\n' > "$TMP/prompt.md"
-unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_CONFIG_GLOBAL XDG_CONFIG_HOME
 git -C "$TMP/work" init -q && git -C "$TMP/work" config user.name t && git -C "$TMP/work" config user.email t@t
 printf 'base\n' > "$TMP/work/tracked.txt"; git -C "$TMP/work" add tracked.txt; git -C "$TMP/work" commit -qm base
 export PATH="$P/tests/fixtures/stub-agy:$PATH"
@@ -65,10 +65,11 @@ has "a refusal names its reason" "$out" "reason=refused"
 
 reset_work() {
   git -C "$TMP/work" stash clear; git -C "$TMP/work" checkout -q -- .; git -C "$TMP/work" clean -qfd
-  rm -f "$(git -C "$TMP/work" rev-parse --path-format=absolute --git-path hooks)/pre-commit"
+  rm -f "$(git -C "$TMP/work" rev-parse --path-format=absolute --git-path hooks)"/{pre-commit,post-checkout}
   git -C "$TMP/work" config --unset dforge.stub
+  git config --global --unset dforge.stub
 }
-for side in write commit stash modify delete hook config; do
+for side in write commit stash modify delete hook hook-link config global; do
   reset_work
   STUB_AGY_WRITE=$side.txt STUB_AGY_SIDE=$side STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
   has "a reviewer that does $side fails" "$out" "status=FAILED"
@@ -79,9 +80,17 @@ for side in write commit stash modify delete hook config; do
     stash) check "a stash names the stash list" "$(grep -cx stash "$TMP/out.json.wrote")" "1" ;;
     modify|delete) check "a $side run names the tracked file" "$(grep -cx tracked.txt "$TMP/out.json.wrote")" "1" ;;
     hook) check "a planted hook is named" "$(grep -c '/hooks/pre-commit$' "$TMP/out.json.wrote")" "1" ;;
+    hook-link) check "a symlinked hook is named" "$(grep -c '/hooks/post-checkout$' "$TMP/out.json.wrote")" "1" ;;
     config) check "a git config change is named" "$(grep -c '/config$' "$TMP/out.json.wrote")" "1" ;;
+    global) check "a global git config change is named" "$(grep -c 'dforge\.stub .*\.gitconfig$' "$TMP/out.json.wrote")" "1" ;;
   esac
 done
+reset_work
+# Two hooks of the same length and POSIX cksum: only a real hash tells them apart.
+hooks=$(git -C "$TMP/work" rev-parse --path-format=absolute --git-path hooks); mkdir -p "$hooks"
+printf '\043\041\057\142\151\156\057\163\150\012\145\170\151\164\040\060\040\043\040\141\142\143\144\145\146\147\150\012' > "$hooks/pre-commit"
+STUB_AGY_HOOK='\043\041\057\142\151\156\057\163\150\012\145\170\151\164\040\060\040\043\040\316\312\307\224\173\064\377\243\012' STUB_AGY_SIDE=hook STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+has "a hook rewritten to the same cksum is wrote" "$out" "evidence=wrote reason=wrote"
 reset_work
 
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_FINDING='{"severity":"Minor","where":"a","what":"quota wording"}' STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
