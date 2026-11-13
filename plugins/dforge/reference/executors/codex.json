@@ -4,7 +4,7 @@
   "probe": { "command": "scripts/lib/codex-client.mjs", "op": "auth" },
   "gate": "scripts/codex-gate",
   "runner": "scripts/run-codex-review.sh",
-  "reference": "reference/executor-lane.md",
+  "reference": "reference/external-review.md",
   "session_dir": "codex-sessions",
   "session_dir_env": "DR_CODEX_SESSION_DIR",
   "priority": 20,

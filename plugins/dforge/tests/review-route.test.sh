@@ -674,11 +674,14 @@ present "the Codex manifest carries the Claude manifest's version" "$P/.codex-pl
 bash "$ROUTE" "$TMP/round.md" --ruling nonsense-kind 1 >/dev/null 2>&1
 check "an unknown ruling kind is still rejected" "$?" "2"
 
-# --- the executor lane reference -------------------------------------------
-LANE="$P/reference/executor-lane.md"
-check "the neutral reference exists" "$([ -f "$LANE" ] && echo yes || echo no)" "yes"
-# The old path is spelled in two pieces on purpose. The rename that produced
-# executor-lane.md rewrote every literal spelling of the OLD path in this
+# --- the external review reference -----------------------------------------
+check "the external review reference exists" "$([ -f "$P/reference/external-review.md" ] && echo yes || echo no)" "yes"
+check "the executor lane reference is gone" "$([ -f "$P/reference/executor-lane.md" ] && echo yes || echo no)" "no"
+check "the final dedupe no longer tags both" "$(grep -c 'claude|codex|both' "$P/reference/final-review.md")" "0"
+check "the final dedupe tags a +-joined origin set" "$(grep -q 'claude+agy' "$P/reference/final-review.md" && echo yes || echo no)" "yes"
+check "the final dedupe runs on two or more lists" "$(grep -q 'two or more lists' "$P/reference/final-review.md" && echo yes || echo no)" "yes"
+# The old path is spelled in two pieces on purpose. An earlier rename
+# rewrote every literal spelling of the OLD path in this
 # repository with sed; written whole, this assertion would have been rewritten
 # to test the new file, which exists, and would then fail. The two pieces
 # concatenate at runtime and match no sed pattern. Never join them.

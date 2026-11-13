@@ -172,8 +172,6 @@ check "codex routing has no scout floor" "$(jq -r '.role_floors.scout // "none"'
 # --- Task 7 ---
 check "A17: switching.md is gone" "$([ -e "$P/skills/executing-plans/references/switching.md" ] && echo yes || echo no)" "no"
 # --- Task 8 ---
-EL="$P/reference/executor-lane.md"
-present "A19: a handback goes to the session" "$EL" 'HANDBACK to inline'
 . "$S/lib/plan.sh"
 printf 'Task 1: escalated inline -> subagent — fix cap\n' > "$TMP/old-ledger.md"
 check "A11: an old escalation line still parses" "$(ledger_left_inline "$TMP/old-ledger.md")" "1"

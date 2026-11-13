@@ -14,7 +14,7 @@ that arises at one point into one dispatch:
 | `cannot-verify` | Every `cannot-verify:` line of a `task-step verdict` digest, before the task completes |
 | `breaker` | Every finding still open after round 2/2 |
 | `blocked-plan` | An implementer BLOCKED because the plan is wrong |
-| `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument ([executor-lane.md](../../../reference/executor-lane.md)) |
+| `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument ([external-review.md](../../../reference/external-review.md)) |
 | `final-residual` | Findings still open after the final review's one fix wave |
 
 **How.** Write `<workspace>/rulings-<point>-<task>.md` — `<task>` is the task

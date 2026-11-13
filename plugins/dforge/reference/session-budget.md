@@ -60,7 +60,7 @@ budget: unknown — unknown — no usage entry in <path>
 
 `source: rollout` is the session's own Codex rollout, found under
 `${CODEX_HOME:-~/.codex}/sessions` by its recorded working directory. Only an
-interactive rollout counts: an executor-lane run started by a Claude controller
+interactive rollout counts: a Codex review run started by a Claude controller
 records that controller's directory, so selecting it would replace a live Claude
 session's verdict. Where a Claude transcript and a rollout both match, the more
 recently written one is the live session.

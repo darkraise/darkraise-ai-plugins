@@ -48,8 +48,8 @@ check "the ruling prompt exists" \
   "$([ -f "$P/skills/subagent-driven-development/references/ruling-prompt.md" ] && echo yes || echo no)" "yes"
 check "the code reviewer reference exists" \
   "$([ -f "$P/skills/requesting-code-review/references/code-reviewer.md" ] && echo yes || echo no)" "yes"
-check "the external executor reference exists" \
-  "$([ -f "$P/reference/executor-lane.md" ] && echo yes || echo no)" "yes"
+check "the external review reference exists" \
+  "$([ -f "$P/reference/external-review.md" ] && echo yes || echo no)" "yes"
 check "the re-review prompt exists" \
   "$([ -f "$P/skills/subagent-driven-development/references/re-review-prompt.md" ] && echo yes || echo no)" "yes"
 

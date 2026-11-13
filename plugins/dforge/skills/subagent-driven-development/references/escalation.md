@@ -24,7 +24,7 @@ Neither applies to a task running on an external executor.
 Its fix rounds resume that executor's own session at round 1 only - the one its
 `**Executor:**` line names - and round 2 leaves the lane by `HANDBACK` instead
 of climbing a rung - see
-[executor-lane.md](../../../reference/executor-lane.md).
+[external-review.md](../../../reference/external-review.md).
 
 ## Escalating out of inline mode
 

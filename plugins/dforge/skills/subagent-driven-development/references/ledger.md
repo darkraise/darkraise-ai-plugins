@@ -48,7 +48,7 @@ Plan: executor <id> off - unreliable (<k> handbacks)
   `CI:` line by finishing. No per-task Recovery row reads them, since those
   key on `Task` and `Group` lines; the Plan state paragraph below does.
 - `Plan: executor <id> off - unreliable (<k> handbacks)` is written by
-  [executor-lane.md](../../../reference/executor-lane.md) §Dispatch. It names
+  [external-review.md](../../../reference/external-review.md) §Dispatch. It names
   no task, so no per-task Recovery row reads it; `scripts/lane-breaker` does.
 - `Acceptance QA:` lines are written by
   [final-review.md](../../../reference/final-review.md) step 0.5. On recovery:

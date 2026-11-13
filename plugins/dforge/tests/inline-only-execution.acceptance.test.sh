@@ -402,11 +402,5 @@ if selected A16; then
   unmatched "A16: the Heavy line leaves out the light task" "$last" 'Task 2'
 fi
 
-# ---------------------------------------------------------------------- A19
-if selected A19; then
-  lane=$(tr -d '\r' < "$REFS/executor-lane.md")
-  has "A19: executor-lane.md names the handback line" "$lane" 'HANDBACK to inline'
-fi
-
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

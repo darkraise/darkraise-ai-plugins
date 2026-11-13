@@ -156,7 +156,7 @@ mkdir -p "$REG"
 jq -n '{id:"agy", locator:"scripts/agy-locate",
   probe:{command:"scripts/lib/agy-probe.mjs", op:"auth"},
   gate:"scripts/agy-gate", runner:"scripts/run-agy-review.sh",
-  reference:"reference/executor-lane.md", session_dir:"agy-sessions",
+  reference:"reference/external-review.md", session_dir:"agy-sessions",
   session_dir_env:"DR_AGY_SESSION_DIR", surfaces:["review"], blocks:{judge:"agy-judge"}}' > "$REG/agy.json"
 SESS="$TMP/sessions"
 ARGS="$TMP/args.log"

@@ -140,7 +140,6 @@ fabricate v4 ranks, or reset budgets to make a request pass. If v4 cannot
 represent the active history, as for a task caught mid-escalation, stop for an
 explicit handoff decision. A fresh unstarted v4 task can have empty local
 history while retaining the prior task record.
-A Claude `Executor: codex` line never starts recursive CLI offload in a Codex host.
 
 ## Execution modes and session ends
 

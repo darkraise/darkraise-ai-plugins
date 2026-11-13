@@ -1,11 +1,8 @@
 # The delegated task loop
 
 One task's dispatch, review, fix loop and complete line.
-dforge:subagent-driven-development runs it for every task, and
-dforge:executing-plans runs it for each task whose brief carries
-`**Dispatch:** delegated`: a task carrying an `**Executor:**` line, which runs
-on that executor's wrapper. A task the session implements itself and a judge
-reviews runs §The session review loop instead.
+dforge:subagent-driven-development runs it for every task. A task the session
+implements itself and a judge reviews runs §The session review loop instead.
 
 ## Contract
 
@@ -23,8 +20,7 @@ reviews runs §The session review loop instead.
 | Seat | Agent | Model argument |
 |---|---|---|
 | Implementer | The task's `**Implementer:**` agent, as `subagent_type` | None |
-| External implementer | The task's `**Executor:**` line, via [executor-lane.md](executor-lane.md) | Set by the wrapper |
-| Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when a Codex seat's status line is `TIMEOUT` or `FAILED`; say every substitution aloud. On a Codex host, a native judge at Astra high or above ([native-codex.md](native-codex.md)) | None |
+| Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when the reviewer panel returns no list (`lists=0`); say every substitution aloud. On a Codex host, a native judge at Astra high or above ([native-codex.md](native-codex.md)) | None |
 | Scoped re-review | `dforge:judge-sonnet-high`; `dforge:judge-opus` for a subtle concurrency fix | None |
 
 **Fleet agents take no `model` or `effort` argument.** The Agent tool's `model`
@@ -42,14 +38,6 @@ turns on multi-step work. Use a mid-tier model as the floor for reviewers.
 
 ## 1. Dispatch the implementer
 
-**Read the task's `**Executor:**` line first.** A task carrying one runs on
-that CLI — follow [executor-lane.md](executor-lane.md)
-§Dispatch — and the steps here are its fallback. A task without one takes
-these steps directly.
-
-For an `agy` task the dispatch first runs `scripts/lane-breaker`
-([executor-lane.md](executor-lane.md) §Dispatch).
-
 **Open the task with one call:**
 `bash <plugin-root>/scripts/task-step start PLAN_FILE N` (a batch passes every
 task number, `N M …`; a wave task adds `--wave K`; every start adds
@@ -66,9 +54,7 @@ again for a task whose state file exists — a task resumed after a restart, a
 dispatch repeated — keeps the recorded BASE, round and review head and writes
 no second assigned line, so the review still packages every commit made since
 the first dispatch; pass `--reset` only to discard the state and start over,
-and say why on the ledger. A task with an
-`**Executor:**` line prints `executor <id>: follow executor-lane.md
-§Dispatch` and writes no dispatch file. Exit 3 means the plan has no such
+and say why on the ledger. Exit 3 means the plan has no such
 task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
 
 - **Choose the agent.** Read the task's `**Implementer:**` line. A name from
@@ -187,7 +173,6 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
 | A name in none of [ladder.md](ladder.md)'s assignment, escalation or reserve tables (`impl-haiku`, `impl-opus-low` and `impl-opus-medium` appear only in the escalation table, and a human `**Override:**` may pin them) | Score at dispatch and dispatch the scored agent |
 | The implementer's model is unavailable on this account | Same effort one model down; where none exists, the ladder successor — see [escalation.md](../skills/subagent-driven-development/references/escalation.md) |
 | Fable unavailable inside a reserve chain entered automatically | `Task <N>: BLOCKED` with the reason — the Opus rungs below it already failed |
-| An `**Executor:**` line the wrapper cannot run | `HANDBACK` to the `**Implementer:**` agent — see [executor-lane.md](executor-lane.md) §Failure rows |
 
 ## 2. Handle the report
 
@@ -199,10 +184,8 @@ Implementer subagents report one of four statuses, or none. Handle each appropri
 check reads the task's worktree, where no sibling's merge moves HEAD). Exit 0 holds the task for its group review (§3a) and
 writes its `awaiting group review` line; exit 4 means the task is reviewed alone: review it (step 3).
 On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
-Inline mode never holds a task: it reviews every
-task it delegates alone, including an `**Executor:**` task that
-`review-route` grades `review=group`, so it goes straight to step 3, as a
-batch does. `task-step review` packages the
+Inline mode never holds a task: its session review loop reviews each task
+alone, so it goes straight to step 3, as a batch does. `task-step review` packages the
 diff and records `t0`, the time the cache rule in step 4 needs.
 
 **DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, pass them to the task reviewer with its other inputs; the review loop decides them. If they're observations (e.g., "this file is getting large"), note them and proceed to review: in subagent mode hold the task first, as DONE says, so a task `review-route` grades `review=group` waits for its group review. A correctness or scope concern takes a grouped task out of its group (below).
@@ -292,15 +275,17 @@ needed.
   `--cwd <worktree>`, see [parallel-waves.md](parallel-waves.md)). It packages the diff from the base
   `start` recorded to HEAD — never `HEAD~1`, which silently truncates
   multi-commit tasks — and records the review head and `t0`. It runs
-  `scripts/codex-gate`, `scripts/review-route PLAN_FILE --task <N>` and
+  each reviewer family's gate (`scripts/codex-gate`, `scripts/agy-gate`),
+  `scripts/review-route PLAN_FILE --task <N>` and
   `scripts/lens-route PLAN_FILE --task <N>`, and writes
   `<workspace>/task-<N>-review-prompt.md`:
   [task-reviewer-prompt.md](../skills/subagent-driven-development/references/task-reviewer-prompt.md)
   with every placeholder filled in, the diff file, the plugin directory and
   each lens's `criteria=` path among them (a task with no lens has no lens
-  section). It runs the mechanical checks below, and for a Codex seat also
-  writes the Codex prompt. It prints at most 15 lines: the seat and its prompt
-  file, for a Codex seat the runner command and its timeout, the check lines,
+  section). It runs the mechanical checks below, and for a panel seat also
+  writes the reviewers' prompt, `<workspace>/task-<N>-review-panel-prompt.md`.
+  It prints at most 15 lines: the seat and its prompt
+  file, for a panel seat the panel command and its timeout, the check lines,
   the state it recorded and the budget line. The diff never enters your own
   context, and a reviewer is never dispatched without it.
 - **The seat:** dispatch the `seat:` line's `subagent_type`, with no `model`
@@ -320,24 +305,23 @@ needed.
   Never Read the report file yourself: the digest carries the verdicts, the
   scores, one line per Critical or Important finding and the cannot-verify
   items, and verdict has already written the fix file and logged the Minor
-  findings. A `codex:light` seat that reviewed writes no report: read its JSON
-  as Codex seats below says. A Codex seat's line names
-  both prompt files, `seat: codex:light prompt: <Codex prompt> fallback:
-  <judge> prompt: <judge prompt>` or `seat: codex:heavy+judge-opus prompt:
-  <Codex prompt> then: dforge:judge-opus prompt: <judge prompt>`: run the
-  Codex seat as below, with the judge after `fallback:` as the seat when it
-  fails and the judge after `then:` as the risk 3 second pass. Both judge
-  prompts are already written, so you never run `review-route` again for
-  them. Run `scripts/codex-gate --refresh` before `task-step review` when
-  Codex may have come back since an earlier off answer, such as after a
+  findings. A `panel:light` seat that returned one list writes no report:
+  read its JSON as Panel seats below says. A panel seat's line names the
+  judge prompt and the judge, `seat: panel:light prompt: <judge prompt>
+  fallback: <judge>` or `seat: panel:heavy+judge-opus prompt: <judge prompt>
+  then: dforge:judge-opus`, and `panel: <command>` and `timeout: <ms>`
+  follow it: run the panel as below, then the judge as Panel seats says. The
+  judge prompt is already written, so you never run `review-route` again for
+  it. Run a family's gate with `--refresh` before `task-step review` when that
+  reviewer may have come back since an earlier off answer, such as after a
   login, because an off answer is kept for the session. A `gate:` line right
-  after the digest's first line carries the gate's answer when the route was
-  `reason=codex-off` or the gate answered `source=probe`; say it aloud when
-  it ends `source=probe`. A task without an `**Executor:**` line
-  whose `seat:` line names a judge was routed with `reason=codex-off`: the
-  review surface is off for this session, no Codex seat runs, and the seat
-  clause records `(codex off — <reason>)` with the `reason` on the `gate:`
-  line (`untrusted` when it printed `usable=true`). When the `seat:` line
+  after the digest's first line carries each family's answer in ranked order
+  (`gate: agy=<open|untrusted|reason> codex=<…>`) when the route was
+  `reason=reviewers-off` or a gate answered `source=probe`; say it aloud when
+  a gate probed. A `seat:` line that names a judge alone was routed with
+  `reason=reviewers-off`: no reviewer's surface is open for this session, no
+  panel runs, and the seat clause records `(reviewers off — <answers>)` with
+  the `gate:` line's answers. When the `seat:` line
   ends `(review-route exited <N>: …)`, `review-route` failed but
   `task-step review` still wrote the complete judge prompt: dispatch the
   `dforge:judge-opus` seat it names as printed, and say why, quoting that
@@ -350,8 +334,8 @@ needed.
   plan, and the seat is a native judge at Astra high or above
   ([native-codex.md](native-codex.md)).
 - **Lenses:** the prompt file already carries each `lens-route` line's
-  `criteria=` path. A Codex seat gets no lens files: on a risk-3 task the
-  Claude judge beside it reads them. On a `Host: codex` plan `lens-route`
+  `criteria=` path. The reviewers' prompt carries no lens files: the
+  Claude judge beside the panel reads them. On a `Host: codex` plan `lens-route`
   exits 2; choose the lenses as [native-codex.md](native-codex.md) says.
 - **Reviewer inputs:** the brief file (it ends with the plan's Global
   Constraints and Contracts — the reviewer's attention lens), the
@@ -484,48 +468,49 @@ Exit 7 is not a seat failure: it means the suite has no record at the review
 head, so write no `Ruling:` line and re-dispatch no seat; run the suite and
 call `verdict` again. Exits 5 and 6 are checked before 7.
 
-**Codex seats.** `task-step review` wrote the task-reviewer prompt for Codex,
-as [executor-lane.md](executor-lane.md) §Codex task review
-seats describes, to `<workspace>/task-<N>-review-codex-prompt.md`, and printed
-the runner command and its `timeout` (the command's `--cwd` is your checkout's
-top level, or the `--cwd DIR` you passed to `task-step review`). Run that
-command as a background Bash
-call with `timeout` = (row bound + 120) × 1000 ms: 2520000
-for `--tier light`, 5520000 for `--tier heavy`; its shape is:
+**Panel seats.** `task-step review` wrote the reviewers' prompt to
+`<workspace>/task-<N>-review-panel-prompt.md`, as
+[external-review.md](external-review.md) §Task review seats describes, and
+printed the panel command and its `timeout` (the command's `--cwd` is your
+checkout's top level, or the `--cwd DIR` you passed to `task-step review`).
+Run that command as a background Bash call with the printed `timeout`:
+2590000 ms for `--tier light`, 5590000 for `--tier heavy`. Its shape is:
 
 ```bash
-bash "<plugin-root>/scripts/run-codex-review.sh" --kind task --tier <light|heavy> \
-  --cwd <worktree-root> --out <workspace>/task-<N>-review-codex.json \
-  --prompt <workspace>/task-<N>-review-codex-prompt.md
+bash "<plugin-root>/scripts/run-review-panel" --kind task --tier <light|heavy> \
+  --cwd <worktree-root> --out-dir <workspace>/task-<N>-review-panel \
+  --prompt <workspace>/task-<N>-review-panel-prompt.md
 ```
 
-`codex:light` is `--tier light`; `codex:heavy+judge-opus` is `--tier heavy`. Read the runner's status line and take its word: `OK` and
-`FALLBACK` are a seat that reviewed — on `FALLBACK`, or a `--tier heavy` line
-naming `gpt-6.1-sol/xhigh` with `status=OK`, say the substitution aloud — and
-`TIMEOUT or FAILED` is a seat that did not: dispatch the route's `fallback`
-seat (the judge after `fallback:` on the `seat:` line `task-step review` printed) with the judge
-prompt file, say so with the runner's reason, and
-never re-dispatch the Codex seat. The runner has already applied its own one-shot
-fallback, so a second attempt here would turn one refused run into two. A
-`FAILED` whose reason reads `codex is off for this session` is the same case:
-the runner's own gate refused, or a quota error turned Codex off for the rest of
-the session, so the next task's `review-route` names Claude seats. Read a
-Codex review from its JSON — `spec_verdict` (`compliant` or `issues`),
-`task_quality` (`approved` or `needs_fixes`), the four scores, `findings` and
-`cannot_verify` — and apply the bands, the cannot-verify route and the fix loop to it
-exactly as to a judge's report.
+It prints one status line per reviewer family, then `panel tier=<t>
+lists=<n>`. Read those lines and take their word: `OK` and `FALLBACK` are a
+reviewer that returned a list in `<out-dir>/<id>.json`, and on `FALLBACK` you
+say the substitution aloud. `SKIPPED`, `TIMEOUT` and `FAILED` are a reviewer
+that returned none: never run it again, since each runner has already applied
+its own one-shot fallback. Then, by `lists=`:
 
-**Risk 3.** On `primary=codex:heavy+judge-opus`, run the Codex seat
-first, then dispatch `dforge:judge-opus` with the judge prompt file, whose
-Second Pass section already names the Codex seat's `--out` path. The task's
-verdicts and scores are the judge's. Its findings,
-plus every Codex finding it marks CONFIRMED, drive the fix loop; each CONFIRMED
-cannot-verify item goes to the ruling seat as a `cannot-verify` item.
-A report whose `## Codex findings` section is not its last formed its own
-review after reading Codex's; `task-step verdict` exits 5 on it. If the Codex seat produced nothing, dispatch the judge with the
-same prompt file and one added line, "No Codex review file exists: skip the
-Second Pass section", and say so. This replaces the three-seat average earlier
-versions used for risk 3.
+- **`lists=0`:** dispatch the judge the `seat:` line names after `fallback:`
+  or `then:` with the judge prompt file and one added line, "No external
+  review file exists: skip the Second Pass section", and say so with each
+  reviewer's reason.
+- **`panel:light`, one list:** read that review from its JSON:
+  `spec_verdict` (`compliant` or `issues`), `task_quality` (`approved` or
+  `needs_fixes`), the four scores, `findings` and `cannot_verify`. Apply the
+  bands, the cannot-verify route and the fix loop to it exactly as to a
+  judge's report; its verdict and scores are the task's.
+- **`panel:light`, two lists:** dispatch the judge after `fallback:` with the
+  judge prompt file. Its Second Pass dedupes both lists and rules CONFIRMED
+  or REJECTED on each finding; its verdict and scores are the task's.
+- **`panel:heavy+judge-opus`, one or two lists:** dispatch
+  `dforge:judge-opus` with the judge prompt file, whose Second Pass already
+  names every list's path. The task's verdicts and scores are the judge's.
+  Its findings, plus every external finding it marks CONFIRMED, drive the
+  fix loop; each CONFIRMED cannot-verify item goes to the ruling seat as a
+  `cannot-verify` item.
+
+A report whose `## External findings` section is not its last formed its own
+review after reading the lists; `task-step verdict` exits 5 on it. This
+replaces the three-seat average earlier versions used for risk 3.
 
 The digest's `cannot-verify:` lines are requirements
 that live in unchanged code or span tasks. These do not block the rest of the
@@ -566,7 +551,7 @@ On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
   (`Task <N>: spec …; quality …; scores …`), writes one fix file per member with a
   Critical or Important finding, and logs each member's Minor findings. A
   member's fix round is read alone with
-  `task-step verdict PLAN_FILE N --rereview <R>`. A group never gets a Codex
+  `task-step verdict PLAN_FILE N --rereview <R>`. A group never gets a panel
   seat.
 - **The report** holds one block per task. Apply §3's verdicts, score bands,
   cannot-verify route and plan-conflict route to each task on its own, and §4's Minor
@@ -626,8 +611,6 @@ alone. Otherwise dispatch a fresh copy of the same agent carrying the brief
 path, the report-file path, and the findings — the report file is the
 persistent memory either way — and note `fresh (<why>)` on the fix-round line.
 That is not an escalation.
-A task on an external executor resumes that executor's own session instead
-— see [executor-lane.md](executor-lane.md) §Resuming an executor task.
 
 **Round 2 — a fresh dispatch on the successor rung.** For a dispatched
 implementer (the session review loop has its own rounds), dispatch a fresh
@@ -642,8 +625,7 @@ a split is reached only through the breaker's AMEND (below).
 A reserve-tier task takes its reserve successor from ladder.md's reserve
 table; `impl-fable-max`, whose successor is `BLOCKED`, writes
 `Task <N>: BLOCKED — impl-fable-max exhausted — <what a human must decide>`
-instead of a round 2. An external task's round 2 is a `HANDBACK` to its
-`**Implementer:**` agent ([executor-lane.md](executor-lane.md)).
+instead of a round 2.
 
 **Split and reserve.** A split follows a tripped breaker: a finding still
 open after round 2 on `impl-opus-high` goes to the breaker, whose AMEND may
@@ -682,7 +664,7 @@ carrying the finding's `:<line>`, with the severity lines after the blank
 line; append the ruling's smallest fix and the covering test files below
 them. Write the file yourself only for findings no report holds: a
 mechanical check's finding, a CONFIRMED-GAP from the ruling seat, or a
-Codex seat's JSON review. `task-step rereview` reads the bullets for the
+light panel seat's JSON review. `task-step rereview` reads the bullets for the
 findings list and the skip rule, so write the file before you call it.
 
 **The re-review is scoped.** Run
@@ -763,39 +745,19 @@ the next task in plan order; after the last task, to the final review, written
 
 - `Task <N>: complete (commits <base7>..<head7>, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat <seat>) — done: …; verified: …; remaining: none; discovered: …; assumptions: …`
 - `Task <N>: complete (commits <base7>..<head7>, <K> parked, <C> carried to Task <M>; scores …, seat <seat>) — …; remaining: <parked and carried one-liners>; …` after a tripped breaker; drop the `carried` clause when nothing was
-- end the scores clause with `, seat <seat>`: `codex gpt-6.1-sol/xhigh`,
-  `codex gpt-6-astra/xhigh+judge-opus`, or the judge's short name, followed by
-  ` (codex <STATUS> — <reason>)` when it replaced a Codex seat, or by
-  ` (codex off — <reason>)` when §3's `gate:` and `seat:` lines say Codex is off
+- end the scores clause with `, seat <seat>`: the reviewers that returned a
+  list and the judge, joined with `+` (`codex gpt-6.1-sol/xhigh`,
+  `codex gpt-6.1-sol/xhigh+agy gemini-4-argon/high+judge-sonnet-high`,
+  `agy gemini-4-argon/high+judge-opus`), or the judge's short name alone,
+  followed by ` (<id> <STATUS> — <reason>)` for each reviewer that ran and
+  returned no list, or by ` (reviewers off — <answers>)` when §3's `gate:`
+  and `seat:` lines say no reviewer is open
 - a group member's complete line (§3a) takes its `commits` range from its
   `awaiting group review` line and ends its scores clause
   `, seat <judge> (group <list>)`
 
 In an auto run, run `scripts/auto-run task-complete`, then the Fable batch when
 `scripts/auto-run decision list` prints anything.
-
-**Release the worktree when the task is complete.** A task that ran on an
-external executor and reached a reviewed complete line no longer owns its
-worktree:
-
-```bash
-bash "$(bash "<plugin-root>/scripts/executors" path <id> wrapper)" \
-  --cwd <worktree-root> --task-id <stable-task-id> --release
-```
-
-`<id>` is the first token of the task's `**Executor:**` line.
-`scripts/lib/task-state.sh` keeps an `owner.json` per worktree and refuses a
-different task id in it, so an unreleased worktree fails the next offload's
-preflight. An inline plan offloads several tasks into one worktree in
-sequence, which makes this the ordinary case rather than a recovery step.
-
-**After a `HANDBACK`, reconcile rather than release.** The Claude implementer
-inherits the worktree, its commits and its report, so ownership passes to a
-task that is still in flight. Reconcile the worktree before the
-implementer is dispatched. Once that implementer's task reaches its reviewed
-complete line with a clean worktree, release the handed-back task with the
-same `--release` command, or every later offload into that worktree fails
-preflight.
 
 Then mark the todo complete and move on. Never move to the next task while
 the review has open Critical/Important issues that are neither fixed nor
@@ -885,16 +847,6 @@ with the session in the implementer's place.
    (§4 The breaker); in an auto run the item goes on the pending list. Then
    run §Early CI when the header's `**Early CI:**` line names this task.
 
-**Executor fallback.** An executor task whose executor is unavailable or
-refuses it is implemented by the session, never by its `**Implementer:**`
-agent: start it with plain `task-step start PLAN_FILE <N>` (an executor task
-writes state and no assigned line), append
-`Task <N>: implementer inline (assigned; base <sha7>; executor <id> unavailable - <reason>)`,
-and join the loop at step 2. A handback mid-loop writes `HANDBACK to inline`
-as its fix-round line's last slot, and the session finishes the task in this
-loop from the round it was in, never closing it `unreviewed`.
-[executor-lane.md](executor-lane.md)'s "Never fall back silently" still holds.
-
 **Codex host.** `task-brief` writes the `**Review:**` line on Claude-host
 plans only, and `task-step` and `review-route --task` exit 2 on a
 `Host: codex` plan. There the loop runs for a task whose `**Evaluation:**`
@@ -952,6 +904,7 @@ For a task whose last ledger line, read by the caller's Recovery rule, is:
 
 | Last line | Action |
 |---|---|
+| An assigned line naming `executor <id> <model>/<effort>` (an executor lane run from before 5.0), or a later fix round of that task, with no complete line | The lane is gone, so the session implements the task. First run `git status`, show your human partner the leftovers, and keep or discard them as they decide; leftover run records under the git directory are inert. Then start the task as the caller's task loop says |
 | `implementer <agent> (assigned …)`, the agent not `inline` | If the report file has a status and `git log <base>..HEAD` is non-empty, review it (§3); otherwise dispatch the same agent fresh (§1) |
 | `fix round R/5` on a `Host: codex` plan | Codex: R < 5 resumes the loop at round R+1 by the five-round schedule (§4); `fix round 5/5` goes to the breaker (§4) |
 | `fix round 1/2` whose last slot is `session` or `HANDBACK to inline` | The session finishes it: §The session review loop, from round 2 |
