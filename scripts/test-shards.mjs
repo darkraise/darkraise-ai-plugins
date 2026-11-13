@@ -86,6 +86,7 @@ export const windowsSeconds = {
   'retained-review-data.acceptance.test.sh': 30,
   'review-depth-qa.acceptance.test.sh': 288,
   'review-depth.acceptance.test.sh': 160,
+  'review-panel.test.sh': 30,
   'review-record.test.sh': 20,
   'review-route.test.sh': 458,
   'roadmap.test.sh': 170,

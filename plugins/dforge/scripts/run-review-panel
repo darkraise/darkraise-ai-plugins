@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+# Run every open external reviewer family at once and report one status line
+# per family.
+#
+# Families come from `scripts/executors ranked`. Each family's gate is read
+# once; a family whose gate does not say review=true is skipped. Every open
+# family's runner starts in the background, and a watchdog ends any runner
+# still going at the bound, so one hung reviewer cannot hold the others' lists.
+#
+# Usage: run-review-panel --kind task|plan|final --tier light|heavy --cwd DIR
+#          --out-dir DIR (--prompt FILE | --base SHA)
+#   --tier is required for task and ignored for plan and final, which take
+#   the heavy rows; --prompt goes with task and plan, --base with final.
+# Output: one `<id>-judge ...` line per family in ranked order, then
+#   `panel tier=<t> lists=<n>`, n counting OK and FALLBACK lines.
+# Env seams: PANEL_<ID>_GATE, PANEL_<ID>_RUNNER, PANEL_LADDER, and
+#   PANEL_BOUND_SECONDS, which replaces the computed bound.
+# Exit: 0 answered, whatever the reviewers did; 2 usage error.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+LADDER="${PANEL_LADDER:-$HERE/../reference/ladder.md}"
+
+die() { printf 'run-review-panel: %s\n' "$1" >&2; exit 2; }
+
+kind="" tier="" cwd="" out_dir="" prompt="" base=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --kind|--tier|--cwd|--out-dir|--prompt|--base) [ $# -ge 2 ] || die "$1 needs a value" ;;
+  esac
+  case "$1" in
+    --kind) kind="$2"; shift 2 ;;
+    --tier) tier="$2"; shift 2 ;;
+    --cwd) cwd="$2"; shift 2 ;;
+    --out-dir) out_dir="$2"; shift 2 ;;
+    --prompt) prompt="$2"; shift 2 ;;
+    --base) base="$2"; shift 2 ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+
+case "$kind" in
+  task)
+    case "$tier" in light|heavy) ;; *) die "--kind task needs --tier light|heavy" ;; esac ;;
+  plan|final) tier=heavy ;;
+  *) die "--kind must be task, plan or final" ;;
+esac
+if [ "$kind" = final ]; then
+  [ -n "$base" ] || die "--kind final needs --base"
+  [ -z "$prompt" ] || die "--kind final takes --base, not --prompt"
+  ext=md
+  src=(--base "$base")
+else
+  [ -n "$prompt" ] || die "--kind $kind needs --prompt"
+  [ -z "$base" ] || die "--kind $kind takes --prompt, not --base"
+  [ -r "$prompt" ] || die "--prompt is not readable: $prompt"
+  ext=json
+  src=(--prompt "$prompt")
+fi
+[ -n "$cwd" ] && [ -d "$cwd" ] || die "--cwd must be a directory"
+[ -n "$out_dir" ] || die "--out-dir is required"
+mkdir -p "$out_dir" || die "cannot create --out-dir: $out_dir"
+out_dir="$(cd "$out_dir" && pwd)"
+if [ -n "${PANEL_BOUND_SECONDS:-}" ]; then
+  [[ $PANEL_BOUND_SECONDS =~ ^[0-9]+$ ]] || die "PANEL_BOUND_SECONDS must be a whole number"
+fi
+
+ids=$(bash "$HERE/executors" ranked) || die "the executor registry could not be read"
+
+seam() { # seam <id> <GATE|RUNNER>; prints the override path, if any
+  local var
+  var="PANEL_$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')_$2"
+  printf '%s' "${!var:-}"
+}
+
+field() { sed -n "s/.* $1=\\([^ ]*\\).*/\\1/p" <<<" $2"; }
+
+# Ladder rows are `model effort seconds`; the light tier runs the last row
+# first, every other kind the first row.
+first_secs() { # first_secs <block>
+  awk -v tag='```'"$1" -v light="$([ "$tier" = light ] && echo 1 || echo 0)" '
+    $0 == tag { f = 1; next }
+    f && $0 == "```" { exit }
+    f && NF { last = $3; if (!seen++) first = $3 }
+    END { print (light ? last : first) }
+  ' "$LADDER"
+}
+
+open_ids=() lines_by_id=()
+bound=0
+for id in $ids; do
+  gate=$(seam "$id" GATE)
+  if [ -z "$gate" ]; then
+    gate=$(bash "$HERE/executors" path "$id" gate) || gate=""
+  fi
+  line=""
+  [ -n "$gate" ] && line=$(bash "$gate" 2>/dev/null | tail -1 | tr -d '\r')
+  if [[ " $line " == *" review=true "* ]]; then
+    open_ids+=("$id")
+    block=$(bash "$HERE/executors" get "$id" blocks.judge 2>/dev/null) || block="$id-judge"
+    secs=$(first_secs "$block")
+    [[ $secs =~ ^[0-9]+$ ]] || die "no seconds for the $block block in $LADDER"
+    case "$id" in agy) grace=70 ;; *) grace=60 ;; esac
+    [ $((secs + grace)) -gt "$bound" ] && bound=$((secs + grace))
+    continue
+  fi
+  if [ "$(field usable "$line")" = true ]; then
+    if [ -z "${CLAUDE_CODE_SESSION_ID:-}" ]; then reason=no-session-id; else reason=untrusted; fi
+  else
+    reason=$(field reason "$line")
+    [ -n "$reason" ] || reason=gate
+  fi
+  rm -f "$out_dir/$id.$ext"
+  lines_by_id+=("$id|$id-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=$reason")
+done
+bound=$((bound + 120))
+[ -z "${PANEL_BOUND_SECONDS:-}" ] || bound=$PANEL_BOUND_SECONDS
+
+have_setsid=false
+command -v setsid >/dev/null 2>&1 && have_setsid=true
+
+pids=()
+# A runner under setsid leads its own process group, so the whole group can be
+# signalled. setsid only forks when its caller already leads a group, which a
+# background job of a non-interactive shell never does, so the pid is the pgid.
+stop_runner() { # stop_runner <pid> <signal>
+  local pid=$1 sig=$2 kids k
+  if [ "$have_setsid" = true ]; then
+    kill "-$sig" -- "-$pid" 2>/dev/null
+    return
+  fi
+  # Without setsid the descendants are found before the runner dies: once it
+  # is gone they are reparented and pkill -P no longer reaches them.
+  if command -v pgrep >/dev/null 2>&1; then
+    kids=$(pgrep -P "$pid" 2>/dev/null)
+    while [ -n "$kids" ]; do
+      for k in $kids; do kill "-$sig" "$k" 2>/dev/null; done
+      kids=$(for k in $kids; do pgrep -P "$k" 2>/dev/null; done)
+    done
+  fi
+  kill "-$sig" "$pid" 2>/dev/null
+}
+stop_all() { local p; for p in ${pids[@]+"${pids[@]}"}; do [ -z "$p" ] || stop_runner "$p" TERM; done; }
+trap 'stop_all; exit 130' INT TERM
+
+for id in ${open_ids[@]+"${open_ids[@]}"}; do
+  runner=$(seam "$id" RUNNER)
+  if [ -z "$runner" ]; then
+    runner=$(bash "$HERE/executors" path "$id" runner) || runner=""
+  fi
+  rm -f "$out_dir/$id.status" "$out_dir/$id.timeout"
+  args=(--kind "$kind" --cwd "$cwd" --out "$out_dir/$id.$ext" "${src[@]}")
+  [ "$kind" = task ] && args+=(--tier "$tier")
+  if [ -z "$runner" ]; then
+    printf 'run-review-panel: no runner registered for %s\n' "$id" > "$out_dir/$id.stderr"
+    pids+=("")
+    continue
+  fi
+  if [ "$have_setsid" = true ]; then
+    setsid bash "$runner" "${args[@]}" > "$out_dir/$id.status" 2> "$out_dir/$id.stderr" < /dev/null &
+  else
+    bash "$runner" "${args[@]}" > "$out_dir/$id.status" 2> "$out_dir/$id.stderr" < /dev/null &
+  fi
+  pids+=("$!")
+done
+
+alive() { kill -0 "$1" 2>/dev/null; }
+any_alive() { local p; for p in ${pids[@]+"${pids[@]}"}; do [ -n "$p" ] && alive "$p" && return 0; done; return 1; }
+
+deadline=$(( $(date +%s) + bound ))
+while any_alive && [ "$(date +%s)" -lt "$deadline" ]; do sleep 0.5; done
+if any_alive; then
+  for i in "${!pids[@]}"; do
+    p=${pids[$i]}
+    [ -n "$p" ] && alive "$p" || continue
+    : > "$out_dir/${open_ids[$i]}.timeout"
+    stop_runner "$p" TERM
+  done
+  # A runner that traps TERM gets five seconds before KILL.
+  kill_at=$(( $(date +%s) + 5 ))
+  while any_alive && [ "$(date +%s)" -lt "$kill_at" ]; do sleep 0.5; done
+  for p in ${pids[@]+"${pids[@]}"}; do [ -n "$p" ] && alive "$p" && stop_runner "$p" KILL; done
+fi
+rcs=()
+for p in ${pids[@]+"${pids[@]}"}; do
+  rc=1
+  if [ -n "$p" ]; then wait "$p" 2>/dev/null; rc=$?; fi
+  rcs+=("$rc")
+done
+trap - INT TERM
+
+for i in "${!open_ids[@]}"; do
+  id=${open_ids[$i]}
+  out="$out_dir/$id.$ext"
+  if [ -e "$out_dir/$id.timeout" ]; then
+    rm -f "$out_dir/$id.timeout"
+    line="$id-judge none/none status=TIMEOUT exit=124 out=$out evidence=none reason=timeout"
+  else
+    line=$(tail -1 "$out_dir/$id.status" 2>/dev/null | tr -d '\r')
+    # A runner that died without its status line still gets a line, so the
+    # family is never silently missing from the panel.
+    if [[ "$line" != "$id-judge "*" status="* ]]; then
+      line="$id-judge none/none status=FAILED exit=${rcs[$i]} out=$out evidence=none reason=error"
+    fi
+  fi
+  lines_by_id+=("$id|$line")
+done
+
+lists=0
+for id in $ids; do
+  for entry in ${lines_by_id[@]+"${lines_by_id[@]}"}; do
+    [ "${entry%%|*}" = "$id" ] || continue
+    line=${entry#*|}
+    printf '%s\n' "$line"
+    case "$line" in *" status=OK "*|*" status=FALLBACK "*) lists=$((lists + 1)) ;; esac
+  done
+done
+printf 'panel tier=%s lists=%s\n' "$tier" "$lists"
