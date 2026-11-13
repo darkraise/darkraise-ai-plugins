@@ -541,3 +541,37 @@ test('mode off runs no git read beyond locating the root', async ($, on) => {
   await w.clock!.advance(20000)
   expect(w.calls.filter(call => call.startsWith('git ') && !call.includes('rev-parse'))).toEqual([])
 })
+
+test('Dense draws one line per card and Detailed brings the cards back', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ key: 'pane-density-hotkey' }))?.props.hotkey).toBe('d')
+  await pane.press({ key: 'pane-density' })
+  expect(w.stored.density).toBe('dense')
+  expect((await pane.find({ key: 'dense-plan' }))?.text).toMatch(/^plan {2}/)
+  expect(await pane.find({ key: 'plan' })).toBeUndefined()
+  expect((await pane.find({ key: 'pane-density' }))?.props.label).toBe('☰ Detailed')
+  const before = w.calls.filter(call => call === 'usage breakdown').length
+  await w.clock!.advance(10000)
+  expect(w.calls.filter(call => call === 'usage breakdown').length).toBe(before)
+  await pane.press({ key: 'pane-density' })
+  expect(w.stored.density).toBe('detailed')
+  expect(await pane.find({ key: 'plan' })).toBeDefined()
+})
+
+test('mode, density and collapsed cards hold across a session switch', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
+  w.stored.mode = 'pane'
+  w.stored.density = 'dense'
+  w.stored.collapsed = ['repo']
+  await $.session.start(START)
+  w.sessionId = 's2'
+  w.stored.density = 'detailed'
+  await w.clock!.advance(2000)
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ key: 'repo-title' }))?.props.label).toBe('▸ Repo')
+  expect(await pane.find({ key: 'plan' })).toBeDefined()
+  expect(w.isPaneUp).toBe(true)
+})

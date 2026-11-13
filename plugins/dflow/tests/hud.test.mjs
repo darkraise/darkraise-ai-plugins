@@ -11,6 +11,7 @@ import { accountCard } from '../hooks/hud/view.mjs';
 import { usageCard } from '../hooks/hud/view.mjs';
 import { repoFromPorcelain, repoName, shortDir } from '../hooks/hud/repo.mjs';
 import { repoCard } from '../hooks/hud/view.mjs';
+import { denseLines } from '../hooks/hud/view.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const hud = root => JSON.parse(read(root, '.dflow/hud.json'));
@@ -307,4 +308,32 @@ test('the Repo card reads dirty or clean', () => {
   const clean = repoCard({ repo: { branch: 'main', ahead: 0, behind: 0, changed: 0, untracked: 0 }, where: { ...where, remote: null } });
   assert.deepEqual([text(clean.headline), rowsOf(clean)], ['✓ clean', ['repo shop', 'dir  ~/code/shop', '⎇ main', 'clean']]);
   assert.deepEqual(rowsOf(repoCard({ repo: null, where })), ['dir  ~/code/shop']);
+});
+
+test('the dense layout is one labelled line per card', () => {
+  const now = 1_000_000_000_000;
+  const input = {
+    hud: PLAN_HUD,
+    account: accountFrom(CLAUDE_JSON, '', '/home/me'),
+    remote: { clients: [{ surface: 'mobile' }], setting: null },
+    context: { tokens: 118000, window: 1000000 },
+    usage: { limits: [{ kind: 'five_hour', percent: 23, resetsAt: now + 3 * H + 40 * 60_000 }, { kind: 'seven_day', percent: 61, resetsAt: now + 4 * 24 * H }], usd: 4.85, startedAt: now - 2 * H },
+    now,
+    repo: repoFromPorcelain(PORCELAIN),
+    where: { cwd: '/home/me/code/shop', root: '/home/me/code/shop', home: '/home/me', remote: null },
+    shown: ['account', 'plan', 'context', 'usage', 'checks', 'board', 'workers', 'repo'],
+  };
+  const lines = denseLines(input, 56).map(text);
+  assert.deepEqual(lines.map(line => line.split(' ')[0]), ['acct', 'plan', 'ctx', 'lim', 'chk', 'board', 'work', 'repo', 'next']);
+  assert.equal(lines[0], 'acct  you@example.com · subscription · Remote ●');
+  assert.match(lines[1], /^plan  [▰▱]{8} 4\/7 · Task 5 · 1 blocked$/);
+  assert.match(lines[2], /^ctx   [▰▱┃]{8} 79% of reset · 118k$/);
+  assert.equal(lines[4], 'chk   gates not run · review 1 blocking');
+  assert.equal(lines[6], 'work  Task 7');
+  assert.equal(lines[7], 'repo  ⎇ feat/x* ↑3 ↓1 ~2 ?1');
+  assert.ok(denseLines({ ...input, hud: { ...PLAN_HUD, workers: [] } }, 56).every(line => !text(line).startsWith('work')));
+  assert.ok(denseLines(input, 30).every(line => cellWidth(text(line)) <= 30));
+  assert.deepEqual(denseLines({ ...input, shown: ['repo', 'plan'] }, 56).map(line => text(line).split(' ')[0]), ['repo', 'plan', 'next']);
+  const noReset = denseLines({ ...input, hud: { ...PLAN_HUD, context: null } }, 56).map(text).find(line => line.startsWith('ctx'));
+  assert.match(noReset, /^ctx {3}[▰▱]{8} 118k of 1\.0M$/);
 });

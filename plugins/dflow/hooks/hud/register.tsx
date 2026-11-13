@@ -13,12 +13,14 @@ import {
   collapsedFrom,
   contextCard,
   contextFile,
+  denseLines,
   isResetFor,
   nextMode,
   nextRow,
   nowRow,
   planCard,
   repoCard,
+  SECTIONS,
   usageCard,
   workersCard,
 } from './view.mjs'
@@ -52,6 +54,7 @@ const contextAtom = atom(
   { plugin: 'dflow', key: 'context' } as const,
   null as HudContext | null,
 )
+const densityAtom = atom({ plugin: 'dflow', key: 'density' } as const, 'detailed' as 'detailed' | 'dense')
 const collapsedAtom = atom({ plugin: 'dflow', key: 'collapsed' } as const, [] as string[])
 const readingsAtom = atom({ plugin: 'dflow', key: 'readings' } as const, [] as number[])
 const breakdownAtom = atom(
@@ -170,6 +173,13 @@ function drawCard(table: any, card: Card, isCollapsed: boolean, onToggle: () => 
   )
 }
 
+async function toggleDensity($: any): Promise<void> {
+  const next = (await read($, densityAtom)) === 'dense' ? 'detailed' : 'dense'
+  await update($, densityAtom, () => next)
+  await $.store.set('density', next)
+  $.ui.invalidate('ui.render')
+}
+
 async function toggleCollapsed($: any, key: string): Promise<void> {
   const now = await read($, collapsedAtom)
   const next = now.includes(key) ? now.filter(one => one !== key) : [...now, key]
@@ -185,7 +195,12 @@ async function isPaneUp($: any): Promise<boolean> {
 // Read only while an open Context card can show it.
 async function readBreakdown($: any): Promise<void> {
   try {
-    if ((await read($, modeAtom)) !== 'pane' || (await read($, collapsedAtom)).includes('context') || !(await isPaneUp($))) {
+    if (
+      (await read($, modeAtom)) !== 'pane' ||
+      (await read($, densityAtom)) === 'dense' ||
+      (await read($, collapsedAtom)).includes('context') ||
+      !(await isPaneUp($))
+    ) {
       return
     }
 
@@ -353,6 +368,9 @@ async function loadMode($: any): Promise<void> {
   if (stored === 'band' || stored === 'pane' || stored === 'off') {
     await update($, modeAtom, () => stored)
   }
+
+  const density = await $.store.get('density')
+  await update($, densityAtom, () => (density === 'dense' ? 'dense' : 'detailed'))
 
   const collapsed = collapsedFrom(await $.store.get('collapsed'))
   await update($, collapsedAtom, () => collapsed)
@@ -670,6 +688,44 @@ export const register: Register = on => {
       account === null
         ? null
         : accountCard({ account, engine: await read($, engineAtom), remote: await read($, remoteAtom) })
+    const isDense = (await read($, densityAtom)) === 'dense'
+    const minimize = () => setMode($, 'band')
+
+    if (isDense) {
+      const lines = denseLines(
+        {
+          hud,
+          account,
+          remote: await read($, remoteAtom),
+          context,
+          usage: await read($, usageAtom),
+          now: await $.clock.now(),
+          repo: await read($, repoAtom),
+          where,
+          shown: SECTIONS,
+        },
+        columns,
+      )
+
+      return (
+        <Box flexDirection="column">
+          <Box key="now">
+            <Text wrap="truncate-end">{drawRuns(table, 'now', runsCut(nowRow(hud), columns))}</Text>
+          </Box>
+          <Box key="controls" flexDirection="row" columnGap={1}>
+            {drawButton(table, 'pane-density', '☰ Detailed', () => toggleDensity($), { hotkey: 'd', isCompact: true })}
+            {drawButton(table, 'pane-minimize', '▁ Minimize', minimize, { hotkey: 'm', isCompact: true })}
+            {drawButton(table, 'context-compact', '⇣ Compact', compact, { hotkey: 'c', isMain: isPastReset, isCompact: true })}
+          </Box>
+          {lines.map((line: Run[] & { key: string }) => (
+            <Box key={`dense-${line.key}`}>
+              <Text wrap="truncate-end">{drawRuns(table, `dense-${line.key}`, line)}</Text>
+            </Box>
+          ))}
+        </Box>
+      )
+    }
+
     const extras: Record<string, unknown[]> = {
       context: [drawButton(table, 'context-compact', '⇣ Compact', compact, { hotkey: 'c', isMain: isPastReset })],
     }
@@ -682,7 +738,8 @@ export const register: Register = on => {
         {accountShown &&
           drawCard(table, accountShown, collapsed.includes('account'), () => toggleCollapsed($, 'account'))}
         <Box key="controls" flexDirection="row" columnGap={1}>
-          {drawButton(table, 'pane-minimize', '▁ Minimize', () => setMode($, 'band'), { hotkey: 'm' })}
+          {drawButton(table, 'pane-density', '≡ Dense', () => toggleDensity($), { hotkey: 'd' })}
+          {drawButton(table, 'pane-minimize', '▁ Minimize', minimize, { hotkey: 'm' })}
         </Box>
         {cards.map(card =>
           drawCard(table, card, collapsed.includes(card.key), () => toggleCollapsed($, card.key), extras[card.key]),

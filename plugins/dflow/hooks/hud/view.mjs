@@ -3,7 +3,7 @@
 
 import { billingLabel, modelName, remoteRuns } from './account.mjs';
 import { repoName, shortDir } from './repo.mjs';
-import { duration, kTokens, limitForecast, limitLabel, bar as meterBar, rampColor, sparkline, stackedRuns, track, trackRuns, windowElapsed } from './meter.mjs';
+import { duration, kTokens, limitForecast, limitLabel, bar as meterBar, rampColor, runsCut, sparkline, stackedRuns, track, trackRuns, windowElapsed } from './meter.mjs';
 
 export const MODES = ['band', 'pane', 'off'];
 export const RESET_FRESH_MS = 10 * 60 * 1000;
@@ -361,4 +361,107 @@ export function repoCard({ repo, where }) {
   const changes = [repo.changed ? `~${repo.changed} changed` : '', repo.untracked ? `?${repo.untracked} untracked` : ''].filter(Boolean);
   card.rows.push(changes.length ? [{ text: changes.join(' '), color: 'yellow' }] : [{ text: 'clean', dim: true }]);
   return card;
+}
+
+const DENSE_LABELS = { account: 'acct', plan: 'plan', context: 'ctx', usage: 'lim', checks: 'chk', board: 'board', workers: 'work', repo: 'repo' };
+const DENSE_METER = 8;
+
+function denseAccount({ account, remote }) {
+  if (!account) return null;
+  if (!account.email) return [{ text: `config ${account.key}`, dim: true }];
+  const billing = billingLabel(account.billing);
+  return [
+    { text: account.email },
+    ...(billing ? [{ text: ` · ${billing}`, dim: true }] : []),
+    { text: ' · Remote ', dim: true },
+    remote?.clients?.length ? { text: '●', color: 'green' } : { text: '○', dim: true },
+  ];
+}
+
+function densePlan({ hud }) {
+  const { plan } = hud;
+  if (!plan) return [{ text: `No active plan on ${hud.branch ?? 'this checkout'}`, dim: true }];
+  const runs = [];
+  if (plan.total > 0) runs.push(...meterRuns(plan.done / plan.total, DENSE_METER), { text: ' ' });
+  runs.push({ text: `${plan.done}/${plan.total}` });
+  if (plan.current) runs.push({ text: ` · Task ${plan.current.number}` });
+  if (plan.blocked.length) runs.push({ text: ' · ' }, { text: `${plan.blocked.length} blocked`, color: 'red' });
+  return runs;
+}
+
+function denseContext({ hud, context }) {
+  if (typeof context?.tokens !== 'number') return null;
+  const { tokens, window } = context;
+  const resetAt = hud.context?.resetAt ?? null;
+  const ramp = rampColor(resetAt ? (tokens / resetAt) * 100 : (tokens / window) * 100);
+  const marks = resetAt ? [{ at: resetAt / window, glyph: '┃', name: 'reset' }] : [];
+  const meter = trackRuns(track(tokens / window, DENSE_METER, marks), ramp, { reset: ramp });
+  if (!resetAt) return [...meter, { text: ` ${kTokens(tokens)} of ${kTokens(window)}`, dim: true }];
+  return [...meter, { text: ` ${Math.round((tokens / resetAt) * 100)}% of reset`, color: ramp }, { text: ` · ${kTokens(tokens)}`, dim: true }];
+}
+
+function denseUsage({ usage, now }) {
+  if (!usage || (!usage.limits.length && usage.usd === null)) return null;
+  const parts = [];
+  for (const kind of WINDOWED) {
+    const limit = usage.limits.find(one => one.kind === kind);
+    if (!limit) continue;
+    const runs = [{ text: `${limitLabel(kind)} ` }, { text: `${Math.round(limit.percent)}%`, color: rampColor(limit.percent) }];
+    if (kind === 'five_hour') {
+      const forecast = limitForecast(kind, limit.percent, limit.resetsAt, now);
+      if (forecast === 'pace') runs.push({ text: ' on pace', color: 'green' });
+      else if (typeof forecast === 'number') runs.push({ text: ` out in ${duration(forecast)}`, color: '#ff8700' });
+    }
+    parts.push(runs);
+  }
+  if (usage.usd !== null) parts.push([{ text: `$${usage.usd.toFixed(2)}`, dim: true }]);
+  return parts.flatMap((runs, index) => (index ? [{ text: ' · ', dim: true }, ...runs] : runs));
+}
+
+function denseChecks({ hud }) {
+  if (!hud.plan) return null;
+  const { gates, review } = hud;
+  let gate = [{ text: 'not run', dim: true }];
+  if (gates && !gates.ok) gate = [{ text: `✗ ${gates.failed.join(', ')}`, color: 'red' }];
+  else if (gates?.ok) gate = [{ text: '✓ passed', color: 'green' }];
+  let verdict = [{ text: 'not run', dim: true }];
+  if (review?.blocking) verdict = [{ text: `${review.blocking} blocking`, color: 'red' }];
+  else if (review?.recorded) verdict = [{ text: `tier ${review.recorded.tier}` }];
+  return [{ text: 'gates ' }, ...gate, { text: ' · review ' }, ...verdict];
+}
+
+function denseBoard({ hud }) {
+  const { board, sync } = hud;
+  if (!board && !sync?.enabled) return null;
+  const parts = [];
+  if (board?.row) parts.push([{ text: `#${board.row.number} ${board.row.state}` }]);
+  else if (board) parts.push([{ text: `${Object.values(board.counts).reduce((sum, count) => sum + count, 0)} rows` }]);
+  if (sync?.enabled) {
+    parts.push(sync.conflict ? [{ text: 'darkmem ✗ conflict: run dflow sync pull', color: 'red' }] : [{ text: `darkmem ${sync.queued ?? 0} queued` }]);
+  }
+  return parts.flatMap((runs, index) => (index ? [{ text: ' · ', dim: true }, ...runs] : runs));
+}
+
+function denseWorkers({ hud }) {
+  if (!hud.workers?.length) return null;
+  return [{ text: hud.workers.map(worker => `Task ${worker.task}`).join(', '), color: 'magenta' }];
+}
+
+function denseRepo({ repo, where }) {
+  if (!repo) return where ? [{ text: shortDir(where.cwd, where.home), dim: true }] : null;
+  const isDirty = repo.changed + repo.untracked > 0;
+  const counts = [repo.ahead ? `↑${repo.ahead}` : '', repo.behind ? `↓${repo.behind}` : '', repo.changed ? `~${repo.changed}` : '', repo.untracked ? `?${repo.untracked}` : ''].filter(Boolean);
+  return [{ text: `⎇ ${repo.branch}` }, ...(isDirty ? [{ text: '*', color: 'yellow' }] : []), ...(counts.length ? [{ text: ` ${counts.join(' ')}`, dim: true }] : [])];
+}
+
+const DENSE_CONTENT = { account: denseAccount, plan: densePlan, context: denseContext, usage: denseUsage, checks: denseChecks, board: denseBoard, workers: denseWorkers, repo: denseRepo };
+
+// One labelled line per shown card with something to show, then the Next line.
+export function denseLines(input, width) {
+  const lines = input.shown.flatMap(key => {
+    const runs = DENSE_CONTENT[key]?.(input);
+    return runs ? [{ key, runs: [{ text: DENSE_LABELS[key].padEnd(6), bold: true }, ...runs] }] : [];
+  });
+  lines.push({ key: 'next', runs: [{ text: 'next  ', bold: true }, { text: input.hud.next }] });
+  return lines.map(line => Object.assign(runsCut(line.runs, width), { key: line.key }));
 }
