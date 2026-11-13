@@ -1,8 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { Hud, HudAccount, HudBreakdown, HudContext, HudEngine, HudRemote, HudUsage, Mode } from '../../types'
+import type { Hud, HudAccount, HudBreakdown, HudContext, HudEngine, HudRemote, HudRepo, HudUsage, HudWhere, Mode } from '../../types'
 import { accountFrom } from './account.mjs'
+import { repoFromPorcelain } from './repo.mjs'
 import {
   RESET_INSTRUCTIONS,
   accountCard,
@@ -17,6 +18,7 @@ import {
   nextRow,
   nowRow,
   planCard,
+  repoCard,
   usageCard,
   workersCard,
 } from './view.mjs'
@@ -30,6 +32,9 @@ const COMMAND = 'dflow:hud'
 const POLL_MS = 2000
 // The breakdown is a local estimate, but still a walk of the transcript.
 const BREAKDOWN_EVERY = 5
+// git status on every fifth poll: a change shows within ten seconds.
+const GIT_EVERY = 5
+const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'status', '--porcelain=v2', '--branch']
 const READINGS_KEPT = 40
 const REWRITE_MS = 5 * 60 * 1000
 const PANE_COLUMNS = 56
@@ -55,6 +60,8 @@ const breakdownAtom = atom(
 )
 const accountAtom = atom({ plugin: 'dflow', key: 'account' } as const, null as HudAccount | null)
 const engineAtom = atom({ plugin: 'dflow', key: 'engine' } as const, { model: null, effort: null } as HudEngine)
+const repoAtom = atom({ plugin: 'dflow', key: 'repo' } as const, null as HudRepo | null)
+const whereAtom = atom({ plugin: 'dflow', key: 'where' } as const, null as HudWhere | null)
 const usageAtom = atom({ plugin: 'dflow', key: 'usage' } as const, null as HudUsage | null)
 const remoteAtom = atom({ plugin: 'dflow', key: 'remote' } as const, { clients: [], setting: null } as HudRemote)
 
@@ -70,6 +77,8 @@ let polls = 0
 // The account, model and Remote Control are read once a session, and never
 // while the mode is off.
 let hasReadAccount = false
+let hasReadWhere = false
+let startCwd = ''
 // Read on a session switch, since a render hook makes no engine call.
 let canUnderline = false
 
@@ -281,6 +290,42 @@ async function readRemote($: any): Promise<void> {
   }
 }
 
+// The folder, the root and the origin remote, once a session; no git runs
+// while the mode is off.
+async function readWhere($: any): Promise<void> {
+  try {
+    const remote = await $.process.run(['git', 'remote', 'get-url', 'origin'], { cwd: root, timeoutMs: 3000 })
+    const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE')) || null
+    await update($, whereAtom, () => ({
+      cwd: startCwd || root,
+      root,
+      home,
+      remote: remote.exitCode === 0 ? remote.stdout.trim() || null : null,
+    }))
+  } catch {
+    // The card shows the folder from the next session's reading.
+  }
+}
+
+// A failing git call keeps the last reading.
+async function readRepo($: any): Promise<void> {
+  try {
+    if (!root || (await read($, modeAtom)) === 'off') {
+      return
+    }
+
+    const found = await $.process.run(GIT_STATUS, { cwd: root, timeoutMs: 3000 })
+    const next = found.exitCode === 0 ? repoFromPorcelain(found.stdout) : null
+
+    if (next !== null && JSON.stringify(next) !== JSON.stringify(await read($, repoAtom))) {
+      await update($, repoAtom, () => next)
+      $.ui.invalidate('ui.render')
+    }
+  } catch {
+    // The last reading stands.
+  }
+}
+
 async function readVersion($: any): Promise<void> {
   try {
     const { base } = await $.session.version()
@@ -334,6 +379,7 @@ async function readState($: any): Promise<void> {
     lastTokens = -1
     root = ''
     hasReadAccount = false
+    hasReadWhere = false
     await loadMode($)
     await readVersion($)
 
@@ -397,6 +443,11 @@ async function readState($: any): Promise<void> {
         at: new Date(now).toISOString(),
       }),
     )
+  }
+
+  if (!hasReadWhere && (await read($, modeAtom)) !== 'off') {
+    hasReadWhere = true
+    await readWhere($)
   }
 
   if (!(await $.fs.exists(`${root}/.dflow/hud.json`))) {
@@ -472,6 +523,7 @@ async function setMode($: any, mode: Mode): Promise<void> {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
+    startCwd = e.cwd ?? ''
     sessionId = ''
     await refresh($)
 
@@ -483,6 +535,10 @@ export const register: Register = on => {
 
       if (polls % BREAKDOWN_EVERY === 0) {
         await readBreakdown($)
+      }
+
+      if (polls % GIT_EVERY === 0) {
+        await readRepo($)
       }
     })
 
@@ -595,6 +651,7 @@ export const register: Register = on => {
     const collapsed = await read($, collapsedAtom)
     const inner = Math.max(10, columns - 4)
     const context = await read($, contextAtom)
+    const where = await read($, whereAtom)
     const cards = [
       planCard(hud, inner),
       contextCard({ hud, context, breakdown: await read($, breakdownAtom), readings: await read($, readingsAtom), width: inner }),
@@ -602,6 +659,7 @@ export const register: Register = on => {
       checksCard(hud),
       boardCard(hud),
       workersCard(hud),
+      ...(where === null ? [] : [repoCard({ repo: await read($, repoAtom), where })]),
     ].filter((card): card is Card => card !== null)
     const isPastReset =
       typeof context?.tokens === 'number' && typeof hud.context?.resetAt === 'number' && context.tokens >= hud.context.resetAt

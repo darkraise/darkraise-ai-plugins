@@ -9,6 +9,8 @@ import { contextCard } from '../hooks/hud/view.mjs';
 import { accountColor, accountFrom, accountKey, billingLabel, modelName, remoteRuns } from '../hooks/hud/account.mjs';
 import { accountCard } from '../hooks/hud/view.mjs';
 import { usageCard } from '../hooks/hud/view.mjs';
+import { repoFromPorcelain, repoName, shortDir } from '../hooks/hud/repo.mjs';
+import { repoCard } from '../hooks/hud/view.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const hud = root => JSON.parse(read(root, '.dflow/hud.json'));
@@ -285,4 +287,24 @@ test('the Usage card without windows shows the cost alone, and nothing without e
   assert.deepEqual([text(card.headline), card.rows], ['$4.80 · $2.40/h', []]);
   assert.equal(usageCard({ usage: { limits: [], usd: null, startedAt: now }, now, width: 50 }), null);
   assert.equal(usageCard({ usage: null, now, width: 50 }), null);
+});
+
+const PORCELAIN = '# branch.oid abc1234def\n# branch.head feat/x\n# branch.ab +3 -1\n1 .M N... 100644 100644 100644 a b src/a.mjs\r\n1 M. N... 100644 100644 100644 a b src/b.mjs\n? notes.txt\n';
+
+test('git porcelain, the repository name and the folder', () => {
+  assert.deepEqual(repoFromPorcelain(PORCELAIN), { branch: 'feat/x', ahead: 3, behind: 1, changed: 2, untracked: 1 });
+  assert.equal(repoFromPorcelain('# branch.oid abc1234def\n# branch.head (detached)\n').branch, '@abc1234');
+  assert.equal(repoFromPorcelain(''), null);
+  assert.deepEqual([repoName('git@github.com:darkraise/shop.git', '/x/shop'), repoName('https://github.com/darkraise/shop', '/x'), repoName(null, '/home/me/code/shop')], ['darkraise/shop', 'darkraise/shop', 'shop']);
+  assert.deepEqual([shortDir('/home/me/code/shop', '/home/me'), shortDir('C:\\Users\\me\\shop', 'C:\\Users\\me'), shortDir('/srv/shop', '/home/me')], ['~/code/shop', '~/shop', '/srv/shop']);
+});
+
+test('the Repo card reads dirty or clean', () => {
+  const where = { cwd: '/home/me/code/shop', root: '/home/me/code/shop', home: '/home/me', remote: 'git@github.com:darkraise/shop.git' };
+  const card = repoCard({ repo: repoFromPorcelain(PORCELAIN), where });
+  assert.deepEqual([card.key, card.color, text(card.headline)], ['repo', 'green', '● dirty']);
+  assert.deepEqual(rowsOf(card), ['repo darkraise/shop', 'dir  ~/code/shop', '⎇ feat/x ↑3 ↓1', '~2 changed ?1 untracked']);
+  const clean = repoCard({ repo: { branch: 'main', ahead: 0, behind: 0, changed: 0, untracked: 0 }, where: { ...where, remote: null } });
+  assert.deepEqual([text(clean.headline), rowsOf(clean)], ['✓ clean', ['repo shop', 'dir  ~/code/shop', '⎇ main', 'clean']]);
+  assert.deepEqual(rowsOf(repoCard({ repo: null, where })), ['dir  ~/code/shop']);
 });

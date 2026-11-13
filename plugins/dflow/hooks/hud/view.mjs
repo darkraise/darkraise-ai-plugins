@@ -2,6 +2,7 @@
 // access here: the hooks module passes plain values in.
 
 import { billingLabel, modelName, remoteRuns } from './account.mjs';
+import { repoName, shortDir } from './repo.mjs';
 import { duration, kTokens, limitForecast, limitLabel, bar as meterBar, rampColor, sparkline, stackedRuns, track, trackRuns, windowElapsed } from './meter.mjs';
 
 export const MODES = ['band', 'pane', 'off'];
@@ -338,5 +339,26 @@ export function usageCard({ usage, now, width }) {
     if (WINDOWED.includes(limit.kind)) card.rows.push(...windowRows(limit, now, width));
     else card.rows.push([{ text: `${limitLabel(limit.kind)} ${Math.round(limit.percent)}%`, color: rampColor(limit.percent) }]);
   }
+  return card;
+}
+
+// The repository and the working folder; with no git reading yet, the folder alone.
+export function repoCard({ repo, where }) {
+  const card = { key: 'repo', title: 'Repo', color: 'green', headline: [], rows: [] };
+  const dir = [{ text: `dir  ${shortDir(where.cwd, where.home)}` }];
+  if (!repo) {
+    card.rows.push(dir);
+    return card;
+  }
+  const isDirty = repo.changed + repo.untracked > 0;
+  card.headline = isDirty ? [{ text: '● dirty', color: 'yellow' }] : [{ text: '✓ clean', color: 'green' }];
+  card.rows.push([{ text: `repo ${repoName(where.remote, where.root ?? where.cwd)}` }], dir);
+  card.rows.push([
+    { text: `⎇ ${repo.branch}` },
+    ...(repo.ahead ? [{ text: ` ↑${repo.ahead}`, color: 'green' }] : []),
+    ...(repo.behind ? [{ text: ` ↓${repo.behind}`, color: 'yellow' }] : []),
+  ]);
+  const changes = [repo.changed ? `~${repo.changed} changed` : '', repo.untracked ? `?${repo.untracked} untracked` : ''].filter(Boolean);
+  card.rows.push(changes.length ? [{ text: changes.join(' '), color: 'yellow' }] : [{ text: 'clean', dim: true }]);
   return card;
 }

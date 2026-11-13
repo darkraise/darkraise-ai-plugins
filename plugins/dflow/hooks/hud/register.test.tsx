@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
+import { accountColor } from './account.mjs'
 import { cellWidth } from './meter.mjs'
 
 const HUD = {
@@ -491,4 +492,52 @@ test('the Usage card shows the limits and cost the engine reports', async ($, on
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'usage-headline' }))?.text).toBe('$4.80 · $2.40/h')
   expect((await pane.find({ key: 'usage-row-1' }))?.text).toBe('    resets in 3h40m · on pace')
+})
+
+const GIT_STATUS = '--no-optional-locks -c core.fsmonitor=false status --porcelain=v2 --branch'
+
+test('git status runs every ten seconds while shown and never while off', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, porcelain: '# branch.head feat/x\n# branch.ab +3 -0\n', remoteUrl: 'git@github.com:darkraise/shop.git' })
+  await $.session.start(START)
+  await w.clock!.advance(10000)
+  expect(w.calls.filter(call => call.includes(GIT_STATUS)).length).toBeGreaterThanOrEqual(1)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ key: 'repo-row-0' }))?.text).toBe('repo darkraise/shop')
+  expect((await pane.find({ key: 'repo-headline' }))?.text).toBe('✓ clean')
+  w.porcelain = undefined
+  await w.clock!.advance(10000)
+  await pane.unmount()
+  const after = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await after.find({ key: 'repo-headline' }))?.text).toBe('✓ clean')
+  await after.unmount()
+  await $.command.run({ command: 'dflow:hud', args: 'off' })
+  const before = w.calls.filter(call => call.includes(GIT_STATUS)).length
+  await w.clock!.advance(20000)
+  expect(w.calls.filter(call => call.includes(GIT_STATUS)).length).toBe(before)
+})
+
+test('the pane draws every card in order, each framed in its color', async ($, on) => {
+  world(on, {
+    files: { [HUD_FILE]: JSON.stringify(HUD), '/home/me/.claude.json': JSON.stringify({ oauthAccount: { emailAddress: 'you@example.com' } }) },
+    usd: 1,
+    porcelain: '# branch.head feat/x\n',
+  })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const at = await order(pane, [/^● Task 5/, /^▾ Account$/, /^M$/, /^▾ Plan$/, /^▾ Context$/, /^▾ Usage$/, /^▾ Checks$/, /^▾ Board$/, /^▾ Workers$/, /^▾ Repo$/, /^Next {2}/])
+  expect(at.every(index => index >= 0)).toBe(true)
+  expect([...at].sort((a, b) => a - b)).toEqual(at)
+  const colors: Record<string, string> = { plan: 'yellow', context: 'cyan', usage: 'blue', checks: 'red', board: 'white', workers: 'magenta', repo: 'green' }
+  for (const [key, color] of Object.entries(colors)) expect((await pane.find({ key }))?.props).toMatchObject({ borderStyle: 'round', borderColor: color })
+  expect((await pane.find({ key: 'account' }))?.props.borderColor).toBe(accountColor('~/.claude'))
+})
+
+test('mode off runs no git read beyond locating the root', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, porcelain: '# branch.head feat/x\n', remoteUrl: 'git@github.com:darkraise/shop.git' })
+  w.stored.mode = 'off'
+  await $.session.start(START)
+  await w.clock!.advance(20000)
+  expect(w.calls.filter(call => call.startsWith('git ') && !call.includes('rev-parse'))).toEqual([])
 })

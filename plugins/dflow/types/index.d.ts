@@ -53,6 +53,10 @@ export type HudUsage = {
   startedAt: number
 }
 
+export type HudRepo = { branch: string; ahead: number; behind: number; changed: number; untracked: number }
+
+export type HudWhere = { cwd: string; root: string | null; home: string | null; remote: string | null }
+
 export type HudBreakdown = {
   rows: { name: string; tokens: number }[]
   compactAt: number | null
@@ -72,6 +76,8 @@ declare module 'claude-code' {
       engine: HudEngine
       remote: HudRemote
       usage: HudUsage | null
+      repo: HudRepo | null
+      where: HudWhere | null
     }
   }
 }
