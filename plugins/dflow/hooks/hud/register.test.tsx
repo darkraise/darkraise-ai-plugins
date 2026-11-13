@@ -161,7 +161,7 @@ function world(on: any, given: Partial<World> & { files: Record<string, string> 
       throw new Error('busy')
     }
     // A compaction leaves at least one message, or the engine skips the hook.
-    return { messages: e.messages ?? [{ role: 'user', text: 'Summary.', toolUses: [] }] }
+    return { messages: e.messages?.length ? e.messages : [{ role: 'user', text: 'Summary.', toolUses: [] }] }
   })
   on('prompt.submit', (_: unknown, e: any) => {
     w.calls.push(`submit ${e.text}`)
@@ -646,4 +646,81 @@ test('/dflow:hud sections sets the list or names the valid cards', async ($, on)
   w.isPaneUp = false
   await $.command.run({ command: 'dflow:hud', args: 'sections' })
   expect(w.isPaneUp).toBe(true)
+})
+
+const RESUMABLE = { ...HUD, plan: { ...HUD.plan, approved: '2026-11-12' } }
+
+test('a session starting on an unfinished plan offers to resume it in the pane and the band', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(RESUMABLE) } })
+  await $.session.start(START)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await band.find({ type: 'Text', text: /↻ Resumable work · Rate-limit meter/ }))?.text).toContain('Next: Task 5: Wire the meter')
+  expect((await band.find({ key: 'band-resume-go' }))?.props.hotkey).toBeUndefined()
+  await band.unmount()
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ key: 'resume-go-hotkey' }))?.props.hotkey).toBe('r')
+  const texts = (await pane.findAll({ type: 'Text' })).map((one: any) => one.text)
+  expect(texts.findIndex((text: string) => text.startsWith('↻ Resumable work'))).toBeLessThan(texts.findIndex((text: string) => text.startsWith('● Task 5')))
+  await pane.press({ key: 'resume-go' })
+  expect(w.calls.filter(call => call === 'command /dflow:build')).toHaveLength(1)
+  expect(w.calls.some(call => call.startsWith('submit'))).toBe(false)
+  expect(await pane.find({ key: 'resume-go' })).toBeUndefined()
+  const after = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await after.find({ key: 'band-resume-go' })).toBeUndefined()
+})
+
+test('Dismiss removes the offer without submitting anything', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(RESUMABLE) } })
+  await $.session.start(START)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await band.press({ key: 'band-resume-dismiss' })
+  expect(await band.find({ key: 'band-resume-go' })).toBeUndefined()
+  expect(w.calls.some(call => call.startsWith('submit'))).toBe(false)
+  await band.unmount()
+  await $.session.compact({ trigger: 'manual', messages: [] })
+  await w.clock!.advance(2000)
+  const later = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await later.find({ key: 'band-resume-go' })).toBeUndefined()
+})
+
+test('no offer after a build runs, progress moves, or for an unapproved plan', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(RESUMABLE) } })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:build' })
+  let band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ key: 'band-resume-go' })).toBeUndefined()
+  await band.unmount()
+  await $.session.compact({ trigger: 'manual', messages: [] })
+  await w.clock!.advance(2000)
+  band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ key: 'band-resume-go' })).toBeUndefined()
+  await band.unmount()
+  w.sessionId = 's2'
+  await w.clock!.advance(2000)
+  band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ key: 'band-resume-go' })).toBeDefined()
+  await band.unmount()
+  w.files[HUD_FILE] = JSON.stringify({ ...RESUMABLE, plan: { ...RESUMABLE.plan, done: 5 } })
+  await w.clock!.advance(2000)
+  band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ key: 'band-resume-go' })).toBeUndefined()
+  await band.unmount()
+  w.files[HUD_FILE] = JSON.stringify(HUD)
+  w.sessionId = 's3'
+  await w.clock!.advance(2000)
+  band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ key: 'band-resume-go' })).toBeUndefined()
+})
+
+test('drawing the band and the pane makes no file, process or usage call', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const before = w.calls.length
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await pane.unmount()
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await band.unmount()
+  expect(w.calls.slice(before)).toEqual([])
 })

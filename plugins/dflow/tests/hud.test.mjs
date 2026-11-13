@@ -14,6 +14,7 @@ import { repoCard } from '../hooks/hud/view.mjs';
 import { denseLines } from '../hooks/hud/view.mjs';
 import { BAND_TIERS, bandLines, bandTop, bandWarning, fitBand } from '../hooks/hud/band.mjs';
 import { sectionsArg, sectionsFrom, sectionsMoved, sectionsToggled } from '../hooks/hud/view.mjs';
+import { isOfferOver, resumeOffer } from '../hooks/hud/view.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const hud = root => JSON.parse(read(root, '.dflow/hud.json'));
@@ -383,4 +384,17 @@ test('the sections list is parsed, toggled and moved', () => {
   assert.deepEqual(sectionsToggled(['plan', 'context'], 'repo'), ['plan', 'context', 'repo']);
   assert.deepEqual(sectionsMoved(['plan', 'context', 'repo'], 'plan', 1), ['context', 'plan', 'repo']);
   assert.deepEqual(sectionsMoved(['plan', 'context'], 'plan', -1), ['plan', 'context']);
+});
+
+test('an approved, unfinished plan with a current task is offered for resuming', () => {
+  const approved = { ...PLAN_HUD, plan: { ...PLAN_HUD.plan, approved: '2026-11-12' } };
+  assert.deepEqual(resumeOffer(approved), { title: 'Rate-limit meter', next: 'Task 5: Wire the meter (in progress)' });
+  assert.equal(resumeOffer({ ...approved, plan: { ...approved.plan, current: { number: 7, title: 'Draw the meter', state: 'todo' } } }).next, 'Task 7: Draw the meter (ready)');
+  assert.equal(resumeOffer(PLAN_HUD), null);
+  assert.equal(resumeOffer({ ...approved, plan: { ...approved.plan, done: 7, current: null } }), null);
+  assert.equal(resumeOffer({ ...approved, plan: { ...approved.plan, current: null } }), null);
+  assert.equal(resumeOffer({ ...approved, plan: null }), null);
+  assert.equal(isOfferOver(approved, approved), false);
+  assert.equal(isOfferOver(approved, { ...approved, plan: { ...approved.plan, done: 5 } }), true);
+  assert.equal(isOfferOver(approved, { ...approved, plan: { ...approved.plan, current: { ...approved.plan.current, number: 6 } } }), true);
 });

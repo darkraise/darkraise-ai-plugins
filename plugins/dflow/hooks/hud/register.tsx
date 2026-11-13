@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { Hud, HudAccount, HudBreakdown, HudContext, HudEngine, HudRemote, HudRepo, HudUsage, HudWhere, Mode } from '../../types'
+import type { Hud, HudAccount, HudBreakdown, HudContext, HudEngine, HudOffer, HudRemote, HudRepo, HudUsage, HudWhere, Mode } from '../../types'
 import { accountFrom } from './account.mjs'
 import { repoFromPorcelain } from './repo.mjs'
 import {
@@ -13,12 +13,14 @@ import {
   contextCard,
   contextFile,
   denseLines,
+  isOfferOver,
   isResetFor,
   nextMode,
   nextRow,
   nowRow,
   planCard,
   repoCard,
+  resumeOffer,
   SECTIONS,
   sectionsArg,
   sectionsFrom,
@@ -64,6 +66,7 @@ const contextAtom = atom(
 const densityAtom = atom({ plugin: 'dflow', key: 'density' } as const, 'detailed' as 'detailed' | 'dense')
 const collapsedAtom = atom({ plugin: 'dflow', key: 'collapsed' } as const, [] as string[])
 const sectionsAtom = atom({ plugin: 'dflow', key: 'sections' } as const, [...SECTIONS] as string[])
+const offerAtom = atom({ plugin: 'dflow', key: 'offer' } as const, null as HudOffer | null)
 const viewAtom = atom({ plugin: 'dflow', key: 'view' } as const, 'cards' as 'cards' | 'sections')
 const readingsAtom = atom({ plugin: 'dflow', key: 'readings' } as const, [] as number[])
 const breakdownAtom = atom(
@@ -98,6 +101,9 @@ let startCwd = ''
 let canUnderline = false
 // Back closes a pane that /dflow:hud sections opened from the band.
 let isSectionsFromBand = false
+// The resume offer is made once a session, from its first hud.json reading;
+// a compaction keeps the session and makes none.
+let isOfferDue = false
 
 type ButtonLook = { hotkey?: string; isMain?: boolean; isOff?: boolean; isCompact?: boolean }
 
@@ -491,6 +497,7 @@ async function readState($: any): Promise<void> {
     root = ''
     hasReadAccount = false
     hasReadWhere = false
+    isOfferDue = true
     await loadMode($)
     await readVersion($)
 
@@ -564,6 +571,8 @@ async function readState($: any): Promise<void> {
   }
 
   if (!(await $.fs.exists(`${root}/.dflow/hud.json`))) {
+    isOfferDue = false
+
     return
   }
 
@@ -578,11 +587,44 @@ async function readState($: any): Promise<void> {
   try {
     const hud = JSON.parse(text) as Hud
     await update($, hudAtom, () => hud)
+    await settleOffer($, hud)
     $.ui.invalidate('ui.render')
   } catch {
     // A file caught mid-write is read again on the next poll.
     lastText = ''
   }
+}
+
+async function settleOffer($: any, hud: Hud): Promise<void> {
+  if (isOfferDue) {
+    isOfferDue = false
+    const offer = resumeOffer(hud)
+    await update($, offerAtom, () => (offer === null ? null : { ...offer, start: hud }))
+
+    return
+  }
+
+  const offer = await read($, offerAtom)
+
+  if (offer !== null && isOfferOver(offer.start, hud)) {
+    await update($, offerAtom, () => null)
+  }
+}
+
+async function clearOffer($: any): Promise<void> {
+  await update($, offerAtom, () => null)
+  $.ui.invalidate('ui.render')
+}
+
+// The offer goes before the build runs, so a second press runs nothing. The
+// host refuses a prompt that starts with `/`, so the command runs directly.
+async function resume($: any): Promise<void> {
+  if ((await read($, offerAtom)) === null) {
+    return
+  }
+
+  await clearOffer($)
+  await $.command.run({ command: 'dflow:build' })
 }
 
 // `dflow done` leaves a flag when the context has passed the threshold and
@@ -752,7 +794,20 @@ export const register: Register = on => {
     return { text: `dflow HUD: ${mode}` }
   }).catch(($, e, next) => next(e))
 
-  // The prompt holds the keyboard, so Expand takes no hotkey.
+  // A build started by hand takes up the work the offer was for.
+  on('command.run', { command: 'dflow:build' }, async ($, e, next) => {
+    try {
+      if ((await read($, offerAtom)) !== null) {
+        await clearOffer($)
+      }
+    } catch {
+      // The poll clears it once the build moves the plan.
+    }
+
+    return next({ ...e, args: e.args ?? '' })
+  }).catch(($, e, next) => next({ ...e, args: e.args ?? '' }))
+
+  // The prompt holds the keyboard, so Expand, Resume and Dismiss take no hotkey.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const hud = await read($, hudAtom)
 
@@ -779,6 +834,18 @@ export const register: Register = on => {
     const isFramed = columns >= BAND_FRAME_SINCE
     const width = isFramed ? columns - 4 : columns
     const warning = bandWarning(hud)
+    const offer = await read($, offerAtom)
+    // The border and padding take four cells, the two gaps two.
+    const offerText = offer && runsCut([{ text: `↻ Resumable work · ${offer.title} — Next: ${offer.next.replace(/ \([^)]*\)$/, '')}` }], columns - 6 - cellWidth('Resume') - cellWidth('Dismiss'))
+    const offerRow = offer && (
+      <Box key="band-resume" flexDirection="row" borderStyle="round" borderColor={BUTTON_MAIN} paddingX={1} columnGap={1}>
+        <Text wrap="truncate-end" color={BUTTON_MAIN}>
+          {offerText!.map(run => run.text).join('')}
+        </Text>
+        {drawButton(table, 'band-resume-go', 'Resume', () => resume($), { isCompact: true })}
+        {drawButton(table, 'band-resume-dismiss', 'Dismiss', () => clearOffer($), { isCompact: true })}
+      </Box>
+    )
     const lines = [
       ...fitBand(input, width).map((runs: Run[], index: number) => ({ key: `band-line-${index}`, runs })),
       ...(warning.length > 0 ? [{ key: 'band-warning', runs: runsCut(warning, width) }] : []),
@@ -789,6 +856,7 @@ export const register: Register = on => {
 
       return (
         <Box flexDirection="column">
+          {offerRow}
           <Box key="band-top" flexDirection="row" columnGap={1}>
             <Text wrap="truncate-end">{drawRuns(table, 'band-top', runsCut(who, columns - cellWidth(EXPAND) - 1))}</Text>
             {expand}
@@ -809,6 +877,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
+        {offerRow}
         <Box key="band-top" flexDirection="row">
           <Text wrap="truncate-end">
             <Text color={frame}>╭─ </Text>
@@ -878,6 +947,23 @@ export const register: Register = on => {
     const isDense = (await read($, densityAtom)) === 'dense'
     const minimize = () => setMode($, 'band')
     const openSections = () => showView($, 'sections')
+    const offer = await read($, offerAtom)
+    const resumeCard = offer && (
+      <Box key="resume" flexDirection="column" borderStyle="round" borderColor={BUTTON_MAIN} paddingX={1}>
+        <Box key="resume-title">
+          <Text wrap="truncate-end" color={BUTTON_MAIN} bold>
+            {`↻ Resumable work · ${offer.title}`}
+          </Text>
+        </Box>
+        <Box key="resume-next">
+          <Text wrap="truncate-end">{`Next: ${offer.next}`}</Text>
+        </Box>
+        <Box key="resume-controls" flexDirection="row" columnGap={1}>
+          {drawButton(table, 'resume-go', 'Resume', () => resume($), { hotkey: 'r', isMain: true, isCompact: isDense })}
+          {drawButton(table, 'resume-dismiss', 'Dismiss', () => clearOffer($), { isCompact: isDense })}
+        </Box>
+      </Box>
+    )
 
     if (isDense) {
       const lines = denseLines(
@@ -897,6 +983,7 @@ export const register: Register = on => {
 
       return (
         <Box flexDirection="column">
+          {resumeCard}
           <Box key="now">
             <Text wrap="truncate-end">{drawRuns(table, 'now', runsCut(nowRow(hud), columns))}</Text>
           </Box>
@@ -925,6 +1012,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
+        {resumeCard}
         <Box key="now">
           <Text wrap="truncate-end">{drawRuns(table, 'now', runsCut(nowRow(hud), columns))}</Text>
         </Box>

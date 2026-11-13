@@ -57,6 +57,8 @@ export type HudRepo = { branch: string; ahead: number; behind: number; changed: 
 
 export type HudWhere = { cwd: string; root: string | null; home: string | null; remote: string | null }
 
+export type HudOffer = { title: string; next: string; start: Hud }
+
 export type HudBreakdown = {
   rows: { name: string; tokens: number }[]
   compactAt: number | null
@@ -73,6 +75,7 @@ declare module 'claude-code' {
       collapsed: string[]
       sections: string[]
       view: 'cards' | 'sections'
+      offer: HudOffer | null
       readings: number[]
       breakdown: HudBreakdown | null
       account: HudAccount | null

@@ -214,6 +214,19 @@ export function sectionsToggled(list, key) {
   return list.includes(key) ? list.filter(one => one !== key) : [...list, key];
 }
 
+// Only an approved plan is the person's own work in flight; a draft is not
+// offered for resuming.
+export function resumeOffer(hud) {
+  const plan = hud.plan;
+  if (!plan?.approved || plan.done >= plan.total || !plan.current) return null;
+  const { number, title, state } = plan.current;
+  return { title: plan.title, next: `Task ${number}: ${title} (${STATE_WORDS[state] ?? state})` };
+}
+
+export function isOfferOver(start, hud) {
+  return !hud.plan || hud.plan.done !== start.plan.done || hud.plan.current?.number !== start.plan.current?.number;
+}
+
 export function sectionsMoved(list, key, delta) {
   const at = list.indexOf(key);
   const to = at + delta;
