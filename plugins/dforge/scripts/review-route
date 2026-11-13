@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Print the review seat for a task, a batch, or a plan-review round, and the
-# Claude seat that replaces it when a Codex seat produces nothing.
+# Claude seat that replaces it when the external reviewer panel produces no list.
 #
 # The routing table lives here rather than in prose for the reason
 # run-codex-review.sh gives: a rule a seat must follow is only reachable when a
-# test can reach it. This script never probes Codex: it reads the file
-# scripts/codex-gate keeps for this session, and while that file does not open
-# the review surface it names Claude seats only, with reason=codex-off. While
-# the surface is open, run-codex-review.sh still checks availability on every
-# run, and its status line decides whether the fallback is used.
+# test can reach it. This script never probes a reviewer: it reads the files
+# scripts/codex-gate and scripts/agy-gate keep for this session, and while
+# neither opens its review surface it names Claude seats only, with
+# reason=reviewers-off. While a surface is open, scripts/run-review-panel reads
+# each gate on every run, and its status lines decide whether the fallback is
+# used.
 #
 # Usage: review-route PLAN_FILE --task ID [ID ...]
 #        review-route PLAN_FILE --plan-round R
@@ -43,6 +44,7 @@ ROUTING="$HERE/../reference/codex-routing.json"
 SEP='( — | – | - | -- )'
 
 die() { printf 'review-route: %s\n' "$1" >&2; exit 2; }
+reviewers_on() { executor_session_on codex review || executor_session_on agy review; }
 usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R | --ruling KIND[,KIND...] [ID ...] | --final | --final-fix FILE [FILE ...]"; }
 
 [ $# -ge 2 ] || usage
@@ -291,10 +293,10 @@ case "$1" in
       reason=round
       [ "$r" -le "$cap" ] || reason=cap-critical
       printf 'review-seat plan-round=%s primary=%s fallback=- reason=%s cap=%s\n' "$r" "$judge" "$reason" "$cap"
-    elif [ "$r" -eq 1 ] && executor_session_on codex review; then
-      printf 'review-seat plan-round=1 primary=codex:plan fallback=%s reason=round cap=%s\n' "$claude" "$cap"
+    elif [ "$r" -eq 1 ] && reviewers_on; then
+      printf 'review-seat plan-round=1 primary=panel:plan fallback=%s reason=round cap=%s\n' "$claude" "$cap"
     elif [ "$r" -eq 1 ]; then
-      printf 'review-seat plan-round=1 primary=%s fallback=- reason=codex-off cap=%s\n' "$claude" "$cap"
+      printf 'review-seat plan-round=1 primary=%s fallback=- reason=reviewers-off cap=%s\n' "$claude" "$cap"
     else
       printf 'review-seat plan-round=%s primary=%s fallback=- reason=round cap=%s\n' "$r" "$OPUS" "$cap"
     fi
@@ -387,17 +389,18 @@ band() { # band <total> - the Claude judge for a score band
 # Risk 3 (security, data loss, migration, concurrency) takes Opus whatever its
 # total; every other task takes its band. An **Executor:** line changes nothing:
 # the session implements every task.
-if ! executor_session_on codex review; then
-  # Codex is off for this session, so the Codex rows name their Claude seat
-  # directly, and there is nothing left to fall back to. Risk 3 stays with Opus.
+if ! reviewers_on; then
+  # No external reviewer is open for this session, so the panel rows name
+  # their Claude seat directly, and there is nothing left to fall back to.
+  # Risk 3 stays with Opus.
   if [ "$max_risk" -ge 3 ]; then primary=$OPUS; else primary=$(band "$max_total"); fi
-  fallback=- reason=codex-off
+  fallback=- reason=reviewers-off
 elif [ "$max_risk" -ge 3 ]; then
-  primary=codex:heavy+judge-opus fallback=$OPUS reason=risk
+  primary=panel:heavy+judge-opus fallback=$OPUS reason=risk
 else
-  # Below risk 3 every total takes the light row, gpt-6.1-sol; Astra is kept
-  # for risk 3, plan review and the final round.
-  primary=codex:light fallback=$(band "$max_total") reason=band
+  # Below risk 3 every total takes the light rows; the heavy rows are kept for
+  # risk 3, plan review and the final round.
+  primary=panel:light fallback=$(band "$max_total") reason=band
 fi
 
 # A single task carries its review tier; a batch is already one review, so it

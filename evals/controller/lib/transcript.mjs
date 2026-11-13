@@ -24,7 +24,14 @@ const WRITES_LEDGER = /(?:>>?|\btee\b(?:\s+-a)?)\s*['"]?(?:[^\s'";&|]*progress\.
 const CODEX_CONTROL = /--(?:dry-run|recover-commit|handback|release|amend-write-set|accept-baseline)\b/;
 // Only a command that launches a run counts: naming a runner in cat, grep or ps does not.
 const isCodexTask = cmd => /run-codex-task\.sh|scripts\/executors['"]?\s+path\s+\S+\s+wrapper/.test(cmd) && /--brief\b/.test(cmd) && !CODEX_CONTROL.test(cmd);
-const codexReviewTier = cmd => (/run-codex-review\.sh/.test(cmd) && /--kind\b/.test(cmd) ? cmd.match(/--tier\s+(\w+)/)?.[1] ?? 'heavy' : null);
+const tierOf = cmd => cmd.match(/--tier\s+(\w+)/)?.[1] ?? 'heavy';
+// A plan panel takes no tier: it answers the panel:plan route.
+const reviewRun = cmd => {
+  if (!/--kind\b/.test(cmd)) return null;
+  if (/run-codex-review\.sh/.test(cmd)) return `codex:${tierOf(cmd)}`;
+  if (/run-review-panel\b/.test(cmd)) return /--kind\s+plan\b/.test(cmd) ? 'panel:plan' : `panel:${tierOf(cmd)}`;
+  return null;
+};
 const byNumber = list => [...new Set(list)].sort((a, b) => Number(a) - Number(b));
 
 export function priceOf(model) {
@@ -194,8 +201,8 @@ export function measureTranscript(source) {
   for (const use of uses.values()) {
     const cmd = use.name === 'Bash' ? String(use.input?.command ?? '') : '';
     const type = isAgent(use) ? String(use.input?.subagent_type ?? '') : '';
-    const tier = codexReviewTier(cmd);
-    if (isAgent(use) || isCodexTask(cmd) || tier !== null) dispatches++;
+    const run = reviewRun(cmd);
+    if (isAgent(use) || isCodexTask(cmd) || run !== null) dispatches++;
     if (SLEEP.test(cmd)) sleeps++;
     if (use.name === 'ListAgents') listAgents++;
     if (use.name === 'Monitor') monitors++;
@@ -204,11 +211,11 @@ export function measureTranscript(source) {
     const written = !failed.has(use.id) ? ledgerText(use) : use.name === 'Bash' && ledgerText(use) !== '' ? ledgerWrites(cmd) : '';
     for (const hit of written.matchAll(COMPLETE)) completed.push(hit[1]);
     let seat = null;
-    if (tier !== null || /judge-/.test(type)) seat = { kind: 'review', name: type || `codex:${tier}` };
+    if (run !== null || /judge-/.test(type)) seat = { kind: 'review', name: type || run };
     else if (isCodexTask(cmd) || /impl-/.test(type)) seat = { kind: 'fix', name: type || 'codex' };
     if (seat !== null && waiting[seat.kind].length > 0) {
       const route = waiting[seat.kind].shift();
-      const fits = route.primary.startsWith('codex:') ? route.primary.startsWith(seat.name) || seat.name === route.fallback : seat.name === route.primary;
+      const fits = /^(?:codex|panel):/.test(route.primary) ? route.primary.startsWith(seat.name) || seat.name === route.fallback : seat.name === route.primary;
       if (!fits) seatMisses++;
     }
     if (/review-route/.test(cmd)) {
