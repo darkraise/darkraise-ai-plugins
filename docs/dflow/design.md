@@ -362,24 +362,50 @@ no handoff document and no resume procedure.
 
 ## 14. HUD
 
-One mod draws two forms from `.dflow/state.json` and the plan file, with no
-model tokens:
+One mod draws two forms from `.dflow/hud.json`, with no model tokens, and only
+in a checkout whose git root holds `.dflow`. The band, above the prompt, in the
+account's color:
 
 ```
-dflow · Rate-limit meter                     feat/rate-meter
-Plan    ████████░░░░░░  4/7   Task 5 wip · verify failed once
-Next    Task 6: Wire the meter into render (after 5)
-Context 118k of 1M · resets at 150k
-Review  tier 1 · not run        Gates  not run
-Board   #12 doing · 3 open · 1 blocked      darkmem ok 14:02
-Workers T6, T7 running
+╭─ you@example.com · subscription · Remote ● connected ───────────────────── Expand ─╮
+│ ~/code/shop ⎇ feat/rate-meter* ↑2 ~1 ?1 · Opus 5.5 · xhigh · dflow 4/7 · Task 5 · ● 2 workers │
+│ ctx ▰▰▰▰▱▱▱┃▱▱ 79% · 5h ▰▰▱▱┊▱▱▱ 23% on pace · 3h40m · 7d 61% · $1.20              │
+╰──────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-- **Pane**: the full view above, beside the transcript.
-- **Band**: one line above the prompt (plan, progress, current task,
-  context), the default while a plan is active.
-- `/dflow:hud` cycles band, pane, off; `/dflow:hud pane|band|off` sets one.
-  The choice is kept across sessions.
+A third line in red names a blocked task, failed gates or a darkmem conflict
+or refusal. Each line shrinks a step at a time to fit; below 48 columns the
+frame goes.
+
+The pane, top to bottom:
+
+```
+● Task 5 in progress · verify failed 1×
+╭ ▾ Account ─────────────────────── subscription ╮
+ ≡ Dense   ⚙ Sections   ▁ Minimize
+╭ ▾ Plan ───────────────────────── 4/7 · 1 blocked ╮
+╭ ▾ Context ─────────────────────── 79% of reset ╮   (⇣ Compact inside)
+╭ ▾ Usage ──────────────────────── $4.85 · $2.35/h ╮
+╭ ▾ Checks ─────────────────────── ● 1 blocking ╮
+╭ ▾ Board ──────────────────────── #12 doing ╮
+╭ ▾ Workers ────────────────────── ● 2 running ╮
+╭ ▾ Repo ───────────────────────── ● dirty ╮
+Next  /dflow:build — Task 5: Wire the meter
+```
+
+Each card is drawn in full in its own color; the outline shows only its top
+rule, with the title on the left and the headline on the right. The controls
+row sits under the Account card, or leads the cards when Account is not first.
+
+A card's title collapses it; **Dense** draws one line per card; **Sections**
+hides, shows and reorders the cards. A session that starts on an approved,
+unfinished plan offers **Resume** and **Dismiss** above the Now row, or above
+the band.
+
+- `/dflow:hud` cycles band, pane, off, and reopens a pane closed by hand;
+  `/dflow:hud band|pane|off` sets one; `/dflow:hud sections [<cards>]` opens
+  the Sections view or sets the list. Mode, density, collapsed cards and
+  sections are kept across sessions.
 
 A mod's own commands cannot contain a colon, so `/dflow:hud` is the plugin's
 `hud` skill and the mod answers that command itself, without a model turn.

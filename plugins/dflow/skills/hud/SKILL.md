@@ -1,7 +1,7 @@
 ---
 name: hud
-description: Show or switch the dflow HUD - a band above the prompt or a pane with plan progress, the current task, context size, gates, review and board. `/dflow:hud [band|pane|off]`.
-argument-hint: "[band|pane|off]"
+description: Show or switch the dflow HUD - a framed band above the prompt or a pane of cards with the account, plan, context, usage, checks, board, workers and repo. `/dflow:hud [band|pane|off|sections [<cards>]]`.
+argument-hint: "[band|pane|off|sections [<cards>]]"
 disable-model-invocation: true
 ---
 

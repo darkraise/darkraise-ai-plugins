@@ -178,9 +178,49 @@ harness's own compaction.
 
 ## HUD
 
-`/dflow:hud` cycles a one-line band above the prompt, a pane and off;
-`/dflow:hud band|pane|off` sets one. It reads `.dflow/hud.json`, which the CLI
-rewrites on every state change, and costs no model tokens.
+The dflow mod draws the build's state from `.dflow/hud.json`, which the CLI
+rewrites on every state change. It draws only in a checkout whose git root
+holds `.dflow`.
+
+- `/dflow:hud` cycles band, pane and off, and reopens a pane closed by hand;
+  `/dflow:hud band|pane|off` sets one. The choice is kept across sessions.
+- `/dflow:hud sections` opens the pane on the Sections view;
+  `/dflow:hud sections plan,context,repo` sets which cards show, in order.
+
+The pane shows a Now row, then one framed card per section, then the Next row:
+
+- **Account** (the account's color): email, name and organization, model and
+  effort, Remote Control, and the config directory.
+- **Plan** (yellow): progress, the plan's title and file, a meter, up to eight
+  tasks around the current one, and any `⚠` checks.
+- **Context** (cyan): the reading against the reset point (`┃`) and
+  auto-compaction (`┊`), a trend, and the six largest `/context` categories.
+- **Usage** (blue): the 5-hour and 7-day limits with pace and reset, other
+  limits, and the session's cost.
+- **Checks** (red): gates and the review.
+- **Board** (white): the board row or counts, and darkmem's sync state.
+- **Workers** (magenta): each running worker's task and branch.
+- **Repo** (green): the repository, the folder, the branch with ahead and
+  behind, and changed and untracked files.
+
+Pressing a card's title collapses it. The buttons take hotkeys while the pane
+has the keyboard: `c` Compact, `d` Dense or Detailed (one line per card), `s`
+Sections (hide, show or reorder the cards), `m` Minimize (to the band), `r`
+Resume and `b` Back from the Sections view.
+
+The band is a frame in the account's color above the prompt: the email,
+billing and Remote Control on its top rule beside **Expand**; a line with the
+folder, branch, model, effort, plan progress and workers; a line with the
+context, the 5-hour and 7-day limits and the cost; and a red line when a task
+is blocked, gates failed or darkmem has a conflict or refusal. Each line
+shrinks to fit, and below 48 columns the frame goes.
+
+A session that starts on an approved plan with work left offers to resume it:
+a card above the Now row, or a row above the band, with **Resume** (runs
+`/dflow:build`) and **Dismiss**.
+
+The HUD costs no model tokens. git status runs every ten seconds and the
+`/context` breakdown is estimated locally, each only while it is shown.
 
 ## Parallel work
 
