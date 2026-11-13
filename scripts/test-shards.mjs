@@ -26,6 +26,8 @@
 // extrapolated to 600 s from the 140 of 147 checks reached before the cut.
 // Run 42591467307 (2026-11-09) supplied inline-only and inline-only-execution
 // (110 s and about 200 s), which had weights of 12 s and 40 s.
+// reviewer-only-externals.acceptance has no Windows run yet: its 200 s is
+// an estimate from about 47 s on Linux.
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -89,6 +91,7 @@ export const windowsSeconds = {
   'review-panel.test.sh': 30,
   'review-record.test.sh': 20,
   'review-route.test.sh': 458,
+  'reviewer-only-externals.acceptance.test.sh': 200,
   'reviewer-only.acceptance.test.sh': 5,
   'roadmap.test.sh': 170,
   'roots.test.sh': 84,
