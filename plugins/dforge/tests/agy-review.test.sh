@@ -33,6 +33,10 @@ run() { # run <args...>; sets out, rc
 }
 args() { tr '\n' ' ' < "$TMP/args" 2>/dev/null; }
 field() { jq -r ".$1 | tostring" "$DR_AGY_SESSION_DIR/s1.json" 2>/dev/null | tr -d '\r'; }
+near() { # near <epoch> <seconds from now>: the epoch is that far ahead, within a minute
+  local now; now=$(date -u +%s)
+  [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge $((now + $2 - 60)) ] && [ "$1" -le $((now + $2)) ] && echo near || echo "$1"
+}
 
 STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
 check "light review answers OK" "$out" "agy-judge gemini-4-argon/high status=OK exit=0 out=$TMP/out.json evidence=none"
@@ -98,11 +102,14 @@ rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAU
 has "a Claude quota fails the Opus run" "$out" "agy-judge claude-opus-5-5/high status=FAILED"
 check "a Claude quota marks the Claude row" "$(field fallback.usable)" "false"
 check "a Claude quota leaves agy usable" "$([ "$(field usable)" = false ] && echo off || echo on)" "on"
+check "a Claude quota's reset is two hours ahead" "$(near "$(field fallback.resets_at_epoch)" 7200)" "near"
 GATE_LINE="${GATE_ON/claude=on/claude=off}" STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "the next heavy review runs Argon directly" "$out" "agy-judge gemini-4-argon/high status=OK exit=0 out=$TMP/out.json evidence=claude-off"
 
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota' run --kind task --tier light --prompt "$TMP/prompt.md"
 check "a Gemini quota turns agy off" "$(field usable)/$(field reason)" "false/quota"
+rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota. Resets in 1d2h3m4s' run --kind task --tier light --prompt "$TMP/prompt.md"
+check "a Gemini quota's reset counts days, hours, minutes and seconds" "$(near "$(field resets_at_epoch)" 93784)" "near"
 
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=plan-review run --kind plan --prompt "$TMP/prompt.md"
 has "a plan review uses the plan schema" "$(args)" "codex-plan-review-schema.json"
@@ -113,6 +120,11 @@ has "a final review uses its schema" "$(args)" "agy-final-review-schema.json"
 check "a final review writes its text" "$(cat "$TMP/out.json")" "No findings."
 has "the final prompt carries the branch diff" "$(cat "$TMP/out.json.prompt")" "+final"
 lacks "the final prompt never sends agy to git" "$(cat "$TMP/out.json.prompt")" "Review the branch diff from"
+STUB_AGY_MODE=final-review run --kind final --base nosuchsha
+has "a final review of an unknown base fails" "$out" "status=FAILED"
+has "an unknown base names error" "$out" "reason=error"
+check "an unknown base exits 1" "$rc" "1"
+check "an unknown base leaves no list" "$([ -e "$TMP/out.json" ] && echo list || echo none)" "none"
 for empty in '""' '" \n "' null; do
   STUB_AGY_REVIEW_JSON=$empty STUB_AGY_MODE=final-review run --kind final --base HEAD~1
   has "a final review of $empty is a schema failure" "$out" "status=FAILED"
