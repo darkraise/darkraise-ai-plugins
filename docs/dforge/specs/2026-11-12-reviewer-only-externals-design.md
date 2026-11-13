@@ -317,7 +317,7 @@ A14. [test, confirmed] The panel's tasks-with-two-lists judge is the band judge 
 A15. [test, high] The final review's dedupe judge runs whenever two or more lists carry findings and tags each finding with a `+`-joined origin set from `claude`, `codex`, `agy`.
 A16. [test, confirmed] The plan makes one real, billed agy review run on this repository with `gemini-4-argon` and one with `claude-opus-5-5`; `agy-policy.json` ships with `trust.review: pass` only when both return a schema-valid list without writing, and with `trust.review: pending` (agy review stays off whatever the setting) otherwise.
 A17. [test, high] One `run-review-panel` run makes exactly one Codex auth probe.
-A18. [test, high] The README carries a "Migrating to 5.0" section naming `codexLane`, `agyLane`, `agyReview`, `revising-plans` and `plan-revise`, and the plugin and marketplace manifests read 5.0.0.
+A18. [test, high] The README carries a "Migrating to 5.0" section naming `codexLane`, `agyLane`, `agyReview`, `revising-plans` and `plan-revise`, and `node scripts/release.mjs --dry-run` on the branch prints `release dforge 4.17.1 -> 5.0.0` (no marketplace file holds a dforge version, and CI's release step writes the version lines).
 
 ## Riskiest assumption
 
