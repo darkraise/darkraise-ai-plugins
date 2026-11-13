@@ -3,7 +3,7 @@
 # (docs/dforge/specs/2026-11-07-inline-only-execution-design.md), statements
 # A1 to A19. Each test is written from the statement's text and reaches the
 # behaviour through the scripts the spec names (plan-lint, task-brief,
-# task-step, next-step, plan-revise, dforge-config, plan.sh's functions) or,
+# task-step, next-step, dforge-config, plan.sh's functions) or,
 # for a statement about text, the text itself. The CI half of A13 needs a
 # pushed commit and is not testable here.
 # Usage:
@@ -141,7 +141,6 @@ lint() { # lint <plan> — sets lout, lrc
   lout=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/plan-lint" "$1" --no-probe 2>&1); lrc=$?
   lout=${lout//$'\r'/}
 }
-delegated() { (cd "$REPO" && "$TIMEOUT_BIN" 60 bash -c '. "$1"; plan_delegated "$2"' _ "$S/lib/plan.sh" "$1") 2>&1 | tr -d '\r'; }
 brief() { # brief <plan> <n> <out>
   (cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/task-brief" "$1" "$2" "$3" >/dev/null 2>&1)
 }
@@ -201,7 +200,6 @@ fi
 # ----------------------------------------------------------------------- A4
 if selected A4; then
   P=$(mk a4 'inline — claude --model opus --effort high — x' "$HEAVY6" "$T1" "$T3R3" "$HEAVY8")
-  check "A4: plan_delegated prints nothing for heavy tasks without Executor lines" "$(delegated "$P")" ""
   for n in 1 3 4; do
     brief "$P" "$n" "$TMP/a4-brief-$n.md"
     [ -s "$TMP/a4-brief-$n.md" ] || printf 'FAIL - A4: task-brief wrote no brief for task %s\n' "$n"
@@ -224,12 +222,6 @@ if selected A5; then
   unmatched "A5: a total-6 risk-2 task's second line is not a Review line" "$(sed -n 2p "$TMP/a5-1.md" 2>/dev/null)" '^\*\*Review:\*\*'
 fi
 
-# ----------------------------------------------------------------------- A6
-if selected A6; then
-  P=$(mk a6 'inline — claude --model opus --effort high — x' "$T1 codex" "$HEAVY6 codex" "$HEAVY8" "$T1")
-  check "A6: plan_delegated prints each executor task, heavy or not" "$(delegated "$P")" "$(printf '1\texecutor\n2\texecutor')"
-fi
-
 # ----------------------------------------------------------------------- A7
 if selected A7; then
   out=$(cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/dforge-config" get executionStrategy 2>&1); rc=$?
@@ -244,17 +236,6 @@ fi
 if selected A8; then
   check "A8: agents/drafter-sonnet.md does not exist" "$([ -e "$PLUGIN/agents/drafter-sonnet.md" ] && echo exists || echo absent)" "absent"
   check "A8: agents/scout-sonnet.md does not exist" "$([ -e "$PLUGIN/agents/scout-sonnet.md" ] && echo exists || echo absent)" "absent"
-fi
-
-# ----------------------------------------------------------------------- A9
-if selected A9; then
-  rev() { (cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/plan-revise" "$1" 2>&1) | tr -d '\r' | grep '^recommend' | tr -s ' '; }
-  P=$(mk a9a 'inline — claude --model sonnet --effort high — x' "$HEAVY6" "$T3R2")
-  check "A9: hardest task total 6, no executor: opus/high, nothing delegated" "$(rev "$P")" "recommend execution=inline model=opus effort=high delegated=0/2"
-  P=$(mk a9b 'inline — claude --model sonnet --effort high — x' "$T5" "$T3R2" "$HEAVY8 codex")
-  check "A9: an executor task is the only one counted as delegated and does not set the pair" "$(rev "$P")" "recommend execution=inline model=sonnet effort=high delegated=1/3"
-  P=$(mk a9c 'inline — claude --model sonnet --effort medium — x' "$T3R3")
-  check "A9: hardest task total 3 risk 3: effort high" "$(rev "$P")" "recommend execution=inline model=sonnet effort=high delegated=0/1"
 fi
 
 # ---------------------------------------------------------------------- A11

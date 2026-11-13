@@ -167,42 +167,8 @@ check "plan_heavy: total 5 or risk 3 on any part" "$(plan_heavy "$TMP/scores.md"
 sed 's/$/\r/' "$TMP/scores.md" > "$TMP/scores-crlf.md"
 check "plan_scores: CRLF" "$(plan_scores "$TMP/scores-crlf.md" | tr '\t\n' ' |')" "1 1 0|2 5 2|3 4 3|4 - -|5 ? ?|"
 
-# --- plan_delegated: executor tasks only ---
-deleg_plan() { # deleg_plan <file> <total/risk ...> — one task per argument
-  local f=$1 i=0 tr; shift
-  printf '# Delegation\n' > "$f"
-  for tr in "$@"; do
-    i=$((i + 1))
-    printf '\n### Task %s: t\n\n**Evaluation:** files 0 - spec 0 - coupling %s - risk %s = %s\n' \
-      "$i" "$((${tr%/*} - ${tr#*/}))" "${tr#*/}" "${tr%/*}" >> "$f"
-  done
-}
-deleg() { plan_delegated "$1" | tr '\t\n' ' |'; }
-deleg_plan "$TMP/d1.md" 1/0 4/2 1/0 1/0 1/0 1/0
-check "plan_delegated: a lone total-4 task stays in session" "$(deleg "$TMP/d1.md")" ""
-deleg_plan "$TMP/d4.md" 5/2 4/2 1/0 4/3 1/0 1/0
-check "plan_delegated: heavy tasks beside a total-4 task stay in session" "$(deleg "$TMP/d4.md")" ""
-sed 's/^|//' > "$TMP/d6.md" <<'EOF'
-|# Split
-|
-|### Task 1: light
-|
-|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
-|
-|### Task 2: split
-|
-|#### Part A: small
-|
-|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
-|
-|#### Part B: larger
-|
-|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
-|
-|### Task 3: unscored
-EOF
-check "plan_delegated: a split task with a total-4 part stays in session" "$(deleg "$TMP/d6.md")" ""
-check "plan_delegated: the scores fixture delegates nothing" "$(deleg "$TMP/scores.md")" ""
+# --- the executor lane functions are gone ---
+check "plan_executors is gone" "$(bash -c ". '$HERE/../scripts/lib/plan.sh'; declare -F plan_executors plan_delegated | wc -l" | tr -d ' ')" "0"
 
 # --- plan_ledger and ledger_left_inline ---
 REPO="$TMP/repo"
@@ -227,92 +193,6 @@ printf 'Task 3: minor (deferred): the grammar says Task 4: escalated inline -> s
 check "ledger_left_inline: a quoted marker is not a switch" "$(ledger_left_inline "$L")" ""
 printf 'Task 5: escalated inline -> subagent\n' | sed 's/$/\r/' >> "$L"
 check "ledger_left_inline: a bare CRLF marker counts" "$(ledger_left_inline "$L")" "5"
-
-# --- plan_executors ---------------------------------------------------------
-sed 's/^|//' > "$TMP/exec.md" <<'EOF'
-|# Executors Fixture
-|
-|### Task 1: plain
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
-|
-|### Task 2: offloaded
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Executor:** codex gpt-6.1-sol / medium
-|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
-|
-|### Task 3: fenced only
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
-|
-|```markdown
-|**Executor:** codex gpt-6.1-sol / medium
-|```
-|
-|### Task 4: split, executor on part A, heavy part B
-|
-|#### Part A: cheap
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Executor:** codex gpt-6.1-sol / medium
-|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
-|
-|#### Part B: risky
-|
-|**Implementer:** dforge:impl-opus-high
-|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
-EOF
-
-check "plan_executors names an offloaded task" \
-  "$(plan_executors "$TMP/exec.md" | awk -F'\t' '$1 == 2 { print $2 }')" "codex"
-check "plan_executors ignores a fenced Executor line" \
-  "$(plan_executors "$TMP/exec.md" | awk -F'\t' '$1 == 3 { print $2 }')" ""
-check "plan_executors matches a line in any part" \
-  "$(plan_executors "$TMP/exec.md" | awk -F'\t' '$1 == 4 { print $2 }')" "codex"
-check "plan_executors emits one row per task" \
-  "$(plan_executors "$TMP/exec.md" | wc -l | tr -d ' ')" "2"
-
-# --- plan_delegated gains the executor kind --------------------------------
-check "an offloaded task is delegated as executor" \
-  "$(plan_delegated "$TMP/exec.md" | awk -F'\t' '$1 == 2 { print $2 }')" "executor"
-check "a plain task is not delegated" \
-  "$(plan_delegated "$TMP/exec.md" | awk -F'\t' '$1 == 1 { print $2 }')" ""
-check "a split task with an executor part is delegated as executor" \
-  "$(plan_delegated "$TMP/exec.md" | awk -F'\t' '$1 == 4 { print $2 }')" "executor"
-
-# --- only an Executor line delegates a total-4 task ------------------------
-# Six tasks, two at total 4, one of them offloaded. Two in six is within the
-# removed one-third rule, which would also have delegated Task 2 as total 4.
-{ printf '# Offload Fixture\n\n'
-  for i in 1 2; do
-    printf '### Task %s: four band\n\n**Implementer:** dforge:impl-sonnet-medium\n' "$i"
-    [ "$i" = 1 ] && printf '**Executor:** codex gpt-6.1-sol / high\n'
-    printf '**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4\n\n'
-  done
-  for i in 3 4 5 6; do
-    printf '### Task %s: small\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n' "$i"
-  done
-} > "$TMP/offload4.md"
-
-check "the offloaded total-4 task delegates as executor" \
-  "$(plan_delegated "$TMP/offload4.md" | awk -F'\t' '$1 == 1 { print $2 }')" "executor"
-check "the other total-4 task stays in session" \
-  "$(plan_delegated "$TMP/offload4.md" | awk -F'\t' '$1 == 2 { print $2 }')" ""
-check "the delegated set is the offloaded task alone" \
-  "$(plan_delegated "$TMP/offload4.md" | wc -l | tr -d ' ')" "1"
-
-# --- absence is not failure -------------------------------------------------
-# offload4.md's last task carries no Executor line, which is the case that
-# leaks a non-zero status out of the loop. The second assertion is the one that
-# matters: it calls plan_delegated directly under errexit, the caller shape that
-# would silently emit no rows.
-check "plan_executors exits 0 when the final task has no Executor line" \
-  "$(plan_executors "$TMP/offload4.md" >/dev/null; echo $?)" "0"
-check "plan_delegated emits its rows under set -euo pipefail" \
-  "$(bash -c 'set -euo pipefail; . "$1"; plan_delegated "$2" | wc -l | tr -d " "' _ "$HERE/../scripts/lib/plan.sh" "$TMP/offload4.md")" "1"
 
 # --- the shared Evaluation reader ---
 # Two shipped defects motivate these. A line left above `#### Part A` scores the
@@ -358,18 +238,6 @@ check "plan_heavy: the corrected score leaves the split task light" \
 printf '# P\n\n### Task 1: One\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 0 = 5\n\n### Task 2: Two\n\n**Evaluation:** files 1 - spec 1 - coupling 2 - risk 0 = 4\n\n### Task 3: Three\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/unsplit.md"
 check "plan_heavy: an unsplit plan is unchanged by the fix" \
   "$(plan_heavy "$TMP/unsplit.md" | tr '\n' ' ')" "1 "
-
-check "plan_executors: unchanged by the fix" \
-  "$(plan_executors "$TMP/exec.md" | tr '\t\n' ' |')" "1 codex|"
-
-# A split task routes on its parts, as it scores on them: an Executor line left
-# above `#### Part A` delegated it while plan-lint and plan-revise ignored it.
-printf '# P\n\n### Task 1: Split\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/stale-exec.md"
-check "plan_executors: a stale parent Executor line does not route a split task" \
-  "$(plan_executors "$TMP/stale-exec.md")" ""
-printf '# P\n\n### Task 1: Split\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Executor:** opencode x / high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$TMP/part-exec.md"
-check "plan_executors: a split task takes its part's line over the parent's" \
-  "$(plan_executors "$TMP/part-exec.md" | tr '\t\n' ' |')" "1 opencode|"
 
 # --- lettered task headings ---
 # plan_tasks reads numbered headings only; plan_lettered names the ones it

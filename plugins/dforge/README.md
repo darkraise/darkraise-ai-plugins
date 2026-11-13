@@ -221,8 +221,6 @@ is already there rather than re-deriving the assignment at dispatch. Under
 inline plan delegates; for the tasks the session implements itself they are
 inert, so nothing falls back.
 
-`revising-plans` brings a plan written before the external executor lane up to the current format, scoring what is unscored and writing the `**Executor:**` and `**Execution:**` lines from `scripts/plan-revise`.
-
 The following observations were made against the external CLI lane on Windows
 with ChatGPT-subscription auth on 2026-08-31. They are historical CLI policy
 evidence, not native Codex capability declarations:
@@ -1043,7 +1041,7 @@ Claude through `agy` only as the retry after a Gemini run fails, and adds
 `fallback=` and `fallback_resets_at=` to the `agy-gate` line before `source=`.
 A plan whose `**Executor:** agy` lines name a `claude-` rung fails `plan-lint`
 until those lines are rewritten from the new block: `scripts/plan-revise`
-prints each task's rung, and dforge:revising-plans makes the edit.
+prints each task's rung, and the `revising-plans` skill makes the edit.
 
 ## Migrating to 4.0
 

@@ -45,31 +45,22 @@ if ! plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>
   exit 4
 fi
 
-# Mixed mode: an inline plan delegates the tasks plan_delegated names - the
-# tasks carrying an Executor line - and the session implements every other
-# task, heavy ones included. A self-implemented risk-3 task carries the review
-# marker, and the header names the heavy tasks. The kind is interpolated, so a
-# new row kind needs no change here. The lines are computed here so an
-# executing session never re-scores a task. A plan with no Execution line
-# predates it and runs inline by invocation, so it gets the same lines.
+# An inline plan's session implements every task, heavy ones included. A
+# risk-3 task carries the review marker, and the header names the heavy tasks.
+# The lines are computed here so an executing session never re-scores a task.
+# A plan with no Execution line predates it and runs inline by invocation, so
+# it gets the same lines.
 dispatch=0
 exec_line=$(plan_header_line "$src" Execution)
 if ! grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")" \
    && { [ -z "$exec_line" ] || grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$exec_line"; }; then
   dispatch=1
 fi
-delegated="" heavy=""
-if [ "$dispatch" -eq 1 ]; then
-  delegated=$(plan_delegated "$src")
-  heavy=$(plan_heavy "$src")
-fi
+heavy=""
+[ "$dispatch" -eq 0 ] || heavy=$(plan_heavy "$src")
 
 if [ "$header" -eq 1 ]; then
   plan_header "$src" > "$out"
-  if [ -n "$delegated" ]; then
-    printf '**Dispatch:** delegated — %s\n' \
-      "$(awk -F'\t' '{ printf "%sTask %s (%s)", (NR > 1 ? ", " : ""), $1, $2 }' <<<"$delegated")" >> "$out"
-  fi
   if [ -n "$heavy" ]; then
     printf '**Heavy:** %s\n' \
       "$(plan_scores "$src" | awk -F'\t' -v heavy=" $(tr '\n' ' ' <<<"$heavy")" '
@@ -80,14 +71,7 @@ else
     echo "task ${n} not found in ${plan} (no heading matching 'Task ${n}')" >&2
     exit 3
   fi
-  # Captured, not piped: grep -q exits at its first match, and under pipefail the
-  # writer's SIGPIPE would decide the if.
-  if [ -n "$delegated" ] && grep -qxF "$n" <<<"$(cut -f1 <<<"$delegated")"; then
-    row=$(plan_scores "$src" | awk -F'\t' -v n="$n" '$1 == n')
-    t=$(cut -f2 <<<"$row") r=$(cut -f3 <<<"$row")
-    awk -v d="**Dispatch:** delegated — total $t, risk $r" 'NR == 1 { print; print d; next } { print }' "$out" > "$out.tmp"
-    mv "$out.tmp" "$out"
-  elif [ "$dispatch" -eq 1 ] && [ "$(plan_scores "$src" | awk -F'\t' -v n="$n" '$1 == n { print $3 }')" = 3 ]; then
+  if [ "$dispatch" -eq 1 ] && [ "$(plan_scores "$src" | awk -F'\t' -v n="$n" '$1 == n { print $3 }')" = 3 ]; then
     awk -v d="**Review:** per-task — risk 3" 'NR == 1 { print; print d; next } { print }' "$out" > "$out.tmp"
     mv "$out.tmp" "$out"
   fi

@@ -3,7 +3,7 @@
 # (docs/dforge/specs/2026-10-26-faster-plans-design.md), statements A2-A13 and
 # A17-A23. Each test is written from the statement's text and reaches the
 # behaviour through the scripts and documents the spec names: plan-lint,
-# plan-revise, review-route, task-step, wave, next-step, plan-amend, the
+# review-route, task-step, wave, next-step, plan-amend, the
 # cockpit's ledger reader, the agent definitions and the shipped prompts and
 # references.
 # Usage:

@@ -27,7 +27,6 @@ If a skill might apply to what you are doing, invoke it before any response or a
 | A bug, failing test or surprise | dforge:systematic-debugging |
 | An approach decision is open | dforge:selecting-approaches |
 | A spec is approved | dforge:writing-plans |
-| A plan predates the executor lane | dforge:revising-plans |
 | Executing a plan | dforge:executing-plans; dforge:subagent-driven-development only for a plan whose Execution line names subagent |
 | Writing code | dforge:test-driven-development |
 | Isolating work | dforge:using-git-worktrees |

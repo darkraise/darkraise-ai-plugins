@@ -9,8 +9,8 @@
 // and typed-seats-and-drafting.acceptance.sh.
 // plan-lint crossed its
 // 1200 s cap in run 41566860573; its weight is the last green run's 1049 s
-// scaled by the 21% its Linux time grew since. Run 41563118629 supplied
-// plan-revise; task-step is the sum of its parts in 41311901567.
+// scaled by the 21% its Linux time grew since. task-step is the sum of its
+// parts in 41311901567.
 // Run 41632296991 (2026-11-03) took 847 s for task-step-base and timed out
 // its shard at 25 minutes. Run 41639945723 hit its 900 s limit (main's push run
 // 41577294934 took 889 s), so the limit is 1200 s and the weight 900 s.
@@ -79,7 +79,6 @@ export const windowsSeconds = {
   'plan-amend.test.sh': 390,
   'plan-lib.test.sh': 43,
   'plan-lint.test.sh': 1270,
-  'plan-revise.test.sh': 560,
   'polluter.test.sh': 10,
   'process-roles.test.sh': 10,
   'register.test.sh': 68,
