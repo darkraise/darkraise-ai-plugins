@@ -14,7 +14,8 @@
 # Output: one `<id>-judge ...` line per family in ranked order, then
 #   `panel tier=<t> lists=<n>`, n counting OK and FALLBACK lines.
 # Env seams: PANEL_<ID>_GATE, PANEL_<ID>_RUNNER, PANEL_LADDER, and
-#   PANEL_BOUND_SECONDS, which replaces the computed bound.
+#   PANEL_BOUND_SECONDS, the seconds from panel start at which the watchdog
+#   fires, in place of the computed bound.
 # Exit: 0 answered, whatever the reviewers did; 2 usage error.
 set -uo pipefail
 
@@ -65,6 +66,7 @@ if [ -n "${PANEL_BOUND_SECONDS:-}" ]; then
   [[ $PANEL_BOUND_SECONDS =~ ^[0-9]+$ ]] || die "PANEL_BOUND_SECONDS must be a whole number"
 fi
 
+start=$(date +%s)
 ids=$(bash "$HERE/executors" ranked) || die "the executor registry could not be read"
 
 seam() { # seam <id> <GATE|RUNNER>; prints the override path, if any
@@ -113,8 +115,12 @@ for id in $ids; do
   rm -f "$out_dir/$id.$ext"
   lines_by_id+=("$id|$id-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=$reason")
 done
+# The bound equals the caller's timeout, counted from panel start, so the
+# watchdog fires 15 s early: the TERM-to-KILL grace, the poll and the printing
+# must all finish before the caller kills the panel and its lists with it.
 bound=$((bound + 120))
-[ -z "${PANEL_BOUND_SECONDS:-}" ] || bound=$PANEL_BOUND_SECONDS
+deadline=$((start + bound - 15))
+[ -z "${PANEL_BOUND_SECONDS:-}" ] || deadline=$((start + PANEL_BOUND_SECONDS))
 
 have_setsid=false
 command -v setsid >/dev/null 2>&1 && have_setsid=true
@@ -148,7 +154,7 @@ for id in ${open_ids[@]+"${open_ids[@]}"}; do
   if [ -z "$runner" ]; then
     runner=$(bash "$HERE/executors" path "$id" runner) || runner=""
   fi
-  rm -f "$out_dir/$id.status" "$out_dir/$id.timeout"
+  rm -f "$out_dir/$id.$ext" "$out_dir/$id.status" "$out_dir/$id.timeout"
   args=(--kind "$kind" --cwd "$cwd" --out "$out_dir/$id.$ext" "${src[@]}")
   [ "$kind" = task ] && args+=(--tier "$tier")
   if [ -z "$runner" ]; then
@@ -167,7 +173,6 @@ done
 alive() { kill -0 "$1" 2>/dev/null; }
 any_alive() { local p; for p in ${pids[@]+"${pids[@]}"}; do [ -n "$p" ] && alive "$p" && return 0; done; return 1; }
 
-deadline=$(( $(date +%s) + bound ))
 while any_alive && [ "$(date +%s)" -lt "$deadline" ]; do sleep 0.5; done
 if any_alive; then
   for i in "${!pids[@]}"; do

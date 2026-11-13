@@ -35,7 +35,7 @@ EOF
   chmod +x "$TMP/$fam-gate" "$TMP/$fam-runner"
 done
 export PANEL_CODEX_GATE="$TMP/codex-gate" PANEL_AGY_GATE="$TMP/agy-gate" PANEL_CODEX_RUNNER="$TMP/codex-runner" PANEL_AGY_RUNNER="$TMP/agy-runner"
-panel() { rm -f "$TMP/times" "$TMP"/*.args; out=$(bash "$PANEL" --cwd "$TMP/work" --out-dir "$TMP/out" "$@" 2>"$TMP/err"); rc=$?; }
+panel() { rm -f "$TMP/times" "$TMP"/*.args; rm -rf "$TMP/out"; out=$(bash "$PANEL" --cwd "$TMP/work" --out-dir "$TMP/out" "$@" 2>"$TMP/err"); rc=$?; }
 
 panel --kind task --tier light --prompt "$TMP/prompt.md"
 check "light panel prints both reviewers in ranked order and a summary" "$out" "agy-judge gemini-4-argon/high status=OK exit=0 out=$TMP/out/agy.json evidence=none
@@ -75,6 +75,7 @@ check "a final panel never passes --tier" "$(cat "$TMP/codex.args" "$TMP/agy.arg
 
 AGY_STATUS=FAILED panel --kind task --tier light --prompt "$TMP/prompt.md"
 check "each runner's stderr has its own file" "$(ls "$TMP/out"/*.stderr | wc -l | tr -d ' ')" "2"
+check "a FAILED runner is not counted as a list" "$(tail -1 <<<"$out")" "panel tier=light lists=1"
 
 cat > "$TMP/hang-runner" <<EOF
 #!/usr/bin/env bash
@@ -87,6 +88,21 @@ check "a runner past the bound is reported as TIMEOUT" "$(head -1 <<<"$out")" "a
 if command -v setsid >/dev/null 2>&1; then
   check "the bound kills the runner's children" "$(kill -0 "$(cat "$TMP/child.pid")" 2>/dev/null && echo alive || echo dead)" "dead"
 fi
+# Called without panel(), which clears the out dir, so an earlier run's list is there.
+mkdir -p "$TMP/out"; printf '{"stale":true}' > "$TMP/out/agy.json"
+PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/hang-runner" bash "$PANEL" --cwd "$TMP/work" --out-dir "$TMP/out" \
+  --kind task --tier light --prompt "$TMP/prompt.md" >/dev/null 2>&1
+check "a timed-out runner leaves no list from an earlier run" "$([ -e "$TMP/out/agy.json" ] && echo stale || echo none)" "none"
+
+cat > "$TMP/slow-gate" <<EOF
+#!/usr/bin/env bash
+sleep 3
+exec bash "$TMP/agy-gate"
+EOF
+chmod +x "$TMP/slow-gate"
+t0=$(date +%s)
+PANEL_BOUND_SECONDS=3 PANEL_AGY_GATE="$TMP/slow-gate" PANEL_AGY_RUNNER="$TMP/hang-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
+check "the bound counts from panel start, gates included" "$([ $(( $(date +%s) - t0 )) -le 5 ] && echo inside || echo over)" "inside"
 
 for fam in codex agy; do
   cat > "$TMP/$fam-count-gate" <<EOF
