@@ -12,7 +12,8 @@
 #   --tier is required for task and ignored for plan and final, which take
 #   the heavy rows; --prompt goes with task and plan, --base with final.
 #   Each gate's stderr goes to <out-dir>/<id>.gate.log, each runner's to
-#   <out-dir>/<id>.stderr.
+#   <out-dir>/<id>.stderr. The panel's own stderr names its bound and the
+#   second its watchdog fires.
 # Output: one `<id>-judge ...` line per family in ranked order, then
 #   `panel tier=<t> lists=<n>`, n counting OK and FALLBACK lines.
 # Env seams: PANEL_<ID>_GATE, PANEL_<ID>_RUNNER, PANEL_LADDER, and
@@ -128,6 +129,7 @@ done
 bound=$((bound + 120))
 deadline=$((start + bound - 15))
 [ -z "${PANEL_BOUND_SECONDS:-}" ] || deadline=$((start + PANEL_BOUND_SECONDS))
+printf 'run-review-panel: bound %s s, watchdog at %s s\n' "$bound" "$((deadline - start))" >&2
 
 have_setsid=false
 command -v setsid >/dev/null 2>&1 && have_setsid=true

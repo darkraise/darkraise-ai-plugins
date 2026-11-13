@@ -123,6 +123,18 @@ PANEL_CODEX_GATE="$TMP/codex-count-gate" PANEL_AGY_GATE="$TMP/agy-count-gate" pa
 check "one panel run reads each gate once" "$(sort "$TMP/gates.log" | uniq -c | awk '{ printf "%s=%s ", $2, $1 }')" "agy=1 codex=1 "
 check "the agy runner makes no roster probe" "$(grep -c 'detect-executors' "$P/scripts/run-agy-review.sh")" "0"
 
+# Each wrong rule gives another figure: the first row on light (1180), the
+# graces swapped (490), or a closed family still counted (485).
+printf '%s\n' '```codex-judge' 'gpt-6-astra xhigh 1000' 'gpt-6.1-sol xhigh 300' '```' \
+  '```agy-judge' 'claude-opus-5-5 high 900' 'gemini-4-argon high 295' '```' > "$TMP/bound-ladder.md"
+bound_of() { grep -o 'bound .*' "$TMP/err" | tr -d '\r'; }
+PANEL_LADDER="$TMP/bound-ladder.md" panel --kind task --tier light --prompt "$TMP/prompt.md"
+check "the light bound is the slower last row plus its grace and 120 s" "$(bound_of)" "bound 485 s, watchdog at 470 s"
+PANEL_LADDER="$TMP/bound-ladder.md" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
+check "the heavy bound takes the first rows" "$(bound_of)" "bound 1180 s, watchdog at 1165 s"
+AGY_GATE_LINE='agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting' \
+  PANEL_LADDER="$TMP/bound-ladder.md" panel --kind task --tier light --prompt "$TMP/prompt.md"
+check "a skipped family adds nothing to the bound" "$(bound_of)" "bound 480 s, watchdog at 465 s"
 printf '%s\n' '```codex-judge' 'gpt-6-astra xhigh 30' 'gpt-6.1-sol xhigh 20' '```' > "$TMP/codex-only-ladder.md"
 PANEL_LADDER="$TMP/codex-only-ladder.md" panel --kind task --tier light --prompt "$TMP/prompt.md"
 check "a family with no ladder block fails as error" "$(head -1 <<<"$out")" "agy-judge none/none status=FAILED exit=0 out=- evidence=none reason=error"
