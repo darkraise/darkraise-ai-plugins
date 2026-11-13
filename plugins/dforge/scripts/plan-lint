@@ -6,8 +6,7 @@
 #
 # Usage: plan-lint PLAN_FILE [--amendments FILE] [--no-probe]
 # Default amendments: <workspace>/amendments.md inside a git repository.
-# --no-probe skips the lane probe, for runs whose verdict must not depend on
-# whether Codex is usable on the machine.
+# --no-probe is accepted and does nothing; callers still pass it.
 # Output: "ERROR|WARN|NOTE <header|Task N>: <what>" lines, then a summary line.
 # Exit: 0 no errors; 1 errors; 2 usage, missing file, or an unreadable
 # routing policy.
@@ -16,7 +15,6 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 . "$HERE/lib/register.sh"
-. "$HERE/lib/executor-session.sh"
 # jq reads it on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /d/...
 # form pwd gives on Git Bash.
 ROUTING="$HERE/../reference/codex-routing.json"
@@ -24,11 +22,11 @@ ROUTING="$HERE/../reference/codex-routing.json"
 usage() { echo "usage: plan-lint PLAN_FILE [--amendments FILE] [--no-probe]" >&2; exit 2; }
 [ $# -ge 1 ] || usage
 plan=$(plan_locate "$1"); shift
-amend="" amend_given=0 probe=1
+amend="" amend_given=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --amendments) [ $# -ge 2 ] || usage; amend=$2 amend_given=1; shift 2 ;;
-    --no-probe) probe=0; shift ;;
+    --no-probe) shift ;;
     *) usage ;;
   esac
 done
@@ -271,58 +269,7 @@ awk "$_PLAN_AWK"'
 # --- per task ---
 assignment=$(ladder_block assignment)
 reserve=$(ladder_block reserve | awk '{ print $1 }' | grep -vxF BLOCKED | grep -vxF -f <(awk '{ print $2 }' <<<"$assignment") || true)
-# An executor's gate and assignment blocks are named by its registry entry.
-# Codex's gate block is literally called `gate`, so nothing moves for it.
-executor_field() {
-  # The registry cannot change during one lint invocation. Cache both successes
-  # and misses on disk so command-substitution subshells share the result.
-  # Validate the id before using it as a filename; it can come from plan text.
-  [[ "$1" =~ ^[a-z][a-z0-9-]*$ ]] || return 1
-  local cache="$TMP/executor-$1-$2" value
-  if [ ! -f "$cache" ]; then
-    value=$(bash "$HERE/executors" get "$1" "$2" 2>/dev/null) || value=""
-    printf '%s' "$value" > "$cache"
-  fi
-  value=$(< "$cache")
-  [ -n "$value" ] || return 1
-  printf '%s\n' "$value"
-}
-executor_gate() { # executor_gate <id> <min_score|max_score|max_risk>
-  local block; block=$(executor_field "$1" blocks.gate)
-  [ -n "$block" ] || return 1
-  awk -v k="$2" '$1 == k { print $2 }' <<<"$(ladder_block "$block")"
-}
-executor_rung() { # executor_rung <id> <total>
-  local block; block=$(executor_field "$1" blocks.assignment)
-  [ -n "$block" ] || return 1
-  awk -v t="$2" '$1 == t { print $2 " / " $3 }' <<<"$(ladder_block "$block")"
-}
-# `<id>\t<min_score>\t<max_risk>\t<max_score>` per registered executor in
-# ranked order, read once: the loop below tests every task against every
-# executor's gate, and each `executors` call is a subprocess.
-lane_gates=""
-while read -r eid; do
-  [ -n "$eid" ] || continue
-  gmin=$(executor_gate "$eid" min_score) gmax=$(executor_gate "$eid" max_risk)
-  gtop=$(executor_gate "$eid" max_score)
-  # An entry whose `blocks.gate` names no ladder block cannot be gated, so it
-  # is never offered as a lane candidate. One diagnostic per entry, and the
-  # run continues, exactly as `executors list` treats an invalid entry.
-  if [ -z "$gmin" ] || [ -z "$gmax" ] || [ -z "$gtop" ]; then
-    printf 'plan-lint: %s gate block %s is missing from the ladder\n' \
-      "$eid" "$(executor_field "$eid" blocks.gate)" >&2
-    continue
-  fi
-  lane_gates="$lane_gates$eid"$'\t'"$gmin"$'\t'"$gmax"$'\t'"$gtop"$'\n'
-done < <(bash "$HERE/executors" ranked 2>/dev/null)
-externals=$(grep -E '^> \*\*External executors:\*\*' <<<"$header" || true)
-# Space-delimited words, so one id is never matched inside another.
-ticked=" $(sed -E 's/^> \*\*External executors:\*\*//' <<<"$externals" | tr ',\t\n' '   ') "
-any_ticked=no
-while IFS=$'\t' read -r lid _; do
-  [ -n "$lid" ] && [[ "$ticked" == *" $lid "* ]] && any_ticked=yes
-done <<<"$lane_gates"
-max_total=0 max_score=0 lane=""
+max_total=0 max_score=0
 
 # A task the ruling seat split carries `#### Part A: …` / `#### Part B: …`
 # sections, each a unit with its own Files, Implementer and Evaluation lines;
@@ -335,11 +282,8 @@ for n in $nums; do
           -gt "$(plan_eval_lines <<<"$full" | grep -c .)" ]; then
     say NOTE "Task $n" "an **Evaluation:** line above the first part does not score the task"
   fi
-  if [ -n "$parts" ] \
-     && [ "$(plan_lines Executor <<<"$full" | grep -c .)" \
-          -gt "$(for part in $parts; do plan_part_text "$part" <<<"$full"; done | plan_lines Executor | grep -c .)" ]; then
-    say NOTE "Task $n" "an **Executor:** line above the first part does not route the task"
-  fi
+  [ -z "$(plan_lines Executor <<<"$full")" ] \
+    || say WARN "Task $n" "the **Executor:** line is obsolete; the session implements this task"
   for part in ${parts:--}; do
   if [ "$part" = - ]; then
     where="Task $n" text=$full
@@ -410,53 +354,6 @@ for n in $nums; do
         say ERROR "$where" "Approach does not match '<inline|advisor|best-of-3> — <reason>'"
       fi
     fi
-    executor=$(line Executor)
-    if [ -n "$executor" ]; then
-      eid=$(sed -E 's/^\*\*Executor:\*\*[[:space:]]*([^[:space:]]+).*/\1/' <<<"$executor")
-      [ "$sev" = ERROR ] || say ERROR "$where" "an Executor line on an overridden task fails the lane gate"
-      if ! bash "$HERE/executors" get "$eid" id >/dev/null 2>&1; then
-        say ERROR "$where" "Executor names no registered executor: $eid (run 'executors list')"
-      else
-        emin=$(executor_gate "$eid" min_score) emax=$(executor_gate "$eid" max_risk)
-        etop=$(executor_gate "$eid" max_score)
-        # A gate that cannot be read cannot certify the task, so an absent
-        # block is an error rather than an open gate.
-        if [ -z "$emin" ] || [ -z "$emax" ] || [ -z "$etop" ]; then
-          say ERROR "$where" "$eid's gate block '$(executor_field "$eid" blocks.gate)' is missing from the ladder"
-        else
-          { [ "$t" -ge "$emin" ] && [ "$t" -le "$etop" ] && [ "$d" -le "$emax" ]; } \
-            || say ERROR "$where" "total $t / risk $d fails the lane gate (min_score $emin, max_score $etop, max_risk $emax)"
-          # The task belongs to the first ticked executor, in ranked order,
-          # whose gate admits it. An overridden or Rule S task is admitted by
-          # none, so it is never reported as misrouted.
-          if [ "$sev" = ERROR ] && [ $((a + b + c)) -lt "$rule_s_limit" ] && [ "$b" -lt 3 ]; then
-            while IFS=$'\t' read -r lid lmin lmax ltop; do
-              [ -n "$lid" ] || continue
-              [ "$lid" != "$eid" ] || break
-              [[ "$ticked" == *" $lid "* ]] || continue
-              { [ "$t" -ge "$lmin" ] && [ "$t" -le "$ltop" ] && [ "$d" -le "$lmax" ]; } || continue
-              say ERROR "$where" "Executor names $eid but $lid ranks first and admits total $t"
-              break
-            done <<<"$lane_gates"
-          fi
-        fi
-        rung=$(executor_rung "$eid" "$t")
-        { [ -n "$rung" ] && [[ "$executor" == *"$eid $rung"* ]]; } || say ERROR "$where" "Executor does not name the $(executor_field "$eid" blocks.assignment) rung for total $t ($eid ${rung:-none})"
-        [[ "$externals" == *"$eid"* ]] || say ERROR "$where" "Executor used but the header's '> **External executors:**' line does not name $eid"
-      fi
-    elif [ "$sev" = ERROR ] && [ $((a + b + c)) -lt "$rule_s_limit" ] && [ "$b" -lt 3 ]; then
-      # One candidate row per executor whose own gate admits the task. Once
-      # the header ticks any executor, an unticked one is no candidate: a line
-      # naming it fails the header check above. A header that ticks nothing
-      # leaves every executor a candidate, so p1.md still gets the warning.
-      while IFS=$'\t' read -r lid lmin lmax ltop; do
-        [ -n "$lid" ] || continue
-        [ "$any_ticked" = no ] || [[ "$ticked" == *" $lid "* ]] || continue
-        { [ "$t" -ge "$lmin" ] && [ "$t" -le "$ltop" ] && [ "$d" -le "$lmax" ]; } || continue
-        rung=$(executor_rung "$lid" "$t")
-        [ -z "$rung" ] || lane="$lane$where"$'\t'"$lid"$'\t'"$rung"$'\n'
-      done <<<"$lane_gates"
-    fi
   fi
   for v in "$a" "$b" "$c" "$d"; do
     [ "$v" -le 3 ] || { say ERROR "$where" "each axis must be 0-3"; break; }
@@ -475,45 +372,10 @@ for n in $nums; do
   done
 done
 
-# The lane probe is lazy: the detector costs about two seconds, so it runs only
-# when some task could have taken the lane and did not, and only for an
-# executor whose lane surface this session's gate opened. A plan without
-# Executor lines is correct on a machine where no executor is usable, so every
-# outcome other than a usable roster row prints nothing. Inline plans are
-# skipped: an inline plan may now carry Executor lines, so this warning would
-# be meaningful there, but turning it on changes a pinned fixture for an
-# advisory message. That is a deliberate deferral, recorded in the register,
-# not an oversight.
-if [ -n "$lane" ] && [ "$probe" -eq 1 ] && [ "$mode" != inline ]; then
-  # The session test is free and the roster costs seconds, so no executor
-  # survives to the probe unless its own lane surface is on.
-  on_ids=""
-  for eid in $(cut -f 2 <<<"$lane" | sort -u); do
-    executor_session_on "$eid" lane && on_ids="$on_ids $eid "
-  done
-  if [ -n "$on_ids" ]; then
-    roster=$(timeout 30 bash "${PLAN_LINT_ROSTER:-$HERE/detect-executors.sh}" 2>/dev/null) || roster=""
-    usable_ids=$(jq -r '.[]? | select(.usable == true) | .id' <<<"$roster" 2>/dev/null | tr -d '\r')
-    # The rows are in ranked order, so the first one that survives the filters
-    # names the executor the task would go to; later rows for it are dropped.
-    warned=""
-    while IFS=$'\t' read -r w eid r; do
-      [ -n "$w" ] || continue
-      [[ "$on_ids" == *" $eid "* ]] || continue
-      grep -qxF "$eid" <<<"$usable_ids" || continue
-      ! grep -qxF "$w" <<<"$warned" || continue
-      warned="$warned$w"$'\n'
-      say WARN "$w" "lane-eligible with no **Executor:** line ($eid $r)"
-    done <<<"$lane"
-  fi
-fi
-
 # R5: execution mode. Inline is the default and subagent mode is deprecated.
-# On Claude, plan_delegated names the executor tasks an inline plan delegates;
-# the session implements every other task, heavy ones included, so the inline
-# model and effort follow the hardest of those. A self-implemented risk-3 task
-# runs the session's per-task review loop, and a plan with executor tasks runs
-# the delegated review loop, so either raises the effort to at least high.
+# On Claude the session implements every task, heavy ones included, so the
+# inline model and effort follow the hardest task. A risk-3 task runs the
+# session's per-task review loop, which raises the effort to at least high.
 effort_rank() { case $1 in low) echo 0 ;; medium) echo 1 ;; high) echo 2 ;; xhigh) echo 3 ;; *) echo 4 ;; esac; }
 # The Execution pair is the main session's for its whole run, so an
 # over-provisioned pair costs more than any single task: a subagent session
@@ -537,7 +399,6 @@ if [ "$codex" -eq 1 ]; then
     fi
   fi
 elif [ -n "$mode" ]; then
-  delegated=$(plan_delegated "$src")
   family=$exec_model
   case $exec_model in claude-*opus*) family=opus ;; claude-*sonnet*) family=sonnet ;; esac
   if [ "$mode" = subagent ]; then
@@ -545,15 +406,13 @@ elif [ -n "$mode" ]; then
     { [ "$family" = sonnet ] && [ "$exec_effort" = high ]; } \
       || say WARN header "subagent Execution line should be claude --model sonnet --effort high"
   else
-    [ -z "$delegated" ] \
-      || say NOTE header "delegated: $(awk -F'\t' '{ printf "%sTask %s (%s)", (NR > 1 ? ", " : ""), $1, $2 }' <<<"$delegated")"
-    read -r self_max self_risk3 < <(plan_scores "$src" | awk -F'\t' -v d=" $(cut -f1 <<<"$delegated" | tr '\n' ' ')" '
-      $2 ~ /^[0-9]+$/ && index(d, " " $1 " ") == 0 { if ($2 + 0 > m) m = $2 + 0; if ($3 + 0 == 3) r3 = 1 }
+    read -r self_max self_risk3 < <(plan_scores "$src" | awk -F'\t' '
+      $2 ~ /^[0-9]+$/ { if ($2 + 0 > m) m = $2 + 0; if ($3 + 0 == 3) r3 = 1 }
       END { print m + 0, r3 + 0 }')
     agent=$(awk -v t="$self_max" '$1 == t { print $2 }' <<<"$assignment")
     need=${agent##*-}
     case $need in low|medium|high) ;; *) need=low ;; esac
-    { [ -z "$delegated" ] && [ "$self_risk3" -eq 0 ]; } || need=high
+    [ "$self_risk3" -eq 0 ] || need=high
     if [ "$family" != sonnet ] && [ "$family" != opus ]; then
       say ERROR header "inline execution needs --model sonnet or opus (model $exec_model)"
     elif [ "$family" = sonnet ] && [[ "$agent" == impl-opus-* ]]; then
@@ -595,7 +454,6 @@ elif [ "$parallelism" = waves ]; then
       || say ERROR header "Parallelism waves must be ascending, contiguous ranges covering Tasks 1-$task_count exactly once"
     wave_of() { awk -F'\t' -v n="$1" '$2 <= n && n <= $3 { print $1 }' <<<"$waves"; }
     scores=$(plan_scores "$src")
-    execs=$(plan_executors "$src" | cut -f1)
     lockfiles=' package.json package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml pnpm-workspace.yaml bun.lockb bun.lock Cargo.toml Cargo.lock go.mod go.sum requirements.txt pyproject.toml poetry.lock uv.lock Pipfile Pipfile.lock Gemfile Gemfile.lock composer.json composer.lock '
     while IFS=$'\t' read -r k a b; do
       [ -n "$k" ] || continue
@@ -619,7 +477,6 @@ elif [ "$parallelism" = waves ]; then
         [ "$width" -gt 1 ] || continue
         risk=$(awk -F'\t' -v n="$n" '$1 == n { print $3 }' <<<"$scores")
         [ "$risk" != 3 ] || say ERROR "Task $n" "a risk-3 task must run alone in its wave"
-        ! grep -qx "$n" <<<"$execs" || say ERROR "Task $n" "a task with an **Executor:** line must run alone in its wave"
         while IFS= read -r path; do
           [ -n "$path" ] || continue
           [[ "$lockfiles" != *" ${path##*/} "* ]] \

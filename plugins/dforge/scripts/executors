@@ -41,7 +41,6 @@ valid_entry() { # valid_entry <file> <stem>; prints the id when valid
     elif (.wrapper | type) != "string" then empty
     elif (.session_dir | type) != "string" then empty
     elif (.surfaces | type) != "array" then empty
-    elif (.blocks.gate | type) != "string" then empty
     else .id end' < "$file" 2>/dev/null | tr -d '\r')
   rc=$?
   { [ "$rc" -eq 0 ] && [ -n "$id" ]; } || { printf 'executors: %s: missing or malformed required fields\n' "$stem" >&2; return 1; }

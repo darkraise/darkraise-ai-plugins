@@ -8,12 +8,7 @@
   "session_dir": "stub-sessions",
   "session_dir_env": "DR_STUB_SESSION_DIR",
   "surfaces": ["lane"],
-  "blocks": {
-    "gate": "stub-gate",
-    "assignment": "stub-assignment",
-    "successor": "stub-successor",
-    "timeout": "stub-timeout"
-  },
+  "blocks": { "judge": "stub-judge" },
   "reasons": {
     "not_enabled": "the stub executor is not enabled in this profile",
     "logged_out": "the stub executor is not logged in; run /stub:setup",

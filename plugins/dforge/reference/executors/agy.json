@@ -9,12 +9,7 @@
   "session_dir_env": "DR_AGY_SESSION_DIR",
   "surfaces": ["lane"],
   "priority": 10,
-  "blocks": {
-    "gate": "agy-lane-gate",
-    "assignment": "agy-assignment",
-    "successor": "agy-successor",
-    "timeout": "agy-timeout"
-  },
+  "blocks": { "judge": "agy-judge" },
   "reasons": {
     "not_installed": "agy is not on PATH; install the Antigravity CLI",
     "not_enabled": "agy is not usable on this machine",

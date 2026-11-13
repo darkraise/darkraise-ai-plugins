@@ -6,5 +6,5 @@
   "session_dir": "opencode-sessions",
   "session_dir_env": "DR_OPENCODE_SESSION_DIR",
   "surfaces": ["lane"],
-  "blocks": { "gate": "stub-gate", "assignment": "stub-assignment" }
+  "blocks": { "judge": "stub-judge" }
 }

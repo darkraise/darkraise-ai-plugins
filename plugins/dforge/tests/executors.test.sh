@@ -62,6 +62,11 @@ jq -n '{id:"missing", locator:"scripts/x"}' > "$TMP/reg/missing.json"
 check "a missing required field is skipped" "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta "
 rm -f "$TMP/reg/missing.json"
 
+entry noblocks; jq 'del(.blocks)' "$TMP/reg/noblocks.json" > "$TMP/x" && mv "$TMP/x" "$TMP/reg/noblocks.json"
+check "an entry without ladder blocks is valid" \
+  "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta noblocks "
+rm -f "$TMP/reg/noblocks.json"
+
 entry gamma; jq '.id = "delta"' "$TMP/reg/gamma.json" > "$TMP/x" && mv "$TMP/x" "$TMP/reg/gamma.json"
 check "an id that disagrees with its filename is skipped" \
   "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta "
@@ -83,8 +88,10 @@ check "the shipped registry lists codex" \
   "$(bash "$EXEC" list | grep -cx codex)" "1"
 check "the shipped codex entry names the real locator" \
   "$(bash "$EXEC" get codex locator)" "scripts/codex-plugin"
-check "the shipped codex entry keeps the ladder block named gate" \
-  "$(bash "$EXEC" get codex blocks.gate)" "gate"
+check "the shipped codex entry keeps only its judge block" \
+  "$(jq -r '.blocks | keys | join(",")' < "$P/reference/executors/codex.json")" "judge"
+check "the shipped codex judge block exists in the ladder" \
+  "$(grep -cx "\`\`\`$(bash "$EXEC" get codex blocks.judge)" "$P/reference/ladder.md")" "1"
 check "the shipped codex entry keeps the session directory" \
   "$(bash "$EXEC" get codex session_dir)" "codex-sessions"
 check "the shipped codex entry keeps the session directory override" \
@@ -121,11 +128,10 @@ for key in locator probe.command gate wrapper; do
   check "the shipped agy $key resolves to a real file" \
     "$([ -f "$(bash "$EXEC" path agy "$key")" ] && echo yes || echo no)" "yes"
 done
-for key in gate assignment successor timeout; do
-  block=$(bash "$EXEC" get agy "blocks.$key")
-  check "the shipped agy $key block exists in the ladder" \
-    "$(grep -cx "\`\`\`$block" "$P/reference/ladder.md")" "1"
-done
+check "the shipped agy entry keeps only its judge block" \
+  "$(jq -r '.blocks | keys | join(",")' < "$P/reference/executors/agy.json")" "judge"
+check "the shipped agy judge block exists in the ladder" \
+  "$(grep -cx "\`\`\`$(bash "$EXEC" get agy blocks.judge)" "$P/reference/ladder.md")" "1"
 
 # --- ranked ------------------------------------------------------------------
 # Priority decides which executor planning tries first. A malformed value must

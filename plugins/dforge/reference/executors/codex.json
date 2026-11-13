@@ -9,13 +9,7 @@
   "session_dir_env": "DR_CODEX_SESSION_DIR",
   "priority": 20,
   "surfaces": ["review", "lane"],
-  "blocks": {
-    "gate": "gate",
-    "assignment": "codex-assignment",
-    "successor": "codex-successor",
-    "timeout": "codex-timeout",
-    "judge": "codex-judge"
-  },
+  "blocks": { "judge": "codex-judge" },
   "reasons": {
     "not_enabled": "the codex plugin is not enabled in this profile",
     "not_installed": "the codex plugin is enabled but not installed in this profile",
