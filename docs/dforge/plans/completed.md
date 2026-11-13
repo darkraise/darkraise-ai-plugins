@@ -16,3 +16,4 @@
 - 2026-11-11 `docs/dforge/plans/2026-11-11-test-volume-rules.md` — via PR
 - 2026-11-12 `docs/dforge/plans/2026-11-12-wording-pin-deletion.md` — via PR
 - 2026-11-13 `docs/dforge/plans/2026-11-13-dflow-hud-overhaul.md` — merged into `main` at 52da46e0
+- 2026-11-13 `docs/dforge/plans/2026-11-13-reviewer-only-externals.md` — merged into `main` at 2831e73a
