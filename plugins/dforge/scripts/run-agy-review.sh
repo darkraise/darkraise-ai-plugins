@@ -279,7 +279,7 @@ classify() { # classify <model> <log-prefix>; sets result and reason (empty when
       . as $r | (.structured_output | type) == "object" and
       ((($s.required // []) - (.structured_output | keys)) | length == 0) and
       ([$s.properties // {} | to_entries[]
-        | select(.value.type == "integer" and (.value.enum | type) == "array")
+        | select((.value.enum | type) == "array")
         | select(.key as $k | .value.enum | index([$r.structured_output[$k]]) == null)] | length == 0)' \
       <<<"$result" >/dev/null 2>&1; then
     reason=schema; return

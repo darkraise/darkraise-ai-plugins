@@ -55,7 +55,7 @@ side() {
     stash) write_file; git stash -q -u ;;
   esac
 }
-review_json() { printf '{"spec":%s,"scope":18,"verification":18,"quality":18,"spec_verdict":"PASS","task_quality":"PASS","findings":[%s],"cannot_verify":[]}' "${STUB_AGY_SCORE:-18}" "${STUB_AGY_FINDING:-}"; }
+review_json() { printf '{"spec":%s,"scope":18,"verification":18,"quality":18,"spec_verdict":"%s","task_quality":"approved","findings":[%s],"cannot_verify":[]}' "${STUB_AGY_SCORE:-18}" "${STUB_AGY_VERDICT:-compliant}" "${STUB_AGY_FINDING:-}"; }
 
 case "${STUB_AGY_MODE:-done}" in
   done) write_file; emit DONE ;;
