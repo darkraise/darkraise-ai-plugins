@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { bandText, bar, isFreshReset, isResetFor, nextMode, paneRows } from '../hooks/hud/view.mjs';
+import { bar as meterBar, cellWidth, duration, isAtLeast, kTokens, limitForecast, limitLabel, rampColor, runsCut, sparkline, stackedRuns, track, trackRuns, windowElapsed } from '../hooks/hud/meter.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const hud = root => JSON.parse(read(root, '.dflow/hud.json'));
@@ -64,4 +65,49 @@ test('the mod is wired into hooks.json and the manifest names its state contract
   const hooks = JSON.parse(fs.readFileSync(path.join(PLUGIN, 'hooks/hooks.json'), 'utf8'));
   assert.deepEqual(hooks.modules, ['./hud/register.tsx']);
   assert.equal(JSON.parse(fs.readFileSync(path.join(PLUGIN, '.claude-plugin/plugin.json'), 'utf8')).types, './types/index.d.ts');
+});
+
+const H = 3_600_000;
+
+test('meter text, colors and labels', () => {
+  assert.deepEqual([kTokens(118000), kTokens(999_499), kTokens(999_500), kTokens(967_000)], ['118k', '999k', '1.0M', '967k']);
+  assert.deepEqual([duration(59_000), duration(12 * 60_000), duration(220 * 60_000), duration((2 * 1440 + 4 * 60) * 60_000)], ['', '12m', '3h40m', '2d4h']);
+  assert.deepEqual([rampColor(49), rampColor(50), rampColor(75), rampColor(90)], ['success', 'warning', '#ff8700', 'error']);
+  assert.deepEqual([limitLabel('five_hour'), limitLabel('seven_day'), limitLabel('spend_limit')], ['5h', '7d', 'spend']);
+  assert.deepEqual([isAtLeast('2.1.323', '2.1.295'), isAtLeast('2.1.290', '2.1.295'), isAtLeast(undefined, '2.1.295')], [true, false, false]);
+});
+
+test('a meter fills to its share and each mark lands on its cell', () => {
+  const parts = track(0.118, 40, [{ at: 0.15, glyph: '┃', name: 'reset' }, { at: 0.967, glyph: '┊', name: 'compact' }]);
+  const cells = [...parts.map(part => part.text).join('')];
+  assert.equal(cells.length, 40);
+  assert.equal(cells[6], '┃');
+  assert.equal(cells[38], '┊');
+  assert.equal(cells.filter(cell => cell === '▰').length, 5);
+  assert.equal(meterBar(0.999, 10), '▰▰▰▰▰▰▰▰▰▱');
+  const runs = trackRuns(parts, 'success', { reset: 'error' });
+  assert.deepStrictEqual(runs.find(run => run.text === '┃'), { text: '┃', color: 'error', bold: true });
+  assert.deepStrictEqual(runs.find(run => run.text === '┊'), { text: '┊', color: 'success', bold: true });
+  assert.deepStrictEqual(runs[0], { text: '▰▰▰▰▰', color: 'success' });
+  assert.equal(runs[1].dim, true);
+});
+
+test('sparkline, stacked runs, window share and pace', () => {
+  assert.deepEqual([sparkline([100000, 118000]), sparkline([1, 2, 3]), sparkline([5, 5])], ['▁█', '▁▅█', '▄▄']);
+  const runs = stackedRuns([318, 41, 9, 6, 4, 2], 50);
+  assert.equal(runs.reduce((sum, run) => sum + run, 0), 50);
+  assert.ok(runs.every(run => run >= 1));
+  const now = 1_000_000_000_000;
+  assert.equal(Math.round(windowElapsed('five_hour', now + 3.4 * H, now) * 100), 32);
+  assert.equal(windowElapsed('spend_limit', now + H, now), null);
+  assert.equal(limitForecast('five_hour', 23, now + (3 * H + 40 * 60_000), now), 'pace');
+  assert.equal(typeof limitForecast('seven_day', 61, now + (2 * 24 + 19) * H, now), 'number');
+  assert.equal(limitForecast('five_hour', 23, now + (4 * H + 55 * 60_000), now), null);
+});
+
+test('widths count terminal cells and a cut row ends in an ellipsis', () => {
+  assert.deepEqual([cellWidth('🚀'), cellWidth('é'), cellWidth('Task 5')], [2, 1, 6]);
+  assert.deepStrictEqual(runsCut([{ text: 'abcdef', bold: true }], 4), [{ text: 'abc', bold: true }, { text: '…', dim: true }]);
+  assert.deepStrictEqual(runsCut([{ text: 'ab🚀' }], 3), [{ text: 'ab' }, { text: '…', dim: true }]);
+  assert.deepStrictEqual(runsCut([{ text: 'abc' }], 3), [{ text: 'abc' }]);
 });
