@@ -391,6 +391,23 @@ test('outside a dflow checkout a stored pane mode opens nothing and reads no acc
   expect(w.calls.some(call => call.includes('.claude.json'))).toBe(false)
 })
 
+test('a session switch reads the breakdown and git again within one poll', async ($, on) => {
+  const w = world(on, {
+    files: { [HUD_FILE]: JSON.stringify(HUD) },
+    porcelain: '# branch.head feat/x\n',
+    breakdown: { categories: [{ name: 'Messages', tokens: 9000, kind: 'used' }], totalTokens: 9000, isAutoCompactEnabled: false },
+  })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await w.clock!.advance(10000)
+  w.sessionId = 's2'
+  const before = w.calls.length
+  await w.clock!.advance(2000)
+  const after = w.calls.slice(before)
+  expect(after).toContain('usage breakdown')
+  expect(after.some(call => call.includes('status --porcelain=v2'))).toBe(true)
+})
+
 test('a Hud read earlier is dropped once hud.json is gone', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify({ ...HUD, plan: { ...HUD.plan, approved: '2026-11-12' } }) } })
   on('ui.render', ($: any, e: any) => {

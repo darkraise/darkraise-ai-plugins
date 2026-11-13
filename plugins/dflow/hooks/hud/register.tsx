@@ -106,6 +106,9 @@ let isSectionsFromBand = false
 // a compaction keeps the session and makes none.
 let isOfferDue = false
 let isPaneDue = false
+// The breakdown and git, cleared on a session switch, are read on the next
+// poll rather than the next fifth one.
+let isRereadDue = false
 
 type ButtonLook = { hotkey?: string; isMain?: boolean; isOff?: boolean; isCompact?: boolean }
 
@@ -505,6 +508,7 @@ async function readState($: any): Promise<void> {
     hasReadWhere = false
     isOfferDue = true
     isPaneDue = true
+    isRereadDue = true
     // The previous session's figures would draw until the next reading.
     await update($, breakdownAtom, () => null)
     await update($, readingsAtom, () => [])
@@ -722,12 +726,14 @@ export const register: Register = on => {
     timer = $.clock.every(POLL_MS, async () => {
       await refresh($)
       polls += 1
+      const isReread = isRereadDue
+      isRereadDue = false
 
-      if (polls % BREAKDOWN_EVERY === 0) {
+      if (isReread || polls % BREAKDOWN_EVERY === 0) {
         await readBreakdown($)
       }
 
-      if (polls % GIT_EVERY === 0) {
+      if (isReread || polls % GIT_EVERY === 0) {
         await readRepo($)
       }
     })
