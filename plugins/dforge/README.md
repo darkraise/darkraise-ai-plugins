@@ -43,11 +43,9 @@ Claude hooks are disabled in the native manifest. Native reviewers have
 independent contexts; enforce read-only restrictions where the host allows and
 disclose instruction-only restrictions where it does not.
 
-**External CLI lane.** On Claude, a task scoring 2–4 at risk ≤ 1 may run on the
-Codex CLI instead of a Claude implementer. The lane needs an exclusively
-assigned linked worktree, stable task IDs, approved file paths and durable
-recovery; read [external-task-recovery.md](reference/external-task-recovery.md)
-before offloading.
+**External reviewers.** On Claude, Codex and Antigravity (agy) take review
+seats only, never a plan task. Both are off by default; read
+[external-review.md](reference/external-review.md) before turning one on.
 
 ## What you get
 
@@ -153,14 +151,12 @@ guesses into a confident pick.
 
 **Every plan runs inline.** Under executing-plans the session that read the
 code implements every task, heavy ones (total 5 or more, or risk 3) included;
-an implementer subagent would rebuild that context from nothing. The one
-exception is every task carrying an `**Executor:**` line, which runs on that
-executor (Codex or Antigravity) with the full per-task review loop in
-`reference/delegated-task.md`. A risk-3 task the session implements gets a
-per-task judge review too, through that file's session review loop; the other
+an implementer subagent would rebuild that context from nothing. A risk-3
+task gets a per-task judge review, through `reference/delegated-task.md`'s
+session review loop; the other
 tasks are covered by one whole-branch review at the end. `plan-lint` requires
 the Execution line's model and effort to cover the hardest task the session
-implements, and `--effort high` at risk 3 or once it delegates. A task that will
+implements, and `--effort high` at risk 3. A task that will
 not converge after three fix rounds goes to the ruling seat as a `breaker`
 item. subagent-driven-development, a dispatch and a scored review per task, is
 deprecated: it runs only for a plan whose Execution line names `subagent` or
@@ -178,72 +174,28 @@ tasks at once, each in its own git worktree, reviews each exactly as it would a
 sequential task, merges each reviewed task with `scripts/wave merge` (which
 refuses a task whose files overlap what the wave already merged), and runs the
 plan's `**Integration check:**` before the next wave starts. `plan-lint` keeps
-risk-3 tasks, executor tasks and dependency-manifest changes alone in their
+risk-3 tasks and dependency-manifest changes alone in their
 wave, the pre-flight ruling seat checks every same-wave pair for coupling the
 file lists cannot show, and `context-size --wave W` keeps room in the session
 for every task running at once. Running a wave one task after another is always
 correct, so every doubt serializes it; `reference/parallel-waves.md` holds the
 procedure. A plan without a `**Parallelism:**` line runs exactly as before.
 
-**An external executor lane.** A task can run on an external CLI instead of a
-Claude implementer, for quota offload onto a separate subscription and for a
-second model family in the loop. Two executors are registered. `agy`, the
-Antigravity CLI (priority 10, wrapper `scripts/run-agy-task.sh`), takes totals 0-8 at risk 2 or below,
-implementation only: totals 0-2 run on `gemini-3.8-flash` at medium effort, as
-the 2026-11-02 calibration record decided, totals 3-4 on `gemini-4-argon` at
-low effort and totals 5-8 on `gemini-4-argon` at high effort, as
-`docs/dforge/notes/2026-11-03-agy-calibration-3-8.md` decided; Claude Sonnet
-runs through `agy` only as the single retry after a Gemini run fails. Codex (priority 20) keeps the
-tasks `agy` refuses. Planning gives each task to the first ticked executor, in
-`executors ranked` order, whose gate admits it. The `agyLane` setting (`Agy
-tasks`) turns the agy lane off. `agy` runs unsandboxed, with the reach of a
-native Claude implementer subagent, so its recovery fingerprints cover only the
-linked worktree and its refs. A per-plan breaker, `scripts/lane-breaker`, turns
-the agy lane off for the rest of a plan after two handbacks. The lane is a
-gate in front of the assignment table, never a rung on the escalation ladder:
-offload selects downward at the cheap end while the ladder only moves upward, and
-one total order cannot express both. The Claude ladder stays the sole backstop,
-so its termination proof is untouched.
+**A reviewer panel.** Codex and agy review; neither implements a task. When a
+family's review surface is open, `scripts/run-review-panel` runs every open
+family at once, chosen by risk: the light tier (Codex `gpt-6.1-sol`, agy
+`gemini-4-argon`) for tasks at risk 0 to 2, and the heavy tier (Codex
+`gpt-6-astra`, agy `claude-opus-5-5`, each falling back once to the light row on
+a refusal) at risk 3, for plan review round 1 and for the final review's
+external round at depth full. A family whose gate is closed is skipped with its
+reason, so the panel answers with whatever lists came back, and a Claude judge
+reviews alone when none did. A heavy panel's lists go to `judge-opus`, which
+rules on every finding. Antigravity's Claude quota is small, so after one or two
+heavy reviews the Opus row is usually off until its reset and Argon reviews in
+its place. A plan that still carries an `**Executor:**` line runs the task in
+the session; `plan-lint` warns that the line is obsolete.
 
-Codex's gate floors at score 2 and stops at 4 on purpose: `codex-assignment` has
-rows for totals 2 to 4 only, and Rule S admits a Claude task up to `reducible`
-5, so `max_score 4` keeps a total-5 or total-6 task at risk 1 or below on the
-Claude ladder. Without the floor the gate would reduce to `risk <= 1` and
-capture nearly every task by count, and it would offload score-0 work where the
-displaced agent is `impl-sonnet-low` and the wrapper costs more to orchestrate
-than it saves.
-
-`**Implementer:**` still names the Claude agent for the score. `**Executor:**` is
-an override on a second line, which is what makes a machine without Codex, a cold
-session, and an executor whose auth has lapsed all degrade by reading a line that
-is already there rather than re-deriving the assignment at dispatch. Under
-`dforge:executing-plans` both lines are read only for the tasks an
-inline plan delegates; for the tasks the session implements itself they are
-inert, so nothing falls back.
-
-The following observations were made against the external CLI lane on Windows
-with ChatGPT-subscription auth on 2026-08-31. They are historical CLI policy
-evidence, not native Codex capability declarations:
-
-- Only `gpt-5.5` and `gpt-5.6-sol` were available. `luna` and `terra` were
-  rejected with HTTP 400 and Codex held no metadata for either.
-- Valid reasoning efforts are `low`, `medium`, `high`, `xhigh`, `ultra`.
-  `minimal` is rejected. The CLI validates neither model nor effort locally - it
-  echoes any string and fails at the API - so `scripts/run-codex-task.sh`
-  validates both before spawning anything.
-- Codex **cannot commit**. Its Windows restricted-token sandbox denies writes to
-  `.git` under `-s workspace-write`, which `codex sandbox -- git add -A`
-  reproduces with no model call. The wrapper owns the commit, so the ledger's
-  commit range is measured rather than reported. It also inlines the repository's
-  `CLAUDE.md` into every prompt, because Codex natively reads only `AGENTS.md`,
-  and passes the model's own conventional-commit subject to `git commit`
-  unmodified.
-- Resume is a request field, not a subcommand. `scripts/lib/codex-client.mjs`
-  passes `resumeThreadId`, and the runner re-sends the model and the effort on
-  every resumed turn, because a resumed thread that fell back to the user's
-  config defaults would run a fix round at a tier the ledger does not record.
-
-Every Codex interaction — the session gate, both runners and the executor
+Every Codex interaction — the session gate, the review runner and the
 roster — goes through the official `codex@openai-codex` plugin.
 `scripts/codex-plugin` locates it for the active profile and enforces a version
 allowlist; `scripts/lib/codex-client.mjs` runs one turn through the plugin's own
@@ -256,9 +208,9 @@ date. This plugin reads no model catalog at all: the judge seats attempt the pre
 rung and fall back once on a refusal, which is the only evidence of entitlement
 that has ever been reliable.
 
-On 2026-09-23 the lane and the judge fallback moved to `gpt-6-sol`: `gpt-5.5`
+On 2026-09-23 the judge fallback moved to `gpt-6-sol`: `gpt-5.5`
 retires from Codex with ChatGPT sign-in on 2026-10-14, and Codex 0.155.1's
-catalog lists `gpt-6-sol` as the upgrade for `gpt-5.6-sol`, with every lane
+catalog lists `gpt-6-sol` as the upgrade for `gpt-5.6-sol`, with every judge
 effort advertised for a ChatGPT Pro sign-in.
 
 On 2026-10-07 they moved again, to `gpt-6.1-sol`, Codex's default since
@@ -271,51 +223,48 @@ puts `gpt-6.1-sol` at ranks 3 to 6.
 A different machine, account, or Codex version must verify the tables against
 its own account before relying on them. Do not make paid capability probes.
 
-**Cross-family review.** Codex reviews are opt-in. By default every review runs
-on Claude judges: `judge-sonnet-high` for tasks totalling 0 to 5, `judge-opus`
-for 6 and at risk 3, plan review and the final review. For a one-off Codex
-review, run `/codex:review` or `/codex:adversarial-review` from the codex
-plugin. Turning the `codexReview` setting on gives Codex the review seats below
-for every run. With it on, Codex is the default task reviewer: `gpt-6.1-sol` for
-tasks totalling 0 to 6, and `gpt-6-astra` followed by `judge-opus` at risk 3. A task the executor lane implemented is always
-reviewed by a Claude judge, so Codex never reviews its own work there; when a
-Codex seat produces nothing, `judge-sonnet-high` takes totals 0 to 5 and
-`judge-opus` 6 and at risk 3. Plan review takes Astra for round 1
-(`judge-opus` when Codex is off) and `judge-opus` for the delta round:
-at most two rounds on a Claude plan.
-The final whole-branch review runs on `judge-opus`, its one fix subagent on
-the highest tier among the tasks the findings touch, and with `codexReview` on gains a Codex round. When both reviewers return findings,
-a fresh `judge-opus` dedupes and verifies them. No review route names `judge-fable`:
-on 2026-09-23 Opus 5.5 at high effort matched or beat Fable 5.1 on two replayed reviews with
-known defects, at about 40% of the cost, so Fable takes a review seat only
-when you ask for it. An auto run is the exception: it dispatches `judge-fable`
-for the spec review and for each batch of rulings
-(`reference/auto-run.md`). With one list there is no third seat:
-the fixer triages each finding against the code and the scoped re-review rules
-on every rejection. The Codex round is not self-review-free, because the branch
-contains whatever the executor lane produced, which is why no finding is acted
-on unchecked.
-`scripts/review-route` prints the review seat for a task or plan round, and
-every Codex seat runs through `scripts/run-codex-review.sh`, which checks
-availability on each run and falls back once to `gpt-6.1-sol` when Astra
-refuses the run. Selection, the run bound and the four
-outcomes live in those scripts rather than in prose, so a refused model is a
-recorded substitution instead of a silently missing seat.
+**Cross-family review.** External reviews are opt-in. By default every review
+runs on Claude judges: `judge-sonnet-high` for tasks totalling 0 to 5,
+`judge-opus` for 6 and at risk 3, plan review and the final review. For a
+one-off Codex review, run `/codex:review` or `/codex:adversarial-review` from
+the codex plugin. Turning the `codexReview` or `agyReview` setting on gives
+that family the panel seats for every run (`reference/external-review.md`):
+a light panel's one list is read as a judge's report, two lists go to the band
+judge to dedupe and verify, and a heavy panel's lists always go to
+`judge-opus`; when the panel returns no list, the Claude seat reviews alone.
+Plan review runs the panel for round 1 (`judge-opus` when it returns nothing
+or every reviewer is off) and `judge-opus` for the delta round: at most two
+rounds on a Claude plan. The final whole-branch review runs on `judge-opus`,
+its one fix subagent on the highest tier among the tasks the findings touch,
+and at depth full gains an external round with one list per reviewer. Whenever
+two or more lists carry findings, a fresh `judge-opus` dedupes and verifies
+them, tagging each finding's origins (`[claude+agy]`). No review route names
+`judge-fable`: on 2026-09-23 Opus 5.5 at high effort matched or beat Fable 5.1
+on two replayed reviews with known defects, at about 40% of the cost, so Fable
+takes a review seat only when you ask for it. An auto run is the exception: it
+dispatches `judge-fable` for the spec review and for each batch of rulings
+(`reference/auto-run.md`). With one list there is no third seat: the fixer
+triages each finding against the code and the scoped re-review rules on every
+rejection. `scripts/review-route` prints the review seat for a task or plan
+round, and each runner (`scripts/run-codex-review.sh`,
+`scripts/run-agy-review.sh`) checks availability on each run and falls back
+once when the preferred row refuses. Selection, the run bound and the outcomes
+live in those scripts rather than in prose, so a refused model is a recorded
+substitution instead of a silently missing seat.
 
-**The Codex session gate.** Before any Codex use, `scripts/codex-gate` checks the official codex plugin
-once per session - enabled, installed at an allowed version, logged in, not on
-a free ChatGPT plan, and within quota - through the plugin's own client, and
-caches the answer per session. When Codex is unusable, every Codex seat, the final-review Codex round,
-the executor lane and `plan-lint`'s lane probe are skipped for the session and
-Claude seats take over; a quota error mid-run turns Codex off the same way. A
-usable Codex is still used only on a surface whose shipping gate passed,
-recorded per surface in `reference/codex-plugin.json`: the calibration replay
-opens the review seats, and the executor-lane smoke test opens the lane.
-`scripts/agy-gate` does the same for Antigravity once per session: `agy` found
-at an allowed version, signed in, within quota, `agyLane` on and the smoke result
-in `reference/agy-policy.json` passing. A quota on a Gemini model closes the
-lane, and one on a Claude model closes only the Claude fallback, each until the
-reset time the error names, or for the session when it names none.
+**The session gates.** Before any Codex use, `scripts/codex-gate` checks the
+official codex plugin once per session - enabled, installed at an allowed
+version, logged in, not on a free ChatGPT plan, and within quota - through the
+plugin's own client, and caches the answer per session. `scripts/agy-gate` does
+the same for Antigravity: `agy` found at an allowed version, signed in and
+within quota. A family that is unusable, or whose setting (`codexReview`,
+`agyReview`) is off, is skipped by every panel for the session, and a quota
+error mid-run turns it off the same way. A usable family reviews only once its
+review surface is trusted: `trust.calibration` in
+`reference/codex-plugin.json` for Codex, `trust.review` in
+`reference/agy-policy.json` for agy. A quota on a Claude model through agy
+closes only the Opus row, until the reset time the error names, or for the
+session when it names none.
 
 **Project state.** `docs/dforge/` holds what a project knows about
   itself, not just its specs and plans: `gates.md` declares the verification
@@ -436,11 +385,10 @@ double-trigger.
 
 **Bash, jq, Git, and GNU timeout/coreutils.** The scripts need Git 2.31 or
 later: they ask `git rev-parse` for `--path-format=absolute`. The rest are
-requirements of the external executor lane:
-`scripts/detect-executors.sh` builds every field with `jq`, and
-`scripts/run-codex-task.sh` parses Codex's verdict with it. Each exits 2 with a
-message naming the dependency rather than degrading, because a missing `jq`
-would otherwise read as "no executor usable" or as a task Codex blocked on. The
+requirements of the external reviewers: `scripts/detect-executors.sh` builds
+every field with `jq`, and the review runners parse each reviewer's answer with
+it. Each exits 2 with a message naming the dependency rather than degrading,
+because a missing `jq` would otherwise read as "no reviewer usable". The
 SessionStart hook is the lenient case: without `jq` it still injects the entry
 point and only skips persisting the session record, and `bash` is required for
 it to run at all. On Windows that means Git for
@@ -1032,15 +980,35 @@ The last loads the working copy into a session and reloads it on save. The
 engine lays its type declarations under `.claude-plugin/types/` when it loads
 the folder; they are not committed.
 
+## Migrating to 5.0
+
+dforge 5.0 retires the external executor lane: Codex and agy review and never
+implement a task.
+
+- **Settings.** `codexLane` and `agyLane` are gone; a stored value is ignored,
+  and `dforge-config unset` refuses either as an unknown key, so it stays in the
+  file harmlessly. `codexReview` is unchanged. The new `agyReview` switch (`Agy
+  reviews`) is off by default, and agy reviews only while
+  `reference/agy-policy.json` records `trust.review: pass`.
+- **Plans.** The `revising-plans` skill and `scripts/plan-revise` are gone. A
+  plan written for an older layout is fixed against `plan-lint`'s findings or
+  re-planned. A task that still carries an `**Executor:**` line runs in the
+  session, and `plan-lint` prints a WARN that the line is obsolete.
+- **A task caught mid-lane.** A task whose last ledger line names an executor
+  run and no complete line is implemented by the session: run `git status`,
+  show the leftovers, keep or discard them, then implement it. Leftover run
+  records under the git directory are inert.
+- **Reviews.** `reference/executor-lane.md` is now
+  `reference/external-review.md`, which describes the reviewer panel
+  (`scripts/run-review-panel`).
+
 ## Migrating to 4.11
 
-dforge 4.11 runs the `agy` lane Gemini first (`gemini-3.8-flash medium` for
-totals 0-2, `gemini-4-argon low` for 3-4, `gemini-4-argon high` for 5-8), runs
-Claude through `agy` only as the retry after a Gemini run fails, and adds
-`fallback=` and `fallback_resets_at=` to the `agy-gate` line before `source=`.
-A plan whose `**Executor:** agy` lines name a `claude-` rung fails `plan-lint`
-until those lines are rewritten from the new block: `scripts/plan-revise`
-prints each task's rung, and the `revising-plans` skill makes the edit.
+dforge 4.11 ran the `agy` lane Gemini first, ran Claude through `agy` only as
+the retry after a Gemini run failed, and added `fallback=` and
+`fallback_resets_at=` to the `agy-gate` line before `source=`. dforge 5.0
+retired that lane and prints the Claude mark as `claude=` and
+`claude_resets_at=`.
 
 ## Migrating to 4.0
 
@@ -1234,7 +1202,7 @@ differences:
    whole-branch review adds a Codex round, and a judge verifies the union of
    both reviewers' findings.
 7. **Rulings, not stops.** Dispatch problems - an unknown agent name, an
-   unavailable model, an Executor line the wrapper refuses - are logged
+   unavailable model, an obsolete Executor line - are logged
    rulings, never silent fallbacks and never stops.
 8. **Session budget.** A budget line, a compaction snapshot, and the
    dforge:handoff / dforge:resume-execution pair replace
@@ -1251,8 +1219,8 @@ differences:
     plan's `**Execution:**` line names inline: `executing-plans` is a full
     inline mode that writes the same ledger, sends its judgment to the same
     ruling seat, and ends at the same shared
-    [final-review.md](reference/final-review.md); only risk-3 and executor
-    tasks get a per-task review. A task it cannot land in three fix rounds
+    [final-review.md](reference/final-review.md); only risk-3 tasks get a
+    per-task review. A task it cannot land in three fix rounds
     goes to the ruling seat as a `breaker` item. Subagent mode is deprecated
     and runs only for an older plan's subagent line or on your instruction.
 
@@ -1270,8 +1238,8 @@ frozen at 6.3.0 with no upstream sync, and
 for t in plugins/dforge/tests/*.test.sh; do bash "$t"; done
 ```
 
-Requires `jq` and `git`. No model calls: the executor suites run against a stub
-`codex` on `PATH` and a synthetic roster, never the real CLI.
+Requires `jq` and `git`. No model calls: the reviewer suites run against a stub
+`codex` plugin, a stub `agy` and a synthetic roster, never the real CLIs.
 `gates-manifest.test.sh` checks that the running-gates skill and its template
 exist and validates the template against the documented format.
 `test-simplifier.test.sh` checks that the test-simplifier skill's files exist
@@ -1292,26 +1260,27 @@ The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one 
 ## Reference
 
 `reference/ladder.md` holds the raw rubric, Rule S, and Claude assignment,
-escalation, reserve, and external CLI tables. Native Codex reads
+escalation, reserve, and external judge tables. Native Codex reads
 `reference/codex-routing.json`; `reference/native-codex.md` explains its weighted
 score, request format, and plan conversion. `scripts/select-native-tier.sh`
 validates raw scores and history before returning a native routing decision.
 
-`reference/executors/` holds one JSON entry per external executor and
+`reference/executors/` holds one JSON entry per external reviewer family and
 `scripts/executors` is the only reader of it: `executors list` prints every
 valid id, `executors ranked` the same ids by ascending `priority`,
 `executors get <id> <dotted.key>` one field, and
 `executors path <id> <dotted.key>` that field resolved against the plugin root.
-An entry names the executor's locator, probe, wrapper, gate, session directory,
-surfaces, priority and ladder blocks, so adding an executor is an entry, a wrapper and a
-ladder block rather than an edit to every script. `reference/executor-lane.md`
-states the entry schema and holds the Claude-hosted external executor lanes,
-`reference/session-budget.md` holds the budget numbers, checkpoints,
-stops and the Compact Instructions block, and `reference/final-review.md` holds
-the whole-branch review both execution skills end at.
-`scripts/run-codex-review.sh` runs every Codex review seat: it
-selects the judge rung from `codex-judge`, bounds the run, and classifies the
-outcome as `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`.
+An entry names the family's locator, probe, gate, review runner, session
+directory, surfaces, priority and judge block, so adding a reviewer is an
+entry, a runner and a ladder block rather than an edit to every script.
+`reference/external-review.md` states the entry schema and describes the
+reviewer panel, `reference/session-budget.md` holds the budget numbers,
+checkpoints, stops and the Compact Instructions block, and
+`reference/final-review.md` holds the whole-branch review both execution skills
+end at. `scripts/run-review-panel` runs every open family's runner at once;
+`scripts/run-codex-review.sh` and `scripts/run-agy-review.sh` each select the
+judge row from their block (`codex-judge`, `agy-judge`), bound the run, and
+classify the outcome as `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`.
 
 `reference/parallel-waves.md` runs a waves plan: opening a wave, the parallel
 implementer dispatch, the merge and the integration check, and recovery.
@@ -1324,46 +1293,23 @@ task commits to, `status` of a wave's tasks, `merge` one reviewed task, and
 settles a disagreement between them.
 
 `criteria/` holds the verifier criteria, including `plan-review.md` for plan
-review, `codex-review-schema.json` for the Codex task seats, and
-`codex-plan-review-schema.json` for the Codex plan-review round;
+review, `codex-review-schema.json` for the external task reviews,
+`codex-plan-review-schema.json` for the plan-review round, and
+`agy-final-review-schema.json` for agy's final-review answer;
 `criteria/TEMPLATE.md` documents the format.
 `tests/criteria.test.sh` validates every file in that directory.
 
-`scripts/` holds the external executor lane:
+`scripts/` holds the external reviewers' plumbing:
 
-- `detect-executors.sh` emits the JSON roster read at plan time and again as a
-  dispatch guard. `usable` means dispatchable, so a batch-capable CLI this
-  plugin ships no wrapper for reports `usable: false` with the reason.
-- `run-codex-task.sh` runs one plan task on Codex, owns the commit, and prints
-  one status line. Exit 0 is `DONE`, 1 is a run that did not reach it, and 2 is
-  no status line - either a refusal before launch or a git failure after the run,
-  which the dispatching skill tells the controller apart and recovers from
-  differently. The status line also carries the wrapper's normalized `exit=`
-  code for the turn (0 when the client reports `ok`, 1 when it does not, 124 on
-  a deadline) and a `note=timed-out` marker, and the report copies the client
-  result's `reason`, `refusal`, `quota`, `timedOut` and `stderr` fields into a
-  `## Codex error` section; the whole client result is kept as `<report>.jsonl`.
-  All three exist because `status` is forced to `BLOCKED` on any non-zero exit,
-  so on its own it cannot separate a parse failure, a timeout, and a model that
-  gave up.
-- `codex-report-schema.json` is the `--output-schema` the wrapper passes, and
-  the shape of the verdict it parses back.
-- `codex-task-contract.md` is appended to every prompt the wrapper sends,
-  resume rounds included.
+- `detect-executors.sh` emits the JSON roster for the named ids, or every
+  registered id: presence, version and sign-in for each family.
+- `codex-plugin` locates the official codex plugin; `codex-gate` is Codex's
+  session gate.
 - `agy-locate` finds the Antigravity CLI and checks its version against
   `reference/agy-policy.json`; `agy-gate` is the session gate built on it and on
   `lib/agy-probe.mjs`, the sign-in probe.
-- `run-agy-task.sh` runs one plan task on `agy` with the same flags, control
-  operations, task record and exit codes as `run-codex-task.sh`. Its status line
-  carries `exit=` and the `note=timed-out` and `note=writer-unconfirmed` markers,
-  and a failed run's report holds an `## Agy error` section with
-  `reason=quota`, `timeout`, `unknown-model` or `error`. It compares git refs
-  before and after the run and blocks the task on any difference.
-- `agy-report-schema.json` is the `--json-schema` the wrapper passes, byte-identical
-  to `codex-report-schema.json`, and `agy-task-contract.md` is appended to every
-  prompt it sends.
-- `lane-breaker` reads a plan's ledger and reports whether an executor's lane is
-  `open` or `tripped` for that plan.
+- `run-review-panel`, `run-codex-review.sh` and `run-agy-review.sh` are the
+  panel and its two runners ([external-review.md](reference/external-review.md)).
 
 ### Item registers
 

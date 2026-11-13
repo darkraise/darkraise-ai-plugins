@@ -37,7 +37,7 @@ names "the ledger grammar holds the awaiting line" "$SDD_LEDGER" 'Task <N>: awai
 names "the ledger grammar holds the group review line" "$SDD_LEDGER" 'Group <list>: review round R/2 (Task <N>: <k> open — <one-liners> | clean; …; commits <a7>..<b7> (Task <N>)[, <a7>..<b7> (Task <M>)])'
 
 # --- the fix loop holds two rounds (faster-plans §3) ---
-names "subagent mode: the fix-round grammar" "$SDD_LEDGER" 'Task <N>: fix round R/2 (X addressed, Y open — <one-liners>; commits a..b[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)'
+names "subagent mode: the fix-round grammar" "$SDD_LEDGER" 'Task <N>: fix round R/2 (X addressed, Y open — <one-liners>; commits a..b[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new>)'
 
 # --- the wave check cadence (faster-plans §4) ---
 WPR="$P/skills/writing-plans/references/task-check-line.md"

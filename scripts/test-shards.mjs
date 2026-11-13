@@ -89,6 +89,7 @@ export const windowsSeconds = {
   'review-panel.test.sh': 30,
   'review-record.test.sh': 20,
   'review-route.test.sh': 458,
+  'reviewer-only.acceptance.test.sh': 5,
   'roadmap.test.sh': 170,
   'roots.test.sh': 84,
   'sdd-references.test.sh': 10,
