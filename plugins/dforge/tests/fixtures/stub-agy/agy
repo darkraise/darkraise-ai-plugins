@@ -53,6 +53,10 @@ side() {
     write) write_file ;;
     commit) write_file; git add -A && git commit -qm stub ;;
     stash) write_file; git stash -q -u ;;
+    modify) printf 'changed\n' >> tracked.txt ;;
+    delete) rm -f tracked.txt ;;
+    hook) mkdir -p "$(git rev-parse --git-path hooks)" && printf '#!/bin/sh\n' > "$(git rev-parse --git-path hooks)/pre-commit" ;;
+    config) git config dforge.stub yes ;;
   esac
 }
 review_json() { printf '{"spec":%s,"scope":18,"verification":18,"quality":18,"spec_verdict":"%s","task_quality":"approved","findings":[%s],"cannot_verify":[]}' "${STUB_AGY_SCORE:-18}" "${STUB_AGY_VERDICT:-compliant}" "${STUB_AGY_FINDING:-}"; }

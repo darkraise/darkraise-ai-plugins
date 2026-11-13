@@ -177,11 +177,25 @@ if ! jq 'walk(if type == "object" and .type == "integer" and (.enum | type) == "
   exit 1
 fi
 
-# Plan mode is the agy-side promise; this is the proof. The stash list is read
-# separately because refs/stash is not in the worktree snapshot.
+# Plan mode is the agy-side promise; this is the proof. The stash list, the git
+# config and the hooks are read separately because the worktree snapshot does
+# not cover the git directory, and a planted hook or config entry runs code at
+# the session's next git command.
+git_state() { # git_state; prints `<crc> <size> <path>` for each config file and hook
+  local common gitdir hooks f files=()
+  common=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir) || return 1
+  gitdir=$(git -C "$cwd" rev-parse --absolute-git-dir) || return 1
+  hooks=$(git -C "$cwd" rev-parse --path-format=absolute --git-path hooks) || return 1
+  for f in "$common/config" "$gitdir/config.worktree"; do [ -f "$f" ] && files+=("$f"); done
+  if [ -d "$hooks" ]; then
+    while IFS= read -r f; do files+=("$f"); done < <(find "$hooks" -type f | tr -d '\r')
+  fi
+  [ "${#files[@]}" -eq 0 ] || cksum "${files[@]}" | tr -d '\r' | LC_ALL=C sort
+}
 take_state() { # take_state <name>
   dr_snapshot "$cwd" "$snapdir/$1.json" || return 1
   git -C "$cwd" stash list --format='%H' 2>/dev/null | tr -d '\r' > "$snapdir/$1.stash"
+  git_state > "$snapdir/$1.git"
 }
 if ! take_state before; then
   status "$model" "$effort" FAILED 0 error
@@ -224,6 +238,9 @@ wrote_check() { # wrote_check; succeeds when the run changed nothing
       (($x | keys) + ($y | keys) | unique)[] | select($x[.] != $y[.])' | tr -d '\r'
     [ "$(jq -r .head < "$snapdir/before.json")" = "$(jq -r .head < "$snapdir/after.json")" ] || echo HEAD
     cmp -s "$snapdir/before.stash" "$snapdir/after.stash" || echo stash
+    awk 'NR == FNR { b[$0] = 1; next } { a[$0] = 1 }
+      END { for (l in b) if (!(l in a)) print l; for (l in a) if (!(l in b)) print l }' \
+      "$snapdir/before.git" "$snapdir/after.git" | sed 's/^[0-9]* [0-9]* //' | LC_ALL=C sort -u
   } > "$out.wrote"
   [ -s "$out.wrote" ] && return 1
   rm -f "$out.wrote"

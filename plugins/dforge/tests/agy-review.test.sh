@@ -21,7 +21,7 @@ cp "$P/reference/agy-policy.json" "$DR_AGY_POLICY"
 printf '# r\n' > "$TMP/prompt.md"
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 git -C "$TMP/work" init -q && git -C "$TMP/work" config user.name t && git -C "$TMP/work" config user.email t@t
-git -C "$TMP/work" commit -q --allow-empty -m base
+printf 'base\n' > "$TMP/work/tracked.txt"; git -C "$TMP/work" add tracked.txt; git -C "$TMP/work" commit -qm base
 export PATH="$P/tests/fixtures/stub-agy:$PATH"
 # A stub gate line, not the real gate: the real gate's probe spawns the stub
 # from Node, which Windows Git Bash cannot do.
@@ -59,8 +59,13 @@ STUB_AGY_REFUSE_MODEL=gemini-4-argon STUB_AGY_MODE=review run --kind task --tier
 has "the light tier never falls back" "$out" "status=FAILED"
 has "a refusal names its reason" "$out" "reason=refused"
 
-for side in write commit stash; do
-  git -C "$TMP/work" stash clear; git -C "$TMP/work" clean -qfd
+reset_work() {
+  git -C "$TMP/work" stash clear; git -C "$TMP/work" checkout -q -- .; git -C "$TMP/work" clean -qfd
+  rm -f "$(git -C "$TMP/work" rev-parse --path-format=absolute --git-path hooks)/pre-commit"
+  git -C "$TMP/work" config --unset dforge.stub
+}
+for side in write commit stash modify delete hook config; do
+  reset_work
   STUB_AGY_WRITE=$side.txt STUB_AGY_SIDE=$side STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
   has "a reviewer that does $side fails" "$out" "status=FAILED"
   has "a $side run is evidence=wrote" "$out" "evidence=wrote reason=wrote"
@@ -68,9 +73,12 @@ for side in write commit stash; do
   case $side in
     commit) check "a commit names HEAD" "$(grep -cx HEAD "$TMP/out.json.wrote")" "1" ;;
     stash) check "a stash names the stash list" "$(grep -cx stash "$TMP/out.json.wrote")" "1" ;;
+    modify|delete) check "a $side run names the tracked file" "$(grep -cx tracked.txt "$TMP/out.json.wrote")" "1" ;;
+    hook) check "a planted hook is named" "$(grep -c '/hooks/pre-commit$' "$TMP/out.json.wrote")" "1" ;;
+    config) check "a git config change is named" "$(grep -c '/config$' "$TMP/out.json.wrote")" "1" ;;
   esac
 done
-git -C "$TMP/work" stash clear; git -C "$TMP/work" clean -qfd
+reset_work
 
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_FINDING='{"severity":"Minor","where":"a","what":"quota wording"}' STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
 has "a clean answer mentioning quota is a list" "$out" "status=OK"
