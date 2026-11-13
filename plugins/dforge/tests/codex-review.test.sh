@@ -88,7 +88,7 @@ STUB
 # GATE_STUB_LINE or GATE_STUB_EXIT.
 cat > "$TMP/gate-stub" <<STUB
 #!$BASH_BIN
-printf '%s\n' "\${GATE_STUB_LINE:-codex-gate usable=true reason=ok review=true lane=true resets_at=- source=cache}"
+printf '%s\n' "\${GATE_STUB_LINE:-codex-gate usable=true reason=ok review=true resets_at=- source=cache}"
 exit "\${GATE_STUB_EXIT:-0}"
 STUB
 
@@ -292,7 +292,7 @@ check "the light tier never falls back" "$(cat "$TMP/calls")" "1"
 
 # --- the session gate and the quota ------------------------------------------
 write_roster
-OFF='codex-gate usable=false reason=quota review=false lane=false resets_at=2026-09-20T10:03:27Z source=cache'
+OFF='codex-gate usable=false reason=quota review=false resets_at=2026-09-20T10:03:27Z source=cache'
 calls() { cat "$TMP/calls" 2>/dev/null || echo 0; }
 
 out=$(GATE_STUB_LINE="$OFF" seat task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
@@ -317,7 +317,7 @@ present "a gate that exits non-zero is refused, whatever it printed" "$out" "cod
 check "a refused gate exits 1" "$rc" "1"
 check "a refused gate runs no codex" "$(calls)" "0"
 
-out=$(GATE_STUB_LINE='codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe' \
+out=$(GATE_STUB_LINE='codex-gate usable=true reason=ok review=false resets_at=- source=probe' \
   run --kind plan --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 present "an untrusted review surface still runs: the runner reads usable only" "$out" "codex-judge gpt-6-astra/high status=OK"
 

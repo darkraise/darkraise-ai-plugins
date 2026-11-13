@@ -3,19 +3,17 @@
 #
 # Codex is usable only when the codex plugin is enabled, installed at an allowed
 # version, logged in on a plan other than free ChatGPT, and within quota. A
-# usable Codex is then used only on a surface whose shipping gate has passed
-# (reference/codex-plugin.json `trust`): calibration opens the review seats, the
-# smoke test opens the executor lane.
-# Anything else turns that surface off for the session, so a Codex outage
+# usable Codex then takes review seats only once its shipping gate has passed
+# (reference/codex-plugin.json `trust.calibration`).
+# Anything else turns the review surface off for the session, so a Codex outage
 # degrades the process instead of failing a task. The probe's answer is cached
 # per session; a quota answer is probed again once its reset time has passed.
 #
 # Usage: codex-gate [--refresh]
-# Output: codex-gate usable=<bool> reason=<r> review=<bool> lane=<bool> resets_at=<iso|-> source=<probe|cache|setting>
+# Output: codex-gate usable=<bool> reason=<r> review=<bool> resets_at=<iso|-> source=<probe|cache|setting>
 #
-# The codexReview and codexLane settings (scripts/dforge-config) switch a surface
-# off whatever the probe says; with both off the gate answers `reason=setting`
-# without probing. codexReview is off unless set: Codex reviews are opt-in.
+# The codexReview setting (scripts/dforge-config) is off unless set: Codex
+# reviews are opt-in, and off the gate answers `reason=setting` without probing.
 # Exit: 0 answered, either way; 2 usage error or missing jq or node.
 set -uo pipefail
 
@@ -38,11 +36,10 @@ command -v node >/dev/null 2>&1 || die "node is required but not on PATH"
 [ -r "$POLICY" ] || die "policy file not found: $POLICY"
 
 want_review=$(dforge_setting codexReview false)
-want_lane=$(dforge_setting codexLane true)
 
 usable="" reason="" resets="" epoch="" version="" source=probe
 file=$(executor_session_file codex) || file=""
-if [ "$want_review" = false ] && [ "$want_lane" = false ]; then
+if [ "$want_review" = false ]; then
   usable=false reason=setting source=setting
 fi
 if [ "$source" = probe ] && [ "$refresh" -eq 0 ] && [ -n "$file" ] && [ -r "$file" ]; then
@@ -95,26 +92,23 @@ fi
 # jq reads on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /d/...
 # form pwd gives on Git Bash.
 trust() { jq -r --arg g "$1" '.trust[$g] == "pass"' < "$POLICY" 2>/dev/null | tr -d '\r'; }
-review=false lane=false
+review=false
 # Without a session id there is no session file, and every reader of the file
 # answers off, so the gate's line says off too rather than disagree with them.
 if [ "$usable" = true ] && [ -n "$file" ]; then
   [ "$(trust calibration)" = true ] && review=true
-  [ "$(trust smoke)" = true ] && lane=true
 fi
-[ "$want_review" = true ] || review=false
-[ "$want_lane" = true ] || lane=false
 
 if [ -n "$file" ]; then
   executor_session_write codex "$(jq -cn --arg sid "$(executor_session_id)" \
-    --argjson usable "$usable" --argjson review "$review" --argjson lane "$lane" \
+    --argjson usable "$usable" --argjson review "$review" \
     --arg reason "$reason" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg resets "$resets" --arg epoch "$epoch" --arg version "$version" \
-    '{session_id: $sid, usable: $usable, review: $review, lane: $lane, reason: $reason,
+    '{session_id: $sid, usable: $usable, review: $review, reason: $reason,
       checked_at: $at, resets_at: (if $resets == "" then null else $resets end),
       resets_at_epoch: (if $epoch == "" then null else ($epoch | tonumber) end),
       plugin_version: (if $version == "" then null else $version end)}')"
 fi
 
-printf 'codex-gate usable=%s reason=%s review=%s lane=%s resets_at=%s source=%s\n' \
-  "$usable" "$reason" "$review" "$lane" "${resets:--}" "$source"
+printf 'codex-gate usable=%s reason=%s review=%s resets_at=%s source=%s\n' \
+  "$usable" "$reason" "$review" "${resets:--}" "$source"

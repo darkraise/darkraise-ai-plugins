@@ -41,7 +41,7 @@ unset DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CO
 # review-route reads this session's gate file; the gate itself is a stub, so no
 # case can reach a real Codex.
 export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=task-step-test
-printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 review_surface() { # review_surface <true|false|absent>
   rm -rf "$DR_CODEX_SESSION_DIR"

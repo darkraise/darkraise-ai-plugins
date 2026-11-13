@@ -5764,7 +5764,7 @@ describe('settings held outside the file', () => {
     await ui.press({ key: 'settings-tab-Workflow' })
     await ui.press({ key: 'set-worktree-always' })
     await ui.press({ key: 'set-worktree-never' })
-    await ui.press({ key: 'set-codexLane-toggle' })
+    await ui.press({ key: 'set-codexReview-toggle' })
     expect(notes.filter(note => note.startsWith(NOTE))).toEqual([])
     await ui.press({ key: 'settings-back' })
     expect(notes.filter(note => note.startsWith(NOTE))).toEqual([

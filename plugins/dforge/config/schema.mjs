@@ -107,11 +107,6 @@ export default {
     label: 'Auto-compact', title: "Claude's auto-compaction",
     description: "Claude's autoCompactEnabled. Stored in Claude's settings file; applies from the next session.",
   },
-  codexLane: {
-    type: 'boolean', default: true, enforcedBy: 'script', group: 'Workflow', target: 'dforge',
-    label: 'Codex tasks', title: 'Give tasks to Codex',
-    description: 'Give plan tasks to Codex when its gate passes. Off keeps every task on Claude.',
-  },
   codexReview: {
     type: 'boolean', default: false, enforcedBy: 'script', group: 'Workflow', target: 'dforge',
     label: 'Codex reviews', title: 'Let Codex review',

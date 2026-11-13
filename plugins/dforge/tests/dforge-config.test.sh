@@ -148,8 +148,8 @@ check "through a linked directory: get answers" "$(node "$TMP/linked-scripts/lib
 
 # --- the workflow keys: defaults and refusals ---
 fresh w
-check "workflow keys: defaults" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log([v.handoffMode, v.codexLane, v.codexReview, v.executionStrategy, v.executionMode, v.worktree, v.processBias, v.designApproval, v.specReview, v.questionStyle, v.finishAction, v.autoRun, v.fastMode].join(" "))')" \
-  "strict true false sequential auto ask standard sections true single ask on ask"
+check "workflow keys: defaults" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log([v.handoffMode, v.codexReview, v.executionStrategy, v.executionMode, v.worktree, v.processBias, v.designApproval, v.specReview, v.questionStyle, v.finishAction, v.autoRun, v.fastMode].join(" "))')" \
+  "strict false sequential auto ask standard sections true single ask on ask"
 # Each key: its default, a value it accepts, and one it refuses.
 while read -r key default valid invalid; do
   fresh "m-$key"
@@ -160,7 +160,6 @@ while read -r key default valid invalid; do
   check "$key: a refusal keeps the value" "$(fc get "$key")" "$valid"
 done <<'ROWS'
 handoffMode strict relaxed loose
-codexLane true false maybe
 codexReview false true 0
 agyLane true false maybe
 lensCap 4 2 10
@@ -334,8 +333,11 @@ ROWS
 # --- the workflow line: the skill-enforced keys that differ from their defaults ---
 fresh x
 check "workflow: nothing at the defaults" "$(fc workflow)" ""
+fresh stale-lane; mkdir -p "$HOME/.dforge"; printf '%s\n' '{"codexLane":false}' > "$FILE"
+check "a stored codexLane resolves without an error" "$(fc get --json >/dev/null; echo $?)" "0"
+fresh w
 fc workflow > /dev/null; check "workflow: exit 0" "$?" "0"
-fc set designApproval whole; fc set worktree always; fc set codexLane false; fc set finishAction merge
+fc set designApproval whole; fc set worktree always; fc set codexReview true; fc set finishAction merge
 check "workflow: only skill keys, in schema order" "$(fc workflow)" \
   "dforge settings in force (each replaces the matching question or default in the skills): worktree=always; designApproval=whole"
 fc workflow extra; check "workflow takes no argument: exit 2" "$?" "2"
