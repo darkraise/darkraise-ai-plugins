@@ -39,6 +39,7 @@ export const windowsSeconds = {
   'run-all.sh': 157,
   'agy-gate.test.sh': 20,
   'agy-gemini-first.acceptance.test.sh': 120,
+  'agy-review.test.sh': 60,
   'antigravity-executor-lane.acceptance.test.sh': 250,
   'auto-default.test.sh': 10,
   'auto-run-skills.test.sh': 10,

@@ -374,6 +374,20 @@ was raised to 5400 on 2026-09-21 for headroom above that single completion, on
 the owner's instruction; nothing measures where its ceiling actually is.
 Revise them when real runs warrant it.
 
+### Agy judge rung
+
+Every agy review seat takes its model from this block, read by
+`scripts/run-agy-review.sh`. The first row is preferred; the last row is the
+fallback and the light tier, which runs it directly. A heavy task review, a
+plan review and a final review use the first row with one fallback to the
+last on a refused model, and a `claude-*` row whose Claude quota is out runs
+the last row instead. The bounds copy the Codex rows of the same tier.
+
+```agy-judge
+claude-opus-5-5 high 5400
+gemini-4-argon high 2400
+```
+
 ### The agy lane gate
 
 ```agy-lane-gate

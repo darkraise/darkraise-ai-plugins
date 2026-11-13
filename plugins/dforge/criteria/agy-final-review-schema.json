@@ -1,0 +1,8 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["review"],
+  "properties": {
+    "review": { "type": "string", "description": "The whole-branch review as Markdown." }
+  }
+}

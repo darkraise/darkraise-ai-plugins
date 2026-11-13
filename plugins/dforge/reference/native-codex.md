@@ -279,7 +279,7 @@ yourself. Otherwise disclose that the restrictions are instruction-only, ensure 
 concurrent writers, and take a snapshot before and after the review:
 
 ```bash
-source <plugin-root>/scripts/lib/task-state.sh
+source <plugin-root>/scripts/lib/worktree-snapshot.sh
 dr_snapshot <worktree> <snapshot-file-outside-worktree>
 dr_task_assert_snapshot <snapshot-file-outside-worktree>
 ```
