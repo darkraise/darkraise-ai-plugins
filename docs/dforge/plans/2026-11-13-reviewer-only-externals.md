@@ -20,6 +20,8 @@
 
 **CI:** `.github/workflows/validate.yml` — platforms: uutils (ubuntu-latest), Windows Git Bash — local: `node scripts/test-all.mjs`; `node scripts/validate-repository.mjs`; `claude plugin validate plugins/dforge`; `claude plugin test plugins/dforge` — uncovered: uutils (ubuntu-latest), Windows Git Bash
 
+**Plan review:** 2026-11-13 — dforge:judge-opus — executability 12 / coherence 14 / coverage 15 / assumptions 12 (round 2)
+
 ## Global Constraints
 
 - All work happens in `/root/repositories/darkraise-ai-plugins/.claude/worktrees/retire-executor-lanes` on `feat/retire-executor-lanes`. Nothing touches the primary checkout `/root/repositories/darkraise-ai-plugins` (live `feat/dflow` work).
@@ -68,6 +70,7 @@
 - The final review's dedupe origin tag (`reference/final-review.md:325`) is read by no script (search of `plugins/dforge/scripts` 2026-11-13), so A15's tag set is prose; A15's script side is the panel's `--kind final` run in Task 9.
 - `executors ranked` orders agy (priority 10) before codex (20) (`scripts/executors:78-96`); the panel keeps that order.
 - The full suite has no recorded run in this worktree's `suites.tsv`; the primary checkout records 173-347 s, so the Task check is rule 4.
+- Borderline review scores (round 2: executability 12, coherence 14 is clear, assumptions 12): accepted. Round 2's one Critical and four Important findings were fixed after it, at the cap; the remaining risk is test snippets meeting suite helpers, which each task's Step 2 (the test must fail for the stated reason) catches before implementation.
 
 ## Task index
 
@@ -213,11 +216,11 @@ git -C "$TMP/work" stash clear; git -C "$TMP/work" clean -qfd
 
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_FINDING='{"severity":"Minor","where":"a","what":"quota wording"}' STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
 has "a clean answer mentioning quota is a list" "$out" "status=OK"
-check "a clean answer marks nothing" "$(field usable)/$(field reason)" "true/ok"
+check "a clean answer marks nothing" "$([ -f "$DR_AGY_SESSION_DIR/s1.json" ] && echo marked || echo none)" "none"
 
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=stderr-quota run --kind task --tier light --prompt "$TMP/prompt.md"
 has "a stderr-only quota fails the run" "$out" "reason=quota-stderr"
-check "a stderr-only quota marks nothing" "$(field reason)" "ok"
+check "a stderr-only quota marks nothing" "$([ -f "$DR_AGY_SESSION_DIR/s1.json" ] && echo marked || echo none)" "none"
 
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='request 14290 failed' run --kind task --tier light --prompt "$TMP/prompt.md"
 has "429 inside a number is no quota" "$out" "reason=error"
@@ -227,7 +230,8 @@ has "a print timeout is TIMEOUT" "$out" "status=TIMEOUT"
 
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota for claude. Resets in 2h' run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "a Claude quota fails the Opus run" "$out" "agy-judge claude-opus-5-5/high status=FAILED"
-check "a Claude quota marks only the Claude row" "$(field usable)/$(field fallback.on)" "true/false"
+check "a Claude quota marks the Claude row" "$(field fallback.on)" "false"
+check "a Claude quota leaves agy usable" "$([ "$(field usable)" = false ] && echo off || echo on)" "on"
 GATE_LINE="${GATE_ON/fallback=on/fallback=off}" STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "the next heavy review runs Argon directly" "$out" "agy-judge gemini-4-argon/high status=OK exit=0 out=$TMP/out.json evidence=claude-off"
 
@@ -282,7 +286,7 @@ This is the spec's riskiest assumption and A16; the owner consented to exactly t
 1. Write `$ws/verify-prompt.md` (`$ws` = `bash plugins/dforge/scripts/sdd-workspace docs/dforge/plans/2026-11-13-reviewer-only-externals.md`): a task-review prompt asking for a review of `HEAD~1..HEAD` of this branch, ending with "Answer with one JSON object matching the schema you were given."
 2. Run as a background Bash call with `timeout` 2600000 ms: `bash plugins/dforge/scripts/run-agy-review.sh --kind task --tier light --cwd "$PWD" --out "$ws/verify-argon.json" --prompt "$ws/verify-prompt.md"`.
 3. Then, as a background Bash call with `timeout` 5600000 ms: the same with `--tier heavy --out "$ws/verify-opus.json"`; the status line must name `claude-opus-5-5/high`.
-4. Both `status=OK` with no `evidence=wrote`: set `reference/agy-policy.json` to `"trust": {"smoke": "pass", "review": "pass"}` and `min_version`/`calibrated` to the `agy --version` printed now (1.5.7 on 2026-11-13); set the stub agy's default `STUB_AGY_VERSION` (`tests/fixtures/stub-agy/agy:12`) to the same version and update `agy-gate.test.sh:80-81`'s policy pin, then run `timeout 600 bash plugins/dforge/tests/agy-gate.test.sh` (PASS). Otherwise set `"review": "pending"`, keep the versions, record the failing status line in this plan's Assumptions, and continue: agy review then ships off (spec, Riskiest assumption).
+4. Both `status=OK` with no `evidence=wrote`: set `reference/agy-policy.json` to `"trust": {"smoke": "pass", "review": "pass"}` and `min_version`/`calibrated` to the `agy --version` printed now (1.5.7 on 2026-11-13); set the stub agy's default `STUB_AGY_VERSION` (`tests/fixtures/stub-agy/agy:12`) to the same version and replace every `1.4.12` in `agy-gate.test.sh` with it (`sed -i 's/1\.4\.12/<version>/g'`; its out-of-range case uses `1.4.11` and stays below the floor), then run `timeout 600 bash plugins/dforge/tests/agy-gate.test.sh` (PASS). Otherwise set `"review": "pending"`, keep the versions, record the failing status line in this plan's Assumptions, and continue: agy review then ships off (spec, Riskiest assumption).
 
 - [ ] **Step 6: Commit**
 
@@ -322,7 +326,7 @@ done
 check "executor-empty-diff is no ruling kind" "$(bash "$ROUTE" "$TMP/plan.md" --ruling executor-empty-diff >/dev/null 2>&1; echo $?)" "2"
 ```
 
-Also: the kind lists at `:263-286` drop `executor-empty-diff` and `codex-empty-diff`; the `reason=executor` expectations at `:335-337` become each task's band seat with `reason=band` (the no-executor plan's answer).
+Also: the kind lists at `:263-286` drop `executor-empty-diff` and `codex-empty-diff`; the `reason=executor` expectations at `:335-337` (run with the review surface off) become each task's Claude seat with `reason=codex-off`, the no-executor plan's answer.
 
 In `task-step.test.sh`, replace the executor start case (`:195-201`) with:
 
@@ -829,7 +833,9 @@ EOF
 chmod +x "$TMP/hang-runner"
 PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/hang-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
 check "a runner past the bound is reported as TIMEOUT" "$(head -1 <<<"$out")" "agy-judge none/none status=TIMEOUT exit=124 out=$TMP/out/agy.json evidence=none reason=timeout"
-check "the bound kills the runner's children" "$(kill -0 "$(cat "$TMP/child.pid")" 2>/dev/null && echo alive || echo dead)" "dead"
+if command -v setsid >/dev/null 2>&1; then
+  check "the bound kills the runner's children" "$(kill -0 "$(cat "$TMP/child.pid")" 2>/dev/null && echo alive || echo dead)" "dead"
+fi
 
 panel --kind task --prompt "$TMP/prompt.md"
 check "a task panel without --tier is a usage error" "$rc" "2"
@@ -848,7 +854,7 @@ Expected: FAIL — `run-review-panel` does not exist.
 1. Parse C10's flags (`die` exits 2): `--tier` required for `--kind task`, ignored and not forwarded for plan and final; `--prompt` required for task and plan, `--base` for final; create `--out-dir`.
 2. For each id of `scripts/executors ranked`: run its gate (`PANEL_<ID>_GATE`, else `bash "$(bash scripts/executors path <id> gate)"`), last line, `tr -d '\r'`. Not ` review=true ` → print the SKIPPED line of C10 with the reason rule (gate `reason=`, `untrusted` when it printed `usable=true`, `no-session-id` when `CLAUDE_CODE_SESSION_ID` is empty).
 3. Start every open family's runner (`PANEL_<ID>_RUNNER`, else the registry `runner`) in the background with `--kind <k> --cwd <cwd> --out <out-dir>/<id>.<json|md> (--prompt|--base) [--tier]`, stdout to `<out-dir>/<id>.status`, stderr to `<out-dir>/<id>.stderr`, under `setsid` where it exists (record the pid as the group id), else as a plain job.
-4. Bound per C10 from the `codex-judge`/`agy-judge` rows (`PANEL_LADDER`, else `reference/ladder.md`) of the families started, or `PANEL_BOUND_SECONDS` when set (a test seam); a watchdog kills each runner group still running at the bound (`kill -TERM -<pgid>`, or the pid and `pkill -P <pid>` repeated for grandchildren without `setsid`) and the panel prints `<id>-judge none/none status=TIMEOUT exit=124 out=<out file> evidence=none reason=timeout` in that runner's place.
+4. Bound per C10 from the `codex-judge`/`agy-judge` rows (`PANEL_LADDER`, else `reference/ladder.md`) of the families started, or `PANEL_BOUND_SECONDS` when set (a test seam); a watchdog kills each runner group still running at the bound (`kill -TERM -<pgid>` where `setsid` exists; without it, `kill -TERM` the runner pid and, where `pkill` exists, `pkill -TERM -P <pid>` repeated for grandchildren — Git Bash may lack `pkill`, so there only the runner pid is signalled, the Known limit the spec states) and the panel prints `<id>-judge none/none status=TIMEOUT exit=124 out=<out file> evidence=none reason=timeout` in that runner's place.
 5. Wait for all; print each family's line in ranked order (its runner's last stdout line, or the SKIPPED line), then `panel tier=<tier|heavy for plan/final> lists=<n>`. Exit 0.
 6. `scripts/test-shards.mjs`: `'review-panel.test.sh': 30`.
 
@@ -984,7 +990,7 @@ git commit -m "feat(dforge): run the panel from task-step"
 **Files:**
 - Create: `plugins/dforge/reference/external-review.md` (from `reference/executor-lane.md` §"Codex task review seats" `:476-556`, §"Final-review Codex round" `:557-622`, the `FALLBACK` row `:638`, §"The executor registry" `:641-669`, the codex review, gate and quota bullets `:670-690`, widened to the panel and agy)
 - Delete: `plugins/dforge/reference/executor-lane.md`
-- Modify: `plugins/dforge/reference/delegated-task.md` (delete `:6-8`, `:26`, `:45-51`, `:70-72`, `:190`, `:203`, `:629-630`, `:645-646`, `:776-800`, `:890-898`; rewrite `:27`, `:295-339`, `:487-526`, `:569`, `:685`, `:764-772`), `plugins/dforge/reference/final-review.md` (`:51`, `:59`, `:150`, `:294-335`, `:421`), `plugins/dforge/reference/native-codex.md:143`, `plugins/dforge/reference/session-budget.md:63`, `plugins/dforge/reference/ladder.md` (links), `plugins/dforge/reference/executors/*.json` (`reference` → `reference/external-review.md`)
+- Modify: `plugins/dforge/reference/delegated-task.md` (delete `:6-8`, `:26`, `:45-51`, `:70-72`, `:190`, `:203`, `:629-630`, `:645-646`, `:776-800`, `:890-898`; rewrite `:27`, `:295-339`, `:487-526`, `:569`, `:685`, `:764-772`), `plugins/dforge/reference/final-review.md` (`:51`, `:59`, `:150`, `:294-335`, `:421`), `plugins/dforge/reference/native-codex.md:143`, `plugins/dforge/reference/session-budget.md:63`, `plugins/dforge/reference/ladder.md` (links), `plugins/dforge/reference/executors/*.json` and `plugins/dforge/tests/fixtures/executors/codex.json` (`reference` → `reference/external-review.md`; the fixture stays byte-identical to the shipped entry)
 - Test: `plugins/dforge/tests/review-route.test.sh:702-712`, `plugins/dforge/tests/inline-mode.test.sh:51-52` (expects `external-review.md`), `plugins/dforge/tests/inline-only.acceptance.test.sh:183-184` and `plugins/dforge/tests/inline-only-execution.acceptance.test.sh:426-427` (their `HANDBACK to inline` greps go with the lane; delete those checks)
 
 **Interfaces:**
