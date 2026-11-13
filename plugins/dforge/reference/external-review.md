@@ -73,9 +73,14 @@ The non-`OK` reason tokens are `gate`, `refused`, `quota`, `quota-stderr`,
 `timeout`, `wrote`, `schema` and `error`. A `wrote` run changed the worktree,
 `HEAD`, the stash list, the git config or a hook: it never counts as a list,
 and what changed is named in `<out>.wrote`. Before any commit the session
-undoes those changes in the panel's `--cwd`; a final round's `--cwd` is a
-throwaway worktree, so it is removed instead, and nothing Acceptance QA
-committed or wrote in the checkout is ever restored.
+undoes a changed path or `HEAD` in the panel's `--cwd`; a final round's
+`--cwd` is a throwaway worktree, so it is removed instead, and nothing
+Acceptance QA committed or wrote in the checkout is ever restored. A `hook`
+path, a `git config <key> <origin>` or a `stash` line lives in the shared git
+directory or a config file, outside `--cwd`, and removing the worktree does
+not undo it; `.wrote` keeps no old value to restore from. On any of those,
+whatever the round, run no further git command in that repository and put
+the `.wrote` lines to the user.
 
 ## Task review seats
 

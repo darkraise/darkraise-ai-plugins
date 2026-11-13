@@ -444,7 +444,9 @@ named_in_output() { # named_in_output <word> - the word appears in the status ou
 }
 t_A6() {
   needs_spawn A6 || return
-  local kind mode
+  local kind mode ext
+  ext=$(tr '\n' ' ' < "$PLUGIN/reference/external-review.md" | tr -s ' ')
+  present "A6: a hook, git config or stash change stops the session, since removing the worktree does not undo it" "$ext" 'hook. path, a .git config <key> <origin>. or a .stash. line .*removing the worktree does not undo it.*run no further git command in that repository'
   for kind in "task light" "task heavy" "plan" "final"; do
     fresh; settings false true
     case ${kind%% *} in plan) mode=plan-review ;; final) mode=final-review ;; *) mode=review ;; esac
