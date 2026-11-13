@@ -14,5 +14,6 @@
 | 7 | Task 12: the host refuses a /-prefixed prompt.submit, so Resume runs /dflow:build as a command | - | - | deferred | handled by amendments A12-A13; the spec's UX-12 and A42 wording ('as the person's prompt') is now out of date |
 | 8 | Task 12: the engine refuses next(e) for a command.run with no args | - | - | deferred | fixed in Task 12 |
 | 9 | Task 14: atoms outlive a reload, so a missing hud.json drew a stale Hud | - | - | deferred | fixed in 637e9400 with a test |
-| 10 | claude plugin validate plugins/dflow warns TS7016 (no declaration file) for each .mjs the mod imports, and ICON_MISSING | - | - | open | - |
-| 11 | Fix-wave follow-ups: the session-switch atom reset, the redraw on a changed reading and setMode's view reset have no assertion of their own; the switch reset writes atoms without an invalidate | - | - | open | - |
+| 10 | claude plugin validate plugins/dflow warns TS7016 (no declaration file) for each .mjs the mod imports, and ICON_MISSING | - | - | done | TS7016 and TS7006: .d.mts declarations beside the five HUD modules; register.tsx validates clean. ICON_MISSING: won't fix; a directory-submission check dforge shares, a marketplace branding choice |
+| 11 | Fix-wave follow-ups: the session-switch atom reset, the redraw on a changed reading and setMode's view reset have no assertion of their own; the switch reset writes atoms without an invalidate | - | - | done | three tests in register.test.tsx, each failing on its mutation; no invalidate added: read() in ui.render subscribes the drawing, so the reset's writes redraw |
+| 12 | claude plugin validate warns TS2345 in register.test.tsx (38) and dforge's cockpit.test.ts: $.command.run test calls omit CommandRunInput's origin and presentation | - | - | open | - |
