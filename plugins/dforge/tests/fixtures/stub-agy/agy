@@ -78,7 +78,7 @@ case "${STUB_AGY_MODE:-done}" in
   outside-write) write_file; printf 'stub\n' > "$STUB_AGY_OUTSIDE"; emit DONE ;;
   review) side; printf '{"conversation_id":"c","status":"SUCCESS","response":"ok","structured_output":%s}\n' "$(review_json)" ;;
   plan-review) side; printf '{"conversation_id":"c","status":"SUCCESS","response":"ok","structured_output":{"executability":18,"coherence":18,"coverage":18,"assumptions":18,"findings":[]}}\n' ;;
-  final-review) side; printf '{"conversation_id":"c","status":"SUCCESS","response":"ok","structured_output":{"review":"No findings."}}\n' ;;
+  final-review) side; printf '{"conversation_id":"c","status":"SUCCESS","response":"ok","structured_output":{"review":%s}}\n' "${STUB_AGY_REVIEW_JSON:-\"No findings.\"}" ;;
   stderr-quota) printf '{"conversation_id":"","status":"ERROR","response":"","error":"","finished_reason":"error"}\n'; printf '429 Too Many Requests\n' >&2; exit 1 ;;
   *) printf 'stub-agy: unknown STUB_AGY_MODE\n' >&2; exit 64 ;;
 esac

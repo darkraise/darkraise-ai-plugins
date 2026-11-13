@@ -284,6 +284,10 @@ classify() { # classify <model> <log-prefix>; sets result and reason (empty when
       <<<"$result" >/dev/null 2>&1; then
     reason=schema; return
   fi
+  if [ "$kind" = final ] && ! jq -e '.structured_output.review | type == "string" and test("\\S")' \
+      <<<"$result" >/dev/null 2>&1; then
+    reason=schema; return
+  fi
   reason=''
 }
 

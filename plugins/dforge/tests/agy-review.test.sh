@@ -105,6 +105,12 @@ has "a final review uses its schema" "$(args)" "agy-final-review-schema.json"
 check "a final review writes its text" "$(cat "$TMP/out.json")" "No findings."
 has "the final prompt carries the branch diff" "$(cat "$TMP/out.json.prompt")" "+final"
 lacks "the final prompt never sends agy to git" "$(cat "$TMP/out.json.prompt")" "Review the branch diff from"
+for empty in '""' '" \n "' null; do
+  STUB_AGY_REVIEW_JSON=$empty STUB_AGY_MODE=final-review run --kind final --base HEAD~1
+  has "a final review of $empty is a schema failure" "$out" "status=FAILED"
+  has "a final review of $empty names schema" "$out" "reason=schema"
+  check "a final review of $empty leaves no list" "$([ -e "$TMP/out.json" ] && echo list || echo none)" "none"
+done
 
 run --kind task
 check "a task review without --prompt is a usage error" "$rc" "2"
