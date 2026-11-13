@@ -81,6 +81,9 @@ let polls = 0
 // while the mode is off.
 let hasReadAccount = false
 let hasReadWhere = false
+// git status can run filter drivers a repository's config names: it runs
+// only in a checkout that holds .dflow, where the owner set dflow up.
+let hasState = false
 let startCwd = ''
 // Read on a session switch, since a render hook makes no engine call.
 let canUnderline = false
@@ -325,7 +328,7 @@ async function readWhere($: any): Promise<void> {
 // A failing git call keeps the last reading.
 async function readRepo($: any): Promise<void> {
   try {
-    if (!root || (await read($, modeAtom)) === 'off') {
+    if (!root || !hasState || (await read($, modeAtom)) === 'off') {
       return
     }
 
@@ -420,7 +423,9 @@ async function readState($: any): Promise<void> {
 
   // A Hud stored earlier outlives a reload: outside a dflow checkout it must
   // not draw.
-  if (!root || !(await $.fs.exists(`${root}/.dflow`))) {
+  hasState = Boolean(root) && (await $.fs.exists(`${root}/.dflow`))
+
+  if (!hasState) {
     if ((await read($, hudAtom)) !== null) {
       await update($, hudAtom, () => null)
       lastText = ''

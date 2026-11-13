@@ -575,3 +575,10 @@ test('mode, density and collapsed cards hold across a session switch', async ($,
   expect(await pane.find({ key: 'plan' })).toBeDefined()
   expect(w.isPaneUp).toBe(true)
 })
+
+test('a checkout without .dflow runs no git status', async ($, on) => {
+  const w = world(on, { files: {}, hasState: false, porcelain: '# branch.head feat/x\n' })
+  await $.session.start(START)
+  await w.clock!.advance(20000)
+  expect(w.calls.filter(call => call.includes(GIT_STATUS))).toEqual([])
+})
