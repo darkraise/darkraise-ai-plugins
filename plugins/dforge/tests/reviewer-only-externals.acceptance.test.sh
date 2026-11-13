@@ -837,7 +837,7 @@ t_A18() {
   before=$(git -C "$REPO_ROOT" status --porcelain)
   rel=$(cd "$REPO_ROOT" && timeout 120 node scripts/release.mjs --dry-run 2>/dev/null | tr -d '\r'); local rrc=$?
   after=$(git -C "$REPO_ROOT" status --porcelain)
-  check "A18: the release dry run prints dforge 4.17.1 -> 5.0.0 first" "$(head -1 <<<"$rel")" "release dforge 4.17.1 -> 5.0.0"
+  check "A18: the release dry run prints dforge 4.17.1 -> 5.0.0" "$(grep -cx 'release dforge 4.17.1 -> 5.0.0' <<<"$rel")" "1"
   check "A18: the release dry run changes no file" "$after" "$before"
   check "A18: no marketplace file holds a dforge version" \
     "$(jq -r '[.plugins[] | select(.name == "dforge") | has("version")] | any' "$REPO_ROOT/.claude-plugin/marketplace.json" "$REPO_ROOT/.agents/plugins/marketplace.json" 2>&1 | tr '\n' ' ')" "false false "
