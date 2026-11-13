@@ -5,3 +5,14 @@
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
+| 1 | Task 3: hudAtom shape tag not bumped when Hud gained fields | - | - | deferred | resolved in Task 4 (shape hud-2); final review triage |
+| 2 | Task 4: collapsed atom keyed 'as any' without a PluginState entry | - | - | deferred | resolved in Task 5; final review triage |
+| 3 | Task 9: density atom missing from PluginState | - | - | deferred | resolved in Task 11; final review triage |
+| 4 | Task 9 parked: bar name clash between meter.mjs and view.mjs | - | - | deferred | resolved by the meterBar alias (A2) and the removal of view's bar in Task 10 |
+| 5 | Task 4: the mod test harness drops keys on Text elements | - | - | deferred | handled by amendments A7-A11 (keys on wrapper Boxes) |
+| 6 | Task 5: the test fixture's session.compact stub returned no messages | - | - | deferred | fixed in Task 5; test-only |
+| 7 | Task 12: the host refuses a /-prefixed prompt.submit, so Resume runs /dflow:build as a command | - | - | deferred | handled by amendments A12-A13; the spec's UX-12 and A42 wording ('as the person's prompt') is now out of date |
+| 8 | Task 12: the engine refuses next(e) for a command.run with no args | - | - | deferred | fixed in Task 12 |
+| 9 | Task 14: atoms outlive a reload, so a missing hud.json drew a stale Hud | - | - | deferred | fixed in 637e9400 with a test |
+| 10 | claude plugin validate plugins/dflow warns TS7016 (no declaration file) for each .mjs the mod imports, and ICON_MISSING | - | - | open | - |
+| 11 | Fix-wave follow-ups: the session-switch atom reset, the redraw on a changed reading and setMode's view reset have no assertion of their own; the switch reset writes atoms without an invalidate | - | - | open | - |
