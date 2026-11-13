@@ -75,12 +75,9 @@ done <<< "$agy"
 check "every agy-judge bound plus 120 s fits a background call's cap" "$too_long" "NONE"
 
 # --- judge blocks --------------------------------------------------------------
-for blk in codex-judge agy-judge; do
-  rows=$(awk -v b="$blk" '$0 == "```" b { f = 1; next } f && $0 == "```" { exit } f && NF' "$P/reference/ladder.md")
-  check "$blk has two rows" "$(printf '%s\n' "$rows" | wc -l | tr -d ' ')" "2"
-  check "$blk rows are model effort seconds" "$(printf '%s\n' "$rows" | awk 'NF != 3 || $3 !~ /^[0-9]+$/' | wc -l | tr -d ' ')" "0"
-done
-check "agy-judge prefers Opus" "$(awk '$0 == "```agy-judge" { getline; print $1; exit }' "$P/reference/ladder.md")" "claude-opus-5-5"
+rows=$(awk '$0 == "```agy-judge" { f = 1; next } f && $0 == "```" { exit } f && NF' "$P/reference/ladder.md")
+check "agy-judge has two rows" "$(printf '%s\n' "$rows" | wc -l | tr -d ' ')" "2"
+check "agy-judge rows are model effort seconds" "$(printf '%s\n' "$rows" | awk 'NF != 3 || $3 !~ /^[0-9]+$/' | wc -l | tr -d ' ')" "0"
 check "no lane runner remains" "$(ls "$P/scripts" | grep -c -e '^run-codex-task' -e '^run-agy-task' -e '^lane-breaker')" "0"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

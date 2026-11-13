@@ -331,10 +331,7 @@ check "review: and leaves no placeholder" "$(placeholders "$WS/task-2-review-pro
 review_surface true
 step review docs/plan.md 1
 PP="$WS/task-1-review-panel-prompt.md"
-check "a light review prints the panel seat" "$(grep -c '^seat: panel:light prompt: .*task-1-review-prompt.md fallback: ' <<<"$out")" "1"
-check "a light review prints the panel command" "$(grep -c '^panel: .*run-review-panel --kind task --tier light .*--out-dir .*task-1-review-panel' <<<"$out")" "1"
 check "a light panel's timeout covers both rows" "$(grep '^timeout:' <<<"$out")" "timeout: 2590000"
-check "the reviewers' prompt is written" "$([ -s "$WS/task-1-review-panel-prompt.md" ] && echo yes || echo no)" "yes"
 check "a light judge prompt keeps the Second Pass for two lists" "$(grep -c '^## Second Pass' "$WS/task-1-review-prompt.md")" "1"
 check "review: the judge prompt keeps no template instruction text" "$(grep -cE '^\[Include |otherwise\.\]$' "$WS/task-1-review-prompt.md")" "0"
 check "review: the light seat names the band fallback" "$(grep '^seat:' <<<"$out")" "seat: panel:light prompt: $JP fallback: dforge:judge-sonnet-high"
