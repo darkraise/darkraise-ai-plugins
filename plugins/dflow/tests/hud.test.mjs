@@ -13,6 +13,7 @@ import { repoFromPorcelain, repoName, shortDir } from '../hooks/hud/repo.mjs';
 import { repoCard } from '../hooks/hud/view.mjs';
 import { denseLines } from '../hooks/hud/view.mjs';
 import { BAND_TIERS, bandLines, bandTop, bandWarning, fitBand } from '../hooks/hud/band.mjs';
+import { sectionsArg, sectionsFrom, sectionsMoved, sectionsToggled } from '../hooks/hud/view.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const hud = root => JSON.parse(read(root, '.dflow/hud.json'));
@@ -369,4 +370,17 @@ test('a blocked task, failed gates or a darkmem conflict make a warning line', (
   assert.deepEqual(bandWarning({ ...PLAN_HUD, plan: { ...PLAN_HUD.plan, blocked: [] }, sync: { enabled: false } }), []);
   assert.deepEqual(['band', 'pane', 'off'].map(mode => nextMode(mode, '')), ['pane', 'off', 'band']);
   assert.deepEqual([nextMode('band', 'off'), nextMode('band', 'sideways')], ['off', null]);
+});
+
+test('the sections list is parsed, toggled and moved', () => {
+  assert.deepEqual(sectionsFrom(undefined), SECTIONS);
+  assert.deepEqual(sectionsFrom([]), SECTIONS);
+  assert.deepEqual(sectionsFrom(['repo', 'nope', 'plan', 'repo']), ['repo', 'plan']);
+  assert.deepEqual(sectionsArg('plan, context,repo'), ['plan', 'context', 'repo']);
+  assert.equal(sectionsArg('plan,shells'), null);
+  assert.equal(sectionsArg(''), null);
+  assert.deepEqual(sectionsToggled(['plan', 'context'], 'context'), ['plan']);
+  assert.deepEqual(sectionsToggled(['plan', 'context'], 'repo'), ['plan', 'context', 'repo']);
+  assert.deepEqual(sectionsMoved(['plan', 'context', 'repo'], 'plan', 1), ['context', 'plan', 'repo']);
+  assert.deepEqual(sectionsMoved(['plan', 'context'], 'plan', -1), ['plan', 'context']);
 });

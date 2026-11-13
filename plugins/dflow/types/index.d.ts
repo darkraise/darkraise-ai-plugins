@@ -69,7 +69,10 @@ declare module 'claude-code' {
       hud: Shaped<Hud | null>
       mode: Mode
       context: HudContext | null
+      density: 'detailed' | 'dense'
       collapsed: string[]
+      sections: string[]
+      view: 'cards' | 'sections'
       readings: number[]
       breakdown: HudBreakdown | null
       account: HudAccount | null

@@ -20,6 +20,10 @@ import {
   planCard,
   repoCard,
   SECTIONS,
+  sectionsArg,
+  sectionsFrom,
+  sectionsMoved,
+  sectionsToggled,
   usageCard,
   workersCard,
 } from './view.mjs'
@@ -59,6 +63,8 @@ const contextAtom = atom(
 )
 const densityAtom = atom({ plugin: 'dflow', key: 'density' } as const, 'detailed' as 'detailed' | 'dense')
 const collapsedAtom = atom({ plugin: 'dflow', key: 'collapsed' } as const, [] as string[])
+const sectionsAtom = atom({ plugin: 'dflow', key: 'sections' } as const, [...SECTIONS] as string[])
+const viewAtom = atom({ plugin: 'dflow', key: 'view' } as const, 'cards' as 'cards' | 'sections')
 const readingsAtom = atom({ plugin: 'dflow', key: 'readings' } as const, [] as number[])
 const breakdownAtom = atom(
   { plugin: 'dflow', key: 'breakdown' } as const,
@@ -90,6 +96,8 @@ let hasState = false
 let startCwd = ''
 // Read on a session switch, since a render hook makes no engine call.
 let canUnderline = false
+// Back closes a pane that /dflow:hud sections opened from the band.
+let isSectionsFromBand = false
 
 type ButtonLook = { hotkey?: string; isMain?: boolean; isOff?: boolean; isCompact?: boolean }
 
@@ -179,6 +187,70 @@ function drawCard(table: any, card: Card, isCollapsed: boolean, onToggle: () => 
   )
 }
 
+// The cards the pane shows, in order, then the hidden ones. The last shown
+// card cannot be switched off: an empty list would read back as the default.
+function drawSections($: any, table: any, sections: string[]) {
+  const { Box, Button, Text } = table
+  const title = (key: string) => key.charAt(0).toUpperCase() + key.slice(1)
+  const hidden = SECTIONS.filter((key: string) => !sections.includes(key))
+  const toggle = (key: string) => (sections.length === 1 && sections[0] === key ? undefined : saveSections($, sectionsToggled(sections, key)))
+  const back = async () => {
+    if (isSectionsFromBand) {
+      await setMode($, 'band')
+    }
+
+    await showView($, 'cards')
+  }
+  const drawSwitch = (key: string, isOn: boolean) => {
+    const label = isOn ? '● On' : '○ Off'
+    const isDim = !isOn || sections.length === 1
+
+    return canUnderline ? (
+      <Button key={`sections-${key}-switch`} label={label} plain dimColor={isDim} hover={{ bold: true }} onPress={() => toggle(key)}>
+        <Text color={isDim ? undefined : BUTTON_MAIN} dimColor={isDim}>
+          {label}
+        </Text>
+      </Button>
+    ) : (
+      <Button key={`sections-${key}-switch`} label={label} plain dimColor={isDim} hover={{ bold: true }} onPress={() => toggle(key)} />
+    )
+  }
+
+  return (
+    <Box flexDirection="column">
+      <Box key="sections-title">
+        <Text bold>⚙ Sections</Text>
+      </Box>
+      <Box key="sections-hint">
+        <Text dimColor wrap="truncate-end">
+          Which cards the pane shows, in order.
+        </Text>
+      </Box>
+      {sections.map((key, index) => (
+        <Box key={`sections-${key}`} flexDirection="row" columnGap={1}>
+          {drawSwitch(key, true)}
+          <Text wrap="truncate-end">{title(key)}</Text>
+          {index > 0 && drawButton(table, `sections-${key}-up`, '↑', () => saveSections($, sectionsMoved(sections, key, -1)), { isCompact: true })}
+          {index < sections.length - 1 &&
+            drawButton(table, `sections-${key}-down`, '↓', () => saveSections($, sectionsMoved(sections, key, 1)), { isCompact: true })}
+        </Box>
+      ))}
+      {hidden.map((key: string) => (
+        <Box key={`sections-${key}`} flexDirection="row" columnGap={1}>
+          {drawSwitch(key, false)}
+          <Text dimColor wrap="truncate-end">
+            {title(key)}
+          </Text>
+        </Box>
+      ))}
+      <Box key="sections-controls" flexDirection="row" columnGap={1}>
+        {drawButton(table, 'sections-reset', 'Reset', () => saveSections($, [...SECTIONS]))}
+        {drawButton(table, 'sections-back', 'Back', back, { hotkey: 'b' })}
+      </Box>
+    </Box>
+  )
+}
+
 async function toggleDensity($: any): Promise<void> {
   const next = (await read($, densityAtom)) === 'dense' ? 'detailed' : 'dense'
   await update($, densityAtom, () => next)
@@ -194,6 +266,17 @@ async function toggleCollapsed($: any, key: string): Promise<void> {
   $.ui.invalidate('ui.render')
 }
 
+async function saveSections($: any, next: string[]): Promise<void> {
+  await update($, sectionsAtom, () => next)
+  await $.store.set('sections', next)
+  $.ui.invalidate('ui.render')
+}
+
+async function showView($: any, view: 'cards' | 'sections'): Promise<void> {
+  await update($, viewAtom, () => view)
+  $.ui.invalidate('ui.render')
+}
+
 async function isPaneUp($: any): Promise<boolean> {
   return (await $.ui.panes()).some((pane: any) => pane.id === PANE && pane.isPlaced)
 }
@@ -205,6 +288,7 @@ async function readBreakdown($: any): Promise<void> {
       (await read($, modeAtom)) !== 'pane' ||
       (await read($, densityAtom)) === 'dense' ||
       (await read($, collapsedAtom)).includes('context') ||
+      !(await read($, sectionsAtom)).includes('context') ||
       !(await isPaneUp($))
     ) {
       return
@@ -380,6 +464,9 @@ async function loadMode($: any): Promise<void> {
 
   const collapsed = collapsedFrom(await $.store.get('collapsed'))
   await update($, collapsedAtom, () => collapsed)
+
+  const sections = sectionsFrom(await $.store.get('sections'))
+  await update($, sectionsAtom, () => sections)
 }
 
 // The HUD is a view: a failure to read or draw it must never surface.
@@ -533,6 +620,7 @@ async function compactAndResume($: any): Promise<void> {
 }
 
 async function setMode($: any, mode: Mode): Promise<void> {
+  isSectionsFromBand = false
   await update($, modeAtom, () => mode)
   await $.store.set('mode', mode)
 
@@ -628,6 +716,29 @@ export const register: Register = on => {
       await setMode($, 'pane')
 
       return { text: 'dflow HUD: pane' }
+    }
+
+    if (args === 'sections') {
+      if (current !== 'pane' || !(await isPaneUp($))) {
+        await setMode($, 'pane')
+        isSectionsFromBand = current === 'band'
+      }
+
+      await showView($, 'sections')
+
+      return { text: 'dflow HUD: sections' }
+    }
+
+    if (args.startsWith('sections ')) {
+      const list = sectionsArg(args.slice('sections '.length))
+
+      if (list === null) {
+        return { text: `Sections: ${SECTIONS.join(', ')}` }
+      }
+
+      await saveSections($, list)
+
+      return { text: `dflow HUD sections: ${list.join(', ')}` }
     }
 
     const mode = nextMode(current, args)
@@ -738,30 +849,35 @@ export const register: Register = on => {
       )
     }
 
+    const sections = await read($, sectionsAtom)
+
+    if ((await read($, viewAtom)) === 'sections') {
+      return drawSections($, table, sections)
+    }
+
     const collapsed = await read($, collapsedAtom)
     const inner = Math.max(10, columns - 4)
     const context = await read($, contextAtom)
     const where = await read($, whereAtom)
-    const cards = [
-      planCard(hud, inner),
-      contextCard({ hud, context, breakdown: await read($, breakdownAtom), readings: await read($, readingsAtom), width: inner }),
-      usageCard({ usage: await read($, usageAtom), now: await $.clock.now(), width: inner }),
-      checksCard(hud),
-      boardCard(hud),
-      workersCard(hud),
-      ...(where === null ? [] : [repoCard({ repo: await read($, repoAtom), where })]),
-    ].filter((card): card is Card => card !== null)
+    const account = await read($, accountAtom)
+    const built: Record<string, Card | null> = {
+      account: account === null ? null : accountCard({ account, engine: await read($, engineAtom), remote: await read($, remoteAtom) }),
+      plan: planCard(hud, inner),
+      context: contextCard({ hud, context, breakdown: await read($, breakdownAtom), readings: await read($, readingsAtom), width: inner }),
+      usage: usageCard({ usage: await read($, usageAtom), now: await $.clock.now(), width: inner }),
+      checks: checksCard(hud),
+      board: boardCard(hud),
+      workers: workersCard(hud),
+      repo: where === null ? null : repoCard({ repo: await read($, repoAtom), where }),
+    }
+    const cards = sections.map(key => built[key]).filter((card): card is Card => card !== null && card !== undefined)
     const isPastReset =
       typeof context?.tokens === 'number' && typeof hud.context?.resetAt === 'number' && context.tokens >= hud.context.resetAt
     const compact = () =>
       compactOrSay($, hud.plan ? { instructions: RESET_INSTRUCTIONS } : {}, 'dflow: could not compact; run /compact')
-    const account = await read($, accountAtom)
-    const accountShown =
-      account === null
-        ? null
-        : accountCard({ account, engine: await read($, engineAtom), remote: await read($, remoteAtom) })
     const isDense = (await read($, densityAtom)) === 'dense'
     const minimize = () => setMode($, 'band')
+    const openSections = () => showView($, 'sections')
 
     if (isDense) {
       const lines = denseLines(
@@ -774,7 +890,7 @@ export const register: Register = on => {
           now: await $.clock.now(),
           repo: await read($, repoAtom),
           where,
-          shown: SECTIONS,
+          shown: sections,
         },
         columns,
       )
@@ -786,6 +902,7 @@ export const register: Register = on => {
           </Box>
           <Box key="controls" flexDirection="row" columnGap={1}>
             {drawButton(table, 'pane-density', '☰ Detailed', () => toggleDensity($), { hotkey: 'd', isCompact: true })}
+            {drawButton(table, 'pane-sections', '⚙ Sections', openSections, { hotkey: 's', isCompact: true })}
             {drawButton(table, 'pane-minimize', '▁ Minimize', minimize, { hotkey: 'm', isCompact: true })}
             {drawButton(table, 'context-compact', '⇣ Compact', compact, { hotkey: 'c', isMain: isPastReset, isCompact: true })}
           </Box>
@@ -801,21 +918,23 @@ export const register: Register = on => {
     const extras: Record<string, unknown[]> = {
       context: [drawButton(table, 'context-compact', '⇣ Compact', compact, { hotkey: 'c', isMain: isPastReset })],
     }
+    const drawOne = (card: Card) =>
+      drawCard(table, card, collapsed.includes(card.key), () => toggleCollapsed($, card.key), extras[card.key])
+    // The controls row sits under the Account card while it leads the pane.
+    const lead = cards[0]?.key === 'account' ? cards.slice(0, 1) : []
 
     return (
       <Box flexDirection="column">
         <Box key="now">
           <Text wrap="truncate-end">{drawRuns(table, 'now', runsCut(nowRow(hud), columns))}</Text>
         </Box>
-        {accountShown &&
-          drawCard(table, accountShown, collapsed.includes('account'), () => toggleCollapsed($, 'account'))}
+        {lead.map(drawOne)}
         <Box key="controls" flexDirection="row" columnGap={1}>
           {drawButton(table, 'pane-density', '≡ Dense', () => toggleDensity($), { hotkey: 'd' })}
+          {drawButton(table, 'pane-sections', '⚙ Sections', openSections, { hotkey: 's' })}
           {drawButton(table, 'pane-minimize', '▁ Minimize', minimize, { hotkey: 'm' })}
         </Box>
-        {cards.map(card =>
-          drawCard(table, card, collapsed.includes(card.key), () => toggleCollapsed($, card.key), extras[card.key]),
-        )}
+        {cards.slice(lead.length).map(drawOne)}
         <Box key="next">
           <Text wrap="truncate-end">{drawRuns(table, 'next', runsCut(nextRow(hud), columns))}</Text>
         </Box>

@@ -198,6 +198,31 @@ export function collapsedFrom(value) {
   return [...new Set(value.filter(key => SECTIONS.includes(key)))];
 }
 
+// An empty list means the default: the pane never shows no card by choice.
+export function sectionsFrom(value) {
+  const known = collapsedFrom(value);
+  return known.length ? known : [...SECTIONS];
+}
+
+export function sectionsArg(text) {
+  const names = text.split(',').map(name => name.trim());
+  if (names.some(name => !SECTIONS.includes(name))) return null;
+  return [...new Set(names)];
+}
+
+export function sectionsToggled(list, key) {
+  return list.includes(key) ? list.filter(one => one !== key) : [...list, key];
+}
+
+export function sectionsMoved(list, key, delta) {
+  const at = list.indexOf(key);
+  const to = at + delta;
+  if (at < 0 || to < 0 || to >= list.length) return list;
+  const next = [...list];
+  [next[at], next[to]] = [next[to], next[at]];
+  return next;
+}
+
 const BREAKDOWN_COLORS = ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red'];
 const BREAKDOWN_ROWS = 6;
 const TREND_LABEL = 16;
