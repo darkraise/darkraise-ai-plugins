@@ -3,7 +3,7 @@
 # (docs/dforge/specs/2026-11-07-inline-only-execution-design.md), statements
 # A1 to A19. Each test is written from the statement's text and reaches the
 # behaviour through the scripts the spec names (plan-lint, task-brief,
-# task-step, next-step, plan-revise, dforge-config, plan.sh's functions) or,
+# task-step, next-step, dforge-config, plan.sh's functions) or,
 # for a statement about text, the text itself. The CI half of A13 needs a
 # pushed commit and is not testable here.
 # Usage:
@@ -50,7 +50,7 @@ unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGE
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
 export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=inline-only-execution-acceptance
-printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=false reason=off review=false lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=false reason=off review=false resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 TIMEOUT_BIN=$(command -v timeout)
 
@@ -141,7 +141,6 @@ lint() { # lint <plan> — sets lout, lrc
   lout=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/plan-lint" "$1" --no-probe 2>&1); lrc=$?
   lout=${lout//$'\r'/}
 }
-delegated() { (cd "$REPO" && "$TIMEOUT_BIN" 60 bash -c '. "$1"; plan_delegated "$2"' _ "$S/lib/plan.sh" "$1") 2>&1 | tr -d '\r'; }
 brief() { # brief <plan> <n> <out>
   (cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/task-brief" "$1" "$2" "$3" >/dev/null 2>&1)
 }
@@ -201,7 +200,6 @@ fi
 # ----------------------------------------------------------------------- A4
 if selected A4; then
   P=$(mk a4 'inline — claude --model opus --effort high — x' "$HEAVY6" "$T1" "$T3R3" "$HEAVY8")
-  check "A4: plan_delegated prints nothing for heavy tasks without Executor lines" "$(delegated "$P")" ""
   for n in 1 3 4; do
     brief "$P" "$n" "$TMP/a4-brief-$n.md"
     [ -s "$TMP/a4-brief-$n.md" ] || printf 'FAIL - A4: task-brief wrote no brief for task %s\n' "$n"
@@ -224,12 +222,6 @@ if selected A5; then
   unmatched "A5: a total-6 risk-2 task's second line is not a Review line" "$(sed -n 2p "$TMP/a5-1.md" 2>/dev/null)" '^\*\*Review:\*\*'
 fi
 
-# ----------------------------------------------------------------------- A6
-if selected A6; then
-  P=$(mk a6 'inline — claude --model opus --effort high — x' "$T1 codex" "$HEAVY6 codex" "$HEAVY8" "$T1")
-  check "A6: plan_delegated prints each executor task, heavy or not" "$(delegated "$P")" "$(printf '1\texecutor\n2\texecutor')"
-fi
-
 # ----------------------------------------------------------------------- A7
 if selected A7; then
   out=$(cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/dforge-config" get executionStrategy 2>&1); rc=$?
@@ -244,17 +236,6 @@ fi
 if selected A8; then
   check "A8: agents/drafter-sonnet.md does not exist" "$([ -e "$PLUGIN/agents/drafter-sonnet.md" ] && echo exists || echo absent)" "absent"
   check "A8: agents/scout-sonnet.md does not exist" "$([ -e "$PLUGIN/agents/scout-sonnet.md" ] && echo exists || echo absent)" "absent"
-fi
-
-# ----------------------------------------------------------------------- A9
-if selected A9; then
-  rev() { (cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/plan-revise" "$1" 2>&1) | tr -d '\r' | grep '^recommend' | tr -s ' '; }
-  P=$(mk a9a 'inline — claude --model sonnet --effort high — x' "$HEAVY6" "$T3R2")
-  check "A9: hardest task total 6, no executor: opus/high, nothing delegated" "$(rev "$P")" "recommend execution=inline model=opus effort=high delegated=0/2"
-  P=$(mk a9b 'inline — claude --model sonnet --effort high — x' "$T5" "$T3R2" "$HEAVY8 codex")
-  check "A9: an executor task is the only one counted as delegated and does not set the pair" "$(rev "$P")" "recommend execution=inline model=sonnet effort=high delegated=1/3"
-  P=$(mk a9c 'inline — claude --model sonnet --effort medium — x' "$T3R3")
-  check "A9: hardest task total 3 risk 3: effort high" "$(rev "$P")" "recommend execution=inline model=sonnet effort=high delegated=0/1"
 fi
 
 # ---------------------------------------------------------------------- A11
@@ -419,12 +400,6 @@ if selected A16; then
   has "A16: the Heavy line names the risk-3 task" "$last" 'Task 3 (total 3, risk 3)'
   has "A16: the Heavy line names the total-5 task" "$last" 'Task 4 (total 5, risk 2)'
   unmatched "A16: the Heavy line leaves out the light task" "$last" 'Task 2'
-fi
-
-# ---------------------------------------------------------------------- A19
-if selected A19; then
-  lane=$(tr -d '\r' < "$REFS/executor-lane.md")
-  has "A19: executor-lane.md names the handback line" "$lane" 'HANDBACK to inline'
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

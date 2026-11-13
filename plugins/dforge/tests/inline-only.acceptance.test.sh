@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance checks for docs/dforge/specs/2026-11-07-inline-only-execution-design.md:
-# the session implements every task, executor tasks still go out, and the
-# subagent path is deprecated but intact.
+# the session implements every task, and the subagent path is deprecated but
+# intact.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -98,7 +98,6 @@ lint() { out=$(bash "$S/plan-lint" "$@" 2>&1); status=$?; }
 # --- Task 1 ---
 . "$S/lib/plan.sh"
 io_plan "$INLINE_OPUS" "1 2 2 2" "0 1 1 1" > heavy.md
-check "A4: a heavy task is not delegated" "$(plan_delegated heavy.md)" ""
 bash "$S/task-brief" heavy.md 1 "$TMP/b1.md" > /dev/null 2>&1
 absent "A4: a heavy brief carries no Dispatch line" "$TMP/b1.md" "**Dispatch:** delegated"
 io_plan "$INLINE_OPUS" "0 2 1 3" "1 2 1 2" > risk3.md
@@ -106,10 +105,6 @@ bash "$S/task-brief" risk3.md 1 "$TMP/r1.md" > /dev/null 2>&1
 check "A5: a risk-3 brief's second line is the review marker" "$(sed -n 2p "$TMP/r1.md")" "**Review:** per-task — risk 3"
 bash "$S/task-brief" risk3.md 2 "$TMP/r2.md" > /dev/null 2>&1
 check "A5: a total-6 risk-2 brief has no review marker" "$(grep -c '^\*\*Review:\*\*' "$TMP/r2.md")" "0"
-io_plan "$INLINE_OPUS" "1 2 2 2" "0 1 1 0" "codex gpt-6.1-sol / low" > exec.md
-check "A6: an executor task is still delegated" "$(plan_delegated exec.md | tr '\t\n' ' |')" "2 executor|"
-io_plan "$INLINE_OPUS" "1 2 2 2" "1 2 2 2" "codex gpt-6.1-sol / high" > exec-heavy.md
-check "A6: a heavy executor task is delegated as executor" "$(plan_delegated exec-heavy.md | tr '\t\n' ' |')" "2 executor|"
 bash "$S/task-brief" --header heavy.md "$TMP/h.md" > /dev/null 2>&1
 check "A16: the header names the heavy task" "$(tail -n 1 "$TMP/h.md")" "**Heavy:** Task 1 (total 7, risk 2)"
 io_plan "$INLINE_OPUS" "0 1 1 0" "0 1 1 1" > light.md
@@ -138,9 +133,6 @@ lacks "A3: no mode error" "$out" "ERROR header: subagent"
 io_plan 'inline — `claude --model sonnet --effort medium` — x' "0 0 0 3" "0 1 1 0" > risk3m.md
 lint risk3m.md
 has "A15: risk 3 raises the effort floor to high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
-io_plan 'inline — `claude --model sonnet --effort high` — x' "1 2 2 2" "0 1 1 0" > old.md
-rev=$(bash "$S/plan-revise" old.md 2>&1)
-has "A9: plan-revise recommends the covering pair" "$rev" "recommend  execution=inline  model=opus  effort=high  delegated=0/2"
 # --- Task 3 ---
 io_plan "$INLINE_OPUS" "0 2 1 3" "0 1 1 0" > loop.md
 git add -A && git commit -qm plans
@@ -180,8 +172,6 @@ check "codex routing has no scout floor" "$(jq -r '.role_floors.scout // "none"'
 # --- Task 7 ---
 check "A17: switching.md is gone" "$([ -e "$P/skills/executing-plans/references/switching.md" ] && echo yes || echo no)" "no"
 # --- Task 8 ---
-EL="$P/reference/executor-lane.md"
-present "A19: a handback goes to the session" "$EL" 'HANDBACK to inline'
 . "$S/lib/plan.sh"
 printf 'Task 1: escalated inline -> subagent — fix cap\n' > "$TMP/old-ledger.md"
 check "A11: an old escalation line still parses" "$(ledger_left_inline "$TMP/old-ledger.md")" "1"

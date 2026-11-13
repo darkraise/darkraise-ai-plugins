@@ -3,18 +3,13 @@
   "locator": "scripts/agy-locate",
   "probe": { "command": "scripts/lib/agy-probe.mjs", "op": "auth" },
   "gate": "scripts/agy-gate",
-  "wrapper": "scripts/run-agy-task.sh",
-  "reference": "reference/executor-lane.md",
+  "runner": "scripts/run-agy-review.sh",
+  "reference": "reference/external-review.md",
   "session_dir": "agy-sessions",
   "session_dir_env": "DR_AGY_SESSION_DIR",
-  "surfaces": ["lane"],
+  "surfaces": ["review"],
   "priority": 10,
-  "blocks": {
-    "gate": "agy-lane-gate",
-    "assignment": "agy-assignment",
-    "successor": "agy-successor",
-    "timeout": "agy-timeout"
-  },
+  "blocks": { "judge": "agy-judge" },
   "reasons": {
     "not_installed": "agy is not on PATH; install the Antigravity CLI",
     "not_enabled": "agy is not usable on this machine",

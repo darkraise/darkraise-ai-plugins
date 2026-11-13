@@ -3,7 +3,7 @@
 # (docs/dforge/specs/2026-10-26-faster-plans-design.md), statements A2-A13 and
 # A17-A23. Each test is written from the statement's text and reaches the
 # behaviour through the scripts and documents the spec names: plan-lint,
-# plan-revise, review-route, task-step, wave, next-step, plan-amend, the
+# review-route, task-step, wave, next-step, plan-amend, the
 # cockpit's ledger reader, the agent definitions and the shipped prompts and
 # references.
 # Usage:
@@ -18,7 +18,6 @@ S="$PLUGIN/scripts"
 STEP="$S/task-step"
 ROUTE="$S/review-route"
 LINT="$S/plan-lint"
-REVISE="$S/plan-revise"
 WAVE="$S/wave"
 NEXT="$S/next-step"
 AMEND="$S/plan-amend"
@@ -57,7 +56,7 @@ unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGE
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
 export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=acceptance-session
-printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 # plan-lint's lane probe asks this roster; a fixed answer keeps the machine's
 # own Codex install out of every case.
@@ -266,9 +265,6 @@ gen_codex_plan() { # gen_codex_plan <"F S C R pair">... — a Host: codex plan, 
 lint() { # lint <file> [args...] — run from the lint directory; sets out and rc
   out=$(cd "$LINTDIR" && timeout 120 bash "$LINT" "$@" --no-probe 2>&1); rc=$?
 }
-lint_probe() { # lint_probe <file> — the same, with the lane probe on
-  out=$(cd "$LINTDIR" && timeout 120 bash "$LINT" "$1" 2>&1); rc=$?
-}
 
 # --- A2 ----------------------------------------------------------------------
 
@@ -341,38 +337,17 @@ a3() {
 # --- A4 ----------------------------------------------------------------------
 
 a4() {
-  local ext='> **External executors:** codex' base="0 0 1 0 sonnet-low" t out_t
-  gen_plan "$ext" "$base" "1 1 1 1 sonnet-medium~**Executor:** codex gpt-6.1-sol / high" > "$LINTDIR/l4.md"
-  lint l4.md
-  absent "A4: a total-4 task with an Executor line passes the lane gate" "$out" 'fails the lane gate'
-  check "A4: and the plan lints clean" "$rc" "0"
-
-  # A task over total 4 is refused the lane on every total above it.
-  local specs=("2 2 1 0 sonnet-high" "2 2 1 1 opus-high" "2 2 1 2 opus-high" "2 2 1 3 opus-high")
-  local tot=(5 6 7 8) i
-  for i in 0 1 2 3; do
-    gen_plan "$ext" "$base" "${specs[$i]}~**Executor:** codex gpt-6.1-sol / high" > "$LINTDIR/l-over.md"
-    lint l-over.md
-    matches "A4: a total-${tot[$i]} task with an Executor line fails the lane gate" "$out" "ERROR Task 2: total ${tot[$i]} / risk [0-9] fails the lane gate"
+  local ext='> **External executors:** codex' base="0 0 1 0 sonnet-low" i
+  # Any total, in the lane's old range or above it: the line is only obsolete.
+  local specs=("1 1 1 1 sonnet-medium" "2 2 1 0 sonnet-high" "2 2 1 3 opus-high")
+  for i in 0 1 2; do
+    gen_plan "$ext" "$base" "${specs[$i]}~**Executor:** codex gpt-6.1-sol / high" > "$LINTDIR/l4.md"
+    lint l4.md
+    has "A4: an Executor line on a ${specs[$i]% *} task is a warning" "$out" \
+      "WARN Task 2: the **Executor:** line is obsolete; the session implements this task"
+    absent "A4: and draws no lane gate finding (${specs[$i]% *})" "$out" 'lane gate'
+    check "A4: and the plan lints without errors (${specs[$i]% *})" "$rc" "0"
   done
-
-  # plan-revise reports the same gate: totals 2-4 pass, 5 and 6 fail on the total.
-  gen_plan "$ext" "0 1 1 0 sonnet-low" "1 1 1 0 sonnet-medium" "1 1 1 1 sonnet-medium" "2 2 1 0 sonnet-high" "2 2 1 1 opus-high" > "$LINTDIR/rv.md"
-  out_t=$(cd "$LINTDIR" && timeout 60 bash "$REVISE" rv.md 2>&1)
-  for t in 1 2 3; do
-    matches "A4: plan-revise passes the lane gate for the unit of total $((t + 1))" "$out_t" "^unit $t  score=$((t + 1))  risk=[01]  rule_s=ok  gate=pass"
-  done
-  matches "A4: plan-revise fails the lane gate for the total-5 unit on its total" "$out_t" '^unit 4  score=5  risk=0  rule_s=ok  gate=fail:total'
-  matches "A4: plan-revise fails the lane gate for the total-6 unit on its total" "$out_t" '^unit 5  score=6  risk=1  rule_s=ok  gate=fail:total'
-
-  # The probe never offers the lane to a task above total 4.
-  session false true
-  gen_plan "" "1 1 1 0 sonnet-medium" "2 2 1 0 sonnet-high" "2 2 1 1 opus-high" > "$LINTDIR/probe.md"
-  lint_probe probe.md
-  has "A4: the lane probe offers a total-3 task with no Executor line" "$out" "WARN Task 1: lane-eligible with no **Executor:** line"
-  lacks "A4: the lane probe never offers a total-5 task" "$out" "WARN Task 2: lane-eligible"
-  lacks "A4: the lane probe never offers a total-6 task" "$out" "WARN Task 3: lane-eligible"
-  session absent
 }
 
 # --- A5 ----------------------------------------------------------------------

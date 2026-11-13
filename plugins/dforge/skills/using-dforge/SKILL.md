@@ -27,7 +27,6 @@ If a skill might apply to what you are doing, invoke it before any response or a
 | A bug, failing test or surprise | dforge:systematic-debugging |
 | An approach decision is open | dforge:selecting-approaches |
 | A spec is approved | dforge:writing-plans |
-| A plan predates the executor lane | dforge:revising-plans |
 | Executing a plan | dforge:executing-plans; dforge:subagent-driven-development only for a plan whose Execution line names subagent |
 | Writing code | dforge:test-driven-development |
 | Isolating work | dforge:using-git-worktrees |
@@ -56,7 +55,7 @@ Every dispatch names a seat: a `dforge:` agent or a typed built-in (`Explore`); 
 
 ## Process Depth
 
-Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural> — <trigger | no trigger>`, and still get approval (under `autoRun=on`, the spec review). That is on Claude Code; Codex runs `on` as `off`. Architectural: `Process: architectural, depth <d> — <triggers>`, `<d>` from `scripts/depth-route --spec-triggers`. Every plan executes inline: the session implements every task but those carrying an `**Executor:**` line, heavy tasks included.
+Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural> — <trigger | no trigger>`, and still get approval (under `autoRun=on`, the spec review). That is on Claude Code; Codex runs `on` as `off`. Architectural: `Process: architectural, depth <d> — <triggers>`, `<d>` from `scripts/depth-route --spec-triggers`. Every plan executes inline: the session implements every task, heavy tasks included.
 
 With the darkmem MCP, prefer its `code_search` over Explore subagents.
 

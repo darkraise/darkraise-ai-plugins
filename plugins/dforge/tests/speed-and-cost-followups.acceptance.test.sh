@@ -41,7 +41,7 @@ unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGE
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL TASK_STEP_BASE_TIMEOUT SUITE_RUN_KILL_AFTER
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
 export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=followups-acceptance
-printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 
 winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }

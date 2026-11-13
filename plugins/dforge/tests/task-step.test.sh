@@ -41,8 +41,9 @@ unset DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CO
 # review-route reads this session's gate file; the gate itself is a stub, so no
 # case can reach a real Codex.
 export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=task-step-test
-printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
-export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason=ok review=true resets_at=- source=cache"' > "$TMP/gate-stub"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting"' > "$TMP/agy-gate-stub"
+export TASK_STEP_CODEX_GATE="$TMP/gate-stub" TASK_STEP_AGY_GATE="$TMP/agy-gate-stub"
 review_surface() { # review_surface <true|false|absent>
   rm -rf "$DR_CODEX_SESSION_DIR"
   [ "$1" != absent ] || return 0
@@ -192,13 +193,9 @@ check "start: a wave reports inside its worktree" \
   "$(grep -c 'Write your full report to task-2-report.md in the directory sdd-workspace prints in your worktree (see the Parallel workspace section):' "$WS/task-2-dispatch.md")" "1"
 check "start: a wave dispatch names no session workspace report path" "$(grep -c "$WS/task-2-report.md" "$WS/task-2-dispatch.md")" "0"
 
-# start: an executor task writes no dispatch file and no assigned line.
-before=$(wc -l < "$LEDGER")
-step start docs/plan.md 3
-check "start: executor line" "$(grep '^executor' <<<"$out")" "executor codex: follow executor-lane.md §Dispatch"
-check "start: no dispatch file for an executor task" "$([ -e "$WS/task-3-dispatch.md" ] && echo yes || echo no)" "no"
-check "start: no assigned line for an executor task" "$(wc -l < "$LEDGER" | tr -d ' ')" "$(echo "$before" | tr -d ' ')"
-check "start: an executor task still records its state" "$([ -f "$WS/task-3-step.json" ] && echo yes || echo no)" "yes"
+step start docs/plan.md 3 --inline
+check "an Executor task takes --inline" "$rc" "0"
+check "an Executor task names no executor" "$(grep -c -i 'executor' <<<"$out")" "0"
 
 # start: a task without an Implementer line is scored at dispatch.
 before=$(wc -l < "$LEDGER")
@@ -306,9 +303,9 @@ JP="$WS/task-1-review-prompt.md"
 check "review: exit 0" "$rc" "0"
 check "review: the digest is at most 15 lines" "$([ "$(count_lines "$out")" -le 15 ] && echo yes || echo no)" "yes"
 check "review: the judge seat" "$(grep '^seat:' <<<"$out")" "seat: dforge:judge-sonnet-high prompt: $JP"
-check "review: codex off shows the gate line" "$(grep -c '^gate: codex-gate usable=true' <<<"$out")" "1"
-check "review: no runner lines for a judge seat" "$(grep -cE '^(codex|timeout):' <<<"$out")" "0"
-check "review: no Codex prompt for a judge seat" "$([ -e "$WS/task-1-review-codex-prompt.md" ] && echo yes || echo no)" "no"
+check "review: reviewers off shows each family's gate reason" "$(grep '^gate:' <<<"$out")" "gate: agy=setting codex=open"
+check "review: no runner lines for a judge seat" "$(grep -cE '^(panel|codex|timeout):' <<<"$out")" "0"
+check "review: no panel prompt for a judge seat" "$([ -e "$WS/task-1-review-panel-prompt.md" ] && echo yes || echo no)" "no"
 check "review: the judge prompt has no unexpanded placeholder" "$(placeholders "$JP")" "0"
 check "review: base, head and diff file" "$(grep -E '^\*\*(Base|Head|Diff file):\*\*' "$JP" | tr '\n' ' ' | sed 's/ $//')" \
   "**Base:** $BASE1 **Head:** $C1 **Diff file:** $WS/review-$(short "$BASE1")..$(short "$C1").diff"
@@ -330,21 +327,24 @@ step review docs/plan.md 2
 check "review: a task with no lens drops the section" "$(grep -c 'Lens Criteria' "$WS/task-2-review-prompt.md")" "0"
 check "review: and leaves no placeholder" "$(placeholders "$WS/task-2-review-prompt.md")" "0"
 
-# review: a light Codex seat, with the judge prompt beside it as the fallback.
+# review: a light panel seat, with the judge prompt as the fallback.
 review_surface true
 step review docs/plan.md 1
-CP="$WS/task-1-review-codex-prompt.md"
-check "review: the light seat" "$(grep '^seat:' <<<"$out")" "seat: codex:light prompt: $CP fallback: dforge:judge-sonnet-high prompt: $JP"
-check "review: the runner command" "$(grep '^codex:' <<<"$out")" \
-  "codex: bash \"$PR/scripts/run-codex-review.sh\" --kind task --tier light --cwd \"$TOP\" --out \"$WS/task-1-review-codex.json\" --prompt \"$CP\""
-check "review: the light timeout" "$(grep '^timeout:' <<<"$out")" "timeout: 2520000"
-check "review: no gate line while the surface is open" "$(grep -c '^gate:' <<<"$out")" "0"
+PP="$WS/task-1-review-panel-prompt.md"
+check "a light panel's timeout covers both rows" "$(grep '^timeout:' <<<"$out")" "timeout: 2590000"
+check "a light judge prompt keeps the Second Pass for two lists" "$(grep -c '^## Second Pass' "$WS/task-1-review-prompt.md")" "1"
+check "review: the judge prompt keeps no template instruction text" "$(grep -cE '^\[Include |otherwise\.\]$' "$WS/task-1-review-prompt.md")" "0"
+check "review: the light seat names the band fallback" "$(grep '^seat:' <<<"$out")" "seat: panel:light prompt: $JP fallback: dforge:judge-sonnet-high"
+check "review: the panel command in full" "$(grep '^panel:' <<<"$out")" \
+  "panel: bash \"$PR\"/scripts/run-review-panel --kind task --tier light --cwd \"$TOP\" --out-dir \"$WS/task-1-review-panel\" --prompt \"$PP\""
+check "review: no gate line while a surface is open" "$(grep -c '^gate:' <<<"$out")" "0"
 check "review: the judge prompt is still written, with its lens" "$(grep -c 'Lens Criteria' "$JP")" "1"
-check "review: the Codex prompt has no unexpanded placeholder" "$(placeholders "$CP")" "0"
-check "review: the Codex prompt asks for one JSON object" "$(grep -c 'one JSON object' "$CP")" "1"
-check "review: the Codex prompt carries the criteria" "$(grep -c '^#### Spec Compliance {#spec}$' "$CP")" "1"
-check "review: the Codex prompt drops the markdown report" "$(grep -cE 'Verification Scores|Output Format|Lens Criteria|Second Pass' "$CP")" "0"
-check "review: the Codex prompt names the diff file" "$(grep -c "^\*\*Diff file:\*\* $WS/review-" "$CP")" "1"
+check "review: the panel prompt has no unexpanded placeholder" "$(placeholders "$PP")" "0"
+check "review: the panel prompt asks for one JSON object" "$(grep -c 'one JSON object' "$PP")" "1"
+check "review: the panel prompt carries the criteria" "$(grep -c '^#### Spec Compliance {#spec}$' "$PP")" "1"
+check "review: the panel prompt drops the markdown report" "$(grep -cE 'Verification Scores|Output Format|Lens Criteria|Second Pass' "$PP")" "0"
+check "review: the panel prompt names the diff file" "$(grep -c "^\*\*Diff file:\*\* $WS/review-" "$PP")" "1"
+check "review: no Codex prompt is written" "$([ -e "$WS/task-1-review-codex-prompt.md" ] && echo yes || echo no)" "no"
 mkdir -p "$TMP/plain"
 state1=$(cat "$WS/task-1-step.json")
 step review docs/plan.md 1 --cwd "$TMP/plain"
@@ -353,28 +353,29 @@ check "review: and says the tracked files cannot be recorded" "$(grep -c 'cannot
 check "review: and leaves the state file alone" "$(cat "$WS/task-1-step.json")" "$state1"
 git worktree add -q --detach "$TMP/wt" HEAD
 step review docs/plan.md 1 --cwd "$TMP/wt"
-check "review: --cwd names the runner's working directory" "$(grep -c -- "--kind task --tier light --cwd \"$TMP/wt\" --out" <<<"$out")" "1"
+check "review: --cwd names the panel's working directory" "$(grep -c -- "--kind task --tier light --cwd \"$TMP/wt\" --out-dir" <<<"$out")" "1"
 git worktree remove --force "$TMP/wt"
 step review docs/plan.md 1 --cwd "$TMP/no-such-dir"
 check "review: a missing --cwd directory exits 2" "$rc" "2"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "agy-gate usable=true reason=ok review=false resets_at=- claude=on claude_resets_at=- source=probe"' > "$TMP/agy-probe-stub"
+TASK_STEP_AGY_GATE="$TMP/agy-probe-stub" step review docs/plan.md 1
+check "review: a gate that probed prints the gate line, untrusted named" "$(grep '^gate:' <<<"$out")" "gate: agy=untrusted codex=open"
 
-# review: a heavy Codex seat on risk 3, then the judge with the Second Pass section.
+# review: a heavy panel seat on risk 3, then the judge with the Second Pass section.
 step start docs/plan.md 7
 echo b > b.txt && git add b.txt && git commit -qm "feat: add b"
 C2=$(git rev-parse HEAD)
 step review docs/plan.md 7
 JP7="$WS/task-7-review-prompt.md"
-check "review: the heavy seat" "$(grep '^seat:' <<<"$out")" \
-  "seat: codex:heavy+judge-opus prompt: $WS/task-7-review-codex-prompt.md then: dforge:judge-opus prompt: $JP7"
-check "review: the heavy timeout" "$(grep '^timeout:' <<<"$out")" "timeout: 5520000"
-check "review: the runner command names the tier" "$(grep -c -- '--kind task --tier heavy --cwd' <<<"$out")" "1"
-check "review: the judge prompt carries the Second Pass section" "$(grep -c '^## Second Pass: The Codex Review$' "$JP7")" "1"
-check "review: the Second Pass names the Codex output file" "$(grep -c "^review of the same diff: $WS/task-7-review-codex.json\$" "$JP7")" "1"
-check "review: the Codex prompt leaves the Second Pass out" "$(grep -c 'Second Pass' "$WS/task-7-review-codex-prompt.md")" "0"
+check "a heavy review prints the heavy panel seat" "$(grep -c '^seat: panel:heavy+judge-opus prompt: .* then: dforge:judge-opus' <<<"$out")" "1"
+check "a heavy panel's timeout" "$(grep '^timeout:' <<<"$out")" "timeout: 5590000"
+check "the Second Pass names each reviewer's file" "$(grep -c -e 'task-7-review-panel/codex.json' -e 'task-7-review-panel/agy.json' "$WS/task-7-review-prompt.md")" "2"
+check "review: the heavy command names the tier" "$(grep -c -- '--kind task --tier heavy --cwd' <<<"$out")" "1"
+check "review: the panel prompt leaves the Second Pass out" "$(grep -c 'Second Pass' "$WS/task-7-review-panel-prompt.md")" "0"
 check "review: the risk-3 judge prompt has no placeholder" "$(placeholders "$JP7")" "0"
 review_surface false
 step review docs/plan.md 7
-check "review: risk 3 with Codex off is a judge-opus seat" "$(grep '^seat:' <<<"$out")" "seat: dforge:judge-opus prompt: $JP7"
+check "review: risk 3 with reviewers off is a judge-opus seat" "$(grep '^seat:' <<<"$out")" "seat: dforge:judge-opus prompt: $JP7"
 check "review: and carries no Second Pass section" "$(grep -c 'Second Pass' "$JP7")" "0"
 review_surface absent
 
@@ -482,10 +483,10 @@ check "review report: no placeholder is left" "$(placeholders "$RP2")" "0"
 check "review report: a fresh review discards the last report" "$([ -e "$WS/task-2-review-report.md" ] && echo yes || echo no)" "no"
 review_surface true
 step review docs/plan.md 1
-check "review report: the Codex prompt carries no report-file rule" \
-  "$(grep -c 'review-report.md\|write nothing else' "$WS/task-1-review-codex-prompt.md")" "0"
-check "review report: the Codex prompt keeps the implementer's report" \
-  "$(grep -cF "Read the implementer's report: $WS/task-1-report.md" "$WS/task-1-review-codex-prompt.md")" "1"
+check "review report: the panel prompt carries no report-file rule" \
+  "$(grep -c 'review-report.md\|write nothing else' "$WS/task-1-review-panel-prompt.md")" "0"
+check "review report: the panel prompt keeps the implementer's report" \
+  "$(grep -cF "Read the implementer's report: $WS/task-1-report.md" "$WS/task-1-review-panel-prompt.md")" "1"
 review_surface absent
 fi
 
@@ -1445,13 +1446,26 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |quality: approved
 |scores: spec 17 / scope 18 / verification 16 / quality 16
 |
-|## Codex findings
-|- [CONFIRMED] app.txt:2 wrong value - the diff shows it
+|## External findings
+|- [CONFIRMED] codex app.txt:2 wrong value - the diff shows it
 |
 |## Findings
 REPORT
 rr_run verdict docs/plan.md 1
-check "verdict: Codex findings that are not the last section exit 5" "$rr_rc" "5"
+check "verdict: External findings that are not the last section exit 5" "$rr_rc" "5"
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: approved
+|scores: spec 17 / scope 18 / verification 16 / quality 16
+|
+|## Findings
+|
+|## Codex findings
+|- [CONFIRMED] app.txt:2 wrong value - the diff shows it
+REPORT
+rr_run verdict docs/plan.md 1
+check "verdict: a report whose external section is still Codex findings exits 5" "$rr_rc $(grep -c 'External findings' <<<"$rr_err")" "5 1"
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |## Verdict
 |spec: pass

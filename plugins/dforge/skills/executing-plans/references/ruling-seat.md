@@ -2,9 +2,8 @@
 
 Judgment about the plan, the spec or a finding belongs to the ruling seat, not
 to you, whatever model you run on. It reads the whole plan, the spec,
-`amendments.md` and the ledger; you read the header and one brief at a time. It,
-delegated tasks and risk-3 task reviews are all this mode dispatches before
-the final review.
+`amendments.md` and the ledger; you read the header and one brief at a time. It
+and risk-3 task reviews are all this mode dispatches before the final review.
 
 **Rulings, not stalls.** Decide the mechanical problems yourself - a missing
 directory, a tool failure, a plan that is silent where you need
@@ -21,15 +20,12 @@ and buys nothing.
 |---|---|
 | `preflight` | Once, before Task 1, when `plan-header.md` ends with a `**Heavy:**` line (Setup) |
 | `blocked-plan` | The plan is wrong and no path forward is a mechanical choice |
-| `plan-conflict` | A final-review finding, or a delegated task's review finding, that conflicts with what the plan's text requires, or is labelled plan-mandated |
-| `cannot-verify` | A delegated task's `cannot-verify:` digest line |
+| `plan-conflict` | A final-review finding, or a risk-3 task's review finding, that conflicts with what the plan's text requires, or is labelled plan-mandated |
+| `cannot-verify` | A risk-3 task's `cannot-verify:` digest line |
 | `breaker` | A task's findings or verifications still open at its cap: a reviewed task's after round 2/2, your own task's after `fix round 3/3` |
-| `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument |
 | `final-residual` | Findings still open after the final review's one fix wave |
 
-`executor-empty-diff` is reachable here too: an inline plan dispatches its
-offloaded tasks, so one of their fix rounds can return DONE with an empty diff,
-and `preflight` arises only for a plan with a heavy task.
+`preflight` arises only for a plan with a heavy task.
 
 **How.** Write `<workspace>/rulings-<point>-<task>.md` - `<task>` is the task
 number the items concern, or `plan` for a plan-level point, so a recurring
@@ -45,9 +41,9 @@ read only its `## Verdict` section
 (`awk '/^## / { on = ($0 == "## Verdict") } on' <report>`), never the rest.
 Items of several kinds at one point share one
 dispatch, and `<kind>` is then one comma-separated list; the route prints
-`dforge:judge-sonnet-high` when every kind is `cannot-verify` or
-`executor-empty-diff` and no task it names is risk 3, and `dforge:judge-opus`
-otherwise. A delegated task's cannot-verify item that a `check identity:` or
+`dforge:judge-sonnet-high` when every kind is `cannot-verify` and no task it
+names is risk 3, and `dforge:judge-opus` otherwise. A reviewed task's
+cannot-verify item that a `check identity:` or
 `check attribution:` line of `scripts/task-step review` answers `clean` goes to
 no seat: log
 `Task <N>: Ruling: cannot-verify — settled by task-step check <name> — none`.
@@ -60,12 +56,12 @@ seat is the native judge named in Select the host first.
 verbatim:
 
 - **CONFIRMED-GAP** - the finding is real. For a task you implement, make
-  the smallest fix the ruling names. A CONFIRMED-GAP whose fix you attempt and fail counts toward the task's fix cap, and at the cap the task goes to the breaker. A delegated task's gap is
-  never yours to fix: mid-task it enters that task's fix loop, and at the
-  breaker it is logged `Task <N>: Ruling: <finding> — <ruling>` and carried
-  into the next dependent task's dispatch (with none, the next task in plan
-  order; after the last task, the final review), as
-  [delegated-task.md](../../../reference/delegated-task.md) §5 completes it.
+  the smallest fix the ruling names. A CONFIRMED-GAP whose fix you attempt and fail counts toward the task's fix cap, and at the cap the task goes to the breaker. A risk-3 task's gap enters that
+  task's session review loop; at the breaker it is logged
+  `Task <N>: Ruling: <finding> — <ruling>` and carried into the next dependent
+  task (with none, the next task in plan order; after the last task, the
+  final review), as [delegated-task.md](../../../reference/delegated-task.md)
+  §5 completes it.
 - **PARK** - log `Task <N>: parked — <finding> — Ruling: <why>`; the code
   stands.
 - **AMEND** - run

@@ -48,8 +48,8 @@ check "the ruling prompt exists" \
   "$([ -f "$P/skills/subagent-driven-development/references/ruling-prompt.md" ] && echo yes || echo no)" "yes"
 check "the code reviewer reference exists" \
   "$([ -f "$P/skills/requesting-code-review/references/code-reviewer.md" ] && echo yes || echo no)" "yes"
-check "the external executor reference exists" \
-  "$([ -f "$P/reference/executor-lane.md" ] && echo yes || echo no)" "yes"
+check "the external review reference exists" \
+  "$([ -f "$P/reference/external-review.md" ] && echo yes || echo no)" "yes"
 check "the re-review prompt exists" \
   "$([ -f "$P/skills/subagent-driven-development/references/re-review-prompt.md" ] && echo yes || echo no)" "yes"
 
@@ -144,43 +144,15 @@ check "a total-4 task has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DT
 brief --header "$DTMP/one4.md" "$DTMP/fh.md"
 check "a total-4 task leaves no header Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/fh.md")" "0"
 
-# --- the executor marker in the Dispatch line -------------------------------
-sed 's/^|//' > "$DTMP/offload.md" <<'EOF'
-|# Offload Fixture
-|
-|**Goal:** Fixture.
-|
-|**Execution:** inline — `claude --model sonnet --effort high` — fixture
-|
-|## Task index
-|
-|1. offloaded
-|2. plain
-|
-|### Task 1: offloaded
-|
-|**Implementer:** dforge:impl-sonnet-medium
-|**Executor:** codex gpt-6.1-sol / medium
-|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
-|
-|### Task 2: plain
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
-EOF
-
-brief --header "$DTMP/offload.md" "$DTMP/oh.md"
-check "the header marks an offloaded task" \
-  "$(grep -c 'Task 1 (executor)' "$DTMP/oh.md")" "1"
-check "the header does not mark a plain task" \
-  "$(grep -c 'Task 2' "$DTMP/oh.md")" "0"
-
-brief "$DTMP/offload.md" 1 "$DTMP/ob1.md"
-check "an offloaded brief is marked delegated" \
-  "$(sed -n 2p "$DTMP/ob1.md")" "**Dispatch:** delegated — total 2, risk 0"
-brief "$DTMP/offload.md" 2 "$DTMP/ob2.md"
-check "a self-implemented brief carries no Dispatch line" \
-  "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/ob2.md")" "0"
+# --- an Executor line delegates nothing ------------------------------------
+sed '/^### Task 1: light$/,/^\*\*Evaluation:/{/^\*\*Evaluation:/i\
+**Executor:** codex gpt-6.1-sol / low
+}' "$DTMP/plan.md" > "$DTMP/exec-plan.md"
+check "the Executor fixture carries the line" "$(grep -c '^\*\*Executor:\*\*' "$DTMP/exec-plan.md")" "1"
+brief "$DTMP/exec-plan.md" 1 "$DTMP/e1.md"
+check "task-brief briefs an Executor task as an inline task" "$(grep -c 'delegated' "$DTMP/e1.md")" "0"
+brief --header "$DTMP/exec-plan.md" "$DTMP/eh.md"
+check "an Executor task leaves no header Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/eh.md")" "0"
 
 rm -rf "$DTMP"
 

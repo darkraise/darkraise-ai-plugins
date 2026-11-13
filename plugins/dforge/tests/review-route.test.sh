@@ -24,15 +24,18 @@ absent() { # absent <name> <file> <needle>
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-# Routing reads this session's Codex gate file. A fixed session id and a
-# temporary directory keep the machine's real session state out of every case.
-export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=review-route-test
-review_surface() { # review_surface <true|false|absent>
-  rm -rf "$DR_CODEX_SESSION_DIR"
-  [ "$1" != absent ] || return 0
-  mkdir -p "$DR_CODEX_SESSION_DIR"
-  printf '{"session_id":"review-route-test","usable":true,"review":%s,"lane":false}\n' "$1" \
-    > "$DR_CODEX_SESSION_DIR/review-route-test.json"
+# Routing reads this session's Codex and agy gate files. A fixed session id and
+# temporary directories keep the machine's real session state out of every case.
+export DR_CODEX_SESSION_DIR="$TMP/sessions" DR_AGY_SESSION_DIR="$TMP/agy-sessions" CLAUDE_CODE_SESSION_ID=review-route-test
+review_surface() { # review_surface <codex true|false|absent> [agy true|false|absent]
+  local dir b
+  rm -rf "$DR_CODEX_SESSION_DIR" "$DR_AGY_SESSION_DIR"
+  for pair in "$DR_CODEX_SESSION_DIR:$1" "$DR_AGY_SESSION_DIR:${2:-absent}"; do
+    dir=${pair%:*} b=${pair##*:}
+    [ "$b" != absent ] || continue
+    mkdir -p "$dir"
+    printf '{"session_id":"review-route-test","usable":true,"review":%s}\n' "$b" > "$dir/review-route-test.json"
+  done
 }
 review_surface true
 
@@ -149,44 +152,43 @@ shape_plan "$TMP/mid.md" '**Evaluation:** files 1 - spec 1 - coupling 1 - risk 2
 check "script exists" "$([ -f "$ROUTE" ] && echo yes || echo no)" "yes"
 
 route --task 1
-check "total 1: light Codex, Sonnet fallback" "$out" "review-seat task=1 primary=codex:light fallback=dforge:judge-sonnet-high review=group reason=band"
+check "total 1: light panel, Sonnet fallback" "$out" "review-seat task=1 primary=panel:light fallback=dforge:judge-sonnet-high review=group reason=band"
 check "a routed task exits 0" "$rc" "0"
 route --task 2
-check "total 3 with em dashes: light Codex, Sonnet fallback" "$out" "review-seat task=2 primary=codex:light fallback=dforge:judge-sonnet-high review=group reason=band"
+check "total 3 with em dashes: light panel, Sonnet fallback" "$out" "review-seat task=2 primary=panel:light fallback=dforge:judge-sonnet-high review=group reason=band"
 route --task 3
-check "total 4 at risk 1: light Codex, Sonnet fallback" "$out" "review-seat task=3 primary=codex:light fallback=dforge:judge-sonnet-high review=group reason=band"
+check "total 4 at risk 1: light panel, Sonnet fallback" "$out" "review-seat task=3 primary=panel:light fallback=dforge:judge-sonnet-high review=group reason=band"
 route --task 4
-check "risk 2 takes its band: light Codex, Sonnet fallback" "$out" "review-seat task=4 primary=codex:light fallback=dforge:judge-sonnet-high review=task reason=band"
-route --task 5
-check "an Executor task is reviewed by its band judge, never Codex" "$out" "review-seat task=5 primary=dforge:judge-sonnet-high fallback=- review=group reason=executor"
-route --task 6
-check "an Executor task at risk 2 takes its band" "$out" "review-seat task=6 primary=dforge:judge-sonnet-high fallback=- review=task reason=executor"
-route --task 11
-check "an Executor task at risk 3 goes to Opus alone" "$out" "review-seat task=11 primary=dforge:judge-opus fallback=- review=task reason=executor"
+check "risk 2 takes its band: light panel, Sonnet fallback" "$out" "review-seat task=4 primary=panel:light fallback=dforge:judge-sonnet-high review=task reason=band"
+sed '/\*\*Executor:\*\*/d' "$TMP/plan.md" > "$TMP/no-executor.md"
+for id in 5 6 11; do
+  check "an Executor line does not route Task $id" \
+    "$(bash "$ROUTE" "$TMP/plan.md" --task "$id" 2>&1 | sed 's/^review-seat [^ ]* //')" \
+    "$(bash "$ROUTE" "$TMP/no-executor.md" --task "$id" 2>&1 | sed 's/^review-seat [^ ]* //')"
+done
+check "executor-empty-diff is no ruling kind" "$(bash "$ROUTE" "$TMP/round.md" --ruling executor-empty-diff 1 >/dev/null 2>&1; echo $?)" "2"
 route --task 7A
-check "a part routes on its own Evaluation" "$out" "review-seat task=7A primary=codex:light fallback=dforge:judge-sonnet-high review=group reason=band"
+check "a part routes on its own Evaluation" "$out" "review-seat task=7A primary=panel:light fallback=dforge:judge-sonnet-high review=group reason=band"
 route --task 7B
-check "the risk-2 part takes light Codex, Sonnet fallback" "$out" "review-seat task=7B primary=codex:light fallback=dforge:judge-sonnet-high review=task reason=band"
+check "the risk-2 part takes light panel, Sonnet fallback" "$out" "review-seat task=7B primary=panel:light fallback=dforge:judge-sonnet-high review=task reason=band"
 route --task 7
-check "a split task without a part routes on its heaviest part" "$out" "review-seat task=7 primary=codex:light fallback=dforge:judge-sonnet-high review=task reason=band"
+check "a split task without a part routes on its heaviest part" "$out" "review-seat task=7 primary=panel:light fallback=dforge:judge-sonnet-high review=task reason=band"
 route --task 8
-check "risk 3 goes to Astra then Opus" "$out" "review-seat task=8 primary=codex:heavy+judge-opus fallback=dforge:judge-opus review=task reason=risk"
+check "risk 3 goes to the heavy panel then Opus" "$out" "review-seat task=8 primary=panel:heavy+judge-opus fallback=dforge:judge-opus review=task reason=risk"
 route --task 10
-check "total 5 at risk 0: light Codex, Sonnet fallback" "$out" "review-seat task=10 primary=codex:light fallback=dforge:judge-sonnet-high review=task reason=band"
+check "total 5 at risk 0: light panel, Sonnet fallback" "$out" "review-seat task=10 primary=panel:light fallback=dforge:judge-sonnet-high review=task reason=band"
 route --task 12
-check "total 6 below risk 3: light Codex, Opus fallback" "$out" "review-seat task=12 primary=codex:light fallback=dforge:judge-opus review=task reason=band"
+check "total 6 below risk 3: light panel, Opus fallback" "$out" "review-seat task=12 primary=panel:light fallback=dforge:judge-opus review=task reason=band"
 
 route --task 1 2
-check "a batch takes its highest total" "$out" "review-seat task=1,2 primary=codex:light fallback=dforge:judge-sonnet-high reason=band"
+check "a batch takes its highest total" "$out" "review-seat task=1,2 primary=panel:light fallback=dforge:judge-sonnet-high reason=band"
 route --task 1 12
-check "a batch crossing into the Opus fallback band" "$out" "review-seat task=1,12 primary=codex:light fallback=dforge:judge-opus reason=band"
-route --task 1 5
-check "one Executor task makes the whole batch Claude-reviewed" "$out" "review-seat task=1,5 primary=dforge:judge-sonnet-high fallback=- reason=executor"
+check "a batch crossing into the Opus fallback band" "$out" "review-seat task=1,12 primary=panel:light fallback=dforge:judge-opus reason=band"
 
 rround "$TMP/round.md" 1
-check "a Claude plan's round 1 is Codex with an Opus fallback, cap 2 whatever its totals" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
+check "a Claude plan's round 1 is the panel with an Opus fallback, cap 2 whatever its totals" "$out" "review-seat plan-round=1 primary=panel:plan fallback=dforge:judge-opus reason=round cap=2"
 rround "$TMP/light.md" 1
-check "a light plan's round 1 is cap 2 too" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
+check "a light plan's round 1 is cap 2 too" "$out" "review-seat plan-round=1 primary=panel:plan fallback=dforge:judge-opus reason=round cap=2"
 rround "$TMP/light.md" 2
 check "a light plan's round 2 is a round within cap 2" "$out" "review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=2"
 rround "$TMP/light.md" 3
@@ -201,7 +203,7 @@ check "a total-8 plan's round 2 is a round within cap 2" "$out" "review-seat pla
 rround "$TMP/slice.md" 3
 check "a total-8 plan has no round 3" "$rc" "2"
 rround "$TMP/plan.md" 1
-check "a Claude plan round with an unparsable Evaluation line routes at full: cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
+check "a Claude plan round with an unparsable Evaluation line routes at full: cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=panel:plan fallback=dforge:judge-opus reason=round cap=2"
 
 # --- the plan-round cap follows the depth ----------------------------------------
 # A Claude plan's cap is 1 at light and standard, 2 at full (lib/depth.sh): the
@@ -230,37 +232,37 @@ depth_fixture "$TMP/drepo/standard.md" standard "$EV0"
 depth_fixture "$TMP/drepo/full.md" full "$EV0"
 depth_fixture "$TMP/drepo/missing.md" missing "$EV0"
 rround "$TMP/drepo/light.md" 1
-check "light: round 1 reviews at cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=1"
+check "light: round 1 reviews at cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=panel:plan fallback=dforge:judge-opus reason=round cap=1"
 rround "$TMP/drepo/light.md" 2
 check "light: round 2 exits 2" "$rc" "2"
 present "light: round 2 names the cap" "$TMP/err" "past the cap (1)"
 rround "$TMP/drepo/light-r2.md" 1
-check "a light spec with a risk-2 task is standard: cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=1"
+check "a light spec with a risk-2 task is standard: cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=panel:plan fallback=dforge:judge-opus reason=round cap=1"
 rround "$TMP/drepo/light-r2.md" 2
 check "standard: round 2 exits 2" "$rc" "2"
 present "standard: round 2 names the cap" "$TMP/err" "past the cap (1)"
 rround "$TMP/drepo/standard.md" 1
-check "a standard spec with a risk-0 task: cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=1"
+check "a standard spec with a risk-0 task: cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=panel:plan fallback=dforge:judge-opus reason=round cap=1"
 rround "$TMP/drepo/light-r3.md" 2
 check "a light spec with a risk-3 task is full: round 2 within cap 2" "$rc:$out" "0:review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=2"
 rround "$TMP/drepo/light-r3.md" 3
 check "full: a Claude plan has no round 3" "$rc" "2"
 rround "$TMP/drepo/full.md" 1
-check "a full spec with a risk-0 task stays at cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
+check "a full spec with a risk-0 task stays at cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=panel:plan fallback=dforge:judge-opus reason=round cap=2"
 rround "$TMP/drepo/light-bad.md" 1
-check "a light spec with an unparsable task routes at full: cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
+check "a light spec with an unparsable task routes at full: cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=panel:plan fallback=dforge:judge-opus reason=round cap=2"
 rround "$TMP/drepo/missing.md" 1
-check "a Spec path that does not exist routes at full: cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
+check "a Spec path that does not exist routes at full: cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=panel:plan fallback=dforge:judge-opus reason=round cap=2"
 review_surface false
 rround "$TMP/drepo/light.md" 1
-check "light with Codex off: round 1 goes to Opus alone, cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=1"
+check "light with reviewers off: round 1 goes to Opus alone, cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=reviewers-off cap=1"
 rround "$TMP/drepo/standard.md" 1
-check "standard with Codex off: round 1 goes to Opus alone, cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=1"
+check "standard with reviewers off: round 1 goes to Opus alone, cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=reviewers-off cap=1"
 review_surface true
 
 # --- the ruling seat -------------------------------------------------------------
-# Rulings go to Opus, except a list made only of cannot-verify and
-# executor-empty-diff kinds on no risk-3 task, which goes to Sonnet. The reason
+# Rulings go to Opus, except a list made only of cannot-verify items on no
+# risk-3 task, which goes to Sonnet. The reason
 # marks where a wrong verdict is expensive: the merge gate, a risk-3 task, and
 # an intricate plan's preflight.
 rule() { out=$(bash "$ROUTE" "$@" 2>"$TMP/err"); rc=$?; }
@@ -276,14 +278,12 @@ rule "$TMP/round.md" --ruling cannot-verify
 check "a plan-wide cannot-verify goes to Sonnet" "$out" "review-seat ruling=cannot-verify tasks=plan primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
 rule "$TMP/round.md" --ruling cannot-verify 8
 check "a cannot-verify item on a risk-3 task goes to Opus" "$out" "review-seat ruling=cannot-verify tasks=8 primary=dforge:judge-opus fallback=- reason=risk"
-rule "$TMP/round.md" --ruling cannot-verify,executor-empty-diff 1 4
-check "a list of Sonnet kinds goes to Sonnet" "$out" "review-seat ruling=cannot-verify,executor-empty-diff tasks=1,4 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
-rule "$TMP/round.md" --ruling cannot-verify,codex-empty-diff 1
-check "the legacy kind joins a Sonnet list as given" "$out" "review-seat ruling=cannot-verify,codex-empty-diff tasks=1 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
+rule "$TMP/round.md" --ruling cannot-verify 1 4
+check "a cannot-verify batch goes to Sonnet" "$out" "review-seat ruling=cannot-verify tasks=1,4 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
 rule "$TMP/round.md" --ruling cannot-verify,breaker 1
 check "a mixed list goes to Opus" "$out" "review-seat ruling=cannot-verify,breaker tasks=1 primary=dforge:judge-opus fallback=- reason=routine"
-rule "$TMP/round.md" --ruling cannot-verify,executor-empty-diff 1 8
-check "a Sonnet list with one risk-3 task goes to Opus" "$out" "review-seat ruling=cannot-verify,executor-empty-diff tasks=1,8 primary=dforge:judge-opus fallback=- reason=risk"
+rule "$TMP/round.md" --ruling cannot-verify 1 8
+check "a cannot-verify batch with one risk-3 task goes to Opus" "$out" "review-seat ruling=cannot-verify tasks=1,8 primary=dforge:judge-opus fallback=- reason=risk"
 rule "$TMP/light.md" --ruling cannot-verify,final-residual
 check "a list naming final-residual is the merge gate" "$out" "review-seat ruling=cannot-verify,final-residual tasks=plan primary=dforge:judge-opus fallback=- reason=merge-gate"
 rule "$TMP/round.md" --ruling cannot-verify,preflight
@@ -313,48 +313,61 @@ check "a Codex-host plan exits 2 for a ruling" "$rc" "2"
 # Codex seat, and the Claude seat it names has nothing to fall back to.
 review_surface false
 route --task 1
-check "codex off: total 1 goes to Sonnet alone" "$out" "review-seat task=1 primary=dforge:judge-sonnet-high fallback=- review=group reason=codex-off"
-check "codex off: a routed task still exits 0" "$rc" "0"
+check "reviewers off: total 1 goes to Sonnet alone" "$out" "review-seat task=1 primary=dforge:judge-sonnet-high fallback=- review=group reason=reviewers-off"
+check "reviewers off: a routed task still exits 0" "$rc" "0"
 route --task 2
-check "codex off: total 3 goes to Sonnet alone" "$out" "review-seat task=2 primary=dforge:judge-sonnet-high fallback=- review=group reason=codex-off"
+check "reviewers off: total 3 goes to Sonnet alone" "$out" "review-seat task=2 primary=dforge:judge-sonnet-high fallback=- review=group reason=reviewers-off"
 route --task 3
-check "codex off: total 4 goes to Sonnet alone" "$out" "review-seat task=3 primary=dforge:judge-sonnet-high fallback=- review=group reason=codex-off"
+check "reviewers off: total 4 goes to Sonnet alone" "$out" "review-seat task=3 primary=dforge:judge-sonnet-high fallback=- review=group reason=reviewers-off"
 route --task 10
-check "codex off: total 5 goes to Sonnet alone" "$out" "review-seat task=10 primary=dforge:judge-sonnet-high fallback=- review=task reason=codex-off"
+check "reviewers off: total 5 goes to Sonnet alone" "$out" "review-seat task=10 primary=dforge:judge-sonnet-high fallback=- review=task reason=reviewers-off"
 route --task 12
-check "codex off: total 6 goes to Opus alone" "$out" "review-seat task=12 primary=dforge:judge-opus fallback=- review=task reason=codex-off"
+check "reviewers off: total 6 goes to Opus alone" "$out" "review-seat task=12 primary=dforge:judge-opus fallback=- review=task reason=reviewers-off"
 route --task 4
-check "codex off: risk 2 at total 4 takes its band" "$out" "review-seat task=4 primary=dforge:judge-sonnet-high fallback=- review=task reason=codex-off"
+check "reviewers off: risk 2 at total 4 takes its band" "$out" "review-seat task=4 primary=dforge:judge-sonnet-high fallback=- review=task reason=reviewers-off"
 route --task 8
-check "codex off: risk 3 goes to Opus alone" "$out" "review-seat task=8 primary=dforge:judge-opus fallback=- review=task reason=codex-off"
+check "reviewers off: risk 3 goes to Opus alone" "$out" "review-seat task=8 primary=dforge:judge-opus fallback=- review=task reason=reviewers-off"
 route --task 7
-check "codex off: a split task routes on its heaviest part" "$out" "review-seat task=7 primary=dforge:judge-sonnet-high fallback=- review=task reason=codex-off"
+check "reviewers off: a split task routes on its heaviest part" "$out" "review-seat task=7 primary=dforge:judge-sonnet-high fallback=- review=task reason=reviewers-off"
 route --task 1 2
-check "codex off: a batch takes its highest total" "$out" "review-seat task=1,2 primary=dforge:judge-sonnet-high fallback=- reason=codex-off"
+check "reviewers off: a batch takes its highest total" "$out" "review-seat task=1,2 primary=dforge:judge-sonnet-high fallback=- reason=reviewers-off"
 route --task 5
-check "codex off: an Executor task is unchanged" "$out" "review-seat task=5 primary=dforge:judge-sonnet-high fallback=- review=group reason=executor"
+check "reviewers off: a former Executor task takes its Claude seat" "$out" "review-seat task=5 primary=dforge:judge-sonnet-high fallback=- review=group reason=reviewers-off"
 route --task 6
-check "codex off: an Executor task at risk 2 is unchanged" "$out" "review-seat task=6 primary=dforge:judge-sonnet-high fallback=- review=task reason=executor"
+check "reviewers off: a former Executor task at risk 2 takes its Claude seat" "$out" "review-seat task=6 primary=dforge:judge-sonnet-high fallback=- review=task reason=reviewers-off"
 rround "$TMP/round.md" 1
-check "codex off: an intricate plan's round 1 goes to Opus alone" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=2"
+check "reviewers off: an intricate plan's round 1 goes to Opus alone" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=reviewers-off cap=2"
 rround "$TMP/light.md" 1
-check "codex off: a plain plan's round 1 goes to Opus alone" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=2"
+check "reviewers off: a plain plan's round 1 goes to Opus alone" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=reviewers-off cap=2"
 rround "$TMP/round.md" 2
-check "codex off: plan round 2 is unchanged" "$out" "review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=2"
+check "reviewers off: plan round 2 is unchanged" "$out" "review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=2"
 review_surface absent
 route --task 3
-check "no session file is off" "$out" "review-seat task=3 primary=dforge:judge-sonnet-high fallback=- review=group reason=codex-off"
+check "no session file is off" "$out" "review-seat task=3 primary=dforge:judge-sonnet-high fallback=- review=group reason=reviewers-off"
 rround "$TMP/round.md" 1
-check "no session file keeps plan round 1 off Codex" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=2"
+check "no session file keeps plan round 1 off the panel" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=reviewers-off cap=2"
 review_surface true
 printf 'not json' > "$DR_CODEX_SESSION_DIR/review-route-test.json"
 route --task 1
-check "a torn session file is off" "$out" "review-seat task=1 primary=dforge:judge-sonnet-high fallback=- review=group reason=codex-off"
+check "a torn session file is off" "$out" "review-seat task=1 primary=dforge:judge-sonnet-high fallback=- review=group reason=reviewers-off"
 review_surface true
 CLAUDE_CODE_SESSION_ID="" route --task 1
-check "no session id is off, whatever is on disk" "$out" "review-seat task=1 primary=dforge:judge-sonnet-high fallback=- review=group reason=codex-off"
+check "no session id is off, whatever is on disk" "$out" "review-seat task=1 primary=dforge:judge-sonnet-high fallback=- review=group reason=reviewers-off"
 route --task 1
-check "an open review surface routes to Codex again" "$out" "review-seat task=1 primary=codex:light fallback=dforge:judge-sonnet-high review=group reason=band"
+check "an open review surface routes to the panel again" "$out" "review-seat task=1 primary=panel:light fallback=dforge:judge-sonnet-high review=group reason=band"
+review_surface false true
+route --task 1
+check "agy alone opens the light panel" "$(grep -o 'primary=[^ ]*' <<<"$out")" "primary=panel:light"
+route --task 8
+check "agy alone opens the heavy panel at risk 3" "$(grep -o 'primary=[^ ]*' <<<"$out")" "primary=panel:heavy+judge-opus"
+rround "$TMP/round.md" 1
+check "agy alone opens the plan panel" "$(grep -o 'primary=[^ ]*' <<<"$out")" "primary=panel:plan"
+review_surface false false
+route --task 1
+check "no surface routes to Claude as reviewers-off" "$(grep -o 'reason=[^ ]*' <<<"$out")" "reason=reviewers-off"
+review_surface true
+route --task 4
+check "risk 2 keeps the light panel" "$(grep -o 'primary=[^ ]*' <<<"$out")" "primary=panel:light"
 
 route --task 9
 check "an unparseable Evaluation exits 2" "$rc" "2"
@@ -381,7 +394,7 @@ present "a Codex-host plan names native-codex.md" "$TMP/err" "native-codex.md"
 
 sed 's/$/\r/' "$TMP/plan.md" > "$TMP/crlf.md"
 out=$(bash "$ROUTE" "$TMP/crlf.md" --task 4 2>/dev/null)
-check "a CRLF plan routes" "$out" "review-seat task=4 primary=codex:light fallback=dforge:judge-sonnet-high review=task reason=band"
+check "a CRLF plan routes" "$out" "review-seat task=4 primary=panel:light fallback=dforge:judge-sonnet-high review=task reason=band"
 
 # --- ruling seat prose -----------------------------------------------------------
 absent "review-route never prints judge-fable" "$ROUTE" 'judge-fable'
@@ -657,53 +670,18 @@ version=$(sed -nE 's/^[[:space:]]*"version": "([^"]+)".*/\1/p' "$P/.claude-plugi
 check "the Claude manifest names a release version" "$([[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && echo yes || echo no)" "yes"
 present "the Codex manifest carries the Claude manifest's version" "$P/.codex-plugin/plugin.json" "\"version\": \"$version\""
 
-# --- ruling kinds are executor-neutral --------------------------------------
-# --ruling calls plan_shape, which scans every task's score regardless of
-# which id was requested (see "an unparseable Evaluation line fails a plan
-# round" above), so it needs the fixture without Task 9's broken line, same
-# as the plan-round checks.
-out=$(bash "$ROUTE" "$TMP/round.md" --ruling executor-empty-diff 1 2>/dev/null); rc=$?
-check "the neutral ruling kind is accepted" "$rc" "0"
-check "the neutral kind prints itself and goes to Sonnet" \
-  "$out" "review-seat ruling=executor-empty-diff tasks=1 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
-
-out=$(bash "$ROUTE" "$TMP/round.md" --ruling codex-empty-diff 1 2>/dev/null); rc=$?
-check "the legacy ruling kind is still accepted" "$rc" "0"
-check "the legacy kind prints its own spelling, not the new one" \
-  "$out" "review-seat ruling=codex-empty-diff tasks=1 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
-
-out=$(bash "$ROUTE" "$TMP/round.md" --ruling executor-empty-diff 8 2>/dev/null)
-check "a risk-3 task still routes the neutral kind to Opus" \
-  "$out" "review-seat ruling=executor-empty-diff tasks=8 primary=dforge:judge-opus fallback=- reason=risk"
-
+# --- ruling kinds ------------------------------------------------------------
 bash "$ROUTE" "$TMP/round.md" --ruling nonsense-kind 1 >/dev/null 2>&1
 check "an unknown ruling kind is still rejected" "$?" "2"
 
-# --- a task on a second executor still gets a Claude review seat ------------
-# The spec's §12 asks for this row. Routing decides who *reviews* a task, and
-# that has never depended on which executor produced the diff, so a stub
-# Executor line must route exactly as the codex line it replaces does.
-# Tasks 5 and 6 of the fixture plan both carry `**Executor:** codex gpt-6.1-sol /
-# high` (lines 84 and 90), so this rewrites both; only Task 5 is asserted on.
-# Swapping the executor and nothing else is the sharpest possible test.
-sed 's|\*\*Executor:\*\* codex gpt-6.1-sol / high|**Executor:** stub stub-model / high|' \
-  "$TMP/plan.md" > "$TMP/stub-plan.md"
-codex_seat=$(bash "$ROUTE" "$TMP/plan.md" --task 5 2>/dev/null)
-stub_seat=$(DR_EXECUTORS_DIR="$P/tests/fixtures/executors" \
-  bash "$ROUTE" "$TMP/stub-plan.md" --task 5 2>/dev/null)
-check "a stub Executor task routes exactly as a codex one does" "$stub_seat" "$codex_seat"
-# The seat name is spelled in two pieces on purpose. validate-repository.mjs
-# resolves every `dforge:<name>` it finds against skills/ and agents/,
-# and this needle is a grep prefix matching three judges, not one agent name.
-JUDGEREF='primary=dforge:''judge-'
-check "the stub task's seat is a Claude judge" \
-  "$(grep -c "$JUDGEREF" <<<"$stub_seat")" "1"
-
-# --- the executor lane reference -------------------------------------------
-LANE="$P/reference/executor-lane.md"
-check "the neutral reference exists" "$([ -f "$LANE" ] && echo yes || echo no)" "yes"
-# The old path is spelled in two pieces on purpose. The rename that produced
-# executor-lane.md rewrote every literal spelling of the OLD path in this
+# --- the external review reference -----------------------------------------
+check "the external review reference exists" "$([ -f "$P/reference/external-review.md" ] && echo yes || echo no)" "yes"
+check "the executor lane reference is gone" "$([ -f "$P/reference/executor-lane.md" ] && echo yes || echo no)" "no"
+check "the final dedupe no longer tags both" "$(grep -c 'claude|codex|both' "$P/reference/final-review.md")" "0"
+check "the final dedupe tags a +-joined origin set" "$(grep -q 'claude+agy' "$P/reference/final-review.md" && echo yes || echo no)" "yes"
+check "the final dedupe runs on two or more lists" "$(grep -q 'two or more lists' "$P/reference/final-review.md" && echo yes || echo no)" "yes"
+# The old path is spelled in two pieces on purpose. An earlier rename
+# rewrote every literal spelling of the OLD path in this
 # repository with sed; written whole, this assertion would have been rewritten
 # to test the new file, which exists, and would then fail. The two pieces
 # concatenate at runtime and match no sed pattern. Never join them.
@@ -716,13 +694,13 @@ check "the Codex-only reference is gone" \
 # rung, and a stale line above `#### Part A` routed a split task on the score
 # that forced the split.
 # The suite leaves the review surface closed, and a closed surface routes every
-# seat to Claude with reason=codex-off, which is not what these cases are about.
+# seat to Claude with reason=reviewers-off, which is not what these cases are about.
 review_surface true
 
 seat() { # seat <file> <id>; sets out and rc
   out=$(bash "$ROUTE" "$1" --task "$2" 2>"$TMP/err"); rc=$?
 }
-LIGHT="primary=codex:light fallback=dforge:judge-sonnet-high review=group reason=band"
+LIGHT="primary=panel:light fallback=dforge:judge-sonnet-high review=group reason=band"
 
 printf '# P\n\n### Task 1: Fenced\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 3 = 6\n```\n' > "$TMP/ev-fenced.md"
 seat "$TMP/ev-fenced.md" 1
@@ -748,8 +726,7 @@ check "a fenced Executor line does not claim the task is offloaded" "$out" "revi
 
 printf '# P\n\n### Task 1: Real executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n**Executor:** codex gpt-6.1-sol / medium\n' > "$TMP/ev-rexec.md"
 seat "$TMP/ev-rexec.md" 1
-check "a real Executor line still routes to a Claude judge" "$out" \
-  "review-seat task=1 primary=dforge:judge-sonnet-high fallback=- review=group reason=executor"
+check "a real Executor line no longer changes the seat" "$out" "review-seat task=1 $LIGHT"
 
 out=$(bash "$ROUTE" "$TMP/round.md" --ruling acceptance-ambiguous 2>&1); status=$?
 check "acceptance-ambiguous: exit 0" "$status" "0"
@@ -793,7 +770,7 @@ review_surface true
 out=$(bash "$ROUTE" "$TMP/unscored.md" --task 1 2 2>/dev/null); rc=$?
 check "unscored: a batch holding an unscored task still exits 2" "$rc" "2"
 seat "$TMP/unscored.md" 2
-check "unscored: its scored neighbour routes as before" "$out" "review-seat task=2 primary=codex:light fallback=dforge:judge-sonnet-high review=group reason=band"
+check "unscored: its scored neighbour routes as before" "$out" "review-seat task=2 primary=panel:light fallback=dforge:judge-sonnet-high review=group reason=band"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

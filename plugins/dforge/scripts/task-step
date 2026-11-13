@@ -17,7 +17,7 @@
 # assigned line) unless --reset is given. --inline starts the session's own
 # review loop for a task it implements: step state and the ledger's identity
 # line, but no dispatch file and no task line, since the session writes its own
-# `implementer inline` assigned line. An executor task never takes it.
+# `implementer inline` assigned line.
 # Exit: 0 ok; 2 usage, or any subcommand on a Host: codex plan; 3 no such task;
 # 4 an amendment does not apply, hold was refused because review-route reviews
 # the task alone, or review --group was given a task with no awaiting group
@@ -729,7 +729,7 @@ group_round_tasks() {
 }
 
 do_start() {
-  local base base7 out rc n a agent="" best=-1 rank unknown=0 exec_id="" suffix=")" label titles kept=0
+  local base base7 out rc n a agent="" best=-1 rank unknown=0 suffix=")" label titles kept=0
   local template="$plugin_root/skills/subagent-driven-development/references/implementer-prompt.md"
   local dispatch="$ws/task-$first-dispatch.md" budget="" workfrom scene
 
@@ -769,15 +769,11 @@ do_start() {
     fi
   done
   [ "$unknown" -eq 0 ] || agent=""
-  if [ ${#ids[@]} -eq 1 ]; then
-    exec_id=$(plan_executors "$src" | awk -F'\t' -v n="$first" '$1 == n { print $2 }' | tr -d '\r')
-  fi
-  [ "$inline" -eq 0 ] || [ -z "$exec_id" ] || usage
 
   [ -z "$wave" ] || suffix="; wave $wave)"
   if [ "$inline" -eq 1 ]; then
     ledger_init
-  elif [ -n "$agent" ] && [ -z "$exec_id" ] && [ "$kept" -eq 0 ]; then
+  elif [ -n "$agent" ] && [ "$kept" -eq 0 ]; then
     ledger_init
     for n in "${ids[@]}"; do
       printf 'Task %s: implementer %s (assigned; base %s%s\n' "$n" "$agent" "$base7" "$suffix" >> "$ledger"
@@ -798,7 +794,7 @@ do_start() {
     fi
   fi
 
-  if [ -z "$exec_id" ] && [ "$inline" -eq 0 ]; then
+  if [ "$inline" -eq 0 ]; then
     if [ ${#ids[@]} -eq 1 ]; then
       label="Task $first: $(title_of "$first")"
     else
@@ -822,13 +818,10 @@ do_start() {
   printf 'task %s: briefed %s, base %s' "$idlist" "$brief" "$base7"
   if [ "$kept" -eq 1 ]; then printf '; state kept, no assigned line written (--reset discards the state)\n'
   elif [ "$inline" -eq 1 ]; then printf '; inline, no dispatch file written\n'
-  elif [ -n "$exec_id" ]; then printf '; executor task, no dispatch file written\n'
   elif [ -n "$agent" ]; then printf '; assigned %s\n' "$agent"
   else printf '; no assigned line written\n'; fi
   if [ "$inline" -eq 1 ]; then
     printf 'seat: inline\n'
-  elif [ -n "$exec_id" ]; then
-    printf 'executor %s: follow executor-lane.md §Dispatch\n' "$exec_id"
   elif [ -n "$agent" ]; then
     printf 'seat: dforge:%s prompt: %s\n' "$agent" "$dispatch"
   else
@@ -842,10 +835,10 @@ route_field() { sed -n "s/.* $1=\\([^ ]*\\).*/\\1/p" <<<"$route" | tr -d '\r'; }
 
 do_review() {
   local base head basesha headsha diff pkgout rc t0 gate route rrc primary fallback reason note="" tier="" judge old_base
-  local lens_files="" lout lrc n line secs timeout_ms cmd top drops=() unexpanded snap
+  local lens_files="" lout lrc n line secs timeout_ms cmd top drops=() unexpanded snap ids_ranked id gl gr probed=0
   local template="$plugin_root/skills/subagent-driven-development/references/task-reviewer-prompt.md"
-  local judge_prompt="$ws/task-$first-review-prompt.md" codex_prompt="$ws/task-$first-review-codex-prompt.md"
-  local codex_out="$ws/task-$first-review-codex.json"
+  local judge_prompt="$ws/task-$first-review-prompt.md" panel_prompt="$ws/task-$first-review-panel-prompt.md"
+  local panel_dir="$ws/task-$first-review-panel" external_files=""
 
   [ -f "$state" ] || die "Task $first has no step state; run task-step start first" 6
   top=$(git rev-parse --show-toplevel)
@@ -863,7 +856,25 @@ do_review() {
   require_scheduled_suite "$state" "${ids[@]}"
   require_suite_base "$basesha" "$first"
 
-  gate=$(bash "${TASK_STEP_CODEX_GATE:-$HERE/codex-gate}" 2>/dev/null | tail -n 1 | tr -d '\r')
+  # One gate per reviewer family; the digest names each family's reason when
+  # no surface is open, or when a gate probed.
+  ids_ranked=$(bash "$HERE/executors" ranked 2>/dev/null | tr -d '\r')
+  gate=""
+  for id in $ids_ranked; do
+    case $id in
+      codex) gl=$(bash "${TASK_STEP_CODEX_GATE:-$HERE/codex-gate}" 2>/dev/null | tail -n 1 | tr -d '\r') ;;
+      agy) gl=$(bash "${TASK_STEP_AGY_GATE:-$HERE/agy-gate}" 2>/dev/null | tail -n 1 | tr -d '\r') ;;
+      *) gl="" ;;
+    esac
+    [[ " $gl " == *" source=probe "* ]] && probed=1
+    if [[ " $gl " == *" review=true "* ]]; then gr=open
+    elif [[ " $gl " == *" usable=true "* ]]; then gr=untrusted
+    else gr=$(sed -n 's/.* reason=\([^ ]*\).*/\1/p' <<<" $gl"); gr=${gr:--}
+    fi
+    gate="${gate:+$gate }$id=$gr"
+    external_files="${external_files:+$external_files
+}$panel_dir/$id.json"
+  done
   route=$(bash "$HERE/review-route" "$plan" --task "${ids[@]}" 2>"$TMP/route.err"); rrc=$?
   if [ "$rrc" -eq 0 ]; then
     primary=$(route_field primary) fallback=$(route_field fallback) reason=$(route_field reason)
@@ -872,8 +883,8 @@ do_review() {
     note=" (review-route exited $rrc: $(tr -d '\r' < "$TMP/route.err" | head -n 1))"
   fi
   case $primary in
-    codex:light) tier=light judge=$fallback ;;
-    codex:heavy+judge-opus) tier=heavy judge=dforge:judge-opus ;;
+    panel:light) tier=light judge=$fallback ;;
+    panel:heavy+judge-opus) tier=heavy judge=dforge:judge-opus ;;
     *) judge=$primary ;;
   esac
   case $judge in dforge:*) ;; *) judge=dforge:judge-opus ;; esac
@@ -895,12 +906,12 @@ do_review() {
   diff=$(sed -n 's/^wrote \(.*\): [0-9]* commit(s), [0-9]* bytes$/\1/p' <<<"$pkgout" | head -n 1 | tr -d '\r')
 
   [ -n "$lens_files" ] || drops+=("Lens Criteria")
-  [ "$tier" = heavy ] || drops+=("Second Pass")
+  [ -n "$tier" ] || drops+=("Second Pass")
   prompt_text "$template" | drop_sections ${drops[@]+"${drops[@]}"} | fill \
     '[BASE_SHA]' "$basesha" '[HEAD_SHA]' "$headsha" '[DIFF_FILE]' "$diff" '[BRIEF_FILE]' "$brief" \
     '[IMPLEMENTER_REPORT_FILE]' "$report" '[REPORT_FILE]' "$ws/task-$first-review-report.md" \
     '[PLUGIN_ROOT]' "$plugin_root" '[JUDGE]' "$judge" \
-    '[LENS_FILES]' "$lens_files" '[CODEX_REVIEW_FILE]' "$codex_out" > "$judge_prompt"
+    '[LENS_FILES]' "$lens_files" '[EXTERNAL_REVIEW_FILES]' "$external_files" > "$judge_prompt"
 
   if [ -n "$tier" ]; then
     {
@@ -911,15 +922,21 @@ do_review() {
       tr -d '\r' < "$plugin_root/criteria/task-review.md" | sed 's/^#/##/'
       printf '\nScore against those criteria and nothing else. Where a criterion tells you to ignore something, ignoring it is part of scoring correctly.\n\n'
       printf '## Output\n\nYour final message is one JSON object that satisfies the output schema, and nothing else: no markdown and no preamble. It carries the four scores (spec, scope, verification, quality), spec_verdict (compliant or issues), task_quality (approved or needs_fixes), findings (severity, file, line and summary for each; line is 0 when a finding has no single line) and cannot_verify (the requirements you could not verify from the diff alone; an empty array when there are none). This overrides any instruction above about the shape of your final message.\n'
-    } > "$codex_prompt"
-    case $tier in
-      light) secs=$(ladder_block codex-judge | awk 'END { print $3 }') ;;
-      *) secs=$(ladder_block codex-judge | awk 'NR == 1 { print $3 }') ;;
-    esac
-    timeout_ms=$(( (${secs:-0} + 120) * 1000 ))
-    cmd="bash \"$plugin_root/scripts/run-codex-review.sh\" --kind task --tier $tier --cwd \"$top\" --out \"$codex_out\" --prompt \"$codex_prompt\""
+    } > "$panel_prompt"
+    # The host call must outlast the panel, whose bound is the slowest family's
+    # row of this tier plus that family's grace (run-review-panel).
+    timeout_ms=0
+    for id in codex:60 agy:70; do
+      case $tier in
+        light) secs=$(ladder_block "${id%%:*}-judge" | awk 'END { print $3 }') ;;
+        *) secs=$(ladder_block "${id%%:*}-judge" | awk 'NR == 1 { print $3 }') ;;
+      esac
+      [ -n "$secs" ] || continue
+      [ $(( (secs + ${id##*:} + 120) * 1000 )) -le "$timeout_ms" ] || timeout_ms=$(( (secs + ${id##*:} + 120) * 1000 ))
+    done
+    cmd="bash \"$plugin_root\"/scripts/run-review-panel --kind task --tier $tier --cwd \"$top\" --out-dir \"$panel_dir\" --prompt \"$panel_prompt\""
   fi
-  for line in "$judge_prompt" ${tier:+"$codex_prompt"}; do
+  for line in "$judge_prompt" ${tier:+"$panel_prompt"}; do
     unexpanded=$(grep -oE '\[[A-Z][A-Z_]*\]' "$line" | head -n 1)
     [ -z "$unexpanded" ] || die "unexpanded placeholder $unexpanded in $line"
   done
@@ -936,13 +953,13 @@ do_review() {
 
   printf 'task %s: reviewed %s..%s (%s commit(s)), diff %s\n' "$idlist" "${basesha:0:7}" "${headsha:0:7}" \
     "$(git rev-list --count "$basesha..$headsha")" "$diff"
-  if [ "$reason" = codex-off ] || [[ "$gate" == *source=probe ]]; then printf 'gate: %s\n' "$gate"; fi
+  if [ "$reason" = reviewers-off ] || [ "$probed" -eq 1 ]; then printf 'gate: %s\n' "${gate:--}"; fi
   case $tier in
-    light) printf 'seat: codex:light prompt: %s fallback: %s prompt: %s\n' "$codex_prompt" "$judge" "$judge_prompt" ;;
-    heavy) printf 'seat: codex:heavy+judge-opus prompt: %s then: %s prompt: %s\n' "$codex_prompt" "$judge" "$judge_prompt" ;;
+    light) printf 'seat: panel:light prompt: %s fallback: %s\n' "$judge_prompt" "$judge" ;;
+    heavy) printf 'seat: panel:heavy+judge-opus prompt: %s then: %s\n' "$judge_prompt" "$judge" ;;
     *) printf 'seat: %s prompt: %s%s\n' "$judge" "$judge_prompt" "$note" ;;
   esac
-  if [ -n "$tier" ]; then printf 'codex: %s\ntimeout: %s\n' "$cmd" "$timeout_ms"; fi
+  if [ -n "$tier" ]; then printf 'panel: %s\ntimeout: %s\n' "$cmd" "$timeout_ms"; fi
   check_identity "$basesha" "$headsha"
   check_attribution "$basesha" "$headsha"
   state_line
@@ -1061,8 +1078,8 @@ do_group() {
     note=" (review-route exited $rrc: $(tr -d '\r' < "$TMP/route.err" | head -n 1))"
   fi
   case $primary in
-    codex:light) judge=$fallback ;;
-    codex:*) judge=dforge:judge-opus ;;
+    panel:light) judge=$fallback ;;
+    panel:*) judge=dforge:judge-opus ;;
     *) judge=$primary ;;
   esac
   case $judge in dforge:*) ;; *) judge=dforge:judge-opus ;; esac
@@ -1143,7 +1160,8 @@ parse_report() {
     }
     /^## / {
       sect = substr($0, 4); sub(/[ \t]+$/, "", sect); nsect++
-      if (sect == "Codex findings") codex_at = nsect
+      if (sect == "External findings") codex_at = nsect
+      if (sect == "Codex findings") err("## Codex findings is retired; the external section is ## External findings")
       next
     }
     sect == "Verdict" {
@@ -1203,7 +1221,7 @@ parse_report() {
         if ((KV["spec"] == "fail" || KV["quality"] == "changes") && !serious[first])
           err("spec: fail or quality: changes with no Critical or Important finding under ## Findings")
       }
-      if (codex_at && codex_at != nsect) err("## Codex findings is not the report'"'"'s last section")
+      if (codex_at && codex_at != nsect) err("## External findings is not the report'"'"'s last section")
       for (i = 1; i <= no; i++) print out[i]
     }'
 }

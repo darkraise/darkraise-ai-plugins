@@ -14,7 +14,6 @@ that arises at one point into one dispatch:
 | `cannot-verify` | Every `cannot-verify:` line of a `task-step verdict` digest, before the task completes |
 | `breaker` | Every finding still open after round 2/2 |
 | `blocked-plan` | An implementer BLOCKED because the plan is wrong |
-| `executor-empty-diff` | An external executor's fix round that returned DONE with an empty diff and an argument ([executor-lane.md](../../../reference/executor-lane.md)) |
 | `final-residual` | Findings still open after the final review's one fix wave |
 
 **How.** Write `<workspace>/rulings-<point>-<task>.md` — `<task>` is the task
@@ -31,9 +30,9 @@ read only its `## Verdict` section
 (`awk '/^## / { on = ($0 == "## Verdict") } on' <report>`), never the rest.
 Items of different kinds at one point share one dispatch, and
 `<kind>` is then one comma-separated list, such as
-`cannot-verify,executor-empty-diff`. The route prints
+`cannot-verify,breaker`. The route prints
 `dforge:judge-sonnet-high` (`reason=simple-kind`) when every kind in the list
-is `cannot-verify` or `executor-empty-diff` and no task it names is risk 3,
+is `cannot-verify` and no task it names is risk 3,
 and `dforge:judge-opus` otherwise; `preflight`, `plan-conflict`, `breaker`,
 `blocked-plan`, `final-residual` and `acceptance-ambiguous` always go to
 `dforge:judge-opus`. On any exit 2, dispatch `dforge:judge-opus` and say why,

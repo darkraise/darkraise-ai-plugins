@@ -48,15 +48,15 @@ keys on. The depth sizes the steps below:
 | 0.5 Acceptance QA | skipped | runs | runs |
 | 1 Claude review | runs | runs | runs |
 | 1 Lenses | `security` only, when it applies | at most 2, plus `test-quality` when it applies, within `lensCap` | up to `lensCap` |
-| 2 Codex round | skipped | skipped | as today |
-| 3 Dedupe judge | never (one list) | never (one list) | with two lists |
+| 2 External round | skipped | skipped | runs |
+| 3 Dedupe judge | never (one list) | never (one list) | with two or more lists |
 
 The fix wave and its scoped re-review run at every depth.
 
 MERGE_BASE is the commit the branch started from, for example
 `git merge-base main HEAD`. After the depth line, step 0 runs first, then
 step 0.2. Step 0.5 dispatches QA in the background and goes straight on to
-step 1: QA runs alongside the Claude review, the lenses and the Codex round,
+step 1: QA runs alongside the Claude review, the lenses and the external round,
 and the fix wave waits for it (step 3).
 Serializing them added QA's whole run, often a quarter of an hour, to every
 final review. Because QA commits while the reviewers read, HEAD in steps 1 and
@@ -147,7 +147,7 @@ your own: QA commits on this branch.
       Dispatch it in the background and, in the same message, start a
       background timer, `sleep <s>` with `<s>` = 600 + 180 × the number of
       `test` statements, at least 1200 and at most 3600 (20 to 60 minutes),
-      as [executor-lane.md](executor-lane.md) arms its timers, with the Bash
+      with the Bash
       call's `timeout` set to (`<s>` + 120) × 1000 ms: a background call's
       limit defaults to 30 minutes, and a timer killed there fires early.
       Then go on to step 1 without waiting; (c) to (e) run when QA returns
@@ -291,49 +291,56 @@ your own: QA commits on this branch.
    `primary` as `subagent_type`, in place of the template's seat line. A
    Codex-host plan takes its final-review seat from
    [native-codex.md](native-codex.md) instead.
-2. **Codex round.** At depth light or standard, skip it: say
-   `codex round skipped (depth <d>)` in one line and go to step 3 with the
-   Claude review alone. At depth full, run the round in
-   [executor-lane.md](executor-lane.md) §Final-review Codex round. Its
-   runner reports one of four outcomes: `OK` and `FALLBACK` produce findings
-   for step 3, and `FALLBACK` also means the preferred judge rung refused the
-   run — say so. `TIMEOUT` and `FAILED` produce nothing: skip the round, say
-   which, and go to step 3 with the Claude review alone. An absent or empty
-   report is never a clean round.
+2. **External round.** At depth light or standard, skip it: say
+   `external round skipped (depth <d>)` in one line and go to step 3 with the
+   Claude review alone. At depth full, run the reviewer panel as
+   [external-review.md](external-review.md) §Final-review external round
+   says, with `--cwd` set to a temporary detached worktree at HEAD
+   (`git worktree add --detach <workspace>/final-review-panel-tree <sha>`), as
+   step 1 does for the integration check: QA commits in the checkout while
+   the panel reads, and the agy runner fails any run whose worktree or `HEAD`
+   moved. Remove the worktree with `git worktree remove --force` once step 3
+   has read the lists. Each reviewer's status line reports one of five outcomes: `OK` and
+   `FALLBACK` produce a list for step 3, and `FALLBACK` also means the
+   preferred row refused the run, so say so. `SKIPPED`, `TIMEOUT` and
+   `FAILED` produce nothing from that reviewer: say which, with its reason.
+   An absent or empty list is never a clean review.
 3. **Wait for QA.** When step 0.5 dispatched QA, nothing below runs until its
    (c) to (e) are done and its `[qa]` findings have joined the Claude list.
    The fix wave also waits for the integration check started in step 1: end
    the turn and resume on its notification.
 
-   **Wait for the round's status line first.** When step 2 launched the
-   runner, there is no step 3 until it has printed `OK`, `FALLBACK`,
-   `TIMEOUT` or `FAILED`: end the turn and resume on its notification. An
-   absent report from a launched runner is a round still running, never a
-   one-list case. When step 2 skipped the round without launching one
-   (`codexReview` off, the gate did not print `review=true`,
-   or depth light or standard), there is
-   nothing to wait for: go straight to the one-list case.
+   **Wait for the panel's closing line first.** When step 2 launched the
+   panel, there is no step 3 until it has printed `panel tier=heavy
+   lists=<n>`: end the turn and resume on its notification. An absent list
+   from a launched panel is a round still running, never a one-list case.
+   When step 2 skipped the round without launching the panel (depth light or
+   standard), there is nothing to wait for: go straight to the one-list case.
 
-   **Dedupe and verify, only with two lists.** When the Claude review and the
-   Codex round each produced at least one finding, dispatch a fresh
-   `dforge:judge-opus` once, given both lists' report paths
-   (the Claude review's and the lens reports, and the Codex round's JSON),
-   with the report file `<workspace>/final-dedupe-report.md`: tell it to
+   **Dedupe and verify whenever two or more lists carry findings.** The
+   lists are the Claude review's (with its lens reports) and one per external
+   reviewer that returned one. When two or more of them carry at least one
+   finding, dispatch a fresh `dforge:judge-opus` once, given every list's
+   path (the Claude review's and the lens reports, and each reviewer's list
+   in the panel's out dir), with the report file
+   `<workspace>/final-dedupe-report.md`: tell it to
    write its full report there, write nothing else, and reply in at most 10 lines.
    The report opens with `## Verdict` holding `confirmed: <k>` and
    `rejected: <k>`, and lists each merged finding under `## Findings` as
-   `- [<severity>] <file>:<line> — [CONFIRMED|REJECTED] [claude|codex|both] <one-liner>`,
+   `- [<severity>] <file>:<line> — [CONFIRMED|REJECTED] [<origins>] <one-liner>`,
    its evidence on indented lines. It merges findings that
    name the same defect in the same place (not merely the same file), tags each
-   `claude`, `codex`, or `both`, and keeps each lens finding's `[lens:<id>]`
+   with its origins, a `+`-joined set of `claude`, `codex` and `agy` naming
+   every list that reported it (for example `[claude+agy]`), and keeps each lens finding's `[lens:<id>]`
    tag, and marks each `CONFIRMED` or `REJECTED` with its evidence in that report. The verifier is a
-   third seat that wrote neither list, so neither reviewer grades its own work.
+   seat that wrote none of the lists, so no reviewer grades its own work.
    A `[qa]` finding is not given to the verifier: it enters the fix wave as
    confirmed, because only the scoped re-review decides a `REJECTED: A<n>`
    dispute (Fixing what it finds).
 
-   **With one list** — Codex off or the round skipped, `TIMEOUT`, `FAILED`, or either reviewer
-   returning no findings — there is no step-3 seat. Every finding in the list
+   **With one list** — the round skipped, every external reviewer `SKIPPED`,
+   `TIMEOUT` or `FAILED`, or only one list carrying findings — there is no
+   step-3 seat. Every finding in the list
    enters the fix wave unverified, and the fixer triages it (Fixing what it
    finds).
 4. **Report.** Name the lenses that ran, each `lens-skipped` lens (or
@@ -418,8 +425,7 @@ over the same range, with `<workspace>/acceptance-report.md` as
 Send any residual findings — `NOT ADDRESSED`, and `REJECTION DISPUTED` in the
 one-list case — to the ruling seat as `final-residual` items and carry out its
 verdicts. The scoped re-review is a Claude seat that wrote none of the code, so
-a list from Codex alone, which may cover Codex's own executor-lane commits,
-still gets an independent reader.
+a list from an external reviewer alone still gets an independent reader.
 
 **Acceptance tests.** The fixer never weakens a test whose name starts with
 `A<n>:`, or with `a<n>_` where the framework forbids a colon in a test name

@@ -45,7 +45,7 @@ unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGE
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
 export DFORGE_LENS_MINOR_FROM=0
-# No session gate file exists, so every plan round routes with reason=codex-off.
+# No session gate file exists, so every plan round routes with reason=reviewers-off.
 export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=review-depth-acceptance
 printf '%s\n' '#!/usr/bin/env bash' "echo '[{\"id\":\"codex\",\"usable\":true,\"reason\":null}]'" > "$TMP/roster-stub"
 export PLAN_LINT_ROSTER="$TMP/roster-stub"
@@ -274,16 +274,16 @@ a7() {
   mkplan p7f.md spec-full.md - 0
   rr docs/dforge/plans/p7l.md --plan-round 1
   # Register row 1 of the review-depth register ruled that light keeps one plan-review round.
-  check "A7 (register row 1): light round 1 has cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=1"
+  check "A7 (register row 1): light round 1 has cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=reviewers-off cap=1"
   rr docs/dforge/plans/p7l.md --plan-round 2
   check "A7: light round 2 exits 2" "$rc" "2"
   has "A7: and says the round is past the cap" "$err" "plan round 2 is past the cap (1)"
   rr docs/dforge/plans/p7s.md --plan-round 1
-  check "A7: standard round 1 has cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=1"
+  check "A7: standard round 1 has cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=reviewers-off cap=1"
   rr docs/dforge/plans/p7s.md --plan-round 2
   check "A7: standard round 2 exits 2" "$rc" "2"
   rr docs/dforge/plans/p7f.md --plan-round 1
-  check "A7: full round 1 has cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=2"
+  check "A7: full round 1 has cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=reviewers-off cap=2"
   rr docs/dforge/plans/p7f.md --plan-round 2
   check "A7: full round 2 is a round within cap 2" "$rc:$out" "0:review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=2"
   rr docs/dforge/plans/p7f.md --plan-round 3

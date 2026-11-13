@@ -29,7 +29,6 @@ req() { # req <extra-json>
   jq -nc --arg cwd "$TMP" --argjson extra "$1" \
     '{op:"turn", kind:"task", cwd:$cwd, model:"gpt-5.6-sol", effort:"high",
       prompt:"review this", schemaPath:null, sandbox:"read-only",
-      resumeThreadId:null, persistThread:false, threadName:null,
       deadlineMs:5000} + $extra'
 }
 
@@ -55,7 +54,7 @@ check "task: routes to runAppServerTurn" \
   "$(grep -c '^runAppServerTurn' "$STUB_EVENT_LOG")" "1"
 unset STUB_EVENT_LOG
 
-# --- codex-client forwards sandbox, output schema, resume and persist to the plugin ---
+# --- codex-client forwards sandbox and output schema, never thread options ---
 export STUB_EVENT_LOG="$TMP/forward.log"
 : > "$STUB_EVENT_LOG"
 # schemaPath is passed as jq's own --arg, not folded into the --argjson extra
@@ -64,20 +63,19 @@ export STUB_EVENT_LOG="$TMP/forward.log"
 # relies on, which only fires on a standalone argv token, never on a path
 # folded inside a larger JSON string.
 forward_req=$(jq -nc --arg cwd "$TMP" --arg schema "$P/criteria/codex-review-schema.json" \
-  --argjson extra '{"sandbox":"workspace-write","resumeThreadId":"prior-thread","persistThread":true}' \
+  --argjson extra '{"sandbox":"workspace-write","resumeThreadId":"prior-thread","persistThread":true,"threadName":"t"}' \
   '{op:"turn", kind:"task", cwd:$cwd, model:"gpt-5.6-sol", effort:"high",
     prompt:"review this", schemaPath:$schema, sandbox:"read-only",
-    resumeThreadId:null, persistThread:false, threadName:null,
     deadlineMs:5000} + $extra')
 run "$forward_req" >/dev/null
 check "forward: sandbox reaches the plugin" \
   "$(grep -c 'sandbox=workspace-write' "$STUB_EVENT_LOG")" "1"
 check "forward: output schema reaches the plugin" \
   "$(grep -c 'schema=yes' "$STUB_EVENT_LOG")" "1"
-check "forward: resumeThreadId reaches the plugin" \
-  "$(grep -c 'resume=prior-thread' "$STUB_EVENT_LOG")" "1"
-check "forward: persistThread reaches the plugin" \
-  "$(grep -c 'persist=true' "$STUB_EVENT_LOG")" "1"
+check "forward: resumeThreadId never reaches the plugin" \
+  "$(grep -c 'resume=-' "$STUB_EVENT_LOG")" "1"
+check "forward: persistThread never reaches the plugin" \
+  "$(grep -c 'persist=false' "$STUB_EVENT_LOG")" "1"
 unset STUB_EVENT_LOG
 
 # --- a plugin that will not import fails closed ---

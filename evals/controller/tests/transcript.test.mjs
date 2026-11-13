@@ -123,6 +123,19 @@ test('a Codex review must run at the routed tier, and a command that launches no
   assert.deepEqual([fix.seatMisses, fix.dispatches], [0, 1]);
 });
 
+test('a reviewer panel run is one review dispatch at its tier, and answers a panel route', () => {
+  const routed = (id, primary) => [said(`m${id}`, 'claude-sonnet-5-5', usage(1, 1), [use(id, 'Bash', { command: 'bash /p/scripts/review-route plan.md --task 1' })]), result(id, `review-seat task=1 primary=${primary} fallback=dforge:judge-sonnet-high reason=band`)];
+  const run = (id, command) => said(`c${id}`, 'claude-sonnet-5-5', usage(1, 1), [use(id, 'Bash', { command })]);
+  const at = (primary, args, extra = []) => measureTranscript(jsonl([...routed('r1', primary), ...extra, run('b1', `bash /p/scripts/run-review-panel ${args} --cwd w --out-dir o`)]));
+  const light = at('panel:light', '--kind task --tier light --prompt p.md');
+  assert.deepEqual([light.seatMisses, light.dispatches], [0, 1]);
+  assert.equal(at('panel:heavy+judge-opus', '--kind task --tier heavy --prompt p.md').seatMisses, 0);
+  assert.equal(at('panel:heavy+judge-opus', '--kind task --tier light --prompt p.md').seatMisses, 1);
+  assert.equal(at('panel:plan', '--kind plan --prompt p.md').seatMisses, 0);
+  const reading = at('panel:light', '--kind task --tier light --prompt p.md', [run('x1', 'cat /p/scripts/run-review-panel')]);
+  assert.deepEqual([reading.seatMisses, reading.dispatches], [0, 1]);
+});
+
 test('a ledger check that only redirects stderr, and a write that failed, are not completions', () => {
   const ledger = '/w/.dforge/sdd/p/progress.md';
   const m = measureTranscript(jsonl([

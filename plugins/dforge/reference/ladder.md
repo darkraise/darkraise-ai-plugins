@@ -1,7 +1,7 @@
 # Assignment, escalation, and reserve tables
 
 The raw axis definitions are shared across hosts; Rule S's threshold is set by
-host below. The unweighted totals, agent tables, and external CLI lane here
+host below. The unweighted totals, agent tables, and external judge rungs here
 apply to Claude. Native Codex uses [native-codex.md](native-codex.md) and its
 weighted `codex-v4` score.
 The fenced blocks below are parsed by `tests/ladder.test.sh`; keep them machine-readable.
@@ -222,116 +222,23 @@ That is the intended outcome. Do not inflate an axis to land on a tier that feel
 right; if a task feels harder than its score, the plan text is probably hiding
 something, and the fix is a better task description or a smaller task.
 
-## The external lane
+## External review rungs
 
-An external executor is not a rung on the escalation ladder above. Offload
-selects downward at the cheap end while the ladder only moves upward, and one
-total order cannot express both. Each registered executor has its own gate
-block, named in its registry entry, and planning consults executors in
-`executors ranked` order. The Claude ladder remains the sole backstop, so
-its termination proof is unchanged by anything in this section.
-
-### The Codex lane gate
-
-```gate
-min_score 2
-max_score 4
-max_risk 1
-require_rule_s_clean true
-require_external_enabled true
-```
-
-All five conditions must hold. `require_rule_s_clean` excludes a task whose
-`spec = 3` was kept by a human override under the legacy floor: such a task can
-score `0 + 3 + 0 + 0 = 3` and would otherwise pass, sending a task whose approach
-nobody decided to a one-shot external agent.
-
-`min_score 2` and `max_score 4` bound the eligible totals to 2, 3 and 4, the
-rows `codex-assignment` has. On a Claude plan Rule S admits `reducible` up to
-5, so `max_risk 1` alone would admit a total of 5 or 6 at risk 0 or 1;
-`max_score 4` keeps them on the Claude ladder. Without the floor the gate
-would reduce to a risk test and capture nearly every task by count. It would
-also offload where offload is worthless: a score-0 task displaces
-`impl-sonnet-low`, which costs less to run than the wrapper costs to
-orchestrate.
-
-### Codex assignment
-
-```codex-assignment
-2 gpt-6.1-sol low
-3 gpt-6.1-sol medium
-4 gpt-6.1-sol high
-```
-
-Only `gpt-6.1-sol` appears in this external CLI *execution* policy; the review
-seats take their rows from the `codex-judge` block below. `gpt-6-sol` replaced
-`gpt-5.5` and `gpt-5.6-sol` on 2026-09-23: `gpt-5.5` retires from Codex with
-ChatGPT sign-in on 2026-10-14, and Codex's own catalog listed `gpt-6-sol` as the
-upgrade for `gpt-5.6-sol`. `gpt-6.1-sol` replaced `gpt-6-sol` on 2026-10-07: it
-has been Codex's default model since 0.159.1, OpenAI describes it as near-Astra
-on software work, and the move rests on that description; no calibration
-replay was run. On 2026-08-31, Codex 0.151.0 on Windows with
-ChatGPT-subscription authentication rejected GPT-5.6 Luna and Terra with HTTP
-400 and provided no metadata for them; GPT-6 Luna has not run through this lane
-yet. Those historical
-observations do not establish current access on another account, CLI version,
-or native client. Native Codex routes Terra through its separate capability filter.
-
-This CLI policy allows `low`, `medium`, `high`, and `xhigh`, and rejects
-`minimal` and `ultra`: no row assigns or succeeds to `ultra`, and no bound has
-been measured for it. Verify advertised capabilities for the actual CLI/account before use;
-do not infer them from the native model list or make paid capability probes.
-
-### Codex successor
-
-```codex-successor
-gpt-6.1-sol/low gpt-6.1-sol/medium
-gpt-6.1-sol/medium gpt-6.1-sol/high
-gpt-6.1-sol/high gpt-6.1-sol/xhigh
-gpt-6.1-sol/xhigh HANDBACK
-```
-
-This is a single-successor column consulted at most once per task, not a
-walkable chain. Only a failed *initial run* consults it: the fix loop resumes the same session on round 1 and hands back on round 2, so no fix round ever
-reads it. It is named `successor` rather than `escalation` for that reason.
-A refused initial run never reads it either: the account refused the model, and
-every row names that same model, so a refusal goes straight to `HANDBACK`.
-
-A fix round whose resume fails to run at all is the case that looks closest to a
-run failure, and it is still excluded. Changing rung mid-loop would discard the
-session context those rounds exist to preserve, so such a round leaves the lane
-by `HANDBACK` instead - the exit it was already heading for at round 2.
-
-`HANDBACK` is an action, not an executor - the same shape as `SPLIT` at the top
-of the escalation table. It resolves to the Claude assignment-table row for the
-task's score, after which the ordinary ladder governs.
-
-Ranking a rung as `model_rank * 10 + effort_rank`, where `gpt-6.1-sol` ranks 0,
-gives every successor a strictly higher rank than its source, so the column is
-acyclic and every walk reaches `HANDBACK`. With one model the rank is the
-effort's alone; the formula stays so a second model can join the column.
-
-### Codex timeout
-
-```codex-timeout
-gpt-6.1-sol/low 900
-gpt-6.1-sol/medium 1200
-gpt-6.1-sol/high 1800
-gpt-6.1-sol/xhigh 2400
-```
-
-Seconds. One constant cannot serve both a `medium` and an `xhigh` run.
+An external model is not a rung on the escalation ladder above: it never
+implements a task, and nothing escalates into a review seat. Each registered
+reviewer has one judge block, named by `blocks.judge` in its registry entry and
+read at runtime by its review runner. The Claude ladder remains the sole
+backstop, so its termination proof is unchanged by anything in this section.
 
 ### Codex judge rung
 
 Every Claude-hosted Codex review seat — the task seats, plan-review round 1,
-and the final-review round — takes its model from this block, not from
-`codex-assignment`. The first row is preferred; the last row is the fallback.
-`--tier light` runs the last row directly, for tasks totalling 0 to 8 below
-risk 3; every other seat (risk 3, plan review, the final round) uses the first
-row with its fallback. Totals 4 to 6 moved from Astra to the light row on
-2026-10-07, when `gpt-6.1-sol` replaced `gpt-6-sol` there, at about a fifth of
-Astra's price.
+and the final-review round — takes its model from this block. The first row is
+preferred; the last row is the fallback. `--tier light` runs the last row
+directly, for tasks totalling 0 to 8 below risk 3; every other seat (risk 3,
+plan review, the final round) uses the first row with its fallback. Totals 4
+to 6 moved from Astra to the light row on 2026-10-07, when `gpt-6.1-sol`
+replaced `gpt-6-sol` there, at about a fifth of Astra's price.
 
 ```codex-judge
 gpt-6-astra xhigh 5400
@@ -345,20 +252,10 @@ defects produced no evidence. Raising the effort without raising the bound
 would only buy more `TIMEOUT` rows, because more thinking takes more wall
 clock on exactly the plans that already ran out of it.
 
-The two rows carry different bounds on purpose. `gpt-6-astra/xhigh` appears
-only here, so its 5400 is free to be set for review work. `gpt-6.1-sol/xhigh`
-also appears in `codex-timeout`, where 2400 bounds *task execution*, and
-`tests/lanes.test.sh` requires the two blocks to agree on any pair they share
-— a constant in two places drifts otherwise. Widening the judge row would mean
-widening execution too, which is a different decision about how long a wedged
-task may hang, so the shared pair keeps the execution constant.
-
-It is a separate block for two mechanical reasons. `scripts/run-codex-task.sh`
-validates `--model` against `codex-assignment`, so a judge model there would
-widen execution admission. And `tests/lanes.test.sh` ranks only the execution
-models, so a judge row in `codex-successor` would fail the termination proof.
-Judges are excluded from the implementer ladder anyway: nothing escalates into
-a review seat.
+The two rows carry different bounds. `gpt-6-astra/xhigh` runs the heavy seats,
+so its 5400 is set for whole plans and branches. `gpt-6.1-sol/xhigh` runs the
+light tier and keeps the 2400 it carried when the same pair also bounded task
+execution.
 
 `gpt-6-astra` is the rung `reference/codex-routing.json` already floors native
 judges at, so both hosts now judge at the same tier. This plugin reads no model
@@ -374,85 +271,20 @@ was raised to 5400 on 2026-09-21 for headroom above that single completion, on
 the owner's instruction; nothing measures where its ceiling actually is.
 Revise them when real runs warrant it.
 
-### The agy lane gate
+### Agy judge rung
 
-```agy-lane-gate
-min_score 0
-max_score 8
-max_risk 2
-require_rule_s_clean true
-require_external_enabled true
+Every agy review seat takes its model from this block, read by
+`scripts/run-agy-review.sh`. The first row is preferred; the last row is the
+fallback and the light tier, which runs it directly. A heavy task review, a
+plan review and a final review use the first row with one fallback to the
+last on a refused model, and a `claude-*` row whose Claude quota is out runs
+the last row instead. The bounds copy the Codex rows of the same tier.
+
+```agy-judge
+claude-opus-5-5 high 5400
+gemini-4-argon high 2400
 ```
 
-All five conditions must hold. `max_score 8` is Rule S's own ceiling,
-`reducible` 5 plus risk 3, so the gate adds no cap beyond it. `max_risk 2`
-keeps risk-3 tasks on the Claude ladder.
-
-`agy-lane-gate` has a floor of 0 because the lane exists for a different reason.
-Codex's floor of 2 exists because a score-0 offload costs more to orchestrate
-than `impl-sonnet-low` costs to run, whereas `agy`'s purpose is to move work
-onto another quota, so even a score-0 task it takes is Claude quota saved.
-
-### Agy assignment
-
-```agy-assignment
-0 gemini-3.8-flash medium
-1 gemini-3.8-flash medium
-2 gemini-3.8-flash medium
-3 gemini-4-argon low
-4 gemini-4-argon low
-5 gemini-4-argon high
-6 gemini-4-argon high
-7 gemini-4-argon high
-8 gemini-4-argon high
-```
-
-Totals 3 to 8 come from the replayed runs recorded in
-`docs/dforge/notes/2026-11-03-agy-calibration-3-8.md`: Argon at `low` passed
-all three tasks scored 3-4, and Argon at `high` passed all three scored 6-7.
-Total 5 runs Argon at `high` because that is the only rung measured on all
-three high tasks. The models are those `agy models` lists.
-
-No row starts on Claude. The Claude quota on Antigravity is small (the
-calibration drained it after about 500k tokens), so it is spent only on the
-single retry after a Gemini run fails.
-
-### Agy successor
-
-```agy-successor
-gemini-3.8-flash/medium claude-sonnet-5-5/medium
-gemini-4-argon/low claude-sonnet-5-5/medium
-gemini-4-argon/high claude-sonnet-5-5/high
-claude-sonnet-5-5/medium HANDBACK
-claude-sonnet-5-5/high HANDBACK
-```
-
-This is a single-successor column consulted at most once per task, not a
-walkable chain, the same shape as `codex-successor`. A failed Gemini run moves
-to Claude rather than to a higher Gemini effort, because the second attempt
-should differ in model family. Every row is a Gemini source with a Claude
-target, or a Claude source with `HANDBACK`, and no row names `claude-opus-5-5`.
-
-`HANDBACK` is an action, not an executor. It resolves to the Claude
-assignment-table row for the task's score, after which the ordinary ladder
-governs.
-
-Ranking a rung as `model_rank * 10 + effort_rank`, where every `gemini-` model
-ranks 0, `claude-sonnet-5-5` 1 and `claude-opus-5-5` 2, and efforts rank `low`
-0, `medium` 1 and `high` 2, gives every successor a strictly higher rank than
-its source, so the column is acyclic and every walk reaches `HANDBACK`.
-
-### Agy timeout
-
-```agy-timeout
-gemini-3.8-flash/medium 900
-gemini-4-argon/low 900
-gemini-4-argon/high 1500
-claude-sonnet-5-5/medium 1200
-claude-sonnet-5-5/high 1800
-```
-
-The values are seconds. The Argon rows follow the 2026-11-02 rule, the larger
-of 900 and three times the slowest passing run rounded up to a multiple of 300:
-at `low`, 3 × 137 s = 411 s, so 900; at `high`, 3 × 426 s = 1278 s, so 1500.
-The Claude rows keep their values.
+The Claude quota on Antigravity is small: the 2026-11-03 calibration drained it
+after about 500k tokens. A review that finds it out runs the Gemini row, so a
+drained quota costs a seat its preferred model, never its review.

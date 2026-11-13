@@ -11,7 +11,10 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 # The gate reads ~/.dforge/config.json; a temporary home keeps the real one out.
 export HOME="$TMP/home"
-mkdir -p "$HOME"
+# Codex reviews are opt-in, and off the gate never probes, so every probe case
+# runs with them on.
+mkdir -p "$HOME/.dforge"
+printf '{"codexReview":true}\n' > "$HOME/.dforge/config.json"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -46,7 +49,7 @@ check "the policy file states a version floor and a major ceiling" \
 check "the policy file records the version the trust gates were measured against" \
   "$(jq -r '.calibrated' "$P/reference/codex-plugin.json" 2>/dev/null | tr -d '\r')" "1.0.3"
 check "the policy file records the gates that passed" \
-  "$(jq -r '[.trust.calibration, .trust.smoke] | join(",")' "$P/reference/codex-plugin.json" 2>/dev/null | tr -d '\r')" "pass,pass"
+  "$(jq -r '.trust | keys | join(",")' "$P/reference/codex-plugin.json" 2>/dev/null | tr -d '\r')" "calibration"
 
 install_plugin 1.0.3 1.0.3
 printf 'export class CodexAppServerClient {}\n' > "$PLUG/scripts/lib/app-server.mjs"
@@ -135,7 +138,7 @@ SESS="$TMP/sessions"
 # test, even one that dies halfway. The copy starts untrusted whatever the
 # shipped file records, so a gate that passes later changes no case below.
 POLICY="$TMP/policy.json"
-jq '.trust = {"calibration":"pending","smoke":"pending"}' "$P/reference/codex-plugin.json" > "$POLICY"
+jq '.trust = {"calibration":"pending"}' "$P/reference/codex-plugin.json" > "$POLICY"
 gate() { # gate <mode> [args...]; sets out and rc
   local mode="$1"; shift
   out=$(cd "$TMP/work" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_PROJECT_DIR= DR_CODEX_SESSION_DIR="$SESS" DR_CODEX_POLICY="$POLICY" \
@@ -149,7 +152,7 @@ check "codex-gate exists" "$([ -f "$P/scripts/codex-gate" ] && echo yes || echo 
 
 fresh; gate usable
 check "a usable but untrusted plugin opens no surface" "$out" \
-  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=true reason=ok review=false resets_at=- source=probe"
 check "the gate exits 0 when it answers" "$rc" "0"
 check "the probe connects in direct mode" "$(grep -c 'connect disableBroker=true' "$TMP/log")" "1"
 check "the probe reads the login, then the limits" \
@@ -159,7 +162,7 @@ check "the session file records the session" "$(field session_id)" "s1"
 check "the session file records the plugin version" "$(field plugin_version)" "1.0.3"
 gate usable
 check "a second call answers from the cache" "$out" \
-  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=cache"
+  "codex-gate usable=true reason=ok review=false resets_at=- source=cache"
 check "a cached answer starts no client" "$(grep -c connect "$TMP/log")" "1"
 
 # Trust is read on every call, cache or probe: flipping it must not wait for a
@@ -167,57 +170,53 @@ check "a cached answer starts no client" "$(grep -c connect "$TMP/log")" "1"
 mkdir -p "$HOME/.dforge"
 printf '{"codexReview":true}\n' > "$HOME/.dforge/config.json"
 cp "$POLICY" "$TMP/policy.bak"
-jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
+jq '.trust = {"calibration":"pass"}' "$TMP/policy.bak" > "$POLICY"
 gate usable
-check "both gates passed opens both surfaces" "$out" \
-  "codex-gate usable=true reason=ok review=true lane=true resets_at=- source=cache"
-jq '.trust = {"calibration":"pass","smoke":"pending"}' "$TMP/policy.bak" > "$POLICY"
+check "calibration opens the review seats" "$out" \
+  "codex-gate usable=true reason=ok review=true resets_at=- source=cache"
+check "the rewritten file carries the review surface" "$(field review)/$(field lane)" "true/null"
+jq '.trust = {"calibration":"pending"}' "$TMP/policy.bak" > "$POLICY"
 gate usable
-check "calibration alone opens only the review seats" "$out" \
-  "codex-gate usable=true reason=ok review=true lane=false resets_at=- source=cache"
-check "the rewritten file carries the review surface" "$(field review)/$(field lane)" "true/false"
-jq '.trust = {"calibration":"pending","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
-gate usable
-check "the smoke test alone opens only the lane" "$out" \
-  "codex-gate usable=true reason=ok review=false lane=true resets_at=- source=cache"
-jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
+check "pending calibration keeps the review seats closed" "$out" \
+  "codex-gate usable=true reason=ok review=false resets_at=- source=cache"
+jq '.trust = {"calibration":"pass"}' "$TMP/policy.bak" > "$POLICY"
 fresh; gate quota
 check "trust never opens a surface on an unusable Codex" "$out" \
-  "codex-gate usable=false reason=quota review=false lane=false resets_at=2026-09-20T10:03:27Z source=probe"
+  "codex-gate usable=false reason=quota review=false resets_at=2026-09-20T10:03:27Z source=probe"
 cp "$TMP/policy.bak" "$POLICY"
 
 fresh; gate quota
 check "an exhausted quota is off with its reset time" "$out" \
-  "codex-gate usable=false reason=quota review=false lane=false resets_at=2026-09-20T10:03:27Z source=probe"
+  "codex-gate usable=false reason=quota review=false resets_at=2026-09-20T10:03:27Z source=probe"
 fresh; gate full
 check "usage at 100 percent is quota even when ordinary usage is allowed" "$out" \
-  "codex-gate usable=false reason=quota review=false lane=false resets_at=2026-09-20T10:03:27Z source=probe"
+  "codex-gate usable=false reason=quota review=false resets_at=2026-09-20T10:03:27Z source=probe"
 fresh; gate logged-out
 check "a logged-out plugin is off" "$out" \
-  "codex-gate usable=false reason=logged-out review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=false reason=logged-out review=false resets_at=- source=probe"
 fresh; gate free
 check "a free ChatGPT plan is off" "$out" \
-  "codex-gate usable=false reason=free-plan review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=false reason=free-plan review=false resets_at=- source=probe"
 check "a free plan is decided before the limits read" \
   "$(grep '^request' "$TMP/log" | tr '\n' ' ')" "request account/read "
 gate free
 check "a free plan stays off from the cache" "$out" \
-  "codex-gate usable=false reason=free-plan review=false lane=false resets_at=- source=cache"
+  "codex-gate usable=false reason=free-plan review=false resets_at=- source=cache"
 fresh; gate method-missing
 check "an app-server without the limits method is off" "$out" \
-  "codex-gate usable=false reason=method-missing review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=false reason=method-missing review=false resets_at=- source=probe"
 fresh; gate rpc-error
 check "any other limits error is off" "$out" \
-  "codex-gate usable=false reason=plugin-api review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=false reason=plugin-api review=false resets_at=- source=probe"
 fresh; gate shapeless
 check "a limits reply without the signal is off" "$out" \
-  "codex-gate usable=false reason=plugin-api review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=false reason=plugin-api review=false resets_at=- source=probe"
 fresh; gate connect-throws
 check "a connect that throws is off" "$out" \
-  "codex-gate usable=false reason=plugin-api review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=false reason=plugin-api review=false resets_at=- source=probe"
 fresh; GATE_MS=1500 gate hang
 check "a hung connect times out" "$out" \
-  "codex-gate usable=false reason=timeout review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=false reason=timeout review=false resets_at=- source=probe"
 # A PATH without timeout, as on macOS: the probe still answers.
 NOTIMEOUT="$TMP/no-timeout-bin"
 mkdir -p "$NOTIMEOUT"
@@ -241,90 +240,79 @@ for tool in jq node git; do
 done
 fresh; PATH="$NOTIMEOUT" gate usable
 check "without timeout on PATH the probe still answers" "$out" \
-  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=true reason=ok review=false resets_at=- source=probe"
 # A connect that resolves after the deadline still has its client closed.
 fresh; GATE_MS=1000 gate slow-connect
 check "a connect that resolves after the deadline is a timeout" "$out" \
-  "codex-gate usable=false reason=timeout review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=false reason=timeout review=false resets_at=- source=probe"
 check "a connect that resolves after the deadline has its client closed" "$(grep -c '^close$' "$TMP/log")" "1"
 fresh; started=$SECONDS; GATE_MS=1500 gate close-hangs
 check "a close that never settles still answers, within its grace" "$out" \
-  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=true reason=ok review=false resets_at=- source=probe"
 check "a close that never settles is waited on for its grace only" "$([ $((SECONDS - started)) -lt 12 ] && echo yes || echo no)" "yes"
 
-# --- the settings switch either surface off ----------------------------------
-# codexReview and codexLane come from ~/.dforge/config.json. With both off
-# nothing may use Codex, so the gate answers without starting a client.
-mkdir -p "$HOME/.dforge"
+# --- the codexReview switch -------------------------------------------------
+# codexReview comes from ~/.dforge/config.json. Off, nothing may use Codex, so
+# the gate answers without starting a client.
 setting() { printf '%s\n' "$1" > "$HOME/.dforge/config.json"; }
-jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
-setting '{}'
-fresh; gate usable
-check "codexReview is off by default, the lane is not" "$out" \
-  "codex-gate usable=true reason=ok review=false lane=true resets_at=- source=probe"
-setting '{"codexLane":false,"codexReview":true}'
-fresh; gate usable
-check "codexLane off closes the lane only" "$out" \
-  "codex-gate usable=true reason=ok review=true lane=false resets_at=- source=probe"
-check "the session file carries the closed lane" "$(field review)/$(field lane)" "true/false"
-setting '{"codexReview":false}'
-gate usable
-check "codexReview off closes the review seats only, from the cache too" "$out" \
-  "codex-gate usable=true reason=ok review=false lane=true resets_at=- source=cache"
-setting '{"codexLane":false,"codexReview":false}'
-fresh; gate usable
-check "both off answers without a probe" "$out" \
-  "codex-gate usable=false reason=setting review=false lane=false resets_at=- source=setting"
-check "both off starts no client" "$(cat "$TMP/log" 2>/dev/null | grep -c connect)" "0"
-check "both off is written for the readers" "$(field usable)/$(field reason)" "false/setting"
+jq '.trust = {"calibration":"pass"}' "$TMP/policy.bak" > "$POLICY"
+setting '{"codexReview":false}'; fresh; gate usable
+check "codexReview off answers setting without probing" "$out" "codex-gate usable=false reason=setting review=false resets_at=- source=setting"
+check "codexReview off starts no client" "$(grep -c connect "$TMP/log" 2>/dev/null || echo 0)" "0"
+check "codexReview off is written for the readers" "$(field usable)/$(field reason)" "false/setting"
+setting '{}'; fresh; gate usable
+check "codexReview is off by default" "$(grep -c 'reason=setting' <<<"$out")" "1"
+setting '{"codexReview":true,"codexLane":false}'; fresh; gate usable
+check "a stored codexLane is ignored" "$(grep -c 'reason=setting' <<<"$out")" "0"
+setting '{"codexReview":false}'; gate usable
 setting '{"codexReview":true}'
 gate usable
 check "switching Codex back on probes again" "$out" \
-  "codex-gate usable=true reason=ok review=true lane=true resets_at=- source=probe"
+  "codex-gate usable=true reason=ok review=true resets_at=- source=probe"
 cp "$TMP/policy.bak" "$POLICY"
-rm -f "$HOME/.dforge/config.json"
+setting '{"codexReview":true}'
 
 # The quota answer is cached only until its reset time.
 fresh; gate quota
 jq '.resets_at_epoch = 1577836800' "$SESS/s1.json" > "$TMP/s.json" && mv "$TMP/s.json" "$SESS/s1.json"
 gate usable
 check "a quota past its reset time is probed again" "$out" \
-  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=true reason=ok review=false resets_at=- source=probe"
 # Past 18 digits the -gt overflows; sed, not jq, so the digits reach the file as written.
 fresh; gate quota
 jq '.resets_at_epoch = 1577836800' "$SESS/s1.json" | sed 's/1577836800/99999999999999999999/' > "$TMP/s.json" \
   && mv "$TMP/s.json" "$SESS/s1.json"
 gate usable
 check "a 20-digit reset epoch is stale and probed again" "$out" \
-  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=true reason=ok review=false resets_at=- source=probe"
 check "a 20-digit reset epoch writes nothing to stderr" "$(cat "$TMP/err")" ""
 gate quota --refresh
 check "--refresh probes even with a cached answer" "$out" \
-  "codex-gate usable=false reason=quota review=false lane=false resets_at=2026-09-20T10:03:27Z source=probe"
+  "codex-gate usable=false reason=quota review=false resets_at=2026-09-20T10:03:27Z source=probe"
 
 # Another session's file is never this session's answer.
 fresh; gate quota
 SID=s2 gate usable
 check "a different session probes for itself" "$out" \
-  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=true reason=ok review=false resets_at=- source=probe"
 
 # Without a session id nothing can be cached or read back, so nothing is written.
 fresh; SID= gate usable
 check "no session id still answers" "$out" \
-  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=true reason=ok review=false resets_at=- source=probe"
 check "no session id writes no file" "$(ls "$SESS" 2>/dev/null | wc -l | tr -d ' ')" "0"
 # The readers (review-route, plan-lint) answer off without a session file, so
 # the gate's own line must agree even when every surface is trusted.
 cp "$POLICY" "$TMP/policy.bak"
-jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
+jq '.trust = {"calibration":"pass"}' "$TMP/policy.bak" > "$POLICY"
 fresh; SID= gate usable
 check "no session id opens no surface, even trusted" "$out" \
-  "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=true reason=ok review=false resets_at=- source=probe"
 cp "$TMP/policy.bak" "$POLICY"
 
 fresh; enable false; gate usable
 check "a disabled plugin never starts a client" "$out" \
-  "codex-gate usable=false reason=plugin-not-enabled review=false lane=false resets_at=- source=probe"
+  "codex-gate usable=false reason=plugin-not-enabled review=false resets_at=- source=probe"
 check "a disabled plugin writes no client log" "$([ -f "$TMP/log" ] && echo yes || echo no)" "no"
 enable true
 
@@ -340,16 +328,15 @@ on() { # on <name> <surface> <want: on|off>
 }
 fresh; mkdir -p "$SESS"
 on "no file is off" review off
-printf '{"session_id":"s1","usable":true,"review":true,"lane":false}\n' > "$SESS/s1.json"
+printf '{"session_id":"s1","usable":true,"review":true}\n' > "$SESS/s1.json"
 on "an open review surface is on" review on
-on "a closed lane is off" lane off
 executor_session_mark_off codex quota
-check "mark_off closes both surfaces" "$(field usable)/$(field review)/$(field lane)/$(field reason)" "false/false/false/quota"
+check "mark_off closes the review surface" "$(field usable)/$(field review)/$(field reason)" "false/false/quota"
 on "a marked-off session is off" review off
 printf 'not json' > "$SESS/s1.json"
 on "a torn file is off" review off
 CLAUDE_CODE_SESSION_ID=""
-printf '{"session_id":"","usable":true,"review":true,"lane":true}\n' > "$SESS/.json"
+printf '{"session_id":"","usable":true,"review":true}\n' > "$SESS/.json"
 on "no session id is off whatever is on disk" review off
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

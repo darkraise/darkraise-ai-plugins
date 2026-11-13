@@ -28,14 +28,9 @@ back. Before anything else:
    says); an assigned line with commits after its base
    goes to review;
    `awaiting group review` is reviewed by the next group dispatch, never re-dispatched.
-   An assigned line ending `thread pending` is an executor
-   wrapper that may still be running: find it in the snapshot's background
-   list and wait for its notification, or stop it and record a Ruling.
    A `Wave <k>: started` line with no later `integrated` or `merged` line
    is a parallel wave in flight: follow
    [parallel-waves.md](../../reference/parallel-waves.md) §Recovery.
-   A `Plan: executor <id> off - unreliable` line keeps that executor off;
-   dispatch reads it through `scripts/lane-breaker`.
 3. When every task has its `complete` line, run `scripts/context-size --final`
    and go on to Final Review or finishing whatever it prints: the final phase
    never hands off. In an auto run it also moves the run to the final phase,
@@ -177,7 +172,7 @@ The flowchart is in [process-graph.md](references/process-graph.md); per task th
 4. Otherwise a finding that conflicts with plan text goes to the ruling seat first ([ruling-prompt.md](references/ruling-prompt.md)). Then run fix round R of 2 (R=1 resume or fresh by cache state, R=2 the successor rung, fresh), each followed by a scoped re-review ([re-review-prompt.md](references/re-review-prompt.md)).
 5. A finding still open after round 2 goes to the ruling seat as a `breaker` item: a CONFIRMED-GAP or AMEND is carried forward, BLOCKED stops, the rest are parked in the ledger with the ruling. Then append the `complete` line.
 
-After the last task: final review (a code reviewer and a Codex round, a judge verifies the union), ONE fix dispatch, one scoped re-review, the ruling seat on residuals, `Final review: clean`, then dforge:finishing-a-development-branch.
+After the last task: final review (a code reviewer and, at depth full, the reviewer panel; a judge verifies the union), ONE fix dispatch, one scoped re-review, the ruling seat on residuals, `Final review: clean`, then dforge:finishing-a-development-branch.
 
 Read [process-graph.md](references/process-graph.md) before you route a state the steps above do not place.
 
@@ -232,7 +227,7 @@ prints back — stays resident in your context for the rest of the session
 and is re-read on every later turn. Hand artifacts over as files.
 
 **Waiting on dispatched subagents (Claude Code):** Agent dispatches run in
-the background, and so do a Codex review seat and a suite that outruns Bash's
+the background, and so do the reviewer panel and a suite that outruns Bash's
 ten-minute foreground cap. While local work remains — ledger updates,
 packaging the next review, reading reports — keep working; child results
 arrive on their own. When only waiting remains, end the turn: each completion

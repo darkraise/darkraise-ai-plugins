@@ -340,8 +340,8 @@ ctx_primary_root() {
 # (scripts/sdd-workspace writes * into its .gitignore). Only this repository's
 # root .gitignore lists the state
 # directory, and an untracked-but-not-ignored file
-# would enter scripts/lib/task-state.sh's review snapshot, invalidating a Codex
-# review, and would block initial execution's clean-worktree check.
+# would enter scripts/lib/worktree-snapshot.sh's review snapshot, invalidating a
+# review.
 ctx_log_observation() {
   local primary base sid
   primary=$(ctx_primary_root) || return 0

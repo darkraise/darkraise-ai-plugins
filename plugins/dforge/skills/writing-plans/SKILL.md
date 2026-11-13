@@ -212,8 +212,8 @@ never invents parallelism the work does not have:
 3. **No two tasks in a wave name the same file** in their `**Files:**` blocks —
    Create, Modify, Test or Delete. Registries, index files, route tables and
    shared fixtures have one owner.
-4. **Some tasks always run alone in their wave:** a task with risk 3, a task
-   carrying an `**Executor:**` line, and a task that touches a dependency
+4. **Some tasks always run alone in their wave:** a task with risk 3 and a
+   task that touches a dependency
    manifest or lockfile (`package.json`, `Cargo.toml`, `go.mod`,
    `pyproject.toml`, and their lockfiles).
 5. **Keep a wave to three tasks** unless more are trivially independent: at
@@ -348,8 +348,7 @@ Read [assignment-procedure.md](references/assignment-procedure.md) before you sc
 
 The scores still set the Execution line's floor and mark the risk-3 tasks a
 judge reviews. The `**Implementer:**` lines are kept for the deprecated
-subagent mode and for scoring an executor task's fallback; under inline mode
-the session implements the task.
+subagent mode; under inline mode the session implements the task.
 
 ## Assign the register rows
 

@@ -131,9 +131,9 @@ async function reap(root, cwd) {
   }
   clearTimeout(grace);
   try {
-    // killProcess carries the Windows knowledge run-codex-task.sh proved:
-    // taskkill walks the native process tree, and a plain kill leaves the
-    // node children of the broker running.
+    // killProcess carries the Windows knowledge: taskkill walks the native
+    // process tree, and a plain kill leaves the node children of the broker
+    // running.
     lifecycle.teardownBrokerSession({ ...session, killProcess: killTree });
   } catch {
     // The session file is still cleared below; a leaked temp dir is not fatal.
@@ -232,9 +232,6 @@ async function main() {
     prompt: req.prompt ?? "",
     sandbox: req.sandbox ?? null,
     outputSchema,
-    resumeThreadId: req.resumeThreadId ?? null,
-    persistThread: req.persistThread === true,
-    threadName: req.threadName ?? null,
     onProgress
   };
   // Every kind runs one plain turn. runAppServerReview is never called: it reads

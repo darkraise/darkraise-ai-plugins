@@ -31,31 +31,6 @@ the reserve table and in no other table. No score reaches them, and reaching for
 one anyway is the exact move Rule S exists to prevent. They are legal in a plan
 only as a human override.
 
-## Why the Executor is a second line
-
-`**Implementer:**` still names the Claude agent for the score, and
-`**Executor:**` is an override on a second line. That ordering makes every
-degradation free: a machine without Codex, a cold session, and an executor whose
-auth has lapsed all fall back by reading a line that is already there, rather
-than re-deriving the assignment at dispatch time. It also keeps every
-`**Implementer:**` value inside the assignment or reserve table, so the checks
-still mean what they say. The `**Implementer:**` line is read only by the
-deprecated subagent mode: under inline mode the session implements the task,
-and an executor task that falls back lands on the session.
-
-## Why the lane gate excludes an overridden Rule S pass
-
-The legacy floor lets a human keep a `spec = 3` task as written. Such a task can
-score `files 0 + spec 3 + coupling 0 + risk 0 = 3` and would otherwise pass the
-gate, handing a task whose approach nobody decided to a one-shot external agent
-that cannot ask questions mid-run.
-
-## Why batched tasks stay on the Claude lane
-
-The rule to batch small same-shape work produces one dispatch covering several
-tasks, which a per-task `**Executor:**` line and per-task thread id cannot
-represent.
-
 ## The lines land in the brief
 
 `scripts/task-brief` copies a task block verbatim, so the assignment lines reach
@@ -88,9 +63,7 @@ A hand edit that breaks a rule the checker enforces - a reserve tier, a kept
 `spec = 3`, a table mismatch - carries an `**Override:** <reason>` line below
 the Evaluation line, and `plan-lint` reports those findings on that task as
 warnings instead of errors. Planners never write the line: it is how a human
-ruling stays legal without the checker guessing who wrote it. An Executor line
-on an overridden task still fails, because the lane gate excludes human
-Rule S overrides.
+ruling stays legal without the checker guessing who wrote it.
 
 ## Why a script checks the plan
 

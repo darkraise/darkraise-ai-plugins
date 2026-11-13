@@ -6,7 +6,7 @@ digraph process {
 
     subgraph cluster_per_task {
         label="Per Task";
-        "Dispatch the assigned implementer or executor (./implementer-prompt.md)" [shape=box];
+        "Dispatch the assigned implementer (./implementer-prompt.md)" [shape=box];
         "Implementer reports NEEDS_CONTEXT?" [shape=diamond];
         "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" [shape=box];
         "Implementer implements, tests, commits, self-reviews" [shape=box];
@@ -29,13 +29,13 @@ digraph process {
 
     "Setup: worktree, finish preference, ledger check, plan header, pre-flight ruling" [shape=box];
     "More tasks remain?" [shape=diamond];
-    "Final review: code reviewer + Codex round, judge verifies the union" [shape=box];
+    "Final review: code reviewer + reviewer panel, judge verifies the union" [shape=box];
     "Final findings? ONE fix dispatch, one scoped re-review, ruling seat on residuals" [shape=box];
     "Final review clean: ledger it, print rulings" [shape=box];
     "Use dforge:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
-    "Setup: worktree, finish preference, ledger check, plan header, pre-flight ruling" -> "Dispatch the assigned implementer or executor (./implementer-prompt.md)";
-    "Dispatch the assigned implementer or executor (./implementer-prompt.md)" -> "Implementer reports NEEDS_CONTEXT?";
+    "Setup: worktree, finish preference, ledger check, plan header, pre-flight ruling" -> "Dispatch the assigned implementer (./implementer-prompt.md)";
+    "Dispatch the assigned implementer (./implementer-prompt.md)" -> "Implementer reports NEEDS_CONTEXT?";
     "Implementer reports NEEDS_CONTEXT?" -> "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" [label="yes"];
     "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" -> "Implementer implements, tests, commits, self-reviews";
     "Implementer reports NEEDS_CONTEXT?" -> "Implementer implements, tests, commits, self-reviews" [label="no"];
@@ -61,9 +61,9 @@ digraph process {
     "Any CONFIRMED-GAP or AMEND?" -> "Park findings in ledger with rulings" [label="no"];
     "Park findings in ledger with rulings" -> "Append completion to ledger, mark todo complete";
     "Append completion to ledger, mark todo complete" -> "More tasks remain?";
-    "More tasks remain?" -> "Dispatch the assigned implementer or executor (./implementer-prompt.md)" [label="yes"];
-    "More tasks remain?" -> "Final review: code reviewer + Codex round, judge verifies the union" [label="no"];
-    "Final review: code reviewer + Codex round, judge verifies the union" -> "Final findings? ONE fix dispatch, one scoped re-review, ruling seat on residuals";
+    "More tasks remain?" -> "Dispatch the assigned implementer (./implementer-prompt.md)" [label="yes"];
+    "More tasks remain?" -> "Final review: code reviewer + reviewer panel, judge verifies the union" [label="no"];
+    "Final review: code reviewer + reviewer panel, judge verifies the union" -> "Final findings? ONE fix dispatch, one scoped re-review, ruling seat on residuals";
     "Final findings? ONE fix dispatch, one scoped re-review, ruling seat on residuals" -> "Final review clean: ledger it, print rulings";
     "Final review clean: ledger it, print rulings" -> "Use dforge:finishing-a-development-branch";
 }

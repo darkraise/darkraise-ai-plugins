@@ -14,12 +14,13 @@
    `scripts/plan-lint PLAN_FILE > <workspace>/plan-lint.txt`, where
    `<workspace>` is the directory `scripts/sdd-workspace PLAN_FILE` prints.
    Before each round `<r>`, copy the plan to `<workspace>/plan-round-<r>.md`,
-   then run `scripts/codex-gate` (say its line aloud when it ends `source=probe`),
-   then `scripts/review-route PLAN_FILE --plan-round <r>`, and review with the
+   then run each reviewer gate, `scripts/agy-gate` and `scripts/codex-gate`
+   (say a line aloud when it ends `source=probe`), then
+   `scripts/review-route PLAN_FILE --plan-round <r>`, and review with the
    seat it prints, using
-   [plan-reviewer-prompt.md](plan-reviewer-prompt.md). The gate
-   keeps an off answer for the session, so add `--refresh` when Codex may have
-   come back since then, such as after a login. Every seat
+   [plan-reviewer-prompt.md](plan-reviewer-prompt.md). A gate
+   keeps an off answer for the session, so add `--refresh` when a reviewer may
+   have come back since then, such as after a login. Every seat
    scores executability, coherence, coverage and assumptions (1-20) against
    [plan-review.md](../../../criteria/plan-review.md) and lists findings. On
    exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native
@@ -30,31 +31,34 @@
      template in round 1, the Later rounds template after it, each with
      `[REPORT_FILE]` set to `<workspace>/plan-review-round-<r>-report.md`. No
      Codex CLI round runs.
-   - **`primary=codex:plan`** (round 1). Write the prompt its Round 1 on Codex
-     section describes to `<workspace>/plan-review-prompt.md`, then run, as a
-     background Bash call with `timeout` = (row bound + 120) × 1000 ms, 5520000
-     today (the rung's bound is longer than a foreground call's ten-minute cap,
-     and a background call's limit defaults to 30 minutes):
+   - **`primary=panel:plan`** (round 1). Write the prompt its Round 1 on
+     external reviewers section describes to `<workspace>/plan-review-prompt.md`,
+     then run, as a background Bash call with `timeout` 5590000 ms (the panel's
+     bound is longer than a foreground call's ten-minute cap, and a background
+     call's limit defaults to 30 minutes):
 
      ```bash
-     bash scripts/run-codex-review.sh --kind plan --cwd <repository-root> \
-       --out <workspace>/plan-review-round-1.json --prompt <workspace>/plan-review-prompt.md
+     bash scripts/run-review-panel --kind plan --tier heavy --cwd <repository-root> \
+       --out-dir <workspace>/plan-review-round-1-panel --prompt <workspace>/plan-review-prompt.md
      ```
 
-     Read its one status line. `OK` and `FALLBACK` are a review: read the four
-     scores and `findings` from the JSON. On `FALLBACK`, or a line naming
-     `gpt-6.1-sol/xhigh` with `status=OK`, say the substitution aloud with the
-     runner's reason or the line's `evidence=`. `TIMEOUT` or `FAILED` produced
-     no review: dispatch the printed `fallback` (`dforge:judge-opus`)
-     with the full-plan template and
+     Read its status lines
+     ([external-review.md](../../../reference/external-review.md) §The panel).
+     Each `OK` or `FALLBACK` line is a review: read its four scores and
+     `findings` from `<out-dir>/<id>.json`, and read every list. On
+     `FALLBACK`, say the substitution aloud with the runner's reason. With two
+     score sets, the lowest score per criterion decides step 3's gate. With
+     `lists=0` no reviewer produced a review: dispatch the printed `fallback`
+     (`dforge:judge-opus`) with the full-plan template and
      `[REPORT_FILE]` set to `<workspace>/plan-review-round-1-report.md`, and
-     say why. Never run the Codex seat twice in one round.
-   - **`reason=codex-off`** (round 1 while the gate has not opened the review
-     surface). No Codex seat runs. The `primary` is `dforge:judge-opus`.
+     say why with each reviewer's reason. Never run the panel twice in one
+     round.
+   - **`reason=reviewers-off`** (round 1 while no gate has opened its review
+     surface). No panel runs. The `primary` is `dforge:judge-opus`.
      Dispatch it with the full-plan template and
      `[REPORT_FILE]` set to `<workspace>/plan-review-round-1-report.md`, and say
-     `codex off — <reason>`, quoting the gate line's `reason` (`untrusted`
-     when it printed `usable=true`).
+     `reviewers off — <reasons>`, quoting each gate line's `reason`
+     (`untrusted` when it printed `usable=true`).
    - **`primary=dforge:judge-opus`** (every later round). Write
      `diff -u <workspace>/plan-round-<r-1>.md PLAN_FILE > <workspace>/plan-delta-<r>.diff`,
      dispatch the seat with the Later rounds template, passing that file and
@@ -84,7 +88,7 @@
 4. **Record.** Only now, add the header line
    `**Plan review:** <YYYY-MM-DD> — <seat> — executability e / coherence c / coverage v / assumptions a (round r)`
    as the last line of the header, directly above `## Global Constraints`.
-   `<seat>` is the seat that ran the last round:
-   `codex <model> / <effort>` from the runner's status line, or the judge
-   agent. The header template deliberately omits it, so `plan-lint` warns
+   `<seat>` is the seat that ran the last round: every reviewer that returned
+   a list, `<id> <model> / <effort>` from its status line joined with ` + `,
+   or the judge agent. The header template deliberately omits it, so `plan-lint` warns
    until the review has run.

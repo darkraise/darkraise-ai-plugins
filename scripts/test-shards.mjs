@@ -7,15 +7,14 @@
 // Run 41307035161 (2026-11-01) supplied speed-and-cost-followups, whose A12
 // part no longer re-runs two suites under test-all (371 s, 0.4 s and 98 s),
 // and typed-seats-and-drafting.acceptance.sh.
-// Run 41563118629 (2026-11-03) supplied run-agy-task. plan-lint crossed its
+// plan-lint crossed its
 // 1200 s cap in run 41566860573; its weight is the last green run's 1049 s
-// scaled by the 21% its Linux time grew since. The same run supplied
-// plan-revise; task-step is the sum of its parts in 41311901567.
-// run-agy-task's weight was scaled by its Linux growth on 2026-11-03.
+// scaled by the 21% its Linux time grew since. task-step is the sum of its
+// parts in 41311901567.
 // Run 41632296991 (2026-11-03) took 847 s for task-step-base and timed out
 // its shard at 25 minutes. Run 41639945723 hit its 900 s limit (main's push run
 // 41577294934 took 889 s), so the limit is 1200 s and the weight 900 s.
-// Run 41636062852 (2026-11-03) timed shard 1 out; lane-breaker, plan-amend, roadmap,
+// Run 41636062852 (2026-11-03) timed shard 1 out; plan-amend, roadmap,
 // speed-and-cost.acceptance, task-loop-steps.acceptance, task-step-settle,
 // task-step-suite and turn-end take the seconds that run measured.
 // Run 42498131582 (2026-11-08) supplied both auto-run-worktree-setting
@@ -27,6 +26,8 @@
 // extrapolated to 600 s from the 140 of 147 checks reached before the cut.
 // Run 42591467307 (2026-11-09) supplied inline-only and inline-only-execution
 // (110 s and about 200 s), which had weights of 12 s and 40 s.
+// reviewer-only-externals.acceptance has no Windows run yet: its 200 s is
+// an estimate from about 47 s on Linux.
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
@@ -38,8 +39,7 @@
 export const windowsSeconds = {
   'run-all.sh': 157,
   'agy-gate.test.sh': 20,
-  'agy-gemini-first.acceptance.test.sh': 120,
-  'antigravity-executor-lane.acceptance.test.sh': 250,
+  'agy-review.test.sh': 60,
   'auto-default.test.sh': 10,
   'auto-run-skills.test.sh': 10,
   'auto-run-worktree-setting-qa.acceptance.test.sh': 330,
@@ -60,7 +60,6 @@ export const windowsSeconds = {
   'dforge-dir.test.sh': 10,
   'dforge-migrate.test.sh': 64,
   'dforge-state.test.sh': 10,
-  'executor-recovery.test.sh': 295,
   'executor-session.test.sh': 10,
   'executors.test.sh': 10,
   'faster-plans.acceptance.test.sh': 900,
@@ -74,7 +73,6 @@ export const windowsSeconds = {
   'inline-only.acceptance.test.sh': 110,
   'inline-only-execution.acceptance.test.sh': 200,
   'ladder.test.sh': 10,
-  'lane-breaker.test.sh': 50,
   'lanes.test.sh': 10,
   'lens-route.test.sh': 185,
   'lock.test.sh': 10,
@@ -83,7 +81,6 @@ export const windowsSeconds = {
   'plan-amend.test.sh': 390,
   'plan-lib.test.sh': 43,
   'plan-lint.test.sh': 1270,
-  'plan-revise.test.sh': 560,
   'polluter.test.sh': 10,
   'process-roles.test.sh': 10,
   'register.test.sh': 68,
@@ -91,12 +88,13 @@ export const windowsSeconds = {
   'retained-review-data.acceptance.test.sh': 30,
   'review-depth-qa.acceptance.test.sh': 288,
   'review-depth.acceptance.test.sh': 160,
+  'review-panel.test.sh': 30,
   'review-record.test.sh': 20,
   'review-route.test.sh': 458,
+  'reviewer-only-externals.acceptance.test.sh': 200,
+  'reviewer-only.acceptance.test.sh': 5,
   'roadmap.test.sh': 170,
   'roots.test.sh': 84,
-  'run-agy-task.test.sh': 450,
-  'run-codex-task.test.sh': 10,
   'sdd-references.test.sh': 10,
   'seats.test.sh': 10,
   'settings-skills.test.sh': 10,
@@ -107,7 +105,6 @@ export const windowsSeconds = {
   'speed-and-cost.acceptance.test.sh': 280,
   'suite-run.test.sh': 54,
   'task-loop-steps.acceptance.test.sh': 920,
-  'task-state.test.sh': 47,
   'task-step-base.test.sh': 900,
   'task-step-settle.test.sh': 220,
   'task-step-suite.test.sh': 250,
@@ -126,6 +123,7 @@ export const windowsSeconds = {
   'working-directory.test.sh': 82,
   'worktree-instructions.test.sh': 10,
   'wording-pin-deletion.acceptance.test.sh': 20,
+  'worktree-snapshot.test.sh': 47,
 };
 
 function partWeight(entry, part, parts) {

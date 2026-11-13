@@ -92,16 +92,13 @@ Never re-score the tasks. `scripts/plan-lint` enforced the eligibility rule
 when the plan was saved, and a plan whose Execution line says `inline` has
 passed it.
 
-A task whose brief's second line marks it delegated carries an `**Executor:**`
-line: it is offloaded, never implemented here, and that line is read by
-[delegated-task.md](../../../reference/delegated-task.md) §1, which runs that
-executor's wrapper. `**Implementer:**` lines are inert for the tasks you
-implement, heavy ones included.
+`**Implementer:**` lines are inert for the tasks you implement, heavy ones
+included, and so is an obsolete `**Executor:**` line.
 
 **Preflight.** The `preflight` item runs when `plan-header.md` ends with a `**Heavy:**` line.
 Send it to the ruling seat before Task 1 and carry out its verdicts. A plan
 with no heavy task
-has no pre-flight scan, even when it offloads tasks: it is one
+has no pre-flight scan: it is one
 whole-plan judge dispatch, and a plan of small tasks is low-coupling by
 construction. A plan defect that surfaces while you work goes to the seat as a
 `blocked-plan` item.

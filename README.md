@@ -119,7 +119,7 @@ before each task and review and hands off to a fresh session when the budget is
 reached. Other skills include `project-status`, `planning-a-product`,
 `systematic-debugging`, `running-gates` and `test-simplifier`. The
 [dforge README](plugins/dforge/README.md) covers the scoring rubric, the
-agent roster, the escalation ladder, parallel waves, the Codex executor lane,
+agent roster, the escalation ladder, parallel waves, the Codex and agy reviewer panel,
 the settings and the cockpit in full.
 
 ## The cockpit

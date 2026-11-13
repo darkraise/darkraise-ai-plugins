@@ -101,7 +101,7 @@ gate_line=$(printf '%s\n' "$gate_line" | tail -1 | tr -d '\r')
 if [ "$gate_rc" -ne 0 ] || [[ "$gate_line" != *" usable=true "* ]]; then
   gate_reason=$(sed -n 's/.* reason=\([^ ]*\).*/\1/p' <<<"$gate_line")
   [ "$gate_rc" -eq 0 ] || gate_reason="codex-gate exited $gate_rc"
-  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
+  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none reason=gate\n' "$out"
   printf 'run-codex-review: codex is off for this session (%s)\n' "${gate_reason:-no gate answer}" >&2
   exit 1
 fi
@@ -109,14 +109,14 @@ fi
 # Invoked through bash, not executed directly: core.filemode is false on some
 # checkouts, so the detector can arrive at mode 100644 and a direct call would
 # fail every seat with "no codex row".
-roster=$(bash "$ROSTER" 2>/dev/null) || roster=""
+roster=$(bash "$ROSTER" codex 2>/dev/null) || roster=""
 codex_row=$(printf '%s' "$roster" | jq -c '.[]? | select(.id=="codex")' 2>/dev/null)
 [ -n "$codex_row" ] || die "no codex row in the executor roster"
 
 usable=$(printf '%s' "$codex_row" | jq -r '.usable')
 if [ "$usable" != true ]; then
   reason=$(printf '%s' "$codex_row" | jq -r '.reason // "codex is not usable"')
-  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
+  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none reason=gate\n' "$out"
   printf 'run-codex-review: %s\n' "$reason" >&2
   exit 1
 fi
@@ -178,7 +178,7 @@ valid_output() {
 # locate and version failures to the status line, and exiting 2 here would make
 # a caller that reads the line see nothing at all.
 if ! plugin_line=$(bash "$HERE/codex-plugin"); then
-  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
+  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none reason=gate\n' "$out"
   printf 'run-codex-review: %s\n' "$plugin_line" >&2
   exit 1
 fi
@@ -200,8 +200,7 @@ run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the resu
     '{op:"turn", kind:$kind, cwd:$cwd, model:$model, effort:$effort,
       prompt:$prompt,
       schemaPath:(if $schema == "" then null else $schema end),
-      sandbox:"read-only", resumeThreadId:null, persistThread:false,
-      threadName:null, deadlineMs:$deadline}')
+      sandbox:"read-only", deadlineMs:$deadline}')
   printf '%s' "$request" | timeout $(( $3 + 60 )) node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$4.stderr"
 }
 
@@ -233,9 +232,18 @@ write_out() { # write_out <result-json>
   jq -j '.finalMessage // ""' <<<"$1" > "$out"
 }
 
-status() { # status <model> <effort> <state> <exit>
-  printf 'codex-judge %s/%s status=%s exit=%s out=%s evidence=%s\n' \
-    "$1" "$2" "$3" "$4" "$out" "$evidence"
+status() { # status <model> <effort> <state> <exit> [reason]
+  printf 'codex-judge %s/%s status=%s exit=%s out=%s evidence=%s%s\n' \
+    "$1" "$2" "$3" "$4" "$out" "$evidence" "${5:+ reason=$5}"
+}
+
+# The reason of a run that neither timed out nor produced a usable answer.
+fail_reason() { # fail_reason <result-json> <rc>
+  if [ "$(jq -r '.quota' <<<"$1")" = true ]; then echo quota
+  elif [ "$(jq -r '.refusal' <<<"$1")" = true ]; then echo refused
+  elif [ "$2" -eq 0 ]; then echo schema
+  else echo error
+  fi
 }
 
 # The final round composes its prompt from the branch; every other kind was
@@ -243,7 +251,7 @@ status() { # status <model> <effort> <state> <exit>
 # caller reads the status line and would otherwise see nothing at all.
 if [ "$kind" = final ]; then
   if ! prompt=$(compose_final_prompt); then
-    printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
+    printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none reason=error\n' "$out"
     printf 'run-codex-review: cannot diff %s...HEAD in %s\n' "$base" "$cwd" >&2
     exit 1
   fi
@@ -256,7 +264,7 @@ rc=0
 [ "$(jq -r '.timedOut' <<<"$result")" = true ] && rc=124
 
 if [ "$rc" -eq 124 ]; then
-  status "$model" "$effort" TIMEOUT "$rc"; exit 1
+  status "$model" "$effort" TIMEOUT "$rc" timeout; exit 1
 fi
 
 if [ "$rc" -eq 0 ] && valid_output; then
@@ -265,7 +273,7 @@ fi
 
 if [ "$(jq -r '.quota' <<<"$result")" = true ]; then
   executor_session_mark_off codex quota
-  status "$model" "$effort" FAILED "$rc"; exit 1
+  status "$model" "$effort" FAILED "$rc" quota; exit 1
 fi
 
 # The fallback is attempted at most once, and never when the row that just ran
@@ -282,13 +290,13 @@ if [ "$(jq -r '.refusal' <<<"$result")" = true ] \
   [ "$(jq -r '.ok' <<<"$result")" = true ] || rc=1
   [ "$(jq -r '.timedOut' <<<"$result")" = true ] && rc=124
   if [ "$rc" -eq 124 ]; then
-    status "$back_model" "$back_effort" TIMEOUT "$rc"; exit 1
+    status "$back_model" "$back_effort" TIMEOUT "$rc" timeout; exit 1
   fi
   if [ "$rc" -eq 0 ] && valid_output; then
     status "$back_model" "$back_effort" FALLBACK "$rc"; exit 0
   fi
   [ "$(jq -r '.quota' <<<"$result")" = true ] && executor_session_mark_off codex quota
-  status "$back_model" "$back_effort" FAILED "$rc"; exit 1
+  status "$back_model" "$back_effort" FAILED "$rc" "$(fail_reason "$result" "$rc")"; exit 1
 fi
 
-status "$model" "$effort" FAILED "$rc"; exit 1
+status "$model" "$effort" FAILED "$rc" "$(fail_reason "$result" "$rc")"; exit 1

@@ -79,10 +79,8 @@ plan_primary_root() {
 
 # ladder_block TAG — the lines of reference/ladder.md's ```TAG fenced block,
 # blank lines dropped.
-# DR_LADDER is a test seam: a suite that needs a fixture executor's blocks
-# points it at the shipped ladder plus its own. Unset in production.
 ladder_block() {
-  tr -d '\r' < "${DR_LADDER:-$_PLAN_LIB_DIR/../../reference/ladder.md}" \
+  tr -d '\r' < "$_PLAN_LIB_DIR/../../reference/ladder.md" \
     | awk -v tag="$1" 'stop { next } $0 == "```" tag { f = 1; next } f && /^```/ { stop = 1; next } f && NF { print }'
 }
 
@@ -201,54 +199,11 @@ plan_scores() {
   done < <(plan_tasks "$1")
 }
 
-# plan_executors FILE — `<task>\t<id>` for every task carrying an Executor
-# line outside a fenced block. One row per task: a split task takes the first
-# line among its parts, and a line above its first part routes nothing, as
-# plan_eval_lines ignores a stale Evaluation line there. Exit 0 whether or not
-# any task carries a line: ordinary absence is not a failure.
-#
-# The Executor line is the decision the plan already made. Nothing here
-# re-evaluates a gate, because execution time must not second-guess planning.
-plan_executors() {
-  local n _title id
-  while IFS=$'\t' read -r n _title; do
-    [ -n "$n" ] || continue
-    # No `exit`: scripts/lib/plan.sh:92-94 records that an early exit leaves
-    # the upstream writer on a closed pipe, and under `pipefail` that SIGPIPE
-    # becomes the caller's status - and task-brief runs `set -euo pipefail`.
-    id=$(plan_task_text "$1" "$n" | awk "$_PLAN_AWK"'
-      in_fence($0) { next }
-      /^#### Part [A-Z]:/ { parts = 1; next }
-      /^\*\*Executor:\*\*/ {
-        sub(/^\*\*Executor:\*\*[ \t]*/, "")
-        if (parts) { if (part == "") part = $1 } else if (pre == "") pre = $1
-      }
-      END { id = parts ? part : pre; if (id != "") print id }')
-    # An `if`, not `[ -n "$id" ] && printf`: the last iteration's status becomes
-    # the function's, so a final task with no Executor line would return 1 and
-    # abort plan_delegated's `execs=` assignment under errexit, emitting no rows
-    # at all - and an empty delegated set reads as "nothing is delegated".
-    if [ -n "$id" ]; then printf '%s\t%s\n' "$n" "$id"; fi
-  done < <(plan_tasks "$1")
-}
-
 # plan_heavy FILE — the heavy task numbers: a highest total of 5 or more, or a
 # highest risk of 3, which task-brief lists on the **Heavy:** header line. One
 # per line, ascending.
 plan_heavy() {
   plan_scores "$1" | awk -F'\t' '$2 != "-" && $2 != "?" && ($2 + 0 >= 5 || $3 + 0 == 3) { print $1 }'
-}
-
-# plan_delegated FILE — the tasks an inline plan delegates, one "N<TAB>executor"
-# line each, ascending: the scored tasks an Executor line marks for an external
-# executor. A heavy task is never delegated: the session implements it.
-plan_delegated() {
-  local execs
-  execs=$(plan_executors "$1" | cut -f1 | tr '\n' ' ')
-  plan_scores "$1" | awk -F'\t' -v execs=" $execs" '
-    $2 == "-" || $2 == "?" { next }
-    index(execs, " " $1 " ") > 0 { print $1 "\texecutor" }
-  '
 }
 
 # plan_parallelism FILE — the plan's execution strategy: `sequential` when the

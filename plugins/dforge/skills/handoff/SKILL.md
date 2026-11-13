@@ -70,11 +70,8 @@ cleanly."
      `Task <N>: Ruling: stopped <what> at handoff — its result is void — <cost if wrong>`.
 
    Only then continue. An assigned line is a resume point only when nothing
-   it names is still running: the agent or wrapper reported back, or you
-   stopped it and ruled on it. An executor line that carries a thread id is
-   resumed by that id in the next session, on either host. One that still
-   says `thread pending` names a wrapper that has not reported: wait for it
-   or stop it.
+   it names is still running: the agent reported back, or you stopped it and
+   ruled on it.
 1. **Make the durable record current.**
    - Execution: the ledger's last line records where you are (a
      `Task N: complete`, a fix-round line, or an assigned line whose run is

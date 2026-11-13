@@ -244,36 +244,41 @@ Subagent ([JUDGE]):
     checks: report each hit as an issue tagged `[lens:<id>]` at your own
     severity; do not score them, and do not add them to Verification Scores.
 
-    ## Second Pass: The Codex Review
+    ## Second Pass: The External Reviews
 
-    [Include this section only on a risk 3 task whose Codex seat
-    produced a review. Delete it otherwise.]
+    [Include this section only when the seat is a reviewer panel. Delete it otherwise.]
 
     Do this only after your Spec Compliance verdict, findings and
-    Verification Scores are written in full. Then read the Codex
-    review of the same diff: [CODEX_REVIEW_FILE]
+    Verification Scores are written in full. Then read the external
+    reviewers' lists of the same diff, one file per reviewer; a file that
+    does not exist is a reviewer that produced no list:
 
-    It is a JSON object; read its `findings` and `cannot_verify`. Append
-    this section to your report file, as its last section:
+    [EXTERNAL_REVIEW_FILES]
 
-        ## Codex findings
-        - [CONFIRMED|REJECTED] <file:line> <the finding, one line> - <your evidence>
-        - [CONFIRMED|REJECTED] cannot-verify: <the item, one line> - <your evidence>
+    Each is a JSON object; read its `findings` and `cannot_verify`. The
+    file's name, `codex` or `agy`, is the origin of every entry in it.
+    Append this section to your report file, as its last section:
+
+        ## External findings
+        - [CONFIRMED|REJECTED] <origin> <file:line> <the finding, one line> - <your evidence>
+        - [CONFIRMED|REJECTED] <origin> cannot-verify: <the item, one line> - <your evidence>
 
     Write one line for every entry in `findings` and every entry in
-    `cannot_verify`. CONFIRMED means the diff supports it. A CONFIRMED
-    finding your Findings section missed is added there too, in the finding
-    grammar, at your own severity and with `(from codex)` ending its
-    one-liner; a CONFIRMED cannot-verify item is added under Cannot verify
-    the same way. Either may lower a score you gave; nothing in the Codex
-    review raises a score, and nothing else you wrote before reading it changes.
+    `cannot_verify` of every list. CONFIRMED means the diff supports it. A
+    CONFIRMED finding your Findings section missed is added there too, in
+    the finding grammar, at your own severity and with `(from <origin>)`
+    ending its one-liner; a CONFIRMED cannot-verify item is added under
+    Cannot verify the same way. Either may lower a score you gave; nothing
+    in the external reviews raises a score, and nothing else you wrote
+    before reading them changes.
 ```
 
 **Placeholders:**
 - `[JUDGE]` — the judge `scripts/review-route` printed, as its `primary` or,
-  after a Codex seat produced nothing, its `fallback`; no `model` or `effort` argument
-- `[CODEX_REVIEW_FILE]` — only with the Second Pass section: the Codex seat's
-  `--out` JSON path. Pass the path, never the findings pasted inline: the judge
+  after the reviewer panel produced no list, its `fallback`; no `model` or `effort` argument
+- `[EXTERNAL_REVIEW_FILES]` — only with the Second Pass section: one path per
+  line, `<workspace>/task-<N>-review-panel/<id>.json` for each `scripts/executors
+  ranked` id. Pass the paths, never the findings pasted inline: the judge
   cannot anchor on a review it has not opened yet
 - `[PLUGIN_ROOT]` — REQUIRED: the resolved dforge plugin directory.
   Expand it before sending; a judge handed the literal token cannot open the
@@ -289,4 +294,4 @@ Subagent ([JUDGE]):
   package to (`scripts/review-package PLAN_FILE BASE HEAD` prints the unique
   path it wrote; the package never enters the controller's context)
 
-**Reviewer writes** its report to [REPORT_FILE] — the Verdict section (spec, quality, scores), Strengths, Findings, Cannot verify and Assessment, with Codex findings last on a risk 3 task — **and returns** a reply of at most 10 lines.
+**Reviewer writes** its report to [REPORT_FILE] — the Verdict section (spec, quality, scores), Strengths, Findings, Cannot verify and Assessment, with External findings last after a panel review — **and returns** a reply of at most 10 lines.

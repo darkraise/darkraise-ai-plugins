@@ -22,8 +22,8 @@ mkdir -p "$TMP/reg"
 entry() { # entry <id> [extra jq assignment]
   jq -n --arg id "$1" '{id:$id, locator:"scripts/x-plugin",
     probe:{command:"scripts/lib/x-client.mjs", op:"auth"},
-    wrapper:"scripts/run-x-task.sh", session_dir:($id + "-sessions"),
-    surfaces:["lane"], blocks:{gate:"gate"}}' > "$TMP/reg/$1.json"
+    gate:"scripts/x-gate", runner:"scripts/run-x-review.sh", session_dir:($id + "-sessions"),
+    surfaces:["review"]}' > "$TMP/reg/$1.json"
 }
 entry alpha
 entry beta
@@ -40,7 +40,7 @@ check "an empty directory lists nothing and still exits 0" \
 check "get reads a top-level field" "$(run "$TMP/reg" get alpha id)" "alpha"
 check "get reads a dotted key" "$(run "$TMP/reg" get alpha probe.op)" "auth"
 check "get prints an array one element per line" \
-  "$(run "$TMP/reg" get alpha surfaces | tr '\n' ',')" "lane,"
+  "$(run "$TMP/reg" get alpha surfaces | tr '\n' ',')" "review,"
 check "get on an unknown id exits 1" "$(run "$TMP/reg" get nope id >/dev/null 2>&1; echo $?)" "1"
 check "get on an unknown key exits 1" "$(run "$TMP/reg" get alpha nope >/dev/null 2>&1; echo $?)" "1"
 check "path resolves against the plugin root" \
@@ -62,6 +62,17 @@ jq -n '{id:"missing", locator:"scripts/x"}' > "$TMP/reg/missing.json"
 check "a missing required field is skipped" "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta "
 rm -f "$TMP/reg/missing.json"
 
+entry noblocks; jq 'del(.blocks)' "$TMP/reg/noblocks.json" > "$TMP/x" && mv "$TMP/x" "$TMP/reg/noblocks.json"
+check "an entry without ladder blocks is valid" \
+  "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta noblocks "
+rm -f "$TMP/reg/noblocks.json"
+
+for key in runner gate; do
+  entry "no$key"; jq "del(.$key)" "$TMP/reg/no$key.json" > "$TMP/x" && mv "$TMP/x" "$TMP/reg/no$key.json"
+  check "an entry without $key is rejected" "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta "
+  rm -f "$TMP/reg/no$key.json"
+done
+
 entry gamma; jq '.id = "delta"' "$TMP/reg/gamma.json" > "$TMP/x" && mv "$TMP/x" "$TMP/reg/gamma.json"
 check "an id that disagrees with its filename is skipped" \
   "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta "
@@ -71,10 +82,10 @@ rm -f "$TMP/reg/gamma.json"
 # alpha.json overwrites it, and the assertion would then pass for the wrong
 # reason.
 mkdir -p "$TMP/case"
-jq -n '{id:"Alpha", locator:"a", probe:{command:"b", op:"auth"}, wrapper:"c",
-        session_dir:"d", surfaces:["lane"], blocks:{gate:"gate"}}' > "$TMP/case/Alpha.json"
-jq -n '{id:"zeta", locator:"a", probe:{command:"b", op:"auth"}, wrapper:"c",
-        session_dir:"d", surfaces:["lane"], blocks:{gate:"gate"}}' > "$TMP/case/zeta.json"
+jq -n '{id:"Alpha", locator:"a", probe:{command:"b", op:"auth"}, gate:"g", runner:"c",
+        session_dir:"d", surfaces:["review"]}' > "$TMP/case/Alpha.json"
+jq -n '{id:"zeta", locator:"a", probe:{command:"b", op:"auth"}, gate:"g", runner:"c",
+        session_dir:"d", surfaces:["review"]}' > "$TMP/case/zeta.json"
 check "an id outside the pattern is skipped" \
   "$(run "$TMP/case" list 2>/dev/null | tr '\n' ' ')" "zeta "
 
@@ -83,16 +94,16 @@ check "the shipped registry lists codex" \
   "$(bash "$EXEC" list | grep -cx codex)" "1"
 check "the shipped codex entry names the real locator" \
   "$(bash "$EXEC" get codex locator)" "scripts/codex-plugin"
-check "the shipped codex entry keeps the ladder block named gate" \
-  "$(bash "$EXEC" get codex blocks.gate)" "gate"
+check "the shipped codex entry keeps only its judge block" \
+  "$(jq -r '.blocks | keys | join(",")' < "$P/reference/executors/codex.json")" "judge"
+check "the shipped codex judge block exists in the ladder" \
+  "$(grep -cx "\`\`\`$(bash "$EXEC" get codex blocks.judge)" "$P/reference/ladder.md")" "1"
 check "the shipped codex entry keeps the session directory" \
   "$(bash "$EXEC" get codex session_dir)" "codex-sessions"
 check "the shipped codex entry keeps the session directory override" \
   "$(bash "$EXEC" get codex session_dir_env)" "DR_CODEX_SESSION_DIR"
-check "the shipped codex entry opens both surfaces" \
-  "$(bash "$EXEC" get codex surfaces | tr '\n' ',')" "review,lane,"
-check "the shipped codex entry names its wrapper" \
-  "$(bash "$EXEC" get codex wrapper)" "scripts/run-codex-task.sh"
+check "the shipped codex entry names its runner and the review surface" \
+  "$(jq -r '[.runner, (.surfaces|join(","))] | join(" ")' < "$P/reference/executors/codex.json")" "scripts/run-codex-review.sh review"
 check "the shipped codex locator resolves to a real file" \
   "$([ -f "$(bash "$EXEC" path codex locator)" ] && echo yes || echo no)" "yes"
 check "the shipped codex probe resolves to a real file" \
@@ -107,25 +118,22 @@ check "the shipped agy entry has priority 10" "$(bash "$EXEC" get agy priority)"
 check "the shipped agy entry names the real locator" \
   "$(bash "$EXEC" get agy locator)" "scripts/agy-locate"
 check "the shipped agy entry names its gate" "$(bash "$EXEC" get agy gate)" "scripts/agy-gate"
-check "the shipped agy entry names its wrapper" \
-  "$(bash "$EXEC" get agy wrapper)" "scripts/run-agy-task.sh"
+check "the shipped agy entry names its runner and the review surface" \
+  "$(jq -r '[.runner, (.surfaces|join(","))] | join(" ")' < "$P/reference/executors/agy.json")" "scripts/run-agy-review.sh review"
 check "the shipped agy entry names its session directory" \
   "$(bash "$EXEC" get agy session_dir)" "agy-sessions"
 check "the shipped agy entry names its session directory override" \
   "$(bash "$EXEC" get agy session_dir_env)" "DR_AGY_SESSION_DIR"
-check "the shipped agy entry opens only the lane" \
-  "$(bash "$EXEC" get agy surfaces | tr '\n' ',')" "lane,"
 check "the shipped agy entry declares no missing reason" \
   "$(bash "$EXEC" get agy reasons.missing >/dev/null 2>&1; echo $?)" "1"
-for key in locator probe.command gate wrapper; do
+for key in locator probe.command gate runner; do
   check "the shipped agy $key resolves to a real file" \
     "$([ -f "$(bash "$EXEC" path agy "$key")" ] && echo yes || echo no)" "yes"
 done
-for key in gate assignment successor timeout; do
-  block=$(bash "$EXEC" get agy "blocks.$key")
-  check "the shipped agy $key block exists in the ladder" \
-    "$(grep -cx "\`\`\`$block" "$P/reference/ladder.md")" "1"
-done
+check "the shipped agy entry keeps only its judge block" \
+  "$(jq -r '.blocks | keys | join(",")' < "$P/reference/executors/agy.json")" "judge"
+check "the shipped agy judge block exists in the ladder" \
+  "$(grep -cx "\`\`\`$(bash "$EXEC" get agy blocks.judge)" "$P/reference/ladder.md")" "1"
 
 # --- ranked ------------------------------------------------------------------
 # Priority decides which executor planning tries first. A malformed value must
@@ -135,8 +143,8 @@ mkdir -p "$TMP/rank"
 rentry() { # rentry <id> [priority as a JSON literal]; no second argument leaves priority out
   jq -n --arg id "$1" --arg p "${2-}" '{id:$id, locator:"scripts/x-plugin",
     probe:{command:"scripts/lib/x-client.mjs", op:"auth"},
-    wrapper:"scripts/run-x-task.sh", session_dir:($id + "-sessions"),
-    surfaces:["lane"], blocks:{gate:"gate"}}
+    gate:"scripts/x-gate", runner:"scripts/run-x-review.sh", session_dir:($id + "-sessions"),
+    surfaces:["review"]}
     + (if $p == "" then {} else {priority: ($p | fromjson)} end)' > "$TMP/rank/$1.json"
 }
 rentry alpha 20; rentry beta 10; rentry aardvark 10; rentry eta 0
@@ -153,7 +161,7 @@ check "ranked reports each invalid priority once on stderr and nothing else" \
 # The edge literals are written verbatim, not through jq, which may reformat 1.0.
 mkdir -p "$TMP/rank-edge"
 edge() { # edge <id> <priority literal>
-  printf '{"id":"%s","locator":"scripts/x-plugin","probe":{"command":"scripts/lib/x-client.mjs","op":"auth"},"wrapper":"scripts/run-x-task.sh","session_dir":"%s-sessions","surfaces":["lane"],"blocks":{"gate":"gate"},"priority":%s}\n' \
+  printf '{"id":"%s","locator":"scripts/x-plugin","probe":{"command":"scripts/lib/x-client.mjs","op":"auth"},"gate":"scripts/x-gate","runner":"scripts/run-x-review.sh","session_dir":"%s-sessions","surfaces":["review"],"priority":%s}\n' \
     "$1" "$1" "$2" > "$TMP/rank-edge/$1.json"
 }
 edge one 1.0; edge two 2; edge nul null
@@ -178,8 +186,8 @@ check "an unknown subcommand is a usage error" "$(bash "$EXEC" frobnicate >/dev/
 
 # --- the shipped test fixture registry --------------------------------------
 FIX="$HERE/fixtures/executors"
-check "the fixture registry lists three ids" \
-  "$(run "$FIX" list | tr '\n' ' ')" "codex opencode stub "
+check "the fixture registry lists two ids" \
+  "$(run "$FIX" list | tr '\n' ' ')" "codex stub "
 check "the fixture codex entry matches the shipped one" \
   "$(diff -q "$FIX/codex.json" "$P/reference/executors/codex.json" >/dev/null && echo same || echo differs)" "same"
 check "the stub locator is executable" \
@@ -198,7 +206,7 @@ check "the stub probe can answer logged out" \
 check "the stub probe can fail without an authed field" \
   "$(printf '{"op":"auth","cwd":"."}' | STUB_PROBE=throw node "$FIX/bin/stub-probe.mjs" x | jq -r '.authed // "absent"')" "absent"
 check "the fixture registry ranks the prioritised codex entry before the unranked ones" \
-  "$(run "$FIX" ranked | tr '\n' ' ')" "codex opencode stub "
+  "$(run "$FIX" ranked | tr '\n' ' ')" "codex stub "
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -55,8 +55,9 @@ unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGE
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
 export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=acceptance-session
-printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
-export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason=ok review=true resets_at=- source=cache"' > "$TMP/gate-stub"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting"' > "$TMP/agy-gate-stub"
+export TASK_STEP_CODEX_GATE="$TMP/gate-stub" TASK_STEP_AGY_GATE="$TMP/agy-gate-stub"
 
 review_surface() { # review_surface <true|false|absent> — what this session's Codex gate file says
   rm -rf "$DR_CODEX_SESSION_DIR"
@@ -211,21 +212,21 @@ a2() {
   absent "A2: and the judge prompt has no lens section" "$(cat "$WS/task-3-review-prompt.md")" '[Ll]ens'
   absent "A2: and no unexpanded placeholder" "$(cat "$WS/task-3-review-prompt.md")" '\[[A-Z][A-Z_]+\]'
 
-  # A Codex seat: the Codex prompt and the runner command.
+  # A panel seat: the reviewers' prompt and the panel command.
   review_surface true
   ts review docs/plan.md 1
   route=$(cd "$R" && bash "$ROUTE" docs/plan.md --task 1)
   primary=$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$route")
-  has "A2: the Codex route's primary is a Codex seat" "$primary" "codex"
-  has "A2: the digest names the Codex seat" "$out" "$primary"
+  has "A2: the open route's primary is a panel seat" "$primary" "panel:"
+  has "A2: the digest names the panel seat" "$out" "$primary"
   local runner cprompt
-  runner=$(grep 'run-codex-review.sh' <<<"$out" | head -n 1)
-  check "A2: the digest prints the runner command" "$([ -n "$runner" ] && echo yes || echo no)" "yes"
+  runner=$(grep 'run-review-panel' <<<"$out" | head -n 1)
+  check "A2: the digest prints the panel command" "$([ -n "$runner" ] && echo yes || echo no)" "yes"
   cprompt=$(sed -n 's/.*--prompt "\{0,1\}\([^" ]*\)"\{0,1\}.*/\1/p' <<<"$runner")
-  check "A2: the runner command names an existing Codex prompt" "$([ -n "$cprompt" ] && [ -f "$cprompt" ] && echo yes || echo no)" "yes"
-  absent "A2: the Codex prompt has no unexpanded placeholder" "$(cat "$cprompt" 2>/dev/null)" '\[[A-Z][A-Z_]+\]'
-  check "A2: the judge prompt is still written beside a Codex seat" "$([ -f "$JP" ] && echo yes || echo no)" "yes"
-  absent "A2: and has no Second Pass section below risk 3" "$(cat "$JP")" 'Second Pass'
+  check "A2: the panel command names an existing reviewers' prompt" "$([ -n "$cprompt" ] && [ -f "$cprompt" ] && echo yes || echo no)" "yes"
+  absent "A2: the reviewers' prompt has no unexpanded placeholder" "$(cat "$cprompt" 2>/dev/null)" '\[[A-Z][A-Z_]+\]'
+  check "A2: the judge prompt is still written beside a panel seat" "$([ -f "$JP" ] && echo yes || echo no)" "yes"
+  has "A2: and carries the Second Pass on every panel review" "$(cat "$JP")" 'Second Pass'
 
   # Risk 3: the judge prompt carries the Second Pass section.
   ts start docs/plan.md 2
@@ -420,11 +421,8 @@ a7() {
   route_primary() { (cd "$R" && bash "$ROUTE" docs/plan.md --ruling "$@" 2>&1) | sed -n 's/.*primary=\([^ ]*\).*/\1/p'; }
   local SON=dforge:judge-sonnet-high OPU=dforge:judge-opus
   check "A7: cannot-verify, a risk-1 task" "$(route_primary cannot-verify 1)" "$SON"
-  check "A7: executor-empty-diff, a risk-1 task" "$(route_primary executor-empty-diff 1)" "$SON"
-  check "A7: both Sonnet kinds, a risk-1 task" "$(route_primary cannot-verify,executor-empty-diff 1)" "$SON"
   check "A7: cannot-verify over two risk-below-3 tasks" "$(route_primary cannot-verify 1 3)" "$SON"
   check "A7: cannot-verify, a risk-3 task" "$(route_primary cannot-verify 2)" "$OPU"
-  check "A7: executor-empty-diff, a risk-3 task" "$(route_primary executor-empty-diff 2)" "$OPU"
   check "A7: cannot-verify over a risk-1 and a risk-3 task" "$(route_primary cannot-verify 1 2)" "$OPU"
   local kind
   for kind in preflight plan-conflict breaker blocked-plan final-residual acceptance-ambiguous; do
@@ -432,7 +430,6 @@ a7() {
   done
   check "A7: a mixed list, Sonnet kind first" "$(route_primary cannot-verify,breaker 1)" "$OPU"
   check "A7: a mixed list, Opus kind first" "$(route_primary breaker,cannot-verify 1)" "$OPU"
-  check "A7: a mixed list of three" "$(route_primary cannot-verify,executor-empty-diff,preflight 1)" "$OPU"
 }
 
 # --- A8 ----------------------------------------------------------------------

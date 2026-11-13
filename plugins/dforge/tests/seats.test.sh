@@ -130,7 +130,7 @@ names "task reviewer: the spec verdict key" "$TRP" 'spec: pass | fail | cannot-v
 names "task reviewer: the quality verdict key" "$TRP" 'quality: approved | changes'
 names "task reviewer: the scores key" "$TRP" 'scores: spec <1-20> / scope <1-20> / verification <1-20> / quality <1-20>'
 names "task reviewer: the cannot-verify section" "$TRP" '## Cannot verify'
-check "task reviewer: the Codex findings are a report section" "$(grep -qE '^ *## Codex findings$' "$TRP" && echo yes || echo no)" "yes"
+check "task reviewer: the External findings are a report section" "$(grep -qE '^ *## External findings$' "$TRP" && echo yes || echo no)" "yes"
 names "re-review: the round verdict key" "$RRP" 'fix round: addressed | open'
 names "re-review: the open count key" "$RRP" 'open: <k>'
 names "group reviewer: the per-task finding grammar" "$GRP" '- [Critical|Important|Minor] (Task <N>) <file>:<line> — <one-liner>'

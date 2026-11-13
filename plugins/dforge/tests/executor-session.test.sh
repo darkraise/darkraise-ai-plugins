@@ -29,18 +29,16 @@ check "the file is the session id under that directory" \
   "$(executor_session_file codex)" "$TMP/codex/session-test.json"
 
 # --- surfaces --------------------------------------------------------------
-executor_session_write codex '{"session_id":"session-test","usable":true,"review":true,"lane":false}'
+executor_session_write codex '{"session_id":"session-test","usable":true,"review":true}'
 check "an open surface reads on" "$(executor_session_on codex review && echo on || echo off)" "on"
-check "a closed surface reads off" "$(executor_session_on codex lane && echo on || echo off)" "off"
-check "an absent executor reads off" "$(executor_session_on stub lane && echo on || echo off)" "off"
+check "an absent executor reads off" "$(executor_session_on stub review && echo on || echo off)" "off"
 
 # --- mark_off writes the record the gate reads back ------------------------
-executor_session_write codex '{"session_id":"session-test","usable":true,"review":true,"lane":true,"plugin_version":"1.0.3"}'
+executor_session_write codex '{"session_id":"session-test","usable":true,"review":true,"plugin_version":"1.0.3"}'
 executor_session_mark_off codex quota
 rec="$TMP/codex/session-test.json"
 check "mark_off clears usable" "$(jq -r '.usable' "$rec")" "false"
-check "mark_off clears every surface in the registry" \
-  "$(jq -r '[.review, .lane] | join(",")' "$rec")" "false,false"
+check "mark_off clears the review surface" "$(jq -r '.review' "$rec")" "false"
 check "mark_off records the reason" "$(jq -r '.reason' "$rec")" "quota"
 check "mark_off records the session id" "$(jq -r '.session_id' "$rec")" "session-test"
 check "mark_off stamps checked_at" "$(jq -r '.checked_at | test("^[0-9]{4}-")' "$rec")" "true"
@@ -49,10 +47,10 @@ check "mark_off writes both reset fields present and null" \
 check "mark_off preserves plugin_version" "$(jq -r '.plugin_version' "$rec")" "1.0.3"
 
 # --- no cross-talk ---------------------------------------------------------
-executor_session_write stub '{"session_id":"session-test","usable":true,"lane":true}'
+executor_session_write stub '{"session_id":"session-test","usable":true,"review":true}'
 executor_session_mark_off codex quota
 check "marking one executor off leaves another untouched" \
-  "$(executor_session_on stub lane && echo on || echo off)" "on"
+  "$(executor_session_on stub review && echo on || echo off)" "on"
 executor_session_write stub '{"session_id":"session-test","usable":true,"lane":true,"stub_version":"0.0.0-stub"}'
 executor_session_mark_off stub quota
 check "mark_off keeps an executor's own version field" \

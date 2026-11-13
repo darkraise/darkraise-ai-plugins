@@ -9,7 +9,7 @@ the lines.
 
 **Codex host:** follow [native-codex.md](../../../reference/native-codex.md) — its
 `codex-v4` selector, plan headers, assignment-source fields, and conversion
-rules replace the Claude table, fleet, and external CLI lane below. Honor the
+rules replace the Claude table and fleet below. Honor the
 user's inline or delegation preference on either host.
 
 1. **Score** each task on the four axes in
@@ -30,20 +30,11 @@ user's inline or delegation preference on either host.
 3. **Assign** from the assignment table, which the total indexes directly.
    Never assign a reserve agent — any `xhigh` or `max` effort, any Fable
    tier. Only a human edit puts one in a plan.
-4. **Offer an external executor** and apply the lane gate — see
-   [executor-lane.md](../../../reference/executor-lane.md) §Planning. Every id
-   `scripts/executors ranked` prints has its own gate; run each in that order, resolved with
-   `bash "$(bash scripts/executors path <id> gate)"`, before the roster, and
-   make the offer once per plan
-   for every executor whose gate prints `lane=true`, writing the offer's ticks
-   in `executors ranked` order. If none is usable, ask nothing.
-5. **Write the lines** directly below the task's `**Depends on:**` line, or
+4. **Write the lines** directly below the task's `**Depends on:**` line, or
    its `**Items:**` line, or its `**Interfaces:**` block when it has neither,
    in this order:
    - `**Implementer:**` — always; the fully qualified agent, for example
      `dforge:impl-sonnet-low`
-   - `**Executor:**` — only when the lane gate passed, for example
-     `codex gpt-6.1-sol / low`
    - `**Evaluation:**` — always, for example
      `files 0 - spec 1 - coupling 1 - risk 0 = 2`
    - `**Approach:**` — only when the task involved an approach decision:
@@ -62,13 +53,8 @@ user's inline or delegation preference on either host.
    **Approach:** inline - skip 2: follows the existing exporter pattern
    ```
 
-6. **Keep the heading form** `### Task N: <name>`: `scripts/task-brief` finds a
+5. **Keep the heading form** `### Task N: <name>`: `scripts/task-brief` finds a
    task by a heading that begins with `Task <N>`.
-
-**A task carries at most one `**Executor:**` line.** The line names
-the first ticked executor in `executors ranked` order whose gate admits it.
-`plan-lint` rejects a line naming another executor while a higher-priority
-ticked executor admits the task, so no choice is left to the planner.
 
 A human may edit any `**Implementer:**` line by hand;
 dforge:subagent-driven-development obeys it and never recomputes.
@@ -77,8 +63,8 @@ choice is the interesting part. A hand edit that breaks a checked rule — a
 reserve tier, a kept `spec = 3`, a table mismatch — carries an
 `**Override:** <reason>` line below the Evaluation line, and `plan-lint` then
 reports it as a warning. Never write an Override line yourself. Under
-dforge:executing-plans the session implements every task that carries no
-`**Executor:**` line, so the `**Implementer:**` line is read only by the
-deprecated subagent mode; an executor task's lines are read for its dispatch.
+dforge:executing-plans the session implements every task, so the
+`**Implementer:**` line is read only by the deprecated subagent mode. No task
+carries an `**Executor:**` line: `plan-lint` warns that one is obsolete.
 [assigning-implementers.md](assigning-implementers.md) explains why
 each of these rules exists.

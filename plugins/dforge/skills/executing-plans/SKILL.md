@@ -1,6 +1,6 @@
 ---
 name: executing-plans
-description: Use when a plan's Execution line names inline mode - the session implements every task it does not delegate, with the whole-branch final review as its gate
+description: Use when a plan's Execution line names inline mode - the session implements every task, with the whole-branch final review as its gate
 ---
 
 # Executing Plans
@@ -27,7 +27,7 @@ back. Before anything else:
    flight, then invoke dforge:handoff. In an auto run, exit 6 (`compact`) is
    [auto-run.md](../../reference/auto-run.md) §The budget line.
 4. Re-read this skill in full before the next task. If a task's last ledger
-   line is an agent-named assigned line or `fix round R/2`, also re-read
+   line is `fix round R/2`, also re-read
    [delegated-task.md](../../reference/delegated-task.md) before continuing.
 
 ## Auto run
@@ -83,8 +83,8 @@ On Codex, the ruling seat is a native judge at Astra high or above
 carries a measured number but no verdict: hand off after every 3 completed
 tasks, or after any task that needed 3 or more fix rounds. Everything else
 here is host-neutral - inline mode
-dispatches nothing but the ruling seat, delegated tasks, risk-3 task reviews
-and the final review.
+dispatches nothing but the ruling seat, risk-3 task reviews and the final
+review.
 
 ## Overview
 
@@ -95,20 +95,12 @@ the gate.
 
 **Why this mode.** Every plan runs inline: this session has read the code the
 plan changes, and a subagent per task would rebuild that context from nothing.
-You implement every task that carries no `**Executor:**` line, heavy tasks included.
-The `**Execution:**` line's model and effort cover the hardest task you
-implement, at least high effort when a task has risk 3 or the plan offloads one.
+You implement every task, heavy tasks included. A task that still carries an
+`**Executor:**` line is implemented here too: `plan-lint` warns that the line
+is obsolete. The `**Execution:**` line's model and effort cover the hardest
+task, at least high effort when a task has risk 3.
 Subagent availability has nothing to do with it - the line decides, and only
 your human partner overrides it.
-
-**Delegated tasks.** A delegated task is one carrying an `**Executor:**` line:
-it runs on its executor's wrapper, not in this session. Its brief's second line
-is `**Dispatch:** delegated — total <t>, risk <r>`, and `plan-header.md` carries
-`**Dispatch:** delegated — Task <a> (executor)`. Run
-[delegated-task.md](../../reference/delegated-task.md) for it: the executor's
-wrapper, the review seat `scripts/review-route` prints, fix rounds up to 2 and
-a reviewed complete line. Read that file the first time a delegated task comes
-up, not before. Delegated tasks are never batched.
 
 **Risk-3 tasks.** A brief whose second line is `**Review:** per-task — risk 3`
 is yours to implement, and a judge reviews it before its complete line: run
@@ -201,7 +193,7 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   The branch's review is the `Final review:` line.
 - There is no scores clause. A scores clause appears only when a judge scored
   the task.
-- The fix cap is 3 for a task you implement, not subagent mode's 5; a delegated task keeps 5. You are fixing your own work, so a
+- The fix cap is 3 for a task you implement, not subagent mode's 5. You are fixing your own work, so a
   fourth round is not a better round. A fix-round line is written after the
   round, with its outcome, exactly as subagent mode writes its own: `passing`
   when the task's verifications now pass, `still failing` otherwise.
@@ -219,11 +211,6 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   the parked findings, `discovered` the problems you found and did not fix, and
   `assumptions` what you assumed where the plan was silent.
 - Write each line in the same message as your other bookkeeping, never later.
-- A delegated task writes subagent mode's per-task lines instead:
-  the agent-named assigned line, `fix round R/2`, `HANDBACK`, `parked`,
-  dispatch `Ruling:` lines, `BLOCKED — <agent> exhausted`, and the complete line
-  with `review clean` or `K parked` and its scores clause
-  (dforge:subagent-driven-development §The Ledger).
 - A risk-3 task writes `fix round R/2` lines ending `; session)` and a
   reviewed complete line (delegated-task.md §The session review loop).
 
@@ -240,8 +227,7 @@ budget before every task at no extra request:
 - `ok` or `unknown`: carry on, however high the percentage. Only the verdict
   stops you.
 - `handoff`: finish the task in flight through its `Task N: complete` line,
-  then invoke dforge:handoff. Never hand off in the middle of a task,
-  delegated ones included. The budget holds one task's worst growth.
+  then invoke dforge:handoff. Never hand off in the middle of a task. The budget holds one task's worst growth.
 
 The plan's last two tasks never hand off in strict mode: their brief prints
 `budget (last 2 tasks)` or `budget (last task)` and says `ok` past the budget. Run `scripts/context-size --final` after the last
@@ -265,11 +251,9 @@ For each task, in order:
    amendment applied, the header's Global Constraints and Contracts, and the
    budget line. You never read task text any other way: reading the plan file
    directly skips the amendments. If the brief's second line is
-   `**Dispatch:** delegated`, run
-   [delegated-task.md](../../reference/delegated-task.md) for this task instead
-   of steps 2 to 7, then go to step 8. If it is
-   `**Review:** per-task — risk 3`, run that file's §The session review loop
-   instead of steps 2 to 7, then go to step 8.
+   `**Review:** per-task — risk 3`, run
+   [delegated-task.md](../../reference/delegated-task.md) §The session review
+   loop instead of steps 2 to 7, then go to step 8.
 2. **Open the task.** Take the base commit (`git rev-parse --short HEAD`) and
    append `Task <N>: implementer inline (assigned; base <sha7>)`.
 3. **Implement exactly what the task names.** Follow its steps in order. Where

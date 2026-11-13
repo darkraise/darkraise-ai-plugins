@@ -176,7 +176,7 @@ if command -v node >/dev/null 2>&1; then
   HOME_S="$TMP/s"; mkdir -p "$HOME_S/.dforge"
   s_ctx=$(payload | HOME="$HOME_S" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
   check "settings: nothing injected at the defaults" "$(grep -c '^dforge settings in force' <<<"$s_ctx")" "0"
-  printf '{"worktree":"always","designApproval":"whole","codexLane":false}\n' > "$HOME_S/.dforge/config.json"
+  printf '{"worktree":"always","designApproval":"whole","codexReview":false}\n' > "$HOME_S/.dforge/config.json"
   s_out=$(payload | HOME="$HOME_S" bash "$SCRIPT" 2>/dev/null)
   check "settings: output stays valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$s_out" && echo yes || echo no)" "yes"
   check "settings: the changed skill keys are injected" \

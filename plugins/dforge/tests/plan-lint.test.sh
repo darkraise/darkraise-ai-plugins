@@ -45,27 +45,6 @@ mkdir -p "$HOME"
 mkdir -p docs
 printf '# Spec\n' > docs/spec.md
 printf '# Program\n' > docs/program.md
-# The lane probe reads this session's Codex gate file. A fixed session id and a
-# temporary directory keep the machine's real session state out of every case.
-export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=plan-lint-test
-lane_surface() { # lane_surface <true|false>
-  mkdir -p "$DR_CODEX_SESSION_DIR"
-  printf '{"session_id":"plan-lint-test","usable":true,"review":false,"lane":%s}\n' "$1" \
-    > "$DR_CODEX_SESSION_DIR/plan-lint-test.json"
-}
-lane_surface true
-# Stub rosters for the lane probe. Every case uses one, so no case depends on
-# whether Codex is installed on the machine running the suite.
-cat > usable.sh <<EOF
-printf 'called\n' >> "$TMP/probe-calls"
-echo '[{"id":"codex","usable":true,"reason":null}]'
-EOF
-cat > unusable.sh <<EOF
-printf 'called\n' >> "$TMP/probe-calls"
-echo '[{"id":"codex","usable":false,"reason":"present but not authenticated; run codex login"}]'
-EOF
-export PLAN_LINT_ROSTER="$TMP/unusable.sh"
-calls() { cat "$TMP/probe-calls" 2>/dev/null | grep -c called; }
 
 claude_plan() {
   cat <<'EOF'
@@ -473,16 +452,6 @@ has "inline Approach needs skip" "$out" "ERROR Task 2: an inline Approach must c
 variant t9.md 's/^\*\*Approach:\*\* .*/**Approach:** gut feeling/'
 lint t9.md
 has "Approach grammar" "$out" "ERROR Task 2: Approach does not match"
-variant t10.md 's/^(\*\*Evaluation:\*\* files 0 - spec 0 - coupling 1 - risk 0 = 1)$/\1\n**Executor:** codex gpt-6.1-sol \/ low/'
-lint t10.md
-has "Executor below the gate" "$out" "ERROR Task 1: total 1 / risk 0 fails the lane gate (min_score 2, max_score 4, max_risk 1)"
-has "Executor without header line" "$out" "ERROR Task 1: Executor used but the header's '> **External executors:**' line does not name codex"
-variant t10b.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 2 - coupling 2 - risk 0 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/^(\*\*Evaluation:\*\* files 1 - spec 2 - coupling 2 - risk 0 = 5)$/\1\n**Executor:** codex gpt-6.1-sol \/ high/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
-lint t10b.md
-has "Executor above max_score fails the gate" "$out" "ERROR Task 1: total 5 / risk 0 fails the lane gate (min_score 2, max_score 4, max_risk 1)"
-variant t11.md 's/^(\*\*Approach:\*\* .*)$/\1\n**Override:** kept\n**Executor:** codex gpt-6.1-sol \/ high/'
-lint t11.md
-has "Executor on an overridden task" "$out" "ERROR Task 2: an Executor line on an overridden task fails the lane gate"
 variant t13.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 0 - coupling 0 - risk 4 = 4/'
 lint t13.md
 has "axis out of range" "$out" "ERROR Task 2: each axis must be 0-3"
@@ -576,48 +545,22 @@ lint cconv.md
 check "a Policy conversion record: exit 0" "$status" "0"
 check "a Policy conversion record: clean" "$out" "plan-lint: 0 errors, 0 warnings"
 
-# --- the lazy lane probe ---
-# p1 makes Task 1 lane-eligible: total 2, risk 0, no Executor, no Override.
-variant p1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/'
-export PLAN_LINT_ROSTER="$TMP/usable.sh"
-rm -f probe-calls; lint p1.md
-has "usable codex: an eligible task without Executor warns" "$out" "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-6.1-sol / low)"
-check "usable codex: the warning does not fail the lint" "$status" "0"
-lacks "usable codex: a risk-2 task is not named" "$out" "WARN Task 2: lane-eligible"
-check "usable codex: the probe runs once" "$(calls)" "1"
-rm -f probe-calls; lint p1.md --no-probe
-lacks "--no-probe: no lane warning" "$out" "lane-eligible"
-check "--no-probe: the roster never runs" "$(calls)" "0"
-rm -f probe-calls; lint clean.md
-check "no candidate: the roster never runs" "$(calls)" "0"
-lane_surface false
-rm -f probe-calls; lint p1.md
-lacks "lane surface off: no lane warning" "$out" "lane-eligible"
-check "lane surface off: the roster never runs" "$(calls)" "0"
-rm -rf "$DR_CODEX_SESSION_DIR"
-rm -f probe-calls; lint p1.md
-check "no session file: the roster never runs" "$(calls)" "0"
-lane_surface true
-export PLAN_LINT_ROSTER="$TMP/unusable.sh"
-rm -f probe-calls; lint p1.md
-lacks "unusable codex: no lane warning" "$out" "lane-eligible"
-check "unusable codex: the probe still ran once" "$(calls)" "1"
-export PLAN_LINT_ROSTER="$TMP/usable.sh"
-variant p2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** codex gpt-6.1-sol \/ low/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
-rm -f probe-calls; lint p2.md
-lacks "an Executor line clears the candidate" "$out" "lane-eligible"
-lacks "the Executor fixture is otherwise clean" "$out" "ERROR Task 1"
-check "a plan whose only candidate has an Executor never probes" "$(calls)" "0"
-variant p3.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/impl-sonnet-low$/impl-sonnet-high/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Override:** owner kept the Sonnet-high tier/'
-rm -f probe-calls; lint p3.md
-lacks "an overridden task is not a candidate" "$out" "lane-eligible"
-variant p4.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/'
-rm -f probe-calls; lint p4.md
-lacks "an inline plan gets no lane warning" "$out" "lane-eligible"
-check "an inline plan never probes" "$(calls)" "0"
-lint p1.md --no-probe --amendments am-none.md
+# --- obsolete Executor lines ---
+tplan "$TMP/clean-plan.md" inline sonnet low 2 2
+sed -e '/^## Global Constraints/i\
+> **External executors:** [x] codex\
+' -e '/^### Task 2/,/^\*\*Evaluation:/{/^\*\*Evaluation:/a\
+**Executor:** codex gpt-6.1-sol / low
+}' "$TMP/clean-plan.md" > "$TMP/exec-plan.md"
+check "the clean plan lints clean" "$(bash "$LINT" "$TMP/clean-plan.md" >/dev/null 2>&1; echo $?)" "0"
+out=$(bash "$LINT" "$TMP/exec-plan.md" 2>&1); rc=$?
+check "an Executor line is no error" "$rc" "0"
+check "an Executor line gets one warning" \
+  "$(grep -c '^WARN Task 2: the \*\*Executor:\*\* line is obsolete; the session implements this task$' <<<"$out")" "1"
+check "the External executors header is accepted silently" "$(grep -c 'External executors' <<<"$out")" "0"
+check "an Executor line raises no effort floor" "$(grep -c -i 'delegated' <<<"$out")" "0"
+lint clean.md --no-probe --amendments am-none.md
 check "flags parse in any order" "$status" "0"
-export PLAN_LINT_ROSTER="$TMP/unusable.sh"
 check "plan-amend never probes" "$(grep -c -- '--no-probe' "$HERE/../scripts/plan-amend")" "2"
 # --- amendments ---
 cat > am.md <<'EOF'
@@ -824,229 +767,6 @@ lacks "plan-lint: no register means no premature-last finding" "$OUT" "register 
 
 fi
 if want two; then
-# --- priority routing: agy ranks before codex ---
-export DR_AGY_SESSION_DIR="$TMP/agy-sessions"
-agy_rung() { # agy_rung <total> - "<model> / <effort>" from the shipped agy-assignment block
-  tr -d '\r' < "$HERE/../reference/ladder.md" \
-    | awk -v t="$1" '$0 == "```agy-assignment" { f = 1; next } f && /^```/ { exit } f && $1 == t { print $2 " / " $3 }'
-}
-esc() { printf '%s' "${1//\//\\/}"; }
-R2=$(agy_rung 2); R4=$(agy_rung 4); R5=$(agy_rung 5)
-T2='s/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/'
-EV2='s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** '
-TICK() { printf 's/^(\\*\\*Program:\\*\\* .*)$/\\1\\n\\n> **External executors:** %s/' "$1"; }
-
-variant r1.md "$T2; ${EV2}agy $(esc "$R2")/; $(TICK 'agy, codex')"
-lint r1.md
-lacks "agy named while both are ticked: the line is accepted" "$out" "ERROR Task 1"
-variant r2.md "$T2; ${EV2}codex gpt-6.1-sol \/ low/; $(TICK 'agy, codex')"
-lint r2.md
-has "codex named while agy ranks first and admits the task" "$out" \
-  "ERROR Task 1: Executor names codex but agy ranks first and admits total 2"
-variant r3.md "$T2; ${EV2}codex gpt-6.1-sol \/ low/; $(TICK 'codex, agy')"
-lint r3.md
-has "rank decides, not the order of the header line" "$out" \
-  "ERROR Task 1: Executor names codex but agy ranks first and admits total 2"
-variant r4.md "$T2; ${EV2}codex gpt-6.1-sol \/ low/; $(TICK 'codex')"
-lint r4.md
-lacks "agy unticked: a codex line is unchanged" "$out" "ERROR Task 1"
-lacks "agy unticked: no ranking finding" "$out" "ranks first"
-
-variant r5.md "s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 1 - coupling 1 - risk 3 = 5/; s/impl-sonnet-medium\$/impl-sonnet-high/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 3 = 5)\$/\1\n**Executor:** agy $(esc "$R5")/; $(TICK 'agy, codex')"
-lint r5.md
-has "a risk-3 task never takes an agy line" "$out" \
-  "ERROR Task 2: total 5 / risk 3 fails the lane gate (min_score 0, max_score 8, max_risk 2)"
-variant r6.md "s/^(\*\*Approach:\*\* .*)\$/\1\n**Override:** kept\n**Executor:** agy $(esc "$R4")/; $(TICK 'agy')"
-lint r6.md
-has "a human override never takes an agy line" "$out" \
-  "ERROR Task 2: an Executor line on an overridden task fails the lane gate"
-
-OLD_ROSTER="${PLAN_LINT_ROSTER:-}"
-lane_surface true
-variant w1.md "$T2"
-mkdir -p "$DR_AGY_SESSION_DIR"
-printf '{"session_id":"plan-lint-test","usable":true,"review":false,"lane":true}\n' \
-  > "$DR_AGY_SESSION_DIR/plan-lint-test.json"
-cat > both.sh <<EOF
-printf 'called\n' >> "$TMP/probe-calls"
-echo '[{"id":"agy","usable":true,"reason":null},{"id":"codex","usable":true,"reason":null}]'
-EOF
-export PLAN_LINT_ROSTER="$TMP/both.sh"
-rm -f probe-calls; lint w1.md
-has "both usable: the warning names the first admitting executor" "$out" \
-  "WARN Task 1: lane-eligible with no **Executor:** line (agy $R2)"
-lacks "both usable: the second admitting executor is not named" "$out" \
-  "lane-eligible with no **Executor:** line (codex"
-has "agy alone admits a risk-2 task" "$out" \
-  "WARN Task 2: lane-eligible with no **Executor:** line (agy $R4)"
-check "both usable: the roster still runs once" "$(calls)" "1"
-variant w2.md "$T2; $(TICK 'codex')"
-rm -f probe-calls; lint w2.md
-has "agy on but only codex ticked: the warning names codex" "$out" \
-  "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-6.1-sol / low)"
-lacks "agy on but only codex ticked: agy is never named" "$out" \
-  "lane-eligible with no **Executor:** line (agy"
-lacks "agy on but only codex ticked: a risk-2 task is not named" "$out" "WARN Task 2: lane-eligible"
-rm -f "$DR_AGY_SESSION_DIR/plan-lint-test.json"
-rm -f probe-calls; lint w1.md
-has "agy off: codex is named as before" "$out" \
-  "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-6.1-sol / low)"
-lacks "agy off: a risk-2 task is not named" "$out" "WARN Task 2: lane-eligible"
-export PLAN_LINT_ROSTER="$OLD_ROSTER"
-unset DR_AGY_SESSION_DIR
-
-# --- Executor lines are validated against their own executor ----------------
-# DR_LADDER points at a fixture ladder that is the shipped one plus the stub's
-# blocks: ladder_block reads one file, and the shipped ladder must not carry
-# test fixtures.
-# This suite defines no $P; the plugin root is "$HERE/.." here.
-export DR_EXECUTORS_DIR="$HERE/fixtures/executors"
-export DR_LADDER="$TMP/stub-ladder.md"
-cat "$HERE/../reference/ladder.md" "$HERE/fixtures/stub-ladder.md" > "$DR_LADDER"
-
-# A stub Executor line validates against the stub's own blocks. The fixture
-# ladder supplies them, so the shipped ladder is untouched.
-variant s1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** stub stub-model \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** stub/'
-lint s1.md
-lacks "a stub Executor line is accepted" "$out" "ERROR Task 1"
-
-# A gate block the ladder does not carry cannot certify a task, so it is an
-# error rather than an open gate. Only the gate fence is renamed, so
-# stub-assignment still resolves and the rung error does not also fire.
-DR_LADDER="$TMP/stub-ladder-nogate.md"
-cat "$HERE/../reference/ladder.md" > "$DR_LADDER"
-sed 's/^```stub-gate$/```stub-gate-unused/' "$HERE/fixtures/stub-ladder.md" >> "$DR_LADDER"
-lint s1.md
-has "a missing gate block is an error, not an open gate" "$out" \
-  "ERROR Task 1: stub's gate block 'stub-gate' is missing from the ladder"
-DR_LADDER="$TMP/stub-ladder-noscore.md"
-cat "$HERE/../reference/ladder.md" > "$DR_LADDER"
-sed '/^max_score /d' "$HERE/fixtures/stub-ladder.md" >> "$DR_LADDER"
-lint s1.md
-has "a gate block without max_score cannot certify a task" "$out" \
-  "ERROR Task 1: stub's gate block 'stub-gate' is missing from the ladder"
-DR_LADDER="$TMP/stub-ladder.md"
-
-# An id with no registry entry is rejected, naming the registry.
-variant s2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** nosuch m \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** nosuch/'
-lint s2.md
-has "an unregistered Executor id is an error" "$out" "ERROR Task 1: Executor names no registered executor: nosuch (run 'executors list')"
-
-# The header must name the line's own id, not merely some executor.
-variant s3.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** stub stub-model \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** codex/'
-lint s3.md
-has "the header must name the line's executor" "$out" "ERROR Task 1: Executor used but the header's '> **External executors:**' line does not name stub"
-
-# --- ranking is by priority, not by name ---
-RANKED="$TMP/ranked-reg"; mkdir -p "$RANKED"
-jq '. + {priority: 20}' < "$HERE/fixtures/executors/codex.json" > "$RANKED/codex.json"
-jq '. + {priority: 10}' < "$HERE/fixtures/executors/stub.json" > "$RANKED/stub.json"
-export DR_EXECUTORS_DIR="$RANKED"
-variant k1.md "$T2; ${EV2}codex gpt-6.1-sol \/ low/; $(TICK 'codex, stub')"
-lint k1.md
-has "a lower priority number outranks a lower name" "$out" \
-  "ERROR Task 1: Executor names codex but stub ranks first and admits total 2"
-variant k2.md "$T2; ${EV2}stub stub-model \/ medium/; $(TICK 'codex, stub')"
-lint k2.md
-lacks "the executor that ranks first may be named" "$out" "ranks first"
-export DR_EXECUTORS_DIR="$HERE/fixtures/executors"
-
-# --- the lane-eligible warning is per executor ------------------------------
-# The generalisation is invisible while codex is the only entry, so prove it
-# where it can be seen: the stub's lane surface is on and its roster row is
-# usable, codex's row is not, and the warning names the stub's own rung from
-# the stub-assignment block.
-# opencode.json borrows the stub's gate block, so it becomes a lane candidate
-# too and its session file is read. Export its directory as well, or that read
-# falls back to the real $HOME.
-export DR_STUB_SESSION_DIR="$TMP/stub-sessions"
-export DR_OPENCODE_SESSION_DIR="$TMP/opencode-sessions"
-mkdir -p "$DR_STUB_SESSION_DIR" "$DR_OPENCODE_SESSION_DIR"
-printf '{"session_id":"plan-lint-test","usable":true,"lane":true}\n' \
-  > "$DR_STUB_SESSION_DIR/plan-lint-test.json"
-cat > stub-roster.sh <<EOF
-printf 'called\n' >> "$TMP/probe-calls"
-echo '[{"id":"codex","usable":false,"reason":"off"},{"id":"stub","usable":true,"reason":null}]'
-EOF
-export PLAN_LINT_ROSTER="$TMP/stub-roster.sh"
-variant p1.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/'
-rm -f probe-calls; lint p1.md
-has "a second executor warns with its own rung" "$out" \
-  "WARN Task 1: lane-eligible with no **Executor:** line (stub stub-model / medium)"
-lacks "an executor whose roster row is unusable does not warn" "$out" \
-  "lane-eligible with no **Executor:** line (codex"
-check "the per-executor warning still probes once" "$(calls)" "1"
-
-# With no lane surface for either id, nothing warns and nothing probes.
-rm -rf "$DR_STUB_SESSION_DIR" "$DR_OPENCODE_SESSION_DIR"
-lane_surface false
-rm -f probe-calls; lint p1.md
-lacks "no executor has a lane surface: no warning" "$out" "lane-eligible"
-check "no executor has a lane surface: the roster never runs" "$(calls)" "0"
-lane_surface true
-unset PLAN_LINT_ROSTER DR_STUB_SESSION_DIR DR_OPENCODE_SESSION_DIR
-
-# --- an inline plan that offloads ------------------------------------------
-# An offloaded task leaves self_max, and any delegation raises the required
-# effort to high.
-# The Execution line is substituted with the suite's own `sed 's/^|//'` idiom
-# rather than perl: it is the only text-editing tool this suite uses, and the
-# line contains no character the shell or sed would reinterpret here.
-inline_plan() { # inline_plan <file> <execution line>
-  sed 's/^|//' > "$TMP/$1" <<'EOF'
-|# Inline Offload Fixture
-|
-|**Goal:** Fixture.
-|
-|**Spec:** docs/superpowers/specs/fixture.md
-|
-|EXECUTION_LINE
-|
-|## Global Constraints
-|
-|None.
-|
-|## Contracts
-|
-|None.
-|
-|## Assumptions (evidence)
-|
-|- Fixture.
-|
-|## Task index
-|
-|1. offloaded four band
-|2. small
-|
-|> **External executors:** codex
-|
-|### Task 1: offloaded four band
-|
-|**Implementer:** dforge:impl-sonnet-medium
-|**Executor:** codex gpt-6.1-sol / high
-|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
-|
-|### Task 2: small
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
-EOF
-  # awk does a literal, one-shot replacement: no regex metacharacter in $2 is
-  # reinterpreted, and no escape survives into the file.
-  awk -v line="$2" '$0 == "EXECUTION_LINE" { print line; next } { print }' \
-    "$TMP/$1" > "$TMP/$1.tmp" && mv "$TMP/$1.tmp" "$TMP/$1"
-}
-
-inline_plan i1.md '**Execution:** inline — `claude --model sonnet --effort high` — fixture'
-lint i1.md
-lacks "an offloaded total-4 task does not force opus" "$out" "needs --model opus"
-has "an offloading inline plan lists its delegated task" "$out" "NOTE header: delegated: Task 1 (executor)"
-
-inline_plan i2.md '**Execution:** inline — `claude --model sonnet --effort low` — fixture'
-lint i2.md
-has "an offloading inline plan needs high effort" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
-
 # --- the shared Evaluation reader ---
 # A task whose only score sits inside a fence used to pass: the linter read the
 # example as the task's line, so an unscored task reached execution unrouted.
@@ -1098,8 +818,8 @@ check "the stale-parent fixture is otherwise clean" "$status" "0"
 
 lintplan stale-parent-exec.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint stale-parent-exec.md
-has "a stale parent Executor line is a NOTE" "$out" \
-  "NOTE Task 1: an **Executor:** line above the first part does not route the task"
+check "a parent Executor line gets the obsolete warning once" \
+  "$(grep -c '^WARN Task 1: the \*\*Executor:\*\* line is obsolete; the session implements this task$' <<<"$out")" "1"
 lacks "a stale parent Executor line is not an error" "$out" "ERROR Task 1"
 check "the stale-parent-exec fixture is otherwise clean" "$status" "0"
 
