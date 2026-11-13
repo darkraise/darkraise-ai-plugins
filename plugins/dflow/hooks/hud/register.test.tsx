@@ -1,7 +1,16 @@
+import type { CommandRunInput } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { accountColor } from './account.mjs'
 import { cellWidth } from './meter.mjs'
+
+// The person typing the command at a wide fullscreen terminal.
+const run = (command: string, args = ''): CommandRunInput => ({
+  command,
+  args,
+  origin: { kind: 'composer' },
+  presentation: { isFullscreen: true, columns: 160 },
+})
 
 const HUD = {
   branch: 'feat/x',
@@ -212,7 +221,7 @@ test('/dflow:hud cycles band, pane, off and keeps the choice', async ($, on) => 
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
   await $.session.start(START)
 
-  expect((await $.command.run({ command: 'dflow:hud' })).text).toBe('dflow HUD: pane')
+  expect((await $.command.run(run('dflow:hud'))).text).toBe('dflow HUD: pane')
   expect(w.stored.mode).toBe('pane')
   expect(w.calls).toContain('open dflow-hud')
 
@@ -221,12 +230,12 @@ test('/dflow:hud cycles band, pane, off and keeps the choice', async ($, on) => 
   expect((await pane.find({ key: 'next' }))?.text).toBe('Next  /dflow:build — Task 5: Wire the meter')
   await pane.unmount()
 
-  expect((await $.command.run({ command: 'dflow:hud' })).text).toBe('dflow HUD: off')
+  expect((await $.command.run(run('dflow:hud'))).text).toBe('dflow HUD: off')
   expect(w.calls).toContain('close dflow-hud')
-  expect((await $.command.run({ command: 'dflow:hud', args: 'sideways' })).text).toBe(
+  expect((await $.command.run(run('dflow:hud', 'sideways'))).text).toBe(
     'Usage: /dflow:hud [band|pane|off]',
   )
-  expect((await $.command.run({ command: 'dflow:hud', args: 'band' })).text).toBe(
+  expect((await $.command.run(run('dflow:hud', 'band'))).text).toBe(
     'dflow HUD: band',
   )
 })
@@ -277,7 +286,7 @@ test('with no dflow directory the mod draws nothing and writes nothing', async (
 test('Minimize puts the HUD in the band and closes the pane; its hotkey letter is underlined', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'pane-minimize-hotkey' }))?.props).toMatchObject({ hotkey: 'm' })
   expect((await pane.find({ type: 'Text', text: 'M' }))?.props.underline).toBe(true)
@@ -289,7 +298,7 @@ test('Minimize puts the HUD in the band and closes the pane; its hotkey letter i
 test('before Claude Code 2.1.295 the hotkey rides on the button itself', async ($, on) => {
   world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, version: '2.1.290' })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'pane-minimize' }))?.props).toMatchObject({ label: '▁ Minimize', hotkey: 'm' })
   expect(await pane.find({ key: 'pane-minimize-hotkey' })).toBeUndefined()
@@ -298,11 +307,11 @@ test('before Claude Code 2.1.295 the hotkey rides on the button itself', async (
 test('/dflow:hud reopens a pane the person closed, and a new session keeps the mode', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
   await $.session.start(START)
-  expect((await $.command.run({ command: 'dflow:hud', args: 'pane' })).text).toBe('dflow HUD: pane')
+  expect((await $.command.run(run('dflow:hud', 'pane'))).text).toBe('dflow HUD: pane')
   w.isPaneUp = false
-  expect((await $.command.run({ command: 'dflow:hud' })).text).toBe('dflow HUD: pane')
+  expect((await $.command.run(run('dflow:hud'))).text).toBe('dflow HUD: pane')
   expect(w.calls.filter(call => call === 'open dflow-hud').length).toBe(2)
-  expect((await $.command.run({ command: 'dflow:hud' })).text).toBe('dflow HUD: off')
+  expect((await $.command.run(run('dflow:hud'))).text).toBe('dflow HUD: off')
   expect(w.calls.some(call => call.startsWith('submit'))).toBe(false)
   w.stored.mode = 'pane'
   w.sessionId = 's2'
@@ -318,7 +327,7 @@ const order = async (ui: any, patterns: RegExp[]) => {
 test('the pane draws the Now row, the cards in order and the Next row', async ($, on) => {
   world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   const at = await order(pane, [/^● Task 5 in progress/, /^▾ Plan$/, /^▾ Checks$/, /^▾ Board$/, /^▾ Workers$/, /^Next {2}/])
   expect(at.every(index => index >= 0)).toBe(true)
@@ -330,7 +339,7 @@ test('the pane draws the Now row, the cards in order and the Next row', async ($
 test('a card title collapses the card and the choice is stored', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await pane.press({ key: 'plan-title' })
   expect((await pane.find({ key: 'plan-title' }))?.props.label).toBe('▸ Plan')
@@ -345,7 +354,7 @@ test('a card title collapses the card and the choice is stored', async ($, on) =
 test('a rewritten hud.json shows within a poll; a broken one keeps the last view', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   w.files[HUD_FILE] = JSON.stringify({ ...HUD, plan: { ...HUD.plan, done: 5 } })
   await w.clock!.advance(2000)
   let pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -360,7 +369,7 @@ test('a rewritten hud.json shows within a poll; a broken one keeps the last view
 test('outside a dflow checkout the pane says how to start', async ($, on) => {
   world(on, { files: {}, hasState: false })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   const texts = (await pane.findAll({ type: 'Text' })).map((one: any) => one.text)
   expect(texts).toEqual(['dflow has no state in this repository yet.', 'Run /dflow:init, then /dflow:plan.'])
@@ -377,7 +386,7 @@ test('before hud.json exists the pane says how to start and the band draws nothi
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect((await band.findAll({ type: 'Text' })).map((one: any) => one.text)).toEqual(['engine'])
   await band.unmount()
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   const texts = (await pane.findAll({ type: 'Text' })).map((one: any) => one.text)
   expect(texts).toEqual(['dflow has no state in this repository yet.', 'Run /dflow:init, then /dflow:plan.'])
@@ -398,7 +407,7 @@ test('a session switch reads the breakdown and git again within one poll', async
     breakdown: { categories: [{ name: 'Messages', tokens: 9000, kind: 'used' }], totalTokens: 9000, isAutoCompactEnabled: false },
   })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   await w.clock!.advance(10000)
   w.sessionId = 's2'
   const before = w.calls.length
@@ -445,7 +454,7 @@ test('worst-case data is cut to the pane, never wrapped', async ($, on) => {
   }
   world(on, { files: { [HUD_FILE]: JSON.stringify(WORST) } })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 40 }, surface: 'terminal' })
   const texts = await pane.findAll({ type: 'Text' })
   const rows = (await pane.findAll({ type: 'Box' })).filter((one: any) => /^(plan|workers|checks)-row-\d+$/.test(String(one.key)))
@@ -468,7 +477,7 @@ const BREAKDOWN_READING = {
 test('Compact compacts with the reset instructions and turns to the accent past the reset point', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, tokens: 160000 })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'context-compact-box' }))?.props.borderColor).toBe('permission')
   expect((await pane.find({ key: 'context-compact-hotkey' }))?.props.hotkey).toBe('c')
@@ -479,7 +488,7 @@ test('Compact compacts with the reset instructions and turns to the accent past 
 test('Compact without a plan sends no instructions; two failures toast once', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify({ ...HUD, plan: null }) }, tokens: 90000, compactFailures: 2 })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'context-compact-box' }))?.props.borderColor).toBe('inactive')
   const pressing = pane.press({ key: 'context-compact' })
@@ -512,7 +521,7 @@ test('the breakdown is read for an open Context card only, and the trend follows
   await $.session.start(START)
   await w.clock!.advance(10000)
   expect(w.calls).not.toContain('usage breakdown')
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   expect(w.calls).toContain('usage breakdown')
   w.tokens = 100000
   await $.turn.complete({ ...TURN, turnId: 't1' })
@@ -531,7 +540,7 @@ test('the breakdown is read for an open Context card only, and the trend follows
 test("a session switch drops the previous session's breakdown, trend and branch", async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, breakdown: BREAKDOWN_READING, porcelain: '# branch.head feat/old\n' })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   await w.clock!.advance(10000)
   w.tokens = 100000
   await $.turn.complete({ ...TURN, turnId: 't1' })
@@ -565,7 +574,7 @@ test('the Account card reads the account file, the model, the effort and Remote 
     remoteControl: 'true',
   })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'account-headline' }))?.text).toBe('subscription')
   expect((await pane.find({ key: 'account-row-0' }))?.text).toBe('● you@example.com')
@@ -590,7 +599,7 @@ test('the Usage card shows the limits and cost the engine reports', async ($, on
     rateLimits: [{ kind: 'five_hour', percentUsed: 23, resetsAt: new Date(NOW + 3 * 3_600_000 + 40 * 60_000).toISOString() }],
   })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'usage-headline' }))?.text).toBe('$4.80 · $2.40/h')
   expect((await pane.find({ key: 'usage-row-1' }))?.text).toBe('    resets in 3h40m · on pace')
@@ -599,7 +608,7 @@ test('the Usage card shows the limits and cost the engine reports', async ($, on
 test('a changed context or usage reading shows within a poll', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, usd: 1 })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   let pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'context-headline' }))?.text).toBe('79% of reset')
   expect((await pane.find({ key: 'usage-headline' }))?.text).toBe('$1.00 · $0.50/h')
@@ -619,7 +628,7 @@ test('git status runs every ten seconds while shown and never while off', async 
   await $.session.start(START)
   await w.clock!.advance(10000)
   expect(w.calls.filter(call => call.includes(GIT_STATUS)).length).toBeGreaterThanOrEqual(1)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'repo-row-0' }))?.text).toBe('repo darkraise/shop')
   expect((await pane.find({ key: 'repo-headline' }))?.text).toBe('✓ clean')
@@ -629,7 +638,7 @@ test('git status runs every ten seconds while shown and never while off', async 
   const after = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await after.find({ key: 'repo-headline' }))?.text).toBe('✓ clean')
   await after.unmount()
-  await $.command.run({ command: 'dflow:hud', args: 'off' })
+  await $.command.run(run('dflow:hud', 'off'))
   const before = w.calls.filter(call => call.includes(GIT_STATUS)).length
   await w.clock!.advance(20000)
   expect(w.calls.filter(call => call.includes(GIT_STATUS)).length).toBe(before)
@@ -642,7 +651,7 @@ test('the pane draws every card in order, each framed in its color', async ($, o
     porcelain: '# branch.head feat/x\n',
   })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   const at = await order(pane, [/^● Task 5/, /^▾ Account$/, /^M$/, /^▾ Plan$/, /^▾ Context$/, /^▾ Usage$/, /^▾ Checks$/, /^▾ Board$/, /^▾ Workers$/, /^▾ Repo$/, /^Next {2}/])
   expect(at.every(index => index >= 0)).toBe(true)
@@ -663,7 +672,7 @@ test('mode off runs no git read beyond locating the root', async ($, on) => {
 test('Dense draws one line per card and Detailed brings the cards back', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'pane-density-hotkey' }))?.props.hotkey).toBe('d')
   await pane.press({ key: 'pane-density' })
@@ -704,7 +713,7 @@ test('a checkout without .dflow runs no git status', async ($, on) => {
 test('the Sections view hides, moves and resets the cards', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, usd: 1 })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'pane-sections-hotkey' }))?.props.hotkey).toBe('s')
   await pane.press({ key: 'pane-sections' })
@@ -740,13 +749,13 @@ test('the Sections view hides, moves and resets the cards', async ($, on) => {
 test('leaving the pane from the Sections view brings it back on the cards', async ($, on) => {
   world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   let pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await pane.press({ key: 'pane-sections' })
   expect(await pane.find({ key: 'sections-reset' })).toBeDefined()
   await pane.unmount()
-  await $.command.run({ command: 'dflow:hud', args: 'band' })
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'band'))
+  await $.command.run(run('dflow:hud', 'pane'))
   pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await pane.find({ key: 'sections-reset' })).toBeUndefined()
   expect(await pane.find({ key: 'plan' })).toBeDefined()
@@ -755,14 +764,14 @@ test('leaving the pane from the Sections view brings it back on the cards', asyn
 test('/dflow:hud sections sets the list or names the valid cards', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
   await $.session.start(START)
-  expect((await $.command.run({ command: 'dflow:hud', args: 'sections plan,context,repo' })).text).toBe('dflow HUD sections: plan, context, repo')
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  expect((await $.command.run(run('dflow:hud', 'sections plan,context,repo'))).text).toBe('dflow HUD sections: plan, context, repo')
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await pane.find({ key: 'checks' })).toBeUndefined()
-  expect((await $.command.run({ command: 'dflow:hud', args: 'sections plan,shells' })).text).toBe('Sections: account, plan, context, usage, checks, board, workers, repo')
+  expect((await $.command.run(run('dflow:hud', 'sections plan,shells'))).text).toBe('Sections: account, plan, context, usage, checks, board, workers, repo')
   expect(w.stored.sections).toEqual(['plan', 'context', 'repo'])
   w.isPaneUp = false
-  await $.command.run({ command: 'dflow:hud', args: 'sections' })
+  await $.command.run(run('dflow:hud', 'sections'))
   expect(w.isPaneUp).toBe(true)
 })
 
@@ -775,7 +784,7 @@ test('a session starting on an unfinished plan offers to resume it in the pane a
   expect((await band.find({ type: 'Text', text: /↻ Resumable work · Rate-limit meter/ }))?.text).toContain('Next: Task 5: Wire the meter')
   expect((await band.find({ key: 'band-resume-go' }))?.props.hotkey).toBeUndefined()
   await band.unmount()
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect((await pane.find({ key: 'resume-go-hotkey' }))?.props.hotkey).toBe('r')
   const texts = (await pane.findAll({ type: 'Text' })).map((one: any) => one.text)
@@ -805,7 +814,7 @@ test('Dismiss removes the offer without submitting anything', async ($, on) => {
 test('no offer after a build runs, progress moves, or for an unapproved plan', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(RESUMABLE) } })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:build' })
+  await $.command.run(run('dflow:build'))
   let band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await band.find({ key: 'band-resume-go' })).toBeUndefined()
   await band.unmount()
@@ -834,7 +843,7 @@ test('no offer after a build runs, progress moves, or for an unapproved plan', a
 test('drawing the band and the pane makes no file, process or usage call', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
   await $.session.start(START)
-  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  await $.command.run(run('dflow:hud', 'pane'))
   const before = w.calls.length
   const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await pane.unmount()
