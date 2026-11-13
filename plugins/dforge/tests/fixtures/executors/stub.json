@@ -3,11 +3,11 @@
   "locator": "tests/fixtures/executors/bin/stub-plugin",
   "probe": { "command": "tests/fixtures/executors/bin/stub-probe.mjs", "op": "auth" },
   "gate": "tests/fixtures/executors/bin/stub-gate",
-  "wrapper": "tests/fixtures/executors/bin/stub-wrapper",
+  "runner": "tests/fixtures/executors/bin/stub-wrapper",
   "reference": "reference/executor-lane.md",
   "session_dir": "stub-sessions",
   "session_dir_env": "DR_STUB_SESSION_DIR",
-  "surfaces": ["lane"],
+  "surfaces": ["review"],
   "blocks": { "judge": "stub-judge" },
   "reasons": {
     "not_enabled": "the stub executor is not enabled in this profile",

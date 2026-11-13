@@ -38,7 +38,8 @@ valid_entry() { # valid_entry <file> <stem>; prints the id when valid
     elif (.locator | type) != "string" then empty
     elif (.probe.command | type) != "string" then empty
     elif (.probe.op | type) != "string" then empty
-    elif (.wrapper | type) != "string" then empty
+    elif (.gate | type) != "string" then empty
+    elif (.runner | type) != "string" then empty
     elif (.session_dir | type) != "string" then empty
     elif (.surfaces | type) != "array" then empty
     else .id end' < "$file" 2>/dev/null | tr -d '\r')

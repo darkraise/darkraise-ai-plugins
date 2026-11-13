@@ -74,6 +74,7 @@ done
 write_roster() { # write_roster
   cat > "$TMP/bin/detect-stub" <<STUB
 #!$BASH_BIN
+printf '%s\n' "\$*" >> "$TMP/roster.log"
 cat <<'JSON'
 [{"id":"codex","present":true,"path":"/stub/codex","version":"codex-cli 0.153.4",
   "authed":true,"auth_status":"authenticated","batch_capable":true,"usable":true,
@@ -162,6 +163,11 @@ seat() { # seat <kind> <extra-args...>; STUB_* in the environment scripts the st
 }
 
 write_roster
+
+: > "$TMP/roster.log"; out=$(seat task --tier light --out "$TMP/o.json" --prompt "$TMP/p.txt")
+check "the runner probes only its own family" "$(cat "$TMP/roster.log")" "codex"
+out=$(STUB_MODE=hang seat task --tier light --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "a timeout names its reason" "$out" "reason=timeout"
 
 out=$(seat final --out "$TMP/o.md" --base main); rc=$?
 present "a complete run with output is OK" "$out" "status=OK"
@@ -290,7 +296,7 @@ OFF='codex-gate usable=false reason=quota review=false lane=false resets_at=2026
 calls() { cat "$TMP/calls" 2>/dev/null || echo 0; }
 
 out=$(GATE_STUB_LINE="$OFF" seat task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
-check "an unusable gate prints the unusable line" "$out" "codex-judge none/none status=FAILED exit=0 out=$TMP/o.json evidence=none"
+check "an unusable gate prints the unusable line" "$out" "codex-judge none/none status=FAILED exit=0 out=$TMP/o.json evidence=none reason=gate"
 check "an unusable gate exits 1" "$rc" "1"
 check "an unusable gate runs no codex" "$(calls)" "0"
 present "the runner names the gate's reason" "$(cat "$TMP/err")" "run-codex-review: codex is off for this session (quota)"
@@ -318,7 +324,7 @@ present "an untrusted review surface still runs: the runner reads usable only" "
 SFILE="$DR_CODEX_SESSION_DIR/codex-review-test.json"
 open_session() {
   mkdir -p "$DR_CODEX_SESSION_DIR"
-  printf '{"session_id":"codex-review-test","usable":true,"review":true,"lane":true,"reason":"ok","plugin_version":"1.0.3"}\n' > "$SFILE"
+  printf '{"session_id":"codex-review-test","usable":true,"review":true,"reason":"ok","plugin_version":"1.0.3"}\n' > "$SFILE"
 }
 open_session
 out=$(STUB_MODE=quota seat task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
@@ -326,7 +332,7 @@ present "a quota error is FAILED on the model that ran" "$out" "codex-judge gpt-
 check "a quota error exits 1" "$rc" "1"
 check "a quota error is never a refusal: no second seat" "$(calls)" "1"
 check "a quota error turns Codex off for the session" \
-  "$(jq -r '[.usable, .review, .lane, .reason] | map(tostring) | join("/")' "$SFILE" | tr -d '\r')" "false/false/false/quota"
+  "$(jq -r '[.usable, .review, .reason] | map(tostring) | join("/")' "$SFILE" | tr -d '\r')" "false/false/quota"
 check "the marked-off file keeps the plugin version" "$(jq -r '.plugin_version' "$SFILE" | tr -d '\r')" "1.0.3"
 
 open_session
