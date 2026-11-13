@@ -42,7 +42,8 @@ bash "<plugin-root>/scripts/run-review-panel" --kind task|plan|final \
   reason=<r>`: `<r>` is the gate's reason, `untrusted` when the gate printed
   `usable=true review=false`, or `no-session-id` when
   `CLAUDE_CODE_SESSION_ID` is unset, since a gate stores its answer per
-  session.
+  session. Each gate's stderr is kept in `<out-dir>/<id>.gate.log`, so a
+  gate that died (`reason=gate`) still names its cause.
 - Each open family's runner (`run-codex-review.sh`, `run-agy-review.sh`)
   starts in the background, in its own process group where `setsid` exists,
   with its stderr in `<out-dir>/<id>.stderr` and its list in

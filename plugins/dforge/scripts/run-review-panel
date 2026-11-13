@@ -11,6 +11,8 @@
 #          --out-dir DIR (--prompt FILE | --base SHA)
 #   --tier is required for task and ignored for plan and final, which take
 #   the heavy rows; --prompt goes with task and plan, --base with final.
+#   Each gate's stderr goes to <out-dir>/<id>.gate.log, each runner's to
+#   <out-dir>/<id>.stderr.
 # Output: one `<id>-judge ...` line per family in ranked order, then
 #   `panel tier=<t> lists=<n>`, n counting OK and FALLBACK lines.
 # Env seams: PANEL_<ID>_GATE, PANEL_<ID>_RUNNER, PANEL_LADDER, and
@@ -96,7 +98,7 @@ for id in $ids; do
     gate=$(bash "$HERE/executors" path "$id" gate) || gate=""
   fi
   line=""
-  [ -n "$gate" ] && line=$(bash "$gate" 2>/dev/null | tail -1 | tr -d '\r')
+  [ -n "$gate" ] && line=$(bash "$gate" 2> "$out_dir/$id.gate.log" | tail -1 | tr -d '\r')
   if [[ " $line " == *" review=true "* ]]; then
     open_ids+=("$id")
     block=$(bash "$HERE/executors" get "$id" blocks.judge 2>/dev/null) || block="$id-judge"

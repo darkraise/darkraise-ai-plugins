@@ -68,6 +68,10 @@ check "with both skipped the panel still exits 0" "$rc" "0"
 CLAUDE_CODE_SESSION_ID= AGY_GATE_LINE='agy-gate usable=true reason=ok review=false resets_at=- claude=on claude_resets_at=- source=probe' \
   panel --kind task --tier light --prompt "$TMP/prompt.md"
 check "no session id is named as the reason" "$(head -1 <<<"$out" | grep -o 'reason=.*')" "reason=no-session-id"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "agy-gate: jq is required" >&2' 'exit 2' > "$TMP/dead-gate"
+PANEL_AGY_GATE="$TMP/dead-gate" panel --kind task --tier light --prompt "$TMP/prompt.md"
+check "a gate that dies skips its family as gate" "$(head -1 <<<"$out")" "agy-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=gate"
+check "a gate's stderr has its own file" "$(cat "$TMP/out/agy.gate.log" 2>/dev/null)" "agy-gate: jq is required"
 
 panel --kind final --tier heavy --base HEAD
 check "a final panel writes one list per reviewer" "$(ls "$TMP/out" | grep -c '\.md$')" "2"
