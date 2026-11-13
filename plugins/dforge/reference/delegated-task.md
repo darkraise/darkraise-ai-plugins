@@ -709,7 +709,7 @@ command in the plan header: start `rereview --covered` as a background
 command and end the turn.
 
 **After each round,** append to the ledger:
-`Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new> | HANDBACK to <agent>)`
+`Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new>)`
 
 Never fix a dispatched implementer's findings yourself in the controller
 session — your context stays clean for coordination, and controller fixes skip
