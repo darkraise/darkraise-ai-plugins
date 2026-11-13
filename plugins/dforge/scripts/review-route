@@ -307,11 +307,7 @@ case "$1" in
     simple=1 residual=0 preflight=0
     for kind in ${kinds//,/ }; do
       case $kind in
-        # executor-empty-diff is the neutral kind. codex-empty-diff is its
-        # earlier name and stays accepted, but it is not canonicalised: the
-        # printf below echoes $kinds, so rewriting it here would change an
-        # existing caller's output.
-        cannot-verify|executor-empty-diff|codex-empty-diff) ;;
+        cannot-verify) ;;
         preflight) simple=0 preflight=1 ;;
         final-residual) simple=0 residual=1 ;;
         plan-conflict|breaker|blocked-plan|acceptance-ambiguous) simple=0 ;;
@@ -355,7 +351,7 @@ case "$1" in
   *) usage ;;
 esac
 
-max_total=-1 max_risk=-1 executor=0
+max_total=-1 max_risk=-1
 for id in "$@"; do
   [[ "$id" =~ ^([0-9]+)([A-Z]?)$ ]] || die "not a task id: $id"
   n=${BASH_REMATCH[1]} part=${BASH_REMATCH[2]}
@@ -364,11 +360,10 @@ for id in "$@"; do
     text=$(plan_part_text "$part" <<<"$text")
     [ -n "$text" ] || die "no part $part in Task $n"
   fi
-  [ -z "$(plan_lines Executor <<<"$text")" ] || executor=1
   evs=$(plan_eval_lines <<<"$text")
   if [ -z "$evs" ] && [ $# -eq 1 ]; then
     # An unscored task has no band to read, so it takes the strongest judge
-    # alone, whatever the Codex gate or an Executor line says.
+    # alone, whatever the Codex gate says.
     printf 'review-seat task=%s primary=%s fallback=- review=task reason=unscored\n' "$id" "$OPUS"
     exit 0
   fi
@@ -389,15 +384,10 @@ band() { # band <total> - the Claude judge for a score band
   fi
 }
 
-# Executor first: a task Codex implemented is never reviewed by Codex, whatever
-# its risk. Risk 3 (security, data loss, migration, concurrency) takes Opus
-# whatever its total; every other task takes its band. No executor's lane gate
-# admits risk 3 (Codex's stops at 1, agy's at 2), so the executor risk-3 row is a guard.
-if [ "$executor" -eq 1 ] && [ "$max_risk" -ge 3 ]; then
-  primary=$OPUS fallback=- reason=executor
-elif [ "$executor" -eq 1 ]; then
-  primary=$(band "$max_total") fallback=- reason=executor
-elif ! executor_session_on codex review; then
+# Risk 3 (security, data loss, migration, concurrency) takes Opus whatever its
+# total; every other task takes its band. An **Executor:** line changes nothing:
+# the session implements every task.
+if ! executor_session_on codex review; then
   # Codex is off for this session, so the Codex rows name their Claude seat
   # directly, and there is nothing left to fall back to. Risk 3 stays with Opus.
   if [ "$max_risk" -ge 3 ]; then primary=$OPUS; else primary=$(band "$max_total"); fi

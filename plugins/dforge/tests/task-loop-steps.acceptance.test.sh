@@ -420,11 +420,8 @@ a7() {
   route_primary() { (cd "$R" && bash "$ROUTE" docs/plan.md --ruling "$@" 2>&1) | sed -n 's/.*primary=\([^ ]*\).*/\1/p'; }
   local SON=dforge:judge-sonnet-high OPU=dforge:judge-opus
   check "A7: cannot-verify, a risk-1 task" "$(route_primary cannot-verify 1)" "$SON"
-  check "A7: executor-empty-diff, a risk-1 task" "$(route_primary executor-empty-diff 1)" "$SON"
-  check "A7: both Sonnet kinds, a risk-1 task" "$(route_primary cannot-verify,executor-empty-diff 1)" "$SON"
   check "A7: cannot-verify over two risk-below-3 tasks" "$(route_primary cannot-verify 1 3)" "$SON"
   check "A7: cannot-verify, a risk-3 task" "$(route_primary cannot-verify 2)" "$OPU"
-  check "A7: executor-empty-diff, a risk-3 task" "$(route_primary executor-empty-diff 2)" "$OPU"
   check "A7: cannot-verify over a risk-1 and a risk-3 task" "$(route_primary cannot-verify 1 2)" "$OPU"
   local kind
   for kind in preflight plan-conflict breaker blocked-plan final-residual acceptance-ambiguous; do
@@ -432,7 +429,6 @@ a7() {
   done
   check "A7: a mixed list, Sonnet kind first" "$(route_primary cannot-verify,breaker 1)" "$OPU"
   check "A7: a mixed list, Opus kind first" "$(route_primary breaker,cannot-verify 1)" "$OPU"
-  check "A7: a mixed list of three" "$(route_primary cannot-verify,executor-empty-diff,preflight 1)" "$OPU"
 }
 
 # --- A8 ----------------------------------------------------------------------

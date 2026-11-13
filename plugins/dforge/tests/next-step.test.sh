@@ -172,8 +172,7 @@ ledger 'Task 1: complete (commits a..b, review clean)' \
 run "$REPO" "$PLAN_REL"
 check "thread pending: exits 0" "$status" "0"
 has "thread pending: still prints the block" "$out" "**Next:** Resume at Task 2 (Second thing)."
-has "thread pending: warns on stderr" "$(cat "$TMP/stderr")" "Task 2 is assigned with its thread pending"
-has "thread pending: names handoff step 0" "$(cat "$TMP/stderr")" "dforge:handoff step 0"
+lacks "thread pending: no warning names the pending thread" "$(cat "$TMP/stderr")" "thread pending"
 ledger 'Task 1: complete (commits a..b, review clean)' \
        'Task 2: implementer dforge:impl-sonnet-low (assigned; base bbbbbbb)'
 run "$REPO" "$PLAN_REL"

@@ -17,7 +17,7 @@
 # assigned line) unless --reset is given. --inline starts the session's own
 # review loop for a task it implements: step state and the ledger's identity
 # line, but no dispatch file and no task line, since the session writes its own
-# `implementer inline` assigned line. An executor task never takes it.
+# `implementer inline` assigned line.
 # Exit: 0 ok; 2 usage, or any subcommand on a Host: codex plan; 3 no such task;
 # 4 an amendment does not apply, hold was refused because review-route reviews
 # the task alone, or review --group was given a task with no awaiting group
@@ -729,7 +729,7 @@ group_round_tasks() {
 }
 
 do_start() {
-  local base base7 out rc n a agent="" best=-1 rank unknown=0 exec_id="" suffix=")" label titles kept=0
+  local base base7 out rc n a agent="" best=-1 rank unknown=0 suffix=")" label titles kept=0
   local template="$plugin_root/skills/subagent-driven-development/references/implementer-prompt.md"
   local dispatch="$ws/task-$first-dispatch.md" budget="" workfrom scene
 
@@ -769,15 +769,11 @@ do_start() {
     fi
   done
   [ "$unknown" -eq 0 ] || agent=""
-  if [ ${#ids[@]} -eq 1 ]; then
-    exec_id=$(plan_executors "$src" | awk -F'\t' -v n="$first" '$1 == n { print $2 }' | tr -d '\r')
-  fi
-  [ "$inline" -eq 0 ] || [ -z "$exec_id" ] || usage
 
   [ -z "$wave" ] || suffix="; wave $wave)"
   if [ "$inline" -eq 1 ]; then
     ledger_init
-  elif [ -n "$agent" ] && [ -z "$exec_id" ] && [ "$kept" -eq 0 ]; then
+  elif [ -n "$agent" ] && [ "$kept" -eq 0 ]; then
     ledger_init
     for n in "${ids[@]}"; do
       printf 'Task %s: implementer %s (assigned; base %s%s\n' "$n" "$agent" "$base7" "$suffix" >> "$ledger"
@@ -798,7 +794,7 @@ do_start() {
     fi
   fi
 
-  if [ -z "$exec_id" ] && [ "$inline" -eq 0 ]; then
+  if [ "$inline" -eq 0 ]; then
     if [ ${#ids[@]} -eq 1 ]; then
       label="Task $first: $(title_of "$first")"
     else
@@ -822,13 +818,10 @@ do_start() {
   printf 'task %s: briefed %s, base %s' "$idlist" "$brief" "$base7"
   if [ "$kept" -eq 1 ]; then printf '; state kept, no assigned line written (--reset discards the state)\n'
   elif [ "$inline" -eq 1 ]; then printf '; inline, no dispatch file written\n'
-  elif [ -n "$exec_id" ]; then printf '; executor task, no dispatch file written\n'
   elif [ -n "$agent" ]; then printf '; assigned %s\n' "$agent"
   else printf '; no assigned line written\n'; fi
   if [ "$inline" -eq 1 ]; then
     printf 'seat: inline\n'
-  elif [ -n "$exec_id" ]; then
-    printf 'executor %s: follow executor-lane.md §Dispatch\n' "$exec_id"
   elif [ -n "$agent" ]; then
     printf 'seat: dforge:%s prompt: %s\n' "$agent" "$dispatch"
   else

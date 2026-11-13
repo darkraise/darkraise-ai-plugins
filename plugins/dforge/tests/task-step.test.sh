@@ -192,13 +192,9 @@ check "start: a wave reports inside its worktree" \
   "$(grep -c 'Write your full report to task-2-report.md in the directory sdd-workspace prints in your worktree (see the Parallel workspace section):' "$WS/task-2-dispatch.md")" "1"
 check "start: a wave dispatch names no session workspace report path" "$(grep -c "$WS/task-2-report.md" "$WS/task-2-dispatch.md")" "0"
 
-# start: an executor task writes no dispatch file and no assigned line.
-before=$(wc -l < "$LEDGER")
-step start docs/plan.md 3
-check "start: executor line" "$(grep '^executor' <<<"$out")" "executor codex: follow executor-lane.md §Dispatch"
-check "start: no dispatch file for an executor task" "$([ -e "$WS/task-3-dispatch.md" ] && echo yes || echo no)" "no"
-check "start: no assigned line for an executor task" "$(wc -l < "$LEDGER" | tr -d ' ')" "$(echo "$before" | tr -d ' ')"
-check "start: an executor task still records its state" "$([ -f "$WS/task-3-step.json" ] && echo yes || echo no)" "yes"
+step start docs/plan.md 3 --inline
+check "an Executor task takes --inline" "$rc" "0"
+check "an Executor task names no executor" "$(grep -c -i 'executor' <<<"$out")" "0"
 
 # start: a task without an Implementer line is scored at dispatch.
 before=$(wc -l < "$LEDGER")

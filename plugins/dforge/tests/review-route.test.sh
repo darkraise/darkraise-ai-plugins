@@ -157,12 +157,13 @@ route --task 3
 check "total 4 at risk 1: light Codex, Sonnet fallback" "$out" "review-seat task=3 primary=codex:light fallback=dforge:judge-sonnet-high review=group reason=band"
 route --task 4
 check "risk 2 takes its band: light Codex, Sonnet fallback" "$out" "review-seat task=4 primary=codex:light fallback=dforge:judge-sonnet-high review=task reason=band"
-route --task 5
-check "an Executor task is reviewed by its band judge, never Codex" "$out" "review-seat task=5 primary=dforge:judge-sonnet-high fallback=- review=group reason=executor"
-route --task 6
-check "an Executor task at risk 2 takes its band" "$out" "review-seat task=6 primary=dforge:judge-sonnet-high fallback=- review=task reason=executor"
-route --task 11
-check "an Executor task at risk 3 goes to Opus alone" "$out" "review-seat task=11 primary=dforge:judge-opus fallback=- review=task reason=executor"
+sed '/\*\*Executor:\*\*/d' "$TMP/plan.md" > "$TMP/no-executor.md"
+for id in 5 6 11; do
+  check "an Executor line does not route Task $id" \
+    "$(bash "$ROUTE" "$TMP/plan.md" --task "$id" 2>&1 | sed 's/^review-seat [^ ]* //')" \
+    "$(bash "$ROUTE" "$TMP/no-executor.md" --task "$id" 2>&1 | sed 's/^review-seat [^ ]* //')"
+done
+check "executor-empty-diff is no ruling kind" "$(bash "$ROUTE" "$TMP/round.md" --ruling executor-empty-diff 1 >/dev/null 2>&1; echo $?)" "2"
 route --task 7A
 check "a part routes on its own Evaluation" "$out" "review-seat task=7A primary=codex:light fallback=dforge:judge-sonnet-high review=group reason=band"
 route --task 7B
@@ -180,8 +181,6 @@ route --task 1 2
 check "a batch takes its highest total" "$out" "review-seat task=1,2 primary=codex:light fallback=dforge:judge-sonnet-high reason=band"
 route --task 1 12
 check "a batch crossing into the Opus fallback band" "$out" "review-seat task=1,12 primary=codex:light fallback=dforge:judge-opus reason=band"
-route --task 1 5
-check "one Executor task makes the whole batch Claude-reviewed" "$out" "review-seat task=1,5 primary=dforge:judge-sonnet-high fallback=- reason=executor"
 
 rround "$TMP/round.md" 1
 check "a Claude plan's round 1 is Codex with an Opus fallback, cap 2 whatever its totals" "$out" "review-seat plan-round=1 primary=codex:plan fallback=dforge:judge-opus reason=round cap=2"
@@ -259,8 +258,8 @@ check "standard with Codex off: round 1 goes to Opus alone, cap 1" "$rc:$out" "0
 review_surface true
 
 # --- the ruling seat -------------------------------------------------------------
-# Rulings go to Opus, except a list made only of cannot-verify and
-# executor-empty-diff kinds on no risk-3 task, which goes to Sonnet. The reason
+# Rulings go to Opus, except a list made only of cannot-verify items on no
+# risk-3 task, which goes to Sonnet. The reason
 # marks where a wrong verdict is expensive: the merge gate, a risk-3 task, and
 # an intricate plan's preflight.
 rule() { out=$(bash "$ROUTE" "$@" 2>"$TMP/err"); rc=$?; }
@@ -276,14 +275,12 @@ rule "$TMP/round.md" --ruling cannot-verify
 check "a plan-wide cannot-verify goes to Sonnet" "$out" "review-seat ruling=cannot-verify tasks=plan primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
 rule "$TMP/round.md" --ruling cannot-verify 8
 check "a cannot-verify item on a risk-3 task goes to Opus" "$out" "review-seat ruling=cannot-verify tasks=8 primary=dforge:judge-opus fallback=- reason=risk"
-rule "$TMP/round.md" --ruling cannot-verify,executor-empty-diff 1 4
-check "a list of Sonnet kinds goes to Sonnet" "$out" "review-seat ruling=cannot-verify,executor-empty-diff tasks=1,4 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
-rule "$TMP/round.md" --ruling cannot-verify,codex-empty-diff 1
-check "the legacy kind joins a Sonnet list as given" "$out" "review-seat ruling=cannot-verify,codex-empty-diff tasks=1 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
+rule "$TMP/round.md" --ruling cannot-verify 1 4
+check "a cannot-verify batch goes to Sonnet" "$out" "review-seat ruling=cannot-verify tasks=1,4 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
 rule "$TMP/round.md" --ruling cannot-verify,breaker 1
 check "a mixed list goes to Opus" "$out" "review-seat ruling=cannot-verify,breaker tasks=1 primary=dforge:judge-opus fallback=- reason=routine"
-rule "$TMP/round.md" --ruling cannot-verify,executor-empty-diff 1 8
-check "a Sonnet list with one risk-3 task goes to Opus" "$out" "review-seat ruling=cannot-verify,executor-empty-diff tasks=1,8 primary=dforge:judge-opus fallback=- reason=risk"
+rule "$TMP/round.md" --ruling cannot-verify 1 8
+check "a cannot-verify batch with one risk-3 task goes to Opus" "$out" "review-seat ruling=cannot-verify tasks=1,8 primary=dforge:judge-opus fallback=- reason=risk"
 rule "$TMP/light.md" --ruling cannot-verify,final-residual
 check "a list naming final-residual is the merge gate" "$out" "review-seat ruling=cannot-verify,final-residual tasks=plan primary=dforge:judge-opus fallback=- reason=merge-gate"
 rule "$TMP/round.md" --ruling cannot-verify,preflight
@@ -332,9 +329,9 @@ check "codex off: a split task routes on its heaviest part" "$out" "review-seat 
 route --task 1 2
 check "codex off: a batch takes its highest total" "$out" "review-seat task=1,2 primary=dforge:judge-sonnet-high fallback=- reason=codex-off"
 route --task 5
-check "codex off: an Executor task is unchanged" "$out" "review-seat task=5 primary=dforge:judge-sonnet-high fallback=- review=group reason=executor"
+check "codex off: a former Executor task takes its Claude seat" "$out" "review-seat task=5 primary=dforge:judge-sonnet-high fallback=- review=group reason=codex-off"
 route --task 6
-check "codex off: an Executor task at risk 2 is unchanged" "$out" "review-seat task=6 primary=dforge:judge-sonnet-high fallback=- review=task reason=executor"
+check "codex off: a former Executor task at risk 2 takes its Claude seat" "$out" "review-seat task=6 primary=dforge:judge-sonnet-high fallback=- review=task reason=codex-off"
 rround "$TMP/round.md" 1
 check "codex off: an intricate plan's round 1 goes to Opus alone" "$out" "review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=2"
 rround "$TMP/light.md" 1
@@ -657,47 +654,9 @@ version=$(sed -nE 's/^[[:space:]]*"version": "([^"]+)".*/\1/p' "$P/.claude-plugi
 check "the Claude manifest names a release version" "$([[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && echo yes || echo no)" "yes"
 present "the Codex manifest carries the Claude manifest's version" "$P/.codex-plugin/plugin.json" "\"version\": \"$version\""
 
-# --- ruling kinds are executor-neutral --------------------------------------
-# --ruling calls plan_shape, which scans every task's score regardless of
-# which id was requested (see "an unparseable Evaluation line fails a plan
-# round" above), so it needs the fixture without Task 9's broken line, same
-# as the plan-round checks.
-out=$(bash "$ROUTE" "$TMP/round.md" --ruling executor-empty-diff 1 2>/dev/null); rc=$?
-check "the neutral ruling kind is accepted" "$rc" "0"
-check "the neutral kind prints itself and goes to Sonnet" \
-  "$out" "review-seat ruling=executor-empty-diff tasks=1 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
-
-out=$(bash "$ROUTE" "$TMP/round.md" --ruling codex-empty-diff 1 2>/dev/null); rc=$?
-check "the legacy ruling kind is still accepted" "$rc" "0"
-check "the legacy kind prints its own spelling, not the new one" \
-  "$out" "review-seat ruling=codex-empty-diff tasks=1 primary=dforge:judge-sonnet-high fallback=- reason=simple-kind"
-
-out=$(bash "$ROUTE" "$TMP/round.md" --ruling executor-empty-diff 8 2>/dev/null)
-check "a risk-3 task still routes the neutral kind to Opus" \
-  "$out" "review-seat ruling=executor-empty-diff tasks=8 primary=dforge:judge-opus fallback=- reason=risk"
-
+# --- ruling kinds ------------------------------------------------------------
 bash "$ROUTE" "$TMP/round.md" --ruling nonsense-kind 1 >/dev/null 2>&1
 check "an unknown ruling kind is still rejected" "$?" "2"
-
-# --- a task on a second executor still gets a Claude review seat ------------
-# The spec's §12 asks for this row. Routing decides who *reviews* a task, and
-# that has never depended on which executor produced the diff, so a stub
-# Executor line must route exactly as the codex line it replaces does.
-# Tasks 5 and 6 of the fixture plan both carry `**Executor:** codex gpt-6.1-sol /
-# high` (lines 84 and 90), so this rewrites both; only Task 5 is asserted on.
-# Swapping the executor and nothing else is the sharpest possible test.
-sed 's|\*\*Executor:\*\* codex gpt-6.1-sol / high|**Executor:** stub stub-model / high|' \
-  "$TMP/plan.md" > "$TMP/stub-plan.md"
-codex_seat=$(bash "$ROUTE" "$TMP/plan.md" --task 5 2>/dev/null)
-stub_seat=$(DR_EXECUTORS_DIR="$P/tests/fixtures/executors" \
-  bash "$ROUTE" "$TMP/stub-plan.md" --task 5 2>/dev/null)
-check "a stub Executor task routes exactly as a codex one does" "$stub_seat" "$codex_seat"
-# The seat name is spelled in two pieces on purpose. validate-repository.mjs
-# resolves every `dforge:<name>` it finds against skills/ and agents/,
-# and this needle is a grep prefix matching three judges, not one agent name.
-JUDGEREF='primary=dforge:''judge-'
-check "the stub task's seat is a Claude judge" \
-  "$(grep -c "$JUDGEREF" <<<"$stub_seat")" "1"
 
 # --- the executor lane reference -------------------------------------------
 LANE="$P/reference/executor-lane.md"
@@ -748,8 +707,7 @@ check "a fenced Executor line does not claim the task is offloaded" "$out" "revi
 
 printf '# P\n\n### Task 1: Real executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n**Executor:** codex gpt-6.1-sol / medium\n' > "$TMP/ev-rexec.md"
 seat "$TMP/ev-rexec.md" 1
-check "a real Executor line still routes to a Claude judge" "$out" \
-  "review-seat task=1 primary=dforge:judge-sonnet-high fallback=- review=group reason=executor"
+check "a real Executor line no longer changes the seat" "$out" "review-seat task=1 $LIGHT"
 
 out=$(bash "$ROUTE" "$TMP/round.md" --ruling acceptance-ambiguous 2>&1); status=$?
 check "acceptance-ambiguous: exit 0" "$status" "0"
