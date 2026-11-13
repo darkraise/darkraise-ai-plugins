@@ -2,7 +2,7 @@
 # Worktree snapshots: the tracked and untracked files, the index and HEAD of a
 # checkout, recorded so a run that must not write can be proved not to have.
 
-dr_state_error() { printf 'task-state: %s\n' "$1" >&2; return 2; }
+dr_state_error() { printf 'worktree-snapshot: %s\n' "$1" >&2; return 2; }
 dr_canonical() { (cd -- "$1" && pwd -P); }
 
 dr_snapshot() {
