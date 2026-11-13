@@ -479,3 +479,16 @@ test('mode off reads no account file but still writes the context size', async (
   expect(w.calls.some(call => call.includes('.claude.json'))).toBe(false)
   expect(w.calls.some(call => call.startsWith('write /repo/.dflow/context/s1.json'))).toBe(true)
 })
+
+test('the Usage card shows the limits and cost the engine reports', async ($, on) => {
+  world(on, {
+    files: { [HUD_FILE]: JSON.stringify(HUD) },
+    usd: 4.8,
+    rateLimits: [{ kind: 'five_hour', percentUsed: 23, resetsAt: new Date(NOW + 3 * 3_600_000 + 40 * 60_000).toISOString() }],
+  })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ key: 'usage-headline' }))?.text).toBe('$4.80 · $2.40/h')
+  expect((await pane.find({ key: 'usage-row-1' }))?.text).toBe('    resets in 3h40m · on pace')
+})

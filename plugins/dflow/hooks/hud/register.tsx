@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { Hud, HudAccount, HudBreakdown, HudContext, HudEngine, HudRemote, Mode } from '../../types'
+import type { Hud, HudAccount, HudBreakdown, HudContext, HudEngine, HudRemote, HudUsage, Mode } from '../../types'
 import { accountFrom } from './account.mjs'
 import {
   RESET_INSTRUCTIONS,
@@ -17,6 +17,7 @@ import {
   nextRow,
   nowRow,
   planCard,
+  usageCard,
   workersCard,
 } from './view.mjs'
 import { isAtLeast, runsCut } from './meter.mjs'
@@ -54,6 +55,7 @@ const breakdownAtom = atom(
 )
 const accountAtom = atom({ plugin: 'dflow', key: 'account' } as const, null as HudAccount | null)
 const engineAtom = atom({ plugin: 'dflow', key: 'engine' } as const, { model: null, effort: null } as HudEngine)
+const usageAtom = atom({ plugin: 'dflow', key: 'usage' } as const, null as HudUsage | null)
 const remoteAtom = atom({ plugin: 'dflow', key: 'remote' } as const, { clients: [], setting: null } as HudRemote)
 
 // `root` is '' until looked up and null once known not to be a repository,
@@ -364,8 +366,18 @@ async function readState($: any): Promise<void> {
     return
   }
 
-  const { context } = await $.session.usage()
+  const figures = await $.session.usage()
+  const { context } = figures
   await update($, contextAtom, () => context)
+  await update($, usageAtom, () => ({
+    limits: (figures.rateLimits ?? []).map((limit: any) => {
+      const resetsAt = typeof limit.resetsAt === 'string' ? Date.parse(limit.resetsAt) : NaN
+
+      return { kind: limit.kind, percent: limit.percentUsed, resetsAt: Number.isFinite(resetsAt) ? resetsAt : null }
+    }),
+    usd: figures.cost?.usd ?? null,
+    startedAt: figures.startedAt,
+  }))
   const now = await $.clock.now()
 
   // Written when the figure changes, and every few minutes so that the CLI
@@ -586,6 +598,7 @@ export const register: Register = on => {
     const cards = [
       planCard(hud, inner),
       contextCard({ hud, context, breakdown: await read($, breakdownAtom), readings: await read($, readingsAtom), width: inner }),
+      usageCard({ usage: await read($, usageAtom), now: await $.clock.now(), width: inner }),
       checksCard(hud),
       boardCard(hud),
       workersCard(hud),

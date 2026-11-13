@@ -8,6 +8,7 @@ import { SECTIONS, boardCard, checksCard, collapsedFrom, nextRow, nowRow, planCa
 import { contextCard } from '../hooks/hud/view.mjs';
 import { accountColor, accountFrom, accountKey, billingLabel, modelName, remoteRuns } from '../hooks/hud/account.mjs';
 import { accountCard } from '../hooks/hud/view.mjs';
+import { usageCard } from '../hooks/hud/view.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const hud = root => JSON.parse(read(root, '.dflow/hud.json'));
@@ -261,4 +262,27 @@ test('the Account card lists who, which model and where', () => {
   assert.deepEqual(rowsOf(card), ['● you@example.com', '  You · Acme (admin)', '  Opus 5.5 · xhigh effort', '  Remote ● connected · phone', '  config ~/.claude']);
   const bare = accountCard({ account: accountFrom({}, '', '/home/me'), engine: { model: 'claude-opus-5-5', effort: 'xhigh' }, remote: { clients: [], setting: null } });
   assert.deepEqual(rowsOf(bare), ['  config ~/.claude']);
+});
+
+test('the Usage card draws each window with its share, reset and pace', () => {
+  const now = 1_000_000_000_000;
+  const card = usageCard({ usage: { limits: [{ kind: 'five_hour', percent: 23, resetsAt: now + 3 * H + 40 * 60_000 }, { kind: 'seven_day', percent: 61, resetsAt: now + (2 * 24 + 19) * H }, { kind: 'spend_limit', percent: 42, resetsAt: null }], usd: 4.86, startedAt: now - 2 * H }, now, width: 50 });
+  assert.deepEqual([card.key, card.color, text(card.headline)], ['usage', 'blue', '$4.86 · $2.43/h']);
+  const rows = rowsOf(card);
+  assert.match(rows[0], /^5h {2}[▰▱┊]+ {2}23%$/);
+  assert.ok(rows[0].includes('┊'));
+  assert.equal(rows[1], '    resets in 3h40m · on pace');
+  assert.match(rows[3], /^ {4}resets in 2d19h · out in \d+d\d+h$/);
+  assert.equal(rows[4], 'spend 42%');
+  assert.equal(card.rows[1].at(-1).color, 'green');
+  const young = usageCard({ usage: { limits: [{ kind: 'five_hour', percent: 2, resetsAt: now + 4 * H + 55 * 60_000 }], usd: null, startedAt: now }, now, width: 50 });
+  assert.equal(rowsOf(young)[1], '    resets in 4h55m');
+});
+
+test('the Usage card without windows shows the cost alone, and nothing without either', () => {
+  const now = 1_000_000_000_000;
+  const card = usageCard({ usage: { limits: [], usd: 4.8, startedAt: now - 2 * H }, now, width: 50 });
+  assert.deepEqual([text(card.headline), card.rows], ['$4.80 · $2.40/h', []]);
+  assert.equal(usageCard({ usage: { limits: [], usd: null, startedAt: now }, now, width: 50 }), null);
+  assert.equal(usageCard({ usage: null, now, width: 50 }), null);
 });

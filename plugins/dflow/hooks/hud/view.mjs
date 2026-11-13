@@ -2,7 +2,7 @@
 // access here: the hooks module passes plain values in.
 
 import { billingLabel, modelName, remoteRuns } from './account.mjs';
-import { kTokens, bar as meterBar, rampColor, sparkline, stackedRuns, track, trackRuns } from './meter.mjs';
+import { duration, kTokens, limitForecast, limitLabel, bar as meterBar, rampColor, sparkline, stackedRuns, track, trackRuns, windowElapsed } from './meter.mjs';
 
 export const MODES = ['band', 'pane', 'off'];
 export const RESET_FRESH_MS = 10 * 60 * 1000;
@@ -301,5 +301,42 @@ export function accountCard({ account, engine, remote }) {
   if (engine?.model) card.rows.push([{ text: `  ${modelName(engine.model)}${engine.effort ? ` · ${engine.effort} effort` : ''}` }]);
   if (remote) card.rows.push([{ text: '  Remote ' }, ...remoteRuns(remote.clients, remote.setting)]);
   card.rows.push(config);
+  return card;
+}
+
+const WINDOWED = ['five_hour', 'seven_day'];
+
+function windowRows(limit, now, width) {
+  const ramp = rampColor(limit.percent);
+  const elapsed = windowElapsed(limit.kind, limit.resetsAt, now);
+  const marks = elapsed === null ? [] : [{ at: elapsed, glyph: '┊', name: 'elapsed' }];
+  const meter = [
+    { text: `${limitLabel(limit.kind)}  ` },
+    ...trackRuns(track(limit.percent / 100, width - 10, marks), ramp, { elapsed: 'gray' }),
+    { text: `  ${Math.round(limit.percent)}%`, color: ramp },
+  ];
+  if (limit.resetsAt === null) return [meter];
+  const reset = [{ text: `    resets in ${duration(limit.resetsAt - now)}`, dim: true }];
+  const forecast = limitForecast(limit.kind, limit.percent, limit.resetsAt, now);
+  if (forecast === 'pace') reset.push({ text: ' · on pace', color: 'green' });
+  else if (typeof forecast === 'number') reset.push({ text: ` · out in ${duration(forecast)}`, color: '#ff8700' });
+  return [meter, reset];
+}
+
+// The rate-limit windows with how far through each one the session is (`┊`),
+// and the session's cost.
+export function usageCard({ usage, now, width }) {
+  if (!usage || (!usage.limits.length && usage.usd === null)) return null;
+  const card = { key: 'usage', title: 'Usage', color: 'blue', headline: [], rows: [] };
+  if (usage.usd !== null) {
+    const hours = (now - usage.startedAt) / 3_600_000;
+    const rate = hours >= 1 / 60 ? ` · $${(usage.usd / hours).toFixed(2)}/h` : '';
+    card.headline = [{ text: `$${usage.usd.toFixed(2)}${rate}`, dim: true }];
+  }
+  const ordered = [...WINDOWED.flatMap(kind => usage.limits.filter(limit => limit.kind === kind)), ...usage.limits.filter(limit => !WINDOWED.includes(limit.kind))];
+  for (const limit of ordered) {
+    if (WINDOWED.includes(limit.kind)) card.rows.push(...windowRows(limit, now, width));
+    else card.rows.push([{ text: `${limitLabel(limit.kind)} ${Math.round(limit.percent)}%`, color: rampColor(limit.percent) }]);
+  }
   return card;
 }

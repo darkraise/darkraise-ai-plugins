@@ -47,6 +47,12 @@ export type HudEngine = { model: string | null; effort: string | null }
 
 export type HudRemote = { clients: { id: string; surface: string }[]; setting: string | null }
 
+export type HudUsage = {
+  limits: { kind: string; percent: number; resetsAt: number | null }[]
+  usd: number | null
+  startedAt: number
+}
+
 export type HudBreakdown = {
   rows: { name: string; tokens: number }[]
   compactAt: number | null
@@ -65,6 +71,7 @@ declare module 'claude-code' {
       account: HudAccount | null
       engine: HudEngine
       remote: HudRemote
+      usage: HudUsage | null
     }
   }
 }
