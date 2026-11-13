@@ -18,6 +18,8 @@
 - **Cockpit features (A35):** asked whether to leave out the `/context` breakdown, the settings view and `sections` setting, Discord notifications and the resumable-work card; owner: "Add context breakdown, section settings and resumable card". The Context card gains the breakdown; a Sections view and `/dflow:hud sections` set which cards show and in what order; a resumable-work card offers to resume an unfinished plan. Discord notifications and the rest of the cockpit's settings view stay out.
 - **Spec review (2026-11-13):** owner chose "Approve and run unattended". The working tree held uncommitted dflow changes in 30 files, including the HUD's per-session context file and session-tagged reset flag that this design keeps; the owner chose to work in place on a new branch with them present.
 
+- **Planning rulings (2026-11-13, auto run):** the last shown card cannot be hidden in the Sections view, so the stored list is never empty and "with every card hidden" (Sections) cannot occur; a context reading with no `resetAt` reads `<tokens> of <window>` with no reset mark on the card, the dense line and the band; the band shrinks in six tiers in the order the band section lists.
+
 Early CI: none
 
 Finish: merge
