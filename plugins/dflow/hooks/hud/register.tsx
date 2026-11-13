@@ -15,6 +15,10 @@ const PANE = 'dflow-hud'
 const COMMAND = 'dflow:hud'
 const POLL_MS = 2000
 const REWRITE_MS = 5 * 60 * 1000
+const PANE_COLUMNS = 56
+const BUTTON_MAIN = 'permission'
+const BUTTON_REST = 'inactive'
+const UNDERLINE_SINCE = '2.1.295'
 
 // Bump the tag when Hud's fields change: it declines what an earlier version
 // stored, which outlives a reload.
@@ -35,6 +39,80 @@ let lastTokens = -1
 let lastWrite = 0
 let sessionId = ''
 let timer: { cancel: () => void } | null = null
+// Read on a session switch, since a render hook makes no engine call.
+let canUnderline = false
+
+// Whether a release (`2.1.295`) is at least `least`, compared part by part;
+// an unreadable one is not.
+function isAtLeast(base: string | undefined, least: string): boolean {
+  const parts = (text: string) => text.split('-')[0]!.split('.').map(Number)
+  if (base === undefined || !/^\d+\.\d+\.\d+/.test(base)) return false
+  const have = parts(base)
+  const want = parts(least)
+  for (let i = 0; i < want.length; i++) {
+    if ((have[i] ?? 0) !== want[i]) return (have[i] ?? 0) > want[i]!
+  }
+  return true
+}
+
+type ButtonLook = { hotkey?: string; isMain?: boolean; isOff?: boolean; isCompact?: boolean }
+
+// A button in a rounded box: gray at rest, the accent on the main one, dim
+// when it reads as off. The hotkey's letter is underlined in the label; a
+// hidden twin holds the hotkey, since a Button with one draws "m: " before
+// its label. Claude Code before 2.1.295 draws that prefix instead.
+function drawButton(table: any, key: string, label: string, onPress: () => unknown, look: ButtonLook = {}) {
+  const { Box, Button, Text } = table
+  const at = canUnderline && look.hotkey !== undefined ? label.toLowerCase().indexOf(look.hotkey) : -1
+  const button =
+    at < 0 ? (
+      <Button key={key} label={label} hotkey={canUnderline ? undefined : look.hotkey} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress} />
+    ) : (
+      <Button key={key} label={label} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress}>
+        {label.slice(0, at)}
+        <Text underline>{label.slice(at, at + 1)}</Text>
+        {label.slice(at + 1)}
+      </Button>
+    )
+  const twin = at >= 0 && (
+    <Box key={`${key}-hotkey-box`} display="none">
+      <Button key={`${key}-hotkey`} label={label} hotkey={look.hotkey} plain onPress={onPress} />
+    </Box>
+  )
+
+  if (look.isCompact) {
+    return (
+      <Box key={`${key}-box`} flexDirection="row">
+        {button}
+        {twin}
+      </Box>
+    )
+  }
+
+  return (
+    <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
+      {button}
+      {twin}
+    </Box>
+  )
+}
+
+async function readVersion($: any): Promise<void> {
+  try {
+    const { base } = await $.session.version()
+    canUnderline = isAtLeast(base, UNDERLINE_SINCE)
+  } catch {
+    canUnderline = false
+  }
+}
+
+async function isPaneUp($: any): Promise<boolean> {
+  return (await $.ui.panes()).some((pane: any) => pane.id === PANE && pane.isPlaced)
+}
+
+async function openPane($: any): Promise<void> {
+  await $.ui.open({ id: PANE, title: 'dflow', columns: PANE_COLUMNS })
+}
 
 async function locate($: any): Promise<string | null> {
   const found = await $.process.run(['git', 'rev-parse', '--show-toplevel'], {
@@ -73,6 +151,11 @@ async function readState($: any): Promise<void> {
     lastTokens = -1
     root = ''
     await loadMode($)
+    await readVersion($)
+
+    if ((await read($, modeAtom)) === 'pane' && !(await isPaneUp($))) {
+      await openPane($)
+    }
   }
 
   if (root === '') {
@@ -180,7 +263,7 @@ async function setMode($: any, mode: Mode): Promise<void> {
   await $.store.set('mode', mode)
 
   if (mode === 'pane') {
-    await $.ui.open({ id: PANE, title: 'dflow' })
+    await openPane($)
   } else {
     await $.ui.close({ id: PANE })
   }
@@ -191,17 +274,13 @@ async function setMode($: any, mode: Mode): Promise<void> {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
+    sessionId = ''
     await refresh($)
 
-    if (timer === null) {
-      timer = $.clock.every(POLL_MS, () => {
-        void refresh($)
-      })
-    }
-
-    if ((await read($, modeAtom)) === 'pane') {
-      void $.ui.open({ id: PANE, title: 'dflow' })
-    }
+    timer?.cancel()
+    timer = $.clock.every(POLL_MS, () => {
+      void refresh($)
+    })
 
     return started
   })
@@ -222,7 +301,17 @@ export const register: Register = on => {
   // cannot hold a colon. Answering it here spends no model turn; if this hook
   // fails, the skill runs and prints the status as text.
   on('command.run', { command: COMMAND }, async ($, e) => {
-    const mode = nextMode(await read($, modeAtom), (e.args ?? '').trim())
+    const args = (e.args ?? '').trim()
+    const current = await read($, modeAtom)
+
+    // A pane the person closed is still the chosen mode: bring it back.
+    if (args === '' && current === 'pane' && !(await isPaneUp($))) {
+      await setMode($, 'pane')
+
+      return { text: 'dflow HUD: pane' }
+    }
+
+    const mode = nextMode(current, args)
 
     if (mode === null) {
       return { text: 'Usage: /dflow:hud [band|pane|off]' }
@@ -252,7 +341,8 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
+    const table = $.ui.resolve(e)
+    const { Box, Text } = table
     const hud = await read($, hudAtom)
 
     if (hud === null) {
@@ -268,6 +358,9 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
+        <Box flexDirection="row" columnGap={1}>
+          {drawButton(table, 'pane-minimize', '▁ Minimize', () => setMode($, 'band'), { hotkey: 'm' })}
+        </Box>
         {rows.map(([label, text, isDim]: [string, string, boolean]) => (
           <Text dimColor={isDim}>
             {label ? `${label.padEnd(8)} ` : ''}
