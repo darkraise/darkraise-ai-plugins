@@ -71,8 +71,11 @@ alone: say so aloud, with each reviewer's reason.
 
 The non-`OK` reason tokens are `gate`, `refused`, `quota`, `quota-stderr`,
 `timeout`, `wrote`, `schema` and `error`. A `wrote` run changed the worktree,
-`HEAD` or the stash list: it never counts as a list, the changed paths are in
-`<out>.wrote`, and the session restores those paths before any commit.
+`HEAD`, the stash list, the git config or a hook: it never counts as a list,
+and what changed is named in `<out>.wrote`. Before any commit the session
+undoes those changes in the panel's `--cwd`; a final round's `--cwd` is a
+throwaway worktree, so it is removed instead, and nothing Acceptance QA
+committed or wrote in the checkout is ever restored.
 
 ## Task review seats
 
@@ -130,12 +133,19 @@ every seat that returned a list.
 At depth full only, the final review runs the panel once:
 
 ```bash
+git worktree add --detach <workspace>/final-review-panel-tree <sha>
 bash "<plugin-root>/scripts/run-review-panel" --kind final --tier heavy \
-  --cwd <worktree-root> --out-dir <workspace>/final-review-panel \
-  --base <base-branch>
+  --cwd <workspace>/final-review-panel-tree \
+  --out-dir <workspace>/final-review-panel --base <base-branch>
 ```
 
-`<base-branch>` is the branch this one forked from. Each runner composes its
+`<sha>` is the review's HEAD ([final-review.md](final-review.md) says which
+SHA that is), and `<base-branch>` is the branch this one forked from.
+Acceptance QA commits in the checkout while the round runs, so the panel reads
+a detached worktree of its own: there `HEAD` is `<sha>`, QA's commits stay out
+of the diff, and they never trip the agy write check. Remove the worktree with
+`git worktree remove --force` once the final review's step 3 has read the
+lists. Each runner composes its
 own prompt, `criteria/codex-final-review.md` followed by
 `git diff <base>...HEAD`, and returns a markdown findings list:
 `<out-dir>/codex.md`, and `<out-dir>/agy.md` from the `review` field of

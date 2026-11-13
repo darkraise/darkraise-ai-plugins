@@ -295,7 +295,12 @@ your own: QA commits on this branch.
    `external round skipped (depth <d>)` in one line and go to step 3 with the
    Claude review alone. At depth full, run the reviewer panel as
    [external-review.md](external-review.md) §Final-review external round
-   says. Each reviewer's status line reports one of five outcomes: `OK` and
+   says, with `--cwd` set to a temporary detached worktree at HEAD
+   (`git worktree add --detach <workspace>/final-review-panel-tree <sha>`), as
+   step 1 does for the integration check: QA commits in the checkout while
+   the panel reads, and the agy runner fails any run whose worktree or `HEAD`
+   moved. Remove the worktree with `git worktree remove --force` once step 3
+   has read the lists. Each reviewer's status line reports one of five outcomes: `OK` and
    `FALLBACK` produce a list for step 3, and `FALLBACK` also means the
    preferred row refused the run, so say so. `SKIPPED`, `TIMEOUT` and
    `FAILED` produce nothing from that reviewer: say which, with its reason.
