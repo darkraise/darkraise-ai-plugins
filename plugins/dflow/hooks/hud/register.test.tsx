@@ -366,6 +366,23 @@ test('outside a dflow checkout the pane says how to start', async ($, on) => {
   expect(texts).toEqual(['dflow has no state in this repository yet.', 'Run /dflow:init, then /dflow:plan.'])
 })
 
+test('before hud.json exists the pane says how to start and the band draws nothing', async ($, on) => {
+  world(on, { files: {} })
+  on('ui.render', ($: any, e: any) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine</Text>
+  })
+  await $.session.start(START)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await band.findAll({ type: 'Text' })).map((one: any) => one.text)).toEqual(['engine'])
+  await band.unmount()
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const texts = (await pane.findAll({ type: 'Text' })).map((one: any) => one.text)
+  expect(texts).toEqual(['dflow has no state in this repository yet.', 'Run /dflow:init, then /dflow:plan.'])
+})
+
 test('worst-case data is cut to the pane, never wrapped', async ($, on) => {
   const long = (n: number) => 'x'.repeat(n)
   const WORST = {
