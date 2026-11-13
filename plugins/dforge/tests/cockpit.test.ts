@@ -113,7 +113,7 @@ const boxTexts = async (ui: { findAll: (query: { type: string }) => Promise<{ te
 const BAND = {
   plugin: 'dforge',
   component: 'AbovePrompt',
-  props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns: 100, scroll: { offset: 0, bodyRows: 3 }, view: {} },
+  props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 3, bodyColumns: 100, scroll: { offset: 0, bodyRows: 3 }, view: {} },
 } as const
 const HINT = {
   plugin: 'dforge',
@@ -547,7 +547,9 @@ function world(on: On, w: World) {
     })
   }
   on('http.fetch', (_$, e) => {
-    w.fetches?.push({ url: e.url, method: e.init?.method ?? 'GET', body: JSON.parse(e.init?.body ?? '{}') as Record<string, unknown> })
+    const body = e.init?.body ?? '{}'
+    if (typeof body !== 'string') throw new Error(`expected a text body for ${e.url}`)
+    w.fetches?.push({ url: e.url, method: e.init?.method ?? 'GET', body: JSON.parse(body) as Record<string, unknown> })
     return { value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }
   })
   on('ui.panes', () => ({ value: w.isPaneShut ? [] : [{ id: 'dforge', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
