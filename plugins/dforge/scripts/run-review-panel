@@ -100,10 +100,15 @@ for id in $ids; do
   line=""
   [ -n "$gate" ] && line=$(bash "$gate" 2> "$out_dir/$id.gate.log" | tail -1 | tr -d '\r')
   if [[ " $line " == *" review=true "* ]]; then
-    open_ids+=("$id")
     block=$(bash "$HERE/executors" get "$id" blocks.judge 2>/dev/null) || block="$id-judge"
     secs=$(first_secs "$block")
-    [[ $secs =~ ^[0-9]+$ ]] || die "no seconds for the $block block in $LADDER"
+    if ! [[ $secs =~ ^[0-9]+$ ]]; then
+      printf 'run-review-panel: no seconds for the %s block in %s\n' "$block" "$LADDER" > "$out_dir/$id.stderr"
+      rm -f "$out_dir/$id.$ext"
+      lines_by_id+=("$id|$id-judge none/none status=FAILED exit=0 out=- evidence=none reason=error")
+      continue
+    fi
+    open_ids+=("$id")
     case "$id" in agy) grace=70 ;; *) grace=60 ;; esac
     [ $((secs + grace)) -gt "$bound" ] && bound=$((secs + grace))
     continue

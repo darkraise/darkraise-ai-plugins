@@ -123,6 +123,13 @@ PANEL_CODEX_GATE="$TMP/codex-count-gate" PANEL_AGY_GATE="$TMP/agy-count-gate" pa
 check "one panel run reads each gate once" "$(sort "$TMP/gates.log" | uniq -c | awk '{ printf "%s=%s ", $2, $1 }')" "agy=1 codex=1 "
 check "the agy runner makes no roster probe" "$(grep -c 'detect-executors' "$P/scripts/run-agy-review.sh")" "0"
 
+printf '%s\n' '```codex-judge' 'gpt-6-astra xhigh 30' 'gpt-6.1-sol xhigh 20' '```' > "$TMP/codex-only-ladder.md"
+PANEL_LADDER="$TMP/codex-only-ladder.md" panel --kind task --tier light --prompt "$TMP/prompt.md"
+check "a family with no ladder block fails as error" "$(head -1 <<<"$out")" "agy-judge none/none status=FAILED exit=0 out=- evidence=none reason=error"
+check "and its cause is in its stderr file" "$(grep -c 'agy-judge block' "$TMP/out/agy.stderr" 2>/dev/null)" "1"
+check "and the other family still runs" "$(grep -c '^codex-judge .* status=OK ' <<<"$out")" "1"
+check "a missing ladder block is no usage error" "$rc" "0"
+
 panel --kind task --prompt "$TMP/prompt.md"
 check "a task panel without --tier is a usage error" "$rc" "2"
 
