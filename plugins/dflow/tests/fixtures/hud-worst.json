@@ -1,0 +1,366 @@
+{
+  "branch": "feature/an-eighty-character-branch-name-that-keeps-going-and-going-to-test-cut-x",
+  "next": "/dflow:build — Task 20: Ship the 🚀 launcher with é ñ ü in its name and keeps going past the edge of any pane and keeps going past the edge of a",
+  "plan": {
+    "title": "The worst-case plan with a title far too long for any card and keeps going past the edge of any pane and keeps going pas",
+    "file": "docs/dflow/plans/2026-11-12-the-worst-case-plan-with-a-very-long-file-name-indeed.md",
+    "approved": "2026-11-12",
+    "done": 19,
+    "total": 40,
+    "current": {
+      "number": 20,
+      "title": "Ship the 🚀 launcher with é ñ ü in its name and keeps going past the edge of any pane and keeps going past the edge of a",
+      "state": "wip",
+      "attempts": 3
+    },
+    "blocked": [
+      {
+        "number": 21,
+        "reason": "The upstream service refuses every request from this host because the key was rotated and keeps going past the edge of any pane and keeps going past the edge of any pane and keeps going past the edge "
+      }
+    ],
+    "tasks": [
+      {
+        "number": 1,
+        "title": "Task title number 1 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any pa",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 2,
+        "title": "Task title number 2 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any pa",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 3,
+        "title": "Task title number 3 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any pa",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 4,
+        "title": "Task title number 4 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any pa",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 5,
+        "title": "Task title number 5 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any pa",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 6,
+        "title": "Task title number 6 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any pa",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 7,
+        "title": "Task title number 7 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any pa",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 8,
+        "title": "Task title number 8 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any pa",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 9,
+        "title": "Task title number 9 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any pa",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 10,
+        "title": "Task title number 10 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 11,
+        "title": "Task title number 11 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 12,
+        "title": "Task title number 12 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 13,
+        "title": "Task title number 13 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 14,
+        "title": "Task title number 14 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 15,
+        "title": "Task title number 15 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 16,
+        "title": "Task title number 16 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 17,
+        "title": "Task title number 17 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 18,
+        "title": "Task title number 18 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 19,
+        "title": "aVeryLongUnbrokenIdentifierThatHasNoSpacesAnywhereInItAtAll_0123456789abcdef0123456",
+        "state": "done",
+        "run": "inline"
+      },
+      {
+        "number": 20,
+        "title": "Ship the 🚀 launcher with é ñ ü in its name and keeps going past the edge of any pane and keeps going past the edge of a",
+        "state": "wip",
+        "run": "inline"
+      },
+      {
+        "number": 21,
+        "title": "Task title number 21 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "blocked",
+        "run": "inline"
+      },
+      {
+        "number": 22,
+        "title": "Task title number 22 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "worker"
+      },
+      {
+        "number": 23,
+        "title": "Task title number 23 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 24,
+        "title": "Task title number 24 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 25,
+        "title": "Task title number 25 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 26,
+        "title": "Task title number 26 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 27,
+        "title": "Task title number 27 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 28,
+        "title": "Task title number 28 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 29,
+        "title": "Task title number 29 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 30,
+        "title": "Task title number 30 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 31,
+        "title": "Task title number 31 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 32,
+        "title": "Task title number 32 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 33,
+        "title": "Task title number 33 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 34,
+        "title": "Task title number 34 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 35,
+        "title": "Task title number 35 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 36,
+        "title": "Task title number 36 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 37,
+        "title": "Task title number 37 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 38,
+        "title": "Task title number 38 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 39,
+        "title": "Task title number 39 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      },
+      {
+        "number": 40,
+        "title": "Task title number 40 for the worst case and keeps going past the edge of any pane and keeps going past the edge of any p",
+        "state": "todo",
+        "run": "inline"
+      }
+    ]
+  },
+  "gates": {
+    "ok": false,
+    "stale": false,
+    "failed": [
+      "lint",
+      "unit-tests",
+      "integration-tests",
+      "e2e",
+      "typecheck"
+    ]
+  },
+  "review": {
+    "recorded": null,
+    "open": 0,
+    "blocking": 0
+  },
+  "board": {
+    "counts": {
+      "todo": 14,
+      "doing": 3,
+      "review": 2,
+      "blocked": 1,
+      "done": 19,
+      "dropped": 1
+    },
+    "row": {
+      "number": 12,
+      "state": "doing"
+    }
+  },
+  "sync": {
+    "enabled": true,
+    "queued": 3,
+    "conflict": "board row 12"
+  },
+  "context": {
+    "resetAt": 150000
+  },
+  "workers": [
+    {
+      "task": 22,
+      "path": ".dflow/workers/22",
+      "branch": "dflow/w22"
+    },
+    {
+      "task": 23,
+      "path": ".dflow/workers/23",
+      "branch": "dflow/w23"
+    },
+    {
+      "task": 24,
+      "path": ".dflow/workers/24",
+      "branch": "dflow/w24"
+    },
+    {
+      "task": 25,
+      "path": ".dflow/workers/25",
+      "branch": "dflow/w25"
+    },
+    {
+      "task": 26,
+      "path": ".dflow/workers/26",
+      "branch": "dflow/w26"
+    },
+    {
+      "task": 27,
+      "path": ".dflow/workers/27",
+      "branch": "dflow/w27"
+    },
+    {
+      "task": 28,
+      "path": ".dflow/workers/28",
+      "branch": "dflow/w28"
+    },
+    {
+      "task": 29,
+      "path": ".dflow/workers/29",
+      "branch": "dflow/w29"
+    },
+    {
+      "task": 30,
+      "path": ".dflow/workers/30",
+      "branch": "dflow/w30"
+    },
+    {
+      "task": 31,
+      "path": ".dflow/workers/31",
+      "branch": "dflow/w31"
+    },
+    {
+      "task": 32,
+      "path": ".dflow/workers/32",
+      "branch": "dflow/w32"
+    },
+    {
+      "task": 33,
+      "path": ".dflow/workers/33",
+      "branch": "dflow/w33"
+    }
+  ],
+  "checks": []
+}
