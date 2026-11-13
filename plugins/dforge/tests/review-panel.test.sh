@@ -76,6 +76,8 @@ check "a final panel never passes --tier" "$(cat "$TMP/codex.args" "$TMP/agy.arg
 AGY_STATUS=FAILED panel --kind task --tier light --prompt "$TMP/prompt.md"
 check "each runner's stderr has its own file" "$(ls "$TMP/out"/*.stderr | wc -l | tr -d ' ')" "2"
 check "a FAILED runner is not counted as a list" "$(tail -1 <<<"$out")" "panel tier=light lists=1"
+check "a FAILED runner's out file is removed" "$([ -e "$TMP/out/agy.json" ] && echo kept || echo removed)" "removed"
+check "an OK runner's list is kept" "$([ -e "$TMP/out/codex.json" ] && echo kept || echo removed)" "kept"
 
 cat > "$TMP/hang-runner" <<EOF
 #!/usr/bin/env bash

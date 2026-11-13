@@ -208,6 +208,9 @@ for i in "${!open_ids[@]}"; do
       line="$id-judge none/none status=FAILED exit=${rcs[$i]} out=$out evidence=none reason=error"
     fi
   fi
+  # A runner can leave a partial or empty out file behind, and the judges read
+  # any file that exists as that reviewer's list.
+  case "$line" in *" status=OK "*|*" status=FALLBACK "*) ;; *) rm -f "$out" ;; esac
   lines_by_id+=("$id|$line")
 done
 
