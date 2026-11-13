@@ -1,13 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { Hud, HudContext, Mode } from '../../types'
+import type { Hud, HudBreakdown, HudContext, Mode } from '../../types'
 import {
   RESET_INSTRUCTIONS,
   bandText,
   boardCard,
   checksCard,
   collapsedFrom,
+  contextCard,
   contextFile,
   isResetFor,
   nextMode,
@@ -24,6 +25,9 @@ type Card = { key: string; title: string; color: string; headline: Run[]; rows: 
 const PANE = 'dflow-hud'
 const COMMAND = 'dflow:hud'
 const POLL_MS = 2000
+// The breakdown is a local estimate, but still a walk of the transcript.
+const BREAKDOWN_EVERY = 5
+const READINGS_KEPT = 40
 const REWRITE_MS = 5 * 60 * 1000
 const PANE_COLUMNS = 56
 const BUTTON_MAIN = 'permission'
@@ -40,7 +44,12 @@ const contextAtom = atom(
   { plugin: 'dflow', key: 'context' } as const,
   null as HudContext | null,
 )
-const collapsedAtom = atom({ plugin: 'dflow', key: 'collapsed' } as any, [] as string[])
+const collapsedAtom = atom({ plugin: 'dflow', key: 'collapsed' } as const, [] as string[])
+const readingsAtom = atom({ plugin: 'dflow', key: 'readings' } as const, [] as number[])
+const breakdownAtom = atom(
+  { plugin: 'dflow', key: 'breakdown' } as const,
+  null as HudBreakdown | null,
+)
 
 // `root` is '' until looked up and null once known not to be a repository,
 // so a session started outside one does not run git on every poll.
@@ -50,6 +59,7 @@ let lastTokens = -1
 let lastWrite = 0
 let sessionId = ''
 let timer: { cancel: () => void } | null = null
+let polls = 0
 // Read on a session switch, since a render hook makes no engine call.
 let canUnderline = false
 
@@ -149,6 +159,72 @@ async function toggleCollapsed($: any, key: string): Promise<void> {
   $.ui.invalidate('ui.render')
 }
 
+async function isPaneUp($: any): Promise<boolean> {
+  return (await $.ui.panes()).some((pane: any) => pane.id === PANE && pane.isPlaced)
+}
+
+// Read only while an open Context card can show it.
+async function readBreakdown($: any): Promise<void> {
+  try {
+    if ((await read($, modeAtom)) !== 'pane' || (await read($, collapsedAtom)).includes('context') || !(await isPaneUp($))) {
+      return
+    }
+
+    const detail = (await $.session.usage({ breakdown: 'summary' })).context.breakdown
+
+    if (detail === undefined) {
+      return
+    }
+
+    const next: HudBreakdown = {
+      rows: detail.categories
+        .filter((row: any) => row.kind === 'used' && row.tokens > 0)
+        .sort((a: any, b: any) => b.tokens - a.tokens)
+        .map((row: any) => ({ name: row.name, tokens: row.tokens })),
+      compactAt: detail.isAutoCompactEnabled ? (detail.autoCompactThreshold ?? null) : null,
+      total: detail.totalTokens ?? null,
+    }
+
+    if (JSON.stringify(await read($, breakdownAtom)) !== JSON.stringify(next)) {
+      await update($, breakdownAtom, () => next)
+      $.ui.invalidate('ui.render')
+    }
+  } catch {
+    // No breakdown on this host: the card shows the totals alone.
+  }
+}
+
+async function pushReading($: any): Promise<void> {
+  const tokens = (await read($, contextAtom))?.tokens
+
+  if (typeof tokens === 'number') {
+    await update($, readingsAtom, readings => [...readings, tokens].slice(-READINGS_KEPT))
+    $.ui.invalidate('ui.render')
+  }
+}
+
+// A compaction refused because the turn had not fully ended is tried once
+// more; a second refusal tells the person what to run.
+async function compactOrSay($: any, request: { instructions?: string }, failure: string): Promise<boolean> {
+  try {
+    await $.session.compact(request)
+
+    return true
+  } catch {
+    await $.clock.sleep(2000)
+
+    try {
+      await $.session.compact(request)
+
+      return true
+    } catch {
+      $.ui.toast(failure)
+
+      return false
+    }
+  }
+}
+
 async function readVersion($: any): Promise<void> {
   try {
     const { base } = await $.session.version()
@@ -156,10 +232,6 @@ async function readVersion($: any): Promise<void> {
   } catch {
     canUnderline = false
   }
-}
-
-async function isPaneUp($: any): Promise<boolean> {
-  return (await $.ui.panes()).some((pane: any) => pane.id === PANE && pane.isPlaced)
 }
 
 async function openPane($: any): Promise<void> {
@@ -303,22 +375,9 @@ async function resetIfAsked($: any): Promise<void> {
 }
 
 async function compactAndResume($: any): Promise<void> {
-  try {
-    await $.session.compact({ instructions: RESET_INSTRUCTIONS })
-  } catch {
-    // The turn had not fully ended; one more try once it has.
-    await $.clock.sleep(2000)
-
-    try {
-      await $.session.compact({ instructions: RESET_INSTRUCTIONS })
-    } catch {
-      $.ui.toast('dflow: could not compact; run /compact, then /dflow:build')
-
-      return
-    }
+  if (await compactOrSay($, { instructions: RESET_INSTRUCTIONS }, 'dflow: could not compact; run /compact, then /dflow:build')) {
+    await $.command.run({ command: 'dflow:build' })
   }
-
-  await $.command.run({ command: 'dflow:build' })
 }
 
 async function setMode($: any, mode: Mode): Promise<void> {
@@ -327,6 +386,7 @@ async function setMode($: any, mode: Mode): Promise<void> {
 
   if (mode === 'pane') {
     await openPane($)
+    await readBreakdown($)
   } else {
     await $.ui.close({ id: PANE })
   }
@@ -341,8 +401,14 @@ export const register: Register = on => {
     await refresh($)
 
     timer?.cancel()
-    timer = $.clock.every(POLL_MS, () => {
-      void refresh($)
+    polls = 0
+    timer = $.clock.every(POLL_MS, async () => {
+      await refresh($)
+      polls += 1
+
+      if (polls % BREAKDOWN_EVERY === 0) {
+        await readBreakdown($)
+      }
     })
 
     return started
@@ -354,6 +420,7 @@ export const register: Register = on => {
     // A subagent's turn ends here too; only the main loop's end is a boundary.
     if (e.agentId === undefined) {
       await refresh($)
+      await pushReading($).catch(() => undefined)
       await resetIfAsked($).catch(() => undefined)
     }
 
@@ -419,9 +486,22 @@ export const register: Register = on => {
     }
 
     const collapsed = await read($, collapsedAtom)
-    const cards = [planCard(hud, Math.max(10, columns - 4)), checksCard(hud), boardCard(hud), workersCard(hud)].filter(
-      (card): card is Card => card !== null,
-    )
+    const inner = Math.max(10, columns - 4)
+    const context = await read($, contextAtom)
+    const cards = [
+      planCard(hud, inner),
+      contextCard({ hud, context, breakdown: await read($, breakdownAtom), readings: await read($, readingsAtom), width: inner }),
+      checksCard(hud),
+      boardCard(hud),
+      workersCard(hud),
+    ].filter((card): card is Card => card !== null)
+    const isPastReset =
+      typeof context?.tokens === 'number' && typeof hud.context?.resetAt === 'number' && context.tokens >= hud.context.resetAt
+    const compact = () =>
+      compactOrSay($, hud.plan ? { instructions: RESET_INSTRUCTIONS } : {}, 'dflow: could not compact; run /compact')
+    const extras: Record<string, unknown[]> = {
+      context: [drawButton(table, 'context-compact', '⇣ Compact', compact, { hotkey: 'c', isMain: isPastReset })],
+    }
 
     return (
       <Box flexDirection="column">
@@ -431,7 +511,9 @@ export const register: Register = on => {
         <Box key="controls" flexDirection="row" columnGap={1}>
           {drawButton(table, 'pane-minimize', '▁ Minimize', () => setMode($, 'band'), { hotkey: 'm' })}
         </Box>
-        {cards.map(card => drawCard(table, card, collapsed.includes(card.key), () => toggleCollapsed($, card.key)))}
+        {cards.map(card =>
+          drawCard(table, card, collapsed.includes(card.key), () => toggleCollapsed($, card.key), extras[card.key]),
+        )}
         <Box key="next">
           <Text wrap="truncate-end">{drawRuns(table, 'next', runsCut(nextRow(hud), columns))}</Text>
         </Box>

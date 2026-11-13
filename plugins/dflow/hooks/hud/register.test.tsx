@@ -159,7 +159,8 @@ function world(on: any, given: Partial<World> & { files: Record<string, string> 
       w.compactFailures = (w.compactFailures ?? 1) - 1
       throw new Error('busy')
     }
-    return { messages: [] }
+    // A compaction leaves at least one message, or the engine skips the hook.
+    return { messages: e.messages ?? [{ role: 'user', text: 'Summary.', toolUses: [] }] }
   })
   on('prompt.submit', (_: unknown, e: any) => {
     w.calls.push(`submit ${e.text}`)
@@ -381,4 +382,75 @@ test('worst-case data is cut to the pane, never wrapped', async ($, on) => {
     expect(cellWidth(row.text)).toBeLessThanOrEqual(36)
   }
   expect((await pane.find({ key: 'plan-headline' }))?.text).toBe('19/40 · 1 blocked')
+})
+
+const RESET = 'A dflow build is in progress'
+const BREAKDOWN_READING = {
+  categories: [['Messages', 318000], ['System tools', 41000], ['System prompt', 9000]].map(([name, tokens]) => ({ name, tokens, kind: 'used' })),
+  totalTokens: 368000,
+  isAutoCompactEnabled: true,
+  autoCompactThreshold: 967000,
+}
+
+test('Compact compacts with the reset instructions and turns to the accent past the reset point', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, tokens: 160000 })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ key: 'context-compact-box' }))?.props.borderColor).toBe('permission')
+  expect((await pane.find({ key: 'context-compact-hotkey' }))?.props.hotkey).toBe('c')
+  await pane.press({ key: 'context-compact' })
+  expect(w.calls.find(call => call.startsWith('compact'))).toContain(RESET)
+})
+
+test('Compact without a plan sends no instructions; two failures toast once', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify({ ...HUD, plan: null }) }, tokens: 90000, compactFailures: 2 })
+  await $.session.start(START)
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ key: 'context-compact-box' }))?.props.borderColor).toBe('inactive')
+  const pressing = pane.press({ key: 'context-compact' })
+  await w.clock!.advance(0)
+  await w.clock!.advance(2000)
+  await pressing
+  expect(w.calls.filter(call => call.startsWith('compact'))).toEqual(['compact ', 'compact '])
+  expect(w.calls.filter(call => call.startsWith('toast'))).toEqual(['toast dflow: could not compact; run /compact'])
+})
+
+test('in mode off a fresh reset flag still compacts and resumes the build', async ($, on) => {
+  const w = world(on, {
+    files: {
+      [HUD_FILE]: JSON.stringify(HUD),
+      '/repo/.dflow/reset.json': JSON.stringify({ plan: 'meter', session: 's1', at: '2026-11-12T11:59:30.000Z' }),
+    },
+  })
+  w.stored.mode = 'off'
+  await $.session.start(START)
+  await $.turn.complete({ ...TURN, turnId: 't1' })
+  await w.clock!.advance(300)
+  await w.clock!.advance(0)
+  const compact = w.calls.findIndex(call => call.startsWith('compact') && call.includes(RESET))
+  expect(compact).toBeGreaterThanOrEqual(0)
+  expect(w.calls.indexOf('command /dflow:build')).toBeGreaterThan(compact)
+})
+
+test('the breakdown is read for an open Context card only, and the trend follows turns', async ($, on) => {
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, breakdown: BREAKDOWN_READING })
+  await $.session.start(START)
+  await w.clock!.advance(10000)
+  expect(w.calls).not.toContain('usage breakdown')
+  await $.command.run({ command: 'dflow:hud', args: 'pane' })
+  expect(w.calls).toContain('usage breakdown')
+  w.tokens = 100000
+  await $.turn.complete({ ...TURN, turnId: 't1' })
+  w.tokens = 118000
+  await $.turn.complete({ ...TURN, turnId: 't2' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.find({ type: 'Text', text: /^trend/ }))?.text).toBe('trend ▁█ +18k')
+  expect((await pane.find({ type: 'Text', text: /compacts 967k$/ }))).toBeDefined()
+  await pane.press({ key: 'context-title' })
+  const before = w.calls.filter(call => call === 'usage breakdown').length
+  await w.clock!.advance(10000)
+  expect(w.calls.filter(call => call === 'usage breakdown').length).toBe(before)
+  expect(await pane.find({ key: 'context-compact' })).toBeDefined()
 })

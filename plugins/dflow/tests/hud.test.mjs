@@ -5,6 +5,7 @@ import test from 'node:test';
 import { bandText, bar, isFreshReset, isResetFor, nextMode } from '../hooks/hud/view.mjs';
 import { bar as meterBar, cellWidth, duration, isAtLeast, kTokens, limitForecast, limitLabel, rampColor, runsCut, sparkline, stackedRuns, track, trackRuns, windowElapsed } from '../hooks/hud/meter.mjs';
 import { SECTIONS, boardCard, checksCard, collapsedFrom, nextRow, nowRow, planCard, taskWindow, workersCard } from '../hooks/hud/view.mjs';
+import { contextCard } from '../hooks/hud/view.mjs';
 import { PLUGIN, dflow, git, makeProject, read, write } from './helpers.mjs';
 
 const hud = root => JSON.parse(read(root, '.dflow/hud.json'));
@@ -199,4 +200,43 @@ test('the Workers card, the Next row and the stored collapse list', () => {
   assert.equal(text(nextRow(PLAN_HUD)), 'Next  /dflow:build — Task 5: Wire the meter');
   assert.deepEqual(SECTIONS, ['account', 'plan', 'context', 'usage', 'checks', 'board', 'workers', 'repo']);
   assert.deepEqual([collapsedFrom(['plan', 'nope', 'plan', 'repo']), collapsedFrom('plan'), collapsedFrom(undefined)], [['plan', 'repo'], [], []]);
+});
+
+const BREAKDOWN = { rows: [['Messages', 318000], ['System tools', 41000], ['System prompt', 9000], ['Memory files', 6000], ['Skills', 4000], ['Custom agents', 2000], ['MCP tools', 1000]].map(([name, tokens]) => ({ name, tokens })), compactAt: null, total: 381000 };
+
+test('the Context card reads the window against the reset point', () => {
+  const card = contextCard({ hud: PLAN_HUD, context: { tokens: 118000, window: 1000000 }, breakdown: null, readings: [], width: 50 });
+  assert.deepEqual([card.key, card.color, text(card.headline)], ['context', 'cyan', '79% of reset']);
+  assert.equal(card.headline[0].color, '#ff8700');
+  const meter = [...text(card.rows[0])];
+  assert.equal(meter.length, 50);
+  assert.equal(meter[7], '┃');
+  assert.equal(text(card.rows[1]), '118k of 1.0M ┃ resets at 150k');
+  const compacting = contextCard({ hud: PLAN_HUD, context: { tokens: 118000, window: 1000000 }, breakdown: { ...BREAKDOWN, compactAt: 967000 }, readings: [100000, 118000], width: 50 });
+  assert.equal([...text(compacting.rows[0])][48], '┊');
+  assert.equal(text(compacting.rows[1]), '118k of 1.0M ┃ resets at 150k ┊ compacts 967k');
+  assert.equal(text(compacting.rows[2]), 'trend ▁█ +18k');
+});
+
+test('the breakdown lists the six largest categories under a stacked bar', () => {
+  const card = contextCard({ hud: PLAN_HUD, context: { tokens: 118000, window: 1000000 }, breakdown: BREAKDOWN, readings: [], width: 50 });
+  const stack = card.rows[2];
+  assert.equal(stack.reduce((sum, run) => sum + run.text.length, 0), 50);
+  assert.deepEqual(stack.map(run => run.color), ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red']);
+  const rows = card.rows.slice(3).map(text);
+  assert.equal(rows.length, 6);
+  assert.match(rows[0], /^ {2}■ Messages +318k +84%$/);
+  assert.ok(!rows.some(row => row.includes('MCP tools')));
+});
+
+test('before a reading the Context card shows the estimate', () => {
+  const card = contextCard({ hud: PLAN_HUD, context: { window: 1000000 }, breakdown: { ...BREAKDOWN, total: 37000 }, readings: [], width: 50 });
+  assert.equal(text(card.headline), '≈37k estimated');
+  assert.ok(!card.rows.some(row => text(row).includes('▰')));
+  assert.equal(text(contextCard({ hud: PLAN_HUD, context: { window: 1000000 }, breakdown: null, readings: [], width: 50 }).headline), 'no reading yet');
+  assert.equal(contextCard({ hud: { ...PLAN_HUD, context: null }, context: null, breakdown: null, readings: [], width: 50 }), null);
+  const unset = contextCard({ hud: { ...PLAN_HUD, context: null }, context: { tokens: 118000, window: 1000000 }, breakdown: null, readings: [], width: 50 });
+  assert.equal(text(unset.headline), '118k of 1.0M');
+  assert.ok(!text(unset.rows[0]).includes('┃'));
+  assert.equal(text(unset.rows[1]), '118k of 1.0M');
 });

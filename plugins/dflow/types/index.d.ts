@@ -33,8 +33,21 @@ export type Hud = {
 
 export type HudContext = { tokens?: number; window: number }
 
+export type HudBreakdown = {
+  rows: { name: string; tokens: number }[]
+  compactAt: number | null
+  total: number | null
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    dflow: { hud: Shaped<Hud | null>; mode: Mode; context: HudContext | null }
+    dflow: {
+      hud: Shaped<Hud | null>
+      mode: Mode
+      context: HudContext | null
+      collapsed: string[]
+      readings: number[]
+      breakdown: HudBreakdown | null
+    }
   }
 }

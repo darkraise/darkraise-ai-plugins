@@ -1,7 +1,7 @@
 // Pure text for the HUD, shared by the mod and the Node tests. No engine
 // access here: the hooks module passes plain values in.
 
-import { bar as meterBar } from './meter.mjs';
+import { kTokens, bar as meterBar, rampColor, sparkline, stackedRuns, track, trackRuns } from './meter.mjs';
 
 export const MODES = ['band', 'pane', 'off'];
 export const RESET_FRESH_MS = 10 * 60 * 1000;
@@ -221,4 +221,64 @@ export function nextRow(hud) {
 export function collapsedFrom(value) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter(key => SECTIONS.includes(key)))];
+}
+
+const BREAKDOWN_COLORS = ['cyan', 'magenta', 'yellow', 'green', 'blue', 'red'];
+const BREAKDOWN_ROWS = 6;
+const TREND_LABEL = 16;
+
+function trendRow(readings, width) {
+  const recent = readings.slice(-Math.max(2, width - TREND_LABEL));
+  const step = recent[recent.length - 1] - recent[recent.length - 2];
+  return [
+    { text: 'trend ', dim: true },
+    { text: sparkline(recent), color: 'cyan' },
+    { text: ` ${step < 0 ? '−' : '+'}${kTokens(Math.abs(step))}`, dim: true },
+  ];
+}
+
+function breakdownRows(breakdown, width) {
+  const top = [...breakdown.rows].sort((a, b) => b.tokens - a.tokens).slice(0, BREAKDOWN_ROWS);
+  const sum = top.reduce((total, row) => total + row.tokens, 0);
+  const cells = stackedRuns(top.map(row => row.tokens), width);
+  const stack = top.flatMap((row, index) => (cells[index] ? [{ text: '█'.repeat(cells[index]), color: BREAKDOWN_COLORS[index] }] : []));
+  const details = top.map((row, index) => [
+    { text: '  ■ ', color: BREAKDOWN_COLORS[index] },
+    { text: row.name.padEnd(20) },
+    { text: kTokens(row.tokens).padStart(5), bold: true },
+    { text: `${String(Math.round((row.tokens / sum) * 100)).padStart(4)}%`, dim: true },
+  ]);
+  return [stack, ...details];
+}
+
+// The live context against the point where dflow resets it (`┃`) and where
+// Claude Code would compact on its own (`┊`), with the local /context
+// breakdown below.
+export function contextCard({ hud, context, breakdown, readings, width }) {
+  const tokens = typeof context?.tokens === 'number' ? context.tokens : null;
+  const resetAt = hud.context?.resetAt ?? null;
+  const hasBreakdown = Boolean(breakdown?.rows?.length);
+  if (tokens === null && resetAt === null && !hasBreakdown) return null;
+  const card = { key: 'context', title: 'Context', color: 'cyan', headline: [], rows: [] };
+  if (tokens === null) {
+    card.headline = [{ text: breakdown?.total ? `≈${kTokens(breakdown.total)} estimated` : 'no reading yet', dim: true }];
+  } else {
+    const window = context.window;
+    const compactAt = breakdown?.compactAt ?? null;
+    const ramp = rampColor(resetAt ? (tokens / resetAt) * 100 : (tokens / window) * 100);
+    card.headline = resetAt
+      ? [{ text: `${Math.round((tokens / resetAt) * 100)}% of reset`, color: ramp }]
+      : [{ text: `${kTokens(tokens)} of ${kTokens(window)}`, dim: true }];
+    const marks = [];
+    if (resetAt) marks.push({ at: resetAt / window, glyph: '┃', name: 'reset' });
+    if (compactAt) marks.push({ at: compactAt / window, glyph: '┊', name: 'compact' });
+    card.rows.push(trackRuns(track(tokens / window, width, marks), ramp, { reset: ramp, compact: 'gray' }));
+    const legend = [{ text: kTokens(tokens), bold: true }, { text: ` of ${kTokens(window)}`, dim: true }];
+    if (resetAt) legend.push({ text: ` ┃ resets at ${kTokens(resetAt)}`, color: ramp });
+    if (compactAt) legend.push({ text: ` ┊ compacts ${kTokens(compactAt)}`, dim: true });
+    card.rows.push(legend);
+    if (readings.length >= 2) card.rows.push(trendRow(readings, width));
+  }
+  if (hasBreakdown) card.rows.push(...breakdownRows(breakdown, width));
+  return card;
 }
