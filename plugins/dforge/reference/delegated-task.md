@@ -38,38 +38,37 @@ turns on multi-step work. Use a mid-tier model as the floor for reviewers.
 ## 1. Open the task
 
 **Open the task with one call:**
-`bash <plugin-root>/scripts/task-step start PLAN_FILE N` with
-`--suite '<suite command>'`, below, unless the Suite command bullet says
-start passes none. It runs `task-brief`, records BASE in
-`<workspace>/task-<N>-step.json` and prints the state it recorded and the
-budget line (see the caller's Session Budget section). It writes no task line:
-you write your own `implementer inline` assigned line. Every later step reads
-that state file, so you never carry a SHA. Calling `start` again for a task
-whose state file exists keeps the recorded BASE, round and review head, so the
-review still packages every commit made since the first start; pass `--reset`
-only to discard the state and start over, and say why on the ledger. Exit 3
-means the plan has no such task; exit 2 on a `Host: codex` plan sends you to
-*The steps by hand* below.
+`bash <plugin-root>/scripts/task-brief --open PLAN_FILE N`. It writes the
+brief, rewrites `<workspace>/plan-header.md`, appends the
+`implementer inline (assigned; base <sha7>)` line once and prints the task
+check and the budget line (see the caller's Session Budget section). That open
+line is the task's BASE: `task-step review` creates
+`<workspace>/task-<N>-step.json` from it, recording the suite command you pass
+as `--suite '<suite command>'` (below), so you never carry a SHA. Calling
+`--open` again for a task that has its open line adds none, and the review
+still packages every commit made since that base. Exit 3 means the plan has no
+such task; exit 2 on a `Host: codex` plan sends you to *The steps by hand*
+below.
 
 - **Suite command.** Read the plan header's `**Task check:**` line first,
   then resolve the plan's suite command once:
   - A plan with no `**Task check:**` line runs as it does today. Pass the
-    suite command to every `task-step start` as `--suite '<suite command>'`.
+    suite command to its first `task-step review` as `--suite '<suite command>'`.
     It is the command on the plan header's
     `**Integration check:**` line; else the test command
     `<docs>/gates.md` declares (the `Command` of the gate that runs the
     project's tests); else one you decide from the project's manifest
     (`package.json` `scripts.test`, a Makefile `test` target, `cargo test`,
-    `go test ./...`, `pytest`) and keep for the rest of the plan. `start`
-    records it as the step file's `suite`, and the first `start --suite` on
+    `go test ./...`, `pytest`) and keep for the rest of the plan. `review`
+    records it as the step file's `suite`, and the first `review --suite` on
     a plan logs `Task <N>: Ruling: suite command — <command> — none`. You run
     only the focused tests that cover your change while you work; §2 runs the
     suite.
-  - A command task check is the suite command: every `task-step start`
+  - A command task check is the suite command: every `task-step review`
     passes it, never the Integration check. The rest of the loop is
     unchanged.
-  - With a task check of `none`, `start` passes no
-    `--suite`. The integration check is the command the first sub-bullet
+  - With a task check of `none`, `review` passes no
+    `--suite` on a task the schedule skips. The integration check is the command the first sub-bullet
     resolves. The schedule is by task number: the integration check runs on
     every task whose number is a multiple of 3 and on the last task. The
     controller decides at review time, in the same turn it starts the run.
@@ -111,7 +110,7 @@ soon as its report is written and its work is committed. Run
 `bash <plugin-root>/scripts/suite-run -- bash -c '<suite command>'` as a
 background Bash command from the checkout's top level, at the task's head, and in the same turn run
 `task-step review` and dispatch its seat (§3). `<suite command>` is the one
-`task-step start --suite` recorded, character for character: `verdict` finds
+`task-step review --suite` recorded, character for character: `verdict` finds
 the run by the quoted form `suite-run` records for that command, so a command
 typed differently, or run from a subdirectory, is never found. The report's
 `## Verified` section lists the focused tests you ran; this run is the full
@@ -138,7 +137,7 @@ needed.
 
 - **One call does the plumbing:**
   `bash <plugin-root>/scripts/task-step review PLAN_FILE N`. It packages the diff from the base
-  `start` recorded to HEAD — never `HEAD~1`, which silently truncates
+  the open line records to HEAD — never `HEAD~1`, which silently truncates
   multi-commit tasks — and records the review head and `t0`. It runs
   each reviewer family's gate (`scripts/codex-gate`, `scripts/agy-gate`),
   `scripts/review-route PLAN_FILE --task <N>` and
@@ -497,6 +496,12 @@ with failing lines leaves the task open, and the fix loop (§4) or a suite run
 When the review comes back clean — or every open finding is parked, or
 confirmed and carried into a later task, with a ruling at the cap — append the
 completion line to the ledger in the same message as your other bookkeeping.
+Write it with `scripts/task-close PLAN_FILE N '<checkpoint>' --review '<text>'`
+(the checkpoint is the part after the dash, `<text>` the part inside the
+parentheses after the commit range): it takes the range from the open line and
+`HEAD`, pushes the ledger and runs the auto-run bookkeeping. A Codex plan has
+no open line from `task-brief --open` (it exits 2 there), so `task-close`
+exits 3 and you append the line by hand.
 A confirmed gap goes to the next task that depends on this one; with none, to
 the next task in plan order; after the last task, to the final review, written
 `carried to final review`, where it is a confirmed finding:
@@ -574,10 +579,10 @@ judge reviews: a task whose brief's second line is
 review, §4's verdicts and re-reviews and §5's complete line run as written,
 with the session in the implementer's place.
 
-1. **Start.** Run `bash <plugin-root>/scripts/task-step start PLAN_FILE <N>`.
-   It records BASE and the suite in `<workspace>/task-<N>-step.json` and
-   writes no task line. Append
-   `Task <N>: implementer inline (assigned; base <sha7>)` yourself.
+1. **Start.** Run `bash <plugin-root>/scripts/task-brief --open PLAN_FILE <N>`.
+   It writes the brief and the open line
+   `Task <N>: implementer inline (assigned; base <sha7>)`; `task-step review`
+   builds the step state from that line.
 2. **Implement and report.** Implement, verify, self-review and commit as
    dforge:executing-plans §The Task Loop steps 3 to 6 say. Then write
    `<workspace>/task-<N>-report.md` in the implementer report shape

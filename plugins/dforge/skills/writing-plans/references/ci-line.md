@@ -13,7 +13,8 @@ the Pitfalls table, comma-separated, or `none`.
 
 For every uncovered platform, copy that platform's rows of the Pitfalls table
 in [ci-parity.md](../../../reference/ci-parity.md) into `## Global Constraints`,
-one line per row, so every task brief carries them.
+one line per row, so every task reaches them through its brief or the
+`plan-header.md` it points at.
 
 ## The Early CI line
 

@@ -969,6 +969,13 @@ implement a task.
   line needs.
 - **Evals.** `evals/tiers`, the harness that graded the `impl-*` tiers, is
   removed.
+- **The task loop.** `scripts/task-brief --open PLAN N` writes the brief and
+  `plan-header.md`, appends the `implementer inline (assigned; base …)` line
+  once and prints the task check; `scripts/task-close PLAN N CHECKPOINT
+  [--review TEXT]` writes the `complete` line, pushes the ledger to darkmem,
+  records an auto run's completion and prints the final budget line after the
+  last task. The brief of a task the session implements no longer repeats the
+  header's Global Constraints and Contracts.
 
 ## Migrating to 4.11
 
@@ -1167,8 +1174,9 @@ differences:
    dforge:handoff / dforge:resume-execution pair replace
    upstream's unmeasured sessions - see [Session budget](#session-budget).
 9. **Small-model planning.** A strong model plans once; the session executes.
-   Every task brief carries the header's Global Constraints and Contracts, the
-   controller reads only the header and one brief at a time, and judgment
+   A brief for a task the session implements points at the header file for the
+   Global Constraints and Contracts (a risk-3 or delegated task's brief carries
+   them), the controller reads only the header and one brief at a time, and judgment
    calls go to a read-only ruling seat (`judge-opus`, with the reason
    `review-route --ruling` prints). Its plan corrections
    land in an append-only `amendments.md` through `scripts/plan-amend`; the
