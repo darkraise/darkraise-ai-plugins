@@ -592,7 +592,7 @@ with a reason, which the cockpit sends to Discord. See
 
 ## Cockpit
 
-Claude Code only. Built and tested against Claude Code 2.1.299 to 2.1.306; the
+Claude Code only. Built and tested against Claude Code 2.1.299 to 2.1.325; the
 mod API is early access and may change between releases.
 
 ### What it does
@@ -1104,7 +1104,7 @@ and the `dr-forge:` prefix. The pre-2.0 `.superpowers/`, `docs/superpowers/`,
 prefix are no longer read. Session start and `repo-audit` print one line naming
 any pre-3.0 directory a repository still has; run, once per repository:
 
-    bash <plugin-root>/scripts/forge-migrate [DIR]
+    bash <plugin-root>/scripts/dforge-migrate [DIR]
 
 In the primary checkout and every linked worktree it moves `.superpowers/` to
 `.forge/`, `docs/superpowers/` to `docs/forge/` (with `git mv` when the
@@ -1125,7 +1125,7 @@ Rename any `DR_SUPERPOWERS_*` variable you set to its `DR_FORGE_*` name.
 `DR_FORGE_DOCUMENT_STORE` and `DR_FORGE_PROGRESS_SOURCE`, which 2.x read, are
 no longer read at all: set `documentStore` and `progressSource` instead.
 
-`forge-migrate` also moves the home: the darkmem mapping in
+`dforge-migrate` also moves the home: the darkmem mapping in
 `~/.dr-superpowers/config.json` into `~/.dr-forge/config.json` when that file
 has none, and each `~/.dr-superpowers/mirror/<project>/` that
 `~/.dr-forge/mirror/` lacks. darkmem itself is off in 3.0 until you set
