@@ -106,7 +106,9 @@ try {
     const tokens = typeof body?.usage?.input_tokens === 'number' ? body.usage.input_tokens : null
     finish({ ...blank, input_tokens: tokens })
   }
-  finish(judge(body, req))
-} catch {
-  finish(blank)
+  // A 200 answer, or a request that timed out once sent, may be billed: with
+  // no usage reported, decide charges an estimate for these two only.
+  finish({ ...judge(body, req), estimate: true })
+} catch (err) {
+  finish({ ...blank, estimate: err?.name === 'TimeoutError' })
 }

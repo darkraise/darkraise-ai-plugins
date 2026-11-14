@@ -133,7 +133,7 @@ cmd_ask() {
   outcome=$(jq -r '.outcome' <<< "$answer" | tr -d '\r')
 
   tokens=$(jq -r '.input_tokens | numbers' <<< "$answer" | tr -d '\r')
-  if [ -z "$tokens" ]; then
+  if [ -z "$tokens" ] && [ "$(jq -r '.estimate == true' <<< "$answer" | tr -d '\r')" = true ]; then
     # No usage came back, yet the request may have been billed: charge an
     # estimate, both orderings at four bytes a token, rather than nothing.
     local bytes=${#question}
@@ -141,8 +141,10 @@ cmd_ask() {
     tokens=$((bytes / 2))
     echo "decide: the answer reported no usage; charged an estimate of $tokens input tokens" >&2
   fi
-  usd=$(awk -v t="$tokens" -v p="$price" 'BEGIN { printf "%.4f", t * p / 1000000 }')
-  api_budget_charge openai "$usd" 2>/dev/null || echo "decide: the charge to openai was not recorded" >&2
+  if [ -n "$tokens" ]; then
+    usd=$(awk -v t="$tokens" -v p="$price" 'BEGIN { printf "%.4f", t * p / 1000000 }')
+    api_budget_charge openai "$usd" 2>/dev/null || echo "decide: the charge to openai was not recorded" >&2
+  fi
   log_ask "$outcome" "$answer"
 
   [ "$MODE" = on ] || no_ruling shadow

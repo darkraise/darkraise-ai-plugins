@@ -124,8 +124,10 @@ before=$(date +%s)
 DFORGE_DECISIONS_TIMEOUT=1 ask "${Q[@]}"
 check "A2: no answer inside the timeout" "$rc:$out" "3:no ruling reason=error"
 check "the timeout bounds the wait" "$([ $(( $(date +%s) - before )) -lt 8 ] && echo yes || echo no)" "yes"
-DFORGE_DECISIONS_URL="http://127.0.0.1:1/v1/decisions" ask "${Q[@]}"
+was=$(spent)
+DFORGE_DECISIONS_URL="http://127.0.0.1:1/v1/decisions" ask "${Q[@]}" --evidence mid.txt
 check "A2: an endpoint that cannot be reached" "$rc:$out" "3:no ruling reason=error"
+check "a request that never reached the endpoint is charged nothing" "$(spent)" "$was"
 check "A2: only the four ruling cases above printed a ruling" "$(grep -c '^ruling:' "$TMP/all.out")" "4"
 
 # --- A3: when no request is made ---
