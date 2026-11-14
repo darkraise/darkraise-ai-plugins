@@ -8,7 +8,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
 S="$P/scripts"
-TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
+TRP="$P/reference/prompts/task-reviewer-prompt.md"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>

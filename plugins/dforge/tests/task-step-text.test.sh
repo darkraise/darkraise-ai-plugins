@@ -5,7 +5,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
-IP="$P/skills/subagent-driven-development/references/implementer-prompt.md"
+IP="$P/reference/prompts/implementer-prompt.md"
 . "$HERE/fixtures/sdd-text.sh"
 
 pass=0 fail=0

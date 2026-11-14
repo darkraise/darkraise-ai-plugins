@@ -23,7 +23,7 @@ kind, its task (or `plan`), and the paths it needs — brief, report, review
 packages — with the findings copied verbatim. Run
 `scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` for the point's
 kinds and the tasks its items concern, and dispatch the `primary` it prints
-with [ruling-prompt.md](ruling-prompt.md), expanding its
+with [ruling-prompt.md](../../../reference/prompts/ruling-prompt.md), expanding its
 placeholders. Its `[REPORT_FILE]` is `<workspace>/rulings-<point>-<task>-report.md`. The
 seat writes its report there and replies in at most 10 lines;
 read only its `## Verdict` section

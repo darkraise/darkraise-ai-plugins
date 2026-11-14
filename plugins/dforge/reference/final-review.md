@@ -190,7 +190,7 @@ your own: QA commits on this branch.
     - `cannot-test: ambiguous`: an item for
       `scripts/review-route PLAN_FILE --ruling acceptance-ambiguous`, sent
       with
-      [ruling-prompt.md](../skills/subagent-driven-development/references/ruling-prompt.md).
+      [ruling-prompt.md](prompts/ruling-prompt.md).
       `REWORD`: replace the statement's text in the spec with the
       `New statement:` line, commit the spec, and re-dispatch QA with
       `[MODE]` `reword A<n>[, A<m>]`; every ambiguous statement of one
@@ -414,7 +414,7 @@ implementer has no Skill tool, and states the `DEFERRED:` skip rule above,
 which no file the subagent reads carries; in inline mode you write it before
 the re-review. Then run exactly one scoped re-review of the fix wave
 (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range, with
-[re-review-prompt.md](../skills/subagent-driven-development/references/re-review-prompt.md),
+[re-review-prompt.md](prompts/re-review-prompt.md),
 its `[IMPLEMENTER_REPORT_FILE]` being that file and its `[REPORT_FILE]`
 being `<workspace>/final-rereview-report.md`). When QA committed tests, FIX_BASE is the
 review's HEAD (the `Acceptance QA: dispatched` SHA), so the range holds QA's

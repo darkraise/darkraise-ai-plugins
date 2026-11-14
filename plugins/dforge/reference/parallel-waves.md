@@ -123,7 +123,7 @@ differences:
   The worktree is not created from it, so the dispatch tells the implementer
   to detach there first.
 - **The dispatch carries the parallel section below**, filled in, after the
-  line naming the dispatch file. Everything else in [implementer-prompt.md](../skills/subagent-driven-development/references/implementer-prompt.md)
+  line naming the dispatch file. Everything else in [implementer-prompt.md](prompts/implementer-prompt.md)
   is unchanged.
 
 ```

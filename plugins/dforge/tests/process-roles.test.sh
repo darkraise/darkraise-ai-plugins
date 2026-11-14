@@ -26,7 +26,7 @@ for f in "$SDD_LEDGER" "$P/skills/executing-plans/SKILL.md"; do
   names "$s: complete line" "$f" 'Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo'
 done
 
-TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
+TRP="$P/reference/prompts/task-reviewer-prompt.md"
 names "task reviewer: lens section" "$TRP" '## Lens Criteria'
 names "task reviewer: the placeholder" "$TRP" '`[LENS_FILES]` — OPTIONAL'
 

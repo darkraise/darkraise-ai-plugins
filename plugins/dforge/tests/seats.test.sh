@@ -99,7 +99,7 @@ check "a checkout path with a space is still scanned" "$(unmodelled ${files[@]+"
 
 RCR="$P/skills/requesting-code-review/SKILL.md"
 CR="$P/skills/requesting-code-review/references/code-reviewer.md"
-RRP="$P/skills/subagent-driven-development/references/re-review-prompt.md"
+RRP="$P/reference/prompts/re-review-prompt.md"
 DT="$P/reference/delegated-task.md"
 check "re-review: no model placeholder" "$(grep -c '\[MODEL\]' "$RRP")" "0"
 names "re-review: the diff file is required" "$RRP" '`[DIFF_FILE]` — REQUIRED'
@@ -111,9 +111,9 @@ names "re-review: the diff file is required" "$RRP" '`[DIFF_FILE]` — REQUIRED'
 lacks() { # lacks <label> <file> <text>
   check "$1" "$(grep -qF -- "$3" "$2" 2>/dev/null && echo yes || echo no)" "no"
 }
-TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
+TRP="$P/reference/prompts/task-reviewer-prompt.md"
 GRP="$P/skills/subagent-driven-development/references/group-reviewer-prompt.md"
-RULP="$P/skills/subagent-driven-development/references/ruling-prompt.md"
+RULP="$P/reference/prompts/ruling-prompt.md"
 FR="$P/reference/final-review.md"
 for t in "$TRP" "$RRP" "$GRP"; do
   n=$(basename "$t" .md)

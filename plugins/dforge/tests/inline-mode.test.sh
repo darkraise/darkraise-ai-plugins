@@ -45,13 +45,13 @@ done
 check "the shared final review exists" \
   "$([ -f "$P/reference/final-review.md" ] && echo yes || echo no)" "yes"
 check "the ruling prompt exists" \
-  "$([ -f "$P/skills/subagent-driven-development/references/ruling-prompt.md" ] && echo yes || echo no)" "yes"
+  "$([ -f "$P/reference/prompts/ruling-prompt.md" ] && echo yes || echo no)" "yes"
 check "the code reviewer reference exists" \
   "$([ -f "$P/skills/requesting-code-review/references/code-reviewer.md" ] && echo yes || echo no)" "yes"
 check "the external review reference exists" \
   "$([ -f "$P/reference/external-review.md" ] && echo yes || echo no)" "yes"
 check "the re-review prompt exists" \
-  "$([ -f "$P/skills/subagent-driven-development/references/re-review-prompt.md" ] && echo yes || echo no)" "yes"
+  "$([ -f "$P/reference/prompts/re-review-prompt.md" ] && echo yes || echo no)" "yes"
 
 # The escalation clause both skills key on.
 present "an owner request switches through the ledger line" "$INLINE" '`Task <N>: escalated inline -> subagent — owner request`'

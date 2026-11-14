@@ -33,7 +33,7 @@ point never overwrites an earlier file - listing each item: an id, its kind,
 its task, and the paths it needs, with the findings copied verbatim. Run
 `scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` and dispatch the
 `primary` it prints with
-[ruling-prompt.md](../../subagent-driven-development/references/ruling-prompt.md),
+[ruling-prompt.md](../../../reference/prompts/ruling-prompt.md),
 expanding its placeholders. Its `[REPORT_FILE]` is
 `<workspace>/rulings-<point>-<task>-report.md`. The seat writes its report
 there and replies in at most 10 lines;

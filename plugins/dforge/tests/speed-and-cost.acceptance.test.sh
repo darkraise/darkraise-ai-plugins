@@ -121,7 +121,7 @@ fi
 
 # ---------------------------------------------------------------- A3
 if selected A3; then
-  IP="$PLUGIN/skills/subagent-driven-development/references/implementer-prompt.md"
+  IP="$PLUGIN/reference/prompts/implementer-prompt.md"
   ts start docs/plan.md 1 --suite "$CMD"
   DISPATCH="$WS/task-1-dispatch.md"
   check "A3: task-step start writes the dispatch file" "$([ -f "$DISPATCH" ] && echo yes || echo no)" "yes"

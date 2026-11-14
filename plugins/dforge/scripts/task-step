@@ -490,7 +490,7 @@ cmd_rereview() (
 
   prompt=$ws/task-$first-rereview-$new_round-prompt.md
   if [ "$skip" -eq 0 ]; then
-    tpl=$here/../skills/subagent-driven-development/references/re-review-prompt.md
+    tpl=$here/../reference/prompts/re-review-prompt.md
     [ -f "$tpl" ] || { echo "task-step: missing template $tpl" >&2; exit 2; }
     printf '%s\n\nThe fix message holds each finding'"'"'s detail: %s\n' "$bullets" "$fix" > "$tmp/findings"
     judge_report=$ws/task-$first-rereview-$new_round-report.md
@@ -743,7 +743,7 @@ group_round_tasks() {
 
 do_start() {
   local base base7 out rc n a agent="" best=-1 rank unknown=0 suffix=")" label titles kept=0
-  local template="$plugin_root/skills/subagent-driven-development/references/implementer-prompt.md"
+  local template="$plugin_root/reference/prompts/implementer-prompt.md"
   local dispatch="$ws/task-$first-dispatch.md" budget="" workfrom scene
 
   if [ -f "$state" ] && [ "$reset" -eq 0 ]; then
@@ -849,7 +849,7 @@ route_field() { sed -n "s/.* $1=\\([^ ]*\\).*/\\1/p" <<<"$route" | tr -d '\r'; }
 do_review() {
   local base head basesha headsha diff pkgout rc t0 gate route rrc primary fallback reason note="" tier="" judge old_base
   local lens_files="" lout lrc n line secs timeout_ms cmd top drops=() unexpanded snap ids_ranked id gl gr probed=0
-  local template="$plugin_root/skills/subagent-driven-development/references/task-reviewer-prompt.md"
+  local template="$plugin_root/reference/prompts/task-reviewer-prompt.md"
   local judge_prompt="$ws/task-$first-review-prompt.md" panel_prompt="$ws/task-$first-review-panel-prompt.md"
   local panel_dir="$ws/task-$first-review-panel" external_files=""
 

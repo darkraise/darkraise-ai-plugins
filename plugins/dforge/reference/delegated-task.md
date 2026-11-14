@@ -45,7 +45,7 @@ task number, `N M …`; a wave task adds `--wave K`; every start adds
 start passes none). It runs `task-brief`,
 records BASE in `<workspace>/task-<N>-step.json`, writes the
 assigned line (below), and writes `<workspace>/task-<N>-dispatch.md`:
-[implementer-prompt.md](../skills/subagent-driven-development/references/implementer-prompt.md)
+[implementer-prompt.md](prompts/implementer-prompt.md)
 with the brief path, the report path and the plugin root filled in. It prints
 at most 15 lines: the `subagent_type`, the dispatch file's path, the state it
 recorded and the budget line (see the caller's Session Budget section). Every
@@ -279,7 +279,7 @@ needed.
   `scripts/review-route PLAN_FILE --task <N>` and
   `scripts/lens-route PLAN_FILE --task <N>`, and writes
   `<workspace>/task-<N>-review-prompt.md`:
-  [task-reviewer-prompt.md](../skills/subagent-driven-development/references/task-reviewer-prompt.md)
+  [task-reviewer-prompt.md](prompts/task-reviewer-prompt.md)
   with every placeholder filled in, the diff file, the plugin directory and
   each lens's `criteria=` path among them (a task with no lens has no lens
   section). It runs the mechanical checks below, and for a panel seat also
@@ -673,7 +673,7 @@ under the skip rule below). It packages the fix diff from the review head it
 recorded last to HEAD, records the new review head, adds one to the
 recorded round, and writes
 `<workspace>/task-<N>-rereview-<R>-prompt.md`:
-[re-review-prompt.md](../skills/subagent-driven-development/references/re-review-prompt.md)
+[re-review-prompt.md](prompts/re-review-prompt.md)
 with the findings from your fix message, the brief, the report file and the
 diff path filled in. It prints the seat and that file; dispatch the seat with
 the prompt "your complete instructions are in `<prompt file>`: read it first
@@ -827,7 +827,7 @@ with the session in the implementer's place.
 2. **Implement and report.** Implement, verify, self-review and commit as
    dforge:executing-plans §The Task Loop steps 3 to 6 say. Then write
    `<workspace>/task-<N>-report.md` in the implementer report shape
-   ([implementer-prompt.md](../skills/subagent-driven-development/references/implementer-prompt.md)
+   ([implementer-prompt.md](prompts/implementer-prompt.md)
    §Report Format): status, commits, `## Verified`,
    `## Discovered issues (not fixed)` and `## Assumptions made`. The reviewer
    prompt names that file.
@@ -863,7 +863,7 @@ writing nothing, when `lens-route` does. Then run the mechanics yourself:
   prints `wrote <path>: <N> lines`, then the budget line; read the path out of
   the first line and never pipe the output into a prompt as if it were a
   filename. Dispatch with
-  [implementer-prompt.md](../skills/subagent-driven-development/references/implementer-prompt.md),
+  [implementer-prompt.md](prompts/implementer-prompt.md),
   its placeholders filled in, the brief path introduced as "read this first —
   it is your requirements, with the exact values to use verbatim, and it ends
   with the plan's Global Constraints and Contracts" and the report-file path
@@ -883,7 +883,7 @@ writing nothing, when `lens-route` does. Then run the mechanics yourself:
   `git log --oneline`, `git diff --stat` and `git diff -U10` for the range,
   redirected to one uniquely named file) and pass the reviewer the path it
   prints; run `date +%s` in the same Bash call and keep the value as `t0`. Fill
-  [task-reviewer-prompt.md](../skills/subagent-driven-development/references/task-reviewer-prompt.md)
+  [task-reviewer-prompt.md](prompts/task-reviewer-prompt.md)
   yourself, `[PLUGIN_ROOT]` expanded to this plugin's resolved directory and
   `[LENS_FILES]` set to each `criteria=` path `scripts/lens-route PLAN_FILE --task <N>`
   prints (with none, delete that section),

@@ -8,7 +8,7 @@ new breakage. It is not a fresh review — the full review already happened.
 that the fix itself broke nothing.
 
 **Seat:** a fleet judge agent, so the dispatch carries no `model` or `effort`
-argument ([delegated-task.md](../../../reference/delegated-task.md) §Seats).
+argument ([delegated-task.md](../delegated-task.md) §Seats).
 
 ```
 Subagent (dforge:judge-sonnet-high; dforge:judge-opus for a subtle concurrency fix):

@@ -767,9 +767,9 @@ a18() {
   local t name text1 findings
   # template path | findings in its report (yes/no)
   for t in \
-    "skills/subagent-driven-development/references/task-reviewer-prompt.md|yes" \
+    "reference/prompts/task-reviewer-prompt.md|yes" \
     "skills/subagent-driven-development/references/group-reviewer-prompt.md|yes" \
-    "skills/subagent-driven-development/references/re-review-prompt.md|yes"; do
+    "reference/prompts/re-review-prompt.md|yes"; do
     name=${t%%|*}; findings=${t##*|}
     text=$(cat "$PLUGIN/$name")
     matches "A18: $(basename "$name") names the report file" "$text" '\[REPORT_FILE\]|Report file:.*-report\.md'
