@@ -66,6 +66,14 @@ test('the pack lists the mechanical facts', t => {
   assert.deepEqual(taskPack.files.map(entry => entry.file).sort(), ['config.mjs', 'src/limit.mjs', 'tests/limit.test.mjs']);
 });
 
+test('a torn gate-history line is skipped, not a crash', t => {
+  const root = makeProject(t);
+  build(root);
+  write(root, '.dflow/gate-history.jsonl', '{"name":"test","ok":true,"seconds":2,"branch":"main"}\n{"name":"te');
+  const printed = dflow(root, ['review', 'pack']);
+  assert.equal(printed.status, 0, printed.stderr);
+});
+
 test('more test lines than twice the source is reported as over budget', t => {
   const root = makeProject(t);
   build(root, { sourceLines: 4, testLines: 30 });
