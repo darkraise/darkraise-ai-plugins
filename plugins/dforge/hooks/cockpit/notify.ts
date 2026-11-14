@@ -133,10 +133,5 @@ export function discordBody(event: NotifyEvent, place: NotifyPlace, style: Notif
   }
 }
 
-/** Whether a kind mentions the person. */
-export function isPing(kind: NotifyKind): boolean {
-  return PINGS.includes(kind)
-}
-
 /** What a send came to: the message id when Discord gave one, else why not. */
 export type SendResult = { isSent: true; id: string | null } | { isSent: false; reason: string }
