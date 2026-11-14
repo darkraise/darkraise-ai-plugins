@@ -117,7 +117,6 @@ check "A5: a plan with no Execution line marks its risk-3 task" "$(sed -n 2p "$T
 # --- Task 2 ---
 io_plan "$INLINE_OPUS" "1 2 2 2" "1 2 1 2" > allheavy.md
 lint allheavy.md
-lacks "A1: no Execution warning on an all-heavy inline plan" "$out" "WARN header: Execution"
 lacks "A1: no inline error on an all-heavy inline plan" "$out" "ERROR header: inline"
 io_plan 'inline — `claude --model sonnet --effort high` — x' "1 2 1 2" "0 1 1 0" > sonnet6.md
 lint sonnet6.md

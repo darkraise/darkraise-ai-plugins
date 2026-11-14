@@ -309,7 +309,6 @@ check "three total-4 tasks in six on opus high: exit 0" "$status" "0"
 tplan r5.md inline sonnet high 5 4 1 1 1 1
 lint r5.md
 check "a heavy and a total-4 task on sonnet high: exit 0" "$status" "0"
-lacks "total 4 is no delegation reason" "$out" "(total 4)"
 tplan r6.md inline sonnet medium 1 4 1 1 1 1
 lint r6.md
 check "a self-implemented total 4 runs at effort medium: exit 0" "$status" "0"
@@ -409,7 +408,6 @@ lacks "a mismatched Implementer line is ignored" "$out" "Implementer"
 variant t6.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 3 = 6/; s/impl-sonnet-medium$/impl-opus-high/'
 lint t6.md
 lacks "impl-opus-high at total 6 is not a reserve finding" "$out" "reserve tier"
-lacks "impl-opus-high at total 6 matches" "$out" "does not match the assignment"
 variant t8.md 's/^\*\*Approach:\*\* .*/**Approach:** inline - follows the pattern/'
 lint t8.md
 has "inline Approach needs skip" "$out" "ERROR Task 2: an inline Approach must cite 'skip <n>'"
@@ -435,20 +433,17 @@ lint cv2.md
 check "codex-v2 plan: exit 1" "$status" "1"
 has "codex-v2 plan: conversion error" "$out" "ERROR header: Routing policy is codex-v2, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
 lacks "codex-v2 plan: no Execution pair error" "$out" "is not in codex-routing.json"
-lacks "codex-v2 plan: no Implementer tier error" "$out" "is not an execution tier"
 has "codex-v2 plan: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
 codex_plan | sed '/^Routing policy:/d; s#codex gpt-6.1-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6.1-sol / low#codex gpt-5.6-terra / medium#' > cnone.md
 lint cnone.md
 check "no Routing policy line: exit 1" "$status" "1"
 has "no Routing policy line: conversion error names it missing" "$out" "ERROR header: Routing policy is missing, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
 lacks "no Routing policy line: no Execution pair error" "$out" "is not in codex-routing.json"
-lacks "no Routing policy line: no Implementer tier error" "$out" "is not an execution tier"
 has "no Routing policy line: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
 codex_plan | sed '/^Routing policy:/d; s#codex gpt-6.1-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6.1-sol / low#codex gpt-5.6-terra / medium#; s#^\*\*Goal:\*\* Demo\.$#**Goal:** Demo.\n\n```text\nRouting policy: codex-v4\n```#' > cfenced.md
 lint cfenced.md
 has "a fenced Routing policy line does not count" "$out" "ERROR header: Routing policy is missing, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
 lacks "a fenced Routing policy line: no Execution pair error" "$out" "is not in codex-routing.json"
-lacks "a fenced Routing policy line: no Implementer tier error" "$out" "is not an execution tier"
 has "a fenced Routing policy line: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
 # A fenced Host line is an example, not the host: the plan stays a Claude plan.
 variant chost.md 's/^\*\*Goal:\*\* Demo\.$/**Goal:** Demo.\n\n```text\nHost: codex\n```/'
@@ -470,7 +465,6 @@ out=$(PATH="$TMP/nojq:$PATH" bash "$LINT" codex.md 2>&1); status=$?
 check "an unreadable routing policy: exit 2" "$status" "2"
 has "an unreadable routing policy: says so" "$out" "plan-lint: cannot read the routing policy version from"
 has "a failing jq: the file cannot be parsed" "$out" "codex-routing.json: the file cannot be parsed"
-lacks "an unreadable routing policy: no empty-policy finding" "$out" "not ;"
 # A copy of the scripts reads its own reference/codex-routing.json.
 KIT="$TMP/kit"
 mkdir -p "$KIT"

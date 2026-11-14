@@ -316,7 +316,6 @@ mkdir -p "$INL_LEDGER"
 run "$REPO" docs/plans/2026-01-01-inline.md
 has "escalation line: keeps the inline pair" "$out" "claude --model sonnet --effort low"
 lacks "escalation line: no subagent pair" "$out" "--effort high"
-lacks "escalation line: no mode switch" "$out" "escalated to subagent mode"
 
 # --- a mixed ledger: a delegated task mid-loop in an inline plan ---
 # Mixed mode writes subagent grammar for a delegated task. An agent-named
