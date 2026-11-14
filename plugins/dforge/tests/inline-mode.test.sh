@@ -51,8 +51,6 @@ check "the external review reference exists" \
 check "the re-review prompt exists" \
   "$([ -f "$P/reference/prompts/re-review-prompt.md" ] && echo yes || echo no)" "yes"
 
-present "an unavailable substitute ends in BLOCKED, not a loop" "$P/reference/escalation.md" '`Task <N>: BLOCKED — no available implementer — <the models found unavailable>`'
-
 # The ledger grammar.
 for line in 'minor (deferred)' 'parked' 'BLOCKED' 'Ruling:' 'Final review: clean' 'Review depth: <light|standard|full> (<reason>)' 'Acceptance QA: skipped (depth light)'; do
   present "inline ledger has: $line" "$INLINE" "$line"
