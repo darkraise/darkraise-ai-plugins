@@ -145,6 +145,9 @@ printf '# no block\n' > "$TMP/noblock.md"
 run API_JUDGE_LADDER="$TMP/noblock.md"
 check "a ladder with no api-judge block: one line, exit 3, no CLI" "$rc|$out|$(started)" "3|api-judge none status=SKIPPED exit=3 out=- spent=0.0000 reason=no-roster|0"
 
+run API_JUDGE_CHAIN=0
+check "a chain with no time left: one SKIPPED chain line per row, exit 3, no CLI" "$rc $(tried)$(started)" "3 anthropic SKIPPED chain openai SKIPPED chain agentrouter SKIPPED chain 0"
+
 # --- A17: auto runs only ---
 run CLAUDE_CODE_SESSION_ID=other
 check "A17: no run bound: one line, exit 3, no CLI" "$rc|$out|$(started)" "3|api-judge none status=SKIPPED exit=3 out=- spent=0.0000 reason=no-run|0"
@@ -174,7 +177,8 @@ ALL_KEYS=(sk-test-anthropic-SENTINEL sk-test-openai-SENTINEL sk-test-agentrouter
 fresh; caps 1000 1000 1000; ladder 30
 run OPENAI_API_KEY=vendor-openai ANTHROPIC_API_KEY=vendor-anthropic CODEX_HOME="$TMP/user-codex" STUB_JUDGE_ANTHROPIC=fail STUB_JUDGE_OPENAI=fail \
   ANTHROPIC_AUTH_TOKEN=vendor-token ANTHROPIC_BASE_URL=https://gateway.invalid CLAUDE_CODE_OAUTH_TOKEN=vendor-oauth \
-  CLAUDE_CODE_USE_BEDROCK=1 CLAUDE_CODE_USE_VERTEX=1 OPENAI_BASE_URL=https://gateway.invalid
+  CLAUDE_CODE_USE_BEDROCK=1 CLAUDE_CODE_USE_VERTEX=1 CLAUDE_CODE_USE_FOUNDRY=1 ANTHROPIC_BEDROCK_BASE_URL=https://gateway.invalid \
+  ANTHROPIC_VERTEX_BASE_URL=https://gateway.invalid OPENAI_BASE_URL=https://gateway.invalid
 check "fixture: all three children ran" "$(started)" "3"
 lacks "A8: no key value is on a judge's command line" "$(cat "$TMP/args.log")" "SENTINEL"
 check "A9: the Anthropic child holds no DFORGE key variable" "$(envof anthropic | grep -c '^DFORGE_[A-Z]*_API_KEY ')" "0"
@@ -182,7 +186,7 @@ check "A9: the Anthropic child's ANTHROPIC_API_KEY is the DFORGE key, not the ve
 check "A9: the Anthropic child holds one key, its own" "$(holds anthropic "${ALL_KEYS[@]}")" "1"
 for b in anthropic openai agentrouter; do
   check "A9: the $b child holds no variable that routes its key or prompt elsewhere" \
-    "$(envof "$b" | grep -c -E '^(ANTHROPIC_AUTH_TOKEN|ANTHROPIC_BASE_URL|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_BEDROCK|CLAUDE_CODE_USE_VERTEX|OPENAI_BASE_URL) ')" "0"
+    "$(envof "$b" | grep -c -E '^(ANTHROPIC_AUTH_TOKEN|ANTHROPIC_BASE_URL|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_BEDROCK|CLAUDE_CODE_USE_VERTEX|CLAUDE_CODE_USE_FOUNDRY|ANTHROPIC_BEDROCK_BASE_URL|ANTHROPIC_VERTEX_BASE_URL|OPENAI_BASE_URL) ')" "0"
 done
 for b in openai agentrouter; do
   check "A9: the $b child holds no DFORGE key variable" "$(envof "$b" | grep -c '^DFORGE_[A-Z]*_API_KEY ')" "0"
