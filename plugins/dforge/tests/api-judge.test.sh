@@ -71,9 +71,10 @@ check "A18: each --add-dir directory reaches the Anthropic CLI" \
   "$(grep -cxF -e "$TMP/ws" -e "$TMP/mirror" "$TMP/args.log") $(grep -qxF -e '--add-dir' "$TMP/args.log" && echo flag)" "2 flag"
 
 # --- A13: a failed budget hands on, and a verdict is required ---
+: > "$JLOG"
 run STUB_JUDGE_ANTHROPIC=fail
 check "A13: a failed run is FAILED and the next budget is tried" "$rc $(tried)" "0 anthropic FAILED error openai OK none "
-check "A11: one status line per budget tried, logged too" "$(tail -4 "$JLOG" | grep -c ' status=')" "2"
+check "A11: one status line per budget tried, logged too" "$(grep ' status=' "$JLOG" | sed 's/.* status=\([A-Z]*\) .*/\1/' | tr '\n' ' ')" "FAILED OK "
 run STUB_JUDGE_ANTHROPIC=noverdict STUB_JUDGE_OPENAI=noverdict
 check "A13: a reply that does not open with the verdict heading is FAILED" "$rc $(tried)" "0 anthropic FAILED no-verdict openai FAILED no-verdict agentrouter OK none "
 check "A11: the budgets are tried in the block's order" "$(grep '^budget ' "$TMP/args.log" | tr '\n' ' ')" "budget anthropic budget openai budget agentrouter "
@@ -135,6 +136,15 @@ printf '%s\n' '{"checked":"2026-11-14","models":{}}' > "$TMP/noprices.json"
 run DFORGE_API_PRICES="$TMP/noprices.json" STUB_JUDGE_ANTHROPIC=fail
 check "A14: no price row skips openai and agentrouter, never anthropic" "$rc $(tried)" "3 anthropic FAILED error openai SKIPPED no-price agentrouter SKIPPED no-price "
 
+# --- a CLI that is not there, and a ladder with no api-judge block ---
+fresh
+run API_JUDGE_CLAUDE="$TMP/no-such-claude"
+check "a CLI that cannot start is FAILED no-cli and the next budget is tried" "$rc $(tried)" "0 anthropic FAILED no-cli openai OK none "
+check "a CLI that cannot start is charged nothing" "$(bash "$SPEND" status | tr -d '\r' | sed -n 's/^api-budget anthropic .* spent=\([0-9.]*\) .*/\1/p')" "0.0000"
+printf '# no block\n' > "$TMP/noblock.md"
+run API_JUDGE_LADDER="$TMP/noblock.md"
+check "a ladder with no api-judge block: one line, exit 3, no CLI" "$rc|$out|$(started)" "3|api-judge none status=SKIPPED exit=3 out=- spent=0.0000 reason=no-roster|0"
+
 # --- A17: auto runs only ---
 run CLAUDE_CODE_SESSION_ID=other
 check "A17: no run bound: one line, exit 3, no CLI" "$rc|$out|$(started)" "3|api-judge none status=SKIPPED exit=3 out=- spent=0.0000 reason=no-run|0"
@@ -162,12 +172,18 @@ holds() { # holds <budget> <value…> — how many of the child's variables hold
 }
 ALL_KEYS=(sk-test-anthropic-SENTINEL sk-test-openai-SENTINEL sk-test-agentrouter-SENTINEL vendor-openai vendor-anthropic)
 fresh; caps 1000 1000 1000; ladder 30
-run OPENAI_API_KEY=vendor-openai ANTHROPIC_API_KEY=vendor-anthropic CODEX_HOME="$TMP/user-codex" STUB_JUDGE_ANTHROPIC=fail STUB_JUDGE_OPENAI=fail
+run OPENAI_API_KEY=vendor-openai ANTHROPIC_API_KEY=vendor-anthropic CODEX_HOME="$TMP/user-codex" STUB_JUDGE_ANTHROPIC=fail STUB_JUDGE_OPENAI=fail \
+  ANTHROPIC_AUTH_TOKEN=vendor-token ANTHROPIC_BASE_URL=https://gateway.invalid CLAUDE_CODE_OAUTH_TOKEN=vendor-oauth \
+  CLAUDE_CODE_USE_BEDROCK=1 CLAUDE_CODE_USE_VERTEX=1 OPENAI_BASE_URL=https://gateway.invalid
 check "fixture: all three children ran" "$(started)" "3"
 lacks "A8: no key value is on a judge's command line" "$(cat "$TMP/args.log")" "SENTINEL"
 check "A9: the Anthropic child holds no DFORGE key variable" "$(envof anthropic | grep -c '^DFORGE_[A-Z]*_API_KEY ')" "0"
 check "A9: the Anthropic child's ANTHROPIC_API_KEY is the DFORGE key, not the vendor variable's value" "$(envof anthropic | grep '^ANTHROPIC_API_KEY ')" "ANTHROPIC_API_KEY $(sha sk-test-anthropic-SENTINEL)"
 check "A9: the Anthropic child holds one key, its own" "$(holds anthropic "${ALL_KEYS[@]}")" "1"
+for b in anthropic openai agentrouter; do
+  check "A9: the $b child holds no variable that routes its key or prompt elsewhere" \
+    "$(envof "$b" | grep -c -E '^(ANTHROPIC_AUTH_TOKEN|ANTHROPIC_BASE_URL|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CODE_USE_BEDROCK|CLAUDE_CODE_USE_VERTEX|OPENAI_BASE_URL) ')" "0"
+done
 for b in openai agentrouter; do
   check "A9: the $b child holds no DFORGE key variable" "$(envof "$b" | grep -c '^DFORGE_[A-Z]*_API_KEY ')" "0"
   check "A9: the $b child holds no Anthropic key variable" "$(envof "$b" | grep -c '^ANTHROPIC_API_KEY ')" "0"
@@ -228,6 +244,7 @@ run DFORGE_FLOCK=no-such-flock DR_LOCK_TENTHS=3
 rm -rf "$LOCKBASE.lockd"
 check "a charge that fails leaves the ruling and its status line standing" "$rc $(tried)$(report)" "0 anthropic OK none present"
 has "a charge that fails is reported on stderr" "$(cat "$TMP/err")" "run-api-judge: the charge to anthropic was not recorded"
+check "a charge that fails is logged" "$(grep -c '^api-judge anthropic charge-failed spent=0.2500$' "$JLOG")" "1"
 check "a charge that fails records nothing" "$(spent anthropic)" "0.0000"
 
 # --- A8: no key value anywhere ---

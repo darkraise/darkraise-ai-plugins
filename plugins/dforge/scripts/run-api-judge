@@ -6,8 +6,9 @@
 #   api-judge <budget>:<model>/<effort> started
 #   api-judge <budget> running <seconds>s
 #   api-judge <budget>:<model>/<effort> status=<OK|FAILED|TIMEOUT|SKIPPED> exit=<n> out=<path|-> spent=<usd> reason=<token>
-# With no auto run bound it prints
-#   api-judge none status=SKIPPED exit=3 out=- spent=0.0000 reason=no-run
+#   api-judge <budget> charge-failed spent=<usd>   (the spend file did not take the charge)
+# With no auto run bound, or no api-judge block to read, it prints
+#   api-judge none status=SKIPPED exit=3 out=- spent=0.0000 reason=no-run|no-roster
 # --dry-run prints `api-judge <budget>:<model>/<effort> dry-run: <command line>`
 # for each open row and starts nothing.
 # Exit: 0 a report was written (under --dry-run: a row was open), 3 none was,
@@ -77,6 +78,10 @@ fi
 
 ladder=${API_JUDGE_LADDER:-$HERE/../reference/ladder.md}
 rows=$(awk '$0 == "```api-judge" { f = 1; next } f && $0 == "```" { exit } f && NF' < "$ladder" 2>/dev/null | tr -d '\r')
+if [ -z "$rows" ]; then
+  say "api-judge none status=SKIPPED exit=3 out=- spent=0.0000 reason=no-roster"
+  exit 3
+fi
 
 claude_cmd() {
   if [ -n "${API_JUDGE_CLAUDE:-}" ]; then printf '%s\n' "$API_JUDGE_CLAUDE"
@@ -137,6 +142,11 @@ reply_text() { # reply_text <budget> — the judge's answer from its captured ou
   esac
 }
 
+# The snapshot library hands git and jq the paths it is given, so on Git Bash
+# it needs MSYS path conversion, which this script turns off for its own calls.
+snapshot() { (unset MSYS_NO_PATHCONV; dr_snapshot "$@"); }
+snapshot_unchanged() { (unset MSYS_NO_PATHCONV; dr_task_assert_snapshot "$@"); }
+
 line_of() { # line_of <budget> <model> <effort> <status> <exit> <out> <spent> <reason>
   printf 'api-judge %s:%s/%s status=%s exit=%s out=%s spent=%s reason=%s' "$@"
 }
@@ -180,7 +190,10 @@ while read -r budget model effort secs _; do
   [ -n "$budget" ] || continue
   now=$(date +%s)
   left=$((CHAIN - (now - START)))
-  [ "$left" -gt 0 ] || exit 3
+  if [ "$left" -le 0 ]; then
+    say "$(line_of "$budget" "$model" "$effort" SKIPPED 0 - 0.0000 chain)"
+    continue
+  fi
   bound=$secs
   [ "$left" -lt "$bound" ] && bound=$left
 
@@ -202,8 +215,8 @@ while read -r budget model effort secs _; do
     continue
   fi
 
-  if ! dr_snapshot "$cwd" "$work/before.json" 2>/dev/null; then
-    say "$(line_of "$budget" "$model" "$effort" FAILED 0 - 0.0000 wrote)"
+  if ! snapshot "$cwd" "$work/before.json" 2>/dev/null; then
+    say "$(line_of "$budget" "$model" "$effort" FAILED 0 - 0.0000 snapshot)"
     exit 3
   fi
   key=${!key_var}
@@ -213,6 +226,8 @@ while read -r budget model effort secs _; do
   (
     cd "$cwd" || exit 1
     unset DFORGE_OPENAI_API_KEY DFORGE_ANTHROPIC_API_KEY DFORGE_AGENTROUTER_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY DFORGE_JUDGE_KEY
+    # Variables that would send the key, or the ruling, somewhere else.
+    unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX OPENAI_BASE_URL OPENAI_ORG_ID OPENAI_PROJECT_ID
     if [ "$budget" != anthropic ]; then
       (umask 077 && mkdir -- "$work/codex-home") || exit 1
       export CODEX_HOME="$(dr_native_path "$work/codex-home")"
@@ -239,9 +254,15 @@ while read -r budget model effort secs _; do
   kill -TERM -- "-$child" 2>/dev/null
   child=""
 
-  spent=$(run_cost "$budget" "$model")
-  api_budget_charge "$budget" "$spent" 2>/dev/null || echo "run-api-judge: the charge to $budget was not recorded" >&2
-  dr_task_assert_snapshot "$work/before.json" 2>/dev/null; snap=$?
+  # 126 and 127: the CLI never started, so nothing reached the API.
+  if [ "$rc" -eq 126 ] || [ "$rc" -eq 127 ]; then spent=0.0000
+  else spent=$(run_cost "$budget" "$model")
+  fi
+  if ! api_budget_charge "$budget" "$spent" 2>/dev/null; then
+    echo "run-api-judge: the charge to $budget was not recorded" >&2
+    say "api-judge $budget charge-failed spent=$spent"
+  fi
+  snapshot_unchanged "$work/before.json" 2>/dev/null; snap=$?
   reply=""
   [ "$rc" -ne 0 ] || reply=$(reply_text "$budget")
   rm -rf -- "$work/codex-home"
@@ -258,6 +279,10 @@ while read -r budget model effort secs _; do
     reply=""
     rm -f -- "$work/out" "$work/err" "$work/last"
     say "$(line_of "$budget" "$model" "$effort" FAILED 0 - "$spent" key-in-reply)"
+    continue
+  fi
+  if [ "$rc" -eq 126 ] || [ "$rc" -eq 127 ]; then
+    say "$(line_of "$budget" "$model" "$effort" FAILED "$rc" - "$spent" no-cli)"
     continue
   fi
   if [ "$rc" -ne 0 ]; then
