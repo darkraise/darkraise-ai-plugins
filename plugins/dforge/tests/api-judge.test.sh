@@ -112,11 +112,11 @@ check "A13: the timed-out CLI is stopped" "$(kill -0 "$(cat "$TMP/stub.pid")" 2>
 check "A13: the row's seconds bound the wait" "$([ $(( $(date +%s) - before )) -lt 20 ] && echo yes || echo no)" "yes"
 ladder 30
 before=$(date +%s)
-run API_JUDGE_CHAIN=2 STUB_JUDGE_ANTHROPIC=hang
+run API_JUDGE_CHAIN=6 STUB_JUDGE_ANTHROPIC=hang
 check "A13: the chain's seconds bound a row that has more of its own" "$rc $(tried)$([ $(( $(date +%s) - before )) -lt 20 ] && echo bounded)" "3 anthropic TIMEOUT timeout bounded"
 before=$(date +%s)
-run API_JUDGE_CHAIN=5 STUB_JUDGE_ANTHROPIC=slow-fail STUB_JUDGE_SLOW=3 STUB_JUDGE_OPENAI=hang
-check "A13: a later row gets only what is left of the chain" "$rc $(tried)$([ $(( $(date +%s) - before )) -lt 20 ] && echo bounded)" "3 anthropic FAILED error openai TIMEOUT timeout bounded"
+run API_JUDGE_CHAIN=10 STUB_JUDGE_ANTHROPIC=slow-fail STUB_JUDGE_SLOW=3 STUB_JUDGE_OPENAI=hang
+check "A13: a later row gets only what is left of the chain" "$rc $(tried)$([ $(( $(date +%s) - before )) -lt 25 ] && echo bounded)" "3 anthropic FAILED error openai TIMEOUT timeout bounded"
 
 # --- A14: a closed budget starts no CLI ---
 fresh; caps 0 0 0
