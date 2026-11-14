@@ -35,8 +35,19 @@ _dforge_long() {
   else printf '%s\n' "$1"; fi
 }
 
-# Both families local, computed without node: no node on PATH, or no git
-# repository (then DIR stands in for the checkout).
+# dforge_darkmem_possible — status 0 when this home could put a family in
+# darkmem: its config.json has a darkmem section, or stores.json records a
+# family already applied. Without either, darkmem-config.mjs --mode answers
+# local for both families, so the callers skip its node start: the common case
+# of a home that never used darkmem.
+dforge_darkmem_possible() {
+  [ -n "${HOME:-}" ] || return 0
+  grep -qs '"darkmem"[[:space:]]*:' "$HOME/.dforge/config.json" || [ -f "$HOME/.dforge/stores.json" ]
+}
+
+# Both families local, computed without node: no node on PATH, no git
+# repository (then DIR stands in for the checkout), or a home that never used
+# darkmem.
 _dforge_local() { # DIR TOP
   local base=${2:-$1} primary=${2:-$1} common
   if [ -n "$2" ]; then
@@ -60,7 +71,7 @@ dforge_stores_init() { # [DIR]
   key="${HOME:-}|${top:-nogit:$dir}"
   [ "$_DFORGE_KEY" = "$key" ] && return 0
   _DFORGE_TOP=$top
-  if [ -z "$top" ] || ! command -v node >/dev/null 2>&1; then
+  if [ -z "$top" ] || ! dforge_darkmem_possible || ! command -v node >/dev/null 2>&1; then
     _dforge_local "$dir" "$top"
     _DFORGE_KEY=$key
     return 0
