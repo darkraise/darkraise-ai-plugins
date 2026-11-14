@@ -1,35 +1,46 @@
 ## Verdict
-verdict: ship 397c08400e3620b0
-scores: coverage 18 / fidelity 18 / states 17 / deviations 18
+verdict: ship
+scores: coverage 17 / fidelity 18 / states 16 / deviations 17
 
-## Evidence opened
+Disputed items: none.
 
-- `.dforge/ui-ux/cockpit-keep-warm/settings-context-v200x60.txt` (and `.ansi`): 200x60 capture, help shown.
-- `.dforge/ui-ux/cockpit-keep-warm/settings-context-v120x40.txt` (and `.ansi`): 120x40 capture, help shown.
-- `.dforge/ui-ux/cockpit-keep-warm/settings-context-nohelp-v120x40.txt` (and `.ansi`): 120x40 capture, help hidden (the new one).
-- `plugins/dforge/tests/cockpit.test.ts`, `describe('keep-warm'` block (lines 3865-4005).
-- `plugins/dforge/hooks/cockpit/register.tsx`: `keepWarm` (3052-3068), `watchdogTick` gates (3011-3022), `prompt.submit` and `turn.start` and `turn.complete` handlers (606-696), `isMainBackground` (2656).
-- The Keep warm setting in `plugins/dforge/config/schema.mjs:109`.
+## What I opened
 
-## Item by item
+- Criteria file, the report (Delta and Results), and all six cited captures: the .txt and .ansi twins of settings-context-v200x60, settings-context-v120x40 and settings-context-nohelp-v120x40.
+- plugins/dforge/tests/cockpit.test.ts: the whole describe 'keep-warm' (lines 3865-4054) and the World mock it runs on (submitFailures, draft, prompt.read, prompt.submit at lines 388-396), plus autoFiles (line 6209).
+- plugins/dforge/hooks/cockpit/register.tsx: the prompt.submit and turn.start handlers, the turn.complete handler (lines 672-730), watchdogTick, keepWarm (lines 3054-3070), isMainBackground and KEEP_WARM_CAP.
+- plugins/dforge/config/schema.mjs lines 107-111 (the keepWarm setting).
 
-- UX-1, covered. The 200x60 capture shows the Context tab (`Context · all defaults`) with `Keep warm        50min   [ − ] [ + ] [ Edit ]` as the last row of the group, followed by the help text "Outside an auto run, while the session waits on background work, the cockpit submits a one-line turn after this many minutes so the prompt cache does not expire. 0 turns it off. Set 4 on the five-minute cache." That is the default, the stepper and the help text. The new 120x40 capture with help hidden (button reads `Show help`) shows the same row as the last row above the card's closing rule. It no longer depends on a fold.
-- UX-2, covered by the test "submits the prompt once keepWarm minutes pass with background work running, and again each further interval". It checks no prompt at 49 minutes, one at 51, none at 48 more minutes after the keep-warm turn, and a second at 3 more. The tick (`watchdogTick` to `keepWarm`) computes elapsed time from the latest of the last turn end, the last keep-warm and `watchedSince`, which is what the test exercises. The report says the live path is not reachable (a model turn is needed to start background work); the report lists this under Not proven, and the test covers it.
-- UX-3, covered. Each negative case has its own test: live turn, bound auto run, service-only command, no background work, `keepWarm` 0. The code agrees: `watchdogTick` returns while `S.isTurnLive`, `keepWarm` returns on 0 minutes, `isMainBackground` excludes service commands, and the keep-warm call is reached only when no auto run is active. The auto-run test also asserts that prompts did go through the other path (`w.prompts.length > 0`), so it is not trivially passing.
-- UX-4, covered by "submits nothing while the composer holds a draft": no prompt at 60 minutes with a draft, one prompt a minute after the draft is cleared. It matches the `$.prompt.read()` check in `keepWarm`.
-- UX-5, covered by two tests. One checks that no Done is sent after a keep-warm turn and that the later released Done carries `Started it.`. The other checks that a keep-warm turn adds no fetch. This matches the `isKeptWarm` branch in `turn.complete`, which leaves `heldDone` alone.
-- UX-6, covered by two tests, one per origin (composer and task-notification). Each reaches six keep-warm prompts, no seventh, then a seventh after a person or notification turn. This matches `KEEP_WARM_CAP = 6` and the reset in `turn.start` when the turn is not a keep-warm one.
-- OP-1, covered. Three captures exist at 200x60 and 120x40, default theme only. The report states the help-shown 120x40 window ends at the Auto-compact rows and says why. Its claim of a single theme (colour is emitted under NO_COLOR=1) is stated, not something I could check from the text captures, and it does not change what the contract asks.
+I did not run the tests. The 558 pass, 0 fail at d3742ddc is the dispatch's statement, not something I re-observed. The "mutation fails the test" remarks in the report's notes are likewise unverified claims and I did not count them as evidence.
 
-## Criteria notes
+## Per item
 
-- Coverage: every contract item has a row, and its evidence opened and shows that item. Not 20 because UX-2 to UX-6 rest on tests alone and the keep-warm prompt was never seen live; the report says so.
-- Fidelity: the `Keep warm` label, the `50min` value, the `[ − ] [ + ] [ Edit ]` controls and the help copy in the captures match the contract's wording, and the row sits in the same format as the Auto-compact rows above it. No element dropped, no copy changed.
-- States: the contract is a touch contract with no state matrix beyond the behaviour items, and each of those has a test. Not higher because no test presses or draws the Keep warm row (stepper, edit) and no keyboard walk of it exists; the report lists this under Not proven, and the contract asks only that the row be listed.
-- Deviations: no row is marked deviation and I found no uncited difference. The one visible difference (Keep warm below the fold at 120x40 with help shown) is disclosed in the OP-1 note and answered by the help-hidden capture.
+- UX-1: shown. At 200x60 the .txt (line 38-43) and its .ansi twin show `Keep warm        50min   [ − ] [ + ] [ Edit ]` as the last row of `Context · all defaults`, with help text that matches the schema.mjs description word for word. At 120x40 with help hidden (button reads `Show help`) line 12 shows the same row. Stepper and Edit buttons are drawn alongside the value and unit, like the neighbouring rows.
+- UX-2: test "submits the prompt once keepWarm minutes pass..." asserts none at 49 min, one at 51 min, none at 48 min after the keep-warm turn and the second at 51 min after it. Matches keepWarm() (interval measured from the later of last turn end, last keep-warm, watch start).
+- UX-3: five tests read. Live turn (t2 started, 10 min at keepWarm 4), auto run bound (autoFiles gives active: true, session sess-1; keepWarm is only called when no active run, and the test also asserts other prompts did go, so it is not a blank world), service command only (`npm run dev`, excluded by isMainBackground), no background work, keepWarm 0. All match the code gates.
+- UX-4: test holds a draft through 60 min with zero sent, then clears it and one goes within a minute. The mock's prompt.read returns the draft, and keepWarm() checks `(await $.prompt.read()).text !== ''`.
+- UX-5: both tests read. The first asserts no Done from the keep-warm turn and that the later released Done carries `Started it.`; the second asserts the fetch count does not grow. Code: `isHeld` and the `sendDone` branch are both guarded by `!isKeptWarm`, and heldDone is not touched.
+- UX-6: both origin variants (composer, task-notification) read. Six go, a seventh only after a turn of another origin. Code: turn.start zeroes keepWarmCount whenever the turn is not a keep-warm turn.
+- UX-7: three tests read.
+  - Error: no fetch after the failed keep-warm turn (no Turn failed alert), still one prompt sent after 10 more minutes, and the later notification releases a Done whose text is `Started it.` (held Done kept).
+  - Aborted: same assertions with reason 'aborted'.
+  - Failed submit: the first submit throws, the loop still sends six in total, which only holds if the count was taken back (otherwise five).
+  - Code at lines 680-697 agrees: `failed` is false for a keep-warm turn, a non-answer ending sets the count to the cap, and heldDone is only cleared when `!isKeptWarm`.
+  - The three names the report cites exist verbatim in the describe.
+- OP-1: the 200x60 capture is 60 lines and the two 120x40 captures are 40 lines, consistent with the stated sizes. Default theme only, with the NO_COLOR reason given in the contract. The .ansi twins show no colour beyond the existing reverse-video tab highlight, which supports that reason.
 
-## Disputed items
+## Observations that do not dispute an item
 
-None.
+- Refusal is named in UX-7 but no test uses reason 'refusal'. It takes the same branch as 'error' in the code (`failed` is in the non-answer set, count set to the cap, nothing cleared), so I count it covered by the error test. A direct test would remove the inference.
+- At 120x40 with help shown (settings-context-v120x40), the Keep warm row, the card's closing rule and the Back and Hide help buttons are cut off by the window. The report discloses this under OP-1 and gives the help-hidden capture as the 120x40 proof of UX-1. I had no pre-change capture to confirm the clipping already existed for the Auto-compact rows, so the "as for any group taller than the window" explanation is stated, not shown. It is a scrolling and window-height property of the existing settings view, not a change made by this branch, and the report does not mark it pass-with-deviation.
+- No capture or test presses the Keep warm stepper, shows `off` at 0, shows an invalid Edit entry, or walks the row by keyboard. The report's "Not proven" section says no test draws or presses the row. For a touch contract whose UX-1 asks only that the row be listed with default, stepper and help, I did not treat this as a dispute, but it is why states scores lower than the others.
+- The live keep-warm prompt was never seen in a session (needs background work only a model turn can start). The report says so and the behaviour rests on the tests above.
 
-Verdict: ship 397c08400e3620b0
+## Scores
+
+- coverage 17: every item has a row, and the evidence I opened shows each one. Refusal in UX-7 is covered by equivalence rather than a direct test.
+- fidelity 18: the Keep warm row has the same shape as its neighbours and the copy matches the schema; the build keeps to the touch scope.
+- states 16: the behavioural states (live, auto run, service-only, none, off, draft, cap, reset, error, abort, failed submit) are each tested. The new row's control states and a keyboard walk are not shown.
+- deviations 17: no row is marked deviation and I found no difference that changes the contract. The one clipped-window note is disclosed in OP-1.
+
+Verdict: ship 191777b6b40a568d

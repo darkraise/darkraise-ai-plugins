@@ -1,12 +1,12 @@
 # UI proof: cockpit keep-warm
 
 **Contract:** touch
-**Fingerprint:** 397c08400e3620b0
+**Fingerprint:** 191777b6b40a568d
 **Platform:** terminal
 **Viewports:** 200x60, 120x40
 **Themes:** default
 **Evidence:** local
-**Judge:** ship 397c08400e3620b0 — docs/dforge/ui-ux/proofs/2026-11-15-cockpit-keep-warm.judge.md
+**Judge:** ship 191777b6b40a568d — docs/dforge/ui-ux/proofs/2026-11-15-cockpit-keep-warm.judge.md
 
 ## Delta
 
@@ -18,6 +18,7 @@
 - **UX-4** — No keep-warm prompt goes while the prompt box holds a draft; one goes once the box is empty.
 - **UX-5** — A keep-warm turn leaves the held Done in place and sends no Done of its own.
 - **UX-6** — At most six keep-warm prompts go in a row; a turn the person or a task notification starts lets six more go.
+- **UX-7** — A keep-warm turn that ends in error, refusal or abort keeps the held Done, raises no Turn failed alert, and stops further keep-warm prompts until a turn of another origin; a submit that fails takes back its count.
 - **OP-1** — Proven at 200x60 and 120x40, in the default theme (Claude Code emits colour under NO_COLOR=1, so there is no second theme to walk).
 
 ## Results
@@ -30,12 +31,14 @@
 | UX-4 | pass | test "keep-warm > submits nothing while the composer holds a draft" | the test answers the plugin's `$.prompt.read()` with the draft; a mutation without the draft check fails it |
 | UX-5 | pass | tests "keep-warm > a keep-warm turn leaves the held Done in place and does not become its text", "a keep-warm turn sends no Done of its own" | the first asserts the released Done carries the chain's own answer, `Started it.` |
 | UX-6 | pass | tests "keep-warm > stops after six in a row, and a composer turn lets six more go", "stops after six in a row, and a task-notification turn lets six more go" | |
+| UX-7 | pass | tests "keep-warm > a keep-warm turn that fails keeps the held Done, raises no alert and stops the keep-warm prompts", "an aborted keep-warm turn keeps the held Done and stops the keep-warm prompts", "a submit that fails takes back its count, so six still go" | added with 0de86851; not reachable live for the same reason as UX-2 |
 | OP-1 | pass | .dforge/ui-ux/cockpit-keep-warm/settings-context-v200x60.txt, .dforge/ui-ux/cockpit-keep-warm/settings-context-v120x40.txt, .dforge/ui-ux/cockpit-keep-warm/settings-context-nohelp-v120x40.txt | tmux reported the window as 200x60 and 120x40 at each capture; the Context tab opens at both. With help shown, the 120x40 window ends at the Auto-compact rows and the Keep warm row is below the fold, as for any group taller than the window; with help hidden the whole group fits |
 
 ## Automated checks
 
 - Walked on Claude Code 2.1.325 in tmux (`NO_COLOR=1`, a throwaway HOME and config directory, a placeholder API key) with `--plugin-dir plugins/dforge` at the branch head, the window pinned to the stated size.
-- `claude plugin test plugins/dforge`: 543 pass, 0 fail
+- Re-walked on 2026-11-15 at d3742ddc after 0de86851 changed `register.tsx`: the three captures were retaken at 200x60 and 120x40 and read as before.
+- `claude plugin test plugins/dforge`: 558 pass, 0 fail (at d3742ddc)
 - `claude plugin validate` passes on the marketplace and on `plugins/dforge`
 - `node scripts/test-all.mjs`: exit 0
 
