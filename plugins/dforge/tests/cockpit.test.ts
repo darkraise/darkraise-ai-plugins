@@ -3959,6 +3959,19 @@ describe('discord', () => {
     expect((fetches[1]?.body.embeds as Record<string, unknown>[])[0]?.title).toBe('✓ Answered')
   })
 
+  test('an approval wait pending at /clear sends nothing afterwards', async ($, on) => {
+    const fetches: World['fetches'] = []
+    on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
+    on('session.end', (_$, e) => e as never)
+    const clock = world(on, { tokens: 50_000, fetches, config: { notifyAskAfter: 20 } })
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.session.start(START)
+    await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+    await $.session.end({ reason: 'clear', sessionId: 'sess-1', resume: { id: 'sess-1' } })
+    await clock.advance(30_000)
+    expect(fetches).toEqual([])
+  })
+
   test('says when a turn fails', async ($, on) => {
     const fetches: World['fetches'] = []
     world(on, { tokens: 50_000, fetches })
