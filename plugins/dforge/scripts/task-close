@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Close a task the session implemented: append its `complete` ledger line, push
+# the ledger to darkmem when that is on, and, in an auto run, record the
+# completion and list the decisions waiting for the Fable batch.
+#
+# Usage: task-close PLAN_FILE N CHECKPOINT [--review TEXT]
+# CHECKPOINT is the text after the dash on the complete line:
+#   done: …; verified: …; remaining: …; discovered: …; assumptions: …
+# TEXT goes where `unreviewed` would: `review clean; scores …` or `K parked`.
+# The commit range is the base `task-brief --open` recorded, to HEAD.
+# Prints the line it wrote, then what the plan needs next: an auto run's
+# pending decisions, an Early CI that names this task, and, after the last
+# task, the final budget line.
+# Exit: 0 ok (or the task was already complete); 2 usage or a checkpoint missing
+# one of its five fields; 3 no such task, or no open line for it; 4 an
+# amendment does not apply; 5 an auto run stopped at this completion.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/plan.sh"
+
+die() { echo "task-close: $1" >&2; exit "${2:-2}"; }
+
+review="unreviewed"
+args=()
+while [ $# -gt 0 ]; do
+  case $1 in
+    --review) [ $# -ge 2 ] && [ -n "$2" ] || die "usage: task-close PLAN_FILE N CHECKPOINT [--review TEXT]"; review=$2; shift 2 ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+[ ${#args[@]} -eq 3 ] || die "usage: task-close PLAN_FILE N CHECKPOINT [--review TEXT]"
+plan_arg=${args[0]} n=${args[1]} checkpoint=${args[2]}
+[[ $n =~ ^[0-9]+$ ]] || die "N must be a task number: $n"
+for field in 'done:' 'verified:' 'remaining:' 'discovered:' 'assumptions:'; do
+  [[ $checkpoint == *"$field"* ]] || die "the checkpoint lacks '$field' (done: …; verified: …; remaining: …; discovered: …; assumptions: …)"
+done
+
+plan=$(plan_locate "$plan_arg")
+[ -f "$plan" ] || die "no such plan file: $plan"
+plan_require_same_project "$plan"
+ctx=$(_plan_ctx "$plan")
+dforge_stores_init "$ctx"
+
+src=$(mktemp)
+trap 'rm -f "$src"' EXIT
+plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null || die "an amendment does not apply; run plan-lint" 4
+plan_task_text "$src" "$n" >/dev/null || die "no Task $n in $plan" 3
+
+slug=$(basename "$plan" .md)
+ledger="$(dforge_ledger_dir "$slug" "$ctx")/progress.md"
+[ -f "$ledger" ] || die "no ledger for $plan; run task-brief --open first" 3
+
+if tr -d '\r' < "$ledger" | grep -q "^Task $n: complete"; then
+  echo "task $n: already complete"
+  exit 0
+fi
+base=$(tr -d '\r' < "$ledger" | sed -n "s/^Task $n: implementer inline (assigned; base \\([0-9a-f]*\\)).*/\\1/p" | tail -n 1)
+[ -n "$base" ] || die "Task $n has no open line in $ledger; run task-brief --open first" 3
+head=$(git rev-parse --short HEAD) || die "not inside a git checkout"
+
+line="Task $n: complete (commits $base..$head, $review) — $checkpoint"
+printf '%s\n' "$line" >> "$ledger"
+echo "wrote: $line"
+
+# A failed push is not a failed close: the ledger line is already written.
+if ! push_out=$(bash "$HERE/darkmem-sync" push 2>&1); then
+  echo "darkmem-sync push failed: $(tail -n 1 <<<"$push_out")"
+fi
+
+rc=0
+if bash "$HERE/auto-run" status >/dev/null 2>&1; then
+  ar_out=$(bash "$HERE/auto-run" task-complete 2>&1); ar_rc=$?
+  [ -z "$ar_out" ] || printf '%s\n' "$ar_out"
+  if [ "$ar_rc" -eq 5 ]; then
+    echo "auto run: stopped at this completion"
+    rc=5
+  fi
+  pending=$(bash "$HERE/auto-run" decision list 2>&1) || true
+  [ -z "$pending" ] || printf 'auto run decisions waiting:\n%s\n' "$pending"
+fi
+
+early=$(plan_header_line "$src" 'Early CI')
+if [[ $early =~ after\ task\ ([0-9]+) ]] && [ "$((10#${BASH_REMATCH[1]}))" -eq "$((10#$n))" ]; then
+  echo "early CI: due after this task (delegated-task.md §Early CI)"
+fi
+
+. "$HERE/lib/context.sh"
+mode=$(ctx_plan_mode "$src" "$ledger")
+if [ "$mode" = --final ]; then
+  DFORGE_BUDGET_CALLER="task-close:$n" bash "$HERE/context-size" --final 2>/dev/null || true
+fi
+exit "$rc"

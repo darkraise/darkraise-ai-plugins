@@ -1,34 +1,45 @@
 #!/usr/bin/env bash
 # Extract one task's full text from an implementation plan into a file the
-# implementer reads in one call, so the task text never has to be pasted
-# through the controller's context. The brief ends with the plan header's
-# Global Constraints and Contracts, so every reader of the brief sees the
-# cross-task names it uses. --header writes the whole header instead.
+# session reads in one call, so the task text never has to be pasted through
+# its context. A brief for a task a judge reviews (risk 3) or for a plan that
+# is not an inline Claude plan ends with the plan header's Global Constraints
+# and Contracts; any other brief points at <workspace>/plan-header.md, which
+# every call rewrites. --header writes the whole header instead.
+# --open does what a session does before it starts a task: it writes the brief
+# and the header, appends the task's `implementer inline (assigned; base <sha7>)`
+# ledger line unless one is there, and prints the task check.
 # Amendments in <workspace>/amendments.md are applied first.
 #
 # Usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE]
+#        task-brief --open PLAN_FILE TASK_NUMBER
 #        task-brief --header PLAN_FILE [OUTFILE]
 # Default OUTFILE: <repo-root>/.dforge/sdd/<plan-basename>/task-<N>-brief.md
 # or .../plan-header.md (per plan and per worktree; concurrent runs of the SAME
 # plan in the same working tree share it).
-# Exit: 0 ok; 2 usage; 3 no such task; 4 an amendment does not apply.
+# Exit: 0 ok; 2 usage, or --open on a Host: codex plan; 3 no such task; 4 an
+# amendment does not apply.
 # Last output line: the session budget line from scripts/context-size.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 
-header=0
-if [ "${1:-}" = "--header" ]; then header=1; shift; fi
+header=0 open=0
+case "${1:-}" in
+  --header) header=1; shift ;;
+  --open) open=1; shift ;;
+esac
 if { [ "$header" -eq 1 ] && { [ $# -lt 1 ] || [ $# -gt 2 ]; }; } \
-   || { [ "$header" -eq 0 ] && { [ $# -lt 2 ] || [ $# -gt 3 ]; }; }; then
-  echo "usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE] | task-brief --header PLAN_FILE [OUTFILE]" >&2
+   || { [ "$open" -eq 1 ] && [ $# -ne 2 ]; } \
+   || { [ "$header" -eq 0 ] && [ "$open" -eq 0 ] && { [ $# -lt 2 ] || [ $# -gt 3 ]; }; }; then
+  echo "usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE] | task-brief --open PLAN_FILE TASK_NUMBER | task-brief --header PLAN_FILE [OUTFILE]" >&2
   exit 2
 fi
 
 plan=$(plan_locate "$1")
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
-dforge_stores_init "$(_plan_ctx "$plan")"
+ctx=$(_plan_ctx "$plan")
+dforge_stores_init "$ctx"
 if [ "$header" -eq 1 ]; then n="" given=${2:-}; else n=$2 given=${3:-}; fi
 
 if [ -n "$given" ]; then
@@ -59,25 +70,59 @@ fi
 heavy=""
 [ "$dispatch" -eq 0 ] || heavy=$(plan_heavy "$src")
 
-if [ "$header" -eq 1 ]; then
-  plan_header "$src" > "$out"
+if [ "$open" -eq 1 ] && grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")"; then
+  echo "a Host: codex plan runs the Codex loop (reference/native-codex.md); task-brief --open is for Claude Code" >&2
+  exit 2
+fi
+
+# write_header FILE: the whole plan header, then the heavy-task line.
+write_header() {
+  plan_header "$src" > "$1"
   if [ -n "$heavy" ]; then
     printf '**Heavy:** %s\n' \
       "$(plan_scores "$src" | awk -F'\t' -v heavy=" $(tr '\n' ' ' <<<"$heavy")" '
-        index(heavy, " " $1 " ") > 0 { printf "%sTask %s (total %s, risk %s)", (n++ ? ", " : ""), $1, $2, $3 }')" >> "$out"
+        index(heavy, " " $1 " ") > 0 { printf "%sTask %s (total %s, risk %s)", (n++ ? ", " : ""), $1, $2, $3 }')" >> "$1"
   fi
+}
+
+# check_command LABEL: the command in the first code span of the header's
+# `**LABEL:**` line, `none` when the value begins with none, else nothing.
+check_command() {
+  local line v
+  line=$(plan_header_line "$src" "$1")
+  [ -n "$line" ] || return 0
+  v=${line#"**$1:**"}
+  v=${v#"${v%%[![:space:]]*}"}
+  if [[ $v == none* ]]; then printf 'none'
+  elif [[ $v =~ \`([^\`]+)\` ]]; then printf '%s' "${BASH_REMATCH[1]}"
+  fi
+}
+
+if [ "$header" -eq 1 ]; then
+  write_header "$out"
 else
   if ! plan_task_text "$src" "$n" > "$out"; then
     echo "task ${n} not found in ${plan} (no heading matching 'Task ${n}')" >&2
     exit 3
   fi
+  risk3=0
   if [ "$dispatch" -eq 1 ] && [ "$(plan_scores "$src" | awk -F'\t' -v n="$n" '$1 == n { print $3 }')" = 3 ]; then
+    risk3=1
     awk -v d="**Review:** per-task — risk 3" 'NR == 1 { print; print d; next } { print }' "$out" > "$out.tmp"
     mv "$out.tmp" "$out"
   fi
-  excerpt=$(plan_header "$src" | awk "$_PLAN_AWK"'in_fence($0) { if (on) print; next } /^## / { h = $0; sub(/[ \t]+$/, "", h); on = (h == "## Global Constraints" || h == "## Contracts") } on { print }')
-  if [ -n "$excerpt" ]; then
-    printf '\n## Plan header excerpt\n\n%s\n' "$excerpt" >> "$out"
+  # The session read the header at setup and the judge of a risk-3 task reads
+  # only the brief, so only a brief for a reader without that context repeats
+  # the Global Constraints and Contracts.
+  if [ "$dispatch" -eq 1 ] && [ "$risk3" -eq 0 ]; then
+    header_file="$(dirname "$out")/plan-header.md"
+    write_header "$header_file"
+    printf '\n## Plan header\n\nGlobal Constraints and Contracts: %s (read at setup; read it again after a compaction).\n' "$header_file" >> "$out"
+  else
+    excerpt=$(plan_header "$src" | awk "$_PLAN_AWK"'in_fence($0) { if (on) print; next } /^## / { h = $0; sub(/[ \t]+$/, "", h); on = (h == "## Global Constraints" || h == "## Contracts") } on { print }')
+    if [ -n "$excerpt" ]; then
+      printf '\n## Plan header excerpt\n\n%s\n' "$excerpt" >> "$out"
+    fi
   fi
   # dforge:ui-ux — a UI task's brief carries the contract items it delivers,
   # verbatim from the spec, so the implementer builds the states and
@@ -97,6 +142,42 @@ else
 fi
 
 echo "wrote ${out}: $(wc -l < "$out" | tr -d ' ') lines"
+
+if [ "$open" -eq 1 ]; then
+  slug=$(basename "$plan" .md)
+  ledger="$(dforge_ledger_dir "$slug" "$ctx")/progress.md"
+  if [ ! -f "$ledger" ]; then
+    mkdir -p "$(dirname "$ledger")"
+    printf '# SDD ledger — plan: %s\n' "$(dforge_name "$plan" "$ctx")" > "$ledger"
+  fi
+  open_base=$(tr -d '\r' < "$ledger" | sed -n "s/^Task $n: implementer inline (assigned; base \([0-9a-f]*\)).*/\1/p" | tail -n 1)
+  if [ -n "$open_base" ]; then
+    echo "task $n: already open, base $open_base"
+  else
+    open_base=$(git rev-parse --short HEAD)
+    printf 'Task %s: implementer inline (assigned; base %s)\n' "$n" "$open_base" >> "$ledger"
+    echo "task $n: opened, base $open_base"
+  fi
+fi
+
+if [ -n "$n" ]; then
+  check_line=$(plan_header_line "$src" 'Task check')
+  if [ -z "$check_line" ]; then
+    echo "task check: no **Task check:** line; run the full suite once before committing"
+  else
+    task_check=$(check_command 'Task check')
+    if [ "$task_check" = none ]; then
+      last_task=$(plan_tasks "$src" | cut -f1 | sort -n | tail -n 1)
+      if [ $((10#$n % 3)) -eq 0 ] || [ "$n" = "$last_task" ]; then
+        echo "task check: none; the integration check is due: $(check_command 'Integration check')"
+      else
+        echo "task check: none; the integration check is not due (every third task and the last)"
+      fi
+    else
+      echo "task check: ${task_check:-unreadable; read the Task check line in $(dirname "$out")/plan-header.md}"
+    fi
+  fi
+fi
 
 # The budget line rides on a call the controller already makes before every
 # task, so checking the session budget costs no extra request. It must never

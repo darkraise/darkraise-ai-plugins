@@ -694,7 +694,17 @@ do_review() {
   local judge_prompt="$ws/task-$first-review-prompt.md" panel_prompt="$ws/task-$first-review-panel-prompt.md"
   local panel_dir="$ws/task-$first-review-panel" external_files=""
 
-  [ -f "$state" ] || die "Task $first has no step state; run task-step start first" 6
+  if [ ! -f "$state" ]; then
+    # task-brief --open recorded the base on the task's ledger line, so a
+    # review needs no start of its own.
+    open_base=$(tr -d '\r' < "$ledger" 2>/dev/null | sed -n "s/^Task $first: implementer inline (assigned; base \([0-9a-f]*\)).*/\1/p" | tail -n 1)
+    [ -n "$open_base" ] || die "Task $first has no step state or open line; run task-brief --open first" 6
+    open_sha=$(git rev-parse --verify --quiet "$open_base^{commit}") || die "the open line's base $open_base is not a commit" 6
+    ledger_init
+    jq -n --argjson tasks "$(printf '%s\n' "${ids[@]}" | jq -sc .)" --arg base "$open_sha" \
+      '{tasks: $tasks, base: $base, head: null, reviewHead: null, round: 0, t0: null}' > "$state.tmp" \
+      && mv "$state.tmp" "$state"
+  fi
   top=$(git rev-parse --show-toplevel)
   if [ -n "$cwd_arg" ]; then
     [ -d "$cwd_arg" ] || die "bad --cwd: $cwd_arg"
