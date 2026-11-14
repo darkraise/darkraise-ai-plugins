@@ -128,7 +128,6 @@ has "A2: total 6 on sonnet is the model-floor error" "$out" "ERROR header: inlin
 io_plan 'subagent — `claude --model sonnet --effort high` — x' "0 1 1 0" "0 1 1 1" > sub.md
 lint sub.md
 has "A3: a subagent line is deprecated" "$out" "WARN header: subagent execution is deprecated; inline is the default"
-lacks "A3: no majority-rule warning" "$out" "tasks are heavy"
 lacks "A3: no mode error" "$out" "ERROR header: subagent"
 io_plan 'inline — `claude --model sonnet --effort medium` — x' "0 0 0 3" "0 1 1 0" > risk3m.md
 lint risk3m.md

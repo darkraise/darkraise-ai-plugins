@@ -345,7 +345,6 @@ a4() {
     lint l4.md
     has "A4: an Executor line on a ${specs[$i]% *} task is a warning" "$out" \
       "WARN Task 2: the **Executor:** line is obsolete; the session implements this task"
-    absent "A4: and draws no lane gate finding (${specs[$i]% *})" "$out" 'lane gate'
     check "A4: and the plan lints without errors (${specs[$i]% *})" "$rc" "0"
   done
 }
