@@ -119,3 +119,71 @@ printed `Incorrect API key provided: sk-invalid.` in its `error` and
 - `anthropic`: verified to the authentication error only.
 - `openai`: verified to the authentication error only.
 - `agentrouter`: verified to the authentication error only.
+
+Live checks, Task 10 (2026-11-15), in a scratch `HOME` and a scratch
+repository with a bound auto run:
+
+- `anthropic` live ruling: not run — `DFORGE_ANTHROPIC_API_KEY` unset.
+- `openai` live ruling: not run — `DFORGE_OPENAI_API_KEY` unset.
+- `agentrouter` live ruling: not run — `DFORGE_AGENTROUTER_API_KEY` unset.
+- Decisions request (`decide ask`, `decisionApi` `shadow`): not run —
+  `DFORGE_OPENAI_API_KEY` unset.
+- Whether the last Codex `turn.completed` usage line is a run's whole cost
+  stays unverified: no Codex run reached a model.
+- `sha256sum ~/.codex/auth.json`: `d86229e2f303d11b…` before and after,
+  unchanged.
+- `claude auth status`: `loggedIn: true`, `authMethod: claude.ai`,
+  `apiProvider: firstParty` before and after, unchanged; no
+  `ANTHROPIC_API_KEY` in the session's environment, so the session stayed on
+  the subscription.
+
+## Demos
+
+Run in the scratch repository (`.dforge/` ignored, one commit, an auto run
+bound to the made-up session `demo-session-1`) under a scratch `HOME`, with
+`AR_SESSION=demo-session-1` and `API_JUDGE_CLAUDE` exported, following
+`plugins/dforge/reference/auto-run.md` §Rulings. Settings were set with
+`dforge-config set` before each step: rung 1 with `decisionApi` `on` and
+`apiBudgetOpenai` 5; rung 2 with `apiBudgetAnthropic` 5 and the other caps 0;
+the last run with every cap 0.
+
+```text
+### A19: a choice item at rung 1
+$ bash plugins/dforge/scripts/decide ask --id demo-1 --question "Which lock should the spool use?" --options "a noclobber lock file | a mkdir lock directory" --evidence docs/s.md
+no ruling reason=closed
+[exit 3]
+
+### A19: the same item at rung 2 (run-api-judge before judge-opus)
+The judge here is the test stub plugins/dforge/tests/fixtures/stub-api-judge/claude: no API key is set on this host.
+$ API_JUDGE_CLAUDE=plugins/dforge/tests/fixtures/stub-api-judge/claude DFORGE_ANTHROPIC_API_KEY=sk-test-anthropic-SENTINEL bash plugins/dforge/scripts/run-api-judge --prompt .dforge/demo-prompt.md --report .dforge/rulings-preexec-1-report.md --cwd .
+api-judge anthropic:claude-opus-5-5/medium started
+api-judge anthropic:claude-opus-5-5/medium status=OK exit=0 out=<scratch repository>/.dforge/rulings-preexec-1-report.md spent=0.2500 reason=none
+[exit 0]
+
+$ cat .dforge/rulings-preexec-1-report.md
+## Verdict
+ruling: a noclobber lock file — it holds on uutils
+
+### A19: the subscription seat only after exit 3
+$ bash plugins/dforge/scripts/run-api-judge --prompt .dforge/demo-prompt.md --report .dforge/rulings-preexec-1-report.md --cwd .
+api-judge anthropic:claude-opus-5-5/medium status=SKIPPED exit=0 out=- spent=0.0000 reason=off
+api-judge openai:gpt-6-astra/xhigh status=SKIPPED exit=0 out=- spent=0.0000 reason=off
+api-judge agentrouter:gpt-6-astra/xhigh status=SKIPPED exit=0 out=- spent=0.0000 reason=off
+[exit 3]
+
+exit 3 — the subscription seat is dispatched at this point, and not before
+
+### A30: api-spend status
+$ bash plugins/dforge/scripts/api-spend status   # scratch HOME
+api-budget anthropic open=false spent=0.2500 cap=0.0000 reason=off
+api-budget openai open=false spent=0.0000 cap=0.0000 reason=off
+api-budget agentrouter open=false spent=0.0000 cap=0.0000 reason=off
+[exit 0]
+
+$ bash plugins/dforge/scripts/api-spend status   # real HOME
+api-budget anthropic open=false spent=0.0000 cap=0.0000 reason=off
+api-budget openai open=false spent=0.0000 cap=0.0000 reason=off
+api-budget agentrouter open=false spent=0.0000 cap=0.0000 reason=off
+[exit 0]
+
+```

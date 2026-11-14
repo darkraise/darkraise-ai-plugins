@@ -529,6 +529,38 @@ line is held up to three times in a row, retries included; then the run stops
 with a reason, which the cockpit sends to Discord. See
 [auto-run.md](reference/auto-run.md).
 
+### API budgets
+
+An auto run can spend developer API credit on its rulings instead of the
+subscription seat. dforge reads three key variables of its own,
+`DFORGE_ANTHROPIC_API_KEY`, `DFORGE_OPENAI_API_KEY` and
+`DFORGE_AGENTROUTER_API_KEY`, set in your shell profile. It never reads the
+vendors' own names: an exported `ANTHROPIC_API_KEY` would move the whole
+Claude Code session onto API billing.
+
+Everything is off until you set a cap: `apiBudgetAnthropic`,
+`apiBudgetOpenai` and `apiBudgetAgentRouter`, in US dollars, default 0. The
+Decisions API also needs `decisionApi` set to `shadow` or `on`. A planning
+choice with listed options goes to the Decisions API first; a ruling it cannot
+make goes to an API-billed judge, tried in this order: `anthropic`
+(`claude-opus-5-5` medium), `openai` (`gpt-6-astra` xhigh), `agentrouter`
+(`gpt-6-astra` xhigh), the rows of the `api-judge` block in
+[ladder.md](reference/ladder.md). A budget is skipped when its cap is 0, its
+key is unset or 95% of the cap is spent. When none can rule, the subscription
+seat rules as before.
+
+`scripts/api-spend status` prints, per budget, whether it is open, what dforge
+has spent and the cap. The count covers only what dforge spent through these
+keys, so turn auto-recharge off in each vendor console and treat the console
+as the authority. Run `decisionApi` as `shadow` first: it logs what the
+Decisions API would rule next to the ruling that was made, and
+`scripts/decide report` shows how often they matched, by confidence band; its
+last line, `promote: yes` or `promote: no (…)`, says whether `on` is earned.
+See [SECURITY.md](../../SECURITY.md) for what the judges can read.
+
+`keepWarm` works outside an auto run only: an auto run's reconcile prompt
+already gives the session a turn every 20 minutes.
+
 ## Cockpit
 
 Claude Code only. Built and tested against Claude Code 2.1.299 to 2.1.325; the
@@ -871,8 +903,14 @@ The same settings can be set with
 | Context | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dforge` sessions. |
 | Context | `autoCompactWindow` | `0` | Claude's own `autoCompactWindow`, written to Claude's user settings file: `0` leaves it unset, else 100,000 to 1,000,000. Applies from the next session. |
 | Context | `autoCompactEnabled` | `true` | Claude's own `autoCompactEnabled`, written to the same file. Applies from the next session. |
+| Context | `keepWarm` | `50` | Minutes, outside an auto run, that the session may wait on background work with no turn before the cockpit submits a one-line keep-warm prompt, so the prompt cache does not expire; at most six in a row, and none while the prompt box holds a draft. `0` turns it off. Set `4` on the five-minute cache. See [API budgets](#api-budgets). |
 | Workflow | `codexReview` | `false` | `true` lets Codex take review seats when its gate passes. `false`, the default, makes `scripts/codex-gate` report `review=false reason=setting` without probing, and keeps every review on Claude; `/codex:review` runs a Codex review on demand. |
 | Workflow | `agyReview` | `false` | `true` lets the Antigravity CLI (`agy`) take review seats when its gate passes and the policy's `trust.review` is `pass`. `false`, the default, makes `scripts/agy-gate` report `review=false reason=setting` without probing, and keeps agy out of every review. |
+| Workflow | `decisionApi` | `off` | In an auto run, a planning choice with listed options goes first to OpenAI's Decisions API. `off` never calls it; `shadow` calls it and logs the answer without ruling; `on` lets a confident answer stand. Needs `DFORGE_OPENAI_API_KEY` and `apiBudgetOpenai` above 0. See [API budgets](#api-budgets). |
+| Workflow | `decisionConfidence` | `85` | The confidence, in percent (50 to 99), a Decisions API answer needs in both option orders to rule. |
+| Workflow | `apiBudgetAnthropic` | `0` | US dollars auto runs may spend on rulings through `DFORGE_ANTHROPIC_API_KEY`, up to 1000. `0` never uses the key. |
+| Workflow | `apiBudgetOpenai` | `0` | US dollars auto runs may spend on rulings and Decisions API requests through `DFORGE_OPENAI_API_KEY`, up to 1000. `0` never uses the key. |
+| Workflow | `apiBudgetAgentRouter` | `0` | US dollars auto runs may spend on rulings through `DFORGE_AGENTROUTER_API_KEY`, up to 1000. `0` never uses the key. A cap above 0 sends ruling prompts, and any file its judge reads, to AgentRouter, a third party; setting it is the consent. |
 | Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DFORGE_LENS_CAP` overrides it. |
 | Workflow | `lensMinorFrom` | `20` | The plan size, in tasks, from which the final review's lenses also report Minor findings. A smaller plan's lenses report Critical and Important findings only, so the fix wave does not triage a long Minor tail. `0` always asks for Minor findings. `DFORGE_LENS_MINOR_FROM` overrides it. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |

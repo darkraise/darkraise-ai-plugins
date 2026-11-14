@@ -30,3 +30,28 @@ scope:
 
 Problems in Claude Code, Codex, Discord or darkmem themselves belong with their
 maintainers.
+
+## API keys and API-billed judges
+
+dforge's auto runs can rule through developer API keys
+(`DFORGE_ANTHROPIC_API_KEY`, `DFORGE_OPENAI_API_KEY`,
+`DFORGE_AGENTROUTER_API_KEY`). Each is unused until its budget cap is set
+above 0.
+
+- The keys live in your shell profile, so every process the session starts
+  can read them, not only dforge's scripts.
+- What dforge's scripts guarantee: each judge runs with a scrubbed
+  environment holding only the one key it needs (Codex in a fresh
+  `CODEX_HOME`); a reply that contains a key value is discarded; no key value
+  is printed, logged, written to a file or passed as a command-line argument.
+- What they do not: a Codex judge can read any file you can read, the shell
+  profile that holds all three keys included. The Anthropic judge reads the
+  worktree and the directories added to its run, ignored files included. The
+  scrubbed environment and the reply scan stop an accidental leak, not a
+  judge steered to look for a key.
+- AgentRouter is a third party. The ruling prompt, and every file its judge
+  reads, pass through it. It is off until both `apiBudgetAgentRouter` and
+  `DFORGE_AGENTROUTER_API_KEY` are set; setting the cap is the consent.
+- Only `scripts/decide` filters what it sends: it refuses evidence files that
+  git ignores or that sit under a `.git` directory. The judges get whatever
+  their prompt names and whatever they choose to read.
