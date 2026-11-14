@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# The Decisions API rung of an auto run's ruling ladder (reference/auto-run.md).
+#
+# Usage: decide ask --id ID --question TEXT --options "A | B | …" [--evidence FILE]...
+#        decide record --id ID --ruling CHOICE
+#        decide report
+# ask prints one line: `ruling: <choice> — Decisions API (confidence <c>)`
+# (exit 0) or `no ruling reason=<token>` (exit 3). Exit 2 is a usage error.
+set -uo pipefail
+export MSYS_NO_PATHCONV=1
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/auto-run.sh"
+. "$HERE/lib/api-budget.sh"
+. "$HERE/lib/native-path.sh"
+. "$HERE/lib/timeout.sh"
+
+MODEL=gpt-6-luna
+EVIDENCE_LIMIT=400000
+
+usage() { echo "decide: $1" >&2; exit 2; }
+
+canon() { # canon PATH — the canonical form of an existing PATH, links followed
+  local target dir
+  target=$(dr_link_target "$1") || return 1
+  if [ -d "$target" ]; then dir=$(cd -P -- "$target" 2>/dev/null && pwd -P) || return 1; dr_native_path "$dir"; return; fi
+  dir=$(cd -P -- "$(dirname -- "$target")" 2>/dev/null && pwd -P) || return 1
+  dr_native_path "$dir/$(basename -- "$target")"
+}
+
+under() { case $1 in "$2"/*) return 0 ;; *) return 1 ;; esac; }
+
+evidence_ok() { # evidence_ok FILE… — every file may be sent
+  local f c docs state top total=0 size
+  docs=$(bash "$HERE/dforge-path" docs 2>/dev/null | tr -d '\r') && docs=$(canon "$docs") || docs=""
+  state=$(bash "$HERE/dforge-path" state 2>/dev/null | tr -d '\r') && state=$(canon "$state") || state=""
+  top=$(git rev-parse --show-toplevel 2>/dev/null | tr -d '\r') && top=$(canon "$top") || top=""
+  for f in "$@"; do
+    [ -f "$f" ] || return 1
+    c=$(canon "$f") || return 1
+    if { [ -n "$docs" ] && under "$c" "$docs"; } || { [ -n "$state" ] && under "$c" "$state"; }; then :
+    elif [ -n "$top" ] && under "$c" "$top"; then
+      git -C "$top" check-ignore -q -- "$c" 2>/dev/null
+      [ $? -eq 1 ] || return 1
+    else
+      return 1
+    fi
+    size=$(wc -c < "$f" | tr -d ' \r') || return 1
+    total=$((total + size))
+  done
+  [ "$total" -le "$EVIDENCE_LIMIT" ]
+}
+
+log_ask() { # log_ask OUTCOME [ANSWER_JSON]
+  local state answer=${2:-'{}'}
+  state=$(bash "$HERE/dforge-path" state 2>/dev/null | tr -d '\r') || return 0
+  mkdir -p -- "$state" 2>/dev/null || return 0
+  jq -nc --arg id "$ID" --argjson options "$OPTIONS_JSON" --arg mode "$MODE" --arg outcome "$1" --argjson a "$answer" \
+    '{kind: "ask", id: $id, options: $options, mode: $mode, outcome: $outcome,
+      choice: ($a.choice // null), choice_reversed: ($a.choice_reversed // null),
+      confidence: ($a.confidence // null), confidence_reversed: ($a.confidence_reversed // null),
+      needs_more: ($a.needs_more // null), guarded: ($a.guarded // null)}' \
+    | tr -d '\r' >> "$state/decisions.jsonl"
+}
+
+no_ruling() { printf 'no ruling reason=%s\n' "$1"; exit 3; }
+
+cmd_ask() {
+  local question="" options="" opt answer outcome tokens price usd lower
+  local -a evidence=() parts=() opts=()
+  ID=""
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --id|--question|--options|--evidence)
+        [ $# -ge 2 ] || usage "$1 needs a value"
+        case $1 in
+          --id) ID=$2 ;;
+          --question) question=$2 ;;
+          --options) options=$2 ;;
+          --evidence) evidence+=("$2") ;;
+        esac
+        shift 2
+        ;;
+      *) usage "unknown argument: $1" ;;
+    esac
+  done
+  [ -n "$ID" ] || usage "ask needs --id"
+  [ -n "$question" ] || usage "ask needs --question"
+  IFS='|' read -r -a parts <<< "$options"
+  for opt in ${parts[@]+"${parts[@]}"}; do
+    opt="${opt#"${opt%%[![:space:]]*}"}"; opt="${opt%"${opt##*[![:space:]]}"}"
+    [ -n "$opt" ] || usage "an option is empty"
+    [ "$opt" != other ] || usage "no option may be named other"
+    opts+=("$opt")
+  done
+  [ "${#opts[@]}" -ge 2 ] || usage "ask needs at least two options"
+  OPTIONS_JSON=$(printf '%s\n' "${opts[@]}" | jq -R . | jq -sc . | tr -d '\r')
+
+  MODE=$(dforge_setting decisionApi off)
+  case $MODE in shadow|on) ;; *) no_ruling off ;; esac
+
+  AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}}
+  ar_bound || { log_ask no-run; no_ruling no-run; }
+
+  if ! api_budget_state openai >/dev/null || ! price=$(api_budget_price "$MODEL" input); then
+    log_ask closed; no_ruling closed
+  fi
+
+  evidence_ok ${evidence[@]+"${evidence[@]}"} || { log_ask evidence; no_ruling evidence; }
+
+  local floor timeout request ev
+  floor=$(dforge_setting decisionConfidence 85)
+  [[ $floor =~ ^[0-9]+(\.[0-9]+)?$ ]] || floor=85
+  timeout=${DFORGE_DECISIONS_TIMEOUT:-30}
+  [[ $timeout =~ ^[0-9]+$ ]] || timeout=30
+  ev='[]'
+  for f in ${evidence[@]+"${evidence[@]}"}; do
+    ev=$(jq -c --arg label "$f" --arg path "$(canon "$f")" '. + [{label: $label, path: $path}]' <<< "$ev" | tr -d '\r')
+  done
+  request=$(jq -nc --arg q "$question" --argjson options "$OPTIONS_JSON" --argjson evidence "$ev" \
+    --argjson floor "$(awk -v f="$floor" 'BEGIN { printf "%.4f", f / 100 }')" --argjson timeout "$timeout" \
+    '{question: $q, options: $options, evidence: $evidence, floor: $floor, timeout: $timeout}' | tr -d '\r')
+  local -a bound=()
+  dforge_timeout && bound=("$DFORGE_TIMEOUT" $((timeout + 15)))
+  answer=$(printf '%s' "$request" | ${bound[@]+"${bound[@]}"} node "$(dr_native_path "$HERE/lib/decisions.mjs")" 2>/dev/null | tr -d '\r' | tail -1)
+  jq -e 'objects | .outcome | strings' >/dev/null 2>&1 <<< "$answer" || answer='{"outcome":"error"}'
+  outcome=$(jq -r '.outcome' <<< "$answer" | tr -d '\r')
+
+  tokens=$(jq -r '.input_tokens | numbers' <<< "$answer" | tr -d '\r')
+  if [ -n "$tokens" ]; then
+    usd=$(awk -v t="$tokens" -v p="$price" 'BEGIN { printf "%.4f", t * p / 1000000 }')
+    api_budget_charge openai "$usd" 2>/dev/null || echo "decide: the charge to openai was not recorded" >&2
+  fi
+  log_ask "$outcome" "$answer"
+
+  [ "$MODE" = on ] || no_ruling shadow
+  [ "$outcome" = ruled ] || no_ruling "$outcome"
+  lower=$(jq -r '[.confidence, .confidence_reversed] | min' <<< "$answer" | tr -d '\r')
+  printf 'ruling: %s — Decisions API (confidence %s)\n' "$(jq -r '.choice' <<< "$answer" | tr -d '\r')" \
+    "$(awk -v c="$lower" 'BEGIN { printf "%.2f", c }')"
+  exit 0
+}
+
+case ${1:-} in
+  ask) shift; cmd_ask "$@" ;;
+  record|report) usage "$1 is not built yet" ;;
+  *) usage "usage: decide ask|record|report" ;;
+esac

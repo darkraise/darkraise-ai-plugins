@@ -27,6 +27,7 @@ export const windowsSeconds = {
   'context-size.test.sh': 222,
   'criteria.test.sh': 10,
   'darkmem-sync.test.sh': 155,
+  'decide.test.sh': 40,
   'depth-route.test.sh': 88,
   'dforge-config.test.sh': 34,
   'dforge-dir.test.sh': 10,
