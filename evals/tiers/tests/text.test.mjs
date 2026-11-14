@@ -11,7 +11,7 @@ const { fill, template } = await import('../lib/prompt.mjs');
 const { MARKER, addedLines, isTestPath, strip } = await import('../lib/strip.mjs');
 
 test('the three production templates yield a prompt body', () => {
-  const body = template(resolve(PLUGIN, 'skills/subagent-driven-development/references/implementer-prompt.md'));
+  const body = template(resolve(PLUGIN, 'reference/prompts/implementer-prompt.md'));
   assert.match(body, /^\S/);
   assert.doesNotMatch(body, /^Subagent|prompt: \|/m);
   assert.match(template(resolve(PLUGIN, 'skills/requesting-code-review/references/code-reviewer.md')), /\[DIFF_FILE\][\s\S]*## Critical Rules/);

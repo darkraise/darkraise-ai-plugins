@@ -12,7 +12,7 @@ import { fill, template } from './lib/prompt.mjs';
 import { snapshot } from './lib/snapshot.mjs';
 import { MARKER, addedLines, strip } from './lib/strip.mjs';
 
-const IMPLEMENTER = resolve(PLUGIN, 'skills/subagent-driven-development/references/implementer-prompt.md');
+const IMPLEMENTER = resolve(PLUGIN, 'reference/prompts/implementer-prompt.md');
 const CODE_REVIEWER = resolve(PLUGIN, 'skills/requesting-code-review/references/code-reviewer.md');
 const PLAN_REVIEWER = resolve(PLUGIN, 'skills/writing-plans/references/plan-reviewer-prompt.md');
 const SCRATCH = '.superpowers/sdd/eval';
