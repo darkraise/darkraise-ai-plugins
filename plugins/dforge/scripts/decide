@@ -141,8 +141,66 @@ cmd_ask() {
   exit 0
 }
 
+decisions_log() {
+  local state
+  state=$(bash "$HERE/dforge-path" state 2>/dev/null | tr -d '\r') || return 1
+  printf '%s/decisions.jsonl\n' "$state"
+}
+
+read_log() { # read_log FILE — the log's JSON objects, one per line; a bad line is skipped
+  if [ -f "$1" ]; then jq -c -R 'fromjson? | objects' < "$1" | tr -d '\r'; fi
+}
+
+cmd_record() {
+  local ruling="" log asked
+  ID=""
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --id|--ruling)
+        [ $# -ge 2 ] || usage "$1 needs a value"
+        if [ "$1" = --id ]; then ID=$2; else ruling=$2; fi
+        shift 2
+        ;;
+      *) usage "unknown argument: $1" ;;
+    esac
+  done
+  [ -n "$ID" ] || usage "record needs --id"
+  [ -n "$ruling" ] || usage "record needs --ruling"
+  log=$(decisions_log) || usage "no state directory"
+  asked=$(read_log "$log" | jq -c --arg id "$ID" 'select(.kind == "ask" and .id == $id)' | tr -d '\r' | tail -1)
+  [ -n "$asked" ] || usage "no ask is logged for id $ID"
+  jq -e --arg r "$ruling" '$r == "other" or ((.options // []) | index([$r]) != null)' >/dev/null <<< "$asked" ||
+    usage "$ruling is not one of the options asked for $ID, nor other"
+  jq -nc --arg id "$ID" --arg r "$ruling" '{kind: "record", id: $id, ruling: $r}' | tr -d '\r' >> "$log"
+}
+
+cmd_report() {
+  local log floor
+  [ $# -eq 0 ] || usage "report takes no arguments"
+  log=$(decisions_log) || usage "no state directory"
+  floor=$(dforge_setting decisionConfidence 85)
+  [[ $floor =~ ^[0-9]+$ ]] || floor=85
+  read_log "$log" | jq -rn --argjson floor "$floor" '
+    [inputs] as $lines
+    | ($lines | map(select(.kind == "record")) | group_by(.id) | map({key: .[0].id, value: (last | .ruling)}) | from_entries) as $rulings
+    | [$lines | map(select(.kind == "ask")) | group_by(.id) | map(last)[]
+        | .id as $id
+        | select((.confidence | type) == "number" and (.confidence_reversed | type) == "number" and ($rulings | has($id)))
+        | {pct: (([.confidence, .confidence_reversed] | min) * 10000 | round / 100 | floor),
+           match: (.choice == .choice_reversed and .choice == $rulings[.id])}] as $items
+    | ([[50, 59], [60, 69], [70, 79], [80, 89], [90, 100]][] as [$lo, $hi]
+        | [$items[] | select(.pct >= $lo and .pct <= $hi)]
+        | "band \($lo)-\($hi): \(length) recorded, \(map(select(.match)) | length) match"),
+      ([$items[] | select(.pct >= $floor)] as $c
+        | ($c | length) as $n | ($c | map(select(.match)) | length) as $m
+        | if $n >= 20 and $m * 100 >= $n * 95 then "promote: yes"
+          else "promote: no (\($n) recorded, \(if $n == 0 then 0 else ($m * 100 / $n | floor) end)% match)" end)
+  ' | tr -d '\r'
+}
+
 case ${1:-} in
   ask) shift; cmd_ask "$@" ;;
-  record|report) usage "$1 is not built yet" ;;
+  record) shift; cmd_record "$@" ;;
+  report) shift; cmd_report "$@" ;;
   *) usage "usage: decide ask|record|report" ;;
 esac

@@ -180,6 +180,53 @@ has "A5: the mirror spec's text is sent" "$(tail -1 "$REQ" | j '.body.input')" "
 (cd "$WORK" && bash "$DECIDE" ask --id q2 --question q --options "a | other" 2>/dev/null); check "an option named other: exit 2" "$?" "2"
 (cd "$WORK" && bash "$DECIDE" frob 2>/dev/null); check "an unknown command: exit 2" "$?" "2"
 
+# --- A7: record and report ---
+rec() { (cd "$WORK" && bash "$DECIDE" record "$@" 2>>"$TMP/err"); }
+report() { (cd "$WORK" && bash "$DECIDE" report 2>>"$TMP/err") | tr -d '\r'; }
+l=$(logged)
+rec --id q1 --ruling "flock"; check "A7: record takes a listed option" "$?" "0"
+check "A7: the record line" "$(tail -1 "$LOG" | tr -d '\r')" '{"kind":"record","id":"q1","ruling":"flock"}'
+rec --id q1 --ruling "other"; check "A7: record takes other" "$?" "0"
+rec --id q1 --ruling "a third way"; check "A7: record refuses any other text: exit 2" "$?" "2"
+rec --id never-asked --ruling "flock"; check "A7: record refuses an id that was never asked: exit 2" "$?" "2"
+check "A7: a refused record writes nothing" "$(( $(logged) - l ))" "2"
+
+ask_line() { # ask_line <id> <confidence> <reversed confidence> <choice> [reversed choice]
+  printf '{"kind":"ask","id":"%s","options":["A","B"],"mode":"shadow","outcome":"ruled","choice":"%s","choice_reversed":"%s","confidence":%s,"confidence_reversed":%s,"needs_more":0.05,"guarded":0.02}\n' "$1" "$4" "${5:-$4}" "$2" "$3"
+}
+rec_line() { printf '{"kind":"record","id":"%s","ruling":"%s"}\n' "$1" "$2"; }
+fixture() { # fixture <confident asks> <how many of their records say B>
+  : > "$LOG"
+  for i in $(seq 1 "$1"); do
+    ask_line "c$i" 0.97 0.95 A >> "$LOG"
+    if [ "$i" -le "$2" ]; then rec_line "c$i" B >> "$LOG"; else rec_line "c$i" A >> "$LOG"; fi
+  done
+  ask_line low1 0.75 0.72 A >> "$LOG"; rec_line low1 B >> "$LOG"
+  ask_line mid1 0.90 0.82 A >> "$LOG"; rec_line mid1 A >> "$LOG"
+  ask_line split1 0.99 0.99 A B >> "$LOG"; rec_line split1 A >> "$LOG"
+  ask_line unrecorded 0.99 0.99 A >> "$LOG"
+  printf '{"kind":"ask","id":"refused","options":["A","B"],"mode":"shadow","outcome":"evidence","choice":null,"choice_reversed":null,"confidence":null,"confidence_reversed":null,"needs_more":null,"guarded":null}\n' >> "$LOG"
+  rec_line refused A >> "$LOG"
+}
+fixture 19 1
+check "A7: report counts matches per band of the lower confidence" "$(report)" \
+"band 50-59: 0 recorded, 0 match
+band 60-69: 0 recorded, 0 match
+band 70-79: 1 recorded, 0 match
+band 80-89: 1 recorded, 1 match
+band 90-100: 20 recorded, 18 match
+promote: no (20 recorded, 90% match)"
+fixture 19 0
+check "A7: 20 confident items, exactly 95% matching, promote" "$(report | tail -1)" "promote: yes"
+fixture 18 0
+check "A7: fewer than 20 confident recorded items never promote" "$(report | tail -1)" "promote: no (19 recorded, 94% match)"
+: > "$LOG"
+check "A7: an empty log" "$(report | tail -1)" "promote: no (0 recorded, 0% match)"
+settings '{"decisionApi":"on","apiBudgetOpenai":10,"decisionConfidence":99}'
+fixture 20 0
+check "A7: decisionConfidence decides which items count toward promotion" "$(report | tail -1)" "promote: no (1 recorded, 0% match)"
+settings '{"decisionApi":"on","apiBudgetOpenai":10}'
+
 # --- A8: no key value is printed, logged or stored ---
 lacks "A8: no key value in stdout, stderr, the log or the spend file" \
   "$(cat "$TMP/all.out" "$TMP/err" "$LOG" "$HOME/.dforge/api-spend.json" 2>/dev/null)" "SENTINEL"
