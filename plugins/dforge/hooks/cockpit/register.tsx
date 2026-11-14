@@ -391,7 +391,7 @@ export const register: Register = on => {
     if (words[0]?.toLowerCase() === 'notify') return notifyCommand($, words.slice(1))
     const wantsSettings = e.args.trim().toLowerCase() === 'settings'
     if (!wantsSettings && e.args.trim() !== '') {
-      return { text: `Unknown argument "${e.args.trim()}". Usage: /cockpit [settings | notify test | notify url <url> | notify mention <id>]` }
+      return { text: `Unknown argument "${e.args.trim()}". Usage: /cockpit [settings | notify test | notify mention <id>]` }
     }
     if (wantsSettings) await showSettings($)
     else {
@@ -988,7 +988,7 @@ export const register: Register = on => {
                 notes.url !== null && compact('set-notify-test', 'Send test', () => sendTest($), { isMain: true }),
                 !notes.isFromEnv && canType && compact('set-notify-url-edit', notes.url === null ? 'Set' : 'Change', () => edit('url'), { isMain: notes.url === null }),
                 !notes.isFromEnv && notes.url !== null && compact('set-notify-url-remove', 'Remove', () => saveWebhook($, '')),
-                !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it from a terminal: /cockpit notify url</Text>,
+                !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it in /cockpit settings in a terminal, or with DFORGE_NOTIFY_URL</Text>,
               )}
           {notes.last !== null && (
             <Text key="set-notify-last" color={notes.last.isError ? 'red' : 'green'} wrap="truncate-end">
@@ -3375,17 +3375,13 @@ async function sendTest($: EngineInterface): Promise<string> {
 async function notifyCommand($: EngineInterface, words: string[]): Promise<{ text: string }> {
   const [verb = '', ...rest] = words
   if (verb === 'test') return { text: await sendTest($) }
-  if (verb === 'url') {
-    const problem = await saveWebhook($, rest.join(' '))
-    return { text: problem ?? (rest.join('').trim() === '' ? 'Discord webhook removed.' : 'Discord webhook saved.') }
-  }
   if (verb === 'mention') {
     const problem = await saveMention($, rest.join(' '))
     return { text: problem ?? 'Discord mention saved.' }
   }
   const state = await read($, notifier)
   return {
-    text: state.url === null ? 'No Discord webhook is set. /cockpit notify url <url> sets one.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from the environment)' : ''}.`,
+    text: state.url === null ? 'No Discord webhook is set. Set one in /cockpit settings (Notifications) in a terminal, or with DFORGE_NOTIFY_URL.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from the environment)' : ''}.`,
   }
 }
 
@@ -3694,7 +3690,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
   await $.command.register({
     name: 'cockpit',
     description: 'Show context, usage, subagents, the plan and the repo in a pane',
-    argumentHint: '[settings | notify test | notify url <url> | notify mention <id>]',
+    argumentHint: '[settings | notify test | notify mention <id>]',
   })
   await loadSettings($)
   const o = await live($)
