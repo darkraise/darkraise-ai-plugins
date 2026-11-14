@@ -124,7 +124,7 @@ against its handoff budget, usage limits with forecasts, running shells and
 subagents, the dforge run, and the repository. It can post to Discord when a
 turn needs you, and its attribution guard keeps AI attribution out of your
 commits and pull requests. It opens by itself once the terminal is 144 columns
-wide, `/cockpit` opens it at any width, and **Minimize** folds it into a
+wide, `/dforge:cockpit` opens it at any width, and **Minimize** folds it into a
 two-line band above the prompt.
 
 <p align="center">

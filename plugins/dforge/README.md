@@ -537,7 +537,7 @@ mod API is early access and may change between releases.
 ### What it does
 
 **Cockpit pane.** A pane with the session at a glance. It opens by itself when
-a session starts, once the terminal is 144 columns wide; `/cockpit` opens it at
+a session starts, once the terminal is 144 columns wide; `/dforge:cockpit` opens it at
 any width, and says why if Claude Code holds it back. In fullscreen at 110
 columns or more it docks beside the transcript; otherwise it sits above the
 prompt. In the full layout each section is a framed card in its own color, its
@@ -703,25 +703,31 @@ nothing to show is left out; the buttons shrink to one line, and
 **Detailed** (`d`) brings the cards back. Each press saves the `density`
 setting. In the desktop app the dense rows are text, without the gauges.
 
-**Live readings.** While the pane is up or the cockpit minimized, it checks
-`~/.dforge/config.json` and the dforge keys in Claude's settings every two
-seconds and puts a change in force, so an edit from `dforge-config`, by hand or
-in another session shows without a restart; a file that stops being a JSON
-object keeps the settings in force and says so in the settings view. The run
-ledger is re-read when it changes, and the git state and the `/context`
-breakdown every ten seconds. Nothing is read while the cockpit is hidden. The
-account, Remote Control's `/config` row and the usage limits keep their own
-timing.
+**Live readings.** While a turn runs under a drawn pane or band, the cockpit
+checks `~/.dforge/config.json` and the dforge keys in Claude's settings every
+two seconds, and every ten seconds otherwise, and puts a change in force, so an
+edit from `dforge-config`, by hand or in another session shows without a
+restart; a file that stops being a JSON object keeps the settings in force and
+says so in the settings view. A hidden cockpit still reads the settings every
+ten seconds, because the guards and the notifications obey them. The run
+ledger is re-read when it changes and after every Bash call, whatever script
+wrote it; the git state after a Bash, Edit or Write call (at most once in two
+seconds) and every ten seconds; the `/context` breakdown every ten seconds
+while the pane is up. A pane left idle redraws every thirty seconds, so its
+clocks keep moving. `/model`, `/effort`, `/output-style`, `/config`, `/login`
+and `/logout` refresh the model, effort, style, Remote Control and account at
+once. The usage limits are read when a measurement lands (after a turn, or when
+a window moves a whole point), and again from the session after `/clear`.
 
 **Minimize** (`m`) closes the pane. The cockpit then draws as a band directly
 above the prompt, across the transcript's width, in the terminal and the
 desktop app alike.
-**Expand** on the top rule opens the pane again, and so does `/cockpit`. Each
+**Expand** on the top rule opens the pane again, and so does `/dforge:cockpit`. Each
 saves the `layout` setting, so the next session opens the same way: a
-minimized cockpit starts with the box or band and no pane. `/cockpit settings`
+minimized cockpit starts with the box or band and no pane. `/dforge:cockpit settings`
 still opens the settings, and **Back** closes them again. Minimize is offered
 in the terminal and the desktop app; elsewhere a minimized cockpit shows
-nothing until `/cockpit` opens it. The band is also what a pane that is not
+nothing until `/dforge:cockpit` opens it. The band is also what a pane that is not
 docked draws (`layout` `auto`, the default). Its frame takes the account's
 color, with the email, billing and Remote Control (`connected`, `on` or
 `not connected`, as on the Account card) on the top rule. Its two lines show
@@ -756,11 +762,11 @@ label as a desktop app marks one; the hotkey presses it while the pane has the
 keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `d` **Dense** or **Detailed**, `s` **Settings**, `m` **Minimize**,
 and `b` **Back** in the settings view. Before Claude Code 2.1.295, which first
 draws a styled label, the hotkey leads the label instead (`c: Compact`). The box is gray at rest and takes the accent color on the one
-that matters: **Hand off** once the context passes `warnAt`, **Resume**
+that matters: **Hand off** once the context passes 80% of the handoff budget, **Resume**
 whenever it shows. In the terminal's settings view a switch reads `● On` or `○ Off`, the
 chosen option of a row takes the accent, and what is off is drawn dim.
 
-**Settings view.** **Settings** (or `/cockpit settings`) turns the pane into the
+**Settings view.** **Settings** (or `/dforge:cockpit settings`) turns the pane into the
 mod's settings: whether it shows at session start, the layout, which sections
 show, the handoff budget, where Hand off takes the accent and the Discord limit
 message goes out, how many context rows to list, the note and guard switches, and the
@@ -778,7 +784,7 @@ The cockpit pops up nothing in the normal course: usage limits show in the
 gauges and the band, and a Discord message that fails to send shows in the
 settings view. A toast appears only when it cannot do what was asked: a
 setting that could not be saved, or a handoff note the session would not take.
-`/cockpit` with an argument it does not know answers with its usage.
+`/dforge:cockpit` with an argument it does not know answers with its usage.
 
 **Handoff reading.** The handoff reading shows only in the cockpit: the
 Context card and the band. The main session re-reads its whole context on every request, so a session that
@@ -795,9 +801,9 @@ session needs you, which works the same over ssh and tmux. Create a webhook
 (channel settings → Integrations → Webhooks → copy URL) and paste it in the
 settings view's **Notifications** group (a typed slash command would keep the
 token in the transcript, so there is none for it). It is kept in the plugin's own store, not in `settings.json`, and only ever
-shows masked; `DFORGE_NOTIFY_URL` in the environment wins over it (`DR_COCKPIT_NOTIFY_URL` still read). **Send
-test** (or `/cockpit notify test`) posts a sample. Set your Discord user id
-(**Mention**, or `/cockpit notify mention <id>`) to be pinged for the events
+shows masked; `DFORGE_NOTIFY_URL` in the environment wins over it . **Send
+test** (or `/dforge:cockpit notify test`) posts a sample. Set your Discord user id
+(**Mention**, or `/dforge:cockpit notify mention <id>`) to be pinged for the events
 that need you; everything else posts silently.
 
 | Event | When | Default | Pings |
@@ -829,7 +835,7 @@ Code" or a Claude session link). Human co-authors pass.
 
 ### Settings
 
-Open the settings with **Settings** in the pane or `/cockpit settings`. They are
+Open the settings with **Settings** in the pane or `/dforge:cockpit settings`. They are
 one tab per group: press `1` to `8` to switch, `i` to hide or show each
 setting's description, and `b` to go back. A row whose value differs from its
 default is marked `*` and shows the default with a **Reset**; `r` resets the
@@ -851,7 +857,7 @@ The same settings can be set with
 
 | Tab | Option | Default | Effect |
 | --- | --- | --- | --- |
-| Cockpit | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
+| Cockpit | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/dforge:cockpit` opens it at any width. No effect while `layout` is `compact`: the settings view locks the row then. |
 | Cockpit | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane, and the band above the prompt. **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
 | Cockpit | `density` | `detailed` | `detailed`: cards, charts and lists. `dense`: one line per section. **Dense** and **Detailed** in the pane set it. |
 | Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band draws the lines the Minimized tab picks instead. |
@@ -860,9 +866,8 @@ The same settings can be set with
 | Cockpit | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
 | Minimized | `bandLine1` | empty | The minimized band's first line, in order, comma-separated: `dir`, `git`, `model`, `effort`, `style`, `turn`, `run`, `agents`, `shells`, `ctx`, `cache`, `cost`, `5h`, `7d`, `time`. Empty shows `dir`, `git`, `model`, `effort`, `style`, `turn`, `run`, `agents`, `shells`; `none` hides the line. The tab's chips add a segment last on a line and take it off the other. |
 | Minimized | `bandLine2` | empty | The second line, from the same names. Empty shows `ctx`, `cache`, `cost`, `5h`, `7d`; `none` hides it. A name on both lines shows on the first. In the desktop app the picked `ctx`, `cache`, `5h` and `7d` are its meters and the rest its text rows. |
-| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dforge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DFORGE_BUDGET` overrides it; `relaxed` handoff mode ignores it. |
+| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dforge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DFORGE_BUDGET` overrides it; `relaxed` handoff mode ignores it, and the settings view locks the row then. |
 | Context | `handoffMode` | `strict` | `strict` hands off at the handoff budget, except that a plan's last two tasks and its final phase run past it to finish the plan. `relaxed` measures every task against the final-phase limit, 85% of the window, so a session carries a plan further; a worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on. |
-| Context | `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
 | Context | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dforge` sessions. |
 | Context | `autoCompactWindow` | `0` | Claude's own `autoCompactWindow`, written to Claude's user settings file: `0` leaves it unset, else 100,000 to 1,000,000. Applies from the next session. |
 | Context | `autoCompactEnabled` | `true` | Claude's own `autoCompactEnabled`, written to the same file. Applies from the next session. |
@@ -874,8 +879,8 @@ The same settings can be set with
 | Workflow | `autoRun` | `on` | `on` runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; `off` on Codex); `ask` offers that once the design is approved; `off` never runs one. See [Auto run](#auto-run). |
 | Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
 | Process | `fastMode` | `ask` | `ask` offers fast mode before brainstorming or debugging a request; `always` takes it without asking; `off` never offers it. See [Fast mode](#fast-mode). |
-| Process | `designApproval` | `sections` | `sections` approves each design section in turn; `whole` presents the design once with one approval. No effect under `autoRun=on` on Claude Code, which presents no design. |
-| Process | `specReview` | `true` | Stop for you to review the written spec before the plan is written. No effect under `autoRun=on` on Claude Code: the spec review always happens. |
+| Process | `designApproval` | `sections` | `sections` approves each design section in turn; `whole` presents the design once with one approval. No effect under `autoRun=on` on Claude Code, which presents no design; the settings view locks the row then and the session-start line leaves it out. |
+| Process | `specReview` | `true` | Stop for you to review the written spec before the plan is written. No effect under `autoRun=on` on Claude Code: the spec review always happens; the settings view locks the row then and the session-start line leaves it out. |
 | Process | `questionStyle` | `single` | `single` asks one clarifying question per message; `batched` asks them all in one. |
 | Finish | `finishAction` | `ask` | What finishing does once the final review is clean. `ask` keeps the question before the first task; `merge`, `pr` or `keep` skips it and runs that action at once; `wait` skips it and shows the finish menu then. |
 | Notifications | `limitAlertAt` | `90` | The share at which a usage limit sends the Discord `limit` message, in percent. `0` turns it off. |
@@ -926,8 +931,8 @@ dforge 5.0 retires the external executor lane: Codex and agy review and never
 implement a task.
 
 - **Settings.** `codexLane` and `agyLane` are gone; a stored value is ignored,
-  and `dforge-config unset` refuses either as an unknown key, so it stays in the
-  file harmlessly. `codexReview` is unchanged. The new `agyReview` switch (`Agy
+  and the settings view lists it as not a dforge setting. `dforge-config unset
+  codexLane` (or `agyLane`) removes it from the file. `codexReview` is unchanged. The new `agyReview` switch (`Agy
   reviews`) is off by default, and agy reviews only while
   `reference/agy-policy.json` records `trust.review: pass`.
 - **Plans.** The `revising-plans` skill and `scripts/plan-revise` are gone. A
@@ -1003,8 +1008,8 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
    `~/.claude/plugins/store/dr-forge_darkraise-*.json` (under
    `$CLAUDE_CONFIG_DIR` when set), as `notifyUrl` and `notifyMention`. Copy
    them before you uninstall, then set them in a dforge session: the webhook
-   in `/cockpit settings` (or `DFORGE_NOTIFY_URL`), the mention with
-   `/cockpit notify mention <id>`.
+   in `/dforge:cockpit settings` (or `DFORGE_NOTIFY_URL`), the mention with
+   `/dforge:cockpit notify mention <id>`.
 
        /plugin install dforge@darkraise
        /plugin uninstall dr-forge@darkraise
@@ -1014,7 +1019,8 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
 
    From dr-superpowers or dr-cockpit, skip dr-forge and install dforge
    directly. Start one dforge session before you uninstall the old plugins:
-   it imports dr-cockpit's options and its Discord webhook and mention, once.
+   it once imported dr-cockpit's options and its Discord webhook and mention;
+   that import is gone, so set them again in `/dforge:cockpit settings`.
    Migrating from dr-superpowers and dr-cockpit below names
    `dr-forge@darkraise`, the plugin of its day; install `dforge@darkraise`
    in its place.
@@ -1061,10 +1067,11 @@ saved settings:
     /plugin uninstall dr-superpowers@darkraise
     /plugin uninstall dr-cockpit@darkraise
 
-The first session imports the cockpit's options into
+The first session imported the cockpit's options into
 `~/.dr-forge/config.json`, and the cockpit's Discord webhook and mention into
-dr-forge's own plugin store, once; the old files stay. Since 3.0.0 the
-dr-superpowers names are no longer read: see Migrating to 3.0.
+dr-forge's own plugin store, once; the old files stayed. The import is no
+longer part of dforge: set those options again in `/dforge:cockpit settings`.
+Since 3.0.0 the dr-superpowers names are no longer read: see Migrating to 3.0.
 
 ## Migrating to 3.0
 
