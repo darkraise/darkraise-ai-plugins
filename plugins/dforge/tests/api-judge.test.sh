@@ -152,5 +152,87 @@ check "--dry-run: both Codex lines carry the read-only sandbox" "$(printf '%s\n'
 (cd "$WORK" && bash "$RUN" --prompt "$TMP/prompt.md" --report "$REPORT" --cwd "$TMP/nowhere" 2>/dev/null); check "a --cwd that is not a directory: exit 2" "$?" "2"
 (cd "$WORK" && bash "$RUN" --prompt "$TMP/prompt.md" --cwd "$WORK" 2>/dev/null); check "a missing --report: exit 2" "$?" "2"
 
+# --- A9: what a judge child is given ---
+sha() { printf '%s' "$1" | sha256sum | cut -c1-16; }
+envof() { awk -v b="budget $1" '$0 == b { f = 1; next } f && $0 == "--" { exit } f' "$TMP/env.log"; }
+holds() { # holds <budget> <value…> — how many of the child's variables hold one of the values
+  local budget=$1 n=0 value; shift
+  for value in "$@"; do n=$(( n + $(envof "$budget" | grep -c " $(sha "$value")\$") )); done
+  echo "$n"
+}
+ALL_KEYS=(sk-test-anthropic-SENTINEL sk-test-openai-SENTINEL sk-test-agentrouter-SENTINEL vendor-openai vendor-anthropic)
+fresh; caps 1000 1000 1000; ladder 30
+run OPENAI_API_KEY=vendor-openai ANTHROPIC_API_KEY=vendor-anthropic CODEX_HOME="$TMP/user-codex" STUB_JUDGE_ANTHROPIC=fail STUB_JUDGE_OPENAI=fail
+check "fixture: all three children ran" "$(started)" "3"
+lacks "A8: no key value is on a judge's command line" "$(cat "$TMP/args.log")" "SENTINEL"
+check "A9: the Anthropic child holds no DFORGE key variable" "$(envof anthropic | grep -c '^DFORGE_[A-Z]*_API_KEY ')" "0"
+check "A9: the Anthropic child's ANTHROPIC_API_KEY is the DFORGE key, not the vendor variable's value" "$(envof anthropic | grep '^ANTHROPIC_API_KEY ')" "ANTHROPIC_API_KEY $(sha sk-test-anthropic-SENTINEL)"
+check "A9: the Anthropic child holds one key, its own" "$(holds anthropic "${ALL_KEYS[@]}")" "1"
+for b in openai agentrouter; do
+  check "A9: the $b child holds no DFORGE key variable" "$(envof "$b" | grep -c '^DFORGE_[A-Z]*_API_KEY ')" "0"
+  check "A9: the $b child holds no Anthropic key variable" "$(envof "$b" | grep -c '^ANTHROPIC_API_KEY ')" "0"
+  check "A9: the $b child holds one key, its own" "$(holds "$b" "${ALL_KEYS[@]}") $(holds "$b" "sk-test-$b-SENTINEL")" "1 1"
+  home=$(envof "$b" | sed -n 's/^CODEX_HOME //p')
+  check "A9: the $b child's CODEX_HOME is not the user's" "$(case "$home" in unset | "$TMP/user-codex" | "$HOME/.codex") echo shared ;; *) echo own ;; esac)" "own"
+done
+
+# --- A8: a reply holding a key value is discarded ---
+fresh
+run STUB_JUDGE_ANTHROPIC=leak STUB_JUDGE_LEAK=sk-test-openai-SENTINEL
+check "A8: a reply holding a key is FAILED key-in-reply and the next budget is tried" "$rc $(tried)" "0 anthropic FAILED key-in-reply openai OK none "
+lacks "A8: the report holds no key" "$(cat "$REPORT")" "SENTINEL"
+run STUB_JUDGE_ANTHROPIC=leak STUB_JUDGE_LEAK=sk-test-agentrouter-SENTINEL STUB_JUDGE_OPENAI=fail STUB_JUDGE_AGENTROUTER=fail
+check "A8: a reply holding a key is never written to the report" "$rc $(report)" "3 absent"
+
+# --- A15: the worktree must not change during a run ---
+fresh
+for mode in write commit; do
+  run "STUB_JUDGE_ANTHROPIC=$mode"
+  check "A15: a run during which a $mode happened is FAILED wrote and ends the chain" "$rc $(tried)$(started)" "3 anthropic FAILED wrote 1"
+  check "A15: after a $mode the reply is not written" "$(report)" "absent"
+  rm -f "$WORK/stray.txt"
+done
+run STUB_JUDGE_ANTHROPIC=write-ignored
+check "A15: a change git ignores is not a write" "$rc $(tried)" "0 anthropic OK none "
+
+# --- A16: what a run cost is charged to its budget ---
+spent() { bash "$SPEND" status | tr -d '\r' | sed -n "s/^api-budget $1 .* spent=\([0-9.]*\) .*/\1/p"; }
+fresh; run
+check "A16: the Anthropic run is charged the cost its CLI reports" "$(spent anthropic) $(status_lines | sed 's/.* spent=\([0-9.]*\) .*/\1/')" "0.2500 0.2500"
+fresh; run STUB_JUDGE_ANTHROPIC=fail
+check "A16: a run that reported nothing is charged 1.00, a Codex run is priced from its tokens" "$(spent anthropic) $(spent openai)" "1.0000 2.5000"
+fresh; run STUB_JUDGE_ANTHROPIC=noverdict STUB_JUDGE_OPENAI=noverdict
+check "A16: a failed run is charged what it reported, agentrouter from the same table" "$(spent anthropic) $(spent openai) $(spent agentrouter)" "0.2500 2.5000 2.5000"
+fresh; ladder 2
+run STUB_JUDGE_ANTHROPIC=fail STUB_JUDGE_OPENAI=hang-usage
+check "A16: a timed-out run is charged its last token total" "$(tried)$(spent openai)" "anthropic FAILED error openai TIMEOUT timeout 2.5000"
+stopped() { kill -0 "$(cat "$TMP/stub.pid")" 2>/dev/null && echo running || echo stopped; }
+check "A13: a timed-out Codex CLI that had reported usage is stopped" "$(stopped)" "stopped"
+fresh
+run STUB_JUDGE_ANTHROPIC=fail STUB_JUDGE_OPENAI=hang
+check "A16: a timed-out run that reported nothing is charged 1.00" "$(spent openai)" "1.0000"
+check "A13: a timed-out Codex CLI is stopped" "$(stopped)" "stopped"
+ladder 30
+fresh; run STUB_JUDGE_ANTHROPIC=silent
+check "A16: a verdict with no cost reported is still charged 1.00" "$rc $(spent anthropic)" "0 1.0000"
+fresh; caps 0 0 0; run
+check "A16: a skipped budget is charged nothing" "$(spent anthropic)" "0.0000"
+caps 1000 1000 1000
+
+# --- a charge that cannot be recorded does not undo a ruling ---
+fresh
+LOCKBASE=$( . "$P/scripts/lib/lock.sh"; dr_lock_base "$HOME/.dforge/api-spend.json" )
+mkdir "$LOCKBASE.lockd"; uname -n > "$LOCKBASE.lockd/host"; printf '%s\n' "$$" > "$LOCKBASE.lockd/pid"
+: > "$TMP/err"
+run DFORGE_FLOCK=no-such-flock DR_LOCK_TENTHS=3
+rm -rf "$LOCKBASE.lockd"
+check "a charge that fails leaves the ruling and its status line standing" "$rc $(tried)$(report)" "0 anthropic OK none present"
+has "a charge that fails is reported on stderr" "$(cat "$TMP/err")" "run-api-judge: the charge to anthropic was not recorded"
+check "a charge that fails records nothing" "$(spent anthropic)" "0.0000"
+
+# --- A8: no key value anywhere ---
+lacks "A8: no key value in stdout, stderr, the log, the spend file or the state directory" \
+  "$(cat "$TMP/all.out" "$TMP/err" "$JLOG" "$HOME/.dforge/api-spend.json" 2>/dev/null; grep -rh SENTINEL "$STATE" 2>/dev/null)" "SENTINEL"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

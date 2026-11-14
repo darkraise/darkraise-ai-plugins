@@ -20,6 +20,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/auto-run.sh"
 . "$HERE/lib/timeout.sh"
 . "$HERE/lib/native-path.sh"
+. "$HERE/lib/worktree-snapshot.sh"
 
 INSTRUCTION='You cannot write files. Reply with the whole report as your answer.'
 GRACE=10
@@ -136,7 +137,43 @@ reply_text() { # reply_text <budget> — the judge's answer from its captured ou
   esac
 }
 
-line_of() { printf 'api-judge %s:%s/%s status=%s exit=%s out=%s spent=0.0000 reason=%s' "$@"; }
+line_of() { # line_of <budget> <model> <effort> <status> <exit> <out> <spent> <reason>
+  printf 'api-judge %s:%s/%s status=%s exit=%s out=%s spent=%s reason=%s' "$@"
+}
+
+keys=()
+for _var in DFORGE_ANTHROPIC_API_KEY DFORGE_OPENAI_API_KEY DFORGE_AGENTROUTER_API_KEY; do
+  [ -z "${!_var:-}" ] || keys+=("${!_var}")
+done
+unset _var
+
+holds_key() { # holds_key <text> — the text holds one of the key values
+  local value
+  for value in ${keys[@]+"${keys[@]}"}; do
+    case "$1" in *"$value"*) return 0 ;; esac
+  done
+  return 1
+}
+
+run_cost() { # run_cost <budget> <model> — what the run in $work cost, four decimals
+  local cost="" usage pin pcached pout
+  case $1 in
+    anthropic)
+      cost=$(jq -r 'select(type == "object") | .total_cost_usd | numbers' < "$work/out" 2>/dev/null | tr -d '\r' | tail -1)
+      ;;
+    *)
+      usage=$(jq -rR 'fromjson? | select(.type == "turn.completed" and (.usage | type) == "object") | .usage
+          | "\(.input_tokens // 0) \(.cached_input_tokens // 0) \(.output_tokens // 0)"' < "$work/out" 2>/dev/null | tr -d '\r' | tail -1)
+      if [ -n "$usage" ] && pin=$(api_budget_price "$2" input) && pout=$(api_budget_price "$2" output); then
+        pcached=$(api_budget_price "$2" cached_input) || pcached=$pin
+        cost=$(awk -v u="$usage" -v pi="$pin" -v pc="$pcached" -v po="$pout" \
+          'BEGIN { split(u, t, " "); printf "%.10f", ((t[1] - t[2]) * pi + t[2] * pc + t[3] * po) / 1000000 }')
+      fi
+      ;;
+  esac
+  [[ $cost =~ ^[0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)?$ ]] || cost=1
+  awk -v c="$cost" 'BEGIN { printf "%.4f", c }'
+}
 
 open=0
 while read -r budget model effort secs _; do
@@ -149,11 +186,11 @@ while read -r budget model effort secs _; do
 
   budget_line=$(api_budget_state "$budget") || {
     reason=$(printf '%s\n' "$budget_line" | sed -n 's/.* reason=\([a-z-]*\)$/\1/p')
-    say "$(line_of "$budget" "$model" "$effort" SKIPPED 0 - "${reason:-off}")"
+    say "$(line_of "$budget" "$model" "$effort" SKIPPED 0 - 0.0000 "${reason:-off}")"
     continue
   }
   if [ "$budget" != anthropic ] && { ! api_budget_price "$model" input >/dev/null || ! api_budget_price "$model" output >/dev/null; }; then
-    say "$(line_of "$budget" "$model" "$effort" SKIPPED 0 - no-price)"
+    say "$(line_of "$budget" "$model" "$effort" SKIPPED 0 - 0.0000 no-price)"
     continue
   fi
 
@@ -165,11 +202,22 @@ while read -r budget model effort secs _; do
     continue
   fi
 
+  if ! dr_snapshot "$cwd" "$work/before.json" 2>/dev/null; then
+    say "$(line_of "$budget" "$model" "$effort" FAILED 0 - 0.0000 wrote)"
+    exit 3
+  fi
+  key=${!key_var}
   say "api-judge $budget:$model/$effort started"
   rm -f -- "$work/out" "$work/err" "$work/last"
+  rm -rf -- "$work/codex-home"
   (
     cd "$cwd" || exit 1
-    export "$(child_key_var "$budget")=${!key_var}"
+    unset DFORGE_OPENAI_API_KEY DFORGE_ANTHROPIC_API_KEY DFORGE_AGENTROUTER_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY DFORGE_JUDGE_KEY
+    if [ "$budget" != anthropic ]; then
+      (umask 077 && mkdir -- "$work/codex-home") || exit 1
+      export CODEX_HOME="$(dr_native_path "$work/codex-home")"
+    fi
+    export "$(child_key_var "$budget")=$key"
     if command -v setsid >/dev/null 2>&1; then
       exec setsid "$DFORGE_TIMEOUT" -k "$GRACE" "$bound" "${cmd[@]}" < "$work/prompt" > "$work/out" 2> "$work/err"
     else
@@ -177,6 +225,7 @@ while read -r budget model effort secs _; do
     fi
   ) &
   child=$!
+  key=""
   row_start=$(date +%s); last_line=$row_start
   while kill -0 "$child" 2>/dev/null; do
     sleep 0.2
@@ -190,26 +239,42 @@ while read -r budget model effort secs _; do
   kill -TERM -- "-$child" 2>/dev/null
   child=""
 
+  spent=$(run_cost "$budget" "$model")
+  api_budget_charge "$budget" "$spent" 2>/dev/null || echo "run-api-judge: the charge to $budget was not recorded" >&2
+  dr_task_assert_snapshot "$work/before.json" 2>/dev/null; snap=$?
+  reply=""
+  [ "$rc" -ne 0 ] || reply=$(reply_text "$budget")
+  rm -rf -- "$work/codex-home"
+
   if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
-    say "$(line_of "$budget" "$model" "$effort" TIMEOUT 124 - timeout)"
+    say "$(line_of "$budget" "$model" "$effort" TIMEOUT 124 - "$spent" timeout)"
     exit 3
   fi
-  if [ "$rc" -ne 0 ]; then
-    say "$(line_of "$budget" "$model" "$effort" FAILED "$rc" - error)"
+  if [ "$snap" -ne 0 ]; then
+    say "$(line_of "$budget" "$model" "$effort" FAILED "$rc" - "$spent" wrote)"
+    exit 3
+  fi
+  if [ -n "$reply" ] && holds_key "$reply"; then
+    reply=""
+    rm -f -- "$work/out" "$work/err" "$work/last"
+    say "$(line_of "$budget" "$model" "$effort" FAILED 0 - "$spent" key-in-reply)"
     continue
   fi
-  reply=$(reply_text "$budget")
+  if [ "$rc" -ne 0 ]; then
+    say "$(line_of "$budget" "$model" "$effort" FAILED "$rc" - "$spent" error)"
+    continue
+  fi
   first=$(printf '%s\n' "$reply" | awk 'NF { print; exit }')
   if [ "$first" != "## Verdict" ]; then
-    say "$(line_of "$budget" "$model" "$effort" FAILED 0 - no-verdict)"
+    say "$(line_of "$budget" "$model" "$effort" FAILED 0 - "$spent" no-verdict)"
     continue
   fi
   mkdir -p -- "$(dirname -- "$report")" 2>/dev/null
   if ! printf '%s\n' "$reply" > "$report"; then
-    say "$(line_of "$budget" "$model" "$effort" FAILED 0 - error)"
+    say "$(line_of "$budget" "$model" "$effort" FAILED 0 - "$spent" error)"
     continue
   fi
-  say "$(line_of "$budget" "$model" "$effort" OK 0 "$report" none)"
+  say "$(line_of "$budget" "$model" "$effort" OK 0 "$report" "$spent" none)"
   exit 0
 done <<< "$rows"
 
