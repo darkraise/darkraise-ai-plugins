@@ -162,70 +162,49 @@ state_of() { jq -r "$2" "$WS/task-$1-step.json" | tr -d '\r'; }
 RR_S="$HERE/../scripts"
 
 if want start; then
-# start: the assigned line, the dispatch file, the state and the digest.
+# start: the identity line, the state and the digest. No dispatch file and no
+# task line: the session writes its own `implementer inline` line.
 step start docs/plan.md 1
 check "start: exit 0" "$rc" "0"
-check "start: the assigned line" "$(tail -n 1 "$LEDGER")" "Task 1: implementer impl-sonnet-low (assigned; base ${BASE:0:7})"
+check "start: the ledger holds no task line" "$(grep -c '^Task ' "$LEDGER" || true)" "0"
 check "start: the ledger names the plan" "$(head -n 1 "$LEDGER")" "# SDD ledger — plan: docs/plan.md"
 check "start: the brief exists" "$([ -f "$WS/task-1-brief.md" ] && echo yes || echo no)" "yes"
+check "start: no dispatch file" "$([ -e "$WS/task-1-dispatch.md" ] && echo yes || echo no)" "no"
 check "start: the digest is at most 15 lines" "$([ "$(count_lines "$out")" -le 15 ] && echo yes || echo no)" "yes"
-check "start: the seat line" "$(grep '^seat:' <<<"$out")" "seat: dforge:impl-sonnet-low prompt: $WS/task-1-dispatch.md"
 check "start: the state line precedes the budget line" "$(tail -n 2 <<<"$out" | head -n 1)" \
   "state: base ${BASE:0:7} review-head - round 0 t0 -"
 check "start: the last line is the budget line" "$(tail -n 1 <<<"$out" | cut -c1-6)" "budget"
-D="$WS/task-1-dispatch.md"
-check "start: the brief path is expanded" "$(grep -c "Read your task brief first: $WS/task-1-brief.md" "$D")" "1"
-check "start: the report path is expanded" "$(grep -c "Write your full report to $WS/task-1-report.md:" "$D")" "1"
-check "start: no placeholder is left" "$(grep -cE '\[(BRIEF_FILE|REPORT_FILE|PLUGIN_ROOT|IMPLEMENTER)\]' "$D")" "0"
-check "start: the plugin root is expanded to this plugin" "$(grep -c "$(cd "$P" && pwd)/scripts/context-size" "$D")" "1"
-check "start: the task name is filled" "$(grep -c 'You are implementing Task 1: plain' "$D")" "1"
-check "start: the working directory is filled" "$(grep -c "^Work from: $(git rev-parse --show-toplevel)\$" "$D")" "1"
-check "start: the dispatch file is a bare prompt" "$(grep -c '^Subagent (' "$D")" "0"
 check "start: the state file" \
   "$(jq -c '[.tasks, .base == "'"$BASE"'", .head, .reviewHead, .round, .t0]' "$WS/task-1-step.json" | tr -d '\r')" '[[1],true,null,null,0,null]'
 
-# start: a backticked Implementer, a prefix-free ledger name.
-step start docs/plan.md 2
-check "start: a backticked Implementer is assigned" "$(tail -n 1 "$LEDGER")" "Task 2: implementer impl-sonnet-high (assigned; base ${BASE:0:7})"
-
-step start docs/plan.md 3 --inline
-check "an Executor task takes --inline" "$rc" "0"
+step start docs/plan.md 3
+check "an Executor task starts like any other" "$rc" "0"
 check "an Executor task names no executor" "$(grep -c -i 'executor' <<<"$out")" "0"
+check "an Executor task writes no task line" "$(grep -c '^Task ' "$LEDGER" || true)" "0"
 
-# start: a task without an Implementer line is scored at dispatch.
-before=$(wc -l < "$LEDGER")
+step start docs/plan.md 2
 step start docs/plan.md 4
-check "start: unscored seat line" "$(grep -c '^seat: unscored (no known \*\*Implementer:\*\* line' <<<"$out")" "1"
-check "start: no assigned line when unscored" "$(wc -l < "$LEDGER" | tr -d ' ')" "$(echo "$before" | tr -d ' ')"
-check "start: the dispatch file is still written" "$([ -f "$WS/task-4-dispatch.md" ] && echo yes || echo no)" "yes"
 
-# start: a batch takes the highest tier, one assigned line per task and one brief.
+# start: one task only.
 step start docs/plan.md 5 6
-check "start: batch seat" "$(grep '^seat:' <<<"$out")" "seat: dforge:impl-opus-medium prompt: $WS/task-5-dispatch.md"
-check "start: batch assigned lines" "$(tail -n 2 "$LEDGER" | sed 's/base [0-9a-f]*/base B/' | tr '\n' ';')" \
-  "Task 5: implementer impl-opus-medium (assigned; base B);Task 6: implementer impl-opus-medium (assigned; base B);"
-check "start: the digest names the batch" "$(head -n 1 <<<"$out" | cut -c1-12)" "task 5,6: br"
-check "start: the batch brief holds both tasks" \
-  "$(grep -cE '^### Task (5: batch low|6: batch high)$' "$WS/task-5-brief.md")" "2"
-check "start: the batch brief carries the header excerpt once" "$(grep -c '^## Plan header excerpt$' "$WS/task-5-brief.md")" "1"
-check "start: the batch brief ends with the header excerpt" "$(grep -v '^$' "$WS/task-5-brief.md" | tail -n 1)" "- Fixture contract."
-check "start: the batch state names both tasks" "$(jq -c .tasks "$WS/task-5-step.json" | tr -d '\r')" "[5,6]"
+check "start: a second task exits 2" "$rc" "2"
+check "start: a second task writes no state" "$([ -f "$WS/task-5-step.json" ] && echo yes || echo no)" "no"
 
-# start: a second call keeps the recorded state and writes no second assigned
-# line; --reset discards the state and starts over.
+# start: a second call keeps the recorded state; --reset discards the state
+# and starts over.
 echo moved > moved.txt && git add moved.txt && git commit -qm "chore: move head"
 MOVED=$(git rev-parse HEAD)
 before=$(wc -l < "$LEDGER")
 step start docs/plan.md 1
 check "start again: exit 0" "$rc" "0"
-check "start again: no second assigned line" "$(wc -l < "$LEDGER" | tr -d ' ')" "$(echo "$before" | tr -d ' ')"
+check "start again: no second ledger line" "$(wc -l < "$LEDGER" | tr -d ' ')" "$(echo "$before" | tr -d ' ')"
 check "start again: the recorded base is kept" "$(jq -r .base "$WS/task-1-step.json" | tr -d '\r')" "$BASE"
 check "start again: the digest says the state is kept" "$(head -n 1 <<<"$out" | grep -c 'state kept')" "1"
 check "start again: the state line shows the kept base" "$(tail -n 2 <<<"$out" | head -n 1)" \
   "state: base ${BASE:0:7} review-head - round 0 t0 -"
 step start docs/plan.md 1 --reset
 check "start --reset: the base is HEAD again" "$(jq -r .base "$WS/task-1-step.json" | tr -d '\r')" "$MOVED"
-check "start --reset: a new assigned line" "$(tail -n 1 "$LEDGER")" "Task 1: implementer impl-sonnet-low (assigned; base ${MOVED:0:7})"
+check "start --reset: the ledger still holds no task line" "$(grep -c '^Task ' "$LEDGER" || true)" "0"
 check "start --reset: the digest does not say kept" "$(head -n 1 <<<"$out" | grep -c 'state kept')" "0"
 
 # Negative: usage, a missing task, a Codex host, an amendment that does not apply.
@@ -443,11 +422,7 @@ check "checks: a clean commit passes both" "$(grep '^check' <<<"$out" | tr '\n' 
 step review docs/plan.md 2 --base "$(git rev-parse HEAD~9)"
 check "checks: several offenders name the first and count the rest" "$(grep '^check attribution' <<<"$out" | grep -c '; 4 more commit(s)$')" "1"
 
-# review: a batch, and a route that fails.
-step review docs/plan.md 5 6
-check "review: a batch names its tasks" "$(head -n 1 <<<"$out" | cut -c1-19)" "task 5,6: reviewed "
-check "review: a batch state is named after its first task" "$(state_of 5 .reviewHead)" "$(git rev-parse HEAD)"
-check "review: a batch prompt names the batch brief" "$(grep -c "^Read the task brief: $WS/task-5-brief.md\$" "$WS/task-5-review-prompt.md")" "1"
+# review: a route that fails.
 step start docs/plan.md 8
 step review docs/plan.md 8
 check "review: a failed route falls back to judge-opus and says why" \

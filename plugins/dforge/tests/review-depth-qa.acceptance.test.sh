@@ -431,9 +431,6 @@ if want A12; then
     present "A12: review-route --final names the Claude review seat under $spec" "$out" "^review-seat final primary=dforge:judge-opus "
   done
   p=$(mkplan a12-light-final s-light - "" r0t1)
-  out=$(cd "$REPO" && timeout 60 bash "$ROUTE" "$p" --final-fix src/a.sh 2>&1); status=$?
-  check "A12: review-route --final-fix still routes at light" "$status" 0
-  absent "A12: the fix wave seat is not none at light" "$out" "primary=none"
   lo=$(cd "$REPO" && DFORGE_LENS_CAP=4 timeout 60 bash "$LENS" "$p" --final "$BASE_C" "$HEAD_C" 2>&1)
   present "A12: lens-route still runs the security lens at light" "$lo" "^lens security "
 fi

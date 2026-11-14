@@ -162,16 +162,9 @@ a1() {
   base7=$(short HEAD)
   ts start docs/plan.md 1
   check "A1: start exits 0" "$rc" "0"
-  check "A1: the ledger's last line is the assigned line" "$(tail -n 1 "$WS/progress.md")" "Task 1: implementer impl-sonnet-low (assigned; base $base7)"
-  local D="$WS/task-1-dispatch.md"
-  check "A1: the dispatch file exists" "$([ -f "$D" ] && echo yes || echo no)" "yes"
-  has "A1: the dispatch names the brief path" "$(cat "$D")" "$WS/task-1-brief.md"
-  has "A1: the dispatch names the report path" "$(cat "$D")" "$WS/task-1-report.md"
-  has "A1: the dispatch carries the expanded plugin root" "$(cat "$D")" "$PLUGIN/scripts/context-size"
-  absent "A1: the dispatch has no unexpanded placeholder" "$(cat "$D")" '\[[A-Z][A-Z_]+\]'
+  check "A1: the ledger holds only its identity line" "$(grep -c '^Task ' "$WS/progress.md" || true)" "0"
+  check "A1: no dispatch file is written" "$([ -e "$WS/task-1-dispatch.md" ] && echo yes || echo no)" "no"
   check "A1: the digest is at most 15 lines" "$([ "$(count_lines "$out")" -le 15 ] && echo yes || echo no)" "yes"
-  has "A1: the digest prints the subagent_type" "$out" "dforge:impl-sonnet-low"
-  has "A1: the digest prints the dispatch path" "$out" "$D"
   matches "A1: the digest's last line is the budget line" "$(tail -n 1 <<<"$out")" '^budget'
   has "A1: the line before it records the state (base)" "$(tail -n 2 <<<"$out" | head -n 1)" "$base7"
 }

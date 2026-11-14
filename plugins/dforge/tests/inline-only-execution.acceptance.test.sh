@@ -317,9 +317,9 @@ fi
 if selected A14; then
   P=$(mk p 'inline — claude --model opus --effort high — x' "$T5" "$T3R3")
   g add -A && g commit -qm init
-  start=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/task-step" start "$P" 2 --inline 2>&1); rc=$?
+  start=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/task-step" start "$P" 2 2>&1); rc=$?
   start=${start//$'\r'/}
-  check "A14: task-step start 2 --inline exits 0" "$rc" "0"
+  check "A14: task-step start 2 exits 0" "$rc" "0"
   step=$(find "$REPO/.dforge" -name 'task-2-step.json' 2>/dev/null | head -n 1)
   check "A14: step state task-2-step.json is written" "$([ -n "$step" ] && echo yes || echo no)" "yes"
   ws=$(dirname "${step:-$REPO/.dforge/none}")

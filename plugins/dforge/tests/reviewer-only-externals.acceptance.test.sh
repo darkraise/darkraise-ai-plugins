@@ -632,16 +632,12 @@ EOF
     "$(diff <(grep -v '^\*\*Executor:' "$R/.dforge/sdd/plan-exec/task-2-brief.md") "$R/.dforge/sdd/plan-plain/task-2-brief.md" >/dev/null && echo same || echo differs)" "same"
   absent "A9: task-brief names no dispatch to an executor" "$(norm <<<"$b_exec")" '[Dd]ispatch|[Ll]ane'
 
-  local s_exec s_plain mode
-  for mode in "--inline" ""; do
-    s_exec=$(cd "$R" && timeout 60 bash "$STEP" start plan-exec.md 2 $mode --reset 2>&1; echo "rc=$?")
-    s_plain=$(cd "$R" && timeout 60 bash "$STEP" start plan-plain.md 2 $mode --reset 2>&1; echo "rc=$?")
-    check "A9: task-step start $mode treats the Executor task as the ordinary task" "$(norm <<<"$s_exec")" "$(norm <<<"$s_plain")"
-    check "A9: task-step start $mode exits 0" "$(tail -1 <<<"$s_exec")" "rc=0"
-    absent "A9: task-step start $mode names no executor" "$(norm <<<"$s_exec")" '[Cc]odex|[Ee]xecutor|agy'
-  done
-  s_exec=$(cd "$R" && timeout 60 bash "$STEP" start plan-exec.md 2 --inline --reset 2>&1)
-  check "A9: the Executor task is an inline task" "$(grep -c '^seat: inline' <<<"$s_exec")" "1"
+  local s_exec s_plain
+  s_exec=$(cd "$R" && timeout 60 bash "$STEP" start plan-exec.md 2 --reset 2>&1; echo "rc=$?")
+  s_plain=$(cd "$R" && timeout 60 bash "$STEP" start plan-plain.md 2 --reset 2>&1; echo "rc=$?")
+  check "A9: task-step start treats the Executor task as the ordinary task" "$(norm <<<"$s_exec")" "$(norm <<<"$s_plain")"
+  check "A9: task-step start exits 0" "$(tail -1 <<<"$s_exec")" "rc=0"
+  absent "A9: task-step start names no executor" "$(norm <<<"$s_exec")" '[Cc]odex|[Ee]xecutor|agy'
   check "A9: the same files are written for both plans" \
     "$(cd "$R/.dforge/sdd/plan-exec" && ls | tr '\n' ' ')" "$(cd "$R/.dforge/sdd/plan-plain" && ls | tr '\n' ' ')"
 }
@@ -706,7 +702,7 @@ prepare_step_repo() {
   git -C "$STEPREPO" commit -q -m plan
   STEP_BASE=$(git -C "$STEPREPO" rev-parse HEAD)
   local n
-  for n in 1 2 3 4 5 6; do (cd "$STEPREPO" && timeout 60 bash "$STEP" start route.md "$n" --inline >/dev/null 2>&1); done
+  for n in 1 2 3 4 5 6; do (cd "$STEPREPO" && timeout 60 bash "$STEP" start route.md "$n" >/dev/null 2>&1); done
   printf 'change\n' > "$STEPREPO/change.txt"
   git -C "$STEPREPO" add -A
   git -C "$STEPREPO" commit -q -m change

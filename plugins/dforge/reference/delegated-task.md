@@ -1,9 +1,9 @@
-# The delegated task loop
+# The task review loop
 
-One task's dispatch, review, fix loop and complete line.
-dforge:executing-plans runs it for a task that carries an `**Executor:**` line.
-A task the session implements itself and a judge reviews runs §The session
-review loop instead.
+One task's judge review, fix loop and complete line. dforge:executing-plans
+runs it for a risk-3 task, which the session implements itself and a judge
+reviews: §The session review loop. Sections 1 to 5 are the steps that loop
+calls.
 
 ## Contract
 
@@ -19,7 +19,6 @@ review loop instead.
 
 | Seat | Agent | Model argument |
 |---|---|---|
-| Implementer | The task's `**Implementer:**` agent, as `subagent_type` | None |
 | Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when the reviewer panel returns no list (`lists=0`); say every substitution aloud. On a Codex host, a native judge at Astra high or above ([native-codex.md](native-codex.md)) | None |
 | Scoped re-review | `dforge:judge-sonnet-high`; `dforge:judge-opus` for a subtle concurrency fix | None |
 
@@ -36,31 +35,22 @@ General-purpose seats always take an explicit model:
 many turns a subagent takes, and the cheapest models routinely take 2-3× the
 turns on multi-step work. Use a mid-tier model as the floor for reviewers.
 
-## 1. Dispatch the implementer
+## 1. Open the task
 
 **Open the task with one call:**
-`bash <plugin-root>/scripts/task-step start PLAN_FILE N` (a batch passes every
-task number, `N M …`; every start adds
+`bash <plugin-root>/scripts/task-step start PLAN_FILE N` with
 `--suite '<suite command>'`, below, unless the Suite command bullet says
-start passes none). It runs `task-brief`,
-records BASE in `<workspace>/task-<N>-step.json`, writes the
-assigned line (below), and writes `<workspace>/task-<N>-dispatch.md`:
-[implementer-prompt.md](prompts/implementer-prompt.md)
-with the brief path, the report path and the plugin root filled in. It prints
-at most 15 lines: the `subagent_type`, the dispatch file's path, the state it
-recorded and the budget line (see the caller's Session Budget section). Every
-later step reads that state file, so you never carry a SHA. Calling `start`
-again for a task whose state file exists — a task resumed after a restart, a
-dispatch repeated — keeps the recorded BASE, round and review head and writes
-no second assigned line, so the review still packages every commit made since
-the first dispatch; pass `--reset` only to discard the state and start over,
-and say why on the ledger. Exit 3 means the plan has no such
-task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
+start passes none. It runs `task-brief`, records BASE in
+`<workspace>/task-<N>-step.json` and prints the state it recorded and the
+budget line (see the caller's Session Budget section). It writes no task line:
+you write your own `implementer inline` assigned line. Every later step reads
+that state file, so you never carry a SHA. Calling `start` again for a task
+whose state file exists keeps the recorded BASE, round and review head, so the
+review still packages every commit made since the first start; pass `--reset`
+only to discard the state and start over, and say why on the ledger. Exit 3
+means the plan has no such task; exit 2 on a `Host: codex` plan sends you to
+*The steps by hand* below.
 
-- **Choose the agent.** Read the task's `**Implementer:**` line. A name from
-  the reserve table of [ladder.md](ladder.md) — any `xhigh` or
-  `max` agent, or any Fable tier — is a human ruling: dispatch it as written
-  and note `reserve tier`. See [escalation.md](escalation.md).
 - **Suite command.** Read the plan header's `**Task check:**` line first,
   then resolve the plan's suite command once:
   - A plan with no `**Task check:**` line runs as it does today. Pass the
@@ -72,9 +62,9 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
     (`package.json` `scripts.test`, a Makefile `test` target, `cargo test`,
     `go test ./...`, `pytest`) and keep for the rest of the plan. `start`
     records it as the step file's `suite`, and the first `start --suite` on
-    a plan logs `Task <N>: Ruling: suite command — <command> — none`. The
-    implementer runs only the focused tests that cover its change; §2 has
-    you run the suite.
+    a plan logs `Task <N>: Ruling: suite command — <command> — none`. You run
+    only the focused tests that cover your change while you work; §2 runs the
+    suite.
   - A command task check is the suite command: every `task-step start`
     passes it, never the Integration check. The rest of the loop is
     unchanged.
@@ -100,87 +90,32 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
     `verdict` runs the suite once there (for example after a fix round),
     bounded at 3600 seconds (`TASK_STEP_BASE_TIMEOUT`). A fix round runs a
     suite only when the review of its task did.
-- **Task brief:** `task-step start` extracted it to
-  `<workspace>/task-<N>-brief.md` (see using-dforge §Session Budget). The
-  brief stays the single source of requirements: the dispatch file tells the
-  implementer to read it first, with the exact values to use verbatim, and it
-  ends with the plan's Global Constraints and Contracts. Your Agent prompt
-  holds only what the dispatch file cannot know: (1) one line on where this
-  task fits in the project; (2) "your complete instructions are in
-  `<dispatch file>`: read it first and follow it"; (3) interfaces and
-  decisions from earlier tasks that the brief cannot know; (4) the
-  ruling-seat verdicts in the ledger that bear on this task, copied verbatim
-  (an ambiguity you notice in the brief goes to the seat as a `plan-conflict`
-  item before you dispatch). Exact values (numbers, magic strings,
-  signatures, test cases) appear only in the brief. Never make a subagent
-  read the whole plan file. A brief whose task the seat split into
-  `#### Part` units is dispatched one part at a time, in order, the prompt
-  naming the part; its assigned line carries `; part <X>`.
-- **Report file:** the dispatch file names it after the brief (brief
-  `…/task-N-brief.md` → report `…/task-N-report.md`). The implementer writes
-  the full report there and returns only status, commits, a one-line test
-  summary, and concerns.
 - **UI tasks:** a brief that carries `## UI/UX contract items` is a UI task
-  (dforge:ui-ux). Say in the Agent prompt that the implementer renders the result
-  through the project UI profile's harness before reporting, and that the
-  report maps each cited ID to a screenshot path or a test name; a cited ID
-  with no evidence is a spec ❌ at review.
-- A dispatch prompt describes one task, not the session's history. Do not
-  paste accumulated prior-task summaries ("state after Tasks 1-3") into
-  later dispatches — a real session's dispatch hit 42k chars of which 99%
-  was pasted history. A fresh subagent needs its brief, which already
-  carries its task, the Contracts and the Global Constraints. Nothing else.
-- The dispatch carries the no-subagents contract (it is in the
-  implementer template): the implementer never dispatches subagents —
-  not helpers, and never a reviewer. Review arrives from you, after the
-  report.
-- If an earlier task parked a finding in the area this task touches, carry
-  a pointer to that ledger entry in the dispatch. If an earlier task's breaker
-  carried a CONFIRMED-GAP to this task, the dispatch names the gap and the
-  ruling's smallest unblocking change as part of this task's work, and its
-  review checks that change.
-- Dispatch the printed `subagent_type` with no `model` or `effort` argument
-  and the prompt above. Never dispatch a `fork` implementer: it would inherit
-  your whole context.
-- Record the implementer's agent identity from the dispatch result — fix
-  round 1 may resume it. `start` already wrote
-  `Task <N>: implementer <agent> (assigned; base <sha7>)`. When what you dispatch differs from that
-  line, or needs a note it cannot know — an agent scored at dispatch, a
-  substitute for an unavailable model, a reserve tier, a `#### Part` — append
-  a new assigned line for it with the note (`; scored at dispatch`,
-  `; reserve tier`, `; part <X>`), as an escalation does: the last assigned
-  line decides.
-- Never dispatch multiple implementation subagents in parallel (conflicts).
+  (dforge:ui-ux). Render the result through the project UI profile's harness
+  before you write the report, and map each cited ID in the report to a
+  screenshot path or a test name; a cited ID with no evidence is a spec ❌ at
+  review.
+- If an earlier task parked a finding in the area this task touches, read that
+  ledger entry first. If an earlier task's breaker carried a CONFIRMED-GAP to
+  this task, the gap and the ruling's smallest unblocking change are part of
+  this task's work, and its review checks that change.
 
-**Dispatch problems are rulings.** Each is said aloud and logged as a
-`Ruling:` line; none falls back silently and none stops the run:
+## 2. The report and the suite
 
-| Problem | Ruling |
-|---|---|
-| No `**Implementer:**` line | Score the task with the rubric in [ladder.md](ladder.md), dispatch that agent, and note `scored at dispatch` on the assigned line |
-| A name in none of [ladder.md](ladder.md)'s assignment, escalation or reserve tables (`impl-haiku`, `impl-opus-low` and `impl-opus-medium` appear only in the escalation table, and a human `**Override:**` may pin them) | Score at dispatch and dispatch the scored agent |
-| The implementer's model is unavailable on this account | Same effort one model down; where none exists, the ladder successor — see [escalation.md](escalation.md) |
-| Fable unavailable inside a reserve chain entered automatically | `Task <N>: BLOCKED` with the reason — the Opus rungs below it already failed |
+Task review always follows the report: write it as §The session review loop
+step 2 says, then run `task-step review` (§3), which packages the diff and
+records `t0`.
 
-## 2. Handle the report
-
-Implementer subagents report one of four statuses, or none. Handle each appropriately:
-
-**DONE:** Review the task (step 3). `task-step review` packages the diff and
-records `t0`, the time the cache rule in step 4 needs.
-
-**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, pass them to the task reviewer with its other inputs; the review loop decides them. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
-
-**The suite runs beside the review.** A task or a batch starts its suite as
-soon as its DONE or DONE_WITH_CONCERNS report is in. Run
+**The suite runs beside the review.** A task starts its suite as
+soon as its report is written and its work is committed. Run
 `bash <plugin-root>/scripts/suite-run -- bash -c '<suite command>'` as a
 background Bash command from the checkout's top level, at the task's head, and in the same turn run
 `task-step review` and dispatch its seat (§3). `<suite command>` is the one
 `task-step start --suite` recorded, character for character: `verdict` finds
 the run by the quoted form `suite-run` records for that command, so a command
 typed differently, or run from a subdirectory, is never found. The report's
-`## Verified` section lists the focused tests the implementer ran; this run is
-the full suite. The last `## Verified` section of the report is the current
+`## Verified` section lists the focused tests you ran; this run is the full
+suite. The last `## Verified` section of the report is the current
 evidence: a fix round appends its own. End the turn when only waiting remains,
 and run `task-step verdict` only once both the seat's report and the suite's
 completion notification are in. A suite still running at a handoff shows in
@@ -193,56 +128,16 @@ runs `task-step review` without `--suite`. A task the schedule names starts the
 integration check as this section describes and passes `--suite` and
 `--suite-base` to `task-step review`.
 
-**NEEDS_CONTEXT:** The implementer needs information that wasn't provided.
-If the answer is mechanical - a path, a name, a value that the header, an
-earlier task's report or the ledger already holds - supply it and re-dispatch
-the same agent, and log `Task <N>: Ruling: supplied <what> — <where it came
-from> — none`. Anything else is a question about what the plan means: send it
-to the ruling seat as a `blocked-plan` item and re-dispatch with the verdict.
-You never answer a requirements question from your own reading of one brief.
-
-**BLOCKED:** The implementer cannot complete the task. Assess the blocker:
-1. If it's a context problem, provide more context and re-dispatch the same agent
-2. If the task requires more reasoning, re-dispatch on the successor rung and write a new assigned line — see [escalation.md](escalation.md)
-3. If the task is too large, send a `blocked-plan` item; a split is the seat's CONFIRMED-GAP naming it, logged as a `Ruling:` line
-4. If the plan itself is wrong, send a `blocked-plan` item to the ruling seat and carry out its verdict; an AMEND re-dispatches from a fresh brief
-
-**Still listed after its report:** on Claude Code, an implementer that left a
-shell or agent of its own running stays listed after it reports, whatever its
-status, and its notification says it "stopped with background work of its own
-still running". Once you have acted on the report, stop it with `TaskStop`
-(its report stands) so nothing it left keeps running into a handoff or the
-finishing menu. `scripts/in-flight` lists any you missed.
-
-**No status line:** the reply carries no `**Status:**` line, usually because
-the implementer ended its turn on a progress note that announces a next step
-instead of taking it. A reply without a status is not DONE, whatever it says
-was finished. If the report file carries a status, act on that one. Otherwise,
-while your harness can send another message to the live agent and its id is
-still in your context, send it one message naming what is still open - the
-brief's unfinished steps and whatever the reply said comes next - telling it to
-continue, or to report BLOCKED with what blocks it; say the continuation aloud.
-If the reply says a command or subagent it started is still running, let that
-finish first: wait for it (on Claude Code, end the turn; on Codex, bounded
-`wait_agent` stretches), and stop it with `TaskStop` if it outlives the rung's bound.
-After two continuations with no status, handle the task as
-BLOCKED with the reason `no report after two continuations`. When you cannot
-message the agent, dispatch the same agent fresh with the brief path, the
-report-file path and `git log <base>..HEAD` as what the earlier run committed.
-
-**Never** ignore an escalation or force the same model to retry without changes. If the implementer said it's stuck, something needs to change.
-
 ## 3. Review the task
 
 Per-task reviews are task-scoped gates. The broad review happens once, at the
 final whole-branch review. Never skip the task review, and never accept a
 report missing either verdict — spec compliance AND task quality are both
-required. Implementer self-review never replaces the task review; both are
+required. Your own self-review never replaces the task review; both are
 needed.
 
 - **One call does the plumbing:**
-  `bash <plugin-root>/scripts/task-step review PLAN_FILE N` (all of a batch's
-  task numbers for a batch). It packages the diff from the base
+  `bash <plugin-root>/scripts/task-step review PLAN_FILE N`. It packages the diff from the base
   `start` recorded to HEAD — never `HEAD~1`, which silently truncates
   multi-commit tasks — and records the review head and `t0`. It runs
   each reviewer family's gate (`scripts/codex-gate`, `scripts/agy-gate`),
@@ -310,13 +205,13 @@ needed.
 - **Reviewer inputs:** the brief file (it ends with the plan's Global
   Constraints and Contracts — the reviewer's attention lens), the
   implementer's report file, and the diff file, all named in the prompt file. Never tell the
-  reviewer which lane produced the diff: a judge that knows the author scores
-  the author.
+  reviewer who wrote the diff: a judge that knows the author scores the
+  author.
 - Do not add open-ended directives like "check all uses" or "run race tests
   if useful" without a concrete, task-specific reason
-- Do not ask a reviewer to re-run tests the implementer already ran on the
-  same code — the implementer's report carries the test evidence, and the
-  suite run of §2 covers the rest
+- Do not ask a reviewer to re-run tests you already ran on the same code —
+  the report carries the test evidence, and the suite run of §2 covers the
+  rest
 - Do not pre-judge findings for the reviewer — never instruct a reviewer to
   ignore or not flag a specific issue. If you believe a finding would be a
   false positive, let the reviewer raise it; the review loop and, at the
@@ -506,62 +401,15 @@ Before the loop starts, two routes leave it immediately:
   because the plan mandates it, and do not dispatch a fix that contradicts
   the plan without the seat's verdict in the ledger.
 
-Everything else enters the loop. A fix round is one fix dispatch plus one
+Everything else enters the loop. A fix round is one fix of your own plus one
 scoped re-review. Two rounds at most per task:
 
-**Round 1 — resume or re-dispatch by cache state.** Resuming keeps the
-implementer's context, but a cold resume re-writes that whole context into the
-cache. Resume only when all of these hold:
+Each round is your own fix, followed by one scoped re-review.
 
-- your harness can send another message to the live agent, and its agent id is
-  still in your context (compaction loses it — then the answer is always fresh);
-- and either `t1 − t0 < 300` seconds, or the implementer's context is under
-  about 100k tokens.
-
-`t0` is the one on the latest `state:` line a `task-step` digest printed; `t1`
-is `date +%s` from a dedicated Bash call immediately before you decide.
-The context figure is the token total the Agent tool reported when the
-implementer finished; if no such figure was reported, the time test decides
-alone. Otherwise dispatch a fresh copy of the same agent carrying the brief
-path, the report-file path, and the findings — the report file is the
-persistent memory either way — and note `fresh (<why>)` on the fix-round line.
-That is not an escalation.
-
-**Round 2 — a fresh dispatch on the successor rung.** For a dispatched
-implementer (the session review loop has its own rounds), dispatch a fresh
-implementer on the successor rung from [ladder.md](ladder.md)'s escalation
-table, with the brief path, the report-file path, the open findings, and this
-framing: "A prior implementer attempted this task [N] times; you own it now.
-Read the report file for what was tried." A finding round 1 did not close
-usually means the implementer cannot see its own problem — fresh eyes and a
-capability bump in one move.
-When the successor is `SPLIT`, round 2 is a fresh dispatch of the same rung (`impl-opus-high`):
-a split is reached only through the breaker's AMEND (below).
-A reserve-tier task takes its reserve successor from ladder.md's reserve
-table; `impl-fable-max`, whose successor is `BLOCKED`, writes
-`Task <N>: BLOCKED — impl-fable-max exhausted — <what a human must decide>`
-instead of a round 2.
-
-**Split and reserve.** A split follows a tripped breaker: a finding still
-open after round 2 on `impl-opus-high` goes to the breaker, whose AMEND may
-rewrite the task's body into `#### Part A` / `#### Part B` units under the
-same number, which you apply with `scripts/plan-amend` and dispatch in order,
-one part per dispatch. A task is split once: a part on `impl-opus-high` takes
-its reserve successor `impl-opus-xhigh` at round 2, said aloud. Both splits
-and reserve entries are `Ruling:` lines. The details are in
-[escalation.md](escalation.md).
-On a Codex host the rungs are not these: escalation, the single split and the
-reserve chain all come from the `codex-v4` selector
-([native-codex.md](native-codex.md) §Selector contract), which the caller runs
-through `scripts/select-native-tier.sh`. A Codex host keeps its five-round cap (`review_cap: 5`) from [codex-routing.json](codex-routing.json).
-
-On a `Host: codex` plan the loop keeps five rounds: rounds 1-3 resume the recorded implementer by Round 1's cache rule, rounds 4 and 5 are fresh dispatches of the pair the selector returns for an `escalate` request, the Codex ledger line is `Task <N>: fix round <R>/5 (…)` with the fields above, and the breaker trips when round 5's re-review still leaves findings open; neither host reads a progress reading.
-
-**Every round, either way:** the implementer fixes, re-runs the tests
-covering the amended code, appends its fix report to the same report file,
-and returns the short contract. Before re-dispatching the reviewer, confirm
-the fix report contains the covering tests, the command run, and the
-output; dispatch the re-review once all three are present. Name the
+**Every round:** you fix, re-run the tests covering the amended code and
+append your fix report to the same report file. Before dispatching the
+re-review, confirm the fix report contains the covering tests, the command
+run, and the output; dispatch the re-review once all three are present. Name the
 covering test files in the fix message — a one-line fix does not need the
 whole suite. The full suite is yours: when the fix is committed, start it at
 the new head as §2 says (under a `none` task check, only when the review of
@@ -571,9 +419,8 @@ has its own suite run beside its re-review.
 **The fix message** is the file `<workspace>/task-<N>-fix-<R>.md`, `R` being
 the round you are starting (1 for the first). Its first lines are one bullet
 per open finding, `- <file>: <finding one-liner>`, then a blank line, then
-what the implementer needs: the finding's detail, the ruling's smallest fix,
-the covering test files. Send the implementer, resumed or fresh, the file's
-path rather than its text.
+what the fix needs: the finding's detail, the ruling's smallest fix, the
+covering test files.
 `task-step verdict` writes its bullets from the report, each `<file>`
 carrying the finding's `:<line>`, with the severity lines after the blank
 line; append the ruling's smallest fix and the covering test files below
@@ -624,14 +471,10 @@ command in the plan header: start `rereview --covered` as a background
 command and end the turn.
 
 **After each round,** append to the ledger:
-`Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new>)`
-
-Never fix a dispatched implementer's findings yourself in the controller
-session — your context stays clean for coordination, and controller fixes skip
-review. In the session review loop the fixes are the session's own.
+`Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>[; re-review skipped (<n> lines)]; session)`
 
 **The breaker.** When round 2's re-review still leaves findings open, stop
-dispatching and send every open finding to the ruling seat in one `breaker`
+fixing and send every open finding to the ruling seat in one `breaker`
 dispatch. The seat parks a finding that is wrong, contestable, or real but
 built on by nothing downstream; returns CONFIRMED-GAP with the smallest
 unblocking change for one a later task builds on; AMEND for a plan defect;
@@ -731,9 +574,9 @@ judge reviews: a task whose brief's second line is
 review, §4's verdicts and re-reviews and §5's complete line run as written,
 with the session in the implementer's place.
 
-1. **Start.** Run `bash <plugin-root>/scripts/task-step start PLAN_FILE <N> --inline`.
+1. **Start.** Run `bash <plugin-root>/scripts/task-step start PLAN_FILE <N>`.
    It records BASE and the suite in `<workspace>/task-<N>-step.json` and
-   writes no dispatch file and no task line. Append
+   writes no task line. Append
    `Task <N>: implementer inline (assigned; base <sha7>)` yourself.
 2. **Implement and report.** Implement, verify, self-review and commit as
    dforge:executing-plans §The Task Loop steps 3 to 6 say. Then write
@@ -769,17 +612,11 @@ at Astra high or above as the seat ([native-codex.md](native-codex.md)).
 `task-step` exits 2 on a `Host: codex` plan, and `task-step review` exits 2,
 writing nothing, when `lens-route` does. Then run the mechanics yourself:
 
-- **§1.** Record BASE (`git rev-parse HEAD`) before dispatching. Run
+- **§1.** Record BASE (`git rev-parse HEAD`) before you start. Run
   `scripts/task-brief PLAN_FILE N` (see using-dforge §Session Budget): it
   prints `wrote <path>: <N> lines`, then the budget line; read the path out of
-  the first line and never pipe the output into a prompt as if it were a
-  filename. Dispatch with
-  [implementer-prompt.md](prompts/implementer-prompt.md),
-  its placeholders filled in, the brief path introduced as "read this first —
-  it is your requirements, with the exact values to use verbatim, and it ends
-  with the plan's Global Constraints and Contracts" and the report-file path
-  named after the brief. Write the assigned line
-  `Task <N>: implementer <agent> (assigned; base <sha7>)`.
+  the first line. Write the assigned line
+  `Task <N>: implementer inline (assigned; base <sha7>)`.
 - **§2.** On a DONE report, run
   `bash <plugin-root>/scripts/suite-run -- <suite command>` yourself in the
   background at the task's head and treat a non-baseline failure as §3's
@@ -798,7 +635,7 @@ writing nothing, when `lens-route` does. Then run the mechanics yourself:
   yourself, `[PLUGIN_ROOT]` expanded to this plugin's resolved directory and
   `[LENS_FILES]` set to each `criteria=` path `scripts/lens-route PLAN_FILE --task <N>`
   prints (with none, delete that section),
-  `[IMPLEMENTER_REPORT_FILE]` set to the implementer's report and `[REPORT_FILE]` to `<workspace>/task-<N>-review-report.md`.
+  `[IMPLEMENTER_REPORT_FILE]` set to your report and `[REPORT_FILE]` to `<workspace>/task-<N>-review-report.md`.
   Check the commits' identity and
   attribution yourself, as the mechanical checks above describe.
   `task-step verdict` exits 2 on a `Host: codex` plan, so read the report's
@@ -816,10 +653,9 @@ For a task whose last ledger line, read by the caller's Recovery rule, is:
 | Last line | Action |
 |---|---|
 | An assigned line naming `executor <id> <model>/<effort>` (an executor lane run from before 5.0), or a later fix round of that task, with no complete line | The lane is gone, so the session implements the task. First run `git status`, show your human partner the leftovers, and keep or discard them as they decide; leftover run records under the git directory are inert. Then start the task as the caller's task loop says |
-| `implementer <agent> (assigned …)`, the agent not `inline` | If the report file has a status and `git log <base>..HEAD` is non-empty, review it (§3); otherwise dispatch the same agent fresh (§1) |
+| `implementer <agent> (assigned …)`, the agent not `inline` (an older run's dispatch) | The session implements the task. If `git log <base>..HEAD` is non-empty, review it (§3); otherwise start the task as the caller's task loop says |
 | `fix round R/5` on a `Host: codex` plan | Codex: R < 5 resumes the loop at round R+1 by the five-round schedule (§4); `fix round 5/5` goes to the breaker (§4) |
-| `fix round 1/2` whose last slot is `session` or `HANDBACK to inline` | The session finishes it: §The session review loop, from round 2 |
-| `fix round 1/2`, or `fix round 1/5` from an older run | Resume the loop at round 2 — a fresh dispatch on the successor rung (§4) |
+| `fix round 1/2` | The session finishes it: §The session review loop, from round 2 |
 | `fix round 2/2`, or `fix round R/5` with R >= 2 from an older run | Go to the breaker (§4) |
 
 On a Codex plan the Codex row wins; the `older run` mappings apply to a Claude plan only.

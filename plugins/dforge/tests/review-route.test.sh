@@ -421,149 +421,10 @@ check "final: an extra argument exits 2" "$rc" "2"
 rule "$TMP/final-plain.md" --task
 check "final: --task with no id still exits 2" "$rc" "2"
 
-# --- the final fix wave's implementer ---
+# --- a Codex-host plan: the plan-round cap ---
 FF="$TMP/ff"
 git init -q "$FF"
 mkdir -p "$FF/docs" "$FF/.dforge/sdd/plan"
-sed 's/^|//' > "$FF/docs/plan.md" <<'EOF'
-|# Fix Wave Fixture
-|
-|**Execution:** inline — `claude --model opus --effort low` — x
-|
-|### Task 1: below the floor
-|
-|**Files:**
-|- Create: `a.txt`
-|- Test: `tests/a.test.sh`
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Evaluation:** files 1 - spec 0 - coupling 0 - risk 0 = 1
-|
-|### Task 2: line range
-|
-|**Files:**
-|- Modify: `b.txt:10-20`
-|
-|**Implementer:** dforge:impl-opus-medium
-|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 2 = 5
-|
-|### Task 3: escalated
-|
-|**Files:**
-|- Modify: `c.txt`
-|
-|**Implementer:** dforge:impl-sonnet-medium
-|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
-|
-|### Task 4: reserve
-|
-|**Files:**
-|- Modify: `d.txt`
-|
-|**Implementer:** dforge:impl-fable-high
-|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
-|**Override:** owner assigned Fable
-|
-|### Task 5: inline
-|
-|**Files:**
-|- Modify: `e.txt`
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
-|
-|### Task 6: split
-|
-|#### Part A: small half
-|
-|**Files:**
-|- Modify: `f.txt`
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
-|
-|#### Part B: larger half
-|
-|**Files:**
-|- Modify: `g.txt`
-|
-|**Implementer:** dforge:impl-opus-low
-|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
-|
-|### Task 7: line list
-|
-|**Files:**
-|- Modify: `h.txt:3-4,9`
-|- Modify: `dir with spaces/f.txt` (the export)
-|- Delete: `old.txt`
-|
-|**Implementer:** dforge:impl-sonnet-high
-|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 0 = 3
-EOF
-sed 's/^|//' > "$FF/.dforge/sdd/plan/progress.md" <<'EOF'
-|# SDD ledger — plan: docs/plan.md
-|Task 1: implementer impl-sonnet-low (assigned; base aaaaaaa)
-|Task 3: implementer dforge:impl-sonnet-medium (assigned; base bbbbbbb)
-|Task 3: fix round 4/5 (1 addressed, 1 open — x; commits bbbbbbb..ccccccc; escalated impl-sonnet-medium -> impl-opus-medium)
-|Task 5: implementer inline (assigned; base ddddddd)
-|Task 5: escalated inline -> subagent — three fix rounds
-EOF
-fix() { out=$(bash "$ROUTE" "$FF/docs/plan.md" --final-fix "$@" 2>"$TMP/err"); rc=$?; }
-FIXSEAT="review-seat final-fix primary=dforge"
-fix zzz.txt
-check "final-fix: no matched task is the floor" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=floor"
-fix a.txt
-check "final-fix: a low tier is raised to the floor" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:1"
-fix tests/a.test.sh
-check "final-fix: a Test entry matches" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:1"
-fix b.txt
-check "final-fix: a :line-range suffix in the plan is ignored" "$out" "$FIXSEAT:impl-opus-medium fallback=- reason=tasks:2"
-fix b.txt:12
-check "final-fix: a finding's own line suffix is ignored" "$out" "$FIXSEAT:impl-opus-medium fallback=- reason=tasks:2"
-fix h.txt
-check "final-fix: a :line-list suffix in the plan is ignored" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:7"
-fix h.txt:3,9
-check "final-fix: a finding's own line list is ignored" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:7"
-fix 'dir with spaces/f.txt'
-check "final-fix: a path with spaces matches whole" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:7"
-fix old.txt
-check "final-fix: a Delete entry matches" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:7"
-fix a.txt b.txt
-check "final-fix: the highest of two matched tasks" "$out" "$FIXSEAT:impl-opus-medium fallback=- reason=tasks:1,2"
-fix c.txt
-check "final-fix: the ledger's escalated agent counts" "$out" "$FIXSEAT:impl-opus-medium fallback=- reason=tasks:3"
-fix d.txt
-check "final-fix: a reserve tier is capped at impl-opus-high" "$out" "$FIXSEAT:impl-opus-high fallback=- reason=tasks:4"
-fix e.txt
-check "final-fix: an inline implementer is the Execution line's rung" "$out" "$FIXSEAT:impl-opus-low fallback=- reason=tasks:5"
-fix g.txt
-check "final-fix: a split task's parts count as the task" "$out" "$FIXSEAT:impl-opus-low fallback=- reason=tasks:6"
-fix zzz.txt c.txt
-check "final-fix: an unmatched file beside a matched one" "$out" "$FIXSEAT:impl-opus-medium fallback=- reason=tasks:3"
-sed 's/^|//' > "$FF/.dforge/sdd/plan/amendments.md" <<'EOF'
-|## A1 — Task 1
-|
-|### Old
-|
-|````
-|- Create: `a.txt`
-|````
-|
-|### New
-|
-|````
-|- Create: `a2.txt`
-|````
-EOF
-fix a2.txt
-check "final-fix: an amended Files block is read" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=tasks:1"
-fix a.txt
-check "final-fix: a file amended away no longer matches" "$out" "$FIXSEAT:impl-sonnet-high fallback=- reason=floor"
-rm -f "$FF/.dforge/sdd/plan/amendments.md"
-fix
-check "final-fix: no file exits 2" "$rc" "2"
-
-# --- a Codex-host plan: the plan-review cap and the final fix wave ---
 # The cap reads the raw total (Task 2: raw 5, weighted 7), so it is 2, not 3.
 mkdir -p "$FF/.dforge/sdd/native"
 sed 's/^|//' > "$FF/docs/native.md" <<'EOF'
@@ -648,21 +509,6 @@ sed 's/^\*\*Evaluation:\*\* files=0,/**Evaluation:** files=08,/' "$FF/docs/nativ
 out=$(bash "$ROUTE" "$FF/docs/native-zero.md" --plan-round 1 2>"$TMP/err"); rc=$?
 check "native plan round: a score written 08 is read as 8" "$rc:$out" \
   "0:review-seat plan-round=1 primary=native:gpt-6-astra/high fallback=- reason=round cap=3"
-NATIVE="review-seat final-fix primary=native"
-native --final-fix zzz.txt
-check "native final-fix: no matched task is rank 5" "$out" "$NATIVE:gpt-6.1-sol/high fallback=- reason=floor"
-native --final-fix a.txt
-check "native final-fix: a low rank is raised to rank 5" "$out" "$NATIVE:gpt-6.1-sol/high fallback=- reason=tasks:1"
-native --final-fix b.txt
-check "native final-fix: the plan's pair without a ledger line" "$out" "$NATIVE:gpt-6-astra/medium fallback=- reason=tasks:2"
-native --final-fix c.txt
-check "native final-fix: the escalation counts, the review seat does not" "$out" "$NATIVE:gpt-6-astra/high fallback=- reason=tasks:3"
-native --final-fix d.txt
-check "native final-fix: a reserve pair is capped at rank 9" "$out" "$NATIVE:gpt-6-astra/xhigh fallback=- reason=tasks:4"
-native --final-fix e.txt
-check "native final-fix: an inline implementer is the Execution pair" "$out" "$NATIVE:gpt-6.1-sol/xhigh fallback=- reason=tasks:5"
-native --final-fix a.txt b.txt c.txt
-check "native final-fix: the highest of the matched tasks" "$out" "$NATIVE:gpt-6-astra/high fallback=- reason=tasks:1,2,3"
 
 # --- README, version and program amendment -------------------------------------
 # The version is read from the Claude manifest, so a release bump needs no edit here.

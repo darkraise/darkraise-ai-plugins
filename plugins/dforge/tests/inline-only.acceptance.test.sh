@@ -135,10 +135,8 @@ has "A15: risk 3 raises the effort floor to high" "$out" "ERROR header: inline e
 io_plan "$INLINE_OPUS" "0 2 1 3" "0 1 1 0" > loop.md
 git add -A && git commit -qm plans
 ws=$(bash "$S/sdd-workspace" loop.md | tail -n 1)
-start_out=$(bash "$S/task-step" start loop.md 1 --inline 2>&1); start_rc=$?
-check "A14: start --inline exits 0" "$start_rc" "0"
-has "A14: start --inline says no dispatch file" "$start_out" "; inline, no dispatch file written"
-has "A14: start --inline names the inline seat" "$start_out" "seat: inline"
+start_out=$(bash "$S/task-step" start loop.md 1 2>&1); start_rc=$?
+check "A14: start exits 0" "$start_rc" "0"
 check "A14: step state written" "$([ -f "$ws/task-1-step.json" ] && echo yes)" "yes"
 check "A14: no dispatch file" "$([ -e "$ws/task-1-dispatch.md" ] && echo yes || echo no)" "no"
 check "A14: only the identity line is written" "$(case "$(head -n 1 "$ws/progress.md")" in "# SDD ledger — plan: "*) echo yes ;; *) echo no ;; esac)" "yes"
