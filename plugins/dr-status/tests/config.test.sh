@@ -113,6 +113,16 @@ check "matching account resolves a color"  "$DCC_ACCOUNT_COLOR" "magenta"
 check "email is read from the account file" "$P_EMAIL"  "someone@example.com"
 check "valid config is not flagged bad"    "$DCC_CONFIG_BAD" "0"
 
+# Widths reach bash arithmetic, where a string is evaluated as an expression.
+TMPW=$(mktemp -d)
+printf '%s' '{"meters":{"width":{"ctx":"BASH_VERSINFO[$(touch '"$TMPW"'/ran)]","cache":8.7,"5h":"3","7d":6}}}' >"$TMPW/c.json"
+dcc_parse_all "$(cat "$F/full.json")" "$TMPW/c.json" /dev/null
+check "a string ctx width falls back to the default" "$DCC_W_CTX" "10"
+check "a fractional cache width is floored"         "$DCC_W_CACHE" "8"
+check "a numeric-string 5h width falls back"        "$DCC_W_5H" "8"
+check "a numeric 7d width is kept"                  "$DCC_W_7D" "6"
+rm -rf "$TMPW"
+
 # --- malformed config ---------------------------------------------------------
 dcc_parse_all "$(cat "$F/full.json")" "$F/config-bad.json" /dev/null
 check "malformed config is flagged"        "$DCC_CONFIG_BAD" "1"
