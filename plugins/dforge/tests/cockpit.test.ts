@@ -1552,6 +1552,15 @@ describe('settings', () => {
     expect(notes.filter(text => /— handoff\./.test(text))).toEqual([expect.stringMatching(/^dforge: budget: 560k of 553k — handoff\. /)])
   })
 
+  test('a burst of measurements does not run git once each', async ($, on) => {
+    const w: World = { ...SIGNED_IN, gitRuns: [] }
+    world(on, w)
+    signedIn(on)
+    await $.session.start(START)
+    for (let i = 0; i < 5; i++) await $.session.measure(MEASURE)
+    expect(w.gitRuns!.filter(run => run.includes(' status ')).length).toBeLessThanOrEqual(1)
+  })
+
   test('sections picks and orders the pane', async ($, on) => {
     world(on, { tokens: 50_000, config: { sections: 'plan, repo' } })
     await $.session.start(START)

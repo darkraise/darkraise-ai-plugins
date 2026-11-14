@@ -436,7 +436,8 @@ export const register: Register = on => {
         })
       }
     }
-    if (o.isMinimized || (await isPaneUp($))) await refreshDetail($)
+    // A measurement lands with every response, and the detail runs git: keep the poll's pace.
+    if ((o.isMinimized || (await isPaneUp($))) && (await $.clock.now()) - S.detailAt >= DETAIL_EVERY * POLL_MS) await refreshDetail($)
 
     return done
   })
