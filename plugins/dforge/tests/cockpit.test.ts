@@ -813,7 +813,7 @@ describe('seat check', () => {
     expect(untyped).toMatch(/dforge:judge-sonnet-high/)
     expect(untyped).toMatch(/Execution line/)
     expect(untyped).not.toMatch(/for implementation/)
-    expect(untyped).toMatch(/dforge:impl-sonnet-medium/)
+    expect(untyped).not.toMatch(/dforge:impl-/)
     expect(untyped).toMatch(/model: "sonnet"/)
     expect(untyped).toMatch(/using-dforge §Seats/)
     for (const subagentType of ['general-purpose', 'claude']) expect(seatDenial({ ...base, subagentType }, true, false)).toBe(untyped)

@@ -56,7 +56,7 @@ const spawn = (fields: Record<string, unknown>) =>
 const REASON = /^dforge: /
 
 describe('typed seats and drafting: acceptance', () => {
-  test('A1: an untyped general-purpose or claude spawn is denied, naming a judge seat, an impl seat and model "sonnet"', async ($, on) => {
+  test('A1: an untyped general-purpose or claude spawn is denied, naming a judge seat and model "sonnet"', async ($, on) => {
     world(on)
     await $.session.start(START)
     await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
@@ -64,7 +64,6 @@ describe('typed seats and drafting: acceptance', () => {
       const out = await $.agent.spawn(spawn({ subagentType }))
       expect(out.deny).toMatch(REASON)
       expect(out.deny).toMatch(/dforge:judge-sonnet-high/)
-      expect(out.deny).toMatch(/dforge:impl-sonnet-medium/)
       expect(out.deny).toContain('model: "sonnet"')
     }
   })
@@ -78,7 +77,7 @@ describe('typed seats and drafting: acceptance', () => {
     expect((await $.agent.spawn(spawn({ model: 'sonnet' }))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({ model: 'opus' }))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({ subagentType: 'claude', model: 'sonnet' }))).deny).toBeUndefined()
-    for (const subagentType of ['dforge:judge-opus', 'dforge:judge-sonnet-high', 'dforge:impl-sonnet-medium']) {
+    for (const subagentType of ['dforge:judge-opus', 'dforge:judge-sonnet-high', 'dforge:impl-sonnet-high']) {
       expect((await $.agent.spawn(spawn({ subagentType }))).deny).toBeUndefined()
     }
     for (const subagentType of ['Explore', 'Plan']) expect((await $.agent.spawn(spawn({ subagentType }))).deny).toBeUndefined()

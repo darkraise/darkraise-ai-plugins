@@ -1,17 +1,10 @@
 #!/usr/bin/env bash
-# The fleet is nineteen agents in two classes. Seven execution implementers
-# pin one model/effort pairing each and are everything the assignment table and
-# the escalation ladder can reach. Nine reserve implementers - the xhigh and max
-# efforts, and every Fable tier - are never an output of scoring: they are
-# reachable only by a human override, or by the reserve chain after a split has
-# already been spent. Three judges never carry Edit, NotebookEdit, Bash or
-# Agent, so "reviewers do not spawn subagents" is enforced rather than
-# requested. A judge carries Write for one file, the report its prompt names;
-# task-step verdict checks that no tracked file changed during the review.
-#
-# Haiku 4.5 does not support reasoning effort at all, so impl-haiku must NOT
-# carry an effort field. xhigh, max, and the Fable model are legal for reserve
-# implementers and for nothing else.
+# The fleet is four agents in two classes. impl-sonnet-high runs the Acceptance
+# QA pass; it never carries Agent, Skill or the other session-only tools. Three
+# judges never carry Edit, NotebookEdit, Bash or Agent, so "reviewers do not
+# spawn subagents" is enforced rather than requested. A judge carries Write for
+# one file, the report its prompt names; task-step verdict checks that no
+# tracked file changed during the review.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,15 +25,12 @@ fm() {
   ' "$1"
 }
 
-RESERVE="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-opus-max impl-opus-xhigh impl-sonnet-max impl-sonnet-xhigh"
-EXPECTED="impl-fable-high impl-fable-low impl-fable-max impl-fable-medium impl-fable-xhigh impl-haiku impl-opus-high impl-opus-low impl-opus-max impl-opus-medium impl-opus-xhigh impl-sonnet-high impl-sonnet-low impl-sonnet-max impl-sonnet-medium impl-sonnet-xhigh judge-fable judge-opus judge-sonnet-high"
+EXPECTED="impl-sonnet-high judge-fable judge-opus judge-sonnet-high"
 JUDGE_TOOLS="Read, Grep, Glob, WebFetch, Write"
 IMPL_DISALLOWED="Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications"
 
-is_reserve() { case " $RESERVE " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
-
 actual=$(cd "$AGENTS" 2>/dev/null && ls *.md 2>/dev/null | sed 's/\.md$//' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
-check "fleet contains exactly the 19 expected agents" "$actual" "$EXPECTED"
+check "fleet contains exactly the 4 expected agents" "$actual" "$EXPECTED"
 
 for f in "$AGENTS"/*.md; do
   [ -e "$f" ] || continue
@@ -59,27 +49,8 @@ for f in "$AGENTS"/*.md; do
 
   case "$base" in
     impl-*)
-      # An implementer's name is its contract: the second segment is the model
-      # and the last is the effort. Checking both against the filename is what
-      # keeps the ladder tables, which index by name, honest.
       check "$base: model matches the name segment" "$model" "$(printf '%s' "$base" | cut -d- -f2)"
-
-      if is_reserve "$base"; then
-        check "$base: effort matches the name suffix" "$effort" "${base##*-}"
-        check "$base: reserve effort is an allowed level" \
-          "$(case "$effort" in low|medium|high|xhigh|max) echo ok ;; *) echo "invalid:$effort" ;; esac)" "ok"
-      else
-        check "$base: execution implementer does not run on fable" \
-          "$([ "$model" = fable ] && echo yes || echo no)" "no"
-        if [ "$model" = "haiku" ]; then
-          check "$base: haiku carries no effort field" "${effort:-ABSENT}" "ABSENT"
-        else
-          check "$base: effort matches the name suffix" "$effort" "${base##*-}"
-          check "$base: execution effort is an allowed level" \
-            "$(case "$effort" in low|medium|high) echo ok ;; *) echo "reserve-or-invalid:$effort" ;; esac)" "ok"
-        fi
-      fi
-
+      check "$base: effort matches the name suffix" "$effort" "${base##*-}"
       check "$base: does not set tools" "$(grep -c '^tools:' "$f")" "0"
       check "$base: drops the session-only tools" "$(fm "$f" disallowedTools)" "$IMPL_DISALLOWED"
       check "$base: preloads verification-before-completion" \
