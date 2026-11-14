@@ -256,7 +256,7 @@ gen_codex_plan() { # gen_codex_plan <"F S C R pair">... — a Host: codex plan, 
 }
 
 lint() { # lint <file> [args...] — run from the lint directory; sets out and rc
-  out=$(cd "$LINTDIR" && timeout 120 bash "$LINT" "$@" --no-probe 2>&1); rc=$?
+  out=$(cd "$LINTDIR" && timeout 120 bash "$LINT" "$@" 2>&1); rc=$?
 }
 
 # --- A2 ----------------------------------------------------------------------
@@ -673,7 +673,7 @@ a22() {
   # The real plans written before this spec lint clean, unedited.
   for plan in 2026-10-24-ui-ux-skill 2026-10-26-task-loop-steps; do
     sum_before=$(cksum < "$REPO_ROOT/docs/dforge/plans/$plan.md")
-    out=$(cd "$REPO_ROOT" && timeout 120 bash "$LINT" "docs/dforge/plans/$plan.md" --no-probe 2>&1); rc=$?
+    out=$(cd "$REPO_ROOT" && timeout 120 bash "$LINT" "docs/dforge/plans/$plan.md" 2>&1); rc=$?
     check "A22: plan-lint passes the pre-spec plan $plan" "$rc" "0"
     matches "A22: and reports no error for $plan" "$out" 'plan-lint: 0 errors'
     check "A22: and leaves $plan as it was" "$(cksum < "$REPO_ROOT/docs/dforge/plans/$plan.md")" "$sum_before"
@@ -686,7 +686,7 @@ a22() {
   printf '# Spec\n' > "$R/docs/spec.md"
   git -C "$R" add -A && git -C "$R" commit -qm "docs: add old plan"
   sum_before=$(cksum < "$R/docs/old-plan.md")
-  out=$(cd "$R" && timeout 120 bash "$LINT" docs/old-plan.md --no-probe 2>&1); rc=$?
+  out=$(cd "$R" && timeout 120 bash "$LINT" docs/old-plan.md 2>&1); rc=$?
   matches "A22: a pre-spec plan of spec-0 tasks lints clean" "$out" 'plan-lint: 0 errors'
   check "A22: and plan-lint exits 0 on it" "$rc" "0"
   local n tier ok=1

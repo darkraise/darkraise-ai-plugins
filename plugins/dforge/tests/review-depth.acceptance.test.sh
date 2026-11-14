@@ -262,7 +262,7 @@ a16() {
   out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$DEPTH" docs/dforge/plans/p.md 2>"$TMP/err"); rc=$?
   check "A16: a Spec path in the darkmem mirror resolves as plan-lint resolves it" "$rc:$out" \
     "0:depth=light spec=light tasks=light reason=spec,task-risk:1"
-  out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$LINT" docs/dforge/plans/p.md --no-probe 2>&1)
+  out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$LINT" docs/dforge/plans/p.md 2>&1)
   check "A16: plan-lint finds the plan and resolves the same path" "$(grep -c -e 'Spec path does not exist' -e 'No such plan file' <<<"$out")" "0"
 }
 
@@ -367,10 +367,10 @@ a8() {
 a10() {
   local out_with out_without
   mkplan p10.md spec-light.md - 0
-  out_without=$(cd "$R" && timeout 60 bash "$LINT" docs/dforge/plans/p10.md --no-probe 2>&1)
+  out_without=$(cd "$R" && timeout 60 bash "$LINT" docs/dforge/plans/p10.md 2>&1)
   has "A10: plan-lint warns while the header has no Plan review line" "$out_without" 'no **Plan review:** line yet'
   PLAN_REVIEW='**Plan review:** 2026-10-27 — skipped (depth light)' mkplan p10b.md spec-light.md - 0
-  out_with=$(cd "$R" && timeout 60 bash "$LINT" docs/dforge/plans/p10b.md --no-probe 2>&1)
+  out_with=$(cd "$R" && timeout 60 bash "$LINT" docs/dforge/plans/p10b.md 2>&1)
   lacks "A10: plan-lint still accepts an older light plan's skipped line" "$out_with" 'no **Plan review:** line yet'
   check "A10: and no header warning mentions it" "$(grep -ci 'WARN header.*plan review' <<<"$out_with")" "0"
 }

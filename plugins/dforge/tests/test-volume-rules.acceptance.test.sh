@@ -112,7 +112,7 @@ None
 EOF
 }
 lint() { # lint <file>; sets out and status, CR stripped
-  out=$(bash "$LINT" "$1" --no-probe 2>&1 | tr -d '\r'); status=${PIPESTATUS[0]}
+  out=$(bash "$LINT" "$1" 2>&1 | tr -d '\r'); status=${PIPESTATUS[0]}
 }
 step1_lines() { grep -E '^(ERROR|WARN) Task [0-9]+: Step 1' <<<"$out"; }
 

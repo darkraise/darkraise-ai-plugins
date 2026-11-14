@@ -155,7 +155,7 @@ run docs/split.md s2.md
 check "split: applied" "$out" "amended: A1 Task 2"
 check "split: the amended plan holds both parts" \
   "$(. "$HERE/../scripts/lib/plan.sh"; plan_apply_amendments docs/split.md "$SPLIT_LEDGER" | grep -c '^#### Part [AB]: ')" "2"
-out=$(bash "$HERE/../scripts/plan-lint" docs/split.md --no-probe 2>&1)
+out=$(bash "$HERE/../scripts/plan-lint" docs/split.md 2>&1)
 check "split: plan-lint accepts the amended plan" "$(grep -c '^ERROR' <<<"$out")" "0"
 
 run docs/plan.md

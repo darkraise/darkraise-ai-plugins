@@ -2,7 +2,7 @@
 # Runs one agy (Antigravity CLI) review seat: selects the judge row, runs agy in
 # plan mode under a bound, proves it wrote nothing, and classifies the outcome.
 #
-# Usage: run-agy-review.sh --kind task|risk3|plan|final --cwd DIR --out FILE
+# Usage: run-agy-review.sh --kind task|plan|final --cwd DIR --out FILE
 #          (--prompt FILE | --base SHA) [--tier light|heavy] [--dry-run]
 # Output: agy-judge <model>/<effort> status=<OK|FALLBACK|TIMEOUT|FAILED>
 #           exit=<n> out=<path> evidence=<e>[ reason=<token>]
@@ -47,14 +47,14 @@ while [ $# -gt 0 ]; do
 done
 
 case "$kind" in
-  task|risk3) [ -n "$prompt" ] || die "--kind $kind requires --prompt"; kind=task ;;
+  task) [ -n "$prompt" ] || die "--kind task requires --prompt" ;;
   plan) [ -n "$prompt" ] || die "--kind plan requires --prompt" ;;
   final) [ -n "$base" ] || die "--kind final requires --base" ;;
-  *) die "--kind must be task, risk3, plan or final" ;;
+  *) die "--kind must be task, plan or final" ;;
 esac
 case "$tier" in
   "") tier=heavy ;;
-  light|heavy) [ "$kind" = task ] || die "--tier applies only to --kind task or risk3" ;;
+  light|heavy) [ "$kind" = task ] || die "--tier applies only to --kind task" ;;
   *) die "--tier must be light or heavy" ;;
 esac
 [ -n "$cwd" ] || die "--cwd is required"

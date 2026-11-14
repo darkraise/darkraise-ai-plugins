@@ -514,9 +514,8 @@ check "an Executor line gets one warning" \
   "$(grep -c '^WARN Task 2: the \*\*Executor:\*\* line is obsolete; the session implements this task$' <<<"$out")" "1"
 check "the External executors header is accepted silently" "$(grep -c 'External executors' <<<"$out")" "0"
 check "an Executor line raises no effort floor" "$(grep -c -i 'delegated' <<<"$out")" "0"
-lint clean.md --no-probe --amendments am-none.md
+lint clean.md --amendments am-none.md
 check "flags parse in any order" "$status" "0"
-check "plan-amend never probes" "$(grep -c -- '--no-probe' "$HERE/../scripts/plan-amend")" "2"
 # --- amendments ---
 cat > am.md <<'EOF'
 ## A1 — Task 2
@@ -610,23 +609,23 @@ PLAN
 }
 
 write_plan "next: Two" "**Items:** 1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 lacks "plan-lint: a cited row is covered" "$OUT" "register row #1"
 
 write_plan "next: Two" ""
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: an uncited assigned row is an error" "$OUT" \
   "ERROR header: register row #1 is assigned to this plan but no task cites it"
 has "plan-lint: a plan with no Items line warns" "$OUT" \
   "WARN header: a register covers this plan's spec but no task carries an **Items:** line"
 
 write_plan "next: Two" "**Items:** 1, 9"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: a dangling citation is an error" "$OUT" \
   "ERROR header: **Items:** cites #9, which no covering register holds"
 
 write_plan "last" "**Items:** 1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: 'last' with another sub-project's open row is an error" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
@@ -645,11 +644,11 @@ cat > "$LREPO/docs/dforge/registers/r.md" <<'REG'
 | 2 | Someone else's | C2 | - | planned | - |
 REG
 write_plan "next: Two" ""
-OUT=$(cd "$LREPO" && HOME="$TMP/name-key-home" bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && HOME="$TMP/name-key-home" bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: an Assigned cell under the other prefix is this plan's" "$OUT" \
   "ERROR header: register row #1 is assigned to this plan but no task cites it"
 write_plan "last" "**Items:** 1"
-OUT=$(cd "$LREPO" && HOME="$TMP/name-key-home" bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && HOME="$TMP/name-key-home" bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: 'last' leaves out this plan's row under the other prefix" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
@@ -666,11 +665,11 @@ cat > "$LREPO/docs/dforge/registers/r.md" <<'REG'
 | 2 | Someone else's | C2 | - | planned | - |
 REG
 write_plan "next: Two" ""
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: an empty Item cell: the row is still this plan's" "$OUT" \
   "ERROR header: register row #1 is assigned to this plan but no task cites it"
 write_plan "last" "**Items:** 1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: an empty Item cell: 'last' names only the other row" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
@@ -687,28 +686,28 @@ cat > "$LREPO/docs/dforge/registers/r2.md" <<'REG'
 | 1 | Also this plan's | docs/superpowers/plans/p.md | - | planned | - |
 REG
 write_plan "next: Two" "**Items:** 1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: a bare id two registers hold is ambiguous" "$OUT" \
   "ERROR header: **Items:** cites #1, which more than one covering register holds: write it as <register>#1"
 write_plan "next: Two" "**Items:** r#1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: a qualified citation leaves the other register's row uncited" "$OUT" \
   "ERROR header: register row r2#1 is assigned to this plan but no task cites it"
 lacks "plan-lint: a qualified citation covers its own row" "$OUT" "register row r#1"
 write_plan "next: Two" "**Items:** \`r#1\`, \`r2#1\`"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 lacks "plan-lint: qualified citations cover both rows" "$OUT" "register row"
 lacks "plan-lint: qualified citations are held" "$OUT" "**Items:** cites"
 write_plan "next: Two" "**Items:** r.md#1, r2.md#1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 lacks "plan-lint: a citation spelled with the .md suffix covers its row" "$OUT" "register row"
 lacks "plan-lint: a citation spelled with the .md suffix is held" "$OUT" "**Items:** cites"
 write_plan "next: Two" "**Items:** r2#2, r#1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: a qualified citation of a missing row is an error" "$OUT" \
   "ERROR header: **Items:** cites r2#2, which no covering register holds"
 write_plan "last" "**Items:** r#1, r2#1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: 'last' names the open row with its register" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: r#2"
 rm "$LREPO/docs/dforge/registers/r2.md"
@@ -716,7 +715,7 @@ rm "$LREPO/docs/dforge/registers/r2.md"
 # A plan with no covering register lints exactly as it did before.
 rm "$LREPO/docs/dforge/registers/r.md"
 write_plan "last" ""
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 lacks "plan-lint: no register means no register findings" "$OUT" "register row"
 lacks "plan-lint: no register means no premature-last finding" "$OUT" "register rows are open"
 
@@ -865,15 +864,15 @@ None
 EOF
 }
 three_task_plan 'waves — 1 | 2-3' > waves.md
-lint waves.md --no-probe
+lint waves.md
 check "an old waves line: exit 0" "$status" "0"
 has "an old waves line: the retirement warning" "$out" "WARN header: parallel waves were retired in 5.0.0; this plan runs one task at a time"
 three_task_plan 'sequential — one chain' > seq.md
-lint seq.md --no-probe
+lint seq.md
 lacks "a sequential line: no Parallelism finding" "$out" "Parallelism"
 lacks "a sequential line: no waves finding" "$out" "waves"
 three_task_plan 'parallel' > parallel-word.md
-lint parallel-word.md --no-probe
+lint parallel-word.md
 has "an unknown strategy" "$out" "ERROR header: Parallelism line does not match '**Parallelism:** sequential'"
 
 # --- test tier and CI header lines ---
@@ -951,7 +950,7 @@ lint cov-late.md
 has "Covered by a later task: it does not run before" "$out" "ERROR Task 1: Covered by Task 2 — Task 2 does not run before Task 1"
 lacks "an Extend step counts as a test step" "$out" "Task 2 has no test step"
 three_task_plan 'sequential — one chain' | with_steps 'Write the failing test' $'Covered by Task 7\'s test `a`' $'Covered by Task 2\'s test `b`' > cov-seq.md
-lint cov-seq.md --no-probe
+lint cov-seq.md
 has "Covered by a missing task" "$out" "ERROR Task 2: Covered by Task 7 — no such task"
 has "Covered by a task with no test step" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 has no test step"
 lacks "a sequential plan: a lower task number runs before" "$out" "Task 3: Covered by Task 2 — Task 2 does not run before"
@@ -979,10 +978,10 @@ for h in 'Write the failing tests' 'Extend the test `t/a.test.sh::first`'; do
   lacks "a recognized Step 1 heading draws no form WARN ($h)" "$out" "none of the forms"
 done
 three_task_plan 'sequential — one chain' > nnt-nostep.md
-lint nnt-nostep.md --no-probe
+lint nnt-nostep.md
 lacks "a task with no Step 1 line draws no form WARN" "$out" "none of the forms"
 three_task_plan 'sequential — one chain' | with_steps 'Write the failing test' 'No new test, because prose only' $'Covered by Task 2\'s test `b`' > nnt-cov.md
-lint nnt-cov.md --no-probe
+lint nnt-cov.md
 has "Covered by a No new test task: it has no test step" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 has no test step"
 lacks "a No new test task with a reason draws no form WARN" "$out" 'Task 2: Step 1'
 
@@ -994,7 +993,7 @@ M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
 mkdir -p "$M/dforge/specs" "$M/dforge/plans"
 printf '# Spec\n' > "$M/dforge/specs/s.md"
 printf '# P\n\n**Spec:** docs/dforge/specs/s.md\n\n### Task 1: One\n' > "$M/dforge/plans/p.md"
-out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/dforge/plans/p.md --no-probe 2>&1)
+out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/dforge/plans/p.md 2>&1)
 lacks "darkmem: the Spec path resolves in the mirror" "$out" "Spec path does not exist"
 lacks "darkmem: the plan is found by name" "$out" "no such plan file"
 has "darkmem: the lint ran to its summary" "$out" " errors, "
@@ -1065,20 +1064,20 @@ $2
 EOF
 }
 ui_plan '' '' > ui-bad.md
-out=$(bash "$LINT" ui-bad.md --no-probe 2>&1)
+out=$(bash "$LINT" ui-bad.md 2>&1)
 has "ui: a UI task without a UI/UX line" "$out" "ERROR Task 1: touches the UI file src/Dialog.tsx but has no **UI/UX:** line"
 has "ui: an uncited UI item" "$out" "ERROR header: UI/UX contract item UI-1 is named by no task's **UI/UX:** line"
 lacks "ui: an OP item needs no task" "$out" "item OP-1 is named by no task"
 lacks "ui: a non-UI task needs no line" "$out" "ERROR Task 2: touches the UI file"
 ui_plan '**UI/UX:** UI-1, UX-1, UX-9' '' > ui-undef.md
-out=$(bash "$LINT" ui-undef.md --no-probe 2>&1)
+out=$(bash "$LINT" ui-undef.md 2>&1)
 has "ui: an undefined ID" "$out" "ERROR Task 1: **UI/UX:** cites UX-9, which the spec's UI/UX contract does not define"
 has "ui: an item no task names" "$out" "item UX-2 is named by no task"
 ui_plan '**UI/UX:** UI-1, UX-1' '**UI/UX:** UX-2' > ui-good.md
-out=$(bash "$LINT" ui-good.md --no-probe 2>&1)
+out=$(bash "$LINT" ui-good.md 2>&1)
 lacks "ui: a covered plan has no UI/UX finding" "$out" "UI/UX"
 sed 's#docs/ui-spec.md#docs/spec.md#' ui-bad.md > ui-nocontract.md
-out=$(bash "$LINT" ui-nocontract.md --no-probe 2>&1)
+out=$(bash "$LINT" ui-nocontract.md 2>&1)
 lacks "ui: a spec without a contract asks for no line" "$out" "UI/UX"
 
 fi

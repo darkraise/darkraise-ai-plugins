@@ -123,14 +123,12 @@ check "final: deadline in milliseconds" "$(jq -r '.deadlineMs > 0' <<<"$r")" "tr
 # --- the two kinds differ ----------------------------------------------------
 write_roster
 printf 'prompt text\n' > "$TMP/p.txt"
-out=$(run --kind risk3 --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
+out=$(run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 r=$(req_of "$out")
-check "risk3: carries a schema path" \
+check "task: carries a schema path" \
   "$(jq -r '.schemaPath' <<<"$r" | grep -c 'codex-review-schema.json')" "1"
-check "risk3: read-only sandbox" "$(jq -r '.sandbox' <<<"$r")" "read-only"
-# risk3 is the sub-project 7 name for the task seat, normalised to task before
-# the request is built, so that is the kind the client sees.
-check "risk3: the kind reaches the request" "$(jq -r '.kind' <<<"$r")" "task"
+check "task: read-only sandbox" "$(jq -r '.sandbox' <<<"$r")" "read-only"
+check "task: the kind reaches the request" "$(jq -r '.kind' <<<"$r")" "task"
 
 # The unusable branch has its own status line and must still be parseable.
 cat > "$TMP/bin/detect-stub" <<STUB
@@ -148,8 +146,10 @@ present "the unusable status line keeps the model/effort shape" "$out" "codex-ju
 check "an unusable codex exits 1" "$rc" "1"
 
 # --- usage errors are exit 2, before any call --------------------------------
-run --kind risk3 --cwd "$TMP/work" --out "$TMP/o.json" --dry-run >/dev/null; rc=$?
-check "risk3 without --prompt is a usage error" "$rc" "2"
+run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --dry-run >/dev/null; rc=$?
+check "task without --prompt is a usage error" "$rc" "2"
+run --kind risk3 --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run >/dev/null; rc=$?
+check "the retired risk3 kind is a usage error" "$rc" "2"
 run --kind final --cwd "$TMP/work" --out "$TMP/o.md" --dry-run >/dev/null; rc=$?
 check "final without --base is a usage error" "$rc" "2"
 run --kind bogus --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run >/dev/null; rc=$?
@@ -180,11 +180,11 @@ check "FAILED exits 1" "$rc" "1"
 out=$(STUB_EMPTY=1 seat final --out "$TMP/o.md" --base main)
 present "no report at all is FAILED" "$out" "status=FAILED"
 
-out=$(STUB_FINAL_MESSAGE='{"spec":18,"scope":18,"verification":18,"quality":18,"spec_verdict":"compliant","task_quality":"approved","findings":[],"cannot_verify":[]}'   seat risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
-present "a schema-shaped risk3 report is OK" "$out" "status=OK"
+out=$(STUB_FINAL_MESSAGE='{"spec":18,"scope":18,"verification":18,"quality":18,"spec_verdict":"compliant","task_quality":"approved","findings":[],"cannot_verify":[]}'   seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "a schema-shaped task report is OK" "$out" "status=OK"
 
-out=$(seat risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
-present "risk3 output that is not schema-shaped is FAILED" "$out" "status=FAILED"
+out=$(seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "task output that is not schema-shaped is FAILED" "$out" "status=FAILED"
 
 out=$(STUB_MODE=hang seat final --out "$TMP/o.md" --base main); rc=$?
 present "a run past its deadline is TIMEOUT, never a model change" "$out" "status=TIMEOUT"
@@ -259,9 +259,6 @@ out=$(run --kind task --tier light --cwd "$TMP/work" --out "$TMP/o.json" --promp
 present "the light tier selects the last judge row" "$out" "codex-judge gpt-6.1-sol/high"
 present "the light tier reports no catalog evidence" "$out" "evidence=none"
 
-out=$(run --kind risk3 --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
-present "risk3 accepts the light tier" "$out" "codex-judge gpt-6.1-sol/high"
-
 out=$(run --kind plan --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 r=$(req_of "$out")
 check "plan: passes the plan-review schema"   "$(jq -r '.schemaPath' <<<"$r" | grep -c 'codex-plan-review-schema.json')" "1"
@@ -308,9 +305,9 @@ case "$out" in
   *would-run*) printf 'FAIL - a gated dry run prints no command\n'; fail=$((fail + 1)) ;;
   *) printf 'ok   - a gated dry run prints no command\n'; pass=$((pass + 1)) ;;
 esac
-out=$(GATE_STUB_LINE="$OFF" seat risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
-present "risk3 is gated too" "$out" "codex-judge none/none status=FAILED"
-check "a gated risk3 runs no codex" "$(calls)" "0"
+out=$(GATE_STUB_LINE="$OFF" seat task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+present "a task seat is gated too" "$out" "codex-judge none/none status=FAILED"
+check "a gated task seat runs no codex" "$(calls)" "0"
 
 out=$(GATE_STUB_EXIT=2 seat final --out "$TMP/o.md" --base main); rc=$?
 present "a gate that exits non-zero is refused, whatever it printed" "$out" "codex-judge none/none status=FAILED"

@@ -138,7 +138,7 @@ T3R2="0 1 0 2"     # total 3, risk 2
 T1="0 0 1 0"       # total 1
 
 lint() { # lint <plan> — sets lout, lrc
-  lout=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/plan-lint" "$1" --no-probe 2>&1); lrc=$?
+  lout=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/plan-lint" "$1" 2>&1); lrc=$?
   lout=${lout//$'\r'/}
 }
 brief() { # brief <plan> <n> <out>

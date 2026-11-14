@@ -4,9 +4,8 @@
 # Execution line, placeholders, and every task's assignment lines against
 # reference/ladder.md (Claude) or reference/codex-routing.json (Codex).
 #
-# Usage: plan-lint PLAN_FILE [--amendments FILE] [--no-probe]
+# Usage: plan-lint PLAN_FILE [--amendments FILE]
 # Default amendments: <workspace>/amendments.md inside a git repository.
-# --no-probe is accepted and does nothing; callers still pass it.
 # Output: "ERROR|WARN|NOTE <header|Task N>: <what>" lines, then a summary line.
 # Exit: 0 no errors; 1 errors; 2 usage, missing file, or an unreadable
 # routing policy.
@@ -19,14 +18,13 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # form pwd gives on Git Bash.
 ROUTING="$HERE/../reference/codex-routing.json"
 
-usage() { echo "usage: plan-lint PLAN_FILE [--amendments FILE] [--no-probe]" >&2; exit 2; }
+usage() { echo "usage: plan-lint PLAN_FILE [--amendments FILE]" >&2; exit 2; }
 [ $# -ge 1 ] || usage
 plan=$(plan_locate "$1"); shift
 amend="" amend_given=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --amendments) [ $# -ge 2 ] || usage; amend=$2 amend_given=1; shift 2 ;;
-    --no-probe) shift ;;
     *) usage ;;
   esac
 done
