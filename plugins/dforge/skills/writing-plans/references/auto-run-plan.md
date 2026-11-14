@@ -4,8 +4,8 @@ When `scripts/auto-run status` exits 0, this plan is written unattended
 ([auto-run.md](../../../reference/auto-run.md)). Run `scripts/auto-run phase plan`
 first. Then nothing in this skill waits on your human partner:
 
-- **An approach or planning choice** you would ask about goes to
-  `dforge:judge-opus` first, then the ladder in auto-run.md §Rulings.
+- **An approach or planning choice** you would ask about goes up the ladder
+  in auto-run.md §Rulings, from its first rung.
   dforge:selecting-approaches runs as usual otherwise.
 - **At the review cap,** a Critical finding or a score of 8 or below goes on
   the pending list, and the Fable batch rules on it with the rest.

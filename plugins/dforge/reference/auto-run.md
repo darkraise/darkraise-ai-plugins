@@ -114,25 +114,63 @@ auto run.
 
 ## Rulings
 
-The ladder for anything you would have asked:
+The ladder for anything you would have asked. The `scripts/decide` and
+`scripts/run-api-judge` calls of rungs 1 and 2 are made only on Claude Code:
 
-1. **Opus.** During execution, the ruling seat (`dforge:judge-opus`) as the
-   execution skills dispatch it; CONFIRMED-GAP, PARK and AMEND are carried out
-   as always. Before execution (a spec or planning choice), dispatch
-   `dforge:judge-opus` yourself with the question, its options with your
-   recommendation first, the spec's path and the plan's path when one exists,
-   asking for `ruling: <choice> — <reason>` or `no ruling`, naming the report
-   file `<state>/rulings-preexec-<k>-report.md` (`<k>` the next unused number)
-   and telling it to write nothing else, and reply in at most 10 lines; the
-   report opens with `## Verdict` holding `ruling: <choice> — <reason>` or
-   `no ruling`.
-2. **The pending list.** An Opus `BLOCKED` or `no ruling`, a task the session
+1. **The Decisions API, for a choice item.** A choice item is a spec or
+   planning choice before execution: a question with its options, your
+   recommendation first. Run
+
+       scripts/decide ask --id <id> --question "<q>" --options "<recommended> | <alternative> [| <alternative>]..." --evidence <the spec> [--evidence <the plan>] [--evidence <a file the question names>]...
+
+   List only real options: `decide` adds `other` itself and refuses an
+   option named `other` with exit 2. On exit 0 the printed ruling stands:
+   record it with
+   `scripts/auto-run ruling add "Decisions API: <item> — <ruling>"`. On
+   exit 3, or any other exit, go on to rung 2. An acceptance statement rated below `high` is
+   not a choice item and starts at rung 2. An item a judge has declined to
+   rule never returns to this rung.
+2. **Opus, on an API budget first.** During execution, the ruling seat
+   (`dforge:judge-opus`) as the execution skills dispatch it; CONFIRMED-GAP,
+   PARK and AMEND are carried out as always. Before execution (a spec or
+   planning choice), the seat is given the question, its options with your
+   recommendation first, the spec's path and the plan's path when one
+   exists; it is asked for `ruling: <choice> — <reason>` or `no ruling`,
+   told the report file `<state>/rulings-preexec-<k>-report.md` (`<k>` the
+   next unused number) and to write nothing else, and to reply in at most
+   10 lines; the report opens with `## Verdict` holding
+   `ruling: <choice> — <reason>` or `no ruling`.
+
+   Either way, a ruling the route gives to `dforge:judge-opus` goes to an
+   API-billed judge first. Write the prompt the seat would get to a file
+   under `<state>` and run, as a background Bash call with `timeout`
+   2520000 and its output neither piped nor redirected:
+
+       scripts/run-api-judge --prompt <file> --report <the report file> --cwd <the worktree> [--add-dir <dir>]...
+
+   with one `--add-dir` for each directory outside the worktree that the
+   prompt points at (the workspace holding the items file, ledger and
+   amendments, and the documents root). Then end the turn and wait for its
+   notification. Until it ends, change nothing under `--cwd` that git does
+   not ignore, and run no git command there that changes its index or
+   HEAD: a change voids the paid run. On exit 0 read the report's
+   `## Verdict` as the seat's. On exit 3 dispatch `dforge:judge-opus`
+   yourself, as above. Three rulings skip `scripts/run-api-judge` and go to
+   the subscription seat directly: a `preflight` ruling, the fresh dispatch
+   after `plan-amend` rejects an AMEND, and the independent confirmation
+   of a Header amendment. A ruling the route gives to
+   `dforge:judge-sonnet-high` is dispatched as today.
+
+   When `decisionApi` is `shadow` and this rung ruled a choice item, run
+   `scripts/decide record --id <id> --ruling "<the option it chose, or other>"`.
+
+3. **The pending list.** An Opus `BLOCKED` or `no ruling`, a task the session
    implements still open at its fix cap, or an implementer that exhausted the
    ladder, is added:
 
        scripts/auto-run decision add --id <id> --question "<q>" --options "<recommended | other>" --opus-reason "<why Opus did not rule>" [--task <N>]
 
-3. **Fable, in one batch.** Dispatch `dforge:judge-fable` once with every
+4. **Fable, in one batch.** Dispatch `dforge:judge-fable` once with every
    line of `scripts/auto-run decision list`, asking for each item
    `ruling: <choice> — <reason>` or `no ruling`, naming the report file
    `<state>/rulings-fable-<k>-report.md` and telling it to
@@ -374,12 +412,15 @@ Note is `final review residual`. On a detached HEAD there is no merge: `merge`
 keeps the branch and `pr` pushes a new branch from the detached HEAD. A `pr`
 with base `none` opens its request against the code host's default branch. No
 menu. Its final message lists every `Ruling:` ledger line, every line of
-`scripts/auto-run ruling list`, every deferred row the run added,
+`scripts/auto-run ruling list`, every line of `scripts/api-spend status`,
+every deferred row the run added,
 every `demo` statement of the spec, every lens
 named by a `final review lens-skipped <id> reason=<reason>` line in the ledger,
 whatever its reason (final-review.md step 4 writes them; do not run
 `scripts/lens-route --final` here, since after a merge its base..HEAD range is
 empty), and, when the ledger's `Review depth:` line says `light`, every `test`
-statement of the spec under `not verified (depth light)`. It runs
+statement of the spec under `not verified (depth light)`. It names each of
+`decisionApi`, the three `apiBudget` caps and the three `DFORGE_*_API_KEY`
+variables that is still off, 0 or unset. It runs
 `scripts/auto-run stop` with no `--reason` before the next-step block: a
 reason marks the run as stopped and sends a `blocked` notice.

@@ -52,6 +52,16 @@ On any exit 2, dispatch
 Codex host, where `review-route --ruling` exits 2 on every `Host: codex` plan and the
 seat is the native judge named in Select the host first.
 
+**In an auto run on Claude Code,** a ruling the route gives to
+`dforge:judge-opus` goes to an API-billed judge first, as
+[auto-run.md](../../../reference/auto-run.md) §Rulings rung 2 says: write
+the seat's prompt to a file, start `scripts/run-api-judge` with it and the
+seat's report path as a background call, end the turn, and change nothing
+in the worktree until it ends. Exit 0: the report is the seat's verdict.
+Exit 3: dispatch the seat as below. A `preflight` ruling, the fresh
+dispatch after `plan-amend` rejects an AMEND, and a Header amendment's
+confirmation skip it and go to the seat directly.
+
 **Carry out each verdict**, and copy its `Ruling:` line into the ledger
 verbatim:
 
