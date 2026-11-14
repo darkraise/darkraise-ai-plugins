@@ -63,6 +63,8 @@ export type CockpitSpawn = {
   seat: string
   model: string
   description: string
+  /** The name it was spawned with, which TaskStop accepts in place of its id. */
+  name?: string
   isDone: boolean
   /** How it ended: null while it runs, `failed` for an aborted, refused or failed end; absent on a record saved before it was kept. */
   outcome?: 'done' | 'failed' | null

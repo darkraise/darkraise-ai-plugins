@@ -519,6 +519,7 @@ export const register: Register = on => {
       seat: e.subagentType,
       model: started.model,
       description: e.description,
+      ...(e.name === undefined ? {} : { name: e.name }),
       isDone: false,
       outcome: null,
       startedAt: await $.clock.now(),
@@ -3988,7 +3989,7 @@ async function trackShells($: EngineInterface, tool: string, e: object, result: 
     const id = (result as { task_id?: unknown } | undefined)?.task_id ?? input.task_id ?? input.shell_id
     if (typeof id === 'string') {
       await update($, shells, list => list.filter(one => one.id !== id))
-      await update($, spawns, all => all.map(one => (one.agentId === id && !one.isDone ? { ...one, isDone: true, outcome: 'failed' as const } : one)))
+      await update($, spawns, all => all.map(one => ((one.agentId === id || one.name === id) && !one.isDone ? { ...one, isDone: true, outcome: 'failed' as const } : one)))
       await syncTicker($)
       await settleBackground($)
     }
