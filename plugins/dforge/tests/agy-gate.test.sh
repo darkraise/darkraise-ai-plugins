@@ -78,7 +78,7 @@ check "the print-timeout mode writes the timeout line to stderr" \
 # --- the policy file ---------------------------------------------------------
 check "the policy states the cli, the version floor, the major ceiling and the calibrated version" \
   "$(jq -r '[.cli, .min_version, (.max_major | tostring), .calibrated] | join(",")' "$P/reference/agy-policy.json" 2>/dev/null | tr -d '\r')" \
-  "agy,1.4.12,1,1.4.12"
+  "agy,1.4.12,1,1.5.9"
 check "the policy records the review trust as pending or pass" \
   "$(jq -r '.trust.review | if . == "pending" or . == "pass" then "valid" else . end' "$P/reference/agy-policy.json" 2>/dev/null | tr -d '\r')" "valid"
 check "the policy has no smoke gate" "$(jq -r '.trust | has("smoke")' "$P/reference/agy-policy.json" 2>/dev/null | tr -d '\r')" "false"

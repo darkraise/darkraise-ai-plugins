@@ -66,7 +66,20 @@ check "every bound plus 120 s fits a background call's 7200000 ms cap" "$too_lon
 # --- agy-judge -----------------------------------------------------------------
 agy=$(block agy-judge)
 check "agy-judge preferred row" "$(printf '%s\n' "$agy" | sed -n 1p)" "claude-opus-5-5 high 5400"
-check "agy-judge fallback row" "$(printf '%s\n' "$agy" | sed -n 2p)" "gemini-4-argon high 2400"
+# The fallback row follows the measurement note's verdict (docs/dforge/notes). The note
+# records one measurement and is not edited afterwards: a later roster change replaces
+# these checks with a literal row.
+NOTE="$P/../../docs/dforge/notes/2026-11-14-agy-hydrogen-review.md"
+verdict=$(grep '^Verdict: ' "$NOTE" 2>/dev/null | tail -1 | tr -d '\r')
+vmodel=$(printf '%s\n' "$verdict" | awk '{print $2}'); veffort=$(printf '%s\n' "$verdict" | awk '{print $3}')
+measured=$(sed -n 's/^agy version: //p' "$NOTE" 2>/dev/null | head -1 | tr -d '\r')
+check "the measurement names Hydrogen or Argon" "$(case "$vmodel" in gemini-4-hydrogen | gemini-4-argon) echo yes ;; *) echo "no: [$verdict]" ;; esac)" "yes"
+check "the note's Verdict line is its last line" "$(tail -1 "$NOTE" 2>/dev/null | tr -d '\r')" "$verdict"
+check "A27: the agy-judge fallback row follows the verdict" "$(printf '%s\n' "$agy" | sed -n 2p)" "$vmodel $veffort 2400"
+check "A27: calibrated is the agy version the runs used" "$(jq -r '.calibrated' < "$P/reference/agy-policy.json" | tr -d '\r')" "$measured"
+if [ "$vmodel" = gemini-4-hydrogen ]; then
+  check "A27: a Hydrogen verdict raises min_version to that version" "$(jq -r '.min_version' < "$P/reference/agy-policy.json" | tr -d '\r')" "$measured"
+fi
 too_long=NONE
 while read -r model effort secs _; do
   [ -n "$model" ] || continue
