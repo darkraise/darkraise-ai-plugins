@@ -83,7 +83,7 @@ Subagent ([JUDGE]):
       review, Host or Routing policy lines. Never add or remove a task heading. A
       task that is too large is an AMEND that rewrites its body into
       `#### Part A: <title>` and `#### Part B: <title>` units under the same
-      heading, each with its own Files, Interfaces, Implementer, Evaluation
+      heading, each with its own Files, Interfaces, Evaluation
       and steps, Part B free to consume Part A's output; each part must
       satisfy Rule S on its own.
     - BLOCKED: every path forward is a guess. After the Ruling line, write

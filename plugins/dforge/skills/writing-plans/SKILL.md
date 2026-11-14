@@ -79,9 +79,9 @@ independently testable deliverable. Every task pays a fixed cost whatever
 its size: the session's own implementation turns, its verification, and
 its share of the review. So merge a small task, one or two files with one test cycle,
 into the neighbour that shares its files or its deliverable, whenever the
-merged task still passes Rule S (Assign an implementer, step 2). A task is
+merged task still passes Rule S (Score every task, step 2). A task is
 a feature slice: on a Claude plan its code task carries no implementation
-code and is scored with spec 2 (Assign an implementer, step 1).
+code and is scored with spec 2 (Score every task, step 1).
 
 ## Plan Document Header
 
@@ -271,9 +271,9 @@ git commit -m "feat: add specific feature"
 
 Read [test-step-forms.md](references/test-step-forms.md) before you write a task's Step 1.
 
-## Assign an implementer to every task
+## Score every task
 
-Read [assignment-procedure.md](references/assignment-procedure.md) before you score the tasks or write their assignment lines.
+Read [assignment-procedure.md](references/assignment-procedure.md) before you score the tasks or write their evaluation lines.
 
 The scores still set the Execution line's floor and mark the risk-3 tasks a
 judge reviews. The session implements every task.

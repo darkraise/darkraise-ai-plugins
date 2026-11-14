@@ -1,7 +1,6 @@
-# Why the assignment rules are shaped this way
+# Why the scoring rules are shaped this way
 
-The procedure lives in writing-plans' "Assign an implementer to every task"
-section. This file holds the reasons, for when a rule looks arbitrary.
+The procedure lives in writing-plans' "Score every task" section. This file holds the reasons, for when a rule looks arbitrary.
 
 ## Score the plan, not the imagined task
 
@@ -21,21 +20,8 @@ is. Buying capability to cover a decomposition defect keeps the defect and pays
 for it. If a task keeps failing Rule S no matter how you split it, that is a
 real finding about the work - say so in the plan rather than scoring around it.
 Rule S caps a compliant Claude total at 8 (`reducible <= 5` plus risk 3), which
-is why the assignment table stops there; a `Host: codex` plan keeps
+is why the execution floor table stops there; a `Host: codex` plan keeps
 `reducible <= 3`. See [ladder.md](../../../reference/ladder.md).
-
-## Reserve agents are never an assignment output
-
-Nine implementers - the `xhigh` and `max` efforts, and every Fable tier - sit in
-the reserve table and in no other table. No score reaches them, and reaching for
-one anyway is the exact move Rule S exists to prevent. They are legal in a plan
-only as a human override.
-
-## The lines land in the brief
-
-`scripts/task-brief` copies a task block verbatim, so the assignment lines reach
-the implementer. That is intended: an implementer knowing its task's blast
-radius is useful context.
 
 ## Why the heading form matters
 
@@ -53,20 +39,16 @@ fine. That is why `scripts/plan-lint` checks all headings as a set: a single
 
 ## Overriding
 
-A human can edit any `**Implementer:**` line by hand; a human ruling always
-wins over the rubric. The `**Evaluation:**` line stays, because the gap between
-the score and the choice is the interesting part.
-
-A hand edit that breaks a rule the checker enforces - a reserve tier, a kept
-`spec = 3`, a table mismatch - carries an `**Override:** <reason>` line below
-the Evaluation line, and `plan-lint` reports those findings on that task as
-warnings instead of errors. Planners never write the line: it is how a human
-ruling stays legal without the checker guessing who wrote it.
+A kept `spec = 3` or a Rule S breach a human accepts carries an
+`**Override:** <reason>` line below the Evaluation line, and `plan-lint`
+reports that task's Rule S finding as a warning instead of an error. Planners
+never write the line: it is how a human ruling stays legal without the checker
+guessing who wrote it.
 
 ## Why a script checks the plan
 
 These rules used to be a checklist the planner ran against its own work, and a
 planner grading itself passes what it meant rather than what it wrote.
 `scripts/plan-lint` applies the same checks the same way whichever model wrote
-the plan, and it reads `ladder.md`'s tables at run time, so the checks cannot
+the plan, and it reads `ladder.md`'s floor table at run time, so the checks cannot
 drift from the tables they enforce.

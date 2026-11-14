@@ -57,7 +57,7 @@ cat > docs/plan.md <<'EOF'
 **Files:**
 - Create: `a.sh`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 Print `hello NAME`.
@@ -67,7 +67,7 @@ Print `hello NAME`.
 **Files:**
 - Modify: `a.sh`
 
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 
 Print `hello NAME` twice.
@@ -111,11 +111,11 @@ entry b6.md '## Header' '**Execution:** inline — `claude --model sonnet --effo
 run docs/plan.md b6.md
 has "protected line" "$out" "rejected: Old text touches a line that cannot be amended"
 
-entry b7.md '## Task 2' '**Implementer:** dforge:impl-sonnet-medium' '**Implementer:** dforge:impl-opus-high'
+entry b7.md '## Task 2' '**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4' '**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 5'
 run docs/plan.md b7.md
 check "new lint error: exit 1" "$status" "1"
 has "new lint error: reason" "$out" "rejected: the amendment introduces lint errors:"
-has "new lint error: named" "$out" "ERROR Task 2: Implementer impl-opus-high does not match"
+has "new lint error: named" "$out" "ERROR Task 2: scores sum to 4, not 5"
 check "new lint error: rolled back byte for byte" "$(cmp -s "$LEDGER" "$TMP/snapshot" && echo same)" "same"
 
 printf '## Task 1\nReason: r\nCost if wrong: c\n### Old\n```text\nPrint `hello NAME`.\n```\n' > b8.md
@@ -142,9 +142,9 @@ check "CRLF block, builds on A1: output" "$out" "amended: A3 Task 2"
 cp docs/plan.md docs/split.md
 SPLIT_LEDGER="$REPO/.dforge/sdd/split/amendments.md"
 part() { # part <letter> [evaluation line]
-  printf '#### Part %s: half %s\n\n**Files:**\n- Modify: `a.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n%s' "$1" "$1" "${2-}"
+  printf '#### Part %s: half %s\n\n**Files:**\n- Modify: `a.sh`\n\n**Implementer:** dforge:impl-sonnet-high\n%s' "$1" "$1" "${2-}"
 }
-split_old=$(printf '**Implementer:** dforge:impl-sonnet-medium\n**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4')
+split_old=$(printf '**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4')
 ev='**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1'
 entry s1.md '## A? — Task 2' "$split_old" "$(printf '%s\n\n%s' "$(part A "$ev")" "$(part B)")"
 run docs/split.md s1.md

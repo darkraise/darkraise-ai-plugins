@@ -90,7 +90,7 @@ None
 **Files:**
 - Create: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 - [ ] **Step 1: Write the failing test**
@@ -105,7 +105,7 @@ echo hi
 **Files:**
 - Modify: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 **Approach:** inline - skip 2: follows the pattern
 
@@ -240,7 +240,7 @@ lacks "the model follows the tasks the session implements" "$out" "needs --model
 variant v9d.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 0 - coupling 1 - risk 3 = 4/'
 lint v9d.md
 has "risk 3 inline needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
-variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dforge:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
+variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dforge:impl-sonnet-high$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
 lint v9j.md
 check "a split task with a heavy part inline at effort high: exit 0" "$status" "0"
 variant v9h.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
@@ -359,7 +359,7 @@ lacks "leading punctuation in a title survives the index check" "$out" "Task ind
 variant v9f.md '/^## Contracts$/{N;N;s/.*/```text\n## Contracts\n```/}'
 lint v9f.md
 has "a fenced section heading does not count" "$out" "ERROR header: missing '## Contracts' section"
-variant v9g.md 's/^\*\*Implementer:\*\* dforge:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-medium/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
+variant v9g.md 's/^\*\*Implementer:\*\* dforge:impl-sonnet-high$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
 lint v9g.md
 has "split parts: part B is missing its Evaluation" "$out" "ERROR Task 2 part B: missing **Evaluation:** line"
 lacks "split parts: part A is clean" "$out" "Task 2 part A"
@@ -396,7 +396,7 @@ lint t2c.md
 lacks "total 8 is assigned impl-opus-high" "$out" "ERROR Task 2"
 variant t2d.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 2 - spec 2 - coupling 1 - risk 2 = 7/'
 lint t2d.md
-has "total 7 names impl-opus-high" "$out" "ERROR Task 2: Implementer impl-sonnet-medium does not match the assignment table's impl-opus-high for total 7"
+lacks "an Implementer line is not checked against the total" "$out" "Implementer"
 variant t2e.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 3 - coupling 0 - risk 0 = 3/'
 lint t2e.md
 has "spec 3 fails Rule S without an override" "$out" "ERROR Task 2: Rule S: files+spec+coupling must be below 6 and spec below 3"
@@ -405,28 +405,11 @@ lint t2f.md
 has "an Override keeps a spec-3 task as a warning" "$out" "WARN Task 2: Rule S: files+spec+coupling must be below 6 and spec below 3"
 variant t3.md 's/impl-sonnet-medium$/impl-sonnet-high/'
 lint t3.md
-has "wrong agent" "$out" "ERROR Task 2: Implementer impl-sonnet-high does not match the assignment table's impl-sonnet-medium for total 4"
-variant t3b.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-opus-medium/'
-lint t3b.md
-has "a 1.23.0 total-5 agent is an error" "$out" "ERROR Task 2: Implementer impl-opus-medium does not match the assignment table's impl-sonnet-high for total 5"
-variant t3c.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-opus-medium/; s/^(\*\*Approach:\*\* .*)$/\1\n**Override:** owner kept Opus here/'
-lint t3c.md
-check "an Override keeps a 1.23.0 agent: exit 0" "$status" "0"
-has "an Override keeps a 1.23.0 agent as a warning" "$out" "WARN Task 2: Implementer impl-opus-medium does not match the assignment table's impl-sonnet-high for total 5"
-variant t4.md 's/impl-sonnet-medium$/impl-fable-high/'
-lint t4.md
-has "reserve name" "$out" "ERROR Task 2: impl-fable-high is a reserve tier; it needs a human **Override:**"
-variant t5.md 's/impl-sonnet-medium$/impl-fable-high/; s/^(\*\*Approach:\*\* .*)$/\1\n**Override:** owner wants Fable here/'
-lint t5.md
-check "Override downgrades: exit 0" "$status" "0"
-has "Override downgrades to WARN" "$out" "WARN Task 2: impl-fable-high is a reserve tier"
+lacks "a mismatched Implementer line is ignored" "$out" "Implementer"
 variant t6.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 3 = 6/; s/impl-sonnet-medium$/impl-opus-high/'
 lint t6.md
 lacks "impl-opus-high at total 6 is not a reserve finding" "$out" "reserve tier"
 lacks "impl-opus-high at total 6 matches" "$out" "does not match the assignment"
-variant t7.md "s/^(\*\*Implementer:\*\*) dforge:impl-sonnet-low$/\1 old-$(printf 'plug'):impl-sonnet-low/"
-lint t7.md
-has "an older plugin prefix is an error" "$out" "ERROR Task 1: Implementer 'old-plug:impl-sonnet-low' is not a dforge agent (dforge:impl-sonnet-low)"
 variant t8.md 's/^\*\*Approach:\*\* .*/**Approach:** inline - follows the pattern/'
 lint t8.md
 has "inline Approach needs skip" "$out" "ERROR Task 2: an inline Approach must cite 'skip <n>'"
@@ -447,13 +430,6 @@ has "Rule S on a Codex plan still rejects reducible 4" "$out" "ERROR Task 1: Rul
 codex_plan | sed 's/weighted routing score=3/weighted routing score=4/' > c1.md
 lint c1.md
 has "weighted score mismatch" "$out" "ERROR Task 1: weighted routing score 4 is not files+spec+coupling+2*risk = 3"
-codex_plan | sed 's#gpt-6.1-sol / low#gpt-6-luna / high#' > c2.md
-lint c2.md
-has "rank below score" "$out" "ERROR Task 1: Implementer rank 2 is below routing score 3"
-codex_plan | sed 's#gpt-6.1-sol / low#gpt-6.1-sol / medium#' > c3.md
-lint c3.md
-check "promotion: exit 0" "$status" "0"
-has "promotion warns" "$out" "WARN Task 1: Implementer rank 4 is above routing score 3 (promotion)"
 codex_plan | sed 's#^Routing policy: codex-v4$#Routing policy: codex-v2#; s#codex gpt-6.1-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6.1-sol / low#codex gpt-5.6-terra / medium#' > cv2.md
 lint cv2.md
 check "codex-v2 plan: exit 1" "$status" "1"
@@ -548,16 +524,16 @@ Reason: the plan picked the wrong tier
 Cost if wrong: one re-dispatch
 ### Old
 ````text
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dforge:impl-sonnet-high
 ````
 ### New
 ````text
-**Implementer:** dforge:impl-opus-medium
+**Implementer:** dforge:impl-sonnet-high
 ````
 EOF
 lint clean.md --amendments am.md
-has "amendments applied before checks" "$out" "ERROR Task 2: Implementer impl-opus-medium does not match"
-sed 's/impl-sonnet-medium$/impl-haiku/' am.md > am-bad.md
+lacks "an amendment that applies leaves no header error" "$out" "does not apply"
+sed 's/impl-sonnet-high$/impl-haiku/' am.md > am-bad.md
 lint clean.md --amendments am-bad.md
 has "non-applying amendment" "$out" "ERROR header: amendment A1 does not apply"
 
@@ -622,7 +598,7 @@ None.
 - Consumes: nothing
 - Produces: nothing
 $2
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 
 - [ ] **Step 1: Write the failing test**
@@ -784,40 +760,40 @@ HDR
   } > "$1"
 }
 
-lintplan fenced-only.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n\n```markdown\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n```\n')"
+lintplan fenced-only.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n\n```markdown\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n```\n')"
 lint fenced-only.md
 has "a fenced-only score is a missing Evaluation line" "$out" "ERROR Task 1: missing **Evaluation:** line"
 
-lintplan stale-parent.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 1 = 6\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan stale-parent.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 1 = 6\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint stale-parent.md
 has "a stale parent score is a NOTE" "$out" \
   "NOTE Task 1: an **Evaluation:** line above the first part does not score the task"
 lacks "a stale parent score is not an error" "$out" "ERROR Task 1"
 check "the stale-parent fixture is otherwise clean" "$status" "0"
 
-lintplan stale-parent-exec.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan stale-parent-exec.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint stale-parent-exec.md
 check "a parent Executor line gets the obsolete warning once" \
   "$(grep -c '^WARN Task 1: the \*\*Executor:\*\* line is obsolete; the session implements this task$' <<<"$out")" "1"
 lacks "a stale parent Executor line is not an error" "$out" "ERROR Task 1"
 check "the stale-parent-exec fixture is otherwise clean" "$status" "0"
 
-lintplan lettered.md "$(printf '### Task A1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan lettered.md "$(printf '### Task A1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint lettered.md
 has "lettered headings are named" "$out" "ERROR header: task headings must be numbered ('### Task N: <title>'): ### Task A1: One is not read"
 lacks "lettered headings are not a generic missing-heading error" "$out" "no task headings"
 lacks "lettered headings are not an index mismatch" "$out" "Task index does not match"
 
-lintplan clean-split.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan clean-split.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint clean-split.md
 lacks "a clean split earns no NOTE" "$out" "above the first part"
 check "the clean-split fixture lints clean" "$status" "0"
 
-lintplan fenced-part.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n#### Part A: an example, not a part\n```\n')"
+lintplan fenced-part.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n#### Part A: an example, not a part\n```\n')"
 lint fenced-part.md
 lacks "a fenced part heading does not create a part" "$out" "Task 1 part A"
 
-lintplan fenced-files.md "$(printf '### Task 1: One\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Files:**\n- Create: `x.txt`\n```\n')"
+lintplan fenced-files.md "$(printf '### Task 1: One\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Files:**\n- Create: `x.txt`\n```\n')"
 lint fenced-files.md
 has "a fenced-only Files block is a missing Files block" "$out" "ERROR Task 1: missing **Files:** block"
 
@@ -867,7 +843,7 @@ None
 **Files:**
 - Create: \`a.txt\`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 2: Two
@@ -876,7 +852,7 @@ None
 - Create: \`b.txt\`
 - Test: \`t/b.test.sh:3-9\`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 3: Three
@@ -884,7 +860,7 @@ None
 **Files:**
 - Create: \`c.txt\`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 EOF
 }

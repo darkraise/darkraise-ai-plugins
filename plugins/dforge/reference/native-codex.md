@@ -20,15 +20,15 @@ the unweighted total in ladder.md; its assignment and external CLI tables do
 not apply to native Codex.
 
 New plans contain `Host: codex` and `Routing policy: codex-v4`. Every task contains
-`Implementer`, `Evaluation`, and `Assignment source: rubric` or `Assignment source: human`.
-Native assignments use `codex <model> / <effort>`. Evaluation preserves all four
-raw axes and explicitly labels the weighted routing score, for example:
+an `Evaluation` line, which preserves all four raw axes and explicitly labels
+the weighted routing score, for example:
 
 ```text
-**Implementer:** codex gpt-6-astra / medium
 **Evaluation:** files=1, spec=1, coupling=1, risk=2; weighted routing score=7
-**Assignment source:** rubric
 ```
+
+The session implements every task, so a task carries no `Implementer` or
+`Assignment source` line; an older plan's lines are ignored.
 
 The machine policy is [codex-routing.json](codex-routing.json):
 
@@ -107,8 +107,7 @@ reserve  gpt-6-astra / max, then gpt-6-astra / ultra
 
 An unstarted plan, one with no ledger, is converted in place and committed:
 its `Routing policy:` line becomes `codex-v4` in its existing bold or plain
-form, the Execution line and every `Assignment source: rubric` Implementer line
-take their v4 pairs, Evaluation lines stay untouched, and a conversion record
+form and the Execution line take their v4 pairs, Evaluation lines stay untouched, and a conversion record
 goes in the header immediately before `## Task index`, so no task's text
 absorbs it:
 

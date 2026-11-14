@@ -269,11 +269,10 @@ awk "$_PLAN_AWK"'
 
 # --- per task ---
 assignment=$(ladder_block assignment)
-reserve=$(ladder_block reserve | awk '{ print $1 }' | grep -vxF BLOCKED | grep -vxF -f <(awk '{ print $2 }' <<<"$assignment") || true)
 max_total=0 max_score=0
 
 # A task the ruling seat split carries `#### Part A: …` / `#### Part B: …`
-# sections, each a unit with its own Files, Implementer and Evaluation lines;
+# sections, each a unit with its own Files and Evaluation lines;
 # every unit is checked on its own.
 for n in $nums; do
   full=$(plan_task_text "$src" "$n")
@@ -297,9 +296,7 @@ for n in $nums; do
   sev=ERROR
   [ -n "$(line Override)" ] && sev=WARN
   [ -n "$(line Files)" ] || say ERROR "$where" "missing **Files:** block"
-  impl=$(line Implementer)
   ev=$(line Evaluation)
-  [ -n "$impl" ] || say ERROR "$where" "missing **Implementer:** line"
   [ -n "$ev" ] || { say ERROR "$where" "missing **Evaluation:** line"; continue; }
 
   if [ "$codex" -eq 1 ]; then
@@ -310,20 +307,6 @@ for n in $nums; do
     fi
     [ "$s" -eq $((a + b + c + 2 * d)) ] || say ERROR "$where" "weighted routing score $s is not files+spec+coupling+2*risk = $((a + b + c + 2 * d))"
     [ "$s" -le "$max_score" ] || max_score=$s
-    source=$(line 'Assignment source')
-    [[ "$source" =~ ^\*\*Assignment\ source:\*\*\ (rubric|human)[[:space:]]*$ ]] || say ERROR "$where" "missing or invalid **Assignment source:** (rubric|human)"
-    if [[ "$source" == *rubric* ]] && [ "$policy_ok" -eq 1 ]; then
-      if [[ "$impl" =~ ^\*\*Implementer:\*\*\ \`?codex\ ([a-z0-9.-]+)\ /\ ([a-z]+)\`?[[:space:]]*$ ]]; then
-        rank=$(jq -r --arg m "${BASH_REMATCH[1]}" --arg e "${BASH_REMATCH[2]}" \
-          '.execution[] | select(.model == $m and .effort == $e) | .rank' < "$ROUTING" 2>/dev/null | tr -d '\r')
-        if [ -z "$rank" ]; then say "$sev" "$where" "Implementer pair is not an execution tier in codex-routing.json"
-        elif [ "$rank" -lt "$s" ]; then say "$sev" "$where" "Implementer rank $rank is below routing score $s"
-        elif [ "$rank" -gt "$s" ]; then say WARN "$where" "Implementer rank $rank is above routing score $s (promotion)"
-        fi
-      else
-        say ERROR "$where" "Implementer does not match 'codex <model> / <effort>'"
-      fi
-    fi
   else
     if [[ "$ev" =~ ^\*\*Evaluation:\*\*\ files\ ([0-9]+)$SEP"spec "([0-9]+)$SEP"coupling "([0-9]+)$SEP"risk "([0-9]+)\ =\ ([0-9]+) ]]; then
       a=${BASH_REMATCH[1]} b=${BASH_REMATCH[3]} c=${BASH_REMATCH[5]} d=${BASH_REMATCH[7]} t=${BASH_REMATCH[8]}
@@ -331,21 +314,6 @@ for n in $nums; do
       say ERROR "$where" "Evaluation does not match 'files a — spec b — coupling c — risk d = t'"; continue
     fi
     [ "$t" -eq $((a + b + c + d)) ] || say ERROR "$where" "scores sum to $((a + b + c + d)), not $t"
-    if [ -n "$impl" ]; then
-      name=$(sed -E 's/^\*\*Implementer:\*\*[ \t]*`?([^` \t]+)`?.*/\1/' <<<"$impl")
-      if [[ "$name" != *:* ]]; then
-        say ERROR "$where" "Implementer '$name' is not fully qualified"
-      else
-        suffix=${name##*:} prefix=${name%%:*}
-        [ "$prefix" = "dforge" ] || say ERROR "$where" "Implementer '$name' is not a dforge agent (dforge:$suffix)"
-        want=$(awk -v t="$t" '$1 == t { print $2 }' <<<"$assignment")
-        if grep -qxF "$suffix" <<<"$reserve"; then
-          say "$sev" "$where" "$suffix is a reserve tier; it needs a human **Override:**"
-        elif [ "$suffix" != "$want" ]; then
-          say "$sev" "$where" "Implementer $suffix does not match the assignment table's ${want:-no row} for total $t"
-        fi
-      fi
-    fi
     approach=$(line Approach)
     if [ -n "$approach" ]; then
       if [[ "$approach" =~ ^\*\*Approach:\*\*\ (inline|advisor|best-of-3)$SEP.+ ]]; then
@@ -402,13 +370,12 @@ elif [ "$mode" = inline ]; then
   read -r self_max self_risk3 < <(plan_scores "$src" | awk -F'\t' '
     $2 ~ /^[0-9]+$/ { if ($2 + 0 > m) m = $2 + 0; if ($3 + 0 == 3) r3 = 1 }
     END { print m + 0, r3 + 0 }')
-  agent=$(awk -v t="$self_max" '$1 == t { print $2 }' <<<"$assignment")
-  need=${agent##*-}
+  read -r need_model need < <(awk -v t="$self_max" '$1 == t { print $2, $3 }' <<<"$assignment")
   case $need in low|medium|high) ;; *) need=low ;; esac
   [ "$self_risk3" -eq 0 ] || need=high
   if [ "$family" != sonnet ] && [ "$family" != opus ]; then
     say ERROR header "inline execution needs --model sonnet or opus (model $exec_model)"
-  elif [ "$family" = sonnet ] && [[ "$agent" == impl-opus-* ]]; then
+  elif [ "$family" = sonnet ] && [ "$need_model" = opus ]; then
     say ERROR header "inline execution needs --model opus (model $exec_model)"
   fi
   [ "$(effort_rank "$exec_effort")" -ge "$(effort_rank "$need")" ] \

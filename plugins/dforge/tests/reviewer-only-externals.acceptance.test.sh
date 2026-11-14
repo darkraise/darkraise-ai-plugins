@@ -332,7 +332,7 @@ cat > "$PLANREPO/route.md" <<'EOF'
 
 ### Task 1: risk zero
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 2: risk one
@@ -347,12 +347,12 @@ cat > "$PLANREPO/route.md" <<'EOF'
 
 ### Task 4: risk two total six
 
-**Implementer:** dforge:impl-opus-high
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 1 - spec 2 - coupling 1 - risk 2 = 6
 
 ### Task 5: risk three total six
 
-**Implementer:** dforge:impl-opus-high
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
 
 ### Task 6: risk three total four
@@ -579,7 +579,7 @@ None
 **Files:**
 - Create: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 - [ ] **Step 1: Write the failing test**
@@ -593,7 +593,7 @@ echo hi
 **Files:**
 - Modify: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 **Approach:** inline - skip 2: follows the pattern
 
@@ -607,7 +607,7 @@ EOF
   git -C "$R" config user.email quangtc94@gmail.com
   printf '# Spec\n' > "$R/docs/spec.md"
   printf '%s\n' "$body" > "$R/plan-plain.md"
-  printf '%s\n' "$body" | sed 's|^\*\*Implementer:\*\* dforge:impl-sonnet-medium$|&\n**Executor:** codex gpt-6.1-sol / high|' > "$R/plan-exec.md"
+  printf '%s\n' "$body" | awk '/^### Task 2:/ { t = 1 } { print } t && /^\*\*Implementer:\*\*/ { print "**Executor:** codex gpt-6.1-sol / high"; t = 0 }' > "$R/plan-exec.md"
   git -C "$R" add -A
   git -C "$R" commit -q -m plans
 

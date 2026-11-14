@@ -117,7 +117,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Body.
@@ -127,7 +127,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 2 - coupling 1 - risk 3 = 7
 |
 |### Task 3: light two
@@ -135,7 +135,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
 |
 |### Task 4: risk two
@@ -143,7 +143,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 2 = 3
 |
 |### Task 5: total five
@@ -159,7 +159,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 1 = 2
 |
 |### Task 7: light four
@@ -167,7 +167,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 |
 |### Task 8: unscored
@@ -175,14 +175,14 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |
 |### Task 9: light five
 |
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4'
 
 CODEX_PLAN_TEXT='|# Codex Fixture
@@ -306,25 +306,10 @@ a2() {
 # --- A3 ----------------------------------------------------------------------
 
 a3() {
-  local want="0:impl-sonnet-low 1:impl-sonnet-low 2:impl-sonnet-low 3:impl-sonnet-medium 4:impl-sonnet-medium 5:impl-sonnet-high 6:impl-opus-high 7:impl-opus-high 8:impl-opus-high"
-  # One task per total 0-8, each with files+spec+coupling at most 5 and spec below 3.
-  local axes=("0 0 0 0" "0 0 1 0" "0 1 1 0" "1 1 1 0" "1 1 1 1" "2 2 1 0" "2 2 1 1" "2 2 1 2" "2 2 1 3")
-  local specs_right=() specs_wrong=() t agent
-  for t in 0 1 2 3 4 5 6 7 8; do
-    agent=$(tr ' ' '\n' <<<"$want" | grep "^$t:" | sed 's/^[0-9]*:impl-//')
-    specs_right+=("${axes[$t]} $agent")
-    specs_wrong+=("${axes[$t]} opus-low")
-  done
-  gen_plan "" "${specs_right[@]}" > "$LINTDIR/t-right.md"
-  lint t-right.md
-  absent "A3: a plan naming the table's agent for every total 0-8 draws no table mismatch" "$out" 'assignment table'
-  absent "A3: and no error on any task" "$out" 'ERROR Task'
-
-  gen_plan "" "${specs_wrong[@]}" > "$LINTDIR/t-wrong.md"
-  lint t-wrong.md
+  local want="0:sonnet/low 1:sonnet/low 2:sonnet/low 3:sonnet/medium 4:sonnet/medium 5:sonnet/high 6:opus/high 7:opus/high 8:opus/high"
   local got
-  got=$(sed -n "s/^ERROR Task \([0-9]*\): Implementer impl-opus-low does not match the assignment table's \(impl-[a-z-]*\) for total \([0-9]*\)\$/\3:\2/p" <<<"$out" | sort -n | tr '\n' ' ' | sed 's/ $//')
-  check "A3: totals 0-6 map as before and 7 and 8 map to impl-opus-high" "$got" "$want"
+  got=$(awk '$0 == "```assignment" { f = 1; next } f && $0 == "```" { exit } f && NF { printf "%s%s:%s/%s", sep, $1, $2, $3; sep = " " }' "$PLUGIN/reference/ladder.md")
+  check "A3: totals 0-5 floor on sonnet, 6-8 on opus" "$got" "$want"
 }
 
 # --- A4 ----------------------------------------------------------------------
@@ -616,7 +601,7 @@ AMEND_PLAN='|# Demo Implementation Plan
 |**Files:**
 |- Create: `a.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Print `hello NAME`.
@@ -626,7 +611,7 @@ AMEND_PLAN='|# Demo Implementation Plan
 |**Files:**
 |- Modify: `a.sh`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 |
 |Print `hello NAME` twice.'
