@@ -105,10 +105,6 @@ your human partner's standing choice of fast mode, which is itself the approval.
 - `designApproval=whole`: present every design section in one message and ask
   for approval once, instead of after each section. It has no effect on Claude
   Code under `autoRun=on`, which presents no design.
-- `executionStrategy`: honoured only for a plan whose Execution line names
-  `subagent` (deprecated, chosen by `executionMode=subagent` or your human
-  partner). Ask no execution-strategy question: the spec
-  records `**Execution strategy:** sequential — inline execution`.
 - `specReview=false`: after the spec self-review block, skip the User Review
   Gate and go on to Implementation. It has no effect under `autoRun=on`:
   on Claude Code the spec review always happens.

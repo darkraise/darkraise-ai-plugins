@@ -224,9 +224,6 @@ fi
 
 # ----------------------------------------------------------------------- A7
 if selected A7; then
-  out=$(cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/dforge-config" get executionStrategy 2>&1); rc=$?
-  check "A7: get executionStrategy exits 0" "$rc" "0"
-  check "A7: get executionStrategy prints sequential" "$out" "sequential"
   out=$(cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/dforge-config" workflow 2>&1); rc=$?
   check "A7: workflow exits 0" "$rc" "0"
   check "A7: workflow prints nothing" "$out" ""

@@ -155,12 +155,8 @@ printf 'Task 1: fix round 1/2 (1 addressed, 0 open; commits %s..%s; session)\n' 
 printf 'Task 1: complete (commits %s..%s, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat dforge:judge-opus) — done: x; verified: x; remaining: none; discovered: none; assumptions: none\n' "$h7" "$h7" >> "$ws/progress.md"
 check "A14: next-step reads the session walk as complete" \
   "$(bash "$S/next-step" loop.md 2>/dev/null | grep '^\*\*Next:\*\*' | grep -c 'Task 2')" "1"
-wave_out=$(bash "$S/task-step" start loop.md 2 --inline --wave 1 2>&1); wave_rc=$?
-check "A14: --inline with --wave is a usage error" "$wave_rc" "2"
 # --- Task 4 ---
-check "A7: executionStrategy defaults to sequential" "$(bash "$S/dforge-config" get executionStrategy | tr -d '\r')" "sequential"
 check "A7: the workflow line is empty at defaults" "$(bash "$S/dforge-config" workflow | tr -d '\r')" ""
-present "A7: the schema says parallel needs subagent mode" "$P/config/schema.mjs" "only with a subagent Execution line"
 absent "cockpit nudge: no Implementer agent for implementation" "$P/hooks/cockpit/lib.ts" "for implementation"
 # --- Task 5 ---
 check "A8: no drafter agent" "$([ -e "$P/agents/drafter-sonnet.md" ] && echo yes || echo no)" "no"

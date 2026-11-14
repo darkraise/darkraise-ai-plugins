@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Acceptance tests for the faster-plans spec
-# (docs/dforge/specs/2026-10-26-faster-plans-design.md), statements A2-A13 and
+# (docs/dforge/specs/2026-10-26-faster-plans-design.md), statements A2-A12 and
 # A17-A23. Each test is written from the statement's text and reaches the
 # behaviour through the scripts and documents the spec names: plan-lint,
-# review-route, task-step, wave, next-step, plan-amend, the
+# review-route, task-step, next-step, plan-amend, the
 # cockpit's ledger reader, the agent definitions and the shipped prompts and
 # references.
 # Usage:
@@ -18,7 +18,6 @@ S="$PLUGIN/scripts"
 STEP="$S/task-step"
 ROUTE="$S/review-route"
 LINT="$S/plan-lint"
-WAVE="$S/wave"
 NEXT="$S/next-step"
 AMEND="$S/plan-amend"
 FIXTURES="$HERE/fixtures"
@@ -527,26 +526,6 @@ a9() {
   lacks "A9: Task 3's section holds no file of Task 1, since its diff starts at its own base" "$s3" "a.txt"
   has "A9: Task 1's section names its own commit range" "$s1" "$(awk '/^Task 1: awaiting group review/ { sub(/^.*\(commits /, ""); sub(/\)$/, ""); print }' "$WS/progress.md")"
 
-  # A wave: tasks held on their own refs, with HEAD still at the wave base.
-  new_repo a9w
-  local base; base=$(full HEAD)
-  ts start docs/plan.md 6 --wave 1
-  ts start docs/plan.md 7 --wave 1
-  git -C "$R" checkout -q -b t6 "$base"; commit_file f6.txt six "feat: six"
-  git -C "$R" checkout -q -b t7 "$base"; commit_file f7.txt seven "feat: seven"
-  git -C "$R" checkout -q main
-  ts hold docs/plan.md 6 --head t6
-  check "A9: a wave task holds on its own ref" "$rc" "0"
-  ts hold docs/plan.md 7 --head t7
-  ts review --group docs/plan.md 6 7
-  check "A9: the wave's group review exits 0 before any member merges" "$rc" "0"
-  check "A9: and HEAD has not moved to any member" "$(full HEAD)" "$base"
-  pkg="$WS/group-6,7-review-package.md"
-  s1=$(section_of "$pkg" 6); s3=$(section_of "$pkg" 7)
-  has "A9: Task 6's section holds its ref's file" "$s1" "f6.txt"
-  lacks "A9: and not Task 7's" "$s1" "f7.txt"
-  has "A9: Task 7's section holds its ref's file" "$s3" "f7.txt"
-  lacks "A9: and not Task 6's" "$s3" "f6.txt"
 }
 
 # --- A10 ---------------------------------------------------------------------
@@ -565,10 +544,6 @@ EOF
 }
 
 a10() {
-  local waves
-  waves=$(doc "$PLUGIN/reference/parallel-waves.md")
-  matches "A10: parallel-waves shows the same attributed line" "$waves" 'Group <list>: review round R/2 \(Task <N>: <k> open — <one-liners> \| clean; …; commits <a7>\.\.<b7> \(Task <N>\)'
-
   # next-step reads the per-task clauses: only the member with open findings is named.
   new_repo a10
   {
@@ -638,7 +613,7 @@ old_ledger() { # old_ledger <file> — the real pre-spec lines, under this plan'
   { printf '# SDD ledger — plan: docs/plan.md\n'; cat "$FIXTURES/faster-plans/old-ledger.md"; } > "$1"
 }
 
-gen_old_plan() { # gen_old_plan <n> — a pre-spec sequential plan of n spec-0 tasks, totals 1 to 6, no Wave check
+gen_old_plan() { # gen_old_plan <n> — a pre-spec sequential plan of n spec-0 tasks, totals 1 to 6
   local i f c r t agent
   printf '%s\n' '# Old Plan' '' '**Goal:** Fixture.' '' '**Spec:** `docs/spec.md`' '' \
     '**Execution:** subagent — `claude --model sonnet --effort high` — fixture' '' \
@@ -678,63 +653,6 @@ a12() {
     'Group 4-5: review round 1/5 (1 addressed, 1 open — meter width; commits def4567..efa5678; resumed)')")
   check "A12: and a Group range line of an older run keeps its R/5" "$got" "4=1/5 5=1/5"
 
-}
-
-# --- A13 ---------------------------------------------------------------------
-
-wave_plan() { # wave_plan <ranges> <task count> <risk-3 task or 0> <wave check line or empty>
-  local i n=$2 r3=$3 risk total
-  printf '%s\n' '# Wave Plan' '' '**Goal:** Fixture.' '' '**Spec:** `docs/spec.md`' '' \
-    '**Execution:** subagent — `claude --model sonnet --effort high` — fixture' '' \
-    "**Parallelism:** waves — $1" '' '**Integration check:** `true`' '**Worktree setup:** none'
-  [ -z "$4" ] || printf '%s\n' "$4"
-  printf '\n%s\n' '## Task index' ''
-  for i in $(seq 1 "$n"); do printf '%d. T%d\n' "$i" "$i"; done
-  printf '\n'
-  for i in $(seq 1 "$n"); do
-    risk=0; [ "$i" -ne "$r3" ] || risk=3
-    total=$((1 + risk))
-    printf '### Task %d: T%d\n\n**Files:**\n- Create: `f%d.txt`\n\n**Depends on:** none\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk %d = %d\n\nBody.\n\n' \
-      "$i" "$i" "$i" "$risk" "$total"
-  done
-}
-
-due_all() { # due_all <plan> <first wave> <last wave> — "<k>:<answer>" for each wave, space separated
-  local k res=""
-  for k in $(seq "$2" "$3"); do
-    out=$(timeout 60 bash "$WAVE" check-due "$1" "$k" 2>&1); rc=$?
-    res="$res$k:$out "
-  done
-  printf '%s' "${res% }"
-}
-
-a13() {
-  mkdir -p "$TMP/a13"
-  # Ten one-task waves; Task 5 is risk 3.
-  wave_plan "1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10" 10 5 '**Wave check:** `npm run build && npm run test:unit`' > "$TMP/a13/with.md"
-  check "A13: every third wave, a risk-3 wave and the last run the full check; the rest the wave check" \
-    "$(due_all "$TMP/a13/with.md" 1 10)" \
-    "1:wave-check 2:wave-check 3:full 4:wave-check 5:full 6:full 7:wave-check 8:wave-check 9:full 10:full"
-  wave_plan "1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10" 10 5 '' > "$TMP/a13/without.md"
-  check "A13: without a Wave check line the other waves run none" \
-    "$(due_all "$TMP/a13/without.md" 1 10)" \
-    "1:none 2:none 3:full 4:none 5:full 6:full 7:none 8:none 9:full 10:full"
-  # Waves are counted, not tasks: seven waves of three tasks, and the last has one.
-  wave_plan "1-3 | 4-6 | 7-9 | 10-12 | 13-15 | 16-18 | 19" 19 0 '**Wave check:** `make quick`' > "$TMP/a13/wide.md"
-  check "A13: waves of several tasks count by wave" \
-    "$(due_all "$TMP/a13/wide.md" 1 7)" \
-    "1:wave-check 2:wave-check 3:full 4:wave-check 5:wave-check 6:full 7:full"
-  # A risk-3 task inside a wider wave also makes its wave full.
-  wave_plan "1-2 | 3-4 | 5-6 | 7-8" 8 4 '**Wave check:** `make quick`' > "$TMP/a13/risk.md"
-  check "A13: a wave holding a risk-3 task runs the full check (wave 2 holds Task 4)" \
-    "$(due_all "$TMP/a13/risk.md" 1 4)" \
-    "1:wave-check 2:full 3:full 4:full"
-  # An older plan that adds the line through a Header amendment is read the same.
-  local plan_before
-  plan_before=$(cksum < "$TMP/a13/without.md")
-  check "A13: check-due leaves the plan file alone" "$(cksum < "$TMP/a13/without.md")" "$plan_before"
-  out=$(timeout 60 bash "$WAVE" check-due "$TMP/a13/with.md" 11 2>&1); rc=$?
-  check "A13: a wave the plan lacks exits 2" "$rc" "2"
 }
 
 # --- A17 ---------------------------------------------------------------------
@@ -997,12 +915,6 @@ a22() {
     check "A22: and git sees no edit to $plan" "$(git -C "$REPO_ROOT" status --porcelain -- "docs/dforge/plans/$plan.md" | grep -c .)" "0"
   done
 
-  # An old waves plan (no Wave check line) under the new cadence.
-  local old="$REPO_ROOT/docs/dforge/plans/2026-10-25-typed-seats-and-drafting.md"
-  absent "A22: the old waves plan carries no Wave check line" "$(cat "$old")" '^\*\*Wave check:\*\*'
-  check "A22: its waves run the full check on the cadence and nothing between" \
-    "$(due_all "$old" 1 3)" "1:none 2:none 3:full"
-
   # An old plan with spec-0 tasks up to total 6, run through §2 and the task loop, plan file untouched.
   new_repo a22
   gen_old_plan 20 > "$R/docs/old-plan.md"
@@ -1071,7 +983,7 @@ a23() {
   check "A23: the Codex routing policy keeps review_cap 5" "$(jq -r '.review_cap' < "$PLUGIN/reference/codex-routing.json" | tr -d '\r')" "5"
 }
 
-ALL="a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a17 a18 a19 a20 a21 a22 a23"
+ALL="a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a17 a18 a19 a20 a21 a22 a23"
 if [ $# -gt 0 ]; then
   sel=""
   for n in "$@"; do sel="$sel $(tr 'A-Z' 'a-z' <<<"$n")"; done

@@ -119,7 +119,6 @@ export function validateRepository(root) {
     'plugins/dforge/skills/project-status/SKILL.md',
     'plugins/dforge/skills/finishing-a-development-branch/SKILL.md',
     'plugins/dforge/reference/auto-run.md',
-    'plugins/dforge/reference/parallel-waves.md',
     'plugins/dforge/reference/session-budget.md',
     'plugins/dforge/skills/migrate/SKILL.md',
   ]);

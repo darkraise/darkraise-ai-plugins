@@ -20,15 +20,13 @@ one line per row, so every task brief carries them.
 Offer the early CI run only when the CI line names an uncovered platform.
 Write no `**Early CI:**` line when every platform is covered.
 
-Attended, ask with the multiple-choice prompt once the plan's task count and
-waves are known. The options are `No early run (Recommended)`, the first
-point and the midway point. Name each point concretely: `after wave <k>` on a
-waves plan, `after task <n>` on a sequential plan. Say that an early run
+Attended, ask with the multiple-choice prompt once the plan's task count is
+known. The options are `No early run (Recommended)`, the first point and the
+midway point. Name each point concretely as `after task <n>`. Say that an early run
 pushes the branch and starts the workflow but never opens a pull request;
 your human partner's answer is the consent.
 
 A point other than "No early run" is written with today's date, as
-`**Early CI:** after wave <k> — consented <YYYY-MM-DD>` or
 `**Early CI:** after task <n> — consented <YYYY-MM-DD>`.
 
 In an auto run (`scripts/auto-run status` exits 0), ask nothing and copy the
@@ -36,7 +34,6 @@ In an auto run (`scripts/auto-run status` exits 0), ask nothing and copy the
 
 - `Early CI: none` writes no line.
 - `Early CI: <first|midway> — consented <date>` writes the header line with
-  that date. `first` is `after wave 1` on a waves plan and `after task 1` on a
-  sequential plan. `midway` is `after wave <ceil(waves/2)>` on a waves plan
-  and `after task <ceil(tasks/2)>` on a sequential plan.
+  that date. `first` is `after task 1` and `midway` is
+  `after task <ceil(tasks/2)>`.
 - A spec with no such decision writes no line.

@@ -57,8 +57,7 @@ a ledger file, not only in todos.
 Read the plan's header, never the whole plan: run
 `scripts/task-brief --header PLAN_FILE` (see using-dforge §Session Budget), and read the
 file it prints (`<workspace>/plan-header.md`). Note the Execution line, the
-`**Parallelism:**` line when there is one, the Global Constraints and the
-Contracts, and create a todo per Task index entry.
+Global Constraints and the Contracts, and create a todo per Task index entry.
 A plan written before 1.4.0 may have no Task index: then run
 `scripts/task-brief PLAN_FILE N` for N = 1, 2, … until it exits 3, and take
 each task's title from its brief's first line. You never read the spec: the
@@ -72,9 +71,6 @@ The Ruling Seat). It scans the whole plan against the spec for:
 - tasks that contradict each other, the Contracts, or the Global Constraints
 - anything the plan explicitly mandates that the review rubric treats as a
   defect (a test that asserts nothing, verbatim duplication of a logic block)
-
-- for a plan whose `**Parallelism:**` line names waves, every pair of tasks
-  in one wave that could observe each other's change
 
 The seat returns a table, not a verdict: one row for every pair of tasks that
 share a file or an interface, and one row for every task on whether its own

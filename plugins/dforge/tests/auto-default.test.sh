@@ -31,7 +31,6 @@ check "ci-parity.md exists" "$([ -s "$CIP" ] && echo yes || echo no)" "yes"
 
 names "writing-plans: the header template has a CI line" "$W" '**CI:** '
 says "writing-plans: the CI line grammar" "$CIL" '`<workflow files>` — platforms: <list> — local: `<cmd>`; `<cmd>` — uncovered: <platforms or none>'
-says "writing-plans: the early-CI wave form" "$CIL" '**Early CI:** after wave <k> — consented <YYYY-MM-DD>'
 says "writing-plans: the early-CI task form" "$CIL" '**Early CI:** after task <n> — consented <YYYY-MM-DD>'
 
 # Docs pointers: pointers name the file that holds their target.

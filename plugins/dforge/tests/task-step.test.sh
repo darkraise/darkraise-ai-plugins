@@ -182,16 +182,11 @@ check "start: the task name is filled" "$(grep -c 'You are implementing Task 1: 
 check "start: the working directory is filled" "$(grep -c "^Work from: $(git rev-parse --show-toplevel)\$" "$D")" "1"
 check "start: the dispatch file is a bare prompt" "$(grep -c '^Subagent (' "$D")" "0"
 check "start: the state file" \
-  "$(jq -c '[.tasks, .base == "'"$BASE"'", .head, .reviewHead, .round, .t0, .wave]' "$WS/task-1-step.json" | tr -d '\r')" '[[1],true,null,null,0,null,null]'
+  "$(jq -c '[.tasks, .base == "'"$BASE"'", .head, .reviewHead, .round, .t0]' "$WS/task-1-step.json" | tr -d '\r')" '[[1],true,null,null,0,null]'
 
-# start: a backticked Implementer, a wave, a prefix-free ledger name.
-step start docs/plan.md 2 --wave 3
-check "start: a wave ends the assigned line" "$(tail -n 1 "$LEDGER")" "Task 2: implementer impl-sonnet-high (assigned; base ${BASE:0:7}; wave 3)"
-check "start: the wave is recorded" "$(jq -r .wave "$WS/task-2-step.json" | tr -d '\r')" "3"
-check "start: a wave names its worktree" "$(grep -c '^Work from: your worktree' "$WS/task-2-dispatch.md")" "1"
-check "start: a wave reports inside its worktree" \
-  "$(grep -c 'Write your full report to task-2-report.md in the directory sdd-workspace prints in your worktree (see the Parallel workspace section):' "$WS/task-2-dispatch.md")" "1"
-check "start: a wave dispatch names no session workspace report path" "$(grep -c "$WS/task-2-report.md" "$WS/task-2-dispatch.md")" "0"
+# start: a backticked Implementer, a prefix-free ledger name.
+step start docs/plan.md 2
+check "start: a backticked Implementer is assigned" "$(tail -n 1 "$LEDGER")" "Task 2: implementer impl-sonnet-high (assigned; base ${BASE:0:7})"
 
 step start docs/plan.md 3 --inline
 check "an Executor task takes --inline" "$rc" "0"
@@ -242,8 +237,6 @@ step start docs/plan.md x
 check "start: a non-numeric task exits 2" "$rc" "2"
 step start docs/plan.md 1 --nope
 check "start: an unknown flag exits 2" "$rc" "2"
-step start docs/plan.md 1 --wave
-check "start: --wave without a value exits 2" "$rc" "2"
 step bogus docs/plan.md 1
 check "an unknown subcommand exits 2" "$rc" "2"
 step start docs/missing.md 1

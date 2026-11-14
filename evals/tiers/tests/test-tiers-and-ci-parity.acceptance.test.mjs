@@ -81,9 +81,8 @@ const INTEGRATION = '**Integration check:** `bash test.sh`';
 const FULL_CI = '**CI:** `.github/workflows/validate.yml` — platforms: ubuntu-latest, windows-latest — local: `node scripts/test-all.mjs` — uncovered: Windows Git Bash';
 
 // A plan of `tasks` tasks. `lines` are the header lines after Execution;
-// `waves` (a Parallelism value) makes it a waves plan; `steps[i]` is the Step 1
-// heading text of Task i + 1, or nothing for no step.
-function plan({ lines = [TASK_CHECK, INTEGRATION, '**CI:** none', REVIEW_LINE], tasks = 3, waves, steps = [] } = {}) {
+// `steps[i]` is the Step 1 heading text of Task i + 1, or nothing for no step.
+function plan({ lines = [TASK_CHECK, INTEGRATION, '**CI:** none', REVIEW_LINE], tasks = 3, steps = [] } = {}) {
   const head = [
     '# Demo Implementation Plan',
     '',
@@ -91,17 +90,15 @@ function plan({ lines = [TASK_CHECK, INTEGRATION, '**CI:** none', REVIEW_LINE], 
     '',
     '**Spec:** `docs/spec.md`',
     '',
-    waves ? '**Execution:** subagent — `claude --model sonnet --effort high` — parallel waves' : '**Execution:** inline — `claude --model sonnet --effort low` — fixture',
+    '**Execution:** inline — `claude --model sonnet --effort low` — fixture',
     '',
   ];
-  if (waves) head.push(`**Parallelism:** ${waves}`, '', '**Worktree setup:** none', '');
   for (const line of lines) head.push(line, '');
   head.push('## Global Constraints', '', '- Bash only.', '', '## Contracts', '', 'None', '', '## Assumptions (evidence)', '', '- None.', '', '## Task index', '');
   for (let n = 1; n <= tasks; n++) head.push(`${n}. Thing ${n}`);
   head.push('');
   for (let n = 1; n <= tasks; n++) {
     head.push(`### Task ${n}: Thing ${n}`, '', '**Files:**', `- Create: \`f${n}.txt\``, '');
-    if (waves) head.push(`**Depends on:** ${n === 1 ? 'none' : 'Task 1'}`, '');
     head.push('**Implementer:** dforge:impl-sonnet-low', '**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1', '');
     if (steps[n - 1]) head.push(`- [ ] **Step 1: ${steps[n - 1]}**`, '');
   }
@@ -157,15 +154,6 @@ test('A1: plan-lint passes a plan with both lines well formed, the none form inc
     assert.equal(status, 0, out);
     assert.match(out, /plan-lint: 0 errors, 0 warnings/);
   }
-});
-
-test('A1: plan-lint still fails a waves plan without an Integration check, and passes it with one', () => {
-  const waves = 'waves — 1 | 2-3';
-  const missing = lint(plan({ waves, lines: [TASK_CHECK, '**CI:** none', REVIEW_LINE] }));
-  assert.equal(missing.status, 1, missing.out);
-  assert.match(missing.out, /^ERROR header: .*Integration check/m);
-  const present = lint(plan({ waves, lines: [TASK_CHECK, INTEGRATION, '**CI:** none', REVIEW_LINE] }));
-  assert.equal(present.status, 0, present.out);
 });
 
 // ---------------------------------------------------------------- task-step fixtures
@@ -422,17 +410,6 @@ test('A8: plan-lint fails a Covered by Task naming a task that does not run befo
   assert.match(itself.out, /^ERROR Task 2: .*Covered by Task 2/m);
 });
 
-test('A8: in a waves plan, a Covered by Task needs a task in an earlier wave', () => {
-  const lines = [TASK_CHECK, INTEGRATION, '**CI:** none', REVIEW_LINE];
-  const sameWave = lint(plan({ lines, waves: 'waves — 1 | 2-3', steps: [FAILING, EXTEND, covered(2)] }));
-  assert.equal(sameWave.status, 1, sameWave.out);
-  assert.match(sameWave.out, /^ERROR Task 3: .*Covered by Task 2/m);
-  const earlier = lint(plan({ lines, waves: 'waves — 1 | 2 | 3', steps: [FAILING, EXTEND, covered(2)] }));
-  assert.equal(earlier.status, 0, earlier.out);
-  const firstWave = lint(plan({ lines, waves: 'waves — 1 | 2-3', steps: [FAILING, EXTEND, covered(1)] }));
-  assert.equal(firstWave.status, 0, firstWave.out);
-});
-
 // ---------------------------------------------------------------- A15, A24
 test('A15: plan-lint warns on a plan without a CI line and passes none', () => {
   const missing = lint(plan({ lines: [TASK_CHECK, INTEGRATION, REVIEW_LINE] }));
@@ -461,17 +438,14 @@ test('A15: plan-lint passes a well formed CI line and fails a malformed one', ()
   }
 });
 
-const early = (point, options = {}) => lint(plan({ lines: [TASK_CHECK, INTEGRATION, FULL_CI, `**Early CI:** ${point}`, REVIEW_LINE], ...options }));
+const early = point => lint(plan({ lines: [TASK_CHECK, INTEGRATION, FULL_CI, `**Early CI:** ${point}`, REVIEW_LINE] }));
 
-test('A24: plan-lint accepts a consented Early CI point on a sequential plan and on a waves plan', () => {
+test('A24: plan-lint accepts a consented Early CI point', () => {
   const sequential = early('after task 2 — consented 2026-10-31');
   assert.equal(sequential.status, 0, sequential.out);
   assert.doesNotMatch(sequential.out, /Early CI/);
   const last = early('after task 3 — consented 2026-10-31');
   assert.equal(last.status, 0, last.out);
-  const waves = early('after wave 2 — consented 2026-10-31', { waves: 'waves — 1 | 2-3' });
-  assert.equal(waves.status, 0, waves.out);
-  assert.doesNotMatch(waves.out, /Early CI/);
 });
 
 test('A24: plan-lint fails an Early CI line without a consented date', () => {
@@ -482,10 +456,10 @@ test('A24: plan-lint fails an Early CI line without a consented date', () => {
   }
 });
 
-test('A24: plan-lint fails an Early CI line naming a wave on a sequential plan', () => {
+test('A24: plan-lint fails an Early CI line naming a wave', () => {
   const result = early('after wave 1 — consented 2026-10-31');
   assert.equal(result.status, 1, result.out);
-  assert.match(result.out, /^ERROR header: .*Early CI.*wave/m);
+  assert.match(result.out, /^ERROR header: .*Early CI.*after task <n>/m);
 });
 
 test('A24: plan-lint fails an Early CI line naming a task past the last', () => {

@@ -14,7 +14,7 @@ never earlier.
 |------|-------|--------|
 | Handoff budget | The compaction point minus 140,000: min(`autoCompactWindow`, model window) × 93% − 140,000, so 465k at a 650,000 window, and never below a fifth of that window, so 20k at 100,000; `DFORGE_BUDGET` overrides, then the `handoffTokens` setting | Owner ruling, 2026-09-19 |
 | Final-phase limit | 85% of min(`autoCompactWindow`, model window): 553k at a 650,000 window, 680k at 800,000; `DFORGE_BUDGET` does not move it. Only relaxed mode and the plan after the spec measure against it | Owner ruling, 2026-10-02; strict mode revised 2026-10-29 |
-| Relaxed handoff | With the `handoffMode` setting at `relaxed`, a plain task and a wave are measured against the final-phase limit (a wave less 140,000 per extra task) and the line reads `budget (relaxed)`; the pinned budget then has no effect. A worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on | Owner ruling, 2026-10-12 |
+| Relaxed handoff | With the `handoffMode` setting at `relaxed`, a plain task is measured against the final-phase limit and the line reads `budget (relaxed)`; the pinned budget then has no effect. A worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on | Owner ruling, 2026-10-12 |
 | Plan after the spec | 150% of the task budget (`DFORGE_BUDGET` included), capped at the final-phase limit: 680k at an 800,000 window with the budget pinned at 465,000 | Owner ruling, 2026-10-10 |
 | Tail | Strict: the last 2 tasks and the final phase are measured against the handoff budget and never hand off, so the plan finishes in the session past its budget. Relaxed: both are measured against the final-phase limit, and a tail task past it hands off. Finishing is never measured | Owner ruling, 2026-10-10; strict mode revised 2026-10-29 |
 | Model window | 1,000,000 for Fable 5.1, Opus 5.5 and Sonnet 5.5; 200,000 for Haiku 4.5 | Claude API model table, cached 2026-06-24; Opus 5.5 from its launch notes; Sonnet 5.5 from the model table and a CLI probe, 2026-09-29 |
@@ -154,7 +154,7 @@ While an auto run is bound to the session ([auto-run.md](auto-run.md)), every
 budget line but `context-size --plan` prints the run's own verdict,
 `budget (auto…)`, and `context-size` exits 6 on `compact`. The run compacts at
 the task budget, or at 90% of the compaction window once a compaction has left
-85% of the task budget or more, less 140k per extra task of a wave; a
+85% of the task budget or more; a
 compaction that leaves 85% of the window or more hands off, and the cockpit
 clears and resumes the session, except in the `plan`, `final` and `finish`
 phases, which never hand off; after one compaction in `final` or `finish`

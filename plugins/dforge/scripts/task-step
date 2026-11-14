@@ -6,7 +6,7 @@
 # <workspace>/task-<N>-step.json; a group review's in
 # <workspace>/group-<list>-step.json.
 #
-# Usage: task-step start  PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND]
+# Usage: task-step start  PLAN_FILE N [M ...] [--reset] [--suite COMMAND]
 #        task-step start  PLAN_FILE N --inline [--reset] [--suite COMMAND]
 #        task-step review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA]
 #        task-step hold   PLAN_FILE N [--head REF] [--cwd DIR]
@@ -40,7 +40,7 @@ plan_budget_line() {
   read -r -a mode <<<"$(. "$1/lib/context.sh" && ctx_plan_mode "$3" "$4" 2>/dev/null)" || mode=()
   DFORGE_BUDGET_CALLER=$2 bash "$1/context-size" ${mode[@]+"${mode[@]}"} 2>/dev/null
 }
-usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND] | start PLAN_FILE N --inline [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]"; }
+usage() { die "usage: task-step start PLAN_FILE N [M ...] [--reset] [--suite COMMAND] | start PLAN_FILE N --inline [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]"; }
 
 # dirty_list DIR: "<path>\t<hash>" for each tracked path that differs from
 # HEAD, sorted; the hash is git's content hash, or "deleted". Paths are
@@ -277,17 +277,16 @@ drop_base_cache() {
 
 NONE_RE='^\*\*Task check:\*\*[[:space:]]*none([[:space:]]|$)'
 
-# require_scheduled_suite STEP_FILE N...: exits 2 when the plan is sequential,
-# its task check is none, one of tasks N... is due the integration check (a
-# multiple of 3, or the last task), and neither --suite nor STEP_FILE names a
-# suite. verdict would otherwise read the task as not scheduled.
+# require_scheduled_suite STEP_FILE N...: exits 2 when the plan's task check
+# is none, one of tasks N... is due the integration check (a multiple of 3, or
+# the last task), and neither --suite nor STEP_FILE names a suite. verdict
+# would otherwise read the task as not scheduled.
 require_scheduled_suite() {
   local step=$1 n last
   shift
   [ -z "$suite_arg" ] || return 0
   [ -z "$(jq -r '.suite // empty' "$step" 2>/dev/null | tr -d '\r')" ] || return 0
   [[ $(plan_header_line "$src" "Task check") =~ $NONE_RE ]] || return 0
-  [ "$(plan_parallelism "$src")" = sequential ] || return 0
   last=$(plan_tasks "$src" | awk -F'\t' '$1 + 0 > m { m = $1 + 0 } END { print m + 0 }')
   for n in "$@"; do
     if [ $((n % 3)) -eq 0 ] || [ "$n" -eq "$last" ]; then
@@ -549,10 +548,9 @@ if [ "$sub" = review ] && [ "$1" = --group ]; then
 fi
 plan_arg=$1; shift
 
-ids=() wave="" reset=0 inline=0 base_arg="" head_arg="" cwd_arg="" vgroup=0 rereview_arg="" suite_arg="" suite_base_arg="" suite_base_sha_arg=""
+ids=() reset=0 inline=0 base_arg="" head_arg="" cwd_arg="" vgroup=0 rereview_arg="" suite_arg="" suite_base_arg="" suite_base_sha_arg=""
 while [ $# -gt 0 ]; do
   case $1 in
-    --wave) [ "$sub" = start ] && [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; wave=$2; shift 2 ;;
     --reset) [ "$sub" = start ] || usage; reset=1; shift ;;
     --inline) [ "$sub" = start ] || usage; inline=1; shift ;;
     --suite) [[ $sub =~ ^(start|review|group)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_arg=$2; shift 2 ;;
@@ -568,7 +566,7 @@ while [ $# -gt 0 ]; do
 done
 [ ${#ids[@]} -ge 1 ] || usage
 [ "$sub" != hold ] || [ ${#ids[@]} -eq 1 ] || usage
-[ "$inline" -eq 0 ] || { [ -z "$wave" ] && [ ${#ids[@]} -eq 1 ]; } || usage
+[ "$inline" -eq 0 ] || [ ${#ids[@]} -eq 1 ] || usage
 # A group member's fix round is re-reviewed alone, so a group has no re-review report.
 [ "$vgroup" -eq 0 ] || [ -z "$rereview_arg" ] || usage
 # Without its base, a review's suite would be compared with the task's own base.
@@ -742,7 +740,7 @@ group_round_tasks() {
 }
 
 do_start() {
-  local base base7 out rc n a agent="" best=-1 rank unknown=0 suffix=")" label titles kept=0
+  local base base7 out rc n a agent="" best=-1 rank unknown=0 label titles kept=0
   local template="$plugin_root/reference/prompts/implementer-prompt.md"
   local dispatch="$ws/task-$first-dispatch.md" budget="" workfrom scene
 
@@ -783,19 +781,18 @@ do_start() {
   done
   [ "$unknown" -eq 0 ] || agent=""
 
-  [ -z "$wave" ] || suffix="; wave $wave)"
   if [ "$inline" -eq 1 ]; then
     ledger_init
   elif [ -n "$agent" ] && [ "$kept" -eq 0 ]; then
     ledger_init
     for n in "${ids[@]}"; do
-      printf 'Task %s: implementer %s (assigned; base %s%s\n' "$n" "$agent" "$base7" "$suffix" >> "$ledger"
+      printf 'Task %s: implementer %s (assigned; base %s)\n' "$n" "$agent" "$base7" >> "$ledger"
     done
   fi
 
   if [ "$kept" -eq 0 ]; then
-    jq -n --argjson tasks "$(printf '%s\n' "${ids[@]}" | jq -sc .)" --arg base "$base" --argjson wave "${wave:-null}" \
-      '{tasks: $tasks, base: $base, head: null, reviewHead: null, round: 0, t0: null, wave: $wave}' > "$state.tmp" \
+    jq -n --argjson tasks "$(printf '%s\n' "${ids[@]}" | jq -sc .)" --arg base "$base" \
+      '{tasks: $tasks, base: $base, head: null, reviewHead: null, round: 0, t0: null}' > "$state.tmp" \
       && mv "$state.tmp" "$state"
   fi
 
@@ -815,12 +812,9 @@ do_start() {
       label="Tasks $(IFS=,; echo "${ids[*]}" | sed 's/,/, /g'): $titles"
     fi
     workfrom="Work from: $(git rev-parse --show-toplevel)"
-    [ -z "$wave" ] || workfrom="Work from: your worktree (see the Parallel workspace section)"
-    reportat="$report"
-    [ -z "$wave" ] || reportat="task-$first-report.md in the directory sdd-workspace prints in your worktree (see the Parallel workspace section)"
     scene="The message that sent you to this file says where the task fits, and carries the interfaces from earlier tasks and the verdicts that bear on it."
     prompt_text "$template" | fill \
-      '[BRIEF_FILE]' "$brief" '[REPORT_FILE]' "$reportat" '[PLUGIN_ROOT]' "$plugin_root" \
+      '[BRIEF_FILE]' "$brief" '[REPORT_FILE]' "$report" '[PLUGIN_ROOT]' "$plugin_root" \
       '[IMPLEMENTER]' "${agent:-the scored implementer}" 'Task N: [task name]' "$label" \
       'Work from: [directory]' "$workfrom" \
       '[Scene-setting: where this fits, dependencies, architectural context]' "$scene" > "$dispatch"
@@ -1474,7 +1468,6 @@ suite_check() {
     fi
     return 0
   fi
-  if [ "$vgroup" -eq 1 ] && [ -n "$(jq -r '.wave // empty' "$st" | tr -d '\r')" ]; then return 0; fi
   rh=$(jq -r '.reviewHead // empty' "$vstate" | tr -d '\r')
   head7=${rh:0:7}
   row=$(suite_row "$st" "$rh" "${cwd_arg:-.}")

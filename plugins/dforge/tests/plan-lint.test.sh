@@ -824,8 +824,8 @@ lintplan fenced-files.md "$(printf '### Task 1: One\n\n**Implementer:** dforge:i
 lint fenced-files.md
 has "a fenced-only Files block is a missing Files block" "$out" "ERROR Task 1: missing **Files:** block"
 
-# --- parallel waves ---
-waves_plan() { # waves_plan <Parallelism value> — three tasks; Tasks 2 and 3 share wave 2
+# --- the Parallelism line ---
+three_task_plan() { # three_task_plan <Parallelism value> — three tasks
   cat <<EOF
 # Demo Implementation Plan
 
@@ -833,7 +833,7 @@ waves_plan() { # waves_plan <Parallelism value> — three tasks; Tasks 2 and 3 s
 
 **Spec:** \`docs/spec.md\`
 
-**Execution:** subagent — \`claude --model sonnet --effort high\` — parallel waves
+**Execution:** subagent — \`claude --model sonnet --effort high\` — fixture
 
 **Parallelism:** $1
 
@@ -870,8 +870,6 @@ None
 **Files:**
 - Create: \`a.txt\`
 
-**Depends on:** none
-
 **Implementer:** dforge:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
@@ -881,8 +879,6 @@ None
 - Create: \`b.txt\`
 - Test: \`t/b.test.sh:3-9\`
 
-**Depends on:** Task 1
-
 **Implementer:** dforge:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
@@ -891,68 +887,21 @@ None
 **Files:**
 - Create: \`c.txt\`
 
-**Depends on:** Task 1
-
 **Implementer:** dforge:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 EOF
 }
-waves_plan 'waves — 1 | 2-3' > waves.md
+three_task_plan 'waves — 1 | 2-3' > waves.md
 lint waves.md --no-probe
-check "waves: a clean plan exits 0" "$status" "0"
-check "waves: only the deprecation warning" "$out" "WARN header: subagent execution is deprecated; inline is the default
-plan-lint: 0 errors, 1 warnings"
-waves_plan 'sequential — one chain' > waves-seq.md
-lint waves-seq.md --no-probe
-lacks "sequential: Depends on lines are not checked" "$out" "Depends on"
-waves_plan 'waves — 1 | two' > waves-bad.md
-lint waves-bad.md --no-probe
-has "waves: a bad range" "$out" "ERROR header: Parallelism waves must be '<N>' or '<A>-<B>' ranges"
-waves_plan 'waves — 1-2 | 2-3' > waves-gap.md
-lint waves-gap.md --no-probe
-has "waves: overlapping ranges" "$out" "ascending, contiguous ranges covering Tasks 1-3 exactly once"
-waves_plan 'waves — 1 | 2' > waves-short.md
-lint waves-short.md --no-probe
-has "waves: ranges must cover every task" "$out" "covering Tasks 1-3 exactly once"
-waves_plan 'parallel' > waves-word.md
-lint waves-word.md --no-probe
-has "waves: an unknown strategy" "$out" "ERROR header: Parallelism line does not match"
-waves_plan 'waves — 1 | 2-3' | sed 's#- Create: `c.txt`#- Modify: `t/b.test.sh:1-2`#' > waves-share.md
-lint waves-share.md --no-probe
-has "waves: a shared file, line ranges ignored" "$out" "ERROR header: wave 2: t/b.test.sh is named by Task 2, Task 3"
-waves_plan 'waves — 1 | 2-3' | awk '/^\*\*Depends on:\*\* Task 1$/ && ++n == 2 { print "**Depends on:** Task 2"; next } { print }' > waves-dep.md
-lint waves-dep.md --no-probe
-has "waves: a same-wave dependency" "$out" "ERROR Task 3: Depends on Task 2 in the same wave (2)"
-waves_plan 'waves — 1 | 2-3' | awk '/^\*\*Depends on:\*\* none$/ && !d++ { next } { print }' > waves-nodep.md
-lint waves-nodep.md --no-probe
-has "waves: every task needs a Depends on line" "$out" "ERROR Task 1: a waves plan needs a **Depends on:** line"
-waves_plan 'waves — 1 | 2-3' | sed 's/risk 0 = 1$/risk 3 = 4/' > waves-risk.md
-lint waves-risk.md --no-probe
-has "waves: risk 3 runs alone" "$out" "ERROR Task 2: a risk-3 task must run alone in its wave"
-lacks "waves: a wave of one may hold risk 3" "$out" "ERROR Task 1: a risk-3 task"
-waves_plan 'waves — 1 | 2-3' | sed 's#- Create: `b.txt`#- Modify: `package-lock.json`#' > waves-lock.md
-lint waves-lock.md --no-probe
-has "waves: a lockfile runs alone" "$out" "ERROR Task 2: package-lock.json is a dependency manifest or lockfile"
-waves_plan 'waves — 1 | 2-3' | sed '/^\*\*Integration check:\*\*/d; s/^\*\*Execution:\*\* subagent — `claude --model sonnet --effort high`/**Execution:** inline — `claude --model sonnet --effort low`/' > waves-inline.md
-lint waves-inline.md --no-probe
-has "waves: inline is refused" "$out" "ERROR header: parallel waves need a subagent Execution line"
-has "waves: the integration check is required" "$out" "ERROR header: a waves plan needs its **Integration check:** line"
-lacks "waves: the missing Integration check is an error, not a warning" "$out" "WARN header: no **Integration check:** line yet"
-# An optional **Wave check:** line runs between the full checks of a waves plan.
-with_wave_check() { # with_wave_check <line> — stdin plan with <line> after the Worktree setup line
-  awk -v l="$1" '{ print } /^\*\*Worktree setup:\*\*/ { print ""; print l }'
-}
-waves_plan 'waves — 1 | 2-3' | with_wave_check '**Wave check:** `bash quick.sh`' > waves-check.md
-lint waves-check.md --no-probe
-check "waves: a Wave check line is accepted" "$out" "WARN header: subagent execution is deprecated; inline is the default
-plan-lint: 0 errors, 1 warnings"
-waves_plan 'waves — 1 | 2-3' | with_wave_check '**Wave check:**' > waves-check-empty.md
-lint waves-check-empty.md --no-probe
-has "waves: a Wave check line needs a command" "$out" "ERROR header: the **Wave check:** line names no command"
-waves_plan 'sequential — one chain' | with_wave_check '**Wave check:** `bash quick.sh`' > seq-check.md
-lint seq-check.md --no-probe
-has "sequential: a Wave check line is flagged" "$out" "WARN header: **Wave check:** runs only between the waves of a waves plan"
-lacks "sequential: a Wave check line is not an error" "$out" "ERROR header: the **Wave check:**"
+check "an old waves line: exit 0" "$status" "0"
+has "an old waves line: the retirement warning" "$out" "WARN header: parallel waves were retired in 5.0.0; this plan runs one task at a time"
+three_task_plan 'sequential — one chain' > seq.md
+lint seq.md --no-probe
+lacks "a sequential line: no Parallelism finding" "$out" "Parallelism"
+lacks "a sequential line: no waves finding" "$out" "waves"
+three_task_plan 'parallel' > parallel-word.md
+lint parallel-word.md --no-probe
+has "an unknown strategy" "$out" "ERROR header: Parallelism line does not match '**Parallelism:** sequential'"
 
 # --- test tier and CI header lines ---
 # The fixtures carry well-formed lines, so each case edits one line. A missing
@@ -1005,19 +954,12 @@ check "Early CI without consent: exit 1" "$status" "1"
 has "Early CI without consent" "$out" 'ERROR header: **Early CI:** lacks "— consented <YYYY-MM-DD>"'
 early 'after task 2 — consented tomorrow'
 has "Early CI with a malformed date lacks consent" "$out" 'ERROR header: **Early CI:** lacks "— consented <YYYY-MM-DD>"'
-early 'after wave 2'
-has "Early CI naming a wave on a sequential plan" "$out" "ERROR header: **Early CI:** names a wave on a sequential plan"
-has "Early CI naming a wave, unconsented, also lacks consent" "$out" 'ERROR header: **Early CI:** lacks "— consented <YYYY-MM-DD>"'
+early 'after wave 2 — consented 2026-10-31'
+has "Early CI naming a wave is refused" "$out" 'ERROR header: **Early CI:** must be "after task <n>", then "— consented <YYYY-MM-DD>"'
 early 'after task 3 — consented 2026-10-31'
 has "Early CI naming a task past the last" "$out" "ERROR header: **Early CI:** names Task 3, past the last task"
 early 'whenever — consented 2026-10-31'
-has "Early CI with no recognised point" "$out" 'ERROR header: **Early CI:** must be "after wave <k>" or "after task <n>", then "— consented <YYYY-MM-DD>"'
-
-waves_plan 'waves — 1 | 2-3' | sed '/^\*\*Task check:\*\*/d' | sed "s#^\*\*CI:\*\* none\$#${CI_FULL}\n\n**Early CI:** after wave 2 — consented 2026-10-31#" > waves-early.md
-lint waves-early.md --no-probe
-check "waves: no Task check and a wave Early CI: exit 0" "$status" "0"
-has "waves: a missing Task check warns" "$out" "WARN header: no **Task check:** line yet"
-lacks "waves: a wave Early CI is accepted" "$out" "Early CI"
+has "Early CI with no recognised point" "$out" 'ERROR header: **Early CI:** must be "after task <n>", then "— consented <YYYY-MM-DD>"'
 
 # --- Step 1 forms ---
 step1() { # step1 <Task 1 heading text> <Task 2 heading text> — the Claude plan with both Step 1 headings replaced
@@ -1035,18 +977,11 @@ step1 $'Covered by Task 2\'s test `second`' 'Extend the test `t/b.test.sh::secon
 lint cov-late.md
 has "Covered by a later task: it does not run before" "$out" "ERROR Task 1: Covered by Task 2 — Task 2 does not run before Task 1"
 lacks "an Extend step counts as a test step" "$out" "Task 2 has no test step"
-waves_plan 'sequential — one chain' | with_steps 'Write the failing test' $'Covered by Task 7\'s test `a`' $'Covered by Task 2\'s test `b`' > cov-seq.md
+three_task_plan 'sequential — one chain' | with_steps 'Write the failing test' $'Covered by Task 7\'s test `a`' $'Covered by Task 2\'s test `b`' > cov-seq.md
 lint cov-seq.md --no-probe
 has "Covered by a missing task" "$out" "ERROR Task 2: Covered by Task 7 — no such task"
 has "Covered by a task with no test step" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 has no test step"
 lacks "a sequential plan: a lower task number runs before" "$out" "Task 3: Covered by Task 2 — Task 2 does not run before"
-waves_plan 'waves — 1 | 2-3' | with_steps 'Write the failing test' 'Extend the test `t/b.test.sh::second`' $'Covered by Task 2\'s test `second`' > cov-wave.md
-lint cov-wave.md --no-probe
-has "a waves plan: Covered by a task in the same wave" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 does not run before Task 3"
-lacks "a waves plan: the covered task has a test step" "$out" "Task 2 has no test step"
-waves_plan 'waves — 1 | 2 | 3' | with_steps 'Write the failing test' 'Extend the test `t/b.test.sh::second`' $'Covered by Task 2\'s test `second`' > cov-wave-ok.md
-lint cov-wave-ok.md --no-probe
-lacks "a waves plan: Covered by a task in an earlier wave is accepted" "$out" "Covered by Task"
 lint cov-ok.md
 lacks "a Covered by heading draws no form WARN" "$out" "none of the forms"
 step1 'No new test, because the change is prose no script reads' 'Write the failing test' > nnt-ok.md
@@ -1070,10 +1005,10 @@ for h in 'Write the failing tests' 'Extend the test `t/a.test.sh::first`'; do
   lint nnt-known.md
   lacks "a recognized Step 1 heading draws no form WARN ($h)" "$out" "none of the forms"
 done
-waves_plan 'sequential — one chain' > nnt-nostep.md
+three_task_plan 'sequential — one chain' > nnt-nostep.md
 lint nnt-nostep.md --no-probe
 lacks "a task with no Step 1 line draws no form WARN" "$out" "none of the forms"
-waves_plan 'sequential — one chain' | with_steps 'Write the failing test' 'No new test, because prose only' $'Covered by Task 2\'s test `b`' > nnt-cov.md
+three_task_plan 'sequential — one chain' | with_steps 'Write the failing test' 'No new test, because prose only' $'Covered by Task 2\'s test `b`' > nnt-cov.md
 lint nnt-cov.md --no-probe
 has "Covered by a No new test task: it has no test step" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 has no test step"
 lacks "a No new test task with a reason draws no form WARN" "$out" 'Task 2: Step 1'

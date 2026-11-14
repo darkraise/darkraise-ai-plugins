@@ -92,11 +92,9 @@ enters the reserve chain, which terminates at BLOCKED. Used at fix round 2
 and at the BLOCKED handler: a task gets at most two fix rounds, then the
 ruling seat.
 
-**Review groups and wave checks.** A task at risk 0 or 1 with a total under 5 is
-reviewed in groups: one judge dispatch for up to four such tasks, or for a
-wave's such tasks before they merge. Riskier tasks keep their own review. Waves
-run the plan's full integration check every third wave, after any risk-3 wave and after the last; a red baseline
-whose failures do not grow counts as a pass. A `Host: codex` plan keeps
+**Review groups.** A task at risk 0 or 1 with a total under 5 is
+reviewed in groups: one judge dispatch for up to four such tasks. Riskier
+tasks keep their own review. A `Host: codex` plan keeps
 `review_cap: 5` and per-task review.
 
 **Review depth.** An architectural plan runs at one of three depths, sized by
@@ -161,25 +159,6 @@ not converge after three fix rounds goes to the ruling seat as a `breaker`
 item. subagent-driven-development, a dispatch and a scored review per task, is
 deprecated: it runs only for a plan whose Execution line names `subagent` or
 on your instruction, and `plan-lint` warns on that line.
-
-**Parallel waves, subagent plans only.** The `executionStrategy` setting
-defaults to `sequential`, and an inline plan always runs one task after
-another. `parallel` and `ask` take effect only for a plan whose Execution line
-names `subagent`. Brainstorming records `**Execution strategy:** sequential —
-inline execution` in the spec. A parallel
-plan groups its tasks into waves, written `**Parallelism:** waves — 1 | 2-4 | 5`:
-contiguous task ranges whose tasks share no file and consume nothing from each
-other, with a `**Depends on:**` line on every task. Subagent mode runs a wave's
-tasks at once, each in its own git worktree, reviews each exactly as it would a
-sequential task, merges each reviewed task with `scripts/wave merge` (which
-refuses a task whose files overlap what the wave already merged), and runs the
-plan's `**Integration check:**` before the next wave starts. `plan-lint` keeps
-risk-3 tasks and dependency-manifest changes alone in their
-wave, the pre-flight ruling seat checks every same-wave pair for coupling the
-file lists cannot show, and `context-size --wave W` keeps room in the session
-for every task running at once. Running a wave one task after another is always
-correct, so every doubt serializes it; `reference/parallel-waves.md` holds the
-procedure. A plan without a `**Parallelism:**` line runs exactly as before.
 
 **A reviewer panel.** Codex and agy review; neither implements a task. When a
 family's review surface is open, `scripts/run-review-panel` runs every open
@@ -503,31 +482,16 @@ without asking (`always`) or never offers it (`off`). See
 
 ## Unattended runs
 
-Two Claude Code settings keep a parallel plan moving while nobody is at the
-keyboard. They belong to Claude Code, and dforge neither sets nor reads them.
+One Claude Code setting keeps a plan moving while nobody is at the keyboard.
+It belongs to Claude Code, and dforge neither sets nor reads it.
 
-**Auto mode.** Start the session with `claude --permission-mode auto`. A wave
-runs its implementers as subagents, several at once, and a tool call that needs
-a permission prompt makes that implementer wait for an answer you are not there
-to give, which holds up the whole wave. In auto mode a classifier approves
-routine calls and blocks risky ones, so no implementer stops on a prompt. This is Claude Code's permission mode; dforge's
-own auto run (see [reference/auto-run.md](reference/auto-run.md)) keeps a plan
-going from approval to finishing and works under any permission mode.
-
-**Wave worktrees from your local HEAD.** Set `worktree.baseRef` to `"head"` in
-your user settings (`~/.claude/settings.json`):
-
-```json
-{ "worktree": { "baseRef": "head" } }
-```
-
-Claude Code creates each wave implementer's worktree itself. Its default,
-`"fresh"`, branches from `origin/<default-branch>`, so when your local main is
-ahead of origin, or the plan sits on a feature branch, the worktree lacks the
-unpushed commits: the plan and the earlier waves' merged tasks. dforge's
-dispatch detaches the implementer to the wave's base afterwards, but a worktree
-that starts from your HEAD begins in the right place. The setting applies to
-every worktree Claude Code creates for you, not only dforge's.
+**Auto mode.** Start the session with `claude --permission-mode auto`. A tool
+call that needs a permission prompt waits for an answer you are not there to
+give. In auto mode a classifier approves routine calls and blocks risky ones,
+so the run does not stop on a prompt. This is Claude Code's permission mode;
+dforge's own auto run (see [reference/auto-run.md](reference/auto-run.md))
+keeps a plan going from approval to finishing and works under any permission
+mode.
 
 ## Session budget
 
@@ -931,8 +895,7 @@ The same settings can be set with
 | Workflow | `agyReview` | `false` | `true` lets the Antigravity CLI (`agy`) take review seats when its gate passes and the policy's `trust.review` is `pass`. `false`, the default, makes `scripts/agy-gate` report `review=false reason=setting` without probing, and keeps agy out of every review. |
 | Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DFORGE_LENS_CAP` overrides it. |
 | Workflow | `lensMinorFrom` | `20` | The plan size, in tasks, from which the final review's lenses also report Minor findings. A smaller plan's lenses report Critical and Important findings only, so the fix wave does not triage a long Minor tail. `0` always asks for Minor findings. `DFORGE_LENS_MINOR_FROM` overrides it. |
-| Workflow | `executionStrategy` | `sequential` | `sequential` runs one task at a time; `parallel` (independent tasks in waves) and `ask` take effect only with a subagent Execution line. |
-| Workflow | `executionMode` | `auto` | `auto` means inline; `inline` and `subagent` fix the plan's Execution line, and `subagent` (deprecated) is the only mode that runs waves. |
+| Workflow | `executionMode` | `auto` | `auto` means inline; `inline` and `subagent` fix the plan's Execution line; `subagent` is deprecated. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
 | Workflow | `autoRun` | `on` | `on` runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; `off` on Codex); `ask` offers that once the design is approved; `off` never runs one. See [Auto run](#auto-run). |
 | Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
@@ -1004,6 +967,12 @@ implement a task.
 - **Reviews.** `reference/executor-lane.md` is now
   `reference/external-review.md`, which describes the reviewer panel
   (`scripts/run-review-panel`).
+- **Parallel waves.** Every plan runs one task at a time. The
+  `executionStrategy` setting is gone (a stored value is ignored), and so are
+  the wave script, the `context-size` and `auto-run verdict` wave widths, and
+  the Wave check and wave Early CI forms. An older plan's
+  `**Parallelism:** waves` line draws a `plan-lint` WARN and its tasks run in
+  index order.
 
 ## Migrating to 4.11
 
@@ -1285,12 +1254,6 @@ end at. `scripts/run-review-panel` runs every open family's runner at once;
 `scripts/run-codex-review.sh` and `scripts/run-agy-review.sh` each select the
 judge row from their block (`codex-judge`, `agy-judge`), bound the run, and
 classify the outcome as `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`.
-
-`reference/parallel-waves.md` runs a waves plan: opening a wave, the parallel
-implementer dispatch, the merge and the integration check, and recovery.
-`scripts/wave` holds its mechanics: `list` the waves, the `ref` a parallel
-task commits to, `status` of a wave's tasks, `merge` one reviewed task, and
-`clean` a merged wave's worktrees and refs without ever forcing.
 
 `reference/project-state.md` describes the committed project-declared state —
 `gates.md`, `plans/completed.md` and `distilled/` — and the precedence order that

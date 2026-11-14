@@ -231,17 +231,6 @@ settings 650000
 run --plan extra
 check "plan: arguments: exit 2" "$status" "2"
 
-# --- a wave reserves one task's growth per extra concurrent task ---
-asst 200000 > "$T"
-run --wave 1
-check "wave of 1: the task budget" "$out" "budget (wave of 1): 200k of 465k (43%) — ok — source: record"
-run --wave 3
-check "wave of 3: 280k less: exit 5" "$status" "5"
-check "wave of 3: line" "$out" "budget (wave of 3): 200k of 185k (108%) — handoff — source: record"
-run --wave 2
-check "wave of 2: fits" "$out" "budget (wave of 2): 200k of 325k (61%) — ok — source: record"
-run --wave 0
-check "wave of 0: usage" "$status" "2"
 asst 30000 false claude-haiku-4-5-20251001 > "$T"
 run --final
 check "final: haiku's 200k window" "$out" "budget (final): 30k of 46k (65%) — ok — source: record"
@@ -251,7 +240,7 @@ run --final extra
 check "final: arguments: exit 2" "$status" "2"
 
 # --- the handoffMode and handoffTokens settings ---
-# Relaxed measures a plain task and a wave against the final-phase limit (553k
+# Relaxed measures a plain task against the final-phase limit (553k
 # is 85% of the 650k window); the final, tail and plan checks do not move.
 cp "$T" "$TMP/t.keep"; cp "$SESS/$KEY.json" "$TMP/record.keep"
 settings 650000
@@ -261,9 +250,6 @@ asst 500000 > "$T"; record s-1 "$T"
 run
 check "relaxed: exit 0 under the final-phase limit" "$status" "0"
 check "relaxed: line" "$out" "budget (relaxed): 500k of 553k (90%) — ok — source: record"
-run --wave 2
-check "relaxed wave: exit 5" "$status" "5"
-check "relaxed wave: one task margin reserved" "$out" "budget (relaxed, wave of 2): 500k of 413k (121%) — handoff — source: record"
 run --final
 check "relaxed: the final phase measures against the final-phase limit" "$out" "budget (final): 500k of 553k (90%) — ok — source: record"
 run --tail 1
@@ -588,8 +574,6 @@ run
 check "auto: ok, exit 0" "$status:$out" "0:budget (auto): 300k of 465k (64%) — ok — source: record"
 run --plan
 check "auto: --plan keeps its own limit" "$out" "budget (plan): 300k of 680k (44%) — ok — source: record"
-run --wave 2
-check "auto: a wave reserves a task" "$out" "budget (auto, wave of 2): 300k of 325k (92%) — ok — source: record"
 asst 470000 > "$AUTO_T"
 run
 check "auto: compact, exit 6" "$status:$out" "6:budget (auto): 470k of 465k (101%) — compact — source: record"
@@ -615,8 +599,6 @@ check "auto: another session keeps the task budget" "$status:$out" "5:budget: 69
 printf '{}\n' > "$AUTO_T"
 run
 has "auto: an unreadable size names the run's limit" "$out" "budget (auto, high): unknown of 720k — unknown — no usage entry in"
-run --wave 2
-has "auto: an unreadable size in a wave names the run's limit" "$out" "budget (auto, high, wave of 2): unknown of 580k — unknown — no usage entry in"
 date +%s > "$HOME/.claude/dforge/sessions/cockpit/auto-1"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 start --spec docs/s.md --register docs/r.md --force >/dev/null)
 run

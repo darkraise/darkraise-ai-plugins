@@ -423,78 +423,16 @@ elif [ -n "$mode" ]; then
   fi
 fi
 
-# --- parallel waves (reference/parallel-waves.md) ---
-# Serializing a wave is always correct only while waves are contiguous ranges
-# and every dependency points into an earlier wave, so those are errors; the
-# rest keeps work that cannot share a wave safely in a wave of its own.
-parallelism=$(plan_parallelism "$src")
-wave_check=$(first_label 'Wave check' "$unfenced_header")
-if [ "$parallelism" = bad ]; then
-  say ERROR header "Parallelism line does not match '**Parallelism:** sequential' or '**Parallelism:** waves — <N|A-B> | …'"
-elif [ "$parallelism" = waves ]; then
-  [ "$codex" -eq 0 ] || say ERROR header "parallel waves are not supported on a Codex host"
-  [ "$mode" != inline ] || say ERROR header "parallel waves need a subagent Execution line"
-  for label in 'Integration check' 'Worktree setup'; do
-    [ -n "$(header_line "$label")" ] || say ERROR header "a waves plan needs its **$label:** line"
-  done
-  if [ -n "$wave_check" ] && [ -z "$(tr -d ' \t' <<<"${wave_check#'**Wave check:**'}")" ]; then
-    say ERROR header "the **Wave check:** line names no command"
-  fi
-  if ! waves=$(plan_waves "$src"); then
-    say ERROR header "Parallelism waves must be '<N>' or '<A>-<B>' ranges separated by '|'"
-  else
-    expect=1 contiguous=1
-    while IFS=$'\t' read -r k a b; do
-      [ -n "$k" ] || continue
-      [ "$a" -eq "$expect" ] || contiguous=0
-      expect=$((b + 1))
-    done <<<"$waves"
-    task_count=$(grep -c . <<<"$nums" || true)
-    [ "$contiguous" -eq 1 ] && [ "$((expect - 1))" -eq "$task_count" ] \
-      || say ERROR header "Parallelism waves must be ascending, contiguous ranges covering Tasks 1-$task_count exactly once"
-    wave_of() { awk -F'\t' -v n="$1" '$2 <= n && n <= $3 { print $1 }' <<<"$waves"; }
-    scores=$(plan_scores "$src")
-    lockfiles=' package.json package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml pnpm-workspace.yaml bun.lockb bun.lock Cargo.toml Cargo.lock go.mod go.sum requirements.txt pyproject.toml poetry.lock uv.lock Pipfile Pipfile.lock Gemfile Gemfile.lock composer.json composer.lock '
-    while IFS=$'\t' read -r k a b; do
-      [ -n "$k" ] || continue
-      width=$((b - a + 1))
-      [ "$width" -le 4 ] || say WARN header "wave $k runs $width tasks; at most 3 run at once, so it runs in parts"
-      : > "$TMP/wave-paths"
-      for n in $(seq "$a" "$b"); do
-        text=$(plan_task_text "$src" "$n") || continue
-        if deps=$(plan_task_depends <<<"$text"); then
-          for dep in $deps; do
-            dw=$(wave_of "$dep")
-            if [ -z "$dw" ] || [ "$dep" -ge "$n" ]; then
-              say ERROR "Task $n" "Depends on Task $dep, which is not an earlier task"
-            elif [ "$dw" -ge "$k" ]; then
-              say ERROR "Task $n" "Depends on Task $dep in the same wave ($k); move one of them to another wave"
-            fi
-          done
-        else
-          say ERROR "Task $n" "a waves plan needs a **Depends on:** line (Task numbers or none)"
-        fi
-        [ "$width" -gt 1 ] || continue
-        risk=$(awk -F'\t' -v n="$n" '$1 == n { print $3 }' <<<"$scores")
-        [ "$risk" != 3 ] || say ERROR "Task $n" "a risk-3 task must run alone in its wave"
-        while IFS= read -r path; do
-          [ -n "$path" ] || continue
-          [[ "$lockfiles" != *" ${path##*/} "* ]] \
-            || say ERROR "Task $n" "$path is a dependency manifest or lockfile; the task must run alone in its wave"
-          printf '%s\t%s\n' "$path" "$n" >> "$TMP/wave-paths"
-        done < <(plan_task_paths <<<"$text")
-      done
-      [ "$width" -gt 1 ] || continue
-      sort -u "$TMP/wave-paths" | awk -F'\t' '
-        { owners[$1] = owners[$1] (owners[$1] == "" ? "" : ", ") "Task " $2; count[$1]++ }
-        END { for (p in count) if (count[p] > 1) print p "\t" owners[p] }
-      ' | sort | while IFS=$'\t' read -r path owners; do
-        say ERROR header "wave $k: $path is named by $owners; tasks in one wave must not share a file"
-      done
-    done <<<"$waves"
-  fi
-elif [ -n "$wave_check" ]; then
-  say WARN header "**Wave check:** runs only between the waves of a waves plan; this plan is sequential"
+# --- Parallelism line ---
+# Parallel waves were retired in 5.0.0, so every plan runs one task at a time
+# and an older plan's waves line only earns a warning.
+parallelism=$(first_label Parallelism "$unfenced_header")
+if [ -z "$parallelism" ] || [[ "$parallelism" =~ ^\*\*Parallelism:\*\*[[:space:]]+sequential([[:space:]]|$) ]]; then
+  :
+elif [[ "$parallelism" =~ ^\*\*Parallelism:\*\*[[:space:]]+waves$SEP ]]; then
+  say WARN header "parallel waves were retired in 5.0.0; this plan runs one task at a time"
+else
+  say ERROR header "Parallelism line does not match '**Parallelism:** sequential'"
 fi
 
 # --- test tier and CI header lines (reference/test-tiers.md, reference/ci-parity.md) ---
@@ -520,7 +458,7 @@ fi
 
 integration_check=$(first_label 'Integration check' "$unfenced_header")
 if [ -z "$integration_check" ]; then
-  [ "$parallelism" != sequential ] || say WARN header "no **Integration check:** line yet"
+  say WARN header "no **Integration check:** line yet"
 elif [ -z "$(header_value 'Integration check' "$integration_check")" ]; then
   say ERROR header "**Integration check:** names no command"
 fi
@@ -539,26 +477,14 @@ fi
 early_ci=$(first_label 'Early CI' "$unfenced_header")
 if [ -n "$early_ci" ]; then
   value=$(header_value 'Early CI' "$early_ci")
-  if ! [[ "$value" =~ ^after\ (wave|task)\ ([1-9][0-9]*)([[:space:]]|$) ]]; then
-    say ERROR header '**Early CI:** must be "after wave <k>" or "after task <n>", then "— consented <YYYY-MM-DD>"'
+  if ! [[ "$value" =~ ^after\ task\ ([1-9][0-9]*)([[:space:]]|$) ]]; then
+    say ERROR header '**Early CI:** must be "after task <n>", then "— consented <YYYY-MM-DD>"'
   else
-    early_kind=${BASH_REMATCH[1]} early_n=${BASH_REMATCH[2]}
+    early_n=${BASH_REMATCH[1]}
     # More than nine digits is past any plan, and would overflow the test.
-    if [ "$early_kind" = wave ]; then
-      if [ "$parallelism" = sequential ]; then
-        say ERROR header "**Early CI:** names a wave on a sequential plan"
-      elif [ "$parallelism" = waves ]; then
-        wave_count=$(grep -c . <<<"${waves:-}" || true)
-        if [ "$wave_count" -gt 0 ] && { [ "${#early_n}" -gt 9 ] || [ "$early_n" -gt "$wave_count" ]; }; then
-          say ERROR header "**Early CI:** names wave $early_n, past the last wave"
-        fi
-      fi
-    else
-      [ "$parallelism" != waves ] || say ERROR header "**Early CI:** names a task on a waves plan; use after wave <k>"
-      last_task=$(tail -n 1 <<<"$nums")
-      if [ -n "$last_task" ] && { [ "${#early_n}" -gt 9 ] || [ "$early_n" -gt "$last_task" ]; }; then
-        say ERROR header "**Early CI:** names Task $early_n, past the last task"
-      fi
+    last_task=$(tail -n 1 <<<"$nums")
+    if [ -n "$last_task" ] && { [ "${#early_n}" -gt 9 ] || [ "$early_n" -gt "$last_task" ]; }; then
+      say ERROR header "**Early CI:** names Task $early_n, past the last task"
     fi
     [[ "$value" =~ ${SEP}consented\ [0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
       || say ERROR header '**Early CI:** lacks "— consented <YYYY-MM-DD>"'
@@ -596,9 +522,6 @@ while IFS=$'\t' read -r m heading; do
   fi
 done <<<"$step1_lines"
 if [ -n "$step1_covered" ]; then
-  step1_waves="" step1_waves_ok=0
-  if [ "$parallelism" = waves ] && step1_waves=$(plan_waves "$src"); then step1_waves_ok=1; fi
-  step1_wave() { awk -F'\t' -v n="$1" '$2 <= n && n <= $3 { print $1; exit }' <<<"$step1_waves"; }
   while read -r m n; do
     [ -n "$m" ] || continue
     if [[ $'\n'"$nums"$'\n' != *$'\n'"$n"$'\n'* ]]; then
@@ -609,15 +532,7 @@ if [ -n "$step1_covered" ]; then
       write|extend) ;;
       *) say ERROR "Task $m" "Covered by Task $n — Task $n has no test step" ;;
     esac
-    if [ "$parallelism" != waves ]; then
-      [ "$n" -lt "$m" ] || say ERROR "Task $m" "Covered by Task $n — Task $n does not run before Task $m"
-    elif [ "$step1_waves_ok" -eq 1 ]; then
-      # A task outside every wave is the waves section's finding, not this one.
-      wn=$(step1_wave "$n") wm=$(step1_wave "$m")
-      if [ -n "$wn" ] && [ -n "$wm" ] && [ "$wn" -ge "$wm" ]; then
-        say ERROR "Task $m" "Covered by Task $n — Task $n does not run before Task $m"
-      fi
-    fi
+    [ "$n" -lt "$m" ] || say ERROR "Task $m" "Covered by Task $n — Task $n does not run before Task $m"
   done <<<"$step1_covered"
 fi
 

@@ -152,15 +152,10 @@ The ladder for anything you would have asked:
   task whose `Consumes:` line cites a Contracts entry the deferred task's
   `Produces:` line cites:
 
-      Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review | ; unmerged task ref <ref>]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>
+      Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>
 
   Add one deferred register row per such task. Recovery, `scripts/next-step`
-  and the final review count the line as complete, so the run moves on. In a
-  wave, a deferred task's branch is not merged, so its commits lie outside the
-  final review's range: its line takes `unmerged task ref <ref>`, the ref
-  `scripts/wave ref PLAN_FILE <N>` prints, in place of the partial-commits
-  clause, and its register row's note names the same ref. Only outside a wave
-  are partial commits kept for the final review.
+  and the final review count the line as complete, so the run moves on.
 - **A spec or planning choice:** take the option listed first, record
   `scripts/auto-run ruling add "unconfirmed: <choice> — Fable gave no ruling"`,
   and add a deferred register row naming the choice.
@@ -180,7 +175,7 @@ The ladder for anything you would have asked:
 A batch runs at once for a blocked task and for a QA `acceptance-ambiguous`
 item, and otherwise whenever the list is
 not empty at a boundary: after the spec, after the plan is reviewed, after each
-wave (each task in sequential mode) and before the final review. Tasks that do
+task and before the final review. Tasks that do
 not depend on a deferred task keep running.
 
 **Never performed in an auto run,** whatever a ruling says: an irreversible or
@@ -198,21 +193,17 @@ While a run is bound to this session, every budget line but
     budget (auto): 312k of 465k (67%) — ok — source: record
     budget (auto): 471k of 465k (101%) — compact — source: record
     budget (auto, high): 724k of 720k (101%) — compact — source: record
-    budget (auto, wave of 3): 190k of 185k (103%) — compact — source: record
 
 - `ok`, or `unknown`: carry on; on `unknown`, record that with
   `scripts/auto-run ruling add`.
 - `compact` (`scripts/context-size` exit 6): finish the task in flight through
-  its `Task N: complete` line (a wave through its merge), run
+  its `Task N: complete` line, run
   `scripts/auto-run task-complete`, then end the turn as Ending a turn says.
-  In the wave loop, lower the width while `--wave` says `compact`, as on
-  `handoff`; at width 1, compact.
 - `handoff` (exit 5): the last compaction left too much behind. Finish the
   task in flight, then follow Clears.
 
 The rules: compact at the task budget in the normal regime, or at 90% of the
-compaction window in the high one, less 140k for each task of a wave beyond
-the first. After a compaction of size P: P at 85% of the window or more hands
+compaction window in the high one. After a compaction of size P: P at 85% of the window or more hands
 off; P at 85% of the task budget or more switches to the high regime;
 anything smaller returns to the normal one. In the `plan`, `final` and
 `finish` phases P never hands off, and once a compaction has run in `final` or

@@ -39,11 +39,9 @@ names "the ledger grammar holds the group review line" "$SDD_LEDGER" 'Group <lis
 # --- the fix loop holds two rounds (faster-plans §3) ---
 names "subagent mode: the fix-round grammar" "$SDD_LEDGER" 'Task <N>: fix round R/2 (X addressed, Y open — <one-liners>; commits a..b[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new>)'
 
-# --- the wave check cadence (faster-plans §4) ---
+# --- the Task check and Integration check header lines (test tiers) ---
 WPR="$P/skills/writing-plans/references/task-check-line.md"
 TIERS="$P/reference/test-tiers.md"
-
-# --- the Task check and Integration check header lines (test tiers) ---
 check "task check: the reference exists" "$([ -s "$WPR" ] && echo yes || echo no)" "yes"
 names "test-tiers: the reference exists" "$TIERS" '# Test tiers'
 

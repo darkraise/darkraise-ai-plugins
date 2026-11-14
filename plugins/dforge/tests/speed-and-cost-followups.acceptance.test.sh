@@ -295,15 +295,6 @@ if selected A9; then
   check "A9: rereview --base on a sequential group member exits 2" "$rc" "2"
   check "A9: the step file's base is unchanged" "$(jq -r '.base' "$WS/task-2-step.json" | tr -d '\r') $(cmp -s "$TMP/step2.before" "$WS/task-2-step.json" && echo same || echo changed)" "$base_before same"
 
-  PREV=$B0
-  ts start docs/plan.md 3 --wave 1
-  echo w3 >> "$REPO/app.txt"; commit_all "work 3"; g branch t3ref
-  ts review docs/plan.md 3 --head t3ref
-  printf -- '- app.txt: wrong value\n\nFixed.\n' > "$WS/task-3-fix-1.md"
-  echo fix3 >> "$REPO/app.txt"; commit_all "fix 3"; g branch -f t3ref HEAD
-  ts rereview docs/plan.md 3 --base "$PREV"
-  check "A9: on a wave task with a head ref --base is accepted and recorded" "$rc $(jq -r '.base' "$WS/task-3-step.json" | tr -d '\r')" "0 $PREV"
-
 fi
 
 if selected A10; then

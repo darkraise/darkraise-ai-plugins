@@ -1,9 +1,8 @@
-**Read the settings first.** Two workflow settings shape a plan,
-`executionMode` and `executionStrategy`. They arrive in the session-start line
+**Read the settings first.** The `executionMode` workflow setting shapes a
+plan. It arrives in the session-start line
 `dforge settings in force (…)`. With no such line in context,
-run `scripts/dforge-config workflow` before you choose the Execution line
-or ask the strategy question; it prints nothing when both are at their
-defaults. A key the line does not name is at its default, and your human
+run `scripts/dforge-config workflow` before you choose the Execution line;
+it prints nothing when the workflow settings are at their defaults. A key the line does not name is at its default, and your human
 partner's own instructions outrank a setting.
 
 **Choosing the Execution line.** Write `inline` on every plan. The session
@@ -24,8 +23,5 @@ loop.
 - Your human partner may override the line; `plan-lint` checks its grammar.
 - The `executionMode` setting fixes the
   line when it is `inline` or `subagent`.
-  An inline plan is sequential, whatever the spec's
-  `**Execution strategy:**` line or the `executionStrategy` setting says,
-  because an inline session implements its own tasks one after another: write
-  `**Parallelism:** sequential — inline execution`
-  and group no waves.
+  Every plan is sequential, because the session implements its own tasks
+  one after another: write `**Parallelism:** sequential — inline execution`.

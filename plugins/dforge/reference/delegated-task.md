@@ -40,7 +40,7 @@ turns on multi-step work. Use a mid-tier model as the floor for reviewers.
 
 **Open the task with one call:**
 `bash <plugin-root>/scripts/task-step start PLAN_FILE N` (a batch passes every
-task number, `N M …`; a wave task adds `--wave K`; every start adds
+task number, `N M …`; every start adds
 `--suite '<suite command>'`, below, unless the Suite command bullet says
 start passes none). It runs `task-brief`,
 records BASE in `<workspace>/task-<N>-step.json`, writes the
@@ -64,8 +64,8 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
 - **Suite command.** Read the plan header's `**Task check:**` line first,
   then resolve the plan's suite command once:
   - A plan with no `**Task check:**` line runs as it does today. Pass the
-    suite command to every `task-step start` as `--suite '<suite command>'`,
-    a wave task's too. It is the command on the plan header's
+    suite command to every `task-step start` as `--suite '<suite command>'`.
+    It is the command on the plan header's
     `**Integration check:**` line; else the test command
     `<docs>/gates.md` declares (the `Command` of the gate that runs the
     project's tests); else one you decide from the project's manifest
@@ -78,7 +78,7 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
   - A command task check is the suite command: every `task-step start`
     passes it, never the Integration check. The rest of the loop is
     unchanged.
-  - With a task check of `none` on a sequential plan, `start` passes no
+  - With a task check of `none`, `start` passes no
     `--suite`. The integration check is the command the first sub-bullet
     resolves. The schedule is by task number: the integration check runs on
     every task whose number is a multiple of 3 and on the last task. The
@@ -105,10 +105,6 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
     bounded at 3600 seconds (`TASK_STEP_BASE_TIMEOUT`). A group runs the
     integration check when it holds a scheduled task. A fix round runs a
     suite only when the review of its task did.
-  - With a task check of `none` on a waves plan, no task gets a per-task
-    suite, because the merged wave check is the suite of the wave's grouped
-    tasks (§2). A command task check on a waves plan still runs per task in
-    its worktree, as it does today.
 - **Task brief:** `task-step start` extracted it to
   `<workspace>/task-<N>-brief.md` (see using-dforge §Session Budget). The
   brief stays the single source of requirements: the dispatch file tells the
@@ -153,16 +149,13 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
   your whole context.
 - Record the implementer's agent identity from the dispatch result — fix
   round 1 may resume it. `start` already wrote
-  `Task <N>: implementer <agent> (assigned; base <sha7>)`, ending
-  `; wave <k>)` for a wave task. When what you dispatch differs from that
+  `Task <N>: implementer <agent> (assigned; base <sha7>)`. When what you dispatch differs from that
   line, or needs a note it cannot know — an agent scored at dispatch, a
   substitute for an unavailable model, a reserve tier, a `#### Part` — append
   a new assigned line for it with the note (`; scored at dispatch`,
   `; reserve tier`, `; part <X>`), as an escalation does: the last assigned
   line decides.
-- Never dispatch multiple implementation subagents in parallel (conflicts),
-  except the tasks of one parallel wave, each in its own worktree
-  ([parallel-waves.md](parallel-waves.md)).
+- Never dispatch multiple implementation subagents in parallel (conflicts).
 
 **Dispatch problems are rulings.** Each is said aloud and logged as a
 `Ruling:` line; none falls back silently and none stops the run:
@@ -179,9 +172,7 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
 Implementer subagents report one of four statuses, or none. Handle each appropriately:
 
 **DONE:** In subagent mode, hold the task first:
-`bash <plugin-root>/scripts/task-step hold PLAN_FILE N` (a wave task adds
-`--head <task ref> --cwd <worktree>`, so the group review's tracked-file
-check reads the task's worktree, where no sibling's merge moves HEAD). Exit 0 holds the task for its group review (§3a) and
+`bash <plugin-root>/scripts/task-step hold PLAN_FILE N`. Exit 0 holds the task for its group review (§3a) and
 writes its `awaiting group review` line; exit 4 means the task is reviewed alone: review it (step 3).
 On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
 Inline mode never holds a task: its session review loop reviews each task
@@ -194,8 +185,7 @@ diff and records `t0`, the time the cache rule in step 4 needs.
 every task inline mode delegates, a batch) starts its suite as soon as its
 DONE or DONE_WITH_CONCERNS report is in. Run
 `bash <plugin-root>/scripts/suite-run -- bash -c '<suite command>'` as a
-background Bash command from the checkout's top level (a wave task: from its
-`--cwd` worktree), at the task's head, and in the same turn run
+background Bash command from the checkout's top level, at the task's head, and in the same turn run
 `task-step review` and dispatch its seat (§3). `<suite command>` is the one
 `task-step start --suite` recorded, character for character: `verdict` finds
 the run by the quoted form `suite-run` records for that command, so a command
@@ -206,8 +196,7 @@ evidence: a fix round appends its own. End the turn when only waiting remains,
 and run `task-step verdict` only once both the seat's report and the suite's
 completion notification are in. A suite still running at a handoff shows in
 `scripts/in-flight`, and the next session starts it again. A held task starts
-no suite now: its group's suite starts with the group review (§3a), and a
-wave's grouped tasks get none, because the wave's merged check is their suite.
+no suite now: its group's suite starts with the group review (§3a).
 On a `Host: codex` plan `task-step` does not run: *The steps by hand* §2 starts
 the suite.
 
@@ -271,8 +260,7 @@ needed.
 
 - **One call does the plumbing:**
   `bash <plugin-root>/scripts/task-step review PLAN_FILE N` (all of a batch's
-  task numbers for a batch; a wave task adds `--head <task ref>` and
-  `--cwd <worktree>`, see [parallel-waves.md](parallel-waves.md)). It packages the diff from the base
+  task numbers for a batch). It packages the diff from the base
   `start` recorded to HEAD — never `HEAD~1`, which silently truncates
   multi-commit tasks — and records the review head and `t0`. It runs
   each reviewer family's gate (`scripts/codex-gate`, `scripts/agy-gate`),
@@ -525,8 +513,7 @@ A task held in §2 is reviewed with other held tasks in one judge dispatch. In
 sequential mode held tasks accumulate, and the group review runs
 when 4 tasks are held, before you dispatch a task `review-route` reviews alone, and after the plan's last task.
 Run `review-route PLAN_FILE --task <next>` to read the next task's tier before
-dispatching it. A parallel wave reviews its grouped tasks as
-[parallel-waves.md](parallel-waves.md) §3 says. Once the group review is
+dispatching it. Once the group review is
 triggered, no new task is dispatched until the group is clean, and
 fixes inside a group run one task at a time.
 On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
@@ -541,7 +528,7 @@ On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
   `seat:` line's judge as §3 says for a judge, with the prompt "your complete
   instructions are in `<prompt file>`: read it first and follow it". In
   sequential mode start the group's suite (§2) once, in that same turn, at the
-  last held member's head; a wave's group gets none. Under a `none` task
+  last held member's head. Under a `none` task
   check, start the group suite only when the group holds a scheduled task,
   and pass `--suite` and `--suite-base` to `review --group`. When the
   group's seat returns and that suite's notification is in, run
@@ -564,7 +551,7 @@ On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
   member's fix. A group runs at most two fix rounds. After each round append
   the group line (subagent-driven-development §The Ledger): one clause per
   member, and in its `commits` clause one `<a7>..<b7> (Task <N>)` range per
-  member fixed in that round, in sequential and wave mode alike. Findings
+  member fixed in that round. Findings
   still open after round 2 go to the breaker as §4 says. Members write no
   `Task <N>: fix round` lines: the `Group` line is their round record. A group
   with a round line is never reviewed again: `review --group` refuses its
@@ -765,13 +752,12 @@ parked or carried with a ruling at the cap.
 
 ## Early CI
 
-An `**Early CI:**` line in the plan header names one point, `after task <n>`
-or `after wave <k>`, and the date your human partner consented to an early
+An `**Early CI:**` line in the plan header names one point, `after task <n>`,
+and the date your human partner consented to an early
 push. With no `**Early CI:**` line in the plan header, nothing in this loop
 pushes the branch or starts CI before finishing. Push only when the line
-carries `— consented <YYYY-MM-DD>`. For `after task <n>`, run these steps
-right after the `Task <n>: complete` line. For `after wave <k>`, run them
-right after the `Wave <k>: integrated` or `Wave <k>: merged` line.
+carries `— consented <YYYY-MM-DD>`. Run these steps right after the
+`Task <n>: complete` line.
 
 1. **Push.** Check the branch first: when HEAD is detached, or `<branch>` is
    `main`, `master`, the remote's default branch

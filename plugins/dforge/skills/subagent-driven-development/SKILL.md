@@ -28,9 +28,6 @@ back. Before anything else:
    says); an assigned line with commits after its base
    goes to review;
    `awaiting group review` is reviewed by the next group dispatch, never re-dispatched.
-   A `Wave <k>: started` line with no later `integrated` or `merged` line
-   is a parallel wave in flight: follow
-   [parallel-waves.md](../../reference/parallel-waves.md) §Recovery.
 3. When every task has its `complete` line, run `scripts/context-size --final`
    and go on to Final Review or finishing whatever it prints: the final phase
    never hands off. In an auto run it also moves the run to the final phase,
@@ -67,17 +64,12 @@ What changes here:
   deferred, and every task that depends on it (its `**Depends on:**` line
   names the task; in a plan without those lines, its `Consumes:` line cites
   a Contracts entry the deferred task's `Produces:` line cites): write
-  `Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review | ; unmerged task ref <ref>]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>`
-  and a deferred register row for each. In a wave, a deferred task's branch is
-  not merged, so its commits lie outside the final review's range: its line
-  takes `unmerged task ref <ref>`, the ref `scripts/wave ref PLAN_FILE <N>`
-  prints, in place of the partial-commits clause, and its register row's note
-  names the same ref. Other tasks keep running.
+  `Task <N>: complete (deferred by the auto run) — done: nothing; verified: not run; remaining: <the item>[; partial commits <a7>..<b7>, kept for the final review]; discovered: none; assumptions: none; Ruling: <why> — <cost if wrong>`
+  and a deferred register row for each. Other tasks keep running.
 - **Each task:** right after its `Task N: complete` line, run
-  `scripts/auto-run task-complete`. After each wave, or each task in
-  sequential mode, run the Fable batch when `scripts/auto-run decision list`
-  prints anything. When that line leaves every task with its `complete` line
-  (in subagent mode, after the last wave's merge), run
+  `scripts/auto-run task-complete`. After each task, run the Fable batch when
+  `scripts/auto-run decision list` prints anything. When that line leaves
+  every task with its `complete` line, run
   `scripts/auto-run phase final` next, before any budget check and before the
   turn ends, so a compaction from there on never hands off. On its exit 4,
   run `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`) and end as auto-run.md §Stopping says.
@@ -85,7 +77,7 @@ What changes here:
   on the run base, off its branch or in the primary checkout, or a carried path was committed):
   end as auto-run.md §Stopping says.
 - **The budget line** reads `budget (auto…)`. On `compact` (exit 6), finish
-  the task in flight (a wave through its merge), then end the turn with
+  the task in flight, then end the turn with
   `Auto run: compacting` as its last line. On `handoff`, finish the task in
   flight, then invoke dforge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
   The tail rule and the final-phase limit do not apply;
@@ -253,14 +245,8 @@ the complete line. Its contract names what the loop needs from you.
 DONE and reviewed with other held tasks in one judge dispatch, per
 [delegated-task.md](../../reference/delegated-task.md) §3a.
 
-**Parallel waves.** When the header says `**Parallelism:** waves — …`, run
-every wave of more than one task through
-[parallel-waves.md](../../reference/parallel-waves.md): its tasks run at once,
-each in its own worktree, each through the same loop above, and are merged and
-checked together before the next wave starts.
-A wave of one task runs in the checkout, proves its base first and closes by §5: run [parallel-waves.md](../../reference/parallel-waves.md) §1 step 2, then the loop above, then §5 (`wave check-due`, then its `integrated` or `merged` line) before the next wave starts.
-Every task of a plan without that line runs here exactly as above. Batching
-never crosses a wave boundary.
+An older plan's `**Parallelism:** waves` line is ignored: its tasks run in
+index order through the loop above.
 
 **Early CI.** When the plan header has an `**Early CI:**` line, run
 [delegated-task.md](../../reference/delegated-task.md) §Early CI at the point

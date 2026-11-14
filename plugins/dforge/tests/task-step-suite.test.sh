@@ -257,7 +257,7 @@ check "verdict, tracked file changed and no row: exit 6" "$rc" "6"
 # --- verdict --cwd reads the state of that checkout ---
 git worktree add -q --detach "$TMP/wt" HEAD
 WT=$TMP/wt
-git -C "$WT" -c user.name=Darkraise -c user.email=dark@example.invalid commit -q --allow-empty -m "wave work"
+git -C "$WT" -c user.name=Darkraise -c user.email=dark@example.invalid commit -q --allow-empty -m "worktree work"
 WT_SHA=$(git -C "$WT" rev-parse HEAD | tr -d '\r')
 set_review 2 "$WT_SHA" "$WT"
 report "$WS/task-2-review-report.md"
@@ -279,10 +279,7 @@ jq -n --arg h "$G_HEAD" --arg c "$REPO" '{tasks: [1, 2], reviewHead: $h, t0: 0, 
 } > "$WS/group-1,2-review-report.md"
 step verdict docs/plan.md 1 2 --group
 check "verdict --group: the last member's suite is checked" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: pass (clean)"
-jq '.wave = 1' "$WS/task-2-step.json" > "$TMP/w.json" && mv "$TMP/w.json" "$WS/task-2-step.json"
 rm -f .dforge/suites.tsv
-step verdict docs/plan.md 1 2 --group
-check "verdict --group: a wave group has no per-group suite" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: none recorded"
 
 git worktree remove --force "$WT"
 

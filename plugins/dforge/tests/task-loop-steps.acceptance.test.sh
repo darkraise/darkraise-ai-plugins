@@ -326,11 +326,6 @@ a4() {
   newp=$(comm -13 <(printf '%s\n' "$pre") <(ls "$WS" | sort) | grep -i 'prompt' | head -n 1)
   diff=$(prompt_path "$WS/$newp")
   has "A4: without --base the package starts at the recorded review head" "$(cat "$diff")" "other.txt"
-
-  # start --wave K ends the assigned line.
-  new_repo a4w
-  ts start docs/plan.md 2 --wave 3
-  matches "A4: start --wave 3 ends the assigned line" "$(tail -n 1 "$WS/progress.md")" '^Task 2: implementer impl-opus-high \(assigned; base [0-9a-f]{7}; wave 3\)$'
 }
 
 # --- A5, A6 -----------------------------------------------------------------

@@ -127,11 +127,6 @@ export default {
     label: 'Lens minors', title: 'Lens Minor findings from',
     description: 'The plan size, in tasks, from which final-review lenses also report Minor findings. A smaller plan gets Critical and Important lens findings only. 0 always asks for Minor findings. DFORGE_LENS_MINOR_FROM overrides it.',
   },
-  executionStrategy: {
-    type: 'enum', values: ['ask', 'sequential', 'parallel'], default: 'sequential', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
-    label: 'Strategy', title: 'Execution strategy',
-    description: 'How a plan executes. sequential, the default, runs one task at a time. parallel and ask take effect only with a subagent Execution line (executionMode=subagent, deprecated); an inline plan is always sequential.',
-  },
   executionMode: {
     type: 'enum', values: ['auto', 'inline', 'subagent'], default: 'auto', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
     label: 'Execution mode', title: 'Execution mode',

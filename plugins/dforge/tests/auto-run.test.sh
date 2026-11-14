@@ -449,10 +449,8 @@ check "normal: ok leaves nothing pending" "$(field pending)" "null"
 out=$(verdict --tokens 465000); status=$?
 check "normal: at the budget, compact" "$status:$out" "6:compact 465000 normal"
 check "compact is pending" "$(field pending)" "compact"
-out=$(verdict --tokens 185000 --wave 3); status=$?
-check "a wave of three reserves two tasks" "$status:$out" "6:compact 185000 normal"
-out=$(verdict --tokens 184999 --wave 3)
-check "a narrower probe that fits cancels the compaction" "$out:$(field pending)" "ok 185000 normal:null"
+out=$(verdict --tokens 464999)
+check "an ok after a compact cancels the compaction" "$out:$(field pending)" "ok 465000 normal:null"
 ar --session s-1 compacted
 out=$(verdict --tokens 395249)
 check "after a compaction under 85% of the budget: normal" "$out:$(field pending)" "ok 465000 normal:null"

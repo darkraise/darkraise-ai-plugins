@@ -4,11 +4,6 @@ When `scripts/auto-run status` exits 0, this plan is written unattended
 ([auto-run.md](../../../reference/auto-run.md)). Run `scripts/auto-run phase plan`
 first. Then nothing in this skill waits on your human partner:
 
-- **The execution strategy:** take the spec's `**Execution strategy:**` line;
-  with none, write `sequential` unless the Execution line is `subagent`, where
-  the `executionStrategy` setting decides as Parallel waves says (`sequential`
-  when it is `ask`). In place, write `sequential` whatever the spec says when `scripts/auto-run status` prints `isolation in-place`:
-  a wave's checkout must be clean, and the carried paths never are.
 - **An approach or planning choice** you would ask about goes to
   `dforge:judge-opus` first, then the ladder in auto-run.md §Rulings.
   dforge:selecting-approaches runs as usual otherwise.

@@ -119,7 +119,6 @@ export const windowsSeconds = {
   'ui-proof.test.sh': 195,
   'ui-ux-skill.acceptance.test.sh': 362,
   'ui-ux-skill.test.sh': 10,
-  'wave.test.sh': 75,
   'working-directory.test.sh': 82,
   'worktree-instructions.test.sh': 10,
   'wording-pin-deletion.acceptance.test.sh': 20,

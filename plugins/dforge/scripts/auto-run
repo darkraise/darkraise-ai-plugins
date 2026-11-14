@@ -21,7 +21,7 @@ usage: auto-run [--session ID] start --spec P [--register R] [--isolation worktr
        auto-run [--session ID] decision list | decision clear [--id ID]
        auto-run [--session ID] ruling add TEXT | ruling list
        auto-run [--session ID] stop [--reason TEXT]
-       auto-run [--session ID] verdict --tokens T --budget B --window W [--wave N]
+       auto-run [--session ID] verdict --tokens T --budget B --window W
        auto-run [--session ID] after-compact
 pending prints compact, after-compact, handoff, clear, resume, switch or none.
 clear --phase is for a phase transition (the switch, finishing, or a plan that
@@ -149,22 +149,20 @@ case $cmd in
     esac
     ;;
   verdict)
-    tokens="" budget="" window="" n=1
+    tokens="" budget="" window=""
     while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || usage
       case $1 in
         --tokens) tokens=$2 ;;
         --budget) budget=$2 ;;
         --window) window=$2 ;;
-        --wave) n=$2 ;;
         *) usage ;;
       esac
       shift 2
     done
-    for v in "$tokens" "$budget" "$window" "$n"; do [[ $v =~ ^[0-9]+$ ]] || usage; done
-    [ "$n" -ge 1 ] || usage
+    for v in "$tokens" "$budget" "$window"; do [[ $v =~ ^[0-9]+$ ]] || usage; done
     bound
-    out=$(ar_verdict "$tokens" "$budget" "$window" "$n") || exit $?
+    out=$(ar_verdict "$tokens" "$budget" "$window") || exit $?
     echo "$out"
     case ${out%% *} in compact) exit 6 ;; handoff) exit 5 ;; esac
     ;;
