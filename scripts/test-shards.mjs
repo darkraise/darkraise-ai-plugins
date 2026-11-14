@@ -63,7 +63,6 @@ export const windowsSeconds = {
   'review-record.test.sh': 20,
   'review-route.test.sh': 458,
   'reviewer-only-externals.acceptance.test.sh': 200,
-  'reviewer-only.acceptance.test.sh': 5,
   'roadmap.test.sh': 170,
   'roots.test.sh': 84,
   'sdd-references.test.sh': 10,
