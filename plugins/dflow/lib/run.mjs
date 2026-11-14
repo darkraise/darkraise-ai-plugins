@@ -20,6 +20,14 @@ function killTree(child) {
   }
 }
 
+let bashFound;
+function findBash(env) {
+  if (bashFound === undefined) {
+    bashFound = (env.PATH || '').split(path.delimiter).some(dir => dir && fs.existsSync(path.join(dir, 'bash')));
+  }
+  return bashFound;
+}
+
 // Runs one shell command with a timeout, writing everything it prints to
 // logFile and keeping the end of it in memory for the failure report.
 export function runCommand(command, { cwd, timeoutSeconds, logFile, env = process.env }) {
@@ -30,8 +38,11 @@ export function runCommand(command, { cwd, timeoutSeconds, logFile, env = proces
   let kept = Buffer.alloc(0);
   let timedOut = false;
   return new Promise(resolve => {
-    const shell = process.platform === 'win32' ? (env.DFLOW_SHELL || 'bash') : (env.DFLOW_SHELL || '/bin/sh');
-    const child = spawn(shell, ['-c', command], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true });
+    const shell = env.DFLOW_SHELL || (process.platform === 'win32' || findBash(env) ? 'bash' : '/bin/sh');
+    // Without pipefail `npm test | tail -20` reports tail's status, so a failing
+    // suite would open the task gate.
+    const args = /(^|[\\/])bash(\.exe)?$/i.test(shell) ? ['-o', 'pipefail', '-c', command] : ['-c', command];
+    const child = spawn(shell, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true });
     const collect = chunk => {
       log.write(chunk);
       kept = Buffer.concat([kept, chunk]);

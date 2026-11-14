@@ -33,3 +33,11 @@ test('a named subset runs but is not recorded, and an unknown name is refused', 
   assert.equal(JSON.parse(dflow(root, ['status', '--json']).stdout).gates, null);
   assert.match(dflow(root, ['gate', 'build']).stderr, /no gate named build; configured: lint, test/);
 });
+
+test('a piped gate fails when an earlier stage fails', t => {
+  const root = makeProject(t, { config: { gates: [{ name: 'test', cmd: 'node suite.mjs 2>&1 | tail -1' }] } });
+  write(root, 'suite.mjs', 'console.log("1 failed"); process.exit(1)\n');
+  const failed = dflow(root, ['gate']);
+  assert.equal(failed.status, 1, failed.stdout);
+  assert.match(failed.stdout, /^FAIL  test: `node suite\.mjs 2>&1 \| tail -1` exited 1/m);
+});
