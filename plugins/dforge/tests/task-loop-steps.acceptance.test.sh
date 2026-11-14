@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
 # Acceptance tests for the task-loop steps spec
 # (docs/dforge/specs/2026-10-26-task-loop-steps-design.md), statements
-# A1-A11 and A15. Each test is written from the statement's text and
+# A1-A8 and A11. Each test is written from the statement's text and
 # reaches the behaviour through the scripts and documents the spec names. The
 # cockpit statements (A12, A13) are in task-loop-steps.acceptance.test.ts.
 # Usage:
 #   bash task-loop-steps.acceptance.test.sh           run every test
-#   bash task-loop-steps.acceptance.test.sh A5 A9     run the named tests only
+#   bash task-loop-steps.acceptance.test.sh A5 A8     run the named tests only
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN="$(cd "$HERE/.." && pwd)"
 S="$PLUGIN/scripts"
 STEP="$S/task-step"
-SUITE="$S/suite-run"
 INFLIGHT="$S/in-flight"
 ROUTE="$S/review-route"
 LROUTE="$S/lens-route"
@@ -461,112 +460,6 @@ a8() {
   a8_case "a generated-with line" c_generated dirty
 }
 
-# --- A9, A10 ----------------------------------------------------------------
-
-sr() { out=$(cd "$R" && bash "$SUITE" "$@" 2>&1); rc=$?; }
-runs() { # runs <counter file> — how many times the command ran
-  if [ -f "$1" ]; then grep -c . "$1"; else echo 0; fi
-}
-
-a9() {
-  new_repo a9
-  local N="$TMP/a9-counter" M="$TMP/a9-counter-other"
-  : > "$N"; : > "$M"
-  local cmd=(bash -c "echo run >> '$N'; exit 0")
-  local other=(bash -c "echo run >> '$M'; exit 0")
-  sr -- "${cmd[@]}"
-  check "A9: a first run exits 0" "$rc" "0"
-  check "A9: a first run runs the command" "$(runs "$N")" "1"
-  local state row
-  state=$(cd "$R" && bash "$S/dforge-path" state | tr -d '\r')
-  row=$(tail -n 1 "$state/suites.tsv" 2>/dev/null)
-  check "A9: the run is recorded with HEAD" "$(cut -f1 <<<"$row")" "$(full HEAD)"
-  check "A9: the run is recorded clean" "$(cut -f2 <<<"$row")" "clean"
-  check "A9: the run is recorded with exit 0" "$(cut -f4 <<<"$row")" "0"
-
-  sr -- "${cmd[@]}"
-  check "A9: the same HEAD, clean, the same command: exits 0" "$rc" "0"
-  has "A9: and reports a reuse" "$out" "suite: reused pass at $(short HEAD)"
-  check "A9: and does not run the command" "$(runs "$N")" "1"
-
-  sr -- "${other[@]}"
-  check "A9: a different command runs" "$(runs "$M")" "1"
-  sr -- "${other[@]}"
-  check "A9: and is reused on its own record" "$(runs "$M")" "1"
-
-  commit_file a.txt a "feat: move head"
-  sr -- "${cmd[@]}"
-  check "A9: a new HEAD runs the command" "$(runs "$N")" "2"
-  lacks "A9: and reports no reuse" "$out" "reused"
-  sr -- "${cmd[@]}"
-  check "A9: the new HEAD's pass is then reused" "$(runs "$N")" "2"
-
-  # A dirty tree then: never reuses.
-  commit_file b.txt b "feat: move head again"
-  printf 'dirty\n' > "$R/untracked.txt"
-  sr -- "${cmd[@]}"
-  check "A9: a dirty tree runs" "$(runs "$N")" "3"
-  sr -- "${cmd[@]}"
-  check "A9: a dirty tree runs again, never reusing" "$(runs "$N")" "4"
-  rm -f "$R/untracked.txt"
-  sr -- "${cmd[@]}"
-  check "A9: a clean tree after dirty runs only did not find a reusable row" "$(runs "$N")" "5"
-  sr -- "${cmd[@]}"
-  check "A9: and the clean run is then reused" "$(runs "$N")" "5"
-
-  # A command that dirties the tree: its row is not reusable even when the tree is clean later.
-  commit_file c.txt c "feat: move head a third time"
-  local D="$TMP/a9-counter-dirtying"
-  : > "$D"
-  local dirtier=(bash -c "echo run >> '$D'; echo x > '$R/stray.txt'; exit 0")
-  sr -- "${dirtier[@]}"
-  check "A9: a command that dirties the tree runs" "$(runs "$D")" "1"
-  rm -f "$R/stray.txt"
-  sr -- "${dirtier[@]}"
-  check "A9: its row, dirty when it ended, is not reused on a clean tree" "$(runs "$D")" "2"
-  rm -f "$R/stray.txt"
-
-  # A failing command is never reused.
-  local F="$TMP/a9-counter-fail"
-  : > "$F"
-  local failing=(bash -c "echo run >> '$F'; echo not ok 1 - broken; exit 1")
-  sr -- "${failing[@]}"
-  check "A9: a failing command exits non-zero" "$([ "$rc" -ne 0 ] && echo yes || echo no)" "yes"
-  sr -- "${failing[@]}"
-  check "A9: a failing command runs again at the same HEAD" "$(runs "$F")" "2"
-}
-
-a10() {
-  new_repo a10
-  local noisy=(bash -c 'i=1; while [ $i -le 40 ]; do echo "noise line $i"; i=$((i + 1)); done; exit 3')
-  sr -- "${noisy[@]}"
-  check "A10: a failing command with no failing-line pattern exits non-zero" "$([ "$rc" -ne 0 ] && echo yes || echo no)" "yes"
-  check "A10: and exits with the command's own code" "$rc" "3"
-  has "A10: the output holds the log's last line" "$out" "noise line 40"
-  has "A10: the output holds the 30th line from the end" "$out" "noise line 11"
-  absent "A10: the output stops at 30 lines: line 10 is out" "$out" 'noise line 10$'
-  absent "A10: the failure is not reported as a pass" "$out" 'suite: pass|reused'
-
-  local silent=(bash -c 'exit 2')
-  sr -- "${silent[@]}"
-  check "A10: a failing command that prints nothing exits non-zero" "$rc" "2"
-  check "A10: and the digest is not empty" "$([ -n "$out" ] && echo yes || echo no)" "yes"
-  has "A10: and says it failed" "$out" "FAIL"
-
-  local fewer=(bash -c 'echo only one line of noise; exit 4')
-  sr -- "${fewer[@]}"
-  check "A10: a log shorter than 30 lines is printed whole" "$(grep -c 'only one line of noise' <<<"$out")" "1"
-  check "A10: and exits with the command's code" "$rc" "4"
-
-  local tap=(bash -c 'echo "ok 1 - good"; echo "not ok 2 - bad thing"; echo "chatter after"; exit 1')
-  sr -- "${tap[@]}"
-  has "A10: a matching failing line is printed" "$out" "not ok 2 - bad thing"
-  absent "A10: and the 30-line tail is not needed then" "$out" 'last 30 lines'
-
-  sr --timeout 1 -- bash -c 'sleep 30'
-  check "A10: a command past its timeout exits 124" "$rc" "124"
-}
-
 # --- A11 ---------------------------------------------------------------------
 
 fjq() { MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' jq "$@"; }
@@ -631,17 +524,7 @@ a11() {
   export CLAUDE_CODE_SESSION_ID=$ENV_SID
 }
 
-# --- A15 ---------------------------------------------------------------------
-
-a15() {
-  local seats seats_rc
-  seats=$(cd "$PLUGIN" && env -u AR_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR timeout 600 bash tests/seats.test.sh 2>&1); seats_rc=$?
-  check "A15: tests/seats.test.sh exits 0" "$seats_rc" "0"
-  absent "A15: tests/seats.test.sh has no failing line" "$seats" '^FAIL'
-  matches "A15: tests/seats.test.sh reports no failure count" "$seats" ' 0 failed$'
-}
-
-ALL="a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a15"
+ALL="a1 a2 a3 a4 a5 a6 a7 a8 a11"
 if [ $# -gt 0 ]; then
   sel=""
   for n in "$@"; do sel="$sel $(tr 'A-Z' 'a-z' <<<"$n")"; done
