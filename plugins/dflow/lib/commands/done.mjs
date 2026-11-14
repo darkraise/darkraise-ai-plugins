@@ -136,7 +136,8 @@ export async function run(ctx, argv, { out }) {
   out(`Task ${number} done · ${shortSha(sha)} · ${doneCount}/${after.tasks.length}`);
   if (task.risk !== 'none') out(`Task ${number} carries risk "${task.risk}": review its commit now (dflow review pack --task ${number}) before building on it.`);
   const size = contextSize(ctx, state);
-  if (size && size.tokens >= ctx.config.context.resetAt) {
+  // Only the mod compacts on the flag; a figure read from the transcript would end the turn with nothing to follow.
+  if (size && size.source === 'mod' && size.tokens >= ctx.config.context.resetAt) {
     // The session id names the conversation to compact: another session open
     // in this checkout must leave the flag alone.
     writeJson(path.join(ctx.paths.stateDir, 'reset.json'), { plan: active.slug, session: ctx.env.CLAUDE_CODE_SESSION_ID || null, at: new Date().toISOString() });
