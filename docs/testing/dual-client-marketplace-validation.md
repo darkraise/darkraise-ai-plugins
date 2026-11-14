@@ -8,7 +8,8 @@ were not changed during validation.
 
 ## Distribution evidence
 
-The isolated real-client smoke harness is `tests/marketplace-smoke.ps1`. Every
+The isolated real-client smoke harness, `tests/marketplace-smoke.ps1`, has since
+been removed (it no longer matched the repository layout; see git history). Every
 CLI invocation has a 60-second limit, captures its process, and terminates its
 tree on timeout. All test profiles/caches live in a generated fixture directory
 under the ignored `.superpowers` workspace and are removed after the run.
