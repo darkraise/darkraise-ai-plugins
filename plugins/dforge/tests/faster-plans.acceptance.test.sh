@@ -80,7 +80,6 @@ commit_file() { # commit_file <file> <content> <message>
   git -C "$R" add "$1" && git -C "$R" commit -qm "$3"
 }
 ledger_text() { cat "$WS/progress.md" 2>/dev/null; }
-ws_files() { ls -A "$WS" 2>/dev/null | sort | tr '\n' ' '; }
 
 PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |
