@@ -877,7 +877,7 @@ writing nothing, when `lens-route` does. Then run the mechanics yourself:
   on the tasks §1 schedules, and no suite on the others.
   A failing line that the task's base commit also fails is baseline: run the
   suite once there, in a temporary worktree, and compare the failing lines as
-  [parallel-waves.md](parallel-waves.md) §1 does. Under a `none` task check,
+  [final-review.md](final-review.md) **Baseline comparison** says. Under a `none` task check,
   compare with `<sha>` from §1, not with the task base commit.
 - **§3.** Run `scripts/review-package PLAN_FILE BASE HEAD` (or, without bash:
   `git log --oneline`, `git diff --stat` and `git diff -U10` for the range,

@@ -236,11 +236,24 @@ your own: QA commits on this branch.
    `git worktree remove --force` once step 3 has read the run's log.
    A failing line that does not also fail at MERGE_BASE is a finding: run the
    command once at MERGE_BASE in a temporary worktree and compare the failing
-   lines, as [parallel-waves.md](parallel-waves.md) §1 does. Write each such
+   lines as **Baseline comparison** below says. Write each such
    finding as `[suite] <failing line>`. A `[suite]` finding enters the fix
    wave as confirmed, as a `[qa]` finding does. The fix subagent runs the
    command again after its last commit through `suite-run` (**Suites.**
    below), and finishing reuses a pass at the same commit.
+
+   **Baseline comparison.** A run's failing lines are the failing-test lines
+   its `suite-run` digest prints, exactly as printed; when the digest's
+   `counts:` line names more than 20 failures, they are every matching line
+   of the log it names,
+   `grep -E '^[[:space:]]*(not ok|\(fail\)|FAIL)' <log> | cut -c1-200`. Remove
+   TAP numbers on both sides (`sed -E 's/^([[:space:]]*not ok) [0-9]+/\1/'`),
+   then `grep -vxFf <base lines> <head lines>` prints the head's failing lines
+   the base does not share. The head's failures are all baseline only when
+   the base's file exists, the head's holds at least one line, and that grep
+   exits 1 (it printed nothing). A missing base file, an empty head list or a
+   grep exit of 2 is not baseline, and a digest that names no test
+   (`last 30 lines of <log>:`) never is.
 
    **Lenses.** Run `scripts/lens-route PLAN_FILE --final MERGE_BASE HEAD`. In
    the same message as the Claude review, dispatch each printed `seat` with
