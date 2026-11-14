@@ -105,15 +105,37 @@ dcc_installation_lock() {
   mkdir -p -- "$(dirname "$DCC_REGISTRY")" || return 1
   local attempts=0 lock="$DCC_REGISTRY.lock"
   while ! mkdir -- "$lock" 2>/dev/null; do
+    _dcc_installation_break_stale "$lock" && continue
     attempts=$((attempts + 1))
     [ "$attempts" -lt 50 ] || return 1
     sleep 0.1
   done
+  printf '%s\n' "$$" > "$lock/pid" 2>/dev/null || true
   DCC_INSTALL_LOCK_DIR="$lock"
+}
+
+# A killed installer leaves its lock behind, and the sync hook runs async, so
+# without this the installed copy silently stops following plugin updates.
+# A lock with no pid file is either mid-acquire or from a release before the
+# pid was written; only an old one is treated as abandoned.
+_dcc_installation_break_stale() { # _dcc_installation_break_stale <lock>
+  local lock="$1" pid=""
+  if [ -r "$lock/pid" ]; then
+    IFS= read -r pid < "$lock/pid" || true
+    case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+    kill -0 "$pid" 2>/dev/null && return 1
+    # Re-read so a lock re-taken since the first read is left alone.
+    [ "$(cat "$lock/pid" 2>/dev/null)" = "$pid" ] || return 1
+  else
+    [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ] || return 1
+  fi
+  rm -f -- "$lock/pid"
+  rmdir -- "$lock" 2>/dev/null
 }
 
 dcc_installation_unlock() {
   [ -n "${DCC_INSTALL_LOCK_DIR:-}" ] || return 0
+  rm -f -- "$DCC_INSTALL_LOCK_DIR/pid"
   rmdir -- "$DCC_INSTALL_LOCK_DIR" || return 1
   DCC_INSTALL_LOCK_DIR=''
 }
