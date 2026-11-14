@@ -13,7 +13,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
 for v in $(compgen -e | grep -E '^(DFORGE_|API_JUDGE_|STUB_|QA_|AR_|CLAUDE_CODE_|GIT_)' || true); do unset "$v"; done
-unset CLAUDE_CONFIG_DIR CLAUDE_PROJECT_DIR CODEX_HOME OPENAI_API_KEY ANTHROPIC_API_KEY XDG_CONFIG_HOME
+unset CLAUDE_CONFIG_DIR CLAUDE_PROJECT_DIR CODEX_HOME OPENAI_API_KEY ANTHROPIC_API_KEY XDG_CONFIG_HOME AR_SESSION
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
