@@ -546,8 +546,10 @@ make goes to an API-billed judge, tried in this order: `anthropic`
 (`claude-opus-5-5` medium), `openai` (`gpt-6-astra` xhigh), `agentrouter`
 (`gpt-6-astra` xhigh), the rows of the `api-judge` block in
 [ladder.md](reference/ladder.md). A budget is skipped when its cap is 0, its
-key is unset or 95% of the cap is spent. When none can rule, the subscription
-seat rules as before.
+key is unset, 95% of the cap is spent, the spend file cannot be read, or, for
+`openai` and `agentrouter`, its model has no price row. The cap is checked
+before each call, so a single ruling can take spend past it. When none can
+rule, the subscription seat rules as before.
 
 `scripts/api-spend status` prints, per budget, whether it is open, what dforge
 has spent and the cap. The count covers only what dforge spent through these

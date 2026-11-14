@@ -42,8 +42,11 @@ above 0.
   can read them, not only dforge's scripts.
 - What dforge's scripts guarantee: each judge runs with a scrubbed
   environment holding only the one key it needs (Codex in a fresh
-  `CODEX_HOME`); a reply that contains a key value is discarded; no key value
-  is printed, logged, written to a file or passed as a command-line argument.
+  `CODEX_HOME`), with no variable that would route the key or the prompt to
+  another endpoint; a reply that contains a key value is discarded; no key
+  value is printed, logged or passed as a command-line argument. A judge
+  CLI's own output, which can echo its key in an error, is held only in a
+  private temporary directory that is removed when the run ends.
 - What they do not: a Codex judge can read any file you can read, the shell
   profile that holds all three keys included. The Anthropic judge reads the
   worktree and the directories added to its run, ignored files included. The
