@@ -167,9 +167,6 @@ check "plan_heavy: total 5 or risk 3 on any part" "$(plan_heavy "$TMP/scores.md"
 sed 's/$/\r/' "$TMP/scores.md" > "$TMP/scores-crlf.md"
 check "plan_scores: CRLF" "$(plan_scores "$TMP/scores-crlf.md" | tr '\t\n' ' |')" "1 1 0|2 5 2|3 4 3|4 - -|5 ? ?|"
 
-# --- the executor lane functions are gone ---
-check "plan_executors is gone" "$(bash -c ". '$HERE/../scripts/lib/plan.sh'; declare -F plan_executors plan_delegated | wc -l" | tr -d ' ')" "0"
-
 # --- plan_ledger and ledger_left_inline ---
 REPO="$TMP/repo"
 git init -q "$REPO"

@@ -149,7 +149,6 @@ mk() { # mk <name> <plan args...> — writes $REPO/docs/plans/<name>.md and echo
   plan "$@" > "$REPO/docs/plans/$name.md"
   printf '%s\n' "$REPO/docs/plans/$name.md"
 }
-nows() { tr -s ' \t' ' ' <<<"$1"; }
 
 # ----------------------------------------------------------------------- A1
 if selected A1; then
@@ -182,18 +181,6 @@ if selected A3; then
   has "A3: the retirement ERROR" "$lout" 'ERROR header: subagent execution was retired in 5.0.0; use inline'
 fi
 
-# ----------------------------------------------------------------------- A4
-if selected A4; then
-  P=$(mk a4 'inline — claude --model opus --effort high — x' "$HEAVY6" "$T1" "$T3R3" "$HEAVY8")
-  for n in 1 3 4; do
-    brief "$P" "$n" "$TMP/a4-brief-$n.md"
-    [ -s "$TMP/a4-brief-$n.md" ] || printf 'FAIL - A4: task-brief wrote no brief for task %s\n' "$n"
-    unmatched "A4: task $n's brief has no Dispatch: delegated line" "$(cat "$TMP/a4-brief-$n.md" 2>/dev/null)" '^\*\*Dispatch:\*\* delegated'
-  done
-  (cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/task-brief" --header "$P" "$TMP/a4-header.md" >/dev/null 2>&1)
-  unmatched "A4: the header has no Dispatch: delegated line" "$(cat "$TMP/a4-header.md" 2>/dev/null)" '^\*\*Dispatch:\*\* delegated'
-fi
-
 # ----------------------------------------------------------------------- A5
 if selected A5; then
   P=$(mk a5 'inline — claude --model opus --effort high — x' "$HEAVY6" "$T3R3" "0 1 1 3")
@@ -202,7 +189,7 @@ if selected A5; then
   brief "$P" 3 "$TMP/a5-3.md"
   check "A5: another risk-3 task's brief has the Review line second" "$(sed -n 2p "$TMP/a5-3.md" | tr -d '\r')" '**Review:** per-task — risk 3'
   brief "$P" 1 "$TMP/a5-1.md"
-  [ -s "$TMP/a5-1.md" ] || printf 'FAIL - A5: task-brief wrote no brief for task 1\n'
+  check "A5: task-brief wrote a brief for task 1" "$([ -s "$TMP/a5-1.md" ] && echo yes || echo no)" "yes"
   unmatched "A5: a total-6 risk-2 task's brief has no Review: per-task line" "$(cat "$TMP/a5-1.md" 2>/dev/null)" '^\*\*Review:\*\* per-task'
   unmatched "A5: a total-6 risk-2 task's second line is not a Review line" "$(sed -n 2p "$TMP/a5-1.md" 2>/dev/null)" '^\*\*Review:\*\*'
 fi

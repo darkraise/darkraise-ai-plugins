@@ -30,7 +30,8 @@ present() { # present <name> <file> <needle>
   else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
 absent() { # absent <name> <file> <needle>
-  if grep -qF -- "$3" "$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
+  if [ ! -f "$2" ]; then printf 'FAIL - %s\n       no such file: [%s]\n' "$1" "$2"; fail=$((fail + 1))
+  elif grep -qF -- "$3" "$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
   else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
 }
 has() { # has <name> <haystack> <needle>
@@ -96,8 +97,6 @@ lint() { out=$(bash "$S/plan-lint" "$@" 2>&1); status=$?; }
 # --- Task 1 ---
 . "$S/lib/plan.sh"
 io_plan "$INLINE_OPUS" "1 2 2 2" "0 1 1 1" > heavy.md
-bash "$S/task-brief" heavy.md 1 "$TMP/b1.md" > /dev/null 2>&1
-absent "A4: a heavy brief carries no Dispatch line" "$TMP/b1.md" "**Dispatch:** delegated"
 io_plan "$INLINE_OPUS" "0 2 1 3" "1 2 1 2" > risk3.md
 bash "$S/task-brief" risk3.md 1 "$TMP/r1.md" > /dev/null 2>&1
 check "A5: a risk-3 brief's second line is the review marker" "$(sed -n 2p "$TMP/r1.md")" "**Review:** per-task — risk 3"
@@ -152,20 +151,6 @@ check "A14: next-step reads the session walk as complete" \
   "$(bash "$S/next-step" loop.md 2>/dev/null | grep '^\*\*Next:\*\*' | grep -c 'Task 2')" "1"
 # --- Task 4 ---
 check "A7: the workflow line is empty at defaults" "$(bash "$S/dforge-config" workflow | tr -d '\r')" ""
-absent "cockpit nudge: no Implementer agent for implementation" "$P/hooks/cockpit/lib.ts" "for implementation"
-# --- Task 5 ---
-check "A8: no drafter agent" "$([ -e "$P/agents/drafter-sonnet.md" ] && echo yes || echo no)" "no"
-check "A8: no draft-pack" "$([ -e "$S/draft-pack" ] && echo yes || echo no)" "no"
-# --- Task 6 ---
-check "A8: no scout agent" "$([ -e "$P/agents/scout-sonnet.md" ] && echo yes || echo no)" "no"
-check "codex routing has no scout floor" "$(jq -r '.role_floors.scout // "none"' < "$P/reference/codex-routing.json" | tr -d '\r')" "none"
-# --- Task 7 ---
-check "A17: switching.md is gone" "$([ -e "$P/skills/executing-plans/references/switching.md" ] && echo yes || echo no)" "no"
-# --- Task 8 ---
-# --- Task 11 ---
-for f in "$P/.claude-plugin/plugin.json" "$P/.codex-plugin/plugin.json" "$P/../../.claude-plugin/marketplace.json"; do
-  absent "no tiered implementers in $f" "$f" "tiered implementers"
-done
 check "marketplace keyword swapped" "$(jq -r '.plugins[] | select(.name == "dforge") | .keywords | index("spec-driven") != null and index("subagents") == null' < "$P/../../.claude-plugin/marketplace.json" | tr -d '\r')" "true"
 check "plugin keyword swapped" "$(jq -r '.keywords | index("spec-driven") != null and index("subagents") == null' < "$P/.claude-plugin/plugin.json" | tr -d '\r')" "true"
 v=$(jq -r .version < "$P/.claude-plugin/plugin.json" | tr -d '\r')

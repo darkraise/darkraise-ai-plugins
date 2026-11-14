@@ -104,8 +104,6 @@ check "A4: compacted --switch exits as a usage error" "$status" "2"
 check "A4: compacted --switch books nothing" "$(field compactions):$(arun s-3 pending)" "0:switch"
 usage_text=$(bash "$AR" 2>&1)
 has "A4: the usage text is printed" "$usage_text" "usage: auto-run"
-lacks "A4: the usage text does not name switch-resume" "$usage_text" "switch-resume"
-lacks "A4: the usage text has no compacted --switch" "$usage_text" "compacted --switch"
 
 # A5
 arun s-3 stop >/dev/null

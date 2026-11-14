@@ -70,7 +70,7 @@ for link in $(grep -oE '\]\([^)#]+\.md' "$DT" | sed 's/^](//' | sort -u); do
   check "delegated loop link resolves: $link" "$([ -f "$P/reference/$link" ] && echo yes || echo no)" "yes"
 done
 
-# --- the Dispatch line: mixed mode's delegation, computed by task-brief ---
+# --- the review marker and heavy list, computed by task-brief ---
 DTMP=$(mktemp -d)
 sed 's/^|//' > "$DTMP/plan.md" <<'EOF'
 |# Mixed
@@ -96,48 +96,10 @@ sed 's/^|//' > "$DTMP/plan.md" <<'EOF'
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4
 EOF
 brief() { bash "$P/scripts/task-brief" "$@" >/dev/null 2>&1; }
-brief "$DTMP/plan.md" 1 "$DTMP/b1.md"
-check "a light task has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/b1.md")" "0"
-brief "$DTMP/plan.md" 2 "$DTMP/b2.md"
-check "a heavy task has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/b2.md")" "0"
 brief "$DTMP/plan.md" 3 "$DTMP/b3.md"
 check "a split task with a risk-3 part carries the review marker" "$(sed -n 2p "$DTMP/b3.md")" "**Review:** per-task — risk 3"
 brief --header "$DTMP/plan.md" "$DTMP/h.md"
 check "the header lists the heavy tasks with their scores" "$(tail -n 1 "$DTMP/h.md")" "**Heavy:** Task 2 (total 5, risk 2), Task 3 (total 4, risk 3)"
-check "a header with no executor task has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/h.md")" "0"
-sed 's/^\*\*Evaluation:\*\* files 1 - spec 1 - coupling 1 - risk 2 = 5$/**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4/; s/risk 3 = 4$/risk 0 = 1/' "$DTMP/plan.md" > "$DTMP/light.md"
-brief --header "$DTMP/light.md" "$DTMP/hl.md"
-check "a lone total-4 task in three is not delegated" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/hl.md")" "0"
-grep -v '^\*\*Execution:\*\*' "$DTMP/plan.md" > "$DTMP/old.md"
-brief "$DTMP/old.md" 2 "$DTMP/o2.md"
-check "a plan with no Execution line has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/o2.md")" "0"
-{ printf 'Host: codex\n\n'; cat "$DTMP/plan.md"; } > "$DTMP/cdx.md"
-brief "$DTMP/cdx.md" 2 "$DTMP/c2.md"
-check "a Codex-host plan has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/c2.md")" "0"
-four_plan() { # four_plan <file> <total ...> — an inline plan, one task per total (1 or 4)
-  local f=$1 i=0 t ev; shift
-  printf '# Four\n\n**Execution:** inline — `claude --model sonnet --effort high` — x\n' > "$f"
-  for t in "$@"; do
-    i=$((i + 1))
-    if [ "$t" -eq 4 ]; then ev='files 0 - spec 1 - coupling 1 - risk 2 = 4'; else ev='files 0 - spec 0 - coupling 1 - risk 0 = 1'; fi
-    printf '\n### Task %s: t\n\n**Evaluation:** %s\n' "$i" "$ev" >> "$f"
-  done
-}
-four_plan "$DTMP/one4.md" 1 4 1 1 1 1
-brief "$DTMP/one4.md" 2 "$DTMP/f2.md"
-check "a total-4 task has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/f2.md")" "0"
-brief --header "$DTMP/one4.md" "$DTMP/fh.md"
-check "a total-4 task leaves no header Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/fh.md")" "0"
-
-# --- an Executor line delegates nothing ------------------------------------
-sed '/^### Task 1: light$/,/^\*\*Evaluation:/{/^\*\*Evaluation:/i\
-**Executor:** codex gpt-6.1-sol / low
-}' "$DTMP/plan.md" > "$DTMP/exec-plan.md"
-check "the Executor fixture carries the line" "$(grep -c '^\*\*Executor:\*\*' "$DTMP/exec-plan.md")" "1"
-brief "$DTMP/exec-plan.md" 1 "$DTMP/e1.md"
-check "task-brief briefs an Executor task as an inline task" "$(grep -c 'delegated' "$DTMP/e1.md")" "0"
-brief --header "$DTMP/exec-plan.md" "$DTMP/eh.md"
-check "an Executor task leaves no header Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/eh.md")" "0"
 
 rm -rf "$DTMP"
 

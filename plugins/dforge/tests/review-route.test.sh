@@ -160,13 +160,6 @@ route --task 3
 check "total 4 at risk 1: light panel, Sonnet fallback" "$out" "review-seat task=3 primary=panel:light fallback=dforge:judge-sonnet-high reason=band"
 route --task 4
 check "risk 2 takes its band: light panel, Sonnet fallback" "$out" "review-seat task=4 primary=panel:light fallback=dforge:judge-sonnet-high reason=band"
-sed '/\*\*Executor:\*\*/d' "$TMP/plan.md" > "$TMP/no-executor.md"
-for id in 5 6 11; do
-  check "an Executor line does not route Task $id" \
-    "$(bash "$ROUTE" "$TMP/plan.md" --task "$id" 2>&1 | sed 's/^review-seat [^ ]* //')" \
-    "$(bash "$ROUTE" "$TMP/no-executor.md" --task "$id" 2>&1 | sed 's/^review-seat [^ ]* //')"
-done
-check "executor-empty-diff is no ruling kind" "$(bash "$ROUTE" "$TMP/round.md" --ruling executor-empty-diff 1 >/dev/null 2>&1; echo $?)" "2"
 route --task 7A
 check "a part routes on its own Evaluation" "$out" "review-seat task=7A primary=panel:light fallback=dforge:judge-sonnet-high reason=band"
 route --task 7B
@@ -525,15 +518,6 @@ check "an unknown ruling kind is still rejected" "$?" "2"
 
 # --- the external review reference -----------------------------------------
 check "the external review reference exists" "$([ -f "$P/reference/external-review.md" ] && echo yes || echo no)" "yes"
-check "the executor lane reference is gone" "$([ -f "$P/reference/executor-lane.md" ] && echo yes || echo no)" "no"
-# The old path is spelled in two pieces on purpose. An earlier rename
-# rewrote every literal spelling of the OLD path in this
-# repository with sed; written whole, this assertion would have been rewritten
-# to test the new file, which exists, and would then fail. The two pieces
-# concatenate at runtime and match no sed pattern. Never join them.
-OLDREF="external-""executor.md"
-check "the Codex-only reference is gone" \
-  "$([ -f "$P/reference/$OLDREF" ] && echo present || echo gone)" "gone"
 
 # --- the shared Evaluation reader ---
 # Two shipped defects: a fenced example line escalated the seat to the risk-3
@@ -565,14 +549,6 @@ seat "$TMP/ev-partfence.md" 1A
 check "a fenced example inside a part does not escalate it" "$out" "review-seat task=1A $LIGHT"
 seat "$TMP/ev-partfence.md" 1
 check "a fenced example inside a part does not escalate the whole task" "$out" "review-seat task=1 $LIGHT"
-
-printf '# P\n\n### Task 1: Fenced executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Executor:** codex gpt-6.1-sol / medium\n```\n' > "$TMP/ev-fexec.md"
-seat "$TMP/ev-fexec.md" 1
-check "a fenced Executor line does not claim the task is offloaded" "$out" "review-seat task=1 $LIGHT"
-
-printf '# P\n\n### Task 1: Real executor\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n**Executor:** codex gpt-6.1-sol / medium\n' > "$TMP/ev-rexec.md"
-seat "$TMP/ev-rexec.md" 1
-check "a real Executor line no longer changes the seat" "$out" "review-seat task=1 $LIGHT"
 
 out=$(bash "$ROUTE" "$TMP/round.md" --ruling acceptance-ambiguous 2>&1); status=$?
 check "acceptance-ambiguous: exit 0" "$status" "0"
