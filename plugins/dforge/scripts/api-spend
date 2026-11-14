@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# What dforge spent on each API budget, and whether each is open.
+#
+# Usage: api-spend status
+#        api-spend add ID USD
+# Exit: 0 done, 1 the spend file's lock could not be had (or the file could
+#       not be read or written), 2 usage or an unknown budget id
+set -uo pipefail
+export MSYS_NO_PATHCONV=1
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/api-budget.sh"
+. "$HERE/lib/lock.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: api-spend status
+       api-spend add ID USD
+USAGE
+  exit 2
+}
+
+add_locked() {
+  local file=$1 id=$2 usd=$3 tmp
+  tmp=$(mktemp "$(dirname "$file")/.api-spend.XXXXXX") || return 1
+  if ! { if [ -f "$file" ]; then cat -- "$file"; else printf '{}'; fi; } |
+    jq --arg id "$id" --arg usd "$usd" \
+      '.[$id].spent_usd = ((.[$id].spent_usd // 0) + ($usd | tonumber)) | .[$id].calls = ((.[$id].calls // 0) + 1)' \
+      > "$tmp"; then
+    rm -f -- "$tmp"
+    echo "api-spend: cannot read $file" >&2
+    return 1
+  fi
+  dr_replace "$file" "$tmp" || { rm -f -- "$tmp"; echo "api-spend: cannot write $file" >&2; return 1; }
+  rm -f -- "$tmp"
+}
+
+case ${1:-} in
+  status)
+    [ $# -eq 1 ] || usage
+    for id in anthropic openai agentrouter; do api_budget_state "$id"; done
+    exit 0
+    ;;
+  add)
+    [ $# -eq 3 ] || usage
+    api_budget_key_var "$2" >/dev/null || { echo "api-spend: unknown budget: $2" >&2; exit 2; }
+    [[ $3 =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "api-spend: not an amount in USD: $3" >&2; exit 2; }
+    file=$(api_budget_spend_file)
+    mkdir -p -- "$(dirname "$file")" || exit 1
+    base=$(dr_lock_base "$file") || exit 1
+    dr_locked "$base" add_locked "$file" "$2" "$3" || exit 1
+    ;;
+  *) usage ;;
+esac

@@ -1,0 +1,15 @@
+{
+  "checked": "2026-11-14",
+  "models": {
+    "gpt-6-luna": {
+      "source": "https://developers.openai.com/api/docs/guides/decisions",
+      "input": 0.1
+    },
+    "gpt-6-astra": {
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "input": 10,
+      "cached_input": 1,
+      "output": 50
+    }
+  }
+}

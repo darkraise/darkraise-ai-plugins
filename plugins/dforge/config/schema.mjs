@@ -104,6 +104,11 @@ export default {
     label: 'Auto-compact', title: "Claude's auto-compaction",
     description: "Claude's autoCompactEnabled. Stored in Claude's settings file; applies from the next session.",
   },
+  keepWarm: {
+    type: 'number', default: 50, min: 0, max: 59, step: 1, unit: 'min', zero: 'off', group: 'Context', target: 'dforge',
+    label: 'Keep warm', title: 'Keep the prompt cache warm (minutes)',
+    description: 'Outside an auto run, while the session waits on background work, the cockpit submits a one-line turn after this many minutes so the prompt cache does not expire. 0 turns it off. Set 4 on the five-minute cache.',
+  },
   codexReview: {
     type: 'boolean', default: false, enforcedBy: 'script', group: 'Workflow', target: 'dforge',
     label: 'Codex reviews', title: 'Let Codex review',
@@ -113,6 +118,31 @@ export default {
     type: 'boolean', default: false, enforcedBy: 'script', group: 'Workflow', target: 'dforge',
     label: 'Agy reviews', title: 'Let Antigravity review',
     description: 'On lets the Antigravity CLI (agy) take review seats when its gate passes and its review surface is trusted. Off, the default, keeps agy out of every review.',
+  },
+  decisionApi: {
+    type: 'enum', values: ['off', 'shadow', 'on'], default: 'off', enforcedBy: 'script', group: 'Workflow', target: 'dforge',
+    label: 'Decisions API', title: 'Auto run: OpenAI Decisions API',
+    description: 'In an auto run, a planning choice with listed options goes first to OpenAI\'s Decisions API. off, the default, never calls it. shadow calls it and logs the answer but never rules. on lets a confident answer stand. Needs DFORGE_OPENAI_API_KEY and an OpenAI cap above 0.',
+  },
+  decisionConfidence: {
+    type: 'number', default: 85, min: 50, max: 99, step: 1, unit: '%', enforcedBy: 'script', group: 'Workflow', target: 'dforge',
+    label: 'Decision floor', title: 'Decisions API: confidence floor',
+    description: 'A Decisions API answer rules only when its confidence is at or above this in both option orders.',
+  },
+  apiBudgetAnthropic: {
+    type: 'number', default: 0, min: 0, max: 1000, step: 5, zero: 'off', enforcedBy: 'script', group: 'Workflow', target: 'dforge',
+    label: 'Anthropic cap', title: 'API budget: Anthropic key (USD)',
+    description: 'What auto runs may spend on rulings through DFORGE_ANTHROPIC_API_KEY, in US dollars. 0, the default, never uses the key. The count covers only what dforge spent: the vendor console is the authority.',
+  },
+  apiBudgetOpenai: {
+    type: 'number', default: 0, min: 0, max: 1000, step: 5, zero: 'off', enforcedBy: 'script', group: 'Workflow', target: 'dforge',
+    label: 'OpenAI cap', title: 'API budget: OpenAI key (USD)',
+    description: 'What auto runs may spend on rulings and Decisions API requests through DFORGE_OPENAI_API_KEY, in US dollars. 0, the default, never uses the key. The count covers only what dforge spent: the vendor console is the authority.',
+  },
+  apiBudgetAgentRouter: {
+    type: 'number', default: 0, min: 0, max: 1000, step: 5, zero: 'off', enforcedBy: 'script', group: 'Workflow', target: 'dforge',
+    label: 'AgentRouter cap', title: 'API budget: AgentRouter (USD)',
+    description: 'What auto runs may spend on rulings through DFORGE_AGENTROUTER_API_KEY, in US dollars. 0, the default, never uses the key. A cap above 0 sends ruling prompts, and any file its judge reads, to AgentRouter, a third party. Its judge can read any file this user can read, and setting a cap above 0 is the consent to that.',
   },
   lensCap: {
     type: 'number', default: 4, min: 0, max: 9, step: 1, zero: 'off', env: 'DFORGE_LENS_CAP', enforcedBy: 'script', group: 'Workflow', target: 'dforge',

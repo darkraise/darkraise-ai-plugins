@@ -12,6 +12,7 @@ export const windowsSeconds = {
   'run-all.sh': 157,
   'agy-gate.test.sh': 20,
   'agy-review.test.sh': 60,
+  'api-spend.test.sh': 20,
   'auto-default.test.sh': 10,
   'auto-run-skills.test.sh': 10,
   'auto-run-worktree-setting-qa.acceptance.test.sh': 330,
