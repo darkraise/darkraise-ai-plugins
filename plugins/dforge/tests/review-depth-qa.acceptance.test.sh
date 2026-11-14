@@ -97,7 +97,7 @@ mkplan() { # mkplan NAME SPEC_NAME|- HOST REVIEW_LINE TOKEN... — a plan in doc
     i=0
     for tok in "$@"; do
       i=$((i + 1))
-      printf '### Task %s: Thing %s\n\n**Files:**\n- Create: `f%s.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n' "$i" "$i" "$i"
+      printf '### Task %s: Thing %s\n\n**Files:**\n- Create: `f%s.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n' "$i" "$i" "$i"
       ev "$tok"
       printf '\n- [ ] **Step 1: Do it**\n\n'
     done
@@ -486,7 +486,7 @@ if want A16; then
     printf '**Execution:** inline — `claude --model sonnet --effort high` — demo\n\n'
     printf '**Plan review:** 2026-10-27 — skipped (depth light)\n\n'
     printf '## Global Constraints\n\n- None.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. Thing 1\n\n'
-    printf '### Task 1: Thing 1\n\n**Files:**\n- Create: `f1.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n'
+    printf '### Task 1: Thing 1\n\n**Files:**\n- Create: `f1.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n'
     printf '**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n\n- [ ] **Step 1: Do it**\n'
   } > "$MIRROR/dforge/plans/m-plan.md"
   lint_out=$(cd "$MR" && HOME="$MH" timeout 60 bash "$LINT" "$MIRROR/dforge/plans/m-plan.md" 2>&1)

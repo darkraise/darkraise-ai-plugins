@@ -103,10 +103,10 @@ EOF
 }
 agent_for() { # the assignment table, by total
   case $1 in
-    0|1|2) echo dforge:impl-sonnet-low ;;
-    3|4) echo dforge:impl-sonnet-medium ;;
+    0|1|2) echo dforge:impl-sonnet-high ;;
+    3|4) echo dforge:impl-sonnet-high ;;
     5) echo dforge:impl-sonnet-high ;;
-    *) echo dforge:impl-opus-high ;;
+    *) echo dforge:impl-sonnet-high ;;
   esac
 }
 # plan <execution text> <spec of each task: "files spec coupling risk[ executor]">... — writes the plan on stdout

@@ -103,7 +103,7 @@ check "thread pending: exits 0" "$status" "0"
 has "thread pending: still prints the block" "$out" "**Next:** Resume at Task 2 (Second thing)."
 lacks "thread pending: no warning names the pending thread" "$(cat "$TMP/stderr")" "thread pending"
 ledger 'Task 1: complete (commits a..b, review clean)' \
-       'Task 2: implementer dforge:impl-sonnet-low (assigned; base bbbbbbb)'
+       'Task 2: implementer dforge:impl-sonnet-high (assigned; base bbbbbbb)'
 run "$REPO" "$PLAN_REL"
 has "agent assigned: warns on stderr" "$(cat "$TMP/stderr")" "the ledger ends on an assigned line for Task 2"
 ledger 'Task 1: complete (commits a..b, review clean)' \
@@ -325,7 +325,7 @@ lacks "escalation line: no mode switch" "$out" "escalated to subagent mode"
   echo "# SDD ledger — plan: docs/plans/2026-01-01-inline.md"
   echo "Task 1: implementer inline (assigned; base aaaaaaa)"
   echo "Task 1: complete (commits aaaaaaa..bbbbbbb, unreviewed) — done: x; verified: y → ok; remaining: none; discovered: none; assumptions: none"
-  echo "Task 2: implementer dforge:impl-opus-medium (assigned; base bbbbbbb)"
+  echo "Task 2: implementer dforge:impl-sonnet-high (assigned; base bbbbbbb)"
   echo "Task 2: fix round 2/5 (1 addressed, 1 open — x; commits bbbbbbb..ccccccc; progress 9 -> 12; resumed)"
 } > "$INL_LEDGER/progress.md"
 run "$REPO" docs/plans/2026-01-01-inline.md

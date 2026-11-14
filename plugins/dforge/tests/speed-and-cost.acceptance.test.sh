@@ -94,7 +94,7 @@ if need_fixture; then
     printf '# Acceptance Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** inline — `claude --model sonnet --effort high` — fixture\n\n## Task index\n\n'
     for n in 1 2 3 4 5; do printf '%s. Task %s\n' "$n" "$n"; done
     for n in 1 2 3 4 5; do
-      printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nRun: `bash check.sh`\n' "$n" "$n"
+      printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nRun: `bash check.sh`\n' "$n" "$n"
     done
   } > "$FIX/docs/plan.md"
   printf '#!/usr/bin/env bash\nif grep -qx ok state.txt; then echo "ok 1 - alpha"; else echo "not ok 1 - alpha"; exit 1; fi\n' > "$FIX/suite.sh"
@@ -284,7 +284,7 @@ if selected A9; then
   gate dforge:impl-sonnet-high "$(newid)" $'**Status:** DONE\n- Commits: abc1234 feat: x'
   check "A9: DONE with no Report: line exits 2" "$grc" "2"
   has "A9: and the reason names the Report: line" "$gerr" "Report:"
-  gate dforge:impl-opus-high "$(newid)" $'**Status:** DONE_WITH_CONCERNS\n- one concern'
+  gate dforge:impl-sonnet-high "$(newid)" $'**Status:** DONE_WITH_CONCERNS\n- one concern'
   check "A9: DONE_WITH_CONCERNS with no Report: line exits 2" "$grc" "2"
   has "A9: and the reason names the Report: line" "$gerr" "Report:"
   gate impl-haiku "$(newid)" $'**Status:** DONE\nno report line here'
@@ -327,30 +327,30 @@ if selected A10; then
   check "A10: an impl stop with no status line exits 0" "$grc" "0"
 
   id=$(newid)
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nfirst try'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nfirst try'
   r1=$grc
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nsecond try, different words'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nsecond try, different words'
   r2=$grc
   check "A10: the first two distinct stops are blocked" "$r1 $r2" "2 2"
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nthird try, different again'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nthird try, different again'
   check "A10: the third distinct stop after two blocks exits 0" "$grc" "0"
   log="$GSTATE/impl-stop-gate.log"
   check "A10: it appends exactly one line to <state>/impl-stop-gate.log" "$(wc -l < "$log" 2>/dev/null | tr -d ' ')" "1"
-  matches "A10: the log line is '<epoch> <agent_id> <agent_type> pass-through after 2 blocks — <reason>'" "$(cat "$log" 2>/dev/null)" "^[0-9]+ $id dforge:impl-opus-medium pass-through after 2 blocks — .+"
+  matches "A10: the log line is '<epoch> <agent_id> <agent_type> pass-through after 2 blocks — <reason>'" "$(cat "$log" 2>/dev/null)" "^[0-9]+ $id dforge:impl-sonnet-high pass-through after 2 blocks — .+"
 
   # An identical stop fired twice does not raise the count.
   id=$(newid)
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nrepeated stop'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nrepeated stop'
   a=$grc
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nrepeated stop'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nrepeated stop'
   b=$grc
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nrepeated stop'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nrepeated stop'
   c=$grc
   check "A10: the same stop three times is blocked each time" "$a $b $c" "2 2 2"
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\na second, distinct stop'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\na second, distinct stop'
   d=$grc
   check "A10: after repeats the next distinct stop is still only the second block" "$d" "2"
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\na third, distinct stop'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\na third, distinct stop'
   check "A10: and the stop after that passes" "$grc" "0"
   check "A10: the repeats added no second log line for the first agent" "$(grep -c " $id " "$log")" "1"
 fi

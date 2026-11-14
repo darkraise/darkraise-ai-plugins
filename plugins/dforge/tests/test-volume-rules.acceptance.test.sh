@@ -91,7 +91,7 @@ None
 **Files:**
 - Create: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 2: Two
@@ -99,7 +99,7 @@ None
 **Files:**
 - Create: `b.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 3: Three
@@ -107,7 +107,7 @@ None
 **Files:**
 - Create: `c.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 EOF
 }

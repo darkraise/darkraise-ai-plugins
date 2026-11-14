@@ -63,7 +63,7 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |
 |### Task 1: light low
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 2: light mid
@@ -97,27 +97,27 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |
 |#### Part A: small half
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |#### Part B: risky half
 |
-|**Implementer:** dforge:impl-opus-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 2 = 5
 |
 |### Task 8: risk three
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
 |
 |### Task 9: broken
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** one plus one
 |
 |### Task 10: band five
 |
-|**Implementer:** dforge:impl-opus-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 2 - spec 2 - coupling 1 - risk 0 = 5
 |
 |### Task 11: executor risk three
@@ -128,7 +128,7 @@ sed 's/^|//' > "$TMP/plan.md" <<'EOF'
 |
 |### Task 12: band six
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 2 - spec 2 - coupling 2 - risk 0 = 6
 EOF
 
@@ -579,7 +579,7 @@ check "acceptance-ambiguous: exit 0" "$status" "0"
 check "acceptance-ambiguous goes to the ruling seat" "$out" \
   "review-seat ruling=acceptance-ambiguous tasks=plan primary=dforge:judge-opus fallback=- reason=routine"
 
-printf '# P\n\n### Task 1: Unscored\n\n**Implementer:** dforge:impl-sonnet-low\n\nBody.\n\n### Task 2: Scored\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n### Task 3: Split\n\n#### Part A: a\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: b\n\nNo score.\n' > "$TMP/unscored.md"
+printf '# P\n\n### Task 1: Unscored\n\n**Implementer:** dforge:impl-sonnet-high\n\nBody.\n\n### Task 2: Scored\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n### Task 3: Split\n\n#### Part A: a\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: b\n\nNo score.\n' > "$TMP/unscored.md"
 seat "$TMP/unscored.md" 1
 check "unscored: exits 0" "$rc" "0"
 check "unscored: reviewed alone by Opus" "$out" "review-seat task=1 primary=dforge:judge-opus fallback=- reason=unscored"

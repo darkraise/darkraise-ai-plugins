@@ -88,7 +88,7 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |### Task 1: plain
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |**Lenses:** lang-bash
 |
@@ -111,27 +111,27 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |### Task 5: batch low
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |### Task 6: batch high
 |
-|**Implementer:** dforge:impl-opus-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |### Task 7: risky
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
 |
 |### Task 8: unparseable
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** one plus one
 |
 |### Task 9: bad lens
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |**Lenses:** no-such-lens
 PLAN
@@ -531,7 +531,7 @@ sed 's/^|//' > "$RR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 2: Risky
@@ -539,7 +539,7 @@ sed 's/^|//' > "$RR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
 |
 |### Task 3: Unreviewed
@@ -547,7 +547,7 @@ sed 's/^|//' > "$RR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 PLAN
 awk '{ print } /^\*\*Goal:\*\*/ { print ""; print "**Host:** codex" }' "$RR_REPO/docs/plan.md" > "$RR_REPO/docs/codex-plan.md"

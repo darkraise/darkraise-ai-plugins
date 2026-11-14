@@ -64,7 +64,7 @@ mkplan() { # mkplan <ntasks> [header line] [task 1 extra text]
   local i
   for ((i = 1; i <= $1; i++)); do printf '%d. Task %d\n' "$i" "$i"; done
   for ((i = 1; i <= $1; i++)); do
-    printf '\n### Task %d: Task %d\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$i" "$i"
+    printf '\n### Task %d: Task %d\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$i" "$i"
     if [ "$i" -eq 1 ] && [ -n "${3:-}" ]; then printf '\n%s\n' "$3"; fi
   done
 }
@@ -104,7 +104,7 @@ if selected A1 || selected A2 || selected A3 || selected A4; then
 |**Files:**
 |- Modify: `lib/new.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Run: `bash mark.sh a1first 0` and then `bash mark.sh a3second 0`

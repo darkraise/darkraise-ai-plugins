@@ -53,21 +53,21 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |### Task 1: first
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |Body one.
 |
 |### Task 2: second
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |Body two.
 |
 |### Task 3: third
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |Body three.
@@ -272,7 +272,7 @@ git worktree remove --force "$WT"
 
 # --- verdict: a none task check schedules the suite by task number ---
 awk '{ print } /^\*\*Execution:\*\*/ { print ""; print "**Task check:** none — full suite every 3 tasks" }' docs/plan.md > docs/plan-none.md
-printf '\n### Task 4: fourth\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n\nBody four.\n' >> docs/plan-none.md
+printf '\n### Task 4: fourth\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n\nBody four.\n' >> docs/plan-none.md
 WS_MAIN=$WS
 WS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan-none.md)")
 rm -f "$WS"/*

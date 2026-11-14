@@ -108,7 +108,7 @@ PLAN_TEXT='|# Acceptance Fixture Plan
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |**Lenses:** lang-bash
 |
@@ -119,7 +119,7 @@ PLAN_TEXT='|# Acceptance Fixture Plan
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
 |
 |### Task 3: nolens
@@ -127,7 +127,7 @@ PLAN_TEXT='|# Acceptance Fixture Plan
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 1 = 2'
 
 CODEX_PLAN_TEXT='|# Codex Fixture

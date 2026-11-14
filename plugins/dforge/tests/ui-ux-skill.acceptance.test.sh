@@ -236,7 +236,7 @@ None
 **Files:**
 - Create: \`$2\`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 $3
 
@@ -247,7 +247,7 @@ $3
 **Files:**
 - Modify: \`$4\`
 
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 **Approach:** inline - skip 2: follows the pattern
 $5
