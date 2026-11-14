@@ -241,32 +241,6 @@ test('A3: without --suite-base the same regression is excused as a base failure'
   assert.match(verdict.out, /^suite: red \(0 failing, 2 baseline\)$/m);
 });
 
-test('A3: review --group writes suite and suiteBase onto the last member and verdict --group reads them', () => {
-  const repo = stepRepo('a3-group', { failing: 'old failure\n' });
-  const s = repo.base;
-  assert.equal(suite(repo, 'bash', '-c', SUITE_CMD).status, 1);
-  write(repo.dir, 'failing.txt', 'old failure\nregression by earlier task\n');
-  commit(repo.dir, 'earlier task regresses');
-  for (const n of [1, 2]) assert.equal(step(repo, 'start', 'docs/plan.md', String(n)).status, 0);
-  work(repo);
-  assert.equal(step(repo, 'hold', 'docs/plan.md', '1').status, 0);
-  work(repo);
-  assert.equal(step(repo, 'hold', 'docs/plan.md', '2').status, 0);
-  const review = step(repo, 'review', '--group', 'docs/plan.md', '1', '2', '--suite', SUITE_CMD, '--suite-base', s);
-  assert.equal(review.status, 0, review.err);
-  assert.equal(stepFile(repo, 2).suite, SUITE_CMD);
-  assert.equal(stepFile(repo, 2).suiteBase, s);
-  assert.equal(stepFile(repo, 1).suite, undefined);
-  assert.equal(suite(repo, 'bash', '-c', SUITE_CMD).status, 1);
-  const member = n => `Task ${n} spec: pass\nTask ${n} quality: approved\nTask ${n} scores: spec 17 / scope 18 / verification 16 / quality 16\n`;
-  write(repo.ws, 'group-1,2-review-report.md', `## Verdict\n${member(1)}${member(2)}`);
-  const verdict = step(repo, 'verdict', 'docs/plan.md', '1', '2', '--group');
-  assert.equal(verdict.status, 0, verdict.err + verdict.out);
-  assert.match(verdict.out, /^Important .*regression by earlier task/m);
-  assert.doesNotMatch(verdict.out, /^Important .*old failure/m);
-  assert.match(verdict.out, /^suite: red \(1 failing, 1 baseline\)$/m);
-});
-
 // ---------------------------------------------------------------- A4
 test('A4: on a sequential plan with a none task check, an unscheduled task runs no suite and can complete', () => {
   const repo = stepRepo('a4', { tasks: 5 });

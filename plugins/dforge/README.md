@@ -90,12 +90,7 @@ already the top model and there is nowhere else to go. Walks terminate at a
 SPLIT action rather than an agent, and only a task that survives that split
 enters the reserve chain, which terminates at BLOCKED. Used at fix round 2
 and at the BLOCKED handler: a task gets at most two fix rounds, then the
-ruling seat.
-
-**Review groups.** A task at risk 0 or 1 with a total under 5 is
-reviewed in groups: one judge dispatch for up to four such tasks. Riskier
-tasks keep their own review. A `Host: codex` plan keeps
-`review_cap: 5` and per-task review.
+ruling seat. A `Host: codex` plan keeps `review_cap: 5`.
 
 **Review depth.** An architectural plan runs at one of three depths, sized by
 risk rather than length. `scripts/depth-route` prints the depth: `full` for a
@@ -973,6 +968,10 @@ implement a task.
   the Wave check and wave Early CI forms. An older plan's
   `**Parallelism:** waves` line draws a `plan-lint` WARN and its tasks run in
   index order.
+- **Group reviews.** `task-step` no longer holds a task or reviews tasks as a
+  group, `review-route` prints no `review=` tier, and every task is reviewed
+  alone. A task whose last ledger line reads `awaiting group review` is
+  reviewed with `task-step review`.
 
 ## Migrating to 4.11
 

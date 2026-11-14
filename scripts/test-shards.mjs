@@ -109,7 +109,7 @@ export const windowsSeconds = {
   'task-step-settle.test.sh': 220,
   'task-step-suite.test.sh': 250,
   'task-step-text.test.sh': 10,
-  'task-step.test.sh': { start: 700, verdict: 450, rereview: 420, group: 280 },
+  'task-step.test.sh': { start: 700, verdict: 450, rereview: 420 },
   'test-simplifier.test.sh': 10,
   'test-volume-rules.acceptance.test.sh': 40,
   'turn-end.test.sh': 290,

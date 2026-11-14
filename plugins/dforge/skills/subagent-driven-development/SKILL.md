@@ -26,8 +26,7 @@ back. Before anything else:
    `fix round 1/2` resumes at round 2 with a fresh dispatch, and `fix round 2/2`
    goes to the breaker (an older run's `R/5` maps as ledger.md §Recovery
    says); an assigned line with commits after its base
-   goes to review;
-   `awaiting group review` is reviewed by the next group dispatch, never re-dispatched.
+   goes to review.
 3. When every task has its `complete` line, run `scripts/context-size --final`
    and go on to Final Review or finishing whatever it prints: the final phase
    never hands off. In an auto run it also moves the run to the final phase,
@@ -159,7 +158,7 @@ in [ledger.md](references/ledger.md) says what to do with it.
 The flowchart is in [process-graph.md](references/process-graph.md); per task the steps are:
 
 1. Dispatch the implementer the task's `**Implementer:**` line names, with the dispatch file `task-step start` writes ([implementer-prompt.md](../../reference/prompts/implementer-prompt.md)). On NEEDS_CONTEXT, supply the missing fact and re-dispatch when it is mechanical; otherwise send a `blocked-plan` item to the ruling seat.
-2. `scripts/review-route` grades the task `review=group` or `review=task`. A group task is held with `task-step hold` and reviewed with the others at 4 held, before a `review=task` dispatch and after the last task ([group-reviewer-prompt.md](references/group-reviewer-prompt.md)); any other task gets its own judge ([task-reviewer-prompt.md](../../reference/prompts/task-reviewer-prompt.md)).
+2. Review the task with the judge `scripts/review-route` names ([task-reviewer-prompt.md](../../reference/prompts/task-reviewer-prompt.md)).
 3. Verdicts clean and no score from 1 to 8: append the `complete` line and take the next task.
 4. Otherwise a finding that conflicts with plan text goes to the ruling seat first ([ruling-prompt.md](../../reference/prompts/ruling-prompt.md)). Then run fix round R of 2 (R=1 resume or fresh by cache state, R=2 the successor rung, fresh), each followed by a scoped re-review ([re-review-prompt.md](../../reference/prompts/re-review-prompt.md)).
 5. A finding still open after round 2 goes to the ruling seat as a `breaker` item: a CONFIRMED-GAP or AMEND is carried forward, BLOCKED stops, the rest are parked in the ledger with the ruling. Then append the `complete` line.
@@ -240,10 +239,6 @@ children in `skills/using-dforge/references/codex-tools.md`.
 For each task, or batch, run [delegated-task.md](../../reference/delegated-task.md):
 dispatch the implementer, handle the report, review the task, the fix loop and
 the complete line. Its contract names what the loop needs from you.
-
-**Group reviews.** A task `review-route` grades `review=group` is held after
-DONE and reviewed with other held tasks in one judge dispatch, per
-[delegated-task.md](../../reference/delegated-task.md) §3a.
 
 An older plan's `**Parallelism:** waves` line is ignored: its tasks run in
 index order through the loop above.

@@ -266,19 +266,6 @@ step verdict docs/plan.md 2 --cwd "$WT"
 check "verdict --cwd: the row in that checkout's state counts" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: pass (clean)"
 step verdict docs/plan.md 2
 check "verdict without --cwd: the checkout's own state has no such row" "$rc" "7"
-
-# --- verdict --group takes the suite of the last member ---
-run_suite
-G_HEAD=$HEAD_SHA
-jq -n --arg h "$G_HEAD" --arg c "$REPO" '{tasks: [1, 2], reviewHead: $h, t0: 0, reviewChecks: [{cwd: $c, head: $h, dirty: []}]}' > "$WS/group-1,2-step.json"
-{
-  printf '## Verdict\n'
-  for t in 1 2; do
-    printf 'Task %s spec: pass\nTask %s quality: approved\nTask %s scores: spec 17 / scope 17 / verification 17 / quality 17\n' "$t" "$t" "$t"
-  done
-} > "$WS/group-1,2-review-report.md"
-step verdict docs/plan.md 1 2 --group
-check "verdict --group: the last member's suite is checked" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: pass (clean)"
 rm -f .dforge/suites.tsv
 
 git worktree remove --force "$WT"

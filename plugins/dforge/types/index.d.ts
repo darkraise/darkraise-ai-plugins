@@ -178,7 +178,7 @@ export type CockpitRunTask = {
   n: number
   title: string
   state: 'pending' | 'assigned' | 'complete' | 'blocked'
-  /** The fix or review round in flight, "2/5". */
+  /** The fix round in flight, "2/5". */
   round: string | null
   seat: string | null
   isClean: boolean

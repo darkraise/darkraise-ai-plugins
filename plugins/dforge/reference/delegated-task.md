@@ -82,18 +82,14 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
     `--suite`. The integration check is the command the first sub-bullet
     resolves. The schedule is by task number: the integration check runs on
     every task whose number is a multiple of 3 and on the last task. The
-    controller decides at review time, in the same turn it starts the run,
-    because `start` runs before anyone knows whether the task will be held
-    or grouped. For a scheduled task, `task-step review` and
-    `task-step review --group` take `--suite <integration check>` and
-    `--suite-base <sha>`; `review --group` records them on the group's last
-    member. `<sha>` is the head of the last full-suite run, or the plan base
+    controller decides at review time, in the same turn it starts the run.
+    For a scheduled task, `task-step review` takes
+    `--suite <integration check>` and `--suite-base <sha>`. `<sha>` is the head of the last full-suite run, or the plan base
     before the first run. The last full-suite run is the last row of
     `<state>/suites.tsv` (`dforge-path state`) whose command column is the
     key `suite-run` records for `bash -c '<integration check>'`, whatever its
     exit, and whose HEAD is the task's base or an ancestor of it
-    (`git merge-base --is-ancestor <row head> <task base>`; for a group, its
-    first member's base). A row at the task's own head, left by an earlier
+    (`git merge-base --is-ancestor <row head> <task base>`). A row at the task's own head, left by an earlier
     review of the task, never counts. The plan base is the `base` in the step
     file of the plan's first task. So a regression made by an earlier task is
     not excused as a base failure. `review` exits 2 when `--suite` comes
@@ -102,8 +98,7 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
     file records none. Normally `suites.tsv` already holds a row at `<sha>`, so the
     comparison costs nothing, but when `suites.tsv` has no row at `<sha>`,
     `verdict` runs the suite once there (for example after a fix round),
-    bounded at 3600 seconds (`TASK_STEP_BASE_TIMEOUT`). A group runs the
-    integration check when it holds a scheduled task. A fix round runs a
+    bounded at 3600 seconds (`TASK_STEP_BASE_TIMEOUT`). A fix round runs a
     suite only when the review of its task did.
 - **Task brief:** `task-step start` extracted it to
   `<workspace>/task-<N>-brief.md` (see using-dforge §Session Budget). The
@@ -171,19 +166,13 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
 
 Implementer subagents report one of four statuses, or none. Handle each appropriately:
 
-**DONE:** In subagent mode, hold the task first:
-`bash <plugin-root>/scripts/task-step hold PLAN_FILE N`. Exit 0 holds the task for its group review (§3a) and
-writes its `awaiting group review` line; exit 4 means the task is reviewed alone: review it (step 3).
-On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
-Inline mode never holds a task: its session review loop reviews each task
-alone, so it goes straight to step 3, as a batch does. `task-step review` packages the
-diff and records `t0`, the time the cache rule in step 4 needs.
+**DONE:** Review the task (step 3). `task-step review` packages the diff and
+records `t0`, the time the cache rule in step 4 needs.
 
-**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, pass them to the task reviewer with its other inputs; the review loop decides them. If they're observations (e.g., "this file is getting large"), note them and proceed to review: in subagent mode hold the task first, as DONE says, so a task `review-route` grades `review=group` waits for its group review. A correctness or scope concern takes a grouped task out of its group (below).
+**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, pass them to the task reviewer with its other inputs; the review loop decides them. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
 
-**The suite runs beside the review.** A task reviewed alone (`hold` exited 4,
-every task inline mode delegates, a batch) starts its suite as soon as its
-DONE or DONE_WITH_CONCERNS report is in. Run
+**The suite runs beside the review.** A task or a batch starts its suite as
+soon as its DONE or DONE_WITH_CONCERNS report is in. Run
 `bash <plugin-root>/scripts/suite-run -- bash -c '<suite command>'` as a
 background Bash command from the checkout's top level, at the task's head, and in the same turn run
 `task-step review` and dispatch its seat (§3). `<suite command>` is the one
@@ -195,8 +184,7 @@ the full suite. The last `## Verified` section of the report is the current
 evidence: a fix round appends its own. End the turn when only waiting remains,
 and run `task-step verdict` only once both the seat's report and the suite's
 completion notification are in. A suite still running at a handoff shows in
-`scripts/in-flight`, and the next session starts it again. A held task starts
-no suite now: its group's suite starts with the group review (§3a).
+`scripts/in-flight`, and the next session starts it again.
 On a `Host: codex` plan `task-step` does not run: *The steps by hand* §2 starts
 the suite.
 
@@ -218,11 +206,6 @@ You never answer a requirements question from your own reading of one brief.
 2. If the task requires more reasoning, re-dispatch on the successor rung and write a new assigned line — see [escalation.md](../skills/subagent-driven-development/references/escalation.md)
 3. If the task is too large, send a `blocked-plan` item; a split is the seat's CONFIRMED-GAP naming it, logged as a `Ruling:` line
 4. If the plan itself is wrong, send a `blocked-plan` item to the ruling seat and carry out its verdict; an AMEND re-dispatches from a fresh brief
-
-**A grouped task that does not report a plain DONE:** a task `review-route`
-grades `review=group` that reports BLOCKED, NEEDS_CONTEXT, or
-DONE_WITH_CONCERNS with a correctness or scope concern leaves the group and is reviewed alone (step 3), even when it later reports DONE. The group reviews
-once its remaining members are held.
 
 **Still listed after its report:** on Claude Code, an implementer that left a
 shell or agent of its own running stays listed after it reports, whatever its
@@ -379,9 +362,7 @@ digest carries exactly one `suite:` line, read from the run §2 started:
   `<workspace>/task-<N>-base.log`. A base run that times out leaves
   `<workspace>/task-<N>-base-timeout`: later calls do not run it again, and
   every failure counts as new. A base that fails with no recognised test line
-  counts as the one line `command exit <code>`, as the head does. A task held
-  in a sequential group is compared with the group's first member's base,
-  because each later member starts at the previous member's head. With `k` at 0
+  counts as the one line `command exit <code>`, as the head does. With `k` at 0
   every failure is a base failure, and the task may complete. A suite run that
   was cut short (exit 124, or 126 and up) adds the finding
   `suite: suite did not finish (exit <code>) at <head7>` whatever its partial
@@ -506,57 +487,6 @@ review, but each goes to the ruling seat as a `cannot-verify` item before
 the task completes, unless a mechanical check settles it: the seat holds
 the plan and cross-task context the reviewer lacks. A CONFIRMED-GAP is a
 failed spec review — it enters the fix loop with the other findings.
-
-## 3a. Review a group
-
-A task held in §2 is reviewed with other held tasks in one judge dispatch. In
-sequential mode held tasks accumulate, and the group review runs
-when 4 tasks are held, before you dispatch a task `review-route` reviews alone, and after the plan's last task.
-Run `review-route PLAN_FILE --task <next>` to read the next task's tier before
-dispatching it. Once the group review is
-triggered, no new task is dispatched until the group is clean, and
-fixes inside a group run one task at a time.
-On a `Host: codex` plan no task is held: every task is reviewed alone (§3).
-
-- **One call does the plumbing:**
-  `bash <plugin-root>/scripts/task-step review --group PLAN_FILE N M …`,
-  naming every held task. It packages each member's diff from its base to its
-  held head, one section per task, writes the prompt from
-  [group-reviewer-prompt.md](../skills/subagent-driven-development/references/group-reviewer-prompt.md),
-  runs the mechanical checks for every member, and prints the `seat:` line,
-  the check lines, the state it recorded and the budget line. Dispatch the
-  `seat:` line's judge as §3 says for a judge, with the prompt "your complete
-  instructions are in `<prompt file>`: read it first and follow it". In
-  sequential mode start the group's suite (§2) once, in that same turn, at the
-  last held member's head. Under a `none` task
-  check, start the group suite only when the group holds a scheduled task,
-  and pass `--suite` and `--suite-base` to `review --group`. When the
-  group's seat returns and that suite's notification is in, run
-  `bash <plugin-root>/scripts/task-step verdict PLAN_FILE N M … --group`
-  with every member's number and act on its digest: it reads
-  `group-<list>-review-report.md`, prints one verdict line per member
-  (`Task <N>: spec …; quality …; scores …`), writes one fix file per member with a
-  Critical or Important finding, and logs each member's Minor findings. A
-  member's fix round is read alone with
-  `task-step verdict PLAN_FILE N --rereview <R>`. A group never gets a panel
-  seat.
-- **The report** holds one block per task. Apply §3's verdicts, score bands,
-  cannot-verify route and plan-conflict route to each task on its own, and §4's Minor
-  rule (`Task <N>: minor (deferred): …`).
-- **Fix rounds.** A member with findings enters §4's fix loop with the fix
-  message `<workspace>/task-<N>-fix-<R>.md`, and is re-reviewed with
-  `bash <plugin-root>/scripts/task-step rereview PLAN_FILE N` and no `--base`:
-  `review --group` recorded the group head as its review head, and
-  each member's re-review moves that head on, so a fix diff holds only that
-  member's fix. A group runs at most two fix rounds. After each round append
-  the group line (subagent-driven-development §The Ledger): one clause per
-  member, and in its `commits` clause one `<a7>..<b7> (Task <N>)` range per
-  member fixed in that round. Findings
-  still open after round 2 go to the breaker as §4 says. Members write no
-  `Task <N>: fix round` lines: the `Group` line is their round record. A group
-  with a round line is never reviewed again: `review --group` refuses its
-  members (exit 4), and its later rounds are member re-reviews.
-- **Completion:** each member gets its own `complete` line once the group is clean, or once the breaker has ruled on its open findings (§5).
 
 ## 4. The fix loop
 
@@ -739,9 +669,6 @@ the next task in plan order; after the last task, to the final review, written
   followed by ` (<id> <STATUS> — <reason>)` for each reviewer that ran and
   returned no list, or by ` (reviewers off — <answers>)` when §3's `gate:`
   and `seat:` lines say no reviewer is open
-- a group member's complete line (§3a) takes its `commits` range from its
-  `awaiting group review` line and ends its scores clause
-  `, seat <judge> (group <list>)`
 
 In an auto run, run `scripts/auto-run task-complete`, then the Fable batch when
 `scripts/auto-run decision list` prints anything.
@@ -896,17 +823,5 @@ For a task whose last ledger line, read by the caller's Recovery rule, is:
 | `fix round 1/2` whose last slot is `session` or `HANDBACK to inline` | The session finishes it: §The session review loop, from round 2 |
 | `fix round 1/2`, or `fix round 1/5` from an older run | Resume the loop at round 2 — a fresh dispatch on the successor rung (§4) |
 | `fix round 2/2`, or `fix round R/5` with R >= 2 from an older run | Go to the breaker (§4) |
-| `awaiting group review (commits …)` | Held: never re-dispatch its implementer. It is reviewed by the next group dispatch (§3a), which the trigger above starts |
-| `review round 1/2` on a group review's `Group` line | Run round 2 (§3a) for each member whose clause is open, one member at a time — after compaction the agent ids are gone, so each is a fresh dispatch |
-| `review round 2/2` on a group review's `Group` line | Send each member's open findings to the breaker (§4) |
 
 On a Codex plan the Codex row wins; the `older run` mappings apply to a Claude plan only.
-
-Members read `awaiting group review` until round 1's `Group` line is
-written. When `<workspace>/group-<list>-step.json` already exists for them,
-the group review ran: never run `review --group` again, which would re-review
-the members' old diffs and leave any fix committed since unreviewed. Without
-`group-<list>-review-report.md`, dispatch the seat again with the prompt file
-`review --group` wrote; with it, run `task-step verdict … --group` before any
-fix commit, and once a member's fix is committed, re-review that member with
-`task-step rereview` from its fix file (§3a).

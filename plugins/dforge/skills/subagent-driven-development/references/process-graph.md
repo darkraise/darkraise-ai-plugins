@@ -10,8 +10,6 @@ digraph process {
         "Implementer reports NEEDS_CONTEXT?" [shape=diamond];
         "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" [shape=box];
         "Implementer implements, tests, commits, self-reviews" [shape=box];
-        "review-route: review=group?" [shape=diamond];
-        "task-step hold; review the group at 4 held, before a review=task dispatch, and after the last task (./group-reviewer-prompt.md)" [shape=box];
         "Generate review package, dispatch judge (./task-reviewer-prompt.md)" [shape=box];
         "Verdicts clean and no score 1-8?" [shape=diamond];
         "Finding conflicts with plan text?" [shape=diamond];
@@ -39,10 +37,7 @@ digraph process {
     "Implementer reports NEEDS_CONTEXT?" -> "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" [label="yes"];
     "Mechanical: supply it and re-dispatch; else blocked-plan item to the seat" -> "Implementer implements, tests, commits, self-reviews";
     "Implementer reports NEEDS_CONTEXT?" -> "Implementer implements, tests, commits, self-reviews" [label="no"];
-    "Implementer implements, tests, commits, self-reviews" -> "review-route: review=group?";
-    "review-route: review=group?" -> "Generate review package, dispatch judge (./task-reviewer-prompt.md)" [label="no"];
-    "review-route: review=group?" -> "task-step hold; review the group at 4 held, before a review=task dispatch, and after the last task (./group-reviewer-prompt.md)" [label="yes"];
-    "task-step hold; review the group at 4 held, before a review=task dispatch, and after the last task (./group-reviewer-prompt.md)" -> "Verdicts clean and no score 1-8?";
+    "Implementer implements, tests, commits, self-reviews" -> "Generate review package, dispatch judge (./task-reviewer-prompt.md)";
     "Generate review package, dispatch judge (./task-reviewer-prompt.md)" -> "Verdicts clean and no score 1-8?";
     "Verdicts clean and no score 1-8?" -> "Append completion to ledger, mark todo complete" [label="yes"];
     "Verdicts clean and no score 1-8?" -> "Finding conflicts with plan text?" [label="no"];

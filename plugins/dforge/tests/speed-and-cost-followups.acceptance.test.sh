@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance tests for the speed-and-cost-followups spec
 # (docs/dforge/specs/2026-10-28-speed-and-cost-followups-design.md), the
-# plugin-side statements A1 to A4, A7 to A16, A20 and the fast part
+# plugin-side statements A1 to A4, A7, A8, A11 to A16, A20 and the fast part
 # of A23 (A19 went with draft-pack). A5 is the `A5:` describe block in
 # cockpit.test.ts; A17 and A18 are in
 # evals/tiers/tests/speed-and-cost-followups.acceptance.test.mjs. Each test is
@@ -259,58 +259,6 @@ if selected A8 || selected A11; then
     "Important 2 cannot-verify:0 — exists only_in_blob at head, expect present — got absent"
   check "A11: it is not logged as settled, and a text hit still settles" \
     "$(grep -c 'blob.bin' "$LEDGER") $(grep -cxE 'Task 2: Ruling: cannot-verify — settled by task-step check exists — notes.txt:1' "$LEDGER")" "0 1"
-fi
-
-# ---------------------------------------------------------------- A9, A10
-build_group() { # build_group <dir> — a repository with tasks 1 and 2 held and group-reviewed at one head, and the group's report written
-  REPO="$1"; init_repo "$REPO"; mkdir -p "$REPO/docs"
-  mkplan 3 > "$REPO/docs/plan.md"
-  printf '#!/usr/bin/env bash\nexit 0\n' > "$REPO/suite.sh"
-  echo 0 > "$REPO/app.txt"
-  commit_all base
-  B0=$(g rev-parse HEAD | tr -d '\r')
-  local n t
-  for n in 1 2; do
-    ts start docs/plan.md "$n" --suite 'bash suite.sh'
-    echo "w$n" >> "$REPO/app.txt"; commit_all "work $n"
-    ts hold docs/plan.md "$n"
-  done
-  WS=$(workspace docs/plan.md)
-  sr 'bash suite.sh'
-  ts review --group docs/plan.md 1 2
-  check "setup: group review exits 0" "$rc" "0"
-  {
-    printf '## Verdict\n'
-    for t in 1 2; do printf 'Task %s spec: pass\nTask %s quality: approved\nTask %s scores: spec 17 / scope 17 / verification 17 / quality 17\n' "$t" "$t" "$t"; done
-  } > "$WS/group-1,2-review-report.md"
-}
-
-if selected A9; then
-  build_group "$TMP/s9"
-  printf -- '- app.txt: wrong value\n\nFixed.\n' > "$WS/task-2-fix-1.md"
-  echo fix >> "$REPO/app.txt"; commit_all "fix 2"
-  cp "$WS/task-2-step.json" "$TMP/step2.before"
-  base_before=$(jq -r '.base' "$WS/task-2-step.json" | tr -d '\r')
-  ts rereview docs/plan.md 2 --base "$B0"
-  check "A9: rereview --base on a sequential group member exits 2" "$rc" "2"
-  check "A9: the step file's base is unchanged" "$(jq -r '.base' "$WS/task-2-step.json" | tr -d '\r') $(cmp -s "$TMP/step2.before" "$WS/task-2-step.json" && echo same || echo changed)" "$base_before same"
-
-fi
-
-if selected A10; then
-  build_group "$TMP/s10"
-  cp "$WS/task-2-step.json" "$TMP/step2.keep"
-  rm -f "$WS/task-2-step.json"
-  ts verdict docs/plan.md 1 2 --group
-  check "A10: a missing last member's step file exits 6 naming the file" "$rc $(grep -cF "$WS/task-2-step.json" <<<"$err")" "6 1"
-  check "A10: and prints no 'suite: none recorded'" "$(grep -c 'suite: none recorded' <<<"$out")" "0"
-  printf '{not json\n' > "$WS/task-2-step.json"
-  ts verdict docs/plan.md 1 2 --group
-  check "A10: a last member's step file that is not valid JSON exits 6 naming the file" "$rc $(grep -cF "$WS/task-2-step.json" <<<"$err")" "6 1"
-  check "A10: and prints no 'suite: none recorded' either" "$(grep -c 'suite: none recorded' <<<"$out")" "0"
-  cp "$TMP/step2.keep" "$WS/task-2-step.json"
-  ts verdict docs/plan.md 1 2 --group
-  check "A10: with the file back the same verdict reads the recorded suite" "$rc $(grep -c '^suite: pass' <<<"$out")" "0 1"
 fi
 
 # ------------------------------------------------------------------ A12

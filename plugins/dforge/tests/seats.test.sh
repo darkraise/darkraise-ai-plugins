@@ -112,10 +112,9 @@ lacks() { # lacks <label> <file> <text>
   check "$1" "$(grep -qF -- "$3" "$2" 2>/dev/null && echo yes || echo no)" "no"
 }
 TRP="$P/reference/prompts/task-reviewer-prompt.md"
-GRP="$P/skills/subagent-driven-development/references/group-reviewer-prompt.md"
 RULP="$P/reference/prompts/ruling-prompt.md"
 FR="$P/reference/final-review.md"
-for t in "$TRP" "$RRP" "$GRP"; do
+for t in "$TRP" "$RRP"; do
   n=$(basename "$t" .md)
   names "$n: names the report file" "$t" 'Write your full report to [REPORT_FILE] and write nothing else'
   check "$n: the report opens with the Verdict section" "$(grep -qE '^ *## Verdict$' "$t" 2>/dev/null && echo yes || echo no)" "yes"
@@ -133,9 +132,6 @@ names "task reviewer: the cannot-verify section" "$TRP" '## Cannot verify'
 check "task reviewer: the External findings are a report section" "$(grep -qE '^ *## External findings$' "$TRP" && echo yes || echo no)" "yes"
 names "re-review: the round verdict key" "$RRP" 'fix round: addressed | open'
 names "re-review: the open count key" "$RRP" 'open: <k>'
-names "group reviewer: the per-task finding grammar" "$GRP" '- [Critical|Important|Minor] (Task <N>) <file>:<line> — <one-liner>'
-names "group reviewer: per-task verdict keys" "$GRP" 'Task <N> spec: pass | fail | cannot-verify'
-names "group reviewer: per-task scores" "$GRP" 'Task <N> scores: spec <1-20> / scope <1-20> / verification <1-20> / quality <1-20>'
 
 # The plan-review and critic seats follow the same report contract.
 PRP="$P/skills/writing-plans/references/plan-reviewer-prompt.md"
@@ -171,7 +167,7 @@ bad_report_paths() {
 JUDGE_TEMPLATES=(
   "$P/skills/writing-plans/references/lint-and-review.md" "$PRP"
   "$FR" "$DT" "$AR" "$WT"
-  "$RRP" "$GRP" "$RULP" "$P/skills/subagent-driven-development/references/ruling-seat.md" "$TRP"
+  "$RRP" "$RULP" "$P/skills/subagent-driven-development/references/ruling-seat.md" "$TRP"
   "$P/skills/executing-plans/references/ruling-seat.md"
   "$CR" "$RCR" "$DJ" "$SJ" "$CM" "$SA"
   "$P/skills/brainstorming/references/architecture-critic.md" "$CP"
