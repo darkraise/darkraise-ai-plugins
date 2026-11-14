@@ -17,7 +17,8 @@
 #        review-route PLAN_FILE --final
 # ID is a task number, or a task number and part letter for a split task (7B).
 # Output: review-seat <scope> primary=<seat> fallback=<seat|-> reason=<why>
-#         (a plan round appends cap=<n>)
+#         (a plan round appends cap=<n>; --final appends external=on|off, off
+#         while no external reviewer's review surface is open)
 # A Claude plan's round cap comes from scripts/depth-route's depth: light and
 # standard 1, full 2; any round past the cap exits 2.
 # A Host: codex plan routes only --plan-round, to a native seat printed as
@@ -182,7 +183,9 @@ case "$1" in
     plan_shape
     reason=plain
     [ "$intricate" -eq 0 ] || reason=intricate
-    printf 'review-seat final primary=%s fallback=- reason=%s\n' "$OPUS" "$reason"
+    external=off
+    ! reviewers_on || external=on
+    printf 'review-seat final primary=%s fallback=- reason=%s external=%s\n' "$OPUS" "$reason" "$external"
     exit 0 ;;
   --task) shift; [ $# -ge 1 ] || usage ;;
   *) usage ;;

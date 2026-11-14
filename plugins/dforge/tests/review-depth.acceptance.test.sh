@@ -381,7 +381,7 @@ a12() {
   for p in p12l p12s p12f; do
     rr "docs/dforge/plans/$p.md" --final
     check "A12: review-route --final still routes the whole-branch Claude review ($p)" "$rc:$out" \
-      "0:review-seat final primary=dforge:judge-opus fallback=- reason=plain"
+      "0:review-seat final primary=dforge:judge-opus fallback=- reason=plain external=off"
   done
 }
 

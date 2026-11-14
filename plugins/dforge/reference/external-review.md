@@ -156,7 +156,7 @@ own prompt, `criteria/codex-final-review.md` followed by
 and [final-review.md](final-review.md) step 3 runs its dedupe judge whenever
 two or more lists carry findings, tagging each finding's origins as a
 `+`-joined set of `claude`, `codex` and `agy`, for example `[claude+agy]`.
-At depth light or standard the round is skipped and said aloud.
+At depth light or standard the round is skipped and said aloud, and so is a depth-full round whose route line says `external=off`.
 
 ## Quota and the Opus row
 

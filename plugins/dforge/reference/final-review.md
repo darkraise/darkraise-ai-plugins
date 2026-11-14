@@ -306,7 +306,10 @@ your own: QA commits on this branch.
    [native-codex.md](native-codex.md) instead.
 2. **External round.** At depth light or standard, skip it: say
    `external round skipped (depth <d>)` in one line and go to step 3 with the
-   Claude review alone. At depth full, run the reviewer panel as
+   Claude review alone. At depth full with `external=off` on the route line
+   step 1 printed, skip it too and say `external round skipped (no reviewer
+   open)`: the panel would only print `SKIPPED` lines. At depth full with
+   `external=on`, run the reviewer panel as
    [external-review.md](external-review.md) §Final-review external round
    says, with `--cwd` set to a temporary detached worktree at HEAD
    (`git worktree add --detach <workspace>/final-review-panel-tree <sha>`), as
@@ -328,7 +331,7 @@ your own: QA commits on this branch.
    lists=<n>`: end the turn and resume on its notification. An absent list
    from a launched panel is a round still running, never a one-list case.
    When step 2 skipped the round without launching the panel (depth light or
-   standard), there is nothing to wait for: go straight to the one-list case.
+   standard, or no reviewer open), there is nothing to wait for: go straight to the one-list case.
 
    **Dedupe and verify whenever two or more lists carry findings.** The
    lists are the Claude review's (with its lens reports) and one per external
