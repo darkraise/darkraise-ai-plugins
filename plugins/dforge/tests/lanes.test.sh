@@ -74,6 +74,14 @@ while read -r model effort secs _; do
 done <<< "$agy"
 check "every agy-judge bound plus 120 s fits a background call's cap" "$too_long" "NONE"
 
+# --- api-judge -----------------------------------------------------------------
+api=$(block api-judge)
+check "api-judge rows, in the order tried" "$api" "anthropic claude-opus-5-5 medium 1800
+openai gpt-6-astra xhigh 1800
+agentrouter gpt-6-astra xhigh 1800"
+check "api-judge rows are budget model effort seconds" \
+  "$(printf '%s\n' "$api" | awk 'NF != 4 || $1 !~ /^(anthropic|openai|agentrouter)$/ || $4 !~ /^[0-9]+$/' | wc -l | tr -d ' ')" "0"
+
 # --- judge blocks --------------------------------------------------------------
 rows=$(awk '$0 == "```agy-judge" { f = 1; next } f && $0 == "```" { exit } f && NF' "$P/reference/ladder.md")
 check "agy-judge has two rows" "$(printf '%s\n' "$rows" | wc -l | tr -d ' ')" "2"

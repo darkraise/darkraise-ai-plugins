@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Stand-in for `claude --bare -p --output-format json`. STUB_JUDGE_ANTHROPIC is its mode.
+set -u
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+stub_log anthropic "$@"
+usage() { :; }
+reply() { # reply <text> — one result object, with the cost unless the mode is silent
+  if [ "$mode" = silent ]; then jq -cn --arg t "$1" '{type: "result", subtype: "success", is_error: false, result: $t}'
+  else jq -cn --arg t "$1" --argjson c "${STUB_JUDGE_COST:-0.25}" '{type: "result", subtype: "success", is_error: false, result: $t, total_cost_usd: $c}'; fi
+}
+stub_run

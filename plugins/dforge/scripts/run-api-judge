@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+# A ruling on the first open API budget of the api-judge block (reference/ladder.md).
+#
+# Usage: run-api-judge --prompt FILE --report FILE --cwd DIR [--add-dir DIR]... [--dry-run]
+# Prints, and appends to <state>/api-judge.log:
+#   api-judge <budget>:<model>/<effort> started
+#   api-judge <budget> running <seconds>s
+#   api-judge <budget>:<model>/<effort> status=<OK|FAILED|TIMEOUT|SKIPPED> exit=<n> out=<path|-> spent=<usd> reason=<token>
+# With no auto run bound it prints
+#   api-judge none status=SKIPPED exit=3 out=- spent=0.0000 reason=no-run
+# --dry-run prints `api-judge <budget>:<model>/<effort> dry-run: <command line>`
+# for each open row and starts nothing.
+# Exit: 0 a report was written (under --dry-run: a row was open), 3 none was,
+#       2 usage
+set -uo pipefail
+export MSYS_NO_PATHCONV=1
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/lib/api-budget.sh"
+. "$HERE/lib/auto-run.sh"
+. "$HERE/lib/timeout.sh"
+. "$HERE/lib/native-path.sh"
+
+INSTRUCTION='You cannot write files. Reply with the whole report as your answer.'
+GRACE=10
+
+die() { echo "run-api-judge: $1" >&2; exit 2; }
+
+prompt="" report="" cwd="" dry=no
+add_dirs=()
+while [ $# -gt 0 ]; do
+  case $1 in
+    --prompt|--report|--cwd|--add-dir)
+      [ $# -ge 2 ] || die "$1 needs a value"
+      case $1 in
+        --prompt) prompt=$2 ;;
+        --report) report=$2 ;;
+        --cwd) cwd=$2 ;;
+        --add-dir) add_dirs+=("$2") ;;
+      esac
+      shift 2
+      ;;
+    --dry-run) dry=yes; shift ;;
+    *) die "unknown argument: $1" ;;
+  esac
+done
+[ -n "$prompt" ] || die "--prompt is required"
+[ -f "$prompt" ] || die "no prompt file: $prompt"
+[ -n "$report" ] || die "--report is required"
+[ -n "$cwd" ] || die "--cwd is required"
+[ -d "$cwd" ] || die "not a directory: $cwd"
+command -v jq >/dev/null 2>&1 || die "jq is required"
+dforge_timeout || die "timeout is required"
+
+START=$(date +%s)
+CHAIN=${API_JUDGE_CHAIN:-2400}
+BEAT=${API_JUDGE_BEAT:-300}
+[[ $CHAIN =~ ^[0-9]+$ ]] || CHAIN=2400
+[[ $BEAT =~ ^[0-9]+$ ]] && [ "$BEAT" -gt 0 ] || BEAT=300
+
+[ "$dry" = yes ] || rm -f -- "$report"
+
+state=$(cd "$cwd" && bash "$HERE/dforge-path" state 2>/dev/null | tr -d '\r') || state=""
+jlog=""
+[ -n "$state" ] && mkdir -p -- "$state" 2>/dev/null && jlog="$state/api-judge.log"
+say() {
+  printf '%s\n' "$1"
+  [ -z "$jlog" ] || printf '%s\n' "$1" >> "$jlog" 2>/dev/null || true
+}
+
+AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}}
+if ! (cd "$cwd" && ar_bound); then
+  say "api-judge none status=SKIPPED exit=3 out=- spent=0.0000 reason=no-run"
+  exit 3
+fi
+
+ladder=${API_JUDGE_LADDER:-$HERE/../reference/ladder.md}
+rows=$(awk '$0 == "```api-judge" { f = 1; next } f && $0 == "```" { exit } f && NF' < "$ladder" 2>/dev/null | tr -d '\r')
+
+claude_cmd() {
+  if [ -n "${API_JUDGE_CLAUDE:-}" ]; then printf '%s\n' "$API_JUDGE_CLAUDE"
+  elif command -v claude >/dev/null 2>&1; then printf 'claude\n'
+  else printf '%s\n' "$HOME/.local/bin/claude"
+  fi
+}
+
+base_url() { case $1 in agentrouter) printf 'https://agentrouter.org/v1\n' ;; *) printf 'https://api.openai.com/v1\n' ;; esac; }
+
+work=$(mktemp -d) || die "cannot create a scratch directory"
+child=""
+cleanup() {
+  if [ -n "$child" ]; then kill -TERM -- "-$child" 2>/dev/null || kill -TERM "$child" 2>/dev/null; fi
+  rm -rf "$work"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+
+{ cat -- "$prompt"; printf '\n%s\n' "$INSTRUCTION"; } > "$work/prompt" || die "cannot write the prompt"
+
+build_cmd() { # build_cmd <budget> <model> <effort> — sets cmd
+  local d
+  case $1 in
+    anthropic)
+      cmd=("$(claude_cmd)" --bare -p --output-format json --model "$2" --effort "$3" --tools Read,Grep,Glob)
+      for d in ${add_dirs[@]+"${add_dirs[@]}"}; do cmd+=(--add-dir "$(dr_native_path "$d")"); done
+      ;;
+    *)
+      cmd=("${API_JUDGE_CODEX:-codex}" exec
+        -c 'model_provider="dforge"'
+        -c 'model_providers.dforge.name="dforge"'
+        -c "model_providers.dforge.base_url=\"$(base_url "$1")\""
+        -c 'model_providers.dforge.env_key="DFORGE_JUDGE_KEY"'
+        -c 'model_providers.dforge.wire_api="responses"'
+        -c "model_reasoning_effort=\"$3\""
+        -m "$2" --sandbox read-only --skip-git-repo-check --json
+        -o "$(dr_native_path "$work/last")" -C "$(dr_native_path "$cwd")" -)
+      ;;
+  esac
+}
+
+child_key_var() { case $1 in anthropic) printf 'ANTHROPIC_API_KEY\n' ;; *) printf 'DFORGE_JUDGE_KEY\n' ;; esac; }
+
+reply_text() { # reply_text <budget> — the judge's answer from its captured output
+  case $1 in
+    anthropic)
+      jq -r 'select(type == "object" and .type == "result" and .is_error != true) | .result // empty' < "$work/out" 2>/dev/null | tr -d '\r'
+      ;;
+    *)
+      if [ -s "$work/last" ]; then tr -d '\r' < "$work/last"
+      else
+        jq -rR 'fromjson? | select(.type == "item.completed" and .item.type == "agent_message") | .item.text' < "$work/out" 2>/dev/null |
+          tr -d '\r'
+      fi
+      ;;
+  esac
+}
+
+line_of() { printf 'api-judge %s:%s/%s status=%s exit=%s out=%s spent=0.0000 reason=%s' "$@"; }
+
+open=0
+while read -r budget model effort secs _; do
+  [ -n "$budget" ] || continue
+  now=$(date +%s)
+  left=$((CHAIN - (now - START)))
+  [ "$left" -gt 0 ] || exit 3
+  bound=$secs
+  [ "$left" -lt "$bound" ] && bound=$left
+
+  budget_line=$(api_budget_state "$budget") || {
+    reason=$(printf '%s\n' "$budget_line" | sed -n 's/.* reason=\([a-z-]*\)$/\1/p')
+    say "$(line_of "$budget" "$model" "$effort" SKIPPED 0 - "${reason:-off}")"
+    continue
+  }
+  if [ "$budget" != anthropic ] && { ! api_budget_price "$model" input >/dev/null || ! api_budget_price "$model" output >/dev/null; }; then
+    say "$(line_of "$budget" "$model" "$effort" SKIPPED 0 - no-price)"
+    continue
+  fi
+
+  build_cmd "$budget" "$model" "$effort"
+  key_var=$(api_budget_key_var "$budget")
+  open=$((open + 1))
+  if [ "$dry" = yes ]; then
+    say "api-judge $budget:$model/$effort dry-run: cd $cwd && $(child_key_var "$budget")=\$$key_var ${cmd[*]} < <prompt>"
+    continue
+  fi
+
+  say "api-judge $budget:$model/$effort started"
+  rm -f -- "$work/out" "$work/err" "$work/last"
+  (
+    cd "$cwd" || exit 1
+    export "$(child_key_var "$budget")=${!key_var}"
+    if command -v setsid >/dev/null 2>&1; then
+      exec setsid "$DFORGE_TIMEOUT" -k "$GRACE" "$bound" "${cmd[@]}" < "$work/prompt" > "$work/out" 2> "$work/err"
+    else
+      exec "$DFORGE_TIMEOUT" -k "$GRACE" "$bound" "${cmd[@]}" < "$work/prompt" > "$work/out" 2> "$work/err"
+    fi
+  ) &
+  child=$!
+  row_start=$(date +%s); last_line=$row_start
+  while kill -0 "$child" 2>/dev/null; do
+    sleep 0.2
+    now=$(date +%s)
+    if [ $((now - last_line)) -ge "$BEAT" ] && kill -0 "$child" 2>/dev/null; then
+      say "api-judge $budget running $((now - row_start))s"
+      last_line=$now
+    fi
+  done
+  wait "$child"; rc=$?
+  kill -TERM -- "-$child" 2>/dev/null
+  child=""
+
+  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    say "$(line_of "$budget" "$model" "$effort" TIMEOUT 124 - timeout)"
+    exit 3
+  fi
+  if [ "$rc" -ne 0 ]; then
+    say "$(line_of "$budget" "$model" "$effort" FAILED "$rc" - error)"
+    continue
+  fi
+  reply=$(reply_text "$budget")
+  first=$(printf '%s\n' "$reply" | awk 'NF { print; exit }')
+  if [ "$first" != "## Verdict" ]; then
+    say "$(line_of "$budget" "$model" "$effort" FAILED 0 - no-verdict)"
+    continue
+  fi
+  mkdir -p -- "$(dirname -- "$report")" 2>/dev/null
+  if ! printf '%s\n' "$reply" > "$report"; then
+    say "$(line_of "$budget" "$model" "$effort" FAILED 0 - error)"
+    continue
+  fi
+  say "$(line_of "$budget" "$model" "$effort" OK 0 "$report" none)"
+  exit 0
+done <<< "$rows"
+
+[ "$dry" = yes ] && [ "$open" -gt 0 ] && exit 0
+exit 3

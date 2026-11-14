@@ -153,3 +153,16 @@ gemini-4-argon high 2400
 The Claude quota on Antigravity is small: the 2026-11-03 calibration drained it
 after about 500k tokens. A review that finds it out runs the Gemini row, so a
 drained quota costs a seat its preferred model, never its review.
+
+## API-billed ruling judges
+
+An auto run tries these budgets, in this order, before the subscription's
+`judge-opus` seat, through `scripts/run-api-judge`. The whole chain has 2400
+seconds, and a row gets its own seconds or what is left of them, whichever is
+less.
+
+```api-judge
+anthropic claude-opus-5-5 medium 1800
+openai gpt-6-astra xhigh 1800
+agentrouter gpt-6-astra xhigh 1800
+```

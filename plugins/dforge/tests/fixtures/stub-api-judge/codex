@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Stand-in for `codex exec --json`. Its budget is agentrouter when an argument names
+# agentrouter.org, openai otherwise; STUB_JUDGE_OPENAI or STUB_JUDGE_AGENTROUTER is its mode.
+set -u
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+budget=openai; last=""; prev=""
+for arg in "$@"; do
+  case "$arg" in *agentrouter.org*) budget=agentrouter ;; esac
+  case "$prev" in -o | --output-last-message) last=$arg ;; esac
+  prev=$arg
+done
+stub_log "$budget" "$@"
+usage() {
+  [ "$mode" = silent ] || printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":1000000,"cached_input_tokens":200000,"output_tokens":100000}}'
+}
+reply() { # reply <text> — the event stream, and the last-message file when one was asked for
+  printf '%s\n' '{"type":"thread.started","thread_id":"t-1"}'
+  jq -cn --arg t "$1" '{type: "item.completed", item: {id: "item_1", type: "agent_message", text: $t}}'
+  usage
+  [ -z "$last" ] || printf '%s' "$1" > "$last"
+}
+stub_run
