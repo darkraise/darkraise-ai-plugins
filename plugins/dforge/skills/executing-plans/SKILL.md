@@ -182,9 +182,10 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   `Review depth: <light|standard|full> (<reason>)` is written once, before
   step 0 of the final review, and is read on recovery, never recomputed; it is
   not a `Final review:` line, which recovery keys on.
-- After each `complete` and `fix round` line, run `scripts/darkmem-sync push`;
-  at `complete`, also promote the task's durable facts
-  ([project-state.md](../../reference/project-state.md) §darkmem sync points).
+- With `darkmemEnabled` true, after each `complete` and `fix round` line, run
+  `scripts/darkmem-sync push`, and at `complete` also promote the task's durable
+  facts ([project-state.md](../../reference/project-state.md) §darkmem sync points).
+  With it false, run neither.
 - `implementer inline` is this mode's assigned line. You are the implementer,
   so the agent slot says so, and `base` is `git rev-parse --short HEAD` taken
   before you change anything.
