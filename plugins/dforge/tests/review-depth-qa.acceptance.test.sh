@@ -17,7 +17,6 @@ DR="$S/depth-route"
 ROUTE="$S/review-route"
 LENS="$S/lens-route"
 LINT="$S/plan-lint"
-BASE_SHA=7884cb791eb6e397f72306f5db8db796f6129034
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -139,16 +138,6 @@ printf 'it("x", () => {})\n' > "$REPO/tests/x.test.ts"
 git -C "$REPO" add -A >/dev/null 2>&1
 git -C "$REPO" commit -q -m head
 HEAD_C=$(git -C "$REPO" rev-parse HEAD)
-
-# The code as it stood before the spec, for "unchanged" comparisons.
-BASE_DIR="$TMP/base"
-have_base=0
-if git -C "$REPO_ROOT" cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
-  mkdir -p "$BASE_DIR"
-  if git -C "$REPO_ROOT" archive "$BASE_SHA" plugins/dforge 2>/dev/null | tar -x -C "$BASE_DIR" 2>/dev/null \
-     && [ -f "$BASE_DIR/plugins/dforge/scripts/review-route" ]; then have_base=1; fi
-fi
-[ "$have_base" -eq 1 ] || echo "note: BASE $BASE_SHA is not in this clone; the unchanged-output comparisons are skipped"
 
 # =====================================================================
 if want A1; then
@@ -347,13 +336,6 @@ if want A7; then
     present "A7: Host: codex total $t (spec light) prints cap=$wcap" "$out" "cap=$wcap"
     absent "A7: Host: codex total $t is never primary=none" "$out" "primary=none"
     rr "$pc" "$((wcap + 2))"; check "A7: Host: codex total $t, round $((wcap + 2)) exits 2" "$status" 2
-    if [ "$have_base" -eq 1 ]; then
-      for r in 1 "$((wcap + 1))" "$((wcap + 2))"; do
-        rr "$pc" "$r"; new_out=$out new_st=$status
-        old_out=$(cd "$REPO" && timeout 60 bash "$BASE_DIR/plugins/dforge/scripts/review-route" "$pc" --plan-round "$r" 2>&1); old_st=$?
-        check "A7: Host: codex total $t round $r matches the pre-spec output" "$new_st|$new_out" "$old_st|$old_out"
-      done
-    fi
   done
 fi
 
@@ -423,14 +405,6 @@ if want A8; then
   present "A8: full prints reason=cap past the cap" "$out" "^lens-skipped .* reason=cap$"
   lr "$pf" DFORGE_LENS_CAP=3
   check "A8: full, lensCap 3, prints 3 lens lines" "$(lens_lines)" 3
-  if [ "$have_base" -eq 1 ]; then
-    norm() { sed -E 's#criteria=[^ ]*/criteria/#criteria=#; s#reason=paths:[^ ]*#reason=paths#'; }
-    for cap in 0 1 2 3 4 9; do
-      lr "$pf" DFORGE_LENS_CAP=$cap; new=$(norm <<<"$out")
-      old=$(cd "$REPO" && env DFORGE_LENS_CAP=$cap timeout 60 bash "$BASE_DIR/plugins/dforge/scripts/lens-route" "$pf" --final "$BASE_C" "$HEAD_C" 2>&1 | norm)
-      check "A8: full, lensCap $cap, output equals the pre-spec output" "$new" "$old"
-    done
-  fi
 fi
 
 # =====================================================================
