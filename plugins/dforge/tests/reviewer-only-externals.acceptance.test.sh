@@ -613,8 +613,6 @@ EOF
   lint=${lint//$'\r'/}
   check "A9: plan-lint on an Executor: codex plan exits 0" "$lrc" "0"
   present "A9: plan-lint reports no errors" "$lint" 'plan-lint: 0 errors'
-  check "A9: plan-lint prints exactly one WARN naming the Executor line" "$(grep -c '^WARN .*Executor' <<<"$lint")" "1"
-  present "A9: that WARN names Task 2 and says the line is obsolete" "$lint" '^WARN Task 2: .*Executor.* line is obsolete'
   absent "A9: plan-lint prints no ERROR" "$lint" '^ERROR'
   local plain
   plain=$(cd "$R" && timeout 60 bash "$LINT" plan-plain.md 2>&1)

@@ -87,12 +87,10 @@ const suiteSeconds = { 'plan-lint.test.sh': 1200, 'speed-and-cost-followups.acce
 // task-step runs as three parts, one per section of the suite, and plan-lint as
 // two, whose limit applies to each.
 const suiteParts = {
-  'faster-plans.acceptance.test.sh': [['a2', 'a3', 'a4', 'a5'], ['a11', 'a12'], ['a17', 'a18', 'a19', 'a20', 'a21', 'a22', 'a23']],
+  'faster-plans.acceptance.test.sh': [['a2', 'a3', 'a5'], ['a11', 'a12'], ['a17', 'a19', 'a20', 'a21', 'a22', 'a23']],
   'task-step.test.sh': [['start'], ['rereview'], ['verdict']],
   'plan-lint.test.sh': [['one'], ['two']],
-  // speed-and-cost-followups ran past 600 s on a Windows runner while its A12
-  // re-ran two whole suites, which it skips under test-all.
-  'speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A7', 'A8', 'A11'], ['A12'], ['A13', 'A14', 'A15', 'A16', 'A20', 'A23']],
+  'speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A7', 'A8', 'A11'], ['A13', 'A14', 'A15']],
 };
 const jobs = [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],

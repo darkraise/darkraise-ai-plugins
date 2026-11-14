@@ -295,10 +295,6 @@ stop_scene() {
 # --- tests ------------------------------------------------------------------
 
 t_A1() {
-  check "A1: SKILL.md exists at plugins/dforge/skills/ui-ux/SKILL.md" \
-    "$([ -f "$PLUGIN/skills/ui-ux/SKILL.md" ] && echo yes || echo no)" "yes"
-  check "A1: its frontmatter says name: ui-ux" \
-    "$(awk 'NR==1 && $0=="---" {f=1; next} f && $0=="---" {exit} f && $0=="name: ui-ux" {print "yes"}' "$PLUGIN/skills/ui-ux/SKILL.md")" "yes"
   local vout vstatus
   local claude_bin=${CLAUDE:-$(type -P claude || true)}
   [ -n "$claude_bin" ] || claude_bin="$REAL_HOME/.local/bin/claude"

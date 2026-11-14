@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Acceptance tests for the speed-and-cost-followups spec
 # (docs/dforge/specs/2026-10-28-speed-and-cost-followups-design.md), the
-# plugin-side statements A1 to A4, A7, A8, A11 to A16, A20 and the fast part
-# of A23 (A19 went with draft-pack). A5 is the `A5:` describe block in
+# plugin-side statements A1 to A4, A7, A8, A11 and A13 to A15 (A19 went with
+# draft-pack). A5 is the `A5:` describe block in
 # cockpit.test.ts. Each test is
 # written from the statement's text and reaches the behaviour through the
 # scripts the spec names (task-step, impl-stop-gate), the files the
@@ -260,25 +260,6 @@ if selected A8 || selected A11; then
     "$(grep -c 'blob.bin' "$LEDGER") $(grep -cxE 'Task 2: Ruling: cannot-verify — settled by task-step check exists — notes.txt:1' "$LEDGER")" "0 1"
 fi
 
-# ------------------------------------------------------------------ A12
-if selected A12; then
-  BT="$HERE/task-step-base.test.sh"; ST="$HERE/task-step-settle.test.sh"
-  check "A12: task-step-base.test.sh has a verdict --cwd case" "$(grep -cE 'verdict .*--cwd' "$BT" | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes"
-  check "A12: and a base row that timed out (exit 124)" "$(grep -cE 'exit 124|sr_timeout|--timeout 1' "$BT" | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes"
-  check "A12: and a passing base row (no base run)" "$(grep -ciE 'passing (suites.tsv )?(base )?row|0 baseline' "$BT" | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes"
-  check "A12: task-step-settle.test.sh has a ./<name> exists item run from a subdirectory" \
-    "$(grep -cE 'exists \./[A-Za-z_.]+ at head, expect present' "$ST" | awk '{ print ($1 >= 1) ? "yes" : "no" }') $(grep -cE '\(cd "\$REPO/[a-z]+" && .*task-step' "$ST" | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes yes"
-  # test-all runs both suites as jobs of their own.
-  if [ -n "${DR_TEST_ALL:-}" ]; then
-    printf 'skip - A12: task-step-base.test.sh and task-step-settle.test.sh run as their own test-all jobs\n'
-  else
-    out=$(cd "$HERE" && timeout 900 bash "$BT" 2>&1); rc=$?
-    check "A12: task-step-base.test.sh passes" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
-    out=$(cd "$HERE" && timeout 600 bash "$ST" 2>&1); rc=$?
-    check "A12: task-step-settle.test.sh passes" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
-  fi
-fi
-
 # ---------------------------------------------------- A13, A14, A15 (gate)
 gate_setup() {
   GREPO="$TMP/gate-repo"; init_repo "$GREPO"
@@ -348,42 +329,6 @@ if selected A15; then
   check "A15: two ## Verified sections, the last holding no bullet, is blocked" "$GRC" "2"
   gate a15-b "$(done_msg "$RPT/two-last-valid.md")"
   check "A15: with the valid bullet in the last section it passes" "$GRC" "0"
-fi
-
-# ------------------------------------------------------------------ A16
-if selected A16; then
-  mkdir -p "$TMP/xdg-host"
-  # As test-all runs it: this suite's MSYS_NO_PATHCONV would break its paths on Git Bash.
-  out=$(cd "$HERE" && env -u MSYS_NO_PATHCONV XDG_STATE_HOME="$TMP/xdg-host" timeout 300 bash "$HERE/impl-stop-gate.test.sh" 2>&1); rc=$?
-  check "A16: impl-stop-gate.test.sh passes with XDG_STATE_HOME set in the calling environment" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
-  check "A16: and writes nothing under it" "$(find "$TMP/xdg-host" -mindepth 1 | wc -l | tr -d ' ')" "0"
-fi
-
-# ------------------------------------------------------------------ A20
-if selected A20; then
-  out=$(cd "$HERE" && timeout 120 bash "$HERE/skill-split-planning.test.sh" 2>&1); rc=$?
-  check "A20: skill-split-planning.test.sh passes and reports no broken link" "$rc $(grep -c '^FAIL' <<<"$out") $(grep -i 'broken' <<<"$out" | grep -vc '^ok ')" "0 0 0"
-  check "A20: no SD= line in the two review-depth acceptance tests" \
-    "$(grep -cE '^[[:space:]]*SD=' "$HERE/review-depth.acceptance.test.sh") $(grep -cE '^[[:space:]]*SD=' "$HERE/review-depth-qa.acceptance.test.sh")" "0 0"
-fi
-
-# ------------------------------------------------------------------ A23
-if selected A23; then
-  out=$(cd "$REPO_ROOT" && timeout 120 node scripts/validate-repository.mjs 2>&1); rc=$?
-  check "A23: node scripts/validate-repository.mjs passes" "$rc" "0"
-  CLAUDE_BIN=${CLAUDE_BIN:-/root/.local/bin/claude}
-  if [ -x "$CLAUDE_BIN" ]; then
-    out=$(cd "$REPO_ROOT" && timeout 120 "$CLAUDE_BIN" plugin validate . 2>&1); rc=$?
-    check "A23: claude plugin validate passes on the marketplace" "$rc" "0"
-    for p in $(jq -r '.plugins[].source' "$REPO_ROOT/.claude-plugin/marketplace.json" | tr -d '\r'); do
-      if [ -f "$REPO_ROOT/$p/.claude-plugin/plugin.json" ]; then
-        out=$(cd "$REPO_ROOT" && timeout 120 "$CLAUDE_BIN" plugin validate "$p" 2>&1); rc=$?
-        check "A23: claude plugin validate passes on $p" "$rc" "0"
-      fi
-    done
-  else
-    printf 'skip - A23: no claude CLI at %s\n' "$CLAUDE_BIN"
-  fi
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

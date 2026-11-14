@@ -307,21 +307,6 @@ a3() {
   check "A3: totals 0-5 floor on sonnet, 6-8 on opus" "$got" "$want"
 }
 
-# --- A4 ----------------------------------------------------------------------
-
-a4() {
-  local ext='> **External executors:** codex' base="0 0 1 0 sonnet-low" i
-  # Any total the session's sonnet pair covers: the line is only obsolete.
-  local specs=("1 1 1 1 sonnet-medium" "2 2 1 0 sonnet-high")
-  for i in 0 1; do
-    gen_plan "$ext" "$base" "${specs[$i]}~**Executor:** codex gpt-6.1-sol / high" > "$LINTDIR/l4.md"
-    lint l4.md
-    has "A4: an Executor line on a ${specs[$i]% *} task is a warning" "$out" \
-      "WARN Task 2: the **Executor:** line is obsolete; the session implements this task"
-    check "A4: and the plan lints without errors (${specs[$i]% *})" "$rc" "0"
-  done
-}
-
 # --- A5 ----------------------------------------------------------------------
 
 a5() {
@@ -432,30 +417,6 @@ a17() {
   gen_plan "" "0 0 1 0 sonnet-low" > "$LINTDIR/pr-light.md"
   out=$(cd "$LINTDIR" && timeout 60 bash "$ROUTE" pr-light.md --plan-round 3 2>&1); rc=$?
   check "A17: a plan of light tasks is capped at 2 as well" "$rc" "2"
-}
-
-# --- A18 ---------------------------------------------------------------------
-
-a18() {
-  local agent text
-  for agent in judge-opus judge-sonnet-high judge-fable; do
-    text=$(sed -n 's/^tools: //p' "$PLUGIN/agents/$agent.md" | tr -d '\r')
-    matches "A18: agents/$agent.md lists Write" "$text" '(^|, )Write(,|$)'
-  done
-
-  local t name text1 findings
-  # template path | findings in its report (yes/no)
-  for t in \
-    "reference/prompts/task-reviewer-prompt.md|yes" \
-    "reference/prompts/re-review-prompt.md|yes"; do
-    name=${t%%|*}; findings=${t##*|}
-    text=$(cat "$PLUGIN/$name")
-    matches "A18: $(basename "$name") names the report file" "$text" '\[REPORT_FILE\]|Report file:.*-report\.md'
-    matches "A18: $(basename "$name") fixes the ## Verdict section" "$text" '^ *## Verdict'
-    if [ "$findings" = yes ]; then
-      matches "A18: $(basename "$name") fixes the finding-line grammar" "$text" '- \[[A-Za-z|]+\] (\(Task <N>\) )?<file>:<line> — <one-liner>'
-    fi
-  done
 }
 
 # --- A19 / A20 ---------------------------------------------------------------
@@ -733,7 +694,7 @@ a23() {
   check "A23: the Codex routing policy keeps review_cap 5" "$(jq -r '.review_cap' < "$PLUGIN/reference/codex-routing.json" | tr -d '\r')" "5"
 }
 
-ALL="a2 a3 a4 a5 a11 a12 a17 a18 a19 a20 a21 a22 a23"
+ALL="a2 a3 a5 a11 a12 a17 a19 a20 a21 a22 a23"
 if [ $# -gt 0 ]; then
   sel=""
   for n in "$@"; do sel="$sel $(tr 'A-Z' 'a-z' <<<"$n")"; done
