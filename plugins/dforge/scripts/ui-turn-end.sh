@@ -54,7 +54,7 @@ root_shown=$PLUGIN_ROOT
 if command -v cygpath >/dev/null 2>&1; then root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
 named=$(grep -E '^ui-proof: FAIL (scope|coverage)' <<<"$out" | sed 's/^ui-proof: FAIL //' | tr '\n' ';' | cut -c1-300)
 [ -n "$named" ] || named=$(head -n 1 <<<"$out" | cut -c1-200)
-reason="UI files changed without a passing UI proof (${named%;}). Run the dforge:ui-ux Prove phase, then \`bash \"${root_shown}/scripts/ui-proof\" check --base ${base}${act}\`; if the proof cannot happen this turn, end your message with the line \`UI proof: pending — <why>\`."
-jq -n --arg r "$reason" --arg m "dforge held the stop: UI files changed without a passing UI proof (${named%;})" \
+reason="Run the dforge:ui-ux Prove phase, then \`bash \"${root_shown}/scripts/ui-proof\" check --base ${base}${act}\`; if the proof cannot happen this turn, end your message with the line \`UI proof: pending — <why>\`. Failure: UI files changed without a passing UI proof (${named%;})."
+jq -n --arg r "$reason" --arg m "dforge: Claude is proving the UI changes before it stops; nothing is needed from you." \
   '{decision: "block", reason: $r, systemMessage: $m}'
 exit 0
