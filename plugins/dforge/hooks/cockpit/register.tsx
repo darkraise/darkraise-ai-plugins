@@ -3400,8 +3400,9 @@ async function refresh(
   const { handoffTokens, nudgeModel } = tuning
   const figures = await $.session.usage()
   const tokens = figures.context.tokens
-  if (tokens === undefined) return
   const window = figures.context.window
+  // A window the host does not know would make every share of it infinite and the budget zero.
+  if (tokens === undefined || !(window > 0)) return
   const auto = await read($, autoRun)
   const isAuto = auto !== null && auto.active
   // A plan's last tasks and its final phase never hand off, as the budget line

@@ -1561,6 +1561,14 @@ describe('settings', () => {
     expect(w.gitRuns!.filter(run => run.includes(' status ')).length).toBeLessThanOrEqual(1)
   })
 
+  test('a window the host does not know draws no share of it', async ($, on) => {
+    world(on, { tokens: 284_000, window: 0 })
+    await $.session.start(START)
+    await $.session.measure(MEASURE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(JSON.stringify(await ui.drawn())).not.toContain('Infinity')
+  })
+
   test('sections picks and orders the pane', async ($, on) => {
     world(on, { tokens: 50_000, config: { sections: 'plan, repo' } })
     await $.session.start(START)
