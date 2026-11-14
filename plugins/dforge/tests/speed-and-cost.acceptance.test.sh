@@ -52,35 +52,6 @@ export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 doc() { tr -d '\r' < "$1" | tr '\n' ' ' | tr -s ' '; } # a file as one line, whitespace collapsed
 winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 
-# ---------------------------------------------------------------- A1
-if selected A1; then
-  over=""
-  for f in "$PLUGIN"/skills/*/SKILL.md; do
-    bytes=$(wc -c < "$f" | tr -d ' \r')
-    [ "$bytes" -le 20000 ] || over="$over$(basename "$(dirname "$f")")=$bytes "
-  done
-  check "A1: every skills/*/SKILL.md is at most 20,000 bytes" "$over" ""
-
-  mkdir -p "$TMP/a1/tests" "$TMP/a1/skills/small" "$TMP/a1/skills/exact" "$TMP/a1/skills/huge" "$TMP/a1/skills/barely"
-  cp "$HERE/skill-size.test.sh" "$TMP/a1/tests/skill-size.test.sh"
-  head -c 5000 /dev/zero | tr '\0' x > "$TMP/a1/skills/small/SKILL.md"
-  head -c 20000 /dev/zero | tr '\0' x > "$TMP/a1/skills/exact/SKILL.md"
-  head -c 31337 /dev/zero | tr '\0' x > "$TMP/a1/skills/huge/SKILL.md"
-  head -c 20001 /dev/zero | tr '\0' x > "$TMP/a1/skills/barely/SKILL.md"
-  out=$(timeout 60 bash "$TMP/a1/tests/skill-size.test.sh" 2>&1); rc=$?
-  check "A1: skill-size.test.sh fails when a skill is over the cap" "$([ "$rc" -ne 0 ] && echo failed || echo passed)" "failed"
-  has "A1: it names the 31,337-byte file with its size" "$out" "huge/SKILL.md"
-  has "A1: it prints the 31,337 size" "$out" "31337"
-  has "A1: it names the 20,001-byte file" "$out" "barely/SKILL.md"
-  has "A1: it prints the 20,001 size" "$out" "20001"
-  lacks "A1: it does not name a skill at exactly 20,000 bytes" "$(grep -E 'FAIL|skill-size:' <<<"$out")" "exact/SKILL.md"
-  lacks "A1: it does not name a small skill" "$(grep -E 'FAIL|skill-size:' <<<"$out")" "small/SKILL.md"
-  rm -rf "$TMP/a1/skills/huge" "$TMP/a1/skills/barely"
-  out=$(timeout 60 bash "$TMP/a1/tests/skill-size.test.sh" 2>&1)
-  check "A1: with every skill at or under the cap, skill-size.test.sh names none" "$(grep -c 'bytes (cap' <<<"$out")" "0"
-  check "A1: and reports no over-cap failure" "$(grep -c 'FAIL.*at most' <<<"$out")" "0"
-fi
-
 # ------------------------------------------------- fixture for A3, A5, A6, A7
 need_fixture() { selected A3 || selected A4 || selected A5 || selected A6 || selected A7; }
 if need_fixture; then

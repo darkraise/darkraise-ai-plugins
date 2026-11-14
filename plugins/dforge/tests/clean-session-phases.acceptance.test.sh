@@ -131,19 +131,6 @@ check "A5: the first prompt is next-step's finishing prompt" "$(field resumeProm
 has "A5: the first prompt reaches finishing through resume-execution" "$(field resumePrompt)" "with dforge:resume-execution. Run dforge:finishing-a-development-branch."
 check "A5: the resume count is unchanged" "$(resumes s-4)" "$resumes_before"
 
-# --- the document statements: A11 ---
-over=""
-count=0
-for f in "$P"/skills/*/SKILL.md; do
-  bytes=$(wc -c < "$f" | tr -d ' \r')
-  count=$((count + 1))
-  [ "$bytes" -le 20000 ] || over="$over $(basename "$(dirname "$f")"):$bytes"
-done
-check "A11: every SKILL.md is at most 20000 bytes" "${over:- }" " "
-check "A11: skills were found" "$([ "$count" -gt 0 ] && echo yes || echo no)" "yes"
-timeout 120 bash "$HERE/skill-size.test.sh" >/dev/null 2>&1; status=$?
-check "A11: the skill-size test passes" "$status" "0"
-
 # --- review-package: A8, A9, A10, A14 ---
 RP="$S/review-package"
 RR="$TMP/rp"

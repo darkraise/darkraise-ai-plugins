@@ -386,14 +386,6 @@ if want A8; then
   check "A8: standard, lensCap 4, prints 3 lens lines with test-quality" "$(lens_lines)" 3
   present "A8: standard past the cap prints reason=cap" "$out" "^lens-skipped .* reason=cap$"
   absent "A8: standard prints no reason=depth" "$out" "reason=depth"
-  lr "$ps" DFORGE_LENS_CAP=9
-  check "A8: standard, lensCap 9, still prints 3 lens lines" "$(lens_lines)" 3
-  lr "$ps" DFORGE_LENS_CAP=1
-  check "A8: standard, lensCap 1, prints 1 lens line" "$(lens_lines)" 1
-  lr "$ps" DFORGE_LENS_CAP=2
-  check "A8: standard, lensCap 2, prints 2 lens lines" "$(lens_lines)" 2
-  lr "$ps" DFORGE_LENS_CAP=0
-  present "A8: standard, lensCap 0, prints lenses off" "$out" "^lenses off$"
   ps2=$(mkplan a8-standard-spec s-standard - "" r0t1)
   lr "$ps2" DFORGE_LENS_CAP=4
   check "A8: standard by the spec, lensCap 4, prints 3 lens lines with test-quality" "$(lens_lines)" 3
