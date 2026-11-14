@@ -185,7 +185,7 @@ export function validateRepository(root) {
       const path = resolve(dir, item.name);
       const rel = relative(root, path).replaceAll('\\', '/');
       if (item.isDirectory()) {
-        if (!unswept.has(item.name) && rel !== 'docs/superpowers') sweep(path);
+        if (!unswept.has(item.name)) sweep(path);
         continue;
       }
       if (!item.isFile() || dccAllowed.has(rel)) continue;
