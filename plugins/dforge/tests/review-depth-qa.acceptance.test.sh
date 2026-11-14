@@ -110,7 +110,7 @@ mkcodex() { # mkcodex NAME SPEC_NAME TOTAL — a one-task Host: codex plan whose
   {
     printf '# %s Codex Plan\n\nHost: codex\nRouting policy: codex-v4\n\n**Goal:** Demo.\n\n' "$name"
     printf '**Spec:** `docs/dforge/specs/%s.md`\n\n' "$spec"
-    printf '**Execution:** subagent — codex gpt-6.1-sol / high — native pair\n\n'
+    printf '**Execution:** inline — codex gpt-6.1-sol / high — native pair\n\n'
     printf '**Plan review:** 2026-10-27 — codex gpt-6-astra / high — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)\n\n'
     printf '## Global Constraints\n\n- None.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. One\n\n'
     printf '### Task 1: One\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** codex gpt-6.1-sol / low\n'

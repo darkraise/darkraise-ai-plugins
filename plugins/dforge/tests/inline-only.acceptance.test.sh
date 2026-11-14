@@ -127,8 +127,7 @@ lint sonnet6.md
 has "A2: total 6 on sonnet is the model-floor error" "$out" "ERROR header: inline execution needs --model opus (model sonnet)"
 io_plan 'subagent — `claude --model sonnet --effort high` — x' "0 1 1 0" "0 1 1 1" > sub.md
 lint sub.md
-has "A3: a subagent line is deprecated" "$out" "WARN header: subagent execution is deprecated; inline is the default"
-lacks "A3: no mode error" "$out" "ERROR header: subagent"
+has "A3: a subagent line is retired" "$out" "ERROR header: subagent execution was retired in 5.0.0; use inline"
 io_plan 'inline — `claude --model sonnet --effort medium` — x' "0 0 0 3" "0 1 1 0" > risk3m.md
 lint risk3m.md
 has "A15: risk 3 raises the effort floor to high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
@@ -167,9 +166,6 @@ check "codex routing has no scout floor" "$(jq -r '.role_floors.scout // "none"'
 # --- Task 7 ---
 check "A17: switching.md is gone" "$([ -e "$P/skills/executing-plans/references/switching.md" ] && echo yes || echo no)" "no"
 # --- Task 8 ---
-. "$S/lib/plan.sh"
-printf 'Task 1: escalated inline -> subagent — fix cap\n' > "$TMP/old-ledger.md"
-check "A11: an old escalation line still parses" "$(ledger_left_inline "$TMP/old-ledger.md")" "1"
 # --- Task 11 ---
 for f in "$P/.claude-plugin/plugin.json" "$P/.codex-plugin/plugin.json" "$P/../../.claude-plugin/marketplace.json"; do
   absent "no tiered implementers in $f" "$f" "tiered implementers"

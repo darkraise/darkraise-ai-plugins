@@ -148,9 +148,7 @@ Read [setup.md](references/setup.md) before you set up the workspace, the ledger
 
 ## The Ledger
 
-This skill and dforge:subagent-driven-development share one grammar, so
-a plan that changes mode mid-run leaves one readable record. The lines this
-mode writes:
+The lines this skill writes:
 
 ```
 # SDD ledger — plan: <path>
@@ -189,20 +187,18 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
 - `implementer inline` is this mode's assigned line. You are the implementer,
   so the agent slot says so, and `base` is `git rev-parse --short HEAD` taken
   before you change anything.
-- `unreviewed` is where subagent mode writes `review clean`. No judge scored
-  this task, and saying so is what keeps the two modes' complete lines honest.
-  The branch's review is the `Final review:` line.
+- `unreviewed` says no judge scored this task. The branch's review is the
+  `Final review:` line.
 - There is no scores clause. A scores clause appears only when a judge scored
   the task.
-- The fix cap is 3 for a task you implement, not subagent mode's 5. You are fixing your own work, so a
+- The fix cap is 3 for a task you implement; a delegated task keeps 5. You are fixing your own work, so a
   fourth round is not a better round. A fix-round line is written after the
-  round, with its outcome, exactly as subagent mode writes its own: `passing`
+  round, with its outcome: `passing`
   when the task's verifications now pass, `still failing` otherwise.
   After `fix round 3/3`, the task goes to the ruling seat as a `breaker` item.
   In an auto run it goes on the pending list, as an exhausted ladder does.
-- This mode writes an escalation line only on an owner request
-  ([setup.md](references/setup.md)); an older ledger may hold one from a
-  failed task. recovery.md and `scripts/next-step` read either as a switch.
+- An older ledger may hold a `Task <N>: escalated inline -> subagent` line from
+  the retired subagent mode; recovery.md says how to read it.
 - A ruling-seat `BLOCKED` that belongs to no task (a Header amendment) is
   logged against the lowest-numbered task without a complete line, so
   recovery reads it as that task's terminal line.

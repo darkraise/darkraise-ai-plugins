@@ -160,9 +160,9 @@ task_files() {
 
 # task_agents N — the implementer task N last ran on: the ledger's last assigned
 # agent, escalation target or HANDBACK target, or else every **Implementer:**
-# line of the task (one per part). Plugin prefixes are dropped. The inline
-# marker "escalated inline -> subagent" names no agent, so only impl- targets
-# count.
+# line of the task (one per part). Plugin prefixes are dropped. An older
+# ledger's "escalated inline -> subagent" marker names no agent, so only impl-
+# targets count.
 task_agents() {
   local agent=""
   [ -z "$ledger" ] || agent=$(tr -d '\r' < "$ledger" | awk -v p="Task $1: " '

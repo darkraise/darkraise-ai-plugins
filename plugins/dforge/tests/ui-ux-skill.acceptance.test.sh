@@ -208,7 +208,7 @@ plan_text() {
 
 **Spec:** \`$1\`
 
-**Execution:** subagent — \`claude --model sonnet --effort high\` — Task 2 scores 4
+**Execution:** inline — \`claude --model sonnet --effort high\` — Task 2 scores 4
 
 **Program:** \`$1\` — sub-project 1 of 2 — next: Second part
 

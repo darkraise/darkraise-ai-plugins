@@ -238,7 +238,7 @@ your own: QA commits on this branch.
    command once at MERGE_BASE in a temporary worktree and compare the failing
    lines as **Baseline comparison** below says. Write each such
    finding as `[suite] <failing line>`. A `[suite]` finding enters the fix
-   wave as confirmed, as a `[qa]` finding does. The fix subagent runs the
+   wave as confirmed, as a `[qa]` finding does. The fix pass runs the
    command again after its last commit through `suite-run` (**Suites.**
    below), and finishing reuses a pass at the same commit.
 
@@ -387,7 +387,7 @@ one-liner begins `deferred: test-simplifier — ` gates nothing on either list
 If confirmed findings remain, fix them in ONE wave with the complete list,
 given as report paths (the dedupe report with two lists; the Claude review's
 and lens reports and the [qa] findings with one), never pasted — in
-subagent mode one fix subagent, in inline mode one pass of your own. Never one
+one pass of your own. Never one
 fixer per finding: per-finding fixers each rebuild context and re-run suites,
 and a real session's final-review fix wave cost more than all its tasks
 combined. In an auto run a deferred task's acceptance failures are not on that
@@ -399,19 +399,7 @@ reports the failed steps. In an auto run it means going on to finishing,
 whose Step 1b runs the dforge:ui-ux Prove phase once and keeps the branch
 when the check still fails; do not run the Prove phase here.
 
-**The fix subagent** (subagent mode). Run
-`scripts/review-route PLAN_FILE --final-fix <file> [<file> ...]` with every
-repository-relative path the findings name. It prints the highest implementer
-tier among the tasks whose `**Files:**` blocks name those paths, as the ledger
-last recorded each (an escalation counts, and an `inline` implementer counts as
-the Execution line's rung), raised to `impl-sonnet-high` and capped at
-`impl-opus-high`; no matched task gives `reason=floor`. Append
-`Final fix: implementer <agent> (assigned; base <sha7>)` to the ledger, then
-dispatch the printed `primary` as `subagent_type`, with no `model` or `effort`
-argument. On a Codex-host plan it prints `primary=native:<model>/<effort>`,
-which [native-codex.md](native-codex.md) says how to record and dispatch.
-
-Whoever fixes writes `<workspace>/final-fix-report.md`: what changed per
+The fix pass writes `<workspace>/final-fix-report.md`: what changed per
 finding, the covering tests, the command and its output. With one list the
 fixer first checks each finding against the code under
 dforge:receiving-code-review, fixes the real ones, and records each one
@@ -420,12 +408,8 @@ finding whose one-liner begins `deferred: test-simplifier — ` and lists it
 under `DEFERRED: <finding>`; the session leaves each `DEFERRED:` finding out
 of the findings the scoped re-review verifies. Each per-finding
 entry and each `REJECTED:` line keeps the finding's `[lens:<id>]` tag, and the
-scoped re-review quotes that tag in its verdict on each rejection. In subagent
-mode the fix subagent writes it as its report file, and its prompt names
-`<plugin-root>/skills/receiving-code-review/SKILL.md` to read, since an
-implementer has no Skill tool, and states the `DEFERRED:` skip rule above,
-which no file the subagent reads carries; in inline mode you write it before
-the re-review. Then run exactly one scoped re-review of the fix wave
+scoped re-review quotes that tag in its verdict on each rejection. You write
+it before the re-review. Then run exactly one scoped re-review of the fix wave
 (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range, with
 [re-review-prompt.md](prompts/re-review-prompt.md),
 its `[IMPLEMENTER_REPORT_FILE]` being that file and its `[REPORT_FILE]`

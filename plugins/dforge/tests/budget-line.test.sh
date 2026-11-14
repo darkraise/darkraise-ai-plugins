@@ -136,7 +136,7 @@ check "task-brief: missing task still exits 3" "$status" "3"
 cat > docs/full.md <<'EOF'
 # Plan
 
-**Execution:** subagent — `claude --model sonnet --effort high` — x
+**Execution:** inline — `claude --model sonnet --effort high` — x
 
 ## Global Constraints
 
@@ -235,7 +235,7 @@ cat > docs/ui-plan.md <<'EOF'
 
 **Spec:** `docs/ui-spec.md`
 
-**Execution:** subagent — `claude --model sonnet --effort high` — x
+**Execution:** inline — `claude --model sonnet --effort high` — x
 
 ## Global Constraints
 

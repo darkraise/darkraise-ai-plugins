@@ -90,7 +90,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |## Global Constraints
 |
@@ -218,7 +218,7 @@ gen_plan() { # gen_plan <extra header line or empty> <"F S C R impl[~label line.
   local extra=$1 i=0 spec f s c r impl more
   shift
   printf '%s\n' '# Gen Plan' '' '**Goal:** Fixture.' '' '**Spec:** `docs/spec.md`' '' \
-    '**Execution:** subagent — `claude --model sonnet --effort high` — fixture' ''
+    '**Execution:** inline — `claude --model sonnet --effort high` — fixture' ''
   [ -z "$extra" ] || printf '%s\n\n' "$extra"
   printf '%s\n' '**Plan review:** 2026-10-26 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)' '' \
     '## Global Constraints' '' '- None.' '' '## Contracts' '' 'None' '' '## Assumptions (evidence)' '' '- None.' '' '## Task index' ''
@@ -240,7 +240,7 @@ gen_plan() { # gen_plan <extra header line or empty> <"F S C R impl[~label line.
 gen_codex_plan() { # gen_codex_plan <"F S C R pair">... — a Host: codex plan, pair as "model/effort"
   local i=0 spec f s c r pair model effort
   printf '%s\n' '# Gen Codex Plan' '' 'Host: codex' 'Routing policy: codex-v4' '' '**Goal:** Fixture.' '' '**Spec:** docs/spec.md' '' \
-    '**Execution:** subagent — codex gpt-6.1-sol / high — native pair' '' \
+    '**Execution:** inline — codex gpt-6.1-sol / high — native pair' '' \
     '**Plan review:** 2026-10-26 — codex gpt-6-astra / high — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)' '' \
     '## Global Constraints' '' '- None.' '' '## Contracts' '' 'None' '' '## Assumptions (evidence)' '' '- None.' '' '## Task index' ''
   for spec in "$@"; do i=$((i + 1)); printf '%d. T%d\n' "$i" "$i"; done
@@ -331,9 +331,9 @@ a3() {
 
 a4() {
   local ext='> **External executors:** codex' base="0 0 1 0 sonnet-low" i
-  # Any total, in the lane's old range or above it: the line is only obsolete.
-  local specs=("1 1 1 1 sonnet-medium" "2 2 1 0 sonnet-high" "2 2 1 3 opus-high")
-  for i in 0 1 2; do
+  # Any total the session's sonnet pair covers: the line is only obsolete.
+  local specs=("1 1 1 1 sonnet-medium" "2 2 1 0 sonnet-high")
+  for i in 0 1; do
     gen_plan "$ext" "$base" "${specs[$i]}~**Executor:** codex gpt-6.1-sol / high" > "$LINTDIR/l4.md"
     lint l4.md
     has "A4: an Executor line on a ${specs[$i]% *} task is a warning" "$out" \
@@ -404,7 +404,7 @@ old_ledger() { # old_ledger <file> — the real pre-spec lines, under this plan'
 gen_old_plan() { # gen_old_plan <n> — a pre-spec sequential plan of n spec-0 tasks, totals 1 to 6
   local i f c r t agent
   printf '%s\n' '# Old Plan' '' '**Goal:** Fixture.' '' '**Spec:** `docs/spec.md`' '' \
-    '**Execution:** subagent — `claude --model sonnet --effort high` — fixture' '' \
+    '**Execution:** inline — `claude --model opus --effort high` — fixture' '' \
     '**Parallelism:** sequential' '' \
     '**Plan review:** 2026-10-02 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)' '' \
     '## Global Constraints' '' '- None.' '' '## Contracts' '' 'None' '' '## Assumptions (evidence)' '' '- None.' '' '## Task index' ''
@@ -592,7 +592,7 @@ AMEND_PLAN='|# Demo Implementation Plan
 |
 |**Spec:** `docs/spec.md`
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4
+|**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4
 |
 |## Global Constraints
 |
@@ -686,7 +686,7 @@ a21() {
 a22() {
   local plan sum_before sum_after
   # The real plans written before this spec lint clean, unedited.
-  for plan in 2026-10-24-ui-ux-skill 2026-10-25-typed-seats-and-drafting 2026-10-26-task-loop-steps; do
+  for plan in 2026-10-24-ui-ux-skill 2026-10-26-task-loop-steps; do
     sum_before=$(cksum < "$REPO_ROOT/docs/dforge/plans/$plan.md")
     out=$(cd "$REPO_ROOT" && timeout 120 bash "$LINT" "docs/dforge/plans/$plan.md" --no-probe 2>&1); rc=$?
     check "A22: plan-lint passes the pre-spec plan $plan" "$rc" "0"

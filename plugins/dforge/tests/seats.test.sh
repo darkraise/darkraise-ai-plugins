@@ -167,7 +167,7 @@ bad_report_paths() {
 JUDGE_TEMPLATES=(
   "$P/skills/writing-plans/references/lint-and-review.md" "$PRP"
   "$FR" "$DT" "$AR" "$WT"
-  "$RRP" "$RULP" "$P/skills/subagent-driven-development/references/ruling-seat.md" "$TRP"
+  "$RRP" "$RULP" "$TRP"
   "$P/skills/executing-plans/references/ruling-seat.md"
   "$CR" "$RCR" "$DJ" "$SJ" "$CM" "$SA"
   "$P/skills/brainstorming/references/architecture-critic.md" "$CP"

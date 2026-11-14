@@ -35,7 +35,7 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |## Global Constraints
 |

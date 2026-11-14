@@ -64,7 +64,7 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |## Global Constraints
 |
@@ -543,7 +543,7 @@ sed 's/^|//' > "$RR_REPO/docs/plan.md" <<'PLAN'
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |## Task index
 |

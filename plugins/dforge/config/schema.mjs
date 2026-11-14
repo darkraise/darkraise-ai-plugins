@@ -127,11 +127,6 @@ export default {
     label: 'Lens minors', title: 'Lens Minor findings from',
     description: 'The plan size, in tasks, from which final-review lenses also report Minor findings. A smaller plan gets Critical and Important lens findings only. 0 always asks for Minor findings. DFORGE_LENS_MINOR_FROM overrides it.',
   },
-  executionMode: {
-    type: 'enum', values: ['auto', 'inline', 'subagent'], default: 'auto', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
-    label: 'Execution mode', title: 'Execution mode',
-    description: 'Who implements plan tasks. auto and inline: the session implements every task. subagent (deprecated) dispatches an implementer per task.',
-  },
   worktree: {
     type: 'enum', values: ['ask', 'always', 'never'], default: 'ask', enforcedBy: 'skill', group: 'Workflow', target: 'dforge',
     label: 'Worktree', title: 'Worktree',

@@ -49,7 +49,7 @@ write_plan() { # write_plan <file> <execution line> <program line or empty>
     printf '### Task 3: Third thing\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nBody.\n'
   } > "$1"
 }
-EXEC_SUB='**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4'
+EXEC_SUB='**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4'
 PROG_NEXT='**Program:** `docs/specs/program.md` — sub-project 2 of 5 — next: Session budget'
 write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm init
@@ -72,7 +72,7 @@ has "not started: status counts tasks outside fences only" "$out" "**Status:** P
 has "not started: next is Task 1" "$out" "**Next:** Start at Task 1 (First thing)."
 has "not started: launch dir is the primary checkout" "$out" "Launch in \`$ROOT\`:"
 has "not started: launch command from Execution line" "$out" "claude --model sonnet --effort high"
-has "not started: prompt names the sdd skill and Setup" "$out" "Continue \`$PLAN_REL\` with dforge:subagent-driven-development. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task 1 (First thing)."
+has "not started: prompt names the execution skill and Setup" "$out" "Continue \`$PLAN_REL\` with dforge:executing-plans. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task 1 (First thing)."
 check "not started: writes the handoff file" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes"
 check "not started: handoff carries the block" "$(grep -c '^\*\*Next:\*\* Start at Task 1' "$HANDOFF")" "1"
 
@@ -159,11 +159,11 @@ write_plan "$PLAN" '**Execution:** inline -- claude --model sonnet --effort medi
 run "$REPO" "$PLAN_REL"
 has "inline: prompt names executing-plans" "$out" "with dforge:executing-plans."
 has "inline: command without backticks" "$out" "claude --model sonnet --effort medium"
-write_plan "$PLAN" '**Execution:** subagent — codex gpt-6.1-sol / high — Codex host' ""
+write_plan "$PLAN" '**Execution:** inline — codex gpt-6.1-sol / high — Codex host' ""
 run "$REPO" "$PLAN_REL"
 has "codex pair: the launch command names the Codex client" "$out" "codex -m gpt-6.1-sol -c model_reasoning_effort=high"
 lacks "codex pair: no claude command" "$out" "claude --model"
-write_plan "$PLAN" '**Execution:** subagent — whatever the owner pinned' ""
+write_plan "$PLAN" '**Execution:** inline — whatever the owner pinned' ""
 run "$REPO" "$PLAN_REL"
 has "an Execution line naming no pair: points at the Execution line" "$out" "Launch: see the **Execution:** line in \`$PLAN_REL\`."
 
@@ -280,10 +280,9 @@ run "$REPO"
 check "no arguments: exits 2" "$status" "2"
 has "no arguments: prints usage on stdout" "$out" "next-step: usage:"
 
-# --- a plan that escalated out of inline mode ---
-# The ledger, not the Execution line, says which mode a run is in after a
-# switch. The launch command has to follow it, or the resumed session starts at
-# inline mode's model and effort.
+# --- an older ledger's escalation line ---
+# Subagent mode was retired, so the line switches nothing: the Execution line
+# still decides the launch command.
 INL="$REPO/docs/plans/2026-01-01-inline.md"
 cat > "$INL" <<'PLAN'
 # Inline plan
@@ -315,16 +314,9 @@ mkdir -p "$INL_LEDGER"
 } > "$INL_LEDGER/progress.md"
 
 run "$REPO" docs/plans/2026-01-01-inline.md
-has "escalated: launches the subagent pair" "$out" "claude --model sonnet --effort high"
-lacks "escalated: drops the inline pair" "$out" "--effort low"
-has "escalated: says the plan escalated" "$out" "This plan escalated to subagent mode at Task 2."
-
-# A later inline assignment means the plan came back; the Execution line rules
-# again.
-echo "Task 2: implementer inline (assigned; base ccccccc)" >> "$INL_LEDGER/progress.md"
-run "$REPO" docs/plans/2026-01-01-inline.md
-has "returned to inline: launches the inline pair" "$out" "claude --model sonnet --effort low"
-lacks "returned to inline: drops the escalation sentence" "$out" "This plan escalated to subagent mode"
+has "escalation line: keeps the inline pair" "$out" "claude --model sonnet --effort low"
+lacks "escalation line: no subagent pair" "$out" "--effort high"
+lacks "escalation line: no mode switch" "$out" "escalated to subagent mode"
 
 # --- a mixed ledger: a delegated task mid-loop in an inline plan ---
 # Mixed mode writes subagent grammar for a delegated task. An agent-named
@@ -338,10 +330,9 @@ lacks "returned to inline: drops the escalation sentence" "$out" "This plan esca
 } > "$INL_LEDGER/progress.md"
 run "$REPO" docs/plans/2026-01-01-inline.md
 has "mixed ledger: keeps the inline pair" "$out" "claude --model sonnet --effort low"
-lacks "mixed ledger: no mode switch" "$out" "This plan escalated to subagent mode"
 has "mixed ledger: resumes the delegated task" "$out" "Resume at Task 2 (Second)."
 
-# --- a ledger that merely quotes the escalation marker must not escalate ---
+# --- a ledger that quotes the escalation marker ---
 # The marker is its own ledger line, not a substring match anywhere in the
 # ledger; a deferred-minor sentence describing the grammar is not an
 # escalation.
@@ -371,7 +362,6 @@ mkdir -p "$QUOTE_LEDGER"
 
 run "$REPO" docs/plans/2026-01-01-quote.md
 lacks "quoted clause: does not launch the subagent pair" "$out" "--effort high"
-lacks "quoted clause: does not say the plan escalated" "$out" "This plan escalated to subagent mode"
 
 # --- the ledger identity may carry an absolute or Windows-form path ---
 ABS_LEDGER="$REPO/.dforge/sdd/2026-01-01-quote"
@@ -394,7 +384,7 @@ cat > "$LASTP" <<'PLAN'
 
 **Spec:** docs/spec.md
 
-**Execution:** subagent — `claude --model sonnet --effort high` — x
+**Execution:** inline — `claude --model sonnet --effort high` — x
 
 **Program:** `docs/spec.md` — sub-project 1 of 3 — next: Cleanup at last
 
@@ -423,7 +413,7 @@ cat > "$BLK" <<'PLAN'
 
 **Spec:** docs/spec.md
 
-**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4
+**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4
 
 ## Task index
 
@@ -545,9 +535,9 @@ mkdir -p "$CODEX_LEDGER_DIR"
   printf 'Task 2: escalated inline -> subagent — fix round 3/3
 '; } > "$CODEX_LEDGER_DIR/progress.md"
 run "$REPO" "$CODEX_PLAN_REL"
-check "codex plan escalated: exits 0" "$status" "0"
-has "codex plan escalated: launches the build tier" "$out" "$CODEX_BUILD"
-lacks "codex plan escalated: no claude launch command" "$out" "claude --model"
+check "codex plan, old escalation line: exits 0" "$status" "0"
+has "codex plan, old escalation line: keeps the Execution pair" "$out" "model_reasoning_effort=medium"
+lacks "codex plan, old escalation line: no claude launch command" "$out" "claude --model"
 
 
 # --- the same directory under a second POSIX spelling ---
@@ -888,7 +878,7 @@ git init -q "$SR"
 git -C "$SR" commit -q --allow-empty -m init
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
 mkdir -p "$M/dforge/plans" "$M/work/sdd/2026-02-02-mirror"
-write_plan "$M/dforge/plans/2026-02-02-mirror.md" '**Execution:** subagent — `claude --model sonnet --effort high` — demo' ""
+write_plan "$M/dforge/plans/2026-02-02-mirror.md" '**Execution:** inline — `claude --model sonnet --effort high` — demo' ""
 printf '# SDD ledger — plan: docs/dforge/plans/2026-02-02-mirror.md\nTask 1: complete (commits a..b, review clean)\n' \
   > "$M/work/sdd/2026-02-02-mirror/progress.md"
 out=$(cd "$SR" && HOME=$SH bash "$SCRIPT" docs/dforge/plans/2026-02-02-mirror.md)

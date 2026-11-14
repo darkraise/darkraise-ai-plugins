@@ -1,9 +1,8 @@
 # Ruling Seat Prompt Template
 
-Use this template when dforge:subagent-driven-development or
-dforge:executing-plans sends judgment items to the ruling seat. Each
-skill's The Ruling Seat section says when, and how each verdict is carried
-out.
+Use this template when dforge:executing-plans sends judgment items to the
+ruling seat. Its The Ruling Seat section says when, and how each verdict is
+carried out.
 
 ```
 Subagent ([JUDGE]):

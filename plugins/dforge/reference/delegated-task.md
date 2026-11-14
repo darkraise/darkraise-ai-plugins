@@ -1,17 +1,17 @@
 # The delegated task loop
 
 One task's dispatch, review, fix loop and complete line.
-dforge:subagent-driven-development runs it for every task. A task the session
-implements itself and a judge reviews runs §The session review loop instead.
+dforge:executing-plans runs it for a task that carries an `**Executor:**` line.
+A task the session implements itself and a judge reviews runs §The session
+review loop instead.
 
 ## Contract
 
 - **The caller holds** the plan workspace, the ledger, a brief file from
-  `scripts/task-brief` (one task's, or in subagent mode a batch's), and a ruling
+  `scripts/task-brief` (one task's), and a ruling
   seat it can dispatch, per its own The Ruling Seat section.
 - **The loop writes** only lines of the shared ledger grammar
-  ([subagent-driven-development](../skills/subagent-driven-development/SKILL.md)
-  §The Ledger).
+  ([executing-plans](../skills/executing-plans/SKILL.md) §The Ledger).
 - **The loop returns** on the task's `complete` line or on a `BLOCKED` line. A
   budget `handoff` waits for the `complete` line.
 
@@ -30,7 +30,7 @@ overrides the pinned effort while the model stays; either runs the agent at a
 tier the ledger does not record.
 
 General-purpose seats always take an explicit model:
-[subagent-driven-development](../skills/subagent-driven-development/SKILL.md) §Seats.
+[using-dforge](../skills/using-dforge/SKILL.md) §Seats.
 
 **Turn count beats token price.** Wall-clock and context cost scale with how
 many turns a subagent takes, and the cheapest models routinely take 2-3× the
@@ -60,7 +60,7 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
 - **Choose the agent.** Read the task's `**Implementer:**` line. A name from
   the reserve table of [ladder.md](ladder.md) — any `xhigh` or
   `max` agent, or any Fable tier — is a human ruling: dispatch it as written
-  and note `reserve tier`. See [escalation.md](../skills/subagent-driven-development/references/escalation.md).
+  and note `reserve tier`. See [escalation.md](escalation.md).
 - **Suite command.** Read the plan header's `**Task check:**` line first,
   then resolve the plan's suite command once:
   - A plan with no `**Task check:**` line runs as it does today. Pass the
@@ -159,7 +159,7 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
 |---|---|
 | No `**Implementer:**` line | Score the task with the rubric in [ladder.md](ladder.md), dispatch that agent, and note `scored at dispatch` on the assigned line |
 | A name in none of [ladder.md](ladder.md)'s assignment, escalation or reserve tables (`impl-haiku`, `impl-opus-low` and `impl-opus-medium` appear only in the escalation table, and a human `**Override:**` may pin them) | Score at dispatch and dispatch the scored agent |
-| The implementer's model is unavailable on this account | Same effort one model down; where none exists, the ladder successor — see [escalation.md](../skills/subagent-driven-development/references/escalation.md) |
+| The implementer's model is unavailable on this account | Same effort one model down; where none exists, the ladder successor — see [escalation.md](escalation.md) |
 | Fable unavailable inside a reserve chain entered automatically | `Task <N>: BLOCKED` with the reason — the Opus rungs below it already failed |
 
 ## 2. Handle the report
@@ -203,7 +203,7 @@ You never answer a requirements question from your own reading of one brief.
 
 **BLOCKED:** The implementer cannot complete the task. Assess the blocker:
 1. If it's a context problem, provide more context and re-dispatch the same agent
-2. If the task requires more reasoning, re-dispatch on the successor rung and write a new assigned line — see [escalation.md](../skills/subagent-driven-development/references/escalation.md)
+2. If the task requires more reasoning, re-dispatch on the successor rung and write a new assigned line — see [escalation.md](escalation.md)
 3. If the task is too large, send a `blocked-plan` item; a split is the seat's CONFIRMED-GAP naming it, logged as a `Ruling:` line
 4. If the plan itself is wrong, send a `blocked-plan` item to the ruling seat and carry out its verdict; an AMEND re-dispatches from a fresh brief
 
@@ -223,9 +223,8 @@ still in your context, send it one message naming what is still open - the
 brief's unfinished steps and whatever the reply said comes next - telling it to
 continue, or to report BLOCKED with what blocks it; say the continuation aloud.
 If the reply says a command or subagent it started is still running, let that
-finish first: wait as subagent-driven-development's Waiting on dispatched
-subagents says (on Claude Code, end the turn; on Codex, bounded `wait_agent`
-stretches), and stop it with `TaskStop` if it outlives the rung's bound.
+finish first: wait for it (on Claude Code, end the turn; on Codex, bounded
+`wait_agent` stretches), and stop it with `TaskStop` if it outlives the rung's bound.
 After two continuations with no status, handle the task as
 BLOCKED with the reason `no report after two continuations`. When you cannot
 message the agent, dispatch the same agent fresh with the brief path, the
@@ -341,8 +340,7 @@ that differs from `git config user.name` and `user.email`, or a
 `Co-Authored-By:` or `Claude-Session:` trailer, or a line beginning
 `Generated with`. A check that
 found something is a finding for the fix loop. A reviewer's cannot-verify item
-that a `clean` line answers is settled without a seat (subagent-driven-development,
-The Ruling Seat).
+that a `clean` line answers is settled without a seat (executing-plans, The Ruling Seat).
 
 **The suite line.** When the step file records a suite command, the verdict
 digest carries exactly one `suite:` line, read from the run §2 started:
@@ -551,7 +549,7 @@ same number, which you apply with `scripts/plan-amend` and dispatch in order,
 one part per dispatch. A task is split once: a part on `impl-opus-high` takes
 its reserve successor `impl-opus-xhigh` at round 2, said aloud. Both splits
 and reserve entries are `Ruling:` lines. The details are in
-[escalation.md](../skills/subagent-driven-development/references/escalation.md).
+[escalation.md](escalation.md).
 On a Codex host the rungs are not these: escalation, the single split and the
 reserve chain all come from the `codex-v4` selector
 ([native-codex.md](native-codex.md) §Selector contract), which the caller runs

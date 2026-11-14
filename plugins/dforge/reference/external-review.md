@@ -22,8 +22,7 @@ last row the fallback, each row `model effort seconds`: `codex-judge`
 
 Under an inline plan only risk-3 tasks get a per-task review and the final
 external round runs at depth full only, so the light tier never runs there:
-Sol and Argon are reached as heavy fallbacks. The light tier serves per-task
-and batch reviews in the deprecated subagent mode.
+Sol and Argon are reached as heavy fallbacks.
 
 ## The panel
 

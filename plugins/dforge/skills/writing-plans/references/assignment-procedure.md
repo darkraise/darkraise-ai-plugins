@@ -56,15 +56,14 @@ user's inline or delegation preference on either host.
 5. **Keep the heading form** `### Task N: <name>`: `scripts/task-brief` finds a
    task by a heading that begins with `Task <N>`.
 
-A human may edit any `**Implementer:**` line by hand;
-dforge:subagent-driven-development obeys it and never recomputes.
+A human may edit any `**Implementer:**` line by hand.
 Leave the `**Evaluation:**` line in place — the gap between the score and the
 choice is the interesting part. A hand edit that breaks a checked rule — a
 reserve tier, a kept `spec = 3`, a table mismatch — carries an
 `**Override:** <reason>` line below the Evaluation line, and `plan-lint` then
 reports it as a warning. Never write an Override line yourself. Under
-dforge:executing-plans the session implements every task, so the
-`**Implementer:**` line is read only by the deprecated subagent mode. No task
+dforge:executing-plans the session implements every task, so nothing reads the
+`**Implementer:**` line. No task
 carries an `**Executor:**` line: `plan-lint` warns that one is obsolete.
 [assigning-implementers.md](assigning-implementers.md) explains why
 each of these rules exists.

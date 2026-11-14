@@ -15,10 +15,7 @@ names() { # names <label> <file> <text>
   check "$1" "$(grep -qF -- "$3" "$2" && echo yes || echo no)" "yes"
 }
 
-for skill in subagent-driven-development executing-plans; do
-  F="$P/skills/$skill/SKILL.md"
-  names "$skill: compact ends the turn" "$F" '`Auto run: compacting` as its last line'
-done
+names "executing-plans: compact ends the turn" "$P/skills/executing-plans/SKILL.md" '`Auto run: compacting` as its last line'
 R="$P/reference/auto-run.md"
 names "auto-run.md: the switching line" "$R" '- `Auto run: switching` after `scripts/auto-run switch` exits 0.'
 

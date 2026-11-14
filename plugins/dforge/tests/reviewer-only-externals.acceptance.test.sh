@@ -547,7 +547,7 @@ t_A9() {
 
 **Spec:** `docs/spec.md`
 
-**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4
+**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4
 
 **Task check:** `bash quick.sh` — gate 1 has Tier: task
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Inline mode is a document, and the claims that make it work are structural:
-# which ledger lines it shares with subagent mode and which files it links to.
+# which ledger lines it writes and which files it links to.
 # A model is not needed to check any of them, so they are checked here instead
 # of in a review.
 set -uo pipefail
@@ -11,9 +11,7 @@ SKILL_VIEW_DIR=$(mktemp -d)
 trap 'rm -rf "$SKILL_VIEW_DIR"' EXIT
 . "$HERE/skill-view.sh"
 INLINE="$(skill_view executing-plans)"
-SDD="$P/skills/subagent-driven-development/SKILL.md"
 FINAL="$P/reference/final-review.md"
-. "$HERE/fixtures/sdd-text.sh"
 # task-brief prints the budget line, which measures a Codex rollout and appends
 # an observation row. This suite runs against the real HOME, so send the rollout
 # search somewhere that does not exist: on a Codex host the live rollout is the
@@ -36,7 +34,7 @@ present() { # present <name> <file> <needle>
   else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
 
-for f in "$INLINE" "$SDD" "$FINAL"; do
+for f in "$INLINE" "$FINAL"; do
   check "exists: $(basename "$(dirname "$f")")/$(basename "$f")" \
     "$([ -f "$f" ] && echo yes || echo no)" "yes"
 done
@@ -53,25 +51,17 @@ check "the external review reference exists" \
 check "the re-review prompt exists" \
   "$([ -f "$P/reference/prompts/re-review-prompt.md" ] && echo yes || echo no)" "yes"
 
-# The escalation clause both skills key on.
-present "an owner request switches through the ledger line" "$INLINE" '`Task <N>: escalated inline -> subagent — owner request`'
-present "subagent mode reads the escalation line" "$SDD" "escalated inline -> subagent"
-ESC="$P/skills/subagent-driven-development/references/escalation.md"
-present "an unavailable substitute ends in BLOCKED, not a loop" "$ESC" '`Task <N>: BLOCKED — no available implementer — <the models found unavailable>`'
+present "an unavailable substitute ends in BLOCKED, not a loop" "$P/reference/escalation.md" '`Task <N>: BLOCKED — no available implementer — <the models found unavailable>`'
 
-# One ledger grammar for both modes.
+# The ledger grammar.
 for line in 'minor (deferred)' 'parked' 'BLOCKED' 'Ruling:' 'Final review: clean' 'Review depth: <light|standard|full> (<reason>)' 'Acceptance QA: skipped (depth light)'; do
   present "inline ledger has: $line" "$INLINE" "$line"
-  present "subagent ledger has: $line" "$SDD_LEDGER" "$line"
 done
-for f in "$INLINE" "$SDD_LEDGER"; do
-  s=$(basename "$(dirname "$f")")/$(basename "$f")
-  for line in 'Review depth: <light|standard|full> (<reason>)' 'Acceptance QA: skipped (depth light)'; do
-    check "$s: the ledger grammar block holds the line $line" "$(grep -Fxc -- "$line" "$f")" "1"
-  done
+for line in 'Review depth: <light|standard|full> (<reason>)' 'Acceptance QA: skipped (depth light)'; do
+  check "executing-plans: the ledger grammar block holds the line $line" "$(grep -Fxc -- "$line" "$INLINE")" "1"
 done
 
-# --- the delegated loop: one copy, shared by both execution skills ---
+# --- the delegated loop ---
 DT="$P/reference/delegated-task.md"
 check "exists: reference/delegated-task.md" "$([ -f "$DT" ] && echo yes || echo no)" "yes"
 NC="$P/reference/native-codex.md"
@@ -120,9 +110,6 @@ check "a header with no executor task has no Dispatch line" "$(grep -c '^\*\*Dis
 sed 's/^\*\*Evaluation:\*\* files 1 - spec 1 - coupling 1 - risk 2 = 5$/**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4/; s/risk 3 = 4$/risk 0 = 1/' "$DTMP/plan.md" > "$DTMP/light.md"
 brief --header "$DTMP/light.md" "$DTMP/hl.md"
 check "a lone total-4 task in three is not delegated" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/hl.md")" "0"
-sed 's/inline — `claude --model opus --effort high`/subagent — `claude --model sonnet --effort high`/' "$DTMP/plan.md" > "$DTMP/sub.md"
-brief "$DTMP/sub.md" 2 "$DTMP/s2.md"
-check "a subagent plan has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/s2.md")" "0"
 grep -v '^\*\*Execution:\*\*' "$DTMP/plan.md" > "$DTMP/old.md"
 brief "$DTMP/old.md" 2 "$DTMP/o2.md"
 check "a plan with no Execution line has no Dispatch line" "$(grep -c '^\*\*Dispatch:\*\*' "$DTMP/o2.md")" "0"

@@ -64,7 +64,7 @@ mkdir -p "$REPO/docs/dforge/plans" "$REPO/docs/dforge/specs"
 printf '# Spec\n' > "$REPO/$SPEC"
 {
   printf '# Widget Implementation Plan\n\n**Spec:** `%s`\n\n' "$SPEC"
-  printf '**Execution:** subagent — `claude --model sonnet --effort high` — Task 1 scores 4\n\n'
+  printf '**Execution:** inline — `claude --model sonnet --effort high` — Task 1 scores 4\n\n'
   printf '## Task index\n\n1. Only\n\n### Task 1: Only\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nBody.\n'
 } > "$REPO/$PLAN_REL"
 git -C "$REPO" add -A
@@ -89,7 +89,7 @@ status_line=$(arun s-2 status)
 has "A3: status reports phase execute" "$status_line" "auto run: execute"
 matches "A3: status says setup is due" "$status_line" "setup due"
 check "A3: the resume count is unchanged" "$(resumes s-2)" "$before"
-check "A3: the first prompt is the one next-step wrote" "$(field resumePrompt | grep -c 'dforge:subagent-driven-development')" "1"
+check "A3: the first prompt is the one next-step wrote" "$(field resumePrompt | grep -c 'dforge:executing-plans')" "1"
 
 # A4
 arun s-2 stop >/dev/null

@@ -56,7 +56,7 @@ claude_plan() {
 
 **Spec:** `docs/spec.md`
 
-**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4
+**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4
 
 **Program:** `docs/program.md` — sub-project 1 of 2 — next: Second part
 
@@ -124,7 +124,7 @@ Routing policy: codex-v4
 
 **Spec:** docs/spec.md
 
-**Execution:** subagent — codex gpt-6.1-sol / high — native pair
+**Execution:** inline — codex gpt-6.1-sol / low — native pair
 
 **Task check:** `bash quick.sh` — gate 1 has Tier: task
 
@@ -173,8 +173,7 @@ if want one; then
 claude_plan > clean.md
 lint clean.md
 check "clean Claude plan: exit 0" "$status" "0"
-has "clean Claude plan: summary" "$out" "plan-lint: 0 errors, 2 warnings"
-has "a light plan on subagent is deprecated" "$out" "WARN header: subagent execution is deprecated; inline is the default"
+has "clean Claude plan: summary" "$out" "plan-lint: 0 errors, 1 warnings"
 has "fenced TODO is a warning" "$out" "WARN Task 1: placeholder: # a fenced TODO is only a warning"
 lacks "inline-code TODO is not a finding" "$out" 'for the `TODO` column'
 codex_plan > codex.md
@@ -248,25 +247,25 @@ variant v9h.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --mod
 lint v9h.md
 variant v9i.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9i.md
-codex_plan | sed -E 's/^\*\*Execution:\*\* subagent/**Execution:** inline/; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* inline — codex gpt-6.1-sol / low#**Execution:** inline — codex gpt-6.1-sol / high#; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline.md
 lint codex-inline.md
 has "a Codex inline pair below the highest score errors" "$out" "ERROR header: inline Execution rank 5 is below the highest task score 9"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6-astra / xhigh#; s#^\*\*Implementer:\*\* codex gpt-6.1-sol / low#**Implementer:** codex gpt-6-astra / xhigh#; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline-heavy-fit.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* inline — codex gpt-6.1-sol / low#**Execution:** inline — codex gpt-6-astra / xhigh#; s#^\*\*Implementer:\*\* codex gpt-6.1-sol / low#**Implementer:** codex gpt-6-astra / xhigh#; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline-heavy-fit.md
 lint codex-inline-heavy-fit.md
 check "A12: a heavy Codex inline plan at its rank: exit 0" "$status" "0"
 lacks "A12: a heavy Codex inline plan at its rank lints without error" "$out" "ERROR"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** subagent — codex gpt-6-astra / high#' > codex-sub-astra.md
-lint codex-sub-astra.md
-check "Codex subagent on Astra: exit 0" "$status" "0"
-has "Codex subagent on Astra warns" "$out" "WARN header: subagent Execution line should be codex gpt-6.1-sol / high"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6.1-sol / low#' > codex-inline-fit.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* inline#**Execution:** subagent#' > codex-sub.md
+lint codex-sub.md
+check "Codex subagent line: exit 1" "$status" "1"
+has "Codex subagent line is an error" "$out" "ERROR header: subagent execution was retired in 5.0.0; use inline"
+codex_plan | sed -E 's#^\*\*Execution:\*\* inline — codex gpt-6.1-sol / low#**Execution:** inline — codex gpt-6.1-sol / low#' > codex-inline-fit.md
 lint codex-inline-fit.md
 check "Codex inline at the highest score: clean" "$out" "plan-lint: 0 errors, 0 warnings"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6-astra / high#' > codex-inline-over.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* inline — codex gpt-6.1-sol / low#**Execution:** inline — codex gpt-6-astra / high#' > codex-inline-over.md
 lint codex-inline-over.md
 check "Codex inline above the highest score: exit 0" "$status" "0"
 has "Codex inline above the highest score warns" "$out" "WARN header: inline Execution rank 8 is above the highest task score 3"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6-astra / max#' > codex-inline-reserve.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* inline — codex gpt-6.1-sol / low#**Execution:** inline — codex gpt-6-astra / max#' > codex-inline-reserve.md
 lint codex-inline-reserve.md
 has "Codex inline on a reserve pair warns" "$out" "WARN header: inline Execution pair codex gpt-6-astra / max is a reserve tier; the highest task score is 3"
 
@@ -346,10 +345,8 @@ lint r14.md
 has "a model id naming neither family is a model error" "$out" "ERROR header: inline execution needs --model sonnet or opus (model claude-haiku-4-5)"
 tplan r15.md subagent opus high 5 5 5 5 1 1
 lint r15.md
-has "a subagent line at opus warns" "$out" "WARN header: subagent Execution line should be claude --model sonnet --effort high"
-tplan r16.md subagent sonnet high 5 5 5 5 1 1
-lint r16.md
-lacks "a subagent line at sonnet high does not warn" "$out" "subagent Execution line should be"
+has "a subagent line is an error" "$out" "ERROR header: subagent execution was retired in 5.0.0; use inline"
+lacks "a subagent line gets no inline pair findings" "$out" "inline execution needs"
 tplan r17.md inline opus low 1 1 1 1 1 1
 lint r17.md
 check "opus where sonnet would do: exit 0" "$status" "0"
@@ -482,7 +479,7 @@ variant chost.md 's/^\*\*Goal:\*\* Demo\.$/**Goal:** Demo.\n\n```text\nHost: cod
 lint chost.md
 check "a fenced Host line: exit 0" "$status" "0"
 lacks "a fenced Host line: no Codex checks" "$out" "Routing policy"
-has "a fenced Host line: lints as the Claude plan" "$out" "plan-lint: 0 errors, 2 warnings"
+has "a fenced Host line: lints as the Claude plan" "$out" "plan-lint: 0 errors, 1 warnings"
 # A backticked Routing policy value is the value.
 codex_plan | sed 's#^Routing policy: codex-v4$#Routing policy: `codex-v4`#' > cbt.md
 lint cbt.md
@@ -833,7 +830,7 @@ three_task_plan() { # three_task_plan <Parallelism value> — three tasks
 
 **Spec:** \`docs/spec.md\`
 
-**Execution:** subagent — \`claude --model sonnet --effort high\` — fixture
+**Execution:** inline — \`claude --model sonnet --effort high\` — fixture
 
 **Parallelism:** $1
 
@@ -912,7 +909,7 @@ check "missing tier and CI lines: warnings only, exit 0" "$status" "0"
 has "a missing Task check warns" "$out" "WARN header: no **Task check:** line yet"
 has "a missing Integration check warns on a sequential plan" "$out" "WARN header: no **Integration check:** line yet"
 has "a missing CI line warns" "$out" "WARN header: no **CI:** line yet"
-has "the three warnings add to the fixture's two" "$out" "plan-lint: 0 errors, 5 warnings"
+has "the three warnings add to the fixture's one" "$out" "plan-lint: 0 errors, 4 warnings"
 
 for bad in 'run the quick tests' 'none' '`bash a.sh` `bash b.sh` — two commands' '`none — full suite every 3 tasks`'; do
   variant tc-bad.md "s#^\*\*Task check:\*\* .*#**Task check:** $bad#"
@@ -929,7 +926,7 @@ CI_FULL='**CI:** `.github/workflows/validate.yml` — platforms: ubuntu-latest, 
 variant tc-none.md "s#^\*\*Task check:\*\* .*#**Task check:** none — full suite every 3 tasks#; s#^\*\*CI:\*\* none\$#${CI_FULL}#"
 lint tc-none.md
 check "the none form and a full CI line: exit 0" "$status" "0"
-has "the none form and a full CI line add no finding" "$out" "plan-lint: 0 errors, 2 warnings"
+has "the none form and a full CI line add no finding" "$out" "plan-lint: 0 errors, 1 warnings"
 
 for bad in 'maybe' \
   '`ci.yml` — platforms: linux — uncovered: none' \

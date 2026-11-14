@@ -2,7 +2,7 @@
 
 Read this when a task reaches an escalation point. The tables themselves - the
 assignment, escalation, and reserve tables - live in
-[ladder.md](../../../reference/ladder.md); never work from memory.
+[ladder.md](ladder.md); never work from memory.
 
 ## Where escalation applies
 
@@ -25,7 +25,7 @@ round exists to preserve.
 A task whose last ledger line is `escalated inline -> subagent` failed in an
 inline session that may already run above the task's assigned tier, so the
 successor of the `**Implementer:**` agent alone can land at or below the tier
-that just failed. Rank both with [ladder.md](../../../reference/ladder.md)
+that just failed. Rank both with [ladder.md](ladder.md)
 §Why this terminates:
 
 - the task's `**Implementer:**` agent, and
@@ -96,7 +96,7 @@ Ruling: split Task <N> at the top rung into parts A and B (amendment A<k>) - imp
 round 1 leaves findings open takes `impl-opus-xhigh` at round 2: the split is
 spent, the task has resisted both capability and decomposition, and only then
 does it enter the reserve chain in
-[ladder.md](../../../reference/ladder.md). It enters at `impl-opus-xhigh` and
+[ladder.md](ladder.md). It enters at `impl-opus-xhigh` and
 walks one successor per further exhaustion. Record the entry as its own ruling,
 and say it aloud:
 

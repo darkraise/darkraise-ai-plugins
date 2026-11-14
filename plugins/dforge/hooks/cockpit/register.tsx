@@ -193,7 +193,7 @@ const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 // Permission modes in which an "ask" is settled without the person.
 const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
 // The skills that run a plan's tasks in this session.
-const RUN_SKILLS = ['dforge:subagent-driven-development', 'dforge:executing-plans', 'dforge:resume-execution']
+const RUN_SKILLS = ['dforge:executing-plans', 'dforge:resume-execution']
 // The tools that move the session into or out of a worktree.
 const WORKTREE_TOOLS = ['EnterWorktree', 'ExitWorktree']
 // The tools a review seat's write guard looks at.

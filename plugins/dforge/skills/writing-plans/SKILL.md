@@ -93,7 +93,7 @@ Constraints and Contracts.
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: the skill the **Execution:** line names — dforge:subagent-driven-development for `subagent`, dforge:executing-plans for `inline`. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: dforge:executing-plans. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -162,7 +162,7 @@ That pair runs the main session for the whole plan, and names the execution
 tier at its highest weighted routing score. `scripts/plan-lint` warns on any other pair,
 and errors on an inline pair below that score.
 
-**Read the settings first (`executionMode`), then choose the Execution line.**
+**Choose the Execution line.**
 
 Read [execution-line.md](references/execution-line.md) before you write the header's Execution line.
 
@@ -276,8 +276,7 @@ Read [test-step-forms.md](references/test-step-forms.md) before you write a task
 Read [assignment-procedure.md](references/assignment-procedure.md) before you score the tasks or write their assignment lines.
 
 The scores still set the Execution line's floor and mark the risk-3 tasks a
-judge reviews. The `**Implementer:**` lines are kept for the deprecated
-subagent mode; under inline mode the session implements the task.
+judge reviews. The session implements every task.
 
 ## Assign the register rows
 

@@ -83,16 +83,12 @@ over. You can also name one, for example "use dforge:brainstorming".
 flowchart LR
   A[Your request] --> B[brainstorming<br/>spec]
   B --> C[writing-plans<br/>scored plan]
-  C --> D{Execution line}
-  D -->|inline| E[executing-plans]
-  D -->|subagent| F[subagent-driven-development]
+  C --> E[executing-plans]
   E --> G[final review]
-  F --> G
   G --> H[finishing-a-development-branch]
   E -. budget reached .-> I[handoff]
-  F -. budget reached .-> I
   I -. new session .-> J[resume-execution]
-  J --> D
+  J --> E
 ```
 
 A feature, start to finish:
@@ -106,9 +102,7 @@ A feature, start to finish:
    `impl-sonnet-low` or `impl-opus-high`. `plan-lint` checks the plan and a judge
    reviews it before it is saved. Saving a plan ends the session.
 3. **Start a fresh session and say "resume".** `resume-execution` hands over to
-   the mode the plan's `**Execution:**` line names: inline, where the session
-   implements the tasks itself, or subagent, where each task goes to its
-   implementer and is reviewed against scored criteria.
+   `executing-plans`, where the session implements the tasks itself.
 4. **Let it run.** Progress goes to `.dforge/sdd/<plan>/progress.md`. A
    whole-branch review follows the last task, then
    `finishing-a-development-branch` offers to merge, open a pull request, keep

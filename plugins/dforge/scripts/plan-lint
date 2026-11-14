@@ -244,13 +244,14 @@ if [ -n "$execution" ]; then
         || jq -e --arg m "$m" --arg e "$e" '[.execution[], .reserve[]] | any(.model == $m and .effort == $e)' < "$ROUTING" >/dev/null 2>&1 \
         || say ERROR header "Execution pair codex $m / $e is not in codex-routing.json"
     else
-      say ERROR header "Execution line does not match '**Execution:** <inline|subagent> — codex <model> / <effort> — <reason>'"
+      say ERROR header "Execution line does not match '**Execution:** inline — codex <model> / <effort> — <reason>'"
     fi
   elif [[ "$execution" =~ ^\*\*Execution:\*\*\ (inline|subagent)$SEP\`?claude\ --model\ (haiku|sonnet|opus|fable|claude-[a-z0-9.-]+)\ --effort\ (low|medium|high|xhigh|max)\`?$SEP.+ ]]; then
     mode=${BASH_REMATCH[1]} exec_model=${BASH_REMATCH[3]} exec_effort=${BASH_REMATCH[4]}
   else
-    say ERROR header "Execution line does not match '**Execution:** <inline|subagent> — claude --model <m> --effort <e> — <reason>'"
+    say ERROR header "Execution line does not match '**Execution:** inline — claude --model <m> --effort <e> — <reason>'"
   fi
+  [ "$mode" != subagent ] || say ERROR header "subagent execution was retired in 5.0.0; use inline"
 fi
 
 # --- placeholders ---
@@ -372,20 +373,17 @@ for n in $nums; do
   done
 done
 
-# R5: execution mode. Inline is the default and subagent mode is deprecated.
+# R5: execution mode. Inline is the only mode; subagent mode was retired.
 # On Claude the session implements every task, heavy ones included, so the
 # inline model and effort follow the hardest task. A risk-3 task runs the
 # session's per-task review loop, which raises the effort to at least high.
 effort_rank() { case $1 in low) echo 0 ;; medium) echo 1 ;; high) echo 2 ;; xhigh) echo 3 ;; *) echo 4 ;; esac; }
 # The Execution pair is the main session's for its whole run, so an
-# over-provisioned pair costs more than any single task: a subagent session
-# only coordinates, and an inline one needs no more than its hardest task.
+# over-provisioned pair costs more than any single task: it needs no more than
+# the hardest task.
 if [ "$codex" -eq 1 ]; then
   if [ "$policy_ok" -eq 0 ]; then
     :
-  elif [ "$mode" = subagent ]; then
-    { [ "$exec_model" = gpt-6.1-sol ] && [ "$exec_effort" = high ]; } \
-      || say WARN header "subagent Execution line should be codex gpt-6.1-sol / high"
   elif [ "$mode" = inline ]; then
     exec_rank=$(jq -r --arg m "$exec_model" --arg e "$exec_effort" \
       '.execution[] | select(.model == $m and .effort == $e) | .rank' < "$ROUTING" 2>/dev/null | tr -d '\r')
@@ -398,29 +396,23 @@ if [ "$codex" -eq 1 ]; then
       say WARN header "inline Execution rank $exec_rank is above the highest task score $max_score"
     fi
   fi
-elif [ -n "$mode" ]; then
+elif [ "$mode" = inline ]; then
   family=$exec_model
   case $exec_model in claude-*opus*) family=opus ;; claude-*sonnet*) family=sonnet ;; esac
-  if [ "$mode" = subagent ]; then
-    say WARN header "subagent execution is deprecated; inline is the default"
-    { [ "$family" = sonnet ] && [ "$exec_effort" = high ]; } \
-      || say WARN header "subagent Execution line should be claude --model sonnet --effort high"
-  else
-    read -r self_max self_risk3 < <(plan_scores "$src" | awk -F'\t' '
-      $2 ~ /^[0-9]+$/ { if ($2 + 0 > m) m = $2 + 0; if ($3 + 0 == 3) r3 = 1 }
-      END { print m + 0, r3 + 0 }')
-    agent=$(awk -v t="$self_max" '$1 == t { print $2 }' <<<"$assignment")
-    need=${agent##*-}
-    case $need in low|medium|high) ;; *) need=low ;; esac
-    [ "$self_risk3" -eq 0 ] || need=high
-    if [ "$family" != sonnet ] && [ "$family" != opus ]; then
-      say ERROR header "inline execution needs --model sonnet or opus (model $exec_model)"
-    elif [ "$family" = sonnet ] && [[ "$agent" == impl-opus-* ]]; then
-      say ERROR header "inline execution needs --model opus (model $exec_model)"
-    fi
-    [ "$(effort_rank "$exec_effort")" -ge "$(effort_rank "$need")" ] \
-      || say ERROR header "inline execution needs --effort $need or above (effort $exec_effort)"
+  read -r self_max self_risk3 < <(plan_scores "$src" | awk -F'\t' '
+    $2 ~ /^[0-9]+$/ { if ($2 + 0 > m) m = $2 + 0; if ($3 + 0 == 3) r3 = 1 }
+    END { print m + 0, r3 + 0 }')
+  agent=$(awk -v t="$self_max" '$1 == t { print $2 }' <<<"$assignment")
+  need=${agent##*-}
+  case $need in low|medium|high) ;; *) need=low ;; esac
+  [ "$self_risk3" -eq 0 ] || need=high
+  if [ "$family" != sonnet ] && [ "$family" != opus ]; then
+    say ERROR header "inline execution needs --model sonnet or opus (model $exec_model)"
+  elif [ "$family" = sonnet ] && [[ "$agent" == impl-opus-* ]]; then
+    say ERROR header "inline execution needs --model opus (model $exec_model)"
   fi
+  [ "$(effort_rank "$exec_effort")" -ge "$(effort_rank "$need")" ] \
+    || say ERROR header "inline execution needs --effort $need or above (effort $exec_effort)"
 fi
 
 # --- Parallelism line ---

@@ -33,7 +33,7 @@ cat > docs/plan.md <<'EOF'
 
 **Spec:** `docs/spec.md`
 
-**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4
+**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4
 
 ## Global Constraints
 
@@ -107,7 +107,7 @@ entry b5.md '## Task 7' 'x' 'y'
 run docs/plan.md b5.md
 has "missing task" "$out" "rejected: no Task 7 in the plan"
 
-entry b6.md '## Header' '**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4' '**Execution:** inline'
+entry b6.md '## Header' '**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4' '**Execution:** inline'
 run docs/plan.md b6.md
 has "protected line" "$out" "rejected: Old text touches a line that cannot be amended"
 
@@ -172,7 +172,7 @@ Cost if wrong: none
 ````
 ### New
 ````text
-**Execution:** subagent — `claude --model opus --effort max` — injected
+**Execution:** inline — `claude --model opus --effort max` — injected
 **Goal:** demo
 ````
 EOF
@@ -180,7 +180,7 @@ printf '# Inject plan
 
 **Goal:** demo
 
-**Execution:** subagent — `claude --model sonnet --effort high` — x
+**Execution:** inline — `claude --model sonnet --effort high` — x
 
 ### Task 1: Only
 

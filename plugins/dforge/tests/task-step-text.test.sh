@@ -6,7 +6,6 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
 IP="$P/reference/prompts/implementer-prompt.md"
-. "$HERE/fixtures/sdd-text.sh"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -21,9 +20,6 @@ names "the reply ends with the Report line" "$IP" '`Report: <absolute path of th
 verified=$(grep -E '^ +- `<command>` — (pass|fail): <n> passed, <m> failed$' "$IP" | sed -E 's/^ +//; s/<command>/bash t.sh/; s/<n>/3/; s/<m>/0/')
 check "the prompt shows both Verified bullet forms" "$(printf '%s\n' "$verified" | grep -c .)" "2"
 check "each Verified bullet form matches the stop gate's grammar" "$(printf '%s\n' "$verified" | grep -cE '^- `[^`]+` — (pass|fail)(: .*)?$')" "2"
-
-# --- the fix loop holds two rounds (faster-plans §3) ---
-names "subagent mode: the fix-round grammar" "$SDD_LEDGER" 'Task <N>: fix round R/2 (X addressed, Y open — <one-liners>; commits a..b[; re-review skipped (<n> lines)]; resumed | fresh (<why>) | escalated <old> -> <new>)'
 
 # --- the Task check and Integration check header lines (test tiers) ---
 WPR="$P/skills/writing-plans/references/task-check-line.md"

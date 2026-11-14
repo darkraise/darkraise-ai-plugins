@@ -276,18 +276,6 @@ plan_ledger() {
   return 0
 }
 
-# ledger_left_inline LEDGER — the task number where the plan left inline mode:
-# the last "escalated inline -> subagent" line with no later inline assignment.
-# Nothing when the plan is in inline mode. The marker is a whole ledger line,
-# never a substring of another line.
-ledger_left_inline() {
-  tr -d '\r' < "$1" | awk '
-    /^Task [0-9]+: escalated inline -> subagent[ \t]*(—|-|$)/ { n = $2; sub(/:$/, "", n); esc = n; next }
-    /^Task [0-9]+: implementer inline \(assigned/ { esc = "" }
-    END { if (esc != "") print esc }
-  '
-}
-
 # plan_apply_amendments PLAN AMEND — the plan with every amendments.md entry
 # applied in file order; the plan unchanged when AMEND is missing or empty.
 # Exit 1, naming the entry on stderr, when an entry does not apply: its Old

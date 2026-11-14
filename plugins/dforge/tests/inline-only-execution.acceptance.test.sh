@@ -176,25 +176,10 @@ fi
 
 # ----------------------------------------------------------------------- A3
 if selected A3; then
-  DEPR='WARN header: subagent execution is deprecated; inline is the default'
   P=$(mk a3a 'subagent — claude --model sonnet --effort high — x' --parallelism '**Parallelism:** sequential — one task at a time' "$T1" "$T1" "$T1")
   lint "$P"
-  check "A3: subagent plan with no heavy task: exit 0" "$lrc" "0"
-  has "A3: the deprecation WARN" "$lout" "$DEPR"
-  unmatched "A3: no majority-rule warning (no heavy task)" "$lout" 'heavy'
-  unmatched "A3: no ERROR (no heavy task)" "$lout" '^ERROR'
-  P=$(mk a3b 'subagent — claude --model sonnet --effort high — x' --parallelism '**Parallelism:** sequential — one task at a time' "$HEAVY6" "$T1")
-  lint "$P"
-  check "A3: subagent plan with a heavy minority: exit 0" "$lrc" "0"
-  has "A3: the deprecation WARN (heavy minority)" "$lout" "$DEPR"
-  unmatched "A3: no majority-rule warning (heavy minority)" "$lout" 'heavy'
-  unmatched "A3: no ERROR (heavy minority)" "$lout" '^ERROR'
-  P=$(mk a3c 'subagent — claude --model sonnet --effort high — x' --parallelism '**Parallelism:** sequential — one task at a time' "$HEAVY6" "$HEAVY8")
-  lint "$P"
-  check "A3: subagent plan with every task heavy: exit 0" "$lrc" "0"
-  has "A3: the deprecation WARN (all heavy)" "$lout" "$DEPR"
-  unmatched "A3: no majority-rule warning (all heavy)" "$lout" 'heavy'
-  unmatched "A3: no ERROR (all heavy)" "$lout" '^ERROR'
+  check "A3: a subagent plan: exit 1" "$lrc" "1"
+  has "A3: the retirement ERROR" "$lout" 'ERROR header: subagent execution was retired in 5.0.0; use inline'
 fi
 
 # ----------------------------------------------------------------------- A4
@@ -233,16 +218,6 @@ fi
 if selected A8; then
   check "A8: agents/drafter-sonnet.md does not exist" "$([ -e "$PLUGIN/agents/drafter-sonnet.md" ] && echo exists || echo absent)" "absent"
   check "A8: agents/scout-sonnet.md does not exist" "$([ -e "$PLUGIN/agents/scout-sonnet.md" ] && echo exists || echo absent)" "absent"
-fi
-
-# ---------------------------------------------------------------------- A11
-if selected A11; then
-  printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: implementer inline (assigned; base abc1234)\nTask 3: escalated inline -> subagent — three fix rounds at or above the assigned tier\n' > "$TMP/a11-ledger.md"
-  got=$(bash -c '. "$1"; ledger_left_inline "$2"' _ "$S/lib/plan.sh" "$TMP/a11-ledger.md" 2>&1 | tr -d '\r')
-  check "A11: ledger_left_inline returns the task number for the old escalation line" "$got" "3"
-  printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: implementer inline (assigned; base abc1234)\nTask 1: complete (unreviewed)\nTask 2: escalated inline -> subagent — owner request\n' > "$TMP/a11-owner.md"
-  got=$(bash -c '. "$1"; ledger_left_inline "$2"' _ "$S/lib/plan.sh" "$TMP/a11-owner.md" 2>&1 | tr -d '\r')
-  check "A11: ledger_left_inline returns the task number for an owner-request switch" "$got" "2"
 fi
 
 # ---------------------------------------------------------------------- A12

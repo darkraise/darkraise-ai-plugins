@@ -59,11 +59,10 @@ while [ $# -gt 0 ]; do
 done
 set -- ${hostless[@]+"${hostless[@]}"}
 
-# The design tier writes specs and plans; the build tier executes them. Claude's
-# pairs are its ladder's top execution rung and the subagent Execution default.
-# Codex runs both tiers on GPT-6.1 Sol high, the subagent Execution default
-# plan-lint expects: the session runs for hours, and the judgment calls that
-# need Astra go to native judges at the rank-8 floor, not to the session.
+# The design tier writes specs and plans; the build tier executes them. Codex
+# runs both tiers on GPT-6.1 Sol high: the session runs for hours, and the
+# judgment calls that need Astra go to native judges at the rank-8 floor, not
+# to the session.
 launch_for() { # launch_for design|build
   case $host:$1 in
     codex:*)       printf 'codex -m gpt-6.1-sol -c model_reasoning_effort=high' ;;
@@ -156,14 +155,6 @@ plan_name() {
   printf '%s\n' "$name"
 }
 
-execution_skill() { # execution_skill EXECUTION_LINE
-  if grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$1"; then
-    printf 'executing-plans'
-  else
-    printf 'subagent-driven-development'
-  fi
-}
-
 complete=0 draft=0 adhoc=0 phase="" next_action=""
 case "${1:-}" in
   --complete) complete=1; shift ;;
@@ -181,7 +172,7 @@ case "${1:-}" in
     ;;
 esac
 
-status_line="" next_line="" prompt="" launch=1 launch_cmd="" launch_plan="" escalated_at=""
+status_line="" next_line="" prompt="" launch=1 launch_cmd="" launch_plan=""
 
 if [ "$adhoc" -eq 1 ]; then
   root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
@@ -236,7 +227,6 @@ else
   if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$plan")"; then host=codex; fi
 
   launch_cmd=$(execution_launch "$execution")
-  skill=$(execution_skill "$execution")
 
   ledger_file="$(dforge_ledger_dir "$slug")/progress.md"
   ledger_note="no ledger at \`$ledger_file\`"
@@ -257,10 +247,6 @@ else
       ledger_note="ledger \`$ledger_file\`"
       done_tasks=$(ledger_done "$ledger_file")
       blocked_tasks=$(ledger_blocked "$ledger_file")
-      # A ledger outranks the Execution line on which mode the run is in: a
-      # switch is recorded there and the plan is never edited. The escalation
-      # holds until a later inline assignment shows the plan came back.
-      escalated_at=$(ledger_left_inline "$ledger_file")
       # A last line that assigns a task to an agent means that
       # run may still be going. The block is still printed, since it is the
       # resume guide either way, but a handoff over a live run loses its result.
@@ -357,7 +343,7 @@ else
           if [ -n "$(plan_ledger "$(dforge_resolve "$target")")" ]; then
             action="Resume \`$target\` with dforge:resume-execution."
           else
-            action="Continue \`$target\` with dforge:$(execution_skill "$target_exec")."
+            action="Continue \`$target\` with dforge:executing-plans."
           fi
           launch_cmd=$(execution_launch "$target_exec") launch_plan=$target
           ;;
@@ -453,10 +439,6 @@ else
       status_line="Plan \`$rel\`: $done_count of $total tasks complete ($ledger_note)."
       next_line="Resume at Task $first_open ($open_title)."
     fi
-    if [ -n "$escalated_at" ] && [ "$launch" -eq 1 ]; then
-      launch_cmd=$(launch_for build)
-      next_line="$next_line This plan escalated to subagent mode at Task $escalated_at."
-    fi
 
     # With a ledger there is state to verify before continuing, which is
     # resume-execution's job; without one the plan starts at the skill's Setup,
@@ -466,7 +448,7 @@ else
     elif [ "$has_ledger" -eq 1 ]; then
       prompt="Resume \`$rel\` with dforge:resume-execution. $next_line"
     else
-      prompt="Continue \`$rel\` with dforge:$skill. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task $first_open ($open_title)."
+      prompt="Continue \`$rel\` with dforge:executing-plans. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task $first_open ($open_title)."
     fi
     if [ "$root" != "$primary" ]; then
       prompt="$prompt First enter the existing worktree \`$root\`."

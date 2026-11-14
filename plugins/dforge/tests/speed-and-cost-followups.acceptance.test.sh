@@ -59,7 +59,7 @@ sr() { (cd "$REPO" && bash "$SUITE" -- bash -c "$1" >/dev/null 2>&1); } # the co
 worktrees() { g worktree list | wc -l | tr -d ' '; }
 
 mkplan() { # mkplan <ntasks> [header line] [task 1 extra text]
-  printf '# Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** subagent — `claude --model sonnet --effort high` — fixture\n\n'
+  printf '# Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** inline — `claude --model sonnet --effort high` — fixture\n\n'
   [ -z "${2:-}" ] || printf '%s\n\n' "$2"
   printf '## Task index\n\n'
   local i
@@ -92,7 +92,7 @@ if selected A1 || selected A2 || selected A3 || selected A4; then
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |**Integration check:** `bash mark.sh a2integ 0`
 |

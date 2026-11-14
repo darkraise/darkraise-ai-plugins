@@ -151,9 +151,9 @@ tasks are covered by one whole-branch review at the end. `plan-lint` requires
 the Execution line's model and effort to cover the hardest task the session
 implements, and `--effort high` at risk 3. A task that will
 not converge after three fix rounds goes to the ruling seat as a `breaker`
-item. subagent-driven-development, a dispatch and a scored review per task, is
-deprecated: it runs only for a plan whose Execution line names `subagent` or
-on your instruction, and `plan-lint` warns on that line.
+item. Subagent execution, a dispatch and a scored review per task, was retired
+in 5.0.0, and `plan-lint` reports an `**Execution:** subagent` line as an
+error.
 
 **A reviewer panel.** Codex and agy review; neither implements a task. When a
 family's review surface is open, `scripts/run-review-panel` runs every open
@@ -209,8 +209,7 @@ judge to dedupe and verify, and a heavy panel's lists always go to
 Plan review runs the panel for round 1 (`judge-opus` when it returns nothing
 or every reviewer is off) and `judge-opus` for the delta round: at most two
 rounds on a Claude plan. The final whole-branch review runs on `judge-opus`,
-its one fix subagent on the highest tier among the tasks the findings touch,
-and at depth full gains an external round with one list per reviewer. Whenever
+its fix pass in the session, and at depth full gains an external round with one list per reviewer. Whenever
 two or more lists carry findings, a fresh `judge-opus` dedupes and verifies
 them, tagging each finding's origins (`[claude+agy]`). No review route names
 `judge-fable`: on 2026-09-23 Opus 5.5 at high effort matched or beat Fable 5.1
@@ -350,7 +349,7 @@ UI files.
 set — brainstorming through finishing-a-development-branch — frozen at upstream
 6.3.0, so no other plugin is required: every agent definition preloads
 `dforge:verification-before-completion` through its `skills:`
-frontmatter, and writing-plans and subagent-driven-development use the plugin's own
+frontmatter, and writing-plans and executing-plans use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
 `context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
 action and keeps `.dforge/handoff/latest.md` pointing at it. Disable the
@@ -890,7 +889,6 @@ The same settings can be set with
 | Workflow | `agyReview` | `false` | `true` lets the Antigravity CLI (`agy`) take review seats when its gate passes and the policy's `trust.review` is `pass`. `false`, the default, makes `scripts/agy-gate` report `review=false reason=setting` without probing, and keeps agy out of every review. |
 | Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DFORGE_LENS_CAP` overrides it. |
 | Workflow | `lensMinorFrom` | `20` | The plan size, in tasks, from which the final review's lenses also report Minor findings. A smaller plan's lenses report Critical and Important findings only, so the fix wave does not triage a long Minor tail. `0` always asks for Minor findings. `DFORGE_LENS_MINOR_FROM` overrides it. |
-| Workflow | `executionMode` | `auto` | `auto` means inline; `inline` and `subagent` fix the plan's Execution line; `subagent` is deprecated. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
 | Workflow | `autoRun` | `on` | `on` runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; `off` on Codex); `ask` offers that once the design is approved; `off` never runs one. See [Auto run](#auto-run). |
 | Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
@@ -972,6 +970,12 @@ implement a task.
   group, `review-route` prints no `review=` tier, and every task is reviewed
   alone. A task whose last ledger line reads `awaiting group review` is
   reviewed with `task-step review`.
+- **Subagent mode.** The `subagent-driven-development` skill and the
+  `executionMode` setting are gone (a stored value is ignored). `plan-lint`
+  reports `**Execution:** subagent` as an error; `executing-plans` runs an
+  older plan that still carries the line inline and logs a ruling. A ledger
+  whose last line for a task is `escalated inline -> subagent` sends that task
+  to the ruling seat as a `breaker` item.
 
 ## Migrating to 4.11
 
@@ -1108,8 +1112,7 @@ A plan opens with a header block: Goal, Spec, the `**Execution:**` line
 (inline on every new plan, with the session's model and effort), Global Constraints, Contracts (every name
 one task produces and another consumes), Assumptions with evidence, and a Task
 index. `scripts/plan-lint` checks it, and a judge reviews it against
-`criteria/plan-review.md` before it is saved. That Execution line is binding: a
-session does not change mode because subagents happen to be available, and only
+`criteria/plan-review.md` before it is saved. That Execution line is binding: only
 your explicit instruction overrides it. Each task
 carries its interfaces and the complete code of its tests, and gives
 implementation code only for configuration values, generated-file or migration
@@ -1131,8 +1134,7 @@ task then reads:
 **Approach:** inline - skip 2: follows the existing exporter pattern
 ```
 
-Edit the `**Implementer:**` line to override. `subagent-driven-development`
-obeys the line and never recomputes when it is present. Add
+Edit the `**Implementer:**` line to override. Add
 `**Override:** <reason>` below the Evaluation line so that `plan-lint` reports
 the deviation as a warning instead of an error.
 
@@ -1186,15 +1188,14 @@ differences:
    `review-route --ruling` prints). Its plan corrections
    land in an append-only `amendments.md` through `scripts/plan-amend`; the
    plan file is never edited during execution.
-10. **Inline by default.** Upstream picks `executing-plans` when subagents are
-    unavailable and recommends subagent execution otherwise. Here every new
-    plan's `**Execution:**` line names inline: `executing-plans` is a full
-    inline mode that writes the same ledger, sends its judgment to the same
-    ruling seat, and ends at the same shared
+10. **Inline only.** Upstream picks `executing-plans` when subagents are
+    unavailable and recommends subagent execution otherwise. Here every
+    plan's `**Execution:**` line names inline: `executing-plans` writes the
+    ledger, sends its judgment to the ruling seat, and ends at the shared
     [final-review.md](reference/final-review.md); only risk-3 tasks get a
     per-task review. A task it cannot land in three fix rounds
-    goes to the ruling seat as a `breaker` item. Subagent mode is deprecated
-    and runs only for an older plan's subagent line or on your instruction.
+    goes to the ruling seat as a `breaker` item. Subagent mode was retired in
+    5.0.0.
 
 ## Licenses
 

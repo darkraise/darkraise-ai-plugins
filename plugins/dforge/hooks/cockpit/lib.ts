@@ -912,7 +912,7 @@ export type LedgerTask = {
 /** What a run's ledger says: its plan, each task it names, and whether the final review came back clean. */
 export type Ledger = { plan: string | null; tasks: LedgerTask[]; isFinished: boolean }
 
-/** Reads the subagent-driven-development ledger (progress.md) as its grammar writes it. */
+/** Reads the execution ledger (progress.md) as its grammar writes it. */
 export function parseLedger(text: string): Ledger {
   const tasks = new Map<number, LedgerTask>()
   const task = (n: number) => {

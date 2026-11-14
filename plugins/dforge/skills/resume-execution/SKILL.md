@@ -49,18 +49,11 @@ session from memory or from a summary.
    way, and yield to `handoff.md` wherever both speak. Neither is an error when
    absent. See [project-state.md](../../reference/project-state.md).
 5. **Continue** with what latest.md's `**Next:**` line says:
-   - Start or resume at Task N: invoke the skill the plan's `**Execution:**`
-     line names — dforge:subagent-driven-development for `subagent`,
-     dforge:executing-plans for `inline`. Its ledger recovery takes over.
-     A ledger with a `Task <N>: escalated inline -> subagent` line and no later
-     `implementer inline (assigned` line has left inline mode: invoke
-     dforge:subagent-driven-development whatever the Execution line
-     says. Inline mode writes that line only when your human partner asks for
-     subagent mode; older ledgers may also hold it from a failed task.
-   - Run the final whole-branch review: invoke the skill the plan's
-     `**Execution:**` line names, as the previous bullet does. With every task
-     complete, each goes straight to its Final Review section, and both follow
-     the same [final-review.md](../../reference/final-review.md).
+   - Start or resume at Task N: invoke dforge:executing-plans. Its ledger
+     recovery takes over.
+   - Run the final whole-branch review: invoke dforge:executing-plans, which
+     with every task complete goes straight to its Final Review section and
+     follows [final-review.md](../../reference/final-review.md).
    - Run finishing: invoke dforge:finishing-a-development-branch.
 
 ## Auto run

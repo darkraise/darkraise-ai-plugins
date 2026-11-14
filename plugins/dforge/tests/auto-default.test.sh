@@ -34,8 +34,7 @@ says "writing-plans: the CI line grammar" "$CIL" '`<workflow files>` — platfor
 says "writing-plans: the early-CI task form" "$CIL" '**Early CI:** after task <n> — consented <YYYY-MM-DD>'
 
 # Docs pointers: pointers name the file that holds their target.
-SDD_REFS="$P/skills/subagent-driven-development/references"
-check "the Recovery pointers resolve" "$([ -s "$SDD_REFS/ledger.md" ] && [ -s "$P/skills/executing-plans/references/recovery.md" ] && echo yes || echo no)" "yes"
+check "the Recovery pointer resolves" "$([ -s "$P/skills/executing-plans/references/recovery.md" ] && echo yes || echo no)" "yes"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

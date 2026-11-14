@@ -92,7 +92,7 @@ if need_fixture; then
   g config user.email t@example.invalid
   mkdir -p "$FIX/docs" "$FIX/lib"
   {
-    printf '# Acceptance Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** subagent — `claude --model sonnet --effort high` — fixture\n\n## Task index\n\n'
+    printf '# Acceptance Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** inline — `claude --model sonnet --effort high` — fixture\n\n## Task index\n\n'
     for n in 1 2 3 4 5; do printf '%s. Task %s\n' "$n" "$n"; done
     for n in 1 2 3 4 5; do
       printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nRun: `bash check.sh`\n' "$n" "$n"

@@ -87,7 +87,7 @@ PLAN_TEXT='|# Acceptance Fixture Plan
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |## Global Constraints
 |

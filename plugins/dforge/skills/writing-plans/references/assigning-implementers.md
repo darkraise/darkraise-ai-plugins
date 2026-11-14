@@ -53,11 +53,9 @@ fine. That is why `scripts/plan-lint` checks all headings as a set: a single
 
 ## Overriding
 
-A human can edit any `**Implementer:**` line by hand.
-subagent-driven-development obeys the line and never recomputes when it is
-present, so a human ruling always wins over the rubric. The `**Evaluation:**`
-line stays, because the gap between the score and the choice is the interesting
-part.
+A human can edit any `**Implementer:**` line by hand; a human ruling always
+wins over the rubric. The `**Evaluation:**` line stays, because the gap between
+the score and the choice is the interesting part.
 
 A hand edit that breaks a rule the checker enforces - a reserve tier, a kept
 `spec = 3`, a table mismatch - carries an `**Override:** <reason>` line below

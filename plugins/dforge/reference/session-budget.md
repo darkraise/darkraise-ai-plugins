@@ -94,9 +94,6 @@ under `ok` is not a reason to stop.
 
 ## Checkpoints
 
-- **subagent-driven-development:** every `task-brief` and `review-package`
-  until the last task completes; then `context-size --final` after the last
-  `Task N: complete` line.
 - **executing-plans:** the budget line on every `task-brief`; then
   `context-size --final` after the last `Task N: complete` line.
 - **The tail:** every budget line printed for the plan's last two tasks

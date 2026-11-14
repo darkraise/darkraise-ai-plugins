@@ -290,7 +290,6 @@ Run dforge:handoff first (`scripts/auto-run clear` reads the first prompt
 and launch command `scripts/next-step` wrote to `latest.md`), then:
 
 - **A compaction that left too much:** `scripts/auto-run clear`.
-- **A plan that left inline mode before this change** (a ledger dforge:executing-plans' recovery.md sends to dforge:subagent-driven-development): `scripts/auto-run clear --phase`. A phase clear never counts as a self-resume.
 - **The switch** (§The switch): the cockpit runs `scripts/auto-run clear --phase` itself.
 - **Finishing** (§Finishing): `scripts/auto-run clear --phase`.
 

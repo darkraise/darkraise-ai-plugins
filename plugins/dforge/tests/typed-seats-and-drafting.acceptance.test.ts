@@ -59,7 +59,7 @@ describe('typed seats and drafting: acceptance', () => {
   test('A1: an untyped general-purpose or claude spawn is denied, naming a judge seat, an impl seat and model "sonnet"', async ($, on) => {
     world(on)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     for (const subagentType of ['general-purpose', 'claude']) {
       const out = await $.agent.spawn(spawn({ subagentType }))
       expect(out.deny).toMatch(REASON)
@@ -72,7 +72,7 @@ describe('typed seats and drafting: acceptance', () => {
   test('A2: general-purpose with a model, any dforge: agent and a typed built-in are not denied', async ($, on) => {
     world(on)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     // The session is a dforge session: the untyped spawn is denied.
     expect((await $.agent.spawn(spawn({}))).deny).toBeDefined()
     expect((await $.agent.spawn(spawn({ model: 'sonnet' }))).deny).toBeUndefined()
@@ -98,7 +98,7 @@ describe('typed seats and drafting: acceptance', () => {
   test('A3: in a dforge session nothing is denied from a subagent loop, a workflow agent, a teammate or a resume', async ($, on) => {
     world(on)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     expect((await $.agent.spawn(spawn({}))).deny).toBeDefined()
     expect((await $.agent.spawn(spawn({ parentAgentId: 'agent-1' }))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({ parentAgentId: 'agent-1', subagentType: 'fork', fork: true }))).deny).toBeUndefined()
@@ -145,7 +145,7 @@ describe('typed seats and drafting: acceptance', () => {
   test('A8: a denied spawn is listed in the cockpit refusals with tool Agent and the deny reason', async ($, on) => {
     world(on)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     const denied = await $.agent.spawn(spawn({}))
     expect(denied.deny).toMatch(REASON)
     const ui = await $.ui.mount(PANE as never)
@@ -158,7 +158,7 @@ describe('typed seats and drafting: acceptance', () => {
   test('A8: an allowed spawn adds no refusal', async ($, on) => {
     world(on)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     expect((await $.agent.spawn(spawn({ model: 'sonnet' }))).deny).toBeUndefined()
     const ui = await $.ui.mount(PANE as never)
     expect(await ui.find({ type: 'Text', text: /✗ Agent:/ })).toBeUndefined()

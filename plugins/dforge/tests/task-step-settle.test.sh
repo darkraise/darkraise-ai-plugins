@@ -42,7 +42,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |## Task index
 |
@@ -233,7 +233,7 @@ sed 's/^|//' > "$REPO/docs/named.md" <<'PLAN'
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |**Integration check:** `bash mark.sh integ 0`
 |

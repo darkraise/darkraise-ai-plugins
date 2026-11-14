@@ -83,7 +83,7 @@ mkplan() {
     [ "$host" = - ] || printf 'Host: codex\n\n'
     printf '**Goal:** Fixture.\n\n'
     [ "$spec" = - ] || printf '**Spec:** docs/dforge/specs/%s\n\n' "$spec"
-    printf '**Execution:** subagent — `claude --model sonnet --effort high` — fixture\n\n'
+    printf '**Execution:** inline — `claude --model sonnet --effort high` — fixture\n\n'
     printf '**Parallelism:** sequential — fixture\n\n'
     [ -z "${PLAN_REVIEW:-}" ] || printf '%s\n\n' "$PLAN_REVIEW"
     printf '## Task index\n\n'

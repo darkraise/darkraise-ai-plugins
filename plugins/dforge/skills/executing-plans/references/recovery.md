@@ -8,7 +8,7 @@
 |---|---|
 | `complete` | Done; never redo |
 | `BLOCKED` | Terminal. It is a stop of the fourth class for any task that depends on it; name it in your final message |
-| `escalated inline -> subagent` | This plan has left inline mode: use dforge:subagent-driven-development |
+| `escalated inline -> subagent` (an older ledger's; subagent mode was retired in 5.0.0) | Treat it as `fix round 3/3 (…; still failing)`: send the task to the ruling seat as a `breaker` item (in an auto run, the pending list) |
 | `fix round R/3 (…; passing)` | Re-run the task's verifications; if they pass, commit anything uncommitted except the carried paths (`scripts/auto-run carried`) and write the complete line, else treat as `still failing` |
 | `fix round R/3 (…; still failing)`, R < 3 | Resume the loop at round R+1 |
 | `fix round 3/3 (…; still failing)` | Send the task to the ruling seat as a `breaker` item (in an auto run, the pending list) |
@@ -24,10 +24,6 @@
 `Early CI: skipped — run <id>` line for that run is resumed first, by applying
 [delegated-task.md](../../../reference/delegated-task.md) §Early CI's recovery
 sentence; a ledger with no `Early CI:` line whose `**Early CI:**` point is
-already complete runs that section now. Neither ends the turn. Then, whatever the per-task lines say: if the ledger holds a
-`Task <N>: escalated inline -> subagent` line with no later
-`implementer inline (assigned` line after it, this plan has left inline mode -
-use dforge:subagent-driven-development, exactly as `scripts/next-step`
-reads the same ledger. Otherwise: every task complete and no `Final review:`
+already complete runs that section now. Neither ends the turn. Then, whatever the per-task lines say: every task complete and no `Final review:`
 line: go to Final Review. A `Final review: clean` line: go to
 dforge:finishing-a-development-branch.

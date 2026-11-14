@@ -54,7 +54,7 @@ plan3() {
 
 **Spec:** `docs/spec.md`
 
-**Execution:** subagent — `claude --model sonnet --effort high` — three tasks
+**Execution:** inline — `claude --model sonnet --effort high` — three tasks
 
 **Parallelism:** sequential — one chain
 
