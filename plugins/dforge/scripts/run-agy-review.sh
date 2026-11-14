@@ -22,11 +22,12 @@ FINAL_CRITERIA="$HERE/../criteria/codex-final-review.md"
 . "$HERE/lib/worktree-snapshot.sh"
 . "$HERE/lib/executor-session.sh"
 . "$HERE/lib/native-path.sh"
+. "$HERE/lib/timeout.sh"
 
 die() { printf 'run-agy-review: %s\n' "$1" >&2; exit 2; }
 
 command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
-command -v timeout >/dev/null 2>&1 || die "GNU timeout is required but not on PATH"
+dforge_timeout || die "GNU timeout (timeout or gtimeout) is required but not on PATH"
 
 kind=""; cwd=""; out=""; prompt=""; base=""; tier=""; dry_run=false
 while [ $# -gt 0 ]; do
@@ -232,9 +233,9 @@ run_row() { # run_row <model> <effort> <seconds> <log-prefix>; sets agy_rc
   (
     cd "$cwd" || exit 1
     if command -v setsid >/dev/null 2>&1; then
-      exec setsid timeout -k 10 $(($3 + GRACE)) agy "${args[@]}" < /dev/null > "$4.stdout" 2> "$4.stderr"
+      exec setsid "$DFORGE_TIMEOUT" -k 10 $(($3 + GRACE)) agy "${args[@]}" < /dev/null > "$4.stdout" 2> "$4.stderr"
     else
-      exec timeout -k 10 $(($3 + GRACE)) agy "${args[@]}" < /dev/null > "$4.stdout" 2> "$4.stderr"
+      exec "$DFORGE_TIMEOUT" -k 10 $(($3 + GRACE)) agy "${args[@]}" < /dev/null > "$4.stdout" 2> "$4.stderr"
     fi
   ) &
   agy_pid=$!

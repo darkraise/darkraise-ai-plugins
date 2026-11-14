@@ -30,6 +30,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
+. "$HERE/lib/timeout.sh"
 
 die() { printf 'task-step: %s\n' "$1" >&2; exit "${2:-2}"; }
 # plan_budget_line SCRIPTS CALLER PLAN_SRC LEDGER — the session budget line,
@@ -176,7 +177,7 @@ run_at_base() {
     return 1
   fi
   if [ -n "$setup" ]; then
-    (cd "$wt" && timeout -k "${SUITE_RUN_KILL_AFTER:-10}" "$secs" bash -c "$setup" < /dev/null) > "$out.setup.log" 2>&1
+    (cd "$wt" && dforge_timeout && "$DFORGE_TIMEOUT" -k "${SUITE_RUN_KILL_AFTER:-10}" "$secs" bash -c "$setup" < /dev/null) > "$out.setup.log" 2>&1
     scode=$?
     [ "$scode" -ne 137 ] || scode=124
   else

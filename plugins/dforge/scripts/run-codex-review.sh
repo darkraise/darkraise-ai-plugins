@@ -22,11 +22,12 @@ ROSTER="${CODEX_REVIEW_ROSTER:-$HERE/detect-executors.sh}"
 # answers from this session's cache or probes the codex plugin.
 GATE="${CODEX_REVIEW_GATE:-$HERE/codex-gate}"
 . "$HERE/lib/executor-session.sh"
+. "$HERE/lib/timeout.sh"
 
 die() { printf 'run-codex-review: %s\n' "$1" >&2; exit 2; }
 
 command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
-command -v timeout >/dev/null 2>&1 || die "GNU timeout is required but not on PATH"
+dforge_timeout || die "GNU timeout (timeout or gtimeout) is required but not on PATH"
 
 kind=""; cwd=""; out=""; prompt=""; base=""; tier=""; dry_run=false
 while [ $# -gt 0 ]; do
@@ -201,7 +202,7 @@ run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the resu
       prompt:$prompt,
       schemaPath:(if $schema == "" then null else $schema end),
       sandbox:"read-only", deadlineMs:$deadline}')
-  printf '%s' "$request" | timeout $(( $3 + 60 )) node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$4.stderr"
+  printf '%s' "$request" | "$DFORGE_TIMEOUT" $(( $3 + 60 )) node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$4.stderr"
 }
 
 # --kind final ships no --prompt of its own: the round is defined by the branch.

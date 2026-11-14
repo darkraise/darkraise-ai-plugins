@@ -239,8 +239,14 @@ for tool in jq node git; do
   chmod +x "$NOTIMEOUT/$tool"
 done
 fresh; PATH="$NOTIMEOUT" gate usable
-check "without timeout on PATH the probe still answers" "$out" \
+check "without timeout on PATH Codex is unusable, as the runner would die" "$out" \
+  "codex-gate usable=false reason=no-timeout review=false resets_at=- source=probe"
+# Homebrew's coreutils installs it as gtimeout.
+ln -s "$(type -P timeout)" "$NOTIMEOUT/gtimeout" 2>/dev/null || cp "$(type -P timeout)" "$NOTIMEOUT/gtimeout"
+fresh; PATH="$NOTIMEOUT" gate usable
+check "gtimeout stands in for timeout" "$out" \
   "codex-gate usable=true reason=ok review=false resets_at=- source=probe"
+rm -f "$NOTIMEOUT/gtimeout"
 # A connect that resolves after the deadline still has its client closed.
 fresh; GATE_MS=1000 gate slow-connect
 check "a connect that resolves after the deadline is a timeout" "$out" \

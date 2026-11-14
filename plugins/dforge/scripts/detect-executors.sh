@@ -13,6 +13,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/native-path.sh"
+. "$HERE/lib/timeout.sh"
 
 # Every field this script emits is built with jq. Without it the script would
 # exit 127 with empty stdout, which the dispatching skill reads as "no executor
@@ -22,8 +23,8 @@ command -v jq >/dev/null 2>&1 || {
 ' >&2
   exit 2
 }
-command -v timeout >/dev/null 2>&1 || {
-  printf 'detect-executors: GNU timeout is required but not on PATH\n' >&2
+dforge_timeout || {
+  printf 'detect-executors: GNU timeout (timeout or gtimeout) is required but not on PATH\n' >&2
   exit 2
 }
 
@@ -53,7 +54,7 @@ emit() { # emit <id>
     path=$locator_root
     version=$(jq -Rn --arg v "${locator_line#*version=}" '$v | sub(" root=.*"; "")')
     auth_json=$(jq -nc --arg op "$probe_op" --arg cwd "$(dr_native_path "$PWD")" '{op: $op, cwd: $cwd}' \
-      | timeout 60 node "$probe_cmd" "$locator_root" 2>/dev/null)
+      | "$DFORGE_TIMEOUT" 60 node "$probe_cmd" "$locator_root" 2>/dev/null)
     case "$(jq -r '.authed | tojson' <<<"${auth_json:-{\}}" 2>/dev/null)" in
       true)  authed=true;  auth_status=authenticated ;;
       false) authed=false; auth_status=logged_out ;;
