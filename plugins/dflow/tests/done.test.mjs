@@ -187,6 +187,19 @@ test('the reset line appears once the context passes the threshold', t => {
   assert.match(dflow(root, ['context']).stdout, /context 162k of 1M/);
 });
 
+test('a torn context file reads as no figure and breaks no command', t => {
+  const root = makeProject(t);
+  stageTask1(root);
+  write(root, '.dflow/context/sess-a.json', '{"session":"sess-a","tok');
+  const env = { CLAUDE_CODE_SESSION_ID: 'sess-a' };
+  assert.equal(dflow(root, ['status'], { env }).status, 0);
+  assert.equal(dflow(root, ['status']).status, 0);
+  const done = dflow(root, ['done', '1', '-m', 'feat: parse'], { env });
+  assert.equal(done.status, 0, done.stderr + done.stdout);
+  assert.match(done.stdout, /### Task 2: Draw the meter/);
+  assert.equal(fs.existsSync(path.join(root, '.dflow/context/sess-a.json')), false);
+});
+
 test('log appends a decision line and rejects kinds the CLI writes itself', t => {
   const root = makeProject(t);
   assert.equal(dflow(root, ['log', '1', 'D', 'a function, not a class']).status, 0);
