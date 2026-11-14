@@ -77,7 +77,7 @@ if [ -f "$FR" ]; then
     "$(LC_ALL=C awk '/[\200-\377]/{n++} END{print n+0}' "$FR")" "0"
 fi
 
-# task-review.md is named by subagent-driven-development, so its ids are a contract.
+# task-review.md is named by executing-plans, so its ids are a contract.
 TR="$CRITERIA/task-review.md"
 if [ -f "$TR" ]; then
   got=$(grep -o '{#[a-z0-9_]\{1,\}}' "$TR" | tr -d '{#}' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')

@@ -17,7 +17,7 @@ You write test cases (pressure scenarios with subagents), watch them fail (basel
 
 **REQUIRED BACKGROUND:** You MUST understand dforge:test-driven-development before using this skill. That skill defines the fundamental RED-GREEN-REFACTOR cycle. This skill adapts TDD to documentation.
 
-**Official guidance:** For Anthropic's official skill authoring best practices, see references/anthropic-best-practices.md. This document provides additional patterns and guidelines that complement the TDD-focused approach in this skill.
+**Official guidance:** For Anthropic's official skill authoring best practices, see https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices. This document provides additional patterns and guidelines that complement the TDD-focused approach in this skill.
 
 ## What is a Skill?
 
@@ -171,8 +171,8 @@ See `references/graphviz-conventions.dot` for graphviz style rules.
 
 **Visualizing for your human partner:** Use `references/render-graphs.js` to render a skill's flowcharts to SVG:
 ```bash
-./references/render-graphs.js ../some-skill           # Each diagram separately
-./references/render-graphs.js ../some-skill --combine # All diagrams in one SVG
+node <plugin-root>/skills/writing-skills/references/render-graphs.js <skill directory>           # Each diagram separately
+node <plugin-root>/skills/writing-skills/references/render-graphs.js <skill directory> --combine # All diagrams in one SVG
 ```
 
 ## Code Examples

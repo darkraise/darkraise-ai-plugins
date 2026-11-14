@@ -53,11 +53,20 @@ check "turn-start tolerates malformed stdin" "$(printf 'nope' | bash "$START"; e
 write_ledger 'Task 1: complete (commits a..b, review clean)'
 sleep 1; prompt s-1
 check "no ledger write this turn: passes" "$(stop s-1 'Here is the answer.')" ""
+# The scan reads the whole transcript, so a stop nothing could hold skips it.
+SHIM="$TMP/shim"; mkdir -p "$SHIM"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$TMP/jq.log" "$(command -v jq)" > "$SHIM/jq"
+chmod +x "$SHIM/jq"
+TR0="$TMP/plain.jsonl"
+jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Here is the answer."}]}}' > "$TR0"
+scans() { : > "$TMP/jq.log"; PATH="$SHIM:$PATH" stop "$@" >/dev/null; grep -c -- '--arg since' "$TMP/jq.log"; }
+check "no ledger write this turn: the transcript is not scanned" "$(scans s-1 'Here is the answer.' false "$TR0")" "0"
 
 # --- mid-plan, summary without the block ---
 write_ledger 'Task 1: complete (commits a..b, review clean)'
 out=$(stop s-1 'Task 1 is done. Everything looks good.')
 check "mid-plan summary: blocks" "$(decision "$out")" "block"
+check "mid-plan summary: the transcript is scanned" "$([ "$(scans s-1 'Task 1 is done.' false "$TR0")" -gt 0 ] && echo yes || echo no)" "yes"
 check "mid-plan summary: names next-step and the plan" \
   "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step" docs/superpowers/plans/2026-10-08-example.md')" "1"
 check "mid-plan summary: the plugin root is quoted" \

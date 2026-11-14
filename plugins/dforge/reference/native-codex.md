@@ -20,15 +20,15 @@ the unweighted total in ladder.md; its assignment and external CLI tables do
 not apply to native Codex.
 
 New plans contain `Host: codex` and `Routing policy: codex-v4`. Every task contains
-`Implementer`, `Evaluation`, and `Assignment source: rubric` or `Assignment source: human`.
-Native assignments use `codex <model> / <effort>`. Evaluation preserves all four
-raw axes and explicitly labels the weighted routing score, for example:
+an `Evaluation` line, which preserves all four raw axes and explicitly labels
+the weighted routing score, for example:
 
 ```text
-**Implementer:** codex gpt-6-astra / medium
 **Evaluation:** files=1, spec=1, coupling=1, risk=2; weighted routing score=7
-**Assignment source:** rubric
 ```
+
+The session implements every task, so a task carries no `Implementer` or
+`Assignment source` line; an older plan's lines are ignored.
 
 The machine policy is [codex-routing.json](codex-routing.json):
 
@@ -107,8 +107,7 @@ reserve  gpt-6-astra / max, then gpt-6-astra / ultra
 
 An unstarted plan, one with no ledger, is converted in place and committed:
 its `Routing policy:` line becomes `codex-v4` in its existing bold or plain
-form, the Execution line and every `Assignment source: rubric` Implementer line
-take their v4 pairs, Evaluation lines stay untouched, and a conversion record
+form and the Execution line take their v4 pairs, Evaluation lines stay untouched, and a conversion record
 goes in the header immediately before `## Task index`, so no task's text
 absorbs it:
 
@@ -165,19 +164,12 @@ every `Host: codex` plan by design: seats come from this file, not from the
 Claude roster. The task reviewer, the ruling seat and the final-review seat are
 all native judges at rank 8 (Astra high) or above, dispatched as Dispatch and
 review below describes. An exit 2 is never a reason to fall back to a Claude
-agent name. Two routes do answer on a Codex plan, printing the seat as
+agent name. One route answers on a Codex plan, printing the seat as
 `primary=native:<model>/<effort>`:
 
 - `--plan-round <r>` prints the judge floor's pair and `cap=`, from each
   task's raw total (files+spec+coupling+risk, 0-6) under Claude's bands, never
   from the weighted routing score.
-- `--final-fix <file> ...` prints the highest native rank the ledger recorded
-  for the tasks whose `**Files:**` blocks name those paths (an escalation
-  counts, and an `inline` implementer counts as the Execution pair), raised to
-  rank 5 (`gpt-6.1-sol / high`) and capped at rank 9 (`gpt-6-astra / xhigh`).
-  Append `Final fix: implementer codex <model> / <effort> (assigned; base <sha7>)`
-  and dispatch that exact pair when it is advertised and allowed; otherwise
-  ask your human partner, as an unavailable pin does.
 
 Sessions end on the count rule rather than on a budget verdict: hand off after
 every 3 completed tasks, or after any task that needed 3 or more fix rounds. The

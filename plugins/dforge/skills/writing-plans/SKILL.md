@@ -79,21 +79,22 @@ independently testable deliverable. Every task pays a fixed cost whatever
 its size: the session's own implementation turns, its verification, and
 its share of the review. So merge a small task, one or two files with one test cycle,
 into the neighbour that shares its files or its deliverable, whenever the
-merged task still passes Rule S (Assign an implementer, step 2). A task is
+merged task still passes Rule S (Score every task, step 2). A task is
 a feature slice: on a Claude plan its code task carries no implementation
-code and is scored with spec 2 (Assign an implementer, step 1).
+code and is scored with spec 2 (Score every task, step 1).
 
 ## Plan Document Header
 
 **Every plan MUST start with this header.** Everything before the first
 `### Task` heading is the header. Execution controllers read only the header
-and one task at a time, and every task brief carries the header's Global
-Constraints and Contracts.
+and one task at a time. A brief for a task the session implements points at the
+header file (`plan-header.md`) for the Global Constraints and Contracts; a
+brief for a delegated or risk-3 task carries them.
 
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: the skill the **Execution:** line names — dforge:subagent-driven-development for `subagent`, dforge:executing-plans for `inline`. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: dforge:executing-plans. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -105,7 +106,7 @@ Constraints and Contracts.
 
 **Execution:** inline — `claude --model <model> --effort <effort>` — [why]
 
-**Parallelism:** [sequential — <why> | waves — <ranges, e.g. 1 | 2-4 | 5>] (see Parallel waves)
+**Parallelism:** sequential — [why]
 
 **Task check:** [`<fast command>` — <why>, or none — full suite every 3 tasks]
 
@@ -113,9 +114,7 @@ Constraints and Contracts.
 
 **CI:** [none, or the line ci-line.md builds from the CI configuration]
 
-**Worktree setup:** [waves only: what a fresh worktree runs before its tests, or `none`]
-
-**Wave check:** [waves only, optional: a faster command — a build and the fast unit suite, say — run after the waves the full check skips; omit the line when there is none]
+**Worktree setup:** [what a fresh worktree runs before its tests, or `none`]
 
 **Program:** [only when the spec is one sub-project of a program design:
 `<program spec path>` — sub-project <k> of <n> — next: <title of sub-project
@@ -164,87 +163,17 @@ That pair runs the main session for the whole plan, and names the execution
 tier at its highest weighted routing score. `scripts/plan-lint` warns on any other pair,
 and errors on an inline pair below that score.
 
-**Read the settings first, then choose the Execution line.**
+**Choose the Execution line.**
 
 Read [execution-line.md](references/execution-line.md) before you write the header's Execution line.
 
 Read [ci-line.md](references/ci-line.md) before you write the header's CI line and its Early CI line.
 
-## Parallel waves
+## Parallelism
 
-Parallel waves apply only when the Execution line is `subagent` (deprecated):
-otherwise write `**Parallelism:** sequential — inline execution` and ask
-nothing.
-
-**Ask first** (subagent plans only). Read the spec's `**Execution strategy:**` line;
-brainstorming's [design-phase.md](../brainstorming/references/design-phase.md)
-writes it as `sequential` on every new spec. When the spec has none, take the `executionStrategy` setting (dforge:brainstorming §Settings;
-the default is `sequential`). Under `ask`, ask your human partner one question
-before you draft any task, "Parallel subagent waves or sequential execution?",
-and wait for the answer. On a Codex host do not ask:
-the plan is sequential. Sequential writes
-`**Parallelism:** sequential — <why>` and nothing below applies.
-
-**Parallel leans the plan toward independence.** It does not lower any other
-bar here — every task keeps its tests, its review and its Rule S — and it
-never invents parallelism the work does not have:
-
-1. **Draft the tasks as usual, then sort them into two groups.** Give every
-   task a `**Depends on:**` line below its `**Interfaces:**` block (and its
-   `**Items:**` line, when there is one): `none`, or the tasks whose output it
-   consumes, as `Task 1, Task 3`. Then:
-   - **alone** — a task that cannot share a wave (rule 4 below, or a file it
-     cannot give up to another task);
-   - **parallel** — every other task.
-
-   Dependencies decide only the order. A task's depth is one more than the
-   deepest task it depends on; a task that depends on nothing has depth 1.
-   Parallel tasks of one depth that share no file form one wave (rule 5 caps
-   its width); an alone task is a wave of its own at its depth. Number the
-   tasks so that the waves run in depth order, each a run of consecutive task
-   numbers. Tasks 1-2 depending on nothing, Tasks 3-5 on Task 1 or 2, and
-   Task 6 on Tasks 3-5 give `waves — 1-2 | 3-5 | 6`. Every dependency sits in
-   an earlier wave.
-2. **Shared things go first.** A type, schema, config key or helper that
-   several tasks use is created by a foundation task in an earlier wave, and
-   recorded in Contracts, so that the tasks of a later wave consume a fixed
-   name rather than inventing their own.
-3. **No two tasks in a wave name the same file** in their `**Files:**` blocks —
-   Create, Modify, Test or Delete. Registries, index files, route tables and
-   shared fixtures have one owner.
-4. **Some tasks always run alone in their wave:** a task with risk 3 and a
-   task that touches a dependency
-   manifest or lockfile (`package.json`, `Cargo.toml`, `go.mod`,
-   `pyproject.toml`, and their lockfiles).
-5. **Keep a wave to three tasks** unless more are trivially independent: at
-   most three run at once, and a wider wave runs in parts.
-6. **Say how the tests stay apart.** When tasks' tests could meet at run time
-   — a port, a database, a fixed temporary path, global state — write in
-   Global Constraints how each task's tests avoid it, or move the tasks to
-   different waves.
-7. **Write the header lines.** `**Parallelism:** waves — 1 | 2-4 | 5`
-   lists the waves in order, a single task or an `A-B` range each, covering
-   every task once. `**Integration check:**` names the command that proves a
-   merged wave works together — the full suite, as on every plan.
-   `**Worktree setup:**` is what a fresh checkout needs before its tests run
-   (`npm ci`, a code generator), or `none`.
-   `**Wave check:**`, optional, names a faster command run after the waves
-   `scripts/wave check-due` does not give the full check — the full
-   Integration check runs after every third wave, any wave holding a risk-3
-   task and the last wave; without a Wave check those waves rest on each
-   task's own tests and a clean merge.
-8. **The Execution line names `subagent`**, `claude --model sonnet --effort
-   high`: inline mode implements its tasks in the session itself, one after
-   another, so it has nothing to run in parallel. Parallel waves apply only
-   to a subagent plan, which `plan-lint` warns is deprecated.
-
-`plan-lint` checks the waves mechanically — ranges, dependencies, shared
-files, the tasks that must run alone, the header lines — and the pre-flight
-ruling seat checks every same-wave pair for coupling the file lists cannot
-show. A wave the seat or the run doubts is run one task after another, which
-is always correct; see [parallel-waves.md](../../reference/parallel-waves.md).
-If a plan ends up with no wave of two or more tasks, say so and write
-`**Parallelism:** sequential — no independent tasks`.
+Every plan runs one task at a time: write
+`**Parallelism:** sequential — inline execution`. Parallel waves were retired
+in 5.0.0, and `plan-lint` warns on an older plan's waves line.
 
 ## Drafting the tasks
 
@@ -278,8 +207,9 @@ example `UI-2, UX-4`. Every `UI-` and `UX-` ID must reach some task; `OP-` IDs
 are proven, not built. `plan-lint` checks both, and `task-brief` appends the
 cited items to the brief (dforge:ui-ux).]
 
-**Depends on:** [waves plans only: `none`, or the tasks whose output this one
-consumes, for example `Task 1, Task 3`. Omit the line in a sequential plan.]
+**Depends on:** [optional: `none`, or the tasks whose output this one
+consumes, for example `Task 1, Task 3`. An auto run defers the tasks it names
+along with a deferred task; without the line it reads Contracts instead.]
 
 - [ ] **Step 1: Write the failing test**
 
@@ -342,13 +272,12 @@ git commit -m "feat: add specific feature"
 
 Read [test-step-forms.md](references/test-step-forms.md) before you write a task's Step 1.
 
-## Assign an implementer to every task
+## Score every task
 
-Read [assignment-procedure.md](references/assignment-procedure.md) before you score the tasks or write their assignment lines.
+Read [assignment-procedure.md](references/assignment-procedure.md) before you score the tasks or write their evaluation lines.
 
 The scores still set the Execution line's floor and mark the risk-3 tasks a
-judge reviews. The `**Implementer:**` lines are kept for the deprecated
-subagent mode; under inline mode the session implements the task.
+judge reviews. The session implements every task.
 
 ## Assign the register rows
 
@@ -383,10 +312,6 @@ from the "No Placeholders" section above. Fix them.
 **3. Contracts:** Every cross-task name appears in Contracts, and every task
 uses it exactly as stated there. A function called `clearLayers()` in Task 3 but
 `clearFullLayers()` in Task 7 is a bug.
-
-**3a. Waves (waves plans only):** Every `**Depends on:**` line names every task
-whose output the task consumes, including through Contracts; a missing
-dependency is the one waves error `plan-lint` cannot see.
 
 **4. Lint:** Run the checker under Lint and Review.
 

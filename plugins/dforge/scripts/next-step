@@ -59,11 +59,10 @@ while [ $# -gt 0 ]; do
 done
 set -- ${hostless[@]+"${hostless[@]}"}
 
-# The design tier writes specs and plans; the build tier executes them. Claude's
-# pairs are its ladder's top execution rung and the subagent Execution default.
-# Codex runs both tiers on GPT-6.1 Sol high, the subagent Execution default
-# plan-lint expects: the session runs for hours, and the judgment calls that
-# need Astra go to native judges at the rank-8 floor, not to the session.
+# The design tier writes specs and plans; the build tier executes them. Codex
+# runs both tiers on GPT-6.1 Sol high: the session runs for hours, and the
+# judgment calls that need Astra go to native judges at the rank-8 floor, not
+# to the session.
 launch_for() { # launch_for design|build
   case $host:$1 in
     codex:*)       printf 'codex -m gpt-6.1-sol -c model_reasoning_effort=high' ;;
@@ -156,14 +155,6 @@ plan_name() {
   printf '%s\n' "$name"
 }
 
-execution_skill() { # execution_skill EXECUTION_LINE
-  if grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$1"; then
-    printf 'executing-plans'
-  else
-    printf 'subagent-driven-development'
-  fi
-}
-
 complete=0 draft=0 adhoc=0 phase="" next_action=""
 case "${1:-}" in
   --complete) complete=1; shift ;;
@@ -181,7 +172,7 @@ case "${1:-}" in
     ;;
 esac
 
-status_line="" next_line="" prompt="" launch=1 launch_cmd="" launch_plan="" escalated_at=""
+status_line="" next_line="" prompt="" launch=1 launch_cmd="" launch_plan=""
 
 if [ "$adhoc" -eq 1 ]; then
   root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
@@ -236,7 +227,6 @@ else
   if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$plan")"; then host=codex; fi
 
   launch_cmd=$(execution_launch "$execution")
-  skill=$(execution_skill "$execution")
 
   ledger_file="$(dforge_ledger_dir "$slug")/progress.md"
   ledger_note="no ledger at \`$ledger_file\`"
@@ -257,10 +247,6 @@ else
       ledger_note="ledger \`$ledger_file\`"
       done_tasks=$(ledger_done "$ledger_file")
       blocked_tasks=$(ledger_blocked "$ledger_file")
-      # A ledger outranks the Execution line on which mode the run is in: a
-      # switch is recorded there and the plan is never edited. The escalation
-      # holds until a later inline assignment shows the plan came back.
-      escalated_at=$(ledger_left_inline "$ledger_file")
       # A last line that assigns a task to an agent means that
       # run may still be going. The block is still printed, since it is the
       # resume guide either way, but a handoff over a live run loses its result.
@@ -357,7 +343,7 @@ else
           if [ -n "$(plan_ledger "$(dforge_resolve "$target")")" ]; then
             action="Resume \`$target\` with dforge:resume-execution."
           else
-            action="Continue \`$target\` with dforge:$(execution_skill "$target_exec")."
+            action="Continue \`$target\` with dforge:executing-plans."
           fi
           launch_cmd=$(execution_launch "$target_exec") launch_plan=$target
           ;;
@@ -417,108 +403,27 @@ else
       next_line="Read \`$spec\` for the sub-project after ${k:-this one} — the plan's Program line names no next step."
     fi
   else
-    # A held task waits for its group review: its last Task line, read as
-    # ledger_blocked reads them, is `awaiting group review`.
-    held_tasks=""
-    if [ "$has_ledger" -eq 1 ]; then
-      held_tasks=$(awk '
-        !/^Task [0-9]+:/ { next }
-        /^Task [0-9]+: (minor \(deferred\)|parked|Ruling:)/ { next }
-        { n = $2; sub(/:$/, "", n); held[n] = ($0 ~ /^Task [0-9]+: awaiting group review/) }
-        END { for (n in held) if (held[n]) print n }
-      ' <<<"$ledger_text" | sort -un)
-    fi
-
-    first_open="" open_title="" done_count=0 held_list="" held_count=0
+    first_open="" open_title="" done_count=0
     while IFS=$'\t' read -r num title; do
       if grep -qx "$num" <<<"$done_tasks"; then
         done_count=$((done_count + 1))
-      elif grep -qx "$num" <<<"$held_tasks"; then
-        held_list="${held_list:+$held_list,}$num" held_count=$((held_count + 1))
       elif [ -z "$first_open" ]; then
         first_open=$num open_title=$title
       fi
     done <<<"$tasks"
 
-    # The last Group review-round line naming a held task: that group is in
-    # its fix rounds, and nothing new starts until it is done.
-    group_list="" group_round="" group_line="" g_members_of_line=""
-    if [ -n "$held_tasks" ]; then
-      group_re='^Group ([0-9]+-[0-9]+|[0-9]+(,[0-9]+)*): review round ([0-9]+)/[0-9]+'
-      while IFS= read -r g_line; do
-        [[ $g_line =~ $group_re ]] || continue
-        g_list=${BASH_REMATCH[1]} g_round=${BASH_REMATCH[3]}
-        if [[ $g_list == *-* ]]; then
-          g_members=""
-          for ((g_n = ${g_list%-*}; g_n <= ${g_list#*-}; g_n++)); do g_members+="$g_n"$'\n'; done
-        else
-          g_members=${g_list//,/$'\n'}
-        fi
-        while IFS= read -r g_n; do
-          if [ -n "$g_n" ] && grep -qx "$g_n" <<<"$held_tasks"; then
-            group_list=$g_list group_round=$g_round group_line=$g_line g_members_of_line=$g_members
-            break
-          fi
-        done <<<"$g_members"
-      done <<<"$ledger_text"
-    fi
-
-    # delegated-task.md §3a: the held tasks are reviewed before anything else
-    # once 4 are held, or when the next task is one review-route reviews
-    # alone; a route that fails reads as review=task.
-    group_first=0
-    if [ "$held_count" -gt 0 ] && [ -n "$first_open" ] && [ -z "$group_list" ]; then
-      if [ "$held_count" -ge 4 ]; then
-        group_first=1
-      else
-        next_route=$(bash "$(cd "$(dirname "$0")" && pwd)/review-route" "$plan" --task "$first_open" 2>/dev/null) || next_route=""
-        case " $next_route " in *" review=group "*) ;; *) group_first=1 ;; esac
-      fi
-    fi
-
     blocked_num=$(head -n 1 <<<"$blocked_tasks")
     if [ -n "$blocked_num" ]; then
       # BLOCKED is terminal: the next session must not be told to start the
-      # task. The line's last dash-separated field names what a human must
-      # decide (`BLOCKED — <who> — <decision>`).
+      # task. What follows the line's second dash names what a human must
+      # decide (`BLOCKED — <who> — <decision>`), dashes of its own included.
       blocked_why=$(grep -E "^Task ${blocked_num}: BLOCKED" <<<"$ledger_text" | tail -n 1 \
-        | awk -F' (—|-) ' '{ sub(/[ \t]+$/, "", $NF); print $NF }')
+        | awk '{ sep = " (—|-) "
+                 if (match($0, sep)) { $0 = substr($0, RSTART + RLENGTH); if (match($0, sep)) $0 = substr($0, RSTART + RLENGTH) }
+                 sub(/[ \t]+$/, ""); print }')
       status_line="Plan \`$rel\`: $done_count of $total tasks complete; Task $blocked_num is BLOCKED ($ledger_note)."
       next_line="Your human partner decides: ${blocked_why:-see the BLOCKED line in the ledger}. Record the ruling in the ledger, then run next-step again."
       launch=0
-    elif [ -n "$group_list" ]; then
-      status_line="Plan \`$rel\`: $done_count of $total tasks complete ($ledger_note)."
-      # A member counts as clean only on an explicit clause: a clause this
-      # cannot read must never complete a member with open findings.
-      open_members="" unread_members=""
-      while IFS= read -r g_n; do
-        [ -n "$g_n" ] || continue
-        ! grep -qx "$g_n" <<<"$done_tasks" || continue
-        if grep -qE "(\\(|; )Task $g_n: [1-9][0-9]* open" <<<"$group_line"; then
-          open_members="${open_members:+$open_members,}$g_n"
-        elif ! grep -qE "(\\(|; )Task $g_n: (clean|0 open)" <<<"$group_line"; then
-          unread_members="${unread_members:+$unread_members,}$g_n"
-        fi
-      done <<<"$g_members_of_line"
-      if [[ $open_members == *,* ]]; then open_names="Tasks $open_members"; else open_names="Task $open_members"; fi
-      if [ -n "$unread_members" ]; then
-        if [[ $unread_members == *,* ]]; then unread_names="Tasks $unread_members"; else unread_names="Task $unread_members"; fi
-        next_line="Read the last \`Group $group_list\` line in the ledger: it holds no \`<k> open\` or \`clean\` clause for $unread_names. Act on each member as delegated-task.md §3a says; write no complete line until its clause is known."
-      elif [ -z "$open_members" ]; then
-        next_line="Write the complete lines of Group $group_list's members: the group is clean."
-      elif [ "$group_round" -eq 1 ]; then
-        next_line="Run fix round 2 of Group $group_list for $open_names, then write the members' complete lines."
-      else
-        next_line="Send the open findings of Group $group_list ($open_names) to the breaker, then write the members' complete lines."
-      fi
-    elif [ -n "$held_list" ] && { [ -z "$first_open" ] || [ "$group_first" -eq 1 ]; }; then
-      status_line="Plan \`$rel\`: $done_count of $total tasks complete ($ledger_note)."
-      if [ "$held_count" -eq 1 ]; then
-        next_line="Review the held Task $held_list as one group (\`task-step review --group\`), then write its complete line."
-      else
-        next_line="Review the held Tasks $held_list as one group (\`task-step review --group\`), then write their complete lines."
-      fi
-      [ -z "$first_open" ] || next_line="$next_line Dispatch Task $first_open ($open_title) only once the group is clean."
     elif [ -z "$first_open" ]; then
       if [ "$has_ledger" -eq 1 ] && grep -q '^Final review: clean' <<<"$ledger_text"; then
         status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
@@ -534,18 +439,6 @@ else
       status_line="Plan \`$rel\`: $done_count of $total tasks complete ($ledger_note)."
       next_line="Resume at Task $first_open ($open_title)."
     fi
-    if [ -z "$blocked_num" ] && [ -z "$group_list" ] && [ -n "$first_open" ] && [ "$held_count" -gt 0 ] && [ "$group_first" -eq 0 ]; then
-      if [ "$held_count" -eq 1 ]; then
-        next_line="$next_line Task $held_list is held for group review."
-      else
-        next_line="$next_line Tasks $held_list are held for group review."
-      fi
-    fi
-
-    if [ -n "$escalated_at" ] && [ "$launch" -eq 1 ]; then
-      launch_cmd=$(launch_for build)
-      next_line="$next_line This plan escalated to subagent mode at Task $escalated_at."
-    fi
 
     # With a ledger there is state to verify before continuing, which is
     # resume-execution's job; without one the plan starts at the skill's Setup,
@@ -555,7 +448,7 @@ else
     elif [ "$has_ledger" -eq 1 ]; then
       prompt="Resume \`$rel\` with dforge:resume-execution. $next_line"
     else
-      prompt="Continue \`$rel\` with dforge:$skill. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task $first_open ($open_title)."
+      prompt="Continue \`$rel\` with dforge:executing-plans. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task $first_open ($open_title)."
     fi
     if [ "$root" != "$primary" ]; then
       prompt="$prompt First enter the existing worktree \`$root\`."

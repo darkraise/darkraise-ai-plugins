@@ -8,7 +8,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
 S="$P/scripts"
-TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
+TRP="$P/reference/prompts/task-reviewer-prompt.md"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -42,7 +42,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |## Task index
 |
@@ -54,7 +54,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `lib/new.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Run: `bash check.sh`
@@ -64,7 +64,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `lib/new.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Run: `bash check.sh`
@@ -233,7 +233,7 @@ sed 's/^|//' > "$REPO/docs/named.md" <<'PLAN'
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |**Integration check:** `bash mark.sh integ 0`
 |
@@ -247,7 +247,7 @@ sed 's/^|//' > "$REPO/docs/named.md" <<'PLAN'
 |**Files:**
 |- Modify: `lib/new.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Run: `bash mark.sh run-first 0` and then `bash mark.sh second-span 0`
@@ -267,7 +267,7 @@ sed 's/^|//' > "$REPO/docs/named.md" <<'PLAN'
 |**Files:**
 |- Modify: `lib/new.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Run: `bash mark.sh task2-run 0`
@@ -369,7 +369,7 @@ check "named spans: the spans name nothing" "$(grep -c '(command not named in th
 
 # A symbol that only a binary file holds is absent, and a root file written ./<name>
 # reads as a path when verdict runs from a subdirectory.
-printf '\n### Task 3: Three\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' >> "$REPO/docs/plan.md"
+printf '\n### Task 3: Three\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' >> "$REPO/docs/plan.md"
 g add -A && g commit -qm "task 3 fixture"
 ts start docs/plan.md 3
 printf 'only_in_blob\0\0' > "$REPO/blob.bin"

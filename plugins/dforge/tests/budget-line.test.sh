@@ -133,10 +133,14 @@ bash "$P/scripts/task-brief" docs/plan.md 9 >/dev/null 2>&1; status=$?
 check "task-brief: missing task still exits 3" "$status" "3"
 
 # --- header excerpt, --header, amendments ---
+# An inline Claude plan's brief points at plan-header.md instead (task-open-close.test.sh);
+# the excerpt is what a Codex plan's brief still carries.
 cat > docs/full.md <<'EOF'
 # Plan
 
-**Execution:** subagent — `claude --model sonnet --effort high` — x
+**Execution:** inline — `claude --model sonnet --effort high` — x
+
+Host: codex
 
 ## Global Constraints
 
@@ -169,6 +173,8 @@ check "task-brief: a trailing-space heading keeps its section" "$(grep -c '^- `g
 # A fenced `## ` line inside Contracts must not end the excerpt.
 cat > docs/fenced.md <<'EOF'
 # Plan
+
+Host: codex
 
 ## Global Constraints
 
@@ -235,7 +241,7 @@ cat > docs/ui-plan.md <<'EOF'
 
 **Spec:** `docs/ui-spec.md`
 
-**Execution:** subagent — `claude --model sonnet --effort high` — x
+**Execution:** inline — `claude --model sonnet --effort high` — x
 
 ## Global Constraints
 
@@ -265,8 +271,8 @@ check "task-brief: a UI task's brief carries the items heading" "$(grep -c '^## 
 check "task-brief: the cited item, verbatim with its continuation" \
   "$(grep -c -e '^- \*\*UX-1\*\* — Escape closes the dialog\.$' -e '^  Focus returns to the trigger\.$' "$TMP/ui1.md")" "2"
 check "task-brief: an uncited item is left out" "$(grep -c 'UX-2' "$TMP/ui1.md")" "0"
-check "task-brief: the items come after the excerpt" \
-  "$([ "$(grep -n '^## UI/UX contract items$' "$TMP/ui1.md" | cut -d: -f1)" -gt "$(grep -n '^## Plan header excerpt$' "$TMP/ui1.md" | cut -d: -f1)" ] && echo yes || echo no)" "yes"
+check "task-brief: the items come after the header pointer" \
+  "$([ "$(grep -n '^## UI/UX contract items$' "$TMP/ui1.md" | cut -d: -f1)" -gt "$(grep -n '^## Plan header$' "$TMP/ui1.md" | cut -d: -f1)" ] && echo yes || echo no)" "yes"
 bash "$P/scripts/task-brief" docs/ui-plan.md 2 "$TMP/ui2.md" >/dev/null 2>&1
 check "task-brief: a task without a UI/UX line gets no items" "$(grep -c 'UI/UX contract items' "$TMP/ui2.md")" "0"
 

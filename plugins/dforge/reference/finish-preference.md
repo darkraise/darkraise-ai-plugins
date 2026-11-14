@@ -32,8 +32,7 @@ branch (`base` is null): finishing finds it as its Step 4 says.
 
 ## When to ask
 
-- **A plan run** (dforge:subagent-driven-development or
-  dforge:executing-plans): at Setup, before the pre-flight and Task 1.
+- **A plan run** (dforge:executing-plans): at Setup, before the pre-flight and Task 1.
   Skip the question when `scripts/finish-choice get --plan PLAN_FILE` already
   prints a choice, or when the plan's ledger already exists: a resumed run
   never stops to ask: finishing carries out the choice recorded at its

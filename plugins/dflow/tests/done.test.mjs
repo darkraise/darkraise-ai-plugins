@@ -187,6 +187,50 @@ test('the reset line appears once the context passes the threshold', t => {
   assert.match(dflow(root, ['context']).stdout, /context 162k of 1M/);
 });
 
+test('a context read only from the transcript prints no reset line, since only the mod compacts', t => {
+  const root = makeProject(t);
+  stageTask1(root);
+  write(root, '.transcripts/big.jsonl', `${JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 162000 } } })}\n`);
+  dflow(root, ['status']);
+  const file = path.join(root, '.dflow/state.json');
+  const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+  fs.writeFileSync(file, JSON.stringify({ ...state, transcript: path.join(root, '.transcripts/big.jsonl') }));
+  assert.match(dflow(root, ['context']).stdout, /context 162k/);
+  const done = dflow(root, ['done', '1', '-m', 'feat: parse']);
+  assert.equal(done.status, 0, done.stderr + done.stdout);
+  assert.doesNotMatch(done.stdout, /RESET:/);
+  assert.equal(fs.existsSync(path.join(root, '.dflow/reset.json')), false);
+});
+
+test('state written by another command while verify runs survives done', t => {
+  const root = makeProject(t);
+  // The verify stands in for a gate or merge saved during a long verify.
+  stageTask1(root, `import fs from 'node:fs';
+const file = '.dflow/state.json';
+const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+state.concurrent = 'kept';
+fs.writeFileSync(file, JSON.stringify(state));
+`);
+  const done = dflow(root, ['done', '1', '-m', 'feat: parse']);
+  assert.equal(done.status, 0, done.stderr + done.stdout);
+  const state = JSON.parse(read(root, '.dflow/state.json'));
+  assert.equal(state.concurrent, 'kept');
+  assert.equal(state.plans['2026-11-12-meter'].tasks[1].state, 'done');
+});
+
+test('a torn context file reads as no figure and breaks no command', t => {
+  const root = makeProject(t);
+  stageTask1(root);
+  write(root, '.dflow/context/sess-a.json', '{"session":"sess-a","tok');
+  const env = { CLAUDE_CODE_SESSION_ID: 'sess-a' };
+  assert.equal(dflow(root, ['status'], { env }).status, 0);
+  assert.equal(dflow(root, ['status']).status, 0);
+  const done = dflow(root, ['done', '1', '-m', 'feat: parse'], { env });
+  assert.equal(done.status, 0, done.stderr + done.stdout);
+  assert.match(done.stdout, /### Task 2: Draw the meter/);
+  assert.equal(fs.existsSync(path.join(root, '.dflow/context/sess-a.json')), false);
+});
+
 test('log appends a decision line and rejects kinds the CLI writes itself', t => {
   const root = makeProject(t);
   assert.equal(dflow(root, ['log', '1', 'D', 'a function, not a class']).status, 0);

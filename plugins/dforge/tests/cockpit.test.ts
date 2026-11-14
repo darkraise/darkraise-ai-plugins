@@ -14,7 +14,6 @@ import {
   isPlanTail,
   kTokens,
   attributionIn,
-  FORK_DRAFTING,
   seatDenial,
   fastModeLine,
   bar,
@@ -247,6 +246,8 @@ type World = {
   missedRestores?: number
   /** The session refuses every row the plugin appends. */
   isAppendFailing?: boolean
+  /** The engine cannot report the session's usage. */
+  isUsageFailing?: boolean
   toasts?: string[]
   notes?: string[]
   env?: Record<string, string>
@@ -259,6 +260,12 @@ type World = {
   /** Each request the plugin sends through $.http.fetch. */
   prompts?: string[]
   fetches?: { url: string; method: string; body: Record<string, unknown> }[]
+  /** Every fetch rejects, its message naming the URL as a host's might. */
+  isFetchFailing?: boolean
+  /** Every fetch stays unanswered, as on a stalled connection. */
+  isFetchHanging?: boolean
+  /** The first fetch answers 429 with this body; the next ones succeed. */
+  rateLimitBody?: string
   /** How Claude Code answers the pane opening; placed unless said. */
   open?: { isPlaced: true } | { isPlaced: false; reason: string }
   opened?: string[]
@@ -335,18 +342,21 @@ function world(on: On, w: World) {
   const clock = mock.clock(on, { now: 1_000_000 })
   on('command.register', () => ({ value: undefined }) as never)
   on('session.start', (_$, e) => e as never)
-  on('session.usage', (_$, e) => ({
-    value: {
-      startedAt: w.startedAt ?? 0,
-      context: {
-        tokens: w.tokens,
-        window: w.window ?? 650_000,
-        ...(e.breakdown === undefined ? {} : { breakdown: BREAKDOWN }),
+  on('session.usage', (_$, e) => {
+    if (w.isUsageFailing) throw new Error('usage unavailable')
+    return {
+      value: {
+        startedAt: w.startedAt ?? 0,
+        context: {
+          tokens: w.tokens,
+          window: w.window ?? 650_000,
+          ...(e.breakdown === undefined ? {} : { breakdown: BREAKDOWN }),
+        },
+        rateLimits: [],
+        cost: { usd: 1.5 },
       },
-      rateLimits: [],
-      cost: { usd: 1.5 },
-    },
-  }))
+    }
+  })
   on('settings.read', (_$, e) => {
     if (e?.source === 'user' && w.isUserSettingsUnreadable) throw new Error('EACCES: the user settings cannot be read')
     const value = e?.source === 'user' && w.userSettings !== undefined ? w.userSettings : (w.settings ?? {})
@@ -550,6 +560,9 @@ function world(on: On, w: World) {
     const body = e.init?.body ?? '{}'
     if (typeof body !== 'string') throw new Error(`expected a text body for ${e.url}`)
     w.fetches?.push({ url: e.url, method: e.init?.method ?? 'GET', body: JSON.parse(body) as Record<string, unknown> })
+    if (w.isFetchFailing) return { deny: `fetch failed for ${e.url}` }
+    if (w.isFetchHanging) return new Promise<never>(() => undefined)
+    if (w.rateLimitBody !== undefined && w.fetches?.length === 1) return { value: { status: 429, ok: false, headers: {}, text: w.rateLimitBody } }
     return { value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }
   })
   on('ui.panes', () => ({ value: w.isPaneShut ? [] : [{ id: 'dforge', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
@@ -781,41 +794,47 @@ describe('attribution guard', () => {
     const ran = await $.tool.call({ tool: 'Bash', command: 'git commit -m "x" -m "Claude-Session: y"' })
     expect(ran.deny).toBeUndefined()
   })
+
+  test('a display read that fails never refuses a call the guard passed', async ($, on) => {
+    world(on, { tokens: 10_000, isUsageFailing: true })
+    const ran = await $.tool.call({ tool: 'Read', file_path: '/tmp/a.txt' })
+    expect(ran.deny).toBeUndefined()
+    const dirty = await $.tool.call({ tool: 'Bash', command: 'git commit -m "x" -m "Claude-Session: y"' })
+    expect(dirty.deny).toMatch(/keeps AI attribution out of git/)
+  })
 })
 
 describe('seat check', () => {
   const base = { subagentType: 'general-purpose', description: 'Look around', fork: false }
 
   test('denies an untyped dispatch and a fork in a dforge session, and passes typed ones', () => {
-    const untyped = seatDenial(base, true, false)
+    const untyped = seatDenial(base, true)
     expect(untyped).toMatch(/dforge:judge-sonnet-high/)
     expect(untyped).toMatch(/Execution line/)
     expect(untyped).not.toMatch(/for implementation/)
-    expect(untyped).toMatch(/dforge:impl-sonnet-medium/)
+    expect(untyped).not.toMatch(/dforge:impl-/)
     expect(untyped).toMatch(/model: "sonnet"/)
     expect(untyped).toMatch(/using-dforge §Seats/)
-    for (const subagentType of ['general-purpose', 'claude']) expect(seatDenial({ ...base, subagentType }, true, false)).toBe(untyped)
-    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, true, false)).toMatch(/^dforge: forks are kept out of dforge sessions\./)
-    expect(seatDenial({ ...base, model: 'sonnet' }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, subagentType: 'dforge:judge-opus' }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, subagentType: 'Explore' }, true, false)).toBeNull()
+    for (const subagentType of ['general-purpose', 'claude']) expect(seatDenial({ ...base, subagentType }, true)).toBe(untyped)
+    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, true)).toMatch(/^dforge: forks are kept out of dforge sessions\./)
+    expect(seatDenial({ ...base, model: 'sonnet' }, true)).toBeNull()
+    expect(seatDenial({ ...base, subagentType: 'dforge:judge-opus' }, true)).toBeNull()
+    expect(seatDenial({ ...base, subagentType: 'Explore' }, true)).toBeNull()
   })
 
   test('passes everything before a dforge skill runs, and spawns the main loop does not make', () => {
-    expect(seatDenial(base, false, false)).toBeNull()
-    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, false, false)).toBeNull()
-    expect(seatDenial({ ...base, parentAgentId: 'agent-1' }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, workflow: { runId: 'wf_1', agentIndex: 1 } }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, isTeammate: true }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, resume: { agentId: 'agent-1' } }, true, false)).toBeNull()
+    expect(seatDenial(base, false)).toBeNull()
+    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, false)).toBeNull()
+    expect(seatDenial({ ...base, parentAgentId: 'agent-1' }, true)).toBeNull()
+    expect(seatDenial({ ...base, workflow: { runId: 'wf_1', agentIndex: 1 } }, true)).toBeNull()
+    expect(seatDenial({ ...base, isTeammate: true }, true)).toBeNull()
+    expect(seatDenial({ ...base, resume: { agentId: 'agent-1' } }, true)).toBeNull()
   })
 
-  test('admits a drafting fork only when forks draft', () => {
+  test('denies a drafting fork like any other fork', () => {
     const fork = { ...base, subagentType: 'fork', fork: true, description: 'Draft plan tasks 1-2' }
-    expect(seatDenial(fork, true, true)).toBeNull()
-    expect(seatDenial({ ...fork, description: 'Verify the register rows' }, true, true)).toMatch(/^dforge: forks are kept out/)
-    expect(seatDenial(fork, true, false)).toMatch(/^dforge: forks are kept out/)
-    expect(FORK_DRAFTING).toBe(false)
+    expect(seatDenial(fork, true)).toMatch(/^dforge: forks are kept out/)
+    expect(seatDenial({ ...fork, description: 'Verify the register rows' }, true)).toMatch(/^dforge: forks are kept out/)
   })
 
   test('denies a drafting fork through the hook once a dforge skill ran', async ($, on) => {
@@ -832,7 +851,7 @@ describe('seat check', () => {
     await $.session.start(START)
     const spawn = { tool_use_id: 'toolu_1', prompt: 'Check the rows', description: 'Check rows', subagentType: 'general-purpose', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: false } as never
     expect((await $.agent.spawn(spawn)).deny).toBeUndefined()
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     expect((await $.agent.spawn({ ...(spawn as object), tool_use_id: 'toolu_2' } as never)).deny).toMatch(/^dforge: name a seat/)
     expect((await $.agent.spawn({ ...(spawn as object), tool_use_id: 'toolu_3', model: 'sonnet' } as never)).deny).toBeUndefined()
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -903,7 +922,7 @@ describe('review seat write guard', () => {
       `${WS}/../amendments.md`,
       `${WS}/other/../task-1-review-report.md`,
     ]
-    const tools = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
+    const tools = ['Write', 'Edit', 'NotebookEdit']
     const got: (string | undefined)[] = []
     const want: string[] = []
     for (const path of refused) {
@@ -913,9 +932,9 @@ describe('review seat write guard', () => {
       }
     }
     expect(got).toEqual(want)
-    expect(await Promise.all(tools.map(async tool => (await write($, 'judge-1', REVIEW, tool)).deny))).toEqual([undefined, undefined, undefined, undefined])
+    expect(await Promise.all(tools.map(async tool => (await write($, 'judge-1', REVIEW, tool)).deny))).toEqual([undefined, undefined, undefined])
     expect((await write($, 'judge-1', `${WS}/./task-1-review-report.md`)).deny).toBeUndefined()
-    // Only the four write tools are looked at.
+    // Only the three write tools are looked at.
     expect((await $.tool.call({ tool: 'Read', file_path: `${WS}/amendments.md`, agentId: 'judge-1' } as never)).deny).toBeUndefined()
   })
 
@@ -1218,7 +1237,7 @@ describe('handoff reading', () => {
   test('in a plan session, offers the handoff in the pane and sends the note once', async ($, on) => {
     const notes: string[] = []
     world(on, { tokens: 470_000, notes })
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(notes).toHaveLength(1)
     expect(notes[0]).toMatch(/budget: 470k of 465k — handoff/)
@@ -1237,7 +1256,7 @@ describe('handoff reading', () => {
     const notes: string[] = []
     const w: World = { tokens: 470_000, notes }
     world(on, w)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(notes).toHaveLength(1)
 
@@ -1522,7 +1541,7 @@ describe('settings', () => {
     const w: World = { tokens: 440_000, notes, config: { handoffMode: 'relaxed' } }
     world(on, w)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     // 440,000 of 552,500 is under warnAt's 80%: Hand off is not the one to press.
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect((await ui.find({ key: 'pane-handoff-box' }))?.props.borderColor).toBe('inactive')
@@ -1537,6 +1556,23 @@ describe('settings', () => {
     w.tokens = 560_000
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(notes.filter(text => /— handoff\./.test(text))).toEqual([expect.stringMatching(/^dforge: budget: 560k of 553k — handoff\. /)])
+  })
+
+  test('a burst of measurements does not run git once each', async ($, on) => {
+    const w: World = { ...SIGNED_IN, gitRuns: [] }
+    world(on, w)
+    signedIn(on)
+    await $.session.start(START)
+    for (let i = 0; i < 5; i++) await $.session.measure(MEASURE)
+    expect(w.gitRuns!.filter(run => run.includes(' status ')).length).toBeLessThanOrEqual(1)
+  })
+
+  test('a window the host does not know draws no share of it', async ($, on) => {
+    world(on, { tokens: 284_000, window: 0 })
+    await $.session.start(START)
+    await $.session.measure(MEASURE)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(JSON.stringify(await ui.drawn())).not.toContain('Infinity')
   })
 
   test('sections picks and orders the pane', async ($, on) => {
@@ -2275,7 +2311,7 @@ describe('dense pane', () => {
     world(on, { ...SIGNED_IN, tokens: 470_000, prompts })
     signedIn(on, configured({ density: 'dense' }))
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ key: 'pane-handoff-box' })).toBeUndefined()
@@ -2331,7 +2367,7 @@ describe('/cockpit', () => {
     const opened: string[] = []
     world(on, { tokens: 284_000, opened })
     const answer = await $.command.run({ ...COCKPIT, args: 'bogus' })
-    expect(answer.text).toBe('Unknown argument "bogus". Usage: /cockpit [settings | notify test | notify url <url> | notify mention <id>]')
+    expect(answer.text).toBe('Unknown argument "bogus". Usage: /cockpit [settings | notify test | notify mention <id>]')
     expect(opened).toEqual([])
   })
 })
@@ -2341,7 +2377,7 @@ describe('buttons', () => {
     const w: World = { ...SIGNED_IN, tokens: 200_000 }
     world(on, w)
     signedIn(on, configured({ handoffTokens: 400_000 }))
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -3771,6 +3807,17 @@ describe('shells and remote', () => {
     })
   })
 
+  test('a background agent TaskStop stopped by name is no longer working', async ($, on) => {
+    world(on, { ...SIGNED_IN, agentIds: ['agent-7'], tools: { TaskStop: () => ({ result: { message: 'stopped' }, text: 'stopped' }) } })
+    signedIn(on)
+    await $.session.start(START)
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Watch the build', description: 'Watch build', subagentType: 'general-purpose', model: 'sonnet', name: 'watcher', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: true, fork: false } as never)
+    await $.tool.call({ tool: 'TaskStop', task_id: 'watcher' } as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^Working · / })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /^Failed · 1$/ })).toBeDefined()
+  })
+
   test('drop a shell TaskStop stopped', async ($, on) => {
     world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL, TaskStop: () => ({ result: { message: 'stopped', task_id: 'b7k2', task_type: 'local_bash' }, text: 'stopped' }) } })
     signedIn(on)
@@ -3926,6 +3973,19 @@ describe('discord', () => {
     expect((fetches[1]?.body.embeds as Record<string, unknown>[])[0]?.title).toBe('✓ Answered')
   })
 
+  test('an approval wait pending at /clear sends nothing afterwards', async ($, on) => {
+    const fetches: World['fetches'] = []
+    on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
+    on('session.end', (_$, e) => e as never)
+    const clock = world(on, { tokens: 50_000, fetches, config: { notifyAskAfter: 20 } })
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.session.start(START)
+    await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+    await $.session.end({ reason: 'clear', sessionId: 'sess-1', resume: { id: 'sess-1' } })
+    await clock.advance(30_000)
+    expect(fetches).toEqual([])
+  })
+
   test('says when a turn fails', async ($, on) => {
     const fetches: World['fetches'] = []
     world(on, { tokens: 50_000, fetches })
@@ -4063,15 +4123,61 @@ describe('discord', () => {
     expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
   })
 
-  test('/cockpit notify sets, tests and refuses', async ($, on) => {
+  test('a hung Discord send does not hold the turn hook, and the next send still goes out', async ($, on) => {
     const fetches: World['fetches'] = []
-    world(on, { tokens: 50_000, fetches })
+    const w: World = { tokens: 50_000, fetches, isFetchHanging: true, config: { notifyAfter: 0 }, env: { DFORGE_NOTIFY_URL: WEBHOOK } }
+    const clock = world(on, w)
     mock.store(on, {})
     await $.session.start(START)
-    expect((await $.command.run({ ...COCKPIT, args: 'notify url https://example.com/x' })).text).toBe('not a Discord webhook URL')
-    expect((await $.command.run({ ...COCKPIT, args: `notify url ${WEBHOOK}` })).text).toBe('Discord webhook saved.')
+    let isReturned = false
+    const ending = $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' }).then(() => {
+      isReturned = true
+    })
+    await clock.advance(1_500)
+    expect(isReturned).toBe(true)
+    await ending
+    await clock.advance(30_000)
+    w.isFetchHanging = false
+    await $.turn.complete({ answer: 'again', durationMs: 5_000, isAborted: false, turnId: 't2', reason: 'answer' })
+    await clock.advance(1)
+    expect(fetches).toHaveLength(2)
+  })
+
+  test('a rate limit whose body is not JSON is retried', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const clock = world(on, { tokens: 50_000, fetches, rateLimitBody: '<html>Cloudflare</html>', config: { notifyAfter: 0 }, env: { DFORGE_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    await $.session.start(START)
+    const ending = $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(1_500)
+    await ending
+    expect(fetches).toHaveLength(2)
+  })
+
+  test('/cockpit notify tests the webhook', async ($, on) => {
+    const fetches: World['fetches'] = []
+    world(on, { tokens: 50_000, fetches, env: { DFORGE_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    await $.session.start(START)
     expect((await $.command.run({ ...COCKPIT, args: 'notify test' })).text).toBe('Test message sent to Discord.')
     expect(fetches).toHaveLength(1)
+  })
+
+  test('/cockpit notify takes no webhook on the command line, which the transcript keeps', async ($, on) => {
+    world(on, { tokens: 50_000 })
+    mock.store(on, {})
+    await $.session.start(START)
+    await $.command.run({ ...COCKPIT, args: `notify url ${WEBHOOK}` })
+    expect((await $.command.run({ ...COCKPIT, args: 'notify' })).text).toBe('No Discord webhook is set. Set one in /cockpit settings (Notifications) in a terminal, or with DFORGE_NOTIFY_URL.')
+  })
+
+  test('a failed send reports its reason with the webhook masked', async ($, on) => {
+    world(on, { tokens: 50_000, isFetchFailing: true, env: { DFORGE_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    await $.session.start(START)
+    const text = (await $.command.run({ ...COCKPIT, args: 'notify test' })).text ?? ''
+    expect(text).toContain('[webhook]')
+    expect(text).not.toContain(WEBHOOK.split('/').pop() ?? WEBHOOK)
   })
 })
 
@@ -4090,17 +4196,15 @@ describe('run card', () => {
   })
 
   test('reads the ledger and the plan', () => {
-    const ledger = parseLedger(`${LEDGER}\nGroup 3-4: review round 1/5 (open)\nTask 5: BLOCKED — impl exhausted — pick a rule\nFinal review: clean (commits a..b)`)
+    const ledger = parseLedger(`${LEDGER}\nTask 5: BLOCKED — impl exhausted — pick a rule\nFinal review: clean (commits a..b)`)
     expect(ledger.plan).toBe('docs/plans/p.md')
     expect(ledger.tasks.map(task => [task.n, task.state, task.round])).toEqual([
       [1, 'complete', null],
       [2, 'assigned', '2/5'],
-      [3, 'assigned', '1/5'],
-      [4, 'assigned', '1/5'],
       [5, 'blocked', null],
     ])
     expect(ledger.tasks[0]?.isClean).toBe(true)
-    expect(ledger.tasks[4]?.reason).toBe('impl exhausted — pick a rule')
+    expect(ledger.tasks[2]?.reason).toBe('impl exhausted — pick a rule')
     expect(ledger.isFinished).toBe(true)
     expect(planTasks(PLAN)).toEqual([
       { n: 1, title: 'Add the helpers' },
@@ -4134,47 +4238,6 @@ describe('run card', () => {
     ])
   })
 
-  const GROUPED = [
-    '# SDD ledger — plan: docs/plans/p.md',
-    'Task 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)',
-    'Task 1: awaiting group review (commits abc1234..bcd2345)',
-    'Task 2: implementer dforge:impl-sonnet-low (assigned; base bcd2345)',
-    'Task 3: implementer dforge:impl-sonnet-low (assigned; base bcd2345)',
-    'Task 3: awaiting group review (commits bcd2345..cde3456)',
-    'Group 1,3: review round 1/2 (Task 1: 1 open — meter width; Task 3: clean; commits cde3456..def4567 (Task 1))',
-  ].join('\n')
-
-  test('reads a group review line with a comma list beside a range', () => {
-    const ledger = parseLedger(`${GROUPED}\nTask 8: implementer dforge:impl-sonnet-low (assigned; base def4567)\nGroup 8-9: review round 2/5 (1 addressed, 0 open; commits def4567..efa5678; fresh)`)
-    expect(ledger.tasks.map(task => [task.n, task.state, task.round])).toEqual([
-      [1, 'assigned', '1/2'],
-      [2, 'assigned', null],
-      [3, 'assigned', '1/2'],
-      [8, 'assigned', '2/5'],
-      [9, 'assigned', '2/5'],
-    ])
-  })
-
-  test('clears a group round when each member completes', () => {
-    const ledger = parseLedger(`${GROUPED}\nTask 1: complete (commits abc1234..bcd2345, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none\nGroup 1,3: review round 2/2 (Task 1: clean; Task 3: clean; commits def4567..efa5678 (Task 1))`)
-    expect(ledger.tasks.map(task => [task.n, task.state, task.round])).toEqual([
-      [1, 'complete', null],
-      [2, 'assigned', null],
-      [3, 'assigned', '2/2'],
-    ])
-  })
-
-  test('shows a group review round on the run card', async ($, on) => {
-    const files = runFiles(GROUPED)
-    world(on, { ...SIGNED_IN, files })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /round 1\/2 · impl-sonnet-low/ })).toBeDefined()
-    expect(JSON.stringify(await ui.drawn())).not.toContain('round 2/5')
-  })
-
   test('lists running, blocked and pending tasks before done ones', () => {
     const states = ['complete', 'assigned', 'pending', 'blocked', 'pending', 'complete', 'assigned', 'pending'] as const
     const tasks = states.map((state, i) => ({ n: i + 1, state }))
@@ -4186,7 +4249,7 @@ describe('run card', () => {
     const files = runFiles(LEDGER)
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
@@ -4205,7 +4268,7 @@ describe('run card', () => {
     const reads: string[] = []
     const clock = world(on, { ...SIGNED_IN, files })
     signedIn(on, files, reads)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     await clock.advance(4_000)
     const ledgerReads = () => reads.filter(path => path.endsWith('/progress.md')).length
@@ -4219,7 +4282,7 @@ describe('run card', () => {
     const reads: string[] = []
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files, reads)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ledgerReads = () => reads.filter(path => path.endsWith('/progress.md')).length
     const before = ledgerReads()
@@ -4232,7 +4295,7 @@ describe('run card', () => {
     files['/home/me/code/shop/docs/plans/p.md'] = { text: PLAN, mtimeMs: 1 }
     const clock = world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     files['/home/me/code/shop/docs/plans/p.md'] = { text: PLAN.replace('Ship it', 'Ship the card'), mtimeMs: 2 }
     await clock.advance(2_000)
@@ -4249,7 +4312,7 @@ describe('run card', () => {
     }) as never)
     const clock = world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const before = writes
     expect(before).toBeGreaterThan(0)
@@ -4263,7 +4326,7 @@ describe('run card', () => {
     const reads: string[] = []
     const clock = world(on, { ...SIGNED_IN, files, startedAt: 3_000_000 })
     signedIn(on, files, reads)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     await clock.advance(4_000)
     const ledgerReads = () => reads.filter(path => path.endsWith('/progress.md')).length
@@ -4279,7 +4342,7 @@ describe('run card', () => {
     const reads: string[] = []
     world(on, { ...SIGNED_IN, files, isPaneShut: true })
     signedIn(on, files, reads)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const stats = () => reads.filter(path => path.endsWith('/progress.md')).length
     files['/home/me/code/shop/.dforge/sdd/p/progress.md']!.mtimeMs = 2_100_000
@@ -4294,7 +4357,7 @@ describe('run card', () => {
     const files: NonNullable<World['files']> = { '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 } }
     const clock = world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     await clock.advance(4_000)
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -4312,7 +4375,7 @@ describe('run card', () => {
     const files = runFiles(LEDGER) ?? {}
     const clock = world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     await clock.advance(4_000)
     files['/home/me/code/shop/.dforge/sdd/p/progress.md'] = {
@@ -4331,7 +4394,7 @@ describe('run card', () => {
     }
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^round 2\/5$/ })).toBeUndefined()
@@ -4343,7 +4406,7 @@ describe('run card', () => {
     world(on, { ...SIGNED_IN, files, fetches })
     signedIn(on, files)
     mock.store(on, { notifyUrl: WEBHOOK })
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     expect(fetches).toHaveLength(0)
     const ledger = files?.['/home/me/code/shop/.dforge/sdd/p/progress.md']
@@ -4363,7 +4426,7 @@ describe('run card', () => {
     world(on, { ...SIGNED_IN, files, fetches })
     signedIn(on, files)
     mock.store(on, { notifyUrl: WEBHOOK })
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const next = '# SDD ledger — plan: docs/plans/q.md\nTask 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)'
     files['/home/me/code/shop/.dforge/sdd/q/progress.md'] = { text: next, mtimeMs: 2_100_000 }
@@ -4379,7 +4442,7 @@ describe('run card', () => {
     world(on, { ...SIGNED_IN, files, fetches })
     signedIn(on, files)
     mock.store(on, { notifyUrl: WEBHOOK })
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     files['/home/me/code/shop/.dforge/sdd/p/progress.md']!.text += '\nTask 2: BLOCKED — impl exhausted — rotate password=hunter2'
     await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
@@ -4392,7 +4455,7 @@ describe('run card', () => {
     world(on, { ...SIGNED_IN, files, fetches })
     signedIn(on, files)
     mock.store(on, { notifyUrl: WEBHOOK })
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     files['/home/me/code/shop/.dforge/sdd/p/progress.md']!.text += '\nTask 2: complete (commits c..e, review clean) — done: x'
     await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
@@ -4407,7 +4470,7 @@ describe('run card', () => {
     const files = runFiles(`${LEDGER}\nTask 2: BLOCKED — impl exhausted — pick a meter width rule`)
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
     await $.tool.call({ tool: 'Bash', command: 'git commit -m "x" -m "Co-Authored-By: Claude <noreply@anthropic.com>"' })
@@ -4495,7 +4558,7 @@ describe('run card', () => {
       signedIn(on, files)
       // The session start reads the ledger; the Skill call makes it a plan session.
       await $.session.start(START)
-      await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+      await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
       const sent = notes.filter(text => /— handoff\./.test(text))
       if (note === null) expect(sent).toEqual([])
       else expect(sent).toEqual([expect.stringMatching(note)])
@@ -4512,7 +4575,7 @@ describe('run card', () => {
     world(on, w)
     signedIn(on, files)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     // One call both completes Task 3 (two tasks left) and crosses the 465k budget.
     files['/home/me/code/shop/.dforge/sdd/p/progress.md'] = { text: tailLedger(3, false), mtimeMs: 2_100_000 }
     w.tokens = 500_000
@@ -4585,7 +4648,7 @@ describe('run card', () => {
     world(on, { ...SIGNED_IN, tokens: 500_000, notes, files })
     signedIn(on, files)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     expect(notes.filter(text => /— handoff\./.test(text))).toEqual([expect.stringMatching(/^dforge: budget: 500k of 465k — handoff\. /)])
     expect(await finishingShown($)).toBe(false)
   })
@@ -4602,7 +4665,7 @@ describe('run card', () => {
       return { value: undefined } as never
     })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     await clock.advance(5_000)
     expect(redraws).toBe(0)
@@ -4634,7 +4697,7 @@ describe('run card', () => {
     }
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     // A file an older version armed shows the choice, with no countdown.
@@ -4729,6 +4792,25 @@ describe('resume offer', () => {
     expect(resumeOfferOf(`${FINISHED}\n## Notes\n\nPaste as the first prompt:\n\n\`\`\`\nold\n\`\`\`\n`)).toBeNull()
   })
 
+  for (const reason of ['clear', 'resume'] as const) {
+    test(`offers the handoff again in the session a ${reason} carries the process into`, async ($, on) => {
+      const wipe = wipesState(on)
+      const files: World['files'] = { [LATEST]: { text: RESUMABLE, mtimeMs: 900_000 } }
+      const w: World = { ...SIGNED_IN, files }
+      const clock = world(on, w)
+      on('session.end', (_$, e) => e as never)
+      signedIn(on, files)
+      await $.session.start(START)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ key: 'resume-card' })).toBeDefined()
+      await $.session.end({ reason, sessionId: 'sess-1', resume: { id: 'sess-1' } })
+      wipe()
+      w.sessionId = 'sess-2'
+      await clock.advance(2_000)
+      expect(await ui.find({ key: 'resume-card' })).toBeDefined()
+    })
+  }
+
   test('draws a resume card at the top of the pane', async ($, on) => {
     await start($, on, RESUMABLE)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -4777,7 +4859,7 @@ describe('resume offer', () => {
 
   test('offers nothing once the session runs a plan', async ($, on) => {
     await start($, on, RESUMABLE)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
   })
@@ -4891,7 +4973,7 @@ describe('cockpit roots', () => {
     const stderr = 'darkmem-config: /home/me/.dforge/stores.json is not valid JSON: Unexpected token\nat line 2\n'
     world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 2, stdout: '', stderr } })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
@@ -4905,7 +4987,7 @@ describe('cockpit roots', () => {
     const files = checkoutFiles()
     world(on, { ...SIGNED_IN, files, modeOut: 'missing' })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
@@ -4920,7 +5002,7 @@ describe('cockpit roots', () => {
       const files = checkoutFiles()
       world(on, { ...SIGNED_IN, files, modeOut })
       signedIn(on, files)
-      await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+      await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
       await $.session.start(START)
       const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
       expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
@@ -4932,7 +5014,7 @@ describe('cockpit roots', () => {
     const files = checkoutFiles()
     world(on, { ...SIGNED_IN, files, modeOut: 'timeout' })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /darkmem-config\.mjs --mode gave no answer within 5 seconds/ })).toBeDefined()
@@ -4943,7 +5025,7 @@ describe('cockpit roots', () => {
     const modeRuns: string[] = []
     world(on, { ...SIGNED_IN, files, modeRuns })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(modeRuns).toEqual(['/home/me/code/shop'])
@@ -4984,7 +5066,7 @@ describe('cockpit roots', () => {
     const stderr = "darkmem-config: ENOENT: no such file or directory, open '/home/me/.dforge/mirror/shop/.sync-state.json'\n"
     world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 1, stdout: '', stderr } })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /^darkmem-config: ENOENT: no such file or directory/ })).toBeDefined()
@@ -5009,7 +5091,7 @@ describe('cockpit roots', () => {
     const modeRuns: string[] = []
     world(on, { ...SIGNED_IN, files, modeRuns })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     expect(modeRuns).toEqual([])
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -5039,7 +5121,7 @@ describe('cockpit roots', () => {
     }
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
@@ -5052,7 +5134,7 @@ describe('cockpit roots', () => {
     }
     world(on, { ...SIGNED_IN, files })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeUndefined()
@@ -5066,7 +5148,7 @@ describe('cockpit roots', () => {
     }
     world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
@@ -5095,7 +5177,7 @@ describe('cockpit roots', () => {
     }
     world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main' })
     signedIn(on, files, undefined, '/home/me/code/main')
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
@@ -5124,7 +5206,7 @@ describe('cockpit roots', () => {
     }
     world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main' })
     signedIn(on, files, undefined, '/home/me/code/main')
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
@@ -5196,7 +5278,7 @@ describe('cockpit roots', () => {
     const w: World = { ...SIGNED_IN, files }
     world(on, w)
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
@@ -5228,7 +5310,7 @@ describe('flight deck', () => {
     const w: World = { ...SIGNED_IN, files, remoteControl: 'true' }
     world(on, w)
     signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.session.start(START)
     for (const [i, t] of [180_000, 205_000, 228_000, 251_000, 270_000, 284_000].entries()) { w.tokens = t; await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: `turn-${i}`, reason: 'answer' }) }
     await $.session.measure({ context: { tokens: 284_000, window: 650_000 }, rateLimits: [{ kind: 'five_hour', percentUsed: 23, resetsAt: new Date(1_000_000 + 220 * 60_000).toISOString() }, { kind: 'seven_day', percentUsed: 61, resetsAt: new Date(1_000_000 + 86 * 3600_000).toISOString() }], cost: { usd: 4.85 }, changed: ['context', 'rateLimits'], breakdown: true } as never)
@@ -5760,7 +5842,7 @@ describe('settings held outside the file', () => {
     const notes: string[] = []
     world(on, { tokens: 50_000, config: {}, notes, written: {} })
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'settings-tab-Workflow' })
@@ -5782,7 +5864,7 @@ describe('settings held outside the file', () => {
     const notes: string[] = []
     world(on, { tokens: 50_000, config: {}, notes, written: {} })
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'settings-tab-Workflow' })
@@ -5799,7 +5881,7 @@ describe('settings held outside the file', () => {
     const w: World = { tokens: 50_000, config: {}, notes, written: {}, isAppendFailing: true }
     world(on, w)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'settings-tab-Workflow' })
@@ -5859,7 +5941,7 @@ describe('settings held outside the file', () => {
     const w: World = { tokens: 50_000, config: {}, notes, closed, written: {}, isAppendFailing: true }
     world(on, w)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await ui.press({ key: 'pane-settings' })
     await ui.press({ key: 'settings-tab-Workflow' })
@@ -6300,7 +6382,7 @@ describe('auto run', () => {
   })
 
   test('switches by clearing: no compaction, the launch model, then the first prompt', async ($, on) => {
-    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md` with dforge:subagent-driven-development.', launch: { model: 'sonnet', effort: 'high' } })
+    const files = autoFiles({ phase: 'execute', pending: 'switch', resumePrompt: 'Continue `docs/plan.md` with dforge:executing-plans.', launch: { model: 'sonnet', effort: 'high' } })
     const w: World = { ...SIGNED_IN, compacts: [], commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
     const clock = world(on, w)
     signedIn(on, files)
@@ -6312,7 +6394,7 @@ describe('auto run', () => {
     expect(w.autoRuns).toContain('--session sess-1 clear --phase')
     expect(w.autoRuns).toContain('--session sess-2 rebind --to sess-2')
     expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
-    expect(w.prompts).toEqual(['Continue `docs/plan.md` with dforge:subagent-driven-development.'])
+    expect(w.prompts).toEqual(['Continue `docs/plan.md` with dforge:executing-plans.'])
     expect(pendingOf(files)).toBeNull()
   })
 
@@ -7007,7 +7089,7 @@ describe('auto run in the pane', () => {
     world(on, w)
     signedIn(on, files)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ key: 'pane-stop-auto' })).toBeDefined()
@@ -7040,7 +7122,7 @@ describe('auto run in the pane', () => {
     const files: NonNullable<World['files']> = {}
     signedIn(on, files)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     w.tokens = 470_000
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     const sent = () => fetches.filter(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title === '🔶 Handoff budget reached').length
@@ -7061,7 +7143,7 @@ describe('auto run in the pane', () => {
     signedIn(on, files)
     await $.session.start(START)
     files[AUTO] = autoFiles({ pending: null })[AUTO]!
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     expect(notes).toEqual([])
   })
@@ -7098,7 +7180,7 @@ describe('A5: the judge write guard (speed-and-cost-followups acceptance)', () =
     await judgeNaming($, on, NAMED)
     const paths = [`${WS}/amendments.md`, `${WS}/task-1-step.json`, '/home/me/code/shop/docs/dforge/plans/2026-10-28-plan.md', '/etc/passwd', '/home/me/code/shop/src/index.ts']
     expect(await Promise.all(paths.map(async path => (await write($, 'judge-1', path)).deny))).toEqual(paths.map(path => refusal(NAMED, path)))
-    for (const tool of ['Edit', 'MultiEdit', 'NotebookEdit']) expect((await write($, 'judge-1', `${WS}/amendments.md`, tool)).deny).toMatch(REFUSED)
+    for (const tool of ['Edit', 'NotebookEdit']) expect((await write($, 'judge-1', `${WS}/amendments.md`, tool)).deny).toMatch(REFUSED)
   })
 
   test('A5: a judge Write to another report name, a relative path or a .. path is refused when the dispatch named only task-1-review-report.md', async ($, on) => {

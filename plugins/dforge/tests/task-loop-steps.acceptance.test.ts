@@ -136,7 +136,7 @@ const launchAgent = ($: Parameters<TestBody>[0]) =>
     tool_use_id: 'toolu_1',
     prompt: 'Implement task 4',
     description: 'Task 4',
-    subagentType: 'dforge:impl-sonnet-low',
+    subagentType: 'dforge:impl-sonnet-high',
     provider: { plugin: 'dforge', tier: 'user' },
     parentModel: 'claude-opus-5-5',
     background: true,

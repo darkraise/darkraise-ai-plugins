@@ -33,7 +33,7 @@ point never overwrites an earlier file - listing each item: an id, its kind,
 its task, and the paths it needs, with the findings copied verbatim. Run
 `scripts/review-route PLAN_FILE --ruling <kind> [<task> ...]` and dispatch the
 `primary` it prints with
-[ruling-prompt.md](../../subagent-driven-development/references/ruling-prompt.md),
+[ruling-prompt.md](../../../reference/prompts/ruling-prompt.md),
 expanding its placeholders. Its `[REPORT_FILE]` is
 `<workspace>/rulings-<point>-<task>-report.md`. The seat writes its report
 there and replies in at most 10 lines;
@@ -70,8 +70,8 @@ verbatim:
   `task-brief` carries the amendment. On `rejected: …`, make one fresh seat
   dispatch carrying the report path, the entry's id and the rejection output;
   a second rejection is BLOCKED. A Header amendment is confirmed by a second, independent `judge-opus` dispatch
-  before `plan-amend` runs, exactly as dforge:subagent-driven-development
-  §The Ruling Seat describes, including its ledger line.
+  before `plan-amend` runs; log it as the `Ruling: amendment A<k> (Header)`
+  ledger line.
 - **BLOCKED** - log `Task <N>: BLOCKED — ruling seat — <decision>`, name it in
   your final message, and stop.
 

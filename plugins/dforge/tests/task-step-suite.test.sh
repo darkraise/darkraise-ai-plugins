@@ -35,7 +35,7 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |## Global Constraints
 |
@@ -53,21 +53,21 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |### Task 1: first
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |Body one.
 |
 |### Task 2: second
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |Body two.
 |
 |### Task 3: third
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |Body three.
@@ -257,7 +257,7 @@ check "verdict, tracked file changed and no row: exit 6" "$rc" "6"
 # --- verdict --cwd reads the state of that checkout ---
 git worktree add -q --detach "$TMP/wt" HEAD
 WT=$TMP/wt
-git -C "$WT" -c user.name=Darkraise -c user.email=dark@example.invalid commit -q --allow-empty -m "wave work"
+git -C "$WT" -c user.name=Darkraise -c user.email=dark@example.invalid commit -q --allow-empty -m "worktree work"
 WT_SHA=$(git -C "$WT" rev-parse HEAD | tr -d '\r')
 set_review 2 "$WT_SHA" "$WT"
 report "$WS/task-2-review-report.md"
@@ -266,29 +266,13 @@ step verdict docs/plan.md 2 --cwd "$WT"
 check "verdict --cwd: the row in that checkout's state counts" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: pass (clean)"
 step verdict docs/plan.md 2
 check "verdict without --cwd: the checkout's own state has no such row" "$rc" "7"
-
-# --- verdict --group takes the suite of the last member ---
-run_suite
-G_HEAD=$HEAD_SHA
-jq -n --arg h "$G_HEAD" --arg c "$REPO" '{tasks: [1, 2], reviewHead: $h, t0: 0, reviewChecks: [{cwd: $c, head: $h, dirty: []}]}' > "$WS/group-1,2-step.json"
-{
-  printf '## Verdict\n'
-  for t in 1 2; do
-    printf 'Task %s spec: pass\nTask %s quality: approved\nTask %s scores: spec 17 / scope 17 / verification 17 / quality 17\n' "$t" "$t" "$t"
-  done
-} > "$WS/group-1,2-review-report.md"
-step verdict docs/plan.md 1 2 --group
-check "verdict --group: the last member's suite is checked" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: pass (clean)"
-jq '.wave = 1' "$WS/task-2-step.json" > "$TMP/w.json" && mv "$TMP/w.json" "$WS/task-2-step.json"
 rm -f .dforge/suites.tsv
-step verdict docs/plan.md 1 2 --group
-check "verdict --group: a wave group has no per-group suite" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: none recorded"
 
 git worktree remove --force "$WT"
 
 # --- verdict: a none task check schedules the suite by task number ---
 awk '{ print } /^\*\*Execution:\*\*/ { print ""; print "**Task check:** none — full suite every 3 tasks" }' docs/plan.md > docs/plan-none.md
-printf '\n### Task 4: fourth\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n\nBody four.\n' >> docs/plan-none.md
+printf '\n### Task 4: fourth\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n\nBody four.\n' >> docs/plan-none.md
 WS_MAIN=$WS
 WS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan-none.md)")
 rm -f "$WS"/*

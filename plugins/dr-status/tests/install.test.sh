@@ -114,6 +114,24 @@ dcc_install_one "$fake/.claude-new"
 check "install creates a missing settings.json" \
   "$(jq -r '.statusLine.type' "$fake/.claude-new/settings.json")" "command"
 
+# --- a symlinked settings.json (dotfiles) is written through the link ---------
+mkdir -p "$fake/.claude-link" "$fake/dotfiles/sub"
+printf '{"oauthAccount":{"emailAddress":"link@example.com"}}\n' > "$fake/.claude-link/.claude.json"
+printf '{"theme":"dark"}\n' > "$fake/dotfiles/sub/settings.json"
+chmod 644 "$fake/dotfiles/sub/settings.json"
+ln -s ../dotfiles/sub/settings.json "$fake/.claude-link/settings.json" 2>/dev/null
+if [ -L "$fake/.claude-link/settings.json" ]; then
+  dcc_install_one "$fake/.claude-link"
+  check "install keeps a symlinked settings.json a link" \
+    "$([ -L "$fake/.claude-link/settings.json" ] && echo link || echo file)" "link"
+  check "install writes the link's target" \
+    "$(jq -r '.statusLine.type + " " + .theme' "$fake/dotfiles/sub/settings.json")" "command dark"
+  check "install keeps the target's mode" \
+    "$(ls -l "$fake/dotfiles/sub/settings.json" | cut -c1-10)" "-rw-r--r--"
+  check "install leaves no temp file beside the target" \
+    "$(ls "$fake/dotfiles/sub" | tr '\n' ' ')" "settings.json "
+fi
+
 # --- sync ---------------------------------------------------------------------
 src="$(mktemp -d)"; mkdir -p "$src/scripts/lib"
 printf '9.9.9\n' > "$src/scripts/VERSION"

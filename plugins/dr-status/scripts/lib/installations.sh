@@ -32,11 +32,33 @@ dcc_installation_get() {
   dcc_installation_json -c --arg account "$account" '.accounts[$account] // null' <<< "$record"
 }
 
+# Dotfile managers link these files; renaming a temp file over the link would
+# replace it with a regular file and leave the managed copy stale.
+dcc_link_target() { # dcc_link_target <path> -> DCC_LINK_TARGET
+  local p="$1" t n=0
+  while [ -L "$p" ] && [ "$n" -lt 40 ]; do
+    t="$(readlink -- "$p")" || return 1
+    case "$t" in /*) p="$t" ;; *) p="$(dirname -- "$p")/$t" ;; esac
+    n=$((n + 1))
+  done
+  DCC_LINK_TARGET="$p"
+}
+
+# The temp file sits beside the target so the rename stays on one file system;
+# cp -p gives it the target's mode, which mktemp's 0600 would otherwise replace.
+dcc_temp_beside() { # dcc_temp_beside <target> -> DCC_TEMP
+  DCC_TEMP="$(mktemp "$1.XXXXXX")" || return 1
+  [ ! -e "$1" ] || cp -p -- "$1" "$DCC_TEMP" 2>/dev/null || true
+}
+
 dcc_installation_save() {
-  local record="$1" tmp
+  local record="$1" tmp target
   dcc_installation_path
-  tmp="$(mktemp "$DCC_REGISTRY.XXXXXX")" || return 1
-  if printf '%s\n' "$record" > "$tmp" && dcc_installation_json -e . < "$tmp" >/dev/null && mv -f -- "$tmp" "$DCC_REGISTRY"; then return 0; fi
+  dcc_link_target "$DCC_REGISTRY" || return 1
+  target="$DCC_LINK_TARGET"
+  dcc_temp_beside "$target" || return 1
+  tmp="$DCC_TEMP"
+  if printf '%s\n' "$record" > "$tmp" && dcc_installation_json -e . < "$tmp" >/dev/null && mv -f -- "$tmp" "$target"; then return 0; fi
   rm -f -- "$tmp"
   return 1
 }
@@ -83,15 +105,37 @@ dcc_installation_lock() {
   mkdir -p -- "$(dirname "$DCC_REGISTRY")" || return 1
   local attempts=0 lock="$DCC_REGISTRY.lock"
   while ! mkdir -- "$lock" 2>/dev/null; do
+    _dcc_installation_break_stale "$lock" && continue
     attempts=$((attempts + 1))
     [ "$attempts" -lt 50 ] || return 1
     sleep 0.1
   done
+  printf '%s\n' "$$" > "$lock/pid" 2>/dev/null || true
   DCC_INSTALL_LOCK_DIR="$lock"
+}
+
+# A killed installer leaves its lock behind, and the sync hook runs async, so
+# without this the installed copy silently stops following plugin updates.
+# A lock with no pid file is either mid-acquire or from a release before the
+# pid was written; only an old one is treated as abandoned.
+_dcc_installation_break_stale() { # _dcc_installation_break_stale <lock>
+  local lock="$1" pid=""
+  if [ -r "$lock/pid" ]; then
+    IFS= read -r pid < "$lock/pid" || true
+    case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+    kill -0 "$pid" 2>/dev/null && return 1
+    # Re-read so a lock re-taken since the first read is left alone.
+    [ "$(cat "$lock/pid" 2>/dev/null)" = "$pid" ] || return 1
+  else
+    [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ] || return 1
+  fi
+  rm -f -- "$lock/pid"
+  rmdir -- "$lock" 2>/dev/null
 }
 
 dcc_installation_unlock() {
   [ -n "${DCC_INSTALL_LOCK_DIR:-}" ] || return 0
+  rm -f -- "$DCC_INSTALL_LOCK_DIR/pid"
   rmdir -- "$DCC_INSTALL_LOCK_DIR" || return 1
   DCC_INSTALL_LOCK_DIR=''
 }

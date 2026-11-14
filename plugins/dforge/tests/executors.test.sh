@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The registry is the one place an executor is described. A malformed entry
 # must not remove every other executor from the roster: that is the silent
-# downgrade detect-executors.sh was already written to avoid, and it is why
-# list skips bad entries rather than failing.
+# downgrade the panel avoids, and it is why list skips bad entries rather than
+# failing.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,8 +20,7 @@ run() { DR_EXECUTORS_DIR="$1" bash "$EXEC" "${@:2}"; }
 
 mkdir -p "$TMP/reg"
 entry() { # entry <id> [extra jq assignment]
-  jq -n --arg id "$1" '{id:$id, locator:"scripts/x-plugin",
-    probe:{command:"scripts/lib/x-client.mjs", op:"auth"},
+  jq -n --arg id "$1" '{id:$id,
     gate:"scripts/x-gate", runner:"scripts/run-x-review.sh", session_dir:($id + "-sessions"),
     surfaces:["review"]}' > "$TMP/reg/$1.json"
 }
@@ -38,15 +37,15 @@ check "an empty directory lists nothing and still exits 0" \
 
 # --- get and path ----------------------------------------------------------
 check "get reads a top-level field" "$(run "$TMP/reg" get alpha id)" "alpha"
-check "get reads a dotted key" "$(run "$TMP/reg" get alpha probe.op)" "auth"
+check "get reads a dotted key" "$(run "$TMP/reg" get alpha blocks.judge >/dev/null 2>&1; echo $?)" "1"
 check "get prints an array one element per line" \
   "$(run "$TMP/reg" get alpha surfaces | tr '\n' ',')" "review,"
 check "get on an unknown id exits 1" "$(run "$TMP/reg" get nope id >/dev/null 2>&1; echo $?)" "1"
 check "get on an unknown key exits 1" "$(run "$TMP/reg" get alpha nope >/dev/null 2>&1; echo $?)" "1"
 check "path resolves against the plugin root" \
-  "$(run "$TMP/reg" path alpha locator)" "$(cd "$P" && pwd)/scripts/x-plugin"
+  "$(run "$TMP/reg" path alpha gate)" "$(cd "$P" && pwd)/scripts/x-gate"
 check "path takes a dotted key too" \
-  "$(run "$TMP/reg" path alpha probe.command)" "$(cd "$P" && pwd)/scripts/lib/x-client.mjs"
+  "$(run "$TMP/reg" path alpha surfaces)" "$(cd "$P" && pwd)/review"
 
 # --- invalid entries are skipped, never fatal ------------------------------
 # Each case keeps alpha and beta valid, so the assertion proves the bad entry
@@ -58,7 +57,7 @@ check "malformed JSON is reported on stderr" \
   "$(run "$TMP/reg" list 2>&1 >/dev/null | grep -c 'broken')" "1"
 rm -f "$TMP/reg/broken.json"
 
-jq -n '{id:"missing", locator:"scripts/x"}' > "$TMP/reg/missing.json"
+jq -n '{id:"missing", gate:"scripts/x"}' > "$TMP/reg/missing.json"
 check "a missing required field is skipped" "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta "
 rm -f "$TMP/reg/missing.json"
 
@@ -92,8 +91,6 @@ check "an id outside the pattern is skipped" \
 # --- the shipped entry -----------------------------------------------------
 check "the shipped registry lists codex" \
   "$(bash "$EXEC" list | grep -cx codex)" "1"
-check "the shipped codex entry names the real locator" \
-  "$(bash "$EXEC" get codex locator)" "scripts/codex-plugin"
 check "the shipped codex entry keeps only its judge block" \
   "$(jq -r '.blocks | keys | join(",")' < "$P/reference/executors/codex.json")" "judge"
 check "the shipped codex judge block exists in the ladder" \
@@ -104,10 +101,6 @@ check "the shipped codex entry keeps the session directory override" \
   "$(bash "$EXEC" get codex session_dir_env)" "DR_CODEX_SESSION_DIR"
 check "the shipped codex entry names its runner and the review surface" \
   "$(jq -r '[.runner, (.surfaces|join(","))] | join(" ")' < "$P/reference/executors/codex.json")" "scripts/run-codex-review.sh review"
-check "the shipped codex locator resolves to a real file" \
-  "$([ -f "$(bash "$EXEC" path codex locator)" ] && echo yes || echo no)" "yes"
-check "the shipped codex probe resolves to a real file" \
-  "$([ -f "$(bash "$EXEC" path codex probe.command)" ] && echo yes || echo no)" "yes"
 
 # --- the shipped agy entry -----------------------------------------------------
 check "the shipped registry lists agy before codex" \
@@ -115,8 +108,6 @@ check "the shipped registry lists agy before codex" \
 check "the shipped registry ranks agy before codex" \
   "$(bash "$EXEC" ranked | tr '\n' ' ')" "agy codex "
 check "the shipped agy entry has priority 10" "$(bash "$EXEC" get agy priority)" "10"
-check "the shipped agy entry names the real locator" \
-  "$(bash "$EXEC" get agy locator)" "scripts/agy-locate"
 check "the shipped agy entry names its gate" "$(bash "$EXEC" get agy gate)" "scripts/agy-gate"
 check "the shipped agy entry names its runner and the review surface" \
   "$(jq -r '[.runner, (.surfaces|join(","))] | join(" ")' < "$P/reference/executors/agy.json")" "scripts/run-agy-review.sh review"
@@ -124,9 +115,7 @@ check "the shipped agy entry names its session directory" \
   "$(bash "$EXEC" get agy session_dir)" "agy-sessions"
 check "the shipped agy entry names its session directory override" \
   "$(bash "$EXEC" get agy session_dir_env)" "DR_AGY_SESSION_DIR"
-check "the shipped agy entry declares no missing reason" \
-  "$(bash "$EXEC" get agy reasons.missing >/dev/null 2>&1; echo $?)" "1"
-for key in locator probe.command gate runner; do
+for key in gate runner; do
   check "the shipped agy $key resolves to a real file" \
     "$([ -f "$(bash "$EXEC" path agy "$key")" ] && echo yes || echo no)" "yes"
 done
@@ -141,8 +130,7 @@ check "the shipped agy judge block exists in the ladder" \
 # line on stderr.
 mkdir -p "$TMP/rank"
 rentry() { # rentry <id> [priority as a JSON literal]; no second argument leaves priority out
-  jq -n --arg id "$1" --arg p "${2-}" '{id:$id, locator:"scripts/x-plugin",
-    probe:{command:"scripts/lib/x-client.mjs", op:"auth"},
+  jq -n --arg id "$1" --arg p "${2-}" '{id:$id,
     gate:"scripts/x-gate", runner:"scripts/run-x-review.sh", session_dir:($id + "-sessions"),
     surfaces:["review"]}
     + (if $p == "" then {} else {priority: ($p | fromjson)} end)' > "$TMP/rank/$1.json"
@@ -161,7 +149,7 @@ check "ranked reports each invalid priority once on stderr and nothing else" \
 # The edge literals are written verbatim, not through jq, which may reformat 1.0.
 mkdir -p "$TMP/rank-edge"
 edge() { # edge <id> <priority literal>
-  printf '{"id":"%s","locator":"scripts/x-plugin","probe":{"command":"scripts/lib/x-client.mjs","op":"auth"},"gate":"scripts/x-gate","runner":"scripts/run-x-review.sh","session_dir":"%s-sessions","surfaces":["review"],"priority":%s}\n' \
+  printf '{"id":"%s","gate":"scripts/x-gate","runner":"scripts/run-x-review.sh","session_dir":"%s-sessions","surfaces":["review"],"priority":%s}\n' \
     "$1" "$1" "$2" > "$TMP/rank-edge/$1.json"
 }
 edge one 1.0; edge two 2; edge nul null
@@ -190,21 +178,6 @@ check "the fixture registry lists two ids" \
   "$(run "$FIX" list | tr '\n' ' ')" "codex stub "
 check "the fixture codex entry matches the shipped one" \
   "$(diff -q "$FIX/codex.json" "$P/reference/executors/codex.json" >/dev/null && echo same || echo differs)" "same"
-check "the stub locator is executable" \
-  "$([ -x "$FIX/bin/stub-plugin" ] && echo yes || echo no)" "yes"
-check "the stub locator emits the ok grammar" \
-  "$(bash "$FIX/bin/stub-plugin" | sed 's/root=.*/root=X/')" "stub-plugin ok version=0.0.0-stub root=X"
-check "the stub locator exits 0 when ok" "$(bash "$FIX/bin/stub-plugin" >/dev/null; echo $?)" "0"
-check "the stub locator can report off" \
-  "$(STUB_LOCATOR=off bash "$FIX/bin/stub-plugin")" "stub-plugin off reason=plugin-not-enabled"
-check "the stub locator exits 1 when off" \
-  "$(STUB_LOCATOR=off bash "$FIX/bin/stub-plugin" >/dev/null; echo $?)" "1"
-check "the stub probe answers authed" \
-  "$(printf '{"op":"auth","cwd":"."}' | node "$FIX/bin/stub-probe.mjs" x | jq -r '.authed')" "true"
-check "the stub probe can answer logged out" \
-  "$(printf '{"op":"auth","cwd":"."}' | STUB_PROBE=logged-out node "$FIX/bin/stub-probe.mjs" x | jq -r '.authed')" "false"
-check "the stub probe can fail without an authed field" \
-  "$(printf '{"op":"auth","cwd":"."}' | STUB_PROBE=throw node "$FIX/bin/stub-probe.mjs" x | jq -r '.authed // "absent"')" "absent"
 check "the fixture registry ranks the prioritised codex entry before the unranked ones" \
   "$(run "$FIX" ranked | tr '\n' ' ')" "codex stub "
 

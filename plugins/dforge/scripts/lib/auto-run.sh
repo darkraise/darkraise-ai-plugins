@@ -1,7 +1,6 @@
 # Sourced. An auto run's state (reference/auto-run.md): one JSON file in the
 # primary checkout's self-ignoring sdd/ directory, bound to one session.
-# Defines functions only; scripts/auto-run is the command line. The limits use
-# CTX_TASK_MARGIN, so scripts/lib/context.sh is sourced first.
+# Defines functions only; scripts/auto-run is the command line.
 #
 # AR_SESSION names the caller. A caller whose session the run is not bound to
 # sees no run, so another session in the same repository never acts on it.
@@ -558,13 +557,11 @@ AR_HIGH_PCT=90
 AR_AFTER_HANDOFF_PCT=85
 AR_AFTER_HIGH_PCT=85
 
-# ar_limit BUDGET WINDOW N REGIME — where a checkpoint covering N tasks
-# compacts: the task budget, or AR_HIGH_PCT of the window in the high regime,
-# less one task's worst growth for each task beside the first.
+# ar_limit BUDGET WINDOW REGIME — where a checkpoint compacts: the task
+# budget, or AR_HIGH_PCT of the window in the high regime.
 ar_limit() {
   local limit
-  if [ "$4" = high ]; then limit=$(( $2 * AR_HIGH_PCT / 100 )); else limit=$1; fi
-  limit=$(( limit - ($3 - 1) * CTX_TASK_MARGIN ))
+  if [ "$3" = high ]; then limit=$(( $2 * AR_HIGH_PCT / 100 )); else limit=$1; fi
   [ "$limit" -gt 0 ] || limit=1
   echo "$limit"
 }
@@ -600,14 +597,14 @@ ar_settle() {
   echo continue
 }
 
-# ar_verdict TOKENS BUDGET WINDOW [N] — prints "<ok|compact|handoff> <limit>
+# ar_verdict TOKENS BUDGET WINDOW — prints "<ok|compact|handoff> <limit>
 # <regime>". A compaction not yet measured is settled first with TOKENS as its
-# size; a pending clear is a handoff in progress. An ok clears a compaction a
-# wider wave probe requested, and a resume the cockpit never confirmed: the
-# session measuring itself is the resumed one. Once a compaction ran in the final phases
+# size; a pending clear is a handoff in progress. An ok clears a pending
+# compaction, and a resume the cockpit never confirmed: the session measuring
+# itself is the resumed one. Once a compaction ran in the final phases
 # (finalCompacted) it never asks for another: Claude Code's own is the backstop.
 ar_verdict() {
-  local tokens=$1 budget=$2 window=$3 n=${4:-1} pending regime limit settled
+  local tokens=$1 budget=$2 window=$3 pending regime limit settled
   pending=$(ar_get pending)
   if [ "$pending" = after-compact ]; then
     settled=$(ar_settle "$tokens" "$budget" "$window") || return $?
@@ -615,7 +612,7 @@ ar_verdict() {
   fi
   regime=$(ar_get regime)
   regime=${regime:-normal}
-  limit=$(ar_limit "$budget" "$window" "$n" "$regime")
+  limit=$(ar_limit "$budget" "$window" "$regime")
   if [ "$pending" = handoff ] || [ "$pending" = clear ]; then
     echo "handoff $limit $regime"
   elif [ "$tokens" -ge "$limit" ] && ! ar_state | ar_jq -e '.finalCompacted == true' >/dev/null 2>&1; then

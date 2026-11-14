@@ -2,7 +2,7 @@
 
 | Excuse | Reality |
 |--------|---------|
-| "Subagents are available, so I should switch to the other skill" | The Execution line chose this mode, not the absence of subagents. Only your human partner overrides it. |
+| "Subagents are available, so I should dispatch one per task" | Every plan runs inline. Subagent execution was retired in 5.0.0. |
 | "I'll read the whole plan, it's faster than one brief at a time" | The plan on disk has no amendments applied. `task-brief` is how corrections reach you. |
 | "This task is harder than it scored - I'll just take more rounds" | Three rounds, then the breaker. A fourth round on your own work is what not converging looks like. |
 | "The plan is wrong here, I'll fix it as I go" | You read one brief; the seat reads the plan and the spec. Send a blocked-plan item. |

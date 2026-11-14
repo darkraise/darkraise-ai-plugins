@@ -54,15 +54,35 @@ function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
+function isRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+}
+
+// What the lock file names as its holder: a pid, or null while the holder is
+// still writing it or the text is not one.
+function holderOf(file) {
+  const pid = Number.parseInt(readText(file) ?? '', 10);
+  return Number.isInteger(pid) && pid > 0 ? pid : null;
+}
+
 // Returns a release function, or null when another process still holds the
-// lock after waitMs. A lock older than staleMs was left by a killed process.
+// lock after waitMs. A lock whose holder process is gone was left by a killed
+// one, whatever its age; one that names no holder is stale after staleMs.
 export function acquireLock(file, { waitMs = 5000, staleMs = 30000 } = {}) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const deadline = Date.now() + waitMs;
+  const mine = String(process.pid);
   for (;;) {
     try {
-      fs.closeSync(fs.openSync(file, 'wx'));
-      return () => fs.rmSync(file, { force: true });
+      fs.writeFileSync(file, mine, { flag: 'wx' });
+      return () => {
+        if (readText(file) === mine) fs.rmSync(file, { force: true });
+      };
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
     }
@@ -72,8 +92,26 @@ export function acquireLock(file, { waitMs = 5000, staleMs = 30000 } = {}) {
     } catch {
       continue;
     }
-    if (age > staleMs) fs.rmSync(file, { force: true });
-    else if (Date.now() >= deadline) return null;
+    const holder = holderOf(file);
+    if (holder !== null ? !isRunning(holder) : age > staleMs) {
+      // Renaming claims the stale file; a lock another waiter created since the
+      // check is put back rather than removed.
+      const claimed = `${file}.${process.pid}.stale`;
+      try {
+        fs.renameSync(file, claimed);
+      } catch {
+        continue;
+      }
+      if (holderOf(claimed) === holder) fs.rmSync(claimed, { force: true });
+      else {
+        try {
+          fs.linkSync(claimed, file);
+        } catch {
+          // Another lock exists already; that holder keeps it.
+        }
+        fs.rmSync(claimed, { force: true });
+      }
+    } else if (Date.now() >= deadline) return null;
     else sleepSync(20);
   }
 }

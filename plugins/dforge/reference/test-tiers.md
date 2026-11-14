@@ -9,7 +9,7 @@ full run. The Sweep tier runs in CI.
 | Tier | Command source | Runs |
 |---|---|---|
 | Task check | the plan header's `**Task check:**` line | beside every task review, every fix round, and inline before every task commit |
-| Full suite | the plan header's `**Integration check:**` line | each wave's merged check, tasks whose number is a multiple of 3 (and the last task) when the task check is `none`, the final review, the fix wave, finishing |
+| Full suite | the plan header's `**Integration check:**` line | tasks whose number is a multiple of 3 (and the last task) when the task check is `none`, the final review, the fix wave, finishing |
 | Sweep | the project's CI | after the push |
 
 ## Impact selection

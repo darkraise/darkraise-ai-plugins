@@ -45,7 +45,7 @@ Then:
      settle, with the recommended option first;
    - when the CI configuration has an uncovered platform, ask whether to run
      CI early on the pushed branch, with the options
-     `No early run (Recommended)`, `After the first wave or task` and
+     `No early run (Recommended)`, `After the first task` and
      `Midway through the plan`; record the answer in `## Decisions` as
      `Early CI: none` or `Early CI: <first|midway> — consented <YYYY-MM-DD>`;
      the answer is the consent for the push and the workflow dispatch;

@@ -1,16 +1,14 @@
-## Assign an implementer to every task
+## Score every task
 
-Every task records which implementer runs it, so the choice is a property of
-the plan rather than a judgment made from memory at dispatch time. Do this
-after the tasks are drafted and before the plan is committed. Retrofitting an
-existing plan is the same process: read it, rename any skill or agent written
-under an older plugin prefix to its `dforge:` name, score each task, and add
-the lines.
+Every task records its score, so the Execution line's floor and the risk-3
+tasks a judge reviews are properties of the plan rather than judgments made
+from memory during execution. Do this after the tasks are drafted and before
+the plan is committed. Retrofitting an existing plan is the same process: read
+it, score each task, and add the lines.
 
 **Codex host:** follow [native-codex.md](../../../reference/native-codex.md) — its
-`codex-v4` selector, plan headers, assignment-source fields, and conversion
-rules replace the Claude table and fleet below. Honor the
-user's inline or delegation preference on either host.
+`codex-v4` selector, plan headers and conversion rules replace the Claude
+floor table below.
 
 1. **Score** each task on the four axes in
    [ladder.md](../../../reference/ladder.md) — files, spec completeness,
@@ -27,14 +25,12 @@ user's inline or delegation preference on either host.
    approach is undecided: settle it with dforge:selecting-approaches, rewrite
    the task with the decision in its steps, and re-score. Never answer a
    reducible axis with a bigger model.
-3. **Assign** from the assignment table, which the total indexes directly.
-   Never assign a reserve agent — any `xhigh` or `max` effort, any Fable
-   tier. Only a human edit puts one in a plan.
+3. **Read the floor.** The execution floor table in ladder.md maps the
+   highest total to the least model and effort the Execution line may name;
+   see [execution-line.md](execution-line.md).
 4. **Write the lines** directly below the task's `**Depends on:**` line, or
    its `**Items:**` line, or its `**Interfaces:**` block when it has neither,
    in this order:
-   - `**Implementer:**` — always; the fully qualified agent, for example
-     `dforge:impl-sonnet-low`
    - `**Evaluation:**` — always, for example
      `files 0 - spec 1 - coupling 1 - risk 0 = 2`
    - `**Approach:**` — only when the task involved an approach decision:
@@ -48,7 +44,6 @@ user's inline or delegation preference on either host.
      rejects the line below risk 3 and an id with no lens file.
 
    ```markdown
-   **Implementer:** dforge:impl-sonnet-high
    **Evaluation:** files 1 - spec 0 - coupling 2 - risk 2 = 5
    **Approach:** inline - skip 2: follows the existing exporter pattern
    ```
@@ -56,15 +51,10 @@ user's inline or delegation preference on either host.
 5. **Keep the heading form** `### Task N: <name>`: `scripts/task-brief` finds a
    task by a heading that begins with `Task <N>`.
 
-A human may edit any `**Implementer:**` line by hand;
-dforge:subagent-driven-development obeys it and never recomputes.
-Leave the `**Evaluation:**` line in place — the gap between the score and the
-choice is the interesting part. A hand edit that breaks a checked rule — a
-reserve tier, a kept `spec = 3`, a table mismatch — carries an
-`**Override:** <reason>` line below the Evaluation line, and `plan-lint` then
-reports it as a warning. Never write an Override line yourself. Under
-dforge:executing-plans the session implements every task, so the
-`**Implementer:**` line is read only by the deprecated subagent mode. No task
-carries an `**Executor:**` line: `plan-lint` warns that one is obsolete.
+A kept `spec = 3` carries an `**Override:** <reason>` line below the
+Evaluation line, and `plan-lint` then reports it as a warning. Never write an
+Override line yourself. Write no `**Implementer:**` line: an older plan's is
+ignored. No task carries an `**Executor:**` line: `plan-lint` warns that one
+is obsolete.
 [assigning-implementers.md](assigning-implementers.md) explains why
 each of these rules exists.

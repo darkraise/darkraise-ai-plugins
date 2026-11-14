@@ -227,13 +227,13 @@ claude --model sonnet --effort high
 Paste as the first prompt:
 
 ```
-Execute docs/plan.md with dforge:subagent-driven-development.
+Execute docs/plan.md with dforge:executing-plans.
 ```
 EOF
 ar --session s-1 clear --phase; status=$?
 check "clear --phase: exit 0" "$status" "0"
 check "clear --phase: pending clear, awaiting a rebind" "$(field pending) $(field rebind)" "clear true"
-check "clear --phase: the first prompt" "$(field resumePrompt)" "Execute docs/plan.md with dforge:subagent-driven-development."
+check "clear --phase: the first prompt" "$(field resumePrompt)" "Execute docs/plan.md with dforge:executing-plans."
 check "clear --phase: the launch" "$(jq -r '.launch | "\(.model) \(.effort)"' "$STATE")" "sonnet high"
 check "clear --phase: not a self-resume" "$(field resumes)" "0"
 
@@ -449,10 +449,8 @@ check "normal: ok leaves nothing pending" "$(field pending)" "null"
 out=$(verdict --tokens 465000); status=$?
 check "normal: at the budget, compact" "$status:$out" "6:compact 465000 normal"
 check "compact is pending" "$(field pending)" "compact"
-out=$(verdict --tokens 185000 --wave 3); status=$?
-check "a wave of three reserves two tasks" "$status:$out" "6:compact 185000 normal"
-out=$(verdict --tokens 184999 --wave 3)
-check "a narrower probe that fits cancels the compaction" "$out:$(field pending)" "ok 185000 normal:null"
+out=$(verdict --tokens 464999)
+check "an ok after a compact cancels the compaction" "$out:$(field pending)" "ok 465000 normal:null"
 ar --session s-1 compacted
 out=$(verdict --tokens 395249)
 check "after a compaction under 85% of the budget: normal" "$out:$(field pending)" "ok 465000 normal:null"
@@ -573,7 +571,7 @@ ar --session s-1 phase plan
 ar --session s-1 switch; status=$?
 check "switch: exit 0, switch pending" "$status:$(field pending)" "0:switch"
 check "switch: the phase moves to execute" "$(field phase)" "execute"
-check "switch: the first prompt" "$(field resumePrompt)" "Execute docs/plan.md with dforge:subagent-driven-development."
+check "switch: the first prompt" "$(field resumePrompt)" "Execute docs/plan.md with dforge:executing-plans."
 check "switch: the launch" "$(jq -r '.launch | "\(.model) \(.effort)"' "$STATE")" "sonnet high"
 check "switch: not a self-resume, no rebind" "$(field resumes):$(field rebind)" "0:false"
 check "pending prints switch" "$(ar --session s-1 pending)" "switch"
@@ -598,7 +596,7 @@ ar --session s-1 phase finish
 # The prompt next-step writes for a clean final review (next-step.test.sh).
 finish_prompt='Resume `docs/plan.md` with dforge:resume-execution. Run dforge:finishing-a-development-branch.'
 cp "$REPO/.dforge/handoff/latest.md" "$TMP/latest.keep"
-sed "s|^Execute docs/plan.md with dforge:subagent-driven-development\.$|$finish_prompt|" "$TMP/latest.keep" > "$REPO/.dforge/handoff/latest.md"
+sed "s|^Execute docs/plan.md with dforge:executing-plans\.$|$finish_prompt|" "$TMP/latest.keep" > "$REPO/.dforge/handoff/latest.md"
 ar --session s-1 clear --phase; status=$?
 check "finishing's clear: exit 0, phase finish, clear pending" "$status:$(field phase):$(field pending)" "0:finish:clear"
 check "finishing's clear: no self-resume" "$(field resumes)" "0"

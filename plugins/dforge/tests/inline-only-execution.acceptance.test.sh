@@ -103,10 +103,10 @@ EOF
 }
 agent_for() { # the assignment table, by total
   case $1 in
-    0|1|2) echo dforge:impl-sonnet-low ;;
-    3|4) echo dforge:impl-sonnet-medium ;;
+    0|1|2) echo dforge:impl-sonnet-high ;;
+    3|4) echo dforge:impl-sonnet-high ;;
     5) echo dforge:impl-sonnet-high ;;
-    *) echo dforge:impl-opus-high ;;
+    *) echo dforge:impl-sonnet-high ;;
   esac
 }
 # plan <execution text> <spec of each task: "files spec coupling risk[ executor]">... — writes the plan on stdout
@@ -138,7 +138,7 @@ T3R2="0 1 0 2"     # total 3, risk 2
 T1="0 0 1 0"       # total 1
 
 lint() { # lint <plan> — sets lout, lrc
-  lout=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/plan-lint" "$1" --no-probe 2>&1); lrc=$?
+  lout=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/plan-lint" "$1" 2>&1); lrc=$?
   lout=${lout//$'\r'/}
 }
 brief() { # brief <plan> <n> <out>
@@ -149,7 +149,6 @@ mk() { # mk <name> <plan args...> — writes $REPO/docs/plans/<name>.md and echo
   plan "$@" > "$REPO/docs/plans/$name.md"
   printf '%s\n' "$REPO/docs/plans/$name.md"
 }
-nows() { tr -s ' \t' ' ' <<<"$1"; }
 
 # ----------------------------------------------------------------------- A1
 if selected A1; then
@@ -176,37 +175,10 @@ fi
 
 # ----------------------------------------------------------------------- A3
 if selected A3; then
-  DEPR='WARN header: subagent execution is deprecated; inline is the default'
   P=$(mk a3a 'subagent — claude --model sonnet --effort high — x' --parallelism '**Parallelism:** sequential — one task at a time' "$T1" "$T1" "$T1")
   lint "$P"
-  check "A3: subagent plan with no heavy task: exit 0" "$lrc" "0"
-  has "A3: the deprecation WARN" "$lout" "$DEPR"
-  unmatched "A3: no majority-rule warning (no heavy task)" "$lout" 'heavy'
-  unmatched "A3: no ERROR (no heavy task)" "$lout" '^ERROR'
-  P=$(mk a3b 'subagent — claude --model sonnet --effort high — x' --parallelism '**Parallelism:** sequential — one task at a time' "$HEAVY6" "$T1")
-  lint "$P"
-  check "A3: subagent plan with a heavy minority: exit 0" "$lrc" "0"
-  has "A3: the deprecation WARN (heavy minority)" "$lout" "$DEPR"
-  unmatched "A3: no majority-rule warning (heavy minority)" "$lout" 'heavy'
-  unmatched "A3: no ERROR (heavy minority)" "$lout" '^ERROR'
-  P=$(mk a3c 'subagent — claude --model sonnet --effort high — x' --parallelism '**Parallelism:** sequential — one task at a time' "$HEAVY6" "$HEAVY8")
-  lint "$P"
-  check "A3: subagent plan with every task heavy: exit 0" "$lrc" "0"
-  has "A3: the deprecation WARN (all heavy)" "$lout" "$DEPR"
-  unmatched "A3: no majority-rule warning (all heavy)" "$lout" 'heavy'
-  unmatched "A3: no ERROR (all heavy)" "$lout" '^ERROR'
-fi
-
-# ----------------------------------------------------------------------- A4
-if selected A4; then
-  P=$(mk a4 'inline — claude --model opus --effort high — x' "$HEAVY6" "$T1" "$T3R3" "$HEAVY8")
-  for n in 1 3 4; do
-    brief "$P" "$n" "$TMP/a4-brief-$n.md"
-    [ -s "$TMP/a4-brief-$n.md" ] || printf 'FAIL - A4: task-brief wrote no brief for task %s\n' "$n"
-    unmatched "A4: task $n's brief has no Dispatch: delegated line" "$(cat "$TMP/a4-brief-$n.md" 2>/dev/null)" '^\*\*Dispatch:\*\* delegated'
-  done
-  (cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/task-brief" --header "$P" "$TMP/a4-header.md" >/dev/null 2>&1)
-  unmatched "A4: the header has no Dispatch: delegated line" "$(cat "$TMP/a4-header.md" 2>/dev/null)" '^\*\*Dispatch:\*\* delegated'
+  check "A3: a subagent plan: exit 1" "$lrc" "1"
+  has "A3: the retirement ERROR" "$lout" 'ERROR header: subagent execution was retired in 5.0.0; use inline'
 fi
 
 # ----------------------------------------------------------------------- A5
@@ -217,16 +189,13 @@ if selected A5; then
   brief "$P" 3 "$TMP/a5-3.md"
   check "A5: another risk-3 task's brief has the Review line second" "$(sed -n 2p "$TMP/a5-3.md" | tr -d '\r')" '**Review:** per-task — risk 3'
   brief "$P" 1 "$TMP/a5-1.md"
-  [ -s "$TMP/a5-1.md" ] || printf 'FAIL - A5: task-brief wrote no brief for task 1\n'
+  check "A5: task-brief wrote a brief for task 1" "$([ -s "$TMP/a5-1.md" ] && echo yes || echo no)" "yes"
   unmatched "A5: a total-6 risk-2 task's brief has no Review: per-task line" "$(cat "$TMP/a5-1.md" 2>/dev/null)" '^\*\*Review:\*\* per-task'
   unmatched "A5: a total-6 risk-2 task's second line is not a Review line" "$(sed -n 2p "$TMP/a5-1.md" 2>/dev/null)" '^\*\*Review:\*\*'
 fi
 
 # ----------------------------------------------------------------------- A7
 if selected A7; then
-  out=$(cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/dforge-config" get executionStrategy 2>&1); rc=$?
-  check "A7: get executionStrategy exits 0" "$rc" "0"
-  check "A7: get executionStrategy prints sequential" "$out" "sequential"
   out=$(cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/dforge-config" workflow 2>&1); rc=$?
   check "A7: workflow exits 0" "$rc" "0"
   check "A7: workflow prints nothing" "$out" ""
@@ -236,16 +205,6 @@ fi
 if selected A8; then
   check "A8: agents/drafter-sonnet.md does not exist" "$([ -e "$PLUGIN/agents/drafter-sonnet.md" ] && echo exists || echo absent)" "absent"
   check "A8: agents/scout-sonnet.md does not exist" "$([ -e "$PLUGIN/agents/scout-sonnet.md" ] && echo exists || echo absent)" "absent"
-fi
-
-# ---------------------------------------------------------------------- A11
-if selected A11; then
-  printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: implementer inline (assigned; base abc1234)\nTask 3: escalated inline -> subagent — three fix rounds at or above the assigned tier\n' > "$TMP/a11-ledger.md"
-  got=$(bash -c '. "$1"; ledger_left_inline "$2"' _ "$S/lib/plan.sh" "$TMP/a11-ledger.md" 2>&1 | tr -d '\r')
-  check "A11: ledger_left_inline returns the task number for the old escalation line" "$got" "3"
-  printf '# SDD ledger — plan: docs/plans/p.md\nTask 1: implementer inline (assigned; base abc1234)\nTask 1: complete (unreviewed)\nTask 2: escalated inline -> subagent — owner request\n' > "$TMP/a11-owner.md"
-  got=$(bash -c '. "$1"; ledger_left_inline "$2"' _ "$S/lib/plan.sh" "$TMP/a11-owner.md" 2>&1 | tr -d '\r')
-  check "A11: ledger_left_inline returns the task number for an owner-request switch" "$got" "2"
 fi
 
 # ---------------------------------------------------------------------- A12
@@ -345,9 +304,9 @@ fi
 if selected A14; then
   P=$(mk p 'inline — claude --model opus --effort high — x' "$T5" "$T3R3")
   g add -A && g commit -qm init
-  start=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/task-step" start "$P" 2 --inline 2>&1); rc=$?
+  start=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/task-step" start "$P" 2 2>&1); rc=$?
   start=${start//$'\r'/}
-  check "A14: task-step start 2 --inline exits 0" "$rc" "0"
+  check "A14: task-step start 2 exits 0" "$rc" "0"
   step=$(find "$REPO/.dforge" -name 'task-2-step.json' 2>/dev/null | head -n 1)
   check "A14: step state task-2-step.json is written" "$([ -n "$step" ] && echo yes || echo no)" "yes"
   ws=$(dirname "${step:-$REPO/.dforge/none}")

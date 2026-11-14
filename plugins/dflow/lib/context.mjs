@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { readJson } from './util.mjs';
+import { readText } from './util.mjs';
 
 const TAIL_BYTES = 1024 * 1024;
 const FRESH_MS = 10 * 60 * 1000;
@@ -42,12 +42,25 @@ function contextFile(ctx, session) {
   return path.join(ctx.paths.stateDir, 'context', `${session.replace(/[^A-Za-z0-9_-]/g, '_')}.json`);
 }
 
+// The mod rewrites these files as the figure moves, so a torn one is likely
+// enough that it reads as no figure and is removed, never as an error.
+function readEntry(file) {
+  const text = readText(file);
+  if (text === null) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    fs.rmSync(file, { force: true });
+    return null;
+  }
+}
+
 // Inside a session the CLI reads that session's own figure (the harness sets
 // CLAUDE_CODE_SESSION_ID for its shell); run by hand, the freshest one.
 // Files of sessions gone for a week are removed on the way.
 function liveContext(ctx, now) {
   const session = ctx.env.CLAUDE_CODE_SESSION_ID;
-  if (session) return readJson(contextFile(ctx, session), null);
+  if (session) return readEntry(contextFile(ctx, session));
   const dir = path.join(ctx.paths.stateDir, 'context');
   let names = [];
   try {
@@ -57,7 +70,7 @@ function liveContext(ctx, now) {
   }
   const entries = names.flatMap(name => {
     const file = path.join(dir, name);
-    const entry = readJson(file, null);
+    const entry = readEntry(file);
     const at = Date.parse(entry?.at ?? '');
     if (!Number.isFinite(at) || now - at > KEEP_MS) {
       fs.rmSync(file, { force: true });

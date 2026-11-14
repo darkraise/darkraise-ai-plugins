@@ -56,7 +56,7 @@ claude_plan() {
 
 **Spec:** `docs/spec.md`
 
-**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4
+**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4
 
 **Program:** `docs/program.md` — sub-project 1 of 2 — next: Second part
 
@@ -90,7 +90,7 @@ None
 **Files:**
 - Create: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 - [ ] **Step 1: Write the failing test**
@@ -105,7 +105,7 @@ echo hi
 **Files:**
 - Modify: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 **Approach:** inline - skip 2: follows the pattern
 
@@ -124,7 +124,7 @@ Routing policy: codex-v4
 
 **Spec:** docs/spec.md
 
-**Execution:** subagent — codex gpt-6.1-sol / high — native pair
+**Execution:** inline — codex gpt-6.1-sol / low — native pair
 
 **Task check:** `bash quick.sh` — gate 1 has Tier: task
 
@@ -173,9 +173,7 @@ if want one; then
 claude_plan > clean.md
 lint clean.md
 check "clean Claude plan: exit 0" "$status" "0"
-has "clean Claude plan: summary" "$out" "plan-lint: 0 errors, 2 warnings"
-has "a light plan on subagent is deprecated" "$out" "WARN header: subagent execution is deprecated; inline is the default"
-lacks "a plan with no heavy task gets no delegation note" "$out" "NOTE header"
+has "clean Claude plan: summary" "$out" "plan-lint: 0 errors, 1 warnings"
 has "fenced TODO is a warning" "$out" "WARN Task 1: placeholder: # a fenced TODO is only a warning"
 lacks "inline-code TODO is not a finding" "$out" 'for the `TODO` column'
 codex_plan > codex.md
@@ -228,7 +226,6 @@ variant v9.md 's/^\*\*Execution:\*\* .*/**Execution:** inline -- claude --model 
 lint v9.md
 lacks "inline at total 4 needs no opus" "$out" "needs --model opus"
 lacks "inline at total 4 runs at effort medium" "$out" "inline execution needs --effort"
-lacks "inline at total 4 passes R5" "$out" "inline execution needs every task"
 lacks "double-hyphen separators and bare command parse" "$out" "Execution line does not match"
 variant v9b.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — Task 2 scores 4/'
 lint v9b.md
@@ -236,48 +233,39 @@ lacks "inline at total 4 on opus is clean" "$out" "ERROR header: inline"
 variant v9c.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9c.md
 has "a total-5 task needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
-lacks "a heavy minority no longer breaks inline" "$out" "inline execution needs every task"
-lacks "inline does not delegate the heavy task" "$out" "(heavy)"
 variant v9c2.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model sonnet --effort high` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9c2.md
 check "a heavy minority inline at effort high: exit 0" "$status" "0"
 lacks "the model follows the tasks the session implements" "$out" "needs --model opus"
-lacks "a heavy minority on inline does not warn" "$out" "Execution line is inline but"
 variant v9d.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 0 - coupling 1 - risk 3 = 4/'
 lint v9d.md
-lacks "risk 3 is not delegated" "$out" "(heavy)"
 has "risk 3 inline needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
-variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dforge:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
+variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dforge:impl-sonnet-high$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
 lint v9j.md
-lacks "a split task with a heavy part is not delegated" "$out" "(heavy)"
 check "a split task with a heavy part inline at effort high: exit 0" "$status" "0"
 variant v9h.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9h.md
-lacks "a heavy majority on inline does not warn" "$out" "Execution line is inline but"
 variant v9i.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9i.md
-lacks "a heavy majority on subagent gets no majority warning" "$out" "tasks are heavy"
-codex_plan | sed -E 's/^\*\*Execution:\*\* subagent/**Execution:** inline/; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* inline — codex gpt-6.1-sol / low#**Execution:** inline — codex gpt-6.1-sol / high#; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline.md
 lint codex-inline.md
-lacks "A12: a Codex-host inline plan with a heavy task has no eligibility error" "$out" "inline execution needs every task"
-lacks "a Codex-host plan gets no delegation note" "$out" "NOTE header"
 has "a Codex inline pair below the highest score errors" "$out" "ERROR header: inline Execution rank 5 is below the highest task score 9"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6-astra / xhigh#; s#^\*\*Implementer:\*\* codex gpt-6.1-sol / low#**Implementer:** codex gpt-6-astra / xhigh#; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline-heavy-fit.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* inline — codex gpt-6.1-sol / low#**Execution:** inline — codex gpt-6-astra / xhigh#; s#^\*\*Implementer:\*\* codex gpt-6.1-sol / low#**Implementer:** codex gpt-6-astra / xhigh#; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline-heavy-fit.md
 lint codex-inline-heavy-fit.md
 check "A12: a heavy Codex inline plan at its rank: exit 0" "$status" "0"
 lacks "A12: a heavy Codex inline plan at its rank lints without error" "$out" "ERROR"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** subagent — codex gpt-6-astra / high#' > codex-sub-astra.md
-lint codex-sub-astra.md
-check "Codex subagent on Astra: exit 0" "$status" "0"
-has "Codex subagent on Astra warns" "$out" "WARN header: subagent Execution line should be codex gpt-6.1-sol / high"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6.1-sol / low#' > codex-inline-fit.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* inline#**Execution:** subagent#' > codex-sub.md
+lint codex-sub.md
+check "Codex subagent line: exit 1" "$status" "1"
+has "Codex subagent line is an error" "$out" "ERROR header: subagent execution was retired in 5.0.0; use inline"
+codex_plan | sed -E 's#^\*\*Execution:\*\* inline — codex gpt-6.1-sol / low#**Execution:** inline — codex gpt-6.1-sol / low#' > codex-inline-fit.md
 lint codex-inline-fit.md
 check "Codex inline at the highest score: clean" "$out" "plan-lint: 0 errors, 0 warnings"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6-astra / high#' > codex-inline-over.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* inline — codex gpt-6.1-sol / low#**Execution:** inline — codex gpt-6-astra / high#' > codex-inline-over.md
 lint codex-inline-over.md
 check "Codex inline above the highest score: exit 0" "$status" "0"
 has "Codex inline above the highest score warns" "$out" "WARN header: inline Execution rank 8 is above the highest task score 3"
-codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6-astra / max#' > codex-inline-reserve.md
+codex_plan | sed -E 's#^\*\*Execution:\*\* inline — codex gpt-6.1-sol / low#**Execution:** inline — codex gpt-6-astra / max#' > codex-inline-reserve.md
 lint codex-inline-reserve.md
 has "Codex inline on a reserve pair warns" "$out" "WARN header: inline Execution pair codex gpt-6-astra / max is a reserve tier; the highest task score is 3"
 
@@ -311,11 +299,9 @@ tplan() { # tplan <file> <mode> <model> <effort> <total ...> — one clean task 
 tplan r1.md inline sonnet high 1 4 1 1 1 1
 lint r1.md
 check "one total-4 task in six on sonnet high: exit 0" "$status" "0"
-lacks "one total-4 task in six is not delegated" "$out" "NOTE header"
 lacks "a self-implemented total-4 task needs no Opus session" "$out" "needs --model opus"
 tplan r3.md inline sonnet high 4 4 4 1 1 1
 lint r3.md
-lacks "three total-4 tasks in six are not delegated either" "$out" "NOTE header"
 check "three self-implemented total-4 tasks on sonnet high: exit 0" "$status" "0"
 tplan r4.md inline opus high 4 4 4 1 1 1
 lint r4.md
@@ -323,8 +309,6 @@ check "three total-4 tasks in six on opus high: exit 0" "$status" "0"
 tplan r5.md inline sonnet high 5 4 1 1 1 1
 lint r5.md
 check "a heavy and a total-4 task on sonnet high: exit 0" "$status" "0"
-lacks "the heavy task is not delegated" "$out" "(heavy)"
-lacks "total 4 is no delegation reason" "$out" "(total 4)"
 tplan r6.md inline sonnet medium 1 4 1 1 1 1
 lint r6.md
 check "a self-implemented total 4 runs at effort medium: exit 0" "$status" "0"
@@ -360,17 +344,13 @@ lint r14.md
 has "a model id naming neither family is a model error" "$out" "ERROR header: inline execution needs --model sonnet or opus (model claude-haiku-4-5)"
 tplan r15.md subagent opus high 5 5 5 5 1 1
 lint r15.md
-has "a subagent line at opus warns" "$out" "WARN header: subagent Execution line should be claude --model sonnet --effort high"
-lacks "a heavy majority on subagent is not disputed" "$out" "tasks are heavy"
-tplan r16.md subagent sonnet high 5 5 5 5 1 1
-lint r16.md
-lacks "a subagent line at sonnet high does not warn" "$out" "subagent Execution line should be"
+has "a subagent line is an error" "$out" "ERROR header: subagent execution was retired in 5.0.0; use inline"
+lacks "a subagent line gets no inline pair findings" "$out" "inline execution needs"
 tplan r17.md inline opus low 1 1 1 1 1 1
 lint r17.md
 check "opus where sonnet would do: exit 0" "$status" "0"
 tplan r18.md subagent sonnet high 1 4 4 1 1 1
 lint r18.md
-lacks "a subagent plan gets no majority-rule warning" "$out" "tasks are heavy"
 
 variant v9e.md 's/^### Task 1: First thing$/### Task 1: -v flag/; s/^1\. First thing$/1. -v flag/'
 lint v9e.md
@@ -378,7 +358,7 @@ lacks "leading punctuation in a title survives the index check" "$out" "Task ind
 variant v9f.md '/^## Contracts$/{N;N;s/.*/```text\n## Contracts\n```/}'
 lint v9f.md
 has "a fenced section heading does not count" "$out" "ERROR header: missing '## Contracts' section"
-variant v9g.md 's/^\*\*Implementer:\*\* dforge:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-medium/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
+variant v9g.md 's/^\*\*Implementer:\*\* dforge:impl-sonnet-high$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
 lint v9g.md
 has "split parts: part B is missing its Evaluation" "$out" "ERROR Task 2 part B: missing **Evaluation:** line"
 lacks "split parts: part A is clean" "$out" "Task 2 part A"
@@ -415,7 +395,7 @@ lint t2c.md
 lacks "total 8 is assigned impl-opus-high" "$out" "ERROR Task 2"
 variant t2d.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 2 - spec 2 - coupling 1 - risk 2 = 7/'
 lint t2d.md
-has "total 7 names impl-opus-high" "$out" "ERROR Task 2: Implementer impl-sonnet-medium does not match the assignment table's impl-opus-high for total 7"
+lacks "an Implementer line is not checked against the total" "$out" "Implementer"
 variant t2e.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 3 - coupling 0 - risk 0 = 3/'
 lint t2e.md
 has "spec 3 fails Rule S without an override" "$out" "ERROR Task 2: Rule S: files+spec+coupling must be below 6 and spec below 3"
@@ -424,28 +404,10 @@ lint t2f.md
 has "an Override keeps a spec-3 task as a warning" "$out" "WARN Task 2: Rule S: files+spec+coupling must be below 6 and spec below 3"
 variant t3.md 's/impl-sonnet-medium$/impl-sonnet-high/'
 lint t3.md
-has "wrong agent" "$out" "ERROR Task 2: Implementer impl-sonnet-high does not match the assignment table's impl-sonnet-medium for total 4"
-variant t3b.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-opus-medium/'
-lint t3b.md
-has "a 1.23.0 total-5 agent is an error" "$out" "ERROR Task 2: Implementer impl-opus-medium does not match the assignment table's impl-sonnet-high for total 5"
-variant t3c.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-opus-medium/; s/^(\*\*Approach:\*\* .*)$/\1\n**Override:** owner kept Opus here/'
-lint t3c.md
-check "an Override keeps a 1.23.0 agent: exit 0" "$status" "0"
-has "an Override keeps a 1.23.0 agent as a warning" "$out" "WARN Task 2: Implementer impl-opus-medium does not match the assignment table's impl-sonnet-high for total 5"
-variant t4.md 's/impl-sonnet-medium$/impl-fable-high/'
-lint t4.md
-has "reserve name" "$out" "ERROR Task 2: impl-fable-high is a reserve tier; it needs a human **Override:**"
-variant t5.md 's/impl-sonnet-medium$/impl-fable-high/; s/^(\*\*Approach:\*\* .*)$/\1\n**Override:** owner wants Fable here/'
-lint t5.md
-check "Override downgrades: exit 0" "$status" "0"
-has "Override downgrades to WARN" "$out" "WARN Task 2: impl-fable-high is a reserve tier"
+lacks "a mismatched Implementer line is ignored" "$out" "Implementer"
 variant t6.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 3 = 6/; s/impl-sonnet-medium$/impl-opus-high/'
 lint t6.md
 lacks "impl-opus-high at total 6 is not a reserve finding" "$out" "reserve tier"
-lacks "impl-opus-high at total 6 matches" "$out" "does not match the assignment"
-variant t7.md "s/^(\*\*Implementer:\*\*) dforge:impl-sonnet-low$/\1 old-$(printf 'plug'):impl-sonnet-low/"
-lint t7.md
-has "an older plugin prefix is an error" "$out" "ERROR Task 1: Implementer 'old-plug:impl-sonnet-low' is not a dforge agent (dforge:impl-sonnet-low)"
 variant t8.md 's/^\*\*Approach:\*\* .*/**Approach:** inline - follows the pattern/'
 lint t8.md
 has "inline Approach needs skip" "$out" "ERROR Task 2: an inline Approach must cite 'skip <n>'"
@@ -466,39 +428,29 @@ has "Rule S on a Codex plan still rejects reducible 4" "$out" "ERROR Task 1: Rul
 codex_plan | sed 's/weighted routing score=3/weighted routing score=4/' > c1.md
 lint c1.md
 has "weighted score mismatch" "$out" "ERROR Task 1: weighted routing score 4 is not files+spec+coupling+2*risk = 3"
-codex_plan | sed 's#gpt-6.1-sol / low#gpt-6-luna / high#' > c2.md
-lint c2.md
-has "rank below score" "$out" "ERROR Task 1: Implementer rank 2 is below routing score 3"
-codex_plan | sed 's#gpt-6.1-sol / low#gpt-6.1-sol / medium#' > c3.md
-lint c3.md
-check "promotion: exit 0" "$status" "0"
-has "promotion warns" "$out" "WARN Task 1: Implementer rank 4 is above routing score 3 (promotion)"
 codex_plan | sed 's#^Routing policy: codex-v4$#Routing policy: codex-v2#; s#codex gpt-6.1-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6.1-sol / low#codex gpt-5.6-terra / medium#' > cv2.md
 lint cv2.md
 check "codex-v2 plan: exit 1" "$status" "1"
 has "codex-v2 plan: conversion error" "$out" "ERROR header: Routing policy is codex-v2, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
 lacks "codex-v2 plan: no Execution pair error" "$out" "is not in codex-routing.json"
-lacks "codex-v2 plan: no Implementer tier error" "$out" "is not an execution tier"
 has "codex-v2 plan: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
 codex_plan | sed '/^Routing policy:/d; s#codex gpt-6.1-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6.1-sol / low#codex gpt-5.6-terra / medium#' > cnone.md
 lint cnone.md
 check "no Routing policy line: exit 1" "$status" "1"
 has "no Routing policy line: conversion error names it missing" "$out" "ERROR header: Routing policy is missing, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
 lacks "no Routing policy line: no Execution pair error" "$out" "is not in codex-routing.json"
-lacks "no Routing policy line: no Implementer tier error" "$out" "is not an execution tier"
 has "no Routing policy line: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
 codex_plan | sed '/^Routing policy:/d; s#codex gpt-6.1-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6.1-sol / low#codex gpt-5.6-terra / medium#; s#^\*\*Goal:\*\* Demo\.$#**Goal:** Demo.\n\n```text\nRouting policy: codex-v4\n```#' > cfenced.md
 lint cfenced.md
 has "a fenced Routing policy line does not count" "$out" "ERROR header: Routing policy is missing, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
 lacks "a fenced Routing policy line: no Execution pair error" "$out" "is not in codex-routing.json"
-lacks "a fenced Routing policy line: no Implementer tier error" "$out" "is not an execution tier"
 has "a fenced Routing policy line: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
 # A fenced Host line is an example, not the host: the plan stays a Claude plan.
 variant chost.md 's/^\*\*Goal:\*\* Demo\.$/**Goal:** Demo.\n\n```text\nHost: codex\n```/'
 lint chost.md
 check "a fenced Host line: exit 0" "$status" "0"
 lacks "a fenced Host line: no Codex checks" "$out" "Routing policy"
-has "a fenced Host line: lints as the Claude plan" "$out" "plan-lint: 0 errors, 2 warnings"
+has "a fenced Host line: lints as the Claude plan" "$out" "plan-lint: 0 errors, 1 warnings"
 # A backticked Routing policy value is the value.
 codex_plan | sed 's#^Routing policy: codex-v4$#Routing policy: `codex-v4`#' > cbt.md
 lint cbt.md
@@ -513,7 +465,6 @@ out=$(PATH="$TMP/nojq:$PATH" bash "$LINT" codex.md 2>&1); status=$?
 check "an unreadable routing policy: exit 2" "$status" "2"
 has "an unreadable routing policy: says so" "$out" "plan-lint: cannot read the routing policy version from"
 has "a failing jq: the file cannot be parsed" "$out" "codex-routing.json: the file cannot be parsed"
-lacks "an unreadable routing policy: no empty-policy finding" "$out" "not ;"
 # A copy of the scripts reads its own reference/codex-routing.json.
 KIT="$TMP/kit"
 mkdir -p "$KIT"
@@ -522,12 +473,10 @@ printf '{"tiers":{}}\n' > "$KIT/reference/codex-routing.json"
 out=$(bash "$KIT/scripts/plan-lint" codex.md 2>&1); status=$?
 check "a version-less routing policy: exit 2" "$status" "2"
 has "a version-less routing policy: says it has no version" "$out" "codex-routing.json: the file has no version"
-lacks "a version-less routing policy: does not blame jq" "$out" "jq installed"
 printf '{"version":\n' > "$KIT/reference/codex-routing.json"
 out=$(bash "$KIT/scripts/plan-lint" codex.md 2>&1); status=$?
 check "a corrupt routing policy: exit 2" "$status" "2"
 has "a corrupt routing policy: says it cannot be parsed" "$out" "codex-routing.json: the file cannot be parsed"
-lacks "a corrupt routing policy: does not blame jq" "$out" "jq installed"
 # No jq on PATH: wrappers for every other tool plan-lint runs before the check.
 # Not links: under Git Bash the linked tools did not run (dirname printed nothing).
 mkdir -p "$TMP/jqless"
@@ -559,9 +508,8 @@ check "an Executor line gets one warning" \
   "$(grep -c '^WARN Task 2: the \*\*Executor:\*\* line is obsolete; the session implements this task$' <<<"$out")" "1"
 check "the External executors header is accepted silently" "$(grep -c 'External executors' <<<"$out")" "0"
 check "an Executor line raises no effort floor" "$(grep -c -i 'delegated' <<<"$out")" "0"
-lint clean.md --no-probe --amendments am-none.md
+lint clean.md --amendments am-none.md
 check "flags parse in any order" "$status" "0"
-check "plan-amend never probes" "$(grep -c -- '--no-probe' "$HERE/../scripts/plan-amend")" "2"
 # --- amendments ---
 cat > am.md <<'EOF'
 ## A1 — Task 2
@@ -569,16 +517,16 @@ Reason: the plan picked the wrong tier
 Cost if wrong: one re-dispatch
 ### Old
 ````text
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dforge:impl-sonnet-high
 ````
 ### New
 ````text
-**Implementer:** dforge:impl-opus-medium
+**Implementer:** dforge:impl-sonnet-high
 ````
 EOF
 lint clean.md --amendments am.md
-has "amendments applied before checks" "$out" "ERROR Task 2: Implementer impl-opus-medium does not match"
-sed 's/impl-sonnet-medium$/impl-haiku/' am.md > am-bad.md
+lacks "an amendment that applies leaves no header error" "$out" "does not apply"
+sed 's/impl-sonnet-high$/impl-haiku/' am.md > am-bad.md
 lint clean.md --amendments am-bad.md
 has "non-applying amendment" "$out" "ERROR header: amendment A1 does not apply"
 
@@ -643,7 +591,7 @@ None.
 - Consumes: nothing
 - Produces: nothing
 $2
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 
 - [ ] **Step 1: Write the failing test**
@@ -655,23 +603,23 @@ PLAN
 }
 
 write_plan "next: Two" "**Items:** 1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 lacks "plan-lint: a cited row is covered" "$OUT" "register row #1"
 
 write_plan "next: Two" ""
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: an uncited assigned row is an error" "$OUT" \
   "ERROR header: register row #1 is assigned to this plan but no task cites it"
 has "plan-lint: a plan with no Items line warns" "$OUT" \
   "WARN header: a register covers this plan's spec but no task carries an **Items:** line"
 
 write_plan "next: Two" "**Items:** 1, 9"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: a dangling citation is an error" "$OUT" \
   "ERROR header: **Items:** cites #9, which no covering register holds"
 
 write_plan "last" "**Items:** 1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: 'last' with another sub-project's open row is an error" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
@@ -690,11 +638,11 @@ cat > "$LREPO/docs/dforge/registers/r.md" <<'REG'
 | 2 | Someone else's | C2 | - | planned | - |
 REG
 write_plan "next: Two" ""
-OUT=$(cd "$LREPO" && HOME="$TMP/name-key-home" bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && HOME="$TMP/name-key-home" bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: an Assigned cell under the other prefix is this plan's" "$OUT" \
   "ERROR header: register row #1 is assigned to this plan but no task cites it"
 write_plan "last" "**Items:** 1"
-OUT=$(cd "$LREPO" && HOME="$TMP/name-key-home" bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && HOME="$TMP/name-key-home" bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: 'last' leaves out this plan's row under the other prefix" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
@@ -711,11 +659,11 @@ cat > "$LREPO/docs/dforge/registers/r.md" <<'REG'
 | 2 | Someone else's | C2 | - | planned | - |
 REG
 write_plan "next: Two" ""
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: an empty Item cell: the row is still this plan's" "$OUT" \
   "ERROR header: register row #1 is assigned to this plan but no task cites it"
 write_plan "last" "**Items:** 1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: an empty Item cell: 'last' names only the other row" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
@@ -732,28 +680,28 @@ cat > "$LREPO/docs/dforge/registers/r2.md" <<'REG'
 | 1 | Also this plan's | docs/superpowers/plans/p.md | - | planned | - |
 REG
 write_plan "next: Two" "**Items:** 1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: a bare id two registers hold is ambiguous" "$OUT" \
   "ERROR header: **Items:** cites #1, which more than one covering register holds: write it as <register>#1"
 write_plan "next: Two" "**Items:** r#1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: a qualified citation leaves the other register's row uncited" "$OUT" \
   "ERROR header: register row r2#1 is assigned to this plan but no task cites it"
 lacks "plan-lint: a qualified citation covers its own row" "$OUT" "register row r#1"
 write_plan "next: Two" "**Items:** \`r#1\`, \`r2#1\`"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 lacks "plan-lint: qualified citations cover both rows" "$OUT" "register row"
 lacks "plan-lint: qualified citations are held" "$OUT" "**Items:** cites"
 write_plan "next: Two" "**Items:** r.md#1, r2.md#1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 lacks "plan-lint: a citation spelled with the .md suffix covers its row" "$OUT" "register row"
 lacks "plan-lint: a citation spelled with the .md suffix is held" "$OUT" "**Items:** cites"
 write_plan "next: Two" "**Items:** r2#2, r#1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: a qualified citation of a missing row is an error" "$OUT" \
   "ERROR header: **Items:** cites r2#2, which no covering register holds"
 write_plan "last" "**Items:** r#1, r2#1"
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 has "plan-lint: 'last' names the open row with its register" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: r#2"
 rm "$LREPO/docs/dforge/registers/r2.md"
@@ -761,7 +709,7 @@ rm "$LREPO/docs/dforge/registers/r2.md"
 # A plan with no covering register lints exactly as it did before.
 rm "$LREPO/docs/dforge/registers/r.md"
 write_plan "last" ""
-OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
+OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 lacks "plan-lint: no register means no register findings" "$OUT" "register row"
 lacks "plan-lint: no register means no premature-last finding" "$OUT" "register rows are open"
 
@@ -805,45 +753,45 @@ HDR
   } > "$1"
 }
 
-lintplan fenced-only.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n\n```markdown\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n```\n')"
+lintplan fenced-only.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n\n```markdown\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n```\n')"
 lint fenced-only.md
 has "a fenced-only score is a missing Evaluation line" "$out" "ERROR Task 1: missing **Evaluation:** line"
 
-lintplan stale-parent.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 1 = 6\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan stale-parent.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 1 = 6\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint stale-parent.md
 has "a stale parent score is a NOTE" "$out" \
   "NOTE Task 1: an **Evaluation:** line above the first part does not score the task"
 lacks "a stale parent score is not an error" "$out" "ERROR Task 1"
 check "the stale-parent fixture is otherwise clean" "$status" "0"
 
-lintplan stale-parent-exec.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan stale-parent-exec.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint stale-parent-exec.md
 check "a parent Executor line gets the obsolete warning once" \
   "$(grep -c '^WARN Task 1: the \*\*Executor:\*\* line is obsolete; the session implements this task$' <<<"$out")" "1"
 lacks "a stale parent Executor line is not an error" "$out" "ERROR Task 1"
 check "the stale-parent-exec fixture is otherwise clean" "$status" "0"
 
-lintplan lettered.md "$(printf '### Task A1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan lettered.md "$(printf '### Task A1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint lettered.md
 has "lettered headings are named" "$out" "ERROR header: task headings must be numbered ('### Task N: <title>'): ### Task A1: One is not read"
 lacks "lettered headings are not a generic missing-heading error" "$out" "no task headings"
 lacks "lettered headings are not an index mismatch" "$out" "Task index does not match"
 
-lintplan clean-split.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan clean-split.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint clean-split.md
 lacks "a clean split earns no NOTE" "$out" "above the first part"
 check "the clean-split fixture lints clean" "$status" "0"
 
-lintplan fenced-part.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n#### Part A: an example, not a part\n```\n')"
+lintplan fenced-part.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n#### Part A: an example, not a part\n```\n')"
 lint fenced-part.md
 lacks "a fenced part heading does not create a part" "$out" "Task 1 part A"
 
-lintplan fenced-files.md "$(printf '### Task 1: One\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Files:**\n- Create: `x.txt`\n```\n')"
+lintplan fenced-files.md "$(printf '### Task 1: One\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Files:**\n- Create: `x.txt`\n```\n')"
 lint fenced-files.md
 has "a fenced-only Files block is a missing Files block" "$out" "ERROR Task 1: missing **Files:** block"
 
-# --- parallel waves ---
-waves_plan() { # waves_plan <Parallelism value> — three tasks; Tasks 2 and 3 share wave 2
+# --- the Parallelism line ---
+three_task_plan() { # three_task_plan <Parallelism value> — three tasks
   cat <<EOF
 # Demo Implementation Plan
 
@@ -851,7 +799,7 @@ waves_plan() { # waves_plan <Parallelism value> — three tasks; Tasks 2 and 3 s
 
 **Spec:** \`docs/spec.md\`
 
-**Execution:** subagent — \`claude --model sonnet --effort high\` — parallel waves
+**Execution:** inline — \`claude --model sonnet --effort high\` — fixture
 
 **Parallelism:** $1
 
@@ -888,9 +836,7 @@ None
 **Files:**
 - Create: \`a.txt\`
 
-**Depends on:** none
-
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 2: Two
@@ -899,9 +845,7 @@ None
 - Create: \`b.txt\`
 - Test: \`t/b.test.sh:3-9\`
 
-**Depends on:** Task 1
-
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 3: Three
@@ -909,70 +853,21 @@ None
 **Files:**
 - Create: \`c.txt\`
 
-**Depends on:** Task 1
-
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 EOF
 }
-waves_plan 'waves — 1 | 2-3' > waves.md
-lint waves.md --no-probe
-check "waves: a clean plan exits 0" "$status" "0"
-lacks "waves: no majority-rule warning" "$out" "tasks are heavy"
-check "waves: only the deprecation warning" "$out" "WARN header: subagent execution is deprecated; inline is the default
-plan-lint: 0 errors, 1 warnings"
-waves_plan 'sequential — one chain' > waves-seq.md
-lint waves-seq.md --no-probe
-lacks "sequential: the majority rule is gone" "$out" "tasks are heavy"
-lacks "sequential: Depends on lines are not checked" "$out" "Depends on"
-waves_plan 'waves — 1 | two' > waves-bad.md
-lint waves-bad.md --no-probe
-has "waves: a bad range" "$out" "ERROR header: Parallelism waves must be '<N>' or '<A>-<B>' ranges"
-waves_plan 'waves — 1-2 | 2-3' > waves-gap.md
-lint waves-gap.md --no-probe
-has "waves: overlapping ranges" "$out" "ascending, contiguous ranges covering Tasks 1-3 exactly once"
-waves_plan 'waves — 1 | 2' > waves-short.md
-lint waves-short.md --no-probe
-has "waves: ranges must cover every task" "$out" "covering Tasks 1-3 exactly once"
-waves_plan 'parallel' > waves-word.md
-lint waves-word.md --no-probe
-has "waves: an unknown strategy" "$out" "ERROR header: Parallelism line does not match"
-waves_plan 'waves — 1 | 2-3' | sed 's#- Create: `c.txt`#- Modify: `t/b.test.sh:1-2`#' > waves-share.md
-lint waves-share.md --no-probe
-has "waves: a shared file, line ranges ignored" "$out" "ERROR header: wave 2: t/b.test.sh is named by Task 2, Task 3"
-waves_plan 'waves — 1 | 2-3' | awk '/^\*\*Depends on:\*\* Task 1$/ && ++n == 2 { print "**Depends on:** Task 2"; next } { print }' > waves-dep.md
-lint waves-dep.md --no-probe
-has "waves: a same-wave dependency" "$out" "ERROR Task 3: Depends on Task 2 in the same wave (2)"
-waves_plan 'waves — 1 | 2-3' | awk '/^\*\*Depends on:\*\* none$/ && !d++ { next } { print }' > waves-nodep.md
-lint waves-nodep.md --no-probe
-has "waves: every task needs a Depends on line" "$out" "ERROR Task 1: a waves plan needs a **Depends on:** line"
-waves_plan 'waves — 1 | 2-3' | sed 's/risk 0 = 1$/risk 3 = 4/' > waves-risk.md
-lint waves-risk.md --no-probe
-has "waves: risk 3 runs alone" "$out" "ERROR Task 2: a risk-3 task must run alone in its wave"
-lacks "waves: a wave of one may hold risk 3" "$out" "ERROR Task 1: a risk-3 task"
-waves_plan 'waves — 1 | 2-3' | sed 's#- Create: `b.txt`#- Modify: `package-lock.json`#' > waves-lock.md
-lint waves-lock.md --no-probe
-has "waves: a lockfile runs alone" "$out" "ERROR Task 2: package-lock.json is a dependency manifest or lockfile"
-waves_plan 'waves — 1 | 2-3' | sed '/^\*\*Integration check:\*\*/d; s/^\*\*Execution:\*\* subagent — `claude --model sonnet --effort high`/**Execution:** inline — `claude --model sonnet --effort low`/' > waves-inline.md
-lint waves-inline.md --no-probe
-has "waves: inline is refused" "$out" "ERROR header: parallel waves need a subagent Execution line"
-has "waves: the integration check is required" "$out" "ERROR header: a waves plan needs its **Integration check:** line"
-lacks "waves: the missing Integration check is an error, not a warning" "$out" "WARN header: no **Integration check:** line yet"
-# An optional **Wave check:** line runs between the full checks of a waves plan.
-with_wave_check() { # with_wave_check <line> — stdin plan with <line> after the Worktree setup line
-  awk -v l="$1" '{ print } /^\*\*Worktree setup:\*\*/ { print ""; print l }'
-}
-waves_plan 'waves — 1 | 2-3' | with_wave_check '**Wave check:** `bash quick.sh`' > waves-check.md
-lint waves-check.md --no-probe
-check "waves: a Wave check line is accepted" "$out" "WARN header: subagent execution is deprecated; inline is the default
-plan-lint: 0 errors, 1 warnings"
-waves_plan 'waves — 1 | 2-3' | with_wave_check '**Wave check:**' > waves-check-empty.md
-lint waves-check-empty.md --no-probe
-has "waves: a Wave check line needs a command" "$out" "ERROR header: the **Wave check:** line names no command"
-waves_plan 'sequential — one chain' | with_wave_check '**Wave check:** `bash quick.sh`' > seq-check.md
-lint seq-check.md --no-probe
-has "sequential: a Wave check line is flagged" "$out" "WARN header: **Wave check:** runs only between the waves of a waves plan"
-lacks "sequential: a Wave check line is not an error" "$out" "ERROR header: the **Wave check:**"
+three_task_plan 'waves — 1 | 2-3' > waves.md
+lint waves.md
+check "an old waves line: exit 0" "$status" "0"
+has "an old waves line: the retirement warning" "$out" "WARN header: parallel waves were retired in 5.0.0; this plan runs one task at a time"
+three_task_plan 'sequential — one chain' > seq.md
+lint seq.md
+lacks "a sequential line: no Parallelism finding" "$out" "Parallelism"
+lacks "a sequential line: no waves finding" "$out" "waves"
+three_task_plan 'parallel' > parallel-word.md
+lint parallel-word.md
+has "an unknown strategy" "$out" "ERROR header: Parallelism line does not match '**Parallelism:** sequential'"
 
 # --- test tier and CI header lines ---
 # The fixtures carry well-formed lines, so each case edits one line. A missing
@@ -983,7 +878,7 @@ check "missing tier and CI lines: warnings only, exit 0" "$status" "0"
 has "a missing Task check warns" "$out" "WARN header: no **Task check:** line yet"
 has "a missing Integration check warns on a sequential plan" "$out" "WARN header: no **Integration check:** line yet"
 has "a missing CI line warns" "$out" "WARN header: no **CI:** line yet"
-has "the three warnings add to the fixture's two" "$out" "plan-lint: 0 errors, 5 warnings"
+has "the three warnings add to the fixture's one" "$out" "plan-lint: 0 errors, 4 warnings"
 
 for bad in 'run the quick tests' 'none' '`bash a.sh` `bash b.sh` — two commands' '`none — full suite every 3 tasks`'; do
   variant tc-bad.md "s#^\*\*Task check:\*\* .*#**Task check:** $bad#"
@@ -1000,7 +895,7 @@ CI_FULL='**CI:** `.github/workflows/validate.yml` — platforms: ubuntu-latest, 
 variant tc-none.md "s#^\*\*Task check:\*\* .*#**Task check:** none — full suite every 3 tasks#; s#^\*\*CI:\*\* none\$#${CI_FULL}#"
 lint tc-none.md
 check "the none form and a full CI line: exit 0" "$status" "0"
-has "the none form and a full CI line add no finding" "$out" "plan-lint: 0 errors, 2 warnings"
+has "the none form and a full CI line add no finding" "$out" "plan-lint: 0 errors, 1 warnings"
 
 for bad in 'maybe' \
   '`ci.yml` — platforms: linux — uncovered: none' \
@@ -1025,19 +920,12 @@ check "Early CI without consent: exit 1" "$status" "1"
 has "Early CI without consent" "$out" 'ERROR header: **Early CI:** lacks "— consented <YYYY-MM-DD>"'
 early 'after task 2 — consented tomorrow'
 has "Early CI with a malformed date lacks consent" "$out" 'ERROR header: **Early CI:** lacks "— consented <YYYY-MM-DD>"'
-early 'after wave 2'
-has "Early CI naming a wave on a sequential plan" "$out" "ERROR header: **Early CI:** names a wave on a sequential plan"
-has "Early CI naming a wave, unconsented, also lacks consent" "$out" 'ERROR header: **Early CI:** lacks "— consented <YYYY-MM-DD>"'
+early 'after wave 2 — consented 2026-10-31'
+has "Early CI naming a wave is refused" "$out" 'ERROR header: **Early CI:** must be "after task <n>", then "— consented <YYYY-MM-DD>"'
 early 'after task 3 — consented 2026-10-31'
 has "Early CI naming a task past the last" "$out" "ERROR header: **Early CI:** names Task 3, past the last task"
 early 'whenever — consented 2026-10-31'
-has "Early CI with no recognised point" "$out" 'ERROR header: **Early CI:** must be "after wave <k>" or "after task <n>", then "— consented <YYYY-MM-DD>"'
-
-waves_plan 'waves — 1 | 2-3' | sed '/^\*\*Task check:\*\*/d' | sed "s#^\*\*CI:\*\* none\$#${CI_FULL}\n\n**Early CI:** after wave 2 — consented 2026-10-31#" > waves-early.md
-lint waves-early.md --no-probe
-check "waves: no Task check and a wave Early CI: exit 0" "$status" "0"
-has "waves: a missing Task check warns" "$out" "WARN header: no **Task check:** line yet"
-lacks "waves: a wave Early CI is accepted" "$out" "Early CI"
+has "Early CI with no recognised point" "$out" 'ERROR header: **Early CI:** must be "after task <n>", then "— consented <YYYY-MM-DD>"'
 
 # --- Step 1 forms ---
 step1() { # step1 <Task 1 heading text> <Task 2 heading text> — the Claude plan with both Step 1 headings replaced
@@ -1055,18 +943,11 @@ step1 $'Covered by Task 2\'s test `second`' 'Extend the test `t/b.test.sh::secon
 lint cov-late.md
 has "Covered by a later task: it does not run before" "$out" "ERROR Task 1: Covered by Task 2 — Task 2 does not run before Task 1"
 lacks "an Extend step counts as a test step" "$out" "Task 2 has no test step"
-waves_plan 'sequential — one chain' | with_steps 'Write the failing test' $'Covered by Task 7\'s test `a`' $'Covered by Task 2\'s test `b`' > cov-seq.md
-lint cov-seq.md --no-probe
+three_task_plan 'sequential — one chain' | with_steps 'Write the failing test' $'Covered by Task 7\'s test `a`' $'Covered by Task 2\'s test `b`' > cov-seq.md
+lint cov-seq.md
 has "Covered by a missing task" "$out" "ERROR Task 2: Covered by Task 7 — no such task"
 has "Covered by a task with no test step" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 has no test step"
 lacks "a sequential plan: a lower task number runs before" "$out" "Task 3: Covered by Task 2 — Task 2 does not run before"
-waves_plan 'waves — 1 | 2-3' | with_steps 'Write the failing test' 'Extend the test `t/b.test.sh::second`' $'Covered by Task 2\'s test `second`' > cov-wave.md
-lint cov-wave.md --no-probe
-has "a waves plan: Covered by a task in the same wave" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 does not run before Task 3"
-lacks "a waves plan: the covered task has a test step" "$out" "Task 2 has no test step"
-waves_plan 'waves — 1 | 2 | 3' | with_steps 'Write the failing test' 'Extend the test `t/b.test.sh::second`' $'Covered by Task 2\'s test `second`' > cov-wave-ok.md
-lint cov-wave-ok.md --no-probe
-lacks "a waves plan: Covered by a task in an earlier wave is accepted" "$out" "Covered by Task"
 lint cov-ok.md
 lacks "a Covered by heading draws no form WARN" "$out" "none of the forms"
 step1 'No new test, because the change is prose no script reads' 'Write the failing test' > nnt-ok.md
@@ -1090,11 +971,11 @@ for h in 'Write the failing tests' 'Extend the test `t/a.test.sh::first`'; do
   lint nnt-known.md
   lacks "a recognized Step 1 heading draws no form WARN ($h)" "$out" "none of the forms"
 done
-waves_plan 'sequential — one chain' > nnt-nostep.md
-lint nnt-nostep.md --no-probe
+three_task_plan 'sequential — one chain' > nnt-nostep.md
+lint nnt-nostep.md
 lacks "a task with no Step 1 line draws no form WARN" "$out" "none of the forms"
-waves_plan 'sequential — one chain' | with_steps 'Write the failing test' 'No new test, because prose only' $'Covered by Task 2\'s test `b`' > nnt-cov.md
-lint nnt-cov.md --no-probe
+three_task_plan 'sequential — one chain' | with_steps 'Write the failing test' 'No new test, because prose only' $'Covered by Task 2\'s test `b`' > nnt-cov.md
+lint nnt-cov.md
 has "Covered by a No new test task: it has no test step" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 has no test step"
 lacks "a No new test task with a reason draws no form WARN" "$out" 'Task 2: Step 1'
 
@@ -1106,7 +987,7 @@ M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
 mkdir -p "$M/dforge/specs" "$M/dforge/plans"
 printf '# Spec\n' > "$M/dforge/specs/s.md"
 printf '# P\n\n**Spec:** docs/dforge/specs/s.md\n\n### Task 1: One\n' > "$M/dforge/plans/p.md"
-out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/dforge/plans/p.md --no-probe 2>&1)
+out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/dforge/plans/p.md 2>&1)
 lacks "darkmem: the Spec path resolves in the mirror" "$out" "Spec path does not exist"
 lacks "darkmem: the plan is found by name" "$out" "no such plan file"
 has "darkmem: the lint ran to its summary" "$out" " errors, "
@@ -1177,20 +1058,20 @@ $2
 EOF
 }
 ui_plan '' '' > ui-bad.md
-out=$(bash "$LINT" ui-bad.md --no-probe 2>&1)
+out=$(bash "$LINT" ui-bad.md 2>&1)
 has "ui: a UI task without a UI/UX line" "$out" "ERROR Task 1: touches the UI file src/Dialog.tsx but has no **UI/UX:** line"
 has "ui: an uncited UI item" "$out" "ERROR header: UI/UX contract item UI-1 is named by no task's **UI/UX:** line"
 lacks "ui: an OP item needs no task" "$out" "item OP-1 is named by no task"
 lacks "ui: a non-UI task needs no line" "$out" "ERROR Task 2: touches the UI file"
 ui_plan '**UI/UX:** UI-1, UX-1, UX-9' '' > ui-undef.md
-out=$(bash "$LINT" ui-undef.md --no-probe 2>&1)
+out=$(bash "$LINT" ui-undef.md 2>&1)
 has "ui: an undefined ID" "$out" "ERROR Task 1: **UI/UX:** cites UX-9, which the spec's UI/UX contract does not define"
 has "ui: an item no task names" "$out" "item UX-2 is named by no task"
 ui_plan '**UI/UX:** UI-1, UX-1' '**UI/UX:** UX-2' > ui-good.md
-out=$(bash "$LINT" ui-good.md --no-probe 2>&1)
+out=$(bash "$LINT" ui-good.md 2>&1)
 lacks "ui: a covered plan has no UI/UX finding" "$out" "UI/UX"
 sed 's#docs/ui-spec.md#docs/spec.md#' ui-bad.md > ui-nocontract.md
-out=$(bash "$LINT" ui-nocontract.md --no-probe 2>&1)
+out=$(bash "$LINT" ui-nocontract.md 2>&1)
 lacks "ui: a spec without a contract asks for no line" "$out" "UI/UX"
 
 fi

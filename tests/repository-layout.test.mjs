@@ -120,16 +120,15 @@ test('the retired dr-forge names are allowed only in the allowlisted files', asy
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('the retired dcc- name is allowed only in the migration notes and historical documents', async () => {
+test('the retired dcc- name is allowed only in the migration notes', async () => {
   const { validateRepository } = await import('../scripts/validate-repository.mjs');
   const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));
   try {
     for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
       cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
     }
-    mkdirSync(resolve(dir, 'docs/superpowers/plans'), { recursive: true });
+    mkdirSync(resolve(dir, 'docs'), { recursive: true });
     writeFileSync(resolve(dir, 'docs/migration.md'), 'install dcc-darkraise-ui\n');
-    writeFileSync(resolve(dir, 'docs/superpowers/plans/old.md'), 'install dcc-darkraise-ui\n');
     const retired = () => validateRepository(dir).filter(error => error.includes('retired dcc- plugin name'));
     assert.deepEqual(retired(), []);
     writeFileSync(resolve(dir, 'docs/stray.md'), 'install dcc-darkraise-ui\n');

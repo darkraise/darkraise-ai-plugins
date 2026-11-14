@@ -190,7 +190,7 @@ your own: QA commits on this branch.
     - `cannot-test: ambiguous`: an item for
       `scripts/review-route PLAN_FILE --ruling acceptance-ambiguous`, sent
       with
-      [ruling-prompt.md](../skills/subagent-driven-development/references/ruling-prompt.md).
+      [ruling-prompt.md](prompts/ruling-prompt.md).
       `REWORD`: replace the statement's text in the spec with the
       `New statement:` line, commit the spec, and re-dispatch QA with
       `[MODE]` `reword A<n>[, A<m>]`; every ambiguous statement of one
@@ -236,11 +236,24 @@ your own: QA commits on this branch.
    `git worktree remove --force` once step 3 has read the run's log.
    A failing line that does not also fail at MERGE_BASE is a finding: run the
    command once at MERGE_BASE in a temporary worktree and compare the failing
-   lines, as [parallel-waves.md](parallel-waves.md) §1 does. Write each such
+   lines as **Baseline comparison** below says. Write each such
    finding as `[suite] <failing line>`. A `[suite]` finding enters the fix
-   wave as confirmed, as a `[qa]` finding does. The fix subagent runs the
+   wave as confirmed, as a `[qa]` finding does. The fix pass runs the
    command again after its last commit through `suite-run` (**Suites.**
    below), and finishing reuses a pass at the same commit.
+
+   **Baseline comparison.** A run's failing lines are the failing-test lines
+   its `suite-run` digest prints, exactly as printed; when the digest's
+   `counts:` line names more than 20 failures, they are every matching line
+   of the log it names,
+   `grep -E '^[[:space:]]*(not ok|\(fail\)|FAIL)' <log> | cut -c1-200`. Remove
+   TAP numbers on both sides (`sed -E 's/^([[:space:]]*not ok) [0-9]+/\1/'`),
+   then `grep -vxFf <base lines> <head lines>` prints the head's failing lines
+   the base does not share. The head's failures are all baseline only when
+   the base's file exists, the head's holds at least one line, and that grep
+   exits 1 (it printed nothing). A missing base file, an empty head list or a
+   grep exit of 2 is not baseline, and a digest that names no test
+   (`last 30 lines of <log>:`) never is.
 
    **Lenses.** Run `scripts/lens-route PLAN_FILE --final MERGE_BASE HEAD`. In
    the same message as the Claude review, dispatch each printed `seat` with
@@ -293,7 +306,10 @@ your own: QA commits on this branch.
    [native-codex.md](native-codex.md) instead.
 2. **External round.** At depth light or standard, skip it: say
    `external round skipped (depth <d>)` in one line and go to step 3 with the
-   Claude review alone. At depth full, run the reviewer panel as
+   Claude review alone. At depth full with `external=off` on the route line
+   step 1 printed, skip it too and say `external round skipped (no reviewer
+   open)`: the panel would only print `SKIPPED` lines. At depth full with
+   `external=on`, run the reviewer panel as
    [external-review.md](external-review.md) §Final-review external round
    says, with `--cwd` set to a temporary detached worktree at HEAD
    (`git worktree add --detach <workspace>/final-review-panel-tree <sha>`), as
@@ -315,7 +331,7 @@ your own: QA commits on this branch.
    lists=<n>`: end the turn and resume on its notification. An absent list
    from a launched panel is a round still running, never a one-list case.
    When step 2 skipped the round without launching the panel (depth light or
-   standard), there is nothing to wait for: go straight to the one-list case.
+   standard, or no reviewer open), there is nothing to wait for: go straight to the one-list case.
 
    **Dedupe and verify whenever two or more lists carry findings.** The
    lists are the Claude review's (with its lens reports) and one per external
@@ -374,7 +390,7 @@ one-liner begins `deferred: test-simplifier — ` gates nothing on either list
 If confirmed findings remain, fix them in ONE wave with the complete list,
 given as report paths (the dedupe report with two lists; the Claude review's
 and lens reports and the [qa] findings with one), never pasted — in
-subagent mode one fix subagent, in inline mode one pass of your own. Never one
+one pass of your own. Never one
 fixer per finding: per-finding fixers each rebuild context and re-run suites,
 and a real session's final-review fix wave cost more than all its tasks
 combined. In an auto run a deferred task's acceptance failures are not on that
@@ -386,19 +402,7 @@ reports the failed steps. In an auto run it means going on to finishing,
 whose Step 1b runs the dforge:ui-ux Prove phase once and keeps the branch
 when the check still fails; do not run the Prove phase here.
 
-**The fix subagent** (subagent mode). Run
-`scripts/review-route PLAN_FILE --final-fix <file> [<file> ...]` with every
-repository-relative path the findings name. It prints the highest implementer
-tier among the tasks whose `**Files:**` blocks name those paths, as the ledger
-last recorded each (an escalation counts, and an `inline` implementer counts as
-the Execution line's rung), raised to `impl-sonnet-high` and capped at
-`impl-opus-high`; no matched task gives `reason=floor`. Append
-`Final fix: implementer <agent> (assigned; base <sha7>)` to the ledger, then
-dispatch the printed `primary` as `subagent_type`, with no `model` or `effort`
-argument. On a Codex-host plan it prints `primary=native:<model>/<effort>`,
-which [native-codex.md](native-codex.md) says how to record and dispatch.
-
-Whoever fixes writes `<workspace>/final-fix-report.md`: what changed per
+The fix pass writes `<workspace>/final-fix-report.md`: what changed per
 finding, the covering tests, the command and its output. With one list the
 fixer first checks each finding against the code under
 dforge:receiving-code-review, fixes the real ones, and records each one
@@ -407,14 +411,10 @@ finding whose one-liner begins `deferred: test-simplifier — ` and lists it
 under `DEFERRED: <finding>`; the session leaves each `DEFERRED:` finding out
 of the findings the scoped re-review verifies. Each per-finding
 entry and each `REJECTED:` line keeps the finding's `[lens:<id>]` tag, and the
-scoped re-review quotes that tag in its verdict on each rejection. In subagent
-mode the fix subagent writes it as its report file, and its prompt names
-`<plugin-root>/skills/receiving-code-review/SKILL.md` to read, since an
-implementer has no Skill tool, and states the `DEFERRED:` skip rule above,
-which no file the subagent reads carries; in inline mode you write it before
-the re-review. Then run exactly one scoped re-review of the fix wave
+scoped re-review quotes that tag in its verdict on each rejection. You write
+it before the re-review. Then run exactly one scoped re-review of the fix wave
 (`scripts/review-package PLAN_FILE FIX_BASE HEAD` over the fix range, with
-[re-review-prompt.md](../skills/subagent-driven-development/references/re-review-prompt.md),
+[re-review-prompt.md](prompts/re-review-prompt.md),
 its `[IMPLEMENTER_REPORT_FILE]` being that file and its `[REPORT_FILE]`
 being `<workspace>/final-rereview-report.md`). When QA committed tests, FIX_BASE is the
 review's HEAD (the `Acceptance QA: dispatched` SHA), so the range holds QA's

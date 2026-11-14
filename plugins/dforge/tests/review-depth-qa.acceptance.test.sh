@@ -17,7 +17,6 @@ DR="$S/depth-route"
 ROUTE="$S/review-route"
 LENS="$S/lens-route"
 LINT="$S/plan-lint"
-BASE_SHA=7884cb791eb6e397f72306f5db8db796f6129034
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -98,7 +97,7 @@ mkplan() { # mkplan NAME SPEC_NAME|- HOST REVIEW_LINE TOKEN... — a plan in doc
     i=0
     for tok in "$@"; do
       i=$((i + 1))
-      printf '### Task %s: Thing %s\n\n**Files:**\n- Create: `f%s.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n' "$i" "$i" "$i"
+      printf '### Task %s: Thing %s\n\n**Files:**\n- Create: `f%s.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n' "$i" "$i" "$i"
       ev "$tok"
       printf '\n- [ ] **Step 1: Do it**\n\n'
     done
@@ -111,7 +110,7 @@ mkcodex() { # mkcodex NAME SPEC_NAME TOTAL — a one-task Host: codex plan whose
   {
     printf '# %s Codex Plan\n\nHost: codex\nRouting policy: codex-v4\n\n**Goal:** Demo.\n\n' "$name"
     printf '**Spec:** `docs/dforge/specs/%s.md`\n\n' "$spec"
-    printf '**Execution:** subagent — codex gpt-6.1-sol / high — native pair\n\n'
+    printf '**Execution:** inline — codex gpt-6.1-sol / high — native pair\n\n'
     printf '**Plan review:** 2026-10-27 — codex gpt-6-astra / high — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)\n\n'
     printf '## Global Constraints\n\n- None.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. One\n\n'
     printf '### Task 1: One\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** codex gpt-6.1-sol / low\n'
@@ -139,16 +138,6 @@ printf 'it("x", () => {})\n' > "$REPO/tests/x.test.ts"
 git -C "$REPO" add -A >/dev/null 2>&1
 git -C "$REPO" commit -q -m head
 HEAD_C=$(git -C "$REPO" rev-parse HEAD)
-
-# The code as it stood before the spec, for "unchanged" comparisons.
-BASE_DIR="$TMP/base"
-have_base=0
-if git -C "$REPO_ROOT" cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
-  mkdir -p "$BASE_DIR"
-  if git -C "$REPO_ROOT" archive "$BASE_SHA" plugins/dforge 2>/dev/null | tar -x -C "$BASE_DIR" 2>/dev/null \
-     && [ -f "$BASE_DIR/plugins/dforge/scripts/review-route" ]; then have_base=1; fi
-fi
-[ "$have_base" -eq 1 ] || echo "note: BASE $BASE_SHA is not in this clone; the unchanged-output comparisons are skipped"
 
 # =====================================================================
 if want A1; then
@@ -347,13 +336,6 @@ if want A7; then
     present "A7: Host: codex total $t (spec light) prints cap=$wcap" "$out" "cap=$wcap"
     absent "A7: Host: codex total $t is never primary=none" "$out" "primary=none"
     rr "$pc" "$((wcap + 2))"; check "A7: Host: codex total $t, round $((wcap + 2)) exits 2" "$status" 2
-    if [ "$have_base" -eq 1 ]; then
-      for r in 1 "$((wcap + 1))" "$((wcap + 2))"; do
-        rr "$pc" "$r"; new_out=$out new_st=$status
-        old_out=$(cd "$REPO" && timeout 60 bash "$BASE_DIR/plugins/dforge/scripts/review-route" "$pc" --plan-round "$r" 2>&1); old_st=$?
-        check "A7: Host: codex total $t round $r matches the pre-spec output" "$new_st|$new_out" "$old_st|$old_out"
-      done
-    fi
   done
 fi
 
@@ -404,14 +386,6 @@ if want A8; then
   check "A8: standard, lensCap 4, prints 3 lens lines with test-quality" "$(lens_lines)" 3
   present "A8: standard past the cap prints reason=cap" "$out" "^lens-skipped .* reason=cap$"
   absent "A8: standard prints no reason=depth" "$out" "reason=depth"
-  lr "$ps" DFORGE_LENS_CAP=9
-  check "A8: standard, lensCap 9, still prints 3 lens lines" "$(lens_lines)" 3
-  lr "$ps" DFORGE_LENS_CAP=1
-  check "A8: standard, lensCap 1, prints 1 lens line" "$(lens_lines)" 1
-  lr "$ps" DFORGE_LENS_CAP=2
-  check "A8: standard, lensCap 2, prints 2 lens lines" "$(lens_lines)" 2
-  lr "$ps" DFORGE_LENS_CAP=0
-  present "A8: standard, lensCap 0, prints lenses off" "$out" "^lenses off$"
   ps2=$(mkplan a8-standard-spec s-standard - "" r0t1)
   lr "$ps2" DFORGE_LENS_CAP=4
   check "A8: standard by the spec, lensCap 4, prints 3 lens lines with test-quality" "$(lens_lines)" 3
@@ -423,14 +397,6 @@ if want A8; then
   present "A8: full prints reason=cap past the cap" "$out" "^lens-skipped .* reason=cap$"
   lr "$pf" DFORGE_LENS_CAP=3
   check "A8: full, lensCap 3, prints 3 lens lines" "$(lens_lines)" 3
-  if [ "$have_base" -eq 1 ]; then
-    norm() { sed -E 's#criteria=[^ ]*/criteria/#criteria=#; s#reason=paths:[^ ]*#reason=paths#'; }
-    for cap in 0 1 2 3 4 9; do
-      lr "$pf" DFORGE_LENS_CAP=$cap; new=$(norm <<<"$out")
-      old=$(cd "$REPO" && env DFORGE_LENS_CAP=$cap timeout 60 bash "$BASE_DIR/plugins/dforge/scripts/lens-route" "$pf" --final "$BASE_C" "$HEAD_C" 2>&1 | norm)
-      check "A8: full, lensCap $cap, output equals the pre-spec output" "$new" "$old"
-    done
-  fi
 fi
 
 # =====================================================================
@@ -457,9 +423,6 @@ if want A12; then
     present "A12: review-route --final names the Claude review seat under $spec" "$out" "^review-seat final primary=dforge:judge-opus "
   done
   p=$(mkplan a12-light-final s-light - "" r0t1)
-  out=$(cd "$REPO" && timeout 60 bash "$ROUTE" "$p" --final-fix src/a.sh 2>&1); status=$?
-  check "A12: review-route --final-fix still routes at light" "$status" 0
-  absent "A12: the fix wave seat is not none at light" "$out" "primary=none"
   lo=$(cd "$REPO" && DFORGE_LENS_CAP=4 timeout 60 bash "$LENS" "$p" --final "$BASE_C" "$HEAD_C" 2>&1)
   present "A12: lens-route still runs the security lens at light" "$lo" "^lens security "
 fi
@@ -515,7 +478,7 @@ if want A16; then
     printf '**Execution:** inline — `claude --model sonnet --effort high` — demo\n\n'
     printf '**Plan review:** 2026-10-27 — skipped (depth light)\n\n'
     printf '## Global Constraints\n\n- None.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. Thing 1\n\n'
-    printf '### Task 1: Thing 1\n\n**Files:**\n- Create: `f1.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n'
+    printf '### Task 1: Thing 1\n\n**Files:**\n- Create: `f1.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n'
     printf '**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n\n- [ ] **Step 1: Do it**\n'
   } > "$MIRROR/dforge/plans/m-plan.md"
   lint_out=$(cd "$MR" && HOME="$MH" timeout 60 bash "$LINT" "$MIRROR/dforge/plans/m-plan.md" 2>&1)

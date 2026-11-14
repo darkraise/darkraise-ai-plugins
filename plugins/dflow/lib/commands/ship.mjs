@@ -8,8 +8,8 @@ import { proofStatus } from '../proof.mjs';
 import { baseCommit, defaultBranch, head, relative } from '../repo.mjs';
 import { buildPack } from '../review.mjs';
 import { runCommand } from '../run.mjs';
-import { appendEvent, loadState, planState, saveState } from '../state.mjs';
-import { loadFindings, refreshHud } from '../status.mjs';
+import { appendEvent, loadState, planState, updateState } from '../state.mjs';
+import { loadFindings, refreshHud, unrecordedTicks } from '../status.mjs';
 import { git, gitList, gitOut, mustGit, readText, shortSha, tail, today } from '../util.mjs';
 import { diagnose } from './doctor.mjs';
 import { runGates } from './gate.mjs';
@@ -105,13 +105,17 @@ export async function run(ctx, argv, { out }) {
   const open = active.plan.tasks.filter(task => !task.done);
   const blocked = blockedTasks(active.plan);
   if (open.length) problems.push(`not every task is done: ${open.map(task => `Task ${task.number}${blocked.has(task.number) ? ' (blocked)' : ''}`).join(', ')}`);
+  for (const number of unrecordedTicks(ctx, active)) problems.push(`Task ${number} is ticked without a recorded \`dflow done\`, so its verify never passed here; untick its steps and run \`dflow done ${number}\``);
   // Ship runs the acceptance commands the plan holds now, so a line changed
   // after approval counts only once the owner's agreement is on record.
   for (const change of amendedAcceptance(ctx, active).filter(entry => !entry.logged)) {
     problems.push(`Acceptance ${change.id} changed after approval with no record of the owner agreeing (was: ${change.was ?? 'absent'}; now: ${change.now ?? 'removed'}); ask the owner, then \`dflow log - A "${change.id}: <what changed> — agreed by the owner"\`, naming each command it runs in backticks`);
   }
 
-  const dirty = gitList(ctx.root, ['status', '--porcelain', '--untracked-files=no', '--no-renames', '-z']);
+  // An untracked file outside docs/dflow/ may be one the gates used, and the
+  // commit would ship without it; drafts of other work there stay untracked.
+  const dirty = gitList(ctx.root, ['status', '--porcelain', '--untracked-files=normal', '--no-renames', '-z'])
+    .filter(entry => !(entry.startsWith('??') && entry.slice(3).startsWith('docs/dflow/')));
   if (dirty.length) problems.push(`uncommitted changes: ${dirty.map(entry => entry.slice(3)).join(', ')}`);
 
   if (!problems.length) {
@@ -125,9 +129,9 @@ export async function run(ctx, argv, { out }) {
     problems.push(...accepted.problems);
     pending.push(...accepted.pending);
     // runGates saved its own result meanwhile, so merge into the file's state.
-    const latest = loadState(ctx.paths);
-    planState(latest, active.slug).acceptance = record.acceptance;
-    saveState(ctx.paths, latest);
+    updateState(ctx.paths, latest => {
+      planState(latest, active.slug).acceptance = record.acceptance;
+    });
   }
 
   const required = buildPack(ctx, active).tier;

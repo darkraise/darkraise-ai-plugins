@@ -46,7 +46,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |**Worktree setup:** `touch setup.done`
 |
@@ -70,7 +70,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 2: Two
@@ -78,7 +78,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 3: Three
@@ -86,7 +86,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 4: Four
@@ -94,7 +94,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 5: Five
@@ -102,7 +102,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 6: Six
@@ -110,7 +110,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 7: Seven
@@ -118,7 +118,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 8: Eight
@@ -126,7 +126,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 9: Nine
@@ -134,7 +134,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 10: Ten
@@ -142,7 +142,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 11: Eleven
@@ -150,7 +150,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 12: Twelve
@@ -158,7 +158,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 PLAN
 cat > "$REPO/suite.sh" <<'SUITE'
@@ -312,50 +312,6 @@ check "task 6: the temporary worktree is gone" "$(g worktree list | wc -l | tr -
 sed 's/^\(\*\*Worktree setup:\*\* \).*$/\1`touch setup.done`/' "$REPO/docs/plan.md" > "$REPO/docs/plan.tmp" && mv "$REPO/docs/plan.tmp" "$REPO/docs/plan.md"
 commit "setup that works"
 
-# Tasks 7 and 8: a sequential group. Task 8 starts at Task 7's head, so a test
-# Task 7 broke fails at Task 8's base too; the group is compared with the base
-# of its first member.
-set_failing ''
-commit "green for the group"
-ts start docs/plan.md 7 --suite 'bash suite.sh'
-set_failing $'not ok 1 - regress\n'
-commit "member 1 breaks a test"
-ts start docs/plan.md 8 --suite 'bash suite.sh'
-printf 'impl 8\n' >> "$REPO/app.txt"
-commit "member 2"
-sr
-G_HEAD=$(g rev-parse HEAD)
-jq -n --arg h "$G_HEAD" --arg c "$REPO" '{tasks: [7, 8], reviewHead: $h, t0: 0, reviewChecks: [{cwd: $c, head: $h, dirty: []}]}' > "$WS/group-7,8-step.json"
-for t in 7 8; do
-  jq --arg h "$G_HEAD" '.reviewHead = $h | .group = "7,8"' "$WS/task-$t-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-$t-step.json"
-done
-{
-  printf '## Verdict\n'
-  for t in 7 8; do
-    printf 'Task %s spec: pass\nTask %s quality: approved\nTask %s scores: spec 17 / scope 17 / verification 17 / quality 17\n' "$t" "$t" "$t"
-  done
-} > "$WS/group-7,8-review-report.md"
-ts verdict docs/plan.md 7 8 --group
-check "group: a regression made by an earlier member is not baseline" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
-check "group: the finding is in the last member's fix file" "$(grep '^fix: ' <<<"$out")" "fix: $WS/task-8-fix-1.md (1 finding)"
-check "group: the fix file names the regression" "$(grep -cF regress "$WS/task-8-fix-1.md")" "2"
-
-# A step file that cannot be read is not "no suite recorded".
-cp "$WS/task-8-step.json" "$TMP/step8.bak"
-rm -f "$WS/task-8-step.json"
-ts verdict docs/plan.md 7 8 --group
-check "group: a missing last member's step file exits 6" "$rc $(grep -cF "cannot read $WS/task-8-step.json" <<<"$err") $(grep -c 'suite: none recorded' <<<"$out")" "6 1 0"
-printf '{not json\n' > "$WS/task-8-step.json"
-ts verdict docs/plan.md 7 8 --group
-check "group: an invalid last member's step file exits 6" "$rc $(grep -cF "cannot read $WS/task-8-step.json" <<<"$err") $(grep -c 'suite: none recorded' <<<"$out")" "6 1 0"
-cp "$TMP/step8.bak" "$WS/task-8-step.json"
-
-# rereview --base would move the group's comparison base, so a sequential
-# member refuses it.
-ts rereview docs/plan.md 8 --base "$(g rev-parse HEAD~1)"
-check "group: rereview --base on a sequential member exits 2" "$rc $(grep -cF -- '--base does not apply to a group member; see delegated-task.md §3a' <<<"$err")" "2 1"
-check "group: the refused rereview leaves the step file as it was" "$(cmp -s "$TMP/step8.bak" "$WS/task-8-step.json" && echo same || echo changed)" "same"
-
 # Task 9: a red suite whose failing lines are all baseline lets the task complete.
 set_failing $'not ok 1 - alpha\n'
 commit "alpha fails at the base"
@@ -422,7 +378,7 @@ check "task 12: the temporary worktree is gone" "$(g worktree list | wc -l | tr 
 
 # Tasks 13 to 18 join the fixture plan; Task 14 names the command its baseline item runs.
 for n in 13 14 15 16 17 18; do
-  printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$n" "$n"
+  printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$n" "$n"
   [ "$n" != 14 ] || printf '\nRun: `bash suite.sh`\n'
 done >> "$REPO/docs/plan.md"
 set_setup() { # set_setup <command> — the plan header's Worktree setup
@@ -550,24 +506,9 @@ check "task 17: the base row in the --cwd checkout's state excuses alpha" "$rc $
 check "task 17: no base run and no base failures file" "$(($(marks setup) - setups0)) $([ -e "$WS/task-17-base-failures.txt" ] && echo file || echo nofile)" "0 nofile"
 g worktree remove --force "$WT"
 
-# Task 18: a wave task in a group, which carries a head ref, keeps rereview --base.
-ts start docs/plan.md 18
-printf 'impl 18\n' >> "$REPO/app.txt"
-commit "work 18"
-g branch t18-ref
-ts review docs/plan.md 18 --head t18-ref
-jq '.group = "18,19"' "$WS/task-18-step.json" > "$TMP/s18.json" && mv "$TMP/s18.json" "$WS/task-18-step.json"
-printf -- '- app.txt: wrong value\n\nFixed.\n' > "$WS/task-18-fix-1.md"
-printf 'fix 18\n' >> "$REPO/app.txt"
-commit "fix 18"
-g branch -f t18-ref HEAD
-EARLIER=$(g rev-parse HEAD~2 | tr -d '\r')
-ts rereview docs/plan.md 18 --base "$EARLIER"
-check "task 18: rereview --base on a grouped wave task is accepted and recorded" "$rc $(jq -r '.base' "$WS/task-18-step.json" | tr -d '\r')" "0 $EARLIER"
-
-# Tasks 19 to 21 join the fixture plan: review takes the suite and its base.
-for n in 19 20 21; do
-  printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$n" "$n"
+# Task 19 joins the fixture plan: review takes the suite and its base.
+for n in 19; do
+  printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$n" "$n"
 done >> "$REPO/docs/plan.md"
 
 # Task 19: a regression an earlier task made after the last full run is not
@@ -599,37 +540,28 @@ check "task 19: a review at the same suite base keeps the cached base run" "$rc 
 ts review docs/plan.md 19 --suite-base "$(g rev-parse HEAD~1 | tr -d '\r')"
 check "task 19: a review that moves the suite base drops the cached base run" "$rc $(base_cache)" "0 nnnn"
 
-# Tasks 20 and 21: review --group writes both onto the last member's step file.
-set_failing ''
-commit "green at the last full run before the group"
+# Task 22: a verdict killed during its base run, as a foreground call past its
+# cap is, leaves no worktree checked out or registered.
+printf '\n### Task 22: Task 22\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' >> "$REPO/docs/plan.md"
+set_failing $'not ok 1 - alpha\n'
+: > "$REPO/slow.txt"
+commit "a base that is slow, again"
+ts start docs/plan.md 22 --suite 'bash suite.sh'
+g rm -q slow.txt
+commit "work 22"
 sr
-G_FULL=$(g rev-parse HEAD | tr -d '\r')
-set_failing $'not ok 1 - regress\n'
-commit "an earlier task breaks a test before the group"
-sr
-ts start docs/plan.md 20
-printf 'impl 20\n' >> "$REPO/app.txt"
-commit "member 1"
-ts start docs/plan.md 21
-printf 'impl 21\n' >> "$REPO/app.txt"
-commit "member 2"
-sr
-for t in 20 21; do
-  printf 'Task %s: awaiting group review (commits aaaaaaa..bbbbbbb)\n' "$t" >> "$WS/progress.md"
-  jq --arg h "$(g rev-parse HEAD | tr -d '\r')" '.heldHead = $h' < "$WS/task-$t-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-$t-step.json"
+ts review docs/plan.md 22
+clean_report 22
+(cd "$REPO" && exec bash "$S/task-step" verdict docs/plan.md 22 >/dev/null 2>&1) &
+killed=$!
+for _ in $(seq 1 100); do
+  [ "$(g worktree list | wc -l | tr -d ' ')" -gt 1 ] && break
+  sleep 0.1
 done
-ts review --group docs/plan.md 20 21 --suite 'bash suite.sh' --suite-base "$G_FULL"
-check "group: review --group --suite --suite-base exits 0" "$rc" "0"
-check "group: the last member's step file holds the suite and its base" "$(jq -r '"\(.suite) \(.suiteBase)"' < "$WS/task-21-step.json" | tr -d '\r')" "bash suite.sh $G_FULL"
-check "group: the first member's step file holds neither" "$(jq -r '"\(.suite // "none") \(.suiteBase // "none")"' < "$WS/task-20-step.json" | tr -d '\r')" "none none"
-{
-  printf '## Verdict\n'
-  for t in 20 21; do
-    printf 'Task %s spec: pass\nTask %s quality: approved\nTask %s scores: spec 17 / scope 17 / verification 17 / quality 17\n' "$t" "$t" "$t"
-  done
-} > "$WS/group-20,21-review-report.md"
-ts verdict docs/plan.md 20 21 --group
-check "group: the suite base beats the group rule, so the regression is new" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
+check "task 22: the base run had started" "$(g worktree list | wc -l | tr -d ' ')" "2"
+kill -TERM "$killed"
+wait "$killed" 2>/dev/null
+check "task 22: a killed verdict leaves no worktree registered" "$(g worktree list | wc -l | tr -d ' ')" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

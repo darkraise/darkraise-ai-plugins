@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 import { head, relative } from '../repo.mjs';
 import { addFinding, buildPack, factLines, findingLine, quotePresent, updateFindings, writePack } from '../review.mjs';
-import { appendEvent, loadState, planState, saveState } from '../state.mjs';
+import { appendEvent, loadState, planState, updateState } from '../state.mjs';
 import { loadFindings, refreshHud } from '../status.mjs';
 import { fail, nowIso } from '../util.mjs';
 import { requireActive } from './next.mjs';
@@ -152,15 +152,15 @@ function record(ctx, active, argv, out) {
   const task = taskOption(values.task);
   const required = buildPack(ctx, active, task).tier;
   if (tier < required) fail(`this diff needs a tier ${required} review; tier ${tier} is not enough`);
-  const state = loadState(ctx.paths);
-  const plan = planState(state, active.slug);
   const entry = { tier, sha: head(ctx.root), at: nowIso(ctx.env) };
-  if (task === undefined) plan.review = entry;
-  else {
-    if (!plan.tasks[task]) fail(`Task ${task} has no record`);
-    delete plan.tasks[task].reviewPending;
-  }
-  saveState(ctx.paths, state);
+  updateState(ctx.paths, state => {
+    const plan = planState(state, active.slug);
+    if (task === undefined) plan.review = entry;
+    else {
+      if (!plan.tasks[task]) fail(`Task ${task} has no record`);
+      delete plan.tasks[task].reviewPending;
+    }
+  });
   appendEvent(ctx, { plan: active.slug, event: 'review', tier, task: task ?? null });
   out(`Recorded a tier ${tier} review of ${task === undefined ? relative(ctx.root, active.file) : `Task ${task}`} at ${entry.sha.slice(0, 7)}.`);
   // Shipping closes the plan and promotes its decisions, so by default the

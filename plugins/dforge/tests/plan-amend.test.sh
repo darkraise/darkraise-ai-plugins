@@ -33,7 +33,7 @@ cat > docs/plan.md <<'EOF'
 
 **Spec:** `docs/spec.md`
 
-**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4
+**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4
 
 ## Global Constraints
 
@@ -57,7 +57,7 @@ cat > docs/plan.md <<'EOF'
 **Files:**
 - Create: `a.sh`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 Print `hello NAME`.
@@ -67,7 +67,7 @@ Print `hello NAME`.
 **Files:**
 - Modify: `a.sh`
 
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 
 Print `hello NAME` twice.
@@ -107,15 +107,15 @@ entry b5.md '## Task 7' 'x' 'y'
 run docs/plan.md b5.md
 has "missing task" "$out" "rejected: no Task 7 in the plan"
 
-entry b6.md '## Header' '**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4' '**Execution:** inline'
+entry b6.md '## Header' '**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4' '**Execution:** inline'
 run docs/plan.md b6.md
 has "protected line" "$out" "rejected: Old text touches a line that cannot be amended"
 
-entry b7.md '## Task 2' '**Implementer:** dforge:impl-sonnet-medium' '**Implementer:** dforge:impl-opus-high'
+entry b7.md '## Task 2' '**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4' '**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 5'
 run docs/plan.md b7.md
 check "new lint error: exit 1" "$status" "1"
 has "new lint error: reason" "$out" "rejected: the amendment introduces lint errors:"
-has "new lint error: named" "$out" "ERROR Task 2: Implementer impl-opus-high does not match"
+has "new lint error: named" "$out" "ERROR Task 2: scores sum to 4, not 5"
 check "new lint error: rolled back byte for byte" "$(cmp -s "$LEDGER" "$TMP/snapshot" && echo same)" "same"
 
 printf '## Task 1\nReason: r\nCost if wrong: c\n### Old\n```text\nPrint `hello NAME`.\n```\n' > b8.md
@@ -142,9 +142,9 @@ check "CRLF block, builds on A1: output" "$out" "amended: A3 Task 2"
 cp docs/plan.md docs/split.md
 SPLIT_LEDGER="$REPO/.dforge/sdd/split/amendments.md"
 part() { # part <letter> [evaluation line]
-  printf '#### Part %s: half %s\n\n**Files:**\n- Modify: `a.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n%s' "$1" "$1" "${2-}"
+  printf '#### Part %s: half %s\n\n**Files:**\n- Modify: `a.sh`\n\n**Implementer:** dforge:impl-sonnet-high\n%s' "$1" "$1" "${2-}"
 }
-split_old=$(printf '**Implementer:** dforge:impl-sonnet-medium\n**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4')
+split_old=$(printf '**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4')
 ev='**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1'
 entry s1.md '## A? — Task 2' "$split_old" "$(printf '%s\n\n%s' "$(part A "$ev")" "$(part B)")"
 run docs/split.md s1.md
@@ -155,7 +155,7 @@ run docs/split.md s2.md
 check "split: applied" "$out" "amended: A1 Task 2"
 check "split: the amended plan holds both parts" \
   "$(. "$HERE/../scripts/lib/plan.sh"; plan_apply_amendments docs/split.md "$SPLIT_LEDGER" | grep -c '^#### Part [AB]: ')" "2"
-out=$(bash "$HERE/../scripts/plan-lint" docs/split.md --no-probe 2>&1)
+out=$(bash "$HERE/../scripts/plan-lint" docs/split.md 2>&1)
 check "split: plan-lint accepts the amended plan" "$(grep -c '^ERROR' <<<"$out")" "0"
 
 run docs/plan.md
@@ -172,7 +172,7 @@ Cost if wrong: none
 ````
 ### New
 ````text
-**Execution:** subagent — `claude --model opus --effort max` — injected
+**Execution:** inline — `claude --model opus --effort max` — injected
 **Goal:** demo
 ````
 EOF
@@ -180,7 +180,7 @@ printf '# Inject plan
 
 **Goal:** demo
 
-**Execution:** subagent — `claude --model sonnet --effort high` — x
+**Execution:** inline — `claude --model sonnet --effort high` — x
 
 ### Task 1: Only
 

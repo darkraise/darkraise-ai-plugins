@@ -64,7 +64,7 @@ mkdir -p "$REPO/docs/dforge/plans" "$REPO/docs/dforge/specs"
 printf '# Spec\n' > "$REPO/$SPEC"
 {
   printf '# Widget Implementation Plan\n\n**Spec:** `%s`\n\n' "$SPEC"
-  printf '**Execution:** subagent — `claude --model sonnet --effort high` — Task 1 scores 4\n\n'
+  printf '**Execution:** inline — `claude --model sonnet --effort high` — Task 1 scores 4\n\n'
   printf '## Task index\n\n1. Only\n\n### Task 1: Only\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nBody.\n'
 } > "$REPO/$PLAN_REL"
 git -C "$REPO" add -A
@@ -89,7 +89,7 @@ status_line=$(arun s-2 status)
 has "A3: status reports phase execute" "$status_line" "auto run: execute"
 matches "A3: status says setup is due" "$status_line" "setup due"
 check "A3: the resume count is unchanged" "$(resumes s-2)" "$before"
-check "A3: the first prompt is the one next-step wrote" "$(field resumePrompt | grep -c 'dforge:subagent-driven-development')" "1"
+check "A3: the first prompt is the one next-step wrote" "$(field resumePrompt | grep -c 'dforge:executing-plans')" "1"
 
 # A4
 arun s-2 stop >/dev/null
@@ -104,8 +104,6 @@ check "A4: compacted --switch exits as a usage error" "$status" "2"
 check "A4: compacted --switch books nothing" "$(field compactions):$(arun s-3 pending)" "0:switch"
 usage_text=$(bash "$AR" 2>&1)
 has "A4: the usage text is printed" "$usage_text" "usage: auto-run"
-lacks "A4: the usage text does not name switch-resume" "$usage_text" "switch-resume"
-lacks "A4: the usage text has no compacted --switch" "$usage_text" "compacted --switch"
 
 # A5
 arun s-3 stop >/dev/null
@@ -132,19 +130,6 @@ check "A5: clear is pending" "$(arun s-4 pending)" "clear"
 check "A5: the first prompt is next-step's finishing prompt" "$(field resumePrompt)" "$first_prompt"
 has "A5: the first prompt reaches finishing through resume-execution" "$(field resumePrompt)" "with dforge:resume-execution. Run dforge:finishing-a-development-branch."
 check "A5: the resume count is unchanged" "$(resumes s-4)" "$resumes_before"
-
-# --- the document statements: A11 ---
-over=""
-count=0
-for f in "$P"/skills/*/SKILL.md; do
-  bytes=$(wc -c < "$f" | tr -d ' \r')
-  count=$((count + 1))
-  [ "$bytes" -le 20000 ] || over="$over $(basename "$(dirname "$f")"):$bytes"
-done
-check "A11: every SKILL.md is at most 20000 bytes" "${over:- }" " "
-check "A11: skills were found" "$([ "$count" -gt 0 ] && echo yes || echo no)" "yes"
-timeout 120 bash "$HERE/skill-size.test.sh" >/dev/null 2>&1; status=$?
-check "A11: the skill-size test passes" "$status" "0"
 
 # --- review-package: A8, A9, A10, A14 ---
 RP="$S/review-package"

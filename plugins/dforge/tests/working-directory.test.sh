@@ -105,10 +105,10 @@ U="$TMP/r3 é x" UP="docs/a b/ñ/plan.md"
 git init -q "$U"
 mkdir -p "$U/docs/a b/ñ" "$U/docs/dforge/registers"
 printf '# Spec\n' > "$U/docs/a b/ñ/spec.md"
-printf '# Plan\n\n**Goal:** Demo.\n\n**Spec:** `docs/a b/ñ/spec.md`\n\n**Execution:** inline — `claude --model sonnet --effort low` — x\n\n## Global Constraints\n\n- Bash only.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. Only\n\n### Task 1: Only\n\n**Files:**\n- Create: `a.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nPrint `hello NAME`.\n' > "$U/$UP"
+printf '# Plan\n\n**Goal:** Demo.\n\n**Spec:** `docs/a b/ñ/spec.md`\n\n**Execution:** inline — `claude --model sonnet --effort low` — x\n\n## Global Constraints\n\n- Bash only.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. Only\n\n### Task 1: Only\n\n**Files:**\n- Create: `a.sh`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nPrint `hello NAME`.\n' > "$U/$UP"
 printf '# R\n\n**Source:** s\n**Covers:** `docs/a b/ñ/spec.md`\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Spaced item | - | - | open | - |\n' > "$U/docs/dforge/registers/spaced.md"
 git -C "$U" add -A && git -C "$U" commit -qm plan
-run "$U" plan-lint "$UP" --no-probe
+run "$U" plan-lint "$UP"
 check "spaced path: plan-lint finds the spec" "$(grep '^ERROR' <<<"$out")" ""
 printf '## A? — Task 1\nReason: r\nCost if wrong: c\n### Old\n````text\nPrint `hello NAME`.\n````\n### New\n````text\nPrint `hello, NAME`.\n````\n' > "$TMP/spaced-block.md"
 run "$U" plan-amend "$UP" "$TMP/spaced-block.md"

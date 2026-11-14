@@ -15,8 +15,6 @@ unset AR_SESSION CLAUDE_CONFIG_DIR
 mkdir -p "$HOME" "$DR_CODEX_SESSION_DIR"
 printf '{"session_id":"inline-only-test","usable":false,"review":false,"lane":false}\n' \
   > "$DR_CODEX_SESSION_DIR/inline-only-test.json"
-printf 'echo %s\n' "'[{\"id\":\"codex\",\"usable\":false,\"reason\":\"test\"}]'" > "$TMP/roster.sh"
-export PLAN_LINT_ROSTER="$TMP/roster.sh"
 cd "$TMP"
 git init -q . && git config user.email t@t && git config user.name t
 mkdir -p docs && printf '# Spec\n' > docs/spec.md
@@ -32,7 +30,8 @@ present() { # present <name> <file> <needle>
   else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
 absent() { # absent <name> <file> <needle>
-  if grep -qF -- "$3" "$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
+  if [ ! -f "$2" ]; then printf 'FAIL - %s\n       no such file: [%s]\n' "$1" "$2"; fail=$((fail + 1))
+  elif grep -qF -- "$3" "$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
   else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
 }
 has() { # has <name> <haystack> <needle>
@@ -98,8 +97,6 @@ lint() { out=$(bash "$S/plan-lint" "$@" 2>&1); status=$?; }
 # --- Task 1 ---
 . "$S/lib/plan.sh"
 io_plan "$INLINE_OPUS" "1 2 2 2" "0 1 1 1" > heavy.md
-bash "$S/task-brief" heavy.md 1 "$TMP/b1.md" > /dev/null 2>&1
-absent "A4: a heavy brief carries no Dispatch line" "$TMP/b1.md" "**Dispatch:** delegated"
 io_plan "$INLINE_OPUS" "0 2 1 3" "1 2 1 2" > risk3.md
 bash "$S/task-brief" risk3.md 1 "$TMP/r1.md" > /dev/null 2>&1
 check "A5: a risk-3 brief's second line is the review marker" "$(sed -n 2p "$TMP/r1.md")" "**Review:** per-task — risk 3"
@@ -120,16 +117,13 @@ check "A5: a plan with no Execution line marks its risk-3 task" "$(sed -n 2p "$T
 # --- Task 2 ---
 io_plan "$INLINE_OPUS" "1 2 2 2" "1 2 1 2" > allheavy.md
 lint allheavy.md
-lacks "A1: no Execution warning on an all-heavy inline plan" "$out" "WARN header: Execution"
 lacks "A1: no inline error on an all-heavy inline plan" "$out" "ERROR header: inline"
 io_plan 'inline — `claude --model sonnet --effort high` — x' "1 2 1 2" "0 1 1 0" > sonnet6.md
 lint sonnet6.md
 has "A2: total 6 on sonnet is the model-floor error" "$out" "ERROR header: inline execution needs --model opus (model sonnet)"
 io_plan 'subagent — `claude --model sonnet --effort high` — x' "0 1 1 0" "0 1 1 1" > sub.md
 lint sub.md
-has "A3: a subagent line is deprecated" "$out" "WARN header: subagent execution is deprecated; inline is the default"
-lacks "A3: no majority-rule warning" "$out" "tasks are heavy"
-lacks "A3: no mode error" "$out" "ERROR header: subagent"
+has "A3: a subagent line is retired" "$out" "ERROR header: subagent execution was retired in 5.0.0; use inline"
 io_plan 'inline — `claude --model sonnet --effort medium` — x' "0 0 0 3" "0 1 1 0" > risk3m.md
 lint risk3m.md
 has "A15: risk 3 raises the effort floor to high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
@@ -137,10 +131,8 @@ has "A15: risk 3 raises the effort floor to high" "$out" "ERROR header: inline e
 io_plan "$INLINE_OPUS" "0 2 1 3" "0 1 1 0" > loop.md
 git add -A && git commit -qm plans
 ws=$(bash "$S/sdd-workspace" loop.md | tail -n 1)
-start_out=$(bash "$S/task-step" start loop.md 1 --inline 2>&1); start_rc=$?
-check "A14: start --inline exits 0" "$start_rc" "0"
-has "A14: start --inline says no dispatch file" "$start_out" "; inline, no dispatch file written"
-has "A14: start --inline names the inline seat" "$start_out" "seat: inline"
+start_out=$(bash "$S/task-step" start loop.md 1 2>&1); start_rc=$?
+check "A14: start exits 0" "$start_rc" "0"
 check "A14: step state written" "$([ -f "$ws/task-1-step.json" ] && echo yes)" "yes"
 check "A14: no dispatch file" "$([ -e "$ws/task-1-dispatch.md" ] && echo yes || echo no)" "no"
 check "A14: only the identity line is written" "$(case "$(head -n 1 "$ws/progress.md")" in "# SDD ledger — plan: "*) echo yes ;; *) echo no ;; esac)" "yes"
@@ -156,29 +148,8 @@ printf 'Task 1: fix round 1/2 (1 addressed, 0 open; commits %s..%s; session)\n' 
 printf 'Task 1: complete (commits %s..%s, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat dforge:judge-opus) — done: x; verified: x; remaining: none; discovered: none; assumptions: none\n' "$h7" "$h7" >> "$ws/progress.md"
 check "A14: next-step reads the session walk as complete" \
   "$(bash "$S/next-step" loop.md 2>/dev/null | grep '^\*\*Next:\*\*' | grep -c 'Task 2')" "1"
-wave_out=$(bash "$S/task-step" start loop.md 2 --inline --wave 1 2>&1); wave_rc=$?
-check "A14: --inline with --wave is a usage error" "$wave_rc" "2"
 # --- Task 4 ---
-check "A7: executionStrategy defaults to sequential" "$(bash "$S/dforge-config" get executionStrategy | tr -d '\r')" "sequential"
 check "A7: the workflow line is empty at defaults" "$(bash "$S/dforge-config" workflow | tr -d '\r')" ""
-present "A7: the schema says parallel needs subagent mode" "$P/config/schema.mjs" "only with a subagent Execution line"
-absent "cockpit nudge: no Implementer agent for implementation" "$P/hooks/cockpit/lib.ts" "for implementation"
-# --- Task 5 ---
-check "A8: no drafter agent" "$([ -e "$P/agents/drafter-sonnet.md" ] && echo yes || echo no)" "no"
-check "A8: no draft-pack" "$([ -e "$S/draft-pack" ] && echo yes || echo no)" "no"
-# --- Task 6 ---
-check "A8: no scout agent" "$([ -e "$P/agents/scout-sonnet.md" ] && echo yes || echo no)" "no"
-check "codex routing has no scout floor" "$(jq -r '.role_floors.scout // "none"' < "$P/reference/codex-routing.json" | tr -d '\r')" "none"
-# --- Task 7 ---
-check "A17: switching.md is gone" "$([ -e "$P/skills/executing-plans/references/switching.md" ] && echo yes || echo no)" "no"
-# --- Task 8 ---
-. "$S/lib/plan.sh"
-printf 'Task 1: escalated inline -> subagent — fix cap\n' > "$TMP/old-ledger.md"
-check "A11: an old escalation line still parses" "$(ledger_left_inline "$TMP/old-ledger.md")" "1"
-# --- Task 11 ---
-for f in "$P/.claude-plugin/plugin.json" "$P/.codex-plugin/plugin.json" "$P/../../.claude-plugin/marketplace.json"; do
-  absent "no tiered implementers in $f" "$f" "tiered implementers"
-done
 check "marketplace keyword swapped" "$(jq -r '.plugins[] | select(.name == "dforge") | .keywords | index("spec-driven") != null and index("subagents") == null' < "$P/../../.claude-plugin/marketplace.json" | tr -d '\r')" "true"
 check "plugin keyword swapped" "$(jq -r '.keywords | index("spec-driven") != null and index("subagents") == null' < "$P/.claude-plugin/plugin.json" | tr -d '\r')" "true"
 v=$(jq -r .version < "$P/.claude-plugin/plugin.json" | tr -d '\r')

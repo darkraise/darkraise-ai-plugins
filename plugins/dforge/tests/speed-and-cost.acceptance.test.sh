@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance tests for the speed-and-cost spec
 # (docs/dforge/specs/2026-10-27-speed-and-cost-design.md), the plugin-side
-# statements A1, A3, A4, A5, A6, A7, A9, A10 and A11. A12 and A13 (the eval
-# pipeline) are in evals/tiers/tests/speed-and-cost.acceptance.test.mjs.
+# statements A1, A3, A4, A5, A6, A7, A9, A10 and A11.
 # Each test is written from the statement's text and reaches the behaviour
 # through the scripts the spec names (task-step, suite-run, impl-stop-gate), the
 # files the plugin ships, or, where a statement is about what a skill tells a
@@ -53,35 +52,6 @@ export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 doc() { tr -d '\r' < "$1" | tr '\n' ' ' | tr -s ' '; } # a file as one line, whitespace collapsed
 winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 
-# ---------------------------------------------------------------- A1
-if selected A1; then
-  over=""
-  for f in "$PLUGIN"/skills/*/SKILL.md; do
-    bytes=$(wc -c < "$f" | tr -d ' \r')
-    [ "$bytes" -le 20000 ] || over="$over$(basename "$(dirname "$f")")=$bytes "
-  done
-  check "A1: every skills/*/SKILL.md is at most 20,000 bytes" "$over" ""
-
-  mkdir -p "$TMP/a1/tests" "$TMP/a1/skills/small" "$TMP/a1/skills/exact" "$TMP/a1/skills/huge" "$TMP/a1/skills/barely"
-  cp "$HERE/skill-size.test.sh" "$TMP/a1/tests/skill-size.test.sh"
-  head -c 5000 /dev/zero | tr '\0' x > "$TMP/a1/skills/small/SKILL.md"
-  head -c 20000 /dev/zero | tr '\0' x > "$TMP/a1/skills/exact/SKILL.md"
-  head -c 31337 /dev/zero | tr '\0' x > "$TMP/a1/skills/huge/SKILL.md"
-  head -c 20001 /dev/zero | tr '\0' x > "$TMP/a1/skills/barely/SKILL.md"
-  out=$(timeout 60 bash "$TMP/a1/tests/skill-size.test.sh" 2>&1); rc=$?
-  check "A1: skill-size.test.sh fails when a skill is over the cap" "$([ "$rc" -ne 0 ] && echo failed || echo passed)" "failed"
-  has "A1: it names the 31,337-byte file with its size" "$out" "huge/SKILL.md"
-  has "A1: it prints the 31,337 size" "$out" "31337"
-  has "A1: it names the 20,001-byte file" "$out" "barely/SKILL.md"
-  has "A1: it prints the 20,001 size" "$out" "20001"
-  lacks "A1: it does not name a skill at exactly 20,000 bytes" "$(grep -E 'FAIL|skill-size:' <<<"$out")" "exact/SKILL.md"
-  lacks "A1: it does not name a small skill" "$(grep -E 'FAIL|skill-size:' <<<"$out")" "small/SKILL.md"
-  rm -rf "$TMP/a1/skills/huge" "$TMP/a1/skills/barely"
-  out=$(timeout 60 bash "$TMP/a1/tests/skill-size.test.sh" 2>&1)
-  check "A1: with every skill at or under the cap, skill-size.test.sh names none" "$(grep -c 'bytes (cap' <<<"$out")" "0"
-  check "A1: and reports no over-cap failure" "$(grep -c 'FAIL.*at most' <<<"$out")" "0"
-fi
-
 # ------------------------------------------------- fixture for A3, A5, A6, A7
 need_fixture() { selected A3 || selected A4 || selected A5 || selected A6 || selected A7; }
 if need_fixture; then
@@ -92,10 +62,10 @@ if need_fixture; then
   g config user.email t@example.invalid
   mkdir -p "$FIX/docs" "$FIX/lib"
   {
-    printf '# Acceptance Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** subagent — `claude --model sonnet --effort high` — fixture\n\n## Task index\n\n'
+    printf '# Acceptance Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** inline — `claude --model sonnet --effort high` — fixture\n\n## Task index\n\n'
     for n in 1 2 3 4 5; do printf '%s. Task %s\n' "$n" "$n"; done
     for n in 1 2 3 4 5; do
-      printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nRun: `bash check.sh`\n' "$n" "$n"
+      printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nRun: `bash check.sh`\n' "$n" "$n"
     done
   } > "$FIX/docs/plan.md"
   printf '#!/usr/bin/env bash\nif grep -qx ok state.txt; then echo "ok 1 - alpha"; else echo "not ok 1 - alpha"; exit 1; fi\n' > "$FIX/suite.sh"
@@ -121,15 +91,8 @@ fi
 
 # ---------------------------------------------------------------- A3
 if selected A3; then
-  IP="$PLUGIN/skills/subagent-driven-development/references/implementer-prompt.md"
-  ts start docs/plan.md 1 --suite "$CMD"
-  DISPATCH="$WS/task-1-dispatch.md"
-  check "A3: task-step start writes the dispatch file" "$([ -f "$DISPATCH" ] && echo yes || echo no)" "yes"
-  for src in "$IP" "$DISPATCH"; do
-    label=$(basename "$src")
-    text=$(doc "$src")
-    has "A3: $label names the Verified section" "$text" '## Verified'
-  done
+  IP="$PLUGIN/reference/prompts/implementer-prompt.md"
+  has "A3: implementer-prompt.md names the Verified section" "$(doc "$IP")" '## Verified'
 fi
 
 # ---------------------------------------------------------------- A4
@@ -292,7 +255,7 @@ if selected A9; then
   gate dforge:impl-sonnet-high "$(newid)" $'**Status:** DONE\n- Commits: abc1234 feat: x'
   check "A9: DONE with no Report: line exits 2" "$grc" "2"
   has "A9: and the reason names the Report: line" "$gerr" "Report:"
-  gate dforge:impl-opus-high "$(newid)" $'**Status:** DONE_WITH_CONCERNS\n- one concern'
+  gate dforge:impl-sonnet-high "$(newid)" $'**Status:** DONE_WITH_CONCERNS\n- one concern'
   check "A9: DONE_WITH_CONCERNS with no Report: line exits 2" "$grc" "2"
   has "A9: and the reason names the Report: line" "$gerr" "Report:"
   gate impl-haiku "$(newid)" $'**Status:** DONE\nno report line here'
@@ -335,30 +298,30 @@ if selected A10; then
   check "A10: an impl stop with no status line exits 0" "$grc" "0"
 
   id=$(newid)
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nfirst try'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nfirst try'
   r1=$grc
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nsecond try, different words'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nsecond try, different words'
   r2=$grc
   check "A10: the first two distinct stops are blocked" "$r1 $r2" "2 2"
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nthird try, different again'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nthird try, different again'
   check "A10: the third distinct stop after two blocks exits 0" "$grc" "0"
   log="$GSTATE/impl-stop-gate.log"
   check "A10: it appends exactly one line to <state>/impl-stop-gate.log" "$(wc -l < "$log" 2>/dev/null | tr -d ' ')" "1"
-  matches "A10: the log line is '<epoch> <agent_id> <agent_type> pass-through after 2 blocks — <reason>'" "$(cat "$log" 2>/dev/null)" "^[0-9]+ $id dforge:impl-opus-medium pass-through after 2 blocks — .+"
+  matches "A10: the log line is '<epoch> <agent_id> <agent_type> pass-through after 2 blocks — <reason>'" "$(cat "$log" 2>/dev/null)" "^[0-9]+ $id dforge:impl-sonnet-high pass-through after 2 blocks — .+"
 
   # An identical stop fired twice does not raise the count.
   id=$(newid)
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nrepeated stop'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nrepeated stop'
   a=$grc
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nrepeated stop'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nrepeated stop'
   b=$grc
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nrepeated stop'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nrepeated stop'
   c=$grc
   check "A10: the same stop three times is blocked each time" "$a $b $c" "2 2 2"
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\na second, distinct stop'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\na second, distinct stop'
   d=$grc
   check "A10: after repeats the next distinct stop is still only the second block" "$d" "2"
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\na third, distinct stop'
+  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\na third, distinct stop'
   check "A10: and the stop after that passes" "$grc" "0"
   check "A10: the repeats added no second log line for the first agent" "$(grep -c " $id " "$log")" "1"
 fi

@@ -206,45 +206,6 @@ plan_heavy() {
   plan_scores "$1" | awk -F'\t' '$2 != "-" && $2 != "?" && ($2 + 0 >= 5 || $3 + 0 == 3) { print $1 }'
 }
 
-# plan_parallelism FILE — the plan's execution strategy: `sequential` when the
-# header has no **Parallelism:** line or names sequential, `waves` for a waves
-# line, `bad` for anything else. See reference/parallel-waves.md.
-plan_parallelism() {
-  local line
-  line=$(plan_header_line "$1" Parallelism)
-  if [ -z "$line" ] || [[ "$line" =~ ^\*\*Parallelism:\*\*[[:space:]]+sequential([[:space:]]|$) ]]; then
-    echo sequential
-  elif [[ "$line" =~ ^\*\*Parallelism:\*\*[[:space:]]+waves( — | – | - | -- ) ]]; then
-    echo waves
-  else
-    echo bad
-  fi
-}
-
-# plan_waves FILE — one "K<TAB>FIRST<TAB>LAST" line per wave of a waves plan,
-# in the order the **Parallelism:** line lists them; nothing for a sequential
-# plan. Exit 4, printing nothing, when a range does not parse. Whether the
-# ranges are contiguous and cover the plan is plan-lint's check, not this one's.
-plan_waves() {
-  local line body k=0 r a b out=""
-  [ "$(plan_parallelism "$1")" = waves ] || return 0
-  line=$(plan_header_line "$1" Parallelism)
-  body=$(sed -E 's/^\*\*Parallelism:\*\*[[:space:]]+waves( — | – | - | -- )//; s/[[:space:]]+$//' <<<"$line")
-  IFS='|' read -r -a ranges <<<"$body"
-  for r in "${ranges[@]}"; do
-    r=$(tr -d ' \t' <<<"$r")
-    if [[ "$r" =~ ^([0-9]+)$ ]]; then a=${BASH_REMATCH[1]} b=$a
-    elif [[ "$r" =~ ^([0-9]+)-([0-9]+)$ ]]; then a=${BASH_REMATCH[1]} b=${BASH_REMATCH[2]}
-    else return 4
-    fi
-    [ "$a" -le "$b" ] || return 4
-    k=$((k + 1))
-    out="$out$k"$'\t'"$((10#$a))"$'\t'"$((10#$b))"$'\n'
-  done
-  [ "$k" -gt 0 ] || return 4
-  printf '%s' "$out"
-}
-
 # plan_task_paths — the repository paths the task text on stdin names in its
 # `- Create:`, `- Modify:`, `- Test:` and `- Delete:` lines outside fences, in
 # every part, one per line, unique. A `:123-145` line range is dropped.
@@ -258,20 +219,6 @@ plan_task_paths() {
       if (p != "" && !seen[p]++) print p
     }
   '
-}
-
-# plan_task_depends — the task numbers the first **Depends on:** line of the
-# task text on stdin names, one per line; `none` prints nothing. Exit 3 when
-# the text has no Depends on line.
-plan_task_depends() {
-  local line
-  line=$(awk "$_PLAN_AWK"'
-    stop { next }
-    in_fence($0) { next }
-    /^\*\*Depends on:\*\*/ { print; stop = 1 }')
-  [ -n "$line" ] || return 3
-  line=${line#"**Depends on:**"}
-  grep -oE '[0-9]+' <<<"$line" || true
 }
 
 # _plan_ctx PLAN — the directory whose checkout a plan belongs to: its own
@@ -327,18 +274,6 @@ plan_ledger() {
   fi
   [ "$(dforge_name_key "$(dforge_name "$named" "$ctx")")" != "$want" ] || printf '%s\n' "$file"
   return 0
-}
-
-# ledger_left_inline LEDGER — the task number where the plan left inline mode:
-# the last "escalated inline -> subagent" line with no later inline assignment.
-# Nothing when the plan is in inline mode. The marker is a whole ledger line,
-# never a substring of another line.
-ledger_left_inline() {
-  tr -d '\r' < "$1" | awk '
-    /^Task [0-9]+: escalated inline -> subagent[ \t]*(—|-|$)/ { n = $2; sub(/:$/, "", n); esc = n; next }
-    /^Task [0-9]+: implementer inline \(assigned/ { esc = "" }
-    END { if (esc != "") print esc }
-  '
 }
 
 # plan_apply_amendments PLAN AMEND — the plan with every amendments.md entry

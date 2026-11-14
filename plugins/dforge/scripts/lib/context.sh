@@ -355,14 +355,11 @@ ctx_log_observation() {
     >> "$base/budget-log.tsv" 2>/dev/null || return 0
 }
 
-ctx_auto_label() { # ctx_auto_label REGIME WIDTH
-  local label="budget (auto"
-  [ "$1" = high ] && label="$label, high"
-  [ "$2" -gt 1 ] && label="$label, wave of $2"
-  printf '%s)' "$label"
+ctx_auto_label() { # ctx_auto_label REGIME
+  if [ "$1" = high ]; then printf 'budget (auto, high)'; else printf 'budget (auto)'; fi
 }
 
-# ctx_auto_line TOKENS MODEL WIDTH — the budget line while an auto run is bound
+# ctx_auto_line TOKENS MODEL — the budget line while an auto run is bound
 # to this session (reference/auto-run.md): the run's rule replaces the task
 # budget, the tail, the final-phase limit and relaxed mode. Returns 0 ok,
 # 6 compact, 5 handoff, 3 when the run cannot be read.
@@ -371,12 +368,12 @@ ctx_auto_line() {
   task=$(ctx_pinned_budget)
   [ -n "$task" ] || task=$(ctx_budget "$2")
   window=$(ctx_window "$2")
-  if ! out=$(ar_verdict "$tokens" "$task" "$window" "$3"); then
+  if ! out=$(ar_verdict "$tokens" "$task" "$window"); then
     echo "budget (auto): unknown — unknown — the run's state could not be updated"
     return 3
   fi
   read -r verdict limit regime <<<"$out"
-  label=$(ctx_auto_label "$regime" "$3")
+  label=$(ctx_auto_label "$regime")
   echo "$label: $(( (tokens + 500) / 1000 ))k of $(( (limit + 500) / 1000 ))k ($(( tokens * 100 / limit ))%) — $verdict — source: $CTX_SOURCE"
   case $verdict in
     compact) return 6 ;;
@@ -385,26 +382,22 @@ ctx_auto_line() {
   return 0
 }
 
-# ctx_line [final | tail R | plan | wave W] — print the budget line; return 0 ok, 5
+# ctx_line [final | tail R | plan] — print the budget line; return 0 ok, 5
 # handoff, 6 compact (an auto run only), 3 unknown. With final, the plan's final
 # phase: measured against the task budget, it never hands off. tail R does the
 # same before one of a plan's last R tasks (CTX_TAIL_TASKS), so the plan
 # finishes in this session past its budget. With the handoffMode setting at
 # relaxed both measure against the final-phase limit instead, and a tail task
-# past it hands off. With wave W, reserve one task's worst growth for
-# each of the W - 1 tasks that run beside the first, so a parallel wave that
-# starts under its budget lands before compaction just as one task does
-# (reference/parallel-waves.md). With the handoffMode setting at relaxed, a
-# plain task and a wave measure against the final-phase limit too, and the
-# label says so. An auto run bound to the session (AR_SESSION, else
+# past it hands off. With the handoffMode setting at relaxed, a plain task
+# measures against the final-phase limit too, and the label says so. An auto run bound to the session (AR_SESSION, else
 # CLAUDE_CODE_SESSION_ID) replaces every limit but the plan's with its own
 # (ar_verdict, reference/auto-run.md): 6 asks for a compaction and 5 for a
 # handoff. With final it first moves the run to its final phase once the
 # ledger has every task complete (ar_enter_final).
 ctx_line() {
   local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
-  local label=budget extra=0
-  local limit=task auto=0 width=1 regime mode finishing=0
+  local label=budget
+  local limit=task auto=0 regime mode finishing=0
   mode=$(dforge_setting handoffMode strict)
   if [ "${1:-}" = final ]; then
     label="budget (final)" finishing=1
@@ -415,11 +408,6 @@ ctx_line() {
     if [ "${2:-1}" = 1 ]; then label="budget (last task)"; else label="budget (last ${2} tasks)"; fi
   fi
   [ "${1:-}" = plan ] && label="budget (plan)" limit=plan
-  if [ "${1:-}" = wave ]; then
-    label="budget (wave of ${2:-1})"
-    extra=$(( (${2:-1} - 1) * CTX_TASK_MARGIN ))
-  fi
-  [ "${1:-}" = wave ] && width=${2:-1}
   # An auto run bound to this session replaces every limit but the plan's.
   if [ "${1:-}" != plan ]; then
     AR_SESSION=${AR_SESSION:-${CLAUDE_CODE_SESSION_ID:-}}
@@ -427,16 +415,20 @@ ctx_line() {
       auto=1
       # The check after the last task's complete line starts the final phase.
       [ "${1:-}" != final ] || ar_enter_final || true
-      label=$(ctx_auto_label normal "$width")
+      label=$(ctx_auto_label normal)
     fi
   fi
   if [ "$limit" = task ] && [ "$mode" = relaxed ]; then
     limit=relaxed
-    if [ "${1:-}" = wave ]; then label="budget (relaxed, wave of ${2:-1})"; else label="budget (relaxed)"; fi
+    label="budget (relaxed)"
   fi
   if ctx_have_jq; then
     if ctx_find_transcript; then claude=$CTX_TRANSCRIPT; fi
-    if ctx_find_rollout; then rollout=$CTX_ROLLOUT; fi
+    # A session id whose own record was found names the caller: a Codex
+    # session in the same checkout must not take its budget line.
+    if [ -z "${CLAUDE_CODE_SESSION_ID:-}" ] || [ "$CTX_SOURCE" != record ]; then
+      if ctx_find_rollout; then rollout=$CTX_ROLLOUT; fi
+    fi
   fi
   # The live session is the one still being appended to. Session records are
   # never deleted, so a record source does not by itself prove a live Claude
@@ -465,13 +457,10 @@ ctx_line() {
   elif [ "$limit" = plan ]; then
     budget=$(ctx_plan_budget "$model")
   elif [ "$limit" = relaxed ]; then
-    budget=$(( $(ctx_final_budget "$model") - extra ))
-    [ "$budget" -gt 0 ] || budget=1
+    budget=$(ctx_final_budget "$model")
   else
     budget=$(ctx_pinned_budget)
     [ -n "$budget" ] || budget=$(ctx_budget "$model")
-    budget=$(( budget - extra ))
-    [ "$budget" -gt 0 ] || budget=1
   fi
   # A size that cannot be read still names the run's own limit.
   if [ "$auto" = 1 ]; then
@@ -479,8 +468,8 @@ ctx_line() {
     regime=${regime:-normal}
     budget=$(ctx_pinned_budget)
     [ -n "$budget" ] || budget=$(ctx_budget "$model")
-    budget=$(ar_limit "$budget" "$(ctx_window "$model")" "$width" "$regime")
-    label=$(ctx_auto_label "$regime" "$width")
+    budget=$(ar_limit "$budget" "$(ctx_window "$model")" "$regime")
+    label=$(ctx_auto_label "$regime")
   fi
   bk=$(( (budget + 500) / 1000 ))
   if ! ctx_have_jq; then echo "$label: unknown of ${bk}k — unknown — no jq"; return 3; fi
@@ -489,7 +478,7 @@ ctx_line() {
     echo "$label: unknown of ${bk}k — unknown — no usage entry in $CTX_TRANSCRIPT"; return 3
   fi
   if [ "$auto" = 1 ]; then
-    ctx_auto_line "$tokens" "$model" "$width"
+    ctx_auto_line "$tokens" "$model"
     return
   fi
   tk=$(( (tokens + 500) / 1000 ))

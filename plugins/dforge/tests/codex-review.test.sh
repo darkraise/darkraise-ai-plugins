@@ -70,20 +70,6 @@ for dep in jq timeout head tr sed awk grep cat mktemp rm; do
   chmod +x "$TMP/bin/$dep"
 done
 
-# A stub roster, so selection is tested without probing the real machine.
-write_roster() { # write_roster
-  cat > "$TMP/bin/detect-stub" <<STUB
-#!$BASH_BIN
-printf '%s\n' "\$*" >> "$TMP/roster.log"
-cat <<'JSON'
-[{"id":"codex","present":true,"path":"/stub/codex","version":"codex-cli 0.153.4",
-  "authed":true,"auth_status":"authenticated","batch_capable":true,"usable":true,
-  "reason":null}]
-JSON
-STUB
-  chmod +x "$TMP/bin/detect-stub"
-}
-
 # A stub session gate. Every case sees a usable Codex unless it sets
 # GATE_STUB_LINE or GATE_STUB_EXIT.
 cat > "$TMP/gate-stub" <<STUB
@@ -95,7 +81,7 @@ STUB
 run() { # run <args...>; STUB_* variables in the environment script the stub
   printf '0' > "$TMP/calls"
   : > "$TMP/events.log"
-  PATH="$TMP/bin:$PATH" CODEX_REVIEW_ROSTER="$TMP/bin/detect-stub" \
+  PATH="$TMP/bin:$PATH" \
     CODEX_REVIEW_GATE="$TMP/gate-stub" CODEX_REVIEW_LADDER="$CODEX_REVIEW_LADDER" \
     CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" CLAUDE_PROJECT_DIR= \
     DR_CODEX_POLICY="$DR_CODEX_POLICY" \
@@ -106,7 +92,6 @@ run() { # run <args...>; STUB_* variables in the environment script the stub
 check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
 
 # --- selection ---------------------------------------------------------------
-write_roster
 out=$(run --kind final --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run)
 req_of() { sed -n '2p' <<<"$1"; } # req_of <dry-run output>; echoes the request JSON
 present "the heavy tier selects astra" "$out" "codex-judge gpt-6-astra/high"
@@ -121,35 +106,19 @@ check "final: read-only sandbox" "$(jq -r '.sandbox' <<<"$r")" "read-only"
 check "final: deadline in milliseconds" "$(jq -r '.deadlineMs > 0' <<<"$r")" "true"
 
 # --- the two kinds differ ----------------------------------------------------
-write_roster
 printf 'prompt text\n' > "$TMP/p.txt"
-out=$(run --kind risk3 --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
+out=$(run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 r=$(req_of "$out")
-check "risk3: carries a schema path" \
+check "task: carries a schema path" \
   "$(jq -r '.schemaPath' <<<"$r" | grep -c 'codex-review-schema.json')" "1"
-check "risk3: read-only sandbox" "$(jq -r '.sandbox' <<<"$r")" "read-only"
-# risk3 is the sub-project 7 name for the task seat, normalised to task before
-# the request is built, so that is the kind the client sees.
-check "risk3: the kind reaches the request" "$(jq -r '.kind' <<<"$r")" "task"
-
-# The unusable branch has its own status line and must still be parseable.
-cat > "$TMP/bin/detect-stub" <<STUB
-#!$BASH_BIN
-cat <<'JSON'
-[{"id":"codex","present":true,"path":null,"version":null,"authed":false,
-  "auth_status":"logged_out","batch_capable":true,"usable":false,
-  "reason":"present but not authenticated; run codex login"}]
-JSON
-STUB
-chmod +x "$TMP/bin/detect-stub"
-out=$(run --kind final --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run); rc=$?
-present "an unusable codex is FAILED" "$out" "status=FAILED"
-present "the unusable status line keeps the model/effort shape" "$out" "codex-judge none/none"
-check "an unusable codex exits 1" "$rc" "1"
+check "task: read-only sandbox" "$(jq -r '.sandbox' <<<"$r")" "read-only"
+check "task: the kind reaches the request" "$(jq -r '.kind' <<<"$r")" "task"
 
 # --- usage errors are exit 2, before any call --------------------------------
-run --kind risk3 --cwd "$TMP/work" --out "$TMP/o.json" --dry-run >/dev/null; rc=$?
-check "risk3 without --prompt is a usage error" "$rc" "2"
+run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --dry-run >/dev/null; rc=$?
+check "task without --prompt is a usage error" "$rc" "2"
+run --kind risk3 --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run >/dev/null; rc=$?
+check "the retired risk3 kind is a usage error" "$rc" "2"
 run --kind final --cwd "$TMP/work" --out "$TMP/o.md" --dry-run >/dev/null; rc=$?
 check "final without --base is a usage error" "$rc" "2"
 run --kind bogus --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run >/dev/null; rc=$?
@@ -162,10 +131,7 @@ seat() { # seat <kind> <extra-args...>; STUB_* in the environment scripts the st
   run --kind "$k" --cwd "$TMP/work" "$@"
 }
 
-write_roster
 
-: > "$TMP/roster.log"; out=$(seat task --tier light --out "$TMP/o.json" --prompt "$TMP/p.txt")
-check "the runner probes only its own family" "$(cat "$TMP/roster.log")" "codex"
 out=$(STUB_MODE=hang seat task --tier light --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "a timeout names its reason" "$out" "reason=timeout"
 
@@ -180,11 +146,11 @@ check "FAILED exits 1" "$rc" "1"
 out=$(STUB_EMPTY=1 seat final --out "$TMP/o.md" --base main)
 present "no report at all is FAILED" "$out" "status=FAILED"
 
-out=$(STUB_FINAL_MESSAGE='{"spec":18,"scope":18,"verification":18,"quality":18,"spec_verdict":"compliant","task_quality":"approved","findings":[],"cannot_verify":[]}'   seat risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
-present "a schema-shaped risk3 report is OK" "$out" "status=OK"
+out=$(STUB_FINAL_MESSAGE='{"spec":18,"scope":18,"verification":18,"quality":18,"spec_verdict":"compliant","task_quality":"approved","findings":[],"cannot_verify":[]}'   seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "a schema-shaped task report is OK" "$out" "status=OK"
 
-out=$(seat risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt")
-present "risk3 output that is not schema-shaped is FAILED" "$out" "status=FAILED"
+out=$(seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
+present "task output that is not schema-shaped is FAILED" "$out" "status=FAILED"
 
 out=$(STUB_MODE=hang seat final --out "$TMP/o.md" --base main); rc=$?
 present "a run past its deadline is TIMEOUT, never a model change" "$out" "status=TIMEOUT"
@@ -249,7 +215,6 @@ present "malformed fallback is FAILED" "$out" 'status=FAILED'
 present "the malformed report came from the fallback seat" "$out" "codex-judge gpt-6.1-sol/high status=FAILED"
 
 # --- task and plan kinds, and the light tier ---------------------------------
-write_roster
 out=$(run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 r=$(req_of "$out")
 check "task: passes the task-review schema"   "$(jq -r '.schemaPath' <<<"$r" | grep -c 'codex-review-schema.json')" "1"
@@ -258,9 +223,6 @@ present "task defaults to the heavy tier" "$out" "codex-judge gpt-6-astra/high"
 out=$(run --kind task --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 present "the light tier selects the last judge row" "$out" "codex-judge gpt-6.1-sol/high"
 present "the light tier reports no catalog evidence" "$out" "evidence=none"
-
-out=$(run --kind risk3 --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
-present "risk3 accepts the light tier" "$out" "codex-judge gpt-6.1-sol/high"
 
 out=$(run --kind plan --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 r=$(req_of "$out")
@@ -291,7 +253,6 @@ present "a refused light run is FAILED" "$out" "status=FAILED"
 check "the light tier never falls back" "$(cat "$TMP/calls")" "1"
 
 # --- the session gate and the quota ------------------------------------------
-write_roster
 OFF='codex-gate usable=false reason=quota review=false resets_at=2026-09-20T10:03:27Z source=cache'
 calls() { cat "$TMP/calls" 2>/dev/null || echo 0; }
 
@@ -308,9 +269,9 @@ case "$out" in
   *would-run*) printf 'FAIL - a gated dry run prints no command\n'; fail=$((fail + 1)) ;;
   *) printf 'ok   - a gated dry run prints no command\n'; pass=$((pass + 1)) ;;
 esac
-out=$(GATE_STUB_LINE="$OFF" seat risk3 --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
-present "risk3 is gated too" "$out" "codex-judge none/none status=FAILED"
-check "a gated risk3 runs no codex" "$(calls)" "0"
+out=$(GATE_STUB_LINE="$OFF" seat task --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
+present "a task seat is gated too" "$out" "codex-judge none/none status=FAILED"
+check "a gated task seat runs no codex" "$(calls)" "0"
 
 out=$(GATE_STUB_EXIT=2 seat final --out "$TMP/o.md" --base main); rc=$?
 present "a gate that exits non-zero is refused, whatever it printed" "$out" "codex-judge none/none status=FAILED"

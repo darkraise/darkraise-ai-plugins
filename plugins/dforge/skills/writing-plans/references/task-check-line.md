@@ -1,6 +1,6 @@
 ## Write the Task check and Integration check lines
 
-`**Integration check:**` holds the full suite command on every plan, not only on a waves plan.
+`**Integration check:**` holds the full suite command on every plan.
 It is the Full suite tier's command.
 
 Choose the first that applies for `**Task check:**`:
@@ -28,5 +28,4 @@ example `— gate 2 has Tier: task` or `— the full suite last passed in 212 s`
 Rule 4 writes the line as `**Task check:** none — full suite every 3 tasks`.
 
 Write the command as one code span. `scripts/plan-lint` warns on a missing
-line and fails a malformed one. A waves plan without an `**Integration check:**`
-line fails.
+line and fails a malformed one.

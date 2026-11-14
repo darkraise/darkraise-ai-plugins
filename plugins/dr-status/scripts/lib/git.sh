@@ -42,15 +42,18 @@ dcc_git_parse() { # dcc_git_parse <porcelain-v2-text>
   return 0
 }
 
-dcc_git_collect() { # dcc_git_collect <dir> -> parsed globals + DCC_GIT_ROOT; non-zero outside a repo
-  local dir="${1:-}" out root to
+dcc_git_collect() { # dcc_git_collect <dir> -> parsed globals + DCC_GIT_ROOT; non-zero outside a repo, 124 on a timeout
+  local dir="${1:-}" out root to rc
   DCC_GIT_BRANCH=""; DCC_GIT_ROOT=""
   [ -n "$dir" ] && [ -d "$dir" ] || return 1
   command -v git >/dev/null 2>&1 || return 1
   # `command -v` is a builtin, so probing per call costs no fork; if coreutils
   # timeout is missing the git calls below simply run unguarded.
   if command -v timeout >/dev/null 2>&1; then to="timeout 1"; else to=""; fi
-  out=$($to git -C "$dir" status --porcelain=v2 --branch --untracked-files=normal 2>/dev/null) || return 1
+  # Without --no-optional-locks a background status may take index.lock to
+  # refresh the index, and the user's own git command racing it then fails.
+  out=$($to git --no-optional-locks -C "$dir" status --porcelain=v2 --branch --untracked-files=normal 2>/dev/null) || {
+    rc=$?; [ "$rc" -eq 124 ] && return 124; return 1; }
   [ -n "$out" ] || return 1
   dcc_git_parse "$out"
   [ -n "$DCC_GIT_BRANCH" ] || return 1

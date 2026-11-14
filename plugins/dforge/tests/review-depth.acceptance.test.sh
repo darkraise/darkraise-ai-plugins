@@ -47,8 +47,6 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MS
 export DFORGE_LENS_MINOR_FROM=0
 # No session gate file exists, so every plan round routes with reason=reviewers-off.
 export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=review-depth-acceptance
-printf '%s\n' '#!/usr/bin/env bash' "echo '[{\"id\":\"codex\",\"usable\":true,\"reason\":null}]'" > "$TMP/roster-stub"
-export PLAN_LINT_ROSTER="$TMP/roster-stub"
 
 # --- fixtures: a repository holding specs and plans ------------------------
 
@@ -83,7 +81,7 @@ mkplan() {
     [ "$host" = - ] || printf 'Host: codex\n\n'
     printf '**Goal:** Fixture.\n\n'
     [ "$spec" = - ] || printf '**Spec:** docs/dforge/specs/%s\n\n' "$spec"
-    printf '**Execution:** subagent — `claude --model sonnet --effort high` — fixture\n\n'
+    printf '**Execution:** inline — `claude --model sonnet --effort high` — fixture\n\n'
     printf '**Parallelism:** sequential — fixture\n\n'
     [ -z "${PLAN_REVIEW:-}" ] || printf '%s\n\n' "$PLAN_REVIEW"
     printf '## Task index\n\n'
@@ -262,7 +260,7 @@ a16() {
   out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$DEPTH" docs/dforge/plans/p.md 2>"$TMP/err"); rc=$?
   check "A16: a Spec path in the darkmem mirror resolves as plan-lint resolves it" "$rc:$out" \
     "0:depth=light spec=light tasks=light reason=spec,task-risk:1"
-  out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$LINT" docs/dforge/plans/p.md --no-probe 2>&1)
+  out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$LINT" docs/dforge/plans/p.md 2>&1)
   check "A16: plan-lint finds the plan and resolves the same path" "$(grep -c -e 'Spec path does not exist' -e 'No such plan file' <<<"$out")" "0"
 }
 
@@ -342,10 +340,6 @@ a8() {
   lr docs/dforge/plans/p8s.md --final "$base" "$head"
   out_std=$out
   check "A8: standard prints the 2 lenses and test-quality" "$(grep -c '^lens ' <<<"$out_std")" "3"
-  check "A8: standard skips the rest for the cap" "$(short <<<"$out_std")" \
-    "lens security;lens silent-failures;lens test-quality;lens-skipped lang-bash reason=cap;lens-skipped lang-python reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
-  out=$(cd "$R" && DFORGE_LENS_CAP=1 timeout 60 bash "$LENS" docs/dforge/plans/p8s.md --final "$base" "$head" 2>&1); rc=$?
-  check "A8: standard with lensCap 1 prints 1 lens line" "$rc:$(grep -c '^lens ' <<<"$out")" "0:1"
 
   out=$(cd "$R" && DFORGE_LENS_CAP=0 timeout 60 bash "$LENS" docs/dforge/plans/p8l.md --final "$base" "$head" 2>&1)
   check "A8: lenses off is unchanged at light" "$out" "lenses off"
@@ -367,10 +361,10 @@ a8() {
 a10() {
   local out_with out_without
   mkplan p10.md spec-light.md - 0
-  out_without=$(cd "$R" && timeout 60 bash "$LINT" docs/dforge/plans/p10.md --no-probe 2>&1)
+  out_without=$(cd "$R" && timeout 60 bash "$LINT" docs/dforge/plans/p10.md 2>&1)
   has "A10: plan-lint warns while the header has no Plan review line" "$out_without" 'no **Plan review:** line yet'
   PLAN_REVIEW='**Plan review:** 2026-10-27 — skipped (depth light)' mkplan p10b.md spec-light.md - 0
-  out_with=$(cd "$R" && timeout 60 bash "$LINT" docs/dforge/plans/p10b.md --no-probe 2>&1)
+  out_with=$(cd "$R" && timeout 60 bash "$LINT" docs/dforge/plans/p10b.md 2>&1)
   lacks "A10: plan-lint still accepts an older light plan's skipped line" "$out_with" 'no **Plan review:** line yet'
   check "A10: and no header warning mentions it" "$(grep -ci 'WARN header.*plan review' <<<"$out_with")" "0"
 }
@@ -383,7 +377,7 @@ a12() {
   for p in p12l p12s p12f; do
     rr "docs/dforge/plans/$p.md" --final
     check "A12: review-route --final still routes the whole-branch Claude review ($p)" "$rc:$out" \
-      "0:review-seat final primary=dforge:judge-opus fallback=- reason=plain"
+      "0:review-seat final primary=dforge:judge-opus fallback=- reason=plain external=off"
   done
 }
 

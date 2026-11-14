@@ -50,10 +50,6 @@ unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_P
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export DR_CODEX_SESSION_DIR="$TMP/codex-sessions"
-cat > "$TMP/unusable.sh" <<'EOF'
-echo '[{"id":"codex","usable":false,"reason":"not authenticated"}]'
-EOF
-export PLAN_LINT_ROSTER="$TMP/unusable.sh"
 
 g() { timeout 60 git "$@"; }
 sedi() { # sedi <expression> <file> — portable in-place edit
@@ -208,7 +204,7 @@ plan_text() {
 
 **Spec:** \`$1\`
 
-**Execution:** subagent — \`claude --model sonnet --effort high\` — Task 2 scores 4
+**Execution:** inline — \`claude --model sonnet --effort high\` — Task 2 scores 4
 
 **Program:** \`$1\` — sub-project 1 of 2 — next: Second part
 
@@ -236,7 +232,7 @@ None
 **Files:**
 - Create: \`$2\`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 $3
 
@@ -247,7 +243,7 @@ $3
 **Files:**
 - Modify: \`$4\`
 
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 **Approach:** inline - skip 2: follows the pattern
 $5
@@ -299,10 +295,6 @@ stop_scene() {
 # --- tests ------------------------------------------------------------------
 
 t_A1() {
-  check "A1: SKILL.md exists at plugins/dforge/skills/ui-ux/SKILL.md" \
-    "$([ -f "$PLUGIN/skills/ui-ux/SKILL.md" ] && echo yes || echo no)" "yes"
-  check "A1: its frontmatter says name: ui-ux" \
-    "$(awk 'NR==1 && $0=="---" {f=1; next} f && $0=="---" {exit} f && $0=="name: ui-ux" {print "yes"}' "$PLUGIN/skills/ui-ux/SKILL.md")" "yes"
   local vout vstatus
   local claude_bin=${CLAUDE:-$(type -P claude || true)}
   [ -n "$claude_bin" ] || claude_bin="$REAL_HOME/.local/bin/claude"

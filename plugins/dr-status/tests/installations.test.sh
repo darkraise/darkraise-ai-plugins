@@ -80,4 +80,17 @@ mkdir "$registry.lock"
 bash "$install_script" install >/dev/null 2>&1
 check 'contended installer fails within bounded lock wait' "$?" 1
 rmdir "$registry.lock"
+mkdir "$registry.lock"; printf '%s\n' "$$" > "$registry.lock/pid"
+bash "$install_script" install >/dev/null 2>&1
+check 'a live owner still blocks the installer' "$?" 1
+rm -rf "$registry.lock"
+sleep 0 & dead=$!; wait "$dead"
+mkdir "$registry.lock"; printf '%s\n' "$dead" > "$registry.lock/pid"
+bash "$install_script" install >/dev/null 2>&1
+check 'a dead owner lock is broken' "$?" 0
+check 'the broken lock is released after install' "$([ -e "$registry.lock" ] && echo held || echo free)" free
+mkdir "$registry.lock"; touch -t 200001010000 "$registry.lock"
+bash "$install_script" install >/dev/null 2>&1
+check 'an old ownerless lock is broken' "$?" 0
+rm -rf "$registry.lock"
 finish

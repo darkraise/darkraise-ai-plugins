@@ -51,7 +51,7 @@ dcc_stub_git() { # dcc_stub_git <bin-dir>
 #!/usr/bin/env bash
 printf 'call\n' >> "$GIT_CALLS"
 case " $* " in
-  *" --porcelain=v2 "*)  cat "$GIT_PORCELAIN" ;;
+  *" --porcelain=v2 "*)  [ -z "${GIT_STATUS_RC:-}" ] || exit "$GIT_STATUS_RC"; cat "$GIT_PORCELAIN" ;;
   *" --show-toplevel "*) printf '%s\n' "$GIT_ROOT" ;;
 esac
 SH

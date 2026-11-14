@@ -7,7 +7,7 @@ import { contextSize, formatTokens } from '../context.mjs';
 import { appendLog, nextTask, parsePlan, taskStates, tickTask } from '../plan.mjs';
 import { head, relative } from '../repo.mjs';
 import { runCommand } from '../run.mjs';
-import { appendEvent, loadState, planState, saveState, taskRecord } from '../state.mjs';
+import { appendEvent, loadState, planState, updateState, taskRecord } from '../state.mjs';
 import { refreshHud, taskBrief } from '../status.mjs';
 import { weakenedTests } from '../tests-check.mjs';
 import { fail, git, gitList, matchesAny, mustGit, readText, shortSha, tail, today, writeJson } from '../util.mjs';
@@ -77,18 +77,20 @@ export async function run(ctx, argv, { out }) {
 
   const logFile = path.join(ctx.paths.logs, active.slug, `task-${number}.log`);
   fs.rmSync(logFile, { force: true });
-  const entry = taskRecord(state, active.slug, number);
   for (const command of task.verify) {
     const result = await runCommand(command, { cwd: ctx.root, timeoutSeconds: ctx.config.verifyTimeout, logFile, env: ctx.env });
     if (result.ok) continue;
-    entry.state = 'wip';
-    entry.attempts = (entry.attempts ?? 0) + 1;
-    saveState(ctx.paths, state);
+    const attempts = updateState(ctx.paths, fresh => {
+      const entry = taskRecord(fresh, active.slug, number);
+      entry.state = 'wip';
+      entry.attempts = (entry.attempts ?? 0) + 1;
+      return entry.attempts;
+    });
     appendEvent(ctx, { plan: active.slug, event: 'verify-failed', task: number });
-    out(`Task ${number} verify failed (attempt ${entry.attempts}): \`${command}\` ${result.timedOut ? `timed out after ${ctx.config.verifyTimeout}s` : `exited ${result.status}`} in ${result.seconds.toFixed(1)}s. Nothing was ticked or committed.`);
+    out(`Task ${number} verify failed (attempt ${attempts}): \`${command}\` ${result.timedOut ? `timed out after ${ctx.config.verifyTimeout}s` : `exited ${result.status}`} in ${result.seconds.toFixed(1)}s. Nothing was ticked or committed.`);
     for (const line of tail(result.output, 40)) out(line);
     out(`Full log: ${relative(ctx.root, logFile)}`);
-    if (entry.attempts >= 3) for (const line of CHOICE) out(line.replaceAll('<N>', String(number)));
+    if (attempts >= 3) for (const line of CHOICE) out(line.replaceAll('<N>', String(number)));
     refreshHud(ctx);
     return 1;
   }
@@ -122,17 +124,20 @@ export async function run(ctx, argv, { out }) {
   }
 
   const sha = head(ctx.root);
-  entry.state = 'done';
-  entry.commit = sha;
-  if (task.risk !== 'none') entry.reviewPending = true;
-  saveState(ctx.paths, state);
+  updateState(ctx.paths, fresh => {
+    const entry = taskRecord(fresh, active.slug, number);
+    entry.state = 'done';
+    entry.commit = sha;
+    if (task.risk !== 'none') entry.reviewPending = true;
+  });
   appendEvent(ctx, { plan: active.slug, event: 'done', task: number, commit: sha, ...(task.risk !== 'none' ? { review: true } : {}) });
 
   const doneCount = after.tasks.filter(candidate => candidate.done).length;
   out(`Task ${number} done · ${shortSha(sha)} · ${doneCount}/${after.tasks.length}`);
   if (task.risk !== 'none') out(`Task ${number} carries risk "${task.risk}": review its commit now (dflow review pack --task ${number}) before building on it.`);
   const size = contextSize(ctx, state);
-  if (size && size.tokens >= ctx.config.context.resetAt) {
+  // Only the mod compacts on the flag; a figure read from the transcript would end the turn with nothing to follow.
+  if (size && size.source === 'mod' && size.tokens >= ctx.config.context.resetAt) {
     // The session id names the conversation to compact: another session open
     // in this checkout must leave the flag alone.
     writeJson(path.join(ctx.paths.stateDir, 'reset.json'), { plan: active.slug, session: ctx.env.CLAUDE_CODE_SESSION_ID || null, at: new Date().toISOString() });
@@ -144,13 +149,13 @@ export async function run(ctx, argv, { out }) {
   if (finished) out('Every task is done. Next: /dflow:review');
   else if (!upcoming) out('No remaining task is ready (blocked or waiting on a blocked task). Run `dflow status`.');
   else {
-    const fresh = loadState(ctx.paths);
-    const following = taskRecord(fresh, active.slug, upcoming.number);
-    if (following.state !== 'wip') {
+    const started = updateState(ctx.paths, fresh => {
+      const following = taskRecord(fresh, active.slug, upcoming.number);
+      if (following.state === 'wip') return false;
       following.state = 'wip';
-      saveState(ctx.paths, fresh);
-      appendEvent(ctx, { plan: active.slug, event: 'wip', task: upcoming.number });
-    }
+      return true;
+    });
+    if (started) appendEvent(ctx, { plan: active.slug, event: 'wip', task: upcoming.number });
     for (const line of taskBrief(ctx, reloaded, upcoming, { designLimit: 0 })) out(line);
   }
   await flush(ctx, { quiet: true });

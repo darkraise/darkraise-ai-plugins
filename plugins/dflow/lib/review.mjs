@@ -35,7 +35,14 @@ function numstat(ctx, range) {
 function suiteGrowth(ctx) {
   const text = readText(path.join(ctx.paths.stateDir, 'gate-history.jsonl'));
   if (!text) return null;
-  const runs = text.split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(run => run.ok);
+  // A gate run killed mid-append leaves a partial last line.
+  const runs = text.split('\n').filter(Boolean).flatMap(line => {
+    try {
+      return [JSON.parse(line)];
+    } catch {
+      return [];
+    }
+  }).filter(run => run.ok);
   const total = branch => {
     const latest = new Map();
     for (const run of runs) if (run.branch === branch) latest.set(run.name, run.seconds);

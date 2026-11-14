@@ -1,6 +1,6 @@
 ---
 name: judge-sonnet-high
-description: "Task reviewer running Sonnet 5.5 at high effort; it writes only its report file. Dispatched by dforge as the task reviewer for totals 0 to 5 when Codex is not the reviewer."
+description: "Read-only judge running Sonnet 5.5 at high effort; it writes only its report file. Scoped re-reviews, the lens seat, simple rulings and read-only checks."
 model: sonnet
 effort: high
 tools: Read, Grep, Glob, WebFetch, Write

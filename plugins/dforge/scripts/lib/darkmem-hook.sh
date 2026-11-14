@@ -7,11 +7,11 @@
 . "$(dirname "${BASH_SOURCE[0]}")/roots.sh"
 _DARKMEM_HOOK_SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
-# Neither file means no mapping and nothing in a mirror, and costs no node
-# start: the common case for a repository that never used darkmem.
+# No darkmem section and no applied family means no mapping and nothing in a
+# mirror, and costs no node start: the common case for a home that never used
+# darkmem. config.json alone says nothing, since every home has one.
 _darkmem_configured() {
-  command -v node >/dev/null 2>&1 || return 1
-  [ -f "${HOME:-}/.dforge/config.json" ] || [ -f "${HOME:-}/.dforge/stores.json" ]
+  [ -n "${HOME:-}" ] && command -v node >/dev/null 2>&1 && dforge_darkmem_possible
 }
 
 # _darkmem_watchdog SECONDS CMD... — CMD, killed with its children after

@@ -5,7 +5,7 @@ set -uo pipefail
 # Usage:
 #   bash task-step.test.sh            run every part
 #   bash task-step.test.sh verdict    run the named parts only
-ALL="start rereview group verdict"
+ALL="start rereview verdict"
 sel=""
 for n in "$@"; do
   n=$(tr 'A-Z' 'a-z' <<<"$n")
@@ -64,7 +64,7 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |## Global Constraints
 |
@@ -88,7 +88,7 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |### Task 1: plain
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |**Lenses:** lang-bash
 |
@@ -111,27 +111,27 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |### Task 5: batch low
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |### Task 6: batch high
 |
-|**Implementer:** dforge:impl-opus-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |### Task 7: risky
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
 |
 |### Task 8: unparseable
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** one plus one
 |
 |### Task 9: bad lens
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |**Lenses:** no-such-lens
 PLAN
@@ -162,75 +162,49 @@ state_of() { jq -r "$2" "$WS/task-$1-step.json" | tr -d '\r'; }
 RR_S="$HERE/../scripts"
 
 if want start; then
-# start: the assigned line, the dispatch file, the state and the digest.
+# start: the identity line, the state and the digest. No dispatch file and no
+# task line: the session writes its own `implementer inline` line.
 step start docs/plan.md 1
 check "start: exit 0" "$rc" "0"
-check "start: the assigned line" "$(tail -n 1 "$LEDGER")" "Task 1: implementer impl-sonnet-low (assigned; base ${BASE:0:7})"
+check "start: the ledger holds no task line" "$(grep -c '^Task ' "$LEDGER" || true)" "0"
 check "start: the ledger names the plan" "$(head -n 1 "$LEDGER")" "# SDD ledger — plan: docs/plan.md"
 check "start: the brief exists" "$([ -f "$WS/task-1-brief.md" ] && echo yes || echo no)" "yes"
+check "start: no dispatch file" "$([ -e "$WS/task-1-dispatch.md" ] && echo yes || echo no)" "no"
 check "start: the digest is at most 15 lines" "$([ "$(count_lines "$out")" -le 15 ] && echo yes || echo no)" "yes"
-check "start: the seat line" "$(grep '^seat:' <<<"$out")" "seat: dforge:impl-sonnet-low prompt: $WS/task-1-dispatch.md"
 check "start: the state line precedes the budget line" "$(tail -n 2 <<<"$out" | head -n 1)" \
   "state: base ${BASE:0:7} review-head - round 0 t0 -"
 check "start: the last line is the budget line" "$(tail -n 1 <<<"$out" | cut -c1-6)" "budget"
-D="$WS/task-1-dispatch.md"
-check "start: the brief path is expanded" "$(grep -c "Read your task brief first: $WS/task-1-brief.md" "$D")" "1"
-check "start: the report path is expanded" "$(grep -c "Write your full report to $WS/task-1-report.md:" "$D")" "1"
-check "start: no placeholder is left" "$(grep -cE '\[(BRIEF_FILE|REPORT_FILE|PLUGIN_ROOT|IMPLEMENTER)\]' "$D")" "0"
-check "start: the plugin root is expanded to this plugin" "$(grep -c "$(cd "$P" && pwd)/scripts/context-size" "$D")" "1"
-check "start: the task name is filled" "$(grep -c 'You are implementing Task 1: plain' "$D")" "1"
-check "start: the working directory is filled" "$(grep -c "^Work from: $(git rev-parse --show-toplevel)\$" "$D")" "1"
-check "start: the dispatch file is a bare prompt" "$(grep -c '^Subagent (' "$D")" "0"
 check "start: the state file" \
-  "$(jq -c '[.tasks, .base == "'"$BASE"'", .head, .reviewHead, .round, .t0, .wave]' "$WS/task-1-step.json" | tr -d '\r')" '[[1],true,null,null,0,null,null]'
+  "$(jq -c '[.tasks, .base == "'"$BASE"'", .head, .reviewHead, .round, .t0]' "$WS/task-1-step.json" | tr -d '\r')" '[[1],true,null,null,0,null]'
 
-# start: a backticked Implementer, a wave, a prefix-free ledger name.
-step start docs/plan.md 2 --wave 3
-check "start: a wave ends the assigned line" "$(tail -n 1 "$LEDGER")" "Task 2: implementer impl-sonnet-high (assigned; base ${BASE:0:7}; wave 3)"
-check "start: the wave is recorded" "$(jq -r .wave "$WS/task-2-step.json" | tr -d '\r')" "3"
-check "start: a wave names its worktree" "$(grep -c '^Work from: your worktree' "$WS/task-2-dispatch.md")" "1"
-check "start: a wave reports inside its worktree" \
-  "$(grep -c 'Write your full report to task-2-report.md in the directory sdd-workspace prints in your worktree (see the Parallel workspace section):' "$WS/task-2-dispatch.md")" "1"
-check "start: a wave dispatch names no session workspace report path" "$(grep -c "$WS/task-2-report.md" "$WS/task-2-dispatch.md")" "0"
-
-step start docs/plan.md 3 --inline
-check "an Executor task takes --inline" "$rc" "0"
+step start docs/plan.md 3
+check "an Executor task starts like any other" "$rc" "0"
 check "an Executor task names no executor" "$(grep -c -i 'executor' <<<"$out")" "0"
+check "an Executor task writes no task line" "$(grep -c '^Task ' "$LEDGER" || true)" "0"
 
-# start: a task without an Implementer line is scored at dispatch.
-before=$(wc -l < "$LEDGER")
+step start docs/plan.md 2
 step start docs/plan.md 4
-check "start: unscored seat line" "$(grep -c '^seat: unscored (no known \*\*Implementer:\*\* line' <<<"$out")" "1"
-check "start: no assigned line when unscored" "$(wc -l < "$LEDGER" | tr -d ' ')" "$(echo "$before" | tr -d ' ')"
-check "start: the dispatch file is still written" "$([ -f "$WS/task-4-dispatch.md" ] && echo yes || echo no)" "yes"
 
-# start: a batch takes the highest tier, one assigned line per task and one brief.
+# start: one task only.
 step start docs/plan.md 5 6
-check "start: batch seat" "$(grep '^seat:' <<<"$out")" "seat: dforge:impl-opus-medium prompt: $WS/task-5-dispatch.md"
-check "start: batch assigned lines" "$(tail -n 2 "$LEDGER" | sed 's/base [0-9a-f]*/base B/' | tr '\n' ';')" \
-  "Task 5: implementer impl-opus-medium (assigned; base B);Task 6: implementer impl-opus-medium (assigned; base B);"
-check "start: the digest names the batch" "$(head -n 1 <<<"$out" | cut -c1-12)" "task 5,6: br"
-check "start: the batch brief holds both tasks" \
-  "$(grep -cE '^### Task (5: batch low|6: batch high)$' "$WS/task-5-brief.md")" "2"
-check "start: the batch brief carries the header excerpt once" "$(grep -c '^## Plan header excerpt$' "$WS/task-5-brief.md")" "1"
-check "start: the batch brief ends with the header excerpt" "$(grep -v '^$' "$WS/task-5-brief.md" | tail -n 1)" "- Fixture contract."
-check "start: the batch state names both tasks" "$(jq -c .tasks "$WS/task-5-step.json" | tr -d '\r')" "[5,6]"
+check "start: a second task exits 2" "$rc" "2"
+check "start: a second task writes no state" "$([ -f "$WS/task-5-step.json" ] && echo yes || echo no)" "no"
 
-# start: a second call keeps the recorded state and writes no second assigned
-# line; --reset discards the state and starts over.
+# start: a second call keeps the recorded state; --reset discards the state
+# and starts over.
 echo moved > moved.txt && git add moved.txt && git commit -qm "chore: move head"
 MOVED=$(git rev-parse HEAD)
 before=$(wc -l < "$LEDGER")
 step start docs/plan.md 1
 check "start again: exit 0" "$rc" "0"
-check "start again: no second assigned line" "$(wc -l < "$LEDGER" | tr -d ' ')" "$(echo "$before" | tr -d ' ')"
+check "start again: no second ledger line" "$(wc -l < "$LEDGER" | tr -d ' ')" "$(echo "$before" | tr -d ' ')"
 check "start again: the recorded base is kept" "$(jq -r .base "$WS/task-1-step.json" | tr -d '\r')" "$BASE"
 check "start again: the digest says the state is kept" "$(head -n 1 <<<"$out" | grep -c 'state kept')" "1"
 check "start again: the state line shows the kept base" "$(tail -n 2 <<<"$out" | head -n 1)" \
   "state: base ${BASE:0:7} review-head - round 0 t0 -"
 step start docs/plan.md 1 --reset
 check "start --reset: the base is HEAD again" "$(jq -r .base "$WS/task-1-step.json" | tr -d '\r')" "$MOVED"
-check "start --reset: a new assigned line" "$(tail -n 1 "$LEDGER")" "Task 1: implementer impl-sonnet-low (assigned; base ${MOVED:0:7})"
+check "start --reset: the ledger still holds no task line" "$(grep -c '^Task ' "$LEDGER" || true)" "0"
 check "start --reset: the digest does not say kept" "$(head -n 1 <<<"$out" | grep -c 'state kept')" "0"
 
 # Negative: usage, a missing task, a Codex host, an amendment that does not apply.
@@ -242,8 +216,6 @@ step start docs/plan.md x
 check "start: a non-numeric task exits 2" "$rc" "2"
 step start docs/plan.md 1 --nope
 check "start: an unknown flag exits 2" "$rc" "2"
-step start docs/plan.md 1 --wave
-check "start: --wave without a value exits 2" "$rc" "2"
 step bogus docs/plan.md 1
 check "an unknown subcommand exits 2" "$rc" "2"
 step start docs/missing.md 1
@@ -450,11 +422,7 @@ check "checks: a clean commit passes both" "$(grep '^check' <<<"$out" | tr '\n' 
 step review docs/plan.md 2 --base "$(git rev-parse HEAD~9)"
 check "checks: several offenders name the first and count the rest" "$(grep '^check attribution' <<<"$out" | grep -c '; 4 more commit(s)$')" "1"
 
-# review: a batch, and a route that fails.
-step review docs/plan.md 5 6
-check "review: a batch names its tasks" "$(head -n 1 <<<"$out" | cut -c1-19)" "task 5,6: reviewed "
-check "review: a batch state is named after its first task" "$(state_of 5 .reviewHead)" "$(git rev-parse HEAD)"
-check "review: a batch prompt names the batch brief" "$(grep -c "^Read the task brief: $WS/task-5-brief.md\$" "$WS/task-5-review-prompt.md")" "1"
+# review: a route that fails.
 step start docs/plan.md 8
 step review docs/plan.md 8
 check "review: a failed route falls back to judge-opus and says why" \
@@ -550,7 +518,7 @@ sed 's/^|//' > "$RR_REPO/docs/plan.md" <<'PLAN'
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |## Task index
 |
@@ -563,7 +531,7 @@ sed 's/^|//' > "$RR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 2: Risky
@@ -571,7 +539,7 @@ sed 's/^|//' > "$RR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
 |
 |### Task 3: Unreviewed
@@ -579,7 +547,7 @@ sed 's/^|//' > "$RR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 PLAN
 awk '{ print } /^\*\*Goal:\*\*/ { print ""; print "**Host:** codex" }' "$RR_REPO/docs/plan.md" > "$RR_REPO/docs/codex-plan.md"
@@ -774,344 +742,6 @@ rr_run rereview docs/plan.md 1 --head ""
 check "rereview with an empty --head exits 2" "$rr_rc" "2"
 fi
 
-if want group; then
-# --- hold and review --group: grouped tasks reviewed together ---
-# The fixture plan's lines carry a leading | so a plan that quotes this suite still lints.
-GR_TMP=$TMP/gr
-GR_REPO=$GR_TMP/repo
-mkdir -p "$GR_TMP/home" "$GR_REPO/docs"
-gr_run() { # gr_run <args...> — task-step in the group fixture repo; sets gr_out, gr_err, gr_rc
-  gr_out=$(cd "$GR_REPO" && env HOME="$GR_TMP/home" DR_CODEX_SESSION_DIR="$GR_TMP/sessions" CLAUDE_CODE_SESSION_ID=gr-test \
-    GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1 bash "$RR_S/task-step" "$@" 2>"$GR_TMP/err"); gr_rc=$?
-  gr_err=$(cat "$GR_TMP/err")
-}
-gr_git() { git -C "$GR_REPO" "$@"; }
-gr_commit() { # gr_commit <file> — append a line to a fixture file and commit it
-  GR_N=$((GR_N + 1))
-  printf 'line %s\n' "$GR_N" >> "$GR_REPO/$1"
-  gr_git add -A && gr_git commit -qm "feat: change $1"
-}
-gr_short() { gr_git rev-parse --short "$1"; }
-gr_state() { # gr_state <task> <jq filter>
-  jq -r "$2" "$GR_WS/task-$1-step.json" | tr -d '\r'
-}
-gr_lines() { wc -l < "$GR_LEDGER" | tr -d ' '; }
-gr_section() { # gr_section <package> <task> — the package's section for one task
-  awk -v h="## Task $2" '{ sub(/\r$/, "") } $0 == h { on = 1; next } /^## / { on = 0 } on' "$1"
-}
-
-git init -q "$GR_REPO"
-gr_git config user.name t
-gr_git config user.email t@example.invalid
-sed 's/^|//' > "$GR_REPO/docs/plan.md" <<'PLAN'
-|# Group Fixture Plan
-|
-|**Goal:** Fixture.
-|
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
-|
-|## Global Constraints
-|
-|- Fixture constraint.
-|
-|## Contracts
-|
-|- Fixture contract.
-|
-|## Task index
-|
-|1. Light one
-|2. Light two
-|3. Heavy
-|4. Light three
-|5. Unscored
-|6. Wave six
-|7. Wave seven
-|
-|### Task 1: Light one
-|
-|**Files:**
-|- Modify: `one.txt`
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
-|**Lenses:** lang-bash
-|
-|### Task 2: Light two
-|
-|**Files:**
-|- Modify: `two.txt`
-|
-|**Implementer:** dforge:impl-sonnet-medium
-|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
-|
-|### Task 3: Heavy
-|
-|**Files:**
-|- Modify: `three.txt`
-|
-|**Implementer:** dforge:impl-opus-high
-|**Evaluation:** files 1 - spec 1 - coupling 1 - risk 2 = 5
-|
-|### Task 4: Light three
-|
-|**Files:**
-|- Modify: `four.txt`
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
-|
-|### Task 5: Unscored
-|
-|**Implementer:** dforge:impl-sonnet-low
-|
-|Body.
-|
-|### Task 6: Wave six
-|
-|**Files:**
-|- Modify: `six.txt`
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
-|
-|### Task 7: Wave seven
-|
-|**Files:**
-|- Modify: `seven.txt`
-|
-|**Implementer:** dforge:impl-sonnet-low
-|**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
-PLAN
-awk '{ print } /^\*\*Goal:\*\*/ { print ""; print "**Host:** codex" }' "$GR_REPO/docs/plan.md" > "$GR_REPO/docs/codex-plan.md"
-for f in one two three four six seven; do printf 'base\n' > "$GR_REPO/$f.txt"; done
-gr_git add -A && gr_git commit -qm base
-GR_N=0
-GR_MAIN=$(gr_git symbolic-ref --short HEAD)
-GR_WS=$(winpath "$(cd "$GR_REPO" && env HOME="$GR_TMP/home" bash "$RR_S/sdd-workspace" docs/plan.md)")
-GR_LEDGER=$GR_WS/progress.md
-
-# hold: the preconditions, then the awaiting line and the held head.
-gr_run hold docs/plan.md 1
-check "hold: before start exits 6" "$gr_rc" "6"
-gr_run start docs/plan.md 1
-GR_B1=$(gr_git rev-parse HEAD)
-gr_commit one.txt
-GR_H1=$(gr_git rev-parse HEAD)
-gr_run hold docs/plan.md 1
-check "hold: exit 0" "$gr_rc" "0"
-check "hold: the awaiting line" "$(tail -n 1 "$GR_LEDGER")" "Task 1: awaiting group review (commits $(gr_short "$GR_B1")..$(gr_short "$GR_H1"))"
-check "hold: records the held head" "$(gr_state 1 .heldHead)" "$GR_H1"
-check "hold: keeps the base" "$(gr_state 1 .base)" "$GR_B1"
-check "hold: the digest's first line" "$(head -n 1 <<<"$gr_out")" "task 1: held for group review (commits $(gr_short "$GR_B1")..$(gr_short "$GR_H1"))"
-check "hold: the digest is at most 15 lines" "$([ "$(count_lines "$gr_out")" -le 15 ] && echo yes || echo no)" "yes"
-check "hold: the last line is the budget line" "$(tail -n 1 <<<"$gr_out" | cut -c1-6)" "budget"
-before=$(gr_lines)
-gr_run hold docs/plan.md 1
-check "hold again: exit 0" "$gr_rc" "0"
-check "hold again: no second awaiting line" "$(gr_lines)" "$before"
-
-# hold refuses a task review-route reviews alone, and writes nothing for it.
-gr_run start docs/plan.md 3
-gr_commit three.txt
-before=$(gr_lines)
-gr_run hold docs/plan.md 3
-check "hold: a review=task task exits 4" "$gr_rc" "4"
-check "hold: says the task is reviewed alone" "$(grep -c 'review=task' <<<"$gr_err")" "1"
-check "hold: a review=task task gets no awaiting line" "$(gr_lines)" "$before"
-check "hold: a review=task task records no held head" "$(gr_state 3 '.heldHead // "none"')" "none"
-gr_run hold docs/plan.md 5
-check "hold: an unscored task is reviewed alone and exits 4" "$gr_rc" "4"
-gr_run hold docs/plan.md 99
-check "hold: no such task exits 3" "$gr_rc" "3"
-gr_run hold docs/plan.md
-check "hold: no task number exits 2" "$gr_rc" "2"
-gr_run hold docs/plan.md 1 2
-check "hold: two task numbers exit 2" "$gr_rc" "2"
-gr_run hold docs/plan.md 1 --head
-check "hold: --head without a value exits 2" "$gr_rc" "2"
-gr_run hold docs/plan.md 1 --head nope
-check "hold: a bad ref exits 2" "$gr_rc" "2"
-gr_run hold docs/codex-plan.md 1
-check "hold: a Host: codex plan exits 2" "$gr_rc" "2"
-
-gr_run start docs/plan.md 2
-GR_B2=$(gr_git rev-parse HEAD)
-gr_commit two.txt
-gr_run hold docs/plan.md 2
-gr_run start docs/plan.md 4
-gr_commit four.txt
-GR_H4=$(gr_git rev-parse HEAD)
-gr_run hold docs/plan.md 4
-check "hold: a third grouped task" "$gr_rc" "0"
-
-# review --group: every member must be held.
-gr_run review --group docs/plan.md 1 3
-check "review --group: a member that is not held exits 4" "$gr_rc" "4"
-check "review --group: names the task that is not held" "$(grep -c 'Task 3' <<<"$gr_err")" "1"
-check "review --group: a refused group writes no file" "$(ls "$GR_WS" | grep -c '^group-')" "0"
-gr_run review --group docs/plan.md 1 5
-check "review --group: a task with no ledger line exits 4" "$gr_rc" "4"
-gr_run review --group docs/plan.md 1 99
-check "review --group: no such task exits 3" "$gr_rc" "3"
-gr_run review --group docs/plan.md
-check "review --group: no task number exits 2" "$gr_rc" "2"
-gr_run review --group docs/plan.md 1 2 --head HEAD
-check "review --group: --head is not a group flag" "$gr_rc" "2"
-gr_run review --group docs/codex-plan.md 1
-check "review --group: a Host: codex plan exits 2" "$gr_rc" "2"
-
-# review --group: the package, the prompt, the digest and the state. The review
-# surface is open, and a group is still reviewed by a Claude judge alone.
-mkdir -p "$GR_TMP/sessions"
-printf '{"session_id":"gr-test","usable":true,"review":true,"lane":false}\n' > "$GR_TMP/sessions/gr-test.json"
-gr_run review --group docs/plan.md 4 1 2
-GL=1,2,4
-GPKG=$GR_WS/group-$GL-review-package.md
-GPR=$GR_WS/group-$GL-review-prompt.md
-check "review --group: exit 0" "$gr_rc" "0"
-check "review --group: the files are named after the sorted list" \
-  "$([ -f "$GR_WS/group-$GL-step.json" ] && [ -f "$GPKG" ] && [ -f "$GPR" ] && echo yes || echo no)" "yes"
-check "review --group: one section per task, in order" "$(grep '^## ' "$GPKG" | tr -d '\r' | tr '\n' ';')" "## Task 1;## Task 2;## Task 4;"
-check "review --group: a section names its brief" "$(gr_section "$GPKG" 1 | grep -cxF "**Brief:** $GR_WS/task-1-brief.md")" "1"
-check "review --group: a section names its report" "$(gr_section "$GPKG" 1 | grep -cxF "**Report:** $GR_WS/task-1-report.md")" "1"
-check "review --group: a section names its range" "$(gr_section "$GPKG" 1 | grep -cxF "**Commits:** $(gr_short "$GR_B1")..$(gr_short "$GR_H1")")" "1"
-check "review --group: a section holds its own diff" "$(gr_section "$GPKG" 1 | grep -c '^diff --git a/one.txt b/one.txt$')" "1"
-check "review --group: a section holds no other task's diff" "$(gr_section "$GPKG" 1 | grep -cE '^diff --git a/(two|three|four)\.txt')" "0"
-check "review --group: a later member's diff starts at its own base" "$(gr_section "$GPKG" 2 | grep -cE '^diff --git a/(one|three|four)\.txt')" "0"
-check "review --group: the later member's diff" "$(gr_section "$GPKG" 2 | grep -c '^diff --git a/two.txt b/two.txt$')" "1"
-check "review --group: the last member's diff" "$(gr_section "$GPKG" 4 | grep -c '^diff --git a/four.txt b/four.txt$')" "1"
-check "review --group: a section names its lens files" "$(gr_section "$GPKG" 1 | grep -cxF "**Lenses:** $PR/criteria/lenses/lang-bash.md")" "1"
-check "review --group: a task with no lens has no lens line" "$(gr_section "$GPKG" 2 | grep -c '^\*\*Lenses:\*\*')" "0"
-check "review --group: the prompt has no unexpanded placeholder" "$(placeholders "$GPR")" "0"
-check "review --group: the prompt names the package" "$([ "$(grep -cF "$GPKG" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
-check "review --group: the prompt names the report file" "$([ "$(grep -cF "$GR_WS/group-$GL-review-report.md" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
-check "review --group: the prompt names the criteria file" "$([ "$(grep -cF "$PR/criteria/task-review.md" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
-check "review --group: the prompt names the group" "$([ "$(grep -cF "$GL" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
-check "review --group: the seat is the route's Claude judge" "$(grep '^seat:' <<<"$gr_out")" "seat: dforge:judge-sonnet-high prompt: $GPR"
-check "review --group: no Codex seat runs" "$(grep -cE '^(codex|timeout):' <<<"$gr_out")" "0"
-check "review --group: no Codex prompt is written" "$(ls "$GR_WS" | grep -c 'codex')" "0"
-check "review --group: the identity check" "$(grep '^check identity' <<<"$gr_out")" "check identity: clean"
-check "review --group: the attribution check" "$(grep '^check attribution' <<<"$gr_out")" "check attribution: clean"
-check "review --group: the digest is at most 15 lines" "$([ "$(count_lines "$gr_out")" -le 15 ] && echo yes || echo no)" "yes"
-check "review --group: the last line is the budget line" "$(tail -n 1 <<<"$gr_out" | cut -c1-6)" "budget"
-check "review --group: the group state names its tasks" "$(jq -c .tasks "$GR_WS/group-$GL-step.json" | tr -d '\r')" "[1,2,4]"
-check "review --group: the group state records the group head" "$(jq -r .reviewHead "$GR_WS/group-$GL-step.json" | tr -d '\r')" "$GR_H4"
-check "review --group: the group state records t0" "$(jq -r '.t0 | type' "$GR_WS/group-$GL-step.json" | tr -d '\r')" "number"
-for n in 1 2 4; do
-  check "review --group: Task $n records the group head" "$(gr_state "$n" .reviewHead)" "$GR_H4"
-  check "review --group: Task $n records round 0" "$(gr_state "$n" .round)" "0"
-  check "review --group: Task $n records t0" "$(gr_state "$n" '.t0 | type')" "number"
-  check "review --group: Task $n names its group" "$(gr_state "$n" .group)" "$GL"
-done
-check "review --group: a member keeps its base" "$(gr_state 2 .base)" "$GR_B2"
-check "review --group: a task outside the group is untouched" "$(gr_state 3 '.reviewHead // "none"')" "none"
-
-# A member's fix round re-reviews alone. In one checkout the fixes run one at a
-# time, so each member's fix diff starts where the group's last review ended.
-gr_commit one.txt
-GR_F1=$(gr_git rev-parse HEAD)
-printf -- '- one.txt: wrong value\n\nFix it.\n' > "$GR_WS/task-1-fix-1.md"
-gr_run rereview docs/plan.md 1
-GRR1=$GR_WS/task-1-rereview-1-prompt.md
-check "member rereview: exit 0" "$gr_rc" "0"
-check "member rereview: the fix base is the group head" "$(grep -c "Fix base:\*\* $GR_H4 " "$GRR1")" "1"
-check "member rereview: records the round" "$(gr_state 1 .round)" "1"
-check "member rereview: records its review head" "$(gr_state 1 .reviewHead)" "$GR_F1"
-check "member rereview: the group records the latest review head" "$(jq -r .reviewHead "$GR_WS/group-$GL-step.json" | tr -d '\r')" "$GR_F1"
-gr_commit two.txt
-GR_F2=$(gr_git rev-parse HEAD)
-printf -- '- two.txt: stale\n\nFix it.\n' > "$GR_WS/task-2-fix-1.md"
-gr_run rereview docs/plan.md 2
-GRR2=$GR_WS/task-2-rereview-1-prompt.md
-GRD2=$(sed -n 's/^\*\*Diff file:\*\* //p' "$GRR2")
-check "member rereview: the next member's fix base is the last fix head" "$(grep -c "Fix base:\*\* $GR_F1 " "$GRR2")" "1"
-check "member rereview: the next member's fix diff holds its own fix" "$(grep -c '^diff --git a/two.txt b/two.txt$' "$GRD2")" "1"
-check "member rereview: the next member's fix diff leaves the earlier fix out" "$(grep -c '^diff --git a/one.txt' "$GRD2")" "0"
-gr_commit four.txt
-printf -- '- four.txt: off by one\n\nFix it.\n' > "$GR_WS/task-4-fix-1.md"
-gr_run rereview docs/plan.md 4 --base "$GR_H4"
-check "member rereview: --base is refused for a sequential member" "$gr_rc $(grep -cF -- '--base does not apply to a group member; see delegated-task.md §3a' <<<"$gr_err") $(gr_state 4 .round)" "2 1 0"
-gr_run rereview docs/plan.md 4
-check "member rereview: without --base the fix base is the last fix head" "$gr_rc $(grep -c "Fix base:\*\* $GR_F2 " "$GR_WS/task-4-rereview-1-prompt.md")" "0 1"
-
-# A group with a review round line is in its fix rounds: reviewing it again
-# would reset every member's round and lift the two-round cap.
-printf '%s\n' 'Group 1,2,4: review round 1/2 (Task 1: clean; Task 2: clean; Task 4: 1 open — off by one; commits aaaaaaa..bbbbbbb (Task 1), bbbbbbb..ccccccc (Task 2), ccccccc..ddddddd (Task 4))' >> "$GR_LEDGER"
-gr_run review --group docs/plan.md 1 2 4
-check "review --group: a group in its fix rounds exits 4" "$gr_rc" "4"
-check "review --group: names every member already in review rounds" "$(grep -c 'Task 1' <<<"$gr_err") $(grep -c 'Task 2' <<<"$gr_err") $(grep -c 'Task 4' <<<"$gr_err")" "1 1 1"
-check "review --group: a refused group keeps each member's round" "$(gr_state 1 .round) $(gr_state 2 .round) $(gr_state 4 .round)" "1 1 1"
-
-# A wave: each member is held at its task ref and re-reviewed from its own head.
-GR_W=$(gr_git rev-parse HEAD)
-gr_run start docs/plan.md 6
-gr_run start docs/plan.md 7
-gr_git branch t6 "$GR_W"
-gr_git branch t7 "$GR_W"
-gr_git checkout -q t6
-gr_commit six.txt
-GR_H6=$(gr_git rev-parse HEAD)
-gr_git checkout -q t7
-gr_commit seven.txt
-GR_H7=$(gr_git rev-parse HEAD)
-gr_git checkout -q "$GR_MAIN"
-gr_git worktree add -q --detach "$GR_TMP/wt6" t6
-gr_run hold docs/plan.md 6 --cwd "$GR_TMP/wt6"
-check "hold --cwd: records that checkout's HEAD" "$(gr_state 6 .heldHead)" "$GR_H6"
-before=$(gr_lines)
-gr_run hold docs/plan.md 6 --head t6
-check "hold --head: exit 0" "$gr_rc" "0"
-check "hold --head: records the ref" "$(gr_state 6 .head)" "t6"
-check "hold --head: the same range writes no second line" "$(gr_lines)" "$before"
-gr_run hold docs/plan.md 7 --head t7
-check "hold --head: records the ref's commit" "$(gr_state 7 .heldHead)" "$GR_H7"
-gr_run review --group docs/plan.md 6 7 --cwd "$GR_TMP/wt6"
-GPKG67=$GR_WS/group-6,7-review-package.md
-check "wave group: exit 0" "$gr_rc" "0"
-check "wave group: --cwd names the checkout whose HEAD is the group head" "$(jq -r .reviewHead "$GR_WS/group-6,7-step.json" | tr -d '\r')" "$GR_H6"
-check "wave group: a member's review head is its own held head" "$(gr_state 6 .reviewHead) $(gr_state 7 .reviewHead)" "$GR_H6 $GR_H7"
-check "wave group: each section holds its own task ref's diff" \
-  "$(gr_section "$GPKG67" 6 | grep -c '^diff --git a/seven.txt') $(gr_section "$GPKG67" 7 | grep -c '^diff --git a/seven.txt b/seven.txt$')" "0 1"
-gr_git checkout -q t6
-gr_commit six.txt
-GR_F6=$(gr_git rev-parse HEAD)
-gr_git checkout -q "$GR_MAIN"
-printf -- '- six.txt: wrong value\n\nFix it.\n' > "$GR_WS/task-6-fix-1.md"
-gr_run rereview docs/plan.md 6
-check "wave member rereview: the fix base is its own held head" "$(grep -c "Fix base:\*\* $GR_H6 " "$GR_WS/task-6-rereview-1-prompt.md")" "1"
-check "wave member rereview: the head is its task ref" "$(grep -c "Head:\*\* $GR_F6\$" "$GR_WS/task-6-rereview-1-prompt.md")" "1"
-printf '%s\n' 'Group 6-7: review round 1/2 (Task 6: 1 open — wrong value; Task 7: clean; commits aaaaaaa..bbbbbbb (Task 6))' >> "$GR_LEDGER"
-gr_run review --group docs/plan.md 6 7
-check "review --group: a range Group line also marks its members as in review rounds" "$gr_rc $(grep -c 'Task 7' <<<"$gr_err")" "4 1"
-gr_git worktree remove --force "$GR_TMP/wt6"
-
-# A group of five: every member's verdict keys reach the digest, one line per
-# member, however many other Verdict lines and cannot-verify items the report holds.
-GR_RH=$(gr_git rev-parse HEAD)
-jq -n --arg rh "$GR_RH" --arg cwd "$GR_REPO" \
-  '{tasks: [1,2,4,6,7], reviewHead: $rh, t0: 0, reviewChecks: [{cwd: $cwd, head: $rh, dirty: []}]}' > "$GR_WS/group-1,2,4,6,7-step.json"
-{
-  printf '## Verdict\n'
-  for t in 1 2 4 6; do
-    printf 'Task %s spec: pass\nTask %s quality: approved\nTask %s scores: spec 17 / scope 17 / verification 17 / quality 17\n' "$t" "$t" "$t"
-  done
-  printf 'Task 7 spec: fail\nTask 7 quality: changes\nTask 7 scores: spec 8 / scope 16 / verification 15 / quality 9\n'
-  for i in 1 2 3 4 5 6 7 8; do printf 'note %s: an extra verdict line\n' "$i"; done
-  printf '\n## Findings\n- [Important] (Task 7) seven.txt:1 — wrong value\n\n## Cannot verify\n'
-  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf -- '- (Task 6) item %s\n' "$i"; done
-} > "$GR_WS/group-1,2,4,6,7-review-report.md"
-gr_run verdict docs/plan.md 1 2 4 6 7 --group
-check "verdict, five members: exit 0" "$gr_rc" "0"
-check "verdict, five members: one verdict line per member" "$(grep -c '^Task [0-9]: spec ' <<<"$gr_out")" "5"
-check "verdict, five members: the last member's failing verdict is shown" \
-  "$(grep '^Task 7: ' <<<"$gr_out")" "Task 7: spec fail; quality changes; scores spec 8 / scope 16 / verification 15 / quality 9"
-check "verdict, five members: the extra Verdict lines are cut" "$(grep -c '^note ' <<<"$gr_out") $(grep '^verdict: ' <<<"$gr_out")" "6 verdict: 2 more lines in the report"
-check "verdict, five members: the cannot-verify list is cut" "$(grep -c '^cannot-verify: (Task 6)' <<<"$gr_out")" "0"
-check "verdict, five members: and says how many it cut" "$(grep -c '^cannot-verify: 12 more in the report$' <<<"$gr_out")" "1"
-check "verdict, five members: at most 20 lines besides the finding lines" "$(grep -cvE '^(Critical|Important) ' <<<"$gr_out")" "20"
-fi
-
 if want verdict; then
 # The re-review judge writes its report where the prompt says; a fresh round
 # discards a stale one at that path.
@@ -1129,137 +759,9 @@ check "rereview report: the implementer's report is filled" "$(grep -cF "$RR_WS/
 check "rereview report: no implementer-report placeholder is left" "$(grep -c '\[IMPLEMENTER_REPORT_FILE\]' "$RR_P")" "0"
 check "rereview report: a fresh round discards the stale report" "$([ -e "$RR_WS/task-1-rereview-1-report.md" ] && echo yes || echo no)" "no"
 
-# A group review's judge writes one report for the group (Task 5's hold and
-# review --group).
-rr_reset
-rr_run hold docs/plan.md 1
-check "group report: hold 1" "$rr_rc" "0"
-rr_run hold docs/plan.md 3
-check "group report: hold 3" "$rr_rc" "0"
-printf 'stale\n' > "$RR_WS/group-1,3-review-report.md"
-rr_run review --group docs/plan.md 1 3
-check "group report: review --group exits 0" "$rr_rc" "0"
-check "group report: the prompt names the group report file" \
-  "$(grep -cF "Write your full report to $RR_WS/group-1,3-review-report.md and write nothing else" "$RR_WS/group-1,3-review-prompt.md")" "1"
-check "group report: a fresh group review discards the last report" "$([ -e "$RR_WS/group-1,3-review-report.md" ] && echo yes || echo no)" "no"
 # --- verdict: the report digest, the fix files and the tracked-file check ---
 vd_report() { sed 's/^|//' > "$1"; } # vd_report <file> — the report on stdin, its leading | stripped
 first_block() { awk '{ sub(/\r$/, "") } /^$/ { exit } { print }' "$1" | tr '\n' ';'; }
-
-# A group report: findings and fix files per member task, from the state the
-# group block above left (Task 5's review --group).
-vd_report "$RR_WS/group-1,3-review-report.md" <<'REPORT'
-|## Verdict
-|Task 1 spec: pass
-|Task 1 quality: changes
-|Task 1 scores: spec 16 / scope 17 / verification 15 / quality 12
-|Task 3 spec: pass
-|Task 3 quality: approved
-|Task 3 scores: spec 18 / scope 18 / verification 17 / quality 17
-|
-|## Findings
-|- [Important] (Task 1) app.txt:3 — off by one
-|  The loop stops one line early.
-|- [Minor] (Task 3) other.txt:1 — wording
-|
-|## Cannot verify
-|- (Task 3) the caller passes the flag
-REPORT
-rr_run verdict docs/plan.md 1 3 --group
-check "verdict --group: exit 0" "$rr_rc" "0"
-check "verdict --group: the digest names the group report" "$(head -n 1 <<<"$rr_out")" "group 1,3: verdict from $RR_WS/group-1,3-review-report.md"
-check "verdict --group: one verdict line per member" "$(grep '^Task [13]: spec ' <<<"$rr_out" | tr '\n' ';')" \
-  "Task 1: spec pass; quality changes; scores spec 16 / scope 17 / verification 15 / quality 12;Task 3: spec pass; quality approved; scores spec 18 / scope 18 / verification 17 / quality 17;"
-check "verdict --group: the finding names its task" "$(grep -E '^(Critical|Important) ' <<<"$rr_out")" "Important 1 app.txt:3 — off by one"
-R1=$(( $(rr_state 1 .round) + 1 ))
-check "verdict --group: a fix file for the task with findings" "$(first_block "$RR_WS/task-1-fix-$R1.md")" "- app.txt:3: off by one;"
-check "verdict --group: no fix file for a task without one" "$(ls "$RR_WS"/task-3-fix-*.md 2>/dev/null | wc -l | tr -d ' ')" "0"
-check "verdict --group: the member's Minor goes to the ledger" "$(grep -c '^Task 3: minor (deferred): other.txt:1 — wording$' "$RR_WS/progress.md")" "1"
-check "verdict --group: the cannot-verify item keeps its task" "$(grep '^cannot-verify: ' <<<"$rr_out")" "cannot-verify: (Task 3) the caller passes the flag"
-vd_report "$RR_WS/group-1,3-review-report.md" <<'REPORT'
-|## Verdict
-|Task 1 spec: pass
-|Task 1 quality: approved
-|Task 1 scores: spec 16 / scope 17 / verification 15 / quality 16
-|
-|## Findings
-REPORT
-rr_run verdict docs/plan.md 1 3 --group
-check "verdict --group: a report missing a member's verdict exits 5" "$rr_rc" "5"
-check "verdict --group: the missing key is named" "$(grep -c 'Task 3 spec' <<<"$rr_err")" "1"
-rr_run verdict docs/plan.md 1 3 --group --rereview 1
-check "verdict --group: a group has no re-review report (members re-review alone)" "$rr_rc" "2"
-
-# Finding attribution: a group finding names a member, a task finding names none.
-vd_group() { # vd_group <findings lines...> — a clean group 1,3 report with these Findings lines
-  {
-    printf '## Verdict\n'
-    printf 'Task %s spec: pass\nTask %s quality: approved\nTask %s scores: spec 17 / scope 17 / verification 17 / quality 17\n' 1 1 1 3 3 3
-    printf '\n## Findings\n'
-    printf '%s\n' "$@"
-  } > "$RR_WS/group-1,3-review-report.md"
-}
-vd_group '- [Minor] app.txt:3 — no task named'
-rr_run verdict docs/plan.md 1 3 --group
-check "verdict --group: a finding without its (Task N) exits 5" "$rr_rc $(grep -c 'no task named' <<<"$rr_err")" "5 1"
-vd_group '- [Minor] (Task 2) app.txt:3 — outside the group'
-rr_run verdict docs/plan.md 1 3 --group
-check "verdict --group: a finding naming a task outside the group exits 5" "$rr_rc $(grep -c 'outside the group' <<<"$rr_err")" "5 1"
-vd_group '- [Minor] (Task 3) other.txt:1 — wording'
-sed -i.bak 's/^Task 3 quality: approved$/Task 3 quality: changes/' "$RR_WS/group-1,3-review-report.md" && rm -f "$RR_WS/group-1,3-review-report.md.bak"
-rr_run verdict docs/plan.md 1 3 --group
-check "verdict --group: quality changes with only a Minor for that task exits 5" "$rr_rc $(grep -c 'Task 3: spec: fail or quality: changes' <<<"$rr_err")" "5 1"
-vd_group '* [Important] (Task 1) app.txt:3 — a star bullet'
-rr_run verdict docs/plan.md 1 3 --group
-check "verdict --group: a line under Findings that is not a bullet exits 5" "$rr_rc $(grep -c 'star bullet' <<<"$rr_err")" "5 1"
-vd_group '- None' '' '## Cannot verify' '- None.'
-rr_run verdict docs/plan.md 1 3 --group
-check "verdict --group: - None under both sections exits 0" "$rr_rc" "0"
-check "verdict --group: and the digest lists nothing" "$(grep -cE '^(Critical|Important|cannot-verify): ' <<<"$rr_out") $(grep '^findings: ' <<<"$rr_out")" \
-  "0 findings: 0 Critical, 0 Important, 0 Minor"
-
-# A wave group spread over two worktrees: one tracked snapshot per member
-# checkout, and verdict checks each.
-rr_reset
-rr_git worktree add -q --detach "$RR_TMP/wt1" HEAD
-rr_git worktree add -q --detach "$RR_TMP/wt3" HEAD
-rr_run hold docs/plan.md 1 --cwd "$RR_TMP/wt1"
-rr_run hold docs/plan.md 3 --cwd "$RR_TMP/wt3"
-check "wave group: hold records the member's checkout" "$(rr_state 3 .heldCwd)" "$RR_TMP/wt3"
-rr_run review --group docs/plan.md 1 3
-check "wave group: one tracked snapshot per member checkout" \
-  "$(jq -r '[.reviewChecks[].cwd] | sort | join(" ")' "$RR_WS/group-1,3-step.json" | tr -d '\r')" "$RR_TMP/wt1 $RR_TMP/wt3"
-vd_report "$RR_WS/group-1,3-review-report.md" <<'REPORT'
-|## Verdict
-|Task 1 spec: pass
-|Task 1 quality: approved
-|Task 1 scores: spec 17 / scope 18 / verification 16 / quality 16
-|Task 3 spec: pass
-|Task 3 quality: approved
-|Task 3 scores: spec 17 / scope 18 / verification 16 / quality 16
-REPORT
-rr_run verdict docs/plan.md 1 3 --group
-check "wave group: clean member checkouts pass" "$rr_rc" "0"
-cp "$RR_WS/group-1,3-step.json" "$RR_TMP/group-1,3.keep"
-jq 'del(.reviewChecks)' "$RR_TMP/group-1,3.keep" > "$RR_WS/group-1,3-step.json"
-rr_run verdict docs/plan.md 1 3 --group
-check "wave group: a group state without its tracked check exits 6" "$rr_rc $(grep -c 'recorded no tracked-file check' <<<"$rr_err")" "6 1"
-cp "$RR_TMP/group-1,3.keep" "$RR_WS/group-1,3-step.json"
-printf 'judge edit\n' >> "$RR_TMP/wt3/app.txt"
-rr_run verdict docs/plan.md 1 3 --group
-check "wave group: a change in one member's checkout exits 6" "$rr_rc" "6"
-check "wave group: the stderr names that checkout" "$(grep -cF "in $RR_TMP/wt3;" <<<"$rr_err")" "1"
-check "wave group: and the file" "$(grep -cx 'app.txt' <<<"$rr_err")" "1"
-rr_run verdict docs/plan.md 1 3 --group --cwd "$RR_TMP/wt1"
-check "wave group: --cwd cannot stand for two checkouts" "$rr_rc" "2"
-printf -- '- app.txt: judge edit\n' > "$RR_WS/task-3-fix-1.md"
-rr_run rereview docs/plan.md 3
-check "wave group: a member's re-review snapshots its own checkout" "$rr_rc $(rr_state 3 .reviewCheck.cwd)" "0 $RR_TMP/wt3"
-printf 'member edit\n' >> "$RR_TMP/wt3/app.txt"
-rr_run verdict docs/plan.md 3 --rereview 1
-check "wave group: a member's re-review verdict checks its own checkout" "$rr_rc $(grep -cF "in $RR_TMP/wt3;" <<<"$rr_err")" "6 1"
-rr_git worktree remove --force "$RR_TMP/wt1"
-rr_git worktree remove --force "$RR_TMP/wt3"
 
 # A task review: the digest, the fix file, the deferred Minor lines.
 rr_reset
@@ -1391,10 +893,22 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |scores: spec 7 / scope 15 / verification 12 / quality 9
 |
 |## Findings
-|- [Important] (Task 1) app.txt:2 — a task prefix outside a group
+|- [Important] docs/user guide.md:3-4 — the heading is wrong - twice
 REPORT
 rr_run verdict docs/plan.md 1
-check "verdict: a task finding with a (Task N) prefix exits 5" "$rr_rc $(grep -c 'prefix outside a group' <<<"$rr_err")" "5 1"
+check "verdict: a finding on a path with a space is read whole" "$rr_rc $(grep -c '^Important 1 docs/user guide.md:3-4 — the heading is wrong - twice$' <<<"$rr_out")" "0 1"
+rm -f "$RR_WS"/task-1-fix-*.md
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: fail
+|quality: changes
+|scores: spec 7 / scope 15 / verification 12 / quality 9
+|
+|## Findings
+|- [Important] (Task 1) app.txt:2 — a task prefix
+REPORT
+rr_run verdict docs/plan.md 1
+check "verdict: a task finding with a (Task N) prefix exits 5" "$rr_rc $(grep -c 'a task prefix' <<<"$rr_err")" "5 1"
 vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |## Verdict
 |spec: fail

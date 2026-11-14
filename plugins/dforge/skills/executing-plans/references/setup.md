@@ -68,25 +68,18 @@ the seat marks its rulings provisional.
 
 **Check the Execution line.** It must name `inline`.
 
-- It names `subagent`: log `Ruling: routed to subagent mode — the plan's
-  Execution line names it — none` and use
-  dforge:subagent-driven-development instead.
-- Your human partner asks for subagent mode, at the start or mid-run: append
-  `Task <N>: escalated inline -> subagent — owner request`, where `<N>` is the
-  next task not yet started, log `Ruling: routed to subagent mode — owner
-  request — none`, and use dforge:subagent-driven-development. Do not edit the
-  plan: `**Execution:**` is a line `scripts/plan-amend` refuses to touch, and
-  a resumed session reads the switch from the ledger. Only their explicit
-  instruction moves the plan back; the next `implementer inline (assigned`
-  line records the return.
+- It names `subagent`: the mode was retired in 5.0.0. Log `Ruling: run inline —
+  the plan's Execution line names the retired subagent mode — none` and
+  continue; `scripts/plan-lint` reports the line as an error, and
+  `**Execution:**` is a line `scripts/plan-amend` refuses to touch.
+- Your human partner asks for subagent mode: tell them it was retired in
+  5.0.0 and continue inline.
 - The plan has no Execution line, because it was written before 1.4.0: log
   `Ruling: inline by invocation — plan predates the Execution line — if wrong,
   a task that will not converge goes to the breaker` and continue.
 
-A `**Parallelism:** waves` line is read only by subagent mode. When your human
-partner has put a waves plan in this mode, run its tasks in index order and
-ignore the waves: a waves plan's index order is always a correct sequential
-order ([parallel-waves.md](../../../reference/parallel-waves.md)).
+An older plan's `**Parallelism:** waves` line is ignored: run its tasks in
+index order, which is always a correct sequential order.
 
 Never re-score the tasks. `scripts/plan-lint` enforced the eligibility rule
 when the plan was saved, and a plan whose Execution line says `inline` has

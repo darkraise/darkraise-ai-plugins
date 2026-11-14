@@ -49,55 +49,30 @@ seats only, never a plan task. Both are off by default; read
 
 ## What you get
 
-**Nineteen agents in three classes.** Seven execution implementers - Sonnet 5.5
-and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
-everything the assignment table and the escalation ladder can reach; no score
-assigns `impl-opus-low` or `impl-opus-medium`; both are reached only by
-escalation. Since 1.27.0 no score assigns `impl-haiku` either: total 0 runs on
-`impl-sonnet-low`, which cost less per pass in the tier evaluation, and Haiku
-is reached only by a human `**Implementer:**` override. Nine reserve implementers - the `xhigh` and `max` efforts, and
-every Fable 5.1 tier - are reachable only by a human override, or by a task
-that has already been split once and still exhausted `impl-opus-high`.
-Three role agents - the judges `judge-opus`, `judge-sonnet-high` and
-`judge-fable` (an auto run's spec review and rulings, or a human override) -
-whose `tools:` frontmatter omits `Edit`, `Bash` and
-`Agent`, so a reviewer that cannot spawn subagents is a fact about the
-registry rather than a request in a prompt; a judge writes only its report file, whose path its prompt names,
-replies in at most ten lines, and `scripts/task-step verdict` checks that no
-tracked file changed during a task review.
-Every plan is drafted in the session that read the code, whatever its size.
-Every implementer keeps its tools, browser and device servers included, but
-its `disallowedTools:` frontmatter drops `Agent`, `Skill` and the session-only
-tools (Artifact, Workflow, plan mode, cron, messaging): their definitions and
-the skill listing are re-read on every implementer call and roughly doubled
-its starting context.
-
-The reserve exists so that a human ruling, and a task that genuinely cannot be
-split any further, both have somewhere to go. It is not a way around the gate:
-above `impl-opus-high` the first answer to a hard task is still to split it, and
-the reserve is only entered when that split has already been spent.
+**Four agents.** `impl-sonnet-high` runs the Acceptance QA pass; it keeps its
+tools, browser and device servers included, but its `disallowedTools:`
+frontmatter drops `Agent`, `Skill` and the session-only tools (Artifact,
+Workflow, plan mode, cron, messaging), whose definitions would otherwise be
+re-read on every call. Three role agents - the judges `judge-opus`,
+`judge-sonnet-high` and `judge-fable` (an auto run's spec review and rulings,
+or a human override) - have a `tools:` frontmatter that omits `Edit`, `Bash`
+and `Agent`, so a reviewer that cannot spawn subagents is a fact about the
+registry rather than a request in a prompt; a judge writes only its report
+file, whose path its prompt names, replies in at most ten lines, and
+`scripts/task-step verdict` checks that no tracked file changed during a task
+review. Every plan is drafted, and every task implemented, in the session that
+read the code, whatever its size.
 
 **A four-axis rubric that gates the plan.** Files, spec completeness, coupling,
 and risk, each scored 0 to 3. Three of those four measure how the task was
 drawn, not how hard the change is, so Rule S sends a task scoring 6 or more
 across them on a Claude plan, or 4 or more on a Codex plan, back to be split
-rather than to a larger model. That cap is what makes the assignment table stop
-at 8.
+rather than to a larger model. That cap is what makes the execution floor
+table stop at 8.
 
-**An escalation ladder.** Every execution implementer has exactly one successor,
-changing model before effort except at the two Opus effort rows, where Opus is
-already the top model and there is nowhere else to go. Walks terminate at a
-SPLIT action rather than an agent, and only a task that survives that split
-enters the reserve chain, which terminates at BLOCKED. Used at fix round 2
-and at the BLOCKED handler: a task gets at most two fix rounds, then the
-ruling seat.
-
-**Review groups and wave checks.** A task at risk 0 or 1 with a total under 5 is
-reviewed in groups: one judge dispatch for up to four such tasks, or for a
-wave's such tasks before they merge. Riskier tasks keep their own review. Waves
-run the plan's full integration check every third wave, after any risk-3 wave and after the last; a red baseline
-whose failures do not grow counts as a pass. A `Host: codex` plan keeps
-`review_cap: 5` and per-task review.
+**A fix cap.** A task the session implements gets at most three fix rounds,
+then goes to the ruling seat as a `breaker` item. A delegated task keeps two.
+A `Host: codex` plan keeps `review_cap: 5`.
 
 **Review depth.** An architectural plan runs at one of three depths, sized by
 risk rather than length. `scripts/depth-route` prints the depth: `full` for a
@@ -158,28 +133,9 @@ tasks are covered by one whole-branch review at the end. `plan-lint` requires
 the Execution line's model and effort to cover the hardest task the session
 implements, and `--effort high` at risk 3. A task that will
 not converge after three fix rounds goes to the ruling seat as a `breaker`
-item. subagent-driven-development, a dispatch and a scored review per task, is
-deprecated: it runs only for a plan whose Execution line names `subagent` or
-on your instruction, and `plan-lint` warns on that line.
-
-**Parallel waves, subagent plans only.** The `executionStrategy` setting
-defaults to `sequential`, and an inline plan always runs one task after
-another. `parallel` and `ask` take effect only for a plan whose Execution line
-names `subagent`. Brainstorming records `**Execution strategy:** sequential —
-inline execution` in the spec. A parallel
-plan groups its tasks into waves, written `**Parallelism:** waves — 1 | 2-4 | 5`:
-contiguous task ranges whose tasks share no file and consume nothing from each
-other, with a `**Depends on:**` line on every task. Subagent mode runs a wave's
-tasks at once, each in its own git worktree, reviews each exactly as it would a
-sequential task, merges each reviewed task with `scripts/wave merge` (which
-refuses a task whose files overlap what the wave already merged), and runs the
-plan's `**Integration check:**` before the next wave starts. `plan-lint` keeps
-risk-3 tasks and dependency-manifest changes alone in their
-wave, the pre-flight ruling seat checks every same-wave pair for coupling the
-file lists cannot show, and `context-size --wave W` keeps room in the session
-for every task running at once. Running a wave one task after another is always
-correct, so every doubt serializes it; `reference/parallel-waves.md` holds the
-procedure. A plan without a `**Parallelism:**` line runs exactly as before.
+item. Subagent execution, a dispatch and a scored review per task, was retired
+in 5.0.0, and `plan-lint` reports an `**Execution:** subagent` line as an
+error.
 
 **A reviewer panel.** Codex and agy review; neither implements a task. When a
 family's review surface is open, `scripts/run-review-panel` runs every open
@@ -235,8 +191,7 @@ judge to dedupe and verify, and a heavy panel's lists always go to
 Plan review runs the panel for round 1 (`judge-opus` when it returns nothing
 or every reviewer is off) and `judge-opus` for the delta round: at most two
 rounds on a Claude plan. The final whole-branch review runs on `judge-opus`,
-its one fix subagent on the highest tier among the tasks the findings touch,
-and at depth full gains an external round with one list per reviewer. Whenever
+its fix pass in the session, and at depth full gains an external round with one list per reviewer. Whenever
 two or more lists carry findings, a fresh `judge-opus` dedupes and verifies
 them, tagging each finding's origins (`[claude+agy]`). No review route names
 `judge-fable`: on 2026-09-23 Opus 5.5 at high effort matched or beat Fable 5.1
@@ -376,7 +331,7 @@ UI files.
 set — brainstorming through finishing-a-development-branch — frozen at upstream
 6.3.0, so no other plugin is required: every agent definition preloads
 `dforge:verification-before-completion` through its `skills:`
-frontmatter, and writing-plans and subagent-driven-development use the plugin's own
+frontmatter, and writing-plans and executing-plans use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
 `context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
 action and keeps `.dforge/handoff/latest.md` pointing at it. Disable the
@@ -384,10 +339,12 @@ upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
 **Bash, jq, Git, and GNU timeout/coreutils.** The scripts need Git 2.31 or
-later: they ask `git rev-parse` for `--path-format=absolute`. The rest are
-requirements of the external reviewers: `scripts/detect-executors.sh` builds
-every field with `jq`, and the review runners parse each reviewer's answer with
-it. Each exits 2 with a message naming the dependency rather than degrading,
+later: they ask `git rev-parse` for `--path-format=absolute`. GNU timeout is
+found as `timeout` or, as Homebrew's coreutils installs it on macOS, as
+`gtimeout`; without either the Codex and agy gates report
+`reason=no-timeout`. The rest are
+requirements of the external reviewers: the review runners parse each
+reviewer's answer with `jq`. Each exits 2 with a message naming the dependency rather than degrading,
 because a missing `jq` would otherwise read as "no reviewer usable". The
 SessionStart hook is the lenient case: without `jq` it still injects the entry
 point and only skips persisting the session record, and `bash` is required for
@@ -472,7 +429,7 @@ Codex has no Stop hook: the Codex manifest declares no hooks, so nothing
 catches a summarize-and-stop there. On Codex you must run `next-step` yourself
 on every early stop.
 
-A `PostToolUse` hook on `Edit`, `Write` and `MultiEdit` runs
+A `PostToolUse` hook on `Edit` and `Write` runs
 `scripts/ui-edit-hook.sh`: for a UI file (`scripts/ui-proof paths`) it
 returns `scripts/ui-lint` findings as additional context and, once per
 session, names `dforge:ui-ux`; it never blocks. A third `Stop` hook,
@@ -500,31 +457,16 @@ without asking (`always`) or never offers it (`off`). See
 
 ## Unattended runs
 
-Two Claude Code settings keep a parallel plan moving while nobody is at the
-keyboard. They belong to Claude Code, and dforge neither sets nor reads them.
+One Claude Code setting keeps a plan moving while nobody is at the keyboard.
+It belongs to Claude Code, and dforge neither sets nor reads it.
 
-**Auto mode.** Start the session with `claude --permission-mode auto`. A wave
-runs its implementers as subagents, several at once, and a tool call that needs
-a permission prompt makes that implementer wait for an answer you are not there
-to give, which holds up the whole wave. In auto mode a classifier approves
-routine calls and blocks risky ones, so no implementer stops on a prompt. This is Claude Code's permission mode; dforge's
-own auto run (see [reference/auto-run.md](reference/auto-run.md)) keeps a plan
-going from approval to finishing and works under any permission mode.
-
-**Wave worktrees from your local HEAD.** Set `worktree.baseRef` to `"head"` in
-your user settings (`~/.claude/settings.json`):
-
-```json
-{ "worktree": { "baseRef": "head" } }
-```
-
-Claude Code creates each wave implementer's worktree itself. Its default,
-`"fresh"`, branches from `origin/<default-branch>`, so when your local main is
-ahead of origin, or the plan sits on a feature branch, the worktree lacks the
-unpushed commits: the plan and the earlier waves' merged tasks. dforge's
-dispatch detaches the implementer to the wave's base afterwards, but a worktree
-that starts from your HEAD begins in the right place. The setting applies to
-every worktree Claude Code creates for you, not only dforge's.
+**Auto mode.** Start the session with `claude --permission-mode auto`. A tool
+call that needs a permission prompt waits for an answer you are not there to
+give. In auto mode a classifier approves routine calls and blocks risky ones,
+so the run does not stop on a prompt. This is Claude Code's permission mode;
+dforge's own auto run (see [reference/auto-run.md](reference/auto-run.md))
+keeps a plan going from approval to finishing and works under any permission
+mode.
 
 ## Session budget
 
@@ -589,7 +531,7 @@ with a reason, which the cockpit sends to Discord. See
 
 ## Cockpit
 
-Claude Code only. Built and tested against Claude Code 2.1.299 to 2.1.306; the
+Claude Code only. Built and tested against Claude Code 2.1.299 to 2.1.325; the
 mod API is early access and may change between releases.
 
 ### What it does
@@ -603,7 +545,7 @@ headline on the title line, under one **Now** row that says what the
 session is doing:
 
 ```
-● running 2m14s · step 18 · Bash in impl-sonnet-low
+● running 2m14s · step 18 · Bash in judge-sonnet-high
 ╭ Account ──────────────────────────── subscription ╮
 │ ● you@example.com                                 │
 │   You · Acme (admin)                              │
@@ -630,10 +572,10 @@ session is doing:
 │ $ npm run dev 12m04s                              │
 ╰───────────────────────────────────────────────────╯
 ╭ Agents ───────────────────────── ● 1 running ✓ 2 ╮
-│ ● impl-sonnet-low Task 4 4m17s                    │
+│ ● judge-sonnet-high Task 4 4m17s                  │
 │ ✓ reviewer-opus Review task 3                     │
 │ Seats by input                                    │
-│   impl-sonnet-low ×1                              │
+│   judge-sonnet-high ×1                            │
 │   ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰ 120k in · 80% cached · 7k out  │
 ╰───────────────────────────────────────────────────╯
 ╭ Run ────────────────────────────── round 2/2 · 3/6 ╮
@@ -641,7 +583,7 @@ session is doing:
 │ plan docs/plans/cockpit.md                        │
 │ ✓ Task 3: Draw the context section · clean        │
 │ ▸ Task 4: Draw usage and agents                   │
-│   round 2/2 · impl-sonnet-low                     │
+│   round 2/2 · judge-sonnet-high                   │
 │ ○ Task 5: Track the plan and repo                 │
 ╰───────────────────────────────────────────────────╯
 ╭ Repo ─────────────────────────────────── ● dirty ╮
@@ -851,8 +793,8 @@ the next response, and re-arms the note.
 **Discord notifications.** The mod can post to a Discord channel when the
 session needs you, which works the same over ssh and tmux. Create a webhook
 (channel settings → Integrations → Webhooks → copy URL) and paste it in the
-settings view's **Notifications** group, or run `/cockpit notify url <url>`.
-It is kept in the plugin's own store, not in `settings.json`, and only ever
+settings view's **Notifications** group (a typed slash command would keep the
+token in the transcript, so there is none for it). It is kept in the plugin's own store, not in `settings.json`, and only ever
 shows masked; `DFORGE_NOTIFY_URL` in the environment wins over it (`DR_COCKPIT_NOTIFY_URL` still read). **Send
 test** (or `/cockpit notify test`) posts a sample. Set your Discord user id
 (**Mention**, or `/cockpit notify mention <id>`) to be pinged for the events
@@ -928,8 +870,6 @@ The same settings can be set with
 | Workflow | `agyReview` | `false` | `true` lets the Antigravity CLI (`agy`) take review seats when its gate passes and the policy's `trust.review` is `pass`. `false`, the default, makes `scripts/agy-gate` report `review=false reason=setting` without probing, and keeps agy out of every review. |
 | Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DFORGE_LENS_CAP` overrides it. |
 | Workflow | `lensMinorFrom` | `20` | The plan size, in tasks, from which the final review's lenses also report Minor findings. A smaller plan's lenses report Critical and Important findings only, so the fix wave does not triage a long Minor tail. `0` always asks for Minor findings. `DFORGE_LENS_MINOR_FROM` overrides it. |
-| Workflow | `executionStrategy` | `sequential` | `sequential` runs one task at a time; `parallel` (independent tasks in waves) and `ask` take effect only with a subagent Execution line. |
-| Workflow | `executionMode` | `auto` | `auto` means inline; `inline` and `subagent` fix the plan's Execution line, and `subagent` (deprecated) is the only mode that runs waves. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
 | Workflow | `autoRun` | `on` | `on` runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; `off` on Codex); `ask` offers that once the design is approved; `off` never runs one. See [Auto run](#auto-run). |
 | Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
@@ -1001,6 +941,40 @@ implement a task.
 - **Reviews.** `reference/executor-lane.md` is now
   `reference/external-review.md`, which describes the reviewer panel
   (`scripts/run-review-panel`).
+- **Parallel waves.** Every plan runs one task at a time. The
+  `executionStrategy` setting is gone (a stored value is ignored), and so are
+  the wave script, the `context-size` and `auto-run verdict` wave widths, and
+  the Wave check and wave Early CI forms. An older plan's
+  `**Parallelism:** waves` line draws a `plan-lint` WARN and its tasks run in
+  index order.
+- **Group reviews.** `task-step` no longer holds a task or reviews tasks as a
+  group, `review-route` prints no `review=` tier, and every task is reviewed
+  alone. A task whose last ledger line reads `awaiting group review` is
+  reviewed with `task-step review`.
+- **Subagent mode.** The `subagent-driven-development` skill and the
+  `executionMode` setting are gone (a stored value is ignored). `plan-lint`
+  reports `**Execution:** subagent` as an error; `executing-plans` runs an
+  older plan that still carries the line inline and logs a ruling. A ledger
+  whose last line for a task is `escalated inline -> subagent` sends that task
+  to the ruling seat as a `breaker` item.
+- **Implementers.** Fifteen of the sixteen `impl-*` agents are gone; only
+  `impl-sonnet-high` stays, for Acceptance QA. `task-step start` takes one task
+  and writes no dispatch file or assigned line, `review-route --final-fix` is
+  gone, and `reference/escalation.md` with the escalation and reserve tables in
+  `reference/ladder.md` went with them. A task no longer carries an
+  `**Implementer:**` line (or, on a Codex plan, an `**Assignment source:**`
+  line): `plan-lint` ignores the line in an older plan, and
+  `reference/ladder.md`'s table now gives the model and effort the Execution
+  line needs.
+- **Evals.** `evals/tiers`, the harness that graded the `impl-*` tiers, is
+  removed.
+- **The task loop.** `scripts/task-brief --open PLAN N` writes the brief and
+  `plan-header.md`, appends the `implementer inline (assigned; base …)` line
+  once and prints the task check; `scripts/task-close PLAN N CHECKPOINT
+  [--review TEXT]` writes the `complete` line, pushes the ledger to darkmem,
+  records an auto run's completion and prints the final budget line after the
+  last task. The brief of a task the session implements no longer repeats the
+  header's Global Constraints and Contracts.
 
 ## Migrating to 4.11
 
@@ -1028,8 +1002,9 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
    The cockpit's Discord webhook and mention stay in dr-forge's plugin store,
    `~/.claude/plugins/store/dr-forge_darkraise-*.json` (under
    `$CLAUDE_CONFIG_DIR` when set), as `notifyUrl` and `notifyMention`. Copy
-   them before you uninstall, then set them in a dforge session with
-   `/cockpit notify url <url>` and `/cockpit notify mention <id>`.
+   them before you uninstall, then set them in a dforge session: the webhook
+   in `/cockpit settings` (or `DFORGE_NOTIFY_URL`), the mention with
+   `/cockpit notify mention <id>`.
 
        /plugin install dforge@darkraise
        /plugin uninstall dr-forge@darkraise
@@ -1100,7 +1075,7 @@ and the `dr-forge:` prefix. The pre-2.0 `.superpowers/`, `docs/superpowers/`,
 prefix are no longer read. Session start and `repo-audit` print one line naming
 any pre-3.0 directory a repository still has; run, once per repository:
 
-    bash <plugin-root>/scripts/forge-migrate [DIR]
+    bash <plugin-root>/scripts/dforge-migrate [DIR]
 
 In the primary checkout and every linked worktree it moves `.superpowers/` to
 `.forge/`, `docs/superpowers/` to `docs/forge/` (with `git mv` when the
@@ -1121,7 +1096,7 @@ Rename any `DR_SUPERPOWERS_*` variable you set to its `DR_FORGE_*` name.
 `DR_FORGE_DOCUMENT_STORE` and `DR_FORGE_PROGRESS_SOURCE`, which 2.x read, are
 no longer read at all: set `documentStore` and `progressSource` instead.
 
-`forge-migrate` also moves the home: the darkmem mapping in
+`dforge-migrate` also moves the home: the darkmem mapping in
 `~/.dr-superpowers/config.json` into `~/.dr-forge/config.json` when that file
 has none, and each `~/.dr-superpowers/mirror/<project>/` that
 `~/.dr-forge/mirror/` lacks. darkmem itself is off in 3.0 until you set
@@ -1136,8 +1111,7 @@ A plan opens with a header block: Goal, Spec, the `**Execution:**` line
 (inline on every new plan, with the session's model and effort), Global Constraints, Contracts (every name
 one task produces and another consumes), Assumptions with evidence, and a Task
 index. `scripts/plan-lint` checks it, and a judge reviews it against
-`criteria/plan-review.md` before it is saved. That Execution line is binding: a
-session does not change mode because subagents happen to be available, and only
+`criteria/plan-review.md` before it is saved. That Execution line is binding: only
 your explicit instruction overrides it. Each task
 carries its interfaces and the complete code of its tests, and gives
 implementation code only for configuration values, generated-file or migration
@@ -1154,15 +1128,13 @@ task then reads:
 - Consumes: `formatRow(row: Row): string` from Task 2
 - Produces: `runExport(cfg: Config): Promise<Report>`
 
-**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 1 - spec 2 - coupling 1 - risk 1 = 5
 **Approach:** inline - skip 2: follows the existing exporter pattern
 ```
 
-Edit the `**Implementer:**` line to override. `subagent-driven-development`
-obeys the line and never recomputes when it is present. Add
-`**Override:** <reason>` below the Evaluation line so that `plan-lint` reports
-the deviation as a warning instead of an error.
+A human who keeps a task that breaks Rule S adds `**Override:** <reason>` below
+the Evaluation line, so that `plan-lint` reports the deviation as a warning
+instead of an error.
 
 The heading keeps upstream's `### Task N: <name>` form on purpose.
 `scripts/task-brief` finds a task by matching a heading that starts with
@@ -1178,51 +1150,44 @@ package, the breaker (whose adjudication now goes to the ruling seat), and the
 handoff to dforge:finishing-a-development-branch - with these
 differences:
 
-1. **Named seats.** The implementer is the fleet agent the plan's
-   `**Implementer:**` line names, dispatched with no `model` argument: passing
-   one would override the agent file's model while `effort` kept its
-   frontmatter value. The task reviewer is a judge agent scoring the criteria
+1. **Named seats.** The task reviewer is a judge agent scoring the criteria
    file. General-purpose seats still name their model explicitly.
 2. **Scores.** Task reviews add four 1-to-20 scores alongside the
    verdicts.
-3. **Escalation ladder.** Round 2 and the BLOCKED handler climb
-   [ladder.md](reference/ladder.md)'s table, ending in one split and then the
-   reserve chain. An external task hands back to its Claude implementer instead.
-   A `Host: codex` plan escalates through the `codex-v4` selector over its
-   five rounds instead.
-4. **Cache-aware resumes.** Fix round 1 resumes the implementer only while
-   its cache is warm - returned under five minutes ago, or under about 100k
-   tokens of context - and otherwise dispatches a fresh copy on the same tier;
-   round 2 goes to the successor rung. On a `Host: codex` plan rounds 1-3
-   resume by that rule and rounds 4 and 5 are fresh dispatches.
+3. **No escalation ladder.** The session implements every task and fixes its
+   own findings, so there is no implementer to escalate; a task that will not
+   converge goes to the ruling seat.
+4. **Cache-aware resumes.** A delegated task's fix round 1 resumes its executor
+   only while its cache is warm; see
+   [delegated-task.md](reference/delegated-task.md).
 5. **One ledger grammar.** Every task gets an assigned line and a complete line
-   carrying its scores and a checkpoint (done, verified, remaining, discovered
+   carrying a checkpoint (done, verified, remaining, discovered
    issues, assumptions), which crash recovery and the final review read.
 6. **Cross-family final review, on request.** With `codexReview` on, the final
    whole-branch review adds a Codex round, and a judge verifies the union of
    both reviewers' findings.
-7. **Rulings, not stops.** Dispatch problems - an unknown agent name, an
-   unavailable model, an obsolete Executor line - are logged
-   rulings, never silent fallbacks and never stops.
+7. **Rulings, not stops.** Problems with a seat - an unavailable model, an
+   obsolete Executor line - are logged rulings, never silent fallbacks and
+   never stops.
 8. **Session budget.** A budget line, a compaction snapshot, and the
    dforge:handoff / dforge:resume-execution pair replace
    upstream's unmeasured sessions - see [Session budget](#session-budget).
-9. **Small-model planning.** A strong model plans once; small models execute.
-   Every task brief carries the header's Global Constraints and Contracts, the
-   controller reads only the header and one brief at a time, and judgment
+9. **Small-model planning.** A strong model plans once; the session executes.
+   A brief for a task the session implements points at the header file for the
+   Global Constraints and Contracts (a risk-3 or delegated task's brief carries
+   them), the controller reads only the header and one brief at a time, and judgment
    calls go to a read-only ruling seat (`judge-opus`, with the reason
    `review-route --ruling` prints). Its plan corrections
    land in an append-only `amendments.md` through `scripts/plan-amend`; the
    plan file is never edited during execution.
-10. **Inline by default.** Upstream picks `executing-plans` when subagents are
-    unavailable and recommends subagent execution otherwise. Here every new
-    plan's `**Execution:**` line names inline: `executing-plans` is a full
-    inline mode that writes the same ledger, sends its judgment to the same
-    ruling seat, and ends at the same shared
+10. **Inline only.** Upstream picks `executing-plans` when subagents are
+    unavailable and recommends subagent execution otherwise. Here every
+    plan's `**Execution:**` line names inline: `executing-plans` writes the
+    ledger, sends its judgment to the ruling seat, and ends at the shared
     [final-review.md](reference/final-review.md); only risk-3 tasks get a
     per-task review. A task it cannot land in three fix rounds
-    goes to the ruling seat as a `breaker` item. Subagent mode is deprecated
-    and runs only for an older plan's subagent line or on your instruction.
+    goes to the ruling seat as a `breaker` item. Subagent mode was retired in
+    5.0.0.
 
 ## Licenses
 
@@ -1259,8 +1224,8 @@ The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one 
 
 ## Reference
 
-`reference/ladder.md` holds the raw rubric, Rule S, and Claude assignment,
-escalation, reserve, and external judge tables. Native Codex reads
+`reference/ladder.md` holds the raw rubric, Rule S, the Claude execution floor
+table, and the external judge tables. Native Codex reads
 `reference/codex-routing.json`; `reference/native-codex.md` explains its weighted
 score, request format, and plan conversion. `scripts/select-native-tier.sh`
 validates raw scores and history before returning a native routing decision.
@@ -1270,7 +1235,7 @@ validates raw scores and history before returning a native routing decision.
 valid id, `executors ranked` the same ids by ascending `priority`,
 `executors get <id> <dotted.key>` one field, and
 `executors path <id> <dotted.key>` that field resolved against the plugin root.
-An entry names the family's locator, probe, gate, review runner, session
+An entry names the family's gate, review runner, session
 directory, surfaces, priority and judge block, so adding a reviewer is an
 entry, a runner and a ladder block rather than an edit to every script.
 `reference/external-review.md` states the entry schema and describes the
@@ -1281,12 +1246,6 @@ end at. `scripts/run-review-panel` runs every open family's runner at once;
 `scripts/run-codex-review.sh` and `scripts/run-agy-review.sh` each select the
 judge row from their block (`codex-judge`, `agy-judge`), bound the run, and
 classify the outcome as `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`.
-
-`reference/parallel-waves.md` runs a waves plan: opening a wave, the parallel
-implementer dispatch, the merge and the integration check, and recovery.
-`scripts/wave` holds its mechanics: `list` the waves, the `ref` a parallel
-task commits to, `status` of a wave's tasks, `merge` one reviewed task, and
-`clean` a merged wave's worktrees and refs without ever forcing.
 
 `reference/project-state.md` describes the committed project-declared state —
 `gates.md`, `plans/completed.md` and `distilled/` — and the precedence order that
@@ -1301,8 +1260,6 @@ review, `codex-review-schema.json` for the external task reviews,
 
 `scripts/` holds the external reviewers' plumbing:
 
-- `detect-executors.sh` emits the JSON roster for the named ids, or every
-  registered id: presence, version and sign-in for each family.
 - `codex-plugin` locates the official codex plugin; `codex-gate` is Codex's
   session gate.
 - `agy-locate` finds the Antigravity CLI and checks its version against

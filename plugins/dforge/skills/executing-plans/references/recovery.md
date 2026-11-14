@@ -8,13 +8,13 @@
 |---|---|
 | `complete` | Done; never redo |
 | `BLOCKED` | Terminal. It is a stop of the fourth class for any task that depends on it; name it in your final message |
-| `escalated inline -> subagent` | This plan has left inline mode: use dforge:subagent-driven-development |
-| `fix round R/3 (…; passing)` | Re-run the task's verifications; if they pass, commit anything uncommitted except the carried paths (`scripts/auto-run carried`) and write the complete line, else treat as `still failing` |
+| `escalated inline -> subagent` (an older ledger's; subagent mode was retired in 5.0.0) | Treat it as `fix round 3/3 (…; still failing)`: send the task to the ruling seat as a `breaker` item (in an auto run, the pending list) |
+| `fix round R/3 (…; passing)` | Re-run the task's verifications; if they pass, commit anything uncommitted except the carried paths (`scripts/auto-run carried`) and run `scripts/task-close` for the complete line, else treat as `still failing` |
 | `fix round R/3 (…; still failing)`, R < 3 | Resume the loop at round R+1 |
 | `fix round 3/3 (…; still failing)` | Send the task to the ruling seat as a `breaker` item (in an auto run, the pending list) |
-| `implementer inline (assigned; base <sha7>[; executor <id> unavailable - <reason> \| executor <id> HANDBACK - <reason>])` | A task whose brief's second line is `**Review:** per-task — risk 3`, or an older ledger's executor fallback, resumes the session review loop at its first step not yet done. Otherwise: if `git log <base>..HEAD` is non-empty, re-run the task's verifications and finish it from where those commits leave it; otherwise start the task |
+| `implementer inline (assigned; base <sha7>[; executor <id> unavailable - <reason> \| executor <id> HANDBACK - <reason>])` | A task whose brief's second line is `**Review:** per-task — risk 3`, or an older ledger's executor fallback, resumes the session review loop at its first step not yet done. Otherwise: if `git log <base>..HEAD` is non-empty, re-run the task's verifications and finish it from where those commits leave it, closing with `scripts/task-close`; otherwise run `scripts/task-brief --open` (it appends no second open line) and start the task |
 | `fix round R/2` whose last slot is `session` or `HANDBACK to inline` (an older ledger's), whatever the assigned line names; this row wins over the next | The session review loop ([delegated-task.md](../../../reference/delegated-task.md) §The session review loop): R < 2 resumes it at round R+1; `2/2` goes to the breaker |
-| An assigned line naming `executor <id> <model>/<effort>` (an executor lane run from before 5.0), or a later fix round of that task, with no complete line | The lane is gone, so the session implements the task. First run `git status`, show your human partner the leftovers, and keep or discard them as they decide; leftover run records under the git directory are inert. Then start the task at step 2 of The Task Loop |
+| An assigned line naming `executor <id> <model>/<effort>` (an executor lane run from before 5.0), or a later fix round of that task, with no complete line | The lane is gone, so the session implements the task. First run `git status`, show your human partner the leftovers, and keep or discard them as they decide; leftover run records under the git directory are inert. Then start the task: `scripts/task-brief --open` appends the open line, then step 3 of The Task Loop |
 | Any other agent-named `implementer <agent> (assigned …)` line, or a `fix round R/2` line that follows one (a Codex plan's `fix round R/5`) | Apply [delegated-task.md](../../../reference/delegated-task.md) §Recovery |
 | none | Not started |
 
@@ -24,10 +24,6 @@
 `Early CI: skipped — run <id>` line for that run is resumed first, by applying
 [delegated-task.md](../../../reference/delegated-task.md) §Early CI's recovery
 sentence; a ledger with no `Early CI:` line whose `**Early CI:**` point is
-already complete runs that section now. Neither ends the turn. Then, whatever the per-task lines say: if the ledger holds a
-`Task <N>: escalated inline -> subagent` line with no later
-`implementer inline (assigned` line after it, this plan has left inline mode -
-use dforge:subagent-driven-development, exactly as `scripts/next-step`
-reads the same ledger. Otherwise: every task complete and no `Final review:`
+already complete runs that section now. Neither ends the turn. Then, whatever the per-task lines say: every task complete and no `Final review:`
 line: go to Final Review. A `Final review: clean` line: go to
 dforge:finishing-a-development-branch.

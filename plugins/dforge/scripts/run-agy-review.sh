@@ -2,7 +2,7 @@
 # Runs one agy (Antigravity CLI) review seat: selects the judge row, runs agy in
 # plan mode under a bound, proves it wrote nothing, and classifies the outcome.
 #
-# Usage: run-agy-review.sh --kind task|risk3|plan|final --cwd DIR --out FILE
+# Usage: run-agy-review.sh --kind task|plan|final --cwd DIR --out FILE
 #          (--prompt FILE | --base SHA) [--tier light|heavy] [--dry-run]
 # Output: agy-judge <model>/<effort> status=<OK|FALLBACK|TIMEOUT|FAILED>
 #           exit=<n> out=<path> evidence=<e>[ reason=<token>]
@@ -22,11 +22,12 @@ FINAL_CRITERIA="$HERE/../criteria/codex-final-review.md"
 . "$HERE/lib/worktree-snapshot.sh"
 . "$HERE/lib/executor-session.sh"
 . "$HERE/lib/native-path.sh"
+. "$HERE/lib/timeout.sh"
 
 die() { printf 'run-agy-review: %s\n' "$1" >&2; exit 2; }
 
 command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
-command -v timeout >/dev/null 2>&1 || die "GNU timeout is required but not on PATH"
+dforge_timeout || die "GNU timeout (timeout or gtimeout) is required but not on PATH"
 
 kind=""; cwd=""; out=""; prompt=""; base=""; tier=""; dry_run=false
 while [ $# -gt 0 ]; do
@@ -46,14 +47,14 @@ while [ $# -gt 0 ]; do
 done
 
 case "$kind" in
-  task|risk3) [ -n "$prompt" ] || die "--kind $kind requires --prompt"; kind=task ;;
+  task) [ -n "$prompt" ] || die "--kind task requires --prompt" ;;
   plan) [ -n "$prompt" ] || die "--kind plan requires --prompt" ;;
   final) [ -n "$base" ] || die "--kind final requires --base" ;;
-  *) die "--kind must be task, risk3, plan or final" ;;
+  *) die "--kind must be task, plan or final" ;;
 esac
 case "$tier" in
   "") tier=heavy ;;
-  light|heavy) [ "$kind" = task ] || die "--tier applies only to --kind task or risk3" ;;
+  light|heavy) [ "$kind" = task ] || die "--tier applies only to --kind task" ;;
   *) die "--tier must be light or heavy" ;;
 esac
 [ -n "$cwd" ] || die "--cwd is required"
@@ -232,9 +233,9 @@ run_row() { # run_row <model> <effort> <seconds> <log-prefix>; sets agy_rc
   (
     cd "$cwd" || exit 1
     if command -v setsid >/dev/null 2>&1; then
-      exec setsid timeout -k 10 $(($3 + GRACE)) agy "${args[@]}" < /dev/null > "$4.stdout" 2> "$4.stderr"
+      exec setsid "$DFORGE_TIMEOUT" -k 10 $(($3 + GRACE)) agy "${args[@]}" < /dev/null > "$4.stdout" 2> "$4.stderr"
     else
-      exec timeout -k 10 $(($3 + GRACE)) agy "${args[@]}" < /dev/null > "$4.stdout" 2> "$4.stderr"
+      exec "$DFORGE_TIMEOUT" -k 10 $(($3 + GRACE)) agy "${args[@]}" < /dev/null > "$4.stdout" 2> "$4.stderr"
     fi
   ) &
   agy_pid=$!

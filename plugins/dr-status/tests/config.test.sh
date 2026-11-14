@@ -55,7 +55,7 @@ unset CLAUDE_CONFIG_DIR
 DCC_ACCT_KEY="~/.claude"
 dcc_parse_all "$(cat "$F/full.json")" /dev/null /dev/null
 check "defaults: config is not flagged bad"     "$DCC_CONFIG_BAD" "0"
-check "defaults: line one segment order"        "$DCC_LINE1" "dir git model effort fast agent style turn run account"
+check "defaults: line one segment order"        "$DCC_LINE1" "dir git model effort fast agent style account"
 check "defaults: line two segment order"        "$DCC_LINE2" "ctx cache cost 5h 7d"
 check "defaults: context meter width"           "$DCC_W_CTX" "10"
 check "defaults: cache meter width"             "$DCC_W_CACHE" "10"
@@ -84,7 +84,6 @@ check "defaults: muted palette"                 "$DCC_P_MUTE"   "gray"
 check "model display name"          "$P_MODEL"     "Opus"
 check "effort level"                "$P_EFFORT"    "xhigh"
 check "fast mode is a 1/0 flag"     "$P_FAST"      "1"
-check "thinking is a 1/0 flag"      "$P_THINK"     "1"
 check "default output style is dropped" "$P_STYLE" ""
 check "context percentage is floored" "$P_CTX_PCT" "47"
 check "context tokens"              "$P_CTX_TOK"   "94210"
@@ -113,6 +112,16 @@ check "out-of-order ramp is sorted"        "$DCC_RAMP"  "0:green: 90:red:bold"
 check "matching account resolves a color"  "$DCC_ACCOUNT_COLOR" "magenta"
 check "email is read from the account file" "$P_EMAIL"  "someone@example.com"
 check "valid config is not flagged bad"    "$DCC_CONFIG_BAD" "0"
+
+# Widths reach bash arithmetic, where a string is evaluated as an expression.
+TMPW=$(mktemp -d)
+printf '%s' '{"meters":{"width":{"ctx":"BASH_VERSINFO[$(touch '"$TMPW"'/ran)]","cache":8.7,"5h":"3","7d":6}}}' >"$TMPW/c.json"
+dcc_parse_all "$(cat "$F/full.json")" "$TMPW/c.json" /dev/null
+check "a string ctx width falls back to the default" "$DCC_W_CTX" "10"
+check "a fractional cache width is floored"         "$DCC_W_CACHE" "8"
+check "a numeric-string 5h width falls back"        "$DCC_W_5H" "8"
+check "a numeric 7d width is kept"                  "$DCC_W_7D" "6"
+rm -rf "$TMPW"
 
 # --- malformed config ---------------------------------------------------------
 dcc_parse_all "$(cat "$F/full.json")" "$F/config-bad.json" /dev/null
@@ -172,7 +181,6 @@ dcc_parse_all '{
 }' /dev/null /dev/null
 check "drift: a string model yields an empty model"      "$P_MODEL"   ""
 check "drift: a good sibling field still renders"        "$P_EFFORT"  "xhigh"
-check "drift: thinking still renders"                    "$P_THINK"   "1"
 check "drift: fast mode still renders"                   "$P_FAST"    "1"
 check "drift: a string workspace falls back to cwd"      "$P_CWD"     "/tmp/here"
 check "drift: a string context_window yields empty pct"  "$P_CTX_PCT" ""

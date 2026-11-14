@@ -76,7 +76,6 @@ import {
   runsWidth,
   SECTIONS,
   BAND_SEGMENTS,
-  FORK_DRAFTING,
   seatDenial,
   fastModeLine,
   bandLines,
@@ -110,6 +109,7 @@ import {
   NOTIFY_KINDS,
   notifyKindsFrom,
   notifyKindsToggled,
+  redact,
 } from './notify'
 import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
 import { CELL_PX, avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
@@ -192,11 +192,11 @@ const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 // Permission modes in which an "ask" is settled without the person.
 const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
 // The skills that run a plan's tasks in this session.
-const RUN_SKILLS = ['dforge:subagent-driven-development', 'dforge:executing-plans', 'dforge:resume-execution']
+const RUN_SKILLS = ['dforge:executing-plans', 'dforge:resume-execution']
 // The tools that move the session into or out of a worktree.
 const WORKTREE_TOOLS = ['EnterWorktree', 'ExitWorktree']
 // The tools a review seat's write guard looks at.
-const REVIEW_WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
+const REVIEW_WRITE_TOOLS = ['Write', 'Edit', 'NotebookEdit']
 const PATH_BODY = /[^\s'"`<>()|*?[\]{},;]*/.source
 const PATH_STOP = /(?![\w-]|\.[\w-])/.source
 // `whole` is an absolute path as a dispatch prompt spells it: not begun inside
@@ -390,7 +390,7 @@ export const register: Register = on => {
     if (words[0]?.toLowerCase() === 'notify') return notifyCommand($, words.slice(1))
     const wantsSettings = e.args.trim().toLowerCase() === 'settings'
     if (!wantsSettings && e.args.trim() !== '') {
-      return { text: `Unknown argument "${e.args.trim()}". Usage: /cockpit [settings | notify test | notify url <url> | notify mention <id>]` }
+      return { text: `Unknown argument "${e.args.trim()}". Usage: /cockpit [settings | notify test | notify mention <id>]` }
     }
     if (wantsSettings) await showSettings($)
     else {
@@ -436,27 +436,14 @@ export const register: Register = on => {
         })
       }
     }
-    if (o.isMinimized || (await isPaneUp($))) await refreshDetail($)
+    // A measurement lands with every response, and the detail runs git: keep the poll's pace.
+    if ((o.isMinimized || (await isPaneUp($))) && (await $.clock.now()) - S.detailAt >= DETAIL_EVERY * POLL_MS) await refreshDetail($)
 
     return done
   })
 
   on('session.end', async ($, e, next) => {
-    if (e.reason !== 'clear') {
-      const head = await read($, budget)
-      const started = (await read($, usage))?.startedAt
-      const stamp = await $.clock.now()
-      await notify($, {
-        kind: 'session',
-        title: '🏁 Session ended',
-        detail: `claude --resume ${e.sessionId}`,
-        isPlain: true,
-        fields: [
-          ...(started === undefined ? [] : [{ name: 'Took', value: elapsed(stamp - started) }]),
-          ...(head?.usd == null ? [] : [{ name: 'Cost', value: `$${head.usd.toFixed(2)}` }]),
-        ],
-      })
-    }
+    const ended = e.reason === 'clear' ? null : await endedEvent($, e.sessionId)
     S.ticker?.cancel()
     S.ticker = null
     // The process goes on after /clear and /resume and no session.start re-arms
@@ -472,9 +459,17 @@ export const register: Register = on => {
     S.releaseTimer?.cancel()
     S.releaseTimer = null
     S.heldDone = null
+    // A wait of the ended session would ping for it later and, while it is
+    // held, keep endWait from restoring the next session's activity.
+    for (const wait of S.waits.values()) wait.timer?.cancel()
+    S.waits.clear()
+    S.waitFrom = null
     S.isMainTurn = false
     await setActivity($, () => IDLE)
-    return next(e)
+    const result = await next(e)
+    // Last, so a slow webhook cannot use up the bound every plugin's end hook shares.
+    if (ended !== null) await notify($, ended)
+    return result
   }).catch(($, e, next) => next(e))
 
   // A compaction leaves no reading until the next response: drop the stale
@@ -494,7 +489,7 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('agent.spawn', async ($, e, next) => {
-    const denial = seatDenial(e, (await read($, isPlanSession)) && !(await read($, isFastMode)), FORK_DRAFTING)
+    const denial = seatDenial(e, (await read($, isPlanSession)) && !(await read($, isFastMode)))
     if (denial !== null) {
       const refusal: CockpitRefusal = { at: await $.clock.now(), tool: 'Agent', line: denial }
       await update($, refusals, list => [...list, refusal].slice(-20))
@@ -512,6 +507,7 @@ export const register: Register = on => {
       seat: e.subagentType,
       model: started.model,
       description: e.description,
+      ...(e.name === undefined ? {} : { name: e.name }),
       isDone: false,
       outcome: null,
       startedAt: await $.clock.now(),
@@ -671,14 +667,18 @@ export const register: Register = on => {
         detail: why,
       }))
       if (failed) {
-        const messageId = await notify($, {
-          kind: 'error',
-          title: `❌ Turn failed${why === null ? '' : `: ${why}`}`,
-          detail: `After ${duration(e.durationMs) || '<1m'}. Send a prompt to continue.`,
-          isPlain: true,
-          fields: await turnFields($),
-        })
-        if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
+        await notify(
+          $,
+          {
+            kind: 'error',
+            title: `❌ Turn failed${why === null ? '' : `: ${why}`}`,
+            detail: `After ${duration(e.durationMs) || '<1m'}. Send a prompt to continue.`,
+            isPlain: true,
+            fields: await turnFields($),
+          },
+          undefined,
+          async () => void (await update($, activity, now => ({ ...now, isSent: true }))),
+        )
       } else if (e.reason === 'answer' && !isHeld) {
         await sendDone($, e.answer, e.durationMs)
       }
@@ -739,19 +739,25 @@ export const register: Register = on => {
       return { deny: `dforge: this project keeps AI attribution out of git. Remove "${line}" and try again.` }
     }
     const id = e.tool_use_id
-    const seat = e.agentId === undefined ? null : ((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat ?? null)
-    if ((await read($, activity)).kind === 'running') await setActivity($, now => ({ ...now, tool, agent: seat === null ? null : shortSeat(seat) }))
-    if (id !== undefined && e.agentId === undefined && ASKING_TOOLS.includes(tool)) {
-      await startWait($, id, 'asking', {
-        kind: 'question',
-        title: tool === 'ExitPlanMode' ? '📋 Plan ready for review' : '❓ Claude is asking',
-        detail: questionOf(e) || undefined,
-        fields: (await turnFields($)).slice(0, 1),
-      }, null)
+    // The guards have judged. What follows before next() only feeds the pane,
+    // and a throw here would reach the .catch below, which refuses the call.
+    try {
+      const seat = e.agentId === undefined ? null : ((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat ?? null)
+      if ((await read($, activity)).kind === 'running') await setActivity($, now => ({ ...now, tool, agent: seat === null ? null : shortSeat(seat) }))
+      if (id !== undefined && e.agentId === undefined && ASKING_TOOLS.includes(tool)) {
+        await startWait($, id, 'asking', {
+          kind: 'question',
+          title: tool === 'ExitPlanMode' ? '📋 Plan ready for review' : '❓ Claude is asking',
+          detail: questionOf(e) || undefined,
+          fields: (await turnFields($)).slice(0, 1),
+        }, null)
+      }
+      // The response asking for this call already measured the window: show it while the tool
+      // runs. Only shown: the note and the alert wait for the ledger this call may write.
+      if (e.agentId === undefined) await refresh($, (await live($)).tuning, S.compactWindow, { isShownOnly: true })
+    } catch {
+      // The pane misses this call; the tool still runs.
     }
-    // The response asking for this call already measured the window: show it while the tool
-    // runs. Only shown: the note and the alert wait for the ledger this call may write.
-    if (e.agentId === undefined) await refresh($, (await live($)).tuning, S.compactWindow, { isShownOnly: true })
     let ran: Awaited<ReturnType<typeof next>>
     try {
       ran = await next(e)
@@ -980,7 +986,7 @@ export const register: Register = on => {
                 notes.url !== null && compact('set-notify-test', 'Send test', () => sendTest($), { isMain: true }),
                 !notes.isFromEnv && canType && compact('set-notify-url-edit', notes.url === null ? 'Set' : 'Change', () => edit('url'), { isMain: notes.url === null }),
                 !notes.isFromEnv && notes.url !== null && compact('set-notify-url-remove', 'Remove', () => saveWebhook($, '')),
-                !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it from a terminal: /cockpit notify url</Text>,
+                !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it in /cockpit settings in a terminal, or with DFORGE_NOTIFY_URL</Text>,
               )}
           {notes.last !== null && (
             <Text key="set-notify-last" color={notes.last.isError ? 'red' : 'green'} wrap="truncate-end">
@@ -2483,14 +2489,54 @@ const S = {
   runKey: '',
   runPlan: null as string | null,
   runReads: 0,
+  // Discord messages go out one at a time; the tail of the queue.
+  outbox: Promise.resolve() as Promise<void>,
 }
 
-// Sends one event to Discord when it is on and a webhook is set; resolves
-// the message id, or null.
-async function notify($: EngineInterface, event: NotifyEvent, editId?: string): Promise<string | null> {
-  if (!S.kinds.includes(event.kind)) return null
+async function endedEvent($: EngineInterface, sessionId: string): Promise<NotifyEvent> {
+  const head = await read($, budget)
+  const started = (await read($, usage))?.startedAt
+  const stamp = await $.clock.now()
+  return {
+    kind: 'session',
+    title: '🏁 Session ended',
+    detail: `claude --resume ${sessionId}`,
+    isPlain: true,
+    fields: [
+      ...(started === undefined ? [] : [{ name: 'Took', value: elapsed(stamp - started) }]),
+      ...(head?.usd == null ? [] : [{ name: 'Cost', value: `$${head.usd.toFixed(2)}` }]),
+    ],
+  }
+}
+
+// How long a hook waits for its Discord message before it goes on; the
+// message still goes out, behind the ones queued before it.
+const NOTIFY_WAIT_MS = 1000
+// How long one Discord request may stay unanswered before the queue moves on.
+const SEND_LIMIT_MS = 8000
+
+/**
+ * Queues one event for Discord when it is on, and waits no longer than
+ * NOTIFY_WAIT_MS for it, so a slow or hung webhook never holds a hook. The
+ * messages go out one at a time in order. `onSent` runs when Discord took it,
+ * given the message id, whether or not the caller still waits.
+ */
+async function notify($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>): Promise<void> {
+  if (!S.kinds.includes(event.kind)) return
+  const job = S.outbox.then(() => deliver($, event, editId, onSent)).catch(() => undefined)
+  S.outbox = job
+  let timer = null as Timer | null
+  const late = new Promise<void>(resolve => {
+    timer = $.clock.after(NOTIFY_WAIT_MS, resolve)
+  })
+  await Promise.race([job, late])
+  timer?.cancel()
+}
+
+// Sends one queued event; the message id goes to `onSent` when Discord took it.
+async function deliver($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>) {
   const state = await read($, notifier)
-  if (state.url === null) return null
+  if (state.url === null) return
   const git = await read($, repo)
   const at = await read($, place)
   const who = await read($, account)
@@ -2507,11 +2553,11 @@ async function notify($: EngineInterface, event: NotifyEvent, editId?: string): 
   const stamp = await $.clock.now()
   if (sent.isSent) {
     await update($, notifier, now => ({ ...now, last: { at: stamp, text: `sent ${event.kind}`, isError: false } }))
-    return sent.id
+    if (sent.id !== null) await onSent?.(sent.id)
+    return
   }
   // A failed send shows in the settings' Discord row, never as a pop-up.
   await update($, notifier, now => ({ ...now, last: { at: stamp, text: sent.reason, isError: true } }))
-  return null
 }
 
 /**
@@ -2525,13 +2571,17 @@ async function sendDone($: EngineInterface, answer: string, durationMs: number) 
   const took = held === null ? durationMs : (await $.clock.now()) - held.startedAt
   if (took < Math.max(0, (await live($)).notifyAfter) * 1000) return
   const text = answer.trim() === '' ? (held?.answer ?? '') : answer
-  const messageId = await notify($, {
-    kind: 'done',
-    title: `✅ Done in ${elapsed(took)}`,
-    detail: text.trim() === '' ? undefined : excerpt(text, 300),
-    fields: await turnFields($),
-  })
-  if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
+  await notify(
+    $,
+    {
+      kind: 'done',
+      title: `✅ Done in ${elapsed(took)}`,
+      detail: text.trim() === '' ? undefined : excerpt(text, 300),
+      fields: await turnFields($),
+    },
+    undefined,
+    async () => void (await update($, activity, now => ({ ...now, isSent: true }))),
+  )
 }
 
 /**
@@ -2625,10 +2675,10 @@ async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'aski
     const wait = S.waits.get(id)
     if (wait === undefined) return
     wait.timer = null
-    const messageId = await notify($, event)
-    if (messageId === null) return
-    wait.messageId = messageId
-    await update($, activity, now => (now.kind === kind ? { ...now, isSent: true } : now))
+    await notify($, event, undefined, async messageId => {
+      wait.messageId = messageId
+      await update($, activity, now => (now.kind === kind ? { ...now, isSent: true } : now))
+    })
   }
   const delay = Math.max(0, S.notifyAskAfter) * 1000
   S.waits.set(id, { timer: delay === 0 ? null : $.clock.after(delay, () => void send()), messageId: null, event, agentId })
@@ -3367,17 +3417,13 @@ async function sendTest($: EngineInterface): Promise<string> {
 async function notifyCommand($: EngineInterface, words: string[]): Promise<{ text: string }> {
   const [verb = '', ...rest] = words
   if (verb === 'test') return { text: await sendTest($) }
-  if (verb === 'url') {
-    const problem = await saveWebhook($, rest.join(' '))
-    return { text: problem ?? (rest.join('').trim() === '' ? 'Discord webhook removed.' : 'Discord webhook saved.') }
-  }
   if (verb === 'mention') {
     const problem = await saveMention($, rest.join(' '))
     return { text: problem ?? 'Discord mention saved.' }
   }
   const state = await read($, notifier)
   return {
-    text: state.url === null ? 'No Discord webhook is set. /cockpit notify url <url> sets one.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from the environment)' : ''}.`,
+    text: state.url === null ? 'No Discord webhook is set. Set one in /cockpit settings (Notifications) in a terminal, or with DFORGE_NOTIFY_URL.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from the environment)' : ''}.`,
   }
 }
 
@@ -3393,8 +3439,9 @@ async function refresh(
   const { handoffTokens, nudgeModel } = tuning
   const figures = await $.session.usage()
   const tokens = figures.context.tokens
-  if (tokens === undefined) return
   const window = figures.context.window
+  // A window the host does not know would make every share of it infinite and the budget zero.
+  if (tokens === undefined || !(window > 0)) return
   const auto = await read($, autoRun)
   const isAuto = auto !== null && auto.active
   // A plan's last tasks and its final phase never hand off, as the budget line
@@ -3677,10 +3724,15 @@ async function engineSettings($: EngineInterface): Promise<string> {
  */
 async function readSession($: EngineInterface, isStart: boolean) {
   const id = await $.session.id().catch(() => null)
+  // These caches outlive a /clear or /resume, and the values they stand for do
+  // not: read again, or the resume offer and the roots note stay unwritten.
+  S.roots = { key: '', value: null }
+  S.offerRead = ''
+  S.offerRegisters = null
   await $.command.register({
     name: 'cockpit',
     description: 'Show context, usage, subagents, the plan and the repo in a pane',
-    argumentHint: '[settings | notify test | notify url <url> | notify mention <id>]',
+    argumentHint: '[settings | notify test | notify mention <id>]',
   })
   await loadSettings($)
   const o = await live($)
@@ -3968,12 +4020,12 @@ async function trackShells($: EngineInterface, tool: string, e: object, result: 
     await syncTicker($)
     return
   }
-  if (tool === 'TaskStop' || tool === 'KillShell' || tool === 'KillBash') {
+  if (tool === 'TaskStop') {
     const input = e as { task_id?: unknown; shell_id?: unknown }
     const id = (result as { task_id?: unknown } | undefined)?.task_id ?? input.task_id ?? input.shell_id
     if (typeof id === 'string') {
       await update($, shells, list => list.filter(one => one.id !== id))
-      await update($, spawns, all => all.map(one => (one.agentId === id && !one.isDone ? { ...one, isDone: true, outcome: 'failed' as const } : one)))
+      await update($, spawns, all => all.map(one => ((one.agentId === id || one.name === id) && !one.isDone ? { ...one, isDone: true, outcome: 'failed' as const } : one)))
       await syncTicker($)
       await settleBackground($)
     }
@@ -4305,9 +4357,22 @@ function kindLabel(kind: NotifyKind): string {
   return kind === 'ask' ? 'approval' : kind
 }
 
+// The promise's value, or null once `ms` pass first.
+async function within<T>($: EngineInterface, work: Promise<T>, ms: number): Promise<T | null> {
+  let timer = null as Timer | null
+  const late = new Promise<null>(resolve => {
+    timer = $.clock.after(ms, () => resolve(null))
+  })
+  try {
+    return await Promise.race([work, late])
+  } finally {
+    timer?.cancel()
+  }
+}
+
 /**
  * Posts a body to the webhook, or with `id` edits that message, waiting out
- * one rate limit. Never throws.
+ * one rate limit and giving up on a request left unanswered. Never throws.
  */
 async function sendDiscord($: EngineInterface, url: string, body: Record<string, unknown>, id?: string): Promise<SendResult> {
   const base = url.trim().replace(/\/$/, '')
@@ -4315,9 +4380,15 @@ async function sendDiscord($: EngineInterface, url: string, body: Record<string,
   const init = { method: id === undefined ? 'POST' : 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const answer = await $.http.fetch(target, init)
+      const answer = await within($, $.http.fetch(target, init), SEND_LIMIT_MS)
+      if (answer === null) return { isSent: false, reason: 'Discord did not answer' }
       if (answer.status === 429 && attempt === 0) {
-        const wait = Number((JSON.parse(answer.text || '{}') as { retry_after?: unknown }).retry_after)
+        let wait = NaN
+        try {
+          wait = Number((JSON.parse(answer.text || '{}') as { retry_after?: unknown }).retry_after)
+        } catch {
+          // A proxy's HTML page: wait the default second.
+        }
         await $.clock.sleep(Math.min(10_000, Math.max(250, (Number.isFinite(wait) ? wait : 1) * 1000)))
         continue
       }
@@ -4329,7 +4400,9 @@ async function sendDiscord($: EngineInterface, url: string, body: Record<string,
         return { isSent: true, id: id ?? null }
       }
     } catch (error) {
-      return { isSent: false, reason: error instanceof Error ? error.message : String(error) }
+      // A host's fetch error may quote the URL, and the reason is shown and
+      // returned as command text, which the transcript keeps.
+      return { isSent: false, reason: redact(error instanceof Error ? error.message : String(error)) }
     }
   }
   return { isSent: false, reason: 'Discord is rate limiting' }

@@ -78,7 +78,7 @@ function parseRequest(raw) {
   }
   if (!req || typeof req !== "object") return null;
   if (typeof req.cwd !== "string" || req.cwd === "") return null;
-  if (req.op !== "turn" && req.op !== "auth") return null;
+  if (req.op !== "turn") return null;
   return req;
 }
 
@@ -164,7 +164,7 @@ async function main() {
   if (!root) await emit({ reason: "bad-request", stderr: "a plugin root is required" });
 
   const req = parseRequest(await readStdin());
-  if (!req) await emit({ reason: "bad-request", stderr: "the request is not a valid turn or auth object" });
+  if (!req) await emit({ reason: "bad-request", stderr: "the request is not a valid turn object" });
 
   let plugin;
   try {
@@ -192,20 +192,6 @@ async function main() {
     preExisting = null;
   }
   reapContext = preExisting ? null : { root, cwd: req.cwd };
-
-  if (req.op === "auth") {
-    try {
-      // `loggedIn`, not `authenticated`: codex.mjs:831-864 is the shape.
-      const status = await plugin.getCodexAuthStatus(req.cwd);
-      const authed = status?.loggedIn === true;
-      await emit({
-        ok: authed, authed, reason: authed ? null : "logged-out",
-        stderr: String(status?.detail ?? "")
-      });
-    } catch (error) {
-      await emit({ reason: "plugin-api", authed: null, stderr: String(error?.message ?? error) });
-    }
-  }
 
   // The progress reporter is the only place a thread id and a turn id surface
   // while the turn is still running, which is what Task 3's deadline needs to

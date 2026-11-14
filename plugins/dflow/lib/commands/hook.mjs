@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { nextTask, taskStates } from '../plan.mjs';
-import { loadState, planState, saveState } from '../state.mjs';
+import { loadState, planState, updateState } from '../state.mjs';
 import { activePlan, briefLines, buildModel, refreshHud, taskBrief } from '../status.mjs';
 import { checkpoint, flush, pull } from './sync.mjs';
 
@@ -20,12 +20,15 @@ function remember(ctx, state, event) {
   if (typeof event.transcript_path !== 'string') return;
   const session = typeof event.session_id === 'string' ? event.session_id : null;
   if (state.transcript === event.transcript_path && (!session || state.transcripts?.[session] === event.transcript_path)) return;
-  state.transcript = event.transcript_path;
-  if (session) {
-    const others = Object.entries(state.transcripts ?? {}).filter(([key]) => key !== session);
-    state.transcripts = Object.fromEntries([...others, [session, event.transcript_path]].slice(-20));
-  }
-  saveState(ctx.paths, state);
+  const apply = target => {
+    target.transcript = event.transcript_path;
+    if (session) {
+      const others = Object.entries(target.transcripts ?? {}).filter(([key]) => key !== session);
+      target.transcripts = Object.fromEntries([...others, [session, event.transcript_path]].slice(-20));
+    }
+  };
+  apply(state);
+  updateState(ctx.paths, apply);
 }
 
 function currentTask(ctx, state, active) {

@@ -58,8 +58,8 @@ check "ledger_blocked: CRLF" "$(ledger_blocked "$TMP/bl-crlf.md")" ""
 check "ledger_blocked: nothing blocked" "$(ledger_blocked "$TMP/open.md")" ""
 
 # --- header, header lines and task text ---
-printf '# P\n\n**Spec:** `a.md`\n\n```\n**Execution:** fenced\n```\n**Execution:** subagent — x\n\n## Global Constraints\n\n- c\n\n### Task 1: One\n\nbody 1\n\n### Task 2: Two\n\nbody 2\n' > "$TMP/h.md"
-check "plan_header_line: first unfenced match" "$(plan_header_line "$TMP/h.md" Execution)" "**Execution:** subagent — x"
+printf '# P\n\n**Spec:** `a.md`\n\n```\n**Execution:** fenced\n```\n**Execution:** inline — x\n\n## Global Constraints\n\n- c\n\n### Task 1: One\n\nbody 1\n\n### Task 2: Two\n\nbody 2\n' > "$TMP/h.md"
+check "plan_header_line: first unfenced match" "$(plan_header_line "$TMP/h.md" Execution)" "**Execution:** inline — x"
 check "plan_header_line: no match prints nothing" "$(plan_header_line "$TMP/h.md" Program)" ""
 check "plan_header: stops before the first task" "$(plan_header "$TMP/h.md" | tail -n 2 | head -n 1)" "- c"
 check "plan_task_text: heading to the next task" "$(plan_task_text "$TMP/h.md" 1 | tr '\n' '|')" "### Task 1: One||body 1||"
@@ -167,9 +167,6 @@ check "plan_heavy: total 5 or risk 3 on any part" "$(plan_heavy "$TMP/scores.md"
 sed 's/$/\r/' "$TMP/scores.md" > "$TMP/scores-crlf.md"
 check "plan_scores: CRLF" "$(plan_scores "$TMP/scores-crlf.md" | tr '\t\n' ' |')" "1 1 0|2 5 2|3 4 3|4 - -|5 ? ?|"
 
-# --- the executor lane functions are gone ---
-check "plan_executors is gone" "$(bash -c ". '$HERE/../scripts/lib/plan.sh'; declare -F plan_executors plan_delegated | wc -l" | tr -d ' ')" "0"
-
 # --- plan_ledger and ledger_left_inline ---
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -185,14 +182,6 @@ check "plan_ledger: an absolute identity line names the plan" "$(plan_ledger "$R
   "$(git -C "$REPO" rev-parse --show-toplevel)/.dforge/sdd/demo/progress.md"
 printf '# SDD ledger — plan: docs/other.md\n' > "$L"
 check "plan_ledger: another plan's ledger is ignored" "$(plan_ledger "$REPO/docs/demo.md")" ""
-printf '# SDD ledger — plan: docs/demo.md\nTask 1: implementer inline (assigned; base a)\nTask 2: escalated inline -> subagent — still failing\n' > "$L"
-check "ledger_left_inline: the escalated task" "$(ledger_left_inline "$L")" "2"
-printf 'Task 3: implementer inline (assigned; base b)\n' >> "$L"
-check "ledger_left_inline: a later inline assignment returns" "$(ledger_left_inline "$L")" ""
-printf 'Task 3: minor (deferred): the grammar says Task 4: escalated inline -> subagent — x\n' >> "$L"
-check "ledger_left_inline: a quoted marker is not a switch" "$(ledger_left_inline "$L")" ""
-printf 'Task 5: escalated inline -> subagent\n' | sed 's/$/\r/' >> "$L"
-check "ledger_left_inline: a bare CRLF marker counts" "$(ledger_left_inline "$L")" "5"
 
 # --- the shared Evaluation reader ---
 # Two shipped defects motivate these. A line left above `#### Part A` scores the

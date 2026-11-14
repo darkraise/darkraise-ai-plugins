@@ -190,13 +190,6 @@ export type SeatSpawn = {
 }
 
 /**
- * Whether a fork described `Draft plan tasks …` may run in a dforge session:
- * docs/dforge/notes/2026-10-25-drafter-measurement.md ruled forks out, and
- * plans are now drafted in the session. Changing it takes a plugin release.
- */
-export const FORK_DRAFTING = false
-
-/**
  * Whether the last `Process:` line of a response puts its request in fast mode
  * (reference/fast-mode.md): true for `Process: fast`, false for any other
  * Process line, null when the text has none. scripts/lib/fast-mode.sh reads
@@ -221,14 +214,13 @@ const CATCH_ALL = ['general-purpose', 'claude']
  * agents, teammates, resumes and spawns inside a subagent are not the main
  * loop's dispatch, and nothing is checked before a dforge skill or agent ran.
  */
-export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean, forkDrafting: boolean): string | null {
+export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean): string | null {
   if (!isPlanSession || spawn.parentAgentId !== undefined || spawn.workflow !== undefined || spawn.isTeammate === true || spawn.resume !== undefined) return null
   if (spawn.fork) {
-    if (forkDrafting && spawn.description.startsWith('Draft plan tasks')) return null
     return "dforge: forks are kept out of dforge sessions. Use dforge:judge-sonnet-high for a read-only check; plans are drafted in the session. See using-dforge §Seats."
   }
   if (CATCH_ALL.includes(spawn.subagentType) && spawn.model === undefined) {
-    return 'dforge: name a seat for this dispatch: dforge:judge-sonnet-high or dforge:judge-opus for a review or read-only check, or pass an explicit model (model: "sonnet") to general-purpose. The session implements plan tasks itself, as the plan\'s Execution line says; an implementer seat such as dforge:impl-sonnet-medium runs only for a deprecated subagent plan. See using-dforge §Seats.'
+    return 'dforge: name a seat for this dispatch: dforge:judge-sonnet-high or dforge:judge-opus for a review or read-only check, or pass an explicit model (model: "sonnet") to general-purpose. The session implements plan tasks itself, as the plan\'s Execution line says. See using-dforge §Seats.'
   }
   return null
 }
@@ -901,7 +893,7 @@ export function limitForecast(kind: string, percent: number, resetsAt: number | 
 export type LedgerTask = {
   n: number
   state: 'assigned' | 'complete' | 'blocked'
-  /** The fix or review round in flight, "2/5" or "1/2". */
+  /** The fix round in flight, "2/5" or "1/2". */
   round: string | null
   /** The seat the task was assigned to. */
   seat: string | null
@@ -912,7 +904,7 @@ export type LedgerTask = {
 /** What a run's ledger says: its plan, each task it names, and whether the final review came back clean. */
 export type Ledger = { plan: string | null; tasks: LedgerTask[]; isFinished: boolean }
 
-/** Reads the subagent-driven-development ledger (progress.md) as its grammar writes it. */
+/** Reads the execution ledger (progress.md) as its grammar writes it. */
 export function parseLedger(text: string): Ledger {
   const tasks = new Map<number, LedgerTask>()
   const task = (n: number) => {
@@ -931,19 +923,6 @@ export function parseLedger(text: string): Ledger {
     }
     if (/^Final review: clean/.test(line)) {
       isFinished = true
-      continue
-    }
-    const group = /^Group (\d+-\d+|\d+(?:,\d+)*): review round (\d+\/\d+)/.exec(line)
-    if (group) {
-      const list = group[1] ?? ''
-      const range = /^(\d+)-(\d+)$/.exec(list)
-      const named: number[] = []
-      if (range) for (let n = Number(range[1]); n <= Number(range[2]); n++) named.push(n)
-      else named.push(...list.split(',').map(Number))
-      for (const n of named) {
-        const one = task(n)
-        if (one.state === 'assigned') one.round = group[2] ?? null
-      }
       continue
     }
     const match = /^Task (\d+): (.*)$/.exec(line)

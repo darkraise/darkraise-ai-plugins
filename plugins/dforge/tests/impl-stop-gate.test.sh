@@ -71,9 +71,9 @@ gate "$(input dforge:impl-sonnet-high a-n $'**Status:** NEEDS_CONTEXT\nReport: /
 check "NEEDS_CONTEXT passes" "$CODE|$OUT|$ERR" "0||"
 gate "$(input dforge:impl-sonnet-high a-free 'Fixed the typo in README.md and committed it.')"
 check "a reply without the status contract passes" "$CODE|$OUT|$ERR" "0||"
-gate '{"agent_type":"dforge:impl-haiku"'
+gate '{"agent_type":"dforge:impl-sonnet-high"'
 check "malformed input passes" "$CODE|$OUT|$ERR" "0||"
-gate "$(fjq -nc --arg m "$DONE" --arg c "$REPO" '{cwd:$c,agent_type:"dforge:impl-haiku",last_assistant_message:$m}')"
+gate "$(fjq -nc --arg m "$DONE" --arg c "$REPO" '{cwd:$c,agent_type:"dforge:impl-sonnet-high",last_assistant_message:$m}')"
 check "input with no agent_id passes" "$CODE|$OUT|$ERR" "0||"
 
 # --- a complete report passes ---
@@ -177,7 +177,7 @@ check "and the agent passes from then on" "$CODE|$OUT|$ERR" "0||"
 FALLBACK="$HOME/.local/state/dforge/impl-stop-gate.log"
 check "the malformed input of the first checks was logged" "$(grep -c 'input is not JSON' "$FALLBACK")" "1"
 check "a stop that the gate has no reason to look at logs nothing" "$(wc -l < "$FALLBACK" | tr -d ' ')" "1"
-gate '{"agent_type":"dforge:impl-haiku"'
+gate '{"agent_type":"dforge:impl-sonnet-high"'
 check "unparseable input passes and is logged" "$CODE|$OUT|$ERR|$(grep -c 'input is not JSON' "$FALLBACK")" "0|||2"
 NOJQ="$TMP/nojq"; mkdir -p "$NOJQ"
 printf '#!/bin/sh\nexec "%s" "$@"\n' "$(command -v dirname)" > "$NOJQ/dirname"
@@ -188,23 +188,23 @@ REPO2="$TMP/repo2"
 git init -q "$REPO2"
 STATE2=$(cd "$REPO2" && bash "$PATHS" state | tr -d '\r')
 mkdir -p "$STATE2" && : > "$STATE2/impl-stop-gate"
-gate "$(fjq -nc --arg c "$REPO2" --arg m $'**Status:** DONE\nAll done.' '{cwd:$c,agent_id:"a-nostate",agent_type:"dforge:impl-haiku",last_assistant_message:$m}')"
+gate "$(fjq -nc --arg c "$REPO2" --arg m $'**Status:** DONE\nAll done.' '{cwd:$c,agent_id:"a-nostate",agent_type:"dforge:impl-sonnet-high",last_assistant_message:$m}')"
 check "a counter that cannot be kept lets the stop through and logs why" "$CODE|$OUT|$ERR|$(grep -c 'a-nostate .*cannot keep the block counter' "$FALLBACK")" "0|||1"
-gate "$(fjq -nc --arg m $'**Status:** DONE\nAll done.' '{cwd:"/nonexistent/dir",agent_id:"a-nocwd",agent_type:"dforge:impl-haiku",last_assistant_message:$m}')"
+gate "$(fjq -nc --arg m $'**Status:** DONE\nAll done.' '{cwd:"/nonexistent/dir",agent_id:"a-nocwd",agent_type:"dforge:impl-sonnet-high",last_assistant_message:$m}')"
 check "a missing working directory lets the stop through and logs why" "$CODE|$OUT|$ERR|$(grep -c 'a-nocwd .*cannot enter /nonexistent/dir' "$FALLBACK")" "0|||1"
 
 LINES0=$(wc -l < "$FALLBACK" | tr -d ' ')
-gate "$(fjq -nc --arg m $'**Status:** DONE\nAll done.' '{cwd:"/nonexistent/dir",agent_id:"a-nl",agent_type:"dforge:impl-haiku\nFAKE injected line\u001b[31m",last_assistant_message:$m}')"
+gate "$(fjq -nc --arg m $'**Status:** DONE\nAll done.' '{cwd:"/nonexistent/dir",agent_id:"a-nl",agent_type:"dforge:impl-sonnet-high\nFAKE injected line\u001b[31m",last_assistant_message:$m}')"
 check "a value with a newline or an escape logs one clean line" "$CODE|$(($(wc -l < "$FALLBACK" | tr -d ' ') - LINES0))|$(grep -c '^FAKE' "$FALLBACK")|$(grep -c "$(printf '\033')" "$FALLBACK")" "0|1|0|0"
 
 # A symlink planted where the log goes is not followed.
 HOME2="$TMP/home2"; mkdir -p "$HOME2/.local/state/dforge"
 ln -s "$TMP/victim" "$HOME2/.local/state/dforge/impl-stop-gate.log"
-HOME="$HOME2" gate '{"agent_type":"dforge:impl-haiku"'
+HOME="$HOME2" gate '{"agent_type":"dforge:impl-sonnet-high"'
 check "a symlinked log file is not written through" "$CODE|$([ -e "$TMP/victim" ] && echo written || echo untouched)" "0|untouched"
 HOME3="$TMP/home3"; mkdir -p "$HOME3/.local/state" "$TMP/victim-dir"
 ln -s "$TMP/victim-dir" "$HOME3/.local/state/dforge"
-HOME="$HOME3" gate '{"agent_type":"dforge:impl-haiku"'
+HOME="$HOME3" gate '{"agent_type":"dforge:impl-sonnet-high"'
 check "a symlinked log directory is not written through" "$CODE|$(ls "$TMP/victim-dir" | wc -l | tr -d ' ')" "0|0"
 
 # --- a blocked agent's next stop is checked even without a status ---
@@ -270,7 +270,7 @@ check "after two blocks a distinct status-less failing stop passes" "$CODE|$OUT|
 gate "$(input dforge:impl-sonnet-high agent-never 'Fixed the typo in README.md.')"
 check "a status-less reply from an agent never blocked passes" "$CODE|$OUT|$ERR" "0||"
 check "and writes no counter" "$([ -e "$STATE/impl-stop-gate/agent-never" ] && echo yes || echo no)" "no"
-gate "$(fjq -nc --arg m 'Fixed it.' '{cwd:"/nonexistent/dir",agent_id:"agent-nocwd",agent_type:"dforge:impl-haiku",last_assistant_message:$m}')"
+gate "$(fjq -nc --arg m 'Fixed it.' '{cwd:"/nonexistent/dir",agent_id:"agent-nocwd",agent_type:"dforge:impl-sonnet-high",last_assistant_message:$m}')"
 check "a status-less stop that cannot enter cwd passes" "$CODE|$OUT|$ERR" "0||"
 check "none of these status-less passes added a fallback-log line" "$(wc -l < "$FALLBACK" | tr -d ' ')" "$FALLBACK_LINES"
 
@@ -290,7 +290,7 @@ check "a 1,000-line incomplete report blocks" "$CODE" "2"
 check "neither run invoked a test runner or a network tool" "$(wc -c < "$CALLS" | tr -d ' ')" "0"
 
 # --- the observed SubagentStop input and the hooks.json wiring ---
-check "the observed agent_type carries the plugin prefix" "$(jq -r .agent_type "$FIXTURE")" "dforge:impl-haiku"
+check "the observed agent_type carries the plugin prefix" "$(jq -r .agent_type "$FIXTURE")" "dforge:impl-sonnet-high"
 check "the observed event name" "$(jq -r .hook_event_name "$FIXTURE")" "SubagentStop"
 check "the observed input has the fields the gate reads" \
   "$(jq -r '[has("agent_id"), has("agent_type"), has("last_assistant_message"), has("cwd")] | all' "$FIXTURE")" "true"

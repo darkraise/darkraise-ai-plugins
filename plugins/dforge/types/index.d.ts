@@ -63,6 +63,8 @@ export type CockpitSpawn = {
   seat: string
   model: string
   description: string
+  /** The name it was spawned with, which TaskStop accepts in place of its id. */
+  name?: string
   isDone: boolean
   /** How it ended: null while it runs, `failed` for an aborted, refused or failed end; absent on a record saved before it was kept. */
   outcome?: 'done' | 'failed' | null
@@ -176,7 +178,7 @@ export type CockpitRunTask = {
   n: number
   title: string
   state: 'pending' | 'assigned' | 'complete' | 'blocked'
-  /** The fix or review round in flight, "2/5". */
+  /** The fix round in flight, "2/5". */
   round: string | null
   seat: string | null
   isClean: boolean

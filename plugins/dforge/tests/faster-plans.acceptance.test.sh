@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Acceptance tests for the faster-plans spec
-# (docs/dforge/specs/2026-10-26-faster-plans-design.md), statements A2-A13 and
-# A17-A23. Each test is written from the statement's text and reaches the
+# (docs/dforge/specs/2026-10-26-faster-plans-design.md), statements A2-A5,
+# A11, A12 and A17-A23. Each test is written from the statement's text and reaches the
 # behaviour through the scripts and documents the spec names: plan-lint,
-# review-route, task-step, wave, next-step, plan-amend, the
+# review-route, task-step, next-step, plan-amend, the
 # cockpit's ledger reader, the agent definitions and the shipped prompts and
 # references.
 # Usage:
@@ -18,7 +18,6 @@ S="$PLUGIN/scripts"
 STEP="$S/task-step"
 ROUTE="$S/review-route"
 LINT="$S/plan-lint"
-WAVE="$S/wave"
 NEXT="$S/next-step"
 AMEND="$S/plan-amend"
 FIXTURES="$HERE/fixtures"
@@ -58,10 +57,6 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MS
 export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=acceptance-session
 printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
-# plan-lint's lane probe asks this roster; a fixed answer keeps the machine's
-# own Codex install out of every case.
-printf '%s\n' '#!/usr/bin/env bash' "echo '[{\"id\":\"codex\",\"usable\":true,\"reason\":null}]'" > "$TMP/roster-stub"
-export PLAN_LINT_ROSTER="$TMP/roster-stub"
 
 session() { # session <review true|false> <lane true|false> | absent — this session's Codex gate file
   rm -rf "$DR_CODEX_SESSION_DIR"
@@ -85,13 +80,12 @@ commit_file() { # commit_file <file> <content> <message>
   git -C "$R" add "$1" && git -C "$R" commit -qm "$3"
 }
 ledger_text() { cat "$WS/progress.md" 2>/dev/null; }
-ws_files() { ls -A "$WS" 2>/dev/null | sort | tr '\n' ' '; }
 
 PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |## Global Constraints
 |
@@ -103,22 +97,22 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |
 |## Task index
 |
-|1. grouped one
+|1. light one
 |2. risk three
-|3. grouped two
+|3. light two
 |4. risk two
 |5. total five
-|6. grouped three
-|7. grouped four
+|6. light three
+|7. light four
 |8. unscored
-|9. grouped five
+|9. light five
 |
-|### Task 1: grouped one
+|### Task 1: light one
 |
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Body.
@@ -128,15 +122,15 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 2 - coupling 1 - risk 3 = 7
 |
-|### Task 3: grouped two
+|### Task 3: light two
 |
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
 |
 |### Task 4: risk two
@@ -144,7 +138,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 2 = 3
 |
 |### Task 5: total five
@@ -155,20 +149,20 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 2 - spec 2 - coupling 1 - risk 0 = 5
 |
-|### Task 6: grouped three
+|### Task 6: light three
 |
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 1 = 2
 |
-|### Task 7: grouped four
+|### Task 7: light four
 |
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 |
 |### Task 8: unscored
@@ -176,14 +170,14 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |
-|### Task 9: grouped five
+|### Task 9: light five
 |
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4'
 
 CODEX_PLAN_TEXT='|# Codex Fixture
@@ -209,12 +203,6 @@ new_repo() { # new_repo <name> — a throwaway repository with the fixture plans
   session absent
 }
 
-hold_task() { # hold_task <n> <file> — start task n, commit a file, hold it
-  ts start docs/plan.md "$1"
-  commit_file "$2" "work of task $1" "feat: task $1"
-  ts hold docs/plan.md "$1"
-}
-
 # --- fixtures: plan-lint plans ---------------------------------------------
 
 LINTDIR="$TMP/lint"
@@ -225,7 +213,7 @@ gen_plan() { # gen_plan <extra header line or empty> <"F S C R impl[~label line.
   local extra=$1 i=0 spec f s c r impl more
   shift
   printf '%s\n' '# Gen Plan' '' '**Goal:** Fixture.' '' '**Spec:** `docs/spec.md`' '' \
-    '**Execution:** subagent — `claude --model sonnet --effort high` — fixture' ''
+    '**Execution:** inline — `claude --model sonnet --effort high` — fixture' ''
   [ -z "$extra" ] || printf '%s\n\n' "$extra"
   printf '%s\n' '**Plan review:** 2026-10-26 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)' '' \
     '## Global Constraints' '' '- None.' '' '## Contracts' '' 'None' '' '## Assumptions (evidence)' '' '- None.' '' '## Task index' ''
@@ -247,7 +235,7 @@ gen_plan() { # gen_plan <extra header line or empty> <"F S C R impl[~label line.
 gen_codex_plan() { # gen_codex_plan <"F S C R pair">... — a Host: codex plan, pair as "model/effort"
   local i=0 spec f s c r pair model effort
   printf '%s\n' '# Gen Codex Plan' '' 'Host: codex' 'Routing policy: codex-v4' '' '**Goal:** Fixture.' '' '**Spec:** docs/spec.md' '' \
-    '**Execution:** subagent — codex gpt-6.1-sol / high — native pair' '' \
+    '**Execution:** inline — codex gpt-6.1-sol / high — native pair' '' \
     '**Plan review:** 2026-10-26 — codex gpt-6-astra / high — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)' '' \
     '## Global Constraints' '' '- None.' '' '## Contracts' '' 'None' '' '## Assumptions (evidence)' '' '- None.' '' '## Task index' ''
   for spec in "$@"; do i=$((i + 1)); printf '%d. T%d\n' "$i" "$i"; done
@@ -263,7 +251,7 @@ gen_codex_plan() { # gen_codex_plan <"F S C R pair">... — a Host: codex plan, 
 }
 
 lint() { # lint <file> [args...] — run from the lint directory; sets out and rc
-  out=$(cd "$LINTDIR" && timeout 120 bash "$LINT" "$@" --no-probe 2>&1); rc=$?
+  out=$(cd "$LINTDIR" && timeout 120 bash "$LINT" "$@" 2>&1); rc=$?
 }
 
 # --- A2 ----------------------------------------------------------------------
@@ -313,299 +301,25 @@ a2() {
 # --- A3 ----------------------------------------------------------------------
 
 a3() {
-  local want="0:impl-sonnet-low 1:impl-sonnet-low 2:impl-sonnet-low 3:impl-sonnet-medium 4:impl-sonnet-medium 5:impl-sonnet-high 6:impl-opus-high 7:impl-opus-high 8:impl-opus-high"
-  # One task per total 0-8, each with files+spec+coupling at most 5 and spec below 3.
-  local axes=("0 0 0 0" "0 0 1 0" "0 1 1 0" "1 1 1 0" "1 1 1 1" "2 2 1 0" "2 2 1 1" "2 2 1 2" "2 2 1 3")
-  local specs_right=() specs_wrong=() t agent
-  for t in 0 1 2 3 4 5 6 7 8; do
-    agent=$(tr ' ' '\n' <<<"$want" | grep "^$t:" | sed 's/^[0-9]*:impl-//')
-    specs_right+=("${axes[$t]} $agent")
-    specs_wrong+=("${axes[$t]} opus-low")
-  done
-  gen_plan "" "${specs_right[@]}" > "$LINTDIR/t-right.md"
-  lint t-right.md
-  absent "A3: a plan naming the table's agent for every total 0-8 draws no table mismatch" "$out" 'assignment table'
-  absent "A3: and no error on any task" "$out" 'ERROR Task'
-
-  gen_plan "" "${specs_wrong[@]}" > "$LINTDIR/t-wrong.md"
-  lint t-wrong.md
+  local want="0:sonnet/low 1:sonnet/low 2:sonnet/low 3:sonnet/medium 4:sonnet/medium 5:sonnet/high 6:opus/high 7:opus/high 8:opus/high"
   local got
-  got=$(sed -n "s/^ERROR Task \([0-9]*\): Implementer impl-opus-low does not match the assignment table's \(impl-[a-z-]*\) for total \([0-9]*\)\$/\3:\2/p" <<<"$out" | sort -n | tr '\n' ' ' | sed 's/ $//')
-  check "A3: totals 0-6 map as before and 7 and 8 map to impl-opus-high" "$got" "$want"
-}
-
-# --- A4 ----------------------------------------------------------------------
-
-a4() {
-  local ext='> **External executors:** codex' base="0 0 1 0 sonnet-low" i
-  # Any total, in the lane's old range or above it: the line is only obsolete.
-  local specs=("1 1 1 1 sonnet-medium" "2 2 1 0 sonnet-high" "2 2 1 3 opus-high")
-  for i in 0 1 2; do
-    gen_plan "$ext" "$base" "${specs[$i]}~**Executor:** codex gpt-6.1-sol / high" > "$LINTDIR/l4.md"
-    lint l4.md
-    has "A4: an Executor line on a ${specs[$i]% *} task is a warning" "$out" \
-      "WARN Task 2: the **Executor:** line is obsolete; the session implements this task"
-    absent "A4: and draws no lane gate finding (${specs[$i]% *})" "$out" 'lane gate'
-    check "A4: and the plan lints without errors (${specs[$i]% *})" "$rc" "0"
-  done
+  got=$(awk '$0 == "```assignment" { f = 1; next } f && $0 == "```" { exit } f && NF { printf "%s%s:%s/%s", sep, $1, $2, $3; sep = " " }' "$PLUGIN/reference/ladder.md")
+  check "A3: totals 0-5 floor on sonnet, 6-8 on opus" "$got" "$want"
 }
 
 # --- A5 ----------------------------------------------------------------------
 
 a5() {
   new_repo a5
-  local expect="1:group 2:task 3:group 4:task 5:task 6:group 7:group 9:group" pair n tier
-  for pair in $expect; do
-    n=${pair%%:*}
-    route docs/plan.md --task "$n"
-    check "A5: review-route --task $n exits 0" "$rc" "0"
-    tier=$(sed -n 's/.* review=\([a-z]*\).*/\1/p' <<<"$out")
-    check "A5: Task $n is review=${pair#*:}" "$tier" "${pair#*:}"
-  done
   route docs/plan.md --task 8
   check "A5: a task with no Evaluation line exits 0" "$rc" "0"
-  has "A5: and prints review=task reason=unscored" "$out" "review=task reason=unscored"
-  route docs/plan.md --task 4
-  check "A5: a risk-2 task of total 3 is reviewed alone" "$(sed -n 's/.* review=\([a-z]*\).*/\1/p' <<<"$out")" "task"
-  route docs/plan.md --task 5
-  check "A5: a total-5 task of risk 0 is reviewed alone" "$(sed -n 's/.* review=\([a-z]*\).*/\1/p' <<<"$out")" "task"
-  route docs/plan.md --task 3
-  check "A5: a total-4 task of risk 1 is grouped" "$(sed -n 's/.* review=\([a-z]*\).*/\1/p' <<<"$out")" "group"
-
-  # The tier does not depend on whether the Codex review surface is open.
-  session true false
-  route docs/plan.md --task 1
-  check "A5: with the Codex review surface open a plain task is still review=group" "$(sed -n 's/.* review=\([a-z]*\).*/\1/p' <<<"$out")" "group"
-  route docs/plan.md --task 2
-  check "A5: and a risk-3 task is still review=task" "$(sed -n 's/.* review=\([a-z]*\).*/\1/p' <<<"$out")" "task"
-  session absent
+  has "A5: and prints reason=unscored" "$out" "reason=unscored"
 
   # With several tasks the route keeps going by the highest total.
   route docs/plan.md --task 1 6
   check "A5: two light tasks route to the light judge" "$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$out")" "dforge:judge-sonnet-high"
   route docs/plan.md --task 1 5
   check "A5: a batch holding a total-5 task stays on the light judge" "$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$out")" "dforge:judge-sonnet-high"
-}
-
-# --- A6 ----------------------------------------------------------------------
-
-a6() {
-  new_repo a6
-  local n before
-  hold_task 1 a.txt
-  check "A6: a grouped task is held" "$rc" "0"
-
-  for n in 2 4 5 8; do
-    ts start docs/plan.md "$n"
-    commit_file "t$n.txt" "work of task $n" "feat: task $n"
-    before=$(ledger_text)
-    ts hold docs/plan.md "$n"
-    check "A6: hold on review=task Task $n exits 4" "$rc" "4"
-    check "A6: and writes no awaiting line for Task $n" "$(ledger_text | grep -c "^Task $n: awaiting group review")" "0"
-    check "A6: and leaves the ledger as it was for Task $n" "$(ledger_text)" "$before"
-    check "A6: and records no held head for Task $n" "$(jq -r '.heldHead // "none"' "$WS/task-$n-step.json")" "none"
-  done
-
-  ts review --group docs/plan.md 1 4
-  check "A6: a group naming a review=task member exits 4" "$rc" "4"
-  check "A6: and writes no group package" "$([ -e "$WS/group-1,4-review-package.md" ] && echo yes || echo no)" "no"
-  check "A6: and writes no group prompt" "$([ -e "$WS/group-1,4-review-prompt.md" ] && echo yes || echo no)" "no"
-  ts review --group docs/plan.md 1 3
-  check "A6: a group naming a task that never started exits 4" "$rc" "4"
-  has "A6: and names that task" "$err" "Task 3"
-  check "A6: and writes no group state" "$([ -e "$WS/group-1,3-step.json" ] && echo yes || echo no)" "no"
-
-  hold_task 3 c.txt
-  ts review --group docs/plan.md 1 3
-  check "A6: a group of two held tasks packages" "$rc" "0"
-  local pkg; pkg=$(cat "$WS/group-1,3-review-package.md")
-  has "A6: the package holds Task 1" "$pkg" "## Task 1"
-  has "A6: the package holds Task 3" "$pkg" "## Task 3"
-  lacks "A6: the package holds no Task 4" "$pkg" "## Task 4"
-  lacks "A6: the package holds no Task 2" "$pkg" "## Task 2"
-}
-
-# --- A7 ----------------------------------------------------------------------
-
-a7() {
-  new_repo a7
-  ts start docs/plan.md 1
-  local base7; base7=$(short HEAD)
-  commit_file a.txt a "feat: add a"
-  local head7; head7=$(short HEAD)
-  ts hold docs/plan.md 1
-  check "A7: hold exits 0" "$rc" "0"
-  check "A7: the ledger's last line is the awaiting line with the task's commit range" "$(ledger_text | tail -n 1)" "Task 1: awaiting group review (commits $base7..$head7)"
-  has "A7: the digest says the task is held" "$out" "task 1: held for group review"
-
-  # After a compaction only the plan and the ledger remain.
-  local done_lines i
-  done_lines=""
-  for i in 2 3 4 5 6 7 8 9; do done_lines="${done_lines}Task $i: complete (commits aaaaaaa..bbbbbbb, review clean)"$'\n'; done
-  {
-    printf '# SDD ledger — plan: docs/plan.md\n'
-    printf 'Task 1: implementer dforge:impl-sonnet-low (assigned; base %s)\n' "$base7"
-    printf 'Task 1: awaiting group review (commits %s..%s)\n' "$base7" "$head7"
-    printf '%s' "$done_lines" | grep -v '^Task 3:'
-    printf 'Task 3: implementer dforge:impl-sonnet-medium (assigned; base %s)\n' "$head7"
-    printf 'Task 3: awaiting group review (commits %s..%s)\n' "$head7" "$head7"
-  } > "$WS/progress.md"
-  out=$(cd "$R" && env -u AR_SESSION timeout 60 bash "$NEXT" docs/plan.md 2>"$TMP/err"); rc=$?
-  check "A7: next-step exits 0 on a ledger with held tasks" "$rc" "0"
-  has "A7: recovery sends the held tasks to the next group dispatch" "$out" "Review the held Tasks 1,3 as one group"
-  lacks "A7: and does not restart Task 1" "$out" "Start at Task 1"
-  lacks "A7: nor resume Task 1" "$out" "Resume at Task 1"
-  lacks "A7: nor resume Task 3" "$out" "Resume at Task 3"
-  has "A7: and the prompt tells the next session to write the members' complete lines" "$out" "then write their complete lines"
-}
-
-# --- A8 ----------------------------------------------------------------------
-
-a8() {
-  # Recovery: a group in its fix rounds blocks every new dispatch.
-  new_repo a8
-  local i
-  {
-    printf '# SDD ledger — plan: docs/plan.md\n'
-    printf 'Task 1: awaiting group review (commits aaaaaaa..bbbbbbb)\n'
-    printf 'Task 3: awaiting group review (commits bbbbbbb..ccccccc)\n'
-    printf 'Group 1,3: review round 1/2 (Task 1: 1 open — x; Task 3: clean; commits ccccccc..ddddddd (Task 1))\n'
-  } > "$WS/progress.md"
-  out=$(cd "$R" && timeout 60 bash "$NEXT" docs/plan.md 2>"$TMP/err"); rc=$?
-  has "A8: with a group in its fix rounds the next action is the group's round 2" "$out" "Run fix round 2 of Group 1,3 for Task 1"
-  absent "A8: and no new task is started or resumed" "$out" '(Start|Resume) at Task'
-  {
-    printf '# SDD ledger — plan: docs/plan.md\n'
-    printf 'Task 1: awaiting group review (commits aaaaaaa..bbbbbbb)\n'
-    printf 'Task 3: awaiting group review (commits bbbbbbb..ccccccc)\n'
-    printf 'Group 1,3: review round 1/2 (Task 1: clean; Task 3: clean; commits ccccccc..ddddddd (Task 1))\n'
-  } > "$WS/progress.md"
-  out=$(cd "$R" && timeout 60 bash "$NEXT" docs/plan.md 2>"$TMP/err"); rc=$?
-  has "A8: a clean group's next action is each member's complete line" "$out" "Write the complete lines of Group 1,3's members: the group is clean."
-  absent "A8: and no new task is started" "$out" '(Start|Resume) at Task'
-
-  # Four held tasks, with more of the plan still open, take the group review before any new dispatch.
-  # The next open task, Task 9, is review=group, so only the held count can send the group first.
-  {
-    printf '# SDD ledger — plan: docs/plan.md\n'
-    for i in 1 3 6 7; do printf 'Task %s: awaiting group review (commits aaaaaaa..bbbbbbb)\n' "$i"; done
-    for i in 2 4 5 8; do printf 'Task %s: complete (commits aaaaaaa..bbbbbbb, review clean)\n' "$i"; done
-  } > "$WS/progress.md"
-  out=$(cd "$R" && timeout 60 bash "$NEXT" docs/plan.md 2>"$TMP/err"); rc=$?
-  has "A8: with 4 tasks held the next action is their group review" "$out" "Review the held Tasks 1,3,6,7 as one group"
-  absent "A8: and Task 9 is not started before the group review" "$out" '(Start|Resume) at Task 9'
-
-  # A review=task task is not dispatched while a group is held.
-  {
-    printf '# SDD ledger — plan: docs/plan.md\n'
-    printf 'Task 1: awaiting group review (commits aaaaaaa..bbbbbbb)\n'
-    printf 'Task 2: complete (commits aaaaaaa..bbbbbbb, review clean)\n'
-    printf 'Task 3: complete (commits aaaaaaa..bbbbbbb, review clean)\n'
-    printf 'Task 4: complete (commits aaaaaaa..bbbbbbb, review clean)\n'
-  } > "$WS/progress.md"
-  out=$(cd "$R" && timeout 60 bash "$NEXT" docs/plan.md 2>"$TMP/err"); rc=$?
-  has "A8: with a task held and the next open task reviewed alone, the group review comes first" "$out" "Review the held Task 1"
-}
-
-# --- A9 ----------------------------------------------------------------------
-
-section_of() { # section_of <package> <n> — the lines of "## Task <n>" up to the next "## Task"
-  awk -v n="$2" '/^## Task [0-9]+( |$)/ { on = ($3 == n); next } on { print }' "$1"
-}
-
-a9() {
-  new_repo a9
-  hold_task 1 a.txt
-  hold_task 3 c.txt
-  ts review --group docs/plan.md 1 3
-  check "A9: the group review exits 0" "$rc" "0"
-  local pkg="$WS/group-1,3-review-package.md" s1 s3
-  s1=$(section_of "$pkg" 1); s3=$(section_of "$pkg" 3)
-  check "A9: the package has one section per task, labelled by number" "$(grep -c '^## Task [0-9]' "$pkg")" "2"
-  has "A9: Task 1's section holds Task 1's file" "$s1" "a.txt"
-  lacks "A9: Task 1's section holds no file of Task 3" "$s1" "c.txt"
-  has "A9: Task 3's section holds Task 3's file" "$s3" "c.txt"
-  lacks "A9: Task 3's section holds no file of Task 1, since its diff starts at its own base" "$s3" "a.txt"
-  has "A9: Task 1's section names its own commit range" "$s1" "$(awk '/^Task 1: awaiting group review/ { sub(/^.*\(commits /, ""); sub(/\)$/, ""); print }' "$WS/progress.md")"
-
-  # A wave: tasks held on their own refs, with HEAD still at the wave base.
-  new_repo a9w
-  local base; base=$(full HEAD)
-  ts start docs/plan.md 6 --wave 1
-  ts start docs/plan.md 7 --wave 1
-  git -C "$R" checkout -q -b t6 "$base"; commit_file f6.txt six "feat: six"
-  git -C "$R" checkout -q -b t7 "$base"; commit_file f7.txt seven "feat: seven"
-  git -C "$R" checkout -q main
-  ts hold docs/plan.md 6 --head t6
-  check "A9: a wave task holds on its own ref" "$rc" "0"
-  ts hold docs/plan.md 7 --head t7
-  ts review --group docs/plan.md 6 7
-  check "A9: the wave's group review exits 0 before any member merges" "$rc" "0"
-  check "A9: and HEAD has not moved to any member" "$(full HEAD)" "$base"
-  pkg="$WS/group-6,7-review-package.md"
-  s1=$(section_of "$pkg" 6); s3=$(section_of "$pkg" 7)
-  has "A9: Task 6's section holds its ref's file" "$s1" "f6.txt"
-  lacks "A9: and not Task 7's" "$s1" "f7.txt"
-  has "A9: Task 7's section holds its ref's file" "$s3" "f7.txt"
-  lacks "A9: and not Task 6's" "$s3" "f6.txt"
-}
-
-# --- A10 ---------------------------------------------------------------------
-
-cockpit_rounds() { # cockpit_rounds <ledger text> — "<n>=<round>" per task the Run card tracks
-  printf '%s\n' "$1" > "$TMP/cockpit-ledger.txt"
-  cat > "$TMP/cockpit-check.mjs" <<EOF
-import { readFileSync } from 'node:fs'
-import { pathToFileURL } from 'node:url'
-// The ESM loader takes a Windows drive path only as a file:// URL.
-const { parseLedger } = await import(pathToFileURL('$(winpath "$PLUGIN")/hooks/cockpit/lib.ts').href)
-const ledger = parseLedger(readFileSync('$(winpath "$TMP")/cockpit-ledger.txt', 'utf8'))
-console.log(ledger.tasks.map(t => t.n + '=' + (t.round ?? '-')).join(' '))
-EOF
-  timeout 60 node --no-warnings "$TMP/cockpit-check.mjs" 2>&1
-}
-
-a10() {
-  local waves
-  waves=$(doc "$PLUGIN/reference/parallel-waves.md")
-  matches "A10: parallel-waves shows the same attributed line" "$waves" 'Group <list>: review round R/2 \(Task <N>: <k> open — <one-liners> \| clean; …; commits <a7>\.\.<b7> \(Task <N>\)'
-
-  # next-step reads the per-task clauses: only the member with open findings is named.
-  new_repo a10
-  {
-    printf '# SDD ledger — plan: docs/plan.md\n'
-    printf 'Task 4: awaiting group review (commits aaaaaaa..bbbbbbb)\n'
-    printf 'Task 6: awaiting group review (commits bbbbbbb..ccccccc)\n'
-    printf 'Task 7: awaiting group review (commits ccccccc..ddddddd)\n'
-    printf 'Group 4,6,7: review round 1/2 (Task 4: 1 open — meter width; Task 6: clean; Task 7: 2 open — x, y; commits ddddddd..eeeeeee (Task 4), eeeeeee..fffffff (Task 7))\n'
-  } > "$WS/progress.md"
-  out=$(cd "$R" && timeout 60 bash "$NEXT" docs/plan.md 2>"$TMP/err"); rc=$?
-  has "A10: next-step names the open members of a comma-list Group line" "$out" "Run fix round 2 of Group 4,6,7 for Tasks 4,7"
-  lacks "A10: and does not name the clean member" "$out" "Task 6,"
-
-  # The cockpit's ledger reader gives each member its round, for a comma list and for a range.
-  local got
-  got=$(cockpit_rounds "$(printf '%s\n' \
-    '# SDD ledger — plan: docs/plans/p.md' \
-    'Task 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Task 2: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Task 3: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Group 1,3: review round 1/2 (Task 1: 1 open — meter width; Task 3: clean; commits cde3456..def4567 (Task 1))')")
-  check "A10: the Run card shows round 1/2 for the members of a comma-list Group line" "$got" "1=1/2 2=- 3=1/2"
-  got=$(cockpit_rounds "$(printf '%s\n' \
-    '# SDD ledger — plan: docs/plans/p.md' \
-    'Task 4: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Task 5: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Task 6: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Group 4-6: review round 2/2 (Task 4: clean; Task 5: 1 open — x; Task 6: clean; commits def4567..efa5678 (Task 5))')")
-  check "A10: the Run card shows round 2/2 for every member of a range Group line" "$got" "4=2/2 5=2/2 6=2/2"
-  got=$(cockpit_rounds "$(printf '%s\n' \
-    '# SDD ledger — plan: docs/plans/p.md' \
-    'Task 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Task 3: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Group 1,3: review round 1/2 (Task 1: clean; Task 3: clean; commits cde3456..def4567 (Task 1))' \
-    'Task 1: complete (commits abc1234..bcd2345, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none')")
-  check "A10: a member's complete line clears its round" "$got" "1=- 3=1/2"
 }
 
 # --- A11 ---------------------------------------------------------------------
@@ -635,14 +349,27 @@ a11() {
 
 # --- A12 ---------------------------------------------------------------------
 
+cockpit_rounds() { # cockpit_rounds <ledger text> — "<n>=<round>" per task the Run card tracks
+  printf '%s\n' "$1" > "$TMP/cockpit-ledger.txt"
+  cat > "$TMP/cockpit-check.mjs" <<EOF
+import { readFileSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
+// The ESM loader takes a Windows drive path only as a file:// URL.
+const { parseLedger } = await import(pathToFileURL('$(winpath "$PLUGIN")/hooks/cockpit/lib.ts').href)
+const ledger = parseLedger(readFileSync('$(winpath "$TMP")/cockpit-ledger.txt', 'utf8'))
+console.log(ledger.tasks.map(t => t.n + '=' + (t.round ?? '-')).join(' '))
+EOF
+  timeout 60 node --no-warnings "$TMP/cockpit-check.mjs" 2>&1
+}
+
 old_ledger() { # old_ledger <file> — the real pre-spec lines, under this plan's identity line
   { printf '# SDD ledger — plan: docs/plan.md\n'; cat "$FIXTURES/faster-plans/old-ledger.md"; } > "$1"
 }
 
-gen_old_plan() { # gen_old_plan <n> — a pre-spec sequential plan of n spec-0 tasks, totals 1 to 6, no Wave check
+gen_old_plan() { # gen_old_plan <n> — a pre-spec sequential plan of n spec-0 tasks, totals 1 to 6
   local i f c r t agent
   printf '%s\n' '# Old Plan' '' '**Goal:** Fixture.' '' '**Spec:** `docs/spec.md`' '' \
-    '**Execution:** subagent — `claude --model sonnet --effort high` — fixture' '' \
+    '**Execution:** inline — `claude --model opus --effort high` — fixture' '' \
     '**Parallelism:** sequential' '' \
     '**Plan review:** 2026-10-02 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)' '' \
     '## Global Constraints' '' '- None.' '' '## Contracts' '' 'None' '' '## Assumptions (evidence)' '' '- None.' '' '## Task index' ''
@@ -672,70 +399,6 @@ a12() {
   has "A12: the cockpit reads a real Task fix round 1/5 line (Task 9)" "$got" "9=1/5"
   has "A12: and another (Task 18)" "$got" "18=1/5"
   absent "A12: and a task with a complete line shows no round (Task 7)" "$got" '(^| )7=[0-9]'
-  got=$(cockpit_rounds "$(printf '%s\n' \
-    '# SDD ledger — plan: docs/plans/p.md' \
-    'Task 4: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Task 5: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Group 4-5: review round 1/5 (1 addressed, 1 open — meter width; commits def4567..efa5678; resumed)')")
-  check "A12: and a Group range line of an older run keeps its R/5" "$got" "4=1/5 5=1/5"
-
-}
-
-# --- A13 ---------------------------------------------------------------------
-
-wave_plan() { # wave_plan <ranges> <task count> <risk-3 task or 0> <wave check line or empty>
-  local i n=$2 r3=$3 risk total
-  printf '%s\n' '# Wave Plan' '' '**Goal:** Fixture.' '' '**Spec:** `docs/spec.md`' '' \
-    '**Execution:** subagent — `claude --model sonnet --effort high` — fixture' '' \
-    "**Parallelism:** waves — $1" '' '**Integration check:** `true`' '**Worktree setup:** none'
-  [ -z "$4" ] || printf '%s\n' "$4"
-  printf '\n%s\n' '## Task index' ''
-  for i in $(seq 1 "$n"); do printf '%d. T%d\n' "$i" "$i"; done
-  printf '\n'
-  for i in $(seq 1 "$n"); do
-    risk=0; [ "$i" -ne "$r3" ] || risk=3
-    total=$((1 + risk))
-    printf '### Task %d: T%d\n\n**Files:**\n- Create: `f%d.txt`\n\n**Depends on:** none\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk %d = %d\n\nBody.\n\n' \
-      "$i" "$i" "$i" "$risk" "$total"
-  done
-}
-
-due_all() { # due_all <plan> <first wave> <last wave> — "<k>:<answer>" for each wave, space separated
-  local k res=""
-  for k in $(seq "$2" "$3"); do
-    out=$(timeout 60 bash "$WAVE" check-due "$1" "$k" 2>&1); rc=$?
-    res="$res$k:$out "
-  done
-  printf '%s' "${res% }"
-}
-
-a13() {
-  mkdir -p "$TMP/a13"
-  # Ten one-task waves; Task 5 is risk 3.
-  wave_plan "1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10" 10 5 '**Wave check:** `npm run build && npm run test:unit`' > "$TMP/a13/with.md"
-  check "A13: every third wave, a risk-3 wave and the last run the full check; the rest the wave check" \
-    "$(due_all "$TMP/a13/with.md" 1 10)" \
-    "1:wave-check 2:wave-check 3:full 4:wave-check 5:full 6:full 7:wave-check 8:wave-check 9:full 10:full"
-  wave_plan "1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10" 10 5 '' > "$TMP/a13/without.md"
-  check "A13: without a Wave check line the other waves run none" \
-    "$(due_all "$TMP/a13/without.md" 1 10)" \
-    "1:none 2:none 3:full 4:none 5:full 6:full 7:none 8:none 9:full 10:full"
-  # Waves are counted, not tasks: seven waves of three tasks, and the last has one.
-  wave_plan "1-3 | 4-6 | 7-9 | 10-12 | 13-15 | 16-18 | 19" 19 0 '**Wave check:** `make quick`' > "$TMP/a13/wide.md"
-  check "A13: waves of several tasks count by wave" \
-    "$(due_all "$TMP/a13/wide.md" 1 7)" \
-    "1:wave-check 2:wave-check 3:full 4:wave-check 5:wave-check 6:full 7:full"
-  # A risk-3 task inside a wider wave also makes its wave full.
-  wave_plan "1-2 | 3-4 | 5-6 | 7-8" 8 4 '**Wave check:** `make quick`' > "$TMP/a13/risk.md"
-  check "A13: a wave holding a risk-3 task runs the full check (wave 2 holds Task 4)" \
-    "$(due_all "$TMP/a13/risk.md" 1 4)" \
-    "1:wave-check 2:full 3:full 4:full"
-  # An older plan that adds the line through a Header amendment is read the same.
-  local plan_before
-  plan_before=$(cksum < "$TMP/a13/without.md")
-  check "A13: check-due leaves the plan file alone" "$(cksum < "$TMP/a13/without.md")" "$plan_before"
-  out=$(timeout 60 bash "$WAVE" check-due "$TMP/a13/with.md" 11 2>&1); rc=$?
-  check "A13: a wave the plan lacks exits 2" "$rc" "2"
 }
 
 # --- A17 ---------------------------------------------------------------------
@@ -754,31 +417,6 @@ a17() {
   gen_plan "" "0 0 1 0 sonnet-low" > "$LINTDIR/pr-light.md"
   out=$(cd "$LINTDIR" && timeout 60 bash "$ROUTE" pr-light.md --plan-round 3 2>&1); rc=$?
   check "A17: a plan of light tasks is capped at 2 as well" "$rc" "2"
-}
-
-# --- A18 ---------------------------------------------------------------------
-
-a18() {
-  local agent text
-  for agent in judge-opus judge-sonnet-high judge-fable; do
-    text=$(sed -n 's/^tools: //p' "$PLUGIN/agents/$agent.md" | tr -d '\r')
-    matches "A18: agents/$agent.md lists Write" "$text" '(^|, )Write(,|$)'
-  done
-
-  local t name text1 findings
-  # template path | findings in its report (yes/no)
-  for t in \
-    "skills/subagent-driven-development/references/task-reviewer-prompt.md|yes" \
-    "skills/subagent-driven-development/references/group-reviewer-prompt.md|yes" \
-    "skills/subagent-driven-development/references/re-review-prompt.md|yes"; do
-    name=${t%%|*}; findings=${t##*|}
-    text=$(cat "$PLUGIN/$name")
-    matches "A18: $(basename "$name") names the report file" "$text" '\[REPORT_FILE\]|Report file:.*-report\.md'
-    matches "A18: $(basename "$name") fixes the ## Verdict section" "$text" '^ *## Verdict'
-    if [ "$findings" = yes ]; then
-      matches "A18: $(basename "$name") fixes the finding-line grammar" "$text" '- \[[A-Za-z|]+\] (\(Task <N>\) )?<file>:<line> — <one-liner>'
-    fi
-  done
 }
 
 # --- A19 / A20 ---------------------------------------------------------------
@@ -895,7 +533,7 @@ AMEND_PLAN='|# Demo Implementation Plan
 |
 |**Spec:** `docs/spec.md`
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4
+|**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4
 |
 |## Global Constraints
 |
@@ -919,7 +557,7 @@ AMEND_PLAN='|# Demo Implementation Plan
 |**Files:**
 |- Create: `a.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Print `hello NAME`.
@@ -929,7 +567,7 @@ AMEND_PLAN='|# Demo Implementation Plan
 |**Files:**
 |- Modify: `a.sh`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 |
 |Print `hello NAME` twice.'
@@ -989,20 +627,14 @@ a21() {
 a22() {
   local plan sum_before sum_after
   # The real plans written before this spec lint clean, unedited.
-  for plan in 2026-10-24-ui-ux-skill 2026-10-25-typed-seats-and-drafting 2026-10-26-task-loop-steps; do
+  for plan in 2026-10-24-ui-ux-skill 2026-10-26-task-loop-steps; do
     sum_before=$(cksum < "$REPO_ROOT/docs/dforge/plans/$plan.md")
-    out=$(cd "$REPO_ROOT" && timeout 120 bash "$LINT" "docs/dforge/plans/$plan.md" --no-probe 2>&1); rc=$?
+    out=$(cd "$REPO_ROOT" && timeout 120 bash "$LINT" "docs/dforge/plans/$plan.md" 2>&1); rc=$?
     check "A22: plan-lint passes the pre-spec plan $plan" "$rc" "0"
     matches "A22: and reports no error for $plan" "$out" 'plan-lint: 0 errors'
     check "A22: and leaves $plan as it was" "$(cksum < "$REPO_ROOT/docs/dforge/plans/$plan.md")" "$sum_before"
     check "A22: and git sees no edit to $plan" "$(git -C "$REPO_ROOT" status --porcelain -- "docs/dforge/plans/$plan.md" | grep -c .)" "0"
   done
-
-  # An old waves plan (no Wave check line) under the new cadence.
-  local old="$REPO_ROOT/docs/dforge/plans/2026-10-25-typed-seats-and-drafting.md"
-  absent "A22: the old waves plan carries no Wave check line" "$(cat "$old")" '^\*\*Wave check:\*\*'
-  check "A22: its waves run the full check on the cadence and nothing between" \
-    "$(due_all "$old" 1 3)" "1:none 2:none 3:full"
 
   # An old plan with spec-0 tasks up to total 6, run through §2 and the task loop, plan file untouched.
   new_repo a22
@@ -1010,30 +642,21 @@ a22() {
   printf '# Spec\n' > "$R/docs/spec.md"
   git -C "$R" add -A && git -C "$R" commit -qm "docs: add old plan"
   sum_before=$(cksum < "$R/docs/old-plan.md")
-  out=$(cd "$R" && timeout 120 bash "$LINT" docs/old-plan.md --no-probe 2>&1); rc=$?
+  out=$(cd "$R" && timeout 120 bash "$LINT" docs/old-plan.md 2>&1); rc=$?
   matches "A22: a pre-spec plan of spec-0 tasks lints clean" "$out" 'plan-lint: 0 errors'
   check "A22: and plan-lint exits 0 on it" "$rc" "0"
   local n tier ok=1
   for n in 1 2 3 4 5 6; do
     route docs/old-plan.md --task "$n"
-    [ "$rc" -eq 0 ] && grep -qE ' review=(task|group) ' <<<"$out" || ok=0
+    [ "$rc" -eq 0 ] && grep -qE ' primary=[^ ]+ ' <<<"$out" || ok=0
   done
-  check "A22: review-route gives every old task a tier" "$ok" "1"
+  check "A22: review-route gives every old task a seat" "$ok" "1"
   WS=$(winpath "$(cd "$R" && bash "$S/sdd-workspace" docs/old-plan.md)")
   ts start docs/old-plan.md 1
   check "A22: task-step starts an old task" "$rc" "0"
   commit_file a.txt a "feat: a"
-  ts hold docs/old-plan.md 1
-  check "A22: task-step holds an old grouped task" "$rc" "0"
-  ts start docs/old-plan.md 2
-  commit_file b.txt b "feat: b"
-  ts hold docs/old-plan.md 2
-  ts review --group docs/old-plan.md 1 2
-  check "A22: task-step reviews two old tasks as a group" "$rc" "0"
-  ts start docs/old-plan.md 4
-  commit_file c.txt c "feat: c"
-  ts hold docs/old-plan.md 4
-  check "A22: and reviews an old risk-2 task alone" "$rc" "4"
+  ts review docs/old-plan.md 1
+  check "A22: task-step reviews an old task" "$rc" "0"
   # The ledger of an older run, cut from a real one, reads under the new rules.
   old_ledger "$WS/progress.md"
   out=$(cd "$R" && timeout 60 bash "$NEXT" docs/old-plan.md 2>"$TMP/err"); rc=$?
@@ -1060,9 +683,8 @@ a23() {
   route docs/codex-plan.md --task 1
   check "A23: review-route --task on a Host: codex plan exits 2" "$rc" "2"
   has "A23: and sends the review to the native Codex reference" "$err" "native-codex.md"
-  lacks "A23: and prints no group tier" "$out" "review=group"
   local sub
-  for sub in "start docs/codex-plan.md 1" "review docs/codex-plan.md 1" "hold docs/codex-plan.md 1" "review --group docs/codex-plan.md 1 2" "rereview docs/codex-plan.md 1"; do
+  for sub in "start docs/codex-plan.md 1" "review docs/codex-plan.md 1" "rereview docs/codex-plan.md 1"; do
     ts $sub
     check "A23: task-step $sub exits 2" "$rc" "2"
   done
@@ -1072,7 +694,7 @@ a23() {
   check "A23: the Codex routing policy keeps review_cap 5" "$(jq -r '.review_cap' < "$PLUGIN/reference/codex-routing.json" | tr -d '\r')" "5"
 }
 
-ALL="a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a17 a18 a19 a20 a21 a22 a23"
+ALL="a2 a3 a5 a11 a12 a17 a19 a20 a21 a22 a23"
 if [ $# -gt 0 ]; then
   sel=""
   for n in "$@"; do sel="$sel $(tr 'A-Z' 'a-z' <<<"$n")"; done

@@ -53,8 +53,8 @@ dcc_cache_key() { # dcc_cache_key <string> -> DCC_CACHE_KEY
   DCC_CACHE_KEY="${s:-_}"
 }
 
-_dcc_cache_read() { # _dcc_cache_read <file> -> 0 when a complete, fresh entry loaded
-  local file="$1" line k v stamp="" sealed=0 age
+_dcc_cache_read() { # _dcc_cache_read <file> [any-age] -> 0 when a complete, fresh entry loaded
+  local file="$1" any="${2:-}" line k v stamp="" sealed=0 age
   [ -r "$file" ] || return 1
   while IFS= read -r line; do
     if [ -z "$stamp" ]; then stamp="$line"; continue; fi
@@ -76,6 +76,7 @@ _dcc_cache_read() { # _dcc_cache_read <file> -> 0 when a complete, fresh entry l
   # loaded above is discarded by the caller, which resets before collecting.
   [ "$sealed" -eq 1 ] || return 1
   case "$stamp" in ''|*[!0-9]*) return 1 ;; esac
+  [ -z "$any" ] || return 0
   age=$(( 10#${DCC_NOW:-0} - 10#$stamp ))
   [ "$age" -ge 0 ] && [ "$age" -lt "$DCC_CACHE_TTL" ]
 }
@@ -110,10 +111,21 @@ dcc_git_cached() { # dcc_git_cached <dir> -> git globals; non-zero outside a rep
   DCC_GIT_BRANCH=""; DCC_GIT_ROOT=""
   DCC_GIT_AHEAD=0; DCC_GIT_BEHIND=0; DCC_GIT_STAGED=0
   DCC_GIT_UNSTAGED=0; DCC_GIT_UNTRACKED=0; DCC_GIT_DIRTY=0
-  if dcc_git_collect "$dir"; then
-    _dcc_cache_write "$file" 1
-    return 0
-  fi
+  dcc_git_collect "$dir"
+  case $? in
+    0) _dcc_cache_write "$file" 1; return 0 ;;
+    124)
+      # A slow status says nothing about whether this is a repository, so the
+      # last good entry is served and re-stamped instead of caching "none".
+      DCC_CACHE_REPO=0
+      if _dcc_cache_read "$file" any && [ "$DCC_CACHE_REPO" = "1" ]; then
+        _dcc_cache_write "$file" 1
+        return 0
+      fi
+      DCC_GIT_BRANCH=""; DCC_GIT_ROOT=""
+      DCC_GIT_AHEAD=0; DCC_GIT_BEHIND=0; DCC_GIT_STAGED=0
+      DCC_GIT_UNSTAGED=0; DCC_GIT_UNTRACKED=0; DCC_GIT_DIRTY=0 ;;
+  esac
   _dcc_cache_write "$file" 0
   return 1
 }

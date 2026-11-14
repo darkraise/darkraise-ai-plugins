@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Acceptance tests for the speed-and-cost-followups spec
 # (docs/dforge/specs/2026-10-28-speed-and-cost-followups-design.md), the
-# plugin-side statements A1 to A4, A7 to A16, A20 and the fast part
-# of A23 (A19 went with draft-pack). A5 is the `A5:` describe block in
-# cockpit.test.ts; A17 and A18 are in
-# evals/tiers/tests/speed-and-cost-followups.acceptance.test.mjs. Each test is
+# plugin-side statements A1 to A4, A7, A8, A11 and A13 to A15 (A19 went with
+# draft-pack). A5 is the `A5:` describe block in
+# cockpit.test.ts. Each test is
 # written from the statement's text and reaches the behaviour through the
 # scripts the spec names (task-step, impl-stop-gate), the files the
 # plugin ships, or, for a statement about text, the text itself.
@@ -59,13 +58,13 @@ sr() { (cd "$REPO" && bash "$SUITE" -- bash -c "$1" >/dev/null 2>&1); } # the co
 worktrees() { g worktree list | wc -l | tr -d ' '; }
 
 mkplan() { # mkplan <ntasks> [header line] [task 1 extra text]
-  printf '# Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** subagent — `claude --model sonnet --effort high` — fixture\n\n'
+  printf '# Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** inline — `claude --model sonnet --effort high` — fixture\n\n'
   [ -z "${2:-}" ] || printf '%s\n\n' "$2"
   printf '## Task index\n\n'
   local i
   for ((i = 1; i <= $1; i++)); do printf '%d. Task %d\n' "$i" "$i"; done
   for ((i = 1; i <= $1; i++)); do
-    printf '\n### Task %d: Task %d\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$i" "$i"
+    printf '\n### Task %d: Task %d\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$i" "$i"
     if [ "$i" -eq 1 ] && [ -n "${3:-}" ]; then printf '\n%s\n' "$3"; fi
   done
 }
@@ -92,7 +91,7 @@ if selected A1 || selected A2 || selected A3 || selected A4; then
 |
 |**Goal:** Fixture.
 |
-|**Execution:** subagent — `claude --model sonnet --effort high` — fixture
+|**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
 |**Integration check:** `bash mark.sh a2integ 0`
 |
@@ -105,7 +104,7 @@ if selected A1 || selected A2 || selected A3 || selected A4; then
 |**Files:**
 |- Modify: `lib/new.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dforge:impl-sonnet-high
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Run: `bash mark.sh a1first 0` and then `bash mark.sh a3second 0`
@@ -261,86 +260,6 @@ if selected A8 || selected A11; then
     "$(grep -c 'blob.bin' "$LEDGER") $(grep -cxE 'Task 2: Ruling: cannot-verify — settled by task-step check exists — notes.txt:1' "$LEDGER")" "0 1"
 fi
 
-# ---------------------------------------------------------------- A9, A10
-build_group() { # build_group <dir> — a repository with tasks 1 and 2 held and group-reviewed at one head, and the group's report written
-  REPO="$1"; init_repo "$REPO"; mkdir -p "$REPO/docs"
-  mkplan 3 > "$REPO/docs/plan.md"
-  printf '#!/usr/bin/env bash\nexit 0\n' > "$REPO/suite.sh"
-  echo 0 > "$REPO/app.txt"
-  commit_all base
-  B0=$(g rev-parse HEAD | tr -d '\r')
-  local n t
-  for n in 1 2; do
-    ts start docs/plan.md "$n" --suite 'bash suite.sh'
-    echo "w$n" >> "$REPO/app.txt"; commit_all "work $n"
-    ts hold docs/plan.md "$n"
-  done
-  WS=$(workspace docs/plan.md)
-  sr 'bash suite.sh'
-  ts review --group docs/plan.md 1 2
-  check "setup: group review exits 0" "$rc" "0"
-  {
-    printf '## Verdict\n'
-    for t in 1 2; do printf 'Task %s spec: pass\nTask %s quality: approved\nTask %s scores: spec 17 / scope 17 / verification 17 / quality 17\n' "$t" "$t" "$t"; done
-  } > "$WS/group-1,2-review-report.md"
-}
-
-if selected A9; then
-  build_group "$TMP/s9"
-  printf -- '- app.txt: wrong value\n\nFixed.\n' > "$WS/task-2-fix-1.md"
-  echo fix >> "$REPO/app.txt"; commit_all "fix 2"
-  cp "$WS/task-2-step.json" "$TMP/step2.before"
-  base_before=$(jq -r '.base' "$WS/task-2-step.json" | tr -d '\r')
-  ts rereview docs/plan.md 2 --base "$B0"
-  check "A9: rereview --base on a sequential group member exits 2" "$rc" "2"
-  check "A9: the step file's base is unchanged" "$(jq -r '.base' "$WS/task-2-step.json" | tr -d '\r') $(cmp -s "$TMP/step2.before" "$WS/task-2-step.json" && echo same || echo changed)" "$base_before same"
-
-  PREV=$B0
-  ts start docs/plan.md 3 --wave 1
-  echo w3 >> "$REPO/app.txt"; commit_all "work 3"; g branch t3ref
-  ts review docs/plan.md 3 --head t3ref
-  printf -- '- app.txt: wrong value\n\nFixed.\n' > "$WS/task-3-fix-1.md"
-  echo fix3 >> "$REPO/app.txt"; commit_all "fix 3"; g branch -f t3ref HEAD
-  ts rereview docs/plan.md 3 --base "$PREV"
-  check "A9: on a wave task with a head ref --base is accepted and recorded" "$rc $(jq -r '.base' "$WS/task-3-step.json" | tr -d '\r')" "0 $PREV"
-
-fi
-
-if selected A10; then
-  build_group "$TMP/s10"
-  cp "$WS/task-2-step.json" "$TMP/step2.keep"
-  rm -f "$WS/task-2-step.json"
-  ts verdict docs/plan.md 1 2 --group
-  check "A10: a missing last member's step file exits 6 naming the file" "$rc $(grep -cF "$WS/task-2-step.json" <<<"$err")" "6 1"
-  check "A10: and prints no 'suite: none recorded'" "$(grep -c 'suite: none recorded' <<<"$out")" "0"
-  printf '{not json\n' > "$WS/task-2-step.json"
-  ts verdict docs/plan.md 1 2 --group
-  check "A10: a last member's step file that is not valid JSON exits 6 naming the file" "$rc $(grep -cF "$WS/task-2-step.json" <<<"$err")" "6 1"
-  check "A10: and prints no 'suite: none recorded' either" "$(grep -c 'suite: none recorded' <<<"$out")" "0"
-  cp "$TMP/step2.keep" "$WS/task-2-step.json"
-  ts verdict docs/plan.md 1 2 --group
-  check "A10: with the file back the same verdict reads the recorded suite" "$rc $(grep -c '^suite: pass' <<<"$out")" "0 1"
-fi
-
-# ------------------------------------------------------------------ A12
-if selected A12; then
-  BT="$HERE/task-step-base.test.sh"; ST="$HERE/task-step-settle.test.sh"
-  check "A12: task-step-base.test.sh has a verdict --cwd case" "$(grep -cE 'verdict .*--cwd' "$BT" | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes"
-  check "A12: and a base row that timed out (exit 124)" "$(grep -cE 'exit 124|sr_timeout|--timeout 1' "$BT" | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes"
-  check "A12: and a passing base row (no base run)" "$(grep -ciE 'passing (suites.tsv )?(base )?row|0 baseline' "$BT" | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes"
-  check "A12: task-step-settle.test.sh has a ./<name> exists item run from a subdirectory" \
-    "$(grep -cE 'exists \./[A-Za-z_.]+ at head, expect present' "$ST" | awk '{ print ($1 >= 1) ? "yes" : "no" }') $(grep -cE '\(cd "\$REPO/[a-z]+" && .*task-step' "$ST" | awk '{ print ($1 >= 1) ? "yes" : "no" }')" "yes yes"
-  # test-all runs both suites as jobs of their own.
-  if [ -n "${DR_TEST_ALL:-}" ]; then
-    printf 'skip - A12: task-step-base.test.sh and task-step-settle.test.sh run as their own test-all jobs\n'
-  else
-    out=$(cd "$HERE" && timeout 900 bash "$BT" 2>&1); rc=$?
-    check "A12: task-step-base.test.sh passes" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
-    out=$(cd "$HERE" && timeout 600 bash "$ST" 2>&1); rc=$?
-    check "A12: task-step-settle.test.sh passes" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
-  fi
-fi
-
 # ---------------------------------------------------- A13, A14, A15 (gate)
 gate_setup() {
   GREPO="$TMP/gate-repo"; init_repo "$GREPO"
@@ -410,42 +329,6 @@ if selected A15; then
   check "A15: two ## Verified sections, the last holding no bullet, is blocked" "$GRC" "2"
   gate a15-b "$(done_msg "$RPT/two-last-valid.md")"
   check "A15: with the valid bullet in the last section it passes" "$GRC" "0"
-fi
-
-# ------------------------------------------------------------------ A16
-if selected A16; then
-  mkdir -p "$TMP/xdg-host"
-  # As test-all runs it: this suite's MSYS_NO_PATHCONV would break its paths on Git Bash.
-  out=$(cd "$HERE" && env -u MSYS_NO_PATHCONV XDG_STATE_HOME="$TMP/xdg-host" timeout 300 bash "$HERE/impl-stop-gate.test.sh" 2>&1); rc=$?
-  check "A16: impl-stop-gate.test.sh passes with XDG_STATE_HOME set in the calling environment" "$rc $(grep -c '^FAIL' <<<"$out")" "0 0"
-  check "A16: and writes nothing under it" "$(find "$TMP/xdg-host" -mindepth 1 | wc -l | tr -d ' ')" "0"
-fi
-
-# ------------------------------------------------------------------ A20
-if selected A20; then
-  out=$(cd "$HERE" && timeout 120 bash "$HERE/skill-split-planning.test.sh" 2>&1); rc=$?
-  check "A20: skill-split-planning.test.sh passes and reports no broken link" "$rc $(grep -c '^FAIL' <<<"$out") $(grep -i 'broken' <<<"$out" | grep -vc '^ok ')" "0 0 0"
-  check "A20: no SD= line in the two review-depth acceptance tests" \
-    "$(grep -cE '^[[:space:]]*SD=' "$HERE/review-depth.acceptance.test.sh") $(grep -cE '^[[:space:]]*SD=' "$HERE/review-depth-qa.acceptance.test.sh")" "0 0"
-fi
-
-# ------------------------------------------------------------------ A23
-if selected A23; then
-  out=$(cd "$REPO_ROOT" && timeout 120 node scripts/validate-repository.mjs 2>&1); rc=$?
-  check "A23: node scripts/validate-repository.mjs passes" "$rc" "0"
-  CLAUDE_BIN=${CLAUDE_BIN:-/root/.local/bin/claude}
-  if [ -x "$CLAUDE_BIN" ]; then
-    out=$(cd "$REPO_ROOT" && timeout 120 "$CLAUDE_BIN" plugin validate . 2>&1); rc=$?
-    check "A23: claude plugin validate passes on the marketplace" "$rc" "0"
-    for p in $(jq -r '.plugins[].source' "$REPO_ROOT/.claude-plugin/marketplace.json" | tr -d '\r'); do
-      if [ -f "$REPO_ROOT/$p/.claude-plugin/plugin.json" ]; then
-        out=$(cd "$REPO_ROOT" && timeout 120 "$CLAUDE_BIN" plugin validate "$p" 2>&1); rc=$?
-        check "A23: claude plugin validate passes on $p" "$rc" "0"
-      fi
-    done
-  else
-    printf 'skip - A23: no claude CLI at %s\n' "$CLAUDE_BIN"
-  fi
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

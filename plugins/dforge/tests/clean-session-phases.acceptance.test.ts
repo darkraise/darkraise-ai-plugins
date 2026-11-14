@@ -12,7 +12,7 @@ const START = { cwd: '/home/me/code/shop/web', surface: 'terminal', isInteractiv
 const SUMMARY: SessionMessage = { role: 'user', text: 'Summary.', toolUses: [] }
 const AUTO = '/home/me/code/shop/.dforge/sdd/auto-run.json'
 const SWITCH_ANSWER = 'Plan saved.\n\nAuto run: switching'
-const FIRST_PROMPT = 'Execute docs/plan.md with dforge:subagent-driven-development.'
+const FIRST_PROMPT = 'Execute docs/plan.md with dforge:executing-plans.'
 const FAILURE_CAP = 2
 
 type World = {

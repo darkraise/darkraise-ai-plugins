@@ -4,7 +4,7 @@ import path from 'node:path';
 import { parseBoard } from './board.mjs';
 import { nextTask, taskStates } from './plan.mjs';
 import { currentBranch, defaultBranch, head, primaryRoot, relative, userConfig } from './repo.mjs';
-import { loadState, planState, readEvents, saveState } from './state.mjs';
+import { loadState, planState, readEvents, updateState } from './state.mjs';
 import { activePlan } from './status.mjs';
 import { acquireLock, nowIso, readJson, readText, shortSha, writeJson } from './util.mjs';
 
@@ -293,13 +293,13 @@ function close(run) {
   const { ctx, sync, report } = run;
   try {
     writeJson(syncFile(ctx), sync);
-    const state = loadState(ctx.paths);
     const queued = readEvents(ctx.paths).length - sync.cursor;
-    state.sync = {
-      enabled: true, queued, lastAt: report.error ? state.sync?.lastAt ?? null : nowIso(ctx.env),
-      conflict: report.conflict, error: report.error, offline: report.offline, refused: report.refused.length,
-    };
-    saveState(ctx.paths, state);
+    updateState(ctx.paths, state => {
+      state.sync = {
+        enabled: true, queued, lastAt: report.error ? state.sync?.lastAt ?? null : nowIso(ctx.env),
+        conflict: report.conflict, error: report.error, offline: report.offline, refused: report.refused.length,
+      };
+    });
   } finally {
     run.release();
   }

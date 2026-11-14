@@ -9,8 +9,6 @@ DCC_C=""
 DCC_R="$DCC_ESC[0m"
 DCC_PAINTED=""
 
-dcc_reset() { DCC_R="$DCC_ESC[0m"; }
-
 dcc_color() { # dcc_color <name> [weight: ''|bold|dim] -> DCC_C
   local name="${1:-}" weight="${2:-}" code=""
   case "$name" in

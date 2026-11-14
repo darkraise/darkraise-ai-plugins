@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { parseBoard } from '../board.mjs';
 import { parsePlan, taskStates } from '../plan.mjs';
 import { head, relative } from '../repo.mjs';
-import { appendEvent, loadState, planState, saveState, taskRecord } from '../state.mjs';
+import { appendEvent, loadState, planState, updateState, taskRecord } from '../state.mjs';
 import { refreshHud, taskBrief } from '../status.mjs';
 import { fail, git, gitOut, mustGit, readText, shortSha } from '../util.mjs';
 import { requireActive } from './next.mjs';
@@ -90,13 +90,16 @@ function add(ctx, argv, out) {
   mustGit(ctx.root, ['worktree', 'add', '-q', '-b', branch, directory, 'HEAD']);
   const brief = `${directory}.brief.md`;
   fs.writeFileSync(brief, [`Worktree: ${directory}`, '', ...taskBrief(ctx, active, task), '', ...RULES, ''].join('\n'));
-  state.workers[number] = { task: number, path: relative(ctx.root, directory), branch, base: head(ctx.root) };
-  const record = taskRecord(state, active.slug, number);
-  if (record.state !== 'wip') {
-    record.state = 'wip';
-    appendEvent(ctx, { plan: active.slug, event: 'wip', task: number });
-  }
-  saveState(ctx.paths, state);
+  const worker = { task: number, path: relative(ctx.root, directory), branch, base: head(ctx.root) };
+  updateState(ctx.paths, fresh => {
+    fresh.workers ??= {};
+    fresh.workers[number] = worker;
+    const record = taskRecord(fresh, active.slug, number);
+    if (record.state !== 'wip') {
+      record.state = 'wip';
+      appendEvent(ctx, { plan: active.slug, event: 'wip', task: number });
+    }
+  });
   out(`Read ${brief} and do the task it describes.`);
   refreshHud(ctx);
   return 0;
@@ -108,7 +111,9 @@ function release(ctx, state, number) {
   git(ctx.root, ['branch', '-q', '-D', worker.branch]);
   fs.rmSync(`${path.join(ctx.root, worker.path)}.brief.md`, { force: true });
   delete state.workers[number];
-  saveState(ctx.paths, state);
+  updateState(ctx.paths, fresh => {
+    delete fresh.workers?.[number];
+  });
 }
 
 function merge(ctx, argv, out, { keep }) {

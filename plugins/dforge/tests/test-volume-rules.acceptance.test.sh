@@ -54,7 +54,7 @@ plan3() {
 
 **Spec:** `docs/spec.md`
 
-**Execution:** subagent — `claude --model sonnet --effort high` — three tasks
+**Execution:** inline — `claude --model sonnet --effort high` — three tasks
 
 **Parallelism:** sequential — one chain
 
@@ -91,7 +91,7 @@ None
 **Files:**
 - Create: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 2: Two
@@ -99,7 +99,7 @@ None
 **Files:**
 - Create: `b.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 3: Three
@@ -107,12 +107,12 @@ None
 **Files:**
 - Create: `c.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 EOF
 }
 lint() { # lint <file>; sets out and status, CR stripped
-  out=$(bash "$LINT" "$1" --no-probe 2>&1 | tr -d '\r'); status=${PIPESTATUS[0]}
+  out=$(bash "$LINT" "$1" 2>&1 | tr -d '\r'); status=${PIPESTATUS[0]}
 }
 step1_lines() { grep -E '^(ERROR|WARN) Task [0-9]+: Step 1' <<<"$out"; }
 

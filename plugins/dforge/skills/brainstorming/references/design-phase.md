@@ -12,9 +12,7 @@
 
 Ask nothing. Every plan executes inline, one task after another, so record
 `**Execution strategy:** sequential — inline execution` near the top of the
-spec, below its title. The plan inherits it. The `executionStrategy` setting is
-honoured only for a plan whose Execution line names `subagent` (deprecated),
-where dforge:writing-plans §Parallel waves decides the waves.
+spec, below its title. The plan inherits it.
 
 **Presenting the design:**
 

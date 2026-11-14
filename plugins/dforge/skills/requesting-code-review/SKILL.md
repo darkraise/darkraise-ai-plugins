@@ -15,8 +15,8 @@ Dispatch a code reviewer subagent to catch issues before they cascade. The revie
 - After completing a major feature outside a plan
 - Before merge to main
 
-Under a plan, the execution skills own review: subagent mode's per-task judge
-and both modes' final review ([final-review.md](../../reference/final-review.md))
+Under a plan, dforge:executing-plans owns review: its risk-3 task judge and
+its final review ([final-review.md](../../reference/final-review.md))
 dispatch their own templates, and this skill's steps do not apply.
 
 **Optional but valuable:**

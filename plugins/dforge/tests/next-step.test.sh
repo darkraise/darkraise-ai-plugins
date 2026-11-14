@@ -44,14 +44,12 @@ write_plan() { # write_plan <file> <execution line> <program line or empty>
     printf '%s\n\n' "$2"
     [ -n "$3" ] && printf '%s\n\n' "$3"
     printf '## Task index\n\n1. First\n2. Second\n3. Third\n\n'
-    # Scored so that review-route grades every task review=group: a held task
-    # is then followed by one that can still be dispatched.
     printf '### Task 1: First thing\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nBody.\n\n```bash\n### Task 9: fenced, not a task\n```\n\n'
     printf '### Task 2: Second thing\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nBody.\n\n'
-    printf '### Task 3: Third thing\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk %s = %s\n\nBody.\n' "${TASK3_RISK:-0}" "$(( ${TASK3_RISK:-0} + 1 ))"
+    printf '### Task 3: Third thing\n\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nBody.\n'
   } > "$1"
 }
-EXEC_SUB='**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4'
+EXEC_SUB='**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4'
 PROG_NEXT='**Program:** `docs/specs/program.md` — sub-project 2 of 5 — next: Session budget'
 write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm init
@@ -74,7 +72,7 @@ has "not started: status counts tasks outside fences only" "$out" "**Status:** P
 has "not started: next is Task 1" "$out" "**Next:** Start at Task 1 (First thing)."
 has "not started: launch dir is the primary checkout" "$out" "Launch in \`$ROOT\`:"
 has "not started: launch command from Execution line" "$out" "claude --model sonnet --effort high"
-has "not started: prompt names the sdd skill and Setup" "$out" "Continue \`$PLAN_REL\` with dforge:subagent-driven-development. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task 1 (First thing)."
+has "not started: prompt names the execution skill and Setup" "$out" "Continue \`$PLAN_REL\` with dforge:executing-plans. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task 1 (First thing)."
 check "not started: writes the handoff file" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes"
 check "not started: handoff carries the block" "$(grep -c '^\*\*Next:\*\* Start at Task 1' "$HANDOFF")" "1"
 
@@ -97,75 +95,6 @@ check "mid-plan: handoff has one Next session section" "$(grep -c '^## Next sess
 has "mid-plan: handoff carries the new next step" "$hand" "Resume at Task 3 (Third thing)."
 lacks "mid-plan: no assigned-line warning" "$(cat "$TMP/stderr")" "warning"
 
-# --- held tasks: a task awaiting its group review is not the next to start ---
-ledger 'Task 1: complete (commits a..b, review clean)' \
-       'Task 2: implementer dforge:impl-sonnet-low (assigned; base bbbbbbb)' \
-       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
-       'Task 2: minor (deferred): rename'
-run "$REPO" "$PLAN_REL"
-check "held: exits 0" "$status" "0"
-has "held: a held task is not complete" "$out" "1 of 3 tasks complete"
-has "held: resumes at the first task neither complete nor held" "$out" "**Next:** Resume at Task 3 (Third thing). Task 2 is held for group review."
-has "held: the prompt carries the held task" "$out" "Resume \`$PLAN_REL\` with dforge:resume-execution. Resume at Task 3 (Third thing). Task 2 is held for group review."
-ledger 'Task 1: implementer dforge:impl-sonnet-low (assigned; base aaaaaaa)' \
-       'Task 1: awaiting group review (commits aaaaaaa..bbbbbbb)'
-run "$REPO" "$PLAN_REL"
-has "held: with nothing complete, starts at the first task not held" "$out" "**Next:** Start at Task 2 (Second thing). Task 1 is held for group review."
-ledger 'Task 1: complete (commits a..b, review clean)' \
-       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
-       'Task 3: awaiting group review (commits ccccccc..ddddddd)'
-run "$REPO" "$PLAN_REL"
-has "held: every open task held means the group review is next" "$out" "**Next:** Review the held Tasks 2,3 as one group (\`task-step review --group\`), then write their complete lines."
-lacks "held: no task is named to start" "$out" "Resume at Task"
-ledger 'Task 1: complete (commits a..b, review clean)' \
-       'Task 2: complete (commits b..c, review clean)' \
-       'Task 3: awaiting group review (commits ccccccc..ddddddd)'
-run "$REPO" "$PLAN_REL"
-has "held: one held task is named in the singular" "$out" "**Next:** Review the held Task 3 as one group (\`task-step review --group\`), then write its complete line."
-# The next open task is reviewed alone (risk 2), so the held group goes first.
-TASK3_RISK=2 write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
-ledger 'Task 1: complete (commits a..b, review clean)' \
-       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)'
-run "$REPO" "$PLAN_REL"
-has "held: before a task reviewed alone, the group review is next" "$out" "**Next:** Review the held Task 2 as one group (\`task-step review --group\`), then write its complete line. Dispatch Task 3 (Third thing) only once the group is clean."
-lacks "held: and Task 3 is not resumed first" "$out" "Resume at Task 3"
-write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
-
-# --- a group in its fix rounds blocks every new dispatch ---
-ledger 'Task 1: awaiting group review (commits aaaaaaa..bbbbbbb)' \
-       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
-       'Group 1,2: review round 1/2 (Task 1: 1 open — x; Task 2: clean; commits ccccccc..ddddddd (Task 1))'
-run "$REPO" "$PLAN_REL"
-has "group round 1: round 2 for the open members is next" "$out" "**Next:** Run fix round 2 of Group 1,2 for Task 1, then write the members' complete lines."
-lacks "group round 1: the next task is not started" "$out" "Start at Task 3"
-lacks "group round 1: the group is not reviewed again" "$out" "Review the held Tasks"
-ledger 'Task 1: complete (commits a..b, review clean)' \
-       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
-       'Task 3: awaiting group review (commits ccccccc..ddddddd)' \
-       'Group 2,3: review round 1/2 (Task 2: 1 open — x; Task 3: 2 open — y, z; commits ddddddd..eeeeeee (Task 2), eeeeeee..fffffff (Task 3))' \
-       'Group 2-3: review round 2/2 (Task 2: clean; Task 3: 1 open — z; commits fffffff..aaaaaaa (Task 3))'
-run "$REPO" "$PLAN_REL"
-has "group round 2: the open findings go to the breaker" "$out" "**Next:** Send the open findings of Group 2-3 (Task 3) to the breaker, then write the members' complete lines."
-ledger 'Task 1: complete (commits a..b, review clean)' \
-       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
-       'Task 3: awaiting group review (commits ccccccc..ddddddd)' \
-       'Group 2,3: review round 1/2 (Task 2: clean; Task 3: clean; commits ddddddd..eeeeeee (Task 2))'
-run "$REPO" "$PLAN_REL"
-has "group clean: the complete lines are next" "$out" "**Next:** Write the complete lines of Group 2,3's members: the group is clean."
-ledger 'Task 1: complete (commits a..b, review clean)' \
-       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
-       'Task 3: awaiting group review (commits ccccccc..ddddddd)' \
-       'Group 2,3: review round 1/2 (Task 2: clean; Task 3: open — y; commits ddddddd..eeeeeee (Task 2))'
-run "$REPO" "$PLAN_REL"
-has "group unread: a clause with no count is not read as clean" "$out" "it holds no \`<k> open\` or \`clean\` clause for Task 3."
-lacks "group unread: and no complete line is called for" "$out" "the group is clean"
-ledger 'Task 1: complete (commits a..b, review clean)' \
-       'Task 2: awaiting group review (commits bbbbbbb..ccccccc)' \
-       'Task 2: complete (commits bbbbbbb..ccccccc, review clean)'
-run "$REPO" "$PLAN_REL"
-has "held: a held task that completed is not held" "$out" "**Next:** Resume at Task 3 (Third thing)."
-lacks "held: and is not named as held" "$out" "held for group review"
-
 # --- a ledger ending on an assigned line warns, and still prints the block ---
 ledger 'Task 1: complete (commits a..b, review clean)' \
        'Task 2: implementer impl-sonnet-low (assigned; base bbbbbbb; executor codex gpt-6.1-sol/low, thread pending)'
@@ -174,31 +103,13 @@ check "thread pending: exits 0" "$status" "0"
 has "thread pending: still prints the block" "$out" "**Next:** Resume at Task 2 (Second thing)."
 lacks "thread pending: no warning names the pending thread" "$(cat "$TMP/stderr")" "thread pending"
 ledger 'Task 1: complete (commits a..b, review clean)' \
-       'Task 2: implementer dforge:impl-sonnet-low (assigned; base bbbbbbb)'
+       'Task 2: implementer dforge:impl-sonnet-high (assigned; base bbbbbbb)'
 run "$REPO" "$PLAN_REL"
 has "agent assigned: warns on stderr" "$(cat "$TMP/stderr")" "the ledger ends on an assigned line for Task 2"
 ledger 'Task 1: complete (commits a..b, review clean)' \
        'Task 2: implementer inline (assigned; base bbbbbbb)'
 run "$REPO" "$PLAN_REL"
 lacks "inline assigned: no warning, the controller is the implementer" "$(cat "$TMP/stderr")" "warning"
-
-# --- a waves ledger: the lines that close a wave are not task lines ---
-ledger 'Wave 1: started (base aaaaaaa; Tasks 1-2; at most 2 at once)' \
-       'Task 1: complete (commits a..b, review clean; merged bbbbbbb)' \
-       'Task 2: complete (commits a..c, review clean; merged ccccccc)' \
-       'Wave 1: merged (head ccccccc; check at wave 3)'
-run "$REPO" "$PLAN_REL"
-check "wave merged: exits 0" "$status" "0"
-has "wave merged: counts the complete tasks" "$out" "2 of 3 tasks complete"
-has "wave merged: resumes at the next wave's task" "$out" "**Next:** Resume at Task 3 (Third thing)."
-lacks "wave merged: no warning" "$(cat "$TMP/stderr")" "warning"
-ledger 'Task 1: complete (commits a..b, review clean)' \
-       'Task 2: complete (commits b..c, review clean)' \
-       'Wave 2: fix round 1/2 (1 addressed, 0 open — x; commits c..d; fresh (wave))' \
-       'Wave 2: integrated (head ddddddd; bash full.sh → pass; baseline failures only)'
-run "$REPO" "$PLAN_REL"
-has "wave integrated on a red baseline: counts the complete tasks" "$out" "2 of 3 tasks complete"
-lacks "wave integrated on a red baseline: no warning" "$(cat "$TMP/stderr")" "warning"
 
 # --- ledger for another plan is ignored ---
 mkdir -p "$LEDGER_DIR"
@@ -248,11 +159,11 @@ write_plan "$PLAN" '**Execution:** inline -- claude --model sonnet --effort medi
 run "$REPO" "$PLAN_REL"
 has "inline: prompt names executing-plans" "$out" "with dforge:executing-plans."
 has "inline: command without backticks" "$out" "claude --model sonnet --effort medium"
-write_plan "$PLAN" '**Execution:** subagent — codex gpt-6.1-sol / high — Codex host' ""
+write_plan "$PLAN" '**Execution:** inline — codex gpt-6.1-sol / high — Codex host' ""
 run "$REPO" "$PLAN_REL"
 has "codex pair: the launch command names the Codex client" "$out" "codex -m gpt-6.1-sol -c model_reasoning_effort=high"
 lacks "codex pair: no claude command" "$out" "claude --model"
-write_plan "$PLAN" '**Execution:** subagent — whatever the owner pinned' ""
+write_plan "$PLAN" '**Execution:** inline — whatever the owner pinned' ""
 run "$REPO" "$PLAN_REL"
 has "an Execution line naming no pair: points at the Execution line" "$out" "Launch: see the **Execution:** line in \`$PLAN_REL\`."
 
@@ -369,10 +280,9 @@ run "$REPO"
 check "no arguments: exits 2" "$status" "2"
 has "no arguments: prints usage on stdout" "$out" "next-step: usage:"
 
-# --- a plan that escalated out of inline mode ---
-# The ledger, not the Execution line, says which mode a run is in after a
-# switch. The launch command has to follow it, or the resumed session starts at
-# inline mode's model and effort.
+# --- an older ledger's escalation line ---
+# Subagent mode was retired, so the line switches nothing: the Execution line
+# still decides the launch command.
 INL="$REPO/docs/plans/2026-01-01-inline.md"
 cat > "$INL" <<'PLAN'
 # Inline plan
@@ -404,16 +314,8 @@ mkdir -p "$INL_LEDGER"
 } > "$INL_LEDGER/progress.md"
 
 run "$REPO" docs/plans/2026-01-01-inline.md
-has "escalated: launches the subagent pair" "$out" "claude --model sonnet --effort high"
-lacks "escalated: drops the inline pair" "$out" "--effort low"
-has "escalated: says the plan escalated" "$out" "This plan escalated to subagent mode at Task 2."
-
-# A later inline assignment means the plan came back; the Execution line rules
-# again.
-echo "Task 2: implementer inline (assigned; base ccccccc)" >> "$INL_LEDGER/progress.md"
-run "$REPO" docs/plans/2026-01-01-inline.md
-has "returned to inline: launches the inline pair" "$out" "claude --model sonnet --effort low"
-lacks "returned to inline: drops the escalation sentence" "$out" "This plan escalated to subagent mode"
+has "escalation line: keeps the inline pair" "$out" "claude --model sonnet --effort low"
+lacks "escalation line: no subagent pair" "$out" "--effort high"
 
 # --- a mixed ledger: a delegated task mid-loop in an inline plan ---
 # Mixed mode writes subagent grammar for a delegated task. An agent-named
@@ -422,15 +324,14 @@ lacks "returned to inline: drops the escalation sentence" "$out" "This plan esca
   echo "# SDD ledger — plan: docs/plans/2026-01-01-inline.md"
   echo "Task 1: implementer inline (assigned; base aaaaaaa)"
   echo "Task 1: complete (commits aaaaaaa..bbbbbbb, unreviewed) — done: x; verified: y → ok; remaining: none; discovered: none; assumptions: none"
-  echo "Task 2: implementer dforge:impl-opus-medium (assigned; base bbbbbbb)"
+  echo "Task 2: implementer dforge:impl-sonnet-high (assigned; base bbbbbbb)"
   echo "Task 2: fix round 2/5 (1 addressed, 1 open — x; commits bbbbbbb..ccccccc; progress 9 -> 12; resumed)"
 } > "$INL_LEDGER/progress.md"
 run "$REPO" docs/plans/2026-01-01-inline.md
 has "mixed ledger: keeps the inline pair" "$out" "claude --model sonnet --effort low"
-lacks "mixed ledger: no mode switch" "$out" "This plan escalated to subagent mode"
 has "mixed ledger: resumes the delegated task" "$out" "Resume at Task 2 (Second)."
 
-# --- a ledger that merely quotes the escalation marker must not escalate ---
+# --- a ledger that quotes the escalation marker ---
 # The marker is its own ledger line, not a substring match anywhere in the
 # ledger; a deferred-minor sentence describing the grammar is not an
 # escalation.
@@ -460,7 +361,6 @@ mkdir -p "$QUOTE_LEDGER"
 
 run "$REPO" docs/plans/2026-01-01-quote.md
 lacks "quoted clause: does not launch the subagent pair" "$out" "--effort high"
-lacks "quoted clause: does not say the plan escalated" "$out" "This plan escalated to subagent mode"
 
 # --- the ledger identity may carry an absolute or Windows-form path ---
 ABS_LEDGER="$REPO/.dforge/sdd/2026-01-01-quote"
@@ -483,7 +383,7 @@ cat > "$LASTP" <<'PLAN'
 
 **Spec:** docs/spec.md
 
-**Execution:** subagent — `claude --model sonnet --effort high` — x
+**Execution:** inline — `claude --model sonnet --effort high` — x
 
 **Program:** `docs/spec.md` — sub-project 1 of 3 — next: Cleanup at last
 
@@ -512,7 +412,7 @@ cat > "$BLK" <<'PLAN'
 
 **Spec:** docs/spec.md
 
-**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4
+**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4
 
 ## Task index
 
@@ -543,6 +443,9 @@ has "blocked: next carries the decision" "$out" "Your human partner decides: whe
 lacks "blocked: no start or resume instruction" "$out" "Resume at Task"
 lacks "blocked: no launch command" "$out" "Launch in"
 has "blocked: latest.md carries the block" "$(cat "$REPO/.dforge/handoff/latest.md")" "Task 2 is BLOCKED"
+printf '%s\n' "Task 2: BLOCKED — ruling seat — pick the store - sqlite or files" >> "$BLK_LEDGER/progress.md"
+run "$REPO" docs/plans/2026-01-01-blocked.md
+has "blocked: a decision with a dash of its own is carried whole" "$out" "Your human partner decides: pick the store - sqlite or files."
 
 # Writers share no temporary path: one another writer left behind, or holds,
 # does not stop this one, and two at once leave one well-formed block.
@@ -631,9 +534,9 @@ mkdir -p "$CODEX_LEDGER_DIR"
   printf 'Task 2: escalated inline -> subagent — fix round 3/3
 '; } > "$CODEX_LEDGER_DIR/progress.md"
 run "$REPO" "$CODEX_PLAN_REL"
-check "codex plan escalated: exits 0" "$status" "0"
-has "codex plan escalated: launches the build tier" "$out" "$CODEX_BUILD"
-lacks "codex plan escalated: no claude launch command" "$out" "claude --model"
+check "codex plan, old escalation line: exits 0" "$status" "0"
+has "codex plan, old escalation line: keeps the Execution pair" "$out" "model_reasoning_effort=medium"
+lacks "codex plan, old escalation line: no claude launch command" "$out" "claude --model"
 
 
 # --- the same directory under a second POSIX spelling ---
@@ -974,7 +877,7 @@ git init -q "$SR"
 git -C "$SR" commit -q --allow-empty -m init
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
 mkdir -p "$M/dforge/plans" "$M/work/sdd/2026-02-02-mirror"
-write_plan "$M/dforge/plans/2026-02-02-mirror.md" '**Execution:** subagent — `claude --model sonnet --effort high` — demo' ""
+write_plan "$M/dforge/plans/2026-02-02-mirror.md" '**Execution:** inline — `claude --model sonnet --effort high` — demo' ""
 printf '# SDD ledger — plan: docs/dforge/plans/2026-02-02-mirror.md\nTask 1: complete (commits a..b, review clean)\n' \
   > "$M/work/sdd/2026-02-02-mirror/progress.md"
 out=$(cd "$SR" && HOME=$SH bash "$SCRIPT" docs/dforge/plans/2026-02-02-mirror.md)

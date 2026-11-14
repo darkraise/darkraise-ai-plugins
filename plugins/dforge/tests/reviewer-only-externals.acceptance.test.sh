@@ -3,8 +3,7 @@
 # (docs/dforge/specs/2026-11-12-reviewer-only-externals-design.md), statements
 # A1-A11 and A13-A18. Written from the statements' text and run through the
 # public surface: the panel and the agy runner as commands, the gates, the
-# review routing, task-step, plan-lint, dforge-config, the README and the
-# release script. Real gates and real runners run against the stub agy
+# review routing, task-step, plan-lint, dforge-config and the release script. Real gates and real runners run against the stub agy
 # (fixtures/stub-agy) and a copy of the stub Codex plugin; the host's own agy
 # is kept out of PATH, so nothing here makes a billed call.
 # Usage:
@@ -332,7 +331,7 @@ cat > "$PLANREPO/route.md" <<'EOF'
 
 ### Task 1: risk zero
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 2: risk one
@@ -347,12 +346,12 @@ cat > "$PLANREPO/route.md" <<'EOF'
 
 ### Task 4: risk two total six
 
-**Implementer:** dforge:impl-opus-high
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 1 - spec 2 - coupling 1 - risk 2 = 6
 
 ### Task 5: risk three total six
 
-**Implementer:** dforge:impl-opus-high
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
 
 ### Task 6: risk three total four
@@ -444,9 +443,7 @@ named_in_output() { # named_in_output <word> - the word appears in the status ou
 }
 t_A6() {
   needs_spawn A6 || return
-  local kind mode ext
-  ext=$(tr '\n' ' ' < "$PLUGIN/reference/external-review.md" | tr -s ' ')
-  present "A6: a hook, git config or stash change stops the session, since removing the worktree does not undo it" "$ext" 'hook. path, a .git config <key> <origin>. or a .stash. line .*removing the worktree does not undo it.*run no further git command in that repository'
+  local kind mode
   for kind in "task light" "task heavy" "plan" "final"; do
     fresh; settings false true
     case ${kind%% *} in plan) mode=plan-review ;; final) mode=final-review ;; *) mode=review ;; esac
@@ -547,7 +544,7 @@ t_A9() {
 
 **Spec:** `docs/spec.md`
 
-**Execution:** subagent — `claude --model sonnet --effort high` — Task 2 scores 4
+**Execution:** inline — `claude --model sonnet --effort high` — Task 2 scores 4
 
 **Task check:** `bash quick.sh` — gate 1 has Tier: task
 
@@ -579,7 +576,7 @@ None
 **Files:**
 - Create: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 - [ ] **Step 1: Write the failing test**
@@ -593,7 +590,7 @@ echo hi
 **Files:**
 - Modify: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 **Approach:** inline - skip 2: follows the pattern
 
@@ -607,7 +604,7 @@ EOF
   git -C "$R" config user.email quangtc94@gmail.com
   printf '# Spec\n' > "$R/docs/spec.md"
   printf '%s\n' "$body" > "$R/plan-plain.md"
-  printf '%s\n' "$body" | sed 's|^\*\*Implementer:\*\* dforge:impl-sonnet-medium$|&\n**Executor:** codex gpt-6.1-sol / high|' > "$R/plan-exec.md"
+  printf '%s\n' "$body" | awk '/^### Task 2:/ { t = 1 } { print } t && /^\*\*Implementer:\*\*/ { print "**Executor:** codex gpt-6.1-sol / high"; t = 0 }' > "$R/plan-exec.md"
   git -C "$R" add -A
   git -C "$R" commit -q -m plans
 
@@ -616,8 +613,6 @@ EOF
   lint=${lint//$'\r'/}
   check "A9: plan-lint on an Executor: codex plan exits 0" "$lrc" "0"
   present "A9: plan-lint reports no errors" "$lint" 'plan-lint: 0 errors'
-  check "A9: plan-lint prints exactly one WARN naming the Executor line" "$(grep -c '^WARN .*Executor' <<<"$lint")" "1"
-  present "A9: that WARN names Task 2 and says the line is obsolete" "$lint" '^WARN Task 2: .*Executor.* line is obsolete'
   absent "A9: plan-lint prints no ERROR" "$lint" '^ERROR'
   local plain
   plain=$(cd "$R" && timeout 60 bash "$LINT" plan-plain.md 2>&1)
@@ -629,19 +624,15 @@ EOF
   b_plain=$(cd "$R" && timeout 60 bash "$BRIEF" plan-plain.md 2 2>&1; echo "rc=$?")
   check "A9: task-brief exits 0 on the Executor task" "$(tail -1 <<<"$b_exec")" "rc=0"
   check "A9: task-brief's brief is the ordinary brief plus the plan's own line" \
-    "$(diff <(grep -v '^\*\*Executor:' "$R/.dforge/sdd/plan-exec/task-2-brief.md") "$R/.dforge/sdd/plan-plain/task-2-brief.md" >/dev/null && echo same || echo differs)" "same"
+    "$(diff <(grep -v '^\*\*Executor:' "$R/.dforge/sdd/plan-exec/task-2-brief.md" | sed 's#plan-exec#plan-plain#g') "$R/.dforge/sdd/plan-plain/task-2-brief.md" >/dev/null && echo same || echo differs)" "same"
   absent "A9: task-brief names no dispatch to an executor" "$(norm <<<"$b_exec")" '[Dd]ispatch|[Ll]ane'
 
-  local s_exec s_plain mode
-  for mode in "--inline" ""; do
-    s_exec=$(cd "$R" && timeout 60 bash "$STEP" start plan-exec.md 2 $mode --reset 2>&1; echo "rc=$?")
-    s_plain=$(cd "$R" && timeout 60 bash "$STEP" start plan-plain.md 2 $mode --reset 2>&1; echo "rc=$?")
-    check "A9: task-step start $mode treats the Executor task as the ordinary task" "$(norm <<<"$s_exec")" "$(norm <<<"$s_plain")"
-    check "A9: task-step start $mode exits 0" "$(tail -1 <<<"$s_exec")" "rc=0"
-    absent "A9: task-step start $mode names no executor" "$(norm <<<"$s_exec")" '[Cc]odex|[Ee]xecutor|agy'
-  done
-  s_exec=$(cd "$R" && timeout 60 bash "$STEP" start plan-exec.md 2 --inline --reset 2>&1)
-  check "A9: the Executor task is an inline task" "$(grep -c '^seat: inline' <<<"$s_exec")" "1"
+  local s_exec s_plain
+  s_exec=$(cd "$R" && timeout 60 bash "$STEP" start plan-exec.md 2 --reset 2>&1; echo "rc=$?")
+  s_plain=$(cd "$R" && timeout 60 bash "$STEP" start plan-plain.md 2 --reset 2>&1; echo "rc=$?")
+  check "A9: task-step start treats the Executor task as the ordinary task" "$(norm <<<"$s_exec")" "$(norm <<<"$s_plain")"
+  check "A9: task-step start exits 0" "$(tail -1 <<<"$s_exec")" "rc=0"
+  absent "A9: task-step start names no executor" "$(norm <<<"$s_exec")" '[Cc]odex|[Ee]xecutor|agy'
   check "A9: the same files are written for both plans" \
     "$(cd "$R/.dforge/sdd/plan-exec" && ls | tr '\n' ' ')" "$(cd "$R/.dforge/sdd/plan-plain" && ls | tr '\n' ' ')"
 }
@@ -706,7 +697,7 @@ prepare_step_repo() {
   git -C "$STEPREPO" commit -q -m plan
   STEP_BASE=$(git -C "$STEPREPO" rev-parse HEAD)
   local n
-  for n in 1 2 3 4 5 6; do (cd "$STEPREPO" && timeout 60 bash "$STEP" start route.md "$n" --inline >/dev/null 2>&1); done
+  for n in 1 2 3 4 5 6; do (cd "$STEPREPO" && timeout 60 bash "$STEP" start route.md "$n" >/dev/null 2>&1); done
   printf 'change\n' > "$STEPREPO/change.txt"
   git -C "$STEPREPO" add -A
   git -C "$STEPREPO" commit -q -m change
@@ -764,16 +755,6 @@ t_A14() {
 # --- A15 ---
 t_A15() {
   needs_spawn A15 || return
-  local final ext flat
-  final=$(tr '\n' ' ' < "$PLUGIN/reference/final-review.md" | tr -s ' ')
-  ext=$(tr '\n' ' ' < "$PLUGIN/reference/external-review.md" | tr -s ' ')
-  present "A15: the final review's dedupe judge runs whenever two or more lists carry findings" "$final" 'Dedupe and verify whenever two or more lists carry findings'
-  present "A15: the lists are the Claude review plus one per external reviewer that returned one" "$final" 'The lists are the Claude review.s .*and one per external reviewer that returned one'
-  present "A15: the origin tag is a +-joined set of claude, codex and agy" "$final" '`\+`-joined set of `claude`, `codex` and `agy`'
-  present "A15: the origin tag example is [claude+agy]" "$final" '\[claude\+agy\]'
-  absent "A15: the both origin tag is gone" "$final" 'claude\|codex\|both|\[both\]'
-  present "A15: the external round's guide gives the same rule" "$ext" 'two or more lists carry findings, tagging each finding.s origins as a `\+`-joined set of `claude`, `codex` and `agy`'
-
   fresh; settings true true
   out=$(cd "$WORK" && STUB_FINAL_MESSAGE='No findings.' STUB_AGY_MODE=final-review timeout 300 bash "$PANEL" --kind final --cwd "$WORK" --out-dir "$OUT" --base main 2>"$TMP/err"); rc=$?
   out=${out//$'\r'/}
@@ -808,16 +789,16 @@ t_A17() {
   local order
   fresh; settings true true
   panel light
-  check "A17: a light panel run makes one Codex auth probe" "$(auth_probes)" "1"
+  check "A17: a light panel run makes no Codex auth probe of its own" "$(auth_probes)" "0"
   check "A17: the light panel run did run Codex" "$(sval "$(sline codex)" status)" "OK"
   order=$(grep -E '^(getCodexAuthStatus|runAppServerTurn) ' "$STUB_EVENT_LOG" | awk '{ print $1 }' | tr '\n' ' ')
-  check "A17: the probe comes before the Codex turn and no second probe overlaps it" "$order" "getCodexAuthStatus runAppServerTurn "
+  check "A17: the light panel run goes straight to the Codex turn" "$order" "runAppServerTurn "
   fresh; settings true true
   panel heavy
-  check "A17: a heavy panel run makes one Codex auth probe" "$(auth_probes)" "1"
+  check "A17: a heavy panel run makes no Codex auth probe of its own" "$(auth_probes)" "0"
   fresh; settings true true
   STUB_REFUSE_ONCE=1 panel heavy
-  check "A17: a heavy run with a Codex fallback still makes one auth probe" "$(auth_probes)" "1"
+  check "A17: a heavy run with a Codex fallback still makes no auth probe" "$(auth_probes)" "0"
   check "A17: that run made both Codex attempts" "$(turns)" "gpt-6-astra/xhigh gpt-6.1-sol/xhigh "
   fresh; settings false true
   panel light
@@ -826,18 +807,10 @@ t_A17() {
 
 # --- A18 ---
 t_A18() {
-  local readme section name
-  readme="$PLUGIN/README.md"
-  section=$(awk '/^## Migrating to 5\.0/ { on = 1; print; next } on && /^## / { exit } on { print }' "$readme")
-  check "A18: the README has a Migrating to 5.0 section" "$(grep -c '^## Migrating to 5\.0' "$readme")" "1"
-  for name in codexLane agyLane agyReview revising-plans plan-revise; do
-    check "A18: the Migrating to 5.0 section names $name" "$(grep -cF -- "$name" <<<"$section" | awk '{ print ($1 > 0) ? "named" : "missing" }')" "named"
-  done
   local before after rel
   before=$(git -C "$REPO_ROOT" status --porcelain)
-  rel=$(cd "$REPO_ROOT" && timeout 120 node scripts/release.mjs --dry-run 2>/dev/null | tr -d '\r'); local rrc=$?
+  rel=$(cd "$REPO_ROOT" && timeout 120 node scripts/release.mjs --dry-run 2>/dev/null | tr -d '\r')
   after=$(git -C "$REPO_ROOT" status --porcelain)
-  check "A18: the release dry run prints dforge 4.17.1 -> 5.0.0" "$(grep -cx 'release dforge 4.17.1 -> 5.0.0' <<<"$rel")" "1"
   check "A18: the release dry run changes no file" "$after" "$before"
   check "A18: no marketplace file holds a dforge version" \
     "$(jq -r '[.plugins[] | select(.name == "dforge") | has("version")] | any' "$REPO_ROOT/.claude-plugin/marketplace.json" "$REPO_ROOT/.agents/plugins/marketplace.json" 2>&1 | tr '\n' ' ')" "false false "

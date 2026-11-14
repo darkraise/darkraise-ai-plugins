@@ -26,8 +26,10 @@ back. Before anything else:
    Otherwise run `scripts/context-size`; on exit 5, finish the task in
    flight, then invoke dforge:handoff. In an auto run, exit 6 (`compact`) is
    [auto-run.md](../../reference/auto-run.md) §The budget line.
-4. Re-read this skill in full before the next task. If a task's last ledger
-   line is `fix round R/2`, also re-read
+4. Re-read this skill in full before the next task, and re-read
+   `<workspace>/plan-header.md`: a brief for a task you implement points at it
+   instead of repeating the Global Constraints and Contracts. If a task's last
+   ledger line is `fix round R/2`, also re-read
    [delegated-task.md](../../reference/delegated-task.md) before continuing.
 
 ## Auto run
@@ -54,12 +56,13 @@ What changes here:
   a Contracts entry the deferred task's `Produces:` line cites): write
   the `Task <N>: complete (deferred by the auto run)` line auto-run.md §Rulings
   gives, and a deferred register row for each. Other tasks keep running.
-- **Each task:** right after its `Task N: complete` line, run
-  `scripts/auto-run task-complete`. After each task, run the Fable batch when
-  `scripts/auto-run decision list` prints anything. When that line leaves every
+- **Each task:** `scripts/task-close` runs `scripts/auto-run task-complete`
+  for you right after it writes the `Task N: complete` line, and prints the
+  decisions waiting. After each task, run the Fable batch when it printed any
+  (`scripts/auto-run decision list` shows the same). When that line leaves every
   task with its `complete` line, run `scripts/auto-run phase final` next, before any budget check and
   before the turn ends, so a compaction from there on never hands off.
-  A `task-complete` exit 5 means the run stopped (a task was completed
+  A `task-close` exit 5 means the run stopped (a task was completed
   on the run base, off its branch or in the primary checkout, or a carried path was committed):
   end as auto-run.md §Stopping says.
 - **The budget line** reads `budget (auto…)`. On `compact` (exit 6), finish
@@ -148,9 +151,7 @@ Read [setup.md](references/setup.md) before you set up the workspace, the ledger
 
 ## The Ledger
 
-This skill and dforge:subagent-driven-development share one grammar, so
-a plan that changes mode mid-run leaves one readable record. The lines this
-mode writes:
+The lines this skill writes:
 
 ```
 # SDD ledger — plan: <path>
@@ -182,26 +183,26 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   `Review depth: <light|standard|full> (<reason>)` is written once, before
   step 0 of the final review, and is read on recovery, never recomputed; it is
   not a `Final review:` line, which recovery keys on.
-- After each `complete` and `fix round` line, run `scripts/darkmem-sync push`;
-  at `complete`, also promote the task's durable facts
-  ([project-state.md](../../reference/project-state.md) §darkmem sync points).
+- With `darkmemEnabled` true, after each `complete` and `fix round` line, run
+  `scripts/darkmem-sync push`, and at `complete` also promote the task's durable
+  facts ([project-state.md](../../reference/project-state.md) §darkmem sync points).
+  With it false, run neither.
 - `implementer inline` is this mode's assigned line. You are the implementer,
   so the agent slot says so, and `base` is `git rev-parse --short HEAD` taken
-  before you change anything.
-- `unreviewed` is where subagent mode writes `review clean`. No judge scored
-  this task, and saying so is what keeps the two modes' complete lines honest.
-  The branch's review is the `Final review:` line.
+  before you change anything. `task-brief --open` writes it, once per task;
+  `task-close` writes the `complete` line from that base to `HEAD`.
+- `unreviewed` says no judge scored this task. The branch's review is the
+  `Final review:` line.
 - There is no scores clause. A scores clause appears only when a judge scored
   the task.
-- The fix cap is 3 for a task you implement, not subagent mode's 5. You are fixing your own work, so a
+- The fix cap is 3 for a task you implement; a delegated task keeps 5. You are fixing your own work, so a
   fourth round is not a better round. A fix-round line is written after the
-  round, with its outcome, exactly as subagent mode writes its own: `passing`
+  round, with its outcome: `passing`
   when the task's verifications now pass, `still failing` otherwise.
   After `fix round 3/3`, the task goes to the ruling seat as a `breaker` item.
   In an auto run it goes on the pending list, as an exhausted ladder does.
-- This mode writes an escalation line only on an owner request
-  ([setup.md](references/setup.md)); an older ledger may hold one from a
-  failed task. recovery.md and `scripts/next-step` read either as a switch.
+- An older ledger may hold a `Task <N>: escalated inline -> subagent` line from
+  the retired subagent mode; recovery.md says how to read it.
 - A ruling-seat `BLOCKED` that belongs to no task (a Header amendment) is
   logged against the lowest-numbered task without a complete line, so
   recovery reads it as that task's terminal line.
@@ -230,8 +231,9 @@ budget before every task at no extra request:
   then invoke dforge:handoff. Never hand off in the middle of a task. The budget holds one task's worst growth.
 
 The plan's last two tasks never hand off in strict mode: their brief prints
-`budget (last 2 tasks)` or `budget (last task)` and says `ok` past the budget. Run `scripts/context-size --final` after the last
-task's `Task <N>: complete` line for the record: it never says `handoff`.
+`budget (last 2 tasks)` or `budget (last task)` and says `ok` past the budget. After the last
+task's `Task <N>: complete` line, `task-close` prints the `--final` budget line
+for the record (run `scripts/context-size --final` yourself if it did not): it never says `handoff`.
 After every earlier task, the next brief's budget line is the check.
 Finishing is never budget-checked. In an auto run `--final` also moves the
 run to the final phase, and a `compact` line still ends the turn on
@@ -246,16 +248,20 @@ context fills, Claude Code's own compaction is the backstop.
 
 For each task, in order:
 
-1. **Read the brief.** Run `scripts/task-brief PLAN_FILE N` and read the
-   file it prints. It carries the task text with every
-   amendment applied, the header's Global Constraints and Contracts, and the
-   budget line. You never read task text any other way: reading the plan file
-   directly skips the amendments. If the brief's second line is
-   `**Review:** per-task — risk 3`, run
+1. **Open the task.** Run `scripts/task-brief --open PLAN_FILE N` and read the
+   brief file it prints. One call writes the brief (the task text with every
+   amendment applied), rewrites `<workspace>/plan-header.md`, appends
+   `Task <N>: implementer inline (assigned; base <sha7>)` once, and prints
+   the `task check:` line and the budget line. A brief for a task you
+   implement points at `plan-header.md` for the Global Constraints and
+   Contracts: read that file the first time in a session and again after a
+   compaction, not before every task. You never read task text any other way:
+   reading the plan file directly skips the amendments. If the brief's second
+   line is `**Review:** per-task — risk 3`, run
    [delegated-task.md](../../reference/delegated-task.md) §The session review
-   loop instead of steps 2 to 7, then go to step 8.
-2. **Open the task.** Take the base commit (`git rev-parse --short HEAD`) and
-   append `Task <N>: implementer inline (assigned; base <sha7>)`.
+   loop instead of steps 2 to 6, then go to step 7.
+2. **Take the base from the open line.** The `base` on that ledger line is the
+   commit the task's range starts from; do not take another.
 3. **Implement exactly what the task names.** Follow its steps in order. Where
    the task says to write a test first, use
    dforge:test-driven-development. Touch only the files and lines the
@@ -264,11 +270,11 @@ For each task, in order:
 4. **Run the verifications as written.** A step that says `Expected: PASS` is
    not done until you have seen it pass. Run the focused test while you work
    and the task check once before committing, in place of the full suite.
-   The task check is the plan header's `**Task check:**` line, read with
-   `scripts/task-brief --header PLAN_FILE`. With a task check of `none`, run
-   the integration check instead on tasks numbered a multiple of 3 and on the
-   last task. A plan with no `**Task check:**` line keeps the full suite once
-   before committing.
+   The task check is the `task check:` line `--open` printed (the plan
+   header's `**Task check:**` line). With a task check of `none`, the line
+   says whether the integration check is due: every task numbered a multiple
+   of 3 and the last. A plan with no `**Task check:**` line keeps the full
+   suite once before committing.
 5. **Self-review your own diff** against the brief before you commit. This is
    the only per-task gate this mode has, so it is not a formality: read
    `git diff`, and check that every step is done, that nothing outside the
@@ -276,17 +282,23 @@ For each task, in order:
    unimplemented function. A test that passes with `return <constant>` is not
    a test.
 6. **Commit** as the task's commit step specifies.
-7. **Close the task.** Append the complete line with its checkpoint, in the
-   same message as your other bookkeeping, and mark the todo complete. In an
-   auto run, run `scripts/auto-run task-complete`, then the Fable batch when
-   `scripts/auto-run decision list` prints anything. Then
-   run [delegated-task.md](../../reference/delegated-task.md) §Early CI when
-   the header's `**Early CI:**` line names this task.
-8. **Check the budget after the last task.** Run
-   `scripts/context-size --final`; in an auto run it moves the run to the
-   final phase, and a `compact` line still ends the turn on
-   `Auto run: compacting`. After any other task, go to the
-   next task's step 1: its brief prints the same budget line.
+7. **Close the task.** Run
+   `scripts/task-close PLAN_FILE N '<checkpoint>'` in the same message as your
+   other bookkeeping, and mark the todo complete. The checkpoint is the text
+   after the dash on the complete line, with its five fields (`done:`,
+   `verified:`, `remaining:`, `discovered:`, `assumptions:`); a risk-3 task
+   adds `--review '<review clean; scores …>'`, in place of `unreviewed`. It
+   writes the `Task <N>: complete (commits <base>..<head>, …)` line, pushes
+   the ledger to darkmem when that is on, and in an auto run records the
+   completion and lists the decisions waiting, which you take to the Fable
+   batch. When its output says `early CI: due after this task`, run
+   [delegated-task.md](../../reference/delegated-task.md) §Early CI.
+8. **Check the budget after the last task.** After the last task
+   `task-close` prints the `--final` budget line itself (in an auto run it
+   moves the run to the final phase, and a `compact` line still ends the turn
+   on `Auto run: compacting`); run `scripts/context-size --final` only when it
+   did not. After any other task, go to the next task's step 1: its brief
+   prints the budget line.
 
 **When a verification will not pass.** Fix, re-run, then append
 `Task <N>: fix round R/3 (<what failed>; commits a..b; passing | still failing)`

@@ -61,5 +61,12 @@ check "a non-numeric width falls back to two cells" "$DCC_ICON_W" "2"
 dcc_icons_init
 check "an empty cache falls back to unicode" "$DCC_ICON_MODE" "unicode"
 
+# --- a copy at a custom destination -------------------------------------------
+mkdir -p "$cache_dir/custom/lib" "$cache_dir/home"
+cp "$HERE/../scripts/lib/icons.sh" "$cache_dir/custom/lib/icons.sh"
+printf 'nerd 2\n' > "$cache_dir/custom/icons.detected"
+check "an installed copy reads the probe result beside itself" \
+  "$(unset DCC_STATUSLINE_HOME; HOME="$cache_dir/home"; source "$cache_dir/custom/lib/icons.sh"; dcc_icons_init; printf '%s' "$DCC_ICON_MODE")" "nerd"
+
 rm -rf "$cache_dir"
 finish

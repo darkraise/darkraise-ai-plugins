@@ -36,6 +36,23 @@ check "no config: latest.md from a worktree" "$(cd "$WT" && dforge_latest_file)"
 check "no config: a DIR argument" "$(dforge_docs_root "$WT")" "$WT/docs/dforge"
 check "outside git: local under the directory" "$(cd "$TMP" && dforge_docs_root)" "$TMP/docs/dforge"
 
+# --- a home with no darkmem section and no applied family starts no node ---
+mkdir -p "$TMP/marknode" "$HOME/.dforge"
+printf '#!/bin/sh\n: > "%s"\nexit 1\n' "$TMP/node-ran" > "$TMP/marknode/node"
+chmod +x "$TMP/marknode/node"
+printf '{"handoffTokens": 300000, "darkmemEnabled": true}\n' > "$HOME/.dforge/config.json"
+check "settings only: docs root" "$(cd "$REPO" && PATH="$TMP/marknode:$PATH" dforge_docs_root)" "$TOP/docs/dforge"
+check "settings only: latest.md from a worktree" "$(cd "$WT" && PATH="$TMP/marknode:$PATH" dforge_latest_file)" "$TOP/.dforge/handoff/latest.md"
+check "settings only: node is not started" "$([ -e "$TMP/node-ran" ] && echo ran || echo skipped)" "skipped"
+printf '{"darkmem": {}}\n' > "$HOME/.dforge/config.json"
+(cd "$REPO" && PATH="$TMP/marknode:$PATH" dforge_docs_root > /dev/null 2>&1)
+check "a darkmem section: node decides" "$([ -e "$TMP/node-ran" ] && echo ran || echo skipped)" "ran"
+rm -f "$TMP/node-ran" "$HOME/.dforge/config.json"
+printf '{}\n' > "$HOME/.dforge/stores.json"
+(cd "$REPO" && PATH="$TMP/marknode:$PATH" dforge_docs_root > /dev/null 2>&1)
+check "a stores record: node decides" "$([ -e "$TMP/node-ran" ] && echo ran || echo skipped)" "ran"
+rm -rf "$TMP/node-ran" "$HOME/.dforge"
+
 # --- the four applied combinations, from the primary checkout and a worktree ---
 for docs in local darkmem; do
   for progress in local darkmem; do

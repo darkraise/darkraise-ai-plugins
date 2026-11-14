@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { currentBranch, head, relative } from '../repo.mjs';
 import { runCommand } from '../run.mjs';
-import { loadState, planState, saveState } from '../state.mjs';
+import { loadState, planState, updateState } from '../state.mjs';
 import { activePlan, refreshHud } from '../status.mjs';
 import { fail, mustGit, nowIso, tail } from '../util.mjs';
 
@@ -17,7 +17,8 @@ export async function runGates(ctx, { names = [], out }) {
   const active = activePlan(ctx, state);
   const results = [];
   // A pass on uncommitted changes says nothing about the commit.
-  const dirty = Boolean(mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=no']).trim());
+  const dirty = mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=normal']).split('\n')
+    .some(entry => entry && !(entry.startsWith('??') && entry.slice(3).startsWith('docs/dflow/')));
   for (const gate of selected) {
     const logFile = path.join(ctx.paths.logs, active?.slug ?? '_', `gate-${gate.name}.log`);
     fs.rmSync(logFile, { force: true });
@@ -35,8 +36,9 @@ export async function runGates(ctx, { names = [], out }) {
   const sha = head(ctx.root);
   if (!names.length) {
     if (active) {
-      planState(state, active.slug).gates = { sha, at: nowIso(ctx.env), ok, dirty, results };
-      saveState(ctx.paths, state);
+      updateState(ctx.paths, fresh => {
+        planState(fresh, active.slug).gates = { sha, at: nowIso(ctx.env), ok, dirty, results };
+      });
     }
     fs.mkdirSync(ctx.paths.stateDir, { recursive: true });
     for (const result of results) fs.appendFileSync(path.join(ctx.paths.stateDir, 'gate-history.jsonl'), `${JSON.stringify({ sha, branch: currentBranch(ctx.root), ...result })}\n`);

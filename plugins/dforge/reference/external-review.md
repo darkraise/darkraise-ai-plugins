@@ -22,9 +22,7 @@ last row the fallback, each row `model effort seconds`: `codex-judge`
 
 Under an inline plan only risk-3 tasks get a per-task review and the final
 external round runs at depth full only, so the light tier never runs there:
-Sol and Argon are reached as heavy fallbacks. The light tier serves per-task
-and batch reviews in the deprecated subagent mode. A group review keeps its
-Claude band judge and gets no panel.
+Sol and Argon are reached as heavy fallbacks.
 
 ## The panel
 
@@ -158,7 +156,7 @@ own prompt, `criteria/codex-final-review.md` followed by
 and [final-review.md](final-review.md) step 3 runs its dedupe judge whenever
 two or more lists carry findings, tagging each finding's origins as a
 `+`-joined set of `claude`, `codex` and `agy`, for example `[claude+agy]`.
-At depth light or standard the round is skipped and said aloud.
+At depth light or standard the round is skipped and said aloud, and so is a depth-full round whose route line says `external=off`.
 
 ## Quota and the Opus row
 
@@ -208,8 +206,6 @@ diagnostic line on stderr.
 | Field | Required | What it names |
 |---|---|---|
 | `id` | yes | The family id: the panel's `<id>-judge` prefix and its out file's stem |
-| `locator` | yes | The script that reports presence, version and install root |
-| `probe.command`, `probe.op` | yes | The Node probe and the operation that answers `.authed` |
 | `gate` | yes | The family's gate script |
 | `runner` | yes | The review runner the panel starts |
 | `session_dir` | yes | The per-session state directory under `$HOME/.claude/dforge/` |
@@ -218,11 +214,8 @@ diagnostic line on stderr.
 | `session_dir_env` | no | An environment variable that replaces `session_dir` |
 | `priority` | no | A non-negative integer; lower ranks first in `executors ranked` (agy 10, codex 20) |
 | `blocks.judge` | no | The family's judge block in [ladder.md](ladder.md) |
-| `reasons.not_enabled`, `reasons.not_installed`, `reasons.missing`, `reasons.logged_out`, `reasons.probe_failed` | no | The roster message for each unusable state |
 
 `${DR_EXECUTORS_DIR}` replaces the registry directory when set.
-`scripts/detect-executors.sh [ID ...]` probes the named ids, or every
-registered id, and prints one roster row each.
 
 ## Per-family: codex
 

@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { addRow, emptyBoard, parseBoard, rewriteRow } from '../board.mjs';
 import { lintPlan, setField, template } from '../plan.mjs';
 import { currentBranch, relative } from '../repo.mjs';
-import { appendEvent, loadState, saveState } from '../state.mjs';
+import { appendEvent, updateState } from '../state.mjs';
 import { activePlan, loadPlan, openPlans, refreshHud } from '../status.mjs';
 import { fail, git, mustGit, readText, today } from '../util.mjs';
 
@@ -53,9 +53,9 @@ function create(ctx, argv, out) {
   const number = linkBoardRow(ctx, { number: values.board === undefined ? undefined : Number(values.board), item: values.title, planRel, acceptance: values.acceptance });
   fs.mkdirSync(ctx.paths.plans, { recursive: true });
   fs.writeFileSync(file, template({ title: values.title, branch: values.branch ?? currentBranch(ctx.root) ?? '…', board: number }));
-  const state = loadState(ctx.paths);
-  state.plan = planRel;
-  saveState(ctx.paths, state);
+  updateState(ctx.paths, state => {
+    state.plan = planRel;
+  });
   appendEvent(ctx, { plan: path.basename(file, '.md'), event: 'planned' });
   out(`Created ${planRel}, linked to board row ${number}. Fill it in, then run \`dflow plan check\`.`);
   refreshHud(ctx);
@@ -100,9 +100,9 @@ function approve(ctx, argv, out) {
     git(ctx.root, ['reset', '-q', '--', ...committed]);
     fail(`the approval commit failed and the plan is not approved:\n${(commit.stderr || commit.stdout).trim()}`);
   }
-  const state = loadState(ctx.paths);
-  state.plan = entry.rel;
-  saveState(ctx.paths, state);
+  updateState(ctx.paths, state => {
+    state.plan = entry.rel;
+  });
   appendEvent(ctx, { plan: entry.slug, event: 'approved' });
   out(`Approved ${entry.rel} and committed it. Next: /dflow:build`);
   refreshHud(ctx);
@@ -111,9 +111,9 @@ function approve(ctx, argv, out) {
 
 function use(ctx, argv, out) {
   const entry = resolvePlan(ctx, argv[0] ?? fail('usage: dflow plan use <file>'));
-  const state = loadState(ctx.paths);
-  state.plan = entry.rel;
-  saveState(ctx.paths, state);
+  updateState(ctx.paths, state => {
+    state.plan = entry.rel;
+  });
   out(`Active plan: ${entry.rel}`);
   refreshHud(ctx);
   return 0;

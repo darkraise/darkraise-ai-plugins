@@ -5,7 +5,6 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
-. "$HERE/fixtures/sdd-text.sh"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -21,12 +20,9 @@ check "critic: criteria ids" \
   "$(grep -o '{#[a-z0-9_]\{1,\}}' "$AC" 2>/dev/null | tr -d '{#}' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')" \
   "failure operability simplest unstated"
 
-for f in "$SDD_LEDGER" "$P/skills/executing-plans/SKILL.md"; do
-  s=$(basename "$(dirname "$f")")/$(basename "$f")
-  names "$s: complete line" "$f" 'Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo'
-done
+names "executing-plans: complete line" "$P/skills/executing-plans/SKILL.md" 'Acceptance QA: complete — <p> pass, <f> fail, <k> flaky, <c> cannot-test, <d> demo'
 
-TRP="$P/skills/subagent-driven-development/references/task-reviewer-prompt.md"
+TRP="$P/reference/prompts/task-reviewer-prompt.md"
 names "task reviewer: lens section" "$TRP" '## Lens Criteria'
 names "task reviewer: the placeholder" "$TRP" '`[LENS_FILES]` — OPTIONAL'
 
