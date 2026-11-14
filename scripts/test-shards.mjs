@@ -1,41 +1,13 @@
-// Approximate Windows seconds from Actions run 40514782333. That run cut off
-// faster-plans and task-step, whose weights are extrapolated from the share of
-// their checks that ran, and ui-proof, which keeps its weight from 39725084214.
-// Run 40753974623 (2026-10-29) supplied the suites the speed-and-cost plans
-// added and those that had grown; task-step-base, cut off there, is
-// extrapolated from task-step-settle's Windows-to-Linux ratio.
-// Run 41307035161 (2026-11-01) supplied speed-and-cost-followups, whose A12
-// part no longer re-runs two suites under test-all (371 s, 0.4 s and 98 s),
-// and typed-seats-and-drafting.acceptance.sh.
-// plan-lint crossed its
-// 1200 s cap in run 41566860573; its weight is the last green run's 1049 s
-// scaled by the 21% its Linux time grew since. task-step is the sum of its
-// parts in 41311901567.
-// Run 41632296991 (2026-11-03) took 847 s for task-step-base and timed out
-// its shard at 25 minutes. Run 41639945723 hit its 900 s limit (main's push run
-// 41577294934 took 889 s), so the limit is 1200 s and the weight 900 s.
-// Run 41636062852 (2026-11-03) timed shard 1 out; plan-amend, roadmap,
-// speed-and-cost.acceptance, task-loop-steps.acceptance, task-step-settle,
-// task-step-suite and turn-end take the seconds that run measured.
-// Run 42498131582 (2026-11-08) supplied both auto-run-worktree-setting
-// acceptance suites (255 s for the QA one, 148 s for the plan's).
-// Run 42575761658 (2026-11-09) timed shard 11 out three times with both
-// auto-run-worktree-setting suites beside task-step's start part. Those
-// suites, clean-session-phases.acceptance and faster-plans take the seconds
-// measured there; task-step is the sum of its parts, the start part
-// extrapolated to 600 s from the 140 of 147 checks reached before the cut.
-// Run 42591467307 (2026-11-09) supplied inline-only and inline-only-execution
-// (110 s and about 200 s), which had weights of 12 s and 40 s.
-// reviewer-only-externals.acceptance has no Windows run yet: its 200 s is
-// an estimate from about 47 s on Linux.
+// Approximate Windows seconds from recent Actions runs; this file's git history
+// names them. A weight for a suite with no Windows run yet is an
+// estimate from its Linux time.
 // These are scheduling weights, not timeouts. The jobs that are not shell
 // suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
 // take the default weight of 10. Every shell suite needs an entry here, with a
 // weight of at most 80% of the suite's limit; tests/test-shards.test.mjs
 // enforces both. A suite test-all runs in parts splits its weight evenly among
 // them, unless its entry maps each part to its own weight, as task-step's does:
-// run 43064426015 (2026-11-11) timed shard 12 out twice with its start part
-// (615-664 s) and verdict part (390-418 s) together, each weighted 350 s.
+// its start and verdict parts together overran one shard at an even split.
 export const windowsSeconds = {
   'run-all.sh': 157,
   'agy-gate.test.sh': 20,

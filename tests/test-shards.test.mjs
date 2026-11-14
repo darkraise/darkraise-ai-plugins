@@ -24,12 +24,15 @@ function jobsWithLimits() {
 const shell = (name, limit, ...part) => ['bash', [`plugins/dforge/tests/${name}`, ...part], limit];
 
 test('Windows shards cover every discovered suite exactly once', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/validate.yml', import.meta.url), 'utf8');
+  const count = Number(/--shard \$\{\{ matrix\.shard \}\}\/(\d+)/.exec(workflow)?.[1]);
+  assert.ok(count > 0, 'validate.yml names the shard count');
   const all = list();
-  const shards = Array.from({ length: 14 }, (_, i) => list('--shard', `${i + 1}/14`));
+  const shards = Array.from({ length: count }, (_, i) => list('--shard', `${i + 1}/${count}`));
   assert.ok(shards.every(shard => shard.length > 0));
   assert.deepEqual(shards.flat().sort(), all.sort());
   assert.equal(new Set(shards.flat()).size, all.length);
-  assert.deepEqual(list('--shard', '1/14'), shards[0]);
+  assert.deepEqual(list('--shard', `1/${count}`), shards[0]);
 });
 
 test('a job without a weight is scheduled at the default weight and unsharded runs retain their order', () => {
