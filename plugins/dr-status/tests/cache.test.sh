@@ -159,5 +159,29 @@ ln -s "$tmp/victim" "$DCC_CACHE_DIR/git-$DCC_CACHE_KEY"
 DCC_CACHE_FORCE=1 dcc_git_cached "$tmp/repo"
 check "a symlinked git entry is not written through" "$(cat "$tmp/victim")" "keep"
 
+# --- a timed-out status keeps the last good entry -------------------------------
+# timeout(1) exits 124; a slow repository must not flicker to "no branch".
+mkdir -p "$tmp/slow"
+DCC_CACHE_FORCE=0
+DCC_NOW=2000
+dcc_git_cached "$tmp/slow"
+: > "$GIT_CALLS"
+DCC_NOW=2020
+GIT_STATUS_RC=124 dcc_git_cached "$tmp/slow"; rc=$?
+check "a timed-out refresh still reports a repository" "$rc" "0"
+check "a timed-out refresh keeps the last branch"      "$DCC_GIT_BRANCH" "feat/dcc-statusline"
+check "a timed-out refresh keeps the last counts"      "$DCC_GIT_STAGED" "2"
+: > "$GIT_CALLS"
+DCC_NOW=2025
+dcc_git_cached "$tmp/slow"; rc=$?
+check "the kept entry is re-stamped and serves warm" "$(calls):$rc" "0:0"
+mkdir -p "$tmp/slow-cold"
+DCC_NOW=2030
+if GIT_STATUS_RC=124 dcc_git_cached "$tmp/slow-cold"; then rc=0; else rc=1; fi
+check "a timed-out cold read reports no repository" "$rc" "1"
+DCC_NOW=2045
+if GIT_STATUS_RC=128 dcc_git_cached "$tmp/slow"; then rc=0; else rc=1; fi
+check "a non-timeout failure still drops the entry" "$rc" "1"
+
 rm -rf "$tmp"
 finish
