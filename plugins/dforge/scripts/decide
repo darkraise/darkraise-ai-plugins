@@ -43,6 +43,7 @@ evidence_ok() { # evidence_ok FILE… — every file may be sent
     # git check-ignore reports nothing under the git directory, whose config can hold credentials.
     { [ -n "$gitdir" ] && under "$c" "$gitdir"; } && return 1
     { [ -n "$common" ] && under "$c" "$common"; } && return 1
+    case /$c/ in */.git/*) return 1 ;; esac
     if { [ -n "$docs" ] && under "$c" "$docs"; } || { [ -n "$state" ] && under "$c" "$state"; }; then :
     elif [ -n "$top" ] && under "$c" "$top"; then
       git -C "$top" check-ignore -q -- "$c" 2>/dev/null

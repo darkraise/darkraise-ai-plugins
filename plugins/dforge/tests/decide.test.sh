@@ -147,6 +147,7 @@ check "A6: shadow logs what the answer would have ruled" "$(last '[.mode, .outco
 # --- A4, A5: what may be sent as evidence ---
 settings '{"decisionApi":"on","apiBudgetOpenai":10}'
 printf 'outside\n' > "$TMP/outside.txt"
+mkdir -p "$WORK/vendor/.git"; printf '[remote "origin"]\n' > "$WORK/vendor/.git/config"
 head -c 400001 /dev/zero | tr '\0' 'a' > "$WORK/big.txt"
 n=$(sent)
 while IFS='|' read -r name file; do
@@ -156,6 +157,7 @@ done <<ROWS
 a file outside the working tree and both roots|$TMP/outside.txt
 a file git ignores|secret.env
 a file in the git directory|.git/config
+a file in a nested repository's git directory|vendor/.git/config
 more than 400000 bytes|big.txt
 a file that does not exist|docs/missing.md
 ROWS
