@@ -62,7 +62,10 @@ _dcc_edit_settings() { # _dcc_edit_settings <dir> <jq-program>
   shift 2
   local settings="$dir/settings.json"
   mkdir -p -- "$dir" || return 1
-  tmp="$(mktemp "$settings.XXXXXX")" || return 1
+  dcc_link_target "$settings" || return 1
+  settings="$DCC_LINK_TARGET"
+  dcc_temp_beside "$settings" || return 1
+  tmp="$DCC_TEMP"
   local input='{}'
   if [ -e "$settings" ]; then input="$(cat "$settings")" || { rm -f -- "$tmp"; return 1; }; fi
   if jq -e --indent 2 "$@" "select(type == \"object\") | $prog" <<< "$input" > "$tmp" 2>/dev/null && mv -f -- "$tmp" "$settings"; then return 0; fi

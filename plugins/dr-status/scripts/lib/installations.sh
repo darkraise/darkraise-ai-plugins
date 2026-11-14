@@ -32,11 +32,33 @@ dcc_installation_get() {
   dcc_installation_json -c --arg account "$account" '.accounts[$account] // null' <<< "$record"
 }
 
+# Dotfile managers link these files; renaming a temp file over the link would
+# replace it with a regular file and leave the managed copy stale.
+dcc_link_target() { # dcc_link_target <path> -> DCC_LINK_TARGET
+  local p="$1" t n=0
+  while [ -L "$p" ] && [ "$n" -lt 40 ]; do
+    t="$(readlink -- "$p")" || return 1
+    case "$t" in /*) p="$t" ;; *) p="$(dirname -- "$p")/$t" ;; esac
+    n=$((n + 1))
+  done
+  DCC_LINK_TARGET="$p"
+}
+
+# The temp file sits beside the target so the rename stays on one file system;
+# cp -p gives it the target's mode, which mktemp's 0600 would otherwise replace.
+dcc_temp_beside() { # dcc_temp_beside <target> -> DCC_TEMP
+  DCC_TEMP="$(mktemp "$1.XXXXXX")" || return 1
+  [ ! -e "$1" ] || cp -p -- "$1" "$DCC_TEMP" 2>/dev/null || true
+}
+
 dcc_installation_save() {
-  local record="$1" tmp
+  local record="$1" tmp target
   dcc_installation_path
-  tmp="$(mktemp "$DCC_REGISTRY.XXXXXX")" || return 1
-  if printf '%s\n' "$record" > "$tmp" && dcc_installation_json -e . < "$tmp" >/dev/null && mv -f -- "$tmp" "$DCC_REGISTRY"; then return 0; fi
+  dcc_link_target "$DCC_REGISTRY" || return 1
+  target="$DCC_LINK_TARGET"
+  dcc_temp_beside "$target" || return 1
+  tmp="$DCC_TEMP"
+  if printf '%s\n' "$record" > "$tmp" && dcc_installation_json -e . < "$tmp" >/dev/null && mv -f -- "$tmp" "$target"; then return 0; fi
   rm -f -- "$tmp"
   return 1
 }
