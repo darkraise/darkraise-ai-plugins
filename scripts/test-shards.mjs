@@ -12,6 +12,7 @@ export const windowsSeconds = {
   'run-all.sh': 157,
   'agy-gate.test.sh': 20,
   'agy-review.test.sh': 60,
+  'api-decisions-keep-warm-hydrogen.acceptance.test.sh': 360,
   'api-judge.test.sh': 120,
   'api-spend.test.sh': 20,
   'auto-default.test.sh': 10,
