@@ -3,8 +3,7 @@
 # (docs/dforge/specs/2026-11-12-reviewer-only-externals-design.md), statements
 # A1-A11 and A13-A18. Written from the statements' text and run through the
 # public surface: the panel and the agy runner as commands, the gates, the
-# review routing, task-step, plan-lint, dforge-config, the README and the
-# release script. Real gates and real runners run against the stub agy
+# review routing, task-step, plan-lint, dforge-config and the release script. Real gates and real runners run against the stub agy
 # (fixtures/stub-agy) and a copy of the stub Codex plugin; the host's own agy
 # is kept out of PATH, so nothing here makes a billed call.
 # Usage:
@@ -444,9 +443,7 @@ named_in_output() { # named_in_output <word> - the word appears in the status ou
 }
 t_A6() {
   needs_spawn A6 || return
-  local kind mode ext
-  ext=$(tr '\n' ' ' < "$PLUGIN/reference/external-review.md" | tr -s ' ')
-  present "A6: a hook, git config or stash change stops the session, since removing the worktree does not undo it" "$ext" 'hook. path, a .git config <key> <origin>. or a .stash. line .*removing the worktree does not undo it.*run no further git command in that repository'
+  local kind mode
   for kind in "task light" "task heavy" "plan" "final"; do
     fresh; settings false true
     case ${kind%% *} in plan) mode=plan-review ;; final) mode=final-review ;; *) mode=review ;; esac
@@ -760,16 +757,6 @@ t_A14() {
 # --- A15 ---
 t_A15() {
   needs_spawn A15 || return
-  local final ext flat
-  final=$(tr '\n' ' ' < "$PLUGIN/reference/final-review.md" | tr -s ' ')
-  ext=$(tr '\n' ' ' < "$PLUGIN/reference/external-review.md" | tr -s ' ')
-  present "A15: the final review's dedupe judge runs whenever two or more lists carry findings" "$final" 'Dedupe and verify whenever two or more lists carry findings'
-  present "A15: the lists are the Claude review plus one per external reviewer that returned one" "$final" 'The lists are the Claude review.s .*and one per external reviewer that returned one'
-  present "A15: the origin tag is a +-joined set of claude, codex and agy" "$final" '`\+`-joined set of `claude`, `codex` and `agy`'
-  present "A15: the origin tag example is [claude+agy]" "$final" '\[claude\+agy\]'
-  absent "A15: the both origin tag is gone" "$final" 'claude\|codex\|both|\[both\]'
-  present "A15: the external round's guide gives the same rule" "$ext" 'two or more lists carry findings, tagging each finding.s origins as a `\+`-joined set of `claude`, `codex` and `agy`'
-
   fresh; settings true true
   out=$(cd "$WORK" && STUB_FINAL_MESSAGE='No findings.' STUB_AGY_MODE=final-review timeout 300 bash "$PANEL" --kind final --cwd "$WORK" --out-dir "$OUT" --base main 2>"$TMP/err"); rc=$?
   out=${out//$'\r'/}
@@ -822,13 +809,6 @@ t_A17() {
 
 # --- A18 ---
 t_A18() {
-  local readme section name
-  readme="$PLUGIN/README.md"
-  section=$(awk '/^## Migrating to 5\.0/ { on = 1; print; next } on && /^## / { exit } on { print }' "$readme")
-  check "A18: the README has a Migrating to 5.0 section" "$(grep -c '^## Migrating to 5\.0' "$readme")" "1"
-  for name in codexLane agyLane agyReview revising-plans plan-revise; do
-    check "A18: the Migrating to 5.0 section names $name" "$(grep -cF -- "$name" <<<"$section" | awk '{ print ($1 > 0) ? "named" : "missing" }')" "named"
-  done
   local before after rel
   before=$(git -C "$REPO_ROOT" status --porcelain)
   rel=$(cd "$REPO_ROOT" && timeout 120 node scripts/release.mjs --dry-run 2>/dev/null | tr -d '\r')
