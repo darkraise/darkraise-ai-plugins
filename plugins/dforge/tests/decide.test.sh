@@ -115,7 +115,10 @@ ask "${Q[@]}"; check "A2: a refusal" "$rc:$out" "3:no ruling reason=refusal"
 raw '{"status":500,"body":{"error":{"message":"boom"}}}'
 ask "${Q[@]}"; check "A2: a failed request" "$rc:$out" "3:no ruling reason=error"
 raw '{"status":200,"body":{"answers":[{"type":"choice","name":"ruling","choice":"option_1","probabilities":[],"confidence":0.95}]}}'
-ask "${Q[@]}"; check "A2: an answer with a question missing" "$rc:$out" "3:no ruling reason=error"
+head -c 200000 /dev/zero | tr '\0' 'a' > "$WORK/mid.txt"
+was=$(spent)
+ask "${Q[@]}" --evidence mid.txt; check "A2: an answer with a question missing" "$rc:$out" "3:no ruling reason=error"
+check "A16: an answer with no usage is charged an estimate, not nothing" "$(awk -v a="$was" -v b="$(spent)" 'BEGIN { print (b > a ? "charged" : "free") }')" "charged"
 raw '{"status":200,"delayMs":8000,"body":{}}'
 before=$(date +%s)
 DFORGE_DECISIONS_TIMEOUT=1 ask "${Q[@]}"
@@ -162,6 +165,14 @@ more than 400000 bytes|big.txt
 a file that does not exist|docs/missing.md
 ROWS
 check "A6: a refused evidence file is logged" "$(last '.outcome')" "evidence"
+mkdir -p "$WORK/Vendor2/.GIT"; printf '[core]\n' > "$WORK/Vendor2/.GIT/config"
+ask "${Q[@]}" --evidence Vendor2/.GIT/config
+check "A4: a git directory spelled in capitals" "$rc:$out:$(( $(sent) - n ))" "3:no ruling reason=evidence:0"
+ln -s "$TMP/outside.txt" "$WORK/link.txt" 2>/dev/null
+if [ -L "$WORK/link.txt" ]; then
+  ask "${Q[@]}" --evidence link.txt
+  check "A4: a link inside the working tree to a file outside it" "$rc:$out:$(( $(sent) - n ))" "3:no ruling reason=evidence:0"
+fi
 ask "${Q[@]}" --evidence docs/s.md --evidence .dforge/note.md
 check "A5: a file under the state root is accepted though git ignores it" "$rc:$(( $(sent) - n ))" "0:1"
 has "A5: its text is sent" "$(tail -1 "$REQ" | j '.body.input')" "state note"

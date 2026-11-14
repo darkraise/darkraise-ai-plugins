@@ -43,7 +43,7 @@ evidence_ok() { # evidence_ok FILE… — every file may be sent
     # git check-ignore reports nothing under the git directory, whose config can hold credentials.
     { [ -n "$gitdir" ] && under "$c" "$gitdir"; } && return 1
     { [ -n "$common" ] && under "$c" "$common"; } && return 1
-    case /$c/ in */.git/*) return 1 ;; esac
+    case $(printf '%s' "/$c/" | tr '[:upper:]' '[:lower:]') in */.git/*) return 1 ;; esac
     if { [ -n "$docs" ] && under "$c" "$docs"; } || { [ -n "$state" ] && under "$c" "$state"; }; then :
     elif [ -n "$top" ] && under "$c" "$top"; then
       git -C "$top" check-ignore -q -- "$c" 2>/dev/null
@@ -133,10 +133,16 @@ cmd_ask() {
   outcome=$(jq -r '.outcome' <<< "$answer" | tr -d '\r')
 
   tokens=$(jq -r '.input_tokens | numbers' <<< "$answer" | tr -d '\r')
-  if [ -n "$tokens" ]; then
-    usd=$(awk -v t="$tokens" -v p="$price" 'BEGIN { printf "%.4f", t * p / 1000000 }')
-    api_budget_charge openai "$usd" 2>/dev/null || echo "decide: the charge to openai was not recorded" >&2
+  if [ -z "$tokens" ]; then
+    # No usage came back, yet the request may have been billed: charge an
+    # estimate, both orderings at four bytes a token, rather than nothing.
+    local bytes=${#question}
+    for f in ${evidence[@]+"${evidence[@]}"}; do bytes=$((bytes + $(wc -c < "$f" | tr -d ' \r'))); done
+    tokens=$((bytes / 2))
+    echo "decide: the answer reported no usage; charged an estimate of $tokens input tokens" >&2
   fi
+  usd=$(awk -v t="$tokens" -v p="$price" 'BEGIN { printf "%.4f", t * p / 1000000 }')
+  api_budget_charge openai "$usd" 2>/dev/null || echo "decide: the charge to openai was not recorded" >&2
   log_ask "$outcome" "$answer"
 
   [ "$MODE" = on ] || no_ruling shadow
