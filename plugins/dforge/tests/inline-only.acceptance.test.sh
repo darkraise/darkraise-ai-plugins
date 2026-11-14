@@ -15,8 +15,6 @@ unset AR_SESSION CLAUDE_CONFIG_DIR
 mkdir -p "$HOME" "$DR_CODEX_SESSION_DIR"
 printf '{"session_id":"inline-only-test","usable":false,"review":false,"lane":false}\n' \
   > "$DR_CODEX_SESSION_DIR/inline-only-test.json"
-printf 'echo %s\n' "'[{\"id\":\"codex\",\"usable\":false,\"reason\":\"test\"}]'" > "$TMP/roster.sh"
-export PLAN_LINT_ROSTER="$TMP/roster.sh"
 cd "$TMP"
 git init -q . && git config user.email t@t && git config user.name t
 mkdir -p docs && printf '# Spec\n' > docs/spec.md

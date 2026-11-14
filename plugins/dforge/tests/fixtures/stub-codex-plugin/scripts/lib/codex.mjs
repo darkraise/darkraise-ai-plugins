@@ -95,9 +95,9 @@ async function turn(cwd, options, label) {
   if (process.env.STUB_REFUSE_ONCE === "1") {
     m = n === 1 ? "refusal" : (process.env.STUB_SECOND_MODE || "ok");
   }
-  // A turn against a logged-out account fails at the turn, not at an auth probe:
-  // getCodexAuthStatus is only reached by op:"auth". Without this branch the
-  // logged-out case would return status 0 and the suite would assert nothing.
+  // A turn against a logged-out account fails at the turn, not at an auth probe.
+  // Without this branch the logged-out case would return status 0 and the suite
+  // would assert nothing.
   if (m === "logged-out") {
     return {
       status: 1, threadId: "stub-thread", turnId: "stub-turn", finalMessage: null,

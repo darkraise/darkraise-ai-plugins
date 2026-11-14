@@ -55,7 +55,6 @@ export const windowsSeconds = {
   'criteria.test.sh': 10,
   'darkmem-sync.test.sh': 155,
   'depth-route.test.sh': 88,
-  'detect.test.sh': 137,
   'dforge-config.test.sh': 34,
   'dforge-dir.test.sh': 10,
   'dforge-migrate.test.sh': 64,

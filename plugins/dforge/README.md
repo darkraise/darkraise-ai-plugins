@@ -343,9 +343,8 @@ later: they ask `git rev-parse` for `--path-format=absolute`. GNU timeout is
 found as `timeout` or, as Homebrew's coreutils installs it on macOS, as
 `gtimeout`; without either the Codex and agy gates report
 `reason=no-timeout`. The rest are
-requirements of the external reviewers: `scripts/detect-executors.sh` builds
-every field with `jq`, and the review runners parse each reviewer's answer with
-it. Each exits 2 with a message naming the dependency rather than degrading,
+requirements of the external reviewers: the review runners parse each
+reviewer's answer with `jq`. Each exits 2 with a message naming the dependency rather than degrading,
 because a missing `jq` would otherwise read as "no reviewer usable". The
 SessionStart hook is the lenient case: without `jq` it still injects the entry
 point and only skips persisting the session record, and `bash` is required for
@@ -1236,7 +1235,7 @@ validates raw scores and history before returning a native routing decision.
 valid id, `executors ranked` the same ids by ascending `priority`,
 `executors get <id> <dotted.key>` one field, and
 `executors path <id> <dotted.key>` that field resolved against the plugin root.
-An entry names the family's locator, probe, gate, review runner, session
+An entry names the family's gate, review runner, session
 directory, surfaces, priority and judge block, so adding a reviewer is an
 entry, a runner and a ladder block rather than an edit to every script.
 `reference/external-review.md` states the entry schema and describes the
@@ -1261,8 +1260,6 @@ review, `codex-review-schema.json` for the external task reviews,
 
 `scripts/` holds the external reviewers' plumbing:
 
-- `detect-executors.sh` emits the JSON roster for the named ids, or every
-  registered id: presence, version and sign-in for each family.
 - `codex-plugin` locates the official codex plugin; `codex-gate` is Codex's
   session gate.
 - `agy-locate` finds the Antigravity CLI and checks its version against

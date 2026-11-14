@@ -47,8 +47,6 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MS
 export DFORGE_LENS_MINOR_FROM=0
 # No session gate file exists, so every plan round routes with reason=reviewers-off.
 export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=review-depth-acceptance
-printf '%s\n' '#!/usr/bin/env bash' "echo '[{\"id\":\"codex\",\"usable\":true,\"reason\":null}]'" > "$TMP/roster-stub"
-export PLAN_LINT_ROSTER="$TMP/roster-stub"
 
 # --- fixtures: a repository holding specs and plans ------------------------
 

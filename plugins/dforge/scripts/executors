@@ -35,9 +35,6 @@ valid_entry() { # valid_entry <file> <stem>; prints the id when valid
   # runs, and a malformed entry would be skipped in silence.
   id=$(jq -r '
     if (.id | type) != "string" then empty
-    elif (.locator | type) != "string" then empty
-    elif (.probe.command | type) != "string" then empty
-    elif (.probe.op | type) != "string" then empty
     elif (.gate | type) != "string" then empty
     elif (.runner | type) != "string" then empty
     elif (.session_dir | type) != "string" then empty

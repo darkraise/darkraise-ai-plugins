@@ -50,10 +50,6 @@ unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_P
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export DR_CODEX_SESSION_DIR="$TMP/codex-sessions"
-cat > "$TMP/unusable.sh" <<'EOF'
-echo '[{"id":"codex","usable":false,"reason":"not authenticated"}]'
-EOF
-export PLAN_LINT_ROSTER="$TMP/unusable.sh"
 
 g() { timeout 60 git "$@"; }
 sedi() { # sedi <expression> <file> — portable in-place edit

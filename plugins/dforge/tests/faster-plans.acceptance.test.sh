@@ -57,10 +57,6 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MS
 export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=acceptance-session
 printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
-# plan-lint's lane probe asks this roster; a fixed answer keeps the machine's
-# own Codex install out of every case.
-printf '%s\n' '#!/usr/bin/env bash' "echo '[{\"id\":\"codex\",\"usable\":true,\"reason\":null}]'" > "$TMP/roster-stub"
-export PLAN_LINT_ROSTER="$TMP/roster-stub"
 
 session() { # session <review true|false> <lane true|false> | absent — this session's Codex gate file
   rm -rf "$DR_CODEX_SESSION_DIR"

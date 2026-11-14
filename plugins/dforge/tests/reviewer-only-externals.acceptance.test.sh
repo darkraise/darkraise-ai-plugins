@@ -629,7 +629,7 @@ EOF
   b_plain=$(cd "$R" && timeout 60 bash "$BRIEF" plan-plain.md 2 2>&1; echo "rc=$?")
   check "A9: task-brief exits 0 on the Executor task" "$(tail -1 <<<"$b_exec")" "rc=0"
   check "A9: task-brief's brief is the ordinary brief plus the plan's own line" \
-    "$(diff <(grep -v '^\*\*Executor:' "$R/.dforge/sdd/plan-exec/task-2-brief.md") "$R/.dforge/sdd/plan-plain/task-2-brief.md" >/dev/null && echo same || echo differs)" "same"
+    "$(diff <(grep -v '^\*\*Executor:' "$R/.dforge/sdd/plan-exec/task-2-brief.md" | sed 's#plan-exec#plan-plain#g') "$R/.dforge/sdd/plan-plain/task-2-brief.md" >/dev/null && echo same || echo differs)" "same"
   absent "A9: task-brief names no dispatch to an executor" "$(norm <<<"$b_exec")" '[Dd]ispatch|[Ll]ane'
 
   local s_exec s_plain
@@ -804,16 +804,16 @@ t_A17() {
   local order
   fresh; settings true true
   panel light
-  check "A17: a light panel run makes one Codex auth probe" "$(auth_probes)" "1"
+  check "A17: a light panel run makes no Codex auth probe of its own" "$(auth_probes)" "0"
   check "A17: the light panel run did run Codex" "$(sval "$(sline codex)" status)" "OK"
   order=$(grep -E '^(getCodexAuthStatus|runAppServerTurn) ' "$STUB_EVENT_LOG" | awk '{ print $1 }' | tr '\n' ' ')
-  check "A17: the probe comes before the Codex turn and no second probe overlaps it" "$order" "getCodexAuthStatus runAppServerTurn "
+  check "A17: the light panel run goes straight to the Codex turn" "$order" "runAppServerTurn "
   fresh; settings true true
   panel heavy
-  check "A17: a heavy panel run makes one Codex auth probe" "$(auth_probes)" "1"
+  check "A17: a heavy panel run makes no Codex auth probe of its own" "$(auth_probes)" "0"
   fresh; settings true true
   STUB_REFUSE_ONCE=1 panel heavy
-  check "A17: a heavy run with a Codex fallback still makes one auth probe" "$(auth_probes)" "1"
+  check "A17: a heavy run with a Codex fallback still makes no auth probe" "$(auth_probes)" "0"
   check "A17: that run made both Codex attempts" "$(turns)" "gpt-6-astra/xhigh gpt-6.1-sol/xhigh "
   fresh; settings false true
   panel light
