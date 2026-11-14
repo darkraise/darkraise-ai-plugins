@@ -3,8 +3,7 @@
 # (docs/dforge/specs/2026-10-28-speed-and-cost-followups-design.md), the
 # plugin-side statements A1 to A4, A7, A8, A11 to A16, A20 and the fast part
 # of A23 (A19 went with draft-pack). A5 is the `A5:` describe block in
-# cockpit.test.ts; A17 and A18 are in
-# evals/tiers/tests/speed-and-cost-followups.acceptance.test.mjs. Each test is
+# cockpit.test.ts. Each test is
 # written from the statement's text and reaches the behaviour through the
 # scripts the spec names (task-step, impl-stop-gate), the files the
 # plugin ships, or, for a statement about text, the text itself.

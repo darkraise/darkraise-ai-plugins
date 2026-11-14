@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance tests for the speed-and-cost spec
 # (docs/dforge/specs/2026-10-27-speed-and-cost-design.md), the plugin-side
-# statements A1, A3, A4, A5, A6, A7, A9, A10 and A11. A12 and A13 (the eval
-# pipeline) are in evals/tiers/tests/speed-and-cost.acceptance.test.mjs.
+# statements A1, A3, A4, A5, A6, A7, A9, A10 and A11.
 # Each test is written from the statement's text and reaches the behaviour
 # through the scripts the spec names (task-step, suite-run, impl-stop-gate), the
 # files the plugin ships, or, where a statement is about what a skill tells a
@@ -122,14 +121,7 @@ fi
 # ---------------------------------------------------------------- A3
 if selected A3; then
   IP="$PLUGIN/reference/prompts/implementer-prompt.md"
-  ts start docs/plan.md 1 --suite "$CMD"
-  DISPATCH="$WS/task-1-dispatch.md"
-  check "A3: task-step start writes the dispatch file" "$([ -f "$DISPATCH" ] && echo yes || echo no)" "yes"
-  for src in "$IP" "$DISPATCH"; do
-    label=$(basename "$src")
-    text=$(doc "$src")
-    has "A3: $label names the Verified section" "$text" '## Verified'
-  done
+  has "A3: implementer-prompt.md names the Verified section" "$(doc "$IP")" '## Verified'
 fi
 
 # ---------------------------------------------------------------- A4

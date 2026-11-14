@@ -97,9 +97,6 @@ const suiteParts = {
 const jobs = [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs')).map(name => `tests/${name}`)], 120],
-  // The tier-eval harness kills process groups and shells out to tar, so its
-  // tests run on POSIX only.
-  ...(process.platform === 'win32' ? [] : [[process.execPath, ['--test', ...readdirSync(resolve(root, 'evals/tiers/tests')).filter(name => name.endsWith('.test.mjs')).map(name => `evals/tiers/tests/${name}`)], 300]]),
   [bash, ['plugins/dr-status/tests/run-all.sh'], 420],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'plugins/dflow/tests')).filter(name => name.endsWith('.test.mjs')).map(name => `plugins/dflow/tests/${name}`)], 300],
   // DR_TEST_ALL tells a suite that every other suite runs as its own job, so

@@ -20,7 +20,6 @@ listed in a catalog per client.
 | `scripts/validate-repository.mjs` | Checks catalogs, manifests, versions, links and retired names |
 | `scripts/test-all.mjs` | Runs every maintained suite; `scripts/test-shards.mjs` splits them for Windows CI |
 | `tests/` | Repository-level tests: catalog layout, shards, portability lint |
-| `evals/tiers/` | The model-tier eval harness for dforge |
 | `docs/dflow/` | dflow's design record, board and plans for this repository |
 | `docs/dforge/` | dforge's specs, plans, registers and notes |
 | `.github/workflows/validate.yml` | CI: Ubuntu, and Windows in fourteen shards |
