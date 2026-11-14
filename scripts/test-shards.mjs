@@ -105,6 +105,7 @@ export const windowsSeconds = {
   'speed-and-cost.acceptance.test.sh': 280,
   'suite-run.test.sh': 54,
   'task-loop-steps.acceptance.test.sh': 920,
+  'task-open-close.test.sh': 30,
   'task-step-base.test.sh': 900,
   'task-step-settle.test.sh': 220,
   'task-step-suite.test.sh': 250,
