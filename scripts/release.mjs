@@ -49,9 +49,15 @@ for (const name of names) {
   const version = JSON.parse(readFileSync(manifestPaths(name)[0], 'utf8')).version;
   const [base, previous] = versionCommits(name);
   if (!base) throw new Error(`${name}: no commit sets its version`);
+  const isTagged = git('tag', '--list', tagOf(name, version)) !== '';
+  // A plugin with no tag at all is released as its current version at HEAD: its
+  // version line may date from a commit that was only a start.
+  const isFirst = git('tag', '--list', `${name}-v*`) === '';
   // The version on main before automated releases, or a hand bump, has no tag yet.
-  if (git('tag', '--list', tagOf(name, version)) === '') tags.push({ name, version, commit: base, notes: notesOf(commitsIn(name, previous, base)) });
-  const pending = commitsIn(name, base, 'HEAD');
+  if (isFirst) tags.push({ name, version, commit: git('rev-parse', 'HEAD'), notes: notesOf(commitsIn(name, null, 'HEAD')) });
+  else if (!isTagged) tags.push({ name, version, commit: base, notes: notesOf(commitsIn(name, previous, base)) });
+  const since = isFirst ? 'HEAD' : isTagged ? git('rev-list', '-n', '1', tagOf(name, version)) : base;
+  const pending = commitsIn(name, since, 'HEAD');
   if (pending.length > 0) bumps.push({ name, from: version, to: bumped(version, pending), notes: notesOf(pending) });
 }
 
