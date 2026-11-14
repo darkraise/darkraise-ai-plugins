@@ -4,19 +4,35 @@ import path from 'node:path';
 
 const KEEP_BYTES = 256 * 1024;
 
-function killTree(child) {
+const GRACE_MS = 2000;
+
+// Stops the command and what it left behind: SIGTERM to its process group, a
+// grace for the group to clean up, then SIGKILL for what is still running.
+async function killTree(child) {
   if (!child.pid) return;
   if (process.platform === 'win32') {
     spawnSync('taskkill', ['/F', '/T', '/PID', String(child.pid)], { stdio: 'ignore', timeout: 10000, windowsHide: true });
     return;
   }
   // The command runs in its own process group so that its children die with it.
-  for (const signal of ['SIGTERM', 'SIGKILL']) {
+  try {
+    process.kill(-child.pid, 'SIGTERM');
+  } catch {
+    return;
+  }
+  const deadline = Date.now() + GRACE_MS;
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 50));
     try {
-      process.kill(-child.pid, signal);
+      process.kill(-child.pid, 0);
     } catch {
       return;
     }
+  }
+  try {
+    process.kill(-child.pid, 'SIGKILL');
+  } catch {
+    // The group ended in the last moment.
   }
 }
 
@@ -55,11 +71,11 @@ export function runCommand(command, { cwd, timeoutSeconds, logFile, env = proces
       killTree(child);
     }, timeoutSeconds * 1000);
     let settled = false;
-    const finish = status => {
+    const finish = async status => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (process.platform !== 'win32') killTree(child);
+      if (process.platform !== 'win32') await killTree(child);
       const seconds = (Date.now() - started) / 1000;
       child.stdout.destroy();
       child.stderr.destroy();
