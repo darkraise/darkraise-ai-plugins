@@ -67,6 +67,8 @@ bash "$SPEND" add agentrouter 2
 check "DFORGE_API_SPEND_FILE moves the file" "$(j '.agentrouter.spent_usd == 2' < "$TMP/elsewhere.json")" "true"
 check "the default file is untouched" "$(j '.agentrouter.spent_usd // 0' < "$FILE")" "0"
 unset DFORGE_API_SPEND_FILE
+printf '{"openai": {"spent_usd": 5' > "$FILE"
+check "a spend file that cannot be read closes every budget" "$(status | grep -c 'open=false .* reason=unreadable$')" "3"
 rm -f "$FILE"
 for _ in 1 2 3 4 5 6 7 8 9 10; do bash "$SPEND" add openai 0.1 & done; wait
 check "ten adds at once all land" "$(j '.openai.calls' < "$FILE") $(line openai | sed 's/.* spent=\([0-9.]*\) .*/\1/')" "10 1.0000"

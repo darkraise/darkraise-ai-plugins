@@ -25,18 +25,20 @@ _api_budget_cap_setting() {
 api_budget_spend_file() { printf '%s\n' "${DFORGE_API_SPEND_FILE:-$HOME/.dforge/api-spend.json}"; }
 
 api_budget_state() {
-  local id=$1 var setting cap spent file reason
+  local id=$1 var setting cap spent file reason unreadable
   var=$(api_budget_key_var "$id") || return 1
   setting=$(_api_budget_cap_setting "$id")
   cap=$(dforge_setting "$setting" 0)
   [[ $cap =~ ^[0-9]+(\.[0-9]+)?$ ]] || cap=0
   file=$(api_budget_spend_file)
-  spent=0
+  spent=0 unreadable=no
   if [ -f "$file" ]; then
     spent=$(MSYS_NO_PATHCONV=1 jq -r --arg id "$id" '.[$id].spent_usd // 0 | numbers' < "$file" 2>/dev/null | tr -d '\r')
-    [[ $spent =~ ^[0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)?$ ]] || spent=0
+    # A spend file that cannot be read closes the budget: reading it as 0 would lift the cap.
+    [[ $spent =~ ^[0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)?$ ]] || { spent=0 unreadable=yes; }
   fi
   if awk -v c="$cap" 'BEGIN { exit !(c + 0 == 0) }'; then reason=off
+  elif [ "$unreadable" = yes ]; then reason=unreadable
   elif [ -z "${!var:-}" ]; then reason=no-key
   elif awk -v s="$spent" -v c="$cap" 'BEGIN { exit !(s + 0 >= 0.95 * c) }'; then reason=spent
   else reason=ok
