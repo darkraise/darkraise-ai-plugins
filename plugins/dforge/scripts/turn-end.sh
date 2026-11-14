@@ -52,18 +52,6 @@ root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 sdd=$(dforge_ledger_root "$root") || sdd=""
 [ "$is_retry" = true ] && [ -z "$auto_pending" ] && exit 0
 [ -d "$sdd" ] || [ -n "$auto_pending" ] || exit 0
-root_shown=$PLUGIN_ROOT
-if command -v cygpath >/dev/null 2>&1; then root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
-. "${SCRIPT_DIR}/lib/in-flight.sh"
-# Background work this session started that is still listed (lib/in-flight.sh):
-# no finished notification yet, or an agent that reported but left work of its
-# own running.
-since=$(inflight_since "$session_id")
-running=$(inflight_scan "$transcript_path" "$since") \
-  || running="(unknown: the transcript could not be scanned; check your background shells and agents by hand)"
-pending=$(grep -c . <<<"$running" || true)
-has_pending_background() { [ "$pending" -gt 0 ]; }
-
 # last_text — the text of the last assistant entry on stdin. Streamed, never
 # slurped: a transcript reaches hundreds of megabytes.
 last_text() {
@@ -77,6 +65,53 @@ if [ -z "$last" ] && [ -f "$transcript_path" ]; then
   last=$(tail -n 400 "$transcript_path" | last_text)
   [ -n "$last" ] || last=$(last_text < "$transcript_path")
 fi
+
+# Every ledger written this turn must have its ending, since two plans can be
+# active in one checkout. A plan whose final review is clean ends on the
+# finishing menu, one of finishing's own stops (failing tests, a discard or
+# worktree prompt) or the next-step block, which names finishing; any other
+# plan ends on the next-step block, or on the finish-preference question asked
+# before its first task. The first ledger without its ending names the reason.
+ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
+ledger="" clean=0
+[ -d "$sdd" ] || sdd=""
+ws="$(dforge_dir state "$root")/sdd"
+while IFS= read -r candidate; do
+  [ -n "$candidate" ] || continue
+  # While progress is darkmem every worktree shares the mirror's work/sdd, and a
+  # plan's workspace is always local: a ledger without one here is another
+  # session's.
+  [ -d "$ws/$(basename "$(dirname "$candidate")")" ] || continue
+  if grep -q '^Final review: clean' "$candidate"; then
+    ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" \
+              'Must fix before completing' 'Worktree removal refused' && continue
+    ledger=$candidate clean=1
+  else
+    ends_with '## Next session' 'Ask me then: show the finish menu' && continue
+    ledger=$candidate clean=0
+  fi
+  break
+done < <([ -z "$sdd" ] || find "$sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | sort)
+
+# The transcript scan below costs seconds on a long session, and its result is
+# read only when this stop could be held: an auto run is pending, a ledger
+# written this turn lacks its ending, or the message ends the session.
+case "$last" in
+  *'## Next session'* | *'Which option?'*) ;;
+  *) [ -n "$auto_pending" ] || [ -n "$ledger" ] || exit 0 ;;
+esac
+
+root_shown=$PLUGIN_ROOT
+if command -v cygpath >/dev/null 2>&1; then root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
+. "${SCRIPT_DIR}/lib/in-flight.sh"
+# Background work this session started that is still listed (lib/in-flight.sh):
+# no finished notification yet, or an agent that reported but left work of its
+# own running.
+since=$(inflight_since "$session_id")
+running=$(inflight_scan "$transcript_path" "$since") \
+  || running="(unknown: the transcript could not be scanned; check your background shells and agents by hand)"
+pending=$(grep -c . <<<"$running" || true)
+has_pending_background() { [ "$pending" -gt 0 ]; }
 
 # While background work runs, a plain stop is the controller waiting for it and
 # passes, in any turn. A message that ends the session over it (the next-step
@@ -131,33 +166,6 @@ if [ -n "$auto_pending" ]; then
   hold "$reason" "dforge held the stop (auto run, hold ${holds} of ${AUTO_HOLD_CAP}): pending ${auto_pending}, and the turn did not end on its sentinel line"
   exit 0
 fi
-
-# Every ledger written this turn must have its ending, since two plans can be
-# active in one checkout. A plan whose final review is clean ends on the
-# finishing menu, one of finishing's own stops (failing tests, a discard or
-# worktree prompt) or the next-step block, which names finishing; any other
-# plan ends on the next-step block, or on the finish-preference question asked
-# before its first task. The first ledger without its ending names the reason.
-ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
-ledger="" clean=0
-[ -d "$sdd" ] || sdd=""
-ws="$(dforge_dir state "$root")/sdd"
-while IFS= read -r candidate; do
-  [ -n "$candidate" ] || continue
-  # While progress is darkmem every worktree shares the mirror's work/sdd, and a
-  # plan's workspace is always local: a ledger without one here is another
-  # session's.
-  [ -d "$ws/$(basename "$(dirname "$candidate")")" ] || continue
-  if grep -q '^Final review: clean' "$candidate"; then
-    ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" \
-              'Must fix before completing' 'Worktree removal refused' && continue
-    ledger=$candidate clean=1
-  else
-    ends_with '## Next session' 'Ask me then: show the finish menu' && continue
-    ledger=$candidate clean=0
-  fi
-  break
-done < <([ -z "$sdd" ] || find "$sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | sort)
 
 [ -n "$ledger" ] || exit 0
 inflight_queued "$transcript_path" "$since" && exit 0
