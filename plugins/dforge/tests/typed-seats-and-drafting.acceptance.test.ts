@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { mock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { FORK_DRAFTING, seatDenial } from '../hooks/cockpit/lib'
+import { seatDenial } from '../hooks/cockpit/lib'
 
 // Acceptance tests for docs/dforge/specs/2026-10-25-typed-seats-and-drafting-design.md,
 // the cockpit statements (A1-A4, A8). They reach the hook only through the
@@ -127,18 +127,11 @@ describe('typed seats and drafting: acceptance', () => {
     expect((await $.agent.spawn(spawn({ subagentType: 'fork', fork: true, model: 'sonnet' }))).deny).toMatch(REASON)
   })
 
-  test('A4: only a fork described "Draft plan tasks" is admitted, and only when forks draft', () => {
+  test('A4: every fork is denied, a drafting one included', () => {
     const base = { subagentType: 'fork', fork: true, description: 'Draft plan tasks 1-2' }
-    // Forks draft: the drafting fork passes, every other fork is still denied.
-    expect(seatDenial(base, true, true)).toBeNull()
-    expect(seatDenial({ ...base, description: 'Draft plan tasks 5-6' }, true, true)).toBeNull()
-    expect(seatDenial({ ...base, description: 'Verify the register rows' }, true, true)).toMatch(REASON)
-    expect(seatDenial({ ...base, description: 'Consolidate findings' }, true, true)).toMatch(REASON)
-    expect(seatDenial({ ...base, description: 'Please draft plan tasks 1-2' }, true, true)).toMatch(REASON)
-    // Forks do not draft: even the drafting description is denied.
-    expect(seatDenial(base, true, false)).toMatch(REASON)
-    // The shipped constant is the measurement's decision: forks do not draft.
-    expect(FORK_DRAFTING).toBe(false)
+    for (const description of ['Draft plan tasks 1-2', 'Draft plan tasks 5-6', 'Verify the register rows', 'Consolidate findings', 'Please draft plan tasks 1-2']) {
+      expect(seatDenial({ ...base, description }, true)).toMatch(REASON)
+    }
   })
 
   test('A8: a denied spawn is listed in the cockpit refusals with tool Agent and the deny reason', async ($, on) => {

@@ -429,7 +429,7 @@ Codex has no Stop hook: the Codex manifest declares no hooks, so nothing
 catches a summarize-and-stop there. On Codex you must run `next-step` yourself
 on every early stop.
 
-A `PostToolUse` hook on `Edit`, `Write` and `MultiEdit` runs
+A `PostToolUse` hook on `Edit` and `Write` runs
 `scripts/ui-edit-hook.sh`: for a UI file (`scripts/ui-proof paths`) it
 returns `scripts/ui-lint` findings as additional context and, once per
 session, names `dforge:ui-ux`; it never blocks. A third `Stop` hook,

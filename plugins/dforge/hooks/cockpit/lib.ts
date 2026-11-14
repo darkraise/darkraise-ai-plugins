@@ -190,13 +190,6 @@ export type SeatSpawn = {
 }
 
 /**
- * Whether a fork described `Draft plan tasks …` may run in a dforge session:
- * docs/dforge/notes/2026-10-25-drafter-measurement.md ruled forks out, and
- * plans are now drafted in the session. Changing it takes a plugin release.
- */
-export const FORK_DRAFTING = false
-
-/**
  * Whether the last `Process:` line of a response puts its request in fast mode
  * (reference/fast-mode.md): true for `Process: fast`, false for any other
  * Process line, null when the text has none. scripts/lib/fast-mode.sh reads
@@ -221,10 +214,9 @@ const CATCH_ALL = ['general-purpose', 'claude']
  * agents, teammates, resumes and spawns inside a subagent are not the main
  * loop's dispatch, and nothing is checked before a dforge skill or agent ran.
  */
-export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean, forkDrafting: boolean): string | null {
+export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean): string | null {
   if (!isPlanSession || spawn.parentAgentId !== undefined || spawn.workflow !== undefined || spawn.isTeammate === true || spawn.resume !== undefined) return null
   if (spawn.fork) {
-    if (forkDrafting && spawn.description.startsWith('Draft plan tasks')) return null
     return "dforge: forks are kept out of dforge sessions. Use dforge:judge-sonnet-high for a read-only check; plans are drafted in the session. See using-dforge §Seats."
   }
   if (CATCH_ALL.includes(spawn.subagentType) && spawn.model === undefined) {

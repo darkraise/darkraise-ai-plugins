@@ -76,7 +76,6 @@ import {
   runsWidth,
   SECTIONS,
   BAND_SEGMENTS,
-  FORK_DRAFTING,
   seatDenial,
   fastModeLine,
   bandLines,
@@ -197,7 +196,7 @@ const RUN_SKILLS = ['dforge:executing-plans', 'dforge:resume-execution']
 // The tools that move the session into or out of a worktree.
 const WORKTREE_TOOLS = ['EnterWorktree', 'ExitWorktree']
 // The tools a review seat's write guard looks at.
-const REVIEW_WRITE_TOOLS = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
+const REVIEW_WRITE_TOOLS = ['Write', 'Edit', 'NotebookEdit']
 const PATH_BODY = /[^\s'"`<>()|*?[\]{},;]*/.source
 const PATH_STOP = /(?![\w-]|\.[\w-])/.source
 // `whole` is an absolute path as a dispatch prompt spells it: not begun inside
@@ -490,7 +489,7 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('agent.spawn', async ($, e, next) => {
-    const denial = seatDenial(e, (await read($, isPlanSession)) && !(await read($, isFastMode)), FORK_DRAFTING)
+    const denial = seatDenial(e, (await read($, isPlanSession)) && !(await read($, isFastMode)))
     if (denial !== null) {
       const refusal: CockpitRefusal = { at: await $.clock.now(), tool: 'Agent', line: denial }
       await update($, refusals, list => [...list, refusal].slice(-20))
@@ -4021,7 +4020,7 @@ async function trackShells($: EngineInterface, tool: string, e: object, result: 
     await syncTicker($)
     return
   }
-  if (tool === 'TaskStop' || tool === 'KillShell' || tool === 'KillBash') {
+  if (tool === 'TaskStop') {
     const input = e as { task_id?: unknown; shell_id?: unknown }
     const id = (result as { task_id?: unknown } | undefined)?.task_id ?? input.task_id ?? input.shell_id
     if (typeof id === 'string') {
