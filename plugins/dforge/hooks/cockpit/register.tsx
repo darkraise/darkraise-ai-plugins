@@ -444,21 +444,7 @@ export const register: Register = on => {
   })
 
   on('session.end', async ($, e, next) => {
-    if (e.reason !== 'clear') {
-      const head = await read($, budget)
-      const started = (await read($, usage))?.startedAt
-      const stamp = await $.clock.now()
-      await notify($, {
-        kind: 'session',
-        title: '🏁 Session ended',
-        detail: `claude --resume ${e.sessionId}`,
-        isPlain: true,
-        fields: [
-          ...(started === undefined ? [] : [{ name: 'Took', value: elapsed(stamp - started) }]),
-          ...(head?.usd == null ? [] : [{ name: 'Cost', value: `$${head.usd.toFixed(2)}` }]),
-        ],
-      })
-    }
+    const ended = e.reason === 'clear' ? null : await endedEvent($, e.sessionId)
     S.ticker?.cancel()
     S.ticker = null
     // The process goes on after /clear and /resume and no session.start re-arms
@@ -481,7 +467,10 @@ export const register: Register = on => {
     S.waitFrom = null
     S.isMainTurn = false
     await setActivity($, () => IDLE)
-    return next(e)
+    const result = await next(e)
+    // Last, so a slow webhook cannot use up the bound every plugin's end hook shares.
+    if (ended !== null) await notify($, ended)
+    return result
   }).catch(($, e, next) => next(e))
 
   // A compaction leaves no reading until the next response: drop the stale
@@ -679,14 +668,18 @@ export const register: Register = on => {
         detail: why,
       }))
       if (failed) {
-        const messageId = await notify($, {
-          kind: 'error',
-          title: `❌ Turn failed${why === null ? '' : `: ${why}`}`,
-          detail: `After ${duration(e.durationMs) || '<1m'}. Send a prompt to continue.`,
-          isPlain: true,
-          fields: await turnFields($),
-        })
-        if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
+        await notify(
+          $,
+          {
+            kind: 'error',
+            title: `❌ Turn failed${why === null ? '' : `: ${why}`}`,
+            detail: `After ${duration(e.durationMs) || '<1m'}. Send a prompt to continue.`,
+            isPlain: true,
+            fields: await turnFields($),
+          },
+          undefined,
+          async () => void (await update($, activity, now => ({ ...now, isSent: true }))),
+        )
       } else if (e.reason === 'answer' && !isHeld) {
         await sendDone($, e.answer, e.durationMs)
       }
@@ -2497,14 +2490,54 @@ const S = {
   runKey: '',
   runPlan: null as string | null,
   runReads: 0,
+  // Discord messages go out one at a time; the tail of the queue.
+  outbox: Promise.resolve() as Promise<void>,
 }
 
-// Sends one event to Discord when it is on and a webhook is set; resolves
-// the message id, or null.
-async function notify($: EngineInterface, event: NotifyEvent, editId?: string): Promise<string | null> {
-  if (!S.kinds.includes(event.kind)) return null
+async function endedEvent($: EngineInterface, sessionId: string): Promise<NotifyEvent> {
+  const head = await read($, budget)
+  const started = (await read($, usage))?.startedAt
+  const stamp = await $.clock.now()
+  return {
+    kind: 'session',
+    title: '🏁 Session ended',
+    detail: `claude --resume ${sessionId}`,
+    isPlain: true,
+    fields: [
+      ...(started === undefined ? [] : [{ name: 'Took', value: elapsed(stamp - started) }]),
+      ...(head?.usd == null ? [] : [{ name: 'Cost', value: `$${head.usd.toFixed(2)}` }]),
+    ],
+  }
+}
+
+// How long a hook waits for its Discord message before it goes on; the
+// message still goes out, behind the ones queued before it.
+const NOTIFY_WAIT_MS = 1000
+// How long one Discord request may stay unanswered before the queue moves on.
+const SEND_LIMIT_MS = 8000
+
+/**
+ * Queues one event for Discord when it is on, and waits no longer than
+ * NOTIFY_WAIT_MS for it, so a slow or hung webhook never holds a hook. The
+ * messages go out one at a time in order. `onSent` runs when Discord took it,
+ * given the message id, whether or not the caller still waits.
+ */
+async function notify($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>): Promise<void> {
+  if (!S.kinds.includes(event.kind)) return
+  const job = S.outbox.then(() => deliver($, event, editId, onSent)).catch(() => undefined)
+  S.outbox = job
+  let timer: Timer | null = null
+  const late = new Promise<void>(resolve => {
+    timer = $.clock.after(NOTIFY_WAIT_MS, resolve)
+  })
+  await Promise.race([job, late])
+  timer?.cancel()
+}
+
+// Sends one queued event; the message id goes to `onSent` when Discord took it.
+async function deliver($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>) {
   const state = await read($, notifier)
-  if (state.url === null) return null
+  if (state.url === null) return
   const git = await read($, repo)
   const at = await read($, place)
   const who = await read($, account)
@@ -2521,11 +2554,11 @@ async function notify($: EngineInterface, event: NotifyEvent, editId?: string): 
   const stamp = await $.clock.now()
   if (sent.isSent) {
     await update($, notifier, now => ({ ...now, last: { at: stamp, text: `sent ${event.kind}`, isError: false } }))
-    return sent.id
+    if (sent.id !== null) await onSent?.(sent.id)
+    return
   }
   // A failed send shows in the settings' Discord row, never as a pop-up.
   await update($, notifier, now => ({ ...now, last: { at: stamp, text: sent.reason, isError: true } }))
-  return null
 }
 
 /**
@@ -2539,13 +2572,17 @@ async function sendDone($: EngineInterface, answer: string, durationMs: number) 
   const took = held === null ? durationMs : (await $.clock.now()) - held.startedAt
   if (took < Math.max(0, (await live($)).notifyAfter) * 1000) return
   const text = answer.trim() === '' ? (held?.answer ?? '') : answer
-  const messageId = await notify($, {
-    kind: 'done',
-    title: `✅ Done in ${elapsed(took)}`,
-    detail: text.trim() === '' ? undefined : excerpt(text, 300),
-    fields: await turnFields($),
-  })
-  if (messageId !== null) await update($, activity, now => ({ ...now, isSent: true }))
+  await notify(
+    $,
+    {
+      kind: 'done',
+      title: `✅ Done in ${elapsed(took)}`,
+      detail: text.trim() === '' ? undefined : excerpt(text, 300),
+      fields: await turnFields($),
+    },
+    undefined,
+    async () => void (await update($, activity, now => ({ ...now, isSent: true }))),
+  )
 }
 
 /**
@@ -2639,10 +2676,10 @@ async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'aski
     const wait = S.waits.get(id)
     if (wait === undefined) return
     wait.timer = null
-    const messageId = await notify($, event)
-    if (messageId === null) return
-    wait.messageId = messageId
-    await update($, activity, now => (now.kind === kind ? { ...now, isSent: true } : now))
+    await notify($, event, undefined, async messageId => {
+      wait.messageId = messageId
+      await update($, activity, now => (now.kind === kind ? { ...now, isSent: true } : now))
+    })
   }
   const delay = Math.max(0, S.notifyAskAfter) * 1000
   S.waits.set(id, { timer: delay === 0 ? null : $.clock.after(delay, () => void send()), messageId: null, event, agentId })
@@ -4321,9 +4358,22 @@ function kindLabel(kind: NotifyKind): string {
   return kind === 'ask' ? 'approval' : kind
 }
 
+// The promise's value, or null once `ms` pass first.
+async function within<T>($: EngineInterface, work: Promise<T>, ms: number): Promise<T | null> {
+  let timer: Timer | null = null
+  const late = new Promise<null>(resolve => {
+    timer = $.clock.after(ms, () => resolve(null))
+  })
+  try {
+    return await Promise.race([work, late])
+  } finally {
+    timer?.cancel()
+  }
+}
+
 /**
  * Posts a body to the webhook, or with `id` edits that message, waiting out
- * one rate limit. Never throws.
+ * one rate limit and giving up on a request left unanswered. Never throws.
  */
 async function sendDiscord($: EngineInterface, url: string, body: Record<string, unknown>, id?: string): Promise<SendResult> {
   const base = url.trim().replace(/\/$/, '')
@@ -4331,9 +4381,15 @@ async function sendDiscord($: EngineInterface, url: string, body: Record<string,
   const init = { method: id === undefined ? 'POST' : 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const answer = await $.http.fetch(target, init)
+      const answer = await within($, $.http.fetch(target, init), SEND_LIMIT_MS)
+      if (answer === null) return { isSent: false, reason: 'Discord did not answer' }
       if (answer.status === 429 && attempt === 0) {
-        const wait = Number((JSON.parse(answer.text || '{}') as { retry_after?: unknown }).retry_after)
+        let wait = NaN
+        try {
+          wait = Number((JSON.parse(answer.text || '{}') as { retry_after?: unknown }).retry_after)
+        } catch {
+          // A proxy's HTML page: wait the default second.
+        }
         await $.clock.sleep(Math.min(10_000, Math.max(250, (Number.isFinite(wait) ? wait : 1) * 1000)))
         continue
       }

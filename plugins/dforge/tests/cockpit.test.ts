@@ -263,6 +263,10 @@ type World = {
   fetches?: { url: string; method: string; body: Record<string, unknown> }[]
   /** Every fetch rejects, its message naming the URL as a host's might. */
   isFetchFailing?: boolean
+  /** Every fetch stays unanswered, as on a stalled connection. */
+  isFetchHanging?: boolean
+  /** The first fetch answers 429 with this body; the next ones succeed. */
+  rateLimitBody?: string
   /** How Claude Code answers the pane opening; placed unless said. */
   open?: { isPlaced: true } | { isPlaced: false; reason: string }
   opened?: string[]
@@ -558,6 +562,8 @@ function world(on: On, w: World) {
     if (typeof body !== 'string') throw new Error(`expected a text body for ${e.url}`)
     w.fetches?.push({ url: e.url, method: e.init?.method ?? 'GET', body: JSON.parse(body) as Record<string, unknown> })
     if (w.isFetchFailing) return { deny: `fetch failed for ${e.url}` }
+    if (w.isFetchHanging) return new Promise<never>(() => undefined)
+    if (w.rateLimitBody !== undefined && w.fetches?.length === 1) return { value: { status: 429, ok: false, headers: {}, text: w.rateLimitBody } }
     return { value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }
   })
   on('ui.panes', () => ({ value: w.isPaneShut ? [] : [{ id: 'dforge', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
@@ -4118,6 +4124,37 @@ describe('discord', () => {
     await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
     expect(fetches).toHaveLength(1)
     expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
+  })
+
+  test('a hung Discord send does not hold the turn hook, and the next send still goes out', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const w: World = { tokens: 50_000, fetches, isFetchHanging: true, config: { notifyAfter: 0 }, env: { DFORGE_NOTIFY_URL: WEBHOOK } }
+    const clock = world(on, w)
+    mock.store(on, {})
+    await $.session.start(START)
+    let isReturned = false
+    const ending = $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' }).then(() => {
+      isReturned = true
+    })
+    await clock.advance(1_500)
+    expect(isReturned).toBe(true)
+    await ending
+    await clock.advance(30_000)
+    w.isFetchHanging = false
+    await $.turn.complete({ answer: 'again', durationMs: 5_000, isAborted: false, turnId: 't2', reason: 'answer' })
+    await clock.advance(1)
+    expect(fetches).toHaveLength(2)
+  })
+
+  test('a rate limit whose body is not JSON is retried', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const clock = world(on, { tokens: 50_000, fetches, rateLimitBody: '<html>Cloudflare</html>', config: { notifyAfter: 0 }, env: { DFORGE_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    await $.session.start(START)
+    const ending = $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(1_500)
+    await ending
+    expect(fetches).toHaveLength(2)
   })
 
   test('/cockpit notify tests the webhook', async ($, on) => {
