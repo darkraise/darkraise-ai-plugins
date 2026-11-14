@@ -166,7 +166,8 @@ export function validateRepository(root) {
             if (line[match.index + match[0].length] === '<') continue;
             const name = match[1];
             if (!existsSync(resolve(root, 'plugins/dforge/skills', name)) &&
-                !existsSync(resolve(root, 'plugins/dforge/agents', `${name}.md`))) {
+                !existsSync(resolve(root, 'plugins/dforge/agents', `${name}.md`)) &&
+                !existsSync(resolve(root, 'plugins/dforge/commands', `${name}.md`))) {
               errors.push(`${rel}:${index + 1}: unresolved dforge reference ${name}`);
             }
           }

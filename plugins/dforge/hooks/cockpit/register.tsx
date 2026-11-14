@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PromptOrigin, Register, RenderChildren, RenderInput, Timer, TurnUsage } from 'claude-code'
+import type { EngineInterface, PromptOrigin, Register, RenderChildren, RenderInput, SessionUsage, Timer, TurnUsage } from 'claude-code'
 
 import type {
   CockpitAccount,
@@ -49,6 +49,9 @@ import {
   isPlanTail,
   isServiceCommand,
   kTokens,
+  seatBarCells,
+  seatCounts,
+  seatRefusalLine,
   levelOf,
   limitForecast,
   limitLabel,
@@ -92,11 +95,10 @@ import {
   track,
   turnsToBudget,
   windowElapsed,
-  warnShare,
   writesGitText,
 } from './lib'
 import type { AgentGroupKey, BandInput, BandSegment, DenseInput, Run, Section, TrackPart } from './lib'
-import { SCHEMA, claudeLocks, envLocks, importedSettings, rangeText, resolveSettings, rowsOf, settingProblems, settingWritten, steppedSetting, tabsOf, typedNumber } from './config'
+import { SCHEMA, claudeLocks, envLocks, inertLocks, rangeText, resolveSettings, rowsOf, settingProblems, settingWritten, steppedSetting, tabsOf, typedNumber } from './config'
 import type { SettingValue, SettingsFile } from './config'
 import { nativeLine, nativeRun } from './native'
 import { drawSettings } from './settings-view'
@@ -175,9 +177,21 @@ const RECONCILE_CAP = 3
 const RELEASE_GRACE_MS = 5_000
 // The prompt.submit origins that are the person's own request, or auto run's.
 const NEW_CHAIN_ORIGINS = new Set<PromptOrigin['kind']>(['composer', 'bridge', 'sdk', 'channel', 'slack-ping', 'plugin'])
-// While the cockpit is drawn its files are checked every POLL_MS, git and the context breakdown every DETAIL_EVERY ticks.
+// While a turn runs under a drawn cockpit its files are checked every POLL_MS.
+// Otherwise the settings and ledger are checked, and git and the context
+// breakdown read, every DETAIL_EVERY ticks; a drawn pane with nothing faster
+// running redraws every CLOCK_EVERY ticks, so its clocks keep moving.
 const POLL_MS = 2_000
 const DETAIL_EVERY = 5
+const CLOCK_EVERY = 15
+// One git status per GIT_EVERY_MS after tool calls; a shell or agent older than LIVE_MS no longer needs a once-a-second clock.
+const GIT_EVERY_MS = 2_000
+const LIVE_MS = 3_600_000
+// Slash commands after which the engine, style, remote and account are read again.
+const REREAD_COMMANDS = ['model', 'effort', 'output-style', 'config', 'login', 'logout']
+const GIT_TOOLS = ['Bash', 'Edit', 'Write', 'NotebookEdit']
+// A Bash command that can move the session's directory: a shell cd, or a worktree.
+const MOVES_DIR = /\b(?:cd|pushd|popd)\b|worktree/
 // The pending actions whose stage the watchdog arms again when no timer holds
 // it; a pending resume resubmits the run's first prompt.
 const WATCHED_STAGES: Readonly<Record<string, AutoStage>> = { compact: 'compact', clear: 'clear', resume: 'resume', switch: 'switch' }
@@ -215,7 +229,6 @@ const REPORT_LINE = /^\s*Write your full report to /
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
 const STORE_MENTION = 'notifyMention'
-const STORE_IMPORTED = 'webhookImported'
 // How many context readings the trend line keeps.
 const TREND_LENGTH = 40
 // The colors the context breakdown cycles through, largest category first.
@@ -278,7 +291,6 @@ type Options = {
   handoffMode: string
   nudgeModel: boolean
   guardAttribution: boolean
-  warnAt: number
   layout: string
   density: string
   sections: string
@@ -295,7 +307,7 @@ type Options = {
 }
 
 /** What the budget reading is judged by. */
-type Tuning = { handoffTokens: number; nudgeModel: boolean; warnAt: number; isRelaxed: boolean }
+type Tuning = { handoffTokens: number; nudgeModel: boolean; isRelaxed: boolean }
 
 /** The options with their defaults filled in, and what the pane derives from them. */
 type Live = Omit<Options, 'layout' | 'density'> & {
@@ -314,7 +326,6 @@ function liveFrom(values: Partial<Options>): Live {
     handoffMode = 'strict',
     nudgeModel = true,
     guardAttribution = true,
-    warnAt = 80,
     layout: layoutSetting = 'auto',
     density: densitySetting = 'detailed',
     sections = '',
@@ -336,7 +347,6 @@ function liveFrom(values: Partial<Options>): Live {
     handoffMode,
     nudgeModel,
     guardAttribution,
-    warnAt,
     layout,
     density: densitySetting === 'dense' ? 'dense' : 'detailed',
     sections,
@@ -350,7 +360,7 @@ function liveFrom(values: Partial<Options>): Live {
     notifyDetail,
     bandLine1,
     bandLine2,
-    tuning: { handoffTokens, nudgeModel, warnAt: warnShare(warnAt), isRelaxed: handoffMode === 'relaxed' },
+    tuning: { handoffTokens, nudgeModel, isRelaxed: handoffMode === 'relaxed' },
     shown: sectionsFrom(sections),
     shownCollapsed: collapsedFrom(collapsed),
     bandLayout: bandLinesFrom(bandLine1, bandLine2),
@@ -384,13 +394,13 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'cockpit' }, async ($, e) => {
+  on('command.run', { command: 'dforge:cockpit' }, async ($, e) => {
     const o = await live($)
     const words = e.args.trim().split(/\s+/)
     if (words[0]?.toLowerCase() === 'notify') return notifyCommand($, words.slice(1))
     const wantsSettings = e.args.trim().toLowerCase() === 'settings'
     if (!wantsSettings && e.args.trim() !== '') {
-      return { text: `Unknown argument "${e.args.trim()}". Usage: /cockpit [settings | notify test | notify mention <id>]` }
+      return { text: `Unknown argument "${e.args.trim()}". Usage: /dforge:cockpit [settings | notify test | notify mention <id>]` }
     }
     if (wantsSettings) await showSettings($)
     else {
@@ -411,21 +421,30 @@ export const register: Register = on => {
     return { text: opened.isPlaced ? 'Cockpit pane opened.' : `Cockpit pane is waiting: ${opened.reason}` }
   })
 
+  // The engine's own commands change what the Account section and the band show: read it again once they ran.
+  on('command.run', async ($, e, next) => {
+    const done = await next(e)
+    if (REREAD_COMMANDS.includes(e.command)) {
+      try {
+        await readEngine($, true)
+        await readRemote($)
+        await readAccount($)
+      } catch {
+        // The next read shows it.
+      }
+    }
+    return done
+  }).catch(($, e, next) => next(e))
+
   on('session.measure', async ($, e, next) => {
     const done = await next(e)
     const o = await live($)
     const now = await $.clock.now()
     const startedAt = (await read($, usage))?.startedAt ?? (await $.session.usage()).startedAt
-    const reading: CockpitUsage = {
-      startedAt,
-      readAt: now,
-      limits: e.rateLimits.map(limit => ({
-        kind: limit.kind,
-        percent: limit.percentUsed,
-        resetsAt: limit.resetsAt === undefined ? null : Date.parse(limit.resetsAt) || null,
-      })),
-    }
+    const reading: CockpitUsage = { startedAt, readAt: now, limits: limitsOf(e.rateLimits) }
+    S.limits = reading.limits
     await update($, usage, () => reading)
+    await refresh($, o.tuning, S.compactWindow, { isShownOnly: true, figures: { context: e.context, cost: e.cost } })
     if (o.limitAlertAt > 0) {
       for (const limit of await alertLimits($, reading, o.limitAlertAt)) {
         await notify($, {
@@ -436,7 +455,7 @@ export const register: Register = on => {
         })
       }
     }
-    // A measurement lands with every response, and the detail runs git: keep the poll's pace.
+    // A measurement lands after each main-thread turn and when a window moves a whole point, and the detail runs git: keep the poll's pace.
     if ((o.isMinimized || (await isPaneUp($))) && (await $.clock.now()) - S.detailAt >= DETAIL_EVERY * POLL_MS) await refreshDetail($)
 
     return done
@@ -491,7 +510,7 @@ export const register: Register = on => {
   on('agent.spawn', async ($, e, next) => {
     const denial = seatDenial(e, (await read($, isPlanSession)) && !(await read($, isFastMode)))
     if (denial !== null) {
-      const refusal: CockpitRefusal = { at: await $.clock.now(), tool: 'Agent', line: denial }
+      const refusal: CockpitRefusal = { at: await $.clock.now(), tool: 'Agent', line: seatRefusalLine(e) }
       await update($, refusals, list => [...list, refusal].slice(-20))
       return { deny: denial }
     }
@@ -636,6 +655,23 @@ export const register: Register = on => {
     const done = await next(e)
     if (e.agentId === undefined) {
       S.isMainTurn = false
+      // The Now row leaves "running" first: the reads below can start processes.
+      const stamp = await $.clock.now()
+      const failed = e.reason === 'error' || e.reason === 'refusal'
+      const why = failed ? failureOf(e) : null
+      const isHeld = e.reason === 'answer' && (await holdsDone($))
+      const turnStartedAt = (await read($, activity)).turnStartedAt ?? stamp - e.durationMs
+      if (e.reason !== 'answer') S.heldDone = null
+      // A later turn that says nothing keeps the answer the chain last gave.
+      else if (isHeld) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp, answer: e.answer.trim() === '' ? (S.heldDone?.answer ?? e.answer) : e.answer }
+      await setActivity($, now => ({
+        ...IDLE,
+        kind: failed ? 'failed' : e.reason === 'aborted' ? 'interrupted' : isHeld ? 'background' : 'idle',
+        since: now.since,
+        lastTurnMs: e.durationMs,
+        endedAt: stamp,
+        detail: why,
+      }))
       await trackAutoRun($)
       S.compactWindow = await readCompactWindow($)
       await readStyle($)
@@ -649,23 +685,7 @@ export const register: Register = on => {
       const head = await read($, budget)
       if (head !== null) await update($, turnTokens, list => [...list, head.tokens].slice(-TURN_READINGS))
       for (const [id, wait] of [...S.waits]) if (wait.agentId === null) await settleWait($, id, '⏹ Turn ended')
-      const stamp = await $.clock.now()
-      const failed = e.reason === 'error' || e.reason === 'refusal'
-      const why = failed ? failureOf(e) : null
-      const isHeld = e.reason === 'answer' && (await holdsDone($))
-      const turnStartedAt = (await read($, activity)).turnStartedAt ?? stamp - e.durationMs
-      if (e.reason !== 'answer') S.heldDone = null
-      // A later turn that says nothing keeps the answer the chain last gave.
-      else if (isHeld) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp, answer: e.answer.trim() === '' ? (S.heldDone?.answer ?? e.answer) : e.answer }
       await readRemote($)
-      await setActivity($, now => ({
-        ...IDLE,
-        kind: failed ? 'failed' : e.reason === 'aborted' ? 'interrupted' : isHeld ? 'background' : 'idle',
-        since: now.since,
-        lastTurnMs: e.durationMs,
-        endedAt: stamp,
-        detail: why,
-      }))
       if (failed) {
         await notify(
           $,
@@ -686,6 +706,8 @@ export const register: Register = on => {
       return done
     }
     const agentId = e.agentId
+    // The session's cost and context moved while the main loop waited on it.
+    await refresh($, (await live($)).tuning, S.compactWindow, { isShownOnly: true }).catch(() => undefined)
     // A notification for a finished subagent's loop may never arrive: its
     // shells end with it, recorded spawn or not.
     await update($, shells, list => list.filter(one => one.agentId !== agentId))
@@ -723,13 +745,13 @@ export const register: Register = on => {
       const denial = await judgeWriteDenial($, tool, e)
       if (denial !== null) {
         try {
-          const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line: denial }
+          const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line: denial.line }
           await update($, refusals, list => [...list, refusal].slice(-20))
         } catch {
           // The refusal stands unlisted: the .catch below knows no judge
           // that only $.agent.list() names.
         }
-        return { deny: denial }
+        return { deny: denial.deny }
       }
     }
     const line = (await live($)).guardAttribution ? await attributionLine($, tool, e) : undefined
@@ -778,15 +800,22 @@ export const register: Register = on => {
     if (ran.deny === undefined && !ran.isError) await trackShells($, tool, e, ran.result)
     if (e.agentId === undefined) {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
-      // A run starts, stops and changes regime through the model's own calls.
-      await trackAutoRun($)
+      // A run starts, stops and changes regime through the model's own Bash calls to scripts/auto-run.
+      if (tool === 'Bash') await trackAutoRun($)
       // A worktree move takes the session's ledger with it.
       // A shell cd moves it too, as using-git-worktrees' fallback does.
-      const isMove = ran.deny === undefined && !ran.isError && (WORKTREE_TOOLS.includes(tool) || (tool === 'Bash' && (await hasMoved($))))
+      const isMove =
+        ran.deny === undefined &&
+        !ran.isError &&
+        (WORKTREE_TOOLS.includes(tool) || (tool === 'Bash' && MOVES_DIR.test(String((e as { command?: unknown }).command ?? '')) && (await hasMoved($))))
       if (isMove) await readPlace($)
-      // The controller writes its ledger with its own tool calls; read it
-      // before the budget, which measures a plan's tail by it.
-      if (isMove || touchesRun(e)) await readRun($)
+      // The controller writes its ledger with its own tool calls, and scripts
+      // write it from a Bash call whose text names no .dforge path: read it
+      // before the budget, which measures a plan's tail by it. It is keyed on
+      // modification times and returns early when nothing changed.
+      if (isMove || tool === 'Bash' || touchesRun(e)) await readRun($)
+      // What the call changed in the tree shows in the git card now, not at the poll.
+      if (GIT_TOOLS.includes(tool) && (await $.clock.now()) - S.gitAt >= GIT_EVERY_MS && ((await live($)).isMinimized || (await isPaneUp($)))) await refreshGit($)
       await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
     }
 
@@ -881,7 +910,7 @@ export const register: Register = on => {
         </Box>
       )
     }
-    const isNearHandoff = head !== null && levelOf(head.tokens, head.limit, o.tuning.warnAt) !== 'quiet'
+    const isNearHandoff = head !== null && levelOf(head.tokens, head.limit) !== 'quiet'
     const resumeCard = offer !== null && (
       <Box key="resume-card" flexDirection="column" borderStyle="round" borderColor={BUTTON_MAIN} paddingX={1}>
         <Text key="resume-title" color={BUTTON_MAIN} bold wrap="truncate-end">
@@ -986,7 +1015,7 @@ export const register: Register = on => {
                 notes.url !== null && compact('set-notify-test', 'Send test', () => sendTest($), { isMain: true }),
                 !notes.isFromEnv && canType && compact('set-notify-url-edit', notes.url === null ? 'Set' : 'Change', () => edit('url'), { isMain: notes.url === null }),
                 !notes.isFromEnv && notes.url !== null && compact('set-notify-url-remove', 'Remove', () => saveWebhook($, '')),
-                !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it in /cockpit settings in a terminal, or with DFORGE_NOTIFY_URL</Text>,
+                !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it in /dforge:cockpit settings in a terminal, or with DFORGE_NOTIFY_URL</Text>,
               )}
           {notes.last !== null && (
             <Text key="set-notify-last" color={notes.last.isError ? 'red' : 'green'} wrap="truncate-end">
@@ -1240,6 +1269,9 @@ export const register: Register = on => {
         </Box>
       )
     }
+    const seatText = (seat: CockpitSeat) => seatCounts(totalIn(seat), cacheShare(seat), seat.output)
+    // The details sit INDENT cells in: the bar takes what the counts leave.
+    const seatBar = (seat: CockpitSeat) => seatBarCells(inner - INDENT, seatText(seat))
     const details = (key: string, ...body: RenderChildren[]) => (
       <Box key={key} flexDirection="column" paddingLeft={INDENT}>
         {body}
@@ -1631,12 +1663,9 @@ export const register: Register = on => {
                   <Text dimColor> ×{seat.runs}</Text>
                 </Text>
                 <Text wrap="truncate-end">
-                  <Text color="magenta">{bar(totalIn(seat) / mostIn, Math.max(6, wide - 26)).replace(/▱+$/, rest => ' '.repeat(rest.length))}</Text>
-                  <Text bold> {kTokens(totalIn(seat))}</Text>
-                  <Text dimColor>
-                    {' '}
-                    in · {cacheShare(seat)}% cached · {kTokens(seat.output)} out
-                  </Text>
+                  {seatBar(seat) > 0 && <Text color="magenta">{bar(totalIn(seat) / mostIn, seatBar(seat)).replace(/▱+$/, rest => ' '.repeat(rest.length))} </Text>}
+                  <Text bold>{seatText(seat).slice(0, seatText(seat).indexOf(' '))}</Text>
+                  <Text dimColor>{seatText(seat).slice(seatText(seat).indexOf(' '))}</Text>
                 </Text>
               </Box>
             )),
@@ -1911,7 +1940,7 @@ export const register: Register = on => {
                 kind: 'text',
                 small: true,
                 left: [{ text: shortSeat(seat.seat) }, { text: ` ×${seat.runs}`, dim: true }],
-                right: [{ text: `${kTokens(totalIn(seat))} in · ${cacheShare(seat)}% cached · ${kTokens(seat.output)} out`, mono: true, dim: true }],
+                right: [{ text: seatCounts(totalIn(seat), cacheShare(seat), seat.output), mono: true, dim: true }],
               },
               { kind: 'picture', svg: seatSvg(totalIn(seat) / mostIn, cacheShare(seat) / 100, width, 'magenta') },
             ]),
@@ -2475,6 +2504,9 @@ const S = {
   heldDone: null as { startedAt: number; heldAt: number; answer: string } | null,
   // Sends the held Done if no turn starts within RELEASE_GRACE_MS of the work ending.
   releaseTimer: null as Timer | null,
+  // The last rate-limit windows read and the limits already alerted: /clear empties $.state but not these.
+  limits: [] as CockpitUsage['limits'],
+  alerted: [] as string[],
   // The poll's timer, whether a tick is running, how many ran, and when the slower readings last ran.
   poll: null as Timer | null,
   isPolling: false,
@@ -2483,8 +2515,12 @@ const S = {
   // turn rather than on every tool call.
   compactWindow: undefined as number | undefined,
   detailAt: 0,
+  // When git last ran, which a tool call's own refresh spaces by GIT_EVERY_MS.
+  gitAt: -GIT_EVERY_MS,
   // The settings file's modification time and the engine's settings, as last put in force.
   seen: { config: null as number | null, claude: '' },
+  // The finish file and its modification time as last read.
+  finishKey: '',
   // The ledger, its modification time and its plan's, as the run was last read; the plan file found then.
   runKey: '',
   runPlan: null as string | null,
@@ -2637,13 +2673,17 @@ async function setActivity($: EngineInterface, change: (now: CockpitActivity) =>
   await syncTicker($)
 }
 
-// The pane's clock: a redraw a second while a turn runs, a background shell
-// runs or a subagent works, so their timers count seconds.
+// The pane's clock: a redraw a second while a turn runs, or a background shell
+// or subagent younger than LIVE_MS works, so their timers count seconds. The
+// elapsed text drops its seconds at an hour; an older one is drawn with the
+// slow redraw the poll gives an idle pane.
 async function syncTicker($: EngineInterface) {
   const now = await read($, activity)
   S.isTurnLive = now.kind === 'running' || now.kind === 'waiting' || now.kind === 'asking'
+  const stamp = await $.clock.now()
+  const isYoung = (startedAt: number) => stamp - startedAt < LIVE_MS
   const isTicking =
-    S.isTurnLive || (await read($, shells)).length > 0 || (await read($, spawns)).some(one => !one.isDone)
+    S.isTurnLive || (await read($, shells)).some(one => isYoung(one.startedAt)) || (await read($, spawns)).some(one => !one.isDone && isYoung(one.startedAt))
   if (isTicking && S.ticker === null) {
     S.ticker = $.clock.every(1000, () => $.ui.invalidate('ui.render'))
   } else if (!isTicking && S.ticker !== null) {
@@ -3260,6 +3300,10 @@ async function readRun($: EngineInterface) {
 // The finish action dforge asked for before the run, from the run's
 // finish.json, or the one beside the workspaces for work without a plan.
 async function readFinish($: EngineInterface, path: string) {
+  const stat = await $.fs.stat(path).catch(() => null)
+  const key = `${path}:${stat?.kind === 'file' ? stat.mtimeMs : ''}`
+  if (key === S.finishKey) return
+  S.finishKey = key
   const text = await $.fs.read(path).catch(() => null)
   const next: CockpitFinish | null = text === null ? null : parseFinish(String(text))
   if (JSON.stringify(await read($, finish)) === JSON.stringify(next)) return
@@ -3307,7 +3351,7 @@ async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
 // The webhook and mention, from the environment or the mod's own store.
 async function readNotifier($: EngineInterface) {
   try {
-    const fromEnv = ((await $.env.get('DFORGE_NOTIFY_URL')) || (await $.env.get('DR_COCKPIT_NOTIFY_URL')) || '').trim()
+    const fromEnv = ((await $.env.get('DFORGE_NOTIFY_URL')) || '').trim()
     const stored = await $.store.get(STORE_URL)
     const url = isDiscordWebhook(fromEnv) ? fromEnv : typeof stored === 'string' && isDiscordWebhook(stored) ? stored : null
     const mention = await $.store.get(STORE_MENTION)
@@ -3423,7 +3467,7 @@ async function notifyCommand($: EngineInterface, words: string[]): Promise<{ tex
   }
   const state = await read($, notifier)
   return {
-    text: state.url === null ? 'No Discord webhook is set. Set one in /cockpit settings (Notifications) in a terminal, or with DFORGE_NOTIFY_URL.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from the environment)' : ''}.`,
+    text: state.url === null ? 'No Discord webhook is set. Set one in /dforge:cockpit settings (Notifications) in a terminal, or with DFORGE_NOTIFY_URL.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from the environment)' : ''}.`,
   }
 }
 
@@ -3434,10 +3478,10 @@ async function refresh(
   $: EngineInterface,
   tuning: Tuning,
   compactWindow: number | undefined,
-  { isShownOnly = false } = {},
+  { isShownOnly = false, figures: given }: { isShownOnly?: boolean; figures?: Pick<SessionUsage, 'context' | 'cost'> } = {},
 ): Promise<{ now: CockpitBudget; isPast: boolean } | undefined> {
   const { handoffTokens, nudgeModel } = tuning
-  const figures = await $.session.usage()
+  const figures = given ?? (await $.session.usage())
   const tokens = figures.context.tokens
   const window = figures.context.window
   // A window the host does not know would make every share of it infinite and the budget zero.
@@ -3455,7 +3499,7 @@ async function refresh(
     ? autoLimitFor(auto.regime, handoffTokens, window, compactWindow)
     : tuning.isRelaxed
       ? finalLimitFor(window, compactWindow)
-      : budgetFor(handoffTokens, undefined, window, compactWindow)
+      : budgetFor(handoffTokens, window, compactWindow)
   const isFinishing = !isAuto && !tuning.isRelaxed && isTail
   const usd = figures.cost?.usd ?? null
   const before = await read($, budget)
@@ -3473,7 +3517,7 @@ async function refresh(
   }
 
   if (isShownOnly) return
-  const level = levelOf(tokens, limit, tuning.warnAt)
+  const level = levelOf(tokens, limit)
   // Finishing the plan past the budget is no handoff.
   const isPast = level === 'handoff' && !isFinishing
   const reading = { now: { tokens, limit, window, compactWindow: compactWindow ?? null, usd, isFinishing }, isPast }
@@ -3556,7 +3600,7 @@ async function applySettings($: EngineInterface, file: SettingsFile, mtime?: num
   const user = { ...engineUser, ...S.claudeSaved }
   const values = resolveSettings(SCHEMA, file, env, merged)
   S.settingProblems = settingProblems(SCHEMA, file, env)
-  const locks = { ...envLocks(SCHEMA, env), ...claudeLocks(SCHEMA, merged, user) }
+  const locks = { ...envLocks(SCHEMA, env), ...claudeLocks(SCHEMA, merged, user), ...inertLocks(SCHEMA, values) }
   S.locks = locks
   await update($, settings, () => values)
   applyNotify(liveFrom(values as Partial<Options>))
@@ -3564,58 +3608,13 @@ async function applySettings($: EngineInterface, file: SettingsFile, mtime?: num
   S.seen = { config: mtime === undefined ? (await configStamp($)).mtime : mtime, claude: JSON.stringify([userRead, mergedRead]) }
 }
 
-/** The first run: dr-cockpit's options, imported into the new file. */
-async function importSettings($: EngineInterface, path: string): Promise<SettingsFile> {
-  if (await nodeRuns($)) {
-    // dforge-config imports before any command, creating the file with a hard
-    // link that never replaces one saved meanwhile. `get --json` prints the
-    // resolved values, not the file, so its output is not used.
-    await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'get', '--json'], { timeoutMs: 15_000 }).catch(() => null)
-    // A run that failed before creating the file falls through to the import below; otherwise a later save would create the file without dr-cockpit's options and shut out the import for good.
-    if (await $.fs.exists(path).catch(() => false)) return (await readSettingsFile($, path)) ?? {}
-  }
-  const claude = await $.settings.read({ source: 'user' }).catch(() => ({}))
-  const file = importedSettings(SCHEMA, claude)
-  // The mod has no exclusive create: a file saved while the reads above ran is kept.
-  if (await $.fs.exists(path).catch(() => false)) return (await readSettingsFile($, path)) ?? file
-  await $.fs.write(path, `${JSON.stringify(file, null, 2)}\n`).catch(() => undefined)
-  return file
-}
-
-/** Once per machine: dr-cockpit's Discord webhook and mention, from its store file into this plugin's store. */
-async function importWebhook($: EngineInterface) {
-  if ((await $.store.get(STORE_IMPORTED)) === true) return
-  await $.store.set(STORE_IMPORTED, true)
-  if ((await $.store.get(STORE_URL)) !== undefined) return
-  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
-  const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || (home ? `${home.replace(/[\\/]+$/, '')}/.claude` : '')
-  if (!configDir) return
-  const dir = `${configDir}/plugins/store`
-  const entry = (await $.fs.list(dir).catch(() => [])).find(one => one.name.startsWith('dr-cockpit_darkraise-') && one.name.endsWith('.json'))
-  if (entry === undefined) return
-  const old = await $.fs
-    .read(`${dir}/${entry.name}`)
-    .then(text => JSON.parse(String(text)) as Record<string, unknown>)
-    .catch(() => null)
-  if (old === null) return
-  if (typeof old.notifyUrl === 'string' && isDiscordWebhook(old.notifyUrl)) await $.store.set(STORE_URL, old.notifyUrl)
-  if (typeof old.notifyMention === 'string') await $.store.set(STORE_MENTION, old.notifyMention)
-}
-
-/** Reads ~/.dforge/config.json into force, importing the pre-2.0 settings on the first run. */
+/** Reads ~/.dforge/config.json into force. */
 async function loadSettings($: EngineInterface) {
   S.claudeSaved = {}
   S.changed = {}
   const { path, mtime } = await configStamp($)
   if (path === null) return applySettings($, {}, null)
-  let file = await readSettingsFile($, path)
-  let readAt: number | null | undefined = mtime
-  if (file !== null && Object.keys(file).length === 0 && !(await $.fs.exists(path).catch(() => false))) {
-    file = await importSettings($, path)
-    readAt = undefined
-  }
-  await applySettings($, file ?? {}, readAt)
-  await importWebhook($).catch(() => undefined)
+  await applySettings($, (await readSettingsFile($, path)) ?? {}, mtime)
 }
 
 /** Saves one setting and puts it in force, saying why if it could not; resolves whether it was saved. */
@@ -3716,7 +3715,7 @@ async function engineSettings($: EngineInterface): Promise<string> {
 }
 
 /**
- * Registers /cockpit and reads every section, then marks the session read.
+ * Reads every section, then marks the session read.
  * session.start runs it once per process, opening or shutting the pane first;
  * the poll runs it again in a session /clear or /resume carried the process
  * into, whose values the host keeps apart and no session.start announces, and
@@ -3729,11 +3728,6 @@ async function readSession($: EngineInterface, isStart: boolean) {
   S.roots = { key: '', value: null }
   S.offerRead = ''
   S.offerRegisters = null
-  await $.command.register({
-    name: 'cockpit',
-    description: 'Show context, usage, subagents, the plan and the repo in a pane',
-    argumentHint: '[settings | notify test | notify mention <id>]',
-  })
   await loadSettings($)
   const o = await live($)
   // Open first: the reads below run processes, and each fills its section as it lands.
@@ -3742,6 +3736,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
   } else if (isStart && o.openAtStart) void $.ui.open(paneFor(o.layout))
   S.compactWindow = await readCompactWindow($)
   await onBudget($, await refresh($, o.tuning, S.compactWindow))
+  await seedUsage($)
   await readAccount($)
   await readPlace($)
   await readBreakdown($)
@@ -3749,6 +3744,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
   await readWhere($)
   await readNotifier($)
   S.runKey = ''
+  S.finishKey = ''
   await readRun($)
   await trackAutoRun($)
   await beat($)
@@ -3776,13 +3772,23 @@ async function pollTick($: EngineInterface) {
       return
     }
     if (seen === '' && id !== null) await update($, sessionRead, () => id)
-    if (!(await live($)).isMinimized && !(await isPaneUp($))) return
     S.polls += 1
+    const isSlowTick = S.polls % DETAIL_EVERY === 0
+    // An age crossing LIVE_MS stops a once-a-second clock with no event to say so.
+    await syncTicker($)
+    const isShown = (await live($)).isMinimized || (await isPaneUp($))
+    // The quick pace is for a turn running under a drawn cockpit; every other
+    // tick waits for the slow one. A closed pane still takes the settings
+    // saved elsewhere, which the hooks act on.
+    if (!isSlowTick && !(isShown && S.isTurnLive)) return
     await rereadSettings($)
+    if (!isShown) return
     await readRun($)
-    if (S.polls % DETAIL_EVERY !== 0) return
-    if ((await $.clock.now()) - S.detailAt >= DETAIL_EVERY * POLL_MS) await refreshDetail($)
-    await trackAutoRun($)
+    if (isSlowTick) {
+      await refreshDetail($)
+      await trackAutoRun($)
+    }
+    if (S.polls % CLOCK_EVERY === 0 && S.ticker === null) $.ui.invalidate('ui.render')
   } finally {
     S.isPolling = false
   }
@@ -3825,6 +3831,11 @@ async function refreshDetail($: EngineInterface) {
   S.detailAt = await $.clock.now()
   await readPlace($)
   await readBreakdown($)
+  await refreshGit($)
+}
+
+async function refreshGit($: EngineInterface) {
+  S.gitAt = await $.clock.now()
   try {
     const ran = await $.process.run(GIT_STATUS, { timeoutMs: 3000 })
     const state = ran.exitCode === 0 ? repoFromPorcelain(ran.stdout) : null
@@ -3895,6 +3906,34 @@ async function readJson($: EngineInterface, path: string): Promise<Record<string
   }
 }
 
+function limitsOf(windows: readonly { kind: string; percentUsed: number; resetsAt?: string }[]): CockpitUsage['limits'] {
+  return windows.map(limit => ({
+    kind: limit.kind,
+    percent: limit.percentUsed,
+    resetsAt: limit.resetsAt === undefined ? null : Date.parse(limit.resetsAt) || null,
+  }))
+}
+
+/**
+ * Fills the Usage section when no measurement has: a new session after /clear
+ * holds none until its first turn ends. The limits are the usage op's, else
+ * the last read ones whose window has not reset.
+ */
+async function seedUsage($: EngineInterface) {
+  if ((await read($, usage)) !== null) return
+  try {
+    const figures = await $.session.usage()
+    const now = await $.clock.now()
+    const fresh = limitsOf(figures.rateLimits)
+    const limits = fresh.length > 0 ? fresh : S.limits.filter(limit => limit.resetsAt === null || limit.resetsAt > now)
+    if (limits.length === 0) return
+    S.limits = limits
+    await update($, usage, () => ({ startedAt: figures.startedAt, readAt: now, limits }))
+  } catch {
+    // No reading yet: the section waits for the first measurement.
+  }
+}
+
 /** Whether the session's directory differs from the one the place was read in. */
 async function hasMoved($: EngineInterface): Promise<boolean> {
   const cwd = await $.session.cwd().catch(() => null)
@@ -3919,12 +3958,13 @@ async function readPlace($: EngineInterface) {
 }
 
 // Until the first request goes out: the session's model and the effort setting.
-async function readEngine($: EngineInterface) {
+// A command that changed them passes isForced, since the request that would
+// correct them is a turn away.
+async function readEngine($: EngineInterface, isForced = false) {
   try {
     const model = await $.session.model()
-    const effortLevel = ((await $.settings.read()) as { effortLevel?: unknown }).effortLevel
-    const effort = typeof effortLevel === 'string' ? effortLevel : null
-    await update($, engine, now => ({ ...now, model: now.model ?? model, effort: now.effort ?? effort }))
+    const effort = effortFor(model, (await $.settings.read()) as SettingsEffort)
+    await update($, engine, now => ({ ...now, model: isForced ? model : (now.model ?? model), effort: isForced ? effort : (now.effort ?? effort) }))
   } catch {
     // The first request fills them in.
   }
@@ -3940,6 +3980,19 @@ async function readStyle($: EngineInterface) {
   } catch {
     // The band shows no style.
   }
+}
+
+type SettingsEffort = { effortLevel?: unknown; modelSettings?: Record<string, { effortLevel?: unknown } | undefined> }
+
+/**
+ * The effort a model starts with: its own modelSettings entry, under its id or
+ * the id with a context suffix such as [1m], else the global effortLevel.
+ */
+function effortFor(model: string, settings: SettingsEffort): string | null {
+  const own = settings.modelSettings ?? {}
+  const key = Object.keys(own).find(one => one === model) ?? Object.keys(own).find(one => one.startsWith(`${model}[`) || model.startsWith(`${one}[`))
+  const level = (key === undefined ? undefined : own[key]?.effortLevel) ?? settings.effortLevel
+  return typeof level === 'string' ? level : null
 }
 
 function cacheOf(usage: TurnUsage): number | null {
@@ -3958,11 +4011,12 @@ async function readCompactWindow($: EngineInterface): Promise<number | undefined
 // The limits that crossed the alert line, once per window and reset, for the
 // Discord message; the pane's own gauges show them, so nothing pops up.
 async function alertLimits($: EngineInterface, reading: CockpitUsage, at: number) {
-  const said = await read($, alerted)
+  const said = [...(await read($, alerted)), ...S.alerted]
   const crossed: CockpitUsage['limits'] = []
   for (const limit of reading.limits) {
     const key = `${limit.kind}@${limit.resetsAt ?? ''}`
     if (limit.percent < at || said.includes(key)) continue
+    S.alerted = [...S.alerted, key].slice(-20)
     await update($, alerted, list => [...list, key].slice(-20))
     crossed.push(limit)
   }
@@ -4232,7 +4286,7 @@ async function isNamedReport($: EngineInterface, target: string, allowed: readon
 
 // A failing agent list refuses no write of a loop the spawn record does not
 // call a judge's; for one it does, the hook's .catch refuses the write.
-async function judgeWriteDenial($: EngineInterface, tool: string, e: { agentId?: string }): Promise<string | null> {
+async function judgeWriteDenial($: EngineInterface, tool: string, e: { agentId?: string }): Promise<{ deny: string; line: string } | null> {
   const spawn = (await read($, spawns)).find(one => one.agentId === e.agentId)
   const isRecordedJudge = isJudgeSeat(spawn?.seat)
   const agents = await $.agent.list().catch(error => {
@@ -4247,9 +4301,15 @@ async function judgeWriteDenial($: EngineInterface, tool: string, e: { agentId?:
     const target = typeof named === 'string' ? named : ''
     const allowed = spawn?.reports ?? []
     if (await isNamedReport($, target, allowed, spawn?.reportRoots ?? [])) return null
-    return `dforge: a review seat writes only the report file its dispatch names (${allowed.length === 0 ? 'none' : allowed.join(', ')}); ${target} is not one.`
+    return {
+      deny: `dforge: a review seat writes only the report file its dispatch names (${allowed.length === 0 ? 'none' : allowed.join(', ')}); ${target} is not one.`,
+      line: `outside its report: ${target.split(/[\\/]/).pop() || target}`,
+    }
   } catch (error) {
-    return `dforge: the review-seat write guard could not check this write (${error instanceof Error && error.message !== '' ? error.message : String(error)}); it is refused.`
+    return {
+      deny: `dforge: the review-seat write guard could not check this write (${error instanceof Error && error.message !== '' ? error.message : String(error)}); it is refused.`,
+      line: 'write guard could not check',
+    }
   }
 }
 

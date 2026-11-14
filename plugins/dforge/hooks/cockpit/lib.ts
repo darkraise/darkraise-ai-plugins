@@ -2,21 +2,19 @@ import type { CockpitAutoRun, CockpitFinish, CockpitRoots } from '../../types'
 
 // Pure helpers, kept apart from the hooks so tests can reach them directly.
 
-/** The strip's handoff reading shows from this share of the budget. */
+/** Hand off takes the accent color from this share of the budget. */
 export const WARN_AT = 0.8
 
 /**
- * The handoff budget: `configured`, else `env`, else dforge's own rule
+ * The handoff budget: `configured`, else dforge's own rule
  * (reference/session-budget.md): the compaction point minus one task's worst
  * growth, min(autoCompactWindow, window) × 93% − 140,000. Small windows, where
  * that comes out near zero, hold a fifth of the window. `configured` is
  * handoffTokens as the settings resolve it, where DFORGE_BUDGET already
- * overrides the file; `env` is a raw DFORGE_BUDGET for a caller without them.
+ * overrides the file.
  */
-export function budgetFor(configured: number, env: string | undefined, window: number, compactWindow?: number): number {
+export function budgetFor(configured: number, window: number, compactWindow?: number): number {
   if (configured > 0) return Math.round(configured)
-  const pinned = Number(env)
-  if (Number.isFinite(pinned) && pinned > 0) return Math.round(pinned)
   const room = compactWindow !== undefined && compactWindow > 0 ? Math.min(window, compactWindow) : window
   return Math.max(Math.floor(room * 0.93) - 140_000, Math.floor(room / 5))
 }
@@ -38,14 +36,9 @@ export function positive(value: unknown): number | undefined {
 
 export type Level = 'quiet' | 'warn' | 'handoff'
 
-export function levelOf(tokens: number, limit: number, warnAt: number = WARN_AT): Level {
+export function levelOf(tokens: number, limit: number): Level {
   if (tokens >= limit) return 'handoff'
-  return tokens >= limit * warnAt ? 'warn' : 'quiet'
-}
-
-/** The warnAt setting, a percentage, as a share: 80 → 0.8, held to 1-99. */
-export function warnShare(percent: number): number {
-  return Number.isFinite(percent) && percent > 0 ? Math.min(Math.max(Math.round(percent), 1), 99) / 100 : WARN_AT
+  return tokens >= limit * WARN_AT ? 'warn' : 'quiet'
 }
 
 export const SECTIONS = ['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo', 'guard'] as const
@@ -125,6 +118,17 @@ export function agentGroups<T extends { agentId: string; isDone: boolean; outcom
 export function kTokens(n: number): string {
   if (n >= 999_500) return `${(n / 1_000_000).toFixed(1)}M`
   return `${Math.round(n / 1000)}k`
+}
+
+/** A seat's counts: what it sent, the share of that the prompt cache served, and what it wrote. */
+export function seatCounts(input: number, cachedPercent: number, output: number): string {
+  return `${kTokens(input)} in · ↻${cachedPercent}% · ${kTokens(output)} out`
+}
+
+/** The cells a seat row's bar gets beside its counts and the space between; 0 when fewer than 6 are left. */
+export function seatBarCells(rowCells: number, counts: string): number {
+  const left = rowCells - 1 - cellWidth(counts)
+  return left >= 6 ? left : 0
 }
 
 const ATTRIBUTION = [
@@ -223,6 +227,11 @@ export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean): string | n
     return 'dforge: name a seat for this dispatch: dforge:judge-sonnet-high or dforge:judge-opus for a review or read-only check, or pass an explicit model (model: "sonnet") to general-purpose. The session implements plan tasks itself, as the plan\'s Execution line says. See using-dforge §Seats.'
   }
   return null
+}
+
+/** The short label the Guard row shows for a spawn seatDenial refused. */
+export function seatRefusalLine(spawn: SeatSpawn): string {
+  return spawn.fork ? 'fork refused' : `${spawn.subagentType.replace(/^dforge:/, '')} with no model`
 }
 
 /** 0.8 → "▰▰▰▰▰▰▰▰▱▱" at width 10; never full below 100%. */
@@ -1418,7 +1427,7 @@ export function reconcileStep(
  * 90% of min(autoCompactWindow, window) in the high regime.
  */
 export function autoLimitFor(regime: string, configured: number, window: number, compactWindow?: number): number {
-  if (regime !== 'high') return budgetFor(configured, undefined, window, compactWindow)
+  if (regime !== 'high') return budgetFor(configured, window, compactWindow)
   const room = compactWindow !== undefined && compactWindow > 0 ? Math.min(window, compactWindow) : window
   return Math.floor(room * 0.9)
 }

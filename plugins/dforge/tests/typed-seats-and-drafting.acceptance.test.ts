@@ -143,8 +143,8 @@ describe('typed seats and drafting: acceptance', () => {
     const ui = await $.ui.mount(PANE as never)
     const row = await ui.find({ type: 'Text', text: /✗ Agent: / })
     expect(row).toBeDefined()
-    // The line carries the reason's opening words, which name the remedy.
-    expect(await ui.find({ type: 'Text', text: /✗ Agent: dforge: name a seat/ })).toBeDefined()
+    // The line is a short label, not the sentence written for the model.
+    expect(await ui.find({ type: 'Text', text: /✗ Agent: general-purpose with no model$/ })).toBeDefined()
   })
 
   test('A8: an allowed spawn adds no refusal', async ($, on) => {

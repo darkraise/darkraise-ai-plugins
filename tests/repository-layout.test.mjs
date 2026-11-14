@@ -69,6 +69,16 @@ test('repository validator rejects broken distribution contracts', async t => {
   }
 });
 
+test('dforge ships /dforge:cockpit as a command file that names the unloaded mod', () => {
+  const text = readFileSync(resolve(root, 'plugins/dforge/commands/cockpit.md'), 'utf8');
+  const head = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text);
+  assert.ok(head, 'frontmatter is required');
+  assert.match(head[1], /^description: \S/m);
+  assert.match(head[1], /^argument-hint: \[settings \| notify test \| notify mention <id>\]$/m);
+  assert.match(head[1], /^disable-model-invocation: true$/m);
+  assert.match(head[2], /did not load/);
+});
+
 test('bundled-link check ignores links inside fenced code blocks', async () => {
   const { validateRepository } = await import('../scripts/validate-repository.mjs');
   const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));

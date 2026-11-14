@@ -18,8 +18,8 @@ export type SettingSpec = {
   max?: number
   step?: number
   values?: readonly string[]
-  /** How a number reads: thousands of tokens, a percentage, seconds or minutes. */
-  unit?: 'k' | '%' | 's' | 'min'
+  /** How a number reads: thousands of tokens, a percentage or seconds. */
+  unit?: 'k' | '%' | 's'
   /** The word shown at 0. */
   zero?: string
   /** The smallest value allowed other than 0, on a number where 0 means unset. */
@@ -27,6 +27,8 @@ export type SettingSpec = {
   enforcedBy?: 'script' | 'skill'
   /** Written even at its default, because an absent key means something else. */
   keepDefault?: boolean
+  /** Another setting's value under which this one changes nothing, and the words its locked row shows. */
+  inertWhen?: { key: string; value: SettingValue; words: string }
 }
 
 export type Schema = Readonly<Record<string, SettingSpec>>
@@ -130,6 +132,12 @@ export function settingProblems(
       problems.push(`${key} in ~/.dforge/config.json is not valid; ${reading === spec.default ? 'ignored' : `read as ${String(reading)}`}`)
     }
   }
+  // darkmem is the reserved mapping, not a setting.
+  for (const key of Object.keys(file)) {
+    if (key !== 'darkmem' && !Object.prototype.hasOwnProperty.call(schema, key)) {
+      problems.push(`${key} in ~/.dforge/config.json is not a dforge setting; remove it with dforge-config unset ${key}`)
+    }
+  }
   return problems
 }
 
@@ -143,17 +151,6 @@ export function settingWritten(schema: Schema, file: SettingsFile, key: string, 
   if (value === spec.default && !spec.keepDefault) delete next[key]
   else next[key] = value
   return next
-}
-
-/** The first run's file: dr-cockpit's options that differ from their defaults. */
-export function importedSettings(schema: Schema, claudeSettings: unknown): SettingsFile {
-  const file: SettingsFile = {}
-  const options = objectAt(objectAt(objectAt(claudeSettings, 'pluginConfigs'), 'dr-cockpit@darkraise'), 'options')
-  for (const [key, spec] of Object.entries(schema)) {
-    const value = options?.[key]
-    if (spec.target === 'dforge' && isValidSetting(spec, value) && value !== spec.default) file[key] = value
-  }
-  return file
 }
 
 /** One settings-view row, drawn from the schema and the value in force. */
@@ -185,7 +182,6 @@ export function shownValue(spec: SettingSpec, value: SettingValue): string {
   if (spec.type !== 'number' || typeof value !== 'number') return String(value)
   if (value === 0 && spec.zero !== undefined) return spec.zero
   if (spec.unit === 'k') return `${value / 1000}k`
-  if (spec.unit === 'min') return `${value} min`
   return `${value}${spec.unit ?? ''}`
 }
 
@@ -274,8 +270,11 @@ export function claudeLocks(schema: Schema, merged: Readonly<Record<string, unkn
   return locks
 }
 
-function objectAt(value: unknown, key: string): Record<string, unknown> | undefined {
-  if (value === null || typeof value !== 'object') return undefined
-  const inner = (value as Record<string, unknown>)[key]
-  return inner !== null && typeof inner === 'object' && !Array.isArray(inner) ? (inner as Record<string, unknown>) : undefined
+/** The rows whose value changes nothing under the values in force, each with the words its row shows. */
+export function inertLocks(schema: Schema, values: Readonly<Record<string, SettingValue>>): Record<string, string> {
+  const locks: Record<string, string> = {}
+  for (const [key, spec] of Object.entries(schema)) {
+    if (spec.inertWhen !== undefined && values[spec.inertWhen.key] === spec.inertWhen.value) locks[key] = spec.inertWhen.words
+  }
+  return locks
 }

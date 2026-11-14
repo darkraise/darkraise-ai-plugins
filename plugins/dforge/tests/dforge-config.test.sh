@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dforge-config: environment over file over default, set/unset, refusals, and
-# the one-time import of the pre-2.0 settings.
+# and the removal of a key the schema no longer has.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,13 +37,13 @@ check "isValidValue: a list naming an unknown name" "$(vv '{ type: "string", val
 
 # --- defaults, set, get, unset ---
 fresh a
-check "default" "$(fc get warnAt)" "80"
-check "first run writes the file" "$(cat "$FILE" | tr -d ' \n')" "{}"
-fc set warnAt 70; check "set: exit 0" "$?" "0"
-check "set then get" "$(fc get warnAt)" "70"
+check "default" "$(fc get breakdownRows)" "6"
+check "reading a setting does not create the file" "$([ -e "$FILE" ] && echo yes || echo no)" "no"
+fc set breakdownRows 8; check "set: exit 0" "$?" "0"
+check "set then get" "$(fc get breakdownRows)" "8"
 fc set layout compact
-check "get --json" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.warnAt, v.layout, v.openAtStart)')" "70 compact true"
-fc set warnAt 80
+check "get --json" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.breakdownRows, v.layout, v.openAtStart)')" "8 compact true"
+fc set breakdownRows 6
 check "a default value is not stored" "$(node -e 'console.log(Object.keys(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))).join(","))' "$FILE")" "layout"
 fc unset layout
 check "unset" "$(fc get layout)" "auto"
@@ -54,7 +54,7 @@ fc unset darkmemEnabled
 # --- refusals leave the file unchanged ---
 before=$(cat "$FILE")
 fc set nope 1; check "unknown key: exit 2" "$?" "2"
-fc set warnAt 500; check "out of range: exit 2" "$?" "2"
+fc set breakdownRows 500; check "out of range: exit 2" "$?" "2"
 fc set layout tiles; check "not an option: exit 2" "$?" "2"
 fc set guardAttribution maybe; check "not a boolean: exit 2" "$?" "2"
 fc set sections "plan, sesions"; check "a misspelt section: exit 2" "$?" "2"
@@ -75,44 +75,35 @@ check "and warned about" "$(grep -c 'DFORGE_BUDGET' "$TMP/stderr")" "1"
 
 # --- a file that is not JSON is refused, not overwritten ---
 printf 'not json' > "$FILE"
-fc set warnAt 70; check "bad file: exit 1" "$?" "1"
+fc set breakdownRows 8; check "bad file: exit 1" "$?" "1"
 check "bad file kept" "$(cat "$FILE")" "not json"
 
-# --- one-time import ---
+# --- the darkmem mapping, and a key the schema no longer has ---
 fresh b
-mkdir -p "$HOME/.claude" "$HOME/.dr-superpowers"
-printf '%s' '{"pluginConfigs":{"dr-cockpit@darkraise":{"options":{"layout":"compact","warnAt":80,"breakdownRows":"x"}}}}' > "$HOME/.claude/settings.json"
-printf '%s' '{"darkmem":{"url":"http://d.test","api_key_env":"DM_KEY","repos":{"/r":{"project":"p"}}}}' > "$HOME/.dr-superpowers/config.json"
-fc get layout > /dev/null
+mkdir -p "$HOME/.dforge"
 DM='{"url":"http://d.test","api_key_env":"DM_KEY","repos":{"/r":{"project":"p"}}}'
-check "import: options only, not the pre-2.0 home" "$(node -e 'const v = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(JSON.stringify(v))' "$FILE")" '{"layout":"compact"}'
-printf '{"layout":"compact","darkmem":%s}\n' "$DM" > "$FILE"
-fc set warnAt 70
-fc unset warnAt
+printf '{"layout":"compact","codexLane":true,"darkmem":%s}\n' "$DM" > "$FILE"
+fc set breakdownRows 8
+fc unset breakdownRows
 fc set notifyDetail brief
 check "set and unset keep the darkmem mapping whole" "$(node -e 'console.log(JSON.stringify(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).darkmem))' "$FILE")" "$DM"
-printf '%s' '{"pluginConfigs":{"dr-cockpit@darkraise":{"options":{"layout":"full"}}}}' > "$HOME/.claude/settings.json"
-check "import runs once" "$(fc get layout)" "compact"
+fc unset codexLane; check "unset of a removed setting: exit 0" "$?" "0"
+check "unset removes a key the schema no longer has" "$(node -e 'console.log(Object.keys(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))).join(","))' "$FILE")" "layout,darkmem,notifyDetail"
+fc unset codexLane; check "unset of a key the file lacks and the schema does not have: exit 2" "$?" "2"
+fc unset darkmem; check "unset of darkmem is refused: exit 2" "$?" "2"
+check "the darkmem mapping survives the refusal" "$(node -e 'console.log(JSON.stringify(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).darkmem))' "$FILE")" "$DM"
+fc get codexLane; check "get of a removed setting is still refused: exit 2" "$?" "2"
+fc get warnAt; check "warnAt is no longer a setting: exit 2" "$?" "2"
 
-# --- CLAUDE_CONFIG_DIR names the settings to import ---
-fresh c
-mkdir -p "$TMP/alt"
-printf '%s' '{"pluginConfigs":{"dr-cockpit@darkraise":{"options":{"notifyDetail":"brief"}}}}' > "$TMP/alt/settings.json"
-check "import from CLAUDE_CONFIG_DIR" "$(CLAUDE_CONFIG_DIR="$TMP/alt" fc get notifyDetail)" "brief"
-
-# --- two first runs at once: exactly one import lands, whole ---
-fresh d
-mkdir -p "$TMP/c1" "$TMP/c2"
-printf '%s' '{"pluginConfigs":{"dr-cockpit@darkraise":{"options":{"layout":"compact"}}}}' > "$TMP/c1/settings.json"
-printf '%s' '{"pluginConfigs":{"dr-cockpit@darkraise":{"options":{"layout":"full","warnAt":70}}}}' > "$TMP/c2/settings.json"
-CLAUDE_CONFIG_DIR="$TMP/c1" bash "$CMD" get layout > /dev/null 2>&1 &
-p1=$!
-CLAUDE_CONFIG_DIR="$TMP/c2" bash "$CMD" get layout > /dev/null 2>&1 &
-p2=$!
-wait "$p1" "$p2"
-case $(tr -d ' \n' < "$FILE") in '{"layout":"compact"}'|'{"layout":"full","warnAt":70}') whole=yes ;; *) whole=no ;; esac
-check "concurrent first runs: one whole import" "$whole" "yes"
-check "concurrent first runs: no temporary file left" "$(ls "$HOME/.dforge" | grep -c '\.import$')" "0"
+# --- the workflow line leaves out what an auto run makes inert ---
+fresh wl
+fc set designApproval whole
+fc set specReview false
+check "workflow: nothing under the default autoRun=on" "$(fc workflow)" ""
+fc set autoRun ask
+check "workflow: both back under autoRun=ask" "$(fc workflow)" "dforge settings in force (each replaces the matching question or default in the skills): autoRun=ask; designApproval=whole; specReview=false"
+fc set autoRun off
+check "workflow: both stay under autoRun=off" "$(fc workflow)" "dforge settings in force (each replaces the matching question or default in the skills): autoRun=off; designApproval=whole; specReview=false"
 
 # --- two setters at once: both keys land ---
 # Each setter holds its read of config.json for 300 ms, so without a lock both
@@ -144,7 +135,7 @@ check "concurrent setters: both keys kept" "$(fc get notifyAfter) $(fc get finis
 # --- run through a symbolic link to the scripts directory, it still runs ---
 fresh linked
 ln -s "$(cd "$HERE/../scripts" && pwd)" "$TMP/linked-scripts"
-check "through a linked directory: get answers" "$(node "$TMP/linked-scripts/lib/dforge-config.mjs" get warnAt 2>&1)" "80"
+check "through a linked directory: get answers" "$(node "$TMP/linked-scripts/lib/dforge-config.mjs" get breakdownRows 2>&1)" "6"
 
 # --- the workflow keys: defaults and refusals ---
 fresh w
@@ -199,7 +190,7 @@ fc set autoCompactWindow 800000; check "claude set: exit 0" "$?" "0"
 check "claude set: the value" "$(at "$CS" autoCompactWindow)" "800000"
 check "claude set: every other key and the order kept" "$(keys "$CS")" "permissions,autoCompactWindow,hooks"
 check "claude set: the permissions untouched" "$(at "$CS" permissions)" '{"allow":["Bash(ls:*)"]}'
-check "claude set: nothing in the dforge file" "$(keys "$FILE")" ""
+check "claude set: nothing in the dforge file" "$([ -e "$FILE" ] && keys "$FILE" || echo "")" ""
 fc set autoCompactWindow 50000; check "claude: below the floor: exit 2" "$?" "2"
 fc set autoCompactWindow 1050000; check "claude: above the maximum: exit 2" "$?" "2"
 check "claude: a refusal changes nothing" "$(at "$CS" autoCompactWindow)" "800000"
@@ -211,14 +202,14 @@ fc set autoCompactWindow 0
 check "claude: 0 removes the key" "$(keys "$CS")" "permissions,hooks,autoCompactEnabled"
 fc unset autoCompactEnabled
 check "claude: unset removes the key" "$(keys "$CS")" "permissions,hooks"
-check "claude: get --json carries both" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.autoCompactWindow, v.autoCompactEnabled, v.warnAt)')" "0 true 80"
+check "claude: get --json carries both" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.autoCompactWindow, v.autoCompactEnabled, v.breakdownRows)')" "0 true 6"
 
 # A file that cannot be parsed is never replaced, and the dforge keys still resolve.
 printf 'not json' > "$CS"
 fc set autoCompactWindow 800000; check "claude: an unparseable file: exit 1" "$?" "1"
 check "claude: an unparseable file is left byte-identical" "$(cat "$CS")" "not json"
 check "claude: the file is named" "$(grep -c 'settings.json is not valid JSON' "$TMP/stderr")" "1"
-check "claude: dforge keys still resolve" "$(fc get warnAt)" "80"
+check "claude: dforge keys still resolve" "$(fc get breakdownRows)" "6"
 check "claude: the unreadable file reads as the default" "$(fc get autoCompactWindow)" "0"
 rm -f "$CS"
 fc set autoCompactWindow 800000
@@ -335,9 +326,9 @@ fresh stale-lane; mkdir -p "$HOME/.dforge"; printf '%s\n' '{"codexLane":false}' 
 check "a stored codexLane resolves without an error" "$(fc get --json >/dev/null; echo $?)" "0"
 fresh w
 fc workflow > /dev/null; check "workflow: exit 0" "$?" "0"
-fc set designApproval whole; fc set worktree always; fc set codexReview true; fc set finishAction merge
+fc set processBias lighter; fc set worktree always; fc set codexReview true; fc set finishAction merge
 check "workflow: only skill keys, in schema order" "$(fc workflow)" \
-  "dforge settings in force (each replaces the matching question or default in the skills): worktree=always; designApproval=whole"
+  "dforge settings in force (each replaces the matching question or default in the skills): worktree=always; processBias=lighter"
 fc workflow extra; check "workflow takes no argument: exit 2" "$?" "2"
 
 # --- dforge_setting: the value in force, or the default when the command cannot answer ---
@@ -369,7 +360,7 @@ printf '{"finishAction":"merge","finishTimeout":45}\n' > "$FILE"
 check "retired finishTimeout: get --json reads the rest" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.finishAction + " " + ("finishTimeout" in v))')" "merge false"
 fc get finishTimeout > /dev/null 2>&1; check "retired finishTimeout: get exits 2" "$?" "2"
 check "finishAction: the title and description" "$(node --input-type=module -e "import { pathToFileURL } from 'node:url'; const { default: schema } = await import(pathToFileURL(process.argv[1]).href); console.log(schema.finishAction.title + ' | ' + schema.finishAction.description)" "$(cd "$HERE/../config" && pwd)/schema.mjs")" 'When the work is done | ask asks before the first task. merge, pr or keep skips the question and runs that action as soon as the final review is clean; wait skips it and shows the finish menu then.'
-fc set warnAt 72.5; check "a fraction of an older key: exit 2" "$?" "2"
+fc set breakdownRows 7.5; check "a fraction of an older key: exit 2" "$?" "2"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -186,14 +186,6 @@ export function restoreClaude(text, env = process.env) {
   writeClaudeKeys(env, Object.entries(values).map(([key, value]) => [key, value === null ? undefined : value]));
 }
 
-function readJson(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return null;
-  }
-}
-
 function need(key) {
   if (!Object.hasOwn(SCHEMA, key)) throw new SettingError(`unknown setting ${key}`);
   return SCHEMA[key];
@@ -234,7 +226,7 @@ export function resolve(env = process.env, warn = message => process.stderr.writ
 export function workflowLine(env = process.env) {
   const values = resolve(env, () => {});
   const parts = Object.entries(SCHEMA)
-    .filter(([key, spec]) => spec.enforcedBy === "skill" && values[key] !== spec.default)
+    .filter(([key, spec]) => spec.enforcedBy === "skill" && values[key] !== spec.default && !(spec.inertWhen && values[spec.inertWhen.key] === spec.inertWhen.value))
     .map(([key]) => `${key}=${values[key]}`);
   return parts.length === 0 ? "" : `dforge settings in force (each replaces the matching question or default in the skills): ${parts.join("; ")}`;
 }
@@ -259,50 +251,24 @@ export function setValue(key, text, env = process.env) {
   return value;
 }
 
+// unset KEY removes a schema key, and a key the file holds that the schema no
+// longer has (a removed setting). darkmem is the reserved mapping, never removed.
 export function unsetValue(key, env = process.env) {
-  const spec = need(key);
-  if (spec.target === "claude") { writeClaude(env, key, undefined); return; }
+  const spec = Object.hasOwn(SCHEMA, key) ? SCHEMA[key] : undefined;
+  if (spec?.target === "claude") { writeClaude(env, key, undefined); return; }
+  if (key === "darkmem") throw new SettingError("darkmem is the reserved mapping, not a setting");
   const file = configPath(env);
   withHomeLock(env, () => {
     const data = readFile(file) ?? {};
+    if (spec === undefined && !Object.hasOwn(data, key)) throw new SettingError(`unknown setting ${key}`);
     delete data[key];
     writeFile(file, data);
   });
 }
 
-// Once per machine, while ~/.dforge/config.json does not exist: dr-cockpit's
-// options from the Claude settings file. The old file stays in place.
-export function importLegacy(env = process.env) {
-  const file = configPath(env);
-  if (fs.existsSync(file)) return false;
-  const data = {};
-  const options = readJson(claudeSettingsPath(env))?.pluginConfigs?.["dr-cockpit@darkraise"]?.options;
-  if (options && typeof options === "object") {
-    for (const [key, spec] of Object.entries(SCHEMA)) {
-      if (spec.target === "dforge" && key in options && isValid(spec, options[key]) && options[key] !== spec.default) data[key] = options[key];
-    }
-  }
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temp = `${file}.${process.pid}.import`;
-  fs.writeFileSync(temp, `${JSON.stringify(data, null, 2)}\n`);
-  try {
-    // A hard link creates the file only if nobody did first, so of two first
-    // runs at once exactly one import lands, whole.
-    fs.linkSync(temp, file);
-    return true;
-  } catch (error) {
-    if (error.code === "EEXIST") return false;
-    throw error;
-  } finally {
-    fs.rmSync(temp, { force: true });
-  }
-}
-
 export function main(argv, env = process.env, out = process.stdout) {
   const [command, ...rest] = argv;
   try {
-    // A script reading one setting must not be what creates the settings file.
-    if (!env.DFORGE_NO_IMPORT) importLegacy(env);
     if (command === "get" && rest.length === 1 && rest[0] === "--json") {
       out.write(`${JSON.stringify(resolve(env))}\n`);
       return 0;

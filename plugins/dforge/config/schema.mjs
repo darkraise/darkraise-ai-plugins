@@ -9,6 +9,8 @@
 // a number reads (`k` is thousands of tokens, zero the word shown at 0).
 // enforcedBy names what obeys a workflow key: `script`, the script that already
 // makes the decision, or `skill`, through the `dforge-config workflow` line.
+// inertWhen names another setting's value under which this one changes nothing;
+// the cockpit locks its row then, and the workflow line leaves it out.
 // keepDefault writes the key even at its default, for a key whose absence
 // means something of its own. values on a string makes it a list: names from
 // values, in any case, separated by commas or spaces, as the cockpit reads it.
@@ -33,9 +35,9 @@ export function isValidValue(spec, value) {
 
 export default {
   openAtStart: {
-    type: 'boolean', default: true, group: 'Cockpit', target: 'dforge',
+    type: 'boolean', default: true, group: 'Cockpit', target: 'dforge', inertWhen: { key: 'layout', value: 'compact', words: 'no effect while the layout is compact' },
     label: 'Show at start', title: 'Open the pane at session start',
-    description: 'Open the cockpit when a session starts, once the terminal is 144 columns wide (110 after the first time). /cockpit opens it at any width.',
+    description: 'Open the cockpit when a session starts, once the terminal is 144 columns wide (110 after the first time). /dforge:cockpit opens it at any width.',
   },
   layout: {
     type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', target: 'dforge',
@@ -78,7 +80,7 @@ export default {
     description: 'What the minimized band\'s second line shows, in the order turned on. A segment turned on here leaves line 1; none on hides the line.',
   },
   handoffTokens: {
-    type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DFORGE_BUDGET', group: 'Context', target: 'dforge',
+    type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DFORGE_BUDGET', group: 'Context', target: 'dforge', inertWhen: { key: 'handoffMode', value: 'relaxed', words: 'ignored in relaxed handoff mode' },
     label: 'Handoff budget', title: 'Handoff budget (tokens)',
     description: "Context size at which the cockpit and the budget scripts say hand off. 0 follows dforge's rule: 93% of the smaller of autoCompactWindow and the model's window, minus 140,000, and never below a fifth of that window. DFORGE_BUDGET overrides it; relaxed handoff mode ignores it.",
   },
@@ -86,11 +88,6 @@ export default {
     type: 'enum', values: ['strict', 'relaxed'], default: 'strict', enforcedBy: 'script', group: 'Context', target: 'dforge',
     label: 'Handoff mode', title: 'Handoff mode',
     description: 'strict hands off at the handoff budget, except that a plan\'s last two tasks and its final phase run past it to finish the plan. relaxed measures every task against the final-phase limit, 85% of the window, and the handoff budget then has no effect.',
-  },
-  warnAt: {
-    type: 'number', default: 80, min: 1, max: 99, step: 5, unit: '%', group: 'Context', target: 'dforge',
-    label: 'Warn at', title: 'Warn at (% of the handoff budget)',
-    description: 'Where Hand off takes the accent color, as a share of the handoff budget, 1 to 99.',
   },
   nudgeModel: {
     type: 'boolean', default: true, group: 'Context', target: 'dforge',
@@ -148,12 +145,12 @@ export default {
     description: 'Fast mode runs a request the way plain Claude Code would: no spec, plan, reviews or finish menu. ask offers it before brainstorming or debugging a request; always takes it without asking; off never offers it.',
   },
   designApproval: {
-    type: 'enum', values: ['sections', 'whole'], default: 'sections', enforcedBy: 'skill', group: 'Process', target: 'dforge',
+    type: 'enum', values: ['sections', 'whole'], default: 'sections', enforcedBy: 'skill', group: 'Process', target: 'dforge', inertWhen: { key: 'autoRun', value: 'on', words: 'no effect while autoRun is on' },
     label: 'Design approval', title: 'Design approval',
     description: 'sections approves each design section in turn; whole presents the design once with one approval.',
   },
   specReview: {
-    type: 'boolean', default: true, enforcedBy: 'skill', group: 'Process', target: 'dforge',
+    type: 'boolean', default: true, enforcedBy: 'skill', group: 'Process', target: 'dforge', inertWhen: { key: 'autoRun', value: 'on', words: 'no effect while autoRun is on' },
     label: 'Spec review stop', title: 'Stop for spec review',
     description: 'Stop for you to review the written spec before the plan is written. Off goes straight to the plan after the self-review.',
   },
