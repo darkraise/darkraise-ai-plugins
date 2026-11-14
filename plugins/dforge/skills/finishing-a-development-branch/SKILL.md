@@ -72,10 +72,7 @@ In phase `finish`, follow this skill with these changes:
   a `final review lens-skipped <id> reason=<reason>` ledger line names,
   whatever its reason (the final
   review wrote them; never run `scripts/lens-route` here, since after a merge
-  base..HEAD is empty). It also carries every line of
-  `scripts/api-spend status`, and names each of `decisionApi`, the three
-  `apiBudget` caps and the three `DFORGE_*_API_KEY` variables that is still
-  off, 0 or unset. Run
+  base..HEAD is empty), and auto-run.md §Finishing's API lines. Run
   `scripts/auto-run stop` with no `--reason` before printing the next-step block:
   a reason marks the run as stopped and sends a `blocked` notice.
 
