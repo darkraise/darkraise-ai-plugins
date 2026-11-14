@@ -74,8 +74,8 @@ uses is early access and may change between releases.
 
 dforge is a standalone fork of
 [superpowers](https://github.com/obra/superpowers) 6.3.0. A strong model plans,
-cheaper implementers execute each task literally, and one strong judge seat
-makes every judgment call. Its skills fire on their own: a `SessionStart` hook
+the session implements each task, and one strong judge seat makes every
+judgment call. Its skills fire on their own: a `SessionStart` hook
 loads the routing rules, so you describe what you want and the right skill takes
 over. You can also name one, for example "use dforge:brainstorming".
 
@@ -98,8 +98,8 @@ A feature, start to finish:
    spec under `docs/dforge/specs/`.
 2. **Approve the spec.** `writing-plans` turns it into a plan under
    `docs/dforge/plans/`. Each task is scored on four axes (files, spec
-   completeness, coupling, risk), and the score picks its implementer, such as
-   `impl-sonnet-low` or `impl-opus-high`. `plan-lint` checks the plan and a judge
+   completeness, coupling, risk), and the highest score sets the model and effort
+   the plan's Execution line needs. `plan-lint` checks the plan and a judge
    reviews it before it is saved. Saving a plan ends the session.
 3. **Start a fresh session and say "resume".** `resume-execution` hands over to
    `executing-plans`, where the session implements the tasks itself.
@@ -113,7 +113,7 @@ before each task and review and hands off to a fresh session when the budget is
 reached. Other skills include `project-status`, `planning-a-product`,
 `systematic-debugging`, `running-gates` and `test-simplifier`. The
 [dforge README](plugins/dforge/README.md) covers the scoring rubric, the
-agent roster, the escalation ladder, parallel waves, the Codex and agy reviewer panel,
+judge roster, the Codex and agy reviewer panel,
 the settings and the cockpit in full.
 
 ## The cockpit

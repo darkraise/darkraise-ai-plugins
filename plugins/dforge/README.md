@@ -49,48 +49,30 @@ seats only, never a plan task. Both are off by default; read
 
 ## What you get
 
-**Nineteen agents in three classes.** Seven execution implementers - Sonnet 5.5
-and Opus 5.5 at `low`, `medium`, and `high`, plus one Haiku 4.5 agent - are
-everything the assignment table and the escalation ladder can reach; no score
-assigns `impl-opus-low` or `impl-opus-medium`; both are reached only by
-escalation. Since 1.27.0 no score assigns `impl-haiku` either: total 0 runs on
-`impl-sonnet-low`, which cost less per pass in the tier evaluation, and Haiku
-is reached only by a human `**Implementer:**` override. Nine reserve implementers - the `xhigh` and `max` efforts, and
-every Fable 5.1 tier - are reachable only by a human override, or by a task
-that has already been split once and still exhausted `impl-opus-high`.
-Three role agents - the judges `judge-opus`, `judge-sonnet-high` and
-`judge-fable` (an auto run's spec review and rulings, or a human override) -
-whose `tools:` frontmatter omits `Edit`, `Bash` and
-`Agent`, so a reviewer that cannot spawn subagents is a fact about the
-registry rather than a request in a prompt; a judge writes only its report file, whose path its prompt names,
-replies in at most ten lines, and `scripts/task-step verdict` checks that no
-tracked file changed during a task review.
-Every plan is drafted in the session that read the code, whatever its size.
-Every implementer keeps its tools, browser and device servers included, but
-its `disallowedTools:` frontmatter drops `Agent`, `Skill` and the session-only
-tools (Artifact, Workflow, plan mode, cron, messaging): their definitions and
-the skill listing are re-read on every implementer call and roughly doubled
-its starting context.
-
-The reserve exists so that a human ruling, and a task that genuinely cannot be
-split any further, both have somewhere to go. It is not a way around the gate:
-above `impl-opus-high` the first answer to a hard task is still to split it, and
-the reserve is only entered when that split has already been spent.
+**Four agents.** `impl-sonnet-high` runs the Acceptance QA pass; it keeps its
+tools, browser and device servers included, but its `disallowedTools:`
+frontmatter drops `Agent`, `Skill` and the session-only tools (Artifact,
+Workflow, plan mode, cron, messaging), whose definitions would otherwise be
+re-read on every call. Three role agents - the judges `judge-opus`,
+`judge-sonnet-high` and `judge-fable` (an auto run's spec review and rulings,
+or a human override) - have a `tools:` frontmatter that omits `Edit`, `Bash`
+and `Agent`, so a reviewer that cannot spawn subagents is a fact about the
+registry rather than a request in a prompt; a judge writes only its report
+file, whose path its prompt names, replies in at most ten lines, and
+`scripts/task-step verdict` checks that no tracked file changed during a task
+review. Every plan is drafted, and every task implemented, in the session that
+read the code, whatever its size.
 
 **A four-axis rubric that gates the plan.** Files, spec completeness, coupling,
 and risk, each scored 0 to 3. Three of those four measure how the task was
 drawn, not how hard the change is, so Rule S sends a task scoring 6 or more
 across them on a Claude plan, or 4 or more on a Codex plan, back to be split
-rather than to a larger model. That cap is what makes the assignment table stop
-at 8.
+rather than to a larger model. That cap is what makes the execution floor
+table stop at 8.
 
-**An escalation ladder.** Every execution implementer has exactly one successor,
-changing model before effort except at the two Opus effort rows, where Opus is
-already the top model and there is nowhere else to go. Walks terminate at a
-SPLIT action rather than an agent, and only a task that survives that split
-enters the reserve chain, which terminates at BLOCKED. Used at fix round 2
-and at the BLOCKED handler: a task gets at most two fix rounds, then the
-ruling seat. A `Host: codex` plan keeps `review_cap: 5`.
+**A fix cap.** A task the session implements gets at most three fix rounds,
+then goes to the ruling seat as a `breaker` item. A delegated task keeps two.
+A `Host: codex` plan keeps `review_cap: 5`.
 
 **Review depth.** An architectural plan runs at one of three depths, sized by
 risk rather than length. `scripts/depth-route` prints the depth: `full` for a
@@ -564,7 +546,7 @@ headline on the title line, under one **Now** row that says what the
 session is doing:
 
 ```
-● running 2m14s · step 18 · Bash in impl-sonnet-low
+● running 2m14s · step 18 · Bash in judge-sonnet-high
 ╭ Account ──────────────────────────── subscription ╮
 │ ● you@example.com                                 │
 │   You · Acme (admin)                              │
@@ -591,10 +573,10 @@ session is doing:
 │ $ npm run dev 12m04s                              │
 ╰───────────────────────────────────────────────────╯
 ╭ Agents ───────────────────────── ● 1 running ✓ 2 ╮
-│ ● impl-sonnet-low Task 4 4m17s                    │
+│ ● judge-sonnet-high Task 4 4m17s                  │
 │ ✓ reviewer-opus Review task 3                     │
 │ Seats by input                                    │
-│   impl-sonnet-low ×1                              │
+│   judge-sonnet-high ×1                            │
 │   ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰ 120k in · 80% cached · 7k out  │
 ╰───────────────────────────────────────────────────╯
 ╭ Run ────────────────────────────── round 2/2 · 3/6 ╮
@@ -602,7 +584,7 @@ session is doing:
 │ plan docs/plans/cockpit.md                        │
 │ ✓ Task 3: Draw the context section · clean        │
 │ ▸ Task 4: Draw usage and agents                   │
-│   round 2/2 · impl-sonnet-low                     │
+│   round 2/2 · judge-sonnet-high                   │
 │ ○ Task 5: Track the plan and repo                 │
 ╰───────────────────────────────────────────────────╯
 ╭ Repo ─────────────────────────────────── ● dirty ╮
@@ -976,6 +958,17 @@ implement a task.
   older plan that still carries the line inline and logs a ruling. A ledger
   whose last line for a task is `escalated inline -> subagent` sends that task
   to the ruling seat as a `breaker` item.
+- **Implementers.** Fifteen of the sixteen `impl-*` agents are gone; only
+  `impl-sonnet-high` stays, for Acceptance QA. `task-step start` takes one task
+  and writes no dispatch file or assigned line, `review-route --final-fix` is
+  gone, and `reference/escalation.md` with the escalation and reserve tables in
+  `reference/ladder.md` went with them. A task no longer carries an
+  `**Implementer:**` line (or, on a Codex plan, an `**Assignment source:**`
+  line): `plan-lint` ignores the line in an older plan, and
+  `reference/ladder.md`'s table now gives the model and effort the Execution
+  line needs.
+- **Evals.** `evals/tiers`, the harness that graded the `impl-*` tiers, is
+  removed.
 
 ## Migrating to 4.11
 
@@ -1129,14 +1122,13 @@ task then reads:
 - Consumes: `formatRow(row: Row): string` from Task 2
 - Produces: `runExport(cfg: Config): Promise<Report>`
 
-**Implementer:** dforge:impl-sonnet-high
 **Evaluation:** files 1 - spec 2 - coupling 1 - risk 1 = 5
 **Approach:** inline - skip 2: follows the existing exporter pattern
 ```
 
-Edit the `**Implementer:**` line to override. Add
-`**Override:** <reason>` below the Evaluation line so that `plan-lint` reports
-the deviation as a warning instead of an error.
+A human who keeps a task that breaks Rule S adds `**Override:** <reason>` below
+the Evaluation line, so that `plan-lint` reports the deviation as a warning
+instead of an error.
 
 The heading keeps upstream's `### Task N: <name>` form on purpose.
 `scripts/task-brief` finds a task by matching a heading that starts with
@@ -1152,36 +1144,29 @@ package, the breaker (whose adjudication now goes to the ruling seat), and the
 handoff to dforge:finishing-a-development-branch - with these
 differences:
 
-1. **Named seats.** The implementer is the fleet agent the plan's
-   `**Implementer:**` line names, dispatched with no `model` argument: passing
-   one would override the agent file's model while `effort` kept its
-   frontmatter value. The task reviewer is a judge agent scoring the criteria
+1. **Named seats.** The task reviewer is a judge agent scoring the criteria
    file. General-purpose seats still name their model explicitly.
 2. **Scores.** Task reviews add four 1-to-20 scores alongside the
    verdicts.
-3. **Escalation ladder.** Round 2 and the BLOCKED handler climb
-   [ladder.md](reference/ladder.md)'s table, ending in one split and then the
-   reserve chain. An external task hands back to its Claude implementer instead.
-   A `Host: codex` plan escalates through the `codex-v4` selector over its
-   five rounds instead.
-4. **Cache-aware resumes.** Fix round 1 resumes the implementer only while
-   its cache is warm - returned under five minutes ago, or under about 100k
-   tokens of context - and otherwise dispatches a fresh copy on the same tier;
-   round 2 goes to the successor rung. On a `Host: codex` plan rounds 1-3
-   resume by that rule and rounds 4 and 5 are fresh dispatches.
+3. **No escalation ladder.** The session implements every task and fixes its
+   own findings, so there is no implementer to escalate; a task that will not
+   converge goes to the ruling seat.
+4. **Cache-aware resumes.** A delegated task's fix round 1 resumes its executor
+   only while its cache is warm; see
+   [delegated-task.md](reference/delegated-task.md).
 5. **One ledger grammar.** Every task gets an assigned line and a complete line
-   carrying its scores and a checkpoint (done, verified, remaining, discovered
+   carrying a checkpoint (done, verified, remaining, discovered
    issues, assumptions), which crash recovery and the final review read.
 6. **Cross-family final review, on request.** With `codexReview` on, the final
    whole-branch review adds a Codex round, and a judge verifies the union of
    both reviewers' findings.
-7. **Rulings, not stops.** Dispatch problems - an unknown agent name, an
-   unavailable model, an obsolete Executor line - are logged
-   rulings, never silent fallbacks and never stops.
+7. **Rulings, not stops.** Problems with a seat - an unavailable model, an
+   obsolete Executor line - are logged rulings, never silent fallbacks and
+   never stops.
 8. **Session budget.** A budget line, a compaction snapshot, and the
    dforge:handoff / dforge:resume-execution pair replace
    upstream's unmeasured sessions - see [Session budget](#session-budget).
-9. **Small-model planning.** A strong model plans once; small models execute.
+9. **Small-model planning.** A strong model plans once; the session executes.
    Every task brief carries the header's Global Constraints and Contracts, the
    controller reads only the header and one brief at a time, and judgment
    calls go to a read-only ruling seat (`judge-opus`, with the reason
@@ -1232,8 +1217,8 @@ The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one 
 
 ## Reference
 
-`reference/ladder.md` holds the raw rubric, Rule S, and Claude assignment,
-escalation, reserve, and external judge tables. Native Codex reads
+`reference/ladder.md` holds the raw rubric, Rule S, the Claude execution floor
+table, and the external judge tables. Native Codex reads
 `reference/codex-routing.json`; `reference/native-codex.md` explains its weighted
 score, request format, and plan conversion. `scripts/select-native-tier.sh`
 validates raw scores and history before returning a native routing decision.
