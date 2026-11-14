@@ -173,6 +173,8 @@ const STALL_MS = 180_000
 // pending stage's failure is booked in place of a further prompt.
 const RECONCILE_MS = 1_200_000
 const RECONCILE_CAP = 3
+// How many keep-warm prompts may go in a row with no turn of another origin between them.
+const KEEP_WARM_CAP = 6
 // How long a Done held for background work waits, once the work ends, for the turn its notification wakes.
 const RELEASE_GRACE_MS = 5_000
 // The prompt.submit origins that are the person's own request, or auto run's.
@@ -200,6 +202,9 @@ function stallPrompt(root: string): string {
 }
 function reconcilePrompt(root: string): string {
   return `Background work has run 20 minutes since the last turn with no notification. Run \`bash "${root}/scripts/in-flight"\`. Stop with TaskStop each launch idle 30 minutes or more, and record a \`Ruling:\` line naming the task it served and that its result is void; leave the others running. Then continue the run, and end the turn again if only waiting remains.`
+}
+function keepWarmPrompt(): string {
+  return 'Keep-warm: background work is still running and the prompt cache is about to expire. Reply with the single line `Still waiting.` and end the turn. Start nothing and call no tool.'
 }
 // The tools that wait on the person by their nature: their dialog is the question.
 const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
@@ -302,6 +307,7 @@ type Options = {
   notifyAfter: number
   notifyAskAfter: number
   notifyDetail: string
+  keepWarm: number
   bandLine1: string
   bandLine2: string
 }
@@ -337,6 +343,7 @@ function liveFrom(values: Partial<Options>): Live {
     notifyAfter = 60,
     notifyAskAfter = 20,
     notifyDetail = 'full',
+    keepWarm = 50,
     bandLine1 = '',
     bandLine2 = '',
   } = values
@@ -358,6 +365,7 @@ function liveFrom(values: Partial<Options>): Live {
     notifyAfter,
     notifyAskAfter,
     notifyDetail,
+    keepWarm,
     bandLine1,
     bandLine2,
     tuning: { handoffTokens, nudgeModel, isRelaxed: handoffMode === 'relaxed' },
@@ -386,6 +394,10 @@ export const register: Register = on => {
     S.watchedSince = await $.clock.now()
     S.reconciledAt = null
     S.reconcileSeen = { key: '', count: 0 }
+    S.keepWarmCount = 0
+    S.keepWarmAt = null
+    S.isKeepWarmSubmitted = false
+    S.isKeepWarmTurn = false
     S.watchdog?.cancel()
     S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($).catch(() => undefined))
     S.poll?.cancel()
@@ -589,8 +601,11 @@ export const register: Register = on => {
 
   // A prompt from the person, or auto run's, starts a new chain: the Done held
   // for the last one is dropped. A wake-up keeps it, and so does an origin not
-  // listed, since a Done covering more work beats a lost one.
+  // listed, since a Done covering more work beats a lost one. The cockpit's own
+  // keep-warm prompt continues the chain it keeps warm.
   on('prompt.submit', async ($, e, next) => {
+    if (S.isKeepWarmSubmitted && e.text === keepWarmPrompt()) return next(e)
+    S.isKeepWarmSubmitted = false
     if (e.origin !== undefined && NEW_CHAIN_ORIGINS.has(e.origin.kind)) S.heldDone = null
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -599,6 +614,9 @@ export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
     if (e.agentId !== undefined) return next(e)
     S.isMainTurn = true
+    S.isKeepWarmTurn = S.isKeepWarmSubmitted
+    S.isKeepWarmSubmitted = false
+    if (!S.isKeepWarmTurn) S.keepWarmCount = 0
     S.releaseTimer?.cancel()
     S.releaseTimer = null
     const stamp = await $.clock.now()
@@ -659,11 +677,14 @@ export const register: Register = on => {
       const stamp = await $.clock.now()
       const failed = e.reason === 'error' || e.reason === 'refusal'
       const why = failed ? failureOf(e) : null
-      const isHeld = e.reason === 'answer' && (await holdsDone($))
+      // A keep-warm turn's answer is no news: the chain's held Done stands as it was.
+      const isKeptWarm = S.isKeepWarmTurn && e.reason === 'answer'
+      S.isKeepWarmTurn = false
+      const isHeld = isKeptWarm ? S.heldDone !== null : e.reason === 'answer' && (await holdsDone($))
       const turnStartedAt = (await read($, activity)).turnStartedAt ?? stamp - e.durationMs
       if (e.reason !== 'answer') S.heldDone = null
       // A later turn that says nothing keeps the answer the chain last gave.
-      else if (isHeld) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp, answer: e.answer.trim() === '' ? (S.heldDone?.answer ?? e.answer) : e.answer }
+      else if (isHeld && !isKeptWarm) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp, answer: e.answer.trim() === '' ? (S.heldDone?.answer ?? e.answer) : e.answer }
       await setActivity($, now => ({
         ...IDLE,
         kind: failed ? 'failed' : e.reason === 'aborted' ? 'interrupted' : isHeld ? 'background' : 'idle',
@@ -699,7 +720,7 @@ export const register: Register = on => {
           undefined,
           async () => void (await update($, activity, now => ({ ...now, isSent: true }))),
         )
-      } else if (e.reason === 'answer' && !isHeld) {
+      } else if (e.reason === 'answer' && !isHeld && !isKeptWarm) {
         await sendDone($, e.answer, e.durationMs)
       }
       if (e.reason === 'answer') await armAutoRun($, e.answer)
@@ -2484,6 +2505,13 @@ const S = {
   // found the same launches running under the same pending action.
   reconciledAt: null as number | null,
   reconcileSeen: { key: '', count: 0 },
+  // Keep-warm prompts sent in a row and when the last was submitted; whether
+  // one was just submitted and its turn has not started; whether the running
+  // main turn is one.
+  keepWarmCount: 0,
+  keepWarmAt: null as number | null,
+  isKeepWarmSubmitted: false,
+  isKeepWarmTurn: false,
   // The watchdog's timer, every WATCHDOG_MS.
   watchdog: null as Timer | null,
   // The roots --mode last named, and the checkout and the
@@ -2988,7 +3016,10 @@ async function watchdogTick($: EngineInterface) {
   }
   if (S.isTurnLive || S.autoBusy) return
   const auto = await readAutoRun($)
-  if (auto === null || !auto.active) return
+  if (auto === null || !auto.active) {
+    await keepWarm($)
+    return
+  }
   if (await isMainBackground($)) {
     await reconcileBackground($, auto)
     return
@@ -3011,6 +3042,29 @@ async function watchdogTick($: EngineInterface) {
   S.stallFailedAt = code === 0 || code === 5 ? null : stamp
   if (code === 5) await endStoppedRun($)
   else if (code === 0 && !S.isTurnLive) await $.prompt.submit({ text: stallPrompt($.plugin.root), asUser: true }).catch(() => undefined)
+}
+
+// Outside a bound run, background work can hold the session past the prompt
+// cache's hour with no turn: after keepWarm minutes the session is given a
+// one-line turn that reads the cache again, at most KEEP_WARM_CAP in a row.
+// Whether a submit disturbs a half-typed draft is not known, so none goes
+// while the prompt box holds text.
+async function keepWarm($: EngineInterface) {
+  const minutes = (await live($)).keepWarm
+  if (!(minutes > 0) || S.keepWarmCount >= KEEP_WARM_CAP) return
+  if ([...S.waits.values()].some(wait => wait.agentId === null)) return
+  if (!(await isMainBackground($))) return
+  const stamp = await $.clock.now()
+  const last = Math.max((await read($, activity)).endedAt ?? 0, S.keepWarmAt ?? 0, S.watchedSince ?? 0)
+  if (stamp - last < minutes * 60_000) return
+  if ((await $.prompt.read()).text !== '') return
+  S.isKeepWarmSubmitted = true
+  S.keepWarmCount += 1
+  S.keepWarmAt = stamp
+  await $.prompt.submit({ text: keepWarmPrompt(), asUser: true }).catch(() => {
+    S.isKeepWarmSubmitted = false
+    S.keepWarmCount -= 1
+  })
 }
 
 async function backgroundKey($: EngineInterface): Promise<string> {

@@ -341,6 +341,8 @@ type World = {
   sessionIdFailures?: number
   /** Runs after each settings read has taken its answer, given the source it named. */
   afterSettingsRead?: (source: string | undefined) => void
+  /** The draft the person's prompt box holds; empty unless said. */
+  draft?: string
 }
 
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
@@ -391,6 +393,7 @@ function world(on: On, w: World) {
     w.prompts?.push(e.text)
     return { text: e.text }
   })
+  on('prompt.read', () => ({ value: { text: w.draft ?? '', cursor: (w.draft ?? '').length } }))
   on('session.attach', (_$, e) => ({ clientId: e.clientId }))
   on('session.detach', (_$, e) => ({ clientId: e.clientId }))
   on('session.surfaces', () => ({ value: ['terminal'] }))
@@ -3856,6 +3859,148 @@ describe('shells and remote', () => {
       await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'toolu_9', agentId: 'agent-1' } as never)
       await clock.advance(5_000)
       expect(titles(fetches)).toEqual(['✅ Done in 2m10s'])
+    })
+  })
+
+  describe('keep-warm', () => {
+    const KEEP_WARM =
+      'Keep-warm: background work is still running and the prompt cache is about to expire. Reply with the single line `Still waiting.` and end the turn. Start nothing and call no tool.'
+    const MIN = 60_000
+    const quiet = (config: Record<string, unknown>): World => ({ tokens: 50_000, prompts: [], config, tools: { Bash: () => SHELL } })
+    const sentOf = (w: World) => (w.prompts ?? []).filter(one => one === KEEP_WARM)
+    // A turn that sends a command to the background and ends, the command still running.
+    const begin = async ($: Parameters<TestBody>[0], command = 'npm test') => {
+      await $.session.start(START)
+      await $.turn.start({ text: 'run it', turnId: 't1' })
+      await $.tool.call({ tool: 'Bash', command, run_in_background: true } as never)
+      await $.turn.complete({ answer: 'Started it.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    }
+    // The turn the cockpit's own prompt starts.
+    const keepWarmTurn = async ($: Parameters<TestBody>[0], clock: ReturnType<typeof world>, turnId: string) => {
+      await $.turn.start({ text: '', turnId })
+      await clock.advance(2_000)
+      await $.turn.complete({ answer: 'Still waiting.', durationMs: 2_000, isAborted: false, turnId, reason: 'answer' })
+    }
+
+    test('submits the prompt once keepWarm minutes pass with background work running, and again each further interval', async ($, on) => {
+      const w = quiet({ keepWarm: 50 })
+      const clock = world(on, w)
+      await begin($)
+      await clock.advance(49 * MIN)
+      expect(sentOf(w)).toHaveLength(0)
+      await clock.advance(2 * MIN)
+      expect(sentOf(w)).toHaveLength(1)
+      await keepWarmTurn($, clock, 'k1')
+      await clock.advance(48 * MIN)
+      expect(sentOf(w)).toHaveLength(1)
+      await clock.advance(3 * MIN)
+      expect(sentOf(w)).toHaveLength(2)
+    })
+
+    test('submits nothing when keepWarm is 0', async ($, on) => {
+      const w = quiet({ keepWarm: 0 })
+      const clock = world(on, w)
+      await begin($)
+      await clock.advance(60 * MIN)
+      expect(sentOf(w)).toHaveLength(0)
+    })
+
+    test('submits nothing when only a service command runs in the background', async ($, on) => {
+      const w = quiet({ keepWarm: 50 })
+      const clock = world(on, w)
+      await begin($, 'npm run dev')
+      await clock.advance(60 * MIN)
+      expect(sentOf(w)).toHaveLength(0)
+    })
+
+    test('submits nothing when no background work runs', async ($, on) => {
+      const w = quiet({ keepWarm: 50 })
+      const clock = world(on, w)
+      await $.session.start(START)
+      await $.turn.start({ text: 'hello', turnId: 't1' })
+      await $.turn.complete({ answer: 'Hello.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await clock.advance(60 * MIN)
+      expect(sentOf(w)).toHaveLength(0)
+    })
+
+    test('submits nothing while a turn is live', async ($, on) => {
+      const w = quiet({ keepWarm: 4 })
+      const clock = world(on, w)
+      await begin($)
+      await $.turn.start({ text: 'and the docs?', turnId: 't2' })
+      await clock.advance(10 * MIN)
+      expect(sentOf(w)).toHaveLength(0)
+    })
+
+    test('submits nothing while an auto run is bound to the session', async ($, on) => {
+      const files = autoFiles({ pending: null })
+      const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: { Bash: () => SHELL } }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true } as never)
+      await $.turn.complete({ answer: 'Waiting.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await clock.advance(60 * MIN)
+      expect(sentOf(w)).toHaveLength(0)
+      expect(w.prompts?.length).toBeGreaterThan(0)
+    })
+
+    for (const origin of ['composer', 'task-notification'] as const)
+      test(`stops after six in a row, and a ${origin} turn lets six more go`, async ($, on) => {
+        const w = quiet({ keepWarm: 4 })
+        const clock = world(on, w)
+        await begin($)
+        for (let i = 1; i <= 8; i++) {
+          await clock.advance(5 * MIN)
+          if (sentOf(w).length === i) await keepWarmTurn($, clock, `k${i}`)
+        }
+        expect(sentOf(w)).toHaveLength(6)
+        await $.prompt.submit({ text: 'status?', origin: { kind: origin }, wait: false } as never)
+        await $.turn.start({ text: 'status?', turnId: 'u1' })
+        await $.turn.complete({ answer: 'Still running.', durationMs: 1, isAborted: false, turnId: 'u1', reason: 'answer' })
+        await clock.advance(5 * MIN)
+        expect(sentOf(w)).toHaveLength(7)
+      })
+
+    test('a keep-warm turn leaves the held Done in place and does not become its text', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const w: World = { ...quiet({ keepWarm: 4, notifyAfter: 0 }), fetches }
+      const clock = world(on, w)
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await begin($, 'node codex-companion.mjs review')
+      await clock.advance(5 * MIN)
+      expect(sentOf(w)).toHaveLength(1)
+      await keepWarmTurn($, clock, 'k1')
+      expect(fetches).toHaveLength(0)
+      await $.session.append(notified(ENDED))
+      await clock.advance(6_000)
+      expect(fetches).toHaveLength(1)
+      expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Started it.')
+    })
+
+    test('a keep-warm turn sends no Done of its own', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const w: World = { ...quiet({ keepWarm: 50, notifyAfter: 0 }), fetches }
+      const clock = world(on, w)
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await begin($)
+      await clock.advance(51 * MIN)
+      expect(sentOf(w)).toHaveLength(1)
+      const before = fetches.length
+      await keepWarmTurn($, clock, 'k1')
+      await clock.advance(10_000)
+      expect(fetches).toHaveLength(before)
+    })
+
+    test('submits nothing while the composer holds a draft', async ($, on) => {
+      const w: World = { ...quiet({ keepWarm: 50 }), draft: 'half a sent' }
+      const clock = world(on, w)
+      await begin($)
+      await clock.advance(60 * MIN)
+      expect(sentOf(w)).toHaveLength(0)
+      w.draft = ''
+      await clock.advance(MIN)
+      expect(sentOf(w)).toHaveLength(1)
     })
   })
 

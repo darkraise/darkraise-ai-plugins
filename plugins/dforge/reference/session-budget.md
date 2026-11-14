@@ -165,6 +165,15 @@ request re-writes the whole context at twice the input price. Start a fresh
 session from `latest.md` rather than continuing (Claude Code also offers
 "Resume from summary" in that case), and hand off before a planned break.
 
+While the session waits on background work outside an auto run, the cockpit
+keeps the cache warm: after `keepWarm` minutes (default 50, 0 off) with no
+main turn, it submits a one-line prompt that the session answers with
+`Still waiting.`, at most six in a row. A turn of any other origin starts the
+count again. Set `keepWarm` to 4 on the five-minute cache. A wait inside a
+live turn cannot be kept warm, and in an auto run the reconcile prompt
+already gives the session a turn every 20 minutes. No prompt goes while the
+prompt box holds a draft.
+
 ## After compaction
 
 The SessionStart hook appends a compaction snapshot (`scripts/lib/snapshot.sh`):
