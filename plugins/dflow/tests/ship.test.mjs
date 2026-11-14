@@ -163,6 +163,19 @@ test('ship commits only what it wrote, and a draft of other work does not block 
   assert.match(git(root, 'status', '--porcelain'), /\?\? docs\/dflow\/plans\/2026-11-13-draft\.md/);
 });
 
+test('a task ticked by hand, never through dflow done, stops ship', t => {
+  const root = makeProject(t);
+  write(root, PLAN_FILE, read(root, PLAN_FILE).replaceAll('- [ ]', '- [x]'));
+  git(root, 'commit', '-q', '-am', 'docs: tick by hand');
+  dflow(root, ['review', 'record', '--tier', '0']);
+  const status = JSON.parse(dflow(root, ['status', '--json']).stdout);
+  assert.doesNotMatch(status.next, /^\/dflow:ship/);
+  const shipped = dflow(root, ['ship']);
+  assert.equal(shipped.status, 1, shipped.stdout);
+  assert.match(shipped.stdout, /Task 1 is ticked without a recorded `dflow done`/);
+  assert.match(shipped.stdout, /Task 2 is ticked without a recorded `dflow done`/);
+});
+
 test('an untracked file outside docs/dflow stops ship, and a gate pass beside it is dirty', t => {
   const root = readyToShip(t, { config: { gates: [{ name: 'test', cmd: 'node suite.mjs' }] } });
   write(root, 'suite.mjs', '\n');

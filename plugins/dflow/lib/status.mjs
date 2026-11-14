@@ -91,15 +91,16 @@ export function buildModel(ctx) {
     if (row) model.board.row = { number: row.number, state: row.state };
   }
 
-  if (fs.existsSync(ctx.paths.events)) {
-    const committed = new Set(readEvents(ctx.paths).filter(event => event.plan === active.slug && event.event === 'done').map(event => event.task));
-    for (const task of tasks) {
-      if (task.done && !committed.has(task.number)) model.checks.push(`Task ${task.number} is ticked without a recorded \`dflow done\``);
-    }
-  }
+  for (const number of unrecordedTicks(ctx, active)) model.checks.push(`Task ${number} is ticked without a recorded \`dflow done\``);
   for (const change of amendedAcceptance(ctx, active).filter(entry => !entry.logged)) model.checks.push(`Acceptance ${change.id} changed after approval with no record of the owner agreeing; ship refuses it`);
   model.next = recommend(model, ctx);
   return model;
+}
+
+// Only `dflow done` runs verify, so a box ticked any other way opens no gate.
+export function unrecordedTicks(ctx, active) {
+  const recorded = new Set(readEvents(ctx.paths).filter(event => event.plan === active.slug && event.event === 'done').map(event => event.task));
+  return active.plan.tasks.filter(task => task.done && !recorded.has(task.number)).map(task => task.number);
 }
 
 function recommend(model, ctx) {
@@ -111,6 +112,7 @@ function recommend(model, ctx) {
   }
   if (model.review.blocking) return `fix ${model.review.blocking} blocking finding(s), then dflow review verify`;
   if (!model.review.recorded) return '/dflow:review — every task is done';
+  if (model.checks.length) return `resolve before shipping: ${model.checks[0]}`;
   if (ctx.config.gates.length && (!model.gates || !model.gates.ok || model.gates.stale)) return '/dflow:ship — it runs the gates, which have not passed on this commit';
   return '/dflow:ship';
 }

@@ -110,7 +110,8 @@ tree that matches what it commits, files outside the task's `Files` are
 explained, no existing test was weakened without a reason, and an amended
 verify line carries a reason. A task without a verify command cannot be done.
 
-A **plan** is done when `dflow ship` finds every task done, the gates and every
+A **plan** is done when `dflow ship` finds every task done through `dflow done`
+(a box ticked by hand does not count), the gates and every
 acceptance command passing on the current commit, a fresh proof for every `UI`
 line, a review at the required tier that covers the current code with no
 blocking finding open, the named docs changed, and `dflow doctor` clean. A task

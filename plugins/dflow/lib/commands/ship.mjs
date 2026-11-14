@@ -9,7 +9,7 @@ import { baseCommit, defaultBranch, head, relative } from '../repo.mjs';
 import { buildPack } from '../review.mjs';
 import { runCommand } from '../run.mjs';
 import { appendEvent, loadState, planState, updateState } from '../state.mjs';
-import { loadFindings, refreshHud } from '../status.mjs';
+import { loadFindings, refreshHud, unrecordedTicks } from '../status.mjs';
 import { git, gitList, gitOut, mustGit, readText, shortSha, tail, today } from '../util.mjs';
 import { diagnose } from './doctor.mjs';
 import { runGates } from './gate.mjs';
@@ -105,6 +105,7 @@ export async function run(ctx, argv, { out }) {
   const open = active.plan.tasks.filter(task => !task.done);
   const blocked = blockedTasks(active.plan);
   if (open.length) problems.push(`not every task is done: ${open.map(task => `Task ${task.number}${blocked.has(task.number) ? ' (blocked)' : ''}`).join(', ')}`);
+  for (const number of unrecordedTicks(ctx, active)) problems.push(`Task ${number} is ticked without a recorded \`dflow done\`, so its verify never passed here; untick its steps and run \`dflow done ${number}\``);
   // Ship runs the acceptance commands the plan holds now, so a line changed
   // after approval counts only once the owner's agreement is on record.
   for (const change of amendedAcceptance(ctx, active).filter(entry => !entry.logged)) {
