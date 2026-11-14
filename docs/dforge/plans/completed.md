@@ -17,3 +17,4 @@
 - 2026-11-12 `docs/dforge/plans/2026-11-12-wording-pin-deletion.md` — via PR
 - 2026-11-13 `docs/dforge/plans/2026-11-13-dflow-hud-overhaul.md` — merged into `main` at 52da46e0
 - 2026-11-13 `docs/dforge/plans/2026-11-13-reviewer-only-externals.md` — merged into `main` at 2831e73a
+- 2026-11-15 `docs/dforge/plans/2026-11-14-api-decisions-keep-warm-hydrogen.md` — merged into `main` at e9bdc1e2
