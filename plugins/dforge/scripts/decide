@@ -31,13 +31,18 @@ canon() { # canon PATH — the canonical form of an existing PATH, links followe
 under() { case $1 in "$2"/*) return 0 ;; *) return 1 ;; esac; }
 
 evidence_ok() { # evidence_ok FILE… — every file may be sent
-  local f c docs state top total=0 size
+  local f c docs state top gitdir common total=0 size
   docs=$(bash "$HERE/dforge-path" docs 2>/dev/null | tr -d '\r') && docs=$(canon "$docs") || docs=""
   state=$(bash "$HERE/dforge-path" state 2>/dev/null | tr -d '\r') && state=$(canon "$state") || state=""
   top=$(git rev-parse --show-toplevel 2>/dev/null | tr -d '\r') && top=$(canon "$top") || top=""
+  gitdir=$(git rev-parse --absolute-git-dir 2>/dev/null | tr -d '\r') && gitdir=$(canon "$gitdir") || gitdir=""
+  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | tr -d '\r') && common=$(canon "$common") || common=""
   for f in "$@"; do
     [ -f "$f" ] || return 1
     c=$(canon "$f") || return 1
+    # git check-ignore reports nothing under the git directory, whose config can hold credentials.
+    { [ -n "$gitdir" ] && under "$c" "$gitdir"; } && return 1
+    { [ -n "$common" ] && under "$c" "$common"; } && return 1
     if { [ -n "$docs" ] && under "$c" "$docs"; } || { [ -n "$state" ] && under "$c" "$state"; }; then :
     elif [ -n "$top" ] && under "$c" "$top"; then
       git -C "$top" check-ignore -q -- "$c" 2>/dev/null

@@ -155,6 +155,7 @@ while IFS='|' read -r name file; do
 done <<ROWS
 a file outside the working tree and both roots|$TMP/outside.txt
 a file git ignores|secret.env
+a file in the git directory|.git/config
 more than 400000 bytes|big.txt
 a file that does not exist|docs/missing.md
 ROWS
