@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import { appendLog, setVerify } from '../plan.mjs';
-import { loadState, saveState, taskRecord } from '../state.mjs';
+import { loadState, updateState, taskRecord } from '../state.mjs';
 import { fail, today } from '../util.mjs';
 import { requireActive } from './next.mjs';
 
@@ -22,8 +22,9 @@ export async function run(ctx, argv, { out }) {
     date: today(ctx.env), task: number, kind: 'V',
     message: `verify is now ${values.verify.map(command => `\`${command}\``).join(', ')}, was ${task.verify.map(command => `\`${command}\``).join(', ') || 'missing'} — ${values.reason}`,
   }));
-  taskRecord(state, active.slug, number).attempts = 0;
-  saveState(ctx.paths, state);
+  updateState(ctx.paths, fresh => {
+    taskRecord(fresh, active.slug, number).attempts = 0;
+  });
   out(`Task ${number} now verifies with: ${values.verify.join(' && ')}. The change is logged and will be listed in the review pack.`);
   return 0;
 }

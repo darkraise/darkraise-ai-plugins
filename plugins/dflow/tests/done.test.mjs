@@ -187,6 +187,22 @@ test('the reset line appears once the context passes the threshold', t => {
   assert.match(dflow(root, ['context']).stdout, /context 162k of 1M/);
 });
 
+test('state written by another command while verify runs survives done', t => {
+  const root = makeProject(t);
+  // The verify stands in for a gate or merge saved during a long verify.
+  stageTask1(root, `import fs from 'node:fs';
+const file = '.dflow/state.json';
+const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+state.concurrent = 'kept';
+fs.writeFileSync(file, JSON.stringify(state));
+`);
+  const done = dflow(root, ['done', '1', '-m', 'feat: parse']);
+  assert.equal(done.status, 0, done.stderr + done.stdout);
+  const state = JSON.parse(read(root, '.dflow/state.json'));
+  assert.equal(state.concurrent, 'kept');
+  assert.equal(state.plans['2026-11-12-meter'].tasks[1].state, 'done');
+});
+
 test('a torn context file reads as no figure and breaks no command', t => {
   const root = makeProject(t);
   stageTask1(root);

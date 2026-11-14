@@ -8,7 +8,7 @@ import { proofStatus } from '../proof.mjs';
 import { baseCommit, defaultBranch, head, relative } from '../repo.mjs';
 import { buildPack } from '../review.mjs';
 import { runCommand } from '../run.mjs';
-import { appendEvent, loadState, planState, saveState } from '../state.mjs';
+import { appendEvent, loadState, planState, updateState } from '../state.mjs';
 import { loadFindings, refreshHud } from '../status.mjs';
 import { git, gitList, gitOut, mustGit, readText, shortSha, tail, today } from '../util.mjs';
 import { diagnose } from './doctor.mjs';
@@ -128,9 +128,9 @@ export async function run(ctx, argv, { out }) {
     problems.push(...accepted.problems);
     pending.push(...accepted.pending);
     // runGates saved its own result meanwhile, so merge into the file's state.
-    const latest = loadState(ctx.paths);
-    planState(latest, active.slug).acceptance = record.acceptance;
-    saveState(ctx.paths, latest);
+    updateState(ctx.paths, latest => {
+      planState(latest, active.slug).acceptance = record.acceptance;
+    });
   }
 
   const required = buildPack(ctx, active).tier;

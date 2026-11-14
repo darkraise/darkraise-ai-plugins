@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { appendLog, blockedTasks, nextTask, taskStates } from '../plan.mjs';
-import { appendEvent, loadState, planState, saveState, taskRecord } from '../state.mjs';
+import { appendEvent, loadState, planState, updateState, taskRecord } from '../state.mjs';
 import { loadPlan, refreshHud } from '../status.mjs';
 import { fail, today } from '../util.mjs';
 import { requireActive } from './next.mjs';
@@ -21,10 +21,11 @@ export async function run(ctx, argv, { out, name }) {
   } else if (!blocked) fail(`Task ${number} is not blocked`);
 
   fs.writeFileSync(active.file, appendLog(active.text, { date: today(ctx.env), task: number, kind: name === 'block' ? 'B' : 'U', message: reason }));
-  const record = taskRecord(state, active.slug, number);
-  delete record.state;
-  if (name === 'unblock') record.attempts = 0;
-  saveState(ctx.paths, state);
+  updateState(ctx.paths, fresh => {
+    const record = taskRecord(fresh, active.slug, number);
+    delete record.state;
+    if (name === 'unblock') record.attempts = 0;
+  });
   appendEvent(ctx, { plan: active.slug, event: name === 'block' ? 'blocked' : 'unblocked', task: number, reason });
   await flush(ctx, { quiet: true });
 

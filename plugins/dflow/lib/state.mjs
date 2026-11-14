@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { nowIso, readJson, readText, writeJson } from './util.mjs';
+import { nowIso, readJson, readText, withLock, writeJson } from './util.mjs';
 
 export function loadState(paths) {
   const state = readJson(paths.state, null) ?? {};
@@ -9,8 +9,20 @@ export function loadState(paths) {
   return state;
 }
 
-export function saveState(paths, state) {
+function saveState(paths, state) {
   writeJson(paths.state, state);
+}
+
+// Commands overlap: a background `dflow done` holds its copy for as long as
+// verify runs. Every write therefore re-reads state.json under a lock and
+// applies only its own change, or it would put back what others removed.
+export function updateState(paths, mutate) {
+  return withLock(`${paths.state}.lock`, () => {
+    const state = loadState(paths);
+    const result = mutate(state);
+    saveState(paths, state);
+    return result;
+  });
 }
 
 export function planState(state, slug) {
