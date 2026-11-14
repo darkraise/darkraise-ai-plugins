@@ -17,7 +17,8 @@ export async function runGates(ctx, { names = [], out }) {
   const active = activePlan(ctx, state);
   const results = [];
   // A pass on uncommitted changes says nothing about the commit.
-  const dirty = Boolean(mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=no']).trim());
+  const dirty = mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=normal']).split('\n')
+    .some(entry => entry && !(entry.startsWith('??') && entry.slice(3).startsWith('docs/dflow/')));
   for (const gate of selected) {
     const logFile = path.join(ctx.paths.logs, active?.slug ?? '_', `gate-${gate.name}.log`);
     fs.rmSync(logFile, { force: true });

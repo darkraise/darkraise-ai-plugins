@@ -111,7 +111,10 @@ export async function run(ctx, argv, { out }) {
     problems.push(`Acceptance ${change.id} changed after approval with no record of the owner agreeing (was: ${change.was ?? 'absent'}; now: ${change.now ?? 'removed'}); ask the owner, then \`dflow log - A "${change.id}: <what changed> — agreed by the owner"\`, naming each command it runs in backticks`);
   }
 
-  const dirty = gitList(ctx.root, ['status', '--porcelain', '--untracked-files=no', '--no-renames', '-z']);
+  // An untracked file outside docs/dflow/ may be one the gates used, and the
+  // commit would ship without it; drafts of other work there stay untracked.
+  const dirty = gitList(ctx.root, ['status', '--porcelain', '--untracked-files=normal', '--no-renames', '-z'])
+    .filter(entry => !(entry.startsWith('??') && entry.slice(3).startsWith('docs/dflow/')));
   if (dirty.length) problems.push(`uncommitted changes: ${dirty.map(entry => entry.slice(3)).join(', ')}`);
 
   if (!problems.length) {
