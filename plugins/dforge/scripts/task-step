@@ -1174,7 +1174,7 @@ parse_report() {
     }
     sect == "Findings" && /^- / {
       if (tolower($0) ~ /^- none\.?[ \t]*$/) next
-      if ($0 !~ /^- \[(Critical|Important|Minor)\] (\(Task [0-9]+\) )?[^ ]+:[0-9]+(-[0-9]+)? (—|-) .+$/) err("line " NR " is not a finding line: " $0)
+      if ($0 !~ /^- \[(Critical|Important|Minor)\] (\(Task [0-9]+\) )?[^ ].*:[0-9]+(-[0-9]+)? (—|-) .+$/) err("line " NR " is not a finding line: " $0)
       rest = substr($0, 4); sev = rest; sub(/\].*$/, "", sev)
       rest = substr(rest, length(sev) + 3)
       task = ""
@@ -1186,9 +1186,11 @@ parse_report() {
       if (!group && task != "") err("line " NR " is not a finding line: " $0)
       if (task == "") task = first
       if (sev != "Minor") serious[task]++
-      loc = rest; sub(/ .*$/, "", loc)
-      rest = substr(rest, length(loc) + 2)
-      one = rest; sub(/^[^ ]+ /, "", one)
+      # The path may hold spaces, so the location ends at the first
+      # ":<line> — " rather than at the first space.
+      match(rest, /:[0-9]+(-[0-9]+)? (—|-) /)
+      loc = substr(rest, 1, RSTART + RLENGTH - 1); sub(/ (—|-) $/, "", loc)
+      one = substr(rest, RSTART + RLENGTH)
       match(loc, /:[0-9]+(-[0-9]+)?$/)
       out[++no] = "F\t" sev "\t" task "\t" substr(loc, 1, RSTART - 1) "\t" substr(loc, RSTART + 1) "\t" one
       next

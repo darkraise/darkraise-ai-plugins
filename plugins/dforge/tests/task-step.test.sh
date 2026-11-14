@@ -1391,6 +1391,18 @@ vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
 |scores: spec 7 / scope 15 / verification 12 / quality 9
 |
 |## Findings
+|- [Important] docs/user guide.md:3-4 — the heading is wrong - twice
+REPORT
+rr_run verdict docs/plan.md 1
+check "verdict: a finding on a path with a space is read whole" "$rr_rc $(grep -c '^Important 1 docs/user guide.md:3-4 — the heading is wrong - twice$' <<<"$rr_out")" "0 1"
+rm -f "$RR_WS"/task-1-fix-*.md
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: fail
+|quality: changes
+|scores: spec 7 / scope 15 / verification 12 / quality 9
+|
+|## Findings
 |- [Important] (Task 1) app.txt:2 — a task prefix outside a group
 REPORT
 rr_run verdict docs/plan.md 1
