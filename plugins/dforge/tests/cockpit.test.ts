@@ -4002,6 +4002,55 @@ describe('shells and remote', () => {
       await clock.advance(MIN)
       expect(sentOf(w)).toHaveLength(1)
     })
+
+    test('a submit that fails takes back its count, so six still go', async ($, on) => {
+      const w: World = { ...quiet({ keepWarm: 4 }), submitFailures: 1 }
+      const clock = world(on, w)
+      await begin($)
+      await clock.advance(5 * MIN)
+      expect(sentOf(w)).toHaveLength(0)
+      for (let i = 1; i <= 8; i++) {
+        await clock.advance(5 * MIN)
+        if (sentOf(w).length === i) await keepWarmTurn($, clock, `k${i}`)
+      }
+      expect(sentOf(w)).toHaveLength(6)
+    })
+
+    test('a keep-warm turn that fails keeps the held Done, raises no alert and stops the keep-warm prompts', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const w: World = { ...quiet({ keepWarm: 4, notifyAfter: 0 }), fetches }
+      const clock = world(on, w)
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await begin($, 'node codex-companion.mjs review')
+      await clock.advance(5 * MIN)
+      expect(sentOf(w)).toHaveLength(1)
+      await $.turn.start({ text: '', turnId: 'k1' })
+      await $.turn.complete({ answer: 'API Error: 529 overloaded', durationMs: 2_000, isAborted: false, turnId: 'k1', reason: 'error' })
+      await clock.advance(10 * MIN)
+      expect(fetches).toHaveLength(0)
+      expect(sentOf(w)).toHaveLength(1)
+      await $.session.append(notified(ENDED))
+      await clock.advance(6_000)
+      expect(fetches).toHaveLength(1)
+      expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Started it.')
+    })
+
+    test('an aborted keep-warm turn keeps the held Done and stops the keep-warm prompts', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const w: World = { ...quiet({ keepWarm: 4, notifyAfter: 0 }), fetches }
+      const clock = world(on, w)
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await begin($, 'node codex-companion.mjs review')
+      await clock.advance(5 * MIN)
+      await $.turn.start({ text: '', turnId: 'k1' })
+      await $.turn.complete({ answer: '', durationMs: 2_000, isAborted: true, turnId: 'k1', reason: 'aborted' } as never)
+      await clock.advance(10 * MIN)
+      expect(sentOf(w)).toHaveLength(1)
+      await $.session.append(notified(ENDED))
+      await clock.advance(6_000)
+      expect(fetches).toHaveLength(1)
+      expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Started it.')
+    })
   })
 
   test('a background agent TaskStop stopped by name is no longer working', async ($, on) => {

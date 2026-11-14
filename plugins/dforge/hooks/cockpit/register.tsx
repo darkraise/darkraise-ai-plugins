@@ -675,19 +675,21 @@ export const register: Register = on => {
       S.isMainTurn = false
       // The Now row leaves "running" first: the reads below can start processes.
       const stamp = await $.clock.now()
-      const failed = e.reason === 'error' || e.reason === 'refusal'
-      const why = failed ? failureOf(e) : null
-      // A keep-warm turn's answer is no news: the chain's held Done stands as it was.
-      const isKeptWarm = S.isKeepWarmTurn && e.reason === 'answer'
+      // A keep-warm turn is no news whatever its end: the chain's held Done
+      // stands as it was, and a failed one only stops the keep-warm prompts.
+      const isKeptWarm = S.isKeepWarmTurn
       S.isKeepWarmTurn = false
+      if (isKeptWarm && e.reason !== 'answer') S.keepWarmCount = KEEP_WARM_CAP
+      const failed = !isKeptWarm && (e.reason === 'error' || e.reason === 'refusal')
+      const why = failed ? failureOf(e) : null
       const isHeld = isKeptWarm ? S.heldDone !== null : e.reason === 'answer' && (await holdsDone($))
       const turnStartedAt = (await read($, activity)).turnStartedAt ?? stamp - e.durationMs
-      if (e.reason !== 'answer') S.heldDone = null
+      if (e.reason !== 'answer' && !isKeptWarm) S.heldDone = null
       // A later turn that says nothing keeps the answer the chain last gave.
       else if (isHeld && !isKeptWarm) S.heldDone = { startedAt: S.heldDone?.startedAt ?? turnStartedAt, heldAt: stamp, answer: e.answer.trim() === '' ? (S.heldDone?.answer ?? e.answer) : e.answer }
       await setActivity($, now => ({
         ...IDLE,
-        kind: failed ? 'failed' : e.reason === 'aborted' ? 'interrupted' : isHeld ? 'background' : 'idle',
+        kind: failed ? 'failed' : e.reason === 'aborted' && !isKeptWarm ? 'interrupted' : isHeld ? 'background' : 'idle',
         since: now.since,
         lastTurnMs: e.durationMs,
         endedAt: stamp,
