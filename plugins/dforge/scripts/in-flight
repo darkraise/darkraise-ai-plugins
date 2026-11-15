@@ -5,13 +5,17 @@
 # before a handoff, the finishing menu, or a claim that the work is done;
 # scripts/next-step runs it before printing a block.
 #
-# Each launch prints as "<agent|shell> <task id> <started HH:MM> <idle Nm|idle -> <what>":
-# the start is the launch result's local time, and the idle age is the minutes
-# since the launch's output file (an agent's own transcript when its result
-# names none) last changed; "-" where there is no such time or file.
+# Each launch prints as "<agent|shell|monitor> <task id> <started HH:MM> <idle Nm|idle -> <what>",
+# with " (service)" or " (timer)" after a service or a bare sleep timer: the
+# start is the launch's local time, and the idle age is the minutes since the
+# launch's output file (an agent's own transcript when its result names none)
+# last changed; "-" where there is no such time or file. The second line names
+# the source: the cockpit's session file when it can be trusted, else the
+# transcript (scripts/lib/in-flight.sh inflight_list).
 #
 # Usage: in-flight
-# Exit: 0 nothing running; 1 something still running (listed on stdout);
+# Exit: 0 nothing running, or only services (listed on stdout); 1 work or a
+#       timer still running (listed on stdout);
 #       3 no transcript for this session (Codex, or no session record), or
 #       one that could not be scanned: check by hand; 2 usage.
 set -uo pipefail
@@ -28,15 +32,26 @@ if ! ctx_have_jq || ! ctx_find_transcript || [ "$CTX_SOURCE" != record ]; then
 fi
 # Claude Code names a transcript by its session id.
 sid=${CLAUDE_CODE_SESSION_ID:-$(basename "$CTX_TRANSCRIPT" .jsonl)}
-if ! running=$(inflight_scan "$CTX_TRANSCRIPT" "$(inflight_since "$sid")"); then
+if ! running=$(inflight_list "$CTX_TRANSCRIPT" "$(inflight_since "$sid")" "$sid"); then
   echo "in-flight: unknown — the transcript could not be scanned; list your background shells and agents by hand"
   exit 3
 fi
+source=$(inflight_source "$sid")
 if [ -z "$running" ]; then
   echo "in-flight: nothing this session started is still running"
+  echo "in-flight: source $source"
+  exit 0
+fi
+# A service runs until stopped, so waiting on it never ends: only work and
+# timers hold the session.
+if [ -z "$(awk -F '\t' '$6 != "service"' <<<"$running")" ]; then
+  echo "in-flight: only services are running:"
+  echo "in-flight: source $source"
+  inflight_text <<<"$running" | sed 's/^/- /'
   exit 0
 fi
 printf 'in-flight: %s background launch(es) still running:\n' "$(grep -c . <<<"$running")"
+echo "in-flight: source $source"
 inflight_text <<<"$running" | sed 's/^/- /'
 cat <<'EOF'
 For each one: wait for it (end the turn; its notification starts the next one),

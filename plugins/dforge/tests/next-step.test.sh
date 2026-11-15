@@ -870,6 +870,19 @@ has "roadmap: every milestone closed" "$OUT" "Nothing — every milestone in \`d
 lacks "roadmap: closed launches nothing" "$OUT" "Launch in"
 
 # --- documents and progress kept in darkmem ---
+# --- a service-only list does not stop the block ---
+SID=s-next; export CLAUDE_CODE_SESSION_ID=$SID
+NT="$TMP/$SID.jsonl"
+mkdir -p "$HOME/.claude/dforge/sessions/by-id"
+jq -n --arg tp "$NT" '{session_id:"s-next",transcript_path:$tp}' > "$HOME/.claude/dforge/sessions/by-id/$SID.json"
+jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"toolu_dev",name:"Bash",input:{description:"Dev server",command:"npm run dev",run_in_background:true}}]}}' > "$NT"
+jq -nc '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_dev",content:"Command running in background with ID: d1. Output is being written to: /tmp/d1.output."}]}}' >> "$NT"
+run "$REPO" "$PLAN_REL"
+check "service only: exits 0" "$status" "0"
+has "service only: the block is printed" "$out" "## Next session"
+has "service only: the services are named" "$out" "Still running services: shell d1 (Dev server)"
+rm -f "$HOME/.claude/dforge/sessions/by-id/$SID.json"; unset CLAUDE_CODE_SESSION_ID
+
 . "$HERE/fixtures/darkmem-stores.sh"
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"

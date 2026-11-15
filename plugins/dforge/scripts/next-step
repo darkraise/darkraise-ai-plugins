@@ -462,7 +462,12 @@ fi
 # A block printed over running work invites ending the session it would die
 # with, so nothing is printed while this session still has background work
 # listed. Without a transcript (Codex, tests) there is nothing to check.
-if running=$(bash "$(cd "$(dirname "$0")" && pwd)/in-flight" 2>/dev/null); then :; else
+# Services alone do not stop it, since they never end; the block names them.
+services_line=""
+if running=$(bash "$(cd "$(dirname "$0")" && pwd)/in-flight" 2>/dev/null); then
+  services=$(sed -n 's/^- \([a-z]*\) \([^ ]*\) [^ ]* idle [^ ]* \(.*\) (service)$/\1 \2 (\3)/p' <<<"$running" | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')
+  [ -z "$services" ] || services_line="Still running services: $services — stop them with TaskStop before you end the session."
+else
   if [ $? -eq 1 ]; then
     printf '%s\n' "$running"
     fail 5 "not printing the next-step block while background work runs; resolve the list above, then run next-step again"
@@ -471,6 +476,7 @@ fi
 
 block=$(
   printf '## Next session\n\n**Status:** %s\n**Next:** %s\n' "$status_line" "$next_line"
+  [ -z "$services_line" ] || printf '%s\n' "$services_line"
   if [ "$launch" -eq 1 ]; then
     if [ -n "$launch_cmd" ]; then
       printf '\nLaunch in `%s`:\n\n```\n%s\n```\n' "$dir" "$launch_cmd"

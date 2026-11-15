@@ -17,6 +17,9 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
+# Outside any checkout: lib/session-state.sh logs its rejections into the
+# working directory's checkout, which must not be the one under test.
+cd "$TMP" || exit 1
 SID=s-flight
 export CLAUDE_CODE_SESSION_ID=$SID
 TP="$TMP/$SID.jsonl"
@@ -251,6 +254,19 @@ bash_use toolu_w 'Run the suite' 'npm test'
 result toolu_w 'Command running in background with ID: w1. Output is being written to: /tmp/w1.output.'
 out=$(bash "$INFLIGHT")
 check "no timer, no timer line" "$(grep -cxF "$TIMER_LINE" <<<"$out")" "0"
+
+# --- in-flight lists services but exits 1 only for finite work ---
+: > "$TP"
+bash_use toolu_dev 'Dev server' 'npm run dev'
+result toolu_dev 'Command running in background with ID: d1. Output is being written to: /tmp/d1.output.'
+out=$(bash "$INFLIGHT"); code=$?
+check "a service alone: exit 0" "$code" "0"
+check "a service alone: listed as a service" "$(grep -c '^- shell d1 .* Dev server (service)$' <<<"$out")" "1"
+check "the source is named" "$(grep -c '^in-flight: source transcript$' <<<"$out")" "1"
+bash_use toolu_w 'Run the suite' 'npm test'
+result toolu_w 'Command running in background with ID: w1. Output is being written to: /tmp/w1.output.'
+out=$(bash "$INFLIGHT"); code=$?
+check "finite work beside a service: exit 1" "$code" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
