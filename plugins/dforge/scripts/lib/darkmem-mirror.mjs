@@ -14,10 +14,15 @@ export const MAX_ENTRY_CHARS = 65536;
 export const MAX_ENTRIES_PER_APPEND = 100;
 export const EMPTY_SHA = sha256(Buffer.alloc(0));
 const HANDOFF_DIR = "handoff";
+const AMENDMENTS_DIR = "amendments";
+// Per-plan files that live beside a ledger, by the docs uri directory that
+// holds them: dforge/<dir>/<slug>.md is work/sdd/<slug>/<file>.
+const PLAN_FILES = { [HANDOFF_DIR]: "handoff.md", [AMENDMENTS_DIR]: "amendments.md" };
 export const ARCHIVE_PREFIX = `${DOC_PREFIX}/archive`;
 // Top-level directories of the docs root whose files are never documents:
-// their uri spaces hold the plans' handoff notes and the archived documents.
-export const RESERVED_DIRS = { handoff: "handoff notes", archive: "archived documents" };
+// their uri spaces hold the plans' handoff notes and amendments, and the
+// archived documents.
+export const RESERVED_DIRS = { handoff: "handoff notes", amendments: "plan amendments", archive: "archived documents" };
 const KEY = /^[A-Za-z0-9._-]{1,200}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const REBUILD = "move it aside to rebuild it from darkmem";
@@ -34,18 +39,19 @@ export function validKey(key) {
   return typeof key === "string" && KEY.test(key) && key !== "." && key !== "..";
 }
 
-// uri -> absolute file. `dforge/handoff/<slug>.md` is reserved for a
-// plan's handoff.md, which lives beside its ledger; any other
+// uri -> absolute file. `dforge/handoff/<slug>.md` and
+// `dforge/amendments/<slug>.md` are reserved for a plan's handoff.md and
+// amendments.md, which live beside its ledger; any other
 // `dforge/<path>` lives under the docs root. A uri that would climb out
 // of the mirror, or name a dotfile, maps nowhere: dotfiles are never synced.
 export function uriToLocal(roots, uri) {
   const parts = String(uri).split("/");
   if (parts[0] !== DOC_PREFIX || parts.length < 2) return null;
   if (parts.slice(1).some(part => part === "" || part.startsWith(".") || part.includes("\\"))) return null;
-  if (parts[1] === HANDOFF_DIR) {
+  if (Object.hasOwn(PLAN_FILES, parts[1])) {
     if (parts.length !== 3 || !parts[2].endsWith(".md")) return null;
     const slug = parts[2].slice(0, -3);
-    return validKey(slug) ? path.join(roots.workRoot, "sdd", slug, "handoff.md") : null;
+    return validKey(slug) ? path.join(roots.workRoot, "sdd", slug, PLAN_FILES[parts[1]]) : null;
   }
   return path.join(roots.docsRoot, ...parts.slice(1));
 }
@@ -56,10 +62,11 @@ export function familiesOf(roots) {
   return roots.families ?? { documents: true, progress: true };
 }
 
-// A plan's handoff note is progress; every other document uri is documents.
+// A plan's handoff note and amendments are progress; every other document
+// uri is documents.
 export function uriFamily(uri) {
   const parts = String(uri).split("/");
-  return parts.length === 3 && parts[0] === DOC_PREFIX && parts[1] === HANDOFF_DIR ? "progress" : "documents";
+  return parts.length === 3 && parts[0] === DOC_PREFIX && Object.hasOwn(PLAN_FILES, parts[1]) ? "progress" : "documents";
 }
 
 export function isArchiveUri(uri) {
@@ -97,21 +104,21 @@ function planDirs(workRoot) {
     .map(entry => ({ slug: entry.name, dir: path.join(sdd, entry.name) }));
 }
 
-// Plan directories holding a ledger or handoff note under a name that cannot
+// Plan directories holding a ledger, handoff note or amendments under a name that cannot
 // be a workstream key; callers report them rather than skip them silently.
 export function unsupportedPlanDirs(workRoot) {
   const sdd = path.join(workRoot, "sdd");
   return sortedEntries(sdd)
     .filter(entry => entry.isDirectory() && !validKey(entry.name))
     .map(entry => path.join(sdd, entry.name))
-    .filter(dir => fs.existsSync(path.join(dir, "progress.md")) || fs.existsSync(path.join(dir, "handoff.md")));
+    .filter(dir => ["progress.md", ...Object.values(PLAN_FILES)].some(name => fs.existsSync(path.join(dir, name))));
 }
 
 // Every document file the mirror syncs, with its uri: files under the docs
-// root when documents sync, then each plan's handoff.md when progress does.
-// Dotfiles are never synced. A file under the docs root's handoff/ or
-// archive/ directory gets uri null: those uri spaces belong to the handoff
-// notes and the archived documents.
+// root when documents sync, then each plan's handoff.md and amendments.md
+// when progress does. Dotfiles are never synced. A file under the docs root's
+// handoff/, amendments/ or archive/ directory gets uri null: those uri spaces
+// belong to the handoff notes, the amendments and the archived documents.
 export function listDocumentFiles(roots) {
   const families = familiesOf(roots);
   const found = [];
@@ -127,8 +134,10 @@ export function listDocumentFiles(roots) {
   if (families.documents) walk(roots.docsRoot, []);
   if (families.progress) {
     for (const { slug, dir } of planDirs(roots.workRoot)) {
-      const file = path.join(dir, "handoff.md");
-      if (fs.existsSync(file)) found.push({ file, uri: `${DOC_PREFIX}/${HANDOFF_DIR}/${slug}.md` });
+      for (const [uriDir, name] of Object.entries(PLAN_FILES)) {
+        const file = path.join(dir, name);
+        if (fs.existsSync(file)) found.push({ file, uri: `${DOC_PREFIX}/${uriDir}/${slug}.md` });
+      }
     }
   }
   return found;
@@ -718,7 +727,7 @@ export function ledgerPlanPath(ledgerText) {
 // The workstream properties worklog_resume hands back. `namedPath` is the plan
 // or draft the workstream is about: a plan yields plan_uri plus the spec its
 // **Spec:** line names; anything else (a draft spec) yields spec_uri. A plan's
-// handoff note adds handoff_uri.
+// handoff note adds handoff_uri, and its amendments amendments_uri.
 export function propertiesFor(roots, slug, namedPath) {
   const properties = {};
   const uri = namedPath ? pathToUri(roots, namedPath) : null;
@@ -738,6 +747,9 @@ export function propertiesFor(roots, slug, namedPath) {
   }
   if (familiesOf(roots).progress && fs.existsSync(path.join(roots.workRoot, "sdd", slug, "handoff.md"))) {
     properties.handoff_uri = `${DOC_PREFIX}/${HANDOFF_DIR}/${slug}.md`;
+  }
+  if (familiesOf(roots).progress && fs.existsSync(path.join(roots.workRoot, "sdd", slug, "amendments.md"))) {
+    properties.amendments_uri = `${DOC_PREFIX}/${AMENDMENTS_DIR}/${slug}.md`;
   }
   return properties;
 }

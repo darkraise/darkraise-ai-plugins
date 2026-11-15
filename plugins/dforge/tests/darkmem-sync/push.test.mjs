@@ -105,6 +105,15 @@ test("handoff notes go up as documents and are linked from their workstream", as
   assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "dforge/handoff/p1.md", "an adopted handoff note is linked too");
 });
 
+test("a plan's amendments go up beside its handoff note (A3)", async t => {
+  const s = await setup(t);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  write(path.join(s.workRoot, "sdd", "p1", "amendments.md"), "## A1 — Task 1\n");
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout);
+  assert.equal(s.stub.db.documents.get("proj\u0000dforge/amendments/p1.md").content, "## A1 — Task 1\n");
+});
+
 test("an empty document fails the push and keeps its record; a reserved file is a note", async t => {
   const s = await setup(t);
   write(path.join(s.docsRoot, "a.md"), "a\n");

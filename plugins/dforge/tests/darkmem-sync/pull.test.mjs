@@ -36,6 +36,16 @@ test("pull writes documents and handoff notes under the prefix, and records thei
   assert.equal(fetches(s.stub), before, "an unchanged manifest fetches nothing");
 });
 
+test("pull restores a plan's amendments beside its ledger (A3)", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/amendments/p1.md", content: "## A1 — Task 1\n" });
+  const result = await s.pull();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "amendments.md")), "## A1 — Task 1\n");
+  assert.equal(fs.existsSync(path.join(s.docsRoot, "amendments")), false, "not filed as a document under the docs root");
+  assert.equal(s.state().documents["dforge/amendments/p1.md"], sha("## A1 — Task 1\n"));
+});
+
 test("a document changed on darkmem replaces an unchanged local copy", async t => {
   const s = await setup(t);
   await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "one\n" });

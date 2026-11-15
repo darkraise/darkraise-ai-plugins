@@ -16,6 +16,9 @@ import {
 import { pullDocuments, pullLedgers, remoteLedger } from "./darkmem-pull.mjs";
 import { inProgressReason, planFinished } from "./darkmem-reconcile.mjs";
 
+// A handoff note and an amendments file are both per-plan documents beside a ledger.
+const isPlanDocument = item => item.kind === "handoff" || item.kind === "amendments";
+
 const local = (base, rel) => path.join(base, ...rel.split("/"));
 
 // `file`'s bytes, read without blocking on a FIFO or device: it throws an
@@ -152,7 +155,8 @@ export function gatherLocalProgress(cfg) {
     for (const { slug, file } of ledgersIn(stateDir)) files.push({ kind: "ledger", slug, file, stateDir, rel: `sdd/${slug}/progress.md` });
     for (const { file, uri } of listDocumentFiles({ workRoot: stateDir, families: { documents: false, progress: true } })) {
       const slug = path.basename(path.dirname(file));
-      files.push({ kind: "handoff", slug, uri, file, stateDir, rel: `sdd/${slug}/handoff.md` });
+      const name = path.basename(file);
+      files.push({ kind: name === "amendments.md" ? "amendments" : "handoff", slug, uri, file, stateDir, rel: `sdd/${slug}/${name}` });
     }
   }
   const primaryState = dforgeDir("state", cfg.repoRoot);
@@ -217,11 +221,16 @@ export async function checkProgressTargets({ cfg, client }, sources) {
     }
     if (!held.equals(item.buffer)) problems.push(`${target}: the mirror already holds a different copy of ${item.rel}`);
   }
-  const notes = new Map((await client.manifest(cfg.project, `${DOC_PREFIX}/handoff`)).map(doc => [doc.uri, doc.content_hash]));
+  const notes = new Map([
+    ...(await client.manifest(cfg.project, `${DOC_PREFIX}/handoff`)),
+    ...(await client.manifest(cfg.project, `${DOC_PREFIX}/amendments`)),
+  ].map(doc => [doc.uri, doc.content_hash]));
   for (const item of sources) {
-    if (item.kind === "handoff") {
+    if (isPlanDocument(item)) {
       const hash = notes.get(item.uri);
-      if (hash !== undefined && hash !== sha256(item.buffer)) problems.push(`${item.uri}: darkmem already holds a different handoff note`);
+      if (hash !== undefined && hash !== sha256(item.buffer)) {
+        problems.push(`${item.uri}: darkmem already holds a different ${item.kind === "amendments" ? "amendments file" : "handoff note"}`);
+      }
     } else if (item.kind === "ledger") {
       const existing = await client.resume(cfg.project, item.slug);
       if (!existing) continue;
@@ -359,16 +368,16 @@ export async function progressToDarkmem(context) {
         const ledger = { slug: item.slug, text: decodeUtf8(item.buffer), mtime: fs.statSync(item.file).mtime.toISOString(), id: null };
         await importLedger({ ...context, report }, checkoutRoots(cfg, item.stateDir), ledger, checked.partial.get(item.slug));
         if (ledger.id) ids.set(item.slug, ledger.id);
-      } else if (item.kind === "handoff") {
+      } else if (isPlanDocument(item)) {
         await client.putDocument({ project: cfg.project, uri: item.uri, content: decodeUtf8(item.buffer) });
       }
     }
     if (report.failures.length) {
-      // Every handoff note was put (a put darkmem refuses throws), and ids
+      // Every handoff note and amendments file was put (a put darkmem refuses throws), and ids
       // holds each ledger darkmem has in full.
       const held = [
         ...sources.filter(item => item.kind === "ledger" && ids.has(item.slug)).map(item => item.rel),
-        ...sources.filter(item => item.kind === "handoff").map(item => item.uri),
+        ...sources.filter(isPlanDocument).map(item => item.uri),
       ];
       return refuse("darkmem refused part of the progress; nothing was moved locally, and darkmem keeps what it accepted", [
         ...report.failures,
@@ -382,7 +391,7 @@ export async function progressToDarkmem(context) {
         const { text, lastSeq } = await remoteLedger(client, ids.get(item.slug));
         lastSeqs.set(item.slug, lastSeq);
         if (!Buffer.from(text, "utf8").equals(item.buffer)) differing.push(`${item.rel}: darkmem's copy reads back different`);
-      } else if (item.kind === "handoff" && (await client.getDocument(cfg.project, item.uri)).content_hash !== sha256(item.buffer)) {
+      } else if (isPlanDocument(item) && (await client.getDocument(cfg.project, item.uri)).content_hash !== sha256(item.buffer)) {
         differing.push(`${item.uri}: darkmem's copy reads back different`);
       }
     }
@@ -426,7 +435,7 @@ export async function progressToDarkmem(context) {
   for (const item of sources) {
     if (item.kind === "ledger") {
       state.ledgers[item.slug] = { offset: item.buffer.length, prefix: sha256(item.buffer), lastSeq: lastSeqs.get(item.slug) };
-    } else if (item.kind === "handoff") {
+    } else if (isPlanDocument(item)) {
       state.documents[item.uri] = sha256(item.buffer);
     } else {
       state.checkpoint = latest.hash;
@@ -474,7 +483,7 @@ export async function progressToDarkmem(context) {
   return {
     moved: true,
     details: [
-      `${count("ledger")} ledgers and ${count("handoff")} handoff notes in darkmem`,
+      `${count("ledger")} ledgers, ${count("handoff")} handoff notes and ${count("amendments")} amendments files in darkmem`,
       ...(latest ? [latest.detail] : []),
       ...[...backups].map(dir => `sources moved to ${dir}`),
       ...unignored.map(({ file, code }) => `${file} could not be written (${code})`),
@@ -632,7 +641,7 @@ export async function progressToLocal(context, { offline = null } = {}) {
   const problems = unsupportedPlanDirs(workRoot).map(dir => `${dir}: not a usable workstream key`);
   const sources = [
     ...ledgersIn(workRoot).map(({ slug, file }) => ({ file, rel: `sdd/${slug}/progress.md` })),
-    ...listDocumentFiles(roots).map(({ file }) => ({ file, rel: `sdd/${path.basename(path.dirname(file))}/handoff.md` })),
+    ...listDocumentFiles(roots).map(({ file }) => ({ file, rel: `sdd/${path.basename(path.dirname(file))}/${path.basename(file)}` })),
   ];
   const latest = path.join(workRoot, "handoff", "latest.md");
   if (fs.existsSync(latest)) sources.push({ file: latest, rel: "handoff/latest.md" });
