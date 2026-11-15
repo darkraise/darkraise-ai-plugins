@@ -47,8 +47,7 @@ guessing who wrote it.
 
 ## Why a script checks the plan
 
-These rules used to be a checklist the planner ran against its own work, and a
-planner grading itself passes what it meant rather than what it wrote.
-`scripts/plan-lint` applies the same checks the same way whichever model wrote
+`scripts/plan-lint` checks these rules, because a planner grading its own work
+passes what it meant rather than what it wrote. It applies the same checks the same way whichever model wrote
 the plan, and it reads `ladder.md`'s floor table at run time, so the checks cannot
 drift from the tables they enforce.

@@ -45,10 +45,9 @@ The machine policy is [codex-routing.json](codex-routing.json):
 | 8 | gpt-6-astra | high |
 | 9 | gpt-6-astra | xhigh |
 
-These tiers are policy choices, not benchmark results. codex-v4 (2026-10-07)
-moved ranks 3 to 6 from `gpt-6-sol` to `gpt-6.1-sol`, Codex's default model
-since 0.159.1, on OpenAI's description of it as near-Astra on software work;
-no calibration replay was run for the move. Only currently advertised
+These tiers are policy choices, not benchmark results: no calibration replay
+backs ranks 3 to 6 on `gpt-6.1-sol` (codex-v3 ran them on `gpt-6-sol`, as the
+table under Existing plans shows). Only currently advertised
 and user-allowed model/effort pairs can run; API model availability does not
 establish access through a native client or the external CLI.
 
