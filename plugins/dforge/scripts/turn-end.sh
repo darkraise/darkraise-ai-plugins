@@ -58,19 +58,8 @@ root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 # In a subshell, so a malformed config costs only this check, never the hook.
 sdd=$(dforge_ledger_root "$root") || sdd=""
 [ -d "$sdd" ] || [ -n "$auto_pending" ] || exit 0
-# last_text — the text of the last assistant entry on stdin. Streamed, never
-# slurped: a transcript reaches hundreds of megabytes.
-last_text() {
-  jq -nrR 'reduce (inputs | fromjson? | objects | select(.type == "assistant")) as $e (null; $e)
-    | values | .message.content
-    | if type == "string" then . elif type == "array" then map(select(.type == "text") | .text) | join("\n") else "" end' \
-    2>/dev/null || true
-}
-last=$(jq -r '.last_assistant_message // empty' <<<"$stdin_json")
-if [ -z "$last" ] && [ -f "$transcript_path" ]; then
-  last=$(tail -n 400 "$transcript_path" | last_text)
-  [ -n "$last" ] || last=$(last_text < "$transcript_path")
-fi
+. "${SCRIPT_DIR}/lib/last-message.sh"
+last=$(last_message "$stdin_json" "$transcript_path")
 
 # Every ledger written this turn must have its ending, since two plans can be
 # active in one checkout. A plan whose final review is clean ends on the
