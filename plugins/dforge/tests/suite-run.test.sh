@@ -191,6 +191,8 @@ check "a timed-out run records its wall time" "$([ "$(field 7)" -ge 1 ] && [ "$(
 
 out=$(cd "$REPO" && SUITE_RUN_KILL_AFTER=1 bash "$SUITE" --timeout 1 -- bash -c 'trap "" TERM; sleep 30' 2>&1); rc=$?
 check "a command that ignores TERM is still a timeout" "$rc" "124"
+run --timeout 60 -- bash -c 'kill -KILL $$'
+check "a command killed by SIGKILL inside its timeout keeps exit 137" "$rc" "137"
 
 out=$(cd "$REPO" && SUITE_RUN_HEARTBEAT=1 bash "$SUITE" -- sleep 3 2>&1); rc=$?
 check "a heartbeat run passes" "$rc" "0"
