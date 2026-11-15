@@ -13,3 +13,4 @@
 | 6 | Review gating by diff size and risk, with a cheap pre-check | docs/dforge/plans/2026-11-15-measured-proposals.md | A12 | done | task-step small-fix skip removed (Task 5) |
 | 7 | Re-check that plans at depth light lose little by skipping acceptance QA, by counting on five shipped light plans the acceptance-statement defects the final review missed | - | - | deferred | needs five shipped light plans; two exist on 2026-11-15 (dflow-hud-overhaul, downloads-mutation-measurement) |
 | 8 | Re-check the code-quality lens's yield per part once five review records carry its parts line | - | - | deferred | spec review Medium, 2026-11-15: lang-*, type-design and docs-comments never ran before, so there is no yield data |
+| 9 | task-loop-steps.acceptance.test.sh A5/A6 re-review rows are covered by task-step.test.sh 'prompts for a one-line fix' and its risk-3 row | - | - | deferred | final review: for dforge:test-simplifier |
