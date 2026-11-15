@@ -265,5 +265,15 @@ out=$(cd "$W2" && AR_SESSION=s2 bash "$RUN" --prompt "$TMP/prompt.md" --report "
 check "an unignored state directory: the judge's own log line is not a write" "$rc $(tried)" "0 anthropic OK none "
 check "an unignored state directory: it now ignores itself" "$(cat "$W2/.dforge/.gitignore" 2>/dev/null | tr -d '\r')" "*"
 
+# --- a pre-run snapshot that cannot be taken: HEAD made unborn after the run is bound ---
+W3="$TMP/work3"; mkdir -p "$W3/docs"; printf '# Spec\n' > "$W3/docs/s.md"; printf '.dforge/\n' > "$W3/.gitignore"
+git -C "$W3" init -q && git -C "$W3" add -A && git -C "$W3" -c user.name=t -c user.email=t@example.invalid commit -qm init
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s3"
+(cd "$W3" && bash "$P/scripts/auto-run" --session s3 start --spec docs/s.md >/dev/null 2>&1)
+git -C "$W3" update-ref -d "$(git -C "$W3" symbolic-ref HEAD)"
+fresh; caps 5 0 0; rm -f "$TMP/args.log"
+out=$(cd "$W3" && AR_SESSION=s3 bash "$RUN" --prompt "$TMP/prompt.md" --report "$W3/.dforge/r.md" --cwd "$W3" 2>>"$TMP/err" | tr -d '\r'); rc=$?
+check "no snapshot: one FAILED line, exit 3, no CLI, no report" "$rc $(tried) $(started) $([ -e "$W3/.dforge/r.md" ] && echo present || echo absent)" "3 anthropic FAILED snapshot  0 absent"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
