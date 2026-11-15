@@ -255,5 +255,15 @@ check "a charge that fails records nothing" "$(spent anthropic)" "0.0000"
 lacks "A8: no key value in stdout, stderr, the log, the spend file or the state directory" \
   "$(cat "$TMP/all.out" "$TMP/err" "$JLOG" "$HOME/.dforge/api-spend.json" 2>/dev/null; grep -rh SENTINEL "$STATE" 2>/dev/null)" "SENTINEL"
 
+# --- a project whose first auto run created .dforge/, which nothing ignores yet ---
+W2="$TMP/work2"; mkdir -p "$W2/docs"; printf '# Spec\n' > "$W2/docs/s.md"
+git -C "$W2" init -q && git -C "$W2" add -A && git -C "$W2" -c user.name=t -c user.email=t@example.invalid commit -qm init
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s2"
+(cd "$W2" && bash "$P/scripts/auto-run" --session s2 start --spec docs/s.md >/dev/null 2>&1)
+fresh; caps 5 0 0
+out=$(cd "$W2" && AR_SESSION=s2 bash "$RUN" --prompt "$TMP/prompt.md" --report "$W2/.dforge/r.md" --cwd "$W2" 2>>"$TMP/err" | tr -d '\r'); rc=$?
+check "an unignored state directory: the judge's own log line is not a write" "$rc $(tried)" "0 anthropic OK none "
+check "an unignored state directory: it now ignores itself" "$(cat "$W2/.dforge/.gitignore" 2>/dev/null | tr -d '\r')" "*"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
