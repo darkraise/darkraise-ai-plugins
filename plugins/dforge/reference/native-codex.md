@@ -145,7 +145,8 @@ Both execution skills run on this host, and the plan's `**Execution:**` line
 names the mode and the native pair. A Codex-host plan is inline, heavy tasks
 included, and its session implements every task.
 A Codex plan therefore carries no delegated task, and `scripts/task-brief`
-writes it no `**Dispatch:**` or `**Review:**` line. A task whose `**Evaluation:**` line
+writes it no `**Dispatch:**` or `**Review:**` line. The task loop opens each
+task with `scripts/task-brief --open PLAN_FILE N`, as on Claude Code. A task whose `**Evaluation:**` line
 reads `risk=3` is reviewed by hand with a native judge at Astra high or above
 ([delegated-task.md](delegated-task.md) §The session review loop); otherwise
 dforge:executing-plans dispatches nothing here but its ruling seat and the

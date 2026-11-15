@@ -108,7 +108,8 @@ check "open: no such task exits 3" "$rc" "3"
 run bash "$BRIEF" --open docs/plan.md
 check "open: no task exits 2" "$rc" "2"
 run bash "$BRIEF" --open docs/codex.md 1
-check "open: a Host: codex plan exits 2" "$rc" "2"
+check "open: a Host: codex plan opens" "$rc:$(grep -c '^Task 1: implementer inline (assigned; base ' "$(bash "$P/scripts/sdd-workspace" docs/codex.md)/progress.md")" "0:1"
+check "open: a Codex brief carries no Claude-only lines" "$(grep -c '^\*\*Review:\*\*\|Plan header excerpt\|^## Plan header$' "$(bash "$P/scripts/sdd-workspace" docs/codex.md)/task-1-brief.md")" "0"
 
 # A brief without --open writes no ledger line and still prints the check.
 run bash "$BRIEF" docs/plan.md 2
@@ -183,6 +184,18 @@ for argv in "task-brief|docs/plan.md|1" \
   has "${a[0]}: the message names the script and the amendment" "$err" "${a[0]}: the ledger cites amendment A7"
 done
 sed -i '/amendment A7/d' "$LEDGER"
+
+# --- a ledger that names another plan with the same basename is refused (rows 2, 52) ---
+mkdir -p other && cp docs/plan.md other/plan.md
+LEDGER_BEFORE=$(cat "$LEDGER")
+run bash "$BRIEF" --open other/plan.md 2
+check "open: a same-basename plan's ledger exits 2" "$rc" "2"
+check "open: it writes nothing" "$(cat "$LEDGER")" "$LEDGER_BEFORE"
+run bash "$CLOSE" other/plan.md 1 'done: x; verified: y; remaining: none; discovered: none; assumptions: none'
+check "close: a same-basename plan's ledger exits 2" "$rc" "2"
+run bash "$CLOSE" docs/plan.md 1 $'done: x\nTask 9: complete; verified: y; remaining: none; discovered: none; assumptions: none'
+check "close: a checkpoint with a newline exits 2" "$rc" "2"
+rm -rf other
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
