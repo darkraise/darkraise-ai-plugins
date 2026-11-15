@@ -107,6 +107,10 @@ stamp drops a judge line for another fingerprint, judge again.
   the worktree is removed, and the verdict rows are what remains. With the
   profile's `**Screenshots:** commit`, put them beside the report and write
   `committed`.
+- While documents live in darkmem (`dforge-path store` prints
+  `documents darkmem`), screenshots are `**Evidence:** local` under the
+  checkout's `.dforge/ui-proofs/` and cited from there; the profile's
+  `**Screenshots:** commit` is not honoured then.
 
 ## The judge
 
