@@ -8,9 +8,7 @@
 
 **Format:** Start with "Use when..." to focus on triggering conditions
 
-**CRITICAL: Description = When to Use, NOT What the Skill Does**
-
-The description should ONLY describe triggering conditions. Do NOT summarize the skill's process or workflow in the description.
+The description says when to use the skill, not what the skill does: triggering conditions only, with no summary of its process or workflow.
 
 **Why this matters:** Testing revealed that when a description summarizes the skill's workflow, an agent may follow the description instead of reading the full skill content. A description saying "code review between tasks" caused an agent to do ONE review, even though the skill's flowchart clearly showed TWO reviews (spec compliance then code quality).
 
@@ -38,7 +36,6 @@ description: Use when implementing any feature or bugfix, before writing impleme
 - Keep triggers technology-agnostic unless the skill itself is technology-specific
 - If skill is technology-specific, make that explicit in the trigger
 - Write in third person (injected into system prompt)
-- **NEVER summarize the skill's process or workflow**
 
 ```yaml
 # ❌ BAD: Too abstract, vague, doesn't include when to use

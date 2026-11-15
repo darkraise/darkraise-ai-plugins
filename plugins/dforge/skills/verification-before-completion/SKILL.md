@@ -31,8 +31,6 @@ BEFORE claiming any status or expressing satisfaction:
    - If NO: State actual status with evidence
    - If YES: State claim WITH evidence
 5. ONLY THEN: Make the claim
-
-Skip any step = lying, not verifying
 ```
 
 ## Common Failures
@@ -55,8 +53,6 @@ Skip any step = lying, not verifying
 - About to commit/push/PR without verification
 - Trusting agent success reports
 - Relying on partial verification
-- Thinking "just this once"
-- Tired and wanting work over
 - **ANY wording implying success without having run verification**
 
 ## Rationalization Prevention
@@ -65,10 +61,8 @@ Skip any step = lying, not verifying
 |--------|---------|
 | "Should work now" | RUN the verification |
 | "I'm confident" | Confidence ≠ evidence |
-| "Just this once" | No exceptions |
 | "Linter passed" | Linter ≠ compiler |
 | "Agent said success" | Verify independently |
-| "I'm tired" | Exhaustion ≠ excuse |
 | "Partial check is enough" | Partial proves nothing |
 | "Different words so rule doesn't apply" | Spirit over letter |
 

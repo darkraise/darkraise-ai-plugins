@@ -24,18 +24,17 @@ WHEN receiving code review feedback:
 6. IMPLEMENT: One item at a time, test each
 ```
 
-## Forbidden Responses
+## How to Respond
 
-**NEVER:**
-- "You're absolutely right!" (explicit instruction-file violation)
-- "Great point!" / "Excellent feedback!" (performative)
-- "Let me implement that now" (before verification)
-
-**INSTEAD:**
+Answer with technical content:
 - Restate the technical requirement
 - Ask clarifying questions
 - Push back with technical reasoning if wrong
 - Just start working (actions > words)
+
+Agreement and praise ("You're absolutely right!", "Great point!") tell the
+reviewer nothing they can check, and "Let me implement that now" commits to a
+change before you have verified it.
 
 ## Handling Unclear Feedback
 

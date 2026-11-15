@@ -7,9 +7,8 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 
 ## Overview
 
-**Core principle:** ALWAYS find root cause before attempting fixes. Symptom fixes are failure.
-
-**Violating the letter of this process is violating the spirit of debugging.**
+**Core principle:** find the root cause before attempting a fix. A fix aimed at
+a symptom leaves the cause in place, so the failure comes back somewhere else.
 
 ## Fast Mode
 
@@ -45,7 +44,7 @@ Use for ANY technical issue:
 - Build failures
 - Integration issues
 
-**Use this ESPECIALLY when:**
+**It matters most when:**
 - Under time pressure (emergencies make guessing tempting)
 - "Just one quick fix" seems obvious
 - You've already tried multiple fixes
@@ -59,7 +58,8 @@ Use for ANY technical issue:
 
 ## The Four Phases
 
-You MUST complete each phase before proceeding to the next.
+Complete each phase before starting the next: each one supplies the evidence
+the next acts on.
 
 ### Phase 1: Root Cause Investigation
 
@@ -190,7 +190,7 @@ You MUST complete each phase before proceeding to the next.
    - Simplest possible reproduction
    - Automated test if possible
    - One-off test script if no framework
-   - MUST have before fixing
+   - Have it before fixing: it is the proof that the fix addresses this failure
    - Use the `dforge:test-driven-development` skill for writing proper failing tests
 
 2. **Implement Single Fix**

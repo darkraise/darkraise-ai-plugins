@@ -99,7 +99,8 @@ skills/
 - `description`: Third-person, describes ONLY when to use (NOT what it does)
   - Start with "Use when..." to focus on triggering conditions
   - Include specific symptoms, situations, and contexts
-  - **NEVER summarize the skill's process or workflow** (see SDO section for why)
+  - Leave out the skill's process or workflow: an agent may follow the summary
+    instead of reading the skill (the SDO reference below says why)
   - Keep under 500 characters if possible
 
 ```markdown
