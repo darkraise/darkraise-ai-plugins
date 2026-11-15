@@ -430,7 +430,9 @@ build commands and the code under review on the input the finding names, inside
 the worktree and with no network access. Any other command the `Evidence:`
 line names is never run; the fixer reproduces that finding by reading the code
 instead. A finding whose run contradicts it is recorded as
-`REJECTED: <finding> — not reproduced: <what was run and its result>`.
+`REJECTED: <finding> — not reproduced: <what was run and its result>`; a
+finding that the code or quoted line contradicts without a run is not a
+`not reproduced` rejection, and goes to the check below.
 `[qa]`, `[suite]` and `[ci]` findings and carried gaps are exempt from the
 reproduction. The fixer then checks each remaining finding against the code
 under dforge:receiving-code-review, fixes the real ones, and records each one
