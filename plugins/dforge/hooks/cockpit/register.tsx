@@ -48,6 +48,7 @@ import {
   isAbsolutePath,
   isPlanTail,
   isServiceCommand,
+  isTimerCommand,
   kTokens,
   seatBarCells,
   seatCounts,
@@ -402,6 +403,7 @@ export const register: Register = on => {
     S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($).catch(() => undefined))
     S.poll?.cancel()
     S.poll = $.clock.every(POLL_MS, () => void pollTick($).catch(() => undefined))
+    await writeSessionState($)
 
     return next(e)
   })
@@ -545,6 +547,7 @@ export const register: Register = on => {
       ...(isJudgeSeat(e.subagentType) ? await judgeReports($, e.prompt) : {}),
     }
     await update($, spawns, list => trimmedSpawns([...list, spawn]))
+    await writeSessionState($)
     await syncTicker($)
 
     return started
@@ -592,6 +595,7 @@ export const register: Register = on => {
     if (e.message.role === 'user') {
       const text = e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n')
       if (text.includes('<task-notification>')) await endShells($, text)
+      if (text.includes('background work of its own still running')) await markPartial($)
     } else if (e.message.role === 'assistant' && e.agentId === undefined) {
       const fast = fastModeLine(e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n'))
       if (fast !== null) await update($, isFastMode, () => fast)
@@ -604,10 +608,10 @@ export const register: Register = on => {
   // listed, since a Done covering more work beats a lost one. The cockpit's own
   // keep-warm prompt continues the chain it keeps warm.
   on('prompt.submit', async ($, e, next) => {
-    if (S.isKeepWarmSubmitted && e.text === keepWarmPrompt()) return next(e)
+    if (S.isKeepWarmSubmitted && e.text === keepWarmPrompt()) return submitted($, await next(e))
     S.isKeepWarmSubmitted = false
     if (e.origin !== undefined && NEW_CHAIN_ORIGINS.has(e.origin.kind)) S.heldDone = null
-    return next(e)
+    return submitted($, await next(e))
   }).catch(($, e, next) => next(e))
 
   // A main turn begins: the Now row starts its clock.
@@ -665,6 +669,7 @@ export const register: Register = on => {
       const effort = typeof e.effort === 'string' ? e.effort : null
       const before = await read($, engine)
       if (before.model !== e.model || before.effort !== effort) await update($, engine, now => ({ ...now, model: e.model, effort }))
+      if (before.model !== e.model) await writeSessionState($)
       const step = e.index + 1
       await update($, activity, now => (now.kind === 'idle' || now.kind === 'failed' || now.step === step ? now : { ...now, step }))
     }
@@ -728,6 +733,7 @@ export const register: Register = on => {
         await sendDone($, e.answer, e.durationMs)
       }
       if (e.reason === 'answer') await armAutoRun($, e.answer)
+      await writeSessionState($)
       return done
     }
     const agentId = e.agentId
@@ -744,6 +750,7 @@ export const register: Register = on => {
     }
     const outcome: 'done' | 'failed' = e.reason === 'answer' ? 'done' : 'failed'
     await update($, spawns, all => all.map(one => (one.agentId === agentId ? { ...one, isDone: true, outcome } : one)))
+    await writeSessionState($)
     for (const [id, wait] of [...S.waits]) if (wait.agentId === agentId) await endWait($, id, '⏹ Agent ended')
     await syncTicker($)
     await settleBackground($)
@@ -823,6 +830,7 @@ export const register: Register = on => {
     }
     if (RUN_SKILLS.includes(skill)) await markRunSession($)
     if (ran.deny === undefined && !ran.isError) await trackShells($, tool, e, ran.result)
+    if (ran.deny === undefined && (tool === 'Monitor' || tool === 'SendMessage')) await markPartial($)
     if (e.agentId === undefined) {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
       // A run starts, stops and changes regime through the model's own Bash calls to scripts/auto-run.
@@ -2500,6 +2508,11 @@ const S = {
   autoActedAt: null as number | null,
   // When this session started: one with no turn yet ages from it.
   watchedSince: null as number | null,
+  // The session that started a launch form the cockpit does not track; its
+  // session state file says partial until the id changes.
+  partialSession: null as string | null,
+  // Each tracked shell's description, by its task id: the shells atom keeps none.
+  shellWhat: {} as Record<string, string>,
   // When background work began deferring the pending stage; null while nothing
   // does or a turn is live.
   autoDeferredSince: null as number | null,
@@ -3004,6 +3017,69 @@ async function beat($: EngineInterface) {
   } catch {
     // A beat that cannot be written is skipped; the watchdog's tick goes on.
   }
+}
+
+// The session facts the scripts read in place of a transcript scan
+// (scripts/lib/session-state.sh): written whole to its final path, since a
+// mod cannot rename, so a reader meeting a half-written file falls back.
+async function writeSessionState($: EngineInterface) {
+  try {
+    const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+    if (!home) return
+    const session = await $.session.id()
+    const window = await $.session.usage().then(
+      figures => figures.context.window,
+      () => null,
+    )
+    const model = (await read($, engine)).model ?? (await $.session.model().catch(() => null))
+    const mainShells = (await read($, shells)).filter(one => (one.agentId ?? null) === null)
+    S.shellWhat = Object.fromEntries(Object.entries(S.shellWhat).filter(([id]) => mainShells.some(one => one.id === id)))
+    const launches = [
+      ...mainShells.map(one => {
+        const line = one.command.split('\n')[0]!
+        return {
+          id: one.id,
+          kind: 'shell',
+          what: (S.shellWhat[one.id] || line).slice(0, 80),
+          command: line,
+          startedAt: one.startedAt,
+          outputFile: '',
+          service: isServiceCommand(one.command),
+          timer: isTimerCommand(one.command),
+        }
+      }),
+      ...(await read($, spawns))
+        .filter(one => !one.isDone)
+        .map(one => ({ id: one.agentId, kind: 'agent', what: one.description.slice(0, 80), command: '', startedAt: one.startedAt, outputFile: '', service: false, timer: false })),
+    ]
+    const state = {
+      session,
+      updated: await $.clock.now(),
+      window: typeof window === 'number' && window > 0 ? window : null,
+      model: model ?? null,
+      partial: S.partialSession === session,
+      launches,
+    }
+    await $.fs.write(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/state/${session.replace(/[^A-Za-z0-9]/g, '-')}.json`, `${JSON.stringify(state)}\n`)
+  } catch {
+    // The scripts fall back to the transcript scan.
+  }
+}
+
+// After the prompt's hooks ran, so the turn stamp the state file is judged
+// against already exists.
+async function submitted<T>($: EngineInterface, result: T): Promise<T> {
+  await writeSessionState($)
+  return result
+}
+
+// A Monitor, a resumed agent or an agent still working after its report: the
+// cockpit cannot see when these end, so the launches it lists are partial.
+async function markPartial($: EngineInterface) {
+  const session = await $.session.id().catch(() => null)
+  if (session === null || S.partialSession === session) return
+  S.partialSession = session
+  await writeSessionState($)
 }
 
 // Each WATCHDOG_MS: the heartbeat, then a wake-up for a bound run nothing
@@ -4117,6 +4193,7 @@ async function endShells($: EngineInterface, text: string) {
   const ended = new Set(tasksEnded(text).map(one => one.id))
   if (ended.size === 0 || !(await read($, shells)).some(one => ended.has(one.id))) return
   await update($, shells, list => list.filter(one => !ended.has(one.id)))
+  await writeSessionState($)
   await syncTicker($)
   await settleBackground($)
 }
@@ -4128,7 +4205,9 @@ async function trackShells($: EngineInterface, tool: string, e: object, result: 
     const id = (result as { backgroundTaskId?: unknown } | undefined)?.backgroundTaskId
     if (typeof id !== 'string' || id === '') return
     const shell: CockpitShell = { id, command: String((e as { command?: unknown }).command ?? ''), startedAt: await $.clock.now(), agentId: (e as { agentId?: string }).agentId ?? null }
+    S.shellWhat[id] = String((e as { description?: unknown }).description ?? '')
     await update($, shells, list => [...list.filter(one => one.id !== id), shell].slice(-20))
+    await writeSessionState($)
     await syncTicker($)
     return
   }
@@ -4138,6 +4217,7 @@ async function trackShells($: EngineInterface, tool: string, e: object, result: 
     if (typeof id === 'string') {
       await update($, shells, list => list.filter(one => one.id !== id))
       await update($, spawns, all => all.map(one => ((one.agentId === id || one.name === id) && !one.isDone ? { ...one, isDone: true, outcome: 'failed' as const } : one)))
+      await writeSessionState($)
       await syncTicker($)
       await settleBackground($)
     }

@@ -7720,3 +7720,54 @@ describe('update frequency', () => {
     })
   })
 })
+
+describe('session state file', () => {
+  const STATE_FILE = '/home/me/.claude/dforge/sessions/state/sess-1.json'
+  const stateOf = (written: Record<string, string>) => JSON.parse(written[STATE_FILE] ?? 'null')
+  const bg = (id: string) => ({ Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: id }, text: 'Running in the background' }) })
+
+  test('is written at session start, prompt submit and turn end with the window', async ($, on) => {
+    const written: Record<string, string> = {}
+    const clock = world(on, { ...SIGNED_IN, written, window: 650_000 })
+    signedIn(on, {})
+    await $.session.start(START)
+    const first = stateOf(written)
+    expect(first).toMatchObject({ session: 'sess-1', window: 650_000, partial: false, launches: [] })
+    expect(typeof first.model).toBe('string')
+    await clock.advance(5_000)
+    await $.prompt.submit({ text: 'go on', wait: false } as never)
+    const submitted = stateOf(written).updated
+    expect(submitted).toBeGreaterThan(first.updated)
+    await clock.advance(5_000)
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(stateOf(written).updated).toBeGreaterThan(submitted)
+  })
+
+  test('lists running launches with their roles and drops an ended one', async ($, on) => {
+    const written: Record<string, string> = {}
+    const w: World = { ...SIGNED_IN, written, tools: bg('b7k2') }
+    world(on, w)
+    signedIn(on, {})
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', description: 'Dev server', run_in_background: true } as never)
+    w.tools = bg('t1')
+    await $.tool.call({ tool: 'Bash', command: 'sleep 1200', run_in_background: true } as never)
+    const launches = stateOf(written).launches
+    expect(launches.map((l: Record<string, unknown>) => [l.id, l.kind, l.command, l.service, l.timer])).toEqual([
+      ['b7k2', 'shell', 'npm run dev', true, false],
+      ['t1', 'shell', 'sleep 1200', false, true],
+    ])
+    expect(launches[0].what).toBe('Dev server')
+    await $.session.append({ message: { type: 'user', role: 'user', content: [{ type: 'text', text: '<task-notification>\n<task-id>b7k2</task-id>\n<status>completed</status>\n</task-notification>' }] }, door: 'queue', origin: { kind: 'task-notification' }, uuid: 'n1' } as never)
+    expect(stateOf(written).launches.map((l: Record<string, unknown>) => l.id)).toEqual(['t1'])
+  })
+
+  test('marks the launches partial once a Monitor starts', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { ...SIGNED_IN, written })
+    signedIn(on, {})
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Monitor', command: 'tail -f x.log' } as never)
+    expect(stateOf(written).partial).toBe(true)
+  })
+})

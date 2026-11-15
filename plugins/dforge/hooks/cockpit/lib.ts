@@ -1235,6 +1235,11 @@ export function isServiceCommand(command: string): boolean {
     .some(part => SERVICES.some(pattern => pattern.test(part)))
 }
 
+/** Whether a background command, by its first line, is a bare `sleep`: a timer that ends on its own. */
+export function isTimerCommand(command: string): boolean {
+  return /^sleep\s+[0-9]+(\.[0-9]+)?[smhd]?$/.test(command.split('\n')[0]!.trim())
+}
+
 /** Whether a release (`2.1.295`) is at least `least`, compared part by part; an unreadable one is not. */
 export function isAtLeast(base: string | undefined, least: string): boolean {
   const parts = (text: string) => text.split('-')[0]!.split('.').map(Number)
