@@ -1,17 +1,18 @@
 # Step 1b: Prove the UI
 
 Run `ui-proof check --base MERGE_BASE --spec <the plan's Spec>` under
-`timeout 120`, where MERGE_BASE is `git merge-base HEAD <base branch>` and
-`<base branch>` is the branch this one was created from (Step 3 explains how
+`bash <plugin-root>/scripts/with-timeout 120 <command>`, where MERGE_BASE is
+`git merge-base HEAD <base branch>` and `<base branch>` is the branch this one was created from (Step 3 explains how
 to find it; determine it now):
 
 ```bash
-bash <plugin-root>/scripts/ui-proof check --base "$(git merge-base HEAD <base branch>)" --spec <the plan's Spec>
+bash <plugin-root>/scripts/with-timeout 120 bash <plugin-root>/scripts/ui-proof check --base "$(git merge-base HEAD <base branch>)" --spec <the plan's Spec>
 ```
 
 Drop `--spec` when there is no plan. **Exit 0** (it also prints `ok` when the
 gate is off or no UI file changed): continue to Step 2. Any other status (2
-for a bad base or spec, 124 for the timeout) means the check never ran: treat
+for a bad base or spec, 124 for the timeout, 125 when no timeout command,
+`timeout` or `gtimeout`, is installed) means the check never ran: treat
 it as exit 1, with its output as the FAIL lines.
 
 **Exit 1:** the UI is unproven, and integrating it is blocked. In an auto
