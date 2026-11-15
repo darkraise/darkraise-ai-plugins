@@ -73,6 +73,7 @@ export const windowsSeconds = {
   'roots.test.sh': 84,
   'sdd-references.test.sh': 10,
   'seats.test.sh': 10,
+  'session-state.test.sh': 20,
   'settings-skills.test.sh': 10,
   'skill-size.test.sh': 10,
   'skill-split-planning.test.sh': 10,

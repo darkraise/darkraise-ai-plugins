@@ -42,6 +42,7 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
       # Every session start rewrites its own records, so one untouched for a
       # month belongs to a session or a checkout that is gone.
       find "$sessions_dir" "$sessions_dir/by-id" -maxdepth 1 -type f -name '*.json' -mtime +30 -delete 2>/dev/null || true
+      if . "${SCRIPT_DIR}/lib/session-state.sh" 2>/dev/null; then ss_prune; fi
     fi
   fi
   # The cockpit writes its heartbeat here (scripts/lib/auto-run.sh
