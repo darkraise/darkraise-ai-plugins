@@ -3,13 +3,18 @@
 Step 1 takes one of four forms.
 
 The first, `- [ ] **Step 1: Write the failing test**`, is for a behaviour no
-existing or planned test reaches.
+existing or planned test reaches. The step carries one test contract per
+test:
+
+    - `<test file>::<test name>` (<unit|integration|e2e>): given <input or state>, asserts <exact observable result>; fails today because <fault>.
 
 The second, ``- [ ] **Step 1: Extend the test `<file>::<name>`**``, is for a
 variant of a behaviour already tested, or new behaviour that belongs in an
-existing test. The step gives the added row, case or assertion in full, and
-it must fail before the implementation, as a new test would. Steps 2 and 4
-run that test.
+existing test. The step carries one test contract for the added row, case or
+assertion, and it must fail before the implementation, as a new test would.
+Steps 2 and 4 run that test.
+
+On a `Host: codex` plan both forms carry the complete test code instead.
 
 The third, ``- [ ] **Step 1: Covered by Task <N>'s test `<name>`**``, applies
 only for a task that adds no new observable behaviour: wiring, extraction or

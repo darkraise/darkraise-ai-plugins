@@ -1160,7 +1160,7 @@ one task produces and another consumes), Assumptions with evidence, and a Task
 index. `scripts/plan-lint` checks it, and a judge reviews it against
 `criteria/plan-review.md` before it is saved. That Execution line is binding: only
 your explicit instruction overrides it. Each task
-carries its interfaces and the complete code of its tests, and gives
+carries its interfaces and a test contract for each test, and gives
 implementation code only for configuration values, generated-file or migration
 commands and constants the spec names; the implementer writes the rest. Each
 task then reads:

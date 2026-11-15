@@ -21,17 +21,20 @@ from your own reading of the whole plan.
 
 Look at each task's text together with the header's Global Constraints and
 Contracts - nothing else. Score HIGH when every step names exact file paths,
-every task gives its interfaces and the complete code of its tests, every
-command is exact and states its expected output, and every test would fail
-against a stub: a test that still passes with `return <constant>` or with the
+every task gives its interfaces and its test contracts, every command is exact
+and states its expected output, and every test contract names its file, test
+name, layer, input and exact asserted result and states a fault a stub would
+not survive: a test that still passes with `return <constant>` or with the
 implementation deleted is invalid. On a Claude plan implementation code
 appears only for a configuration value, a generated-file or migration command,
 or a fixed constant the spec names, and a task that describes its
 implementation precisely without its code is not a gap. On a `Host: codex`
 plan every code step carries the complete code. Score LOW when a step leaves a
-decision to the implementer, a test step lacks its complete test code, a step
-refers to something outside the task and header, says "similar to Task N", or
-specifies a test that asserts nothing. Redundant test: score LOW when a
+decision to the implementer, a test contract names no exact result, two
+readers could turn a test contract into tests that catch different faults, a
+`Host: codex` test step lacks its complete test code, a step refers to
+something outside the task and header, says "similar to Task N", or specifies
+a test that asserts nothing. Redundant test: score LOW when a
 planned test fails for no fault that an existing test or another planned test
 does not already catch, as for a test that cannot fail, and name the
 overlapping test in the finding. A task whose Step 1 reads "Covered by Task

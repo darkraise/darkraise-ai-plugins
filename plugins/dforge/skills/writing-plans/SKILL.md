@@ -213,11 +213,8 @@ along with a deferred task; without the line it reads Contracts instead.]
 
 - [ ] **Step 1: Write the failing test**
 
-```python
-def test_specific_behavior():
-    result = function(input)
-    assert result == expected
-```
+- `tests/path/test.py::test_specific_behavior` (unit): given `function(input)`,
+  asserts it returns `expected`; fails today because `function` is not defined.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -231,18 +228,25 @@ Expected: FAIL with "function not defined"
 2. [Its inputs and outputs, the exact strings and exit codes Contracts names,
    the edge cases, and what must not change.]
 
-A task carries its files, its interfaces, the complete code of its tests, the
-decisions it embodies, and the commands that verify it. Step 3 describes the
-implementation; it carries no implementation code. Implementation code
-appears only where no test can pin the behaviour: a configuration value, a
-generated-file or migration command, or a fixed constant the spec names. A
-test that still passes with `return <constant>` or with the implementation
-deleted is a plan failure: `plan-review.md` scores it LOW.
+A task carries its files, its interfaces, its test contracts, the decisions it
+embodies, and the commands that verify it. On a Claude plan Step 1 gives one
+test contract per test, not the test's code:
 
-On a Codex host, tasks keep the code-given shape: Step 3 is **Write the
-implementation** and carries every line of it, because
-[native-codex.md](../../reference/native-codex.md) keeps Rule S at
-`reducible >= 4`.
+    - `<test file>::<test name>` (<unit|integration|e2e>): given <input or state>, asserts <exact observable result>; fails today because <fault>.
+
+The asserted result is exact: the strings, exit codes and values come from
+Contracts or are written inline, so two readers write tests that catch the
+same fault. Step 3 describes the implementation; it carries no implementation
+code. Implementation code appears only where no test can pin the behaviour: a
+configuration value, a generated-file or migration command, or a fixed
+constant the spec names. A contract whose test would still pass with
+`return <constant>` or with the implementation deleted is a plan failure:
+`plan-review.md` scores it LOW.
+
+On a Codex host, tasks keep the code-given shape: Step 1 carries the complete
+test code, and Step 3 is **Write the implementation** and carries every line
+of it, because [native-codex.md](../../reference/native-codex.md) keeps Rule S
+at `reducible >= 4`.
 
 Step 1's test sits at the lowest layer that can fail for the task's change. Plan
 an end-to-end test only for a new user journey, never for an edge case a unit or
@@ -289,11 +293,11 @@ Every step must contain the actual content an engineer needs. These are
 **plan failures** — never write them:
 - "TBD", "TODO", "implement later", "fill in details"
 - "Add appropriate error handling" / "add validation" / "handle edge cases"
-- "Write tests for the above" (without actual test code)
-- "Similar to Task N" (repeat the test code or the description — the engineer
-  may be reading tasks out of order)
-- Tests that describe behaviour without asserting it (every test step carries
-  its complete test code)
+- "Write tests for the above" (without a test contract for each test)
+- "Similar to Task N" (repeat the test contract or the description — the
+  engineer may be reading tasks out of order)
+- A test contract that names no exact asserted result (on a `Host: codex`
+  plan, a test step without its complete test code)
 - References to types, functions, or methods not defined in any task
 
 ## Self-Review
