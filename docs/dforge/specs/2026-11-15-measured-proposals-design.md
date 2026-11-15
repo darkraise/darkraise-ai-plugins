@@ -42,6 +42,14 @@ did no harm. Register row 7 (a re-check of light-depth plans) is set to
   (`docs/dforge/plans/2026-11-13-reviewer-only-externals.md:746`), the lens
   shape test (`tests/criteria.test.sh:25-68`) and `lens-route --task`'s one
   reader (`scripts/task-step:757-764`), for no gain the Decisions ask for.
+- M1 runs (spec review): "Two per arm (Recommended)".
+- M2 check (spec review): "Add revert-per-file check (Recommended)".
+
+Early CI: none
+
+Finish: merge
+
+Worktree: in-place
 
 ## Current state (2026-11-15)
 
@@ -279,13 +287,13 @@ merged branches, from `docs/dforge/notes/2026-11-14-agy-hydrogen-review.md:19-21
 and `docs/dforge/reviews/2026-11-13-dflow-hud-overhaul.md:8`: b1
 `b36eaf63..bc097711` (cockpit fixes), b3 `5bb5545f..e48eeafa` (retire executor
 lanes) and `9d46f4e..52da46e0` (dflow-hud overhaul). For each, the Claude final
-review runs twice on the same `scripts/review-package` output, through
-`dforge:judge-opus`: once with code-reviewer.md as it stood before §3 (`git
-show <pre-change sha>:...`) and once with the new file. b1 has no plan, so its
+review runs four times on the same `scripts/review-package` output, through
+`dforge:judge-opus`: twice with code-reviewer.md as it stood before §3 (`git
+show <pre-change sha>:...`) and twice with the new file, 12 reviews in all. b1 has no plan, so its
 package is built with an explicit OUTFILE and its `[PLAN_OR_REQUIREMENTS]` is
 its commit subjects, the same in both arms.
 
-A fresh `dforge:judge-opus` judges every finding of all six reports in one
+A fresh `dforge:judge-opus` judges every finding of all twelve reports in one
 shuffled list, each finding given as `<file>:<line> — <one-liner>` and its
 detail lines with any `Evidence:` line removed, and no prompt version named:
 confirmed (a real defect of that diff) or unconfirmed. The note records, per
@@ -311,7 +319,10 @@ original assertion, and the Step 1 line count before and after. In a scratch
 clone at the task's base commit, a `dforge:impl-sonnet-high` seat, given only
 the `scripts/task-brief` output for a plan copy with the rewritten Step 1 plus
 `plan-header.md`, writes the tests and nothing else. Each written test must
-fail at the base commit and pass at the task's commit.
+fail at the base commit and pass at the task's commit. Then, for each
+non-test file the task changed, that file alone is reverted to the base at the
+task's commit: whenever the plan's own tests fail on that state, the
+contract-written tests must fail too.
 
 M2 shows an upper bound: the contracts are written by a session that holds the
 finished tests, while a planner writes them before any test exists. It can
@@ -342,9 +353,9 @@ A12. [test, high] `task-step` has no `--covered` option (a usage error), and a f
 A13. dropped — the spec review found that no script reads review reports, so it had nothing to test.
 A14. [demo, high] When M1's keep rule held: the Claude final review, lens and plan-review prompts require an `Evidence:` line per finding, report no style findings, read diff-first and end with `## Opened`, and code-reviewer.md's Minor definition no longer names code style; otherwise those files match their pre-change content and the M1 note records the result.
 A15. [demo, high] When M1's keep rule held: the fix wave reproduces each finding first and records an unreproduced one as `REJECTED: <finding> — not reproduced: <what was run and its result>`, and the re-review prompt says when it upholds one; otherwise those files match their pre-change content.
-A16. [demo, medium] The M1 note records every run and the keep rule's result. Q: one run per arm per branch (6 reviews), or two (12 reviews) to damp run-to-run variation?
+A16. [demo, confirmed] The M1 note records all twelve runs (two per arm per branch) and the keep rule's result over their sums.
 A17. [demo, high] When M2's keep rule held: a Claude plan's Step 1 carries test contracts, not test code, a `Host: codex` plan still carries complete code, and plan-review.md's Executability judges the contracts; otherwise those files match their pre-change content and the M2 note names the contract that failed.
-A18. [demo, medium] The M2 note records the four tasks, each original assertion's covering contract entry, and the fail-at-base, pass-at-commit result. Q: is fail-at-base and pass-at-commit enough, or must reverting each non-test file the task changed also fail the contract-written tests whenever it fails the plan's own tests?
+A18. [demo, confirmed] The M2 note records the four tasks, each original assertion's covering contract entry, the fail-at-base and pass-at-commit result, and for each reverted non-test file whether the contract-written tests failed whenever the plan's own tests did.
 A19. [demo, high] No dforge skill, criteria or prompt file says that a task's implementer sees only its task's text, or that small models execute the plan literally.
 A20. [demo, high] `reference/native-codex.md` tells a Codex host how to pick code-quality's parts by hand.
 A21. [demo, high] The retained `final review lens code-quality` line ends with each part that ran and its finding count.
