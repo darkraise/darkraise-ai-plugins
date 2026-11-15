@@ -45,6 +45,7 @@ import {
   isAtLeast,
   isGitWriteTool,
   isDforge,
+  gitMessageTexts,
   gitTextFiles,
   isAbsolutePath,
   isPlanTail,
@@ -92,6 +93,7 @@ import {
   sparkline,
   stackedRuns,
   statMissing,
+  stringsIn,
   tasksEnded,
   termColor,
   themeColor,
@@ -235,6 +237,8 @@ const PROMPT_PATH = pathShape('-prompt\\.md')
 // Every judge prompt template names its report on this line; a prompt also
 // names reports the judge only reads.
 const REPORT_LINE = /^\s*Write your full report to /
+// The same line in a prompt, its phrase free to wrap: the text after it, to the line's end.
+const REPORT_LINES = /(?:^|\n)[ \t]*Write\s+your\s+full\s+report\s+to\s+(\S[^\n]*)/g
 // How many main-turn context readings the forecast keeps.
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
@@ -398,6 +402,7 @@ function applyNotify(o: Live) {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    S.permissionMode = null
     await readSession($, true)
     S.watchedSince = await $.clock.now()
     S.reconciledAt = null
@@ -649,12 +654,24 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // The function-hook tool.check carries no permission mode; the classic hook
+  // inputs do, so the mode the session runs in now is read from them.
+  on('classic.UserPromptSubmit', ($, e, next) => {
+    if (typeof e.permission_mode === 'string' && e.permission_mode !== '') S.permissionMode = e.permission_mode
+    return next(e)
+  })
+  on('classic.PermissionRequest', ($, e, next) => {
+    if (typeof e.permission_mode === 'string' && e.permission_mode !== '') S.permissionMode = e.permission_mode
+    return next(e)
+  })
+
   // Watches the permission decision, never changes it: an "ask" on a call
   // means the person is about to be asked, unless the mode settles it alone.
   on('tool.check', async ($, e, next) => {
     const decided = await next(e)
     const id = e.tool_use_id
-    if (decided.decision !== 'ask' || id === undefined || S.isUnattended || ASKING_TOOLS.includes(e.tool) || S.waits.has(id)) return decided
+    const isUnattended = S.permissionMode === null ? S.isUnattended : UNATTENDED_MODES.includes(S.permissionMode)
+    if (decided.decision !== 'ask' || id === undefined || isUnattended || ASKING_TOOLS.includes(e.tool) || S.waits.has(id)) return decided
     const seat = e.agentId === undefined ? null : ((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat ?? null)
     await startWait($, id, 'waiting', {
       kind: 'ask',
@@ -885,7 +902,15 @@ export const register: Register = on => {
     if (!next.called && e.agentId !== undefined && REVIEW_WRITE_TOOLS.includes(String(e.tool)) && isJudgeSeat((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat)) {
       return { deny: `dforge: the review-seat write guard could not check this write (${next.error.message || next.error.kind}); it is refused.` }
     }
-    return next.called || !(await live($)).guardAttribution ? next(e) : { deny: 'dforge: its attribution guard failed.' }
+    if (next.called) return next(e)
+    const tool = String(e.tool)
+    const isJudged = tool === 'Bash' ? writesGitText(String((e as { command?: unknown }).command ?? '')) : isGitWriteTool(tool)
+    if (!isJudged) return next(e)
+    const isGuarded = await live($).then(
+      settings => settings.guardAttribution,
+      () => true,
+    )
+    return isGuarded ? { deny: 'dforge: its attribution guard failed; set guardAttribution off to lift it.' } : next(e)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -2563,7 +2588,10 @@ const S = {
   ledgerSeen: new Map<string, Set<string>>(),
   // When sendLedgerEvents last sent a task's waiting question: that turn's Done is the question.
   questionSentAt: null as number | null,
+  // The settings' default mode is unattended; read only until an event carries the session's mode.
   isUnattended: false,
+  // The permission mode the last classic hook input carried; null before one.
+  permissionMode: null as string | null,
   // Whether this Claude Code draws a Button's label from styled children,
   // so the hotkey's letter can be underlined in it.
   canUnderline: null as boolean | null,
@@ -4504,7 +4532,10 @@ function pathKey(canon: string): string {
 async function reviewDirs($: EngineInterface): Promise<string[]> {
   const listed = await $.process.run(['git', 'worktree', 'list', '--porcelain'], { timeoutMs: 2000 }).catch(() => null)
   const worktrees = listed?.exitCode === 0 ? listed.stdout.split('\n').flatMap(line => (line.startsWith('worktree ') ? [line.slice('worktree '.length).trim()] : [])) : []
-  return [...new Set([S.where.checkout, S.where.primary, ...worktrees].filter(dir => dir !== null))]
+  // The session's directory last: a report under it is found while S.where is
+  // unset and git cannot list the worktrees.
+  const cwd = await $.session.cwd().catch(() => null)
+  return [...new Set([S.where.checkout, S.where.primary, ...worktrees, cwd].filter((dir): dir is string => typeof dir === 'string' && dir !== ''))]
 }
 
 function rootsOf(dirs: readonly string[]): string[] {
@@ -4556,6 +4587,10 @@ function reportPathsIn(text: string, dirs: readonly string[]): string[] {
 async function judgeReports($: EngineInterface, prompt: string): Promise<{ reports: string[]; reportRoots: string[] }> {
   const dirs = await reviewDirs($)
   const reportRoots = rootsOf(dirs)
+  // A prompt that names its report on the report line allows only that line's
+  // paths: a re-review prompt also names the prior round's report to read.
+  const lines = [...prompt.matchAll(REPORT_LINES)].map(match => match[1] ?? '')
+  if (lines.length > 0) return { reports: [...new Set(lines.flatMap(line => reportPathsIn(line, dirs)))], reportRoots }
   const named = reportPathsIn(prompt, dirs)
   if (named.length > 0) return { reports: named, reportRoots }
   const reports = new Set<string>()
@@ -4631,8 +4666,14 @@ async function attributionLine($: EngineInterface, tool: string, e: object): Pro
   if (tool === 'Bash') {
     const command = String((e as { command?: unknown }).command ?? '')
     if (!writesGitText(command)) return undefined
-    const inline = attributionIn(command)
-    if (inline !== undefined) return inline
+    // Only the text the command writes is read: a message read from stdin
+    // comes from the command's own here-document or pipe, so the whole
+    // command is read then.
+    const { texts, isStdin } = gitMessageTexts(command)
+    for (const text of isStdin ? [...texts, command] : texts) {
+      const inline = attributionIn(text)
+      if (inline !== undefined) return inline
+    }
     // A relative file is read from the session's directory: a cd earlier in
     // the command is not followed, and a file that cannot be read passes. Only
     // a regular file is read: this hook runs before the tool, and a read of
@@ -4647,7 +4688,12 @@ async function attributionLine($: EngineInterface, tool: string, e: object): Pro
     }
     return undefined
   }
-  return isGitWriteTool(tool) ? attributionIn(JSON.stringify(e)) : undefined
+  if (!isGitWriteTool(tool)) return undefined
+  for (const text of stringsIn(e)) {
+    const line = attributionIn(text)
+    if (line !== undefined) return line
+  }
+  return undefined
 }
 
 function addRun(all: CockpitSeat[], seat: string, usage: TurnUsage): CockpitSeat[] {

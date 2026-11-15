@@ -801,6 +801,43 @@ describe('attribution guard', () => {
     expect(reads).not.toContain('/dev/stdin')
   })
 
+  test('passes a human co-author and a mere mention, refuses an AI trailer', async ($, on) => {
+    const TRAILER = ['Co', 'authored-by:'].join('-')
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    const human = await $.tool.call({ tool: 'Bash', command: `git commit -m 'fix: x' -m '${TRAILER} Claude Dupont <claude.dupont@example.com>'` })
+    expect(human.deny).toBeUndefined()
+    const mention = await $.tool.call({ tool: 'Bash', command: `git commit -m 'test: refuse ${TRAILER} trailers naming Claude'` })
+    expect(mention.deny).toBeUndefined()
+    const ai = await $.tool.call({ tool: 'Bash', command: `git commit -m 'fix: x' -m '${TRAILER} Claude <noreply@anthropic.com>'` })
+    expect(ai.deny).toMatch(/keeps AI attribution out of git/)
+  })
+
+  test('a guard hook that throws refuses only a call the guard judges, naming guardAttribution', async ($, on) => {
+    // The next read of the settings is refused once: the hook's own, before
+    // anything else it does; its .catch then reads them as usual. A hook that
+    // throws would be skipped and the store beneath would answer, so it denies.
+    let failures = 0
+    on('state.get', { plugin: 'dforge', key: 'settings' } as never, ((_$: unknown, e: unknown, next: (e: unknown) => unknown) => {
+      if (failures > 0) {
+        failures -= 1
+        return { deny: 'the store is down' }
+      }
+      return next(e)
+    }) as never)
+    const files: World['files'] = { '/home/me/code/shop/web/msg.txt': { text: 'fix: tidy\n' } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    failures = 1
+    const read = await $.tool.call({ tool: 'Read', file_path: '/home/me/code/shop/a.ts' } as never)
+    expect(read.deny).toBeUndefined()
+    expect(read.text).toBe('ok')
+    failures = 1
+    const commit = await $.tool.call({ tool: 'Bash', command: 'git commit -F msg.txt' })
+    expect(commit.deny).toBe('dforge: its attribution guard failed; set guardAttribution off to lift it.')
+  })
+
   test('is off when configured off', async ($, on) => {
     world(on, { tokens: 10_000, config: { guardAttribution: false } })
     await $.session.start(START)
@@ -4255,6 +4292,21 @@ describe('discord', () => {
     expect(fetches).toEqual([])
   })
 
+  for (const [mode, defaultMode, isAsked] of [['auto', 'default', false], ['default', 'bypassPermissions', true]] as const)
+    test(`an approval under the ${mode} mode the session reports ${isAsked ? 'pings' : 'does not ping'}, the settings default being ${defaultMode}`, async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
+      // The test's own hook is the bottom of a classic event's chain.
+      on('classic.UserPromptSubmit', () => ({}) as never)
+      const clock = world(on, { tokens: 50_000, fetches, settings: { permissions: { defaultMode } }, config: { notifyAskAfter: 20 } })
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.classic.UserPromptSubmit({ prompt: 'go', permission_mode: mode })
+      await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+      await clock.advance(30_000)
+      expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)).toEqual(isAsked ? ['⏳ Waiting for approval'] : [])
+    })
+
   test('says when a turn fails', async ($, on) => {
     const fetches: World['fetches'] = []
     world(on, { tokens: 50_000, fetches })
@@ -7597,6 +7649,31 @@ describe('A5: the judge write guard (speed-and-cost-followups acceptance)', () =
     expect(typeof denied).toBe('string')
     expect(denied).toMatch(/review.seat/i)
     expect(denied).toMatch(/write/i)
+  })
+
+  test('a direct re-review prompt allows only its report line, not the prior round', async ($, on) => {
+    const PRIOR = `${WS}/plan-review-round-1-report.md`
+    const NEXT = `${WS}/plan-review-round-2-report.md`
+    world(on, { tokens: 10_000, agentIds: ['judge-1'] })
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(spawn(`Prior findings: ${PRIOR}\nWrite your full report to ${NEXT}, then reply in 10 lines.`, 'dforge:judge-opus', 9))
+    expect((await write($, 'judge-1', PRIOR)).deny).toMatch(REFUSED)
+    expect((await write($, 'judge-1', NEXT)).deny).toBeUndefined()
+  })
+
+  test('accepts the named report under the session directory when no checkout is known and git worktree list fails', async ($, on) => {
+    // Matched on its argv, this answers `git worktree list` above world's process.run hook.
+    on('process.run', { argv: /worktree/ } as never, (() => ({
+      value: { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository\n', isStdoutTruncated: false, isStderrTruncated: false },
+    })) as never)
+    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: '', commonDir: '/home/me/code/shop/.git/modules/sub' })
+    signedIn(on, {}, undefined, '/home/me/code/shop', () => '/home/me/code/shop')
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(spawn(`Review task 1. Write your full report to ${NAMED}, then reply in 10 lines.`, 'dforge:judge-sonnet-high', 1))
+    expect((await write($, 'judge-1', NAMED)).deny).toBeUndefined()
+    expect((await write($, 'judge-1', `${WS}/amendments.md`)).deny).toMatch(REFUSED)
   })
 
   test('A5: a dforge:impl-* subagent and the main loop are not affected', async ($, on) => {

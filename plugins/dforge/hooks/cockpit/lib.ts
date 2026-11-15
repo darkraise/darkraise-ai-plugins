@@ -132,8 +132,23 @@ export function seatBarCells(rowCells: number, counts: string): number {
   return left >= 6 ? left : 0
 }
 
+// A Co-authored-by trailer: at a line start, real or escaped (`\n` as a JSON
+// string or a shell $'…' spells it), and running to the next real or escaped
+// newline. Only a trailer naming an AI counts (isAiAuthor).
+const CO_AUTHOR = /(?:^|\n|\\n)[ \t]*(co-authored-by:[^\n\\]*(?:\\(?!n)[^\n\\]*)*)/gi
+// An AI identity: the whole name, or an address at an AI vendor's domain.
+const AI_NAME = /^(?:claude|codex|copilot|chatgpt)$/i
+const AI_ADDRESS = /@(?:[\w-]+\.)*(?:anthropic|openai)\.com$/i
+
+function isAiAuthor(trailer: string): boolean {
+  const body = trailer.replace(/^co-authored-by:/i, '')
+  const at = body.indexOf('<')
+  const name = (at < 0 ? body : body.slice(0, at)).replace(/[\\"'`}\],\s]+$/, '').trim()
+  const address = at < 0 ? '' : (body.slice(at + 1).split('>')[0] ?? '').trim()
+  return AI_NAME.test(name) || AI_ADDRESS.test(address)
+}
+
 const ATTRIBUTION = [
-  /co-authored-by:[^\n]*(claude|anthropic|codex|openai|copilot)/i,
   /claude-session:/i,
   /generated with \[?claude code/i,
   /claude\.ai\/code\/session_/i,
@@ -144,6 +159,10 @@ const ATTRIBUTION = [
  * it: a shell command's closing quote, or a JSON string's escapes.
  */
 export function attributionIn(text: string): string | undefined {
+  for (const match of text.matchAll(CO_AUTHOR)) {
+    const line = match[1] ?? ''
+    if (isAiAuthor(line)) return line.replace(/[\\"'`}\],\s]+$/, '').trim()
+  }
   for (const pattern of ATTRIBUTION) {
     const match = pattern.exec(text)
     if (match) {
@@ -157,6 +176,188 @@ export function attributionIn(text: string): string | undefined {
 /** Whether a shell command writes a commit or a pull request. */
 export function writesGitText(command: string): boolean {
   return /\bgit\b[^\n|;&]*\bcommit\b/.test(command) || /\bgh\s+pr\s+(create|edit)\b/.test(command)
+}
+
+/** Every string inside a value, nested ones included: a tool call's text fields. */
+export function stringsIn(value: unknown): string[] {
+  if (typeof value === 'string') return [value]
+  if (Array.isArray(value)) return value.flatMap(stringsIn)
+  if (typeof value === 'object' && value !== null) return Object.values(value).flatMap(stringsIn)
+  return []
+}
+
+// Where a here-document's operator and delimiter word end, and the delimiter.
+function heredocAt(src: string, at: number): { delim: string; isTabbed: boolean; end: number } | null {
+  const match = /^<<(-?)[ \t]*(['"]?)([A-Za-z0-9_.-]+)\2/.exec(src.slice(at))
+  return match === null || src[at + 2] === '<' ? null : { delim: match[3] ?? '', isTabbed: match[1] === '-', end: at + match[0].length }
+}
+
+// Past the bodies of the here-documents opened on the line that ended at `at`.
+function heredocsEnd(src: string, at: number, docs: readonly { delim: string; isTabbed: boolean }[]): number {
+  let at2 = at
+  for (const doc of docs) {
+    while (at2 < src.length) {
+      const next = src.indexOf('\n', at2)
+      const end = next < 0 ? src.length : next
+      const line = src.slice(at2, end).replace(/\r$/, '')
+      at2 = next < 0 ? src.length : next + 1
+      if ((doc.isTabbed ? line.replace(/^\t+/, '') : line) === doc.delim) break
+    }
+  }
+  return at2
+}
+
+// Past the quoted text that opens at `at` (a ' or a ").
+function quoteEnd(src: string, at: number): number {
+  if (src[at] === "'") {
+    const close = src.indexOf("'", at + 1)
+    return close < 0 ? src.length : close + 1
+  }
+  let i = at + 1
+  while (i < src.length) {
+    const c = src[i]
+    if (c === '\\') i += 2
+    else if (c === '"') return i + 1
+    else if (c === '$' && src[i + 1] === '(') i = substEnd(src, i + 2)
+    else if (c === '`') i = backtickEnd(src, i)
+    else i++
+  }
+  return src.length
+}
+
+function backtickEnd(src: string, at: number): number {
+  let i = at + 1
+  while (i < src.length && src[i] !== '`') i += src[i] === '\\' ? 2 : 1
+  return Math.min(i + 1, src.length)
+}
+
+// Past the `)` closing a command substitution whose `$(` ends just before
+// `at`, here-documents inside it included.
+function substEnd(src: string, at: number): number {
+  let depth = 1
+  let docs: { delim: string; isTabbed: boolean }[] = []
+  let i = at
+  while (i < src.length) {
+    const c = src[i]
+    const doc = c === '<' && src[i + 1] === '<' ? heredocAt(src, i) : null
+    if (c === '\\') i += 2
+    else if (c === "'" || c === '"') i = quoteEnd(src, i)
+    else if (c === '`') i = backtickEnd(src, i)
+    else if (doc !== null) {
+      docs.push(doc)
+      i = doc.end
+    } else if (c === '\n' && docs.length > 0) {
+      i = heredocsEnd(src, i + 1, docs)
+      docs = []
+    } else {
+      if (c === '(') depth++
+      if (c === ')' && --depth === 0) return i + 1
+      i++
+    }
+  }
+  return src.length
+}
+
+/**
+ * A shell command's simple commands, each as its words with the quoting
+ * removed (a `$(…)` or `…` kept as written) and its source text.
+ * Here-document bodies belong to no word, so their text never splits one.
+ */
+export function shellCommands(src: string): { raw: string; words: string[] }[] {
+  const out: { raw: string; words: string[] }[] = []
+  let words: string[] = []
+  let word: string | null = null
+  let start = 0
+  let docs: { delim: string; isTabbed: boolean }[] = []
+  const endWord = () => {
+    if (word !== null) words.push(word)
+    word = null
+  }
+  const endCommand = (at: number) => {
+    endWord()
+    if (words.length > 0) out.push({ raw: src.slice(start, at), words })
+    words = []
+  }
+  let i = 0
+  while (i < src.length) {
+    const c = src[i]!
+    const doc = c === '<' && src[i + 1] === '<' ? heredocAt(src, i) : null
+    if (c === ' ' || c === '\t' || c === '\r') {
+      endWord()
+      i++
+    } else if (c === '\n' || c === ';' || c === '&' || c === '|') {
+      endCommand(i)
+      i++
+      if (c === '\n' && docs.length > 0) {
+        i = heredocsEnd(src, i, docs)
+        docs = []
+      }
+      start = i
+    } else if (doc !== null) {
+      endWord()
+      docs.push(doc)
+      i = doc.end
+    } else if (c === '#' && word === null) {
+      const next = src.indexOf('\n', i)
+      i = next < 0 ? src.length : next
+    } else if (c === "'") {
+      const end = quoteEnd(src, i)
+      word = (word ?? '') + src.slice(i + 1, end - 1)
+      i = end
+    } else if (c === '"') {
+      const end = quoteEnd(src, i)
+      word = (word ?? '') + src.slice(i + 1, end - 1).replace(/\\([\\"$`\n])/g, '$1')
+      i = end
+    } else if (c === '$' && src[i + 1] === "'") {
+      let j = i + 2
+      while (j < src.length && src[j] !== "'") j += src[j] === '\\' ? 2 : 1
+      word = (word ?? '') + src.slice(i + 2, j)
+      i = Math.min(j + 1, src.length)
+    } else if (c === '$' && src[i + 1] === '(') {
+      const end = substEnd(src, i + 2)
+      word = (word ?? '') + src.slice(i, end)
+      i = end
+    } else if (c === '`') {
+      const end = backtickEnd(src, i)
+      word = (word ?? '') + src.slice(i, end)
+      i = end
+    } else if (c === '\\') {
+      if (src[i + 1] !== '\n') word = (word ?? '') + (src[i + 1] ?? '')
+      i += 2
+    } else {
+      word = (word ?? '') + c
+      i++
+    }
+  }
+  endCommand(src.length)
+  return out
+}
+
+// The options whose next word is a commit's or pull request's text: git
+// commit's -m and --message (alone or ending a cluster such as -am), gh pr's
+// --title, -t, --body and -b.
+const MESSAGE_FLAG = /^(?:-[A-Za-z]*m|--message|-t|--title|-b|--body)$/
+const STDIN_FILE = /^(?:-F-|--file=-|--body-file=-)$/
+
+/**
+ * The texts a commit or pull request command writes from its arguments, and
+ * whether one reads its text from stdin (`-F -`), where it comes from the
+ * command's own here-document or pipe.
+ */
+export function gitMessageTexts(command: string): { texts: string[]; isStdin: boolean } {
+  const texts: string[] = []
+  let isStdin = false
+  for (const one of shellCommands(command)) {
+    if (!writesGitText(one.words.join(' '))) continue
+    one.words.forEach((word, at) => {
+      const next = one.words[at + 1]
+      if (MESSAGE_FLAG.test(word) && next !== undefined) texts.push(next)
+      else if (/^--(?:message|title|body)=/.test(word)) texts.push(word.slice(word.indexOf('=') + 1))
+      else if (/^-m./.test(word)) texts.push(word.slice(2))
+      if (STDIN_FILE.test(word) || (/^(?:-F|--file|--body-file)$/.test(word) && next === '-')) isStdin = true
+    })
+  }
+  return { texts, isStdin }
 }
 
 /** The files a commit or pull request command takes its text from (`git commit -F`, `gh pr create --body-file`); stdin's `-` is the command's own text. */
