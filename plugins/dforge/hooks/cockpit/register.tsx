@@ -154,6 +154,8 @@ const AUTO_RETRY_MS = 5_000
 // The restored default model is written this many times at most, each write
 // watched this long for the engine to read it back.
 const RESTORE_WRITES = 3
+// Settings whose step up from 0 is a consent, confirmed by a second press.
+const CONSENT_KEYS: readonly string[] = ['apiBudgetAgentRouter']
 const RESTORE_WAIT_MS = 3_000
 const RESTORE_POLL_MS = 500
 type AutoStage = 'compact' | 'continue' | 'clear' | 'resume' | 'switch'
@@ -1070,10 +1072,11 @@ export const register: Register = on => {
           { ...look, isCompact: true },
         )
       // The desktop spaces these rows by its own scale, as the settings view does.
+      // The desktop stacks its label over its controls, as the settings view's own rows do.
       const row = (key: string, label: string, ...controls: RenderChildren[]) => (
-        <Box key={key} flexDirection="row" columnGap={isDesktop ? 'sm' : 1}>
-          <Box key={`${key}-label`} width={16} flexShrink={0}>
-            <Text>{label}</Text>
+        <Box key={key} flexDirection={isDesktop ? 'column' : 'row'} columnGap={isDesktop ? 'sm' : 1} gap={isDesktop ? 'xs' : undefined}>
+          <Box key={`${key}-label`} width={isDesktop ? undefined : 16} flexShrink={0}>
+            <Text weight={isDesktop ? 'medium' : undefined}>{label}</Text>
           </Box>
           <Box key={`${key}-controls`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={isDesktop ? 'sm' : 1} rowGap={isDesktop ? 'xs' : undefined} flexShrink={1}>
             {controls}
@@ -1156,6 +1159,7 @@ export const register: Register = on => {
       // Every press but the one that asked for it ends an edit, a webhook or
       // mention field's included, or a pending reset.
       const show = async (change: Partial<CockpitSettingsView>) => {
+        S.consentPending = null
         if ((await read($, notifier)).editing !== null) await update($, notifier, now => ({ ...now, editing: null, error: null }))
         await update($, settingsView, now => ({ ...now, editing: null, error: null, isConfirmingReset: false, ...change }))
       }
@@ -1186,7 +1190,26 @@ export const register: Register = on => {
           </Box>
         )
       }
+      const consent = S.consentPending
+      const consentSpec = consent === null ? undefined : SCHEMA[consent]
       const custom: Record<string, RenderChildren> = {
+        ...(consent === null || consentSpec === undefined
+          ? {}
+          : {
+              [consent]: [
+                <Text key={`set-${consent}-consent`} color="warning">{`${consentSpec.title}: a cap above 0 is your consent to it `}</Text>,
+                compact(
+                  `set-${consent}-confirm`,
+                  'Confirm',
+                  () => {
+                    S.consentPending = null
+                    return save(consent, steppedSetting(consentSpec, 0, 1))
+                  },
+                  { isMain: true },
+                ),
+                compact(`set-${consent}-cancel`, 'Cancel', () => show({})),
+              ],
+            }),
         bandLine1: bandChips(0),
         bandLine2: bandChips(1),
         sections: chips(
@@ -1232,9 +1255,17 @@ export const register: Register = on => {
         {
           openTab: next => show({ tab: next }),
           set: save,
-          step: (key, direction) => {
+          step: async (key, direction) => {
             const spec = SCHEMA[key]
-            return spec === undefined ? undefined : save(key, steppedSetting(spec, Number(values[key] ?? spec.default), direction))
+            if (spec === undefined) return undefined
+            // Raising a consent cap from 0 is the consent itself, so it takes a second press.
+            if (CONSENT_KEYS.includes(key) && direction > 0 && Number(values[key] ?? spec.default) === 0) {
+              await show({})
+              S.consentPending = key
+              $.ui.invalidate('ui.render')
+              return undefined
+            }
+            return save(key, steppedSetting(spec, Number(values[key] ?? spec.default), direction))
           },
           edit: key => (key === null ? show({ editing: null }) : openField($, `set-${key}-input`, () => show({ editing: key }))),
           submit: async (key, text) => {
@@ -2573,6 +2604,8 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
 const S = {
   // Saved or environment values the settings in force ignored, for the settings view.
   settingProblems: [] as string[],
+  // A consent setting whose raise from 0 waits for its confirm press; null otherwise.
+  consentPending: null as string | null,
   // The problem line for a settings file that does not parse (C15), while it does not; null otherwise.
   brokenConfig: null as string | null,
   // Keys something outside the settings file forces, with the words their rows show.

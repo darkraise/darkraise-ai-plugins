@@ -257,12 +257,12 @@ export default {
     description: 'Keep a mapped repository\'s documents and progress in darkmem through the mirror. Off keeps both in the repository: a family already in the mirror moves back at the next session start with no plan in progress, from the mirror alone. Left unset after an upgrade, a family a 2.x release put in the mirror stays there unsynced until you choose. A repository is mapped under darkmem.repos in ~/.dforge/config.json.',
   },
   documentStore: {
-    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'dforge',
+    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'dforge', inertWhen: { key: 'darkmemEnabled', value: false, words: 'no effect while darkmem is off' },
     label: 'Documents', title: 'Document store',
     description: 'While Use darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: local in the repository, or darkmem through the mirror. A change moves them at the next session start with no plan in progress.',
   },
   progressSource: {
-    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'dforge',
+    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'dforge', inertWhen: { key: 'darkmemEnabled', value: false, words: 'no effect while darkmem is off' },
     label: 'Progress', title: 'Progress tracking source',
     description: 'While Use darkmem is on, where a mapped repository keeps its plan ledgers and handoffs: local in the repository, or darkmem through the mirror. A change moves them at the next session start with no plan in progress.',
   },

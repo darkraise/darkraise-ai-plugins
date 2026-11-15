@@ -8266,3 +8266,37 @@ describe('display and saved-state honesty', () => {
     expect(notes.some(n => /worktree/.test(n))).toBe(true)
   })
 })
+
+describe('inert rows, consent and desktop steppers', () => {
+  test('the darkmem store rows are locked while darkmem is off', async ($, on) => {
+    world(on, { tokens: 284_000, config: { darkmemEnabled: false } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-darkmem' })
+    expect((await ui.find({ key: 'set-documentStore-controls' }))?.text).toMatch(/no effect while darkmem is off/)
+  })
+
+  test('raising the AgentRouter cap from 0 needs a second press', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: {}, written })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: `settings-tab-${SCHEMA.apiBudgetAgentRouter!.group}` })
+    await ui.press({ key: 'set-apiBudgetAgentRouter-more' })
+    expect(written[CONFIG]).toBeUndefined()
+    await ui.press({ key: 'set-apiBudgetAgentRouter-confirm' })
+    expect(JSON.parse(written[CONFIG] ?? '{}').apiBudgetAgentRouter).toBe(5)
+    expect(await ui.find({ key: 'set-apiBudgetAgentRouter-confirm' })).toBeUndefined()
+  })
+
+  test('a desktop stepper shows its zero word', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect((await ui.find({ key: 'set-handoffTokens-controls' }))?.text).toMatch(/\bauto\b/)
+  })
+})
