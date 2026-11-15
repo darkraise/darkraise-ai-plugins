@@ -106,10 +106,14 @@ check "mark_off over a file holding two objects writes one object" "$(jq -s leng
 check "executor_session_iso converts an epoch to ISO 8601 UTC" "$(executor_session_iso "$FAR")" "$FAR_ISO"
 
 # --- pruning ---------------------------------------------------------------
-touch -d '8 days ago' "$TMP/codex/ancient.json" 2>/dev/null || touch -t 200001010000 "$TMP/codex/ancient.json"
+for old in ancient.json .ancient.json.lock; do
+  touch -d '8 days ago' "$TMP/codex/$old" 2>/dev/null || touch -t 200001010000 "$TMP/codex/$old"
+done
 executor_session_write codex '{"session_id":"session-test","usable":true}'
 check "a week-old session file is pruned on write" \
   "$([ -f "$TMP/codex/ancient.json" ] && echo kept || echo pruned)" "pruned"
+check "a week-old session's lock file is pruned on write" \
+  "$([ -f "$TMP/codex/.ancient.json.lock" ] && echo kept || echo pruned)" "pruned"
 
 # A malformed entry is an installation fault, so the helper's diagnostic must
 # reach the caller rather than being swallowed into a mute lane shutdown.
@@ -120,6 +124,22 @@ check "a malformed entry still fails closed" \
 check "a malformed entry says why on stderr" \
   "$(DR_EXECUTORS_DIR="$TMP/bad" executor_session_file codex 2>&1 >/dev/null | head -1 | tr -d '\r')" \
   "executors: codex: missing or malformed required fields"
+
+# --- two marks written at once both survive ---------------------------------
+# The lane mark is lost when it lands between the fallback mark's read and its
+# write. Where that window falls depends on the machine, so the fallback mark
+# starts at a sweep of offsets after the lane mark.
+both=0 rounds=0
+for delay in 0 0.005 0.01 0.015 0.02 0.03 0.04 0.06; do
+  rounds=$((rounds + 1))
+  executor_session_write codex '{"session_id":"session-test","usable":true,"review":true,"fallback":null}'
+  executor_session_mark_off codex quota & a=$!
+  sleep "$delay"
+  executor_session_mark_fallback_off codex & b=$!
+  wait "$a" "$b"
+  [ "$(jq -r '[.usable, .fallback.usable] | map(tostring) | join(" ")' "$TMP/codex/session-test.json")" = "false false" ] && both=$((both + 1))
+done
+check "a lane mark and a fallback mark written at once both survive, every round" "$both" "$rounds"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

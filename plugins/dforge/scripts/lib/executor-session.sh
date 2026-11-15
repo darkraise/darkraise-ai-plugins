@@ -15,6 +15,7 @@
 # Source this file; it defines functions only.
 
 _EXECUTOR_SESSION_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$_EXECUTOR_SESSION_LIB_DIR/lock.sh"
 
 # The helper's stderr is not swallowed: a malformed registry entry is an
 # installation fault, and silencing it turns the lane off with no diagnostic.
@@ -77,6 +78,24 @@ _executor_session_prior() {
 # Without a session id there is nothing to write, which succeeds; any other
 # write that leaves no file fails, so a runner never reports a mark it lost.
 executor_session_write() {
+  [ -n "$(executor_session_id)" ] || return 0
+  _executor_session_locked "$1" _executor_session_write_unlocked "$@"
+}
+
+# _executor_session_locked <id> <command> [<arg>...] - <command> holding the
+# lock of this session's file. Every writer reads the prior file and writes it
+# back whole, so two writers at once would lose the first one's change.
+_executor_session_locked() {
+  local f dir base
+  f=$(executor_session_file "$1") || return 1
+  dir=$(executor_session_dir "$1") || return 1
+  mkdir -p "$dir" 2>/dev/null || return 1
+  base=$(dr_lock_base "$f") || return 1
+  shift
+  dr_locked "$base" "$@"
+}
+
+_executor_session_write_unlocked() {
   local f dir prior json
   [ -n "$(executor_session_id)" ] || return 0
   f=$(executor_session_file "$1") || return 1
@@ -91,7 +110,7 @@ executor_session_write() {
   [ -n "$json" ] || json=$2
   printf '%s\n' "$json" > "$f.tmp.$$" && mv -f "$f.tmp.$$" "$f" \
     || { rm -f "$f.tmp.$$" 2>/dev/null; return 1; }
-  find "$dir" -maxdepth 1 -name '*.json' -mtime +7 -delete 2>/dev/null || true
+  find "$dir" -maxdepth 1 \( -name '*.json' -o -name '.*.json.lock' \) -mtime +7 -delete 2>/dev/null || true
 }
 
 # executor_session_iso <epoch> - the epoch in ISO 8601 UTC; prints nothing
@@ -115,8 +134,12 @@ executor_session_iso() {
 # Both mark functions fail when the mark was not written, and succeed without
 # writing when there is no session id, as executor_session_write does.
 executor_session_mark_off() {
-  local f prior surfaces record epoch=${3:-} iso=''
   [ -n "$(executor_session_id)" ] || return 0
+  _executor_session_locked "$1" _executor_session_mark_off_unlocked "$@"
+}
+
+_executor_session_mark_off_unlocked() {
+  local f prior surfaces record epoch=${3:-} iso=''
   f=$(executor_session_file "$1") || return 1
   if [[ $epoch =~ ^[0-9]{1,18}$ ]]; then iso=$(executor_session_iso "$epoch"); else epoch=''; fi
   prior=$(_executor_session_prior "$f")
@@ -133,15 +156,19 @@ executor_session_mark_off() {
     + with_entries(select(.key | endswith("_version")))
     + (reduce $surfaces[] as $s ({}; . + {($s): false}))' <<<"$prior" 2>/dev/null) || return 1
   [ -n "$record" ] || return 1
-  executor_session_write "$1" "$record"
+  _executor_session_write_unlocked "$1" "$record"
 }
 
 # executor_session_mark_fallback_off <id> [<epoch>] - only the Claude fallback
 # is out of quota, until <epoch> or, without one, for the session. It marks the
 # fallback alone and leaves usable, lane and reason as the gate wrote them.
 executor_session_mark_fallback_off() {
-  local f prior record epoch=${2:-} iso=''
   [ -n "$(executor_session_id)" ] || return 0
+  _executor_session_locked "$1" _executor_session_mark_fallback_off_unlocked "$@"
+}
+
+_executor_session_mark_fallback_off_unlocked() {
+  local f prior record epoch=${2:-} iso=''
   f=$(executor_session_file "$1") || return 1
   if [[ $epoch =~ ^[0-9]{1,18}$ ]]; then iso=$(executor_session_iso "$epoch"); else epoch=''; fi
   prior=$(_executor_session_prior "$f")
@@ -153,5 +180,5 @@ executor_session_mark_fallback_off() {
                     resets_at_epoch: (if $epoch == "" then null else ($epoch | tonumber) end)}}' \
     <<<"$prior" 2>/dev/null) || return 1
   [ -n "$record" ] || return 1
-  executor_session_write "$1" "$record"
+  _executor_session_write_unlocked "$1" "$record"
 }
