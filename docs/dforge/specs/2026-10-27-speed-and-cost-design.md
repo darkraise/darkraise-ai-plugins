@@ -170,8 +170,10 @@ reference file; none is deleted.
   that shows a suite-run call are deliberately unchanged.
 - **Baseline and existence facts.** The task-reviewer prompt gives
   cannot-verify items a structured form when they ask a mechanical question:
-  `cannot-verify: exists <path|symbol> at <base|head> — <why it matters>` or
-  `cannot-verify: baseline <command> — <why>`. `task-step verdict` settles them
+  `cannot-verify: exists <path|symbol> at <base|head>, expect <present|absent> — <why it matters>` or
+  `cannot-verify: baseline <command>, expect <pass|fail> — <why>` (the owner
+  ruling of 2026-10-28 made `expect` required: an item without it goes to the
+  ruling seat). `task-step verdict` settles them
   itself: `exists` by `git cat-file -e` for a path or `git grep -nwF` for a
   symbol at the named commit; `baseline` by running the named command verbatim
   at the base commit in a temporary worktree through
@@ -322,7 +324,7 @@ A2. [test, neg, high] No rule is lost by the split: every new reference file is 
 A3. [test, high] The subagent-mode implementer prompt no longer tells the implementer to run the full suite; it tells it to run the focused tests that cover its change and report each under `## Verified` in §2's grammar, ending its reply with a `Report:` line.
 A4. [test, high] After an implementer's DONE report, the controller starts suite-run in the background at the task's head and dispatches the task review in the same turn.
 A5. [test, neg, high] `task-step verdict` at a head whose recorded suite row has a non-baseline failure writes `suite: <test> fails at <head7>` as an Important finding into the fix file and prints `fix:` naming it; with no row for that head and command it prints `suite: not run (<command>)` and exits 7. `reference/delegated-task.md` says a task is marked complete only after `verdict` passes.
-A6. [test, high] A structured `cannot-verify: exists …` or `cannot-verify: baseline …` item is settled by `task-step verdict` and logged as settled by task-step with its evidence, with no seat dispatched.
+A6. [test, high] A structured `cannot-verify: exists …, expect …` or `cannot-verify: baseline …, expect …` item is settled by `task-step verdict` and logged as settled by task-step with its evidence, with no seat dispatched; the same item without `expect` goes to the ruling seat.
 A7. [test, neg, high] A free-text cannot-verify item still goes to the ruling seat.
 A8. [test, high] Every `agents/impl-*.md` carries the anti-hardcoding, report-incorrect-tests and tests-are-immutable clauses, and every non-Sonnet `agents/impl-*.md` carries the scope-limit clause.
 A9. [test, high] The stop gate exits 2 with a reason naming what is missing when an `impl-*` agent stops with `**Status:** DONE` or `DONE_WITH_CONCERNS` and the message has no `Report:` line, or the report file is missing, lacks a required section, or has no `## Verified` bullet in §2's grammar.

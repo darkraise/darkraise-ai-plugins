@@ -181,12 +181,10 @@ if selected A6 || selected A7; then
 fi
 
 if selected A6; then
-  # Skipped: these checks write the items in spec Design §2's form, without
-  # `expect`, which the 2026-10-28 owner decision (amendment A21) overrides.
-  # Deferred as register row 26 in docs/dforge/registers/2026-10-27-speed-and-cost.md.
-  echo "skip: A6 spec-form checks (register row 26)"
+  check "A6 (no expect): verdict exits 0" "$rc3" "0"
+  check "A6 (no expect): no item is settled" "$(grep -c 'settled by task-step check' <<<"$ledger3")" "0"
+  check "A6 (no expect): all four items are left for the seat" "$(grep -c '^cannot-verify: ' <<<"$out3")" "4"
 
-  # The reviewer prompt's own form carries `expect`; the same items in that form.
   check "A6 (expect form): verdict exits 0" "$rc4" "0"
   check "A6 (expect form): three exists items and one baseline item are settled" \
     "$(grep -c 'settled by task-step check' <<<"$ledger4")" "4"
