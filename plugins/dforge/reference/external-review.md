@@ -136,7 +136,7 @@ every seat that returned a list.
 At depth full only, the final review runs the panel once:
 
 ```bash
-git worktree remove --force <workspace>/final-review-panel-tree 2>/dev/null; git worktree prune
+git worktree remove -f -f <workspace>/final-review-panel-tree 2>/dev/null; rm -rf <workspace>/final-review-panel-tree; git worktree prune
 git worktree add --detach <workspace>/final-review-panel-tree <sha>
 bash "<plugin-root>/scripts/run-review-panel" --kind final --tier heavy \
   --cwd <workspace>/final-review-panel-tree \
@@ -150,7 +150,8 @@ a detached worktree of its own: there `HEAD` is `<sha>`, QA's commits stay out
 of the diff, and they never trip the agy write check. Remove the worktree with
 `git worktree remove --force` once the final review's step 3 has read the
 lists. The block's first line clears a tree a crashed run left behind, which
-would otherwise make `git worktree add` fail. Each runner composes its
+would otherwise make `git worktree add` fail; the doubled `-f` also removes a
+tree that an interrupted `add` left locked. Each runner composes its
 own prompt, `criteria/codex-final-review.md` followed by
 `git diff <base>...HEAD`, and returns a markdown findings list:
 `<out-dir>/codex.md`, and `<out-dir>/agy.md` from the `review` field of
