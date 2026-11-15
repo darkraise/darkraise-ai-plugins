@@ -373,3 +373,19 @@ test("session lines skip the sync, and say so, when too little of the hook's tim
   assert.ok(Date.now() - started < 10000);
   assert.equal(s.stub.db.requests.length, 0);
 });
+
+test("a session-start sync that overruns its step bound is one line naming the command", async t => {
+  const s = await setup(t);
+  const shim = scratch("dmh-slow-");
+  const realNode = process.execPath.replace(/\\/g, "/");
+  fs.writeFileSync(path.join(shim, "node"),
+    `#!/usr/bin/env bash\ncase " $* " in *"darkmem-sync.mjs reconcile "*) exec sleep 60 ;; esac\nexec "${realNode}" "$@"\n`,
+    { mode: 0o755 });
+  const key = Object.keys(s.env).find(k => k.toUpperCase() === "PATH") ?? "PATH";
+  const env = { ...s.env, [key]: shim + path.delimiter + (s.env[key] ?? ""), DARKMEM_SESSION_STEP_SECONDS: "2", DARKMEM_KILL_GRACE: "1" };
+  const started = Date.now();
+  const result = await sessionLines(s.repo, "sid-hook", env);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /^darkmem-sync did not finish at session start; run darkmem-sync reconcile by its plugin-root path$/m);
+  assert.ok(Date.now() - started < 30000, "the overrun ended at the step bound, not the reconcile's own end");
+});

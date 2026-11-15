@@ -166,5 +166,24 @@ printf '{"darkmem":{"url":"http://127.0.0.1:9","repos":{"%s":{"project":"superpo
 check "config error: exit 2" "$?" "2"
 check "config error: the message" "$(grep -c 'use local or darkmem' "$TMP/err")" "1"
 
+# --- no node while darkmem is applied: exit 2, never local (row 15) ---
+nonode_path() { # PATH without the directories that hold node
+  local d out='' IFS=:
+  for d in $PATH; do [ -x "$d/node" ] || [ -x "$d/node.exe" ] || out=${out:+$out:}$d; done
+  printf '%s\n' "$out"
+}
+NONODE_PATH=$(nonode_path)
+if PATH="$NONODE_PATH" command -v node >/dev/null 2>&1 || ! PATH="$NONODE_PATH" command -v git >/dev/null 2>&1 \
+   || ! PATH="$NONODE_PATH" command -v jq >/dev/null 2>&1; then
+  printf 'skip - no node: node shares a PATH directory with git or jq here\n'
+else
+  stores_home "$HOME" "$REPO" superpowers local darkmem > /dev/null
+  out=$(cd "$REPO" && _DFORGE_KEY= PATH="$NONODE_PATH" dforge_ledger_dir p1 2>&1); rc=$?
+  check "no node, progress applied darkmem: exit 2" "$rc" "2"
+  check "the message names node" "$(grep -c 'roots.sh: node is required while darkmem stores are applied' <<<"$out")" "1"
+  rm -f "$HOME/.dforge/stores.json"
+  check "no node, nothing applied: still local" "$(cd "$REPO" && _DFORGE_KEY= PATH="$NONODE_PATH" dforge_ledger_dir p1)" "$TOP/.dforge/sdd/p1"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
