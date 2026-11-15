@@ -62,7 +62,7 @@ With every non-test file from the commit and the contract version, they must
 pass. (c) For each non-test file reverted alone to the base (deleted when the
 task created it), whenever the plan version fails the contract version must
 fail too. In (a) and (b) the plan version ran as a control; it failed and
-passed alike in every run. Script: `m2-check.sh` in the session scratchpad.
+passed alike in every run. Script: [`2026-11-15-lean-test-contracts-check.sh`](2026-11-15-lean-test-contracts-check.sh), run per task as `M2_SCRATCH=<clones dir> M2_WORK=<seat outputs dir> bash <script> <n> <base> <commit> "<test files>" "<Step 2 suites>"`.
 
 | Run | (a) contract / plan | (b) contract / plan | (c) |
 |---|---|---|---|
