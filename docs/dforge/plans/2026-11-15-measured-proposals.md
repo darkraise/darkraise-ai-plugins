@@ -20,6 +20,8 @@
 
 **CI:** `.github/workflows/validate.yml` — platforms: uutils (ubuntu-latest), Windows Git Bash — local: `node scripts/test-all.mjs`; `node scripts/validate-repository.mjs`; `claude plugin validate plugins/dforge`; `claude plugin test plugins/dforge` — uncovered: uutils (ubuntu-latest), Windows Git Bash
 
+**Plan review:** 2026-11-15 — dforge:judge-opus — executability 11 / coherence 15 / coverage 15 / assumptions 9 (round 1)
+
 ## Global Constraints
 
 - Paths below are repository-relative; `plugins/dforge/` is the plugin root.
@@ -52,15 +54,18 @@
 
 ## Assumptions (evidence)
 
-- The Agent tool result reports a dispatch's total tokens as `subagent_tokens` in its `<usage>` block: seen on the Explore and judge-fable dispatches of 2026-11-15 (this session). M1 reads that number.
+- The Agent tool result reports a dispatch's total tokens as `subagent_tokens` in its `<usage>` block: seen on the Explore, judge-fable and judge-opus dispatches of 2026-11-15 (this session). M1 reads that number.
 - M1's six commits exist: `git cat-file -t` on `b36eaf63`, `bc097711`, `5bb5545f`, `e48eeafa`, `9d46f4e`, `52da46e0` (2026-11-15; the last four checked by the spec review and this session).
 - b3 (`5bb5545f..e48eeafa`) implemented `docs/dforge/plans/2026-11-13-reviewer-only-externals.md` (`git log 5bb5545f..e48eeafa -- docs/dforge/plans`, 2026-11-15); the dflow-hud range implemented `docs/dforge/plans/2026-11-13-dflow-hud-overhaul.md`; b1 has no plan.
 - `scripts/review-package` takes `PLAN_FILE BASE HEAD [OUTFILE]` (`plugins/dforge/scripts/review-package:7`).
-- `plugins/dforge/tests/plan-amend.test.sh::pre-existing errors: accepted` (`:129-134`) already proves plan-amend accepts an amendment to a plan with errors it did not add; the comparison is by `comm` over all ERROR lines (`plugins/dforge/scripts/plan-amend:133-136`), so it holds for C1's errors (A4).
+- plan-amend compares all ERROR lines before and after an amendment by `comm` (`plugins/dforge/scripts/plan-amend:133-136`), so a pre-existing C1 error does not block an amendment; Task 2 pins that with its own case (A4), beside `plugins/dforge/tests/plan-amend.test.sh::pre-existing errors: accepted` (`:129-134`).
 - `lens-route` is the only script that prints lens lines, and `task-step` (`:757-764`) is the only script that parses them, `--task` lines only (rg over `plugins/dforge/scripts`, 2026-11-15). `--final` lines are read by the session.
 - The full suite last passed in 287 s (`.dforge/suites.tsv`, 2026-11-15), so the Task check is the full suite.
 - `dforge:impl-sonnet-high` and `dforge:judge-opus` are dispatchable seats in this session (the session's agent list, 2026-11-15).
-- The plan-lint fixtures and the plan-amend fixture name `a.txt` on a Modify line after a Create line (`plugins/dforge/tests/plan-lint.test.sh:91,106`), which the new check accepts; any other fixture the check breaks is found by the suite in Task 2 Step 4.
+- The plan-lint fixtures name `a.txt` on a Modify line after a Create line (`plugins/dforge/tests/plan-lint.test.sh:91,106`), which the new check accepts. `plugins/dforge/tests/faster-plans.acceptance.test.sh:630-636` (A22) lints two real historical plans whose paths have since moved (`docs/dforge/plans/2026-10-26-task-loop-steps.md` names `plugins/dforge/skills/subagent-driven-development/...`); both are recorded in `docs/dforge/plans/completed.md:1,3`.
+- Ruling (session, plan review round 1, Critical): plan-lint skips the path and range checks for a plan that the `completed.md` beside it records, matched as the plan's basename inside a backticked path on a line of that file. A finished plan's paths may go stale, and historical plans are never edited (CLAUDE.md), so A22 passes unedited. The spec's checks apply to every plan not yet recorded there.
+- A dispatched seat writes only inside this worktree: M1's reports and M2's tests go under `<workspace>` (`.dforge/sdd/2026-11-15-measured-proposals/`), with the exact `-report.md` path named in the prompt, and the session copies M2's tests into the scratch clones. The review seat's write guard refuses a write outside the worktree cwd (`/root/.claude/projects/-root-repositories-darkraise-ai-plugins/memory/review-seat-write-guard-needs-worktree-cwd.md`).
+- Plan review round 1 (2026-11-15) scored executability 11 and assumptions 9, borderline; every Critical and Important finding was fixed in the plan, and the cap at depth standard is one round, so no second round runs.
 
 ## Task index
 
@@ -109,9 +114,9 @@ Expected: a sha; write it down as PRE. Step 4's old arm reads `git show PRE:plug
 - [ ] **Step 4: Run M1**
 
 1. For each range — b1 `b36eaf63..bc097711`, b3 `5bb5545f..e48eeafa` (plan `docs/dforge/plans/2026-11-13-reviewer-only-externals.md`), d `9d46f4e..52da46e0` (plan `docs/dforge/plans/2026-11-13-dflow-hud-overhaul.md`) — clone this repository into `<scratchpad>/m1-<name>` (`git clone -q`), check out the range's head, and build one package with `timeout 120 bash plugins/dforge/scripts/review-package <plan> <base> <head> <scratchpad>/m1-<name>.diff` run from this checkout (b1 passes the b3 plan path, since it has none; the package depends on BASE and HEAD). b1's `[PLAN_OR_REQUIREMENTS]` is its commit subjects (`git log --format=%s b36eaf63..bc097711`); the others' is their plan path.
-2. For each range, dispatch `dforge:judge-opus` four times, one at a time, cwd the clone: twice with the old prompt (`git show PRE:...code-reviewer.md`, placeholders filled) and twice with the new one, each writing `<scratchpad>/m1-<name>-<old|new>-<k>-report.md`. Record each dispatch's `subagent_tokens`. A seat that fails twice for one run ends M1 as not passed.
-3. Build one shuffled list of every finding from the twelve reports, each as `<file>:<line> — <one-liner>` plus its detail lines with every `Evidence:` line removed and no report or prompt named; keep the key (finding → run) out of the list's file. Dispatch one fresh `dforge:judge-opus` to mark each CONFIRMED (a real defect of that range's diff) or UNCONFIRMED, writing `<scratchpad>/m1-verdicts-report.md`.
-4. Write `docs/dforge/notes/2026-11-15-review-prompt-replay.md`: per run, the findings by severity, confirmed Critical and Important, unconfirmed share (0 when a run has no findings), and tokens; then the sums per arm and the keep rule's result: kept when new confirmed Critical+Important ≥ old, and new total tokens < old or new unconfirmed share < old. State that M1 measures code-reviewer.md only; the lens prompt, the plan-reviewer prompt and the fixer rule are judged by that proxy.
+2. For each range, dispatch `dforge:judge-opus` four times, one at a time: twice with the old prompt (`git show PRE:...code-reviewer.md`) and twice with the new one. Fill the placeholders identically in both arms: `[DESCRIPTION]` the range name and its first commit subject, `[BASE_SHA]` and `[HEAD_SHA]` the range ends, `[DIFF_FILE]` the package path, `[PLAN_OR_REQUIREMENTS]` as in item 1, and `[REPORT_FILE]` the absolute path `<workspace>/m1/<name>-<old|new>-<k>-report.md` (`<workspace>` is `.dforge/sdd/2026-11-15-measured-proposals` in this worktree; the seat writes only there). The clone is named in the prompt as the repository to read. Record each dispatch's `subagent_tokens`. A seat that fails twice for one run ends M1 as not passed.
+3. Build one shuffled list of every finding from the twelve reports in `<workspace>/m1/verdict-input.md`, each item tagged with its range name (b1, b3 or d — never its arm) and given as `<file>:<line> — <one-liner>` plus its detail lines with every `Evidence:` line removed and no report or prompt named; keep the key (item → run) in `<workspace>/m1/key.tsv`, which the judge is not given. Dispatch one fresh `dforge:judge-opus` with the list and the three package paths, to mark each item CONFIRMED (a real defect of its range's diff) or UNCONFIRMED, writing `<workspace>/m1/verdicts-report.md`.
+4. Write `docs/dforge/notes/2026-11-15-review-prompt-replay.md`: per run, the findings by severity, confirmed Critical and Important, and tokens; then per arm the sums and the unconfirmed share, defined as unconfirmed findings summed ÷ findings summed over the arm's six runs (0 when that sum is 0); and the keep rule's result: kept when the new arm's confirmed Critical+Important ≥ the old arm's, and the new arm's total tokens < the old arm's or its unconfirmed share < the old arm's. State that M1 measures code-reviewer.md only; the lens prompt, the plan-reviewer prompt and the fixer rule are judged by that proxy.
 
 - [ ] **Step 5: Keep or revert**
 
@@ -140,6 +145,7 @@ git commit -m "docs(notes): record the review prompt replay"
 - Modify: `plugins/dforge/skills/writing-plans/references/plan-reviewer-prompt.md`
 - Modify: `scripts/test-all.mjs`
 - Test: `plugins/dforge/tests/plan-lint.test.sh`
+- Test: `plugins/dforge/tests/plan-amend.test.sh`
 
 **Interfaces:**
 - Consumes: none.
@@ -240,26 +246,50 @@ out=$(lint_paths '- Modify: `a.txt:3-2`')
 has "paths: a start above its end is an error" "$out" "ERROR Task 2: a.txt:3-2 is outside the file's 3 lines"
 out=$(lint_paths '- Modify: `made.txt:40-50`')
 lacks "paths: a range on a created path is not checked" "$out" "is outside the file"
+paths_plan '- Modify: `tests/new.test.sh`' \
+  | sed 's#^- Delete: `gone.txt`#- Test: `tests/new.test.sh`#; s#Step 1: No new test, because it only creates a file#Step 1: Write the failing test#' > plan.md
+out=$(bash "$LINT" plan.md 2>&1)
+lacks "paths: a Test path of an earlier Write-the-failing-test task counts as created" "$out" "tests/new.test.sh does not exist"
+mkdir -p done
+paths_plan '- Modify: `missing.txt`' 'Write the failing test' > done/plan.md
+printf -- '- 2026-11-15 `done/plan.md` — merged into `main` at abc1234\n' > done/completed.md
+out=$(bash "$LINT" done/plan.md 2>&1)
+lacks "paths: a plan its completed.md records skips the path check" "$out" "missing.txt does not exist"
+rm done/completed.md
+out=$(bash "$LINT" done/plan.md 2>&1)
+has "paths: the same plan unrecorded is checked" "$out" "ERROR Task 2: missing.txt does not exist and no earlier task creates it"
 cd "$TMP" || exit 1
 fi
 ```
 
+In `plugins/dforge/tests/plan-amend.test.sh`, directly after the `pre-existing errors: accepted` check, add:
+
+```bash
+# A4: a path error the plan already had does not block an amendment elsewhere.
+awk '{ print } /^### Task 2/ { print ""; print "**Files:**"; print "- Modify: `gone/nowhere.txt`" }' docs/plan.md > docs/pathold.md
+out=$(bash "$HERE/../scripts/plan-lint" docs/pathold.md 2>&1)
+has "pre-existing path error: the lint reports it" "$out" "ERROR Task 2: gone/nowhere.txt does not exist and no earlier task creates it"
+entry b10p.md '## Task 1' 'Print `hello NAME`.' 'Print `hello, NAME`.'
+run docs/pathold.md b10p.md
+check "pre-existing path error: accepted" "$out" "amended: A1 Task 1"
+```
+
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `timeout 600 bash plugins/dforge/tests/plan-lint.test.sh paths`
-Expected: FAIL on the four `has` checks for missing paths and bad ranges (plan-lint prints no such errors yet).
+Run: `timeout 600 bash plugins/dforge/tests/plan-lint.test.sh paths; timeout 300 bash plugins/dforge/tests/plan-amend.test.sh`
+Expected: FAIL on the six `has` checks in the paths part (five for missing paths and bad ranges, one for the unrecorded plan) and on `pre-existing path error: the lint reports it`: plan-lint prints no such errors yet.
 
 - [ ] **Step 3: Implement**
 
 1. `plan_task_paths` in `plugins/dforge/scripts/lib/plan.sh`: add the `--detail` mode exactly as C2 states; without the flag the output stays byte-identical.
-2. `plugins/dforge/scripts/plan-lint`: inside the existing per-task loop (about `:275-277`, where the task text is already held), call `plan_task_paths --detail` on that text, keep a running set of created paths (each task's `Create` paths, and its `Test` paths when the task's Step 1 heading is `Write the failing test`), and for each `Modify` or `Test` path: skip a path containing `*`; resolve it against the top level of `_plan_ctx "$plan"` (`plugins/dforge/scripts/lib/plan.sh:228-237`); print C1's first error when it neither exists nor is in the created set (this task's own creations included). For an existing file with a non-empty range, count its lines once (awk `END { print NR }`, which counts an unterminated last line) and print C1's second error when any comma-separated item `a` or `a-b` breaks `1 <= a <= b <= n`. Ranges on created paths are not checked. Add no subprocess per path without a range.
+2. `plugins/dforge/scripts/plan-lint`: move the `# --- Step 1 forms ---` pass that builds `step1_lines` and `step1_class` (about `:451-479`) above the per-task loop (about `:275`), unchanged, so the loop can read `step1_class[n] == write` (its existing prefix match: "Write the failing test for the `TODO` column" counts). Compute once per lint the root: the git top level of the `_plan_ctx "$plan"` directory (`plugins/dforge/scripts/lib/plan.sh:228-237`), or that directory itself when it is not inside a repository. Skip the whole check when the `completed.md` beside the plan file has a line holding `` /<plan basename>` `` or `` `<plan basename>` `` (the Assumptions ruling). Otherwise, inside the per-task loop (where the task text is already held), call `plan_task_paths --detail` on that text, keep a running set of created paths (each task's `Create` paths, and its `Test` paths when `step1_class[n]` is `write`), and for each `Modify` or `Test` path: skip a path containing `*`; resolve it against the root; print C1's first error when it neither exists nor is in the created set (this task's own creations included). For an existing file with a non-empty range, count its lines once (awk `END { print NR }`, which counts an unterminated last line) and print C1's second error when any comma-separated item `a` or `a-b` breaks `1 <= a <= b <= n`. Ranges on created paths are not checked. Add no subprocess per path without a range.
 3. `plan-reviewer-prompt.md`: in the `**plan-lint output:**` line (about `:21-22`), say that path existence and line ranges are among the checks already run.
 4. `scripts/test-all.mjs`: change `'plan-lint.test.sh': [['one'], ['two']]` to `[['one'], ['two'], ['paths']]`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `timeout 900 bash plugins/dforge/tests/plan-lint.test.sh paths && timeout 900 bash plugins/dforge/tests/plan-lint.test.sh one two && timeout 300 bash plugins/dforge/tests/plan-amend.test.sh`
-Expected: PASS, `0 failed` in each. A fixture elsewhere that now fails on C1 gets the missing file created in its fixture setup, not a weaker check.
+Run: `timeout 900 bash plugins/dforge/tests/plan-lint.test.sh paths && timeout 900 bash plugins/dforge/tests/plan-lint.test.sh one two && timeout 300 bash plugins/dforge/tests/plan-amend.test.sh && timeout 1200 bash plugins/dforge/tests/faster-plans.acceptance.test.sh`
+Expected: PASS, `0 failed` in each; faster-plans' A22 passes because both historical plans are in `completed.md`. A test fixture (never a real plan) that now fails on C1 gets the missing file created in its fixture setup, not a weaker check.
 
 - [ ] **Step 5: Run the task check**
 
@@ -268,8 +298,10 @@ Expected: PASS, and this plan's own lint reports `0 errors`; an error on a path 
 
 - [ ] **Step 6: Commit**
 
+Then: `timeout 60 bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-15-measured-proposals.md 1 done --note "plan-lint path and range checks (Task 2)"`.
+
 ```bash
-git add plugins/dforge/scripts/plan-lint plugins/dforge/scripts/lib/plan.sh plugins/dforge/tests/plan-lint.test.sh plugins/dforge/skills/writing-plans/references/plan-reviewer-prompt.md scripts/test-all.mjs
+git add plugins/dforge/scripts/plan-lint plugins/dforge/scripts/lib/plan.sh plugins/dforge/tests/plan-lint.test.sh plugins/dforge/tests/plan-amend.test.sh plugins/dforge/skills/writing-plans/references/plan-reviewer-prompt.md scripts/test-all.mjs docs/dforge/registers/2026-11-15-measured-proposals.md
 git commit -m "feat(dforge): check plan task paths and ranges"
 ```
 
@@ -379,6 +411,54 @@ git reset -q --hard "$HEAD1"
 
 5. In `plugins/dforge/tests/dforge-config.test.sh:162`, change the expected `lensCap` default from `4` to `5`.
 
+6. `plugins/dforge/tests/review-depth.acceptance.test.sh`: in `short()` (`:110`) add `s/ parts=[^ ]*//;` after the `criteria=` substitution; replace the three A8 checks at `:329-337` and `:342` with:
+
+```bash
+  check "A8: full prints every lens up to the cap of 5" "$(short <<<"$out_full")" \
+    "lens security;lens silent-failures;lens test-quality;lens code-quality;"
+  check "A8: light skips every other applicable lens for the depth" "$(short <<<"$out")" \
+    "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped code-quality reason=depth;"
+  check "A8: standard prints the 2 lenses, test-quality and code-quality" "$(grep -c '^lens ' <<<"$out_std")" "4"
+```
+
+7. `plugins/dforge/tests/review-depth-qa.acceptance.test.sh`: at `:361` the regex becomes `"^lens-skipped (silent-failures|test-quality|code-quality) reason=depth$"`; at `:386-399` replace the standard and full checks with:
+
+```bash
+  check "A8: standard, lensCap 4, prints 4 lens lines with test-quality and code-quality" "$(lens_lines)" 4
+  absent "A8: standard with every applying lens kept prints no reason=cap" "$out" "reason=cap"
+  absent "A8: standard prints no reason=depth" "$out" "reason=depth"
+  ps2=$(mkplan a8-standard-spec s-standard - "" r0t1)
+  lr "$ps2" DFORGE_LENS_CAP=4
+  check "A8: standard by the spec, lensCap 4, prints 4 lens lines" "$(lens_lines)" 4
+
+  # full: up to lensCap, as before.
+  lr "$pf" DFORGE_LENS_CAP=4
+  check "A8: full, lensCap 4, prints 4 lens lines" "$(lens_lines)" 4
+  absent "A8: full prints no reason=depth" "$out" "reason=depth"
+  lr "$pf" DFORGE_LENS_CAP=3
+  check "A8: full, lensCap 3, prints 3 lens lines" "$(lens_lines)" 3
+  present "A8: full, lensCap 3, skips code-quality for the cap" "$out" "^lens-skipped code-quality reason=cap$"
+```
+
+8. `plugins/dforge/tests/test-volume-rules.acceptance.test.sh`: in `lines()` (`:195-197`) add `s/ parts=[^ ]*//;` after the `criteria=` substitution; replace the A6, A10 and A7 checks (about `:209-229`) with:
+
+```bash
+check "A6: standard depth, default cap: three lenses and code-quality" "$(lines "$out")" \
+  "lens security;lens silent-failures;lens test-quality;lens code-quality;"
+check "A10: light depth: security only, every other applicable lens skipped for depth" "$(lines "$out")" \
+  "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped code-quality reason=depth;"
+check "A10: full depth, cap 5: four lenses apply, none skipped" "$(lines "$out")" \
+  "lens security;lens silent-failures;lens test-quality;lens code-quality;"
+[ "$(printed "$out")" -le 3 ] && r=yes || r=no
+check "A7: at most three lens lines when no test path changed" "$r" "yes"
+```
+
+(each keeps its own `out=$(route ...)` line above it), and in A9 (about `:255`) replace `lens lang-bash;` with `lens code-quality;` in the check renamed `A9: without security, code-quality prints`.
+
+9. `plugins/dforge/tests/ui-ux-skill.acceptance.test.sh`: in both `for id in security lang-typescript test-quality silent-failures` loops (`:806` and the profile loop below it) replace `lang-typescript` with `code-quality`, and at `:839` replace `"^lens(-skipped)? lang-typescript( |\$)"` with `"^lens(-skipped)? code-quality( |\$)"` in the check renamed `A18: setup: the route still ran (code-quality matched)`.
+
+The old checks each replacement in items 2-3 supersedes are `lens-route.test.sh:62-67`, `:72`, `:81`, `:83-84`, `:91`, `:145-192` and `:222-226`.
+
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `timeout 300 bash plugins/dforge/tests/lens-route.test.sh; timeout 300 bash plugins/dforge/tests/dforge-config.test.sh`
@@ -390,7 +470,7 @@ Expected: FAIL: lens-route still prints part lens lines and caps at 4; dforge-co
 2. `--final`: for `code-quality`, run `lens_match` on each part in that order; it applies when any part matches; print C3's line (or its skipped form). Count it toward `n` (lensCap) but, like test-quality, not toward `others` (standard's two-lens limit). Light depth skips it with `reason=depth`. No line when no part matches.
 3. C4: the `lensCap` default `5` in `plugins/dforge/config/schema.mjs:147` (its description names code-quality instead of "the language lenses, type design, docs") and both fallbacks at `plugins/dforge/scripts/lens-route:112-113`; update the script's header comment (`:11-24`) to describe the code-quality line.
 4. `--task`: unchanged.
-5. `review-depth.acceptance.test.sh` (`:331-337`), `review-depth-qa.acceptance.test.sh` (`:361`, `:385-399`), `test-volume-rules.acceptance.test.sh` (`:211-255`) and `ui-ux-skill.acceptance.test.sh` (`:806-839`): update each expected lens-route line by the Step 1 mapping (part lens lines become one code-quality line after test-quality; counts of `^lens ` lines rise where code-quality now runs). Change only expected values that the grouping changes.
+5. The four acceptance suites change only as Step 1 items 6-9 state.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -442,8 +522,10 @@ Expected: PASS.
 
 - [ ] **Step 4: Commit**
 
+Then: `timeout 60 bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-15-measured-proposals.md 2 done --note "code-quality lens grouped at route time (Tasks 3-4)"`.
+
 ```bash
-git add plugins/dforge/reference/final-review.md plugins/dforge/README.md plugins/dforge/reference/native-codex.md plugins/dforge/skills/writing-plans/references/assignment-procedure.md
+git add plugins/dforge/reference/final-review.md plugins/dforge/README.md plugins/dforge/reference/native-codex.md plugins/dforge/skills/writing-plans/references/assignment-procedure.md docs/dforge/registers/2026-11-15-measured-proposals.md
 git commit -m "docs(dforge): describe the code-quality lens"
 ```
 
@@ -463,9 +545,9 @@ git commit -m "docs(dforge): describe the code-quality lens"
 **Items:** 6
 **Evaluation:** files 1 - spec 2 - coupling 1 - risk 2 = 6
 
-- [ ] **Step 1: Extend the test `plugins/dforge/tests/task-step.test.sh::skips a one-line fix`**
+- [ ] **Step 1: Write the failing test**
 
-In the `if want rereview; then` part of `plugins/dforge/tests/task-step.test.sh`, replace the twelve `rr_case` skip-rule rows (from `# The skip rule:` through `reads a backticked finding path with a line suffix`) and the `# A skipped round still packages the fix and advances the state.` block (through its `rereview skip: no prompt is written` check) with:
+In the `if want rereview; then` part of `plugins/dforge/tests/task-step.test.sh`, replace the twelve `rr_case` skip-rule rows (from `# The skip rule:` through `reads a backticked finding path with a line suffix`) with the block below. In the `# A skipped round still packages the fix and advances the state.` block that follows them, rename the comment to `# A prompt round packages the fix and advances the state.`, drop `--covered` from its `rr_run`, keep its reviewHead, round, t0, budget-line and state-line checks with their names changed from `rereview skip:` to `rereview round:`, and delete its `no prompt is written` and `the digest fits 15 lines` checks.
 
 ```bash
 # Every fix round gets its re-review: there is no small-fix skip.
@@ -479,7 +561,14 @@ rr_run rereview docs/plan.md 1 --covered
 check "rereview: --covered is a usage error" "$rr_rc" "2"
 ```
 
-In the block that follows (`# With the plan's other tasks complete the digest's budget line names the tail`) and in the `# A written prompt:` block, drop `--covered` from each `rr_run rereview ...` call. In `tests/task-step.test.sh:93` and `:293`, and in `tests/task-loop-steps.acceptance.test.sh` (`:112`, `:245`, `:371-401`) and `tests/task-step-base.test.sh` (`:251-293`), remove each `--covered` argument and each assertion about a skipped re-review (`re-review: skipped`, `suite_gap`, the skipped digest); a case whose whole subject is the skip is deleted.
+Then, in the rest of the `rereview` part:
+
+- Drop `--covered` from every remaining `rr_run rereview ...` call: the budget-tail block, `# A written prompt:`, `# Rounds chain:`, the round-3 and older-round-4 calls, and `rereview with no fix message exits 6`; their expected values stay.
+- Delete the two cases under `# --base moves the package start, and the skip rule counts from it.` that end in `rereview without --base counts from the recorded review head` and `rereview --base counts from the given base`, and rename the comment to `# --base moves the package start.`; the `rereview --base:` prompt checks after them stay.
+- In the `--head` case, drop `--covered` and change `check "rereview --head: skips on the ref's diff alone" "$(rr_verdict 1 1)" "re-review: skipped (2 changed lines, 1 finding, app.txt)"` to `check "rereview --head: prompts on the ref's diff" "$(rr_verdict 1 1)" "prompt"`.
+- In the zero-padded case, drop `--covered` and change its expected value to `"0 prompt"`.
+
+In `tests/task-loop-steps.acceptance.test.sh` (`:112`, `:245`, `:371-401`) and `tests/task-step-base.test.sh` (`:251-293`), remove each `--covered` argument; an assertion whose expected value is `re-review: skipped ...` becomes `prompt`, and a case whose subject is the skip rule itself (its name says skip) is deleted. `tests/task-step.test.sh:93` and `:293` name the `lang-bash` lens, not the skip, and stay.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -503,8 +592,10 @@ Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
+Then: `timeout 60 bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-15-measured-proposals.md 6 done --note "task-step small-fix skip removed (Task 5)"`.
+
 ```bash
-git add plugins/dforge/scripts/task-step plugins/dforge/reference/delegated-task.md plugins/dforge/tests/task-step.test.sh plugins/dforge/tests/task-loop-steps.acceptance.test.sh plugins/dforge/tests/task-step-base.test.sh
+git add plugins/dforge/scripts/task-step plugins/dforge/reference/delegated-task.md plugins/dforge/tests/task-step.test.sh plugins/dforge/tests/task-loop-steps.acceptance.test.sh plugins/dforge/tests/task-step-base.test.sh docs/dforge/registers/2026-11-15-measured-proposals.md
 git commit -m "refactor(dforge): drop the small-fix re-review skip"
 ```
 
@@ -514,24 +605,30 @@ git commit -m "refactor(dforge): drop the small-fix re-review skip"
 - Modify: `plugins/dforge/skills/writing-plans/SKILL.md`
 - Modify: `plugins/dforge/criteria/plan-review.md`
 - Modify: `plugins/dforge/skills/writing-plans/references/plan-reviewer-prompt.md`
-- Modify: `plugins/dforge/skills/writing-plans/references/assignment-procedure.md`
 
 **Interfaces:**
 - Consumes: none.
 - Produces: none.
 
 **Items:** 5
-**Evaluation:** files 2 - spec 2 - coupling 0 - risk 0 = 4
+**Evaluation:** files 1 - spec 2 - coupling 0 - risk 0 = 3
 
 - [ ] **Step 1: No new test, because the edit is prose no script reads; `plugins/dforge/tests/criteria.test.sh` already checks plan-review.md's shape and ASCII**
 
 - [ ] **Step 2: Edit the wording**
 
-Remove each sentence saying that a task's implementer sees only that task's text, or that small models execute the plan literally, from `SKILL.md:17-19` and `:195-197`, `plan-review.md:11` and `:14-16`, `plan-reviewer-prompt.md:6`, `:24-26` and `:153-155`, and `assignment-procedure.md:19-20`. Where the sentence carried an instruction (judge each task from its own text plus the header), replace it with: the session implements every task and reads it through its brief, which carries the task text with amendments plus the header's Global Constraints and Contracts. Keep `README.md:22`.
+Find each sentence by its quoted text (line numbers shift after Tasks 1-2) and rewrite it:
+
+1. `SKILL.md`, Overview: "Small models execute these plans literally: each task's implementer sees only that task's text plus the header's Global Constraints and Contracts." becomes "The session implements every task, reading each through its brief: the task text with its amendments plus the header's Global Constraints and Contracts."
+2. `SKILL.md`, Task Structure, the `**Interfaces:**` Produces bullet: "A task's implementer sees only their own task plus Global Constraints and Contracts; this block is how they learn which names they touch." becomes "The brief carries only this task plus Global Constraints and Contracts; this block is how the session learns which names the task touches."
+3. `plan-review.md`: "Every task's implementer sees only that task's text plus the header's Global Constraints and Contracts. Judge each task from that view, not from your own reading of the whole plan." becomes "The session implements each task from its brief: the task text plus the header's Global Constraints and Contracts. Judge each task from that view, not from your own reading of the whole plan." Keep the file ASCII.
+4. `plan-reviewer-prompt.md`: the Purpose line "so that small models can execute it literally" becomes "so that the session can execute each task from its brief"; in both templates, "Small models will execute it literally: each task's implementer sees only that task's text plus the header's Global Constraints and Contracts." becomes "The session implements each task from its brief: the task text plus the header's Global Constraints and Contracts."; "Read every task as its implementer will:" becomes "Read every task as the session will, through its brief:".
+
+Keep `README.md:22`.
 
 - [ ] **Step 3: Verify the wording is gone**
 
-Run: `rg -n -i "implementer sees only|small models (will )?execute" plugins/dforge/skills plugins/dforge/criteria plugins/dforge/reference`
+Run: `rg -n -i -U "small models[\\s\\S]{0,20}execut|implementer sees only|as its implementer will" plugins/dforge/skills plugins/dforge/criteria plugins/dforge/reference`
 Expected: no output.
 
 - [ ] **Step 4: Run the task check**
@@ -542,7 +639,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/dforge/skills/writing-plans/SKILL.md plugins/dforge/criteria/plan-review.md plugins/dforge/skills/writing-plans/references/plan-reviewer-prompt.md plugins/dforge/skills/writing-plans/references/assignment-procedure.md
+git add plugins/dforge/skills/writing-plans/SKILL.md plugins/dforge/criteria/plan-review.md plugins/dforge/skills/writing-plans/references/plan-reviewer-prompt.md
 git commit -m "docs(dforge): drop the stale implementer wording"
 ```
 
@@ -581,8 +678,8 @@ In `docs/dforge/plans/2026-11-14-api-decisions-keep-warm-hydrogen.md` and `docs/
 - [ ] **Step 4: Run M2**
 
 1. For each task, rewrite its Step 1 as C7 entries from the plan's own test code, in a copy of the plan under `<scratchpad>/m2/`; record which entry covers each original assertion, and Step 1's line count before and after.
-2. Clone this repository into `<scratchpad>/m2-<n>` at the task's base; produce its brief with `timeout 60 bash plugins/dforge/scripts/task-brief` on the plan copy (as `task-brief --help` prints), and dispatch one `dforge:impl-sonnet-high` seat, cwd the clone, given only the brief and `plan-header.md`, told to write the tests and nothing else and not to commit.
-3. Check, with timeouts: the written tests fail at the base; with the task's commit's non-test files checked out, they pass; then for each non-test file the task changed, revert that file alone to the base at the task's commit and run both the plan's own tests and the written ones: whenever the plan's fail, the written ones must fail too.
+2. Clone this repository into `<scratchpad>/m2-<n>` and check out the task's base. Write the brief and header from the plan copy with `timeout 60 bash plugins/dforge/scripts/task-brief <plan copy> <N> <workspace>/m2/<n>/brief.md` and `timeout 60 bash plugins/dforge/scripts/task-brief --header <plan copy> <workspace>/m2/<n>/plan-header.md`. Dispatch one `dforge:impl-sonnet-high` seat given only those two files and the clone's path to read: it writes the complete new content of the task's test file (as it should stand after Step 1) to `<workspace>/m2/<n>/<test file basename>`, writes nothing else, and does not commit. The session copies that file into the clone as `<test file>.contract`.
+3. Check in the clone, each run under `timeout 600`, with the test file's two versions swapped in by copying: the contract version is `<test file>.contract`; the plan version is `git show <task commit>:<test file>`. (a) At the base with the contract version: the task's new tests fail. (b) With `git checkout <task commit> -- <each non-test file the task changed>` and the contract version: they pass. (c) For each such non-test file, revert that file alone to the base (`git checkout <base> -- <file>`), run the plan version and then the contract version, and restore the file: whenever the plan version fails, the contract version must fail too. The task's tests run with the suite command the plan's Step 2 names.
 4. Write `docs/dforge/notes/2026-11-15-lean-test-contracts.md`: the four tasks, the coverage mapping, the line counts, each check's result, the keep rule's result (kept only when all four pass every check), and the limit: the contracts were written from finished tests, so M2 shows an upper bound.
 
 - [ ] **Step 5: Keep or revert**
