@@ -77,6 +77,16 @@ printf 'stale\n' > "$REVIEW"
 check "A9: a rerun replaces the record" "$(cat "$REVIEW" 2>/dev/null)" "$want"
 check "A9: a rerun leaves one record" "$(ls "$TOP/docs/dforge/reviews" | wc -l | tr -d ' ')" 1
 
+# --- amendments are kept in the record, after the review lines (A5) ---
+printf '## A1 — Task 1\nReason: x\nCost if wrong: y\n' > "$WT/.dforge/sdd/2026-01-01-p/amendments.md"
+out=$(cd "$TOP" && bash "$P/scripts/review-record" retain "$PLAN" --from "$WT"); rc=$?
+check "amendments: retain exits 0" "$rc:$out" "0:$REVIEW"
+check "amendments are kept in the record" "$(cat "$REVIEW" 2>/dev/null)" \
+  "$want"$'\n\n## Amendments\n\n## A1 — Task 1\nReason: x\nCost if wrong: y'
+rm -f "$WT/.dforge/sdd/2026-01-01-p/amendments.md"
+(cd "$TOP" && bash "$P/scripts/review-record" retain "$PLAN" --from "$WT" >/dev/null)
+check "amendments: none, no section" "$(cat "$REVIEW" 2>/dev/null)" "$want"
+
 printf '# Q\n' > "$TOP/docs/dforge/plans/2026-01-01-q.md"
 printf '# Q\n' > "$WT/docs/dforge/plans/2026-01-01-q.md"
 ledger "$WT" 2026-01-01-q "$WT/docs/dforge/plans/2026-01-01-q.md" \
