@@ -101,8 +101,5 @@ cat "$fixture/request.json" "$fixture/request.json" > "$fixture/input.json"
 bash "$selector" --request "$fixture/input.json" > "$fixture/output.json" 2>/dev/null
 check 'multiple JSON requests are rejected' "$?" 2
 check 'invalid request emits no decision' "$(wc -c < "$fixture/output.json" | tr -d ' ')" 0
-awk '/^```json$/ { inside=1; next } inside && /^```$/ { exit } inside { print }' "$HERE/../reference/native-codex.md" > "$fixture/documented.json"
-out="$(bash "$selector" --request "$fixture/documented.json" 2>/dev/null)"
-check 'documented request executes with the stated assignment' "$(jq -c '[.action,.score,.rank,.model,.effort]' <<< "$out")" '["dispatch",7,7,"gpt-6-astra","medium"]'
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

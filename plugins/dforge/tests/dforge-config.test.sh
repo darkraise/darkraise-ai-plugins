@@ -104,6 +104,11 @@ fc set autoRun ask
 check "workflow: both back under autoRun=ask" "$(fc workflow)" "dforge settings in force (each replaces the matching question or default in the skills): autoRun=ask; designApproval=whole; specReview=false"
 fc set autoRun off
 check "workflow: both stay under autoRun=off" "$(fc workflow)" "dforge settings in force (each replaces the matching question or default in the skills): autoRun=off; designApproval=whole; specReview=false"
+fresh codexwf
+fc set designApproval whole >/dev/null; fc set specReview false >/dev/null
+check "workflow --host codex keeps overrides under autoRun=on" "$(fc workflow --host codex)" \
+  "dforge settings in force (each replaces the matching question or default in the skills): designApproval=whole; specReview=false"
+check "workflow on Claude still leaves them out" "$(fc workflow)" ""
 
 # --- two setters at once: both keys land ---
 # Each setter holds its read of config.json for 300 ms, so without a lock both

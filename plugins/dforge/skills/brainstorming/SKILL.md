@@ -88,7 +88,8 @@ downgrades mid-task.
 
 The workflow settings in force arrive as one line at session start, `dforge
 settings in force (…): key=value; …`. With no such line in context, run
-`scripts/dforge-config workflow` once before your first question; it prints the
+`scripts/dforge-config workflow` once before your first question (a Codex
+session runs `scripts/dforge-config workflow --host codex`); it prints the
 same line, or nothing when every setting is at its default. A key the line does
 not name is at its default. Your human partner's own instructions outrank a
 setting, and no setting removes the approval gate. `fastMode=always` records
