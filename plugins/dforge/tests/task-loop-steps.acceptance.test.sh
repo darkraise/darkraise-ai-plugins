@@ -285,7 +285,8 @@ a4() {
   diff=$(prompt_path "$JP")
   has "A4: --base on review: the package holds the commit after SHA" "$(cat "$diff")" "b.txt"
   lacks "A4: --base on review: the package leaves out the commit before SHA" "$(cat "$diff")" "a.txt"
-  lacks "A4: the package does not start at the recorded base" "$(cat "$diff")" "${base:0:7}..none"
+  has "A4: the package starts at SHA" "$(cat "$diff")" "# Review package: $c1.."
+  lacks "A4: the package does not start at the recorded base" "$(cat "$diff")" "# Review package: $base.."
 
   # --base on rereview: the same, from the fix base.
   new_repo a4r
@@ -521,6 +522,18 @@ a11() {
   has "A11: turn-end.sh names the shell by description" "$reason" "Run the suite"
   has "A11: turn-end.sh names an agent by id" "$reason" "a11"
   has "A11: turn-end.sh names an agent by description" "$reason" "Implement task 4"
+
+  # next-step still counts and names the launches, and prints no block over them.
+  local ns
+  ns=$(cd "$REPO" && bash "$PLUGIN/scripts/next-step" --adhoc --phase build --next "Commit the work" 2>/dev/null); code=$?
+  check "A11: next-step over running launches: exit 5" "$code" "5"
+  has "A11: next-step counts the launches" "$ns" "4 background launch"
+  has "A11: next-step names the shell by id" "$ns" "shell b11 "
+  has "A11: next-step names the shell by description" "$ns" "Run the suite"
+  has "A11: next-step names an agent by id" "$ns" "agent a11 "
+  has "A11: next-step names an agent by description" "$ns" "Implement task 4"
+  lacks "A11: next-step prints no next-session block" "$ns" "## Next session"
+  check "A11: next-step writes no latest.md" "$([ -e "$REPO/.dforge/handoff/latest.md" ] && echo written || echo none)" "none"
   export CLAUDE_CODE_SESSION_ID=$ENV_SID
 }
 
