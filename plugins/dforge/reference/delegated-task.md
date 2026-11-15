@@ -429,13 +429,12 @@ line; append the ruling's smallest fix and the covering test files below
 them. Write the file yourself only for findings no report holds: a
 mechanical check's finding, a CONFIRMED-GAP from the ruling seat, or a
 light panel seat's JSON review. `task-step rereview` reads the bullets for the
-findings list and the skip rule, so write the file before you call it.
+findings list, so write the file before you call it.
 
 **The re-review is scoped.** Run
-`bash <plugin-root>/scripts/task-step rereview PLAN_FILE N` (with `--covered`
-under the skip rule below). It packages the fix diff from the review head it
-recorded last to HEAD, records the new review head, adds one to the
-recorded round, and writes
+`bash <plugin-root>/scripts/task-step rereview PLAN_FILE N`. It packages the
+fix diff from the review head it recorded last to HEAD, records the new
+review head, adds one to the recorded round, and writes
 `<workspace>/task-<N>-rereview-<R>-prompt.md`:
 [re-review-prompt.md](prompts/re-review-prompt.md)
 with the findings from your fix message, the brief, the report file and the
@@ -452,28 +451,8 @@ file and its `fix:` line reads `breaker (round 2 of 2; …)`: send those
 findings to the breaker. The re-reviewer's out-of-scope
 issues reach the ledger as deferred Minor findings and never extend the loop.
 
-**The skip rule.** Pass `--covered` only after confirming that the fix report
-names the covering tests, the command and passing output. With it,
-`rereview` skips the re-review when exactly one finding is open, the fix
-changes at most 3 lines (added plus deleted, test files included) and touches
-that finding's file, and the task is not risk 3. It prints
-`re-review: skipped (<n> changed lines, 1 finding, <file>)` and writes no
-prompt: count the finding addressed, dispatch no seat, and write the fix-round
-line with `re-review skipped (<n> lines)`. A skipped re-review still counts
-as its round. Without `--covered`, or in any other case, the re-review runs.
-When the step file records a suite, `--covered` also needs the suite run at
-the fix head to have finished: pass it only after that run's notification is
-in. `rereview` then skips only when the fix head's suite passes or fails with
-base failures only; otherwise it prints
-`re-review: not skipped (suite <red|not run>)` and writes the prompt as it
-does without `--covered`. A red fix-head suite can make `--covered` run the
-suite once at the base commit, which takes up to an hour
-(`TASK_STEP_BASE_TIMEOUT`), and as long again for a **Worktree setup:**
-command in the plan header: start `rereview --covered` as a background
-command and end the turn.
-
 **After each round,** append to the ledger:
-`Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>[; re-review skipped (<n> lines)]; session)`
+`Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>; session)`
 
 **The breaker.** When round 2's re-review still leaves findings open, stop
 fixing and send every open finding to the ruling seat in one `breaker`
@@ -599,9 +578,9 @@ with the session in the implementer's place.
    (§3).
 4. **Fix rounds, two at most.** Each round is your own fix, its covering
    tests appended to the report file under a new `## Verified` section, and
-   the scoped `task-step rereview` (§4, its skip rule included). After each
+   the scoped `task-step rereview` (§4). After each
    round append
-   `Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>[; re-review skipped (<n> lines)]; session)`.
+   `Task <N>: fix round <R>/2 (<X> addressed, <Y> open — <finding one-liners>; commits <a7>..<b7>; session)`.
    Minor and plan-mandated findings leave the loop as §4 says.
 5. **Close.** A clean verdict writes §5's reviewed complete line, its scores
    clause ending `, seat <seat>`. After `2/2` with findings still open, send

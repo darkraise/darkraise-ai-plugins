@@ -465,7 +465,7 @@ review_surface absent
 fi
 
 if want rereview || want verdict; then
-# --- rereview: the skip rule, the package and the state ---
+# --- rereview: the package and the state ---
 # The fixture plan's lines carry a leading | so a plan that quotes this suite still lints.
 RR_TMP=$TMP/rr
 mkdir -p "$RR_TMP"
@@ -583,36 +583,29 @@ cp "$RR_WS/task-2-step.json" "$RR_TMP/state2.0"
 fi
 
 if want rereview; then
-# The skip rule: one open finding, at most 3 changed lines (test files
-# included) touching the finding's file, a task below risk 3, and --covered.
-rr_case "skips a one-line fix" 1 --covered "- app.txt: wrong value" "app.txt:mod" "0 re-review: skipped (2 changed lines, 1 finding, app.txt)"
-rr_case "skips exactly 3 changed lines" 1 --covered "- app.txt: wrong value" "app.txt:add3" "0 re-review: skipped (3 changed lines, 1 finding, app.txt)"
-rr_case "counts a test file edit toward the limit" 1 --covered "- app.txt: wrong value" "app.txt:mod test.txt:mod" "0 prompt"
-rr_case "skips a small fix that also adds a test line" 1 --covered "- app.txt: wrong value" "app.txt:add1 test.txt:add1" "0 re-review: skipped (2 changed lines, 1 finding, app.txt)"
-rr_case "does not skip 4 changed lines" 1 --covered "- app.txt: wrong value" "app.txt:add4" "0 prompt"
-rr_case "does not skip without --covered" 1 "" "- app.txt: wrong value" "app.txt:mod" "0 prompt"
-rr_case "does not skip with two open findings" 1 --covered "- app.txt: wrong value|- other.txt: stale" "app.txt:mod" "0 prompt"
-rr_case "does not skip a fix that edits only another test file" 1 --covered "- app.txt: wrong value" "test.txt:mod" "0 prompt"
-rr_case "does not skip a fix to another file than the finding's" 1 --covered "- app.txt: wrong value" "other.txt:mod" "0 prompt"
-rr_case "does not skip a binary fix" 1 --covered "- bin.dat: wrong blob" "bin.dat:bin" "0 prompt"
-rr_case "does not skip a risk 3 task" 2 --covered "- app.txt: wrong value" "app.txt:mod" "0 prompt"
-rr_case "reads a backticked finding path with a line suffix" 1 --covered '- `app.txt:12`: wrong value' "app.txt:mod" "0 re-review: skipped (2 changed lines, 1 finding, app.txt)"
+# Every fix round gets its re-review: there is no small-fix skip.
+rr_case "prompts for a one-line fix" 1 "" "- app.txt: wrong value" "app.txt:mod" "0 prompt"
+rr_case "prompts for a one-line fix on a risk 3 task" 2 "" "- app.txt: wrong value" "app.txt:mod" "0 prompt"
+rr_reset
+rr_edit app.txt mod
+rr_git add -A && rr_git commit -qm fix
+rr_fix 1 1 "- app.txt: wrong value"
+rr_run rereview docs/plan.md 1 --covered
+check "rereview: --covered is a usage error" "$rr_rc" "2"
 
-# A skipped round still packages the fix and advances the state.
+# A prompt round packages the fix and advances the state.
 rr_reset
 rr_edit app.txt mod
 rr_git add -A && rr_git commit -qm fix
 rr_fix 1 1 "- app.txt: wrong value"
 jq '.t0 = 1' "$RR_WS/task-1-step.json" > "$RR_TMP/t0.tmp" && cp "$RR_TMP/t0.tmp" "$RR_WS/task-1-step.json"
-rr_run rereview docs/plan.md 1 --covered
-check "rereview skip: records the head as the review head" "$(rr_state 1 .reviewHead)" "$(rr_git rev-parse HEAD)"
-check "rereview skip: increments the round" "$(rr_state 1 .round)" "1"
-check "rereview skip: replaces t0 with the time of the re-review" "$([ "$(rr_state 1 .t0)" -gt 1000000000 ] && echo yes || echo no)" "yes"
-check "rereview skip: the digest shows the recorded t0" "$(sed -n 's/^state: .* t0 //p' <<<"$rr_out")" "$(rr_state 1 .t0)"
-check "rereview skip: the digest fits 15 lines" "$([ "$(wc -l <<<"$rr_out")" -le 15 ] && echo yes || echo no)" "yes"
-check "rereview skip: the digest names the state" "$(grep -c "^state: base .* review-head $(rr_git rev-parse --short HEAD) round 1 t0 " <<<"$rr_out")" "1"
-check "rereview skip: the digest ends with the budget line" "$(tail -n 1 <<<"$rr_out" | cut -c1-7)" "budget:"
-check "rereview skip: no prompt is written" "$(ls "$RR_WS"/task-1-rereview-*-prompt.md 2>/dev/null | wc -l | tr -d ' ')" "0"
+rr_run rereview docs/plan.md 1
+check "rereview round: records the head as the review head" "$(rr_state 1 .reviewHead)" "$(rr_git rev-parse HEAD)"
+check "rereview round: increments the round" "$(rr_state 1 .round)" "1"
+check "rereview round: replaces t0 with the time of the re-review" "$([ "$(rr_state 1 .t0)" -gt 1000000000 ] && echo yes || echo no)" "yes"
+check "rereview round: the digest shows the recorded t0" "$(sed -n 's/^state: .* t0 //p' <<<"$rr_out")" "$(rr_state 1 .t0)"
+check "rereview round: the digest names the state" "$(grep -c "^state: base .* review-head $(rr_git rev-parse --short HEAD) round 1 t0 " <<<"$rr_out")" "1"
+check "rereview round: the digest ends with the budget line" "$(tail -n 1 <<<"$rr_out" | cut -c1-7)" "budget:"
 # With the plan's other tasks complete the digest's budget line names the tail,
 # which never hands off in strict mode.
 cp "$RR_WS/progress.md" "$RR_TMP/ledger.keep"
@@ -621,7 +614,7 @@ rr_reset
 rr_edit app.txt mod
 rr_git add -A && rr_git commit -qm fix
 rr_fix 1 1 "- app.txt: wrong value"
-rr_run rereview docs/plan.md 1 --covered
+rr_run rereview docs/plan.md 1
 check "rereview: in the plan's last task the budget line names the tail" "$(tail -n 1 <<<"$rr_out" | cut -c1-19)" "budget (last task):"
 cp "$RR_TMP/ledger.keep" "$RR_WS/progress.md"
 
@@ -631,7 +624,7 @@ rr_reset
 rr_edit app.txt add4
 rr_git add -A && rr_git commit -qm fix
 rr_fix 1 1 "- app.txt: wrong value|- other.txt: stale"
-rr_run rereview docs/plan.md 1 --covered
+rr_run rereview docs/plan.md 1
 RR_P=$RR_WS/task-1-rereview-1-prompt.md
 check "rereview prompt: the digest names the seat and the file" "$(grep -c "^seat: dforge:judge-sonnet-high prompt: $RR_P\$" <<<"$rr_out")" "1"
 check "rereview prompt: no placeholder is left" "$(grep -cE '\[(BRIEF_FILE|FINDINGS|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$RR_P")" "0"
@@ -648,7 +641,7 @@ RR_H1=$(rr_git rev-parse HEAD)
 rr_edit app.txt add4
 rr_git add -A && rr_git commit -qm fix2
 rr_fix 1 2 "- app.txt: still wrong"
-rr_run rereview docs/plan.md 1 --covered
+rr_run rereview docs/plan.md 1
 check "rereview round 2: writes the round 2 prompt" "$([ -f "$RR_WS/task-1-rereview-2-prompt.md" ] && echo yes || echo no)" "yes"
 check "rereview round 2: the fix base is round 1's head" "$(grep -c "Fix base:\*\* $RR_H1 " "$RR_WS/task-1-rereview-2-prompt.md")" "1"
 check "rereview round 2: the state round is 2" "$(rr_state 1 .round)" "2"
@@ -658,7 +651,7 @@ rr_edit app.txt add4
 rr_git add -A && rr_git commit -qm fix3
 rr_fix 1 3 "- app.txt: still wrong"
 cp "$RR_WS/task-1-step.json" "$RR_TMP/state1.2"
-rr_run rereview docs/plan.md 1 --covered
+rr_run rereview docs/plan.md 1
 check "rereview round 3: exits 7" "$rr_rc" "7"
 check "rereview round 3: names the cap and the breaker" "$(grep -c 'task-step: fix round 3 is past the cap of 2; send the open findings to the breaker' <<<"$rr_err")" "1"
 check "rereview round 3: writes no prompt" "$([ -f "$RR_WS/task-1-rereview-3-prompt.md" ] && echo yes || echo no)" "no"
@@ -667,28 +660,11 @@ check "rereview round 3: prints no digest" "$rr_out" ""
 # A step state an older run left at round 4 of 5 goes to the breaker too.
 jq '.round = 4' "$RR_TMP/state1.2" > "$RR_WS/task-1-step.json"
 rr_fix 1 5 "- app.txt: still wrong"
-rr_run rereview docs/plan.md 1 --covered
+rr_run rereview docs/plan.md 1
 check "rereview after an older run's round 4: exits 7" "$rr_rc" "7"
 check "rereview after an older run's round 4: names round 5" "$(grep -c 'fix round 5 is past the cap of 2' <<<"$rr_err")" "1"
 
-# --base moves the package start, and the skip rule counts from it.
-rr_reset
-rr_edit app.txt mod
-rr_git add -A && rr_git commit -qm fix-a
-rr_edit app.txt add3
-rr_git add -A && rr_git commit -qm fix-b
-rr_fix 1 1 "- app.txt: wrong value"
-rr_run rereview docs/plan.md 1 --covered
-check "rereview without --base counts from the recorded review head" "$(rr_verdict 1 1)" "prompt"
-rr_reset
-rr_edit app.txt mod
-rr_git add -A && rr_git commit -qm fix-a
-RR_A=$(rr_git rev-parse HEAD)
-rr_edit app.txt add3
-rr_git add -A && rr_git commit -qm fix-b
-rr_fix 1 1 "- app.txt: wrong value"
-rr_run rereview docs/plan.md 1 --covered --base "$RR_A"
-check "rereview --base counts from the given base" "$(rr_verdict 1 1)" "re-review: skipped (3 changed lines, 1 finding, app.txt)"
+# --base moves the package start.
 rr_reset
 rr_edit app.txt mod
 rr_git add -A && rr_git commit -qm fix-a
@@ -710,8 +686,8 @@ rr_git branch -f rr-task-ref
 rr_edit app.txt add4
 rr_git add -A && rr_git commit -qm later
 rr_fix 1 1 "- app.txt: wrong value"
-rr_run rereview docs/plan.md 1 --covered --head rr-task-ref
-check "rereview --head: skips on the ref's diff alone" "$(rr_verdict 1 1)" "re-review: skipped (2 changed lines, 1 finding, app.txt)"
+rr_run rereview docs/plan.md 1 --head rr-task-ref
+check "rereview --head: prompts on the ref's diff" "$(rr_verdict 1 1)" "prompt"
 check "rereview --head: records the ref's commit as the review head" "$(rr_state 1 .reviewHead)" "$(rr_git rev-parse rr-task-ref)"
 check "rereview --head: records the ref" "$(rr_state 1 .head)" "rr-task-ref"
 
@@ -720,15 +696,15 @@ rr_reset
 rr_edit app.txt mod
 rr_git add -A && rr_git commit -qm fix
 rr_fix 1 1 "- app.txt: wrong value"
-rr_run rereview docs/plan.md 01 --covered
-check "rereview names Task 1 as 01" "$rr_rc $(rr_verdict 1 1)" "0 re-review: skipped (2 changed lines, 1 finding, app.txt)"
+rr_run rereview docs/plan.md 01
+check "rereview names Task 1 as 01" "$rr_rc $(rr_verdict 1 1)" "0 prompt"
 
 # Refusals write nothing.
 rr_reset
 rr_run rereview docs/plan.md 3
 check "rereview before review exits 6" "$rr_rc" "6"
 rr_reset
-rr_run rereview docs/plan.md 1 --covered
+rr_run rereview docs/plan.md 1
 check "rereview with no fix message exits 6" "$rr_rc" "6"
 check "rereview with no fix message leaves the state alone" "$(cmp -s "$RR_WS/task-1-step.json" "$RR_TMP/state1.0" && echo same || echo changed)" "same"
 printf 'No bullets here.\n' > "$RR_WS/task-1-fix-1.md"

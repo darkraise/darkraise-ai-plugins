@@ -242,7 +242,7 @@ a3() {
   ts start docs/plan.md 1
   printf '%s\n\nFixed.\n' '- app.txt: a finding' > "$WS/task-1-fix-1.md"
   before=$(ws_files)
-  ts rereview docs/plan.md 1 --covered
+  ts rereview docs/plan.md 1
   check "A3: rereview before review exits 6, with its fix message in place" "$rc" "6"
   check "A3: and writes nothing" "$(ws_files)" "$before"
 
@@ -323,7 +323,7 @@ a4() {
 
 # --- A5, A6 -----------------------------------------------------------------
 
-# The repository for the skip rule: tasks 1 (risk 1) and 2 (risk 3) started and
+# The repository for the re-review cases: tasks 1 (risk 1) and 2 (risk 3) started and
 # reviewed at one head, with their states saved.
 rr_setup() { # rr_setup <repo name>
   new_repo "$1"
@@ -383,22 +383,22 @@ rr_case() {
 
 a5() {
   rr_setup rr5
-  rr_case "A5: one line in the finding's file, covered" 1 --covered '- app.txt: one' app.txt:add1 -- skip
-  rr_case "A5: three changed lines is the limit" 1 --covered '- app.txt: one' app.txt:add3 -- skip
-  rr_case "A5: three changed lines across the finding's file and a test file" 1 --covered '- app.txt: one' app.txt:add1 test.txt:add2 -- skip
-  rr_case "A5: four changed lines are over the limit" 1 --covered '- app.txt: one' app.txt:add4 -- prompt
-  rr_case "A5: test-file lines count toward the limit" 1 --covered '- app.txt: one' app.txt:add1 test.txt:add3 -- prompt
-  rr_case "A5: a replaced line counts as two changed lines, four over three" 1 --covered '- app.txt: one' app.txt:mod app.txt:add2 -- prompt
+  rr_case "A5: one line in the finding's file, covered" 1 "" '- app.txt: one' app.txt:add1 -- prompt
+  rr_case "A5: three changed lines is the limit" 1 "" '- app.txt: one' app.txt:add3 -- prompt
+  rr_case "A5: three changed lines across the finding's file and a test file" 1 "" '- app.txt: one' app.txt:add1 test.txt:add2 -- prompt
+  rr_case "A5: four changed lines are over the limit" 1 "" '- app.txt: one' app.txt:add4 -- prompt
+  rr_case "A5: test-file lines count toward the limit" 1 "" '- app.txt: one' app.txt:add1 test.txt:add3 -- prompt
+  rr_case "A5: a replaced line counts as two changed lines, four over three" 1 "" '- app.txt: one' app.txt:mod app.txt:add2 -- prompt
   rr_case "A5: without --covered" 1 "" '- app.txt: one' app.txt:add1 -- prompt
-  rr_case "A5: a risk-3 task" 2 --covered '- app.txt: one' app.txt:add1 -- prompt
+  rr_case "A5: a risk-3 task" 2 "" '- app.txt: one' app.txt:add1 -- prompt
 }
 
 a6() {
   rr_setup rr6
-  rr_case "A6: a fix that edits only a test file other than the finding's" 1 --covered '- app.txt: one' test.txt:add1 -- prompt
-  rr_case "A6: a fix that edits only another source file" 1 --covered '- app.txt: one' other.txt:add1 -- prompt
-  rr_case "A6: two open findings, a tiny fix in one finding's file" 1 --covered '- app.txt: one|- other.txt: two' app.txt:add1 -- prompt
-  rr_case "A6: two open findings, a fix touching both files" 1 --covered '- app.txt: one|- other.txt: two' app.txt:add1 other.txt:add1 -- prompt
+  rr_case "A6: a fix that edits only a test file other than the finding's" 1 "" '- app.txt: one' test.txt:add1 -- prompt
+  rr_case "A6: a fix that edits only another source file" 1 "" '- app.txt: one' other.txt:add1 -- prompt
+  rr_case "A6: two open findings, a tiny fix in one finding's file" 1 "" '- app.txt: one|- other.txt: two' app.txt:add1 -- prompt
+  rr_case "A6: two open findings, a fix touching both files" 1 "" '- app.txt: one|- other.txt: two' app.txt:add1 other.txt:add1 -- prompt
 }
 
 # --- A7 ----------------------------------------------------------------------

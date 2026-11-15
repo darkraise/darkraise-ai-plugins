@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # task-step compares a red suite with the base commit's failures: verdict reuses
 # a base row, then task-<N>-base-failures.txt, then runs the suite once at the
-# base in a temporary worktree; rereview --covered skips only on a covered suite.
+# base in a temporary worktree.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,7 +30,7 @@ export SUITE_MARK="$TMP/marks"
 # The helpers run before task-step's rereview dispatch, which exits before any
 # later definition exists.
 dispatch=$(grep -n '^if \[ "\${1:-}" = rereview \]; then$' "$S/task-step" | head -n 1 | cut -d: -f1)
-for fn in suite_key suite_row suite_failing_lines suite_fail_set suite_unfinished suite_base_sha require_step_file suite_base_lines run_at_base suite_gap; do
+for fn in suite_key suite_row suite_failing_lines suite_fail_set suite_unfinished suite_base_sha require_step_file suite_base_lines run_at_base; do
   at=$(grep -n "^$fn() {" "$S/task-step" | head -n 1 | cut -d: -f1)
   check "$fn is defined before the rereview dispatch" "$([ -n "$at" ] && [ -n "$dispatch" ] && [ "$at" -lt "$dispatch" ] && echo yes || echo no)" "yes"
 done
@@ -247,50 +247,6 @@ ts verdict docs/plan.md 3
 check "task 3: a passing base leaves nothing to excuse" "$(grep '^suite: ' <<<"$out")" "suite: red (1 failing, 0 baseline)"
 check "task 3: the empty file is kept" "$([ -f "$WS/task-3-base-failures.txt" ] && [ ! -s "$WS/task-3-base-failures.txt" ] && echo empty || echo other)" "empty"
 check "task 3: the base run used the setup" "$(marks setup)" "2"
-
-# Task 4: rereview --covered skips only when the fix head's suite is covered.
-set_failing $'not ok 1 - alpha\n'
-commit "red again"
-ts start docs/plan.md 4 --suite 'bash suite.sh'
-printf 'impl\n' >> "$REPO/app.txt"
-commit "work 4"
-ts review docs/plan.md 4
-R0=$(g rev-parse HEAD)
-cp "$WS/task-4-step.json" "$TMP/state4.0"
-rr_case() { # rr_case <name> <fix: mod|broken|green|slow> <run suite: yes|no|timeout> <want>
-  g reset -q --hard "$R0"
-  cp "$TMP/state4.0" "$WS/task-4-step.json"
-  rm -f "$WS"/task-4-fix-*.md "$WS"/task-4-rereview-*-prompt.md
-  case $2 in
-    mod) awk 'NR == 2 { print "changed"; next } { print }' "$REPO/app.txt" > "$REPO/app.tmp" && mv "$REPO/app.tmp" "$REPO/app.txt" ;;
-    broken) awk 'NR == 2 { print "broken"; next } { print }' "$REPO/app.txt" > "$REPO/app.tmp" && mv "$REPO/app.tmp" "$REPO/app.txt" ;;
-    slow) awk 'NR == 2 { print "changed"; next } { print }' "$REPO/app.txt" > "$REPO/app.tmp" && mv "$REPO/app.tmp" "$REPO/app.txt"; : > "$REPO/slow.txt" ;;
-    green) awk 'NR == 2 { print "changed"; next } { print }' "$REPO/app.txt" > "$REPO/app.tmp" && mv "$REPO/app.tmp" "$REPO/app.txt"; : > "$REPO/failing.txt" ;;
-  esac
-  commit fix
-  printf -- '- app.txt: wrong value\n\nFixed.\n' > "$WS/task-4-fix-1.md"
-  [ "$3" != yes ] || sr
-  [ "$3" != timeout ] || sr_timeout
-  ts rereview docs/plan.md 4 --covered
-  check "rereview $1" "$rc $(grep '^re-review: ' <<<"$out") $([ -f "$WS/task-4-rereview-1-prompt.md" ] && echo prompt || echo none)" "$4"
-}
-rr_case "no suite row for the fix head: not skipped" mod no "0 re-review: not skipped (suite not run) prompt"
-rr_case "a non-baseline failure at the fix head: not skipped" broken yes "0 re-review: not skipped (suite red) prompt"
-rr_case "baseline failures only: skipped" mod yes "0 re-review: skipped (2 changed lines, 1 finding, app.txt) none"
-rr_case "a suite that timed out with baseline lines only: not skipped" slow timeout "0 re-review: not skipped (suite red) prompt"
-rr_case "a passing suite: skipped" green yes "0 re-review: skipped (3 changed lines, 1 finding, app.txt) none"
-check "task 4: the base run happened once" "$(marks setup)" "3"
-
-# Task 5: a task started before --suite existed keeps today's rule.
-ts start docs/plan.md 5
-printf 'impl\n' >> "$REPO/app.txt"
-commit "work 5"
-ts review docs/plan.md 5
-printf -- '- app.txt: wrong value\n\nFixed.\n' > "$WS/task-5-fix-1.md"
-awk 'NR == 3 { print "changed"; next } { print }' "$REPO/app.txt" > "$REPO/app.tmp" && mv "$REPO/app.tmp" "$REPO/app.txt"
-commit fix
-ts rereview docs/plan.md 5 --covered
-check "no recorded suite: today's skip rule" "$rc $(grep '^re-review: ' <<<"$out")" "0 re-review: skipped (2 changed lines, 1 finding, app.txt)"
 
 # Task 6: a base run that cannot start leaves no file, and every failure is new.
 sed 's/`touch setup.done`/`false`/' "$REPO/docs/plan.md" > "$REPO/docs/plan.tmp" && mv "$REPO/docs/plan.tmp" "$REPO/docs/plan.md"

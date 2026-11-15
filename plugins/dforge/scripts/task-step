@@ -7,7 +7,7 @@
 #
 # Usage: task-step start  PLAN_FILE N [--reset] [--suite COMMAND]
 #        task-step review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA]
-#        task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]
+#        task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF]
 #        task-step verdict PLAN_FILE N [M ...] [--rereview R] [--cwd DIR]
 # A start opens the session's own review loop for a task it implements: step
 # state and the ledger's identity line, but no task line, since the session
@@ -33,7 +33,7 @@ plan_budget_line() {
   read -r -a mode <<<"$(. "$1/lib/context.sh" && ctx_plan_mode "$3" "$4" 2>/dev/null)" || mode=()
   DFORGE_BUDGET_CALLER=$2 bash "$1/context-size" ${mode[@]+"${mode[@]}"} 2>/dev/null
 }
-usage() { die "usage: task-step start PLAN_FILE N [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--rereview R] [--cwd DIR]"; }
+usage() { die "usage: task-step start PLAN_FILE N [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] | verdict PLAN_FILE N [M ...] [--rereview R] [--cwd DIR]"; }
 
 # dirty_list DIR: "<path>\t<hash>" for each tracked path that differs from
 # HEAD, sorted; the hash is git's content hash, or "deleted". Paths are
@@ -284,27 +284,8 @@ require_suite_base() {
     || die "--suite-base ${suite_base_sha_arg:0:7} is not Task $2's base ${1:0:7} or an ancestor of it"
 }
 
-# suite_gap STEP_FILE N SHA [DIR]: nothing when the step file records no suite
-# or SHA's suite row passes or fails with baseline lines only; otherwise "not
-# run" (no row) or "red". STEP_FILE has passed require_step_file in the caller.
-suite_gap() {
-  local step=$1 n=$2 sha=$3 dir=${4:-.} row code log base_lines line
-  [ -n "$(jq -r '.suite // empty' "$step" | tr -d '\r')" ] || return 0
-  row=$(suite_row "$step" "$sha" "$dir")
-  if [ -z "$row" ]; then echo "not run"; return 0; fi
-  code=$(cut -f4 <<<"$row")
-  [ "$code" != 0 ] || return 0
-  log=$(cut -f5 <<<"$row")
-  if [ ! -f "$log" ] || suite_unfinished "$code"; then echo red; return 0; fi
-  base_lines=$(suite_base_lines "$step" "$n" "$dir")
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    if ! grep -qxF -- "$line" <<<"$base_lines"; then echo red; return 0; fi
-  done < <(suite_fail_set "$log" "$code")
-}
-
 rr_usage() {
-  echo "usage: task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered]" >&2
+  echo "usage: task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF]" >&2
   exit 2
 }
 
@@ -337,10 +318,10 @@ rr_render() { # rr_render TEMPLATE FINDINGS_FILE — the fenced prompt body, de-
 # A subshell body: every exit below leaves only the subshell, so the
 # dispatch branch passes the status on.
 cmd_rereview() (
-  local here plan_arg plan tmp src header ws state first t scores row risk
-  local fix bullets nopen file review_head round new_round head_ref head_sha fix_base fix_base_sha
-  local pkg diff_file numstat a d f lines over touched risk3 skip why now prompt tpl ids check_dir snap suite_why suite_dir old_base
-  local tasks=() base_arg="" head_arg="" covered=0
+  local here plan_arg plan tmp src header ws state first t
+  local fix bullets nopen review_head round new_round head_ref head_sha fix_base fix_base_sha
+  local pkg diff_file now prompt tpl ids check_dir snap old_base
+  local tasks=() base_arg="" head_arg=""
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   . "$here/lib/plan.sh"
   [ $# -ge 2 ] || rr_usage
@@ -349,7 +330,6 @@ cmd_rereview() (
     case $1 in
       --base) [ $# -ge 2 ] && [ -n "$2" ] || rr_usage; base_arg=$2; shift 2 ;;
       --head) [ $# -ge 2 ] && [ -n "$2" ] || rr_usage; head_arg=$2; shift 2 ;;
-      --covered) covered=1; shift ;;
       *) [[ $1 =~ ^[0-9]+$ ]] || rr_usage; tasks+=("$((10#$1))"); shift ;;
     esac
   done
@@ -404,10 +384,6 @@ cmd_rereview() (
     echo "task-step: $fix must start with one '- <file>: <finding>' bullet per open finding" >&2
     exit 2
   fi
-  file=${bullets%%$'\n'*}
-  file=${file#- }
-  file=${file%%: *}
-  file=$(printf '%s' "$file" | tr -d '`' | sed -E 's/:[0-9][0-9,-]*$//; s#^\./##')
 
   head_ref=$head_arg
   [ -n "$head_ref" ] || head_ref=$(jq -r '.head // empty' "$state" | tr -d '\r')
@@ -417,58 +393,22 @@ cmd_rereview() (
   [ -n "$fix_base" ] || fix_base=$review_head
   fix_base_sha=$(git rev-parse --verify --quiet "$fix_base^{commit}") || { echo "bad BASE: $fix_base" >&2; exit 2; }
 
-  scores=$(plan_scores "$src")
-  risk3=0
-  for t in "${tasks[@]}"; do
-    row=$(awk -F'\t' -v n="$t" '$1 == n' <<<"$scores")
-    risk=$(cut -f3 <<<"$row")
-    case $risk in 0|1|2) ;; *) risk3=1 ;; esac
-  done
-
-  lines=0 over=0 touched=0
-  numstat=$(git -c core.quotepath=off diff --numstat --no-renames "$fix_base_sha..$head_sha")
-  while IFS=$'\t' read -r a d f; do
-    [ -n "$f" ] || continue
-    f=${f%$'\r'}
-    if [ "$a" = "-" ] || [ "$d" = "-" ]; then over=1; else lines=$((lines + a + d)); fi
-    [ "$f" != "$file" ] || touched=1
-  done <<<"$numstat"
-
-  skip=0 why=""
-  if [ "$nopen" -ne 1 ]; then why="$nopen findings open"
-  elif [ "$risk3" -eq 1 ]; then why="risk 3 or unscored"
-  elif [ "$covered" -ne 1 ]; then why="--covered not given"
-  elif [ "$over" -eq 1 ]; then why="binary file in the fix"
-  elif [ "$lines" -gt 3 ]; then why="$lines changed lines"
-  elif [ "$touched" -ne 1 ]; then why="the fix does not touch $file"
-  else skip=1
-  fi
-  suite_why=""
-  if [ "$skip" -eq 1 ]; then
-    suite_dir=$(jq -r '.reviewCheck.cwd // empty' "$state" | tr -d '\r')
-    require_step_file "$state"
-    suite_why=$(suite_gap "$state" "$first" "$head_sha" "$suite_dir")
-    if [ -n "$suite_why" ]; then skip=0 why="suite $suite_why"; fi
-  fi
-
   pkg=$(bash "$here/review-package" "$plan" "$fix_base_sha" "$head_sha") || { printf '%s\n' "$pkg" >&2; exit 2; }
   diff_file=$(printf '%s\n' "$pkg" | sed -n -E '/^wrote /{s/^wrote (.*): [0-9]+ commit\(s\), [0-9]+ bytes$/\1/;p;q;}')
 
   prompt=$ws/task-$first-rereview-$new_round-prompt.md
-  if [ "$skip" -eq 0 ]; then
-    tpl=$here/../reference/prompts/re-review-prompt.md
-    [ -f "$tpl" ] || { echo "task-step: missing template $tpl" >&2; exit 2; }
-    printf '%s\n\nThe fix message holds each finding'"'"'s detail: %s\n' "$bullets" "$fix" > "$tmp/findings"
-    judge_report=$ws/task-$first-rereview-$new_round-report.md
-    RR_BRIEF=$ws/task-$first-brief.md RR_REPORT=$ws/task-$first-report.md RR_JUDGE_REPORT=$judge_report \
-      RR_FIX_BASE=$fix_base_sha RR_HEAD=$head_sha RR_DIFF=$diff_file rr_render "$tpl" "$tmp/findings" > "$tmp/prompt"
-    if grep -qE '\[(BRIEF_FILE|FINDINGS|IMPLEMENTER_REPORT_FILE|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$tmp/prompt"; then
-      echo "task-step: $tpl holds a placeholder rereview does not fill" >&2
-      exit 2
-    fi
-    rm -f "$judge_report"
-    cp "$tmp/prompt" "$prompt"
+  tpl=$here/../reference/prompts/re-review-prompt.md
+  [ -f "$tpl" ] || { echo "task-step: missing template $tpl" >&2; exit 2; }
+  printf '%s\n\nThe fix message holds each finding'"'"'s detail: %s\n' "$bullets" "$fix" > "$tmp/findings"
+  judge_report=$ws/task-$first-rereview-$new_round-report.md
+  RR_BRIEF=$ws/task-$first-brief.md RR_REPORT=$ws/task-$first-report.md RR_JUDGE_REPORT=$judge_report \
+    RR_FIX_BASE=$fix_base_sha RR_HEAD=$head_sha RR_DIFF=$diff_file rr_render "$tpl" "$tmp/findings" > "$tmp/prompt"
+  if grep -qE '\[(BRIEF_FILE|FINDINGS|IMPLEMENTER_REPORT_FILE|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$tmp/prompt"; then
+    echo "task-step: $tpl holds a placeholder rereview does not fill" >&2
+    exit 2
   fi
+  rm -f "$judge_report"
+  cp "$tmp/prompt" "$prompt"
 
   check_dir=$(jq -r '.reviewCheck.cwd // empty' "$state" | tr -d '\r')
   [ -n "$check_dir" ] || check_dir=$(git rev-parse --show-toplevel | tr -d '\r')
@@ -485,14 +425,8 @@ cmd_rereview() (
     "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
   drop_base_cache "$state" "$first" "$old_base"
 
-  if [ "$skip" -eq 1 ]; then
-    printf 'task %s: re-review round %s: packaged %s..%s, skipped\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}"
-    printf 're-review: skipped (%s changed lines, 1 finding, %s)\n' "$lines" "$file"
-  else
-    printf 'task %s: re-review round %s: packaged %s..%s, prompt written (not skipped: %s)\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}" "$why"
-    printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$prompt"
-    [ -z "$suite_why" ] || printf 're-review: not skipped (suite %s)\n' "$suite_why"
-  fi
+  printf 'task %s: re-review round %s: packaged %s..%s, prompt written\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}"
+  printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$prompt"
   printf 'state: base %s review-head %s round %s t0 %s\n' \
     "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "${head_sha:0:7}" "$new_round" "$now"
   plan_budget_line "$here" task-step:rereview "$src" "$(dforge_ledger_dir "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")/progress.md" || true
