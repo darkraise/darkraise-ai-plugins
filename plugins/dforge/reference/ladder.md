@@ -39,7 +39,7 @@ Let `reducible = files + spec + coupling`.
 
 **If `reducible >= 6`, or if `spec = 3`, the task must be split or re-designed.
 Do not assign a larger model.** That is the gate on a Claude plan, whose code
-tasks carry their tests and interfaces but not their implementation and so
+tasks carry their test contracts and interfaces but not their implementation and so
 score 2 on spec completeness.
 
 A `Host: codex` plan keeps `reducible >= 4` as its gate:
