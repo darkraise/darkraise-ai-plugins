@@ -355,7 +355,7 @@ a8() {
   check "A8: light prints no security line when its clause does not match" "$rc:$(grep -c 'security' <<<"$out")" "0:0"
   check "A8: and still skips the other lenses for the depth" "$(grep -c '^lens-skipped .* reason=depth$' <<<"$out")" "3"
   LENS_SCRIPT="$copy/scripts/lens-route" lr docs/dforge/plans/p8f.md --final "$base" "$head"
-  check "A8: full is unchanged without a matching security lens" "$(grep -c '^lens ' <<<"$out")" "3"
+  check "A8: full without a matching security lens prints the other three" "$(grep -c '^lens ' <<<"$out")" "3"
 }
 
 a10() {

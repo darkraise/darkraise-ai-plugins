@@ -369,26 +369,20 @@ rr_case() {
   post=$(ls "$WS" | sort)
   newp=$(comm -13 <(printf '%s\n' "$pre") <(printf '%s\n' "$post") | grep -i 'prompt' | head -n 1)
   skipline=$(grep '^re-review: skipped' <<<"$out")
-  if [ "$want" = skip ]; then
-    check "$name: exit 0" "$rc" "0"
-    matches "$name: prints the skip line" "$skipline" '^re-review: skipped \([0-9]+ changed lines, 1 finding, app\.txt\)$'
-    check "$name: writes no prompt" "${newp:-none}" "none"
-  else
-    check "$name: exit 0" "$rc" "0"
-    check "$name: no skip line" "${skipline:-none}" "none"
-    check "$name: writes a re-review prompt" "$([ -n "$newp" ] && echo yes || echo no)" "yes"
-    has "$name: names dforge:judge-sonnet-high" "$out" "dforge:judge-sonnet-high"
-  fi
+  check "$name: exit 0" "$rc" "0"
+  check "$name: no skip line" "${skipline:-none}" "none"
+  check "$name: writes a re-review prompt" "$([ -n "$newp" ] && echo yes || echo no)" "yes"
+  has "$name: names dforge:judge-sonnet-high" "$out" "dforge:judge-sonnet-high"
 }
 
 a5() {
   rr_setup rr5
-  rr_case "A5: one line in the finding's file, covered" 1 "" '- app.txt: one' app.txt:add1 -- prompt
-  rr_case "A5: three changed lines is the limit" 1 "" '- app.txt: one' app.txt:add3 -- prompt
-  rr_case "A5: three changed lines across the finding's file and a test file" 1 "" '- app.txt: one' app.txt:add1 test.txt:add2 -- prompt
-  rr_case "A5: four changed lines are over the limit" 1 "" '- app.txt: one' app.txt:add4 -- prompt
-  rr_case "A5: test-file lines count toward the limit" 1 "" '- app.txt: one' app.txt:add1 test.txt:add3 -- prompt
-  rr_case "A5: a replaced line counts as two changed lines, four over three" 1 "" '- app.txt: one' app.txt:mod app.txt:add2 -- prompt
+  rr_case "A5: one line in the finding's file prompts" 1 "" '- app.txt: one' app.txt:add1 -- prompt
+  rr_case "A5: three changed lines prompt" 1 "" '- app.txt: one' app.txt:add3 -- prompt
+  rr_case "A5: three lines across the finding's file and a test file prompt" 1 "" '- app.txt: one' app.txt:add1 test.txt:add2 -- prompt
+  rr_case "A5: four changed lines prompt" 1 "" '- app.txt: one' app.txt:add4 -- prompt
+  rr_case "A5: one finding-file line and three test-file lines prompt" 1 "" '- app.txt: one' app.txt:add1 test.txt:add3 -- prompt
+  rr_case "A5: a replaced line and two added lines prompt" 1 "" '- app.txt: one' app.txt:mod app.txt:add2 -- prompt
   rr_case "A5: without --covered" 1 "" '- app.txt: one' app.txt:add1 -- prompt
   rr_case "A5: a risk-3 task" 2 "" '- app.txt: one' app.txt:add1 -- prompt
 }
