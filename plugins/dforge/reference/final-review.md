@@ -281,17 +281,24 @@ your own: QA commits on this branch.
    You are a specialist reviewer. Read the lens at <criteria path>: its
    criteria are defect patterns, not a rubric, so do not score them. Review
    the branch diff in <package path> against the spec <spec path> and the
-   plan <plan path>. Write your full report to
+   plan <plan path>. Start from the diff: open a repository file only for
+   a range a hunk names or for a question that fits one sentence. Write
+   your full report to
    <workspace>/lens-<id>-report.md,
    write nothing else, and reply in at most 10 lines: the counts by
    severity and the report path. The report opens with `## Verdict` holding
    `findings: <c> Critical, <i> Important, <m> Minor`, then lists each hit
    under `## Findings`, most severe first, as
    `- [Critical|Important|Minor] <file>:<line> — [lens:<id>] <one-liner>`
-   followed by at most three lines indented by two spaces: what fails and
-   the fix. Report at most ten
+   followed by at most four lines indented by two spaces: first
+   `Evidence: <the input, state or command that reaches the defect and its
+   wrong result, or a quoted spec, plan or brief line it breaks, with its
+   location>`, then what fails and the fix. A finding without an
+   `Evidence:` line is not reported. Report at most ten
    findings. [Report Critical and Important findings only; leave Minor ones
-   out.] With none, leave Findings empty.
+   out.] With none, leave Findings empty. The report ends with `## Opened`:
+   one `- <path> — <the question>` line per repository file opened
+   outside the diff.
    ```
 
    Then run `scripts/review-route PLAN_FILE --final` and dispatch
@@ -405,9 +412,15 @@ whose Step 1b runs the dforge:ui-ux Prove phase once and keeps the branch
 when the check still fails; do not run the Prove phase here.
 
 The fix pass writes `<workspace>/final-fix-report.md`: what changed per
-finding, the covering tests, the command and its output. With one list the
-fixer first checks each finding against the code under
-dforge:receiving-code-review, fixes the real ones, and records each one
+finding, the covering tests, the command and its output. With one list and with two,
+the fixer first reproduces each finding before fixing it: it runs the input
+or command the finding's `Evidence:` line names at the review HEAD, or, for a
+quoted-line finding, shows the quoted line beside the code or text that
+breaks it. A finding whose run contradicts it is recorded as
+`REJECTED: <finding> — not reproduced: <what was run and its result>`.
+`[qa]`, `[suite]` and `[ci]` findings and carried gaps are exempt from the
+reproduction. The fixer then checks each remaining finding against the code
+under dforge:receiving-code-review, fixes the real ones, and records each one
 it rejects under `REJECTED: <finding>` with its evidence. The fixer skips a
 finding whose one-liner begins `deferred: test-simplifier — ` and lists it
 under `DEFERRED: <finding>`; the session leaves each `DEFERRED:` finding out
@@ -424,9 +437,8 @@ commits too: the final reviewers never saw them. When no confirmed finding
 needs a fix wave but QA committed tests, still run that one scoped re-review
 over the same range, with `<workspace>/acceptance-report.md` as
 `[IMPLEMENTER_REPORT_FILE]`.
-Send any residual findings — `NOT ADDRESSED`, and `REJECTION DISPUTED` in the
-one-list case — to the ruling seat as `final-residual` items and carry out its
-verdicts. The scoped re-review is a Claude seat that wrote none of the code, so
+Send any residual findings — `NOT ADDRESSED` and `REJECTION DISPUTED` — to the
+ruling seat as `final-residual` items and carry out its verdicts. The scoped re-review is a Claude seat that wrote none of the code, so
 a list from an external reviewer alone still gets an independent reader.
 
 **Acceptance tests.** The fixer never weakens a test whose name starts with

@@ -48,6 +48,11 @@ Subagent ([JUDGE]):
     `Task N:` or `header:`, and say what is wrong, why it matters for
     execution, and the fix.
 
+    Each finding cites its evidence: the plan or spec line it concerns,
+    quoted, or the command that shows the defect. A finding without
+    evidence is not reported. The plan is the diff: open code only to check
+    a claim a task makes about it.
+
     ## Output Format
 
     Write your full report to [REPORT_FILE] and write nothing else: it is
@@ -60,11 +65,17 @@ Subagent ([JUDGE]):
 
         ## Findings
         - [Critical|Important|Minor] <file>:<line> — <one-liner>
+          Evidence: <"quoted plan or spec line" (location) | command and its result>
+
+        ## Opened
+        - <path> — <the question>
 
     `<file>:<line>` is the plan file and the line the finding is about; the
     one-liner begins `Task N:` or `header:` and carries the issue, why it
-    matters for execution, and the fix. Detail goes on lines indented by two
-    spaces below its finding. Leave Findings empty when there are none.
+    matters for execution, and the fix. Its `Evidence:` line comes first
+    among the detail lines indented by two spaces below it. Leave Findings
+    empty when there are none. Under `## Opened`, one line per code file
+    opened to check a task's claim.
 
     ## Criteria
 
@@ -171,6 +182,11 @@ Subagent ([JUDGE]):
     implementation body is not a finding, while a missing or stub test is. On
     a `Host: codex` plan every code step carries its complete code.
 
+    Each finding cites its evidence: the plan or spec line it concerns,
+    quoted, or the command that shows the defect. A finding without
+    evidence is not reported. The plan is the diff: open code only to check
+    a claim a task makes about it.
+
     You cannot run commands or dispatch subagents, and you write only the report file.
 
     ## Output Format
@@ -189,11 +205,17 @@ Subagent ([JUDGE]):
 
         ## Findings
         - [Critical|Important|Minor] <file>:<line> — <one-liner>
+          Evidence: <"quoted plan or spec line" (location) | command and its result>
+
+        ## Opened
+        - <path> — <the question>
 
     `<file>:<line>` is the plan file and the line the finding is about; the
     one-liner begins `Task N:` or `header:` and carries the issue, why it
-    matters for execution, and the fix. Detail goes on lines indented by two
-    spaces below its finding. Leave Findings empty when there are none.
+    matters for execution, and the fix. Its `Evidence:` line comes first
+    among the detail lines indented by two spaces below it. Leave Findings
+    empty when there are none. Under `## Opened`, one line per code file
+    opened to check a task's claim.
 
     Write one Prior findings line for every Critical or Important finding of
     the last round, and repeat each NOT ADDRESSED one under Findings at its

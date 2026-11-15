@@ -103,9 +103,10 @@ Subagent (dforge:judge-sonnet-high; dforge:judge-opus for a subtle concurrency f
     Write one Finding verdicts line for each finding in The Findings Under
     Verification, in order. "Attempted" is not addressed: the specific
     defect must no longer exist. Use the rejection form for a finding the
-    fix report lists under `REJECTED:` (a final review with one findings
-    list), and uphold only when the evidence shows the finding is wrong,
-    not merely unfixed.
+    fix report lists under `REJECTED:` (a final review), and uphold only
+    when the evidence shows the finding is wrong, not merely unfixed. A
+    `not reproduced` rejection is upheld when the fix report shows the run
+    and its result contradicts the finding.
     An upheld rejection is closed; a disputed one is open.
 
     Under Findings, list every finding still open — each NOT ADDRESSED one

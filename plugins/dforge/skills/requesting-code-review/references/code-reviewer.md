@@ -28,9 +28,11 @@ Subagent (dforge:judge-opus):
 
     ## Read-Only Review
 
-    Your review is read-only and you have no shell: read the diff file and
-    the repository files it touches, and change nothing in the repository:
-    your one write is the report file.
+    Your review is read-only and you have no shell: read the diff file
+    once; open a repository file only for a range a hunk names or for a
+    question that fits one sentence; grep for the named symbol rather than
+    crawling. Change nothing in the repository: your one write is the
+    report file.
 
     ## You Do Not Dispatch Subagents
 
@@ -40,6 +42,18 @@ Subagent (dforge:judge-opus):
     reviewer you spawn duplicates one of them at full cost, and its
     verdict counts for nothing. If the diff feels too large for one
     pass, review it in passes yourself and say so in your report.
+
+    ## Evidence and Diff First
+
+    Report a finding only with evidence: the input, state or command that
+    reaches the defect and the wrong result it gives, or a quoted spec,
+    plan or brief line the change breaks, with its location. A finding you
+    cannot back that way is not reported. Style preferences are not
+    findings.
+
+    Start from the diff. Each repository file you open outside it answers
+    a question you can state in one sentence, and the report lists it under
+    `## Opened`.
 
     ## What to Check
 
@@ -100,6 +114,7 @@ Subagent (dforge:judge-opus):
 
         ## Findings
         - [Critical|Important|Minor] <file>:<line> — <one-liner>
+          Evidence: <input, state or command and its wrong result | "quoted line" (location)>
 
         ## Recommendations
         <improvements for code quality, architecture, or process>
@@ -107,13 +122,19 @@ Subagent (dforge:judge-opus):
         ## Assessment
         <one or two sentences of technical assessment>
 
+        ## Opened
+        - <path> — <the question>
+
     One line per finding, most severe first: Critical for bugs, security
     issues, data loss risks and broken functionality; Important for
     architecture problems, missing features, poor error handling and test
-    gaps; Minor for code style, optimization and documentation polish.
-    `<line>` is 0 when no single line applies. Below each finding, on lines
-    indented by two spaces: what is wrong, why it matters, and how to fix
-    it when that is not obvious. Leave a section with nothing in it empty.
+    gaps; Minor for optimisation and documentation defects. `<line>` is 0
+    when no single line applies. Below each finding, on lines indented by
+    two spaces: its `Evidence:` line, then what is wrong, why it matters,
+    and how to fix it when that is not obvious. A finding without an
+    `Evidence:` line is not reported. Under `## Opened`, one line per
+    repository file opened outside the diff. Leave a section with nothing
+    in it empty.
 
     ## Critical Rules
 
@@ -159,12 +180,15 @@ ready to merge: with fixes
 
 ## Findings
 - [Important] index-conversations:1 — Missing help text in CLI wrapper
+  Evidence: `index-conversations --help` prints "unknown option: --help" and exits 2.
   No --help flag, so users won't discover --concurrency.
   Fix: add a --help case with usage examples.
 - [Important] search.ts:25 — Date validation missing
+  Evidence: `search --since 2024-13-45` returns 0 results and exit 0, where the plan says "reject an invalid date with an error" (plan.md:41).
   Invalid dates silently return no results.
   Fix: validate the ISO format and throw an error with an example.
 - [Minor] indexer.ts:130 — No progress indicator
+  Evidence: "report progress as X of Y for runs over 100 conversations" (plan.md:58); indexing 500 conversations prints nothing until it ends.
   No "X of Y" counter for long operations, so users don't know how long to wait.
 
 ## Recommendations
@@ -173,4 +197,7 @@ ready to merge: with fixes
 
 ## Assessment
 Core implementation is solid with good architecture and tests. The Important findings (help text, date validation) are easily fixed and don't affect core functionality.
+
+## Opened
+- db.ts — does the migration run before the first query?
 ```
