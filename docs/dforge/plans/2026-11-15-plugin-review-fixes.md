@@ -20,6 +20,8 @@
 
 **CI:** `.github/workflows/validate.yml` — platforms: uutils (ubuntu-latest), Windows Git Bash — local: `node scripts/test-all.mjs`; `node scripts/validate-repository.mjs`; `claude plugin validate plugins/dforge`; `claude plugin test plugins/dforge` — uncovered: uutils (ubuntu-latest), Windows Git Bash
 
+**Plan review:** 2026-11-15 — dforge:judge-opus — executability 14 / coherence 17 / coverage 17 / assumptions 15 (round 2)
+
 ## Global Constraints
 
 - Paths are repository-relative; `plugins/dforge/` is the plugin root. The work edits the unreleased source under `plugins/dforge`; the session itself runs the installed 4.17.1 from the plugin cache.
@@ -40,24 +42,25 @@
 
 ## Contracts
 
-- **C1 session state file** (Task 1 writes; Tasks 2, 3, 8 read). `~/.claude/dforge/sessions/state/<sid>.json`, where `~` is the cockpit's home as for `sessions/cockpit/<id>` and `<sid>` is the session id with every character outside `A-Za-z0-9` replaced by `-` (the turn stamp's name, `scripts/turn-start.sh`). Written atomically (temporary file, then rename) at session start, at every `prompt.submit` (after the turn stamp exists), at every main-loop `turn.complete`, whenever a launch starts or ends, and when the model changes:
+- **C1 session state file** (Task 1 writes; Tasks 2, 3, 8 read). `~/.claude/dforge/sessions/state/<sid>.json`, where `~` is the cockpit's home as for `sessions/cockpit/<id>` and `<sid>` is the session id with every character outside `A-Za-z0-9` replaced by `-` (the turn stamp's name, `scripts/turn-start.sh`). Written with one `$.fs.write` of the final path (a mod has no rename; a reader that meets a half-written file sees `unparseable` and falls back, C2) at session start, at every `prompt.submit` (after the turn stamp exists), at every main-loop `turn.complete`, whenever a launch starts or ends, and when the model changes:
   `{"session": "<id>", "updated": <epoch ms>, "window": <tokens or null>, "model": "<id or null>", "partial": <bool>, "launches": [{"id": "<task id>", "kind": "shell|agent|monitor", "what": "<description or command, 80 chars>", "command": "<first line of the command, or empty>", "startedAt": <epoch ms>, "outputFile": "<path or empty>", "service": <bool>, "timer": <bool>}]}`.
   `partial` is true when the session started a launch form the cockpit does not track (a Monitor, a resumed agent, an agent that reported with work of its own still running); `launches` lists only launches still running.
 - **C2 `scripts/lib/session-state.sh`** (Task 2). Sourced; functions only; needs jq.
   `ss_file SID` prints the C1 path. `ss_window SID` prints the window and exits 0 when the file parses, `.session` equals SID and `.window` is a positive integer; `ss_model SID` likewise for `.model`. `ss_launches SID` prints C3 lines for `.launches` and exits 0 only when, in addition, `.partial` is false and `.updated` is not older than the turn stamp's modification time (no turn stamp: stale). Each returns 1 otherwise, after appending one line `<turn stamp epoch>\t<sid>\t<reader>\t<reason>` to `<state>/session-state.log` (`<state>` = `scripts/dforge-path state` in the working directory's checkout), where `<reader>` is `window`, `model` or `launches` and `<reason>` is `missing`, `unparseable`, `session mismatch`, `stale` or `partial`; a line already in the log is not appended again. `ss_prune` deletes state files older than 30 days.
 - **C3 in-flight line** (Task 3; read by Tasks 5, 7, 12). `inflight_scan` and `inflight_list` print six tab-separated fields: `<agent|shell|monitor> <task id> <started HH:MM> <idle Nm|idle -> <what> <work|service|timer>`. `inflight_list TRANSCRIPT SINCE SID` prints `ss_launches SID` when it succeeds, else `inflight_scan TRANSCRIPT SINCE` (same exit contract); `inflight_source SID` prints `session file` or `transcript`, the choice `inflight_list` makes, without logging. `inflight_text` keeps printing the first five fields and appends ` (service)` or ` (timer)` for those roles.
-- **C4 `plugins/dforge/config/services.json`** (Task 3; read by Task 4). `{"services": ["<pattern>", ...], "timer": "<pattern>"}`. Each pattern is valid in both JavaScript `RegExp` and jq (Oniguruma); the shell side evaluates them with jq, never `grep -E`. A command is a service when some part of its first line matches a services pattern, the parts being the line split on `&&`, `||` and `;`, each trimmed, with leading `NAME=value ` assignments removed (today's `isServiceCommand`). A command is a timer when its trimmed first line matches `timer`: `^sleep\s+[0-9]+(\.[0-9]+)?[smhd]?$`. `plugins/dforge/tests/fixtures/service-commands.json` is `[{"command": "<text>", "role": "service|timer|work"}, ...]`, asserted through both implementations.
-- **C5 `plan_final_review_state LEDGER [DIR]`** (Task 6, `scripts/lib/plan.sh`; read by Task 7). Runs git in DIR (default the working directory) and reads the ledger's last `Final review: clean (commits <base>..<head>)` line and prints one of: `none` (no such line), `current` (HEAD equals `<head>`, or every commit in `<head>..HEAD` touches only files under the docs root `dforge_docs_root` names, or HEAD is not on the branch the line was written on and `<head>` is an ancestor of HEAD, as on a base branch after a merge), `stale <head>` (`<head>` is an ancestor of HEAD and a commit after it touches a file outside the docs root), `rewritten <head>` (`<head>` is not an ancestor of HEAD, or is not a commit). A clean line without a `(commits …)` clause prints `current`.
+- **C4 `plugins/dforge/config/services.json`** (Task 3; read by Task 4). `{"services": ["<pattern>", ...], "timer": "<pattern>"}`. Each pattern is valid in both JavaScript `RegExp` and jq (Oniguruma); the shell side evaluates them with jq, never `grep -E`. A command is a service when some part of its first line matches a services pattern, the parts being the line split on `&&`, `||` and `;`, each trimmed, with leading `NAME=value ` assignments removed (today's `isServiceCommand`). A command is a timer when its trimmed first line matches `timer`: `^sleep\s+[0-9]+(\.[0-9]+)?[smhd]?$`. `plugins/dforge/tests/fixtures/service-commands.json` is `[{"command": "<text>", "role": "service|timer|work"}, ...]`, asserted through both implementations. A mod and its tests load only code files, so `plugins/dforge/config/services.mjs` and `plugins/dforge/tests/fixtures/service-commands.mjs` default-export the same values as their JSON files (Task 4). Each is generated from its JSON file by the command `tests/repository-layout.test.mjs` prints, and that test asserts the two are equal. Edit the JSON, never the mirror.
+- **C5 `plan_final_review_state LEDGER [DIR]`** (Task 6, `scripts/lib/plan.sh`; read by Task 7). Runs git in DIR (default the working directory) and reads the ledger's last `Final review: clean (commits <base>..<head>)` line and prints one of: `none` (no such line), `current` (HEAD equals `<head>`; or every commit in `<head>..HEAD` touches only paths under the docs root; or `<head>` is an ancestor of HEAD but not on HEAD's first-parent chain, `git rev-list --first-parent HEAD`, which is a base branch that merged the plan's branch), `stale <head>` (`<head>` is on HEAD's first-parent chain and a commit after it touches a path outside the docs root), `rewritten <head>` (`<head>` is not an ancestor of HEAD, or is not a commit). A path is under the docs root when `<toplevel>/<path>` lies inside `dforge_docs_root DIR`; when `dforge_docs_store DIR` is not `local` (darkmem documents), no committed path is. A clean line without a `(commits …)` clause prints `current`. The ledger records no branch, so the first-parent test is the only base-branch rule.
 - **C6 fast-mode grammar** (Task 9; read by Tasks 10, 11). `Process: fast — <why>` is request-scoped: on only while it sits after the current turn stamp. `Process: fast (session) — <why>` is session-scoped: on until a later `Process:` line names another path. `fast_mode_on TRANSCRIPT [LAST_MESSAGE]` (status 0 = on) reads the last message first, then the main transcript backwards in chunks; it skips an expired plain `fast` line and stops at the first `fast (session)` line (on) or non-fast `Process:` line (off). With no turn stamp, plain `fast` counts as on. The session id is the transcript's basename without `.jsonl`; the verdict for the part before the stamp is cached in `<turn stamp>.fast` (`on` or `off`), so the backwards scan runs at most once per turn. `plugins/dforge/tests/fixtures/fast-mode/cases.json` is `[{"name": "<case>", "before": [<assistant texts>], "after": [<assistant texts>] or null, "on": <bool>}]`, `before` and `after` sitting on either side of the turn stamp (a person's prompt in the cockpit) and `after: null` meaning no stamp,, asserted through `fast_mode_on` and the cockpit's parser.
-- **C7 amendments location** (Task 14; read by Tasks 15-17). `plan_amendments_file PLAN` prints `<dforge_ledger_dir <slug>>/amendments.md` when it is non-empty. `plan_amendments_ready PLAN`, run in the caller's own shell (never inside `$(…)`), first moves a `<dforge_workspace <slug>>/amendments.md` to the ledger directory when the ledger-directory file is missing, appending `Ruling: amendments moved beside the ledger — none` to the ledger when the ledger exists; then exits 2 with `<script>: the ledger cites amendment A<k>, which <amendments path> lacks` when a ledger line contains `Ruling: amendment A<k>` and the file has no `## A<k> ` heading.
-- **C8 `scripts/qa-files`** (Task 13). `qa-files begin WORKSPACE` writes `WORKSPACE/qa-status-before.txt` from `git status --porcelain=v1 -z --untracked-files=all` and truncates `WORKSPACE/qa-touched.txt`. `qa-files clean WORKSPACE` restores (tracked, `git restore --staged --worktree --`) or deletes (untracked file; a directory only once empty) each path that is listed in `qa-touched.txt` and new relative to the snapshot, never a path `scripts/auto-run carried` prints, and prints `qa-files: removed <path>` per path it cleaned and `qa-files: left <path>` per other new dirty path. Exit 0; 2 usage or a missing snapshot. No manifest: nothing is cleaned and every new path is printed as left.
-- **C9 `next-step --kept PLAN_FILE`** (Task 19). Prints a `## Next session` block whose Status names the plan and says its branch is kept unintegrated, and whose Next names the branch, the worktree and the finish choices still open (`merge`, `pr`, `discard`); prints no "is complete", launches nothing, reads no register or roadmap. `--complete`, `--kept` and `--adhoc` delete `.dforge/sdd/finish.json` (the no-plan finish record) after writing the block.
+- **C7 amendments location** (Task 14; read by Tasks 15-17). `plan_amendments_file PLAN` prints `<dforge_ledger_dir <slug>>/amendments.md` only when that file is non-empty, and nothing otherwise: readers take no output as no amendments, and it never creates the file or its directory. A writer (`plan-amend`) computes the same path itself from `dforge_ledger_dir <slug>`. `plan_amendments_ready PLAN`, run in the caller's own shell (never inside `$(…)`), first moves a `<dforge_workspace <slug>>/amendments.md` to the ledger directory when the ledger-directory file is missing, appending `Ruling: amendments moved beside the ledger — none` to the ledger when the ledger exists; then exits 2 with `<script>: the ledger cites amendment A<k>, which <amendments path> lacks` when a ledger line contains `Ruling: amendment A<k>` and the file has no `## A<k> ` heading.
+- **C8 `scripts/qa-files`** (Task 13). `qa-files begin WORKSPACE` writes `WORKSPACE/qa-status-before.txt` from `git status --porcelain=v1 -z --untracked-files=all` and truncates `WORKSPACE/qa-touched.txt`. `qa-files clean WORKSPACE` restores (tracked, `git restore --staged --worktree --`) or deletes (untracked file; a directory only once empty) each path that is listed in `qa-touched.txt` and new relative to the snapshot, never a path `scripts/auto-run carried` prints, and prints `qa-files: removed <path>` per file it restored or deleted (a directory removed once empty prints no line) and `qa-files: left <path>` per other new dirty path, a carried one included. Exit 0; 2 usage or a missing snapshot. No manifest: nothing is cleaned and every new path is printed as left.
+- **C9 `next-step --kept PLAN_FILE`** (Task 19). Prints a `## Next session` block whose Status names the plan and says its branch is kept unintegrated, and whose Next names the branch, the worktree and the finish choices still open, ending `run dforge:finishing-a-development-branch when you choose merge, pr or discard.`; prints no "is complete", launches nothing, reads no register or roadmap. `--complete`, `--kept` and `--adhoc` delete `.dforge/sdd/finish.json` (the no-plan finish record) after writing the block.
 - **C10 `scripts/with-timeout SECONDS CMD...`** (Task 23). Runs CMD under `dforge_timeout`'s command with `-k 10`, exiting with its status (124 on the bound); exits 125 with `with-timeout: no timeout command (timeout or gtimeout) on PATH` when there is none; 2 on usage.
 - **C11 QA reply contract** (Task 26). Acceptance QA's reply ends with `Report: <absolute path>`; `impl-stop-gate` blocks a stop whose reply has that line when the file is missing or its first non-empty line is not `## Verdict`; a reply with no `Report:` line passes.
 - **C12 `dforge-config workflow [--host claude|codex]`** (Task 27). With `--host codex` the `autoRun=on` exclusion of `inertWhen` is not applied.
 - **C13 cockpit ledger states** (Task 29; read by Task 30). `parseLedger` task states gain `waiting` (with `question: string`, the text after `waiting — `) and `deferred` (a `complete (deferred by the auto run)` line). `isClean` is read only inside the parenthesised clause before ` — `.
-- **C14 saved defaults** (Task 32). `~/.claude/dforge/sessions/saved-defaults/<sid>.json`: `{"session": "<id>", "pid": <cockpit process id>, "launchModel": "<model the switch sets>", "saved": {"model": ..., "modelSettings": ..., "effortLevel": ...}}`, a missing key stored as `null`.
+- **C14 saved defaults** (Task 32; liveness from C16). `~/.claude/dforge/sessions/saved-defaults/<sid>.json`, with `~` and `<sid>` as for the heartbeat `sessions/cockpit/<sid>`: `{"session": "<id>", "launchModel": "<model the switch sets>", "saved": {"model": ..., "modelSettings": ..., "effortLevel": ...}}`, a missing key stored as `null`, in that key order. Written with `$.fs.write` before `/model`, never over an existing file. Deleted only by `node scripts/lib/dforge-config.mjs drop-snapshot <sid>` (exit 0, a missing file included; 2 on usage), since a mod cannot delete a file.
 - **C15 settings problem line** (Task 34). `dforge: <config path> is not a JSON object; every setting reads its default and notifyOn reads none until it parses` — printed by `dforge-config workflow` in place of the settings line, and shown by the cockpit.
+- **C16 cockpit liveness** (Task 30; read by Task 32). `isSessionAlive($, sid)` in `register.tsx` is true when `<home>/.claude/dforge/sessions/cockpit/<sid with every character outside A-Za-z0-9 replaced by ->` holds epoch seconds no more than 180 before `$.clock.now()` (`AR_BEAT_SECONDS`, `scripts/lib/auto-run.sh:17`). This is the heartbeat `beat` writes each watchdog minute, and `<home>` is `HOME`, else `USERPROFILE`. A beat up to 180 s ahead reads as now. A missing, unreadable or non-numeric file, or a beat further ahead, is not alive. It starts no process.
 
 ## Assumptions (evidence)
 
@@ -67,7 +70,21 @@
 - New `*.test.sh` suites are found by `scripts/test-all.mjs` (`readdirSync` of `plugins/dforge/tests`) and need a `windowsSeconds` weight in `scripts/test-shards.mjs`, which `tests/test-shards.test.mjs` enforces.
 - The model table keeps session-budget.md's entries (`plugins/dforge/reference/session-budget.md:20`): 1,000,000 for Fable 5.1, Opus 5.5 and Sonnet 5.5, 200,000 for Haiku 4.5. Any other model id, Fable 5.2 included, takes its window from the session state file or reads `unknown`.
 - R5 choice: the cockpit tracks shells and agents it starts and marks the file `partial` for any other launch form, so the transcript scan stays the authority there; this avoids teaching the cockpit three transcript-only forms.
+- `scripts/auto-run` takes its session from `CLAUDE_CODE_SESSION_ID`, or `--session ID`, and overwrites any inherited `AR_SESSION` (`plugins/dforge/scripts/auto-run:38-44`), so Task 13's carried case names the session through `CLAUDE_CODE_SESSION_ID`.
+- Today's `fast_mode_on` reads the whole transcript in one forward `jq -rR` pass (`plugins/dforge/scripts/lib/fast-mode.sh:13-15`); Task 9's R9 case therefore measures the bytes `jq` reads, not the time taken.
+- Node sits in a PATH directory of its own on both CI platforms (`actions/setup-node@v5`, `.github/workflows/validate.yml:57-59` and `:129-131`) and locally (`/root/.nvm/versions/node/v24.18.0/bin/node`, `command -v node`, 2026-11-15), so Task 21's no-node cases drop that directory from PATH instead of linking tools into a bare one; where node shares a directory with git or jq they print `skip`. A temporary `PATH=…` prefix reaches `command -v` inside a bash function (checked 2026-11-15).
+- Task 23's fake PATH holds scripts that exec each tool by absolute path, never links: Git Bash's `ln -s` copies by default, and a copied `.exe` loses its DLL directory; uutils' multicall binary picks its tool from the name it runs under. `agy-locate` reaches its `--version` call once an `agy` is on PATH (`plugins/dforge/scripts/agy-locate:26-30`).
+- On CI's uutils `timeout`, `_darkmem_bounded` uses the watchdog, which returns 143 or 137 on an overrun rather than 124 (`plugins/dforge/scripts/lib/darkmem-hook.sh:23-50`); Task 21 accepts all three.
+- `run-review-panel` takes its bound from `PANEL_BOUND_SECONDS` and its runners from `PANEL_<ID>_RUNNER` (`plugins/dforge/scripts/run-review-panel:19-21`, `:68-77`); Git Bash has no `pgrep`, so Task 24's tree case skips there (`plugins/dforge/tests/review-panel.test.sh:13-14`).
+- The ledger records no branch (`plugins/dforge/scripts/task-step:581`), so C5 tells a base branch from the plan's branch by `git rev-list --first-parent HEAD` alone.
 - `stores.json` maps each primary checkout to `{documents, progress, project, mirror}` (`plugins/dforge/scripts/lib/darkmem-config.mjs:77-121`), which Task 21 reads with jq.
+- A Claude Code mod, and every file it or its tests import, loads only code files (`.ts`, `.tsx`, `.jsx`, `.js`, `.mjs`, `.cjs`, `.mts`, `.cts`) and imports only relative files and `claude-code`: there is no Node (`plugins/dforge/.claude-plugin/types/claude-code/index.d.ts:22-28`, engine-written for 2.1.325 and git-ignored; `plugins/dforge/config/schema.mjs:2-3`). A `claude plugin test` probe on 2026-11-15 confirmed it: a `.json` import fails ("is not named like code and was not loaded"), `node:fs` fails ("imports its own files by relative path and "claude-code", nothing else"), and a test's `./fixtures/x.mjs` import loads. So Tasks 4 and 10 read JSON through generated `.mjs` mirrors, which `tests/repository-layout.test.mjs` checks.
+- A mod has no process id and no signal API (`rg -n '\bpid\b'` over that `index.d.ts` finds nothing, 2026-11-15). Its `$.fs` offers only `read`, `write`, `list`, `exists`, `stat` and `ancestors` (`index.d.ts:7644-7678`), so it cannot rename or delete. Liveness therefore comes from the cockpit heartbeat (C16), the rule `ar_is_stale` applies (`plugins/dforge/scripts/lib/auto-run.sh:17`, `:128-157`), and deletion goes through `dforge-config.mjs drop-snapshot`.
+- The function-hook `tool.check` event carries no permission mode (`ToolCheckInput`, `index.d.ts:14794-14847`). Classic hook inputs do (`BaseHookInput.permission_mode`, `:881`): a 2026-11-15 probe showed `$.classic.UserPromptSubmit({ prompt, permission_mode: 'auto' })` delivers `'auto'` to `on('classic.UserPromptSubmit')`, so Task 31 reads the session's mode from classic events.
+- `cockpit.test.ts` harness rules, from 2026-11-15 probes:
+  - A test registers each event once: a second `on('fs.list')` beside `world`'s fails to load with "registered twice". A matcher-qualified registration (`{ path }`, or `{ argv: /re/ }`, since `process.run`'s argv is matched as a string) loads beside it and nests outside it ("first outermost", `index.d.ts:7296-7297`).
+  - A test hook that throws is skipped and the hooks beneath answer, so a seam that must fail a read answers `{ deny }`.
+  - A test's own `on('classic.<Event>')` is the bottom of that classic chain (`index.d.ts:17297-17299`).
 
 ## Task index
 
@@ -189,7 +206,7 @@ Expected: FAIL in `session state file` (no state file is written).
 
 - [ ] **Step 3: Implement**
 
-1. In `register.tsx`, add `writeSessionState($)`, beside `beat($)` (`$.fs.write` of `sessions/cockpit/<id>`, about `:2997-3003`): it builds C1 from the session id (sanitised as `beat` does), `Date`/clock milliseconds, the window `figures.context.window` from the last `$.session.usage()` reading (null when unknown), the engine or session model, the main-loop `shells` atom entries and the undone background `spawns`, and writes `<path>.tmp` then renames it (use the host's fs rename if it has one; otherwise a single `$.fs.write` of the final path). A write failure is swallowed.
+1. In `register.tsx`, add `writeSessionState($)`, beside `beat($)` (`$.fs.write` of `sessions/cockpit/<id>`, about `:2997-3003`): it builds C1 from the session id (sanitised as `beat` does), `Date`/clock milliseconds, the window `figures.context.window` from the last `$.session.usage()` reading (null when unknown), the engine or session model, the main-loop `shells` atom entries and the undone background `spawns`, and writes it with one `$.fs.write` of the final path (`$.fs` offers no rename). A write failure is swallowed.
 2. Call it at the end of the `session.start` handler, in `prompt.submit` (`:606`), in the main-loop branch of `turn.complete` (`:674`), after `trackShells` changes the `shells` atom (`:4126`), after `endShells` (`:4116`), after a spawn is added (`:522`) or marked done (`:733-756`), and when `turn.step` (`:663`) changes the engine model.
 3. A shell entry is `{id, kind: 'shell', what: description || command first line (80 chars), command: first line, startedAt, outputFile: '', service: isServiceCommand(command), timer: isTimerCommand(command)}`; an agent entry has `kind: 'agent'`, `what` its description, `command: ''`, `service: false`, `timer: false`.
 4. In `lib.ts`, export `isTimerCommand(command)`: true when the trimmed first line matches `^sleep\s+[0-9]+(\.[0-9]+)?[smhd]?$` (C4's timer pattern).
@@ -406,31 +423,71 @@ git commit -m "feat(dforge): tell services and timers from work"
 ### Task 4: Cockpit reads the shared service list
 
 **Files:**
+- Create: `plugins/dforge/config/services.mjs`
+- Create: `plugins/dforge/config/services.d.mts`
+- Create: `plugins/dforge/tests/fixtures/service-commands.mjs`
+- Create: `plugins/dforge/tests/fixtures/service-commands.d.mts`
 - Modify: `plugins/dforge/hooks/cockpit/lib.ts`
 - Modify: `plugins/dforge/hooks/cockpit/register.tsx`
+- Modify: `plugins/dforge/scripts/in-flight`
 - Test: `plugins/dforge/tests/cockpit.test.ts`
+- Test: `plugins/dforge/tests/in-flight.test.sh`
+- Test: `tests/repository-layout.test.mjs`
 
 **Interfaces:**
 - Consumes: C4.
-- Produces: none.
+- Produces: C4's module mirrors (`config/services.mjs`, `tests/fixtures/service-commands.mjs`).
 
 **Items:** 12, 37
-**Implementer:** dforge:impl-sonnet-high
-**Evaluation:** files 1 - spec 2 - coupling 1 - risk 1 = 5
+**Implementer:** dforge:impl-opus-high
+**Evaluation:** files 2 - spec 2 - coupling 1 - risk 1 = 6
 
-- [ ] **Step 1: Extend the test `plugins/dforge/tests/cockpit.test.ts::tells a service from a job that ends`**
+A Claude Code mod, and every file it or its tests import, loads only code files: `import ... from '../config/x.json'` fails with "is not named like code and was not loaded", and `import ... from 'node:fs'` fails with "a hooks module imports its own files by relative path and "claude-code", nothing else". So the cockpit reads C4 through generated `.mjs` mirrors of the two JSON files, the way it already imports `config/schema.mjs`, and a node test keeps each mirror equal to its JSON file. The JSON files stay the ones to edit; the shell side keeps reading them with jq.
 
-Replace its two loops with one over the shared fixture, and add a reconcile case beside `submits one reconcile prompt when a background ${holder} alone holds a bound run for 20 minutes`:
+- [ ] **Step 1: Write the failing tests**
+
+1. From the repository root, generate the fixture's mirror (the same command, naming `config/services.json`, generates the service list's mirror in Step 3):
+
+```bash
+node -e "const fs = require('node:fs'); for (const file of process.argv.slice(1)) fs.writeFileSync(file.slice(0, -5) + '.mjs', '// Generated from ' + file.split('/').pop() + ': edit that file, then run the command in tests/repository-layout.test.mjs.\nexport default ' + JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')), null, 2) + '\n')" plugins/dforge/tests/fixtures/service-commands.json
+```
+
+2. Create `plugins/dforge/tests/fixtures/service-commands.d.mts`:
+
+```ts
+// Types for service-commands.mjs, so cockpit.test.ts's import type-checks.
+declare const cases: readonly { command: string; role: 'service' | 'timer' | 'work' }[]
+export default cases
+```
+
+3. In `plugins/dforge/tests/cockpit.test.ts`, add `isTimerCommand,` after `isServiceCommand,` in the `../hooks/cockpit/lib` import, and add this line after the `../hooks/cockpit/svg` import:
+
+```ts
+import SERVICE_COMMANDS from './fixtures/service-commands.mjs'
+```
+
+4. Rewritten assertion (row 12 moves the list into the shared fixture): replace the body of `tells a service from a job that ends` (in `describe('now row')`), whose two literal loops become one over the fixture:
 
 ```ts
   test('tells a service from a job that ends', () => {
-    const cases = JSON.parse(readFileSync(new URL('./fixtures/service-commands.json', import.meta.url), 'utf8')) as { command: string; role: string }[]
-    for (const { command, role } of cases) {
+    expect(SERVICE_COMMANDS.length).toBeGreaterThan(25)
+    for (const { command, role } of SERVICE_COMMANDS) {
       expect([command, isServiceCommand(command)]).toEqual([command, role === 'service'])
       expect([command, isTimerCommand(command)]).toEqual([command, role === 'timer'])
     }
   })
+```
 
+5. Rewritten assertion (row 37 adds a sentence to the reconcile prompt): in `describe('auto run')`, replace `RECONCILE_PROMPT` with:
+
+```ts
+  const RECONCILE_PROMPT =
+    /^Background work has run 20 minutes since the last turn with no notification\. Run `bash "[^"]*\/scripts\/in-flight"`\. Stop with TaskStop each launch idle 30 minutes or more, and record a `Ruling:` line naming the task it served and that its result is void; leave the others running\. Never stop a bare `sleep` timer: it bounds a dispatch\. Then continue the run, and end the turn again if only waiting remains\.$/
+```
+
+6. In `describe('auto run')`, beside `submits one reconcile prompt when a background ${holder} alone holds a bound run for 20 minutes`:
+
+```ts
   test('a bare sleep timer alone never draws a reconcile prompt', async ($, on) => {
     const files = autoFiles({ pending: null })
     const bash = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'qa1' }, text: 'Running in the background' }) }
@@ -445,28 +502,63 @@ Replace its two loops with one over the shared fixture, and add a reconcile case
   })
 ```
 
-Add `isTimerCommand` to the `lib` import and `import { readFileSync } from 'node:fs'` at the top if the file lacks it (use the harness's own file reader if `node:fs` is unavailable under `claude plugin test`).
+7. Append to `plugins/dforge/tests/in-flight.test.sh`, after Task 3's part and before its summary lines. The idle report is `scripts/in-flight`'s listing, which the reconcile prompt sends the session to and whose closing text says to stop each launch with TaskStop:
+
+```bash
+# --- the idle report leaves a bare sleep timer running (row 37) ---
+# The "no transcript" part above removed the session record; in-flight needs it.
+jq -n --arg tp "$TP" '{session_id:"s-flight",transcript_path:$tp}' > "$HOME/.claude/dforge/sessions/by-id/$SID.json"
+TIMER_LINE='A launch marked (timer) is a bare sleep that bounds a dispatch: leave it running.'
+: > "$TP"
+bash_use toolu_t 'QA timer' 'sleep 1200'
+result toolu_t 'Command running in background with ID: t1. Output is being written to: /tmp/t1.output.'
+out=$(bash "$INFLIGHT")
+check "a timer is listed as a timer" "$(grep -c '^- shell t1 .* QA timer (timer)$' <<<"$out")" "1"
+check "the report says to leave a timer running" "$(grep -cxF "$TIMER_LINE" <<<"$out")" "1"
+: > "$TP"
+bash_use toolu_w 'Run the suite' 'npm test'
+result toolu_w 'Command running in background with ID: w1. Output is being written to: /tmp/w1.output.'
+out=$(bash "$INFLIGHT")
+check "no timer, no timer line" "$(grep -cxF "$TIMER_LINE" <<<"$out")" "0"
+```
+
+8. In `tests/repository-layout.test.mjs`, change the `node:url` import to `import { fileURLToPath, pathToFileURL } from 'node:url';` and add:
+
+```js
+test('the cockpit\'s module mirrors of dforge JSON files match them', async () => {
+  const sources = ['plugins/dforge/config/services.json', 'plugins/dforge/tests/fixtures/service-commands.json'];
+  const regenerate = `node -e "const fs = require('node:fs'); for (const file of process.argv.slice(1)) fs.writeFileSync(file.slice(0, -5) + '.mjs', '// Generated from ' + file.split('/').pop() + ': edit that file, then run the command in tests/repository-layout.test.mjs.\\nexport default ' + JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')), null, 2) + '\\n')" ${sources.join(' ')}`;
+  for (const rel of sources) {
+    const mirror = rel.slice(0, -'.json'.length) + '.mjs';
+    assert.ok(existsSync(resolve(root, mirror)), `${mirror} is missing; from the repository root run: ${regenerate}`);
+    const { default: value } = await import(pathToFileURL(resolve(root, mirror)).href);
+    assert.deepEqual(value, json(rel), `${mirror} differs from ${rel}; from the repository root run: ${regenerate}`);
+  }
+});
+```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `timeout 240 /root/.local/bin/claude plugin test plugins/dforge`
-Expected: FAIL on `a bare sleep timer alone never draws a reconcile prompt`.
+Run: `timeout 240 /root/.local/bin/claude plugin test plugins/dforge; timeout 300 bash plugins/dforge/tests/in-flight.test.sh; timeout 120 node --test tests/repository-layout.test.mjs`
+Expected: FAIL. The cockpit suite fails `a bare sleep timer alone never draws a reconcile prompt` (a reconcile prompt is sent at 21 minutes) and every test that matches `RECONCILE_PROMPT` (the sentence is missing); in-flight fails `the report says to leave a timer running`; the layout test fails with `plugins/dforge/config/services.mjs is missing`.
 
 - [ ] **Step 3: Implement**
 
-1. In `lib.ts`, replace the `SERVICES` literal with the patterns of `config/services.json` (import the JSON the way the cockpit already imports `config/schema.mjs`; `new RegExp(pattern)` each), and build `isTimerCommand` from its `timer` pattern.
-2. In `register.tsx`, `backgroundKey` (`:3074`) and `reconcileBackground` (`:3085`) leave out main-loop shells whose command is a timer or a service, so a timer or a service alone never starts the 20-minute reconcile; `isMainBackground` (`:2660`) keeps holding a timer as background work.
-3. `reconcilePrompt` (`:203`) gains: "Never stop a bare `sleep` timer: it bounds a dispatch."
+1. From the repository root, run the Step 1 command with `plugins/dforge/config/services.json` in place of the fixture path, which writes `config/services.mjs`. Add `config/services.d.mts` declaring its default export as `{ services: readonly string[]; timer: string }`, the way `config/schema.d.mts` types `schema.mjs`.
+2. In `lib.ts`, import the default export of `../../config/services.mjs` (as `config.ts:1` imports `../../config/schema.mjs`). Replace the `SERVICES` literal (`:1218-1227`) with that list's `services`, each compiled once with `new RegExp(pattern)` at module load, and build `isTimerCommand` from its `timer` pattern, tested against the trimmed first line. Read no file at run time: no JSON import, no `node:fs`, no `$.fs.read`.
+3. In `register.tsx`, `backgroundKey` (`:3074`) and `reconcileBackground` (`:3085`) leave out main-loop shells whose command is a timer or a service, so a timer or a service alone never starts the 20-minute reconcile; `isMainBackground` (`:2660`) keeps holding a timer as background work.
+4. `reconcilePrompt` (`:203`) gains the sentence `Never stop a bare \`sleep\` timer: it bounds a dispatch.` after `leave the others running.`
+5. `scripts/in-flight`: after its closing text, when a listed launch ends ` (timer)`, print the line `A launch marked (timer) is a bare sleep that bounds a dispatch: leave it running.`
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `timeout 240 /root/.local/bin/claude plugin test plugins/dforge`
-Expected: PASS; the `RECONCILE_PROMPT` regex (`:6266`) gains the new sentence.
+Run: `timeout 240 /root/.local/bin/claude plugin test plugins/dforge && timeout 300 bash plugins/dforge/tests/in-flight.test.sh && timeout 120 node --test tests/repository-layout.test.mjs`
+Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/dforge/hooks/cockpit/lib.ts plugins/dforge/hooks/cockpit/register.tsx plugins/dforge/tests/cockpit.test.ts
+git add plugins/dforge/config/services.mjs plugins/dforge/config/services.d.mts plugins/dforge/tests/fixtures/service-commands.mjs plugins/dforge/tests/fixtures/service-commands.d.mts plugins/dforge/hooks/cockpit/lib.ts plugins/dforge/hooks/cockpit/register.tsx plugins/dforge/scripts/in-flight plugins/dforge/tests/cockpit.test.ts plugins/dforge/tests/in-flight.test.sh tests/repository-layout.test.mjs
 git commit -m "feat(dforge): share the service list with the cockpit"
 ```
 
@@ -488,7 +580,7 @@ git commit -m "feat(dforge): share the service list with the cockpit"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `plugins/dforge/tests/in-flight.test.sh`, after Task 3's part:
+Append to `plugins/dforge/tests/in-flight.test.sh` at its end, after Task 4's part and before its summary lines (an earlier part deletes the by-id record, which Task 4's part re-creates):
 
 ```bash
 # --- in-flight lists services but exits 1 only for finite work ---
@@ -572,7 +664,7 @@ done3 "Final review: clean (commits 0000000..$head7)"
 run "$REPO" "$PLAN_REL"
 has "C5: current clean line routes to finishing" "$out" "**Next:** Run dforge:finishing-a-development-branch."
 mkdir -p "$REPO/docs/dforge/plans" && printf 'note\n' > "$REPO/docs/dforge/plans/completed.md"
-git -C "$REPO" add -A && git -C "$REPO" commit -qm "docs: index"
+git -C "$REPO" add docs/dforge/plans/completed.md && git -C "$REPO" commit -qm "docs: index"
 run "$REPO" "$PLAN_REL"
 has "C5: docs-only commits after the head keep it current" "$out" "**Next:** Run dforge:finishing-a-development-branch."
 printf 'x\n' > "$REPO/code.txt" && git -C "$REPO" add code.txt && git -C "$REPO" commit -qm "fix: later"
@@ -581,7 +673,14 @@ has "C5: a later code commit routes to a scoped re-review" "$out" "Re-review $he
 git -C "$REPO" reset -q --hard "$head7" && git -C "$REPO" commit -q --amend -m "rewritten"
 run "$REPO" "$PLAN_REL"
 has "C5: a rewritten head routes to a full final review" "$out" "Run the final whole-branch review, then dforge:finishing-a-development-branch."
-git -C "$REPO" checkout -q - && git -C "$REPO" branch -qD feat-c5
+head7=$(git -C "$REPO" rev-parse --short HEAD)
+done3 "Final review: clean (commits 0000000..$head7)"
+git -C "$REPO" checkout -q -
+git -C "$REPO" merge -q --no-ff -m "merge feat-c5" feat-c5
+printf 'y\n' > "$REPO/base.txt" && git -C "$REPO" add base.txt && git -C "$REPO" commit -qm "fix: on base"
+run "$REPO" "$PLAN_REL"
+has "C5: a base branch that merged the head routes to finishing" "$out" "**Next:** Run dforge:finishing-a-development-branch."
+git -C "$REPO" reset -q --hard HEAD~2 && git -C "$REPO" branch -qD feat-c5
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -591,7 +690,7 @@ Expected: FAIL on `C5: a later code commit routes to a scoped re-review`.
 
 - [ ] **Step 3: Implement**
 
-1. In `lib/plan.sh`, add `plan_final_review_state LEDGER` (C5). "Under the docs root" compares each changed path, made repository-relative, against `dforge_name`'s logical docs prefix (`docs/dforge/` and the legacy `docs/superpowers/`); under darkmem documents nothing of the plan's docs is in git, so any committed path counts as code. Use `git log --format= --name-only <head>..HEAD`; a merge base check is `git merge-base --is-ancestor`.
+1. In `lib/plan.sh`, add `plan_final_review_state LEDGER [DIR]` (C5), running every git call as `git -C "$(dr_native_path "${2:-$PWD}")"`. Decide in this order: no clean line, `none`; no `(commits …)` clause or HEAD equal to `<head>`, `current`; `git merge-base --is-ancestor <head> HEAD` false or `<head>` not a commit, `rewritten <head>`; `<head>` absent from `git rev-list --first-parent HEAD`, `current`; every path of `git log --format= --name-only <head>..HEAD` under the docs root as C5 defines it, `current`; otherwise `stale <head>`. Compare paths after `tr -d '\r'`, and compare the docs root and `<toplevel>/<path>` as `cygpath -m` forms where `cygpath` exists (Global Constraints).
 2. In `next-step` (`:428`), replace the `grep -q '^Final review: clean'` test: `current` keeps today's finishing route; `stale <h>` prints Status `all N tasks complete; commits after the clean review (<h>) are unreviewed` and Next `Re-review <h>..HEAD with the fix-wave re-review in reference/final-review.md, then append a new clean line; then dforge:finishing-a-development-branch.`; `rewritten <h>` takes the no-clean route (`Run the final whole-branch review, …`) and its Status adds `the reviewed head <h> is no longer in the branch history`; `none` is unchanged.
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -796,12 +895,40 @@ fast_mode_on "$tp"
 said 'Process: bounded — no trigger' 2020-01-01T00:00:00.000Z > "$tp.new" && mv "$tp.new" "$tp"
 fast_mode_on "$tp"; rc=$?
 check "fast mode: the pre-stamp verdict is cached for the turn" "$rc:$(cat "$TURNS/$sid.fast")" "0:on"
+
+# The scan reads from the end and stops at the deciding line (ruling R9): jq,
+# wrapped to log the bytes each call reads, never sees the 64 MiB head that a
+# forward pass must read.
+sid=fm-big; tp="$TMP/$sid.jsonl"; rm -f "$TURNS/$sid" "$TURNS/$sid.fast"
+JQW="$TMP/jq-wrap"; mkdir -p "$JQW"
+export JQ_BYTES="$TMP/jq-bytes" REAL_JQ; REAL_JQ=$(command -v jq); : > "$JQ_BYTES"
+cat > "$JQW/jq" <<'W'
+#!/usr/bin/env bash
+n=0
+for a in "$@"; do [ -f "$a" ] && n=$((n + $(wc -c < "$a"))); done
+t=$(mktemp); cat > "$t"; n=$((n + $(wc -c < "$t")))
+printf '%s\n' "$n" >> "$JQ_BYTES"
+"$REAL_JQ" "$@" < "$t"; rc=$?; rm -f "$t"; exit $rc
+W
+chmod +x "$JQW/jq"
+if command -v truncate >/dev/null 2>&1 && truncate -s 64M "$tp" 2>/dev/null; then
+  printf '\n' >> "$tp"
+  said 'Process: fast (session) — spikes' 2020-01-01T00:00:00.000Z >> "$tp"
+  touch -d '2020-01-01T00:01:00Z' "$TURNS/$sid"
+  said 'ok' 2020-01-01T00:02:00.000Z >> "$tp"
+  PATH="$JQW:$PATH" timeout 120 bash -c '. "$1"; fast_mode_on "$2"' fm "$HERE/../scripts/lib/fast-mode.sh" "$tp" < /dev/null; rc=$?
+  read_bytes=$(awk '{ s += $1 } END { print s + 0 }' "$JQ_BYTES")
+  check "fast mode: a huge head is never read" "$rc:$(( read_bytes < 8388608 ))" "0:1"
+else
+  printf 'skip - fast mode huge head: truncate cannot make a 64 MiB file here\n'
+fi
+rm -f "$tp"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `timeout 300 bash plugins/dforge/tests/ui-hooks.test.sh`
-Expected: FAIL on `fast mode: plain fast in an earlier request` and `fast mode: the pre-stamp verdict is cached for the turn`.
+Expected: FAIL on `fast mode: plain fast in an earlier request`, `fast mode: the pre-stamp verdict is cached for the turn` and `fast mode: a huge head is never read`.
 
 - [ ] **Step 3: Implement**
 
@@ -828,7 +955,10 @@ git commit -m "fix(dforge): scope fast mode to its request or session"
 - Modify: `plugins/dforge/hooks/cockpit/lib.ts`
 - Modify: `plugins/dforge/hooks/cockpit/register.tsx`
 - Modify: `plugins/dforge/config/schema.mjs`
+- Create: `plugins/dforge/tests/fixtures/fast-mode/cases.mjs`
+- Create: `plugins/dforge/tests/fixtures/fast-mode/cases.d.mts`
 - Test: `plugins/dforge/tests/cockpit.test.ts`
+- Test: `tests/repository-layout.test.mjs`
 
 **Interfaces:**
 - Consumes: C6.
@@ -840,11 +970,29 @@ git commit -m "fix(dforge): scope fast mode to its request or session"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `plugins/dforge/tests/cockpit.test.ts`:
+A mod test cannot read a JSON file (no `node:fs`, no `.json` import; Task 4), so the cases reach it through a generated mirror, as Task 4's do.
+
+1. From the repository root, generate `plugins/dforge/tests/fixtures/fast-mode/cases.mjs` with Task 4's command naming `plugins/dforge/tests/fixtures/fast-mode/cases.json`:
+
+```bash
+node -e "const fs = require('node:fs'); for (const file of process.argv.slice(1)) fs.writeFileSync(file.slice(0, -5) + '.mjs', '// Generated from ' + file.split('/').pop() + ': edit that file, then run the command in tests/repository-layout.test.mjs.\nexport default ' + JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')), null, 2) + '\n')" plugins/dforge/tests/fixtures/fast-mode/cases.json
+```
+
+2. Create `plugins/dforge/tests/fixtures/fast-mode/cases.d.mts`:
+
+```ts
+// Types for cases.mjs, so cockpit.test.ts's import type-checks.
+declare const cases: readonly { name: string; before: readonly string[]; after: readonly string[] | null; on: boolean }[]
+export default cases
+```
+
+3. In `tests/repository-layout.test.mjs`, add `'plugins/dforge/tests/fixtures/fast-mode/cases.json'` to the `sources` list of `the cockpit's module mirrors of dforge JSON files match them` (Task 4).
+
+4. In `plugins/dforge/tests/cockpit.test.ts`, add `import fastModeCases from './fixtures/fast-mode/cases.mjs'` after the fixture import Task 4 added, then append:
 
 ```ts
 describe('fast mode scope', () => {
-  const cases = JSON.parse(readFileSync(new URL('./fixtures/fast-mode/cases.json', import.meta.url), 'utf8')) as { name: string; before: string[]; after: string[] | null; on: boolean }[]
+  const cases = fastModeCases
   const said = ($: Parameters<TestBody>[0], text: string, n: number) =>
     $.session.append({ message: { type: 'assistant', role: 'assistant', content: [{ type: 'text', text }] }, door: 'response', origin: { kind: 'model' }, uuid: `fm-${n}` } as never)
   const spawn = (id: string) => ({ tool_use_id: id, prompt: 'Look', description: 'Look around', subagentType: 'general-purpose', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: false }) as never
@@ -909,13 +1057,13 @@ Expected: FAIL on `plain fast in an earlier request`, `no handoff note while fas
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `timeout 240 /root/.local/bin/claude plugin test plugins/dforge && timeout 300 bash plugins/dforge/tests/dforge-config.test.sh`
-Expected: PASS. Rewritten assertion: `stands down while the main loop is in fast mode, and a full-flow Process line turns it back on` (`:882`) keeps passing unchanged, since it submits no prompt between its lines.
+Run: `timeout 240 /root/.local/bin/claude plugin test plugins/dforge && timeout 300 bash plugins/dforge/tests/dforge-config.test.sh && timeout 120 node --test tests/repository-layout.test.mjs`
+Expected: PASS. Rewritten assertion: none — `stands down while the main loop is in fast mode, and a full-flow Process line turns it back on` (`:882`) keeps passing unchanged, since it submits no prompt between its lines.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/dforge/hooks/cockpit/lib.ts plugins/dforge/hooks/cockpit/register.tsx plugins/dforge/config/schema.mjs plugins/dforge/tests/cockpit.test.ts
+git add plugins/dforge/hooks/cockpit/lib.ts plugins/dforge/hooks/cockpit/register.tsx plugins/dforge/config/schema.mjs plugins/dforge/tests/cockpit.test.ts plugins/dforge/tests/fixtures/fast-mode/cases.mjs plugins/dforge/tests/fixtures/fast-mode/cases.d.mts tests/repository-layout.test.mjs
 git commit -m "fix(dforge): scope cockpit fast mode and its nudge"
 ```
 
@@ -1076,6 +1224,8 @@ check() { # check <name> <got> <want>
   else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
 TMP="$(mktemp -d)"
+# git.exe under MSYS_NO_PATHCONV cannot open the shell's /tmp form.
+if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home" MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
@@ -1104,6 +1254,14 @@ check "clean: an unlisted new file stays" "$(cat 'human new.txt')" "mine"
 check "clean: a path dirty before QA stays" "$(cat dirty-before.txt)" "pre-existing"
 check "clean: names what it left" "$(grep -c '^qa-files: left human.txt$' <<<"$out") $(grep -c '^qa-files: left human new.txt$' <<<"$out")" "1 1"
 check "clean: names what it removed" "$(grep -c '^qa-files: removed ' <<<"$out")" "3"
+
+# A path the auto run carried in is never cleaned, even when QA listed it.
+bash "$QA" begin "$WS"
+printf '{"active":true,"session":"s-qa","carried":["carried.txt"]}\n' > "$TMP/repo/.dforge/sdd/auto-run.json"
+printf 'carried.txt\n' >> "$WS/qa-touched.txt"; printf 'mine\n' > carried.txt
+out=$(CLAUDE_CODE_SESSION_ID=s-qa bash "$QA" clean "$WS")
+check "clean: a carried path stays though QA listed it" "$(cat carried.txt):$(grep -c '^qa-files: left carried.txt$' <<<"$out")" "mine:1"
+rm -f "$TMP/repo/.dforge/sdd/auto-run.json"
 
 bash "$QA" begin "$WS"
 check "a re-dispatch starts with an empty manifest" "$(wc -c < "$WS/qa-touched.txt" | tr -d ' ')" "0"
@@ -1213,7 +1371,9 @@ git commit -m "fix(dforge): keep amendments beside the ledger"
 - Modify: `plugins/dforge/scripts/review-route`
 - Modify: `plugins/dforge/scripts/lens-route`
 - Modify: `plugins/dforge/scripts/depth-route`
+- Modify: `plugins/dforge/reference/prompts/ruling-prompt.md`
 - Test: `plugins/dforge/tests/task-open-close.test.sh`
+- Test: `plugins/dforge/tests/plan-amend.test.sh`
 
 **Interfaces:**
 - Consumes: C7.
@@ -1230,20 +1390,45 @@ Files 1: the eight scripts carry one decision, one `plan_amendments_ready "$plan
 Append to `plugins/dforge/tests/task-open-close.test.sh`, before its summary lines:
 
 ```bash
-# --- a ledger that cites a missing amendment stops the brief (A4) ---
+# --- every amendment consumer refuses a ledger citing a missing amendment (A4) ---
 printf 'Task 1: Ruling: amendment A7 — x — y\n' >> "$LEDGER"
-run bash "$BRIEF" docs/plan.md 1
-check "brief: a cited amendment missing exits 2" "$rc" "2"
-has "brief: the message names it" "$err" "cites amendment A7"
-run bash "$CLOSE" docs/plan.md 1 'done: x; verified: y; remaining: none; discovered: none; assumptions: none'
-check "close: a cited amendment missing exits 2" "$rc" "2"
+for argv in "task-brief|docs/plan.md|1" \
+    "task-step|start|docs/plan.md|1" \
+    "task-close|docs/plan.md|1|done: x; verified: y; remaining: none; discovered: none; assumptions: none" \
+    "plan-lint|docs/plan.md" \
+    "review-route|docs/plan.md|--task|1" \
+    "lens-route|docs/plan.md|--task|1" \
+    "depth-route|docs/plan.md"; do
+  IFS='|' read -r -a a <<<"$argv"
+  run bash "$P/scripts/${a[0]}" "${a[@]:1}"
+  check "${a[0]}: a cited amendment missing exits 2" "$rc" "2"
+  has "${a[0]}: the message names the script and the amendment" "$err" "${a[0]}: the ledger cites amendment A7"
+done
 sed -i '/amendment A7/d' "$LEDGER"
+```
+
+Append to `plugins/dforge/tests/plan-amend.test.sh`, before its summary lines:
+
+```bash
+# --- under darkmem progress the amendment lands beside the mirror ledger (C7) ---
+. "$HERE/fixtures/darkmem-stores.sh"
+DH="$TMP/dm-home"; mkdir -p "$DH"
+DM=$(stores_home "$DH" "$REPO" proj local darkmem)
+mkdir -p "$DM/work/sdd/plan"
+printf '# SDD ledger — plan: docs/plan.md\n' > "$DM/work/sdd/plan/progress.md"
+had=$(grep -c '^## A[0-9]* ' "$amendments")
+entry b-dm.md '## A? — Task 1' 'Print `hello NAME`.' 'Print `hello NAME` once.'
+out=$(HOME="$DH" bash "$AMEND" docs/plan.md b-dm.md 2>&1); status=$?
+check "darkmem: append exits 0" "$status" "0"
+check "darkmem: the workspace file was moved, not shadowed" "$([ -e "$amendments" ] && echo left || echo moved)" "moved"
+check "darkmem: the ledger directory holds every entry" "$(grep -c '^## A[0-9]* ' "$DM/work/sdd/plan/amendments.md")" "$((had + 1))"
+check "darkmem: the move is logged in the mirror ledger" "$(grep -c '^Ruling: amendments moved beside the ledger — none$' "$DM/work/sdd/plan/progress.md")" "1"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `timeout 300 bash plugins/dforge/tests/task-open-close.test.sh`
-Expected: FAIL on `brief: a cited amendment missing exits 2`.
+Run: `timeout 300 bash plugins/dforge/tests/task-open-close.test.sh; timeout 300 bash plugins/dforge/tests/plan-amend.test.sh`
+Expected: FAIL on each `<script>: a cited amendment missing exits 2` check (Task 14 adds `plan_amendments_ready` but no consumer calls it yet) and on `darkmem: the workspace file was moved, not shadowed`.
 
 - [ ] **Step 3: Implement**
 
@@ -1258,7 +1443,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/dforge/scripts plugins/dforge/reference/prompts/ruling-prompt.md plugins/dforge/tests/task-open-close.test.sh
+git add plugins/dforge/scripts plugins/dforge/reference/prompts/ruling-prompt.md plugins/dforge/tests/task-open-close.test.sh plugins/dforge/tests/plan-amend.test.sh
 git commit -m "fix(dforge): refuse a plan whose amendments went missing"
 ```
 
@@ -1272,6 +1457,7 @@ git commit -m "fix(dforge): refuse a plan whose amendments went missing"
 - Modify: `plugins/dforge/reference/project-state.md`
 - Test: `plugins/dforge/tests/darkmem-sync/push.test.mjs`
 - Test: `plugins/dforge/tests/darkmem-sync/reconcile-progress.test.mjs`
+- Test: `plugins/dforge/tests/darkmem-sync/pull.test.mjs`
 
 **Interfaces:**
 - Consumes: C7.
@@ -1299,12 +1485,59 @@ test("a plan's amendments go up beside its handoff note (A3)", async t => {
 });
 ```
 
-In `plugins/dforge/tests/darkmem-sync/reconcile-progress.test.mjs`, beside its handoff move case, add the same assertion for `amendments.md` in both directions: after a move to darkmem, `work/sdd/<slug>/amendments.md` is in the mirror with the checkout copy's content; after the move back, it is in `<checkout>/.dforge/sdd/<slug>/amendments.md`. Copy that file's handoff case and change only the file name and URI.
+In `plugins/dforge/tests/darkmem-sync/reconcile-progress.test.mjs`, after `progress moves into darkmem from every checkout, and a second run does nothing`:
+
+```js
+test("a plan's amendments move into darkmem with its ledger (A3)", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(s.repo, ".dforge", "sdd", "p1", "amendments.md"), "## A1 — Task 1\n");
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
+  assert.equal(s.stub.db.documents.get("proj\u0000dforge/amendments/p1.md").content, "## A1 — Task 1\n");
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "amendments.md")), "## A1 — Task 1\n");
+  assert.equal(s.state().documents["dforge/amendments/p1.md"], sha("## A1 — Task 1\n"));
+  const [aside] = movedAside(s.repo);
+  assert.equal(read(path.join(s.repo, ".dforge", aside, "sdd", "p1", "amendments.md")), "## A1 — Task 1\n");
+  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "sdd", "p1", "amendments.md")), false);
+});
+```
+
+After `progress moves back into the primary checkout from closed and open workstreams, and darkmem keeps its copy`:
+
+```js
+test("a plan's amendments move back into the checkout with its ledger (A3)", async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/amendments/p1.md", content: "## A1 — Task 1\n" });
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
+  assert.equal(read(path.join(s.repo, ".dforge", "sdd", "p1", "amendments.md")), "## A1 — Task 1\n");
+  assert.equal("dforge/amendments/p1.md" in s.state().documents, false);
+  assert.equal(s.stub.db.documents.has("proj\u0000dforge/amendments/p1.md"), true, "darkmem keeps its copy");
+});
+```
+
+In `plugins/dforge/tests/darkmem-sync/pull.test.mjs`, after `pull writes documents and handoff notes under the prefix, and records their hashes`:
+
+```js
+test("pull restores a plan's amendments beside its ledger (A3)", async t => {
+  const s = await setup(t);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/amendments/p1.md", content: "## A1 — Task 1\n" });
+  const result = await s.pull();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "amendments.md")), "## A1 — Task 1\n");
+  assert.equal(fs.existsSync(path.join(s.docsRoot, "amendments")), false, "not filed as a document under the docs root");
+  assert.equal(s.state().documents["dforge/amendments/p1.md"], sha("## A1 — Task 1\n"));
+});
+```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `timeout 600 bash plugins/dforge/tests/darkmem-sync.test.sh`
-Expected: FAIL on `a plan's amendments go up beside its handoff note (A3)`.
+Expected: FAIL on the four `(A3)` tests.
 
 - [ ] **Step 3: Implement**
 
@@ -1351,19 +1584,41 @@ mkdir -p "$REPO/.dforge/sdd/amended"
 printf '## A1 — Header\n\nReason: x\nCost if wrong: y\n\n### Old\n\n````\n**CI:** none\n````\n\n### New\n\n````\n**CI:** none-amended\n````\n' > "$REPO/.dforge/sdd/amended/amendments.md"
 mirror docs/amended.md
 has "an amended CI line is the one read" "$out$err" "none-amended"
+rm -rf "$REPO/.dforge/sdd/amended" "$REPO/docs/amended.md"
+
+# --- a plan stored only in the darkmem docs mirror is found (A5) ---
+. "$HERE/fixtures/darkmem-stores.sh"
+DM=$(stores_home "$HOME" "$REPO" proj darkmem local)
+mkdir -p "$DM/dforge/plans" && cp "$TMP/none.md" "$DM/dforge/plans/mp.md"
+mirror docs/dforge/plans/mp.md
+check "a mirror-only plan: exit 0" "$rc" "0"
+check "a mirror-only plan: its CI line is read" "$out" "ci: none"
+rm -f "$HOME/.dforge/stores.json" "$HOME/.dforge/config.json"
 ```
 
-Append to `plugins/dforge/tests/review-record.test.sh`, after its `A7/A13: no --from` case: give the worktree ledger's directory an `amendments.md` with one entry before `retain`, and assert the review record holds that entry's heading (`check "amendments are kept in the record" "$(grep -c '^## A1 — Task 1$' "$REVIEW")" "1"`).
+Append to `plugins/dforge/tests/review-record.test.sh`, after the `A9: a rerun leaves one record` check:
+
+```bash
+# --- amendments are kept in the record, after the review lines (A5) ---
+printf '## A1 — Task 1\nReason: x\nCost if wrong: y\n' > "$WT/.dforge/sdd/2026-01-01-p/amendments.md"
+out=$(cd "$TOP" && bash "$P/scripts/review-record" retain "$PLAN" --from "$WT"); rc=$?
+check "amendments: retain exits 0" "$rc:$out" "0:$REVIEW"
+check "amendments are kept in the record" "$(cat "$REVIEW" 2>/dev/null)" \
+  "$want"$'\n\n## Amendments\n\n## A1 — Task 1\nReason: x\nCost if wrong: y'
+rm -f "$WT/.dforge/sdd/2026-01-01-p/amendments.md"
+(cd "$TOP" && bash "$P/scripts/review-record" retain "$PLAN" --from "$WT" >/dev/null)
+check "amendments: none, no section" "$(cat "$REVIEW" 2>/dev/null)" "$want"
+```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `timeout 300 bash plugins/dforge/tests/ci-mirror.test.sh; timeout 300 bash plugins/dforge/tests/review-record.test.sh`
-Expected: FAIL on `an amended CI line is the one read` and `amendments are kept in the record`.
+Expected: FAIL on `an amended CI line is the one read`, `a mirror-only plan: exit 0` and `amendments are kept in the record`.
 
 - [ ] **Step 3: Implement**
 
-1. `ci-mirror` (`:24-27`): `plan=$(plan_locate "$1")`, `plan_amendments_ready "$plan"`, then read `**CI:**` from `plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")"`; an amended value that is not `none` and not a CI line form is reported as today's malformed line.
-2. `review-record`: add the plan's `amendments.md` (C7 path) under an `## Amendments` section of the record, verbatim, when it exists; `REVIEW_LINES` (`:26`) keeps everything else as is.
+1. `ci-mirror` (`:24-27`): `plan=$(plan_locate "$1")` (so a name resolves into the darkmem docs mirror, while a path outside the checkout, as the suite's `$TMP/*.md` cases pass, stays readable as today), `plan_amendments_ready "$plan"`, then read `**CI:**` from `plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")"`; an amended value that is not `none` and not a CI line form is reported as today's malformed line.
+2. `review-record`: when the plan's `amendments.md` (C7 path, in the `--from` checkout when given) is non-empty, append to the record a blank line, `## Amendments`, a blank line, then the file verbatim; with none, the record is unchanged. `REVIEW_LINES` (`:26`) keeps everything else as is.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1526,11 +1781,18 @@ git commit -m "fix(dforge): route Keep as-is and late PR records"
 Append to `plugins/dforge/tests/auto-run.test.sh`, before its final block (the one that checks every suite sets both session variables):
 
 ```bash
+# --- start --register fills an empty Covers (row 54) ---
+mkdir -p "$REPO/docs"
+printf '# Register\n\n**Source:** a review\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n' > "$REPO/docs/r-covers.md"
+ar --session s-1 start --spec "$SPEC" --register docs/r-covers.md --force >/dev/null
+check "start --register fills an empty Covers" "$(grep -c "^\*\*Covers:\*\* $SPEC$" "$REPO/docs/r-covers.md")" "1"
 # --- clear checks whose prompt it stores (row 32) ---
+ar --session s-1 attach --plan docs/plan.md
 mkdir -p "$REPO/.dforge/handoff"
 printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/other.md` with dforge:resume-execution.\n```\n' > "$REPO/.dforge/handoff/latest.md"
+pending_before=$(field pending) resumes_before=$(field resumes)
 ar --session s-1 clear >/dev/null 2>&1; status=$?
-check "clear: another plan's prompt is refused" "$status:$(field pending)" "4:$(field pending)"
+check "clear: another plan's prompt is refused, nothing booked" "$status:$(field pending):$(field resumes)" "4:$pending_before:$resumes_before"
 # --- stop --stale (row 33) ---
 ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
 check "stop --stale: refused while the owner lives" "$status:$(field active)" "3:true"
@@ -1539,16 +1801,14 @@ ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
 check "stop --stale: a dead owner's run stops" "$status:$(field active)" "0:false"
 ```
 
-and, in its `start --register` cases, a register whose `**Covers:**` is `-` reads the spec after start: `check "start --register fills Covers" "$(grep -c "^\*\*Covers:\*\* $SPEC$" "$REPO/<that register>")" "1"`, using the register file those cases already create.
-
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `timeout 700 bash plugins/dforge/tests/auto-run.test.sh`
-Expected: FAIL on `clear: another plan's prompt is refused`.
+Expected: FAIL on `start --register fills an empty Covers`, `clear: another plan's prompt is refused, nothing booked` and `stop --stale: a dead owner's run stops`.
 
 - [ ] **Step 3: Implement**
 
-1. `ar_clear`: after `ar_handoff`, apply `ar_switch`'s check (`[[ $AR_PROMPT == *"$(basename "$plan")"* ]]`, exit 4 with its message) when a plan is attached.
+1. `ar_clear`: after `ar_handoff` and before the resume count changes, apply `ar_switch`'s check (`[[ $AR_PROMPT == *"$(basename "$plan")"* ]]`, exit 4 with its message) when a plan is attached.
 2. `auto-run stop --stale`: skip the binding check when `ar_is_stale` holds, stop the run with reason `owner session <id> is gone`, print its pending decisions and rulings; exit 3 while the owner is live.
 3. `auto-run start --register FILE`: set `**Covers:**` to the spec when it is `-` (`register.sh` already edits that line for auto-run's own register, `auto-run.sh:200`).
 4. resume-execution `SKILL.md`: when `auto-run status` names a run whose owner is stale, run `auto-run stop --stale` and read what it lists before resuming.
@@ -1573,6 +1833,7 @@ git commit -m "fix(dforge): guard auto-run clear and stop stale runs"
 - Modify: `plugins/dforge/scripts/lib/darkmem-hook.sh`
 - Test: `plugins/dforge/tests/roots.test.sh`
 - Test: `plugins/dforge/tests/hook.test.sh`
+- Test: `plugins/dforge/tests/darkmem-sync/hooks.test.mjs`
 
 **Interfaces:**
 - Consumes: none.
@@ -1584,42 +1845,99 @@ git commit -m "fix(dforge): guard auto-run clear and stop stale runs"
 
 - [ ] **Step 1: Write the failing test**
 
+The no-node cases take node away by dropping every PATH directory that holds `node` (or `node.exe`), never by linking tools into a bare directory: a copied `git.exe` or `bash.exe` on Git Bash loses its DLLs, and a uutils multicall binary picks its tool from its name. Where node shares a directory with git or jq the cases print a `skip` line; locally (nvm) and on both CI platforms (`actions/setup-node`) node has a directory of its own.
+
 Append to `plugins/dforge/tests/roots.test.sh`, before its summary lines:
 
 ```bash
 # --- no node while darkmem is applied: exit 2, never local (row 15) ---
-MIRROR=$(stores_home "$HOME" "$REPO" superpowers local darkmem)
-NONODE="$TMP/nonode"; mkdir -p "$NONODE"
-for t in git jq dirname basename cat grep sed tr awk mkdir; do ln -sf "$(command -v "$t")" "$NONODE/$t"; done
-out=$(cd "$REPO" && PATH="$NONODE" dforge_ledger_dir p1 2>&1); rc=$?
-check "no node, progress applied darkmem: exit 2" "$rc" "2"
-check "the message names node" "$(grep -c 'node is required while darkmem stores are applied' <<<"$out")" "1"
-rm -f "$HOME/.dforge/stores.json"
-check "no node, nothing applied: still local" "$(cd "$REPO" && PATH="$NONODE" dforge_ledger_dir p1)" "$TOP/.dforge/sdd/p1"
+nonode_path() { # PATH without the directories that hold node
+  local d out='' IFS=:
+  for d in $PATH; do [ -x "$d/node" ] || [ -x "$d/node.exe" ] || out=${out:+$out:}$d; done
+  printf '%s\n' "$out"
+}
+NONODE_PATH=$(nonode_path)
+if PATH="$NONODE_PATH" command -v node >/dev/null 2>&1 || ! PATH="$NONODE_PATH" command -v git >/dev/null 2>&1 \
+   || ! PATH="$NONODE_PATH" command -v jq >/dev/null 2>&1; then
+  printf 'skip - no node: node shares a PATH directory with git or jq here\n'
+else
+  stores_home "$HOME" "$REPO" superpowers local darkmem > /dev/null
+  out=$(cd "$REPO" && _DFORGE_KEY= PATH="$NONODE_PATH" dforge_ledger_dir p1 2>&1); rc=$?
+  check "no node, progress applied darkmem: exit 2" "$rc" "2"
+  check "the message names node" "$(grep -c 'roots.sh: node is required while darkmem stores are applied' <<<"$out")" "1"
+  rm -f "$HOME/.dforge/stores.json"
+  check "no node, nothing applied: still local" "$(cd "$REPO" && _DFORGE_KEY= PATH="$NONODE_PATH" dforge_ledger_dir p1)" "$TOP/.dforge/sdd/p1"
+fi
 ```
 
-Append to `plugins/dforge/tests/hook.test.sh`, before its summary lines: with a home whose darkmem config maps `$REPO` and a `DARKMEM_SYNC_BIN`-style stub (or a `node` shim first on PATH that sleeps 120 s for `darkmem-sync`), run the startup payload under `timeout 60` and check the hook exits 0 within 45 s and that `additionalContext` holds one line matching `darkmem-sync did not finish at session start; run`. Use the stub mechanism `tests/darkmem-sync/hooks.test.mjs` already uses for slow syncs; if it has none, put a `node` shim on PATH that sleeps when its arguments name `darkmem-sync`.
+Append to `plugins/dforge/tests/hook.test.sh`, before its summary lines:
+
+```bash
+# --- no node while darkmem is applied: one warning per session (row 15, A13) ---
+. "$HERE/fixtures/darkmem-stores.sh"
+nonode_path() { # PATH without the directories that hold node
+  local d out='' IFS=:
+  for d in $PATH; do [ -x "$d/node" ] || [ -x "$d/node.exe" ] || out=${out:+$out:}$d; done
+  printf '%s\n' "$out"
+}
+NN_PATH=$(nonode_path)
+NN_REPO="$TMP/nn-repo"; git init -q "$NN_REPO"
+HOME_N="$TMP/nn-home"; mkdir -p "$HOME_N"
+stores_home "$HOME_N" "$NN_REPO" proj local darkmem > /dev/null
+nn_ctx() { # nn_ctx <source> — the additionalContext of one start of session s-nn
+  MSYS_NO_PATHCONV=1 jq -n --arg cwd "$NN_REPO" --arg src "$1" \
+    '{hook_event_name:"SessionStart",session_id:"s-nn",transcript_path:"",cwd:$cwd,source:$src}' \
+    | HOME="$HOME_N" PATH="$NN_PATH" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""'
+}
+if PATH="$NN_PATH" command -v node >/dev/null 2>&1 || ! PATH="$NN_PATH" command -v git >/dev/null 2>&1 \
+   || ! PATH="$NN_PATH" command -v jq >/dev/null 2>&1; then
+  printf 'skip - no node at session start: node shares a PATH directory with git or jq here\n'
+else
+  check "no node: the first start warns once" "$(nn_ctx startup | grep -c 'node is required while darkmem stores are applied')" "1"
+  check "no node: a later start of the same session does not repeat it" "$(nn_ctx resume | grep -c 'node is required while darkmem stores are applied')" "0"
+fi
+```
+
+Add to `plugins/dforge/tests/darkmem-sync/hooks.test.mjs`, after the test `session lines skip the sync, and say so, when too little of the hook's time is left`:
+
+```js
+test("a session-start sync that overruns its step bound is one line naming the command", async t => {
+  const s = await setup(t);
+  const shim = scratch("dmh-slow-");
+  const realNode = process.execPath.replace(/\\/g, "/");
+  fs.writeFileSync(path.join(shim, "node"),
+    `#!/usr/bin/env bash\ncase " $* " in *"darkmem-sync.mjs reconcile "*) exec sleep 60 ;; esac\nexec "${realNode}" "$@"\n`,
+    { mode: 0o755 });
+  const key = Object.keys(s.env).find(k => k.toUpperCase() === "PATH") ?? "PATH";
+  const env = { ...s.env, [key]: shim + path.delimiter + (s.env[key] ?? ""), DARKMEM_SESSION_STEP_SECONDS: "2", DARKMEM_KILL_GRACE: "1" };
+  const started = Date.now();
+  const result = await sessionLines(s.repo, "sid-hook", env);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /^darkmem-sync did not finish at session start; run darkmem-sync reconcile by its plugin-root path$/m);
+  assert.ok(Date.now() - started < 30000, "the overrun ended at the step bound, not the reconcile's own end");
+});
+```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `timeout 300 bash plugins/dforge/tests/roots.test.sh; timeout 300 bash plugins/dforge/tests/hook.test.sh`
-Expected: FAIL on `no node, progress applied darkmem: exit 2` and the 45-second case.
+Run: `timeout 300 bash plugins/dforge/tests/roots.test.sh; timeout 300 bash plugins/dforge/tests/hook.test.sh; timeout 600 node --test plugins/dforge/tests/darkmem-sync/hooks.test.mjs`
+Expected: FAIL on `no node, progress applied darkmem: exit 2`, `no node: the first start warns once` and the overrun test (or `skip` lines for the two bash cases where node shares a directory).
 
 - [ ] **Step 3: Implement**
 
-1. `dforge_stores_init` (`roots.sh:74`): split the node test out; when node is missing and `stores.json` records `documents` or `progress` as `darkmem` for this checkout's primary root (read with jq; without jq, any entry), print `roots.sh: node is required while darkmem stores are applied` and exit 2. Update the comment at `:48-50`.
-2. Hooks that already wrap the roots call in `$(…) ||` pass silently; `session-start.sh` adds the message once per session, writing a marker `<turn stamp>.nonode` beside the session's stamp.
-3. `darkmem_session_lines`: bound reconcile and pull at 20 s each and `DARKMEM_SYNC_LOCK_WAIT_MS=10000`; on an overrun (exit 124 from `_darkmem_run`) print `darkmem-sync did not finish at session start; run darkmem-sync <reconcile|pull> by its plugin-root path`. Update the comment at `:91-96`.
+1. `dforge_stores_init` (`roots.sh:74`): split the node test out; when node is missing and `stores.json` records `documents` or `progress` as `darkmem` for this checkout's primary root (read with jq; without jq, any entry), print `roots.sh: node is required while darkmem stores are applied` to stderr and exit 2. Update the comment at `:48-50`.
+2. Hooks that already wrap the roots call in `$(…) ||` pass silently. `session-start.sh` adds the line `dforge: node is required while darkmem stores are applied; install Node or set the stores local` to its context once per session: it writes a marker `<turn stamp>.nonode` (the stamp path `scripts/turn-start.sh` builds, `~/.claude/dforge/sessions/turns/<sanitised sid>`) and adds the line only while the marker is absent.
+3. `darkmem_session_lines`: bound reconcile and pull at `${DARKMEM_SESSION_STEP_SECONDS:-20}` seconds each (each still capped by the time the hook has left, as today), with `DARKMEM_SYNC_LOCK_WAIT_MS=10000`, below the step bound (spec ruling R18). An overrun is `_darkmem_run` exiting 124 (GNU timeout), 143 or 137 (the watchdog's TERM or KILL); on one, print `darkmem-sync did not finish at session start; run darkmem-sync <reconcile|pull> by its plugin-root path`, naming the step that overran. Update the comment at `:91-96`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `timeout 300 bash plugins/dforge/tests/roots.test.sh && timeout 300 bash plugins/dforge/tests/hook.test.sh && timeout 600 bash plugins/dforge/tests/darkmem-sync.test.sh`
+Run: `timeout 300 bash plugins/dforge/tests/roots.test.sh && timeout 300 bash plugins/dforge/tests/hook.test.sh && timeout 600 node --test plugins/dforge/tests/darkmem-sync/hooks.test.mjs && timeout 600 bash plugins/dforge/tests/darkmem-sync.test.sh`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/dforge/scripts/lib/roots.sh plugins/dforge/scripts/session-start.sh plugins/dforge/scripts/lib/darkmem-hook.sh plugins/dforge/tests/roots.test.sh plugins/dforge/tests/hook.test.sh
+git add plugins/dforge/scripts/lib/roots.sh plugins/dforge/scripts/session-start.sh plugins/dforge/scripts/lib/darkmem-hook.sh plugins/dforge/tests/roots.test.sh plugins/dforge/tests/hook.test.sh plugins/dforge/tests/darkmem-sync/hooks.test.mjs
 git commit -m "fix(dforge): refuse local stores without node"
 ```
 
@@ -1631,6 +1949,7 @@ git commit -m "fix(dforge): refuse local stores without node"
 - Test: `plugins/dforge/tests/task-step-base.test.sh`
 - Test: `plugins/dforge/tests/suite-run.test.sh`
 - Test: `plugins/dforge/tests/task-step.test.sh`
+- Test: `plugins/dforge/tests/task-step-settle.test.sh`
 
 **Interfaces:**
 - Consumes: none.
@@ -1642,13 +1961,26 @@ git commit -m "fix(dforge): refuse local stores without node"
 
 - [ ] **Step 1: Write the failing test**
 
-In `plugins/dforge/tests/task-step-base.test.sh`, rewrite line 297 (rewritten assertion: row 8 changes what it pins):
+In `plugins/dforge/tests/task-step-base.test.sh`, rewrite three checks (rewritten assertions: row 8 changes what they pin):
 
 ```bash
 check "task 10: an unnamed failure at base and head counts as new" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
 ```
 
-and the same change for Task 11's matching check (the run-at-base variant that follows).
+in place of line 297 (`task 10: a red base row without test lines excuses the head`),
+
+```bash
+check "task 11: an unnamed failure at base and head counts as new" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
+check "task 11: the base failures hold the exit code, marked unnamed" "$(grep -cE '^command exit 1 \(unnamed [0-9]+-[0-9]+\)$' "$WS/task-11-base-failures.txt")" "1"
+```
+
+in place of lines 309-310. In the same file, change the fixture line 268 so the Worktree setup carries a trailing note (row 57; the later base runs, Tasks 9 to 12, fail without the setup):
+
+```bash
+sed 's/^\(\*\*Worktree setup:\*\* \).*$/\1`touch setup.done` — the marker the suite reads/' "$REPO/docs/plan.md" > "$REPO/docs/plan.tmp" && mv "$REPO/docs/plan.tmp" "$REPO/docs/plan.md"
+```
+
+In `plugins/dforge/tests/task-step-settle.test.sh`, change the fixture header line 238 to `` |**Integration check:** `bash mark.sh integ 0` — the full suite `` (row 57): the existing check that settles `baseline bash mark.sh integ 0` as a named command then pins the first-code-span rule.
 
 Append to `plugins/dforge/tests/suite-run.test.sh`, before its summary lines:
 
@@ -1664,12 +1996,23 @@ check "a failed git status is not clean" "$(field 2)" "dirty"
 mv "$REPO/.git/index.bak" "$REPO/.git/index"
 ```
 
-In `plugins/dforge/tests/task-step.test.sh`'s `start` part, add: a plan whose `**Integration check:**` is `` `bash t.sh` — the full suite `` and a `review` call with `--cwd "$TOP"` made from `$TMP`; check that the state file's suite command is `bash t.sh` and that the head recorded equals `git -C "$TOP" rev-parse HEAD`.
+In `plugins/dforge/tests/task-step.test.sh`, after the `review: --cwd names the panel's working directory` case and its `git worktree remove` line:
+
+```bash
+# --- --cwd's checkout answers every git question (row 56) ---
+state_keep=$(cat "$WS/task-1-step.json")
+git worktree add -q --detach "$TMP/wt-cwd" HEAD
+git -C "$TMP/wt-cwd" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m "only in the worktree"
+step review docs/plan.md 1 --cwd "$TMP/wt-cwd"
+check "review: the review head is --cwd's HEAD" "$rc:$(jq -r '.reviewHead' "$WS/task-1-step.json" | tr -d '\r')" "0:$(git -C "$TMP/wt-cwd" rev-parse HEAD)"
+git worktree remove --force "$TMP/wt-cwd"
+printf '%s\n' "$state_keep" > "$WS/task-1-step.json"
+```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `timeout 1200 bash plugins/dforge/tests/task-step-base.test.sh; timeout 300 bash plugins/dforge/tests/suite-run.test.sh; timeout 900 bash plugins/dforge/tests/task-step.test.sh start`
-Expected: FAIL on the three new or rewritten checks.
+Run: `timeout 1200 bash plugins/dforge/tests/task-step-base.test.sh; timeout 300 bash plugins/dforge/tests/suite-run.test.sh; timeout 900 bash plugins/dforge/tests/task-step.test.sh; timeout 600 bash plugins/dforge/tests/task-step-settle.test.sh`
+Expected: FAIL on the rewritten Task 10 and 11 checks, the Task 9 base checks (the setup no longer runs), both suite-run checks, `review: the review head is --cwd's HEAD`, and the settle check for `baseline bash mark.sh integ 0`.
 
 - [ ] **Step 3: Implement**
 
@@ -1678,13 +2021,13 @@ Expected: FAIL on the three new or rewritten checks.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `timeout 1200 bash plugins/dforge/tests/task-step-base.test.sh && timeout 300 bash plugins/dforge/tests/suite-run.test.sh && timeout 900 bash plugins/dforge/tests/task-step.test.sh`
+Run: `timeout 1200 bash plugins/dforge/tests/task-step-base.test.sh && timeout 300 bash plugins/dforge/tests/suite-run.test.sh && timeout 900 bash plugins/dforge/tests/task-step.test.sh && timeout 600 bash plugins/dforge/tests/task-step-settle.test.sh`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/dforge/scripts/task-step plugins/dforge/scripts/suite-run plugins/dforge/tests/task-step-base.test.sh plugins/dforge/tests/suite-run.test.sh plugins/dforge/tests/task-step.test.sh
+git add plugins/dforge/scripts/task-step plugins/dforge/scripts/suite-run plugins/dforge/tests/task-step-base.test.sh plugins/dforge/tests/suite-run.test.sh plugins/dforge/tests/task-step.test.sh plugins/dforge/tests/task-step-settle.test.sh
 git commit -m "fix(dforge): never excuse or reuse unproven suite runs"
 ```
 
@@ -1725,17 +2068,23 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 BIN="$TMP/bin"; mkdir -p "$BIN"
-for t in bash env sleep cat head tr dirname jq sed grep; do ln -sf "$(command -v "$t")" "$BIN/$t"; done
-ln -sf "$(command -v timeout)" "$BIN/gtimeout"
-PATH="$BIN" bash "$S/with-timeout" 5 true; rc=$?
+# A script that execs the tool by its absolute path, never a link or a copy:
+# Git Bash's ln -s copies, and a copied .exe loses its DLLs; a uutils
+# multicall binary picks its tool from the name it is run under.
+wrap() { # wrap <name> <target>
+  printf '#!%s\nexec "%s" "$@"\n' "$BASH" "$2" > "$BIN/$1"; chmod +x "$BIN/$1"
+}
+for t in env sleep true cat head tr dirname basename jq sed grep; do wrap "$t" "$(command -v "$t")"; done
+wrap gtimeout "$(command -v timeout)"
+PATH="$BIN" "$BASH" "$S/with-timeout" 5 true; rc=$?
 check "only gtimeout: a quick command exits 0" "$rc" "0"
-PATH="$BIN" bash "$S/with-timeout" 1 sleep 5; rc=$?
+PATH="$BIN" "$BASH" "$S/with-timeout" 1 sleep 5; rc=$?
 check "only gtimeout: the bound exits 124" "$rc" "124"
 rm -f "$BIN/gtimeout"
-out=$(PATH="$BIN" bash "$S/with-timeout" 5 true 2>&1); rc=$?
+out=$(PATH="$BIN" "$BASH" "$S/with-timeout" 5 true 2>&1); rc=$?
 check "no timeout command: exit 125" "$rc:$out" "125:with-timeout: no timeout command (timeout or gtimeout) on PATH"
-printf '#!/usr/bin/env bash\nsleep 60\n' > "$BIN/agy"; chmod +x "$BIN/agy"
-out=$(PATH="$BIN" timeout 30 bash "$S/agy-locate"); rc=$?
+printf '#!%s\nsleep 60\n' "$BASH" > "$BIN/agy"; chmod +x "$BIN/agy"
+out=$(timeout 30 env PATH="$BIN" "$BASH" "$S/agy-locate"); rc=$?
 check "agy-locate: no timeout command reports the CLI unusable" "$rc:$out" "1:agy-locate off reason=no-timeout-command"
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
@@ -1786,28 +2135,36 @@ Append to `plugins/dforge/tests/review-panel.test.sh`, before its summary lines:
 
 ```bash
 # --- without setsid, a timed-out runner leaves no descendant (row 58) ---
-cat > "$TMP/tree-runner" <<'R'
+# The grandchild is the case today's walk misses: it signals a child before
+# listing that child's children, which are reparented once it dies.
+cat > "$TMP/tree-runner" <<EOF
 #!/usr/bin/env bash
-( sleep 300 & echo $! >> "$TREE_PIDS"; wait ) & echo $! >> "$TREE_PIDS"
+( sleep 300 & printf '%s\n' \$! >> "$TMP/tree-pids"; printf '%s\n' \$! >> "$TMP/children"; wait ) &
+printf '%s\n' \$! >> "$TMP/tree-pids"; printf '%s\n' \$! >> "$TMP/children"
 wait
-R
-export TREE_PIDS="$TMP/tree-pids"; : > "$TREE_PIDS"
-PANEL_CODEX_RUNNER="$TMP/tree-runner" PANEL_NO_SETSID=1 panel --kind task --tier heavy --prompt "$TMP/prompt.md" --timeout 2
-sleep 1
-alive=0; while read -r p; do kill -0 "$p" 2>/dev/null && alive=$((alive + 1)); done < "$TREE_PIDS"
-check "no setsid: no descendant survives the timeout" "$alive" "0"
+EOF
+chmod +x "$TMP/tree-runner"
+if command -v pgrep >/dev/null 2>&1; then
+  : > "$TMP/tree-pids"
+  PANEL_NO_SETSID=1 PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/tree-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
+  check "no setsid: the timed-out runner is reported as TIMEOUT" "$(head -1 <<<"$out" | grep -c 'status=TIMEOUT')" "1"
+  alive=0; while read -r p; do kill -0 "$p" 2>/dev/null && alive=$((alive + 1)); done < "$TMP/tree-pids"
+  check "no setsid: no child or grandchild survives the timeout" "$alive:$(wc -l < "$TMP/tree-pids" | tr -d ' ')" "0:2"
+else
+  printf 'skip - no setsid tree walk: pgrep is not on PATH (Git Bash)\n'
+fi
 ```
 
-If `run-review-panel` takes its bound from another flag than `--timeout`, use that flag; add `PANEL_NO_SETSID` as its test seam beside the other `PANEL_*` seams.
+Add `PANEL_NO_SETSID` to the `# Env seams:` comment in `run-review-panel` (`:19-21`) beside `PANEL_BOUND_SECONDS`.
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `timeout 300 bash plugins/dforge/tests/review-panel.test.sh`
-Expected: FAIL on `no setsid: no descendant survives the timeout`.
+Expected: FAIL on `no setsid: no child or grandchild survives the timeout`.
 
 - [ ] **Step 3: Implement**
 
-1. `stop_runner` (`:142-156`): without setsid, walk the whole tree with `pgrep -P` first, collecting every pid, then send the signal to all of them, deepest first; after the KILL pass (`:196`), check every collected pid with `kill -0` and KILL survivors once more. `PANEL_NO_SETSID=1` forces the no-setsid path.
+1. `stop_runner` (`:142-156`): without setsid, walk the whole tree with `pgrep -P` first, collecting every pid, then send the signal to all of them, deepest first; after the KILL pass (`:196`), check every collected pid with `kill -0` and KILL survivors once more. `PANEL_NO_SETSID=1` sets `have_setsid=false` (`:135`), so both the launch (`:174`) and `stop_runner` take the no-setsid path.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -2118,7 +2475,7 @@ git commit -m "fix(dforge): show waiting and deferred tasks in the cockpit"
 
 **Interfaces:**
 - Consumes: C13, `auto-run stop --stale` (Task 20).
-- Produces: none.
+- Produces: C16.
 
 **Items:** 18, 39, 16, 33
 **Implementer:** dforge:impl-opus-high
@@ -2126,7 +2483,9 @@ git commit -m "fix(dforge): show waiting and deferred tasks in the cockpit"
 
 - [ ] **Step 1: Write the failing test**
 
-In `describe('run card')`:
+Two harness rules these tests follow: a test registers each event once (a second `on('fs.list', ...)` beside `world`'s fails to load with `registered twice`), so a counting hook takes a matcher and `world`'s hook answers beneath it; and a test's own hooks nest in registration order, first outermost.
+
+In `describe('run card')`, before `reads the ledger again at a new session start, unchanged as it is`:
 
 ```ts
   test('follows the plan this session named, not a newer ledger', async ($, on) => {
@@ -2144,20 +2503,90 @@ In `describe('run card')`:
     expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Task 1: Other/ })).toBeUndefined()
   })
+
+  test('lists an unchanged ledger directory once, and again once it changes', async ($, on) => {
+    const BASE = '/home/me/code/shop/.dforge/sdd'
+    const lists: string[] = []
+    // A test registers each event once: world's fs.list hook answers beneath this matched one.
+    on('fs.list', { path: BASE } as never, ((_$: unknown, e: { path: string }, next: (e: unknown) => unknown) => {
+      lists.push(e.path)
+      return next(e)
+    }) as never)
+    const files: NonNullable<World['files']> = { ...runFiles(LEDGER), [BASE]: { text: '', kind: 'dir', mtimeMs: 5 } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.session.start(START)
+    const listed = () => lists.filter(path => path === BASE).length
+    const before = listed()
+    expect(before).toBeGreaterThan(0)
+    for (const turnId of ['t1', 't2', 't3']) await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId, reason: 'answer' })
+    expect(listed()).toBe(before)
+    files[`${BASE}/q/progress.md`] = { text: '# SDD ledger — plan: docs/plans/q.md\nTask 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)', mtimeMs: 3_000_000 }
+    files[BASE] = { text: '', kind: 'dir', mtimeMs: 6 }
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't4', reason: 'answer' })
+    expect(listed()).toBe(before + 1)
+  })
 ```
 
-Beside `withdraws a ruling handoff at the next turn once its last row closes`, the same test with the register under the darkmem docs root (the world's `darkmem-config.mjs --mode` answering documents `darkmem` with root `/home/me/.dforge/mirror/shop/dforge`) and the handoff naming it as `docs/dforge/registers/<name>.md`: the offer clears once every row is resolved. In the auto-run describe: with `autoFiles({ session: 'sess-old' })` and no heartbeat for `sess-old`, the pane shows a line matching `/auto-run stop --stale/`.
+In `describe('resume offer')`, beside `withdraws a ruling handoff at the next turn once its last row closes` (before `keeps a ruling handoff whose register cannot be read`). The register lives only in the darkmem docs mirror, so today's checkout path reads nothing and the offer is kept:
+
+```ts
+  test('withdraws a ruling handoff once every row of its register in the darkmem docs store is resolved', async ($, on) => {
+    const MIRROR = '/home/me/.dforge/mirror/shop'
+    const MODE = [
+      `documents\tdarkmem\t${MIRROR}/dforge`,
+      'progress\tlocal\t/home/me/code/shop/.dforge/sdd\t/home/me/code/shop/.dforge/handoff/latest.md',
+      'project\tshop',
+      '',
+    ].join('\n')
+    const STORED = `${MIRROR}/dforge/registers/r.md`
+    const files: NonNullable<World['files']> = {
+      '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 },
+      [LATEST]: { text: rulingHandoff(), mtimeMs: 900_000 },
+      [STORED]: { text: register(['done', 'open']), mtimeMs: 1 },
+    }
+    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
+    signedIn(on, files)
+    await $.session.start(START)
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ key: 'band-resume' })).toBeDefined()
+    files[STORED] = { text: register(['done', 'done']), mtimeMs: 2 }
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+  })
+```
+
+In `describe('auto run in the pane')`, before `measures against the high regime`. The world's clock starts at 1000 s, so a beat at 700 is 300 s old (past C16's 180 s) and one at 950 is alive:
+
+```ts
+  for (const [beat, isNamed] of [[undefined, true], ['700\n', true], ['950\n', false]] as const)
+    test(`${isNamed ? 'names' : 'does not name'} auto-run stop --stale for a run whose owner ${beat === undefined ? 'left no heartbeat' : `last beat at ${beat.trim()} s, the clock at 1000 s`}`, async ($, on) => {
+      const files: NonNullable<World['files']> = {
+        ...autoFiles({ session: 'sess-old', pending: null }),
+        ...(beat === undefined ? {} : { '/home/me/.claude/dforge/sessions/cockpit/sess-old': { text: beat } }),
+      }
+      world(on, { ...SIGNED_IN, files })
+      signedIn(on, files)
+      await $.session.start(START)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      const line = await ui.find({ type: 'Text', text: /auto run left by a closed session — run scripts\/auto-run stop --stale/ })
+      if (isNamed) expect(line).toBeDefined()
+      else expect(line).toBeUndefined()
+    })
+```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `timeout 240 /root/.local/bin/claude plugin test plugins/dforge`
-Expected: FAIL on the three tests.
+Expected: FAIL on `follows the plan this session named, not a newer ledger` (the newer ledger `q` is shown), `lists an unchanged ledger directory once, and again once it changes` (the directory is listed at every turn), `withdraws a ruling handoff once every row of its register in the darkmem docs store is resolved` (the offer stays), and the two `names auto-run stop --stale …` cases. `does not name auto-run stop --stale for a run whose owner last beat at 950 s, the clock at 1000 s` already passes.
 
 - [ ] **Step 3: Implement**
 
-1. `tool.call` (Bash): record the plan path of the last `task-brief`, `task-step`, `task-close` or `next-step` call in a session atom; `readRun` (`:3266`) reads that plan's ledger after turn-end's local-workspace test (`scripts/turn-end.sh:87-90`); newest-by-mtime only when no plan is bound. Cache the ledger-directory listing by its modification time.
-2. `readResumeOffer` (`:3223`): resolve register names through `planCandidates`' docs-root mapping (`lib.ts:818`).
-3. The pane: a run owned by another session whose heartbeat is older than the auto run's beat limit shows `auto run left by a closed session — run scripts/auto-run stop --stale`.
+1. `tool.call` (Bash): record the plan path of the last `task-brief`, `task-step`, `task-close` or `next-step` call in a session atom; `readRun` (`:3266`) reads that plan's ledger after turn-end's local-workspace test (`scripts/turn-end.sh:87-90`); newest-by-mtime only when no plan is bound. Cache the ledger-directory listing (`:3282`): keep the entries `$.fs.list(base)` returned with `$.fs.stat(base).mtimeMs`, and list again only when that time changes or the stat fails. Still stat each `<slug>/progress.md` on every read: appending to a ledger changes no directory's modification time.
+2. `readResumeOffer` (`:3223`): resolve each register name through `planCandidates`' docs-root mapping (`lib.ts:813-821`), given the roots `readRun` already read and its checkouts, in place of `${root}/${path}`.
+3. Add C16's `isSessionAlive($, sid)` to `register.tsx`, reading the heartbeat `beat` writes (`:2997-3007`) with `$.fs.read` and comparing it with `$.clock.now()`. The engine gives a mod no process id or signal API, so liveness is the heartbeat's age, the rule `ar_is_stale` applies (`scripts/lib/auto-run.sh:17`, `:128-157`).
+4. The pane: when `.dforge/sdd/auto-run.json` holds an active run whose `session` is not this session's id and `isSessionAlive` is false for it, the auto run card shows `auto run left by a closed session — run scripts/auto-run stop --stale`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -2189,21 +2618,38 @@ git commit -m "fix(dforge): bind the Run card to the session's plan"
 
 - [ ] **Step 1: Write the failing test**
 
-In `describe('A5: the judge write guard …')`:
+Harness rules these tests follow: a test registers each event once, so a hook beside one `world` registers takes a matcher (`{ argv: /worktree/ }` matches `process.run`'s argv as a string), and the matched hook, registered first, answers above `world`'s; a test hook that throws is skipped and the kit answers beneath it, so a hook that must make a read fail answers `{ deny }`; and the test's own `on('classic.<Event>')` is the bottom of that classic chain, so a test that raises one registers it.
+
+In `describe('A5: the judge write guard …')`, before `A5: a dforge:impl-* subagent and the main loop are not affected`:
 
 ```ts
   test('a direct re-review prompt allows only its report line, not the prior round', async ($, on) => {
     const PRIOR = `${WS}/plan-review-round-1-report.md`
     const NEXT = `${WS}/plan-review-round-2-report.md`
     world(on, { tokens: 10_000, agentIds: ['judge-1'] })
+    on('agent.list', () => ({ value: [] }) as never)
     await $.session.start(START)
     await $.agent.spawn(spawn(`Prior findings: ${PRIOR}\nWrite your full report to ${NEXT}, then reply in 10 lines.`, 'dforge:judge-opus', 9))
     expect((await write($, 'judge-1', PRIOR)).deny).toMatch(REFUSED)
     expect((await write($, 'judge-1', NEXT)).deny).toBeUndefined()
   })
+
+  test('accepts the named report under the session directory when no checkout is known and git worktree list fails', async ($, on) => {
+    // Matched on its argv, this answers `git worktree list` above world's process.run hook.
+    on('process.run', { argv: /worktree/ } as never, (() => ({
+      value: { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository\n', isStdoutTruncated: false, isStderrTruncated: false },
+    })) as never)
+    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: '', commonDir: '/home/me/code/shop/.git/modules/sub' })
+    signedIn(on, {}, undefined, '/home/me/code/shop', () => '/home/me/code/shop')
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(spawn(`Review task 1. Write your full report to ${NAMED}, then reply in 10 lines.`, 'dforge:judge-sonnet-high', 1))
+    expect((await write($, 'judge-1', NAMED)).deny).toBeUndefined()
+    expect((await write($, 'judge-1', `${WS}/amendments.md`)).deny).toMatch(REFUSED)
+  })
 ```
 
-Beside `refuses a commit whose message file carries a trailer` (the trailer word is built at run time so the test file's own commit passes the guard):
+In `describe('attribution guard')`, before `is off when configured off` (the trailer word is built at run time so the test file's own commit passes the guard):
 
 ```ts
   test('passes a human co-author and a mere mention, refuses an AI trailer', async ($, on) => {
@@ -2217,20 +2663,63 @@ Beside `refuses a commit whose message file carries a trailer` (the trailer word
     const ai = await $.tool.call({ tool: 'Bash', command: `git commit -m 'fix: x' -m '${TRAILER} Claude <noreply@anthropic.com>'` })
     expect(ai.deny).toMatch(/keeps AI attribution out of git/)
   })
+
+  test('a guard hook that throws refuses only a call the guard judges, naming guardAttribution', async ($, on) => {
+    // The next read of the settings is refused once: the hook's own, before
+    // anything else it does; its .catch then reads them as usual. A hook that
+    // throws would be skipped and the store beneath would answer, so it denies.
+    let failures = 0
+    on('state.get', { plugin: 'dforge', key: 'settings' } as never, ((_$: unknown, e: unknown, next: (e: unknown) => unknown) => {
+      if (failures > 0) {
+        failures -= 1
+        return { deny: 'the store is down' }
+      }
+      return next(e)
+    }) as never)
+    const files: World['files'] = { '/home/me/code/shop/web/msg.txt': { text: 'fix: tidy\n' } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    failures = 1
+    const read = await $.tool.call({ tool: 'Read', file_path: '/home/me/code/shop/a.ts' } as never)
+    expect(read.deny).toBeUndefined()
+    expect(read.text).toBe('ok')
+    failures = 1
+    const commit = await $.tool.call({ tool: 'Bash', command: 'git commit -F msg.txt' })
+    expect(commit.deny).toBe('dforge: its attribution guard failed; set guardAttribution off to lift it.')
+  })
 ```
 
-Add beside them: with an `fs.read` handler that throws installed after `world`, a `Read` call is allowed and a `git commit -F msg.txt` call is refused with a message containing `guardAttribution`; a `tool.check` whose event carries `permission_mode: 'bypassPermissions'` starts no approval wait (no `ask` notification after `notifyAskAfter`); a judge report under the session cwd is accepted when `git worktree list` fails and the checkout is unknown.
+In `describe('discord')`, before `says when a turn fails`:
+
+```ts
+  for (const [mode, defaultMode, isAsked] of [['auto', 'default', false], ['default', 'bypassPermissions', true]] as const)
+    test(`an approval under the ${mode} mode the session reports ${isAsked ? 'pings' : 'does not ping'}, the settings default being ${defaultMode}`, async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
+      // The test's own hook is the bottom of a classic event's chain.
+      on('classic.UserPromptSubmit', () => ({}) as never)
+      const clock = world(on, { tokens: 50_000, fetches, settings: { permissions: { defaultMode } }, config: { notifyAskAfter: 20 } })
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.classic.UserPromptSubmit({ prompt: 'go', permission_mode: mode })
+      await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+      await clock.advance(30_000)
+      expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)).toEqual(isAsked ? ['⏳ Waiting for approval'] : [])
+    })
+```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `timeout 240 /root/.local/bin/claude plugin test plugins/dforge`
-Expected: FAIL on the new guard tests.
+Expected: FAIL on the six new tests: the prior round's report is allowed; the report under the session directory is refused with `(none)`; the human co-author is refused; the Read is refused with `dforge: its attribution guard failed.`; the `auto` case pings and the `default` case does not.
 
 - [ ] **Step 3: Implement**
 
-1. `judgeReports` (`:4300`): a direct prompt with a `REPORT_LINE` line (the phrase may wrap) allows only that line's paths; without one, today's behaviour. `reviewDirs` (`:4248`) adds the session cwd as a fallback root.
+1. `judgeReports` (`:4300`): a direct prompt with a `REPORT_LINE` line (the phrase may wrap) allows only that line's paths; without one, today's behaviour. `reviewDirs` (`:4248`) adds the session cwd (`$.session.cwd()`, a failed read ignored) after the checkout, the primary and the listed worktrees, so a report under `<cwd>/.dforge` is found when `S.where` is unset and `git worktree list` fails.
 2. The attribution pattern (`lib.ts:135`): match only a trailer line at a real line start, stopping at a real or escaped newline, whose name or address is an AI identity (the whole name `Claude`, `Codex`, `Copilot`, `ChatGPT`, or an address at `anthropic.com` or `openai.com`); for Bash, scan only `-m` texts and message files, not the whole command.
-3. `tool.call`'s `.catch` (`:848-852`): fail closed only for calls the guards judge (`writesGitText`, `isGitWriteTool`, judge writes), with `dforge: its attribution guard failed; set guardAttribution off to lift it.`; `tool.check` (`:641`) uses `e.permission_mode` when present before `S.isUnattended`.
+3. `tool.call`'s `.catch` (`:848-852`): fail closed only for calls the guards judge: a Bash command `writesGitText` matches, a tool `isGitWriteTool` names, and the judge writes the first branch already refuses. For such a call, read `guardAttribution`: off passes the call to `next(e)`; on, or a read that fails, answers `dforge: its attribution guard failed; set guardAttribution off to lift it.` Every other call goes to `next(e)`.
+4. Unattended mode from the session: the function-hook `tool.check` event carries no permission mode (`ToolCheckInput`, `.claude-plugin/types/claude-code/index.d.ts:14794-14847`); the classic hook inputs do (`BaseHookInput.permission_mode`, `:881`). Register `classic.UserPromptSubmit` and `classic.PermissionRequest` hooks that store a non-empty `e.permission_mode` in `S.permissionMode` and return `next(e)`; `session.start` clears it. `tool.check` (`:641`) treats a call as unattended by `UNATTENDED_MODES.includes(S.permissionMode)` while `S.permissionMode` is set, and by `S.isUnattended` (the settings default) only before any event has carried a mode.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -2253,43 +2742,214 @@ git commit -m "fix(dforge): narrow the write and attribution guards"
 - Test: `plugins/dforge/tests/dforge-config.test.sh`
 
 **Interfaces:**
-- Consumes: none.
+- Consumes: C16 (Task 30).
 - Produces: C14.
 
 **Items:** 60, 61, 45
 **Implementer:** dforge:impl-opus-high
-**Evaluation:** files 2 - spec 2 - coupling 0 - risk 2 = 6
+**Evaluation:** files 2 - spec 2 - coupling 1 - risk 2 = 7
+
+A mod has no process id and no file delete: the engine's `fs` offers `read`, `write`, `list`, `exists`, `stat` and `ancestors` only, and nothing names a process id. So a snapshot's writer is alive by its cockpit heartbeat (C16), and the cockpit deletes a snapshot through `dforge-config.mjs drop-snapshot`, which the test world already records in `w.runs` as it records `claude-restore`.
 
 - [ ] **Step 1: Write the failing test**
 
-In the auto-run describe, beside `puts back the default model and effort that /model and /effort save`:
+Rewritten assertions (row 60 adds `effortLevel` to what is saved and restored): in `describe('auto run')`, `puts back the default model and effort that /model and /effort save` expects
 
 ```ts
-  test('a snapshot left by a dead session is restored at the next start', async ($, on) => {
+    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([
+      expect.stringContaining(`claude-restore ${JSON.stringify({ model: 'opus[1m]', modelSettings: { 'claude-opus-5-5': { effortLevel: 'max' } }, effortLevel: null })}`),
+    ])
+```
+
+and `removes the defaults /model and /effort added where none were set` expects
+
+```ts
+    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([expect.stringContaining('claude-restore {"model":null,"modelSettings":null,"effortLevel":null}')])
+```
+
+In `describe('auto run')`, before `removes the defaults /model and /effort added where none were set`:
+
+```ts
+  for (const isRefusing of [false, true])
+    test(`saves the defaults before /model and ${isRefusing ? 'keeps them when the restore fails' : 'drops them once the restore reads back'}`, async ($, on) => {
+      const SNAP = '/home/me/.claude/dforge/sessions/saved-defaults/sess-2.json'
+      const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+      const written: Record<string, string> = {}
+      let atModel: string | undefined
+      const w: World = {
+        ...SIGNED_IN,
+        written,
+        commands: [],
+        autoRuns: [],
+        prompts: [],
+        runs: [],
+        userSettings: { model: 'opus[1m]', effortLevel: 'max' },
+        isDforgeConfigRefusing: isRefusing,
+        autoFile: files[AUTO],
+        onCommand: command => {
+          if (command === 'model') atModel = written[SNAP]
+        },
+      }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await settle(clock)
+      expect(JSON.parse(atModel ?? 'null')).toEqual({ session: 'sess-2', launchModel: 'sonnet', saved: { model: 'opus[1m]', modelSettings: null, effortLevel: 'max' } })
+      expect(w.runs?.filter(run => run.includes(' drop-snapshot '))).toEqual(isRefusing ? [] : [expect.stringContaining('drop-snapshot sess-2')])
+    })
+
+  describe('a model switch snapshot another session left', () => {
     const SNAP = '/home/me/.claude/dforge/sessions/saved-defaults/sess-0.json'
-    const files: World['files'] = { [SNAP]: { text: JSON.stringify({ session: 'sess-0', pid: 999_999, launchModel: 'sonnet', saved: { model: 'opus[1m]', modelSettings: null, effortLevel: null } }) } }
-    const w: World = { ...SIGNED_IN, runs: [], files, userSettings: { model: 'sonnet' } }
-    world(on, w)
-    signedIn(on, files)
+    const BEAT = '/home/me/.claude/dforge/sessions/cockpit/sess-0'
+    const SNAPSHOT = { text: JSON.stringify({ session: 'sess-0', launchModel: 'sonnet', saved: { model: 'opus[1m]', modelSettings: null, effortLevel: 'max' } }) }
+    // The clock starts at 1000 s: a beat at 700 is 300 s old, past the 180 s limit; one at 990 is alive.
+    const startWith = async ($: Parameters<TestBody>[0], on: On, model: string, beat?: string) => {
+      const files: NonNullable<World['files']> = { [SNAP]: SNAPSHOT, ...(beat === undefined ? {} : { [BEAT]: { text: beat } }) }
+      const w: World = { ...SIGNED_IN, runs: [], toasts: [], files, userSettings: { model } }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await settle(clock)
+      return w
+    }
+    const restores = (w: World) => w.runs?.filter(run => run.includes(' claude-restore ')) ?? []
+    const drops = (w: World) => w.runs?.filter(run => run.includes(' drop-snapshot ')) ?? []
+    const told = (w: World) => w.toasts?.filter(text => /snapshot/.test(text)) ?? []
+
+    for (const beat of ['700\n', undefined])
+      test(`restores the defaults of a session ${beat === undefined ? 'that left no heartbeat' : 'whose heartbeat is stale'} while its launch model is the default, then drops the snapshot`, async ($, on) => {
+        const w = await startWith($, on, 'sonnet', beat)
+        expect(restores(w)).toEqual([expect.stringContaining('claude-restore {"model":"opus[1m]","modelSettings":null,"effortLevel":"max"}')])
+        expect(w.userSettings).toEqual({ model: 'opus[1m]', effortLevel: 'max' })
+        expect(drops(w)).toEqual([expect.stringContaining('drop-snapshot sess-0')])
+        expect(told(w)).toEqual([])
+      })
+
+    test('drops, saying so once, the snapshot of a dead session whose launch model is no longer the default', async ($, on) => {
+      const w = await startWith($, on, 'haiku', '700\n')
+      expect(restores(w)).toEqual([])
+      expect(drops(w)).toEqual([expect.stringContaining('drop-snapshot sess-0')])
+      expect(told(w)).toEqual(['dforge: dropped the model switch snapshot of session sess-0: your default model is no longer sonnet.'])
+    })
+
+    test('leaves the snapshot of a session that is still alive', async ($, on) => {
+      const w = await startWith($, on, 'sonnet', '990\n')
+      expect(restores(w)).toEqual([])
+      expect(drops(w)).toEqual([])
+      expect(told(w)).toEqual([])
+    })
+  })
+
+  test('arms the watchdog when a read at the start fails', async ($, on) => {
+    const written: Record<string, string> = {}
+    const clock = world(on, { ...SIGNED_IN, written, isUsageFailing: true })
+    signedIn(on, {})
     await $.session.start(START)
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([expect.stringContaining('"model":"opus[1m]"')])
+    await clock.advance(60_000)
+    expect(written['/home/me/.claude/dforge/sessions/cockpit/sess-1']).toBe('1060\n')
+  })
+
+  test("a main compaction clears the turn readings, a subagent's does not", async ($, on) => {
+    const sets: unknown[] = []
+    on('state.set', { plugin: 'dforge', key: 'turnTokens' } as never, ((_$: unknown, e: { value: unknown }, next: (e: unknown) => unknown) => {
+      sets.push(e.value)
+      return next(e)
+    }) as never)
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    const before = sets.length
+    expect(before).toBeGreaterThan(0)
+    await $.session.compact({ trigger: 'auto', messages: [SUMMARY], agentId: 'agent-1' } as never)
+    expect(sets).toHaveLength(before)
+    await $.session.compact({ trigger: 'manual', messages: [SUMMARY] })
+    expect(sets.slice(before)).toEqual([[]])
   })
 ```
 
-Add: the same snapshot with `userSettings: { model: 'haiku' }` restores nothing; one whose `pid` is `process.pid` restores nothing and stays; with `isUsageFailing: true`, `session.start` still writes the heartbeat after `clock.advance(60_000)`; a main `session.compact` clears `turnTokens` (intercept `state.set` for key `turnTokens`).
+In `describe('auto run')`, before `submits no reconcile prompt outside an auto run`. With `pending: 'compact'` and no sentinel turn the stage is never armed, so only `RECONCILE_CAP` can fail it: today the count carries over the session change and the second prompt after it books the failure:
 
-Append to `dforge-config.test.sh`: `fresh effort; mkdir -p "$HOME/.claude"; printf '{}' > "$HOME/.claude/settings.json"; fc claude-restore '{"effortLevel":"high"}'; check "claude-restore takes effortLevel" "$?:$(jq -r .effortLevel "$HOME/.claude/settings.json")" "0:high"`.
+```ts
+  test('counts the reconcile prompts afresh in the session a resume carries the process into', { timeoutMs: 30_000 }, async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    on('session.end', (_$, e) => e as never)
+    signedIn(on, files)
+    await $.session.start(START)
+    await spawnTask4($)
+    // No sentinel: the pending compact is never armed, so only the reconcile cap can fail it.
+    await $.turn.complete({ answer: 'Waiting for the implementer.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    const reconciles = () => w.prompts?.filter(text => RECONCILE_PROMPT.test(text)).length
+    await clock.advance(2_600_000)
+    expect(reconciles()).toBe(2)
+    await $.session.end({ reason: 'resume', sessionId: 'sess-1', resume: { id: 'sess-1' } })
+    w.sessionId = 'sess-2'
+    files[AUTO]!.text = files[AUTO]!.text.replace('"session":"sess-1"', '"session":"sess-2"')
+    await clock.advance(2_600_000)
+    expect(reconciles()).toBe(4)
+    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
+  })
+```
+
+In `describe('keep-warm')`, before `submits nothing while the composer holds a draft`. Any person turn already resets the count (`register.tsx:621`), so the session changes with no turn in between:
+
+```ts
+    test('lets six more go in the session a resume carries the process into', async ($, on) => {
+      const w = quiet({ keepWarm: 4 })
+      const clock = world(on, w)
+      on('session.end', (_$, e) => e as never)
+      await begin($)
+      for (let i = 1; i <= 8; i++) {
+        await clock.advance(5 * MIN)
+        if (sentOf(w).length === i) await keepWarmTurn($, clock, `k${i}`)
+      }
+      expect(sentOf(w)).toHaveLength(6)
+      // The shell still runs and no turn starts: only the session id changes.
+      await $.session.end({ reason: 'resume', sessionId: 'sess-1', resume: { id: 'sess-1' } })
+      w.sessionId = 'sess-2'
+      await clock.advance(2_000)
+      await clock.advance(5 * MIN)
+      expect(sentOf(w)).toHaveLength(7)
+    })
+```
+
+Append to `plugins/dforge/tests/dforge-config.test.sh`, before its closing `printf '\n%d passed, %d failed\n'` line:
+
+```bash
+# --- claude-restore takes effortLevel; drop-snapshot removes one session's snapshot (row 60) ---
+fresh snapshot
+mkdir -p "$HOME/.claude"
+printf '%s\n' '{"model":"sonnet"}' > "$HOME/.claude/settings.json"
+fc claude-restore '{"model":"opus[1m]","modelSettings":null,"effortLevel":"high"}'; check "claude-restore takes effortLevel: exit 0" "$?" "0"
+check "claude-restore takes effortLevel: written" "$(at "$HOME/.claude/settings.json" effortLevel)" '"high"'
+printf '%s\n' '{"model":"sonnet","effortLevel":"low"}' > "$HOME/.claude/settings.json"
+fc claude-restore '{"effortLevel":null}'; check "claude-restore: a null effortLevel removes it" "$?:$(keys "$HOME/.claude/settings.json")" "0:model"
+SNAPS="$HOME/.claude/dforge/sessions/saved-defaults"
+mkdir -p "$SNAPS"
+printf '{}\n' > "$SNAPS/sess-0.json"
+printf '{}\n' > "$SNAPS/sess-9.json"
+fc drop-snapshot 'sess/0'; check "drop-snapshot: exit 0" "$?" "0"
+check "drop-snapshot: only that session's snapshot is gone, its id sanitised" "$(ls "$SNAPS" | tr '\n' ' ')" "sess-9.json "
+fc drop-snapshot sess-0; check "drop-snapshot: a missing snapshot: exit 0" "$?" "0"
+fc drop-snapshot; check "drop-snapshot: no session: exit 2" "$?" "2"
+```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `timeout 240 /root/.local/bin/claude plugin test plugins/dforge; timeout 300 bash plugins/dforge/tests/dforge-config.test.sh`
-Expected: FAIL on the new tests.
+Expected: FAIL. In the cockpit suite: the two rewritten assertions (no `effortLevel` in the restore), both `saves the defaults before /model …` cases (no snapshot is written), the two `restores the defaults of a session …` cases and `drops, saying so once, …` (nothing is read at start), `arms the watchdog when a read at the start fails` (no heartbeat: the failing usage read ends `session.start` before the timers are armed), `a main compaction clears the turn readings, …`, `counts the reconcile prompts afresh …` (3 prompts and a booked failure) and `lets six more go …` (6, not 7). `leaves the snapshot of a session that is still alive` already passes. In dforge-config: the three `claude-restore` effortLevel checks and the first three `drop-snapshot` checks; `drop-snapshot: no session: exit 2` already passes.
 
 - [ ] **Step 3: Implement**
 
-1. `autoStage` (`:2851`): before `/model`, write C14 (never over an existing file for this session), `effortLevel` always read; delete it after a restore that read back. `session.start`: restore another session's snapshot only when its `pid` is not alive and the user's `model` equals `launchModel`, then delete it; leave a live writer's snapshot; delete any other with one toast line (R16).
-2. `RESTORABLE` (`dforge-config.mjs:169`) gains `effortLevel`; `userDefaults` (`register.tsx:2955`) reads it.
-3. A `resetSessionGuards()` called on a session-id change resets `keepWarmCount`, `reconcileSeen` and `autoDeferredSince`; a main `session.compact` (`:508`) clears `turnTokens`; `session.start` (`:392`) arms the watchdog and poll first and wraps each read in its own `try`.
+1. `autoStage` (`:2851`): before `/model`, write C14 for the current session id with `$.fs.write`, unless `$.fs.stat` finds the file; `saved` is `userDefaults`' answer. After `restoreUserDefaults` returns true, run `node <plugin root>/scripts/lib/dforge-config.mjs drop-snapshot <session id>` (timeout 15 s, a failure ignored); a restore that did not read back leaves the snapshot.
+2. `session.start`: list `<home>/.claude/dforge/sessions/saved-defaults` (a listing that fails means none) and read each name ending `.json`, whatever kind the listing reports. Skip this session's own. For another session's snapshot: leave it when `isSessionAlive` (C16) holds for its `session`; otherwise, when the user's current `model` (from `userDefaults`) equals its `launchModel`, put its `saved` back with `restoreUserDefaults` and drop it once that read back; otherwise drop it and toast `dforge: dropped the model switch snapshot of session <session>: your default model is no longer <launchModel>.` A snapshot that does not parse is dropped (by its file name less `.json`) with `dforge: dropped an unreadable model switch snapshot, <file name>.` Compare `saved` in C14's key order (`model`, `modelSettings`, `effortLevel`), since the read-back compares JSON text.
+3. `RESTORABLE` (`dforge-config.mjs:169`) gains `effortLevel`; `userDefaults` (`register.tsx:2955`) returns `{ model, modelSettings, effortLevel }`, each missing key `null`. `dforge-config.mjs` gains `drop-snapshot SESSION`: delete `<home>/.claude/dforge/sessions/saved-defaults/<SESSION with every character outside A-Za-z0-9 replaced by ->.json` (`<home>` as `homeOf` reads it), a missing file included, and exit 0; any other argument count prints the usage line, which names the command, and exits 2.
+4. A `resetSessionGuards()` resets `keepWarmCount`, `reconcileSeen` and `autoDeferredSince`; `session.start` calls it in place of its own resets (`:396-397`), and `pollTick` (`:3828-3831`) calls it before `readSession($, false)` when the session id changed. A main `session.compact` (`:508`) clears `turnTokens` to `[]`.
+5. `session.start` (`:392`) arms the watchdog and the poll first, then runs `readSession` with each read in its own `try`, so a read that throws (`refresh`'s `$.session.usage()`, `:3542`) skips only its own section.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -2470,19 +3130,21 @@ check "an invalid notifyOn reads none" "$(fc get notifyOn)" "none"
 check "a mixed list keeps its known names" "$(fc get sections)" "plan"
 fresh claudelock
 mkdir -p "$HOME/.claude" && printf '{}' > "$HOME/.claude/settings.json"
-fc set autoCompactWindow 700000 & fc set autoCompactEnabled false & wait
+# The delay holds each writer between its read and its write, so two unlocked
+# writers always both read {} and the second rename drops the first key.
+DFORGE_CLAUDE_WRITE_DELAY_MS=1500 fc set autoCompactWindow 700000 & DFORGE_CLAUDE_WRITE_DELAY_MS=1500 fc set autoCompactEnabled false & wait
 check "two concurrent Claude-key writes both persist" "$(jq -c '{autoCompactWindow, autoCompactEnabled}' "$HOME/.claude/settings.json")" '{"autoCompactWindow":700000,"autoCompactEnabled":false}'
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `timeout 300 bash plugins/dforge/tests/dforge-config.test.sh`
-Expected: FAIL on `an invalid notifyOn reads none`.
+Expected: FAIL on `an invalid notifyOn reads none` and `two concurrent Claude-key writes both persist`.
 
 - [ ] **Step 3: Implement**
 
 1. `schema.mjs`: export `resolveStored(key, spec, file)` beside `isValidValue` with the list salvage and the `notifyOn`-as-`none` fallback now in `config.ts:87-111`; `config.ts` `storedSetting` and `dforge-config.mjs` `resolve` both call it, each keeping its own warning. `SettingSpec['unit']` gains `'min'`.
-2. `writeClaudeKeys`: hold a lock keyed to `realTarget(...)` across read, change and rename (the `withHomeLock` mechanism with a per-file lock name); `setValue`'s Claude branch and `restoreClaude` go through it.
+2. `writeClaudeKeys`: hold a lock keyed to `realTarget(...)` across read, change and rename (the `withHomeLock` mechanism with a per-file lock name, waiting at least 10 s for it); `setValue`'s Claude branch and `restoreClaude` go through it. Between the read and the write, when `DFORGE_CLAUDE_WRITE_DELAY_MS` is a positive integer, block that many milliseconds (`Atomics.wait` on a fresh `Int32Array(new SharedArrayBuffer(4))`): a test seam, named in the function's comment, that leaves the default path unchanged.
 
 - [ ] **Step 4: Run test to verify it passes**
 
