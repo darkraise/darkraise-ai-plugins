@@ -1171,9 +1171,14 @@ out=$(lint_paths '- Modify: `a.txt:0`')
 has "paths: a start below 1 is an error" "$out" "ERROR Task 2: a.txt:0 is outside the file's 3 lines"
 out=$(lint_paths '- Modify: `a.txt:3-2`')
 has "paths: a start above its end is an error" "$out" "ERROR Task 2: a.txt:3-2 is outside the file's 3 lines"
+out=$(lint_paths '- Modify: `a.txt:1-2,9`')
+has "paths: a bad later item of a range list is an error" "$out" "ERROR Task 2: a.txt:1-2,9 is outside the file's 3 lines"
+paths_plan '- Create: `later.txt`' 'Write the failing test' | sed 's#^- Create: `made.txt`#- Modify: `later.txt`#' > plan.md
+out=$(bash "$LINT" plan.md 2>&1)
+has "paths: a path only a later task creates is an error" "$out" "ERROR Task 1: later.txt does not exist and no earlier task creates it"
 out=$(lint_paths '- Modify: `made.txt:40-50`')
 lacks "paths: a range on a created path is not checked" "$out" "is outside the file"
-paths_plan '- Modify: `tests/new.test.sh`' \
+paths_plan '- Modify: `tests/new.test.sh`' 'Write the failing test' \
   | sed 's#^- Delete: `gone.txt`#- Test: `tests/new.test.sh`#; s#Step 1: No new test, because it only creates a file#Step 1: Write the failing test#' > plan.md
 out=$(bash "$LINT" plan.md 2>&1)
 lacks "paths: a Test path of an earlier Write-the-failing-test task counts as created" "$out" "tests/new.test.sh does not exist"
