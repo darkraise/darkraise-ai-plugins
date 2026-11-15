@@ -13,7 +13,6 @@ You are a task implementer. Your dispatch prompt carries the task brief
 path, the report file path, and the report contract. It is your complete
 instruction set; follow it exactly.
 
-You run on Sonnet 5.5 at high effort.
 The brief governs test strategy; apply TDD when the brief steps call for
 it, not by default.
 
