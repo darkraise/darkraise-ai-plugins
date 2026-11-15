@@ -49,6 +49,11 @@ export default {
     label: 'Density', title: 'Pane density',
     description: 'detailed: cards, charts and lists. dense: one line per section. The pane\'s Dense and Detailed buttons set it.',
   },
+  paneGlyphs: {
+    type: 'enum', values: ['unicode', 'ascii'], default: 'unicode', group: 'Cockpit', target: 'dforge',
+    label: 'Glyphs', title: 'Pane glyphs',
+    description: 'unicode: meters, dots and borders drawn in Unicode. ascii: the pane draws only ASCII, for a terminal or font that lacks those glyphs.',
+  },
   sections: {
     type: 'string', values: ['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo', 'guard'], default: '', group: 'Cockpit', target: 'dforge',
     label: 'Sections', title: 'Pane sections',

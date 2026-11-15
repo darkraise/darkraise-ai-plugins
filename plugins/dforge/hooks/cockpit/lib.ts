@@ -446,12 +446,58 @@ export function seatRefusalLine(spawn: SeatSpawn): string {
   return spawn.fork ? 'fork refused' : `${spawn.subagentType.replace(/^dforge:/, '')} with no model`
 }
 
+/** The meter cells, the live dot and the in-flight arrow the pane draws. */
+export type Glyphs = { fill: string; empty: string; dot: string; arrow: string }
+export const UNICODE_GLYPHS: Glyphs = { fill: '▰', empty: '▱', dot: '●', arrow: '▸' }
+export const ASCII_GLYPHS: Glyphs = { fill: '#', empty: '-', dot: '*', arrow: '>' }
+
 /** 0.8 → "▰▰▰▰▰▰▰▰▱▱" at width 10; never full below 100%. */
-export function bar(share: number, width: number): string {
+export function bar(share: number, width: number, glyphs: Glyphs = UNICODE_GLYPHS): string {
   const clamped = Math.min(Math.max(share, 0), 1)
   let on = Math.round(clamped * width)
   if (on === width && clamped < 1) on = width - 1
-  return '▰'.repeat(on) + '▱'.repeat(width - on)
+  return glyphs.fill.repeat(on) + glyphs.empty.repeat(width - on)
+}
+
+const ASCII_SPELLING: Record<string, string> = {
+  '▰': '#', '▱': '-', '●': '*', '▸': '>', '▾': 'v', '○': 'o', '◐': 'o', '·': '|', '…': '...', '—': '-', '–': '-', '−': '-',
+  '✓': '+', '✅': '+', '✗': 'x', '❌': 'x', '×': 'x', '≈': '~', '§': 'S', '⎇': '@', '↑': '^', '↓': 'v', '↻': '@', '↪': '->', '⇣': 'v',
+  '─': '-', '━': '=', '│': '|', '┃': '|', '┊': ':', '╭': '+', '╮': '+', '╰': '+', '╯': '+', '█': '#', '■': '#',
+  '▁': '_', '▂': '_', '▃': '.', '▄': '-', '▅': '=', '▆': '=', '▇': '#', '☰': '=', '≡': '=', '⚙': '*',
+  '\ufe0f': '', '⏹': '#', '⏭': '>>', '⏳': '..', '❓': '?', '⛔': '!', '🛑': '!', '⚠': '!', '🔶': '*', '🔔': '!', '🏁': '#',
+}
+
+/** `text` in ASCII: each glyph the cockpit draws spelled plainly, accents dropped, anything else a `?`. */
+export function asciiText(text: string): string {
+  return [...text]
+    .map(ch => ASCII_SPELLING[ch] ?? ch)
+    .join('')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x00-\x7f]/gu, '?')
+}
+
+/**
+ * A drawn tree in ASCII alone: every text and button label through asciiText,
+ * every border classic. Elements other than Box, Text and Button are kept.
+ */
+export function asciiTree<T>(node: T): T {
+  if (typeof node === 'string') return asciiText(node) as T
+  if (Array.isArray(node)) return node.map(asciiTree) as T
+  if (node === null || typeof node !== 'object') return node
+  const element = node as { type?: unknown; props?: Record<string, unknown>; hover?: Record<string, unknown>; children?: unknown }
+  if (element.type !== 'Box' && element.type !== 'Text' && element.type !== 'Button') return node
+  const plain = (props: Record<string, unknown>) => ({
+    ...props,
+    ...(typeof props.label === 'string' ? { label: asciiText(props.label) } : {}),
+    ...(props.borderStyle === undefined ? {} : { borderStyle: 'classic' }),
+  })
+  return {
+    ...element,
+    ...(element.props === undefined ? {} : { props: plain(element.props) }),
+    ...(element.hover === undefined ? {} : { hover: plain(element.hover) }),
+    ...(element.children === undefined ? {} : { children: asciiTree(element.children) }),
+  } as T
 }
 
 /** The usage ramp: green, yellow, orange, then red. */
@@ -546,9 +592,9 @@ export type TrackPart = { text: string; kind: 'fill' | 'empty' | 'mark'; mark?: 
  * A meter `width` cells wide filled to `share`, with each mark's glyph in the
  * cell its share lands on (a later mark wins a shared cell). Never full below 100%.
  */
-export function track(share: number, width: number, marks: readonly { at: number; glyph: string; name: string }[]): TrackPart[] {
-  const filled = bar(share, width)
-  const cells: TrackPart[] = [...filled].map(cell => ({ text: cell, kind: cell === '▰' ? 'fill' : 'empty' }))
+export function track(share: number, width: number, marks: readonly { at: number; glyph: string; name: string }[], glyphs: Glyphs = UNICODE_GLYPHS): TrackPart[] {
+  const filled = bar(share, width, glyphs)
+  const cells: TrackPart[] = [...filled].map(cell => ({ text: cell, kind: cell === glyphs.fill ? 'fill' : 'empty' }))
   for (const mark of marks) {
     if (!(mark.at >= 0 && mark.at <= 1)) continue
     const index = Math.min(width - 1, Math.floor(mark.at * width))
@@ -1278,13 +1324,13 @@ function commandExcerpt(command: string, width: number): string {
 }
 
 /** The Now row: one line, whatever the state, so the pane never jumps. */
-export function nowLine(now: ActivityInput, at: number, work: ActivityWork = { shells: [], agents: 0 }): Run[] {
+export function nowLine(now: ActivityInput, at: number, work: ActivityWork = { shells: [], agents: 0 }, glyphs: Glyphs = UNICODE_GLYPHS): Run[] {
   const sep: Run = { text: ' · ', dim: true }
   const sent: Run[] = now.isSent ? [sep, { text: 'Discord ✓', dim: true }] : []
   switch (now.kind) {
     case 'running':
       return [
-        { text: '● ', color: 'cyan', bold: true },
+        { text: `${glyphs.dot} `, color: 'cyan', bold: true },
         { text: 'running ' },
         { text: elapsed(at - (now.turnStartedAt ?? now.since)), color: 'cyan', bold: true },
         ...(now.step > 0 ? [sep, { text: `step ${now.step}`, dim: true }] : []),

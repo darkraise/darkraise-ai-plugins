@@ -22,6 +22,8 @@ import type {
 import {
   accountColor,
   accountKey,
+  ASCII_GLYPHS,
+  asciiTree,
   attributionIn,
   autoLimitFor,
   activeRunOwner,
@@ -99,6 +101,7 @@ import {
   themeColor,
   track,
   turnsToBudget,
+  UNICODE_GLYPHS,
   windowElapsed,
   writesGitText,
 } from './lib'
@@ -310,6 +313,7 @@ type Options = {
   guardAttribution: boolean
   layout: string
   density: string
+  paneGlyphs: string
   sections: string
   collapsed: string
   breakdownRows: number
@@ -328,9 +332,10 @@ type Options = {
 type Tuning = { handoffTokens: number; nudgeModel: boolean; isRelaxed: boolean }
 
 /** The options with their defaults filled in, and what the pane derives from them. */
-type Live = Omit<Options, 'layout' | 'density'> & {
+type Live = Omit<Options, 'layout' | 'density' | 'paneGlyphs'> & {
   layout: 'auto' | 'full' | 'compact'
   density: 'detailed' | 'dense'
+  paneGlyphs: 'unicode' | 'ascii'
   tuning: Tuning
   shown: Section[]
   shownCollapsed: Section[]
@@ -346,6 +351,7 @@ function liveFrom(values: Partial<Options>): Live {
     guardAttribution = true,
     layout: layoutSetting = 'auto',
     density: densitySetting = 'detailed',
+    paneGlyphs = 'unicode',
     sections = '',
     collapsed = '',
     breakdownRows = 6,
@@ -368,6 +374,7 @@ function liveFrom(values: Partial<Options>): Live {
     guardAttribution,
     layout,
     density: densitySetting === 'dense' ? 'dense' : 'detailed',
+    paneGlyphs: paneGlyphs === 'ascii' ? 'ascii' : 'unicode',
     sections,
     collapsed,
     breakdownRows,
@@ -645,6 +652,7 @@ export const register: Register = on => {
     if (!S.isKeepWarmTurn) S.keepWarmCount = 0
     S.releaseTimer?.cancel()
     S.releaseTimer = null
+    await flushSettingNote($)
     const stamp = await $.clock.now()
     for (const [id, wait] of [...S.waits]) if (wait.agentId === null) await settleWait($, id, '⏹ Turn ended')
     await setActivity($, now => ({
@@ -926,6 +934,8 @@ export const register: Register = on => {
     const isDesktop = Svg !== undefined
     const now = await $.clock.now()
     const room = e.props.bodyColumns
+    const glyphs = o.paneGlyphs === 'ascii' ? ASCII_GLYPHS : UNICODE_GLYPHS
+    const glyphed = <T,>(tree: T): T => (o.paneGlyphs === 'ascii' ? asciiTree(tree) : tree)
     const isCompact = o.isMinimized || (o.layout === 'auto' && e.props.placement === 'inline')
     // Only these two surfaces draw the band above the prompt.
     const canMinimize = e.surface === 'terminal' || e.surface === 'desktop'
@@ -1000,6 +1010,12 @@ export const register: Register = on => {
       )
     }
     const isNearHandoff = head !== null && levelOf(head.tokens, head.limit) !== 'quiet'
+    const problemCount = S.settingProblems.length
+    const problemLine = problemCount > 0 && (
+      <Text key="setting-problems" color="warning" wrap="truncate-end">
+        {`${problemCount} setting problem${problemCount === 1 ? '' : 's'} · see Settings`}
+      </Text>
+    )
     const resumeCard = offer !== null && (
       <Box key="resume-card" flexDirection="column" borderStyle="round" borderColor={BUTTON_MAIN} paddingX={1}>
         <Text key="resume-title" color={BUTTON_MAIN} bold wrap="truncate-end">
@@ -1196,7 +1212,7 @@ export const register: Register = on => {
         ),
       }
 
-      return drawSettings(
+      return glyphed(drawSettings(
         elements,
         {
           tabs,
@@ -1253,7 +1269,7 @@ export const register: Register = on => {
             if (o.isMinimized) await $.ui.close({ id: PANE })
           },
         },
-      )
+      ))
     }
     const running = all.filter(one => !one.isDone)
     // After Esc, what kept going: background shells and agents survive it.
@@ -1281,14 +1297,14 @@ export const register: Register = on => {
     // band's rows, has to be asked for the full pane.
     if (isCompact) {
       const isInline = e.props.placement === 'inline'
-      return drawBand(
+      return glyphed(await drawBand(
         $,
         e,
         async () => {
           if ((await setOption($, 'layout', isInline ? 'full' : 'auto')) && isInline) await $.ui.open(paneFor('full'))
         },
         e.props.bodyColumns,
-      )
+      ))
     }
 
     if (isDense) {
@@ -1314,13 +1330,14 @@ export const register: Register = on => {
         const runs = denseLine(name, dense)
         return runs === null ? [] : [{ key: `dense-${name}`, runs: runsCut(runs, room) }]
       })
-      return (
+      return glyphed(
         <Box flexDirection="column">
           {resumeCard}
+          {problemLine}
           <Box key="dense-now" flexDirection="row" alignItems="center" columnGap={1}>
             <Box key="dense-now-text" flexGrow={1} flexShrink={1}>
               <Text key="now" wrap="truncate-end">
-                {drawRuns('now', nowLine(actNow, now, work))}
+                {drawRuns('now', nowLine(actNow, now, work, glyphs))}
               </Text>
             </Box>
           </Box>
@@ -1408,7 +1425,7 @@ export const register: Register = on => {
           track(head.tokens / head.window, inner, [
             ...(compactAt === null ? [] : [{ at: compactAt / head.window, glyph: '┊', name: 'compact' }]),
             { at: head.limit / head.window, glyph: '┃', name: 'handoff' },
-          ]),
+          ], glyphs),
           { handoff: rampColor(percent), compact: 'gray' },
         ),
         <Text key="ctx-legend" wrap="truncate-end">
@@ -1495,7 +1512,7 @@ export const register: Register = on => {
           </Text>
         </Text>,
         <Text key="plan-progress" color={color}>
-          {bar(summary.done / summary.total, inner)}
+          {bar(summary.done / summary.total, inner, glyphs)}
         </Text>,
         summary.plan !== null && (
           <Text key="plan-path" dimColor wrap="truncate-end">
@@ -1689,7 +1706,7 @@ export const register: Register = on => {
                 {drawTrack(
                   `limit-${limit.kind}-track`,
                   limit.percent,
-                  track(limit.percent / 100, width, gone === null ? [] : [{ at: gone, glyph: '┊', name: 'pace' }]),
+                  track(limit.percent / 100, width, gone === null ? [] : [{ at: gone, glyph: '┊', name: 'pace' }], glyphs),
                   { pace: 'white' },
                 )}
                 <Text color={rampColor(limit.percent)} bold>
@@ -1781,7 +1798,7 @@ export const register: Register = on => {
                   <Text dimColor> ×{seat.runs}</Text>
                 </Text>
                 <Text wrap="truncate-end">
-                  {seatBar(seat) > 0 && <Text color="magenta">{bar(totalIn(seat) / mostIn, seatBar(seat)).replace(/▱+$/, rest => ' '.repeat(rest.length))} </Text>}
+                  {seatBar(seat) > 0 && <Text color="magenta">{bar(totalIn(seat) / mostIn, seatBar(seat), glyphs).replace(new RegExp(`${glyphs.empty}+$`), rest => ' '.repeat(rest.length))} </Text>}
                   <Text bold>{seatText(seat).slice(0, seatText(seat).indexOf(' '))}</Text>
                   <Text dimColor>{seatText(seat).slice(seatText(seat).indexOf(' '))}</Text>
                 </Text>
@@ -1803,7 +1820,7 @@ export const register: Register = on => {
             {doneCount}/{items.length}
           </Text>,
           <Text key="plan-progress" color="yellow">
-            {bar(doneCount / items.length, inner)}
+            {bar(doneCount / items.length, inner, glyphs)}
           </Text>,
           shownItems.map(item => (
             <Text key={`plan-${item.id}`} wrap="truncate-end">
@@ -2222,15 +2239,16 @@ export const register: Register = on => {
           </Box>
         )
       }
-      return (
+      return glyphed(
         <Box flexDirection="column" gap="md">
           {resumeCard}
+          {problemLine}
           {o.shown.includes('account') && panels.account}
           {controls}
           <Box key="now-row" flexDirection="row" alignItems="center" columnGap={1}>
             <Box key="now-box" flexGrow={1} flexShrink={1}>
               <Text key="now" wrap="truncate-end">
-                {drawRuns('now', nowLine(actNow, now, work))}
+                {drawRuns('now', nowLine(actNow, now, work, glyphs))}
               </Text>
             </Box>
           </Box>
@@ -2245,11 +2263,12 @@ export const register: Register = on => {
       )
     }
 
-    return (
+    return glyphed(
       <Box flexDirection="column">
         {resumeCard}
+        {problemLine}
         <Text key="now" wrap="truncate-end">
-          {drawRuns('now', nowLine(actNow, now, work))}
+          {drawRuns('now', nowLine(actNow, now, work, glyphs))}
         </Text>
         {!o.shown.includes('account') && controls}
         {o.shown.map(name => (name === 'account' ? [byName[name], controls] : byName[name]))}
@@ -4043,8 +4062,10 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
       const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'set', key, String(value)], { timeoutMs: 15_000 })
       if (ran.exitCode !== 0) throw new Error(ran.stderr.trim().replace(/^dforge-config: /, '') || `dforge-config exited ${ran.exitCode}`)
       // dforge-config removes a floored key saved as 0, so the user file then lacks it.
-      S.claudeSaved[key] = spec.floor !== undefined && value === 0 ? undefined : value
+      const saved = spec.floor !== undefined && value === 0 ? undefined : value
+      S.claudeSaved[key] = saved
       await applySettings($, file ?? {}, mtime)
+      void claudeReadBack($, key, saved)
       return true
     }
     if (path === null) throw new Error('no home directory is set')
@@ -4064,6 +4085,32 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
   } catch (error) {
     $.ui.toast(`dforge: ${key} not saved: ${error instanceof Error ? error.message : String(error)}`)
     return false
+  }
+}
+
+// The engine can write its own settings over a save that lands right after
+// one of its own, so a Claude key is read back as restoreUserDefaults reads
+// the defaults. Unseen after the wait, the save is no longer shown as saved.
+// It runs apart from the press, which would otherwise wait out the polls.
+async function claudeReadBack($: EngineInterface, key: string, value: SettingValue | undefined) {
+  try {
+    let user: Record<string, unknown> | null = null
+    for (let waited = 0; ; waited += RESTORE_POLL_MS) {
+      user = (await $.settings.read({ source: 'user' }).catch(() => null)) as Record<string, unknown> | null
+      if (user !== null && user[key] === value) return
+      if (waited >= RESTORE_WAIT_MS) break
+      await $.clock.sleep(RESTORE_POLL_MS)
+    }
+    // An unreadable engine says nothing; a later save of the key owns the overlay.
+    if (user === null || !(key in S.claudeSaved) || S.claudeSaved[key] !== value) return
+    const engine = user[key]
+    delete S.claudeSaved[key]
+    const { path, mtime } = await configStamp($)
+    const file = path === null ? {} : await readSettingsFile($, path)
+    await applySettings($, file ?? {}, mtime)
+    $.ui.toast(`dforge: ${key} did not stick: the engine kept ${engine === undefined ? 'no value' : JSON.stringify(engine)}`)
+  } catch {
+    // The read-back is a courtesy: a failure leaves the save shown as saved.
   }
 }
 
@@ -4244,7 +4291,11 @@ async function rereadSettings($: EngineInterface) {
     return
   }
   const before = (await live($)).layout
+  const was = ((await read($, settings)) ?? {}) as Record<string, SettingValue | undefined>
   await applySettings($, file, mtime)
+  // A skill-enforced key saved outside the pane reaches the session as a pane save does.
+  const values = ((await read($, settings)) ?? {}) as Record<string, SettingValue | undefined>
+  for (const [key, spec] of Object.entries(SCHEMA)) if (spec.enforcedBy === 'skill' && values[key] !== was[key] && values[key] !== undefined) S.changed[key] = values[key]
   await reseatPane($, before)
 }
 
