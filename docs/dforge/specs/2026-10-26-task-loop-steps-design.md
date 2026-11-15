@@ -124,9 +124,10 @@ run, and none while a turn is live. Because 20 minutes falls before the
 30-minute deferral cap, the session can stop a hung launch before the stage's
 failure is booked. The reconcile turn is a live turn, so it restarts the
 stage's deferral clock (`autoDeferredSince` in `autoStage`); so that a stage
-cannot be deferred forever, the third consecutive reconcile prompt for one
-pending stage with no launch stopped and no notification between them books
-the failure that `DEFER_CAP_MS` would have. The idle test is the
+cannot be deferred forever, after the third consecutive reconcile prompt for
+one pending stage with no launch stopped and no notification between them,
+the next window books the failure that `DEFER_CAP_MS` would have. The idle
+test is the
 output file, not the launch's age, so a long but active implementer or Codex
 seat (heavy reviews run up to 92 minutes) is never stopped. A background
 suite that prints nothing for a long build step stays live because
