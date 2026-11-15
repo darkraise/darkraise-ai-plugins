@@ -46,9 +46,13 @@ Grouped by subsystem. Each bullet names its register row(s).
 
 ### 1. Data safety
 
-- **QA manifest (row 1).** Acceptance QA appends each path it creates,
-  modifies or deletes to `<workspace>/qa-touched.txt`, one repository-relative
-  path per line, before it writes the path. On a QA timeout (both the main
+- **QA manifest (row 1).** The session truncates
+  `<workspace>/qa-touched.txt` whenever it saves `qa-status-before.txt`, so a
+  re-dispatch or a second final-review round starts empty. Acceptance QA
+  appends each path it creates, modifies or deletes to that file, one
+  repository-relative path per line, before it writes the path;
+  acceptance-qa.md's "What you may read" and "Never" sections allow that one
+  append. On a QA timeout (both the main
   path at final-review.md:163-168 and the recovery path at :121-125) the
   session restores or deletes only paths that are both listed in the manifest
   and new relative to `qa-status-before.txt`. Every other new dirty path is
@@ -57,7 +61,10 @@ Grouped by subsystem. Each bullet names its register row(s).
 - **Amendments are durable (row 25).** `amendments.md` lives in the ledger
   directory (`dforge_dir ledger <plan>`), so it follows progress into the
   darkmem mirror and is synced and retained with the ledger. `review-record`
-  keeps it. Recovery (`resume-execution`, `task-brief`) refuses with exit 2
+  keeps it. Migration: when the ledger-directory file is missing and
+  `<workspace>/amendments.md` exists, the first reader moves it there and logs
+  one `Ruling: amendments moved beside the ledger — none` line, so a plan
+  amended before the upgrade resumes with its amendments. Recovery (`resume-execution`, `task-brief`) refuses with exit 2
   and a named message when the ledger has a `Ruling: amendment A<k>` line and
   `amendments.md` lacks `A<k>`. `ci-mirror` resolves the plan with
   `plan_locate` and reads it through `plan_apply_amendments`.
@@ -72,7 +79,9 @@ Grouped by subsystem. Each bullet names its register row(s).
 - **Stale final review (row 3).** `next-step` and recovery parse the head of
   `Final review: clean (commits <base>..<head>)`. When HEAD has commits after
   `<head>` that touch anything but `<docs>/` files, the plan routes to a
-  scoped re-review of `<head>..HEAD`, not to finishing.
+  scoped re-review of `<head>..HEAD`, not to finishing. When `<head>` is not an
+  ancestor of HEAD (a rebase, amend or squash), it routes to a full final
+  review and logs a `Ruling:` line naming the rewritten history.
 - **PR records after publication (row 6).** Option 2 writes and syncs the
   completion record only after `git push` and the PR creation both succeed.
 - **Keep as-is (row 7).** Step 7 runs `next-step --kept` after Option 3: it
@@ -92,34 +101,49 @@ Grouped by subsystem. Each bullet names its register row(s).
   `**Covers:**` to the spec when it is `-`.
 - **Missing Node (row 15).** When `dforge_darkmem_possible` is true and Node
   is not on PATH, `dforge_roots` exits 2 with "node is required while darkmem
-  stores are applied". Hooks treat that exit as "pass silently and add one
-  warning line"; scripts the session calls fail with the message.
+  stores are applied". Hooks treat that exit as a silent pass, and session
+  start injects the warning once (a marker beside the turn stamp); scripts the
+  session calls fail with the message.
 
 ### 3. Cockpit session file
 
 - **Contract (rows 12, 28, 39, 40).** The cockpit writes
-  `~/.claude/dforge/sessions/state/<session-id>.json` at session start, at
-  every turn end and whenever a launch starts or ends:
-  `{session, updated, window, model, fastMode: {on, scope, since},
-  launches: [{id, kind, what, service}]}`. Scripts read it through one helper
-  in `scripts/lib/session-state.sh`, and only when `updated` is not older
-  than the session's turn stamp; otherwise they fall back to today's
-  transcript scan.
+  `~/.claude/dforge/sessions/state/<session-id>.json` at session start, when
+  a prompt is submitted (after the turn stamp exists), at every turn end,
+  whenever a launch starts or ends, and when the model changes:
+  `{session, updated, window, model, launches: [{id, kind, what, service}]}`.
+  Scripts read it through one helper in `scripts/lib/session-state.sh`.
+  `window` and `model` are valid while `session` matches; `launches` is valid
+  only when `updated` is not older than the turn stamp. Otherwise the helper
+  falls back to today's transcript scan, and on a rejection it appends one
+  line per turn (reader and reason: missing, stale, unparseable, session
+  mismatch) to `<state>/session-state.log`; `scripts/in-flight` and the
+  budget line name the source they used. Session start prunes state files
+  older than 30 days. Fast mode stays out of the file: `fast_mode_on`
+  remains its only parser.
 - **One service list (row 12).** The service patterns the cockpit uses
   (`SERVICES`, `isServiceCommand`) move to `config/services.json`, read by
   both the cockpit and `lib/in-flight.sh`. In `turn-end.sh` a running service
   no longer passes a plain stop: only finite background work does.
 - **Context window (row 28).** `ctx_model_window` takes the session file's
-  `window`; without it, a model id the table does not list yields
-  `unknown`, never a guessed 1,000,000.
-- **Hot paths (row 39).** `fast_mode_on` reads the session file, else only
-  the transcript tail since the turn stamp. The newest-ledger scan caches by
-  directory modification time.
+  `window`; without it, a model id the table does not list has no window.
+  Every consumer handles that before any arithmetic: `ctx_line` and
+  `ctx_auto_line` print the existing `unknown` verdict and exit 3
+  (context.sh:386, which session-budget.md's count rule reads as "keep the
+  session"), and `ar_verdict`/`ar_limit` treat it as no size-based handoff.
+  A guessed 1,000,000 is never used.
+- **Hot paths (row 39).** `fast_mode_on` reads the main transcript backwards
+  in chunks and stops at the newest `Process:` line, instead of scanning the
+  whole file forwards. The newest-ledger scan caches by directory
+  modification time.
 - **Fast-mode scope (rows 14, 59).** `Process: fast — <why>` covers the one
   request: it ends at the next human prompt unless that turn writes another
   `Process: fast` line. The fast-mode question gains a third answer, fast for
   this session, written `Process: fast (session) — <why>`, which stays in
   force until the session ends or a later `Process:` line names another path.
+  So `fast_mode_on` takes the newest `Process:` line in the main transcript:
+  `fast (session)` is on wherever it sits; plain `fast` is on only when it
+  sits after the current turn stamp.
   The cockpit's budget nudge does not fire while fast mode is on.
 - **QA timer (row 37).** A launch whose command is a bare `sleep <n>` is a
   timer: the reconcile prompt and the idle report never tell the session to
@@ -170,9 +194,12 @@ Grouped by subsystem. Each bullet names its register row(s).
 - **Judge seats (row 36).** `WebFetch` is removed from every judge agent's
   tools.
 - **QA persona and gate (row 53).** `impl-sonnet-high.md` describes QA and
-  walkthrough dispatches only. `impl-stop-gate` checks that the report path
-  named in the dispatch exists and opens with its required heading
-  (`## Verdict` for QA), and passes any other stop.
+  walkthrough dispatches only. QA's reply contract (acceptance-qa.md) ends
+  with a `Report: <absolute path>` line. `impl-stop-gate` identifies a QA stop
+  by that line and blocks it when the file is missing or does not open with
+  `## Verdict`; it no longer looks for a `**Status:**` line. A reply without
+  a `Report:` line (a walkthrough, any other dispatch) passes unchecked. The
+  existing pass-through limits (two blocks per agent, five fires) stay.
 
 ### 6. Codex host
 
@@ -204,11 +231,13 @@ Grouped by subsystem. Each bullet names its register row(s).
   session bound to no plan.
 - **Resume offer (row 16).** Register names resolve through the docs-root
   mapping `planCandidates` uses.
-- **Model switch (row 60).** The saved defaults are written to
-  `~/.claude/dforge/sessions/saved-defaults.json` before `/model` runs and
-  restored from it at the next session start when still present.
-  `effortLevel` joins the snapshot if the plan's first cockpit task finds
-  that `/effort` writes it.
+- **Model switch (row 60).** Before `/model` runs, the cockpit writes the
+  user's `model`, `modelSettings` and `effortLevel` to
+  `~/.claude/dforge/sessions/saved-defaults/<session-id>.json`, never
+  overwriting an existing snapshot, together with the launch model it is
+  about to set. At session start a snapshot is restored only when the session
+  that wrote it is dead and the user's current `model` still equals that
+  launch model; any other snapshot is deleted with one line saying so.
 - **Session changes (row 61).** One helper resets the per-session guards
   (keep-warm, reconcile, auto-deferred) on a session-id change, and a main
   compaction clears `turnTokens`.
@@ -245,23 +274,23 @@ Grouped by subsystem. Each bullet names its register row(s).
 ## Acceptance
 
 A1. [test, high] When acceptance QA times out, a file the human edited during QA and not listed in `qa-touched.txt` keeps its content and is named in the final-review message.
-A2. [test, neg, high] The QA timeout cleanup never restores or deletes a path absent from `qa-touched.txt`, and with no manifest it touches nothing.
+A2. [test, neg, high] The QA timeout cleanup never restores or deletes a path absent from `qa-touched.txt`, with no manifest it touches nothing, and a re-dispatch never inherits an earlier run's entries.
 A3. [test, high] With progress in darkmem, `amendments.md` is synced with the ledger, and a fresh checkout restored from the mirror applies the approved amendments.
 A4. [test, high] Resume and `task-brief` exit 2 naming the missing amendment when the ledger cites `A<k>` and `amendments.md` lacks it.
 A5. [test, high] `ci-mirror` reads an amended `**CI:**` line and finds a plan stored in the darkmem docs mirror.
 A6. [test, neg, high] `task-brief --open` and `task-close` exit 2 when the ledger's plan line names a different plan with the same basename, and write nothing.
-A7. [test, high] A ledger with `Final review: clean (commits a..h)` and a later non-docs commit routes to a re-review of `h..HEAD`; docs-only commits after `h` still route to finishing.
+A7. [test, high] A ledger with `Final review: clean (commits a..h)` and a later non-docs commit routes to a re-review of `h..HEAD`; docs-only commits after `h` still route to finishing; when `h` is not an ancestor of HEAD it routes to a full final review.
 A8. [test, high] Under Option 2 with darkmem documents, no completion record is written or synced when the push fails.
 A9. [test, high] After Keep as-is, `next-step --kept` prints a pending-integration block naming the branch and does not print "is complete" or advance the programme.
 A10. [test, high] `finish-choice answer` succeeds with no saved preference, and the no-plan record is gone after Step 7.
 A11. [test, high] The compaction snapshot omits a `latest.md` that names another plan and predates the session, and keeps the newest ledger lines when over the cap.
 A12. [test, high] `auto-run clear` refuses a `latest.md` prompt for another plan; `auto-run stop --stale` stops a run whose owner session is dead; `auto-run start --register` fills `**Covers:** -`.
 A13. [test, neg, high] With darkmem stores applied and no Node on PATH, no script reads or writes a local ledger; scripts exit 2 with the node message and hooks pass with one warning line.
-A14. [test, high] The cockpit writes the session state file at session start and turn end, and `lib/session-state.sh` ignores a file older than the turn stamp.
+A14. [test, high] The cockpit writes the session state file at session start, prompt submit and turn end; a hook reading it mid-turn uses its `launches`, and `lib/session-state.sh` ignores `launches` older than the turn stamp while still using `window` for the same session, logging each rejection to `session-state.log`.
 A15. [test, high] With a dev server as the only running launch, a mid-plan summary stop is held, as it is with nothing running.
-A16. [test, high] `ctx_model_window` returns the session file's window when present and `unknown` for an unlisted model without one.
+A16. [test, high] `ctx_model_window` returns the session file's window when present; for an unlisted model without one, the budget line prints the `unknown` verdict and exits 3 and the auto-run verdict hands off on no size, with no arithmetic error.
 A17. [test, high] Request-scoped fast mode ends at the next human prompt: the UI edit hook and UI proof hold run again in a later request that writes no `Process: fast` line.
-A18. [test, high] `Process: fast (session)` keeps fast mode on across later requests until another `Process:` line names a different path.
+A18. [test, high] `Process: fast (session)` keeps fast mode on across later requests until another `Process:` line names a different path, with no session state file present.
 A19. [test, neg, high] The cockpit's budget nudge never fires while fast mode is on.
 A20. [test, high] A bare `sleep` launch is never named as idle work to stop by the reconcile prompt.
 A21. [test, medium] Session start returns within 45 seconds when darkmem reconcile or pull hangs, and injects one line naming the sync command. Q: is a 20-second bound per darkmem step right for your network?
@@ -276,7 +305,7 @@ A29. [test, high] `task-step` with `--cwd` resolves HEAD and diffs in that direc
 A30. [test, high] `ui-proof check` accepts a screenshot cited under the checkout's `.dforge/ui-proofs/` while documents live in darkmem.
 A31. [test, neg, high] The judge guard refuses a write to a prior round's report named in a direct re-review prompt, and accepts the report on the prompt's report line.
 A32. [test, neg, high] No judge agent file lists `WebFetch` among its tools.
-A33. [test, high] `impl-stop-gate` blocks a QA dispatch's stop when its named report is missing or lacks `## Verdict`, and passes otherwise.
+A33. [test, high] `impl-stop-gate` blocks a stop whose reply ends `Report: <path>` when that file is missing or lacks `## Verdict`, and passes a reply with no `Report:` line.
 A34. [test, high] `task-brief --open` on a `Host: codex` plan writes the open line and brief and exits 0.
 A35. [test, high] `dforge-config workflow --host codex` emits `designApproval` and `specReview` overrides under `autoRun=on`.
 A36. [demo, high] native-codex.md describes one judge per risk-3 review and no implementer escalation, reserve tier or split, and its lens routing names depth gating and `lensMinorFrom`.
@@ -284,7 +313,7 @@ A37. [test, high] `parseLedger` reads `waiting —` as waiting with its question
 A38. [test, high] A main turn ending on `Which option?` or on a ledger `waiting —` line sends a `question` notification.
 A39. [test, high] The Run card shows the plan this session last named in a task-brief/task-step/task-close/next-step call, even when another worktree's ledger changed later.
 A40. [test, high] Under `documentStore=darkmem` the resume offer clears once every row of its register is resolved.
-A41. [test, high] A cockpit crash after `/model` and before restore leaves `saved-defaults.json`, and the next session start restores the user's model.
+A41. [test, high] A cockpit crash after `/model` and before restore leaves its per-session snapshot, and the next session start restores the user's model; a snapshot whose launch model no longer matches the current model, or whose session is alive, is not restored.
 A42. [test, high] Keep-warm and reconcile counters reset on a session-id change, and `turnTokens` clears on a main compaction.
 A43. [test, neg, high] The attribution guard passes a commit with a human `Co-Authored-By:` and a command that only mentions a trailer, and still refuses an AI co-author trailer.
 A44. [test, high] A throwing `tool.call` hook refuses only guarded calls, with a message naming `guardAttribution`.
@@ -298,7 +327,8 @@ A51. [demo, high] On desktop, steppers show unit and zero words, and webhook row
 A52. [test, high] The fast-mode question offers a fast-for-this-session answer in brainstorming and systematic-debugging.
 A53. [demo, high] README, executing-plans, final-review.md and the QA persona carry no text describing the retired unplanned-commit hold, the fix subagent, a delegated cap of 5 on Claude plans, or per-task implementer dispatch.
 A54. [test, high] An unattended-mode check uses the event's permission mode when the event carries one.
-A55. [test, neg, high] Every existing suite still passes, except the baseline assertion A25 replaces, and no existing `Task <N>:` ledger line changes meaning for `ledger_blocked` or recovery.
+A55. [test, neg, high] Every existing suite still passes, except the assertions these rows rewrite: the baseline test (A25), impl-stop-gate's DONE contract (A33), the cockpit's service-shell tests (A15), the 1,000,000-token fallback (A16) and the fast-mode scope (A17, A18); no existing `Task <N>:` ledger line changes meaning for `ledger_blocked` or recovery.
+A56. [test, high] A plan amended before the upgrade, with `amendments.md` still in its workspace, resumes and applies its amendments.
 
 ## Riskiest assumption
 
@@ -317,3 +347,36 @@ when it does not.
 The rejected findings and rejected halves listed in Decisions; register
 `2026-11-15-residual-fixes.md` (unrelated agy behaviour); a version bump or
 release.
+
+## Critic findings
+
+Architecture critic (judge-opus), 2026-11-15: 1 Blocker, 5 High, 5 Medium,
+3 Nit — every one fixed in the sections above.
+
+- [Blocker] Session-scoped fast mode lost by a tail-only fallback — fixed:
+  `fast_mode_on` takes the newest `Process:` line in the whole transcript,
+  read backwards (§3 Hot paths, Fast-mode scope; A18).
+- [High] Session file stale for nearly every read — fixed: written at prompt
+  submit too; `window`/`model` valid per session, `launches` per turn (A14).
+- [High] QA gate had no source for the report path — fixed: QA replies end
+  `Report: <path>`; the gate keys on it (A33).
+- [High] Amendments move had no migration — fixed: first reader moves the
+  workspace file and logs a ruling (A56).
+- [High] One global saved-defaults file — fixed: per-session, never
+  overwritten, restored only when the writer is dead and the launch model is
+  still set (A41).
+- [High] `unknown` window reached bash arithmetic — fixed: consumers take the
+  existing unknown verdict, exit 3 (A16).
+- [Medium] QA manifest lifecycle — fixed: truncated with `qa-status-before.txt`;
+  acceptance-qa.md allows the append (A2).
+- [Medium] A55 contradicted pinned suites — fixed: A55 names the rewritten
+  assertions.
+- [Medium] Rewritten history after the clean review — fixed: full final review
+  with a ruling (A7).
+- [Medium] `fastMode` duplicated the `Process:` grammar — fixed: dropped from
+  the session file.
+- [Medium] No trace of the source used — fixed: `session-state.log`, and the
+  source named by `in-flight` and the budget line.
+- [Nit] Node warning on every hook — fixed: once per session at start.
+- [Nit] State file retention — fixed: pruned after 30 days.
+- [Nit] `effortLevel` probe — fixed: always snapshotted.
