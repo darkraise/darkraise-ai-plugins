@@ -159,7 +159,25 @@ if ln -s "$TMP/a15-transcript.jsonl" "$TMP/a15.output" 2>/dev/null && [ -L "$TMP
   result toolu_a15 "$(printf 'Async agent launched successfully.\nagentId: a15 (internal ID)\noutput_file: %s/a15.output' "$TMP")"
   out=$(bash "$INFLIGHT")
   check "an output file that is a link: the age of what it points at" "$(grep -c '^- agent a15 - idle 33m Review task 7$' <<<"$out")" "1"
+else
+  echo "skip: an output file that is a link (ln -s copies here)"
 fi
+
+# --- output paths with a space, and an agent path the sentence ends ---
+mkdir -p "$TMP/with space"
+use toolu_s17 'Run the spaced suite'
+result toolu_s17 "Command running in background with ID: b17. Output is being written to: $TMP/with space/b17.output. You will be notified when it completes."
+: > "$TMP/with space/b17.output"; ago 4 "$TMP/with space/b17.output"
+use toolu_a18 'Review the spaced task'
+result toolu_a18 "$(printf 'Async agent launched successfully.\nagentId: a18 (internal ID)\noutput_file: %s/with space/a18.output\nDo NOT Read or tail this file.' "$TMP")"
+: > "$TMP/with space/a18.output"; ago 6 "$TMP/with space/a18.output"
+use toolu_a19 'Review the dotted task'
+result toolu_a19 "$(printf 'Async agent launched successfully.\nagentId: a19 (internal ID)\noutput_file: %s/a19.output.' "$TMP")"
+: > "$TMP/a19.output"; ago 8 "$TMP/a19.output"
+out=$(bash "$INFLIGHT")
+check "a shell output path with a space is read whole" "$(grep -c '^- shell b17 - idle 4m Run the spaced suite$' <<<"$out")" "1"
+check "an agent output path with a space is read whole" "$(grep -c '^- agent a18 - idle 6m Review the spaced task$' <<<"$out")" "1"
+check "an agent output path loses the period that ends its sentence" "$(grep -c '^- agent a19 - idle 8m Review the dotted task$' <<<"$out")" "1"
 
 # --- a shell moved to the background by its foreground timeout ---
 use toolu_t16 'Run the long suite'

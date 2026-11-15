@@ -61,6 +61,7 @@ inflight_scan() {
   local tp=$1 since=${2:-} events launched stopped latest running kind id start out what
   [ -n "$tp" ] && [ -f "$tp" ] || return 0
   events=$(set -o pipefail; jq -rR --arg since "$since" 'def hm($t): try ($t | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 | localtime | strftime("%H:%M")) catch "-";
+      def path_end: sub("\\s+$"; "") | sub("\\.(\\s.*)?$"; "");
       fromjson? | select(.isSidechain? != true)
       | select($since == "" or ((.timestamp? // $since) >= $since))
       | if .type? == "assistant" then
@@ -71,9 +72,9 @@ inflight_scan() {
           | .message.content? | arrays | .[] | select(.type? == "tool_result")
           | (.content | if type == "array" then (.[0].text? // "") else tostring end) as $text
           | if ($text | test("^Command (running in background with ID|did not complete within its [0-9]+s timeout and was moved to the background)")) then
-              "L\t\(.tool_use_id // "-")\t\(($text | capture("(with ID: |\\(ID: )(?<id>[A-Za-z0-9_-]+)").id) // "-")\tshell\t\(hm($ts))\t\(([$text | capture("Output is being written to: (?<p>[^\\s]+)").p | sub("\\.$"; "")] | first) // "-")"
+              "L\t\(.tool_use_id // "-")\t\(($text | capture("(with ID: |\\(ID: )(?<id>[A-Za-z0-9_-]+)").id) // "-")\tshell\t\(hm($ts))\t\(([$text | capture("Output is being written to: (?<p>[^\\r\\n]+)").p | path_end] | first) // "-")"
             elif ($text | test("^Async agent launched")) then
-              "L\t\(.tool_use_id // "-")\t\(($text | capture("agentId: (?<id>[A-Za-z0-9_-]+)").id) // "-")\tagent\t\(hm($ts))\t\(([$text | capture("output_file: (?<p>[^\\s]+)").p] | first) // "-")"
+              "L\t\(.tool_use_id // "-")\t\(($text | capture("agentId: (?<id>[A-Za-z0-9_-]+)").id) // "-")\tagent\t\(hm($ts))\t\(([$text | capture("output_file: (?<p>[^\\r\\n]+)").p | path_end] | first) // "-")"
             elif ($text | test("^\\{\"success\":true,\"message\":\"Resuming agent ")) then
               "L\t\(.tool_use_id // "-")\t\(($text | capture("\"resumedAgentId\":\"(?<id>[A-Za-z0-9_-]+)\"").id) // "-")\tagent\t\(hm($ts))\t-"
             elif ($text | test("^Monitor started \\(task ")) then
