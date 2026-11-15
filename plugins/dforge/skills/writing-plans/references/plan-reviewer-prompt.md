@@ -143,7 +143,8 @@ above to `scripts/run-review-panel --kind plan` with four changes:
        Return your review as the JSON object the output schema defines: the
        four scores as integers 1-20, and one `findings` entry per problem, with
        `severity`, `where` (`Task N`, `Task N part X`, or `header`), and a
-       `summary` carrying the issue, why it matters for execution, and the fix.
+       `summary` carrying the issue, its evidence, why it matters for
+       execution, and the fix.
 
 Expand `[PLUGIN_ROOT]`, `[PLAN_FILE]`, `[SPEC_FILE]` and `[LINT_FILE]` exactly as
 for a judge.

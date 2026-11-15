@@ -80,9 +80,9 @@ always reach the same row.
 8 opus high
 ```
 
-A Claude plan written to dforge:writing-plans gives each code task its tests
-and interfaces but not its implementation, so a code task scores 2 on spec
-completeness and is drawn as a feature slice up to `reducible <= 5`. A Codex
+A Claude plan written to dforge:writing-plans gives each code task its test
+contracts and interfaces but not its implementation, so a code task scores 2
+on spec completeness and is drawn as a feature slice up to `reducible <= 5`. A Codex
 plan still carries the code, so its tasks score 0 or 1 there.
 
 Do not inflate an axis to land on a row that feels right; if a task feels harder

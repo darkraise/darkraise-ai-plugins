@@ -16,7 +16,7 @@ floor table below.
    task as its brief will carry it — the task text plus the header's Global
    Constraints and Contracts: if those contain the complete code and exact
    signatures, spec completeness is 0. Count file shapes, not file instances.
-   A Claude plan's code task carries its tests and interfaces but no
+   A Claude plan's code task carries its test contracts and interfaces but no
    implementation, so it scores spec 2.
 2. **Apply Rule S before the table.** On a Claude plan, if
    `files + spec + coupling >= 6`, split the task where a reviewer could

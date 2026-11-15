@@ -6,9 +6,9 @@ The procedure lives in writing-plans' "Score every task" section. This file hold
 
 "Spec completeness" is a fact about the plan text: if the task's steps contain
 the complete code to write, that axis is 0 no matter how clever the code is.
-A Claude plan's code task gives its tests and interfaces but not its
-implementation, so it scores 2. Score the task as the plan describes it, not
-as you imagine it might grow.
+A Claude plan's code task gives its test contracts and interfaces but not
+its implementation, so it scores 2. Score the task as the plan describes it,
+not as you imagine it might grow.
 
 Count file shapes, not file instances: sixteen files generated from one template
 carry one decision, and the axis measures decisions.
