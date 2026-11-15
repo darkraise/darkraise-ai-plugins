@@ -17,7 +17,8 @@
 #                               is anything but ask.
 #   answer ACTION               record that finishing acted on the choice, or
 #                               that the menu was answered (merge | pr | keep |
-#                               discard); an answered choice is never re-run
+#                               discard); an answered choice is never re-run.
+#                               With nothing recorded, it creates the record.
 #   clear                       forget the choice
 #
 # FINISH_CHOICE_NOW (epoch seconds) stands in for the clock in tests.
@@ -131,8 +132,12 @@ case $cmd in
   answer)
     [ $# -eq 1 ] || usage
     case $1 in merge|pr|keep|discard) ;; *) echo "answer takes one of: merge pr keep discard" >&2; exit 2 ;; esac
-    need_file
-    write '.answer = $answer | .answeredAt = $now' --arg answer "$1" --argjson now "$now"
+    if [ -s "$file" ]; then
+      write '.answer = $answer | .answeredAt = $now' --arg answer "$1" --argjson now "$now"
+    else
+      jq -n --arg answer "$1" --argjson now "$now" \
+        '{action: $answer, base: null, chosenAt: $now, source: "answer", answer: $answer, answeredAt: $now}' > "$file"
+    fi
     ;;
   clear)
     rm -f "$file"

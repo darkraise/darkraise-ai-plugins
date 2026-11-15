@@ -909,6 +909,16 @@ run "$REPO" "$PLAN_REL"
 has "C5: a base branch that merged the head routes to finishing" "$out" "**Next:** Run dforge:finishing-a-development-branch."
 git -C "$REPO" reset -q --hard HEAD~2 && git -C "$REPO" branch -qD feat-c5
 
+# --- Keep as-is keeps the branch pending (C9) ---
+ledger 'Task 1: complete (commits a..b, review clean)' 'Task 2: complete (commits b..c, review clean)' 'Task 3: complete (commits c..d, review clean)' 'Final review: clean (commits a..d)'
+mkdir -p "$REPO/.dforge/sdd" && printf '{"action":"pr"}\n' > "$REPO/.dforge/sdd/finish.json"
+run "$REPO" --kept "$PLAN_REL"
+check "kept: exits 0" "$status" "0"
+has "kept: names the branch" "$out" "$(git -C "$REPO" branch --show-current)"
+lacks "kept: never says complete" "$out" "is complete"
+has "kept: the finish choices stay open" "$out" "merge, pr or discard"
+check "kept: the no-plan finish record is cleared" "$([ -e "$REPO/.dforge/sdd/finish.json" ] && echo kept || echo gone)" "gone"
+
 . "$HERE/fixtures/darkmem-stores.sh"
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"
