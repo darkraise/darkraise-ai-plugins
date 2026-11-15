@@ -137,6 +137,33 @@ repository with a bound auto run:
   `ANTHROPIC_API_KEY` in the session's environment, so the session stayed on
   the subscription.
 
+Live checks repeated 2026-11-15 with all three keys set, same scratch setup:
+
+- First pass: all three rulings reached their models and were charged
+  (0.0085, 0.1252, 0.1281 USD), then ended `status=FAILED reason=wrote`.
+  The scratch repository did not ignore `.dforge/`, and `run-api-judge`
+  appends its `started` line to `<state>/api-judge.log` after the
+  before-snapshot. Reproduced with the stub judge; register row 18 of
+  `docs/dforge/registers/2026-11-14-decisions-cache-and-credits.md`.
+- Second pass, `.dforge/` ignored as in a dforge project:
+  - `anthropic` live ruling: verified live 2026-11-15:
+    `anthropic:claude-opus-5-5/medium status=OK … spent=0.0034 reason=none`,
+    report opens with `## Verdict`, `api-spend status` spent 0.0034.
+  - `openai` live ruling: verified live 2026-11-15:
+    `openai:gpt-6-astra/xhigh status=OK … spent=0.1390 reason=none`, report
+    opens with `## Verdict`, spent 0.1390.
+  - `agentrouter` live ruling: verified live 2026-11-15:
+    `agentrouter:gpt-6-astra/xhigh status=OK … spent=0.1258 reason=none`,
+    report opens with `## Verdict`, spent 0.1258.
+  - Decisions request: verified live 2026-11-15: `no ruling reason=shadow`;
+    the `decisions.jsonl` line holds `choice`, `choice_reversed`,
+    `confidence` 0.82 and `confidence_reversed` 0.61.
+- `sha256sum ~/.codex/auth.json`: `d86229e2f303d11b…` before and after both
+  passes; the `claude auth status` output digest is unchanged too.
+- Whether the last Codex `turn.completed` usage line is a run's whole cost
+  stays unverified: these one-shot rulings were not inspected for more than
+  one `turn.completed` line.
+
 ## Demos
 
 Run in the scratch repository (`.dforge/` ignored, one commit, an auto run
