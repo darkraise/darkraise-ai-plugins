@@ -31,6 +31,15 @@
 - Fast-mode question: "Add 'fast for this session' (Recommended)".
 - Release: no version bump or release in this work; the next release is a
   separate decision.
+- Session-start bound (A21): "20 s per step (Recommended)" — reconcile and pull
+  each bounded at 20 seconds, the mirror lock wait cut to 10 seconds.
+- Approval: "Approve and run unattended".
+
+Early CI: none
+
+Finish: merge
+
+Worktree: in-place
 
 ## Problem
 
@@ -293,7 +302,7 @@ A17. [test, high] Request-scoped fast mode ends at the next human prompt: the UI
 A18. [test, high] `Process: fast (session)` keeps fast mode on across later requests until another `Process:` line names a different path, with no session state file present.
 A19. [test, neg, high] The cockpit's budget nudge never fires while fast mode is on.
 A20. [test, high] A bare `sleep` launch is never named as idle work to stop by the reconcile prompt.
-A21. [test, medium] Session start returns within 45 seconds when darkmem reconcile or pull hangs, and injects one line naming the sync command. Q: is a 20-second bound per darkmem step right for your network?
+A21. [test, confirmed] Session start returns within 45 seconds when darkmem reconcile or pull hangs (20 seconds per step, mirror lock wait cut to 10 seconds), and injects one line naming the sync command.
 A22. [test, high] `ui-turn-end.sh` passes a stop whose message carries `## Next session`, a stop whose ledger ends on `waiting —`, and a stop with finite background work running, after a UI edit.
 A23. [test, high] `ui-turn-end.sh` reads the transcript when `last_assistant_message` is absent and passes a message ending `UI proof: pending — …`.
 A24. [test, high] In relaxed handoff mode the cockpit adds no handoff note during the final phase.
