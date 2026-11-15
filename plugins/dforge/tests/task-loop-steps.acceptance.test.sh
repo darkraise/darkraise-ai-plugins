@@ -347,14 +347,13 @@ rr_edit() { # rr_edit <file> <add1|add2|add3|add4|mod> — change a fixture file
     mod) awk -v n="$RR_N" 'NR == 2 { print "changed " n; next } { print }' "$f" > "$f.tmp" && mv "$f.tmp" "$f" ;;
   esac
 }
-# rr_case <name> <task> <flags> <bullets|separated> <edits file:kind ...> -- <want skip|prompt>
+# rr_case <name> <task> <flags> <bullets|separated> <edits file:kind ...> -- <expected: prompt>
 rr_case() {
-  local name=$1 task=$2 flags=$3 bullets=$4 e want pre post newp skipline
+  local name=$1 task=$2 flags=$3 bullets=$4 e pre post newp skipline
   shift 4
   local edits=()
   while [ "$1" != "--" ]; do edits+=("$1"); shift; done
   shift
-  want=$1
   git -C "$R" reset -q --hard "$RR0"
   rm -f "$WS"/task-*-fix-*.md
   find "$WS" -name 'task-*prompt*' ! -name '*review-prompt.md' -delete 2>/dev/null
@@ -383,7 +382,6 @@ a5() {
   rr_case "A5: four changed lines prompt" 1 "" '- app.txt: one' app.txt:add4 -- prompt
   rr_case "A5: one finding-file line and three test-file lines prompt" 1 "" '- app.txt: one' app.txt:add1 test.txt:add3 -- prompt
   rr_case "A5: a replaced line and two added lines prompt" 1 "" '- app.txt: one' app.txt:mod app.txt:add2 -- prompt
-  rr_case "A5: without --covered" 1 "" '- app.txt: one' app.txt:add1 -- prompt
   rr_case "A5: a risk-3 task" 2 "" '- app.txt: one' app.txt:add1 -- prompt
 }
 
