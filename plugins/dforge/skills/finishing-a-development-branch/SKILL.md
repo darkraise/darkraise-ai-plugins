@@ -125,18 +125,18 @@ GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
 WORKTREE_PATH=$(git rev-parse --show-toplevel)
 ```
 
-This determines which menu to show and how cleanup works:
+This sets the menu and the cleanup:
 
 | State | Menu | Cleanup |
-|-------|------|---------|
-| `GIT_DIR == GIT_COMMON` (normal repo) | Standard 3 options | No worktree to clean up |
+|---|---|---|
+| `GIT_DIR == GIT_COMMON` (normal repo) | Standard 3 options | None |
 | `GIT_DIR != GIT_COMMON`, named branch | Standard 3 options | Provenance-based (see Step 6) |
 | `GIT_DIR != GIT_COMMON`, detached HEAD | Reduced 2 options (no merge) | Externally managed — leave in place |
 
 ## Step 3: Determine Base Branch
 
-The base branch is whatever this work forked from — usually named in the
-plan, the conversation, or the branch's upstream.
+The base branch is the one this work forked from, usually named in the plan,
+the conversation or the branch's upstream.
 An upstream names the base only as Step 4 qualifies it: a local branch other
 than this one. A finish preference
 recorded before the run (`scripts/finish-choice get [--plan PLAN_FILE]`) names
@@ -385,7 +385,7 @@ When the ledger holds a `CI:` line, the final message quotes it.
 ## Quick Reference
 
 | Option | Merge | Push | Keep Worktree | Cleanup Branch |
-|--------|-------|------|---------------|----------------|
+|---|---|---|---|---|
 | 1. Merge locally | yes | - | - | yes |
 | 2. Create PR | - | yes | yes | - |
 | 3. Keep as-is | - | - | yes | - |
