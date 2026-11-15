@@ -62,7 +62,8 @@ log_ask() { # log_ask OUTCOME [ANSWER_JSON]
   state=$(bash "$HERE/dforge-path" state 2>/dev/null | tr -d '\r') || return 0
   mkdir -p -- "$state" 2>/dev/null || return 0
   jq -nc --arg id "$ID" --argjson options "$OPTIONS_JSON" --arg mode "$MODE" --arg outcome "$1" --argjson a "$answer" \
-    '{kind: "ask", id: $id, options: $options, mode: $mode, outcome: $outcome,
+    --argjson lost "${CHARGE_LOST:-false}" \
+    '{kind: "ask", id: $id, options: $options, mode: $mode, outcome: $outcome, charge_lost: $lost,
       choice: ($a.choice // null), choice_reversed: ($a.choice_reversed // null),
       confidence: ($a.confidence // null), confidence_reversed: ($a.confidence_reversed // null),
       needs_more: ($a.needs_more // null), guarded: ($a.guarded // null)}' \
@@ -143,7 +144,7 @@ cmd_ask() {
   fi
   if [ -n "$tokens" ]; then
     usd=$(awk -v t="$tokens" -v p="$price" 'BEGIN { printf "%.4f", t * p / 1000000 }')
-    api_budget_charge openai "$usd" 2>/dev/null || echo "decide: the charge to openai was not recorded" >&2
+    api_budget_charge openai "$usd" 2>/dev/null || { CHARGE_LOST=true; echo "decide: the charge to openai was not recorded" >&2; }
   fi
   log_ask "$outcome" "$answer"
 

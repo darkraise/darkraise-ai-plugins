@@ -82,6 +82,11 @@ check "A16: the request is charged to openai from its input tokens" "$(spent)" "
 check "A6: the ask is logged with both answers" \
   "$(last '[.kind, .id, (.options | join("/")), .mode, .outcome, .choice, .choice_reversed, .confidence, .confidence_reversed, .needs_more, .guarded] | map(tostring) | join(" | ")')" \
   "ask | q1 | a noclobber lock file/flock | on | ruled | a noclobber lock file | a noclobber lock file | 0.93 | 0.91 | 0.05 | 0.02"
+check "a recorded charge is logged as not lost" "$(last '.charge_lost')" "false"
+: > "$TMP/not-a-dir"
+DFORGE_API_SPEND_FILE="$TMP/not-a-dir/spend.tsv" ask "${Q[@]}" --evidence docs/s.md
+check "a charge that cannot be recorded still rules" "$rc:$out" "0:ruling: a noclobber lock file — Decisions API (confidence 0.91)"
+check "a charge that cannot be recorded is logged as lost" "$(last '.charge_lost')" "true"
 
 # --- A2: every way an answer fails to rule ---
 while IFS='|' read -r name a ca b cb nm g token; do
@@ -128,7 +133,7 @@ was=$(spent)
 DFORGE_DECISIONS_URL="http://127.0.0.1:1/v1/decisions" ask "${Q[@]}" --evidence mid.txt
 check "A2: an endpoint that cannot be reached" "$rc:$out" "3:no ruling reason=error"
 check "a request that never reached the endpoint is charged nothing" "$(spent)" "$was"
-check "A2: only the four ruling cases above printed a ruling" "$(grep -c '^ruling:' "$TMP/all.out")" "4"
+check "A2: only the five ruling cases above printed a ruling" "$(grep -c '^ruling:' "$TMP/all.out")" "5"
 
 # --- A3: when no request is made ---
 reply option_1 0.95 option_1 0.95 0.05 0.02
