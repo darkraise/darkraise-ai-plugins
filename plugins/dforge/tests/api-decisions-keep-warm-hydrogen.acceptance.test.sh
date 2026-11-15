@@ -326,7 +326,7 @@ a6() {
   for v in q6 alpha beta on 0.93 0.91 0.05 0.02; do
     check "A6: the answered ask's line holds '$v'" "$(line_has "$n" "$v")" "yes"
   done
-  check "A6: the answered ask's line holds the choice twice (both orders)" "$(sed -n "${n}p" "$STATE/decisions.jsonl" | jq -r '[.. | scalars | tostring | select(. == "beta")] | length' | tr -d '\r')" "3"
+  check "A6: 'beta' appears three times on the line (the option and both choices)" "$(sed -n "${n}p" "$STATE/decisions.jsonl" | jq -r '[.. | scalars | tostring | select(. == "beta")] | length' | tr -d '\r')" "3"
   settings '{"decisionApi":"shadow","apiBudgetOpenai":10}'
   reply alpha 0.9 beta 0.8 0.07 0.03
   n0=$(logged)
