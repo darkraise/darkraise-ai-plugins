@@ -740,6 +740,25 @@ printf '{}\n' > "$T"
 out=$(after); status=$?
 check "after-compact: an unknown size with setup due names Setup" "$status:$out:$(field pending)" "0:continue — the size after compaction is unknown; record that with auto-run ruling add, and Claude Code's own compaction stays the backstop; setup due: begin at the execution skill's Setup, workspace first:null"
 
+# --- start --register fills an empty Covers (row 54) ---
+mkdir -p "$REPO/docs"
+printf '# Register\n\n**Source:** a review\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n' > "$REPO/docs/r-covers.md"
+ar --session s-1 start --spec "$SPEC" --register docs/r-covers.md --force >/dev/null
+check "start --register fills an empty Covers" "$(grep -c "^\*\*Covers:\*\* $SPEC$" "$REPO/docs/r-covers.md")" "1"
+# --- clear checks whose prompt it stores (row 32) ---
+ar --session s-1 attach --plan docs/plan.md
+mkdir -p "$REPO/.dforge/handoff"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/other.md` with dforge:resume-execution.\n```\n' > "$REPO/.dforge/handoff/latest.md"
+pending_before=$(field pending) resumes_before=$(field resumes)
+ar --session s-1 clear >/dev/null 2>&1; status=$?
+check "clear: another plan's prompt is refused, nothing booked" "$status:$(field pending):$(field resumes)" "4:$pending_before:$resumes_before"
+# --- stop --stale (row 33) ---
+ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
+check "stop --stale: refused while the owner lives" "$status:$(field active)" "3:true"
+beat s-1 100000
+ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
+check "stop --stale: a dead owner's run stops" "$status:$(field active)" "0:false"
+
 # --- every suite that runs the run-control scripts names its own session ---
 # A subagent's shell carries the controller's CLAUDE_CODE_SESSION_ID, so a
 # suite run there that leaves it set binds to the live auto run. A line runs a

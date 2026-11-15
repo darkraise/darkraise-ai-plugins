@@ -8,6 +8,7 @@
 # plan.sh brings roots.sh, and the plan and ledger readers ar_enter_final uses.
 . "$(dirname "${BASH_SOURCE[0]}")/plan.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lock.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/register.sh"
 
 AR_STALE_MINUTES=60
 AR_RESUME_CAP=3
@@ -181,7 +182,7 @@ ar_create_unless_busy() {
 # register it creates goes in the checkout the run starts from, where its path
 # resolves. ISOLATION is worktree (the default) or in-place.
 ar_start() {
-  local spec=$1 register=$2 force=$3 iso=${4:-worktree} path top slug base regfile age
+  local spec=$1 register=$2 force=$3 iso=${4:-worktree} path top slug base regfile="" age
   path=$(ar_path) || { echo "auto-run: not inside a git repository" >&2; return 2; }
   # Nothing would compact, switch or wake the run without the cockpit.
   age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
@@ -215,6 +216,14 @@ ar_start() {
     setupDue: false, stalls: 0, stalledAt: null, compactionsSinceTask: 0,
     isolation: $iso, branch: null, branchBase: null, carried: null
   }' || return $?
+  # A register opened at the spec review before the spec existed may still
+  # cover nothing, and next-step finds a register only through its Covers.
+  [ -z "$regfile" ] && [ -n "$register" ] && regfile=$(dforge_resolve "$register" "$top")
+  if [ -f "$regfile" ] && [ "$(register_field "$regfile" Covers)" = - ]; then
+    COVERS="**Covers:** $spec" awk '
+      !done && /^\*\*Covers:\*\*[ \t]*-[ \t\r]*$/ { print ENVIRON["COVERS"]; done = 1; next }
+      { print }' "$regfile" > "$regfile.tmp" && mv -f "$regfile.tmp" "$regfile" || rm -f "$regfile.tmp"
+  fi
   printf '%s\n' "$register"
 }
 
@@ -327,6 +336,24 @@ ar_carried_hit() {
 
 ar_stop() { # ar_stop [REASON]
   ar_update '.active = false | .stopped = (if $r == "" then null else $r end) | .pending = null' --arg r "${1:-}"
+}
+
+# ar_stop_stale — stop, from any session, an active run whose owner is gone
+# (ar_is_stale), with reason `owner session <id> is gone`, then print what it
+# leaves undecided. A replaced or crashed session can never bind again, so the
+# binding check is skipped. Return 3 when no run is active or its owner lives.
+ar_stop_stale() {
+  local path sid
+  ar_state | ar_jq -e '.active == true' >/dev/null 2>&1 \
+    || { echo "auto-run: no auto run is active" >&2; return 3; }
+  sid=$(ar_get session)
+  ar_is_stale || { echo "auto-run: the run's owner session $sid is still live; stop it from that session" >&2; return 3; }
+  path=$(ar_path) || return 1
+  dr_locked "$path" ar_put "$path" '.active = false | .stopped = $r | .pending = null' \
+    --arg r "owner session $sid is gone" || return 1
+  echo "auto-run: stopped — owner session $sid is gone"
+  ar_decision_list | sed 's/^/pending decision: /'
+  ar_ruling_list | sed 's/^/ruling: /'
 }
 
 # ar_set_phase PHASE — refuses (return 4) execute where ar_guard does, since
@@ -455,8 +482,15 @@ ar_switch() {
 # the clear is a self-resume, and the AR_RESUME_CAP-th in a row stops the run
 # (return 5).
 ar_clear() {
-  local is_phase=$1 resumes
+  local is_phase=$1 resumes plan
   ar_handoff || return 1
+  # One latest.md serves every worktree, so the prompt read may be another
+  # plan's; storing it would resume the wrong plan.
+  plan=$(ar_get plan)
+  if [ -n "$plan" ] && [[ $AR_PROMPT != *"$(basename "$plan")"* ]]; then
+    echo "auto-run: the handoff's first prompt names another plan than $plan; run scripts/next-step $plan again" >&2
+    return 4
+  fi
   if [ "$is_phase" != 1 ]; then
     ar_update '.resumes = ((.resumes // 0) + 1)' || return $?
     resumes=$(ar_get resumes)
