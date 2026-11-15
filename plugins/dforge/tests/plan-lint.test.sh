@@ -926,6 +926,9 @@ early 'after task 3 — consented 2026-10-31'
 has "Early CI naming a task past the last" "$out" "ERROR header: **Early CI:** names Task 3, past the last task"
 early 'whenever — consented 2026-10-31'
 has "Early CI with no recognised point" "$out" 'ERROR header: **Early CI:** must be "after task <n>", then "— consented <YYYY-MM-DD>"'
+early 'after task 99999999999999999999 — consented 2026-10-31'
+has "Early CI naming a task past nine digits is past the last" "$out" "ERROR header: **Early CI:** names Task 99999999999999999999, past the last task"
+lacks "Early CI naming a task past nine digits: no shell arithmetic error" "$out" "integer"
 
 # --- Step 1 forms ---
 step1() { # step1 <Task 1 heading text> <Task 2 heading text> — the Claude plan with both Step 1 headings replaced
@@ -950,6 +953,10 @@ has "Covered by a task with no test step" "$out" "ERROR Task 3: Covered by Task 
 lacks "a sequential plan: a lower task number runs before" "$out" "Task 3: Covered by Task 2 — Task 2 does not run before"
 lint cov-ok.md
 lacks "a Covered by heading draws no form WARN" "$out" "none of the forms"
+three_task_plan 'sequential — one chain' | with_steps 'Write the failing test' 'Write the failing test' 'Write the failing test' \
+  | awk '{ print } /^### Task 2/ && !done { print ""; print "```markdown"; print "- [ ] **Step 1: Covered by Task 9\x27s test `x`**"; print "```"; done = 1 }' > cov-fenced.md
+lint cov-fenced.md
+lacks "a fenced Covered by heading is an example, not the task's Step 1" "$out" "Covered by Task 9"
 step1 'No new test, because the change is prose no script reads' 'Write the failing test' > nnt-ok.md
 lint nnt-ok.md
 check "No new test with a reason: exit 0" "$status" "0"
