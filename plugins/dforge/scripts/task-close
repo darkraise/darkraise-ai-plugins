@@ -44,6 +44,7 @@ dforge_stores_init "$ctx"
 
 src=$(mktemp)
 trap 'rm -f "$src"' EXIT
+plan_amendments_ready "$plan"
 plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null || die "an amendment does not apply; run plan-lint" 4
 plan_task_text "$src" "$n" >/dev/null || die "no Task $n in $plan" 3
 

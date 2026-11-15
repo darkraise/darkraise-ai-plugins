@@ -151,9 +151,8 @@ wrong base is expensive to undo.
 has not yet printed its "Rulings I made" and "Amendments made" lists, print
 them now: under "Rulings I made", every ledger line containing `Ruling:`, in
 order, each with what it costs if wrong, then every `BLOCKED` task; under
-"Amendments made", every entry of `amendments.md` in the directory
-`scripts/sdd-workspace PLAN_FILE` prints, in
-full. The execution skills leave these lists to this step, so they are
+"Amendments made", every entry of `<ledger dir>/amendments.md` (beside
+`progress.md`), in full. The execution skills leave these lists to this step, so they are
 exhaustive here. Your human partner chooses how to integrate with those
 decisions in view.
 

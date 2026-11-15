@@ -8,7 +8,7 @@
 # --open does what a session does before it starts a task: it writes the brief
 # and the header, appends the task's `implementer inline (assigned; base <sha7>)`
 # ledger line unless one is there, and prints the task check.
-# Amendments in <workspace>/amendments.md are applied first.
+# Amendments in <ledger dir>/amendments.md are applied first.
 #
 # Usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE]
 #        task-brief --open PLAN_FILE TASK_NUMBER
@@ -51,6 +51,7 @@ fi
 
 src=$(mktemp)
 trap 'rm -f "$src" "$src.err"' EXIT
+plan_amendments_ready "$plan"
 if ! plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2> "$src.err"; then
   cat "$src.err" >&2
   exit 4

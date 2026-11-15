@@ -342,6 +342,7 @@ cmd_rereview() (
   BASE_TMP=$tmp
   trap 'base_cleanup "$tmp"' EXIT
   src=$tmp/plan.md
+  plan_amendments_ready "$plan"
   if ! plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2> "$tmp/err"; then
     cat "$tmp/err" >&2
     exit 4
@@ -477,6 +478,7 @@ TMP=$(mktemp -d)
 BASE_TMP=$TMP
 trap 'base_cleanup "$TMP"' EXIT
 src="$TMP/plan.md"
+plan_amendments_ready "$plan"
 plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null \
   || die "an amendment does not apply; run plan-lint" 4
 if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")"; then

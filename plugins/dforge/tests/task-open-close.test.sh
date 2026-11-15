@@ -168,5 +168,21 @@ run bash "$CLOSE" docs/plan.md 3 "$CP"
 check "close: the last task prints a budget line" "$(grep -c '^budget' <<<"$out")" "1"
 check "close: a middle task prints none" "$(run bash "$CLOSE" docs/plan.md 2 "$CP"; grep -c '^budget' <<<"$out")" "0"
 
+# --- every amendment consumer refuses a ledger citing a missing amendment (A4) ---
+printf 'Task 1: Ruling: amendment A7 — x — y\n' >> "$LEDGER"
+for argv in "task-brief|docs/plan.md|1" \
+    "task-step|start|docs/plan.md|1" \
+    "task-close|docs/plan.md|1|done: x; verified: y; remaining: none; discovered: none; assumptions: none" \
+    "plan-lint|docs/plan.md" \
+    "review-route|docs/plan.md|--task|1" \
+    "lens-route|docs/plan.md|--task|1" \
+    "depth-route|docs/plan.md"; do
+  IFS='|' read -r -a a <<<"$argv"
+  run bash "$P/scripts/${a[0]}" "${a[@]:1}"
+  check "${a[0]}: a cited amendment missing exits 2" "$rc" "2"
+  has "${a[0]}: the message names the script and the amendment" "$err" "${a[0]}: the ledger cites amendment A7"
+done
+sed -i '/amendment A7/d' "$LEDGER"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

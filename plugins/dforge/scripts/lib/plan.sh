@@ -375,13 +375,15 @@ plan_amendments_file() {
 # the file lacks exits 2, naming it: the task text would be read without an
 # amendment the run already applied.
 plan_amendments_ready() {
-  local me ctx slug ldir ws file old ledger tmp k bad=0
+  local me ctx slug ldir ws file old ledger tmp k seen=" " bad=0
   local moved='Ruling: amendments moved beside the ledger — none'
-  me=$(basename "$0")
+  # Parameter expansion, not basename: plan-lint runs this with only the tools
+  # its own checks need on PATH.
+  me=${0##*/}
   ctx=$(_plan_ctx "$1")
   git -C "$ctx" rev-parse --show-toplevel >/dev/null 2>&1 || return 0
   dforge_stores_init "$ctx"
-  slug=$(basename "$1" .md)
+  slug=${1##*/} slug=${slug%.md}
   ldir=$(dforge_ledger_dir "$slug" "$ctx")
   ws=$(dforge_workspace "$slug" "$ctx")
   file="$ldir/amendments.md" old="$ws/amendments.md" ledger="$ldir/progress.md"
@@ -398,7 +400,9 @@ plan_amendments_ready() {
     fi
   fi
   [ -f "$ledger" ] || return 0
-  for k in $(tr -d '\r' < "$ledger" | grep -oE 'Ruling: amendment A[0-9]+' | sed 's/.*A//' | sort -un); do
+  for k in $(tr -d '\r' < "$ledger" | grep -oE 'Ruling: amendment A[0-9]+' | sed 's/.*A//'); do
+    case $seen in *" $k "*) continue ;; esac
+    seen="$seen$k "
     [ -f "$file" ] && tr -d '\r' < "$file" | grep -q "^## A$k " && continue
     printf '%s: the ledger cites amendment A%s, which %s lacks\n' "$me" "$k" "$file" >&2
     bad=1
