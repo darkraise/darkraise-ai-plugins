@@ -6,7 +6,7 @@
 # cockpit statements (A12, A13) are in task-loop-steps.acceptance.test.ts.
 # Usage:
 #   bash task-loop-steps.acceptance.test.sh           run every test
-#   bash task-loop-steps.acceptance.test.sh A5 A8     run the named tests only
+#   bash task-loop-steps.acceptance.test.sh A7 A8     run the named tests only
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -321,78 +321,6 @@ a4() {
   has "A4: without --base the package starts at the recorded review head" "$(cat "$diff")" "other.txt"
 }
 
-# --- A5, A6 -----------------------------------------------------------------
-
-# The repository for the re-review cases: tasks 1 (risk 1) and 2 (risk 3) started and
-# reviewed at one head, with their states saved.
-rr_setup() { # rr_setup <repo name>
-  new_repo "$1"
-  ts start docs/plan.md 1; ts start docs/plan.md 2
-  commit_file work.txt work "feat: work"
-  ts review docs/plan.md 1
-  ts review docs/plan.md 2
-  RR0=$(full HEAD)
-  cp "$WS/task-1-step.json" "$TMP/rr-state1.json"
-  cp "$WS/task-2-step.json" "$TMP/rr-state2.json"
-  RR_N=0
-}
-rr_edit() { # rr_edit <file> <add1|add2|add3|add4|mod> — change a fixture file
-  local f="$R/$1"
-  RR_N=$((RR_N + 1))
-  case $2 in
-    add1) printf 'x%s\n' "$RR_N" >> "$f" ;;
-    add2) printf 'x%s\ny\n' "$RR_N" >> "$f" ;;
-    add3) printf 'x%s\ny\nz\n' "$RR_N" >> "$f" ;;
-    add4) printf 'x%s\ny\nz\nw\n' "$RR_N" >> "$f" ;;
-    mod) awk -v n="$RR_N" 'NR == 2 { print "changed " n; next } { print }' "$f" > "$f.tmp" && mv "$f.tmp" "$f" ;;
-  esac
-}
-# rr_case <name> <task> <flags> <bullets|separated> <edits file:kind ...> -- <expected: prompt>
-rr_case() {
-  local name=$1 task=$2 flags=$3 bullets=$4 e pre post newp skipline
-  shift 4
-  local edits=()
-  while [ "$1" != "--" ]; do edits+=("$1"); shift; done
-  shift
-  git -C "$R" reset -q --hard "$RR0"
-  rm -f "$WS"/task-*-fix-*.md
-  find "$WS" -name 'task-*prompt*' ! -name '*review-prompt.md' -delete 2>/dev/null
-  cp "$TMP/rr-state1.json" "$WS/task-1-step.json"
-  cp "$TMP/rr-state2.json" "$WS/task-2-step.json"
-  for e in "${edits[@]}"; do rr_edit "${e%%:*}" "${e#*:}"; done
-  git -C "$R" add -A && git -C "$R" commit -qm "fix: round"
-  { printf '%s\n' "$bullets" | tr '|' '\n'; printf '\nFixed.\n'; } > "$WS/task-$task-fix-1.md"
-  pre=$(ls "$WS" | sort)
-  # shellcheck disable=SC2086
-  ts rereview docs/plan.md "$task" $flags
-  post=$(ls "$WS" | sort)
-  newp=$(comm -13 <(printf '%s\n' "$pre") <(printf '%s\n' "$post") | grep -i 'prompt' | head -n 1)
-  skipline=$(grep '^re-review: skipped' <<<"$out")
-  check "$name: exit 0" "$rc" "0"
-  check "$name: no skip line" "${skipline:-none}" "none"
-  check "$name: writes a re-review prompt" "$([ -n "$newp" ] && echo yes || echo no)" "yes"
-  has "$name: names dforge:judge-sonnet-high" "$out" "dforge:judge-sonnet-high"
-}
-
-a5() {
-  rr_setup rr5
-  rr_case "A5: one line in the finding's file prompts" 1 "" '- app.txt: one' app.txt:add1 -- prompt
-  rr_case "A5: three changed lines prompt" 1 "" '- app.txt: one' app.txt:add3 -- prompt
-  rr_case "A5: three lines across the finding's file and a test file prompt" 1 "" '- app.txt: one' app.txt:add1 test.txt:add2 -- prompt
-  rr_case "A5: four changed lines prompt" 1 "" '- app.txt: one' app.txt:add4 -- prompt
-  rr_case "A5: one finding-file line and three test-file lines prompt" 1 "" '- app.txt: one' app.txt:add1 test.txt:add3 -- prompt
-  rr_case "A5: a replaced line and two added lines prompt" 1 "" '- app.txt: one' app.txt:mod app.txt:add2 -- prompt
-  rr_case "A5: a risk-3 task" 2 "" '- app.txt: one' app.txt:add1 -- prompt
-}
-
-a6() {
-  rr_setup rr6
-  rr_case "A6: a fix that edits only a test file other than the finding's" 1 "" '- app.txt: one' test.txt:add1 -- prompt
-  rr_case "A6: a fix that edits only another source file" 1 "" '- app.txt: one' other.txt:add1 -- prompt
-  rr_case "A6: two open findings, a tiny fix in one finding's file" 1 "" '- app.txt: one|- other.txt: two' app.txt:add1 -- prompt
-  rr_case "A6: two open findings, a fix touching both files" 1 "" '- app.txt: one|- other.txt: two' app.txt:add1 other.txt:add1 -- prompt
-}
-
 # --- A7 ----------------------------------------------------------------------
 
 a7() {
@@ -529,7 +457,7 @@ a11() {
   export CLAUDE_CODE_SESSION_ID=$ENV_SID
 }
 
-ALL="a1 a2 a3 a4 a5 a6 a7 a8 a11"
+ALL="a1 a2 a3 a4 a7 a8 a11"
 if [ $# -gt 0 ]; then
   sel=""
   for n in "$@"; do sel="$sel $(tr 'A-Z' 'a-z' <<<"$n")"; done

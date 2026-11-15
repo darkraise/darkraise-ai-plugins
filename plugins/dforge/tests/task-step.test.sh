@@ -586,6 +586,9 @@ if want rereview; then
 # Every fix round gets its re-review: there is no small-fix skip.
 rr_case "prompts for a one-line fix" 1 "" "- app.txt: wrong value" "app.txt:mod" "0 prompt"
 rr_case "prompts for a one-line fix on a risk 3 task" 2 "" "- app.txt: wrong value" "app.txt:mod" "0 prompt"
+check "rereview: a risk 3 task keeps the judge-sonnet-high seat" "$(grep -c '^seat: dforge:judge-sonnet-high prompt: ' <<<"$rr_out")" "1"
+rr_case "prompts for a fix that edits only another source file" 1 "" "- app.txt: wrong value" "other.txt:mod" "0 prompt"
+rr_case "prompts for a fix that edits only a test file" 1 "" "- app.txt: wrong value" "test.txt:mod" "0 prompt"
 rr_reset
 rr_edit app.txt mod
 rr_git add -A && rr_git commit -qm fix
