@@ -222,6 +222,7 @@ your own: QA commits on this branch.
    **Integration check.** In the same message as the Claude review, start the
    plan header's `**Integration check:**` command through
    `bash <plugin-root>/scripts/suite-run -- bash -c '<integration check>'`
+   (a single quote escaped as [delegated-task.md](delegated-task.md) §2 says)
    as a background command at the same HEAD the Claude review reads, on
    every final review and in either execution mode, with the Bash call's
    `timeout` set to (3600 + 120) × 1000 ms. A plan with no such line runs
