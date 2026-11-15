@@ -90,6 +90,7 @@ check "the Anthropic judge runs on the row's model" "$(after anthropic --model)"
 check "the Anthropic judge runs at the row's effort" "$(after anthropic --effort)" "medium"
 for b in openai agentrouter; do
   check "the $b judge's sandbox is read-only" "$(after "$b" --sandbox)$(after "$b" -s)" "read-only"
+  check "the $b judge's shells do not inherit its key" "$(grep -c '^shell_environment_policy.exclude=\["DFORGE_JUDGE_KEY"\]$' "$TMP/args.log")" "2"
 done
 check "no judge is given wider permissions" "$(grep -c -e 'dangerously' -e 'danger-full-access' -e 'workspace-write' "$TMP/args.log")" "0"
 printf 'stale\n' > "$REPORT"

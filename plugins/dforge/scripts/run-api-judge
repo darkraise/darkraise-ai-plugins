@@ -122,6 +122,7 @@ build_cmd() { # build_cmd <budget> <model> <effort> — sets cmd
         -c "model_providers.dforge.base_url=\"$(base_url "$1")\""
         -c 'model_providers.dforge.env_key="DFORGE_JUDGE_KEY"'
         -c 'model_providers.dforge.wire_api="responses"'
+        -c 'shell_environment_policy.exclude=["DFORGE_JUDGE_KEY"]'
         -c "model_reasoning_effort=\"$3\""
         -m "$2" --sandbox read-only --skip-git-repo-check --json
         -o "$(dr_native_path "$work/last")" -C "$(dr_native_path "$cwd")" -)
