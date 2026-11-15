@@ -122,8 +122,10 @@ mutation green: 0
 Command: timeout 300 bash tests/foo.acceptance.sh → 2 passed, 1 failed
 ```
 
-Then reply in at most 10 lines: the counts by result, the mutation counts
-and the report path. The session reads the report, not your reply.
+Then reply in at most 10 lines: the counts by result and the mutation
+counts. The session reads the report, not your reply. End the reply with
+the line `Report: <absolute path of the report>`; a stop hook holds your
+stop until that file exists and opens with `## Verdict`.
 
 Result is one of `pass`, `fail`, `flaky`, `cannot-test: ambiguous` (the
 statement can be read two ways; name both readings in the Test cell),

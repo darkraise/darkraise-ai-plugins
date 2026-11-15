@@ -26,7 +26,7 @@ fm() {
 }
 
 EXPECTED="impl-sonnet-high judge-fable judge-opus judge-sonnet-high"
-JUDGE_TOOLS="Read, Grep, Glob, WebFetch, Write"
+JUDGE_TOOLS="Read, Grep, Glob, Write"
 IMPL_DISALLOWED="Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications"
 
 actual=$(cd "$AGENTS" 2>/dev/null && ls *.md 2>/dev/null | sed 's/\.md$//' | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
