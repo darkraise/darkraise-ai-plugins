@@ -389,3 +389,39 @@ plan_require_same_project() {
     "$me" "$1" "${plan_top:-no git repository}" "$cwd_top" >&2
   exit 2
 }
+
+# plan_final_review_state LEDGER [DIR] — whether the ledger's last
+# `Final review: clean (commits <base>..<head>)` line still covers HEAD in DIR
+# (default the working directory): `none` (no clean line); `current` (HEAD is
+# <head>, only docs-root paths changed since, or <head> reached HEAD through a
+# merge into a base branch, off its first-parent chain); `stale <head>` (a
+# later commit on the first-parent chain touches code); `rewritten <head>`
+# (<head> is no commit, or no ancestor of HEAD). A clean line with no commits
+# clause, or a DIR where HEAD does not resolve, reads `current`: git cannot
+# judge it. The ledger records no branch, so the first-parent chain is the only
+# base-branch test.
+plan_final_review_state() {
+  local dir line head full now top docs path changed
+  dir=$(dr_native_path "${2:-$PWD}")
+  line=$(tr -d '\r' < "$1" 2>/dev/null | grep '^Final review: clean' | tail -n 1)
+  if [ -z "$line" ]; then echo none; return 0; fi
+  head=$(sed -n 's/^Final review: clean (commits [^ .]*\.\.\([0-9A-Za-z]*\)[,)].*/\1/p' <<<"$line")
+  if [ -z "$head" ]; then echo current; return 0; fi
+  now=$(git -C "$dir" rev-parse --verify -q HEAD 2>/dev/null | tr -d '\r')
+  if [ -z "$now" ]; then echo current; return 0; fi
+  full=$(git -C "$dir" rev-parse --verify -q "$head^{commit}" 2>/dev/null | tr -d '\r')
+  if [ -z "$full" ]; then echo "rewritten $head"; return 0; fi
+  if [ "$full" = "$now" ]; then echo current; return 0; fi
+  if ! git -C "$dir" merge-base --is-ancestor "$full" "$now" 2>/dev/null; then echo "rewritten $head"; return 0; fi
+  if ! git -C "$dir" rev-list --first-parent "$now" 2>/dev/null | tr -d '\r' | grep -qxF "$full"; then echo current; return 0; fi
+  changed=$(git -C "$dir" log --format= --name-only "$full..$now" 2>/dev/null | tr -d '\r' | sed '/^$/d')
+  if [ -z "$changed" ]; then echo current; return 0; fi
+  # Under darkmem documents no committed path is a docs path.
+  if [ "$(dforge_docs_store "$dir")" != local ]; then echo "stale $head"; return 0; fi
+  top=$(dr_native_path "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null | tr -d '\r')")
+  docs=$(dr_native_path "$(dforge_docs_root "$dir")")
+  while IFS= read -r path; do
+    case "$top/$path" in "${docs%/}"/*) ;; *) echo "stale $head"; return 0 ;; esac
+  done <<<"$changed"
+  echo current
+}

@@ -113,7 +113,7 @@ mkdir -p "$(dirname "$LEDGER")"
 {
   printf '# SDD ledger — plan: %s\n' "$PLAN_REL"
   printf 'Task 1: complete (x)\n'
-  printf 'Final review: clean (commits a1b2c3d..d4e5f6a)\n'
+  printf 'Final review: clean (commits a1b2c3d..%s)\n' "$(git -C "$REPO" rev-parse --short HEAD)"
 } > "$LEDGER"
 arun s-4 phase final >/dev/null
 resumes_before=$(resumes s-4)
