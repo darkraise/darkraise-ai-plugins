@@ -41,7 +41,9 @@ floor table below.
      lens ids under `criteria/lenses/` that match why the task is risky,
      comma-separated, for example `security` for an authentication change. The
      task's Claude review seat reads them as defect patterns; `plan-lint`
-     rejects the line below risk 3 and an id with no lens file.
+     rejects the line below risk 3 and an id with no lens file. The line
+     names part ids (`lang-bash`, `type-design`, ...), never `code-quality`,
+     which has no lens file.
 
    ```markdown
    **Evaluation:** files 1 - spec 0 - coupling 2 - risk 2 = 5

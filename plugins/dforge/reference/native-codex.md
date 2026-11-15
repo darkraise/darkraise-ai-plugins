@@ -305,12 +305,16 @@ file writes beyond their report files. Acceptance QA is a native implementer at 
 a risk-3 task review they are the ids on the task's `**Lenses:**` line,
 uncapped. For the final review, read each `criteria/lenses/*.md` `Applies:`
 line against the branch diff and run the matching lenses in priority order
-(security, ui-ux, silent-failures, test-quality, the `lang-*` lenses
-alphabetically, type-design, docs-comments), at most `lensCap` of them
-(`scripts/dforge-config get lensCap`; `0` runs none), and name the rest as
+(security, ui-ux, silent-failures, test-quality, code-quality), at most
+`lensCap` of them (`scripts/dforge-config get lensCap`; `0` runs none), and
+name the rest as
 skipped in the report. Ledger each lens you skip as
 `final review lens-skipped <id> reason=cap`; with `lensCap` 0, write
-`final review lenses off` instead of skipped lines. Then write the lines
+`final review lenses off` instead of skipped lines. code-quality has no lens
+file of its own: pick its parts (the `lang-*` lenses, `type-design`,
+`docs-comments`) by reading each part file's `Applies:` line against the
+branch diff, and run the matching parts as one lens seat, which counts as one
+lens toward `lensCap`. Then write the lines
 final-review.md's Retained lines names. An `Applies: ui-paths` clause
 matches a changed file that `scripts/ui-proof paths` lists, and only when the project has a UI
 profile (`<docs>/ui-ux/profile.md`) or the plan's spec has a

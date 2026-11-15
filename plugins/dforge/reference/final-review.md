@@ -47,7 +47,7 @@ keys on. The depth sizes the steps below:
 | 0.2 UI proof | runs | runs | runs |
 | 0.5 Acceptance QA | skipped | runs | runs |
 | 1 Claude review | runs | runs | runs |
-| 1 Lenses | `security` only, when it applies | at most 2, plus `test-quality` when it applies, within `lensCap` | up to `lensCap` |
+| 1 Lenses | `security` only, when it applies | at most 2, plus `test-quality` and `code-quality` when they apply, within `lensCap` (default 5) | up to `lensCap` |
 | 2 External round | skipped | skipped | runs |
 | 3 Dedupe judge | never (one list) | never (one list) | with two or more lists |
 
@@ -263,7 +263,14 @@ your own: QA commits on this branch.
    each lens seat writes its report to `<workspace>/lens-<id>-report.md`:
    the Claude list for step 3 is the Claude review's findings plus every
    `[qa]` finding from step 0.5 and every lens finding, tagged `[lens:<id>]`,
-   and the dedupe judge and the fixer receive the lens file paths.
+   and the dedupe judge and the fixer receive the lens file paths. A
+   `lens code-quality parts=<p1>,<p2>,...` line is one seat for the parts
+   that match the change's stack (the language lenses, type design, docs):
+   its prompt opens "Read the lenses at these part files: <parts>", the
+   paths from `parts=`, in place of the single criteria path; its report is
+   `<workspace>/lens-code-quality-report.md`; each finding keeps its own
+   part's tag, `[lens:<part id>]`; and the dedupe judge and the fixer
+   receive the part paths.
    `lens-skipped` lines and `lenses off` dispatch nothing; step 4 names them
    and writes each `lens-skipped` line to the ledger. A lens seat writes
    only its own report file, so a recovery may dispatch it again. A
@@ -273,8 +280,9 @@ your own: QA commits on this branch.
    costs the fixer more triage than it yields fixes. `lens-route` reads the
    depth itself: at light it prints a `lens` line only for `security`, and
    only when its Applies clause matches; at standard it prints at most two
-   lenses besides `test-quality`, which it adds whenever its Applies clause
-   matches, and never more than `lensCap` in all. A lens it drops prints
+   lenses besides `test-quality` and `code-quality`, which it adds whenever
+   they apply, and never more than `lensCap` (default 5) in all. A lens it
+   drops prints
    `lens-skipped <id> reason=depth` (light) or `reason=cap`.
 
    ```
@@ -503,6 +511,10 @@ record, because cleanup deletes the ledger.
   whose seat left no report, or a report with no readable `## Verdict`, is
   ledgered as `final review lens-skipped <id> reason=failed`, never as a
   zero-count line.
+- For code-quality, the line also counts each part:
+  `final review lens code-quality — <c> Critical, <i> Important, <m> Minor; fixed <f>, rejected <r>; parts <id>=<findings>,...`,
+  counting findings tagged with any part's `[lens:<part id>]`, the report
+  being `<workspace>/lens-code-quality-report.md`.
 - `final review lenses off`, once, when `lensCap` is 0: step 1 printed
   `lenses off`, or, on a Codex host, `scripts/dforge-config get lensCap`
   prints `0`.

@@ -99,7 +99,7 @@ final review scales as follows:
 | 0.2 UI proof | runs | runs | runs |
 | 0.5 Acceptance QA | skipped | runs | runs |
 | 1 Claude review (`dforge:judge-opus`) | runs | runs | runs |
-| 1 Lenses | security only, when it applies | at most 2, plus test-quality when it applies, within `lensCap` | up to `lensCap` |
+| 1 Lenses | security only, when it applies | at most 2, plus test-quality and code-quality when they apply, within `lensCap` (default 5) | up to `lensCap` |
 | 2 Codex round | skipped | skipped | as today |
 | 3 Dedupe judge | never (one list) | never (one list) | with two lists |
 
@@ -913,7 +913,7 @@ The same settings can be set with
 | Workflow | `apiBudgetAnthropic` | `0` | US dollars auto runs may spend on rulings through `DFORGE_ANTHROPIC_API_KEY`, up to 1000. `0` never uses the key. |
 | Workflow | `apiBudgetOpenai` | `0` | US dollars auto runs may spend on rulings and Decisions API requests through `DFORGE_OPENAI_API_KEY`, up to 1000. `0` never uses the key. |
 | Workflow | `apiBudgetAgentRouter` | `0` | US dollars auto runs may spend on rulings through `DFORGE_AGENTROUTER_API_KEY`, up to 1000. `0` never uses the key. A cap above 0 sends ruling prompts, and any file its judge reads, to AgentRouter, a third party; setting it is the consent. |
-| Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DFORGE_LENS_CAP` overrides it. |
+| Workflow | `lensCap` | `5` | How many specialist review lenses (security, ui-ux, silent failures, test quality, and code quality: the language lenses, type design and docs grouped by the change's stack) the final review runs at most, in that priority order. At standard depth it runs at most 2 plus test quality and code quality. `0` turns them off. `DFORGE_LENS_CAP` overrides it. |
 | Workflow | `lensMinorFrom` | `20` | The plan size, in tasks, from which the final review's lenses also report Minor findings. A smaller plan's lenses report Critical and Important findings only, so the fix wave does not triage a long Minor tail. `0` always asks for Minor findings. `DFORGE_LENS_MINOR_FROM` overrides it. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
 | Workflow | `autoRun` | `on` | `on` runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; `off` on Codex); `ask` offers that once the design is approved; `off` never runs one. See [Auto run](#auto-run). |
