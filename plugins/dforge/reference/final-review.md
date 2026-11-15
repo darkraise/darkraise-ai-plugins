@@ -119,11 +119,13 @@ your own: QA commits on this branch.
   when the plan's spec has no `A<n>` statement tagged `test`, or when
   the ledger already holds `Acceptance QA: complete`. When the ledger holds
   `Acceptance QA: dispatched` with no `complete` line, QA was cut off. First,
-  when `<workspace>/qa-status-before.txt` exists, remove QA's uncommitted work
-  as (b) does when its timer finishes first, and log
-  `Ruling: QA cut off — its uncommitted files were removed — none`; without
-  that file, remove nothing.
-  Never restore or delete a carried path (`scripts/auto-run carried`), whatever its status line shows. Then, when
+  when `<workspace>/qa-status-before.txt` exists, run
+  `bash <plugin-root>/scripts/qa-files clean <workspace>` as (b) does when its
+  timer finishes first, name the paths of its `qa-files: left` lines in your
+  final-review message, and log
+  `Ruling: QA cut off — its listed files were removed; left: <paths> — none`
+  (`left: none` when it printed no `left` line); without that file, remove
+  nothing. Then, when
   `<workspace>/acceptance-report.md` exists, read it, complete it yourself
   with `cannot-test: timeout` for every `test` statement it does not cover,
   and go to (c) below; otherwise re-dispatch once with `[MODE]` `rerun`, under
@@ -142,10 +144,13 @@ your own: QA commits on this branch.
       its `test` statements verbatim, MERGE_BASE, HEAD, the test command
       `gates.md` declares or `none`, the workspace, and `[MODE]` `first`.
       When the plan has a `**Worktree setup:**` line, give QA that command
-      too, for its mutation worktree. Before dispatching, save the output of
-      `git status --porcelain` to `<workspace>/qa-status-before.txt`.
-      Dispatch it in the background and, in the same message, start a
-      background timer, `sleep <s>` with `<s>` = 600 + 180 × the number of
+      too, for its mutation worktree. Before every dispatch, the `rerun`
+      and `reword` re-dispatches included and after any cut-off cleanup
+      above, run `bash <plugin-root>/scripts/qa-files begin <workspace>`:
+      it saves `git status` to `<workspace>/qa-status-before.txt` and
+      empties `<workspace>/qa-touched.txt`, the list QA appends each path it
+      writes to. Dispatch it in the background and, in the same message,
+      start a background timer, `sleep <s>` with `<s>` = 600 + 180 × the number of
       `test` statements, at least 1200 and at most 3600 (20 to 60 minutes),
       with the Bash
       call's `timeout` set to (`<s>` + 120) × 1000 ms: a background call's
@@ -160,13 +165,15 @@ your own: QA commits on this branch.
       Clean up only once it has stopped, since removing files a live writer
       still owns races it. If it cannot be stopped, leave its files in place
       and report the blocked cleanup.
-      Once it has stopped, run `git status --porcelain` again: each path it
-      lists that `<workspace>/qa-status-before.txt` does not is QA's
-      unfinished work. Restore a tracked one with
-      `git restore --staged --worktree -- <path>`, delete an untracked one,
-      and log
-      `Ruling: QA timed out — its uncommitted files were removed — none`.
-      Never restore or delete a carried path (`scripts/auto-run carried`), whatever its status line shows.
+      Once it has stopped, run
+      `bash <plugin-root>/scripts/qa-files clean <workspace>`. It restores
+      or deletes only the paths QA listed that turned dirty after `begin`,
+      never a carried path (`scripts/auto-run carried`), and prints a
+      `qa-files: left <path>` line for every other new dirty path, which
+      may be your human partner's work. Name those paths in your
+      final-review message, and log
+      `Ruling: QA timed out — its listed files were removed; left: <paths> — none`
+      (`left: none` when it printed no `left` line).
       Then write or complete `<workspace>/acceptance-report.md` yourself,
       with `cannot-test: timeout` for every statement it does not cover.
       When QA finishes first, stop the timer.

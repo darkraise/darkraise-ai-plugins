@@ -60,6 +60,7 @@ export const windowsSeconds = {
   'plan-lint.test.sh': { one: 620, two: 620, paths: 40 },
   'polluter.test.sh': 10,
   'process-roles.test.sh': 10,
+  'qa-files.test.sh': 20,
   'register.test.sh': 68,
   'repo-audit.test.sh': 53,
   'retained-review-data.acceptance.test.sh': 30,
