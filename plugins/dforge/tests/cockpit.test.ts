@@ -106,6 +106,7 @@ import { nativeLine, nativeRun } from '../hooks/cockpit/native'
 import { drawSettings } from '../hooks/cockpit/settings-view'
 import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
 import SERVICE_COMMANDS from './fixtures/service-commands.mjs'
+import fastModeCases from './fixtures/fast-mode/cases.mjs'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -874,8 +875,8 @@ describe('seat check', () => {
   })
 
   test('reads the last Process line of a text: fast, the full flow, or none', () => {
-    expect(fastModeLine('Process: fast — a one-file fix\n\nOn it.')).toBe(true)
-    expect(fastModeLine('`Process: fast`')).toBe(true)
+    expect(fastModeLine('Process: fast — a one-file fix\n\nOn it.')).toBe('request')
+    expect(fastModeLine('`Process: fast`')).toBe('request')
     expect(fastModeLine('Process: fast — x\nProcess: bounded, inline — no trigger')).toBe(false)
     expect(fastModeLine('Process: faster — not the marker')).toBe(false)
     expect(fastModeLine('Here is the answer.')).toBeNull()
@@ -1787,6 +1788,7 @@ describe('settings', () => {
     await ui.press({ key: 'settings-tab-Context' })
     expect(await ui.find({ key: 'set-handoffTokens-more' })).toBeUndefined()
     expect((await ui.find({ key: 'set-handoffTokens-controls' }))?.text).toMatch(/ignored in relaxed handoff mode/)
+    expect((await ui.find({ key: 'set-handoffTokens-controls' }))?.text).toMatch(/an auto run still uses it/)
     await ui.press({ key: 'settings-tab-Process' })
     expect((await ui.find({ key: 'set-designApproval-controls' }))?.text).toMatch(/no effect while autoRun is on/)
     expect((await ui.find({ key: 'set-specReview-controls' }))?.text).toMatch(/no effect while autoRun is on/)
@@ -7785,5 +7787,55 @@ describe('session state file', () => {
     await $.session.start(START)
     await $.tool.call({ tool: 'Monitor', command: 'tail -f x.log' } as never)
     expect(stateOf(written).partial).toBe(true)
+  })
+})
+
+describe('fast mode scope', () => {
+  const cases = fastModeCases
+  const said = ($: Parameters<TestBody>[0], text: string, n: number) =>
+    $.session.append({ message: { type: 'assistant', role: 'assistant', content: [{ type: 'text', text }] }, door: 'response', origin: { kind: 'model' }, uuid: `fm-${n}` } as never)
+  const spawn = (id: string) => ({ tool_use_id: id, prompt: 'Look', description: 'Look around', subagentType: 'general-purpose', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: false }) as never
+  for (const c of cases)
+    test(`the seat check follows fast mode: ${c.name}`, async ($, on) => {
+      world(on, { tokens: 10_000 })
+      await $.session.start(START)
+      await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
+      let n = 0
+      for (const text of c.before) await said($, text, n++)
+      if (c.after !== null) {
+        await $.prompt.submit({ text: 'the next request', wait: false } as never)
+        for (const text of c.after) await said($, text, n++)
+      }
+      const denial = (await $.agent.spawn(spawn('toolu_fm'))).deny
+      if (c.on) expect(denial).toBeUndefined()
+      else expect(denial).toMatch(/^dforge: name a seat/)
+    })
+
+  test('no handoff note while fast mode is on', async ($, on) => {
+    const notes: string[] = []
+    const w: World = { tokens: 440_000, notes }
+    world(on, w)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
+    await said($, 'Process: fast — a one-line fix', 1)
+    w.tokens = 470_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(notes.filter(text => /— handoff\./.test(text))).toEqual([])
+  })
+
+  test('relaxed mode keeps the final-phase exemption once every task is complete', async ($, on) => {
+    const notes: string[] = []
+    const files: World['files'] = {
+      ...configured({ handoffMode: 'relaxed' }),
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: '# SDD ledger — plan: docs/plans/p.md\nTask 1: complete (commits a..b, review clean) — done: x', mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/plans/p.md': { text: '# Plan\n\n### Task 1: Only\n' },
+    }
+    world(on, { ...SIGNED_IN, tokens: 600_000, notes, files })
+    signedIn(on, files)
+    // The session start reads the settings and the ledger; the Skill call makes it a plan session.
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(notes.filter(text => /— handoff\./.test(text))).toEqual([])
   })
 })

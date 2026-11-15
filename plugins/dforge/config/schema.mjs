@@ -80,9 +80,9 @@ export default {
     description: 'What the minimized band\'s second line shows, in the order turned on. A segment turned on here leaves line 1; none on hides the line.',
   },
   handoffTokens: {
-    type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DFORGE_BUDGET', group: 'Context', target: 'dforge', inertWhen: { key: 'handoffMode', value: 'relaxed', words: 'ignored in relaxed handoff mode' },
+    type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DFORGE_BUDGET', group: 'Context', target: 'dforge', inertWhen: { key: 'handoffMode', value: 'relaxed', words: 'ignored in relaxed handoff mode; an auto run still uses it' },
     label: 'Handoff budget', title: 'Handoff budget (tokens)',
-    description: "Context size at which the cockpit and the budget scripts say hand off. 0 follows dforge's rule: 93% of the smaller of autoCompactWindow and the model's window, minus 140,000, and never below a fifth of that window. DFORGE_BUDGET overrides it; relaxed handoff mode ignores it.",
+    description: "Context size at which the cockpit and the budget scripts say hand off. 0 follows dforge's rule: 93% of the smaller of autoCompactWindow and the model's window, minus 140,000, and never below a fifth of that window. DFORGE_BUDGET overrides it; relaxed handoff mode ignores it, and an auto run still uses it.",
   },
   handoffMode: {
     type: 'enum', values: ['strict', 'relaxed'], default: 'strict', enforcedBy: 'script', group: 'Context', target: 'dforge',

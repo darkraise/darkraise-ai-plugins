@@ -263,6 +263,7 @@ const refusals = atom({ plugin: 'dforge', key: 'refusals' } as const, [])
 const isNudged = atom({ plugin: 'dforge', key: 'isNudged' } as const, false)
 const isPlanSession = atom({ plugin: 'dforge', key: 'isPlanSession' } as const, false)
 const isFastMode = atom({ plugin: 'dforge', key: 'isFastMode' } as const, false)
+const isFastSession = atom({ plugin: 'dforge', key: 'isFastSession' } as const, false)
 const isRunSession = atom({ plugin: 'dforge', key: 'isRunSession' } as const, false)
 const autoRun = atom({ plugin: 'dforge', key: 'autoRun' } as const, null)
 const alerted = atom({ plugin: 'dforge', key: 'alerted' } as const, [])
@@ -598,7 +599,9 @@ export const register: Register = on => {
       if (text.includes('background work of its own still running')) await markPartial($)
     } else if (e.message.role === 'assistant' && e.agentId === undefined) {
       const fast = fastModeLine(e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n'))
-      if (fast !== null) await update($, isFastMode, () => fast)
+      if (fast === 'session') await update($, isFastSession, () => true)
+      if (fast === false) await update($, isFastSession, () => false)
+      if (fast !== null) await update($, isFastMode, () => fast !== false)
     }
     return kept
   }).catch(($, e, next) => next(e))
@@ -611,6 +614,9 @@ export const register: Register = on => {
     if (S.isKeepWarmSubmitted && e.text === keepWarmPrompt()) return submitted($, await next(e))
     S.isKeepWarmSubmitted = false
     if (e.origin !== undefined && NEW_CHAIN_ORIGINS.has(e.origin.kind)) S.heldDone = null
+    // A plain `Process: fast` covers its own request only; a new one from the
+    // person ends it, unless a `Process: fast (session)` line is in force.
+    if ((e.origin === undefined || NEW_CHAIN_ORIGINS.has(e.origin.kind)) && !(await read($, isFastSession))) await update($, isFastMode, () => false)
     return submitted($, await next(e))
   }).catch(($, e, next) => next(e))
 
@@ -3640,7 +3646,9 @@ async function refresh(
     : tuning.isRelaxed
       ? finalLimitFor(window, compactWindow)
       : budgetFor(handoffTokens, window, compactWindow)
-  const isFinishing = !isAuto && !tuning.isRelaxed && isTail
+  // Relaxed mode measures the tail against the final-phase limit, but a plan
+  // with every task complete is in its final phase, which never hands off.
+  const isFinishing = !isAuto && isTail && (!tuning.isRelaxed || summary?.isFinished === true || (summary !== null && summary.isPlanRead && summary.total > 0 && summary.done >= summary.total))
   const usd = figures.cost?.usd ?? null
   const before = await read($, budget)
   if (
@@ -3666,7 +3674,7 @@ async function refresh(
     return reading
   }
   // An auto run compacts at its limit rather than handing off: no note.
-  if (!nudgeModel || isAuto || (await read($, isNudged)) || !(await read($, isPlanSession))) return reading
+  if (!nudgeModel || isAuto || (await read($, isNudged)) || !(await read($, isPlanSession)) || (await read($, isFastMode))) return reading
   await update($, isNudged, () => true)
   const note = `dforge: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`
   try {

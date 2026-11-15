@@ -195,16 +195,18 @@ export type SeatSpawn = {
 }
 
 /**
- * Whether the last `Process:` line of a response puts its request in fast mode
- * (reference/fast-mode.md): true for `Process: fast`, false for any other
- * Process line, null when the text has none. scripts/lib/fast-mode.sh reads
- * the same line for the Stop and edit hooks.
+ * What the last `Process:` line of a response says about fast mode
+ * (reference/fast-mode.md): 'session' for `Process: fast (session)`, on until
+ * another Process line; 'request' for any other `Process: fast`, on for its
+ * request; false for any other Process line; null when the text has none.
+ * scripts/lib/fast-mode.sh reads the same grammar for the Stop and edit hooks.
  */
-export function fastModeLine(text: string): boolean | null {
-  let found: boolean | null = null
+export function fastModeLine(text: string): 'session' | 'request' | false | null {
+  let found: 'session' | 'request' | false | null = null
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.replace(/^[\s`*]+/, '')
-    if (line.startsWith('Process:')) found = /^Process:\s*fast(?![\w-])/.test(line)
+    if (!line.startsWith('Process:')) continue
+    found = /^Process:\s*fast\s*\(session\)/.test(line) ? 'session' : /^Process:\s*fast(?![\w-])/.test(line) ? 'request' : false
   }
   return found
 }
