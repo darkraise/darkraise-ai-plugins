@@ -7,7 +7,7 @@ set -uo pipefail
 #   bash plan-lint.test.sh two      run the named parts only
 # test-all runs the parts as separate jobs: together they outgrow one Windows
 # shard.
-ALL="one two"
+ALL="one two paths"
 sel=""
 for n in "$@"; do
   case " $ALL " in
@@ -38,6 +38,10 @@ lacks() { # lacks <name> <haystack> <needle>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 cd "$TMP"
+# The files the fixture plans Modify or Test, so the path check finds them.
+for i in 1 2 3 4 5 6; do : > "f$i.txt"; done
+: > b.txt
+mkdir -p t && printf '%s\n' 1 2 3 4 5 6 7 8 9 > t/b.test.sh
 # Every case reads this home, never the developer's ~/.dforge; the name-key
 # cases below set their own.
 export HOME="$TMP/home"
@@ -1081,6 +1085,107 @@ sed 's#docs/ui-spec.md#docs/spec.md#' ui-bad.md > ui-nocontract.md
 out=$(bash "$LINT" ui-nocontract.md 2>&1)
 lacks "ui: a spec without a contract asks for no line" "$out" "UI/UX"
 
+fi
+if want paths; then
+# The path check: Modify and Test paths exist or an earlier task creates them,
+# and ranges fit the file. Fixture lines carry a leading | so this suite lints.
+mkdir -p "$TMP/paths" && cd "$TMP/paths" || exit 1
+mkdir -p docs && printf '# Spec\n' > docs/spec.md
+printf 'one\ntwo\nthree\n' > a.txt
+printf 'x\ny' > b.txt
+paths_plan() { # paths_plan <task 2 files lines> <task 2 step 1 heading>
+  sed 's/^|//' <<EOF
+|# Paths Plan
+|
+|**Goal:** Demo.
+|
+|**Spec:** \`docs/spec.md\`
+|
+|**Execution:** inline — \`claude --model sonnet --effort low\` — small
+|
+|**Task check:** none — full suite every 3 tasks
+|
+|**Integration check:** \`bash test.sh\`
+|
+|**CI:** none
+|
+|## Global Constraints
+|
+|- Bash only.
+|
+|## Contracts
+|
+|None
+|
+|## Assumptions (evidence)
+|
+|- None.
+|
+|## Task index
+|
+|1. Make
+|2. Use
+|
+|### Task 1: Make
+|
+|**Files:**
+|- Create: \`made.txt\`
+|- Delete: \`gone.txt\`
+|
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
+|
+|- [ ] **Step 1: No new test, because it only creates a file**
+|
+|### Task 2: Use
+|
+|**Files:**
+$1
+|
+|**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
+|
+|- [ ] **Step 1: $2**
+EOF
+}
+lint_paths() { paths_plan "$1" "${2:-Write the failing test}" > plan.md; bash "$LINT" plan.md 2>&1; }
+
+out=$(lint_paths '- Modify: `missing.txt`')
+has "paths: a missing Modify path is an error" "$out" "ERROR Task 2: missing.txt does not exist and no earlier task creates it"
+out=$(lint_paths '- Test: `tests/missing.test.sh`' 'No new test, because it is prose')
+has "paths: a missing Test path outside a Write-the-failing-test task is an error" "$out" "ERROR Task 2: tests/missing.test.sh does not exist and no earlier task creates it"
+out=$(lint_paths '- Test: `tests/new.test.sh`')
+lacks "paths: a Test path of a Write-the-failing-test task counts as created" "$out" "tests/new.test.sh does not exist"
+out=$(lint_paths '- Modify: `made.txt`')
+lacks "paths: a path an earlier task creates is not an error" "$out" "made.txt does not exist"
+out=$(lint_paths '- Create: `fresh.txt`
+|- Delete: `nowhere.txt`')
+lacks "paths: Create and Delete paths are not checked" "$out" "does not exist"
+out=$(lint_paths '- Modify: `src/*.sh`')
+lacks "paths: a span holding * is not checked" "$out" "does not exist"
+out=$(lint_paths '- Modify: `a.txt:2-3`
+|- Modify: `a.txt:1-2,3`
+|- Modify: `b.txt:2`')
+lacks "paths: valid single, list and unterminated-last-line ranges pass" "$out" "is outside the file"
+out=$(lint_paths '- Modify: `a.txt:3-4`')
+has "paths: an end beyond the file is an error" "$out" "ERROR Task 2: a.txt:3-4 is outside the file's 3 lines"
+out=$(lint_paths '- Modify: `a.txt:0`')
+has "paths: a start below 1 is an error" "$out" "ERROR Task 2: a.txt:0 is outside the file's 3 lines"
+out=$(lint_paths '- Modify: `a.txt:3-2`')
+has "paths: a start above its end is an error" "$out" "ERROR Task 2: a.txt:3-2 is outside the file's 3 lines"
+out=$(lint_paths '- Modify: `made.txt:40-50`')
+lacks "paths: a range on a created path is not checked" "$out" "is outside the file"
+paths_plan '- Modify: `tests/new.test.sh`' \
+  | sed 's#^- Delete: `gone.txt`#- Test: `tests/new.test.sh`#; s#Step 1: No new test, because it only creates a file#Step 1: Write the failing test#' > plan.md
+out=$(bash "$LINT" plan.md 2>&1)
+lacks "paths: a Test path of an earlier Write-the-failing-test task counts as created" "$out" "tests/new.test.sh does not exist"
+mkdir -p done
+paths_plan '- Modify: `missing.txt`' 'Write the failing test' > done/plan.md
+printf -- '- 2026-11-15 `done/plan.md` — merged into `main` at abc1234\n' > done/completed.md
+out=$(bash "$LINT" done/plan.md 2>&1)
+lacks "paths: a plan its completed.md records skips the path check" "$out" "missing.txt does not exist"
+rm done/completed.md
+out=$(bash "$LINT" done/plan.md 2>&1)
+has "paths: the same plan unrecorded is checked" "$out" "ERROR Task 2: missing.txt does not exist and no earlier task creates it"
+cd "$TMP" || exit 1
 fi
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

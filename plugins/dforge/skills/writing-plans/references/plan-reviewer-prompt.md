@@ -18,8 +18,9 @@ Subagent ([JUDGE]):
 
     **Plan:** [PLAN_FILE]
     **Spec it implements:** [SPEC_FILE]
-    **plan-lint output:** [LINT_FILE] - the mechanical checks already ran; do
-    not repeat them, but an ERROR line there is a finding.
+    **plan-lint output:** [LINT_FILE] - the mechanical checks already ran,
+    among them that each Modify and Test path exists and each line range
+    fits its file; do not repeat them, but an ERROR line there is a finding.
 
     Read the spec, then the plan. Read every task as its implementer will:
     the task text plus the header's Global Constraints and Contracts, nothing

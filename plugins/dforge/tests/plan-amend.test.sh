@@ -132,6 +132,13 @@ sed '/^## Contracts$/,/^## Assumptions/{/^## Assumptions/!d}' docs/plan.md > doc
 entry b10.md '## Task 1' 'Print `hello NAME`.' 'Print `hello, NAME`.'
 run docs/old.md b10.md
 check "pre-existing errors: accepted" "$out" "amended: A1 Task 1"
+# A4: a path error the plan already had does not block an amendment elsewhere.
+awk '{ print } /^### Task 2/ { print ""; print "**Files:**"; print "- Modify: `gone/nowhere.txt`" }' docs/plan.md > docs/pathold.md
+out=$(bash "$HERE/../scripts/plan-lint" docs/pathold.md 2>&1)
+has "pre-existing path error: the lint reports it" "$out" "ERROR Task 2: gone/nowhere.txt does not exist and no earlier task creates it"
+entry b10p.md '## Task 1' 'Print `hello NAME`.' 'Print `hello, NAME`.'
+run docs/pathold.md b10p.md
+check "pre-existing path error: accepted" "$out" "amended: A1 Task 1"
 
 entry b11.md '## Task 2' 'Print `hello NAME` three times.' 'Print `hello NAME` four times.'
 sed 's/$/\r/' b11.md > b11-crlf.md

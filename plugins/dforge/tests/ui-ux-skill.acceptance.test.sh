@@ -109,6 +109,9 @@ new_repo() {
   g init -q "$REPO"
   mkdir -p "$REPO/src" "$REPO/docs/dforge/plans"
   printf 'hello\n' > "$REPO/README.md"
+  # The files the fixture plans' Task 2 modifies, so plan-lint's path check finds them.
+  printf 'a\n' > "$REPO/a.txt"
+  printf 'export {}\n' > "$REPO/src/Dialog.tsx"
   write_spec "$REPO/$SPEC_REL" contract
   write_spec "$REPO/$OTHER_SPEC_REL" contract
   write_spec "$REPO/$PLAIN_SPEC_REL" plain

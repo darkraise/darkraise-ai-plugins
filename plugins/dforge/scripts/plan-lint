@@ -265,6 +265,97 @@ awk "$_PLAN_AWK"'
   }
 ' where=header "$src" >> "$findings"
 
+bt='`'
+# --- Step 1 forms ---
+# The forms are defined in skills/writing-plans/references/test-step-forms.md.
+# One awk pass and no other subprocess unless a task cites a Covered by test,
+# because the plan-lint suite already runs slowly on Windows.
+step1_lines=$(awk "$_PLAN_AWK"'
+  { f = in_fence($0); k = f ? -1 : is_task($0) }
+  k >= 0 { task = k; in_task = 1; next }
+  f || !in_task || (task in seen) { next }
+  /^- \[[ xX]\] \*\*Step 1: / {
+    t = $0; sub(/^- \[[ xX]\] \*\*Step 1: /, "", t); sub(/\*\*.*$/, "", t)
+    print task "\t" t; seen[task] = 1
+  }
+' "$src")
+step1_class=() step1_covered=""
+covered_re="^Covered by Task ([0-9]+)'s test $bt"
+no_test_re='^No new test, because .*[A-Za-z0-9]'
+while IFS=$'\t' read -r m heading; do
+  [ -n "$m" ] || continue
+  if [[ "$heading" == "Write the failing test"* ]]; then step1_class[m]=write
+  elif [[ "$heading" == "Extend the test $bt"* ]]; then step1_class[m]=extend
+  elif [[ "$heading" =~ $covered_re ]]; then
+    step1_class[m]=covered
+    step1_covered="$step1_covered$m $((10#${BASH_REMATCH[1]}))"$'\n'
+  elif [[ "$heading" =~ $no_test_re ]]; then step1_class[m]=none
+  elif [[ "$heading" == "No new test"* ]]; then
+    say ERROR "Task $m" 'Step 1 must read "No new test, because <reason>"'
+  else
+    say WARN "Task $m" "Step 1 \"$heading\" is none of the forms in test-step-forms.md"
+  fi
+done <<<"$step1_lines"
+
+# --- task paths ---
+# Modify and Test paths exist, or an earlier task creates them, and ranges fit
+# the file. A finished plan that its completed.md records is skipped: its paths
+# may have moved since, and historical plans are never edited. No subprocess
+# per path: the plan-lint suite already runs slowly on Windows.
+paths_ctx=$(_plan_ctx "$plan")
+paths_root=$(git -C "$paths_ctx" rev-parse --show-toplevel 2>/dev/null | tr -d '\r') || paths_root=""
+[ -n "$paths_root" ] || paths_root=$paths_ctx
+paths_check=1
+paths_done="$(dirname "$plan")/completed.md"
+if [ -f "$paths_done" ]; then
+  paths_base=$(basename "$plan")
+  while IFS= read -r l || [ -n "$l" ]; do
+    case $l in *"/$paths_base$bt"*|*"$bt$paths_base$bt"*) paths_check=0; break ;; esac
+  done < "$paths_done"
+fi
+paths_created=$'\n' paths_counts=$'\n'
+# paths_lines FILE — sets paths_n to FILE's line count, an unterminated last
+# line counted, cached in a plain string (plan-lint uses no declare -A).
+paths_lines() {
+  local cached=${paths_counts#*$'\n'"$1"$'\t'} l
+  if [ "$cached" != "$paths_counts" ]; then paths_n=${cached%%$'\n'*}; return; fi
+  paths_n=0
+  while IFS= read -r l || [ -n "$l" ]; do paths_n=$((paths_n + 1)); done < "$1"
+  paths_counts="$paths_counts$1"$'\t'"$paths_n"$'\n'
+}
+# paths_range_ok RANGE — every comma-separated a or a-b keeps 1 <= a <= b <= paths_n.
+paths_range_ok() {
+  local item a b rest=$1,
+  while [ -n "$rest" ]; do
+    item=${rest%%,*} rest=${rest#*,}
+    a=${item%%-*} b=${item#*-}
+    [ "$((10#$a))" -ge 1 ] && [ "$((10#$a))" -le "$((10#$b))" ] && [ "$((10#$b))" -le "$paths_n" ] || return 1
+  done
+}
+paths_task() { # paths_task N DETAIL — DETAIL is plan_task_paths --detail output
+  local kind path range file
+  while IFS=$'\t' read -r kind path range; do
+    [ -n "$kind" ] || continue
+    case $kind in
+      Create) paths_created="$paths_created$path"$'\n' ;;
+      Test) [ "${step1_class[$1]:-}" = write ] && paths_created="$paths_created$path"$'\n' ;;
+    esac
+  done <<<"$2"
+  while IFS=$'\t' read -r kind path range; do
+    case $kind in Modify|Test) ;; *) continue ;; esac
+    case $path in *'*'*) continue ;; esac
+    case $paths_created in *$'\n'"$path"$'\n'*) continue ;; esac
+    file="$paths_root/$path"
+    if [ ! -e "$file" ]; then
+      say ERROR "Task $1" "$path does not exist and no earlier task creates it"
+      continue
+    fi
+    [ -n "$range" ] && [ -f "$file" ] || continue
+    paths_lines "$file"
+    paths_range_ok "$range" || say ERROR "Task $1" "$path:$range is outside the file's $paths_n lines"
+  done <<<"$2"
+}
+
 # --- per task ---
 assignment=$(ladder_block assignment)
 max_total=0 max_score=0
@@ -274,6 +365,10 @@ max_total=0 max_score=0
 # every unit is checked on its own.
 for n in $nums; do
   full=$(plan_task_text "$src" "$n")
+  if [ "$paths_check" -eq 1 ]; then
+    paths_detail=$(plan_task_paths --detail <<<"$full")
+    paths_task "$n" "$paths_detail"
+  fi
   parts=$(plan_task_parts <<<"$full")
   if [ -n "$parts" ] \
      && [ "$(plan_lines Evaluation <<<"$full" | grep -c .)" \
@@ -393,7 +488,6 @@ else
 fi
 
 # --- test tier and CI header lines (reference/test-tiers.md, reference/ci-parity.md) ---
-bt='`'
 header_value() { # header_value <label> <line> — the line without its label, trimmed
   local v=${2#"**$1:**"}
   v=${v#"${v%%[![:space:]]*}"}
@@ -448,36 +542,6 @@ if [ -n "$early_ci" ]; then
   fi
 fi
 
-# --- Step 1 forms ---
-# The forms are defined in skills/writing-plans/references/test-step-forms.md.
-# One awk pass and no other subprocess unless a task cites a Covered by test,
-# because the plan-lint suite already runs slowly on Windows.
-step1_lines=$(awk "$_PLAN_AWK"'
-  { f = in_fence($0); k = f ? -1 : is_task($0) }
-  k >= 0 { task = k; in_task = 1; next }
-  f || !in_task || (task in seen) { next }
-  /^- \[[ xX]\] \*\*Step 1: / {
-    t = $0; sub(/^- \[[ xX]\] \*\*Step 1: /, "", t); sub(/\*\*.*$/, "", t)
-    print task "\t" t; seen[task] = 1
-  }
-' "$src")
-step1_class=() step1_covered=""
-covered_re="^Covered by Task ([0-9]+)'s test $bt"
-no_test_re='^No new test, because .*[A-Za-z0-9]'
-while IFS=$'\t' read -r m heading; do
-  [ -n "$m" ] || continue
-  if [[ "$heading" == "Write the failing test"* ]]; then step1_class[m]=write
-  elif [[ "$heading" == "Extend the test $bt"* ]]; then step1_class[m]=extend
-  elif [[ "$heading" =~ $covered_re ]]; then
-    step1_class[m]=covered
-    step1_covered="$step1_covered$m $((10#${BASH_REMATCH[1]}))"$'\n'
-  elif [[ "$heading" =~ $no_test_re ]]; then step1_class[m]=none
-  elif [[ "$heading" == "No new test"* ]]; then
-    say ERROR "Task $m" 'Step 1 must read "No new test, because <reason>"'
-  else
-    say WARN "Task $m" "Step 1 \"$heading\" is none of the forms in test-step-forms.md"
-  fi
-done <<<"$step1_lines"
 if [ -n "$step1_covered" ]; then
   while read -r m n; do
     [ -n "$m" ] || continue

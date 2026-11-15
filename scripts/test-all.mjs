@@ -84,12 +84,12 @@ const hasTsc = typesGenerated && spawnSync(tscExecutable, [...tscPrefix, '--vers
 const suiteSeconds = { 'plan-lint.test.sh': 1200, 'speed-and-cost-followups.acceptance.test.sh': 1200, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step-base.test.sh': 1200, 'task-step.test.sh': 900, 'next-step.test.sh': 700, 'auto-run.test.sh': 700 };
 // faster-plans takes about 20 minutes on a Windows runner, more than a shard
 // can hold beside anything else, so it runs as three parts of its tests.
-// task-step runs as three parts, one per section of the suite, and plan-lint as
-// two, whose limit applies to each.
+// task-step and plan-lint each run as three parts, one per section of the
+// suite, whose limit applies to each.
 const suiteParts = {
   'faster-plans.acceptance.test.sh': [['a2', 'a3', 'a5'], ['a11', 'a12'], ['a17', 'a19', 'a20', 'a21', 'a22', 'a23']],
   'task-step.test.sh': [['start'], ['rereview'], ['verdict']],
-  'plan-lint.test.sh': [['one'], ['two']],
+  'plan-lint.test.sh': [['one'], ['two'], ['paths']],
   'speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A7', 'A8', 'A11'], ['A13', 'A14', 'A15']],
 };
 const jobs = [

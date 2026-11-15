@@ -206,17 +206,28 @@ plan_heavy() {
   plan_scores "$1" | awk -F'\t' '$2 != "-" && $2 != "?" && ($2 + 0 >= 5 || $3 + 0 == 3) { print $1 }'
 }
 
-# plan_task_paths — the repository paths the task text on stdin names in its
-# `- Create:`, `- Modify:`, `- Test:` and `- Delete:` lines outside fences, in
-# every part, one per line, unique. A `:123-145` line range is dropped.
+# plan_task_paths [--detail] — the repository paths the task text on stdin
+# names in its `- Create:`, `- Modify:`, `- Test:` and `- Delete:` lines
+# outside fences, in every part, one per line, unique. A `:123-145` line range
+# is dropped. With --detail, one `<kind>\t<path>\t<range>` line per such line,
+# in order and not deduplicated, the range without its colon (`12`, `3-9`,
+# `35-44,66-72`) or empty.
 plan_task_paths() {
-  awk "$_PLAN_AWK"'
+  local detail=0
+  [ "${1:-}" = --detail ] && detail=1
+  awk -v detail="$detail" "$_PLAN_AWK"'
     in_fence($0) { next }
     /^[ \t]*- (Create|Modify|Test|Delete):[ \t]*`[^`]+`/ {
+      kind = $0; sub(/^[ \t]*- /, "", kind); sub(/:.*$/, "", kind)
       p = $0; sub(/^[^`]*`/, "", p); sub(/`.*$/, "", p)
+      range = ""
+      if (detail && match(p, /:[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$/)) {
+        range = substr(p, RSTART + 1); p = substr(p, 1, RSTART - 1)
+      }
       sub(/:[0-9]+(-[0-9]+)?$/, "", p)
       sub(/^\.\//, "", p)
-      if (p != "" && !seen[p]++) print p
+      if (detail) { if (p != "") print kind "\t" p "\t" range }
+      else if (p != "" && !seen[p]++) print p
     }
   '
 }

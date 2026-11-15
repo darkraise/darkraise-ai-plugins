@@ -5,7 +5,7 @@
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
-| 1 | plan review: move mechanical checks (edit old text present, paths and symbols resolve) into plan-lint; use the delta template for every round after the first | docs/dforge/plans/2026-11-15-measured-proposals.md | A1-A4 | doing | from 2026-10-25-token-efficiency.md #5 |
+| 1 | plan review: move mechanical checks (edit old text present, paths and symbols resolve) into plan-lint; use the delta template for every round after the first | docs/dforge/plans/2026-11-15-measured-proposals.md | A1-A4 | done | plan-lint path and range checks (Task 2) |
 | 2 | low-yield review stages outside the task loop: audit or drop unclassified second-judge and critique reviews; drop the language and docs lenses rather than lowering lensCap; run spec review only for architectural work | docs/dforge/plans/2026-11-15-measured-proposals.md | A5-A11, A20, A21 | doing | from 2026-10-25-token-efficiency.md #15 |
 | 3 | Evidence-bound findings: each judge finding cites a failing command or a quoted brief line, a fix round starts only for findings that reproduce, and the reviewer prompt says skip style | docs/dforge/plans/2026-11-15-measured-proposals.md | A14-A16 | done | kept: docs/dforge/notes/2026-11-15-review-prompt-replay.md |
 | 4 | Diff-first, narrow judge search: specific questions, narrow grep, view only known ranges | docs/dforge/plans/2026-11-15-measured-proposals.md | A14, A16 | done | kept: docs/dforge/notes/2026-11-15-review-prompt-replay.md |
