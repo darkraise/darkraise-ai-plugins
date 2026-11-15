@@ -668,7 +668,7 @@ do_start() {
   if [ "$kept" -eq 0 ]; then
     jq -n --argjson tasks "$(printf '%s\n' "${ids[@]}" | jq -sc .)" --arg base "$base" \
       '{tasks: $tasks, base: $base, head: null, reviewHead: null, round: 0, t0: null}' > "$state.tmp" \
-      && mv "$state.tmp" "$state"
+      && mv "$state.tmp" "$state" || die "cannot update $state"
   fi
 
   if [ -n "$suite_arg" ]; then
@@ -703,7 +703,7 @@ do_review() {
     ledger_init
     jq -n --argjson tasks "$(printf '%s\n' "${ids[@]}" | jq -sc .)" --arg base "$open_sha" \
       '{tasks: $tasks, base: $base, head: null, reviewHead: null, round: 0, t0: null}' > "$state.tmp" \
-      && mv "$state.tmp" "$state"
+      && mv "$state.tmp" "$state" || die "cannot update $state"
   fi
   top=$(git rev-parse --show-toplevel)
   if [ -n "$cwd_arg" ]; then
@@ -815,7 +815,7 @@ do_review() {
     --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
     '.reviewHead = $rh | .t0 = $t0 | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
      | .reviewCheck = $chk | (if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
-    "$state" > "$state.tmp" && mv "$state.tmp" "$state"
+    "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
   drop_base_cache "$state" "$first" "$old_base"
 
   printf 'task %s: reviewed %s..%s (%s commit(s)), diff %s\n' "$idlist" "${basesha:0:7}" "${headsha:0:7}" \

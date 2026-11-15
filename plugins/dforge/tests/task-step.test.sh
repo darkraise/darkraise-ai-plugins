@@ -1064,5 +1064,21 @@ check "verdict: no such task exits 3" "$rr_rc" "3"
 rr_run verdict docs/codex-plan.md 1
 check "verdict: a Host: codex plan exits 2" "$rr_rc" "2"
 fi
+
+# A step-state write that fails stops the step instead of passing silently.
+if want start; then
+  cd "$REPO" || exit 1
+  rm -f "$WS/task-5-step.json"
+  mkdir "$WS/task-5-step.json.tmp"
+  step start docs/plan.md 5
+  check "start: a step state that cannot be written fails" "$rc:$(grep -c 'cannot update' "$TMP/err")" "2:1"
+  rmdir "$WS/task-5-step.json.tmp"
+  step start docs/plan.md 5
+  echo w > w5.txt && git add w5.txt && git commit -qm "feat: add w5"
+  mkdir "$WS/task-5-step.json.tmp"
+  step review docs/plan.md 5
+  check "review: a review head that cannot be recorded fails" "$rc:$(grep -c 'cannot update' "$TMP/err")" "2:1"
+  rmdir "$WS/task-5-step.json.tmp"
+fi
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
