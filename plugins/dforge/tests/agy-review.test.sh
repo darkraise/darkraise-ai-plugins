@@ -167,6 +167,10 @@ PATH="$TMP/oldgit:$PATH" STUB_AGY_MODE=review run --kind task --tier light --pro
 has "a git older than 2.31 fails before agy runs" "$out" "status=FAILED exit=0 out=$TMP/out.json evidence=none reason=git"
 has "a git older than 2.31 names the version" "$(cat "$TMP/err")" "git 2.31 or later is required (found 2.30.0)"
 check "a git older than 2.31 exits 1" "$rc" "1"
+check "a git older than 2.31 never calls agy" "$([ -e "$TMP/args" ] && echo called || echo none)" "none"
+sed -i 's/git version 2.30.0/git version 2.31.0.windows.1/' "$TMP/oldgit/git"
+PATH="$TMP/oldgit:$PATH" STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+has "git 2.31 with a Windows suffix passes the floor" "$out" "status=OK"
 
 run --kind task
 check "a task review without --prompt is a usage error" "$rc" "2"
