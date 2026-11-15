@@ -350,16 +350,60 @@ plan_apply_amendments() {
   ' "$2" "$1"
 }
 
-# plan_amendments_file PLAN — <workspace>/amendments.md when PLAN belongs to a
-# git checkout and that file is non-empty; otherwise nothing. Computed, not
-# created: readers never bring the workspace into being.
+# plan_amendments_file PLAN — <ledger dir>/amendments.md, beside the ledger
+# (dforge_ledger_dir, the darkmem mirror's when progress is kept there), when
+# PLAN belongs to a git checkout and that file is non-empty; otherwise
+# nothing, which readers take as no amendments. Computed, not created: readers
+# never bring the ledger directory into being. plan-amend computes the same
+# path to write it.
 plan_amendments_file() {
   local ctx file
   ctx=$(_plan_ctx "$1")
   git -C "$ctx" rev-parse --show-toplevel >/dev/null 2>&1 || return 0
-  file="$(dforge_workspace "$(basename "$1" .md)" "$ctx")/amendments.md"
+  file="$(dforge_ledger_dir "$(basename "$1" .md)" "$ctx")/amendments.md"
   [ -s "$file" ] && printf '%s\n' "$file"
   return 0
+}
+
+# plan_amendments_ready PLAN — run in the caller's own shell, never inside
+# $(…): it exits the caller. Amendments used to live in the workspace, which
+# is not where darkmem keeps the ledger, so a session on another host lost
+# them. When the ledger directory has no amendments file and the workspace
+# has one, it is moved there (copied to a temporary name, renamed, then
+# removed from the workspace) and the move is logged in the ledger, once.
+# Then a ledger line citing `Ruling: amendment A<k>` whose `## A<k> ` heading
+# the file lacks exits 2, naming it: the task text would be read without an
+# amendment the run already applied.
+plan_amendments_ready() {
+  local me ctx slug ldir ws file old ledger tmp k bad=0
+  local moved='Ruling: amendments moved beside the ledger — none'
+  me=$(basename "$0")
+  ctx=$(_plan_ctx "$1")
+  git -C "$ctx" rev-parse --show-toplevel >/dev/null 2>&1 || return 0
+  dforge_stores_init "$ctx"
+  slug=$(basename "$1" .md)
+  ldir=$(dforge_ledger_dir "$slug" "$ctx")
+  ws=$(dforge_workspace "$slug" "$ctx")
+  file="$ldir/amendments.md" old="$ws/amendments.md" ledger="$ldir/progress.md"
+  if [ ! -s "$file" ] && [ -s "$old" ] && [ "$ldir" != "$ws" ] && ! [ "$ldir" -ef "$ws" ]; then
+    tmp="$file.tmp.$$"
+    if ! { mkdir -p "$ldir" && cp -- "$old" "$tmp" && mv -f -- "$tmp" "$file"; }; then
+      rm -f -- "$tmp"
+      printf '%s: could not move %s beside the ledger, to %s\n' "$me" "$old" "$file" >&2
+      exit 2
+    fi
+    rm -f -- "$old"
+    if [ -f "$ledger" ] && ! grep -qxF -- "$moved" "$ledger"; then
+      printf '%s\n' "$moved" >> "$ledger"
+    fi
+  fi
+  [ -f "$ledger" ] || return 0
+  for k in $(tr -d '\r' < "$ledger" | grep -oE 'Ruling: amendment A[0-9]+' | sed 's/.*A//' | sort -un); do
+    [ -f "$file" ] && tr -d '\r' < "$file" | grep -q "^## A$k " && continue
+    printf '%s: the ledger cites amendment A%s, which %s lacks\n' "$me" "$k" "$file" >&2
+    bad=1
+  done
+  [ "$bad" -eq 0 ] || exit 2
 }
 
 # plan_require_same_project FILE — return when FILE belongs to the working
