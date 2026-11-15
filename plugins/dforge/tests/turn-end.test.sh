@@ -149,6 +149,12 @@ check "next-step block over running work: blocks" "$(decision "$out")" "block"
 check "the hold counts the running launches" "$(jq -r .reason <<<"$out" | grep -c '2 background launch')" "1"
 check "finishing menu over running work: blocks" "$(decision "$(stop s-1 'Which option?' false "$BG")")" "block"
 check "retry over running work: passes" "$(stop s-1 'Which option?' true "$BG")" ""
+# Every stop after a hold is a retry, so the hold over running work counts once
+# per turn, not once per stop: a block printed after another hold is held too.
+stop s-1 'Waiting on the reviewer.' false "$BG" >/dev/null
+check "a session-ending retry over running work after another hold: blocks" \
+  "$(decision "$(stop s-1 $'## Next session\n\nx' true "$BG")")" "block"
+check "a second retry over running work: passes" "$(stop s-1 $'## Next session\n\nx' true "$BG")" ""
 sleep 1; prompt s-1
 check "next-step block over running work, no ledger write: blocks" \
   "$(decision "$(stop s-1 $'## Next session\n\nx' false "$BG")")" "block"

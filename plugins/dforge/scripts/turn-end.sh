@@ -5,8 +5,8 @@
 # `## Next session` block from scripts/next-step. Controllers that summarize and
 # stop (common on Sonnet) leave the human with neither. When the last message carries neither,
 # block the stop once with the instruction; Claude Code sets stop_hook_active on
-# the retry, which always passes. Anything missing (jq, a ledger written this
-# turn, or the turn stamp from scripts/turn-start.sh unless an auto run is
+# the retry, which passes unless it ends the session over running work (below).
+# Anything missing (jq, a ledger written this turn, or the turn stamp from scripts/turn-start.sh unless an auto run is
 # bound to the session) passes silently, and so
 # does a plain stop while an agent or command this session started in the
 # background is still running: the controller is waiting on it, and its
@@ -40,6 +40,9 @@ hold() { # hold <reason> <what the user sees>
 }
 
 stamp="${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"
+# Set while a session-ending message over running work has been held; a stop
+# that is no retry starts a fresh count.
+[ "$is_retry" = true ] || rm -f "$stamp.bg-held" 2>/dev/null
 # An auto run bound to this session (reference/auto-run.md) lives in the
 # primary checkout, whichever worktree the turn ran in: its pending action. It
 # is read before the stamp gate, so a session with no stamp (a cleared one,
@@ -50,7 +53,6 @@ root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 . "${SCRIPT_DIR}/lib/roots.sh"
 # In a subshell, so a malformed config costs only this check, never the hook.
 sdd=$(dforge_ledger_root "$root") || sdd=""
-[ "$is_retry" = true ] && [ -z "$auto_pending" ] && exit 0
 [ -d "$sdd" ] || [ -n "$auto_pending" ] || exit 0
 # last_text — the text of the last assistant entry on stdin. Streamed, never
 # slurped: a transcript reaches hundreds of megabytes.
@@ -116,11 +118,15 @@ has_pending_background() { [ "$pending" -gt 0 ]; }
 # While background work runs, a plain stop is the controller waiting for it and
 # passes, in any turn. A message that ends the session over it (the next-step
 # block or the finishing menu) is held once, in any turn too: that is the
-# handoff that would leave the work to die with the session.
+# handoff that would leave the work to die with the session. Once means once
+# for this reason, retries included: the block often comes as the answer to an
+# earlier hold, so stop_hook_active alone would let it through. A marker that
+# cannot be written on a retry passes, since the retry could otherwise loop.
 if has_pending_background; then
-  [ "$is_retry" = true ] && exit 0
   case "$last" in
     *'## Next session'* | *'Which option?'*)
+      [ "$is_retry" = true ] && [ -f "$stamp.bg-held" ] && exit 0
+      { mkdir -p "$(dirname "$stamp")" && : > "$stamp.bg-held"; } 2>/dev/null || [ "$is_retry" != true ] || exit 0
       reason="Your message ends the session, but ${pending} background launch(es) are still running:
 $(inflight_text <<<"$running" | sed 's/^/- /')
 Wait for each (end the turn without the block), or stop it with TaskStop <id>, then run next-step again."
@@ -129,6 +135,7 @@ Wait for each (end the turn without the block), or stop it with TaskStop <id>, t
   esac
   exit 0
 fi
+[ "$is_retry" = true ] && [ -z "$auto_pending" ] && exit 0
 
 # A turn of an auto run ends only on the sentinel line that answers its pending
 # action; the cockpit compacts, clears or switches on that line. Any other ending is held
