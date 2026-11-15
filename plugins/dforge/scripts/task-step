@@ -800,9 +800,12 @@ do_review() {
     done
     cmd="bash \"$plugin_root\"/scripts/run-review-panel --kind task --tier $tier --cwd \"$top\" --out-dir \"$panel_dir\" --prompt \"$panel_prompt\""
   fi
+  # Only a token the template holds is a placeholder: a filled value, such as a
+  # checkout path, may hold a bracketed capital word of its own.
   for line in "$judge_prompt" ${tier:+"$panel_prompt"}; do
-    unexpanded=$(grep -oE '\[[A-Z][A-Z_]*\]' "$line" | head -n 1)
-    [ -z "$unexpanded" ] || die "unexpanded placeholder $unexpanded in $line"
+    while IFS= read -r unexpanded; do
+      [ -z "$unexpanded" ] || ! grep -qF -- "$unexpanded" "$line" || die "unexpanded placeholder $unexpanded in $line"
+    done < <(prompt_text "$template" | grep -oE '\[[A-Z][A-Z_]*\]' | sort -u)
   done
   rm -f "$ws/task-$first-review-report.md"
 
