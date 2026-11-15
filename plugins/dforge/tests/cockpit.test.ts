@@ -3875,9 +3875,9 @@ describe('shells and remote', () => {
       await $.tool.call({ tool: 'Bash', command, run_in_background: true } as never)
       await $.turn.complete({ answer: 'Started it.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     }
-    // The turn the cockpit's own prompt starts.
+    // The turn the cockpit's own prompt starts: the engine hands turn.start the submitted text.
     const keepWarmTurn = async ($: Parameters<TestBody>[0], clock: ReturnType<typeof world>, turnId: string) => {
-      await $.turn.start({ text: '', turnId })
+      await $.turn.start({ text: KEEP_WARM, turnId })
       await clock.advance(2_000)
       await $.turn.complete({ answer: 'Still waiting.', durationMs: 2_000, isAborted: false, turnId, reason: 'answer' })
     }
@@ -4016,6 +4016,24 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(6)
     })
 
+    test('a turn of another origin that starts before the keep-warm turn does not take its mark', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const w: World = { ...quiet({ keepWarm: 4, notifyAfter: 0 }), fetches }
+      const clock = world(on, w)
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await begin($, 'node codex-companion.mjs review')
+      await clock.advance(5 * MIN)
+      expect(sentOf(w)).toHaveLength(1)
+      await $.turn.start({ text: '', turnId: 'w1' })
+      await clock.advance(2_000)
+      await $.turn.complete({ answer: 'Checked the review.', durationMs: 2_000, isAborted: false, turnId: 'w1', reason: 'answer' })
+      await keepWarmTurn($, clock, 'k1')
+      await $.session.append(notified(ENDED))
+      await clock.advance(6_000)
+      expect(fetches).toHaveLength(1)
+      expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Checked the review.')
+    })
+
     test('a keep-warm turn that fails keeps the held Done, raises no alert and stops the keep-warm prompts', async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const w: World = { ...quiet({ keepWarm: 4, notifyAfter: 0 }), fetches }
@@ -4024,7 +4042,7 @@ describe('shells and remote', () => {
       await begin($, 'node codex-companion.mjs review')
       await clock.advance(5 * MIN)
       expect(sentOf(w)).toHaveLength(1)
-      await $.turn.start({ text: '', turnId: 'k1' })
+      await $.turn.start({ text: KEEP_WARM, turnId: 'k1' })
       await $.turn.complete({ answer: 'API Error: 529 overloaded', durationMs: 2_000, isAborted: false, turnId: 'k1', reason: 'error' })
       await clock.advance(10 * MIN)
       expect(fetches).toHaveLength(0)
@@ -4042,7 +4060,7 @@ describe('shells and remote', () => {
       mock.store(on, { notifyUrl: WEBHOOK })
       await begin($, 'node codex-companion.mjs review')
       await clock.advance(5 * MIN)
-      await $.turn.start({ text: '', turnId: 'k1' })
+      await $.turn.start({ text: KEEP_WARM, turnId: 'k1' })
       await $.turn.complete({ answer: '', durationMs: 2_000, isAborted: true, turnId: 'k1', reason: 'aborted' } as never)
       await clock.advance(10 * MIN)
       expect(sentOf(w)).toHaveLength(1)

@@ -614,8 +614,10 @@ export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
     if (e.agentId !== undefined) return next(e)
     S.isMainTurn = true
-    S.isKeepWarmTurn = S.isKeepWarmSubmitted
-    S.isKeepWarmSubmitted = false
+    // A wake-up can start between the keep-warm submit and its turn; the
+    // engine hands turn.start the submitted text, so only that turn matches.
+    S.isKeepWarmTurn = S.isKeepWarmSubmitted && e.text === keepWarmPrompt()
+    if (S.isKeepWarmTurn) S.isKeepWarmSubmitted = false
     if (!S.isKeepWarmTurn) S.keepWarmCount = 0
     S.releaseTimer?.cancel()
     S.releaseTimer = null
