@@ -4566,6 +4566,46 @@ describe('run card', () => {
     expect(ledgerReads()).toBe(before)
   })
 
+  test('follows the plan this session named, not a newer ledger', async ($, on) => {
+    const files: World['files'] = {
+      ...runFiles(LEDGER),
+      '/home/me/code/shop/.dforge/sdd/q/progress.md': { text: '# SDD ledger — plan: docs/plans/q.md\nTask 1: complete (commits a..b, review clean) — done: x', mtimeMs: 3_000_000 },
+      '/home/me/code/shop/docs/plans/q.md': { text: '# Plan\n\n### Task 1: Other\n' },
+    }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'bash /p/scripts/task-brief --open docs/plans/p.md 2' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Task 1: Other/ })).toBeUndefined()
+  })
+
+  test('lists an unchanged ledger directory once, and again once it changes', async ($, on) => {
+    const BASE = '/home/me/code/shop/.dforge/sdd'
+    const lists: string[] = []
+    // A test registers each event once: world's fs.list hook answers beneath this matched one.
+    on('fs.list', { path: BASE } as never, ((_$: unknown, e: { path: string }, next: (e: unknown) => unknown) => {
+      lists.push(e.path)
+      return next(e)
+    }) as never)
+    const files: NonNullable<World['files']> = { ...runFiles(LEDGER), [BASE]: { text: '', kind: 'dir', mtimeMs: 5 } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.session.start(START)
+    const listed = () => lists.filter(path => path === BASE).length
+    const before = listed()
+    expect(before).toBeGreaterThan(0)
+    for (const turnId of ['t1', 't2', 't3']) await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId, reason: 'answer' })
+    expect(listed()).toBe(before)
+    files[`${BASE}/q/progress.md`] = { text: '# SDD ledger — plan: docs/plans/q.md\nTask 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)', mtimeMs: 3_000_000 }
+    files[BASE] = { text: '', kind: 'dir', mtimeMs: 6 }
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't4', reason: 'answer' })
+    expect(listed()).toBe(before + 1)
+  })
+
   test('reads the ledger again at a new session start, unchanged as it is', async ($, on) => {
     const files = runFiles(LEDGER) ?? {}
     const reads: string[] = []
@@ -5206,6 +5246,30 @@ describe('resume offer', () => {
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     expect(await band.find({ key: 'band-resume' })).toBeDefined()
     files[REGISTER] = { text: register(['done', 'done']), mtimeMs: 2 }
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+  })
+
+  test('withdraws a ruling handoff once every row of its register in the darkmem docs store is resolved', async ($, on) => {
+    const MIRROR = '/home/me/.dforge/mirror/shop'
+    const MODE = [
+      `documents\tdarkmem\t${MIRROR}/dforge`,
+      'progress\tlocal\t/home/me/code/shop/.dforge/sdd\t/home/me/code/shop/.dforge/handoff/latest.md',
+      'project\tshop',
+      '',
+    ].join('\n')
+    const STORED = `${MIRROR}/dforge/registers/r.md`
+    const files: NonNullable<World['files']> = {
+      '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 },
+      [LATEST]: { text: rulingHandoff(), mtimeMs: 900_000 },
+      [STORED]: { text: register(['done', 'open']), mtimeMs: 1 },
+    }
+    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
+    signedIn(on, files)
+    await $.session.start(START)
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ key: 'band-resume' })).toBeDefined()
+    files[STORED] = { text: register(['done', 'done']), mtimeMs: 2 }
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
   })
@@ -7443,6 +7507,21 @@ describe('auto run in the pane', () => {
     await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     expect(notes).toEqual([])
   })
+
+  for (const [beat, isNamed] of [[undefined, true], ['700\n', true], ['950\n', false]] as const)
+    test(`${isNamed ? 'names' : 'does not name'} auto-run stop --stale for a run whose owner ${beat === undefined ? 'left no heartbeat' : `last beat at ${beat.trim()} s, the clock at 1000 s`}`, async ($, on) => {
+      const files: NonNullable<World['files']> = {
+        ...autoFiles({ session: 'sess-old', pending: null }),
+        ...(beat === undefined ? {} : { '/home/me/.claude/dforge/sessions/cockpit/sess-old': { text: beat } }),
+      }
+      world(on, { ...SIGNED_IN, files })
+      signedIn(on, files)
+      await $.session.start(START)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      const line = await ui.find({ type: 'Text', text: /auto run left by a closed session — run scripts\/auto-run stop --stale/ })
+      if (isNamed) expect(line).toBeDefined()
+      else expect(line).toBeUndefined()
+    })
 
   test('measures against the high regime', async ($, on) => {
     world(on, { ...SIGNED_IN, tokens: 470_000 })
