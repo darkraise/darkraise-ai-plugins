@@ -167,6 +167,13 @@ done <<'EOF'
 **CI:** `ci.yml` — platforms: ubuntu-latest — local: make test — uncovered: none
 **CI:** `ci.yml` — platforms: ubuntu-latest — local: `make test`
 **CI:** `ci.yml` — platforms: ubuntu-latest — local: `make test` — uncovered:
+**CI:** `ci.yml
+**CI:** `` — platforms: ubuntu-latest — local: `make test` — uncovered: none
+**CI:** `ci.yml` — local: `make test` — uncovered: none
+**CI:** `ci.yml` — platforms:  — local: `make test` — uncovered: none
+**CI:** `ci.yml` — platforms: ubuntu-latest — local: `make test
+**CI:** `ci.yml` — platforms: ubuntu-latest — local: `` — uncovered: none
+**CI:** `ci.yml` — platforms: ubuntu-latest — local: `make test`, `make lint` — uncovered: none
 EOF
 
 mkdir "$TMP/plain"
