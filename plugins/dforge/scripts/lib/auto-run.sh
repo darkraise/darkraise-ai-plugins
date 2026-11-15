@@ -603,9 +603,18 @@ ar_settle() {
 # compaction, and a resume the cockpit never confirmed: the session measuring
 # itself is the resumed one. Once a compaction ran in the final phases
 # (finalCompacted) it never asks for another: Claude Code's own is the backstop.
+# WINDOW 0 is an unknown window: "unknown 0 <regime>", status 3, and no
+# size-based compaction or handoff; a pending compaction settles to continue,
+# so a Stop hold that waits on it cannot repeat forever.
 ar_verdict() {
   local tokens=$1 budget=$2 window=$3 pending regime limit settled
   pending=$(ar_get pending)
+  if [ "$window" = 0 ]; then
+    if [ "$pending" = after-compact ]; then ar_update '.pending = null' || return $?; fi
+    regime=$(ar_get regime)
+    echo "unknown 0 ${regime:-normal}"
+    return 3
+  fi
   if [ "$pending" = after-compact ]; then
     settled=$(ar_settle "$tokens" "$budget" "$window") || return $?
     [ "$settled" != handoff ] || pending=handoff

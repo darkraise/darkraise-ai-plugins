@@ -161,8 +161,10 @@ case $cmd in
     done
     for v in "$tokens" "$budget" "$window"; do [[ $v =~ ^[0-9]+$ ]] || usage; done
     bound
-    out=$(ar_verdict "$tokens" "$budget" "$window") || exit $?
-    echo "$out"
+    out=$(ar_verdict "$tokens" "$budget" "$window")
+    status=$?
+    [ -z "$out" ] || echo "$out"
+    [ "$status" -eq 0 ] || exit "$status"
     case ${out%% *} in compact) exit 6 ;; handoff) exit 5 ;; esac
     ;;
   after-compact)
@@ -182,9 +184,8 @@ case $cmd in
       model=$(ctx_model "$CTX_TRANSCRIPT")
       tokens=$(ctx_measure "$CTX_TRANSCRIPT") || tokens=""
     fi
-    budget=$(ctx_pinned_budget)
-    [ -n "$budget" ] || budget=$(ctx_budget "$model")
-    window=$(ctx_window "$model")
+    ctx_window_prime "$model"
+    window=$(ctx_window "$model") || window=""
     due=""
     [ "$(ar_get setupDue)" != true ] || due="; setup due: begin at the execution skill's Setup, workspace first"
     if [ -z "$tokens" ]; then
@@ -192,6 +193,13 @@ case $cmd in
       echo "continue — the size after compaction is unknown; record that with auto-run ruling add, and Claude Code's own compaction stays the backstop$due"
       exit 0
     fi
+    if [ -z "$window" ]; then
+      [ "$pending" != after-compact ] || ar_update '.pending = null' || exit $?
+      echo "continue — the model's window is unknown, so no size-based handoff applies; Claude Code's own compaction stays the backstop$due"
+      exit 0
+    fi
+    budget=$(ctx_pinned_budget)
+    [ -n "$budget" ] || budget=$(ctx_budget "$model")
     # Only a booked compaction is settled into the run; any other pending
     # action (a resume, a stale call) is measured and left as it is.
     if [ "$pending" = after-compact ]; then

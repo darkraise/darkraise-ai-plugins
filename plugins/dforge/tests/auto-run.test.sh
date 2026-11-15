@@ -492,6 +492,11 @@ check "rebind: a resume is pending" "$(field pending)" "resume"
 out=$(verdict --tokens 10000); status=$?
 check "an ok verdict clears a stale resume" "$status:${out%% *}:$(field pending)" "0:ok:null"
 
+# --- an unknown window never asks for a size-based compaction (R17) ---
+jq '.pending = "after-compact"' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+out=$(verdict --tokens 900000 --window 0); status=$?
+check "unknown window: unknown, exit 3, nothing pending" "$status:${out%% *}:$(field pending)" "3:unknown:null"
+
 # --- after-compact measures the session it names ---
 mkdir -p "$HOME/.claude"
 printf '{"autoCompactWindow": 800000}\n' > "$HOME/.claude/settings.json"

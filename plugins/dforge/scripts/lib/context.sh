@@ -27,6 +27,7 @@ CTX_PLAN_PCT=150
 
 . "$(dirname "${BASH_SOURCE[0]}")/dforge-env.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/auto-run.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/session-state.sh"
 
 ctx_jq() { "${DFORGE_JQ:-jq}" "$@"; }
 ctx_have_jq() { command -v "${DFORGE_JQ:-jq}" >/dev/null 2>&1; }
@@ -143,11 +144,54 @@ ctx_model() {
   printf '%s' "$out"
 }
 
+# ctx_window_sid — the session whose window is read: CLAUDE_CODE_SESSION_ID,
+# else the transcript's name.
+ctx_window_sid() {
+  if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then printf '%s' "$CLAUDE_CODE_SESSION_ID"
+  elif [ -n "${CTX_TRANSCRIPT:-}" ]; then basename "$CTX_TRANSCRIPT" .jsonl
+  fi
+}
+
+# _ctx_window_lookup MODEL SID — sets CTX_WINDOW_FOUND and CTX_WINDOW_SOURCE
+# (session file | table), both empty when neither knows the window. A guessed
+# window would put the budget anywhere, so an unlisted model has none.
+_ctx_window_lookup() {
+  local w=""
+  CTX_WINDOW_SOURCE=""
+  if [ -n "$2" ] && ctx_have_jq && w=$(ss_window "$2"); then
+    CTX_WINDOW_SOURCE="session file"
+  else
+    case $1 in
+      *haiku*) w=200000 ;;
+      claude-fable-5-1* | claude-opus-5-5* | claude-sonnet-5-5*) w=1000000 ;;
+      *) w="" ;;
+    esac
+    [ -z "$w" ] || CTX_WINDOW_SOURCE=table
+  fi
+  CTX_WINDOW_FOUND=$w
+}
+
+# ctx_window_prime MODEL — look the window up once in the caller's shell: the
+# budget helpers run in subshells, and each lookup reads the session file.
+ctx_window_prime() {
+  local sid
+  sid=$(ctx_window_sid)
+  _ctx_window_lookup "$1" "$sid"
+  CTX_WINDOW_CACHE_KEY="$1|$sid" CTX_WINDOW_CACHE_SOURCE=$CTX_WINDOW_SOURCE CTX_WINDOW_CACHE_VALUE=$CTX_WINDOW_FOUND
+}
+
+# ctx_model_window MODEL [SID] — the model's window in tokens; nothing and
+# status 1 when it is unknown.
 ctx_model_window() {
-  case $1 in
-    *haiku*) echo 200000 ;;
-    *) echo 1000000 ;;
-  esac
+  local sid
+  if [ $# -ge 2 ]; then sid=$2; else sid=$(ctx_window_sid); fi
+  if [ "${CTX_WINDOW_CACHE_KEY-}" = "$1|$sid" ]; then
+    CTX_WINDOW_SOURCE=$CTX_WINDOW_CACHE_SOURCE CTX_WINDOW_FOUND=$CTX_WINDOW_CACHE_VALUE
+  else
+    _ctx_window_lookup "$1" "$sid"
+  fi
+  [ -n "$CTX_WINDOW_FOUND" ] || return 1
+  echo "$CTX_WINDOW_FOUND"
 }
 
 # Codex rollout entries are one JSON object per line. The context size is the
@@ -251,10 +295,11 @@ ctx_auto_compact_window() {
 }
 
 # ctx_window MODEL — the window compaction is measured against: the model's
-# window, or autoCompactWindow when that is smaller.
+# window, or autoCompactWindow when that is smaller; nothing and status 1 when
+# the model's window is unknown.
 ctx_window() {
   local window acw
-  window=$(ctx_model_window "$1")
+  window=$(ctx_model_window "$1") || return 1
   acw=$(ctx_auto_compact_window)
   if [ -n "$acw" ] && [ "$acw" -gt 0 ] && [ "$acw" -lt "$window" ]; then window=$acw; fi
   echo "$window"
@@ -264,7 +309,7 @@ ctx_window() {
 # A window small enough to put the rule near or below zero holds a fifth of it.
 ctx_budget() {
   local window budget
-  window=$(ctx_window "$1")
+  window=$(ctx_window "$1") || return 1
   budget=$(( window * CTX_COMPACT_PCT / 100 - CTX_TASK_MARGIN ))
   [ "$budget" -ge $(( window / 5 )) ] || budget=$(( window / 5 ))
   echo "$budget"
@@ -273,7 +318,9 @@ ctx_budget() {
 # ctx_final_budget MODEL — the final phase's limit. DFORGE_BUDGET pins
 # the task budget only, so it never moves this one.
 ctx_final_budget() {
-  echo $(( $(ctx_window "$1") * CTX_FINAL_PCT / 100 ))
+  local window
+  window=$(ctx_window "$1") || return 1
+  echo $(( window * CTX_FINAL_PCT / 100 ))
 }
 
 # ctx_pinned_budget — the task budget someone pinned: DFORGE_BUDGET, else the
@@ -317,9 +364,9 @@ ctx_plan_mode() {
 # the final-phase limit.
 ctx_plan_budget() {
   local task final plan
+  final=$(ctx_final_budget "$1") || return 1
   task=$(ctx_pinned_budget)
   [ -n "$task" ] || task=$(ctx_budget "$1")
-  final=$(ctx_final_budget "$1")
   plan=$(( task * CTX_PLAN_PCT / 100 ))
   [ "$plan" -le "$final" ] || plan=$final
   echo "$plan"
@@ -355,6 +402,13 @@ ctx_log_observation() {
     >> "$base/budget-log.tsv" 2>/dev/null || return 0
 }
 
+# ctx_source_text — the line's source: the transcript's, and the window's when
+# the cockpit's session file gave it.
+ctx_source_text() {
+  if [ "${CTX_WINDOW_SOURCE:-}" = "session file" ]; then printf '%s, window session file' "$CTX_SOURCE"
+  else printf '%s' "$CTX_SOURCE"; fi
+}
+
 ctx_auto_label() { # ctx_auto_label REGIME
   if [ "$1" = high ]; then printf 'budget (auto, high)'; else printf 'budget (auto)'; fi
 }
@@ -362,19 +416,30 @@ ctx_auto_label() { # ctx_auto_label REGIME
 # ctx_auto_line TOKENS MODEL — the budget line while an auto run is bound
 # to this session (reference/auto-run.md): the run's rule replaces the task
 # budget, the tail, the final-phase limit and relaxed mode. Returns 0 ok,
-# 6 compact, 5 handoff, 3 when the run cannot be read.
+# 6 compact, 5 handoff, 3 when the run cannot be read or the model's window
+# is unknown. The run's rule needs the window (the high regime and the
+# after-compaction rule measure against it), so a pinned budget does not stand
+# in for an unknown one.
 ctx_auto_line() {
-  local tokens=$1 task window out verdict limit regime label
-  task=$(ctx_pinned_budget)
-  [ -n "$task" ] || task=$(ctx_budget "$2")
-  window=$(ctx_window "$2")
+  local tokens=$1 task=0 window out verdict limit regime label
+  if window=$(ctx_window "$2"); then
+    task=$(ctx_pinned_budget)
+    [ -n "$task" ] || task=$(ctx_budget "$2")
+  else
+    window=0
+  fi
   if ! out=$(ar_verdict "$tokens" "$task" "$window"); then
-    echo "budget (auto): unknown — unknown — the run's state could not be updated"
+    if [ "${out%% *}" = unknown ]; then
+      read -r _ _ regime <<<"$out"
+      echo "$(ctx_auto_label "$regime"): $(( (tokens + 500) / 1000 ))k measured — unknown — the model's window is unknown"
+    else
+      echo "budget (auto): unknown — unknown — the run's state could not be updated"
+    fi
     return 3
   fi
   read -r verdict limit regime <<<"$out"
   label=$(ctx_auto_label "$regime")
-  echo "$label: $(( (tokens + 500) / 1000 ))k of $(( (limit + 500) / 1000 ))k ($(( tokens * 100 / limit ))%) — $verdict — source: $CTX_SOURCE"
+  echo "$label: $(( (tokens + 500) / 1000 ))k of $(( (limit + 500) / 1000 ))k ($(( tokens * 100 / limit ))%) — $verdict — source: $(ctx_source_text)"
   case $verdict in
     compact) return 6 ;;
     handoff) return 5 ;;
@@ -395,7 +460,7 @@ ctx_auto_line() {
 # handoff. With final it first moves the run to its final phase once the
 # ledger has every task complete (ar_enter_final).
 ctx_line() {
-  local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
+  local budget="" model="" tokens bk tk pct found=0 claude="" rollout="" of window
   local label=budget
   local limit=task auto=0 regime mode finishing=0
   mode=$(dforge_setting handoffMode strict)
@@ -452,44 +517,54 @@ ctx_line() {
     CTX_TRANSCRIPT=$claude
     model=$(ctx_model "$CTX_TRANSCRIPT")
   fi
-  if [ "$limit" = final ]; then
-    budget=$(ctx_final_budget "$model")
+  ctx_window_prime "$model"
+  # An unknown window leaves the budget empty: only a pinned task budget
+  # stands without one.
+  if [ "$limit" = final ] || [ "$limit" = relaxed ]; then
+    budget=$(ctx_final_budget "$model") || budget=""
   elif [ "$limit" = plan ]; then
-    budget=$(ctx_plan_budget "$model")
-  elif [ "$limit" = relaxed ]; then
-    budget=$(ctx_final_budget "$model")
+    budget=$(ctx_plan_budget "$model") || budget=""
   else
     budget=$(ctx_pinned_budget)
-    [ -n "$budget" ] || budget=$(ctx_budget "$model")
+    [ -n "$budget" ] || budget=$(ctx_budget "$model") || budget=""
   fi
   # A size that cannot be read still names the run's own limit.
   if [ "$auto" = 1 ]; then
     regime=$(ar_get regime)
     regime=${regime:-normal}
-    budget=$(ctx_pinned_budget)
-    [ -n "$budget" ] || budget=$(ctx_budget "$model")
-    budget=$(ar_limit "$budget" "$(ctx_window "$model")" "$regime")
     label=$(ctx_auto_label "$regime")
+    budget=""
+    if window=$(ctx_window "$model"); then
+      budget=$(ctx_pinned_budget)
+      [ -n "$budget" ] || budget=$(ctx_budget "$model")
+      budget=$(ar_limit "$budget" "$window" "$regime")
+    fi
   fi
-  bk=$(( (budget + 500) / 1000 ))
-  if ! ctx_have_jq; then echo "$label: unknown of ${bk}k — unknown — no jq"; return 3; fi
-  if [ "$found" -eq 0 ]; then echo "$label: unknown of ${bk}k — unknown — no transcript found"; return 3; fi
+  of=""
+  [ -z "$budget" ] || of=" of $(( (budget + 500) / 1000 ))k"
+  if ! ctx_have_jq; then echo "$label: unknown$of — unknown — no jq"; return 3; fi
+  if [ "$found" -eq 0 ]; then echo "$label: unknown$of — unknown — no transcript found"; return 3; fi
   if ! tokens=$(ctx_measure "$CTX_TRANSCRIPT"); then
-    echo "$label: unknown of ${bk}k — unknown — no usage entry in $CTX_TRANSCRIPT"; return 3
+    echo "$label: unknown$of — unknown — no usage entry in $CTX_TRANSCRIPT"; return 3
   fi
   if [ "$auto" = 1 ]; then
     ctx_auto_line "$tokens" "$model"
     return
   fi
   tk=$(( (tokens + 500) / 1000 ))
+  if [ -z "$budget" ]; then
+    echo "$label: ${tk}k measured — unknown — the model's window is unknown"
+    return 3
+  fi
+  bk=$(( (budget + 500) / 1000 ))
   pct=$(( tokens * 100 / budget ))
   # The final phase never hands off (reference/session-budget.md §Stops), nor in
   # strict mode does a plan's tail: an over-limit line still says ok.
   if [ "$tokens" -ge "$budget" ] && [ "$finishing" -eq 0 ]; then
-    echo "$label: ${tk}k of ${bk}k (${pct}%) — handoff — source: $CTX_SOURCE"
+    echo "$label: ${tk}k of ${bk}k (${pct}%) — handoff — source: $(ctx_source_text)"
     return 5
   fi
-  echo "$label: ${tk}k of ${bk}k (${pct}%) — ok — source: $CTX_SOURCE"
+  echo "$label: ${tk}k of ${bk}k (${pct}%) — ok — source: $(ctx_source_text)"
 }
 
 # Pair consecutive task-brief rows within one session: task-brief runs once per
