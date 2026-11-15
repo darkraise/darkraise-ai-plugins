@@ -312,7 +312,8 @@ your own: QA commits on this branch.
    `external=on`, run the reviewer panel as
    [external-review.md](external-review.md) §Final-review external round
    says, with `--cwd` set to a temporary detached worktree at HEAD
-   (`git worktree add --detach <workspace>/final-review-panel-tree <sha>`), as
+   (`git worktree add --detach <workspace>/final-review-panel-tree <sha>`,
+   after clearing a tree a crashed run left, as that section's block does), as
    step 1 does for the integration check: QA commits in the checkout while
    the panel reads, and the agy runner fails any run whose worktree or `HEAD`
    moved. Remove the worktree with `git worktree remove --force` once step 3
