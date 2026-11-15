@@ -27,5 +27,11 @@ Then:
 [delegated-task.md](../../../reference/delegated-task.md) §Early CI's recovery
 sentence; a ledger with no `Early CI:` line whose `**Early CI:**` point is
 already complete runs that section now. Neither ends the turn. Then, whatever the per-task lines say: every task complete and no `Final review:`
-line: go to Final Review. A `Final review: clean` line: go to
-dforge:finishing-a-development-branch.
+line: go to Final Review. A `Final review: clean` line is routed by its state,
+which `scripts/next-step PLAN_FILE` reads (`plan_final_review_state`, C5):
+`current` goes to dforge:finishing-a-development-branch; `stale <head>`, a
+commit outside the docs root after the reviewed head, goes to the fix-wave's
+scoped re-review of `<head>..HEAD` in
+[final-review.md](../../../reference/final-review.md), which appends a new
+clean line; `rewritten <head>` goes to a full final review, after logging
+`Ruling: final review rerun — reviewed head <head> is no longer in the branch history — history rewritten after the review`.

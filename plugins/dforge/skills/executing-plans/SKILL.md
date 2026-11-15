@@ -198,12 +198,12 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   `Final review:` line.
 - There is no scores clause. A scores clause appears only when a judge scored
   the task.
-- The fix cap is 3 for a task you implement; a delegated task keeps 5. You are fixing your own work, so a
+- The fix cap is 3 for a task you implement; a delegated task keeps 2 (5 on a `Host: codex` plan). You are fixing your own work, so a
   fourth round is not a better round. A fix-round line is written after the
   round, with its outcome: `passing`
   when the task's verifications now pass, `still failing` otherwise.
   After `fix round 3/3`, the task goes to the ruling seat as a `breaker` item.
-  In an auto run it goes on the pending list, as an exhausted ladder does.
+  In an auto run it goes on the pending list.
 - An older ledger may hold a `Task <N>: escalated inline -> subagent` line from
   the retired subagent mode; recovery.md says how to read it.
 - A ruling-seat `BLOCKED` that belongs to no task (a Header amendment) is

@@ -397,17 +397,8 @@ When the turn wrote more than one ledger, each one must have its
 ending. Each hold also shows you a one-line note saying why the session went
 on.
 
-Unplanned work gets the same hold. The prompt hook also records which commits
-the repository's local branches point at. A turn that wrote no ledger but
-changed that set (a commit, a merge, or deleting a branch's only pointer to a
-commit) in a project with dforge docs must end on the `## Next session` block
-from `next-step --adhoc`, the finishing menu, or finishing's "No plan file"
-line. Otherwise the hook holds the stop once and tells Claude to continue
-remaining work, finish a branch that is ready to integrate, or print the block. Creating
-a branch on an existing commit, or a stop in another repository than the
-prompt's, does not count. Neither does a turn that ran no dforge skill (no
-Skill call and no typed `/dforge:` command since the prompt): a commit made
-without dforge is never held for dforge's ending.
+The prompt hook also records which commits the repository's local branches
+point at; that record serves the UI proof hold only.
 
 A run also asks one question before its first task: what finishing should do
 once the final review is clean (merge locally, push and open a pull request,

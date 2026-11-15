@@ -463,6 +463,10 @@ over the same range, with `<workspace>/acceptance-report.md` as
 Send any residual findings — `NOT ADDRESSED` and `REJECTION DISPUTED` — to the
 ruling seat as `final-residual` items and carry out its verdicts. The scoped re-review is a Claude seat that wrote none of the code, so
 a list from an external reviewer alone still gets an independent reader.
+When the scoped re-review is clean, the clean line appended after it is a new
+`Final review: clean (commits <base>..<new head>)`, `<new head>` being the
+HEAD it reviewed; so is the one after a re-review of commits made after an
+earlier clean line (C5's `stale` state).
 
 **Acceptance tests.** The fixer never weakens a test whose name starts with
 `A<n>:`, or with `a<n>_` where the framework forbids a colon in a test name
@@ -484,7 +488,7 @@ dforge:test-driven-development, and never a regression test that names a fixed
 bug; a test that exists at MERGE_BASE is left for dforge:test-simplifier. The
 commit body names the faults the covering test catches. A finding whose
 one-liner begins `deferred: test-simplifier — ` reaches the fixer, which skips
-it and lists it under `DEFERRED:` (**The fix subagent** above). The
+it and lists it under `DEFERRED:` (**the fix pass** above). The
 session records it with
 `scripts/register add <register> "<old test> is covered by <new test>" --state deferred --note "final review: for dforge:test-simplifier"`
 in the register that covers the plan's spec, or names it in the final message
@@ -494,10 +498,10 @@ only, neither fixed nor rejected.
 **Suites.** Any test or validation suite you run in the final review — the
 check after the fix wave, or the project's full suite in inline mode — goes
 through `bash <plugin-root>/scripts/suite-run -- <command>`, which records the
-HEAD it ran at and prints a digest in place of the output. Tell the fix
-subagent to run the plan's `**Integration check:**` command the same way,
+HEAD it ran at and prints a digest in place of the output. Run the plan's
+`**Integration check:**` command yourself the same way,
 `bash <plugin-root>/scripts/suite-run -- bash -c '<integration check>'`,
-after its last commit, on a clean tree: finishing's verification then
+after the fix pass's last commit, on a clean tree: finishing's verification then
 reuses that pass at the unchanged HEAD instead of running the suite again. A
 fix wave whose commits moved HEAD past that run is not reused.
 
