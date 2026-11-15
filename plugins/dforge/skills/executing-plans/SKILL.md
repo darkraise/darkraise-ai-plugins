@@ -130,11 +130,13 @@ Four things stop you, and only these: an irreversible or destructive operation;
 a security-sensitive action; a side effect outside the execution workspace that norms say
 you ask about first (a merge, a push to a shared branch, a publish); and a
 ruling-seat `BLOCKED` verdict. For those, stop and ask — except in an auto run,
-which asks nothing (see Auto run).
+which asks nothing (see Auto run). Asking does not end the session: make
+`Task <N>: waiting — <question>` the ledger's last line, end on the question
+with no next-step block, and continue once your partner answers.
 
 **Every session ends with the next step.** Whenever this session ends before
-the plan is finished - one of those four stops, a context-budget handoff, or
-your human partner asking you to stop - first
+the plan is finished - a context-budget handoff, or your human partner asking
+you to stop - first
 reconcile live children exactly as dforge:handoff step 0 says: wait
 for them, or `TaskStop` them and record a Ruling. Tell your partner which you
 did. Then run `scripts/next-step PLAN_FILE` (see using-dforge §Session
@@ -164,6 +166,7 @@ Task <N>: Ruling: (unseated) <item> — <decision> — <cost if wrong>
 Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
 Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
 Task <N>: BLOCKED — ruling seat — <what a human must decide>
+Task <N>: waiting — <question>
 Task <N>: complete (commits a..b, unreviewed | K parked) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
 Review depth: <light|standard|full> (<reason>)

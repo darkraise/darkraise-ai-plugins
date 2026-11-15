@@ -88,12 +88,13 @@ ladder_block() {
 # "Task N: BLOCKED", sorted, unique. BLOCKED is terminal: a resumed session must
 # not start the task. The Recovery rule both execution skills define reads the
 # last "Task N:" line in file order, stepping over the kinds that are not
-# terminal, so a BLOCKED the owner resolved and the task re-ran is not blocked
-# any more — a flat grep would keep reporting it forever.
+# terminal (a waiting line is a question asked, not a state), so a BLOCKED
+# the owner resolved and the task re-ran is not blocked any more — a flat
+# grep would keep reporting it forever.
 ledger_blocked() {
   tr -d '\r' < "$1" | awk '
     !/^Task [0-9]+:/ { next }
-    /^Task [0-9]+: (minor \(deferred\)|parked|Ruling:)/ { next }
+    /^Task [0-9]+: (minor \(deferred\)|parked|Ruling:|waiting — )/ { next }
     { n = $2; sub(/:$/, "", n); blocked[n] = ($0 ~ /^Task [0-9]+: BLOCKED/) }
     END { for (n in blocked) if (blocked[n]) print n }
   ' | sort -un

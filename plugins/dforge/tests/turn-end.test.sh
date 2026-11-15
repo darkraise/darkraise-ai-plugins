@@ -89,6 +89,14 @@ check "finish-preference question on a detached HEAD: passes" "$(stop s-1 $'Befo
 write_ledger 'Task 1: complete (commits a..b, review clean)'
 out=$(stop s-1 $'Before I start: when the implementation is done, the finish menu waits for\nyour answer. If it gets none within 30 minutes, what should I do?\n\nWhich option?')
 check "the retired finish-preference question: blocks" "$(decision "$out")" "block"
+check "mid-plan summary: names the waiting line for a question" "$(jq -r .reason <<<"$out" | grep -c 'Task <N>: waiting — <question>')" "1"
+
+# --- one of the stops that asks the human, mid-plan ---
+# The session is not over: the answer arrives as the next prompt.
+write_ledger $'Task 16: implementer inline (assigned; base abc1234)\nTask 16: waiting — run the paid model generation (about $7, cap $20)?'
+check "a waiting line ends the ledger: the question passes" "$(stop s-1 'Should I run the model generation?')" ""
+write_ledger $'Task 16: waiting — run the paid model generation?\nTask 16: fix round 1/3 (a test; passing)'
+check "a waiting line the work moved past: a summary blocks" "$(decision "$(stop s-1 'Task 16 is done.')")" "block"
 
 # --- final review clean, summary instead of finishing ---
 write_ledger $'Task 1: complete (commits a..b, review clean)\nFinal review: clean (commits a1b2c3d..f0e1d2c)'
