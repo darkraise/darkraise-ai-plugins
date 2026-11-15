@@ -904,13 +904,15 @@ export function limitForecast(kind: string, percent: number, resetsAt: number | 
 /** One task's state in a dforge SDD ledger. */
 export type LedgerTask = {
   n: number
-  state: 'assigned' | 'complete' | 'blocked'
+  state: 'assigned' | 'complete' | 'blocked' | 'waiting' | 'deferred'
   /** The fix round in flight, "2/5" or "1/2". */
   round: string | null
   /** The seat the task was assigned to. */
   seat: string | null
   isClean: boolean
   reason: string | null
+  /** What a waiting task asks, the text after "waiting — ". */
+  question: string | null
 }
 
 /** What a run's ledger says: its plan, each task it names, and whether the final review came back clean. */
@@ -920,7 +922,7 @@ export type Ledger = { plan: string | null; tasks: LedgerTask[]; isFinished: boo
 export function parseLedger(text: string): Ledger {
   const tasks = new Map<number, LedgerTask>()
   const task = (n: number) => {
-    const found = tasks.get(n) ?? { n, state: 'assigned' as const, round: null, seat: null, isClean: false, reason: null }
+    const found: LedgerTask = tasks.get(n) ?? { n, state: 'assigned', round: null, seat: null, isClean: false, reason: null, question: null }
     tasks.set(n, found)
     return found
   }
@@ -946,8 +948,9 @@ export function parseLedger(text: string): Ledger {
     if (assigned) {
       const one = task(n)
       one.seat = assigned[1] ?? null
-      if (one.state !== 'complete') one.state = 'assigned'
+      if (one.state !== 'complete' && one.state !== 'deferred') one.state = 'assigned'
       one.reason = null
+      one.question = null
       continue
     }
     const round = /^fix round (\d+\/\d+)/.exec(rest)
@@ -957,9 +960,20 @@ export function parseLedger(text: string): Ledger {
     }
     if (/^complete\b/.test(rest)) {
       const one = task(n)
-      one.state = 'complete'
+      // Only the parenthesised clause before " — " says how it closed: the checkpoint after it is free text.
+      const clause = /^complete\s*(\([^)]*\))?/.exec(rest)?.[1] ?? ''
+      one.state = /^\(deferred by the auto run\)$/.test(clause) ? 'deferred' : 'complete'
       one.round = null
-      one.isClean = /review clean/.test(rest)
+      one.isClean = /review clean/.test(clause)
+      one.question = null
+      continue
+    }
+    const waiting = /^waiting\s*[—-]+\s*(.*)$/.exec(rest)
+    if (waiting) {
+      const one = task(n)
+      if (one.state === 'complete' || one.state === 'deferred') continue
+      one.state = 'waiting'
+      one.question = waiting[1]?.trim() || null
       continue
     }
     const blocked = /^BLOCKED\s*[—-]+\s*(.*)$/.exec(rest)
@@ -1008,7 +1022,7 @@ export function isPlanTail(run: { done: number; total: number; isFinished: boole
   return run.isFinished || (run.isPlanRead && run.total > 0 && run.total - run.done <= TAIL_TASKS)
 }
 
-const RUN_ORDER: Readonly<Record<string, number>> = { assigned: 0, blocked: 1, pending: 2, complete: 3 }
+const RUN_ORDER: Readonly<Record<string, number>> = { assigned: 0, waiting: 0, blocked: 1, pending: 2, complete: 3, deferred: 3 }
 
 /** The first `size` of a run's tasks as the Run card lists them: in flight, blocked, not started, then done, each in plan order. */
 export function runList<T extends { n: number; state: string }>(tasks: readonly T[], size: number): T[] {
