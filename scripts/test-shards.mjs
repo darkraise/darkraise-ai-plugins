@@ -6,8 +6,9 @@
 // take the default weight of 10. Every shell suite needs an entry here, with a
 // weight of at most 80% of the suite's limit; tests/test-shards.test.mjs
 // enforces both. A suite test-all runs in parts splits its weight evenly among
-// them, unless its entry maps each part to its own weight, as task-step's does:
-// its start and verdict parts together overran one shard at an even split.
+// them, unless its entry maps each part to its own weight, as task-step's and
+// plan-lint's do: task-step's start and verdict parts together overran one
+// shard at an even split, and plan-lint's paths part is a small fraction of it.
 export const windowsSeconds = {
   'run-all.sh': 157,
   'agy-gate.test.sh': 20,
@@ -51,11 +52,12 @@ export const windowsSeconds = {
   'lanes.test.sh': 10,
   'lens-route.test.sh': 185,
   'lock.test.sh': 10,
+  'measured-proposals.acceptance.test.sh': 60,
   'native-routing.test.sh': 10,
   'next-step.test.sh': 500,
   'plan-amend.test.sh': 390,
   'plan-lib.test.sh': 43,
-  'plan-lint.test.sh': 1270,
+  'plan-lint.test.sh': { one: 620, two: 620, paths: 40 },
   'polluter.test.sh': 10,
   'process-roles.test.sh': 10,
   'register.test.sh': 68,
@@ -102,7 +104,9 @@ export const windowsSeconds = {
 
 function partWeight(entry, part, parts) {
   if (entry === undefined) return 10 / parts;
-  return typeof entry === 'object' ? entry[part] ?? 10 : entry / parts;
+  if (typeof entry !== 'object') return entry / parts;
+  if (!part) return Object.values(entry).reduce((sum, w) => sum + w, 0);
+  return entry[part] ?? 10;
 }
 
 export function selectShard(jobs, shard, weights = windowsSeconds) {
