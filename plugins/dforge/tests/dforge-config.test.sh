@@ -373,5 +373,22 @@ fc get finishTimeout > /dev/null 2>&1; check "retired finishTimeout: get exits 2
 check "finishAction: the title and description" "$(node --input-type=module -e "import { pathToFileURL } from 'node:url'; const { default: schema } = await import(pathToFileURL(process.argv[1]).href); console.log(schema.finishAction.title + ' | ' + schema.finishAction.description)" "$(cd "$HERE/../config" && pwd)/schema.mjs")" 'When the work is done | ask asks before the first task. merge, pr or keep skips the question and runs that action as soon as the final review is clean; wait skips it and shows the finish menu then.'
 fc set breakdownRows 7.5; check "a fraction of an older key: exit 2" "$?" "2"
 
+# --- claude-restore takes effortLevel; drop-snapshot removes one session's snapshot (row 60) ---
+fresh snapshot
+mkdir -p "$HOME/.claude"
+printf '%s\n' '{"model":"sonnet"}' > "$HOME/.claude/settings.json"
+fc claude-restore '{"model":"opus[1m]","modelSettings":null,"effortLevel":"high"}'; check "claude-restore takes effortLevel: exit 0" "$?" "0"
+check "claude-restore takes effortLevel: written" "$(at "$HOME/.claude/settings.json" effortLevel)" '"high"'
+printf '%s\n' '{"model":"sonnet","effortLevel":"low"}' > "$HOME/.claude/settings.json"
+fc claude-restore '{"effortLevel":null}'; check "claude-restore: a null effortLevel removes it" "$?:$(keys "$HOME/.claude/settings.json")" "0:model"
+SNAPS="$HOME/.claude/dforge/sessions/saved-defaults"
+mkdir -p "$SNAPS"
+printf '{}\n' > "$SNAPS/sess-0.json"
+printf '{}\n' > "$SNAPS/sess-9.json"
+fc drop-snapshot 'sess/0'; check "drop-snapshot: exit 0" "$?" "0"
+check "drop-snapshot: only that session's snapshot is gone, its id sanitised" "$(ls "$SNAPS" | tr '\n' ' ')" "sess-9.json "
+fc drop-snapshot sess-0; check "drop-snapshot: a missing snapshot: exit 0" "$?" "0"
+fc drop-snapshot; check "drop-snapshot: no session: exit 2" "$?" "2"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

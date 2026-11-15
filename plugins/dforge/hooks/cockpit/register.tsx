@@ -403,18 +403,19 @@ function applyNotify(o: Live) {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     S.permissionMode = null
-    await readSession($, true)
     S.watchedSince = await $.clock.now()
     S.reconciledAt = null
-    S.reconcileSeen = { key: '', count: 0 }
-    S.keepWarmCount = 0
+    resetSessionGuards()
     S.keepWarmAt = null
     S.isKeepWarmSubmitted = false
     S.isKeepWarmTurn = false
+    // The timers first: a read below that fails must not leave the session unwatched.
     S.watchdog?.cancel()
     S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($).catch(() => undefined))
     S.poll?.cancel()
     S.poll = $.clock.every(POLL_MS, () => void pollTick($).catch(() => undefined))
+    await readSession($, true)
+    await sweepSnapshots($).catch(() => undefined)
     await writeSessionState($)
 
     return next(e)
@@ -524,6 +525,8 @@ export const register: Register = on => {
     if (e.agentId === undefined && e.trigger !== 'precompute' && 'messages' in done && done.messages !== undefined) {
       await update($, budget, () => null)
       await update($, isNudged, () => false)
+      // The turns before a compaction say nothing about the context after it.
+      await update($, turnTokens, () => [])
       // The estimate stands in until the next response; the old one is the window before.
       await readBreakdown($)
       // The engine's or the person's compaction: the run's rule still applies after it.
@@ -3063,11 +3066,14 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       // can be read now and put back after (the restore runs node).
       const saved = await userDefaults($)
       if (saved !== null && (await nodeRuns($))) {
+        await saveDefaults($, bound, auto.launch.model, saved)
         for (const [command, args] of [['model', auto.launch.model], ['effort', auto.launch.effort]] as const) {
           await $.command.run({ command, args }).catch(() => refused.push(`/${command} ${args}`))
         }
         isRestored = await restoreUserDefaults($, saved)
-        if (!isRestored) {
+        // A restore that did not read back leaves the snapshot for a later session.
+        if (isRestored) await dropSnapshot($, bound)
+        else {
           await notify($, { kind: 'blocked', title: '⛔ Default model not restored', detail: `/model and /effort left the auto run's launch model as the default in ${await userSettingsPath($)}.`, isPlain: true })
         }
       } else isKept = true
@@ -3093,10 +3099,81 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
 
 // What /model and /effort save as the user's defaults, as the engine has them
 // loaded; null when the settings cannot be read, so nothing is restored from a guess.
-async function userDefaults($: EngineInterface): Promise<{ model: unknown; modelSettings: unknown } | null> {
+async function userDefaults($: EngineInterface): Promise<SavedDefaults | null> {
   const user = (await $.settings.read({ source: 'user' }).catch(() => null)) as Record<string, unknown> | null
   if (user === null) return null
-  return { model: user.model ?? null, modelSettings: user.modelSettings ?? null }
+  return { model: user.model ?? null, modelSettings: user.modelSettings ?? null, effortLevel: user.effortLevel ?? null }
+}
+
+// The user's defaults as /model and /effort save them, in this key order: the
+// restore's read-back compares JSON text.
+type SavedDefaults = { model: unknown; modelSettings: unknown; effortLevel: unknown }
+
+// Where the defaults are kept while a model switch is in flight, so a session
+// that dies before the restore leaves them for the next one; null without a home.
+async function snapshotPath($: EngineInterface, sessionId: string): Promise<string | null> {
+  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+  if (!home) return null
+  return `${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/saved-defaults/${sessionId.replace(/[^A-Za-z0-9]/g, '-')}.json`
+}
+
+// Written before /model, never over a snapshot already there: that one holds
+// the defaults from before an earlier switch.
+async function saveDefaults($: EngineInterface, sessionId: string, launchModel: string, saved: SavedDefaults) {
+  const path = await snapshotPath($, sessionId)
+  if (path === null || (await $.fs.stat(path).catch(() => null)) !== null) return
+  const snapshot = { session: sessionId, launchModel, saved: { model: saved.model, modelSettings: saved.modelSettings, effortLevel: saved.effortLevel } }
+  await $.fs.write(path, `${JSON.stringify(snapshot)}\n`).catch(() => undefined)
+}
+
+// A mod cannot delete a file: dforge-config.mjs does it.
+async function dropSnapshot($: EngineInterface, name: string) {
+  await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'drop-snapshot', name], { timeoutMs: 15_000 }).catch(() => null)
+}
+
+// The snapshots other sessions left. A live writer's is still in use. A dead
+// one's defaults go back while its launch model is still the default, the sign
+// that nothing changed them since; otherwise they are stale and only dropped.
+async function sweepSnapshots($: EngineInterface) {
+  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+  if (!home) return
+  const dir = `${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/saved-defaults`
+  const own = (await $.session.id()).replace(/[^A-Za-z0-9]/g, '-')
+  for (const entry of await $.fs.list(dir).catch(() => [])) {
+    if (!entry.name.endsWith('.json')) continue
+    const name = entry.name.slice(0, -'.json'.length)
+    if (name === own) continue
+    const text = await $.fs.read(`${dir}/${entry.name}`).catch(() => null)
+    if (text === null) continue
+    const snapshot = snapshotOf(String(text))
+    if (snapshot === null) {
+      await dropSnapshot($, name)
+      $.ui.toast(`dforge: dropped an unreadable model switch snapshot, ${entry.name}.`)
+      continue
+    }
+    if (await isSessionAlive($, snapshot.session)) continue
+    const now = await userDefaults($)
+    if (now === null) continue
+    if (now.model === snapshot.launchModel) {
+      if (await restoreUserDefaults($, snapshot.saved)) await dropSnapshot($, name)
+    } else {
+      await dropSnapshot($, name)
+      $.ui.toast(`dforge: dropped the model switch snapshot of session ${snapshot.session}: your default model is no longer ${snapshot.launchModel}.`)
+    }
+  }
+}
+
+function snapshotOf(text: string): { session: string; launchModel: string; saved: SavedDefaults } | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return null
+  }
+  const s = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as Record<string, unknown>
+  const saved = (typeof s.saved === 'object' && s.saved !== null ? s.saved : null) as Record<string, unknown> | null
+  if (typeof s.session !== 'string' || typeof s.launchModel !== 'string' || saved === null) return null
+  return { session: s.session, launchModel: s.launchModel, saved: { model: saved.model ?? null, modelSettings: saved.modelSettings ?? null, effortLevel: saved.effortLevel ?? null } }
 }
 
 // Whether node starts: the restore below runs dforge-config.mjs with it.
@@ -3117,7 +3194,7 @@ async function userSettingsPath($: EngineInterface): Promise<string> {
 // The engine never reloads a write that lands right after its own save, and its
 // next settings write would save the launch model again, so the restore counts
 // only once the engine reads it back; a later write is outside that window.
-async function restoreUserDefaults($: EngineInterface, saved: { model: unknown; modelSettings: unknown }): Promise<boolean> {
+async function restoreUserDefaults($: EngineInterface, saved: SavedDefaults): Promise<boolean> {
   for (let write = 0; write < RESTORE_WRITES; write++) {
     const ran = await $.process
       .run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'claude-restore', JSON.stringify(saved)], { timeoutMs: 15_000 })
@@ -4059,6 +4136,14 @@ async function engineSettings($: EngineInterface): Promise<string> {
  * into, whose values the host keeps apart and no session.start announces, and
  * leaves the pane as the person left it.
  */
+// The counts that hold within one session: the keep-warm prompts, the
+// reconcile prompts, and the background-work deferral.
+function resetSessionGuards() {
+  S.keepWarmCount = 0
+  S.reconcileSeen = { key: '', count: 0 }
+  S.autoDeferredSince = null
+}
+
 async function readSession($: EngineInterface, isStart: boolean) {
   const id = await $.session.id().catch(() => null)
   // These caches outlive a /clear or /resume, and the values they stand for do
@@ -4066,30 +4151,41 @@ async function readSession($: EngineInterface, isStart: boolean) {
   S.roots = { key: '', value: null }
   S.offerRead = ''
   S.offerRegisters = null
-  await loadSettings($)
-  const o = await live($)
+  // Each read fills its own section: one that throws leaves only that section unread.
+  const step = async (part: () => Promise<unknown>) => {
+    try {
+      await part()
+    } catch {
+      // The section keeps what it showed; the poll reads it again.
+    }
+  }
+  await step(() => loadSettings($))
   // Open first: the reads below run processes, and each fills its section as it lands.
-  if (isStart && o.isMinimized) {
-    if ((await read($, view)) !== 'settings') await shutPane($)
-  } else if (isStart && o.openAtStart) void $.ui.open(paneFor(o.layout))
-  S.compactWindow = await readCompactWindow($)
-  await onBudget($, await refresh($, o.tuning, S.compactWindow))
-  await seedUsage($)
-  await readAccount($)
-  await readPlace($)
-  await readBreakdown($)
-  await readEngine($)
-  await readWhere($)
-  await readNotifier($)
+  await step(async () => {
+    const o = await live($)
+    if (isStart && o.isMinimized) {
+      if ((await read($, view)) !== 'settings') await shutPane($)
+    } else if (isStart && o.openAtStart) void $.ui.open(paneFor(o.layout))
+  })
+  await step(async () => {
+    S.compactWindow = await readCompactWindow($)
+    await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
+  })
+  await step(() => seedUsage($))
+  await step(() => readAccount($))
+  await step(() => readPlace($))
+  await step(() => readBreakdown($))
+  await step(() => readEngine($))
+  await step(() => readWhere($))
+  await step(() => readNotifier($))
   S.runKey = ''
   S.finishKey = ''
-  await readRun($)
-  await trackAutoRun($)
-  await beat($)
-  await readVersion($)
-  await readRemote($)
-  // Last, so a read that failed is tried again at the next poll. '' when the
-  // id could not be read: the poll adopts the first id it reads.
+  await step(() => readRun($))
+  await step(() => trackAutoRun($))
+  await step(() => beat($))
+  await step(() => readVersion($))
+  await step(() => readRemote($))
+  // '' when the id could not be read: the poll adopts the first id it reads.
   await update($, sessionRead, () => id ?? '')
 }
 
@@ -4106,6 +4202,8 @@ async function pollTick($: EngineInterface) {
     const seen = await read($, sessionRead)
     const id = await $.session.id().catch(() => null)
     if (seen === null || (id !== null && seen !== '' && id !== seen)) {
+      // A /resume carries the process into another session, whose own counts start at zero.
+      resetSessionGuards()
       await readSession($, false)
       return
     }
