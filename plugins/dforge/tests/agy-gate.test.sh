@@ -48,12 +48,12 @@ SPAWNABLE=$(node -e 'const r = require("child_process").spawnSync(process.argv[1
 POLICY="$TMP/policy.json"
 jq '.trust = {"review":"pass"}' "$P/reference/agy-policy.json" > "$POLICY" 2>/dev/null
 HIGHFLOOR="$TMP/highfloor.json"
-jq '.min_version = "1.5.0"' "$POLICY" > "$HIGHFLOOR" 2>/dev/null
+jq '.min_version = "1.6.0"' "$POLICY" > "$HIGHFLOOR" 2>/dev/null
 
 # --- the stub itself ---------------------------------------------------------
 # Tasks 4 to 7 drive the wrapper through this stub, so its own shapes are pinned.
 check "the stub is executable" "$([ -x "$STUBDIR/agy" ] && echo yes || echo no)" "yes"
-check "the stub prints its version" "$("$STUBDIR/agy" --version | tr -d '\r')" "1.4.12"
+check "the stub prints its version" "$("$STUBDIR/agy" --version | tr -d '\r')" "1.5.9"
 check "the stub lists two model ids after its banner" \
   "$("$STUBDIR/agy" models | tr -d '\r' | grep -c "$(printf '^[a-z0-9.-]*\t')")" "2"
 check "the stub can be logged out" "$(STUB_AGY_AUTH=logged-out "$STUBDIR/agy" models >/dev/null 2>&1; echo $?)" "1"
@@ -78,7 +78,7 @@ check "the print-timeout mode writes the timeout line to stderr" \
 # --- the policy file ---------------------------------------------------------
 check "the policy states the cli, the version floor, the major ceiling and the calibrated version" \
   "$(jq -r '[.cli, .min_version, (.max_major | tostring), .calibrated] | join(",")' "$P/reference/agy-policy.json" 2>/dev/null | tr -d '\r')" \
-  "agy,1.4.12,1,1.5.9"
+  "agy,1.5.9,1,1.5.9"
 check "the policy records the review trust as pending or pass" \
   "$(jq -r '.trust.review | if . == "pending" or . == "pass" then "valid" else . end' "$P/reference/agy-policy.json" 2>/dev/null | tr -d '\r')" "valid"
 check "the policy has no smoke gate" "$(jq -r '.trust | has("smoke")' "$P/reference/agy-policy.json" 2>/dev/null | tr -d '\r')" "false"
@@ -91,7 +91,7 @@ loc() { # loc [args...]; sets out and rc. LOC_PATH and LOC_POLICY override the d
 }
 check "agy-locate exists" "$([ -f "$P/scripts/agy-locate" ] && echo yes || echo no)" "yes"
 loc
-check "an agy inside the range is ok, with its directory as root" "$out" "agy-locate ok version=1.4.12 root=$STUBDIR"
+check "an agy inside the range is ok, with its directory as root" "$out" "agy-locate ok version=1.5.9 root=$STUBDIR"
 check "ok exits 0" "$rc" "0"
 STUB_AGY_VERSION=1.9.3 loc
 check "a minor above the floor is ok" "$out" "agy-locate ok version=1.9.3 root=$STUBDIR"
@@ -100,12 +100,12 @@ check "a version below the floor is off" "$out" "agy-locate off reason=plugin-ve
 check "off exits 1" "$rc" "1"
 STUB_AGY_VERSION=2.0.0 loc
 check "a major above the ceiling is off" "$out" "agy-locate off reason=plugin-version:2.0.0"
-STUB_AGY_VERSION=$'1.4.12\r' loc
-check "a carriage return after the version is stripped" "$out" "agy-locate ok version=1.4.12 root=$STUBDIR"
-STUB_AGY_VERSION=$'1.4.12\nsecond line' loc
-check "only the first line of the version output counts" "$out" "agy-locate ok version=1.4.12 root=$STUBDIR"
+STUB_AGY_VERSION=$'1.5.9\r' loc
+check "a carriage return after the version is stripped" "$out" "agy-locate ok version=1.5.9 root=$STUBDIR"
+STUB_AGY_VERSION=$'1.5.9\nsecond line' loc
+check "only the first line of the version output counts" "$out" "agy-locate ok version=1.5.9 root=$STUBDIR"
 LOC_POLICY="$HIGHFLOOR" loc
-check "DR_AGY_POLICY replaces the policy path" "$out" "agy-locate off reason=plugin-version:1.4.12"
+check "DR_AGY_POLICY replaces the policy path" "$out" "agy-locate off reason=plugin-version:1.5.9"
 LOC_PATH="$SEAL" loc
 check "no agy on PATH is not installed" "$out" "agy-locate off reason=plugin-not-installed"
 check "not installed exits 1" "$rc" "1"
@@ -216,7 +216,7 @@ setting '{"agyReview":true}'
 # --- reset times and the Claude mark (A6, A7, A9, A10) --------------------
 FAR=4070908800 FAR_ISO=2099-01-01T00:00:00Z
 seed() { mkdir -p "$SESS"; jq -cn "$1" > "$SESS/s1.json"; }
-fresh; seed "{session_id:\"s1\", usable:false, review:false, reason:\"quota\", checked_at:\"2026-11-03T00:00:00Z\", resets_at:\"$FAR_ISO\", resets_at_epoch:$FAR, agy_version:\"1.4.12\"}"
+fresh; seed "{session_id:\"s1\", usable:false, review:false, reason:\"quota\", checked_at:\"2026-11-03T00:00:00Z\", resets_at:\"$FAR_ISO\", resets_at_epoch:$FAR, agy_version:\"1.5.9\"}"
 gate
 check "an unexpired quota is kept and prints its reset" "$out" \
   "agy-gate usable=false reason=quota review=false resets_at=$FAR_ISO claude=on claude_resets_at=- source=cache"
@@ -232,24 +232,24 @@ check "a non-numeric reset reads as none, so the quota holds for the session" "$
   "agy-gate usable=false reason=quota review=false resets_at=- claude=on claude_resets_at=- source=cache"
 
 # Twenty digits overflow [ -gt ]; a string keeps every jq from reformatting them.
-fresh; seed '{session_id:"s1", usable:false, review:false, reason:"quota", resets_at:"far", resets_at_epoch:"99999999999999999999", agy_version:"1.4.12", fallback:{usable:false, reason:"quota", resets_at:"far", resets_at_epoch:"99999999999999999999"}}'
+fresh; seed '{session_id:"s1", usable:false, review:false, reason:"quota", resets_at:"far", resets_at_epoch:"99999999999999999999", agy_version:"1.5.9", fallback:{usable:false, reason:"quota", resets_at:"far", resets_at_epoch:"99999999999999999999"}}'
 gate --refresh
 check "a reset past 18 digits reads as none, so both quotas hold for the session" "$out" \
   "agy-gate usable=false reason=quota review=false resets_at=- claude=off claude_resets_at=- source=cache"
 
-fresh; seed "{session_id:\"s1\", usable:true, review:true, reason:\"ok\", resets_at:null, resets_at_epoch:null, agy_version:\"1.4.12\", fallback:{usable:false, reason:\"quota\", resets_at:\"$FAR_ISO\", resets_at_epoch:$FAR}}"
+fresh; seed "{session_id:\"s1\", usable:true, review:true, reason:\"ok\", resets_at:null, resets_at_epoch:null, agy_version:\"1.5.9\", fallback:{usable:false, reason:\"quota\", resets_at:\"$FAR_ISO\", resets_at_epoch:$FAR}}"
 gate
 check "an unexpired Claude mark turns Claude off and leaves the surface open" "$out" \
   "agy-gate usable=true reason=ok review=true resets_at=- claude=off claude_resets_at=$FAR_ISO source=cache"
 check "the gate's write keeps the unexpired Claude mark" "$(field fallback.resets_at_epoch)" "$FAR"
 
-fresh; seed '{session_id:"s1", usable:true, review:true, reason:"ok", agy_version:"1.4.12", fallback:{usable:false, reason:"quota", resets_at:null, resets_at_epoch:null}}'
+fresh; seed '{session_id:"s1", usable:true, review:true, reason:"ok", agy_version:"1.5.9", fallback:{usable:false, reason:"quota", resets_at:null, resets_at_epoch:null}}'
 gate --refresh
 check "a Claude mark with no reset holds for the session, --refresh included" \
   "$(sed 's/ source=.*//' <<<"$out")" \
   "agy-gate usable=$(field usable) reason=$(field reason) review=$(field review) resets_at=- claude=off claude_resets_at=-"
 
-fresh; seed '{session_id:"s1", usable:true, review:true, reason:"ok", agy_version:"1.4.12", fallback:{usable:false, reason:"quota", resets_at:"1970-01-01T00:16:40Z", resets_at_epoch:1000}}'
+fresh; seed '{session_id:"s1", usable:true, review:true, reason:"ok", agy_version:"1.5.9", fallback:{usable:false, reason:"quota", resets_at:"1970-01-01T00:16:40Z", resets_at_epoch:1000}}'
 gate
 check "an expired Claude mark turns Claude back on" "$out" \
   "agy-gate usable=true reason=ok review=true resets_at=- claude=on claude_resets_at=- source=cache"
@@ -260,7 +260,7 @@ if [ "$SPAWNABLE" = yes ]; then
   check "a usable, trusted agy opens the review surface" "$out" \
     "agy-gate usable=true reason=ok review=true resets_at=- claude=on claude_resets_at=- source=probe"
   check "the session file records the answer" \
-    "$(field session_id)/$(field usable)/$(field review)/$(field reason)/$(field agy_version)" "s1/true/true/ok/1.4.12"
+    "$(field session_id)/$(field usable)/$(field review)/$(field reason)/$(field agy_version)" "s1/true/true/ok/1.5.9"
   check "the session file carries no reset time" "$(field resets_at)/$(field resets_at_epoch)" "null/null"
   check "the probe ran once" "$(grep -c '^models$' "$ARGS")" "1"
   gate
@@ -310,12 +310,12 @@ if [ "$SPAWNABLE" = yes ]; then
   check "a quota mark made after a good probe also survives --refresh" "$out" \
     "agy-gate usable=false reason=quota review=false resets_at=- claude=on claude_resets_at=- source=cache"
   check "the quota survives with the probe never re-run" "$(grep -c '^models$' "$ARGS")" "1"
-  check "a quota mark keeps the recorded agy version" "$(field agy_version)" "1.4.12"
+  check "a quota mark keeps the recorded agy version" "$(field agy_version)" "1.5.9"
 
-  fresh; STUB_AGY_VERSION='1.4.12 (build 7)' gate
+  fresh; STUB_AGY_VERSION='1.5.9 (build 7)' gate
   check "a version holding a space still opens the review surface" "$out" \
     "agy-gate usable=true reason=ok review=true resets_at=- claude=on claude_resets_at=- source=probe"
-  check "a version holding a space is recorded whole" "$(field agy_version)" "1.4.12 (build 7)"
+  check "a version holding a space is recorded whole" "$(field agy_version)" "1.5.9 (build 7)"
 
   fresh; SID= gate
   check "no session id still answers, with the surface closed" "$out" \
@@ -327,13 +327,13 @@ if [ "$SPAWNABLE" = yes ]; then
   check "switching agyReview on probes again" "$out" \
     "agy-gate usable=true reason=ok review=true resets_at=- claude=on claude_resets_at=- source=probe"
 
-  fresh; seed '{session_id:"s1", usable:false, review:false, reason:"quota", resets_at:"1970-01-01T00:16:40Z", resets_at_epoch:1000, agy_version:"1.4.12"}'
+  fresh; seed '{session_id:"s1", usable:false, review:false, reason:"quota", resets_at:"1970-01-01T00:16:40Z", resets_at_epoch:1000, agy_version:"1.5.9"}'
   gate
   check "an expired quota is probed again and the surface reopens" "$out" \
     "agy-gate usable=true reason=ok review=true resets_at=- claude=on claude_resets_at=- source=probe"
   check "the reopened surface carries no reset time" "$(field resets_at)/$(field resets_at_epoch)" "null/null"
 
-  fresh; seed "{session_id:\"s1\", usable:false, review:false, reason:\"logged-out\", agy_version:\"1.4.12\", fallback:{usable:false, reason:\"quota\", resets_at:\"$FAR_ISO\", resets_at_epoch:$FAR}}"
+  fresh; seed "{session_id:\"s1\", usable:false, review:false, reason:\"logged-out\", agy_version:\"1.5.9\", fallback:{usable:false, reason:\"quota\", resets_at:\"$FAR_ISO\", resets_at_epoch:$FAR}}"
   gate --refresh
   check "a probe write keeps an unexpired Claude mark" "$out" \
     "agy-gate usable=true reason=ok review=true resets_at=- claude=off claude_resets_at=$FAR_ISO source=probe"

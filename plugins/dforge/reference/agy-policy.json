@@ -1,7 +1,7 @@
 {
   "cli": "agy",
-  "min_version": "1.4.12",
+  "min_version": "1.5.9",
   "max_major": 1,
   "calibrated": "1.5.9",
-  "trust": { "review": "pending" }
+  "trust": { "review": "pass" }
 }

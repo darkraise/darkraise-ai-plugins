@@ -9,7 +9,7 @@ if [ -n "${STUB_AGY_ARGS_LOG:-}" ]; then
 fi
 
 if [ "${1:-}" = --version ]; then
-  printf '%s\n' "${STUB_AGY_VERSION:-1.4.12}"
+  printf '%s\n' "${STUB_AGY_VERSION:-1.5.9}"
   exit 0
 fi
 

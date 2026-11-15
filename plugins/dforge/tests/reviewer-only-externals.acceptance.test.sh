@@ -65,6 +65,8 @@ export STUB_AGY_MODE=review
 TRUSTED="$TMP/agy-policy-trusted.json"
 jq '.trust.review = "pass"' "$PLUGIN/reference/agy-policy.json" > "$TRUSTED"
 export DR_AGY_POLICY="$TRUSTED"
+UNTRUSTED="$TMP/agy-policy-untrusted.json"
+jq '.trust.review = "pending"' "$PLUGIN/reference/agy-policy.json" > "$UNTRUSTED"
 
 # A PATH holding every tool the scripts use and no agy: this host has a real
 # agy, which must never be reached. The stub agy goes in front of this PATH.
@@ -404,9 +406,9 @@ t_A4() {
   check "A4: neither open: risk 3 at total 4 is the Opus band seat" "$(sval "$rline" primary)" "dforge:judge-opus"
   absent "A4: neither open: no route names a panel" "$rline" 'panel:'
 
-  # An untrusted agy surface (shipped policy) with Codex off is neither open.
+  # An untrusted agy surface with Codex off is neither open.
   fresh; settings false true
-  DR_AGY_POLICY="$PLUGIN/reference/agy-policy.json" gate_line agy >/dev/null; gate_line codex >/dev/null
+  DR_AGY_POLICY="$UNTRUSTED" gate_line agy >/dev/null; gate_line codex >/dev/null
   route --task 1
   check "A4: an untrusted agy surface does not count as open" "$(sval "$rline" reason)" "reviewers-off"
 }
