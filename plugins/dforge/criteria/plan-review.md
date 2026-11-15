@@ -8,12 +8,12 @@ plan before it is saved.
 Trust the plan text, the spec text, and the plan-lint output file. Do NOT trust
 the planner's self-review, its task index, or its claims about what a task
 covers: check each claim against the task text itself. A plan that reads as
-thorough is not evidence that a small model can execute it; the exact paths,
+thorough is not evidence that the session can execute it; the exact paths,
 interfaces, tests and commands in each task are.
 
-Every task's implementer sees only that task's text plus the header's Global
-Constraints and Contracts. Judge each task from that view, not from your own
-reading of the whole plan.
+The session implements each task from its brief: the task text plus the
+header's Global Constraints and Contracts. Judge each task from that view, not
+from your own reading of the whole plan.
 
 ## Criteria
 

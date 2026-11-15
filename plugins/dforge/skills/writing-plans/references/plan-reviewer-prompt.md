@@ -3,7 +3,7 @@
 Use this template when dforge:writing-plans dispatches the plan review.
 
 **Purpose:** score a finished plan against `criteria/plan-review.md` before it
-is saved, so that small models can execute it literally.
+is saved, so that the session can execute each task from its brief.
 
 **Dispatch after:** the plan is complete, self-reviewed, and `scripts/plan-lint`
 reports 0 errors.
@@ -12,9 +12,9 @@ reports 0 errors.
 Subagent ([JUDGE]):
   description: "Review plan document"
   prompt: |
-    You are reviewing an implementation plan before it is saved. Small models
-    will execute it literally: each task's implementer sees only that task's
-    text plus the header's Global Constraints and Contracts.
+    You are reviewing an implementation plan before it is saved. The session
+    implements each task from its brief: the task text plus the header's
+    Global Constraints and Contracts.
 
     **Plan:** [PLAN_FILE]
     **Spec it implements:** [SPEC_FILE]
@@ -22,9 +22,9 @@ Subagent ([JUDGE]):
     among them that each Modify and Test path exists and each line range
     fits its file; do not repeat them, but an ERROR line there is a finding.
 
-    Read the spec, then the plan. Read every task as its implementer will:
-    the task text plus the header's Global Constraints and Contracts, nothing
-    else.
+    Read the spec, then the plan. Read every task as the session will,
+    through its brief: the task text plus the header's Global Constraints and
+    Contracts, nothing else.
 
     On a Claude plan a code task gives its interfaces, the complete code of
     its tests and its verify commands, not its implementation: a missing
@@ -162,9 +162,8 @@ Subagent ([JUDGE]):
   description: "Re-review plan document, round [ROUND]"
   prompt: |
     You are reviewing an implementation plan that failed its previous review
-    round and has been revised. Small models will execute it literally: each
-    task's implementer sees only that task's text plus the header's Global
-    Constraints and Contracts.
+    round and has been revised. The session implements each task from its
+    brief: the task text plus the header's Global Constraints and Contracts.
 
     **Plan:** [PLAN_FILE]
     **Spec it implements:** [SPEC_FILE]

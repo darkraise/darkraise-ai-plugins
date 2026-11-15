@@ -14,9 +14,9 @@ the tests that pin it, docs they might need to check, how to verify it. Give
 them the whole plan as feature-slice tasks. DRY. YAGNI. TDD. Frequent commits.
 
 Assume they are a skilled developer, but know almost nothing about our toolset
-or problem domain. Assume they don't know good test design very well. Small
-models execute these plans literally: each task's implementer sees only that
-task's text plus the header's Global Constraints and Contracts.
+or problem domain. Assume they don't know good test design very well. The
+session implements every task, reading each through its brief: the task text
+with its amendments plus the header's Global Constraints and Contracts.
 
 **Keep it minimal and checkable:** no speculative abstractions; each task is the
 minimum that meets the spec; each task ends with a check that proves it.
@@ -192,9 +192,9 @@ code the plan changes; a drafter would read it again from nothing.
 
 **Interfaces:**
 - Consumes: [what this task uses from earlier tasks — cite the Contracts entry]
-- Produces: [what later tasks rely on — cite the Contracts entry. A task's
-  implementer sees only their own task plus Global Constraints and
-  Contracts; this block is how they learn which names they touch.]
+- Produces: [what later tasks rely on — cite the Contracts entry. The brief
+  carries only this task plus Global Constraints and Contracts; this block
+  is how the session learns which names the task touches.]
 
 **Items:** [only when a register covers this plan's spec: the register row
 identifiers this task discharges, comma-separated, for example `4, 16`. When
