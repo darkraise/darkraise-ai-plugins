@@ -145,9 +145,9 @@ export default {
     description: 'What auto runs may spend on rulings through DFORGE_AGENTROUTER_API_KEY, in US dollars. 0, the default, never uses the key. A cap above 0 sends ruling prompts, and any file its judge reads, to AgentRouter, a third party. Its judge can read any file this user can read, and setting a cap above 0 is the consent to that.',
   },
   lensCap: {
-    type: 'number', default: 4, min: 0, max: 9, step: 1, zero: 'off', env: 'DFORGE_LENS_CAP', enforcedBy: 'script', group: 'Workflow', target: 'dforge',
+    type: 'number', default: 5, min: 0, max: 9, step: 1, zero: 'off', env: 'DFORGE_LENS_CAP', enforcedBy: 'script', group: 'Workflow', target: 'dforge',
     label: 'Review lenses', title: 'Final-review lens cap',
-    description: 'How many specialist review lenses the final review runs at most, highest priority first. 0 turns them off. DFORGE_LENS_CAP overrides it.',
+    description: 'How many specialist review lenses the final review runs at most, highest priority first. The code-quality lens, which groups the language, type-design and docs parts, counts as one. 0 turns them off. DFORGE_LENS_CAP overrides it.',
   },
   lensMinorFrom: {
     type: 'number', default: 20, min: 0, max: 500, step: 5, zero: 'off', env: 'DFORGE_LENS_MINOR_FROM', enforcedBy: 'script', group: 'Workflow', target: 'dforge',

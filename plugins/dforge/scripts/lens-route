@@ -9,9 +9,14 @@
 # Usage: lens-route PLAN_FILE --final BASE HEAD
 #        lens-route PLAN_FILE --task ID
 # Output: lens <id> criteria=<path> seat=<seat> reason=<always|paths:<glob>|added|ui-paths>
+#         lens code-quality parts=<path>,... seat=<seat> reason=<reason>
+#                                           (--final: one seat for the matching
+#                                           parts, in PARTS order; the reason is
+#                                           the first matching part's; no line
+#                                           when no part applies)
 #         lens-skipped <id> reason=cap      (--final, past the lensCap setting, or
 #                                           at standard depth past 2 lenses
-#                                           besides test-quality)
+#                                           besides test-quality and code-quality)
 #         lens-skipped <id> reason=depth    (--final, a lens other than security
 #                                           that applied, at light depth)
 #         lens-floor important tasks=<n> from=<m>
@@ -21,8 +26,8 @@
 #         lenses off                        (--final, lensCap 0)
 #         lens <id> criteria=<path>         (--task, one per id on the task's **Lenses:** line)
 # The depth (scripts/depth-route) sizes --final: light keeps only security,
-# standard keeps at most 2 lenses besides test-quality, which it adds when it
-# applies, up to lensCap in all; full keeps up to lensCap.
+# standard keeps at most 2 lenses besides test-quality and code-quality, which
+# it adds when they apply, up to lensCap in all; full keeps up to lensCap.
 # Exit: 0 routed, also when no lens applies; 2 usage error, a missing plan or
 # task, an unknown lens id, or a Host: codex plan.
 set -uo pipefail
@@ -33,6 +38,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/dforge-env.sh"
 LENSES="$(cd "$HERE/../criteria/lenses" 2>/dev/null && pwd)"
 SEAT=dforge:judge-sonnet-high
+# The code-quality lens's parts: lens files --final groups into one seat and
+# never routes on their own. --task still names them by id.
+PARTS="lang-bash lang-csharp lang-python lang-typescript type-design docs-comments"
 
 die() { printf 'lens-route: %s\n' "$1" >&2; exit 2; }
 usage() { die "usage: lens-route PLAN_FILE --final BASE HEAD | --task ID"; }
@@ -52,16 +60,30 @@ if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header"; then
   die "a Host: codex plan routes reviews through reference/native-codex.md"
 fi
 
-# lens_order — every lens id, highest priority first: four fixed leaders
-# (security, then ui-ux, so the cap keeps the UI lens on a UI branch), the
-# language lenses alphabetically, two fixed trailers, then any other lens.
+# lens_order — every --final lens id, highest priority first: four fixed
+# leaders (security, then ui-ux, so the cap keeps the UI lens on a UI branch),
+# code-quality, then any other lens file that is not a part.
 lens_order() {
   local all id
   all=$(for f in "$LENSES"/*.md; do [ -e "$f" ] && basename "$f" .md; done | LC_ALL=C sort)
   for id in security ui-ux silent-failures test-quality; do grep -qxF "$id" <<<"$all" && echo "$id"; done
-  grep -E '^lang-' <<<"$all"
-  for id in type-design docs-comments; do grep -qxF "$id" <<<"$all" && echo "$id"; done
-  grep -vxE 'security|ui-ux|silent-failures|test-quality|type-design|docs-comments|lang-.*' <<<"$all"
+  echo code-quality
+  grep -vxE "security|ui-ux|silent-failures|test-quality|${PARTS// /|}" <<<"$all"
+}
+
+# code_quality_match — set cq_parts to the comma-separated paths of the parts
+# whose Applies clause matches, in PARTS order, and cq_reason to the first
+# one's reason; status 1 when none matches.
+code_quality_match() {
+  local part r
+  cq_parts="" cq_reason=""
+  for part in $PARTS; do
+    [ -f "$LENSES/$part.md" ] || continue
+    r=$(lens_match "$part") || continue
+    [ -n "$cq_reason" ] || cq_reason=$r
+    cq_parts="${cq_parts:+$cq_parts,}$LENSES/$part.md"
+  done
+  [ -n "$cq_reason" ]
 }
 
 # lens_match ID — print the first Applies clause that matches the change set
@@ -109,8 +131,8 @@ case $1 in
     base=$2 head=$3
     git rev-parse --verify --quiet "$base^{commit}" >/dev/null || die "bad BASE: $base"
     git rev-parse --verify --quiet "$head^{commit}" >/dev/null || die "bad HEAD: $head"
-    cap=${DFORGE_LENS_CAP:-$(dforge_setting lensCap 4)}
-    [[ "$cap" =~ ^[0-9]$ ]] || cap=4
+    cap=${DFORGE_LENS_CAP:-$(dforge_setting lensCap 5)}
+    [[ "$cap" =~ ^[0-9]$ ]] || cap=5
     if [ "$cap" -eq 0 ]; then echo "lenses off"; exit 0; fi
     depth=$(depth_plan_depth "$src" "$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)")
     changed=$(git -c core.quotepath=off diff --name-only "$base..$head")
@@ -129,13 +151,19 @@ case $1 in
     n=0 others=0
     while IFS= read -r id; do
       [ -n "$id" ] || continue
-      reason=$(lens_match "$id") || continue
+      if [ "$id" = code-quality ]; then
+        code_quality_match || continue
+        reason=$cq_reason where="parts=$cq_parts"
+      else
+        reason=$(lens_match "$id") || continue
+        where="criteria=$LENSES/$id.md"
+      fi
       if [ "$depth" = light ] && [ "$id" != security ]; then
         printf 'lens-skipped %s reason=depth\n' "$id"
-      elif [ "$n" -lt "$cap" ] && { [ "$depth" != standard ] || [ "$id" = test-quality ] || [ "$others" -lt 2 ]; }; then
-        printf 'lens %s criteria=%s seat=%s reason=%s\n' "$id" "$LENSES/$id.md" "$SEAT" "$reason"
+      elif [ "$n" -lt "$cap" ] && { [ "$depth" != standard ] || [ "$id" = test-quality ] || [ "$id" = code-quality ] || [ "$others" -lt 2 ]; }; then
+        printf 'lens %s %s seat=%s reason=%s\n' "$id" "$where" "$SEAT" "$reason"
         n=$((n + 1))
-        [ "$id" = test-quality ] || others=$((others + 1))
+        [ "$id" = test-quality ] || [ "$id" = code-quality ] || others=$((others + 1))
       else
         printf 'lens-skipped %s reason=cap\n' "$id"
       fi

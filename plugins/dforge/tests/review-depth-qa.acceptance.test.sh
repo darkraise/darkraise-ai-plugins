@@ -358,7 +358,7 @@ if want A8; then
   check "A8: light exits 0" "$status" 0
   present "A8: light prints the security lens" "$out" "^lens security "
   check "A8: light prints exactly one lens line" "$(lens_lines)" 1
-  present "A8: light skips another applicable lens with reason=depth" "$out" "^lens-skipped (silent-failures|test-quality|lang-bash|lang-python|lang-typescript|type-design|docs-comments) reason=depth$"
+  present "A8: light skips another applicable lens with reason=depth" "$out" "^lens-skipped (silent-failures|test-quality|code-quality) reason=depth$"
   absent "A8: light never skips security" "$out" "^lens-skipped security"
   absent "A8: light prints no reason=cap line" "$out" "reason=cap"
   skipped=$(grep -c '^lens-skipped .* reason=depth$' <<<"$out")
@@ -383,20 +383,20 @@ if want A8; then
   # standard: at most 2 lens lines besides test-quality, which this change set needs.
   ps=$(mkplan a8-standard s-light - "" r0t1 r2t4)
   lr "$ps" DFORGE_LENS_CAP=4
-  check "A8: standard, lensCap 4, prints 3 lens lines with test-quality" "$(lens_lines)" 3
-  present "A8: standard past the cap prints reason=cap" "$out" "^lens-skipped .* reason=cap$"
+  check "A8: standard, lensCap 4, prints 4 lens lines with test-quality and code-quality" "$(lens_lines)" 4
+  absent "A8: standard with every applying lens kept prints no reason=cap" "$out" "reason=cap"
   absent "A8: standard prints no reason=depth" "$out" "reason=depth"
   ps2=$(mkplan a8-standard-spec s-standard - "" r0t1)
   lr "$ps2" DFORGE_LENS_CAP=4
-  check "A8: standard by the spec, lensCap 4, prints 3 lens lines with test-quality" "$(lens_lines)" 3
+  check "A8: standard by the spec, lensCap 4, prints 4 lens lines" "$(lens_lines)" 4
 
   # full: up to lensCap, as before.
   lr "$pf" DFORGE_LENS_CAP=4
   check "A8: full, lensCap 4, prints 4 lens lines" "$(lens_lines)" 4
   absent "A8: full prints no reason=depth" "$out" "reason=depth"
-  present "A8: full prints reason=cap past the cap" "$out" "^lens-skipped .* reason=cap$"
   lr "$pf" DFORGE_LENS_CAP=3
   check "A8: full, lensCap 3, prints 3 lens lines" "$(lens_lines)" 3
+  present "A8: full, lensCap 3, skips code-quality for the cap" "$out" "^lens-skipped code-quality reason=cap$"
 fi
 
 # =====================================================================

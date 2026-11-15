@@ -806,7 +806,7 @@ t_A18() {
   has "A18: contract spec, UI file changed: ui-ux is routed" "$o" "lens ui-ux "
   lacks "A18: ui-ux is not cut by the cap" "$o" "lens-skipped ui-ux"
   local id
-  for id in security lang-typescript test-quality silent-failures; do
+  for id in security code-quality test-quality silent-failures; do
     matches "A18: setup: $id matched the diff" "$o" "^lens(-skipped)? $id( |\$)"
   done
 
@@ -818,7 +818,7 @@ t_A18() {
   o=$(route "$REPO" p.md "$BASE")
   has "A18: profile project, UI file changed: ui-ux is routed" "$o" "lens ui-ux "
   lacks "A18: ui-ux is not cut by the cap (profile)" "$o" "lens-skipped ui-ux"
-  for id in security lang-typescript test-quality silent-failures; do
+  for id in security code-quality test-quality silent-failures; do
     matches "A18: setup: $id matched the diff (profile)" "$o" "^lens(-skipped)? $id( |\$)"
   done
 
@@ -839,7 +839,7 @@ t_A18() {
   o=$(route "$REPO" p.md "$BASE")
   lacks "A18: no profile, no contract, a .tsx file changed: ui-ux is not routed" "$o" "lens ui-ux "
   absent "A18: nor listed as skipped" "$o" '^lens(-skipped)? ui-ux( |$)'
-  matches "A18: setup: the route still ran (lang-typescript matched)" "$o" "^lens(-skipped)? lang-typescript( |\$)"
+  matches "A18: setup: the route still ran (code-quality matched)" "$o" "^lens(-skipped)? code-quality( |\$)"
 }
 
 t_A22() {

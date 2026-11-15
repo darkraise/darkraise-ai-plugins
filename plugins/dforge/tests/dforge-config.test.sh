@@ -159,7 +159,7 @@ apiBudgetAnthropic 0 25 1001
 apiBudgetOpenai 0 25 1001
 apiBudgetAgentRouter 0 25 1001
 keepWarm 50 4 60
-lensCap 4 2 10
+lensCap 5 2 10
 lensMinorFrom 20 10 501
 autoRun on ask maybe
 worktree ask always sometimes

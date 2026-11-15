@@ -107,7 +107,7 @@ depth_of() { # depth_of <plan file> — the depth-route line for a plan in the f
 }
 rr() { out=$(cd "$R" && timeout 60 bash "$ROUTE" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
 lr() { out=$(cd "$R" && timeout 60 bash "${LENS_SCRIPT:-$LENS}" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
-short() { sed -E 's/ criteria=[^ ]*//; s/ seat=[^ ]*//; s/ reason=(always|added|ui-paths|paths:[^ ]*)$//' | tr '\n' ';'; }
+short() { sed -E 's/ criteria=[^ ]*//; s/ parts=[^ ]*//; s/ seat=[^ ]*//; s/ reason=(always|added|ui-paths|paths:[^ ]*)$//' | tr '\n' ';'; }
 
 # --- A1-A6, A13, A16: depth-route ------------------------------------------
 
@@ -327,19 +327,19 @@ a8() {
 
   lr docs/dforge/plans/p8f.md --final "$base" "$head"
   out_full=$out
-  check "A8: full prints every lens up to the cap of 4, the rest skipped for the cap" "$(short <<<"$out_full")" \
-    "lens security;lens silent-failures;lens test-quality;lens lang-bash;lens-skipped lang-python reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
+  check "A8: full prints every lens up to the cap of 5" "$(short <<<"$out_full")" \
+    "lens security;lens silent-failures;lens test-quality;lens code-quality;"
 
   lr docs/dforge/plans/p8l.md --final "$base" "$head"
   check "A8: light prints a lens line for security alone" "$(grep -c '^lens ' <<<"$out")" "1"
   check "A8: light keeps security" "$(grep -c '^lens security ' <<<"$out")" "1"
   check "A8: light skips every other applicable lens for the depth" "$(short <<<"$out")" \
-    "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped lang-bash reason=depth;lens-skipped lang-python reason=depth;lens-skipped lang-typescript reason=depth;lens-skipped docs-comments reason=depth;"
+    "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped code-quality reason=depth;"
   check "A8: light skips no lens for the cap" "$rc:$(grep -c 'reason=cap' <<<"$out")" "0:0"
 
   lr docs/dforge/plans/p8s.md --final "$base" "$head"
   out_std=$out
-  check "A8: standard prints the 2 lenses and test-quality" "$(grep -c '^lens ' <<<"$out_std")" "3"
+  check "A8: standard prints the 2 lenses, test-quality and code-quality" "$(grep -c '^lens ' <<<"$out_std")" "4"
 
   out=$(cd "$R" && DFORGE_LENS_CAP=0 timeout 60 bash "$LENS" docs/dforge/plans/p8l.md --final "$base" "$head" 2>&1)
   check "A8: lenses off is unchanged at light" "$out" "lenses off"
@@ -353,9 +353,9 @@ a8() {
   sed -i.bak 's#^Applies: .*#Applies: paths docs/never/*#' "$copy/criteria/lenses/security.md"
   LENS_SCRIPT="$copy/scripts/lens-route" lr docs/dforge/plans/p8l.md --final "$base" "$head"
   check "A8: light prints no security line when its clause does not match" "$rc:$(grep -c 'security' <<<"$out")" "0:0"
-  check "A8: and still skips the other lenses for the depth" "$(grep -c '^lens-skipped .* reason=depth$' <<<"$out")" "6"
+  check "A8: and still skips the other lenses for the depth" "$(grep -c '^lens-skipped .* reason=depth$' <<<"$out")" "3"
   LENS_SCRIPT="$copy/scripts/lens-route" lr docs/dforge/plans/p8f.md --final "$base" "$head"
-  check "A8: full is unchanged without a matching security lens" "$(grep -c '^lens ' <<<"$out")" "4"
+  check "A8: full is unchanged without a matching security lens" "$(grep -c '^lens ' <<<"$out")" "3"
 }
 
 a10() {

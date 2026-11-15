@@ -194,7 +194,7 @@ add_file() { # add_file <path> <content>
 # criteria, seat and reason=<why applied> fields, as one ;-joined string.
 lines() {
   tr -d '\r' <<<"$1" | grep -E '^lens(-skipped)? ' \
-    | sed -E 's/ criteria=[^ ]*//; s/ seat=[^ ]*//; s/ reason=(always|added|ui-paths|paths:[^ ]*)$//' | tr '\n' ';'
+    | sed -E 's/ criteria=[^ ]*//; s/ parts=[^ ]*//; s/ seat=[^ ]*//; s/ reason=(always|added|ui-paths|paths:[^ ]*)$//' | tr '\n' ';'
 }
 printed() { tr -d '\r' <<<"$1" | grep -c '^lens '; }
 route() { bash "$ROUTE" "$@" 2>&1; }
@@ -207,16 +207,16 @@ add_file README.md 'Docs.'
 H6=$(git rev-parse HEAD)
 
 out=$(route standard-plan.md --final "$BASE" "$H6")
-check "A6: standard depth, default cap: three lenses, the rest skipped for the cap" "$(lines "$out")" \
-  "lens security;lens silent-failures;lens test-quality;lens-skipped lang-bash reason=cap;lens-skipped docs-comments reason=cap;"
+check "A6: standard depth, default cap: three lenses and code-quality" "$(lines "$out")" \
+  "lens security;lens silent-failures;lens test-quality;lens code-quality;"
 
 # A10 on the same change set.
 out=$(route light-plan.md --final "$BASE" "$H6")
 check "A10: light depth: security only, every other applicable lens skipped for depth" "$(lines "$out")" \
-  "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped lang-bash reason=depth;lens-skipped docs-comments reason=depth;"
+  "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped code-quality reason=depth;"
 out=$(route full-plan.md --final "$BASE" "$H6")
-check "A10: full depth, cap 4: four lenses, the rest skipped for the cap" "$(lines "$out")" \
-  "lens security;lens silent-failures;lens test-quality;lens lang-bash;lens-skipped docs-comments reason=cap;"
+check "A10: full depth, cap 5: four lenses apply, none skipped" "$(lines "$out")" \
+  "lens security;lens silent-failures;lens test-quality;lens code-quality;"
 
 # A7: no path matches test-quality's clause; five other lenses apply.
 new_repo "$TMP/a7" ; cd "$TMP/a7" || exit 1
@@ -225,8 +225,8 @@ add_file src/b.ts 'run() ?? fallback()'
 add_file NOTES.md 'Notes.'
 H7=$(git rev-parse HEAD)
 out=$(route standard-plan.md --final "$BASE" "$H7")
-[ "$(printed "$out")" -le 2 ] && r=yes || r=no
-check "A7: at most two lens lines when no test path changed" "$r" "yes"
+[ "$(printed "$out")" -le 3 ] && r=yes || r=no
+check "A7: at most three lens lines when no test path changed" "$r" "yes"
 has "A7: the route ran and printed its lens lines" "$(lines "$out")" "lens security;"
 lacks "A7: test-quality is not routed" "$(lines "$out")" "lens test-quality"
 
@@ -252,7 +252,7 @@ H9=$(git rev-parse HEAD)
 out=$(bash "$TMP/plug/scripts/lens-route" standard-plan.md --final "$BASE" "$H9" 2>&1)
 has "A9: without security, silent-failures prints" "$(lines "$out")" "lens silent-failures;"
 has "A9: without security, test-quality prints" "$(lines "$out")" "lens test-quality;"
-has "A9: without security, lang-bash prints" "$(lines "$out")" "lens lang-bash;"
+has "A9: without security, code-quality prints" "$(lines "$out")" "lens code-quality;"
 lacks "A9: the narrowed security lens does not print" "$(lines "$out")" "lens security;"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
