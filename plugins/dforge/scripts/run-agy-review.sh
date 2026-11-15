@@ -109,6 +109,16 @@ if [[ "$gate_line" != *" usable=true "* ]]; then
   exit 1
 fi
 
+# git_state's rev-parse --path-format needs 2.31; older git would fail every run as a bare error.
+git_found=$(git --version | sed -n 's/^git version //p')
+git_version=$(sed -n 's/^\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' <<<"$git_found")
+if [ -z "$git_version" ] || [ "${git_version%%.*}" -lt 2 ] ||
+  { [ "${git_version%%.*}" -eq 2 ] && [ "${git_version#*.}" -lt 31 ]; }; then
+  status none none FAILED 0 git
+  printf 'run-agy-review: git 2.31 or later is required (found %s)\n' "${git_found:-unknown}" >&2
+  exit 1
+fi
+
 if [ "$tier" = light ]; then
   model="$back_model"; effort="$back_effort"
 else

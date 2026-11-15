@@ -160,6 +160,14 @@ for empty in '""' '" \n "' null; do
   check "a final review of $empty leaves no list" "$([ -e "$TMP/out.json" ] && echo list || echo none)" "none"
 done
 
+mkdir -p "$TMP/oldgit"
+printf '#!/usr/bin/env bash\n[ "$1" = --version ] && { echo "git version 2.30.0"; exit 0; }\nexec "%s" "$@"\n' "$(command -v git)" > "$TMP/oldgit/git"
+chmod +x "$TMP/oldgit/git"
+PATH="$TMP/oldgit:$PATH" STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+has "a git older than 2.31 fails before agy runs" "$out" "status=FAILED exit=0 out=$TMP/out.json evidence=none reason=git"
+has "a git older than 2.31 names the version" "$(cat "$TMP/err")" "git 2.31 or later is required (found 2.30.0)"
+check "a git older than 2.31 exits 1" "$rc" "1"
+
 run --kind task
 check "a task review without --prompt is a usage error" "$rc" "2"
 
