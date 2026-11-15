@@ -204,5 +204,37 @@ check "no session record: exit 3" "$(cd "$REPO" && bash "$INFLIGHT" >/dev/null; 
 check "no session record: next-step still prints" \
   "$(cd "$REPO" && bash "$NEXT" docs/superpowers/plans/2026-10-10-example.md 2>/dev/null | grep -c '## Next session')" "1"
 
+# --- launch roles from config/services.json (C3, C4) ---
+. "$HERE/../scripts/lib/in-flight.sh"
+FIX="$HERE/fixtures/service-commands.json"
+n_fix=$(jq length < "$FIX" | tr -d '\r')
+for ((i = 0; i < n_fix; i++)); do
+  # Read each command whole: @tsv would turn `make\nnpm run dev`'s newline into a backslash pair.
+  cmd=$(jq -r --argjson i "$i" '.[$i].command' < "$FIX" | tr -d '\r')
+  role=$(jq -r --argjson i "$i" '.[$i].role' < "$FIX" | tr -d '\r')
+  check "role of $(printf '%q' "$cmd")" "$(inflight_role "$cmd")" "$role"
+done
+
+bash_use() { # bash_use <tool_use_id> <description> <command>
+  fjq -nc --arg id "$1" --arg d "$2" --arg c "$3" '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:$id,name:"Bash",input:{description:$d,command:$c,run_in_background:true}}]}}' >> "$TP"
+}
+: > "$TP"
+bash_use toolu_dev 'Dev server' 'npm run dev'
+result toolu_dev 'Command running in background with ID: d1. Output is being written to: /tmp/d1.output.'
+bash_use toolu_t 'QA timer' 'sleep 1200'
+result toolu_t 'Command running in background with ID: t1. Output is being written to: /tmp/t1.output.'
+bash_use toolu_w 'Run the suite' 'npm test'
+result toolu_w 'Command running in background with ID: w1. Output is being written to: /tmp/w1.output.'
+check "scan: the sixth field is the role" "$(inflight_scan "$TP" | cut -f2,6 | tr '\n' ' ')" "d1	service t1	timer w1	work "
+
+SD="$HOME/.claude/dforge/sessions/state"; mkdir -p "$SD" "$HOME/.claude/dforge/sessions/turns"
+touch -d '-60 seconds' "$HOME/.claude/dforge/sessions/turns/$SID"
+jq -nc --arg s "$SID" --argjson u "$(( $(date +%s) * 1000 ))" \
+  '{session:$s, updated:$u, window:null, model:null, partial:false, launches:[{id:"z9", kind:"agent", what:"Review", command:"", startedAt:$u, outputFile:"", service:false, timer:false}]}' > "$SD/$SID.json"
+check "list: a fresh session file is the source" "$(inflight_source "$SID") $(inflight_list "$TP" "" "$SID" | cut -f2)" "session file z9"
+jq -c '.partial = true' < "$SD/$SID.json" > "$SD/x" && mv "$SD/x" "$SD/$SID.json"
+check "list: a partial file falls back to the transcript" "$(inflight_source "$SID") $(inflight_list "$TP" "" "$SID" | cut -f2 | tr '\n' ' ')" "transcript d1 t1 w1 "
+rm -f "$SD/$SID.json"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
