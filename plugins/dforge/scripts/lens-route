@@ -39,8 +39,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 LENSES="$(cd "$HERE/../criteria/lenses" 2>/dev/null && pwd)"
 SEAT=dforge:judge-sonnet-high
 # The code-quality lens's parts: lens files --final groups into one seat and
-# never routes on their own. --task still names them by id.
-PARTS="lang-bash lang-csharp lang-python lang-typescript type-design docs-comments"
+# never routes on their own, every lang-* lens sorted, then type-design and
+# docs-comments. --task still names them by id.
+PARTS="$(for f in "$LENSES"/lang-*.md; do [ -e "$f" ] && basename "$f" .md; done | LC_ALL=C sort | tr '\n' ' ')type-design docs-comments"
 
 die() { printf 'lens-route: %s\n' "$1" >&2; exit 2; }
 usage() { die "usage: lens-route PLAN_FILE --final BASE HEAD | --task ID"; }

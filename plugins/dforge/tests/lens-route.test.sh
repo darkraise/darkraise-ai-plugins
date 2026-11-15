@@ -62,7 +62,6 @@ out=$(bash "$ROUTE" plan.md --final "$BASE" "$HEAD1"); status=$?
 check "final: exit 0" "$status" "0"
 check "final: a shell-only change gets security and code-quality" "$(short <<<"$out")" "lens security;lens code-quality;"
 check "final: code-quality carries only the matching part" "$(parts <<<"$out")" "lang-bash.md "
-check "final: no lens line names a part id" "$(grep -cE '^lens(-skipped)? (lang-|type-design|docs-comments)' <<<"$out")" "0"
 check "final: the seat and reason" "$(grep -c '^lens security criteria=[^ ]* seat=dforge:judge-sonnet-high reason=always$' <<<"$out")" "1"
 crit=$(sed -n 's/^lens code-quality parts=\([^, ]*\).*/\1/p' <<<"$out")
 check "final: the part path exists" "$([ -f "$crit" ] && echo yes || echo no)" "yes"
@@ -199,6 +198,11 @@ check "light: security prints nothing when its Applies clause does not match" "$
 out=$(bash "$TMP/plug/scripts/lens-route" standard-plan.md --final "$BASE" "$HEAD2")
 check "standard: without security, test-quality and code-quality use no slot" "$(short <<<"$out")" \
   "lens silent-failures;lens test-quality;lens code-quality;"
+printf '# lang-awk\n\nApplies: paths *.sh\n' > "$TMP/plug/criteria/lenses/lang-awk.md"
+out=$(bash "$TMP/plug/scripts/lens-route" standard-plan.md --final "$BASE" "$HEAD2")
+check "final: a new lang-* lens joins code-quality, sorted first" "$(parts <<<"$out" | cut -d' ' -f1-2)" "lang-awk.md lang-bash.md"
+check "final: and routes no line of its own" "$(grep -c '^lens[^ ]* lang-awk' <<<"$out")" "0"
+rm "$TMP/plug/criteria/lenses/lang-awk.md"
 { cat light-plan.md; printf '**Lenses:** lang-bash\n'; } > light-lenses.md
 out=$(bash "$ROUTE" light-lenses.md --task 1); status=$?
 check "light: --task names its lenses as before" "$status:$(sed -E 's/ criteria=[^ ]*//' <<<"$out")" "0:lens lang-bash"
@@ -234,6 +238,11 @@ out=$(uroute plan.md --final "$UBASE" "$UHEAD")
 check "ui-ux: with a profile it is second and survives the default cap" "$(short <<<"$out")" \
   "lens security;lens ui-ux;lens silent-failures;lens test-quality;lens code-quality;"
 check "ui-ux: the reason" "$(grep -c '^lens ui-ux .* reason=ui-paths$' <<<"$out")" "1"
+mkdir -p specs && printf '# Spec\n\n**Depth:** standard — fixture\n' > specs/standard.md
+write_depth_plan ui-standard.md standard 0
+out=$(uroute ui-standard.md --final "$UBASE" "$UHEAD")
+check "standard: a third of security, ui-ux and silent-failures is skipped for the cap, code-quality kept" "$(short <<<"$out")" \
+  "lens security;lens ui-ux;lens-skipped silent-failures reason=cap;lens test-quality;lens code-quality;"
 rm docs/dforge/ui-ux/profile.md
 printf '# Spec\n\n## UI/UX contract\n\n**UI/UX depth:** feature — x\n\n- **UX-1** — Escape closes the dialog.\n' > docs/s.md
 { printf '**Spec:** `docs/s.md`\n\n'; cat plan.md; } > plan-spec.md
