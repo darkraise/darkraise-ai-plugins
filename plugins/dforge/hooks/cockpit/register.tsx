@@ -202,7 +202,7 @@ function stallPrompt(root: string): string {
   return `The auto run stalled: the last turn ended without its sentinel line. Run \`bash "${root}/scripts/auto-run" status\`, continue the phase it names, and end the turn as reference/auto-run.md §Ending a turn says.`
 }
 function reconcilePrompt(root: string): string {
-  return `Background work has run 20 minutes since the last turn with no notification. Run \`bash "${root}/scripts/in-flight"\`. Stop with TaskStop each launch idle 30 minutes or more, and record a \`Ruling:\` line naming the task it served and that its result is void; leave the others running. Then continue the run, and end the turn again if only waiting remains.`
+  return `Background work has run 20 minutes since the last turn with no notification. Run \`bash "${root}/scripts/in-flight"\`. Stop with TaskStop each launch idle 30 minutes or more, and record a \`Ruling:\` line naming the task it served and that its result is void; leave the others running. Never stop a bare \`sleep\` timer: it bounds a dispatch. Then continue the run, and end the turn again if only waiting remains.`
 }
 function keepWarmPrompt(): string {
   return 'Keep-warm: background work is still running and the prompt cache is about to expire. Reply with the single line `Still waiting.` and end the turn. Start nothing and call no tool.'
@@ -3149,7 +3149,9 @@ async function keepWarm($: EngineInterface) {
 
 async function backgroundKey($: EngineInterface): Promise<string> {
   const agents = (await read($, spawns)).filter(one => !one.isDone).map(one => `a:${one.agentId}`)
-  const commands = (await read($, shells)).filter(one => (one.agentId ?? null) === null && !isServiceCommand(one.command)).map(one => `s:${one.id}`)
+  const commands = (await read($, shells))
+    .filter(one => (one.agentId ?? null) === null && !isServiceCommand(one.command) && !isTimerCommand(one.command))
+    .map(one => `s:${one.id}`)
   return [...agents, ...commands].sort().join(',')
 }
 
@@ -3164,8 +3166,12 @@ async function reconcileBackground($: EngineInterface, auto: CockpitAutoRun) {
   const stamp = await $.clock.now()
   const last = Math.max(S.watchedSince ?? 0, now.endedAt ?? 0, S.reconciledAt ?? 0)
   if (stamp - last <= RECONCILE_MS) return
+  // A timer or a service alone is no launch to reconcile: a timer ends on its
+  // own, and a service runs until stopped.
+  const key = await backgroundKey($)
+  if (key === '') return
   const stage = WATCHED_STAGES[auto.pending ?? '']
-  const step = reconcileStep(S.reconcileSeen, `${auto.pending ?? ''}|${await backgroundKey($)}`, stage !== undefined, RECONCILE_CAP)
+  const step = reconcileStep(S.reconcileSeen, `${auto.pending ?? ''}|${key}`, stage !== undefined, RECONCILE_CAP)
   S.reconciledAt = stamp
   S.reconcileSeen = step.seen
   if (step.action === 'fail' && stage !== undefined) {

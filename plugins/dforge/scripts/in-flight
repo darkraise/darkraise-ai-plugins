@@ -45,4 +45,7 @@ listed while work it started runs; stop it the same way, which clears it. If a
 stopped launch's result is not in hand, record a Ruling line in the ledger for
 the task it served. Then run this again.
 EOF
+if [ "$(awk -F '\t' '$6 == "timer"' <<<"$running")" != "" ]; then
+  echo 'A launch marked (timer) is a bare sleep that bounds a dispatch: leave it running.'
+fi
 exit 1

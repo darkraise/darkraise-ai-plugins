@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve, sep } from 'node:path';
 import test from 'node:test';
 
@@ -205,4 +205,15 @@ test('the settings schema is valid, and broken schemas are caught', async () => 
   assert.match(await broken(flag("unit: 'k'")), /schema b: unit must be one of k, %, s, min, on a number/);
   assert.match(await broken(flag("zero: 'off'")), /schema b: zero must be one of auto, off, any, hidden, unset, on a number/);
   assert.equal(await broken(entry('floor: 5')), '');
+});
+
+test('the cockpit\'s module mirrors of dforge JSON files match them', async () => {
+  const sources = ['plugins/dforge/config/services.json', 'plugins/dforge/tests/fixtures/service-commands.json'];
+  const regenerate = `node -e "const fs = require('node:fs'); for (const file of process.argv.slice(1)) fs.writeFileSync(file.slice(0, -5) + '.mjs', '// Generated from ' + file.split('/').pop() + ': edit that file, then run the command in tests/repository-layout.test.mjs.\\nexport default ' + JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')), null, 2) + '\\n')" ${sources.join(' ')}`;
+  for (const rel of sources) {
+    const mirror = rel.slice(0, -'.json'.length) + '.mjs';
+    assert.ok(existsSync(resolve(root, mirror)), `${mirror} is missing; from the repository root run: ${regenerate}`);
+    const { default: value } = await import(pathToFileURL(resolve(root, mirror)).href);
+    assert.deepEqual(value, json(rel), `${mirror} differs from ${rel}; from the repository root run: ${regenerate}`);
+  }
 });

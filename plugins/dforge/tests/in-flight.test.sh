@@ -236,5 +236,21 @@ jq -c '.partial = true' < "$SD/$SID.json" > "$SD/x" && mv "$SD/x" "$SD/$SID.json
 check "list: a partial file falls back to the transcript" "$(inflight_source "$SID") $(inflight_list "$TP" "" "$SID" | cut -f2 | tr '\n' ' ')" "transcript d1 t1 w1 "
 rm -f "$SD/$SID.json"
 
+# --- the idle report leaves a bare sleep timer running (row 37) ---
+# The "no transcript" part above removed the session record; in-flight needs it.
+jq -n --arg tp "$TP" '{session_id:"s-flight",transcript_path:$tp}' > "$HOME/.claude/dforge/sessions/by-id/$SID.json"
+TIMER_LINE='A launch marked (timer) is a bare sleep that bounds a dispatch: leave it running.'
+: > "$TP"
+bash_use toolu_t 'QA timer' 'sleep 1200'
+result toolu_t 'Command running in background with ID: t1. Output is being written to: /tmp/t1.output.'
+out=$(bash "$INFLIGHT")
+check "a timer is listed as a timer" "$(grep -c '^- shell t1 .* QA timer (timer)$' <<<"$out")" "1"
+check "the report says to leave a timer running" "$(grep -cxF "$TIMER_LINE" <<<"$out")" "1"
+: > "$TP"
+bash_use toolu_w 'Run the suite' 'npm test'
+result toolu_w 'Command running in background with ID: w1. Output is being written to: /tmp/w1.output.'
+out=$(bash "$INFLIGHT")
+check "no timer, no timer line" "$(grep -cxF "$TIMER_LINE" <<<"$out")" "0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

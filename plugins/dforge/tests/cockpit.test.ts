@@ -39,6 +39,7 @@ import {
   hasUnresolvedRows,
   isAtLeast,
   isServiceCommand,
+  isTimerCommand,
   reconcileStep,
   levelOf,
   limitForecast,
@@ -104,6 +105,7 @@ import {
 import { nativeLine, nativeRun } from '../hooks/cockpit/native'
 import { drawSettings } from '../hooks/cockpit/settings-view'
 import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
+import SERVICE_COMMANDS from './fixtures/service-commands.mjs'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -3336,10 +3338,11 @@ describe('now row', () => {
   })
 
   test('tells a service from a job that ends', () => {
-    for (const command of ['npm run dev', 'pnpm dev', 'yarn start', 'npm run dev:api', 'vite --port 3000', 'npx next dev', 'python3 -m http.server 8000', 'docker compose up', 'tail -f app.log', 'jest --watch', 'jest --watchAll', 'cargo watch -x run', 'cd web && npm run dev', 'PORT=3000 npm start'])
-      expect(isServiceCommand(command)).toBe(true)
-    for (const command of ['npm test', 'npm run build', 'vite build', 'vitest', 'docker compose up -d', 'npm run start:build', 'node codex-companion.mjs review', 'echo "npm run dev"', 'make\nnpm run dev'])
-      expect(isServiceCommand(command)).toBe(false)
+    expect(SERVICE_COMMANDS.length).toBeGreaterThan(25)
+    for (const { command, role } of SERVICE_COMMANDS) {
+      expect([command, isServiceCommand(command)]).toEqual([command, role === 'service'])
+      expect([command, isTimerCommand(command)]).toEqual([command, role === 'timer'])
+    }
   })
 
   test('follows a turn from start to end, and its tool calls', async ($, on) => {
@@ -6264,7 +6267,7 @@ describe('auto run', () => {
     })
 
   const RECONCILE_PROMPT =
-    /^Background work has run 20 minutes since the last turn with no notification\. Run `bash "[^"]*\/scripts\/in-flight"`\. Stop with TaskStop each launch idle 30 minutes or more, and record a `Ruling:` line naming the task it served and that its result is void; leave the others running\. Then continue the run, and end the turn again if only waiting remains\.$/
+    /^Background work has run 20 minutes since the last turn with no notification\. Run `bash "[^"]*\/scripts\/in-flight"`\. Stop with TaskStop each launch idle 30 minutes or more, and record a `Ruling:` line naming the task it served and that its result is void; leave the others running\. Never stop a bare `sleep` timer: it bounds a dispatch\. Then continue the run, and end the turn again if only waiting remains\.$/
 
   test('compacts on the sentinel, books it and submits the continue prompt', async ($, on) => {
     const files = autoFiles()
@@ -7144,6 +7147,19 @@ describe('auto run', () => {
     await $.turn.complete({ answer: 'Done.', durationMs: 1, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-1' })
     await clock.advance(60_000)
     expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toHaveLength(1)
+  })
+
+  test('a bare sleep timer alone never draws a reconcile prompt', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const bash = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'qa1' }, text: 'Running in the background' }) }
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: bash }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'sleep 3600', run_in_background: true } as never)
+    await $.turn.complete({ answer: 'Waiting for QA.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(2_600_000)
+    expect(w.prompts?.filter(text => /^Background work has run/.test(text))).toEqual([])
   })
 
   for (const holder of ['agent', 'shell'] as const) {

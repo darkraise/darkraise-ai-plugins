@@ -1,3 +1,4 @@
+import SHARED from '../../config/services.mjs'
 import type { CockpitAutoRun, CockpitFinish, CockpitRoots } from '../../types'
 
 // Pure helpers, kept apart from the hooks so tests can reach them directly.
@@ -1214,17 +1215,11 @@ export function denseLine(section: Section, input: DenseInput): Run[] | null {
 }
 
 // Commands that start something meant to run until stopped: a dev server, a
-// watcher, a followed log.
-const SERVICES = [
-  /^(npm|pnpm|yarn|bun)( run)? (dev|start|serve|preview|watch)(:(?!build\b)|\s|$)/,
-  /^((npx|bunx|pnpm exec) )?(vite(?! build)(\s|$)|next (dev|start)|nuxt dev|astro dev|webpack serve|ng serve|nodemon)/,
-  /^python3? -m http\.server/,
-  /^(uvicorn|flask run|rails (s|server))(\s|$)/,
-  /^docker(-| )compose up(?!.*\s(-d|--detach)(\s|$))/,
-  /^tail -[fF](\s|$)/,
-  /^cargo watch(\s|$)/,
-  /\s--watch(All)?(=|\s|$)/,
-]
+// watcher, a followed log. config/services.json holds the list the scripts
+// share (scripts/lib/in-flight.sh); edit it there.
+const SERVICES = SHARED.services.map(pattern => new RegExp(pattern))
+// A bare sleep: a timer that bounds a dispatch and ends on its own.
+const TIMER = new RegExp(SHARED.timer)
 
 /** Whether a background command, by its first line, starts a service that never ends on its own. */
 export function isServiceCommand(command: string): boolean {
@@ -1237,7 +1232,7 @@ export function isServiceCommand(command: string): boolean {
 
 /** Whether a background command, by its first line, is a bare `sleep`: a timer that ends on its own. */
 export function isTimerCommand(command: string): boolean {
-  return /^sleep\s+[0-9]+(\.[0-9]+)?[smhd]?$/.test(command.split('\n')[0]!.trim())
+  return TIMER.test(command.split('\n')[0]!.trim())
 }
 
 /** Whether a release (`2.1.295`) is at least `least`, compared part by part; an unreadable one is not. */
