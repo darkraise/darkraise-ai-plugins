@@ -1859,6 +1859,19 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: /codexLane in ~\/\.dforge\/config\.json is not a dforge setting; remove it with dforge-config unset codexLane/ })).toBeDefined()
   })
 
+  test('a settings file that does not parse is a problem and silences Discord', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const files: NonNullable<World['files']> = { [CONFIG]: { text: '{"layout": "full",}', mtimeMs: 1 } }
+    world(on, { ...SIGNED_IN, files, fetches, env: { HOME: '/home/me', DFORGE_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /1 setting problem/ })).toBeDefined()
+    await $.turn.complete({ answer: 'done', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(fetches).toHaveLength(0)
+  })
+
   test('a rows whose setting has no effect under the values in force is locked', async ($, on) => {
     world(on, { tokens: 284_000, config: { handoffMode: 'relaxed', handoffTokens: 300_000, layout: 'compact' } })
     await $.session.start(START)

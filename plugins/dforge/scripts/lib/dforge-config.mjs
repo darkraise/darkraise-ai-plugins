@@ -228,10 +228,31 @@ export function resolve(env = process.env, warn = message => process.stderr.writ
   return values;
 }
 
+// The settings problem line, in place of the settings line, when the file
+// exists and does not parse to a JSON object; null otherwise. A file that
+// cannot be read at all is left to readFile, which says why.
+function brokenFileLine(file) {
+  let text;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  try {
+    const data = JSON.parse(text);
+    if (data && typeof data === "object" && !Array.isArray(data)) return null;
+  } catch {
+    // Not JSON: the problem line below.
+  }
+  return `dforge: ${file} is not a JSON object; every setting reads its default and notifyOn reads none until it parses`;
+}
+
 // One line naming the skill-enforced keys that differ from their defaults, for
 // the session-start hook and the skills; empty when every one is at its default.
 // Codex runs autoRun=on as off, so a key that autoRun makes inert stays in force there.
 export function workflowLine(env = process.env, host = "claude") {
+  const broken = brokenFileLine(configPath(env));
+  if (broken) return broken;
   const values = resolve(env, () => {});
   const inert = (spec) => spec.inertWhen && !(host === "codex" && spec.inertWhen.key === "autoRun")
     && values[spec.inertWhen.key] === spec.inertWhen.value;
