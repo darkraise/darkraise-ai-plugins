@@ -424,9 +424,9 @@ a9() {
   local home
   for mode in with-codex-home without; do
     if [ "$mode" = with-codex-home ]; then
-      jrun OPENAI_API_KEY=vendor-openai ANTHROPIC_API_KEY=vendor-anthropic "CODEX_HOME=$TMP/user-codex" STUB_JUDGE_ANTHROPIC=fail STUB_JUDGE_OPENAI=fail
+      jrun OPENAI_API_KEY=vendor-openai ANTHROPIC_API_KEY=vendor-anthropic ANTHROPIC_AUTH_TOKEN=vendor-auth-token CLAUDE_CODE_OAUTH_TOKEN=vendor-oauth-token "CODEX_HOME=$TMP/user-codex" STUB_JUDGE_ANTHROPIC=fail STUB_JUDGE_OPENAI=fail
     else
-      jrun OPENAI_API_KEY=vendor-openai ANTHROPIC_API_KEY=vendor-anthropic STUB_JUDGE_ANTHROPIC=fail STUB_JUDGE_OPENAI=fail
+      jrun OPENAI_API_KEY=vendor-openai ANTHROPIC_API_KEY=vendor-anthropic ANTHROPIC_AUTH_TOKEN=vendor-auth-token CLAUDE_CODE_OAUTH_TOKEN=vendor-oauth-token STUB_JUDGE_ANTHROPIC=fail STUB_JUDGE_OPENAI=fail
     fi
     check "fixture ($mode): all three judge children ran" "$(started)" "3"
     check "A9 ($mode): no child holds a DFORGE_*_API_KEY variable" "$(grep -cE ' DFORGE_[A-Z_]*_API_KEY ' "$ENVLOG" || true)" "0"
