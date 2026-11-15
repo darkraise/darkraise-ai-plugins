@@ -390,6 +390,25 @@ check "a hold count that cannot be written: the run stops" "$(jq -r .active "$ST
 check "a hold count that cannot be written: one hold asks for the attended ending" "$(jq -r .reason <<<"$out" | grep -c '§Stopping')" "1"
 
 # --- progress kept in darkmem: the mirror's ledgers are the ones read ---
+# --- a running service does not pass a plain stop (row 12) ---
+SVC="$TMP/service.jsonl"
+jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"toolu_dev",name:"Bash",input:{description:"Dev server",command:"npm run dev",run_in_background:true}}]}}' > "$SVC"
+jq -nc '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_dev",content:"Command running in background with ID: d1. Output is being written to: /tmp/d1.output."}]}}' >> "$SVC"
+sleep 1; prompt s-svc
+write_ledger 'Task 1: complete (commits a..b, review clean)'
+check "a service alone: a mid-plan summary stop is held" "$(decision "$(stop s-svc 'Task 1 is done.' false "$SVC")")" "block"
+check "a service alone: the next-step block passes" "$(stop s-svc $'## Next session\n\n**Status:** x' false "$SVC")" ""
+
+# --- a clean line older than the code is not current (row 3) ---
+h7=$(git -C "$REPO" rev-parse --short HEAD)
+printf 'x\n' > "$REPO/code.txt"
+git -C "$REPO" add code.txt && git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -qm "fix: later"
+sleep 1; prompt s-stale
+write_ledger "Final review: clean (commits 0000000..$h7)"
+out=$(stop s-stale 'All done.')
+check "a stale clean line: held" "$(decision "$out")" "block"
+check "a stale clean line: not sent to the finishing menu" "$(jq -r .reason <<<"$out" | grep -c 'passed its final review')" "0"
+
 . "$HERE/fixtures/darkmem-stores.sh"
 M=$(stores_home "$HOME" "$REPO" proj local darkmem)
 mkdir -p "$M/work/sdd/2026-10-10-mirror" "$REPO/.dforge/sdd/2026-10-10-mirror"

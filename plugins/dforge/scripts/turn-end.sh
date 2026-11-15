@@ -11,7 +11,9 @@
 # bound to the session) passes silently, and so
 # does a plain stop while an agent or command this session started in the
 # background is still running: the controller is waiting on it, and its
-# notification starts the next turn. The reverse is held once: a next-step
+# notification starts the next turn. A running service (a dev server, a
+# watcher) is no such wait: it never ends on its own, so it neither passes a
+# plain stop nor holds a session-ending one. The reverse is held once: a next-step
 # block or finishing menu printed over running work would invite the human to
 # end a session whose work is still in flight.
 # A plan's hold also stands down while a task notification is still queued: its
@@ -52,6 +54,7 @@ auto_pending=$(cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --
 [ -f "$stamp" ] || [ -n "$auto_pending" ] || exit 0
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 . "${SCRIPT_DIR}/lib/roots.sh"
+. "${SCRIPT_DIR}/lib/plan.sh"
 # In a subshell, so a malformed config costs only this check, never the hook.
 sdd=$(dforge_ledger_root "$root") || sdd=""
 [ -d "$sdd" ] || [ -n "$auto_pending" ] || exit 0
@@ -88,7 +91,9 @@ while IFS= read -r candidate; do
   # plan's workspace is always local: a ledger without one here is another
   # session's.
   [ -d "$ws/$(basename "$(dirname "$candidate")")" ] || continue
-  if grep -q '^Final review: clean' "$candidate"; then
+  # Only a clean line that still covers HEAD sends the session to finishing; a
+  # stale or rewritten one is a plan advanced without its next step.
+  if [ "$(plan_final_review_state "$candidate" "$root")" = current ]; then
     ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" \
               'Must fix before completing' 'Worktree removal refused' && continue
     ledger=$candidate clean=1
@@ -115,8 +120,10 @@ if command -v cygpath >/dev/null 2>&1; then root_shown=$(cygpath -m "$PLUGIN_ROO
 # no finished notification yet, or an agent that reported but left work of its
 # own running.
 since=$(inflight_since "$session_id")
-running=$(inflight_scan "$transcript_path" "$since") \
+running=$(inflight_list "$transcript_path" "$since" "$session_id") \
   || running="(unknown: the transcript could not be scanned; check your background shells and agents by hand)"
+# Services never end, so only work and timers are waited on.
+running=$(awk -F '\t' '$6 != "service"' <<<"$running")
 pending=$(grep -c . <<<"$running" || true)
 has_pending_background() { [ "$pending" -gt 0 ]; }
 
