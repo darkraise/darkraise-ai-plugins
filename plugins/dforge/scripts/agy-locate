@@ -8,7 +8,7 @@
 #
 # Usage: agy-locate
 # Output: agy-locate ok version=<v> root=<directory of the agy executable>
-#         agy-locate off reason=<plugin-not-installed|no-timeout-command|plugin-version:<v>>
+#         agy-locate off reason=<plugin-not-installed|no-timeout-command|version-timeout|plugin-version:<v>>
 # Exit: 0 ok; 1 off; 2 usage error or missing jq.
 set -uo pipefail
 
@@ -29,7 +29,9 @@ agy=$(command -v agy 2>/dev/null) || off plugin-not-installed
 [ -n "$agy" ] || off plugin-not-installed
 
 dforge_timeout || off no-timeout-command
-version=$("$DFORGE_TIMEOUT" 20 "$agy" --version 2>/dev/null | head -n 1 | tr -d '\r')
+out=$("$DFORGE_TIMEOUT" 20 "$agy" --version 2>/dev/null); status=$?
+[ "$status" -ne 124 ] || off version-timeout
+version=$(head -n 1 <<<"$out" | tr -d '\r')
 [ -n "$version" ] || off plugin-not-installed
 
 # jq reads on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /d/...
