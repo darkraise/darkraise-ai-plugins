@@ -3683,6 +3683,11 @@ async function engineSettings($: EngineInterface): Promise<string> {
  */
 async function readSession($: EngineInterface, isStart: boolean) {
   const id = await $.session.id().catch(() => null)
+  // These caches outlive a /clear or /resume, and the values they stand for do
+  // not: read again, or the resume offer and the roots note stay unwritten.
+  S.roots = { key: '', value: null }
+  S.offerRead = ''
+  S.offerRegisters = null
   await $.command.register({
     name: 'cockpit',
     description: 'Show context, usage, subagents, the plan and the repo in a pane',

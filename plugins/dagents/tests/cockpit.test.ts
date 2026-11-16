@@ -4742,6 +4742,25 @@ describe('resume offer', () => {
     expect(resumeOfferOf(`${FINISHED}\n## Notes\n\nPaste as the first prompt:\n\n\`\`\`\nold\n\`\`\`\n`)).toBeNull()
   })
 
+  for (const reason of ['clear', 'resume'] as const) {
+    test(`offers the handoff again in the session a ${reason} carries the process into`, async ($, on) => {
+      const wipe = wipesState(on)
+      const files: World['files'] = { [LATEST]: { text: RESUMABLE, mtimeMs: 900_000 } }
+      const w: World = { ...SIGNED_IN, files }
+      const clock = world(on, w)
+      on('session.end', (_$, e) => e as never)
+      signedIn(on, files)
+      await $.session.start(START)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ key: 'resume-card' })).toBeDefined()
+      await $.session.end({ reason, sessionId: 'sess-1', resume: { id: 'sess-1' } })
+      wipe()
+      w.sessionId = 'sess-2'
+      await clock.advance(2_000)
+      expect(await ui.find({ key: 'resume-card' })).toBeDefined()
+    })
+  }
+
   test('draws a resume card at the top of the pane', async ($, on) => {
     await start($, on, RESUMABLE)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
