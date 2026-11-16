@@ -6649,6 +6649,17 @@ describe('auto run', () => {
     expect(written['/home/me/.claude/dagents/sessions/cockpit/sess-1']).toBe('1060\n')
   })
 
+  test('reads again, at a slow poll tick, a session read whose step failed at the start', async ($, on) => {
+    const w: World = { ...SIGNED_IN, isUsageFailing: true }
+    const clock = world(on, w)
+    signedIn(on, {})
+    await $.session.start(START)
+    w.isUsageFailing = false
+    await clock.advance(12_000)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /284k of 650k ┃ handoff 465k/ })).toBeDefined()
+  })
+
   test("a main compaction clears the turn readings, a subagent's does not", async ($, on) => {
     const sets: unknown[] = []
     on('state.set', { plugin: 'dagents', key: 'turnTokens' } as never, ((_$: unknown, e: { value: unknown }, next: (e: unknown) => unknown) => {
