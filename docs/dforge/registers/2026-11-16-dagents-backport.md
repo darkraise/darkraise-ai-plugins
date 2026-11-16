@@ -41,42 +41,42 @@
 | 34 | 0c58f7f docs(dforge): run the final panel in a worktree | - | - | n/a | docs-only: runs dforge 5's final reviewer panel in a worktree (external-review.md, final-review.md) |
 | 35 | 62799cd fix(dforge): catch hook mode and config reorders | - | - | n/a | 5-only |
 | 36 | e48eeaf fix(dforge): stop on a shared git state write | - | - | n/a | 5-only |
-| 37 | 0786918 test(dforge): match the A18 release line anywhere | - | - | open | - |
-| 38 | a109465 fix(dforge): run tools when a pane read fails | - | - | open | - |
-| 39 | 2470dcd docs(dforge): use neutral gates in the template | - | - | open | - |
-| 40 | 094b6d9 refactor(dforge): drop orphan approach criteria | - | - | open | - |
-| 41 | b10487c docs(dforge): make helper commands runnable | - | - | open | - |
-| 42 | 777c30b chore(dforge): drop depth_name and a dead fixture | - | - | open | - |
-| 43 | fe1cf47 fix(dforge): read a finding on a path with a space | - | - | open | - |
-| 44 | a5a366a fix(dforge): match lens paths on non-ASCII names | - | - | open | - |
-| 45 | 65e912d fix(dforge): keep a BLOCKED decision's own dashes | - | - | open | - |
-| 46 | 859596e perf(dforge): scan the transcript only for a hold | - | - | open | - |
-| 47 | 9e1511e perf(dforge): start no node without darkmem | - | - | open | - |
-| 48 | b3a641b fix(dforge): offer Resume again after /clear | - | - | open | - |
-| 49 | 533ab53 perf(dforge): pace the pane's git reads | - | - | open | - |
-| 50 | 1c95820 fix(dforge): skip the gauge for an unknown window | - | - | open | - |
-| 51 | 90ceee5 refactor(dforge): drop the unused isPing export | - | - | open | - |
-| 52 | ee1705c fix(dforge): keep a Claude budget line off Codex rollouts | - | - | open | - |
-| 53 | 19a1527 fix(dforge): accept gtimeout and gate on a missing timeout | - | - | open | - |
-| 54 | 74f54ff fix(dforge): drop a killed base run's worktree | - | - | open | - |
-| 55 | f9256ee fix(dforge): mask the webhook in a failed send's reason | - | - | open | - |
-| 56 | 2d3577e fix(dforge): drop the notify url verb | - | - | open | - |
-| 57 | 942711c fix(dforge): cancel approval waits when a session ends | - | - | open | - |
-| 58 | dbc1d44 fix(dforge): end a spawn TaskStop stopped by name | - | - | open | - |
-| 59 | 71baa5f fix(dforge): keep Discord sends off the hook budget | - | - | open | - |
-| 60 | 77e4127 docs(dforge): fix migrate script name and tested range | - | - | open | - |
-| 61 | 99bbab2 test(dforge): drop two tests that cannot hold in CI | - | - | open | - |
-| 62 | e46cd66 test(dforge): drop absence checks that cannot fail | - | - | open | - |
-| 63 | aaf3140 refactor(dforge): move the live prompt templates out of the SDD skill | - | - | open | - |
-| 64 | 864ffe4 perf(dforge): skip darkmem push in the task loop when off | - | - | open | - |
-| 65 | 5516b26 docs(dforge): move baseline compare to final-review | - | - | open | - |
-| 66 | 53e1807 refactor(dforge): remove parallel waves | - | - | open | - |
-| 67 | 3a69a43 refactor(dforge): remove group review and hold | - | - | open | - |
-| 68 | 4d5e4d0 refactor(dforge): retire subagent execution mode | - | - | open | - |
-| 69 | 7950420 refactor(evals): remove the tier eval harness | - | - | open | - |
-| 70 | 2da644a refactor(dforge): drop dispatch and fix-wave routing | - | - | open | - |
-| 71 | f198d4a refactor(dforge): remove 15 implementer agents | - | - | open | - |
-| 72 | 15a7a6b refactor(dforge): stop requiring Implementer lines | - | - | open | - |
+| 37 | 0786918 test(dforge): match the A18 release line anywhere | - | - | n/a | test-only: reviewer-only-externals.acceptance.test.sh is a dforge 5 suite |
+| 38 | a109465 fix(dforge): run tools when a pane read fails | - | - | done | port d298556; fail@parent pass@port |
+| 39 | 2470dcd docs(dforge): use neutral gates in the template | - | - | done | port 6b4e525; text-only plugins/dagents/skills/running-gates/references/gates-template.md |
+| 40 | 094b6d9 refactor(dforge): drop orphan approach criteria | - | - | done | port 05c9ab5; text-only plugins/dagents/skills/selecting-approaches/SKILL.md |
+| 41 | b10487c docs(dforge): make helper commands runnable | - | - | done | port a1799b7; text-only plugins/dagents/skills/writing-skills/SKILL.md |
+| 42 | 777c30b chore(dforge): drop depth_name and a dead fixture | - | - | n/a | feature: removes the unused depth_name in lib/depth.sh and an unused fixture; no behaviour changes |
+| 43 | fe1cf47 fix(dforge): read a finding on a path with a space | - | - | done | port c1b5260; fail@parent pass@port |
+| 44 | a5a366a fix(dforge): match lens paths on non-ASCII names | - | - | done | port 11f7e2e; fail@parent pass@port |
+| 45 | 65e912d fix(dforge): keep a BLOCKED decision's own dashes | - | - | done | port a1c364c; fail@parent pass@port |
+| 46 | 859596e perf(dforge): scan the transcript only for a hold | - | - | n/a | feature: perf change to turn-end.sh's transcript scan |
+| 47 | 9e1511e perf(dforge): start no node without darkmem | - | - | n/a | feature: perf change resolving local stores in lib/roots.sh without node |
+| 48 | b3a641b fix(dforge): offer Resume again after /clear | - | - | done | port dd460dd; fail@parent pass@port |
+| 49 | 533ab53 perf(dforge): pace the pane's git reads | - | - | n/a | feature: perf change pacing the cockpit's git reads in register.tsx |
+| 50 | 1c95820 fix(dforge): skip the gauge for an unknown window | - | - | done | port 532af27; fail@parent pass@port |
+| 51 | 90ceee5 refactor(dforge): drop the unused isPing export | - | - | n/a | feature: removes the unused isPing export from hooks/cockpit/notify.ts |
+| 52 | ee1705c fix(dforge): keep a Claude budget line off Codex rollouts | - | - | done | port 7c71c53; fail@parent pass@port |
+| 53 | 19a1527 fix(dforge): accept gtimeout and gate on a missing timeout | - | - | done | port eac7231; fail@parent pass@port |
+| 54 | 74f54ff fix(dforge): drop a killed base run's worktree | - | - | done | port bf87d5a; fail@parent pass@port |
+| 55 | f9256ee fix(dforge): mask the webhook in a failed send's reason | - | - | done | port e680b58; fail@parent pass@port |
+| 56 | 2d3577e fix(dforge): drop the notify url verb | - | - | done | port da23299; fail@parent pass@port |
+| 57 | 942711c fix(dforge): cancel approval waits when a session ends | - | - | done | port be8219e; fail@parent pass@port |
+| 58 | dbc1d44 fix(dforge): end a spawn TaskStop stopped by name | - | - | done | port aa27456; fail@parent pass@port |
+| 59 | 71baa5f fix(dforge): keep Discord sends off the hook budget | - | - | done | port 335b25c; fail@parent pass@port |
+| 60 | 77e4127 docs(dforge): fix migrate script name and tested range | - | - | done | port 3e101db; text-only plugins/dagents/README.md |
+| 61 | 99bbab2 test(dforge): drop two tests that cannot hold in CI | - | - | n/a | test-only: drops reviewer-only-externals' A18 and review-depth-qa's pre-spec comparisons; dagents' review-depth-qa looks for plugins/dagents in an archive of plugins/dforge, so those comparisons always skip |
+| 62 | e46cd66 test(dforge): drop absence checks that cannot fail | - | - | n/a | test-only: removes absence checks in plan-lint and acceptance suites that cannot fail; dagents' copies pass and guard nothing less |
+| 63 | aaf3140 refactor(dforge): move the live prompt templates out of the SDD skill | - | - | n/a | feature: moves the live prompt templates from the subagent-driven-development skill to reference/prompts, a dforge 5 restructure |
+| 64 | 864ffe4 perf(dforge): skip darkmem push in the task loop when off | - | - | n/a | feature: perf change skipping darkmem-sync push in executing-plans when darkmem is off |
+| 65 | 5516b26 docs(dforge): move baseline compare to final-review | - | - | n/a | docs-only: moves the baseline comparison out of parallel-waves.md, which dagents keeps and final-review.md still cites |
+| 66 | 53e1807 refactor(dforge): remove parallel waves | - | - | n/a | feature: removes parallel waves (wave, plan-lint wave checks), which dagents keeps |
+| 67 | 3a69a43 refactor(dforge): remove group review and hold | - | - | n/a | feature: removes group review and hold from task-step and next-step, which dagents keeps |
+| 68 | 4d5e4d0 refactor(dforge): retire subagent execution mode | - | - | n/a | feature: retires subagent execution mode, which dagents keeps |
+| 69 | 7950420 refactor(evals): remove the tier eval harness | - | - | n/a | test-only: removes the tier eval harness checks from the speed-and-cost acceptance suites |
+| 70 | 2da644a refactor(dforge): drop dispatch and fix-wave routing | - | - | n/a | feature: drops dispatch and fix-wave routing from review-route and task-step, which dagents keeps |
+| 71 | f198d4a refactor(dforge): remove 15 implementer agents | - | - | n/a | feature: removes the 15 implementer agents, which dagents keeps |
+| 72 | 15a7a6b refactor(dforge): stop requiring Implementer lines | - | - | n/a | feature: stops plan-lint requiring Implementer lines, which dagents' assignment still needs |
 | 73 | eced2ee docs(dforge): describe the single-agent fleet | - | - | open | - |
 | 74 | 9a214ac refactor(dforge): reduce the ladder to the floor table | - | - | open | - |
 | 75 | 76c672f test(dforge): drop retired agent names from fixtures | - | - | open | - |
