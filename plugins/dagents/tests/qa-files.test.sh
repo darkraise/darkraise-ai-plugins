@@ -69,6 +69,17 @@ check "clean: a listed path dirty before QA keeps its content" "$(cat pre-listed
 check "clean: a listed path dirty before QA is named as left, never removed" \
   "$(grep -c -e '^qa-files: left pre-listed.txt$' -e '^qa-files: left kept.txt$' <<<"$out"):$(grep -c '^qa-files: removed ' <<<"$out")" "2:0"
 
+# A restore git refuses is named with git's own reason.
+git checkout -q -- kept.txt; rm -f pre-listed.txt
+bash "$QA" begin "$WS"
+printf 'kept.txt\n' >> "$WS/qa-touched.txt"; printf 'qa\n' >> kept.txt
+: > .git/index.lock
+out=$(bash "$QA" clean "$WS" 2>"$TMP/qa-err")
+rm -f .git/index.lock
+check "clean: a refused restore names git's reason and leaves the path" \
+  "$(grep -c '^qa-files: could not undo kept.txt: .*index.lock' "$TMP/qa-err"):$(grep -c '^qa-files: left kept.txt$' <<<"$out")" "1:1"
+git checkout -q -- kept.txt
+
 bash "$QA" begin "$WS"
 check "a re-dispatch starts with an empty manifest" "$(wc -c < "$WS/qa-touched.txt" | tr -d ' ')" "0"
 rm -f "$WS/qa-touched.txt"; printf 'z\n' > z.txt
