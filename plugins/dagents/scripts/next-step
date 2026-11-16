@@ -9,11 +9,17 @@
 # here rather than remembered by the model: small executors reliably forget to
 # say it, and a hand-written handoff goes stale the moment work moves on.
 #
-# Usage: next-step [--host claude|codex] [--complete] PLAN_FILE
+# Usage: next-step [--host claude|codex] [--complete|--kept] PLAN_FILE
 #        next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION
 #        next-step [--host claude|codex] --adhoc --phase design|build --next ACTION
 #   --complete  the plan is finished and its branch integrated; the ledger may
 #               already be deleted. Replaces latest.md wholesale.
+#   --kept      finishing kept the plan's branch as-is: integration is still
+#               pending, so the block names the branch, its worktree and the
+#               finish choices still open, and reads no register or roadmap.
+#               Replaces latest.md wholesale.
+#   --complete, --kept and --adhoc delete the primary checkout's no-plan
+#   finish record (.dagents/sdd/finish.json) once the block is printed.
 #   --draft     a design phase (brainstorming, a spec, a plan being written) is
 #               handing off; DRAFT_FILE is the authority and ACTION names the
 #               next step and its skill.
@@ -38,7 +44,7 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--host claude|codex] [--complete] PLAN_FILE | next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] --adhoc --phase design|build --next ACTION"; }
+usage() { fail 2 "usage: next-step [--host claude|codex] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] --adhoc --phase design|build --next ACTION"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
@@ -164,9 +170,10 @@ execution_skill() { # execution_skill EXECUTION_LINE
   fi
 }
 
-complete=0 draft=0 adhoc=0 phase="" next_action=""
+complete=0 kept=0 draft=0 adhoc=0 phase="" next_action=""
 case "${1:-}" in
   --complete) complete=1; shift ;;
+  --kept) kept=1; shift ;;
   --draft)
     draft=1; shift
     { [ $# -eq 3 ] && [ "$2" = "--next" ] && [ -n "$3" ]; } || usage
@@ -244,7 +251,7 @@ else
   done_tasks=""
   blocked_tasks=""
   has_ledger=0
-  if [ "$complete" -eq 0 ] && [ -f "$ledger_file" ]; then
+  if [ "$complete" -eq 0 ] && [ "$kept" -eq 0 ] && [ -f "$ledger_file" ]; then
     ledger_text=$(tr -d '\r' < "$ledger_file")
     # The identity line may carry the path as given on the command line: relative
     # to the checkout, absolute, or in Windows form. Compare resolved paths.
@@ -278,7 +285,13 @@ else
     fi
   fi
 
-  if [ "$complete" -eq 1 ]; then
+  if [ "$kept" -eq 1 ]; then
+    branch=$(git -C "$root" branch --show-current 2>/dev/null | tr -d '\r')
+    [ -n "$branch" ] || branch="detached HEAD $(git -C "$root" rev-parse --short HEAD 2>/dev/null | tr -d '\r')"
+    status_line="Plan \`$rel\`: its branch \`$branch\` is kept unintegrated."
+    next_line="The branch \`$branch\` in \`$root\` still waits for integration; run dagents:finishing-a-development-branch when you choose merge, pr or discard."
+    prompt="Finish \`$rel\` with dagents:finishing-a-development-branch: the branch $branch in $root is kept unintegrated."
+  elif [ "$complete" -eq 1 ]; then
     spec=$(sed -E 's/^\*\*Program:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$program")
     k=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $2}' || true)
     n=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $4}' || true)
@@ -607,6 +620,12 @@ block=$(
 )
 printf '%s\n' "$block"
 
+# The no-plan finish record has done its job once finishing has an outcome;
+# left behind, the next unplanned finish would act on it without asking.
+if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ "$adhoc" -eq 1 ]; then
+  rm -f "$(dagents_dir state "$primary")/sdd/finish.json"
+fi
+
 handoff=$(dagents_latest_file)
 today=$(date -u +%Y-%m-%d)
 # Read, merged and replaced under the handoff's lock, so a concurrent writer's
@@ -615,7 +634,7 @@ write_handoff() {
   local tmp status=0
   case $handoff in */.dagents/handoff/latest.md) dagents_state_ignore "${handoff%/.dagents/handoff/latest.md}" ;; esac
   tmp=$(mktemp) || return 1
-  if [ "$complete" -eq 1 ] || [ ! -f "$handoff" ]; then
+  if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ ! -f "$handoff" ]; then
     printf '# Handoff — %s\n\n%s\n' "$today" "$block" > "$tmp" || status=1
   else
     # Replace only the Next session section; the rest is the session's own notes.

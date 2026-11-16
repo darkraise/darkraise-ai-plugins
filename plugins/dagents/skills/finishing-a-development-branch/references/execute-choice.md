@@ -69,11 +69,11 @@ On a plan with an `**Early CI:**` line, delete the remote branch after the local
 
 ### Option 2: Push and Create PR
 
-Write the plan's review record before Step 5b's commit (The review record,
-below) and commit it with the index line.
-
-First record the plan in the completed index (Step 5b) and commit it on the
-branch, so the line travels with the PR. Then:
+With local documents, write the plan's review record before Step 5b's commit
+(The review record, below) and commit it with the index line: first record the
+plan in the completed index (Step 5b) and commit it on the branch, so the line
+travels with the PR. While documents live in darkmem, write none of Step 5b's
+records yet. Then:
 
 ```bash
 git push -u origin <feature-branch>
@@ -85,6 +85,12 @@ Then create the pull/merge request against <base-branch> with the code host's
 tooling — its CLI if one is available, or the creation URL most forges
 print when you push — following the repo's PR template and conventions if
 present, and report the URL to your human partner.
+
+While documents live in darkmem, only once `git push` and the PR creation
+have both succeeded, write Step 5b's records (the index line, the register
+rows, the roadmap settle and the review record) and sync them with
+`bash <plugin-root>/scripts/darkmem-sync push`. When either failed, write none
+of them and say so: the plan is not completed.
 
 Keep the worktree — your human partner iterates on PR feedback there.
 

@@ -285,12 +285,9 @@ never add a second line for it.
 | Path | When | Which form |
 |---|---|---|
 | Option 1, merge locally | On the base branch, as its own commit, after Step 5's merged-result verification passes | the `merged into` form |
-| Option 2, push and PR | On the branch, before the push | the `via PR` form |
+| Option 2, push and PR | On the branch, before the push; darkmem documents: after the PR exists (execute-choice.md) | the `via PR` form |
 | Option 3, keep as-is | Never | — |
 | Confirmed discard | Never | — |
-
-Option 3 and a confirmed discard write nothing. Step 6 runs for a discard, which
-is exactly why this write is bound to the outcome and not to Step 6.
 
 The SHA on an Option 1 line is the base branch head after the merge, not the
 merge commit's own hash — a commit cannot contain its own hash, and the merge
@@ -359,7 +356,8 @@ Read [cleanup.md](references/cleanup.md) before you remove the worktree.
 gone, so nothing follows from it.
 
 If this work came from a plan file, run `scripts/next-step --complete PLAN_FILE`
-(see using-dagents §Session Budget), with the
+(see using-dagents §Session Budget; after Option 3, `--kept`: the branch is not
+integrated), with the
 working directory inside the repository — after Option 1 that is the main
 repo root. It prints a `## Next session` block naming what follows the plan:
 the next program sub-project or roadmap epic with its launch command and
