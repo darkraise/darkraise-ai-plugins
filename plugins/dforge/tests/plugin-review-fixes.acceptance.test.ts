@@ -609,3 +609,231 @@ describe('plugin-review-fixes: the judge write guard', () => {
     expect((await write($, 'judge-1', NEXT)).deny).toBeUndefined()
   })
 })
+
+const WEBHOOK = 'https://discord.com/api/webhooks/123456789012/abcDEF_token-x'
+const LATEST = '/home/me/code/shop/.dforge/handoff/latest.md'
+const REGISTER = '/home/me/code/shop/docs/dforge/registers/r.md'
+const registerOf = (states: string[]) =>
+  ['# Register', '', '**Source:** test', '**Covers:** -', '', '| # | Item | Assigned | Acceptance | State | Note |', '|---|---|---|---|---|---|', ...states.map((state, i) => `| ${i + 1} | item ${i + 1} | - | - | ${state} | - |`), ''].join('\n')
+const rulingHandoffOf = (registerName: string) =>
+  [
+    '# Handoff',
+    '',
+    '## Next session',
+    '',
+    '**Status:** Plan `docs/dforge/plans/x.md` is complete.',
+    `**Next:** Register rows still open (1) in \`${registerName}\`: #2 item 2.`,
+    '',
+    'Paste as the first prompt:',
+    '',
+    '```',
+    `Continue the work recorded in \`${registerName}\`: 1 rows are open (#2 item 2). Rule on the open rows with dforge:brainstorming.`,
+    '```',
+    '',
+  ].join('\n')
+
+describe('plugin-review-fixes: ledger states, notifications and the run card', () => {
+  const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n\n### Task 3: Ship it\n'
+  const LEDGER = [
+    '# SDD ledger — plan: docs/plans/p.md',
+    'Task 1: implementer inline (assigned; base abc1234)',
+    'Task 1: complete (commits a..b, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none',
+    'Task 2: implementer inline (assigned; base def5678)',
+  ].join('\n')
+  const LEDGER_FILE = '/home/me/code/shop/.dforge/sdd/p/progress.md'
+  const runFiles = (ledger: string): NonNullable<World['files']> => ({
+    [LEDGER_FILE]: { text: ledger, mtimeMs: 2_000_000 },
+    '/home/me/code/shop/docs/plans/p.md': { text: PLAN },
+  })
+  const titles = (fetches: NonNullable<World['fetches']>) => fetches.map(f => String((f.body.embeds as Record<string, unknown>[])[0]?.title))
+
+  test('A37: parseLedger reads a waiting line with its question and a deferred completion as deferred', () => {
+    const ledger = parseLedger([LEDGER, 'Task 2: waiting — which colour should the card be?', 'Task 3: implementer inline (assigned; base 1234567)', 'Task 3: complete (deferred by the auto run) — done: nothing; verified: none; remaining: all; discovered: none; assumptions: none'].join('\n'))
+    const byN = Object.fromEntries(ledger.tasks.map(task => [task.n, task]))
+    expect(byN[2]?.state).toBe('waiting')
+    expect(byN[2]?.question).toBe('which colour should the card be?')
+    expect(byN[3]?.state).toBe('deferred')
+    expect(byN[1]?.state).toBe('complete')
+  })
+
+  test('A37: a deferred task sends no completion event', async ($, on) => {
+    const files = { ...runFiles(LEDGER), ...configured({ notifyOn: 'task,question' }) }
+    const fetches: NonNullable<World['fetches']> = []
+    world(on, { ...SIGNED_IN, files, fetches })
+    signedIn(on, files)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.session.start(START)
+    files[LEDGER_FILE]!.text += '\nTask 3: implementer inline (assigned; base 1234567)\nTask 3: complete (deferred by the auto run) — done: nothing; verified: none; remaining: all; discovered: none; assumptions: none'
+    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
+    await $.turn.complete({ answer: 'Moving on.', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(titles(fetches).filter(t => /Task 3/.test(t) && /✅|complete/i.test(t))).toEqual([])
+    expect(titles(fetches).filter(t => /Task 3/.test(t))).toHaveLength(1)
+  })
+
+  test('A38: a main turn ending on a ledger waiting line sends one question notification', async ($, on) => {
+    const files = runFiles(LEDGER)
+    const fetches: NonNullable<World['fetches']> = []
+    world(on, { ...SIGNED_IN, files, fetches })
+    signedIn(on, files)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.session.start(START)
+    files[LEDGER_FILE]!.text += '\nTask 2: waiting — which meter width?'
+    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
+    await $.turn.complete({ answer: 'I need a decision on the meter.', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    const sent = titles(fetches)
+    expect(sent.filter(t => /❓/.test(t))).toHaveLength(1)
+    expect(sent.filter(t => /Done/.test(t))).toEqual([])
+  })
+
+  test('A38: a main turn ending on Which option? sends a question, not a done', async ($, on) => {
+    const fetches: NonNullable<World['fetches']> = []
+    world(on, { ...SIGNED_IN, fetches })
+    signedIn(on, {})
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.session.start(START)
+    await $.turn.complete({ answer: '1. Merge\n2. Open a PR\n\nWhich option?', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(titles(fetches)).toEqual(['❓ Claude is asking'])
+  })
+
+  test('A39: the Run card shows the plan this session last named in a task-brief call, though another ledger changed later', async ($, on) => {
+    const files: NonNullable<World['files']> = {
+      ...runFiles(LEDGER),
+      '/home/me/code/shop/.dforge/sdd/q/progress.md': { text: '# SDD ledger — plan: docs/plans/q.md\nTask 1: complete (commits a..b, review clean) — done: x', mtimeMs: 3_000_000 },
+      '/home/me/code/shop/docs/plans/q.md': { text: '# Plan\n\n### Task 1: Other plan task\n' },
+    }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'bash /p/scripts/task-brief --open docs/plans/p.md 2' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Other plan task/ })).toBeUndefined()
+  })
+})
+
+describe('plugin-review-fixes: resume offer, model switch snapshot and session changes', () => {
+  test('A40: under documentStore=darkmem the resume offer clears once every row of its register is resolved', async ($, on) => {
+    const MIRROR = '/home/me/.dforge/mirror/shop'
+    const MODE = [`documents\tdarkmem\t${MIRROR}/dforge`, 'progress\tlocal\t/home/me/code/shop/.dforge/sdd\t/home/me/code/shop/.dforge/handoff/latest.md', 'project\tshop', ''].join('\n')
+    const STORED = `${MIRROR}/dforge/registers/r.md`
+    const files: NonNullable<World['files']> = {
+      '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 },
+      [LATEST]: { text: rulingHandoffOf('docs/dforge/registers/r.md'), mtimeMs: 900_000 },
+      [STORED]: { text: registerOf(['done', 'open']), mtimeMs: 1 },
+    }
+    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
+    signedIn(on, files)
+    await $.session.start(START)
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ key: 'band-resume' })).toBeDefined()
+    files[STORED] = { text: registerOf(['done', 'done']), mtimeMs: 2 }
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+  })
+
+  describe('A41: a cockpit that crashed after /model and before the restore', () => {
+    const SNAP = '/home/me/.claude/dforge/sessions/saved-defaults/sess-2.json'
+    const BEAT = '/home/me/.claude/dforge/sessions/cockpit/sess-2'
+    // The first cockpit: a switch that clears, sets the launch model sonnet and then cannot restore the person's settings.
+    const crashed = async ($: Parameters<TestBody>[0], on: On) => {
+      const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+      const written: Record<string, string> = {}
+      const w: World = { ...SIGNED_IN, written, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]', effortLevel: 'max' }, isDforgeConfigRefusing: true, autoFile: files[AUTO] }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await settle(clock)
+      return written[SNAP]
+    }
+    // The next session, in a fresh process: the snapshot is all that is left of the first.
+    const next = async ($: Parameters<TestBody>[0], on: On, snapshot: string, model: string, beat?: string) => {
+      const files: NonNullable<World['files']> = { [SNAP]: { text: snapshot }, ...(beat === undefined ? {} : { [BEAT]: { text: beat } }) }
+      const w: World = { ...SIGNED_IN, sessionId: 'sess-9', runs: [], toasts: [], files, userSettings: { model } }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await settle(clock)
+      return w
+    }
+    const restores = (w: World) => (w.runs ?? []).filter(run => run.includes(' claude-restore '))
+    const crashedSnapshot = { value: '' }
+
+    test('the crashed cockpit leaves its snapshot, naming the person\'s model', async ($, on) => {
+      crashedSnapshot.value = (await crashed($, on)) ?? ''
+      expect(crashedSnapshot.value).not.toBe('')
+      expect(crashedSnapshot.value).toContain('opus[1m]')
+    })
+    test('the next session start restores the person\'s model when the launch model is still the default', async ($, on) => {
+      const snap = crashedSnapshot.value
+      expect(snap).not.toBe('')
+      const w = await next($, on, snap, 'sonnet')
+      expect(restores(w).length).toBe(1)
+      expect(w.userSettings).toMatchObject({ model: 'opus[1m]' })
+    })
+    test('a snapshot whose launch model is no longer the default is not restored', async ($, on) => {
+      const snap = crashedSnapshot.value
+      expect(snap).not.toBe('')
+      const w = await next($, on, snap, 'haiku')
+      expect(restores(w)).toEqual([])
+      expect(w.userSettings).toMatchObject({ model: 'haiku' })
+    })
+    test('a snapshot whose session is still alive is not restored', async ($, on) => {
+      const snap = crashedSnapshot.value
+      expect(snap).not.toBe('')
+      const w = await next($, on, snap, 'sonnet', '990\n')
+      expect(restores(w)).toEqual([])
+    })
+  })
+
+  test('A42: a main compaction clears turnTokens and a subagent compaction does not', async ($, on) => {
+    const sets: unknown[] = []
+    on('state.set', { plugin: 'dforge', key: 'turnTokens' } as never, ((_$: unknown, e: { value: unknown }, next: (e: unknown) => unknown) => {
+      sets.push(e.value)
+      return next(e)
+    }) as never)
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    const before = sets.length
+    await $.session.compact({ trigger: 'auto', messages: [SUMMARY], agentId: 'agent-1' } as never)
+    expect(sets).toHaveLength(before)
+    await $.session.compact({ trigger: 'manual', messages: [SUMMARY] })
+    expect(sets.slice(before)).toEqual([[]])
+  })
+
+  test('A42: keep-warm and reconcile counters start afresh when the session id changes', async ($, on) => {
+    const MIN = 60_000
+    const KEEP_WARM = 'Keep-warm: background work is still running and the prompt cache is about to expire. Reply with the single line `Still waiting.` and end the turn. Start nothing and call no tool.'
+    const w: World = { tokens: 50_000, prompts: [], config: { keepWarm: 4 }, tools: bg('b1') }
+    const clock = world(on, w)
+    on('session.end', (_$, e) => e as never)
+    const sent = () => (w.prompts ?? []).filter(one => one === KEEP_WARM).length
+    await $.session.start(START)
+    await $.turn.start({ text: 'run it', turnId: 't1' })
+    await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true } as never)
+    await $.turn.complete({ answer: 'Started it.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    for (let i = 1; i <= 8; i++) {
+      await clock.advance(5 * MIN)
+      if (sent() === i) {
+        await $.turn.start({ text: KEEP_WARM, turnId: `k${i}` })
+        await clock.advance(2_000)
+        await $.turn.complete({ answer: 'Still waiting.', durationMs: 2_000, isAborted: false, turnId: `k${i}`, reason: 'answer' })
+      }
+    }
+    const capped = sent()
+    expect(capped).toBeGreaterThan(0)
+    await clock.advance(10 * MIN)
+    expect(sent()).toBe(capped)
+    await $.session.end({ reason: 'resume', sessionId: 'sess-1', resume: { id: 'sess-1' } })
+    w.sessionId = 'sess-2'
+    await clock.advance(2_000)
+    await clock.advance(5 * MIN)
+    expect(sent()).toBeGreaterThan(capped)
+  })
+})
