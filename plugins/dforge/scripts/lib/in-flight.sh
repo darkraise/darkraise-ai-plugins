@@ -138,7 +138,12 @@ inflight_scan() {
     [ "$kind" = shell ] && cmds+=("$cmd")
   done <<<"$running"
   roles=""
-  [ "${#cmds[@]}" -eq 0 ] || roles=$(MSYS_NO_PATHCONV=1 jq -r "$_INFLIGHT_ROLE"' $ARGS.positional[] | role($cfg)' --args "${cmds[@]}" < "$_INFLIGHT_SERVICES" 2>/dev/null | tr -d '\r') || roles=""
+  # `--` keeps a command that opens with a dash a positional argument.
+  if [ "${#cmds[@]}" -gt 0 ] && ! roles=$(MSYS_NO_PATHCONV=1 jq -r "$_INFLIGHT_ROLE"' $ARGS.positional[] | role($cfg)' --args -- "${cmds[@]}" < "$_INFLIGHT_SERVICES" 2>/dev/null); then
+    roles=""
+    echo "in-flight: could not tell services and timers from work (jq failed on $_INFLIGHT_SERVICES); every shell counts as work" >&2
+  fi
+  roles=${roles//$'\r'/}
   local -a role_of=()
   [ -z "$roles" ] || mapfile -t role_of <<<"$roles"
   local n=0 role
@@ -163,7 +168,11 @@ _INFLIGHT_ROLE='. as $cfg | def role($cfg): (split("\n")[0] // "") as $line
 # inflight_role COMMAND: service, timer or work.
 inflight_role() {
   local role
-  role=$(MSYS_NO_PATHCONV=1 jq -r --arg c "$1" "$_INFLIGHT_ROLE"' $c | role($cfg)' < "$_INFLIGHT_SERVICES" 2>/dev/null | tr -d '\r') || role=""
+  if ! role=$(MSYS_NO_PATHCONV=1 jq -r --arg c "$1" "$_INFLIGHT_ROLE"' $c | role($cfg)' < "$_INFLIGHT_SERVICES" 2>/dev/null); then
+    role=""
+    echo "in-flight: could not tell services and timers from work (jq failed on $_INFLIGHT_SERVICES); the command counts as work" >&2
+  fi
+  role=${role//$'\r'/}
   printf '%s\n' "${role:-work}"
 }
 

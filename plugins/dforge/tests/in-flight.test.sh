@@ -229,6 +229,13 @@ result toolu_t 'Command running in background with ID: t1. Output is being writt
 bash_use toolu_w 'Run the suite' 'npm test'
 result toolu_w 'Command running in background with ID: w1. Output is being written to: /tmp/w1.output.'
 check "scan: the sixth field is the role" "$(inflight_scan "$TP" | cut -f2,6 | tr '\n' ' ')" "d1	service t1	timer w1	work "
+cp "$TP" "$TP.keep"
+bash_use toolu_o 'Odd launch' '--arg x'
+result toolu_o 'Command running in background with ID: o1. Output is being written to: /tmp/o1.output.'
+check "scan: a command opening with a dash is a command, not a jq option" "$(inflight_scan "$TP" 2>/dev/null | cut -f2,6 | tr '\n' ' ')" "d1	service t1	timer w1	work o1	work "
+check "scan: a classification jq cannot run is said on stderr" \
+  "$(_INFLIGHT_SERVICES="$TMP/no-services.json" inflight_scan "$TP" 2>&1 >/dev/null | grep -c 'every shell counts as work')" "1"
+mv "$TP.keep" "$TP"
 
 SD="$HOME/.claude/dforge/sessions/state"; mkdir -p "$SD" "$HOME/.claude/dforge/sessions/turns"
 touch -d '-60 seconds' "$HOME/.claude/dforge/sessions/turns/$SID"
