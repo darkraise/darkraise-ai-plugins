@@ -56,7 +56,8 @@ itself.
    `~/.claude/plugins/store/dr-forge_darkraise-*.json` (under
    `$CLAUDE_CONFIG_DIR` when set), as `notifyUrl` and `notifyMention`, and
    dagents does not read that file. Once copied, they set them in a dagents
-   session with `/cockpit notify url <url>` and `/cockpit notify mention <id>`.
+   session: the webhook in `/cockpit settings` (or `DAGENTS_NOTIFY_URL`), the
+   mention with `/cockpit notify mention <id>`.
    Then remind your human partner to uninstall
    `dr-forge@darkraise` and `dr-superpowers@darkraise` when either is
    installed (`claude plugin uninstall <name>`, or `codex plugin remove

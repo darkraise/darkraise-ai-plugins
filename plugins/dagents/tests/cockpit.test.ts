@@ -2355,7 +2355,7 @@ describe('/cockpit', () => {
     const opened: string[] = []
     world(on, { tokens: 284_000, opened })
     const answer = await $.command.run({ ...COCKPIT, args: 'bogus' })
-    expect(answer.text).toBe('Unknown argument "bogus". Usage: /cockpit [settings | notify test | notify url <url> | notify mention <id>]')
+    expect(answer.text).toBe('Unknown argument "bogus". Usage: /cockpit [settings | notify test | notify mention <id>]')
     expect(opened).toEqual([])
   })
 })
@@ -4087,15 +4087,21 @@ describe('discord', () => {
     expect(fetches[0]?.url).toBe(`${WEBHOOK}?wait=true`)
   })
 
-  test('/cockpit notify sets, tests and refuses', async ($, on) => {
+  test('/cockpit notify tests the webhook', async ($, on) => {
     const fetches: World['fetches'] = []
-    world(on, { tokens: 50_000, fetches })
+    world(on, { tokens: 50_000, fetches, env: { DAGENTS_NOTIFY_URL: WEBHOOK } })
     mock.store(on, {})
     await $.session.start(START)
-    expect((await $.command.run({ ...COCKPIT, args: 'notify url https://example.com/x' })).text).toBe('not a Discord webhook URL')
-    expect((await $.command.run({ ...COCKPIT, args: `notify url ${WEBHOOK}` })).text).toBe('Discord webhook saved.')
     expect((await $.command.run({ ...COCKPIT, args: 'notify test' })).text).toBe('Test message sent to Discord.')
     expect(fetches).toHaveLength(1)
+  })
+
+  test('/cockpit notify takes no webhook on the command line, which the transcript keeps', async ($, on) => {
+    world(on, { tokens: 50_000 })
+    mock.store(on, {})
+    await $.session.start(START)
+    await $.command.run({ ...COCKPIT, args: `notify url ${WEBHOOK}` })
+    expect((await $.command.run({ ...COCKPIT, args: 'notify' })).text).toBe('No Discord webhook is set. Set one in /cockpit settings (Notifications) in a terminal, or with DAGENTS_NOTIFY_URL.')
   })
 
   test('a failed send reports its reason with the webhook masked', async ($, on) => {

@@ -913,8 +913,8 @@ the next response, and re-arms the note.
 **Discord notifications.** The mod can post to a Discord channel when the
 session needs you, which works the same over ssh and tmux. Create a webhook
 (channel settings → Integrations → Webhooks → copy URL) and paste it in the
-settings view's **Notifications** group, or run `/cockpit notify url <url>`.
-It is kept in the plugin's own store, not in `settings.json`, and only ever
+settings view's **Notifications** group (a typed slash command would keep the
+token in the transcript, so there is none for it). It is kept in the plugin's own store, not in `settings.json`, and only ever
 shows masked; `DAGENTS_NOTIFY_URL` in the environment wins over it (`DAGENTS_COCKPIT_NOTIFY_URL` still read). **Send
 test** (or `/cockpit notify test`) posts a sample. Set your Discord user id
 (**Mention**, or `/cockpit notify mention <id>`) to be pinged for the events
@@ -1071,8 +1071,9 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
    The cockpit's Discord webhook and mention stay in dr-forge's plugin store,
    `~/.claude/plugins/store/dr-forge_darkraise-*.json` (under
    `$CLAUDE_CONFIG_DIR` when set), as `notifyUrl` and `notifyMention`. Copy
-   them before you uninstall, then set them in a dagents session with
-   `/cockpit notify url <url>` and `/cockpit notify mention <id>`.
+   them before you uninstall, then set them in a dagents session: the webhook
+   in `/cockpit settings` (or `DAGENTS_NOTIFY_URL`), the mention with
+   `/cockpit notify mention <id>`.
 
        /plugin install dagents@darkraise
        /plugin uninstall dr-forge@darkraise
