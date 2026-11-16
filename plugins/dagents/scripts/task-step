@@ -109,12 +109,29 @@ suite_failing_lines() {
 }
 
 # suite_fail_set LOG CODE: the failing lines of a failed run's log, one per
-# line, or "command exit CODE" when the log holds none, so a base and a head
-# that both fail without a recognised test line still compare equal.
+# line, or "command exit CODE (unnamed <epoch>-<pid>)" when the log holds none.
+# A failure no test line names cannot be shown to be the same failure at the
+# base and the head, so the marker makes the two lines differ: an unnamed head
+# failure is never excused by an unnamed base failure. Each call runs in its
+# own $(…) subshell, whose $BASHPID differs.
 suite_fail_set() {
   local lines
   lines=$(suite_failing_lines "$1" || true)
-  if [ -n "$lines" ]; then printf '%s\n' "$lines"; else printf 'command exit %s\n' "$2"; fi
+  if [ -n "$lines" ]; then printf '%s\n' "$lines"
+  else printf 'command exit %s (unnamed %s-%s)\n' "$2" "$(date +%s)" "$BASHPID"; fi
+}
+
+# header_command TEXT: the command a header value names, as task-brief's
+# check_command reads it: its first `…` code span, so a trailing note is never
+# run; "none" for a value that begins with none; the trimmed value when it has
+# no span.
+header_command() {
+  local v
+  v=$(printf '%s' "$1" | sed -E 's/^[[:blank:]]+//; s/[[:blank:]]+$//')
+  if [[ $v == none* ]]; then printf 'none'
+  elif [[ $v =~ \`([^\`]+)\` ]]; then printf '%s' "${BASH_REMATCH[1]}"
+  else printf '%s' "$v"
+  fi
 }
 
 # suite_unfinished CODE: succeeds for an exit that says the run was cut short
@@ -173,7 +190,7 @@ run_at_base() {
   local sha=$1 cmd=$2 out=$3 secs=${4:-600} wt line setup="" run log code scode=0 rc=1
   if [ -n "${src:-}" ] && [ -f "$src" ]; then
     line=$(plan_header_line "$src" 'Worktree setup')
-    setup=$(printf '%s' "${line#\*\*Worktree setup:\*\*}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^`(.*)`$/\1/')
+    setup=$(header_command "${line#\*\*Worktree setup:\*\*}")
     [ "$setup" != none ] || setup=""
   fi
   # Under BASE_TMP, so a run killed mid-suite (a foreground call past its cap)
@@ -684,7 +701,7 @@ drop_sections() {
 # user. Prints the digest line.
 check_identity() {
   local un ue sha an ae cn ce who bad="" count=0
-  un=$(git config user.name | tr -d '\r') ue=$(git config user.email | tr -d '\r')
+  un=$(git -C "${top:-.}" config user.name | tr -d '\r') ue=$(git -C "${top:-.}" config user.email | tr -d '\r')
   if [ -z "$un" ] || [ -z "$ue" ]; then echo "check identity: no git user.name and user.email configured"; return; fi
   while IFS=$'\x1f' read -r sha an ae cn ce; do
     [ -n "$sha" ] || continue
@@ -694,7 +711,7 @@ check_identity() {
     [ -n "$who" ] || continue
     count=$((count + 1))
     [ -n "$bad" ] || bad="$sha $who"
-  done < <(git log --reverse --format='%h%x1f%an%x1f%ae%x1f%cn%x1f%ce' "$1..$2" | tr -d '\r')
+  done < <(git -C "${top:-.}" log --reverse --format='%h%x1f%an%x1f%ae%x1f%cn%x1f%ce' "$1..$2" | tr -d '\r')
   if [ "$count" -eq 0 ]; then echo "check identity: clean"; return; fi
   echo "check identity: $bad (expected $un <$ue>)$([ "$count" -le 1 ] || echo "; $((count - 1)) more commit(s)")"
 }
@@ -705,11 +722,11 @@ check_identity() {
 # attribution. Prints the digest line.
 check_attribution() {
   local sha hit bad="" count=0
-  for sha in $(git rev-list --reverse "$1..$2" | tr -d '\r'); do
-    hit=$(git log -1 --format=%B "$sha" | tr -d '\r' | grep -iE '^[[:space:]]*(co-authored-by|claude-session):|^[^[:alnum:]]*generated with' | head -n 1)
+  for sha in $(git -C "${top:-.}" rev-list --reverse "$1..$2" | tr -d '\r'); do
+    hit=$(git -C "${top:-.}" log -1 --format=%B "$sha" | tr -d '\r' | grep -iE '^[[:space:]]*(co-authored-by|claude-session):|^[^[:alnum:]]*generated with' | head -n 1)
     [ -n "$hit" ] || continue
     count=$((count + 1))
-    [ -n "$bad" ] || bad="$(git rev-parse --short=7 "$sha") $(cut -c1-70 <<<"$hit")"
+    [ -n "$bad" ] || bad="$(git -C "${top:-.}" rev-parse --short=7 "$sha") $(cut -c1-70 <<<"$hit")"
   done
   if [ "$count" -eq 0 ]; then echo "check attribution: clean"; return; fi
   echo "check attribution: $bad$([ "$count" -le 1 ] || echo "; $((count - 1)) more commit(s)")"
@@ -876,15 +893,19 @@ do_review() {
   top=$(git rev-parse --show-toplevel)
   if [ -n "$cwd_arg" ]; then
     [ -d "$cwd_arg" ] || die "bad --cwd: $cwd_arg"
-    top=$cwd_arg
+    top=$(dr_native_path "$cwd_arg")
+    [ "$(git -C "$top" rev-parse --is-inside-work-tree 2>/dev/null | tr -d '\r')" = true ] \
+      || die "cannot record the tracked files of $top for the verdict check: not a git work tree"
   fi
   base=$base_arg
   [ -n "$base" ] || base=$(jq -r '.base' "$state" | tr -d '\r')
   head=$head_arg
   [ -n "$head" ] || head=$(jq -r '.head // empty' "$state" | tr -d '\r')
   [ -n "$head" ] || head=HEAD
-  basesha=$(git rev-parse --verify --quiet "$base^{commit}") || die "bad BASE: $base"
-  headsha=$(git rev-parse --verify --quiet "$head^{commit}") || die "bad head: $head"
+  # --cwd's checkout answers every git question below: HEAD there may be a
+  # commit this checkout's HEAD never reached.
+  basesha=$(git -C "$top" rev-parse --verify --quiet "$base^{commit}") || die "bad BASE: $base"
+  headsha=$(git -C "$top" rev-parse --verify --quiet "$head^{commit}") || die "bad head: $head"
   require_scheduled_suite "$state" "${ids[@]}"
   require_suite_base "$basesha" "$first"
 
@@ -960,7 +981,7 @@ do_review() {
   drop_base_cache "$state" "$first" "$old_base"
 
   printf 'task %s: reviewed %s..%s (%s commit(s)), diff %s\n' "$idlist" "${basesha:0:7}" "${headsha:0:7}" \
-    "$(git rev-list --count "$basesha..$headsha")" "$diff"
+    "$(git -C "$top" rev-list --count "$basesha..$headsha")" "$diff"
   if [ "$reason" = codex-off ] || [[ "$gate" == *source=probe ]]; then printf 'gate: %s\n' "$gate"; fi
   case $tier in
     light) printf 'seat: codex:light prompt: %s fallback: %s prompt: %s\n' "$codex_prompt" "$judge" "$judge_prompt" ;;
@@ -1298,8 +1319,8 @@ plan_named_commands() {
   suite=$(jq -r '.suite // empty' "$step" | tr -d '\r' | sed -E 's/^[[:blank:]]+//; s/[[:blank:]]+$//')
   case $suite in '' | *$'\n'*) ;; *) printf '%s\n' "$suite" ;; esac
   line=$(plan_header "$src" | plan_lines 'Integration check' | sed -n 1p)
-  integ=$(printf '%s' "${line#\*\*Integration check:\*\*}" | sed -E 's/^[[:blank:]]+//; s/[[:blank:]]+$//; s/^`(.*)`$/\1/')
-  [ -z "$integ" ] || printf '%s\n' "$integ"
+  integ=$(header_command "${line#\*\*Integration check:\*\*}")
+  [ -z "$integ" ] || [ "$integ" = none ] || printf '%s\n' "$integ"
   # A lone * before a blank is a list marker, so the ** of **Check:** is never
   # stripped. A span opened by a double backtick, unclosed, empty or closed by
   # a double backtick names nothing.
@@ -1497,6 +1518,9 @@ suite_check() {
   nbase=$((nfail - nnew))
   suite_line="suite: red ($nnew failing, $nbase baseline)"
   while IFS= read -r line; do
+    # The unnamed marker only keeps a base line from matching; the finding
+    # names the exit.
+    [[ $line =~ ^(command\ exit\ [0-9]+)\ \(unnamed\ [0-9]+-[0-9]+\)$ ]] && line=${BASH_REMATCH[1]}
     case $line in
       'suite did not finish'*) printf '%s\tImportant\tsuite\t0\tsuite: %s at %s\n' "$target" "$line" "$head7" ;;
       *) printf '%s\tImportant\tsuite\t0\tsuite: %s fails at %s\n' "$target" "${line//$'\t'/ }" "$head7" ;;

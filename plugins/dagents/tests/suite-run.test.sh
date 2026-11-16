@@ -244,5 +244,15 @@ probe 0 "$TMP/out-tap-pass"
 has "a six-column row is reused" "$out" "suite: reused pass at ${HEAD6:0:7} ("
 check "reusing a six-column row does not run the command" "$(runs)" "$before"
 
+# --- a HEAD that moved during the run records no reusable row (row 9) ---
+printf '#!/usr/bin/env bash\ngit -C "%s" commit -q --allow-empty -m moved\n' "$REPO" > "$TMP/mover.sh"
+run -- bash "$TMP/mover.sh"
+check "a moved HEAD is recorded dirty" "$(field 2)" "dirty"
+# --- a failed git status counts as dirty (row 10) ---
+mv "$REPO/.git/index" "$REPO/.git/index.bak"; printf 'garbage' > "$REPO/.git/index"
+probe 0 "$TMP/out-tap-pass"
+check "a failed git status is not clean" "$(field 2)" "dirty"
+mv "$REPO/.git/index.bak" "$REPO/.git/index"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

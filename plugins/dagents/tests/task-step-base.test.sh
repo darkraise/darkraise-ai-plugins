@@ -308,7 +308,7 @@ check "task 6: the setup log is kept" "$([ -f "$WS/task-6-base.log.setup.log" ] 
 check "task 6: no file is kept, so the next verdict tries again" "$([ -e "$WS/task-6-base-failures.txt" ] && echo file || echo nofile)" "nofile"
 check "task 6: the temporary worktree is gone" "$(g worktree list | wc -l | tr -d ' ')" "1"
 
-sed 's/^\(\*\*Worktree setup:\*\* \).*$/\1`touch setup.done`/' "$REPO/docs/plan.md" > "$REPO/docs/plan.tmp" && mv "$REPO/docs/plan.tmp" "$REPO/docs/plan.md"
+sed 's/^\(\*\*Worktree setup:\*\* \).*$/\1`touch setup.done` — the marker the suite reads/' "$REPO/docs/plan.md" > "$REPO/docs/plan.tmp" && mv "$REPO/docs/plan.tmp" "$REPO/docs/plan.md"
 commit "setup that works"
 
 # Tasks 7 and 8: a sequential group. Task 8 starts at Task 7's head, so a test
@@ -381,7 +381,7 @@ sr
 ts review docs/plan.md 10
 clean_report 10
 ts verdict docs/plan.md 10
-check "task 10: a red base row without test lines excuses the head" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (0 failing, 1 baseline)"
+check "task 10: an unnamed failure at base and head counts as new" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
 
 # Task 11: the same, when the suite has to run at the base.
 printf 'more\n' >> "$REPO/app.txt"
@@ -393,8 +393,8 @@ sr
 ts review docs/plan.md 11
 clean_report 11
 ts verdict docs/plan.md 11
-check "task 11: a red base run without test lines excuses the head" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (0 failing, 1 baseline)"
-check "task 11: the base failures hold the exit code" "$(cat "$WS/task-11-base-failures.txt")" "command exit 1"
+check "task 11: an unnamed failure at base and head counts as new" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
+check "task 11: the base failures hold the exit code, marked unnamed" "$(grep -cE '^command exit 1 \(unnamed [0-9]+-[0-9]+\)$' "$WS/task-11-base-failures.txt")" "1"
 
 # Task 12: a base run that times out is not paid again.
 set_failing $'not ok 1 - alpha\n'
