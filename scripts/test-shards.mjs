@@ -156,6 +156,7 @@ export const windowsSeconds = {
   'plugins/dagents/tests/plan-revise.test.sh': 10,
   'plugins/dagents/tests/polluter.test.sh': 10,
   'plugins/dagents/tests/process-roles.test.sh': 10,
+  'plugins/dagents/tests/qa-files.test.sh': 20,
   'plugins/dagents/tests/register.test.sh': 68,
   'plugins/dagents/tests/repo-audit.test.sh': 53,
   'plugins/dagents/tests/retained-review-data.acceptance.test.sh': 30,

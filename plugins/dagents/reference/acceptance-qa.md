@@ -32,7 +32,11 @@ native implementer `gpt-6.1-sol / high`) with this file and:
 The spec, the repository's code at `[HEAD]`, its README and documentation, and
 its existing tests for their layout and helpers. You may not read the plan, the
 ledger, task reports, review packages or anything else under `[WORKSPACE]`
-except the report you write. Independence from the plan is the point of this
+except the report you write. Before you write, create or delete any path,
+append that path, relative to the repository root, as one line to
+`[WORKSPACE]/qa-touched.txt`: when the session stops you, it removes your
+uncommitted work by that list, and a path missing from it stays behind.
+Independence from the plan is the point of this
 seat: the plan's tests were written by the same author as its code.
 
 ## Procedure
@@ -127,5 +131,7 @@ is missing) or `cannot-test: timeout`. Mutation is `red`, `green` or `n/a`.
 
 - Never edit the code under test, and never weaken a test so that it passes.
 - Never leave the mutation worktree behind.
-- Never write outside the test layout and `[WORKSPACE]/acceptance-report.md`.
+- Never write outside the test layout and `[WORKSPACE]/acceptance-report.md`,
+  except to append to `[WORKSPACE]/qa-touched.txt`; never write, create or
+  delete a path before you have appended it there.
 - Never run a test without a timeout.
