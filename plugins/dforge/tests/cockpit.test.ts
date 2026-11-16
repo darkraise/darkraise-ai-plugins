@@ -8441,6 +8441,26 @@ describe('display and saved-state honesty', () => {
     expect(lines.length).toBeLessThanOrEqual(3)
   })
 
+  test('a Claude-key save the engine keeps stays and toasts nothing', async ($, on) => {
+    const toasts: string[] = []
+    const runs: string[] = []
+    const w: World = { tokens: 284_000, config: {}, toasts, runs, settings: { autoCompactWindow: 650_000 } }
+    const clock = world(on, w)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'set-autoCompactWindow-more' })
+    const saved = Number(/ set autoCompactWindow (\d+)/.exec(runs.join('\n'))?.[1])
+    expect(saved).toBeGreaterThan(650_000)
+    w.userSettings = w.settings = { autoCompactWindow: saved }
+    for (let second = 0; second < 10; second++) {
+      await clock.advance(1_000)
+      expect(toasts.filter(t => /did not stick/.test(t))).toEqual([])
+    }
+    expect(await ui.find({ type: 'Text', text: new RegExp(`^${saved / 1000}k`) })).toBeDefined()
+  })
+
   test('a skill-enforced key changed in the file mid-session adds the settings note', async ($, on) => {
     const notes: string[] = []
     const files: NonNullable<World['files']> = { [CONFIG]: { text: JSON.stringify({}), mtimeMs: 1 } }
