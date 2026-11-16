@@ -486,7 +486,7 @@ out=$(stop_at s-tr6 "$TRP" 'Merged.')
 check "a plan name that is not a plain path is not repeated" "$(jq -r .reason <<<"$out" | grep -c 'rm -rf')" "0"
 check "a plan name that is not a plain path: the placeholder stands" "$(jq -r .reason <<<"$out" | grep -c -- '--complete PLAN_FILE')" "1"
 sleep 1; prompt s-tr1 "$TMP/wt-p"
-check "a later turn still finds the primary" "$(cat "$HOME/.claude/dagents/sessions/turns/s-tr1.refs")" \
+check "a later turn still finds the primary" "$(head -n 1 "$HOME/.claude/dagents/sessions/turns/s-tr1.refs")" \
   "$(git -C "$TRP" rev-parse --path-format=absolute --git-common-dir)"
 
 sleep 1; prompt s-tr2 "$TRP"
@@ -513,6 +513,11 @@ sleep 1
 milestone M3 Three open >> "$TRP/docs/dagents/roadmap.md"
 commit_all "$TRP" 'docs: add M3'
 check "a design turn that edits the roadmap is not held" "$(stop_at s-tr4 "$TRP" 'Added M3.')" ""
+sleep 1; prompt s-tr1 "$TMP/wt-p"
+sleep 1
+milestone M4 Four open >> "$TRP/docs/dagents/roadmap.md"
+commit_all "$TRP" 'docs: add M4'
+check "a turn in a removed worktree that edits the roadmap is not held" "$(stop_at s-tr1 "$TMP/wt-p" 'Added M4.')" ""
 
 sleep 1; prompt s-tr5 "$TRP"
 check "nothing changed, nothing held" "$(stop_at s-tr5 "$TRP" 'Done.')" ""

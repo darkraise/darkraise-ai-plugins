@@ -23,9 +23,11 @@ touch "$stamp" 2>/dev/null || true
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/turn-refs.sh"
 if [ -n "$cwd" ] && turn_refs "$cwd" > "$stamp.refs.tmp" 2>/dev/null; then
   mv "$stamp.refs.tmp" "$stamp.refs" 2>/dev/null || true
-elif [ -n "$cwd" ] && [ ! -d "$cwd" ] && [ -f "$stamp.refs" ] && head -n 1 "$stamp.refs" > "$stamp.refs.tmp" 2>/dev/null && [ -s "$stamp.refs.tmp" ]; then
-  # The session's checkout was removed (a merged worktree): its common git
-  # directory still leads turn-end.sh to the primary checkout.
+elif [ -n "$cwd" ] && [ ! -d "$cwd" ] && primary=$(turn_primary "$(head -n 1 "$stamp.refs" 2>/dev/null | tr -d '\r')") \
+     && turn_refs "$primary" > "$stamp.refs.tmp" 2>/dev/null; then
+  # The session's checkout was removed (a merged worktree): turn-end.sh falls
+  # back to the primary checkout, so its refs stand in, start-of-turn HEAD
+  # included; without them a roadmap edit reads as a milestone close.
   mv "$stamp.refs.tmp" "$stamp.refs" 2>/dev/null || true
 else
   rm -f "$stamp.refs.tmp" "$stamp.refs" 2>/dev/null || true

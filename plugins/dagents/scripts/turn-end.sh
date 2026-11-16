@@ -51,16 +51,8 @@ stamp="${HOME:-}/.claude/dagents/sessions/turns/$(printf '%s' "$session_id" | tr
 # checkout the turn started in: line 1 of the stamp's refs is the common git
 # directory, whose parent is the primary checkout, or else the first worktree
 # git lists for it.
-stamp_root() {
-  local common dir
-  common=$(head -n 1 "$stamp.refs" 2>/dev/null | tr -d '\r')
-  [ -n "$common" ] || return 1
-  case "$common" in
-    */.git) dir=${common%/.git} ;;
-    *) dir=$(git --git-dir="$common" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n '1s/^worktree //p') ;;
-  esac
-  [ -n "$dir" ] && [ -d "$dir" ] && printf '%s\n' "$dir"
-}
+. "${SCRIPT_DIR}/lib/turn-refs.sh"
+stamp_root() { turn_primary "$(head -n 1 "$stamp.refs" 2>/dev/null | tr -d '\r')"; }
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || root=$(stamp_root) || root=""
 auto_pending=$([ -n "$root" ] && cd "$root" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) || auto_pending=""
 [ -f "$stamp" ] || [ -n "$auto_pending" ] || exit 0
