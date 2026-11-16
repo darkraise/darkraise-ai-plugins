@@ -174,5 +174,22 @@ out=$(cd "$TMP/plain" && timeout 120 bash "$MIRROR" "$TMP/ci.md" 2>&1); rc=$?
 check "commands outside a git checkout exit 2" "$rc" "2"
 has "commands outside a git checkout say so" "$out" "not in a git checkout"
 
+# --- an amended CI line is read (A5) ---
+mkdir -p "$REPO/docs" && cp "$TMP/none.md" "$REPO/docs/amended.md"
+mkdir -p "$REPO/.dagents/sdd/amended"
+printf '## A1 — Header\n\nReason: x\nCost if wrong: y\n\n### Old\n\n````\n**CI:** none\n````\n\n### New\n\n````\n**CI:** none-amended\n````\n' > "$REPO/.dagents/sdd/amended/amendments.md"
+mirror docs/amended.md
+has "an amended CI line is the one read" "$out$err" "none-amended"
+rm -rf "$REPO/.dagents/sdd/amended" "$REPO/docs/amended.md"
+
+# --- a plan stored only in the darkmem docs mirror is found (A5) ---
+. "$HERE/fixtures/darkmem-stores.sh"
+DM=$(stores_home "$HOME" "$REPO" proj darkmem local)
+mkdir -p "$DM/dagents/plans" && cp "$TMP/none.md" "$DM/dagents/plans/mp.md"
+mirror docs/dagents/plans/mp.md
+check "a mirror-only plan: exit 0" "$rc" "0"
+check "a mirror-only plan: its CI line is read" "$out" "ci: none"
+rm -f "$HOME/.dagents/stores.json" "$HOME/.dagents/config.json"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

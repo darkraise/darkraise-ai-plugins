@@ -4,6 +4,8 @@
 #
 # Usage: review-record retain PLAN_FILE [--from CHECKOUT]
 #        review-record ratio MERGE_BASE HEAD
+# retain copies the ledger's review lines and, under "## Amendments", the
+# plan's amendments.md verbatim when it is non-empty.
 # Exit: retain 0 written (prints the record's path), 2 usage, 3 the ledger
 #              holds no review line, 4 no ledger names the plan, 1 the
 #              record could not be written
@@ -26,7 +28,7 @@ USAGE
 REVIEW_LINES='^(Review depth:|Acceptance QA: complete|Acceptance QA: skipped|final review lens|Final review:|Test ratio:)'
 
 retain() {
-  local plan="" from="" have_from=0 slug ctx name key top wt dir file c seen named lines="" ledger="" docs target tmp
+  local plan="" from="" have_from=0 slug ctx name key top wt dir file c seen named lines="" ledger="" docs target tmp amend
   local -a dirs=() candidates=()
   while [ $# -gt 0 ]; do
     case $1 in
@@ -85,13 +87,19 @@ retain() {
     exit 3
   fi
 
+  # Amendments sit beside the ledger they were found with, so the --from
+  # checkout's copy is the one kept.
+  amend="${ledger%/*}/amendments.md"
+
   dagents_stores_init
   docs=$(dagents_docs_root)
   target="$docs/reviews/$slug.md"
   mkdir -p "$docs/reviews" || exit 1
   tmp=$(mktemp "$docs/reviews/.$slug.md.XXXXXX") || exit 1
-  if ! printf '# Review record: %s\n\nPlan: %s\nRetained: %s\n\n%s\n' \
-       "$slug" "$name" "$(date +%Y-%m-%d)" "$lines" > "$tmp" || ! mv -f "$tmp" "$target"; then
+  if ! { printf '# Review record: %s\n\nPlan: %s\nRetained: %s\n\n%s\n' \
+           "$slug" "$name" "$(date +%Y-%m-%d)" "$lines" &&
+         { [ ! -s "$amend" ] || { printf '\n## Amendments\n\n' && cat -- "$amend"; }; }
+       } > "$tmp" || ! mv -f "$tmp" "$target"; then
     rm -f "$tmp"
     exit 1
   fi
