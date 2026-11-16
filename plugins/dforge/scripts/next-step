@@ -316,6 +316,15 @@ else
       } | awk '!seen[$0]++'
     )
     open_rows=$(grep . <<<"$open_rows" || true)
+    if [ -n "$open_rows" ]; then
+      ROUTE_ROOT=$root ROUTE_FINISHED=$rel ROUTE_MS=$current_ms ROUTE_OUTSIDE_MS=$outside_ms
+      route_rows <<<"$open_rows"
+      # Built rows wait on a milestone audit; with no roadmap there is none, so
+      # they are left to the plan's own next step as if nothing were open.
+      if [ -z "$roadmap" ] && [ -n "$ROUTE_BUILT" ] && [ "$(tr ',' '\n' <<<"$ROUTE_BUILT" | grep -c .)" -eq "$(grep -c . <<<"$open_rows")" ]; then
+        open_rows=""
+      fi
+    fi
 
     if [ -n "$open_rows" ]; then
       open_n=$(grep -c . <<<"$open_rows")
@@ -323,8 +332,6 @@ else
         NR <= 3 { printf "%s#%s %s", (NR > 1 ? "; " : ""), $2, $3 }
         END { if (NR > 3) printf " +%d more", NR - 3 }
       ' <<<"$open_rows")
-      ROUTE_ROOT=$root ROUTE_FINISHED=$rel ROUTE_MS=$current_ms ROUTE_OUTSIDE_MS=$outside_ms
-      route_rows <<<"$open_rows"
       kind=$ROUTE_KIND action=$ROUTE_ACTION waiting=$ROUTE_WAITING stale=$ROUTE_STALE
       launch_cmd=$ROUTE_LAUNCH_CMD launch_plan=$ROUTE_LAUNCH_PLAN
       stale_note=""
@@ -333,7 +340,10 @@ else
       status_line="Plan \`$rel\` is complete."
       next_line="Register rows still open ($open_n) in $reg_list: $row_list.${stale_note:+ $stale_note}${action:+ $action}"
       if [ "$kind" = milestone ]; then
-        prompt="Close milestone $ms_id ($ms_name) of \`$(dforge_name "$(dforge_docs_root)")/roadmap.md\` with dforge:closing-a-milestone; rows awaiting the owner's check (verify): $waiting."
+        verify_clause="" built_clause=""
+        [ -z "$waiting" ] || verify_clause="; rows awaiting the owner's check (verify): $waiting"
+        [ -z "$ROUTE_BUILT" ] || built_clause=" Built, awaiting the audit: $ROUTE_BUILT."
+        prompt="Close milestone $ms_id ($ms_name) of \`$(dforge_name "$(dforge_docs_root)")/roadmap.md\` with dforge:closing-a-milestone$verify_clause.$built_clause"
         launch=1
       elif [ -n "$kind" ]; then
         prompt="Continue the work recorded in $reg_list: $open_n rows are open ($row_list). $action"

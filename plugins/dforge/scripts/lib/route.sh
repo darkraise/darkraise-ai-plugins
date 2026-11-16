@@ -1,7 +1,80 @@
 # The register router next-step uses to pick the one next action from the open
 # rows of the registers it reads. Sourced; defines functions only. It calls
-# helpers the sourcing script defines (plan_name, plan_finished,
-# execution_launch, launch_for) and the plan.sh and roots.sh libraries.
+# helpers the sourcing script defines (plan_name, plan_finished, _plan_roots,
+# execution_launch, launch_for) and the plan.sh, roots.sh and register.sh
+# libraries.
+
+# _spec_plan_files ROOT SPEC — "<name>\t<path>\t<sub-project or empty>" for
+# every plan whose header Spec or Program line names SPEC, once per name key,
+# the first place _plan_roots lists winning.
+_spec_plan_files() {
+  local want dir prefix f idx spec prog sub key seen="" files=() names=()
+  want=$(dforge_name_key "$2")
+  while IFS=$'\t' read -r dir prefix; do
+    # A checkout's top level holds no plan directory of its own.
+    [ -n "$prefix" ] && [ -d "$dir/plans" ] || continue
+    for f in "$dir"/plans/*.md; do
+      [ -s "$f" ] && [ "${f##*/}" != completed.md ] || continue
+      files+=("$f") names+=("$prefix/plans/${f##*/}")
+    done
+  done < <(_plan_roots "$1")
+  [ ${#files[@]} -gt 0 ] || return 0
+  # \037, not a tab: a tab is IFS whitespace, so an empty field would vanish.
+  while IFS=$'\037' read -r idx spec prog sub; do
+    [ "$(dforge_name_key "$spec")" = "$want" ] || [ "$(dforge_name_key "$prog")" = "$want" ] || continue
+    key=$(dforge_name_key "${names[idx - 1]}")
+    case $seen in *"|$key|"*) continue ;; esac
+    seen="$seen|$key|"
+    printf '%s\t%s\t%s\n' "${names[idx - 1]}" "${files[idx - 1]}" "$sub"
+  done < <(awk "$_PLAN_AWK"'
+    function val(line, key,   v) {
+      v = substr(line, length(key) + 1); sub(/^[ \t]+/, "", v)
+      if (substr(v, 1, 1) == "`") { v = substr(v, 2); sub(/`.*$/, "", v) } else sub(/[ \t].*$/, "", v)
+      return v
+    }
+    function emit() { if (task) print idx "\037" spec "\037" prog "\037" subp }
+    FNR == 1 { if (idx) emit(); idx++; FENCE = ""; spec = ""; prog = ""; subp = ""; task = 0 }
+    { sub(/\r$/, "") }
+    in_fence($0) { next }
+    is_task($0) >= 0 { task = 1; next }
+    task { next }
+    index($0, "**Spec:**") == 1 && spec == "" { spec = val($0, "**Spec:**") }
+    index($0, "**Program:**") == 1 && prog == "" {
+      prog = val($0, "**Program:**")
+      if (match($0, /sub-project [0-9]+/)) { subp = substr($0, RSTART + 12, RLENGTH - 12) }
+    }
+    END { if (idx) emit() }
+  ' "${files[@]}")
+}
+
+# spec_plans ROOT SPEC — the repository-relative name of every plan whose
+# header Spec or Program line names SPEC, once per name key.
+spec_plans() {
+  _spec_plan_files "$1" "$2" | cut -f1
+}
+
+# _route_counted PLAN_PATH — true when a live plan's outcome can be read from
+# completed.md: the index exists beside it and the plan is not older than the
+# index's first entry, so it cannot be a plan finished before the index began.
+_route_counted() {
+  local index pdate cdate
+  index="$(dirname "$1")/completed.md"
+  [ -f "$index" ] || return 1
+  pdate=$(basename "$1" | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}' || true)
+  [ -n "$pdate" ] || return 1
+  cdate=$(tr -d '\r' < "$index" | sed -nE 's/^- ([0-9]{4}-[0-9]{2}-[0-9]{2}).*/\1/p' | head -n 1)
+  [ -z "$cdate" ] || [[ ! $pdate < $cdate ]]
+}
+
+# _route_covers REGISTER SPEC — true when REGISTER's Covers line names SPEC.
+_route_covers() {
+  local cov want
+  want=$(dforge_name_key "$2")
+  while IFS= read -r cov; do
+    [ "$(dforge_name_key "$cov")" != "$want" ] || return 0
+  done < <(register_covers "$1")
+  return 1
+}
 
 # route_rows — classify the open rows on stdin, one per line:
 # "<register>\t<id>\t<item>\t<assigned>\t<acceptance>\t<state>\t<note>".
@@ -11,7 +84,9 @@
 # ROUTE_ELSEWHERE and ROUTE_UNRECORDED. Call it in the caller's own shell, never
 # inside $(…), or the outputs are lost.
 route_rows() {
-  local rid rassigned rstate a r k best=9 target_exec ms_id ms_name
+  local rreg rid rassigned rstate a r k t tpath vs best=9 target_path="" via_spec=0 \
+    target_exec ms_id ms_name plans name path sub live counted pick \
+    followups="" ids
   ROUTE_KIND="" ROUTE_TARGET="" ROUTE_ACTION="" ROUTE_LAUNCH_CMD="" ROUTE_LAUNCH_PLAN=""
   ROUTE_WAITING="" ROUTE_BUILT="" ROUTE_STALE="" ROUTE_ELSEWHERE="" ROUTE_UNRECORDED=""
   # The Assigned cell decides the route, not the row order. A row still on
@@ -20,9 +95,10 @@ route_rows() {
   # path absent here belongs to another repository. Among the rest the
   # first row of the most concrete kind wins: a plan to execute, a spec to
   # plan, a label to specify, then a ruling on unassigned rows.
-  while IFS=$'\037' read -r _ rid _ rassigned _ rstate _; do
+  while IFS=$'\037' read -r rreg rid _ rassigned _ rstate _; do
     a=${rassigned#\`}
     a=${a%\`}
+    t=$a tpath="" vs=0
     if [ "$rstate" = verify ]; then
       ROUTE_WAITING="${ROUTE_WAITING:+$ROUTE_WAITING, }#$rid"; continue
     elif [ -z "$a" ] || [ "$a" = "-" ]; then
@@ -30,37 +106,82 @@ route_rows() {
     elif [ "$(dforge_name_key "$(plan_name "$ROUTE_ROOT" "$a")")" = "$(dforge_name_key "$ROUTE_FINISHED")" ] || plan_finished "$ROUTE_ROOT" "$a"; then
       ROUTE_STALE="${ROUTE_STALE:+$ROUTE_STALE, }#$rid"; continue
     elif [ -f "$(dforge_resolve "$a")" ]; then
-      if [ -n "$(plan_tasks "$(dforge_resolve "$a")")" ] || [ -n "$(plan_lettered "$(dforge_resolve "$a")")" ]; then r=1 k=plan; else r=2 k=spec; fi
+      if [ -n "$(plan_tasks "$(dforge_resolve "$a")")" ] || [ -n "$(plan_lettered "$(dforge_resolve "$a")")" ]; then
+        r=1 k=plan
+      else
+        # A spec's rows route by its plans: a live one is executed, none
+        # means the spec still needs one, and once all are finished the row
+        # is a requirement left over or an epic built and awaiting its audit.
+        plans=$(_spec_plan_files "$ROUTE_ROOT" "$a")
+        if [ -z "$plans" ]; then
+          r=2 k=spec
+        else
+          live="" counted=""
+          while IFS=$'\t' read -r name path sub; do
+            if [ "$(dforge_name_key "$name")" = "$(dforge_name_key "$ROUTE_FINISHED")" ] || plan_finished "$ROUTE_ROOT" "$name"; then
+              continue
+            fi
+            if _route_counted "$path"; then
+              counted="$counted$(printf '%06d\t%s\t%s\t%s' "${sub:-999999}" "$(basename "$path")" "$name" "$path")
+"
+            else
+              live=1
+            fi
+          done <<<"$plans"
+          if [ -n "$counted" ]; then
+            # The lowest sub-project first, else the oldest filename date.
+            pick=$(grep . <<<"$counted" | LC_ALL=C sort | awk 'NR == 1')
+            t=$(cut -f3 <<<"$pick") tpath=$(cut -f4 <<<"$pick") vs=1
+            r=1 k=plan
+          elif [ -n "$live" ]; then
+            ROUTE_UNRECORDED="${ROUTE_UNRECORDED:+$ROUTE_UNRECORDED, }#$rid"; continue
+          elif _route_covers "$rreg" "$a"; then
+            followups="$followups$(dforge_name_key "$a")	#$rid
+"
+            r=2 k=followup
+          else
+            ROUTE_BUILT="${ROUTE_BUILT:+$ROUTE_BUILT, }#$rid"; continue
+          fi
+        fi
+      fi
     elif [[ $a == *.md ]]; then
       ROUTE_ELSEWHERE="${ROUTE_ELSEWHERE:+$ROUTE_ELSEWHERE, }#$rid"; continue
     else
       r=3 k=label
     fi
-    if [ "$r" -lt "$best" ]; then best=$r ROUTE_TARGET=$a ROUTE_KIND=$k; fi
+    if [ "$r" -lt "$best" ]; then best=$r ROUTE_TARGET=$t ROUTE_KIND=$k target_path=$tpath via_spec=$vs; fi
   done < <(tr '\t' '\037')
 
   ROUTE_LAUNCH_CMD=$(launch_for design)
   case $ROUTE_KIND in
     plan)
-      target_exec=$(plan_header_line "$(dforge_resolve "$ROUTE_TARGET")" Execution)
-      if [ -n "$(plan_ledger "$(dforge_resolve "$ROUTE_TARGET")")" ]; then
+      [ -n "$target_path" ] || target_path=$(dforge_resolve "$ROUTE_TARGET")
+      target_exec=$(plan_header_line "$target_path" Execution)
+      if [ -n "$(plan_ledger "$target_path")" ]; then
         ROUTE_ACTION="Resume \`$ROUTE_TARGET\` with dforge:resume-execution."
       else
         ROUTE_ACTION="Continue \`$ROUTE_TARGET\` with dforge:executing-plans."
       fi
+      [ "$via_spec" -eq 0 ] || ROUTE_ACTION="$ROUTE_ACTION If it was abandoned, record it in completed.md or delete it."
       ROUTE_LAUNCH_CMD=$(execution_launch "$target_exec") ROUTE_LAUNCH_PLAN=$ROUTE_TARGET
       ;;
     spec)  ROUTE_ACTION="\`$ROUTE_TARGET\`: write its plan with dforge:writing-plans." ;;
+    followup)
+      ids=$(ROUTE_KEY=$(dforge_name_key "$ROUTE_TARGET") awk -F'\t' '$1 == ENVIRON["ROUTE_KEY"] { printf "%s%s", (n++ ? ", " : ""), $2 }' <<<"$followups")
+      ROUTE_ACTION="\`$ROUTE_TARGET\`: write a follow-up plan for rows $ids with dforge:writing-plans."
+      ;;
     label) ROUTE_ACTION="\`$ROUTE_TARGET\`: write its spec in a fresh session." ;;
     rule)  ROUTE_ACTION="Rule on the open rows with dforge:brainstorming." ;;
     *)
       [ -z "$ROUTE_WAITING" ] || ROUTE_ACTION="Awaiting your check (verify): $ROUTE_WAITING."
       [ -z "$ROUTE_ELSEWHERE" ] || ROUTE_ACTION="${ROUTE_ACTION:+$ROUTE_ACTION }Assigned outside this repository: $ROUTE_ELSEWHERE."
-      # The milestone audit is the check a verify row waits on, so a
-      # milestone with nothing else unresolved goes to it.
-      if [ -n "$ROUTE_MS" ] && [ -n "$ROUTE_WAITING" ] && [ -z "$ROUTE_STALE$ROUTE_ELSEWHERE$ROUTE_OUTSIDE_MS" ]; then
+      [ -z "$ROUTE_UNRECORDED" ] || ROUTE_ACTION="${ROUTE_ACTION:+$ROUTE_ACTION }Spec plans exist, outcome unrecorded: $ROUTE_UNRECORDED."
+      # The milestone audit is the check a verify row waits on, and a built
+      # epic's, so a milestone with nothing else unresolved goes to it.
+      if [ -n "$ROUTE_MS" ] && [ -n "$ROUTE_WAITING$ROUTE_BUILT" ] && [ -z "$ROUTE_STALE$ROUTE_ELSEWHERE$ROUTE_UNRECORDED$ROUTE_OUTSIDE_MS" ]; then
         ROUTE_KIND=milestone
         ms_id=$(cut -f1 <<<"$ROUTE_MS") ms_name=$(cut -f2 <<<"$ROUTE_MS")
+        [ -z "$ROUTE_BUILT" ] || ROUTE_ACTION="${ROUTE_ACTION:+$ROUTE_ACTION }Built, awaiting the audit: $ROUTE_BUILT."
         ROUTE_ACTION="$ROUTE_ACTION Milestone $ms_id ($ms_name) has nothing else open: audit and close it with dforge:closing-a-milestone."
       fi
       ;;

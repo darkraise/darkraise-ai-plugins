@@ -73,6 +73,7 @@ export const windowsSeconds = {
   'reviewer-only-externals.acceptance.test.sh': 200,
   'roadmap.test.sh': 170,
   'roots.test.sh': 84,
+  'route.test.sh': 120,
   'sdd-references.test.sh': 10,
   'seats.test.sh': 10,
   'session-state.test.sh': 20,
