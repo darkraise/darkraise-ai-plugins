@@ -156,6 +156,98 @@ has "A5: it runs the amended CI command" "$out" "ci: echo amended-ci"
 lacks "A5: it does not run the unamended command" "$out" "original-ci"
 rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
 
+# --- A7, A9, A10: routing after a clean final review, Keep as-is, finish record ---
+R7="$TMP/route"
+mkrepo "$R7"
+git -C "$R7" checkout -q -b feature
+mkdir -p "$R7/.dforge/sdd/plan"
+LEDGER7="$R7/.dforge/sdd/plan/progress.md"
+write_ledger() { # write_ledger <final review line>
+  printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commits a..b, review clean)\nTask 2: complete (commits b..c, review clean)\n%s\n' "$1" > "$LEDGER7"
+}
+ns() { out=$(cd "$R7" && bash "$S/next-step" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
+H=$(git -C "$R7" rev-parse --short HEAD)
+write_ledger "Final review: clean (commits 1234567..$H)"
+ns docs/plan.md
+has "A7: a clean review of the current head routes to finishing" "$out" "**Next:** Run dforge:finishing-a-development-branch."
+mkdir -p "$R7/docs/dforge/plans" && printf 'note\n' > "$R7/docs/dforge/plans/completed.md"
+git -C "$R7" add docs/dforge/plans/completed.md && git -C "$R7" commit -qm "docs: index"
+ns docs/plan.md
+has "A7: a docs-only commit after the head still routes to finishing" "$out" "**Next:** Run dforge:finishing-a-development-branch."
+printf 'code\n' > "$R7/code.txt" && git -C "$R7" add code.txt && git -C "$R7" commit -qm "fix: later"
+ns docs/plan.md
+has "A7: a later non-docs commit routes to a re-review of h..HEAD" "$out" "$H..HEAD"
+lacks "A7: and not straight to finishing" "$out" "**Next:** Run dforge:finishing-a-development-branch."
+git -C "$R7" reset -q --hard "$H" && git -C "$R7" commit -q --amend -m "rewritten head"
+ns docs/plan.md
+has "A7: a head no longer in history routes to a full final review" "$out" "final whole-branch review"
+lacks "A7: not to a scoped re-review" "$out" "..HEAD"
+check "A7: recovery logs a Ruling line naming the rewritten history" "$(grep -c 'Ruling: final review rerun.*history rewritten' "$P/skills/executing-plans/references/recovery.md")" "1"
+
+write_ledger "Final review: clean (commits 1234567..$(git -C "$R7" rev-parse --short HEAD))"
+mkdir -p "$R7/.dforge/sdd" && printf '{"action":"pr"}\n' > "$R7/.dforge/sdd/finish.json"
+ns --kept docs/plan.md
+check "A9: --kept exits 0" "$rc" "0"
+has "A9: the block names the branch" "$out" "feature"
+lacks "A9: it never says the plan is complete" "$out" "is complete"
+check "A9: the no-plan finish record is gone after Step 7" "$([ -e "$R7/.dforge/sdd/finish.json" ] && echo kept || echo gone)" "gone"
+
+# A10: finish-choice answer needs no saved preference.
+R10="$TMP/fc"
+mkrepo "$R10"
+run bash -c "cd '$R10' && bash '$S/finish-choice' answer merge"
+check "A10: answer with no saved preference exits 0" "$rc" "0"
+run bash -c "cd '$R10' && bash '$S/finish-choice' get"
+has "A10: the answer is recorded" "$out" "merge"
+printf '{"action":"pr"}\n' > "$R10/.dforge/sdd/finish.json"
+run bash -c "cd '$R10' && bash '$S/next-step' --complete docs/plan.md"
+check "A10: --complete clears the no-plan record" "$([ -e "$R10/.dforge/sdd/finish.json" ] && echo kept || echo gone)" "gone"
+
+# A8: Option 2's procedure writes the records only after the push and the PR.
+EC="$P/skills/finishing-a-development-branch/references/execute-choice.md"
+l_opt=$(grep -n '^### Option 2' "$EC" | head -n 1 | cut -d: -f1)
+l_push=$(awk -v s="$l_opt" 'NR > s && /git push -u origin/ { print NR; exit }' "$EC")
+l_after=$(awk -v s="$l_opt" 'NR > s && /have both succeeded/ { print NR; exit }' "$EC")
+l_none=$(awk -v s="$l_after" 'NR > s && /write none/ { print NR; exit }' "$EC")
+check "A8: the prose orders the push before the darkmem records" "$([ -n "$l_push" ] && [ -n "$l_after" ] && [ "$l_push" -lt "$l_after" ] && echo ordered || echo not)" "ordered"
+check "A8: the prose writes no record when the push or the PR failed" "$([ -n "$l_none" ] && echo yes || echo no)" "yes"
+check "A8: the prose still syncs the records afterwards" "$(sed -n "${l_after},$((l_after+4))p" "$EC" | grep -c 'darkmem-sync push')" "1"
+
+# --- A11: the compaction snapshot (session-start.sh, source compact) ---
+R11="$TMP/snap"
+mkrepo "$R11"
+mkdir -p "$R11/.dforge/handoff" "$R11/.dforge/sdd/plan"
+printf '# Handoff\n\n## Next session\n\n**Next:** Resume docs/other-plan.md at Task 9 (OTHERPLAN-MARK).\n' > "$R11/.dforge/handoff/latest.md"
+touch -d '3 hours ago' "$R11/.dforge/handoff/latest.md"
+snap_payload() { # snap_payload <transcript>
+  jq -n --arg tp "$1" --arg cwd "$R11" '{hook_event_name:"SessionStart",session_id:"s-snap",transcript_path:$tp,cwd:$cwd,source:"compact"}'
+}
+TR11="$TMP/snap.jsonl"
+jq -cn --arg ts "$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%S.000Z)" \
+  '{type:"user",timestamp:$ts,isSidechain:false,origin:{kind:"human"},message:{role:"user",content:"hello"}}' > "$TR11"
+out=$(snap_payload "$TR11" | bash "$S/session-start.sh" 2>/dev/null)
+ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out")
+has "A11: the snapshot is built" "$ctx" "## Compaction snapshot"
+lacks "A11: a latest.md naming another plan that predates the session is omitted" "$ctx" "OTHERPLAN-MARK"
+printf '# Handoff\n\n## Next session\n\n**Next:** Resume docs/plan.md at Task 2 (OWNPLAN-MARK).\n' > "$R11/.dforge/handoff/latest.md"
+touch -d '3 hours ago' "$R11/.dforge/handoff/latest.md"
+printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commits a..b, review clean)\n' > "$R11/.dforge/sdd/plan/progress.md"
+out=$(snap_payload "$TR11" | bash "$S/session-start.sh" 2>/dev/null)
+ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out")
+has "A11: a latest.md naming a plan whose ledger this session wrote is kept" "$ctx" "OWNPLAN-MARK"
+# Over the cap: the ledger's newest lines survive.
+pad=$(printf 'x%.0s' $(seq 1 600))
+{
+  printf '# SDD ledger — plan: docs/plan.md\n'
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf 'Task %s: OLDLINE-%s %s\n' "$i" "$i" "$pad"; done
+  printf 'Task 13: NEWESTLINE-MARK %s\n' "$pad"
+} > "$R11/.dforge/sdd/plan/progress.md"
+out=$(snap_payload "$TR11" | bash "$S/session-start.sh" 2>/dev/null)
+ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out")
+has "A11: over the cap, the newest ledger line is kept" "$ctx" "NEWESTLINE-MARK"
+lacks "A11: over the cap, the oldest lines are the ones dropped" "$ctx" "OLDLINE-1 "
+check "A11: the hook output stays under the 10,000-character cap" "$([ "${#ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
+
 # --- footer ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
