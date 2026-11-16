@@ -682,7 +682,7 @@ t_A14() {
   o=$(stop_hook "$HX" "$SID" "$REPO" 'The dialog is done.' false "$NOUI_TRANSCRIPT")
   check "A14: a committed UI edit with no proof, in a profile project: the stop is held" "$(decision "$o")" "block"
   has "A14: the reason names the stale file" "$(jq -r '.reason // ""' <<<"$o")" "src/App.tsx"
-  has "A14: the systemMessage names the stale file" "$(jq -r '.systemMessage // ""' <<<"$o")" "src/App.tsx"
+  has "A14: the systemMessage tells the person nothing is needed" "$(jq -r '.systemMessage // ""' <<<"$o")" "nothing is needed from you"
   o=$(stop_hook "$HX" "$SID" "$REPO" 'The dialog is done.' true "$NOUI_TRANSCRIPT")
   check "A14: the retry (stop_hook_active) passes" "$o" ""
 
@@ -693,7 +693,7 @@ t_A14() {
   o=$(stop_hook "$HX" "$SID" "$REPO" 'The dialog is done.' false "$NOUI_TRANSCRIPT")
   check "A14: a report with a contract ID missing: the stop is held" "$(decision "$o")" "block"
   has "A14: the reason names the missing ID" "$(jq -r '.reason // ""' <<<"$o")" "OP-1"
-  has "A14: the systemMessage names the missing ID" "$(jq -r '.systemMessage // ""' <<<"$o")" "OP-1"
+  has "A14: the systemMessage tells the person nothing is needed here too" "$(jq -r '.systemMessage // ""' <<<"$o")" "nothing is needed from you"
   o=$(stop_hook "$HX" "$SID" "$REPO" 'The dialog is done.' true "$NOUI_TRANSCRIPT")
   check "A14: the retry passes here too" "$o" ""
 
