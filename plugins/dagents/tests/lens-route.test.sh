@@ -66,6 +66,12 @@ crit=$(sed -n 's/^lens lang-bash criteria=\([^ ]*\) .*/\1/p' <<<"$out")
 check "final: the criteria path exists" "$([ -f "$crit" ] && echo yes || echo no)" "yes"
 check "final: the reason names the glob" "$(grep -c '^lens lang-bash .* reason=paths:\*\.sh$' <<<"$out")" "1"
 
+# git quotes a non-ASCII name unless told not to, and a quoted name matches no glob.
+commit_file $'scripts/caf\303\251.py' 'print(1)'
+out=$(bash "$ROUTE" plan.md --final "$HEAD1" "$(git rev-parse HEAD)")
+check "final: a non-ASCII file name still matches its lens paths" "$(grep -c '^lens lang-python ' <<<"$out")" "1"
+git reset -q --hard "$HEAD1"
+
 # A2: more applicable lenses than the cap.
 commit_file tests/a.test.ts 'try { run() } catch (e) {}'
 commit_file README.md 'Docs.'

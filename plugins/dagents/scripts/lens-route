@@ -113,7 +113,7 @@ case $1 in
     [[ "$cap" =~ ^[0-9]$ ]] || cap=4
     if [ "$cap" -eq 0 ]; then echo "lenses off"; exit 0; fi
     depth=$(depth_plan_depth "$src" "$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)")
-    changed=$(git diff --name-only "$base..$head")
+    changed=$(git -c core.quotepath=off diff --name-only "$base..$head")
     added=$(git diff -U0 "$base..$head" | awk '/^\+\+\+ /{next} /^\+/{print substr($0, 2)}')
     # dagents:ui-ux — the UI lens applies where the UI gate does.
     . "$HERE/lib/ui-ux.sh"
