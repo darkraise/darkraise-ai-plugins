@@ -166,6 +166,7 @@ export const windowsSeconds = {
   'plugins/dagents/tests/review-route.test.sh': 458,
   'plugins/dagents/tests/roadmap.test.sh': 170,
   'plugins/dagents/tests/roots.test.sh': 84,
+  'plugins/dagents/tests/route.test.sh': 120,
   'plugins/dagents/tests/run-agy-task.test.sh': 10,
   'plugins/dagents/tests/run-codex-task.test.sh': 10,
   'plugins/dagents/tests/sdd-references.test.sh': 10,
