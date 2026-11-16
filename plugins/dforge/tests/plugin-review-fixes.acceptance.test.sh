@@ -327,6 +327,77 @@ out=$(jq -cn --arg cwd "$R13" '{hook_event_name:"Stop",session_id:"s-nonode",tra
 check "A13: the Stop hook passes" "$rc:$(jq -r '.decision // "pass"' <<<"${out:-{\}}" 2>/dev/null)" "0:pass"
 rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
 
+# --- A14 (the readers), A16: the cockpit's session state file ---
+R14="$TMP/ss"
+mkrepo "$R14"
+SS="$HOME/.claude/dforge/sessions"
+mkdir -p "$SS/by-id" "$SS/state" "$SS/turns"
+TP14="$TMP/s-ss.jsonl"
+: > "$TP14"
+jq -n --arg tp "$TP14" '{session_id:"s-ss",transcript_path:$tp}' > "$SS/by-id/s-ss.json"
+touch -d '-60 seconds' "$SS/turns/s-ss"
+now_ms() { echo $(( ($(date +%s) - ${1:-0}) * 1000 )); }
+put_state() { # put_state <updated ms> <session> <window> [model]
+  jq -nc --arg s "$2" --argjson u "$1" --argjson w "$3" --arg m "${4:-claude-unlisted-9}" --argjson at "$(now_ms)" \
+    '{session:$s, updated:$u, window:$w, model:$m, partial:false,
+      launches:[{id:"bfresh", kind:"shell", what:"Fresh launch", command:"sleep 999", startedAt:$at, outputFile:"", service:false, timer:false}]}' > "$SS/state/s-ss.json"
+}
+inflight() { out=$(cd "$R14" && CLAUDE_CODE_SESSION_ID=s-ss bash "$S/in-flight" 2>&1); rc=$?; }
+put_state "$(now_ms)" s-ss 650000
+inflight
+check "A14: a hook reading the file mid-turn lists its launches (exit 1)" "$rc" "1"
+has "A14: the launch is listed" "$out" "bfresh"
+has "A14: the source is named as the session file" "$out" "session"
+put_state "$(now_ms 120)" s-ss 650000
+inflight
+check "A14: launches older than the turn stamp are ignored (transcript has none: exit 0)" "$rc" "0"
+lacks "A14: the stale launch is not listed" "$out" "bfresh"
+LOG14="$R14/.dforge/session-state.log"
+check "A14: the rejection is logged to session-state.log" "$(grep -c 'launches.*stale' "$LOG14" 2>/dev/null)" "1"
+inflight
+check "A14: the same turn logs the rejection once" "$(grep -c 'launches.*stale' "$LOG14")" "1"
+bl() { out=$(cd "$R14" && CLAUDE_CODE_SESSION_ID=s-ss bash "$S/context-size" 2>&1); rc=$?; }
+printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-unlisted-9","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":300000}}}\n' > "$TP14"
+bl
+check "A14: the window of the same session is still used when launches are stale" "$rc" "0"
+has "A14: the budget line names the session file as its window source" "$out" "window session file"
+put_state "$(now_ms)" s-other 650000
+inflight
+check "A14: a file written for another session is ignored" "$(grep -c 'session mismatch' "$LOG14")" "1"
+printf 'not json\n' > "$SS/state/s-ss.json"
+inflight
+check "A14: an unparseable file is logged" "$(grep -c 'unparseable' "$LOG14")" "1"
+rm -f "$SS/state/s-ss.json"
+inflight
+check "A14: a missing file is logged" "$(grep -c 'missing' "$LOG14")" "1"
+
+# A16: the window comes from the session file; an unlisted model without one is unknown.
+bl
+check "A16: an unlisted model with no session file exits 3" "$rc" "3"
+has "A16: and prints the unknown verdict" "$out" "unknown"
+lacks "A16: with no arithmetic error" "$out" "syntax error"
+put_state "$(now_ms)" s-ss 650000
+bl
+b650=$out
+check "A16: the session file's window is used (exit 0)" "$rc" "0"
+put_state "$(now_ms)" s-ss 800000
+bl
+check "A16: a different window changes the budget" "$([ "$out" != "$b650" ] && echo differs || echo same)" "differs"
+rm -f "$SS/state/s-ss.json"
+# the auto run: unknown, exit 3, nothing pending, and a pending after-compact settles
+printf '# Spec\n' > "$R14/docs/spec16.md"; printf '# P\n\n### Task 1: x\n\nb\n' > "$R14/docs/p16.md"
+git -C "$R14" add -A && git -C "$R14" commit -qm docs
+beat s-ss 2>/dev/null || { mkdir -p "$SS/cockpit"; date +%s > "$SS/cockpit/s-ss"; }
+(cd "$R14" && bash "$S/auto-run" --session s-ss start --spec docs/spec16.md >/dev/null && bash "$S/auto-run" --session s-ss attach --plan docs/p16.md >/dev/null && bash "$S/auto-run" --session s-ss phase plan >/dev/null 2>&1)
+bl
+check "A16: the auto line exits 3 for an unlisted model" "$rc" "3"
+has "A16: the auto line prints the unknown verdict" "$out" "unknown"
+check "A16: it sets no pending" "$(cd "$R14" && bash "$S/auto-run" --session s-ss pending)" "none"
+(cd "$R14" && bash "$S/auto-run" --session s-ss compacted >/dev/null 2>&1)
+bl
+check "A16: a pending after-compact settles (no pending left)" "$(cd "$R14" && bash "$S/auto-run" --session s-ss pending)" "none"
+(cd "$R14" && bash "$S/auto-run" --session s-ss stop >/dev/null 2>&1)
+
 # --- footer ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
