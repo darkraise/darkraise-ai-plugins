@@ -246,8 +246,7 @@ Subagent ([JUDGE]):
 
     ## Second Pass: The Codex Review
 
-    [Include this section only on a risk 3 task whose Codex seat
-    produced a review. Delete it otherwise.]
+    [Include this section only on a risk 3 task whose Codex seat produced a review. Delete it otherwise.]
 
     Do this only after your Spec Compliance verdict, findings and
     Verification Scores are written in full. Then read the Codex

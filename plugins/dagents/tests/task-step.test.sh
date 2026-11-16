@@ -371,6 +371,7 @@ check "review: the runner command names the tier" "$(grep -c -- '--kind task --t
 check "review: the judge prompt carries the Second Pass section" "$(grep -c '^## Second Pass: The Codex Review$' "$JP7")" "1"
 check "review: the Second Pass names the Codex output file" "$(grep -c "^review of the same diff: $WS/task-7-review-codex.json\$" "$JP7")" "1"
 check "review: the Codex prompt leaves the Second Pass out" "$(grep -c 'Second Pass' "$WS/task-7-review-codex-prompt.md")" "0"
+check "review: the judge prompt keeps no template instruction text" "$(grep -cE '^\[Include |otherwise\.\]$' "$JP7")" "0"
 check "review: the risk-3 judge prompt has no placeholder" "$(placeholders "$JP7")" "0"
 review_surface false
 step review docs/plan.md 7
