@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Run a command under GNU timeout, found as timeout or gtimeout (Homebrew's
+# coreutils on macOS), killing it 10 seconds after the bound if it ignores TERM.
+#
+# Usage: with-timeout SECONDS CMD [ARG...]
+# Exit: CMD's status (124 when the bound fired); 125 when no timeout command
+#       is on PATH; 2 on usage.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/timeout.sh
+. "$HERE/lib/timeout.sh"
+
+usage() { printf 'usage: with-timeout SECONDS CMD [ARG...]\n' >&2; exit 2; }
+
+[ $# -ge 2 ] || usage
+[[ $1 =~ ^[0-9]+(\.[0-9]+)?[smhd]?$ ]] || usage
+
+if ! dagents_timeout; then
+  printf 'with-timeout: no timeout command (timeout or gtimeout) on PATH\n' >&2
+  exit 125
+fi
+exec "$DAGENTS_TIMEOUT" -k 10 "$@"

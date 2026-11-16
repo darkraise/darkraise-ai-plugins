@@ -8,13 +8,15 @@
 #
 # Usage: agy-locate
 # Output: agy-locate ok version=<v> root=<directory of the agy executable>
-#         agy-locate off reason=<plugin-not-installed|plugin-version:<v>>
+#         agy-locate off reason=<plugin-not-installed|no-timeout-command|plugin-version:<v>>
 # Exit: 0 ok; 1 off; 2 usage error or missing jq.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # Tests point this at a copy; the shipped file is the version policy and trust record.
 POLICY="${DAGENTS_AGY_POLICY:-$HERE/../reference/agy-policy.json}"
+# shellcheck source=lib/timeout.sh
+. "$HERE/lib/timeout.sh"
 
 die() { printf 'agy-locate: %s\n' "$1" >&2; exit 2; }
 off() { printf 'agy-locate off reason=%s\n' "$1"; exit 1; }
@@ -26,11 +28,8 @@ command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
 agy=$(command -v agy 2>/dev/null) || off plugin-not-installed
 [ -n "$agy" ] || off plugin-not-installed
 
-if command -v timeout >/dev/null 2>&1; then
-  version=$(timeout 20 "$agy" --version 2>/dev/null | head -n 1 | tr -d '\r')
-else
-  version=$("$agy" --version 2>/dev/null | head -n 1 | tr -d '\r')
-fi
+dagents_timeout || off no-timeout-command
+version=$("$DAGENTS_TIMEOUT" 20 "$agy" --version 2>/dev/null | head -n 1 | tr -d '\r')
 [ -n "$version" ] || off plugin-not-installed
 
 # jq reads on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /d/...

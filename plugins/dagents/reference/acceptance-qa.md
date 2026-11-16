@@ -59,7 +59,10 @@ seat: the plan's tests were written by the same author as its code.
    running UI through it.
 3. **Run, with a timeout.** Run each file with its own project's runner,
    `[TEST_COMMAND]` scoped to it or the framework's own, always under
-   `timeout`. A setup or import
+   `bash <plugin-root>/scripts/with-timeout <seconds> <command>`, where
+   `<plugin-root>` is the directory that holds this file's `reference/`
+   directory. Exit 125 means no timeout command (`timeout` or `gtimeout`) is
+   installed: the test never ran. A setup or import
    error is your own bug: fix the test. An assertion failure is a finding, which you never fix: you do not
    edit the code under test. Re-run a failing test once; when the two runs
    disagree, record `flaky`.
