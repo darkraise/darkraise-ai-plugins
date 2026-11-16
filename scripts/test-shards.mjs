@@ -149,6 +149,7 @@ export const windowsSeconds = {
   'plugins/dagents/tests/lens-route.test.sh': 185,
   'plugins/dagents/tests/lock.test.sh': 10,
   'plugins/dagents/tests/native-routing.test.sh': 10,
+  'plugins/dagents/tests/next-session-routing.acceptance.test.sh': 400,
   'plugins/dagents/tests/next-step.test.sh': 500,
   'plugins/dagents/tests/next-step-print.test.sh': 150,
   'plugins/dagents/tests/plan-amend.test.sh': 390,
