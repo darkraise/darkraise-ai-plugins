@@ -44,13 +44,13 @@
 - **C3 — the rename.** `scripts/dagents-rename.mjs` exports `renameText(text)` and `renamePath(relPath)`, and runs as `node scripts/dagents-rename.mjs tree <dir>` (rewrites every text file's content and renames every path component under `<dir>`, in place; exit 0, or exit 1 naming both sources when two distinct source names map to one target) and `node scripts/dagents-rename.mjs patch` (a unified diff on stdin, the translated diff on stdout). The map, applied in this order: (1) `\bDFORGE_` → `DAGENTS_`; (2) `\bDR_[A-Z0-9_]+` → `DAGENTS_` + the rest, except `DR_TEST_BASH`, `DR_TEST_ALL`, `DR_FORGE_*` and `DR_SUPERPOWERS_*`; (3) `DARKMEM_KILL_GRACE`, `DARKMEM_SYNC_LOCK_WAIT_MS`, `DARKMEM_SYNC_TIMEOUT_MS` → `DAGENTS_` + the name; (4) `dforge` followed by ` <digit>`, ` v<digit>` or `-v<digit>` is left unchanged; (5) every other `dforge` → `dagents`, `Dforge` → `Dagents`, `DFORGE` → `DAGENTS`. Files holding a NUL byte are left unchanged.
 - **C4 — the validator.** `validateRepository(root, { names } = {})` takes an optional plugin list (default the maintained list). `NAMESPACED = ['dforge', 'dagents']`: for each such plugin, every `<plugin>:<name>` reference in its own tree must resolve to `plugins/<plugin>/skills/<name>`, `agents/<name>.md` or `commands/<name>.md`, else the error `<rel>:<line>: unresolved <plugin> reference <name>`. `validateSchema(root, plugin = 'dforge')` reads `plugins/<plugin>/config/schema.mjs` and requires `target` to be `<plugin>` or `claude` (error `schema <key>: target must be <plugin> or claude`); the CLI validates the schema of every listed plugin that has one. `.dagents` is unswept. `DAGENTS_DFORGE_ALLOWED` is the set of `plugins/dagents/` files allowed to spell `dforge` (beyond the C3 rule-4 version text); any other match is the error `<rel>:<line>: dforge name in dagents`, and `dagents <digit>` other than `dagents 1` is the error `<rel>:<line>: dagents version other than 1.x`.
 - **C5 — the backport register and tool.** `docs/dforge/registers/2026-11-16-dagents-backport.md` (`**Covers:** -`) holds one row per commit, Item `<sha7> <subject>`, in `git rev-list --no-merges --reverse dforge-v4.17.1..<to> -- plugins/dforge` order. A finished row is `done` with Note `port <dagents-sha7>; fail@parent pass@port` or `port <dagents-sha7>; text-only <path>`, or `n/a` with Note `5-only`, `5-only: <reason>`, `feature: <reason>`, `test-only: <reason>`, `docs-only: <reason>` or `superseded by <sha7>: <reason>`. `node scripts/dagents-backport.mjs rows <from> <to>` prints `<sha7> <subject>` per commit; `five-only <sha>` exits 0 when every non-test path (not under a `/tests/` directory) the commit touches under `plugins/dforge/` is absent at `dforge-v4.17.1`, else 1; `audit <register> <to> [--through <id>]` exits 0 when every row (through row `<id>`, when given) is finished as above, a bare `5-only` passes `five-only`, a `port` sha resolves to a commit that touches `plugins/dagents/`, and (without `--through`) every commit `rows` lists is a row; else it prints one line per problem and exits 1.
-- **C6 — older spellings.** In dagents, `docs/dforge` and `.dforge` are a third older spelling beside `docs/forge`/`docs/superpowers` and `.forge`/`.superpowers`: `dagents_name_key docs/dforge/<rest>` prints `docs/dagents/<rest>`; `dagents_name_spellings docs/dagents/<rest>` prints `docs/dforge/<rest>`, `docs/forge/<rest>`, `docs/superpowers/<rest>` in that order; `dagents_resolve docs/dforge/<rest>` prints `<docs root>/<rest>`.
+- **C6 — older spellings.** In dagents, `docs/dforge` and `.dforge` are a third older spelling beside `docs/forge`/`docs/superpowers` and `.forge`/`.superpowers`: `dagents_name_key docs/dforge/<rest>` prints `docs/dagents/<rest>`; `dagents_name_spellings docs/dagents/<rest>` prints the key `docs/dagents/<rest>`, then `docs/dforge/<rest>`, `docs/forge/<rest>`, `docs/superpowers/<rest>`, in that order; `dagents_resolve docs/dforge/<rest>` prints `<docs root>/<rest>`. The dforge spelling translates local names and citations only: it never forms a darkmem request uri or workstream key.
 - **C7 — darkmem namespace.** dagents' darkmem client name is `dagents`, its document uris start `dagents/`, and every workstream key it writes or reads starts `dagents/` (`dagents/<plan slug>`, `dagents/project`).
 - **C8 — the guard.** `scripts/workflow-guard.mjs` in `plugins/dforge`, `plugins/dagents` and `plugins/dflow`, byte-identical. CLI: `node workflow-guard.mjs --host claude|codex [--self <name>] [--hook session-start]`. Inputs: `WORKFLOW_GUARD_CLAUDE_DIR` (default `${CLAUDE_CONFIG_DIR:-~/.claude}`), `WORKFLOW_GUARD_MANAGED_DIR` (default per OS: `/etc/claude-code` on Linux, `/Library/Application Support/ClaudeCode` on macOS, `C:\Program Files\ClaudeCode` on Windows; `managed-settings.json` plus `managed-settings.d/*.json`), `WORKFLOW_GUARD_PROJECT_DIR` (default `CLAUDE_PROJECT_DIR`, else the working directory's git root), and for Codex `CODEX_HOME` (default `~/.codex`). Siblings are `dforge@darkraise`, `dagents@darkraise`, `dflow@darkraise`. Standalone output: one line `<name>@darkraise <scope>` per active plugin (`<scope>` is `managed`, `local`, `project`, `user` or `default`), exit 0 for zero or one, 3 for two or more, 2 for bad usage. `--self <name>` counts that plugin active (scope `self`). `--hook session-start` reads the hook event JSON on stdin; on a conflict it prints one JSON object `{"systemMessage": <block>, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": <block + relay instruction>}}`, writes the marker and exits 3; with no conflict it prints nothing, deletes this session's marker and exits 0. The block names every active plugin and, per active plugin, `claude plugin disable <name>@darkraise --scope local` first, then `claude plugin disable <name>@darkraise --scope <scope>` when `<scope>` is `user` or `project`. Marker: `${CLAUDE_PLUGIN_DATA}/workflow-guard/<session id with every character outside A-Za-z0-9 replaced by ->`; none is written or read when `CLAUDE_PLUGIN_DATA` is unset; markers older than seven days are deleted on each `--hook session-start`. A malformed file or a thrown error prints one line `workflow-guard: <reason>` on stderr and counts as no conflict. The guard never writes a settings file or `installed_plugins.json`.
 - **C9 — stand-down check in bash hooks.** `scripts/lib/stand-down.sh` (dforge and dagents) defines `stand_down_active SESSION_ID`, status 0 when the C8 marker for that session exists, 1 otherwise or when `CLAUDE_PLUGIN_DATA` or the id is empty.
+- **C10 — 4.x migration.** `dagents-migrate [--dry-run] [DIR]` keeps its 4.17.1 interface and exit codes and adds `.dforge/` → `.dagents/`, `docs/dforge/` → `docs/dagents/`, `<git dir>/dforge/` → `<git dir>/dagents/` as further older sources. Ignore and attributes lines naming `.dforge` or `docs/dforge` gain a dagents twin and are kept. `dforge:` prefixes in active plans and the handoff note become `dagents:`, and migrate stages every rewrite it makes in a tracked file (`git add`), so a moved and rewritten plan shows as a plain rename. A project with an active plan whose `### Task` headings carry no `**Implementer:**` line is refused with `dagents-migrate: refused: dforge 5 layout: not migratable (<plan>)` and nothing moves. A live run refuses that checkout: a lock directory under `<git common dir>/dforge/locks/` whose `host` file names this host and whose `pid` file names a running process, or an auto-run binding whose session is live. Refusals keep 4.17.1's form `dagents-migrate: refused: <reason>`; two tracked docs trees keep its `refused: <a> and <b> all exist` text.
 - **C11 — the mods' guard line.** `guardLine(result, root)` — exported from `hooks/cockpit/lib.ts` in dforge and dagents and from `hooks/hud/band.mjs` in dflow — takes the standalone check's `{ exitCode, stdout }` (or `null` when it failed to start) and the plugin root; it returns `<plugin ids from stdout, joined by ", "> are enabled together; run node <root>/scripts/workflow-guard.mjs --host claude` when `exitCode` is 3, else `null`. A mod awaits the check through `$.process.run` before registering anything with a side effect, and when `guardLine` returns a line it renders only that line.
 - **C12 — harness isolation.** `scripts/test-shards.mjs` exports `guardIsolation(env, dir)`: a copy of `env` with `WORKFLOW_GUARD_CLAUDE_DIR`, `WORKFLOW_GUARD_MANAGED_DIR` and `WORKFLOW_GUARD_PROJECT_DIR` set to `dir` where unset. `scripts/test-all.mjs` passes every job's environment through it with one empty temporary directory.
-- **C10 — 4.x migration.** `dagents-migrate [--dry-run] [DIR]` keeps its 4.17.1 interface and exit codes and adds `.dforge/` → `.dagents/`, `docs/dforge/` → `docs/dagents/`, `<git dir>/dforge/` → `<git dir>/dagents/` as further older sources. Ignore and attributes lines naming `.dforge` or `docs/dforge` gain a dagents twin and are kept. `dforge:` prefixes in active plans and the handoff note become `dagents:`. A project with an active plan whose `### Task` headings carry no `**Implementer:**` line is refused with `dagents-migrate: refused: dforge 5 layout: not migratable (<plan>)` and nothing moves. A live run (dforge's `<git common dir>/dforge/locks` held by a live pid, or an auto-run binding whose session is live) refuses that checkout.
 
 ## Assumptions (evidence)
 
@@ -61,6 +61,11 @@
 - The `DARKMEM_*` names 4.17.1 defines are `DARKMEM_API_KEY`, `DARKMEM_KILL_GRACE`, `DARKMEM_SYNC_LOCK_WAIT_MS`, `DARKMEM_SYNC_TIMEOUT_MS`; its `DR_*` names include the legacy `DR_FORGE_*` and `DR_SUPERPOWERS_*` translations — `git grep` at the tag, 2026-11-17.
 - The renamed 4.17.1 tree passes its own suites once its baseline failures are dispositioned — unverified — Task 5 verifies it (the spec's riskiest assumption).
 - The release workflow bumps dforge to 5.0.0 and tags dagents and dflow at 1.0.0 — `scripts/release.mjs:29-61`, read 2026-11-16.
+- `installed_plugins.json` is `{"version": 2, "plugins": {"<name>@<marketplace>": [{"scope": "user"|"project"|"local", "projectPath"?, "installPath", "version", …}]}}` — this host's `~/.claude-alt/plugins/installed_plugins.json`, read 2026-11-17.
+- Settings precedence is managed, then local, project, user; a plugin with no `enabledPlugins` entry is enabled by default; SessionStart hooks may return `systemMessage` and `hookSpecificOutput.additionalContext` — code.claude.com/docs/en/settings.md, …/plugins/manifest-reference.md and …/hooks.md, per the spec review of 2026-11-17.
+- The per-OS managed-settings paths and the `managed-settings.d` drop-in in C8 — unverified — Task 20 verifies them against code.claude.com/docs/en/settings.md before writing the defaults.
+- No identifier collides under the C3 map at the tag (no `DFORGE_X` beside a renamed `DR_X` or `DARKMEM_X`) — `comm` of the two name sets from `git grep` at `dforge-v4.17.1`, run 2026-11-17.
+- 4.17.1 test helpers the plan's tests reuse: `dforge-migrate.test.sh` defines `check`, `exists`, `migrate`, `repo`, `$FM` and `$TMP`, and refuses two docs trees with `refused: <a> and <b> all exist` (lines 1-60, 496-498); `roots.test.sh` defines `$REPO`, `$TOP`, `$WT`, and `dforge_name_spellings` prints the key first (lines 24-29, 106-111; `lib/roots.sh:153-163`); `darkmem-sync/push.test.mjs` `setup` returns `stub`, `repo`, `seed`, `push`, `docsRoot`, `workRoot`, `env` (lines 10-23); `darkmem-sync/migrate.test.mjs` imports `createClient`, `startStub`, `STUB_KEY`, `sha` and `makeHome`, `makeRepo`, `read`, `run`, `scratch`, `write` (lines 1-9); `cockpit.test.ts` imports from `'../hooks/cockpit/lib'` (line 74); `next-step` prints ``Plan `<rel>` is complete.`` and `<done> of <total> tasks complete` (lines 384, 494); 4.17.1 locks live in `<git common dir>/dforge/locks/<name>.<key>/` with `host` and `pid` files (`lib/lock.sh:17-30, 147-148`) — `git show dforge-v4.17.1:<path>`, run 2026-11-17. After Task 5 every `dforge` in these names reads `dagents`.
 
 ## Task index
 
@@ -171,10 +176,10 @@ test('two plugins may hold suites with one basename', () => {
 });
 
 test('the default run leaves dagents to its own run, and --plugin dagents runs only dagents', () => {
-  assert.ok(list().every(line => !line.includes('plugins/dagents/')));
+  assert.ok(list().every(line => !/plugins\/dagents(\/|$| )/.test(line)));
   const dagents = list('--plugin', 'dagents');
   assert.ok(dagents.length > 0);
-  assert.ok(dagents.every(line => line.includes('plugins/dagents/')), dagents.join('\n'));
+  assert.ok(dagents.every(line => /plugins\/dagents(\/|$| )/.test(line)), dagents.join('\n'));
   const bad = spawnSync(process.execPath, [runner, '--list', '--plugin', 'nope'], { encoding: 'utf8', timeout: 10000 });
   assert.equal(bad.status, 2);
 });
@@ -192,6 +197,8 @@ test('every dagents shell suite has a weight within 80% of its limit', () => {
 });
 ```
 
+Re-key the file's existing weight tables to the new keys, since weights are now looked up by a job's full path: in `a suite with per-part weights schedules each part by its own weight` the weights become `{ 'plugins/dforge/tests/a.test.sh': { start: 700, verdict: 450, x: 100, y: 100 } }`; in `a shell suite needs a weight of at most 80% of its limit` every weights key `'a.test.sh'` becomes `'plugins/dforge/tests/a.test.sh'` (the `shell` helper already builds that path; the expected patterns stay, since the messages now carry the full path, which contains the old name).
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `timeout 120 node --test tests/test-shards.test.mjs; timeout 60 node scripts/test-all.mjs --list | wc -l`
@@ -202,7 +209,7 @@ Expected: FAIL — `sched.suiteSeconds` is undefined and `--plugin` is an unknow
 1. Move `suiteSeconds` and `suiteParts` from `scripts/test-all.mjs` into `scripts/test-shards.mjs` as exports, and re-key them and `windowsSeconds` by repository path (`'plan-lint.test.sh'` → `'plugins/dforge/tests/plan-lint.test.sh'`, `'run-all.sh'` → `'plugins/dr-status/tests/run-all.sh'`). Keep every existing value.
 2. In `selectShard` and `checkShellWeights`, name a job by `job[1][0]` instead of its basename; `checkShellWeights` accepts `^plugins\/[a-z0-9-]+\/tests\/[^/]+\.(test|acceptance)\.sh$` and the dr-status `run-all.sh`, and its messages use the path.
 3. `scripts/test-all.mjs` gains `--plugin` (only `dagents` is accepted; any other value prints `test-all: --plugin takes dagents` and exits 2). The dforge job builder becomes a function of the plugin directory; without `--plugin` the job list is today's; with `--plugin dagents` it is dagents' shell suites (`plugins/dagents/tests/*.test.sh` and `*.acceptance.sh`, parts and limits from the path-keyed tables), `claude plugin test plugins/dagents` under the same `hasClaude` rule, and `tsc --noEmit -p plugins/dagents` when `plugins/dagents/tsconfig.json` and `plugins/dagents/.claude-plugin/types/tsconfig.json` exist and tsc runs.
-4. Give every dagents shell suite a `windowsSeconds` entry: its dforge namesake's weight when one exists at the same basename, else 10, kept within 80% of its limit (raise its `suiteSeconds` entry where needed). Do not give dagents suites dforge's `suiteParts` entries.
+4. Give every dagents shell suite a `windowsSeconds` entry. When the dagents suite declares an `ALL="..."` line naming exactly the parts of its dforge namesake's `suiteParts` entry, give it the same `suiteParts`, `suiteSeconds` and per-part weights under its own path. Otherwise give it one weight: the namesake's weight (the sum of its parts' weights when the namesake's entry is per-part), or 10 when it has no namesake; and when that weight exceeds 80% of 600, a `suiteSeconds` entry of `Math.ceil(weight / 0.8)`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -581,7 +588,7 @@ Expected: FAIL — validate.yml names no dagents shard count.
 1. Measure: `time timeout 1800 node scripts/test-all.mjs --plugin dagents` on this host; set the dagents Linux bound to 1.5× that (seconds, at most 1050) and the Windows dagents shard count so that `selectShard` puts at most 1100 weighted seconds in any shard.
 2. Add job `dagents-changes` on `ubuntu-latest` (checkout with `fetch-depth: 0`): for `workflow_dispatch` output `dagents=true`; for `push` diff `${{ github.event.before }}..${{ github.sha }}`, for `pull_request` diff the base sha to the head sha; output `dagents=true` when any changed path matches `^(plugins/dagents/|scripts/|tests/|\.github/workflows/validate\.yml)`, else `false`; an unreadable `before` (a new branch) outputs `true`.
 3. Add job `validate-dagents` with the `validate` job's `runs-on` expression and `timeout-minutes`, `needs: dagents-changes`, `if: needs.dagents-changes.outputs.dagents == 'true'`; steps: checkout, setup-node 22, the prerequisites step, the Install Claude Code step (copied), `timeout 60s "$CLAUDE" plugin validate plugins/dagents`, `timeout 240s "$CLAUDE" plugin test plugins/dagents`, then `timeout --kill-after=10s <bound>s node scripts/test-all.mjs --plugin dagents`.
-4. Add job `windows-dagents` mirroring `windows` with `needs`/`if` as above and `node scripts/test-all.mjs --plugin dagents --shard ${{ matrix.shard }}/<count>`.
+4. Add job `windows-dagents`, placed after the `windows` job, mirroring `windows` with `needs`/`if` as above and `node scripts/test-all.mjs --plugin dagents --shard ${{ matrix.shard }}/<count>`.
 5. The `homelab` wait job selects `.name == "validate" or .name == "validate-dagents"` and succeeds once every selected job has left `queued`, `waiting` and `pending`, or has been skipped.
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -699,11 +706,11 @@ Expected: FAIL — the script does not exist.
 - [ ] **Step 3: Implement**
 
 1. `scripts/dagents-backport.mjs` implements C5's three subcommands, reading git through `execFileSync` with a 60-second timeout and the register table by its `| # | Item | … |` rows. Problem lines are `row <id>: <problem>` or `<sha7> <subject>: not a row`.
-2. Create the register: write its header (`# dagents backport`, `**Source:** every dforge commit since dforge-v4.17.1, for docs/dforge/specs/2026-11-16-dagents-split-design.md §2`, `**Covers:** -`, the table header), then add a row per line of `node scripts/dagents-backport.mjs rows dforge-v4.17.1 main` with `bash <plugin-root>/scripts/register add <file> "<line>"`, and confirm with `register check`.
+2. Create the register: write its header (`# dagents backport`, `**Source:** every dforge commit since dforge-v4.17.1, for docs/dforge/specs/2026-11-16-dagents-split-design.md §2`, `**Covers:** -`, the table header), then add a row per line of `node scripts/dagents-backport.mjs rows dforge-v4.17.1 main` with `bash plugins/dforge/scripts/register add docs/dforge/registers/2026-11-16-dagents-backport.md "<line>"`, and confirm with `bash plugins/dforge/scripts/register check docs/dforge/registers/2026-11-16-dagents-backport.md`.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `timeout 120 node --test tests/dagents-backport.test.mjs && bash <plugin-root>/scripts/register check docs/dforge/registers/2026-11-16-dagents-backport.md`
+Run: `timeout 120 node --test tests/dagents-backport.test.mjs && bash plugins/dforge/scripts/register check docs/dforge/registers/2026-11-16-dagents-backport.md`
 Expected: PASS, and `register: 0 errors`; the register holds as many rows as `rows` prints.
 
 - [ ] **Step 5: Commit**
@@ -732,19 +739,19 @@ git commit -m "feat(dagents): add the backport register and audit"
 
 - [ ] **Step 2: Triage each row, in order**
 
-For row `<id>` with source `<sha>`: read `git show <sha>`. If `node scripts/dagents-backport.mjs five-only <sha>` exits 0, set `register set <reg> <id> n/a --note "5-only"`. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
+For row `<id>` with source `<sha>`: read `git show <sha>`. If `timeout 60 node scripts/dagents-backport.mjs five-only <sha>` exits 0, run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> n/a --note "5-only"`; set every other `n/a` row with the same command and its own note. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
 
 - [ ] **Step 3: Port each `port` row**
 
-1. `git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > <scratch>/port.diff`.
-2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' <scratch>/port.diff`, or write the reproducing test), run that suite under `timeout`, and confirm it fails.
-3. Apply the rest (`git apply --3way <scratch>/port.diff`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
-4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Set `register set <reg> <id> done --note "port <sha7>; fail@parent pass@port"`, or `"port <sha7>; text-only <path>"` for a prose-only port.
+1. `PD=$(mktemp -d) && git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > "$PD/port.diff"` (remove `$PD` once the row is finished).
+2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' "$PD/port.diff"`, or write the reproducing test), run that suite under `timeout`, and confirm it fails. A port that adds a dagents shell suite also adds its `windowsSeconds` entry to `scripts/test-shards.mjs` (its Linux seconds, at most 80% of its limit).
+3. Apply the rest (`git apply --3way "$PD/port.diff"`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
+4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> done --note "port <sha7>; fail@parent pass@port"`, or with `--note "port <sha7>; text-only <path>"` for a prose-only port.
 
 - [ ] **Step 4: Verify the range**
 
-Run: `node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 36 && timeout 1800 node scripts/test-all.mjs --plugin dagents`
-Expected: exit 0, then the dagents suites pass. A failure is bisected to its port commit and fixed there (`git commit --fixup` plus `git rebase --autosquash` on the unpushed branch) before Task 9.
+Run: `timeout 120 node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 36 && timeout 120 node --test tests/test-shards.test.mjs && timeout 1800 node scripts/test-all.mjs --plugin dagents`
+Expected: exit 0, then both test runs pass. A failure is bisected to its port commit and fixed there (`git commit --fixup` plus `git rebase --autosquash` on the unpushed branch) before Task 9.
 
 - [ ] **Step 5: Commit** — the register: `git commit -m "docs(dagents): triage backport rows 1-36" docs/dforge/registers/2026-11-16-dagents-backport.md`.
 
@@ -767,19 +774,19 @@ Expected: exit 0, then the dagents suites pass. A failure is bisected to its por
 
 - [ ] **Step 2: Triage each row, in order**
 
-For row `<id>` with source `<sha>`: read `git show <sha>`. If `node scripts/dagents-backport.mjs five-only <sha>` exits 0, set `register set <reg> <id> n/a --note "5-only"`. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
+For row `<id>` with source `<sha>`: read `git show <sha>`. If `timeout 60 node scripts/dagents-backport.mjs five-only <sha>` exits 0, run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> n/a --note "5-only"`; set every other `n/a` row with the same command and its own note. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
 
 - [ ] **Step 3: Port each `port` row**
 
-1. `git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > <scratch>/port.diff`.
-2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' <scratch>/port.diff`, or write the reproducing test), run that suite under `timeout`, and confirm it fails.
-3. Apply the rest (`git apply --3way <scratch>/port.diff`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
-4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Set `register set <reg> <id> done --note "port <sha7>; fail@parent pass@port"`, or `"port <sha7>; text-only <path>"` for a prose-only port.
+1. `PD=$(mktemp -d) && git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > "$PD/port.diff"` (remove `$PD` once the row is finished).
+2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' "$PD/port.diff"`, or write the reproducing test), run that suite under `timeout`, and confirm it fails. A port that adds a dagents shell suite also adds its `windowsSeconds` entry to `scripts/test-shards.mjs` (its Linux seconds, at most 80% of its limit).
+3. Apply the rest (`git apply --3way "$PD/port.diff"`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
+4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> done --note "port <sha7>; fail@parent pass@port"`, or with `--note "port <sha7>; text-only <path>"` for a prose-only port.
 
 - [ ] **Step 4: Verify the range**
 
-Run: `node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 72 && timeout 1800 node scripts/test-all.mjs --plugin dagents`
-Expected: exit 0, then the dagents suites pass. A failure is bisected to its port commit and fixed there before Task 10.
+Run: `timeout 120 node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 72 && timeout 120 node --test tests/test-shards.test.mjs && timeout 1800 node scripts/test-all.mjs --plugin dagents`
+Expected: exit 0, then both test runs pass. A failure is bisected to its port commit and fixed there before Task 10.
 
 - [ ] **Step 5: Commit** — the register: `git commit -m "docs(dagents): triage backport rows 37-72" docs/dforge/registers/2026-11-16-dagents-backport.md`.
 
@@ -802,19 +809,19 @@ Expected: exit 0, then the dagents suites pass. A failure is bisected to its por
 
 - [ ] **Step 2: Triage each row, in order**
 
-For row `<id>` with source `<sha>`: read `git show <sha>`. If `node scripts/dagents-backport.mjs five-only <sha>` exits 0, set `register set <reg> <id> n/a --note "5-only"`. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
+For row `<id>` with source `<sha>`: read `git show <sha>`. If `timeout 60 node scripts/dagents-backport.mjs five-only <sha>` exits 0, run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> n/a --note "5-only"`; set every other `n/a` row with the same command and its own note. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
 
 - [ ] **Step 3: Port each `port` row**
 
-1. `git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > <scratch>/port.diff`.
-2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' <scratch>/port.diff`, or write the reproducing test), run that suite under `timeout`, and confirm it fails.
-3. Apply the rest (`git apply --3way <scratch>/port.diff`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
-4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Set `register set <reg> <id> done --note "port <sha7>; fail@parent pass@port"`, or `"port <sha7>; text-only <path>"` for a prose-only port.
+1. `PD=$(mktemp -d) && git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > "$PD/port.diff"` (remove `$PD` once the row is finished).
+2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' "$PD/port.diff"`, or write the reproducing test), run that suite under `timeout`, and confirm it fails. A port that adds a dagents shell suite also adds its `windowsSeconds` entry to `scripts/test-shards.mjs` (its Linux seconds, at most 80% of its limit).
+3. Apply the rest (`git apply --3way "$PD/port.diff"`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
+4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> done --note "port <sha7>; fail@parent pass@port"`, or with `--note "port <sha7>; text-only <path>"` for a prose-only port.
 
 - [ ] **Step 4: Verify the range**
 
-Run: `node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 108 && timeout 1800 node scripts/test-all.mjs --plugin dagents`
-Expected: exit 0, then the dagents suites pass. A failure is bisected to its port commit and fixed there before Task 11.
+Run: `timeout 120 node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 108 && timeout 120 node --test tests/test-shards.test.mjs && timeout 1800 node scripts/test-all.mjs --plugin dagents`
+Expected: exit 0, then both test runs pass. A failure is bisected to its port commit and fixed there before Task 11.
 
 - [ ] **Step 5: Commit** — the register: `git commit -m "docs(dagents): triage backport rows 73-108" docs/dforge/registers/2026-11-16-dagents-backport.md`.
 
@@ -837,19 +844,19 @@ Expected: exit 0, then the dagents suites pass. A failure is bisected to its por
 
 - [ ] **Step 2: Triage each row, in order**
 
-For row `<id>` with source `<sha>`: read `git show <sha>`. If `node scripts/dagents-backport.mjs five-only <sha>` exits 0, set `register set <reg> <id> n/a --note "5-only"`. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
+For row `<id>` with source `<sha>`: read `git show <sha>`. If `timeout 60 node scripts/dagents-backport.mjs five-only <sha>` exits 0, run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> n/a --note "5-only"`; set every other `n/a` row with the same command and its own note. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
 
 - [ ] **Step 3: Port each `port` row**
 
-1. `git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > <scratch>/port.diff`.
-2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' <scratch>/port.diff`, or write the reproducing test), run that suite under `timeout`, and confirm it fails.
-3. Apply the rest (`git apply --3way <scratch>/port.diff`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
-4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Set `register set <reg> <id> done --note "port <sha7>; fail@parent pass@port"`, or `"port <sha7>; text-only <path>"` for a prose-only port.
+1. `PD=$(mktemp -d) && git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > "$PD/port.diff"` (remove `$PD` once the row is finished).
+2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' "$PD/port.diff"`, or write the reproducing test), run that suite under `timeout`, and confirm it fails. A port that adds a dagents shell suite also adds its `windowsSeconds` entry to `scripts/test-shards.mjs` (its Linux seconds, at most 80% of its limit).
+3. Apply the rest (`git apply --3way "$PD/port.diff"`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
+4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> done --note "port <sha7>; fail@parent pass@port"`, or with `--note "port <sha7>; text-only <path>"` for a prose-only port.
 
 - [ ] **Step 4: Verify the range**
 
-Run: `node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 144 && timeout 1800 node scripts/test-all.mjs --plugin dagents`
-Expected: exit 0, then the dagents suites pass. A failure is bisected to its port commit and fixed there before Task 12.
+Run: `timeout 120 node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 144 && timeout 120 node --test tests/test-shards.test.mjs && timeout 1800 node scripts/test-all.mjs --plugin dagents`
+Expected: exit 0, then both test runs pass. A failure is bisected to its port commit and fixed there before Task 12.
 
 - [ ] **Step 5: Commit** — the register: `git commit -m "docs(dagents): triage backport rows 109-144" docs/dforge/registers/2026-11-16-dagents-backport.md`.
 
@@ -872,19 +879,19 @@ Expected: exit 0, then the dagents suites pass. A failure is bisected to its por
 
 - [ ] **Step 2: Triage each row, in order**
 
-For row `<id>` with source `<sha>`: read `git show <sha>`. If `node scripts/dagents-backport.mjs five-only <sha>` exits 0, set `register set <reg> <id> n/a --note "5-only"`. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
+For row `<id>` with source `<sha>`: read `git show <sha>`. If `timeout 60 node scripts/dagents-backport.mjs five-only <sha>` exits 0, run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> n/a --note "5-only"`; set every other `n/a` row with the same command and its own note. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
 
 - [ ] **Step 3: Port each `port` row**
 
-1. `git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > <scratch>/port.diff`.
-2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' <scratch>/port.diff`, or write the reproducing test), run that suite under `timeout`, and confirm it fails.
-3. Apply the rest (`git apply --3way <scratch>/port.diff`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
-4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Set `register set <reg> <id> done --note "port <sha7>; fail@parent pass@port"`, or `"port <sha7>; text-only <path>"` for a prose-only port.
+1. `PD=$(mktemp -d) && git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > "$PD/port.diff"` (remove `$PD` once the row is finished).
+2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' "$PD/port.diff"`, or write the reproducing test), run that suite under `timeout`, and confirm it fails. A port that adds a dagents shell suite also adds its `windowsSeconds` entry to `scripts/test-shards.mjs` (its Linux seconds, at most 80% of its limit).
+3. Apply the rest (`git apply --3way "$PD/port.diff"`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
+4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> done --note "port <sha7>; fail@parent pass@port"`, or with `--note "port <sha7>; text-only <path>"` for a prose-only port.
 
 - [ ] **Step 4: Verify the range**
 
-Run: `node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 180 && timeout 1800 node scripts/test-all.mjs --plugin dagents`
-Expected: exit 0, then the dagents suites pass. A failure is bisected to its port commit and fixed there before Task 13.
+Run: `timeout 120 node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 180 && timeout 120 node --test tests/test-shards.test.mjs && timeout 1800 node scripts/test-all.mjs --plugin dagents`
+Expected: exit 0, then both test runs pass. A failure is bisected to its port commit and fixed there before Task 13.
 
 - [ ] **Step 5: Commit** — the register: `git commit -m "docs(dagents): triage backport rows 145-180" docs/dforge/registers/2026-11-16-dagents-backport.md`.
 
@@ -907,19 +914,19 @@ Expected: exit 0, then the dagents suites pass. A failure is bisected to its por
 
 - [ ] **Step 2: Triage each row, in order**
 
-For row `<id>` with source `<sha>`: read `git show <sha>`. If `node scripts/dagents-backport.mjs five-only <sha>` exits 0, set `register set <reg> <id> n/a --note "5-only"`. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
+For row `<id>` with source `<sha>`: read `git show <sha>`. If `timeout 60 node scripts/dagents-backport.mjs five-only <sha>` exits 0, run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> n/a --note "5-only"`; set every other `n/a` row with the same command and its own note. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
 
 - [ ] **Step 3: Port each `port` row**
 
-1. `git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > <scratch>/port.diff`.
-2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' <scratch>/port.diff`, or write the reproducing test), run that suite under `timeout`, and confirm it fails.
-3. Apply the rest (`git apply --3way <scratch>/port.diff`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
-4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Set `register set <reg> <id> done --note "port <sha7>; fail@parent pass@port"`, or `"port <sha7>; text-only <path>"` for a prose-only port.
+1. `PD=$(mktemp -d) && git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > "$PD/port.diff"` (remove `$PD` once the row is finished).
+2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' "$PD/port.diff"`, or write the reproducing test), run that suite under `timeout`, and confirm it fails. A port that adds a dagents shell suite also adds its `windowsSeconds` entry to `scripts/test-shards.mjs` (its Linux seconds, at most 80% of its limit).
+3. Apply the rest (`git apply --3way "$PD/port.diff"`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
+4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> done --note "port <sha7>; fail@parent pass@port"`, or with `--note "port <sha7>; text-only <path>"` for a prose-only port.
 
 - [ ] **Step 4: Verify the range**
 
-Run: `node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 216 && timeout 1800 node scripts/test-all.mjs --plugin dagents`
-Expected: exit 0, then the dagents suites pass. A failure is bisected to its port commit and fixed there before Task 14.
+Run: `timeout 120 node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 216 && timeout 120 node --test tests/test-shards.test.mjs && timeout 1800 node scripts/test-all.mjs --plugin dagents`
+Expected: exit 0, then both test runs pass. A failure is bisected to its port commit and fixed there before Task 14.
 
 - [ ] **Step 5: Commit** — the register: `git commit -m "docs(dagents): triage backport rows 181-216" docs/dforge/registers/2026-11-16-dagents-backport.md`.
 
@@ -942,19 +949,19 @@ Expected: exit 0, then the dagents suites pass. A failure is bisected to its por
 
 - [ ] **Step 2: Triage each row, in order**
 
-For row `<id>` with source `<sha>`: read `git show <sha>`. If `node scripts/dagents-backport.mjs five-only <sha>` exits 0, set `register set <reg> <id> n/a --note "5-only"`. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
+For row `<id>` with source `<sha>`: read `git show <sha>`. If `timeout 60 node scripts/dagents-backport.mjs five-only <sha>` exits 0, run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> n/a --note "5-only"`; set every other `n/a` row with the same command and its own note. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
 
 - [ ] **Step 3: Port each `port` row**
 
-1. `git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > <scratch>/port.diff`.
-2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' <scratch>/port.diff`, or write the reproducing test), run that suite under `timeout`, and confirm it fails.
-3. Apply the rest (`git apply --3way <scratch>/port.diff`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
-4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Set `register set <reg> <id> done --note "port <sha7>; fail@parent pass@port"`, or `"port <sha7>; text-only <path>"` for a prose-only port.
+1. `PD=$(mktemp -d) && git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > "$PD/port.diff"` (remove `$PD` once the row is finished).
+2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' "$PD/port.diff"`, or write the reproducing test), run that suite under `timeout`, and confirm it fails. A port that adds a dagents shell suite also adds its `windowsSeconds` entry to `scripts/test-shards.mjs` (its Linux seconds, at most 80% of its limit).
+3. Apply the rest (`git apply --3way "$PD/port.diff"`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
+4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> done --note "port <sha7>; fail@parent pass@port"`, or with `--note "port <sha7>; text-only <path>"` for a prose-only port.
 
 - [ ] **Step 4: Verify the range**
 
-Run: `node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 252 && timeout 1800 node scripts/test-all.mjs --plugin dagents`
-Expected: exit 0, then the dagents suites pass. A failure is bisected to its port commit and fixed there before Task 15.
+Run: `timeout 120 node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main --through 252 && timeout 120 node --test tests/test-shards.test.mjs && timeout 1800 node scripts/test-all.mjs --plugin dagents`
+Expected: exit 0, then both test runs pass. A failure is bisected to its port commit and fixed there before Task 15.
 
 - [ ] **Step 5: Commit** — the register: `git commit -m "docs(dagents): triage backport rows 217-252" docs/dforge/registers/2026-11-16-dagents-backport.md`.
 
@@ -977,19 +984,19 @@ Expected: exit 0, then the dagents suites pass. A failure is bisected to its por
 
 - [ ] **Step 2: Refresh, then triage each row, in order**
 
-First add a row for every line `node scripts/dagents-backport.mjs rows dforge-v4.17.1 main` prints that the register lacks (commits that landed on `main` since Task 7). Then, for each row from 253 on with source `<sha>`: read `git show <sha>`. If `node scripts/dagents-backport.mjs five-only <sha>` exits 0, set `register set <reg> <id> n/a --note "5-only"`. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
+First add a row for every line `node scripts/dagents-backport.mjs rows dforge-v4.17.1 main` prints that the register lacks (commits that landed on `main` since Task 7). Then, for each row from 253 on with source `<sha>`: read `git show <sha>`. If `timeout 60 node scripts/dagents-backport.mjs five-only <sha>` exits 0, run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> n/a --note "5-only"`; set every other `n/a` row with the same command and its own note. Otherwise decide, from the diff and the 4.17.1 code it touches in `plugins/dagents`, whether its defect exists in 4.17.1: a `port`, or `n/a` with `feature: …`, `test-only: …`, `docs-only: …`, `superseded by <sha7>: …` or `5-only: …`, each reason naming the code in one clause.
 
 - [ ] **Step 3: Port each `port` row**
 
-1. `git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > <scratch>/port.diff`.
-2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' <scratch>/port.diff`, or write the reproducing test), run that suite under `timeout`, and confirm it fails.
-3. Apply the rest (`git apply --3way <scratch>/port.diff`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
-4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Set `register set <reg> <id> done --note "port <sha7>; fail@parent pass@port"`, or `"port <sha7>; text-only <path>"` for a prose-only port.
+1. `PD=$(mktemp -d) && git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > "$PD/port.diff"` (remove `$PD` once the row is finished).
+2. Apply only the test hunks (`git apply --3way --include='plugins/dagents/tests/*' "$PD/port.diff"`, or write the reproducing test), run that suite under `timeout`, and confirm it fails. A port that adds a dagents shell suite also adds its `windowsSeconds` entry to `scripts/test-shards.mjs` (its Linux seconds, at most 80% of its limit).
+3. Apply the rest (`git apply --3way "$PD/port.diff"`); where it does not apply because version 5 restructured the code, reimplement the same behaviour in the 4.17.1 structure. Run the suite: it passes.
+4. Commit `fix(dagents): <source subject's description>` with body `Backport of <sha>.`; source commits fixing one defect may share one port commit. Run `bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> done --note "port <sha7>; fail@parent pass@port"`, or with `--note "port <sha7>; text-only <path>"` for a prose-only port.
 
 - [ ] **Step 4: Verify every row**
 
-Run: `node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main && timeout 1800 node scripts/test-all.mjs --plugin dagents`
-Expected: exit 0, then the dagents suites pass.
+Run: `timeout 120 node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main && timeout 120 node --test tests/test-shards.test.mjs && timeout 1800 node scripts/test-all.mjs --plugin dagents`
+Expected: exit 0, then both test runs pass.
 
 - [ ] **Step 5: Commit** — the register: `git commit -m "docs(dagents): finish the backport triage" docs/dforge/registers/2026-11-16-dagents-backport.md`.
 
@@ -1009,14 +1016,14 @@ Expected: exit 0, then the dagents suites pass.
 **Implementer:** dforge:impl-opus-high
 **Evaluation:** files 2 - spec 2 - coupling 1 - risk 2 = 7
 
-- [ ] **Step 1: Extend the test `plugins/dagents/tests/roots.test.sh`** (before its summary lines, using its `check <name> <got> <want>` helper; `$R` is a repository the suite creates, with its docs root at `$R/docs/dagents`)
+- [ ] **Step 1: Extend the test `plugins/dagents/tests/roots.test.sh`** (before its summary lines, using its `check <name> <got> <want>` helper and its repository `$TOP`)
 
 ```bash
 # --- dforge 4.x citations read as an older spelling ---
 check "dforge key" "$(dagents_name_key docs/dforge/plans/x.md)" "docs/dagents/plans/x.md"
 check "dforge root key" "$(dagents_name_key docs/dforge)" "docs/dagents"
-check "spellings name dforge first" "$(dagents_name_spellings docs/dagents/plans/x.md | tr '\n' '|')" "docs/dforge/plans/x.md|docs/forge/plans/x.md|docs/superpowers/plans/x.md|"
-check "dforge citation resolves" "$(cd "$R" && dagents_resolve docs/dforge/plans/x.md)" "$(cd "$R" && dagents_docs_root)/plans/x.md"
+check "spellings: key, then dforge first" "$(dagents_name_spellings docs/dagents/plans/x.md | tr '\n' '|')" "docs/dagents/plans/x.md|docs/dforge/plans/x.md|docs/forge/plans/x.md|docs/superpowers/plans/x.md|"
+check "dforge citation resolves" "$(cd "$TOP" && dagents_resolve docs/dforge/plans/x.md)" "$(cd "$TOP" && dagents_docs_root)/plans/x.md"
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -1026,13 +1033,13 @@ Expected: FAIL — `dforge key` gets `docs/dforge/plans/x.md`.
 
 - [ ] **Step 3: Implement**
 
-1. In each list of older spellings (`docs/forge`, `docs/superpowers`, `.forge`, `.superpowers`, the darkmem mirror's legacy prefixes and base lists, sync's and reconcile's spelling lists), add `docs/dforge`, `.dforge` or `dforge` as the first older spelling, with C6's output order.
+1. In each list of older local spellings (`docs/forge`, `docs/superpowers`, `.forge`, `.superpowers` in `lib/roots.sh`, the mirror's local base list of worktree docs directories, sync's and reconcile's citation translations), add `docs/dforge` or `.dforge` as the first older spelling, with C6's output order (the key stays first). Never add `dforge` to a list from which a darkmem request uri, document prefix or workstream key is formed (`DOC_PREFIX`, `LEGACY_PREFIX` and their uses stay as they are).
 2. Add every file this task changed to `DAGENTS_DFORGE_ALLOWED`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `timeout 600 bash plugins/dagents/tests/roots.test.sh && timeout 600 bash plugins/dagents/tests/darkmem-sync.test.sh && timeout 60 node scripts/validate-repository.mjs`
-Expected: PASS on all three.
+Expected: PASS on all three; the existing roots cases, whose expected spellings gain the `docs/dforge` line, are updated to the C6 order.
 
 - [ ] **Step 5: Commit**
 
@@ -1059,15 +1066,18 @@ git commit -m "feat(dagents): read dforge spellings as older ones"
 - [ ] **Step 1: Write the failing test** (append to `plugins/dagents/tests/darkmem-sync/push.test.mjs`, which already defines `setup`)
 
 ```js
-test("dagents keeps to its own darkmem client, documents and workstreams", async t => {
+test("dagents keeps to its own darkmem client, documents and workstreams on push and pull", async t => {
   const s = await setup(t);
   await s.seed.putDocument({ project: "proj", uri: "dforge/specs/old.md", content: "dforge's\n" });
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "dforge's\n" }] });
   write(path.join(s.docsRoot, "specs", "a.md"), "# A\n");
   write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/dagents/plans/p1.md\nTask 1: complete (abc)\n");
+  const before = s.stub.db.requests.length;
   const pushed = await s.push();
   assert.equal(pushed.code, 0, pushed.stdout + pushed.stderr);
-  for (const r of s.stub.db.requests) {
+  const pulled = await run(["pull"], { cwd: s.repo, env: s.env });
+  assert.equal(pulled.code, 0, pulled.stdout + pulled.stderr);
+  for (const r of s.stub.db.requests.slice(before)) {
     if (r.body?.uri) assert.match(r.body.uri, /^dagents\//, JSON.stringify(r));
     if (r.body?.workstream) assert.match(r.body.workstream, /^dagents\//, JSON.stringify(r));
     if (r.query?.workstream) assert.match(r.query.workstream, /^dagents\//, JSON.stringify(r));
@@ -1136,14 +1146,26 @@ git -C "$D" add .gitignore .gitattributes docs CLAUDE.md
 git -C "$D" commit -q -m docs
 DG=$(git -C "$D" rev-parse --absolute-git-dir)
 mkdir -p "$DG/dforge/locks"
+DW="$TMP/d4wt"
+git -C "$D" worktree add -q -b feature "$DW"
+mkdir -p "$DW/.dforge/handoff"
+printf 'next: dforge:executing-plans\n' > "$DW/.dforge/handoff/latest.md"
+DWG=$(git -C "$DW" rev-parse --absolute-git-dir)
+mkdir -p "$DWG/dforge/tasks"
+tree_of() { (cd "$1" && find . -path ./.git -prune -o -print | sort; cat .gitignore .gitattributes 2>/dev/null) | cksum; }
+before=$(tree_of "$D")
 
 dry=$(migrate "$FM" --dry-run "$D" 2>&1)
-check "dforge dry run: nothing moved" "$(exists "$D/.dagents")$(exists "$D/docs/dagents")" "nono"
+check "dforge dry run: nothing moved" "$(exists "$D/.dagents")$(exists "$D/docs/dagents")$(exists "$DW/.dagents")" "nonono"
+check "dforge dry run: nothing rewritten" "$(tree_of "$D")" "$before"
 out=$(migrate "$FM" "$D" 2>&1); code=$?
 check "dforge: exit 0" "$code" "0"
 check "dforge: ledger moved" "$(head -n 1 "$D/.dagents/sdd/p1/progress.md" 2>/dev/null)" "# SDD ledger — plan: docs/dforge/plans/p1.md"
 check "dforge: docs moved and staged" "$(git -C "$D" status --porcelain -- docs | cut -c1-2 | sort -u | tr -d ' ')" "R"
 check "dforge: git-dir state moved" "$(exists "$DG/dagents/locks")$(exists "$DG/dforge")" "yesno"
+check "dforge worktree: state moved" "$(exists "$DW/.dagents/handoff/latest.md")$(exists "$DW/.dforge")" "yesno"
+check "dforge worktree: handoff prefix rewritten" "$(cat "$DW/.dagents/handoff/latest.md")" "next: dagents:executing-plans"
+check "dforge worktree: git-dir state moved" "$(exists "$DWG/dagents/tasks")$(exists "$DWG/dforge")" "yesno"
 check "dforge: active plan prefixes rewritten" "$(grep -c 'dagents:' "$D/docs/dagents/plans/p1.md")" "3"
 check "dforge: ignore twin added, original kept" "$(tr '\n' '|' < "$D/.gitignore")" ".dforge/|.dagents/|"
 check "dforge: attributes twin added" "$(grep -c 'docs/dagents/\*\* linguist-documentation' "$D/.gitattributes")" "1"
@@ -1175,18 +1197,33 @@ echo state > "$G/.dforge/session-state.log"
 git -C "$G" add docs; git -C "$G" commit -q -m docs
 migrate "$FM" "$G" > /dev/null 2>&1; check "4.x opened under dforge 5: migrates" "$?$(exists "$G/docs/dagents/plans/p.md")" "0yes"
 
-# --- per-item refusals ---
-H="$TMP/d4d"
-repo "$H"
-mkdir -p "$H/docs/dforge/plans" "$H/.dforge/sdd/p" "$H/.dagents/sdd/p"
-printf '# P\n\n### Task 1: one\n\n**Implementer:** dforge:impl-sonnet-low\n' > "$H/docs/dforge/plans/p.md"
-echo old > "$H/.dforge/sdd/p/progress.md"; echo new > "$H/.dagents/sdd/p/progress.md"
-git -C "$H" add docs; git -C "$H" commit -q -m docs
-echo dirty >> "$H/docs/dforge/plans/p.md"
-migrate "$FM" "$H" > /dev/null 2>&1; code=$?
+# --- per-item refusals, one fixture each ---
+plan4='# P\n\n### Task 1: one\n\n**Implementer:** dforge:impl-sonnet-low\n'
+fixture() { repo "$1"; mkdir -p "$1/docs/dforge/plans"; printf "$plan4" > "$1/docs/dforge/plans/p.md"; git -C "$1" add docs; git -C "$1" commit -q -m docs; }
+H1="$TMP/r-differ"; fixture "$H1"
+mkdir -p "$H1/.dforge/sdd/p" "$H1/.dagents/sdd/p"; echo old > "$H1/.dforge/sdd/p/progress.md"; echo new > "$H1/.dagents/sdd/p/progress.md"
+out=$(migrate "$FM" "$H1" 2>&1); code=$?
 check "differing same-path file: refused" "$code" "1"
-check "differing file left in place" "$(cat "$H/.dforge/sdd/p/progress.md")" "old"
-check "dirty docs: left in place" "$(exists "$H/docs/dforge/plans/p.md")" "yes"
+check "differing file left in place" "$(cat "$H1/.dforge/sdd/p/progress.md")" "old"
+check "the docs still moved" "$(exists "$H1/docs/dagents/plans/p.md")" "yes"
+H2="$TMP/r-dirty"; fixture "$H2"
+echo dirty >> "$H2/docs/dforge/plans/p.md"
+migrate "$FM" "$H2" > /dev/null 2>&1; code=$?
+check "dirty docs: refused" "$code" "1"
+check "dirty docs: left in place" "$(exists "$H2/docs/dforge/plans/p.md")$(exists "$H2/docs/dagents")" "yesno"
+H3="$TMP/r-two"; fixture "$H3"
+mkdir -p "$H3/docs/dagents"; echo x > "$H3/docs/dagents/x.md"; git -C "$H3" add docs; git -C "$H3" commit -q -m two
+out=$(migrate "$FM" "$H3" 2>&1); code=$?
+check "two docs trees: refused" "$code" "1"
+check "two docs trees: says why" "$(printf '%s' "$out" | grep -c "refused: .*docs/dforge.* all exist")" "1"
+H4="$TMP/r-live"; fixture "$H4"
+H4G=$(git -C "$H4" rev-parse --git-common-dir); case $H4G in /*) ;; *) H4G="$H4/$H4G" ;; esac
+mkdir -p "$H4G/dforge/locks/run.abc"; uname -n > "$H4G/dforge/locks/run.abc/host"; echo "$$" > "$H4G/dforge/locks/run.abc/pid"
+out=$(migrate "$FM" "$H4" 2>&1); code=$?
+check "live run: refused" "$code" "1"
+check "live run: nothing moved" "$(exists "$H4/docs/dagents")" "no"
+echo 999999 > "$H4G/dforge/locks/run.abc/pid"
+migrate "$FM" "$H4" > /dev/null 2>&1; check "dead pid: migrates" "$?$(exists "$H4/docs/dagents/plans/p.md")" "0yes"
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -1197,15 +1234,15 @@ Expected: FAIL — `.dforge` is not a migrate source.
 - [ ] **Step 3: Implement**
 
 1. In `dagents-migrate`, add `.dforge`, `docs/dforge` and `<git dir>/dforge` to the older sources of each move, using the existing per-item move, merge and refusal paths (the dirty check covers only paths migrate moves or rewrites).
-2. For `.dforge` and `docs/dforge` ignore and attributes lines, append the dagents twin and keep the original (the older dr-forge and dr-superpowers lines keep today's replace behaviour).
+2. For `.dforge` and `docs/dforge` ignore and attributes lines, append the dagents twin and keep the original (the older dr-forge and dr-superpowers lines keep today's replace behaviour). Stage every rewrite migrate makes in a tracked file.
 3. Add `dforge:` to the prefixes rewritten in active plans and the handoff note; list other tracked files that mention `docs/dforge`, `.dforge` or `dforge:` on a `report:` line each, without changing them.
 4. Before any move, refuse the checkout per C10 when an active plan (not in `completed.md`) has a `### Task` heading with no `**Implementer:**` line, and when dforge's locks or an auto-run binding are held by a live session; `.dforge/session-state.log` and other hook-written files are never markers.
-5. The migrate skill, `session-start.sh` and `repo-audit` name `dforge 4.x layout found` when a project has `docs/dforge` or `.dforge` and no C10 marker. Add the changed files to `DAGENTS_DFORGE_ALLOWED`.
+5. The migrate skill, `session-start.sh` and `repo-audit` name `dforge 4.x layout found` when a project has `docs/dforge` or `.dforge` and no C10 marker; `session-start.sh` prints it only on its normal path, after the guard (a stood-down session prints nothing of it). Add the changed files to `DAGENTS_DFORGE_ALLOWED`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `timeout 900 bash plugins/dagents/tests/dagents-migrate.test.sh && timeout 60 node scripts/validate-repository.mjs`
-Expected: PASS on all three.
+Expected: PASS on both.
 
 - [ ] **Step 5: Commit**
 
@@ -1231,7 +1268,14 @@ git commit -m "feat(dagents): migrate a dforge 4.x project"
 **Evaluation:** files 1 - spec 2 - coupling 2 - risk 3 = 8
 **Lenses:** silent-failures, security
 
-- [ ] **Step 1: Write the failing test** (append to `plugins/dagents/tests/darkmem-sync/migrate.test.mjs`; it imports `startStub`, `STUB_KEY` and the helpers `makeRepo`, `write`, `read`, `git` from this directory, and `runMigrate(repo, env)` runs `bash ../../scripts/dagents-migrate <repo>` with a 120-second timeout)
+- [ ] **Step 1: Write the failing test** (append to `plugins/dagents/tests/darkmem-sync/migrate.test.mjs`, which already imports `fs`, `path`, `createClient`, `startStub`, `STUB_KEY`, `makeRepo`, `read`, `run`, `scratch` and `write`; add `import { spawnSync } from "node:child_process";` and `import { fileURLToPath } from "node:url";` to its imports and this helper above the new tests)
+
+```js
+const MIGRATE = fileURLToPath(new URL("../../scripts/dagents-migrate", import.meta.url));
+const runMigrate = (repo, env, ...args) => spawnSync(process.env.DR_TEST_BASH ?? "bash", [MIGRATE, ...args, repo], { cwd: repo, env, encoding: "utf8", timeout: 120000 });
+```
+
+The tests:
 
 ```js
 test("a dforge 4.x project's home record and darkmem data move to dagents, and dforge keeps the rest", async t => {
@@ -1271,11 +1315,28 @@ test("a dforge 4.x project's home record and darkmem data move to dagents, and d
   assert.match(out.stdout, /dforge\/ documents and workstreams were copied, not deleted; to delete them once no dforge checkout maps projA, run: /);
 
   const before = stub.db.requests.length;
-  const sync = run(["push"], { cwd: a, env: { ...env } });
+  const sync = await run(["push"], { cwd: a, env: { ...env } });
   assert.equal(sync.code, 0, sync.stdout + sync.stderr);
   const after = stub.db.requests.slice(before);
   assert.ok(!after.some(r => r.method === "DELETE"));
   assert.ok(!after.some(r => r.method === "POST" && r.path === "/api/v1/documents"), "nothing is re-uploaded");
+});
+
+test("the migrate dry run lists the home steps and the variables to rename, and writes nothing", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const home = scratch("home-");
+  const a = makeRepo();
+  write(path.join(home, ".dforge", "config.json"), JSON.stringify({ autoRun: "off", darkmem: { url: stub.url, projects: { [a]: "projA" } } }));
+  write(path.join(home, ".dforge", "stores.json"), JSON.stringify({ [a]: { documents: "darkmem", progress: "darkmem", project: "projA", mirror: path.join(home, ".dforge", "mirror", "projA") } }));
+  const env = { ...process.env, HOME: home, DARKMEM_API_KEY: STUB_KEY, CLAUDE_CONFIG_DIR: "", DFORGE_BUDGET: "200k" };
+  const before = stub.db.requests.filter(r => r.method !== "GET").length;
+  const out = runMigrate(a, env, "--dry-run");
+  assert.equal(out.status, 0, out.stdout + out.stderr);
+  assert.match(out.stdout, /DFORGE_BUDGET .*DAGENTS_BUDGET/);
+  assert.equal(fs.existsSync(path.join(home, ".dagents")), false);
+  assert.equal(JSON.parse(read(path.join(home, ".dforge", "stores.json")))[a].project, "projA");
+  assert.equal(stub.db.requests.filter(r => r.method !== "GET").length, before);
 });
 ```
 
@@ -1516,8 +1577,14 @@ printf '{"enabledPlugins":{"dforge@darkraise":true}}' > "$TMP/claude/settings.js
 out=$(printf '{"session_id":"s2","cwd":"%s","source":"fork","hook_event_name":"SessionStart"}' "$TMP/project" | (cd "$TMP/project" && bash "$ROOT/scripts/session-start.sh"))
 check "fork: guard runs" "$( [ -e "$TMP/data/workflow-guard/s2" ] && echo yes)" "yes"
 
-PATH="/usr/bin/nonexistent" out=$(event startup SessionStart | (cd "$TMP/project" && /bin/bash "$ROOT/scripts/session-start.sh" 2>&1))
-check "node missing: no guard line" "$(printf '%s' "$out" | grep -c 'workflow-guard')" "0"
+printf '{"enabledPlugins":{"dforge@darkraise":false}}' > "$TMP/claude/settings.json"
+mkdir -p "$TMP/nonode"
+for tool in bash sh cat jq git sed awk tr mkdir rm date grep head tail sort uname mktemp dirname basename printf wc cut env ls find cp mv touch stat od; do
+  where=$(command -v "$tool" 2>/dev/null) && [ "$where" != "$(command -v node 2>/dev/null)" ] && ln -sf "$where" "$TMP/nonode/$tool"
+done
+with_node=$(event resume SessionStart | (cd "$TMP/project" && bash "$ROOT/scripts/session-start.sh" 2>/dev/null))
+no_node_err=$( (event resume SessionStart | (cd "$TMP/project" && PATH="$TMP/nonode" bash "$ROOT/scripts/session-start.sh" >/dev/null)) 2>&1 )
+check "node missing: no guard output on stderr" "$(printf '%s' "$no_node_err" | grep -c 'workflow-guard\|node: command not found')" "0"
 
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
@@ -1544,8 +1611,9 @@ Expected: FAIL — session start prints the normal injection.
 2. `session-start.sh`: first, when node is on PATH, run `node "$CLAUDE_PLUGIN_ROOT/scripts/workflow-guard.mjs" --host claude --self dagents --hook session-start` with the hook's stdin; on exit 3 print its stdout and exit 0 before any other work (injection, darkmem reconcile and pull, the transcript record).
 3. Every other hook script `hooks.json` names reads the session id the way it already does (or from stdin with `jq`) and exits 0 silently when `stand_down_active` succeeds, before any other work.
 4. `hooks.json`: the SessionStart matcher becomes `startup|resume|clear|compact|fork`.
-5. Add `guardIsolation` (C12) to `scripts/test-shards.mjs`; `scripts/test-all.mjs` creates one empty temporary directory, passes every job's environment through `guardIsolation`, and removes the directory when the run ends.
-6. By hand, once: start a nested Claude Code session with both dagents and dforge enabled (see memory "Driving nested Claude smoke runs") and confirm the `systemMessage` shows; record the result in the baseline note under `## Guard message`.
+5. Add `guardIsolation` (C12) to `scripts/test-shards.mjs`; `scripts/test-all.mjs` creates one empty temporary directory, passes every job's environment through `guardIsolation`, and removes the directory when the run ends. So that a suite run alone is isolated too, every dagents suite that runs a hook script (`rg -l 'session-start.sh|turn-start.sh|turn-end.sh|ui-edit-hook.sh|ui-turn-end.sh|darkmem-stop-push.sh|impl-stop-gate' plugins/dagents/tests`) exports `WORKFLOW_GUARD_CLAUDE_DIR`, `WORKFLOW_GUARD_MANAGED_DIR` and `WORKFLOW_GUARD_PROJECT_DIR` to a fresh directory under its own temporary directory, on the line after it creates it, unless the suite sets them itself (as `stand-down.test.sh` does). The cockpit's tests need nothing: their `$.process.run` is a fake that never runs the guard.
+6. Give `plugins/dagents/tests/stand-down.test.sh` a `windowsSeconds` entry of 20.
+7. By hand, once: start a nested Claude Code session with both dagents and dforge enabled (see memory "Driving nested Claude smoke runs") and confirm the `systemMessage` shows; record the result in the baseline note under `## Guard message`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -1665,12 +1733,19 @@ printf '%d passed, %d failed\n' "$pass" "$fail"
 Run: `timeout 300 bash plugins/dforge/tests/stand-down.test.sh`
 Expected: FAIL — dforge's session start prints its injection.
 
-- [ ] **Step 3: Implement** — copy `workflow-guard.mjs` byte for byte; add `scripts/lib/stand-down.sh` per C9; wire `session-start.sh` (with `--self dforge`), the other hook scripts and the `fork` matcher exactly as Task 21 Step 3 items 2-4 describe for dagents; give `stand-down.test.sh` a `windowsSeconds` entry of 20.
+- [ ] **Step 3: Implement**
+
+1. Copy `plugins/dagents/scripts/workflow-guard.mjs` byte for byte to `plugins/dforge/scripts/workflow-guard.mjs`, and add `plugins/dforge/scripts/lib/stand-down.sh` per C9.
+2. `session-start.sh`: first, when node is on PATH, run `node "$CLAUDE_PLUGIN_ROOT/scripts/workflow-guard.mjs" --host claude --self dforge --hook session-start` with the hook's stdin; on exit 3 print its stdout and exit 0 before any other work (the injection, darkmem reconcile and pull, the transcript record).
+3. Every other hook script `hooks.json` names reads the session id the way it already does (or from stdin with `jq`) and exits 0 silently when `stand_down_active` succeeds, before any other work.
+4. `hooks.json`: the SessionStart matcher becomes `startup|resume|clear|compact|fork`.
+5. Every dforge suite that runs a hook script (`rg -l 'session-start.sh|turn-start.sh|turn-end.sh|ui-edit-hook.sh|ui-turn-end.sh|darkmem-stop-push.sh|impl-stop-gate' plugins/dforge/tests`) exports the three `WORKFLOW_GUARD_*` variables to a fresh directory under its own temporary directory, on the line after it creates it, unless it sets them itself.
+6. Give `plugins/dforge/tests/stand-down.test.sh` a `windowsSeconds` entry of 20.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `timeout 300 bash plugins/dforge/tests/stand-down.test.sh && timeout 1800 node scripts/test-all.mjs`
-Expected: PASS on all three; every existing dforge suite passes unchanged apart from the harness's guard isolation (A17).
+Expected: PASS on both; every existing dforge suite passes unchanged apart from the guard isolation (A17).
 
 - [ ] **Step 5: Commit**
 
@@ -1707,7 +1782,7 @@ test('the guard line names the active plugins and the check, only on a conflict'
 })
 ```
 
-In `plugins/dforge/tests/plan-lint.test.sh`, inside the block that runs for part `one` (it defines `LINT` and `TMP` and the `check` helper):
+In `plugins/dforge/tests/plan-lint.test.sh`, inside the `if want one; then` block, immediately before the `fi` that closes it (the line before `if want two; then`); the suite defines `LINT`, `TMP` and `check` above that block:
 
 ```bash
 # --- the 4.x signposts name dagents ---
@@ -1748,8 +1823,8 @@ git commit -m "feat(dforge): guard the cockpit and point to dagents"
 **Files:**
 - Create: `plugins/dflow/scripts/workflow-guard.mjs` (copy)
 - Modify: `plugins/dflow/hooks/hooks.json`, `plugins/dflow/lib/commands/hook.mjs`, `plugins/dflow/hooks/hud/register.tsx`, `plugins/dflow/hooks/hud/band.mjs`, `plugins/dflow/README.md`, `plugins/dflow/tests/helpers.mjs`
-- Modify: `scripts/validate-repository.mjs`
-- Test: `plugins/dflow/tests/hooks.test.mjs`, `plugins/dflow/tests/hud.test.mjs`, `tests/repository-layout.test.mjs`, `tests/workflow-guard.test.mjs`
+- Modify: `scripts/validate-repository.mjs`, `scripts/test-all.mjs`
+- Test: `plugins/dflow/tests/hooks.test.mjs`, `plugins/dflow/tests/hud.test.mjs`, `tests/repository-layout.test.mjs`, `tests/guard-isolation.test.mjs`
 
 **Interfaces:**
 - Consumes: C8, C12
@@ -1798,19 +1873,30 @@ test('the HUD guard line names the active plugins and the check, only on a confl
 });
 ```
 
-Append to `tests/workflow-guard.test.mjs` (A25; add `import { guardIsolation } from '../scripts/test-shards.mjs';` and `const repoRoot = fileURLToPath(new URL('../', import.meta.url));`):
+Create `tests/guard-isolation.test.mjs` (A25), run by `scripts/test-all.mjs` as its own job with a 1200-second limit and left out of the root `tests/*.test.mjs` job:
 
 ```js
-test('the hook suites pass under a host config that enables every sibling', t => {
-  const w = world(t);
-  w.installs({ ...w.userInstall('dforge'), ...w.userInstall('dagents'), ...w.userInstall('dflow') });
-  w.json(join(w.claude, 'settings.json'), { enabledPlugins: { 'dforge@darkraise': true, 'dagents@darkraise': true, 'dflow@darkraise': true } });
-  const host = { ...process.env, CLAUDE_CONFIG_DIR: w.claude };
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+
+const repoRoot = fileURLToPath(new URL('../', import.meta.url));
+
+test('the hook suites pass, each run alone, under a host config that enables every sibling', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'host-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, 'plugins'), { recursive: true });
+  const install = name => ({ [`${name}@darkraise`]: [{ scope: 'user', installPath: '/x', version: '1' }] });
+  writeFileSync(join(dir, 'plugins/installed_plugins.json'), JSON.stringify({ version: 2, plugins: { ...install('dforge'), ...install('dagents'), ...install('dflow') } }));
+  writeFileSync(join(dir, 'settings.json'), JSON.stringify({ enabledPlugins: { 'dforge@darkraise': true, 'dagents@darkraise': true, 'dflow@darkraise': true } }));
+  const host = { ...process.env, CLAUDE_CONFIG_DIR: dir };
   for (const key of ['WORKFLOW_GUARD_CLAUDE_DIR', 'WORKFLOW_GUARD_MANAGED_DIR', 'WORKFLOW_GUARD_PROJECT_DIR']) delete host[key];
-  const empty = join(w.dir, 'empty'); mkdirSync(empty);
-  const env = guardIsolation(host, empty);
   for (const suite of ['plugins/dagents/tests/hook.test.sh', 'plugins/dforge/tests/hook.test.sh']) {
-    const r = spawnSync(process.env.DR_TEST_BASH ?? 'bash', [suite], { cwd: repoRoot, env, encoding: 'utf8', timeout: 600000 });
+    const r = spawnSync(process.env.DR_TEST_BASH ?? 'bash', [suite], { cwd: repoRoot, env: host, encoding: 'utf8', timeout: 600000 });
     assert.equal(r.status, 0, `${suite}\n${(r.stdout ?? '').slice(-2000)}`);
   }
   const d = spawnSync(process.execPath, ['--test', 'plugins/dflow/tests/hooks.test.mjs'], { cwd: repoRoot, env: host, encoding: 'utf8', timeout: 300000 });
@@ -1835,7 +1921,7 @@ test('the three workflow-guard copies are byte-identical', async t => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `timeout 300 node --test plugins/dflow/tests/hooks.test.mjs plugins/dflow/tests/hud.test.mjs; timeout 300 node --test tests/repository-layout.test.mjs; timeout 1200 node --test tests/workflow-guard.test.mjs`
+Run: `timeout 300 node --test plugins/dflow/tests/hooks.test.mjs plugins/dflow/tests/hud.test.mjs; timeout 300 node --test tests/repository-layout.test.mjs; timeout 1200 node --test tests/guard-isolation.test.mjs`
 Expected: FAIL on the new dflow, copy-identity and A25 tests.
 
 - [ ] **Step 3: Implement**
@@ -1847,16 +1933,17 @@ Expected: FAIL on the new dflow, copy-identity and A25 tests.
 5. `tests/helpers.mjs`: `dflow()` and `dflowAsync()` set the three `WORKFLOW_GUARD_*` variables to an empty temporary directory unless the caller's `env` sets them.
 6. `validate-repository.mjs`: compare the three copies and report `plugins/<p>/scripts/workflow-guard.mjs: differs from plugins/dforge/scripts/workflow-guard.mjs`.
 7. README: a "One workflow plugin at a time" section with the guard's behaviour, its blind spots (`--settings`, `--plugin-dir`, server-delivered settings, MDM/registry/plist policy), that skills stay invocable when stood down, and that a sibling older than its guard release does not stand down.
+8. `scripts/test-all.mjs`: leave `tests/guard-isolation.test.mjs` out of the root `tests/*.test.mjs` job and run it as its own job, `[process.execPath, ['--test', 'tests/guard-isolation.test.mjs'], 1200]`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `timeout 300 node --test plugins/dflow/tests/*.test.mjs && timeout 300 node --test tests/repository-layout.test.mjs && timeout 1200 node --test tests/workflow-guard.test.mjs && timeout 180 claude plugin test plugins/dflow`
+Run: `timeout 300 node --test plugins/dflow/tests/*.test.mjs && timeout 300 node --test tests/repository-layout.test.mjs && timeout 1200 node --test tests/guard-isolation.test.mjs && timeout 120 node --test tests/test-shards.test.mjs && timeout 180 claude plugin test plugins/dflow`
 Expected: PASS on all four.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/dflow scripts/validate-repository.mjs tests/repository-layout.test.mjs tests/workflow-guard.test.mjs
+git add plugins/dflow scripts/validate-repository.mjs scripts/test-all.mjs tests/repository-layout.test.mjs tests/guard-isolation.test.mjs
 git commit -m "feat(dflow): stand down when another workflow runs"
 ```
 
@@ -1905,14 +1992,15 @@ cycle() { # cycle LABEL — run the cycle; print a listing of dforge-named paths
   export HOME="$T/home"; mkdir -p "$HOME"
   export WORKFLOW_GUARD_CLAUDE_DIR="$T/c" WORKFLOW_GUARD_MANAGED_DIR="$T/c" WORKFLOW_GUARD_PROJECT_DIR="$T/p"
   git init -q -b main "$T/p"; git -C "$T/p" commit -q --allow-empty -m init
-  mkdir -p "$T/p/docs/dagents/plans"
-  printf '# P\n\n**Execution:** inline — `claude --model sonnet --effort low` — x\n\n### Task 1: one\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n' > "$T/p/docs/dagents/plans/p.md"
   if [ "$1" = seeded ]; then
     mkdir -p "$HOME/.dforge" "$T/p/.dforge/sdd/p"
-    printf '{"autoRun":"off","handoffBudget":1}' > "$HOME/.dforge/config.json"
+    printf '{"autoRun":"off","handoffBudget":1,"darkmem":{"url":"http://127.0.0.1:9","projects":{"%s":"projP"}}}' "$T/p" > "$HOME/.dforge/config.json"
     echo 'Task 1: complete (abc)' > "$T/p/.dforge/sdd/p/progress.md"
     export DFORGE_BUDGET=1 DR_CODEX_SESSION_DIR="$T/elsewhere"
   fi
+  sleep 1
+  mkdir -p "$T/p/docs/dagents/plans"
+  printf '# P\n\n**Execution:** inline — `claude --model sonnet --effort low` — x\n\n### Task 1: one\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n' > "$T/p/docs/dagents/plans/p.md"
   local ev='{"session_id":"s","source":"startup","hook_event_name":"SessionStart","cwd":"'"$T/p"'"}'
   local out
   out=$( cd "$T/p" && printf '%s' "$ev" | bash "$ROOT/scripts/session-start.sh" 2>&1 | grep -v 'dforge 4.x layout found'
@@ -1933,10 +2021,10 @@ printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
 ```
 
-- [ ] **Step 2: Run the test to verify it fails or passes for the right reason**
+- [ ] **Step 2: Run the test**
 
-Run: `timeout 900 bash plugins/dagents/tests/isolation.acceptance.test.sh`
-Expected: FAIL until it has a `windowsSeconds` entry and any leak found is fixed; a failing `check` names the leak.
+Run: `timeout 900 bash plugins/dagents/tests/isolation.acceptance.test.sh; timeout 120 node --test tests/test-shards.test.mjs`
+Expected: the suite passes unless a leak remains (each failing `check` names one); the shard test FAILS — the new suite has no `windowsSeconds` entry.
 
 - [ ] **Step 3: Implement** — fix every leak the test names in the dagents file that causes it (a remaining dforge path or variable read); give the suite a `windowsSeconds` entry from its measured Linux time.
 
@@ -1974,16 +2062,16 @@ git commit -m "test(dagents): prove isolation and the 4.x set"
 1. Root `README.md`: a dagents row in the plugin table beside dforge and dflow, and a note that dforge, dagents and dflow are alternatives of which only one may be enabled per project, with the guard's command.
 2. `docs/migration.md`: a "dforge 4.x to dagents" entry: 4.17.1 updates to dforge 5.0.0; to keep the agent workflow, install dagents, run `claude plugin disable dforge@darkraise --scope local` in the project, and run `/dagents:migrate`; darkmem `dforge/` data is copied, and the printed command deletes it later.
 3. `CLAUDE.md` Validation: name `plugins/dagents` beside dforge and dflow for `claude plugin validate`/`test`, `node scripts/test-all.mjs --plugin dagents`, and add: "A dagents job skipped by its path filter counts as green."
-4. Add the deferred row to the split register: `bash <plugin-root>/scripts/register add docs/dforge/registers/2026-11-16-dagents-split.md "dagents does not follow dforge fixes that land after the split; a later backport reruns scripts/dagents-backport.mjs" --state deferred --note "spec out of scope: later dforge fixes"`.
+4. Add the deferred row to the split register: `bash plugins/dforge/scripts/register add docs/dforge/registers/2026-11-16-dagents-split.md "dagents does not follow dforge fixes that land after the split; a later backport reruns scripts/dagents-backport.mjs" --state deferred --note "spec out of scope: later dforge fixes"`.
 
 - [ ] **Step 3: Close the backport**
 
-Run `node scripts/dagents-backport.mjs rows dforge-v4.17.1 main` and triage and port any commit the register lacks, as Task 15 Steps 2-3 say. Then run the release dry run.
+Add a row for every line `timeout 60 node scripts/dagents-backport.mjs rows dforge-v4.17.1 main` prints that the register lacks, with `bash plugins/dforge/scripts/register add docs/dforge/registers/2026-11-16-dagents-backport.md "<line>"`. For each new row: read `git show <sha>`; when `timeout 60 node scripts/dagents-backport.mjs five-only <sha>` exits 0 set it `n/a` with note `5-only` (`bash plugins/dforge/scripts/register set docs/dforge/registers/2026-11-16-dagents-backport.md <id> n/a --note "5-only"`); otherwise decide whether its defect exists in 4.17.1 and set `n/a` with a classed reason, or port it: `PD=$(mktemp -d) && git show <sha> -- plugins/dforge | node scripts/dagents-rename.mjs patch > "$PD/port.diff"`, apply the test hunks first (`git apply --3way --include='plugins/dagents/tests/*' "$PD/port.diff"`) and see the suite fail, apply the rest (`git apply --3way "$PD/port.diff"`, or reimplement it in the 4.17.1 structure) and see it pass, commit `fix(dagents): <description>` with body `Backport of <sha>.`, and set the row `done` with note `port <sha7>; fail@parent pass@port`. A24 is a demo for your human partner; it is not run here, and finishing records register row 3 as `verify`.
 
 - [ ] **Step 4: Verify**
 
-Run: `node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main && timeout 120 node scripts/release.mjs --dry-run && timeout 60 node scripts/validate-repository.mjs`
-Expected: the audit exits 0; the dry run lists `release dforge 4.17.1 -> 5.0.0`, `tag dagents-v1.0.0` and `tag dflow-v1.0.0`; the validator passes.
+Run: `timeout 120 node scripts/dagents-backport.mjs audit docs/dforge/registers/2026-11-16-dagents-backport.md main && bash plugins/dforge/scripts/register open docs/dforge/registers/2026-11-16-dagents-backport.md; timeout 120 node scripts/release.mjs --dry-run && timeout 60 node scripts/validate-repository.mjs`
+Expected: the audit exits 0; `register open` exits 0 (no open row); the dry run lists `release dforge 4.17.1 -> 5.0.0`, `tag dagents-v1.0.0` and `tag dflow-v1.0.0`; the validator passes.
 
 - [ ] **Step 5: Commit**
 
