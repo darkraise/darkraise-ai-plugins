@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { resolve, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import test from 'node:test';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -216,4 +216,39 @@ test('the cockpit\'s module mirrors of dforge JSON files match them', async () =
     const { default: value } = await import(pathToFileURL(resolve(root, mirror)).href);
     assert.deepEqual(value, json(rel), `${mirror} differs from ${rel}; from the repository root run: ${regenerate}`);
   }
+});
+
+test('a namespaced plugin resolves references within its own tree', async t => {
+  const { validateRepository } = await import('../scripts/validate-repository.mjs');
+  const dir = mkdtempSync(resolve(tmpdir(), 'ns-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
+  writeFileSync(resolve(dir, 'plugins/dagents/reference/stray.md'), 'see dagents:no-such-skill and dagents:brainstorming\n');
+  const names = ['darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status', 'dagents'];
+  const errors = validateRepository(dir, { names });
+  assert.ok(errors.includes('plugins/dagents/reference/stray.md:1: unresolved dagents reference no-such-skill'), errors.join('\n'));
+  assert.ok(!errors.some(e => e.includes('dagents reference brainstorming')), errors.join('\n'));
+});
+
+test('the .dagents scratch directory is not swept', async t => {
+  const { validateRepository } = await import('../scripts/validate-repository.mjs');
+  const dir = mkdtempSync(resolve(tmpdir(), 'sweep-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
+  mkdirSync(resolve(dir, '.dagents'), { recursive: true });
+  writeFileSync(resolve(dir, '.dagents/x.md'), 'dcc-darkraise\n');
+  assert.ok(!validateRepository(dir).some(e => e.startsWith('.dagents/')));
+});
+
+test('each plugin schema names its own plugin as a target', async t => {
+  const { validateSchema } = await import('../scripts/validate-repository.mjs');
+  const dir = mkdtempSync(resolve(tmpdir(), 'schema-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(resolve(dir, 'plugins/probe/config'), { recursive: true });
+  const entry = target => `export default { flag: { type: 'boolean', group: 'Workflow', title: 'Flag', description: 'A flag.', target: '${target}', label: 'Flag', default: false } };\n`;
+  writeFileSync(resolve(dir, 'plugins/probe/config/schema.mjs'), entry('probe'));
+  assert.deepEqual(await validateSchema(dir, 'probe'), []);
+  writeFileSync(resolve(dir, 'plugins/probe/config/schema.mjs'), entry('dforge'));
+  assert.deepEqual(await validateSchema(dir, 'probe'), ['schema flag: target must be probe or claude']);
+  assert.deepEqual(await validateSchema(root), []);
 });

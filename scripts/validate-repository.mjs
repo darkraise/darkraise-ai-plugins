@@ -3,7 +3,11 @@ import { resolve, relative, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { lintTree } from './lint-portability.mjs';
 
-const names = ['darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status'];
+const maintained = ['darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status'];
+const NAMESPACED = ['dforge', 'dagents'];
+// dagents spells dforge only where it migrates or reads a dforge 4.x layout,
+// lists its siblings, or names its origin.
+export const DAGENTS_DFORGE_ALLOWED = new Set(['plugins/dagents/README.md']);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
 // A file's lines for the name sweeps, or null for a binary file (one holding a
@@ -17,7 +21,7 @@ const textLines = path => {
   return text.includes('\u0000') ? null : text.split('\n');
 };
 
-export function validateRepository(root) {
+export function validateRepository(root, { names = maintained } = {}) {
   root = resolve(root);
   const errors = [];
   const read = path => {
@@ -26,8 +30,8 @@ export function validateRepository(root) {
   };
   const manifests = new Map();
   for (const [client, catalogPath, expected] of [
-    ['claude', '.claude-plugin/marketplace.json', names],
-    ['codex', '.agents/plugins/marketplace.json', names.filter(name => !claudeOnly.includes(name))],
+    ['claude', '.claude-plugin/marketplace.json', maintained],
+    ['codex', '.agents/plugins/marketplace.json', maintained.filter(name => !claudeOnly.includes(name))],
   ]) {
     const catalog = read(resolve(root, catalogPath));
     if (!catalog) continue;
@@ -157,18 +161,23 @@ export function validateRepository(root) {
         const lines = textLines(path);
         if (!lines) continue;
         lines.forEach((line, index) => {
+          if (name === 'dagents') {
+            if (!DAGENTS_DFORGE_ALLOWED.has(rel) && /dforge/i.test(line.replace(/dforge(?= \d| v\d|-v\d)/g, ''))) errors.push(`${rel}:${index + 1}: dforge name in dagents`);
+            if ([...line.matchAll(/dagents (\d+)/g)].some(match => match[1] !== '1')) errors.push(`${rel}:${index + 1}: dagents version other than 1.x`);
+          }
           if (checksSuperpowers && /superpowers/i.test(line)) errors.push(`${rel}:${index + 1}: retired superpowers name`);
           if (checksForge && retiredForge.test(line.replace(/\d{4}-\d{2}-\d{2}-dr-forge/g, ''))) errors.push(`${rel}:${index + 1}: retired dr-forge name`);
           if (legacyAllowed.has(rel)) return;
           if (legacyPattern.test(line)) errors.push(`${rel}:${index + 1}: legacy plugin-name reference`);
-          for (const match of line.matchAll(/dforge:([a-z0-9-]+)/g)) {
+          if (!NAMESPACED.includes(name)) return;
+          for (const match of line.matchAll(new RegExp(`${name}:([a-z0-9-]+)`, 'g'))) {
             // A name followed by `<` is a template placeholder such as impl-<model>-<effort>.
             if (line[match.index + match[0].length] === '<') continue;
-            const name = match[1];
-            if (!existsSync(resolve(root, 'plugins/dforge/skills', name)) &&
-                !existsSync(resolve(root, 'plugins/dforge/agents', `${name}.md`)) &&
-                !existsSync(resolve(root, 'plugins/dforge/commands', `${name}.md`))) {
-              errors.push(`${rel}:${index + 1}: unresolved dforge reference ${name}`);
+            const ref = match[1];
+            if (!existsSync(resolve(root, 'plugins', name, 'skills', ref)) &&
+                !existsSync(resolve(root, 'plugins', name, 'agents', `${ref}.md`)) &&
+                !existsSync(resolve(root, 'plugins', name, 'commands', `${ref}.md`))) {
+              errors.push(`${rel}:${index + 1}: unresolved ${name} reference ${ref}`);
             }
           }
         });
@@ -178,8 +187,8 @@ export function validateRepository(root) {
   }
   // The UI plugins dropped their dcc- prefix in 0.3.0; only the migration
   // notes and the historical plans and specs still spell it.
-  const dccAllowed = new Set(['docs/migration.md', 'scripts/validate-repository.mjs', 'tests/repository-layout.test.mjs']);
-  const unswept = new Set(['.git', '.claude', 'node_modules', '.worktrees', '.dforge', '.forge', '.superpowers']);
+  const dccAllowed = new Set(['docs/migration.md', 'scripts/validate-repository.mjs', 'tests/repository-layout.test.mjs', 'docs/dforge/plans/2026-11-17-dagents-split.md']);
+  const unswept = new Set(['.git', '.claude', 'node_modules', '.worktrees', '.dforge', '.dagents', '.forge', '.superpowers']);
   const sweep = dir => {
     for (const item of readdirSync(dir, { withFileTypes: true })) {
       const path = resolve(dir, item.name);
@@ -202,10 +211,12 @@ const GROUPS = ['Cockpit', 'Minimized', 'Context', 'Workflow', 'Process', 'Finis
 const UNITS = ['k', '%', 's', 'min'];
 const ZEROS = ['auto', 'off', 'any', 'hidden', 'unset'];
 
-export async function validateSchema(root) {
-  const rel = 'plugins/dforge/config/schema.mjs';
+let schemaLoads = 0;
+export async function validateSchema(root, plugin = 'dforge') {
+  const rel = `plugins/${plugin}/config/schema.mjs`;
   let schema;
-  try { schema = (await import(pathToFileURL(resolve(root, rel)).href)).default; }
+  // A query per load: import() caches by URL, and a schema file can change between calls.
+  try { schema = (await import(`${pathToFileURL(resolve(root, rel)).href}?load=${++schemaLoads}`)).default; }
   catch (error) { return [`${rel}: ${error.message}`]; }
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return [`${rel}: must default-export an object`];
   const errors = [];
@@ -216,7 +227,7 @@ export async function validateSchema(root) {
     if (!GROUPS.includes(spec.group)) errors.push(`${at}: group must be one of ${GROUPS.join(', ')}`);
     if (typeof spec.title !== 'string' || !spec.title) errors.push(`${at}: title is required`);
     if (typeof spec.description !== 'string' || !spec.description) errors.push(`${at}: description is required`);
-    if (!['dforge', 'claude'].includes(spec.target)) errors.push(`${at}: target must be dforge or claude`);
+    if (![plugin, 'claude'].includes(spec.target)) errors.push(`${at}: target must be ${plugin} or claude`);
     if (spec.env !== undefined && !/^[A-Z][A-Z0-9_]*$/.test(spec.env)) errors.push(`${at}: env must name an environment variable`);
     if (spec.step !== undefined && !(typeof spec.step === 'number' && spec.step > 0)) errors.push(`${at}: step must be a positive number`);
     if (typeof spec.label !== 'string' || !spec.label || spec.label.length > 16) errors.push(`${at}: label is required, at most 16 characters`);
@@ -238,7 +249,9 @@ export async function validateSchema(root) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = process.argv[2] ?? fileURLToPath(new URL('../', import.meta.url));
-  const errors = [...validateRepository(root), ...await validateSchema(root), ...lintTree(root)];
+  const errors = [...validateRepository(root)];
+  for (const name of maintained) if (existsSync(resolve(root, 'plugins', name, 'config/schema.mjs'))) errors.push(...await validateSchema(root, name));
+  errors.push(...lintTree(root));
   if (errors.length) { console.error(errors.join('\n')); process.exitCode = 1; }
   else console.log('Repository catalogs, manifests, versions, bundled links and the settings schema are valid.');
 }
