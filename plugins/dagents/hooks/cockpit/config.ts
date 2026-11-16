@@ -1,4 +1,4 @@
-import RAW, { isValidValue } from '../../config/schema.mjs'
+import RAW, { isValidValue, listNames, resolveStored } from '../../config/schema.mjs'
 
 /** A setting's value as the settings file holds it. */
 export type SettingValue = boolean | number | string
@@ -77,35 +77,9 @@ export function resolveSettings(
     }
     const raw = spec.env === undefined ? undefined : env[spec.env]
     const fromEnv = raw === undefined || raw === '' ? undefined : settingFromText(spec, raw)
-    values[key] = fromEnv ?? storedSetting(key, spec, file)
+    values[key] = fromEnv ?? (resolveStored(key, spec, file) as SettingValue)
   }
   return values
-}
-
-function storedSetting(key: string, spec: SettingSpec, file: SettingsFile): SettingValue {
-  const stored = file[key]
-  if (isValidSetting(spec, stored)) return stored
-  if (!Object.prototype.hasOwnProperty.call(file, key)) return spec.default
-  const list = listNames(spec, stored)
-  return list !== undefined && list.known.length > 0 ? list.known.join(',') : invalidStored(key, spec)
-}
-
-// A list naming one unknown name keeps the names it knows: falling back to
-// the default would bring back every name the empty list stands for.
-function listNames(spec: SettingSpec, value: unknown): { known: string[]; unknown: string[] } | undefined {
-  const allowed = spec.values
-  if (spec.type !== 'string' || allowed === undefined || typeof value !== 'string') return undefined
-  const names = value.split(/[\s,]+/).filter(name => name !== '')
-  return {
-    known: names.map(name => name.toLowerCase()).filter(name => allowed.includes(name)),
-    unknown: names.filter(name => !allowed.includes(name.toLowerCase())),
-  }
-}
-
-// A notifyOn the person wrote but mistyped ("off") sends nothing: the default
-// set would post to Discord what they meant to keep private.
-function invalidStored(key: string, spec: SettingSpec): SettingValue {
-  return key === 'notifyOn' ? 'none' : spec.default
 }
 
 /** One line for each environment or file value that does not fit its setting and is therefore ignored. */
@@ -126,7 +100,7 @@ export function settingProblems(
         problems.push(`${key} in ~/.dagents/config.json: unknown ${list.unknown.join(', ')} ignored`)
         continue
       }
-      const reading = invalidStored(key, spec)
+      const reading = resolveStored(key, spec, file)
       problems.push(`${key} in ~/.dagents/config.json is not valid; ${reading === spec.default ? 'ignored' : `read as ${String(reading)}`}`)
     }
   }

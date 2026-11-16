@@ -31,6 +31,33 @@ export function isValidValue(spec, value) {
   }
 }
 
+// A list setting's names split into those its values know and the rest, or
+// undefined when the setting is no list or the value no string.
+export function listNames(spec, value) {
+  const allowed = spec.values;
+  if (spec.type !== "string" || allowed === undefined || typeof value !== "string") return undefined;
+  const names = value.split(/[\s,]+/).filter(name => name !== "");
+  return {
+    known: names.map(name => name.toLowerCase()).filter(name => allowed.includes(name)),
+    unknown: names.filter(name => !allowed.includes(name.toLowerCase())),
+  };
+}
+
+// What a dagents key reads from the settings file: the stored value when it
+// fits, the default when the file lacks the key. A list naming an unknown name
+// keeps the names it knows, since the default would bring back every name the
+// empty list stands for; a notifyOn written but mistyped ("off") reads none,
+// since the default set would post to Discord what was meant to stay private;
+// anything else reads the default. Both readers call it and say their own warning.
+export function resolveStored(key, spec, file) {
+  const stored = file[key];
+  if (isValidValue(spec, stored)) return stored;
+  if (!Object.prototype.hasOwnProperty.call(file, key)) return spec.default;
+  const list = listNames(spec, stored);
+  if (list !== undefined && list.known.length > 0) return list.known.join(",");
+  return key === "notifyOn" ? "none" : spec.default;
+}
+
 export default {
   openAtStart: {
     type: 'boolean', default: true, group: 'Cockpit', target: 'dagents',

@@ -3,11 +3,12 @@
 // over both. A key whose target is `claude` lives in Claude's own user settings
 // file instead, and this module is its only writer. The first command on a
 // machine imports the pre-2.0 settings once.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import SCHEMA, { isValidValue } from "../../config/schema.mjs";
+import SCHEMA, { isValidValue, resolveStored } from "../../config/schema.mjs";
 import { acquireLock } from "./darkmem-mirror.mjs";
 
 export class SettingError extends Error {}
@@ -29,7 +30,10 @@ const HOME_LOCK_WAIT_MS = 10000;
 // sessions changing different keys never drop each other's change. A holder
 // keeps it for milliseconds, so a wait that long means it is stuck.
 export function withHomeLock(env, change, Busy = Error) {
-  const dir = path.join(homeOf(env), ".dagents", ".lock");
+  return withLock(path.join(homeOf(env), ".dagents", ".lock"), change, Busy);
+}
+
+function withLock(dir, change, Busy) {
   const deadline = Date.now() + HOME_LOCK_WAIT_MS;
   let release;
   while (!(release = acquireLock(dir))) {
@@ -154,14 +158,30 @@ function writeClaude(env, key, value) {
   writeClaudeKeys(env, [[key, value]]);
 }
 
+// Every dagents writer of one Claude settings file holds a lock named for the
+// file the write lands on, so two sessions saving different keys at once
+// cannot drop each other's.
 function writeClaudeKeys(env, entries) {
   const file = realTarget(claudeSettingsPath(env));
-  const data = readFile(file) ?? {};
-  for (const [key, value] of entries) {
-    if (value === undefined) delete data[key];
-    else data[key] = value;
-  }
-  writeFile(file, data);
+  const name = `claude-${crypto.createHash("sha256").update(file).digest("hex").slice(0, 16)}`;
+  withLock(path.join(homeOf(env), ".dagents", ".locks", name), () => {
+    const data = readFile(file) ?? {};
+    for (const [key, value] of entries) {
+      if (value === undefined) delete data[key];
+      else data[key] = value;
+    }
+    holdForTest(env);
+    writeFile(file, data);
+  }, Error);
+}
+
+// A test seam: DAGENTS_CLAUDE_WRITE_DELAY_MS, a positive integer, holds a
+// Claude settings write that long between its read and its write, so a test
+// can make two writers overlap. Unset, nothing waits.
+function holdForTest(env) {
+  const text = env.DAGENTS_CLAUDE_WRITE_DELAY_MS ?? "";
+  if (!/^[1-9][0-9]*$/.test(text)) return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(text));
 }
 
 // What /model and /effort save as the user's defaults. An auto run's cleared
@@ -227,11 +247,11 @@ export function resolve(env = process.env, warn = message => process.stderr.writ
       if (value !== undefined) { values[key] = value; continue; }
       warn(`${spec.env}=${raw} is not a valid ${key}; ignored`);
     }
-    if (key in data) {
-      if (isValid(spec, data[key])) { values[key] = data[key]; continue; }
-      warn(`${key} in ${file} is not valid; ignored`);
+    if (key in data && !isValid(spec, data[key])) {
+      const reading = resolveStored(key, spec, data);
+      warn(`${key} in ${file} is not valid; ${reading === spec.default ? "ignored" : `read as ${reading}`}`);
     }
-    values[key] = spec.default;
+    values[key] = resolveStored(key, spec, data);
   }
   return values;
 }

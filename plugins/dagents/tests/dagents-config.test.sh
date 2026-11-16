@@ -392,5 +392,16 @@ fresh broken
 mkdir -p "$(dirname "$FILE")" && printf '{"layout": "full",}' > "$FILE"
 check "workflow: a broken file prints the problem line" "$(fc workflow)" "dagents: $FILE is not a JSON object; every setting reads its default and notifyOn reads none until it parses"
 
+fresh resolver
+mkdir -p "$(dirname "$FILE")" && printf '{"notifyOn": "off", "sections": "plan,unknown"}' > "$FILE"
+check "an invalid notifyOn reads none" "$(fc get notifyOn)" "none"
+check "a mixed list keeps its known names" "$(fc get sections)" "plan"
+fresh claudelock
+mkdir -p "$HOME/.claude" && printf '{}' > "$HOME/.claude/settings.json"
+# The delay holds each writer between its read and its write, so two unlocked
+# writers always both read {} and the second rename drops the first key.
+DAGENTS_CLAUDE_WRITE_DELAY_MS=1500 fc set autoCompactWindow 700000 & DAGENTS_CLAUDE_WRITE_DELAY_MS=1500 fc set autoCompactEnabled false & wait
+check "two concurrent Claude-key writes both persist" "$(jq -c '{autoCompactWindow, autoCompactEnabled}' "$HOME/.claude/settings.json")" '{"autoCompactWindow":700000,"autoCompactEnabled":false}'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
