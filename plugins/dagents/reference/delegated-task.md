@@ -216,7 +216,10 @@ background Bash command from the checkout's top level (a wave task: from its
 `task-step review` and dispatch its seat (§3). `<suite command>` is the one
 `task-step start --suite` recorded, character for character: `verdict` finds
 the run by the quoted form `suite-run` records for that command, so a command
-typed differently, or run from a subdirectory, is never found. The report's
+typed differently, or run from a subdirectory, is never found. A command that
+holds a single quote writes each `'` as `'\''` inside `bash -c '…'`: the shell
+hands `bash -c` the original text, so the recorded key is unchanged. Every
+`bash -c '<command>'` form in dagents follows this rule. The report's
 `## Verified` section lists the focused tests the implementer ran; this run is
 the full suite. The last `## Verified` section of the report is the current
 evidence: a fix round appends its own. End the turn when only waiting remains,

@@ -85,7 +85,8 @@ suite (`npm test` / `cargo test` / `pytest` / `go test ./...`) through
 `bash <plugin-root>/scripts/suite-run -- <test command>`, in the background
 when it can outrun Bash's ten-minute cap. A plan with an
 `**Integration check:**` line runs that command instead, as
-`bash <plugin-root>/scripts/suite-run -- bash -c '<integration check>'`, the
+`bash <plugin-root>/scripts/suite-run -- bash -c '<integration check>'`
+(each `'` written `'\''`), the
 form the final review recorded, so its pass is reused; a plan without one
 keeps `suite-run -- <test command>`. It prints a digest, never the whole
 output, and reuses a recorded pass (`suite: reused pass at <sha7>`) only at

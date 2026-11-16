@@ -33,7 +33,9 @@ bash <plugin-root>/scripts/suite-run -- bash -c '<full suite command>'
 
 `<full suite command>` is the `**Integration check:**` command of the plan
 being finished, else the project's test command. `bash -c` keeps the row's
-key the one writing-plans, task-step and ci-mirror look up. The suite runs
+key the one writing-plans, task-step and ci-mirror look up; a single quote in
+the command is escaped as
+[delegated-task.md](../../../reference/delegated-task.md) §2 says. The suite runs
 whether or not the project declares gates. suite-run reuses a pass a gate
 already recorded at this HEAD. The run in the main checkout leaves one
 full-suite row for each merge head. dagents:closing-a-milestone reads these
