@@ -80,7 +80,7 @@ export default {
   handoffTokens: {
     type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DAGENTS_BUDGET', group: 'Context', target: 'dagents',
     label: 'Handoff budget', title: 'Handoff budget (tokens)',
-    description: "Context size at which the cockpit and the budget scripts say hand off. 0 follows dagents's rule: 93% of the smaller of autoCompactWindow and the model's window, minus 140,000, and never below a fifth of that window. DAGENTS_BUDGET overrides it; relaxed handoff mode ignores it.",
+    description: "Context size at which the cockpit and the budget scripts say hand off. 0 follows dagents's rule: 93% of the smaller of autoCompactWindow and the model's window, minus 140,000, and never below a fifth of that window. DAGENTS_BUDGET overrides it; relaxed handoff mode ignores it, and an auto run still uses it.",
   },
   handoffMode: {
     type: 'enum', values: ['strict', 'relaxed'], default: 'strict', enforcedBy: 'script', group: 'Context', target: 'dagents',
