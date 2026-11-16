@@ -121,6 +121,14 @@ if [ -n "$roadmap_root" ]; then
   fi
 fi
 
+# A dforge 4.x project keeps its work under docs/dforge and .dforge, which
+# dagents reads only as citations; a dforge 5 project is not one to migrate.
+dforge_line=""
+if [ -n "$roadmap_root" ] && dagents_dforge4_layout "$roadmap_root"; then
+  dforge_line="dagents: dforge 4.x layout found (docs/dforge or .dforge); run the dagents:migrate skill (/dagents:migrate) to move it to dagents' names"
+  context="${context}\n\n$(escape_for_json "$dforge_line")"
+fi
+
 # A darkmem store applied with no node to read it: every script exits 2 from
 # lib/roots.sh, and the hooks that read a root pass silently, so the session
 # is told once, on its first start (a marker beside the turn stamp).
@@ -151,7 +159,7 @@ fi
 # seconds for the snapshot and the reply, since a killed hook injects nothing.
 darkmem_lines=""
 if . "${SCRIPT_DIR}/lib/darkmem-hook.sh" 2>/dev/null; then
-  room=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} - ${#nonode_line} ))
+  room=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} - ${#dforge_line} - ${#nonode_line} ))
   if [ "$room" -ge 100 ]; then
     darkmem_lines=$(darkmem_session_lines "${cwd:-$PWD}" "${session_id:-}" "$room" $(( 270 - SECONDS )) \
       | tr -d '\001-\010\013\014\016-\037')
@@ -169,7 +177,7 @@ fi
 # point leaves, with headroom for the wrapper text.
 if grep -qE '"source"[[:space:]]*:[[:space:]]*"compact"' <<<"$stdin_json" \
    && . "${SCRIPT_DIR}/lib/snapshot.sh" 2>/dev/null; then
-  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} - ${#nonode_line} - ${#darkmem_lines} ))
+  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} - ${#dforge_line} - ${#nonode_line} - ${#darkmem_lines} ))
   [ "$cap" -le "$SNAPSHOT_CAP" ] || cap=$SNAPSHOT_CAP
   if [ "$cap" -gt 1000 ]; then
     # Transcript text can carry raw C0 controls (pasted terminal output with

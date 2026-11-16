@@ -68,3 +68,43 @@ dagents_legacy_layout() {
   done
   return 0
 }
+
+# dagents_dforge5_plan [ROOT] — the first plan under ROOT/docs/dforge/plans/
+# that its completed.md does not record and whose "### Task" headings include
+# one with no **Implementer:** line before the next: dforge 5 writes none, and
+# its layout is not one dagents can migrate. Prints the plan's name
+# (docs/dforge/plans/<rest>); status 1 when there is none. A fenced block is
+# quoted text, never a heading.
+dagents_dforge5_plan() {
+  local docs=${1:-.}/docs/dforge plan rel index spelling recorded
+  [ -d "$docs/plans" ] || return 1
+  while IFS= read -r -d '' plan; do
+    rel=${plan#"$docs"/}
+    [ "${rel##*/}" != completed.md ] || continue
+    index="$(dirname -- "$plan")/completed.md" recorded=0
+    if [ -f "$index" ]; then
+      for spelling in dforge dagents forge superpowers; do
+        grep -qF "\`docs/$spelling/$rel\`" "$index" && { recorded=1; break; }
+      done
+    fi
+    [ "$recorded" -eq 0 ] || continue
+    awk '
+      function close_task() { if (task && !impl) bad = 1 }
+      /^ ? ? ?(```|~~~)/ { fence = !fence; next }
+      fence { next }
+      /^### Task / { close_task(); task = 1; impl = 0; next }
+      /^\*\*Implementer:\*\*/ { impl = 1 }
+      END { close_task(); exit bad ? 0 : 1 }
+    ' "$plan" && { printf 'docs/dforge/%s\n' "$rel"; return 0; }
+  done < <(find "$docs/plans" -type f -name '*.md' -print0 2>/dev/null | sort -z)
+  return 1
+}
+
+# dagents_dforge4_layout [ROOT] — true when the checkout at ROOT still holds
+# dforge 4.x's docs/dforge/ or .dforge/ and no dforge 5 plan, so the migrate
+# skill can move it to dagents' names.
+dagents_dforge4_layout() {
+  local root=${1:-.}
+  [ -e "$root/docs/dforge" ] || [ -e "$root/.dforge" ] || return 1
+  ! dagents_dforge5_plan "$root" > /dev/null
+}

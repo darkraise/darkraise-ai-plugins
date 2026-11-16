@@ -1,6 +1,6 @@
 ---
 name: migrate
-description: Use when session start or repo-audit says a repository or home still uses an older layout, or when moving from dr-superpowers or dr-forge to dagents - previews the move with a dry run, migrates on one confirmation, and offers the commit
+description: Use when session start or repo-audit says a repository or home still uses an older layout or a dforge 4.x layout, or when moving from dr-superpowers, dr-forge or dforge 4.x to dagents - previews the move with a dry run, migrates on one confirmation, and offers the commit
 ---
 
 # Migrate
@@ -8,21 +8,30 @@ description: Use when session start or repo-audit says a repository or home stil
 **Announce at start:** "I'm using the migrate skill to move this repository, the home directory's dagents files and darkmem's documents to dagents's names."
 
 dagents reads only its own names. A repository or home that dr-superpowers
-(before 3.0) or dr-forge (3.x) set up keeps its work under the older ones until
-`scripts/dagents-migrate` moves it:
+(before 3.0), dr-forge (3.x) or dforge 4.x set up keeps its work under the
+older ones until `scripts/dagents-migrate` moves it:
 
 | Older | dagents |
 |---|---|
-| `.superpowers/`, `.forge/` | `.dagents/` |
-| `docs/superpowers/`, `docs/forge/` | `docs/dagents/` |
-| `<git dir>/dr-superpowers/`, `<git dir>/dr-forge/` | `<git dir>/dagents/` |
+| `.dforge/`, `.superpowers/`, `.forge/` | `.dagents/` |
+| `docs/dforge/`, `docs/superpowers/`, `docs/forge/` | `docs/dagents/` |
+| `<git dir>/dforge/`, `<git dir>/dr-superpowers/`, `<git dir>/dr-forge/` | `<git dir>/dagents/` |
 | `~/.dr-superpowers/`, `~/.dr-forge/` | `~/.dagents/` |
 | darkmem's `superpowers/` and `forge/` documents | `dagents/` |
 
 An active plan (one its `completed.md` does not record) and the handoff note
-get their `dr-superpowers:` and `dr-forge:` prefixes rewritten to `dagents:`,
-so they keep running. Finished plans, specs, ledgers and registers keep their
-text as history; dagents still reads their citations.
+get their `dr-superpowers:`, `dr-forge:` and `dforge:` prefixes rewritten to
+`dagents:`, so they keep running, and each rewrite of a tracked file is
+staged. Finished plans, specs, ledgers and registers keep their text as
+history; dagents still reads their citations. An ignore or attributes line
+naming `.dforge` or `docs/dforge` is kept and gains its `dagents` twin. Any
+other tracked file that still names dforge (a `CLAUDE.md`, a README) is listed
+on a `report:` line and left as it is.
+
+A dforge 5 project (an active `docs/dforge` plan with a task that has no
+`**Implementer:**` line) is refused whole, as is a project a dforge run still
+holds (a live lock under `<git dir>/dforge/locks/`, or an auto run bound to a
+live session); nothing moves.
 
 Every change goes through `scripts/dagents-migrate`. This skill writes nothing
 itself.
@@ -47,7 +56,8 @@ itself.
    directory an earlier line would create as absent, so a second directory
    moving into it (`.superpowers/` and `.forge/` both to `.dagents/`) is listed
    as a move, and only this run merges it and finds a file that differs.
-6. **Commit.** Show the `commit:` lines and offer to commit what they name as
+6. **Commit.** Show the `report:` lines and offer to edit the files they name
+   by hand. Show the `commit:` lines and offer to commit what they name as
    one commit, `chore: move to the dagents layout`. Commit only after your
    human partner agrees, and stage nothing the lines do not name.
 7. **Retire the old plugins.** When `dr-forge@darkraise` is installed, first

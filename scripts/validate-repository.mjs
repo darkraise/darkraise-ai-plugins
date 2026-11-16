@@ -27,6 +27,13 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   'plugins/dagents/tests/darkmem-sync/restore.test.mjs',
   // Seeds another plugin's darkmem document and workstream that dagents must leave alone.
   'plugins/dagents/tests/darkmem-sync/push.test.mjs',
+  // Migrate moves a dforge 4.x project's names to dagents' and says when one is found.
+  'plugins/dagents/scripts/dagents-migrate',
+  'plugins/dagents/scripts/lib/dagents-dir.sh',
+  'plugins/dagents/scripts/repo-audit',
+  'plugins/dagents/scripts/session-start.sh',
+  'plugins/dagents/skills/migrate/SKILL.md',
+  'plugins/dagents/tests/dagents-migrate.test.sh',
 ]);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };

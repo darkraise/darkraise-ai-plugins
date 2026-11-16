@@ -557,7 +557,7 @@ check "refusing home, dry: not called unfinished" "$(grep -c 'did not finish' <<
 P="$TMP/plugin/scripts"
 mkdir -p "$P/lib"
 cp "$FM" "$P/dagents-migrate"
-cp "$HERE/../scripts/lib/native-path.sh" "$P/lib/"
+cp "$HERE/../scripts/lib/native-path.sh" "$HERE/../scripts/lib/dagents-dir.sh" "$P/lib/"
 H="$TMP/home-step"
 repo "$H"
 check "no dagents-home-migrate: nothing to do" "$(migrate "$P/dagents-migrate" "$H")" "dagents-migrate: nothing to migrate in $H"
@@ -598,6 +598,124 @@ mkdir -p "$NH/.dr-forge"
 out=$(HOME="$NH" PATH="$NB" migrate "$P/dagents-migrate" "$H" 2>&1); code=$?
 check "no node, dr-forge home present: exit 1" "$code" "1"
 check "no node, dr-forge home present: refused" "$(grep -c 'refused: node is not on PATH' <<<"$out")" "1"
+
+# --- dforge 4.x: a primary checkout and a worktree move to the dagents names ---
+D="$TMP/d4"
+repo "$D"
+mkdir -p "$D/.dforge/sdd/p1" "$D/docs/dforge/plans"
+printf '# SDD ledger — plan: docs/dforge/plans/p1.md\nTask 1: complete (abc)\n' > "$D/.dforge/sdd/p1/progress.md"
+printf '# P1\n\n### Task 1: one\n\n**Implementer:** dforge:impl-sonnet-low\n\n### Task 2: two\n\n**Implementer:** dforge:impl-sonnet-low\nuse dforge:executing-plans\n' > "$D/docs/dforge/plans/p1.md"
+# Task text a real plan carries, so git still reads the staged rewrite as a rename.
+for i in 1 2 3 4 5 6 7 8 9 10; do printf 'Step %s: a line of task text that migrate leaves as it is.\n' "$i"; done >> "$D/docs/dforge/plans/p1.md"
+printf '# P0\n\n### Task 1: one\n\n**Implementer:** dforge:impl-sonnet-low\n' > "$D/docs/dforge/plans/p0.md"
+printf -- '- `docs/dforge/plans/p0.md`\n' > "$D/docs/dforge/plans/completed.md"
+printf '.dforge/\n' > "$D/.gitignore"
+printf 'docs/dforge/** linguist-documentation\n' > "$D/.gitattributes"
+printf 'see dforge:brainstorming\n' > "$D/CLAUDE.md"
+git -C "$D" add .gitignore .gitattributes docs CLAUDE.md
+git -C "$D" commit -q -m docs
+DG=$(git -C "$D" rev-parse --absolute-git-dir)
+mkdir -p "$DG/dforge/locks"
+DW="$TMP/d4wt"
+git -C "$D" worktree add -q -b feature "$DW"
+mkdir -p "$DW/.dforge/handoff"
+printf 'next: dforge:executing-plans\n' > "$DW/.dforge/handoff/latest.md"
+DWG=$(git -C "$DW" rev-parse --absolute-git-dir)
+mkdir -p "$DWG/dforge/tasks"
+tree_of() { (cd "$1" && find . -path ./.git -prune -o -print | sort; cat .gitignore .gitattributes 2>/dev/null) | cksum; }
+before=$(tree_of "$D")
+
+dry=$(migrate "$FM" --dry-run "$D" 2>&1)
+check "dforge dry run: nothing moved" "$(exists "$D/.dagents")$(exists "$D/docs/dagents")$(exists "$DW/.dagents")" "nonono"
+check "dforge dry run: nothing rewritten" "$(tree_of "$D")" "$before"
+out=$(migrate "$FM" "$D" 2>&1); code=$?
+check "dforge: exit 0" "$code" "0"
+check "dforge: ledger moved" "$(head -n 1 "$D/.dagents/sdd/p1/progress.md" 2>/dev/null)" "# SDD ledger — plan: docs/dforge/plans/p1.md"
+check "dforge: docs moved and staged" "$(git -C "$D" status --porcelain -- docs | cut -c1-2 | sort -u | tr -d ' ')" "R"
+check "dforge: git-dir state moved" "$(exists "$DG/dagents/locks")$(exists "$DG/dforge")" "yesno"
+check "dforge worktree: state moved" "$(exists "$DW/.dagents/handoff/latest.md")$(exists "$DW/.dforge")" "yesno"
+check "dforge worktree: handoff prefix rewritten" "$(cat "$DW/.dagents/handoff/latest.md")" "next: dagents:executing-plans"
+check "dforge worktree: git-dir state moved" "$(exists "$DWG/dagents/tasks")$(exists "$DWG/dforge")" "yesno"
+check "dforge: active plan prefixes rewritten" "$(grep -c 'dagents:' "$D/docs/dagents/plans/p1.md")" "3"
+check "dforge: ignore twin added, original kept" "$(tr '\n' '|' < "$D/.gitignore")" ".dforge/|.dagents/|"
+check "dforge: attributes twin added" "$(grep -c 'docs/dagents/\*\* linguist-documentation' "$D/.gitattributes")" "1"
+check "dforge: CLAUDE.md reported, not rewritten" "$(cat "$D/CLAUDE.md")|$(printf '%s' "$out" | grep -c 'CLAUDE.md')" "see dforge:brainstorming|1"
+again=$(migrate "$FM" "$D" 2>&1); check "dforge: a second run finds nothing" "$?" "0"
+
+# --- A21: after the move, dforge citations still resolve ---
+NS="$HERE/../scripts/next-step"
+p0=$(cd "$D" && bash "$NS" docs/dagents/plans/p0.md 2>&1)
+check "A21: the finished plan is finished" "$(printf '%s' "$p0" | grep -c 'Plan `docs/dagents/plans/p0.md` is complete.')" "1"
+p1=$(cd "$D" && bash "$NS" docs/dagents/plans/p1.md 2>&1)
+check "A21: the unfinished plan resumes at Task 2" "$(printf '%s' "$p1" | grep -c '1 of 2 tasks complete')" "1"
+
+# --- a dforge 5 project is refused, a 4.x project opened under dforge 5 is not ---
+F="$TMP/d5"
+repo "$F"
+mkdir -p "$F/docs/dforge/plans"
+printf '# P\n\n### Task 1: one\n\nno implementer line\n' > "$F/docs/dforge/plans/p.md"
+git -C "$F" add docs; git -C "$F" commit -q -m docs
+out=$(migrate "$FM" "$F" 2>&1); code=$?
+check "dforge 5: refused" "$code" "1"
+check "dforge 5: says why" "$(printf '%s' "$out" | grep -c 'dforge 5 layout: not migratable (docs/dforge/plans/p.md)')" "1"
+check "dforge 5: nothing moved" "$(exists "$F/docs/dagents")" "no"
+G="$TMP/d4s"
+repo "$G"
+mkdir -p "$G/docs/dforge/plans" "$G/.dforge"
+printf '# P\n\n### Task 1: one\n\n**Implementer:** dforge:impl-sonnet-low\n' > "$G/docs/dforge/plans/p.md"
+echo state > "$G/.dforge/session-state.log"
+git -C "$G" add docs; git -C "$G" commit -q -m docs
+migrate "$FM" "$G" > /dev/null 2>&1; check "4.x opened under dforge 5: migrates" "$?$(exists "$G/docs/dagents/plans/p.md")" "0yes"
+
+# --- per-item refusals, one fixture each ---
+plan4='# P\n\n### Task 1: one\n\n**Implementer:** dforge:impl-sonnet-low\n'
+fixture() { repo "$1"; mkdir -p "$1/docs/dforge/plans"; printf "$plan4" > "$1/docs/dforge/plans/p.md"; git -C "$1" add docs; git -C "$1" commit -q -m docs; }
+H1="$TMP/r-differ"; fixture "$H1"
+mkdir -p "$H1/.dforge/sdd/p" "$H1/.dagents/sdd/p"; echo old > "$H1/.dforge/sdd/p/progress.md"; echo new > "$H1/.dagents/sdd/p/progress.md"
+out=$(migrate "$FM" "$H1" 2>&1); code=$?
+check "differing same-path file: refused" "$code" "1"
+check "differing file left in place" "$(cat "$H1/.dforge/sdd/p/progress.md")" "old"
+check "the docs still moved" "$(exists "$H1/docs/dagents/plans/p.md")" "yes"
+rm "$H1/.dagents/sdd/p/progress.md"
+migrate "$FM" "$H1" > /dev/null 2>&1; check "a second run finishes the job" "$?$(cat "$H1/.dagents/sdd/p/progress.md" 2>/dev/null)$(exists "$H1/.dforge")" "0oldno"
+H2="$TMP/r-dirty"; fixture "$H2"
+echo dirty >> "$H2/docs/dforge/plans/p.md"
+migrate "$FM" "$H2" > /dev/null 2>&1; code=$?
+check "dirty docs: refused" "$code" "1"
+check "dirty docs: left in place" "$(exists "$H2/docs/dforge/plans/p.md")$(exists "$H2/docs/dagents")" "yesno"
+H3="$TMP/r-two"; fixture "$H3"
+mkdir -p "$H3/docs/dagents"; echo x > "$H3/docs/dagents/x.md"; git -C "$H3" add docs; git -C "$H3" commit -q -m two
+out=$(migrate "$FM" "$H3" 2>&1); code=$?
+check "two docs trees: refused" "$code" "1"
+check "two docs trees: says why" "$(printf '%s' "$out" | grep -c "refused: .*docs/dforge.* all exist")" "1"
+H4="$TMP/r-live"; fixture "$H4"
+H4G=$(git -C "$H4" rev-parse --git-common-dir); case $H4G in /*) ;; *) H4G="$H4/$H4G" ;; esac
+mkdir -p "$H4G/dforge/locks/run.abc"; uname -n > "$H4G/dforge/locks/run.abc/host"; echo "$$" > "$H4G/dforge/locks/run.abc/pid"
+out=$(migrate "$FM" "$H4" 2>&1); code=$?
+check "live run: refused" "$code" "1"
+check "live run: nothing moved" "$(exists "$H4/docs/dagents")" "no"
+sleep 0 & dead=$!; wait "$dead"; echo "$dead" > "$H4G/dforge/locks/run.abc/pid"
+migrate "$FM" "$H4" > /dev/null 2>&1; check "dead pid: migrates" "$?$(exists "$H4/docs/dagents/plans/p.md")" "0yes"
+H5="$TMP/r-bound"; fixture "$H5"
+mkdir -p "$H5/.dforge/sdd" "$HOME/.claude/dforge/sessions/cockpit"
+printf '{"active":true,"session":"s:1"}\n' > "$H5/.dforge/sdd/auto-run.json"
+date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-1"
+out=$(migrate "$FM" "$H5" 2>&1); code=$?
+check "bound auto run: refused" "$code$(printf '%s' "$out" | grep -c 'a dforge run still holds .*auto run of session s:1')" "11"
+check "bound auto run: nothing moved" "$(exists "$H5/docs/dagents")$(exists "$H5/.dagents")" "nono"
+echo $(( $(date +%s) - 600 )) > "$HOME/.claude/dforge/sessions/cockpit/s-1"
+migrate "$FM" "$H5" > /dev/null 2>&1; check "stale auto run: migrates" "$?$(exists "$H5/.dagents/sdd/auto-run.json")" "0yes"
+rm -rf "$HOME/.claude/dforge"
+
+# --- detection: only an unmigrated 4.x project is named ---
+J="$TMP/detect4"; fixture "$J"
+mkdir -p "$TMP/detect-home"
+ev='{"session_id":"m1","source":"startup","hook_event_name":"SessionStart","cwd":"'"$J"'"}'
+seen() { grep -q 'dforge 4.x layout found' && echo yes || echo no; }
+check "4.x layout: session start names it" "$(cd "$J" && printf '%s' "$ev" | HOME="$TMP/detect-home" bash "$HERE/../scripts/session-start.sh" 2>&1 | seen)" "yes"
+check "4.x layout: repo-audit names it" "$(cd "$J" && HOME="$TMP/detect-home" bash "$HERE/../scripts/repo-audit" 2>&1 | seen)" "yes"
+check "dforge 5 layout: repo-audit does not name it" "$(cd "$F" && HOME="$TMP/detect-home" bash "$HERE/../scripts/repo-audit" 2>&1 | seen)" "no"
+check "migrated project: repo-audit does not name it" "$(cd "$D" && HOME="$TMP/detect-home" bash "$HERE/../scripts/repo-audit" 2>&1 | seen)" "no"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

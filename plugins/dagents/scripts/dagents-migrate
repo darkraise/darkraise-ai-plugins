@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
 # dagents-migrate [--dry-run] [DIR] — move a repository from the older names
-# to dforge 4.0's, which reads only the new ones: dr-superpowers' (before 3.0)
-# and dr-forge's (3.x). For the repository at DIR (default: the working
-# directory), its primary checkout and every linked worktree:
-#   .superpowers/, .forge/                    -> .dagents/      (plain rename)
-#   docs/superpowers/ or docs/forge/          -> docs/dagents/  (git mv when tracked)
-#   <git dir>/dr-superpowers/, <git dir>/dr-forge/ -> <git dir>/dagents/
+# to dagents', which reads only its own: dr-superpowers' (before 3.0),
+# dr-forge's (3.x) and dforge 4.x's. For the repository at DIR (default: the
+# working directory), its primary checkout and every linked worktree:
+#   .dforge/, .superpowers/, .forge/          -> .dagents/      (plain rename)
+#   docs/dforge/, docs/superpowers/ or docs/forge/ -> docs/dagents/ (git mv when tracked)
+#   <git dir>/dforge/, <git dir>/dr-superpowers/, <git dir>/dr-forge/ -> <git dir>/dagents/
 # then, once every move has succeeded, the lines of .gitignore, .gitattributes
-# and the shared info/exclude that name an older directory. An active plan
-# (one the completed.md beside it does not record) and the checkout's handoff
-# note have their dr-superpowers: and dr-forge: prefixes rewritten to
-# dagents:, so they keep running. No other file's content changes: finished
-# plans, specs, ledgers and registers keep the citations dagents translates
-# when it reads them. Last, scripts/lib/dagents-home-migrate.mjs moves the
-# homes (~/.dr-superpowers/ and ~/.dr-forge/ -> ~/.dagents/) when it is
-# installed.
+# and the shared info/exclude that name an older directory; a line naming
+# .dforge or docs/dforge is kept and gains its dagents twin, since dforge may
+# still run in another checkout of the project. An active plan (one the
+# completed.md beside it does not record) and the checkout's handoff note have
+# their dr-superpowers:, dr-forge: and dforge: prefixes rewritten to dagents:,
+# so they keep running, and every rewrite of a tracked file is staged. No other
+# file's content changes: finished plans, specs, ledgers and registers keep
+# the citations dagents translates when it reads them, and each other tracked
+# file that names dforge is listed on a report: line. Last,
+# scripts/lib/dagents-home-migrate.mjs moves the homes (~/.dr-superpowers/ and
+# ~/.dr-forge/ -> ~/.dagents/) when it is installed.
 #
 # A checkout holding an older state directory and .dagents/ is merged file by
 # file: a file or empty directory only the old one has moves, an identical
@@ -30,11 +33,17 @@
 # is printed. It treats a directory an earlier line would create as absent, so
 # a second source into it is listed as a move rather than a merge.
 #
+# A project with an active dforge 5 plan (a docs/dforge plan with a task and
+# no **Implementer:** line), or one a dforge run still holds (a lock under
+# <git common dir>/dforge/locks/ owned by a live process on this host, or an
+# auto run bound to a live session), is refused before anything moves.
+#
 # Exit: 0 done or nothing to do; 1 something was (or, dry, would be) refused;
 # 2 usage or not inside a git repository.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/native-path.sh"
+. "$HERE/lib/dagents-dir.sh"
 
 dry=0
 if [ "${1:-}" = --dry-run ]; then dry=1; shift; fi
@@ -156,7 +165,7 @@ mv_plain() {
 # docs_trees CHECKOUT — each docs tree the checkout holds, one per line.
 docs_trees() {
   local name
-  for name in superpowers forge dagents; do [ ! -e "$1/docs/$name" ] || printf '%s\n' "$1/docs/$name"; done
+  for name in dforge superpowers forge dagents; do [ ! -e "$1/docs/$name" ] || printf '%s\n' "$1/docs/$name"; done
 }
 
 # migrate_docs CHECKOUT — the one docs tree to docs/dagents/. Sets docs_ok to 0
@@ -191,22 +200,32 @@ migrate_docs() {
   fi
 }
 
-# renamed_lines FILE MODE — what rewrite_names would leave in FILE.
+OLDER_NAMES_RE='(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)|docs/(superpowers|forge)([/[:space:]*]|$)'
+DFORGE_NAMES_RE='(^|[^A-Za-z0-9_-])\.dforge([/[:space:]*]|$)|docs/dforge([/[:space:]*]|$)'
+
+# renamed_lines FILE MODE — what rewrite_names would leave in FILE. A line
+# naming .dforge or docs/dforge always takes MODE add.
 renamed_lines() {
   sed -E -e 's#(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)#\1.dagents\3#g' \
          -e 's#docs/(superpowers|forge)([/[:space:]*]|$)#docs/dagents\2#g' "$1" \
     | awk -v mode="$2" '
-      NR == FNR { old[FNR] = $0; have[$0] = 1; n = FNR; next }
+      FILENAME == ARGV[1] { old[FNR] = $0; have[$0] = 1; n = FNR; next }
+      FILENAME == ARGV[2] { twin[FNR] = $0; next }
       { new[FNR] = $0 }
       END {
         for (i = 1; i <= n; i++) {
-          if (old[i] == new[i]) { print old[i]; continue }
+          if (old[i] == new[i]) {
+            print old[i]
+            if (old[i] != twin[i] && old[i] !~ /^[[:space:]]*#/ && !(twin[i] in have)) { print twin[i]; have[twin[i]] = 1 }
+            continue
+          }
           if (mode == "add") {
             print old[i]
             if (old[i] !~ /^[[:space:]]*#/ && !(new[i] in have)) { print new[i]; have[new[i]] = 1 }
           } else if (!(new[i] in have)) { print new[i]; have[new[i]] = 1 }
         }
-      }' "$1" -
+      }' "$1" <(sed -E -e 's#(^|[^A-Za-z0-9_-])\.dforge([/[:space:]*]|$)#\1.dagents\2#g' \
+                       -e 's#docs/dforge([/[:space:]*]|$)#docs/dagents\1#g' "$1") -
 }
 
 # rewrite_names FILE MODE — the ignore and attribute lines that name an
@@ -216,7 +235,7 @@ renamed_lines() {
 rewrite_names() {
   local file=$1 mode=$2 tmp
   [ -f "$file" ] && [ ! -L "$file" ] || return 1
-  grep -qE '(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)|docs/(superpowers|forge)([/[:space:]*]|$)' "$file" || return 1
+  grep -qE "$OLDER_NAMES_RE|$DFORGE_NAMES_RE" "$file" || return 1
   if [ "$dry" -eq 1 ]; then
     # Piped into cmp, a failed rewrite would read as a difference; the real
     # run skips it, so the dry run lists nothing.
@@ -248,7 +267,7 @@ writable() {
   case $real/ in "$top"/*) return 0 ;; *) return 1 ;; esac
 }
 
-PREFIX_RE='(^|[^A-Za-z0-9_-])dr-(superpowers|forge):([a-z])'
+PREFIX_RE='(^|[^A-Za-z0-9_-])(dr-(superpowers|forge)|dforge):([a-z])'
 # prefixes_renamed FILE — FILE with the older plugin prefixes outside fenced
 # code blocks rewritten as dagents's own. A fence is quoted text, never rewritten.
 prefixes_renamed() {
@@ -257,7 +276,7 @@ prefixes_renamed() {
   awk -v BINMODE=3 '
     function rename(line,   out, prev) {
       out = ""
-      while (match(line, /dr-(superpowers|forge):[a-z]/)) {
+      while (match(line, /(dr-(superpowers|forge)|dforge):[a-z]/)) {
         prev = RSTART > 1 ? substr(line, RSTART - 1, 1) : substr(out, length(out), 1)
         if (prev == "" || prev !~ /[A-Za-z0-9_-]/) {
           out = out substr(line, 1, RSTART - 1) "dagents:"
@@ -320,11 +339,11 @@ rewrite_prefixes() {
 }
 
 # plan_done DOCS REL — the completed.md beside the plan DOCS/REL records it,
-# under any of the three docs spellings, as next-step's plan_finished reads it.
+# under any of the four docs spellings, as next-step's plan_finished reads it.
 plan_done() {
   local f="$1/$(dirname -- "$2")/completed.md" spelling
   [ -f "$f" ] || return 1
-  for spelling in dagents forge superpowers; do
+  for spelling in dagents dforge forge superpowers; do
     grep -qF "\`docs/$spelling/$2\`" "$f" && return 0
   done
   return 1
@@ -340,6 +359,7 @@ rewrite_active_plans() {
       [ "${rel##*/}" != completed.md ] || continue
       plan_done "$docs" "$rel" && continue
       if rewrite_prefixes "$plan" "$wt" && g -C "$wt" ls-files --error-unmatch -- "${docs#"$wt"/}/$rel" >/dev/null 2>&1; then
+        stage "$wt" "${docs#"$wt"/}/$rel"
         commit_notes+=("$wt: docs/dagents/$rel")
       fi
     done < <(find "$docs/plans" -type f -name '*.md' -print0)
@@ -349,10 +369,74 @@ rewrite_active_plans() {
   # it also lists an old directory's note that a line above would move.
   [ ! -f "$wt/.dagents/handoff/latest.md" ] || rewrite_prefixes "$wt/.dagents/handoff/latest.md" "$wt" || true
   [ "$dry" -eq 1 ] || return 0
-  for state in .forge .superpowers; do
+  for state in .dforge .forge .superpowers; do
     note="$wt/$state/handoff/latest.md"
     [ ! -f "$note" ] || ! would_move "$note" || rewrite_prefixes "$note" "$wt" || true
   done
+}
+
+# stage CHECKOUT REL — a real run stages its rewrite of the tracked file REL,
+# so a moved and rewritten plan shows as one rename.
+stage() {
+  [ "$dry" -eq 0 ] || return 0
+  g -C "$1" add -- "$2" || refuse "git add $2 failed in $1; stage it by hand"
+}
+
+# dforge_live CHECKOUT — what of a dforge run still holds the project: a lock
+# directory under the common git dir's dforge/locks/ whose host is this one
+# and whose pid runs, or the checkout's auto run, bound to a session whose
+# cockpit beat within three minutes or, with no beat, whose transcript was
+# written within the hour (dforge 4.x's own stale rules). Status 1 when none.
+dforge_live() {
+  local lock pid host state sid beat file
+  for lock in "$common"/dforge/locks/*/; do
+    [ -d "$lock" ] || continue
+    pid=$(tr -dc '0-9' 2>/dev/null < "$lock/pid") host=$(tr -d '\r\n' 2>/dev/null < "$lock/host")
+    [ -n "$pid" ] && [ "$host" = "$(uname -n)" ] || continue
+    if kill -0 "$pid" 2>/dev/null || ps -p "$pid" >/dev/null 2>&1; then printf 'the lock %s\n' "${lock%/}"; return 0; fi
+  done
+  state="$1/.dforge/sdd/auto-run.json"
+  [ -f "$state" ] || return 1
+  if ! command -v jq >/dev/null 2>&1; then
+    grep -qE '"active"[[:space:]]*:[[:space:]]*true' "$state" || return 1
+    printf 'the auto run in %s (jq is not on PATH to read its session)\n' "$state"
+    return 0
+  fi
+  sid=$(jq -r 'select(.active == true) | .session // empty' < "$state" 2>/dev/null | tr -d '\r')
+  [ -n "$sid" ] || return 1
+  file="${HOME:-}/.claude/dforge/sessions/cockpit/$(printf '%s' "$sid" | tr -c 'A-Za-z0-9' '-')"
+  if [ -f "$file" ]; then
+    beat=$(head -n 1 "$file" | tr -dc '0-9')
+    [ -n "$beat" ] && [ $(( $(date +%s) - beat )) -le 180 ] || return 1
+  else
+    [ -n "$(find "${CLAUDE_CONFIG_DIR:-${HOME:-}/.claude}"/projects/*/"$sid".jsonl -mmin -60 2>/dev/null | head -n 1)" ] || return 1
+  fi
+  printf 'the auto run of session %s\n' "$sid"
+}
+
+# report_dforge CHECKOUT — note each tracked file outside the docs tree, the
+# state directories and the ignore files that still names dforge, under its
+# repository path, for one report: line per path however many checkouts hold
+# it. Migrate leaves their text as it is.
+reported_paths=()
+reported_in=()
+report_dforge() {
+  local file i listed status
+  listed=$(g -C "$1" grep -I -l -E -e 'docs/dforge|(^|[^A-Za-z0-9_-])\.dforge|(^|[^A-Za-z0-9_-])dforge:[a-z]' -- . \
+    ':(exclude)docs/dagents' ':(exclude)docs/dforge' ':(exclude).dagents' ':(exclude).dforge' ':(exclude).gitignore' ':(exclude).gitattributes' 2>&1)
+  status=$?
+  # 1 is "no match"; anything else means the search did not finish.
+  if [ "$status" -gt 1 ]; then
+    printf 'report: %s could not be searched for files that name dforge (git grep: %s)\n' "$1" "$(head -n 1 <<<"$listed")"
+    return 0
+  fi
+  [ "$status" -eq 0 ] || return 0
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    for i in "${!reported_paths[@]}"; do [ "${reported_paths[$i]}" != "$file" ] || break; done
+    if [ "${#reported_paths[@]}" -gt 0 ] && [ "${reported_paths[$i]}" = "$file" ]; then reported_in[$i]="${reported_in[$i]}, $1"
+    else reported_paths+=("$file"); reported_in+=("$1"); fi
+  done <<<"$listed"
 }
 
 while IFS= read -r wt; do
@@ -360,9 +444,22 @@ while IFS= read -r wt; do
 done < <(g -C "$root" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
 [ ${#checkouts[@]} -gt 0 ] || checkouts=("$root")
 
+# A dforge 5 plan, or a dforge run still holding the project, stops the whole
+# run before anything moves.
+blocked=0 dforge_found=()
+for wt in "${checkouts[@]}"; do
+  if plan5=$(dagents_dforge5_plan "$wt"); then refuse "dforge 5 layout: not migratable ($plan5)"; blocked=1; fi
+  if holder=$(dforge_live "$wt"); then refuse "a dforge run still holds $wt ($holder); let it finish or stop it, then run dagents-migrate again"; blocked=1; fi
+  found=0
+  gitdir=$(g -C "$wt" rev-parse --absolute-git-dir 2>/dev/null) || gitdir=""
+  if [ -e "$wt/.dforge" ] || [ -e "$wt/docs/dforge" ] || { [ -n "$gitdir" ] && [ -e "$gitdir/dforge" ]; }; then found=1; fi
+  dforge_found+=("$found")
+done
+[ "$blocked" -eq 0 ] || exit 1
+
 for wt in "${checkouts[@]}"; do
   checkout_refused=0
-  for old in .superpowers .forge; do
+  for old in .dforge .superpowers .forge; do
     tracked=0
     if [ -e "$wt/$old" ] && [ -n "$(g -C "$wt" ls-files -- "$old" | head -n 1)" ]; then tracked=1; fi
     mv_plain "$wt/$old" "$wt/.dagents"
@@ -373,7 +470,7 @@ for wt in "${checkouts[@]}"; do
   migrate_docs "$wt"
   [ "$docs_ok" -eq 0 ] || rewrite_active_plans "$wt" "$docs_at"
   if gitdir=$(g -C "$wt" rev-parse --absolute-git-dir 2>/dev/null); then
-    for old in dr-superpowers dr-forge; do mv_plain "$gitdir/$old" "$gitdir/dagents"; done
+    for old in dforge dr-superpowers dr-forge; do mv_plain "$gitdir/$old" "$gitdir/dagents"; done
   else
     refuse "cannot read the git directory of $wt"
   fi
@@ -388,9 +485,11 @@ for i in "${!checkouts[@]}"; do
   [ "${clean[$i]}" -eq 0 ] || mode=add
   for name in .gitignore .gitattributes; do
     if rewrite_names "$wt/$name" "$mode" && g -C "$wt" ls-files --error-unmatch -- "$name" >/dev/null 2>&1; then
+      stage "$wt" "$name"
       commit_notes+=("$wt: $name")
     fi
   done
+  [ "${dforge_found[$i]}" -eq 0 ] || report_dforge "$wt"
 done
 mode=replace
 [ "$refused" -eq 0 ] || mode=add
@@ -424,6 +523,9 @@ if [ -f "$HERE/lib/dagents-home-migrate.mjs" ]; then
   fi
 fi
 
+for i in "${!reported_paths[@]}"; do
+  printf 'report: %s names dforge (docs/dforge, .dforge or a dforge: prefix) in %s; dagents left it as it is\n' "${reported_paths[$i]}" "${reported_in[$i]}"
+done
 [ "$dry" -eq 1 ] || for note in "${commit_notes[@]+"${commit_notes[@]}"}"; do printf 'commit: %s\n' "$note"; done
 [ "$moved" -eq 1 ] || [ "$refused" -eq 1 ] || echo "dagents-migrate: nothing to migrate in $root"
 exit "$refused"
