@@ -4,7 +4,7 @@ import type { On, RenderElement, SessionMessage } from 'claude-code'
 
 import { parseLedger } from '../hooks/cockpit/lib'
 import type { SettingsFile } from '../hooks/cockpit/config'
-import { SCHEMA, settingWritten } from '../hooks/cockpit/config'
+import { SCHEMA, resolveSettings, settingWritten } from '../hooks/cockpit/config'
 
 // Acceptance tests for docs/dforge/specs/2026-11-15-plugin-review-fixes-design.md,
 // the cockpit statements. The engine below is the same set of event answers the
@@ -835,5 +835,131 @@ describe('plugin-review-fixes: resume offer, model switch snapshot and session c
     await clock.advance(2_000)
     await clock.advance(5 * MIN)
     expect(sent()).toBeGreaterThan(capped)
+  })
+})
+
+describe('plugin-review-fixes: guards and permission mode', () => {
+  const TRAILER = ['Co', 'Authored-By:'].join('-')
+  const guarded = async ($: Parameters<TestBody>[0], on: On, command: string) => {
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    await $.session.start(START)
+    return $.tool.call({ tool: 'Bash', command })
+  }
+  test('A43: a commit with a human co-author trailer passes', async ($, on) => {
+    const ran = await guarded($, on, `git commit -m 'fix: tidy' -m '${TRAILER} Jane Smith <jane.smith@example.com>'`)
+    expect(ran.deny).toBeUndefined()
+  })
+  test('A43: a commit that only mentions a trailer in its subject passes', async ($, on) => {
+    const ran = await guarded($, on, `git commit -m 'test: refuse ${TRAILER} lines that name an AI'`)
+    expect(ran.deny).toBeUndefined()
+  })
+  test('A43: a command that only mentions a trailer, with no commit, passes', async ($, on) => {
+    const ran = await guarded($, on, `echo "${TRAILER} Claude <noreply@anthropic.com>" > notes.txt`)
+    expect(ran.deny).toBeUndefined()
+  })
+  test('A43: a commit with an AI co-author trailer is still refused', async ($, on) => {
+    const ran = await guarded($, on, `git commit -m 'fix: tidy' -m '${TRAILER} Claude <noreply@anthropic.com>'`)
+    expect(ran.deny).toMatch(/attribution/)
+  })
+
+  test('A44: a throwing tool.call hook refuses only a guarded call, with a message naming guardAttribution', async ($, on) => {
+    let failures = 0
+    on('state.get', { plugin: 'dforge', key: 'settings' } as never, ((_$: unknown, e: unknown, next: (e: unknown) => unknown) => {
+      if (failures > 0) {
+        failures -= 1
+        return { deny: 'the store is down' }
+      }
+      return next(e)
+    }) as never)
+    const files: World['files'] = { '/home/me/code/shop/web/msg.txt': { text: 'fix: tidy\n' } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    failures = 1
+    const read = await $.tool.call({ tool: 'Read', file_path: '/home/me/code/shop/a.ts' } as never)
+    expect(read.deny).toBeUndefined()
+    failures = 1
+    const guarded = await $.tool.call({ tool: 'Bash', command: 'git commit -F msg.txt' })
+    expect(guarded.deny).toMatch(/guardAttribution/)
+  })
+
+  for (const [mode, defaultMode, isAsked] of [['auto', 'default', false], ['default', 'bypassPermissions', true]] as const)
+    test(`A54: an approval wait under the ${mode} mode the event carries ${isAsked ? 'pings' : 'does not ping'}, the settings default being ${defaultMode}`, async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
+      on('classic.UserPromptSubmit', () => ({}) as never)
+      const clock = world(on, { tokens: 50_000, fetches, settings: { permissions: { defaultMode } }, config: { notifyAskAfter: 20 } })
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.classic.UserPromptSubmit({ prompt: 'go', permission_mode: mode })
+      await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+      await clock.advance(30_000)
+      expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)).toEqual(isAsked ? ['⏳ Waiting for approval'] : [])
+    })
+})
+
+describe('plugin-review-fixes: pane display, saved settings and inert rows', () => {
+  test('A45: with paneGlyphs=ascii the pane renders only ASCII and the head shows the setting-problem count', async ($, on) => {
+    world(on, { tokens: 284_000, config: { paneGlyphs: 'ascii', layout: 'tiles' } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const drawn = JSON.stringify(await ui.drawn())
+    expect(drawn.match(/[^\x00-\x7f]/g)).toBeNull()
+    expect(await ui.find({ type: 'Text', text: /1 setting problem/ })).toBeDefined()
+  })
+
+  test('A46: a Claude-key save the engine does not keep is cleared from the view and toasted within 10 seconds', async ($, on) => {
+    const toasts: string[] = []
+    const clock = world(on, { tokens: 284_000, config: {}, toasts, runs: [], settings: { autoCompactWindow: 650_000 } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'set-autoCompactWindow-more' })
+    await clock.advance(10_000)
+    expect(await ui.find({ type: 'Text', text: /^650k/ })).toBeDefined()
+    expect(toasts.filter(t => /autoCompactWindow/.test(t) && /stick|not kept|not saved/i.test(t))).toHaveLength(1)
+  })
+
+  test('A48: a settings file with a trailing comma is a problem on the pane head, and notifyOn reads as none (the session-start line is asserted in the shell suite)', async ($, on) => {
+    const fetches: NonNullable<World['fetches']> = []
+    const files: NonNullable<World['files']> = { [CONFIG]: { text: '{"layout": "full", "notifyOn": "done",}', mtimeMs: 1 } }
+    world(on, { ...SIGNED_IN, files, fetches, env: { HOME: '/home/me', DFORGE_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /1 setting problem/ })).toBeDefined()
+    await $.turn.complete({ answer: 'done', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(fetches).toHaveLength(0)
+  })
+
+  test('A50: the darkmem store rows are inert while darkmem is off', async ($, on) => {
+    world(on, { tokens: 284_000, config: { darkmemEnabled: false } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-darkmem' })
+    expect((await ui.find({ key: 'set-documentStore-controls' }))?.text).toMatch(/no effect while darkmem is off/)
+  })
+
+  test('A50: one press of + on apiBudgetAgentRouter at 0 does not change it', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: {}, written })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: `settings-tab-${SCHEMA.apiBudgetAgentRouter!.group}` })
+    await ui.press({ key: 'set-apiBudgetAgentRouter-more' })
+    expect(written[CONFIG]).toBeUndefined()
+  })
+})
+
+describe('plugin-review-fixes: the cockpit\'s settings reader', () => {
+  test('A47: the cockpit resolves "notifyOn": "off" to none and "sections": "plan,unknown" to plan, as dforge-config does', () => {
+    const values = resolveSettings(SCHEMA, { notifyOn: 'off', sections: 'plan,unknown' }, {})
+    expect(values.notifyOn).toBe('none')
+    expect(values.sections).toBe('plan')
   })
 })

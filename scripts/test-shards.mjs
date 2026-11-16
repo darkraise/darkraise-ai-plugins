@@ -58,6 +58,7 @@ export const windowsSeconds = {
   'plan-amend.test.sh': 390,
   'plan-lib.test.sh': 43,
   'plan-lint.test.sh': { one: 620, two: 620, paths: 40 },
+  'plugin-review-fixes.acceptance.test.sh': 200,
   'polluter.test.sh': 10,
   'process-roles.test.sh': 10,
   'qa-files.test.sh': 20,

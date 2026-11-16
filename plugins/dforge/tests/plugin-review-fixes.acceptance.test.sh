@@ -722,6 +722,37 @@ for skill in brainstorming systematic-debugging; do
   has "A52: $skill asks for a fast-for-this-session answer" "$(tr '\n' ' ' < "$P/skills/$skill/SKILL.md" | tr -s ' ')" "fast mode for this session"
 done
 
+# --- A47, A48, A49: the settings file ---
+export HOME="$TMP/home-cfg"; mkdir -p "$HOME/.dforge" "$HOME/.claude"
+printf '{"notifyOn": "off", "sections": "plan,unknown"}\n' > "$HOME/.dforge/config.json"
+N47=$(bash "$S/dforge-config" get notifyOn 2>/dev/null); SEC47=$(bash "$S/dforge-config" get sections 2>/dev/null)
+check "A47: dforge-config reads notifyOn \"off\" as none" "$N47" "none"
+check "A47: dforge-config salvages sections \"plan,unknown\" to the known section" "$SEC47" "plan"
+printf '{"layout": "full", "notifyOn": "done",}\n' > "$HOME/.dforge/config.json"
+out=$(jq -cn --arg cwd "$TMP" '{hook_event_name:"SessionStart",session_id:"s-cfg",transcript_path:"",cwd:$cwd,source:"startup"}' | bash "$S/session-start.sh" 2>/dev/null)
+ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out")
+check "A48: session start injects one problem line for the file" "$(grep -c 'not a JSON object' <<<"$ctx")" "1"
+printf '{}\n' > "$HOME/.dforge/config.json"
+
+# A49: two concurrent writes of different Claude keys both persist. The write is held
+# DFORGE_CLAUDE_WRITE_DELAY_MS between its read and its write (the script's own test seam)
+# so the two overlap.
+export HOME="$TMP/home-w49"
+lost=0
+for i in 1 2 3; do
+  rm -rf "$HOME"; mkdir -p "$HOME/.claude" "$HOME/.dforge"
+  printf '{"theme":"dark"}\n' > "$HOME/.claude/settings.json"
+  DFORGE_CLAUDE_WRITE_DELAY_MS=400 bash "$S/dforge-config" claude-restore '{"effortLevel":"high"}' >/dev/null 2>&1 &
+  p1=$!
+  DFORGE_CLAUDE_WRITE_DELAY_MS=400 bash "$S/dforge-config" claude-restore '{"model":"sonnet"}' >/dev/null 2>&1 &
+  p2=$!
+  wait "$p1" "$p2"
+  got=$(jq -r '[.effortLevel, .model, .theme] | map(tostring) | join(",")' < "$HOME/.claude/settings.json" 2>/dev/null)
+  [ "$got" = "high,sonnet,dark" ] || { lost=$((lost + 1)); printf '       run %s kept: %s\n' "$i" "$got"; }
+done
+check "A49: both concurrent Claude-key writes persisted in every one of 3 runs" "$lost" "0"
+export HOME="$TMP/home"
+
 # --- footer ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
