@@ -13,6 +13,7 @@
 #        next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION
 #        next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION
 #        next-step [--host claude|codex] [--print] --project [--keep-notes]
+#        next-step [--host claude|codex] --print --latest
 #   --print     compute and print the block only: write, create and delete
 #               nothing, and skip the background-work check.
 #   --complete  the plan is finished and its branch integrated; the ledger may
@@ -35,6 +36,8 @@
 #               the block comes from the current milestone's registers, or
 #               every register when no milestone is current. Replaces latest.md
 #               wholesale unless --keep-notes, which keeps the notes above it.
+#   --latest    recompute the block latest.md holds from what its marker
+#               names (requires --print), and print it with the marker last.
 #   --host      which client the next session launches; default claude. A plan
 #               states its own host in its header, so the flag serves the paths
 #               that have no plan to read.
@@ -44,7 +47,8 @@
 # Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
 #       latest.md could not be written; 5 background work this session started
 #       is still running (scripts/in-flight): nothing printed or written
-#       (never under --print).
+#       (never under --print); 6 --print --latest has nothing to resume
+#       (nothing on stdout, at most one reason on stderr).
 set -euo pipefail
 
 # Failures print on stdout as well as stderr. A session that surfaces only
@@ -56,7 +60,7 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--host claude|codex] [--print] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print] --project [--keep-notes]"; }
+usage() { fail 2 "usage: next-step [--host claude|codex] [--print] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print] --project [--keep-notes] | next-step [--host claude|codex] --print --latest"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
@@ -187,8 +191,12 @@ plan_name() {
   printf '%s\n' "$name"
 }
 
-complete=0 kept=0 draft=0 adhoc=0 project=0 keep_notes=0 phase="" next_action=""
+complete=0 kept=0 draft=0 adhoc=0 project=0 keep_notes=0 latest_mode=0 phase="" next_action=""
 case "${1:-}" in
+  --latest)
+    latest_mode=1; shift
+    { [ $# -eq 0 ] && [ "$print_only" -eq 1 ]; } || usage
+    ;;
   --project)
     project=1; shift
     if [ "${1:-}" = --keep-notes ]; then keep_notes=1; shift; fi
@@ -258,7 +266,7 @@ render_rows() {
 
 status_line="" next_line="" prompt="" launch=1 launch_cmd="" launch_plan=""
 
-if [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ]; then
+if [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ] || [ "$latest_mode" -eq 1 ]; then
   root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
   primary=$(plan_primary_root "$root")
   dir=$primary
@@ -282,6 +290,68 @@ dforge_stores_init "$root"
 # path otherwise, which no checkout-relative name can reach.
 if [ "$(dforge_progress_store)" = darkmem ]; then latest_shown=$(dforge_latest_file)
 else latest_shown="$(dforge_dir_rel state "$primary")/handoff/latest.md"; fi
+
+# --print --latest: the stored block, recomputed from what its marker names
+# when the repository can answer it, so a reader never replays a stale one.
+if [ "$latest_mode" -eq 1 ]; then
+  gone() { printf 'next-step: %s\n' "$1" >&2; exit 6; }
+  latest=$(dforge_latest_file)
+  [ -f "$latest" ] || gone "no latest.md at $latest"
+  stored=$(tr -d '\r' < "$latest" | awk '
+    /^## Next session[ \t]*$/ { on = 1; print; next }
+    on && /^## / { exit }
+    on')
+  [ -n "$stored" ] || gone "latest.md has no Next session section"
+  marker=$(grep -E '^<!-- next-step: .* -->$' <<<"$stored" | tail -n 1 || true)
+  stored=$(grep -vE '^<!-- next-step: ' <<<"$stored" | awk 'NF { last = NR } { line[NR] = $0 } END { for (i = 1; i <= last; i++) print line[i] }')
+  stored_block() { printf '%s\n%s\n' "$stored" "$marker"; exit 0; }
+  if [ -z "$marker" ]; then
+    at=$(stat -c %Y "$latest" 2>/dev/null || stat -f %m "$latest")
+    marker="<!-- next-step: kind=none subject=- at=$at -->"
+    stored_block
+  fi
+  m=${marker#<!-- next-step: }; m=${m% -->}
+  m=${m% at=*}
+  m_subject=${m#* subject=}
+  m_kind="" m_branch="" m_done=0 m_closed=0
+  for word in ${m%% subject=*}; do
+    case $word in
+      kind=*) m_kind=${word#kind=} ;;
+      branch=*) m_branch=${word#branch=} ;;
+      done=*) m_done=${word#done=} ;;
+      closed=*) m_closed=${word#closed=} ;;
+    esac
+  done
+  self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+  recompute() { # recompute ARGS... — this script's own --print block, then the marker
+    local out status=0
+    out=$(cd "$root" && bash "$self" --host "$host" --print "$@" 2>&1) || status=$?
+    if [ "$status" -ne 0 ]; then printf '%s\n' "$out"; exit "$status"; fi
+    printf '%s\n%s\n' "$out" "$marker"
+    exit 0
+  }
+  read -r now_done now_closed < <(handoff_counts "$root")
+  case $m_kind in
+    plan)
+      if grep -qE '^\*\*Status:\*\* .*[1-9][0-9]* of [0-9]+ tasks complete' <<<"$stored" \
+         && ! plan_ledger_any "$root" "$m_subject" >/dev/null && ! plan_finished "$root" "$m_subject"; then
+        gone "the ledger is gone and the plan is unrecorded: $m_subject"
+      fi
+      recompute "$m_subject" ;;
+    complete) recompute --complete "$m_subject" ;;
+    project) recompute --project ;;
+    kept)
+      plan_finished "$root" "$m_subject" && recompute --complete "$m_subject"
+      git -C "$primary" rev-parse --verify --quiet "refs/heads/$m_branch" >/dev/null || gone "the kept branch $m_branch is gone"
+      ! git -C "$primary" merge-base --is-ancestor "refs/heads/$m_branch" HEAD 2>/dev/null || gone "the kept branch $m_branch is merged"
+      stored_block ;;
+    draft|adhoc)
+      { [ "$now_done" -gt "$m_done" ] || [ "$now_closed" -gt "$m_closed" ]; } && gone "a plan or a milestone closed since the block was written"
+      [ "$m_kind" != draft ] || [ -z "$(spec_plans "$root" "$m_subject")" ] || gone "a plan names the draft $m_subject"
+      stored_block ;;
+    *) gone "unknown marker kind: ${m_kind:-none}" ;;
+  esac
+fi
 
 if [ "$adhoc" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
