@@ -191,6 +191,18 @@ has "no roadmap: built rows fall through to the Program-line branches" "$NEXT" "
 lacks "no roadmap: built rows are not listed as open" "$NEXT" "Register rows still open"
 lacks "no roadmap: built rows are not planned afresh" "$NEXT" "write its plan"
 
+# --- built rows under a roadmap whose milestones are all closed: no audit awaits them ---
+fixture
+plan 2026-09-01-p0 "$S"
+plan 2026-10-05-p1 "$X"
+completed 2026-09-01-p0
+register r "$X" "1|Epic S|$S|doing"
+roadmap r
+sed -i.bak 's/| open | - |$/| closed | - |/' "$D/roadmap.md" && rm -f "$D/roadmap.md.bak"
+complete 2026-10-05-p1
+has "closed roadmap: built rows read as nothing open" "$NEXT" "**Next:** Nothing — every milestone in \`docs/dagents/roadmap.md\` is closed."
+lacks "closed roadmap: built rows are not listed without an action" "$NEXT" "Register rows still open"
+
 # --- a plan row resumes a worktree ledger ---
 fixture
 plan 2026-09-01-p1 "$X"
