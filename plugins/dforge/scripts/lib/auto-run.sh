@@ -349,11 +349,24 @@ ar_stop_stale() {
   sid=$(ar_get session)
   ar_is_stale || { echo "auto-run: the run's owner session $sid is still live; stop it from that session" >&2; return 3; }
   path=$(ar_path) || return 1
-  dr_locked "$path" ar_put "$path" '.active = false | .stopped = $r | .pending = null' \
-    --arg r "owner session $sid is gone" || return 1
+  local status=0
+  dr_locked "$path" _ar_stop_if_stale "$path" "$sid" || status=$?
+  case $status in
+    0) ;;
+    3) echo "auto-run: the run changed while it was being stopped (a new run, or its owner came back); nothing was stopped" >&2; return 3 ;;
+    *) return 1 ;;
+  esac
   echo "auto-run: stopped — owner session $sid is gone"
   ar_decision_list | sed 's/^/pending decision: /'
   ar_ruling_list | sed 's/^/ruling: /'
+}
+
+# _ar_stop_if_stale PATH SID — under the state's lock, so a run started with
+# --force since the check outside it is never stopped: stop the run only while
+# SID still owns it, it is active, and SID is gone. Return 3 otherwise.
+_ar_stop_if_stale() {
+  ar_jq -e --arg s "$2" '.active == true and .session == $s' < "$1" >/dev/null 2>&1 && ar_is_stale || return 3
+  ar_put "$1" '.active = false | .stopped = $r | .pending = null' --arg r "owner session $2 is gone"
 }
 
 # ar_set_phase PHASE — refuses (return 4) execute where ar_guard does, since

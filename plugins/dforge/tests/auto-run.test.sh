@@ -758,6 +758,21 @@ check "stop --stale: refused while the owner lives" "$status:$(field active)" "3
 beat s-1 100000
 ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
 check "stop --stale: a dead owner's run stops" "$status:$(field active)" "0:false"
+# A run started with --force between the check and the locked write is left
+# alone: the fake flock swaps it in just before the lock is taken.
+if command -v flock >/dev/null 2>&1; then
+  ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  beat s-1 100000
+  cp "$STATE" "$TMP/fresh-run.json"
+  jq '.session = "s-3"' "$TMP/fresh-run.json" > "$TMP/swap.json"
+  beat s-3
+  printf '#!/usr/bin/env bash\n[ ! -f "%s" ] || mv -f "%s" "%s"\nexec flock "$@"\n' "$TMP/swap.json" "$TMP/swap.json" "$STATE" > "$TMP/swap-flock"
+  chmod +x "$TMP/swap-flock"
+  DFORGE_FLOCK="$TMP/swap-flock" ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
+  check "stop --stale: a run that replaced the stale one meanwhile keeps running" "$status:$(field session):$(field active)" "3:s-3:true"
+else
+  printf 'skip - stop --stale race: no flock on this host\n'
+fi
 
 # --- every suite that runs the run-control scripts names its own session ---
 # A subagent's shell carries the controller's CLAUDE_CODE_SESSION_ID, so a
