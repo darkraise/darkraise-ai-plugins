@@ -4196,7 +4196,9 @@ async function claudeReadBack($: EngineInterface, key: string, value: SettingVal
     const { path, mtime } = await configStamp($)
     const file = path === null ? {} : await readSettingsFile($, path)
     await applySettings($, inForce(file), mtime)
-    $.ui.toast(`dforge: ${key} did not stick: the engine kept ${engine === undefined ? 'no value' : JSON.stringify(engine)}`)
+    $.ui.toast(
+      `dforge: ${key} did not stick: the engine kept ${engine === undefined ? 'no value' : JSON.stringify(engine)}. Claude Code may have saved its own settings over it; set it again, or edit ${await userSettingsPath($)}.`,
+    )
   } catch {
     // The read-back is a courtesy: a failure leaves the save shown as saved.
   }
