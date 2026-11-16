@@ -171,7 +171,8 @@ your own: QA commits on this branch.
       or deletes only the paths QA listed that turned dirty after `begin`,
       never a carried path (`scripts/auto-run carried`), and prints a
       `qa-files: left <path>` line for every other new dirty path, which
-      may be your human partner's work. Name those paths in your
+      may be your human partner's work, and for a listed path that was
+      already dirty, where QA's edits are mixed into theirs. Name those paths in your
       final-review message, and log
       `Ruling: QA timed out — its listed files were removed; left: <paths> — none`
       (`left: none` when it printed no `left` line).
