@@ -2988,15 +2988,16 @@ async function readAutoRun($: EngineInterface): Promise<CockpitAutoRun | null> {
 // engine gives a mod no process id or signal API, so the beat's age is all
 // there is. A beat up to BEAT_SECONDS ahead is clock skew and reads as now.
 // No beat file is a dead session; null, unknown, is a beat that reads as no
-// time (a write caught midway) or a check that failed, which callers must not
-// act on as a death.
+// time (a write caught midway), a beat file that exists but cannot be read,
+// or a check that failed, which callers must not act on as a death.
 const BEAT_SECONDS = 180
 async function isSessionAlive($: EngineInterface, sid: string): Promise<boolean | null> {
   try {
     const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
     if (!home) return null
-    const text = await $.fs.read(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/cockpit/${sid.replace(/[^A-Za-z0-9]/g, '-')}`).catch(() => null)
-    if (text === null) return false
+    const path = `${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/cockpit/${sid.replace(/[^A-Za-z0-9]/g, '-')}`
+    const text = await $.fs.read(path).catch(() => null)
+    if (text === null) return (await $.fs.exists(path)) ? null : false
     const first = String(text).split(/\r?\n/)[0]?.trim() ?? ''
     if (!/^[0-9]+$/.test(first)) return null
     const age = Math.floor((await $.clock.now()) / 1000) - Number(first)

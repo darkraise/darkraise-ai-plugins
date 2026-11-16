@@ -565,8 +565,8 @@ function world(on: On, w: World) {
     if (w.written !== undefined) w.written[e.path] = e.text
     return { value: undefined }
   })
+  on('fs.exists', (_$, e) => ({ value: (w.config !== undefined && e.path === CONFIG) || e.path in (w.written ?? {}) || e.path in (w.files ?? {}) }))
   if (w.config !== undefined) {
-    on('fs.exists', (_$, e) => ({ value: e.path === CONFIG || e.path in (w.written ?? {}) || e.path in (w.files ?? {}) }))
     on('fs.read', (_$, e) => {
       if (e.path === CONFIG) return { value: w.written?.[CONFIG] ?? JSON.stringify(w.config) }
       throw new Error('ENOENT')
@@ -6780,6 +6780,18 @@ describe('auto run', () => {
         expect(restores(w)).toEqual([])
         expect(drops(w)).toEqual([])
       })
+
+    test('leaves the snapshot of a session whose heartbeat exists but cannot be read', async ($, on) => {
+      const unreadable = { get text(): string { throw new Error('EACCES: permission denied') } }
+      const files: NonNullable<World['files']> = { [SNAP]: SNAPSHOT, [BEAT]: unreadable }
+      const w: World = { ...SIGNED_IN, runs: [], toasts: [], files, userSettings: { model: 'sonnet' } }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await settle(clock)
+      expect(restores(w)).toEqual([])
+      expect(drops(w)).toEqual([])
+    })
   })
 
   test('arms the watchdog when a read at the start fails', async ($, on) => {

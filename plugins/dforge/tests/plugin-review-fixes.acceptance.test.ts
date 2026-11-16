@@ -370,8 +370,8 @@ function world(on: On, w: World) {
     if (w.written !== undefined) w.written[e.path] = e.text
     return { value: undefined }
   })
+  on('fs.exists', (_$, e) => ({ value: (w.config !== undefined && e.path === CONFIG) || e.path in (w.written ?? {}) || e.path in (w.files ?? {}) }))
   if (w.config !== undefined) {
-    on('fs.exists', (_$, e) => ({ value: e.path === CONFIG || e.path in (w.written ?? {}) || e.path in (w.files ?? {}) }))
     on('fs.read', (_$, e) => {
       if (e.path === CONFIG) return { value: w.written?.[CONFIG] ?? JSON.stringify(w.config) }
       throw new Error('ENOENT')
