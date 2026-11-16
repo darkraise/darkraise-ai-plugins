@@ -752,6 +752,15 @@ test("a file under the docs root's archive/ is a reserved note and never pushed"
   assert.equal([...s.stub.db.documents.keys()].some(key => key.includes("archive")), false);
 });
 
+test("a file under the docs root's amendments/ is a reserved note and never pushed", async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "amendments", "p1.md"), "## A1 not a plan's amendments\n");
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /note: amendments\/p1\.md: the docs root's amendments\/ directory is reserved, not pushed/);
+  assert.equal(s.stub.db.documents.has("proj\u0000dforge/amendments/p1.md"), false);
+});
+
 test("a document darkmem stores with other bytes is sent once, and the next pull brings darkmem's copy back", async t => {
   const s = await setup(t, { transformContent: content => content.replace(/\n$/, "") });
   markMigrated(s.mirror);
