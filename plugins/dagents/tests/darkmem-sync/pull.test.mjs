@@ -703,3 +703,16 @@ test("a mirror synced with another server or project is refused, not read as rem
   fs.writeFileSync(config, JSON.stringify(mapping));
   assert.equal((await s.pull()).code, 0);
 });
+
+test("a second mirror receives the project checkpoint", async t => {
+  const s = await setup(t);
+  const repo = makeRepo();
+  const first = makeHome({ repo, url: s.stub.url });
+  const note = "# Handoff — 2026-11-16\n\n## Next session\n\n**Status:** Plan `docs/dagents/plans/P.md` is complete.\n**Next:** Nothing — no register holds an unresolved row.\n<!-- next-step: kind=complete done=1 closed=0 subject=docs/dagents/plans/P.md at=1763251200 -->\n";
+  write(path.join(first.workRoot, "handoff", "latest.md"), note);
+  const pushed = await run(["push"], { cwd: repo, env: first.env });
+  assert.equal(pushed.code, 0, pushed.stdout + pushed.stderr);
+  const result = await s.pull();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), note);
+});

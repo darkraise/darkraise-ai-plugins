@@ -399,7 +399,7 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
     report.failures.push("handoff/latest.md: empty or not UTF-8 text, not pushed");
     return;
   }
-  const target = checkpointTarget(body);
+  const target = checkpointTarget(body, { marker: true });
   const workstream = named ?? target?.slug;
   if (!workstream) {
     report.failures.push("handoff/latest.md: its State section names no plan or draft; push again with --workstream KEY");

@@ -766,3 +766,27 @@ test("a document darkmem stores with other bytes is sent once, and the next pull
   assert.equal(again.code, 0, again.stdout + again.stderr);
   assert.equal(s.posts("/api/v1/documents").length, 1, "the document is not sent again");
 });
+
+const COMPLETE_NOTE = "# Handoff — 2026-11-16\n\n## Next session\n\n**Status:** Plan `docs/dagents/plans/P.md` is complete.\n**Next:** Nothing — no register holds an unresolved row.\n<!-- next-step: kind=complete done=1 closed=0 subject=docs/dagents/plans/P.md at=1763251200 -->\n";
+
+test("a complete latest.md is pushed under the project workstream", async t => {
+  const s = await setup(t);
+  write(path.join(s.workRoot, "handoff", "latest.md"), COMPLETE_NOTE);
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stdout, /names no plan or draft/);
+  assert.match(result.stdout, / 1 checkpoints;/);
+  const project = s.stub.db.workstreams.find(w => w.key === "project");
+  assert.deepEqual(project.entries.map(e => [e.kind, e.body]), [["checkpoint", COMPLETE_NOTE]]);
+  assert.deepEqual(project.properties ?? {}, {});
+});
+
+test("a project latest.md with stale notes is filed by its marker", async t => {
+  const s = await setup(t);
+  const note = "# Handoff — 2026-11-16\n\n## State\n- Plan: `docs/dagents/plans/Q.md`; ledger: `x`\n\n## Next session\n\n**Status:** Project: milestone M1 is open.\n**Next:** Write the plan for docs/dagents/specs/s.md with dagents:writing-plans.\n<!-- next-step: kind=project done=2 closed=0 subject=- at=1763251200 -->\n";
+  write(path.join(s.workRoot, "handoff", "latest.md"), note);
+  const result = await s.push();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "project").entries.length, 1);
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "Q"), undefined, "the stale State section does not name the workstream");
+});
