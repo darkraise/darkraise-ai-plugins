@@ -68,6 +68,7 @@ pending=$(grep -c . <<<"$running" || true)
 has_pending_background() { [ "$pending" -gt 0 ]; }
 
 . "${SCRIPT_DIR}/lib/last-message.sh"
+. "${SCRIPT_DIR}/lib/next-ending.sh"
 last=$(last_message "$stdin_json" "$transcript_path")
 
 # While background work runs, a plain stop is the controller waiting for it and
@@ -134,8 +135,12 @@ fi
 # finishing menu, one of finishing's own stops (failing tests, a discard or
 # worktree prompt) or the next-step block, which names finishing; any other
 # plan ends on the next-step block, or on the finish-preference question asked
-# before its first task. The first ledger without its ending names the reason.
+# before its first task. The next-step block counts only as next-step wrote it
+# this turn (lib/next-ending.sh), never hand-typed. The first ledger without its
+# ending names the reason.
 ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
+latest=""
+wrote_block() { [ -n "$latest" ] || latest=$(dagents_latest_file "$root"); ending_released "$last" "$stamp" "$latest"; }
 ledger="" clean=0
 [ -d "$sdd" ] || sdd=""
 ws="$(dagents_dir state "$root")/sdd"
@@ -148,11 +153,13 @@ while IFS= read -r candidate; do
   # Only a clean line that still covers HEAD sends the session to finishing; a
   # stale or rewritten one is a plan advanced without its next step.
   if [ "$(plan_final_review_state "$candidate" "$root")" = current ]; then
-    ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" \
+    ends_with 'Which option?' "Type 'discard' to confirm" \
               'Must fix before completing' 'Worktree removal refused' && continue
+    wrote_block && continue
     ledger=$candidate clean=1
   else
-    ends_with '## Next session' 'Ask me then: show the finish menu' && continue
+    ends_with 'Ask me then: show the finish menu' && continue
+    wrote_block && continue
     ledger=$candidate clean=0
   fi
   break

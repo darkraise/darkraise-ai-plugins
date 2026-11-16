@@ -167,7 +167,13 @@ check "hooks.json: the description names the UI hooks" "$(jq -r .description "$H
 sleep 1; prompt u-9
 printf '// changed\n' >> src/App.tsx
 check "a UI change with no proof: held" "$(decision "$(stop u-9 'Task 2 is done.')")" "block"
-check "a Next session block stands down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Status:** x')")" "none"
+# Only the block next-step wrote this turn is a handoff: one typed by hand is not.
+check "a hand-typed Next session block does not stand down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** x')")" "block"
+sleep 1
+mkdir -p .dagents/handoff
+printf '# Handoff\n\n## Next session\n\n**Next:** x\n' > .dagents/handoff/latest.md
+check "a Next session block stands down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** x')")" "none"
+rm -f .dagents/handoff/latest.md
 BGT="$TMP/ui-bg.jsonl"
 jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"toolu_w",name:"Bash",input:{description:"Suite",command:"npm test",run_in_background:true}}]}}' > "$BGT"
 jq -nc '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_w",content:"Command running in background with ID: w1. Output is being written to: /tmp/w1.output."}]}}' >> "$BGT"

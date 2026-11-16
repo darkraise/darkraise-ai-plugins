@@ -7,8 +7,9 @@
 # session ran dagents:ui-ux. It stands down while an auto run is bound to the
 # session (turn-end.sh owns those stops), on the retry (stop_hook_active), in
 # fast mode (lib/fast-mode.sh), when the last message ends with
-# "UI proof: pending — <why>", when it carries a `## Next session` block (a
-# handoff), and while background work this session started runs
+# "UI proof: pending — <why>", when it carries the `## Next session` block
+# next-step wrote this turn (a handoff; lib/next-ending.sh; without a turn
+# stamp, any such block), and while background work this session started runs
 # (lib/in-flight.sh): each of those stops is not a claim that the UI work is
 # done. The last message is the hook's, else the transcript's
 # (lib/last-message.sh). Anything
@@ -49,7 +50,13 @@ last=$(sed -E 's/^[[:space:]`]+//; s/[[:space:]`]+$//' <<<"$last")
 if grep -qE '^UI proof: pending[[:space:]]+(—|–|-)[[:space:]]*[^[:space:]]' <<<"$last"; then exit 0; fi
 . "$SCRIPT_DIR/lib/fast-mode.sh"
 fast_mode_on "$transcript_path" "$message" && exit 0
-grep -qF '## Next session' <<<"$message" && exit 0
+. "$SCRIPT_DIR/lib/roots.sh"
+. "$SCRIPT_DIR/lib/next-ending.sh"
+if [ -f "$stamp" ]; then
+  ending_released "$message" "$stamp" "$(dagents_latest_file "$root")" && exit 0
+else
+  grep -qF '## Next session' <<<"$message" && exit 0
+fi
 . "$SCRIPT_DIR/lib/in-flight.sh"
 if running=$(inflight_scan "$transcript_path" "$(inflight_since "$session_id")" 2>/dev/null) && [ -n "$running" ]; then
   exit 0
