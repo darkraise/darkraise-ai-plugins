@@ -290,7 +290,7 @@ has "unwritable handoff: says so on stdout" "$out" "next-step: could not write"
 rm -f "$REPO/.dagents/handoff"
 
 # --- final review clean: finishing is next ---
-ledger 'Task 1: complete (x)' 'Task 2: complete (x)' 'Task 3: complete (x)' 'Final review: clean (commits a1b2c3d..d4e5f6a)'
+ledger 'Task 1: complete (x)' 'Task 2: complete (x)' 'Task 3: complete (x)' "Final review: clean (commits a1b2c3d..$(git -C "$REPO" rev-parse --short HEAD))"
 run "$REPO" "$PLAN_REL"
 has "final review clean: status" "$out" "**Status:** Plan \`$PLAN_REL\`: all 3 tasks complete; the final review is clean."
 has "final review clean: next is finishing" "$out" "**Next:** Run dagents:finishing-a-development-branch."
@@ -969,6 +969,33 @@ bash "$HERE/../scripts/roadmap" close --root "$MREPO" M1 --note "audit: 1 MET" >
 OUT=$(cd "$MREPO" && bash "$SCRIPT" --complete docs/superpowers/plans/billing.md 2>&1)
 has "roadmap: every milestone closed" "$OUT" "Nothing — every milestone in \`docs/dagents/roadmap.md\` is closed."
 lacks "roadmap: closed launches nothing" "$OUT" "Launch in"
+
+# --- a clean final review is current only for the head it names (C5) ---
+done3() { ledger 'Task 1: complete (commits a..b, review clean)' 'Task 2: complete (commits b..c, review clean)' 'Task 3: complete (commits c..d, review clean)' "$@"; }
+git -C "$REPO" checkout -q -b feat-c5
+head7=$(git -C "$REPO" rev-parse --short HEAD)
+done3 "Final review: clean (commits 0000000..$head7)"
+run "$REPO" "$PLAN_REL"
+has "C5: current clean line routes to finishing" "$out" "**Next:** Run dagents:finishing-a-development-branch."
+mkdir -p "$REPO/docs/dagents/plans" && printf 'note\n' > "$REPO/docs/dagents/plans/completed.md"
+git -C "$REPO" add docs/dagents/plans/completed.md && git -C "$REPO" commit -qm "docs: index"
+run "$REPO" "$PLAN_REL"
+has "C5: docs-only commits after the head keep it current" "$out" "**Next:** Run dagents:finishing-a-development-branch."
+printf 'x\n' > "$REPO/code.txt" && git -C "$REPO" add code.txt && git -C "$REPO" commit -qm "fix: later"
+run "$REPO" "$PLAN_REL"
+has "C5: a later code commit routes to a scoped re-review" "$out" "Re-review $head7..HEAD"
+git -C "$REPO" reset -q --hard "$head7" && git -C "$REPO" commit -q --amend -m "rewritten"
+run "$REPO" "$PLAN_REL"
+has "C5: a rewritten head routes to a full final review" "$out" "Run the final whole-branch review, then dagents:finishing-a-development-branch."
+head7=$(git -C "$REPO" rev-parse --short HEAD)
+done3 "Final review: clean (commits 0000000..$head7)"
+git -C "$REPO" checkout -q -
+git -C "$REPO" merge -q --no-ff --allow-unrelated-histories -m "merge feat-c5" feat-c5
+printf 'y\n' > "$REPO/base.txt" && git -C "$REPO" add base.txt && git -C "$REPO" commit -qm "fix: on base"
+run "$REPO" "$PLAN_REL"
+has "C5: a base branch that merged the head routes to finishing" "$out" "**Next:** Run dagents:finishing-a-development-branch."
+git -C "$REPO" reset -q --hard HEAD~2 && git -C "$REPO" branch -qD feat-c5
+
 
 # --- documents and progress kept in darkmem ---
 . "$HERE/fixtures/darkmem-stores.sh"

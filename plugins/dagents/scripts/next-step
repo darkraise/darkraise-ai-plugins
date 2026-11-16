@@ -526,13 +526,25 @@ else
       fi
       [ -z "$first_open" ] || next_line="$next_line Dispatch Task $first_open ($open_title) only once the group is clean."
     elif [ -z "$first_open" ]; then
-      if [ "$has_ledger" -eq 1 ] && grep -q '^Final review: clean' <<<"$ledger_text"; then
-        status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
-        next_line="Run dagents:finishing-a-development-branch."
-      else
-        status_line="Plan \`$rel\`: all $total tasks complete."
-        next_line="Run the final whole-branch review, then dagents:finishing-a-development-branch."
-      fi
+      review_state=none
+      [ "$has_ledger" -eq 0 ] || review_state=$(plan_final_review_state "$ledger_file" "$root")
+      case $review_state in
+        current)
+          status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
+          next_line="Run dagents:finishing-a-development-branch."
+          ;;
+        stale\ *)
+          status_line="Plan \`$rel\`: all $total tasks complete; commits after the clean review (${review_state#stale }) are unreviewed."
+          next_line="Re-review ${review_state#stale }..HEAD with the fix-wave re-review in reference/final-review.md, then append a new clean line; then dagents:finishing-a-development-branch."
+          ;;
+        *)
+          status_line="Plan \`$rel\`: all $total tasks complete."
+          case $review_state in
+            rewritten\ *) status_line="Plan \`$rel\`: all $total tasks complete; the reviewed head ${review_state#rewritten } is no longer in the branch history." ;;
+          esac
+          next_line="Run the final whole-branch review, then dagents:finishing-a-development-branch."
+          ;;
+      esac
     elif [ "$done_count" -eq 0 ]; then
       status_line="Plan \`$rel\`: 0 of $total tasks complete ($ledger_note)."
       next_line="Start at Task $first_open ($open_title)."
