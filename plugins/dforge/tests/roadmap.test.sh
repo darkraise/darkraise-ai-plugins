@@ -138,6 +138,18 @@ run bash "$RM" settle --root "$ROOT" --spec docs/dforge/specs/2026-10-08-billing
 check "settle: an epic matches its spec under the other docs prefix" \
   "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $5 }')" "verify"
 
+check "settle: a second settle does not repeat its note" \
+  "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $6 }')" "built; owner confirms at the milestone audit"
+bash "$REG" set "$D/registers/m1.md" 1 doing --note "owner ruling: keep" >/dev/null
+run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
+check "settle keeps an existing note: the row is verify" "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $5 }')" "verify"
+check "settle keeps an existing note" \
+  "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $6 }')" "built; owner confirms at the milestone audit; owner ruling: keep"
+bash "$REG" set "$D/registers/m1.md" 1 doing >/dev/null
+run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
+check "settle keeps an existing note: once" \
+  "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $6 }')" "built; owner confirms at the milestone audit; owner ruling: keep"
+
 # verify is unresolved: the owner's confirmation is still owed.
 run bash "$RM" close --root "$ROOT" M1 --note "audit"
 check "verify: close refused" "$RC" "1"
@@ -279,6 +291,41 @@ register "$D/registers/m5.md" "$GIFT" \
 check "roadmap_unresolved: an empty cell keeps its place" \
   "$(roadmap_unresolved "$ROOT" docs/dforge/registers/m5.md | tr '\t' ',' | tr '\n' '|')" \
   "docs/dforge/registers/m5.md,1,,open,-|docs/dforge/registers/gift.md,1,Wrap,open,-|"
+
+# --- a milestone of built rows closes after sign-off (A30) ---
+# Shaped as darkpanel's M5: every epic built from one spec whose plans are all
+# indexed and whose requirement register is resolved.
+B="$TMP/built"
+git init -q -b main "$B"
+BD="$B/docs/dforge"
+mkdir -p "$BD/plans" "$BD/specs" "$BD/registers"
+printf '.dforge/\n' > "$B/.gitignore"
+TS=docs/dforge/specs/2026-10-17-tailscale-design.md
+printf '# Tailscale design\n' > "$B/$TS"
+printf '# Product\n' > "$BD/specs/product.md"
+printf '# Tailscale\n\n**Spec:** %s\n**Execution:** inline — `claude --model sonnet --effort high` — small\n\n### Task 1: One\n\nBody.\n' "$TS" > "$BD/plans/2026-10-18-tailscale.md"
+printf '# Completed plans\n\n- 2026-10-20 — `docs/dforge/plans/2026-10-18-tailscale.md` — merged\n' > "$BD/plans/completed.md"
+register "$BD/registers/m5-tailscale.md" docs/dforge/specs/product.md \
+  "| 1 | Node management | $TS | - | doing | - |" \
+  "| 2 | Tailnet management | $TS | - | doing | - |" \
+  "| 3 | DERP servers | $TS | - | doing | - |" \
+  "| 4 | ACL editor | $TS | - | open | - |"
+register "$BD/registers/tailscale.md" "$TS" '| 1 | Join a node | docs/dforge/plans/2026-10-18-tailscale.md | - | done | - |'
+{
+  printf '# Panel — roadmap\n\n**Product:** a panel\n**Spec:** docs/dforge/specs/product.md\n\n'
+  printf '| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n'
+  printf '| M5 | Tailscale | every epic resolved | docs/dforge/registers/m5-tailscale.md | open | - |\n'
+} > "$BD/roadmap.md"
+git -C "$B" add -A && git -C "$B" -c user.name=t -c user.email=t@example.invalid commit -qm fixture
+OUT=$(cd "$B" && timeout 60 bash "$HERE/../scripts/next-step" --print --project 2>&1)
+check "built rows: next-step names M5's audit" \
+  "$(grep -cF 'Built, awaiting the audit: #1, #2, #3, #4. Milestone M5 (Tailscale) has nothing else open: audit and close it with dforge:closing-a-milestone.' <<<"$OUT")" "1"
+for row in 1 2 3 4; do bash "$REG" set "$BD/registers/m5-tailscale.md" "$row" done >/dev/null; done
+run bash "$RM" close --root "$B" M5 --note x
+check "built rows: close exits 0 once the rows are signed off" "$RC" "0"
+check "built rows: the roadmap reads M5 closed" "$(roadmap_row "$BD/roadmap.md" M5 | cut -f5)" "closed"
+run bash "$RM" status --root "$B"
+check "built rows: status reads M5 closed" "$(grep -c '^M5 Tailscale — closed — x$' <<<"$OUT")" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
