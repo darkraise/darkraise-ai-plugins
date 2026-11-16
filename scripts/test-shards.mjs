@@ -152,7 +152,7 @@ export const windowsSeconds = {
   'plugins/dagents/tests/next-step.test.sh': 500,
   'plugins/dagents/tests/plan-amend.test.sh': 390,
   'plugins/dagents/tests/plan-lib.test.sh': 43,
-  'plugins/dagents/tests/plan-lint.test.sh': 1280,
+  'plugins/dagents/tests/plan-lint.test.sh': { one: 620, two: 660 },
   'plugins/dagents/tests/plan-revise.test.sh': 10,
   'plugins/dagents/tests/polluter.test.sh': 10,
   'plugins/dagents/tests/process-roles.test.sh': 10,
@@ -182,7 +182,7 @@ export const windowsSeconds = {
   'plugins/dagents/tests/task-step-settle.test.sh': 220,
   'plugins/dagents/tests/task-step-suite.test.sh': 250,
   'plugins/dagents/tests/task-step-text.test.sh': 10,
-  'plugins/dagents/tests/task-step.test.sh': 1570,
+  'plugins/dagents/tests/task-step.test.sh': { start: 700, rereview: 420, group: 348, verdict: 450 },
   'plugins/dagents/tests/test-simplifier.test.sh': 10,
   'plugins/dagents/tests/test-volume-rules.acceptance.test.sh': 40,
   'plugins/dagents/tests/turn-end.test.sh': 290,
@@ -213,10 +213,10 @@ export const suiteSeconds = {
   'plugins/dagents/tests/auto-run.test.sh': 634,
   'plugins/dagents/tests/faster-plans.acceptance.test.sh': 1125,
   'plugins/dagents/tests/next-step.test.sh': 625,
-  'plugins/dagents/tests/plan-lint.test.sh': 1600,
+  'plugins/dagents/tests/plan-lint.test.sh': 1200,
   'plugins/dagents/tests/task-loop-steps.acceptance.test.sh': 1150,
   'plugins/dagents/tests/task-step-base.test.sh': 1125,
-  'plugins/dagents/tests/task-step.test.sh': 1963,
+  'plugins/dagents/tests/task-step.test.sh': 900,
 };
 // faster-plans takes about 20 minutes on a Windows runner, more than a shard
 // can hold beside anything else, so it runs as three parts of its tests.
@@ -227,6 +227,8 @@ export const suiteParts = {
   'plugins/dforge/tests/task-step.test.sh': [['start'], ['rereview'], ['verdict']],
   'plugins/dforge/tests/plan-lint.test.sh': [['one'], ['two'], ['paths']],
   'plugins/dforge/tests/speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A7', 'A8', 'A11'], ['A13', 'A14', 'A15']],
+  'plugins/dagents/tests/plan-lint.test.sh': [['one'], ['two']],
+  'plugins/dagents/tests/task-step.test.sh': [['start'], ['rereview'], ['group'], ['verdict']],
 };
 
 function partWeight(entry, part, parts) {

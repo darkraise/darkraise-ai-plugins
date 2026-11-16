@@ -170,3 +170,24 @@ test('a dagents suite sharing a dforge basename keeps its own limit and parts', 
 test('every dagents shell suite has a weight within 80% of its limit', () => {
   assert.deepEqual(sched.checkShellWeights(jobsWithLimits('--plugin', 'dagents')), []);
 });
+
+test('dagents Windows shards cover every dagents suite exactly once', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/validate.yml', import.meta.url), 'utf8');
+  const count = Number(/--plugin dagents --shard \$\{\{ matrix\.shard \}\}\/(\d+)/.exec(workflow)?.[1]);
+  assert.ok(count > 0, 'validate.yml names the dagents shard count');
+  const all = list('--plugin', 'dagents');
+  const shards = Array.from({ length: count }, (_, i) => list('--plugin', 'dagents', '--shard', `${i + 1}/${count}`));
+  assert.ok(shards.every(shard => shard.length > 0));
+  assert.deepEqual(shards.flat().sort(), all.sort());
+});
+
+test('dagents jobs run only when dagents, scripts, tests or the workflow change', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/validate.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /^ {2}dagents-changes:$/m);
+  assert.ok(workflow.includes('^(plugins/dagents/|scripts/|tests/|\\.github/workflows/validate\\.yml)'), 'the path filter');
+  for (const job of ['validate-dagents', 'windows-dagents']) {
+    const block = workflow.slice(workflow.indexOf(`  ${job}:`));
+    assert.match(block.slice(0, 600), /needs\.dagents-changes\.outputs\.dagents == 'true'/, job);
+  }
+  assert.match(workflow, /\.name == "validate-dagents"/, 'the homelab wait job watches validate-dagents');
+});

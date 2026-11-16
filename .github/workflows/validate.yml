@@ -37,14 +37,16 @@ jobs:
           jobs="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs"
           deadline=$((SECONDS + 300))
           while [ "$SECONDS" -lt "$deadline" ]; do
-            status=$(timeout 30s gh api "$jobs" --jq '.jobs[] | select(.name == "validate") | .status' || true)
-            if [ -n "$status" ] && [ "$status" != queued ] && [ "$status" != waiting ] && [ "$status" != pending ]; then
-              echo "The homelab runner took validate ($status)."
+            # validate-dagents waits on dagents-changes and may not be listed yet,
+            # so both names must be there; a skipped job reads as completed.
+            ready=$(timeout 30s gh api "$jobs" --jq '[.jobs[] | select(.name == "validate" or .name == "validate-dagents") | .status] | length == 2 and all(. != "queued" and . != "waiting" and . != "pending")' || true)
+            if [ "$ready" = true ]; then
+              echo "The homelab runner took validate and validate-dagents, or validate-dagents was skipped."
               exit 0
             fi
             sleep 10
           done
-          echo "::warning::No homelab runner took validate in five minutes; running again on GitHub's runners."
+          echo "::warning::No homelab runner took validate and validate-dagents in five minutes; running again on GitHub's runners."
           timeout 30s gh workflow run validate.yml --repo "$GITHUB_REPOSITORY" --ref "$REF" -f runner=hosted
           timeout 30s gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
@@ -116,6 +118,91 @@ jobs:
         timeout-minutes: 18
         run: timeout --kill-after=10s 1050s node scripts/test-all.mjs
 
+  # dagents is the frozen dforge 4.x line: its jobs run only when a change can
+  # reach it. A new branch's push has no readable before commit, so it runs them.
+  dagents-changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      dagents: ${{ steps.filter.outputs.dagents }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          case "$EVENT" in
+            push) from=$BEFORE ;;
+            pull_request) from=$BASE ;;
+            *) echo "dagents=true" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          if ! git cat-file -e "$from^{commit}" 2>/dev/null || ! changed=$(timeout 30s git diff --name-only "$from" "$HEAD"); then
+            echo "dagents=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if printf '%s\n' "$changed" | grep -Eq '^(plugins/dagents/|scripts/|tests/|\.github/workflows/validate\.yml)'; then
+            echo "dagents=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dagents=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  validate-dagents:
+    needs: dagents-changes
+    if: needs.dagents-changes.outputs.dagents == 'true'
+    timeout-minutes: 26
+    runs-on: ${{ fromJSON((inputs.runner != 'hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","homelab"]' || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      # A self-hosted runner may hold the tools already and have no sudo.
+      - name: Install validation prerequisites
+        timeout-minutes: 3
+        run: |
+          missing=()
+          command -v jq > /dev/null || missing+=(jq)
+          command -v rg > /dev/null || missing+=(ripgrep)
+          command -v timeout > /dev/null || missing+=(coreutils)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            timeout 120s sudo apt-get update
+            timeout 60s sudo apt-get install -y "${missing[@]}"
+          fi
+
+      # One CLI version for every validate step: dforge's mod (hooks modules)
+      # needs 2.1.299, and the marketplace step reads dforge too. Installed
+      # once, retried, since an npx download per call ran past its bound;
+      # kept off PATH, where test-all would run the cockpit tests again.
+      - name: Install Claude Code
+        timeout-minutes: 6
+        run: |
+          for attempt in 1 2 3; do
+            timeout 120s npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.306 && break
+            [ "$attempt" -lt 3 ] || exit 1
+          done
+          # The package's postinstall links its native binary; an npm that
+          # holds install scripts back for approval would skip it.
+          (cd "$RUNNER_TEMP/claude-code" && timeout 60s node node_modules/@anthropic-ai/claude-code/install.cjs)
+          timeout 30s "$RUNNER_TEMP/claude-code/node_modules/.bin/claude" --version
+          echo "CLAUDE=$RUNNER_TEMP/claude-code/node_modules/.bin/claude" >> "$GITHUB_ENV"
+
+      - name: Validate and test dagents
+        timeout-minutes: 6
+        run: |
+          timeout 60s "$CLAUDE" plugin validate plugins/dagents
+          timeout 240s "$CLAUDE" plugin test plugins/dagents
+
+      - name: Run dagents regression suites
+        timeout-minutes: 18
+        run: timeout --kill-after=10s 249s node scripts/test-all.mjs --plugin dagents
+
   windows:
     name: Windows (${{ matrix.shard }}/14)
     runs-on: windows-latest
@@ -142,3 +229,32 @@ jobs:
           # which the runner's administrator account may create.
           MSYS: winsymlinks:nativestrict
         run: node scripts/test-all.mjs --shard ${{ matrix.shard }}/14
+
+  windows-dagents:
+    name: Windows dagents (${{ matrix.shard }}/13)
+    needs: dagents-changes
+    if: needs.dagents-changes.outputs.dagents == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Install shell prerequisites
+        timeout-minutes: 3
+        shell: pwsh
+        run: choco install jq ripgrep --yes --no-progress
+      - name: Run Windows regression suites
+        timeout-minutes: 25
+        shell: pwsh
+        env:
+          DR_TEST_BASH: C:/Program Files/Git/bin/bash.exe
+          # Git Bash's ln -s copies its target unless told to make a real link,
+          # which the runner's administrator account may create.
+          MSYS: winsymlinks:nativestrict
+        run: node scripts/test-all.mjs --plugin dagents --shard ${{ matrix.shard }}/13
