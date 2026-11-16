@@ -38,6 +38,7 @@ for field in 'done:' 'verified:' 'remaining:' 'discovered:' 'assumptions:'; do
 done
 # A line break would start a second ledger line, which recovery would read.
 case $checkpoint in *$'\n'*|*$'\r'*) die "the checkpoint must be one line" ;; esac
+case $review in *$'\n'*|*$'\r'*) die "the --review text must be one line" ;; esac
 
 plan=$(plan_locate "$plan_arg")
 [ -f "$plan" ] || die "no such plan file: $plan"

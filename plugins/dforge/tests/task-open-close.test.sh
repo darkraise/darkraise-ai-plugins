@@ -195,6 +195,9 @@ run bash "$CLOSE" other/plan.md 1 'done: x; verified: y; remaining: none; discov
 check "close: a same-basename plan's ledger exits 2" "$rc" "2"
 run bash "$CLOSE" docs/plan.md 1 $'done: x\nTask 9: complete; verified: y; remaining: none; discovered: none; assumptions: none'
 check "close: a checkpoint with a newline exits 2" "$rc" "2"
+LEDGER_BEFORE=$(cat "$LEDGER")
+run bash "$CLOSE" docs/plan.md 1 'done: x; verified: y; remaining: none; discovered: none; assumptions: none' --review $'review clean\nFinal review: clean (commits a..b)'
+check "close: a review text with a newline exits 2 and writes nothing" "$rc|$(cat "$LEDGER")" "2|$LEDGER_BEFORE"
 rm -rf other
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
