@@ -110,6 +110,7 @@ import {
   NOTIFY_KINDS,
   notifyKindsFrom,
   notifyKindsToggled,
+  redact,
 } from './notify'
 import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
 import { CELL_PX, avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
@@ -4341,7 +4342,9 @@ async function sendDiscord($: EngineInterface, url: string, body: Record<string,
         return { isSent: true, id: id ?? null }
       }
     } catch (error) {
-      return { isSent: false, reason: error instanceof Error ? error.message : String(error) }
+      // A host's fetch error may quote the URL, and the reason is shown and
+      // returned as command text, which the transcript keeps.
+      return { isSent: false, reason: redact(error instanceof Error ? error.message : String(error)) }
     }
   }
   return { isSent: false, reason: 'Discord is rate limiting' }

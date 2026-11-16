@@ -261,6 +261,8 @@ type World = {
   /** Each request the plugin sends through $.http.fetch. */
   prompts?: string[]
   fetches?: { url: string; method: string; body: Record<string, unknown> }[]
+  /** Every fetch rejects, its message naming the URL as a host's might. */
+  isFetchFailing?: boolean
   /** How Claude Code answers the pane opening; placed unless said. */
   open?: { isPlaced: true } | { isPlaced: false; reason: string }
   opened?: string[]
@@ -555,6 +557,7 @@ function world(on: On, w: World) {
     const body = e.init?.body ?? '{}'
     if (typeof body !== 'string') throw new Error(`expected a text body for ${e.url}`)
     w.fetches?.push({ url: e.url, method: e.init?.method ?? 'GET', body: JSON.parse(body) as Record<string, unknown> })
+    if (w.isFetchFailing) return { deny: `fetch failed for ${e.url}` }
     return { value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }
   })
   on('ui.panes', () => ({ value: w.isPaneShut ? [] : [{ id: 'dagents', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
@@ -4093,6 +4096,15 @@ describe('discord', () => {
     expect((await $.command.run({ ...COCKPIT, args: `notify url ${WEBHOOK}` })).text).toBe('Discord webhook saved.')
     expect((await $.command.run({ ...COCKPIT, args: 'notify test' })).text).toBe('Test message sent to Discord.')
     expect(fetches).toHaveLength(1)
+  })
+
+  test('a failed send reports its reason with the webhook masked', async ($, on) => {
+    world(on, { tokens: 50_000, isFetchFailing: true, env: { DAGENTS_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    await $.session.start(START)
+    const text = (await $.command.run({ ...COCKPIT, args: 'notify test' })).text ?? ''
+    expect(text).toContain('[webhook]')
+    expect(text).not.toContain(WEBHOOK.split('/').pop() ?? WEBHOOK)
   })
 })
 
