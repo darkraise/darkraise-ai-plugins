@@ -630,5 +630,28 @@ check "group: the first member's step file holds neither" "$(jq -r '"\(.suite //
 ts verdict docs/plan.md 20 21 --group
 check "group: the suite base beats the group rule, so the regression is new" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 0 baseline)"
 
+# Task 22: a verdict killed during its base run, as a foreground call past its
+# cap is, leaves no worktree checked out or registered.
+printf '\n### Task 22: Task 22\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' >> "$REPO/docs/plan.md"
+set_failing $'not ok 1 - alpha\n'
+: > "$REPO/slow.txt"
+commit "a base that is slow, again"
+ts start docs/plan.md 22 --suite 'bash suite.sh'
+g rm -q slow.txt
+commit "work 22"
+sr
+ts review docs/plan.md 22
+clean_report 22
+(cd "$REPO" && exec bash "$S/task-step" verdict docs/plan.md 22 >/dev/null 2>&1) &
+killed=$!
+for _ in $(seq 1 100); do
+  [ "$(g worktree list | wc -l | tr -d ' ')" -gt 1 ] && break
+  sleep 0.1
+done
+check "task 22: the base run had started" "$(g worktree list | wc -l | tr -d ' ')" "2"
+kill -TERM "$killed"
+wait "$killed" 2>/dev/null
+check "task 22: a killed verdict leaves no worktree registered" "$(g worktree list | wc -l | tr -d ' ')" "1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
