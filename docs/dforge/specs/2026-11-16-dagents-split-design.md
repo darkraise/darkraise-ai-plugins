@@ -261,8 +261,10 @@ existing target merge file by file, and a second run finishes the job.
 - dforge: `workflow-guard.mjs`; the stand-down in `session-start.sh`; the
   marker check at the top of every other hook script in `hooks/hooks.json`; the
   load-time check in the cockpit mod; the Codex entry step; a README section on
-  the guard; and a README line pointing the 4.x agent workflow to dagents. The
-  version is left to the release workflow.
+  the guard; a README line pointing the 4.x agent workflow to dagents; and one
+  clause naming dagents and `/dagents:migrate` in plan-lint's existing
+  subagent-mode error and Executor-line warning. The version is left to the
+  release workflow.
 - dflow: the same guard wiring in its SessionStart hook, its other hooks and its
   HUD mod.
 
@@ -286,7 +288,10 @@ Lands in the rename commit (§1 step 3):
   would exceed its job timeout.
 - `.github/workflows/validate.yml` gets a "Validate and test dagents" step and
   a dagents Linux job with a measured bound, on the same runner selection as
-  `validate`, and the homelab wait job watches it too.
+  `validate`, and the homelab wait job watches it too. The dagents Linux job
+  and the dagents Windows shards run only when `plugins/dagents/`, `scripts/`,
+  `tests/` or the workflow change; project `CLAUDE.md` says a skipped job
+  counts as green.
 - `.gitignore` ignores `.dagents/`. Project `CLAUDE.md` Validation names
   `plugins/dagents` beside dforge and dflow.
 - The root `README.md` gains a dagents row and a one-of-three note, and
@@ -310,7 +315,7 @@ A9. [test, high] dagents migrate on a fixture dforge 4.x project with a worktree
 A10. [test, neg, high] The migrate dry run writes nothing; the move refuses, writing nothing for that item, on a differing same-path file, two tracked docs trees, a dirty file among the paths it moves, or a run a live session holds; a project with a version-5 marker, including a fresh clone of one, is refused; a 4.x project opened once under dforge 5 still migrates; and a second run after a partial migration finishes the job.
 A11. [test, high] With two or all three of dforge, dagents and dflow (each at its guard release) enabled and installed, each plugin's SessionStart returns JSON whose `systemMessage` and `additionalContext` both name every active plugin and give the `--scope local` command first, plus the enabling scope's command for a user- or project-scope sibling; neither its other hooks nor its mod writes or prints anything else for the rest of the session.
 A12. [test, neg, high] The guard never writes a settings file or `installed_plugins.json`, under a conflict or not.
-A13. [test, medium] Migrating a project whose documents live in darkmem copies its `dforge/…` documents and workstreams to the dagents namespace, reads every copy back, deletes nothing, and prints the deletion command for the originals. Q: is copy-and-print right for darkmem, given the dforge originals may still serve other checkouts or machines, or should migrate delete them as the local move does?
+A13. [test, confirmed] Migrating a project whose documents live in darkmem copies its `dforge/…` documents and workstreams to the dagents namespace, reads every copy back, deletes nothing, and prints the deletion command for the originals.
 A14. [test, high] A sibling enabled in user settings but disabled in project settings, enabled but not installed, or installed at project scope for another project, is not a conflict; installed with no `enabledPlugins` entry at any scope is active; managed `false` overrides every other scope; a malformed settings file gives one diagnostic and no conflict; with node missing the hooks print nothing extra.
 A15. [test, high] `workflow-guard.mjs --host claude` exits 0 with one or no workflow plugin active, exits 3 with two or more, and prints each active plugin with its enabling scope.
 A16. [test, high] The three copies of `workflow-guard.mjs` are byte-identical, and `validate-repository.mjs` fails on a fixture where one differs.
@@ -321,10 +326,12 @@ A20. [test, high] After migrating project A, dforge 5 in project B on the same h
 A21. [test, high] After migrating a fixture 4.x project whose `completed.md` and unfinished subagent-mode ledger cite `docs/dforge/…`, next-step treats the finished plan as finished and resumes the unfinished one at its next task under dagents.
 A22. [test, high] A dagents suite with the same basename as a dforge suite gets its own time limit, parts and weight in `test-all.mjs` and `test-shards.mjs`.
 A23. [test, high] Before the push, `node scripts/release.mjs --dry-run` lists dforge 5.0.0, dagents 1.0.0 and dflow 1.0.0.
-A24. [demo, medium] On Codex with dforge and dagents both enabled, the first turn runs the standalone check and stops with the conflict message. Q: is a skill-text check (no hook) acceptable on Codex, where neither plugin has hooks?
+A24. [demo, confirmed] On Codex with dforge and dagents both enabled, the first turn runs the standalone check and stops with the conflict message; the README states the check runs only when the entry skill loads.
 A25. [test, high] With an exported host config that enables a sibling workflow plugin, the dagents, dforge and dflow suites still pass.
 A26. [test, high] A dagents push and pull against a stub darkmem server request only the `dagents` client, `dagents/…` documents and `dagents/`-prefixed workstream keys, with `dforge/…` data present and untouched; the first dagents sync after migrating a darkmem-applied project deletes nothing and re-uploads nothing.
 A27. [test, high] A SessionStart with no conflict deletes its session's marker, and a `fork` session start runs the guard.
+A28. [test, high] dforge 5's plan-lint subagent-mode error and Executor-line warning name dagents and `/dagents:migrate`.
+A29. [test, neg, high] A push that changes none of `plugins/dagents/`, `scripts/`, `tests/` or the workflow runs no dagents job, and the run is green.
 
 ## Riskiest assumption
 
@@ -339,7 +346,8 @@ and again right after it, ahead of any port, and dispositioning every failure
 
 ## Out of scope
 
-- Any change to dforge 5's behaviour beyond the guard and its README.
+- Any change to dforge 5's behaviour beyond the guard, its README and the
+  plan-lint signpost clause (§6).
 - Retiring or deprecating dforge 4.x installs in place: an installed dforge
   4.17.1 upgrades to 5.0.0 through the normal update path, and a user who wants
   the 4.x workflow installs dagents and runs its migrate.
@@ -370,6 +378,8 @@ and again right after it, ahead of any port, and dispositioning every failure
 - Nit, dforge wiring: fixed in §6.
 
 ## Review rulings
+
+- Owner, spec review: A13 copy and keep originals; A24 skill-text check accepted; dforge 5 plan-lint signpost added (A28); dagents CI path-filtered (A29).
 
 - Fable, spec: [High] conflict block reaches the user — `systemMessage` plus `additionalContext`; A11 asserts both.
 - Fable, spec: [High] guard test seam — three overridable roots, harness points them at fixtures; A17 reworded; A25.
