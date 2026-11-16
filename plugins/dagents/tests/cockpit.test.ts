@@ -259,6 +259,8 @@ type World = {
   env?: Record<string, string>
   /** Files the plugin reads, by path, with their modification time. */
   files?: Record<string, { text: string; mtimeMs?: number; kind?: 'file' | 'dir' | 'other'; isLink?: boolean }>
+  // Files disk() reads; fs.exists, which a module registers once, answers for them here.
+  onDisk?: Record<string, string>
   /** Paths whose stat rejects; the kit drops the code, so the mod sees a rejection with none. */
   statErrors?: Record<string, string>
   /** What the plugin writes, by path. */
@@ -560,8 +562,10 @@ function world(on: On, w: World) {
     if (w.written !== undefined) w.written[e.path] = e.text
     return { value: undefined }
   })
+  on('fs.exists', (_$, e) => ({
+    value: (w.config !== undefined && e.path === CONFIG) || e.path in (w.written ?? {}) || e.path in (w.files ?? {}) || e.path in (w.onDisk ?? {}),
+  }))
   if (w.config !== undefined) {
-    on('fs.exists', (_$, e) => ({ value: e.path === CONFIG || e.path in (w.written ?? {}) || e.path in (w.files ?? {}) }))
     on('fs.read', (_$, e) => {
       if (e.path === CONFIG) return { value: w.written?.[CONFIG] ?? JSON.stringify(w.config) }
       throw new Error('ENOENT')
@@ -1921,7 +1925,6 @@ describe('settings', () => {
       if (text === undefined) throw new Error('ENOENT')
       return { value: text }
     })
-    on('fs.exists', (_$, e) => ({ value: e.path in written || e.path in files }))
   }
   /** The plugin's store, kept in memory where the test can read it; the test's own `$` has no store noun. */
   function memory(on: On, entries: Record<string, unknown> = {}) {
@@ -1944,7 +1947,7 @@ describe('settings', () => {
 
   test('the first session imports the cockpit options and the webhook, not the pre-2.0 darkmem mapping', async ($, on) => {
     const written: Record<string, string> = {}
-    world(on, { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
+    world(on, { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED, onDisk: OLD_FILES })
     disk(on, written, OLD_FILES)
     const store = memory(on)
     await $.session.start(START)
@@ -1955,7 +1958,7 @@ describe('settings', () => {
 
   test('a later session imports nothing again', async ($, on) => {
     const written: Record<string, string> = {}
-    const w: World = { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED }
+    const w: World = { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED, onDisk: OLD_FILES }
     world(on, w)
     disk(on, written, OLD_FILES)
     const store = memory(on)
@@ -1969,7 +1972,7 @@ describe('settings', () => {
 
   test('a webhook already set is kept', async ($, on) => {
     const written: Record<string, string> = {}
-    world(on, { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
+    world(on, { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED, onDisk: OLD_FILES })
     disk(on, written, OLD_FILES)
     const store = memory(on)
     store.set('notifyUrl', 'https://discord.com/api/webhooks/2/mine')
@@ -1980,7 +1983,7 @@ describe('settings', () => {
   test('the first session leaves the import to dagents-config and reads the file it made', async ($, on) => {
     const written: Record<string, string> = {}
     const runs: string[] = []
-    world(on, { tokens: 284_000, written, runs, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
+    world(on, { tokens: 284_000, written, runs, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED, onDisk: OLD_FILES })
     disk(on, written, OLD_FILES)
     memory(on)
     await $.session.start(START)
@@ -1995,7 +1998,7 @@ describe('settings', () => {
   test('without node the first session writes the import itself', async ($, on) => {
     const written: Record<string, string> = {}
     const runs: string[] = []
-    world(on, { tokens: 284_000, written, runs, isNodeMissing: true, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
+    world(on, { tokens: 284_000, written, runs, isNodeMissing: true, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED, onDisk: OLD_FILES })
     disk(on, written, OLD_FILES)
     memory(on)
     await $.session.start(START)
@@ -2006,7 +2009,7 @@ describe('settings', () => {
   test('when dagents-config fails before creating the file the first session writes the import itself', async ($, on) => {
     const written: Record<string, string> = {}
     const runs: string[] = []
-    world(on, { tokens: 284_000, written, runs, isDagentsConfigRefusing: true, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
+    world(on, { tokens: 284_000, written, runs, isDagentsConfigRefusing: true, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED, onDisk: OLD_FILES })
     disk(on, written, OLD_FILES)
     memory(on)
     await $.session.start(START)
@@ -2016,7 +2019,7 @@ describe('settings', () => {
 
   test('a settings file dagents-config wrote first is kept, and the webhook still comes over', async ($, on) => {
     const written: Record<string, string> = { [CONFIG]: JSON.stringify({ layout: 'full' }) }
-    world(on, { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED })
+    world(on, { tokens: 284_000, written, env: { HOME: '/home/me' }, settings: legacy(70), files: LISTED, onDisk: OLD_FILES })
     disk(on, written, OLD_FILES)
     const store = memory(on)
     await $.session.start(START)
@@ -6654,6 +6657,18 @@ describe('auto run', () => {
         expect(restores(w)).toEqual([])
         expect(drops(w)).toEqual([])
       })
+
+    test('leaves the snapshot of a session whose heartbeat exists but cannot be read', async ($, on) => {
+      const unreadable = { get text(): string { throw new Error('EACCES: permission denied') } }
+      const files: NonNullable<World['files']> = { [SNAP]: SNAPSHOT, [BEAT]: unreadable }
+      const w: World = { ...SIGNED_IN, runs: [], toasts: [], files, userSettings: { model: 'sonnet' } }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await settle(clock)
+      expect(restores(w)).toEqual([])
+      expect(drops(w)).toEqual([])
+    })
   })
 
   test('arms the watchdog when a read at the start fails', async ($, on) => {
