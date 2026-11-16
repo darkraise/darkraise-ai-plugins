@@ -120,8 +120,10 @@ code=$?
 trap - INT TERM
 kill "$ticker" 2>/dev/null
 wait "$ticker" 2>/dev/null
-[ "$code" -ne 137 ] || code=124
 end=$(date +%s)
+# timeout exits 137 when its -k kill ends the command; a 137 before the bound
+# is the command's own SIGKILL, such as the OOM killer's, not a timeout.
+[ "$code" -ne 137 ] || [ $((end - start)) -lt "$secs" ] || code=124
 
 recorded=$clean_before
 if [ "$recorded" = clean ] && ! is_clean; then recorded=dirty; fi
