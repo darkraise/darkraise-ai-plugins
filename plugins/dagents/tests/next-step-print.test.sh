@@ -272,6 +272,16 @@ for kind in plan project; do
   check "latest $kind: changes nothing" "$( (cd "$L" && find .dagents -print | LC_ALL=C sort); digest "$LL"; mtime "$LL")" "$before"
 done
 
+lfixture
+printf '# R\n\n**Source:** s\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Thing | - | - | open | - |\n' > "$LD/registers/r.md"
+(cd "$L" && timeout 120 bash "$SCRIPT" --host codex --project >/dev/null 2>&1)
+has "latest host: a Codex write names its host in the marker" "$(grep '^<!-- next-step: ' "$LL")" " host=codex "
+latest
+has "latest host: a Codex project block recomputes with the Codex launch" "$out" "codex -m"
+lacks "latest host: a Codex project block names no Claude launch" "$out" "claude --model"
+(cd "$L" && timeout 120 bash "$SCRIPT" --project >/dev/null 2>&1)
+lacks "latest host: a Claude write adds no host word" "$(grep '^<!-- next-step: ' "$LL")" "host="
+
 rm -f "$LL"; latest
 check "latest edges: no latest.md exits 6" "$status" 6
 printf '# Handoff\n\n## Notes\n\nx\n' > "$LL"; latest

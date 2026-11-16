@@ -43,7 +43,9 @@
 #               that have no plan to read.
 # latest.md's Next session section ends with a marker line the printed block
 # never carries, naming what the block was computed from:
-#   <!-- next-step: kind=<kind> [branch=<name> or branch=detached:<sha>] done=<n> closed=<n> subject=<name or -> at=<epoch> -->
+#   <!-- next-step: kind=<kind> [branch=<name> or branch=detached:<sha>] [host=codex] done=<n> closed=<n> subject=<name or -> at=<epoch> -->
+#   host=codex appears only for a Codex block; --print --latest without --host
+#   recomputes for the host it names.
 # Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
 #       latest.md could not be written; 5 background work this session started
 #       is still running (scripts/in-flight): nothing printed or written
@@ -68,14 +70,14 @@ usage() { fail 2 "usage: next-step [--host claude|codex] [--print] [--complete|-
 
 # --host and --print are pulled out wherever they sit so the remaining
 # arguments keep their strict positional contract.
-host=claude print_only=0
+host=claude host_given=0 print_only=0
 hostless=()
 while [ $# -gt 0 ]; do
   case $1 in
     --print) print_only=1; shift ;;
     --host)
       [ $# -ge 2 ] || usage
-      case $2 in claude|codex) host=$2 ;; *) usage ;; esac
+      case $2 in claude|codex) host=$2 host_given=1 ;; *) usage ;; esac
       shift 2
       ;;
     *) hostless+=("$1"); shift ;;
@@ -329,6 +331,7 @@ if [ "$latest_mode" -eq 1 ]; then
       branch=*) m_branch=${word#branch=} ;;
       done=*) m_done=${word#done=} ;;
       closed=*) m_closed=${word#closed=} ;;
+      host=codex) [ "$host_given" -eq 1 ] || host=codex ;;
     esac
   done
   case $m_done$m_closed in *[!0-9]*) gone "malformed marker counts: $marker" ;; esac
@@ -769,7 +772,8 @@ elif [ "$complete" -eq 1 ]; then marker_kind=complete marker_subject=$rel
 else marker_kind=plan marker_subject=$rel
 fi
 read -r marker_done marker_closed < <(handoff_counts "$primary")
-marker="<!-- next-step: kind=$marker_kind done=$marker_done closed=$marker_closed subject=$marker_subject at=$(date +%s) -->"
+marker_host=""; [ "$host" != codex ] || marker_host=" host=codex"
+marker="<!-- next-step: kind=$marker_kind$marker_host done=$marker_done closed=$marker_closed subject=$marker_subject at=$(date +%s) -->"
 # Read, merged and replaced under the handoff's lock, so a concurrent writer's
 # notes are never overwritten with the copy read before them.
 write_handoff() {
