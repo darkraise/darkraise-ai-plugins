@@ -113,42 +113,42 @@
 | 106 | 13dbd00 feat(dforge): keep the prompt cache warm while waiting | - | - | n/a | feature: keeps the prompt cache warm while the cockpit waits |
 | 107 | eadd832 feat(dforge): place Gemini Hydrogen by measurement | - | - | n/a | feature: places Gemini Hydrogen in agy-policy.json by measurement |
 | 108 | a778864 fix(dforge): keep the finishing skill under its cap | - | - | n/a | 5-only: trims a sentence the API-rung commits added to finishing's SKILL.md; dagents' copy is 19962 bytes, under the cap |
-| 109 | a7fc54c docs(dforge): document API budgets and keep-warm | - | - | open | - |
-| 110 | 1a56515 test(dforge): add acceptance tests A1-A18 | - | - | open | - |
-| 111 | fe2bd8b test(dforge): add acceptance tests A21-A24 | - | - | open | - |
-| 112 | 0de8685 fix(dforge): keep the held Done on a failed keep-warm | - | - | open | - |
-| 113 | b52542f fix(dforge): harden run-api-judge's edge cases | - | - | open | - |
-| 114 | 6de4b68 fix(dforge): close a budget on an unreadable spend file | - | - | open | - |
-| 115 | f89c163 fix(dforge): charge unmetered Decisions requests | - | - | open | - |
-| 116 | 70a0d0f docs(dforge): state the judge scrub and budget skips | - | - | open | - |
-| 117 | a2ee8ee test(dforge): name AR_SESSION in the acceptance suite | - | - | open | - |
-| 118 | 997ef1a fix(dforge): estimate only maybe-billed requests | - | - | open | - |
-| 119 | 8a501b6 fix(dforge): clear Foundry and cloud base URLs too | - | - | open | - |
-| 120 | 70407cd test(dforge): widen the api-judge chain timings | - | - | open | - |
-| 121 | a5ccd1d test(dforge): cap stop reason without the root path | - | - | open | - |
-| 122 | 075f139 test(dforge): name the A6 choice count accurately | - | - | open | - |
-| 123 | 173d4ea docs(dforge): clear a stale review panel tree | - | - | open | - |
-| 124 | 540167a fix(dforge): name the git floor in agy reviews | - | - | open | - |
-| 125 | 15b67f2 docs(dforge): clear a locked review panel tree | - | - | open | - |
-| 126 | 131075f test(dforge): pin the agy git floor boundary | - | - | open | - |
-| 127 | e6a989d feat(dforge): trust agy review after live runs | - | - | open | - |
-| 128 | bfb1a3c fix(dforge): ignore state before an API ruling | - | - | open | - |
-| 129 | bc26f61 docs(dforge): give skill rules their reasons | - | - | open | - |
-| 130 | 1037b07 docs(dforge): drop model lines from agent bodies | - | - | open | - |
-| 131 | 2a85be4 docs(dforge): drop dated history from references | - | - | open | - |
-| 132 | 235f759 docs(dforge): state one quote rule for bash -c | - | - | open | - |
-| 133 | 39420d1 docs(dforge): lease the Early CI branch delete | - | - | open | - |
-| 134 | d012344 fix(dforge): mark only the keep-warm turn itself | - | - | open | - |
-| 135 | 1918182 fix(dforge): log a lost Decisions charge | - | - | open | - |
-| 136 | c991f75 test(dforge): pin the api-judge snapshot failure | - | - | open | - |
-| 137 | 4f3456a test(dforge): cover routing tokens in acceptance A9 | - | - | open | - |
-| 138 | 3ea0dbf test(dforge): pin two unpinned plan-lint rules | - | - | open | - |
-| 139 | 4fdf6d0 test(dforge): cover the ci-mirror malformed paths | - | - | open | - |
-| 140 | 40c7219 test(dforge): reconcile A6 with the expect ruling | - | - | open | - |
-| 141 | d33358f fix(dforge): lock executor session writes | - | - | open | - |
-| 142 | 6b40c9d fix(dforge): read whole output paths in in-flight | - | - | open | - |
-| 143 | cdd46ef test(dforge): close two gaps in task-loop acceptance | - | - | open | - |
-| 144 | 04dc582 fix(dforge): keep a quick SIGKILL out of timeouts | - | - | open | - |
+| 109 | a7fc54c docs(dforge): document API budgets and keep-warm | - | - | n/a | docs-only: documents dforge 5's API budgets and keep-warm in the README |
+| 110 | 1a56515 test(dforge): add acceptance tests A1-A18 | - | - | n/a | test-only: adds the API decisions, keep-warm and Hydrogen acceptance suite for dforge 5 features |
+| 111 | fe2bd8b test(dforge): add acceptance tests A21-A24 | - | - | n/a | test-only: extends the API decisions, keep-warm and Hydrogen acceptance suite for dforge 5 features |
+| 112 | 0de8685 fix(dforge): keep the held Done on a failed keep-warm | - | - | n/a | 5-only: fixes the held Done around the cockpit's keep-warm turn, which dagents lacks (row 106 is a feature) |
+| 113 | b52542f fix(dforge): harden run-api-judge's edge cases | - | - | n/a | 5-only |
+| 114 | 6de4b68 fix(dforge): close a budget on an unreadable spend file | - | - | n/a | 5-only |
+| 115 | f89c163 fix(dforge): charge unmetered Decisions requests | - | - | n/a | 5-only |
+| 116 | 70a0d0f docs(dforge): state the judge scrub and budget skips | - | - | n/a | docs-only: states the API judge scrub and budget skips in the README, dforge 5 features |
+| 117 | a2ee8ee test(dforge): name AR_SESSION in the acceptance suite | - | - | n/a | test-only: renames a variable in the API decisions acceptance suite, a dforge 5 suite |
+| 118 | 997ef1a fix(dforge): estimate only maybe-billed requests | - | - | n/a | 5-only |
+| 119 | 8a501b6 fix(dforge): clear Foundry and cloud base URLs too | - | - | n/a | 5-only |
+| 120 | 70407cd test(dforge): widen the api-judge chain timings | - | - | n/a | test-only: widens timings in api-judge.test.sh, a dforge 5 suite |
+| 121 | a5ccd1d test(dforge): cap stop reason without the root path | - | - | done | port 5b722ee; fail@parent pass@port |
+| 122 | 075f139 test(dforge): name the A6 choice count accurately | - | - | n/a | test-only: renames an A6 check in the API decisions acceptance suite, a dforge 5 suite |
+| 123 | 173d4ea docs(dforge): clear a stale review panel tree | - | - | n/a | docs-only: clears a stale review panel tree in external-review.md and final-review.md, dforge 5's panel |
+| 124 | 540167a fix(dforge): name the git floor in agy reviews | - | - | n/a | 5-only |
+| 125 | 15b67f2 docs(dforge): clear a locked review panel tree | - | - | n/a | 5-only |
+| 126 | 131075f test(dforge): pin the agy git floor boundary | - | - | n/a | test-only: pins the agy git floor in agy-review.test.sh, a dforge 5 suite |
+| 127 | e6a989d feat(dforge): trust agy review after live runs | - | - | n/a | feature: trusts agy review in agy-policy.json after live runs |
+| 128 | bfb1a3c fix(dforge): ignore state before an API ruling | - | - | n/a | 5-only |
+| 129 | bc26f61 docs(dforge): give skill rules their reasons | - | - | n/a | feature: rewords rules in four skills to state their reasons; no defect |
+| 130 | 1037b07 docs(dforge): drop model lines from agent bodies | - | - | n/a | feature: drops model lines that repeat the frontmatter from agent bodies; no defect |
+| 131 | 2a85be4 docs(dforge): drop dated history from references | - | - | n/a | feature: drops dated history from native-codex.md and assigning-implementers.md; no defect |
+| 132 | 235f759 docs(dforge): state one quote rule for bash -c | - | - | done | port 6e6f0fe; text-only plugins/dagents/reference/delegated-task.md |
+| 133 | 39420d1 docs(dforge): lease the Early CI branch delete | - | - | done | port c58191f; text-only plugins/dagents/skills/finishing-a-development-branch/references/execute-choice.md |
+| 134 | d012344 fix(dforge): mark only the keep-warm turn itself | - | - | n/a | 5-only: narrows the cockpit's keep-warm turn marker, which dagents lacks (row 106 is a feature) |
+| 135 | 1918182 fix(dforge): log a lost Decisions charge | - | - | n/a | 5-only |
+| 136 | c991f75 test(dforge): pin the api-judge snapshot failure | - | - | n/a | test-only: pins the api-judge snapshot failure, a dforge 5 suite |
+| 137 | 4f3456a test(dforge): cover routing tokens in acceptance A9 | - | - | n/a | test-only: covers routing tokens in the API decisions acceptance suite, a dforge 5 suite |
+| 138 | 3ea0dbf test(dforge): pin two unpinned plan-lint rules | - | - | n/a | test-only: pins two plan-lint rules dagents keeps; its Early CI checks pass on dagents' plan-lint, and its Covered-by pass skips fenced lines through in_fence; no defect |
+| 139 | 4fdf6d0 test(dforge): cover the ci-mirror malformed paths | - | - | n/a | test-only: adds coverage for ci-mirror's malformed-path exits; the checks pass on dagents' ci-mirror; no defect |
+| 140 | 40c7219 test(dforge): reconcile A6 with the expect ruling | - | - | n/a | test-only: reconciles speed-and-cost A6 with a dforge 5 expect ruling |
+| 141 | d33358f fix(dforge): lock executor session writes | - | - | done | port 4ea6af0; fail@parent pass@port |
+| 142 | 6b40c9d fix(dforge): read whole output paths in in-flight | - | - | done | port a912655; fail@parent pass@port |
+| 143 | cdd46ef test(dforge): close two gaps in task-loop acceptance | - | - | n/a | test-only: closes two coverage gaps in task-loop-steps acceptance; no defect |
+| 144 | 04dc582 fix(dforge): keep a quick SIGKILL out of timeouts | - | - | done | port 73ea085; fail@parent pass@port |
 | 145 | e0fdf31 fix(dforge): flag only template placeholders | - | - | open | - |
 | 146 | d84da62 fix(dforge): stop task-step on a lost state write | - | - | open | - |
 | 147 | 1189ce4 fix(dforge): keep the judge key out of Codex shells | - | - | open | - |
