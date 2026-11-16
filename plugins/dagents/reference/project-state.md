@@ -97,9 +97,11 @@ darkmem.
 | `<latest.md>` | `<primary checkout>/<state>/handoff/latest.md` | `~/.dagents/mirror/<project>/work/handoff/latest.md` |
 
 `<state>` and a plan's workspace (`scripts/sdd-workspace`: briefs, reports,
-review packages, `amendments.md`) stay in the checkout either way. A plan's
-ledger is `<ledger dir>/progress.md` and its handoff note
-`<ledger dir>/handoff.md`.
+review packages) stay in the checkout either way. A plan's ledger is
+`<ledger dir>/progress.md`, its handoff note `<ledger dir>/handoff.md` and
+its amendments `<ledger dir>/amendments.md`, so the amendments follow progress
+into darkmem (`dagents/amendments/<plan-basename>.md`) and are synced with the
+ledger.
 
 Every script resolves these through `scripts/lib/roots.sh`; a skill resolves
 them with `bash <plugin-root>/scripts/dagents-path state|docs [RELATIVE] | ledger <plan-basename> | latest`

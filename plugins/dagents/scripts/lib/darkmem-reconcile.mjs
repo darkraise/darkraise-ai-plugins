@@ -283,6 +283,7 @@ function statusLines(stdout) {
 function uncarried(docsDir, parts) {
   if (parts.some(part => part.startsWith("."))) return "a dot name, which the mirror never syncs";
   if (parts[0] === "handoff") return "under handoff/, which is reserved for plan handoff notes";
+  if (parts[0] === "amendments") return "under amendments/, which is reserved for plan amendments";
   if (parts[0] === "archive") return "under archive/, which is reserved for deletion archives";
   let at = docsDir;
   let stat;
