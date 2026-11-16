@@ -502,9 +502,9 @@ else
     if [ -n "$open_rows" ]; then
       ROUTE_ROOT=$root ROUTE_FINISHED=$rel ROUTE_MS=$current_ms ROUTE_OUTSIDE_MS=$outside_ms
       route_rows <<<"$open_rows"
-      # Built rows wait on a milestone audit; with no roadmap there is none, so
-      # they are left to the plan's own next step as if nothing were open.
-      if [ -z "$roadmap" ] && [ -n "$ROUTE_BUILT" ] && [ "$(tr ',' '\n' <<<"$ROUTE_BUILT" | grep -c .)" -eq "$(grep -c . <<<"$open_rows")" ]; then
+      # Built rows wait on a milestone audit; with no current milestone there
+      # is none, so they are left to the next step as if nothing were open.
+      if [ -z "$current_ms" ] && [ -n "$ROUTE_BUILT" ] && [ "$(tr ',' '\n' <<<"$ROUTE_BUILT" | grep -c .)" -eq "$(grep -c . <<<"$open_rows")" ]; then
         open_rows=""
       fi
     fi
