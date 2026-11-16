@@ -154,8 +154,11 @@ const AUTO_RETRY_MS = 5_000
 // The restored default model is written this many times at most, each write
 // watched this long for the engine to read it back.
 const RESTORE_WRITES = 3
-// Settings whose step up from 0 is a consent, confirmed by a second press.
-const CONSENT_KEYS: readonly string[] = ['apiBudgetAgentRouter']
+// Settings whose raise from 0 is a consent, confirmed by a second press, and
+// what the person consents to.
+const CONSENTS: Readonly<Record<string, string>> = {
+  apiBudgetAgentRouter: 'ruling prompts, and any file its judge reads, then go to AgentRouter, a third party',
+}
 const RESTORE_WAIT_MS = 3_000
 const RESTORE_POLL_MS = 500
 type AutoStage = 'compact' | 'continue' | 'clear' | 'resume' | 'switch'
@@ -975,11 +978,12 @@ export const register: Register = on => {
     // Every control is a button in a rounded box: gray at rest, the accent on
     // the one that matters (`isMain`), dim when it reads as off.
     if (S.canUnderline === null) await readVersion($)
-    const button = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean; isCompact?: boolean } = {}) => {
+    const button = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean; isCompact?: boolean; isFocused?: boolean } = {}) => {
+      const autoFocus = look.isFocused === true ? true : undefined
       // The desktop draws its own buttons, the main one in its primary look. A compact
       // button is that one on the terminal too: a single line, not a three-line box.
       if (isDesktop || look.isCompact) {
-        return <Button key={key} label={label} hotkey={look.hotkey} variant={look.isMain ? 'primary' : undefined} dimColor={look.isOff} onPress={onPress} />
+        return <Button key={key} label={label} hotkey={look.hotkey} variant={look.isMain ? 'primary' : undefined} dimColor={look.isOff} autoFocus={autoFocus} onPress={onPress} />
       }
       // The hotkey's letter is underlined in the label, as a desktop app marks
       // one; a hidden twin holds the hotkey, since a Button with one draws "c: "
@@ -987,7 +991,7 @@ export const register: Register = on => {
       if (!S.canUnderline) {
         return (
           <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
-            <Button key={key} label={label} hotkey={look.hotkey} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress} />
+            <Button key={key} label={label} hotkey={look.hotkey} plain dimColor={look.isOff} hover={{ bold: true }} autoFocus={autoFocus} onPress={onPress} />
           </Box>
         )
       }
@@ -995,9 +999,9 @@ export const register: Register = on => {
       return (
         <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
           {at < 0 ? (
-            <Button key={key} label={label} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress} />
+            <Button key={key} label={label} plain dimColor={look.isOff} hover={{ bold: true }} autoFocus={autoFocus} onPress={onPress} />
           ) : (
-            <Button key={key} label={label} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress}>
+            <Button key={key} label={label} plain dimColor={look.isOff} hover={{ bold: true }} autoFocus={autoFocus} onPress={onPress}>
               {label.slice(0, at)}
               <Text underline>{label.slice(at, at + 1)}</Text>
               {label.slice(at + 1)}
@@ -1061,7 +1065,7 @@ export const register: Register = on => {
     if ((await read($, view)) === 'settings') {
       // Each press saves to ~/.dforge/config.json and puts the value in force, so the rows below always show what is saved.
       const set = (key: string, value: SettingValue) => setOption($, key, value)
-      const compact = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean } = {}) =>
+      const compact = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean; isFocused?: boolean } = {}) =>
         button(
           key,
           label,
@@ -1167,6 +1171,16 @@ export const register: Register = on => {
         if (state.editing !== null || state.isConfirmingReset) await show({})
         return set(key, value)
       }
+      // Raising a consent cap from 0, by a step or a typed value, is the
+      // consent itself, so it waits for the Confirm press its row then shows.
+      const askConsent = async (key: string, value: SettingValue) => {
+        const spec = SCHEMA[key]
+        if (CONSENTS[key] === undefined || spec === undefined || Number(values[key] ?? spec.default) !== 0 || !(Number(value) > 0)) return false
+        await show({})
+        S.consentPending = { key, value: Number(value) }
+        $.ui.invalidate('ui.render')
+        return true
+      }
       // A segment's chip on either line: on adds it last there and moves it off the other.
       const bandChips = (index: 0 | 1) => {
         const key = `set-bandLine${index + 1}`
@@ -1191,23 +1205,25 @@ export const register: Register = on => {
         )
       }
       const consent = S.consentPending
-      const consentSpec = consent === null ? undefined : SCHEMA[consent]
+      const consentSpec = consent === null ? undefined : SCHEMA[consent.key]
       const custom: Record<string, RenderChildren> = {
         ...(consent === null || consentSpec === undefined
           ? {}
           : {
-              [consent]: [
-                <Text key={`set-${consent}-consent`} color="warning">{`${consentSpec.title}: a cap above 0 is your consent to it `}</Text>,
+              [consent.key]: [
+                <Text key={`set-${consent.key}-consent`} color="warning">
+                  {`${consentSpec.title}: confirm a cap of ${consent.value}? ${CONSENTS[consent.key] ?? ''} `}
+                </Text>,
                 compact(
-                  `set-${consent}-confirm`,
+                  `set-${consent.key}-confirm`,
                   'Confirm',
                   () => {
                     S.consentPending = null
-                    return save(consent, steppedSetting(consentSpec, 0, 1))
+                    return save(consent.key, consent.value)
                   },
-                  { isMain: true },
+                  { isMain: true, isFocused: true },
                 ),
-                compact(`set-${consent}-cancel`, 'Cancel', () => show({})),
+                compact(`set-${consent.key}-cancel`, 'Cancel', () => show({})),
               ],
             }),
         bandLine1: bandChips(0),
@@ -1258,14 +1274,9 @@ export const register: Register = on => {
           step: async (key, direction) => {
             const spec = SCHEMA[key]
             if (spec === undefined) return undefined
-            // Raising a consent cap from 0 is the consent itself, so it takes a second press.
-            if (CONSENT_KEYS.includes(key) && direction > 0 && Number(values[key] ?? spec.default) === 0) {
-              await show({})
-              S.consentPending = key
-              $.ui.invalidate('ui.render')
-              return undefined
-            }
-            return save(key, steppedSetting(spec, Number(values[key] ?? spec.default), direction))
+            const value = steppedSetting(spec, Number(values[key] ?? spec.default), direction)
+            if (await askConsent(key, value)) return undefined
+            return save(key, value)
           },
           edit: key => (key === null ? show({ editing: null }) : openField($, `set-${key}-input`, () => show({ editing: key }))),
           submit: async (key, text) => {
@@ -1276,6 +1287,7 @@ export const register: Register = on => {
               await update($, settingsView, now => ({ ...now, editing: key, error: rangeText(spec) }))
               return
             }
+            if (await askConsent(key, value)) return
             if (await set(key, value)) await show({})
           },
           reset: key => {
@@ -2605,7 +2617,7 @@ const S = {
   // Saved or environment values the settings in force ignored, for the settings view.
   settingProblems: [] as string[],
   // A consent setting whose raise from 0 waits for its confirm press; null otherwise.
-  consentPending: null as string | null,
+  consentPending: null as { key: string; value: number } | null,
   // The problem line for a settings file that does not parse (C15), while it does not; null otherwise.
   brokenConfig: null as string | null,
   // Keys something outside the settings file forces, with the words their rows show.

@@ -8343,6 +8343,36 @@ describe('inert rows, consent and desktop steppers', () => {
     expect(await ui.find({ key: 'set-apiBudgetAgentRouter-confirm' })).toBeUndefined()
   })
 
+  test('the AgentRouter consent names the cap and the third party, and its Confirm takes the focus', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: `settings-tab-${SCHEMA.apiBudgetAgentRouter!.group}` })
+    await ui.press({ key: 'set-apiBudgetAgentRouter-more' })
+    const controls = (await ui.find({ key: 'set-apiBudgetAgentRouter-controls' }))?.text ?? ''
+    expect(controls).toMatch(/\bcap of 5\b/)
+    expect(controls).toMatch(/AgentRouter, a third party/)
+    expect(controls).toMatch(/any file its judge reads/)
+    expect((await ui.find({ key: 'set-apiBudgetAgentRouter-confirm' }))?.props.autoFocus).toBe(true)
+  })
+
+  test('a typed AgentRouter cap above 0 waits for the same confirm press', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: {}, written })
+    await $.session.start(START)
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await desk.press({ key: 'pane-settings' })
+    await desk.press({ key: `settings-tab-${SCHEMA.apiBudgetAgentRouter!.group}` })
+    await desk.input({ key: 'set-apiBudgetAgentRouter-input', text: '20' })
+    expect(written[CONFIG]).toBeUndefined()
+    expect((await desk.find({ key: 'set-apiBudgetAgentRouter-controls' }))?.text).toMatch(/\bcap of 20\b/)
+    await desk.press({ key: 'set-apiBudgetAgentRouter-confirm' })
+    expect(JSON.parse(written[CONFIG] ?? '{}').apiBudgetAgentRouter).toBe(20)
+    await desk.input({ key: 'set-apiBudgetAgentRouter-input', text: '30' })
+    expect(JSON.parse(written[CONFIG] ?? '{}').apiBudgetAgentRouter).toBe(30)
+  })
+
   test('a desktop stepper shows its zero word', async ($, on) => {
     world(on, { tokens: 284_000, config: {} })
     await $.session.start(START)
