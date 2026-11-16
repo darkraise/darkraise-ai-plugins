@@ -68,13 +68,13 @@ snapshot() { # snapshot — hashes, mtimes and the file list under .dforge
 }
 
 # --- --print changes nothing ---
-for mode in plain --complete --kept; do
+for mode in plain --complete --kept --project; do
   mkdir -p "$REPO/.dforge/handoff" "$REPO/.dforge/sdd"
   printf '# Handoff\n\n## Notes\n\nkeep me\n' > "$LATEST"
   printf '{"action":"merge"}\n' > "$FINISH"
   touch -t 200101010000 "$LATEST" "$FINISH"
   before=$(snapshot)
-  if [ "$mode" = plain ]; then args=("$PLAN"); else args=("$mode" "$PLAN"); fi
+  case $mode in plain) args=("$PLAN") ;; --project) args=(--project) ;; *) args=("$mode" "$PLAN") ;; esac
   out=$(cd "$REPO" && timeout 60 bash "$SCRIPT" --print "${args[@]}" 2>&1)
   check "--print $mode: exits 0" "$?" 0
   has "--print $mode: prints the block" "$out" "## Next session"

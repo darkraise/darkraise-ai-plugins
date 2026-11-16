@@ -203,5 +203,54 @@ printf '# SDD ledger — plan: docs/dforge/plans/2026-10-05-live.md\nTask 1: imp
 complete 2026-09-01-p1
 has "worktree ledger: the plan row resumes" "$NEXT" "Resume \`docs/dforge/plans/2026-10-05-live.md\` with dforge:resume-execution."
 
+project() { # project [args...] — run next-step --project in $R; sets OUT, NEXT, STATUS
+  git -C "$R" add -A >/dev/null && git -C "$R" commit -qm fixture >/dev/null
+  OUT=$(cd "$R" && timeout 60 bash "$SCRIPT" "$@" 2>&1)
+  NEXT=$(grep '^\*\*Next:\*\*' <<<"$OUT")
+  STATUS=$(grep '^\*\*Status:\*\*' <<<"$OUT")
+}
+
+# --- --project audits a milestone of verify or built rows ---
+built_fixture
+register e docs/dforge/specs/shop.md "1|Epic S|$S|doing" "2|Other|-|verify"
+project --print --project
+has "project milestone: the current milestone is named" "$STATUS" "**Status:** Project: milestone M1 (MVP) is current."
+has "project milestone: the C7 audit line" "$NEXT" "Awaiting your check (verify): #2. Built, awaiting the audit: #1. Milestone M1 (MVP) has nothing else open: audit and close it with dforge:closing-a-milestone."
+has "project milestone: the audit launches" "$OUT" "Paste as the first prompt:"
+
+# --- --project with nothing open and no roadmap prints Nothing ---
+fixture
+register r "$X" "1|Done|-|done"
+project --print --project
+has "project nothing: no roadmap" "$STATUS" "**Status:** Project: no roadmap."
+has "project nothing: the Nothing line" "$NEXT" "**Next:** Nothing — no register holds an unresolved row."
+lacks "project nothing: launches nothing" "$OUT" "Paste as the first prompt:"
+
+# --- --project with every milestone closed scans every register ---
+built_fixture
+register e docs/dforge/specs/shop.md "1|Epic S|$S|done"
+sed -i.bak 's/| open | - |$/| closed | audit |/' "$D/roadmap.md" && rm -f "$D/roadmap.md.bak"
+register other "$X" "1|Search|Search|open"
+project --print --project
+has "project closed: every milestone is closed" "$STATUS" "**Status:** Project: every milestone is closed."
+has "project closed: a register outside the milestones routes" "$NEXT" "\`Search\`: write its spec in a fresh session."
+
+# --- --project replaces latest.md unless told to keep notes ---
+fixture
+register r "$X" "1|Search|Search|open"
+LATEST="$R/.dforge/handoff/latest.md"
+mkdir -p "$(dirname "$LATEST")"
+printf '# Handoff\n\n## State\n\nold notes\n\n## Next session\n\nOld block.\n' > "$LATEST"
+project --project
+lacks "project write: the notes are replaced" "$(cat "$LATEST")" "## State"
+has "project write: the marker names the project" "$(grep '^<!-- next-step:' "$LATEST")" "kind=project done=0 closed=0 subject=- at="
+awk '/^## Next session/ { print "## State"; print ""; print "kept notes"; print "" } { print }' "$LATEST" > "$LATEST.new" && mv "$LATEST.new" "$LATEST"
+project --project --keep-notes
+kept=$(cat "$LATEST")
+has "project keep-notes: the notes survive" "$kept" "kept notes"
+check_above=$(awk '/^kept notes$/ { n = NR } /^## Next session/ { b = NR } END { print (n && b && n < b) ? "above" : "not above" }' "$LATEST")
+has "project keep-notes: the notes sit above the block" "$check_above" "above"
+has "project keep-notes: the marker names the project" "$(grep '^<!-- next-step:' "$LATEST")" "kind=project done=0 closed=0 subject=- at="
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

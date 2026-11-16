@@ -12,6 +12,7 @@
 # Usage: next-step [--host claude|codex] [--print] [--complete|--kept] PLAN_FILE
 #        next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION
 #        next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION
+#        next-step [--host claude|codex] [--print] --project [--keep-notes]
 #   --print     compute and print the block only: write, create and delete
 #               nothing, and skip the background-work check.
 #   --complete  the plan is finished and its branch integrated; the ledger may
@@ -30,6 +31,10 @@
 #               plan or draft file) is handing off; the notes in latest.md are
 #               the authority. --phase design launches the planning model,
 #               --phase build the execution model.
+#   --project   no plan is in hand (between plans, or after a milestone close):
+#               the block comes from the current milestone's registers, or
+#               every register when no milestone is current. Replaces latest.md
+#               wholesale unless --keep-notes, which keeps the notes above it.
 #   --host      which client the next session launches; default claude. A plan
 #               states its own host in its header, so the flag serves the paths
 #               that have no plan to read.
@@ -51,7 +56,7 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--host claude|codex] [--print] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION"; }
+usage() { fail 2 "usage: next-step [--host claude|codex] [--print] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print] --project [--keep-notes]"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
@@ -182,8 +187,13 @@ plan_name() {
   printf '%s\n' "$name"
 }
 
-complete=0 kept=0 draft=0 adhoc=0 phase="" next_action=""
+complete=0 kept=0 draft=0 adhoc=0 project=0 keep_notes=0 phase="" next_action=""
 case "${1:-}" in
+  --project)
+    project=1; shift
+    if [ "${1:-}" = --keep-notes ]; then keep_notes=1; shift; fi
+    [ $# -eq 0 ] || usage
+    ;;
   --complete) complete=1; shift ;;
   --kept) kept=1; shift ;;
   --draft)
@@ -200,9 +210,55 @@ case "${1:-}" in
     ;;
 esac
 
+# collect_rows — read register paths on stdin; set open_rows (route_rows'
+# input lines), reg_list and outside_ms, against current_ms and ms_regs.
+collect_rows() {
+  local reg_file rows
+  open_rows="" reg_list="" outside_ms=""
+  while IFS= read -r reg_file; do
+    [ -n "$reg_file" ] || continue
+    rows=$(register_open "$reg_file")
+    [ -n "$rows" ] || continue
+    # The milestone audit reads only the registers below the milestone.
+    if [ -n "$current_ms" ] && ! grep -qxF -- "$reg_file" <<<"$ms_regs"; then outside_ms=1; fi
+    # Several registers may cover one spec; every one that has open rows is
+    # named, so the count is never attributed to the wrong file.
+    reg_list="${reg_list:+$reg_list, }\`$(dforge_name "$reg_file")\`"
+    open_rows="${open_rows}$(ROUTE_REG=$reg_file awk '{ print ENVIRON["ROUTE_REG"] "\t" $0 }' <<<"$rows")
+"
+  done
+  open_rows=$(grep . <<<"$open_rows" || true)
+}
+
+# render_rows — the Next line, prompt and launch for open_rows from the
+# ROUTE_* outputs of route_rows.
+render_rows() {
+  local open_n row_list kind action waiting stale stale_note ms_id ms_name verify_clause="" built_clause=""
+  open_n=$(grep -c . <<<"$open_rows")
+  row_list=$(awk -F'\t' '
+    NR <= 3 { printf "%s#%s %s", (NR > 1 ? "; " : ""), $2, $3 }
+    END { if (NR > 3) printf " +%d more", NR - 3 }
+  ' <<<"$open_rows")
+  kind=$ROUTE_KIND action=$ROUTE_ACTION waiting=$ROUTE_WAITING stale=$ROUTE_STALE
+  launch_cmd=$ROUTE_LAUNCH_CMD launch_plan=$ROUTE_LAUNCH_PLAN
+  stale_note=""
+  [ -z "$stale" ] || stale_note="Still assigned to a finished plan: $stale — resolve or reassign them with \`scripts/register set\`."
+  next_line="Register rows still open ($open_n) in $reg_list: $row_list.${stale_note:+ $stale_note}${action:+ $action}"
+  if [ "$kind" = milestone ]; then
+    ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
+    [ -z "$waiting" ] || verify_clause="; rows awaiting the owner's check (verify): $waiting"
+    [ -z "$ROUTE_BUILT" ] || built_clause=" Built, awaiting the audit: $ROUTE_BUILT."
+    prompt="Close milestone $ms_id ($ms_name) of \`$(dforge_name "$(dforge_docs_root)")/roadmap.md\` with dforge:closing-a-milestone$verify_clause.$built_clause"
+    launch=1
+  elif [ -n "$kind" ]; then
+    prompt="Continue the work recorded in $reg_list: $open_n rows are open ($row_list). $action"
+    launch=1
+  fi
+}
+
 status_line="" next_line="" prompt="" launch=1 launch_cmd="" launch_plan=""
 
-if [ "$adhoc" -eq 1 ]; then
+if [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ]; then
   root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
   primary=$(plan_primary_root "$root")
   dir=$primary
@@ -235,6 +291,35 @@ if [ "$adhoc" -eq 1 ]; then
   prompt="Continue the unplanned work recorded in \`$latest_shown\`: $next_action"
   if [ "$root" != "$primary" ]; then
     prompt="$prompt First enter the existing worktree \`$root\`."
+  fi
+elif [ "$project" -eq 1 ]; then
+  launch=0 rel=""
+  roadmap=$(roadmap_file "$root")
+  current_ms="" ms_regs=""
+  [ -z "$roadmap" ] || current_ms=$(roadmap_current "$roadmap")
+  if [ -n "$current_ms" ]; then
+    ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
+    status_line="Project: milestone $ms_id ($ms_name) is current."
+    ms_regs=$(roadmap_registers "$root" "$(cut -f4 <<<"$current_ms")")
+    collect_rows < <(roadmap_unresolved "$root" "$(cut -f4 <<<"$current_ms")" | cut -f1 \
+      | while IFS= read -r r; do dforge_resolve "$r"; done | awk '!seen[$0]++')
+  else
+    if [ -n "$roadmap" ]; then status_line="Project: every milestone is closed."; else status_line="Project: no roadmap."; fi
+    collect_rows < <(register_files "$root")
+  fi
+  if [ -n "$open_rows" ]; then
+    # With a current milestone only its registers are read, so no row is
+    # outside it; no plan is being completed.
+    ROUTE_ROOT=$root ROUTE_FINISHED="" ROUTE_MS=$current_ms ROUTE_OUTSIDE_MS=""
+    route_rows <<<"$open_rows"
+    render_rows
+  elif [ -n "$current_ms" ]; then
+    next_line="Milestone $ms_id ($ms_name) has nothing open: audit and close it with dforge:closing-a-milestone."
+    launch_cmd=$(launch_for design)
+    prompt="Close milestone $ms_id ($ms_name) of \`$(dforge_name "$(dforge_docs_root)")/roadmap.md\` with dforge:closing-a-milestone."
+    launch=1
+  else
+    next_line="Nothing — no register holds an unresolved row."
   fi
 elif [ "$draft" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
@@ -317,27 +402,15 @@ else
     roadmap=$(roadmap_file "$root")
     current_ms=""
     [ -z "$roadmap" ] || current_ms=$(roadmap_current "$roadmap")
-    open_rows="" reg_list="" ms_regs="" outside_ms=""
+    ms_regs=""
     [ -z "$current_ms" ] || ms_regs=$(roadmap_registers "$root" "$(cut -f4 <<<"$current_ms")")
-    while IFS= read -r reg_file; do
-      [ -n "$reg_file" ] || continue
-      rows=$(register_open "$reg_file")
-      [ -n "$rows" ] || continue
-      # The milestone audit reads only the registers below the milestone.
-      if [ -n "$current_ms" ] && ! grep -qxF -- "$reg_file" <<<"$ms_regs"; then outside_ms=1; fi
-      # Several registers may cover one spec; every one that has open rows is
-      # named, so the count is never attributed to the wrong file.
-      reg_list="${reg_list:+$reg_list, }\`$(dforge_name "$reg_file")\`"
-      open_rows="${open_rows}$(ROUTE_REG=$reg_file awk '{ print ENVIRON["ROUTE_REG"] "\t" $0 }' <<<"$rows")
-"
-    done < <(
+    collect_rows < <(
       { [ ${#reg_specs[@]} -eq 0 ] || register_for_spec "$root" "${reg_specs[@]}"
         if [ -n "$current_ms" ]; then
           roadmap_unresolved "$root" "$(cut -f4 <<<"$current_ms")" | cut -f1 | while IFS= read -r r; do dforge_resolve "$r"; done
         fi
       } | awk '!seen[$0]++'
     )
-    open_rows=$(grep . <<<"$open_rows" || true)
     if [ -n "$open_rows" ]; then
       ROUTE_ROOT=$root ROUTE_FINISHED=$rel ROUTE_MS=$current_ms ROUTE_OUTSIDE_MS=$outside_ms
       route_rows <<<"$open_rows"
@@ -349,28 +422,8 @@ else
     fi
 
     if [ -n "$open_rows" ]; then
-      open_n=$(grep -c . <<<"$open_rows")
-      row_list=$(awk -F'\t' '
-        NR <= 3 { printf "%s#%s %s", (NR > 1 ? "; " : ""), $2, $3 }
-        END { if (NR > 3) printf " +%d more", NR - 3 }
-      ' <<<"$open_rows")
-      kind=$ROUTE_KIND action=$ROUTE_ACTION waiting=$ROUTE_WAITING stale=$ROUTE_STALE
-      launch_cmd=$ROUTE_LAUNCH_CMD launch_plan=$ROUTE_LAUNCH_PLAN
-      stale_note=""
-      [ -z "$stale" ] || stale_note="Still assigned to a finished plan: $stale — resolve or reassign them with \`scripts/register set\`."
-      [ "$kind" != milestone ] || { ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms"); }
       status_line="Plan \`$rel\` is complete."
-      next_line="Register rows still open ($open_n) in $reg_list: $row_list.${stale_note:+ $stale_note}${action:+ $action}"
-      if [ "$kind" = milestone ]; then
-        verify_clause="" built_clause=""
-        [ -z "$waiting" ] || verify_clause="; rows awaiting the owner's check (verify): $waiting"
-        [ -z "$ROUTE_BUILT" ] || built_clause=" Built, awaiting the audit: $ROUTE_BUILT."
-        prompt="Close milestone $ms_id ($ms_name) of \`$(dforge_name "$(dforge_docs_root)")/roadmap.md\` with dforge:closing-a-milestone$verify_clause.$built_clause"
-        launch=1
-      elif [ -n "$kind" ]; then
-        prompt="Continue the work recorded in $reg_list: $open_n rows are open ($row_list). $action"
-        launch=1
-      fi
+      render_rows
     elif [ -n "$roadmap" ]; then
       # The roadmap outranks the Program line. Nothing is open in the current
       # milestone, so it is ready for its audit; closing it is the only way on.
@@ -512,6 +565,7 @@ fi
 handoff=$(dforge_latest_file)
 today=$(date -u +%Y-%m-%d)
 if [ "$adhoc" -eq 1 ]; then marker_kind=adhoc marker_subject=-
+elif [ "$project" -eq 1 ]; then marker_kind=project marker_subject=-
 elif [ "$draft" -eq 1 ]; then marker_kind=draft marker_subject=$rel
 elif [ "$kept" -eq 1 ]; then marker_kind="kept branch=${branch##* }" marker_subject=$rel
 elif [ "$complete" -eq 1 ]; then marker_kind=complete marker_subject=$rel
@@ -525,7 +579,8 @@ write_handoff() {
   local tmp status=0
   case $handoff in */.dforge/handoff/latest.md) dforge_state_ignore "${handoff%/.dforge/handoff/latest.md}" ;; esac
   tmp=$(mktemp) || return 1
-  if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ ! -f "$handoff" ]; then
+  if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ ! -f "$handoff" ] \
+     || { [ "$project" -eq 1 ] && [ "$keep_notes" -eq 0 ]; }; then
     printf '# Handoff — %s\n\n%s\n%s\n' "$today" "$block" "$marker" > "$tmp" || status=1
   else
     # Replace only the Next session section; the rest is the session's own notes.
