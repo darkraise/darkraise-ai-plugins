@@ -35,6 +35,11 @@
   the copy and the manifest edit, and every fix is ported through the same
   scripted rename, so every commit from the rename on is a consistent dagents
   that CI validates.
+- Early CI: none
+
+Finish: merge
+
+Worktree: in-place
 
 ## Goal
 
