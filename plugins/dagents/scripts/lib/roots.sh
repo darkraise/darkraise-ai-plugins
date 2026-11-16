@@ -55,7 +55,8 @@ _dagents_local() { # DIR TOP
 }
 
 # _dagents_applied_darkmem TOP — stores.json records documents or progress as
-# darkmem for TOP's primary checkout; without jq, for any checkout.
+# darkmem for TOP's primary checkout; without jq, for any checkout. A file that
+# does not parse may record either, so it counts as applied, said on stderr.
 _dagents_applied_darkmem() {
   local stores="${HOME:-}/.dagents/stores.json" common primary=$1
   [ -n "${HOME:-}" ] && [ -f "$stores" ] || return 1
@@ -68,6 +69,11 @@ _dagents_applied_darkmem() {
   fi
   jq -e --arg k "$primary" '.[$k] | objects | .documents == "darkmem" or .progress == "darkmem"' \
     < "$stores" >/dev/null 2>&1
+  case $? in
+    0) return 0 ;;
+    1 | 4) return 1 ;;
+    *) printf 'roots.sh: %s does not parse, so darkmem stores may be applied\n' "$stores" >&2; return 0 ;;
+  esac
 }
 
 dagents_stores_init() { # [DIR]
