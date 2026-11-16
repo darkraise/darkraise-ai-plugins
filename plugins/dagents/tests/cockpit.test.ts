@@ -247,6 +247,8 @@ type World = {
   missedRestores?: number
   /** The session refuses every row the plugin appends. */
   isAppendFailing?: boolean
+  /** The engine cannot report the session's usage. */
+  isUsageFailing?: boolean
   toasts?: string[]
   notes?: string[]
   env?: Record<string, string>
@@ -335,18 +337,21 @@ function world(on: On, w: World) {
   const clock = mock.clock(on, { now: 1_000_000 })
   on('command.register', () => ({ value: undefined }) as never)
   on('session.start', (_$, e) => e as never)
-  on('session.usage', (_$, e) => ({
-    value: {
-      startedAt: w.startedAt ?? 0,
-      context: {
-        tokens: w.tokens,
-        window: w.window ?? 650_000,
-        ...(e.breakdown === undefined ? {} : { breakdown: BREAKDOWN }),
+  on('session.usage', (_$, e) => {
+    if (w.isUsageFailing) throw new Error('usage unavailable')
+    return {
+      value: {
+        startedAt: w.startedAt ?? 0,
+        context: {
+          tokens: w.tokens,
+          window: w.window ?? 650_000,
+          ...(e.breakdown === undefined ? {} : { breakdown: BREAKDOWN }),
+        },
+        rateLimits: [],
+        cost: { usd: 1.5 },
       },
-      rateLimits: [],
-      cost: { usd: 1.5 },
-    },
-  }))
+    }
+  })
   on('settings.read', (_$, e) => {
     if (e?.source === 'user' && w.isUserSettingsUnreadable) throw new Error('EACCES: the user settings cannot be read')
     const value = e?.source === 'user' && w.userSettings !== undefined ? w.userSettings : (w.settings ?? {})
@@ -780,6 +785,14 @@ describe('attribution guard', () => {
     await $.session.start(START)
     const ran = await $.tool.call({ tool: 'Bash', command: 'git commit -m "x" -m "Claude-Session: y"' })
     expect(ran.deny).toBeUndefined()
+  })
+
+  test('a display read that fails never refuses a call the guard passed', async ($, on) => {
+    world(on, { tokens: 10_000, isUsageFailing: true })
+    const ran = await $.tool.call({ tool: 'Read', file_path: '/tmp/a.txt' })
+    expect(ran.deny).toBeUndefined()
+    const dirty = await $.tool.call({ tool: 'Bash', command: 'git commit -m "x" -m "Claude-Session: y"' })
+    expect(dirty.deny).toMatch(/keeps AI attribution out of git/)
   })
 })
 
