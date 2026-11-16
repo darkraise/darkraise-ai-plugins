@@ -1900,6 +1900,23 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: /codexLane in ~\/\.dforge\/config\.json is not a dforge setting; remove it with dforge-config unset codexLane/ })).toBeDefined()
   })
 
+  test('the minimized band counts setting problems', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on, configured({ layout: 'compact', density: 'nope' }))
+    await $.session.start(START)
+    const band = await $.ui.mount(minimized('terminal'))
+    expect(await band.find({ type: 'Text', text: /1 setting problem/ })).toBeDefined()
+  })
+
+  test('the pane line names the button that shows the setting problems', async ($, on) => {
+    const files: NonNullable<World['files']> = { [CONFIG]: { text: '{"layout": "full",}', mtimeMs: 1 } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^1 setting problem · open ⚙ Settings to see it$/ })).toBeDefined()
+  })
+
   test('a settings file that does not parse is a problem and silences Discord', async ($, on) => {
     const fetches: World['fetches'] = []
     const files: NonNullable<World['files']> = { [CONFIG]: { text: '{"layout": "full",}', mtimeMs: 1 } }
@@ -7858,6 +7875,17 @@ describe('auto run in the pane', () => {
       if (isNamed) expect(line).toBeDefined()
       else expect(line).toBeUndefined()
     })
+
+  test('a run left by a closed session has a button that stops it', async ($, on) => {
+    const files: NonNullable<World['files']> = autoFiles({ session: 'sess-old', pending: null })
+    const w: World = { ...SIGNED_IN, files, autoRuns: [] }
+    world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-stop-stale' })
+    expect(w.autoRuns).toContain('--session sess-1 stop --stale')
+  })
 
   test('measures against the high regime', async ($, on) => {
     world(on, { ...SIGNED_IN, tokens: 470_000 })

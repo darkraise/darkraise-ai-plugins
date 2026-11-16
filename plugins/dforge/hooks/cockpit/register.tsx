@@ -1020,7 +1020,7 @@ export const register: Register = on => {
     const problemCount = S.settingProblems.length
     const problemLine = problemCount > 0 && (
       <Text key="setting-problems" color="warning" wrap="truncate-end">
-        {`${problemCount} setting problem${problemCount === 1 ? '' : 's'} · see Settings`}
+        {`${problemCount} setting problem${problemCount === 1 ? '' : 's'} · open ⚙ Settings to see ${problemCount === 1 ? 'it' : 'them'}`}
       </Text>
     )
     const resumeCard = offer !== null && (
@@ -1040,10 +1040,11 @@ export const register: Register = on => {
     const actions = (
       <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
         {isRunLeft && (
-          <Text key="auto-left" color="yellow">
+          <Text key="auto-left" color="warning">
             auto run left by a closed session — run scripts/auto-run stop --stale
           </Text>
         )}
+        {isRunLeft && button('pane-stop-stale', '■ Stop stale run', () => void stopStaleRun($), { isCompact: isDense })}
         {autoNow?.active && (
           <Text key="auto-line" color="magenta">
             {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} ${autoNow.compactions === 1 ? 'compaction' : 'compactions'} · ${autoNow.resumes} ${autoNow.resumes === 1 ? 'resume' : 'resumes'}`}
@@ -2433,13 +2434,15 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
     isBackground: doing.kind === 'background',
   }
   const blocked = summary?.tasks.filter(task => task.state === 'blocked') ?? []
-  const warning: Run[] = [
+  const problems = S.settingProblems.length
+  const warnings: Run[][] = [
     ...(blocked.length === 0
       ? []
-      : [{ text: '✗ ', color: 'red', bold: true }, { text: blocked.length === 1 ? `Task ${blocked[0]?.n} blocked` : `${blocked.length} tasks blocked`, color: 'red' }]),
-    ...(blocked.length > 0 && refused.length > 0 ? [{ text: '  ·  ', dim: true }] : []),
-    ...(refused.length === 0 ? [] : [{ text: '✗ ', color: 'red', bold: true }, { text: `${refused.length} refused`, color: 'red' }]),
+      : [[{ text: '✗ ', color: 'red', bold: true }, { text: blocked.length === 1 ? `Task ${blocked[0]?.n} blocked` : `${blocked.length} tasks blocked`, color: 'red' }]]),
+    ...(refused.length === 0 ? [] : [[{ text: '✗ ', color: 'red', bold: true }, { text: `${refused.length} refused`, color: 'red' }]]),
+    ...(problems === 0 ? [] : [[{ text: '! ', color: 'warning', bold: true }, { text: `${problems} setting problem${problems === 1 ? '' : 's'}`, color: 'warning' }]]),
   ]
+  const warning: Run[] = warnings.flatMap((one, index) => (index === 0 ? one : [{ text: '  ·  ', dim: true }, ...one]))
   const remoteBand: Run[] =
     remoteNow.clients.length > 0
       ? [{ text: 'Remote ● ', color: 'green' }, { text: 'connected', color: 'green' }]
@@ -3521,6 +3524,14 @@ async function bookAutoCompaction($: EngineInterface, fromPane = false) {
     await trackAutoRun($)
     scheduleAutoAct($, 'continue', 0)
   }
+}
+
+// Stops the run a closed session left (auto-run stop --stale), then reads
+// the run again so the pane drops its line.
+async function stopStaleRun($: EngineInterface) {
+  await autoRunCall($, await $.session.id(), ['stop', '--stale'])
+  await trackAutoRun($)
+  $.ui.invalidate('ui.render')
 }
 
 async function stopAutoRun($: EngineInterface) {
