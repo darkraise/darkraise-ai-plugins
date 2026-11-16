@@ -131,8 +131,9 @@ dforge itself:
 - the 4.x migration (§4);
 - the readers that translate older spellings: `docs/dforge` and `.dforge` become
   a third older spelling beside `docs/forge` and `docs/superpowers`, read at the
-  same places 4.17.1 translates those two (`lib/roots.sh`, the migrate script,
-  the darkmem mirror's base list), so a migrated plan, ledger, register or
+  same places 4.17.1 translates those two (for example `lib/roots.sh`, the
+  migrate script, the darkmem mirror, sync and reconcile; the plan finds every
+  such list), so a migrated plan, ledger, register or
   `completed.md` citing `docs/dforge/…` still resolves;
 - the guard's sibling list (§5) and the README's origin note;
 - the older dr-forge and dr-superpowers translations the migrate script carries.
@@ -204,8 +205,10 @@ existing target merge file by file, and a second run finishes the job.
   `${CLAUDE_CONFIG_DIR:-~/.claude}`), the managed-settings directory (default
   per OS, the paths and drop-in directory taken from the settings
   documentation), and the project directory (default `CLAUDE_PROJECT_DIR`, else
-  the working directory's git root). `test-all.mjs` and the mod test setup
-  point them at empty fixtures, so no suite depends on the host's plugins.
+  the working directory's git root). The shared shell test helper, the mod
+  test setup and `test-all.mjs` point them at empty fixtures, so no suite
+  depends on the host's plugins, whether run alone or through `test-all.mjs`.
+  The plan confirms once by hand that SessionStart's `systemMessage` displays.
 - **Detection on Claude Code.** For each sibling `<name>@darkraise`, the
   effective value is that of the highest-precedence scope that sets the key
   (managed, then project-local `.claude/settings.local.json`, project
@@ -301,7 +304,7 @@ A3. [test, high] At merge time, a command lists every non-merge commit in `dforg
 A4. [test, high] For each port commit that changes code or tests, its regression test (or, for a fix that shipped without one, a new test reproducing the defect) fails at the port's parent and passes at the port commit, and the register row records both results; a port that changes only skill or reference prose records `text-only` and the changed file instead.
 A5. [test, neg, high] dagents has none of version 5's features (no reviewer-panel runner, no API-ruling rungs, no `task-close`, no per-session state file), and its agent set, subagent-driven-development, revising-plans and Executor-line routing equal the tag's under the rename.
 A6. [test, neg, high] Outside the §3 allowlist, `rg -i dforge plugins/dagents` finds nothing, and `plugins/dagents` names no dagents version other than 1.x.
-A7. [test, neg, high] With dagents active, a full session-start, task-brief, next-step and turn-end cycle in a temporary project and home creates or changes nothing named `.dforge`, `docs/dforge`, `~/.dforge` or `~/.claude/dforge`; a set `DFORGE_BUDGET` or `DR_CODEX_SESSION_DIR` changes nothing; and a pre-seeded `~/.dforge/config.json` (non-default settings and a darkmem mapping) plus `.dforge/` state leave dagents' output equal to the run without them.
+A7. [test, neg, high] With dagents active, a full session-start, task-brief, next-step and turn-end cycle in a temporary project and home creates or changes nothing named `.dforge`, `docs/dforge`, `~/.dforge` or `~/.claude/dforge`; a set `DFORGE_BUDGET` or `DR_CODEX_SESSION_DIR` changes nothing; and a pre-seeded `~/.dforge/config.json` (non-default settings and a darkmem mapping) plus `.dforge/` state leave dagents' output equal to the run without them, apart from the §4 "dforge 4.x layout found" line.
 A8. [test, high] The full dagents suite, `claude plugin test plugins/dagents` and `tsc --noEmit -p plugins/dagents` pass.
 A9. [test, high] dagents migrate on a fixture dforge 4.x project with a worktree stages `git mv` renames of `docs/dforge`, moves `.dforge` and `<git dir>/dforge` in each worktree, rewrites `dforge:` prefixes in active plans and the handoff note, reports other files that mention dforge, adds dagents twins to ignore and attributes lines while keeping the dforge ones, and copies the home settings dagents' schema defines without overwriting existing dagents values.
 A10. [test, neg, high] The migrate dry run writes nothing; the move refuses, writing nothing for that item, on a differing same-path file, two tracked docs trees, a dirty file among the paths it moves, or a run a live session holds; a project with a version-5 marker, including a fresh clone of one, is refused; a 4.x project opened once under dforge 5 still migrates; and a second run after a partial migration finishes the job.
