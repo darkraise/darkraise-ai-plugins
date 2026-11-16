@@ -60,6 +60,15 @@ out=$(CLAUDE_CODE_SESSION_ID=s-qa bash "$QA" clean "$WS")
 check "clean: a stopped run's state file does not block a cleanup" "$([ -e gone.txt ] && echo kept || echo gone)" "gone"
 rm -f "$TMP/repo/.dagents/sdd/auto-run.json"
 
+# A path dirty before QA that QA also listed: never undone, and named.
+printf 'mine\n' > pre-listed.txt; printf 'two\n' >> kept.txt
+bash "$QA" begin "$WS"
+printf 'pre-listed.txt\nkept.txt\n' >> "$WS/qa-touched.txt"; printf 'qa\n' >> pre-listed.txt; printf 'qa\n' >> kept.txt
+out=$(bash "$QA" clean "$WS")
+check "clean: a listed path dirty before QA keeps its content" "$(cat pre-listed.txt)|$(cat kept.txt)" $'mine\nqa|one\ntwo\nqa'
+check "clean: a listed path dirty before QA is named as left, never removed" \
+  "$(grep -c -e '^qa-files: left pre-listed.txt$' -e '^qa-files: left kept.txt$' <<<"$out"):$(grep -c '^qa-files: removed ' <<<"$out")" "2:0"
+
 bash "$QA" begin "$WS"
 check "a re-dispatch starts with an empty manifest" "$(wc -c < "$WS/qa-touched.txt" | tr -d ' ')" "0"
 rm -f "$WS/qa-touched.txt"; printf 'z\n' > z.txt

@@ -11,7 +11,8 @@
 #        qa-files clean WORKSPACE   restore or delete QA's listed paths
 # clean prints "qa-files: removed <path>" for each path it restored or
 # deleted, and "qa-files: left <path>" for every other path that turned dirty
-# since begin, carried ones included.
+# since begin, carried ones included, and for each listed path that was
+# already dirty at begin.
 # Exit: 0 done; 2 usage, no git checkout, or no snapshot from begin.
 set -uo pipefail
 
@@ -114,7 +115,12 @@ for i in "${!PATHS[@]}"; do
   path=${PATHS[$i]} code=${CODES[$i]}
   has "$path" "${done_paths[@]+"${done_paths[@]}"}" && continue
   done_paths+=("$path")
-  has "$path" "${old[@]+"${old[@]}"}" && continue
+  # Dirty before QA began: the person's, whatever QA added, so never undone;
+  # named when QA listed it, since QA's edits may now be mixed into it.
+  if has "$path" "${old[@]+"${old[@]}"}"; then
+    has "$path" "${listed[@]+"${listed[@]}"}" && printf 'qa-files: left %s\n' "$path"
+    continue
+  fi
   if [ "$blocked" -eq 1 ] || has "$path" "${carried[@]+"${carried[@]}"}" \
     || ! has "$path" "${listed[@]+"${listed[@]}"}"; then
     printf 'qa-files: left %s\n' "$path"
