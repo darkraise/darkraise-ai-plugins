@@ -1564,6 +1564,22 @@ export function resumeOfferOf(text: string): { next: string; prompt: string | nu
   return { next, prompt: prompt === '' ? null : prompt }
 }
 
+/**
+ * The last next-step marker line in a text: what the block was computed from,
+ * and when, in milliseconds. `subject=` runs to the last ` at=`; `-` is none.
+ */
+export function markerOf(text: string): { kind: string; subject: string | null; at: number } | null {
+  const lines = text.split(/\r?\n/)
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const fields = /^<!-- next-step: (.*) at=(-?\d+) -->$/.exec(lines[index]!.trim())
+    if (fields === null) continue
+    const kind = /(?:^| )kind=(\S+)/.exec(fields[1]!)?.[1] ?? ''
+    const subject = / subject=(.*)$/.exec(fields[1]!)?.[1] ?? '-'
+    return { kind, subject: subject === '-' ? null : subject, at: Number(fields[2]) * 1000 }
+  }
+  return null
+}
+
 /** The registers a next-step ruling prompt names: "Continue the work recorded in `a.md`, `b.md`: …". */
 export function promptRegisters(prompt: string): string[] {
   const names = /^Continue the work recorded in (.*?): /.exec(prompt)?.[1] ?? ''

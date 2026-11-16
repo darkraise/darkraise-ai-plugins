@@ -219,12 +219,14 @@ export type CockpitRoots = {
 
 /** A handoff note that starts a next session, as the resume card and band offer it. */
 export type CockpitResumeOffer = {
-  /** When the note was written, in milliseconds since the epoch. */
+  /** When the note was written, in milliseconds since the epoch: its next-step marker's `at`, else the file's time. */
   at: number
   /** The note's `**Next:**` line. */
   next: string
   /** The note's fenced first prompt; null when it has none, and Resume falls back to resume-execution. */
   prompt: string | null
+  /** Whether `next-step --print --latest` recomputed it; false when the stored note stands in for a failed run. */
+  isRechecked: boolean
 }
 
 /** An auto run as its state file says (reference/auto-run.md), for the session it is bound to. */

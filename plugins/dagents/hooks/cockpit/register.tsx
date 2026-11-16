@@ -71,6 +71,7 @@ import {
   repoFromPorcelain,
   repoName,
   resumeOfferOf,
+  markerOf,
   promptRegisters,
   hasUnresolvedRows,
   runList,
@@ -2225,7 +2226,7 @@ async function drawResumeBand($: EngineInterface, e: RenderInput<'AbovePrompt'>,
       <Box key="resume-band-text" flexGrow={1} flexShrink={1}>
         <Text key="resume-band-line" wrap="truncate-end">
           <Text color={BUTTON_MAIN} bold>
-            {`↻ Resumable work · ${handedOff((await $.clock.now()) - offer.at)}`}
+            {`↻ Resumable work · ${handedOff((await $.clock.now()) - offer.at)}${offer.isRechecked ? '' : ' · not rechecked'}`}
           </Text>
           <Text dimColor>{` — Next: ${offer.next}`}</Text>
         </Text>
@@ -2571,10 +2572,12 @@ const S = {
   latestName: null as string | null,
   // The latest.md path and modification time the resume offer was read for.
   offerRead: '',
-  // What that note offers, and the modification times of the registers its
-  // prompt names when the offer was last decided.
-  offerFound: null as { next: string; prompt: string | null } | null,
-  offerRegisters: null as string | null,
+  // That note's text and its age (its marker's at, else the file's time).
+  offerStored: null as { text: string; at: number; subject: string | null } | null,
+  // The cache key of the last next-step --print --latest run started, and
+  // whether one is in flight: one at a time, never awaited.
+  offerRanKey: null as string | null,
+  isOfferRunning: false,
   // A Done held while the main conversation's background work runs: when its
   // chain of turns began, when a turn last ended with the work pending, and
   // that turn's answer, which a Done released with no turn carries.
@@ -3287,6 +3290,8 @@ async function bookAutoCompaction($: EngineInterface, fromPane = false) {
 async function stopAutoRun($: EngineInterface) {
   await autoRunCall($, await $.session.id(), ['stop', '--reason', 'owner pressed Stop auto'])
   await trackAutoRun($)
+  // The resume offer is not recomputed during a run: recompute it now.
+  await readRun($)
 }
 
 // The roots darkmem-config.mjs --mode names for the session's checkout (store
@@ -3352,29 +3357,96 @@ async function finishPath($: EngineInterface, checkouts: readonly string[], slug
   return paths[paths.length - 1] ?? ''
 }
 
-// The note is read again only when it changes, and the registers its prompt
-// names only when theirs do: readRun runs at every turn. A ruling handoff is
-// withdrawn once every register it names is readable and fully resolved, since
-// nothing rewrites the note when the last row closes.
+// The offer is what `next-step --print --latest` recomputes from the
+// repository. The run is started detached, so no turn or tool hook waits on
+// it; one at a time; again only when a file the block is computed from
+// changes; and never while the offer cannot show. Until a run resolves, the
+// offer the last one produced stands. latest.md is read again only when it
+// changes: its marker dates the offer, so editing the notes keeps a dismissal.
 async function readResumeOffer(
   $: EngineInterface,
   latest: string,
-  at: number | null,
+  mtime: number | null,
   docs: CockpitRoots['docs'] | null,
   places: readonly { root: string; docsDir: string }[],
+  primary: string,
 ) {
-  const key = `${latest}\t${at}`
+  const key = `${latest}\t${mtime}`
   if (S.offerRead !== key) {
     S.offerRead = key
-    const text = at === null ? null : await $.fs.read(latest).catch(() => null)
-    S.offerFound = typeof text === 'string' ? resumeOfferOf(text) : null
-    S.offerRegisters = null
+    const text = mtime === null ? null : await $.fs.read(latest).catch(() => null)
+    const mark = typeof text === 'string' ? markerOf(text) : null
+    S.offerStored = typeof text === 'string' && mtime !== null ? { text, at: mark?.at ?? Math.floor(mtime / 1000) * 1000, subject: mark?.subject ?? null } : null
   }
-  const found = S.offerFound
+  const stored = S.offerStored
+  if (stored === null || (await $.clock.now()) - stored.at >= RESUME_WITHIN) {
+    if ((await read($, resumeOffer)) !== null) await update($, resumeOffer, () => null)
+    return
+  }
+  if ((await read($, resumeDismissed)) === stored.at || (await read($, isPlanSession)) || (await read($, autoRun))?.active) return
+  const runKey = [key, ...(await offerTimes($, docs, places, stored.subject))].join('\t')
+  if (S.isOfferRunning || S.offerRanKey === runKey) return
+  S.offerRanKey = runKey
+  S.isOfferRunning = true
+  const checkout = S.where.checkout
+  const isGone = checkout === null || (await $.fs.stat(checkout).catch(() => null))?.kind !== 'dir'
+  // The directory travels in argv: no cockpit call passes $.process.run a cwd.
+  const argv = ['bash', '-c', 'cd -- "$1" && exec bash "$2" --print --latest', 'next-step', isGone ? primary : checkout, `${$.plugin.root}/scripts/next-step`]
+  void $.process
+    .run(argv, { timeoutMs: 20_000 })
+    .catch(() => null)
+    .then(ran => offerFrom($, ran, stored, docs, places))
+    .then(async offer => {
+      if (JSON.stringify(await read($, resumeOffer)) !== JSON.stringify(offer)) await update($, resumeOffer, () => offer)
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      S.isOfferRunning = false
+    })
+}
+
+// The modification times a recomputed block depends on: completed.md,
+// roadmap.md, each register, the plans directory and the note's subject plan.
+// The subject's ledger is left out: the offer is hidden in a plan session.
+async function offerTimes(
+  $: EngineInterface,
+  docs: CockpitRoots['docs'] | null,
+  places: readonly { root: string; docsDir: string }[],
+  subject: string | null,
+): Promise<string[]> {
+  const where = (name: string) => planCandidates(name, docs, places)
+  const paths = [...where('docs/dagents/plans/completed.md'), ...where('docs/dagents/roadmap.md'), ...where('docs/dagents/plans'), ...(subject === null ? [] : where(subject))]
+  for (const dir of where('docs/dagents/registers')) {
+    for (const entry of (await $.fs.list(dir).catch(() => null)) ?? []) {
+      if (entry.name.endsWith('.md')) paths.push(`${dir}/${entry.name}`)
+    }
+  }
+  const stats = await Promise.all(paths.map(path => $.fs.stat(path).catch(() => null)))
+  return paths.map((path, index) => `${path}=${stats[index]?.mtimeMs ?? '-'}`)
+}
+
+// What a finished run offers: the recomputed block on exit 0, nothing on exit
+// 6, and otherwise the stored note, marked as not rechecked. A stored ruling
+// handoff is withdrawn once every register its prompt names is readable and
+// fully resolved, since nothing rewrites the note when the last row closes.
+async function offerFrom(
+  $: EngineInterface,
+  ran: { exitCode: number; stdout: string } | null,
+  stored: { text: string; at: number },
+  docs: CockpitRoots['docs'] | null,
+  places: readonly { root: string; docsDir: string }[],
+): Promise<CockpitResumeOffer | null> {
+  if (ran?.exitCode === 6) return null
+  if (ran?.exitCode === 0) {
+    const found = resumeOfferOf(ran.stdout)
+    return found === null ? null : { at: markerOf(ran.stdout)?.at ?? stored.at, next: found.next, prompt: found.prompt, isRechecked: true }
+  }
+  const found = resumeOfferOf(stored.text)
+  if (found === null) return null
   // A register name resolves as a plan name does: into the darkmem docs
   // mirror while documents live there, else the first checkout holding it.
   const registers: string[] = []
-  for (const name of found?.prompt == null ? [] : promptRegisters(found.prompt)) {
+  for (const name of found.prompt === null ? [] : promptRegisters(found.prompt)) {
     const candidates = planCandidates(name, docs, places)
     let chosen = candidates[0] ?? name
     for (const candidate of candidates) {
@@ -3385,10 +3457,6 @@ async function readResumeOffer(
     }
     registers.push(chosen)
   }
-  const stats = await Promise.all(registers.map(path => $.fs.stat(path).catch(() => null)))
-  const registerKey = stats.map(info => (info?.kind === 'file' ? info.mtimeMs : '-')).join('\t')
-  if (S.offerRegisters === registerKey) return
-  S.offerRegisters = registerKey
   let isSettled = registers.length > 0
   for (const path of registers) {
     const text = await $.fs.read(path).catch(() => null)
@@ -3397,8 +3465,7 @@ async function readResumeOffer(
       break
     }
   }
-  const offer: CockpitResumeOffer | null = found === null || at === null || isSettled ? null : { at, next: found.next, prompt: found.prompt }
-  if (JSON.stringify(await read($, resumeOffer)) !== JSON.stringify(offer)) await update($, resumeOffer, () => offer)
+  return isSettled ? null : { at: stored.at, next: found.next, prompt: found.prompt, isRechecked: false }
 }
 
 /** The handoff the resume card and band offer now; null while nothing is to resume. */
@@ -3433,7 +3500,7 @@ async function readRun($: EngineInterface) {
   try {
     const handoff = await $.fs.stat(latest).catch(() => null)
     const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
-    await readResumeOffer($, latest, handoffTime, roots?.docs ?? null, places)
+    await readResumeOffer($, latest, handoffTime, roots?.docs ?? null, places, root)
     const local = `${session ?? root}/.dagents/sdd`
     const base = roots?.progress.ledgerRoot ?? local
     const bound = await read($, boundPlan)
@@ -4048,7 +4115,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
   // not: read again, or the resume offer and the roots note stay unwritten.
   S.roots = { key: '', value: null }
   S.offerRead = ''
-  S.offerRegisters = null
+  S.offerRanKey = null
   await $.command.register({
     name: 'cockpit',
     description: 'Show context, usage, subagents, the plan and the repo in a pane',
@@ -4086,8 +4153,9 @@ async function readSession($: EngineInterface, isStart: boolean) {
   await step(() => readWhere($))
   await step(() => readNotifier($))
   S.runKey = ''
-  await step(() => readRun($))
+  // The run first: the resume offer is not recomputed while one is active.
   await step(() => trackAutoRun($))
+  await step(() => readRun($))
   await step(() => beat($))
   await step(() => readVersion($))
   await step(() => readRemote($))
