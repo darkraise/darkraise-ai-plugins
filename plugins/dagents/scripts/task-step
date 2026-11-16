@@ -619,6 +619,16 @@ prompt_text() {
     on && !/^\[Include this section only/ { print }'
 }
 
+# template_placeholder TEMPLATE FILE: the first placeholder TEMPLATE holds that
+# FILE still carries. Only a token the template holds counts: a filled value,
+# such as a checkout path, may hold a bracketed capital word of its own.
+template_placeholder() {
+  local token
+  while IFS= read -r token; do
+    [ -z "$token" ] || ! grep -qF -- "$token" "$2" || { printf '%s\n' "$token"; return; }
+  done < <(prompt_text "$1" | grep -oE '\[[A-Z][A-Z_]*\]' | sort -u)
+}
+
 # fill TOKEN VALUE [TOKEN VALUE ...]: stdin to stdout, each literal TOKEN
 # replaced by its VALUE. The pairs travel in the environment so that a path
 # with a backslash or an ampersand is never read as an escape.
@@ -828,7 +838,7 @@ do_start() {
       '[IMPLEMENTER]' "${agent:-the scored implementer}" 'Task N: [task name]' "$label" \
       'Work from: [directory]' "$workfrom" \
       '[Scene-setting: where this fits, dependencies, architectural context]' "$scene" > "$dispatch"
-    unexpanded=$(grep -oE '\[[A-Z][A-Z_]*\]' "$dispatch" | head -n 1)
+    unexpanded=$(template_placeholder "$template" "$dispatch")
     [ -s "$dispatch" ] && [ -z "$unexpanded" ] || die "dispatch file $dispatch is empty or holds an unexpanded placeholder ${unexpanded:-}"
   fi
 
@@ -933,7 +943,7 @@ do_review() {
     cmd="bash \"$plugin_root/scripts/run-codex-review.sh\" --kind task --tier $tier --cwd \"$top\" --out \"$codex_out\" --prompt \"$codex_prompt\""
   fi
   for line in "$judge_prompt" ${tier:+"$codex_prompt"}; do
-    unexpanded=$(grep -oE '\[[A-Z][A-Z_]*\]' "$line" | head -n 1)
+    unexpanded=$(template_placeholder "$template" "$line")
     [ -z "$unexpanded" ] || die "unexpanded placeholder $unexpanded in $line"
   done
   rm -f "$ws/task-$first-review-report.md"
@@ -1083,7 +1093,7 @@ do_group() {
   [ -f "$template" ] || die "missing template $template"
   prompt_text "$template" | fill '[GROUP_LIST]' "$list" '[PACKAGE_FILE]' "$pkg" \
     '[REPORT_FILE]' "$ws/group-$list-review-report.md" '[PLUGIN_ROOT]' "$plugin_root" > "$TMP/prompt.md"
-  unexpanded=$(grep -oE '\[[A-Z][A-Z_]*\]' "$TMP/prompt.md" | head -n 1)
+  unexpanded=$(template_placeholder "$template" "$TMP/prompt.md")
   [ -s "$TMP/prompt.md" ] && [ -z "$unexpanded" ] || die "group prompt is empty or holds an unexpanded placeholder ${unexpanded:-}"
 
   id_line="check identity: clean" at_line="check attribution: clean"

@@ -313,6 +313,14 @@ check "review: the judge prompt has no unexpanded placeholder" "$(placeholders "
 check "review: base, head and diff file" "$(grep -E '^\*\*(Base|Head|Diff file):\*\*' "$JP" | tr '\n' ' ' | sed 's/ $//')" \
   "**Base:** $BASE1 **Head:** $C1 **Diff file:** $WS/review-$(short "$BASE1")..$(short "$C1").diff"
 check "review: the diff file exists" "$([ -f "$WS/review-$(short "$BASE1")..$(short "$C1").diff" ] && echo yes || echo no)" "yes"
+# A bracketed capital token in a filled value, here the checkout's path, is
+# not a placeholder the template left unexpanded.
+cp -a "$REPO" "$TMP/fix-[WIP]"
+wip_rc=$(cd "$TMP/fix-[WIP]" && bash "$STEP" review docs/plan.md 1 >/dev/null 2>&1; echo $?)
+check "review: a checkout path holding [WIP] is no unexpanded placeholder" "$wip_rc" "0"
+wip_rc=$(cd "$TMP/fix-[WIP]" && bash "$STEP" start docs/plan.md 1 --reset >/dev/null 2>&1; echo $?)
+check "start: a dispatch naming a checkout path holding [WIP] is written" "$wip_rc" "0"
+rm -rf "$TMP/fix-[WIP]"
 check "review: brief and report paths" "$(grep -cE "^(Read the task brief: $WS/task-1-brief.md|Read the implementer's report: $WS/task-1-report.md)\$" "$JP")" "2"
 check "review: the criteria path is expanded" "$(grep -c "Read the criteria file at $PR/criteria/task-review.md and score" "$JP")" "1"
 check "review: the lens path is named" "$(grep -c "^Read each lens file in $PR/criteria/lenses/lang-bash.md\. Lens criteria" "$JP")" "1"
