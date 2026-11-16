@@ -202,6 +202,10 @@ has "A10: the answer is recorded" "$out" "merge"
 printf '{"action":"pr"}\n' > "$R10/.dforge/sdd/finish.json"
 run bash -c "cd '$R10' && bash '$S/next-step' --complete docs/plan.md"
 check "A10: --complete clears the no-plan record" "$([ -e "$R10/.dforge/sdd/finish.json" ] && echo kept || echo gone)" "gone"
+printf '{"action":"pr"}\n' > "$R10/.dforge/sdd/finish.json"
+run bash -c "cd '$R10' && bash '$S/finish-choice' clear"
+check "A10: finish-choice clear removes the no-plan record" "$([ -e "$R10/.dforge/sdd/finish.json" ] && echo kept || echo gone)" "gone"
+check "A10: Step 7 clears the record when nothing follows" "$(grep -c 'scripts/finish-choice clear' "$P/skills/finishing-a-development-branch/SKILL.md")" "1"
 
 # A8: Option 2's procedure writes the records only after the push and the PR.
 EC="$P/skills/finishing-a-development-branch/references/execute-choice.md"
