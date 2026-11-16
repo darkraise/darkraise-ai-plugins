@@ -28,10 +28,21 @@
   `scripts/lib/roadmap.sh:76-93`); the auto-run switch keeps its plain
   `next-step PLAN_FILE` call (`ar_switch` needs the plan in the prompt,
   `scripts/lib/auto-run.sh:488-490`).
-- Pending the spec review, written here as Fable recommended: built rows pass
-  closing-a-milestone through step 2 reading `next-step --print --project`
-  (§4); a superseded draft or unplanned block is hidden (§2, A10); the
-  transition hold fires only on this turn's own change (§5, A16).
+- Spec review, built rows (the Blocker). Answer: **"Step 2 asks next-step
+  (Recommended)"** — step 2 takes its go or stop from
+  `next-step --print --project`; step 7 sets built rows to `done` with the
+  `verify` rows (§4).
+- Spec review, A10. Answer: **"Hide it (Recommended)"** — a superseded draft
+  or unplanned block exits 6 (§2).
+- Spec review, A16. Answer: **"This turn's change only (Recommended)"** — the
+  transition hold fires only on this turn's own change (§5).
+- Spec review approval: **"Approve and run unattended"**.
+
+Early CI: none
+
+Finish: merge
+
+Worktree: in-place
 
 ## Problem
 
@@ -272,13 +283,13 @@ A6. [test, neg, high] `next-step --print` in every mode leaves latest.md and fin
 A7. [test, high] `next-step --project` prints the milestone-audit block when the current milestone has only `verify` or built rows, and prints "Nothing" with no launch when there is no roadmap and no unresolved register row.
 A8. [test, high] Plain `next-step PLAN` for a plan listed in completed.md prints the same Next line as `next-step --complete PLAN`.
 A9. [test, high] Plain `next-step PLAN` run in the primary checkout, with the plan's ledger only in a linked worktree, reports that ledger's progress, reads its final review against that worktree, and names that worktree.
-A10. [test, medium] An `adhoc` or `draft` block followed by one more completed.md entry or closed milestone than its marker records makes `next-step --print --latest` exit 6. Q: hide a superseded block (recommended), or show the recomputed project step in its place?
+A10. [test, confirmed] An `adhoc` or `draft` block followed by one more completed.md entry or closed milestone than its marker records makes `next-step --print --latest` exit 6.
 A11. [test, high] latest.md written by next-step carries the marker with kind, counts, subject and `at`; the printed block does not contain it; the auto-run switch and clear still read the first prompt and launch from it.
 A12. [test, high] The cockpit band shows the recomputed Next line and prompt, hides the offer on exit 6, falls back to the stored block with its register check and a "not rechecked" mark when the run fails or times out, and takes its age from the marker, so editing the notes does not reset a dismissal.
 A13. [test, neg, high] The cockpit does not run next-step while the offer cannot show, never more than one run at a time, never awaited by the tool-call path, and not again while its cache key is unchanged.
 A14. [test, high] repo-audit's Handoff section prints the recomputed Status and Next lines; on exit 6 it says nothing is to resume; on any other failure or timeout it prints the stored lines labelled as not recomputed.
 A15. [test, high] A turn whose cwd worktree was removed, which committed a new completed.md line and ends on a summary, is held once, and the reason names `next-step --complete` with that plan.
-A16. [test, neg, medium] A turn whose own commit closes a milestone in roadmap.md and ends without the block is held once naming `next-step --project`, and the retry passes; a turn where roadmap.md or completed.md moved only through a pull is not held. Q: narrow the hold to this turn's own change (recommended), or accept one false hold per pull?
+A16. [test, neg, confirmed] A turn whose own commit closes a milestone in roadmap.md and ends without the block is held once naming `next-step --project`, and the retry passes; a turn where roadmap.md or completed.md moved only through a pull is not held.
 A17. [test, neg, high] A first stop of a ledger or transition turn whose message contains `## Next session`, while latest.md is writable and not newer than the turn stamp, is held.
 A18. [test, neg, high] A turn that changed no ledger, completed.md or roadmap.md is not held by the ledger or transition rules.
 A19. [test, neg, high] Another session's ledger written during the turn never holds it (`tests/turn-end.test.sh:421-424` keeps passing).
