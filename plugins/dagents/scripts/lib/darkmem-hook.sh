@@ -81,6 +81,19 @@ _darkmem_fit() {
     }'
 }
 
+# _darkmem_session_step DIR SID SECONDS COMMAND — one session-start step, its
+# output merged; 124 (GNU timeout) or 143 and 137 (the watchdog's TERM and
+# KILL) mean it overran SECONDS.
+_darkmem_session_step() {
+  local status
+  DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS=10000 _darkmem_run "$@" 2>&1
+  status=$?
+  case $status in
+    124 | 137 | 143) echo "darkmem-sync did not finish at session start; run darkmem-sync $4 by its plugin-root path" ;;
+  esac
+  return 0
+}
+
 # darkmem_session_lines DIR SID [ROOM] [SECONDS] — reconcile's and pull's lines
 # for the session start note, without notes, "nothing to pull" or a pull
 # summary that reports nothing, fitted to 20 lines and ROOM characters
@@ -91,11 +104,14 @@ _darkmem_fit() {
 # SECONDS (default 270) is all the time the two may take, kill grace included:
 # a hook killed at its timeout loses the whole note, the entry point with it.
 # Reconcile gets what pull's 60 seconds leave, up to 200; pull what reconcile
-# left, up to 60; a step left under 10 seconds is skipped with a line. Both
-# wait up to 30 seconds for a mirror lock, which a Stop push still running in
-# the background may hold.
+# left, up to 60; a step left under 10 seconds is skipped with a line. Each
+# step is bounded again at DARKMEM_SESSION_STEP_SECONDS (20), so a slow sync
+# delays the session's first prompt by seconds rather than minutes, and waits
+# up to 10 seconds, below that bound, for a mirror lock a Stop push still
+# running in the background may hold. A step that overruns its bound is one
+# line naming the command to run by hand.
 darkmem_session_lines() {
-  local reason status end grace bound
+  local reason status end grace bound step
   _darkmem_configured || return 0
   reason=$( (dagents_docs_store "$1" >/dev/null) 2>&1 )
   status=$?
@@ -104,20 +120,22 @@ darkmem_session_lines() {
     || [ "$( (dagents_docs_store "$1") 2>/dev/null)" = darkmem ] \
     || [ "$( (dagents_progress_store "$1") 2>/dev/null)" = darkmem ] \
     || return 0
-  end=$(( SECONDS + ${4:-270} )) grace=${DAGENTS_DARKMEM_KILL_GRACE:-5}
+  end=$(( SECONDS + ${4:-270} )) grace=${DAGENTS_DARKMEM_KILL_GRACE:-5} step=${DARKMEM_SESSION_STEP_SECONDS:-20}
   {
     bound=$(( end - SECONDS - 60 - 2 * grace ))
     [ "$bound" -le 200 ] || bound=200
     if [ "$bound" -lt 10 ]; then
       echo "darkmem-sync: reconcile and pull skipped at session start: too little of the hook's time is left; run darkmem-sync reconcile, then pull"
     else
-      DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS=30000 _darkmem_run "$1" "$2" "$bound" reconcile 2>&1
+      [ "$bound" -le "$step" ] || bound=$step
+      _darkmem_session_step "$1" "$2" "$bound" reconcile
       bound=$(( end - SECONDS - grace ))
       [ "$bound" -le 60 ] || bound=60
       if [ "$bound" -lt 10 ]; then
         echo "darkmem-sync: pull skipped at session start: too little of the hook's time is left; run darkmem-sync pull"
       else
-        DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS=30000 _darkmem_run "$1" "$2" "$bound" pull 2>&1
+        [ "$bound" -le "$step" ] || bound=$step
+        _darkmem_session_step "$1" "$2" "$bound" pull
       fi
     fi
   } \

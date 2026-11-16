@@ -35,8 +35,10 @@ _dagents_long() {
   else printf '%s\n' "$1"; fi
 }
 
-# Both families local, computed without node: no node on PATH, or no git
-# repository (then DIR stands in for the checkout).
+# Both families local, computed without node: no git repository (then DIR
+# stands in for the checkout), or no node on PATH while stores.json applies no
+# darkmem store to this checkout (one that does exits 2: its documents or
+# ledger are in the mirror, and a local root would split the plan's state).
 _dagents_local() { # DIR TOP
   local base=${2:-$1} primary=${2:-$1} common
   if [ -n "$2" ]; then
@@ -52,6 +54,22 @@ _dagents_local() { # DIR TOP
   _DAGENTS_PROJECT=""
 }
 
+# _dagents_applied_darkmem TOP — stores.json records documents or progress as
+# darkmem for TOP's primary checkout; without jq, for any checkout.
+_dagents_applied_darkmem() {
+  local stores="${HOME:-}/.dagents/stores.json" common primary=$1
+  [ -n "${HOME:-}" ] && [ -f "$stores" ] || return 1
+  if ! command -v jq >/dev/null 2>&1; then
+    grep -q '"darkmem"' "$stores"
+    return
+  fi
+  if common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
+    primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null) || primary=$1
+  fi
+  jq -e --arg k "$primary" '.[$k] | objects | .documents == "darkmem" or .progress == "darkmem"' \
+    < "$stores" >/dev/null 2>&1
+}
+
 dagents_stores_init() { # [DIR]
   local dir=${1:-$PWD} top key out kind store root extra
   # Git Bash's $PWD is /tmp/... or /d/...; under MSYS_NO_PATHCONV git.exe takes
@@ -60,7 +78,16 @@ dagents_stores_init() { # [DIR]
   key="${HOME:-}|${top:-nogit:$dir}"
   [ "$_DAGENTS_KEY" = "$key" ] && return 0
   _DAGENTS_TOP=$top
-  if [ -z "$top" ] || ! command -v node >/dev/null 2>&1; then
+  if [ -z "$top" ]; then
+    _dagents_local "$dir" "$top"
+    _DAGENTS_KEY=$key
+    return 0
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    if _dagents_applied_darkmem "$top"; then
+      printf 'roots.sh: node is required while darkmem stores are applied\n' >&2
+      exit 2
+    fi
     _dagents_local "$dir" "$top"
     _DAGENTS_KEY=$key
     return 0
