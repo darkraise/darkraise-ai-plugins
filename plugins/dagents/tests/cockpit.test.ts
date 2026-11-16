@@ -5516,6 +5516,21 @@ describe('resume offer', () => {
     }
   })
 
+  test('runs again once an auto run ends, though no keyed file changed', async ($, on) => {
+    const w = await begin($, on, marked(RESUMABLE, 900), {
+      w: { nextStepOuts: [{ exitCode: 0, stdout: recomputed('Resume at Task 3', 950) }, { exitCode: 0, stdout: recomputed('Resume at Task 5', 950) }] },
+    })
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ type: 'Text', text: /Next: Resume at Task 3$/ })).toBeDefined()
+    w.files[AUTO] = autoFiles({ pending: null })[AUTO]!
+    await w.turn()
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+    w.files[AUTO] = autoFiles({ active: false, pending: null })[AUTO]!
+    await w.turn()
+    expect(w.nextStepRuns).toHaveLength(2)
+    expect(await band.find({ type: 'Text', text: /Next: Resume at Task 5$/ })).toBeDefined()
+  })
+
   test('never awaits a run, nor starts a second while one is in flight', async ($, on) => {
     const w = await begin($, on, RESUMABLE, { w: { nextStepOuts: ['hang'] } })
     w.files[LATEST] = { ...w.files[LATEST]!, mtimeMs: 950_000 }
