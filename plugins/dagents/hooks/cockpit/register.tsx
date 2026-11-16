@@ -194,6 +194,8 @@ function reconcilePrompt(root: string): string {
 }
 // The tools that wait on the person by their nature: their dialog is the question.
 const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
+// The endings of a main turn that asks the person to pick: dagents's finish menu and its confirmations.
+const ASKING_ENDS = /(Which option\?|Type 'discard' to confirm\.?|Ask me then: show the finish menu\.?)$/
 // Permission modes in which an "ask" is settled without the person.
 const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
 // The skills that run a plan's tasks in this session.
@@ -235,7 +237,7 @@ const BAND_WORDS: readonly BandSegment[] = ['model', 'effort', 'style', 'turn', 
 // the light theme and the dark alike.
 const CARD = '#8080800f'
 // How the desktop's run bar colors a task by its state.
-const RUN_SEGMENTS: Record<string, Segment> = { complete: 'done', assigned: 'active', blocked: 'blocked' }
+const RUN_SEGMENTS: Record<string, Segment> = { complete: 'done', deferred: 'done', assigned: 'active', waiting: 'active', blocked: 'blocked' }
 const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'status', '--porcelain=v2', '--branch']
 
 const budget = atom({ plugin: 'dagents', key: 'budget' } as const, null)
@@ -694,6 +696,17 @@ export const register: Register = on => {
             isPlain: true,
             fields: await turnFields($),
           },
+          undefined,
+          async () => void (await update($, activity, now => ({ ...now, isSent: true }))),
+        )
+      } else if (e.reason === 'answer' && S.questionSentAt !== null && S.questionSentAt >= turnStartedAt) {
+        // The ledger's waiting line already said what the turn asks.
+        S.heldDone = null
+      } else if (e.reason === 'answer' && ASKING_ENDS.test(e.answer.trim())) {
+        S.heldDone = null
+        await notify(
+          $,
+          { kind: 'question', title: '❓ Claude is asking', detail: excerpt(e.answer, 300), fields: await turnFields($) },
           undefined,
           async () => void (await update($, activity, now => ({ ...now, isSent: true }))),
         )
@@ -1423,6 +1436,29 @@ export const register: Register = on => {
               </Text>
             )
           }
+          if (task.state === 'deferred') {
+            return (
+              <Text key={`plan-${task.n}`} dimColor wrap="truncate-end">
+                ⏭ {label} · deferred
+              </Text>
+            )
+          }
+          if (task.state === 'waiting') {
+            return (
+              <Box key={`plan-${task.n}`} flexDirection="column">
+                <Text color={BUTTON_MAIN} bold wrap="truncate-end">
+                  ? {label}
+                </Text>
+                {task.question !== null && (
+                  <Box paddingLeft={INDENT}>
+                    <Text color={BUTTON_MAIN} wrap="truncate-end">
+                      {task.question}
+                    </Text>
+                  </Box>
+                )}
+              </Box>
+            )
+          }
           if (task.state === 'blocked') {
             return (
               <Box key={`plan-${task.n}`} flexDirection="column">
@@ -1955,12 +1991,16 @@ export const register: Register = on => {
               const label = `Task ${task.n}${task.title === '' ? '' : `: ${task.title}`}`
               const meta =
                 task.state === 'complete' ? (task.isClean ? 'reviewed clean' : null)
+                : task.state === 'deferred' ? 'deferred'
+                : task.state === 'waiting' ? task.question
                 : task.state === 'blocked' ? `BLOCKED${task.reason === null ? '' : ` · ${task.reason}`}`
                 : task.state === 'assigned' && (task.round !== null || task.seat !== null)
                   ? [task.round === null ? 'implementing' : `round ${task.round}`, task.seat === null ? null : shortSeat(task.seat)].filter(Boolean).join(' · ')
                   : null
               const icon: PanelRun =
                 task.state === 'complete' ? { text: '✓', color: 'green' }
+                : task.state === 'deferred' ? { text: '⏭', faint: true }
+                : task.state === 'waiting' ? { text: '?', color: 'magenta' }
                 : task.state === 'blocked' ? { text: '✗', color: 'red' }
                 : task.state === 'assigned' ? { text: '▸', color: 'blue' }
                 : { text: '○', faint: true }
@@ -1968,10 +2008,16 @@ export const register: Register = on => {
                 kind: 'text',
                 left: [
                   { ...icon, text: `${icon.text}  ` },
-                  { text: label, bold: task.state === 'assigned' || task.state === 'blocked', color: task.state === 'blocked' ? 'red' : undefined, dim: task.state === 'pending' },
+                  {
+                    text: label,
+                    bold: task.state === 'assigned' || task.state === 'blocked' || task.state === 'waiting',
+                    color: task.state === 'blocked' ? 'red' : task.state === 'waiting' ? 'magenta' : undefined,
+                    dim: task.state === 'pending' || task.state === 'deferred',
+                  },
                 ],
               })
-              if (meta !== null) lines.push({ kind: 'text', small: true, indent: 18, left: [{ text: meta, color: task.state === 'blocked' ? 'red' : undefined, dim: task.state !== 'blocked' }] })
+              const metaColor = task.state === 'blocked' ? 'red' : task.state === 'waiting' ? 'magenta' : undefined
+              if (meta !== null) lines.push({ kind: 'text', small: true, indent: 18, left: [{ text: meta, color: metaColor, dim: metaColor === undefined }] })
             }
             if (summary.isFinished) lines.push({ kind: 'text', left: [{ text: 'Final review clean.', color: 'green' }] })
             return panel(
@@ -2458,6 +2504,8 @@ const S = {
   // of a plan's ledger only records them, so a reload, a re-read or a resumed
   // plan sends nothing twice.
   ledgerSeen: new Map<string, Set<string>>(),
+  // When sendLedgerEvents last sent a task's waiting question: that turn's Done is the question.
+  questionSentAt: null as number | null,
   // The settings' default mode is unattended; read only until an event carries the session's mode.
   isUnattended: false,
   // The permission mode the last classic hook input carried; null before one.
@@ -3268,9 +3316,11 @@ async function readRun($: EngineInterface) {
           seat: known?.seat ?? null,
           isClean: known?.isClean ?? false,
           reason: known?.reason ?? null,
+          question: known?.question ?? null,
         }
       }),
-      done: ledger.tasks.filter(one => one.state === 'complete').length,
+      // A deferred task is done with as far as the run is concerned.
+      done: ledger.tasks.filter(one => one.state === 'complete' || one.state === 'deferred').length,
       total: numbers.length,
       isFinished: ledger.isFinished,
       isPlanRead: planPath !== null,
@@ -3299,10 +3349,14 @@ async function readFinish($: EngineInterface, path: string) {
   await syncTicker($)
 }
 
-// A task that became blocked or complete since the last read, said once.
+// A task that became blocked, waiting, deferred or complete since the last read, said once.
 async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
   const keys = summary.tasks.flatMap(task =>
-    task.state === 'blocked' ? [`blocked:${task.n}:${task.reason ?? ''}`] : task.state === 'complete' ? [`complete:${task.n}`] : [],
+    task.state === 'blocked' ? [`blocked:${task.n}:${task.reason ?? ''}`]
+    : task.state === 'waiting' ? [`waiting:${task.n}:${task.question ?? ''}`]
+    : task.state === 'deferred' ? [`deferred:${task.n}`]
+    : task.state === 'complete' ? [`complete:${task.n}`]
+    : [],
   )
   if (summary.isFinished) keys.push('finished')
   const seen = S.ledgerSeen.get(summary.plan ?? '')
@@ -3321,6 +3375,21 @@ async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
         kind: 'blocked',
         title: `🛑 Task ${task.n} blocked`,
         detail: task.reason ?? undefined,
+        fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }],
+      })
+    } else if (what === 'waiting' && task !== undefined) {
+      S.questionSentAt = await $.clock.now()
+      await notify($, {
+        kind: 'question',
+        title: `❓ Task ${task.n} waiting on you`,
+        detail: task.question ?? undefined,
+        fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }],
+      })
+    } else if (what === 'deferred' && task !== undefined) {
+      await notify($, {
+        kind: 'task',
+        title: `⏭ Task ${task.n} deferred`,
+        detail: task.title || undefined,
         fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }],
       })
     } else if (what === 'complete' && task !== undefined) {

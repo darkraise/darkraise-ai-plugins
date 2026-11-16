@@ -4428,6 +4428,46 @@ describe('run card', () => {
     ])
   })
 
+  test('reads waiting, deferred and review clean only in its clause', () => {
+    const ledger = parseLedger([
+      LEDGER,
+      'Task 2: waiting — which meter width?',
+      'Task 3: implementer inline (assigned; base 1234567)',
+      'Task 3: complete (deferred by the auto run) — done: nothing; verified: lint and self review clean; remaining: all; discovered: none; assumptions: none',
+    ].join('\n'))
+    expect(ledger.tasks.map(task => [task.n, task.state])).toEqual([[1, 'complete'], [2, 'waiting'], [3, 'deferred']])
+    expect(ledger.tasks[1]?.question).toBe('which meter width?')
+    expect(ledger.tasks[2]?.isClean).toBe(false)
+  })
+
+  test('a waiting line sends one question and a deferred task no completion', async ($, on) => {
+    const files = runFiles(LEDGER)
+    const fetches: World['fetches'] = []
+    world(on, { ...SIGNED_IN, files, fetches })
+    signedIn(on, files)
+    mock.store(on, { notifyUrl: WEBHOOK, notifyOn: 'task,question' })
+    await $.tool.call({ tool: 'Skill', skill: 'dagents:executing-plans' })
+    await $.session.start(START)
+    const ledger = files?.['/home/me/code/shop/.dagents/sdd/p/progress.md']
+    if (ledger !== undefined) ledger.text += '\nTask 2: waiting — which meter width?\nTask 3: complete (deferred by the auto run) — done: nothing'
+    await $.tool.call({ tool: 'Bash', command: 'cat .dagents/sdd/p/progress.md' })
+    await $.turn.complete({ answer: 'Which meter width should the card use?', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    const titles = fetches.map(f => String((f.body.embeds as Record<string, unknown>[])[0]?.title))
+    expect(titles.filter(t => /Task 2/.test(t))).toHaveLength(1)
+    expect(titles.filter(t => /✅ Task 3 complete/.test(t))).toEqual([])
+  })
+
+  test('a main turn ending on Which option? sends a question', async ($, on) => {
+    const fetches: World['fetches'] = []
+    world(on, { ...SIGNED_IN, fetches })
+    signedIn(on, {})
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.session.start(START)
+    await $.turn.complete({ answer: '1. Merge\n2. PR\n\nWhich option?', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(fetches).toHaveLength(1)
+    expect(String((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.title)).not.toMatch(/^✅ Done/)
+  })
+
   test('reads no task heading inside a fence, as plan.sh does', () => {
     const plan = ['# Plan', '', '````md', '```', '### Task 99: Example', '```', '````', '~~~', '## Task 98: Also an example', '~~~', '#### Task 1: Real', '# Task 2: Top level', '  ### Task 3: Indented'].join('\n')
     expect(planTasks(plan)).toEqual([

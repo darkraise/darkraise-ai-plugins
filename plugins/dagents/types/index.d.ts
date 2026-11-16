@@ -177,12 +177,14 @@ export type CockpitActivity = {
 export type CockpitRunTask = {
   n: number
   title: string
-  state: 'pending' | 'assigned' | 'complete' | 'blocked'
+  state: 'pending' | 'assigned' | 'complete' | 'blocked' | 'waiting' | 'deferred'
   /** The fix or review round in flight, "2/5". */
   round: string | null
   seat: string | null
   isClean: boolean
   reason: string | null
+  /** What a waiting task asks. */
+  question: string | null
 }
 
 /** A dagents run as its SDD ledger tells it. */
