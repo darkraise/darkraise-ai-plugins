@@ -588,6 +588,11 @@ describe('plugin-review-fixes: auto-run reconcile and relaxed handoff', () => {
     }
     expect(await handoffNotes($, on, files, 600_000)).toEqual([])
   })
+
+  test('A24: the same session before its last task is complete is nudged (control)', async ($, on) => {
+    const files = { ...configured({ handoffMode: 'relaxed' }), ...ledger('') }
+    expect((await handoffNotes($, on, files, 740_000)).length).toBeGreaterThan(0)
+  })
 })
 
 describe('plugin-review-fixes: the judge write guard', () => {
