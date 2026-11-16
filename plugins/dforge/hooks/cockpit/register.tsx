@@ -4203,9 +4203,9 @@ async function claudeReadBack($: EngineInterface, key: string, value: SettingVal
     const { path, mtime } = await configStamp($)
     const file = path === null ? {} : await readSettingsFile($, path)
     await applySettings($, inForce(file), mtime)
-    $.ui.toast(
-      `dforge: ${key} did not stick: the engine kept ${engine === undefined ? 'no value' : JSON.stringify(engine)}. Claude Code may have saved its own settings over it; set it again, or edit ${await userSettingsPath($)}.`,
-    )
+    // The terminal host cuts a toast after three 40-column lines, so the remedy
+    // comes before anything else and no path, which alone can fill a line, is named.
+    $.ui.toast(`dforge: ${key} did not stick (the engine kept ${engine === undefined ? 'no value' : JSON.stringify(engine)}). Set it again, or edit Claude's settings.json.`)
   } catch {
     // The read-back is a courtesy: a failure leaves the save shown as saved.
   }
