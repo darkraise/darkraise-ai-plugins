@@ -2525,7 +2525,7 @@ async function notify($: EngineInterface, event: NotifyEvent, editId?: string, o
   if (!S.kinds.includes(event.kind)) return
   const job = S.outbox.then(() => deliver($, event, editId, onSent)).catch(() => undefined)
   S.outbox = job
-  let timer: Timer | null = null
+  let timer = null as Timer | null
   const late = new Promise<void>(resolve => {
     timer = $.clock.after(NOTIFY_WAIT_MS, resolve)
   })
@@ -4359,7 +4359,7 @@ function kindLabel(kind: NotifyKind): string {
 
 // The promise's value, or null once `ms` pass first.
 async function within<T>($: EngineInterface, work: Promise<T>, ms: number): Promise<T | null> {
-  let timer: Timer | null = null
+  let timer = null as Timer | null
   const late = new Promise<null>(resolve => {
     timer = $.clock.after(ms, () => resolve(null))
   })
