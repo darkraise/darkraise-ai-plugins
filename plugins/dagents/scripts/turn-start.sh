@@ -23,6 +23,10 @@ touch "$stamp" 2>/dev/null || true
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/turn-refs.sh"
 if [ -n "$cwd" ] && turn_refs "$cwd" > "$stamp.refs.tmp" 2>/dev/null; then
   mv "$stamp.refs.tmp" "$stamp.refs" 2>/dev/null || true
+elif [ -n "$cwd" ] && [ ! -d "$cwd" ] && [ -f "$stamp.refs" ] && head -n 1 "$stamp.refs" > "$stamp.refs.tmp" 2>/dev/null && [ -s "$stamp.refs.tmp" ]; then
+  # The session's checkout was removed (a merged worktree): its common git
+  # directory still leads turn-end.sh to the primary checkout.
+  mv "$stamp.refs.tmp" "$stamp.refs" 2>/dev/null || true
 else
   rm -f "$stamp.refs.tmp" "$stamp.refs" 2>/dev/null || true
 fi

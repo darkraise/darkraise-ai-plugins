@@ -448,5 +448,60 @@ check "a writable latest.md: the heading alone is not enough" \
 check "a line merely containing the heading is not the block" \
   "$(ending_released $'Done. ## Next session' "$HOME/.claude/dagents/sessions/turns/s-nx" "$TMP/absent/handoff/latest.md" && echo released || echo held)" "held"
 
+# --- a turn that merges a plan or closes a milestone ends on next-step (rows 2, 7) ---
+stop_at() { # stop_at <session> <cwd> <last message> [stop_hook_active]
+  jq -n --arg sid "$1" --arg cwd "$2" --arg msg "$3" --argjson active "${4:-false}" \
+    '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:"",stop_hook_active:$active,last_assistant_message:$msg}' | bash "$END"
+}
+commit_all() { git -C "$1" add -A && git -C "$1" -c user.name=t -c user.email=t@example.invalid commit -qm "$2"; }
+TRP="$TMP/transitions"
+git init -q "$TRP"
+mkdir -p "$TRP/docs/dagents/plans"
+printf '# Completed plans\n\n- 2026-11-01 `docs/dagents/plans/2026-11-01-old.md` — merged into `main`\n' > "$TRP/docs/dagents/plans/completed.md"
+milestone() { printf '| %s | %s | it works | `docs/dagents/registers/%s.md` | %s | - |\n' "$1" "$2" "$1" "$3"; }
+{ printf '# Roadmap\n\n| M | Name | Exit | Register | State | Note |\n|---|---|---|---|---|---|\n'; milestone M1 One open; milestone M2 Two open; } > "$TRP/docs/dagents/roadmap.md"
+commit_all "$TRP" 'docs: roadmap'
+git -C "$TRP" worktree add -q "$TMP/wt-p" -b feature
+sleep 1; prompt s-tr1 "$TMP/wt-p"
+sleep 1
+printf -- '- 2026-11-16 `docs/dagents/plans/2026-11-16-p.md` — merged into `main`\n' >> "$TRP/docs/dagents/plans/completed.md"
+commit_all "$TRP" 'docs: record p'
+git -C "$TRP" worktree remove --force "$TMP/wt-p"
+out=$(stop_at s-tr1 "$TMP/wt-p" 'Merged.')
+check "a finishing turn in a removed worktree is held" "$(decision "$out")" "block"
+check "a finishing turn in a removed worktree: names next-step --complete and the plan" \
+  "$(jq -r .reason <<<"$out" | grep -c 'next-step" --complete docs/dagents/plans/2026-11-16-p.md')" "1"
+sleep 1; prompt s-tr1 "$TMP/wt-p"
+check "a later turn still finds the primary" "$(cat "$HOME/.claude/dagents/sessions/turns/s-tr1.refs")" \
+  "$(git -C "$TRP" rev-parse --path-format=absolute --git-common-dir)"
+
+sleep 1; prompt s-tr2 "$TRP"
+sleep 1
+sed 's/| M1 | One | \(.*\) | open |/| M1 | One | \1 | closed |/' "$TRP/docs/dagents/roadmap.md" > "$TMP/roadmap.md" && mv "$TMP/roadmap.md" "$TRP/docs/dagents/roadmap.md"
+commit_all "$TRP" 'docs: close M1'
+out=$(stop_at s-tr2 "$TRP" 'M1 closed.')
+check "a turn that closes a milestone is held once" "$(decision "$out")" "block"
+check "a turn that closes a milestone: names next-step --project" "$(jq -r .reason <<<"$out" | grep -c 'next-step" --project')" "1"
+check "a turn that closes a milestone: the retry passes" "$(stop_at s-tr2 "$TRP" 'M1 closed.' true)" ""
+
+SECOND="$TMP/transitions-2"
+git clone -q "$TRP" "$SECOND"
+sed 's/| M2 | Two | \(.*\) | open |/| M2 | Two | \1 | closed |/' "$SECOND/docs/dagents/roadmap.md" > "$TMP/roadmap.md" && mv "$TMP/roadmap.md" "$SECOND/docs/dagents/roadmap.md"
+printf -- '- 2026-11-16 `docs/dagents/plans/2026-11-16-q.md` — merged into `main`\n' >> "$SECOND/docs/dagents/plans/completed.md"
+commit_all "$SECOND" 'docs: close M2, record q'
+sleep 1; prompt s-tr3 "$TRP"
+sleep 1
+git -C "$TRP" pull -q --ff-only "$SECOND" HEAD
+check "a pull that moves the roadmap is not held" "$(stop_at s-tr3 "$TRP" 'Pulled.')" ""
+
+sleep 1; prompt s-tr4 "$TRP"
+sleep 1
+milestone M3 Three open >> "$TRP/docs/dagents/roadmap.md"
+commit_all "$TRP" 'docs: add M3'
+check "a design turn that edits the roadmap is not held" "$(stop_at s-tr4 "$TRP" 'Added M3.')" ""
+
+sleep 1; prompt s-tr5 "$TRP"
+check "nothing changed, nothing held" "$(stop_at s-tr5 "$TRP" 'Done.')" ""
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
