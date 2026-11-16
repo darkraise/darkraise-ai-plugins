@@ -755,8 +755,15 @@ export function propertiesFor(roots, slug, namedPath) {
 }
 
 // What a handoff note is about: the plan or draft its `## State` section names
-// on a `- Plan:` or `- Draft:` line, as {slug, path}, or null.
-export function checkpointTarget(text) {
+// on a `- Plan:` or `- Draft:` line, as {slug, path}, or null. With `marker`,
+// a note whose last next-step marker reads kind=complete or kind=project is
+// the project's, whatever `## State` it kept from before.
+export function checkpointTarget(text, { marker = false } = {}) {
+  if (marker) {
+    const last = (text.match(/^<!-- next-step: .* -->\r?$/gm) ?? []).at(-1);
+    const kind = last && /^<!-- next-step: kind=(\S+)/.exec(last)[1];
+    if (kind === "complete" || kind === "project") return { slug: "project", path: null };
+  }
   const state = /^## State[ \t]*\r?\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(text);
   if (!state) return null;
   const named = /^- (?:Plan|Draft): `([^`]+)`/m.exec(state[1]);
