@@ -454,6 +454,11 @@ touch "$RB"
 run
 check "newest wins: the rollout takes it again" "$status" "3"
 has "newest wins: rollout source" "$out" "source: rollout"
+# A Claude session that finds its own record is the caller, whatever Codex
+# session runs beside it in the checkout.
+CLAUDE_CODE_SESSION_ID=s-1 run
+check "own session: a newer rollout does not replace it" "$status" "0"
+has "own session: Claude source" "$out" "source: record"
 
 # The regression this whole filter exists for: a Claude controller running
 # Codex executor tasks in its own worktree must keep its verdict.

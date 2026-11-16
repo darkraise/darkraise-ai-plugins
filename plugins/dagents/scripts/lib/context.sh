@@ -436,7 +436,11 @@ ctx_line() {
   fi
   if ctx_have_jq; then
     if ctx_find_transcript; then claude=$CTX_TRANSCRIPT; fi
-    if ctx_find_rollout; then rollout=$CTX_ROLLOUT; fi
+    # A session id whose own record was found names the caller: a Codex
+    # session in the same checkout must not take its budget line.
+    if [ -z "${CLAUDE_CODE_SESSION_ID:-}" ] || [ "$CTX_SOURCE" != record ]; then
+      if ctx_find_rollout; then rollout=$CTX_ROLLOUT; fi
+    fi
   fi
   # The live session is the one still being appended to. Session records are
   # never deleted, so a record source does not by itself prove a live Claude
