@@ -215,9 +215,18 @@ check "entry point is at most 5,500 bytes" \
 
 # --- no node while darkmem is applied: one warning per session (row 15, A13) ---
 . "$HERE/fixtures/darkmem-stores.sh"
-nonode_path() { # PATH without the directories that hold node
-  local d out='' IFS=:
-  for d in $PATH; do [ -x "$d/node" ] || [ -x "$d/node.exe" ] || out=${out:+$out:}$d; done
+nonode_path() { # PATH with no node: a directory holding node is dropped, or, when it holds git or jq too, stood in for by links to its other programs
+  local d f m out='' IFS=:
+  for d in $PATH; do
+    if [ -x "$d/node" ] || [ -x "$d/node.exe" ]; then
+      [ -x "$d/git" ] || [ -x "$d/git.exe" ] || [ -x "$d/jq" ] || [ -x "$d/jq.exe" ] || continue
+      m="$TMP/nonode/$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
+      mkdir -p "$m"
+      for f in "$d"/*; do case ${f##*/} in node | node.exe) ;; *) ln -s "$f" "$m/" 2>/dev/null ;; esac; done
+      d=$m
+    fi
+    out=${out:+$out:}$d
+  done
   printf '%s\n' "$out"
 }
 NN_PATH=$(nonode_path)
