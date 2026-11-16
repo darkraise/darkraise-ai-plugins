@@ -279,6 +279,55 @@ check "latest edges: no Next session section exits 6" "$status" 6
 stored "<!-- next-step: kind=plan done=1 closed=0 subject=docs/dforge/plans/missing.md at=1 -->"; latest
 check "latest edges: a missing plan passes exit 2 through" "$status" 2
 
+# --- --print --latest: complete markers, an indexed plan, malformed markers ---
+lfixture
+index_p
+want=$(cd "$L" && bash "$SCRIPT" --print --complete "$P" 2>/dev/null | grep '^\*\*Next:\*\*')
+stored "<!-- next-step: kind=complete done=2 closed=0 subject=$P at=1 -->"
+latest
+check "latest complete: exits 0" "$status" 0
+has "latest complete: recomputes the --complete block" "$out" "$want"
+want=$(cd "$L" && bash "$SCRIPT" --print "$P" 2>/dev/null | grep '^\*\*Next:\*\*')
+stored "<!-- next-step: kind=plan done=1 closed=0 subject=$P at=1 -->" "Plan \`$P\`: 2 of 3 tasks complete (ledger \`x\`)." "Resume at Task 3 (Three)."
+latest
+check "latest plan: an indexed plan with no ledger recomputes" "$status" 0
+has "latest plan: an indexed plan with no ledger prints its block" "$out" "$want"
+for bad in --latest -x docs/dforge/plans/p.txt; do
+  stored "<!-- next-step: kind=plan done=1 closed=0 subject=$bad at=1 -->" "Plan \`$P\`: 0 of 3 tasks complete." "Start at Task 1 (One)."
+  latest
+  check "latest edges: the subject $bad exits 6" "$status" 6
+  has "latest edges: the subject $bad is named malformed" "$err" "malformed marker subject"
+done
+stored "<!-- next-step: kind=adhoc done=1x closed=0 subject=- at=1 -->"
+latest
+check "latest edges: non-numeric counts exit 6" "$status" 6
+
+# --- a kept detached HEAD is recorded as a commit and recomputed as one ---
+lfixture
+git -C "$L" checkout -q --detach
+printf 'y\n' > "$L/y.txt" && git -C "$L" add y.txt && git -C "$L" commit -qm detached
+sha=$(git -C "$L" rev-parse --short HEAD)
+(cd "$L" && timeout 60 bash "$SCRIPT" --kept "$P" >/dev/null 2>&1)
+has "kept detached: the marker records the commit" "$(LATEST=$LL section_last)" "kind=kept branch=detached:$sha "
+git -C "$L" checkout -q main
+latest
+check "kept detached: an unmerged commit exits 0" "$status" 0
+has "kept detached: an unmerged commit prints the stored block" "$out" "**Next:**"
+git -C "$L" merge -q --no-ff -m merge "$sha"
+latest
+check "kept detached: a merged commit exits 6" "$status" 6
+
+# --- the supersession counts are the primary's, wherever the block is written ---
+lfixture
+printf -- '- 2026-10-02 — `docs/dforge/plans/2026-10-02-b.md` — merged\n' >> "$LD/plans/completed.md"
+git -C "$L" add -A && git -C "$L" commit -qm index
+git -C "$L" worktree add -q --detach "$TMP/latest-wt" HEAD~1
+(cd "$TMP/latest-wt" && timeout 60 bash "$SCRIPT" --adhoc --phase build --next "Fix the thing." >/dev/null 2>&1)
+has "counts: a block written in an older worktree counts the primary's index" "$(LATEST=$LL section_last)" " done=2 "
+latest
+check "counts: that block is not superseded in the primary" "$status" 0
+git -C "$L" worktree remove --force "$TMP/latest-wt"
+
 # --- timing: 1,000 rows across 10 registers and 25 plans naming one spec ---
 lfixture
 : > "$LD/specs/big.md"
