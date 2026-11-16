@@ -2618,6 +2618,8 @@ const S = {
   settingProblems: [] as string[],
   // A consent setting whose raise from 0 waits for its confirm press; null otherwise.
   consentPending: null as { key: string; value: number } | null,
+  // A session read one of whose steps threw: the slow poll tick reads it again.
+  isSessionPartial: false,
   // The problem line for a settings file that does not parse (C15), while it does not; null otherwise.
   brokenConfig: null as string | null,
   // Keys something outside the settings file forces, with the words their rows show.
@@ -4272,12 +4274,14 @@ async function readSession($: EngineInterface, isStart: boolean) {
   S.roots = { key: '', value: null }
   S.offerRead = ''
   S.offerRegisters = null
-  // Each read fills its own section: one that throws leaves only that section unread.
+  // Each read fills its own section: one that throws leaves only that section
+  // unread, and the session partly read, so a slow poll tick reads it again.
+  let isPartial = false
   const step = async (part: () => Promise<unknown>) => {
     try {
       await part()
     } catch {
-      // The section keeps what it showed; the poll reads it again.
+      isPartial = true
     }
   }
   await step(() => loadSettings($))
@@ -4306,6 +4310,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
   await step(() => beat($))
   await step(() => readVersion($))
   await step(() => readRemote($))
+  S.isSessionPartial = isPartial
   // '' when the id could not be read: the poll adopts the first id it reads.
   await update($, sessionRead, () => id ?? '')
 }
@@ -4333,6 +4338,10 @@ async function pollTick($: EngineInterface) {
     const isSlowTick = S.polls % DETAIL_EVERY === 0
     // An age crossing LIVE_MS stops a once-a-second clock with no event to say so.
     await syncTicker($)
+    if (isSlowTick && S.isSessionPartial) {
+      await readSession($, false)
+      return
+    }
     const isShown = (await live($)).isMinimized || (await isPaneUp($))
     // The quick pace is for a turn running under a drawn cockpit; every other
     // tick waits for the slow one. A closed pane still takes the settings
