@@ -4423,6 +4423,22 @@ describe('discord', () => {
       expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)).toEqual(isAsked ? ['⏳ Waiting for approval'] : [])
     })
 
+  for (const [agentId, isAsked] of [['agent-2', true], [undefined, false]] as const)
+    test(`a permission request ${agentId === undefined ? 'from the main thread sets' : "from a subagent leaves"} the session's mode`, async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
+      on('classic.UserPromptSubmit', () => ({}) as never)
+      on('classic.PermissionRequest', () => ({}) as never)
+      const clock = world(on, { tokens: 50_000, fetches, settings: { permissions: { defaultMode: 'default' } }, config: { notifyAskAfter: 20 } })
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.classic.UserPromptSubmit({ prompt: 'go', permission_mode: 'default' })
+      await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: {}, permission_mode: 'bypassPermissions', ...(agentId === undefined ? {} : { agent_id: agentId }) } as never)
+      await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+      await clock.advance(30_000)
+      expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)).toEqual(isAsked ? ['⏳ Waiting for approval'] : [])
+    })
+
   test('says when a turn fails', async ($, on) => {
     const fetches: World['fetches'] = []
     world(on, { tokens: 50_000, fetches })

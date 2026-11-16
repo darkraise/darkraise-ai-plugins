@@ -676,8 +676,9 @@ export const register: Register = on => {
     if (typeof e.permission_mode === 'string' && e.permission_mode !== '') S.permissionMode = e.permission_mode
     return next(e)
   })
+  // A subagent's request carries the subagent's mode, not the session's.
   on('classic.PermissionRequest', ($, e, next) => {
-    if (typeof e.permission_mode === 'string' && e.permission_mode !== '') S.permissionMode = e.permission_mode
+    if (e.agent_id === undefined && typeof e.permission_mode === 'string' && e.permission_mode !== '') S.permissionMode = e.permission_mode
     return next(e)
   })
 
