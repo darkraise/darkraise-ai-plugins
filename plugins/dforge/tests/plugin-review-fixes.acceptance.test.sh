@@ -248,6 +248,85 @@ has "A11: over the cap, the newest ledger line is kept" "$ctx" "NEWESTLINE-MARK"
 lacks "A11: over the cap, the oldest lines are the ones dropped" "$ctx" "OLDLINE-1 "
 check "A11: the hook output stays under the 10,000-character cap" "$([ "${#ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
 
+# --- A12: auto-run clear, stop --stale and start --register ---
+R12="$TMP/ar"
+mkrepo "$R12"
+AR="$S/auto-run"
+STATE12="$R12/.dforge/sdd/auto-run.json"
+beat() { # beat <session> [age seconds]: the heartbeat a live cockpit writes
+  local f
+  f="$HOME/.claude/dforge/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  mkdir -p "$(dirname "$f")"
+  printf '%s\n' "$(( $(date +%s) - ${2:-0} ))" > "$f"
+}
+arun() { local s=$1; shift; beat "$s"; (cd "$R12" && bash "$AR" --session "$s" "$@"); }
+printf '# Spec\n' > "$R12/docs/spec12.md"
+mkdir -p "$R12/docs/dforge/registers"
+printf '# Register\n\n**Source:** x\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n' > "$R12/docs/r12.md"
+git -C "$R12" add -A && git -C "$R12" commit -qm docs
+arun s-12 start --spec docs/spec12.md --register docs/r12.md >/dev/null
+check "A12: start --register fills **Covers:** - with the spec" "$(grep -c '^\*\*Covers:\*\* docs/spec12.md$' "$R12/docs/r12.md")" "1"
+arun s-12 attach --plan docs/plan.md >/dev/null
+arun s-12 phase plan >/dev/null
+# latest.md written for another plan.
+mkdir -p "$R12/docs/plans"
+{ cat "$R12/docs/plan.md"; } > "$R12/docs/plans/other.md"
+(cd "$R12" && bash "$S/next-step" docs/plans/other.md >/dev/null 2>&1)
+arun s-12 clear >/dev/null 2>"$TMP/err"; rc=$?
+check "A12: clear refuses a latest.md prompt for another plan (exit 4)" "$rc" "4"
+has "A12: the refusal says the prompt names another plan" "$(cat "$TMP/err")" "another plan"
+check "A12: and leaves no clear pending" "$(arun s-12 pending)" "none"
+# A run whose owner is gone is stopped from another session.
+beat s-12 100000
+(cd "$R12" && bash "$AR" --session s-other stop --stale >"$TMP/o" 2>&1); rc=$?
+check "A12: stop --stale stops a run whose owner session is dead (exit 0)" "$rc" "0"
+check "A12: the run is no longer active" "$(jq -r '.active' "$STATE12" | tr -d '\r')" "false"
+arun s-12b start --spec docs/spec12.md --force >/dev/null
+(cd "$R12" && bash "$AR" --session s-other stop --stale >"$TMP/o" 2>&1); rc=$?
+check "A12: stop --stale leaves a live owner alone (exit 3)" "$rc" "3"
+check "A12: the live run stays active" "$(jq -r '.active' "$STATE12" | tr -d '\r')" "true"
+check "A12: resume-execution names a stale run and the command that stops it" "$(grep -c 'stop --stale' "$P/skills/resume-execution/SKILL.md")" "1"
+
+# --- A13: darkmem stores applied and no Node on PATH ---
+R13="$TMP/nonode"
+mkrepo "$R13"
+NB="$TMP/nonode-bin"
+mkdir -p "$NB"
+IFS=: read -r -a pdirs <<<"$PATH"
+for d in "${pdirs[@]}"; do
+  [ -d "$d" ] || continue
+  for f in "$d"/*; do
+    b=${f##*/}
+    case $b in node | nodejs | npm | npx | corepack) continue ;; esac
+    [ -e "$NB/$b" ] || ln -s "$f" "$NB/$b" 2>/dev/null
+  done
+done
+. "$HERE/fixtures/darkmem-stores.sh"
+M13=$(stores_home "$HOME" "$R13" nonode local darkmem)
+mkdir -p "$R13/.dforge/sdd/plan"
+printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commits a..b, review clean)\nTask 2: complete (commits b..c, review clean)\n' > "$R13/.dforge/sdd/plan/progress.md"
+cp "$R13/.dforge/sdd/plan/progress.md" "$TMP/ledger13.before"
+check "A13: the sandbox PATH has no node" "$(PATH=$NB command -v node || echo none)" "none"
+for argv in "task-brief|--open|docs/plan.md|1" "next-step|docs/plan.md" "task-close|docs/plan.md|1|$CP" "task-step|start|docs/plan.md|1"; do
+  IFS='|' read -r -a a <<<"$argv"
+  run bash -c "cd '$R13' && PATH='$NB' bash '$S/${a[0]}' \"\${@:1}\"" _ "${a[@]:1}"
+  check "A13: ${a[0]} exits 2 without node" "$rc" "2"
+  has "A13: ${a[0]} names the node requirement" "$out$err" "node is required while darkmem stores are applied"
+done
+check "A13: no script wrote the local ledger" "$(cmp -s "$R13/.dforge/sdd/plan/progress.md" "$TMP/ledger13.before" && echo same || echo changed)" "same"
+check "A13: no script wrote a ledger line into the mirror" "$([ -e "$M13/work/sdd/plan/progress.md" ] && echo written || echo none)" "none"
+hookin() { jq -cn --arg cwd "$R13" '{hook_event_name:"SessionStart",session_id:"s-nonode",transcript_path:"",cwd:$cwd,source:"startup"}'; }
+out=$(hookin | PATH="$NB" bash "$S/session-start.sh" 2>/dev/null); rc=$?
+ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out")
+check "A13: session start passes" "$rc" "0"
+check "A13: session start injects the warning once" "$(grep -c 'node is required while darkmem stores are applied' <<<"$ctx")" "1"
+out=$(hookin | PATH="$NB" bash "$S/session-start.sh" 2>/dev/null)
+ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out")
+check "A13: a second start of the same session injects none" "$(grep -c 'node is required while darkmem stores are applied' <<<"$ctx")" "0"
+out=$(jq -cn --arg cwd "$R13" '{hook_event_name:"Stop",session_id:"s-nonode",transcript_path:"",cwd:$cwd,stop_hook_active:false,last_assistant_message:"Done."}' | PATH="$NB" bash "$S/turn-end.sh" 2>/dev/null); rc=$?
+check "A13: the Stop hook passes" "$rc:$(jq -r '.decision // "pass"' <<<"${out:-{\}}" 2>/dev/null)" "0:pass"
+rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
+
 # --- footer ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
