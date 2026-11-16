@@ -76,6 +76,58 @@ _route_covers() {
   return 1
 }
 
+# _route_class ASSIGNED — the route of an Assigned cell, into _ROUTE_CLASS as
+# "<kind>\036<rank>\036<target>\036<target path>\036<via spec>": kind rule,
+# stale, plan, spec, unrecorded, finished (a spec whose plans are all
+# finished), elsewhere or label.
+_route_class() {
+  local a=$1 plans name path sub live="" counted="" pick
+  _ROUTE_CLASS=""
+  if [ -z "$a" ] || [ "$a" = "-" ]; then
+    _ROUTE_CLASS="rule"$'\036'4$'\036'"$a"$'\036\036'0
+  elif [ "$(dagents_name_key "$(plan_name "$ROUTE_ROOT" "$a")")" = "$(dagents_name_key "$ROUTE_FINISHED")" ] || plan_finished "$ROUTE_ROOT" "$a"; then
+    _ROUTE_CLASS="stale"
+  elif [ -f "$(dagents_resolve "$a")" ]; then
+    if [ -n "$(plan_tasks "$(dagents_resolve "$a")")" ] || [ -n "$(plan_lettered "$(dagents_resolve "$a")")" ]; then
+      _ROUTE_CLASS="plan"$'\036'1$'\036'"$a"$'\036\036'0
+      return 0
+    fi
+    # A spec's rows route by its plans: a live one is executed, none means
+    # the spec still needs one, and once all are finished the row is a
+    # requirement left over or an epic built and awaiting its audit.
+    plans=$(_spec_plan_files "$ROUTE_ROOT" "$a")
+    if [ -z "$plans" ]; then
+      _ROUTE_CLASS="spec"$'\036'2$'\036'"$a"$'\036\036'0
+      return 0
+    fi
+    while IFS=$'\t' read -r name path sub; do
+      if [ "$(dagents_name_key "$name")" = "$(dagents_name_key "$ROUTE_FINISHED")" ] || plan_finished "$ROUTE_ROOT" "$name"; then
+        continue
+      fi
+      if _route_counted "$path"; then
+        counted="$counted$(printf '%06d\t%s\t%s\t%s' "${sub:-999999}" "$(basename "$path")" "$name" "$path")
+"
+      else
+        live=1
+      fi
+    done <<<"$plans"
+    if [ -n "$counted" ]; then
+      # The lowest sub-project first, else the oldest filename date.
+      pick=$(grep . <<<"$counted" | LC_ALL=C sort | awk 'NR == 1')
+      _ROUTE_CLASS="plan"$'\036'1$'\036'"$(cut -f3 <<<"$pick")"$'\036'"$(cut -f4 <<<"$pick")"$'\036'1
+    elif [ -n "$live" ]; then
+      _ROUTE_CLASS="unrecorded"
+    else
+      _ROUTE_CLASS="finished"$'\036'2$'\036'"$a"$'\036\036'0
+    fi
+  elif [[ $a == *.md ]]; then
+    _ROUTE_CLASS="elsewhere"
+  else
+    _ROUTE_CLASS="label"$'\036'3$'\036'"$a"$'\036\036'0
+  fi
+  return 0
+}
+
 # route_rows — classify the open rows on stdin, one per line:
 # "<register>\t<id>\t<item>\t<assigned>\t<acceptance>\t<state>\t<note>".
 # Reads ROUTE_ROOT, ROUTE_FINISHED, ROUTE_MS and ROUTE_OUTSIDE_MS; sets
@@ -84,9 +136,8 @@ _route_covers() {
 # ROUTE_ELSEWHERE and ROUTE_UNRECORDED. Call it in the caller's own shell, never
 # inside $(…), or the outputs are lost.
 route_rows() {
-  local rreg rid rassigned rstate a r k t tpath vs best=9 target_path="" via_spec=0 \
-    target_exec ms_id ms_name plans name path sub live counted pick \
-    followups="" ids
+  local rreg rid rassigned rstate a c r k t tpath vs best=9 target_path="" via_spec=0 \
+    target_exec ms_id ms_name followups="" ids classes=$'\n' covered=$'\n'
   ROUTE_KIND="" ROUTE_TARGET="" ROUTE_ACTION="" ROUTE_LAUNCH_CMD="" ROUTE_LAUNCH_PLAN=""
   ROUTE_WAITING="" ROUTE_BUILT="" ROUTE_STALE="" ROUTE_ELSEWHERE="" ROUTE_UNRECORDED=""
   # The Assigned cell decides the route, not the row order. A row still on
@@ -98,57 +149,34 @@ route_rows() {
   while IFS=$'\037' read -r rreg rid _ rassigned _ rstate _; do
     a=${rassigned#\`}
     a=${a%\`}
-    t=$a tpath="" vs=0
     if [ "$rstate" = verify ]; then
       ROUTE_WAITING="${ROUTE_WAITING:+$ROUTE_WAITING, }#$rid"; continue
-    elif [ -z "$a" ] || [ "$a" = "-" ]; then
-      r=4 k=rule
-    elif [ "$(dagents_name_key "$(plan_name "$ROUTE_ROOT" "$a")")" = "$(dagents_name_key "$ROUTE_FINISHED")" ] || plan_finished "$ROUTE_ROOT" "$a"; then
-      ROUTE_STALE="${ROUTE_STALE:+$ROUTE_STALE, }#$rid"; continue
-    elif [ -f "$(dagents_resolve "$a")" ]; then
-      if [ -n "$(plan_tasks "$(dagents_resolve "$a")")" ] || [ -n "$(plan_lettered "$(dagents_resolve "$a")")" ]; then
-        r=1 k=plan
-      else
-        # A spec's rows route by its plans: a live one is executed, none
-        # means the spec still needs one, and once all are finished the row
-        # is a requirement left over or an epic built and awaiting its audit.
-        plans=$(_spec_plan_files "$ROUTE_ROOT" "$a")
-        if [ -z "$plans" ]; then
-          r=2 k=spec
-        else
-          live="" counted=""
-          while IFS=$'\t' read -r name path sub; do
-            if [ "$(dagents_name_key "$name")" = "$(dagents_name_key "$ROUTE_FINISHED")" ] || plan_finished "$ROUTE_ROOT" "$name"; then
-              continue
-            fi
-            if _route_counted "$path"; then
-              counted="$counted$(printf '%06d\t%s\t%s\t%s' "${sub:-999999}" "$(basename "$path")" "$name" "$path")
-"
-            else
-              live=1
-            fi
-          done <<<"$plans"
-          if [ -n "$counted" ]; then
-            # The lowest sub-project first, else the oldest filename date.
-            pick=$(grep . <<<"$counted" | LC_ALL=C sort | awk 'NR == 1')
-            t=$(cut -f3 <<<"$pick") tpath=$(cut -f4 <<<"$pick") vs=1
-            r=1 k=plan
-          elif [ -n "$live" ]; then
-            ROUTE_UNRECORDED="${ROUTE_UNRECORDED:+$ROUTE_UNRECORDED, }#$rid"; continue
-          elif _route_covers "$rreg" "$a"; then
-            followups="$followups$(dagents_name_key "$a")	#$rid
-"
-            r=2 k=followup
-          else
-            ROUTE_BUILT="${ROUTE_BUILT:+$ROUTE_BUILT, }#$rid"; continue
-          fi
-        fi
-      fi
-    elif [[ $a == *.md ]]; then
-      ROUTE_ELSEWHERE="${ROUTE_ELSEWHERE:+$ROUTE_ELSEWHERE, }#$rid"; continue
-    else
-      r=3 k=label
     fi
+    # Rows sharing an Assigned cell route alike, so each cell is classified
+    # once: a spec's classification reads every plan file.
+    case $classes in
+      *$'\n'"$a"$'\035'*) c=${classes#*$'\n'"$a"$'\035'}; c=${c%%$'\n'*} ;;
+      *) _route_class "$a"; c=$_ROUTE_CLASS; classes="$classes$a"$'\035'"$c"$'\n' ;;
+    esac
+    IFS=$'\036' read -r k r t tpath vs <<<"$c"
+    case $k in
+      stale) ROUTE_STALE="${ROUTE_STALE:+$ROUTE_STALE, }#$rid"; continue ;;
+      elsewhere) ROUTE_ELSEWHERE="${ROUTE_ELSEWHERE:+$ROUTE_ELSEWHERE, }#$rid"; continue ;;
+      unrecorded) ROUTE_UNRECORDED="${ROUTE_UNRECORDED:+$ROUTE_UNRECORDED, }#$rid"; continue ;;
+      finished)
+        case $covered in
+          *$'\n'"$rreg"$'\035'"$a"$'\035'*) c=${covered#*$'\n'"$rreg"$'\035'"$a"$'\035'}; c=${c%%$'\n'*} ;;
+          *) if _route_covers "$rreg" "$a"; then c=1; else c=0; fi; covered="$covered$rreg"$'\035'"$a"$'\035'"$c"$'\n' ;;
+        esac
+        if [ "$c" -eq 1 ]; then
+          followups="$followups$(dagents_name_key "$a")	#$rid
+"
+          r=2 k=followup
+        else
+          ROUTE_BUILT="${ROUTE_BUILT:+$ROUTE_BUILT, }#$rid"; continue
+        fi
+        ;;
+    esac
     if [ "$r" -lt "$best" ]; then best=$r ROUTE_TARGET=$t ROUTE_KIND=$k target_path=$tpath via_spec=$vs; fi
   done < <(tr '\t' '\037')
 

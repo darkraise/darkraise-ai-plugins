@@ -12,6 +12,8 @@
 # Usage: next-step [--host claude|codex] [--print] [--complete|--kept] PLAN_FILE
 #        next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION
 #        next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION
+#        next-step [--host claude|codex] [--print] --project [--keep-notes]
+#        next-step [--host claude|codex] --print --latest
 #   --print     compute and print the block only: write, create and delete
 #               nothing, and skip the background-work check.
 #   --complete  the plan is finished and its branch integrated; the ledger may
@@ -30,6 +32,12 @@
 #               plan or draft file) is handing off; the notes in latest.md are
 #               the authority. --phase design launches the planning model,
 #               --phase build the execution model.
+#   --project   no plan is in hand (between plans, or after a milestone close):
+#               the block comes from the current milestone's registers, or
+#               every register when no milestone is current. Replaces latest.md
+#               wholesale unless --keep-notes, which keeps the notes above it.
+#   --latest    recompute the block latest.md holds from what its marker
+#               names (requires --print), and print it with the marker last.
 #   --host      which client the next session launches; default claude. A plan
 #               states its own host in its header, so the flag serves the paths
 #               that have no plan to read.
@@ -39,7 +47,8 @@
 # Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
 #       latest.md could not be written; 5 background work this session started
 #       is still running (scripts/in-flight): nothing printed or written
-#       (never under --print).
+#       (never under --print); 6 --print --latest has nothing to resume
+#       (nothing on stdout, at most one reason on stderr).
 set -euo pipefail
 
 # Failures print on stdout as well as stderr. A session that surfaces only
@@ -51,7 +60,7 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--host claude|codex] [--print] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION"; }
+usage() { fail 2 "usage: next-step [--host claude|codex] [--print] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print] --project [--keep-notes] | next-step [--host claude|codex] --print --latest"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
@@ -191,8 +200,17 @@ execution_skill() { # execution_skill EXECUTION_LINE
   fi
 }
 
-complete=0 kept=0 draft=0 adhoc=0 phase="" next_action=""
+complete=0 kept=0 draft=0 adhoc=0 project=0 keep_notes=0 latest_mode=0 phase="" next_action=""
 case "${1:-}" in
+  --latest)
+    latest_mode=1; shift
+    { [ $# -eq 0 ] && [ "$print_only" -eq 1 ]; } || usage
+    ;;
+  --project)
+    project=1; shift
+    if [ "${1:-}" = --keep-notes ]; then keep_notes=1; shift; fi
+    [ $# -eq 0 ] || usage
+    ;;
   --complete) complete=1; shift ;;
   --kept) kept=1; shift ;;
   --draft)
@@ -209,9 +227,55 @@ case "${1:-}" in
     ;;
 esac
 
+# collect_rows — read register paths on stdin; set open_rows (route_rows'
+# input lines), reg_list and outside_ms, against current_ms and ms_regs.
+collect_rows() {
+  local reg_file rows
+  open_rows="" reg_list="" outside_ms=""
+  while IFS= read -r reg_file; do
+    [ -n "$reg_file" ] || continue
+    rows=$(register_open "$reg_file")
+    [ -n "$rows" ] || continue
+    # The milestone audit reads only the registers below the milestone.
+    if [ -n "$current_ms" ] && ! grep -qxF -- "$reg_file" <<<"$ms_regs"; then outside_ms=1; fi
+    # Several registers may cover one spec; every one that has open rows is
+    # named, so the count is never attributed to the wrong file.
+    reg_list="${reg_list:+$reg_list, }\`$(dagents_name "$reg_file")\`"
+    open_rows="${open_rows}$(ROUTE_REG=$reg_file awk '{ print ENVIRON["ROUTE_REG"] "\t" $0 }' <<<"$rows")
+"
+  done
+  open_rows=$(grep . <<<"$open_rows" || true)
+}
+
+# render_rows — the Next line, prompt and launch for open_rows from the
+# ROUTE_* outputs of route_rows.
+render_rows() {
+  local open_n row_list kind action waiting stale stale_note ms_id ms_name verify_clause="" built_clause=""
+  open_n=$(grep -c . <<<"$open_rows")
+  row_list=$(awk -F'\t' '
+    NR <= 3 { printf "%s#%s %s", (NR > 1 ? "; " : ""), $2, $3 }
+    END { if (NR > 3) printf " +%d more", NR - 3 }
+  ' <<<"$open_rows")
+  kind=$ROUTE_KIND action=$ROUTE_ACTION waiting=$ROUTE_WAITING stale=$ROUTE_STALE
+  launch_cmd=$ROUTE_LAUNCH_CMD launch_plan=$ROUTE_LAUNCH_PLAN
+  stale_note=""
+  [ -z "$stale" ] || stale_note="Still assigned to a finished plan: $stale — resolve or reassign them with \`scripts/register set\`."
+  next_line="Register rows still open ($open_n) in $reg_list: $row_list.${stale_note:+ $stale_note}${action:+ $action}"
+  if [ "$kind" = milestone ]; then
+    ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
+    [ -z "$waiting" ] || verify_clause="; rows awaiting the owner's check (verify): $waiting"
+    [ -z "$ROUTE_BUILT" ] || built_clause=" Built, awaiting the audit: $ROUTE_BUILT."
+    prompt="Close milestone $ms_id ($ms_name) of \`$(dagents_name "$(dagents_docs_root)")/roadmap.md\` with dagents:closing-a-milestone$verify_clause.$built_clause"
+    launch=1
+  elif [ -n "$kind" ]; then
+    prompt="Continue the work recorded in $reg_list: $open_n rows are open ($row_list). $action"
+    launch=1
+  fi
+}
+
 status_line="" next_line="" prompt="" launch=1 launch_cmd="" launch_plan="" escalated_at=""
 
-if [ "$adhoc" -eq 1 ]; then
+if [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ] || [ "$latest_mode" -eq 1 ]; then
   root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
   primary=$(plan_primary_root "$root")
   dir=$primary
@@ -236,6 +300,68 @@ dagents_stores_init "$root"
 if [ "$(dagents_progress_store)" = darkmem ]; then latest_shown=$(dagents_latest_file)
 else latest_shown="$(dagents_dir_rel state "$primary")/handoff/latest.md"; fi
 
+# --print --latest: the stored block, recomputed from what its marker names
+# when the repository can answer it, so a reader never replays a stale one.
+if [ "$latest_mode" -eq 1 ]; then
+  gone() { printf 'next-step: %s\n' "$1" >&2; exit 6; }
+  latest=$(dagents_latest_file)
+  [ -f "$latest" ] || gone "no latest.md at $latest"
+  stored=$(tr -d '\r' < "$latest" | awk '
+    /^## Next session[ \t]*$/ { on = 1; print; next }
+    on && /^## / { exit }
+    on')
+  [ -n "$stored" ] || gone "latest.md has no Next session section"
+  marker=$(grep -E '^<!-- next-step: .* -->$' <<<"$stored" | tail -n 1 || true)
+  stored=$(grep -vE '^<!-- next-step: ' <<<"$stored" | awk 'NF { last = NR } { line[NR] = $0 } END { for (i = 1; i <= last; i++) print line[i] }')
+  stored_block() { printf '%s\n%s\n' "$stored" "$marker"; exit 0; }
+  if [ -z "$marker" ]; then
+    at=$(stat -c %Y "$latest" 2>/dev/null || stat -f %m "$latest")
+    marker="<!-- next-step: kind=none subject=- at=$at -->"
+    stored_block
+  fi
+  m=${marker#<!-- next-step: }; m=${m% -->}
+  m=${m% at=*}
+  m_subject=${m#* subject=}
+  m_kind="" m_branch="" m_done=0 m_closed=0
+  for word in ${m%% subject=*}; do
+    case $word in
+      kind=*) m_kind=${word#kind=} ;;
+      branch=*) m_branch=${word#branch=} ;;
+      done=*) m_done=${word#done=} ;;
+      closed=*) m_closed=${word#closed=} ;;
+    esac
+  done
+  self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+  recompute() { # recompute ARGS... — this script's own --print block, then the marker
+    local out status=0
+    out=$(cd "$root" && bash "$self" --host "$host" --print "$@" 2>&1) || status=$?
+    if [ "$status" -ne 0 ]; then printf '%s\n' "$out"; exit "$status"; fi
+    printf '%s\n%s\n' "$out" "$marker"
+    exit 0
+  }
+  read -r now_done now_closed < <(handoff_counts "$root")
+  case $m_kind in
+    plan)
+      if grep -qE '^\*\*Status:\*\* .*[1-9][0-9]* of [0-9]+ tasks complete' <<<"$stored" \
+         && ! plan_ledger_any "$root" "$m_subject" >/dev/null && ! plan_finished "$root" "$m_subject"; then
+        gone "the ledger is gone and the plan is unrecorded: $m_subject"
+      fi
+      recompute "$m_subject" ;;
+    complete) recompute --complete "$m_subject" ;;
+    project) recompute --project ;;
+    kept)
+      plan_finished "$root" "$m_subject" && recompute --complete "$m_subject"
+      git -C "$primary" rev-parse --verify --quiet "refs/heads/$m_branch" >/dev/null || gone "the kept branch $m_branch is gone"
+      ! git -C "$primary" merge-base --is-ancestor "refs/heads/$m_branch" HEAD 2>/dev/null || gone "the kept branch $m_branch is merged"
+      stored_block ;;
+    draft|adhoc)
+      { [ "$now_done" -gt "$m_done" ] || [ "$now_closed" -gt "$m_closed" ]; } && gone "a plan or a milestone closed since the block was written"
+      [ "$m_kind" != draft ] || [ -z "$(spec_plans "$root" "$m_subject")" ] || gone "a plan names the draft $m_subject"
+      stored_block ;;
+    *) gone "unknown marker kind: ${m_kind:-none}" ;;
+  esac
+fi
+
 if [ "$adhoc" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
   status_line="Unplanned work: the notes in \`$latest_shown\` are the authority."
@@ -244,6 +370,35 @@ if [ "$adhoc" -eq 1 ]; then
   prompt="Continue the unplanned work recorded in \`$latest_shown\`: $next_action"
   if [ "$root" != "$primary" ]; then
     prompt="$prompt First enter the existing worktree \`$root\`."
+  fi
+elif [ "$project" -eq 1 ]; then
+  launch=0 rel=""
+  roadmap=$(roadmap_file "$root")
+  current_ms="" ms_regs=""
+  [ -z "$roadmap" ] || current_ms=$(roadmap_current "$roadmap")
+  if [ -n "$current_ms" ]; then
+    ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
+    status_line="Project: milestone $ms_id ($ms_name) is current."
+    ms_regs=$(roadmap_registers "$root" "$(cut -f4 <<<"$current_ms")")
+    collect_rows < <(roadmap_unresolved "$root" "$(cut -f4 <<<"$current_ms")" | cut -f1 \
+      | while IFS= read -r r; do dagents_resolve "$r"; done | awk '!seen[$0]++')
+  else
+    if [ -n "$roadmap" ]; then status_line="Project: every milestone is closed."; else status_line="Project: no roadmap."; fi
+    collect_rows < <(register_files "$root")
+  fi
+  if [ -n "$open_rows" ]; then
+    # With a current milestone only its registers are read, so no row is
+    # outside it; no plan is being completed.
+    ROUTE_ROOT=$root ROUTE_FINISHED="" ROUTE_MS=$current_ms ROUTE_OUTSIDE_MS=""
+    route_rows <<<"$open_rows"
+    render_rows
+  elif [ -n "$current_ms" ]; then
+    next_line="Milestone $ms_id ($ms_name) has nothing open: audit and close it with dagents:closing-a-milestone."
+    launch_cmd=$(launch_for design)
+    prompt="Close milestone $ms_id ($ms_name) of \`$(dagents_name "$(dagents_docs_root)")/roadmap.md\` with dagents:closing-a-milestone."
+    launch=1
+  else
+    next_line="Nothing — no register holds an unresolved row."
   fi
 elif [ "$draft" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
@@ -335,27 +490,15 @@ else
     roadmap=$(roadmap_file "$root")
     current_ms=""
     [ -z "$roadmap" ] || current_ms=$(roadmap_current "$roadmap")
-    open_rows="" reg_list="" ms_regs="" outside_ms=""
+    ms_regs=""
     [ -z "$current_ms" ] || ms_regs=$(roadmap_registers "$root" "$(cut -f4 <<<"$current_ms")")
-    while IFS= read -r reg_file; do
-      [ -n "$reg_file" ] || continue
-      rows=$(register_open "$reg_file")
-      [ -n "$rows" ] || continue
-      # The milestone audit reads only the registers below the milestone.
-      if [ -n "$current_ms" ] && ! grep -qxF -- "$reg_file" <<<"$ms_regs"; then outside_ms=1; fi
-      # Several registers may cover one spec; every one that has open rows is
-      # named, so the count is never attributed to the wrong file.
-      reg_list="${reg_list:+$reg_list, }\`$(dagents_name "$reg_file")\`"
-      open_rows="${open_rows}$(ROUTE_REG=$reg_file awk '{ print ENVIRON["ROUTE_REG"] "\t" $0 }' <<<"$rows")
-"
-    done < <(
+    collect_rows < <(
       { [ ${#reg_specs[@]} -eq 0 ] || register_for_spec "$root" "${reg_specs[@]}"
         if [ -n "$current_ms" ]; then
           roadmap_unresolved "$root" "$(cut -f4 <<<"$current_ms")" | cut -f1 | while IFS= read -r r; do dagents_resolve "$r"; done
         fi
       } | awk '!seen[$0]++'
     )
-    open_rows=$(grep . <<<"$open_rows" || true)
     if [ -n "$open_rows" ]; then
       ROUTE_ROOT=$root ROUTE_FINISHED=$rel ROUTE_MS=$current_ms ROUTE_OUTSIDE_MS=$outside_ms
       route_rows <<<"$open_rows"
@@ -367,28 +510,8 @@ else
     fi
 
     if [ -n "$open_rows" ]; then
-      open_n=$(grep -c . <<<"$open_rows")
-      row_list=$(awk -F'\t' '
-        NR <= 3 { printf "%s#%s %s", (NR > 1 ? "; " : ""), $2, $3 }
-        END { if (NR > 3) printf " +%d more", NR - 3 }
-      ' <<<"$open_rows")
-      kind=$ROUTE_KIND action=$ROUTE_ACTION waiting=$ROUTE_WAITING stale=$ROUTE_STALE
-      launch_cmd=$ROUTE_LAUNCH_CMD launch_plan=$ROUTE_LAUNCH_PLAN
-      stale_note=""
-      [ -z "$stale" ] || stale_note="Still assigned to a finished plan: $stale — resolve or reassign them with \`scripts/register set\`."
-      [ "$kind" != milestone ] || { ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms"); }
       status_line="Plan \`$rel\` is complete."
-      next_line="Register rows still open ($open_n) in $reg_list: $row_list.${stale_note:+ $stale_note}${action:+ $action}"
-      if [ "$kind" = milestone ]; then
-        verify_clause="" built_clause=""
-        [ -z "$waiting" ] || verify_clause="; rows awaiting the owner's check (verify): $waiting"
-        [ -z "$ROUTE_BUILT" ] || built_clause=" Built, awaiting the audit: $ROUTE_BUILT."
-        prompt="Close milestone $ms_id ($ms_name) of \`$(dagents_name "$(dagents_docs_root)")/roadmap.md\` with dagents:closing-a-milestone$verify_clause.$built_clause"
-        launch=1
-      elif [ -n "$kind" ]; then
-        prompt="Continue the work recorded in $reg_list: $open_n rows are open ($row_list). $action"
-        launch=1
-      fi
+      render_rows
     elif [ -n "$roadmap" ]; then
       # The roadmap outranks the Program line. Nothing is open in the current
       # milestone, so it is ready for its audit; closing it is the only way on.
@@ -619,6 +742,7 @@ fi
 handoff=$(dagents_latest_file)
 today=$(date -u +%Y-%m-%d)
 if [ "$adhoc" -eq 1 ]; then marker_kind=adhoc marker_subject=-
+elif [ "$project" -eq 1 ]; then marker_kind=project marker_subject=-
 elif [ "$draft" -eq 1 ]; then marker_kind=draft marker_subject=$rel
 elif [ "$kept" -eq 1 ]; then marker_kind="kept branch=${branch##* }" marker_subject=$rel
 elif [ "$complete" -eq 1 ]; then marker_kind=complete marker_subject=$rel
@@ -632,7 +756,8 @@ write_handoff() {
   local tmp status=0
   case $handoff in */.dagents/handoff/latest.md) dagents_state_ignore "${handoff%/.dagents/handoff/latest.md}" ;; esac
   tmp=$(mktemp) || return 1
-  if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ ! -f "$handoff" ]; then
+  if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ ! -f "$handoff" ] \
+     || { [ "$project" -eq 1 ] && [ "$keep_notes" -eq 0 ]; }; then
     printf '# Handoff — %s\n\n%s\n%s\n' "$today" "$block" "$marker" > "$tmp" || status=1
   else
     # Replace only the Next session section; the rest is the session's own notes.

@@ -37,11 +37,15 @@ _snapshot_start() {
 # session wrote it: latest.md, or the ledger of a plan its block names, changed
 # at or after START. A handoff from another session would steer this one.
 snapshot_latest() {
-  local latest block mt keep=1 ledger _where lm plan_rel age="" d
+  local latest block mt at keep=1 ledger _where lm plan_rel age="" d
   latest=$(dagents_latest_file "$1") || return 0
   [ -f "$latest" ] || return 0
   block=$(tr -d '\r' < "$latest" | awk '/^## Next session/ { f = 1; next } f && /^## / { exit } f')
   mt=$(_snapshot_mtime "$latest") || mt=""
+  # next-step's marker names when the block was computed; a later edit of the
+  # notes moves the mtime, not that.
+  at=$(sed -nE 's/^<!-- next-step: .* at=([0-9]+) -->$/\1/p' <<<"$block" | tail -n 1)
+  block=$(grep -vE '^<!-- next-step: ' <<<"$block" || true)
   if [ -n "${2:-}" ] && [ -n "$mt" ] && [ "$mt" -lt "$2" ]; then
     keep=0
     while IFS=$'\t' read -r ledger _where; do
@@ -53,8 +57,8 @@ snapshot_latest() {
     done < <(dagents_ledger_files "$1")
   fi
   [ "$keep" = 1 ] || return 0
-  if [ -n "$mt" ]; then
-    d=$(( $(date +%s) - mt ))
+  if [ -n "${at:-$mt}" ]; then
+    d=$(( $(date +%s) - ${at:-$mt} ))
     [ "$d" -ge 0 ] || d=0
     if [ "$d" -lt 3600 ]; then age=" ($((d / 60))m old)"
     elif [ "$d" -lt 86400 ]; then age=" ($((d / 3600))h old)"

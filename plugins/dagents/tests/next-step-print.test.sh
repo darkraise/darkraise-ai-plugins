@@ -68,13 +68,13 @@ snapshot() { # snapshot — hashes, mtimes and the file list under .dagents
 }
 
 # --- --print changes nothing ---
-for mode in plain --complete --kept; do
+for mode in plain --complete --kept --project; do
   mkdir -p "$REPO/.dagents/handoff" "$REPO/.dagents/sdd"
   printf '# Handoff\n\n## Notes\n\nkeep me\n' > "$LATEST"
   printf '{"action":"merge"}\n' > "$FINISH"
   touch -t 200101010000 "$LATEST" "$FINISH"
   before=$(snapshot)
-  if [ "$mode" = plain ]; then args=("$PLAN"); else args=("$mode" "$PLAN"); fi
+  case $mode in plain) args=("$PLAN") ;; --project) args=(--project) ;; *) args=("$mode" "$PLAN") ;; esac
   out=$(cd "$REPO" && timeout 60 bash "$SCRIPT" --print "${args[@]}" 2>&1)
   check "--print $mode: exits 0" "$?" 0
   has "--print $mode: prints the block" "$out" "## Next session"
@@ -164,6 +164,145 @@ launch=$(awk '/^Launch in / { on = 1; next } on && /^```$/ { if (f) exit; f = 1;
 check "auto run: the first prompt reads unchanged" "$(ar_fenced "$LATEST" 'Paste as the first prompt:')" "$prompt"
 check "auto run: the launch command reads unchanged" "$(ar_fenced "$LATEST" 'Launch in ')" "$launch"
 has "auto run: the launch command is the plan's" "$launch" "claude --model sonnet --effort high"
+
+# --- --print --latest ---
+L="$TMP/latest"
+lfixture() { # lfixture — a fresh repository in $L with plan P (3 tasks) and completed.md of one entry
+  rm -rf "$L"; git init -q -b main "$L"
+  LD="$L/docs/dagents"; mkdir -p "$LD/plans" "$LD/specs" "$LD/registers" "$L/.dagents/handoff"
+  printf '.dagents/\n' > "$L/.gitignore"
+  : > "$LD/specs/demo.md"
+  {
+    printf '# P\n\n**Spec:** docs/dagents/specs/demo.md\n'
+    printf '**Execution:** inline — `claude --model sonnet --effort high` — small\n\n'
+    printf '### Task 1: One\n\nBody.\n\n### Task 2: Two\n\nBody.\n\n### Task 3: Three\n\nBody.\n'
+  } > "$LD/plans/2026-11-01-p.md"
+  printf '# Completed plans\n\n- 2026-10-01 — `docs/dagents/plans/2026-10-01-a.md` — merged\n' > "$LD/plans/completed.md"
+  git -C "$L" add -A && git -C "$L" commit -qm init
+  LL="$L/.dagents/handoff/latest.md"
+}
+P=docs/dagents/plans/2026-11-01-p.md
+stored() { # stored <marker or empty> [status line] [next line] — write latest.md by hand
+  { printf '# Handoff\n\n## Notes\n\nmine\n\n## Next session\n\n**Status:** %s\n**Next:** %s\n' "${2:-Stored status.}" "${3:-Stored next.}"
+    [ -z "$1" ] || printf '%s\n' "$1"; } > "$LL"
+}
+latest() { # latest — run --print --latest in $L; sets out, err, status
+  out=$(cd "$L" && timeout 120 bash "$SCRIPT" --print --latest 2>"$TMP/lerr"); status=$?
+  err=$(cat "$TMP/lerr")
+}
+index_p() { printf -- '- 2026-11-10 — `%s` — merged\n' "$P" >> "$LD/plans/completed.md"; }
+
+lfixture
+stored "<!-- next-step: kind=adhoc done=1 closed=0 subject=- at=1 -->"
+latest
+check "latest adhoc: matching counts exit 0" "$status" 0
+has "latest adhoc: matching counts print the stored block" "$out" "**Next:** Stored next."
+check "latest adhoc: the marker is the last line" "$(tail -n 1 <<<"$out")" "<!-- next-step: kind=adhoc done=1 closed=0 subject=- at=1 -->"
+printf -- '- 2026-10-02 — `docs/dagents/plans/2026-10-02-b.md` — merged\n' >> "$LD/plans/completed.md"
+latest
+check "latest adhoc: a newer completed plan supersedes it" "$status" 6
+check "latest adhoc: superseded prints nothing" "$out" ""
+lfixture
+printf '# M1\n\n**Source:** roadmap\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | E | - | - | done | - |\n' > "$LD/registers/m1.md"
+printf '# R\n\n**Product:** p\n**Spec:** docs/dagents/specs/demo.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | One | x | docs/dagents/registers/m1.md | closed | audit |\n' > "$LD/roadmap.md"
+stored "<!-- next-step: kind=adhoc done=1 closed=0 subject=- at=1 -->"
+latest
+check "latest adhoc: a newly closed milestone supersedes it" "$status" 6
+
+lfixture
+printf '# D\n' > "$LD/specs/D.md"
+stored "<!-- next-step: kind=draft done=1 closed=0 subject=docs/dagents/specs/D.md at=1 -->"
+latest
+check "latest draft: a draft with no plan prints the stored block" "$status" 0
+sed 's#docs/dagents/specs/demo.md#docs/dagents/specs/D.md#' "$L/$P" > "$LD/plans/2026-11-02-d.md"
+latest
+check "latest draft: a plan naming the draft supersedes it" "$status" 6
+
+lfixture
+stored ""
+latest
+check "latest no marker: exits 0" "$status" 0
+has "latest no marker: prints the stored block" "$out" "**Next:** Stored next."
+check "latest no marker: the kind=none line carries the mtime" "$(tail -n 1 <<<"$out")" "<!-- next-step: kind=none subject=- at=$(mtime "$LL") -->"
+
+lfixture
+git -C "$L" checkout -q -b feat && printf 'x\n' > "$L/x.txt" && git -C "$L" add x.txt && git -C "$L" commit -qm feat && git -C "$L" checkout -q main
+KEPT="<!-- next-step: kind=kept branch=feat done=1 closed=0 subject=$P at=1 -->"
+stored "$KEPT"
+latest
+check "latest kept: an unmerged branch exits 0" "$status" 0
+has "latest kept: an unmerged branch prints the stored block" "$out" "**Next:** Stored next."
+index_p
+want=$(cd "$L" && bash "$SCRIPT" --print --complete "$P" 2>/dev/null | grep '^\*\*Next:\*\*')
+latest
+has "latest kept: once indexed it is the --complete block" "$out" "$want"
+sed -i.bak '$d' "$LD/plans/completed.md" && rm -f "$LD/plans/completed.md.bak"
+git -C "$L" branch -q -D feat
+latest
+check "latest kept: a deleted branch exits 6" "$status" 6
+lfixture
+git -C "$L" checkout -q -b feat && printf 'x\n' > "$L/x.txt" && git -C "$L" add x.txt && git -C "$L" commit -qm feat && git -C "$L" checkout -q main
+git -C "$L" merge -q --no-ff -m merge feat
+stored "$KEPT"
+latest
+check "latest kept: a merged branch exits 6" "$status" 6
+
+lfixture
+stored "<!-- next-step: kind=plan done=1 closed=0 subject=$P at=1 -->" "Plan \`$P\`: 2 of 3 tasks complete (ledger \`x\`)." "Resume at Task 3 (Three)."
+latest
+check "latest plan: a lost ledger never restarts the plan" "$status" 6
+has "latest plan: the reason is named" "$err" "the ledger is gone and the plan is unrecorded"
+check "latest plan: nothing on stdout" "$out" ""
+mkdir -p "$L/.dagents/sdd/2026-11-01-p"
+printf '# SDD ledger — plan: %s\nTask 1: complete (x)\nTask 2: complete (x)\n' "$P" > "$L/.dagents/sdd/2026-11-01-p/progress.md"
+PM="<!-- next-step: kind=plan done=1 closed=0 subject=$P at=1 -->"
+stored "$PM" "Plan \`$P\`: 1 of 3 tasks complete." "Resume at Task 2 (Two)."
+latest
+check "latest plan: recomputed exits 0" "$status" 0
+has "latest plan: recomputed from the ledger" "$out" "**Next:** Resume at Task 3 (Three)."
+check "latest plan: the stored marker is the last line" "$(tail -n 1 <<<"$out")" "$PM"
+
+for kind in plan project; do
+  if [ "$kind" = plan ]; then mk=$PM; else mk="<!-- next-step: kind=project done=1 closed=0 subject=- at=1 -->"; fi
+  stored "$mk"
+  touch -t 200101010000 "$LL"
+  before=$( (cd "$L" && find .dagents -print | LC_ALL=C sort); digest "$LL"; mtime "$LL")
+  latest
+  check "latest $kind: exits 0" "$status" 0
+  check "latest $kind: changes nothing" "$( (cd "$L" && find .dagents -print | LC_ALL=C sort); digest "$LL"; mtime "$LL")" "$before"
+done
+
+rm -f "$LL"; latest
+check "latest edges: no latest.md exits 6" "$status" 6
+printf '# Handoff\n\n## Notes\n\nx\n' > "$LL"; latest
+check "latest edges: no Next session section exits 6" "$status" 6
+(cd "$L" && timeout 60 bash "$SCRIPT" --latest >/dev/null 2>&1); check "latest edges: --latest without --print is a usage error" "$?" 2
+stored "<!-- next-step: kind=plan done=1 closed=0 subject=docs/dagents/plans/missing.md at=1 -->"; latest
+check "latest edges: a missing plan passes exit 2 through" "$status" 2
+
+# --- timing: 1,000 rows across 10 registers and 25 plans naming one spec ---
+lfixture
+: > "$LD/specs/big.md"
+for i in $(seq -w 1 25); do
+  sed 's#docs/dagents/specs/demo.md#docs/dagents/specs/big.md#' "$L/$P" > "$LD/plans/2026-10-$i-big.md"
+  printf -- '- 2026-10-01 — `docs/dagents/plans/2026-10-%s-big.md` — merged\n' "$i" >> "$LD/plans/completed.md"
+done
+for r in $(seq 1 10); do
+  { printf '# R%s\n\n**Source:** test\n**Covers:** docs/dagents/specs/big.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n' "$r"
+    for i in $(seq 1 100); do printf '| %s | Row %s | docs/dagents/specs/big.md | - | open | - |\n' "$i" "$i"; done
+  } > "$LD/registers/r$r.md"
+done
+stored "<!-- next-step: kind=project done=26 closed=0 subject=- at=1 -->"
+t0=${EPOCHREALTIME:-$(date +%s)}
+latest
+t1=${EPOCHREALTIME:-$(date +%s)}
+ms=$(awk -v a="$t0" -v b="$t1" 'BEGIN { printf "%d", (b - a) * 1000 }')
+printf 'next-step-print: --print --latest took %s ms\n' "$ms"
+check "timing: the recompute exits 0" "$status" 0
+has "timing: the follow-up route is computed" "$out" "write a follow-up plan"
+if [ "$(uname -s)" = Linux ]; then
+  check "timing: under 10 s on Linux" "$([ "$ms" -lt 10000 ] && echo fast || echo "slow ($ms ms)")" fast
+fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
