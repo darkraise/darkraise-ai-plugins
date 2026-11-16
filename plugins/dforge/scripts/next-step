@@ -49,6 +49,7 @@ usage() { fail 2 "usage: next-step [--host claude|codex] [--complete|--kept] PLA
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
+. "$(cd "$(dirname "$0")" && pwd)/lib/route.sh"
 
 # --host is pulled out wherever it sits so the remaining arguments keep their
 # strict positional contract.
@@ -305,7 +306,7 @@ else
       # Several registers may cover one spec; every one that has open rows is
       # named, so the count is never attributed to the wrong file.
       reg_list="${reg_list:+$reg_list, }\`$(dforge_name "$reg_file")\`"
-      open_rows="${open_rows}${rows}
+      open_rows="${open_rows}$(ROUTE_REG=$reg_file awk '{ print ENVIRON["ROUTE_REG"] "\t" $0 }' <<<"$rows")
 "
     done < <(
       { [ ${#reg_specs[@]} -eq 0 ] || register_for_spec "$root" "${reg_specs[@]}"
@@ -319,64 +320,16 @@ else
     if [ -n "$open_rows" ]; then
       open_n=$(grep -c . <<<"$open_rows")
       row_list=$(awk -F'\t' '
-        NR <= 3 { printf "%s#%s %s", (NR > 1 ? "; " : ""), $1, $2 }
+        NR <= 3 { printf "%s#%s %s", (NR > 1 ? "; " : ""), $2, $3 }
         END { if (NR > 3) printf " +%d more", NR - 3 }
       ' <<<"$open_rows")
-      # The Assigned cell decides the route, not the row order. A row still on
-      # a finished plan is the finishing session's to resolve and must never
-      # route back to that plan; a verify row waits on a human check; a .md
-      # path absent here belongs to another repository. Among the rest the
-      # first row of the most concrete kind wins: a plan to execute, a spec to
-      # plan, a label to specify, then a ruling on unassigned rows.
-      stale="" waiting="" elsewhere="" best=9 target="" kind=""
-      while IFS=$'\037' read -r rid _ rassigned _ rstate _; do
-        a=${rassigned#\`}
-        a=${a%\`}
-        if [ "$rstate" = verify ]; then
-          waiting="${waiting:+$waiting, }#$rid"; continue
-        elif [ -z "$a" ] || [ "$a" = "-" ]; then
-          r=4 k=rule
-        elif [ "$(dforge_name_key "$(plan_name "$root" "$a")")" = "$(dforge_name_key "$rel")" ] || plan_finished "$root" "$a"; then
-          stale="${stale:+$stale, }#$rid"; continue
-        elif [ -f "$(dforge_resolve "$a")" ]; then
-          if [ -n "$(plan_tasks "$(dforge_resolve "$a")")" ] || [ -n "$(plan_lettered "$(dforge_resolve "$a")")" ]; then r=1 k=plan; else r=2 k=spec; fi
-        elif [[ $a == *.md ]]; then
-          elsewhere="${elsewhere:+$elsewhere, }#$rid"; continue
-        else
-          r=3 k=label
-        fi
-        if [ "$r" -lt "$best" ]; then best=$r target=$a kind=$k; fi
-      done < <(tr '\t' '\037' <<<"$open_rows")
-
+      ROUTE_ROOT=$root ROUTE_FINISHED=$rel ROUTE_MS=$current_ms ROUTE_OUTSIDE_MS=$outside_ms
+      route_rows <<<"$open_rows"
+      kind=$ROUTE_KIND action=$ROUTE_ACTION waiting=$ROUTE_WAITING stale=$ROUTE_STALE
+      launch_cmd=$ROUTE_LAUNCH_CMD launch_plan=$ROUTE_LAUNCH_PLAN
       stale_note=""
       [ -z "$stale" ] || stale_note="Still assigned to a finished plan: $stale — resolve or reassign them with \`scripts/register set\`."
-      launch_cmd=$(launch_for design)
-      case $kind in
-        plan)
-          target_exec=$(plan_header_line "$(dforge_resolve "$target")" Execution)
-          if [ -n "$(plan_ledger "$(dforge_resolve "$target")")" ]; then
-            action="Resume \`$target\` with dforge:resume-execution."
-          else
-            action="Continue \`$target\` with dforge:executing-plans."
-          fi
-          launch_cmd=$(execution_launch "$target_exec") launch_plan=$target
-          ;;
-        spec)  action="\`$target\`: write its plan with dforge:writing-plans." ;;
-        label) action="\`$target\`: write its spec in a fresh session." ;;
-        rule)  action="Rule on the open rows with dforge:brainstorming." ;;
-        *)
-          action=""
-          [ -z "$waiting" ] || action="Awaiting your check (verify): $waiting."
-          [ -z "$elsewhere" ] || action="${action:+$action }Assigned outside this repository: $elsewhere."
-          # The milestone audit is the check a verify row waits on, so a
-          # milestone with nothing else unresolved goes to it.
-          if [ -n "$current_ms" ] && [ -n "$waiting" ] && [ -z "$stale$elsewhere$outside_ms" ]; then
-            kind=milestone
-            ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
-            action="$action Milestone $ms_id ($ms_name) has nothing else open: audit and close it with dforge:closing-a-milestone."
-          fi
-          ;;
-      esac
+      [ "$kind" != milestone ] || { ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms"); }
       status_line="Plan \`$rel\` is complete."
       next_line="Register rows still open ($open_n) in $reg_list: $row_list.${stale_note:+ $stale_note}${action:+ $action}"
       if [ "$kind" = milestone ]; then
