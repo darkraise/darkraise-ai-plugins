@@ -404,8 +404,10 @@ export function gitMessageTexts(command: string): { texts: string[]; isWhole: bo
             ? word.slice(word.indexOf('F') + 1)
             : undefined
       if (file === undefined) return
+      // By the last path segment, so `> msg.txt` and `-F ./msg.txt` name one file.
+      const tail = (p: string) => p.replace(/^.*[\\/]/, '')
       const isWritten = all.some(other =>
-        other.words.some((w, wAt) => (other !== one || wAt !== at + 1) && (w === file || w.replace(/^\d*(?:&>>?|>>?\|?)/, '') === file)),
+        other.words.some((w, wAt) => (other !== one || (wAt !== at && wAt !== at + 1)) && tail(w.replace(/^\d*(?:&>>?|>>?\|?)/, '')) === tail(file)),
       )
       if (STDIN_PATH.test(file) || file.startsWith('<(') || isExpanding(file) || isWritten) isWhole = true
     })

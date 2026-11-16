@@ -813,6 +813,8 @@ describe('attribution guard', () => {
       [`git log --grep='${TRAILER} Claude' && ${COMMIT} -m 'fix: x'`, false],
       [`cat > /tmp/msg <<'EOF'\nfix: x\n\n${AI}\nEOF\n${COMMIT} -F /tmp/msg`, true],
       [`printf 'fix\\n\\n${AI}\\n' > msg.txt && ${COMMIT} -F msg.txt`, true],
+      [`cat > msg.txt <<'EOF'\nfix: x\n\n${AI}\nEOF\n${COMMIT} -F ./msg.txt`, true],
+      [`cat > ./msg.txt <<'EOF'\nfix: x\n\n${AI}\nEOF\n${COMMIT} -F msg.txt`, true],
       [`echo '${AI}' | tee -a msg.txt; ${COMMIT} --file=msg.txt`, true],
       [`MSG=$'fix\\n\\n${AI}'; ${COMMIT} -m "$MSG"`, true],
       [`${COMMIT} -m "$(echo '${AI}')"`, true],
