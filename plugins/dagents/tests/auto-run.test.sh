@@ -742,6 +742,11 @@ mkdir -p "$REPO/docs"
 printf '# Register\n\n**Source:** a review\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n' > "$REPO/docs/r-covers.md"
 ar --session s-1 start --spec "$SPEC" --register docs/r-covers.md --force >/dev/null
 check "start --register fills an empty Covers" "$(grep -c "^\*\*Covers:\*\* $SPEC$" "$REPO/docs/r-covers.md")" "1"
+printf '# Register\n\n**Source:** a review\n**Covers:** -\n' > "$REPO/docs/r-stuck.md"
+mkdir "$REPO/docs/r-stuck.md.tmp"
+err=$(ar --session s-1 start --spec "$SPEC" --register docs/r-stuck.md --force 2>&1 >/dev/null)
+check "start --register says when it cannot fill Covers" "$(grep -c 'could not set \*\*Covers:\*\*' <<<"$err"):$(grep -c '^\*\*Covers:\*\* -$' "$REPO/docs/r-stuck.md")" "1:1"
+rmdir "$REPO/docs/r-stuck.md.tmp"
 # --- clear checks whose prompt it stores (row 32) ---
 ar --session s-1 attach --plan docs/plan.md
 mkdir -p "$REPO/.dagents/handoff"
