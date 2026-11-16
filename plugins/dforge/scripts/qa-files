@@ -128,19 +128,19 @@ for i in "${!PATHS[@]}"; do
   fi
   if [ "$code" = '??' ]; then
     case $path in
-      */) rmdir -- "$path" 2>/dev/null ;;
-      *) rm -f -- "$path" ;;
+      */) err=$(rmdir -- "$path" 2>&1) ;;
+      *) err=$(rm -f -- "$path" 2>&1) ;;
     esac
     ok=$?
   else
-    git --literal-pathspecs restore --staged --worktree -- "$path" 2>/dev/null
+    err=$(git --literal-pathspecs restore --staged --worktree -- "$path" 2>&1)
     ok=$?
   fi
   if [ "$ok" -eq 0 ]; then
     printf 'qa-files: removed %s\n' "$path"
     remove_empty_parents "${path%/}"
   else
-    echo "qa-files: could not undo $path" >&2
+    echo "qa-files: could not undo $path${err:+: ${err%%$'\n'*}}" >&2
     printf 'qa-files: left %s\n' "$path"
   fi
 done
