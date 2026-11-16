@@ -398,6 +398,103 @@ bl
 check "A16: a pending after-compact settles (no pending left)" "$(cd "$R14" && bash "$S/auto-run" --session s-ss pending)" "none"
 (cd "$R14" && bash "$S/auto-run" --session s-ss stop >/dev/null 2>&1)
 
+# --- A15: a running service does not pass a mid-plan summary stop ---
+R15="$TMP/stop"
+mkrepo "$R15"
+git -C "$R15" config user.name t; git -C "$R15" config user.email t@example.invalid
+mkdir -p "$R15/.dforge/sdd/plan"
+LEDGER15="$R15/.dforge/sdd/plan/progress.md"
+TURNS="$HOME/.claude/dforge/sessions/turns"; mkdir -p "$TURNS"
+t_prompt() { # t_prompt <session>
+  jq -n --arg sid "$1" --arg cwd "$R15" '{hook_event_name:"UserPromptSubmit",session_id:$sid,cwd:$cwd,prompt:"go"}' | bash "$S/turn-start.sh"
+}
+t_stop() { # t_stop <script> <session> <message> [transcript]
+  jq -n --arg sid "$2" --arg cwd "$R15" --arg msg "$3" --arg tp "${4:-}" \
+    '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:$tp,stop_hook_active:false}
+     + (if $msg == "" then {} else {last_assistant_message:$msg} end)' | bash "$S/$1"
+}
+decision() { jq -r '.decision // "none"' <<<"${1:-{\}}" 2>/dev/null || echo none; }
+bg_transcript() { # bg_transcript <file> <description> <command>
+  jq -nc --arg d "$2" --arg c "$3" '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"toolu_bg",name:"Bash",input:{description:$d,command:$c,run_in_background:true}}]}}' > "$1"
+  jq -nc '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_bg",content:"Command running in background with ID: bg1. Output is being written to: /tmp/bg1.output."}]}}' >> "$1"
+}
+SVC15="$TMP/svc15.jsonl"; bg_transcript "$SVC15" "Dev server" "npm run dev"
+NOTHING15="$TMP/nothing15.jsonl"; : > "$NOTHING15"
+sleep 1; t_prompt s-15
+printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commits a..b, review clean)\n' > "$LEDGER15"
+check "A15: with nothing running a mid-plan summary stop is held" "$(decision "$(t_stop turn-end.sh s-15 'Task 1 is done.' "$NOTHING15")")" "block"
+check "A15: with only a dev server running it is held as well" "$(decision "$(t_stop turn-end.sh s-15 'Task 1 is done.' "$SVC15")")" "block"
+FIN15="$TMP/fin15.jsonl"; bg_transcript "$FIN15" "Suite" "npm test"
+check "A15: finite background work still passes the plain stop" "$(decision "$(t_stop turn-end.sh s-15 'Task 1 is done.' "$FIN15")")" "none"
+
+# --- A17, A18, A22, A23: the UI hooks and fast mode ---
+R17="$TMP/ui"
+mkrepo "$R17"
+git -C "$R17" config user.name t; git -C "$R17" config user.email t@example.invalid
+mkdir -p "$R17/src" "$R17/docs/dforge/ui-ux"
+printf 'export const App = () => <main>Hi</main>;\n' > "$R17/src/App.tsx"
+printf '<img src="a.png">\n' > "$R17/src/Bad.tsx"
+printf '# UI profile\n\n**Platform:** web\n' > "$R17/docs/dforge/ui-ux/profile.md"
+git -C "$R17" add -A && git -C "$R17" commit -qm ui
+u_prompt() { jq -n --arg sid "$1" --arg cwd "$R17" '{hook_event_name:"UserPromptSubmit",session_id:$sid,cwd:$cwd,prompt:"go"}' | bash "$S/turn-start.sh"; }
+u_edit() { # u_edit <session> <transcript>
+  jq -n --arg sid "$1" --arg cwd "$R17" --arg f "$R17/src/Bad.tsx" --arg tp "$2" \
+    '{hook_event_name:"PostToolUse",session_id:$sid,cwd:$cwd,transcript_path:$tp,tool_name:"Edit",tool_input:{file_path:$f}}' | bash "$S/ui-edit-hook.sh"
+}
+u_stop() { # u_stop <session> <message> [transcript]
+  jq -n --arg sid "$1" --arg cwd "$R17" --arg msg "$2" --arg tp "${3:-}" \
+    '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:$tp,stop_hook_active:false}
+     + (if $msg == "" then {} else {last_assistant_message:$msg} end)' | bash "$S/ui-turn-end.sh"
+}
+said() { jq -nc --arg t "$1" --arg ts "$2" '{type:"assistant",timestamp:$ts,message:{role:"assistant",content:[{type:"text",text:$t}]}}'; }
+findings() { jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$1" 2>/dev/null | grep -c 'img-alt'; }
+
+# A17: request-scoped fast mode ends at the next human prompt. Claude Code names a
+# session's transcript after the session, which is how the hooks find its turn stamp.
+TR17="$TMP/u-17.jsonl"
+u_prompt u-17
+touch -d '-20 minutes' "$TURNS/u-17"
+said 'Process: fast — a one-line tweak' "$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%S.000Z)" > "$TR17"
+check "A17: within the request that wrote the line the edit hook stays silent" "$(findings "$(u_edit u-17 "$TR17")")" "0"
+sleep 1; u_prompt u-17
+said 'Working on it.' "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$TR17"
+check "A17: in a later request with no Process: fast line the edit hook runs again" "$(findings "$(u_edit u-17 "$TR17")")" "1"
+printf '// change\n' >> "$R17/src/App.tsx"; git -C "$R17" commit -qam 'ui change'
+check "A17: and the UI proof hold runs again" "$(decision "$(u_stop u-17 'Done.' "$TR17")")" "block"
+
+# A18: a session-scoped line stays on across requests, with no state file.
+TR18="$TMP/u-18.jsonl"
+u_prompt u-18
+touch -d '-20 minutes' "$TURNS/u-18"
+said 'Process: fast (session) — spikes all day' "$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%S.000Z)" > "$TR18"
+sleep 1; u_prompt u-18
+said 'Another request.' "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$TR18"
+check "A18: no state file exists" "$([ -e "$HOME/.claude/dforge/sessions/state/u-18.json" ] && echo yes || echo no)" "no"
+check "A18: the edit hook stays silent in a later request" "$(findings "$(u_edit u-18 "$TR18")")" "0"
+printf '// change 2\n' >> "$R17/src/App.tsx"; git -C "$R17" commit -qam 'ui change 2'
+check "A18: the UI proof hold stays down" "$(decision "$(u_stop u-18 'Done.' "$TR18")")" "none"
+said 'Process: bounded — no trigger' "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$TR18"
+check "A18: a later Process: line naming another path turns the hooks back on" "$(findings "$(u_edit u-18 "$TR18")")" "1"
+
+# A22: stand-downs after a UI edit.
+sleep 1; u_prompt u-22
+printf '// change 3\n' >> "$R17/src/App.tsx"; git -C "$R17" commit -qam 'ui change 3'
+check "A22: a UI change with no proof is held" "$(decision "$(u_stop u-22 'Task 2 is done.')")" "block"
+check "A22: a stop carrying ## Next session passes" "$(decision "$(u_stop u-22 $'Done.\n\n## Next session\n\n**Status:** x')")" "none"
+mkdir -p "$R17/.dforge/sdd/ui-plan"
+printf '# SDD ledger — plan: docs/ui-plan.md\nTask 2: waiting — which colour?\n' > "$R17/.dforge/sdd/ui-plan/progress.md"
+check "A22: a ledger written this turn ending on waiting — passes" "$(decision "$(u_stop u-22 'Which colour should the button be?')")" "none"
+rm -rf "$R17/.dforge/sdd/ui-plan"
+BG22="$TMP/bg22.jsonl"; bg_transcript "$BG22" "Suite" "npm test"
+check "A22: finite background work running passes" "$(decision "$(u_stop u-22 'Waiting for the suite.' "$BG22")")" "none"
+
+# A23: the transcript supplies the message when last_assistant_message is absent.
+LT23="$TMP/last23.jsonl"
+jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"Stopping here.\n\nUI proof: pending — needs the device"}]}}' > "$LT23"
+check "A23: no last_assistant_message: the transcript's UI proof: pending line passes" "$(decision "$(u_stop u-22 '' "$LT23")")" "none"
+check "A23: a message ending UI proof: pending — why passes" "$(decision "$(u_stop u-22 $'Done.\n\nUI proof: pending — no browser here')")" "none"
+check "A23: a pending line with no reason is still held" "$(decision "$(u_stop u-22 $'Done.\n\nUI proof: pending')")" "block"
+
 # --- footer ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
