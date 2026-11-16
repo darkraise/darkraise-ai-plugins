@@ -51,6 +51,7 @@ auto_pending=$(cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --
 [ -f "$stamp" ] || [ -n "$auto_pending" ] || exit 0
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 . "${SCRIPT_DIR}/lib/roots.sh"
+. "${SCRIPT_DIR}/lib/plan.sh"
 # In a subshell, so a malformed config costs only this check, never the hook.
 sdd=$(dagents_ledger_root "$root") || sdd=""
 [ -d "$sdd" ] || [ -n "$auto_pending" ] || exit 0
@@ -155,7 +156,9 @@ while IFS= read -r candidate; do
   # plan's workspace is always local: a ledger without one here is another
   # session's.
   [ -d "$ws/$(basename "$(dirname "$candidate")")" ] || continue
-  if grep -q '^Final review: clean' "$candidate"; then
+  # Only a clean line that still covers HEAD sends the session to finishing; a
+  # stale or rewritten one is a plan advanced without its next step.
+  if [ "$(plan_final_review_state "$candidate" "$root")" = current ]; then
     ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" \
               'Must fix before completing' 'Worktree removal refused' && continue
     ledger=$candidate clean=1

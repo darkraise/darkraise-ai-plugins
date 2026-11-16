@@ -372,6 +372,16 @@ out=$(HOME="$H2" stop s-5 'Done.' true)
 check "a hold count that cannot be written: the run stops" "$(jq -r .active "$STATE"):$(jq -r .stopped "$STATE" | grep -c 'without its sentinel')" "false:1"
 check "a hold count that cannot be written: one hold asks for the attended ending" "$(jq -r .reason <<<"$out" | grep -c '§Stopping')" "1"
 
+# --- a clean line older than the code is not current ---
+h7=$(git -C "$REPO" rev-parse --short HEAD)
+printf 'x\n' > "$REPO/code.txt"
+git -C "$REPO" add code.txt && git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -qm "fix: later"
+sleep 1; prompt s-stale
+write_ledger "Final review: clean (commits 0000000..$h7)"
+out=$(stop s-stale 'All done.')
+check "a stale clean line: held" "$(decision "$out")" "block"
+check "a stale clean line: not sent to the finishing menu" "$(jq -r .reason <<<"$out" | grep -c 'passed its final review')" "0"
+
 # --- progress kept in darkmem: the mirror's ledgers are the ones read ---
 . "$HERE/fixtures/darkmem-stores.sh"
 M=$(stores_home "$HOME" "$REPO" proj local darkmem)
