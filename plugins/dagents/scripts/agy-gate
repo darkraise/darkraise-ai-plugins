@@ -27,6 +27,7 @@ POLICY="${DAGENTS_AGY_POLICY:-$HERE/../reference/agy-policy.json}"
 . "$HERE/lib/executor-session.sh"
 . "$HERE/lib/native-path.sh"
 . "$HERE/lib/dagents-env.sh"
+. "$HERE/lib/timeout.sh"
 
 die() { printf 'agy-gate: %s\n' "$1" >&2; exit 2; }
 
@@ -112,20 +113,22 @@ if [ "$source" = probe ]; then
       version=${fields%% root=*}
       root=${fields#* root=}
       # The probe owns its 30 s deadline; this outer bound only guarantees the
-      # gate returns if node itself wedges, so where timeout is missing (macOS
-      # ships none) the probe runs without it.
-      bound=()
-      command -v timeout >/dev/null 2>&1 && bound=(timeout 45)
-      export MSYS_NO_PATHCONV=1
-      cwd=$(dr_native_path "$PWD")
-      answer=$(jq -cn --arg cwd "$cwd" '{op:"auth",cwd:$cwd}' \
-        | ${bound[@]+"${bound[@]}"} node "$HERE/lib/agy-probe.mjs" "$(dr_native_path "$root")" 2>/dev/null \
-        | tail -1 | tr -d '\r')
-      case "$(jq -r '.authed | tostring' <<<"$answer" 2>/dev/null | tr -d '\r')" in
-        true) usable=true reason=ok ;;
-        false) usable=false reason=logged-out ;;
-        *) usable=false reason=probe-failed ;;
-      esac
+      # gate returns if node itself wedges. The review runner refuses to start
+      # without timeout, so agy is unusable then.
+      if ! dagents_timeout; then
+        usable=false reason=no-timeout
+      else
+        export MSYS_NO_PATHCONV=1
+        cwd=$(dr_native_path "$PWD")
+        answer=$(jq -cn --arg cwd "$cwd" '{op:"auth",cwd:$cwd}' \
+          | "$DAGENTS_TIMEOUT" 45 node "$HERE/lib/agy-probe.mjs" "$(dr_native_path "$root")" 2>/dev/null \
+          | tail -1 | tr -d '\r')
+        case "$(jq -r '.authed | tostring' <<<"$answer" 2>/dev/null | tr -d '\r')" in
+          true) usable=true reason=ok ;;
+          false) usable=false reason=logged-out ;;
+          *) usable=false reason=probe-failed ;;
+        esac
+      fi
       ;;
     1) usable=false reason=$(sed -n 's/^agy-locate off reason=//p' <<<"$line") ;;
     *) die "agy-locate failed" ;;

@@ -37,6 +37,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/dagents-dir.sh"
+. "$HERE/lib/timeout.sh"
 
 die() { printf 'suite-run: %s\n' "$1" >&2; exit 2; }
 usage() { die "usage: suite-run [--timeout SECONDS] -- COMMAND [ARG ...]"; }
@@ -52,7 +53,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ $# -ge 1 ] || usage
-command -v timeout >/dev/null 2>&1 || die "GNU timeout is required but not on PATH"
+dagents_timeout || die "GNU timeout (timeout or gtimeout) is required but not on PATH"
 
 root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not in a git checkout"
 head=$(git rev-parse HEAD 2>/dev/null | tr -d '\r') || head=""
@@ -97,7 +98,7 @@ start=$(date +%s)
 log="$state/suites/$start-$$.log"
 beat=${SUITE_RUN_HEARTBEAT:-300}
 
-timeout -k "${SUITE_RUN_KILL_AFTER:-10}" "$secs" "$@" > "$log" 2>&1 < /dev/null &
+"$DAGENTS_TIMEOUT" -k "${SUITE_RUN_KILL_AFTER:-10}" "$secs" "$@" > "$log" 2>&1 < /dev/null &
 pid=$!
 # The ticker wakes once a second so that nothing outlives the command by more
 # than that: a single sleep of the whole interval would be left behind.

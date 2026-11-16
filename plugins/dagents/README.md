@@ -442,7 +442,10 @@ upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
 **Bash, jq, Git, and GNU timeout/coreutils.** The scripts need Git 2.31 or
-later: they ask `git rev-parse` for `--path-format=absolute`. The rest are
+later: they ask `git rev-parse` for `--path-format=absolute`. GNU timeout is
+found as `timeout` or, as Homebrew's coreutils installs it on macOS, as
+`gtimeout`; without either the Codex and agy gates report
+`reason=no-timeout`. The rest are
 requirements of the external executor lane:
 `scripts/detect-executors.sh` builds every field with `jq`, and
 `scripts/run-codex-task.sh` parses Codex's verdict with it. Each exits 2 with a

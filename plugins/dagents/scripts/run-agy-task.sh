@@ -23,6 +23,7 @@ source "$HERE/lib/task-state.sh"
 source "$HERE/lib/task-execution.sh"
 source "$HERE/lib/executor-session.sh"
 source "$HERE/lib/native-path.sh"
+source "$HERE/lib/timeout.sh"
 
 VALID_EFFORTS="low medium high"
 
@@ -92,7 +93,7 @@ fi
 # block: the controller would spend a rung and a second paid run to learn
 # nothing. The durable phase distinguishes preflight failures from failures after execution.
 command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
-command -v timeout >/dev/null 2>&1 || die "GNU timeout is required but not on PATH"
+dagents_timeout || die "GNU timeout (timeout or gtimeout) is required but not on PATH"
 
 # Resolved once: reset pathspecs are repo-relative while these files are written
 # caller-relative, and `git reset` on a non-matching path exits 0, so the miss
@@ -278,9 +279,9 @@ agy_args+=(-p "$pointer")
 (
   cd "$cwd" || exit 1
   if command -v setsid >/dev/null 2>&1; then
-    exec setsid timeout -k 10 $((timeout_s + GRACE)) agy "${agy_args[@]}" < /dev/null > "$result" 2> "$report.stderr"
+    exec setsid "$DAGENTS_TIMEOUT" -k 10 $((timeout_s + GRACE)) agy "${agy_args[@]}" < /dev/null > "$result" 2> "$report.stderr"
   else
-    exec timeout -k 10 $((timeout_s + GRACE)) agy "${agy_args[@]}" < /dev/null > "$result" 2> "$report.stderr"
+    exec "$DAGENTS_TIMEOUT" -k 10 $((timeout_s + GRACE)) agy "${agy_args[@]}" < /dev/null > "$result" 2> "$report.stderr"
   fi
 ) &
 agy_pid=$!
