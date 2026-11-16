@@ -321,7 +321,7 @@ cmd_reopen() {
 }
 
 cmd_settle() {
-  local spec="" m reg rid ritem rassigned racc rstate rnote a changed=0
+  local spec="" m reg rid ritem rassigned racc rstate rnote a note changed=0
   while [ $# -gt 0 ]; do
     case $1 in --spec) [ $# -ge 2 ] || usage; spec=$2; shift 2 ;; *) usage ;; esac
   done
@@ -339,7 +339,10 @@ cmd_settle() {
       [ "$(dagents_name_key "$a")" = "$(dagents_name_key "$spec")" ] || continue
       case " $REGISTER_UNRESOLVED " in *" $rstate "*) ;; *) continue ;; esac
       [ "$rstate" != verify ] || continue
-      bash "$HERE/register" set "$(dagents_resolve "$reg" "$root")" "$rid" verify --note "built; owner confirms at the milestone audit" || exit 2
+      # An owner's note on the row is kept, after settle's own.
+      note="built; owner confirms at the milestone audit"
+      case "$rnote" in '' | - | "$note") ;; "$note; "*) note=$rnote ;; *) note="$note; $rnote" ;; esac
+      bash "$HERE/register" set "$(dagents_resolve "$reg" "$root")" "$rid" verify --note "$note" || exit 2
       echo "$m: #$rid $ritem — verify"
       changed=1
     done < <(register_rows "$(dagents_resolve "$reg" "$root")" | register_cells)
