@@ -221,42 +221,42 @@
 | 214 | 3311598 test(dforge): add QA acceptance A14, A19-A20, A24, A31 | - | - | n/a | test-only: cockpit acceptance tests of dforge 5's plugin-review-fixes spec |
 | 215 | 8da9057 test(dforge): add QA acceptance A37-A42 | - | - | n/a | test-only: cockpit acceptance tests of dforge 5's plugin-review-fixes spec |
 | 216 | a0af39c test(dforge): add QA acceptance A43-A50, A54 | - | - | n/a | test-only: acceptance tests of dforge 5's plugin-review-fixes spec and their dforge shard weight |
-| 217 | 7e9f0ef test(dforge): add QA acceptance A24 control | - | - | open | - |
-| 218 | 4f69002 fix(dforge): read whole command for unseen messages | - | - | open | - |
-| 219 | f573f5f fix(dforge): clear the worktree's no-plan record | - | - | open | - |
-| 220 | 790c81f fix(dforge): wrap cut rows under ASCII glyphs | - | - | open | - |
-| 221 | 2ab23fc test(dforge): pin desktop webhook rows and units | - | - | open | - |
-| 222 | d0822c3 fix(dforge): spell out the AgentRouter cap consent | - | - | open | - |
-| 223 | 0331c84 fix(dforge): make the snapshot sweep act on facts | - | - | open | - |
-| 224 | 56c8d44 fix(dforge): reread a session read a step failed | - | - | open | - |
-| 225 | 2b10898 fix(dforge): name listed QA paths already dirty | - | - | open | - |
-| 226 | 11d2dab test(dforge): pin the question notification titles | - | - | open | - |
-| 227 | 40c6f49 test(dforge): gate an unprefixed type's bad report | - | - | open | - |
-| 228 | ab50c31 fix(dforge): keep finishing's skill under its cap | - | - | open | - |
-| 229 | ea30d1d docs(dforge): fix stale names in reference text | - | - | open | - |
-| 230 | c7abb03 fix(dforge): refuse a multi-line task-close review | - | - | open | - |
-| 231 | 4bd215a fix(dforge): keep dashed commands out of jq options | - | - | open | - |
-| 232 | da61668 fix(dforge): recheck a stale run inside the lock | - | - | open | - |
-| 233 | 8fbb79c fix(dforge): match a clear's plan name whole | - | - | open | - |
-| 234 | e429076 fix(dforge): say when a register's Covers is unset | - | - | open | - |
-| 235 | f29f7c7 fix(dforge): read only this checkout's ledgers | - | - | open | - |
-| 236 | a6b1c7c fix(dforge): ignore a subagent's permission mode | - | - | open | - |
-| 237 | f3d54ce fix(dforge): read a failed history walk as stale | - | - | open | - |
-| 238 | b5f4761 fix(dforge): count an unparsed stores.json applied | - | - | open | - |
-| 239 | 640a767 test(dforge): run no-node cases beside a shared bin | - | - | open | - |
-| 240 | 8ad97cc fix(dforge): name a timed-out agy --version | - | - | open | - |
-| 241 | 912916c fix(dforge): check the panel's kill left nothing | - | - | open | - |
-| 242 | 6095c1f fix(dforge): show setting problems and stale runs | - | - | open | - |
-| 243 | a22aad3 fix(dforge): say what to do when a save is undone | - | - | open | - |
-| 244 | 735233f fix(dforge): name a waiting task in the dense row | - | - | open | - |
-| 245 | 83bd7ca test(dforge): bound a session-start pull overrun | - | - | open | - |
-| 246 | 0103738 test(dforge): give A21 room on slow runners | - | - | open | - |
-| 247 | 7bcfc5f test(dforge): keep A11's runs out of the checkout | - | - | open | - |
-| 248 | ecd418e fix(dforge): keep git's reason for a failed undo | - | - | open | - |
-| 249 | ed407a7 test(dforge): keep the docs root's amendments/ out | - | - | open | - |
-| 250 | 424e19d fix(dforge): read an unreadable beat as unknown | - | - | open | - |
-| 251 | f5e9103 fix(dforge): match a written message file by name | - | - | open | - |
-| 252 | 656edd4 test(dforge): pin A10's nothing-follows clear | - | - | open | - |
+| 217 | 7e9f0ef test(dforge): add QA acceptance A24 control | - | - | n/a | test-only: an A24 control in plugin-review-fixes.acceptance.test.ts, a dforge 5 suite dagents lacks |
+| 218 | 4f69002 fix(dforge): read whole command for unseen messages | - | - | done | port 6f9f718; fail@parent pass@port |
+| 219 | f573f5f fix(dforge): clear the worktree's no-plan record | - | - | done | port 4e265f3; fail@parent pass@port |
+| 220 | 790c81f fix(dforge): wrap cut rows under ASCII glyphs | - | - | n/a | 5-only: asciiTree and the paneGlyphs setting are dforge 5, absent from dagents' cockpit |
+| 221 | 2ab23fc test(dforge): pin desktop webhook rows and units | - | - | n/a | test-only: pins dforge 5's desktop keepWarm stepper and webhook rows |
+| 222 | d0822c3 fix(dforge): spell out the AgentRouter cap consent | - | - | n/a | 5-only: the AgentRouter consent (CONSENT_KEYS, apiBudgetAgentRouter) is absent from dagents' settings |
+| 223 | 0331c84 fix(dforge): make the snapshot sweep act on facts | - | - | done | port 241b497; fail@parent pass@port |
+| 224 | 56c8d44 fix(dforge): reread a session read a step failed | - | - | done | port fdf386b; fail@parent pass@port |
+| 225 | 2b10898 fix(dforge): name listed QA paths already dirty | - | - | done | port 59f6b21; fail@parent pass@port |
+| 226 | 11d2dab test(dforge): pin the question notification titles | - | - | n/a | test-only: pins dforge 5's waiting-line question titles; dagents writes no waiting line |
+| 227 | 40c6f49 test(dforge): gate an unprefixed type's bad report | - | - | n/a | test-only: adds a missing-report case for an unprefixed agent type to impl-stop-gate.test.sh; no code change |
+| 228 | ab50c31 fix(dforge): keep finishing's skill under its cap | - | - | done | port 4e265f3; fail@parent pass@port |
+| 229 | ea30d1d docs(dforge): fix stale names in reference text | - | - | done | port d5f1a82; text-only plugins/dagents/reference/native-codex.md |
+| 230 | c7abb03 fix(dforge): refuse a multi-line task-close review | - | - | n/a | 5-only |
+| 231 | 4bd215a fix(dforge): keep dashed commands out of jq options | - | - | n/a | 5-only: inflight_scan's jq role pass (_INFLIGHT_ROLE, services and timers) is absent from dagents' in-flight.sh |
+| 232 | da61668 fix(dforge): recheck a stale run inside the lock | - | - | done | port b37b0c4; fail@parent pass@port |
+| 233 | 8fbb79c fix(dforge): match a clear's plan name whole | - | - | done | port dede5df; fail@parent pass@port |
+| 234 | e429076 fix(dforge): say when a register's Covers is unset | - | - | done | port 7e58e76; fail@parent pass@port |
+| 235 | f29f7c7 fix(dforge): read only this checkout's ledgers | - | - | n/a | 5-only: dagents' ui-turn-end.sh has no waiting-ledger stand-down (left out at row 179), so it reads no ledger |
+| 236 | a6b1c7c fix(dforge): ignore a subagent's permission mode | - | - | done | port 2bc58f5; fail@parent pass@port |
+| 237 | f3d54ce fix(dforge): read a failed history walk as stale | - | - | done | port ab736e7; fail@parent pass@port |
+| 238 | b5f4761 fix(dforge): count an unparsed stores.json applied | - | - | done | port 920961f; fail@parent pass@port |
+| 239 | 640a767 test(dforge): run no-node cases beside a shared bin | - | - | done | port 5ee71f5; fail@parent pass@port |
+| 240 | 8ad97cc fix(dforge): name a timed-out agy --version | - | - | done | port 1aed8fa; fail@parent pass@port |
+| 241 | 912916c fix(dforge): check the panel's kill left nothing | - | - | n/a | 5-only |
+| 242 | 6095c1f fix(dforge): show setting problems and stale runs | - | - | n/a | feature: a band setting-problem count and a Stop stale run button; dagents has no pane problem line (row 202) |
+| 243 | a22aad3 fix(dforge): say what to do when a save is undone | - | - | done | port 1185e63; fail@parent pass@port |
+| 244 | 735233f fix(dforge): name a waiting task in the dense row | - | - | n/a | 5-only: dagents writes no Task <N>: waiting line for the dense row to name |
+| 245 | 83bd7ca test(dforge): bound a session-start pull overrun | - | - | n/a | test-only: adds a pull-overrun case to darkmem-sync hooks.test.mjs; no code change |
+| 246 | 0103738 test(dforge): give A21 room on slow runners | - | - | n/a | test-only: widens a keep-warm acceptance test's bound; dagents has no keep-warm |
+| 247 | 7bcfc5f test(dforge): keep A11's runs out of the checkout | - | - | n/a | test-only: A11's runs polluted dforge 5's session-state.log, which dagents' hooks never write |
+| 248 | ecd418e fix(dforge): keep git's reason for a failed undo | - | - | done | port a8b2750; fail@parent pass@port |
+| 249 | ed407a7 test(dforge): keep the docs root's amendments/ out | - | - | n/a | test-only: adds a push case for the reserved amendments/ directory; no code change |
+| 250 | 424e19d fix(dforge): read an unreadable beat as unknown | - | - | done | port 12eda9d; fail@parent pass@port |
+| 251 | f5e9103 fix(dforge): match a written message file by name | - | - | done | port a15898d; fail@parent pass@port |
+| 252 | 656edd4 test(dforge): pin A10's nothing-follows clear | - | - | n/a | test-only: A10 cases in plugin-review-fixes.acceptance.test.sh, a dforge 5 suite dagents lacks |
 | 253 | 4edda5a fix(dforge): fit the did-not-stick toast in its box | - | - | open | - |
 | 254 | fbf0121 fix(dforge): focus Confirm after the consent press | - | - | open | - |
 | 255 | 642b774 fix(dforge): retry only the session steps that failed | - | - | open | - |
