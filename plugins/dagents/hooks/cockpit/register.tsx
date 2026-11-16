@@ -2494,8 +2494,8 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
 const S = {
   // Saved or environment values the settings in force ignored, for the settings view.
   settingProblems: [] as string[],
-  // A session read one of whose steps threw: the slow poll tick reads it again.
-  isSessionPartial: false,
+  // The session read's steps that threw: the slow poll tick runs each again.
+  sessionUnread: [] as (() => Promise<unknown>)[],
   // The problem line for a settings file that does not parse (C15), while it does not; null otherwise.
   brokenConfig: null as string | null,
   // Keys something outside the settings file forces, with the words their rows show.
@@ -4055,23 +4055,25 @@ async function readSession($: EngineInterface, isStart: boolean) {
     argumentHint: '[settings | notify test | notify mention <id>]',
   })
   // Each read fills its own section: one that throws leaves only that section
-  // unread, and the session partly read, so a slow poll tick reads it again.
-  let isPartial = false
-  const step = async (part: () => Promise<unknown>) => {
+  // unread, and a slow poll tick reads that one again, not the whole session,
+  // whose caches the reset above would otherwise clear on every retry.
+  const unread: (() => Promise<unknown>)[] = []
+  const step = async (part: () => Promise<unknown>, isRetried = true) => {
     try {
       await part()
     } catch {
-      isPartial = true
+      if (isRetried) unread.push(part)
     }
   }
   await step(() => loadSettings($))
   // Open first: the reads below run processes, and each fills its section as it lands.
+  // Not retried: a pane opening long after the start would come from nowhere.
   await step(async () => {
     const o = await live($)
     if (isStart && o.isMinimized) {
       if ((await read($, view)) !== 'settings') await shutPane($)
     } else if (isStart && o.openAtStart) void $.ui.open(paneFor(o.layout))
-  })
+  }, false)
   await step(async () => {
     S.compactWindow = await readCompactWindow($)
     await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
@@ -4089,15 +4091,15 @@ async function readSession($: EngineInterface, isStart: boolean) {
   await step(() => beat($))
   await step(() => readVersion($))
   await step(() => readRemote($))
-  S.isSessionPartial = isPartial
+  S.sessionUnread = unread
   // '' when the id could not be read: the poll adopts the first id it reads.
   await update($, sessionRead, () => id ?? '')
 }
 
 /**
  * One poll tick: first a session the cockpit has not read, which a /clear or
- * /resume leaves with no values or another id, or at a slow tick one it read
- * only in part; then nothing unless the pane is
+ * /resume leaves with no values or another id, and at a slow tick the steps
+ * of its read that failed; then nothing unless the pane is
  * placed or the cockpit minimized; then changed settings and the run, and
  * every DETAIL_EVERY ticks the slower readings and the auto run.
  */
@@ -4116,9 +4118,10 @@ async function pollTick($: EngineInterface) {
     if (seen === '' && id !== null) await update($, sessionRead, () => id)
     S.polls += 1
     const isSlowTick = S.polls % DETAIL_EVERY === 0
-    if (isSlowTick && S.isSessionPartial) {
-      await readSession($, false)
-      return
+    if (isSlowTick && S.sessionUnread.length > 0) {
+      const parts = S.sessionUnread
+      S.sessionUnread = []
+      for (const part of parts) await part().catch(() => S.sessionUnread.push(part))
     }
     if (!(await live($)).isMinimized && !(await isPaneUp($))) return
     await rereadSettings($)
