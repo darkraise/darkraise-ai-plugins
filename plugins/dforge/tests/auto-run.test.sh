@@ -492,6 +492,11 @@ check "rebind: a resume is pending" "$(field pending)" "resume"
 out=$(verdict --tokens 10000); status=$?
 check "an ok verdict clears a stale resume" "$status:${out%% *}:$(field pending)" "0:ok:null"
 
+# --- an unknown window never asks for a size-based compaction (R17) ---
+jq '.pending = "after-compact"' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"
+out=$(verdict --tokens 900000 --window 0); status=$?
+check "unknown window: unknown, exit 3, nothing pending" "$status:${out%% *}:$(field pending)" "3:unknown:null"
+
 # --- after-compact measures the session it names ---
 mkdir -p "$HOME/.claude"
 printf '{"autoCompactWindow": 800000}\n' > "$HOME/.claude/settings.json"
@@ -734,6 +739,48 @@ ar --session s-1 compacted
 printf '{}\n' > "$T"
 out=$(after); status=$?
 check "after-compact: an unknown size with setup due names Setup" "$status:$out:$(field pending)" "0:continue — the size after compaction is unknown; record that with auto-run ruling add, and Claude Code's own compaction stays the backstop; setup due: begin at the execution skill's Setup, workspace first:null"
+
+# --- start --register fills an empty Covers (row 54) ---
+mkdir -p "$REPO/docs"
+printf '# Register\n\n**Source:** a review\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n' > "$REPO/docs/r-covers.md"
+ar --session s-1 start --spec "$SPEC" --register docs/r-covers.md --force >/dev/null
+check "start --register fills an empty Covers" "$(grep -c "^\*\*Covers:\*\* $SPEC$" "$REPO/docs/r-covers.md")" "1"
+printf '# Register\n\n**Source:** a review\n**Covers:** -\n' > "$REPO/docs/r-stuck.md"
+mkdir "$REPO/docs/r-stuck.md.tmp"
+err=$(ar --session s-1 start --spec "$SPEC" --register docs/r-stuck.md --force 2>&1 >/dev/null)
+check "start --register says when it cannot fill Covers" "$(grep -c 'could not set \*\*Covers:\*\*' <<<"$err"):$(grep -c '^\*\*Covers:\*\* -$' "$REPO/docs/r-stuck.md")" "1:1"
+rmdir "$REPO/docs/r-stuck.md.tmp"
+# --- clear checks whose prompt it stores (row 32) ---
+ar --session s-1 attach --plan docs/plan.md
+mkdir -p "$REPO/.dforge/handoff"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/other.md` with dforge:resume-execution.\n```\n' > "$REPO/.dforge/handoff/latest.md"
+pending_before=$(field pending) resumes_before=$(field resumes)
+ar --session s-1 clear >/dev/null 2>&1; status=$?
+check "clear: another plan's prompt is refused, nothing booked" "$status:$(field pending):$(field resumes)" "4:$pending_before:$resumes_before"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/myplan.md` with dforge:resume-execution.\n```\n' > "$REPO/.dforge/handoff/latest.md"
+ar --session s-1 clear >/dev/null 2>&1; status=$?
+check "clear: a plan whose name only ends in this one's is another plan" "$status:$(field pending):$(field resumes)" "4:$pending_before:$resumes_before"
+# --- stop --stale (row 33) ---
+ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
+check "stop --stale: refused while the owner lives" "$status:$(field active)" "3:true"
+beat s-1 100000
+ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
+check "stop --stale: a dead owner's run stops" "$status:$(field active)" "0:false"
+# A run started with --force between the check and the locked write is left
+# alone: the fake flock swaps it in just before the lock is taken.
+if command -v flock >/dev/null 2>&1; then
+  ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  beat s-1 100000
+  cp "$STATE" "$TMP/fresh-run.json"
+  jq '.session = "s-3"' "$TMP/fresh-run.json" > "$TMP/swap.json"
+  beat s-3
+  printf '#!/usr/bin/env bash\n[ ! -f "%s" ] || mv -f "%s" "%s"\nexec flock "$@"\n' "$TMP/swap.json" "$TMP/swap.json" "$STATE" > "$TMP/swap-flock"
+  chmod +x "$TMP/swap-flock"
+  DFORGE_FLOCK="$TMP/swap-flock" ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
+  check "stop --stale: a run that replaced the stale one meanwhile keeps running" "$status:$(field session):$(field active)" "3:s-3:true"
+else
+  printf 'skip - stop --stale race: no flock on this host\n'
+fi
 
 # --- every suite that runs the run-control scripts names its own session ---
 # A subagent's shell carries the controller's CLAUDE_CODE_SESSION_ID, so a

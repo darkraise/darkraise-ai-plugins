@@ -13,8 +13,8 @@ a symptom leaves the cause in place, so the failure comes back somewhere else.
 ## Fast Mode
 
 Before Phase 1, unless `fastMode=off`, ask once:
-"Fast mode, or the full dforge flow?" (the AskUserQuestion tool where the
-host has it). Fast mode fixes the bug the way plain Claude Code would; the full
+"Fast mode, fast mode for this session, or the full dforge flow?" (the
+AskUserQuestion tool where the host has it). Fast mode fixes the bug the way plain Claude Code would; the full
 flow is the four phases below.
 Recommend the full flow when the failure is intermittent, spans components or
 has already resisted a fix, and fast mode for a plain, local failure. Take fast
@@ -22,7 +22,8 @@ mode without asking when the request asks for it or for speed, or under
 `fastMode=always`. Never offer it as a dispatched subagent, while a plan is
 executing, or during an auto run.
 
-On fast mode, say `Process: fast — <why>` on a line of its own and follow
+On fast mode, say `Process: fast — <why>` on a line of its own (for the
+session, `Process: fast (session) — <why>`) and follow
 [fast-mode.md](../../reference/fast-mode.md); this skill ends there for the
 request.
 

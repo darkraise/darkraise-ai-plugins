@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# Acceptance QA's file manifest (reference/final-review.md step 0.5). QA lists
+# every repository-relative path it writes, creates or deletes in
+# <workspace>/qa-touched.txt, one per line. When QA is stopped before it
+# commits, `clean` undoes only those paths, and only where they turned dirty
+# after `begin`: an edit the person made meanwhile, or a path that was dirty
+# before QA started, is never touched, and neither is a path the auto run
+# carried in (scripts/auto-run carried).
+#
+# Usage: qa-files begin WORKSPACE   snapshot `git status` and empty the manifest
+#        qa-files clean WORKSPACE   restore or delete QA's listed paths
+# clean prints "qa-files: removed <path>" for each path it restored or
+# deleted, and "qa-files: left <path>" for every other path that turned dirty
+# since begin, carried ones included, and for each listed path that was
+# already dirty at begin.
+# Exit: 0 done; 2 usage, no git checkout, or no snapshot from begin.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+usage() { echo "usage: qa-files begin|clean WORKSPACE" >&2; exit 2; }
+[ $# -eq 2 ] && [ -n "$2" ] || usage
+cmd=$1 ws=$2
+case $cmd in begin | clean) ;; *) usage ;; esac
+[ -d "$ws" ] || { echo "qa-files: no workspace directory $ws" >&2; exit 2; }
+ws=$(cd "$ws" && pwd)
+before="$ws/qa-status-before.txt" touched="$ws/qa-touched.txt"
+
+top=$(git rev-parse --show-toplevel 2>/dev/null | tr -d '\r') && [ -n "$top" ] \
+  || { echo "qa-files: not inside a git checkout" >&2; exit 2; }
+cd "$top" || exit 2
+
+# Porcelain paths are relative to the top level and never quoted under -z.
+status() { git status --porcelain=v1 -z --untracked-files=all; }
+
+if [ "$cmd" = begin ]; then
+  status > "$before" || { echo "qa-files: git status failed" >&2; exit 2; }
+  : > "$touched" || exit 2
+  exit 0
+fi
+
+[ -f "$before" ] || { echo "qa-files: no snapshot $before; run qa-files begin first" >&2; exit 2; }
+
+# parse_status — status records on stdin; sets PATHS (every path named) and
+# CODES (the record's XY code for each, ?? for an untracked file). A rename
+# or copy record is followed by its source path, which is listed too.
+parse_status() {
+  PATHS=() CODES=()
+  local rec xy src
+  while IFS= read -r -d '' rec; do
+    xy=${rec:0:2}
+    PATHS+=("${rec:3}") CODES+=("$xy")
+    case $xy in
+      *R* | *C*) IFS= read -r -d '' src && { PATHS+=("$src") CODES+=("$xy"); } ;;
+    esac
+  done
+}
+
+has() { # has NEEDLE ITEM... — status 0 when NEEDLE is one of the items
+  local needle=$1 item
+  shift
+  for item in "$@"; do [ "$item" = "$needle" ] && return 0; done
+  return 1
+}
+
+parse_status < "$before"
+old=("${PATHS[@]+"${PATHS[@]}"}")
+now=$(mktemp) || exit 2
+trap 'rm -f "$now"' EXIT
+status > "$now" || { echo "qa-files: git status failed" >&2; exit 2; }
+parse_status < "$now"
+
+listed=()
+if [ -f "$touched" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%$'\r'}
+    line=${line#./}
+    [ -n "$line" ] && listed+=("$line")
+  done < "$touched"
+fi
+
+carried=() blocked=0
+if out=$(bash "$HERE/auto-run" carried 2>/dev/null); then
+  while IFS= read -r line; do
+    line=${line%$'\r'}
+    [ -n "$line" ] && carried+=("$line")
+  done <<<"$out"
+else
+  # A failed read means nothing is carried only when no active run exists: a
+  # stopped run keeps its state file with active false. An active run bound to
+  # another session, an unparseable file or a missing jq could hide carried
+  # paths, so nothing is cleaned then.
+  . "$HERE/lib/auto-run.sh"
+  state=$(ar_path 2>/dev/null) || state=""
+  if [ -z "$state" ] || { [ -f "$state" ] \
+    && ! "${DFORGE_JQ:-jq}" -e 'type == "object" and .active != true' < "$state" >/dev/null 2>&1; }; then
+    blocked=1
+    echo "qa-files: could not read the auto run's carried paths; nothing was cleaned" >&2
+  fi
+fi
+
+# remove_empty_parents PATH — rmdir each parent of PATH that is now empty, up
+# to (not including) the top level.
+remove_empty_parents() {
+  local dir=$1
+  while :; do
+    case $dir in */*) dir=${dir%/*} ;; *) return 0 ;; esac
+    [ -n "$dir" ] || return 0
+    rmdir -- "$dir" 2>/dev/null || return 0
+  done
+}
+
+done_paths=()
+for i in "${!PATHS[@]}"; do
+  path=${PATHS[$i]} code=${CODES[$i]}
+  has "$path" "${done_paths[@]+"${done_paths[@]}"}" && continue
+  done_paths+=("$path")
+  # Dirty before QA began: the person's, whatever QA added, so never undone;
+  # named when QA listed it, since QA's edits may now be mixed into it.
+  if has "$path" "${old[@]+"${old[@]}"}"; then
+    has "$path" "${listed[@]+"${listed[@]}"}" && printf 'qa-files: left %s\n' "$path"
+    continue
+  fi
+  if [ "$blocked" -eq 1 ] || has "$path" "${carried[@]+"${carried[@]}"}" \
+    || ! has "$path" "${listed[@]+"${listed[@]}"}"; then
+    printf 'qa-files: left %s\n' "$path"
+    continue
+  fi
+  if [ "$code" = '??' ]; then
+    case $path in
+      */) err=$(rmdir -- "$path" 2>&1) ;;
+      *) err=$(rm -f -- "$path" 2>&1) ;;
+    esac
+    ok=$?
+  else
+    err=$(git --literal-pathspecs restore --staged --worktree -- "$path" 2>&1)
+    ok=$?
+  fi
+  if [ "$ok" -eq 0 ]; then
+    printf 'qa-files: removed %s\n' "$path"
+    remove_empty_parents "${path%/}"
+  else
+    echo "qa-files: could not undo $path${err:+: ${err%%$'\n'*}}" >&2
+    printf 'qa-files: left %s\n' "$path"
+  fi
+done
+exit 0

@@ -153,6 +153,21 @@ test("progress moves into darkmem from every checkout, and a second run does not
   assert.equal(again.stdout, "");
 });
 
+test("a plan's amendments move into darkmem with its ledger (A3)", async t => {
+  const s = await setup(t, "darkmem");
+  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(s.repo, ".dforge", "sdd", "p1", "amendments.md"), "## A1 — Task 1\n");
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
+  assert.equal(s.stub.db.documents.get("proj\u0000dforge/amendments/p1.md").content, "## A1 — Task 1\n");
+  assert.equal(read(path.join(s.workRoot, "sdd", "p1", "amendments.md")), "## A1 — Task 1\n");
+  assert.equal(s.state().documents["dforge/amendments/p1.md"], sha("## A1 — Task 1\n"));
+  const [aside] = movedAside(s.repo);
+  assert.equal(read(path.join(s.repo, ".dforge", aside, "sdd", "p1", "amendments.md")), "## A1 — Task 1\n");
+  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "sdd", "p1", "amendments.md")), false);
+});
+
 test("a ledger darkmem already holds unchanged is not filed again, so a stopped move can run again", async t => {
   const s = await setup(t, "darkmem");
   write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
@@ -832,6 +847,18 @@ test("progress moves back into the primary checkout from closed and open workstr
   const again = await s.reconcile();
   assert.equal(again.code, 0, again.stdout + again.stderr);
   assert.equal(again.stdout, "");
+});
+
+test("a plan's amendments move back into the checkout with its ledger (A3)", async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  await s.seed.putDocument({ project: "proj", uri: "dforge/amendments/p1.md", content: "## A1 — Task 1\n" });
+  const result = await s.reconcile();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
+  assert.equal(read(path.join(s.repo, ".dforge", "sdd", "p1", "amendments.md")), "## A1 — Task 1\n");
+  assert.equal("dforge/amendments/p1.md" in s.state().documents, false);
+  assert.equal(s.stub.db.documents.has("proj\u0000dforge/amendments/p1.md"), true, "darkmem keeps its copy");
 });
 
 test("progress stays in darkmem when the primary checkout holds a different file", async t => {

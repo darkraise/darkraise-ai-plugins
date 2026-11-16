@@ -266,11 +266,10 @@ gate_setup() {
   GSTATE=$(cd "$GREPO" && bash "$S/dforge-path" state | tr -d '\r')
   FALLBACK="$HOME/.local/state/dforge/impl-stop-gate.log"
   RPT="$TMP/gate-reports"; mkdir -p "$RPT"
-  printf '# Report\n\n## Verified\n- `bash t.sh` — pass: 3 passed, 0 failed\n\n## Discovered issues (not fixed)\nNone.\n\n## Assumptions made\nNone.\n' > "$RPT/full.md"
-  printf '# Report\n\n## Discovered issues (not fixed)\nNone.\n\n## Assumptions made\nNone.\n' > "$RPT/no-verified.md"
-  printf '# Report\n\n**Status:** BLOCKED\n\nNeed a decision.\n' > "$RPT/blocked.md"
-  printf '# Report\n\n## Verified\n- `bash t.sh` — pass: 3 passed, 0 failed\n\n## Verified\nnothing yet\n\n## Discovered issues (not fixed)\nNone.\n\n## Assumptions made\nNone.\n' > "$RPT/two-first-valid.md"
-  printf '# Report\n\n## Verified\nnothing yet\n\n## Verified\n- `bash t.sh` — pass: 3 passed, 0 failed\n\n## Discovered issues (not fixed)\nNone.\n\n## Assumptions made\nNone.\n' > "$RPT/two-last-valid.md"
+  printf '## Verdict\npass: 3\n' > "$RPT/full.md"
+  printf '# Report\n\n## Verdict\npass: 3\n' > "$RPT/no-verdict.md"
+  printf '\n\n## Verdict\npass: 3\n' > "$RPT/blank-first.md"
+  printf 'pass: 3\n\n## Verdict\n' > "$RPT/verdict-late.md"
 }
 gate() { # gate <agent id> <message> [cwd] — sets GRC and GERR
   local json
@@ -278,57 +277,46 @@ gate() { # gate <agent id> <message> [cwd] — sets GRC and GERR
   timeout 30 bash "$GATE" <<<"$json" >"$TMP/gout" 2>"$TMP/gerr"; GRC=$?
   GERR=$(tr -d '\r' < "$TMP/gerr")
 }
-done_msg() { printf '**Status:** DONE\nReport: %s' "$1"; }
 plain_msg() { printf 'Here is my update.\nReport: %s' "$1"; }
 fallback_size() { if [ -f "$FALLBACK" ]; then wc -c < "$FALLBACK" | tr -d ' '; else echo 0; fi; }
 
 if selected A13 || selected A14 || selected A15; then gate_setup; fi
 
 if selected A13; then
-  gate a13-x "$(done_msg "$TMP/none.md")"
-  check "A13: the first DONE with no report file is blocked" "$GRC" "2"
-  gate a13-x "$(plain_msg "$RPT/no-verified.md")"
-  check "A13: a status-less retry whose report still lacks ## Verified exits 2" "$GRC" "2"
-  has "A13: and says what is missing" "$GERR" "## Verified"
-  gate a13-y "$(done_msg "$TMP/none.md")"
+  gate a13-x "$(plain_msg "$TMP/none.md")"
+  check "A13: the first reply whose report file is missing is blocked" "$GRC" "2"
+  gate a13-x "$(plain_msg "$RPT/no-verdict.md")"
+  check "A13: a retry whose report does not open with ## Verdict exits 2" "$GRC" "2"
+  has "A13: and says what is missing" "$GERR" "## Verdict"
+  gate a13-y "$(plain_msg "$TMP/none.md")"
   gate a13-y "$(plain_msg "$RPT/full.md")"
-  check "A13: the same retry with a complete report exits 0" "$GRC" "0"
+  check "A13: the same retry with a report that opens with ## Verdict exits 0" "$GRC" "0"
 fi
 
 if selected A14; then
-  gate a14-a "$(done_msg "$TMP/none.md")"
-  gate a14-a "$(printf 'Status: blocked - waiting on a decision\nReport: %s' "$RPT/no-verified.md")"
-  check "A14: a retry whose text says 'Status: blocked' exits 0" "$GRC" "0"
+  gate a14-a "$(plain_msg "$TMP/none.md")"
+  gate a14-a 'Status: blocked - waiting on a decision'
+  check "A14: a retry with no Report: line after a block exits 0" "$GRC" "0"
 
-  gate a14-b "$(done_msg "$TMP/none.md")"
-  gate a14-b "$(plain_msg "$RPT/blocked.md")"
-  check "A14: a status-less retry whose report's first status line is BLOCKED exits 0" "$GRC" "0"
-
-  gate a14-c "$(done_msg "$TMP/none.md")"
-  gate a14-c "$(done_msg "$RPT/full.md")"
-  rc1=$GRC
   gate a14-c "$(plain_msg "$TMP/none.md")"
-  check "A14: a status-less reply after a block followed by a complete DONE exits 0" "$rc1 $GRC" "0 0"
-
-  gate a14-d "$(done_msg "$TMP/none.md")"
-  gate a14-d "$(printf '**Status:** BLOCKED\nReport: %s' "$TMP/none.md")"
+  gate a14-c "$(plain_msg "$RPT/full.md")"
   rc1=$GRC
-  gate a14-d "$(plain_msg "$TMP/none.md")"
-  check "A14: a status-less reply after a block followed by a BLOCKED status exits 0" "$rc1 $GRC" "0 0"
+  gate a14-c 'Here is my update.'
+  check "A14: a reply with no Report: line after a block and a passing report exits 0" "$rc1 $GRC" "0 0"
 
   size0=$(fallback_size)
-  gate a14-e "$(plain_msg "$TMP/none.md")"
-  check "A14: a status-less reply from an agent never blocked exits 0" "$GRC" "0"
-  gate a14-f "$(plain_msg "$TMP/none.md")" "$TMP/no/such/dir"
+  gate a14-e 'Here is my update.'
+  check "A14: a reply with no Report: line from an agent never blocked exits 0" "$GRC" "0"
+  gate a14-f 'Here is my update.' "$TMP/no/such/dir"
   check "A14: also from a directory that cannot be entered" "$GRC" "0"
   check "A14: neither adds a line to the fallback log" "$(fallback_size)" "$size0"
 fi
 
 if selected A15; then
-  gate a15-a "$(done_msg "$RPT/two-first-valid.md")"
-  check "A15: two ## Verified sections, the last holding no bullet, is blocked" "$GRC" "2"
-  gate a15-b "$(done_msg "$RPT/two-last-valid.md")"
-  check "A15: with the valid bullet in the last section it passes" "$GRC" "0"
+  gate a15-a "$(plain_msg "$RPT/verdict-late.md")"
+  check "A15: a report whose ## Verdict follows another first line is blocked" "$GRC" "2"
+  gate a15-b "$(plain_msg "$RPT/blank-first.md")"
+  check "A15: blank lines before ## Verdict pass" "$GRC" "0"
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

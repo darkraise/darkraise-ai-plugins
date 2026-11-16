@@ -25,15 +25,17 @@ partner choosing it is the approval.
 Unless `fastMode=off`, offer fast mode in the message that states your
 Process line, before your first clarifying question, as one question (the
 AskUserQuestion tool where the host has it):
-"Fast mode, or the full dforge flow?" Fast mode works the request the way
-plain Claude Code would; the full flow is the path the Process line named.
+"Fast mode, fast mode for this session, or the full dforge flow?" Fast mode
+works the request the way plain Claude Code would; the full flow is the path
+the Process line named.
 Recommend fast mode for a spike or a bounded request, the full flow when a
 trigger holds. Take fast mode without asking when the request already asks
 for it or for speed ("fast mode", "quick", "just do it"), or under
 `fastMode=always`. Never offer it during an auto run
 (`scripts/auto-run status` exits 0).
 
-On fast mode, say `Process: fast — <why>` on a line of its own and follow
+On fast mode, say `Process: fast — <why>` on a line of its own (for the
+session, `Process: fast (session) — <why>`) and follow
 [fast-mode.md](../../reference/fast-mode.md): this skill, and every other
 dforge skill, ends there for the request. On the full flow, go on with your
 path below.
@@ -88,7 +90,8 @@ downgrades mid-task.
 
 The workflow settings in force arrive as one line at session start, `dforge
 settings in force (…): key=value; …`. With no such line in context, run
-`scripts/dforge-config workflow` once before your first question; it prints the
+`scripts/dforge-config workflow` once before your first question (a Codex
+session runs `scripts/dforge-config workflow --host codex`); it prints the
 same line, or nothing when every setting is at its default. A key the line does
 not name is at its default. Your human partner's own instructions outrank a
 setting, and no setting removes the approval gate. `fastMode=always` records

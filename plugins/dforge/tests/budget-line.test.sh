@@ -42,14 +42,14 @@ out=$(bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null); status=$?
 check "task-brief: exit 0 with no transcript" "$status" "0"
 check "task-brief: first line unchanged" "$(sed -n 1p <<<"$out" | cut -c1-6)" "wrote "
 check "task-brief: last line is the budget line" "$(tail -n 1 <<<"$out")" \
-  "budget: unknown of 465k — unknown — no transcript found"
+  "budget: unknown — unknown — no transcript found"
 
 # --- over budget: handoff, exit unchanged ---
 native() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 KEY=$(printf '%s' "$(native "$(pwd)")" | tr -c 'A-Za-z0-9' '-')
 mkdir -p "$HOME/.claude/projects/$KEY" "$HOME/.claude/dforge/sessions"
 T="$HOME/.claude/projects/$KEY/s-1.jsonl"
-printf '{"type":"assistant","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":500000}}}\n' > "$T"
+printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":500000}}}\n' > "$T"
 jq -n --arg tp "$T" '{session_id:"s-1",transcript_path:$tp}' > "$HOME/.claude/dforge/sessions/$KEY.json"
 
 out=$(bash "$P/scripts/review-package" docs/plan.md "$BASE" HEAD 2>/dev/null); status=$?
@@ -80,7 +80,7 @@ printf 'Task 2: complete (commit abc1235)
 out=$(bash "$P/scripts/task-brief" docs/plan.md 3 2>/dev/null)
 check "task-brief: one task left: the tail line" "$(tail -n 1 <<<"$out")" \
   "budget (last task): 500k of 465k (107%) — ok — source: record"
-printf '{"type":"assistant","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":560000}}}\n' > "$T"
+printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":560000}}}\n' > "$T"
 out=$(bash "$P/scripts/task-brief" docs/plan.md 3 2>/dev/null); status=$?
 check "task-brief: far past the budget in the tail: still ok" "$(tail -n 1 <<<"$out")" \
   "budget (last task): 560k of 465k (120%) — ok — source: record"
@@ -91,7 +91,7 @@ out=$(bash "$P/scripts/review-package" docs/plan.md "$BASE" HEAD 2>/dev/null)
 check "review-package: every task complete: the final line" "$(tail -n 1 <<<"$out")" \
   "budget (final): 560k of 465k (120%) — ok — source: record"
 rm -f "$L"
-printf '{"type":"assistant","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":500000}}}\n' > "$T"
+printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":500000}}}\n' > "$T"
 
 # --- relaxed handoff: a task brief measures against the final-phase limit ---
 mkdir -p "$HOME/.dforge"

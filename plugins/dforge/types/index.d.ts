@@ -177,12 +177,14 @@ export type CockpitActivity = {
 export type CockpitRunTask = {
   n: number
   title: string
-  state: 'pending' | 'assigned' | 'complete' | 'blocked'
+  state: 'pending' | 'assigned' | 'complete' | 'blocked' | 'waiting' | 'deferred'
   /** The fix round in flight, "2/5". */
   round: string | null
   seat: string | null
   isClean: boolean
   reason: string | null
+  /** What a waiting task asks. */
+  question: string | null
 }
 
 /** A dforge run as its SDD ledger tells it. */
@@ -312,12 +314,18 @@ declare module 'claude-code' {
       notifier: CockpitNotifier
       isNudged: boolean
       isPlanSession: boolean
-      /** The main loop's latest `Process:` line is `Process: fast` (reference/fast-mode.md): the seat check stands down. */
+      /** Fast mode is on (reference/fast-mode.md): a `Process: fast` line in this request, or a session-scoped one in force. The seat check and the budget nudge stand down. */
       isFastMode: boolean
+      /** A `Process: fast (session)` line is in force: a new request keeps fast mode on until another Process line names a different path. */
+      isFastSession: boolean
       /** This session runs a plan: an execution skill ran, an implementer was spawned, or the ledger moved. */
       isRunSession: boolean
       /** The auto run bound to this session, as last read; null without one. */
       autoRun: CockpitAutoRun | null
+      /** An active auto run another session owns and whose cockpit no longer beats: the pane names `auto-run stop --stale`. */
+      autoRunLeft: boolean
+      /** The plan file this session last named in a task-brief, task-step, task-close or next-step call; null before one. */
+      boundPlan: string | null
       /** The session id the cockpit last read every section for; '' when the id could not be read, null before the first read. */
       sessionRead: string | null
     }

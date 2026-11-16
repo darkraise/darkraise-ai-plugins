@@ -33,6 +33,33 @@ export function isValidValue(spec, value) {
   }
 }
 
+// A list setting's names split into those its values know and the rest, or
+// undefined when the setting is no list or the value no string.
+export function listNames(spec, value) {
+  const allowed = spec.values;
+  if (spec.type !== "string" || allowed === undefined || typeof value !== "string") return undefined;
+  const names = value.split(/[\s,]+/).filter(name => name !== "");
+  return {
+    known: names.map(name => name.toLowerCase()).filter(name => allowed.includes(name)),
+    unknown: names.filter(name => !allowed.includes(name.toLowerCase())),
+  };
+}
+
+// What a dforge key reads from the settings file: the stored value when it
+// fits, the default when the file lacks the key. A list naming an unknown name
+// keeps the names it knows, since the default would bring back every name the
+// empty list stands for; a notifyOn written but mistyped ("off") reads none,
+// since the default set would post to Discord what was meant to stay private;
+// anything else reads the default. Both readers call it and say their own warning.
+export function resolveStored(key, spec, file) {
+  const stored = file[key];
+  if (isValidValue(spec, stored)) return stored;
+  if (!Object.prototype.hasOwnProperty.call(file, key)) return spec.default;
+  const list = listNames(spec, stored);
+  if (list !== undefined && list.known.length > 0) return list.known.join(",");
+  return key === "notifyOn" ? "none" : spec.default;
+}
+
 export default {
   openAtStart: {
     type: 'boolean', default: true, group: 'Cockpit', target: 'dforge', inertWhen: { key: 'layout', value: 'compact', words: 'no effect while the layout is compact' },
@@ -48,6 +75,11 @@ export default {
     type: 'enum', values: ['detailed', 'dense'], default: 'detailed', group: 'Cockpit', target: 'dforge',
     label: 'Density', title: 'Pane density',
     description: 'detailed: cards, charts and lists. dense: one line per section. The pane\'s Dense and Detailed buttons set it.',
+  },
+  paneGlyphs: {
+    type: 'enum', values: ['unicode', 'ascii'], default: 'unicode', group: 'Cockpit', target: 'dforge',
+    label: 'Glyphs', title: 'Pane glyphs',
+    description: 'unicode: meters, dots and borders drawn in Unicode. ascii: the pane draws only ASCII, for a terminal or font that lacks those glyphs.',
   },
   sections: {
     type: 'string', values: ['account', 'context', 'usage', 'shells', 'agents', 'plan', 'repo', 'guard'], default: '', group: 'Cockpit', target: 'dforge',
@@ -80,9 +112,9 @@ export default {
     description: 'What the minimized band\'s second line shows, in the order turned on. A segment turned on here leaves line 1; none on hides the line.',
   },
   handoffTokens: {
-    type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DFORGE_BUDGET', group: 'Context', target: 'dforge', inertWhen: { key: 'handoffMode', value: 'relaxed', words: 'ignored in relaxed handoff mode' },
+    type: 'number', default: 0, min: 0, max: 2_000_000, step: 50_000, unit: 'k', zero: 'auto', env: 'DFORGE_BUDGET', group: 'Context', target: 'dforge', inertWhen: { key: 'handoffMode', value: 'relaxed', words: 'ignored in relaxed handoff mode; an auto run still uses it' },
     label: 'Handoff budget', title: 'Handoff budget (tokens)',
-    description: "Context size at which the cockpit and the budget scripts say hand off. 0 follows dforge's rule: 93% of the smaller of autoCompactWindow and the model's window, minus 140,000, and never below a fifth of that window. DFORGE_BUDGET overrides it; relaxed handoff mode ignores it.",
+    description: "Context size at which the cockpit and the budget scripts say hand off. 0 follows dforge's rule: 93% of the smaller of autoCompactWindow and the model's window, minus 140,000, and never below a fifth of that window. DFORGE_BUDGET overrides it; relaxed handoff mode ignores it, and an auto run still uses it.",
   },
   handoffMode: {
     type: 'enum', values: ['strict', 'relaxed'], default: 'strict', enforcedBy: 'script', group: 'Context', target: 'dforge',
@@ -225,12 +257,12 @@ export default {
     description: 'Keep a mapped repository\'s documents and progress in darkmem through the mirror. Off keeps both in the repository: a family already in the mirror moves back at the next session start with no plan in progress, from the mirror alone. Left unset after an upgrade, a family a 2.x release put in the mirror stays there unsynced until you choose. A repository is mapped under darkmem.repos in ~/.dforge/config.json.',
   },
   documentStore: {
-    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'dforge',
+    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'dforge', inertWhen: { key: 'darkmemEnabled', value: false, words: 'no effect while darkmem is off' },
     label: 'Documents', title: 'Document store',
     description: 'While Use darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: local in the repository, or darkmem through the mirror. A change moves them at the next session start with no plan in progress.',
   },
   progressSource: {
-    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'dforge',
+    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'dforge', inertWhen: { key: 'darkmemEnabled', value: false, words: 'no effect while darkmem is off' },
     label: 'Progress', title: 'Progress tracking source',
     description: 'While Use darkmem is on, where a mapped repository keeps its plan ledgers and handoffs: local in the repository, or darkmem through the mirror. A change moves them at the next session start with no plan in progress.',
   },

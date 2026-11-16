@@ -7,7 +7,9 @@ an instruction of theirs, so it outranks every skill for that request.
 
 Once fast mode is taken:
 
-- Say `Process: fast — <why>` on a line of its own.
+- Say `Process: fast — <why>` on a line of its own for this request, or
+  `Process: fast (session) — <why>` when your human partner chose it for the
+  session.
 - Work the request the way plain Claude Code would: explore, change, run what
   the change needs, and report.
 - Invoke no further dforge skill for that request. Write no spec, plan,
@@ -22,5 +24,9 @@ dforge's UI proof hold, its UI edit hook and the cockpit's seat check stand
 down while the latest `Process:` line the main session wrote is
 `Process: fast`. Plan ledger and auto run holds do not.
 
-Fast mode covers one request. The next request is routed as usual and offered
-the choice again; a full-flow `Process:` line turns the hooks back on.
+`Process: fast` covers one request: the next request is routed as usual and
+offered the choice again. `Process: fast (session)` covers every request until
+a later `Process:` line names another path. A later turn of the same request
+restates its `Process:` line before its first edit, and the compaction
+snapshot carries a session-scoped line forward. A full-flow `Process:` line
+turns the hooks back on.

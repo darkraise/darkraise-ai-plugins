@@ -104,6 +104,11 @@ fc set autoRun ask
 check "workflow: both back under autoRun=ask" "$(fc workflow)" "dforge settings in force (each replaces the matching question or default in the skills): autoRun=ask; designApproval=whole; specReview=false"
 fc set autoRun off
 check "workflow: both stay under autoRun=off" "$(fc workflow)" "dforge settings in force (each replaces the matching question or default in the skills): autoRun=off; designApproval=whole; specReview=false"
+fresh codexwf
+fc set designApproval whole >/dev/null; fc set specReview false >/dev/null
+check "workflow --host codex keeps overrides under autoRun=on" "$(fc workflow --host codex)" \
+  "dforge settings in force (each replaces the matching question or default in the skills): designApproval=whole; specReview=false"
+check "workflow on Claude still leaves them out" "$(fc workflow)" ""
 
 # --- two setters at once: both keys land ---
 # Each setter holds its read of config.json for 300 ms, so without a lock both
@@ -367,6 +372,38 @@ check "retired finishTimeout: get --json reads the rest" "$(fc get --json | node
 fc get finishTimeout > /dev/null 2>&1; check "retired finishTimeout: get exits 2" "$?" "2"
 check "finishAction: the title and description" "$(node --input-type=module -e "import { pathToFileURL } from 'node:url'; const { default: schema } = await import(pathToFileURL(process.argv[1]).href); console.log(schema.finishAction.title + ' | ' + schema.finishAction.description)" "$(cd "$HERE/../config" && pwd)/schema.mjs")" 'When the work is done | ask asks before the first task. merge, pr or keep skips the question and runs that action as soon as the final review is clean; wait skips it and shows the finish menu then.'
 fc set breakdownRows 7.5; check "a fraction of an older key: exit 2" "$?" "2"
+
+# --- claude-restore takes effortLevel; drop-snapshot removes one session's snapshot (row 60) ---
+fresh snapshot
+mkdir -p "$HOME/.claude"
+printf '%s\n' '{"model":"sonnet"}' > "$HOME/.claude/settings.json"
+fc claude-restore '{"model":"opus[1m]","modelSettings":null,"effortLevel":"high"}'; check "claude-restore takes effortLevel: exit 0" "$?" "0"
+check "claude-restore takes effortLevel: written" "$(at "$HOME/.claude/settings.json" effortLevel)" '"high"'
+printf '%s\n' '{"model":"sonnet","effortLevel":"low"}' > "$HOME/.claude/settings.json"
+fc claude-restore '{"effortLevel":null}'; check "claude-restore: a null effortLevel removes it" "$?:$(keys "$HOME/.claude/settings.json")" "0:model"
+SNAPS="$HOME/.claude/dforge/sessions/saved-defaults"
+mkdir -p "$SNAPS"
+printf '{}\n' > "$SNAPS/sess-0.json"
+printf '{}\n' > "$SNAPS/sess-9.json"
+fc drop-snapshot 'sess/0'; check "drop-snapshot: exit 0" "$?" "0"
+check "drop-snapshot: only that session's snapshot is gone, its id sanitised" "$(ls "$SNAPS" | tr '\n' ' ')" "sess-9.json "
+fc drop-snapshot sess-0; check "drop-snapshot: a missing snapshot: exit 0" "$?" "0"
+fc drop-snapshot; check "drop-snapshot: no session: exit 2" "$?" "2"
+
+fresh broken
+mkdir -p "$(dirname "$FILE")" && printf '{"layout": "full",}' > "$FILE"
+check "workflow: a broken file prints the problem line" "$(fc workflow)" "dforge: $FILE is not a JSON object; every setting reads its default and notifyOn reads none until it parses"
+
+fresh resolver
+mkdir -p "$(dirname "$FILE")" && printf '{"notifyOn": "off", "sections": "plan,unknown"}' > "$FILE"
+check "an invalid notifyOn reads none" "$(fc get notifyOn)" "none"
+check "a mixed list keeps its known names" "$(fc get sections)" "plan"
+fresh claudelock
+mkdir -p "$HOME/.claude" && printf '{}' > "$HOME/.claude/settings.json"
+# The delay holds each writer between its read and its write, so two unlocked
+# writers always both read {} and the second rename drops the first key.
+DFORGE_CLAUDE_WRITE_DELAY_MS=1500 fc set autoCompactWindow 700000 & DFORGE_CLAUDE_WRITE_DELAY_MS=1500 fc set autoCompactEnabled false & wait
+check "two concurrent Claude-key writes both persist" "$(jq -c '{autoCompactWindow, autoCompactEnabled}' "$HOME/.claude/settings.json")" '{"autoCompactWindow":700000,"autoCompactEnabled":false}'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

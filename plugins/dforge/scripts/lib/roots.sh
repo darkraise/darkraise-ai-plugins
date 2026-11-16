@@ -45,9 +45,11 @@ dforge_darkmem_possible() {
   grep -qs '"darkmem"[[:space:]]*:' "$HOME/.dforge/config.json" || [ -f "$HOME/.dforge/stores.json" ]
 }
 
-# Both families local, computed without node: no node on PATH, no git
-# repository (then DIR stands in for the checkout), or a home that never used
-# darkmem.
+# Both families local, computed without node: no git repository (then DIR
+# stands in for the checkout), a home that never used darkmem, or no node on
+# PATH while stores.json applies no darkmem store to this checkout (one that
+# does exits 2: its documents or ledger are in the mirror, and a local root
+# would split the plan's state).
 _dforge_local() { # DIR TOP
   local base=${2:-$1} primary=${2:-$1} common
   if [ -n "$2" ]; then
@@ -63,6 +65,28 @@ _dforge_local() { # DIR TOP
   _DFORGE_PROJECT=""
 }
 
+# _dforge_applied_darkmem TOP — stores.json records documents or progress as
+# darkmem for TOP's primary checkout; without jq, for any checkout. A file that
+# does not parse may record either, so it counts as applied, said on stderr.
+_dforge_applied_darkmem() {
+  local stores="${HOME:-}/.dforge/stores.json" common primary=$1
+  [ -n "${HOME:-}" ] && [ -f "$stores" ] || return 1
+  if ! command -v jq >/dev/null 2>&1; then
+    grep -q '"darkmem"' "$stores"
+    return
+  fi
+  if common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
+    primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null) || primary=$1
+  fi
+  jq -e --arg k "$primary" '.[$k] | objects | .documents == "darkmem" or .progress == "darkmem"' \
+    < "$stores" >/dev/null 2>&1
+  case $? in
+    0) return 0 ;;
+    1 | 4) return 1 ;;
+    *) printf 'roots.sh: %s does not parse, so darkmem stores may be applied\n' "$stores" >&2; return 0 ;;
+  esac
+}
+
 dforge_stores_init() { # [DIR]
   local dir=${1:-$PWD} top key out kind store root extra
   # Git Bash's $PWD is /tmp/... or /d/...; under MSYS_NO_PATHCONV git.exe takes
@@ -71,7 +95,16 @@ dforge_stores_init() { # [DIR]
   key="${HOME:-}|${top:-nogit:$dir}"
   [ "$_DFORGE_KEY" = "$key" ] && return 0
   _DFORGE_TOP=$top
-  if [ -z "$top" ] || ! dforge_darkmem_possible || ! command -v node >/dev/null 2>&1; then
+  if [ -z "$top" ] || ! dforge_darkmem_possible; then
+    _dforge_local "$dir" "$top"
+    _DFORGE_KEY=$key
+    return 0
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    if _dforge_applied_darkmem "$top"; then
+      printf 'roots.sh: node is required while darkmem stores are applied\n' >&2
+      exit 2
+    fi
     _dforge_local "$dir" "$top"
     _DFORGE_KEY=$key
     return 0

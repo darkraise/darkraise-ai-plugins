@@ -99,10 +99,11 @@ your own: QA commits on this branch.
 
 - 0.2 **UI proof.** Run
   `bash <plugin-root>/scripts/ui-proof check --base MERGE_BASE --spec <the plan's Spec>`
-  under `timeout 120`. Exit 0 goes on (it also prints `ok` when the project
-  has no UI profile and the spec no UI/UX contract, or when no UI file
-  changed). Any other status (2 for a bad base or spec, 124 for the timeout)
-  means the check never ran: treat it as exit 1.
+  under `bash <plugin-root>/scripts/with-timeout 120 <command>`. Exit 0 goes
+  on (it also prints `ok` when the project has no UI profile and the spec no
+  UI/UX contract, or when no UI file changed). Any other status (2 for a bad
+  base or spec, 124 for the timeout, 125 when no timeout command, `timeout` or
+  `gtimeout`, is installed) means the check never ran: treat it as exit 1.
   Exit 1 stops the review like a red gate: the UI is unproven, and
   reviewing it spends the seats on what the proof would have found. Attended,
   report the failed steps and stop. In an auto run, run the dforge:ui-ux Prove
@@ -119,11 +120,13 @@ your own: QA commits on this branch.
   when the plan's spec has no `A<n>` statement tagged `test`, or when
   the ledger already holds `Acceptance QA: complete`. When the ledger holds
   `Acceptance QA: dispatched` with no `complete` line, QA was cut off. First,
-  when `<workspace>/qa-status-before.txt` exists, remove QA's uncommitted work
-  as (b) does when its timer finishes first, and log
-  `Ruling: QA cut off — its uncommitted files were removed — none`; without
-  that file, remove nothing.
-  Never restore or delete a carried path (`scripts/auto-run carried`), whatever its status line shows. Then, when
+  when `<workspace>/qa-status-before.txt` exists, run
+  `bash <plugin-root>/scripts/qa-files clean <workspace>` as (b) does when its
+  timer finishes first, name the paths of its `qa-files: left` lines in your
+  final-review message, and log
+  `Ruling: QA cut off — its listed files were removed; left: <paths> — none`
+  (`left: none` when it printed no `left` line); without that file, remove
+  nothing. Then, when
   `<workspace>/acceptance-report.md` exists, read it, complete it yourself
   with `cannot-test: timeout` for every `test` statement it does not cover,
   and go to (c) below; otherwise re-dispatch once with `[MODE]` `rerun`, under
@@ -142,10 +145,13 @@ your own: QA commits on this branch.
       its `test` statements verbatim, MERGE_BASE, HEAD, the test command
       `gates.md` declares or `none`, the workspace, and `[MODE]` `first`.
       When the plan has a `**Worktree setup:**` line, give QA that command
-      too, for its mutation worktree. Before dispatching, save the output of
-      `git status --porcelain` to `<workspace>/qa-status-before.txt`.
-      Dispatch it in the background and, in the same message, start a
-      background timer, `sleep <s>` with `<s>` = 600 + 180 × the number of
+      too, for its mutation worktree. Before every dispatch, the `rerun`
+      and `reword` re-dispatches included and after any cut-off cleanup
+      above, run `bash <plugin-root>/scripts/qa-files begin <workspace>`:
+      it saves `git status` to `<workspace>/qa-status-before.txt` and
+      empties `<workspace>/qa-touched.txt`, the list QA appends each path it
+      writes to. Dispatch it in the background and, in the same message,
+      start a background timer, `sleep <s>` with `<s>` = 600 + 180 × the number of
       `test` statements, at least 1200 and at most 3600 (20 to 60 minutes),
       with the Bash
       call's `timeout` set to (`<s>` + 120) × 1000 ms: a background call's
@@ -160,13 +166,16 @@ your own: QA commits on this branch.
       Clean up only once it has stopped, since removing files a live writer
       still owns races it. If it cannot be stopped, leave its files in place
       and report the blocked cleanup.
-      Once it has stopped, run `git status --porcelain` again: each path it
-      lists that `<workspace>/qa-status-before.txt` does not is QA's
-      unfinished work. Restore a tracked one with
-      `git restore --staged --worktree -- <path>`, delete an untracked one,
-      and log
-      `Ruling: QA timed out — its uncommitted files were removed — none`.
-      Never restore or delete a carried path (`scripts/auto-run carried`), whatever its status line shows.
+      Once it has stopped, run
+      `bash <plugin-root>/scripts/qa-files clean <workspace>`. It restores
+      or deletes only the paths QA listed that turned dirty after `begin`,
+      never a carried path (`scripts/auto-run carried`), and prints a
+      `qa-files: left <path>` line for every other new dirty path, which
+      may be your human partner's work, and for a listed path that was
+      already dirty, where QA's edits are mixed into theirs. Name those paths in your
+      final-review message, and log
+      `Ruling: QA timed out — its listed files were removed; left: <paths> — none`
+      (`left: none` when it printed no `left` line).
       Then write or complete `<workspace>/acceptance-report.md` yourself,
       with `cannot-test: timeout` for every statement it does not cover.
       When QA finishes first, stop the timer.
@@ -455,6 +464,11 @@ over the same range, with `<workspace>/acceptance-report.md` as
 Send any residual findings — `NOT ADDRESSED` and `REJECTION DISPUTED` — to the
 ruling seat as `final-residual` items and carry out its verdicts. The scoped re-review is a Claude seat that wrote none of the code, so
 a list from an external reviewer alone still gets an independent reader.
+When the scoped re-review is clean, the clean line appended after it is a new
+`Final review: clean (commits <base>..<new head>)`, `<new head>` being the
+HEAD it reviewed; so is the one after a re-review of commits made after an
+earlier clean line (the `stale` state of `plan_final_review_state` in
+`scripts/lib/plan.sh`).
 
 **Acceptance tests.** The fixer never weakens a test whose name starts with
 `A<n>:`, or with `a<n>_` where the framework forbids a colon in a test name
@@ -476,7 +490,7 @@ dforge:test-driven-development, and never a regression test that names a fixed
 bug; a test that exists at MERGE_BASE is left for dforge:test-simplifier. The
 commit body names the faults the covering test catches. A finding whose
 one-liner begins `deferred: test-simplifier — ` reaches the fixer, which skips
-it and lists it under `DEFERRED:` (**The fix subagent** above). The
+it and lists it under `DEFERRED:` (**the fix pass** above). The
 session records it with
 `scripts/register add <register> "<old test> is covered by <new test>" --state deferred --note "final review: for dforge:test-simplifier"`
 in the register that covers the plan's spec, or names it in the final message
@@ -486,10 +500,10 @@ only, neither fixed nor rejected.
 **Suites.** Any test or validation suite you run in the final review — the
 check after the fix wave, or the project's full suite in inline mode — goes
 through `bash <plugin-root>/scripts/suite-run -- <command>`, which records the
-HEAD it ran at and prints a digest in place of the output. Tell the fix
-subagent to run the plan's `**Integration check:**` command the same way,
+HEAD it ran at and prints a digest in place of the output. Run the plan's
+`**Integration check:**` command yourself the same way,
 `bash <plugin-root>/scripts/suite-run -- bash -c '<integration check>'`,
-after its last commit, on a clean tree: finishing's verification then
+after the fix pass's last commit, on a clean tree: finishing's verification then
 reuses that pass at the unchanged HEAD instead of running the suite again. A
 fix wave whose commits moved HEAD past that run is not reused.
 

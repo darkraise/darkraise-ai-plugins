@@ -333,6 +333,14 @@ git worktree add -q --detach "$TMP/wt" HEAD
 step review docs/plan.md 1 --cwd "$TMP/wt"
 check "review: --cwd names the panel's working directory" "$(grep -c -- "--kind task --tier light --cwd \"$TMP/wt\" --out-dir" <<<"$out")" "1"
 git worktree remove --force "$TMP/wt"
+# --- --cwd's checkout answers every git question (row 56) ---
+state_keep=$(cat "$WS/task-1-step.json")
+git worktree add -q --detach "$TMP/wt-cwd" HEAD
+git -C "$TMP/wt-cwd" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m "only in the worktree"
+step review docs/plan.md 1 --cwd "$TMP/wt-cwd"
+check "review: the review head is --cwd's HEAD" "$rc:$(jq -r '.reviewHead' "$WS/task-1-step.json" | tr -d '\r')" "0:$(git -C "$TMP/wt-cwd" rev-parse HEAD)"
+git worktree remove --force "$TMP/wt-cwd"
+printf '%s\n' "$state_keep" > "$WS/task-1-step.json"
 step review docs/plan.md 1 --cwd "$TMP/no-such-dir"
 check "review: a missing --cwd directory exits 2" "$rc" "2"
 printf '%s\n' '#!/usr/bin/env bash' 'echo "agy-gate usable=true reason=ok review=false resets_at=- claude=on claude_resets_at=- source=probe"' > "$TMP/agy-probe-stub"

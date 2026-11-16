@@ -108,7 +108,8 @@ check "open: no such task exits 3" "$rc" "3"
 run bash "$BRIEF" --open docs/plan.md
 check "open: no task exits 2" "$rc" "2"
 run bash "$BRIEF" --open docs/codex.md 1
-check "open: a Host: codex plan exits 2" "$rc" "2"
+check "open: a Host: codex plan opens" "$rc:$(grep -c '^Task 1: implementer inline (assigned; base ' "$(bash "$P/scripts/sdd-workspace" docs/codex.md)/progress.md")" "0:1"
+check "open: a Codex brief carries no Claude-only lines" "$(grep -c '^\*\*Review:\*\*\|Plan header excerpt\|^## Plan header$' "$(bash "$P/scripts/sdd-workspace" docs/codex.md)/task-1-brief.md")" "0"
 
 # A brief without --open writes no ledger line and still prints the check.
 run bash "$BRIEF" docs/plan.md 2
@@ -167,6 +168,37 @@ run bash "$BRIEF" --open docs/plan.md 3
 run bash "$CLOSE" docs/plan.md 3 "$CP"
 check "close: the last task prints a budget line" "$(grep -c '^budget' <<<"$out")" "1"
 check "close: a middle task prints none" "$(run bash "$CLOSE" docs/plan.md 2 "$CP"; grep -c '^budget' <<<"$out")" "0"
+
+# --- every amendment consumer refuses a ledger citing a missing amendment (A4) ---
+printf 'Task 1: Ruling: amendment A7 — x — y\n' >> "$LEDGER"
+for argv in "task-brief|docs/plan.md|1" \
+    "task-step|start|docs/plan.md|1" \
+    "task-close|docs/plan.md|1|done: x; verified: y; remaining: none; discovered: none; assumptions: none" \
+    "plan-lint|docs/plan.md" \
+    "review-route|docs/plan.md|--task|1" \
+    "lens-route|docs/plan.md|--task|1" \
+    "depth-route|docs/plan.md"; do
+  IFS='|' read -r -a a <<<"$argv"
+  run bash "$P/scripts/${a[0]}" "${a[@]:1}"
+  check "${a[0]}: a cited amendment missing exits 2" "$rc" "2"
+  has "${a[0]}: the message names the script and the amendment" "$err" "${a[0]}: the ledger cites amendment A7"
+done
+sed -i '/amendment A7/d' "$LEDGER"
+
+# --- a ledger that names another plan with the same basename is refused (rows 2, 52) ---
+mkdir -p other && cp docs/plan.md other/plan.md
+LEDGER_BEFORE=$(cat "$LEDGER")
+run bash "$BRIEF" --open other/plan.md 2
+check "open: a same-basename plan's ledger exits 2" "$rc" "2"
+check "open: it writes nothing" "$(cat "$LEDGER")" "$LEDGER_BEFORE"
+run bash "$CLOSE" other/plan.md 1 'done: x; verified: y; remaining: none; discovered: none; assumptions: none'
+check "close: a same-basename plan's ledger exits 2" "$rc" "2"
+run bash "$CLOSE" docs/plan.md 1 $'done: x\nTask 9: complete; verified: y; remaining: none; discovered: none; assumptions: none'
+check "close: a checkpoint with a newline exits 2" "$rc" "2"
+LEDGER_BEFORE=$(cat "$LEDGER")
+run bash "$CLOSE" docs/plan.md 1 'done: x; verified: y; remaining: none; discovered: none; assumptions: none' --review $'review clean\nFinal review: clean (commits a..b)'
+check "close: a review text with a newline exits 2 and writes nothing" "$rc|$(cat "$LEDGER")" "2|$LEDGER_BEFORE"
+rm -rf other
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -50,15 +50,17 @@ inflight_idle() {
 }
 
 # inflight_scan TRANSCRIPT [SINCE]
-# stdout: one line per launch still running, five tab-separated fields:
-#   <agent|shell> <task id> <started HH:MM> <idle Nm|idle -> <what>
+# stdout: one line per launch still running, six tab-separated fields:
+#   <agent|shell|monitor> <task id> <started HH:MM> <idle Nm|idle -> <what> <work|service|timer>
 # The start is the launch result's own timestamp in local time ("-" when it
-# has none); the idle age is inflight_idle's; <what> is cut at 80 characters.
+# has none); the idle age is inflight_idle's; <what> is cut at 80 characters;
+# the role is inflight_role's for a shell's command, and work for the rest.
 # Returns 1 when the transcript could not be scanned, which is not "nothing".
 # jq reads it on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /c/...
 # form the session record's lookup yields.
 inflight_scan() {
-  local tp=$1 since=${2:-} events launched stopped latest running kind id start out what
+  local tp=$1 since=${2:-} events launched stopped latest running kind id start out what cmd roles
+  local -a cmds=()
   [ -n "$tp" ] && [ -f "$tp" ] || return 0
   events=$(set -o pipefail; jq -rR --arg since "$since" 'def hm($t): try ($t | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 | localtime | strftime("%H:%M")) catch "-";
       def path_end: sub("\\s+$"; "") | sub("\\.(\\s.*)?$"; "");
@@ -66,7 +68,7 @@ inflight_scan() {
       | select($since == "" or ((.timestamp? // $since) >= $since))
       | if .type? == "assistant" then
           .message.content? | arrays | .[] | select(.type? == "tool_use")
-          | "U\t\(.id // "-")\t\((.input.description? // .input.command? // "") | tostring | gsub("[\t\r\n]+"; " ") | .[0:80])"
+          | "U\t\(.id // "-")\t\((.input.description? // .input.command? // "") | tostring | gsub("[\t\r\n]+"; " ") | .[0:80])\t\((.input.command? // "") | tostring | (split("\n")[0] // "") | gsub("[\t\r]+"; " "))"
         elif .type? == "user" then
           (.timestamp? // "") as $ts
           | .message.content? | arrays | .[] | select(.type? == "tool_result")
@@ -123,18 +125,55 @@ inflight_scan() {
   running=$(awk -F '\t' '
       FILENAME == ARGV[1] { if ($0 != "") gone[$0] = 1; next }
       FILENAME == ARGV[2] { if ($0 != "") { seq[$1] = $2 + 0; state[$1] = $3 }; next }
-      FILENAME == ARGV[3] { if ($1 == "U") what[$2] = $3; next }
+      FILENAME == ARGV[3] { if ($1 == "U") { what[$2] = $3; cmd[$2] = $4 }; next }
       { u = "u:" $2; t = "t:" $3; k = ""
         if (u in seq) k = u
         if ((t in seq) && (k == "" || seq[t] > seq[k])) k = t
         if (k != "" && state[k] == "done") next }
       ($3 in gone) || seen[$2]++ || ($3 != "-" && listed[$3]++) { next }
-      { w = what[$2]; if (w == "") w = "(no description)"; print $4 "\t" $3 "\t" $5 "\t" $6 "\t" w }' \
+      { w = what[$2]; if (w == "") w = "(no description)"; print $4 "\t" $3 "\t" $5 "\t" $6 "\t" w "\t" cmd[$2] }' \
       <(printf '%s\n' "$stopped") <(printf '%s\n' "$latest") <(printf '%s\n' "$events") - <<<"$launched") || return 1
   [ -z "$running" ] && return 0
-  while IFS=$'\t' read -r kind id start out what; do
-    printf '%s\t%s\t%s\t%s\t%s\n' "$kind" "$id" "$start" "$(inflight_idle "$kind" "$id" "$out" "$tp")" "$what"
+  while IFS=$'\t' read -r kind id start out what cmd; do
+    [ "$kind" = shell ] && cmds+=("$cmd")
   done <<<"$running"
+  roles=""
+  # `--` keeps a command that opens with a dash a positional argument.
+  if [ "${#cmds[@]}" -gt 0 ] && ! roles=$(MSYS_NO_PATHCONV=1 jq -r "$_INFLIGHT_ROLE"' $ARGS.positional[] | role($cfg)' --args -- "${cmds[@]}" < "$_INFLIGHT_SERVICES" 2>/dev/null); then
+    roles=""
+    echo "in-flight: could not tell services and timers from work (jq failed on $_INFLIGHT_SERVICES); every shell counts as work" >&2
+  fi
+  roles=${roles//$'\r'/}
+  local -a role_of=()
+  [ -z "$roles" ] || mapfile -t role_of <<<"$roles"
+  local n=0 role
+  while IFS=$'\t' read -r kind id start out what cmd; do
+    role=work
+    if [ "$kind" = shell ]; then role=${role_of[$n]:-work}; n=$((n + 1)); fi
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$id" "$start" "$(inflight_idle "$kind" "$id" "$out" "$tp")" "$what" "$role"
+  done <<<"$running"
+}
+
+# The services and the timer pattern the cockpit shares (config/services.json,
+# contract C4). jq evaluates them: three patterns use lookahead, which grep -E
+# lacks. A command is a timer when its trimmed first line is a bare sleep, and
+# a service when a part of that line, split on &&, || and ;, trimmed and
+# without leading NAME=value assignments, matches a services pattern.
+_INFLIGHT_SERVICES="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/config/services.json"
+_INFLIGHT_ROLE='. as $cfg | def role($cfg): (split("\n")[0] // "") as $line
+  | if ($line | gsub("^\\s+|\\s+$"; "") | test($cfg.timer)) then "timer"
+    elif any($line | splits("&&|\\|\\||;") | gsub("^\\s+|\\s+$"; "") | sub("^(\\w+=\\S*\\s+)+"; ""); . as $part | any($cfg.services[]; . as $re | $part | test($re))) then "service"
+    else "work" end;'
+
+# inflight_role COMMAND: service, timer or work.
+inflight_role() {
+  local role
+  if ! role=$(MSYS_NO_PATHCONV=1 jq -r --arg c "$1" "$_INFLIGHT_ROLE"' $c | role($cfg)' < "$_INFLIGHT_SERVICES" 2>/dev/null); then
+    role=""
+    echo "in-flight: could not tell services and timers from work (jq failed on $_INFLIGHT_SERVICES); the command counts as work" >&2
+  fi
+  role=${role//$'\r'/}
+  printf '%s\n' "${role:-work}"
 }
 
 # inflight_queued TRANSCRIPT [SINCE]: status 0 when a task notification is
@@ -153,9 +192,36 @@ inflight_queued() {
       END { for (i in q) if (index(q[i], "<task-notification>")) exit 0; exit 1 }'
 }
 
-# inflight_text: inflight_scan's lines on stdin with single spaces between the
-# fields, for a person to read.
-inflight_text() { tr '\t' ' '; }
+# inflight_text: inflight_scan's lines on stdin, the first five fields with
+# single spaces between them and the role named when it is not work, for a
+# person to read.
+inflight_text() {
+  awk -F '\t' '{ s = $1; m = NF < 5 ? NF : 5; for (i = 2; i <= m; i++) s = s " " $i
+    if ($6 == "service") s = s " (service)"; else if ($6 == "timer") s = s " (timer)"
+    print s }'
+}
+
+# inflight_list TRANSCRIPT SINCE SID: the session state file's launches when
+# lib/session-state.sh trusts them (ss_launches), else inflight_scan's lines,
+# with its exit status.
+inflight_list() {
+  local out
+  if [ -n "${3:-}" ] && out=$(ss_launches "$3"); then
+    [ -z "$out" ] || printf '%s\n' "$out"
+    return 0
+  fi
+  inflight_scan "$1" "${2:-}"
+}
+
+# inflight_source SID: "session file" or "transcript", the source
+# inflight_list takes, without logging a rejection.
+inflight_source() {
+  if [ -n "${1:-}" ] && ( _ss_log() { :; }; ss_launches "$1" >/dev/null ); then
+    printf 'session file\n'
+  else
+    printf 'transcript\n'
+  fi
+}
 
 # inflight_since SESSION_ID: the time scripts/session-start.sh recorded when
 # the session last started or resumed, or nothing.
@@ -164,3 +230,5 @@ inflight_since() {
   [ -n "$1" ] && [ -f "$f" ] && head -n 1 "$f" | tr -d '\r'
   return 0
 }
+
+. "$(dirname "${BASH_SOURCE[0]}")/session-state.sh"

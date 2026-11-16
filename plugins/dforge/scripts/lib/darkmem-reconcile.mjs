@@ -283,6 +283,7 @@ function statusLines(stdout) {
 function uncarried(docsDir, parts) {
   if (parts.some(part => part.startsWith("."))) return "a dot name, which the mirror never syncs";
   if (parts[0] === "handoff") return "under handoff/, which is reserved for plan handoff notes";
+  if (parts[0] === "amendments") return "under amendments/, which is reserved for plan amendments";
   if (parts[0] === "archive") return "under archive/, which is reserved for deletion archives";
   let at = docsDir;
   let stat;
@@ -487,7 +488,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
     && !fs.existsSync(path.join(mirror.docsRoot, ...uri.slice(DOC_PREFIX.length + 1).split("/"))));
   if (unpushed.length && !offline) return { moved: false, reason: "the mirror holds deletions not yet pushed; push first", details: unpushed };
   const target = path.join(cfg.repoRoot, "docs", "dforge");
-  // A file under the docs root's handoff/ or archive/ has uri null: never synced, not carried.
+  // A file under the docs root's handoff/, amendments/ or archive/ has uri null: never synced, not carried.
   const files = listDocumentFiles(mirror).filter(item => item.uri).map(({ file, uri }) => {
     const dest = path.join(target, path.relative(mirror.docsRoot, file));
     return { file, uri, dest, name: slash(path.relative(cfg.repoRoot, dest)), hash: fileHash(file) };

@@ -175,7 +175,14 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
     const field = Input !== undefined && (
       <Input key={`set-${row.key}-input`} label={row.label} value={String(row.value)} submitLabel="save" onSubmit={(text: string) => act.submit(row.key, text)} />
     )
-    if (row.kind === 'stepper') return [field, press(`set-${row.key}-less`, '−', () => act.step(row.key, -1)), press(`set-${row.key}-more`, '+', () => act.step(row.key, 1))]
+    if (row.kind === 'stepper') {
+      return [
+        field,
+        <Text key={`set-${row.key}-shown`} dimColor>{` ${row.shown} `}</Text>,
+        press(`set-${row.key}-less`, '−', () => act.step(row.key, -1)),
+        press(`set-${row.key}-more`, '+', () => act.step(row.key, 1)),
+      ]
+    }
     return field
   }
 

@@ -42,6 +42,7 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
       # Every session start rewrites its own records, so one untouched for a
       # month belongs to a session or a checkout that is gone.
       find "$sessions_dir" "$sessions_dir/by-id" -maxdepth 1 -type f -name '*.json' -mtime +30 -delete 2>/dev/null || true
+      if . "${SCRIPT_DIR}/lib/session-state.sh" 2>/dev/null; then ss_prune; fi
     fi
   fi
   # The cockpit writes its heartbeat here (scripts/lib/auto-run.sh
@@ -122,6 +123,27 @@ if [ -n "$roadmap_root" ]; then
   fi
 fi
 
+# A darkmem store applied with no node to read it: every script exits 2 from
+# lib/roots.sh, and the hooks that read a root pass silently, so the session
+# is told once, on its first start (a marker beside the turn stamp).
+nonode_line=""
+if [ -n "$roadmap_root" ] && ! command -v node >/dev/null 2>&1; then
+  nonode_err=$( (dforge_stores_init "$roadmap_root") 2>&1 >/dev/null )
+  case $nonode_err in
+    *'node is required while darkmem stores are applied'*)
+      nonode_marker=""
+      if [ -n "${HOME:-}" ] && [ -n "${session_id:-}" ]; then
+        nonode_marker="${HOME}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').nonode"
+      fi
+      if [ -z "$nonode_marker" ] || [ ! -e "$nonode_marker" ]; then
+        nonode_line="dforge: node is required while darkmem stores are applied; install Node or set the stores local"
+        context="${context}\n\n$(escape_for_json "$nonode_line")"
+        [ -z "$nonode_marker" ] || { mkdir -p "$(dirname "$nonode_marker")" && : > "$nonode_marker"; } 2>/dev/null || true
+      fi
+      ;;
+  esac
+fi
+
 # darkmem's reconcile and pull (darkmem store options spec §5), on every
 # source: a line per moved or refused family and the pull's result, fitted to
 # the room the hook's 10,000-character cap leaves the entry point. A
@@ -131,7 +153,7 @@ fi
 # seconds for the snapshot and the reply, since a killed hook injects nothing.
 darkmem_lines=""
 if . "${SCRIPT_DIR}/lib/darkmem-hook.sh" 2>/dev/null; then
-  room=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} ))
+  room=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} - ${#nonode_line} ))
   if [ "$room" -ge 100 ]; then
     darkmem_lines=$(darkmem_session_lines "${cwd:-$PWD}" "${session_id:-}" "$room" $(( 270 - SECONDS )) \
       | tr -d '\001-\010\013\014\016-\037')
@@ -149,7 +171,7 @@ fi
 # point leaves, with headroom for the wrapper text.
 if grep -qE '"source"[[:space:]]*:[[:space:]]*"compact"' <<<"$stdin_json" \
    && . "${SCRIPT_DIR}/lib/snapshot.sh" 2>/dev/null; then
-  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} - ${#darkmem_lines} ))
+  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} - ${#nonode_line} - ${#darkmem_lines} ))
   [ "$cap" -le "$SNAPSHOT_CAP" ] || cap=$SNAPSHOT_CAP
   if [ "$cap" -gt 1000 ]; then
     # Transcript text can carry raw C0 controls (pasted terminal output with

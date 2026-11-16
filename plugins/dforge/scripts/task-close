@@ -11,8 +11,9 @@
 # Prints the line it wrote, then what the plan needs next: an auto run's
 # pending decisions, an Early CI that names this task, and, after the last
 # task, the final budget line.
-# Exit: 0 ok (or the task was already complete); 2 usage or a checkpoint missing
-# one of its five fields; 3 no such task, or no open line for it; 4 an
+# Exit: 0 ok (or the task was already complete); 2 usage, a checkpoint missing
+# one of its five fields or holding a line break, or a ledger (same basename)
+# that names another plan; 3 no such task, or no open line for it; 4 an
 # amendment does not apply; 5 an auto run stopped at this completion.
 set -uo pipefail
 
@@ -35,6 +36,9 @@ plan_arg=${args[0]} n=${args[1]} checkpoint=${args[2]}
 for field in 'done:' 'verified:' 'remaining:' 'discovered:' 'assumptions:'; do
   [[ $checkpoint == *"$field"* ]] || die "the checkpoint lacks '$field' (done: …; verified: …; remaining: …; discovered: …; assumptions: …)"
 done
+# A line break would start a second ledger line, which recovery would read.
+case $checkpoint in *$'\n'*|*$'\r'*) die "the checkpoint must be one line" ;; esac
+case $review in *$'\n'*|*$'\r'*) die "the --review text must be one line" ;; esac
 
 plan=$(plan_locate "$plan_arg")
 [ -f "$plan" ] || die "no such plan file: $plan"
@@ -42,13 +46,20 @@ plan_require_same_project "$plan"
 ctx=$(_plan_ctx "$plan")
 dforge_stores_init "$ctx"
 
+slug=$(basename "$plan" .md)
+ledger="$(dforge_ledger_dir "$slug" "$ctx")/progress.md"
+named=""
+[ ! -f "$ledger" ] || named=$(ledger_plan "$ledger")
+if [ -n "$named" ] && [ -z "$(plan_ledger "$plan")" ]; then
+  die "$ledger belongs to $named, not $plan"
+fi
+
 src=$(mktemp)
 trap 'rm -f "$src"' EXIT
+plan_amendments_ready "$plan"
 plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null || die "an amendment does not apply; run plan-lint" 4
 plan_task_text "$src" "$n" >/dev/null || die "no Task $n in $plan" 3
 
-slug=$(basename "$plan" .md)
-ledger="$(dforge_ledger_dir "$slug" "$ctx")/progress.md"
 [ -f "$ledger" ] || die "no ledger for $plan; run task-brief --open first" 3
 
 if tr -d '\r' < "$ledger" | grep -q "^Task $n: complete"; then

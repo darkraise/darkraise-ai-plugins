@@ -144,5 +144,10 @@ for case in outside fenced worded quoted; do
   check "a Finish line $case is not read" "$?" "3"
 done
 
+# --- answer with nothing recorded creates the record (row 55) ---
+rm -f .dforge/sdd/finish.json
+FINISH_CHOICE_NOW=$T0 fc answer keep >/dev/null 2>&1; rc=$?
+check "answer: no record still succeeds" "$rc:$(jq -r .answer .dforge/sdd/finish.json)" "0:keep"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

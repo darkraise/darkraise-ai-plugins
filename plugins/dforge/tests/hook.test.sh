@@ -213,5 +213,38 @@ check "session-start.sh parses" \
 check "entry point is at most 5,500 bytes" \
   "$([ "$(wc -c < "$HERE/../skills/using-dforge/SKILL.md")" -le 5500 ] && echo yes || echo no)" "yes"
 
+# --- no node while darkmem is applied: one warning per session (row 15, A13) ---
+. "$HERE/fixtures/darkmem-stores.sh"
+nonode_path() { # PATH with no node: a directory holding node is dropped, or, when it holds git or jq too, stood in for by links to its other programs
+  local d f m out='' IFS=:
+  for d in $PATH; do
+    if [ -x "$d/node" ] || [ -x "$d/node.exe" ]; then
+      [ -x "$d/git" ] || [ -x "$d/git.exe" ] || [ -x "$d/jq" ] || [ -x "$d/jq.exe" ] || continue
+      m="$TMP/nonode/$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
+      mkdir -p "$m"
+      for f in "$d"/*; do case ${f##*/} in node | node.exe) ;; *) ln -s "$f" "$m/" 2>/dev/null ;; esac; done
+      d=$m
+    fi
+    out=${out:+$out:}$d
+  done
+  printf '%s\n' "$out"
+}
+NN_PATH=$(nonode_path)
+NN_REPO="$TMP/nn-repo"; git init -q "$NN_REPO"
+HOME_N="$TMP/nn-home"; mkdir -p "$HOME_N"
+stores_home "$HOME_N" "$NN_REPO" proj local darkmem > /dev/null
+nn_ctx() { # nn_ctx <source> — the additionalContext of one start of session s-nn
+  MSYS_NO_PATHCONV=1 jq -n --arg cwd "$NN_REPO" --arg src "$1" \
+    '{hook_event_name:"SessionStart",session_id:"s-nn",transcript_path:"",cwd:$cwd,source:$src}' \
+    | HOME="$HOME_N" PATH="$NN_PATH" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""'
+}
+if PATH="$NN_PATH" command -v node >/dev/null 2>&1 || ! PATH="$NN_PATH" command -v git >/dev/null 2>&1 \
+   || ! PATH="$NN_PATH" command -v jq >/dev/null 2>&1; then
+  printf 'skip - no node at session start: node shares a PATH directory with git or jq here\n'
+else
+  check "no node: the first start warns once" "$(nn_ctx startup | grep -c 'node is required while darkmem stores are applied')" "1"
+  check "no node: a later start of the same session does not repeat it" "$(nn_ctx resume | grep -c 'node is required while darkmem stores are applied')" "0"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

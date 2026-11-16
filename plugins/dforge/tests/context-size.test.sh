@@ -45,7 +45,7 @@ settings 650000
 
 asst() { # asst <tokens> [isSidechain] [model]
   printf '{"type":"assistant","isSidechain":%s,"message":{"model":"%s","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' \
-    "${2:-false}" "${3:-claude-opus-5}" "$1"
+    "${2:-false}" "${3:-claude-opus-5-5}" "$1"
 }
 boundary() { # boundary <postTokens>
   printf '{"type":"system","subtype":"compact_boundary","isSidechain":false,"compactMetadata":{"trigger":"auto","preTokens":460000,"postTokens":%s}}\n' "$1"
@@ -87,7 +87,7 @@ run
 check "whole-file fallback: line" "$out" "budget: 50k of 465k (10%) — ok — source: record"
 
 # --- no usage entry ---
-userline > "$T"
+{ userline; asst 0; } > "$T"
 run
 check "no usage: exit 3" "$status" "3"
 posix() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi; }
@@ -106,7 +106,7 @@ check "the dforge name wins" "$out" "budget: 285k of 380k (75%) — ok — sourc
 asst 30000 false claude-haiku-4-5-20251001 > "$T"
 run
 check "haiku: 200k window caps the compaction point" "$out" "budget: 30k of 46k (65%) — ok — source: record"
-asst 285000 false claude-sonnet-5 > "$T"
+asst 285000 false claude-sonnet-5-5 > "$T"
 settings 2000000
 run
 check "window beats a larger autoCompactWindow" "$out" "budget: 285k of 790k (36%) — ok — source: record"
@@ -128,11 +128,11 @@ check "a per-model autoCompactWindow is not the top-level one" "$out" "budget: 2
 settings 650000
 run
 check "project settings are read only under CLAUDE_PROJECT_DIR" "$out" "budget: 285k of 465k (61%) — ok — source: record"
-asst 15000 false claude-sonnet-5 > "$T"
+asst 15000 false claude-sonnet-5-5 > "$T"
 settings 100000
 run
 check "a small window holds a fifth of it" "$out" "budget: 15k of 20k (75%) — ok — source: record"
-asst 285000 false claude-sonnet-5 > "$T"
+asst 285000 false claude-sonnet-5-5 > "$T"
 settings 650000
 DFORGE_BUDGET=junk run
 check "invalid override is ignored" "$out" "budget: 285k of 465k (61%) — ok — source: record"
@@ -169,12 +169,12 @@ mv "$ALT/projects/$KEY" "$PROJ"
 # --- nothing to read ---
 HOME="$TMP/empty" run
 check "no transcript: exit 3" "$status" "3"
-check "no transcript: line, no settings" "$out" "budget: unknown of 790k — unknown — no transcript found"
+check "no transcript: line, no settings" "$out" "budget: unknown — unknown — no transcript found"
 
 # --- no jq ---
 DFORGE_JQ=no-such-jq run
 check "no jq: exit 3" "$status" "3"
-check "no jq: line" "$out" "budget: unknown of 465k — unknown — no jq"
+check "no jq: line" "$out" "budget: unknown — unknown — no jq"
 
 # --- usage ---
 run extra
@@ -235,7 +235,7 @@ asst 30000 false claude-haiku-4-5-20251001 > "$T"
 run --final
 check "final: haiku's 200k window" "$out" "budget (final): 30k of 46k (65%) — ok — source: record"
 DFORGE_JQ=no-such-jq run --final
-check "final: no jq: line" "$out" "budget (final): unknown of 465k — unknown — no jq"
+check "final: no jq: line" "$out" "budget (final): unknown — unknown — no jq"
 run --final extra
 check "final: arguments: exit 2" "$status" "2"
 
@@ -301,6 +301,20 @@ has "no own record: falls back to the cwd record" "$out" "budget: 50k of"
 check "no own record: the cwd record of another session is flagged" "$(src)" "record?"
 rm -rf "$SESS/by-id" "$TA" "$TB"
 record s-1 "$T"
+
+# --- the window: the session state file, else the model table, else unknown (row 28) ---
+TW="$PROJ/s-win.jsonl"
+asst 300000 false claude-mystery-9 > "$TW"
+record s-win "$TW"
+run
+check "unlisted model, no state file: unknown, exit 3" "$status:$(grep -c ' — unknown — ' <<<"$out")" "3:1"
+check "unlisted model: no arithmetic error" "$(grep -c 'syntax error\|integer expression' "$TMP/stderr")" "0"
+mkdir -p "$HOME/.claude/dforge/sessions/state"
+jq -nc --argjson u "$(( $(date +%s) * 1000 ))" '{session:"s-win",updated:$u,window:400000,model:"claude-mystery-9",partial:false,launches:[]}' > "$HOME/.claude/dforge/sessions/state/s-win.json"
+run
+check "the state file's window gives a verdict" "$status" "5"
+has "the line names the window's source" "$out" "— source: record, window session file"
+rm -f "$HOME/.claude/dforge/sessions/state/s-win.json"
 
 # --- Codex rollout measurement ---
 # The context size is the last token_count event's last_token_usage.input_tokens.
@@ -596,7 +610,7 @@ run
 check "auto: a compaction that left 85% of the window hands off" "$status:$out" "5:budget (auto, high): 690k of 720k (95%) — handoff — source: record"
 CLAUDE_CODE_SESSION_ID=auto-2 run
 check "auto: another session keeps the task budget" "$status:$out" "5:budget: 690k of 465k (148%) — handoff — source: record?"
-printf '{}\n' > "$AUTO_T"
+asst 0 > "$AUTO_T"
 run
 has "auto: an unreadable size names the run's limit" "$out" "budget (auto, high): unknown of 720k — unknown — no usage entry in"
 date +%s > "$HOME/.claude/dforge/sessions/cockpit/auto-1"

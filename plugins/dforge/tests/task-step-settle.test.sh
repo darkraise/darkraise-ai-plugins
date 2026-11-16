@@ -235,7 +235,7 @@ sed 's/^|//' > "$REPO/docs/named.md" <<'PLAN'
 |
 |**Execution:** inline — `claude --model sonnet --effort high` — fixture
 |
-|**Integration check:** `bash mark.sh integ 0`
+|**Integration check:** `bash mark.sh integ 0` — the full suite
 |
 |## Task index
 |

@@ -153,5 +153,45 @@ check "a missing ladder block is no usage error" "$rc" "0"
 panel --kind task --prompt "$TMP/prompt.md"
 check "a task panel without --tier is a usage error" "$rc" "2"
 
+# --- without setsid, a timed-out runner leaves no descendant (row 58) ---
+# The grandchild is the case today's walk misses: it signals a child before
+# listing that child's children, which are reparented once it dies.
+cat > "$TMP/tree-runner" <<EOF
+#!/usr/bin/env bash
+( sleep 300 & printf '%s\n' \$! >> "$TMP/tree-pids"; printf '%s\n' \$! >> "$TMP/children"; wait ) &
+printf '%s\n' \$! >> "$TMP/tree-pids"; printf '%s\n' \$! >> "$TMP/children"
+wait
+EOF
+chmod +x "$TMP/tree-runner"
+if command -v pgrep >/dev/null 2>&1; then
+  : > "$TMP/tree-pids"
+  PANEL_NO_SETSID=1 PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/tree-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
+  check "no setsid: the timed-out runner is reported as TIMEOUT" "$(head -1 <<<"$out" | grep -c 'status=TIMEOUT')" "1"
+  alive=0; while read -r p; do kill -0 "$p" 2>/dev/null && alive=$((alive + 1)); done < "$TMP/tree-pids"
+  check "no setsid: no child or grandchild survives the timeout" "$alive:$(wc -l < "$TMP/tree-pids" | tr -d ' ')" "0:2"
+else
+  printf 'skip - no setsid tree walk: pgrep is not on PATH (Git Bash)\n'
+fi
+
+# --- without setsid or pgrep the tree cannot be walked, and the panel says so ---
+nopgrep_path() { # PATH with no pgrep: a directory holding it stood in for by links to its other programs
+  local d f m out='' IFS=:
+  for d in $PATH; do
+    if [ -x "$d/pgrep" ]; then
+      m="$TMP/nopgrep/$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
+      mkdir -p "$m"
+      for f in "$d"/*; do [ "${f##*/}" = pgrep ] || ln -s "$f" "$m/" 2>/dev/null; done
+      d=$m
+    fi
+    out=${out:+$out:}$d
+  done
+  printf '%s\n' "$out"
+}
+: > "$TMP/tree-pids"
+NOPGREP_PATH=$(nopgrep_path)
+PATH="$NOPGREP_PATH" PANEL_NO_SETSID=1 PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/tree-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
+check "no setsid or pgrep: the panel says the runner's children were not stopped" "$(grep -c 'neither setsid nor pgrep is on PATH' "$TMP/err")" "1"
+while read -r p; do kill -KILL "$p" 2>/dev/null; done < "$TMP/tree-pids"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

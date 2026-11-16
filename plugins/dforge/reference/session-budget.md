@@ -17,7 +17,7 @@ never earlier.
 | Relaxed handoff | With the `handoffMode` setting at `relaxed`, a plain task is measured against the final-phase limit and the line reads `budget (relaxed)`; the pinned budget then has no effect. A worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on | Owner ruling, 2026-10-12 |
 | Plan after the spec | 150% of the task budget (`DFORGE_BUDGET` included), capped at the final-phase limit: 680k at an 800,000 window with the budget pinned at 465,000 | Owner ruling, 2026-10-10 |
 | Tail | Strict: the last 2 tasks and the final phase are measured against the handoff budget and never hand off, so the plan finishes in the session past its budget. Relaxed: both are measured against the final-phase limit, and a tail task past it hands off. Finishing is never measured | Owner ruling, 2026-10-10; strict mode revised 2026-10-29 |
-| Model window | 1,000,000 for Fable 5.1, Opus 5.5 and Sonnet 5.5; 200,000 for Haiku 4.5 | Claude API model table, cached 2026-06-24; Opus 5.5 from its launch notes; Sonnet 5.5 from the model table and a CLI probe, 2026-09-29 |
+| Model window | The cockpit's session state file first (`~/.claude/dforge/sessions/state/<sid>.json`); else 1,000,000 for Fable 5.1, Opus 5.5 and Sonnet 5.5 and 200,000 for Haiku 4.5; any other model has no window, never a guessed 1,000,000 | Claude API model table, cached 2026-06-24; Opus 5.5 from its launch notes; Sonnet 5.5 from the model table and a CLI probe, 2026-09-29 |
 | `autoCompactWindow` | 800,000 with `DFORGE_BUDGET` pinned at 465,000, in `~/.claude/settings.json` (650,000 before) | Set 2026-09-11; raised 2026-10-02 |
 | Where auto-compaction fires | About 93-96% of the window: 467k, 467k and 479k observed at 500,000 | Inference from three transcripts |
 | Hook output cap | 10,000 characters; longer output becomes a file reference | Claude Code hooks reference |
@@ -39,14 +39,20 @@ compaction snapshot below carries it on. `scripts/lib/context.sh`
 reads `autoCompactWindow` from the user, then the project, then the local
 `settings.json` (the last that sets it wins, as in Claude Code; project files
 only when `CLAUDE_PROJECT_DIR` is set) and the model from the transcript, so
-the budget follows either when they change, and agrees with the cockpit's.
+the budget follows either when they change. The model's window comes from the
+cockpit's session state file (`scripts/lib/session-state.sh` `ss_window`), else
+from the table above; a model the table does not list, with no state file,
+reads `unknown` (the window is never guessed at 1,000,000). The script's budget
+agrees with the cockpit's only while that state file is present.
 
 ## The budget line
 
 ```
 budget: 312k of 465k (67%) — ok — source: record
 budget: 470k of 465k (101%) — handoff — source: record
-budget: unknown of 465k — unknown — no transcript found
+budget: unknown — unknown — no transcript found
+budget: 300k measured — unknown — the model's window is unknown
+budget: 300k of 232k (129%) — handoff — source: record, window session file
 budget (last task): 512k of 465k (110%) — ok — source: record
 budget (relaxed): 512k of 680k (75%) — ok — source: record
 ```
@@ -82,7 +88,14 @@ own when `CLAUDE_CODE_SESSION_ID` is set, else the directory's), `record?` (the
 directory's record, and a newer transcript exists in the same directory or the
 record names another session: two sessions may share it) or
 `guessed` (no record; the newest transcript for the directory) or, on a Codex
-host, `rollout` (the session's own rollout file). `unknown` means
+host, `rollout` (the session's own rollout file). `, window session file`
+follows it when the cockpit's state file gave the window. A line whose budget
+cannot be computed (the window is unknown and no pinned task budget applies)
+names no budget: `unknown — unknown — <reason>` when the size is unknown too,
+`<t>k measured — unknown — the model's window is unknown` when it is not. In
+an auto run an unknown window is never a size-based compaction or handoff: the
+line reads `unknown`, sets nothing pending, and a pending compaction settles
+to continue. `unknown` means
 apply the count rule on Codex and the phase stops everywhere.
 
 `scripts/task-brief` and `scripts/review-package` print it as their last line,

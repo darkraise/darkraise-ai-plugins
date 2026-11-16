@@ -32,7 +32,11 @@ native implementer `gpt-6.1-sol / high`) with this file and:
 The spec, the repository's code at `[HEAD]`, its README and documentation, and
 its existing tests for their layout and helpers. You may not read the plan, the
 ledger, task reports, review packages or anything else under `[WORKSPACE]`
-except the report you write. Independence from the plan is the point of this
+except the report you write. Before you write, create or delete any path,
+append that path, relative to the repository root, as one line to
+`[WORKSPACE]/qa-touched.txt`: when the session stops you, it removes your
+uncommitted work by that list, and a path missing from it stays behind.
+Independence from the plan is the point of this
 seat: the plan's tests were written by the same author as its code.
 
 ## Procedure
@@ -55,7 +59,10 @@ seat: the plan's tests were written by the same author as its code.
    running UI through it.
 3. **Run, with a timeout.** Run each file with its own project's runner,
    `[TEST_COMMAND]` scoped to it or the framework's own, always under
-   `timeout`. A setup or import
+   `bash <plugin-root>/scripts/with-timeout <seconds> <command>`, where
+   `<plugin-root>` is the directory that holds this file's `reference/`
+   directory. Exit 125 means no timeout command (`timeout` or `gtimeout`) is
+   installed: the test never ran. A setup or import
    error is your own bug: fix the test. An assertion failure is a finding, which you never fix: you do not
    edit the code under test. Re-run a failing test once; when the two runs
    disagree, record `flaky`.
@@ -112,11 +119,13 @@ mutation green: 0
 | A2 | `tests/foo.acceptance.sh` A2: never writes outside the root | pass | red |
 | A3 | `tests/foo.acceptance.sh` A3: refuses an empty list | fail | n/a |
 
-Command: timeout 300 bash tests/foo.acceptance.sh → 2 passed, 1 failed
+Command: bash <plugin-root>/scripts/with-timeout 300 bash tests/foo.acceptance.sh → 2 passed, 1 failed
 ```
 
-Then reply in at most 10 lines: the counts by result, the mutation counts
-and the report path. The session reads the report, not your reply.
+Then reply in at most 10 lines: the counts by result and the mutation
+counts. The session reads the report, not your reply. End the reply with
+the line `Report: <absolute path of the report>`; a stop hook holds your
+stop until that file exists and opens with `## Verdict`.
 
 Result is one of `pass`, `fail`, `flaky`, `cannot-test: ambiguous` (the
 statement can be read two ways; name both readings in the Test cell),
@@ -127,5 +136,7 @@ is missing) or `cannot-test: timeout`. Mutation is `red`, `green` or `n/a`.
 
 - Never edit the code under test, and never weaken a test so that it passes.
 - Never leave the mutation worktree behind.
-- Never write outside the test layout and `[WORKSPACE]/acceptance-report.md`.
+- Never write outside the test layout and `[WORKSPACE]/acceptance-report.md`,
+  except to append to `[WORKSPACE]/qa-touched.txt`; never write, create or
+  delete a path before you have appended it there.
 - Never run a test without a timeout.

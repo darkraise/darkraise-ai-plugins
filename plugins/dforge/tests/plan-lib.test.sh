@@ -244,6 +244,20 @@ git init -q "$SR"
 git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 STOP=$(git -C "$SR" rev-parse --show-toplevel)
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
+# --- amendments live beside the ledger (C7) ---
+mkdir -p "$SR/docs" && printf '# P\n\n### Task 1: One\n' > "$SR/docs/am.md"
+LD="$M/work/sdd/am"; WSD="$SR/.dforge/sdd/am"
+mkdir -p "$LD" "$WSD"
+printf '# SDD ledger — plan: docs/am.md\nTask 1: Ruling: amendment A1 — x — y\n' > "$LD/progress.md"
+printf '## A1 — Task 1\n' > "$WSD/amendments.md"
+(cd "$SR" && HOME=$SH plan_amendments_ready docs/am.md); rc=$?
+check "ready: migrates the workspace file" "$rc:$([ -s "$LD/amendments.md" ] && echo moved):$([ -e "$WSD/amendments.md" ] && echo left || echo gone)" "0:moved:gone"
+check "ready: logs the move once" "$(grep -c '^Ruling: amendments moved beside the ledger — none$' "$LD/progress.md")" "1"
+check "file: the ledger directory's copy" "$(cd "$SR" && HOME=$SH plan_amendments_file docs/am.md)" "$LD/amendments.md"
+printf 'Task 1: Ruling: amendment A2 — x — y\n' >> "$LD/progress.md"
+err=$(cd "$SR" && HOME=$SH plan_amendments_ready docs/am.md 2>&1); rc=$?
+check "ready: a cited amendment missing from the file exits 2" "$rc" "2"
+check "ready: the message names it" "$(grep -c 'cites amendment A2, which .*amendments.md lacks' <<<"$err")" "1"
 mkdir -p "$M/dforge/plans" "$M/work/sdd/mp"
 printf '# MP\n' > "$M/dforge/plans/mp.md"
 printf '# SDD ledger — plan: docs/dforge/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
@@ -272,10 +286,10 @@ mv "$M/dforge/plans/mp.saved" "$M/dforge/plans/mp.md"
 rm "$SR/docs/dforge/plans/mp.md"
 check "plan_locate: an existing file stays" "$(cd "$REPO" && plan_locate docs/demo.md)" "docs/demo.md"
 check "plan_locate: a missing name stays" "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/none.md)" "docs/dforge/plans/none.md"
-mkdir -p "$STOP/.dforge/sdd/mp"
-printf '## A1 — Task 1\n' > "$STOP/.dforge/sdd/mp/amendments.md"
-check "amendments_file: a mirror plan's workspace stays in the checkout" \
-  "$(cd "$SR" && HOME=$SH plan_amendments_file "$M/dforge/plans/mp.md")" "$STOP/.dforge/sdd/mp/amendments.md"
+mkdir -p "$M/work/sdd/mp"
+printf '## A1 — Task 1\n' > "$M/work/sdd/mp/amendments.md"
+check "amendments_file: a mirror plan's amendments sit beside its mirror ledger" \
+  "$(cd "$SR" && HOME=$SH plan_amendments_file "$M/dforge/plans/mp.md")" "$M/work/sdd/mp/amendments.md"
 (cd "$SR" && HOME=$SH plan_require_same_project "$M/dforge/plans/mp.md" 2>/dev/null)
 check "same project: a mirror plan while documents are in darkmem" "$?" "0"
 (cd "$SR" && HOME=$SH plan_require_same_project "$REPO/docs/demo.md" 2>/dev/null)

@@ -163,5 +163,88 @@ check "hooks.json: turn-end.sh stays the first Stop hook" \
   "$(jq -r '.hooks.Stop[0].hooks[0].command' "$HOOKS")" 'bash "${CLAUDE_PLUGIN_ROOT}/scripts/turn-end.sh"'
 check "hooks.json: the description names the UI hooks" "$(jq -r .description "$HOOKS" | grep -c 'UI proof')" "1"
 
+# --- ui-turn-end.sh stands down for handoffs, questions and finite work (row 29) ---
+sleep 1; prompt u-9
+printf '// changed\n' >> src/App.tsx
+check "a UI change with no proof: held" "$(decision "$(stop u-9 'Task 2 is done.')")" "block"
+check "a Next session block stands down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Status:** x')")" "none"
+mkdir -p .dforge/sdd/ui-plan
+printf '# SDD ledger — plan: docs/ui-plan.md\nTask 2: waiting — which colour?\n' > .dforge/sdd/ui-plan/progress.md
+check "a ledger ending on a waiting line stands down" "$(decision "$(stop u-9 'Which colour should the button be?')")" "none"
+rm -rf .dforge/sdd/ui-plan
+# Under darkmem progress every worktree shares the mirror's ledgers: only one
+# whose workspace is in this checkout is this session's.
+. "$HERE/fixtures/darkmem-stores.sh"
+M=$(stores_home "$HOME" "$REPO" proj local darkmem)
+mkdir -p "$M/work/sdd/other-plan"
+printf '# SDD ledger — plan: docs/other-plan.md\nTask 2: waiting — which colour?\n' > "$M/work/sdd/other-plan/progress.md"
+check "another worktree's waiting ledger does not stand down" "$(decision "$(stop u-9 'Task 2 is done.')")" "block"
+mkdir -p .dforge/sdd/other-plan
+touch "$M/work/sdd/other-plan/progress.md"
+check "a waiting ledger with its workspace here stands down" "$(decision "$(stop u-9 'Which colour should the button be?')")" "none"
+rm -rf .dforge/sdd/other-plan "$HOME/.dforge"
+BGT="$TMP/ui-bg.jsonl"
+jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"toolu_w",name:"Bash",input:{description:"Suite",command:"npm test",run_in_background:true}}]}}' > "$BGT"
+jq -nc '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_w",content:"Command running in background with ID: w1. Output is being written to: /tmp/w1.output."}]}}' >> "$BGT"
+check "finite background work stands down" "$(decision "$(stop u-9 'Waiting for the suite.' false "$BGT")")" "none"
+LT="$TMP/ui-last.jsonl"
+jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"Stopping here.\n\nUI proof: pending — needs the device"}]}}' > "$LT"
+out=$(jq -nc --arg tp "$LT" --arg cwd "$REPO" '{session_id:"u-9",cwd:$cwd,transcript_path:$tp,stop_hook_active:false}' | bash "$END")
+check "no last_assistant_message: the transcript's pending line releases" "$(decision "$out")" "none"
+git checkout -q -- src/App.tsx
+
+# --- fast_mode_on: request and session scope (C6) ---
+. "$HERE/../scripts/lib/fast-mode.sh"
+TURNS="$HOME/.claude/dforge/sessions/turns"; mkdir -p "$TURNS"
+said() { jq -nc --arg t "$1" --arg ts "$2" '{type:"assistant",timestamp:$ts,message:{role:"assistant",content:[{type:"text",text:$t}]}}'; }
+n=0
+while IFS= read -r c; do
+  n=$((n + 1)); sid="fm-$n"; tp="$TMP/$sid.jsonl"; : > "$tp"; rm -f "$TURNS/$sid" "$TURNS/$sid.fast"
+  while IFS= read -r t; do said "$t" "2020-01-01T00:00:00.000Z" >> "$tp"; done < <(jq -r '.before[]' <<<"$c")
+  if [ "$(jq -r '.after == null' <<<"$c")" = false ]; then
+    touch -d '2020-01-01T00:01:00Z' "$TURNS/$sid"
+    while IFS= read -r t; do said "$t" "2020-01-01T00:02:00.000Z" >> "$tp"; done < <(jq -r '.after[]' <<<"$c")
+  fi
+  if fast_mode_on "$tp"; then got=true; else got=false; fi
+  check "fast mode: $(jq -r .name <<<"$c")" "$got" "$(jq -r .on <<<"$c")"
+done < <(jq -c '.[]' < "$HERE/fixtures/fast-mode/cases.json")
+
+# The verdict for the part before the stamp is read once per turn.
+sid=fm-cache; tp="$TMP/$sid.jsonl"
+said 'Process: fast (session) — spikes' 2020-01-01T00:00:00.000Z > "$tp"
+touch -d '2020-01-01T00:01:00Z' "$TURNS/$sid"
+fast_mode_on "$tp"
+said 'Process: bounded — no trigger' 2020-01-01T00:00:00.000Z > "$tp.new" && mv "$tp.new" "$tp"
+fast_mode_on "$tp"; rc=$?
+check "fast mode: the pre-stamp verdict is cached for the turn" "$rc:$(cat "$TURNS/$sid.fast")" "0:on"
+
+# The scan reads from the end and stops at the deciding line (ruling R9): jq,
+# wrapped to log the bytes each call reads, never sees the 64 MiB head that a
+# forward pass must read.
+sid=fm-big; tp="$TMP/$sid.jsonl"; rm -f "$TURNS/$sid" "$TURNS/$sid.fast"
+JQW="$TMP/jq-wrap"; mkdir -p "$JQW"
+export JQ_BYTES="$TMP/jq-bytes" REAL_JQ; REAL_JQ=$(command -v jq); : > "$JQ_BYTES"
+cat > "$JQW/jq" <<'W'
+#!/usr/bin/env bash
+n=0
+for a in "$@"; do [ -f "$a" ] && n=$((n + $(wc -c < "$a"))); done
+t=$(mktemp); cat > "$t"; n=$((n + $(wc -c < "$t")))
+printf '%s\n' "$n" >> "$JQ_BYTES"
+"$REAL_JQ" "$@" < "$t"; rc=$?; rm -f "$t"; exit $rc
+W
+chmod +x "$JQW/jq"
+if command -v truncate >/dev/null 2>&1 && truncate -s 64M "$tp" 2>/dev/null; then
+  printf '\n' >> "$tp"
+  said 'Process: fast (session) — spikes' 2020-01-01T00:00:00.000Z >> "$tp"
+  touch -d '2020-01-01T00:01:00Z' "$TURNS/$sid"
+  said 'ok' 2020-01-01T00:02:00.000Z >> "$tp"
+  PATH="$JQW:$PATH" timeout 120 bash -c '. "$1"; fast_mode_on "$2"' fm "$HERE/../scripts/lib/fast-mode.sh" "$tp" < /dev/null; rc=$?
+  read_bytes=$(awk '{ s += $1 } END { print s + 0 }' "$JQ_BYTES")
+  check "fast mode: a huge head is never read" "$rc:$(( read_bytes < 8388608 ))" "0:1"
+else
+  printf 'skip - fast mode huge head: truncate cannot make a 64 MiB file here\n'
+fi
+rm -f "$tp"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

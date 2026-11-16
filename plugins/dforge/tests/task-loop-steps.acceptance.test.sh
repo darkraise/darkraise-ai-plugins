@@ -417,7 +417,8 @@ a11() {
   result_at toolu_a3 2026-10-26T11:40:00.000Z $'Async agent launched successfully.\nagentId: a13 (internal ID)'
 
   local out code
-  out=$(TZ=UTC0 bash "$INFLIGHT"); code=$?
+  # Run outside the developer's checkout, whose session-state.log would gain this session's line.
+  out=$(cd "$TMP" && TZ=UTC0 bash "$INFLIGHT"); code=$?
   check "A11: running launches: exit 1" "$code" "1"
   matches "A11: a shell: start time and idle minutes from the file its result names" "$out" '^- shell b11 08:05 idle (46|47|48)m Run the suite$'
   matches "A11: an agent: start time and idle minutes from its output_file" "$out" '^- agent a11 09:30 idle (11|12|13)m Implement task 4$'
@@ -429,12 +430,12 @@ a11() {
   git init -q "$REPO"
   WS2="$REPO/.dforge/sdd/2026-10-08-example"
   mkdir -p "$WS2"
-  jq -n --arg sid s-turn --arg cwd "$REPO" '{hook_event_name:"UserPromptSubmit",session_id:$sid,cwd:$cwd,prompt:"go"}' | bash "$TURNSTART"
+  jq -n --arg sid s-turn --arg cwd "$REPO" '{hook_event_name:"UserPromptSubmit",session_id:$sid,cwd:$cwd,prompt:"go"}' | (cd "$REPO" && bash "$TURNSTART")
   sleep 1
   printf '# SDD ledger — plan: docs/superpowers/plans/2026-10-08-example.md\nTask 1: dispatched\n' > "$WS2/progress.md"
   local msg=$'Stopping here.\n\n## Next session\n\n**Status:** x' hold reason
   hold=$(jq -n --arg sid s-turn --arg cwd "$REPO" --arg msg "$msg" --arg tp "$TP" \
-    '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:$tp,stop_hook_active:false,last_assistant_message:$msg}' | bash "$TURNEND")
+    '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:$tp,stop_hook_active:false,last_assistant_message:$msg}' | (cd "$REPO" && bash "$TURNEND"))
   reason=$(jq -r '.reason // ""' <<<"$hold")
   check "A11: turn-end.sh holds a next-step block over running launches" "$(jq -r '.decision // "none"' <<<"$hold")" "block"
   has "A11: turn-end.sh counts the launches" "$reason" "4 background launch"

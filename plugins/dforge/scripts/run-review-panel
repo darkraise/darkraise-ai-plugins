@@ -18,7 +18,8 @@
 #   `panel tier=<t> lists=<n>`, n counting OK and FALLBACK lines.
 # Env seams: PANEL_<ID>_GATE, PANEL_<ID>_RUNNER, PANEL_LADDER, and
 #   PANEL_BOUND_SECONDS, the seconds from panel start at which the watchdog
-#   fires, in place of the computed bound.
+#   fires, in place of the computed bound, and PANEL_NO_SETSID, which runs
+#   the runners as on a host without setsid.
 # Exit: 0 answered, whatever the reviewers did; 2 usage error.
 set -uo pipefail
 
@@ -133,26 +134,33 @@ printf 'run-review-panel: bound %s s, watchdog at %s s\n' "$bound" "$((deadline 
 
 have_setsid=false
 command -v setsid >/dev/null 2>&1 && have_setsid=true
+[ -z "${PANEL_NO_SETSID:-}" ] || have_setsid=false
 
 pids=()
 # A runner under setsid leads its own process group, so the whole group can be
 # signalled. setsid only forks when its caller already leads a group, which a
 # background job of a non-interactive shell never does, so the pid is the pgid.
+# Every descendant stop_runner signalled without setsid, so the last pass can
+# kill whatever outlived both signals after its parent had already died.
+tree_pids=()
 stop_runner() { # stop_runner <pid> <signal>
-  local pid=$1 sig=$2 kids k
+  local pid=$1 sig=$2 level k i tree=()
   if [ "$have_setsid" = true ]; then
     kill "-$sig" -- "-$pid" 2>/dev/null
     return
   fi
-  # Without setsid the descendants are found before the runner dies: once it
-  # is gone they are reparented and pkill -P no longer reaches them.
+  # Without setsid the whole tree is listed before any of it is signalled: a
+  # process that dies is reaped and its children reparented, and pgrep -P no
+  # longer reaches them. They are then signalled deepest first.
   if command -v pgrep >/dev/null 2>&1; then
-    kids=$(pgrep -P "$pid" 2>/dev/null)
-    while [ -n "$kids" ]; do
-      for k in $kids; do kill "-$sig" "$k" 2>/dev/null; done
-      kids=$(for k in $kids; do pgrep -P "$k" 2>/dev/null; done)
+    level=$(pgrep -P "$pid" 2>/dev/null)
+    while [ -n "$level" ]; do
+      for k in $level; do tree+=("$k"); done
+      level=$(for k in $level; do pgrep -P "$k" 2>/dev/null; done)
     done
   fi
+  for ((i = ${#tree[@]} - 1; i >= 0; i--)); do kill "-$sig" "${tree[$i]}" 2>/dev/null; done
+  tree_pids+=(${tree[@]+"${tree[@]}"})
   kill "-$sig" "$pid" 2>/dev/null
 }
 stop_all() { local p; for p in ${pids[@]+"${pids[@]}"}; do [ -z "$p" ] || stop_runner "$p" TERM; done; }
@@ -183,7 +191,9 @@ alive() { kill -0 "$1" 2>/dev/null; }
 any_alive() { local p; for p in ${pids[@]+"${pids[@]}"}; do [ -n "$p" ] && alive "$p" && return 0; done; return 1; }
 
 while any_alive && [ "$(date +%s)" -lt "$deadline" ]; do sleep 0.5; done
+timed_out=false
 if any_alive; then
+  timed_out=true
   for i in "${!pids[@]}"; do
     p=${pids[$i]}
     [ -n "$p" ] && alive "$p" || continue
@@ -194,6 +204,7 @@ if any_alive; then
   kill_at=$(( $(date +%s) + 5 ))
   while any_alive && [ "$(date +%s)" -lt "$kill_at" ]; do sleep 0.5; done
   for p in ${pids[@]+"${pids[@]}"}; do [ -n "$p" ] && alive "$p" && stop_runner "$p" KILL; done
+  for p in ${tree_pids[@]+"${tree_pids[@]}"}; do alive "$p" && kill -KILL "$p" 2>/dev/null; done
 fi
 rcs=()
 for p in ${pids[@]+"${pids[@]}"}; do
@@ -202,6 +213,16 @@ for p in ${pids[@]+"${pids[@]}"}; do
   rcs+=("$rc")
 done
 trap - INT TERM
+# Checked once the runners are reaped: until then a killed runner is a zombie
+# that kill -0 still finds.
+if [ "$timed_out" = true ]; then
+  survivors=()
+  for p in ${pids[@]+"${pids[@]}"} ${tree_pids[@]+"${tree_pids[@]}"}; do [ -n "$p" ] && alive "$p" && survivors+=("$p"); done
+  [ ${#survivors[@]} -eq 0 ] || printf 'run-review-panel: still alive after KILL: %s\n' "${survivors[*]}" >&2
+  if [ "$have_setsid" = false ] && ! command -v pgrep >/dev/null 2>&1; then
+    echo "run-review-panel: neither setsid nor pgrep is on PATH, so a timed-out runner's own children were not found or stopped" >&2
+  fi
+fi
 
 for i in "${!open_ids[@]}"; do
   id=${open_ids[$i]}

@@ -151,9 +151,8 @@ wrong base is expensive to undo.
 has not yet printed its "Rulings I made" and "Amendments made" lists, print
 them now: under "Rulings I made", every ledger line containing `Ruling:`, in
 order, each with what it costs if wrong, then every `BLOCKED` task; under
-"Amendments made", every entry of `amendments.md` in the directory
-`scripts/sdd-workspace PLAN_FILE` prints, in
-full. The execution skills leave these lists to this step, so they are
+"Amendments made", every entry of `<ledger dir>/amendments.md` (beside
+`progress.md`), in full. The execution skills leave these lists to this step, so they are
 exhaustive here. Your human partner chooses how to integrate with those
 decisions in view.
 
@@ -287,12 +286,9 @@ never add a second line for it.
 | Path | When | Which form |
 |---|---|---|
 | Option 1, merge locally | On the base branch, as its own commit, after Step 5's merged-result verification passes | the `merged into` form |
-| Option 2, push and PR | On the branch, before the push | the `via PR` form |
+| Option 2, push and PR | On the branch, before the push; darkmem documents: after the PR exists (execute-choice.md) | the `via PR` form |
 | Option 3, keep as-is | Never | — |
 | Confirmed discard | Never | — |
-
-Option 3 and a confirmed discard write nothing. Step 6 runs for a discard, which
-is exactly why this write is bound to the outcome and not to Step 6.
 
 The SHA on an Option 1 line is the base branch head after the merge, not the
 merge commit's own hash — a commit cannot contain its own hash, and the merge
@@ -361,7 +357,8 @@ Read [cleanup.md](references/cleanup.md) before you remove the worktree.
 gone, so nothing follows from it.
 
 If this work came from a plan file, run `scripts/next-step --complete PLAN_FILE`
-(see using-dforge §Session Budget), with the
+(see using-dforge §Session Budget; after Option 3, `--kept`: the branch is not
+integrated), with the
 working directory inside the repository — after Option 1 that is the main
 repo root. It prints a `## Next session` block naming what follows the plan:
 the next program sub-project or roadmap epic with its launch command and
@@ -377,8 +374,9 @@ plan file, when something follows (a register row this work left open, a
 finding awaiting a ruling), run
 `scripts/next-step --adhoc --phase <design|build> --next "<what follows>"` —
 `design` when what follows is rulings, a spec or a plan — and end with the
-block it prints, verbatim. When nothing follows, end with: "No plan file — no
-follow-on work recorded."
+block it prints, verbatim. When nothing follows, run
+`scripts/finish-choice clear` (the choice is used up) and end with: "No plan
+file — no follow-on work recorded."
 
 When the ledger holds a `CI:` line, the final message quotes it.
 

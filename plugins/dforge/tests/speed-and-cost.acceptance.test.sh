@@ -214,24 +214,8 @@ if need_gate; then
       | CLAUDE_PLUGIN_ROOT="$PLUGIN" timeout 30 bash "$GATE" 2>"$TMP/gerr"
     grc=$?; gerr=$(cat "$TMP/gerr")
   }
-  report() { # report <path> <variant> — a report file; variant names what is wrong
-    local p=$1 v=$2
-    {
-      printf '# Task report\n\n## What I did\nChanged things.\n\n'
-      [ "$v" = no-verified ] || {
-        printf '## Verified\n'
-        case $v in
-          prose-only) printf 'I ran the tests and they passed.\n- ran some tests\n- `npm test` passed\n' ;;
-          fail-bullet) printf -- '- `bash tests/a.sh` — fail: 3 passed, 1 failed\n' ;;
-          *) printf -- '- `bash tests/a.sh` — pass: 4 passed, 0 failed\n' ;;
-        esac
-        printf '\n'
-      }
-      [ "$v" = no-discovered ] || printf '## Discovered issues (not fixed)\nNone\n\n'
-      [ "$v" = no-assumptions ] || printf '## Assumptions made\nNone\n'
-    } > "$p"
-  }
-  msg() { printf '**Status:** %s\n- Commits: abc1234 feat: x\n- 4/4 passing\nReport: %s' "$1" "$2"; }
+  qa() { printf '%s\nReport: %s' "${2:-QA done.}" "$1"; } # qa <report path> [first line]
+  miss() { qa "$TMP/reports/none.md" "$1"; } # miss <first line>: a reply whose report file is missing
   newid() { printf 'agent-%s' "$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"; }
 fi
 
@@ -241,52 +225,28 @@ if selected A9; then
   has "A9: hooks.json registers the gate on SubagentStop for impl agents" "$hooks" '(dforge:)?impl-.*'
   has "A9: and runs scripts/impl-stop-gate" "$hooks" 'scripts/impl-stop-gate'
 
-  report "$TMP/reports/ok.md" ok
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/ok.md")"
-  check "A9: a complete DONE report passes" "$grc" "0"
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE_WITH_CONCERNS "$TMP/reports/ok.md")"
-  check "A9: a complete DONE_WITH_CONCERNS report passes" "$grc" "0"
-  report "$TMP/reports/fail.md" fail-bullet
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/fail.md")"
-  check "A9: a Verified bullet in the fail form counts" "$grc" "0"
-
+  printf '## Verdict\npass: 1\n' > "$TMP/reports/ok.md"
+  gate dforge:impl-sonnet-high "$(newid)" "$(qa "$TMP/reports/ok.md")"
+  check "A9: a report that opens with ## Verdict passes" "$grc" "0"
   gate dforge:impl-sonnet-high "$(newid)" $'**Status:** DONE\n- Commits: abc1234 feat: x'
-  check "A9: DONE with no Report: line exits 2" "$grc" "2"
-  has "A9: and the reason names the Report: line" "$gerr" "Report:"
-  gate dforge:impl-sonnet-high "$(newid)" $'**Status:** DONE_WITH_CONCERNS\n- one concern'
-  check "A9: DONE_WITH_CONCERNS with no Report: line exits 2" "$grc" "2"
-  has "A9: and the reason names the Report: line" "$gerr" "Report:"
-  gate impl-haiku "$(newid)" $'**Status:** DONE\nno report line here'
+  check "A9: a reply with no Report: line passes" "$grc" "0"
+  gate impl-haiku "$(newid)" "$(qa "$TMP/reports/nothing-here.md")"
   check "A9: an agent type without the plugin prefix is gated too" "$grc" "2"
-
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/nothing-here.md")"
+  gate dforge:impl-sonnet-high "$(newid)" "$(qa "$TMP/reports/nothing-here.md")"
   check "A9: a missing report file exits 2" "$grc" "2"
   has "A9: and the reason names the missing file" "$gerr" "nothing-here.md"
-
-  report "$TMP/reports/no-d.md" no-discovered
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/no-d.md")"
-  check "A9: a report without ## Discovered issues (not fixed) exits 2" "$grc" "2"
-  has "A9: and the reason names that section" "$gerr" "Discovered issues"
-  report "$TMP/reports/no-a.md" no-assumptions
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/no-a.md")"
-  check "A9: a report without ## Assumptions made exits 2" "$grc" "2"
-  has "A9: and the reason names that section" "$gerr" "Assumptions made"
-  report "$TMP/reports/no-v.md" no-verified
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/no-v.md")"
-  check "A9: a report without ## Verified exits 2" "$grc" "2"
-  has "A9: and the reason names that section" "$gerr" "Verified"
-  report "$TMP/reports/prose.md" prose-only
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/prose.md")"
-  check "A9: a Verified section with no bullet in the grammar exits 2" "$grc" "2"
-  has "A9: and the reason names the Verified section" "$gerr" "Verified"
+  has "A9: and the block names the Report: line" "$gerr" "Report: line"
+  printf '# Task report\n\n## Verdict\npass: 1\n' > "$TMP/reports/no-verdict.md"
+  gate dforge:impl-sonnet-high "$(newid)" "$(qa "$TMP/reports/no-verdict.md")"
+  check "A9: a report that does not open with ## Verdict exits 2" "$grc" "2"
+  has "A9: and the reason names ## Verdict" "$gerr" "## Verdict"
 fi
 
 # ---------------------------------------------------------------- A10
 if selected A10; then
-  report "$TMP/reports/ok.md" ok
   for kind in dforge:judge-opus general-purpose Explore dforge:judge-sonnet-high; do
-    gate "$kind" "$(newid)" $'**Status:** DONE\nno report line'
-    check "A10: $kind with a DONE stop and no report exits 0" "$grc" "0"
+    gate "$kind" "$(newid)" "$(miss 'QA done.')"
+    check "A10: $kind with a missing report exits 0" "$grc" "0"
   done
   gate dforge:impl-sonnet-high "$(newid)" $'**Status:** BLOCKED - the brief is unclear'
   check "A10: a BLOCKED impl stop exits 0" "$grc" "0"
@@ -296,12 +256,12 @@ if selected A10; then
   check "A10: an impl stop with no status line exits 0" "$grc" "0"
 
   id=$(newid)
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nfirst try'
+  gate dforge:impl-sonnet-high "$id" "$(miss 'first try')"
   r1=$grc
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nsecond try, different words'
+  gate dforge:impl-sonnet-high "$id" "$(miss 'second try, different words')"
   r2=$grc
   check "A10: the first two distinct stops are blocked" "$r1 $r2" "2 2"
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nthird try, different again'
+  gate dforge:impl-sonnet-high "$id" "$(miss 'third try, different again')"
   check "A10: the third distinct stop after two blocks exits 0" "$grc" "0"
   log="$GSTATE/impl-stop-gate.log"
   check "A10: it appends exactly one line to <state>/impl-stop-gate.log" "$(wc -l < "$log" 2>/dev/null | tr -d ' ')" "1"
@@ -309,17 +269,17 @@ if selected A10; then
 
   # An identical stop fired twice does not raise the count.
   id=$(newid)
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nrepeated stop'
+  gate dforge:impl-sonnet-high "$id" "$(miss 'repeated stop')"
   a=$grc
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nrepeated stop'
+  gate dforge:impl-sonnet-high "$id" "$(miss 'repeated stop')"
   b=$grc
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nrepeated stop'
+  gate dforge:impl-sonnet-high "$id" "$(miss 'repeated stop')"
   c=$grc
   check "A10: the same stop three times is blocked each time" "$a $b $c" "2 2 2"
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\na second, distinct stop'
+  gate dforge:impl-sonnet-high "$id" "$(miss 'a second, distinct stop')"
   d=$grc
   check "A10: after repeats the next distinct stop is still only the second block" "$d" "2"
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\na third, distinct stop'
+  gate dforge:impl-sonnet-high "$id" "$(miss 'a third, distinct stop')"
   check "A10: and the stop after that passes" "$grc" "0"
   check "A10: the repeats added no second log line for the first agent" "$(grep -c " $id " "$log")" "1"
 fi
@@ -340,24 +300,22 @@ if selected A11; then
   check "A11: the recording stubs work (control: npm is recorded)" "$(grep -c '^npm test' "$STUBLOG")" "1"
   : > "$STUBLOG"
 
-  { printf '# Task report\n\n## What I did\n'; for i in $(seq 1 1000); do printf 'line %s: tested things and ran things\n' "$i"; done
-    printf '\n## Verified\n- `bash tests/a.sh` — pass: 4 passed, 0 failed\n\n## Discovered issues (not fixed)\nNone\n\n## Assumptions made\nNone\n'; } > "$TMP/reports/big.md"
-  { printf '# Task report\n\n## What I did\n'; for i in $(seq 1 1000); do printf 'line %s: tested things\n' "$i"; done
-    printf '\n## Verified\n- `bash tests/a.sh` — pass: 4 passed, 0 failed\n\n## Discovered issues (not fixed)\nNone\n'; } > "$TMP/reports/big-bad.md"
+  { printf '## Verdict\npass: 1\n\n## Notes\n'; for i in $(seq 1 1000); do printf 'line %s: tested things and ran things\n' "$i"; done; } > "$TMP/reports/big.md"
+  { printf '# Task report\n\n## Notes\n'; for i in $(seq 1 1000); do printf 'line %s: tested things\n' "$i"; done; printf '\n## Verdict\npass: 1\n'; } > "$TMP/reports/big-bad.md"
   check "A11: the report is a 1,000-line file" "$([ "$(wc -l < "$TMP/reports/big.md")" -ge 1000 ] && echo yes || echo no)" "yes"
 
   OLDPATH=$PATH
   export PATH="$STUBS_PATH:$OLDPATH"
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/big.md")"
-  check "A11: a complete 1,000-line report passes" "$grc" "0"
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/big-bad.md")"
-  check "A11: an incomplete 1,000-line report is blocked" "$grc" "2"
+  gate dforge:impl-sonnet-high "$(newid)" "$(qa "$TMP/reports/big.md")"
+  check "A11: a 1,000-line report that opens with ## Verdict passes" "$grc" "0"
+  gate dforge:impl-sonnet-high "$(newid)" "$(qa "$TMP/reports/big-bad.md")"
+  check "A11: a 1,000-line report that does not open with ## Verdict is blocked" "$grc" "2"
   gate dforge:impl-sonnet-high "$(newid)" $'**Status:** DONE\nno report line'
-  check "A11: a reply with no Report: line is blocked" "$grc" "2"
+  check "A11: a reply with no Report: line passes" "$grc" "0"
   id=$(newid)
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\none'
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\ntwo'
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nthree'
+  gate dforge:impl-sonnet-high "$id" "$(miss one)"
+  gate dforge:impl-sonnet-high "$id" "$(miss two)"
+  gate dforge:impl-sonnet-high "$id" "$(miss three)"
   check "A11: the pass-through path passes" "$grc" "0"
   export PATH=$OLDPATH
   check "A11: no test runner or network tool stub was invoked by any gate run" "$(cat "$STUBLOG")" ""

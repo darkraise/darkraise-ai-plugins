@@ -22,8 +22,11 @@ import type {
 import {
   accountColor,
   accountKey,
+  ASCII_GLYPHS,
+  asciiTree,
   attributionIn,
   autoLimitFor,
+  activeRunOwner,
   autoRunFor,
   agentGroups,
   bar,
@@ -44,10 +47,12 @@ import {
   isAtLeast,
   isGitWriteTool,
   isDforge,
+  gitMessageTexts,
   gitTextFiles,
   isAbsolutePath,
   isPlanTail,
   isServiceCommand,
+  isTimerCommand,
   kTokens,
   seatBarCells,
   seatCounts,
@@ -56,6 +61,7 @@ import {
   limitForecast,
   limitLabel,
   modelName,
+  namedPlan,
   nowLine,
   parseFinish,
   parseLedger,
@@ -89,11 +95,13 @@ import {
   sparkline,
   stackedRuns,
   statMissing,
+  stringsIn,
   tasksEnded,
   termColor,
   themeColor,
   track,
   turnsToBudget,
+  UNICODE_GLYPHS,
   windowElapsed,
   writesGitText,
 } from './lib'
@@ -146,6 +154,11 @@ const AUTO_RETRY_MS = 5_000
 // The restored default model is written this many times at most, each write
 // watched this long for the engine to read it back.
 const RESTORE_WRITES = 3
+// Settings whose raise from 0 is a consent, confirmed by a second press, and
+// what the person consents to.
+const CONSENTS: Readonly<Record<string, string>> = {
+  apiBudgetAgentRouter: 'ruling prompts, and any file its judge reads, then go to AgentRouter, a third party',
+}
 const RESTORE_WAIT_MS = 3_000
 const RESTORE_POLL_MS = 500
 type AutoStage = 'compact' | 'continue' | 'clear' | 'resume' | 'switch'
@@ -201,13 +214,15 @@ function stallPrompt(root: string): string {
   return `The auto run stalled: the last turn ended without its sentinel line. Run \`bash "${root}/scripts/auto-run" status\`, continue the phase it names, and end the turn as reference/auto-run.md §Ending a turn says.`
 }
 function reconcilePrompt(root: string): string {
-  return `Background work has run 20 minutes since the last turn with no notification. Run \`bash "${root}/scripts/in-flight"\`. Stop with TaskStop each launch idle 30 minutes or more, and record a \`Ruling:\` line naming the task it served and that its result is void; leave the others running. Then continue the run, and end the turn again if only waiting remains.`
+  return `Background work has run 20 minutes since the last turn with no notification. Run \`bash "${root}/scripts/in-flight"\`. Stop with TaskStop each launch idle 30 minutes or more, and record a \`Ruling:\` line naming the task it served and that its result is void; leave the others running. Never stop a bare \`sleep\` timer: it bounds a dispatch. Then continue the run, and end the turn again if only waiting remains.`
 }
 function keepWarmPrompt(): string {
   return 'Keep-warm: background work is still running and the prompt cache is about to expire. Reply with the single line `Still waiting.` and end the turn. Start nothing and call no tool.'
 }
 // The tools that wait on the person by their nature: their dialog is the question.
 const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
+// The endings of a main turn that asks the person to pick: dforge's finish menu and its confirmations.
+const ASKING_ENDS = /(Which option\?|Type 'discard' to confirm\.?|Ask me then: show the finish menu\.?)$/
 // Permission modes in which an "ask" is settled without the person.
 const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
 // The skills that run a plan's tasks in this session.
@@ -230,6 +245,8 @@ const PROMPT_PATH = pathShape('-prompt\\.md')
 // Every judge prompt template names its report on this line; a prompt also
 // names reports the judge only reads.
 const REPORT_LINE = /^\s*Write your full report to /
+// The same line in a prompt, its phrase free to wrap: the text after it, to the line's end.
+const REPORT_LINES = /(?:^|\n)[ \t]*Write\s+your\s+full\s+report\s+to\s+(\S[^\n]*)/g
 // How many main-turn context readings the forecast keeps.
 const TURN_READINGS = 12
 const STORE_URL = 'notifyUrl'
@@ -246,7 +263,7 @@ const BAND_WORDS: readonly BandSegment[] = ['model', 'effort', 'style', 'turn', 
 // the light theme and the dark alike.
 const CARD = '#8080800f'
 // How the desktop's run bar colors a task by its state.
-const RUN_SEGMENTS: Record<string, Segment> = { complete: 'done', assigned: 'active', blocked: 'blocked' }
+const RUN_SEGMENTS: Record<string, Segment> = { complete: 'done', deferred: 'done', assigned: 'active', waiting: 'active', blocked: 'blocked' }
 const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'status', '--porcelain=v2', '--branch']
 
 const budget = atom({ plugin: 'dforge', key: 'budget' } as const, null)
@@ -262,8 +279,11 @@ const refusals = atom({ plugin: 'dforge', key: 'refusals' } as const, [])
 const isNudged = atom({ plugin: 'dforge', key: 'isNudged' } as const, false)
 const isPlanSession = atom({ plugin: 'dforge', key: 'isPlanSession' } as const, false)
 const isFastMode = atom({ plugin: 'dforge', key: 'isFastMode' } as const, false)
+const isFastSession = atom({ plugin: 'dforge', key: 'isFastSession' } as const, false)
 const isRunSession = atom({ plugin: 'dforge', key: 'isRunSession' } as const, false)
 const autoRun = atom({ plugin: 'dforge', key: 'autoRun' } as const, null)
+const autoRunLeft = atom({ plugin: 'dforge', key: 'autoRunLeft' } as const, false)
+const boundPlan = atom({ plugin: 'dforge', key: 'boundPlan' } as const, null)
 const alerted = atom({ plugin: 'dforge', key: 'alerted' } as const, [])
 const trend = atom({ plugin: 'dforge', key: 'trend' } as const, [])
 const view = atom({ plugin: 'dforge', key: 'view' } as const, 'cockpit')
@@ -298,6 +318,7 @@ type Options = {
   guardAttribution: boolean
   layout: string
   density: string
+  paneGlyphs: string
   sections: string
   collapsed: string
   breakdownRows: number
@@ -316,9 +337,10 @@ type Options = {
 type Tuning = { handoffTokens: number; nudgeModel: boolean; isRelaxed: boolean }
 
 /** The options with their defaults filled in, and what the pane derives from them. */
-type Live = Omit<Options, 'layout' | 'density'> & {
+type Live = Omit<Options, 'layout' | 'density' | 'paneGlyphs'> & {
   layout: 'auto' | 'full' | 'compact'
   density: 'detailed' | 'dense'
+  paneGlyphs: 'unicode' | 'ascii'
   tuning: Tuning
   shown: Section[]
   shownCollapsed: Section[]
@@ -334,6 +356,7 @@ function liveFrom(values: Partial<Options>): Live {
     guardAttribution = true,
     layout: layoutSetting = 'auto',
     density: densitySetting = 'detailed',
+    paneGlyphs = 'unicode',
     sections = '',
     collapsed = '',
     breakdownRows = 6,
@@ -356,6 +379,7 @@ function liveFrom(values: Partial<Options>): Live {
     guardAttribution,
     layout,
     density: densitySetting === 'dense' ? 'dense' : 'detailed',
+    paneGlyphs: paneGlyphs === 'ascii' ? 'ascii' : 'unicode',
     sections,
     collapsed,
     breakdownRows,
@@ -390,18 +414,21 @@ function applyNotify(o: Live) {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await readSession($, true)
+    S.permissionMode = null
     S.watchedSince = await $.clock.now()
     S.reconciledAt = null
-    S.reconcileSeen = { key: '', count: 0 }
-    S.keepWarmCount = 0
+    resetSessionGuards()
     S.keepWarmAt = null
     S.isKeepWarmSubmitted = false
     S.isKeepWarmTurn = false
+    // The timers first: a read below that fails must not leave the session unwatched.
     S.watchdog?.cancel()
     S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($).catch(() => undefined))
     S.poll?.cancel()
     S.poll = $.clock.every(POLL_MS, () => void pollTick($).catch(() => undefined))
+    await readSession($, true)
+    await sweepSnapshots($).catch((error: unknown) => $.ui.toast(`dforge: the check for model switch snapshots other sessions left failed: ${error instanceof Error ? error.message : String(error)}.`))
+    await writeSessionState($)
 
     return next(e)
   })
@@ -510,6 +537,8 @@ export const register: Register = on => {
     if (e.agentId === undefined && e.trigger !== 'precompute' && 'messages' in done && done.messages !== undefined) {
       await update($, budget, () => null)
       await update($, isNudged, () => false)
+      // The turns before a compaction say nothing about the context after it.
+      await update($, turnTokens, () => [])
       // The estimate stands in until the next response; the old one is the window before.
       await readBreakdown($)
       // The engine's or the person's compaction: the run's rule still applies after it.
@@ -545,6 +574,7 @@ export const register: Register = on => {
       ...(isJudgeSeat(e.subagentType) ? await judgeReports($, e.prompt) : {}),
     }
     await update($, spawns, list => trimmedSpawns([...list, spawn]))
+    await writeSessionState($)
     await syncTicker($)
 
     return started
@@ -592,9 +622,12 @@ export const register: Register = on => {
     if (e.message.role === 'user') {
       const text = e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n')
       if (text.includes('<task-notification>')) await endShells($, text)
+      if (text.includes('background work of its own still running')) await markPartial($)
     } else if (e.message.role === 'assistant' && e.agentId === undefined) {
       const fast = fastModeLine(e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n'))
-      if (fast !== null) await update($, isFastMode, () => fast)
+      if (fast === 'session') await update($, isFastSession, () => true)
+      if (fast === false) await update($, isFastSession, () => false)
+      if (fast !== null) await update($, isFastMode, () => fast !== false)
     }
     return kept
   }).catch(($, e, next) => next(e))
@@ -604,10 +637,13 @@ export const register: Register = on => {
   // listed, since a Done covering more work beats a lost one. The cockpit's own
   // keep-warm prompt continues the chain it keeps warm.
   on('prompt.submit', async ($, e, next) => {
-    if (S.isKeepWarmSubmitted && e.text === keepWarmPrompt()) return next(e)
+    if (S.isKeepWarmSubmitted && e.text === keepWarmPrompt()) return submitted($, await next(e))
     S.isKeepWarmSubmitted = false
     if (e.origin !== undefined && NEW_CHAIN_ORIGINS.has(e.origin.kind)) S.heldDone = null
-    return next(e)
+    // A plain `Process: fast` covers its own request only; a new one from the
+    // person ends it, unless a `Process: fast (session)` line is in force.
+    if ((e.origin === undefined || NEW_CHAIN_ORIGINS.has(e.origin.kind)) && !(await read($, isFastSession))) await update($, isFastMode, () => false)
+    return submitted($, await next(e))
   }).catch(($, e, next) => next(e))
 
   // A main turn begins: the Now row starts its clock.
@@ -621,6 +657,7 @@ export const register: Register = on => {
     if (!S.isKeepWarmTurn) S.keepWarmCount = 0
     S.releaseTimer?.cancel()
     S.releaseTimer = null
+    await flushSettingNote($)
     const stamp = await $.clock.now()
     for (const [id, wait] of [...S.waits]) if (wait.agentId === null) await settleWait($, id, '⏹ Turn ended')
     await setActivity($, now => ({
@@ -633,12 +670,25 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // The function-hook tool.check carries no permission mode; the classic hook
+  // inputs do, so the mode the session runs in now is read from them.
+  on('classic.UserPromptSubmit', ($, e, next) => {
+    if (typeof e.permission_mode === 'string' && e.permission_mode !== '') S.permissionMode = e.permission_mode
+    return next(e)
+  })
+  // A subagent's request carries the subagent's mode, not the session's.
+  on('classic.PermissionRequest', ($, e, next) => {
+    if (e.agent_id === undefined && typeof e.permission_mode === 'string' && e.permission_mode !== '') S.permissionMode = e.permission_mode
+    return next(e)
+  })
+
   // Watches the permission decision, never changes it: an "ask" on a call
   // means the person is about to be asked, unless the mode settles it alone.
   on('tool.check', async ($, e, next) => {
     const decided = await next(e)
     const id = e.tool_use_id
-    if (decided.decision !== 'ask' || id === undefined || S.isUnattended || ASKING_TOOLS.includes(e.tool) || S.waits.has(id)) return decided
+    const isUnattended = S.permissionMode === null ? S.isUnattended : UNATTENDED_MODES.includes(S.permissionMode)
+    if (decided.decision !== 'ask' || id === undefined || isUnattended || ASKING_TOOLS.includes(e.tool) || S.waits.has(id)) return decided
     const seat = e.agentId === undefined ? null : ((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat ?? null)
     await startWait($, id, 'waiting', {
       kind: 'ask',
@@ -665,6 +715,7 @@ export const register: Register = on => {
       const effort = typeof e.effort === 'string' ? e.effort : null
       const before = await read($, engine)
       if (before.model !== e.model || before.effort !== effort) await update($, engine, now => ({ ...now, model: e.model, effort }))
+      if (before.model !== e.model) await writeSessionState($)
       const step = e.index + 1
       await update($, activity, now => (now.kind === 'idle' || now.kind === 'failed' || now.step === step ? now : { ...now, step }))
     }
@@ -724,10 +775,22 @@ export const register: Register = on => {
           undefined,
           async () => void (await update($, activity, now => ({ ...now, isSent: true }))),
         )
+      } else if (e.reason === 'answer' && !isKeptWarm && S.questionSentAt !== null && S.questionSentAt >= turnStartedAt) {
+        // The ledger's waiting line already said what the turn asks.
+        S.heldDone = null
+      } else if (e.reason === 'answer' && !isKeptWarm && ASKING_ENDS.test(e.answer.trim())) {
+        S.heldDone = null
+        await notify(
+          $,
+          { kind: 'question', title: '❓ Claude is asking', detail: excerpt(e.answer, 300), fields: await turnFields($) },
+          undefined,
+          async () => void (await update($, activity, now => ({ ...now, isSent: true }))),
+        )
       } else if (e.reason === 'answer' && !isHeld && !isKeptWarm) {
         await sendDone($, e.answer, e.durationMs)
       }
       if (e.reason === 'answer') await armAutoRun($, e.answer)
+      await writeSessionState($)
       return done
     }
     const agentId = e.agentId
@@ -744,6 +807,7 @@ export const register: Register = on => {
     }
     const outcome: 'done' | 'failed' = e.reason === 'answer' ? 'done' : 'failed'
     await update($, spawns, all => all.map(one => (one.agentId === agentId ? { ...one, isDone: true, outcome } : one)))
+    await writeSessionState($)
     for (const [id, wait] of [...S.waits]) if (wait.agentId === agentId) await endWait($, id, '⏹ Agent ended')
     await syncTicker($)
     await settleBackground($)
@@ -823,6 +887,7 @@ export const register: Register = on => {
     }
     if (RUN_SKILLS.includes(skill)) await markRunSession($)
     if (ran.deny === undefined && !ran.isError) await trackShells($, tool, e, ran.result)
+    if (ran.deny === undefined && (tool === 'Monitor' || tool === 'SendMessage')) await markPartial($)
     if (e.agentId === undefined) {
       if (ran.deny === undefined && !ran.isError) await trackPlan($, tool, e, ran.result)
       // A run starts, stops and changes regime through the model's own Bash calls to scripts/auto-run.
@@ -834,6 +899,11 @@ export const register: Register = on => {
         !ran.isError &&
         (WORKTREE_TOOLS.includes(tool) || (tool === 'Bash' && MOVES_DIR.test(String((e as { command?: unknown }).command ?? '')) && (await hasMoved($))))
       if (isMove) await readPlace($)
+      // The Run card follows the plan this session last named to a plan script.
+      if (tool === 'Bash' && ran.deny === undefined && !ran.isError) {
+        const named = namedPlan(String((e as { command?: unknown }).command ?? ''))
+        if (named !== null && (await read($, boundPlan)) !== named) await update($, boundPlan, () => named)
+      }
       // The controller writes its ledger with its own tool calls, and scripts
       // write it from a Bash call whose text names no .dforge path: read it
       // before the budget, which measures a plan's tail by it. It is keyed on
@@ -849,7 +919,15 @@ export const register: Register = on => {
     if (!next.called && e.agentId !== undefined && REVIEW_WRITE_TOOLS.includes(String(e.tool)) && isJudgeSeat((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat)) {
       return { deny: `dforge: the review-seat write guard could not check this write (${next.error.message || next.error.kind}); it is refused.` }
     }
-    return next.called || !(await live($)).guardAttribution ? next(e) : { deny: 'dforge: its attribution guard failed.' }
+    if (next.called) return next(e)
+    const tool = String(e.tool)
+    const isJudged = tool === 'Bash' ? writesGitText(String((e as { command?: unknown }).command ?? '')) : isGitWriteTool(tool)
+    if (!isJudged) return next(e)
+    const isGuarded = await live($).then(
+      settings => settings.guardAttribution,
+      () => true,
+    )
+    return isGuarded ? { deny: 'dforge: its attribution guard failed; set guardAttribution off to lift it.' } : next(e)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -862,6 +940,8 @@ export const register: Register = on => {
     const isDesktop = Svg !== undefined
     const now = await $.clock.now()
     const room = e.props.bodyColumns
+    const glyphs = o.paneGlyphs === 'ascii' ? ASCII_GLYPHS : UNICODE_GLYPHS
+    const glyphed = <T,>(tree: T): T => (o.paneGlyphs === 'ascii' ? asciiTree(tree) : tree)
     const isCompact = o.isMinimized || (o.layout === 'auto' && e.props.placement === 'inline')
     // Only these two surfaces draw the band above the prompt.
     const canMinimize = e.surface === 'terminal' || e.surface === 'desktop'
@@ -899,11 +979,12 @@ export const register: Register = on => {
     // Every control is a button in a rounded box: gray at rest, the accent on
     // the one that matters (`isMain`), dim when it reads as off.
     if (S.canUnderline === null) await readVersion($)
-    const button = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean; isCompact?: boolean } = {}) => {
+    const button = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean; isCompact?: boolean; isFocused?: boolean } = {}) => {
+      const autoFocus = look.isFocused === true ? true : undefined
       // The desktop draws its own buttons, the main one in its primary look. A compact
       // button is that one on the terminal too: a single line, not a three-line box.
       if (isDesktop || look.isCompact) {
-        return <Button key={key} label={label} hotkey={look.hotkey} variant={look.isMain ? 'primary' : undefined} dimColor={look.isOff} onPress={onPress} />
+        return <Button key={key} label={label} hotkey={look.hotkey} variant={look.isMain ? 'primary' : undefined} dimColor={look.isOff} autoFocus={autoFocus} onPress={onPress} />
       }
       // The hotkey's letter is underlined in the label, as a desktop app marks
       // one; a hidden twin holds the hotkey, since a Button with one draws "c: "
@@ -911,7 +992,7 @@ export const register: Register = on => {
       if (!S.canUnderline) {
         return (
           <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
-            <Button key={key} label={label} hotkey={look.hotkey} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress} />
+            <Button key={key} label={label} hotkey={look.hotkey} plain dimColor={look.isOff} hover={{ bold: true }} autoFocus={autoFocus} onPress={onPress} />
           </Box>
         )
       }
@@ -919,9 +1000,9 @@ export const register: Register = on => {
       return (
         <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
           {at < 0 ? (
-            <Button key={key} label={label} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress} />
+            <Button key={key} label={label} plain dimColor={look.isOff} hover={{ bold: true }} autoFocus={autoFocus} onPress={onPress} />
           ) : (
-            <Button key={key} label={label} plain dimColor={look.isOff} hover={{ bold: true }} onPress={onPress}>
+            <Button key={key} label={label} plain dimColor={look.isOff} hover={{ bold: true }} autoFocus={autoFocus} onPress={onPress}>
               {label.slice(0, at)}
               <Text underline>{label.slice(at, at + 1)}</Text>
               {label.slice(at + 1)}
@@ -936,6 +1017,12 @@ export const register: Register = on => {
       )
     }
     const isNearHandoff = head !== null && levelOf(head.tokens, head.limit) !== 'quiet'
+    const problemCount = S.settingProblems.length
+    const problemLine = problemCount > 0 && (
+      <Text key="setting-problems" color="warning" wrap="truncate-end">
+        {`${problemCount} setting problem${problemCount === 1 ? '' : 's'} · open ⚙ Settings to see ${problemCount === 1 ? 'it' : 'them'}`}
+      </Text>
+    )
     const resumeCard = offer !== null && (
       <Box key="resume-card" flexDirection="column" borderStyle="round" borderColor={BUTTON_MAIN} paddingX={1}>
         <Text key="resume-title" color={BUTTON_MAIN} bold wrap="truncate-end">
@@ -948,9 +1035,16 @@ export const register: Register = on => {
       </Box>
     )
     const autoNow = await read($, autoRun)
+    const isRunLeft = !autoNow?.active && (await read($, autoRunLeft))
     const isDense = o.density === 'dense'
     const actions = (
       <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
+        {isRunLeft && (
+          <Text key="auto-left" color="warning">
+            auto run left by a closed session — run scripts/auto-run stop --stale
+          </Text>
+        )}
+        {isRunLeft && button('pane-stop-stale', '■ Stop stale run', () => void stopStaleRun($), { isCompact: isDense })}
         {autoNow?.active && (
           <Text key="auto-line" color="magenta">
             {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} ${autoNow.compactions === 1 ? 'compaction' : 'compactions'} · ${autoNow.resumes} ${autoNow.resumes === 1 ? 'resume' : 'resumes'}`}
@@ -973,7 +1067,7 @@ export const register: Register = on => {
     if ((await read($, view)) === 'settings') {
       // Each press saves to ~/.dforge/config.json and puts the value in force, so the rows below always show what is saved.
       const set = (key: string, value: SettingValue) => setOption($, key, value)
-      const compact = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean } = {}) =>
+      const compact = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean; isFocused?: boolean } = {}) =>
         button(
           key,
           label,
@@ -984,10 +1078,11 @@ export const register: Register = on => {
           { ...look, isCompact: true },
         )
       // The desktop spaces these rows by its own scale, as the settings view does.
+      // The desktop stacks its label over its controls, as the settings view's own rows do.
       const row = (key: string, label: string, ...controls: RenderChildren[]) => (
-        <Box key={key} flexDirection="row" columnGap={isDesktop ? 'sm' : 1}>
-          <Box key={`${key}-label`} width={16} flexShrink={0}>
-            <Text>{label}</Text>
+        <Box key={key} flexDirection={isDesktop ? 'column' : 'row'} columnGap={isDesktop ? 'sm' : 1} gap={isDesktop ? 'xs' : undefined}>
+          <Box key={`${key}-label`} width={isDesktop ? undefined : 16} flexShrink={0}>
+            <Text weight={isDesktop ? 'medium' : undefined}>{label}</Text>
           </Box>
           <Box key={`${key}-controls`} flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={isDesktop ? 'sm' : 1} rowGap={isDesktop ? 'xs' : undefined} flexShrink={1}>
             {controls}
@@ -1070,12 +1165,23 @@ export const register: Register = on => {
       // Every press but the one that asked for it ends an edit, a webhook or
       // mention field's included, or a pending reset.
       const show = async (change: Partial<CockpitSettingsView>) => {
+        S.consentPending = null
         if ((await read($, notifier)).editing !== null) await update($, notifier, now => ({ ...now, editing: null, error: null }))
         await update($, settingsView, now => ({ ...now, editing: null, error: null, isConfirmingReset: false, ...change }))
       }
       const save = async (key: string, value: SettingValue) => {
         if (state.editing !== null || state.isConfirmingReset) await show({})
         return set(key, value)
+      }
+      // Raising a consent cap from 0, by a step or a typed value, is the
+      // consent itself, so it waits for the Confirm press its row then shows.
+      const askConsent = async (key: string, value: SettingValue) => {
+        const spec = SCHEMA[key]
+        if (CONSENTS[key] === undefined || spec === undefined || Number(values[key] ?? spec.default) !== 0 || !(Number(value) > 0)) return false
+        await show({})
+        S.consentPending = { key, value: Number(value) }
+        $.ui.invalidate('ui.render')
+        return true
       }
       // A segment's chip on either line: on adds it last there and moves it off the other.
       const bandChips = (index: 0 | 1) => {
@@ -1100,7 +1206,28 @@ export const register: Register = on => {
           </Box>
         )
       }
+      const consent = S.consentPending
+      const consentSpec = consent === null ? undefined : SCHEMA[consent.key]
       const custom: Record<string, RenderChildren> = {
+        ...(consent === null || consentSpec === undefined
+          ? {}
+          : {
+              [consent.key]: [
+                <Text key={`set-${consent.key}-consent`} color="warning">
+                  {`${consentSpec.title}: confirm a cap of ${consent.value}? ${CONSENTS[consent.key] ?? ''} `}
+                </Text>,
+                compact(
+                  `set-${consent.key}-confirm`,
+                  'Confirm',
+                  () => {
+                    S.consentPending = null
+                    return save(consent.key, consent.value)
+                  },
+                  { isMain: true, isFocused: true },
+                ),
+                compact(`set-${consent.key}-cancel`, 'Cancel', () => show({})),
+              ],
+            }),
         bandLine1: bandChips(0),
         bandLine2: bandChips(1),
         sections: chips(
@@ -1126,7 +1253,7 @@ export const register: Register = on => {
         ),
       }
 
-      return drawSettings(
+      return glyphed(drawSettings(
         elements,
         {
           tabs,
@@ -1146,9 +1273,12 @@ export const register: Register = on => {
         {
           openTab: next => show({ tab: next }),
           set: save,
-          step: (key, direction) => {
+          step: async (key, direction) => {
             const spec = SCHEMA[key]
-            return spec === undefined ? undefined : save(key, steppedSetting(spec, Number(values[key] ?? spec.default), direction))
+            if (spec === undefined) return undefined
+            const value = steppedSetting(spec, Number(values[key] ?? spec.default), direction)
+            if (await askConsent(key, value)) return undefined
+            return save(key, value)
           },
           edit: key => (key === null ? show({ editing: null }) : openField($, `set-${key}-input`, () => show({ editing: key }))),
           submit: async (key, text) => {
@@ -1159,6 +1289,7 @@ export const register: Register = on => {
               await update($, settingsView, now => ({ ...now, editing: key, error: rangeText(spec) }))
               return
             }
+            if (await askConsent(key, value)) return
             if (await set(key, value)) await show({})
           },
           reset: key => {
@@ -1183,7 +1314,7 @@ export const register: Register = on => {
             if (o.isMinimized) await $.ui.close({ id: PANE })
           },
         },
-      )
+      ))
     }
     const running = all.filter(one => !one.isDone)
     // After Esc, what kept going: background shells and agents survive it.
@@ -1211,18 +1342,24 @@ export const register: Register = on => {
     // band's rows, has to be asked for the full pane.
     if (isCompact) {
       const isInline = e.props.placement === 'inline'
-      return drawBand(
+      return glyphed(await drawBand(
         $,
         e,
         async () => {
           if ((await setOption($, 'layout', isInline ? 'full' : 'auto')) && isInline) await $.ui.open(paneFor('full'))
         },
         e.props.bodyColumns,
-      )
+      ))
     }
 
     if (isDense) {
+      // A task waiting on the person is the one to name: the row is all the dense layout has.
+      const waiting = summary?.tasks.find(task => task.state === 'waiting') ?? null
       const inFlight = summary?.tasks.find(task => task.state === 'assigned') ?? null
+      const current =
+        waiting !== null ? `? Task ${waiting.n} waiting${waiting.question === null ? '' : `: ${waiting.question}`}`
+        : inFlight === null ? null
+        : `Task ${inFlight.n}${inFlight.title === '' ? '' : `: ${inFlight.title}`}`
       const dense: DenseInput = {
         email: who?.email ?? null,
         billing,
@@ -1233,7 +1370,7 @@ export const register: Register = on => {
         limits,
         shells: background,
         agents: running.map(one => shortSeat(one.seat)),
-        run: summary === null || summary.total === 0 ? null : { done: summary.done, total: summary.total, current: inFlight === null ? null : `Task ${inFlight.n}${inFlight.title === '' ? '' : `: ${inFlight.title}`}` },
+        run: summary === null || summary.total === 0 ? null : { done: summary.done, total: summary.total, current },
         todos: items.length === 0 ? null : { done: doneCount, total: items.length, current: items.find(item => item.status === 'in_progress')?.text ?? null },
         repo: git,
         refused: refused.length,
@@ -1244,13 +1381,14 @@ export const register: Register = on => {
         const runs = denseLine(name, dense)
         return runs === null ? [] : [{ key: `dense-${name}`, runs: runsCut(runs, room) }]
       })
-      return (
+      return glyphed(
         <Box flexDirection="column">
           {resumeCard}
+          {problemLine}
           <Box key="dense-now" flexDirection="row" alignItems="center" columnGap={1}>
             <Box key="dense-now-text" flexGrow={1} flexShrink={1}>
               <Text key="now" wrap="truncate-end">
-                {drawRuns('now', nowLine(actNow, now, work))}
+                {drawRuns('now', nowLine(actNow, now, work, glyphs))}
               </Text>
             </Box>
           </Box>
@@ -1338,7 +1476,7 @@ export const register: Register = on => {
           track(head.tokens / head.window, inner, [
             ...(compactAt === null ? [] : [{ at: compactAt / head.window, glyph: '┊', name: 'compact' }]),
             { at: head.limit / head.window, glyph: '┃', name: 'handoff' },
-          ]),
+          ], glyphs),
           { handoff: rampColor(percent), compact: 'gray' },
         ),
         <Text key="ctx-legend" wrap="truncate-end">
@@ -1425,7 +1563,7 @@ export const register: Register = on => {
           </Text>
         </Text>,
         <Text key="plan-progress" color={color}>
-          {bar(summary.done / summary.total, inner)}
+          {bar(summary.done / summary.total, inner, glyphs)}
         </Text>,
         summary.plan !== null && (
           <Text key="plan-path" dimColor wrap="truncate-end">
@@ -1449,6 +1587,29 @@ export const register: Register = on => {
                   {task.isClean ? ' · clean' : ''}
                 </Text>
               </Text>
+            )
+          }
+          if (task.state === 'deferred') {
+            return (
+              <Text key={`plan-${task.n}`} dimColor wrap="truncate-end">
+                ⏭ {label} · deferred
+              </Text>
+            )
+          }
+          if (task.state === 'waiting') {
+            return (
+              <Box key={`plan-${task.n}`} flexDirection="column">
+                <Text color={BUTTON_MAIN} bold wrap="truncate-end">
+                  ? {label}
+                </Text>
+                {task.question !== null && (
+                  <Box paddingLeft={INDENT}>
+                    <Text color={BUTTON_MAIN} wrap="truncate-end">
+                      {task.question}
+                    </Text>
+                  </Box>
+                )}
+              </Box>
             )
           }
           if (task.state === 'blocked') {
@@ -1596,7 +1757,7 @@ export const register: Register = on => {
                 {drawTrack(
                   `limit-${limit.kind}-track`,
                   limit.percent,
-                  track(limit.percent / 100, width, gone === null ? [] : [{ at: gone, glyph: '┊', name: 'pace' }]),
+                  track(limit.percent / 100, width, gone === null ? [] : [{ at: gone, glyph: '┊', name: 'pace' }], glyphs),
                   { pace: 'white' },
                 )}
                 <Text color={rampColor(limit.percent)} bold>
@@ -1688,7 +1849,7 @@ export const register: Register = on => {
                   <Text dimColor> ×{seat.runs}</Text>
                 </Text>
                 <Text wrap="truncate-end">
-                  {seatBar(seat) > 0 && <Text color="magenta">{bar(totalIn(seat) / mostIn, seatBar(seat)).replace(/▱+$/, rest => ' '.repeat(rest.length))} </Text>}
+                  {seatBar(seat) > 0 && <Text color="magenta">{bar(totalIn(seat) / mostIn, seatBar(seat), glyphs).replace(new RegExp(`${glyphs.empty}+$`), rest => ' '.repeat(rest.length))} </Text>}
                   <Text bold>{seatText(seat).slice(0, seatText(seat).indexOf(' '))}</Text>
                   <Text dimColor>{seatText(seat).slice(seatText(seat).indexOf(' '))}</Text>
                 </Text>
@@ -1710,7 +1871,7 @@ export const register: Register = on => {
             {doneCount}/{items.length}
           </Text>,
           <Text key="plan-progress" color="yellow">
-            {bar(doneCount / items.length, inner)}
+            {bar(doneCount / items.length, inner, glyphs)}
           </Text>,
           shownItems.map(item => (
             <Text key={`plan-${item.id}`} wrap="truncate-end">
@@ -1983,12 +2144,16 @@ export const register: Register = on => {
               const label = `Task ${task.n}${task.title === '' ? '' : `: ${task.title}`}`
               const meta =
                 task.state === 'complete' ? (task.isClean ? 'reviewed clean' : null)
+                : task.state === 'deferred' ? 'deferred'
+                : task.state === 'waiting' ? task.question
                 : task.state === 'blocked' ? `BLOCKED${task.reason === null ? '' : ` · ${task.reason}`}`
                 : task.state === 'assigned' && (task.round !== null || task.seat !== null)
                   ? [task.round === null ? 'implementing' : `round ${task.round}`, task.seat === null ? null : shortSeat(task.seat)].filter(Boolean).join(' · ')
                   : null
               const icon: PanelRun =
                 task.state === 'complete' ? { text: '✓', color: 'green' }
+                : task.state === 'deferred' ? { text: '⏭', faint: true }
+                : task.state === 'waiting' ? { text: '?', color: 'magenta' }
                 : task.state === 'blocked' ? { text: '✗', color: 'red' }
                 : task.state === 'assigned' ? { text: '▸', color: 'blue' }
                 : { text: '○', faint: true }
@@ -1996,10 +2161,16 @@ export const register: Register = on => {
                 kind: 'text',
                 left: [
                   { ...icon, text: `${icon.text}  ` },
-                  { text: label, bold: task.state === 'assigned' || task.state === 'blocked', color: task.state === 'blocked' ? 'red' : undefined, dim: task.state === 'pending' },
+                  {
+                    text: label,
+                    bold: task.state === 'assigned' || task.state === 'blocked' || task.state === 'waiting',
+                    color: task.state === 'blocked' ? 'red' : task.state === 'waiting' ? 'magenta' : undefined,
+                    dim: task.state === 'pending' || task.state === 'deferred',
+                  },
                 ],
               })
-              if (meta !== null) lines.push({ kind: 'text', small: true, indent: 18, left: [{ text: meta, color: task.state === 'blocked' ? 'red' : undefined, dim: task.state !== 'blocked' }] })
+              const metaColor = task.state === 'blocked' ? 'red' : task.state === 'waiting' ? 'magenta' : undefined
+              if (meta !== null) lines.push({ kind: 'text', small: true, indent: 18, left: [{ text: meta, color: metaColor, dim: metaColor === undefined }] })
             }
             if (summary.isFinished) lines.push({ kind: 'text', left: [{ text: 'Final review clean.', color: 'green' }] })
             return panel(
@@ -2119,15 +2290,16 @@ export const register: Register = on => {
           </Box>
         )
       }
-      return (
+      return glyphed(
         <Box flexDirection="column" gap="md">
           {resumeCard}
+          {problemLine}
           {o.shown.includes('account') && panels.account}
           {controls}
           <Box key="now-row" flexDirection="row" alignItems="center" columnGap={1}>
             <Box key="now-box" flexGrow={1} flexShrink={1}>
               <Text key="now" wrap="truncate-end">
-                {drawRuns('now', nowLine(actNow, now, work))}
+                {drawRuns('now', nowLine(actNow, now, work, glyphs))}
               </Text>
             </Box>
           </Box>
@@ -2142,11 +2314,12 @@ export const register: Register = on => {
       )
     }
 
-    return (
+    return glyphed(
       <Box flexDirection="column">
         {resumeCard}
+        {problemLine}
         <Text key="now" wrap="truncate-end">
-          {drawRuns('now', nowLine(actNow, now, work))}
+          {drawRuns('now', nowLine(actNow, now, work, glyphs))}
         </Text>
         {!o.shown.includes('account') && controls}
         {o.shown.map(name => (name === 'account' ? [byName[name], controls] : byName[name]))}
@@ -2267,13 +2440,15 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
     isBackground: doing.kind === 'background',
   }
   const blocked = summary?.tasks.filter(task => task.state === 'blocked') ?? []
-  const warning: Run[] = [
+  const problems = S.settingProblems.length
+  const warnings: Run[][] = [
     ...(blocked.length === 0
       ? []
-      : [{ text: '✗ ', color: 'red', bold: true }, { text: blocked.length === 1 ? `Task ${blocked[0]?.n} blocked` : `${blocked.length} tasks blocked`, color: 'red' }]),
-    ...(blocked.length > 0 && refused.length > 0 ? [{ text: '  ·  ', dim: true }] : []),
-    ...(refused.length === 0 ? [] : [{ text: '✗ ', color: 'red', bold: true }, { text: `${refused.length} refused`, color: 'red' }]),
+      : [[{ text: '✗ ', color: 'red', bold: true }, { text: blocked.length === 1 ? `Task ${blocked[0]?.n} blocked` : `${blocked.length} tasks blocked`, color: 'red' }]]),
+    ...(refused.length === 0 ? [] : [[{ text: '✗ ', color: 'red', bold: true }, { text: `${refused.length} refused`, color: 'red' }]]),
+    ...(problems === 0 ? [] : [[{ text: '! ', color: 'warning', bold: true }, { text: `${problems} setting problem${problems === 1 ? '' : 's'}`, color: 'warning' }]]),
   ]
+  const warning: Run[] = warnings.flatMap((one, index) => (index === 0 ? one : [{ text: '  ·  ', dim: true }, ...one]))
   const remoteBand: Run[] =
     remoteNow.clients.length > 0
       ? [{ text: 'Remote ● ', color: 'green' }, { text: 'connected', color: 'green' }]
@@ -2451,6 +2626,12 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
 const S = {
   // Saved or environment values the settings in force ignored, for the settings view.
   settingProblems: [] as string[],
+  // A consent setting whose raise from 0 waits for its confirm press; null otherwise.
+  consentPending: null as { key: string; value: number } | null,
+  // A session read one of whose steps threw: the slow poll tick reads it again.
+  isSessionPartial: false,
+  // The problem line for a settings file that does not parse (C15), while it does not; null otherwise.
+  brokenConfig: null as string | null,
   // Keys something outside the settings file forces, with the words their rows show.
   locks: {} as Record<string, string>,
   // Skill-enforced settings changed since the model was last told, with their new values.
@@ -2486,7 +2667,12 @@ const S = {
   // of a plan's ledger only records them, so a reload, a re-read or a resumed
   // plan sends nothing twice.
   ledgerSeen: new Map<string, Set<string>>(),
+  // When sendLedgerEvents last sent a task's waiting question: that turn's Done is the question.
+  questionSentAt: null as number | null,
+  // The settings' default mode is unattended; read only until an event carries the session's mode.
   isUnattended: false,
+  // The permission mode the last classic hook input carried; null before one.
+  permissionMode: null as string | null,
   // Whether this Claude Code draws a Button's label from styled children,
   // so the hotkey's letter can be underlined in it.
   canUnderline: null as boolean | null,
@@ -2500,6 +2686,11 @@ const S = {
   autoActedAt: null as number | null,
   // When this session started: one with no turn yet ages from it.
   watchedSince: null as number | null,
+  // The session that started a launch form the cockpit does not track; its
+  // session state file says partial until the id changes.
+  partialSession: null as string | null,
+  // Each tracked shell's description, by its task id: the shells atom keeps none.
+  shellWhat: {} as Record<string, string>,
   // When background work began deferring the pending stage; null while nothing
   // does or a turn is live.
   autoDeferredSince: null as number | null,
@@ -2557,6 +2748,8 @@ const S = {
   runKey: '',
   runPlan: null as string | null,
   runReads: 0,
+  // The ledger directory's workspaces and its modification time when listed.
+  ledgerDirs: { base: '', at: null as number | null, names: [] as string[] },
   // Discord messages go out one at a time; the tail of the queue.
   outbox: Promise.resolve() as Promise<void>,
 }
@@ -2775,14 +2968,43 @@ async function endWait($: EngineInterface, id: string, outcome: string) {
   if (kind === 'background') await settleBackground($)
 }
 
-// The auto run state file in the primary checkout, as the run bound to this
-// session; null when there is none or another session owns it.
-async function readAutoRun($: EngineInterface): Promise<CockpitAutoRun | null> {
+// The auto run state file in the primary checkout; null when there is none.
+async function autoRunText($: EngineInterface): Promise<string | null> {
   const root = S.where.primary ?? (await read($, place))?.root ?? null
   if (root === null) return null
   const text = await $.fs.read(`${root}/.dforge/sdd/auto-run.json`).catch(() => null)
-  if (typeof text !== 'string') return null
-  return autoRunFor(text, await $.session.id())
+  return typeof text === 'string' ? text : null
+}
+
+// The auto run state file's run, as the run bound to this session; null when
+// there is none or another session owns it.
+async function readAutoRun($: EngineInterface): Promise<CockpitAutoRun | null> {
+  const text = await autoRunText($)
+  return text === null ? null : autoRunFor(text, await $.session.id())
+}
+
+// Whether a session's cockpit still beats, by the heartbeat beat() writes,
+// as ar_is_stale judges it (scripts/lib/auto-run.sh, AR_BEAT_SECONDS). The
+// engine gives a mod no process id or signal API, so the beat's age is all
+// there is. A beat up to BEAT_SECONDS ahead is clock skew and reads as now.
+// No beat file is a dead session; null, unknown, is a beat that reads as no
+// time (a write caught midway), a beat file that exists but cannot be read,
+// or a check that failed, which callers must not act on as a death.
+const BEAT_SECONDS = 180
+async function isSessionAlive($: EngineInterface, sid: string): Promise<boolean | null> {
+  try {
+    const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+    if (!home) return null
+    const path = `${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/cockpit/${sid.replace(/[^A-Za-z0-9]/g, '-')}`
+    const text = await $.fs.read(path).catch(() => null)
+    if (text === null) return (await $.fs.exists(path)) ? null : false
+    const first = String(text).split(/\r?\n/)[0]?.trim() ?? ''
+    if (!/^[0-9]+$/.test(first)) return null
+    const age = Math.floor((await $.clock.now()) / 1000) - Number(first)
+    return age >= -BEAT_SECONDS && age <= BEAT_SECONDS
+  } catch {
+    return null
+  }
 }
 
 // Runs scripts/auto-run as `sessionId`; resolves its exit code, 1 when it could not run.
@@ -2794,7 +3016,12 @@ async function autoRunCall($: EngineInterface, sessionId: string, args: string[]
 // Keeps the pane's copy of the bound run, and says once on Discord when the
 // run stopped with a reason.
 async function trackAutoRun($: EngineInterface) {
-  const now = await readAutoRun($)
+  const text = await autoRunText($)
+  const id = await $.session.id()
+  const now = text === null ? null : autoRunFor(text, id)
+  const owner = now === null && text !== null ? activeRunOwner(text) : null
+  const isLeft = owner !== null && owner !== id && (await isSessionAlive($, owner)) === false
+  if ((await read($, autoRunLeft)) !== isLeft) await update($, autoRunLeft, () => isLeft)
   const before = await read($, autoRun)
   if (JSON.stringify(now) === JSON.stringify(before)) return
   await update($, autoRun, () => now)
@@ -2922,11 +3149,14 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       // can be read now and put back after (the restore runs node).
       const saved = await userDefaults($)
       if (saved !== null && (await nodeRuns($))) {
+        await saveDefaults($, bound, auto.launch.model, saved)
         for (const [command, args] of [['model', auto.launch.model], ['effort', auto.launch.effort]] as const) {
           await $.command.run({ command, args }).catch(() => refused.push(`/${command} ${args}`))
         }
         isRestored = await restoreUserDefaults($, saved)
-        if (!isRestored) {
+        // A restore that did not read back leaves the snapshot for a later session.
+        if (isRestored) await dropSnapshot($, bound)
+        else {
           await notify($, { kind: 'blocked', title: '⛔ Default model not restored', detail: `/model and /effort left the auto run's launch model as the default in ${await userSettingsPath($)}.`, isPlain: true })
         }
       } else isKept = true
@@ -2952,10 +3182,96 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
 
 // What /model and /effort save as the user's defaults, as the engine has them
 // loaded; null when the settings cannot be read, so nothing is restored from a guess.
-async function userDefaults($: EngineInterface): Promise<{ model: unknown; modelSettings: unknown } | null> {
+async function userDefaults($: EngineInterface): Promise<SavedDefaults | null> {
   const user = (await $.settings.read({ source: 'user' }).catch(() => null)) as Record<string, unknown> | null
   if (user === null) return null
-  return { model: user.model ?? null, modelSettings: user.modelSettings ?? null }
+  return { model: user.model ?? null, modelSettings: user.modelSettings ?? null, effortLevel: user.effortLevel ?? null }
+}
+
+// The user's defaults as /model and /effort save them, in this key order: the
+// restore's read-back compares JSON text.
+type SavedDefaults = { model: unknown; modelSettings: unknown; effortLevel: unknown }
+
+// Where the defaults are kept while a model switch is in flight, so a session
+// that dies before the restore leaves them for the next one; null without a home.
+async function snapshotPath($: EngineInterface, sessionId: string): Promise<string | null> {
+  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+  if (!home) return null
+  return `${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/saved-defaults/${sessionId.replace(/[^A-Za-z0-9]/g, '-')}.json`
+}
+
+// Written before /model, never over a snapshot already there: that one holds
+// the defaults from before an earlier switch.
+async function saveDefaults($: EngineInterface, sessionId: string, launchModel: string, saved: SavedDefaults) {
+  const path = await snapshotPath($, sessionId)
+  if (path === null || (await $.fs.stat(path).catch(() => null)) !== null) return
+  const snapshot = { session: sessionId, launchModel, saved: { model: saved.model, modelSettings: saved.modelSettings, effortLevel: saved.effortLevel } }
+  await $.fs.write(path, `${JSON.stringify(snapshot)}\n`).catch(() => undefined)
+}
+
+// A mod cannot delete a file: dforge-config.mjs does it. Whether it did.
+async function dropSnapshot($: EngineInterface, name: string): Promise<boolean> {
+  const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'drop-snapshot', name], { timeoutMs: 15_000 }).catch(() => null)
+  return ran?.exitCode === 0
+}
+
+function undroppedToast(session: string, file: string): string {
+  return `dforge: could not drop the model switch snapshot of session ${session}, ${file}; the next session start tries again.`
+}
+
+// The snapshots other sessions left. A live writer's is still in use. A dead
+// one's defaults go back while its launch model is still the default, the sign
+// that nothing changed them since; otherwise they are stale and only dropped.
+async function sweepSnapshots($: EngineInterface) {
+  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+  if (!home) return
+  const dir = `${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/saved-defaults`
+  const own = (await $.session.id()).replace(/[^A-Za-z0-9]/g, '-')
+  for (const entry of await $.fs.list(dir).catch(() => [])) {
+    if (!entry.name.endsWith('.json')) continue
+    const name = entry.name.slice(0, -'.json'.length)
+    if (name === own) continue
+    const text = await $.fs.read(`${dir}/${entry.name}`).catch(() => null)
+    if (text === null) continue
+    const snapshot = snapshotOf(String(text))
+    if (snapshot === null) {
+      $.ui.toast(
+        (await dropSnapshot($, name))
+          ? `dforge: dropped an unreadable model switch snapshot, ${entry.name}.`
+          : `dforge: could not drop an unreadable model switch snapshot, ${entry.name}; the next session start tries again.`,
+      )
+      continue
+    }
+    if ((await isSessionAlive($, snapshot.session)) !== false) continue
+    const now = await userDefaults($)
+    if (now === null) continue
+    if (now.model === snapshot.launchModel) {
+      if (!(await restoreUserDefaults($, snapshot.saved))) {
+        $.ui.toast(`dforge: could not put back the default model that session ${snapshot.session} switched from; it stays ${snapshot.launchModel}, and its snapshot is kept for the next session start to try again.`)
+      } else if (!(await dropSnapshot($, name))) {
+        $.ui.toast(undroppedToast(snapshot.session, entry.name))
+      }
+    } else {
+      $.ui.toast(
+        (await dropSnapshot($, name))
+          ? `dforge: dropped the model switch snapshot of session ${snapshot.session}: your default model is no longer ${snapshot.launchModel}.`
+          : undroppedToast(snapshot.session, entry.name),
+      )
+    }
+  }
+}
+
+function snapshotOf(text: string): { session: string; launchModel: string; saved: SavedDefaults } | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return null
+  }
+  const s = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as Record<string, unknown>
+  const saved = (typeof s.saved === 'object' && s.saved !== null ? s.saved : null) as Record<string, unknown> | null
+  if (typeof s.session !== 'string' || typeof s.launchModel !== 'string' || saved === null) return null
+  return { session: s.session, launchModel: s.launchModel, saved: { model: saved.model ?? null, modelSettings: saved.modelSettings ?? null, effortLevel: saved.effortLevel ?? null } }
 }
 
 // Whether node starts: the restore below runs dforge-config.mjs with it.
@@ -2976,7 +3292,7 @@ async function userSettingsPath($: EngineInterface): Promise<string> {
 // The engine never reloads a write that lands right after its own save, and its
 // next settings write would save the launch model again, so the restore counts
 // only once the engine reads it back; a later write is outside that window.
-async function restoreUserDefaults($: EngineInterface, saved: { model: unknown; modelSettings: unknown }): Promise<boolean> {
+async function restoreUserDefaults($: EngineInterface, saved: SavedDefaults): Promise<boolean> {
   for (let write = 0; write < RESTORE_WRITES; write++) {
     const ran = await $.process
       .run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'claude-restore', JSON.stringify(saved)], { timeoutMs: 15_000 })
@@ -3004,6 +3320,69 @@ async function beat($: EngineInterface) {
   } catch {
     // A beat that cannot be written is skipped; the watchdog's tick goes on.
   }
+}
+
+// The session facts the scripts read in place of a transcript scan
+// (scripts/lib/session-state.sh): written whole to its final path, since a
+// mod cannot rename, so a reader meeting a half-written file falls back.
+async function writeSessionState($: EngineInterface) {
+  try {
+    const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+    if (!home) return
+    const session = await $.session.id()
+    const window = await $.session.usage().then(
+      figures => figures.context.window,
+      () => null,
+    )
+    const model = (await read($, engine)).model ?? (await $.session.model().catch(() => null))
+    const mainShells = (await read($, shells)).filter(one => (one.agentId ?? null) === null)
+    S.shellWhat = Object.fromEntries(Object.entries(S.shellWhat).filter(([id]) => mainShells.some(one => one.id === id)))
+    const launches = [
+      ...mainShells.map(one => {
+        const line = one.command.split('\n')[0]!
+        return {
+          id: one.id,
+          kind: 'shell',
+          what: (S.shellWhat[one.id] || line).slice(0, 80),
+          command: line,
+          startedAt: one.startedAt,
+          outputFile: '',
+          service: isServiceCommand(one.command),
+          timer: isTimerCommand(one.command),
+        }
+      }),
+      ...(await read($, spawns))
+        .filter(one => !one.isDone)
+        .map(one => ({ id: one.agentId, kind: 'agent', what: one.description.slice(0, 80), command: '', startedAt: one.startedAt, outputFile: '', service: false, timer: false })),
+    ]
+    const state = {
+      session,
+      updated: await $.clock.now(),
+      window: typeof window === 'number' && window > 0 ? window : null,
+      model: model ?? null,
+      partial: S.partialSession === session,
+      launches,
+    }
+    await $.fs.write(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/state/${session.replace(/[^A-Za-z0-9]/g, '-')}.json`, `${JSON.stringify(state)}\n`)
+  } catch {
+    // The scripts fall back to the transcript scan.
+  }
+}
+
+// After the prompt's hooks ran, so the turn stamp the state file is judged
+// against already exists.
+async function submitted<T>($: EngineInterface, result: T): Promise<T> {
+  await writeSessionState($)
+  return result
+}
+
+// A Monitor, a resumed agent or an agent still working after its report: the
+// cockpit cannot see when these end, so the launches it lists are partial.
+async function markPartial($: EngineInterface) {
+  const session = await $.session.id().catch(() => null)
+  if (session === null || S.partialSession === session) return
+  S.partialSession = session
+  await writeSessionState($)
 }
 
 // Each WATCHDOG_MS: the heartbeat, then a wake-up for a bound run nothing
@@ -3073,7 +3452,9 @@ async function keepWarm($: EngineInterface) {
 
 async function backgroundKey($: EngineInterface): Promise<string> {
   const agents = (await read($, spawns)).filter(one => !one.isDone).map(one => `a:${one.agentId}`)
-  const commands = (await read($, shells)).filter(one => (one.agentId ?? null) === null && !isServiceCommand(one.command)).map(one => `s:${one.id}`)
+  const commands = (await read($, shells))
+    .filter(one => (one.agentId ?? null) === null && !isServiceCommand(one.command) && !isTimerCommand(one.command))
+    .map(one => `s:${one.id}`)
   return [...agents, ...commands].sort().join(',')
 }
 
@@ -3088,8 +3469,12 @@ async function reconcileBackground($: EngineInterface, auto: CockpitAutoRun) {
   const stamp = await $.clock.now()
   const last = Math.max(S.watchedSince ?? 0, now.endedAt ?? 0, S.reconciledAt ?? 0)
   if (stamp - last <= RECONCILE_MS) return
+  // A timer or a service alone is no launch to reconcile: a timer ends on its
+  // own, and a service runs until stopped.
+  const key = await backgroundKey($)
+  if (key === '') return
   const stage = WATCHED_STAGES[auto.pending ?? '']
-  const step = reconcileStep(S.reconcileSeen, `${auto.pending ?? ''}|${await backgroundKey($)}`, stage !== undefined, RECONCILE_CAP)
+  const step = reconcileStep(S.reconcileSeen, `${auto.pending ?? ''}|${key}`, stage !== undefined, RECONCILE_CAP)
   S.reconciledAt = stamp
   S.reconcileSeen = step.seen
   if (step.action === 'fail' && stage !== undefined) {
@@ -3146,6 +3531,14 @@ async function bookAutoCompaction($: EngineInterface, fromPane = false) {
     await trackAutoRun($)
     scheduleAutoAct($, 'continue', 0)
   }
+}
+
+// Stops the run a closed session left (auto-run stop --stale), then reads
+// the run again so the pane drops its line.
+async function stopStaleRun($: EngineInterface) {
+  await autoRunCall($, await $.session.id(), ['stop', '--stale'])
+  await trackAutoRun($)
+  $.ui.invalidate('ui.render')
 }
 
 async function stopAutoRun($: EngineInterface) {
@@ -3220,7 +3613,13 @@ async function finishPath($: EngineInterface, checkouts: readonly string[], slug
 // names only when theirs do: readRun runs at every turn. A ruling handoff is
 // withdrawn once every register it names is readable and fully resolved, since
 // nothing rewrites the note when the last row closes.
-async function readResumeOffer($: EngineInterface, latest: string, at: number | null, root: string) {
+async function readResumeOffer(
+  $: EngineInterface,
+  latest: string,
+  at: number | null,
+  docs: CockpitRoots['docs'] | null,
+  places: readonly { root: string; docsDir: string }[],
+) {
   const key = `${latest}\t${at}`
   if (S.offerRead !== key) {
     S.offerRead = key
@@ -3229,7 +3628,20 @@ async function readResumeOffer($: EngineInterface, latest: string, at: number | 
     S.offerRegisters = null
   }
   const found = S.offerFound
-  const registers = (found?.prompt == null ? [] : promptRegisters(found.prompt)).map(path => (/^(?:[A-Za-z]:)?[\\/]/.test(path) ? path : `${root}/${path}`))
+  // A register name resolves as a plan name does: into the darkmem docs
+  // mirror while documents live there, else the first checkout holding it.
+  const registers: string[] = []
+  for (const name of found?.prompt == null ? [] : promptRegisters(found.prompt)) {
+    const candidates = planCandidates(name, docs, places)
+    let chosen = candidates[0] ?? name
+    for (const candidate of candidates) {
+      if ((await $.fs.stat(candidate).catch(() => null))?.kind === 'file') {
+        chosen = candidate
+        break
+      }
+    }
+    registers.push(chosen)
+  }
   const stats = await Promise.all(registers.map(path => $.fs.stat(path).catch(() => null)))
   const registerKey = stats.map(info => (info?.kind === 'file' ? info.mtimeMs : '-')).join('\t')
   if (S.offerRegisters === registerKey) return
@@ -3274,17 +3686,21 @@ async function readRun($: EngineInterface) {
   const latest = roots?.progress.latestFile ?? `${state}/handoff/latest.md`
   S.latestName = roots?.progress.store === 'darkmem' ? latest : null
   const checkouts = [...new Set([session, root].filter((dir): dir is string => dir !== null))]
+  const places = checkouts.map(dir => ({ root: dir, docsDir: `${dir}/docs/dforge` }))
   try {
     const handoff = await $.fs.stat(latest).catch(() => null)
     const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
-    await readResumeOffer($, latest, handoffTime, root)
-    const base = roots?.progress.ledgerRoot ?? `${session ?? root}/.dforge/sdd`
-    const entries = await $.fs.list(base).catch(() => [])
+    await readResumeOffer($, latest, handoffTime, roots?.docs ?? null, places)
+    const local = `${session ?? root}/.dforge/sdd`
+    const base = roots?.progress.ledgerRoot ?? local
+    const bound = await read($, boundPlan)
     let newest: { slug: string; path: string; at: number } | null = null
-    for (const entry of entries) {
-      if (entry.kind !== 'dir') continue
-      const info = await $.fs.stat(`${base}/${entry.name}/progress.md`).catch(() => null)
-      if (info?.kind === 'file' && (newest === null || info.mtimeMs > newest.at)) newest = { slug: entry.name, path: `${base}/${entry.name}/progress.md`, at: info.mtimeMs }
+    if (bound !== null) newest = await boundLedger($, base, local, bound)
+    else {
+      for (const name of await ledgerDirs($, base)) {
+        const info = await $.fs.stat(`${base}/${name}/progress.md`).catch(() => null)
+        if (info?.kind === 'file' && (newest === null || info.mtimeMs > newest.at)) newest = { slug: name, path: `${base}/${name}/progress.md`, at: info.mtimeMs }
+      }
     }
     await readFinish($, await finishPath($, checkouts, newest?.slug ?? null))
     const startedAt = (await read($, usage))?.startedAt ?? (await $.session.usage().catch(() => null))?.startedAt ?? 0
@@ -3307,8 +3723,6 @@ async function readRun($: EngineInterface) {
     let titles: { n: number; title: string }[] = []
     let planPath: string | null = null
     if (ledger.plan !== null) {
-      const places: { root: string; docsDir: string }[] = []
-      for (const dir of checkouts) places.push({ root: dir, docsDir: `${dir}/docs/dforge` })
       for (const candidate of planCandidates(ledger.plan, roots?.docs ?? null, places)) {
         try {
           titles = planTasks(String(await $.fs.read(candidate)))
@@ -3334,9 +3748,11 @@ async function readRun($: EngineInterface) {
           seat: known?.seat ?? null,
           isClean: known?.isClean ?? false,
           reason: known?.reason ?? null,
+          question: known?.question ?? null,
         }
       }),
-      done: ledger.tasks.filter(one => one.state === 'complete').length,
+      // A deferred task is done with as far as the run is concerned.
+      done: ledger.tasks.filter(one => one.state === 'complete' || one.state === 'deferred').length,
       total: numbers.length,
       isFinished: ledger.isFinished,
       isPlanRead: planPath !== null,
@@ -3355,6 +3771,32 @@ async function readRun($: EngineInterface) {
   }
 }
 
+// The ledger of the plan this session named, in the workspace sdd-workspace
+// names for the plan file. While progress is darkmem every worktree shares the
+// mirror's ledgers and a plan's workspace is always local, so a ledger with no
+// workspace here is another session's (turn-end.sh's local-workspace test).
+async function boundLedger($: EngineInterface, base: string, local: string, plan: string): Promise<{ slug: string; path: string; at: number } | null> {
+  const slug = (plan.split(/[\\/]/).pop() ?? '').replace(/\.md$/, '')
+  if (slug === '') return null
+  if (base !== local && (await $.fs.stat(`${local}/${slug}`).catch(() => null))?.kind !== 'dir') return null
+  const path = `${base}/${slug}/progress.md`
+  const info = await $.fs.stat(path).catch(() => null)
+  return info?.kind === 'file' ? { slug, path, at: info.mtimeMs } : null
+}
+
+// The ledger directory's workspaces, listed again only when its modification
+// time changes or cannot be read. Appending to a ledger changes no
+// directory's time, so each progress.md is still stat'ed at every read.
+async function ledgerDirs($: EngineInterface, base: string): Promise<string[]> {
+  const info = await $.fs.stat(base).catch(() => null)
+  const at = info?.kind === 'dir' ? info.mtimeMs : null
+  if (at !== null && S.ledgerDirs.base === base && S.ledgerDirs.at === at) return S.ledgerDirs.names
+  const entries = await $.fs.list(base).catch(() => null)
+  const names = (entries ?? []).filter(entry => entry.kind === 'dir').map(entry => entry.name)
+  S.ledgerDirs = at !== null && entries !== null ? { base, at, names } : { base: '', at: null, names: [] }
+  return names
+}
+
 // The finish action dforge asked for before the run, from the run's
 // finish.json, or the one beside the workspaces for work without a plan.
 async function readFinish($: EngineInterface, path: string) {
@@ -3369,10 +3811,14 @@ async function readFinish($: EngineInterface, path: string) {
   await syncTicker($)
 }
 
-// A task that became blocked or complete since the last read, said once.
+// A task that became blocked, waiting, deferred or complete since the last read, said once.
 async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
   const keys = summary.tasks.flatMap(task =>
-    task.state === 'blocked' ? [`blocked:${task.n}:${task.reason ?? ''}`] : task.state === 'complete' ? [`complete:${task.n}`] : [],
+    task.state === 'blocked' ? [`blocked:${task.n}:${task.reason ?? ''}`]
+    : task.state === 'waiting' ? [`waiting:${task.n}:${task.question ?? ''}`]
+    : task.state === 'deferred' ? [`deferred:${task.n}`]
+    : task.state === 'complete' ? [`complete:${task.n}`]
+    : [],
   )
   if (summary.isFinished) keys.push('finished')
   const seen = S.ledgerSeen.get(summary.plan ?? '')
@@ -3391,6 +3837,21 @@ async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
         kind: 'blocked',
         title: `🛑 Task ${task.n} blocked`,
         detail: task.reason ?? undefined,
+        fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }],
+      })
+    } else if (what === 'waiting' && task !== undefined) {
+      S.questionSentAt = await $.clock.now()
+      await notify($, {
+        kind: 'question',
+        title: `❓ Task ${task.n} waiting on you`,
+        detail: task.question ?? undefined,
+        fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }],
+      })
+    } else if (what === 'deferred' && task !== undefined) {
+      await notify($, {
+        kind: 'task',
+        title: `⏭ Task ${task.n} deferred`,
+        detail: task.title || undefined,
         fields: [{ name: 'Run', value: `${summary.done}/${summary.total}` }],
       })
     } else if (what === 'complete' && task !== undefined) {
@@ -3558,7 +4019,9 @@ async function refresh(
     : tuning.isRelaxed
       ? finalLimitFor(window, compactWindow)
       : budgetFor(handoffTokens, window, compactWindow)
-  const isFinishing = !isAuto && !tuning.isRelaxed && isTail
+  // Relaxed mode measures the tail against the final-phase limit, but a plan
+  // with every task complete is in its final phase, which never hands off.
+  const isFinishing = !isAuto && isTail && (!tuning.isRelaxed || summary?.isFinished === true || (summary !== null && summary.isPlanRead && summary.total > 0 && summary.done >= summary.total))
   const usd = figures.cost?.usd ?? null
   const before = await read($, budget)
   if (
@@ -3584,7 +4047,7 @@ async function refresh(
     return reading
   }
   // An auto run compacts at its limit rather than handing off: no note.
-  if (!nudgeModel || isAuto || (await read($, isNudged)) || !(await read($, isPlanSession))) return reading
+  if (!nudgeModel || isAuto || (await read($, isNudged)) || !(await read($, isPlanSession)) || (await read($, isFastMode))) return reading
   await update($, isNudged, () => true)
   const note = `dforge: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`
   try {
@@ -3657,7 +4120,7 @@ async function applySettings($: EngineInterface, file: SettingsFile, mtime?: num
   const merged = { ...((mergedRead ?? {}) as Record<string, unknown>), ...S.claudeSaved }
   const user = { ...engineUser, ...S.claudeSaved }
   const values = resolveSettings(SCHEMA, file, env, merged)
-  S.settingProblems = settingProblems(SCHEMA, file, env)
+  S.settingProblems = [...(S.brokenConfig === null ? [] : [S.brokenConfig]), ...settingProblems(SCHEMA, file, env)]
   const locks = { ...envLocks(SCHEMA, env), ...claudeLocks(SCHEMA, merged, user), ...inertLocks(SCHEMA, values) }
   S.locks = locks
   await update($, settings, () => values)
@@ -3670,9 +4133,17 @@ async function applySettings($: EngineInterface, file: SettingsFile, mtime?: num
 async function loadSettings($: EngineInterface) {
   S.claudeSaved = {}
   S.changed = {}
+  S.brokenConfig = null
   const { path, mtime } = await configStamp($)
   if (path === null) return applySettings($, {}, null)
-  await applySettings($, (await readSettingsFile($, path)) ?? {}, mtime)
+  const file = await readSettingsFile($, path)
+  if (file === null) S.brokenConfig = `dforge: ${path} is not a JSON object; every setting reads its default and notifyOn reads none until it parses`
+  await applySettings($, inForce(file), mtime)
+}
+
+// What a settings file puts in force: a file that does not parse (C15) sends no notification, as dforge-config's workflow line says.
+function inForce(file: SettingsFile | null): SettingsFile {
+  return file ?? (S.brokenConfig === null ? {} : { notifyOn: 'none' })
 }
 
 /** Saves one setting and puts it in force, saying why if it could not; resolves whether it was saved. */
@@ -3686,8 +4157,10 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
       const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'set', key, String(value)], { timeoutMs: 15_000 })
       if (ran.exitCode !== 0) throw new Error(ran.stderr.trim().replace(/^dforge-config: /, '') || `dforge-config exited ${ran.exitCode}`)
       // dforge-config removes a floored key saved as 0, so the user file then lacks it.
-      S.claudeSaved[key] = spec.floor !== undefined && value === 0 ? undefined : value
-      await applySettings($, file ?? {}, mtime)
+      const saved = spec.floor !== undefined && value === 0 ? undefined : value
+      S.claudeSaved[key] = saved
+      await applySettings($, inForce(file), mtime)
+      void claudeReadBack($, key, saved)
       return true
     }
     if (path === null) throw new Error('no home directory is set')
@@ -3707,6 +4180,34 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
   } catch (error) {
     $.ui.toast(`dforge: ${key} not saved: ${error instanceof Error ? error.message : String(error)}`)
     return false
+  }
+}
+
+// The engine can write its own settings over a save that lands right after
+// one of its own, so a Claude key is read back as restoreUserDefaults reads
+// the defaults. Unseen after the wait, the save is no longer shown as saved.
+// It runs apart from the press, which would otherwise wait out the polls.
+async function claudeReadBack($: EngineInterface, key: string, value: SettingValue | undefined) {
+  try {
+    let user: Record<string, unknown> | null = null
+    for (let waited = 0; ; waited += RESTORE_POLL_MS) {
+      user = (await $.settings.read({ source: 'user' }).catch(() => null)) as Record<string, unknown> | null
+      if (user !== null && user[key] === value) return
+      if (waited >= RESTORE_WAIT_MS) break
+      await $.clock.sleep(RESTORE_POLL_MS)
+    }
+    // An unreadable engine says nothing; a later save of the key owns the overlay.
+    if (user === null || !(key in S.claudeSaved) || S.claudeSaved[key] !== value) return
+    const engine = user[key]
+    delete S.claudeSaved[key]
+    const { path, mtime } = await configStamp($)
+    const file = path === null ? {} : await readSettingsFile($, path)
+    await applySettings($, inForce(file), mtime)
+    $.ui.toast(
+      `dforge: ${key} did not stick: the engine kept ${engine === undefined ? 'no value' : JSON.stringify(engine)}. Claude Code may have saved its own settings over it; set it again, or edit ${await userSettingsPath($)}.`,
+    )
+  } catch {
+    // The read-back is a courtesy: a failure leaves the save shown as saved.
   }
 }
 
@@ -3779,6 +4280,14 @@ async function engineSettings($: EngineInterface): Promise<string> {
  * into, whose values the host keeps apart and no session.start announces, and
  * leaves the pane as the person left it.
  */
+// The counts that hold within one session: the keep-warm prompts, the
+// reconcile prompts, and the background-work deferral.
+function resetSessionGuards() {
+  S.keepWarmCount = 0
+  S.reconcileSeen = { key: '', count: 0 }
+  S.autoDeferredSince = null
+}
+
 async function readSession($: EngineInterface, isStart: boolean) {
   const id = await $.session.id().catch(() => null)
   // These caches outlive a /clear or /resume, and the values they stand for do
@@ -3786,30 +4295,44 @@ async function readSession($: EngineInterface, isStart: boolean) {
   S.roots = { key: '', value: null }
   S.offerRead = ''
   S.offerRegisters = null
-  await loadSettings($)
-  const o = await live($)
+  // Each read fills its own section: one that throws leaves only that section
+  // unread, and the session partly read, so a slow poll tick reads it again.
+  let isPartial = false
+  const step = async (part: () => Promise<unknown>) => {
+    try {
+      await part()
+    } catch {
+      isPartial = true
+    }
+  }
+  await step(() => loadSettings($))
   // Open first: the reads below run processes, and each fills its section as it lands.
-  if (isStart && o.isMinimized) {
-    if ((await read($, view)) !== 'settings') await shutPane($)
-  } else if (isStart && o.openAtStart) void $.ui.open(paneFor(o.layout))
-  S.compactWindow = await readCompactWindow($)
-  await onBudget($, await refresh($, o.tuning, S.compactWindow))
-  await seedUsage($)
-  await readAccount($)
-  await readPlace($)
-  await readBreakdown($)
-  await readEngine($)
-  await readWhere($)
-  await readNotifier($)
+  await step(async () => {
+    const o = await live($)
+    if (isStart && o.isMinimized) {
+      if ((await read($, view)) !== 'settings') await shutPane($)
+    } else if (isStart && o.openAtStart) void $.ui.open(paneFor(o.layout))
+  })
+  await step(async () => {
+    S.compactWindow = await readCompactWindow($)
+    await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
+  })
+  await step(() => seedUsage($))
+  await step(() => readAccount($))
+  await step(() => readPlace($))
+  await step(() => readBreakdown($))
+  await step(() => readEngine($))
+  await step(() => readWhere($))
+  await step(() => readNotifier($))
   S.runKey = ''
   S.finishKey = ''
-  await readRun($)
-  await trackAutoRun($)
-  await beat($)
-  await readVersion($)
-  await readRemote($)
-  // Last, so a read that failed is tried again at the next poll. '' when the
-  // id could not be read: the poll adopts the first id it reads.
+  await step(() => readRun($))
+  await step(() => trackAutoRun($))
+  await step(() => beat($))
+  await step(() => readVersion($))
+  await step(() => readRemote($))
+  S.isSessionPartial = isPartial
+  // '' when the id could not be read: the poll adopts the first id it reads.
   await update($, sessionRead, () => id ?? '')
 }
 
@@ -3826,6 +4349,8 @@ async function pollTick($: EngineInterface) {
     const seen = await read($, sessionRead)
     const id = await $.session.id().catch(() => null)
     if (seen === null || (id !== null && seen !== '' && id !== seen)) {
+      // A /resume carries the process into another session, whose own counts start at zero.
+      resetSessionGuards()
       await readSession($, false)
       return
     }
@@ -3834,6 +4359,10 @@ async function pollTick($: EngineInterface) {
     const isSlowTick = S.polls % DETAIL_EVERY === 0
     // An age crossing LIVE_MS stops a once-a-second clock with no event to say so.
     await syncTicker($)
+    if (isSlowTick && S.isSessionPartial) {
+      await readSession($, false)
+      return
+    }
     const isShown = (await live($)).isMinimized || (await isPaneUp($))
     // The quick pace is for a turn running under a drawn cockpit; every other
     // tick waits for the slow one. A closed pane still takes the settings
@@ -3860,13 +4389,20 @@ async function rereadSettings($: EngineInterface) {
   const file = path === null ? {} : await readSettingsFile($, path)
   if (file === null) {
     S.seen = { config: mtime, claude }
+    // A file that never parsed this session keeps its problem line until it does.
+    if (S.brokenConfig !== null) return
     const problem = `${path} is not a JSON object; the settings in force are kept`
     if (!S.settingProblems.includes(problem)) S.settingProblems = [...S.settingProblems, problem]
     $.ui.invalidate('ui.render')
     return
   }
+  S.brokenConfig = null
   const before = (await live($)).layout
+  const was = ((await read($, settings)) ?? {}) as Record<string, SettingValue | undefined>
   await applySettings($, file, mtime)
+  // A skill-enforced key saved outside the pane reaches the session as a pane save does.
+  const values = ((await read($, settings)) ?? {}) as Record<string, SettingValue | undefined>
+  for (const [key, spec] of Object.entries(SCHEMA)) if (spec.enforcedBy === 'skill' && values[key] !== was[key] && values[key] !== undefined) S.changed[key] = values[key]
   await reseatPane($, before)
 }
 
@@ -4117,6 +4653,7 @@ async function endShells($: EngineInterface, text: string) {
   const ended = new Set(tasksEnded(text).map(one => one.id))
   if (ended.size === 0 || !(await read($, shells)).some(one => ended.has(one.id))) return
   await update($, shells, list => list.filter(one => !ended.has(one.id)))
+  await writeSessionState($)
   await syncTicker($)
   await settleBackground($)
 }
@@ -4128,7 +4665,9 @@ async function trackShells($: EngineInterface, tool: string, e: object, result: 
     const id = (result as { backgroundTaskId?: unknown } | undefined)?.backgroundTaskId
     if (typeof id !== 'string' || id === '') return
     const shell: CockpitShell = { id, command: String((e as { command?: unknown }).command ?? ''), startedAt: await $.clock.now(), agentId: (e as { agentId?: string }).agentId ?? null }
+    S.shellWhat[id] = String((e as { description?: unknown }).description ?? '')
     await update($, shells, list => [...list.filter(one => one.id !== id), shell].slice(-20))
+    await writeSessionState($)
     await syncTicker($)
     return
   }
@@ -4138,6 +4677,7 @@ async function trackShells($: EngineInterface, tool: string, e: object, result: 
     if (typeof id === 'string') {
       await update($, shells, list => list.filter(one => one.id !== id))
       await update($, spawns, all => all.map(one => ((one.agentId === id || one.name === id) && !one.isDone ? { ...one, isDone: true, outcome: 'failed' as const } : one)))
+      await writeSessionState($)
       await syncTicker($)
       await settleBackground($)
     }
@@ -4248,7 +4788,10 @@ function pathKey(canon: string): string {
 async function reviewDirs($: EngineInterface): Promise<string[]> {
   const listed = await $.process.run(['git', 'worktree', 'list', '--porcelain'], { timeoutMs: 2000 }).catch(() => null)
   const worktrees = listed?.exitCode === 0 ? listed.stdout.split('\n').flatMap(line => (line.startsWith('worktree ') ? [line.slice('worktree '.length).trim()] : [])) : []
-  return [...new Set([S.where.checkout, S.where.primary, ...worktrees].filter(dir => dir !== null))]
+  // The session's directory last: a report under it is found while S.where is
+  // unset and git cannot list the worktrees.
+  const cwd = await $.session.cwd().catch(() => null)
+  return [...new Set([S.where.checkout, S.where.primary, ...worktrees, cwd].filter((dir): dir is string => typeof dir === 'string' && dir !== ''))]
 }
 
 function rootsOf(dirs: readonly string[]): string[] {
@@ -4300,6 +4843,11 @@ function reportPathsIn(text: string, dirs: readonly string[]): string[] {
 async function judgeReports($: EngineInterface, prompt: string): Promise<{ reports: string[]; reportRoots: string[] }> {
   const dirs = await reviewDirs($)
   const reportRoots = rootsOf(dirs)
+  // A prompt that names its report on the report line allows only that line's
+  // paths: a re-review prompt also names the prior round's report to read. A
+  // report line naming no path leaves the lookup below to answer.
+  const onLine = [...new Set([...prompt.matchAll(REPORT_LINES)].flatMap(match => reportPathsIn(match[1] ?? '', dirs)))]
+  if (onLine.length > 0) return { reports: onLine, reportRoots }
   const named = reportPathsIn(prompt, dirs)
   if (named.length > 0) return { reports: named, reportRoots }
   const reports = new Set<string>()
@@ -4375,23 +4923,38 @@ async function attributionLine($: EngineInterface, tool: string, e: object): Pro
   if (tool === 'Bash') {
     const command = String((e as { command?: unknown }).command ?? '')
     if (!writesGitText(command)) return undefined
-    const inline = attributionIn(command)
-    if (inline !== undefined) return inline
+    // Only the text the command writes is read, unless the command may give
+    // its message text those words do not show (gitMessageTexts): then the
+    // whole command is read, as it is when a message file is not there yet.
+    const { texts, isWhole } = gitMessageTexts(command)
+    for (const text of texts) {
+      const inline = attributionIn(text)
+      if (inline !== undefined) return inline
+    }
     // A relative file is read from the session's directory: a cd earlier in
-    // the command is not followed, and a file that cannot be read passes. Only
-    // a regular file is read: this hook runs before the tool, and a read of
-    // /dev/stdin or a pipe would wait on input the command has not yet given.
+    // the command is not followed. Only a regular file is read: this hook runs
+    // before the tool, and a read of /dev/stdin or a pipe would wait on input
+    // the command has not yet given.
+    let isUnseen = isWhole
     const cwd = await $.session.cwd().catch(() => null)
     for (const file of gitTextFiles(command)) {
       const path = isAbsolutePath(file) || cwd === null ? file : `${cwd.replace(/[\\/]+$/, '')}/${file}`
-      if ((await $.fs.stat(path).catch(() => null))?.kind !== 'file') continue
-      const text = await $.fs.read(path).catch(() => null)
-      const line = text === null ? undefined : attributionIn(String(text))
+      const text = (await $.fs.stat(path).catch(() => null))?.kind === 'file' ? await $.fs.read(path).catch(() => null) : null
+      if (text === null) {
+        isUnseen = true
+        continue
+      }
+      const line = attributionIn(String(text))
       if (line !== undefined) return line
     }
-    return undefined
+    return isUnseen ? attributionIn(command, true) : undefined
   }
-  return isGitWriteTool(tool) ? attributionIn(JSON.stringify(e)) : undefined
+  if (!isGitWriteTool(tool)) return undefined
+  for (const text of stringsIn(e)) {
+    const line = attributionIn(text)
+    if (line !== undefined) return line
+  }
+  return undefined
 }
 
 function addRun(all: CockpitSeat[], seat: string, usage: TurnUsage): CockpitSeat[] {

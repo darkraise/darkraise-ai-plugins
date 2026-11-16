@@ -350,16 +350,64 @@ plan_apply_amendments() {
   ' "$2" "$1"
 }
 
-# plan_amendments_file PLAN — <workspace>/amendments.md when PLAN belongs to a
-# git checkout and that file is non-empty; otherwise nothing. Computed, not
-# created: readers never bring the workspace into being.
+# plan_amendments_file PLAN — <ledger dir>/amendments.md, beside the ledger
+# (dforge_ledger_dir, the darkmem mirror's when progress is kept there), when
+# PLAN belongs to a git checkout and that file is non-empty; otherwise
+# nothing, which readers take as no amendments. Computed, not created: readers
+# never bring the ledger directory into being. plan-amend computes the same
+# path to write it.
 plan_amendments_file() {
   local ctx file
   ctx=$(_plan_ctx "$1")
   git -C "$ctx" rev-parse --show-toplevel >/dev/null 2>&1 || return 0
-  file="$(dforge_workspace "$(basename "$1" .md)" "$ctx")/amendments.md"
+  file="$(dforge_ledger_dir "$(basename "$1" .md)" "$ctx")/amendments.md"
   [ -s "$file" ] && printf '%s\n' "$file"
   return 0
+}
+
+# plan_amendments_ready PLAN — run in the caller's own shell, never inside
+# $(…): it exits the caller. Amendments used to live in the workspace, which
+# is not where darkmem keeps the ledger, so a session on another host lost
+# them. When the ledger directory has no amendments file and the workspace
+# has one, it is moved there (copied to a temporary name, renamed, then
+# removed from the workspace) and the move is logged in the ledger, once.
+# Then a ledger line citing `Ruling: amendment A<k>` whose `## A<k> ` heading
+# the file lacks exits 2, naming it: the task text would be read without an
+# amendment the run already applied.
+plan_amendments_ready() {
+  local me ctx slug ldir ws file old ledger tmp k seen=" " bad=0
+  local moved='Ruling: amendments moved beside the ledger — none'
+  # Parameter expansion, not basename: plan-lint runs this with only the tools
+  # its own checks need on PATH.
+  me=${0##*/}
+  ctx=$(_plan_ctx "$1")
+  git -C "$ctx" rev-parse --show-toplevel >/dev/null 2>&1 || return 0
+  dforge_stores_init "$ctx"
+  slug=${1##*/} slug=${slug%.md}
+  ldir=$(dforge_ledger_dir "$slug" "$ctx")
+  ws=$(dforge_workspace "$slug" "$ctx")
+  file="$ldir/amendments.md" old="$ws/amendments.md" ledger="$ldir/progress.md"
+  if [ ! -s "$file" ] && [ -s "$old" ] && [ "$ldir" != "$ws" ] && ! [ "$ldir" -ef "$ws" ]; then
+    tmp="$file.tmp.$$"
+    if ! { mkdir -p "$ldir" && cp -- "$old" "$tmp" && mv -f -- "$tmp" "$file"; }; then
+      rm -f -- "$tmp"
+      printf '%s: could not move %s beside the ledger, to %s\n' "$me" "$old" "$file" >&2
+      exit 2
+    fi
+    rm -f -- "$old"
+    if [ -f "$ledger" ] && ! grep -qxF -- "$moved" "$ledger"; then
+      printf '%s\n' "$moved" >> "$ledger"
+    fi
+  fi
+  [ -f "$ledger" ] || return 0
+  for k in $(tr -d '\r' < "$ledger" | grep -oE 'Ruling: amendment A[0-9]+' | sed 's/.*A//'); do
+    case $seen in *" $k "*) continue ;; esac
+    seen="$seen$k "
+    [ -f "$file" ] && tr -d '\r' < "$file" | grep -q "^## A$k " && continue
+    printf '%s: the ledger cites amendment A%s, which %s lacks\n' "$me" "$k" "$file" >&2
+    bad=1
+  done
+  [ "$bad" -eq 0 ] || exit 2
 }
 
 # plan_require_same_project FILE — return when FILE belongs to the working
@@ -388,4 +436,45 @@ plan_require_same_project() {
   printf "%s: %s is in %s, but the working directory is in %s; run from inside the plan's worktree\n" \
     "$me" "$1" "${plan_top:-no git repository}" "$cwd_top" >&2
   exit 2
+}
+
+# plan_final_review_state LEDGER [DIR] — whether the ledger's last
+# `Final review: clean (commits <base>..<head>)` line still covers HEAD in DIR
+# (default the working directory): `none` (no clean line); `current` (HEAD is
+# <head>, only docs-root paths changed since, or <head> reached HEAD through a
+# merge into a base branch, off its first-parent chain); `stale <head>` (a
+# later commit on the first-parent chain touches code); `rewritten <head>`
+# (<head> is no commit, or no ancestor of HEAD). A clean line with no commits
+# clause, or a DIR where HEAD does not resolve, reads `current`: git cannot
+# judge it. A failed walk of the history after <head> reads `stale <head>`. The ledger records no branch, so the first-parent chain is the only
+# base-branch test.
+plan_final_review_state() {
+  local dir line head full now top docs path changed
+  dir=$(dr_native_path "${2:-$PWD}")
+  line=$(tr -d '\r' < "$1" 2>/dev/null | grep '^Final review: clean' | tail -n 1)
+  if [ -z "$line" ]; then echo none; return 0; fi
+  head=$(sed -n 's/^Final review: clean (commits [^ .]*\.\.\([0-9A-Za-z]*\)[,)].*/\1/p' <<<"$line")
+  if [ -z "$head" ]; then echo current; return 0; fi
+  now=$(git -C "$dir" rev-parse --verify -q HEAD 2>/dev/null | tr -d '\r')
+  if [ -z "$now" ]; then echo current; return 0; fi
+  full=$(git -C "$dir" rev-parse --verify -q "$head^{commit}" 2>/dev/null | tr -d '\r')
+  if [ -z "$full" ]; then echo "rewritten $head"; return 0; fi
+  if [ "$full" = "$now" ]; then echo current; return 0; fi
+  if ! git -C "$dir" merge-base --is-ancestor "$full" "$now" 2>/dev/null; then echo "rewritten $head"; return 0; fi
+  # A git call that fails proves nothing, so it reads as stale: the scoped
+  # re-review is the safe route, finishing is not.
+  local chain
+  chain=$(git -C "$dir" rev-list --first-parent "$now" 2>/dev/null) || { echo "stale $head"; return 0; }
+  if ! tr -d '\r' <<<"$chain" | grep -qxF "$full"; then echo current; return 0; fi
+  changed=$(git -C "$dir" log --format= --name-only "$full..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
+  changed=$(tr -d '\r' <<<"$changed" | sed '/^$/d')
+  if [ -z "$changed" ]; then echo current; return 0; fi
+  # Under darkmem documents no committed path is a docs path.
+  if [ "$(dforge_docs_store "$dir")" != local ]; then echo "stale $head"; return 0; fi
+  top=$(dr_native_path "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null | tr -d '\r')")
+  docs=$(dr_native_path "$(dforge_docs_root "$dir")")
+  while IFS= read -r path; do
+    case "$top/$path" in "${docs%/}"/*) ;; *) echo "stale $head"; return 0 ;; esac
+  done <<<"$changed"
+  echo current
 }

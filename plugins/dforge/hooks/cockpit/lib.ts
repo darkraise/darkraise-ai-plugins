@@ -1,3 +1,4 @@
+import SHARED from '../../config/services.mjs'
 import type { CockpitAutoRun, CockpitFinish, CockpitRoots } from '../../types'
 
 // Pure helpers, kept apart from the hooks so tests can reach them directly.
@@ -131,8 +132,31 @@ export function seatBarCells(rowCells: number, counts: string): number {
   return left >= 6 ? left : 0
 }
 
+// A Co-authored-by trailer: at a line start, real or escaped (`\n` as a JSON
+// string or a shell $'…' spells it), and running to the next real or escaped
+// newline. Only a trailer naming an AI counts (isAiAuthor).
+const CO_AUTHOR = /(?:^|\n|\\n)[ \t]*(co-authored-by:[^\n\\]*(?:\\(?!n)[^\n\\]*)*)/gi
+// The same trailer anywhere in a text: for a command whose message the guard
+// cannot see whole, as `echo "Co-authored-by: …" >> msg` builds one.
+const CO_AUTHOR_ANYWHERE = /(co-authored-by:[^\n\\]*(?:\\(?!n)[^\n\\]*)*)/gi
+// An AI identity: an AI product's name, alone or followed only by model and
+// product words ("Claude Opus 4.5", "GitHub Copilot"), or an address at an AI
+// vendor's domain. A person named Claude has a surname that is none of these.
+const AI_NAME = /^(?:claude|codex|copilot|github[ \t]+copilot|chatgpt|openai[ \t]+codex)(?:[ \t]+(?:opus|sonnet|haiku|fable|code|cli|agent|\d[\w.-]*))*$/i
+const AI_ADDRESS = /@(?:[\w-]+\.)*(?:anthropic|openai)\.com$/i
+const QUOTING_TAIL = /[\\"'`}\],\s]+$/
+// A name may also end a $(…) or a command: `echo 'Co-authored-by: Claude')`.
+const NAME_TAIL = /[\\"'`}\]),;\s]+$/
+
+function isAiAuthor(trailer: string): boolean {
+  const body = trailer.replace(/^co-authored-by:/i, '')
+  const at = body.indexOf('<')
+  const name = (at < 0 ? body : body.slice(0, at)).replace(NAME_TAIL, '').trim()
+  const address = at < 0 ? '' : (body.slice(at + 1).split('>')[0] ?? '').trim()
+  return AI_NAME.test(name) || AI_ADDRESS.test(address)
+}
+
 const ATTRIBUTION = [
-  /co-authored-by:[^\n]*(claude|anthropic|codex|openai|copilot)/i,
   /claude-session:/i,
   /generated with \[?claude code/i,
   /claude\.ai\/code\/session_/i,
@@ -140,14 +164,19 @@ const ATTRIBUTION = [
 
 /**
  * The first AI attribution line in a text, if any, without the quoting around
- * it: a shell command's closing quote, or a JSON string's escapes.
+ * it: a shell command's closing quote, or a JSON string's escapes. A
+ * co-author trailer counts at a line start only, or anywhere with isAnywhere.
  */
-export function attributionIn(text: string): string | undefined {
+export function attributionIn(text: string, isAnywhere = false): string | undefined {
+  for (const match of text.matchAll(isAnywhere ? CO_AUTHOR_ANYWHERE : CO_AUTHOR)) {
+    const line = match[1] ?? ''
+    if (isAiAuthor(line)) return line.replace(QUOTING_TAIL, '').trim()
+  }
   for (const pattern of ATTRIBUTION) {
     const match = pattern.exec(text)
     if (match) {
       const line = text.slice(match.index).split(/\n|\\n/)[0] ?? ''
-      return line.replace(/[\\"'`}\],\s]+$/, '').trim()
+      return line.replace(QUOTING_TAIL, '').trim()
     }
   }
   return undefined
@@ -158,12 +187,240 @@ export function writesGitText(command: string): boolean {
   return /\bgit\b[^\n|;&]*\bcommit\b/.test(command) || /\bgh\s+pr\s+(create|edit)\b/.test(command)
 }
 
+/** Every string inside a value, nested ones included: a tool call's text fields. */
+export function stringsIn(value: unknown): string[] {
+  if (typeof value === 'string') return [value]
+  if (Array.isArray(value)) return value.flatMap(stringsIn)
+  if (typeof value === 'object' && value !== null) return Object.values(value).flatMap(stringsIn)
+  return []
+}
+
+// Where a here-document's operator and delimiter word end, and the delimiter.
+function heredocAt(src: string, at: number): { delim: string; isTabbed: boolean; end: number } | null {
+  const match = /^<<(-?)[ \t]*(?:\\([A-Za-z0-9_.-]+)|(['"]?)([A-Za-z0-9_.-]+)\3)/.exec(src.slice(at))
+  return match === null || src[at + 2] === '<' ? null : { delim: match[2] ?? match[4] ?? '', isTabbed: match[1] === '-', end: at + match[0].length }
+}
+
+// Past the bodies of the here-documents opened on the line that ended at `at`.
+function heredocsEnd(src: string, at: number, docs: readonly { delim: string; isTabbed: boolean }[]): number {
+  let at2 = at
+  for (const doc of docs) {
+    while (at2 < src.length) {
+      const next = src.indexOf('\n', at2)
+      const end = next < 0 ? src.length : next
+      const line = src.slice(at2, end).replace(/\r$/, '')
+      at2 = next < 0 ? src.length : next + 1
+      if ((doc.isTabbed ? line.replace(/^\t+/, '') : line) === doc.delim) break
+    }
+  }
+  return at2
+}
+
+// Past the quoted text that opens at `at` (a ' or a ").
+function quoteEnd(src: string, at: number): number {
+  if (src[at] === "'") {
+    const close = src.indexOf("'", at + 1)
+    return close < 0 ? src.length : close + 1
+  }
+  let i = at + 1
+  while (i < src.length) {
+    const c = src[i]
+    if (c === '\\') i += 2
+    else if (c === '"') return i + 1
+    else if (c === '$' && src[i + 1] === '(') i = substEnd(src, i + 2)
+    else if (c === '`') i = backtickEnd(src, i)
+    else i++
+  }
+  return src.length
+}
+
+function backtickEnd(src: string, at: number): number {
+  let i = at + 1
+  while (i < src.length && src[i] !== '`') i += src[i] === '\\' ? 2 : 1
+  return Math.min(i + 1, src.length)
+}
+
+// Past the `)` closing a command substitution whose `$(` ends just before
+// `at`, here-documents inside it included.
+function substEnd(src: string, at: number): number {
+  let depth = 1
+  let docs: { delim: string; isTabbed: boolean }[] = []
+  let i = at
+  while (i < src.length) {
+    const c = src[i]
+    const doc = c === '<' && src[i + 1] === '<' ? heredocAt(src, i) : null
+    if (c === '\\') i += 2
+    else if (c === "'" || c === '"') i = quoteEnd(src, i)
+    else if (c === '`') i = backtickEnd(src, i)
+    else if (doc !== null) {
+      docs.push(doc)
+      i = doc.end
+    } else if (c === '\n' && docs.length > 0) {
+      i = heredocsEnd(src, i + 1, docs)
+      docs = []
+    } else {
+      if (c === '(') depth++
+      if (c === ')' && --depth === 0) return i + 1
+      i++
+    }
+  }
+  return src.length
+}
+
+/**
+ * A shell command's simple commands, each as its words with the quoting
+ * removed (a `$(…)` or `…` kept as written) and its source text.
+ * Here-document bodies belong to no word, so their text never splits one.
+ */
+export function shellCommands(src: string): { raw: string; words: string[] }[] {
+  const out: { raw: string; words: string[] }[] = []
+  let words: string[] = []
+  let word: string | null = null
+  let start = 0
+  let docs: { delim: string; isTabbed: boolean }[] = []
+  const endWord = () => {
+    if (word !== null) words.push(word)
+    word = null
+  }
+  const endCommand = (at: number) => {
+    endWord()
+    if (words.length > 0) out.push({ raw: src.slice(start, at), words })
+    words = []
+  }
+  let i = 0
+  while (i < src.length) {
+    const c = src[i]!
+    const doc = c === '<' && src[i + 1] === '<' ? heredocAt(src, i) : null
+    if (c === ' ' || c === '\t' || c === '\r') {
+      endWord()
+      i++
+    } else if ((c === '&' || c === '|') && (src[i - 1] === '>' || src[i - 1] === '<' || (c === '&' && src[i + 1] === '>'))) {
+      // A redirection (`2>&1`, `&>file`, `>|file`), not a command separator.
+      word = (word ?? '') + c
+      i++
+    } else if (c === '\n' || c === ';' || c === '&' || c === '|') {
+      endCommand(i)
+      i++
+      if (c === '\n' && docs.length > 0) {
+        i = heredocsEnd(src, i, docs)
+        docs = []
+      }
+      start = i
+    } else if (doc !== null) {
+      endWord()
+      docs.push(doc)
+      i = doc.end
+    } else if (c === '#' && word === null) {
+      const next = src.indexOf('\n', i)
+      i = next < 0 ? src.length : next
+    } else if (c === "'") {
+      const end = quoteEnd(src, i)
+      word = (word ?? '') + src.slice(i + 1, end - 1)
+      i = end
+    } else if (c === '"') {
+      const end = quoteEnd(src, i)
+      word = (word ?? '') + src.slice(i + 1, end - 1).replace(/\\([\\"$`\n])/g, '$1')
+      i = end
+    } else if (c === '$' && src[i + 1] === "'") {
+      let j = i + 2
+      while (j < src.length && src[j] !== "'") j += src[j] === '\\' ? 2 : 1
+      word = (word ?? '') + src.slice(i + 2, j)
+      i = Math.min(j + 1, src.length)
+    } else if (c === '$' && src[i + 1] === '(') {
+      const end = substEnd(src, i + 2)
+      word = (word ?? '') + src.slice(i, end)
+      i = end
+    } else if (c === '`') {
+      const end = backtickEnd(src, i)
+      word = (word ?? '') + src.slice(i, end)
+      i = end
+    } else if (c === '\\') {
+      if (src[i + 1] !== '\n') word = (word ?? '') + (src[i + 1] ?? '')
+      i += 2
+    } else {
+      word = (word ?? '') + c
+      i++
+    }
+  }
+  endCommand(src.length)
+  return out
+}
+
+// The options whose next word is a commit's or pull request's text: git
+// commit's -m and --message (alone or ending a cluster such as -am), gh pr's
+// --title, -t, --body and -b.
+const MESSAGE_FLAG = /^(?:-[A-Za-z]*m|--message|-t|--title|-b|--body)$/
+// The names a message file can give stdin by.
+const STDIN_PATH = /^(?:-|\/dev\/stdin|\/dev\/fd\/0|\/proc\/self\/fd\/0)$/
+// A `$(cat <<'EOF' … EOF)` message: its text is the body as written when the
+// delimiter is quoted, or when the body expands nothing.
+const CAT_HEREDOC = /^\$\(\s*cat\s+<<-?[ \t]*(\\|['"])?([A-Za-z0-9_.-]+)['"]?[ \t]*\n([\s\S]*)\n[ \t]*\2[ \t]*\n?\s*\)$/
+
+// Whether a message word expands to text the command does not spell out.
+function isExpanding(text: string): boolean {
+  const doc = CAT_HEREDOC.exec(text)
+  if (doc !== null) return doc[1] === undefined && /[$`]/.test(doc[3] ?? '')
+  return /[$`]/.test(text)
+}
+
+/**
+ * The texts a commit or pull request command writes from its arguments
+ * (`--trailer` values included), and whether its message may hold text those
+ * do not show, so the whole command must be read: a message from stdin (`-F
+ * -`), which the command's own here-document or pipe gives; a message word
+ * that expands a variable or a command; a message file the command itself
+ * writes, or a process substitution. A file that exists before the command
+ * runs is read by the caller.
+ */
+export function gitMessageTexts(command: string): { texts: string[]; isWhole: boolean } {
+  const texts: string[] = []
+  let isWhole = false
+  const all = shellCommands(command)
+  for (const one of all) {
+    if (!writesGitText(one.words.join(' '))) continue
+    one.words.forEach((word, at) => {
+      const next = one.words[at + 1]
+      const text = MESSAGE_FLAG.test(word) && next !== undefined
+        ? next
+        : /^--(?:message|title|body)=/.test(word)
+          ? word.slice(word.indexOf('=') + 1)
+          : /^-m./.test(word)
+            ? word.slice(2)
+            : undefined
+      if (text !== undefined) {
+        texts.push(text)
+        if (isExpanding(text)) isWhole = true
+      }
+      const trailer = word === '--trailer' ? next : /^--trailer=/.test(word) ? word.slice(10) : undefined
+      if (trailer !== undefined) {
+        texts.push(trailer.replace(/^([\w-]+)[ \t]*=[ \t]*/, '$1: '))
+        if (isExpanding(trailer)) isWhole = true
+      }
+      const file = /^(?:-[a-z]*F|--file|--body-file)$/.test(word)
+        ? next
+        : /^--(?:file|body-file)=/.test(word)
+          ? word.slice(word.indexOf('=') + 1)
+          : /^-[a-z]*F./.test(word)
+            ? word.slice(word.indexOf('F') + 1)
+            : undefined
+      if (file === undefined) return
+      // By the last path segment, so `> msg.txt` and `-F ./msg.txt` name one file.
+      const tail = (p: string) => p.replace(/^.*[\\/]/, '')
+      const isWritten = all.some(other =>
+        other.words.some((w, wAt) => (other !== one || (wAt !== at && wAt !== at + 1)) && tail(w.replace(/^\d*(?:&>>?|>>?\|?)/, '')) === tail(file)),
+      )
+      if (STDIN_PATH.test(file) || file.startsWith('<(') || isExpanding(file) || isWritten) isWhole = true
+    })
+  }
+  return { texts, isWhole }
+}
+
 /** The files a commit or pull request command takes its text from (`git commit -F`, `gh pr create --body-file`); stdin's `-` is the command's own text. */
 export function gitTextFiles(command: string): string[] {
   const files: string[] = []
   for (const part of command.split(/[;&|\n]+/)) {
     if (!writesGitText(part)) continue
-    for (const match of part.matchAll(/(?:^|\s)(?:-F[ \t]*|--(?:body-)?file(?:=|[ \t]+))("[^"]*"|'[^']*'|[^\s"';&|]+)/g)) {
+    for (const match of part.matchAll(/(?:^|\s)(?:-[a-z]*F[ \t]*|--(?:body-)?file(?:=|[ \t]+))("[^"]*"|'[^']*'|[^\s"';&|]+)/g)) {
       const file = (match[1] ?? '').replace(/^(["'])(.*)\1$/, '$2')
       if (file !== '' && file !== '-') files.push(file)
     }
@@ -194,16 +451,18 @@ export type SeatSpawn = {
 }
 
 /**
- * Whether the last `Process:` line of a response puts its request in fast mode
- * (reference/fast-mode.md): true for `Process: fast`, false for any other
- * Process line, null when the text has none. scripts/lib/fast-mode.sh reads
- * the same line for the Stop and edit hooks.
+ * What the last `Process:` line of a response says about fast mode
+ * (reference/fast-mode.md): 'session' for `Process: fast (session)`, on until
+ * another Process line; 'request' for any other `Process: fast`, on for its
+ * request; false for any other Process line; null when the text has none.
+ * scripts/lib/fast-mode.sh reads the same grammar for the Stop and edit hooks.
  */
-export function fastModeLine(text: string): boolean | null {
-  let found: boolean | null = null
+export function fastModeLine(text: string): 'session' | 'request' | false | null {
+  let found: 'session' | 'request' | false | null = null
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.replace(/^[\s`*]+/, '')
-    if (line.startsWith('Process:')) found = /^Process:\s*fast(?![\w-])/.test(line)
+    if (!line.startsWith('Process:')) continue
+    found = /^Process:\s*fast\s*\(session\)/.test(line) ? 'session' : /^Process:\s*fast(?![\w-])/.test(line) ? 'request' : false
   }
   return found
 }
@@ -234,12 +493,61 @@ export function seatRefusalLine(spawn: SeatSpawn): string {
   return spawn.fork ? 'fork refused' : `${spawn.subagentType.replace(/^dforge:/, '')} with no model`
 }
 
+/** The meter cells, the live dot and the in-flight arrow the pane draws. */
+export type Glyphs = { fill: string; empty: string; dot: string; arrow: string }
+export const UNICODE_GLYPHS: Glyphs = { fill: '▰', empty: '▱', dot: '●', arrow: '▸' }
+export const ASCII_GLYPHS: Glyphs = { fill: '#', empty: '-', dot: '*', arrow: '>' }
+
 /** 0.8 → "▰▰▰▰▰▰▰▰▱▱" at width 10; never full below 100%. */
-export function bar(share: number, width: number): string {
+export function bar(share: number, width: number, glyphs: Glyphs = UNICODE_GLYPHS): string {
   const clamped = Math.min(Math.max(share, 0), 1)
   let on = Math.round(clamped * width)
   if (on === width && clamped < 1) on = width - 1
-  return '▰'.repeat(on) + '▱'.repeat(width - on)
+  return glyphs.fill.repeat(on) + glyphs.empty.repeat(width - on)
+}
+
+const ASCII_SPELLING: Record<string, string> = {
+  '▰': '#', '▱': '-', '●': '*', '▸': '>', '▾': 'v', '○': 'o', '◐': 'o', '·': '|', '…': '...', '—': '-', '–': '-', '−': '-',
+  '✓': '+', '✅': '+', '✗': 'x', '❌': 'x', '×': 'x', '≈': '~', '§': 'S', '⎇': '@', '↑': '^', '↓': 'v', '↻': '@', '↪': '->', '⇣': 'v',
+  '─': '-', '━': '=', '│': '|', '┃': '|', '┊': ':', '╭': '+', '╮': '+', '╰': '+', '╯': '+', '█': '#', '■': '#',
+  '▁': '_', '▂': '_', '▃': '.', '▄': '-', '▅': '=', '▆': '=', '▇': '#', '☰': '=', '≡': '=', '⚙': '*',
+  '\ufe0f': '', '⏹': '#', '⏭': '>>', '⏳': '..', '❓': '?', '⛔': '!', '🛑': '!', '⚠': '!', '🔶': '*', '🔔': '!', '🏁': '#',
+}
+
+/** `text` in ASCII: each glyph the cockpit draws spelled plainly, accents dropped, anything else a `?`. */
+export function asciiText(text: string): string {
+  return [...text]
+    .map(ch => ASCII_SPELLING[ch] ?? ch)
+    .join('')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x00-\x7f]/gu, '?')
+}
+
+/**
+ * A drawn tree in ASCII alone: every text and button label through asciiText,
+ * every border classic, and every Text that would be cut at the pane's edge
+ * wrapped instead, since the renderer ends a cut row in `…`, which no rewrite
+ * here reaches. Elements other than Box, Text and Button are kept.
+ */
+export function asciiTree<T>(node: T): T {
+  if (typeof node === 'string') return asciiText(node) as T
+  if (Array.isArray(node)) return node.map(asciiTree) as T
+  if (node === null || typeof node !== 'object') return node
+  const element = node as { type?: unknown; props?: Record<string, unknown>; hover?: Record<string, unknown>; children?: unknown }
+  if (element.type !== 'Box' && element.type !== 'Text' && element.type !== 'Button') return node
+  const plain = (props: Record<string, unknown>) => ({
+    ...props,
+    ...(typeof props.label === 'string' ? { label: asciiText(props.label) } : {}),
+    ...(props.borderStyle === undefined ? {} : { borderStyle: 'classic' }),
+    ...(element.type === 'Text' && props.wrap !== undefined && props.wrap !== 'wrap' ? { wrap: 'wrap' } : {}),
+  })
+  return {
+    ...element,
+    ...(element.props === undefined ? {} : { props: plain(element.props) }),
+    ...(element.hover === undefined ? {} : { hover: plain(element.hover) }),
+    ...(element.children === undefined ? {} : { children: asciiTree(element.children) }),
+  } as T
 }
 
 /** The usage ramp: green, yellow, orange, then red. */
@@ -334,9 +642,9 @@ export type TrackPart = { text: string; kind: 'fill' | 'empty' | 'mark'; mark?: 
  * A meter `width` cells wide filled to `share`, with each mark's glyph in the
  * cell its share lands on (a later mark wins a shared cell). Never full below 100%.
  */
-export function track(share: number, width: number, marks: readonly { at: number; glyph: string; name: string }[]): TrackPart[] {
-  const filled = bar(share, width)
-  const cells: TrackPart[] = [...filled].map(cell => ({ text: cell, kind: cell === '▰' ? 'fill' : 'empty' }))
+export function track(share: number, width: number, marks: readonly { at: number; glyph: string; name: string }[], glyphs: Glyphs = UNICODE_GLYPHS): TrackPart[] {
+  const filled = bar(share, width, glyphs)
+  const cells: TrackPart[] = [...filled].map(cell => ({ text: cell, kind: cell === glyphs.fill ? 'fill' : 'empty' }))
   for (const mark of marks) {
     if (!(mark.at >= 0 && mark.at <= 1)) continue
     const index = Math.min(width - 1, Math.floor(mark.at * width))
@@ -901,13 +1209,15 @@ export function limitForecast(kind: string, percent: number, resetsAt: number | 
 /** One task's state in a dforge SDD ledger. */
 export type LedgerTask = {
   n: number
-  state: 'assigned' | 'complete' | 'blocked'
+  state: 'assigned' | 'complete' | 'blocked' | 'waiting' | 'deferred'
   /** The fix round in flight, "2/5" or "1/2". */
   round: string | null
   /** The seat the task was assigned to. */
   seat: string | null
   isClean: boolean
   reason: string | null
+  /** What a waiting task asks, the text after "waiting — ". */
+  question: string | null
 }
 
 /** What a run's ledger says: its plan, each task it names, and whether the final review came back clean. */
@@ -917,7 +1227,7 @@ export type Ledger = { plan: string | null; tasks: LedgerTask[]; isFinished: boo
 export function parseLedger(text: string): Ledger {
   const tasks = new Map<number, LedgerTask>()
   const task = (n: number) => {
-    const found = tasks.get(n) ?? { n, state: 'assigned' as const, round: null, seat: null, isClean: false, reason: null }
+    const found: LedgerTask = tasks.get(n) ?? { n, state: 'assigned', round: null, seat: null, isClean: false, reason: null, question: null }
     tasks.set(n, found)
     return found
   }
@@ -943,8 +1253,9 @@ export function parseLedger(text: string): Ledger {
     if (assigned) {
       const one = task(n)
       one.seat = assigned[1] ?? null
-      if (one.state !== 'complete') one.state = 'assigned'
+      if (one.state !== 'complete' && one.state !== 'deferred') one.state = 'assigned'
       one.reason = null
+      one.question = null
       continue
     }
     const round = /^fix round (\d+\/\d+)/.exec(rest)
@@ -954,9 +1265,20 @@ export function parseLedger(text: string): Ledger {
     }
     if (/^complete\b/.test(rest)) {
       const one = task(n)
-      one.state = 'complete'
+      // Only the parenthesised clause before " — " says how it closed: the checkpoint after it is free text.
+      const clause = /^complete\s*(\([^)]*\))?/.exec(rest)?.[1] ?? ''
+      one.state = /^\(deferred by the auto run\)$/.test(clause) ? 'deferred' : 'complete'
       one.round = null
-      one.isClean = /review clean/.test(rest)
+      one.isClean = /review clean/.test(clause)
+      one.question = null
+      continue
+    }
+    const waiting = /^waiting\s*[—-]+\s*(.*)$/.exec(rest)
+    if (waiting) {
+      const one = task(n)
+      if (one.state === 'complete' || one.state === 'deferred') continue
+      one.state = 'waiting'
+      one.question = waiting[1]?.trim() || null
       continue
     }
     const blocked = /^BLOCKED\s*[—-]+\s*(.*)$/.exec(rest)
@@ -1005,7 +1327,7 @@ export function isPlanTail(run: { done: number; total: number; isFinished: boole
   return run.isFinished || (run.isPlanRead && run.total > 0 && run.total - run.done <= TAIL_TASKS)
 }
 
-const RUN_ORDER: Readonly<Record<string, number>> = { assigned: 0, blocked: 1, pending: 2, complete: 3 }
+const RUN_ORDER: Readonly<Record<string, number>> = { assigned: 0, waiting: 0, blocked: 1, pending: 2, complete: 3, deferred: 3 }
 
 /** The first `size` of a run's tasks as the Run card lists them: in flight, blocked, not started, then done, each in plan order. */
 export function runList<T extends { n: number; state: string }>(tasks: readonly T[], size: number): T[] {
@@ -1052,13 +1374,13 @@ function commandExcerpt(command: string, width: number): string {
 }
 
 /** The Now row: one line, whatever the state, so the pane never jumps. */
-export function nowLine(now: ActivityInput, at: number, work: ActivityWork = { shells: [], agents: 0 }): Run[] {
+export function nowLine(now: ActivityInput, at: number, work: ActivityWork = { shells: [], agents: 0 }, glyphs: Glyphs = UNICODE_GLYPHS): Run[] {
   const sep: Run = { text: ' · ', dim: true }
   const sent: Run[] = now.isSent ? [sep, { text: 'Discord ✓', dim: true }] : []
   switch (now.kind) {
     case 'running':
       return [
-        { text: '● ', color: 'cyan', bold: true },
+        { text: `${glyphs.dot} `, color: 'cyan', bold: true },
         { text: 'running ' },
         { text: elapsed(at - (now.turnStartedAt ?? now.since)), color: 'cyan', bold: true },
         ...(now.step > 0 ? [sep, { text: `step ${now.step}`, dim: true }] : []),
@@ -1214,17 +1536,11 @@ export function denseLine(section: Section, input: DenseInput): Run[] | null {
 }
 
 // Commands that start something meant to run until stopped: a dev server, a
-// watcher, a followed log.
-const SERVICES = [
-  /^(npm|pnpm|yarn|bun)( run)? (dev|start|serve|preview|watch)(:(?!build\b)|\s|$)/,
-  /^((npx|bunx|pnpm exec) )?(vite(?! build)(\s|$)|next (dev|start)|nuxt dev|astro dev|webpack serve|ng serve|nodemon)/,
-  /^python3? -m http\.server/,
-  /^(uvicorn|flask run|rails (s|server))(\s|$)/,
-  /^docker(-| )compose up(?!.*\s(-d|--detach)(\s|$))/,
-  /^tail -[fF](\s|$)/,
-  /^cargo watch(\s|$)/,
-  /\s--watch(All)?(=|\s|$)/,
-]
+// watcher, a followed log. config/services.json holds the list the scripts
+// share (scripts/lib/in-flight.sh); edit it there.
+const SERVICES = SHARED.services.map(pattern => new RegExp(pattern))
+// A bare sleep: a timer that bounds a dispatch and ends on its own.
+const TIMER = new RegExp(SHARED.timer)
 
 /** Whether a background command, by its first line, starts a service that never ends on its own. */
 export function isServiceCommand(command: string): boolean {
@@ -1233,6 +1549,11 @@ export function isServiceCommand(command: string): boolean {
     .split(/&&|\|\||;/)
     .map(part => part.trim().replace(/^(\w+=\S*\s+)+/, ''))
     .some(part => SERVICES.some(pattern => pattern.test(part)))
+}
+
+/** Whether a background command, by its first line, is a bare `sleep`: a timer that ends on its own. */
+export function isTimerCommand(command: string): boolean {
+  return TIMER.test(command.split('\n')[0]!.trim())
 }
 
 /** Whether a release (`2.1.295`) is at least `least`, compared part by part; an unreadable one is not. */
@@ -1392,6 +1713,33 @@ export function autoRunFor(text: string, sessionId: string): CockpitAutoRun | nu
     stalledAt: typeof s.stalledAt === 'number' && Number.isFinite(s.stalledAt) ? s.stalledAt : null,
     launch: typeof launch.model === 'string' && typeof launch.effort === 'string' ? { model: launch.model, effort: launch.effort } : null,
   }
+}
+
+/** The session that owns an active run in an auto-run state file; null when no run is active or the file does not parse. */
+export function activeRunOwner(text: string): string | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const s = parsed as Record<string, unknown>
+  return s.active === true && typeof s.session === 'string' && s.session !== '' ? s.session : null
+}
+
+/** The plan file the last task-brief, task-step, task-close or next-step call in a shell command names; null when none names one. */
+export function namedPlan(command: string): string | null {
+  let found: string | null = null
+  for (const match of command.matchAll(/scripts[\\/](?:task-brief|task-step|task-close|next-step)["']?((?:[ \t]+[^\s;&|]+)*)/g)) {
+    const word = (match[1] ?? '')
+      .trim()
+      .split(/\s+/)
+      .map(one => one.replace(/^["']|["']$/g, ''))
+      .find(one => one.endsWith('.md'))
+    if (word !== undefined) found = word
+  }
+  return found
 }
 
 /** The line an auto run's turn ends on, by the pending action it answers. */

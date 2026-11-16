@@ -3,16 +3,17 @@
 // over both. A key whose target is `claude` lives in Claude's own user settings
 // file instead, and this module is its only writer. The first command on a
 // machine imports the pre-2.0 settings once.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import SCHEMA, { isValidValue } from "../../config/schema.mjs";
+import SCHEMA, { isValidValue, resolveStored } from "../../config/schema.mjs";
 import { acquireLock } from "./darkmem-mirror.mjs";
 
 export class SettingError extends Error {}
 
-const USAGE = "usage: dforge-config get KEY | get --json | set KEY VALUE | unset KEY | claude-restore JSON | workflow";
+const USAGE = "usage: dforge-config get KEY | get --json | set KEY VALUE | unset KEY | claude-restore JSON | drop-snapshot SESSION | workflow [--host claude|codex]";
 
 function homeOf(env) {
   return env.HOME || os.homedir();
@@ -29,7 +30,10 @@ const HOME_LOCK_WAIT_MS = 10000;
 // sessions changing different keys never drop each other's change. A holder
 // keeps it for milliseconds, so a wait that long means it is stuck.
 export function withHomeLock(env, change, Busy = Error) {
-  const dir = path.join(homeOf(env), ".dforge", ".lock");
+  return withLock(path.join(homeOf(env), ".dforge", ".lock"), change, Busy);
+}
+
+function withLock(dir, change, Busy) {
   const deadline = Date.now() + HOME_LOCK_WAIT_MS;
   let release;
   while (!(release = acquireLock(dir))) {
@@ -154,19 +158,35 @@ function writeClaude(env, key, value) {
   writeClaudeKeys(env, [[key, value]]);
 }
 
+// Every dforge writer of one Claude settings file holds a lock named for the
+// file the write lands on, so two sessions saving different keys at once
+// cannot drop each other's.
 function writeClaudeKeys(env, entries) {
   const file = realTarget(claudeSettingsPath(env));
-  const data = readFile(file) ?? {};
-  for (const [key, value] of entries) {
-    if (value === undefined) delete data[key];
-    else data[key] = value;
-  }
-  writeFile(file, data);
+  const name = `claude-${crypto.createHash("sha256").update(file).digest("hex").slice(0, 16)}`;
+  withLock(path.join(homeOf(env), ".dforge", ".locks", name), () => {
+    const data = readFile(file) ?? {};
+    for (const [key, value] of entries) {
+      if (value === undefined) delete data[key];
+      else data[key] = value;
+    }
+    holdForTest(env);
+    writeFile(file, data);
+  }, Error);
+}
+
+// A test seam: DFORGE_CLAUDE_WRITE_DELAY_MS, a positive integer, holds a
+// Claude settings write that long between its read and its write, so a test
+// can make two writers overlap. Unset, nothing waits.
+function holdForTest(env) {
+  const text = env.DFORGE_CLAUDE_WRITE_DELAY_MS ?? "";
+  if (!/^[1-9][0-9]*$/.test(text)) return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(text));
 }
 
 // What /model and /effort save as the user's defaults. An auto run's cleared
 // session runs both, and the cockpit puts the saved values back afterwards.
-const RESTORABLE = ["model", "modelSettings"];
+const RESTORABLE = ["model", "modelSettings", "effortLevel"];
 
 // claude-restore JSON — sets each named key of Claude's user settings to its
 // value, removing a key whose value is null, in one write.
@@ -181,9 +201,16 @@ export function restoreClaude(text, env = process.env) {
     throw new SettingError("claude-restore takes a JSON object");
   }
   for (const key of Object.keys(values)) {
-    if (!RESTORABLE.includes(key)) throw new SettingError(`claude-restore restores only ${RESTORABLE.join(" and ")}, not ${key}`);
+    if (!RESTORABLE.includes(key)) throw new SettingError(`claude-restore restores only ${RESTORABLE.join(", ")}, not ${key}`);
   }
   writeClaudeKeys(env, Object.entries(values).map(([key, value]) => [key, value === null ? undefined : value]));
+}
+
+// drop-snapshot SESSION — deletes the model switch snapshot the cockpit saved
+// for that session before /model, a missing one included: a mod cannot delete.
+export function dropSnapshot(session, env = process.env) {
+  const name = `${session.replace(/[^A-Za-z0-9]/g, "-")}.json`;
+  fs.rmSync(path.join(homeOf(env), ".claude", "dforge", "sessions", "saved-defaults", name), { force: true });
 }
 
 function need(key) {
@@ -212,21 +239,45 @@ export function resolve(env = process.env, warn = message => process.stderr.writ
       if (value !== undefined) { values[key] = value; continue; }
       warn(`${spec.env}=${raw} is not a valid ${key}; ignored`);
     }
-    if (key in data) {
-      if (isValid(spec, data[key])) { values[key] = data[key]; continue; }
-      warn(`${key} in ${file} is not valid; ignored`);
+    if (key in data && !isValid(spec, data[key])) {
+      const reading = resolveStored(key, spec, data);
+      warn(`${key} in ${file} is not valid; ${reading === spec.default ? "ignored" : `read as ${reading}`}`);
     }
-    values[key] = spec.default;
+    values[key] = resolveStored(key, spec, data);
   }
   return values;
 }
 
+// The settings problem line, in place of the settings line, when the file
+// exists and does not parse to a JSON object; null otherwise. A file that
+// cannot be read at all is left to readFile, which says why.
+function brokenFileLine(file) {
+  let text;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  try {
+    const data = JSON.parse(text);
+    if (data && typeof data === "object" && !Array.isArray(data)) return null;
+  } catch {
+    // Not JSON: the problem line below.
+  }
+  return `dforge: ${file} is not a JSON object; every setting reads its default and notifyOn reads none until it parses`;
+}
+
 // One line naming the skill-enforced keys that differ from their defaults, for
 // the session-start hook and the skills; empty when every one is at its default.
-export function workflowLine(env = process.env) {
+// Codex runs autoRun=on as off, so a key that autoRun makes inert stays in force there.
+export function workflowLine(env = process.env, host = "claude") {
+  const broken = brokenFileLine(configPath(env));
+  if (broken) return broken;
   const values = resolve(env, () => {});
+  const inert = (spec) => spec.inertWhen && !(host === "codex" && spec.inertWhen.key === "autoRun")
+    && values[spec.inertWhen.key] === spec.inertWhen.value;
   const parts = Object.entries(SCHEMA)
-    .filter(([key, spec]) => spec.enforcedBy === "skill" && values[key] !== spec.default && !(spec.inertWhen && values[spec.inertWhen.key] === spec.inertWhen.value))
+    .filter(([key, spec]) => spec.enforcedBy === "skill" && values[key] !== spec.default && !inert(spec))
     .map(([key]) => `${key}=${values[key]}`);
   return parts.length === 0 ? "" : `dforge settings in force (each replaces the matching question or default in the skills): ${parts.join("; ")}`;
 }
@@ -281,8 +332,10 @@ export function main(argv, env = process.env, out = process.stdout) {
     if (command === "set" && rest.length === 2) { setValue(rest[0], rest[1], env); return 0; }
     if (command === "unset" && rest.length === 1) { unsetValue(rest[0], env); return 0; }
     if (command === "claude-restore" && rest.length === 1) { restoreClaude(rest[0], env); return 0; }
-    if (command === "workflow" && rest.length === 0) {
-      const line = workflowLine(env);
+    if (command === "drop-snapshot" && rest.length === 1) { dropSnapshot(rest[0], env); return 0; }
+    const host = rest.length === 2 && rest[0] === "--host" && ["claude", "codex"].includes(rest[1]) ? rest[1] : null;
+    if (command === "workflow" && (rest.length === 0 || host)) {
+      const line = workflowLine(env, host ?? "claude");
       if (line) out.write(`${line}\n`);
       return 0;
     }

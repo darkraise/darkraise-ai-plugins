@@ -10,6 +10,8 @@ import {
   autoRunFor,
   isAbsolutePath,
   isDforge,
+  gitMessageTexts,
+  shellCommands,
   gitTextFiles,
   isPlanTail,
   kTokens,
@@ -39,6 +41,7 @@ import {
   hasUnresolvedRows,
   isAtLeast,
   isServiceCommand,
+  isTimerCommand,
   reconcileStep,
   levelOf,
   limitForecast,
@@ -104,6 +107,8 @@ import {
 import { nativeLine, nativeRun } from '../hooks/cockpit/native'
 import { drawSettings } from '../hooks/cockpit/settings-view'
 import { avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from '../hooks/cockpit/svg'
+import SERVICE_COMMANDS from './fixtures/service-commands.mjs'
+import fastModeCases from './fixtures/fast-mode/cases.mjs'
 
 const SURFACES = ['terminal', 'desktop'] as const
 const runsText = (runs: Run[]) => runs.map(one => one.text).join('')
@@ -560,8 +565,8 @@ function world(on: On, w: World) {
     if (w.written !== undefined) w.written[e.path] = e.text
     return { value: undefined }
   })
+  on('fs.exists', (_$, e) => ({ value: (w.config !== undefined && e.path === CONFIG) || e.path in (w.written ?? {}) || e.path in (w.files ?? {}) }))
   if (w.config !== undefined) {
-    on('fs.exists', (_$, e) => ({ value: e.path === CONFIG || e.path in (w.written ?? {}) || e.path in (w.files ?? {}) }))
     on('fs.read', (_$, e) => {
       if (e.path === CONFIG) return { value: w.written?.[CONFIG] ?? JSON.stringify(w.config) }
       throw new Error('ENOENT')
@@ -775,6 +780,64 @@ describe('attribution guard', () => {
     expect(gitTextFiles('grep -F needle file && git commit -m x')).toEqual([])
   })
 
+  test('reads a shell command as its simple commands, keeping redirections and here-documents whole', () => {
+    const words = (src: string) => shellCommands(src).map(one => one.words)
+    expect(words(`a 'b c' "d\\"e" && f 2>&1 | g &>/dev/null; h >|out 0<&3`)).toEqual([['a', 'b c', 'd"e'], ['f', '2>&1'], ['g', '&>/dev/null'], ['h', '>|out', '0<&3']])
+    expect(words('cat <<\\EOF\ngit commit -m x\nEOF\nnext')).toEqual([['cat'], ['next']])
+    expect(words("cat <<-'EOF'\n\tbody; x\n\tEOF\necho $(printf 'a;b') \\\n  more # c; d")).toEqual([['cat'], ['echo', "$(printf 'a;b')", 'more']])
+  })
+
+  test('reads a commit or pull request message wherever the command writes it from', () => {
+    const TRAILER = ['Co', 'Authored-By:'].join('-')
+    const AI = `${TRAILER} Claude <noreply@anthropic.com>`
+    const GENERATED = ['Generated', 'with'].join(' ')
+    const COMMIT = ['git', 'commit'].join(' ')
+    const found = (command: string) => {
+      const { texts, isWhole } = gitMessageTexts(command)
+      return texts.some(text => attributionIn(text) !== undefined) || (isWhole && attributionIn(command, true) !== undefined)
+    }
+    const cases: [string, boolean][] = [
+      [`${COMMIT} -m "$(cat <<'EOF'\nfix: don't break\n\n${AI}\nEOF\n)"`, true],
+      [`${COMMIT} -F - <<'EOF'\nx\n\n${AI}\nEOF`, true],
+      [`${COMMIT} -F /dev/stdin <<'EOF'\nfix: x\n\n${AI}\nEOF`, true],
+      [`${COMMIT} --file=/dev/fd/0 <<'EOF'\nfix: x\n\n${AI}\nEOF`, true],
+      [`printf 'x\\n\\n${AI}' | ${COMMIT} -F -`, true],
+      [`${COMMIT} -m $'fix\\n\\n${AI}'`, true],
+      [`${COMMIT} -am 'x' -m '${TRAILER} ChatGPT <x@y.z>'`, true],
+      [`${COMMIT} --message="fix\n\n${TRAILER} Codex <codex@openai.com>"`, true],
+      [`GIT_AUTHOR_NAME=D ${COMMIT} -q -m "a; b && c" -m "${TRAILER} Copilot <c@github.com>"`, true],
+      [`gh pr create --title x --body "$(cat <<'EOF'\n## Summary\n${GENERATED} [Claude Code](https://claude.com/claude-code)\nEOF\n)"`, true],
+      [`${COMMIT} -q -m "fix(dforge): x"`, false],
+      [`${COMMIT} -m 'fix' -m '${TRAILER} Jane <jane@example.com>'`, false],
+      [`cat > f.sh <<'EOF'\necho '${AI}'\nEOF\n${COMMIT} -m x`, false],
+      [`git log --grep='${TRAILER} Claude' && ${COMMIT} -m 'fix: x'`, false],
+      [`cat > /tmp/msg <<'EOF'\nfix: x\n\n${AI}\nEOF\n${COMMIT} -F /tmp/msg`, true],
+      [`printf 'fix\\n\\n${AI}\\n' > msg.txt && ${COMMIT} -F msg.txt`, true],
+      [`cat > msg.txt <<'EOF'\nfix: x\n\n${AI}\nEOF\n${COMMIT} -F ./msg.txt`, true],
+      [`cat > ./msg.txt <<'EOF'\nfix: x\n\n${AI}\nEOF\n${COMMIT} -F msg.txt`, true],
+      [`echo '${AI}' | tee -a msg.txt; ${COMMIT} --file=msg.txt`, true],
+      [`MSG=$'fix\\n\\n${AI}'; ${COMMIT} -m "$MSG"`, true],
+      [`${COMMIT} -m "$(echo '${AI}')"`, true],
+      [`${COMMIT} -m "fix" -m "\`printf '%s' '${AI}'\`"`, true],
+      [`${COMMIT} -F <(printf '${AI}')`, true],
+      [`${COMMIT} -aF - <<'EOF'\nfix\n\n${AI}\nEOF`, true],
+      [`${COMMIT} -qF /dev/stdin <<'EOF'\nfix\n\n${AI}\nEOF`, true],
+      [`printf '%s\\n' fix '${AI}' | ${COMMIT} -F -`, true],
+      [`${COMMIT} -m x --trailer "${AI}"`, true],
+      [`${COMMIT} -m x --trailer='Co-authored-by=Claude <noreply@anthropic.com>'`, true],
+      [`${COMMIT} 2>&1 -m 'fix' -m '${AI}'`, true],
+      [`${COMMIT} &>/dev/null -m 'fix' -m '${AI}'`, true],
+      [`${COMMIT} -m 'fix' -m '${TRAILER} Claude Opus 4.5'`, true],
+      [`${COMMIT} -m 'fix' -m '${TRAILER} Claude Code <bot@example.com>'`, true],
+      [`${COMMIT} -m 'fix' -m '${TRAILER} GitHub Copilot <175728472+Copilot@users.noreply.github.com>'`, true],
+      [`cat > f.sh <<'EOF'\necho '${AI}'\nEOF\n${COMMIT} -m "$(cat <<'X'\nfix: x\nX\n)"`, false],
+      [`cat > notes.md <<\\EOF\n${COMMIT} -m '${AI}'\nEOF`, false],
+      [`${COMMIT} -m 'fix' -m '${TRAILER} Claude Dupont <claude.dupont@example.com>'`, false],
+      [`${COMMIT} -m 'fix: cost is $5'`, false],
+    ]
+    expect(cases.filter(([command, want]) => found(command) !== want).map(([command]) => command)).toEqual([])
+  })
+
   test('refuses a commit whose message file carries a trailer', async ($, on) => {
     const files: World['files'] = {
       '/home/me/code/shop/web/msg.txt': { text: 'fix: tidy\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n' },
@@ -788,6 +851,18 @@ describe('attribution guard', () => {
     expect(clean.deny).toBeUndefined()
   })
 
+  test('reads the whole command when its message file is not there yet', async ($, on) => {
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    const written = await $.tool.call({
+      tool: 'Bash',
+      command: "cat > msg.txt <<'EOF'\nfix: tidy\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\ngit commit -F ./msg.txt",
+    })
+    expect(written.deny).toBe('dforge: this project keeps AI attribution out of git. Remove "Co-Authored-By: Claude <noreply@anthropic.com>" and try again.')
+    const clean = await $.tool.call({ tool: 'Bash', command: "cat > msg.txt <<'EOF'\nfix: tidy\nEOF\ngit commit -F ./msg.txt" })
+    expect(clean.deny).toBeUndefined()
+  })
+
   test('never reads a message file that is not a regular file', async ($, on) => {
     const files: World['files'] = { '/dev/stdin': { text: 'Co-Authored-By: Claude <noreply@anthropic.com>\n', kind: 'other' } }
     const reads: string[] = []
@@ -796,6 +871,43 @@ describe('attribution guard', () => {
     const ran = await $.tool.call({ tool: 'Bash', command: "git commit -F /dev/stdin <<'EOF'\nfix: tidy\nEOF" })
     expect(ran.deny).toBeUndefined()
     expect(reads).not.toContain('/dev/stdin')
+  })
+
+  test('passes a human co-author and a mere mention, refuses an AI trailer', async ($, on) => {
+    const TRAILER = ['Co', 'authored-by:'].join('-')
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    const human = await $.tool.call({ tool: 'Bash', command: `git commit -m 'fix: x' -m '${TRAILER} Claude Dupont <claude.dupont@example.com>'` })
+    expect(human.deny).toBeUndefined()
+    const mention = await $.tool.call({ tool: 'Bash', command: `git commit -m 'test: refuse ${TRAILER} trailers naming Claude'` })
+    expect(mention.deny).toBeUndefined()
+    const ai = await $.tool.call({ tool: 'Bash', command: `git commit -m 'fix: x' -m '${TRAILER} Claude <noreply@anthropic.com>'` })
+    expect(ai.deny).toMatch(/keeps AI attribution out of git/)
+  })
+
+  test('a guard hook that throws refuses only a call the guard judges, naming guardAttribution', async ($, on) => {
+    // The next read of the settings is refused once: the hook's own, before
+    // anything else it does; its .catch then reads them as usual. A hook that
+    // throws would be skipped and the store beneath would answer, so it denies.
+    let failures = 0
+    on('state.get', { plugin: 'dforge', key: 'settings' } as never, ((_$: unknown, e: unknown, next: (e: unknown) => unknown) => {
+      if (failures > 0) {
+        failures -= 1
+        return { deny: 'the store is down' }
+      }
+      return next(e)
+    }) as never)
+    const files: World['files'] = { '/home/me/code/shop/web/msg.txt': { text: 'fix: tidy\n' } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    failures = 1
+    const read = await $.tool.call({ tool: 'Read', file_path: '/home/me/code/shop/a.ts' } as never)
+    expect(read.deny).toBeUndefined()
+    expect(read.text).toBe('ok')
+    failures = 1
+    const commit = await $.tool.call({ tool: 'Bash', command: 'git commit -F msg.txt' })
+    expect(commit.deny).toBe('dforge: its attribution guard failed; set guardAttribution off to lift it.')
   })
 
   test('is off when configured off', async ($, on) => {
@@ -872,8 +984,8 @@ describe('seat check', () => {
   })
 
   test('reads the last Process line of a text: fast, the full flow, or none', () => {
-    expect(fastModeLine('Process: fast — a one-file fix\n\nOn it.')).toBe(true)
-    expect(fastModeLine('`Process: fast`')).toBe(true)
+    expect(fastModeLine('Process: fast — a one-file fix\n\nOn it.')).toBe('request')
+    expect(fastModeLine('`Process: fast`')).toBe('request')
     expect(fastModeLine('Process: fast — x\nProcess: bounded, inline — no trigger')).toBe(false)
     expect(fastModeLine('Process: faster — not the marker')).toBe(false)
     expect(fastModeLine('Here is the answer.')).toBeNull()
@@ -1012,6 +1124,21 @@ describe('review seat write guard', () => {
       await $.session.start(START)
       await $.agent.spawn(dispatch(`Your complete instructions are in \`${promptFile}\`: read it first and follow it.`, 'dforge:judge-sonnet-high', 1))
     }
+
+    test('reads the prompt file when the dispatch\'s own report line names no path', async ($, on) => {
+      const files: NonNullable<World['files']> = { [PROMPT]: { text: FILLED } }
+      world(on, { tokens: 10_000, agentIds: ['judge-1'], files })
+      on('agent.list', () => ({ value: [] }) as never)
+      on('fs.read', (_$, e) => {
+        const file = files[e.path]
+        if (file === undefined) throw new Error('ENOENT')
+        return { value: file.text }
+      })
+      await $.session.start(START)
+      await $.agent.spawn(dispatch(`Your complete instructions are in \`${PROMPT}\`.\nWrite your full report to the path the prompt file names.`, 'dforge:judge-sonnet-high', 1))
+      expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
+      expect((await write($, 'judge-1', EARLIER)).deny).toBe(`dforge: a review seat writes only the report file its dispatch names (${REVIEW}); ${EARLIER} is not one.`)
+    })
 
     test('allows only the report on the prompt file\'s report line', async ($, on) => {
       await pointed($, on, PROMPT, { [PROMPT]: { text: FILLED } })
@@ -1775,6 +1902,36 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: /codexLane in ~\/\.dforge\/config\.json is not a dforge setting; remove it with dforge-config unset codexLane/ })).toBeDefined()
   })
 
+  test('the minimized band counts setting problems', async ($, on) => {
+    world(on, SIGNED_IN)
+    signedIn(on, configured({ layout: 'compact', density: 'nope' }))
+    await $.session.start(START)
+    const band = await $.ui.mount(minimized('terminal'))
+    expect(await band.find({ type: 'Text', text: /1 setting problem/ })).toBeDefined()
+  })
+
+  test('the pane line names the button that shows the setting problems', async ($, on) => {
+    const files: NonNullable<World['files']> = { [CONFIG]: { text: '{"layout": "full",}', mtimeMs: 1 } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^1 setting problem · open ⚙ Settings to see it$/ })).toBeDefined()
+  })
+
+  test('a settings file that does not parse is a problem and silences Discord', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const files: NonNullable<World['files']> = { [CONFIG]: { text: '{"layout": "full",}', mtimeMs: 1 } }
+    world(on, { ...SIGNED_IN, files, fetches, env: { HOME: '/home/me', DFORGE_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /1 setting problem/ })).toBeDefined()
+    await $.turn.complete({ answer: 'done', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(fetches).toHaveLength(0)
+  })
+
   test('a rows whose setting has no effect under the values in force is locked', async ($, on) => {
     world(on, { tokens: 284_000, config: { handoffMode: 'relaxed', handoffTokens: 300_000, layout: 'compact' } })
     await $.session.start(START)
@@ -1785,6 +1942,7 @@ describe('settings', () => {
     await ui.press({ key: 'settings-tab-Context' })
     expect(await ui.find({ key: 'set-handoffTokens-more' })).toBeUndefined()
     expect((await ui.find({ key: 'set-handoffTokens-controls' }))?.text).toMatch(/ignored in relaxed handoff mode/)
+    expect((await ui.find({ key: 'set-handoffTokens-controls' }))?.text).toMatch(/an auto run still uses it/)
     await ui.press({ key: 'settings-tab-Process' })
     expect((await ui.find({ key: 'set-designApproval-controls' }))?.text).toMatch(/no effect while autoRun is on/)
     expect((await ui.find({ key: 'set-specReview-controls' }))?.text).toMatch(/no effect while autoRun is on/)
@@ -3336,10 +3494,11 @@ describe('now row', () => {
   })
 
   test('tells a service from a job that ends', () => {
-    for (const command of ['npm run dev', 'pnpm dev', 'yarn start', 'npm run dev:api', 'vite --port 3000', 'npx next dev', 'python3 -m http.server 8000', 'docker compose up', 'tail -f app.log', 'jest --watch', 'jest --watchAll', 'cargo watch -x run', 'cd web && npm run dev', 'PORT=3000 npm start'])
-      expect(isServiceCommand(command)).toBe(true)
-    for (const command of ['npm test', 'npm run build', 'vite build', 'vitest', 'docker compose up -d', 'npm run start:build', 'node codex-companion.mjs review', 'echo "npm run dev"', 'make\nnpm run dev'])
-      expect(isServiceCommand(command)).toBe(false)
+    expect(SERVICE_COMMANDS.length).toBeGreaterThan(25)
+    for (const { command, role } of SERVICE_COMMANDS) {
+      expect([command, isServiceCommand(command)]).toEqual([command, role === 'service'])
+      expect([command, isTimerCommand(command)]).toEqual([command, role === 'timer'])
+    }
   })
 
   test('follows a turn from start to end, and its tool calls', async ($, on) => {
@@ -3992,6 +4151,24 @@ describe('shells and remote', () => {
       expect(fetches).toHaveLength(before)
     })
 
+    test('lets six more go in the session a resume carries the process into', async ($, on) => {
+      const w = quiet({ keepWarm: 4 })
+      const clock = world(on, w)
+      on('session.end', (_$, e) => e as never)
+      await begin($)
+      for (let i = 1; i <= 8; i++) {
+        await clock.advance(5 * MIN)
+        if (sentOf(w).length === i) await keepWarmTurn($, clock, `k${i}`)
+      }
+      expect(sentOf(w)).toHaveLength(6)
+      // The shell still runs and no turn starts: only the session id changes.
+      await $.session.end({ reason: 'resume', sessionId: 'sess-1', resume: { id: 'sess-1' } })
+      w.sessionId = 'sess-2'
+      await clock.advance(2_000)
+      await clock.advance(5 * MIN)
+      expect(sentOf(w)).toHaveLength(7)
+    })
+
     test('submits nothing while the composer holds a draft', async ($, on) => {
       const w: World = { ...quiet({ keepWarm: 50 }), draft: 'half a sent' }
       const clock = world(on, w)
@@ -4250,6 +4427,37 @@ describe('discord', () => {
     expect(fetches).toEqual([])
   })
 
+  for (const [mode, defaultMode, isAsked] of [['auto', 'default', false], ['default', 'bypassPermissions', true]] as const)
+    test(`an approval under the ${mode} mode the session reports ${isAsked ? 'pings' : 'does not ping'}, the settings default being ${defaultMode}`, async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
+      // The test's own hook is the bottom of a classic event's chain.
+      on('classic.UserPromptSubmit', () => ({}) as never)
+      const clock = world(on, { tokens: 50_000, fetches, settings: { permissions: { defaultMode } }, config: { notifyAskAfter: 20 } })
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.classic.UserPromptSubmit({ prompt: 'go', permission_mode: mode })
+      await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+      await clock.advance(30_000)
+      expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)).toEqual(isAsked ? ['⏳ Waiting for approval'] : [])
+    })
+
+  for (const [agentId, isAsked] of [['agent-2', true], [undefined, false]] as const)
+    test(`a permission request ${agentId === undefined ? 'from the main thread sets' : "from a subagent leaves"} the session's mode`, async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
+      on('classic.UserPromptSubmit', () => ({}) as never)
+      on('classic.PermissionRequest', () => ({}) as never)
+      const clock = world(on, { tokens: 50_000, fetches, settings: { permissions: { defaultMode: 'default' } }, config: { notifyAskAfter: 20 } })
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.classic.UserPromptSubmit({ prompt: 'go', permission_mode: 'default' })
+      await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: {}, permission_mode: 'bypassPermissions', ...(agentId === undefined ? {} : { agent_id: agentId }) } as never)
+      await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+      await clock.advance(30_000)
+      expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)).toEqual(isAsked ? ['⏳ Waiting for approval'] : [])
+    })
+
   test('says when a turn fails', async ($, on) => {
     const fetches: World['fetches'] = []
     world(on, { tokens: 50_000, fetches })
@@ -4457,6 +4665,45 @@ describe('run card', () => {
     ])
   })
 
+  test('reads waiting, deferred and review clean only in its clause', () => {
+    const ledger = parseLedger([
+      LEDGER,
+      'Task 2: waiting — which meter width?',
+      'Task 3: implementer inline (assigned; base 1234567)',
+      'Task 3: complete (deferred by the auto run) — done: nothing; verified: lint and self review clean; remaining: all; discovered: none; assumptions: none',
+    ].join('\n'))
+    expect(ledger.tasks.map(task => [task.n, task.state])).toEqual([[1, 'complete'], [2, 'waiting'], [3, 'deferred']])
+    expect(ledger.tasks[1]?.question).toBe('which meter width?')
+    expect(ledger.tasks[2]?.isClean).toBe(false)
+  })
+
+  test('a waiting line sends one question and a deferred task no completion', async ($, on) => {
+    const files = runFiles(LEDGER)
+    const fetches: World['fetches'] = []
+    world(on, { ...SIGNED_IN, files, fetches })
+    signedIn(on, files)
+    mock.store(on, { notifyUrl: WEBHOOK, notifyOn: 'task,question' })
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.session.start(START)
+    const ledger = files?.['/home/me/code/shop/.dforge/sdd/p/progress.md']
+    if (ledger !== undefined) ledger.text += '\nTask 2: waiting — which meter width?\nTask 3: complete (deferred by the auto run) — done: nothing'
+    await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
+    await $.turn.complete({ answer: 'Which meter width should the card use?', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    const titles = fetches.map(f => String((f.body.embeds as Record<string, unknown>[])[0]?.title))
+    // One question for the waiting line, none from the turn's end (R15), and no completion for the deferred task.
+    expect(titles).toEqual(['❓ Task 2 waiting on you'])
+  })
+
+  test('a main turn ending on Which option? sends a question', async ($, on) => {
+    const fetches: World['fetches'] = []
+    world(on, { ...SIGNED_IN, fetches })
+    signedIn(on, {})
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.session.start(START)
+    await $.turn.complete({ answer: '1. Merge\n2. PR\n\nWhich option?', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(fetches.map(f => String((f.body.embeds as Record<string, unknown>[])[0]?.title))).toEqual(['❓ Claude is asking'])
+  })
+
   test('reads no task heading inside a fence, as plan.sh does', () => {
     const plan = ['# Plan', '', '````md', '```', '### Task 99: Example', '```', '````', '~~~', '## Task 98: Also an example', '~~~', '#### Task 1: Real', '# Task 2: Top level', '  ### Task 3: Indented'].join('\n')
     expect(planTasks(plan)).toEqual([
@@ -4507,6 +4754,19 @@ describe('run card', () => {
     expect(drawn.indexOf('Task 3: Ship it')).toBeLessThan(drawn.indexOf('Task 1: Add the helpers'))
   })
 
+  test('the dense plan row names a waiting task and its question ahead of an assigned one', async ($, on) => {
+    const files = {
+      ...runFiles(`${LEDGER}\nTask 3: implementer inline (assigned; base 1234567)\nTask 3: waiting — which meter width?`),
+      ...configured({ density: 'dense' }),
+    }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ key: 'dense-plan' }))?.text).toMatch(/1\/3 · \? Task 3 waiting: which meter width\?$/)
+  })
+
   test('reads an unchanged ledger no more, however many ticks pass', async ($, on) => {
     const files = runFiles(LEDGER) ?? {}
     const reads: string[] = []
@@ -4519,6 +4779,46 @@ describe('run card', () => {
     const before = ledgerReads()
     await clock.advance(10_000)
     expect(ledgerReads()).toBe(before)
+  })
+
+  test('follows the plan this session named, not a newer ledger', async ($, on) => {
+    const files: World['files'] = {
+      ...runFiles(LEDGER),
+      '/home/me/code/shop/.dforge/sdd/q/progress.md': { text: '# SDD ledger — plan: docs/plans/q.md\nTask 1: complete (commits a..b, review clean) — done: x', mtimeMs: 3_000_000 },
+      '/home/me/code/shop/docs/plans/q.md': { text: '# Plan\n\n### Task 1: Other\n' },
+    }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'bash /p/scripts/task-brief --open docs/plans/p.md 2' })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /Task 1: Other/ })).toBeUndefined()
+  })
+
+  test('lists an unchanged ledger directory once, and again once it changes', async ($, on) => {
+    const BASE = '/home/me/code/shop/.dforge/sdd'
+    const lists: string[] = []
+    // A test registers each event once: world's fs.list hook answers beneath this matched one.
+    on('fs.list', { path: BASE } as never, ((_$: unknown, e: { path: string }, next: (e: unknown) => unknown) => {
+      lists.push(e.path)
+      return next(e)
+    }) as never)
+    const files: NonNullable<World['files']> = { ...runFiles(LEDGER), [BASE]: { text: '', kind: 'dir', mtimeMs: 5 } }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.session.start(START)
+    const listed = () => lists.filter(path => path === BASE).length
+    const before = listed()
+    expect(before).toBeGreaterThan(0)
+    for (const turnId of ['t1', 't2', 't3']) await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId, reason: 'answer' })
+    expect(listed()).toBe(before)
+    files[`${BASE}/q/progress.md`] = { text: '# SDD ledger — plan: docs/plans/q.md\nTask 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)', mtimeMs: 3_000_000 }
+    files[BASE] = { text: '', kind: 'dir', mtimeMs: 6 }
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't4', reason: 'answer' })
+    expect(listed()).toBe(before + 1)
   })
 
   test('reads the ledger again at a new session start, unchanged as it is', async ($, on) => {
@@ -5161,6 +5461,30 @@ describe('resume offer', () => {
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     expect(await band.find({ key: 'band-resume' })).toBeDefined()
     files[REGISTER] = { text: register(['done', 'done']), mtimeMs: 2 }
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+  })
+
+  test('withdraws a ruling handoff once every row of its register in the darkmem docs store is resolved', async ($, on) => {
+    const MIRROR = '/home/me/.dforge/mirror/shop'
+    const MODE = [
+      `documents\tdarkmem\t${MIRROR}/dforge`,
+      'progress\tlocal\t/home/me/code/shop/.dforge/sdd\t/home/me/code/shop/.dforge/handoff/latest.md',
+      'project\tshop',
+      '',
+    ].join('\n')
+    const STORED = `${MIRROR}/dforge/registers/r.md`
+    const files: NonNullable<World['files']> = {
+      '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 },
+      [LATEST]: { text: rulingHandoff(), mtimeMs: 900_000 },
+      [STORED]: { text: register(['done', 'open']), mtimeMs: 1 },
+    }
+    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
+    signedIn(on, files)
+    await $.session.start(START)
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ key: 'band-resume' })).toBeDefined()
+    files[STORED] = { text: register(['done', 'done']), mtimeMs: 2 }
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
   })
@@ -6264,7 +6588,7 @@ describe('auto run', () => {
     })
 
   const RECONCILE_PROMPT =
-    /^Background work has run 20 minutes since the last turn with no notification\. Run `bash "[^"]*\/scripts\/in-flight"`\. Stop with TaskStop each launch idle 30 minutes or more, and record a `Ruling:` line naming the task it served and that its result is void; leave the others running\. Then continue the run, and end the turn again if only waiting remains\.$/
+    /^Background work has run 20 minutes since the last turn with no notification\. Run `bash "[^"]*\/scripts\/in-flight"`\. Stop with TaskStop each launch idle 30 minutes or more, and record a `Ruling:` line naming the task it served and that its result is void; leave the others running\. Never stop a bare `sleep` timer: it bounds a dispatch\. Then continue the run, and end the turn again if only waiting remains\.$/
 
   test('compacts on the sentinel, books it and submits the continue prompt', async ($, on) => {
     const files = autoFiles()
@@ -6362,9 +6686,153 @@ describe('auto run', () => {
     await settle(clock)
     expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
     expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([
-      expect.stringContaining(`claude-restore ${JSON.stringify({ model: 'opus[1m]', modelSettings: { 'claude-opus-5-5': { effortLevel: 'max' } } })}`),
+      expect.stringContaining(`claude-restore ${JSON.stringify({ model: 'opus[1m]', modelSettings: { 'claude-opus-5-5': { effortLevel: 'max' } }, effortLevel: null })}`),
     ])
     expect(w.prompts).toEqual(['Execute docs/plan.md.'])
+  })
+
+  for (const isRefusing of [false, true])
+    test(`saves the defaults before /model and ${isRefusing ? 'keeps them when the restore fails' : 'drops them once the restore reads back'}`, async ($, on) => {
+      const SNAP = '/home/me/.claude/dforge/sessions/saved-defaults/sess-2.json'
+      const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+      const written: Record<string, string> = {}
+      let atModel: string | undefined
+      const w: World = {
+        ...SIGNED_IN,
+        written,
+        commands: [],
+        autoRuns: [],
+        prompts: [],
+        runs: [],
+        userSettings: { model: 'opus[1m]', effortLevel: 'max' },
+        isDforgeConfigRefusing: isRefusing,
+        autoFile: files[AUTO],
+        onCommand: command => {
+          if (command === 'model') atModel = written[SNAP]
+        },
+      }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      await settle(clock)
+      expect(JSON.parse(atModel ?? 'null')).toEqual({ session: 'sess-2', launchModel: 'sonnet', saved: { model: 'opus[1m]', modelSettings: null, effortLevel: 'max' } })
+      expect(w.runs?.filter(run => run.includes(' drop-snapshot '))).toEqual(isRefusing ? [] : [expect.stringContaining('drop-snapshot sess-2')])
+    })
+
+  describe('a model switch snapshot another session left', () => {
+    const SNAP = '/home/me/.claude/dforge/sessions/saved-defaults/sess-0.json'
+    const BEAT = '/home/me/.claude/dforge/sessions/cockpit/sess-0'
+    const SNAPSHOT = { text: JSON.stringify({ session: 'sess-0', launchModel: 'sonnet', saved: { model: 'opus[1m]', modelSettings: null, effortLevel: 'max' } }) }
+    // The clock starts at 1000 s: a beat at 700 is 300 s old, past the 180 s limit; one at 990 is alive.
+    const startWith = async ($: Parameters<TestBody>[0], on: On, model: string, beat?: string) => {
+      const files: NonNullable<World['files']> = { [SNAP]: SNAPSHOT, ...(beat === undefined ? {} : { [BEAT]: { text: beat } }) }
+      const w: World = { ...SIGNED_IN, runs: [], toasts: [], files, userSettings: { model } }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await settle(clock)
+      return w
+    }
+    const restores = (w: World) => w.runs?.filter(run => run.includes(' claude-restore ')) ?? []
+    const drops = (w: World) => w.runs?.filter(run => run.includes(' drop-snapshot ')) ?? []
+    const told = (w: World) => w.toasts?.filter(text => /snapshot/.test(text)) ?? []
+
+    for (const beat of ['700\n', undefined])
+      test(`restores the defaults of a session ${beat === undefined ? 'that left no heartbeat' : 'whose heartbeat is stale'} while its launch model is the default, then drops the snapshot`, async ($, on) => {
+        const w = await startWith($, on, 'sonnet', beat)
+        expect(restores(w)).toEqual([expect.stringContaining('claude-restore {"model":"opus[1m]","modelSettings":null,"effortLevel":"max"}')])
+        expect(w.userSettings).toEqual({ model: 'opus[1m]', effortLevel: 'max' })
+        expect(drops(w)).toEqual([expect.stringContaining('drop-snapshot sess-0')])
+        expect(told(w)).toEqual([])
+      })
+
+    test('drops, saying so once, the snapshot of a dead session whose launch model is no longer the default', async ($, on) => {
+      const w = await startWith($, on, 'haiku', '700\n')
+      expect(restores(w)).toEqual([])
+      expect(drops(w)).toEqual([expect.stringContaining('drop-snapshot sess-0')])
+      expect(told(w)).toEqual(['dforge: dropped the model switch snapshot of session sess-0: your default model is no longer sonnet.'])
+    })
+
+    test('leaves the snapshot of a session that is still alive', async ($, on) => {
+      const w = await startWith($, on, 'sonnet', '990\n')
+      expect(restores(w)).toEqual([])
+      expect(drops(w)).toEqual([])
+      expect(told(w)).toEqual([])
+    })
+
+    for (const model of ['sonnet', 'haiku'])
+      test(`says so when it cannot ${model === 'sonnet' ? 'put back the defaults of a dead session' : 'drop a stale snapshot'}`, async ($, on) => {
+        const files: NonNullable<World['files']> = { [SNAP]: SNAPSHOT, [BEAT]: { text: '700\n' } }
+        const w: World = { ...SIGNED_IN, runs: [], toasts: [], files, userSettings: { model }, isDforgeConfigRefusing: true }
+        const clock = world(on, w)
+        signedIn(on, files)
+        await $.session.start(START)
+        await settle(clock)
+        expect(told(w)).toEqual([
+          model === 'sonnet'
+            ? 'dforge: could not put back the default model that session sess-0 switched from; it stays sonnet, and its snapshot is kept for the next session start to try again.'
+            : 'dforge: could not drop the model switch snapshot of session sess-0, sess-0.json; the next session start tries again.',
+        ])
+      })
+
+    for (const beat of ['', 'garbled\n'])
+      test(`leaves the snapshot of a session whose heartbeat reads ${beat === '' ? 'empty' : 'malformed'}, which proves nothing about it`, async ($, on) => {
+        const w = await startWith($, on, 'sonnet', beat)
+        expect(restores(w)).toEqual([])
+        expect(drops(w)).toEqual([])
+      })
+
+    test('leaves the snapshot of a session whose heartbeat exists but cannot be read', async ($, on) => {
+      const unreadable = { get text(): string { throw new Error('EACCES: permission denied') } }
+      const files: NonNullable<World['files']> = { [SNAP]: SNAPSHOT, [BEAT]: unreadable }
+      const w: World = { ...SIGNED_IN, runs: [], toasts: [], files, userSettings: { model: 'sonnet' } }
+      const clock = world(on, w)
+      signedIn(on, files)
+      await $.session.start(START)
+      await settle(clock)
+      expect(restores(w)).toEqual([])
+      expect(drops(w)).toEqual([])
+    })
+  })
+
+  test('arms the watchdog when a read at the start fails', async ($, on) => {
+    const written: Record<string, string> = {}
+    const clock = world(on, { ...SIGNED_IN, written, isUsageFailing: true })
+    signedIn(on, {})
+    await $.session.start(START)
+    await clock.advance(60_000)
+    expect(written['/home/me/.claude/dforge/sessions/cockpit/sess-1']).toBe('1060\n')
+  })
+
+  test('reads again, at a slow poll tick, a session read whose step failed at the start', async ($, on) => {
+    const w: World = { ...SIGNED_IN, isUsageFailing: true }
+    const clock = world(on, w)
+    signedIn(on, {})
+    await $.session.start(START)
+    w.isUsageFailing = false
+    await clock.advance(12_000)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /284k of 650k ┃ handoff 465k/ })).toBeDefined()
+  })
+
+  test("a main compaction clears the turn readings, a subagent's does not", async ($, on) => {
+    const sets: unknown[] = []
+    on('state.set', { plugin: 'dforge', key: 'turnTokens' } as never, ((_$: unknown, e: { value: unknown }, next: (e: unknown) => unknown) => {
+      sets.push(e.value)
+      return next(e)
+    }) as never)
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    const before = sets.length
+    expect(before).toBeGreaterThan(0)
+    await $.session.compact({ trigger: 'auto', messages: [SUMMARY], agentId: 'agent-1' } as never)
+    expect(sets).toHaveLength(before)
+    await $.session.compact({ trigger: 'manual', messages: [SUMMARY] })
+    expect(sets.slice(before)).toEqual([[]])
   })
 
   test('removes the defaults /model and /effort added where none were set', async ($, on) => {
@@ -6375,7 +6843,7 @@ describe('auto run', () => {
     await $.session.start(START)
     await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([expect.stringContaining('claude-restore {"model":null,"modelSettings":null}')])
+    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([expect.stringContaining('claude-restore {"model":null,"modelSettings":null,"effortLevel":null}')])
   })
 
   test('restores nothing when the clear sets no model', async ($, on) => {
@@ -7146,6 +7614,19 @@ describe('auto run', () => {
     expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toHaveLength(1)
   })
 
+  test('a bare sleep timer alone never draws a reconcile prompt', async ($, on) => {
+    const files = autoFiles({ pending: null })
+    const bash = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'qa1' }, text: 'Running in the background' }) }
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: bash }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'sleep 3600', run_in_background: true } as never)
+    await $.turn.complete({ answer: 'Waiting for QA.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(2_600_000)
+    expect(w.prompts?.filter(text => /^Background work has run/.test(text))).toEqual([])
+  })
+
   for (const holder of ['agent', 'shell'] as const) {
     test(`submits one reconcile prompt when a background ${holder} alone holds a bound run for 20 minutes`, async ($, on) => {
       const files = autoFiles({ pending: null })
@@ -7168,6 +7649,27 @@ describe('auto run', () => {
       expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toEqual([])
     })
   }
+
+  test('counts the reconcile prompts afresh in the session a resume carries the process into', { timeoutMs: 30_000 }, async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    on('session.end', (_$, e) => e as never)
+    signedIn(on, files)
+    await $.session.start(START)
+    await spawnTask4($)
+    // No sentinel: the pending compact is never armed, so only the reconcile cap can fail it.
+    await $.turn.complete({ answer: 'Waiting for the implementer.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    const reconciles = () => w.prompts?.filter(text => RECONCILE_PROMPT.test(text)).length
+    await clock.advance(2_600_000)
+    expect(reconciles()).toBe(2)
+    await $.session.end({ reason: 'resume', sessionId: 'sess-1', resume: { id: 'sess-1' } })
+    w.sessionId = 'sess-2'
+    files[AUTO]!.text = files[AUTO]!.text.replace('"session":"sess-1"', '"session":"sess-2"')
+    await clock.advance(2_600_000)
+    expect(reconciles()).toBe(4)
+    expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
+  })
 
   test('submits no reconcile prompt outside an auto run', async ($, on) => {
     const files = autoFiles({ active: false, pending: null })
@@ -7386,6 +7888,32 @@ describe('auto run in the pane', () => {
     expect(notes).toEqual([])
   })
 
+  for (const [beat, isNamed] of [[undefined, true], ['700\n', true], ['950\n', false]] as const)
+    test(`${isNamed ? 'names' : 'does not name'} auto-run stop --stale for a run whose owner ${beat === undefined ? 'left no heartbeat' : `last beat at ${beat.trim()} s, the clock at 1000 s`}`, async ($, on) => {
+      const files: NonNullable<World['files']> = {
+        ...autoFiles({ session: 'sess-old', pending: null }),
+        ...(beat === undefined ? {} : { '/home/me/.claude/dforge/sessions/cockpit/sess-old': { text: beat } }),
+      }
+      world(on, { ...SIGNED_IN, files })
+      signedIn(on, files)
+      await $.session.start(START)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      const line = await ui.find({ type: 'Text', text: /auto run left by a closed session — run scripts\/auto-run stop --stale/ })
+      if (isNamed) expect(line).toBeDefined()
+      else expect(line).toBeUndefined()
+    })
+
+  test('a run left by a closed session has a button that stops it', async ($, on) => {
+    const files: NonNullable<World['files']> = autoFiles({ session: 'sess-old', pending: null })
+    const w: World = { ...SIGNED_IN, files, autoRuns: [] }
+    world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-stop-stale' })
+    expect(w.autoRuns).toContain('--session sess-1 stop --stale')
+  })
+
   test('measures against the high regime', async ($, on) => {
     world(on, { ...SIGNED_IN, tokens: 470_000 })
     signedIn(on, autoFiles({ pending: null, regime: 'high' }))
@@ -7460,6 +7988,31 @@ describe('A5: the judge write guard (speed-and-cost-followups acceptance)', () =
     expect(typeof denied).toBe('string')
     expect(denied).toMatch(/review.seat/i)
     expect(denied).toMatch(/write/i)
+  })
+
+  test('a direct re-review prompt allows only its report line, not the prior round', async ($, on) => {
+    const PRIOR = `${WS}/plan-review-round-1-report.md`
+    const NEXT = `${WS}/plan-review-round-2-report.md`
+    world(on, { tokens: 10_000, agentIds: ['judge-1'] })
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(spawn(`Prior findings: ${PRIOR}\nWrite your full report to ${NEXT}, then reply in 10 lines.`, 'dforge:judge-opus', 9))
+    expect((await write($, 'judge-1', PRIOR)).deny).toMatch(REFUSED)
+    expect((await write($, 'judge-1', NEXT)).deny).toBeUndefined()
+  })
+
+  test('accepts the named report under the session directory when no checkout is known and git worktree list fails', async ($, on) => {
+    // Matched on its argv, this answers `git worktree list` above world's process.run hook.
+    on('process.run', { argv: /worktree/ } as never, (() => ({
+      value: { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository\n', isStdoutTruncated: false, isStderrTruncated: false },
+    })) as never)
+    world(on, { tokens: 10_000, agentIds: ['judge-1'], checkout: '', commonDir: '/home/me/code/shop/.git/modules/sub' })
+    signedIn(on, {}, undefined, '/home/me/code/shop', () => '/home/me/code/shop')
+    on('agent.list', () => ({ value: [] }) as never)
+    await $.session.start(START)
+    await $.agent.spawn(spawn(`Review task 1. Write your full report to ${NAMED}, then reply in 10 lines.`, 'dforge:judge-sonnet-high', 1))
+    expect((await write($, 'judge-1', NAMED)).deny).toBeUndefined()
+    expect((await write($, 'judge-1', `${WS}/amendments.md`)).deny).toMatch(REFUSED)
   })
 
   test('A5: a dforge:impl-* subagent and the main loop are not affected', async ($, on) => {
@@ -7718,5 +8271,262 @@ describe('update frequency', () => {
       await $.tool.call({ tool: 'Bash', command: 'ls' })
       expect(reads.filter(path => path.endsWith('auto-run.json'))).toHaveLength(1)
     })
+  })
+})
+
+describe('session state file', () => {
+  const STATE_FILE = '/home/me/.claude/dforge/sessions/state/sess-1.json'
+  const stateOf = (written: Record<string, string>) => JSON.parse(written[STATE_FILE] ?? 'null')
+  const bg = (id: string) => ({ Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: id }, text: 'Running in the background' }) })
+
+  test('is written at session start, prompt submit and turn end with the window', async ($, on) => {
+    const written: Record<string, string> = {}
+    const clock = world(on, { ...SIGNED_IN, written, window: 650_000 })
+    signedIn(on, {})
+    await $.session.start(START)
+    const first = stateOf(written)
+    expect(first).toMatchObject({ session: 'sess-1', window: 650_000, partial: false, launches: [] })
+    expect(typeof first.model).toBe('string')
+    await clock.advance(5_000)
+    await $.prompt.submit({ text: 'go on', wait: false } as never)
+    const submitted = stateOf(written).updated
+    expect(submitted).toBeGreaterThan(first.updated)
+    await clock.advance(5_000)
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(stateOf(written).updated).toBeGreaterThan(submitted)
+  })
+
+  test('lists running launches with their roles and drops an ended one', async ($, on) => {
+    const written: Record<string, string> = {}
+    const w: World = { ...SIGNED_IN, written, tools: bg('b7k2') }
+    world(on, w)
+    signedIn(on, {})
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', description: 'Dev server', run_in_background: true } as never)
+    w.tools = bg('t1')
+    await $.tool.call({ tool: 'Bash', command: 'sleep 1200', run_in_background: true } as never)
+    const launches = stateOf(written).launches
+    expect(launches.map((l: Record<string, unknown>) => [l.id, l.kind, l.command, l.service, l.timer])).toEqual([
+      ['b7k2', 'shell', 'npm run dev', true, false],
+      ['t1', 'shell', 'sleep 1200', false, true],
+    ])
+    expect(launches[0].what).toBe('Dev server')
+    await $.session.append({ message: { type: 'user', role: 'user', content: [{ type: 'text', text: '<task-notification>\n<task-id>b7k2</task-id>\n<status>completed</status>\n</task-notification>' }] }, door: 'queue', origin: { kind: 'task-notification' }, uuid: 'n1' } as never)
+    expect(stateOf(written).launches.map((l: Record<string, unknown>) => l.id)).toEqual(['t1'])
+  })
+
+  test('marks the launches partial once a Monitor starts', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { ...SIGNED_IN, written })
+    signedIn(on, {})
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Monitor', command: 'tail -f x.log' } as never)
+    expect(stateOf(written).partial).toBe(true)
+  })
+})
+
+describe('fast mode scope', () => {
+  const cases = fastModeCases
+  const said = ($: Parameters<TestBody>[0], text: string, n: number) =>
+    $.session.append({ message: { type: 'assistant', role: 'assistant', content: [{ type: 'text', text }] }, door: 'response', origin: { kind: 'model' }, uuid: `fm-${n}` } as never)
+  const spawn = (id: string) => ({ tool_use_id: id, prompt: 'Look', description: 'Look around', subagentType: 'general-purpose', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: false }) as never
+  for (const c of cases)
+    test(`the seat check follows fast mode: ${c.name}`, async ($, on) => {
+      world(on, { tokens: 10_000 })
+      await $.session.start(START)
+      await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
+      let n = 0
+      for (const text of c.before) await said($, text, n++)
+      if (c.after !== null) {
+        await $.prompt.submit({ text: 'the next request', wait: false } as never)
+        for (const text of c.after) await said($, text, n++)
+      }
+      const denial = (await $.agent.spawn(spawn('toolu_fm'))).deny
+      if (c.on) expect(denial).toBeUndefined()
+      else expect(denial).toMatch(/^dforge: name a seat/)
+    })
+
+  test('no handoff note while fast mode is on', async ($, on) => {
+    const notes: string[] = []
+    const w: World = { tokens: 440_000, notes }
+    world(on, w)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:brainstorming' })
+    await said($, 'Process: fast — a one-line fix', 1)
+    w.tokens = 470_000
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(notes.filter(text => /— handoff\./.test(text))).toEqual([])
+  })
+
+  test('relaxed mode keeps the final-phase exemption once every task is complete', async ($, on) => {
+    const notes: string[] = []
+    const files: World['files'] = {
+      ...configured({ handoffMode: 'relaxed' }),
+      '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: '# SDD ledger — plan: docs/plans/p.md\nTask 1: complete (commits a..b, review clean) — done: x', mtimeMs: 2_000_000 },
+      '/home/me/code/shop/docs/plans/p.md': { text: '# Plan\n\n### Task 1: Only\n' },
+    }
+    world(on, { ...SIGNED_IN, tokens: 600_000, notes, files })
+    signedIn(on, files)
+    // The session start reads the settings and the ledger; the Skill call makes it a plan session.
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(notes.filter(text => /— handoff\./.test(text))).toEqual([])
+  })
+})
+
+describe('display and saved-state honesty', () => {
+  test('paneGlyphs=ascii draws only ASCII, and the head counts setting problems', async ($, on) => {
+    world(on, { tokens: 284_000, config: { paneGlyphs: 'ascii', layout: 'tiles' } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(JSON.stringify(await ui.drawn())).not.toMatch(/[▰▱●▸]/)
+    expect(await ui.find({ type: 'Text', text: /1 setting problem/ })).toBeDefined()
+  })
+
+  test('paneGlyphs=ascii wraps a row too long for the pane rather than cut it with an ellipsis', async ($, on) => {
+    const dir = `/tmp/claude-0/${'-root-repositories-darkraise-ai-plugins'.repeat(6)}/config`
+    world(on, { ...SIGNED_IN, env: { HOME: '/home/me', CLAUDE_CONFIG_DIR: dir }, config: { paneGlyphs: 'ascii' } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const drawn = JSON.stringify(await ui.drawn())
+    expect(drawn).toContain(`"config ","${dir}"`)
+    expect(drawn.match(/[^\x00-\x7f]/gu) ?? []).toEqual([])
+    expect(drawn.match(/"wrap":"(?!wrap")[a-z-]+"/g) ?? []).toEqual([])
+  })
+
+  test('a Claude-key save the engine drops is cleared and toasted', async ($, on) => {
+    const toasts: string[] = []
+    const clock = world(on, { tokens: 284_000, config: {}, toasts, runs: [], settings: { autoCompactWindow: 650_000 } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'set-autoCompactWindow-more' })
+    await clock.advance(10_000)
+    expect(await ui.find({ type: 'Text', text: /^650k/ })).toBeDefined()
+    expect(toasts.filter(t => /autoCompactWindow .*did not stick/.test(t))).toHaveLength(1)
+  })
+
+  test("a Claude-key save the engine drops says what to do about it", async ($, on) => {
+    const toasts: string[] = []
+    const clock = world(on, { tokens: 284_000, config: {}, toasts, runs: [], settings: { autoCompactWindow: 650_000 }, env: { HOME: '/home/me', CLAUDE_CONFIG_DIR: '' } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'set-autoCompactWindow-more' })
+    await clock.advance(10_000)
+    expect(toasts.filter(t => /did not stick/.test(t))).toEqual([
+      'dforge: autoCompactWindow did not stick: the engine kept 650000. Claude Code may have saved its own settings over it; set it again, or edit /home/me/.claude/settings.json.',
+    ])
+  })
+
+  test('a skill-enforced key changed in the file mid-session adds the settings note', async ($, on) => {
+    const notes: string[] = []
+    const files: NonNullable<World['files']> = { [CONFIG]: { text: JSON.stringify({}), mtimeMs: 1 } }
+    const clock = world(on, { ...SIGNED_IN, files, notes })
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    files[CONFIG] = { text: JSON.stringify({ worktree: 'never' }), mtimeMs: 2 }
+    await clock.advance(10_000)
+    await $.turn.start({ text: 'next', turnId: 't2' })
+    expect(notes.some(n => /worktree/.test(n))).toBe(true)
+  })
+})
+
+describe('inert rows, consent and desktop steppers', () => {
+  test('the darkmem store rows are locked while darkmem is off', async ($, on) => {
+    world(on, { tokens: 284_000, config: { darkmemEnabled: false } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-darkmem' })
+    expect((await ui.find({ key: 'set-documentStore-controls' }))?.text).toMatch(/no effect while darkmem is off/)
+  })
+
+  test('raising the AgentRouter cap from 0 needs a second press', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: {}, written })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: `settings-tab-${SCHEMA.apiBudgetAgentRouter!.group}` })
+    await ui.press({ key: 'set-apiBudgetAgentRouter-more' })
+    expect(written[CONFIG]).toBeUndefined()
+    await ui.press({ key: 'set-apiBudgetAgentRouter-confirm' })
+    expect(JSON.parse(written[CONFIG] ?? '{}').apiBudgetAgentRouter).toBe(5)
+    expect(await ui.find({ key: 'set-apiBudgetAgentRouter-confirm' })).toBeUndefined()
+  })
+
+  test('the AgentRouter consent names the cap and the third party, and its Confirm takes the focus', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: `settings-tab-${SCHEMA.apiBudgetAgentRouter!.group}` })
+    await ui.press({ key: 'set-apiBudgetAgentRouter-more' })
+    const controls = (await ui.find({ key: 'set-apiBudgetAgentRouter-controls' }))?.text ?? ''
+    expect(controls).toMatch(/\bcap of 5\b/)
+    expect(controls).toMatch(/AgentRouter, a third party/)
+    expect(controls).toMatch(/any file its judge reads/)
+    expect((await ui.find({ key: 'set-apiBudgetAgentRouter-confirm' }))?.props.autoFocus).toBe(true)
+  })
+
+  test('a typed AgentRouter cap above 0 waits for the same confirm press', async ($, on) => {
+    const written: Record<string, string> = {}
+    world(on, { tokens: 284_000, config: {}, written })
+    await $.session.start(START)
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await desk.press({ key: 'pane-settings' })
+    await desk.press({ key: `settings-tab-${SCHEMA.apiBudgetAgentRouter!.group}` })
+    await desk.input({ key: 'set-apiBudgetAgentRouter-input', text: '20' })
+    expect(written[CONFIG]).toBeUndefined()
+    expect((await desk.find({ key: 'set-apiBudgetAgentRouter-controls' }))?.text).toMatch(/\bcap of 20\b/)
+    await desk.press({ key: 'set-apiBudgetAgentRouter-confirm' })
+    expect(JSON.parse(written[CONFIG] ?? '{}').apiBudgetAgentRouter).toBe(20)
+    await desk.input({ key: 'set-apiBudgetAgentRouter-input', text: '30' })
+    expect(JSON.parse(written[CONFIG] ?? '{}').apiBudgetAgentRouter).toBe(30)
+  })
+
+  test('a desktop stepper shows its zero word', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect((await ui.find({ key: 'set-handoffTokens-controls' }))?.text).toMatch(/\bauto\b/)
+  })
+
+  test('a desktop stepper shows its unit word', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect((await ui.find({ key: 'set-keepWarm-controls' }))?.text).toMatch(/\b50min\b/)
+  })
+
+  test('the desktop stacks the webhook and mention labels over their controls; a terminal sets them side by side', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await desk.press({ key: 'pane-settings' })
+    await desk.press({ key: 'settings-tab-Notifications' })
+    for (const key of ['set-notify-url', 'set-notify-mention']) {
+      expect((await desk.find({ key }))?.props.flexDirection).toBe('column')
+      const label = await desk.find({ key: `${key}-label` })
+      expect(label?.props.width).toBeUndefined()
+      expect(JSON.stringify(label)).toContain('"weight":"medium"')
+    }
+    await desk.unmount()
+    const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    if ((await term.find({ key: 'pane-settings' })) !== undefined) await term.press({ key: 'pane-settings' })
+    await term.press({ key: 'settings-tab-Notifications' })
+    for (const key of ['set-notify-url', 'set-notify-mention']) {
+      expect((await term.find({ key }))?.props.flexDirection).toBe('row')
+      expect((await term.find({ key: `${key}-label` }))?.props.width).toBe(16)
+    }
   })
 })

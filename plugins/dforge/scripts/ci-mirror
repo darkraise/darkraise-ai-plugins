@@ -3,7 +3,8 @@
 # checkout's top level, so the final review sees the CI commands' verdicts at
 # this HEAD and a later gate with the same command reuses the pass.
 #
-# Usage: ci-mirror PLAN_FILE
+# Usage: ci-mirror PLAN_FILE (a path, or a name the darkmem docs mirror holds)
+# The **CI:** line is read with the plan's amendments applied.
 # Output: for `**CI:** none`, the one line "ci: none". Otherwise one line per
 #         local command, in order,
 #           ci: <cmd> — <the suite-run verdict line without its "suite: " prefix>
@@ -21,10 +22,15 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 die() { printf 'ci-mirror: %s\n' "$1" >&2; exit 2; }
 
 [ $# -eq 1 ] || { printf 'usage: ci-mirror PLAN_FILE\n' >&2; exit 2; }
-plan=$1
+plan=$(plan_locate "$1")
 [ -f "$plan" ] && [ -r "$plan" ] || die "cannot read $plan"
+plan_amendments_ready "$plan"
 
-line=$(plan_header_line "$plan" CI)
+TMP=$(mktemp) || die "cannot create a temporary file"
+trap 'rm -f "$TMP" "$TMP.err"' EXIT
+plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$TMP" 2> "$TMP.err" \
+  || die "the plan's amendments do not apply: $(cat "$TMP.err")"
+line=$(plan_header_line "$TMP" CI)
 line=${line%$'\r'}
 [ -n "$line" ] || die "no **CI:** line in $plan"
 
@@ -35,7 +41,7 @@ trim() { # trim TEXT
   printf '%s' "$t"
 }
 
-malformed() { die "malformed **CI:** line"; }
+malformed() { die "malformed **CI:** line: $line"; }
 
 text=$(trim "${line#'**CI:**'}")
 if [ "$text" = none ]; then

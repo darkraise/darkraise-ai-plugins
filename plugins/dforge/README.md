@@ -397,17 +397,8 @@ When the turn wrote more than one ledger, each one must have its
 ending. Each hold also shows you a one-line note saying why the session went
 on.
 
-Unplanned work gets the same hold. The prompt hook also records which commits
-the repository's local branches point at. A turn that wrote no ledger but
-changed that set (a commit, a merge, or deleting a branch's only pointer to a
-commit) in a project with dforge docs must end on the `## Next session` block
-from `next-step --adhoc`, the finishing menu, or finishing's "No plan file"
-line. Otherwise the hook holds the stop once and tells Claude to continue
-remaining work, finish a branch that is ready to integrate, or print the block. Creating
-a branch on an existing commit, or a stop in another repository than the
-prompt's, does not count. Neither does a turn that ran no dforge skill (no
-Skill call and no typed `/dforge:` command since the prompt): a commit made
-without dforge is never held for dforge's ending.
+The prompt hook also records which commits the repository's local branches
+point at; that record serves the UI proof hold only.
 
 A run also asks one question before its first task: what finishing should do
 once the final review is clean (merge locally, push and open a pull request,
@@ -894,6 +885,7 @@ The same settings can be set with
 | Cockpit | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/dforge:cockpit` opens it at any width. No effect while `layout` is `compact`: the settings view locks the row then. |
 | Cockpit | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane, and the band above the prompt. **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
 | Cockpit | `density` | `detailed` | `detailed`: cards, charts and lists. `dense`: one line per section. **Dense** and **Detailed** in the pane set it. |
+| Cockpit | `paneGlyphs` | `unicode` | `unicode`: meters, dots and borders drawn in Unicode. `ascii`: the pane draws only ASCII, for a terminal or font that lacks those glyphs; a row too long for the pane wraps rather than ending in an ellipsis. |
 | Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band draws the lines the Minimized tab picks instead. |
 | Cockpit | `collapsed` | empty | Sections drawn as their title row and headline only, comma-separated, from the same eight names. Pressing a section's title collapses or expands it and saves this setting. Empty expands all eight. |
 | Cockpit | `breakdownRows` | `6` | How many `/context` categories the Context section lists, largest first, up to 12. `0` hides them. |

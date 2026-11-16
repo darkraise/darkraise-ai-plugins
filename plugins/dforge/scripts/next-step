@@ -9,11 +9,18 @@
 # here rather than remembered by the model: small executors reliably forget to
 # say it, and a hand-written handoff goes stale the moment work moves on.
 #
-# Usage: next-step [--host claude|codex] [--complete] PLAN_FILE
+# Usage: next-step [--host claude|codex] [--complete|--kept] PLAN_FILE
 #        next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION
 #        next-step [--host claude|codex] --adhoc --phase design|build --next ACTION
 #   --complete  the plan is finished and its branch integrated; the ledger may
 #               already be deleted. Replaces latest.md wholesale.
+#   --kept      finishing kept the plan's branch as-is: integration is still
+#               pending, so the block names the branch, its worktree and the
+#               finish choices still open, and reads no register or roadmap.
+#               Replaces latest.md wholesale.
+#   --complete, --kept and --adhoc delete the no-plan finish record
+#   (.dforge/sdd/finish.json) of the current checkout and of the primary
+#   checkout once the block is printed.
 #   --draft     a design phase (brainstorming, a spec, a plan being written) is
 #               handing off; DRAFT_FILE is the authority and ACTION names the
 #               next step and its skill.
@@ -38,7 +45,7 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--host claude|codex] [--complete] PLAN_FILE | next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] --adhoc --phase design|build --next ACTION"; }
+usage() { fail 2 "usage: next-step [--host claude|codex] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] --adhoc --phase design|build --next ACTION"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
@@ -155,9 +162,10 @@ plan_name() {
   printf '%s\n' "$name"
 }
 
-complete=0 draft=0 adhoc=0 phase="" next_action=""
+complete=0 kept=0 draft=0 adhoc=0 phase="" next_action=""
 case "${1:-}" in
   --complete) complete=1; shift ;;
+  --kept) kept=1; shift ;;
   --draft)
     draft=1; shift
     { [ $# -eq 3 ] && [ "$2" = "--next" ] && [ -n "$3" ]; } || usage
@@ -234,7 +242,7 @@ else
   done_tasks=""
   blocked_tasks=""
   has_ledger=0
-  if [ "$complete" -eq 0 ] && [ -f "$ledger_file" ]; then
+  if [ "$complete" -eq 0 ] && [ "$kept" -eq 0 ] && [ -f "$ledger_file" ]; then
     ledger_text=$(tr -d '\r' < "$ledger_file")
     # The identity line may carry the path as given on the command line: relative
     # to the checkout, absolute, or in Windows form. Compare resolved paths.
@@ -260,7 +268,13 @@ else
     fi
   fi
 
-  if [ "$complete" -eq 1 ]; then
+  if [ "$kept" -eq 1 ]; then
+    branch=$(git -C "$root" branch --show-current 2>/dev/null | tr -d '\r')
+    [ -n "$branch" ] || branch="detached HEAD $(git -C "$root" rev-parse --short HEAD 2>/dev/null | tr -d '\r')"
+    status_line="Plan \`$rel\`: its branch \`$branch\` is kept unintegrated."
+    next_line="The branch \`$branch\` in \`$root\` still waits for integration; run dforge:finishing-a-development-branch when you choose merge, pr or discard."
+    prompt="Finish \`$rel\` with dforge:finishing-a-development-branch: the branch $branch in $root is kept unintegrated."
+  elif [ "$complete" -eq 1 ]; then
     spec=$(sed -E 's/^\*\*Program:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$program")
     k=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $2}' || true)
     n=$(grep -oE 'sub-project [0-9]+ of [0-9]+' <<<"$program" | head -n 1 | awk '{print $4}' || true)
@@ -425,13 +439,25 @@ else
       next_line="Your human partner decides: ${blocked_why:-see the BLOCKED line in the ledger}. Record the ruling in the ledger, then run next-step again."
       launch=0
     elif [ -z "$first_open" ]; then
-      if [ "$has_ledger" -eq 1 ] && grep -q '^Final review: clean' <<<"$ledger_text"; then
-        status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
-        next_line="Run dforge:finishing-a-development-branch."
-      else
-        status_line="Plan \`$rel\`: all $total tasks complete."
-        next_line="Run the final whole-branch review, then dforge:finishing-a-development-branch."
-      fi
+      review_state=none
+      [ "$has_ledger" -eq 0 ] || review_state=$(plan_final_review_state "$ledger_file" "$root")
+      case $review_state in
+        current)
+          status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
+          next_line="Run dforge:finishing-a-development-branch."
+          ;;
+        stale\ *)
+          status_line="Plan \`$rel\`: all $total tasks complete; commits after the clean review (${review_state#stale }) are unreviewed."
+          next_line="Re-review ${review_state#stale }..HEAD with the fix-wave re-review in reference/final-review.md, then append a new clean line; then dforge:finishing-a-development-branch."
+          ;;
+        *)
+          status_line="Plan \`$rel\`: all $total tasks complete."
+          case $review_state in
+            rewritten\ *) status_line="Plan \`$rel\`: all $total tasks complete; the reviewed head ${review_state#rewritten } is no longer in the branch history." ;;
+          esac
+          next_line="Run the final whole-branch review, then dforge:finishing-a-development-branch."
+          ;;
+      esac
     elif [ "$done_count" -eq 0 ]; then
       status_line="Plan \`$rel\`: 0 of $total tasks complete ($ledger_note)."
       next_line="Start at Task $first_open ($open_title)."
@@ -462,7 +488,12 @@ fi
 # A block printed over running work invites ending the session it would die
 # with, so nothing is printed while this session still has background work
 # listed. Without a transcript (Codex, tests) there is nothing to check.
-if running=$(bash "$(cd "$(dirname "$0")" && pwd)/in-flight" 2>/dev/null); then :; else
+# Services alone do not stop it, since they never end; the block names them.
+services_line=""
+if running=$(bash "$(cd "$(dirname "$0")" && pwd)/in-flight" 2>/dev/null); then
+  services=$(sed -n 's/^- \([a-z]*\) \([^ ]*\) [^ ]* idle [^ ]* \(.*\) (service)$/\1 \2 (\3)/p' <<<"$running" | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')
+  [ -z "$services" ] || services_line="Still running services: $services — stop them with TaskStop before you end the session."
+else
   if [ $? -eq 1 ]; then
     printf '%s\n' "$running"
     fail 5 "not printing the next-step block while background work runs; resolve the list above, then run next-step again"
@@ -471,6 +502,7 @@ fi
 
 block=$(
   printf '## Next session\n\n**Status:** %s\n**Next:** %s\n' "$status_line" "$next_line"
+  [ -z "$services_line" ] || printf '%s\n' "$services_line"
   if [ "$launch" -eq 1 ]; then
     if [ -n "$launch_cmd" ]; then
       printf '\nLaunch in `%s`:\n\n```\n%s\n```\n' "$dir" "$launch_cmd"
@@ -482,6 +514,14 @@ block=$(
 )
 printf '%s\n' "$block"
 
+# The no-plan finish record has done its job once finishing has an outcome;
+# left behind, the next unplanned finish would act on it without asking.
+# finish-choice writes it under the checkout it runs in, a linked worktree
+# included, so both that checkout's and the primary's are cleared.
+if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ "$adhoc" -eq 1 ]; then
+  rm -f "$(dforge_dir state "$root")/sdd/finish.json" "$(dforge_dir state "$primary")/sdd/finish.json"
+fi
+
 handoff=$(dforge_latest_file)
 today=$(date -u +%Y-%m-%d)
 # Read, merged and replaced under the handoff's lock, so a concurrent writer's
@@ -490,7 +530,7 @@ write_handoff() {
   local tmp status=0
   case $handoff in */.dforge/handoff/latest.md) dforge_state_ignore "${handoff%/.dforge/handoff/latest.md}" ;; esac
   tmp=$(mktemp) || return 1
-  if [ "$complete" -eq 1 ] || [ ! -f "$handoff" ]; then
+  if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ ! -f "$handoff" ]; then
     printf '# Handoff — %s\n\n%s\n' "$today" "$block" > "$tmp" || status=1
   else
     # Replace only the Next session section; the rest is the session's own notes.

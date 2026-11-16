@@ -8,7 +8,7 @@
 # --open does what a session does before it starts a task: it writes the brief
 # and the header, appends the task's `implementer inline (assigned; base <sha7>)`
 # ledger line unless one is there, and prints the task check.
-# Amendments in <workspace>/amendments.md are applied first.
+# Amendments in <ledger dir>/amendments.md are applied first.
 #
 # Usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE]
 #        task-brief --open PLAN_FILE TASK_NUMBER
@@ -16,8 +16,8 @@
 # Default OUTFILE: <repo-root>/.dforge/sdd/<plan-basename>/task-<N>-brief.md
 # or .../plan-header.md (per plan and per worktree; concurrent runs of the SAME
 # plan in the same working tree share it).
-# Exit: 0 ok; 2 usage, or --open on a Host: codex plan; 3 no such task; 4 an
-# amendment does not apply.
+# Exit: 0 ok; 2 usage, or --open given a plan whose ledger (same basename)
+# names another plan; 3 no such task; 4 an amendment does not apply.
 # Last output line: the session budget line from scripts/context-size.
 set -euo pipefail
 
@@ -42,6 +42,18 @@ ctx=$(_plan_ctx "$plan")
 dforge_stores_init "$ctx"
 if [ "$header" -eq 1 ]; then n="" given=${2:-}; else n=$2 given=${3:-}; fi
 
+# Two plans with one basename share a ledger directory, so --open checks the
+# ledger's identity line before it writes anything.
+if [ "$open" -eq 1 ]; then
+  ledger="$(dforge_ledger_dir "$(basename "$plan" .md)" "$ctx")/progress.md"
+  named=""
+  [ ! -f "$ledger" ] || named=$(ledger_plan "$ledger")
+  if [ -n "$named" ] && [ -z "$(plan_ledger "$plan")" ]; then
+    echo "task-brief: $ledger belongs to $named, not $plan" >&2
+    exit 2
+  fi
+fi
+
 if [ -n "$given" ]; then
   out=$given
 else
@@ -51,6 +63,7 @@ fi
 
 src=$(mktemp)
 trap 'rm -f "$src" "$src.err"' EXIT
+plan_amendments_ready "$plan"
 if ! plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2> "$src.err"; then
   cat "$src.err" >&2
   exit 4
@@ -69,11 +82,6 @@ if ! grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")
 fi
 heavy=""
 [ "$dispatch" -eq 0 ] || heavy=$(plan_heavy "$src")
-
-if [ "$open" -eq 1 ] && grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")"; then
-  echo "a Host: codex plan runs the Codex loop (reference/native-codex.md); task-brief --open is for Claude Code" >&2
-  exit 2
-fi
 
 # write_header FILE: the whole plan header, then the heavy-task line.
 write_header() {

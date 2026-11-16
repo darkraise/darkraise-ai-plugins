@@ -17,6 +17,9 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
+# Outside any checkout: lib/session-state.sh logs its rejections into the
+# working directory's checkout, which must not be the one under test.
+cd "$TMP" || exit 1
 SID=s-flight
 export CLAUDE_CODE_SESSION_ID=$SID
 TP="$TMP/$SID.jsonl"
@@ -203,6 +206,74 @@ rm -f "$HOME/.claude/dforge/sessions/by-id/$SID.json"
 check "no session record: exit 3" "$(cd "$REPO" && bash "$INFLIGHT" >/dev/null; echo $?)" "3"
 check "no session record: next-step still prints" \
   "$(cd "$REPO" && bash "$NEXT" docs/superpowers/plans/2026-10-10-example.md 2>/dev/null | grep -c '## Next session')" "1"
+
+# --- launch roles from config/services.json (C3, C4) ---
+. "$HERE/../scripts/lib/in-flight.sh"
+FIX="$HERE/fixtures/service-commands.json"
+n_fix=$(jq length < "$FIX" | tr -d '\r')
+for ((i = 0; i < n_fix; i++)); do
+  # Read each command whole: @tsv would turn `make\nnpm run dev`'s newline into a backslash pair.
+  cmd=$(jq -r --argjson i "$i" '.[$i].command' < "$FIX" | tr -d '\r')
+  role=$(jq -r --argjson i "$i" '.[$i].role' < "$FIX" | tr -d '\r')
+  check "role of $(printf '%q' "$cmd")" "$(inflight_role "$cmd")" "$role"
+done
+
+bash_use() { # bash_use <tool_use_id> <description> <command>
+  fjq -nc --arg id "$1" --arg d "$2" --arg c "$3" '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:$id,name:"Bash",input:{description:$d,command:$c,run_in_background:true}}]}}' >> "$TP"
+}
+: > "$TP"
+bash_use toolu_dev 'Dev server' 'npm run dev'
+result toolu_dev 'Command running in background with ID: d1. Output is being written to: /tmp/d1.output.'
+bash_use toolu_t 'QA timer' 'sleep 1200'
+result toolu_t 'Command running in background with ID: t1. Output is being written to: /tmp/t1.output.'
+bash_use toolu_w 'Run the suite' 'npm test'
+result toolu_w 'Command running in background with ID: w1. Output is being written to: /tmp/w1.output.'
+check "scan: the sixth field is the role" "$(inflight_scan "$TP" | cut -f2,6 | tr '\n' ' ')" "d1	service t1	timer w1	work "
+cp "$TP" "$TP.keep"
+bash_use toolu_o 'Odd launch' '--arg x'
+result toolu_o 'Command running in background with ID: o1. Output is being written to: /tmp/o1.output.'
+check "scan: a command opening with a dash is a command, not a jq option" "$(inflight_scan "$TP" 2>/dev/null | cut -f2,6 | tr '\n' ' ')" "d1	service t1	timer w1	work o1	work "
+check "scan: a classification jq cannot run is said on stderr" \
+  "$(_INFLIGHT_SERVICES="$TMP/no-services.json" inflight_scan "$TP" 2>&1 >/dev/null | grep -c 'every shell counts as work')" "1"
+mv "$TP.keep" "$TP"
+
+SD="$HOME/.claude/dforge/sessions/state"; mkdir -p "$SD" "$HOME/.claude/dforge/sessions/turns"
+touch -d '-60 seconds' "$HOME/.claude/dforge/sessions/turns/$SID"
+jq -nc --arg s "$SID" --argjson u "$(( $(date +%s) * 1000 ))" \
+  '{session:$s, updated:$u, window:null, model:null, partial:false, launches:[{id:"z9", kind:"agent", what:"Review", command:"", startedAt:$u, outputFile:"", service:false, timer:false}]}' > "$SD/$SID.json"
+check "list: a fresh session file is the source" "$(inflight_source "$SID") $(inflight_list "$TP" "" "$SID" | cut -f2)" "session file z9"
+jq -c '.partial = true' < "$SD/$SID.json" > "$SD/x" && mv "$SD/x" "$SD/$SID.json"
+check "list: a partial file falls back to the transcript" "$(inflight_source "$SID") $(inflight_list "$TP" "" "$SID" | cut -f2 | tr '\n' ' ')" "transcript d1 t1 w1 "
+rm -f "$SD/$SID.json"
+
+# --- the idle report leaves a bare sleep timer running (row 37) ---
+# The "no transcript" part above removed the session record; in-flight needs it.
+jq -n --arg tp "$TP" '{session_id:"s-flight",transcript_path:$tp}' > "$HOME/.claude/dforge/sessions/by-id/$SID.json"
+TIMER_LINE='A launch marked (timer) is a bare sleep that bounds a dispatch: leave it running.'
+: > "$TP"
+bash_use toolu_t 'QA timer' 'sleep 1200'
+result toolu_t 'Command running in background with ID: t1. Output is being written to: /tmp/t1.output.'
+out=$(bash "$INFLIGHT")
+check "a timer is listed as a timer" "$(grep -c '^- shell t1 .* QA timer (timer)$' <<<"$out")" "1"
+check "the report says to leave a timer running" "$(grep -cxF "$TIMER_LINE" <<<"$out")" "1"
+: > "$TP"
+bash_use toolu_w 'Run the suite' 'npm test'
+result toolu_w 'Command running in background with ID: w1. Output is being written to: /tmp/w1.output.'
+out=$(bash "$INFLIGHT")
+check "no timer, no timer line" "$(grep -cxF "$TIMER_LINE" <<<"$out")" "0"
+
+# --- in-flight lists services but exits 1 only for finite work ---
+: > "$TP"
+bash_use toolu_dev 'Dev server' 'npm run dev'
+result toolu_dev 'Command running in background with ID: d1. Output is being written to: /tmp/d1.output.'
+out=$(bash "$INFLIGHT"); code=$?
+check "a service alone: exit 0" "$code" "0"
+check "a service alone: listed as a service" "$(grep -c '^- shell d1 .* Dev server (service)$' <<<"$out")" "1"
+check "the source is named" "$(grep -c '^in-flight: source transcript$' <<<"$out")" "1"
+bash_use toolu_w 'Run the suite' 'npm test'
+result toolu_w 'Command running in background with ID: w1. Output is being written to: /tmp/w1.output.'
+out=$(bash "$INFLIGHT"); code=$?
+check "finite work beside a service: exit 1" "$code" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

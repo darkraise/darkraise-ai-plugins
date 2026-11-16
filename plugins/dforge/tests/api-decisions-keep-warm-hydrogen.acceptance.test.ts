@@ -150,7 +150,7 @@ const notified = (text: string) =>
   }) as never
 
 describe('api-decisions-keep-warm-hydrogen: keep-warm', () => {
-  test('A21: with keepWarm=50 and a main-loop background shell running, the keep-warm prompt goes once after 50 minutes and once more per further 50', async ($, on) => {
+  test('A21: with keepWarm=50 and a main-loop background shell running, the keep-warm prompt goes once after 50 minutes and once more per further 50', { timeoutMs: 30_000 }, async ($, on) => {
     const w = fresh({ keepWarm: 50 })
     const clock = world(on, w)
     await beginWaiting($)

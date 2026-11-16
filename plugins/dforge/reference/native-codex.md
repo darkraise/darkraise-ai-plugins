@@ -55,7 +55,7 @@ establish access through a native client or the external CLI.
 
 Treat an existing assignment without a source as human-pinned. Keep original
 assignments fixed; actual attempts, promotions, and substitutions go in the
-ledger. The selector and `scripts/plan-lint` accept only `codex-v4`: they reject
+ledger. `scripts/select-native-tier.sh` and `scripts/plan-lint` accept only `codex-v4`: they reject
 codex-v1, codex-v2, codex-v3 and unknown policy versions with a
 conversion-required error. Never reinterpret an older plan's scores or ranks as
 v4.
@@ -74,8 +74,8 @@ pair is the v4 execution tier at its score. The Execution line's pair maps by
 rank: an older execution pair becomes the v4 pair at the same rank (v3
 `gpt-6-sol / high`, rank 5, becomes `gpt-6.1-sol / high`; v2 `gpt-5.6-sol /
 high`, rank 7, becomes `gpt-6-astra / medium`), and a reserve pair stays itself.
-A human pin stays verbatim even when it names an older pair, which the selector
-still dispatches while it is advertised; the preview flags each such pin so
+A human pin stays verbatim even when it names an older pair, which still runs
+while it is advertised; the preview flags each such pin so
 your human partner keeps or re-pins it explicitly.
 
 The older ranks, kept here because the policy file no longer carries them.
@@ -132,12 +132,9 @@ line:
 Ruling: policy conversion codex-v3 -> codex-v4 — approved preview; Task 4 gpt-6.1-sol / low, Task 5 gpt-6-astra / medium — attempts above this line stay codex-v3
 ```
 
-Later selector requests carry `"policy": "codex-v4"`. Preserve policy-tagged
-attempt history and consumed split/review budgets; never relabel old attempts,
-fabricate v4 ranks, or reset budgets to make a request pass. If v4 cannot
-represent the active history, as for a task caught mid-escalation, stop for an
-explicit handoff decision. A fresh unstarted v4 task can have empty local
-history while retaining the prior task record.
+Tasks after that line run under `codex-v4`. Keep the ledger lines above it as
+they are: never relabel them, fabricate v4 ranks, or reset a review budget. If
+v4 cannot represent the task in flight, stop for an explicit handoff decision.
 
 ## Execution modes and session ends
 
@@ -145,7 +142,8 @@ Both execution skills run on this host, and the plan's `**Execution:**` line
 names the mode and the native pair. A Codex-host plan is inline, heavy tasks
 included, and its session implements every task.
 A Codex plan therefore carries no delegated task, and `scripts/task-brief`
-writes it no `**Dispatch:**` or `**Review:**` line. A task whose `**Evaluation:**` line
+writes it no `**Dispatch:**` or `**Review:**` line. The task loop opens each
+task with `scripts/task-brief --open PLAN_FILE N`, as on Claude Code. A task whose `**Evaluation:**` line
 reads `risk=3` is reviewed by hand with a native judge at Astra high or above
 ([delegated-task.md](delegated-task.md) §The session review loop); otherwise
 dforge:executing-plans dispatches nothing here but its ruling seat and the
@@ -180,73 +178,10 @@ yet, so the count rule, not the number, decides when to hand off.
 the resume block names the Codex client; for a plan it reads `Host: codex` from
 the header itself.
 
-## Selector contract
-
-Intersect currently advertised model/effort pairs with applicable user policy at
-planning and again immediately before dispatch. No paid capability probes. Read
-[codex-routing.json](codex-routing.json), then run the bundled selector with jq:
-
-```bash
-bash <plugin-root>/scripts/select-native-tier.sh --request <request-file>
-```
-
-Provide exactly one JSON object with `policy`, `operation` (`assign` or `escalate`),
-`role` (`implementer` or `judge`), `assignment_source`, `available_pairs`
-objects with model/effort, `attempted_ranks`, `attempted_reserves` (effort names),
-`split_consumed`, and `review_rounds`. Rubric requests require
-`axes: {files,spec,coupling,risk}`. The selector enforces Rule S and calculates
-the score; an optional `score` must be an integer 0–9 equal to that calculation.
-The result includes the calculated score even when capability filtering promotes
-the returned rank. Missing metadata is an error, not permission to inherit defaults.
-
-This complete example dispatches Astra medium when that is the allowed advertised pair:
-
-```json
-{
-  "policy": "codex-v4",
-  "operation": "assign",
-  "role": "implementer",
-  "assignment_source": "rubric",
-  "axes": {"files": 1, "spec": 1, "coupling": 1, "risk": 2},
-  "available_pairs": [{"model": "gpt-6-astra", "effort": "medium"}],
-  "attempted_ranks": [],
-  "attempted_reserves": [],
-  "split_consumed": false,
-  "review_rounds": 0
-}
-```
-
-Human requests use `assignment_source: human` and an explicit
-`pinned_pair: {model,effort}`. Axes and score are not used for human selection;
-preserve their evaluation in the plan. Human approval can override Rule S or
-choose reserve directly, but cannot bypass capability filtering or the review cap.
-An unavailable pin or any proposed escalation returns `approval` before substitution.
-
-Initial `assign` requests must have empty attempt histories. Rubric `escalate`
-requires prior execution attempts. Execution ranks must be unique and increasing;
-reserve efforts follow max then ultra, with skipped unavailable efforts allowed.
-Rubric reserve history requires an implementer whose split budget is consumed.
-Transport retries reuse the prior dispatch directly; they are not fresh assignment
-or capability escalation requests, and do not append duplicate ranks.
-
-Obey the returned action: dispatch the exact pair, obtain approval, split once,
-or stop blocked. Invalid requests exit 2 without a decision. Announce promotions
-and record every attempt after selection and before launching the agent.
-
-Execution advances monotonically through available higher ranks. After the one
-split, reset execution rank history for the new child task while preserving its
-parent history and consumed split budget. If that child exhausts execution,
-reserve proceeds through Astra max, then ultra, then blocked; skip unavailable
-pairs. Once reserve has begun, it takes precedence over newly available execution
-tiers. Ultra exhaustion is terminal; neither execution tiers nor max can restart.
-Transport retries reuse their exact recorded pair and do not reset rank history,
-split budget, or the five-round cap.
-
-An ultra implementer may run subagents in parallel inside its own task: that is
-this plugin's policy, not a property of the ultra effort level, so the brief
-says so explicitly. The task's approved write set, the before/after snapshot
-and the review still apply to the task as a whole. Only implementers reach the
-reserve, so the no-delegation instruction for judges is unaffected.
+Codex runs no session-start hook, so the settings line never arrives on its
+own: run `scripts/dforge-config workflow --host codex` once before the first
+question. It prints the same line as on Claude Code, except that Codex runs
+`autoRun=on` as `off`, so the settings an auto run makes inert stay in force.
 
 ## Dispatch and review
 
@@ -279,18 +214,13 @@ and blocks continuation. Preserve those changes for inspection. These snapshots
 detect drift, not authorship. If user/task policy requires enforced isolation,
 stop when the client cannot provide it; instruction-only review is unavailable.
 
-Resume the recorded implementer for fix rounds when supported, using the same
-pair and task state. If resume is unsupported, report the lost context and use
-a fresh isolated implementer with the complete fix package under the recorded
-assignment; do not silently inherit the controller's model.
-
 Judges start at rank 8 (Astra high) or above.
 For rubric routing, evaluate the bounded review brief itself. An
 implementer task with spec=3 must first receive approach work; do not submit its
 unresolved implementation axes as a judge assignment or invent passing axes.
 Every review uses a separate agent context with the full review package, never the implementer's
 conversation. Preserve existing criteria scoring, advisor approach
-selection, three independent evaluations for raw risk 3, and the five-round
+selection, one native judge per risk-3 task review, and the five-round
 review cap. Raw risk stays 0–3; its doubled score contribution is not a new risk
 category. Ten execution tiers do not grant ten review rounds.
 For native final branch review use independent native reviewer contexts; do not
@@ -304,13 +234,21 @@ file writes beyond their report files. Acceptance QA is a native implementer at 
 `Host: codex` plan, as `review-route` does, so pick the lenses by hand. For
 a risk-3 task review they are the ids on the task's `**Lenses:**` line,
 uncapped. For the final review, read each `criteria/lenses/*.md` `Applies:`
-line against the branch diff and run the matching lenses in priority order
-(security, ui-ux, silent-failures, test-quality, code-quality), at most
-`lensCap` of them (`scripts/dforge-config get lensCap`; `0` runs none), and
-name the rest as
+line against the branch diff and take the matching lenses in priority order
+(security, ui-ux, silent-failures, test-quality, code-quality), gated as
+`scripts/lens-route` gates them by the ledger's `Review depth:` line: at
+`light` run only security; at `standard` run at most 2 lenses besides
+test-quality and code-quality, which run whenever they apply; at `full` run
+every match. Never run more than `lensCap` in all
+(`scripts/dforge-config get lensCap`; `0` runs none), and name the rest as
 skipped in the report. Ledger each lens you skip as
+`final review lens-skipped <id> reason=depth` (a light-depth skip) or
 `final review lens-skipped <id> reason=cap`; with `lensCap` 0, write
-`final review lenses off` instead of skipped lines. code-quality has no lens
+`final review lenses off` instead of skipped lines. When the plan has fewer
+tasks than the `lensMinorFrom` setting
+(`scripts/dforge-config get lensMinorFrom`, default 20) and any lens runs, add
+the `lens-floor important` sentence of
+[final-review.md](final-review.md) to every lens prompt. code-quality has no lens
 file of its own: pick its parts (the `lang-*` lenses, `type-design`,
 `docs-comments`) by reading each part file's `Applies:` line against the
 branch diff, and run the matching parts as one lens seat, which counts as one

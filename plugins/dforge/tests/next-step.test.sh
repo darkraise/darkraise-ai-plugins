@@ -188,6 +188,12 @@ has "worktree: prompt names the worktree" "$out" "First enter the existing workt
 has "worktree: launch dir is still the primary checkout" "$out" "Launch in \`$ROOT\`:"
 check "worktree: handoff written in the primary checkout" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes"
 check "worktree: no handoff inside the worktree" "$([ -f "$WT/.dforge/handoff/latest.md" ] && echo yes || echo no)" "no"
+mkdir -p "$WT/.dforge/sdd" "$REPO/.dforge/sdd"
+printf '{"action":"pr"}\n' > "$WT/.dforge/sdd/finish.json"
+printf '{"action":"pr"}\n' > "$REPO/.dforge/sdd/finish.json"
+run "$WT" --adhoc --phase build --next "Ship the fix"
+check "worktree: adhoc clears the no-plan record finish-choice wrote there" "$([ -e "$WT/.dforge/sdd/finish.json" ] && echo kept || echo gone)" "gone"
+check "worktree: adhoc clears the primary's no-plan record too" "$([ -e "$REPO/.dforge/sdd/finish.json" ] && echo kept || echo gone)" "gone"
 
 # --- handoff write failure still prints the block ---
 rm -rf "$REPO/.dforge/handoff"
@@ -200,7 +206,7 @@ has "unwritable handoff: says so on stdout" "$out" "next-step: could not write"
 rm -f "$REPO/.dforge/handoff"
 
 # --- final review clean: finishing is next ---
-ledger 'Task 1: complete (x)' 'Task 2: complete (x)' 'Task 3: complete (x)' 'Final review: clean (commits a1b2c3d..d4e5f6a)'
+ledger 'Task 1: complete (x)' 'Task 2: complete (x)' 'Task 3: complete (x)' "Final review: clean (commits a1b2c3d..$(git -C "$REPO" rev-parse --short HEAD))"
 run "$REPO" "$PLAN_REL"
 has "final review clean: status" "$out" "**Status:** Plan \`$PLAN_REL\`: all 3 tasks complete; the final review is clean."
 has "final review clean: next is finishing" "$out" "**Next:** Run dforge:finishing-a-development-branch."
@@ -870,6 +876,65 @@ has "roadmap: every milestone closed" "$OUT" "Nothing — every milestone in \`d
 lacks "roadmap: closed launches nothing" "$OUT" "Launch in"
 
 # --- documents and progress kept in darkmem ---
+# --- a service-only list does not stop the block ---
+SID=s-next; export CLAUDE_CODE_SESSION_ID=$SID
+NT="$TMP/$SID.jsonl"
+mkdir -p "$HOME/.claude/dforge/sessions/by-id"
+jq -n --arg tp "$NT" '{session_id:"s-next",transcript_path:$tp}' > "$HOME/.claude/dforge/sessions/by-id/$SID.json"
+jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"toolu_dev",name:"Bash",input:{description:"Dev server",command:"npm run dev",run_in_background:true}}]}}' > "$NT"
+jq -nc '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_dev",content:"Command running in background with ID: d1. Output is being written to: /tmp/d1.output."}]}}' >> "$NT"
+run "$REPO" "$PLAN_REL"
+check "service only: exits 0" "$status" "0"
+has "service only: the block is printed" "$out" "## Next session"
+has "service only: the services are named" "$out" "Still running services: shell d1 (Dev server)"
+rm -f "$HOME/.claude/dforge/sessions/by-id/$SID.json"; unset CLAUDE_CODE_SESSION_ID
+
+# --- a clean final review is current only for the head it names (C5) ---
+done3() { ledger 'Task 1: complete (commits a..b, review clean)' 'Task 2: complete (commits b..c, review clean)' 'Task 3: complete (commits c..d, review clean)' "$@"; }
+git -C "$REPO" checkout -q -b feat-c5
+head7=$(git -C "$REPO" rev-parse --short HEAD)
+done3 "Final review: clean (commits 0000000..$head7)"
+run "$REPO" "$PLAN_REL"
+has "C5: current clean line routes to finishing" "$out" "**Next:** Run dforge:finishing-a-development-branch."
+mkdir -p "$REPO/docs/dforge/plans" && printf 'note\n' > "$REPO/docs/dforge/plans/completed.md"
+git -C "$REPO" add docs/dforge/plans/completed.md && git -C "$REPO" commit -qm "docs: index"
+run "$REPO" "$PLAN_REL"
+has "C5: docs-only commits after the head keep it current" "$out" "**Next:** Run dforge:finishing-a-development-branch."
+# A git call that fails is no evidence the head still covers HEAD.
+REAL_GIT=$(command -v git)
+for verb in 'rev-list --first-parent' 'log --format= --name-only'; do
+  mkdir -p "$TMP/git-fails"
+  printf '#!/usr/bin/env bash\ncase " $* " in *" %s "*) exit 128 ;; esac\nexec "%s" "$@"\n' "$verb" "$REAL_GIT" > "$TMP/git-fails/git"
+  chmod +x "$TMP/git-fails/git"
+  out=$(cd "$REPO" && PATH="$TMP/git-fails:$PATH" bash "$SCRIPT" "$PLAN_REL" 2>/dev/null)
+  has "C5: a failed git ${verb%% *} routes to a scoped re-review, not finishing" "$out" "Re-review $head7..HEAD"
+done
+rm -rf "$TMP/git-fails"
+printf 'x\n' > "$REPO/code.txt" && git -C "$REPO" add code.txt && git -C "$REPO" commit -qm "fix: later"
+run "$REPO" "$PLAN_REL"
+has "C5: a later code commit routes to a scoped re-review" "$out" "Re-review $head7..HEAD"
+git -C "$REPO" reset -q --hard "$head7" && git -C "$REPO" commit -q --amend -m "rewritten"
+run "$REPO" "$PLAN_REL"
+has "C5: a rewritten head routes to a full final review" "$out" "Run the final whole-branch review, then dforge:finishing-a-development-branch."
+head7=$(git -C "$REPO" rev-parse --short HEAD)
+done3 "Final review: clean (commits 0000000..$head7)"
+git -C "$REPO" checkout -q -
+git -C "$REPO" merge -q --no-ff --allow-unrelated-histories -m "merge feat-c5" feat-c5
+printf 'y\n' > "$REPO/base.txt" && git -C "$REPO" add base.txt && git -C "$REPO" commit -qm "fix: on base"
+run "$REPO" "$PLAN_REL"
+has "C5: a base branch that merged the head routes to finishing" "$out" "**Next:** Run dforge:finishing-a-development-branch."
+git -C "$REPO" reset -q --hard HEAD~2 && git -C "$REPO" branch -qD feat-c5
+
+# --- Keep as-is keeps the branch pending (C9) ---
+ledger 'Task 1: complete (commits a..b, review clean)' 'Task 2: complete (commits b..c, review clean)' 'Task 3: complete (commits c..d, review clean)' 'Final review: clean (commits a..d)'
+mkdir -p "$REPO/.dforge/sdd" && printf '{"action":"pr"}\n' > "$REPO/.dforge/sdd/finish.json"
+run "$REPO" --kept "$PLAN_REL"
+check "kept: exits 0" "$status" "0"
+has "kept: names the branch" "$out" "$(git -C "$REPO" branch --show-current)"
+lacks "kept: never says complete" "$out" "is complete"
+has "kept: the finish choices stay open" "$out" "merge, pr or discard"
+check "kept: the no-plan finish record is cleared" "$([ -e "$REPO/.dforge/sdd/finish.json" ] && echo kept || echo gone)" "gone"
+
 . "$HERE/fixtures/darkmem-stores.sh"
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"
