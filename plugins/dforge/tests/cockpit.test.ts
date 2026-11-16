@@ -4752,6 +4752,19 @@ describe('run card', () => {
     expect(drawn.indexOf('Task 3: Ship it')).toBeLessThan(drawn.indexOf('Task 1: Add the helpers'))
   })
 
+  test('the dense plan row names a waiting task and its question ahead of an assigned one', async ($, on) => {
+    const files = {
+      ...runFiles(`${LEDGER}\nTask 3: implementer inline (assigned; base 1234567)\nTask 3: waiting — which meter width?`),
+      ...configured({ density: 'dense' }),
+    }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ key: 'dense-plan' }))?.text).toMatch(/1\/3 · \? Task 3 waiting: which meter width\?$/)
+  })
+
   test('reads an unchanged ledger no more, however many ticks pass', async ($, on) => {
     const files = runFiles(LEDGER) ?? {}
     const reads: string[] = []
