@@ -117,8 +117,8 @@ line, as both execution skills' recovery tables do, so a task that was blocked
 and later ruled and completed no longer matches.
 
 Rules 4 and 5 require `completed.md` to exist. Without it nothing can be shown to
-have finished, and firing rule 5 would recommend re-executing merged work — fall
-to rule 7 and say the index is absent. When several plans match one rule, take
+have finished, and firing rule 5 would recommend re-executing merged work — skip
+to rule 6 and continue from there, and say the index is absent. When several plans match one rule, take
 the newest filename date and say so. When a rule matches in more than one
 worktree, report each and recommend the one whose branch has the newest commit.
 
