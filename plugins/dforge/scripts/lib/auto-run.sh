@@ -222,7 +222,10 @@ ar_start() {
   if [ -f "$regfile" ] && [ "$(register_field "$regfile" Covers)" = - ]; then
     COVERS="**Covers:** $spec" awk '
       !done && /^\*\*Covers:\*\*[ \t]*-[ \t\r]*$/ { print ENVIRON["COVERS"]; done = 1; next }
-      { print }' "$regfile" > "$regfile.tmp" && mv -f "$regfile.tmp" "$regfile" || rm -f "$regfile.tmp"
+      { print }' "$regfile" > "$regfile.tmp" && mv -f "$regfile.tmp" "$regfile" || {
+        rm -f "$regfile.tmp" 2>/dev/null
+        echo "auto-run: could not set **Covers:** in $regfile to $spec; set it by hand, or next-step finds no register" >&2
+      }
   fi
   printf '%s\n' "$register"
 }
