@@ -1,0 +1,12 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "transcript_path": "/home/user/.claude/projects/-tmp-probe-work/11111111-2222-4333-8444-555555555555.jsonl",
+  "cwd": "/tmp/probe/work",
+  "permission_mode": "default",
+  "agent_id": "af385f8112824c5d7",
+  "agent_type": "dforge:impl-haiku",
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_transcript_path": "/home/user/.claude/projects/-tmp-probe-work/11111111-2222-4333-8444-555555555555/subagents/agent-af385f8112824c5d7.jsonl",
+  "last_assistant_message": "**Status:** DONE\nReport: /tmp/probe/reports/task-4-report.md"
+}

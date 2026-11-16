@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Stub locator satisfying the Contracts grammar. STUB_LOCATOR picks the branch.
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+case "${STUB_LOCATOR:-ok}" in
+  off) printf 'stub-plugin off reason=plugin-not-enabled\n'; exit 1 ;;
+  missing) printf 'stub-plugin off reason=plugin-missing\n'; exit 1 ;;
+  *) printf 'stub-plugin ok version=0.0.0-stub root=%s\n' "$HERE"; exit 0 ;;
+esac

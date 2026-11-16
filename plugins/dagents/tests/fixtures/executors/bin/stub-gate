@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Stub gate. Nothing in this sub-project runs it or asserts on it; the registry
+# names it so sub-project B inherits a `gate` field that already resolves.
+set -uo pipefail
+printf 'stub-gate usable=true reason=ok lane=%s resets_at=- source=probe\n' "${STUB_GATE_LANE:-false}"

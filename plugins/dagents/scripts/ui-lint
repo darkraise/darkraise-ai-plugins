@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# High-precision UI defect patterns for the ui-ux skill, one line per finding:
+#   <file>:<line>: <rule> <message>
+# Each rule has a failing and a passing fixture in tests/fixtures/ui-lint/.
+# Patterns read one line at a time (an Android image element across lines);
+# a pattern that would need a parser does not belong here. The awk program is
+# lib/ui-lint.awk: bash 3.2 cannot parse its quotes inside a $( ) heredoc.
+# Usage: ui-lint FILE...   Exit: 0 no finding, 1 findings, 2 usage or awk failure.
+set -uo pipefail
+
+[ $# -ge 1 ] || { echo "usage: ui-lint FILE..." >&2; exit 2; }
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+found=0
+for file in "$@"; do
+  [ -f "$file" ] || continue
+  case $file in
+    *.tsx|*.jsx|*.vue|*.svelte|*.astro|*.html|*.css|*.scss|*.sass|*.less) kind=web ;;
+    *.xaml|*.axaml) kind=xaml ;;
+    *res/layout/*.xml) kind=android ;;
+    *) continue ;;
+  esac
+  token=0
+  case ${file##*/} in *token*|*theme*|*palette*|*variables*|*.config.*) token=1 ;; esac
+  out=$(tr -d '\r' < "$file" | awk -v f="$file" -v kind="$kind" -v token="$token" -f "$HERE/lib/ui-lint.awk") ||
+    { echo "ui-lint: awk failed on $file" >&2; exit 2; }
+  if [ -n "$out" ]; then printf '%s\n' "$out"; found=1; fi
+done
+exit "$found"

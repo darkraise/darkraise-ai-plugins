@@ -1,0 +1,177 @@
+// darkmem-sync import (darkmem mirror spec §3): the one-time move of a
+// repository's docs directory and its local ledgers and handoff notes into
+// darkmem. It reads the repository, never the mirror, and finishes by pulling
+// everything it filed into a scratch directory with pull's own code and
+// comparing bytes. A pull afterwards fills the real mirror.
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { HttpError } from "./darkmem-client.mjs";
+import { dforgeDir, storesPath, writeApplied } from "./darkmem-config.mjs";
+import {
+  DOC_PREFIX, MAX_ENTRIES_PER_APPEND, RESERVED_DIRS, decodeUtf8, emptyState, ledgerFiles, ledgerPieces, ledgerPlanPath, listDocumentFiles, propertiesFor,
+  sha256, unsupportedPlanDirs, uriToLocal,
+} from "./darkmem-mirror.mjs";
+import { pullDocuments, pullLedgers } from "./darkmem-pull.mjs";
+
+// The import's source snapshot. Every problem is collected, so one run names
+// all of them.
+function readSources(roots) {
+  const problems = [];
+  const documents = [];
+  const ledgers = [];
+  for (const dir of unsupportedPlanDirs(roots.workRoot)) problems.push(`${dir}: not a usable workstream key`);
+  for (const { file, uri } of listDocumentFiles(roots)) {
+    if (!uri) {
+      const top = path.relative(roots.docsRoot, file).split(path.sep)[0];
+      problems.push(`${file}: the docs directory's ${top}/ is reserved for ${RESERVED_DIRS[top]}`);
+      continue;
+    }
+    const buffer = fs.readFileSync(file);
+    const content = decodeUtf8(buffer);
+    if (!content) {
+      problems.push(`${file}: empty or not UTF-8 text`);
+      continue;
+    }
+    documents.push({ uri, buffer, content });
+  }
+  for (const { slug, file } of ledgerFiles(roots.workRoot)) {
+    const buffer = fs.readFileSync(file);
+    const text = decodeUtf8(buffer);
+    if (!text) {
+      problems.push(`${file}: empty or not UTF-8 text`);
+      continue;
+    }
+    ledgers.push({ slug, buffer, text, mtime: fs.statSync(file).mtime.toISOString(), id: null });
+  }
+  return { problems, documents, ledgers };
+}
+
+// `resume` continues a stopped import of the same ledger: { id, lastSeq, from }
+// names darkmem's open workstream, its newest ledger entry and how many pieces
+// it already holds. Each later batch is sent under the last sequence number
+// darkmem answered, so another writer's append is a 409, not interleaved lines.
+export async function importLedger({ cfg, client, report }, roots, ledger, resume = null) {
+  const pieces = ledgerPieces(ledger.text);
+  const properties = { ...propertiesFor(roots, ledger.slug, ledgerPlanPath(ledger.text)), imported_mtime: ledger.mtime };
+  let lastSeq = resume?.lastSeq;
+  ledger.id = resume?.id ?? null;
+  for (let i = resume?.from ?? 0; i < pieces.length; i += MAX_ENTRIES_PER_APPEND) {
+    const entries = pieces.slice(i, i + MAX_ENTRIES_PER_APPEND).map(body => ({ kind: "ledger", body }));
+    try {
+      const answer = await client.append({ project: cfg.project, workstream: ledger.slug, properties, entries, expectedLastSeq: lastSeq });
+      ledger.id = answer.workstream.id;
+      if (resume) lastSeq = answer.last_seq;
+    } catch (error) {
+      if (!(error instanceof HttpError && (error.status === 422 || (resume && error.status === 409)))) throw error;
+      report.failures.push(`sdd/${ledger.slug}/progress.md: darkmem refused an entry: ${error.detail}`);
+      ledger.id = null;
+      return;
+    }
+  }
+  await client.updateWorkstream(ledger.id, { state: "closed", retain: true });
+  report.counts.workstreams += 1;
+}
+
+const sameBytes = (file, buffer) => fs.existsSync(file) && fs.readFileSync(file).equals(buffer);
+
+async function verify(context, roots, snapshot) {
+  const { report } = context;
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "darkmem-import-"));
+  // A byte difference keeps the scratch copy for the operator to compare.
+  let keepScratch = false;
+  try {
+    const scratchRoots = { docsRoot: path.join(scratch, DOC_PREFIX), workRoot: path.join(scratch, "work") };
+    const scratchContext = {
+      ...context,
+      roots: scratchRoots,
+      state: emptyState(),
+      persist: () => {},
+      report: { conflicts: [], failures: [], notes: [], counts: { documents: 0, ledgers: 0 } },
+    };
+    await pullDocuments(scratchContext);
+    const imported = snapshot.ledgers.filter(l => l.id).map(l => ({ id: l.id, key: l.slug }));
+    await pullLedgers(scratchContext, imported);
+    // Re-read after the pull, so an edit made while it ran fails the import too.
+    const again = readSources(roots);
+    const inventory = source => [...source.documents.map(d => d.uri), ...source.ledgers.map(l => `sdd/${l.slug}`)].sort().join("\n");
+    const changed = inventory(again) !== inventory(snapshot)
+      || again.documents.some((d, i) => !d.buffer.equals(snapshot.documents[i].buffer))
+      || again.ledgers.some((l, i) => !l.buffer.equals(snapshot.ledgers[i].buffer));
+    if (changed || again.problems.length) {
+      report.failures.push("the source files changed during the import; run it again with --replace");
+      return;
+    }
+    // A refused document or ledger (no id) was reported where darkmem refused
+    // it and was never filed, so it has no copy to compare.
+    const differing = [
+      ...snapshot.documents.filter(d => !d.refused && !sameBytes(uriToLocal(scratchRoots, d.uri), d.buffer)).map(d => d.uri),
+      ...snapshot.ledgers.filter(l => l.id && !sameBytes(path.join(scratchRoots.workRoot, "sdd", l.slug, "progress.md"), l.buffer))
+        .map(l => `sdd/${l.slug}/progress.md`),
+    ];
+    if (differing.length) {
+      keepScratch = true;
+      for (const name of differing) report.failures.push(`${name}: a pull of darkmem's copy differs from the source; compare under ${scratch}`);
+      return;
+    }
+    report.notes.push("verified: a pull of every imported file reads back byte-identical");
+  } finally {
+    if (!keepScratch) fs.rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+export async function importRepository(context) {
+  const { cfg, client, report, options, env } = context;
+  Object.assign(report.counts, { documents: 0, workstreams: 0 });
+  const roots = { docsRoot: dforgeDir("docs", cfg.repoRoot), workRoot: dforgeDir("state", cfg.repoRoot), worktreeRoot: cfg.repoRoot };
+  const snapshot = readSources(roots);
+  if (snapshot.problems.length) {
+    report.failures.push(...snapshot.problems);
+    report.notes.push("nothing was imported");
+    return;
+  }
+  const existing = new Map();
+  for (const ledger of snapshot.ledgers) {
+    const answer = await client.resume(cfg.project, ledger.slug);
+    if (answer) existing.set(ledger.slug, answer.workstream.id);
+  }
+  // A document darkmem holds with other content may be newer than this
+  // checkout's copy, so only --replace overwrites it, and then only the
+  // version read here: one changed since is a 409, not a silent overwrite.
+  const remote = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item.content_hash]));
+  for (const doc of snapshot.documents) doc.expectedHash = remote.get(doc.uri);
+  const differing = snapshot.documents.filter(doc => doc.expectedHash !== undefined && doc.expectedHash !== sha256(doc.buffer)).map(doc => doc.uri);
+  if ((existing.size || differing.length) && !options["--replace"]) {
+    if (existing.size) report.failures.push(`already in darkmem: ${[...existing.keys()].join(", ")}; run import --replace to purge and re-import them (needs an admin key)`);
+    if (differing.length) report.failures.push(`darkmem already holds different content for ${differing.join(", ")}; pull and compare, or run import --replace to overwrite them`);
+    report.notes.push("nothing was imported");
+    return;
+  }
+  // Purges come first: a key that may not purge stops the import before any
+  // document is written.
+  for (const id of existing.values()) await client.purgeWorkstream(id);
+  for (const doc of snapshot.documents) {
+    try {
+      await client.putDocument({ project: cfg.project, uri: doc.uri, content: doc.content, expectedHash: doc.expectedHash });
+      report.counts.documents += 1;
+    } catch (error) {
+      if (!(error instanceof HttpError && (error.status === 422 || error.status === 409))) throw error;
+      report.failures.push(error.status === 409
+        ? `${doc.uri}: changed on darkmem during the import, so it was not overwritten: ${error.detail}`
+        : `${doc.uri}: darkmem refused it: ${error.detail}`);
+      doc.refused = true;
+    }
+  }
+  for (const ledger of snapshot.ledgers) await importLedger(context, roots, ledger);
+  await verify(context, roots, snapshot);
+  // Only a clean, verified import moves the documents' applied store, and only
+  // when documents are configured darkmem. Progress waits for reconcile: import
+  // closes every workstream it files and pull reads only open ones, and it
+  // reads neither latest.md nor linked worktrees, so recording progress would
+  // empty every reader's view.
+  if (report.failures.length || report.conflicts.length) return;
+  const families = ["documents"].filter(family => cfg[family].configured === "darkmem");
+  if (!families.length) return;
+  writeApplied(env, cfg.repoRoot, Object.fromEntries(families.map(family => [family, "darkmem"])), { project: cfg.project, mirror: cfg.mirror });
+  report.notes.push(`recorded ${families.join(" and ")} as applied darkmem in ${storesPath(env)}`);
+}

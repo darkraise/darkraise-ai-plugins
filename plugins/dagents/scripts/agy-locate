@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Locate the Antigravity CLI (agy) on PATH, and say whether this plugin may use
+# it.
+#
+# The lane drives agy's print mode and its models listing, whose shapes can
+# change between releases, so the version is checked against the policy: at
+# least the version the lane was calibrated for, and no newer major.
+#
+# Usage: agy-locate
+# Output: agy-locate ok version=<v> root=<directory of the agy executable>
+#         agy-locate off reason=<plugin-not-installed|plugin-version:<v>>
+# Exit: 0 ok; 1 off; 2 usage error or missing jq.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# Tests point this at a copy; the shipped file is the version policy and trust record.
+POLICY="${DR_AGY_POLICY:-$HERE/../reference/agy-policy.json}"
+
+die() { printf 'agy-locate: %s\n' "$1" >&2; exit 2; }
+off() { printf 'agy-locate off reason=%s\n' "$1"; exit 1; }
+
+[ $# -eq 0 ] || die "usage: agy-locate"
+command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
+[ -r "$POLICY" ] || die "policy file not found: $POLICY"
+
+agy=$(command -v agy 2>/dev/null) || off plugin-not-installed
+[ -n "$agy" ] || off plugin-not-installed
+
+if command -v timeout >/dev/null 2>&1; then
+  version=$(timeout 20 "$agy" --version 2>/dev/null | head -n 1 | tr -d '\r')
+else
+  version=$("$agy" --version 2>/dev/null | head -n 1 | tr -d '\r')
+fi
+[ -n "$version" ] || off plugin-not-installed
+
+# jq reads on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /d/...
+# form pwd gives on Git Bash.
+jq -e --arg v "$version" '
+  def semver: split(".") | map(sub("[^0-9].*$"; "") | tonumber? // 0);
+  ($v | semver) as $cur
+  | ($cur >= (.min_version | semver)) and ($cur[0] <= .max_major)
+' < "$POLICY" >/dev/null 2>&1 \
+  || off "plugin-version:$version"
+
+printf 'agy-locate ok version=%s root=%s\n' "$version" "$(dirname "$agy")"
