@@ -8351,4 +8351,35 @@ describe('inert rows, consent and desktop steppers', () => {
     await ui.press({ key: 'settings-tab-Context' })
     expect((await ui.find({ key: 'set-handoffTokens-controls' }))?.text).toMatch(/\bauto\b/)
   })
+
+  test('a desktop stepper shows its unit word', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    expect((await ui.find({ key: 'set-keepWarm-controls' }))?.text).toMatch(/\b50min\b/)
+  })
+
+  test('the desktop stacks the webhook and mention labels over their controls; a terminal sets them side by side', async ($, on) => {
+    world(on, { tokens: 284_000, config: {} })
+    await $.session.start(START)
+    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await desk.press({ key: 'pane-settings' })
+    await desk.press({ key: 'settings-tab-Notifications' })
+    for (const key of ['set-notify-url', 'set-notify-mention']) {
+      expect((await desk.find({ key }))?.props.flexDirection).toBe('column')
+      const label = await desk.find({ key: `${key}-label` })
+      expect(label?.props.width).toBeUndefined()
+      expect(JSON.stringify(label)).toContain('"weight":"medium"')
+    }
+    await desk.unmount()
+    const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    if ((await term.find({ key: 'pane-settings' })) !== undefined) await term.press({ key: 'pane-settings' })
+    await term.press({ key: 'settings-tab-Notifications' })
+    for (const key of ['set-notify-url', 'set-notify-mention']) {
+      expect((await term.find({ key }))?.props.flexDirection).toBe('row')
+      expect((await term.find({ key: `${key}-label` }))?.props.width).toBe(16)
+    }
+  })
 })
