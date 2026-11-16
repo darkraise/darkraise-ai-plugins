@@ -375,8 +375,8 @@ finding awaiting a ruling), run
 `scripts/next-step --adhoc --phase <design|build> --next "<what follows>"` —
 `design` when what follows is rulings, a spec or a plan — and end with the
 block it prints, verbatim. When nothing follows, run
-`scripts/finish-choice clear`, so the next unplanned finish does not act on
-this one's choice, and end with: "No plan file — no follow-on work recorded."
+`scripts/finish-choice clear` (the choice is used up) and end with: "No plan
+file — no follow-on work recorded."
 
 When the ledger holds a `CI:` line, the final message quotes it.
 
