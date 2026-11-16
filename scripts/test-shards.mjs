@@ -55,6 +55,7 @@ export const windowsSeconds = {
   'measured-proposals.acceptance.test.sh': 60,
   'native-routing.test.sh': 10,
   'next-step.test.sh': 500,
+  'next-step-print.test.sh': 150,
   'plan-amend.test.sh': 390,
   'plan-lib.test.sh': 43,
   'plan-lint.test.sh': { one: 620, two: 620, paths: 40 },
