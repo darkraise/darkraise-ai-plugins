@@ -148,7 +148,8 @@ case $cmd in
               item=$(sed -e 's/^[[:space:]`]*//' -e 's/[[:space:]`]*$//' <<<"$item")
               case $item in
                 *.png|*.jpg|*.jpeg|*.webp|*.gif)
-                  [ -f "$root/$item" ] || [ -f "$item" ] || failed evidence "$id cites $item, which does not exist" ;;
+                  [ -f "$root/$item" ] || [ -f "$item" ] || [ -f "$(dagents_resolve "$item" "$root")" ] \
+                    || failed evidence "$id cites $item, which does not exist" ;;
               esac
             done ;;
           fail) failed verdicts "$id failed: ${note:-no note}" ;;
