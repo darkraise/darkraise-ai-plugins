@@ -6816,6 +6816,18 @@ describe('auto run', () => {
     expect(await ui.find({ type: 'Text', text: /284k of 650k ┃ handoff 465k/ })).toBeDefined()
   })
 
+  test('a session step that fails on every read is retried alone, and the slow tick still refreshes the pane', async ($, on) => {
+    const w: World = { ...SIGNED_IN, isUsageFailing: true, gitRuns: [] }
+    const clock = world(on, w)
+    signedIn(on, {})
+    await $.session.start(START)
+    const atStart = [...w.gitRuns!]
+    await clock.advance(31_000)
+    const later = w.gitRuns!.slice(atStart.length)
+    expect(later.filter(run => run.includes(' status ')).length).toBeGreaterThanOrEqual(2)
+    expect(later.filter(run => run.includes('--git-common-dir'))).toEqual([])
+  })
+
   test("a main compaction clears the turn readings, a subagent's does not", async ($, on) => {
     const sets: unknown[] = []
     on('state.set', { plugin: 'dforge', key: 'turnTokens' } as never, ((_$: unknown, e: { value: unknown }, next: (e: unknown) => unknown) => {
