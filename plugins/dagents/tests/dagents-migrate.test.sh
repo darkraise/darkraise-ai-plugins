@@ -2,6 +2,7 @@
 # dagents-migrate: a dr-superpowers or dr-forge repository's checkouts move to
 # the dforge 4.0 names.
 set -uo pipefail
+unset AR_SESSION CLAUDE_CODE_SESSION_ID CLAUDE_CONFIG_DIR CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM="$HERE/../scripts/dagents-migrate"
@@ -705,6 +706,12 @@ check "bound auto run: refused" "$code$(printf '%s' "$out" | grep -c 'a dforge r
 check "bound auto run: nothing moved" "$(exists "$H5/docs/dagents")$(exists "$H5/.dagents")" "nono"
 echo $(( $(date +%s) - 600 )) > "$HOME/.claude/dforge/sessions/cockpit/s-1"
 migrate "$FM" "$H5" > /dev/null 2>&1; check "stale auto run: migrates" "$?$(exists "$H5/.dagents/sdd/auto-run.json")" "0yes"
+H6="$TMP/r-unreadable"; fixture "$H6"
+mkdir -p "$H6/.dforge/sdd"; printf '{"active":tru\n' > "$H6/.dforge/sdd/auto-run.json"
+if command -v jq >/dev/null 2>&1; then
+  out=$(migrate "$FM" "$H6" 2>&1); code=$?
+  check "unreadable auto run: refused" "$code$(printf '%s' "$out" | grep -c 'jq could not read')" "11"
+fi
 rm -rf "$HOME/.claude/dforge"
 
 # --- detection: only an unmigrated 4.x project is named ---

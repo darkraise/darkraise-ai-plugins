@@ -402,7 +402,11 @@ dforge_live() {
     printf 'the auto run in %s (jq is not on PATH to read its session)\n' "$state"
     return 0
   fi
-  sid=$(jq -r 'select(.active == true) | .session // empty' < "$state" 2>/dev/null | tr -d '\r')
+  if ! sid=$(jq -r 'select(.active == true) | .session // empty' < "$state" 2>/dev/null); then
+    printf 'the auto run in %s, which jq could not read\n' "$state"
+    return 0
+  fi
+  sid=$(tr -d '\r' <<<"$sid")
   [ -n "$sid" ] || return 1
   file="${HOME:-}/.claude/dforge/sessions/cockpit/$(printf '%s' "$sid" | tr -c 'A-Za-z0-9' '-')"
   if [ -f "$file" ]; then
@@ -423,11 +427,11 @@ reported_in=()
 report_dforge() {
   local file i listed status
   listed=$(g -C "$1" grep -I -l -E -e 'docs/dforge|(^|[^A-Za-z0-9_-])\.dforge|(^|[^A-Za-z0-9_-])dforge:[a-z]' -- . \
-    ':(exclude)docs/dagents' ':(exclude)docs/dforge' ':(exclude).dagents' ':(exclude).dforge' ':(exclude).gitignore' ':(exclude).gitattributes' 2>&1)
+    ':(exclude)docs/dagents' ':(exclude)docs/dforge' ':(exclude).dagents' ':(exclude).dforge' ':(exclude).gitignore' ':(exclude).gitattributes' 2>/dev/null)
   status=$?
   # 1 is "no match"; anything else means the search did not finish.
   if [ "$status" -gt 1 ]; then
-    printf 'report: %s could not be searched for files that name dforge (git grep: %s)\n' "$1" "$(head -n 1 <<<"$listed")"
+    printf 'report: %s could not be searched for files that name dforge (git grep exited %s)\n' "$1" "$status"
     return 0
   fi
   [ "$status" -eq 0 ] || return 0
