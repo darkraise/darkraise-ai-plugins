@@ -3795,6 +3795,17 @@ describe('shells and remote', () => {
     })
   })
 
+  test('a background agent TaskStop stopped by name is no longer working', async ($, on) => {
+    world(on, { ...SIGNED_IN, agentIds: ['agent-7'], tools: { TaskStop: () => ({ result: { message: 'stopped' }, text: 'stopped' }) } })
+    signedIn(on)
+    await $.session.start(START)
+    await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Watch the build', description: 'Watch build', subagentType: 'general-purpose', model: 'sonnet', name: 'watcher', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: true, fork: false } as never)
+    await $.tool.call({ tool: 'TaskStop', task_id: 'watcher' } as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /^Working · / })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /^Failed · 1$/ })).toBeDefined()
+  })
+
   test('drop a shell TaskStop stopped', async ($, on) => {
     world(on, { ...SIGNED_IN, tools: { Bash: () => SHELL, TaskStop: () => ({ result: { message: 'stopped', task_id: 'b7k2', task_type: 'local_bash' }, text: 'stopped' }) } })
     signedIn(on)
