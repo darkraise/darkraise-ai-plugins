@@ -609,6 +609,119 @@ done < "$D28/pids"
 has "A28: the timed-out runner is reported as TIMEOUT" "$out" "status=TIMEOUT"
 check "A28: every one of the runner's $(wc -l < "$D28/pids" | tr -d ' ') descendants is gone" "$alive" "0"
 
+# --- A29: task-step --cwd, and a header command with a trailing note ---
+R29="$TMP/cwd"
+git init -q "$R29"; git -C "$R29" config user.name t; git -C "$R29" config user.email t@example.invalid
+mkdir -p "$R29/docs"
+{
+  printf '# Cwd Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** inline — `claude --model sonnet --effort high` — fixture\n\n'
+  printf '**Integration check:** `bash mark.sh integ 0` — the full suite (slow; see CI)\n\n'
+  printf '## Task index\n\n1. One\n\n### Task 1: One\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n'
+} > "$R29/docs/plan.md"
+printf '#!/usr/bin/env bash\n: > "$MARK_DIR/$1"\nexit "${2:-0}"\n' > "$R29/mark.sh"
+printf 'one\n' > "$R29/app.txt"; printf '.dforge/\n' > "$R29/.gitignore"
+git -C "$R29" add -A && git -C "$R29" commit -qm base
+BASE29=$(git -C "$R29" rev-parse --short HEAD)
+ts29() { out=$(cd "$R29" && bash "$S/task-step" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
+ts29 start docs/plan.md 1
+git -C "$R29" worktree add -q -b wt "$TMP/wt29"
+printf 'two\n' > "$TMP/wt29/wtonly.txt"
+git -C "$TMP/wt29" add -A && git -C "$TMP/wt29" commit -qm "work in the worktree"
+WTHEAD=$(git -C "$TMP/wt29" rev-parse --short HEAD)
+ts29 review docs/plan.md 1 --cwd "$TMP/wt29"
+check "A29: review --cwd exits 0" "$rc" "0"
+has "A29: review --cwd resolves HEAD in that directory" "$out" "$BASE29..$WTHEAD"
+check "A29: the review diff holds the worktree's change" "$(grep -q '^+++ b/wtonly.txt$' "$R29"/.dforge/sdd/plan/review-*.diff && echo yes || echo no)" "yes"
+WS29=$(cd "$R29" && bash "$S/sdd-workspace" docs/plan.md)
+printf '## Verdict\nspec: cannot-verify\nquality: approved\nscores: spec 15 / scope 17 / verification 12 / quality 16\n\n## Strengths\nFine.\n\n## Findings\n\n## Cannot verify\n- cannot-verify: baseline bash mark.sh integ 0, expect pass — the Integration check\n\n## Assessment\nFine.\n' > "$WS29/task-1-review-report.md"
+mkdir -p "$TMP/marks29"
+out=$(cd "$R29" && MARK_DIR="$TMP/marks29" bash "$S/task-step" verdict docs/plan.md 1 --cwd "$TMP/wt29" 2>"$TMP/err"); rc=$?
+check "A29: verdict --cwd exits 0" "$rc" "0"
+check "A29: the Integration check's command ran, taken from before its trailing note" "$(ls "$TMP/marks29" | tr '\n' ' ')" "integ "
+check "A29: and the item is settled, not a finding" "$(grep -c 'settled by task-step check baseline' "$WS29/progress.md")" "1"
+git -C "$R29" worktree remove --force "$TMP/wt29"
+
+# --- A30: ui-proof check with documents in darkmem and screenshots in the checkout ---
+R30="$TMP/proof"
+mkrepo "$R30"
+git -C "$R30" config user.name t; git -C "$R30" config user.email t@example.invalid
+mkdir -p "$R30/src"
+printf 'export const App = () => null;\n' > "$R30/src/App.tsx"
+git -C "$R30" add -A && git -C "$R30" commit -qm app
+BASE30=$(git -C "$R30" rev-parse HEAD)
+M30=$(stores_home "$HOME" "$R30" proofs darkmem local)
+PD30="$M30/dforge/ui-ux/proofs"
+mkdir -p "$PD30" "$R30/.dforge/ui-proofs"
+printf '# UI profile\n\n**Platform:** web\n' > "$M30/dforge/ui-ux/profile.md"
+printf 'png' > "$R30/.dforge/ui-proofs/a.png"
+printf '// change\n' >> "$R30/src/App.tsx"; git -C "$R30" commit -qam 'ui change'
+up30() { (cd "$R30" && bash "$S/ui-proof" "$@"); }
+proof30() { # proof30 <evidence cell>: a stamped, judged touch report citing the cell
+  { printf '# UI proof: t\n\n**Contract:** touch\n**Platform:** web\n**Evidence:** local\n\n## Delta\n\n**UI/UX depth:** touch — a fix\n\n- **UX-1** — the fix\n'
+    printf '\n## Results\n\n| ID | Verdict | Evidence | Note |\n|---|---|---|---|\n| UX-1 | pass | %s | |\n' "$1"
+  } > "$PD30/2026-11-16-t.md"
+  up30 stamp "$PD30/2026-11-16-t.md" >/dev/null
+  fp=$(up30 fingerprint)
+  printf 'The proof holds.\n\nVerdict: ship %s\n' "$fp" > "$PD30/2026-11-16-t.judge.md"
+  printf '\n**Judge:** ship %s — %s/2026-11-16-t.judge.md\n' "$fp" "$PD30" >> "$PD30/2026-11-16-t.md"
+}
+proof30 '.dforge/ui-proofs/a.png'
+up30 check --base "$BASE30" >/dev/null 2>&1; rc=$?
+check "A30: a screenshot cited under the checkout's .dforge/ui-proofs/ is accepted while documents live in darkmem" "$rc" "0"
+proof30 '.dforge/ui-proofs/missing.png'
+up30 check --base "$BASE30" >/dev/null 2>&1; rc=$?
+check "A30: a cited screenshot that is not there still fails" "$rc" "1"
+rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
+
+# --- A32: no judge agent lists WebFetch ---
+n32=0
+for f in "$P"/agents/judge-*.md; do
+  n32=$((n32 + 1))
+  tools=$(awk '/^---[[:space:]]*$/ { c++; next } c == 1 && /^tools:/ { print; exit }' "$f")
+  check "A32: $(basename "$f") has a tools line" "$([ -n "$tools" ] && echo yes || echo no)" "yes"
+  lacks "A32: $(basename "$f") does not list WebFetch" "$tools" "WebFetch"
+done
+check "A32: there are judge agent files to check" "$([ "$n32" -ge 3 ] && echo yes || echo no)" "yes"
+
+# --- A33: impl-stop-gate keys on the reply's Report: line ---
+R33="$TMP/gate"
+mkrepo "$R33"
+gate() { # gate <agent id> <reply>: the SubagentStop input for a QA seat
+  jq -n --arg id "$1" --arg cwd "$R33" --arg msg "$2" \
+    '{session_id:"s-33",transcript_path:"",cwd:$cwd,permission_mode:"default",agent_id:$id,agent_type:"dforge:impl-sonnet-high",hook_event_name:"SubagentStop",stop_hook_active:false,agent_transcript_path:"",last_assistant_message:$msg}' \
+    | bash "$S/impl-stop-gate" 2>"$TMP/gate.err"
+}
+gate a33-missing "QA done.
+Report: $R33/missing-report.md"; rc=$?
+check "A33: a reply ending Report: <path> blocks when the file is missing (exit 2)" "$rc" "2"
+printf 'Findings only, no heading.\n' > "$R33/no-verdict.md"
+gate a33-noverdict "QA done.
+Report: $R33/no-verdict.md"; rc=$?
+check "A33: it blocks when the file does not open with ## Verdict (exit 2)" "$rc" "2"
+printf '## Verdict\npass: 2\n' > "$R33/good.md"
+gate a33-good "QA done.
+Report: $R33/good.md"; rc=$?
+check "A33: it passes when the file opens with ## Verdict" "$rc" "0"
+gate a33-none "Walkthrough done, no report line here."; rc=$?
+check "A33: a reply with no Report: line passes unchecked" "$rc" "0"
+gate a33-status $'**Status:** DONE'; rc=$?
+check "A33: a **Status:** line alone is not looked at" "$rc" "0"
+
+# --- A35: the workflow line on a Codex host under autoRun=on ---
+export HOME="$TMP/home-wf"; mkdir -p "$HOME"
+bash "$S/dforge-config" set designApproval whole >/dev/null 2>&1
+bash "$S/dforge-config" set specReview false >/dev/null 2>&1
+out=$(bash "$S/dforge-config" workflow --host codex 2>&1)
+has "A35: --host codex emits the designApproval override under the default autoRun=on" "$out" "designApproval=whole"
+has "A35: --host codex emits the specReview override" "$out" "specReview=false"
+check "A35: the same settings on a Claude host emit nothing under autoRun=on" "$(bash "$S/dforge-config" workflow 2>&1)" ""
+export HOME="$TMP/home"
+
+# --- A52: the fast-mode question offers fast for this session ---
+for skill in brainstorming systematic-debugging; do
+  has "A52: $skill asks for a fast-for-this-session answer" "$(tr '\n' ' ' < "$P/skills/$skill/SKILL.md" | tr -s ' ')" "fast mode for this session"
+done
+
 # --- footer ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
