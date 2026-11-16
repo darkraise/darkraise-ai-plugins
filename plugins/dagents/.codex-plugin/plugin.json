@@ -1,15 +1,15 @@
 {
-  "name": "dforge",
-  "version": "4.17.1",
-  "description": "Brainstorm, plan and execute with scored tasks, in-session execution, criteria-based review, UI/UX work proven in the running UI and external Antigravity and Codex executors; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget, usage limits and the repo, with Discord notifications and an attribution guard.",
+  "name": "dagents",
+  "version": "1.0.0",
+  "description": "Brainstorm, plan and execute with scored tasks, implementer agents on a model ladder, subagent or inline execution, external Antigravity and Codex executors, criteria-based review and UI/UX work proven in the running UI; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget and usage limits. Continues the dforge 4.x workflow.",
   "author": {
     "name": "Darkraise"
   },
   "skills": "./skills/",
   "interface": {
-    "shortDescription": "Planned work with task scoring, in-session execution, criteria-based review, and external Antigravity and Codex executors.",
+    "shortDescription": "Brainstorm, plan and execute with scored tasks, implementer agents on a model ladder, subagent or inline execution, external Antigravity and Codex executors, criteria-based review and UI/UX work proven in the running UI; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget and usage limits. Continues the dforge 4.x workflow.",
     "category": "Development",
-    "displayName": "dforge",
+    "displayName": "dagents",
     "developerName": "Darkraise"
   },
   "hooks": {}
