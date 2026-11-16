@@ -185,42 +185,42 @@
 | 178 | 8b24b72 fix(dforge): trust only this session's handoff in snapshots | - | - | done | port e2dfad4; fail@parent pass@port |
 | 179 | badc9e9 fix(dforge): let the UI proof hold stand down | - | - | done | port f0193a4; fail@parent pass@port |
 | 180 | 1b13c36 fix(dforge): clean up only the files QA listed | - | - | done | port f29fabf; fail@parent pass@port |
-| 181 | bd6ab26 fix(dforge): keep QA files when carried is unread | - | - | open | - |
-| 182 | 37e9bfa fix(dforge): keep amendments beside the ledger | - | - | open | - |
-| 183 | efac8da fix(dforge): refuse a plan whose amendments went missing | - | - | open | - |
-| 184 | 4054dd5 fix(dforge): sync amendments with the ledger | - | - | open | - |
-| 185 | 015f424 fix(dforge): read and keep plan amendments | - | - | open | - |
-| 186 | 0b12fd4 fix(dforge): check plan identity when opening a task | - | - | open | - |
-| 187 | 40e2086 fix(dforge): route Keep as-is and late PR records | - | - | open | - |
-| 188 | afca0c6 fix(dforge): guard auto-run clear and stop stale runs | - | - | open | - |
-| 189 | bc11017 fix(dforge): refuse local stores without node | - | - | open | - |
-| 190 | df0a5cd fix(dforge): never excuse or reuse unproven suite runs | - | - | open | - |
-| 191 | b8b3b7d fix(dforge): bound commands where only gtimeout exists | - | - | open | - |
-| 192 | 2f16c67 fix(dforge): reap the whole runner tree without setsid | - | - | open | - |
-| 193 | 5b7b473 fix(dforge): resolve proof screenshots through the store | - | - | open | - |
-| 194 | ce31831 fix(dforge): retarget the stop gate to the QA report | - | - | open | - |
-| 195 | a11442b fix(dforge): keep Codex workflow overrides | - | - | open | - |
-| 196 | 8430aee docs(dforge): drop retired rules, add session fast mode | - | - | open | - |
-| 197 | 044d471 fix(dforge): show waiting and deferred tasks in the cockpit | - | - | open | - |
-| 198 | 3f9d5e7 fix(dforge): bind the Run card to the session's plan | - | - | open | - |
-| 199 | e46380d fix(dforge): narrow the write and attribution guards | - | - | open | - |
-| 200 | f1082e9 fix(dforge): read stdin messages and pointer prompts | - | - | open | - |
-| 201 | 107efb4 fix(dforge): survive a crash between switch and restore | - | - | open | - |
-| 202 | 4aa4f42 feat(dforge): add ASCII glyphs and honest saved settings | - | - | open | - |
-| 203 | 7e870d8 fix(dforge): report a settings file that does not parse | - | - | open | - |
-| 204 | 9b6c760 fix(dforge): resolve settings once and lock Claude writes | - | - | open | - |
-| 205 | 16857b1 fix(dforge): lock inert rows and confirm API consent | - | - | open | - |
-| 206 | dfd11ae test(dforge): add QA acceptance A1-A6, A34, A56 | - | - | open | - |
-| 207 | ab96799 test(dforge): add QA acceptance A7-A11 | - | - | open | - |
-| 208 | c7911f6 test(dforge): add QA acceptance A12, A13 | - | - | open | - |
-| 209 | ee1f5bf test(dforge): add QA acceptance A14, A16 | - | - | open | - |
-| 210 | 49a4f53 test(dforge): add QA acceptance A15, A17-A18, A22-A23 | - | - | open | - |
-| 211 | 1470d40 test(dforge): add QA acceptance A21, A25-A28 | - | - | open | - |
-| 212 | 6ff6a5d test(dforge): add QA acceptance A29-A33, A35, A52 | - | - | open | - |
-| 213 | 780fb0c test(dforge): add QA acceptance A3 | - | - | open | - |
-| 214 | 3311598 test(dforge): add QA acceptance A14, A19-A20, A24, A31 | - | - | open | - |
-| 215 | 8da9057 test(dforge): add QA acceptance A37-A42 | - | - | open | - |
-| 216 | a0af39c test(dforge): add QA acceptance A43-A50, A54 | - | - | open | - |
+| 181 | bd6ab26 fix(dforge): keep QA files when carried is unread | - | - | done | port be32589; fail@parent pass@port |
+| 182 | 37e9bfa fix(dforge): keep amendments beside the ledger | - | - | done | port 7e750ed; fail@parent pass@port |
+| 183 | efac8da fix(dforge): refuse a plan whose amendments went missing | - | - | done | port 7e750ed; fail@parent pass@port |
+| 184 | 4054dd5 fix(dforge): sync amendments with the ledger | - | - | done | port 1b31399; fail@parent pass@port |
+| 185 | 015f424 fix(dforge): read and keep plan amendments | - | - | done | port ad0c773; fail@parent pass@port |
+| 186 | 0b12fd4 fix(dforge): check plan identity when opening a task | - | - | n/a | 5-only: guards task-brief --open and task-close, which dagents lacks |
+| 187 | 40e2086 fix(dforge): route Keep as-is and late PR records | - | - | done | port 74db7a5; fail@parent pass@port |
+| 188 | afca0c6 fix(dforge): guard auto-run clear and stop stale runs | - | - | done | port 21748d7; fail@parent pass@port |
+| 189 | bc11017 fix(dforge): refuse local stores without node | - | - | done | port edb4e62; fail@parent pass@port |
+| 190 | df0a5cd fix(dforge): never excuse or reuse unproven suite runs | - | - | done | port f9cf608; fail@parent pass@port |
+| 191 | b8b3b7d fix(dforge): bound commands where only gtimeout exists | - | - | done | port 94812df; fail@parent pass@port |
+| 192 | 2f16c67 fix(dforge): reap the whole runner tree without setsid | - | - | n/a | 5-only |
+| 193 | 5b7b473 fix(dforge): resolve proof screenshots through the store | - | - | done | port cbd4a74; fail@parent pass@port |
+| 194 | ce31831 fix(dforge): retarget the stop gate to the QA report | - | - | n/a | feature: retargets impl-stop-gate from the implementer agents, which dagents keeps, to a QA persona |
+| 195 | a11442b fix(dforge): keep Codex workflow overrides | - | - | n/a | 5-only: scopes the autoRun inertWhen keys to Claude; dagents' schema has no inertWhen keys |
+| 196 | 8430aee docs(dforge): drop retired rules, add session fast mode | - | - | done | port a30bf85; text-only plugins/dagents/reference/fast-mode.md |
+| 197 | 044d471 fix(dforge): show waiting and deferred tasks in the cockpit | - | - | done | port 78fef36; fail@parent pass@port |
+| 198 | 3f9d5e7 fix(dforge): bind the Run card to the session's plan | - | - | done | port 57af74b; fail@parent pass@port |
+| 199 | e46380d fix(dforge): narrow the write and attribution guards | - | - | done | port 16de258; fail@parent pass@port |
+| 200 | f1082e9 fix(dforge): read stdin messages and pointer prompts | - | - | done | port a5ace79; fail@parent pass@port |
+| 201 | 107efb4 fix(dforge): survive a crash between switch and restore | - | - | done | port f20e8a5; fail@parent pass@port |
+| 202 | 4aa4f42 feat(dforge): add ASCII glyphs and honest saved settings | - | - | done | port ac92c30; fail@parent pass@port |
+| 203 | 7e870d8 fix(dforge): report a settings file that does not parse | - | - | done | port 120c3d5; fail@parent pass@port |
+| 204 | 9b6c760 fix(dforge): resolve settings once and lock Claude writes | - | - | done | port c7c4de5; fail@parent pass@port |
+| 205 | 16857b1 fix(dforge): lock inert rows and confirm API consent | - | - | n/a | 5-only: locks inertWhen rows and confirms the apiBudgetAgentRouter consent, neither of which dagents' schema has |
+| 206 | dfd11ae test(dforge): add QA acceptance A1-A6, A34, A56 | - | - | n/a | test-only: acceptance tests of dforge 5's plugin-review-fixes spec, run against dforge |
+| 207 | ab96799 test(dforge): add QA acceptance A7-A11 | - | - | n/a | test-only: acceptance tests of dforge 5's plugin-review-fixes spec, run against dforge |
+| 208 | c7911f6 test(dforge): add QA acceptance A12, A13 | - | - | n/a | test-only: acceptance tests of dforge 5's plugin-review-fixes spec, run against dforge |
+| 209 | ee1f5bf test(dforge): add QA acceptance A14, A16 | - | - | n/a | test-only: acceptance tests of dforge 5's plugin-review-fixes spec, run against dforge |
+| 210 | 49a4f53 test(dforge): add QA acceptance A15, A17-A18, A22-A23 | - | - | n/a | test-only: acceptance tests of dforge 5's plugin-review-fixes spec, run against dforge |
+| 211 | 1470d40 test(dforge): add QA acceptance A21, A25-A28 | - | - | n/a | test-only: acceptance tests of dforge 5's plugin-review-fixes spec, run against dforge |
+| 212 | 6ff6a5d test(dforge): add QA acceptance A29-A33, A35, A52 | - | - | n/a | test-only: acceptance tests of dforge 5's plugin-review-fixes spec, run against dforge |
+| 213 | 780fb0c test(dforge): add QA acceptance A3 | - | - | n/a | test-only: a darkmem-sync acceptance test of dforge 5's plugin-review-fixes spec |
+| 214 | 3311598 test(dforge): add QA acceptance A14, A19-A20, A24, A31 | - | - | n/a | test-only: cockpit acceptance tests of dforge 5's plugin-review-fixes spec |
+| 215 | 8da9057 test(dforge): add QA acceptance A37-A42 | - | - | n/a | test-only: cockpit acceptance tests of dforge 5's plugin-review-fixes spec |
+| 216 | a0af39c test(dforge): add QA acceptance A43-A50, A54 | - | - | n/a | test-only: acceptance tests of dforge 5's plugin-review-fixes spec and their dforge shard weight |
 | 217 | 7e9f0ef test(dforge): add QA acceptance A24 control | - | - | open | - |
 | 218 | 4f69002 fix(dforge): read whole command for unseen messages | - | - | open | - |
 | 219 | f573f5f fix(dforge): clear the worktree's no-plan record | - | - | open | - |
