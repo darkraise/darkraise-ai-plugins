@@ -77,42 +77,42 @@
 | 70 | 2da644a refactor(dforge): drop dispatch and fix-wave routing | - | - | n/a | feature: drops dispatch and fix-wave routing from review-route and task-step, which dagents keeps |
 | 71 | f198d4a refactor(dforge): remove 15 implementer agents | - | - | n/a | feature: removes the 15 implementer agents, which dagents keeps |
 | 72 | 15a7a6b refactor(dforge): stop requiring Implementer lines | - | - | n/a | feature: stops plan-lint requiring Implementer lines, which dagents' assignment still needs |
-| 73 | eced2ee docs(dforge): describe the single-agent fleet | - | - | open | - |
-| 74 | 9a214ac refactor(dforge): reduce the ladder to the floor table | - | - | open | - |
-| 75 | 76c672f test(dforge): drop retired agent names from fixtures | - | - | open | - |
-| 76 | 8a6b567 feat(dforge): add task-brief --open and task-close | - | - | open | - |
-| 77 | 976d3dc docs(dforge): describe task-brief --open and task-close | - | - | open | - |
-| 78 | 0235edf test(dforge): fit budget-line and shards to the open brief | - | - | open | - |
-| 79 | 9045f7a refactor(dforge): drop --no-probe and --kind risk3 | - | - | open | - |
-| 80 | c97cdef refactor(dforge): remove the Codex roster probe | - | - | open | - |
-| 81 | 95553d5 refactor(dforge): drop dead tool names and FORK_DRAFTING | - | - | open | - |
-| 82 | d18b699 chore: remove the stale smoke script and two skill references | - | - | open | - |
-| 83 | b53c2ea docs(dforge): correct the agent descriptions | - | - | open | - |
-| 84 | bbf92e7 perf(dforge): trim the session-start injection | - | - | open | - |
-| 85 | 0c512f4 perf(dforge): skip the external round with no reviewer open | - | - | open | - |
-| 86 | 5f19c45 test(dforge): drop the reviewer-only README pin suite | - | - | open | - |
-| 87 | 0c3ab97 fix(dforge): type the notify timers so cancel checks | - | - | open | - |
-| 88 | ce5e1f7 test(dforge): drop reference and README prose pins | - | - | open | - |
-| 89 | 71dc441 test(dforge): drop Dispatch and retired-role tombstones | - | - | open | - |
-| 90 | fd4c8e9 test(dforge): drop absence checks no script can fail | - | - | open | - |
-| 91 | e2d49d9 test(dforge): remove an unread fixture and an unused helper | - | - | open | - |
-| 92 | 03498f5 test(dforge): drop suite-run copies from the task-loop suite | - | - | open | - |
-| 93 | 42d226b test(dforge): drop duplicate cap, link and lensCap checks | - | - | open | - |
-| 94 | d102363 test(dforge): drop re-run suites and duplicate acceptance cases | - | - | open | - |
-| 95 | f5e0fd9 fix(dforge): say what happens next when the UI stop is held | - | - | open | - |
-| 96 | 31bd659 feat(dforge): ship /dforge:cockpit as a command file | - | - | open | - |
+| 73 | eced2ee docs(dforge): describe the single-agent fleet | - | - | n/a | docs-only: describes dforge 5's single-agent fleet in the README |
+| 74 | 9a214ac refactor(dforge): reduce the ladder to the floor table | - | - | n/a | feature: reduces ladder.md to the floor table, retiring the score ladder dagents keeps |
+| 75 | 76c672f test(dforge): drop retired agent names from fixtures | - | - | n/a | test-only: drops retired agent names from fixtures; dagents keeps those agents |
+| 76 | 8a6b567 feat(dforge): add task-brief --open and task-close | - | - | n/a | feature: adds task-brief --open and task-close |
+| 77 | 976d3dc docs(dforge): describe task-brief --open and task-close | - | - | n/a | docs-only: describes task-brief --open and task-close, dforge 5 additions |
+| 78 | 0235edf test(dforge): fit budget-line and shards to the open brief | - | - | n/a | test-only: fits budget-line.test.sh to the open brief, a dforge 5 feature |
+| 79 | 9045f7a refactor(dforge): drop --no-probe and --kind risk3 | - | - | n/a | feature: drops --no-probe and --kind risk3 from plan-amend, plan-lint and the review runners, which dagents keeps |
+| 80 | c97cdef refactor(dforge): remove the Codex roster probe | - | - | n/a | feature: removes the Codex roster probe from detect-executors.sh, which dagents' executor lane uses |
+| 81 | 95553d5 refactor(dforge): drop dead tool names and FORK_DRAFTING | - | - | n/a | feature: removes tool names and the FORK_DRAFTING switch from the cockpit and hooks after dforge 5's retirements |
+| 82 | d18b699 chore: remove the stale smoke script and two skill references | - | - | n/a | feature: replaces writing-skills' pasted best-practices copy with its URL and drops an example; housekeeping, no defect |
+| 83 | b53c2ea docs(dforge): correct the agent descriptions | - | - | n/a | docs-only: rewrites the agent descriptions for dforge 5's retired score bands; dagents' descriptions match its routing |
+| 84 | bbf92e7 perf(dforge): trim the session-start injection | - | - | n/a | feature: perf change trimming session-start.sh's injection |
+| 85 | 0c512f4 perf(dforge): skip the external round with no reviewer open | - | - | n/a | feature: perf change skipping the external review round in review-route when no reviewer is open |
+| 86 | 5f19c45 test(dforge): drop the reviewer-only README pin suite | - | - | n/a | test-only: drops reviewer-only.acceptance.test.sh, a dforge 5 suite |
+| 87 | 0c3ab97 fix(dforge): type the notify timers so cancel checks | - | - | done | port df2e117; fail@parent pass@port |
+| 88 | ce5e1f7 test(dforge): drop reference and README prose pins | - | - | n/a | test-only: drops prose pins in review-route and reviewer-only-externals suites on dforge 5 text |
+| 89 | 71dc441 test(dforge): drop Dispatch and retired-role tombstones | - | - | n/a | test-only: drops tombstone checks for Dispatch and roles dforge 5 retired |
+| 90 | fd4c8e9 test(dforge): drop absence checks no script can fail | - | - | n/a | test-only: drops absence checks in inline-only, next-step and plan-lint suites that no script can fail |
+| 91 | e2d49d9 test(dforge): remove an unread fixture and an unused helper | - | - | n/a | test-only: removes an unread fixture and an unused helper from faster-plans.acceptance.test.sh |
+| 92 | 03498f5 test(dforge): drop suite-run copies from the task-loop suite | - | - | n/a | test-only: drops duplicate suite-run checks from task-loop-steps.acceptance.test.sh |
+| 93 | 42d226b test(dforge): drop duplicate cap, link and lensCap checks | - | - | n/a | test-only: drops duplicate cap, link and lensCap checks across acceptance suites |
+| 94 | d102363 test(dforge): drop re-run suites and duplicate acceptance cases | - | - | n/a | test-only: drops re-run suites and duplicate acceptance cases |
+| 95 | f5e0fd9 fix(dforge): say what happens next when the UI stop is held | - | - | done | port 038abe1; fail@parent pass@port |
+| 96 | 31bd659 feat(dforge): ship /dforge:cockpit as a command file | - | - | n/a | 5-only |
 | 97 | bc09771 fix(dforge): cockpit issues, update frequency and settings | - | - | open | - |
-| 98 | 12f6d95 feat(dforge): add API budgets and the spend file | - | - | open | - |
-| 99 | f38bc95 feat(dforge): add the Decisions API ruling rung | - | - | open | - |
-| 100 | e31290c feat(dforge): record and report Decisions API rulings | - | - | open | - |
-| 101 | 4d12902 fix(dforge): refuse git-directory files as evidence | - | - | open | - |
-| 102 | 0509664 fix(dforge): refuse nested .git paths as evidence | - | - | open | - |
-| 103 | 7873ba3 feat(dforge): run rulings on API-billed judges | - | - | open | - |
-| 104 | e072bd5 feat(dforge): scrub, prove and charge API judge runs | - | - | open | - |
-| 105 | e5bc2f7 feat(dforge): start auto-run rulings at the API rungs | - | - | open | - |
-| 106 | 13dbd00 feat(dforge): keep the prompt cache warm while waiting | - | - | open | - |
-| 107 | eadd832 feat(dforge): place Gemini Hydrogen by measurement | - | - | open | - |
-| 108 | a778864 fix(dforge): keep the finishing skill under its cap | - | - | open | - |
+| 98 | 12f6d95 feat(dforge): add API budgets and the spend file | - | - | n/a | feature: adds API budgets and the api-spend file |
+| 99 | f38bc95 feat(dforge): add the Decisions API ruling rung | - | - | n/a | 5-only |
+| 100 | e31290c feat(dforge): record and report Decisions API rulings | - | - | n/a | 5-only |
+| 101 | 4d12902 fix(dforge): refuse git-directory files as evidence | - | - | n/a | 5-only |
+| 102 | 0509664 fix(dforge): refuse nested .git paths as evidence | - | - | n/a | 5-only |
+| 103 | 7873ba3 feat(dforge): run rulings on API-billed judges | - | - | n/a | feature: adds run-api-judge for API-billed ruling judges |
+| 104 | e072bd5 feat(dforge): scrub, prove and charge API judge runs | - | - | n/a | 5-only |
+| 105 | e5bc2f7 feat(dforge): start auto-run rulings at the API rungs | - | - | n/a | feature: starts auto-run rulings at the API rungs |
+| 106 | 13dbd00 feat(dforge): keep the prompt cache warm while waiting | - | - | n/a | feature: keeps the prompt cache warm while the cockpit waits |
+| 107 | eadd832 feat(dforge): place Gemini Hydrogen by measurement | - | - | n/a | feature: places Gemini Hydrogen in agy-policy.json by measurement |
+| 108 | a778864 fix(dforge): keep the finishing skill under its cap | - | - | n/a | 5-only: trims a sentence the API-rung commits added to finishing's SKILL.md; dagents' copy is 19962 bytes, under the cap |
 | 109 | a7fc54c docs(dforge): document API budgets and keep-warm | - | - | open | - |
 | 110 | 1a56515 test(dforge): add acceptance tests A1-A18 | - | - | open | - |
 | 111 | fe2bd8b test(dforge): add acceptance tests A21-A24 | - | - | open | - |
