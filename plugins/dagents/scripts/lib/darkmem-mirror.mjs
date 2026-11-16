@@ -687,13 +687,13 @@ function worktreeDocsRoots(worktreeRoot) {
 }
 
 // The darkmem uri a document's name or path stands for: a name under
-// docs/dagents/, docs/forge/ or docs/superpowers/ (as a ledger or a **Spec:**
-// line writes it), or an absolute path under the docs root, the worktree's
-// docs directory or another worktree's (an older ledger's identity line may
-// name one). Computed from the roots, never by searching for a segment.
+// docs/dagents/, docs/dforge/, docs/forge/ or docs/superpowers/ (as a ledger
+// or a **Spec:** line writes it), or an absolute path under the docs root, the
+// worktree's docs directory (or its dforge 4.x docs/dforge) or another
+// worktree's (an older ledger's identity line may name one). Computed from the roots, never by searching for a segment.
 export function pathToUri(roots, file) {
   const text = String(file).replace(/\\/g, "/");
-  const name = /^(?:\.\/)?docs\/(?:dagents|forge|superpowers)\/(.+)$/.exec(text);
+  const name = /^(?:\.\/)?docs\/(?:dagents|dforge|forge|superpowers)\/(.+)$/.exec(text);
   if (name) {
     const uri = `${DOC_PREFIX}/${name[1]}`;
     return uriToLocal(roots, uri) ? uri : null;
@@ -705,7 +705,7 @@ export function pathToUri(roots, file) {
     return uri && uriToLocal(roots, uri) ? uri : null;
   };
   const bases = [roots.docsRoot];
-  if (roots.worktreeRoot) bases.push(path.join(roots.worktreeRoot, "docs", "dagents"));
+  if (roots.worktreeRoot) bases.push(path.join(roots.worktreeRoot, "docs", "dagents"), path.join(roots.worktreeRoot, "docs", "dforge"));
   for (const base of bases) {
     const uri = base && under(base);
     if (uri) return uri;

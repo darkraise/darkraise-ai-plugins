@@ -34,15 +34,16 @@ const storesOf = (home, repo) => {
 };
 
 test("a document name has one key under every prefix", () => {
-  assert.deepEqual(nameSpellings("docs/superpowers/plans/p.md"), ["docs/dagents/plans/p.md", "docs/forge/plans/p.md", "docs/superpowers/plans/p.md"]);
-  assert.deepEqual(nameSpellings("docs/forge/plans/p.md"), ["docs/dagents/plans/p.md", "docs/forge/plans/p.md", "docs/superpowers/plans/p.md"]);
-  assert.deepEqual(nameSpellings("./docs/dagents/plans/p.md"), ["docs/dagents/plans/p.md", "docs/forge/plans/p.md", "docs/superpowers/plans/p.md"]);
-  assert.deepEqual(nameSpellings("docs/superpowers"), ["docs/dagents", "docs/forge", "docs/superpowers"]);
+  assert.deepEqual(nameSpellings("docs/superpowers/plans/p.md"), ["docs/dagents/plans/p.md", "docs/dforge/plans/p.md", "docs/forge/plans/p.md", "docs/superpowers/plans/p.md"]);
+  assert.deepEqual(nameSpellings("docs/forge/plans/p.md"), ["docs/dagents/plans/p.md", "docs/dforge/plans/p.md", "docs/forge/plans/p.md", "docs/superpowers/plans/p.md"]);
+  assert.deepEqual(nameSpellings("./docs/dagents/plans/p.md"), ["docs/dagents/plans/p.md", "docs/dforge/plans/p.md", "docs/forge/plans/p.md", "docs/superpowers/plans/p.md"]);
+  assert.deepEqual(nameSpellings("docs/superpowers"), ["docs/dagents", "docs/dforge", "docs/forge", "docs/superpowers"]);
+  assert.deepEqual(nameSpellings("docs/dforge/plans/p.md"), ["docs/dagents/plans/p.md", "docs/dforge/plans/p.md", "docs/forge/plans/p.md", "docs/superpowers/plans/p.md"]);
   assert.deepEqual(nameSpellings("docs/forgex/a.md"), ["docs/forgex/a.md"]);
   assert.deepEqual(nameSpellings("docs/superpowersx/a.md"), ["docs/superpowersx/a.md"]);
   assert.deepEqual(nameSpellings("/abs/docs/superpowers/a.md"), ["/abs/docs/superpowers/a.md"]);
-  assert.deepEqual(nameSpellings("docs/superpowers/"), ["docs/dagents", "docs/forge", "docs/superpowers"]);
-  assert.deepEqual(nameSpellings("docs/forge/plans/"), ["docs/dagents/plans", "docs/forge/plans", "docs/superpowers/plans"]);
+  assert.deepEqual(nameSpellings("docs/superpowers/"), ["docs/dagents", "docs/dforge", "docs/forge", "docs/superpowers"]);
+  assert.deepEqual(nameSpellings("docs/forge/plans/"), ["docs/dagents/plans", "docs/dforge/plans", "docs/forge/plans", "docs/superpowers/plans"]);
 });
 
 test("a directory or named pipe where a document should be hashes as a non-file instead of throwing or blocking", () => {
@@ -280,6 +281,7 @@ test("documents move into darkmem: imported, pulled into the mirror, verified, a
   const s = await docsRepo(t, { "specs/a.md": "# A\n", "plans/p.md": "# P\n**Spec:** docs/dagents/specs/a.md\n" });
   write(path.join(s.repo, "CLAUDE.md"), "See docs/superpowers/specs/a.md\n");
   write(path.join(s.repo, "README.md"), "No citations\n");
+  write(path.join(s.repo, "NOTES.md"), "See docs/dforge/specs/a.md\n");
   commitAll(s.repo, "cite");
   await s.seed.putDocument({ project: "proj", uri: "dagents/specs/a.md", content: "# A\n" });
   const result = await s.reconcile();
@@ -287,6 +289,7 @@ test("documents move into darkmem: imported, pulled into the mirror, verified, a
   assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to darkmem$/m);
   assert.ok(result.stdout.includes(`  the deletion of docs/dagents is staged in ${s.repo}; commit it\n`), result.stdout);
   assert.ok(result.stdout.includes("    CLAUDE.md\n"), result.stdout);
+  assert.ok(result.stdout.includes("    NOTES.md\n"), "a dforge 4.x citation is named too");
   assert.doesNotMatch(result.stdout, /README\.md/);
   assert.equal(read(path.join(s.docsRoot, "plans", "p.md")), "# P\n**Spec:** docs/dagents/specs/a.md\n");
   assert.equal(s.stub.db.documents.size, 2);
@@ -611,7 +614,7 @@ test("a failing citation search is named in the move's details", { skip: process
   fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\nfor a in "$@"; do [ "$a" = "grep" ] && { echo "fatal: grep refused by the test" >&2; exit 128; }; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
   const result = await reconcile(s.repo, { ...s.env, PATH: `${bin}${path.delimiter}${s.env.PATH ?? process.env.PATH}` });
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /git grep failed: fatal: grep refused by the test; check for docs\/superpowers\/, docs\/forge\/ and docs\/dagents\/ citations before you commit/);
+  assert.match(result.stdout, /git grep failed: fatal: grep refused by the test; check for docs\/superpowers\/, docs\/forge\/, docs\/dforge\/ and docs\/dagents\/ citations before you commit/);
 });
 
 for (const { arg, reason } of [
@@ -684,7 +687,7 @@ test("a citation search killed before it finishes is named in the move's details
   fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\nfor a in "$@"; do [ "$a" = "grep" ] && kill -KILL $$; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
   const result = await reconcile(s.repo, { ...s.env, PATH: `${bin}${path.delimiter}${s.env.PATH ?? process.env.PATH}` });
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /git grep failed: it did not finish \(SIGKILL\); check for docs\/superpowers\/, docs\/forge\/ and docs\/dagents\/ citations before you commit/);
+  assert.match(result.stdout, /git grep failed: it did not finish \(SIGKILL\); check for docs\/superpowers\/, docs\/forge\/, docs\/dforge\/ and docs\/dagents\/ citations before you commit/);
 });
 
 // Documents applied darkmem and configured local, darkmem holding two of them.

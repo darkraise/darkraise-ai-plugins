@@ -144,6 +144,9 @@ test("restore refuses an occupied uri or a name with no archived copy, and needs
   const legacy = await s.sync("restore", "docs/forge/b.md");
   assert.equal(legacy.code, 1);
   assert.match(legacy.stdout, /^refused: no archived copy of dagents\/b\.md on darkmem$/m);
+  const dforge = await s.sync("restore", "docs/dforge/b.md");
+  assert.equal(dforge.code, 1);
+  assert.match(dforge.stdout, /^refused: no archived copy of dagents\/b\.md on darkmem$/m);
   assert.equal(s.stub.db.requests.some(r => r.method === "PATCH"), false);
   fs.writeFileSync(path.join(s.home, ".dagents", "stores.json"), JSON.stringify({ [s.repo]: { documents: "local", progress: "darkmem" } }));
   const local = await s.sync("restore", "docs/dagents/a.md");

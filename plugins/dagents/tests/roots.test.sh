@@ -103,11 +103,11 @@ check "name key: docs/superpowersx is another name" "$(dagents_name_key docs/sup
 check "name key: a name outside the docs directory" "$(dagents_name_key .dagents/sdd/p/progress.md)" ".dagents/sdd/p/progress.md"
 check "name key: an absolute path stays" "$(dagents_name_key /x/docs/superpowers/a.md)" "/x/docs/superpowers/a.md"
 check "name spellings: a document name" \
-  "$(dagents_name_spellings docs/superpowers/plans/p.md | tr '\n' '|')" "docs/dagents/plans/p.md|docs/forge/plans/p.md|docs/superpowers/plans/p.md|"
+  "$(dagents_name_spellings docs/superpowers/plans/p.md | tr '\n' '|')" "docs/dagents/plans/p.md|docs/dforge/plans/p.md|docs/forge/plans/p.md|docs/superpowers/plans/p.md|"
 check "name spellings: the docs directory itself" \
-  "$(dagents_name_spellings ./docs/dagents | tr '\n' '|')" "docs/dagents|docs/forge|docs/superpowers|"
+  "$(dagents_name_spellings ./docs/dagents | tr '\n' '|')" "docs/dagents|docs/dforge|docs/forge|docs/superpowers|"
 check "name spellings: a trailing slash" \
-  "$(dagents_name_spellings docs/forge/ | tr '\n' '|')" "docs/dagents|docs/forge|docs/superpowers|"
+  "$(dagents_name_spellings docs/forge/ | tr '\n' '|')" "docs/dagents|docs/dforge|docs/forge|docs/superpowers|"
 check "name spellings: any other name" "$(dagents_name_spellings .dagents/x.md | tr '\n' '|')" ".dagents/x.md|"
 
 # --- the mapped project, from roots.sh and from dagents-path ---
@@ -181,6 +181,12 @@ else
   rm -f "$HOME/.dagents/stores.json"
   check "no node, nothing applied: still local" "$(cd "$REPO" && _DAGENTS_KEY= PATH="$NONODE_PATH" dagents_ledger_dir p1)" "$TOP/.dagents/sdd/p1"
 fi
+
+# --- dforge 4.x citations read as an older spelling ---
+check "dforge key" "$(dagents_name_key docs/dforge/plans/x.md)" "docs/dagents/plans/x.md"
+check "dforge root key" "$(dagents_name_key docs/dforge)" "docs/dagents"
+check "spellings: key, then dforge first" "$(dagents_name_spellings docs/dagents/plans/x.md | tr '\n' '|')" "docs/dagents/plans/x.md|docs/dforge/plans/x.md|docs/forge/plans/x.md|docs/superpowers/plans/x.md|"
+check "dforge citation resolves" "$(cd "$TOP" && dagents_resolve docs/dforge/plans/x.md)" "$(cd "$TOP" && dagents_docs_root)/plans/x.md"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

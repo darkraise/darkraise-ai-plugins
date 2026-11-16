@@ -13,8 +13,8 @@ import { progressToDarkmem, progressToLocal, readNoFollow, readRegular, writeExc
 import { pullDocuments } from "./darkmem-pull.mjs";
 
 const FAMILIES = ["documents", "progress"];
-// dr-forge wrote docs/forge, dr-superpowers docs/superpowers.
-const LEGACY = ["docs/forge", "docs/superpowers"];
+// dforge 4.x wrote docs/dforge, dr-forge docs/forge, dr-superpowers docs/superpowers.
+const LEGACY = ["docs/dforge", "docs/forge", "docs/superpowers"];
 const DOCS = "docs/dagents";
 
 // Each move, under "<family>:<target store>". A move answers
@@ -59,9 +59,9 @@ function dirEntries(dir) {
 }
 
 // One document name under any docs prefix (spec §7.1), as dagents_name_key
-// and dagents_name_spellings spell it in roots.sh. The older docs/forge and
-// docs/superpowers spellings stay readable because historical plans and
-// ledgers cite them.
+// and dagents_name_spellings spell it in roots.sh. The older docs/dforge,
+// docs/forge and docs/superpowers spellings stay readable because historical
+// plans and ledgers cite them.
 export function nameSpellings(name) {
   const text = String(name).replace(/^\.\//, "").replace(/(.)\/+$/, "$1");
   const old = LEGACY.find(prefix => text === prefix || text.startsWith(`${prefix}/`));
@@ -445,15 +445,15 @@ async function documentsToDarkmem(context) {
   const removed = runGit(cfg.repoRoot, ["rm", "-r", "-q", "--", rel]);
   if (removed.status !== 0) return { moved: false, reason: `git rm failed: ${removed.stderr.trim()}`, details: [] };
   const details = [`the deletion of ${rel} is staged in ${cfg.repoRoot}; commit it`];
-  const cites = runGit(cfg.repoRoot, ["grep", "-I", "-l", "-F", "-e", "docs/superpowers/", "-e", "docs/forge/", "-e", "docs/dagents/", "--", ".", `:(exclude)${rel}`]);
+  const cites = runGit(cfg.repoRoot, ["grep", "-I", "-l", "-F", "-e", "docs/superpowers/", "-e", "docs/forge/", "-e", "docs/dforge/", "-e", "docs/dagents/", "--", ".", `:(exclude)${rel}`]);
   const citing = cites.status === 0 ? cites.stdout.split("\n").filter(Boolean) : [];
   // 1 is "no match"; anything else, a killed or timed-out run's null included, is a failure.
   if (cites.status !== 0 && cites.status !== 1) {
     const why = cites.stderr.trim() || `it did not finish (${cites.signal ?? "no exit status"})`;
-    details.push(`git grep failed: ${why}; check for docs/superpowers/, docs/forge/ and docs/dagents/ citations before you commit`);
+    details.push(`git grep failed: ${why}; check for docs/superpowers/, docs/forge/, docs/dforge/ and docs/dagents/ citations before you commit`);
   }
   if (citing.length) {
-    details.push("these tracked files cite docs/superpowers/, docs/forge/ or docs/dagents/ names; rewrite them before you commit the deletion:");
+    details.push("these tracked files cite docs/superpowers/, docs/forge/, docs/dforge/ or docs/dagents/ names; rewrite them before you commit the deletion:");
     details.push(...citing.slice(0, 20).map(file => `  ${file}`));
     if (citing.length > 20) details.push(`and ${citing.length - 20} more`);
   }

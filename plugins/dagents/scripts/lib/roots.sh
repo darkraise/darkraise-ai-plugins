@@ -163,16 +163,17 @@ dagents_ledger_files() {
 }
 
 # dagents_name_key NAME — the one name every docs prefix shares (store options
-# spec §7.1): docs/superpowers/<rest> (before 3.0) and docs/forge/<rest> (3.x)
-# are docs/dagents/<rest>. dagents has written only docs/dagents since 4.0.0, but
-# plans, specs, ledgers and registers written before it cite an old prefix and
-# are never rewritten, so every comparison of two document names compares
-# their keys.
+# spec §7.1): docs/superpowers/<rest> (before 3.0), docs/forge/<rest> (3.x)
+# and docs/dforge/<rest> (dforge 4.x) are docs/dagents/<rest>. dagents writes
+# only docs/dagents, but plans, specs, ledgers and registers written before it
+# cite an old prefix and are never rewritten, so every comparison of two
+# document names compares their keys.
 dagents_name_key() {
   local name=${1#./}
   [ "$name" = / ] || name=${name%/}
   case $name in
-    docs/superpowers|docs/forge) printf 'docs/dagents\n' ;;
+    docs/superpowers|docs/forge|docs/dforge) printf 'docs/dagents\n' ;;
+    docs/dforge/*) printf 'docs/dagents/%s\n' "${name#docs/dforge/}" ;;
     docs/superpowers/*) printf 'docs/dagents/%s\n' "${name#docs/superpowers/}" ;;
     docs/forge/*) printf 'docs/dagents/%s\n' "${name#docs/forge/}" ;;
     *) printf '%s\n' "$name" ;;
@@ -180,7 +181,8 @@ dagents_name_key() {
 }
 
 # dagents_name_spellings NAME — the key, then for a document name the same name
-# under the 3.x docs/forge and the pre-3.0 docs/superpowers. completed.md and
+# under dforge 4.x's docs/dforge, the 3.x docs/forge and the pre-3.0
+# docs/superpowers. completed.md and
 # register cells keep the spelling they were written with, so a search runs
 # once per line and accepts any.
 dagents_name_spellings() {
@@ -188,23 +190,25 @@ dagents_name_spellings() {
   key=$(dagents_name_key "$1")
   printf '%s\n' "$key"
   case $key in
-    docs/dagents) printf 'docs/forge\ndocs/superpowers\n' ;;
+    docs/dagents) printf 'docs/dforge\ndocs/forge\ndocs/superpowers\n' ;;
     docs/dagents/*)
       rest=${key#docs/dagents/}
-      printf 'docs/forge/%s\ndocs/superpowers/%s\n' "$rest" "$rest" ;;
+      printf 'docs/dforge/%s\ndocs/forge/%s\ndocs/superpowers/%s\n' "$rest" "$rest" "$rest" ;;
   esac
 }
 
 # dagents_resolve NAME [DIR] — a document name under the docs root, any other
 # relative name under the worktree, an absolute path unchanged. A historical
-# citation docs/superpowers/… or docs/forge/… resolves as docs/dagents/… does.
+# citation docs/superpowers/…, docs/forge/… or docs/dforge/… resolves as
+# docs/dagents/… does.
 dagents_resolve() {
   local name=${1#./}
   dagents_stores_init "${2:-}"
   case $name in
     /*|[A-Za-z]:/*|[A-Za-z]:\\*) printf '%s\n' "$1" ;;
-    docs/dagents|docs/forge|docs/superpowers) printf '%s\n' "$_DAGENTS_DOCS_ROOT" ;;
+    docs/dagents|docs/dforge|docs/forge|docs/superpowers) printf '%s\n' "$_DAGENTS_DOCS_ROOT" ;;
     docs/dagents/*) printf '%s/%s\n' "$_DAGENTS_DOCS_ROOT" "${name#docs/dagents/}" ;;
+    docs/dforge/*) printf '%s/%s\n' "$_DAGENTS_DOCS_ROOT" "${name#docs/dforge/}" ;;
     docs/forge/*) printf '%s/%s\n' "$_DAGENTS_DOCS_ROOT" "${name#docs/forge/}" ;;
     docs/superpowers/*) printf '%s/%s\n' "$_DAGENTS_DOCS_ROOT" "${name#docs/superpowers/}" ;;
     *) printf '%s/%s\n' "${_DAGENTS_TOP:-${2:-$PWD}}" "$name" ;;

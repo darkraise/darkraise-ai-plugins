@@ -156,11 +156,13 @@ test("paths name their uris; plans and drafts name their properties; a handoff n
   };
   assert.equal(pathToUri(named, "docs/superpowers/plans/p1.md"), "dagents/plans/p1.md");
   assert.equal(pathToUri(named, "docs/forge/plans/p1.md"), "dagents/plans/p1.md");
+  assert.equal(pathToUri(named, "docs/dforge/plans/p1.md"), "dagents/plans/p1.md");
   assert.equal(pathToUri(named, "./docs/dagents/plans/p1.md"), "dagents/plans/p1.md");
   assert.equal(pathToUri(named, "/home/u/.dagents/mirror/dagents/dagents/plans/p1.md"), "dagents/plans/p1.md");
   assert.equal(pathToUri(named, "/w/dagents/docs/dagents/specs/s.md"), "dagents/specs/s.md");
   assert.equal(pathToUri(named, "/w/dagents/docs/superpowers/specs/s.md"), null);
   assert.equal(pathToUri(named, "/w/dagents/docs/forge/specs/s.md"), null);
+  assert.equal(pathToUri(named, "/w/dagents/docs/dforge/specs/s.md"), "dagents/specs/s.md", "a dforge 4.x ledger names its worktree's docs/dforge");
   assert.equal(pathToUri(named, "/w/dagents/.dagents/sdd/p1/progress.md"), null);
   assert.equal(pathToUri(named, "/elsewhere/dagents/plans/p1.md"), null);
   assert.equal(pathToUri(named, "plans/p1.md"), null);

@@ -16,6 +16,15 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   // These suites read this repository's own notes and plans under docs/dforge.
   'plugins/dagents/tests/lanes.test.sh',
   'plugins/dagents/tests/typed-seats-and-drafting.acceptance.sh',
+  // dforge 4.x's docs/dforge is read as an older spelling of docs/dagents.
+  'plugins/dagents/scripts/lib/roots.sh',
+  'plugins/dagents/scripts/lib/darkmem-mirror.mjs',
+  'plugins/dagents/scripts/lib/darkmem-sync.mjs',
+  'plugins/dagents/scripts/lib/darkmem-reconcile.mjs',
+  'plugins/dagents/tests/roots.test.sh',
+  'plugins/dagents/tests/darkmem-sync/mirror.test.mjs',
+  'plugins/dagents/tests/darkmem-sync/reconcile.test.mjs',
+  'plugins/dagents/tests/darkmem-sync/restore.test.mjs',
 ]);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
