@@ -257,34 +257,34 @@
 | 250 | 424e19d fix(dforge): read an unreadable beat as unknown | - | - | done | port 12eda9d; fail@parent pass@port |
 | 251 | f5e9103 fix(dforge): match a written message file by name | - | - | done | port a15898d; fail@parent pass@port |
 | 252 | 656edd4 test(dforge): pin A10's nothing-follows clear | - | - | n/a | test-only: A10 cases in plugin-review-fixes.acceptance.test.sh, a dforge 5 suite dagents lacks |
-| 253 | 4edda5a fix(dforge): fit the did-not-stick toast in its box | - | - | open | - |
-| 254 | fbf0121 fix(dforge): focus Confirm after the consent press | - | - | open | - |
-| 255 | 642b774 fix(dforge): retry only the session steps that failed | - | - | open | - |
-| 256 | dd15eb1 test(dforge): pin a kept Claude-key save as toastless | - | - | open | - |
-| 257 | 37334d9 refactor(dforge): move next-step's router to route.sh | - | - | open | - |
-| 258 | 4d08f3c fix(dforge): route spec rows by the spec's plans | - | - | open | - |
-| 259 | 53fe7f8 feat(dforge): add next-step --print and a marker | - | - | open | - |
-| 260 | f6c1db9 fix(dforge): read completed.md and worktree ledgers | - | - | open | - |
-| 261 | cd486fb feat(dforge): add the plan-less next-step --project | - | - | open | - |
-| 262 | 3c7a1d0 feat(dforge): recompute latest.md with --print --latest | - | - | open | - |
-| 263 | f617f51 fix(dforge): recompute handoff lines in repo-audit | - | - | open | - |
-| 264 | 7d0d94d fix(dforge): recompute the cockpit resume offer | - | - | open | - |
-| 265 | eb49724 fix(dforge): release a stop only on a written block | - | - | open | - |
-| 266 | e9e0dc9 fix(dforge): hold turns that merge or close work | - | - | open | - |
-| 267 | 0e10e32 fix(dforge): name only a plain plan path in a hold | - | - | open | - |
-| 268 | c75c2c6 fix(dforge): keep row notes in roadmap settle | - | - | open | - |
-| 269 | 8624f84 docs(dforge): end milestone flows on next-step | - | - | open | - |
-| 270 | a004ff0 docs(dforge): read the next step from next-step | - | - | open | - |
-| 271 | c49d96a fix(dforge): file project checkpoints in darkmem | - | - | open | - |
-| 272 | 9fda4ea test(dforge): add acceptance tests A1-A11, A14-A19, A23-A31 for next-session-routing | - | - | open | - |
-| 273 | 241ad5e test(dforge): add acceptance tests A12, A13 for next-session-routing | - | - | open | - |
-| 274 | 2ff5031 test(dforge): add acceptance test A22 for next-session-routing | - | - | open | - |
-| 275 | 8d15fb8 fix(dforge): harden the next-step latest recompute | - | - | open | - |
-| 276 | 53d9182 fix(dforge): recompute the resume offer after a run | - | - | open | - |
-| 277 | 38bb71d fix(dforge): name only a plain plan in a ledger hold | - | - | open | - |
-| 278 | 3648e9f chore(dforge): weigh the routing acceptance suite | - | - | open | - |
-| 279 | addd102 test(dforge): skip the directory-mode check on Windows | - | - | open | - |
-| 280 | 9f2161e fix(dforge): drop built rows with no current milestone | - | - | open | - |
-| 281 | d7089d6 fix(dforge): keep full refs after a removed checkout | - | - | open | - |
-| 282 | 86c359c docs(dforge): route rules 4-5 without an index to rule 6 | - | - | open | - |
-| 283 | 71ab192 fix(dforge): record a Codex host in the next-step marker | - | - | open | - |
+| 253 | 4edda5a fix(dforge): fit the did-not-stick toast in its box | - | - | done | port a1c7b4d; fail@parent pass@port |
+| 254 | fbf0121 fix(dforge): focus Confirm after the consent press | - | - | n/a | 5-only: the AgentRouter consent (askConsent, CONSENTS) is absent from dagents' settings |
+| 255 | 642b774 fix(dforge): retry only the session steps that failed | - | - | done | port 2545388; fail@parent pass@port |
+| 256 | dd15eb1 test(dforge): pin a kept Claude-key save as toastless | - | - | n/a | test-only: pins that a kept Claude-key save toasts nothing; no code change |
+| 257 | 37334d9 refactor(dforge): move next-step's router to route.sh | - | - | n/a | feature: a refactor moving next-step's router into route.sh; its code comes along in 4cce7c0, row 258's port |
+| 258 | 4d08f3c fix(dforge): route spec rows by the spec's plans | - | - | done | port 4cce7c0; fail@parent pass@port |
+| 259 | 53fe7f8 feat(dforge): add next-step --print and a marker | - | - | n/a | feature: next-step --print and its latest.md marker; its code comes along in 7169ce2, row 260's port |
+| 260 | f6c1db9 fix(dforge): read completed.md and worktree ledgers | - | - | done | port 7169ce2; fail@parent pass@port |
+| 261 | cd486fb feat(dforge): add the plan-less next-step --project | - | - | n/a | feature: the plan-less next-step --project; its code comes along in ac4a31c, row 263's port |
+| 262 | 3c7a1d0 feat(dforge): recompute latest.md with --print --latest | - | - | n/a | feature: next-step --print --latest; its code comes along in ac4a31c, row 263's port |
+| 263 | f617f51 fix(dforge): recompute handoff lines in repo-audit | - | - | done | port ac4a31c; fail@parent pass@port |
+| 264 | 7d0d94d fix(dforge): recompute the cockpit resume offer | - | - | done | port c5a9afb; fail@parent pass@port |
+| 265 | eb49724 fix(dforge): release a stop only on a written block | - | - | done | port f91364d; fail@parent pass@port |
+| 266 | e9e0dc9 fix(dforge): hold turns that merge or close work | - | - | done | port 42b48ab; fail@parent pass@port |
+| 267 | 0e10e32 fix(dforge): name only a plain plan path in a hold | - | - | done | port 8533ac3; fail@parent pass@port |
+| 268 | c75c2c6 fix(dforge): keep row notes in roadmap settle | - | - | done | port 6046963; fail@parent pass@port |
+| 269 | 8624f84 docs(dforge): end milestone flows on next-step | - | - | done | port 0ef749b; text-only plugins/dagents/skills/closing-a-milestone/SKILL.md |
+| 270 | a004ff0 docs(dforge): read the next step from next-step | - | - | done | port 2a1f844; text-only plugins/dagents/skills/project-status/SKILL.md |
+| 271 | c49d96a fix(dforge): file project checkpoints in darkmem | - | - | done | port fe97610; fail@parent pass@port |
+| 272 | 9fda4ea test(dforge): add acceptance tests A1-A11, A14-A19, A23-A31 for next-session-routing | - | - | done | port bebe1ce; fail@parent pass@port |
+| 273 | 241ad5e test(dforge): add acceptance tests A12, A13 for next-session-routing | - | - | done | port bebe1ce; fail@parent pass@port |
+| 274 | 2ff5031 test(dforge): add acceptance test A22 for next-session-routing | - | - | done | port bebe1ce; fail@parent pass@port |
+| 275 | 8d15fb8 fix(dforge): harden the next-step latest recompute | - | - | done | port 8d4a989; fail@parent pass@port |
+| 276 | 53d9182 fix(dforge): recompute the resume offer after a run | - | - | done | port 329e618; fail@parent pass@port |
+| 277 | 38bb71d fix(dforge): name only a plain plan in a ledger hold | - | - | done | port 6506637; fail@parent pass@port |
+| 278 | 3648e9f chore(dforge): weigh the routing acceptance suite | - | - | done | port 7a0a57e; text-only plugins/dagents/skills/handoff/SKILL.md |
+| 279 | addd102 test(dforge): skip the directory-mode check on Windows | - | - | done | port 6ee479c; text-only plugins/dagents/tests/turn-end.test.sh |
+| 280 | 9f2161e fix(dforge): drop built rows with no current milestone | - | - | done | port ffc8818; fail@parent pass@port |
+| 281 | d7089d6 fix(dforge): keep full refs after a removed checkout | - | - | done | port e619228; fail@parent pass@port |
+| 282 | 86c359c docs(dforge): route rules 4-5 without an index to rule 6 | - | - | done | port eadd783; text-only plugins/dagents/skills/project-status/SKILL.md |
+| 283 | 71ab192 fix(dforge): record a Codex host in the next-step marker | - | - | done | port e63fb22; fail@parent pass@port |
