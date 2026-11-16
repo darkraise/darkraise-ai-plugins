@@ -3033,6 +3033,8 @@ async function trackAutoRun($: EngineInterface) {
   const before = await read($, autoRun)
   if (JSON.stringify(now) === JSON.stringify(before)) return
   await update($, autoRun, () => now)
+  // The run moved the ledger the offer's cache key leaves out: recompute once it ends.
+  if (before?.active === true && now?.active !== true) S.offerRanKey = null
   if (before?.active === true && now !== null && !now.active && now.stopped !== null) {
     await notify($, { kind: 'blocked', title: '⛔ Auto run stopped', detail: now.stopped, isPlain: true })
   }
