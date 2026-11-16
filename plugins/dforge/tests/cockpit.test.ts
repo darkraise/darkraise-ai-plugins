@@ -4655,8 +4655,8 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
     await $.turn.complete({ answer: 'Which meter width should the card use?', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
     const titles = fetches.map(f => String((f.body.embeds as Record<string, unknown>[])[0]?.title))
-    expect(titles.filter(t => /Task 2/.test(t))).toHaveLength(1)
-    expect(titles.filter(t => /✅ Task 3 complete/.test(t))).toEqual([])
+    // One question for the waiting line, none from the turn's end (R15), and no completion for the deferred task.
+    expect(titles).toEqual(['❓ Task 2 waiting on you'])
   })
 
   test('a main turn ending on Which option? sends a question', async ($, on) => {
@@ -4666,8 +4666,7 @@ describe('run card', () => {
     mock.store(on, { notifyUrl: WEBHOOK })
     await $.session.start(START)
     await $.turn.complete({ answer: '1. Merge\n2. PR\n\nWhich option?', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
-    expect(fetches).toHaveLength(1)
-    expect(String((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.title)).not.toMatch(/^✅ Done/)
+    expect(fetches.map(f => String((f.body.embeds as Record<string, unknown>[])[0]?.title))).toEqual(['❓ Claude is asking'])
   })
 
   test('reads no task heading inside a fence, as plan.sh does', () => {
