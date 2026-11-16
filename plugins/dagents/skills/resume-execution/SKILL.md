@@ -73,6 +73,13 @@ would stop and ask (the worktree and its branch are gone), run
 first, then ask. After a compaction an auto run does not come here: it
 follows the execution skill's After compaction steps.
 
+A run whose owner session is gone (crashed, or replaced outside the cockpit)
+is bound to no live session, so `scripts/auto-run status` exits 3 here while
+`<state>/sdd/auto-run.json` still reads `"active": true`. Run
+`scripts/auto-run stop --stale` before resuming: it stops that run and prints
+its pending decisions and rulings, which you read before going on. It exits 3
+and changes nothing while the owner still lives.
+
 ## Red Flags
 
 | Thought | Reality |
