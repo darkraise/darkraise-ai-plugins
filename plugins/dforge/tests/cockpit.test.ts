@@ -8281,6 +8281,17 @@ describe('display and saved-state honesty', () => {
     expect(await ui.find({ type: 'Text', text: /1 setting problem/ })).toBeDefined()
   })
 
+  test('paneGlyphs=ascii wraps a row too long for the pane rather than cut it with an ellipsis', async ($, on) => {
+    const dir = `/tmp/claude-0/${'-root-repositories-darkraise-ai-plugins'.repeat(6)}/config`
+    world(on, { ...SIGNED_IN, env: { HOME: '/home/me', CLAUDE_CONFIG_DIR: dir }, config: { paneGlyphs: 'ascii' } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const drawn = JSON.stringify(await ui.drawn())
+    expect(drawn).toContain(`"config ","${dir}"`)
+    expect(drawn.match(/[^\x00-\x7f]/gu) ?? []).toEqual([])
+    expect(drawn.match(/"wrap":"(?!wrap")[a-z-]+"/g) ?? []).toEqual([])
+  })
+
   test('a Claude-key save the engine drops is cleared and toasted', async ($, on) => {
     const toasts: string[] = []
     const clock = world(on, { tokens: 284_000, config: {}, toasts, runs: [], settings: { autoCompactWindow: 650_000 } })

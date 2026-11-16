@@ -524,7 +524,9 @@ export function asciiText(text: string): string {
 
 /**
  * A drawn tree in ASCII alone: every text and button label through asciiText,
- * every border classic. Elements other than Box, Text and Button are kept.
+ * every border classic, and every Text that would be cut at the pane's edge
+ * wrapped instead, since the renderer ends a cut row in `…`, which no rewrite
+ * here reaches. Elements other than Box, Text and Button are kept.
  */
 export function asciiTree<T>(node: T): T {
   if (typeof node === 'string') return asciiText(node) as T
@@ -536,6 +538,7 @@ export function asciiTree<T>(node: T): T {
     ...props,
     ...(typeof props.label === 'string' ? { label: asciiText(props.label) } : {}),
     ...(props.borderStyle === undefined ? {} : { borderStyle: 'classic' }),
+    ...(element.type === 'Text' && props.wrap !== undefined && props.wrap !== 'wrap' ? { wrap: 'wrap' } : {}),
   })
   return {
     ...element,
