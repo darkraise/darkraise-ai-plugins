@@ -501,7 +501,10 @@ ar_clear() {
   # One latest.md serves every worktree, so the prompt read may be another
   # plan's; storing it would resume the wrong plan.
   plan=$(ar_get plan)
-  if [ -n "$plan" ] && [[ $AR_PROMPT != *"$(basename "$plan")"* ]]; then
+  # The plan's file name as a whole word: `myplan.md` is not `plan.md`.
+  local name
+  name=$(basename "$plan")
+  if [ -n "$plan" ] && ! [[ $AR_PROMPT =~ (^|[^A-Za-z0-9._-])"$name"($|[^A-Za-z0-9_-]) ]]; then
     echo "auto-run: the handoff's first prompt names another plan than $plan; run scripts/next-step $plan again" >&2
     return 4
   fi

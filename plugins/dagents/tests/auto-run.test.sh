@@ -749,6 +749,9 @@ printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResum
 pending_before=$(field pending) resumes_before=$(field resumes)
 ar --session s-1 clear >/dev/null 2>&1; status=$?
 check "clear: another plan's prompt is refused, nothing booked" "$status:$(field pending):$(field resumes)" "4:$pending_before:$resumes_before"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/myplan.md` with dagents:resume-execution.\n```\n' > "$REPO/.dagents/handoff/latest.md"
+ar --session s-1 clear >/dev/null 2>&1; status=$?
+check "clear: a plan whose name only ends in this one's is another plan" "$status:$(field pending):$(field resumes)" "4:$pending_before:$resumes_before"
 # --- stop --stale (row 33) ---
 ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
 check "stop --stale: refused while the owner lives" "$status:$(field active)" "3:true"
