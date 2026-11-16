@@ -7,8 +7,9 @@
 # session ran dforge:ui-ux. It stands down while an auto run is bound to the
 # session (turn-end.sh owns those stops), on the retry (stop_hook_active), in
 # fast mode (lib/fast-mode.sh), when the last message ends with
-# "UI proof: pending — <why>", when it carries a `## Next session` block (a
-# handoff), when a ledger written this turn ends on a `Task <N>: waiting — `
+# "UI proof: pending — <why>", when it carries the `## Next session` block
+# next-step wrote this turn (a handoff; lib/next-ending.sh; without a turn
+# stamp, any such block), when a ledger written this turn ends on a `Task <N>: waiting — `
 # question, and while finite background work or a timer runs (lib/in-flight.sh):
 # each of those stops is not a claim that the UI work is done. The last message
 # is the hook's, else the transcript's (lib/last-message.sh). Anything
@@ -49,9 +50,14 @@ last=$(sed -E 's/^[[:space:]`]+//; s/[[:space:]`]+$//' <<<"$last")
 if grep -qE '^UI proof: pending[[:space:]]+(—|–|-)[[:space:]]*[^[:space:]]' <<<"$last"; then exit 0; fi
 . "$SCRIPT_DIR/lib/fast-mode.sh"
 fast_mode_on "$transcript_path" "$message" && exit 0
-grep -qF '## Next session' <<<"$message" && exit 0
+. "$SCRIPT_DIR/lib/roots.sh"
+. "$SCRIPT_DIR/lib/next-ending.sh"
 if [ -f "$stamp" ]; then
-  . "$SCRIPT_DIR/lib/roots.sh"
+  ending_released "$message" "$stamp" "$(dforge_latest_file "$root")" && exit 0
+else
+  grep -qF '## Next session' <<<"$message" && exit 0
+fi
+if [ -f "$stamp" ]; then
   . "$SCRIPT_DIR/lib/plan.sh"
   sdd=$(dforge_ledger_root "$root") || sdd=""
   ws="$(dforge_dir state "$root")/sdd"

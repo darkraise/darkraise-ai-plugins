@@ -167,7 +167,13 @@ check "hooks.json: the description names the UI hooks" "$(jq -r .description "$H
 sleep 1; prompt u-9
 printf '// changed\n' >> src/App.tsx
 check "a UI change with no proof: held" "$(decision "$(stop u-9 'Task 2 is done.')")" "block"
-check "a Next session block stands down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Status:** x')")" "none"
+# Only the block next-step wrote this turn is a handoff: one typed by hand is not.
+check "a hand-typed Next session block does not stand down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** x')")" "block"
+sleep 1
+mkdir -p .dforge/handoff
+printf '# Handoff\n\n## Next session\n\n**Next:** x\n' > .dforge/handoff/latest.md
+check "a Next session block stands down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** x')")" "none"
+rm -f .dforge/handoff/latest.md
 mkdir -p .dforge/sdd/ui-plan
 printf '# SDD ledger — plan: docs/ui-plan.md\nTask 2: waiting — which colour?\n' > .dforge/sdd/ui-plan/progress.md
 check "a ledger ending on a waiting line stands down" "$(decision "$(stop u-9 'Which colour should the button be?')")" "none"

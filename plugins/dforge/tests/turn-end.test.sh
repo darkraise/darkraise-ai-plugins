@@ -42,6 +42,14 @@ write_ledger() {
   sleep 1 # -newer compares whole seconds on some filesystems
   printf '# SDD ledger — plan: docs/superpowers/plans/2026-10-08-example.md\n%s\n' "$1" > "$LEDGER"
 }
+LATEST="$REPO/.dforge/handoff/latest.md"
+# latest.md as scripts/next-step writes it, after the turn's stamp: a block in
+# the stop message releases a ledger turn only with that file's Next line.
+wrote_next() { # wrote_next [Next text]
+  sleep 1
+  mkdir -p "${LATEST%/*}"
+  printf '# Handoff\n\n## Next session\n\n**Status:** x\n**Next:** %s\n' "${1:-x}" > "$LATEST"
+}
 
 # --- turn-start ---
 check "turn-start prints nothing" "$(prompt s-1)" ""
@@ -75,11 +83,12 @@ check "mid-plan summary: tells the user why" "$(jq -r .systemMessage <<<"$out" |
 # The checkout path is the caller's, so only the hook's own words are capped.
 check "mid-plan summary: the reason stays short" "$(r=$(jq -r .reason <<<"$out"); r=${r//"$SHOWN"/}; [ "${#r}" -lt 360 ] && echo short || echo "long: ${#r}")" "short"
 check "retry with stop_hook_active: passes" "$(stop s-1 'Task 1 is done.' true)" ""
-check "next-step block: passes" "$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x')" ""
+wrote_next
+check "next-step block: passes" "$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x\n**Next:** x')" ""
 # Without last_assistant_message the transcript's last assistant entry is read,
 # however far back it sits.
 TR="$TMP/fallback.jsonl"
-jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Stopping here.\n\n## Next session\n\n**Status:** x"}]}}' > "$TR"
+jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Stopping here.\n\n## Next session\n\n**Status:** x\n**Next:** x"}]}}' > "$TR"
 for i in $(seq 500); do printf '{"type":"progress","n":%s}\n' "$i"; done >> "$TR"
 check "no message field, the block far back in the transcript: passes" "$(stop s-1 '' false "$TR")" ""
 jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Task 1 is done."}]}}' >> "$TR"
@@ -115,7 +124,7 @@ out=$(stop s-1 $'1. Merge back to main locally\n\nWhich option?')
 check "two ledgers, menu only: blocks" "$(decision "$out")" "block"
 check "two ledgers, menu only: names the mid-plan ledger's next-step" \
   "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step" docs/superpowers/plans/2026-10-09-other.md')" "1"
-check "two ledgers, next-step block: passes" "$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x')" ""
+check "two ledgers, next-step block: passes" "$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x\n**Next:** x')" ""
 rm -rf "$WS2"
 
 # --- the transcript stands in when the message field is absent ---
@@ -152,7 +161,7 @@ launch toolu_bash 'Command running in background with ID: b1. Output is being wr
 launch toolu_grep 'notes.md: Async agent launched successfully'
 write_ledger 'Task 1: dispatched'
 check "agent and command running: passes" "$(stop s-1 'Waiting on the reviewer.' false "$BG")" ""
-out=$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x' false "$BG")
+out=$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x\n**Next:** x' false "$BG")
 check "next-step block over running work: blocks" "$(decision "$out")" "block"
 check "the hold counts the running launches" "$(jq -r .reason <<<"$out" | grep -c '2 background launch')" "1"
 check "finishing menu over running work: blocks" "$(decision "$(stop s-1 'Which option?' false "$BG")")" "block"
@@ -205,7 +214,8 @@ queue dequeue
 launch toolu_timer 'Command running in background with ID: t1. Output is being written to: /tmp/t1.output.'
 launch toolu_watch 'Command running in background with ID: w1. Output is being written to: /tmp/w1.output.'
 launch toolu_grep2 'grep output: Successfully stopped task: w1 (sleep 900)'
-NEXT=$'Stopping here.\n\n## Next session\n\n**Status:** x'
+NEXT=$'Stopping here.\n\n## Next session\n\n**Status:** x\n**Next:** x'
+wrote_next
 check "unstopped commands: next-step block holds" "$(decision "$(stop s-1 "$NEXT" false "$BG")")" "block"
 launch toolu_stop '{"message":"Successfully stopped task: t1 (sleep 900)","task_id":"t1","task_type":"local_bash"}'
 out=$(stop s-1 "$NEXT" false "$BG")
@@ -397,7 +407,8 @@ jq -nc '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_
 sleep 1; prompt s-svc
 write_ledger 'Task 1: complete (commits a..b, review clean)'
 check "a service alone: a mid-plan summary stop is held" "$(decision "$(stop s-svc 'Task 1 is done.' false "$SVC")")" "block"
-check "a service alone: the next-step block passes" "$(stop s-svc $'## Next session\n\n**Status:** x' false "$SVC")" ""
+wrote_next
+check "a service alone: the next-step block passes" "$(stop s-svc $'## Next session\n\n**Status:** x\n**Next:** x' false "$SVC")" ""
 
 # --- a clean line older than the code is not current (row 3) ---
 h7=$(git -C "$REPO" rev-parse --short HEAD)
@@ -438,6 +449,31 @@ check "a dforge turn that committed without a plan: passes" "$(stop s-4 'Fixed a
 sleep 1; prompt s-4 "$outside"
 check "a prompt outside git records no heads" \
   "$([ -f "$HOME/.claude/dforge/sessions/turns/s-4.refs" ] && echo yes || echo no)" "no"
+
+# --- only the block next-step wrote this turn releases a ledger turn (rows 2, 8) ---
+wrote_next 'Resume at Task 2.'
+sleep 1; prompt s-nx
+write_ledger 'Task 1: complete (commits a..b, review clean)'
+HAND=$'Done.\n\n## Next session\n\n**Next:** Resume at Task 2.'
+check "a hand-typed block does not release a ledger turn" "$(decision "$(stop s-nx "$HAND")")" "block"
+wrote_next 'Resume at Task 2.'
+check "a written block releases a ledger turn" "$(stop s-nx "$HAND")" ""
+wrote_next 'Resume at Task 3.'
+check "a block with another Next line does not release it" "$(decision "$(stop s-nx "$HAND")")" "block"
+# next-step prints the block and writes nothing (exit 4) where latest.md cannot
+# be written: there the heading alone stands. Root writes any file.
+if [ "$(id -u)" = 0 ] && ! command -v cygpath >/dev/null 2>&1; then
+  echo "skip - an unwritable latest.md accepts the heading (running as root)"
+else
+  chmod 444 "$LATEST"
+  check "an unwritable latest.md accepts the heading" "$(stop s-nx "$HAND")" ""
+  chmod 644 "$LATEST"
+fi
+. "$HERE/../scripts/lib/next-ending.sh"
+check "a writable latest.md: the heading alone is not enough" \
+  "$(ending_released "$HAND" "$HOME/.claude/dforge/sessions/turns/s-nx" "$TMP/absent/handoff/latest.md" && echo released || echo held)" "held"
+check "a line merely containing the heading is not the block" \
+  "$(ending_released $'Done. ## Next session' "$HOME/.claude/dforge/sessions/turns/s-nx" "$TMP/absent/handoff/latest.md" && echo released || echo held)" "held"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

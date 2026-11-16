@@ -59,6 +59,7 @@ root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 sdd=$(dforge_ledger_root "$root") || sdd=""
 [ -d "$sdd" ] || [ -n "$auto_pending" ] || exit 0
 . "${SCRIPT_DIR}/lib/last-message.sh"
+. "${SCRIPT_DIR}/lib/next-ending.sh"
 last=$(last_message "$stdin_json" "$transcript_path")
 
 # Every ledger written this turn must have its ending, since two plans can be
@@ -68,9 +69,12 @@ last=$(last_message "$stdin_json" "$transcript_path")
 # plan ends on the next-step block, on the finish-preference question asked
 # before its first task, or on a question to the human that the ledger's last
 # line records (`Task <N>: waiting — <question>`): the answer is the next
-# prompt, so the session is not over. The first ledger without its ending
-# names the reason.
+# prompt, so the session is not over. The next-step block counts only as
+# next-step wrote it this turn (lib/next-ending.sh), never hand-typed. The
+# first ledger without its ending names the reason.
 ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
+latest=""
+wrote_block() { [ -n "$latest" ] || latest=$(dforge_latest_file "$root"); ending_released "$last" "$stamp" "$latest"; }
 ledger="" clean=0
 [ -d "$sdd" ] || sdd=""
 ws="$(dforge_dir state "$root")/sdd"
@@ -83,11 +87,13 @@ while IFS= read -r candidate; do
   # Only a clean line that still covers HEAD sends the session to finishing; a
   # stale or rewritten one is a plan advanced without its next step.
   if [ "$(plan_final_review_state "$candidate" "$root")" = current ]; then
-    ends_with '## Next session' 'Which option?' "Type 'discard' to confirm" \
+    ends_with 'Which option?' "Type 'discard' to confirm" \
               'Must fix before completing' 'Worktree removal refused' && continue
+    wrote_block && continue
     ledger=$candidate clean=1
   else
-    ends_with '## Next session' 'Ask me then: show the finish menu' && continue
+    ends_with 'Ask me then: show the finish menu' && continue
+    wrote_block && continue
     tr -d '\r' < "$candidate" | sed '/^[[:space:]]*$/d' | tail -n 1 | grep -q '^Task [0-9][0-9]*: waiting — ' && continue
     ledger=$candidate clean=0
   fi
