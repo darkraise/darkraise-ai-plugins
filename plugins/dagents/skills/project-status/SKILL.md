@@ -9,7 +9,7 @@ description: Use when asked what to do next, where the project stands, whether t
 
 One screen: where the repository stands, what is open, and the single next step.
 This skill writes nothing — not `latest.md`, not a workspace, not a ledger. It
-never calls `scripts/next-step`, which rewrites `latest.md`. See
+calls `scripts/next-step` only with `--print`, which writes nothing. See
 [project-state.md](../../reference/project-state.md) for the files it reads.
 
 ## Steps
@@ -107,10 +107,9 @@ wins, and the report names which one matched.
 | 3 | Final review clean, branch unmerged (`git merge-base --is-ancestor <branch> <base>` exits non-zero) | dagents:finishing-a-development-branch |
 | 4 | `completed.md` exists and a spec has no plan | dagents:writing-plans |
 | 5 | `completed.md` exists and a plan is absent from it with no ledger | dagents:using-git-worktrees, then the plan's execution skill |
-| 6 | A register holds an unresolved row and no rule above matched | Route by the `Assigned` cell, as `scripts/next-step --complete` does, not by row order. Set aside `verify` rows (awaiting your check), rows assigned to a finished plan (one `completed.md` records; list them to resolve or reassign) and `.md` paths absent from this repository (another repository's work). Of the rest, the first row assigned to an existing plan goes to that plan's execution skill (dagents:resume-execution when it has a ledger), else one assigned to an existing spec to dagents:writing-plans, else any other label to dagents:brainstorming for its spec, else dagents:brainstorming to rule on the unassigned rows. Nothing left: when the set-aside rows are only `verify` rows and a roadmap milestone is open, fall to rule 7; otherwise no skill — name the set-aside rows |
-| 7 | The current roadmap milestone is not closed and has nothing open but `verify` rows (`scripts/roadmap open` exits 0, or every row it lists is at `verify`, which the audit is the check for) | dagents:closing-a-milestone |
-| 8 | A dirty tree with no plan in flight | name the files and ask whether they are live work |
-| 9 | None of the above | say the project is between programmes, offer dagents:brainstorming |
+| 6 | A register holds an unresolved row, or a roadmap milestone is not closed, and no rule above matched | Run `scripts/next-step --print --project` (with `--host codex` on Codex) and recommend what its `**Next:**` line names: a plan's execution skill, dagents:writing-plans, dagents:brainstorming, the milestone audit with dagents:closing-a-milestone, or the rows awaiting your check. When it reads `Nothing`, fall to rule 7 |
+| 7 | A dirty tree with no plan in flight | name the files and ask whether they are live work |
+| 8 | None of the above | say the project is between programmes, offer dagents:brainstorming |
 
 `BLOCKED` outranks everything: `scripts/next-step` already treats it as terminal
 and hands the decision to your human partner. Rule 0 reads each task's **last**
@@ -119,7 +118,7 @@ and later ruled and completed no longer matches.
 
 Rules 4 and 5 require `completed.md` to exist. Without it nothing can be shown to
 have finished, and firing rule 5 would recommend re-executing merged work — fall
-to rule 8 and say the index is absent. When several plans match one rule, take
+to rule 7 and say the index is absent. When several plans match one rule, take
 the newest filename date and say so. When a rule matches in more than one
 worktree, report each and recommend the one whose branch has the newest commit.
 

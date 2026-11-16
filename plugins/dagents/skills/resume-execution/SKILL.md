@@ -48,7 +48,9 @@ session from memory or from a summary.
    `<docs>/distilled/gotchas.md` in the same step: they bind the same
    way, and yield to `handoff.md` wherever both speak. Neither is an error when
    absent. See [project-state.md](../../reference/project-state.md).
-5. **Continue** with what latest.md's `**Next:**` line says:
+5. **Continue** with what the `**Next:**` line of
+   `scripts/next-step --print PLAN_FILE` says, not latest.md's (it recomputes
+   the step from the plan and ledger and writes nothing):
    - Start or resume at Task N: invoke the skill the plan's `**Execution:**`
      line names — dagents:subagent-driven-development for `subagent`,
      dagents:executing-plans for `inline`. Its ledger recovery takes over.
