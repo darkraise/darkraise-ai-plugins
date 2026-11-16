@@ -22,7 +22,7 @@ cleanly."
   budget leaves room for one task to finish.
 - A hard stop: the plan is saved outside an auto run. A saved plan at depth light is a stop
   only when it has 4 or more tasks, or when `scripts/context-size` does not
-  say `ok` after steps 0-4 (dforge:writing-plans §Execution Handoff): a light
+  say `ok` after steps 0-4 (dagents:writing-plans §Execution Handoff): a light
   plan of 1-3 tasks runs steps 0-4 and continues in this session.
   The last task completing is never a stop in either execution mode: the
   final review and finishing run in the same session whatever
@@ -37,7 +37,7 @@ cleanly."
   a compaction that left too much. A saved plan moves through the switch instead
   (auto-run.md §The switch): only steps 0-3 below run, and the cockpit clears
   the session. It also clears before finishing
-  (auto-run.md §Finishing), through dforge:finishing-a-development-branch.
+  (auto-run.md §Finishing), through dagents:finishing-a-development-branch.
   On a handoff the steps below run as always, but the turn does not
   end on the next-step block: return to the step that invoked this skill,
   which runs `scripts/auto-run clear` and ends the turn (auto-run.md §Clears).
@@ -80,7 +80,7 @@ cleanly."
      `Task N: complete`, a fix-round line, or an assigned line whose run is
      over, per step 0). Update
      `<ledger dir>/handoff.md` (below; `<ledger dir>` per
-     using-dforge §Session Budget).
+     using-dagents §Session Budget).
    - Design phase (brainstorming, a spec, a plan in progress): save the draft
      file. It is the authority.
    - Unplanned work (a change designed in chat, or a punch list, with no plan
@@ -110,15 +110,15 @@ cleanly."
 
    In a design phase, `State` names the draft instead of a plan and ledger,
    on the line ``- Draft: `<spec path>` `` in place of the `- Plan:` line, where
-   `<spec path>` is the draft's name (`dforge-path name`). darkmem files the
+   `<spec path>` is the draft's name (`dagents-path name`). darkmem files the
    checkpoint under the workstream either line names.
    For unplanned work, `State` lists each item with its state: implemented
    and uncommitted, committed, awaiting feedback (with the link), or
    unscoped.
-4. **Run `scripts/next-step`** (see using-dforge §Session Budget):
+4. **Run `scripts/next-step`** (see using-dagents §Session Budget):
    - Execution: `scripts/next-step PLAN_FILE`.
    - Design phase: `scripts/next-step --draft DRAFT_FILE --next "<the next action, naming its skill>"`,
-     for example `--next "Write the implementation plan with dforge:writing-plans."`
+     for example `--next "Write the implementation plan with dagents:writing-plans."`
    - Unplanned work: `scripts/next-step --adhoc --phase <design|build> --next "<the next action, naming its skill>"`.
      The phase is `design` when the next action, or any item the next
      session may pick up, is unscoped or awaits a design decision or

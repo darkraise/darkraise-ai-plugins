@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Report what a plan written before the external executor lane is missing, and
 # which of its scoring units the lane gate would admit, so
-# dforge:revising-plans edits from a computed answer rather than from
+# dagents:revising-plans edits from a computed answer rather than from
 # arithmetic done by hand across a long plan.
 #
 # This script writes nothing. Every mechanical rule lives here, where a test can
@@ -18,7 +18,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 # Tests point this at a fixture ladder; production reads the shipped blocks.
-LADDER="${DR_PLAN_REVISE_LADDER:-$HERE/../reference/ladder.md}"
+LADDER="${DAGENTS_PLAN_REVISE_LADDER:-$HERE/../reference/ladder.md}"
 
 die() { printf 'plan-revise: %s\n' "$1" >&2; exit 2; }
 usage() { die "usage: plan-revise PLAN_FILE | plan-revise --survey DIR"; }
@@ -153,7 +153,7 @@ ledger_for() {
   local ctx slug want ledger where named best wt roots
   ctx=$(_plan_ctx "$1")
   slug=$(basename "$1" .md)
-  want=$(dforge_name_key "$(dforge_name "$1" "$ctx")")
+  want=$(dagents_name_key "$(dagents_name "$1" "$ctx")")
   roots=$(git -C "$ctx" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
   while IFS=$'\t' read -r ledger where; do
     [ -n "$ledger" ] || continue
@@ -166,12 +166,12 @@ ledger_for() {
         [ -n "$wt" ] || continue
         case $named in "$wt"/*) [ "${#wt}" -gt "${#best}" ] && best=$wt ;; esac
       done <<<"$roots"
-      if [ -n "$best" ]; then named=${named#"$best"/}; else named=$(dforge_name "$named" "$ctx"); fi ;;
+      if [ -n "$best" ]; then named=${named#"$best"/}; else named=$(dagents_name "$named" "$ctx"); fi ;;
     esac
-    [ "$(dforge_name_key "$named")" = "$want" ] || continue
+    [ "$(dagents_name_key "$named")" = "$want" ] || continue
     printf '%s\t%s\n' "$where" "$ledger"
     return 0
-  done < <(dforge_ledger_files "$ctx")
+  done < <(dagents_ledger_files "$ctx")
 }
 
 # completed_form PLAN — "merged", "pr" or nothing, from the completed.md beside
@@ -184,8 +184,8 @@ completed_form() {
   local f rel hits s
   f="$(cd "$(dirname "$1")" && pwd)/completed.md"
   [ -f "$f" ] || return 0
-  rel=$(dforge_name "$1" "$(_plan_ctx "$1")")
-  hits=$(while IFS= read -r s; do grep -F "\`$s\`" "$f" 2>/dev/null; done < <(dforge_name_spellings "$rel"))
+  rel=$(dagents_name "$1" "$(_plan_ctx "$1")")
+  hits=$(while IFS= read -r s; do grep -F "\`$s\`" "$f" 2>/dev/null; done < <(dagents_name_spellings "$rel"))
   [ -n "$hits" ] || return 0
   if grep -qF 'merged into' <<<"$hits"; then printf 'merged\n'
   elif grep -qF 'via PR' <<<"$hits"; then printf 'pr\n'
@@ -206,7 +206,7 @@ steps() {
 survey() {
   local dir=$1 f rows=0 a score risk fl sp cp
   local tasks scored unparsed eligible live evidence lf form execution exec_mode ok
-  dforge_stores_init "$(_plan_ctx "$dir/x")"
+  dagents_stores_init "$(_plan_ctx "$dir/x")"
   for f in "$dir"/*.md; do
     [ -f "$f" ] || continue
     tasks=$(plan_tasks "$f" | grep -c .)

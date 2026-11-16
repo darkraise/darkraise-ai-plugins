@@ -1,7 +1,7 @@
 ## Lint and Review
 
 1. **Lint.** Run `scripts/plan-lint PLAN_FILE`
-   (see using-dforge §Session Budget) until it reports `0 errors`.
+   (see using-dagents §Session Budget) until it reports `0 errors`.
    Fix each WARN, or
    explain it in one line of the plan's Assumptions. The checker covers the
    header sections, the task headings and index, the Execution line,
@@ -22,7 +22,7 @@
    come back since then, such as after a login. Every seat
    scores executability, coherence, coverage and assumptions (1-20) against
    [plan-review.md](../../../criteria/plan-review.md) and lists findings. On
-   exit 2, review with `dforge:judge-opus` (on a Codex-host plan, a native
+   exit 2, review with `dagents:judge-opus` (on a Codex-host plan, a native
    judge at Astra high or above) and say why, quoting its message.
    - **`primary=native:<model>/<effort>`** (every round of a Codex-host plan).
      Dispatch a native judge at that pair or above
@@ -45,17 +45,17 @@
      scores and `findings` from the JSON. On `FALLBACK`, or a line naming
      `gpt-6.1-sol/xhigh` with `status=OK`, say the substitution aloud with the
      runner's reason or the line's `evidence=`. `TIMEOUT` or `FAILED` produced
-     no review: dispatch the printed `fallback` (`dforge:judge-opus`)
+     no review: dispatch the printed `fallback` (`dagents:judge-opus`)
      with the full-plan template and
      `[REPORT_FILE]` set to `<workspace>/plan-review-round-1-report.md`, and
      say why. Never run the Codex seat twice in one round.
    - **`reason=codex-off`** (round 1 while the gate has not opened the review
-     surface). No Codex seat runs. The `primary` is `dforge:judge-opus`.
+     surface). No Codex seat runs. The `primary` is `dagents:judge-opus`.
      Dispatch it with the full-plan template and
      `[REPORT_FILE]` set to `<workspace>/plan-review-round-1-report.md`, and say
      `codex off — <reason>`, quoting the gate line's `reason` (`untrusted`
      when it printed `usable=true`).
-   - **`primary=dforge:judge-opus`** (every later round). Write
+   - **`primary=dagents:judge-opus`** (every later round). Write
      `diff -u <workspace>/plan-round-<r-1>.md PLAN_FILE > <workspace>/plan-delta-<r>.diff`,
      dispatch the seat with the Later rounds template, passing that file and
      the previous round's findings file, with

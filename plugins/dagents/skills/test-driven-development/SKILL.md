@@ -197,7 +197,7 @@ After green only:
 - Fold a new test that varies a sibling into the sibling's table as a row
 - Delete a test written on this branch when a broader test written on this branch fails for every fault the narrower one catches
 
-The commit body names those faults. The rule covers only tests that do not exist at the branch's merge base (`git merge-base <default branch> HEAD`), and never a regression test that names a fixed bug. A test that predates the branch goes through dforge:test-simplifier.
+The commit body names those faults. The rule covers only tests that do not exist at the branch's merge base (`git merge-base <default branch> HEAD`), and never a regression test that names a fixed bug. A test that predates the branch goes through dagents:test-simplifier.
 
 Keep tests green. Don't add behavior.
 

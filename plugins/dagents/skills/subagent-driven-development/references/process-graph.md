@@ -32,7 +32,7 @@ digraph process {
     "Final review: code reviewer + Codex round, judge verifies the union" [shape=box];
     "Final findings? ONE fix dispatch, one scoped re-review, ruling seat on residuals" [shape=box];
     "Final review clean: ledger it, print rulings" [shape=box];
-    "Use dforge:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
+    "Use dagents:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
     "Setup: worktree, finish preference, ledger check, plan header, pre-flight ruling" -> "Dispatch the assigned implementer or executor (./implementer-prompt.md)";
     "Dispatch the assigned implementer or executor (./implementer-prompt.md)" -> "Implementer reports NEEDS_CONTEXT?";
@@ -65,6 +65,6 @@ digraph process {
     "More tasks remain?" -> "Final review: code reviewer + Codex round, judge verifies the union" [label="no"];
     "Final review: code reviewer + Codex round, judge verifies the union" -> "Final findings? ONE fix dispatch, one scoped re-review, ruling seat on residuals";
     "Final findings? ONE fix dispatch, one scoped re-review, ruling seat on residuals" -> "Final review clean: ledger it, print rulings";
-    "Final review clean: ledger it, print rulings" -> "Use dforge:finishing-a-development-branch";
+    "Final review clean: ledger it, print rulings" -> "Use dagents:finishing-a-development-branch";
 }
 ```

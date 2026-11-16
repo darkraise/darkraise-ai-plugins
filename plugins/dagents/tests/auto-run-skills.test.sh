@@ -4,7 +4,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
-unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID DFORGE_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID DAGENTS_BUDGET CLAUDE_PROJECT_DIR
 
 pass=0 fail=0
 check() { # check <name> <got> <want>

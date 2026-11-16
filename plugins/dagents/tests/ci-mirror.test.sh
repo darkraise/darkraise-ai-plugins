@@ -42,15 +42,15 @@ mirror() { # mirror <plan file> — stdout in $out, stderr in $err, exit code in
   out=$(cd "$REPO" && timeout 120 bash "$MIRROR" "$@" 2>"$TMP/err" < /dev/null); rc=$?
   err=$(cat "$TMP/err")
 }
-rows() { wc -l < "$REPO/.dforge/suites.tsv" | tr -d ' '; }
-key_of() { sed -n "${1}p" "$REPO/.dforge/suites.tsv" | tr -d '\r' | cut -f3; }
+rows() { wc -l < "$REPO/.dagents/suites.tsv" | tr -d ' '; }
+key_of() { sed -n "${1}p" "$REPO/.dagents/suites.tsv" | tr -d '\r' | cut -f3; }
 
 # --- a plan whose CI line is none --------------------------------------------
 printf '# P\n\n**Spec:** `s.md`\n\n**CI:** none\n\n### Task 1: One\n\nbody\n' > "$TMP/none.md"
 mirror "$TMP/none.md"
 check "none exits 0" "$rc" "0"
 check "none prints ci: none and nothing else" "$out" "ci: none"
-check "none runs nothing through suite-run" "$([ -e "$REPO/.dforge/suites.tsv" ] && echo yes || echo no)" "no"
+check "none runs nothing through suite-run" "$([ -e "$REPO/.dagents/suites.tsv" ] && echo yes || echo no)" "no"
 
 # --- local commands run through suite-run ----------------------------------------
 cat > "$TMP/ci.md" <<'EOF'
@@ -97,7 +97,7 @@ mkdir -p "$REPO/sub"
 out=$(cd "$REPO/sub" && timeout 120 bash "$MIRROR" "$TMP/ci.md" 2>/dev/null); rc=$?
 check "a run from a subdirectory passes" "$rc" "0"
 check "a run from a subdirectory still runs the command" "$(runs)" "3"
-check "no row names the subdirectory" "$(cut -f3 "$REPO/.dforge/suites.tsv" | tr -d '\r' | grep -c '^(sub)')" "0"
+check "no row names the subdirectory" "$(cut -f3 "$REPO/.dagents/suites.tsv" | tr -d '\r' | grep -c '^(sub)')" "0"
 
 # --- a failing command, and a command that cannot launch ---------------------------------
 cat > "$TMP/fail.md" <<'EOF'

@@ -24,7 +24,7 @@ product spec and `scripts/roadmap check` reports `0 errors`.
 - The repository is empty or a skeleton, and the request is a product, an app,
   a service or a tool rather than a change to one.
 - Or the request names several independent subsystems ("chat, file storage,
-  billing and analytics"). dforge:brainstorming's scope check sends
+  billing and analytics"). dagents:brainstorming's scope check sends
   these here instead of decomposing them in prose.
 
 A project that already has `<docs>/roadmap.md` does not come here:
@@ -71,18 +71,18 @@ the roadmap exists, and new work is an epic row (see Changing the roadmap).
 9. **Approval.** Present the spec path and `roadmap status`. On approval, commit
    the spec, the registers and the roadmap together. Set each M0 row your human
    partner approved to `done` with `scripts/register set`, close M0 through
-   dforge:closing-a-milestone, and end with
-   `scripts/next-step --draft <product spec> --next "Brainstorm the first M1 epic with dforge:brainstorming"`.
+   dagents:closing-a-milestone, and end with
+   `scripts/next-step --draft <product spec> --next "Brainstorm the first M1 epic with dagents:brainstorming"`.
 
 ## After this skill
 
-Each epic runs the normal cycle: dforge:brainstorming writes its spec
+Each epic runs the normal cycle: dagents:brainstorming writes its spec
 and opens its requirement register (required for every epic on the roadmap,
-even when the request was one sentence), dforge:writing-plans plans it,
+even when the request was one sentence), dagents:writing-plans plans it,
 the plan's execution skill builds it, and
-dforge:finishing-a-development-branch runs `scripts/roadmap settle`,
+dagents:finishing-a-development-branch runs `scripts/roadmap settle`,
 which moves the epic row to `verify` once its requirements are resolved. A
-milestone closes only through dforge:closing-a-milestone.
+milestone closes only through dagents:closing-a-milestone.
 
 ## Changing the roadmap
 

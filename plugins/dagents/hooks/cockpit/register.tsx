@@ -43,7 +43,7 @@ import {
   handedOff,
   isAtLeast,
   isGitWriteTool,
-  isDforge,
+  isDagents,
   gitTextFiles,
   isAbsolutePath,
   isPlanTail,
@@ -115,7 +115,7 @@ import type { NotifyEvent, NotifyKind, NotifyPlace, SendResult } from './notify'
 import { CELL_PX, avatarSvg, bandMetersSvg, gaugeTileSvg, gaugeSvg, labelledMeterSvg, meterSvg, paint, seatSvg, segmentsSvg, stackSvg, svgWidth, trendSvg } from './svg'
 import type { BandMeter, PanelLine, PanelRun, Segment } from './svg'
 
-const PANE = 'dforge'
+const PANE = 'dagents'
 const PANE_COLUMNS = 56
 const INDENT = 2
 // A button's rounded frame: the accent on the one that matters, gray at rest.
@@ -130,9 +130,9 @@ const MAX_BREAKDOWN_ROWS = 12
 // Below this the band drops its frame.
 const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
-  'Finish the task in flight through its completion line, then hand off with the dforge handoff skill. Start no new task.'
+  'Finish the task in flight through its completion line, then hand off with the dagents handoff skill. Start no new task.'
 function resumePrompt(): string {
-  return `Resume the work in ${S.latestName ?? '.dforge/handoff/latest.md'} with the dforge resume-execution skill.`
+  return `Resume the work in ${S.latestName ?? '.dagents/handoff/latest.md'} with the dagents resume-execution skill.`
 }
 // A handoff older than this is not offered for resuming.
 const RESUME_WITHIN = 3 * 86_400_000
@@ -192,7 +192,7 @@ const ASKING_TOOLS = ['AskUserQuestion', 'ExitPlanMode']
 // Permission modes in which an "ask" is settled without the person.
 const UNATTENDED_MODES = ['auto', 'bypassPermissions', 'dontAsk']
 // The skills that run a plan's tasks in this session.
-const RUN_SKILLS = ['dforge:subagent-driven-development', 'dforge:executing-plans', 'dforge:resume-execution']
+const RUN_SKILLS = ['dagents:subagent-driven-development', 'dagents:executing-plans', 'dagents:resume-execution']
 // The tools that move the session into or out of a worktree.
 const WORKTREE_TOOLS = ['EnterWorktree', 'ExitWorktree']
 // The tools a review seat's write guard looks at.
@@ -231,40 +231,40 @@ const CARD = '#8080800f'
 const RUN_SEGMENTS: Record<string, Segment> = { complete: 'done', assigned: 'active', blocked: 'blocked' }
 const GIT_STATUS = ['git', '--no-optional-locks', '-c', 'core.fsmonitor=false', 'status', '--porcelain=v2', '--branch']
 
-const budget = atom({ plugin: 'dforge', key: 'budget' } as const, null)
-const usage = atom({ plugin: 'dforge', key: 'usage' } as const, null)
-const breakdown = atom({ plugin: 'dforge', key: 'breakdown' } as const, null)
-const seats = atom({ plugin: 'dforge', key: 'seats' } as const, [])
-const spawns = atom({ plugin: 'dforge', key: 'spawns' } as const, [])
-const shells = atom({ plugin: 'dforge', key: 'shells' } as const, [])
-const remote = atom({ plugin: 'dforge', key: 'remote' } as const, { clients: [], setting: null })
-const plan = atom({ plugin: 'dforge', key: 'plan' } as const, [])
-const repo = atom({ plugin: 'dforge', key: 'repo' } as const, null)
-const refusals = atom({ plugin: 'dforge', key: 'refusals' } as const, [])
-const isNudged = atom({ plugin: 'dforge', key: 'isNudged' } as const, false)
-const isPlanSession = atom({ plugin: 'dforge', key: 'isPlanSession' } as const, false)
-const isFastMode = atom({ plugin: 'dforge', key: 'isFastMode' } as const, false)
-const isRunSession = atom({ plugin: 'dforge', key: 'isRunSession' } as const, false)
-const autoRun = atom({ plugin: 'dforge', key: 'autoRun' } as const, null)
-const alerted = atom({ plugin: 'dforge', key: 'alerted' } as const, [])
-const trend = atom({ plugin: 'dforge', key: 'trend' } as const, [])
-const view = atom({ plugin: 'dforge', key: 'view' } as const, 'cockpit')
-const account = atom({ plugin: 'dforge', key: 'account' } as const, null)
-const sessionRead = atom({ plugin: 'dforge', key: 'sessionRead' } as const, null)
-const place = atom({ plugin: 'dforge', key: 'place' } as const, null)
-const engine = atom({ plugin: 'dforge', key: 'engine' } as const, { model: null, effort: null, cache: null, style: null })
+const budget = atom({ plugin: 'dagents', key: 'budget' } as const, null)
+const usage = atom({ plugin: 'dagents', key: 'usage' } as const, null)
+const breakdown = atom({ plugin: 'dagents', key: 'breakdown' } as const, null)
+const seats = atom({ plugin: 'dagents', key: 'seats' } as const, [])
+const spawns = atom({ plugin: 'dagents', key: 'spawns' } as const, [])
+const shells = atom({ plugin: 'dagents', key: 'shells' } as const, [])
+const remote = atom({ plugin: 'dagents', key: 'remote' } as const, { clients: [], setting: null })
+const plan = atom({ plugin: 'dagents', key: 'plan' } as const, [])
+const repo = atom({ plugin: 'dagents', key: 'repo' } as const, null)
+const refusals = atom({ plugin: 'dagents', key: 'refusals' } as const, [])
+const isNudged = atom({ plugin: 'dagents', key: 'isNudged' } as const, false)
+const isPlanSession = atom({ plugin: 'dagents', key: 'isPlanSession' } as const, false)
+const isFastMode = atom({ plugin: 'dagents', key: 'isFastMode' } as const, false)
+const isRunSession = atom({ plugin: 'dagents', key: 'isRunSession' } as const, false)
+const autoRun = atom({ plugin: 'dagents', key: 'autoRun' } as const, null)
+const alerted = atom({ plugin: 'dagents', key: 'alerted' } as const, [])
+const trend = atom({ plugin: 'dagents', key: 'trend' } as const, [])
+const view = atom({ plugin: 'dagents', key: 'view' } as const, 'cockpit')
+const account = atom({ plugin: 'dagents', key: 'account' } as const, null)
+const sessionRead = atom({ plugin: 'dagents', key: 'sessionRead' } as const, null)
+const place = atom({ plugin: 'dagents', key: 'place' } as const, null)
+const engine = atom({ plugin: 'dagents', key: 'engine' } as const, { model: null, effort: null, cache: null, style: null })
 const IDLE: CockpitActivity = { kind: 'idle', since: 0, turnStartedAt: null, step: 0, tool: null, agent: null, detail: null, lastTurnMs: null, endedAt: null, isSent: false }
-const activity = atom({ plugin: 'dforge', key: 'activity' } as const, IDLE)
-const turnTokens = atom({ plugin: 'dforge', key: 'turnTokens' } as const, [])
-const run = atom({ plugin: 'dforge', key: 'run' } as const, null)
-const finish = atom({ plugin: 'dforge', key: 'finish' } as const, null)
-const resumeOffer = atom({ plugin: 'dforge', key: 'resumeOffer' } as const, null)
-const resumeDismissed = atom({ plugin: 'dforge', key: 'resumeDismissed' } as const, null)
-const rootsNote = atom({ plugin: 'dforge', key: 'rootsNote' } as const, null)
-const settings = atom({ plugin: 'dforge', key: 'settings' } as const, null)
+const activity = atom({ plugin: 'dagents', key: 'activity' } as const, IDLE)
+const turnTokens = atom({ plugin: 'dagents', key: 'turnTokens' } as const, [])
+const run = atom({ plugin: 'dagents', key: 'run' } as const, null)
+const finish = atom({ plugin: 'dagents', key: 'finish' } as const, null)
+const resumeOffer = atom({ plugin: 'dagents', key: 'resumeOffer' } as const, null)
+const resumeDismissed = atom({ plugin: 'dagents', key: 'resumeDismissed' } as const, null)
+const rootsNote = atom({ plugin: 'dagents', key: 'rootsNote' } as const, null)
+const settings = atom({ plugin: 'dagents', key: 'settings' } as const, null)
 const SETTINGS_VIEW: CockpitSettingsView = { tab: '', isHelpShown: true, editing: null, error: null, isConfirmingReset: false }
-const settingsView = atom({ plugin: 'dforge', key: 'settingsView' } as const, SETTINGS_VIEW)
-const notifier = atom({ plugin: 'dforge', key: 'notifier' } as const, {
+const settingsView = atom({ plugin: 'dagents', key: 'settingsView' } as const, SETTINGS_VIEW)
+const notifier = atom({ plugin: 'dagents', key: 'notifier' } as const, {
   url: null,
   isFromEnv: false,
   mention: null,
@@ -502,7 +502,7 @@ export const register: Register = on => {
     }
     const started = await next(e)
     if (started.deny !== undefined || started.agentId === undefined) return started
-    if (isDforge(e.subagentType)) {
+    if (isDagents(e.subagentType)) {
       await update($, isPlanSession, () => true)
       await flushSettingNote($)
       if (e.subagentType.split(':')[1]?.startsWith('impl-')) await markRunSession($)
@@ -537,7 +537,7 @@ export const register: Register = on => {
   // A skill typed as a slash command makes no Skill tool call; its prompt is expanded on every path.
   on('skill.prompt', async ($, e, next) => {
     const expanded = await next(e)
-    if (isDforge(e.skill)) {
+    if (isDagents(e.skill)) {
       await update($, isPlanSession, () => true)
       await flushSettingNote($)
     }
@@ -736,7 +736,7 @@ export const register: Register = on => {
     if (line !== undefined) {
       const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line }
       await update($, refusals, list => [...list, refusal].slice(-20))
-      return { deny: `dforge: this project keeps AI attribution out of git. Remove "${line}" and try again.` }
+      return { deny: `dagents: this project keeps AI attribution out of git. Remove "${line}" and try again.` }
     }
     const id = e.tool_use_id
     const seat = e.agentId === undefined ? null : ((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat ?? null)
@@ -764,7 +764,7 @@ export const register: Register = on => {
     }
     if ((await read($, activity)).tool === tool) await setActivity($, now => (now.kind === 'running' ? { ...now, tool: null, agent: null } : now))
     const skill = tool === 'Skill' ? String((e as { skill?: unknown }).skill ?? '') : ''
-    if (isDforge(skill)) {
+    if (isDagents(skill)) {
       await update($, isPlanSession, () => true)
       await flushSettingNote($)
     }
@@ -787,9 +787,9 @@ export const register: Register = on => {
     return ran
   }).catch(async ($, e, next) => {
     if (!next.called && e.agentId !== undefined && REVIEW_WRITE_TOOLS.includes(String(e.tool)) && isJudgeSeat((await read($, spawns)).find(one => one.agentId === e.agentId)?.seat)) {
-      return { deny: `dforge: the review-seat write guard could not check this write (${next.error.message || next.error.kind}); it is refused.` }
+      return { deny: `dagents: the review-seat write guard could not check this write (${next.error.message || next.error.kind}); it is refused.` }
     }
-    return next.called || !(await live($)).guardAttribution ? next(e) : { deny: 'dforge: its attribution guard failed.' }
+    return next.called || !(await live($)).guardAttribution ? next(e) : { deny: 'dagents: its attribution guard failed.' }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -911,7 +911,7 @@ export const register: Register = on => {
     )
 
     if ((await read($, view)) === 'settings') {
-      // Each press saves to ~/.dforge/config.json and puts the value in force, so the rows below always show what is saved.
+      // Each press saves to ~/.dagents/config.json and puts the value in force, so the rows below always show what is saved.
       const set = (key: string, value: SettingValue) => setOption($, key, value)
       const compact = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean } = {}) =>
         button(
@@ -1636,7 +1636,7 @@ export const register: Register = on => {
             )),
           ),
       ),
-      // In a dforge run the card reads the run's ledger instead: the
+      // In a dagents run the card reads the run's ledger instead: the
       // round in flight, reviews that came back clean, and blocked tasks.
       plan:
         summary !== null && summary.total > 0 ? (
@@ -2658,7 +2658,7 @@ async function endWait($: EngineInterface, id: string, outcome: string) {
 async function readAutoRun($: EngineInterface): Promise<CockpitAutoRun | null> {
   const root = S.where.primary ?? (await read($, place))?.root ?? null
   if (root === null) return null
-  const text = await $.fs.read(`${root}/.dforge/sdd/auto-run.json`).catch(() => null)
+  const text = await $.fs.read(`${root}/.dagents/sdd/auto-run.json`).catch(() => null)
   if (typeof text !== 'string') return null
   return autoRunFor(text, await $.session.id())
 }
@@ -2836,7 +2836,7 @@ async function userDefaults($: EngineInterface): Promise<{ model: unknown; model
   return { model: user.model ?? null, modelSettings: user.modelSettings ?? null }
 }
 
-// Whether node starts: the restore below runs dforge-config.mjs with it.
+// Whether node starts: the restore below runs dagents-config.mjs with it.
 async function nodeRuns($: EngineInterface): Promise<boolean> {
   const ran = await $.process.run(['node', '--version'], { timeoutMs: 5_000 }).catch(() => null)
   return ran?.exitCode === 0
@@ -2857,7 +2857,7 @@ async function userSettingsPath($: EngineInterface): Promise<string> {
 async function restoreUserDefaults($: EngineInterface, saved: { model: unknown; modelSettings: unknown }): Promise<boolean> {
   for (let write = 0; write < RESTORE_WRITES; write++) {
     const ran = await $.process
-      .run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'claude-restore', JSON.stringify(saved)], { timeoutMs: 15_000 })
+      .run(['node', `${$.plugin.root}/scripts/lib/dagents-config.mjs`, 'claude-restore', JSON.stringify(saved)], { timeoutMs: 15_000 })
       .catch(() => null)
     if (ran?.exitCode !== 0) return false
     for (let waited = 0; ; waited += RESTORE_POLL_MS) {
@@ -2878,7 +2878,7 @@ async function beat($: EngineInterface) {
     if (!home) return
     const id = (await $.session.id()).replace(/[^A-Za-z0-9]/g, '-')
     const seconds = Math.floor((await $.clock.now()) / 1000)
-    await $.fs.write(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/cockpit/${id}`, `${seconds}\n`)
+    await $.fs.write(`${home.replace(/[\\/]+$/, '')}/.claude/dagents/sessions/cockpit/${id}`, `${seconds}\n`)
   } catch {
     // A beat that cannot be written is skipped; the watchdog's tick goes on.
   }
@@ -3006,8 +3006,8 @@ async function stopAutoRun($: EngineInterface) {
 }
 
 // The roots darkmem-config.mjs --mode names for the session's checkout (store
-// options spec §7.3). Read again when the checkout, ~/.dforge/stores.json or
-// ~/.dforge/config.json changes, so the session that ran a move or mapped the
+// options spec §7.3). Read again when the checkout, ~/.dagents/stores.json or
+// ~/.dagents/config.json changes, so the session that ran a move or mapped the
 // repository sees the new roots. Null keeps the checkout paths: silently
 // without node, mode lines or either file, with a note in the pane when the
 // run fails or outruns its 5 seconds.
@@ -3022,7 +3022,7 @@ const TIMED_OUT = /still running after/i
 
 async function readRoots($: EngineInterface, checkout: string): Promise<CockpitRoots | null> {
   const home = (await read($, place))?.home ?? null
-  const mtimeOf = async (name: string) => (home === null ? null : ((await $.fs.stat(`${home}/.dforge/${name}`).catch(() => null))?.mtimeMs ?? null))
+  const mtimeOf = async (name: string) => (home === null ? null : ((await $.fs.stat(`${home}/.dagents/${name}`).catch(() => null))?.mtimeMs ?? null))
   const stores = await mtimeOf('stores.json')
   const config = await mtimeOf('config.json')
   const key = `${checkout}|${stores ?? 'none'}|${config ?? 'none'}`
@@ -3060,7 +3060,7 @@ async function readRoots($: EngineInterface, checkout: string): Promise<CockpitR
 async function finishPath($: EngineInterface, checkouts: readonly string[], slug: string | null): Promise<string> {
   const paths: string[] = []
   for (const dir of checkouts) {
-    paths.push(slug === null ? `${dir}/.dforge/sdd/finish.json` : `${dir}/.dforge/sdd/${slug}/finish.json`)
+    paths.push(slug === null ? `${dir}/.dagents/sdd/finish.json` : `${dir}/.dagents/sdd/${slug}/finish.json`)
   }
   for (const path of paths) {
     if ((await $.fs.stat(path).catch(() => null))?.kind === 'file') return path
@@ -3113,7 +3113,7 @@ async function resume($: EngineInterface, offer: CockpitResumeOffer) {
 
 // The run's ledger, its plan's tasks, and the newest handoff, read where the
 // roots put them (store options spec §7.3): while progress is local, the
-// ledgers under the session worktree's .dforge/, as sdd-workspace writes them,
+// ledgers under the session worktree's .dagents/, as sdd-workspace writes them,
 // and the handoff under the primary checkout's; the darkmem mirror while it is not.
 async function readRun($: EngineInterface) {
   // A poll tick's read and a tool call's can overlap: only the latest writes.
@@ -3121,7 +3121,7 @@ async function readRun($: EngineInterface) {
   const session = S.where.checkout ?? (await read($, place))?.root ?? null
   const root = S.where.primary ?? session
   if (root === null) return
-  const state = `${root}/.dforge`
+  const state = `${root}/.dagents`
   const roots = await readRoots($, session ?? root)
   const latest = roots?.progress.latestFile ?? `${state}/handoff/latest.md`
   S.latestName = roots?.progress.store === 'darkmem' ? latest : null
@@ -3130,7 +3130,7 @@ async function readRun($: EngineInterface) {
     const handoff = await $.fs.stat(latest).catch(() => null)
     const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
     await readResumeOffer($, latest, handoffTime, root)
-    const base = roots?.progress.ledgerRoot ?? `${session ?? root}/.dforge/sdd`
+    const base = roots?.progress.ledgerRoot ?? `${session ?? root}/.dagents/sdd`
     const entries = await $.fs.list(base).catch(() => [])
     let newest: { slug: string; path: string; at: number } | null = null
     for (const entry of entries) {
@@ -3160,7 +3160,7 @@ async function readRun($: EngineInterface) {
     let planPath: string | null = null
     if (ledger.plan !== null) {
       const places: { root: string; docsDir: string }[] = []
-      for (const dir of checkouts) places.push({ root: dir, docsDir: `${dir}/docs/dforge` })
+      for (const dir of checkouts) places.push({ root: dir, docsDir: `${dir}/docs/dagents` })
       for (const candidate of planCandidates(ledger.plan, roots?.docs ?? null, places)) {
         try {
           titles = planTasks(String(await $.fs.read(candidate)))
@@ -3207,7 +3207,7 @@ async function readRun($: EngineInterface) {
   }
 }
 
-// The finish action dforge asked for before the run, from the run's
+// The finish action dagents asked for before the run, from the run's
 // finish.json, or the one beside the workspaces for work without a plan.
 async function readFinish($: EngineInterface, path: string) {
   const text = await $.fs.read(path).catch(() => null)
@@ -3257,7 +3257,7 @@ async function sendLedgerEvents($: EngineInterface, summary: CockpitRun) {
 // The webhook and mention, from the environment or the mod's own store.
 async function readNotifier($: EngineInterface) {
   try {
-    const fromEnv = ((await $.env.get('DFORGE_NOTIFY_URL')) || (await $.env.get('DR_COCKPIT_NOTIFY_URL')) || '').trim()
+    const fromEnv = ((await $.env.get('DAGENTS_NOTIFY_URL')) || (await $.env.get('DAGENTS_COCKPIT_NOTIFY_URL')) || '').trim()
     const stored = await $.store.get(STORE_URL)
     const url = isDiscordWebhook(fromEnv) ? fromEnv : typeof stored === 'string' && isDiscordWebhook(stored) ? stored : null
     const mention = await $.store.get(STORE_MENTION)
@@ -3291,7 +3291,7 @@ async function readWhere($: EngineInterface) {
   }
   S.where.host = (await $.env.get('HOSTNAME')) || (await firstLine(['hostname']))
   S.where.tmux = (await $.env.get('TMUX')) ? await firstLine(['tmux', 'display-message', '-p', '#S']) : null
-  // A worktree's .dforge/ lives in the primary checkout: the work tree of the
+  // A worktree's .dagents/ lives in the primary checkout: the work tree of the
   // common git directory's parent, as ar_primary_root (scripts/lib/auto-run.sh)
   // finds it, so a layout the scripts resolve no primary for (a submodule)
   // has none here either.
@@ -3354,7 +3354,7 @@ async function sendTest($: EngineInterface): Promise<string> {
   const state = await read($, notifier)
   if (state.url === null) return 'No Discord webhook is set.'
   const body = discordBody(
-    { kind: 'done', title: '🔔 Test from dforge', detail: 'Notifications reach this channel.', isPlain: true },
+    { kind: 'done', title: '🔔 Test from dagents', detail: 'Notifications reach this channel.', isPlain: true },
     { host: S.where.host, repo: null, branch: null, tmux: S.where.tmux, account: (await read($, account))?.key ?? null },
     { mention: null, isBrief: S.isBrief, now: await $.clock.now() },
   )
@@ -3383,7 +3383,7 @@ async function notifyCommand($: EngineInterface, words: string[]): Promise<{ tex
 
 
 // Reads the status line's figures (free without a breakdown) and, past the
-// budget in a dforge session, tells the model once.
+// budget in a dagents session, tells the model once.
 async function refresh(
   $: EngineInterface,
   tuning: Tuning,
@@ -3437,7 +3437,7 @@ async function refresh(
   // An auto run compacts at its limit rather than handing off: no note.
   if (!nudgeModel || isAuto || (await read($, isNudged)) || !(await read($, isPlanSession))) return reading
   await update($, isNudged, () => true)
-  const note = `dforge: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`
+  const note = `dagents: budget: ${kTokens(tokens)} of ${kTokens(limit)} — handoff. ${HANDOFF_PROMPT}`
   try {
     await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } })
   } catch {
@@ -3470,10 +3470,10 @@ async function showSettings($: EngineInterface) {
   await update($, view, () => 'settings')
 }
 
-/** ~/.dforge/config.json, or null when no home directory is set. */
+/** ~/.dagents/config.json, or null when no home directory is set. */
 async function configFile($: EngineInterface): Promise<string | null> {
   const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
-  return home ? `${home.replace(/[\\/]+$/, '')}/.dforge/config.json` : null
+  return home ? `${home.replace(/[\\/]+$/, '')}/.dagents/config.json` : null
 }
 
 /** The settings file's object: {} when it does not exist, null when it exists but is not a JSON object. */
@@ -3499,7 +3499,7 @@ async function readSettingsFile($: EngineInterface, path: string): Promise<Setti
  */
 async function applySettings($: EngineInterface, file: SettingsFile, mtime?: number | null) {
   // $.env.get takes only a literal name: each variable the schema names is listed.
-  const env = { DFORGE_BUDGET: await $.env.get('DFORGE_BUDGET'), DFORGE_LENS_CAP: await $.env.get('DFORGE_LENS_CAP'), DFORGE_LENS_MINOR_FROM: await $.env.get('DFORGE_LENS_MINOR_FROM') }
+  const env = { DAGENTS_BUDGET: await $.env.get('DAGENTS_BUDGET'), DAGENTS_LENS_CAP: await $.env.get('DAGENTS_LENS_CAP'), DAGENTS_LENS_MINOR_FROM: await $.env.get('DAGENTS_LENS_MINOR_FROM') }
   const userRead = await $.settings.read({ source: 'user' }).catch(() => null)
   const mergedRead = await $.settings.read().catch(() => null)
   const engineUser = (userRead ?? {}) as Record<string, unknown>
@@ -3520,10 +3520,10 @@ async function applySettings($: EngineInterface, file: SettingsFile, mtime?: num
 /** The first run: dr-cockpit's options, imported into the new file. */
 async function importSettings($: EngineInterface, path: string): Promise<SettingsFile> {
   if (await nodeRuns($)) {
-    // dforge-config imports before any command, creating the file with a hard
+    // dagents-config imports before any command, creating the file with a hard
     // link that never replaces one saved meanwhile. `get --json` prints the
     // resolved values, not the file, so its output is not used.
-    await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'get', '--json'], { timeoutMs: 15_000 }).catch(() => null)
+    await $.process.run(['node', `${$.plugin.root}/scripts/lib/dagents-config.mjs`, 'get', '--json'], { timeoutMs: 15_000 }).catch(() => null)
     // A run that failed before creating the file falls through to the import below; otherwise a later save would create the file without dr-cockpit's options and shut out the import for good.
     if (await $.fs.exists(path).catch(() => false)) return (await readSettingsFile($, path)) ?? {}
   }
@@ -3555,7 +3555,7 @@ async function importWebhook($: EngineInterface) {
   if (typeof old.notifyMention === 'string') await $.store.set(STORE_MENTION, old.notifyMention)
 }
 
-/** Reads ~/.dforge/config.json into force, importing the pre-2.0 settings on the first run. */
+/** Reads ~/.dagents/config.json into force, importing the pre-2.0 settings on the first run. */
 async function loadSettings($: EngineInterface) {
   S.claudeSaved = {}
   S.changed = {}
@@ -3578,10 +3578,10 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
   const file = path === null ? null : await readSettingsFile($, path)
   try {
     if (spec?.target === 'claude') {
-      // Claude's settings file holds far more than these keys, so only dforge-config, which rewrites it in one rename, writes it.
-      const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'set', key, String(value)], { timeoutMs: 15_000 })
-      if (ran.exitCode !== 0) throw new Error(ran.stderr.trim().replace(/^dforge-config: /, '') || `dforge-config exited ${ran.exitCode}`)
-      // dforge-config removes a floored key saved as 0, so the user file then lacks it.
+      // Claude's settings file holds far more than these keys, so only dagents-config, which rewrites it in one rename, writes it.
+      const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dagents-config.mjs`, 'set', key, String(value)], { timeoutMs: 15_000 })
+      if (ran.exitCode !== 0) throw new Error(ran.stderr.trim().replace(/^dagents-config: /, '') || `dagents-config exited ${ran.exitCode}`)
+      // dagents-config removes a floored key saved as 0, so the user file then lacks it.
       S.claudeSaved[key] = spec.floor !== undefined && value === 0 ? undefined : value
       await applySettings($, file ?? {}, mtime)
       return true
@@ -3601,25 +3601,25 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
     if (spec?.enforcedBy === 'skill') S.changed[key] = value
     return true
   } catch (error) {
-    $.ui.toast(`dforge: ${key} not saved: ${error instanceof Error ? error.message : String(error)}`)
+    $.ui.toast(`dagents: ${key} not saved: ${error instanceof Error ? error.message : String(error)}`)
     return false
   }
 }
 
-// dforge-config writes under ~/.dforge/.lock, the lock every other writer of
+// dagents-config writes under ~/.dagents/.lock, the lock every other writer of
 // the file takes, so a save cannot drop another session's. False when node
 // cannot start: the direct write is then all there is.
 async function isSetByNode($: EngineInterface, key: string, value: SettingValue): Promise<boolean> {
   let ran
   try {
-    ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'set', key, String(value)], { timeoutMs: 15_000 })
+    ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dagents-config.mjs`, 'set', key, String(value)], { timeoutMs: 15_000 })
   } catch (error) {
     if (NO_NODE.test(String(error))) return false
     throw error
   }
   if (ran.exitCode === 0) return true
   if (NO_NODE.test(ran.stderr)) return false
-  throw new Error(ran.stderr.trim().replace(/^dforge-config: /, '') || `dforge-config exited ${ran.exitCode}`)
+  throw new Error(ran.stderr.trim().replace(/^dagents-config: /, '') || `dagents-config exited ${ran.exitCode}`)
 }
 
 /**
@@ -3637,12 +3637,12 @@ async function markRunSession($: EngineInterface) {
   if (!(await read($, isRunSession))) await update($, isRunSession, () => true)
 }
 
-/** Tells the model, once, which skill-enforced settings changed; outside a dforge session the change waits for one. */
+/** Tells the model, once, which skill-enforced settings changed; outside a dagents session the change waits for one. */
 async function flushSettingNote($: EngineInterface) {
   const sent = { ...S.changed }
   const keys = Object.keys(sent)
   if (keys.length === 0 || !(await read($, isPlanSession))) return
-  const note = `dforge settings changed: ${keys.map(key => `${key}=${String(sent[key])}`).join('; ')}. Each replaces the matching question or default in the skills.`
+  const note = `dagents settings changed: ${keys.map(key => `${key}=${String(sent[key])}`).join('; ')}. Each replaces the matching question or default in the skills.`
   try {
     const appended = await $.session.append({ message: { type: 'user', content: [{ type: 'text', text: note }] } })
     if (appended.deny !== undefined) return
@@ -3755,7 +3755,7 @@ async function rereadSettings($: EngineInterface) {
 }
 
 /**
- * Seats the cockpit for a layout saved outside the pane (dforge-config or
+ * Seats the cockpit for a layout saved outside the pane (dagents-config or
  * another session), as the pane's own controls do when they save it: the band
  * in the pane's place, or the pane in the band's, or the open pane asked for
  * the new layout's rows. The settings view is left where it is.
@@ -4038,7 +4038,7 @@ function planWindow(items: readonly CockpitPlanItem[], size: number): CockpitPla
 }
 
 function isJudgeSeat(seat: string | undefined): boolean {
-  return seat !== undefined && isDforge(seat) && seat.slice(seat.indexOf(':') + 1).startsWith('judge-')
+  return seat !== undefined && isDagents(seat) && seat.slice(seat.indexOf(':') + 1).startsWith('judge-')
 }
 
 // Past 50 records the oldest finished ones go; a running one stays, as the
@@ -4089,7 +4089,7 @@ async function reviewDirs($: EngineInterface): Promise<string[]> {
 
 function rootsOf(dirs: readonly string[]): string[] {
   return dirs.flatMap(dir => {
-    const root = canonPath(`${dir}/.dforge`)
+    const root = canonPath(`${dir}/.dagents`)
     return root === null ? [] : [root]
   })
 }
@@ -4111,7 +4111,7 @@ function pathsIn(text: string, dirs: readonly string[], shape: ReturnType<typeof
   }
   for (const [path] of text.matchAll(shape.whole)) add(path)
   for (const dir of dirs) {
-    const raw = `${dir}/.dforge`
+    const raw = `${dir}/.dagents`
     for (const spelling of new Set([raw, raw.replace(/\\/g, '/'), raw.replace(/\//g, '\\')])) {
       const literal = spelling.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const head = new RegExp(`(?<![\\w.~/\\\\-])${literal}`, /^[A-Za-z]:/.test(spelling) ? 'gi' : 'g')
@@ -4195,9 +4195,9 @@ async function judgeWriteDenial($: EngineInterface, tool: string, e: { agentId?:
     const target = typeof named === 'string' ? named : ''
     const allowed = spawn?.reports ?? []
     if (await isNamedReport($, target, allowed, spawn?.reportRoots ?? [])) return null
-    return `dforge: a review seat writes only the report file its dispatch names (${allowed.length === 0 ? 'none' : allowed.join(', ')}); ${target} is not one.`
+    return `dagents: a review seat writes only the report file its dispatch names (${allowed.length === 0 ? 'none' : allowed.join(', ')}); ${target} is not one.`
   } catch (error) {
-    return `dforge: the review-seat write guard could not check this write (${error instanceof Error && error.message !== '' ? error.message : String(error)}); it is refused.`
+    return `dagents: the review-seat write guard could not check this write (${error instanceof Error && error.message !== '' ? error.message : String(error)}); it is refused.`
   }
 }
 
@@ -4240,7 +4240,7 @@ function addRun(all: CockpitSeat[], seat: string, usage: TurnUsage): CockpitSeat
 }
 
 function shortSeat(seat: string): string {
-  return seat.replace(/^dforge:/, '')
+  return seat.replace(/^dagents:/, '')
 }
 
 function costRate(usd: number, startedAt: number | undefined, now: number): string {
@@ -4263,12 +4263,12 @@ function runRound(summary: CockpitRun): string | null {
   return summary.tasks.find(task => task.state === 'assigned' && task.round !== null)?.round ?? null
 }
 
-// Whether a call's command or file names a .dforge path or finish-choice, as a ledger write or the finish choice does.
+// Whether a call's command or file names a .dagents path or finish-choice, as a ledger write or the finish choice does.
 function touchesRun(e: object): boolean {
   const args = e as Record<string, unknown>
   return ['command', 'file_path', 'notebook_path', 'path'].some(key => {
     const value = args[key]
-    return typeof value === 'string' && /\.dforge|finish-choice/.test(value)
+    return typeof value === 'string' && /\.dagents|finish-choice/.test(value)
   })
 }
 

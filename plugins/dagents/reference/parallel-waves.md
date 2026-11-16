@@ -1,6 +1,6 @@
 # Parallel waves
 
-How dforge:subagent-driven-development runs a plan whose header says
+How dagents:subagent-driven-development runs a plan whose header says
 `**Parallelism:** waves — …`. A plan without that line, or with
 `**Parallelism:** sequential`, never reads this file. The design is
 `docs/superpowers/specs/2026-10-10-parallel-waves-design.md` in the plugin's
@@ -308,7 +308,7 @@ When every task of the wave has a complete line:
 A wave is the unit a budget `handoff` waits for: on a `handoff` verdict from
 any brief or review package, start no new task, finish every task already
 dispatched through its complete line, integrate the wave, then invoke
-dforge:handoff. §1's `--wave` check is what makes that room.
+dagents:handoff. §1's `--wave` check is what makes that room.
 
 ## In-flight runs
 
@@ -343,7 +343,7 @@ complete and has no closing line continues at §5. After compaction:
 An older run's `Wave <k>: fix round R/5` line: R = 1 resumes at round 2,
 R >= 2 goes to the breaker.
 
-Live children are reconciled first, exactly as dforge:handoff step 0
+Live children are reconciled first, exactly as dagents:handoff step 0
 says.
 
 ## Common rationalizations

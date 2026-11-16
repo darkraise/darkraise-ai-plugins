@@ -1,5 +1,5 @@
 ---
-name: using-dforge
+name: using-dagents
 description: Use when starting any conversation - establishes how to find and use skills, requiring skill invocation before ANY response including clarifying questions
 ---
 
@@ -21,27 +21,27 @@ If a skill might apply to what you are doing, invoke it before any response or a
 
 | When | Skill |
 |---|---|
-| A new product from scratch | dforge:planning-a-product |
-| Building or changing behaviour | dforge:brainstorming |
-| Anything a user sees or does | dforge:ui-ux |
-| A bug, failing test or surprise | dforge:systematic-debugging |
-| An approach decision is open | dforge:selecting-approaches |
-| A spec is approved | dforge:writing-plans |
-| A plan predates the executor lane | dforge:revising-plans |
-| Executing a plan | dforge:executing-plans; dforge:subagent-driven-development only for a plan whose Execution line names subagent |
-| Writing code | dforge:test-driven-development |
-| Isolating work | dforge:using-git-worktrees |
-| Before claiming done | dforge:verification-before-completion |
-| Asking for or receiving review | dforge:requesting-code-review, dforge:receiving-code-review |
-| Work complete | dforge:finishing-a-development-branch |
-| Stopping mid-work, or picking it up | dforge:handoff, dforge:resume-execution |
-| Writing a skill | dforge:writing-skills |
-| Where the work stands, what to do next | dforge:project-status |
-| A phase or milestone done | dforge:closing-a-milestone |
-| Before the final review or merge, when `gates.md` exists | dforge:running-gates |
-| Session notes have accumulated | dforge:distilling-docs |
-| Slow or heavy tests | dforge:test-simplifier |
-| A repository or home on an older layout | dforge:migrate |
+| A new product from scratch | dagents:planning-a-product |
+| Building or changing behaviour | dagents:brainstorming |
+| Anything a user sees or does | dagents:ui-ux |
+| A bug, failing test or surprise | dagents:systematic-debugging |
+| An approach decision is open | dagents:selecting-approaches |
+| A spec is approved | dagents:writing-plans |
+| A plan predates the executor lane | dagents:revising-plans |
+| Executing a plan | dagents:executing-plans; dagents:subagent-driven-development only for a plan whose Execution line names subagent |
+| Writing code | dagents:test-driven-development |
+| Isolating work | dagents:using-git-worktrees |
+| Before claiming done | dagents:verification-before-completion |
+| Asking for or receiving review | dagents:requesting-code-review, dagents:receiving-code-review |
+| Work complete | dagents:finishing-a-development-branch |
+| Stopping mid-work, or picking it up | dagents:handoff, dagents:resume-execution |
+| Writing a skill | dagents:writing-skills |
+| Where the work stands, what to do next | dagents:project-status |
+| A phase or milestone done | dagents:closing-a-milestone |
+| Before the final review or merge, when `gates.md` exists | dagents:running-gates |
+| Session notes have accumulated | dagents:distilling-docs |
+| Slow or heavy tests | dagents:test-simplifier |
+| A repository or home on an older layout | dagents:migrate |
 
 ## Principles
 
@@ -52,7 +52,7 @@ If a skill might apply to what you are doing, invoke it before any response or a
 
 ## Seats
 
-Every dispatch names a seat: a `dforge:` agent or a typed built-in (`Explore`); `general-purpose` takes an explicit `model`. No forks. Read-only checks (register rows, findings, a claim) go to `dforge:judge-sonnet-high`, or `dforge:judge-opus` across several files.
+Every dispatch names a seat: a `dagents:` agent or a typed built-in (`Explore`); `general-purpose` takes an explicit `model`. No forks. Read-only checks (register rows, findings, a claim) go to `dagents:judge-sonnet-high`, or `dagents:judge-opus` across several files.
 
 ## Process Depth
 
@@ -63,10 +63,10 @@ With the darkmem MCP, prefer its `code_search` over Explore subagents.
 ## Session Budget
 
 - Call every `scripts/…` command as `bash <plugin-root>/scripts/<name>`, with the working directory inside the project's worktree; a relative `PLAN_FILE` resolves against it. The plugin root is printed below this entry point (on Codex: the parent of the `skills/` directory).
-- The goal is a finished plan; the budget only guards against auto-compaction. `scripts/task-brief`, `scripts/review-package` and `scripts/context-size` print a budget line. `ok`: continue at any percentage; `handoff`: finish the task in flight, then use dforge:handoff. See [session-budget.md](../../reference/session-budget.md).
-- Picking up earlier work: run `scripts/repo-audit` first; a plan with a ledger resumes through dforge:resume-execution.
+- The goal is a finished plan; the budget only guards against auto-compaction. `scripts/task-brief`, `scripts/review-package` and `scripts/context-size` print a budget line. `ok`: continue at any percentage; `handoff`: finish the task in flight, then use dagents:handoff. See [session-budget.md](../../reference/session-budget.md).
+- Picking up earlier work: run `scripts/repo-audit` first; a plan with a ledger resumes through dagents:resume-execution.
 - After compaction, trust the snapshot, ledger and `git log` over the summary.
-- `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` in these skills: `bash <plugin-root>/scripts/dforge-path state|docs [RELATIVE]|ledger <plan>|latest` prints each in the checkout it runs in, or in the darkmem mirror where `documentStore` or `progressSource` keeps it ([project-state.md](../../reference/project-state.md)).
+- `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` in these skills: `bash <plugin-root>/scripts/dagents-path state|docs [RELATIVE]|ledger <plan>|latest` prints each in the checkout it runs in, or in the darkmem mirror where `documentStore` or `progressSource` keeps it ([project-state.md](../../reference/project-state.md)).
 
 ## Platform and Precedence
 

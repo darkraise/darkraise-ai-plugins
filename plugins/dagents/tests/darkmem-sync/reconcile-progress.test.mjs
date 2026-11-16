@@ -9,8 +9,8 @@ import { checkProgressTargets, gatherLocalProgress, progressToLocal, readNoFollo
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
 import { git, makeHome, makeRepo, namedPipe, read, run, scratch, write } from "./helpers.mjs";
 
-const LEDGER = name => `# SDD ledger — plan: docs/dforge/plans/${name}.md\nTask 1: complete (commits aaaa..bbbb)\n`;
-const LATEST = "## State\n- Plan: `docs/dforge/plans/p1.md`\n";
+const LEDGER = name => `# SDD ledger — plan: docs/dagents/plans/${name}.md\nTask 1: complete (commits aaaa..bbbb)\n`;
+const LATEST = "## State\n- Plan: `docs/dagents/plans/p1.md`\n";
 
 function repoWithWorktree() {
   const repo = makeRepo();
@@ -21,26 +21,26 @@ function repoWithWorktree() {
 
 test("progress sources come from every checkout, and agreeing copies are one source", () => {
   const { repo, worktree } = repoWithWorktree();
-  write(path.join(repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
-  write(path.join(repo, ".dforge", "sdd", "p1", "handoff.md"), "# Handoff p1\n");
-  write(path.join(repo, ".dforge", "sdd", "p1", "brief.md"), "a workspace file, not progress\n");
-  write(path.join(repo, ".dforge", "handoff", "latest.md"), LATEST);
-  write(path.join(worktree, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
-  write(path.join(worktree, ".dforge", "sdd", "p2", "progress.md"), LEDGER("p2"));
-  write(path.join(worktree, ".dforge", "handoff", "latest.md"), "a linked worktree's latest.md is not progress\n");
+  write(path.join(repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(repo, ".dagents", "sdd", "p1", "handoff.md"), "# Handoff p1\n");
+  write(path.join(repo, ".dagents", "sdd", "p1", "brief.md"), "a workspace file, not progress\n");
+  write(path.join(repo, ".dagents", "handoff", "latest.md"), LATEST);
+  write(path.join(worktree, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(worktree, ".dagents", "sdd", "p2", "progress.md"), LEDGER("p2"));
+  write(path.join(worktree, ".dagents", "handoff", "latest.md"), "a linked worktree's latest.md is not progress\n");
   const { problems, files, sources } = gatherLocalProgress({ repoRoot: repo });
   assert.deepEqual(problems, []);
   assert.deepEqual(sources.map(item => item.rel).sort(), ["handoff/latest.md", "sdd/p1/handoff.md", "sdd/p1/progress.md", "sdd/p2/progress.md"]);
   assert.equal(files.length, 5);
-  assert.equal(sources.find(item => item.kind === "handoff").uri, "dforge/handoff/p1.md");
+  assert.equal(sources.find(item => item.kind === "handoff").uri, "dagents/handoff/p1.md");
 });
 
 test("an unusable plan directory, unreadable text and disagreeing copies are all problems", () => {
   const { repo, worktree } = repoWithWorktree();
-  write(path.join(repo, ".dforge", "sdd", "bad name", "handoff.md"), "# note\n");
-  write(path.join(repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
-  write(path.join(worktree, ".dforge", "sdd", "p1", "progress.md"), `${LEDGER("p1")}Task 2: complete (commits cccc..dddd)\n`);
-  write(path.join(repo, ".dforge", "sdd", "p3", "handoff.md"), Buffer.from([0xff, 0xfe]));
+  write(path.join(repo, ".dagents", "sdd", "bad name", "handoff.md"), "# note\n");
+  write(path.join(repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(worktree, ".dagents", "sdd", "p1", "progress.md"), `${LEDGER("p1")}Task 2: complete (commits cccc..dddd)\n`);
+  write(path.join(repo, ".dagents", "sdd", "p3", "handoff.md"), Buffer.from([0xff, 0xfe]));
   const { problems } = gatherLocalProgress({ repoRoot: repo });
   assert.equal(problems.length, 3, problems.join("\n"));
   assert.match(problems.join("\n"), /bad name: not a usable workstream key$/m);
@@ -54,20 +54,20 @@ test("an equal ledger on darkmem is already filed; a different ledger, handoff n
   const client = createClient({ url: stub.url, apiKey: STUB_KEY, runKey: "seed" });
   const repo = makeRepo();
   const mirror = scratch("dms-mirror-");
-  write(path.join(repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
-  write(path.join(repo, ".dforge", "sdd", "p2", "progress.md"), LEDGER("p2"));
-  write(path.join(repo, ".dforge", "sdd", "p2", "handoff.md"), "# local note\n");
-  write(path.join(repo, ".dforge", "handoff", "latest.md"), "local latest\n");
+  write(path.join(repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(repo, ".dagents", "sdd", "p2", "progress.md"), LEDGER("p2"));
+  write(path.join(repo, ".dagents", "sdd", "p2", "handoff.md"), "# local note\n");
+  write(path.join(repo, ".dagents", "handoff", "latest.md"), "local latest\n");
   const { workstream } = await client.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   await client.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: "# SDD ledger — plan: elsewhere\n" }] });
-  await client.putDocument({ project: "proj", uri: "dforge/handoff/p2.md", content: "# darkmem note\n" });
+  await client.putDocument({ project: "proj", uri: "dagents/handoff/p2.md", content: "# darkmem note\n" });
   write(path.join(mirror, "work", "handoff", "latest.md"), "mirror latest\n");
   const { sources } = gatherLocalProgress({ repoRoot: repo });
   const { problems, filed } = await checkProgressTargets({ cfg: { project: "proj", mirror }, client }, sources);
   assert.deepEqual([...filed], [["p1", workstream.id]]);
   assert.equal(problems.length, 3, problems.join("\n"));
   assert.match(problems.join("\n"), /^sdd\/p2\/progress\.md: darkmem already holds a different ledger for workstream p2$/m);
-  assert.match(problems.join("\n"), /^dforge\/handoff\/p2\.md: darkmem already holds a different handoff note$/m);
+  assert.match(problems.join("\n"), /^dagents\/handoff\/p2\.md: darkmem already holds a different handoff note$/m);
   assert.match(problems.join("\n"), /work[\\/]handoff[\\/]latest\.md: the mirror already holds a different copy of handoff\/latest\.md$/m);
 });
 
@@ -79,9 +79,9 @@ async function setup(t, target) {
   const stub = await startStub();
   t.after(() => stub.close());
   const repo = makeRepo();
-  write(path.join(repo, "docs", "dforge", "plans", "p1.md"), "# p1\n");
-  write(path.join(repo, "docs", "dforge", "plans", "p2.md"), "# p2\n");
-  write(path.join(repo, "docs", "dforge", "plans", "completed.md"), "- `docs/dforge/plans/p1.md`\n- `docs/dforge/plans/p2.md`\n- `docs/dforge/plans/p4.md`\n");
+  write(path.join(repo, "docs", "dagents", "plans", "p1.md"), "# p1\n");
+  write(path.join(repo, "docs", "dagents", "plans", "p2.md"), "# p2\n");
+  write(path.join(repo, "docs", "dagents", "plans", "completed.md"), "- `docs/dagents/plans/p1.md`\n- `docs/dagents/plans/p2.md`\n- `docs/dagents/plans/p4.md`\n");
   git(repo, "add", "docs");
   git(repo, "commit", "-q", "-m", "plans");
   const worktree = path.join(scratch("dms-wt-"), "side");
@@ -96,23 +96,23 @@ async function setup(t, target) {
     stub, repo, worktree, ...home, seed,
     state: () => JSON.parse(fs.readFileSync(path.join(home.mirror, ".sync-state.json"), "utf8")),
     stores: () => {
-      const { documents, progress } = JSON.parse(fs.readFileSync(path.join(home.home, ".dforge", "stores.json"), "utf8"))[repo];
+      const { documents, progress } = JSON.parse(fs.readFileSync(path.join(home.home, ".dagents", "stores.json"), "utf8"))[repo];
       return { documents, progress };
     },
     reconcile: () => run(["reconcile"], { cwd: repo, env: home.env }),
   };
 }
 
-const movedAside = dir => (fs.existsSync(path.join(dir, ".dforge")) ? fs.readdirSync(path.join(dir, ".dforge")).filter(name => /^moved-\d{8}T\d{6}Z$/.test(name)) : []);
+const movedAside = dir => (fs.existsSync(path.join(dir, ".dagents")) ? fs.readdirSync(path.join(dir, ".dagents")).filter(name => /^moved-\d{8}T\d{6}Z$/.test(name)) : []);
 
 test("progress moves into darkmem from every checkout, and a second run does nothing", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "handoff.md"), "# Handoff p1\n");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "brief.md"), "workspace\n");
-  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), LATEST);
-  write(path.join(s.worktree, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
-  write(path.join(s.worktree, ".dforge", "sdd", "p2", "progress.md"), LEDGER("p2"));
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "handoff.md"), "# Handoff p1\n");
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "brief.md"), "workspace\n");
+  write(path.join(s.repo, ".dagents", "handoff", "latest.md"), LATEST);
+  write(path.join(s.worktree, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(s.worktree, ".dagents", "sdd", "p2", "progress.md"), LEDGER("p2"));
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
@@ -124,9 +124,9 @@ test("progress moves into darkmem from every checkout, and a second run does not
     assert.equal(read(path.join(s.workRoot, "sdd", key, "progress.md")), LEDGER(key));
     assert.deepEqual(s.state().ledgers[key], { offset: Buffer.byteLength(LEDGER(key)), prefix: sha(LEDGER(key)), lastSeq: ledger.at(-1).seq });
   }
-  assert.equal(s.stub.db.documents.get("proj\u0000dforge/handoff/p1.md").content, "# Handoff p1\n");
+  assert.equal(s.stub.db.documents.get("proj\u0000dagents/handoff/p1.md").content, "# Handoff p1\n");
   assert.equal(read(path.join(s.workRoot, "sdd", "p1", "handoff.md")), "# Handoff p1\n");
-  assert.equal(s.state().documents["dforge/handoff/p1.md"], sha("# Handoff p1\n"));
+  assert.equal(s.state().documents["dagents/handoff/p1.md"], sha("# Handoff p1\n"));
   assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), LATEST);
   const p1 = s.stub.db.workstreams.find(w => w.key === "p1");
   const [checkpoint, ...more] = p1.entries.filter(e => e.kind === "checkpoint");
@@ -134,20 +134,20 @@ test("progress moves into darkmem from every checkout, and a second run does not
   assert.deepEqual(more, []);
   assert.equal(p1.state, "closed", "a closed workstream is closed again after its checkpoint");
   assert.equal(s.state().checkpoint, sha(LATEST));
-  for (const dir of [s.repo, s.worktree]) assert.equal(git(dir, "status", "--porcelain", "--untracked-files=all", "--", ".dforge"), "", `${dir}'s backup is ignored`);
+  for (const dir of [s.repo, s.worktree]) assert.equal(git(dir, "status", "--porcelain", "--untracked-files=all", "--", ".dagents"), "", `${dir}'s backup is ignored`);
   assert.equal(s.state().checkpointAt, checkpoint.created_at);
   assert.deepEqual(s.state().checkpointAtByWorkstream, { p1: checkpoint.created_at });
   assert.match(result.stdout, /^ {2}latest\.md filed as a checkpoint of p1$/m);
   assert.deepEqual(s.stores(), { documents: "local", progress: "darkmem" });
   const [primaryAside] = movedAside(s.repo);
-  assert.equal(read(path.join(s.repo, ".dforge", primaryAside, "sdd", "p1", "progress.md")), LEDGER("p1"));
-  assert.equal(read(path.join(s.repo, ".dforge", primaryAside, "sdd", "p1", "handoff.md")), "# Handoff p1\n");
-  assert.equal(read(path.join(s.repo, ".dforge", primaryAside, "handoff", "latest.md")), LATEST);
-  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md")), false);
-  assert.equal(read(path.join(s.repo, ".dforge", "sdd", "p1", "brief.md")), "workspace\n", "workspaces stay");
+  assert.equal(read(path.join(s.repo, ".dagents", primaryAside, "sdd", "p1", "progress.md")), LEDGER("p1"));
+  assert.equal(read(path.join(s.repo, ".dagents", primaryAside, "sdd", "p1", "handoff.md")), "# Handoff p1\n");
+  assert.equal(read(path.join(s.repo, ".dagents", primaryAside, "handoff", "latest.md")), LATEST);
+  assert.equal(fs.existsSync(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md")), false);
+  assert.equal(read(path.join(s.repo, ".dagents", "sdd", "p1", "brief.md")), "workspace\n", "workspaces stay");
   const [sideAside] = movedAside(s.worktree);
-  assert.equal(read(path.join(s.worktree, ".dforge", sideAside, "sdd", "p2", "progress.md")), LEDGER("p2"));
-  assert.equal(fs.existsSync(path.join(s.worktree, ".dforge", "sdd", "p1", "progress.md")), false);
+  assert.equal(read(path.join(s.worktree, ".dagents", sideAside, "sdd", "p2", "progress.md")), LEDGER("p2"));
+  assert.equal(fs.existsSync(path.join(s.worktree, ".dagents", "sdd", "p1", "progress.md")), false);
   const again = await s.reconcile();
   assert.equal(again.code, 0, again.stdout + again.stderr);
   assert.equal(again.stdout, "");
@@ -155,7 +155,7 @@ test("progress moves into darkmem from every checkout, and a second run does not
 
 test("a ledger darkmem already holds unchanged is not filed again, so a stopped move can run again", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
@@ -168,8 +168,8 @@ test("a ledger darkmem already holds unchanged is not filed again, so a stopped 
 
 test("a latest.md that names no plan is copied unsent, behind darkmem's newest checkpoint", async t => {
   const s = await setup(t, "darkmem");
-  const { workstream } = await s.seed.append({ project: "proj", workstream: "p9", entries: [{ kind: "checkpoint", body: "## State\n- Plan: `docs/dforge/plans/p9.md`\n" }] });
-  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), "a note with no State section\n");
+  const { workstream } = await s.seed.append({ project: "proj", workstream: "p9", entries: [{ kind: "checkpoint", body: "## State\n- Plan: `docs/dagents/plans/p9.md`\n" }] });
+  write(path.join(s.repo, ".dagents", "handoff", "latest.md"), "a note with no State section\n");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
@@ -184,7 +184,7 @@ test("a latest.md that names no plan is copied unsent, behind darkmem's newest c
 test("a copy dated at a checkpoint of a workstream key with a slash leaves a loadable state", async t => {
   const s = await setup(t, "darkmem");
   await s.seed.append({ project: "proj", workstream: "feature/foo", entries: [{ kind: "checkpoint", body: "# Foo\n" }] });
-  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), "a note with no State section\n");
+  write(path.join(s.repo, ".dagents", "handoff", "latest.md"), "a note with no State section\n");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.doesNotThrow(() => loadState(path.join(s.mirror, ".sync-state.json")));
@@ -194,29 +194,29 @@ test("a copy dated at a checkpoint of a workstream key with a slash leaves a loa
 
 test("a ledger's workstream properties read its plan in its own checkout", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.worktree, "docs", "dforge", "plans", "p4.md"), "# p4\n\n**Spec:** `docs/dforge/specs/s4.md`\n");
-  write(path.join(s.worktree, ".dforge", "sdd", "p4", "progress.md"), LEDGER("p4"));
+  write(path.join(s.worktree, "docs", "dagents", "plans", "p4.md"), "# p4\n\n**Spec:** `docs/dagents/specs/s4.md`\n");
+  write(path.join(s.worktree, ".dagents", "sdd", "p4", "progress.md"), LEDGER("p4"));
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const { plan_uri, spec_uri } = s.stub.db.workstreams.find(w => w.key === "p4").properties;
-  assert.deepEqual({ plan_uri, spec_uri }, { plan_uri: "dforge/plans/p4.md", spec_uri: "dforge/specs/s4.md" });
+  assert.deepEqual({ plan_uri, spec_uri }, { plan_uri: "dagents/plans/p4.md", spec_uri: "dagents/specs/s4.md" });
 });
 
 test("documents and progress both move to darkmem in one run, and the ledger's properties read the plan from the mirror", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, "docs", "dforge", "plans", "p1.md"), "# p1\n\n**Spec:** `docs/dforge/specs/s1.md`\n");
-  write(path.join(s.repo, "docs", "dforge", "specs", "s1.md"), "# s1\n");
+  write(path.join(s.repo, "docs", "dagents", "plans", "p1.md"), "# p1\n\n**Spec:** `docs/dagents/specs/s1.md`\n");
+  write(path.join(s.repo, "docs", "dagents", "specs", "s1.md"), "# s1\n");
   git(s.repo, "add", "docs");
   git(s.repo, "commit", "-q", "-m", "spec");
-  write(path.join(s.home, ".dforge", "config.json"), JSON.stringify({ darkmemEnabled: true, darkmem: { url: s.stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [s.repo]: { project: "proj" } } } }));
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(s.home, ".dagents", "config.json"), JSON.stringify({ darkmemEnabled: true, darkmem: { url: s.stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [s.repo]: { project: "proj" } } } }));
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to darkmem$/m);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
-  assert.equal(fs.existsSync(path.join(s.repo, "docs", "dforge", "plans", "p1.md")), false, "the documents move ran first and removed the checkout's copy");
+  assert.equal(fs.existsSync(path.join(s.repo, "docs", "dagents", "plans", "p1.md")), false, "the documents move ran first and removed the checkout's copy");
   const { plan_uri, spec_uri } = s.stub.db.workstreams.find(w => w.key === "p1").properties;
-  assert.deepEqual({ plan_uri, spec_uri }, { plan_uri: "dforge/plans/p1.md", spec_uri: "dforge/specs/s1.md" });
+  assert.deepEqual({ plan_uri, spec_uri }, { plan_uri: "dagents/plans/p1.md", spec_uri: "dagents/specs/s1.md" });
   assert.deepEqual(s.stores(), { documents: "darkmem", progress: "darkmem" });
 });
 
@@ -224,20 +224,20 @@ const UP_REFUSALS = [
   {
     name: "copies of one ledger that differ between checkouts",
     plant: async s => {
-      write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
-      write(path.join(s.worktree, ".dforge", "sdd", "p1", "progress.md"), `${LEDGER("p1")}Task 2: complete (commits cccc..dddd)\n`);
+      write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
+      write(path.join(s.worktree, ".dagents", "sdd", "p1", "progress.md"), `${LEDGER("p1")}Task 2: complete (commits cccc..dddd)\n`);
     },
     detail: /^ {2}sdd\/p1\/progress\.md: .+ and .+ differ$/m,
   },
   {
     name: "a plan directory that is not a workstream key",
-    plant: async s => write(path.join(s.repo, ".dforge", "sdd", "bad name", "handoff.md"), "# note\n"),
+    plant: async s => write(path.join(s.repo, ".dagents", "sdd", "bad name", "handoff.md"), "# note\n"),
     detail: /^ {2}.+bad name: not a usable workstream key$/m,
   },
   {
     name: "a different ledger on darkmem",
     plant: async s => {
-      write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+      write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
       await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "# SDD ledger — plan: elsewhere\n" }] });
     },
     detail: /^ {2}sdd\/p1\/progress\.md: darkmem already holds a different ledger for workstream p1$/m,
@@ -245,7 +245,7 @@ const UP_REFUSALS = [
   {
     name: "a different copy in the mirror",
     plant: async s => {
-      write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+      write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
       write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "other\n");
     },
     detail: /the mirror already holds a different copy of sdd\/p1\/progress\.md$/m,
@@ -273,20 +273,20 @@ test("a progress file or mirror copy that cannot be read is a problem, not a cra
   const client = createClient({ url: stub.url, apiKey: STUB_KEY, runKey: "seed" });
   const repo = makeRepo();
   const mirror = scratch("dms-mirror-");
-  fs.mkdirSync(path.join(repo, ".dforge", "sdd", "p1", "progress.md"), { recursive: true });
-  write(path.join(repo, ".dforge", "sdd", "p2", "progress.md"), LEDGER("p2"));
+  fs.mkdirSync(path.join(repo, ".dagents", "sdd", "p1", "progress.md"), { recursive: true });
+  write(path.join(repo, ".dagents", "sdd", "p2", "progress.md"), LEDGER("p2"));
   fs.mkdirSync(path.join(mirror, "work", "sdd", "p2", "progress.md"), { recursive: true });
   const { problems, sources } = gatherLocalProgress({ repoRoot: repo });
-  assert.deepEqual(problems.map(line => line.replace(repo, "<repo>").split(path.sep).join("/")), ["<repo>/.dforge/sdd/p1/progress.md: could not be read (EISDIR)"]);
+  assert.deepEqual(problems.map(line => line.replace(repo, "<repo>").split(path.sep).join("/")), ["<repo>/.dagents/sdd/p1/progress.md: could not be read (EISDIR)"]);
   const checked = await checkProgressTargets({ cfg: { project: "proj", mirror }, client }, sources);
   assert.deepEqual(checked.problems.map(line => line.replace(mirror, "<mirror>").split(path.sep).join("/")), ["<mirror>/work/sdd/p2/progress.md: could not be read (EISDIR)"]);
 });
 
 test("a state directory whose sdd cannot be listed is a problem, not a crash", () => {
   const repo = makeRepo();
-  write(path.join(repo, ".dforge", "sdd"), "not a directory\n");
+  write(path.join(repo, ".dagents", "sdd"), "not a directory\n");
   const { problems, sources } = gatherLocalProgress({ repoRoot: repo });
-  assert.deepEqual(problems, [`${path.join(repo, ".dforge", "sdd")}: could not be read (ENOTDIR)`]);
+  assert.deepEqual(problems, [`${path.join(repo, ".dagents", "sdd")}: could not be read (ENOTDIR)`]);
   assert.deepEqual(sources, []);
 });
 
@@ -294,7 +294,7 @@ test("a symbolic-linked progress file is a problem, and is not read through", { 
   const repo = makeRepo();
   const outside = path.join(scratch("dms-link-"), "progress.md");
   write(outside, LEDGER("p1"));
-  const link = path.join(repo, ".dforge", "sdd", "p1", "progress.md");
+  const link = path.join(repo, ".dagents", "sdd", "p1", "progress.md");
   fs.mkdirSync(path.dirname(link), { recursive: true });
   fs.symlinkSync(outside, link);
   const { problems, sources } = gatherLocalProgress({ repoRoot: repo });
@@ -304,7 +304,7 @@ test("a symbolic-linked progress file is a problem, and is not read through", { 
 
 test("a dangling progress.md link is a problem, not a ledger left behind", { skip: process.platform === "win32" }, () => {
   const repo = makeRepo();
-  const link = path.join(repo, ".dforge", "sdd", "p1", "progress.md");
+  const link = path.join(repo, ".dagents", "sdd", "p1", "progress.md");
   fs.mkdirSync(path.dirname(link), { recursive: true });
   fs.symlinkSync(path.join(scratch("dms-link-"), "missing.md"), link);
   const { problems, sources } = gatherLocalProgress({ repoRoot: repo });
@@ -402,7 +402,7 @@ test("a link swapped in for a file after any lstat of it is still not read throu
 
 test("a checkout ledger swapped for a link after its check is a problem, and is not read through", { skip: process.platform === "win32" }, t => {
   const repo = makeRepo();
-  const ledger = path.join(repo, ".dforge", "sdd", "p1", "progress.md");
+  const ledger = path.join(repo, ".dagents", "sdd", "p1", "progress.md");
   const outside = path.join(scratch("dms-link-"), "progress.md");
   write(ledger, LEDGER("p1"));
   write(outside, LEDGER("p1"));
@@ -422,22 +422,22 @@ test("a git worktree list that fails is the one problem", () => {
 
 test("progress reached through a symbolic link stays local, and nothing is sent or moved", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
-  fs.symlinkSync(path.join(s.repo, ".dforge"), path.join(s.worktree, ".dforge"));
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  fs.symlinkSync(path.join(s.repo, ".dagents"), path.join(s.worktree, ".dagents"));
   const before = s.stub.db.requests.length;
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): the checkouts' progress is reached through symbolic links; nothing was sent or moved\n"), result.stdout);
-  assert.ok(result.stdout.includes(`  ${path.join(s.worktree, ".dforge")}: a symbolic link, which the move will not move files through\n`), result.stdout);
+  assert.ok(result.stdout.includes(`  ${path.join(s.worktree, ".dagents")}: a symbolic link, which the move will not move files through\n`), result.stdout);
   assert.deepEqual(s.stub.db.requests.slice(before).filter(r => r.method !== "GET").map(r => `${r.method} ${r.path}`), []);
   assert.equal(s.stores().progress, "local");
   assert.deepEqual(movedAside(s.repo), []);
-  assert.equal(read(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md")), LEDGER("p1"));
+  assert.equal(read(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md")), LEDGER("p1"));
 });
 
 test("a darkmem error inside the move refuses it as a failure during the move, and nothing is moved", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "handoff.md"), "# Handoff p1\n");
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "handoff.md"), "# Handoff p1\n");
   s.stub.db.failures.push({ method: "POST", path: "/api/v1/documents", status: 503, detail: "busy" });
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
@@ -448,7 +448,7 @@ test("a darkmem error inside the move refuses it as a failure during the move, a
 
 test("a ledger that changes while the move sends it stays local, and nothing is copied or moved", async t => {
   const s = await setup(t, "darkmem");
-  const ledger = path.join(s.repo, ".dforge", "sdd", "p1", "progress.md");
+  const ledger = path.join(s.repo, ".dagents", "sdd", "p1", "progress.md");
   write(ledger, LEDGER("p1"));
   let appended = false;
   s.stub.db.onRequest = (method, pathname) => {
@@ -468,7 +468,7 @@ test("a ledger that changes while the move sends it stays local, and nothing is 
 
 test("a ledger that darkmem reads back different stays local, and nothing is copied or moved", async t => {
   const s = await setup(t, "darkmem");
-  const ledger = path.join(s.repo, ".dforge", "sdd", "p1", "progress.md");
+  const ledger = path.join(s.repo, ".dagents", "sdd", "p1", "progress.md");
   write(ledger, LEDGER("p1"));
   let appended = false;
   let altered = false;
@@ -490,16 +490,16 @@ test("a ledger that darkmem reads back different stays local, and nothing is cop
 
 test("a handoff note that darkmem reads back different stays local, and nothing is copied or moved", async t => {
   const s = await setup(t, "darkmem");
-  const note = path.join(s.repo, ".dforge", "sdd", "p1", "handoff.md");
+  const note = path.join(s.repo, ".dagents", "sdd", "p1", "handoff.md");
   write(note, "# Handoff p1\n");
   s.stub.db.onRequest = (method, pathname) => {
-    const held = s.stub.db.documents.get("proj\u0000dforge/handoff/p1.md");
+    const held = s.stub.db.documents.get("proj\u0000dagents/handoff/p1.md");
     if (held && method === "GET" && pathname === "/api/v1/documents/by-uri") held.content_hash = sha("altered\n");
   };
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): a read-back of darkmem's copies differs; nothing was moved locally\n"), result.stdout);
-  assert.ok(result.stdout.includes("  dforge/handoff/p1.md: darkmem's copy reads back different\n"), result.stdout);
+  assert.ok(result.stdout.includes("  dagents/handoff/p1.md: darkmem's copy reads back different\n"), result.stdout);
   assert.equal(s.stores().progress, "local");
   assert.deepEqual(movedAside(s.repo), []);
   assert.equal(read(note), "# Handoff p1\n");
@@ -507,7 +507,7 @@ test("a handoff note that darkmem reads back different stays local, and nothing 
 
 test("a checkpoint that darkmem reads back different stays local, and nothing is copied or moved", async t => {
   const s = await setup(t, "darkmem");
-  const latest = path.join(s.repo, ".dforge", "handoff", "latest.md");
+  const latest = path.join(s.repo, ".dagents", "handoff", "latest.md");
   write(latest, LATEST);
   s.stub.db.onRequest = (method, pathname) => {
     if (method !== "GET" || pathname !== "/api/v1/worklog/resume") return;
@@ -525,16 +525,16 @@ test("a checkpoint that darkmem reads back different stays local, and nothing is
 
 test("a plan that starts while darkmem is written keeps progress local, and nothing is copied or moved", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
   let started = false;
   s.stub.db.onRequest = (method, pathname) => {
     if (started || method !== "POST" || pathname !== "/api/v1/worklog/entries") return;
     started = true;
-    write(path.join(s.repo, ".dforge", "sdd", "p3", "progress.md"), LEDGER("p3"));
+    write(path.join(s.repo, ".dagents", "sdd", "p3", "progress.md"), LEDGER("p3"));
   };
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): a plan is in progress: docs/dforge/plans/p3.md\n"), result.stdout);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): a plan is in progress: docs/dagents/plans/p3.md\n"), result.stdout);
   assert.equal(s.stores().progress, "local");
   assert.deepEqual(movedAside(s.repo), []);
   assert.equal(fs.existsSync(path.join(s.workRoot, "sdd", "p1", "progress.md")), false);
@@ -542,9 +542,9 @@ test("a plan that starts while darkmem is written keeps progress local, and noth
 
 test("a ledger linked to a named pipe while darkmem is written is in progress, and is never opened for a blocking read", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
   const pipe = namedPipe(path.join(scratch("dms-pipe-"), "pipe"));
-  const late = path.join(s.repo, ".dforge", "sdd", "p3", "progress.md");
+  const late = path.join(s.repo, ".dagents", "sdd", "p3", "progress.md");
   let linked = false;
   s.stub.db.onRequest = (method, pathname) => {
     if (linked || method !== "POST" || pathname !== "/api/v1/worklog/entries") return;
@@ -561,7 +561,7 @@ test("a ledger linked to a named pipe while darkmem is written is in progress, a
 
 test("a mirror directory linked while darkmem is written refuses the move, and nothing is written through it", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "darkmem");
-  const note = path.join(s.repo, ".dforge", "sdd", "p1", "handoff.md");
+  const note = path.join(s.repo, ".dagents", "sdd", "p1", "handoff.md");
   write(note, "# Handoff p1\n");
   const outside = scratch("dms-outside-");
   const planDir = path.join(s.workRoot, "sdd", "p1");
@@ -585,7 +585,7 @@ test("a mirror directory linked while darkmem is written refuses the move, and n
 
 test("a named pipe where a ledger belongs is in progress, and is never opened for a blocking read", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "darkmem");
-  const ledger = namedPipe(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"));
+  const ledger = namedPipe(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"));
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.ok(result.stdout.includes(`darkmem-sync reconcile: progress stay local (configured darkmem): a plan is in progress: ${ledger}\n`), result.stdout);
@@ -594,7 +594,7 @@ test("a named pipe where a ledger belongs is in progress, and is never opened fo
 
 test("a named pipe at the mirror's copy of a ledger is a problem, and is never opened for a blocking read", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
   const target = namedPipe(path.join(s.workRoot, "sdd", "p1", "progress.md"));
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
@@ -605,7 +605,7 @@ test("a named pipe at the mirror's copy of a ledger is a problem, and is never o
 
 test("a handoff note linked to a named pipe while darkmem is written stays local, and the recheck never blocks on it", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "darkmem");
-  const note = path.join(s.repo, ".dforge", "sdd", "p1", "handoff.md");
+  const note = path.join(s.repo, ".dagents", "sdd", "p1", "handoff.md");
   write(note, "# Handoff p1\n");
   const pipe = namedPipe(path.join(scratch("dms-pipe-"), "pipe"));
   let linked = false;
@@ -627,13 +627,13 @@ test("a handoff note linked to a named pipe while darkmem is written stays local
 for (const [slugs, count] of [[["p1"], "1 source"], [["p1", "p2"], "2 sources"]]) {
   test(`a move-aside that leaves ${count} behind names them in one line, still ignores the backup, and a rerun finishes the move`, async t => {
     const s = await setup(t, "darkmem");
-    const ledgers = slugs.map(slug => path.join(s.repo, ".dforge", "sdd", slug, "progress.md"));
+    const ledgers = slugs.map(slug => path.join(s.repo, ".dagents", "sdd", slug, "progress.md"));
     for (const [k, slug] of slugs.entries()) write(ledgers[k], LEDGER(slug));
     // A non-empty directory at each ledger's backup path, for every stamp the next minute can name.
     const now = Date.now();
     const blockers = [];
     for (let i = 0; i < 60; i += 1) {
-      const dir = path.join(s.repo, ".dforge", `moved-${utcStamp(new Date(now + i * 1000))}`);
+      const dir = path.join(s.repo, ".dagents", `moved-${utcStamp(new Date(now + i * 1000))}`);
       blockers.push(dir);
       for (const slug of slugs) write(path.join(dir, "sdd", slug, "progress.md", "keep"), "taken\n");
     }
@@ -643,7 +643,7 @@ for (const [slugs, count] of [[["p1"], "1 source"], [["p1", "p2"], "2 sources"]]
     const named = slugs.map(() => ".+progress\\.md \\(\\w+\\)").join(", ");
     assert.match(result.stdout, new RegExp(`^darkmem-sync reconcile: progress stay local \\(configured darkmem\\): darkmem and the mirror hold the progress, but ${count} could not be moved aside: ${named}; reconcile again to finish$`, "m"));
     for (const [k, slug] of slugs.entries()) assert.equal(read(ledgers[k]), LEDGER(slug));
-    assert.equal(read(path.join(s.repo, ".dforge", ".gitignore")), "*\n");
+    assert.equal(read(path.join(s.repo, ".dagents", ".gitignore")), "*\n");
     assert.equal(s.stores().progress, "local");
     for (const dir of blockers) fs.rmSync(dir, { recursive: true });
     const again = await s.reconcile();
@@ -655,11 +655,11 @@ for (const [slugs, count] of [[["p1"], "1 source"], [["p1", "p2"], "2 sources"]]
 
 test("a move-aside that leaves a source behind and cannot write .gitignore still ends in the refusal", async t => {
   const s = await setup(t, "darkmem");
-  const ledger = path.join(s.repo, ".dforge", "sdd", "p1", "progress.md");
+  const ledger = path.join(s.repo, ".dagents", "sdd", "p1", "progress.md");
   write(ledger, LEDGER("p1"));
   const now = Date.now();
   for (let i = 0; i < 60; i += 1) {
-    const dir = path.join(s.repo, ".dforge", `moved-${utcStamp(new Date(now + i * 1000))}`);
+    const dir = path.join(s.repo, ".dagents", `moved-${utcStamp(new Date(now + i * 1000))}`);
     write(path.join(dir, "sdd", "p1", "progress.md", "keep"), "taken\n");
   }
   // This host runs as root, which bypasses chmod, so the write is made to fail.
@@ -669,7 +669,7 @@ test("a move-aside that leaves a source behind and cannot write .gitignore still
     'import path from "node:path";',
     "const w = fs.writeFileSync;",
     "fs.writeFileSync = (f, ...a) => {",
-    '  if (String(f).endsWith(`${path.sep}.dforge${path.sep}.gitignore`)) throw Object.assign(new Error("injected by the test"), { code: "EACCES", syscall: "open" });',
+    '  if (String(f).endsWith(`${path.sep}.dagents${path.sep}.gitignore`)) throw Object.assign(new Error("injected by the test"), { code: "EACCES", syscall: "open" });',
     "  return w(f, ...a);",
     "};",
     "",
@@ -677,15 +677,15 @@ test("a move-aside that leaves a source behind and cannot write .gitignore still
   const result = await run(["reconcile"], { cwd: s.repo, env: { ...s.env, NODE_OPTIONS: `--import ${pathToFileURL(preload).href}` } });
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stderr, /unexpected error/);
-  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay local \(configured darkmem\): darkmem and the mirror hold the progress, but 1 source could not be moved aside: .+progress\.md \(\w+\), and .+\.dforge[\\/]\.gitignore \(EACCES\) could not be written; reconcile again to finish$/m);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay local \(configured darkmem\): darkmem and the mirror hold the progress, but 1 source could not be moved aside: .+progress\.md \(\w+\), and .+\.dagents[\\/]\.gitignore \(EACCES\) could not be written; reconcile again to finish$/m);
   assert.equal(read(ledger), LEDGER("p1"));
-  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", ".gitignore")), false);
+  assert.equal(fs.existsSync(path.join(s.repo, ".dagents", ".gitignore")), false);
   assert.equal(s.stores().progress, "local");
 });
 
 test("a move that sets every source aside but cannot write .gitignore still moves, and names the file", async t => {
   const s = await setup(t, "darkmem");
-  const ledger = path.join(s.repo, ".dforge", "sdd", "p1", "progress.md");
+  const ledger = path.join(s.repo, ".dagents", "sdd", "p1", "progress.md");
   write(ledger, LEDGER("p1"));
   // This host runs as root, which bypasses chmod, so the write is made to fail.
   const preload = path.join(scratch("dms-preload-"), "preload.mjs");
@@ -694,7 +694,7 @@ test("a move that sets every source aside but cannot write .gitignore still move
     'import path from "node:path";',
     "const w = fs.writeFileSync;",
     "fs.writeFileSync = (f, ...a) => {",
-    '  if (String(f).endsWith(`${path.sep}.dforge${path.sep}.gitignore`)) throw Object.assign(new Error("injected by the test"), { code: "EACCES", syscall: "open" });',
+    '  if (String(f).endsWith(`${path.sep}.dagents${path.sep}.gitignore`)) throw Object.assign(new Error("injected by the test"), { code: "EACCES", syscall: "open" });',
     "  return w(f, ...a);",
     "};",
     "",
@@ -703,10 +703,10 @@ test("a move that sets every source aside but cannot write .gitignore still move
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.doesNotMatch(result.stderr, /unexpected error/);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
-  assert.ok(result.stdout.includes(`  ${path.join(s.repo, ".dforge", ".gitignore")} could not be written (EACCES)\n`), result.stdout);
+  assert.ok(result.stdout.includes(`  ${path.join(s.repo, ".dagents", ".gitignore")} could not be written (EACCES)\n`), result.stdout);
   assert.equal(fs.existsSync(ledger), false);
   assert.equal(movedAside(s.repo).length, 1);
-  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", ".gitignore")), false);
+  assert.equal(fs.existsSync(path.join(s.repo, ".dagents", ".gitignore")), false);
   assert.equal(s.stores().progress, "darkmem");
 });
 
@@ -714,7 +714,7 @@ test("latest.md filed for an active plan leaves its workstream open, even one th
   const s = await setup(t, "darkmem");
   const { workstream } = await s.seed.append({ project: "proj", workstream: "p3", entries: [{ kind: "note", body: "earlier\n" }] });
   await s.seed.updateWorkstream(workstream.id, { state: "closed", retain: true });
-  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), "## State\n- Plan: `docs/dforge/plans/p3.md`\n");
+  write(path.join(s.repo, ".dagents", "handoff", "latest.md"), "## State\n- Plan: `docs/dagents/plans/p3.md`\n");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^ {2}latest\.md filed as a checkpoint of p3$/m);
@@ -723,7 +723,7 @@ test("latest.md filed for an active plan leaves its workstream open, even one th
 
 test("latest.md filed for a completed plan closes the workstream it opens", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), "## State\n- Plan: `docs/dforge/plans/p2.md`\n");
+  write(path.join(s.repo, ".dagents", "handoff", "latest.md"), "## State\n- Plan: `docs/dagents/plans/p2.md`\n");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const ws = s.stub.db.workstreams.find(w => w.key === "p2");
@@ -734,15 +734,15 @@ test("latest.md filed for a completed plan closes the workstream it opens", asyn
 
 test("a ledger darkmem refuses names what darkmem now holds, and nothing is moved locally", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
-  write(path.join(s.repo, ".dforge", "sdd", "p2", "progress.md"), LEDGER("p2"));
-  write(path.join(s.repo, ".dforge", "sdd", "p2", "handoff.md"), "# Handoff p2\n");
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  write(path.join(s.repo, ".dagents", "sdd", "p2", "progress.md"), LEDGER("p2"));
+  write(path.join(s.repo, ".dagents", "sdd", "p2", "handoff.md"), "# Handoff p2\n");
   s.stub.db.failures.push({ method: "POST", path: "/api/v1/worklog/entries", status: 422, detail: "refused by the test" });
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): darkmem refused part of the progress; nothing was moved locally, and darkmem keeps what it accepted\n"), result.stdout);
   assert.ok(result.stdout.includes("  sdd/p1/progress.md: darkmem refused an entry: refused by the test\n"), result.stdout);
-  assert.ok(result.stdout.includes("  darkmem now holds in full: sdd/p2/progress.md, dforge/handoff/p2.md\n"), result.stdout);
+  assert.ok(result.stdout.includes("  darkmem now holds in full: sdd/p2/progress.md, dagents/handoff/p2.md\n"), result.stdout);
   assert.equal(s.stores().progress, "local");
   assert.deepEqual(movedAside(s.repo), []);
 });
@@ -751,7 +751,7 @@ test("a plan directory that is a symbolic link stays local, and nothing is sent 
   const s = await setup(t, "darkmem");
   const outside = path.join(scratch("dms-link-"), "p1");
   write(path.join(outside, "progress.md"), LEDGER("p1"));
-  const link = path.join(s.worktree, ".dforge", "sdd", "p1");
+  const link = path.join(s.worktree, ".dagents", "sdd", "p1");
   fs.mkdirSync(path.dirname(link), { recursive: true });
   fs.symlinkSync(outside, link);
   const before = s.stub.db.requests.length;
@@ -788,7 +788,7 @@ for (const { name, plant, linked, unwritten } of [
 ]) {
   test(`progress stays local when ${name} is a symbolic link, and nothing is sent or written through it`, { skip: process.platform === "win32" }, async t => {
     const s = await setup(t, "darkmem");
-    write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
+    write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
     plant(s);
     const result = await s.reconcile();
     assert.equal(result.code, 1, result.stdout + result.stderr);
@@ -807,12 +807,12 @@ test("progress moves back into the primary checkout from closed and open workstr
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: LATEST }] });
   await s.seed.updateWorkstream(workstream.id, { state: "closed", retain: true });
   await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: LEDGER("p2") }] });
-  await s.seed.putDocument({ project: "proj", uri: "dforge/handoff/p1.md", content: "# Handoff p1\n" });
+  await s.seed.putDocument({ project: "proj", uri: "dagents/handoff/p1.md", content: "# Handoff p1\n" });
   assert.equal(fs.existsSync(s.mirror), false, "the mirror starts empty");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
-  const stateDir = path.join(s.repo, ".dforge");
+  const stateDir = path.join(s.repo, ".dagents");
   assert.equal(read(path.join(stateDir, "sdd", "p1", "progress.md")), LEDGER("p1"), "a closed workstream's ledger comes back");
   assert.equal(read(path.join(stateDir, "sdd", "p2", "progress.md")), LEDGER("p2"));
   assert.equal(read(path.join(stateDir, "sdd", "p1", "handoff.md")), "# Handoff p1\n");
@@ -825,10 +825,10 @@ test("progress moves back into the primary checkout from closed and open workstr
   assert.equal(after.checkpoint, null);
   assert.equal(after.checkpointAt, null);
   assert.deepEqual(after.pendingLinks, []);
-  assert.equal("dforge/handoff/p1.md" in after.documents, false);
+  assert.equal("dagents/handoff/p1.md" in after.documents, false);
   assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
   assert.equal(s.stub.db.workstreams.length, 2);
-  assert.equal(s.stub.db.documents.has("proj\u0000dforge/handoff/p1.md"), true);
+  assert.equal(s.stub.db.documents.has("proj\u0000dagents/handoff/p1.md"), true);
   const again = await s.reconcile();
   assert.equal(again.code, 0, again.stdout + again.stderr);
   assert.equal(again.stdout, "");
@@ -837,23 +837,23 @@ test("progress moves back into the primary checkout from closed and open workstr
 test("progress stays in darkmem when the primary checkout holds a different file", async t => {
   const s = await setup(t, "local");
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), "a local ledger\n");
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), "a local ledger\n");
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): /m);
   assert.match(result.stdout, /^ {2}.+sdd[\\/]p1[\\/]progress\.md: differs from the mirror's sdd\/p1\/progress\.md$/m);
-  assert.equal(read(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md")), "a local ledger\n");
+  assert.equal(read(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md")), "a local ledger\n");
   assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), LEDGER("p1"));
   assert.equal(s.stores().progress, "darkmem");
 });
 
 test("a workstream opened on darkmem since the mirror's last pull, for an unfinished plan, keeps progress in darkmem", async t => {
   const s = await setup(t, "local");
-  await s.seed.append({ project: "proj", workstream: "p3", entries: [{ kind: "ledger", body: "# SDD ledger — plan: docs/dforge/plans/p3.md\nTask 1: implementer x (assigned)\n" }] });
+  await s.seed.append({ project: "proj", workstream: "p3", entries: [{ kind: "ledger", body: "# SDD ledger — plan: docs/dagents/plans/p3.md\nTask 1: implementer x (assigned)\n" }] });
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): a plan is in progress: /m);
-  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "sdd", "p3")), false, "nothing is copied");
+  assert.equal(fs.existsSync(path.join(s.repo, ".dagents", "sdd", "p3")), false, "nothing is copied");
   assert.equal(fs.existsSync(path.join(s.workRoot, "sdd", "p3", "progress.md")), true, "the mirror keeps the pulled ledger");
   assert.equal(s.stores().progress, "darkmem");
 });
@@ -862,12 +862,12 @@ test("a primary state directory reached through a symbolic link keeps progress i
   const s = await setup(t, "local");
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   const outside = scratch("dms-link-");
-  fs.mkdirSync(path.join(s.repo, ".dforge"), { recursive: true });
-  fs.symlinkSync(outside, path.join(s.repo, ".dforge", "sdd"));
+  fs.mkdirSync(path.join(s.repo, ".dagents"), { recursive: true });
+  fs.symlinkSync(outside, path.join(s.repo, ".dagents", "sdd"));
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay darkmem (configured local): .dforge is reached through symbolic links; nothing was copied\n"), result.stdout);
-  assert.ok(result.stdout.includes("  .dforge/sdd: a symbolic link, which the move will not write through\n"), result.stdout);
+  assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay darkmem (configured local): .dagents is reached through symbolic links; nothing was copied\n"), result.stdout);
+  assert.ok(result.stdout.includes("  .dagents/sdd: a symbolic link, which the move will not write through\n"), result.stdout);
   assert.deepEqual(fs.readdirSync(outside), []);
   assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), LEDGER("p1"));
   assert.equal(s.stores().progress, "darkmem");
@@ -877,7 +877,7 @@ for (const [what, plant, code] of [["a directory", file => fs.mkdirSync(file, { 
   test(`a primary checkout file that is ${what} keeps progress in darkmem, not a crash or a blocking read`, { skip: code === "EFTYPE" && process.platform === "win32" }, async t => {
     const s = await setup(t, "local");
     await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
-    const target = path.join(s.repo, ".dforge", "sdd", "p1", "progress.md");
+    const target = path.join(s.repo, ".dagents", "sdd", "p1", "progress.md");
     plant(target);
     const result = await s.reconcile();
     assert.equal(result.code, 1, result.stdout + result.stderr);
@@ -897,7 +897,7 @@ test("a mirror that lost latest.md takes darkmem's newest checkpoint again befor
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
-  assert.equal(read(path.join(s.repo, ".dforge", "handoff", "latest.md")), LATEST);
+  assert.equal(read(path.join(s.repo, ".dagents", "handoff", "latest.md")), LATEST);
 });
 
 for (const [what, plant, code] of [["a directory", file => fs.mkdirSync(file, { recursive: true }), "EISDIR"], ["a named pipe", namedPipe, "EFTYPE"]]) {
@@ -923,7 +923,7 @@ test("a mirror latest.md that cannot be written keeps progress in darkmem, not a
   assert.doesNotMatch(result.stderr, /unexpected error/);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the pull into the mirror did not finish cleanly$/m);
   assert.match(result.stdout, /^ {2}failed: handoff\/latest\.md: could not be written \(\w+\)$/m);
-  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "handoff", "latest.md")), false);
+  assert.equal(fs.existsSync(path.join(s.repo, ".dagents", "handoff", "latest.md")), false);
   assert.equal(s.stores().progress, "darkmem");
 });
 
@@ -941,7 +941,7 @@ test("a symbolic link among the mirror's progress keeps progress in darkmem, and
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the mirror's progress is reached through symbolic links; nothing was pulled or copied$/m);
   assert.ok(result.stdout.includes(`  ${link}: a symbolic link in the mirror, which the move will not read through\n`), result.stdout);
-  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md")), false);
+  assert.equal(fs.existsSync(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md")), false);
   assert.equal(s.stores().progress, "darkmem");
 });
 
@@ -949,7 +949,7 @@ test("a linked mirror ledger is refused before the pull, so newer darkmem conten
   const s = await setup(t, "local");
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   const outside = path.join(scratch("dms-link-"), "progress.md");
-  const older = "# SDD ledger — plan: docs/dforge/plans/p1.md\n";
+  const older = "# SDD ledger — plan: docs/dagents/plans/p1.md\n";
   write(outside, older);
   const link = path.join(s.workRoot, "sdd", "p1", "progress.md");
   fs.mkdirSync(path.dirname(link), { recursive: true });
@@ -968,7 +968,7 @@ test("a symbolic-linked mirror work directory keeps progress in darkmem, and not
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   const outside = scratch("dms-link-");
   const outsideLedger = path.join(outside, "sdd", "p1", "progress.md");
-  const outsideText = "# SDD ledger — plan: docs/dforge/plans/p1.md\n";
+  const outsideText = "# SDD ledger — plan: docs/dagents/plans/p1.md\n";
   write(outsideLedger, outsideText);
   fs.rmSync(s.workRoot, { recursive: true, force: true });
   fs.mkdirSync(path.dirname(s.workRoot), { recursive: true });
@@ -977,7 +977,7 @@ test("a symbolic-linked mirror work directory keeps progress in darkmem, and not
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the mirror's progress is reached through symbolic links; nothing was pulled or copied$/m);
   assert.ok(result.stdout.includes(`  ${s.workRoot}: a symbolic link in the mirror, which the move will not read through\n`), result.stdout);
-  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md")), false);
+  assert.equal(fs.existsSync(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md")), false);
   assert.equal(fs.readFileSync(outsideLedger, "utf8"), outsideText);
   assert.equal(s.stores().progress, "darkmem");
 });
@@ -990,7 +990,7 @@ function offlineMove() {
   write(path.join(mirror, "work", "sdd", "p1", "progress.md"), LEDGER("p1"));
   write(path.join(mirror, "work", "sdd", "p2", "progress.md"), LEDGER("p2"));
   const context = { cfg: { repoRoot: repo, mirror }, client: null, state: emptyState(), persist: () => {} };
-  return { mirror, context, target: slug => path.join(repo, ".dforge", "sdd", slug, "progress.md") };
+  return { mirror, context, target: slug => path.join(repo, ".dagents", "sdd", slug, "progress.md") };
 }
 
 // Maps each descriptor the exclusive create returns to its path: the copy
@@ -1240,18 +1240,18 @@ const ABSOLUTE_LEDGER = file => `# SDD ledger — plan: ${file}\nTask 1: complet
 
 test("an absolute ledger identity into the checkout counts as finished after the documents move removed it", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.home, ".dforge", "config.json"), JSON.stringify({ darkmemEnabled: true, darkmem: { url: s.stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [s.repo]: { project: "proj" } } } }));
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), ABSOLUTE_LEDGER(path.join(s.repo, "docs", "dforge", "plans", "p1.md")));
+  write(path.join(s.home, ".dagents", "config.json"), JSON.stringify({ darkmemEnabled: true, darkmem: { url: s.stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [s.repo]: { project: "proj" } } } }));
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), ABSOLUTE_LEDGER(path.join(s.repo, "docs", "dagents", "plans", "p1.md")));
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to darkmem$/m);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
-  assert.equal(fs.existsSync(path.join(s.repo, "docs", "dforge", "plans", "p1.md")), false, "the documents move ran first");
+  assert.equal(fs.existsSync(path.join(s.repo, "docs", "dagents", "plans", "p1.md")), false, "the documents move ran first");
 });
 
 test("a worktree's ledger whose absolute identity points into the primary checkout counts as finished", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.worktree, ".dforge", "sdd", "p2", "progress.md"), ABSOLUTE_LEDGER(path.join(s.repo, "docs", "dforge", "plans", "p2.md")));
+  write(path.join(s.worktree, ".dagents", "sdd", "p2", "progress.md"), ABSOLUTE_LEDGER(path.join(s.repo, "docs", "dagents", "plans", "p2.md")));
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
@@ -1259,9 +1259,9 @@ test("a worktree's ledger whose absolute identity points into the primary checko
 
 test("an absolute ledger identity under no root stays in progress and is named, even beside a completed.md naming it", async t => {
   const s = await setup(t, "darkmem");
-  const elsewhere = path.join(scratch("dms-elsewhere-"), "docs", "dforge", "plans", "p1.md");
+  const elsewhere = path.join(scratch("dms-elsewhere-"), "docs", "dagents", "plans", "p1.md");
   write(path.join(path.dirname(elsewhere), "completed.md"), `- \`${elsewhere}\`\n`);
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), ABSOLUTE_LEDGER(elsewhere));
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), ABSOLUTE_LEDGER(elsewhere));
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.ok(result.stdout.includes(`darkmem-sync reconcile: progress stay local (configured darkmem): a plan is in progress: ${elsewhere}\n`), result.stdout);
@@ -1269,24 +1269,24 @@ test("an absolute ledger identity under no root stays in progress and is named, 
 
 test("an absolute ledger identity through a symbolic-linked docs directory is named from its physical path", { skip: process.platform === "win32" && "directory symbolic links need privileges on Windows" }, async t => {
   const s = await setup(t, "darkmem");
-  const outside = path.join(scratch("dms-docs-"), "dforge");
-  fs.renameSync(path.join(s.repo, "docs", "dforge"), outside);
-  fs.symlinkSync(outside, path.join(s.repo, "docs", "dforge"), "dir");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), ABSOLUTE_LEDGER(path.join(outside, "plans", "p1.md")));
+  const outside = path.join(scratch("dms-docs-"), "dagents");
+  fs.renameSync(path.join(s.repo, "docs", "dagents"), outside);
+  fs.symlinkSync(outside, path.join(s.repo, "docs", "dagents"), "dir");
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), ABSOLUTE_LEDGER(path.join(outside, "plans", "p1.md")));
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
 });
 
 // 251 pieces: a stopped import holding the first 100 leaves two batches to send.
-const LONG = `# SDD ledger — plan: docs/dforge/plans/p1.md\n\n${Array.from({ length: 250 }, (_, i) => `Task ${i + 1}: complete (commits aaaa..bbbb)\n\n`).join("")}`;
+const LONG = `# SDD ledger — plan: docs/dagents/plans/p1.md\n\n${Array.from({ length: 250 }, (_, i) => `Task ${i + 1}: complete (commits aaaa..bbbb)\n\n`).join("")}`;
 const FIRST_BATCH = () => ledgerPieces(LONG).slice(0, 100).map(body => ({ kind: "ledger", body }));
 const ledgerOf = ws => ws.entries.filter(e => e.kind === "ledger");
 const ledgerAppends = s => s.stub.db.requests.filter(r => r.method === "POST" && r.path === "/api/v1/worklog/entries" && r.body.entries[0].kind === "ledger");
 
 test("a move stopped after its first append batch resumes the import", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LONG);
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LONG);
   await s.seed.append({ project: "proj", workstream: "p1", entries: FIRST_BATCH() });
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
@@ -1304,7 +1304,7 @@ test("a move stopped after its first append batch resumes the import", async t =
 
 test("another writer's append during a resumed import refuses the move, and nothing local moves", async t => {
   const s = await setup(t, "darkmem");
-  const ledger = path.join(s.repo, ".dforge", "sdd", "p1", "progress.md");
+  const ledger = path.join(s.repo, ".dagents", "sdd", "p1", "progress.md");
   write(ledger, LONG);
   await s.seed.append({ project: "proj", workstream: "p1", entries: FIRST_BATCH() });
   let competed = false;
@@ -1326,8 +1326,8 @@ test("another writer's append during a resumed import refuses the move, and noth
 
 test("an open workstream holding no ledger entries yet is resumed from the start", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "## State\n- Plan: `docs/dforge/plans/p1.md`\n" }] });
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "## State\n- Plan: `docs/dagents/plans/p1.md`\n" }] });
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const ws = s.stub.db.workstreams.find(w => w.key === "p1");
@@ -1349,7 +1349,7 @@ for (const [name, prepare] of [
 ]) {
   test(`${name} refuses the move and sends nothing`, async t => {
     const s = await setup(t, "darkmem");
-    write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LONG);
+    write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LONG);
     await prepare(s);
     const appends = () => s.stub.db.requests.filter(r => r.method === "POST" && r.path === "/api/v1/worklog/entries").length;
     const before = appends();
@@ -1358,13 +1358,13 @@ for (const [name, prepare] of [
     assert.match(result.stdout, /^darkmem-sync reconcile: progress stay local \(configured darkmem\): darkmem or the mirror already holds different progress$/m);
     assert.match(result.stdout, /^ {2}sdd\/p1\/progress\.md: darkmem already holds a different ledger for workstream p1$/m);
     assert.equal(appends(), before);
-    assert.equal(read(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md")), LONG);
+    assert.equal(read(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md")), LONG);
   });
 }
 
 test("a darkmem ledger whose absolute identity names a linked worktree's plan counts as finished", async t => {
   const s = await setup(t, "local");
-  const identity = path.join(s.worktree, "docs", "dforge", "plans", "p2.md");
+  const identity = path.join(s.worktree, "docs", "dagents", "plans", "p2.md");
   await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: ABSOLUTE_LEDGER(identity) }] });
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
@@ -1376,7 +1376,7 @@ test("a darkmem ledger whose absolute identity names a worktree nested in the pr
   fs.appendFileSync(path.join(s.repo, ".git", "info", "exclude"), ".claude/worktrees/\n");
   const nested = path.join(s.repo, ".claude", "worktrees", "nested");
   git(s.repo, "worktree", "add", "-q", "-b", "nested", nested);
-  const identity = path.join(nested, "docs", "dforge", "plans", "p2.md");
+  const identity = path.join(nested, "docs", "dagents", "plans", "p2.md");
   await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: ABSOLUTE_LEDGER(identity) }] });
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);

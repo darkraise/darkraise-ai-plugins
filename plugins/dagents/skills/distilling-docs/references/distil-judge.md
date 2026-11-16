@@ -1,7 +1,7 @@
 # Distillation judge contract
 
 The dispatch prompt for the seat that gates deletion in
-dforge:distilling-docs. Fill the placeholders and send it as the whole
+dagents:distilling-docs. Fill the placeholders and send it as the whole
 instruction set: the judge has no other context.
 
 ## Placeholders

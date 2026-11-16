@@ -1,4 +1,4 @@
-// The one new seam between dforge and the official codex plugin.
+// The one new seam between dagents and the official codex plugin.
 //
 // Usage: node codex-client.mjs <plugin-root>   (request JSON on stdin)
 // Prints one JSON result object on stdout and always exits 0: the caller is

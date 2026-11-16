@@ -275,7 +275,7 @@ Subagent ([JUDGE]):
 - `[CODEX_REVIEW_FILE]` — only with the Second Pass section: the Codex seat's
   `--out` JSON path. Pass the path, never the findings pasted inline: the judge
   cannot anchor on a review it has not opened yet
-- `[PLUGIN_ROOT]` — REQUIRED: the resolved dforge plugin directory.
+- `[PLUGIN_ROOT]` — REQUIRED: the resolved dagents plugin directory.
   Expand it before sending; a judge handed the literal token cannot open the
   criteria file
 - `[LENS_FILES]` — OPTIONAL: the `criteria=` paths `scripts/lens-route PLAN_FILE --task <N>` printed. Delete the Lens Criteria section when there are none.

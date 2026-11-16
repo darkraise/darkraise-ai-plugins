@@ -18,18 +18,18 @@ if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
-export MSYS_NO_PATHCONV=1 DFORGE_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
+export MSYS_NO_PATHCONV=1 DAGENTS_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DFORGE_BUDGET DFORGE_JQ DFORGE_FLOCK DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
+unset DAGENTS_BUDGET DAGENTS_JQ DAGENTS_FLOCK DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q -b main "$REPO"
 git -C "$REPO" commit -q --allow-empty -m init
-STATE="$REPO/.dforge/sdd/auto-run.json"
-SPEC=docs/dforge/specs/2026-10-13-widget-design.md
+STATE="$REPO/.dagents/sdd/auto-run.json"
+SPEC=docs/dagents/specs/2026-10-13-widget-design.md
 beat() { # beat <session> [age in seconds]: the heartbeat a live cockpit writes
   local f
-  f="$HOME/.claude/dforge/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  f="$HOME/.claude/dagents/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
   mkdir -p "$(dirname "$f")"
   printf '%s\n' "$(( $(date +%s) - ${2:-0} ))" > "$f"
 }
@@ -44,7 +44,7 @@ side() { (cd "$TMP/side" && bash "$AR" "$@"); }
 field() { jq -r --arg f "$1" '.[$f] | tostring' "$STATE"; }
 # A session's by-id record and transcript, written now or at a touch -d time.
 live() { # live <session> [touch -d argument]
-  local rec="$HOME/.claude/dforge/sessions/by-id/$1.json" tp="$HOME/.claude/projects/p/$1.jsonl"
+  local rec="$HOME/.claude/dagents/sessions/by-id/$1.json" tp="$HOME/.claude/projects/p/$1.jsonl"
   mkdir -p "$(dirname "$rec")" "$(dirname "$tp")"
   printf '{}\n' > "$tp"
   [ -z "${2:-}" ] || touch -d "$2" "$tp"
@@ -57,7 +57,7 @@ check "start without a session: exit 2" "$status" "2"
 check "start without a session: says why" "$(grep -c 'no session id' <<<"$out")" "1"
 out=$(ar --session s-1 start --spec "$SPEC" 2>&1); status=$?
 check "start: exit 0" "$status" "0"
-reg="docs/dforge/registers/$(date +%Y-%m-%d)-widget-auto.md"
+reg="docs/dagents/registers/$(date +%Y-%m-%d)-widget-auto.md"
 check "start: prints the register it created" "$out" "$reg"
 check "start: the register has the table header" "$(grep -c '^| # | Item | Assigned | Acceptance | State | Note |$' "$REPO/$reg")" "1"
 check "start: the register covers the spec" "$(grep -c "^\*\*Covers:\*\* $SPEC$" "$REPO/$reg")" "1"
@@ -65,15 +65,15 @@ check "start: active, bound, based on main" "$(field active) $(field session) $(
 check "start: phase spec, regime normal" "$(field phase) $(field regime)" "spec normal"
 check "start: nothing pending" "$(field pending)" "null"
 check "start: no stalls, no compactions since a task" "$(field stalls):$(field stalledAt):$(field compactionsSinceTask)" "0:null:0"
-check "start: the state file is ignored by git" "$(git -C "$REPO" status --porcelain -- .dforge | grep -c .)" "0"
-check "start: sdd ignores everything in it" "$(cat "$REPO/.dforge/sdd/.gitignore")" "*"
+check "start: the state file is ignored by git" "$(git -C "$REPO" status --porcelain -- .dagents | grep -c .)" "0"
+check "start: sdd ignores everything in it" "$(cat "$REPO/.dagents/sdd/.gitignore")" "*"
 
-# A cloned repository controls .dforge/sdd/, so its ignore is never written
+# A cloned repository controls .dagents/sdd/, so its ignore is never written
 # through a symbolic link.
 git init -q -b main "$TMP/linked"
 git -C "$TMP/linked" commit -q --allow-empty -m init
-mkdir -p "$TMP/linked/.dforge/sdd" "$TMP/outside"
-ln -s "$TMP/outside/planted" "$TMP/linked/.dforge/sdd/.gitignore"
+mkdir -p "$TMP/linked/.dagents/sdd" "$TMP/outside"
+ln -s "$TMP/outside/planted" "$TMP/linked/.dagents/sdd/.gitignore"
 beat s-link
 (cd "$TMP/linked" && bash "$AR" --session s-link start --spec "$SPEC" >/dev/null 2>&1)
 check "start: linked ignore never written through" "$([ -e "$TMP/outside/planted" ] && echo yes || echo no)" "no"
@@ -99,7 +99,7 @@ ar --session s-2 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; stat
 check "a stale run gives way" "$status:$(field session):$(field register)" "0:s-2:docs/r.md"
 mkdir -p "$HOME/.claude/projects/q"
 printf '{}\n' > "$HOME/.claude/projects/q/s-2.jsonl"
-rm -f "$HOME/.claude/dforge/sessions/cockpit/s-2"
+rm -f "$HOME/.claude/dagents/sessions/cockpit/s-2"
 ar --session s-1 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
 check "a live transcript without a record still counts" "$status:$(field session)" "4:s-2"
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null 2>&1; status=$?
@@ -126,7 +126,7 @@ printf '#!/usr/bin/env bash\nif [ "$*" = +%%s ]; then echo %s; else exec %s "$@"
 chmod +x "$CLOCK/date"
 stamp() { # stamp <session> <seconds before NOW; negative is ahead of it>
   local f
-  f="$HOME/.claude/dforge/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  f="$HOME/.claude/dagents/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
   mkdir -p "$(dirname "$f")"
   printf '%s\n' "$(( NOW - $2 ))" > "$f"
 }
@@ -184,7 +184,7 @@ ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 ar --session s-1 attach --plan docs/plan.md
 ar --session s-1 phase execute 2>"$TMP/err"; status=$?
 check "phase execute in the primary checkout: exit 4, phase unchanged" "$status:$(field phase)" "4:spec"
-check "phase execute in the primary checkout: says to make the worktree" "$(grep -c 'create the execution worktree first (dforge:using-git-worktrees)' "$TMP/err")" "1"
+check "phase execute in the primary checkout: says to make the worktree" "$(grep -c 'create the execution worktree first (dagents:using-git-worktrees)' "$TMP/err")" "1"
 side --session s-1 phase execute; status=$?
 check "phase execute from a linked worktree: exit 0" "$status" "0"
 check "attach and phase" "$(field plan) $(field phase)" "docs/plan.md execute"
@@ -209,8 +209,8 @@ check "ruling list" "$(ar --session s-1 ruling list | paste -sd'|' -)" "Fable: k
 # --- clears ---
 ar --session s-1 clear --phase >/dev/null 2>&1; status=$?
 check "clear without a handoff file: exit 1, nothing pending" "$status:$(field pending)" "1:null"
-mkdir -p "$REPO/.dforge/handoff"
-cat > "$REPO/.dforge/handoff/latest.md" <<'EOF'
+mkdir -p "$REPO/.dagents/handoff"
+cat > "$REPO/.dagents/handoff/latest.md" <<'EOF'
 # Handoff
 
 ## Next session
@@ -227,13 +227,13 @@ claude --model sonnet --effort high
 Paste as the first prompt:
 
 ```
-Execute docs/plan.md with dforge:subagent-driven-development.
+Execute docs/plan.md with dagents:subagent-driven-development.
 ```
 EOF
 ar --session s-1 clear --phase; status=$?
 check "clear --phase: exit 0" "$status" "0"
 check "clear --phase: pending clear, awaiting a rebind" "$(field pending) $(field rebind)" "clear true"
-check "clear --phase: the first prompt" "$(field resumePrompt)" "Execute docs/plan.md with dforge:subagent-driven-development."
+check "clear --phase: the first prompt" "$(field resumePrompt)" "Execute docs/plan.md with dagents:subagent-driven-development."
 check "clear --phase: the launch" "$(jq -r '.launch | "\(.model) \(.effort)"' "$STATE")" "sonnet high"
 check "clear --phase: not a self-resume" "$(field resumes)" "0"
 
@@ -285,52 +285,52 @@ printf '#!/usr/bin/env bash\ncase " $* " in *" f failures "*|*" f resumes "*) sl
 chmod +x "$SLOW_JQ"
 for lock in flock no-such-flock; do
   ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
-  DFORGE_JQ=$SLOW_JQ DFORGE_FLOCK=$lock ar --session s-1 failure >/dev/null 2>&1 &
-  DFORGE_JQ=$SLOW_JQ DFORGE_FLOCK=$lock ar --session s-1 failure >/dev/null 2>&1 &
+  DAGENTS_JQ=$SLOW_JQ DAGENTS_FLOCK=$lock ar --session s-1 failure >/dev/null 2>&1 &
+  DAGENTS_JQ=$SLOW_JQ DAGENTS_FLOCK=$lock ar --session s-1 failure >/dev/null 2>&1 &
   wait
   check "$lock: two failures at once stop the run" "$(field failures):$(field active)" "2:false"
   ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
-  DFORGE_JQ=$SLOW_JQ DFORGE_FLOCK=$lock ar --session s-1 clear >/dev/null 2>&1 &
-  DFORGE_JQ=$SLOW_JQ DFORGE_FLOCK=$lock ar --session s-1 clear >/dev/null 2>&1 &
+  DAGENTS_JQ=$SLOW_JQ DAGENTS_FLOCK=$lock ar --session s-1 clear >/dev/null 2>&1 &
+  DAGENTS_JQ=$SLOW_JQ DAGENTS_FLOCK=$lock ar --session s-1 clear >/dev/null 2>&1 &
   wait
   check "$lock: two clears at once count two self-resumes" "$(field resumes):$(field pending)" "2:clear"
 done
 check "no flock: the lock directory is gone" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
 # An ownerless lock is a claim in progress until it is a minute old.
 mkdir "$STATE.lockd"
-DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a fresh claim' 2>/dev/null; status=$?
+DAGENTS_LOCK_TENTHS=5 DAGENTS_FLOCK=no-such-flock side --session s-1 ruling add 'past a fresh claim' 2>/dev/null; status=$?
 check "no flock: a lock still being claimed is never taken" "$status:$(jq -r '.rulings | length' "$STATE")" "1:0"
 # ago SECONDS: that long ago as touch -t reads it, from GNU or BSD date.
 ago() { local t=$(( $(date +%s) - $1 )); date -d "@$t" +%Y%m%d%H%M.%S 2>/dev/null || date -r "$t" +%Y%m%d%H%M.%S; }
 touch -t "$(ago 10)" "$STATE.lockd"
-DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a stalled claim' 2>/dev/null; status=$?
+DAGENTS_LOCK_TENTHS=5 DAGENTS_FLOCK=no-such-flock side --session s-1 ruling add 'past a stalled claim' 2>/dev/null; status=$?
 check "no flock: a claim stalled ten seconds keeps its lock" "$status:$(jq -r '.rulings | length' "$STATE")" "1:0"
 touch -t "$(ago 40)" "$STATE.lockd"
-DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 task-complete; status=$?
+DAGENTS_LOCK_TENTHS=5 DAGENTS_FLOCK=no-such-flock side --session s-1 task-complete; status=$?
 check "no flock: a lock its holder left behind is taken within the wait" "$status:$(field resumes)" "0:0"
 check "no flock: and released" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
 # A held lock is taken over only from an owner that provably exited: a live
 # but slow holder keeps it, and the waiter gives up rather than writing.
 sleep 30 & live_holder=$!
 mkdir "$STATE.lockd" && printf '%s\n' "$live_holder" > "$STATE.lockd/pid" && uname -n > "$STATE.lockd/host"
-DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a live holder' 2>/dev/null; status=$?
+DAGENTS_LOCK_TENTHS=5 DAGENTS_FLOCK=no-such-flock side --session s-1 ruling add 'past a live holder' 2>/dev/null; status=$?
 check "no flock: a live holder's lock is never taken" "$status:$(jq -r '.rulings | length' "$STATE")" "1:0"
 kill "$live_holder"; wait "$live_holder" 2>/dev/null
-DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a dead holder'; status=$?
+DAGENTS_LOCK_TENTHS=5 DAGENTS_FLOCK=no-such-flock side --session s-1 ruling add 'past a dead holder'; status=$?
 check "no flock: a dead holder's lock is taken" "$status:$(jq -r '.rulings | length' "$STATE")" "0:1"
 check "no flock: and released after" "$([ -e "$STATE.lockd" ] && echo left || echo gone)" "gone"
 mkdir "$STATE.lockd" && uname -n > "$STATE.lockd/host" && touch -t 202001010000 "$STATE.lockd"
-DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a claim killed before its pid'; status=$?
+DAGENTS_LOCK_TENTHS=5 DAGENTS_FLOCK=no-such-flock side --session s-1 ruling add 'past a claim killed before its pid'; status=$?
 check "no flock: a claim killed before its pid is taken" "$status:$(jq -r '.rulings | length' "$STATE")" "0:2"
 # A reclaimer killed inside its guard leaves the guard; once old it is no bar.
 sleep 0 & dead_holder=$!
 wait "$dead_holder"
 mkdir "$STATE.lockd" && printf '%s\n' "$dead_holder" > "$STATE.lockd/pid" && uname -n > "$STATE.lockd/host"
 mkdir "$STATE.lockd.reclaim"
-DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a fresh guard' 2>/dev/null; status=$?
+DAGENTS_LOCK_TENTHS=5 DAGENTS_FLOCK=no-such-flock side --session s-1 ruling add 'past a fresh guard' 2>/dev/null; status=$?
 check "no flock: a fresh reclaim guard holds off a reclaim" "$status:$(jq -r '.rulings | length' "$STATE")" "1:2"
 touch -t 202001010000 "$STATE.lockd.reclaim"
-DR_LOCK_TENTHS=5 DFORGE_FLOCK=no-such-flock side --session s-1 ruling add 'past a stale guard'; status=$?
+DAGENTS_LOCK_TENTHS=5 DAGENTS_FLOCK=no-such-flock side --session s-1 ruling add 'past a stale guard'; status=$?
 check "no flock: a stale reclaim guard is cleared" "$status:$(jq -r '.rulings | length' "$STATE"):$([ -e "$STATE.lockd" ] && echo left || echo gone):$([ -e "$STATE.lockd.reclaim" ] && echo left || echo gone)" "0:3:gone:gone"
 
 # The binding is checked again under the lock, so a caller that passed the
@@ -372,7 +372,7 @@ for lock in flock no-such-flock; do
   fi
   holder=$!
   held "$lock: a start waits for the lock" || continue
-  DFORGE_FLOCK=$lock ar --session s-2 start --spec "$SPEC" --register docs/r.md --force >/dev/null
+  DAGENTS_FLOCK=$lock ar --session s-2 start --spec "$SPEC" --register docs/r.md --force >/dev/null
   wait
   check "$lock: a start waits for the lock" "$(field session):$(field rulings)" "s-2:[]"
 done
@@ -401,7 +401,7 @@ for lock in flock no-such-flock; do
   fi
   holder=$!
   held "$lock: a caller that waited for the lock finds the run rebound meanwhile" || continue
-  DFORGE_FLOCK=$lock ar --session s-1 ruling add 'too late' >/dev/null 2>&1; status=$?
+  DAGENTS_FLOCK=$lock ar --session s-1 ruling add 'too late' >/dev/null 2>&1; status=$?
   wait
   check "$lock: a caller that waited for the lock finds the run rebound meanwhile" "$status:$(field session):$(jq -r '.rulings | length' "$STATE")" "3:s-2:0"
 done
@@ -424,7 +424,7 @@ for lock in flock no-such-flock; do
   fi
   holder=$!
   held "$lock: a start that waited for the lock finds the run made live meanwhile" || continue
-  DFORGE_FLOCK=$lock ar --session s-2 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
+  DAGENTS_FLOCK=$lock ar --session s-2 start --spec "$SPEC" --register docs/r.md >/dev/null 2>&1; status=$?
   wait
   check "$lock: a start that waited for the lock finds the run made live meanwhile" "$status:$(field session):$(field active)" "4:s-1:true"
 done
@@ -500,7 +500,7 @@ printf '{"autoCompactWindow": 800000}\n' > "$HOME/.claude/settings.json"
 live s-1
 T="$HOME/.claude/projects/p/s-1.jsonl"
 asst() { printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' "$1"; }
-after() { (cd "$REPO" && CLAUDE_CODE_SESSION_ID=s-other DFORGE_BUDGET=465000 bash "$AR" --session s-1 after-compact); }
+after() { (cd "$REPO" && CLAUDE_CODE_SESSION_ID=s-other DAGENTS_BUDGET=465000 bash "$AR" --session s-1 after-compact); }
 ar --session s-1 compacted
 asst 30000 > "$T"
 out=$(after); status=$?
@@ -573,7 +573,7 @@ ar --session s-1 phase plan
 ar --session s-1 switch; status=$?
 check "switch: exit 0, switch pending" "$status:$(field pending)" "0:switch"
 check "switch: the phase moves to execute" "$(field phase)" "execute"
-check "switch: the first prompt" "$(field resumePrompt)" "Execute docs/plan.md with dforge:subagent-driven-development."
+check "switch: the first prompt" "$(field resumePrompt)" "Execute docs/plan.md with dagents:subagent-driven-development."
 check "switch: the launch" "$(jq -r '.launch | "\(.model) \(.effort)"' "$STATE")" "sonnet high"
 check "switch: not a self-resume, no rebind" "$(field resumes):$(field rebind)" "0:false"
 check "pending prints switch" "$(ar --session s-1 pending)" "switch"
@@ -596,14 +596,14 @@ ar --session s-1 attach --plan docs/plan.md
 ar --session s-1 phase final
 ar --session s-1 phase finish
 # The prompt next-step writes for a clean final review (next-step.test.sh).
-finish_prompt='Resume `docs/plan.md` with dforge:resume-execution. Run dforge:finishing-a-development-branch.'
-cp "$REPO/.dforge/handoff/latest.md" "$TMP/latest.keep"
-sed "s|^Execute docs/plan.md with dforge:subagent-driven-development\.$|$finish_prompt|" "$TMP/latest.keep" > "$REPO/.dforge/handoff/latest.md"
+finish_prompt='Resume `docs/plan.md` with dagents:resume-execution. Run dagents:finishing-a-development-branch.'
+cp "$REPO/.dagents/handoff/latest.md" "$TMP/latest.keep"
+sed "s|^Execute docs/plan.md with dagents:subagent-driven-development\.$|$finish_prompt|" "$TMP/latest.keep" > "$REPO/.dagents/handoff/latest.md"
 ar --session s-1 clear --phase; status=$?
 check "finishing's clear: exit 0, phase finish, clear pending" "$status:$(field phase):$(field pending)" "0:finish:clear"
 check "finishing's clear: no self-resume" "$(field resumes)" "0"
 check "finishing's clear: next-step's finishing prompt" "$(field resumePrompt)" "$finish_prompt"
-cp "$TMP/latest.keep" "$REPO/.dforge/handoff/latest.md"
+cp "$TMP/latest.keep" "$REPO/.dagents/handoff/latest.md"
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 
 # --- the plan, final and finish phases never hand off ---

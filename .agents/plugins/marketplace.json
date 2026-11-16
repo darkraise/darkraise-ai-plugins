@@ -21,6 +21,18 @@
         "installation": "AVAILABLE",
         "authentication": "ON_USE"
       },
+      "name": "dagents",
+      "category": "Development",
+      "source": {
+        "source": "local",
+        "path": "./plugins/dagents"
+      }
+    },
+    {
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
       "name": "darkraise-ui",
       "category": "Development",
       "source": {

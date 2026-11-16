@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { HttpError, TransportError } from "./darkmem-client.mjs";
-import { dforgeDir } from "./darkmem-config.mjs";
+import { dagentsDir } from "./darkmem-config.mjs";
 import { importLedger } from "./darkmem-import.mjs";
 import {
   DOC_PREFIX, checkpointTarget, decodeUtf8, isoMicros, ledgerPieces, listDocumentFiles, newestCheckpointAt, propertiesFor,
@@ -127,7 +127,7 @@ export function gatherLocalProgress(cfg) {
   const problems = [];
   const files = [];
   for (const checkout of listed.dirs) {
-    const stateDir = dforgeDir("state", checkout);
+    const stateDir = dagentsDir("state", checkout);
     const sdd = path.join(stateDir, "sdd");
     // A linked plan directory is not listed as one, so its progress would be
     // left behind without a word. An sdd that cannot be listed is this
@@ -155,7 +155,7 @@ export function gatherLocalProgress(cfg) {
       files.push({ kind: "handoff", slug, uri, file, stateDir, rel: `sdd/${slug}/handoff.md` });
     }
   }
-  const primaryState = dforgeDir("state", cfg.repoRoot);
+  const primaryState = dagentsDir("state", cfg.repoRoot);
   const latest = path.join(primaryState, "handoff", "latest.md");
   if (fs.existsSync(latest)) files.push({ kind: "latest", file: latest, stateDir: primaryState, rel: "handoff/latest.md" });
   const sources = [];
@@ -253,7 +253,7 @@ const scratchReport = () => ({ conflicts: [], failures: [], notes: [], counts: {
 // own docs directory while documents are local, since a plan may exist only
 // on its branch; the mirror's while they are darkmem.
 const checkoutRoots = (cfg, stateDir) => ({
-  docsRoot: cfg.documents.applied === "darkmem" ? cfg.documents.root : dforgeDir("docs", path.dirname(stateDir)),
+  docsRoot: cfg.documents.applied === "darkmem" ? cfg.documents.root : dagentsDir("docs", path.dirname(stateDir)),
   workRoot: stateDir,
   worktreeRoot: path.dirname(stateDir),
 });
@@ -448,7 +448,7 @@ export async function progressToDarkmem(context) {
       left.push(`${item.file} (${error.code})`);
     }
   }
-  // The checkout's state directory ignores itself, as .dforge/sdd/ does, so a
+  // The checkout's state directory ignores itself, as .dagents/sdd/ does, so a
   // backup never shows as untracked in a repository that does not list it.
   // "wx" never writes through a link or over a file already there.
   const unignored = [];
@@ -628,7 +628,7 @@ export async function progressToLocal(context, { offline = null } = {}) {
     const busy = inProgressReason(context);
     if (busy) return refuse(busy.reason, busy.details);
   }
-  const stateDir = dforgeDir("state", cfg.repoRoot);
+  const stateDir = dagentsDir("state", cfg.repoRoot);
   const problems = unsupportedPlanDirs(workRoot).map(dir => `${dir}: not a usable workstream key`);
   const sources = [
     ...ledgersIn(workRoot).map(({ slug, file }) => ({ file, rel: `sdd/${slug}/progress.md` })),

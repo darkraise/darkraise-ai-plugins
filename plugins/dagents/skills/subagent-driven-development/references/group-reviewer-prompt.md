@@ -193,7 +193,7 @@ Subagent (the judge seat task-step review --group prints):
 - `[PACKAGE_FILE]` — REQUIRED: the group review package
   `task-step review --group` wrote, one section per task
 - `[REPORT_FILE]` — REQUIRED: the file this judge writes its report to, `<workspace>/group-<list>-review-report.md`; `task-step review --group` fills it
-- `[PLUGIN_ROOT]` — REQUIRED: the resolved dforge plugin directory. Expand it
+- `[PLUGIN_ROOT]` — REQUIRED: the resolved dagents plugin directory. Expand it
   before sending; a judge handed the literal token cannot open the criteria
   file
 

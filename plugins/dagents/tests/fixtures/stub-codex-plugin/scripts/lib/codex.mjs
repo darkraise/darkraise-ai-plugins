@@ -1,4 +1,4 @@
-// Stub of codex@openai-codex 1.0.3 scripts/lib/codex.mjs, for dforge
+// Stub of codex@openai-codex 1.0.3 scripts/lib/codex.mjs, for dagents
 // tests. Behaviour is scripted by STUB_* environment variables so a suite can
 // drive every branch of codex-client.mjs without a real Codex, a real account
 // or a real broker.

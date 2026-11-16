@@ -19,7 +19,7 @@ AR_BEAT_SECONDS=180
 
 # A native jq.exe ends its lines CRLF; every script sourcing this sets
 # pipefail, so jq's own status, which -e relies on, still decides.
-ar_jq() { "${DFORGE_JQ:-jq}" "$@" | tr -d '\r'; }
+ar_jq() { "${DAGENTS_JQ:-jq}" "$@" | tr -d '\r'; }
 
 ar_primary_root() {
   local common
@@ -28,7 +28,7 @@ ar_primary_root() {
 }
 
 # ar_in_primary — true in the primary checkout. A worktree run's tasks run in
-# a linked worktree (dforge:using-git-worktrees), so a task step here would
+# a linked worktree (dagents:using-git-worktrees), so a task step here would
 # land on the run's base; ar_guard applies it to worktree runs only.
 ar_in_primary() {
   local dir common
@@ -41,7 +41,7 @@ ar_in_primary() {
 ar_path() {
   local primary
   primary=$(ar_primary_root) || return 1
-  printf '%s/sdd/auto-run.json\n' "$(dforge_dir state "$primary")"
+  printf '%s/sdd/auto-run.json\n' "$(dagents_dir state "$primary")"
 }
 
 # ar_state — the state file's JSON; fails when there is none.
@@ -109,7 +109,7 @@ ar_get() {
 # Windows path is converted as scripts/lib/context.sh does.
 ar_transcript() {
   local rec tp
-  rec="$HOME/.claude/dforge/sessions/by-id/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-').json"
+  rec="$HOME/.claude/dagents/sessions/by-id/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-').json"
   if [ -f "$rec" ]; then
     tp=$(ar_jq -r '.transcript_path // empty' < "$rec" 2>/dev/null | tr -d '\r')
     if [ -n "$tp" ] && command -v cygpath >/dev/null 2>&1; then tp=$(cygpath -u "$tp"); fi
@@ -123,7 +123,7 @@ ar_transcript() {
 # ar_beat_file SESSION — where the session's cockpit writes its heartbeat: the
 # epoch seconds of its last beat.
 ar_beat_file() {
-  printf '%s/.claude/dforge/sessions/cockpit/%s\n' "${HOME:-}" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  printf '%s/.claude/dagents/sessions/cockpit/%s\n' "${HOME:-}" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
 }
 
 # ar_beat_age SESSION — seconds since the session's cockpit last beat; fails
@@ -189,13 +189,13 @@ ar_start() {
     || { echo "auto-run: no live cockpit in this session" >&2; return 2; }
   if [ "$force" != 1 ] && ar_busy; then ar_busy_refusal; return; fi
   top=$(git rev-parse --show-toplevel)
-  dforge_stores_init "$top"
+  dagents_stores_init "$top"
   if [ -z "$register" ]; then
     slug=$(basename "$spec" .md)
     slug=${slug%-design}
     slug=$(sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}-//' <<<"$slug")
-    register="$(dforge_name "$(dforge_docs_root "$top")" "$top")/registers/$(date +%Y-%m-%d)-$slug-auto.md"
-    regfile=$(dforge_resolve "$register" "$top")
+    register="$(dagents_name "$(dagents_docs_root "$top")" "$top")/registers/$(date +%Y-%m-%d)-$slug-auto.md"
+    regfile=$(dagents_resolve "$register" "$top")
     if [ ! -f "$regfile" ]; then
       mkdir -p "$(dirname "$regfile")" || return 1
       printf '# Auto run: %s\n\n**Source:** items the auto run for `%s` deferred\n**Covers:** %s\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n' \
@@ -204,7 +204,7 @@ ar_start() {
   fi
   base=$(git symbolic-ref --short -q HEAD 2>/dev/null || true)
   mkdir -p "$(dirname "$path")" || return 1
-  dforge_self_ignore "$(dirname "$path")"
+  dagents_self_ignore "$(dirname "$path")"
   # Under the update lock, so a --force start never lands between another
   # session's read and write of the state and is lost.
   dr_locked "$path" ar_create_unless_busy "$force" "$path" --arg s "$AR_SESSION" --arg spec "$spec" --arg reg "$register" --arg base "$base" \
@@ -249,7 +249,7 @@ ar_setup_branch() {
   fi
   head=$(git rev-parse HEAD) && [ -n "$head" ] || return 1
   top=$(git rev-parse --show-toplevel) || return 1
-  register=$(dforge_resolve "$(ar_get register)" "$top")
+  register=$(dagents_resolve "$(ar_get register)" "$top")
   register=${register#"$top"/}
   tmp=$(mktemp) || return 1
   if ! git status --porcelain=v1 -z --untracked-files=all >"$tmp"; then
@@ -337,9 +337,9 @@ ar_set_phase() {
   local hit rc
   if [ "$1" = execute ] && ar_guard; then
     if [ "$AR_GUARD_RULE" = 3 ]; then
-      echo "auto-run: this is the primary checkout; create the execution worktree first (dforge:using-git-worktrees), then run auto-run phase execute from it" >&2
+      echo "auto-run: this is the primary checkout; create the execution worktree first (dagents:using-git-worktrees), then run auto-run phase execute from it" >&2
     else
-      echo "auto-run: HEAD is not on the run's branch; follow dforge:using-git-worktrees Step 0 for the run, then run auto-run phase execute again" >&2
+      echo "auto-run: HEAD is not on the run's branch; follow dagents:using-git-worktrees Step 0 for the run, then run auto-run phase execute again" >&2
     fi
     return 4
   fi
@@ -423,8 +423,8 @@ ar_handoff() {
   local primary latest launch
   AR_PROMPT="" AR_MODEL="" AR_EFFORT=""
   primary=$(ar_primary_root) || return 1
-  dforge_stores_init "$primary"
-  latest=$(dforge_latest_file "$primary")
+  dagents_stores_init "$primary"
+  latest=$(dagents_latest_file "$primary")
   [ -f "$latest" ] && AR_PROMPT=$(ar_fenced "$latest" 'Paste as the first prompt:')
   [ -n "$AR_PROMPT" ] || { echo "auto-run: no first prompt in $latest; run scripts/next-step first" >&2; return 1; }
   launch=$(ar_fenced "$latest" 'Launch in ' | head -n 1)

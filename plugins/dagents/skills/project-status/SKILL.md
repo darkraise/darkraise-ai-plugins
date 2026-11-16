@@ -15,11 +15,11 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
 ## Steps
 
 1. **Orient in one call.** Run `scripts/repo-audit`
-   (see using-dforge §Session Budget). It gives branch and HEAD, worktrees, dirty files, plans with
+   (see using-dagents §Session Budget). It gives branch and HEAD, worktrees, dirty files, plans with
    ledgers, the handoff file, and recent commits.
 2. **Route out if execution is live.** If a ledger has incomplete tasks and no
    task's last line is `BLOCKED`, name the plan and the task reached and route
-   to dforge:resume-execution. Stop there: this skill orients a session
+   to dagents:resume-execution. Stop there: this skill orients a session
    with no thread to pick up, and never duplicates the resume path.
 3. **Classify each plan.** A file under `<docs>/plans/` is a plan when
    it has at least one `Task N` heading outside a fenced block — what
@@ -32,7 +32,7 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
      While progress is local, check it under every worktree the audit lists
      (`<worktree>/<state>/sdd/<basename minus .md>/progress.md`), because a
      ledger lives in the worktree executing it; while it lives in darkmem,
-     every worktree shares the mirror's one. Use `scripts/dforge-path ledger`
+     every worktree shares the mirror's one. Use `scripts/dagents-path ledger`
      or compute the path directly; never call `scripts/sdd-workspace`, which
      creates the directory.
      A plan whose tasks are all complete but which is not yet indexed as merged
@@ -42,9 +42,9 @@ never calls `scripts/next-step`, which rewrites `latest.md`. See
      item register answers that. A ledger showing every task complete is not a
      completion signal either — the work may be unmerged.
      Either prefix names the same document: `docs/superpowers/<rest>` in a
-     ledger, a `completed.md` entry or a register cell matches `docs/dforge/<rest>`.
+     ledger, a `completed.md` entry or a register cell matches `docs/dagents/<rest>`.
    - **Not started** — neither, and only when `completed.md` exists. "No ledger"
-     never means "never ran": dforge:finishing-a-development-branch
+     never means "never ran": dagents:finishing-a-development-branch
      deletes the workspace on integration.
 4. **Match specs to plans.** A spec's slug is its filename without the leading
    `YYYY-MM-DD-` and the trailing `-design`. A plan matches when its filename
@@ -102,15 +102,15 @@ wins, and the report names which one matched.
 | # | Condition | Recommendation |
 |---|---|---|
 | 0 | A task's **last** ledger line is `Task N: BLOCKED` | No skill. The decision it names goes under Owner-only items |
-| 1 | A ledger has incomplete tasks and no such line | dforge:resume-execution |
+| 1 | A ledger has incomplete tasks and no such line | dagents:resume-execution |
 | 2 | Every task complete, no `Final review: clean` line | the final review, via the plan's `**Execution:**` skill |
-| 3 | Final review clean, branch unmerged (`git merge-base --is-ancestor <branch> <base>` exits non-zero) | dforge:finishing-a-development-branch |
-| 4 | `completed.md` exists and a spec has no plan | dforge:writing-plans |
-| 5 | `completed.md` exists and a plan is absent from it with no ledger | dforge:using-git-worktrees, then the plan's execution skill |
-| 6 | A register holds an unresolved row and no rule above matched | Route by the `Assigned` cell, as `scripts/next-step --complete` does, not by row order. Set aside `verify` rows (awaiting your check), rows assigned to a finished plan (one `completed.md` records; list them to resolve or reassign) and `.md` paths absent from this repository (another repository's work). Of the rest, the first row assigned to an existing plan goes to that plan's execution skill (dforge:resume-execution when it has a ledger), else one assigned to an existing spec to dforge:writing-plans, else any other label to dforge:brainstorming for its spec, else dforge:brainstorming to rule on the unassigned rows. Nothing left: when the set-aside rows are only `verify` rows and a roadmap milestone is open, fall to rule 7; otherwise no skill — name the set-aside rows |
-| 7 | The current roadmap milestone is not closed and has nothing open but `verify` rows (`scripts/roadmap open` exits 0, or every row it lists is at `verify`, which the audit is the check for) | dforge:closing-a-milestone |
+| 3 | Final review clean, branch unmerged (`git merge-base --is-ancestor <branch> <base>` exits non-zero) | dagents:finishing-a-development-branch |
+| 4 | `completed.md` exists and a spec has no plan | dagents:writing-plans |
+| 5 | `completed.md` exists and a plan is absent from it with no ledger | dagents:using-git-worktrees, then the plan's execution skill |
+| 6 | A register holds an unresolved row and no rule above matched | Route by the `Assigned` cell, as `scripts/next-step --complete` does, not by row order. Set aside `verify` rows (awaiting your check), rows assigned to a finished plan (one `completed.md` records; list them to resolve or reassign) and `.md` paths absent from this repository (another repository's work). Of the rest, the first row assigned to an existing plan goes to that plan's execution skill (dagents:resume-execution when it has a ledger), else one assigned to an existing spec to dagents:writing-plans, else any other label to dagents:brainstorming for its spec, else dagents:brainstorming to rule on the unassigned rows. Nothing left: when the set-aside rows are only `verify` rows and a roadmap milestone is open, fall to rule 7; otherwise no skill — name the set-aside rows |
+| 7 | The current roadmap milestone is not closed and has nothing open but `verify` rows (`scripts/roadmap open` exits 0, or every row it lists is at `verify`, which the audit is the check for) | dagents:closing-a-milestone |
 | 8 | A dirty tree with no plan in flight | name the files and ask whether they are live work |
-| 9 | None of the above | say the project is between programmes, offer dforge:brainstorming |
+| 9 | None of the above | say the project is between programmes, offer dagents:brainstorming |
 
 `BLOCKED` outranks everything: `scripts/next-step` already treats it as terminal
 and hands the decision to your human partner. Rule 0 reads each task's **last**
@@ -132,4 +132,4 @@ worktree, report each and recommend the one whose branch has the newest commit.
 | "I know roughly where this stands" | Every line comes from the audit or the tree. Nothing from memory. |
 | "Every plan in the phase merged, so the phase is done" | Only `closed` in `roadmap status` means done. Report what `roadmap open` lists. |
 | "No ledger, so nobody ever ran it" | The workspace is deleted on merge. Check `completed.md` first. |
-| "I should write the handoff while I'm here" | This skill writes nothing. `latest.md` belongs to dforge:handoff. |
+| "I should write the handoff while I'm here" | This skill writes nothing. `latest.md` belongs to dagents:handoff. |

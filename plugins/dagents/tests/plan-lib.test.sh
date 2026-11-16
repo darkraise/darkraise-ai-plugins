@@ -121,10 +121,10 @@ REPO="$TMP/repo"
 git init -q "$REPO"
 cp "$TMP/h.md" "$REPO/plan.md"
 check "amendments_file: none yet" "$(plan_amendments_file "$REPO/plan.md")" ""
-mkdir -p "$REPO/.dforge/sdd/plan"
-cp "$TMP/am.md" "$REPO/.dforge/sdd/plan/amendments.md"
+mkdir -p "$REPO/.dagents/sdd/plan"
+cp "$TMP/am.md" "$REPO/.dagents/sdd/plan/amendments.md"
 got=$(plan_amendments_file "$REPO/plan.md")
-check "amendments_file: the plan's workspace file" "${got##*/.dforge/}" "sdd/plan/amendments.md"
+check "amendments_file: the plan's workspace file" "${got##*/.dagents/}" "sdd/plan/amendments.md"
 check "amendments_file: outside a repository" "$(plan_amendments_file "$TMP/h.md")" ""
 
 # --- plan_scores and plan_heavy ---
@@ -207,16 +207,16 @@ check "plan_delegated: the scores fixture delegates nothing" "$(deleg "$TMP/scor
 # --- plan_ledger and ledger_left_inline ---
 REPO="$TMP/repo"
 git init -q "$REPO"
-mkdir -p "$REPO/docs" "$REPO/.dforge/sdd/demo"
+mkdir -p "$REPO/docs" "$REPO/.dagents/sdd/demo"
 printf '# Demo\n' > "$REPO/docs/demo.md"
-L="$REPO/.dforge/sdd/demo/progress.md"
+L="$REPO/.dagents/sdd/demo/progress.md"
 check "plan_ledger: no ledger prints nothing" "$(plan_ledger "$REPO/docs/demo.md")" ""
 printf '# SDD ledger — plan: docs/demo.md\n' > "$L"
 check "plan_ledger: a relative identity line names the plan" "$(plan_ledger "$REPO/docs/demo.md")" \
-  "$(git -C "$REPO" rev-parse --show-toplevel)/.dforge/sdd/demo/progress.md"
+  "$(git -C "$REPO" rev-parse --show-toplevel)/.dagents/sdd/demo/progress.md"
 printf '# SDD ledger — plan: %s/docs/demo.md\n' "$(git -C "$REPO" rev-parse --show-toplevel)" > "$L"
 check "plan_ledger: an absolute identity line names the plan" "$(plan_ledger "$REPO/docs/demo.md")" \
-  "$(git -C "$REPO" rev-parse --show-toplevel)/.dforge/sdd/demo/progress.md"
+  "$(git -C "$REPO" rev-parse --show-toplevel)/.dagents/sdd/demo/progress.md"
 printf '# SDD ledger — plan: docs/other.md\n' > "$L"
 check "plan_ledger: another plan's ledger is ignored" "$(plan_ledger "$REPO/docs/demo.md")" ""
 printf '# SDD ledger — plan: docs/demo.md\nTask 1: implementer inline (assigned; base a)\nTask 2: escalated inline -> subagent — still failing\n' > "$L"
@@ -234,18 +234,18 @@ sed 's/^|//' > "$TMP/exec.md" <<'EOF'
 |
 |### Task 1: plain
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 2: offloaded
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Executor:** codex gpt-6.1-sol / medium
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 |
 |### Task 3: fenced only
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |```markdown
@@ -256,13 +256,13 @@ sed 's/^|//' > "$TMP/exec.md" <<'EOF'
 |
 |#### Part A: cheap
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Executor:** codex gpt-6.1-sol / medium
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 |
 |#### Part B: risky
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dagents:impl-opus-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
 EOF
 
@@ -288,12 +288,12 @@ check "a split task with an executor part is delegated as executor" \
 # removed one-third rule, which would also have delegated Task 2 as total 4.
 { printf '# Offload Fixture\n\n'
   for i in 1 2; do
-    printf '### Task %s: four band\n\n**Implementer:** dforge:impl-sonnet-medium\n' "$i"
+    printf '### Task %s: four band\n\n**Implementer:** dagents:impl-sonnet-medium\n' "$i"
     [ "$i" = 1 ] && printf '**Executor:** codex gpt-6.1-sol / high\n'
     printf '**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4\n\n'
   done
   for i in 3 4 5 6; do
-    printf '### Task %s: small\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n' "$i"
+    printf '### Task %s: small\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n' "$i"
   done
 } > "$TMP/offload4.md"
 
@@ -387,53 +387,53 @@ git init -q "$SR"
 git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 STOP=$(git -C "$SR" rev-parse --show-toplevel)
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/dforge/plans" "$M/work/sdd/mp"
-printf '# MP\n' > "$M/dforge/plans/mp.md"
-printf '# SDD ledger — plan: docs/dforge/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
+mkdir -p "$M/dagents/plans" "$M/work/sdd/mp"
+printf '# MP\n' > "$M/dagents/plans/mp.md"
+printf '# SDD ledger — plan: docs/dagents/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
 check "plan_ledger: a mirror plan finds its mirror ledger by name" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$M/dforge/plans/mp.md")" "$M/work/sdd/mp/progress.md"
-printf '# SDD ledger — plan: %s\n' "$M/dforge/plans/mp.md" > "$M/work/sdd/mp/progress.md"
+  "$(cd "$SR" && HOME=$SH plan_ledger "$M/dagents/plans/mp.md")" "$M/work/sdd/mp/progress.md"
+printf '# SDD ledger — plan: %s\n' "$M/dagents/plans/mp.md" > "$M/work/sdd/mp/progress.md"
 check "plan_ledger: an absolute mirror path names it too" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$M/dforge/plans/mp.md")" "$M/work/sdd/mp/progress.md"
+  "$(cd "$SR" && HOME=$SH plan_ledger "$M/dagents/plans/mp.md")" "$M/work/sdd/mp/progress.md"
 printf '# SDD ledger — plan: docs/superpowers/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
 check "plan_ledger: the pre-2.0 prefix names a mirror plan" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$M/dforge/plans/mp.md")" "$M/work/sdd/mp/progress.md"
+  "$(cd "$SR" && HOME=$SH plan_ledger "$M/dagents/plans/mp.md")" "$M/work/sdd/mp/progress.md"
 check "plan_locate: a document name finds the mirror's copy" \
-  "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/mp.md)" "$M/dforge/plans/mp.md"
-mkdir -p "$SR/docs/dforge/plans"
-printf '# Stale checkout copy\n' > "$SR/docs/dforge/plans/mp.md"
+  "$(cd "$SR" && HOME=$SH plan_locate docs/dagents/plans/mp.md)" "$M/dagents/plans/mp.md"
+mkdir -p "$SR/docs/dagents/plans"
+printf '# Stale checkout copy\n' > "$SR/docs/dagents/plans/mp.md"
 check "plan_locate: applied mirror wins over leftover checkout" \
-  "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/mp.md)" "$M/dforge/plans/mp.md"
+  "$(cd "$SR" && HOME=$SH plan_locate docs/dagents/plans/mp.md)" "$M/dagents/plans/mp.md"
 check "plan_locate: absolute checkout path follows applied mirror" \
-  "$(cd "$SR" && HOME=$SH plan_locate "$SR/docs/dforge/plans/mp.md")" "$M/dforge/plans/mp.md"
+  "$(cd "$SR" && HOME=$SH plan_locate "$SR/docs/dagents/plans/mp.md")" "$M/dagents/plans/mp.md"
 check "plan_locate: an absolute plan outside cwd keeps its store context" \
-  "$(cd "$TMP" && HOME=$SH plan_locate "$SR/docs/dforge/plans/mp.md")" "$M/dforge/plans/mp.md"
-mv "$M/dforge/plans/mp.md" "$M/dforge/plans/mp.saved"
+  "$(cd "$TMP" && HOME=$SH plan_locate "$SR/docs/dagents/plans/mp.md")" "$M/dagents/plans/mp.md"
+mv "$M/dagents/plans/mp.md" "$M/dagents/plans/mp.saved"
 check "plan_locate: missing mirror does not revive stale checkout" \
-  "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/mp.md)" "$M/dforge/plans/mp.md"
-mv "$M/dforge/plans/mp.saved" "$M/dforge/plans/mp.md"
-rm "$SR/docs/dforge/plans/mp.md"
+  "$(cd "$SR" && HOME=$SH plan_locate docs/dagents/plans/mp.md)" "$M/dagents/plans/mp.md"
+mv "$M/dagents/plans/mp.saved" "$M/dagents/plans/mp.md"
+rm "$SR/docs/dagents/plans/mp.md"
 check "plan_locate: an existing file stays" "$(cd "$REPO" && plan_locate docs/demo.md)" "docs/demo.md"
-check "plan_locate: a missing name stays" "$(cd "$SR" && HOME=$SH plan_locate docs/dforge/plans/none.md)" "docs/dforge/plans/none.md"
-mkdir -p "$STOP/.dforge/sdd/mp"
-printf '## A1 — Task 1\n' > "$STOP/.dforge/sdd/mp/amendments.md"
+check "plan_locate: a missing name stays" "$(cd "$SR" && HOME=$SH plan_locate docs/dagents/plans/none.md)" "docs/dagents/plans/none.md"
+mkdir -p "$STOP/.dagents/sdd/mp"
+printf '## A1 — Task 1\n' > "$STOP/.dagents/sdd/mp/amendments.md"
 check "amendments_file: a mirror plan's workspace stays in the checkout" \
-  "$(cd "$SR" && HOME=$SH plan_amendments_file "$M/dforge/plans/mp.md")" "$STOP/.dforge/sdd/mp/amendments.md"
-(cd "$SR" && HOME=$SH plan_require_same_project "$M/dforge/plans/mp.md" 2>/dev/null)
+  "$(cd "$SR" && HOME=$SH plan_amendments_file "$M/dagents/plans/mp.md")" "$STOP/.dagents/sdd/mp/amendments.md"
+(cd "$SR" && HOME=$SH plan_require_same_project "$M/dagents/plans/mp.md" 2>/dev/null)
 check "same project: a mirror plan while documents are in darkmem" "$?" "0"
 (cd "$SR" && HOME=$SH plan_require_same_project "$REPO/docs/demo.md" 2>/dev/null)
 check "same project: another checkout's plan is refused" "$?" "2"
 M=$(stores_home "$SH" "$SR" proj local darkmem)
-mkdir -p "$STOP/docs/dforge/plans"
-printf '# LP\n' > "$STOP/docs/dforge/plans/lp.md"
+mkdir -p "$STOP/docs/dagents/plans"
+printf '# LP\n' > "$STOP/docs/dagents/plans/lp.md"
 mkdir -p "$M/work/sdd/lp"
-printf '# SDD ledger — plan: docs/dforge/plans/lp.md\n' > "$M/work/sdd/lp/progress.md"
+printf '# SDD ledger — plan: docs/dagents/plans/lp.md\n' > "$M/work/sdd/lp/progress.md"
 check "plan_ledger: a checkout plan finds its mirror ledger" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/dforge/plans/lp.md")" "$M/work/sdd/lp/progress.md"
+  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/dagents/plans/lp.md")" "$M/work/sdd/lp/progress.md"
 printf '# SDD ledger — plan: docs/superpowers/plans/lp.md\n' > "$M/work/sdd/lp/progress.md"
 check "plan_ledger: the pre-2.0 prefix names a checkout plan" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/dforge/plans/lp.md")" "$M/work/sdd/lp/progress.md"
-(cd "$SR" && HOME=$SH plan_require_same_project "$M/dforge/plans/mp.md" 2>/dev/null)
+  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/dagents/plans/lp.md")" "$M/work/sdd/lp/progress.md"
+(cd "$SR" && HOME=$SH plan_require_same_project "$M/dagents/plans/mp.md" 2>/dev/null)
 check "same project: a mirror plan while documents are local is refused" "$?" "2"
 
 # --- a home that is a git repository: a mirror plan still belongs to the
@@ -441,13 +441,13 @@ check "same project: a mirror plan while documents are local is refused" "$?" "2
 GH="$TMP/git-home"
 git init -q "$GH"
 GM=$(stores_home "$GH" "$SR" proj darkmem darkmem)
-mkdir -p "$GM/dforge/plans" "$GM/work/sdd/gp"
-printf '# GP\n' > "$GM/dforge/plans/gp.md"
-printf '# SDD ledger — plan: docs/dforge/plans/gp.md\n' > "$GM/work/sdd/gp/progress.md"
+mkdir -p "$GM/dagents/plans" "$GM/work/sdd/gp"
+printf '# GP\n' > "$GM/dagents/plans/gp.md"
+printf '# SDD ledger — plan: docs/dagents/plans/gp.md\n' > "$GM/work/sdd/gp/progress.md"
 check "plan_ledger: a mirror plan in a home under git finds its ledger" \
-  "$(cd "$SR" && HOME=$GH plan_ledger "$GM/dforge/plans/gp.md")" "$GM/work/sdd/gp/progress.md"
-printf '{not json\n' > "$GH/.dforge/config.json"
-(cd "$SR" && HOME=$GH plan_ledger "$GM/dforge/plans/gp.md" > /dev/null 2> "$TMP/ledger-err")
+  "$(cd "$SR" && HOME=$GH plan_ledger "$GM/dagents/plans/gp.md")" "$GM/work/sdd/gp/progress.md"
+printf '{not json\n' > "$GH/.dagents/config.json"
+(cd "$SR" && HOME=$GH plan_ledger "$GM/dagents/plans/gp.md" > /dev/null 2> "$TMP/ledger-err")
 check "plan_ledger: a ConfigError exits 2" "$?" "2"
 check "plan_ledger: the ConfigError is named once" "$(grep -c 'not valid JSON' "$TMP/ledger-err")" "1"
 

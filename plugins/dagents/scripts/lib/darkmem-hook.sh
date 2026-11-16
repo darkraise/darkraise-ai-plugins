@@ -11,14 +11,14 @@ _DARKMEM_HOOK_SCRIPTS=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # start: the common case for a repository that never used darkmem.
 _darkmem_configured() {
   command -v node >/dev/null 2>&1 || return 1
-  [ -f "${HOME:-}/.dforge/config.json" ] || [ -f "${HOME:-}/.dforge/stores.json" ]
+  [ -f "${HOME:-}/.dagents/config.json" ] || [ -f "${HOME:-}/.dagents/stores.json" ]
 }
 
 # _darkmem_watchdog SECONDS CMD... — CMD, killed with its children after
 # SECONDS, where GNU timeout is missing (macOS ships none): an async hook's
 # timeout is not enforced, so nothing else would stop it. set -m starts CMD in
 # its own process group, which the kill takes whole, node included. SIGTERM
-# first, SIGKILL after the grace period (DARKMEM_KILL_GRACE, 5 s) for a command
+# first, SIGKILL after the grace period (DAGENTS_DARKMEM_KILL_GRACE, 5 s) for a command
 # that ignores it.
 _darkmem_watchdog() {
   local seconds=$1 pid watchdog status monitor=1
@@ -27,7 +27,7 @@ _darkmem_watchdog() {
   set -m
   "$@" &
   pid=$!
-  (sleep "$seconds"; kill -TERM -- "-$pid"; sleep "${DARKMEM_KILL_GRACE:-5}"; kill -KILL -- "-$pid") >/dev/null 2>&1 &
+  (sleep "$seconds"; kill -TERM -- "-$pid"; sleep "${DAGENTS_DARKMEM_KILL_GRACE:-5}"; kill -KILL -- "-$pid") >/dev/null 2>&1 &
   watchdog=$!
   wait "$pid" 2>/dev/null
   status=$?
@@ -43,7 +43,7 @@ _darkmem_watchdog() {
 # signals CMD alone and leaves its children running.
 _darkmem_bounded() {
   if timeout --version 2>/dev/null | grep -q 'GNU coreutils'; then
-    timeout -k "${DARKMEM_KILL_GRACE:-5}" "$@"
+    timeout -k "${DAGENTS_DARKMEM_KILL_GRACE:-5}" "$@"
   else
     _darkmem_watchdog "$@"
   fi
@@ -51,7 +51,7 @@ _darkmem_bounded() {
 
 # _darkmem_run DIR SID SECONDS COMMAND — darkmem-sync COMMAND in DIR, bounded.
 _darkmem_run() {
-  (cd "$1" 2>/dev/null && export DFORGE_SESSION_ID=$2 && _darkmem_bounded "$3" bash "$_DARKMEM_HOOK_SCRIPTS/darkmem-sync" "$4" </dev/null)
+  (cd "$1" 2>/dev/null && export DAGENTS_SESSION_ID=$2 && _darkmem_bounded "$3" bash "$_DARKMEM_HOOK_SCRIPTS/darkmem-sync" "$4" </dev/null)
 }
 
 # _darkmem_fit MAXLINES MAXCHARS — the lines on stdin, fitted. Unindented lines
@@ -97,27 +97,27 @@ _darkmem_fit() {
 darkmem_session_lines() {
   local reason status end grace bound
   _darkmem_configured || return 0
-  reason=$( (dforge_docs_store "$1" >/dev/null) 2>&1 )
+  reason=$( (dagents_docs_store "$1" >/dev/null) 2>&1 )
   status=$?
   [ "$status" = 0 ] || { printf '%s\n' "$reason" | head -n 1; return 0; }
-  (dforge_project "$1") >/dev/null 2>&1 \
-    || [ "$( (dforge_docs_store "$1") 2>/dev/null)" = darkmem ] \
-    || [ "$( (dforge_progress_store "$1") 2>/dev/null)" = darkmem ] \
+  (dagents_project "$1") >/dev/null 2>&1 \
+    || [ "$( (dagents_docs_store "$1") 2>/dev/null)" = darkmem ] \
+    || [ "$( (dagents_progress_store "$1") 2>/dev/null)" = darkmem ] \
     || return 0
-  end=$(( SECONDS + ${4:-270} )) grace=${DARKMEM_KILL_GRACE:-5}
+  end=$(( SECONDS + ${4:-270} )) grace=${DAGENTS_DARKMEM_KILL_GRACE:-5}
   {
     bound=$(( end - SECONDS - 60 - 2 * grace ))
     [ "$bound" -le 200 ] || bound=200
     if [ "$bound" -lt 10 ]; then
       echo "darkmem-sync: reconcile and pull skipped at session start: too little of the hook's time is left; run darkmem-sync reconcile, then pull"
     else
-      DARKMEM_SYNC_LOCK_WAIT_MS=30000 _darkmem_run "$1" "$2" "$bound" reconcile 2>&1
+      DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS=30000 _darkmem_run "$1" "$2" "$bound" reconcile 2>&1
       bound=$(( end - SECONDS - grace ))
       [ "$bound" -le 60 ] || bound=60
       if [ "$bound" -lt 10 ]; then
         echo "darkmem-sync: pull skipped at session start: too little of the hook's time is left; run darkmem-sync pull"
       else
-        DARKMEM_SYNC_LOCK_WAIT_MS=30000 _darkmem_run "$1" "$2" "$bound" pull 2>&1
+        DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS=30000 _darkmem_run "$1" "$2" "$bound" pull 2>&1
       fi
     fi
   } \
@@ -137,7 +137,7 @@ darkmem_session_lines() {
 # both would not reach the push, which runs in a process group of its own.
 darkmem_push_quietly() {
   _darkmem_configured || return 0
-  _darkmem_bounded 30 bash -c '. "$1" && dforge_project "$2"' darkmem-push "$_DARKMEM_HOOK_SCRIPTS/lib/roots.sh" "$1" >/dev/null 2>&1 || return 0
-  DARKMEM_SYNC_LOCK_WAIT_MS=1 _darkmem_run "$1" "$2" 100 push >/dev/null 2>&1
+  _darkmem_bounded 30 bash -c '. "$1" && dagents_project "$2"' darkmem-push "$_DARKMEM_HOOK_SCRIPTS/lib/roots.sh" "$1" >/dev/null 2>&1 || return 0
+  DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS=1 _darkmem_run "$1" "$2" 100 push >/dev/null 2>&1
   return 0
 }

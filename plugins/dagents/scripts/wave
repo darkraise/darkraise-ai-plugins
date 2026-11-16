@@ -66,7 +66,7 @@ need_commit() { git rev-parse --verify --quiet "$1^{commit}" >/dev/null || die 2
 wave_mark() {
   local gitdir
   gitdir=$(git -C "${1:-.}" rev-parse --absolute-git-dir 2>/dev/null) || return 1
-  printf '%s/dforge/wave-task\n' "$gitdir"
+  printf '%s/dagents/wave-task\n' "$gitdir"
 }
 # worktrees_holding A B — "<path>" of every detached worktree entered for ref B
 # (wave enter) whose HEAD lies in A..B (an ancestor of B, not of A): the

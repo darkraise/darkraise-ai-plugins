@@ -6,7 +6,7 @@
   "wrapper": "scripts/run-agy-task.sh",
   "reference": "reference/executor-lane.md",
   "session_dir": "agy-sessions",
-  "session_dir_env": "DR_AGY_SESSION_DIR",
+  "session_dir_env": "DAGENTS_AGY_SESSION_DIR",
   "surfaces": ["lane"],
   "priority": 10,
   "blocks": {

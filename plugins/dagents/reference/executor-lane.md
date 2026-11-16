@@ -8,7 +8,7 @@ its wrapper `bash "$(executors path <id> wrapper)"`, and its ladder blocks are
 named by `executors get <id> blocks.assignment`, `blocks.successor` and
 `blocks.timeout`. Where an executor needs something this file cannot say
 generically, its own section at the foot of this file says it.
-dforge:writing-plans reads Planning; dforge:subagent-driven-development
+dagents:writing-plans reads Planning; dagents:subagent-driven-development
 reads everything else. A native Codex host never uses these lanes: it follows
 [native-codex.md](native-codex.md), and a Claude `**Executor:**` line never
 starts recursive CLI offload in a Codex host.
@@ -70,7 +70,7 @@ timeout, so never ask this one through it:
    minutes; Claude-only` in one line and continue the plan without waiting.
    A timer that fires after the question was answered is ignored. A timer
    still running when the session would end is stopped first, as
-   dforge:handoff step 0 says: until it fires or is stopped it is a
+   dagents:handoff step 0 says: until it fires or is stopped it is a
    launch that has not reported back, and it would wake a handed-off session
    with `lane-question-timeout`.
 
@@ -108,7 +108,7 @@ and gains nothing.
 executor is an override on a second line, never a replacement on the first:
 
 ```markdown
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dagents:impl-sonnet-low
 **Executor:** <id> <model> / <effort>
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 ```
@@ -131,13 +131,13 @@ enforces is files and commits, not a particular runtime.
 
 **The fallback is the session.** Wherever this file says a task falls back -
 its gate is closed, its CLI is unusable, the per-plan breaker has tripped, a
-run or a fix round hands back - dforge:executing-plans implements the task
+run or a fix round hands back - dagents:executing-plans implements the task
 itself under [delegated-task.md](delegated-task.md) §The session review loop,
 never closing it `unreviewed`, and its assigned line's agent slot reads
 `inline`. A task that falls back before any run joins that loop at its
 implement step after the plain `task-step start` the executor path already ran
 (never `--inline`, which refuses an executor task); a handback mid-loop joins
-it at the round it was in. Deprecated dforge:subagent-driven-development
+it at the round it was in. Deprecated dagents:subagent-driven-development
 dispatches the task's `**Implementer:**` agent instead, with that agent in the
 slot.
 
@@ -277,7 +277,7 @@ agy dispatch.
    wrapper runs. Without it the ledger's last line is the previous task's
    `complete` line, and a resumed controller would take the task in flight for
    finished. A `thread pending` line is never a resume point
-   (dforge:handoff step 0).
+   (dagents:handoff step 0).
 
    The thread id must reach the ledger. It also lands in the report file. If it
    lived only in your context, a compaction would turn fix round 1 into a fresh
@@ -652,7 +652,7 @@ and its `id` equals its filename stem; an invalid entry is skipped by
 | `locator` | yes | The script that reports presence, version and install root |
 | `probe.command`, `probe.op` | yes | The Node probe and the operation that answers `.authed` |
 | `wrapper` | yes | The task wrapper the dispatch step runs |
-| `session_dir` | yes | The per-session state directory under `$HOME/.claude/dforge/` |
+| `session_dir` | yes | The per-session state directory under `$HOME/.claude/dagents/` |
 | `surfaces` | yes | The surfaces this executor staffs, for example `lane` and `review` |
 | `blocks.gate` | yes | The [ladder.md](ladder.md) block holding `min_score`, `max_score` and `max_risk` |
 | `gate` | no | The executor's own gate script |
@@ -663,7 +663,7 @@ and its `id` equals its filename stem; an invalid entry is skipped by
 | `reasons.not_enabled`, `reasons.not_installed`, `reasons.missing`, `reasons.logged_out`, `reasons.probe_failed` | no | The roster message for each unusable state |
 
 `executors ranked` prints every valid id by ascending `priority`, then id: the
-order planning and dispatch try the executors in. `${DR_EXECUTORS_DIR}` replaces
+order planning and dispatch try the executors in. `${DAGENTS_EXECUTORS_DIR}` replaces
 the registry directory when set; it does not add to it. Adding an executor is an
 entry here, a wrapper, and its ladder blocks.
 
@@ -732,7 +732,7 @@ specific to it:
   linked worktree and its refs: a write outside them leaves no trace the
   wrapper can see. Tasks whose tests spawn piped Node child processes are fine
   on this lane.
-- **The brief.** The brief reaches `agy` as a file under `$DR_TASK_DIR/prompt/`,
+- **The brief.** The brief reaches `agy` as a file under `$DAGENTS_TASK_DIR/prompt/`,
   never as an argument, and `--add-dir` names only that directory. The `-p`
   argument is a fixed pointer sentence naming that file, so a long brief never
   meets an argument-length limit or a shell quoting rule.

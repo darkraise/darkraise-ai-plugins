@@ -1,5 +1,5 @@
-// dforge's settings: their schema (config/schema.mjs), the values in
-// ~/.dforge/config.json, and the environment variable a key names, which wins
+// dagents's settings: their schema (config/schema.mjs), the values in
+// ~/.dagents/config.json, and the environment variable a key names, which wins
 // over both. A key whose target is `claude` lives in Claude's own user settings
 // file instead, and this module is its only writer. The first command on a
 // machine imports the pre-2.0 settings once.
@@ -12,28 +12,28 @@ import { acquireLock } from "./darkmem-mirror.mjs";
 
 export class SettingError extends Error {}
 
-const USAGE = "usage: dforge-config get KEY | get --json | set KEY VALUE | unset KEY | claude-restore JSON | workflow";
+const USAGE = "usage: dagents-config get KEY | get --json | set KEY VALUE | unset KEY | claude-restore JSON | workflow";
 
 function homeOf(env) {
   return env.HOME || os.homedir();
 }
 
 export function configPath(env = process.env) {
-  return path.join(homeOf(env), ".dforge", "config.json");
+  return path.join(homeOf(env), ".dagents", "config.json");
 }
 
 const HOME_LOCK_WAIT_MS = 10000;
 
-// Runs `change` holding the lock every writer of a file in ~/.dforge
+// Runs `change` holding the lock every writer of a file in ~/.dagents
 // (config.json, stores.json) takes across its read, merge and replace, so two
 // sessions changing different keys never drop each other's change. A holder
 // keeps it for milliseconds, so a wait that long means it is stuck.
 export function withHomeLock(env, change, Busy = Error) {
-  const dir = path.join(homeOf(env), ".dforge", ".lock");
+  const dir = path.join(homeOf(env), ".dagents", ".lock");
   const deadline = Date.now() + HOME_LOCK_WAIT_MS;
   let release;
   while (!(release = acquireLock(dir))) {
-    if (Date.now() >= deadline) throw new Busy(`another dforge process has held ${dir} for ${HOME_LOCK_WAIT_MS / 1000} s; if none is running, remove it`);
+    if (Date.now() >= deadline) throw new Busy(`another dagents process has held ${dir} for ${HOME_LOCK_WAIT_MS / 1000} s; if none is running, remove it`);
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
   }
   try {
@@ -112,7 +112,7 @@ export function claudeSettingsPath(env = process.env) {
 }
 
 // Claude's user settings as far as they can be read: a file that cannot be
-// parsed is warned about and read as empty, so the dforge keys still resolve.
+// parsed is warned about and read as empty, so the dagents keys still resolve.
 function claudeValues(env, warn) {
   try {
     return readFile(claudeSettingsPath(env)) ?? {};
@@ -199,7 +199,7 @@ function need(key) {
   return SCHEMA[key];
 }
 
-export function resolve(env = process.env, warn = message => process.stderr.write(`dforge-config: ${message}\n`)) {
+export function resolve(env = process.env, warn = message => process.stderr.write(`dagents-config: ${message}\n`)) {
   const file = configPath(env);
   const data = readFile(file) ?? {};
   let claude;
@@ -236,7 +236,7 @@ export function workflowLine(env = process.env) {
   const parts = Object.entries(SCHEMA)
     .filter(([key, spec]) => spec.enforcedBy === "skill" && values[key] !== spec.default)
     .map(([key]) => `${key}=${values[key]}`);
-  return parts.length === 0 ? "" : `dforge settings in force (each replaces the matching question or default in the skills): ${parts.join("; ")}`;
+  return parts.length === 0 ? "" : `dagents settings in force (each replaces the matching question or default in the skills): ${parts.join("; ")}`;
 }
 
 export function setValue(key, text, env = process.env) {
@@ -270,7 +270,7 @@ export function unsetValue(key, env = process.env) {
   });
 }
 
-// Once per machine, while ~/.dforge/config.json does not exist: dr-cockpit's
+// Once per machine, while ~/.dagents/config.json does not exist: dr-cockpit's
 // options from the Claude settings file. The old file stays in place.
 export function importLegacy(env = process.env) {
   const file = configPath(env);
@@ -279,7 +279,7 @@ export function importLegacy(env = process.env) {
   const options = readJson(claudeSettingsPath(env))?.pluginConfigs?.["dr-cockpit@darkraise"]?.options;
   if (options && typeof options === "object") {
     for (const [key, spec] of Object.entries(SCHEMA)) {
-      if (spec.target === "dforge" && key in options && isValid(spec, options[key]) && options[key] !== spec.default) data[key] = options[key];
+      if (spec.target === "dagents" && key in options && isValid(spec, options[key]) && options[key] !== spec.default) data[key] = options[key];
     }
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -302,7 +302,7 @@ export function main(argv, env = process.env, out = process.stdout) {
   const [command, ...rest] = argv;
   try {
     // A script reading one setting must not be what creates the settings file.
-    if (!env.DFORGE_NO_IMPORT) importLegacy(env);
+    if (!env.DAGENTS_NO_IMPORT) importLegacy(env);
     if (command === "get" && rest.length === 1 && rest[0] === "--json") {
       out.write(`${JSON.stringify(resolve(env))}\n`);
       return 0;
@@ -323,7 +323,7 @@ export function main(argv, env = process.env, out = process.stdout) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   } catch (error) {
-    process.stderr.write(`dforge-config: ${error.message}\n`);
+    process.stderr.write(`dagents-config: ${error.message}\n`);
     return error instanceof SettingError ? 2 : 1;
   }
 }

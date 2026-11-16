@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
 import type { On, RenderElement, SessionMessage } from 'claude-code'
 
-// Acceptance tests for docs/dforge/specs/2026-10-26-task-loop-steps-design.md,
+// Acceptance tests for docs/dagents/specs/2026-10-26-task-loop-steps-design.md,
 // the cockpit statements (A12, A13). They reach the watchdog only through the
 // engine's events: a bound auto run is the auto-run state file naming the
 // session, background work is an Agent or Bash launch with run_in_background,
@@ -10,7 +10,7 @@ import type { On, RenderElement, SessionMessage } from 'claude-code'
 
 const START = { cwd: '/home/me/code/shop/web', surface: 'terminal', isInteractive: true } as never
 const SUMMARY: SessionMessage = { role: 'user', text: 'Summary.', toolUses: [] }
-const AUTO = '/home/me/code/shop/.dforge/sdd/auto-run.json'
+const AUTO = '/home/me/code/shop/.dagents/sdd/auto-run.json'
 const SENTINEL = 'Task 3: complete.\n\nAuto run: compacting'
 const MIN = 60_000
 
@@ -136,8 +136,8 @@ const launchAgent = ($: Parameters<TestBody>[0]) =>
     tool_use_id: 'toolu_1',
     prompt: 'Implement task 4',
     description: 'Task 4',
-    subagentType: 'dforge:impl-sonnet-low',
-    provider: { plugin: 'dforge', tier: 'user' },
+    subagentType: 'dagents:impl-sonnet-low',
+    provider: { plugin: 'dagents', tier: 'user' },
     parentModel: 'claude-opus-5-5',
     background: true,
     fork: false,

@@ -1,10 +1,15 @@
-# dforge
+# dagents
+
+dagents continues dforge 4.17.1 under its own name, starting at version 1.0.0:
+the scored-task workflow with implementer agents on a model ladder, kept beside
+dforge 5. Its state lives under `.dagents/`, `docs/dagents/` and
+`~/.dagents/`.
 
 A standalone fork of [superpowers](https://github.com/obra/superpowers) 6.3.0
 (MIT — see `LICENSES/`) for Claude Code and Codex, built around one idea: a
 strong model writes the plan, the session executes it literally, one task at a
 time, at the model and effort its hardest task needs, and every judgment call
-goes to one strong ruling seat. Install `dforge@darkraise` from the repository-root
+goes to one strong ruling seat. Install `dagents@darkraise` from the repository-root
 marketplace, then disable the upstream `superpowers` plugin,
 `dcc-superpower-companions` and `andrej-karpathy-skills`: same-named skills in
 two enabled plugins can double-trigger.
@@ -125,7 +130,7 @@ final review scales as follows:
 | 0 Gates | runs | runs | runs |
 | 0.2 UI proof | runs | runs | runs |
 | 0.5 Acceptance QA | skipped | runs | runs |
-| 1 Claude review (`dforge:judge-opus`) | runs | runs | runs |
+| 1 Claude review (`dagents:judge-opus`) | runs | runs | runs |
 | 1 Lenses | security only, when it applies | at most 2, plus test-quality when it applies, within `lensCap` | up to `lensCap` |
 | 2 Codex round | skipped | skipped | as today |
 | 3 Dedupe judge | never (one list) | never (one list) | with two lists |
@@ -192,7 +197,7 @@ Antigravity CLI (priority 10, wrapper `scripts/run-agy-task.sh`), takes totals 0
 implementation only: totals 0-2 run on `gemini-3.8-flash` at medium effort, as
 the 2026-11-02 calibration record decided, totals 3-4 on `gemini-4-argon` at
 low effort and totals 5-8 on `gemini-4-argon` at high effort, as
-`docs/dforge/notes/2026-11-03-agy-calibration-3-8.md` decided; Claude Sonnet
+`docs/dagents/notes/2026-11-03-agy-calibration-3-8.md` decided; Claude Sonnet
 runs through `agy` only as the single retry after a Gemini run fails. Codex (priority 20) keeps the
 tasks `agy` refuses. Planning gives each task to the first ticked executor, in
 `executors ranked` order, whose gate admits it. The `agyLane` setting (`Agy
@@ -217,7 +222,7 @@ than it saves.
 an override on a second line, which is what makes a machine without Codex, a cold
 session, and an executor whose auth has lapsed all degrade by reading a line that
 is already there rather than re-deriving the assignment at dispatch. Under
-`dforge:executing-plans` both lines are read only for the tasks an
+`dagents:executing-plans` both lines are read only for the tasks an
 inline plan delegates; for the tasks the session implements itself they are
 inert, so nothing falls back.
 
@@ -319,7 +324,7 @@ in `reference/agy-policy.json` passing. A quota on a Gemini model closes the
 lane, and one on a Claude model closes only the Claude fallback, each until the
 reset time the error names, or for the session when it names none.
 
-**Project state.** `docs/dforge/` holds what a project knows about
+**Project state.** `docs/dagents/` holds what a project knows about
   itself, not just its specs and plans: `gates.md` declares the verification
   gates in order, `plans/completed.md` indexes merged plans, and `distilled/`
   holds four durable files — constraints, gotchas, reference, rejected —
@@ -348,25 +353,25 @@ reset time the error names, or for the session when it names none.
   a repository's planning documents and progress in a darkmem instance over
   its keyed REST routes. It does nothing until you opt in: turn on **Use
   darkmem** (`darkmemEnabled`) in the cockpit's darkmem settings or with
-  `bash <plugin-root>/scripts/dforge-config set darkmemEnabled true`, and map
-  the repository's primary checkout in `~/.dforge/config.json` —
+  `bash <plugin-root>/scripts/dagents-config set darkmemEnabled true`, and map
+  the repository's primary checkout in `~/.dagents/config.json` —
   `{"darkmem": {"url": "http://<host>:8000", "api_key_env": "DARKMEM_API_KEY", "repos": {"<primary checkout path>": {"project": "<name>"}}}}`
   — and export a `dmk_` key in that variable. The repository then syncs a
-  mirror at `~/.dforge/mirror/<project>/`, whose documents live under the
-  darkmem uri prefix `dforge/`. The key needs the `read` and `capture` scopes,
+  mirror at `~/.dagents/mirror/<project>/`, whose documents live under the
+  darkmem uri prefix `dagents/`. The key needs the `read` and `capture` scopes,
   and `import --replace` also `admin`. Two settings choose each family's
   store while darkmem is on: `documentStore` (specs, plans, registers, notes)
   and `progressSource` (ledgers and handoffs), `local` or `darkmem`, both
   `darkmem` by default; a mapping entry may override either, for example
-  `{"project": "plugins", "documentStore": "local"}`. `~/.dforge/stores.json`
+  `{"project": "plugins", "documentStore": "local"}`. `~/.dagents/stores.json`
   records where each family actually lives, with its project and mirror, and
   the scripts and skills read and write there through `scripts/lib/roots.sh`
-  and `scripts/dforge-path`.
+  and `scripts/dagents-path`.
   `pull` fetches what changed; `push` sends documents under their last synced
   hash and each new ledger line as its own entry, with `task`, `state` and
   `commit` properties a progress board can read; `status` lists each family's
   store and local changes;
-  `import` files an existing `docs/dforge/` and its ledgers once, verified byte
+  `import` files an existing `docs/dagents/` and its ledgers once, verified byte
   for byte. A store that changes moves its family at the next session start
   with no plan in progress and no auto run active:
   `reconcile` copies the files across, verifies every hash, records the new
@@ -385,7 +390,7 @@ reset time the error names, or for the session when it names none.
   remove the mapping, and the next session start with no plan in progress
   moves every family back into the repository from the mirror alone, without
   asking darkmem, naming each file darkmem does not hold as the mirror does and keeping the mirror
-  as a dated `dforge-moved-<stamp>` / `work-moved-<stamp>` backup; until then
+  as a dated `dagents-moved-<stamp>` / `work-moved-<stamp>` backup; until then
   the scripts keep reading the mirror, and `push` and `pull` do nothing. A
   store set back to `local` while darkmem is on and reachable is pulled from
   darkmem first. A repository a 2.x release moved into darkmem stays there,
@@ -401,20 +406,20 @@ reset time the error names, or for the session when it names none.
   config lookup is bounded at 30 seconds and its push at 100, each sent
   SIGTERM at its bound and SIGKILL 5 seconds later. `push` waits up to 100
   seconds for another run's mirror lock before refusing;
-  `DARKMEM_SYNC_LOCK_WAIT_MS` sets that wait in milliseconds, and a value that
+  `DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS` sets that wait in milliseconds, and a value that
   is not a positive number means the 100 seconds. The Stop hook's push never
   waits: it refuses at once while another run holds the lock and the next stop
   sends what it missed. A
   move stopped part-way through filing a ledger resumes it at the next session
   start. A document deleted from the mirror is archived on darkmem under
-  `dforge/archive/<stamp>/` and `restore <name>` brings it back;
+  `dagents/archive/<stamp>/` and `restore <name>` brings it back;
   `revision <name>` prints the `<name>@r<id>` a distilled `Source:` line
-  cites. `docs/superpowers/<rest>` and `docs/dforge/<rest>` name the same
+  cites. `docs/superpowers/<rest>` and `docs/dagents/<rest>` name the same
   document everywhere names are compared, so historical plans keep resolving.
   A conflict is reported, never merged. Without a mapping every command but
   `import` prints one line and does nothing.
 
-**UI/UX work proven in the running UI.** `dforge:ui-ux` turns a design into a
+**UI/UX work proven in the running UI.** `dagents:ui-ux` turns a design into a
 numbered UI/UX contract (UI, UX and an Output promise) in the spec,
 `plan-lint` makes every UI task name the items it delivers, `task-brief`
 hands them to the implementer verbatim, and a walkthrough proves each one on
@@ -428,11 +433,11 @@ UI files.
 **The upstream workflow ships in-plugin.** The fork carries the full skill
 set — brainstorming through finishing-a-development-branch — frozen at upstream
 6.3.0, so no other plugin is required: every agent definition preloads
-`dforge:verification-before-completion` through its `skills:`
+`dagents:verification-before-completion` through its `skills:`
 frontmatter, and writing-plans and subagent-driven-development use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
 `context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
-action and keeps `.dforge/handoff/latest.md` pointing at it. Disable the
+action and keeps `.dagents/handoff/latest.md` pointing at it. Disable the
 upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
@@ -455,13 +460,13 @@ message instead.
 ## How it fires
 
 A `SessionStart` hook (matcher `startup|resume|clear|compact`) injects the
-`dforge:using-dforge` entry point as `additionalContext`, so every
+`dagents:using-dagents` entry point as `additionalContext`, so every
 session starts with the skill-routing rules — including the pointers to
 `selecting-approaches`, implementer assignment in `writing-plans`, and plan
 execution in `executing-plans` that a PreToolUse nudge used to add. The same
 script persists the session's `transcript_path`, `session_id`, `cwd`, and
-`source` to `~/.claude/dforge/sessions/by-id/<sanitized-session-id>.json`
-and to `~/.claude/dforge/sessions/<sanitized-cwd>.json` (last writer
+`source` to `~/.claude/dagents/sessions/by-id/<sanitized-session-id>.json`
+and to `~/.claude/dagents/sessions/<sanitized-cwd>.json` (last writer
 wins per directory). `scripts/context-size` reads the session's own record by
 `CLAUDE_CODE_SESSION_ID`, so two sessions in one checkout each measure their
 own transcript, and falls back to the directory's record. A record no
@@ -474,8 +479,8 @@ A run must end on its next step: the finishing menu once the final review is
 clean, otherwise the `## Next session` block from `next-step`. Controllers,
 Sonnet especially, tend to summarize the run and stop instead. A
 `UserPromptSubmit` hook stamps the start of each turn under
-`~/.claude/dforge/sessions/turns/`, and a `Stop` hook checks whether
-that turn wrote a plan ledger (`.dforge/sdd/*/progress.md`). If it did and
+`~/.claude/dagents/sessions/turns/`, and a `Stop` hook checks whether
+that turn wrote a plan ledger (`.dagents/sdd/*/progress.md`). If it did and
 the last message carries neither ending, the hook blocks the stop once and
 tells Claude which one is missing. The retry always passes, and without `jq`,
 a stamp or a ledger written this turn, the hook does nothing. While an agent or
@@ -497,19 +502,19 @@ on.
 Unplanned work gets the same hold. The prompt hook also records which commits
 the repository's local branches point at. A turn that wrote no ledger but
 changed that set (a commit, a merge, or deleting a branch's only pointer to a
-commit) in a project with dforge docs must end on the `## Next session` block
+commit) in a project with dagents docs must end on the `## Next session` block
 from `next-step --adhoc`, the finishing menu, or finishing's "No plan file"
 line. Otherwise the hook holds the stop once and tells Claude to continue
 remaining work, finish a branch that is ready to integrate, or print the block. Creating
 a branch on an existing commit, or a stop in another repository than the
-prompt's, does not count. Neither does a turn that ran no dforge skill (no
-Skill call and no typed `/dforge:` command since the prompt): a commit made
-without dforge is never held for dforge's ending.
+prompt's, does not count. Neither does a turn that ran no dagents skill (no
+Skill call and no typed `/dagents:` command since the prompt): a commit made
+without dagents is never held for dagents's ending.
 
 A run also asks one question before its first task: what finishing should do
 once the final review is clean (merge locally, push and open a pull request,
 keep the branch, or ask then). `scripts/finish-choice` keeps the answer beside
-the ledger (`.dforge/sdd/<plan>/finish.json`, or `.dforge/sdd/finish.json` for
+the ledger (`.dagents/sdd/<plan>/finish.json`, or `.dagents/sdd/finish.json` for
 work done without a plan). Finishing carries out that choice at once, with no
 menu, and stops wherever an attended finish would ask (failing tests, a
 rejected push, a refused worktree removal), ending on the menu. "Ask me then"
@@ -529,7 +534,7 @@ on every early stop.
 A `PostToolUse` hook on `Edit`, `Write` and `MultiEdit` runs
 `scripts/ui-edit-hook.sh`: for a UI file (`scripts/ui-proof paths`) it
 returns `scripts/ui-lint` findings as additional context and, once per
-session, names `dforge:ui-ux`; it never blocks. A third `Stop` hook,
+session, names `dagents:ui-ux`; it never blocks. A third `Stop` hook,
 `scripts/ui-turn-end.sh`, holds a turn once when it leaves UI changes without
 a passing `ui-proof check` in a project with a UI profile (or a session that
 ran the skill); the line `UI proof: pending — <why>` releases it, and it
@@ -537,10 +542,10 @@ stands down while an auto run is bound.
 
 ### Fast mode
 
-Before the full flow starts for a request, `dforge:brainstorming` and
-`dforge:systematic-debugging` ask "Fast mode, or the full dforge flow?". Fast
+Before the full flow starts for a request, `dagents:brainstorming` and
+`dagents:systematic-debugging` ask "Fast mode, or the full dagents flow?". Fast
 mode works the request the way plain Claude Code would: Claude says
-`Process: fast — <why>` and then invokes no further dforge skill for that
+`Process: fast — <why>` and then invokes no further dagents skill for that
 request, so there is no spec, plan, register, review, worktree question,
 finishing menu or next-step block, and choosing fast mode stands in for the
 design approval. Your own instructions (CLAUDE.md, direct requests) still
@@ -555,13 +560,13 @@ without asking (`always`) or never offers it (`off`). See
 ## Unattended runs
 
 Two Claude Code settings keep a parallel plan moving while nobody is at the
-keyboard. They belong to Claude Code, and dforge neither sets nor reads them.
+keyboard. They belong to Claude Code, and dagents neither sets nor reads them.
 
 **Auto mode.** Start the session with `claude --permission-mode auto`. A wave
 runs its implementers as subagents, several at once, and a tool call that needs
 a permission prompt makes that implementer wait for an answer you are not there
 to give, which holds up the whole wave. In auto mode a classifier approves
-routine calls and blocks risky ones, so no implementer stops on a prompt. This is Claude Code's permission mode; dforge's
+routine calls and blocks risky ones, so no implementer stops on a prompt. This is Claude Code's permission mode; dagents's
 own auto run (see [reference/auto-run.md](reference/auto-run.md)) keeps a plan
 going from approval to finishing and works under any permission mode.
 
@@ -575,16 +580,16 @@ your user settings (`~/.claude/settings.json`):
 Claude Code creates each wave implementer's worktree itself. Its default,
 `"fresh"`, branches from `origin/<default-branch>`, so when your local main is
 ahead of origin, or the plan sits on a feature branch, the worktree lacks the
-unpushed commits: the plan and the earlier waves' merged tasks. dforge's
+unpushed commits: the plan and the earlier waves' merged tasks. dagents's
 dispatch detaches the implementer to the wave's base afterwards, but a worktree
 that starts from your HEAD begins in the right place. The setting applies to
-every worktree Claude Code creates for you, not only dforge's.
+every worktree Claude Code creates for you, not only dagents's.
 
 ## Session budget
 
 Long sessions cost more than they look: every request re-reads the whole
 context, and compaction drops the reports, findings and rulings a controller
-needs. dforge hands off instead.
+needs. dagents hands off instead.
 
 - **The budget line.** `scripts/task-brief` and `scripts/review-package` end
   with `budget: 312k of 465k (67%) — ok — source: record`, so the controller
@@ -760,9 +765,9 @@ desktop window joins the session, unless you closed it.
   (a new session, or just after a compaction) it shows the estimate instead,
   `≈37k estimated`, with the categories. A tool call's reading shows as the
   tool starts. **⇣ Compact** stays on the card, and **↪ Hand off** appears in
-  `dforge` sessions.
+  `dagents` sessions.
 - **Resumable work** is a card at the top of the pane, framed in the accent
-  color, when `.dforge/handoff/latest.md` is under three days old and its
+  color, when `.dagents/handoff/latest.md` is under three days old and its
   `## Next session` block has a first prompt to paste (a finished plan, or a
   task blocked on your ruling, has none). It names the note's age and its
   **Next:** line, and **Resume** (`r`) queues the prompt that resumes it. The
@@ -785,12 +790,12 @@ desktop window joins the session, unless you closed it.
   each subagent type (seat) with its runs, input tokens, the share served from
   the prompt cache and output tokens. Use it to see where a plan's tokens go.
 - **Plan** follows the main session's todo list or task list, centred on the
-  item in progress. In a `dforge` run it becomes **Run**, read from the
-  run's ledger (`.dforge/sdd/<run>/progress.md`) and its plan: the review
+  item in progress. In a `dagents` run it becomes **Run**, read from the
+  run's ledger (`.dagents/sdd/<run>/progress.md`) and its plan: the review
   round in flight, the tasks done, which were reviewed clean, and a blocked
   task in red with its reason. A run whose tasks were all done before the
   session started is left out, so a new session starts without it. Its
-  **Finish** row shows what dforge will do once the final review is clean
+  **Finish** row shows what dagents will do once the final review is clean
   (the option chosen before the run: `Finish push and open a PR when done`).
   It disappears once finishing carries the choice out or you answer the menu
   yourself. Work done without a plan shows the row on the Plan card.
@@ -803,7 +808,7 @@ desktop window joins the session, unless you closed it.
 section to its title row and headline, and `▸ Usage` expands it again. Each
 press saves the `collapsed` setting, so the next session opens the same way. A
 collapsed Context section keeps its buttons, and the resumable-work card never
-collapses. The Run card is the `plan` section during a dforge run, so collapsing
+collapses. The Run card is the `plan` section during a dagents run, so collapsing
 either one collapses the other.
 
 **Dense** (`d`) turns the pane into one line per section, in the `sections`
@@ -816,8 +821,8 @@ nothing to show is left out; the buttons shrink to one line, and
 setting. In the desktop app the dense rows are text, without the gauges.
 
 **Live readings.** While the pane is up or the cockpit minimized, it checks
-`~/.dforge/config.json` and the dforge keys in Claude's settings every two
-seconds and puts a change in force, so an edit from `dforge-config`, by hand or
+`~/.dagents/config.json` and the dagents keys in Claude's settings every two
+seconds and puts a change in force, so an edit from `dagents-config`, by hand or
 in another session shows without a restart; a file that stops being a JSON
 object keeps the settings in force and says so in the settings view. The run
 ledger is re-read when it changes, and the git state and the `/context`
@@ -841,7 +846,7 @@ the segments the **Minimized** settings tab picks, as dr-status did. By
 default the first line has the folder with the branch, ahead and behind counts
 and changes, the model and effort, the output style when it is not the
 default, the turn (`▸ 2m14s · Bash` while it runs, `approve?` or `asking`
-while it waits on you, `turn failed`), a dforge run's tasks done and review
+while it waits on you, `turn failed`), a dagents run's tasks done and review
 round, the subagents running, and the background shells with how long the
 longest has run. The second has the context against the handoff budget with
 the turns left, the prompt-cache hit rate of the last turn, the session's cost,
@@ -877,7 +882,7 @@ mod's settings: whether it shows at session start, the layout, which sections
 show, the handoff budget, where Hand off takes the accent and the Discord limit
 message goes out, how many context rows to list, the note and guard switches, and the
 Discord notifications. Each press saves
-the setting to `~/.dforge/config.json`, and the pane redraws with it. **Back** (`b`)
+the setting to `~/.dagents/config.json`, and the pane redraws with it. **Back** (`b`)
 returns to the cockpit. In the desktop app each switch and choice is a
 dropdown, and each number and text setting an open field that saves when you
 submit it (a number keeps its `−` and `+` steps); an entry out of range shows
@@ -895,7 +900,7 @@ setting that could not be saved, or a handoff note the session would not take.
 **Handoff reading.** The handoff reading shows only in the cockpit: the
 Context card and the band. The main session re-reads its whole context on every request, so a session that
 runs past its budget pays for it on each turn after. In a session running
-`dforge` (one that has loaded one of its skills or started one of its
+`dagents` (one that has loaded one of its skills or started one of its
 agents), **Hand off** queues a prompt asking the controller to finish the task
 in flight and hand off with the `handoff` skill. Past the budget the mod also
 adds one note to the conversation saying the same, so a controller deep in a
@@ -907,7 +912,7 @@ session needs you, which works the same over ssh and tmux. Create a webhook
 (channel settings → Integrations → Webhooks → copy URL) and paste it in the
 settings view's **Notifications** group, or run `/cockpit notify url <url>`.
 It is kept in the plugin's own store, not in `settings.json`, and only ever
-shows masked; `DFORGE_NOTIFY_URL` in the environment wins over it (`DR_COCKPIT_NOTIFY_URL` still read). **Send
+shows masked; `DAGENTS_NOTIFY_URL` in the environment wins over it (`DAGENTS_COCKPIT_NOTIFY_URL` still read). **Send
 test** (or `/cockpit notify test`) posts a sample. Set your Discord user id
 (**Mention**, or `/cockpit notify mention <id>`) to be pinged for the events
 that need you; everything else posts silently.
@@ -918,7 +923,7 @@ that need you; everything else posts silently.
 | `question` | Claude asks you something or has a plan ready, likewise | on | yes |
 | `done` | A turn ends after running at least `notifyAfter` seconds | on | no |
 | `error` | A turn fails | on | yes |
-| `blocked` | A `dforge` task is blocked | on | yes |
+| `blocked` | A `dagents` task is blocked | on | yes |
 | `budget` | The context crosses the handoff budget | on | no |
 | `limit` | A usage limit crosses `limitAlertAt` | on | no |
 | `task` | A run's task completes, or its final review is clean | off | no |
@@ -951,15 +956,15 @@ a project or managed Claude settings file) shows what forces it and no
 controls.
 
 The same settings can be set with
-`bash <plugin-root>/scripts/dforge-config set <key> <value>` or by editing
-`~/.dforge/config.json`:
+`bash <plugin-root>/scripts/dagents-config set <key> <value>` or by editing
+`~/.dagents/config.json`:
 
 ```json
 { "layout": "compact", "handoffMode": "relaxed", "finishAction": "pr" }
 ```
 
-`dforge-config get --json` prints every value in force, and
-`dforge-config workflow` prints the line the skills read.
+`dagents-config get --json` prints every value in force, and
+`dagents-config workflow` prints the line the skills read.
 
 | Tab | Option | Default | Effect |
 | --- | --- | --- | --- |
@@ -972,17 +977,17 @@ The same settings can be set with
 | Cockpit | `guardAttribution` | `true` | Blank the engine's attribution text and refuse git writes that carry it. |
 | Minimized | `bandLine1` | empty | The minimized band's first line, in order, comma-separated: `dir`, `git`, `model`, `effort`, `style`, `turn`, `run`, `agents`, `shells`, `ctx`, `cache`, `cost`, `5h`, `7d`, `time`. Empty shows `dir`, `git`, `model`, `effort`, `style`, `turn`, `run`, `agents`, `shells`; `none` hides the line. The tab's chips add a segment last on a line and take it off the other. |
 | Minimized | `bandLine2` | empty | The second line, from the same names. Empty shows `ctx`, `cache`, `cost`, `5h`, `7d`; `none` hides it. A name on both lines shows on the first. In the desktop app the picked `ctx`, `cache`, `5h` and `7d` are its meters and the rest its text rows. |
-| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dforge's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DFORGE_BUDGET` overrides it; `relaxed` handoff mode ignores it. |
+| Context | `handoffTokens` | `0` | The handoff budget in tokens, for the pane and the budget scripts alike. `0` follows dagents's own rule: 93% of the smaller of `autoCompactWindow` and the model's window, minus 140,000, and never below a fifth of that window. `DAGENTS_BUDGET` overrides it; `relaxed` handoff mode ignores it. |
 | Context | `handoffMode` | `strict` | `strict` hands off at the handoff budget, except that a plan's last two tasks and its final phase run past it to finish the plan. `relaxed` measures every task against the final-phase limit, 85% of the window, so a session carries a plan further; a worst-case fix loop late in such a session may compact, and the compaction snapshot carries it on. |
 | Context | `warnAt` | `80` | Where **Hand off** takes the accent color, as a percentage of the handoff budget (1-99). |
-| Context | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dforge` sessions. |
+| Context | `nudgeModel` | `true` | Add the one note to the conversation at the budget, in `dagents` sessions. |
 | Context | `autoCompactWindow` | `0` | Claude's own `autoCompactWindow`, written to Claude's user settings file: `0` leaves it unset, else 100,000 to 1,000,000. Applies from the next session. |
 | Context | `autoCompactEnabled` | `true` | Claude's own `autoCompactEnabled`, written to the same file. Applies from the next session. |
 | Workflow | `codexLane` | `true` | Give plan tasks to Codex when its gate passes. `false` makes `scripts/codex-gate` report `lane=false`. |
 | Workflow | `codexReview` | `false` | `true` lets Codex take review seats when its gate passes. `false`, the default, makes the gate report `review=false` and keeps every review on Claude; `/codex:review` runs a Codex review on demand. With `codexLane` off too, the gate does not probe Codex at all. |
 | Workflow | `agyLane` | `true` | Give plan tasks to the Antigravity CLI (`agy`) when its gate passes. `false` makes `scripts/agy-gate` report `lane=false reason=setting` without probing, and keeps those tasks on Claude or Codex. |
-| Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DFORGE_LENS_CAP` overrides it. |
-| Workflow | `lensMinorFrom` | `20` | The plan size, in tasks, from which the final review's lenses also report Minor findings. A smaller plan's lenses report Critical and Important findings only, so the fix wave does not triage a long Minor tail. `0` always asks for Minor findings. `DFORGE_LENS_MINOR_FROM` overrides it. |
+| Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DAGENTS_LENS_CAP` overrides it. |
+| Workflow | `lensMinorFrom` | `20` | The plan size, in tasks, from which the final review's lenses also report Minor findings. A smaller plan's lenses report Critical and Important findings only, so the fix wave does not triage a long Minor tail. `0` always asks for Minor findings. `DAGENTS_LENS_MINOR_FROM` overrides it. |
 | Workflow | `executionStrategy` | `sequential` | `sequential` runs one task at a time; `parallel` (independent tasks in waves) and `ask` take effect only with a subagent Execution line. |
 | Workflow | `executionMode` | `auto` | `auto` means inline; `inline` and `subagent` fix the plan's Execution line, and `subagent` (deprecated) is the only mode that runs waves. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
@@ -994,7 +999,7 @@ The same settings can be set with
 | Process | `questionStyle` | `single` | `single` asks one clarifying question per message; `batched` asks them all in one. |
 | Finish | `finishAction` | `ask` | What finishing does once the final review is clean. `ask` keeps the question before the first task; `merge`, `pr` or `keep` skips it and runs that action at once; `wait` skips it and shows the finish menu then. |
 | Notifications | `limitAlertAt` | `90` | The share at which a usage limit sends the Discord `limit` message, in percent. `0` turns it off. |
-| Notifications | `notifyOn` | empty | The Discord events to send, comma-separated (see above). Empty sends the default set; `none` sends nothing. `dforge-config` rejects a value naming an unknown event; one written by hand into the settings file sends nothing. |
+| Notifications | `notifyOn` | empty | The Discord events to send, comma-separated (see above). Empty sends the default set; `none` sends nothing. `dagents-config` rejects a value naming an unknown event; one written by hand into the settings file sends nothing. |
 | Notifications | `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |
 | Notifications | `notifyAskAfter` | `20` | Seconds an approval or question waits before it sends. `0` sends at once. |
 | Notifications | `notifyDetail` | `full` | `full` includes command and answer excerpts; `brief` sends titles and fields only. |
@@ -1003,7 +1008,7 @@ The same settings can be set with
 | darkmem | `progressSource` | `darkmem` | The same choice for plan ledgers and handoffs. A mapping entry's own `progressSource` outranks it. |
 
 The cockpit settings (Cockpit, Minimized, Context, Notifications) apply at once, whether
-you change them in the pane, with `dforge-config` or in the file, except the
+you change them in the pane, with `dagents-config` or in the file, except the
 two Claude keys, which Claude reads at its next session start. A
 Workflow or Process setting reaches the skills through one line injected at
 session start; when you change one mid-session, the cockpit adds a note to the
@@ -1016,19 +1021,19 @@ before implementation.
 
 ```text
 /plugin marketplace add darkraise/darkraise-ai-plugins
-/plugin install dforge@darkraise
+/plugin install dagents@darkraise
 ```
 
 An installed copy stays at the version it was installed at. To take a new
-release, run `claude plugin update dforge@darkraise` and start a new session
+release, run `claude plugin update dagents@darkraise` and start a new session
 (or run `/reload-plugins`).
 
 ### Development
 
 ```text
-claude plugin validate plugins/dforge
-claude plugin test plugins/dforge
-claude --plugin-dir plugins/dforge
+claude plugin validate plugins/dagents
+claude plugin test plugins/dagents
+claude --plugin-dir plugins/dagents
 ```
 
 The last loads the working copy into a session and reloads it on save. The
@@ -1043,7 +1048,7 @@ Claude through `agy` only as the retry after a Gemini run fails, and adds
 `fallback=` and `fallback_resets_at=` to the `agy-gate` line before `source=`.
 A plan whose `**Executor:** agy` lines name a `claude-` rung fails `plan-lint`
 until those lines are rewritten from the new block: `scripts/plan-revise`
-prints each task's rung, and dforge:revising-plans makes the edit.
+prints each task's rung, and dagents:revising-plans makes the edit.
 
 ## Migrating to 4.0
 
@@ -1052,47 +1057,47 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
 
 | 3.x | 4.0 |
 |---|---|
-| plugin `dr-forge@darkraise`, skills and agents `dr-forge:<name>` | `dforge@darkraise`, `dforge:<name>` |
-| `.forge/`, `docs/forge/`, `<git dir>/dr-forge/` | `.dforge/`, `docs/dforge/`, `<git dir>/dforge/` |
-| `~/.dr-forge/` | `~/.dforge/` |
-| `DR_FORGE_*` environment variables | `DFORGE_*` |
-| `scripts/forge-config`, `scripts/forge-path`, `scripts/forge-migrate` | `scripts/dforge-config`, `scripts/dforge-path`, `scripts/dforge-migrate` |
-| darkmem documents under `forge/` | `dforge/` |
+| plugin `dr-forge@darkraise`, skills and agents `dr-forge:<name>` | `dagents@darkraise`, `dagents:<name>` |
+| `.forge/`, `docs/forge/`, `<git dir>/dr-forge/` | `.dagents/`, `docs/dagents/`, `<git dir>/dagents/` |
+| `~/.dr-forge/` | `~/.dagents/` |
+| `DR_FORGE_*` environment variables | `DAGENTS_*` |
+| `scripts/forge-config`, `scripts/forge-path`, `scripts/forge-migrate` | `scripts/dagents-config`, `scripts/dagents-path`, `scripts/dagents-migrate` |
+| darkmem documents under `forge/` | `dagents/` |
 
-1. Install dforge, then uninstall dr-forge, so their hooks do not run twice.
+1. Install dagents, then uninstall dr-forge, so their hooks do not run twice.
    The cockpit's Discord webhook and mention stay in dr-forge's plugin store,
    `~/.claude/plugins/store/dr-forge_darkraise-*.json` (under
    `$CLAUDE_CONFIG_DIR` when set), as `notifyUrl` and `notifyMention`. Copy
-   them before you uninstall, then set them in a dforge session with
+   them before you uninstall, then set them in a dagents session with
    `/cockpit notify url <url>` and `/cockpit notify mention <id>`.
 
-       /plugin install dforge@darkraise
+       /plugin install dagents@darkraise
        /plugin uninstall dr-forge@darkraise
 
-   On Codex: `codex plugin add dforge@darkraise`, then
+   On Codex: `codex plugin add dagents@darkraise`, then
    `codex plugin remove dr-forge@darkraise`.
 
-   From dr-superpowers or dr-cockpit, skip dr-forge and install dforge
-   directly. Start one dforge session before you uninstall the old plugins:
+   From dr-superpowers or dr-cockpit, skip dr-forge and install dagents
+   directly. Start one dagents session before you uninstall the old plugins:
    it imports dr-cockpit's options and its Discord webhook and mention, once.
    Migrating from dr-superpowers and dr-cockpit below names
-   `dr-forge@darkraise`, the plugin of its day; install `dforge@darkraise`
+   `dr-forge@darkraise`, the plugin of its day; install `dagents@darkraise`
    in its place.
-2. In each repository, run `/dforge:migrate` (on Codex, ask for the
-   `dforge:migrate` skill). It shows what `scripts/dforge-migrate --dry-run`
+2. In each repository, run `/dagents:migrate` (on Codex, ask for the
+   `dagents:migrate` skill). It shows what `scripts/dagents-migrate --dry-run`
    would move, asks once, then moves every checkout and the home, rewrites the
    old plugin prefixes (`dr-forge`, `dr-superpowers`) in plans still in
    progress, and offers to commit what moved. It takes a dr-superpowers
    repository straight to 4.0 as well. Session start and `repo-audit` name
    any older path still present.
-3. Rename any `DR_FORGE_*` variable a shell profile sets to `DFORGE_*`.
+3. Rename any `DR_FORGE_*` variable a shell profile sets to `DAGENTS_*`.
 
-darkmem's documents move from `forge/` to `dforge/` at the first sync after
-the mirror moved. A name darkmem already holds under `dforge/` is refused,
+darkmem's documents move from `forge/` to `dagents/` at the first sync after
+the mirror moved. A name darkmem already holds under `dagents/` is refused,
 never overwritten.
 
 The sections below record the earlier migrations under the names of their
-day; their steps now run through `/dforge:migrate`.
+day; their steps now run through `/dagents:migrate`.
 
 ## Migrating from 0.x
 
@@ -1189,7 +1194,7 @@ task then reads:
 - Consumes: `formatRow(row: Row): string` from Task 2
 - Produces: `runExport(cfg: Config): Promise<Report>`
 
-**Implementer:** dforge:impl-sonnet-high
+**Implementer:** dagents:impl-sonnet-high
 **Evaluation:** files 1 - spec 2 - coupling 1 - risk 1 = 5
 **Approach:** inline - skip 2: follows the existing exporter pattern
 ```
@@ -1210,7 +1215,7 @@ previous task's brief.
 
 The upstream loop is kept - the brief and report protocol, the review
 package, the breaker (whose adjudication now goes to the ruling seat), and the
-handoff to dforge:finishing-a-development-branch - with these
+handoff to dagents:finishing-a-development-branch - with these
 differences:
 
 1. **Named seats.** The implementer is the fleet agent the plan's
@@ -1240,7 +1245,7 @@ differences:
    unavailable model, an Executor line the wrapper refuses - are logged
    rulings, never silent fallbacks and never stops.
 8. **Session budget.** A budget line, a compaction snapshot, and the
-   dforge:handoff / dforge:resume-execution pair replace
+   dagents:handoff / dagents:resume-execution pair replace
    upstream's unmeasured sessions - see [Session budget](#session-budget).
 9. **Small-model planning.** A strong model plans once; small models execute.
    Every task brief carries the header's Global Constraints and Contracts, the
@@ -1270,7 +1275,7 @@ frozen at 6.3.0 with no upstream sync, and
 ## Tests
 
 ```bash
-for t in plugins/dforge/tests/*.test.sh; do bash "$t"; done
+for t in plugins/dagents/tests/*.test.sh; do bash "$t"; done
 ```
 
 Requires `jq` and `git`. No model calls: the executor suites run against a stub
@@ -1373,7 +1378,7 @@ review, `codex-review-schema.json` for the Codex task seats, and
 A register is the list of source items a body of work must answer, and the
 authority on whether that work is finished. One file per incoming list —
 an owner's list, a review's findings, a batch — at
-`docs/dforge/registers/YYYY-MM-DD-<slug>.md`, committed, and required whenever a request carries two or more
+`docs/dagents/registers/YYYY-MM-DD-<slug>.md`, committed, and required whenever a request carries two or more
 distinct items.
 
 Each row carries an identifier, the requester's words, an assignment, an
@@ -1400,7 +1405,7 @@ surface behaves exactly as it did before.
 A project built from scratch spans many specs and many sessions, and what goes
 missing there is whole epics: decided once in prose, then forgotten when a later
 session calls the phase done. `planning-a-product` runs discovery first and
-writes `docs/dforge/roadmap.md`, the milestones in order (by default M0
+writes `docs/dagents/roadmap.md`, the milestones in order (by default M0
 Discovery, M1 Foundations, the feature milestones, Hardening, Release), each
 with exit criteria and one item register whose rows are its epics. Each epic's
 spec then gets its own register of requirements, which `plan-lint` already ties

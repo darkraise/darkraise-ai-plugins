@@ -33,10 +33,10 @@ up() { bash "$UP" "$@"; }
 check "paths: the defaults hold the web globs" "$(up paths | grep -cxF '*.tsx')" "1"
 check "paths: the defaults hold the windows globs" "$(up paths | grep -cxF '*.xaml')" "1"
 check "paths: no bare *.ts" "$(up paths | grep -cxF '*.ts')" "0"
-mkdir -p docs/dforge/ui-ux
-printf '# UI profile\n\n**Platform:** web\n**UI paths:** `src/ui/*` `*.tsx`\n' > docs/dforge/ui-ux/profile.md
+mkdir -p docs/dagents/ui-ux
+printf '# UI profile\n\n**Platform:** web\n**UI paths:** `src/ui/*` `*.tsx`\n' > docs/dagents/ui-ux/profile.md
 check "paths: the profile's globs replace the defaults" "$(up paths | tr '\n' ' ')" "src/ui/* *.tsx "
-rm docs/dforge/ui-ux/profile.md
+rm docs/dagents/ui-ux/profile.md
 
 # --- filter: one awk pass that must agree with uiux_is_ui ---
 SAMPLE="$TMP/sample"
@@ -55,9 +55,9 @@ agree() { # agree <label>: uiux_filter and uiux_is_ui pick the same lines of $SA
   read -r pass fail < "$TMP/counts"
 }
 agree "the default globs match as uiux_is_ui does"
-printf '# UI profile\n\n**UI paths:** `src/ui/*` `app/?.ts` `[ab]x/*.c` `[!z]y.go` `*\\(1\\).html` `w [[]x].scss`\n' > docs/dforge/ui-ux/profile.md
+printf '# UI profile\n\n**UI paths:** `src/ui/*` `app/?.ts` `[ab]x/*.c` `[!z]y.go` `*\\(1\\).html` `w [[]x].scss`\n' > docs/dagents/ui-ux/profile.md
 agree "?, [..], [!..] and escapes match as uiux_is_ui does"
-rm docs/dforge/ui-ux/profile.md
+rm docs/dagents/ui-ux/profile.md
 big=$(awk 'BEGIN { for (i = 0; i < 50000; i++) printf "src/m%d/f%d.%s\n", i % 500, i, (i % 10 ? "ts" : "tsx") }')
 start=$SECONDS
 n=$( (. "$HERE/../scripts/lib/ui-ux.sh"; uiux_filter "$REPO" <<<"$big") | grep -c .)
@@ -94,8 +94,8 @@ rm src/b.css; git checkout -q src/App.tsx
 up changed >/dev/null 2>&1; check "changed: --base is required" "$?" "2"
 
 # --- contract ---
-mkdir -p docs/dforge/specs
-cat > docs/dforge/specs/s.md <<'EOF'
+mkdir -p docs/dagents/specs
+cat > docs/dagents/specs/s.md <<'EOF'
 # Spec
 
 ## UI/UX contract
@@ -126,11 +126,11 @@ cat > docs/dforge/specs/s.md <<'EOF'
 
 - **UX-7** — outside the section
 EOF
-check "contract: the ids in order, fences and other sections skipped" "$(up contract docs/dforge/specs/s.md | tr '\n' ' ')" "UI-1 UI-2 UX-1 OP-1 "
-check "contract: a bullet item with its continuation" "$(up contract docs/dforge/specs/s.md UI-1)" $'- **UI-1** — Settings layout.\n  Board: default, error.'
-check "contract: a table item under its header" "$(up contract docs/dforge/specs/s.md OP-1)" $'| ID | Promise |\n|---|---|\n| OP-1 | Matches the boards. |'
-check "contract: an unknown id prints nothing" "$(up contract docs/dforge/specs/s.md UX-5)" ""
-up contract docs/dforge/specs/missing.md >/dev/null 2>&1; check "contract: a missing spec exits 2" "$?" "2"
+check "contract: the ids in order, fences and other sections skipped" "$(up contract docs/dagents/specs/s.md | tr '\n' ' ')" "UI-1 UI-2 UX-1 OP-1 "
+check "contract: a bullet item with its continuation" "$(up contract docs/dagents/specs/s.md UI-1)" $'- **UI-1** — Settings layout.\n  Board: default, error.'
+check "contract: a table item under its header" "$(up contract docs/dagents/specs/s.md OP-1)" $'| ID | Promise |\n|---|---|\n| OP-1 | Matches the boards. |'
+check "contract: an unknown id prints nothing" "$(up contract docs/dagents/specs/s.md UX-5)" ""
+up contract docs/dagents/specs/missing.md >/dev/null 2>&1; check "contract: a missing spec exits 2" "$?" "2"
 up nope >/dev/null 2>&1; check "usage: an unknown verb exits 2" "$?" "2"
 
 # --- check: the gate ---
@@ -138,7 +138,7 @@ up check >/dev/null 2>&1; check "check: --base is required" "$?" "2"
 out=$(up check --base HEAD); st=$?
 check "check: gate off without a profile or a contract" "$st" "0"
 check "check: says the gate is off" "$(grep -c 'gate off' <<<"$out")" "1"
-printf '# UI profile\n\n**Platform:** web\n' > docs/dforge/ui-ux/profile.md
+printf '# UI profile\n\n**Platform:** web\n' > docs/dagents/ui-ux/profile.md
 git add docs && git commit -q -m docs
 check "check: no UI change since the base passes" "$(up check --base "$BASE" >/dev/null; echo $?)" "0"
 printf '// v2\n' >> src/App.tsx
@@ -149,10 +149,10 @@ check "check: names the changed file" "$(grep -c 'src/App.tsx' <<<"$out")" "1"
 git commit -q -am 'ui v2'
 check "check: a committed UI change with no report fails" "$(up check --base "$BASE" >/dev/null; echo $?)" "1"
 
-PROOFS=docs/dforge/ui-ux/proofs
-mkdir -p "$PROOFS" .dforge/ui-ux/t
-printf '*\n' > .dforge/.gitignore
-printf 'png' > .dforge/ui-ux/t/a.png
+PROOFS=docs/dagents/ui-ux/proofs
+mkdir -p "$PROOFS" .dagents/ui-ux/t
+printf '*\n' > .dagents/.gitignore
+printf 'png' > .dagents/ui-ux/t/a.png
 report() { # report <name> <contract> <rows> [extra header line]
   { printf '# UI proof: t\n\n**Contract:** %s\n**Platform:** web\n**Evidence:** local\n%s\n' "$2" "${4:-}"
     if [ "$2" = touch ]; then printf '\n## Delta\n\n**UI/UX depth:** touch — a fix\n\n- **UX-1** — the fix\n'; fi
@@ -164,7 +164,7 @@ judge() { # judge <name> <verdict> — the judge file and the report's Judge lin
   printf 'The proof holds.\n\nVerdict: %s %s\n' "$2" "$fp" > "$PROOFS/$1.judge.md"
   printf '\n**Judge:** %s %s — %s/%s.judge.md\n' "$2" "$fp" "$PROOFS" "$1" >> "$PROOFS/$1.md"
 }
-PASSROW='| UX-1 | pass | .dforge/ui-ux/t/a.png | |'
+PASSROW='| UX-1 | pass | .dagents/ui-ux/t/a.png | |'
 report 2026-10-24-t touch "$PASSROW"
 out=$(up stamp "$PROOFS/2026-10-24-t.md")
 check "stamp: reports the fingerprint" "$(grep -c "^ui-proof: stamped $(up fingerprint)" <<<"$out")" "1"
@@ -188,7 +188,7 @@ check "check: no judge line fails" "$st" "1"
 check "check: names the judge step" "$(grep -c '^ui-proof: FAIL judge:' <<<"$out")" "1"
 judge 2026-10-24-t ship
 check "check: judged again, it passes" "$(up check --base "$BASE" >/dev/null; echo $?)" "0"
-report 2026-10-24-u touch '| UX-1 | fail | .dforge/ui-ux/t/a.png | abandoned |'
+report 2026-10-24-u touch '| UX-1 | fail | .dagents/ui-ux/t/a.png | abandoned |'
 up stamp "$PROOFS/2026-10-24-u.md" >/dev/null
 out=$(up check --base "$BASE"); st=$?
 check "check: a failing report sorting last does not hide a passing one" "$st" "0"
@@ -207,16 +207,16 @@ try() { # try <rows> [extra header line] [judge verdict] — a fresh touch repor
   judge 2026-10-24-t "${3:-ship}"
   up check --base "$BASE" >/dev/null; echo "$?"
 }
-check "verdicts: a fail row fails" "$(try '| UX-1 | fail | .dforge/ui-ux/t/a.png | the dialog stays open |')" "1"
-check "verdicts: an uncited deviation fails" "$(try '| UX-1 | deviation | .dforge/ui-ux/t/a.png | looks better |')" "1"
-check "verdicts: a cited deviation passes" "$(try '| UX-1 | deviation | .dforge/ui-ux/t/a.png | cites: user answer 2026-10-24 |')" "0"
+check "verdicts: a fail row fails" "$(try '| UX-1 | fail | .dagents/ui-ux/t/a.png | the dialog stays open |')" "1"
+check "verdicts: an uncited deviation fails" "$(try '| UX-1 | deviation | .dagents/ui-ux/t/a.png | looks better |')" "1"
+check "verdicts: a cited deviation passes" "$(try '| UX-1 | deviation | .dagents/ui-ux/t/a.png | cites: user answer 2026-10-24 |')" "0"
 check "verdicts: a pass row without evidence fails" "$(try '| UX-1 | pass | - | |')" "1"
-check "verdicts: a missing screenshot fails" "$(try '| UX-1 | pass | .dforge/ui-ux/t/missing.png | |')" "1"
+check "verdicts: a missing screenshot fails" "$(try '| UX-1 | pass | .dagents/ui-ux/t/missing.png | |')" "1"
 check "verdicts: a test name is evidence" "$(try '| UX-1 | pass | A12: escape closes the dialog | |')" "0"
 check "verdicts: unverifiable without acceptance fails" "$(try '| UX-1 | unverifiable | - | no emulator here |')" "1"
 check "verdicts: unverifiable with the user's acceptance passes" "$(try '| UX-1 | unverifiable | - | no emulator here |' '**Accepted by:** "ship it without the Android run"')" "0"
-check "verdicts: an unknown verdict fails" "$(try '| UX-1 | ok | .dforge/ui-ux/t/a.png | |')" "1"
-check "coverage: a delta item with no row fails" "$(try '| UX-2 | pass | .dforge/ui-ux/t/a.png | |')" "1"
+check "verdicts: an unknown verdict fails" "$(try '| UX-1 | ok | .dagents/ui-ux/t/a.png | |')" "1"
+check "coverage: a delta item with no row fails" "$(try '| UX-2 | pass | .dagents/ui-ux/t/a.png | |')" "1"
 check "judge: a fix verdict fails" "$(try "$PASSROW" '' fix)" "1"
 try "$PASSROW" >/dev/null
 rm "$PROOFS/2026-10-24-t.judge.md"
@@ -227,48 +227,48 @@ check "judge: a judge file whose verdict differs fails" "$(up check --base "$BAS
 
 # --- a spec with a contract binds the report ---
 try "$PASSROW" >/dev/null
-out=$(up check --base "$BASE" --spec docs/dforge/specs/s.md); st=$?
+out=$(up check --base "$BASE" --spec docs/dagents/specs/s.md); st=$?
 check "spec: a touch report does not prove a spec with a contract" "$st" "1"
 check "spec: says no report names the spec" "$(grep -c '^ui-proof: FAIL report:' <<<"$out")" "1"
 rm -f "$PROOFS"/2026-10-24-t.*
-cp docs/dforge/specs/s.md docs/dforge/specs/other.md
-ROWS='| UI-1 | pass | .dforge/ui-ux/t/a.png | |
-| UI-2 | pass | .dforge/ui-ux/t/a.png | |
-| UX-1 | pass | .dforge/ui-ux/t/a.png | |
-| OP-1 | pass | .dforge/ui-ux/t/a.png | |'
-report 2026-10-24-o docs/dforge/specs/other.md "$ROWS"; up stamp "$PROOFS/2026-10-24-o.md" >/dev/null; judge 2026-10-24-o ship
-check "spec: a report bound to another spec does not count" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "1"
+cp docs/dagents/specs/s.md docs/dagents/specs/other.md
+ROWS='| UI-1 | pass | .dagents/ui-ux/t/a.png | |
+| UI-2 | pass | .dagents/ui-ux/t/a.png | |
+| UX-1 | pass | .dagents/ui-ux/t/a.png | |
+| OP-1 | pass | .dagents/ui-ux/t/a.png | |'
+report 2026-10-24-o docs/dagents/specs/other.md "$ROWS"; up stamp "$PROOFS/2026-10-24-o.md" >/dev/null; judge 2026-10-24-o ship
+check "spec: a report bound to another spec does not count" "$(up check --base "$BASE" --spec docs/dagents/specs/s.md >/dev/null; echo $?)" "1"
 rm -f "$PROOFS"/2026-10-24-o.*
-report 2026-10-24-s docs/dforge/specs/s.md "$(head -n 3 <<<"$ROWS")"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
-out=$(up check --base "$BASE" --spec docs/dforge/specs/s.md); st=$?
+report 2026-10-24-s docs/dagents/specs/s.md "$(head -n 3 <<<"$ROWS")"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
+out=$(up check --base "$BASE" --spec docs/dagents/specs/s.md); st=$?
 check "spec: a contract ID with no row fails" "$st" "1"
 check "spec: names the missing ID" "$(grep -c 'FAIL coverage: OP-1' <<<"$out")" "1"
 check "spec: coverage applies without --spec too" "$(up check --base "$BASE" >/dev/null; echo $?)" "1"
-report 2026-10-24-s docs/dforge/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
-check "spec: a full report bound to the spec passes" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "0"
-TWO='| UI-1 | pass | .dforge/ui-ux/t/a.png | |
-| UI-2 | pass | .dforge/ui-ux/t/a.png | |
+report 2026-10-24-s docs/dagents/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
+check "spec: a full report bound to the spec passes" "$(up check --base "$BASE" --spec docs/dagents/specs/s.md >/dev/null; echo $?)" "0"
+TWO='| UI-1 | pass | .dagents/ui-ux/t/a.png | |
+| UI-2 | pass | .dagents/ui-ux/t/a.png | |
 | UX-1 | unverifiable | - | no emulator here |
 | OP-1 | unverifiable | - | no tablet here |'
 accept() { # accept <header lines> — the two-unverifiable report, stamped and judged; prints check's status
-  report 2026-10-24-s docs/dforge/specs/s.md "$TWO" "$1"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
-  up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?
+  report 2026-10-24-s docs/dagents/specs/s.md "$TWO" "$1"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
+  up check --base "$BASE" --spec docs/dagents/specs/s.md >/dev/null; echo $?
 }
 check "accepted: one nameless line does not cover two unverifiable rows" "$(accept '**Accepted by:** "fine without the emulator"')" "1"
 check "accepted: a line naming only one of two rows fails" "$(accept '**Accepted by:** UX-1: "fine without the emulator"')" "1"
 check "accepted: a line per row passes" "$(accept '**Accepted by:** UX-1: "fine without the emulator"
 **Accepted by:** OP-1: "fine without the tablet"')" "0"
-report 2026-10-24-s docs/dforge/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null
+report 2026-10-24-s docs/dagents/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null
 printf 'The proof holds.\n\nVerdict: ship 0000000000000000\n' > "$PROOFS/2026-10-24-s.judge.md"
 printf '\n**Judge:** ship %s — %s/2026-10-24-s.judge.md\n' "$(up fingerprint)" "$PROOFS" >> "$PROOFS/2026-10-24-s.md"
-out=$(up check --base "$BASE" --spec docs/dforge/specs/s.md); st=$?
+out=$(up check --base "$BASE" --spec docs/dagents/specs/s.md); st=$?
 check "judge: a judge file for another fingerprint fails" "$st" "1"
 check "judge: names the judge file's missing verdict" "$(grep -c 'FAIL judge:.*does not end with' <<<"$out")" "1"
-report 2026-10-24-s docs/dforge/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
-rm docs/dforge/ui-ux/profile.md
-check "active: a spec with a contract turns the gate on" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "0"
+report 2026-10-24-s docs/dagents/specs/s.md "$ROWS"; up stamp "$PROOFS/2026-10-24-s.md" >/dev/null; judge 2026-10-24-s ship
+rm docs/dagents/ui-ux/profile.md
+check "active: a spec with a contract turns the gate on" "$(up check --base "$BASE" --spec docs/dagents/specs/s.md >/dev/null; echo $?)" "0"
 rm -f "$PROOFS"/*.md
-check "active: a spec with a contract and no report fails" "$(up check --base "$BASE" --spec docs/dforge/specs/s.md >/dev/null; echo $?)" "1"
+check "active: a spec with a contract and no report fails" "$(up check --base "$BASE" --spec docs/dagents/specs/s.md >/dev/null; echo $?)" "1"
 check "active: --active turns the gate on without a profile" "$(up check --base "$BASE" --active >/dev/null; echo $?)" "1"
 check "active: without it, no profile and no spec, the gate is off" "$(up check --base "$BASE" >/dev/null; echo $?)" "0"
 

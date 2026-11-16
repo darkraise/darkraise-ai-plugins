@@ -43,12 +43,12 @@ it does without it.
 
 | File | Written by | Read by |
 |---|---|---|
-| `gates.md` | a human, or dforge:running-gates' bootstrap on approval | dforge:running-gates |
-| `plans/completed.md` | dforge:finishing-a-development-branch | dforge:project-status |
-| `registers/*.md` | dforge:brainstorming, dforge:writing-plans, both execution skills, dforge:finishing-a-development-branch — all through `scripts/register` | `scripts/next-step`, `scripts/plan-lint`, `scripts/repo-audit`, dforge:project-status, dforge:brainstorming |
-| `reviews/*.md` | dforge:finishing-a-development-branch, through `scripts/review-record` | dforge:closing-a-milestone, and a person weighing review depth |
-| `roadmap.md` | dforge:planning-a-product and dforge:closing-a-milestone, through `scripts/roadmap` | `scripts/next-step`, `scripts/repo-audit`, the SessionStart hook, dforge:project-status, dforge:brainstorming, dforge:finishing-a-development-branch |
-| `distilled/*.md` | dforge:distilling-docs, or a human recording an approved spec's owner decision | dforge:project-status, dforge:brainstorming, dforge:resume-execution, both execution skills; `constraints.md` also dforge:writing-plans |
+| `gates.md` | a human, or dagents:running-gates' bootstrap on approval | dagents:running-gates |
+| `plans/completed.md` | dagents:finishing-a-development-branch | dagents:project-status |
+| `registers/*.md` | dagents:brainstorming, dagents:writing-plans, both execution skills, dagents:finishing-a-development-branch — all through `scripts/register` | `scripts/next-step`, `scripts/plan-lint`, `scripts/repo-audit`, dagents:project-status, dagents:brainstorming |
+| `reviews/*.md` | dagents:finishing-a-development-branch, through `scripts/review-record` | dagents:closing-a-milestone, and a person weighing review depth |
+| `roadmap.md` | dagents:planning-a-product and dagents:closing-a-milestone, through `scripts/roadmap` | `scripts/next-step`, `scripts/repo-audit`, the SessionStart hook, dagents:project-status, dagents:brainstorming, dagents:finishing-a-development-branch |
+| `distilled/*.md` | dagents:distilling-docs, or a human recording an approved spec's owner decision | dagents:project-status, dagents:brainstorming, dagents:resume-execution, both execution skills; `constraints.md` also dagents:writing-plans |
 
 ## Precedence
 
@@ -66,7 +66,7 @@ judgment call.
 
 ## What never happens to these files
 
-`distilled/*.md` are written only by dforge:distilling-docs, with one
+`distilled/*.md` are written only by dagents:distilling-docs, with one
 exception: a human may add an entry that an approved spec's owner decisions
 name, citing that spec as its `Source`. distilling-docs deletes sources under
 its own rules and never touches a spec, a plan, `completed.md`, or anything
@@ -74,17 +74,17 @@ outside `<docs>/notes/` and `<docs>/findings/`. `gates.md`
 is edited by a human or by an approved bootstrap, never silently.
 `completed.md` is append-only. `reviews/*.md` is written only by
 `scripts/review-record`, one file per plan; nothing deletes it, and
-dforge:distilling-docs never touches it.
+dagents:distilling-docs never touches it.
 
 ## Where `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` are
 
-`<state>` is `.dforge/` and `<docs>` is `docs/dforge/`. A repository that still
-has a pre-3.0 directory is moved with `bash <plugin-root>/scripts/dforge-migrate`
+`<state>` is `.dagents/` and `<docs>` is `docs/dagents/`. A repository that still
+has a pre-3.0 directory is moved with `bash <plugin-root>/scripts/dagents-migrate`
 first; session start and `scripts/repo-audit` name what it still has.
 
 darkmem is off unless the `darkmemEnabled` setting is on. A repository mapped
 to darkmem while it is on may keep each family in the darkmem mirror instead
-(`documentStore`, `progressSource`; `bash <plugin-root>/scripts/dforge-path store`
+(`documentStore`, `progressSource`; `bash <plugin-root>/scripts/dagents-path store`
 prints which). Turned off or unmapped, both families belong in the checkout:
 a family still in the mirror is read there until the reconcile of a session
 start with no plan in progress copies it back from the mirror, without asking
@@ -92,9 +92,9 @@ darkmem.
 
 | Token | Local | darkmem |
 |---|---|---|
-| `<docs>` | `<worktree>/docs/dforge` | `~/.dforge/mirror/<project>/dforge` |
-| `<ledger dir>` | `<worktree>/<state>/sdd/<plan-basename>` | `~/.dforge/mirror/<project>/work/sdd/<plan-basename>` |
-| `<latest.md>` | `<primary checkout>/<state>/handoff/latest.md` | `~/.dforge/mirror/<project>/work/handoff/latest.md` |
+| `<docs>` | `<worktree>/docs/dagents` | `~/.dagents/mirror/<project>/dagents` |
+| `<ledger dir>` | `<worktree>/<state>/sdd/<plan-basename>` | `~/.dagents/mirror/<project>/work/sdd/<plan-basename>` |
+| `<latest.md>` | `<primary checkout>/<state>/handoff/latest.md` | `~/.dagents/mirror/<project>/work/handoff/latest.md` |
 
 `<state>` and a plan's workspace (`scripts/sdd-workspace`: briefs, reports,
 review packages, `amendments.md`) stay in the checkout either way. A plan's
@@ -102,22 +102,22 @@ ledger is `<ledger dir>/progress.md` and its handoff note
 `<ledger dir>/handoff.md`.
 
 Every script resolves these through `scripts/lib/roots.sh`; a skill resolves
-them with `bash <plugin-root>/scripts/dforge-path state|docs [RELATIVE] | ledger <plan-basename> | latest`
-before it reads or writes, never by spelling a path. `dforge-path` answers for
+them with `bash <plugin-root>/scripts/dagents-path state|docs [RELATIVE] | ledger <plan-basename> | latest`
+before it reads or writes, never by spelling a path. `dagents-path` answers for
 the checkout it runs in; for a path written under another root, such as
 `<worktree>/<state>/…`, run it from that root:
-`(cd "<root>" && bash <plugin-root>/scripts/dforge-path state sdd)`.
+`(cd "<root>" && bash <plugin-root>/scripts/dagents-path state sdd)`.
 
 Where a path is written into a file or onto a command line (a ledger's
 identity line, a roadmap `Spec` or `Register` cell, a `**Spec:**` line,
 `.gitattributes`, a script argument), write its name:
-`bash <plugin-root>/scripts/dforge-path name <path>`. A document's name is
-`docs/dforge/<rest>` in both stores (a name written before 3.0.0 as
+`bash <plugin-root>/scripts/dagents-path name <path>`. A document's name is
+`docs/dagents/<rest>` in both stores (a name written before 3.0.0 as
 `docs/superpowers/<rest>` still means it), so a ledger in darkmem can name a
 plan in the checkout and the reverse; every script accepts a name where it
 takes a path.
 
-While `dforge-path store` prints `documents darkmem`, a step that commits a
+While `dagents-path store` prints `documents darkmem`, a step that commits a
 spec, plan, register, roadmap or `completed.md` line runs
 `bash <plugin-root>/scripts/darkmem-sync push` instead. Code commits are
 unchanged.
@@ -131,15 +131,15 @@ repository that is not mapped to darkmem, or while darkmem is off, it prints
 one line and exits 0, so no check comes first. On Claude Code the SessionStart hook runs `darkmem-sync reconcile`, then `pull`,
 and the Stop hook pushes as a safety net. Codex has no hooks, so there these
 steps and the session-start step in
-`skills/using-dforge/references/codex-tools.md` are the only triggers.
+`skills/using-dagents/references/codex-tools.md` are the only triggers.
 
 **Promotion to memory.** At each `Task <N>: complete` line and at handoff,
 record the durable facts the work established (decisions and their reasons,
 root causes and fixes, constraints), one fact per entry. When
-`dforge-path project` prints a project (darkmem is on and the repository
+`dagents-path project` prints a project (darkmem is on and the repository
 mapped) and the darkmem MCP tools are available, file each with `memory_add`,
 tagged `project/<project>`. Otherwise append each as one bullet to
 `<docs>/notes/<YYYY-MM-DD>-facts.md` and commit it in a `docs(notes): …`
 commit of its own (while documents live in darkmem, the push carries it
-instead): dforge:distilling-docs absorbs only tracked, clean notes. Ledger lines, progress and commit hashes stay in the work log either
+instead): dagents:distilling-docs absorbs only tracked, clean notes. Ledger lines, progress and commit hashes stay in the work log either
 way.

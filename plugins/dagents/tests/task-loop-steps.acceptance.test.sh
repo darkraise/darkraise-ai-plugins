@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Acceptance tests for the task-loop steps spec
-# (docs/dforge/specs/2026-10-26-task-loop-steps-design.md), statements
+# (docs/dagents/specs/2026-10-26-task-loop-steps-design.md), statements
 # A1-A11 and A15. Each test is written from the statement's text and
 # reaches the behaviour through the scripts and documents the spec names. The
 # cockpit statements (A12, A13) are in task-loop-steps.acceptance.test.ts.
@@ -51,18 +51,18 @@ if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
-unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
-export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=acceptance-session
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
+export DAGENTS_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=acceptance-session
 printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 
 review_surface() { # review_surface <true|false|absent> — what this session's Codex gate file says
-  rm -rf "$DR_CODEX_SESSION_DIR"
+  rm -rf "$DAGENTS_CODEX_SESSION_DIR"
   [ "$1" != absent ] || return 0
-  mkdir -p "$DR_CODEX_SESSION_DIR"
-  printf '{"session_id":"%s","usable":true,"review":%s,"lane":false}\n' "$CLAUDE_CODE_SESSION_ID" "$1" > "$DR_CODEX_SESSION_DIR/$CLAUDE_CODE_SESSION_ID.json"
+  mkdir -p "$DAGENTS_CODEX_SESSION_DIR"
+  printf '{"session_id":"%s","usable":true,"review":%s,"lane":false}\n' "$CLAUDE_CODE_SESSION_ID" "$1" > "$DAGENTS_CODEX_SESSION_DIR/$CLAUDE_CODE_SESSION_ID.json"
 }
 
 CO="Co-Authored""-By"
@@ -107,7 +107,7 @@ PLAN_TEXT='|# Acceptance Fixture Plan
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |**Lenses:** lang-bash
 |
@@ -118,7 +118,7 @@ PLAN_TEXT='|# Acceptance Fixture Plan
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dagents:impl-opus-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
 |
 |### Task 3: nolens
@@ -126,7 +126,7 @@ PLAN_TEXT='|# Acceptance Fixture Plan
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dagents:impl-sonnet-medium
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 1 = 2'
 
 CODEX_PLAN_TEXT='|# Codex Fixture
@@ -169,7 +169,7 @@ a1() {
   has "A1: the dispatch carries the expanded plugin root" "$(cat "$D")" "$PLUGIN/scripts/context-size"
   absent "A1: the dispatch has no unexpanded placeholder" "$(cat "$D")" '\[[A-Z][A-Z_]+\]'
   check "A1: the digest is at most 15 lines" "$([ "$(count_lines "$out")" -le 15 ] && echo yes || echo no)" "yes"
-  has "A1: the digest prints the subagent_type" "$out" "dforge:impl-sonnet-low"
+  has "A1: the digest prints the subagent_type" "$out" "dagents:impl-sonnet-low"
   has "A1: the digest prints the dispatch path" "$out" "$D"
   matches "A1: the digest's last line is the budget line" "$(tail -n 1 <<<"$out")" '^budget'
   has "A1: the line before it records the state (base)" "$(tail -n 2 <<<"$out" | head -n 1)" "$base7"
@@ -197,7 +197,7 @@ a2() {
   done <<<"$lens_paths"
   route=$(cd "$R" && bash "$ROUTE" docs/plan.md --task 1)
   primary=$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$route")
-  check "A2: review-route prints a Claude judge seat with Codex off" "$primary" "dforge:judge-sonnet-high"
+  check "A2: review-route prints a Claude judge seat with Codex off" "$primary" "dagents:judge-sonnet-high"
   has "A2: the digest names the seat review-route prints" "$out" "$primary"
   local nchecks
   nchecks=$(grep -cE '^check [A-Za-z_-]+: ' <<<"$out")
@@ -388,7 +388,7 @@ rr_case() {
     check "$name: exit 0" "$rc" "0"
     check "$name: no skip line" "${skipline:-none}" "none"
     check "$name: writes a re-review prompt" "$([ -n "$newp" ] && echo yes || echo no)" "yes"
-    has "$name: names dforge:judge-sonnet-high" "$out" "dforge:judge-sonnet-high"
+    has "$name: names dagents:judge-sonnet-high" "$out" "dagents:judge-sonnet-high"
   fi
 }
 
@@ -418,7 +418,7 @@ a7() {
   new_repo a7
   local want got
   route_primary() { (cd "$R" && bash "$ROUTE" docs/plan.md --ruling "$@" 2>&1) | sed -n 's/.*primary=\([^ ]*\).*/\1/p'; }
-  local SON=dforge:judge-sonnet-high OPU=dforge:judge-opus
+  local SON=dagents:judge-sonnet-high OPU=dagents:judge-opus
   check "A7: cannot-verify, a risk-1 task" "$(route_primary cannot-verify 1)" "$SON"
   check "A7: executor-empty-diff, a risk-1 task" "$(route_primary executor-empty-diff 1)" "$SON"
   check "A7: both Sonnet kinds, a risk-1 task" "$(route_primary cannot-verify,executor-empty-diff 1)" "$SON"
@@ -493,7 +493,7 @@ a9() {
   check "A9: a first run exits 0" "$rc" "0"
   check "A9: a first run runs the command" "$(runs "$N")" "1"
   local state row
-  state=$(cd "$R" && bash "$S/dforge-path" state | tr -d '\r')
+  state=$(cd "$R" && bash "$S/dagents-path" state | tr -d '\r')
   row=$(tail -n 1 "$state/suites.tsv" 2>/dev/null)
   check "A9: the run is recorded with HEAD" "$(cut -f1 <<<"$row")" "$(full HEAD)"
   check "A9: the run is recorded clean" "$(cut -f2 <<<"$row")" "clean"
@@ -590,8 +590,8 @@ a11() {
   local SID=s-flight TP="$TMP/s-flight.jsonl" ENV_SID
   ENV_SID=$CLAUDE_CODE_SESSION_ID
   export CLAUDE_CODE_SESSION_ID=$SID
-  mkdir -p "$HOME/.claude/dforge/sessions/by-id" "$TMP/$SID/subagents"
-  jq -n --arg tp "$TP" '{session_id:"s-flight",transcript_path:$tp}' > "$HOME/.claude/dforge/sessions/by-id/$SID.json"
+  mkdir -p "$HOME/.claude/dagents/sessions/by-id" "$TMP/$SID/subagents"
+  jq -n --arg tp "$TP" '{session_id:"s-flight",transcript_path:$tp}' > "$HOME/.claude/dagents/sessions/by-id/$SID.json"
   : > "$TP"
   use() { # use <tool_use_id> <description>
     fjq -nc --arg id "$1" --arg d "$2" '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:$id,name:"Agent",input:{description:$d}}]}}' >> "$TP"
@@ -628,7 +628,7 @@ a11() {
   # turn-end.sh still counts and names the launches.
   local REPO="$TMP/a11-repo" WS2
   git init -q "$REPO"
-  WS2="$REPO/.dforge/sdd/2026-10-08-example"
+  WS2="$REPO/.dagents/sdd/2026-10-08-example"
   mkdir -p "$WS2"
   jq -n --arg sid s-turn --arg cwd "$REPO" '{hook_event_name:"UserPromptSubmit",session_id:$sid,cwd:$cwd,prompt:"go"}' | bash "$TURNSTART"
   sleep 1

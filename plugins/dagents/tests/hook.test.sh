@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The SessionStart hook must inject the using-dforge entry point in the
+# The SessionStart hook must inject the using-dagents entry point in the
 # Claude Code JSON shape, persist the session record keyed by sanitized cwd and
 # by session id, tolerate malformed stdin (inject anyway, persist nothing), and
 # always exit 0.
@@ -39,11 +39,11 @@ check "well-formed: the plugin root line states the working-directory contract" 
 check "well-formed: additionalContext is non-empty" \
   "$(jq -r '(.hookSpecificOutput.additionalContext // "") | length > 0' <<<"$out" 2>/dev/null)" "true"
 check "well-formed: context names the entry-point skill" \
-  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c 'dforge:using-dforge')" "1"
+  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c 'dagents:using-dagents')" "1"
 check "well-formed: emits no permissionDecision" \
   "$(jq -r '.hookSpecificOutput.permissionDecision // "ABSENT"' <<<"$out" 2>/dev/null)" "ABSENT"
 
-RECORD="$HOME_A/.claude/dforge/sessions/D--repo-example.json"
+RECORD="$HOME_A/.claude/dagents/sessions/D--repo-example.json"
 check "well-formed: persists the session record" "$([ -f "$RECORD" ] && echo yes || echo no)" "yes"
 check "record: transcript_path" \
   "$(jq -r '.transcript_path // "MISSING"' "$RECORD" 2>/dev/null)" "/tmp/fake-transcript.jsonl"
@@ -56,7 +56,7 @@ check "record: cwd" "$(jq -r '.cwd // "MISSING"' "$RECORD" 2>/dev/null)" 'D:\rep
 MSYS_NO_PATHCONV=1 jq -n --arg tp '/tmp/second-transcript.jsonl' --arg cwd 'D:\repo\example' \
   '{hook_event_name:"SessionStart",session_id:"s-456",transcript_path:$tp,cwd:$cwd,source:"startup"}' \
   | HOME="$HOME_A" bash "$SCRIPT" >/dev/null 2>&1
-BYID="$HOME_A/.claude/dforge/sessions/by-id"
+BYID="$HOME_A/.claude/dagents/sessions/by-id"
 check "shared cwd: the cwd record names the later session" "$(jq -r '.session_id' "$RECORD" 2>/dev/null)" "s-456"
 check "shared cwd: the first session keeps its own record" \
   "$(jq -r '.transcript_path' "$BYID/s-123.json" 2>/dev/null)" "/tmp/fake-transcript.jsonl"
@@ -65,11 +65,11 @@ check "shared cwd: the second session has its own record" \
 
 # --- records a month old are pruned; the session's own and recent ones stay ---
 printf '{}\n' > "$BYID/s-old.json"
-printf '{}\n' > "$HOME_A/.claude/dforge/sessions/D--gone-worktree.json"
-touch -d '40 days ago' "$BYID/s-old.json" "$HOME_A/.claude/dforge/sessions/D--gone-worktree.json" "$BYID/s-123.json"
+printf '{}\n' > "$HOME_A/.claude/dagents/sessions/D--gone-worktree.json"
+touch -d '40 days ago' "$BYID/s-old.json" "$HOME_A/.claude/dagents/sessions/D--gone-worktree.json" "$BYID/s-123.json"
 payload | HOME="$HOME_A" bash "$SCRIPT" >/dev/null 2>&1
 check "prune: an old session record is removed" "$([ -e "$BYID/s-old.json" ] && echo yes || echo no)" "no"
-check "prune: an old checkout record is removed" "$([ -e "$HOME_A/.claude/dforge/sessions/D--gone-worktree.json" ] && echo yes || echo no)" "no"
+check "prune: an old checkout record is removed" "$([ -e "$HOME_A/.claude/dagents/sessions/D--gone-worktree.json" ] && echo yes || echo no)" "no"
 check "prune: the starting session's record is rewritten, not removed" "$(jq -r '.session_id' "$BYID/s-123.json" 2>/dev/null)" "s-123"
 check "prune: a recent record stays" "$([ -e "$BYID/s-456.json" ] && echo yes || echo no)" "yes"
 
@@ -97,8 +97,8 @@ export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invali
 REPO="$TMP/repo"
 git init -q -b main "$REPO"
 git -C "$REPO" commit -q --allow-empty -m init
-mkdir -p "$REPO/.dforge/handoff"
-printf '# Handoff\n\n## Next session\n\n**Next:** Resume at Task 4 (Four).\n' > "$REPO/.dforge/handoff/latest.md"
+mkdir -p "$REPO/.dagents/handoff"
+printf '# Handoff\n\n## Next session\n\n**Next:** Resume at Task 4 (Four).\n' > "$REPO/.dagents/handoff/latest.md"
 TR="$TMP/transcript.jsonl"
 MSYS_NO_PATHCONV=1 jq -cn '{type:"user",isSidechain:false,origin:{kind:"human"},message:{role:"user",content:"keep the API stable"}}' > "$TR"
 compact_payload() {
@@ -111,21 +111,21 @@ status=$?
 ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out" 2>/dev/null)
 check "compact: exits 0" "$status" "0"
 check "compact: emits valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
-check "compact: entry point still injected" "$(grep -c 'dforge:using-dforge' <<<"$ctx")" "1"
+check "compact: entry point still injected" "$(grep -c 'dagents:using-dagents' <<<"$ctx")" "1"
 check "compact: snapshot appended" "$(grep -c '^## Compaction snapshot' <<<"$ctx")" "1"
 check "compact: carries the handoff next step" "$(grep -c 'Resume at Task 4 (Four)' <<<"$ctx")" "1"
 check "compact: carries the owner prompt" "$(grep -c 'keep the API stable' <<<"$ctx")" "1"
 check "compact: under the 10,000-character hook cap" "$([ "${#ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
-check "an existing state directory ignores itself" "$(git -C "$REPO" status --porcelain --untracked-files=all -- .dforge)" ""
+check "an existing state directory ignores itself" "$(git -C "$REPO" status --porcelain --untracked-files=all -- .dagents)" ""
 BARE="$TMP/bare-repo"
 git init -q -b main "$BARE"
 MSYS_NO_PATHCONV=1 jq -n --arg cwd "$BARE" '{hook_event_name:"SessionStart",session_id:"s-10",transcript_path:"",cwd:$cwd,source:"startup"}' \
   | HOME="$HOME_D" bash "$SCRIPT" >/dev/null 2>&1
-check "a checkout without a state directory gains none" "$([ -e "$BARE/.dforge" ] && echo yes || echo no)" "no"
+check "a checkout without a state directory gains none" "$([ -e "$BARE/.dagents" ] && echo yes || echo no)" "no"
 LINKED="$TMP/linked-repo"
 git init -q -b main "$LINKED"
-mkdir -p "$LINKED/.dforge" "$TMP/outside"
-ln -s "$TMP/outside/planted" "$LINKED/.dforge/.gitignore"
+mkdir -p "$LINKED/.dagents" "$TMP/outside"
+ln -s "$TMP/outside/planted" "$LINKED/.dagents/.gitignore"
 MSYS_NO_PATHCONV=1 jq -n --arg cwd "$LINKED" '{hook_event_name:"SessionStart",session_id:"s-11",transcript_path:"",cwd:$cwd,source:"startup"}' \
   | HOME="$HOME_D" bash "$SCRIPT" >/dev/null 2>&1
 check "the state ignore is never written through a link" "$([ -e "$TMP/outside/planted" ] && echo yes || echo no)" "no"
@@ -143,12 +143,12 @@ check "compact: control bytes stripped from the context" \
   "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$esc_out" 2>/dev/null | grep -c $'\033')" "0"
 
 # --- a roadmap project: its position rides in every session ---
-mkdir -p "$REPO/docs/dforge/registers" "$REPO/docs/dforge/specs"
-: > "$REPO/docs/dforge/specs/shop-design.md"
+mkdir -p "$REPO/docs/dagents/registers" "$REPO/docs/dagents/specs"
+: > "$REPO/docs/dagents/specs/shop-design.md"
 printf '# M1 — item register\n\n**Source:** roadmap\n**Covers:** docs/superpowers/specs/shop-design.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Billing | - | - | done | - |\n| 2 | Search | - | - | open | - |\n' \
-  > "$REPO/docs/dforge/registers/m1.md"
+  > "$REPO/docs/dagents/registers/m1.md"
 printf '# Shop — roadmap\n\n**Product:** a shop\n**Spec:** docs/superpowers/specs/shop-design.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | MVP | every epic resolved | docs/superpowers/registers/m1.md | open | - |\n' \
-  > "$REPO/docs/dforge/roadmap.md"
+  > "$REPO/docs/dagents/roadmap.md"
 startup_payload() {
   MSYS_NO_PATHCONV=1 jq -n --arg tp "$TR" --arg cwd "$REPO" \
     '{hook_event_name:"SessionStart",session_id:"s-10",transcript_path:$tp,cwd:$cwd,source:"startup"}'
@@ -168,29 +168,29 @@ mkdir -p "$REPO/.superpowers"
 lg_out=$(startup_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null)
 check "older layout: output stays valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$lg_out" && echo yes || echo no)" "yes"
 check "older layout: the migration line is injected" \
-  "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$lg_out" | grep -cF "dforge: this repository still uses an older layout ($(git -C "$REPO" rev-parse --show-toplevel)/.superpowers); run the dforge:migrate skill (/dforge:migrate)")" "1"
+  "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$lg_out" | grep -cF "dagents: this repository still uses an older layout ($(git -C "$REPO" rev-parse --show-toplevel)/.superpowers); run the dagents:migrate skill (/dagents:migrate)")" "1"
 rm -rf "$REPO/.superpowers"
 
 # --- workflow settings ride in every session as one line ---
 if command -v node >/dev/null 2>&1; then
-  HOME_S="$TMP/s"; mkdir -p "$HOME_S/.dforge"
+  HOME_S="$TMP/s"; mkdir -p "$HOME_S/.dagents"
   s_ctx=$(payload | HOME="$HOME_S" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
-  check "settings: nothing injected at the defaults" "$(grep -c '^dforge settings in force' <<<"$s_ctx")" "0"
-  printf '{"worktree":"always","designApproval":"whole","codexLane":false}\n' > "$HOME_S/.dforge/config.json"
+  check "settings: nothing injected at the defaults" "$(grep -c '^dagents settings in force' <<<"$s_ctx")" "0"
+  printf '{"worktree":"always","designApproval":"whole","codexLane":false}\n' > "$HOME_S/.dagents/config.json"
   s_out=$(payload | HOME="$HOME_S" bash "$SCRIPT" 2>/dev/null)
   check "settings: output stays valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$s_out" && echo yes || echo no)" "yes"
   check "settings: the changed skill keys are injected" \
-    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c '^dforge settings in force (each replaces the matching question or default in the skills): worktree=always; designApproval=whole$')" "1"
+    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c '^dagents settings in force (each replaces the matching question or default in the skills): worktree=always; designApproval=whole$')" "1"
   s_ctx=$(compact_payload | HOME="$HOME_S" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
-  check "settings: the line survives compaction" "$(grep -c '^dforge settings in force' <<<"$s_ctx")" "1"
+  check "settings: the line survives compaction" "$(grep -c '^dagents settings in force' <<<"$s_ctx")" "1"
   check "settings: still under the 10,000-character hook cap" "$([ "${#s_ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
-  printf 'not json' > "$HOME_S/.dforge/config.json"
+  printf 'not json' > "$HOME_S/.dagents/config.json"
   s_out=$(payload | HOME="$HOME_S" bash "$SCRIPT" 2>/dev/null); status=$?
   check "settings: a broken file still exits 0" "$status" "0"
   check "settings: a broken file injects no line" \
-    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c '^dforge settings in force')" "0"
+    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c '^dagents settings in force')" "0"
   check "settings: a broken file keeps the entry point" \
-    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c 'dforge:using-dforge')" "1"
+    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c 'dagents:using-dagents')" "1"
 fi
 
 # --- hooks.json wiring ---
@@ -211,7 +211,7 @@ check "session-start.sh parses" \
 # 10,000-character cap with the compaction snapshot; 5,500 bytes leaves the
 # snapshot about 4,500.
 check "entry point is at most 5,500 bytes" \
-  "$([ "$(wc -c < "$HERE/../skills/using-dforge/SKILL.md")" -le 5500 ] && echo yes || echo no)" "yes"
+  "$([ "$(wc -c < "$HERE/../skills/using-dagents/SKILL.md")" -le 5500 ] && echo yes || echo no)" "yes"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

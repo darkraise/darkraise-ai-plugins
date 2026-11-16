@@ -25,7 +25,7 @@ _executor_session_field() { # _executor_session_field <id> <key>
 executor_session_id() { printf '%s' "${CLAUDE_CODE_SESSION_ID:-}"; }
 
 # The override variable is named by the registry, so an executor keeps whatever
-# name its callers already export - DR_CODEX_SESSION_DIR, for Codex.
+# name its callers already export - DAGENTS_CODEX_SESSION_DIR, for Codex.
 executor_session_dir() { # executor_session_dir <id>
   local env_name override dir
   env_name=$(_executor_session_field "$1" session_dir_env)
@@ -35,7 +35,7 @@ executor_session_dir() { # executor_session_dir <id>
   fi
   dir=$(_executor_session_field "$1" session_dir)
   [ -n "$dir" ] || return 1
-  printf '%s/.claude/dforge/%s' "$HOME" "$dir"
+  printf '%s/.claude/dagents/%s' "$HOME" "$dir"
 }
 
 # executor_session_file <id> - this session's file; fails with no session id.

@@ -11,7 +11,7 @@ that the fix itself broke nothing.
 argument ([delegated-task.md](../../../reference/delegated-task.md) §Seats).
 
 ```
-Subagent (dforge:judge-sonnet-high; dforge:judge-opus for a subtle concurrency fix):
+Subagent (dagents:judge-sonnet-high; dagents:judge-opus for a subtle concurrency fix):
   description: "Re-review Task N fix round R"
   prompt: |
     You are re-reviewing one task's fix round. A previous review produced

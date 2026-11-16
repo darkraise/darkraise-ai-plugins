@@ -19,7 +19,7 @@ complete this work."
 When `scripts/auto-run status` exits 0
 ([auto-run.md](../../reference/auto-run.md)) and its phase is not `finish`, run
 `scripts/auto-run phase finish` (exit 4: `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`), and stop),
-dforge:handoff steps 0-3, `scripts/next-step PLAN_FILE` and `scripts/auto-run clear --phase`, and end the turn with `Auto run: clearing`.
+dagents:handoff steps 0-3, `scripts/next-step PLAN_FILE` and `scripts/auto-run clear --phase`, and end the turn with `Auto run: clearing`.
 In phase `finish`, follow this skill with these changes:
 
 - **Step 3** asks nothing: the base branch is
@@ -79,7 +79,7 @@ In phase `finish`, follow this skill with these changes:
 ## Step 1: Verify Tests
 
 When the project declares `<docs>/gates.md`, run
-dforge:running-gates — it determines its own base, so it works here even
+dagents:running-gates — it determines its own base, so it works here even
 though Step 3 has not established one yet. Otherwise run the project's full test
 suite (`npm test` / `cargo test` / `pytest` / `go test ./...`) through
 `bash <plugin-root>/scripts/suite-run -- <test command>`, in the background
@@ -101,7 +101,7 @@ Tests failing (<N> failures). Must fix before completing:
 
 [Show the digest's failing lines]
 
-Next: fix these failures, then re-run dforge:finishing-a-development-branch.
+Next: fix these failures, then re-run dagents:finishing-a-development-branch.
 ```
 
 Do not run `scripts/next-step` here: the branch is not ready to integrate, and
@@ -174,7 +174,7 @@ launch, not only the reports. Run `scripts/in-flight` first. Exit 1 lists
 background shells and agents this session started that are still running,
 including an agent that sent its report but left work of its own alive. Wait
 for each, or stop it with `TaskStop` (a reported agent's report stands), as
-dforge:handoff step 0 says, and run it again. Go on only on exit 0, or on
+dagents:handoff step 0 says, and run it again. Go on only on exit 0, or on
 exit 3 after checking by hand.
 
 **A choice recorded before the run.** Then run
@@ -264,7 +264,7 @@ Read [execute-choice.md](references/execute-choice.md) before you carry out the 
 
 A merged plan leaves no committed trace that it ran: its ledger lives in the
 gitignored workspace that Step 6 deletes, and its branch is deleted with it.
-Without a record, dforge:project-status cannot tell a merged plan from
+Without a record, dagents:project-status cannot tell a merged plan from
 one nobody ever started, and will recommend re-executing finished work.
 
 So append one line to `<docs>/plans/completed.md` in the adopting
@@ -274,12 +274,12 @@ for a confirmed discard, and never runs for Options 2 and 3.
 The two line forms:
 
 ```markdown
-- 2026-09-12 `docs/dforge/plans/2026-09-12-example.md` — merged into `main` at 6a4619a
-- 2026-09-12 `docs/dforge/plans/2026-09-12-example.md` — via PR
+- 2026-09-12 `docs/dagents/plans/2026-09-12-example.md` — merged into `main` at 6a4619a
+- 2026-09-12 `docs/dagents/plans/2026-09-12-example.md` — via PR
 ```
 
 Either prefix names the same document: an entry spelled
-`docs/superpowers/<rest>` already records the plan `docs/dforge/<rest>`, so
+`docs/superpowers/<rest>` already records the plan `docs/dagents/<rest>`, so
 never add a second line for it.
 
 | Path | When | Which form |
@@ -339,7 +339,7 @@ When `<docs>/roadmap.md` exists, run
 `scripts/roadmap settle --spec <the plan's Spec path>` after resolving those
 rows and commit its changes with them. It moves the epic row assigned to that
 spec to `verify` once every register covering the spec is resolved, and never
-to `done`: an epic is done only when dforge:closing-a-milestone has
+to `done`: an epic is done only when dagents:closing-a-milestone has
 audited it. Settle before Step 7, so `next-step` routes to the next epic rather
 than back to this one.
 
@@ -359,7 +359,7 @@ Read [cleanup.md](references/cleanup.md) before you remove the worktree.
 gone, so nothing follows from it.
 
 If this work came from a plan file, run `scripts/next-step --complete PLAN_FILE`
-(see using-dforge §Session Budget), with the
+(see using-dagents §Session Budget), with the
 working directory inside the repository — after Option 1 that is the main
 repo root. It prints a `## Next session` block naming what follows the plan:
 the next program sub-project or roadmap epic with its launch command and

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Acceptance tests for the review-depth spec
-# (docs/dforge/specs/2026-10-27-review-depth-design.md), statements A1-A8,
+# (docs/dagents/specs/2026-10-27-review-depth-design.md), statements A1-A8,
 # A10, A12, A13 and A16. Written from the statements' text and run through the
 # public surface: depth-route, review-route, lens-route and plan-lint as
 # commands.
@@ -39,10 +39,10 @@ trap 'rm -rf "$TMP"' EXIT
 # Windows path or git initialises a repository somewhere else.
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
-unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR DFORGE_LENS_CAP DFORGE_LENS_MINOR_FROM
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
+unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR DAGENTS_LENS_CAP DAGENTS_LENS_MINOR_FROM
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
 export GIT_AUTHOR_NAME=Darkraise GIT_AUTHOR_EMAIL=quangtc94@gmail.com GIT_COMMITTER_NAME=Darkraise GIT_COMMITTER_EMAIL=quangtc94@gmail.com
-export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=review-depth-qa
+export DAGENTS_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=review-depth-qa
 
 WANT=("$@")
 want() { # want <A-id> — true when no filter was given or the id is listed
@@ -54,9 +54,9 @@ want() { # want <A-id> — true when no filter was given or the id is listed
 
 # --- fixtures: one repository holding specs and plans ---
 REPO="$TMP/repo"
-mkdir -p "$REPO/docs/dforge/specs" "$REPO/docs/dforge/plans"
+mkdir -p "$REPO/docs/dagents/specs" "$REPO/docs/dagents/plans"
 git -C "$REPO" init -q -b main
-SPECS="$REPO/docs/dforge/specs"
+SPECS="$REPO/docs/dagents/specs"
 
 mkspec() { # mkspec NAME DEPTH_LINE — a spec whose Depth line is DEPTH_LINE ("" for none)
   {
@@ -82,14 +82,14 @@ ev() { # ev TOKEN — rRtT is an Evaluation line at risk R, total T; none omits 
   esac
 }
 
-mkplan() { # mkplan NAME SPEC_NAME|- HOST REVIEW_LINE TOKEN... — a plan in docs/dforge/plans
+mkplan() { # mkplan NAME SPEC_NAME|- HOST REVIEW_LINE TOKEN... — a plan in docs/dagents/plans
   local name=$1 spec=$2 host=$3 review=$4 n=0 tok i
   shift 4
   {
     printf '# %s Implementation Plan\n\n' "$name"
     [ "$host" != codex ] || printf 'Host: codex\nRouting policy: codex-v4\n\n'
     printf '**Goal:** Demo.\n\n'
-    [ "$spec" = - ] || printf '**Spec:** `docs/dforge/specs/%s.md`\n\n' "$spec"
+    [ "$spec" = - ] || printf '**Spec:** `docs/dagents/specs/%s.md`\n\n' "$spec"
     printf '**Execution:** inline — `claude --model sonnet --effort high` — demo\n\n'
     [ -z "$review" ] || printf '%s\n\n' "$review"
     printf '## Global Constraints\n\n- None.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n'
@@ -98,26 +98,26 @@ mkplan() { # mkplan NAME SPEC_NAME|- HOST REVIEW_LINE TOKEN... — a plan in doc
     i=0
     for tok in "$@"; do
       i=$((i + 1))
-      printf '### Task %s: Thing %s\n\n**Files:**\n- Create: `f%s.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n' "$i" "$i" "$i"
+      printf '### Task %s: Thing %s\n\n**Files:**\n- Create: `f%s.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n' "$i" "$i" "$i"
       ev "$tok"
       printf '\n- [ ] **Step 1: Do it**\n\n'
     done
-  } > "$REPO/docs/dforge/plans/$name.md"
-  printf '%s\n' "$REPO/docs/dforge/plans/$name.md"
+  } > "$REPO/docs/dagents/plans/$name.md"
+  printf '%s\n' "$REPO/docs/dagents/plans/$name.md"
 }
 
 mkcodex() { # mkcodex NAME SPEC_NAME TOTAL — a one-task Host: codex plan whose raw total is TOTAL
   local name=$1 spec=$2 total=$3
   {
     printf '# %s Codex Plan\n\nHost: codex\nRouting policy: codex-v4\n\n**Goal:** Demo.\n\n' "$name"
-    printf '**Spec:** `docs/dforge/specs/%s.md`\n\n' "$spec"
+    printf '**Spec:** `docs/dagents/specs/%s.md`\n\n' "$spec"
     printf '**Execution:** subagent — codex gpt-6.1-sol / high — native pair\n\n'
     printf '**Plan review:** 2026-10-27 — codex gpt-6-astra / high — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)\n\n'
     printf '## Global Constraints\n\n- None.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. One\n\n'
     printf '### Task 1: One\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** codex gpt-6.1-sol / low\n'
     printf '**Evaluation:** files=%s, spec=0, coupling=0, risk=0; weighted routing score=%s\n**Assignment source:** rubric\n' "$total" "$total"
-  } > "$REPO/docs/dforge/plans/$name.md"
-  printf '%s\n' "$REPO/docs/dforge/plans/$name.md"
+  } > "$REPO/docs/dagents/plans/$name.md"
+  printf '%s\n' "$REPO/docs/dagents/plans/$name.md"
 }
 
 route() { # route PLAN — sets out and status of depth-route PLAN, run from the repository
@@ -146,7 +146,7 @@ have_base=0
 if git -C "$REPO_ROOT" cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
   mkdir -p "$BASE_DIR"
   if git -C "$REPO_ROOT" archive "$BASE_SHA" plugins/dforge 2>/dev/null | tar -x -C "$BASE_DIR" 2>/dev/null \
-     && [ -f "$BASE_DIR/plugins/dforge/scripts/review-route" ]; then have_base=1; fi
+     && [ -f "$BASE_DIR/plugins/dagents/scripts/review-route" ]; then have_base=1; fi
 fi
 [ "$have_base" -eq 1 ] || echo "note: BASE $BASE_SHA is not in this clone; the unchanged-output comparisons are skipped"
 
@@ -212,7 +212,7 @@ if want A3; then
   # amendments.md is applied: raising and lowering a task's risk both count.
   p=$(mkplan a3-amend-up s-light - "" r1t2 r1t2)
   route "$p"; check "A3: before the amendment -> light" "$(depth_of)" light
-  adir="$REPO/.dforge/sdd/a3-amend-up"; mkdir -p "$adir"
+  adir="$REPO/.dagents/sdd/a3-amend-up"; mkdir -p "$adir"
   {
     printf '## A1 — Task 2\n\nReason: scope grew\n\nCost if wrong: none\n\n### Old\n\n````\n'
     printf '**Evaluation:** files 1 - spec 0 - coupling 0 - risk 1 = 2\n'
@@ -224,7 +224,7 @@ if want A3; then
   check "A3: amendments.md raising a task to risk 3 -> full" "$(depth_of)" full
   p=$(mkplan a3-amend-down s-light - "" r3t3 r1t2)
   route "$p"; check "A3: before the lowering amendment -> full" "$(depth_of)" full
-  adir="$REPO/.dforge/sdd/a3-amend-down"; mkdir -p "$adir"
+  adir="$REPO/.dagents/sdd/a3-amend-down"; mkdir -p "$adir"
   {
     printf '## A1 — Task 1\n\nReason: split off\n\nCost if wrong: none\n\n### Old\n\n````\n'
     printf '**Evaluation:** files 0 - spec 0 - coupling 0 - risk 3 = 3\n'
@@ -350,7 +350,7 @@ if want A7; then
     if [ "$have_base" -eq 1 ]; then
       for r in 1 "$((wcap + 1))" "$((wcap + 2))"; do
         rr "$pc" "$r"; new_out=$out new_st=$status
-        old_out=$(cd "$REPO" && timeout 60 bash "$BASE_DIR/plugins/dforge/scripts/review-route" "$pc" --plan-round "$r" 2>&1); old_st=$?
+        old_out=$(cd "$REPO" && timeout 60 bash "$BASE_DIR/plugins/dagents/scripts/review-route" "$pc" --plan-round "$r" 2>&1); old_st=$?
         check "A7: Host: codex total $t round $r matches the pre-spec output" "$new_st|$new_out" "$old_st|$old_out"
       done
     fi
@@ -372,7 +372,7 @@ if want A8; then
   lens_lines() { if [ "$status" -ne 0 ]; then printf 'status=%s\n' "$status"; else grep -c '^lens ' <<<"$out"; fi; }
 
   pl=$(mkplan a8-light s-light - "" r0t1 r1t2)
-  lr "$pl" DFORGE_LENS_CAP=4
+  lr "$pl" DAGENTS_LENS_CAP=4
   check "A8: light exits 0" "$status" 0
   present "A8: light prints the security lens" "$out" "^lens security "
   check "A8: light prints exactly one lens line" "$(lens_lines)" 1
@@ -383,15 +383,15 @@ if want A8; then
   if [ "$skipped" -ge 3 ]; then printf 'ok   - A8: light skips at least 3 other applicable lenses (%s)\n' "$skipped"; pass=$((pass + 1))
   else printf 'FAIL - A8: light skips at least 3 other applicable lenses (got %s)\n' "$skipped"; fail=$((fail + 1)); fi
   # Every lens that applies at full and is not security is skipped, with a reason=depth, at light.
-  lr "$pl" DFORGE_LENS_CAP=9
+  lr "$pl" DAGENTS_LENS_CAP=9
   light_skipped=$(grep -E '^lens-skipped ' <<<"$out" | awk '{print $2}' | sort | tr '\n' ' ')
   pf=$(mkplan a8-full s-full - "" r0t1)
-  lr "$pf" DFORGE_LENS_CAP=9
+  lr "$pf" DAGENTS_LENS_CAP=9
   full_ids=$(grep -E '^lens ' <<<"$out" | awk '{print $2}' | grep -vx security | sort | tr '\n' ' ')
   check "A8: the lenses skipped at light are the other lenses that apply at full" "$light_skipped" "$full_ids"
 
   # security does not apply: no lens line for it, and no skip line either.
-  out=$(cd "$REPO" && env DFORGE_LENS_CAP=4 timeout 60 bash "$CP/scripts/lens-route" "$pl" --final "$BASE_C" "$HEAD_C" 2>&1); status=$?
+  out=$(cd "$REPO" && env DAGENTS_LENS_CAP=4 timeout 60 bash "$CP/scripts/lens-route" "$pl" --final "$BASE_C" "$HEAD_C" 2>&1); status=$?
   check "A8: light, security not applicable, exits 0" "$status" 0
   absent "A8: light, security not applicable, prints no security lens" "$out" "^lens security "
   absent "A8: light, security not applicable, prints no security skip" "$out" "lens-skipped security"
@@ -400,34 +400,34 @@ if want A8; then
 
   # standard: at most 2 lens lines besides test-quality, which this change set needs.
   ps=$(mkplan a8-standard s-light - "" r0t1 r2t4)
-  lr "$ps" DFORGE_LENS_CAP=4
+  lr "$ps" DAGENTS_LENS_CAP=4
   check "A8: standard, lensCap 4, prints 3 lens lines with test-quality" "$(lens_lines)" 3
   present "A8: standard past the cap prints reason=cap" "$out" "^lens-skipped .* reason=cap$"
   absent "A8: standard prints no reason=depth" "$out" "reason=depth"
-  lr "$ps" DFORGE_LENS_CAP=9
+  lr "$ps" DAGENTS_LENS_CAP=9
   check "A8: standard, lensCap 9, still prints 3 lens lines" "$(lens_lines)" 3
-  lr "$ps" DFORGE_LENS_CAP=1
+  lr "$ps" DAGENTS_LENS_CAP=1
   check "A8: standard, lensCap 1, prints 1 lens line" "$(lens_lines)" 1
-  lr "$ps" DFORGE_LENS_CAP=2
+  lr "$ps" DAGENTS_LENS_CAP=2
   check "A8: standard, lensCap 2, prints 2 lens lines" "$(lens_lines)" 2
-  lr "$ps" DFORGE_LENS_CAP=0
+  lr "$ps" DAGENTS_LENS_CAP=0
   present "A8: standard, lensCap 0, prints lenses off" "$out" "^lenses off$"
   ps2=$(mkplan a8-standard-spec s-standard - "" r0t1)
-  lr "$ps2" DFORGE_LENS_CAP=4
+  lr "$ps2" DAGENTS_LENS_CAP=4
   check "A8: standard by the spec, lensCap 4, prints 3 lens lines with test-quality" "$(lens_lines)" 3
 
   # full: up to lensCap, as before.
-  lr "$pf" DFORGE_LENS_CAP=4
+  lr "$pf" DAGENTS_LENS_CAP=4
   check "A8: full, lensCap 4, prints 4 lens lines" "$(lens_lines)" 4
   absent "A8: full prints no reason=depth" "$out" "reason=depth"
   present "A8: full prints reason=cap past the cap" "$out" "^lens-skipped .* reason=cap$"
-  lr "$pf" DFORGE_LENS_CAP=3
+  lr "$pf" DAGENTS_LENS_CAP=3
   check "A8: full, lensCap 3, prints 3 lens lines" "$(lens_lines)" 3
   if [ "$have_base" -eq 1 ]; then
     norm() { sed -E 's#criteria=[^ ]*/criteria/#criteria=#; s#reason=paths:[^ ]*#reason=paths#'; }
     for cap in 0 1 2 3 4 9; do
-      lr "$pf" DFORGE_LENS_CAP=$cap; new=$(norm <<<"$out")
-      old=$(cd "$REPO" && env DFORGE_LENS_CAP=$cap timeout 60 bash "$BASE_DIR/plugins/dforge/scripts/lens-route" "$pf" --final "$BASE_C" "$HEAD_C" 2>&1 | norm)
+      lr "$pf" DAGENTS_LENS_CAP=$cap; new=$(norm <<<"$out")
+      old=$(cd "$REPO" && env DAGENTS_LENS_CAP=$cap timeout 60 bash "$BASE_DIR/plugins/dagents/scripts/lens-route" "$pf" --final "$BASE_C" "$HEAD_C" 2>&1 | norm)
       check "A8: full, lensCap $cap, output equals the pre-spec output" "$new" "$old"
     done
   fi
@@ -454,13 +454,13 @@ if want A12; then
     p=$(mkplan "a12-$spec" "$spec" - "" r0t1)
     out=$(cd "$REPO" && timeout 60 bash "$ROUTE" "$p" --final 2>&1); status=$?
     check "A12: review-route --final exits 0 under $spec" "$status" 0
-    present "A12: review-route --final names the Claude review seat under $spec" "$out" "^review-seat final primary=dforge:judge-opus "
+    present "A12: review-route --final names the Claude review seat under $spec" "$out" "^review-seat final primary=dagents:judge-opus "
   done
   p=$(mkplan a12-light-final s-light - "" r0t1)
   out=$(cd "$REPO" && timeout 60 bash "$ROUTE" "$p" --final-fix src/a.sh 2>&1); status=$?
   check "A12: review-route --final-fix still routes at light" "$status" 0
   absent "A12: the fix wave seat is not none at light" "$out" "primary=none"
-  lo=$(cd "$REPO" && DFORGE_LENS_CAP=4 timeout 60 bash "$LENS" "$p" --final "$BASE_C" "$HEAD_C" 2>&1)
+  lo=$(cd "$REPO" && DAGENTS_LENS_CAP=4 timeout 60 bash "$LENS" "$p" --final "$BASE_C" "$HEAD_C" 2>&1)
   present "A12: lens-route still runs the security lens at light" "$lo" "^lens security "
 fi
 
@@ -508,25 +508,25 @@ if want A16; then
   git -C "$MR" init -q -b main
   printf 'x\n' > "$MR/x.txt"; git -C "$MR" add -A >/dev/null 2>&1; git -C "$MR" commit -q -m init
   MIRROR=$(stores_home "$MH" "$MR" qaproj darkmem local)
-  mkdir -p "$MIRROR/dforge/specs" "$MIRROR/dforge/plans"
-  printf '# Mirror spec\n\n**Execution strategy:** sequential\n\n**Depth:** standard — interface (set by hand)\n\n## Decisions\n' > "$MIRROR/dforge/specs/m-spec.md"
+  mkdir -p "$MIRROR/dagents/specs" "$MIRROR/dagents/plans"
+  printf '# Mirror spec\n\n**Execution strategy:** sequential\n\n**Depth:** standard — interface (set by hand)\n\n## Decisions\n' > "$MIRROR/dagents/specs/m-spec.md"
   {
-    printf '# Mirror Plan\n\n**Goal:** Demo.\n\n**Spec:** `docs/dforge/specs/m-spec.md`\n\n'
+    printf '# Mirror Plan\n\n**Goal:** Demo.\n\n**Spec:** `docs/dagents/specs/m-spec.md`\n\n'
     printf '**Execution:** inline — `claude --model sonnet --effort high` — demo\n\n'
     printf '**Plan review:** 2026-10-27 — skipped (depth light)\n\n'
     printf '## Global Constraints\n\n- None.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. Thing 1\n\n'
-    printf '### Task 1: Thing 1\n\n**Files:**\n- Create: `f1.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n'
+    printf '### Task 1: Thing 1\n\n**Files:**\n- Create: `f1.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n'
     printf '**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n\n- [ ] **Step 1: Do it**\n'
-  } > "$MIRROR/dforge/plans/m-plan.md"
-  lint_out=$(cd "$MR" && HOME="$MH" timeout 60 bash "$LINT" "$MIRROR/dforge/plans/m-plan.md" 2>&1)
+  } > "$MIRROR/dagents/plans/m-plan.md"
+  lint_out=$(cd "$MR" && HOME="$MH" timeout 60 bash "$LINT" "$MIRROR/dagents/plans/m-plan.md" 2>&1)
   absent "A16: plan-lint resolves the mirror spec path (no 'Spec path does not exist')" "$lint_out" "Spec path does not exist"
-  out=$(cd "$MR" && HOME="$MH" timeout 60 bash "$DR" "$MIRROR/dforge/plans/m-plan.md" 2>&1); status=$?
+  out=$(cd "$MR" && HOME="$MH" timeout 60 bash "$DR" "$MIRROR/dagents/plans/m-plan.md" 2>&1); status=$?
   check "A16: a mirror spec path routes (exit 0)" "$status" 0
   present "A16: a mirror spec path gives spec=standard" "$out" " spec=standard "
   present "A16: a mirror spec path gives depth=standard" "$out" "^depth=standard "
   # The same plan with the spec absent from the mirror falls to none, proving the spec was read from there.
-  mv "$MIRROR/dforge/specs/m-spec.md" "$MIRROR/dforge/specs/m-spec.moved"
-  out=$(cd "$MR" && HOME="$MH" timeout 60 bash "$DR" "$MIRROR/dforge/plans/m-plan.md" 2>&1)
+  mv "$MIRROR/dagents/specs/m-spec.md" "$MIRROR/dagents/specs/m-spec.moved"
+  out=$(cd "$MR" && HOME="$MH" timeout 60 bash "$DR" "$MIRROR/dagents/plans/m-plan.md" 2>&1)
   present "A16: control: with the mirror spec gone the plan routes at full with spec=none" "$out" "^depth=full spec=none "
 fi
 

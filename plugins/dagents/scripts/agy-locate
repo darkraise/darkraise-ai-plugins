@@ -14,7 +14,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # Tests point this at a copy; the shipped file is the version policy and trust record.
-POLICY="${DR_AGY_POLICY:-$HERE/../reference/agy-policy.json}"
+POLICY="${DAGENTS_AGY_POLICY:-$HERE/../reference/agy-policy.json}"
 
 die() { printf 'agy-locate: %s\n' "$1" >&2; exit 2; }
 off() { printf 'agy-locate off reason=%s\n' "$1"; exit 1; }

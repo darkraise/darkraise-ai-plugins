@@ -1,6 +1,6 @@
 # Simplification judge contract
 
-The two dispatch prompts for dforge:test-simplifier's judge seat. Fill
+The two dispatch prompts for dagents:test-simplifier's judge seat. Fill
 the placeholders and send one prompt as the whole instruction set: the judge
 has no other context and no Bash, so everything it must compare is either a
 path it can read or text in the prompt.

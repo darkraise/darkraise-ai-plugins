@@ -74,7 +74,7 @@ your own: QA commits on this branch.
    and before step 1 starts the integration check. A gate or an integration
    check whose command equals a `**CI:**`-line command then reuses ci-mirror's
    pass at this HEAD instead of running a second time. When you run
-   dforge:running-gates, name PLAN_FILE to it, so its step 4 can match a gate
+   dagents:running-gates, name PLAN_FILE to it, so its step 4 can match a gate
    to the plan's `**CI:**` commands. Exit 0 goes on. Exit 1
    prints one `ci: <command> — FAIL (exit <code>)` line per failing command.
    Each such line becomes a finding on the Claude list (step 1), written
@@ -85,7 +85,7 @@ your own: QA commits on this branch.
    no finding. Run it again whenever the gates run again.
 
    When the project declares `<docs>/gates.md`, run
-   dforge:running-gates before dispatching any reviewer. A red gate stops
+   dagents:running-gates before dispatching any reviewer. A red gate stops
    the review, and so does a manifest defect: reviewing a branch that does not
    build, or whose suites fail, spends both reviewer seats on findings the gate
    already made. When the
@@ -105,7 +105,7 @@ your own: QA commits on this branch.
   means the check never ran: treat it as exit 1.
   Exit 1 stops the review like a red gate: the UI is unproven, and
   reviewing it spends the seats on what the proof would have found. Attended,
-  report the failed steps and stop. In an auto run, run the dforge:ui-ux Prove
+  report the failed steps and stop. In an auto run, run the dagents:ui-ux Prove
   phase, then check again, and go on when it passes; when the second exit 1
   comes only from `unverifiable` rows, which need the user's words, run
   `scripts/auto-run stop --reason "ui proof needs the user"` and end as
@@ -136,7 +136,7 @@ your own: QA commits on this branch.
 
   (a) Append `Acceptance QA: dispatched (base <sha7>)` (the HEAD you hand QA).
 
-  (b) Dispatch `dforge:impl-sonnet-high` (on a Codex host, the native
+  (b) Dispatch `dagents:impl-sonnet-high` (on a Codex host, the native
       implementer `gpt-6.1-sol / high`) with
       [acceptance-qa.md](acceptance-qa.md) and its placeholders: the spec,
       its `test` statements verbatim, MERGE_BASE, HEAD, the test command
@@ -281,9 +281,9 @@ your own: QA commits on this branch.
    ```
 
    Then run `scripts/review-route PLAN_FILE --final` and dispatch
-   the `primary` it prints: `dforge:judge-opus`, with `reason=intricate`
+   the `primary` it prints: `dagents:judge-opus`, with `reason=intricate`
    for a plan with a task at risk 3 or totalling 6. Use
-   dforge:requesting-code-review's
+   dagents:requesting-code-review's
    [code-reviewer.md](../skills/requesting-code-review/references/code-reviewer.md)
    with `[REPORT_FILE]` set to `<workspace>/final-review-report.md`,
    `[DIFF_FILE]` set to the package path, `[PLAN_OR_REQUIREMENTS]` to the
@@ -316,7 +316,7 @@ your own: QA commits on this branch.
 
    **Dedupe and verify, only with two lists.** When the Claude review and the
    Codex round each produced at least one finding, dispatch a fresh
-   `dforge:judge-opus` once, given both lists' report paths
+   `dagents:judge-opus` once, given both lists' report paths
    (the Claude review's and the lens reports, and the Codex round's JSON),
    with the report file `<workspace>/final-dedupe-report.md`: tell it to
    write its full report there, write nothing else, and reply in at most 10 lines.
@@ -354,7 +354,7 @@ your own: QA commits on this branch.
    on each rejection. The report is not where the turn ends: after the fix
    wave and the Retained lines (below), the execution skill's Finish section
    goes straight on to
-   dforge:finishing-a-development-branch, and the report sits above its menu.
+   dagents:finishing-a-development-branch, and the report sits above its menu.
 
 ## Fixing what it finds
 
@@ -376,7 +376,7 @@ list (step 0.5 (d)).
 The fix wave edits UI files and so stales the UI proof: after the wave, run
 step 0.2's `ui-proof check` again. Exit 1 then means, attended, a stop that
 reports the failed steps. In an auto run it means going on to finishing,
-whose Step 1b runs the dforge:ui-ux Prove phase once and keeps the branch
+whose Step 1b runs the dagents:ui-ux Prove phase once and keeps the branch
 when the check still fails; do not run the Prove phase here.
 
 **The fix subagent** (subagent mode). Run
@@ -394,7 +394,7 @@ which [native-codex.md](native-codex.md) says how to record and dispatch.
 Whoever fixes writes `<workspace>/final-fix-report.md`: what changed per
 finding, the covering tests, the command and its output. With one list the
 fixer first checks each finding against the code under
-dforge:receiving-code-review, fixes the real ones, and records each one
+dagents:receiving-code-review, fixes the real ones, and records each one
 it rejects under `REJECTED: <finding>` with its evidence. The fixer skips a
 finding whose one-liner begins `deferred: test-simplifier — ` and lists it
 under `DEFERRED: <finding>`; the session leaves each `DEFERRED:` finding out
@@ -437,13 +437,13 @@ so finishing's test run is green and the statement is not lost.
 to the fix wave, which merges the tests into a row of one table or deletes the
 redundant one. The fix wave may delete only a test added on the branch, a test
 that does not exist at MERGE_BASE, under the REFACTOR rule in
-dforge:test-driven-development, and never a regression test that names a fixed
-bug; a test that exists at MERGE_BASE is left for dforge:test-simplifier. The
+dagents:test-driven-development, and never a regression test that names a fixed
+bug; a test that exists at MERGE_BASE is left for dagents:test-simplifier. The
 commit body names the faults the covering test catches. A finding whose
 one-liner begins `deferred: test-simplifier — ` reaches the fixer, which skips
 it and lists it under `DEFERRED:` (**The fix subagent** above). The
 session records it with
-`scripts/register add <register> "<old test> is covered by <new test>" --state deferred --note "final review: for dforge:test-simplifier"`
+`scripts/register add <register> "<old test> is covered by <new test>" --state deferred --note "final review: for dagents:test-simplifier"`
 in the register that covers the plan's spec, or names it in the final message
 when no register covers it, and counts it in its lens line's Important count
 only, neither fixed nor rejected.
@@ -459,7 +459,7 @@ reuses that pass at the unchanged HEAD instead of running the suite again. A
 fix wave whose commits moved HEAD past that run is not reused.
 
 There is no second fix wave. Residual load-bearing findings surface to your
-human partner when dforge:finishing-a-development-branch presents the options.
+human partner when dagents:finishing-a-development-branch presents the options.
 Only the four stop classes stop you here.
 
 ## Retained lines
@@ -469,7 +469,7 @@ any residual findings, or straight after step 4 when no fix wave ran, append
 these lines to the ledger, each unless the ledger already holds a line with
 its prefix (`final review lens <id> —`, `final review lens-skipped <id>`,
 `final review lenses off`, `Test ratio:`), before the execution skill appends `Final review: clean`.
-dforge:finishing-a-development-branch copies them into the plan's review
+dagents:finishing-a-development-branch copies them into the plan's review
 record, because cleanup deletes the ledger.
 
 - One line per lens that ran:
@@ -484,7 +484,7 @@ record, because cleanup deletes the ledger.
   ledgered as `final review lens-skipped <id> reason=failed`, never as a
   zero-count line.
 - `final review lenses off`, once, when `lensCap` is 0: step 1 printed
-  `lenses off`, or, on a Codex host, `scripts/dforge-config get lensCap`
+  `lenses off`, or, on a Codex host, `scripts/dagents-config get lensCap`
   prints `0`.
 - The test ratio: run `bash <plugin-root>/scripts/review-record ratio <MERGE_BASE> HEAD`
   and append the line it prints. On exit 2 append nothing; the review

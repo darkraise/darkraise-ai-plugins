@@ -12,7 +12,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 # The runner marks this session's Codex gate file off on a quota error. A fixed
 # session id and a temporary directory keep the machine's real file out of it.
-export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=codex-review-test
+export DAGENTS_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=codex-review-test
 
 # The runner resolves its plugin root through scripts/codex-plugin, which reads
 # the profile settings and the policy file. Both are fixtures here, and
@@ -28,9 +28,9 @@ printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$CLAUDE_CONFIG_DIR/
 jq -nc --arg p "$STUB_PLUGIN" \
   '{version:2, plugins:{"codex@openai-codex":[{scope:"user", installPath:$p, version:"1.0.3"}]}}' \
   > "$CLAUDE_CONFIG_DIR/plugins/installed_plugins.json"
-export DR_CODEX_POLICY="$TMP/policy.json"
+export DAGENTS_CODEX_POLICY="$TMP/policy.json"
 jq -nc '{plugin:"codex@openai-codex", min_version:"1.0.3", max_major:1,
-         trust:{calibration:"pending", smoke:"pending"}}' > "$DR_CODEX_POLICY"
+         trust:{calibration:"pending", smoke:"pending"}}' > "$DAGENTS_CODEX_POLICY"
 
 # A fixture ladder, because the shipped codex-judge rows bound a run at 1800
 # seconds and the timeout case would wait out half an hour against them. The
@@ -97,7 +97,7 @@ run() { # run <args...>; STUB_* variables in the environment script the stub
   PATH="$TMP/bin:$PATH" CODEX_REVIEW_ROSTER="$TMP/bin/detect-stub" \
     CODEX_REVIEW_GATE="$TMP/gate-stub" CODEX_REVIEW_LADDER="$CODEX_REVIEW_LADDER" \
     CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" CLAUDE_PROJECT_DIR= \
-    DR_CODEX_POLICY="$DR_CODEX_POLICY" \
+    DAGENTS_CODEX_POLICY="$DAGENTS_CODEX_POLICY" \
     STUB_CALL_FILE="$TMP/calls" STUB_EVENT_LOG="$TMP/events.log" \
     "$BASH_BIN" "$SCRIPT" "$@" 2>"$TMP/err"
 }
@@ -315,9 +315,9 @@ out=$(GATE_STUB_LINE='codex-gate usable=true reason=ok review=false lane=false r
   run --kind plan --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 present "an untrusted review surface still runs: the runner reads usable only" "$out" "codex-judge gpt-6-astra/high status=OK"
 
-SFILE="$DR_CODEX_SESSION_DIR/codex-review-test.json"
+SFILE="$DAGENTS_CODEX_SESSION_DIR/codex-review-test.json"
 open_session() {
-  mkdir -p "$DR_CODEX_SESSION_DIR"
+  mkdir -p "$DAGENTS_CODEX_SESSION_DIR"
   printf '{"session_id":"codex-review-test","usable":true,"review":true,"lane":true,"reason":"ok","plugin_version":"1.0.3"}\n' > "$SFILE"
 }
 open_session

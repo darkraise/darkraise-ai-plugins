@@ -6,12 +6,12 @@ import type { CockpitAutoRun, CockpitFinish, CockpitRoots } from '../../types'
 export const WARN_AT = 0.8
 
 /**
- * The handoff budget: `configured`, else `env`, else dforge's own rule
+ * The handoff budget: `configured`, else `env`, else dagents's own rule
  * (reference/session-budget.md): the compaction point minus one task's worst
  * growth, min(autoCompactWindow, window) × 93% − 140,000. Small windows, where
  * that comes out near zero, hold a fifth of the window. `configured` is
- * handoffTokens as the settings resolve it, where DFORGE_BUDGET already
- * overrides the file; `env` is a raw DFORGE_BUDGET for a caller without them.
+ * handoffTokens as the settings resolve it, where DAGENTS_BUDGET already
+ * overrides the file; `env` is a raw DAGENTS_BUDGET for a caller without them.
  */
 export function budgetFor(configured: number, env: string | undefined, window: number, compactWindow?: number): number {
   if (configured > 0) return Math.round(configured)
@@ -172,9 +172,9 @@ export function isGitWriteTool(tool: string): boolean {
   return /pull_request|create_or_update_file|push_files/.test(tool) && !/read|list|search|get_/.test(tool)
 }
 
-/** Whether a subagent type or skill name belongs to dforge. */
-export function isDforge(name: string): boolean {
-  return name.startsWith('dforge:')
+/** Whether a subagent type or skill name belongs to dagents. */
+export function isDagents(name: string): boolean {
+  return name.startsWith('dagents:')
 }
 
 /** The agent.spawn fields the seat check reads. */
@@ -190,8 +190,8 @@ export type SeatSpawn = {
 }
 
 /**
- * Whether a fork described `Draft plan tasks …` may run in a dforge session:
- * docs/dforge/notes/2026-10-25-drafter-measurement.md ruled forks out, and
+ * Whether a fork described `Draft plan tasks …` may run in a dagents session:
+ * docs/dagents/notes/2026-10-25-drafter-measurement.md ruled forks out, and
  * plans are now drafted in the session. Changing it takes a plugin release.
  */
 export const FORK_DRAFTING = false
@@ -215,20 +215,20 @@ export function fastModeLine(text: string): boolean | null {
 const CATCH_ALL = ['general-purpose', 'claude']
 
 /**
- * Why a dforge session's main loop may not start this agent, or null. A fork
+ * Why a dagents session's main loop may not start this agent, or null. A fork
  * inherits the session's context and model, and an untyped agent given no
  * model inherits the model: the costs typed seats exist to avoid. Workflow
  * agents, teammates, resumes and spawns inside a subagent are not the main
- * loop's dispatch, and nothing is checked before a dforge skill or agent ran.
+ * loop's dispatch, and nothing is checked before a dagents skill or agent ran.
  */
 export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean, forkDrafting: boolean): string | null {
   if (!isPlanSession || spawn.parentAgentId !== undefined || spawn.workflow !== undefined || spawn.isTeammate === true || spawn.resume !== undefined) return null
   if (spawn.fork) {
     if (forkDrafting && spawn.description.startsWith('Draft plan tasks')) return null
-    return "dforge: forks are kept out of dforge sessions. Use dforge:judge-sonnet-high for a read-only check; plans are drafted in the session. See using-dforge §Seats."
+    return "dagents: forks are kept out of dagents sessions. Use dagents:judge-sonnet-high for a read-only check; plans are drafted in the session. See using-dagents §Seats."
   }
   if (CATCH_ALL.includes(spawn.subagentType) && spawn.model === undefined) {
-    return 'dforge: name a seat for this dispatch: dforge:judge-sonnet-high or dforge:judge-opus for a review or read-only check, or pass an explicit model (model: "sonnet") to general-purpose. The session implements plan tasks itself, as the plan\'s Execution line says; an implementer seat such as dforge:impl-sonnet-medium runs only for a deprecated subagent plan. See using-dforge §Seats.'
+    return 'dagents: name a seat for this dispatch: dagents:judge-sonnet-high or dagents:judge-opus for a review or read-only check, or pass an explicit model (model: "sonnet") to general-purpose. The session implements plan tasks itself, as the plan\'s Execution line says; an implementer seat such as dagents:impl-sonnet-medium runs only for a deprecated subagent plan. See using-dagents §Seats.'
   }
   return null
 }
@@ -461,7 +461,7 @@ export type BandInput = {
   usd?: number | null
   /** The main turn while it runs, waits on the person or has failed. */
   turn?: { kind: 'running' | 'waiting' | 'asking' | 'failed'; since: number; tool: string | null } | null
-  /** A dforge run's tasks, and the review round of the task in flight. */
+  /** A dagents run's tasks, and the review round of the task in flight. */
   run?: { done: number; total: number; round: string | null; blocked: number } | null
   /** True while the main conversation's background work runs: the line holding agents, shells or the turn leads with ◐. */
   isBackground?: boolean
@@ -807,12 +807,12 @@ export function statMissing(error: unknown, isAboveDir: boolean): boolean {
  * directory; any other name under each checkout. The session's checkout comes
  * first. A ledger written before 4.0.0 cites its plan as docs/forge/<rest>,
  * or before 3.0.0 as docs/superpowers/<rest>; both still name
- * docs/dforge/<rest>: ledgers are never rewritten.
+ * docs/dagents/<rest>: ledgers are never rewritten.
  */
 export function planCandidates(plan: string, docs: CockpitRoots['docs'] | null, checkouts: readonly { root: string; docsDir: string }[]): string[] {
   if (isAbsolutePath(plan)) return [plan]
   const name = plan.replace(/^\.\//, '')
-  const doc = /^docs\/(?:dforge|forge|superpowers)(?:\/(.*))?$/.exec(name)
+  const doc = /^docs\/(?:dagents|forge|superpowers)(?:\/(.*))?$/.exec(name)
   const under = (dir: string) => (doc?.[1] ? `${dir}/${doc[1]}` : dir)
   if (doc && docs?.store === 'darkmem') return [under(docs.root)]
   const seen = new Set<string>()
@@ -897,7 +897,7 @@ export function limitForecast(kind: string, percent: number, resetsAt: number | 
   return now + left < resetsAt ? left : 'pace'
 }
 
-/** One task's state in a dforge SDD ledger. */
+/** One task's state in a dagents SDD ledger. */
 export type LedgerTask = {
   n: number
   state: 'assigned' | 'complete' | 'blocked'
@@ -1298,7 +1298,7 @@ export function hasUnresolvedRows(text: string): boolean {
   })
 }
 
-/** finish.json as dforge's finish-choice writes it; null when unreadable. */
+/** finish.json as dagents's finish-choice writes it; null when unreadable. */
 export function parseFinish(text: string): CockpitFinish | null {
   try {
     const raw = JSON.parse(text) as Record<string, unknown>

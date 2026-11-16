@@ -20,10 +20,10 @@ TMP=$(mktemp -d)
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 trap 'rm -rf "$TMP"' EXIT
-export HOME="$TMP/home" MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1
+export HOME="$TMP/home" MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1
 mkdir -p "$HOME/.claude"
-unset DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
-export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=task-step-settle-test
+unset DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
+export DAGENTS_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=task-step-settle-test
 printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 
@@ -53,7 +53,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `lib/new.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Run: `bash check.sh`
@@ -63,7 +63,7 @@ sed 's/^|//' > "$REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `lib/new.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Run: `bash check.sh`
@@ -246,7 +246,7 @@ sed 's/^|//' > "$REPO/docs/named.md" <<'PLAN'
 |**Files:**
 |- Modify: `lib/new.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Run: `bash mark.sh run-first 0` and then `bash mark.sh second-span 0`
@@ -266,7 +266,7 @@ sed 's/^|//' > "$REPO/docs/named.md" <<'PLAN'
 |**Files:**
 |- Modify: `lib/new.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Run: `bash mark.sh task2-run 0`
@@ -368,7 +368,7 @@ check "named spans: the spans name nothing" "$(grep -c '(command not named in th
 
 # A symbol that only a binary file holds is absent, and a root file written ./<name>
 # reads as a path when verdict runs from a subdirectory.
-printf '\n### Task 3: Three\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' >> "$REPO/docs/plan.md"
+printf '\n### Task 3: Three\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' >> "$REPO/docs/plan.md"
 g add -A && g commit -qm "task 3 fixture"
 ts start docs/plan.md 3
 printf 'only_in_blob\0\0' > "$REPO/blob.bin"

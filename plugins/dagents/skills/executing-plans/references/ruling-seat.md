@@ -45,14 +45,14 @@ read only its `## Verdict` section
 (`awk '/^## / { on = ($0 == "## Verdict") } on' <report>`), never the rest.
 Items of several kinds at one point share one
 dispatch, and `<kind>` is then one comma-separated list; the route prints
-`dforge:judge-sonnet-high` when every kind is `cannot-verify` or
-`executor-empty-diff` and no task it names is risk 3, and `dforge:judge-opus`
+`dagents:judge-sonnet-high` when every kind is `cannot-verify` or
+`executor-empty-diff` and no task it names is risk 3, and `dagents:judge-opus`
 otherwise. A delegated task's cannot-verify item that a `check identity:` or
 `check attribution:` line of `scripts/task-step review` answers `clean` goes to
 no seat: log
 `Task <N>: Ruling: cannot-verify — settled by task-step check <name> — none`.
 On any exit 2, dispatch
-`dforge:judge-opus` and say why, quoting its message - except on a
+`dagents:judge-opus` and say why, quoting its message - except on a
 Codex host, where `review-route --ruling` exits 2 on every `Host: codex` plan and the
 seat is the native judge named in Select the host first.
 
@@ -74,7 +74,7 @@ verbatim:
   `task-brief` carries the amendment. On `rejected: …`, make one fresh seat
   dispatch carrying the report path, the entry's id and the rejection output;
   a second rejection is BLOCKED. A Header amendment is confirmed by a second, independent `judge-opus` dispatch
-  before `plan-amend` runs, exactly as dforge:subagent-driven-development
+  before `plan-amend` runs, exactly as dagents:subagent-driven-development
   §The Ruling Seat describes, including its ledger line.
 - **BLOCKED** - log `Task <N>: BLOCKED — ruling seat — <decision>`, name it in
   your final message, and stop.

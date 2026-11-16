@@ -10,8 +10,8 @@ first. Then nothing in this skill waits on your human partner:
   when it is `ask`). In place, write `sequential` whatever the spec says when `scripts/auto-run status` prints `isolation in-place`:
   a wave's checkout must be clean, and the carried paths never are.
 - **An approach or planning choice** you would ask about goes to
-  `dforge:judge-opus` first, then the ladder in auto-run.md §Rulings.
-  dforge:selecting-approaches runs as usual otherwise.
+  `dagents:judge-opus` first, then the ladder in auto-run.md §Rulings.
+  dagents:selecting-approaches runs as usual otherwise.
 - **The executor offer:** tick only what a constraint ticks without asking;
   start no timed question. In place, tick nothing when `scripts/auto-run status` prints `isolation in-place`.
 - **At the review cap,** a Critical finding or a score of 8 or below goes on
@@ -21,7 +21,7 @@ first. Then nothing in this skill waits on your human partner:
   the Fable batch when `scripts/auto-run decision list` prints anything, then
   the switch instead of Execution Handoff: when the spec's `## Decisions`
   holds a `Finish: <action>` line, `scripts/finish-choice set <action> --plan
-  PLAN_FILE`; dforge:handoff steps 0-3 only; `scripts/next-step PLAN_FILE`
+  PLAN_FILE`; dagents:handoff steps 0-3 only; `scripts/next-step PLAN_FILE`
   (on exit 5, wait for or stop what `scripts/in-flight` lists and run it
   again, as auto-run.md §The switch step 3 says);
   then `scripts/auto-run switch` and end the turn with `Auto run: switching`

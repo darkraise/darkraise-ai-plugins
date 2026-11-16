@@ -9,7 +9,7 @@ description: Use before the final whole-branch review or before merging, when th
 
 A project declares what proves a change works, in order, in
 `<docs>/gates.md`. This skill reads that manifest and runs it. Gates
-are **branch level**: they are reached from dforge:finishing-a-development-branch
+are **branch level**: they are reached from dagents:finishing-a-development-branch
 and from [final-review.md](../../reference/final-review.md), never from inside a
 per-task loop, where a five-gate manifest would cost more than the plan. See
 [project-state.md](../../reference/project-state.md).
@@ -47,13 +47,13 @@ sessions read it the same way.
   whatever `Command` returned.
 - **`Tier`:** `task`, `branch` or `sweep`. Absent means `branch`, so a manifest
   written before the field means what it meant before. A `task` gate is the kind
-  dforge:writing-plans offers as a plan's `**Task check:**`; this skill runs
+  dagents:writing-plans offers as a plan's `**Task check:**`; this skill runs
   `task` and `branch` gates alike, in manifest order. A `sweep` gate belongs to
   CI: this skill skips it and prints
   `gate <n> (<title>): skipped — Tier sweep runs in CI`.
 - **`Budget`:** `<seconds>s`, for example `Budget: 900s`. It is read only on the
   gate whose `Command` equals the `**Integration check:**` command of the plan;
-  this skill ignores it, and dforge:closing-a-milestone compares the full
+  this skill ignores it, and dagents:closing-a-milestone compares the full
   suite's duration with it.
 
 A complete example, and a blank skeleton, are in
@@ -92,7 +92,7 @@ red. An `image` gate is never passed off numbers; the numbers say where to look.
    conditional gate for the files the earlier ones touched, in a report that
    reads as correct. State the base in the report. A caller that has not merged
    supplies none, so never wait for one:
-   dforge:finishing-a-development-branch establishes its base in Step 3,
+   dagents:finishing-a-development-branch establishes its base in Step 3,
    after the Step 1 that invokes this skill. The change set is
    `git diff --name-only <base>...HEAD` plus `git status --short`, computed per
    `Repo`, each against its own repository's default branch.
@@ -100,8 +100,8 @@ red. An `image` gate is never passed off numbers; the numbers say where to look.
    After a merge the fork point is HEAD itself, and an empty change set would
    skip every conditional gate. So a caller that has already merged names the
    base instead, as a literal sha (one per `Repo` when the manifest spans
-   several repositories): dforge:finishing-a-development-branch passes the
-   base branch's commit from before its merge, and dforge:closing-a-milestone
+   several repositories): dagents:finishing-a-development-branch passes the
+   base branch's commit from before its merge, and dagents:closing-a-milestone
    passes `all` — a milestone spans many merges, so no one change set covers
    it, and every gate runs, conditional ones included. A computed base equal
    to HEAD with no caller-named base is the same trap: ask, or run every

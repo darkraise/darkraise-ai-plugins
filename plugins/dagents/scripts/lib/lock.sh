@@ -1,7 +1,7 @@
 # Sourced. Locks for a read-modify-write of a shared file: flock where it
 # exists, else a lock directory that records its owner. Defines functions only.
 
-DR_LOCK_TENTHS=${DR_LOCK_TENTHS:-100}
+DAGENTS_LOCK_TENTHS=${DAGENTS_LOCK_TENTHS:-100}
 
 # dr_proc_start PID — when PID's process started, so a reused PID reads as a
 # different process; empty where neither /proc nor `ps -o lstart` exists.
@@ -33,17 +33,17 @@ dr_lock_release() {
   rmdir -- "$1" 2>/dev/null
 }
 
-# dr_lock_old DIR — DIR last changed more than DR_LOCK_STALE_SECONDS ago. A
+# dr_lock_old DIR — DIR last changed more than DAGENTS_LOCK_STALE_SECONDS ago. A
 # claim or a reclaim takes milliseconds, so an ownerless lock or a guard this
 # old was left by a process killed inside it; the margin covers a claimer
 # stopped mid-claim (a suspended job, a sleeping laptop) and a file server's
 # clock skew. Seconds, not find -mmin, whose rounding differs between finds and
 # can hold a writer off for two minutes.
-DR_LOCK_STALE_SECONDS=${DR_LOCK_STALE_SECONDS:-30}
+DAGENTS_LOCK_STALE_SECONDS=${DAGENTS_LOCK_STALE_SECONDS:-30}
 dr_lock_old() {
   local changed
   changed="$(stat -c %Y -- "$1" 2>/dev/null || stat -f %m -- "$1" 2>/dev/null)" || return 1
-  [[ $changed =~ ^[0-9]+$ ]] && [ $(( $(date +%s) - changed )) -gt "$DR_LOCK_STALE_SECONDS" ]
+  [[ $changed =~ ^[0-9]+$ ]] && [ $(( $(date +%s) - changed )) -gt "$DAGENTS_LOCK_STALE_SECONDS" ]
 }
 
 # dr_dir_take DIR — create DIR and hold it: only the shell that creates
@@ -144,8 +144,8 @@ dr_lock_base() {
   name="$(basename "$file")"
   if common="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
     key="$(printf '%s' "$dir/$name" | git -C "$dir" hash-object --stdin)" || return 1
-    mkdir -p -- "$common/dforge/locks" || return 1
-    printf '%s/dforge/locks/%s.%s\n' "$common" "$name" "${key:0:12}"
+    mkdir -p -- "$common/dagents/locks" || return 1
+    printf '%s/dagents/locks/%s.%s\n' "$common" "$name" "${key:0:12}"
   else
     printf '%s/.%s\n' "$dir" "$name"
   fi
@@ -153,30 +153,30 @@ dr_lock_base() {
 
 # dr_locked BASE COMMAND [ARGS…] — run COMMAND in a subshell holding BASE's
 # lock: flock on BASE.lock, else the directory BASE.lockd. Returns COMMAND's
-# status, or 1 when the lock is not had within DR_LOCK_TENTHS tenths or flock
+# status, or 1 when the lock is not had within DAGENTS_LOCK_TENTHS tenths or flock
 # fails for another reason; the message says which.
 dr_locked() {
   local base="$1" status i claimed=0
   shift
-  if command -v "${DFORGE_FLOCK:-flock}" >/dev/null 2>&1; then
+  if command -v "${DAGENTS_FLOCK:-flock}" >/dev/null 2>&1; then
     (
       # 75 is no code flock itself uses, so only a timeout reads as a busy lock.
-      "${DFORGE_FLOCK:-flock}" -w $(( (DR_LOCK_TENTHS + 9) / 10 )) -E 75 9
+      "${DAGENTS_FLOCK:-flock}" -w $(( (DAGENTS_LOCK_TENTHS + 9) / 10 )) -E 75 9
       status=$?
       case $status in
         0) ;;
-        75) echo "dforge: $base is locked by another process" >&2; exit 1 ;;
-        *) echo "dforge: cannot lock $base (flock exited $status)" >&2; exit 1 ;;
+        75) echo "dagents: $base is locked by another process" >&2; exit 1 ;;
+        *) echo "dagents: cannot lock $base (flock exited $status)" >&2; exit 1 ;;
       esac
       "$@"
     ) 9>>"$base.lock"
     return
   fi
-  for ((i = 0; i <= DR_LOCK_TENTHS; i++)); do
+  for ((i = 0; i <= DAGENTS_LOCK_TENTHS; i++)); do
     if dr_lock_take "$base.lockd"; then claimed=1; break; fi
-    [ "$i" -eq "$DR_LOCK_TENTHS" ] || sleep 0.1
+    [ "$i" -eq "$DAGENTS_LOCK_TENTHS" ] || sleep 0.1
   done
-  [ "$claimed" -eq 1 ] && dr_lock_claim "$base.lockd" || { echo "dforge: $base is locked by another process" >&2; return 1; }
+  [ "$claimed" -eq 1 ] && dr_lock_claim "$base.lockd" || { echo "dagents: $base is locked by another process" >&2; return 1; }
   ( "$@" )
   status=$?
   dr_lock_release "$base.lockd"

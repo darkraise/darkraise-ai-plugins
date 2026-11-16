@@ -88,7 +88,7 @@ check "enter: refuses the primary checkout" "$status" "2"
 # A mark that cannot be written leaves the worktree where it was, not detached
 # and unmarked, which `wave clean` would skip without a word.
 git worktree add -q -b markfail "$TMP/wt-markfail" main
-touch "$(git -C "$TMP/wt-markfail" rev-parse --absolute-git-dir)/dforge"
+touch "$(git -C "$TMP/wt-markfail" rev-parse --absolute-git-dir)/dagents"
 out=$(cd "$TMP/wt-markfail" && bash "$WAVE" enter "$REPO/docs/plan.md" 2 "$BASE" 2>&1); status=$?
 check "enter: a mark that cannot be written exits 2" "$status" "2"
 check "enter: and the worktree is not left detached" "$(git -C "$TMP/wt-markfail" branch --show-current)" "markfail"

@@ -1,7 +1,7 @@
-// The moves from dforge's older darkmem names to its own: the homes
-// ~/.dr-superpowers/ and ~/.dr-forge/ to ~/.dforge/, a mirror's superpowers/
-// or forge/ folder and sync state uris to dforge/, and darkmem's superpowers/
-// and forge/ documents to dforge/. The only module besides the document-name
+// The moves from dagents's older darkmem names to its own: the homes
+// ~/.dr-superpowers/ and ~/.dr-forge/ to ~/.dagents/, a mirror's superpowers/
+// or forge/ folder and sync state uris to dagents/, and darkmem's superpowers/
+// and forge/ documents to dagents/. The only module besides the document-name
 // translation that reads the old names.
 import fs from "node:fs";
 import os from "node:os";
@@ -9,7 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { HttpError } from "./darkmem-client.mjs";
 import { DOC_PREFIX, LEGACY_PREFIX, StateError, acquireLock, loadState, saveState } from "./darkmem-mirror.mjs";
-import { withHomeLock } from "./dforge-config.mjs";
+import { withHomeLock } from "./dagents-config.mjs";
 
 // dr-superpowers wrote superpowers/, dr-forge forge/.
 export const OLD_PREFIXES = [LEGACY_PREFIX, "forge"];
@@ -85,8 +85,8 @@ export function migrateMirrorLocked(mirror) {
 }
 
 // darkmem's half, once per mirror: every superpowers/ and forge/ document
-// moves to the same name under dforge/, under its own hash. A name darkmem
-// already holds under dforge/ is a failure, never overwritten. Answers the
+// moves to the same name under dagents/, under its own hash. A name darkmem
+// already holds under dagents/ is a failure, never overwritten. Answers the
 // failure lines; state.prefix is set only when there are none.
 export async function migrateServer({ cfg, client, state, persist }) {
   if (state.prefix === DOC_PREFIX) return [];
@@ -143,10 +143,10 @@ function sameFile(a, b) {
   }
 }
 
-// The home's half, run by scripts/dforge-migrate. ~/.dr-forge/ becomes
-// ~/.dforge/: renamed whole when ~/.dforge/ is absent, otherwise entry by
+// The home's half, run by scripts/dagents-migrate. ~/.dr-forge/ becomes
+// ~/.dagents/: renamed whole when ~/.dagents/ is absent, otherwise entry by
 // entry, its config.json merged key by key. ~/.dr-superpowers/ then gives
-// ~/.dforge/config.json its darkmem mapping when that file has none, and each
+// ~/.dagents/config.json its darkmem mapping when that file has none, and each
 // mirror the new home lacks. stores.json follows every mirror that moved, and
 // every mirror gets its local half. The old files stay wherever something was
 // refused. With dryRun nothing is written and each line says what would
@@ -155,7 +155,7 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   const home = env.HOME || os.homedir();
   const forgeHome = path.join(home, ".dr-forge");
   const oldHome = path.join(home, ".dr-superpowers");
-  const newHome = path.join(home, ".dforge");
+  const newHome = path.join(home, ".dagents");
   const lines = [];
   let refused = 0;
   const refuse = line => {
@@ -179,7 +179,7 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
     try {
       return readJson(file);
     } catch (error) {
-      if (!badConfigs.has(file)) refuse(`${error.message}; fix or delete it, then run dforge-migrate again`);
+      if (!badConfigs.has(file)) refuse(`${error.message}; fix or delete it, then run dagents-migrate again`);
       badConfigs.add(file);
       return UNREADABLE;
     }
@@ -208,12 +208,12 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
           const bad = [[from, old], [to, next]].find(([, value]) => notObject(value));
           if (bad) {
             badConfigs.add(bad[0]);
-            refuse(`${bad[0]} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
+            refuse(`${bad[0]} does not hold a JSON object; fix or delete it, then run dagents-migrate again`);
             return;
           }
           const clash = Object.keys(old).filter(key => key in next && JSON.stringify(old[key]) !== JSON.stringify(next[key]));
           if (clash.length) {
-            refuse(`${from} and ${to} set ${clash.join(", ")} differently; keep one value in ${to} and delete it from ${from}, then run dforge-migrate again`);
+            refuse(`${from} and ${to} set ${clash.join(", ")} differently; keep one value in ${to} and delete it from ${from}, then run dagents-migrate again`);
             return;
           }
           const copied = Object.keys(old).filter(key => !(key in next));
@@ -240,7 +240,7 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
               if (!dryRun) fs.rmSync(source);
               did(`dropped ${source}, the same as ${target}`, `would drop ${source}, the same as ${target}`);
             } else {
-              refuse(`${source} differs from ${target}; keep one by hand, then run dforge-migrate again`);
+              refuse(`${source} differs from ${target}; keep one by hand, then run dagents-migrate again`);
             }
             continue;
           }
@@ -267,7 +267,7 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
         did(`dropped ${from}, the same as ${to}`, `would drop ${from}, the same as ${to}`);
         continue;
       }
-      refuse(`${from} differs from ${to}; keep one by hand, then run dforge-migrate again`);
+      refuse(`${from} differs from ${to}; keep one by hand, then run dagents-migrate again`);
     }
     if (!dryRun) {
       for (const dir of [path.join(forgeHome, "mirror"), forgeHome]) {
@@ -291,13 +291,13 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
       const current = (dryRun && merged) ? { ...merged } : readOrRefuse(source);
       const config = current ?? {};
       if (current === UNREADABLE || (current !== undefined && notObject(current))) {
-        if (!badConfigs.has(source)) refuse(`${source} does not hold a JSON object; fix or delete it, then run dforge-migrate again`);
+        if (!badConfigs.has(source)) refuse(`${source} does not hold a JSON object; fix or delete it, then run dagents-migrate again`);
       } else if (config.darkmem === undefined) {
         config.darkmem = oldConfig.darkmem;
         if (!dryRun) writeJson(file, config);
         did(`copied the darkmem mapping from ${path.join(oldHome, "config.json")} into ${file}`,
           `would copy the darkmem mapping from ${path.join(oldHome, "config.json")} into ${file}`);
-        if (config.darkmemEnabled === undefined) lines.push("darkmem is off until you turn it on: bash <plugin-root>/scripts/dforge-config set darkmemEnabled true");
+        if (config.darkmemEnabled === undefined) lines.push("darkmem is off until you turn it on: bash <plugin-root>/scripts/dagents-config set darkmemEnabled true");
       } else {
         lines.push(`${file} already has a darkmem section; ${path.join(oldHome, "config.json")} was not copied`);
       }
@@ -395,10 +395,10 @@ function isMain() {
 if (isMain()) {
   try {
     const { lines, refused } = migrateHome(process.env, { dryRun: process.argv.includes("--dry-run") });
-    for (const line of lines) process.stdout.write(`dforge-home-migrate: ${line}\n`);
+    for (const line of lines) process.stdout.write(`dagents-home-migrate: ${line}\n`);
     process.exitCode = refused ? 1 : 0;
   } catch (error) {
-    process.stderr.write(`dforge-home-migrate: ${error.message}\n`);
+    process.stderr.write(`dagents-home-migrate: ${error.message}\n`);
     process.exitCode = 1;
   }
 }

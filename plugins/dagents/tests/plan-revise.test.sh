@@ -72,7 +72,7 @@ check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
 mktask() { # mktask <files> <spec> <coupling> <risk> <total> — the Implementer the ladder gives the total
   local agent=impl-sonnet-low
   case $5 in 3|4) agent=impl-sonnet-medium ;; 5) agent=impl-sonnet-high ;; 6|7|8) agent=impl-opus-high ;; esac
-  printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dforge:%s\n**Evaluation:** files %s - spec %s - coupling %s - risk %s = %s\n' "$agent" "$@"
+  printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dagents:%s\n**Evaluation:** files %s - spec %s - coupling %s - risk %s = %s\n' "$agent" "$@"
 }
 
 # --- the gate boundaries, read from the shipped ladder ---
@@ -129,12 +129,12 @@ cat "$HERE/../reference/ladder.md" "$HERE/fixtures/stub-ladder.md" > "$STUBLADDE
 hdr '
 > **External executors:** codex stub
 ' "$(mktask 1 0 1 0 2)"
-out=$( (cd "$REPO" && DR_EXECUTORS_DIR="$FIXREG" DR_PLAN_REVISE_LADDER="$STUBLADDER" bash "$SCRIPT" docs/p.md) | grep -m 1 '^unit')
+out=$( (cd "$REPO" && DAGENTS_EXECUTORS_DIR="$FIXREG" DAGENTS_PLAN_REVISE_LADDER="$STUBLADDER" bash "$SCRIPT" docs/p.md) | grep -m 1 '^unit')
 check "every ticked executor that admits the unit is listed" \
   "$(field rungs "$out" | tr ',' '\n' | cut -d: -f1 | sort | tr '\n' ' ')" "codex stub "
 
 # --- units, parts and the states a score can be in ---
-plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n#### Part A: a\n\n**Files:**\n- Create: `a`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n#### Part A: a\n\n**Files:**\n- Create: `a`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 check "a split task yields one unit per part" "$(run | grep -c '^unit')" "2"
 check "a part unit is named with its letter" "$(run | sed -n 's/^unit \([0-9A-Z]*\).*/\1/p' | tr '\n' ' ')" "1A 1B "
 
@@ -143,7 +143,7 @@ plan '### Task 1: One
 **Files:**
 - Create: `x`
 
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dagents:impl-sonnet-medium
 '
 out=$(unit1)
 check "no score reports a dash" "$(field score "$out")" "-"
@@ -162,7 +162,7 @@ check "an unparseable score gates unknown" "$(field gate "$out")" "unknown"
 
 # axes must aggregate exactly as plan_scores does: the highest total and the
 # highest risk independently, not the risk that happens to sit on the top line.
-plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dforge:impl-sonnet-medium\n**Evaluation:** files 1 - spec 1 - coupling 1 - risk 0 = 3\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 2 = 2\n')"
+plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dagents:impl-sonnet-medium\n**Evaluation:** files 1 - spec 1 - coupling 1 - risk 0 = 3\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 2 = 2\n')"
 out=$(unit1)
 check "the highest total wins" "$(field score "$out")" "3"
 check "the highest risk wins independently" "$(field risk "$out")" "2"
@@ -200,7 +200,7 @@ check "both ticked: a risk-3 unit is admitted by neither" "$(field gate "$(unit1
 check "both ticked: a risk-3 unit has no rung" "$(field rungs "$(unit1)")" ""
 
 # The selection is a header line. A fenced example in a task body is not it.
-plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n> **External executors:** stub\n```\n')"
+plan "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n> **External executors:** stub\n```\n')"
 check "a fenced executors line is not the selection" "$(field executors "$(run | grep '^header')")" "codex"
 
 printf '# Bare Plan\n\n### Task 1: One\n\n**Files:**\n- Create: `x`\n\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n' > "$REPO/docs/p.md"
@@ -263,7 +263,7 @@ mkdir -p "$SUR/docs"
 git -C "$SUR" init -q
 git -C "$SUR" config user.email t@t
 git -C "$SUR" config user.name t
-survey() { (cd "$SUR" && DR_EXECUTORS_DIR="$FIXREG" bash "$SCRIPT" --survey docs); }
+survey() { (cd "$SUR" && DAGENTS_EXECUTORS_DIR="$FIXREG" bash "$SCRIPT" --survey docs); }
 row() { survey | grep -m 1 "^plan  $1"; }
 splan() { # splan <name> <body>
   printf '# P\n\n**Execution:** inline — `claude --model sonnet --effort high` — x\n\n### Task 1: One\n\n**Files:**\n- Create: `x`\n\n%s\n' "$2" > "$SUR/docs/$1.md"
@@ -300,14 +300,14 @@ rm -f "$SUR/docs/relaxed.md" "$SUR/docs/wide.md"
 # --- liveness precedence ---
 check "no ledger and no completed entry is unknown" "$(field live "$(row scored)")" "unknown"
 
-mkdir -p "$SUR/.dforge/sdd/scored"
+mkdir -p "$SUR/.dagents/sdd/scored"
 printf '# SDD ledger — plan: docs/scored.md\nTask 1: complete (x)\n' \
-  > "$SUR/.dforge/sdd/scored/progress.md"
+  > "$SUR/.dagents/sdd/scored/progress.md"
 check "a ledger naming the plan is live" "$(field live "$(row scored)")" "yes"
 
-printf '# SDD ledger — plan: docs/other.md\n' > "$SUR/.dforge/sdd/scored/progress.md"
+printf '# SDD ledger — plan: docs/other.md\n' > "$SUR/.dagents/sdd/scored/progress.md"
 check "a ledger naming another plan is not this plan's" "$(field live "$(row scored)")" "unknown"
-rm -rf "$SUR/.dforge"
+rm -rf "$SUR/.dagents"
 
 # completed.md names the plan by its recorded path, so a shorter basename that
 # is a substring of a longer one must not match it.
@@ -321,10 +321,10 @@ check "a via-PR entry is unknown, not done" "$(field live "$(row scored)")" "unk
 printf -- '- 2026-09-20 `docs/scored.md` — merged into `main` at abc1234\n- 2026-09-21 `docs/scored.md` — via PR\n' > "$SUR/docs/completed.md"
 check "merged outranks a later via-PR entry" "$(field live "$(row scored)")" "no"
 
-mkdir -p "$SUR/.dforge/sdd/scored"
-printf '# SDD ledger — plan: docs/scored.md\n' > "$SUR/.dforge/sdd/scored/progress.md"
+mkdir -p "$SUR/.dagents/sdd/scored"
+printf '# SDD ledger — plan: docs/scored.md\n' > "$SUR/.dagents/sdd/scored/progress.md"
 check "a ledger outranks a completed entry" "$(field live "$(row scored)")" "yes"
-rm -rf "$SUR/.dforge"
+rm -rf "$SUR/.dagents"
 rm -f "$SUR/docs/completed.md"
 
 # A ledger may live in a linked worktree while the plan is read from the primary
@@ -333,8 +333,8 @@ rm -f "$SUR/docs/completed.md"
 git -C "$SUR" add -A >/dev/null 2>&1
 git -C "$SUR" commit -qm base >/dev/null 2>&1
 git -C "$SUR" worktree add -q "$TMP/wt" -b feature >/dev/null 2>&1
-mkdir -p "$TMP/wt/.dforge/sdd/scored"
-printf '# SDD ledger — plan: docs/scored.md\n' > "$TMP/wt/.dforge/sdd/scored/progress.md"
+mkdir -p "$TMP/wt/.dagents/sdd/scored"
+printf '# SDD ledger — plan: docs/scored.md\n' > "$TMP/wt/.dagents/sdd/scored/progress.md"
 check "a ledger in a linked worktree is found" "$(field live "$(row scored)")" "yes"
 # Git reports native paths on Windows; mktemp uses Git Bash's POSIX spelling.
 WT_ROOT="$(git -C "$TMP/wt" rev-parse --show-toplevel)"
@@ -362,19 +362,19 @@ SR="$TMP/stores-repo"
 git init -q "$SR"
 git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/dforge/plans" "$M/work/sdd/mp"
-printf '**Goal:** demo\n\n### Task 1: One\n' > "$M/dforge/plans/mp.md"
-printf '# SDD ledger — plan: docs/dforge/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
-row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/dforge/plans" | grep '^plan  mp\.md')
+mkdir -p "$M/dagents/plans" "$M/work/sdd/mp"
+printf '**Goal:** demo\n\n### Task 1: One\n' > "$M/dagents/plans/mp.md"
+printf '# SDD ledger — plan: docs/dagents/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
+row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/dagents/plans" | grep '^plan  mp\.md')
 check "darkmem survey: live" "$(field live "$row")" "yes"
 check "darkmem survey: the evidence names the mirror" "$(grep -c 'ledger in mirror' <<<"$row")" "1"
 
 printf '# SDD ledger — plan: docs/superpowers/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
-row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/dforge/plans" | grep '^plan  mp\.md')
+row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/dagents/plans" | grep '^plan  mp\.md')
 check "darkmem survey: a ledger under the other prefix is live" "$(field live "$row")" "yes"
 rm -f "$M/work/sdd/mp/progress.md"
-printf -- '- 2026-10-13 `docs/superpowers/plans/mp.md` — merged into `main` at abc1234\n' > "$M/dforge/plans/completed.md"
-row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/dforge/plans" | grep '^plan  mp\.md')
+printf -- '- 2026-10-13 `docs/superpowers/plans/mp.md` — merged into `main` at abc1234\n' > "$M/dagents/plans/completed.md"
+row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/dagents/plans" | grep '^plan  mp\.md')
 check "darkmem survey: a completed entry under the other prefix" "$(field live "$row")" "no"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

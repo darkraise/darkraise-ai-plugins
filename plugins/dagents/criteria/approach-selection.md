@@ -1,6 +1,6 @@
 # Approach Selection - Verifier Criteria
 
-Applied by dforge:selecting-approaches when a judge ranks
+Applied by dagents:selecting-approaches when a judge ranks
 candidate approaches pairwise.
 
 ## Ground Truth Note

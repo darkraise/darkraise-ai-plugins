@@ -1,6 +1,6 @@
 # Architecture Critique - Review Criteria
 
-Applied by dforge:brainstorming on the architectural path, after the spec
+Applied by dagents:brainstorming on the architectural path, after the spec
 self-review and before the spec review. These are review lenses, not a scored
 rubric: the prompt asks for ranked findings.
 

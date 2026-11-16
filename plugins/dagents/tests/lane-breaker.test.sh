@@ -23,9 +23,9 @@ unset CLAUDE_CONFIG_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
-mkdir -p "$REPO/docs" "$REPO/.dforge/sdd/plan"
+mkdir -p "$REPO/docs" "$REPO/.dagents/sdd/plan"
 printf '# Breaker Fixture Plan\n\n### Task 1: One\n\n**Files:**\n- Create: `a.txt`\n' > "$REPO/docs/plan.md"
-LEDGER="$REPO/.dforge/sdd/plan/progress.md"
+LEDGER="$REPO/.dagents/sdd/plan/progress.md"
 PLAN="$REPO/docs/plan.md"
 
 ledger() { printf '%s\n' '# SDD ledger — plan: docs/plan.md' "$@" > "$LEDGER"; }

@@ -21,7 +21,7 @@ dr_task_open "$fixture/primary" task-1 "$fixture/scope.json" 2>/dev/null
 check 'primary checkout is rejected' "$?" 2
 dr_task_open "$fixture/work" task-1 "$fixture/scope.json"
 check 'linked clean worktree is accepted' "$?" 0
-check 'task starts ready' "$(jq -r .phase "$DR_TASK_DIR/state.json")" ready
+check 'task starts ready' "$(jq -r .phase "$DAGENTS_TASK_DIR/state.json")" ready
 dr_snapshot "$fixture/work" "$fixture/before.json"
 printf 'unrelated\n' > "$fixture/work/unrelated.txt"
 dr_task_assert_snapshot "$fixture/before.json" >/dev/null 2>&1
@@ -49,7 +49,7 @@ dr_task_unlock
 
 # A runner killed outright leaves its lock behind; the next run on the same
 # host reclaims it once the recorded process is gone, and only then.
-lock="$DR_TASK_ROOT/run.lock"
+lock="$DAGENTS_TASK_ROOT/run.lock"
 bash -c 'exit 0' & dead=$!; wait "$dead"
 mkdir "$lock" && printf '%s\n' "$dead" > "$lock/pid" && uname -n > "$lock/host" && : > "$lock/start"
 dr_task_open "$fixture/work" task-1 "$fixture/scope.json" 2>/dev/null
@@ -74,16 +74,16 @@ check 'persistent owner survives unlocking' "$?" 2
 dr_task_open "$fixture/work" task-1 "$fixture/scope.json"
 check 'same task can reopen after unlock' "$?" 0
 dr_task_unlock
-printf '{broken' > "$DR_TASK_DIR/state.json"
+printf '{broken' > "$DAGENTS_TASK_DIR/state.json"
 (dr_task_open "$fixture/work" task-1 "$fixture/scope.json") >/dev/null 2>&1
 check 'malformed state cannot become a fresh task' "$?" 2
 
-# The pre-3.0 dr-superpowers task directory is left to scripts/dforge-migrate.
+# The pre-3.0 dr-superpowers task directory is left to scripts/dagents-migrate.
 git -C "$fixture/primary" worktree add -q -b legacy "$fixture/legacy"
 legacy_gitdir="$(git -C "$fixture/legacy" rev-parse --absolute-git-dir)"
 mkdir -p "$legacy_gitdir/dr-superpowers"
 dr_task_open "$fixture/legacy" task-1 "$fixture/scope.json"
-check 'a pre-3.0 dr-superpowers task directory is not used' "$DR_TASK_ROOT" "$(dr_canonical "$legacy_gitdir")/dforge"
+check 'a pre-3.0 dr-superpowers task directory is not used' "$DAGENTS_TASK_ROOT" "$(dr_canonical "$legacy_gitdir")/dagents"
 dr_task_unlock
 
 # Batched JSON serialization must preserve filenames and deleted entries.

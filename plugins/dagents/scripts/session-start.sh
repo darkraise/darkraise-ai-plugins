@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SessionStart hook: inject the using-dforge entry point, persist the
+# SessionStart hook: inject the using-dagents entry point, persist the
 # session's transcript path for the budget tooling, and on the compact source
 # append the compaction snapshot (scripts/lib/snapshot.sh). Injection must
 # survive a missing jq or malformed stdin; persistence and the snapshot's
@@ -22,7 +22,7 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
   # Every record below lives under $HOME; with HOME empty its paths would start
   # at /.claude, so nothing is persisted.
   if [ -n "${HOME:-}" ] && [ -n "$transcript_path" ] && [ -n "$cwd" ]; then
-    sessions_dir="${HOME:-}/.claude/dforge/sessions"
+    sessions_dir="${HOME:-}/.claude/dagents/sessions"
     key=$(printf '%s' "$cwd" | tr -c 'A-Za-z0-9' '-')
     # Git Bash rewrites POSIX-looking values passed as native-binary arguments;
     # every --arg here is opaque data, so suppress the conversion.
@@ -48,7 +48,7 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
   # ar_beat_file) with $.fs.write, which need not create a directory, so a
   # start that records no session makes it too.
   if [ -n "${HOME:-}" ]; then
-    cockpit_dir="$HOME/.claude/dforge/sessions/cockpit"
+    cockpit_dir="$HOME/.claude/dagents/sessions/cockpit"
     mkdir -p "$cockpit_dir" 2>/dev/null || true
     find "$cockpit_dir" -maxdepth 1 -type f -mtime +30 -delete 2>/dev/null || true
   fi
@@ -57,15 +57,15 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
   # launches after this time as running.
   case "$source_event" in
     startup | resume)
-      if [ -n "${HOME:-}" ] && [ -n "$session_id" ] && mkdir -p "${HOME:-}/.claude/dforge/sessions/turns" 2>/dev/null; then
+      if [ -n "${HOME:-}" ] && [ -n "$session_id" ] && mkdir -p "${HOME:-}/.claude/dagents/sessions/turns" 2>/dev/null; then
         date -u +%Y-%m-%dT%H:%M:%S.000Z \
-          > "${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').since" 2>/dev/null || true
+          > "${HOME:-}/.claude/dagents/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').since" 2>/dev/null || true
       fi
       ;;
   esac
 fi
 
-content="$(cat "${PLUGIN_ROOT}/skills/using-dforge/SKILL.md" 2>/dev/null || true)"
+content="$(cat "${PLUGIN_ROOT}/skills/using-dagents/SKILL.md" 2>/dev/null || true)"
 [ -n "$content" ] || exit 0
 
 # Escape for JSON embedding with bash parameter substitution (single C-level
@@ -85,15 +85,15 @@ escaped=$(escape_for_json "$content")
 # the project; this line is where the root is named.
 plugin_root_shown=$PLUGIN_ROOT
 if command -v cygpath >/dev/null 2>&1; then plugin_root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
-context="<EXTREMELY_IMPORTANT>\nYou have dforge.\n\n**Below is the full content of your 'dforge:using-dforge' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${escaped}\n\nPlugin root: $(escape_for_json "$plugin_root_shown") — call scripts by this path, with the working directory inside the project\n</EXTREMELY_IMPORTANT>"
+context="<EXTREMELY_IMPORTANT>\nYou have dagents.\n\n**Below is the full content of your 'dagents:using-dagents' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${escaped}\n\nPlugin root: $(escape_for_json "$plugin_root_shown") — call scripts by this path, with the working directory inside the project\n</EXTREMELY_IMPORTANT>"
 
 # A greenfield project's position: one line computed from its roadmap, so a
 # fresh or compacted session never has to remember which milestone it is in or
 # which epic is still open. Anything that fails here injects nothing extra.
 roadmap_line=""
 roadmap_root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null || true)
-[ -z "$roadmap_root" ] || dforge_state_ignore "$roadmap_root"
-if [ -n "$roadmap_root" ] && [ -f "$(dforge_docs_root "$roadmap_root")/roadmap.md" ]; then
+[ -z "$roadmap_root" ] || dagents_state_ignore "$roadmap_root"
+if [ -n "$roadmap_root" ] && [ -f "$(dagents_docs_root "$roadmap_root")/roadmap.md" ]; then
   roadmap_line=$(bash "${SCRIPT_DIR}/roadmap" status --root "$roadmap_root" --line 2>/dev/null \
     | head -n 1 | tr -d '\001-\010\013\014\016-\037' || true)
   if [ -n "$roadmap_line" ]; then
@@ -102,21 +102,21 @@ if [ -n "$roadmap_root" ] && [ -f "$(dforge_docs_root "$roadmap_root")/roadmap.m
 fi
 
 # The workflow settings that differ from their defaults, as one line the skills
-# read where they would otherwise ask (scripts/dforge-config workflow). Without
+# read where they would otherwise ask (scripts/dagents-config workflow). Without
 # Node, or with a settings file that cannot be read, nothing is added.
-settings_line=$(bash "${SCRIPT_DIR}/dforge-config" workflow 2>/dev/null \
+settings_line=$(bash "${SCRIPT_DIR}/dagents-config" workflow 2>/dev/null \
   | head -n 1 | tr -d '\001-\010\013\014\016-\037\r' || true)
 if [ -n "$settings_line" ]; then
   context="${context}\n\n$(escape_for_json "$settings_line")"
 fi
 
-# dforge reads none of the older names, so a repository that still has them
+# dagents reads none of the older names, so a repository that still has them
 # would split its work between the old directories and the new ones unnoticed.
 legacy_line=""
 if [ -n "$roadmap_root" ]; then
-  legacy=$(dforge_legacy_layout "$roadmap_root" | paste -sd, - | sed 's/,/, /g' | tr -d '\001-\037')
+  legacy=$(dagents_legacy_layout "$roadmap_root" | paste -sd, - | sed 's/,/, /g' | tr -d '\001-\037')
   if [ -n "$legacy" ]; then
-    legacy_line="dforge: this repository still uses an older layout ($legacy); run the dforge:migrate skill (/dforge:migrate)"
+    legacy_line="dagents: this repository still uses an older layout ($legacy); run the dagents:migrate skill (/dagents:migrate)"
     context="${context}\n\n$(escape_for_json "$legacy_line")"
   fi
 fi

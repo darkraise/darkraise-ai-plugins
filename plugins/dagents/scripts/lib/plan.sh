@@ -79,10 +79,10 @@ plan_primary_root() {
 
 # ladder_block TAG — the lines of reference/ladder.md's ```TAG fenced block,
 # blank lines dropped.
-# DR_LADDER is a test seam: a suite that needs a fixture executor's blocks
+# DAGENTS_LADDER is a test seam: a suite that needs a fixture executor's blocks
 # points it at the shipped ladder plus its own. Unset in production.
 ladder_block() {
-  tr -d '\r' < "${DR_LADDER:-$_PLAN_LIB_DIR/../../reference/ladder.md}" \
+  tr -d '\r' < "${DAGENTS_LADDER:-$_PLAN_LIB_DIR/../../reference/ladder.md}" \
     | awk -v tag="$1" 'stop { next } $0 == "```" tag { f = 1; next } f && /^```/ { stop = 1; next } f && NF { print }'
 }
 
@@ -326,7 +326,7 @@ plan_task_depends() {
 _plan_ctx() {
   local dir mirror physical
   dir=$(dirname "$1")
-  mirror=$(cd "${HOME:-}/.dforge/mirror" 2>/dev/null && pwd -P) || mirror=""
+  mirror=$(cd "${HOME:-}/.dagents/mirror" 2>/dev/null && pwd -P) || mirror=""
   physical=$(cd "$dir" 2>/dev/null && pwd -P) || physical=""
   if [ -n "$mirror" ] && [ -n "$physical" ]; then
     case "$physical/" in "$mirror"/*) printf '%s\n' "$PWD"; return 0 ;; esac
@@ -339,12 +339,12 @@ _plan_ctx() {
 plan_locate() {
   local found name ctx
   ctx=$(_plan_ctx "$1")
-  dforge_stores_init "$ctx"
-  name=$(dforge_name "$1" "$ctx")
-  found=$(dforge_resolve "$name" "$ctx")
-  if [ "$_DFORGE_DOCS_STORE" = darkmem ]; then
-    case $(dforge_name_key "$name") in
-      docs/dforge/*)
+  dagents_stores_init "$ctx"
+  name=$(dagents_name "$1" "$ctx")
+  found=$(dagents_resolve "$name" "$ctx")
+  if [ "$_DAGENTS_DOCS_STORE" = darkmem ]; then
+    case $(dagents_name_key "$name") in
+      docs/dagents/*)
         if [ -f "$found" ] || [ -f "$1" ]; then printf '%s\n' "$found"; return 0; fi ;;
     esac
   fi
@@ -361,16 +361,16 @@ plan_ledger() {
   local ctx want file named
   ctx=$(_plan_ctx "$1")
   # In this shell, so a ConfigError exits the caller rather than a $(…) below.
-  dforge_stores_init "$ctx"
-  want=$(dforge_name_key "$(dforge_name "$1" "$ctx")")
-  file="$(dforge_ledger_dir "$(basename "$1" .md)" "$ctx")/progress.md"
+  dagents_stores_init "$ctx"
+  want=$(dagents_name_key "$(dagents_name "$1" "$ctx")")
+  file="$(dagents_ledger_dir "$(basename "$1" .md)" "$ctx")/progress.md"
   [ -f "$file" ] || return 0
   named=$(ledger_plan "$file")
   [ -n "$named" ] || return 0
   if command -v cygpath >/dev/null 2>&1; then
     named=$(cygpath -m "$named" 2>/dev/null || printf '%s' "$named")
   fi
-  [ "$(dforge_name_key "$(dforge_name "$named" "$ctx")")" != "$want" ] || printf '%s\n' "$file"
+  [ "$(dagents_name_key "$(dagents_name "$named" "$ctx")")" != "$want" ] || printf '%s\n' "$file"
   return 0
 }
 
@@ -455,7 +455,7 @@ plan_amendments_file() {
   local ctx file
   ctx=$(_plan_ctx "$1")
   git -C "$ctx" rev-parse --show-toplevel >/dev/null 2>&1 || return 0
-  file="$(dforge_workspace "$(basename "$1" .md)" "$ctx")/amendments.md"
+  file="$(dagents_workspace "$(basename "$1" .md)" "$ctx")/amendments.md"
   [ -s "$file" ] && printf '%s\n' "$file"
   return 0
 }
@@ -475,10 +475,10 @@ plan_require_same_project() {
     || { printf '%s: not inside a git repository\n' "$me" >&2; exit 2; }
   plan_top=$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null) || plan_top=""
   [ "$plan_top" != "$cwd_top" ] || return 0
-  dforge_stores_init
-  if [ "$_DFORGE_DOCS_STORE" = darkmem ]; then
+  dagents_stores_init
+  if [ "$_DAGENTS_DOCS_STORE" = darkmem ]; then
     dir=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P) || dir=""
-    docs=$(cd "$_DFORGE_DOCS_ROOT" 2>/dev/null && pwd -P) || docs=""
+    docs=$(cd "$_DAGENTS_DOCS_ROOT" 2>/dev/null && pwd -P) || docs=""
     if [ -n "$dir" ] && [ -n "$docs" ]; then
       case "$dir/" in "$docs"/*) return 0 ;; esac
     fi

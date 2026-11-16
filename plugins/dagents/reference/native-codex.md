@@ -2,7 +2,7 @@
 
 This policy applies only when the active host exposes native Codex agent tools.
 Identify the host from callable tool schemas, never from a `codex` executable.
-If the host is ambiguous, required dforge skills are missing, or model and
+If the host is ambiguous, required dagents skills are missing, or model and
 effort capabilities are not advertised, stop with the missing prerequisite.
 Shared skill invocation activates this path; no Claude `Skill` hook is needed.
 
@@ -151,7 +151,7 @@ A Codex plan therefore carries no delegated task, and `scripts/task-brief`
 writes it no `**Dispatch:**` or `**Review:**` line. A task whose `**Evaluation:**` line
 reads `risk=3` is reviewed by hand with a native judge at Astra high or above
 ([delegated-task.md](delegated-task.md) §The session review loop); otherwise
-dforge:executing-plans dispatches nothing here but its ruling seat and the
+dagents:executing-plans dispatches nothing here but its ruling seat and the
 final review.
 
 The Execution pair runs the main session, so it is sized to what that session
@@ -317,7 +317,7 @@ uncapped. For the final review, read each `criteria/lenses/*.md` `Applies:`
 line against the branch diff and run the matching lenses in priority order
 (security, ui-ux, silent-failures, test-quality, the `lang-*` lenses
 alphabetically, type-design, docs-comments), at most `lensCap` of them
-(`scripts/dforge-config get lensCap`; `0` runs none), and name the rest as
+(`scripts/dagents-config get lensCap`; `0` runs none), and name the rest as
 skipped in the report. Ledger each lens you skip as
 `final review lens-skipped <id> reason=cap`; with `lensCap` 0, write
 `final review lenses off` instead of skipped lines. Then write the lines

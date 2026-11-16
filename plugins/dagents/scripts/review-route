@@ -35,8 +35,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/depth.sh"
 . "$HERE/lib/executor-session.sh"
 
-SONNET=dforge:judge-sonnet-high
-OPUS=dforge:judge-opus
+SONNET=dagents:judge-sonnet-high
+OPUS=dagents:judge-opus
 # jq reads it on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the /d/...
 # form pwd gives on Git Bash.
 ROUTING="$HERE/../reference/codex-routing.json"
@@ -48,7 +48,7 @@ usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R
 [ $# -ge 2 ] || usage
 plan=$(plan_locate "$1"); shift
 [ -f "$plan" ] || die "no such plan file: $plan"
-dforge_stores_init "$(_plan_ctx "$plan")"
+dagents_stores_init "$(_plan_ctx "$plan")"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -225,12 +225,12 @@ final_fix() {
     done <<<"$agents"
   done
   if [ -z "$tasks" ]; then
-    printf 'review-seat final-fix primary=dforge:impl-sonnet-high fallback=- reason=floor\n'
+    printf 'review-seat final-fix primary=dagents:impl-sonnet-high fallback=- reason=floor\n'
     return
   fi
   [ "$best" -ge 12 ] || best=12
   [ "$best" -le 22 ] || best=22
-  printf 'review-seat final-fix primary=dforge:%s fallback=- reason=tasks:%s\n' \
+  printf 'review-seat final-fix primary=dagents:%s fallback=- reason=tasks:%s\n' \
     "impl-${models[best / 10]}-${efforts[best % 10]}" "$tasks"
 }
 

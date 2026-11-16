@@ -32,11 +32,11 @@ read only its `## Verdict` section
 Items of different kinds at one point share one dispatch, and
 `<kind>` is then one comma-separated list, such as
 `cannot-verify,executor-empty-diff`. The route prints
-`dforge:judge-sonnet-high` (`reason=simple-kind`) when every kind in the list
+`dagents:judge-sonnet-high` (`reason=simple-kind`) when every kind in the list
 is `cannot-verify` or `executor-empty-diff` and no task it names is risk 3,
-and `dforge:judge-opus` otherwise; `preflight`, `plan-conflict`, `breaker`,
+and `dagents:judge-opus` otherwise; `preflight`, `plan-conflict`, `breaker`,
 `blocked-plan`, `final-residual` and `acceptance-ambiguous` always go to
-`dforge:judge-opus`. On any exit 2, dispatch `dforge:judge-opus` and say why,
+`dagents:judge-opus`. On any exit 2, dispatch `dagents:judge-opus` and say why,
 quoting its message. Codex hosts, where `review-route` exits 2, use a native
 judge at Astra high or above ([native-codex.md](../../../reference/native-codex.md)).
 
@@ -68,7 +68,7 @@ verbatim:
   **A Header amendment is confirmed first.** Before `plan-amend`, write
   `<workspace>/rulings-<point>-<task>-confirm.md`: the original item entry
   unchanged, then the path of the first seat's report and the item's id. Confirm it with
-  a second, independent `dforge:judge-opus` dispatch, made directly
+  a second, independent `dagents:judge-opus` dispatch, made directly
   rather than through `review-route`, with the same template and
   `[CONFIRM_NOTE]` filled; its `[REPORT_FILE]` is
   `<workspace>/rulings-<point>-<task>-confirm-report.md`, and its AMEND is

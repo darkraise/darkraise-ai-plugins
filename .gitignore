@@ -13,6 +13,7 @@ npm-debug.log*
 
 # dforge agent scratch (ledgers, briefs, review packages); .forge/ before 4.0, .superpowers/ before 2.0
 .dforge/
+.dagents/
 .forge/
 .superpowers/
 .worktrees/

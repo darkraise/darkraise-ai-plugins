@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Acceptance tests for the ui-ux skill spec (docs/dforge/specs/2026-10-24-ui-ux-skill-design.md).
+# Acceptance tests for the ui-ux skill spec (docs/dagents/specs/2026-10-24-ui-ux-skill-design.md).
 # Each test is written from the spec's acceptance statement and reaches the
 # behaviour through the scripts and documents the spec names. Usage:
 #   bash ui-ux-skill.acceptance.test.sh            run every test
@@ -46,10 +46,10 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 REAL_HOME="$HOME"
 export HOME="$TMP/home"; mkdir -p "$HOME"
-unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DAGENTS_BUDGET CLAUDE_PROJECT_DIR
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
-export DR_CODEX_SESSION_DIR="$TMP/codex-sessions"
+export DAGENTS_CODEX_SESSION_DIR="$TMP/codex-sessions"
 cat > "$TMP/unusable.sh" <<'EOF'
 echo '[{"id":"codex","usable":false,"reason":"not authenticated"}]'
 EOF
@@ -60,14 +60,14 @@ sedi() { # sedi <expression> <file> — portable in-place edit
   sed "$1" "$2" > "$2.sedi" && mv "$2.sedi" "$2"
 }
 
-SPEC_REL=docs/dforge/specs/2026-10-24-demo-design.md
-OTHER_SPEC_REL=docs/dforge/specs/2026-10-24-other-design.md
-PLAIN_SPEC_REL=docs/dforge/specs/2026-10-24-plain-design.md
-PROFILE_REL=docs/dforge/ui-ux/profile.md
-PROOFS=docs/dforge/ui-ux/proofs
+SPEC_REL=docs/dagents/specs/2026-10-24-demo-design.md
+OTHER_SPEC_REL=docs/dagents/specs/2026-10-24-other-design.md
+PLAIN_SPEC_REL=docs/dagents/specs/2026-10-24-plain-design.md
+PROFILE_REL=docs/dagents/ui-ux/profile.md
+PROOFS=docs/dagents/ui-ux/proofs
 REPORT_REL=$PROOFS/2026-10-24-demo.md
 JUDGE_REL=$PROOFS/2026-10-24-demo.judge.md
-EVID=.dforge/ui-ux/demo
+EVID=.dagents/ui-ux/demo
 FAKEFP=0000000000000000
 
 # --- fixtures ---------------------------------------------------------------
@@ -111,7 +111,7 @@ EOF
 new_repo() {
   REPO="$TMP/$1"
   g init -q "$REPO"
-  mkdir -p "$REPO/src" "$REPO/docs/dforge/plans"
+  mkdir -p "$REPO/src" "$REPO/docs/dagents/plans"
   printf 'hello\n' > "$REPO/README.md"
   write_spec "$REPO/$SPEC_REL" contract
   write_spec "$REPO/$OTHER_SPEC_REL" contract
@@ -140,15 +140,15 @@ commit_path() { # commit_path <repo> <path>
 
 good_rows() {
   cat <<'EOF'
-| UI-1 | pass | .dforge/ui-ux/demo/a.png | |
+| UI-1 | pass | .dagents/ui-ux/demo/a.png | |
 | UX-1 | pass | A1: escape closes | |
 | UX-2 | pass | A1: saving pending | |
-| OP-1 | pass | .dforge/ui-ux/demo/a.png | |
+| OP-1 | pass | .dagents/ui-ux/demo/a.png | |
 EOF
 }
 touch_rows() {
   cat <<'EOF'
-| UI-1 | pass | .dforge/ui-ux/demo/a.png | |
+| UI-1 | pass | .dagents/ui-ux/demo/a.png | |
 | UX-1 | pass | A1: escape closes | |
 EOF
 }
@@ -158,7 +158,7 @@ TOUCH_DELTA=$'## Delta\n\n**UI/UX depth:** touch — dialog closes on Escape\n\n
 write_report() {
   local repo=$1 rows=$2 contract=${3:-$SPEC_REL} delta=${4:-} trailer=${5:-}
   mkdir -p "$repo/$PROOFS" "$repo/$EVID"
-  printf '*\n' > "$repo/.dforge/.gitignore"
+  printf '*\n' > "$repo/.dagents/.gitignore"
   [ -f "$repo/$EVID/a.png" ] || printf 'png' > "$repo/$EVID/a.png"
   {
     printf '# UI proof: Demo\n\n'
@@ -212,7 +212,7 @@ plan_text() {
 
 **Program:** \`$1\` — sub-project 1 of 2 — next: Second part
 
-**Plan review:** 2026-09-12 — dforge:judge-fable — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
+**Plan review:** 2026-09-12 — dagents:judge-fable — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
 ## Global Constraints
 
@@ -236,7 +236,7 @@ None
 **Files:**
 - Create: \`$2\`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dagents:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 $3
 
@@ -247,7 +247,7 @@ $3
 **Files:**
 - Modify: \`$4\`
 
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dagents:impl-sonnet-medium
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 **Approach:** inline - skip 2: follows the pattern
 $5
@@ -257,10 +257,10 @@ EOF
 }
 # write_plan <repo> <name> <spec> <t1 files> <t1 ui> <t2 files> <t2 ui>
 write_plan() {
-  plan_text "$3" "$4" "$5" "$6" "$7" > "$1/docs/dforge/plans/$2"
+  plan_text "$3" "$4" "$5" "$6" "$7" > "$1/docs/dagents/plans/$2"
 }
 lint() { # lint <repo> <plan>; sets out and status
-  out=$(cd "$1" && CLAUDE_CODE_SESSION_ID=acc-lint timeout 60 bash "$PLINT" "docs/dforge/plans/$2" 2>&1); status=$?
+  out=$(cd "$1" && CLAUDE_CODE_SESSION_ID=acc-lint timeout 60 bash "$PLINT" "docs/dagents/plans/$2" 2>&1); status=$?
 }
 
 # --- hook helpers -----------------------------------------------------------
@@ -285,7 +285,7 @@ NOUI_TRANSCRIPT="$TMP/transcript-plain.jsonl"
 jq -nc '{type:"user",message:{role:"user",content:"fix the dialog"}}' > "$NOUI_TRANSCRIPT"
 UIRUN_TRANSCRIPT="$TMP/transcript-uiux.jsonl"
 cp "$NOUI_TRANSCRIPT" "$UIRUN_TRANSCRIPT"
-jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"t1",name:"Skill",input:{skill:"dforge:ui-ux"}}]}}' >> "$UIRUN_TRANSCRIPT"
+jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"t1",name:"Skill",input:{skill:"dagents:ui-ux"}}]}}' >> "$UIRUN_TRANSCRIPT"
 
 # stop_scene <name> <profile none|web> — a repo whose turn committed a UI edit; sets REPO BASE HX SID
 stop_scene() {
@@ -299,7 +299,7 @@ stop_scene() {
 # --- tests ------------------------------------------------------------------
 
 t_A1() {
-  check "A1: SKILL.md exists at plugins/dforge/skills/ui-ux/SKILL.md" \
+  check "A1: SKILL.md exists at plugins/dagents/skills/ui-ux/SKILL.md" \
     "$([ -f "$PLUGIN/skills/ui-ux/SKILL.md" ] && echo yes || echo no)" "yes"
   check "A1: its frontmatter says name: ui-ux" \
     "$(awk 'NR==1 && $0=="---" {f=1; next} f && $0=="---" {exit} f && $0=="name: ui-ux" {print "yes"}' "$PLUGIN/skills/ui-ux/SKILL.md")" "yes"
@@ -311,7 +311,7 @@ t_A1() {
     return
   fi
   vout=$(cd "$PLUGIN" && timeout 180 "$claude_bin" plugin validate "$PLUGIN" 2>&1); vstatus=$?
-  check "A1: claude plugin validate passes on dforge" "$vstatus" "0"
+  check "A1: claude plugin validate passes on dagents" "$vstatus" "0"
   has "A1: the validator reports success" "$vout" "Validation passed"
 }
 
@@ -343,7 +343,7 @@ t_A5() {
   new_repo a5 none
   write_plan "$REPO" p.md "$SPEC_REL" src/Dialog.tsx '**UI/UX:** UI-1, UX-1' a.txt ''
   local b1="$TMP/a5-brief1.md" b2="$TMP/a5-brief2.md"
-  (cd "$REPO" && timeout 60 bash "$TBRIEF" docs/dforge/plans/p.md 1 "$b1" >/dev/null 2>&1); status=$?
+  (cd "$REPO" && timeout 60 bash "$TBRIEF" docs/dagents/plans/p.md 1 "$b1" >/dev/null 2>&1); status=$?
   check "A5: task-brief exits 0 for the task with a UI/UX line" "$status" "0"
   local brief; brief=$(cat "$b1")
   has "A5: the brief carries UI-1's first line verbatim" "$brief" '- **UI-1** — Dialog: `Card` with tokens `surface` and `muted-foreground`.'
@@ -351,7 +351,7 @@ t_A5() {
   has "A5: the brief carries UX-1 verbatim" "$brief" '- **UX-1** — Escape closes the dialog and returns focus to the trigger.'
   lacks "A5: the brief leaves out the contract item the task does not cite" "$brief" 'Saving shows a pending state'
   lacks "A5: the brief leaves out the OP- item the task does not cite" "$brief" 'Proven at 375x812'
-  (cd "$REPO" && timeout 60 bash "$TBRIEF" docs/dforge/plans/p.md 2 "$b2" >/dev/null 2>&1); status=$?
+  (cd "$REPO" && timeout 60 bash "$TBRIEF" docs/dagents/plans/p.md 2 "$b2" >/dev/null 2>&1); status=$?
   check "A5: task-brief exits 0 for the task without a UI/UX line" "$status" "0"
   brief=$(cat "$b2")
   lacks "A5: a task without the line gets no UI-1 item" "$brief" 'Dialog: `Card`'
@@ -379,7 +379,7 @@ t_A6() {
 
   new_repo a6c none
   ui_file "$REPO"
-  write_report "$REPO" "$(good_rows | sed 's#^| UX-2 | pass | A1: saving pending | |#| UX-2 | deviation | .dforge/ui-ux/demo/a.png | cites: user answer 2026-10-24, pending state dropped |#')"
+  write_report "$REPO" "$(good_rows | sed 's#^| UX-2 | pass | A1: saving pending | |#| UX-2 | deviation | .dagents/ui-ux/demo/a.png | cites: user answer 2026-10-24, pending state dropped |#')"
   finish_report "$REPO"
   gate "$REPO" --base "$BASE" --spec "$SPEC_REL"
   check "A6: a cited deviation row passes" "$status" "0"
@@ -450,7 +450,7 @@ t_A8() {
   gate "$REPO" --base "$BASE" --spec "$SPEC_REL"
   check "A8: a pass row with no evidence: exit 1" "$status" "1"
 
-  build_a8 a8missing "$(good_rows | sed 's#^| UI-1 | pass | [^|]*|#| UI-1 | pass | .dforge/ui-ux/demo/missing.png |#')"
+  build_a8 a8missing "$(good_rows | sed 's#^| UI-1 | pass | [^|]*|#| UI-1 | pass | .dagents/ui-ux/demo/missing.png |#')"
   gate "$REPO" --base "$BASE" --spec "$SPEC_REL"
   check "A8: a cited screenshot that does not exist: exit 1" "$status" "1"
 
@@ -624,9 +624,9 @@ t_A11() {
   head1=$(g -C "$REPO" rev-parse HEAD~1)
   head2=$(g -C "$REPO" rev-parse HEAD)
   write_plan "$REPO" lens.md "$PLAIN_SPEC_REL" app/x.py '' src/Dialog.tsx ''
-  o=$(cd "$REPO" && timeout 60 bash "$LROUTE" docs/dforge/plans/lens.md --final "$BASE" "$head1" 2>&1)
+  o=$(cd "$REPO" && timeout 60 bash "$LROUTE" docs/dagents/plans/lens.md --final "$BASE" "$head1" 2>&1)
   lacks "A11: lens-route does not route ui-ux for a .tsx file the profile does not name" "$o" "lens ui-ux "
-  o=$(cd "$REPO" && timeout 60 bash "$LROUTE" docs/dforge/plans/lens.md --final "$head1" "$head2" 2>&1)
+  o=$(cd "$REPO" && timeout 60 bash "$LROUTE" docs/dagents/plans/lens.md --final "$head1" "$head2" 2>&1)
   has "A11: lens-route routes ui-ux for the profile's glob" "$o" "lens ui-ux "
 }
 
@@ -663,16 +663,16 @@ t_A13() {
   printf 'export const A = () => (\n  <div>\n    <img src="x.png" />\n  </div>\n);\n' > "$REPO/src/App.tsx"
   local o
   o=$(hook_edit "$hh" s-a13 "$REPO" "$REPO/src/App.tsx" "$NOUI_TRANSCRIPT")
-  has "A13: the first UI edit of a session with no ui-ux run names the skill" "$(ctx "$o")" "dforge:ui-ux"
+  has "A13: the first UI edit of a session with no ui-ux run names the skill" "$(ctx "$o")" "dagents:ui-ux"
   o=$(hook_edit "$hh" s-a13 "$REPO" "$REPO/src/App.tsx" "$NOUI_TRANSCRIPT")
-  lacks "A13: the second UI edit does not repeat it" "$(ctx "$o")" "dforge:ui-ux"
+  lacks "A13: the second UI edit does not repeat it" "$(ctx "$o")" "dagents:ui-ux"
   has "A13: the second UI edit still returns its lint findings" "$(ctx "$o")" "3"
   o=$(hook_edit "$hh" s-a13 "$REPO" "$REPO/src/App.tsx" "$NOUI_TRANSCRIPT")
-  lacks "A13: the third UI edit does not repeat it" "$(ctx "$o")" "dforge:ui-ux"
+  lacks "A13: the third UI edit does not repeat it" "$(ctx "$o")" "dagents:ui-ux"
   o=$(hook_edit "$hh" s-a13-other "$REPO" "$REPO/src/App.tsx" "$NOUI_TRANSCRIPT")
-  has "A13: another session's first UI edit names the skill again" "$(ctx "$o")" "dforge:ui-ux"
+  has "A13: another session's first UI edit names the skill again" "$(ctx "$o")" "dagents:ui-ux"
   o=$(hook_edit "$hh" s-a13-ran "$REPO" "$REPO/src/App.tsx" "$UIRUN_TRANSCRIPT")
-  lacks "A13: a session whose transcript shows a ui-ux run is not reminded" "$(ctx "$o")" "dforge:ui-ux"
+  lacks "A13: a session whose transcript shows a ui-ux run is not reminded" "$(ctx "$o")" "dagents:ui-ux"
 }
 
 t_A14() {
@@ -716,8 +716,8 @@ t_A15() {
   # an auto run bound to the session
   new_repo a15b web
   HX="$TMP/home-a15b"; SID=s-a15b
-  mkdir -p "$HX/.claude/dforge/sessions/cockpit"
-  date +%s > "$HX/.claude/dforge/sessions/cockpit/$SID"
+  mkdir -p "$HX/.claude/dagents/sessions/cockpit"
+  date +%s > "$HX/.claude/dagents/sessions/cockpit/$SID"
   turn_start "$HX" "$SID" "$REPO"
   (cd "$REPO" && HOME="$HX" timeout 30 bash "$AUTORUN" --session "$SID" start --spec docs/s.md --register docs/r.md >/dev/null 2>&1)
   ui_file "$REPO" src/App.tsx
@@ -725,7 +725,7 @@ t_A15() {
   o=$(stop_hook "$HX" "$SID" "$REPO" 'The dialog is done.' false "$NOUI_TRANSCRIPT")
   check "A15: an auto run bound to the session: the stop is not held" "$o" ""
   (cd "$REPO" && HOME="$HX" timeout 30 bash "$AUTORUN" --session "$SID" stop --reason "acceptance control" >/dev/null 2>&1)
-  rm -f "$REPO/.dforge/sdd/auto-run.json"
+  rm -f "$REPO/.dagents/sdd/auto-run.json"
   o=$(stop_hook "$HX" "$SID" "$REPO" 'The dialog is done.' false "$NOUI_TRANSCRIPT")
   check "A15: control: with the auto run gone the same stop is held" "$(decision "$o")" "block"
 
@@ -796,7 +796,7 @@ lens_branch() { # lens_branch <repo> <files...> — commit the files; the diff i
   g -C "$repo" commit -qm "branch work"
 }
 route() { # route <repo> <plan> <base>
-  (cd "$1" && HOME="$TMP/home-lens" timeout 60 bash "$LROUTE" "docs/dforge/plans/$2" --final "$3" HEAD 2>&1)
+  (cd "$1" && HOME="$TMP/home-lens" timeout 60 bash "$LROUTE" "docs/dagents/plans/$2" --final "$3" HEAD 2>&1)
 }
 t_A18() {
   mkdir -p "$TMP/home-lens"

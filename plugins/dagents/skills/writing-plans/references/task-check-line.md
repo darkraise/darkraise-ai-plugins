@@ -15,7 +15,7 @@ Choose the first that applies for `**Task check:**`:
 
 Rule 2 reads the duration from `suites.tsv`. Read only rows of the checkout
 you run in, from `<state>/suites.tsv` where `<state>` is
-`scripts/dforge-path state`. A row matches when column 3 equals the quoted
+`scripts/dagents-path state`. A row matches when column 3 equals the quoted
 key suite-run records for `bash -c <cmd>` run from the top level, which is
 the output of
 `printf '%q ' bash -c '<cmd>'` without its trailing space. Take the last

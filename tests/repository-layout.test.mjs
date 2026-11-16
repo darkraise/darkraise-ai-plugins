@@ -7,19 +7,20 @@ import test from 'node:test';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const json = path => JSON.parse(readFileSync(resolve(root, path), 'utf8'));
-test('Claude offers five maintained plugins', () => {
+test('Claude offers six maintained plugins', () => {
   assert.deepEqual(json('.claude-plugin/marketplace.json').plugins.map(p => p.name).sort(),
-    ['darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status']);
+    ['dagents', 'darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status']);
 });
 test('Codex root discovery offers only supported plugins', () => {
   assert.ok(existsSync(resolve(root, '.agents/plugins/marketplace.json')), 'dedicated Codex catalog is required');
   assert.deepEqual(json('.agents/plugins/marketplace.json').plugins.map(p => p.name).sort(),
-    ['darkraise-ui', 'darkraise-win32ui', 'dforge']);
+    ['dagents', 'darkraise-ui', 'darkraise-win32ui', 'dforge']);
 });
 test('Codex explicitly suppresses inherited Claude hooks', () => {
-  const path = 'plugins/dforge/.codex-plugin/plugin.json';
-  assert.ok(existsSync(resolve(root, path)), 'native manifest is required');
-  assert.deepEqual(json(path).hooks, {});
+  for (const path of ['plugins/dforge/.codex-plugin/plugin.json', 'plugins/dagents/.codex-plugin/plugin.json']) {
+    assert.ok(existsSync(resolve(root, path)), `${path} is required`);
+    assert.deepEqual(json(path).hooks, {});
+  }
 });
 
 test('repository validator rejects broken distribution contracts', async t => {
@@ -251,4 +252,17 @@ test('each plugin schema names its own plugin as a target', async t => {
   writeFileSync(resolve(dir, 'plugins/probe/config/schema.mjs'), entry('dforge'));
   assert.deepEqual(await validateSchema(dir, 'probe'), ['schema flag: target must be probe or claude']);
   assert.deepEqual(await validateSchema(root), []);
+});
+
+test('dagents spells dforge only where it must, and names only its 1.x version', async t => {
+  const { validateRepository } = await import('../scripts/validate-repository.mjs');
+  const dir = mkdtempSync(resolve(tmpdir(), 'dagents-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
+  assert.deepEqual(validateRepository(dir), []);
+  writeFileSync(resolve(dir, 'plugins/dagents/reference/stray.md'), 'see docs/dforge/plans\nsince dagents 3.0\nsince dforge 3.0\n');
+  const errors = validateRepository(dir);
+  assert.ok(errors.includes('plugins/dagents/reference/stray.md:1: dforge name in dagents'), errors.join('\n'));
+  assert.ok(errors.includes('plugins/dagents/reference/stray.md:2: dagents version other than 1.x'), errors.join('\n'));
+  assert.ok(!errors.some(e => e.startsWith('plugins/dagents/reference/stray.md:3')), errors.join('\n'));
 });

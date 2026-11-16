@@ -34,7 +34,7 @@ answer. Each statement is one line:
    With no register open, first open `<docs>/registers/<date>-<spec-slug>.md`
    as Opening an item register says; its `**Covers:**` stays `-` until the spec
    is written. A register row whose Item begins `A<n>:` is a deferred acceptance
-   statement wherever dforge refers to one.
+   statement wherever dagents refers to one.
 
 The step asks nothing when every statement is `high`. A statement you add or
 change while writing the spec, rated below `high`, is asked the same way before

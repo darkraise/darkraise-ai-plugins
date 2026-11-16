@@ -35,19 +35,19 @@ winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else pr
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME/.claude"
-export MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1
-unset DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
+export MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1
+unset DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
 
 # review-route reads this session's gate file; the gate itself is a stub, so no
 # case can reach a real Codex.
-export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=task-step-test
+export DAGENTS_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=task-step-test
 printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 review_surface() { # review_surface <true|false|absent>
-  rm -rf "$DR_CODEX_SESSION_DIR"
+  rm -rf "$DAGENTS_CODEX_SESSION_DIR"
   [ "$1" != absent ] || return 0
-  mkdir -p "$DR_CODEX_SESSION_DIR"
-  printf '{"session_id":"task-step-test","usable":true,"review":%s,"lane":false}\n' "$1" > "$DR_CODEX_SESSION_DIR/task-step-test.json"
+  mkdir -p "$DAGENTS_CODEX_SESSION_DIR"
+  printf '{"session_id":"task-step-test","usable":true,"review":%s,"lane":false}\n' "$1" > "$DAGENTS_CODEX_SESSION_DIR/task-step-test.json"
 }
 
 REPO="$TMP/repo"
@@ -87,7 +87,7 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |### Task 1: plain
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |**Lenses:** lang-bash
 |
@@ -95,12 +95,12 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |### Task 2: second
 |
-|**Implementer:** `dforge:impl-sonnet-high`
+|**Implementer:** `dagents:impl-sonnet-high`
 |**Evaluation:** files 1 - spec 0 - coupling 1 - risk 1 = 3
 |
 |### Task 3: executor
 |
-|**Implementer:** dforge:impl-sonnet-high
+|**Implementer:** dagents:impl-sonnet-high
 |**Executor:** codex gpt-6.1-sol / high
 |**Evaluation:** files 1 - spec 0 - coupling 1 - risk 1 = 3
 |
@@ -110,27 +110,27 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |### Task 5: batch low
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |### Task 6: batch high
 |
-|**Implementer:** dforge:impl-opus-medium
+|**Implementer:** dagents:impl-opus-medium
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |### Task 7: risky
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dagents:impl-opus-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
 |
 |### Task 8: unparseable
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** one plus one
 |
 |### Task 9: bad lens
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |**Lenses:** no-such-lens
 PLAN
@@ -168,7 +168,7 @@ check "start: the assigned line" "$(tail -n 1 "$LEDGER")" "Task 1: implementer i
 check "start: the ledger names the plan" "$(head -n 1 "$LEDGER")" "# SDD ledger — plan: docs/plan.md"
 check "start: the brief exists" "$([ -f "$WS/task-1-brief.md" ] && echo yes || echo no)" "yes"
 check "start: the digest is at most 15 lines" "$([ "$(count_lines "$out")" -le 15 ] && echo yes || echo no)" "yes"
-check "start: the seat line" "$(grep '^seat:' <<<"$out")" "seat: dforge:impl-sonnet-low prompt: $WS/task-1-dispatch.md"
+check "start: the seat line" "$(grep '^seat:' <<<"$out")" "seat: dagents:impl-sonnet-low prompt: $WS/task-1-dispatch.md"
 check "start: the state line precedes the budget line" "$(tail -n 2 <<<"$out" | head -n 1)" \
   "state: base ${BASE:0:7} review-head - round 0 t0 -"
 check "start: the last line is the budget line" "$(tail -n 1 <<<"$out" | cut -c1-6)" "budget"
@@ -209,7 +209,7 @@ check "start: the dispatch file is still written" "$([ -f "$WS/task-4-dispatch.m
 
 # start: a batch takes the highest tier, one assigned line per task and one brief.
 step start docs/plan.md 5 6
-check "start: batch seat" "$(grep '^seat:' <<<"$out")" "seat: dforge:impl-opus-medium prompt: $WS/task-5-dispatch.md"
+check "start: batch seat" "$(grep '^seat:' <<<"$out")" "seat: dagents:impl-opus-medium prompt: $WS/task-5-dispatch.md"
 check "start: batch assigned lines" "$(tail -n 2 "$LEDGER" | sed 's/base [0-9a-f]*/base B/' | tr '\n' ';')" \
   "Task 5: implementer impl-opus-medium (assigned; base B);Task 6: implementer impl-opus-medium (assigned; base B);"
 check "start: the digest names the batch" "$(head -n 1 <<<"$out" | cut -c1-12)" "task 5,6: br"
@@ -305,7 +305,7 @@ step review docs/plan.md 1
 JP="$WS/task-1-review-prompt.md"
 check "review: exit 0" "$rc" "0"
 check "review: the digest is at most 15 lines" "$([ "$(count_lines "$out")" -le 15 ] && echo yes || echo no)" "yes"
-check "review: the judge seat" "$(grep '^seat:' <<<"$out")" "seat: dforge:judge-sonnet-high prompt: $JP"
+check "review: the judge seat" "$(grep '^seat:' <<<"$out")" "seat: dagents:judge-sonnet-high prompt: $JP"
 check "review: codex off shows the gate line" "$(grep -c '^gate: codex-gate usable=true' <<<"$out")" "1"
 check "review: no runner lines for a judge seat" "$(grep -cE '^(codex|timeout):' <<<"$out")" "0"
 check "review: no Codex prompt for a judge seat" "$([ -e "$WS/task-1-review-codex-prompt.md" ] && echo yes || echo no)" "no"
@@ -334,7 +334,7 @@ check "review: and leaves no placeholder" "$(placeholders "$WS/task-2-review-pro
 review_surface true
 step review docs/plan.md 1
 CP="$WS/task-1-review-codex-prompt.md"
-check "review: the light seat" "$(grep '^seat:' <<<"$out")" "seat: codex:light prompt: $CP fallback: dforge:judge-sonnet-high prompt: $JP"
+check "review: the light seat" "$(grep '^seat:' <<<"$out")" "seat: codex:light prompt: $CP fallback: dagents:judge-sonnet-high prompt: $JP"
 check "review: the runner command" "$(grep '^codex:' <<<"$out")" \
   "codex: bash \"$PR/scripts/run-codex-review.sh\" --kind task --tier light --cwd \"$TOP\" --out \"$WS/task-1-review-codex.json\" --prompt \"$CP\""
 check "review: the light timeout" "$(grep '^timeout:' <<<"$out")" "timeout: 2520000"
@@ -365,7 +365,7 @@ C2=$(git rev-parse HEAD)
 step review docs/plan.md 7
 JP7="$WS/task-7-review-prompt.md"
 check "review: the heavy seat" "$(grep '^seat:' <<<"$out")" \
-  "seat: codex:heavy+judge-opus prompt: $WS/task-7-review-codex-prompt.md then: dforge:judge-opus prompt: $JP7"
+  "seat: codex:heavy+judge-opus prompt: $WS/task-7-review-codex-prompt.md then: dagents:judge-opus prompt: $JP7"
 check "review: the heavy timeout" "$(grep '^timeout:' <<<"$out")" "timeout: 5520000"
 check "review: the runner command names the tier" "$(grep -c -- '--kind task --tier heavy --cwd' <<<"$out")" "1"
 check "review: the judge prompt carries the Second Pass section" "$(grep -c '^## Second Pass: The Codex Review$' "$JP7")" "1"
@@ -374,7 +374,7 @@ check "review: the Codex prompt leaves the Second Pass out" "$(grep -c 'Second P
 check "review: the risk-3 judge prompt has no placeholder" "$(placeholders "$JP7")" "0"
 review_surface false
 step review docs/plan.md 7
-check "review: risk 3 with Codex off is a judge-opus seat" "$(grep '^seat:' <<<"$out")" "seat: dforge:judge-opus prompt: $JP7"
+check "review: risk 3 with Codex off is a judge-opus seat" "$(grep '^seat:' <<<"$out")" "seat: dagents:judge-opus prompt: $JP7"
 check "review: and carries no Second Pass section" "$(grep -c 'Second Pass' "$JP7")" "0"
 review_surface absent
 
@@ -457,7 +457,7 @@ check "review: a batch prompt names the batch brief" "$(grep -c "^Read the task 
 step start docs/plan.md 8
 step review docs/plan.md 8
 check "review: a failed route falls back to judge-opus and says why" \
-  "$(grep -c "^seat: dforge:judge-opus prompt: $WS/task-8-review-prompt.md (review-route exited 2: review-route: Task 8: the Evaluation line does not parse" <<<"$out")" "1"
+  "$(grep -c "^seat: dagents:judge-opus prompt: $WS/task-8-review-prompt.md (review-route exited 2: review-route: Task 8: the Evaluation line does not parse" <<<"$out")" "1"
 
 # review: a lens-route failure stops the step before it writes anything.
 step start docs/plan.md 9
@@ -496,8 +496,8 @@ RR_TMP=$TMP/rr
 mkdir -p "$RR_TMP"
 RR_REPO=$RR_TMP/repo
 rr_run() { # rr_run <args...> — task-step in the fixture repo; sets rr_out, rr_err, rr_rc
-  rr_out=$(cd "$RR_REPO" && env HOME="$RR_TMP/home" DR_CODEX_SESSION_DIR="$RR_TMP/sessions" CLAUDE_CODE_SESSION_ID=rr-test \
-    GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1 bash "$RR_S/task-step" "$@" 2>"$RR_TMP/err"); rr_rc=$?
+  rr_out=$(cd "$RR_REPO" && env HOME="$RR_TMP/home" DAGENTS_CODEX_SESSION_DIR="$RR_TMP/sessions" CLAUDE_CODE_SESSION_ID=rr-test \
+    GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1 MSYS_NO_PATHCONV=1 bash "$RR_S/task-step" "$@" 2>"$RR_TMP/err"); rr_rc=$?
   rr_err=$(cat "$RR_TMP/err")
 }
 rr_git() { git -C "$RR_REPO" "$@"; }
@@ -562,7 +562,7 @@ sed 's/^|//' > "$RR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 2: Risky
@@ -570,7 +570,7 @@ sed 's/^|//' > "$RR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dagents:impl-opus-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 3 = 6
 |
 |### Task 3: Unreviewed
@@ -578,7 +578,7 @@ sed 's/^|//' > "$RR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 PLAN
 awk '{ print } /^\*\*Goal:\*\*/ { print ""; print "**Host:** codex" }' "$RR_REPO/docs/plan.md" > "$RR_REPO/docs/codex-plan.md"
@@ -658,7 +658,7 @@ rr_git add -A && rr_git commit -qm fix
 rr_fix 1 1 "- app.txt: wrong value|- other.txt: stale"
 rr_run rereview docs/plan.md 1 --covered
 RR_P=$RR_WS/task-1-rereview-1-prompt.md
-check "rereview prompt: the digest names the seat and the file" "$(grep -c "^seat: dforge:judge-sonnet-high prompt: $RR_P\$" <<<"$rr_out")" "1"
+check "rereview prompt: the digest names the seat and the file" "$(grep -c "^seat: dagents:judge-sonnet-high prompt: $RR_P\$" <<<"$rr_out")" "1"
 check "rereview prompt: no placeholder is left" "$(grep -cE '\[(BRIEF_FILE|FINDINGS|REPORT_FILE|FIX_BASE_SHA|HEAD_SHA|DIFF_FILE|MODEL)\]' "$RR_P")" "0"
 check "rereview prompt: the open findings are listed" "$(grep -c '^- app.txt: wrong value$\|^- other.txt: stale$' "$RR_P")" "2"
 check "rereview prompt: the fix base is the recorded review head" "$(grep -c "Fix base:\*\* $RR_R0 " "$RR_P")" "1"
@@ -780,8 +780,8 @@ GR_TMP=$TMP/gr
 GR_REPO=$GR_TMP/repo
 mkdir -p "$GR_TMP/home" "$GR_REPO/docs"
 gr_run() { # gr_run <args...> — task-step in the group fixture repo; sets gr_out, gr_err, gr_rc
-  gr_out=$(cd "$GR_REPO" && env HOME="$GR_TMP/home" DR_CODEX_SESSION_DIR="$GR_TMP/sessions" CLAUDE_CODE_SESSION_ID=gr-test \
-    GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1 bash "$RR_S/task-step" "$@" 2>"$GR_TMP/err"); gr_rc=$?
+  gr_out=$(cd "$GR_REPO" && env HOME="$GR_TMP/home" DAGENTS_CODEX_SESSION_DIR="$GR_TMP/sessions" CLAUDE_CODE_SESSION_ID=gr-test \
+    GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1 MSYS_NO_PATHCONV=1 bash "$RR_S/task-step" "$@" 2>"$GR_TMP/err"); gr_rc=$?
   gr_err=$(cat "$GR_TMP/err")
 }
 gr_git() { git -C "$GR_REPO" "$@"; }
@@ -832,7 +832,7 @@ sed 's/^|//' > "$GR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `one.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |**Lenses:** lang-bash
 |
@@ -841,7 +841,7 @@ sed 's/^|//' > "$GR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `two.txt`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dagents:impl-sonnet-medium
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
 |
 |### Task 3: Heavy
@@ -849,7 +849,7 @@ sed 's/^|//' > "$GR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `three.txt`
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dagents:impl-opus-high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 2 = 5
 |
 |### Task 4: Light three
@@ -857,12 +857,12 @@ sed 's/^|//' > "$GR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `four.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 |
 |### Task 5: Unscored
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |
 |Body.
 |
@@ -871,7 +871,7 @@ sed 's/^|//' > "$GR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `six.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |### Task 7: Wave seven
@@ -879,7 +879,7 @@ sed 's/^|//' > "$GR_REPO/docs/plan.md" <<'PLAN'
 |**Files:**
 |- Modify: `seven.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 PLAN
 awk '{ print } /^\*\*Goal:\*\*/ { print ""; print "**Host:** codex" }' "$GR_REPO/docs/plan.md" > "$GR_REPO/docs/codex-plan.md"
@@ -987,7 +987,7 @@ check "review --group: the prompt names the package" "$([ "$(grep -cF "$GPKG" "$
 check "review --group: the prompt names the report file" "$([ "$(grep -cF "$GR_WS/group-$GL-review-report.md" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
 check "review --group: the prompt names the criteria file" "$([ "$(grep -cF "$PR/criteria/task-review.md" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
 check "review --group: the prompt names the group" "$([ "$(grep -cF "$GL" "$GPR")" -ge 1 ] && echo yes || echo no)" "yes"
-check "review --group: the seat is the route's Claude judge" "$(grep '^seat:' <<<"$gr_out")" "seat: dforge:judge-sonnet-high prompt: $GPR"
+check "review --group: the seat is the route's Claude judge" "$(grep '^seat:' <<<"$gr_out")" "seat: dagents:judge-sonnet-high prompt: $GPR"
 check "review --group: no Codex seat runs" "$(grep -cE '^(codex|timeout):' <<<"$gr_out")" "0"
 check "review --group: no Codex prompt is written" "$(ls "$GR_WS" | grep -c 'codex')" "0"
 check "review --group: the identity check" "$(grep '^check identity' <<<"$gr_out")" "check identity: clean"

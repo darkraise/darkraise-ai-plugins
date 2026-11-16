@@ -9,7 +9,7 @@ P="$HERE/.."
 STUB="$HERE/fixtures/stub-codex-plugin"
 CLIENT="$P/scripts/lib/codex-client.mjs"
 
-export DR_CODEX_SESSION_DIR="$(mktemp -d)"
+export DAGENTS_CODEX_SESSION_DIR="$(mktemp -d)"
 export CLAUDE_CODE_SESSION_ID=codex-client-test-session
 
 pass=0 fail=0
@@ -19,7 +19,7 @@ check() { # check <name> <got> <want>
 }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP" "$DR_CODEX_SESSION_DIR"' EXIT
+trap 'rm -rf "$TMP" "$DAGENTS_CODEX_SESSION_DIR"' EXIT
 
 run() { # run <request-json>; echoes the result JSON
   printf '%s' "$1" | node "$CLIENT" "$STUB" 2>"$TMP/stderr"

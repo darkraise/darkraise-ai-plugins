@@ -159,7 +159,7 @@ inflight_text() { tr '\t' ' '; }
 # inflight_since SESSION_ID: the time scripts/session-start.sh recorded when
 # the session last started or resumed, or nothing.
 inflight_since() {
-  local f="${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-').since"
+  local f="${HOME:-}/.claude/dagents/sessions/turns/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-').since"
   [ -n "$1" ] && [ -f "$f" ] && head -n 1 "$f" | tr -d '\r'
   return 0
 }

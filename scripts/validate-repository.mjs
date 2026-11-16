@@ -1,13 +1,22 @@
 import { readFileSync, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, relative, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { renamePath } from './dagents-rename.mjs';
 import { lintTree } from './lint-portability.mjs';
 
-const maintained = ['darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status'];
+const maintained = ['dagents', 'darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status'];
 const NAMESPACED = ['dforge', 'dagents'];
+// dagents is dforge 4.17.1 renamed, so it keeps dforge's rules and allowlists under its own paths.
+const WORKFLOW = ['dforge', 'dagents'];
+const withDagents = paths => new Set(paths.flatMap(path => [path, renamePath(path)]));
 // dagents spells dforge only where it migrates or reads a dforge 4.x layout,
 // lists its siblings, or names its origin.
-export const DAGENTS_DFORGE_ALLOWED = new Set(['plugins/dagents/README.md']);
+export const DAGENTS_DFORGE_ALLOWED = new Set([
+  'plugins/dagents/README.md',
+  // These suites read this repository's own notes and plans under docs/dforge.
+  'plugins/dagents/tests/lanes.test.sh',
+  'plugins/dagents/tests/typed-seats-and-drafting.acceptance.sh',
+]);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
 // A file's lines for the name sweeps, or null for a binary file (one holding a
@@ -53,17 +62,17 @@ export function validateRepository(root, { names = maintained } = {}) {
       if (manifest.name !== entry.name) errors.push(`${client}: manifest name mismatch for ${entry.name}`);
       if (!/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(manifest.version ?? '')) errors.push(`${entry.name}: invalid version`);
       if (!manifest.description || typeof manifest.description !== 'string') errors.push(`${entry.name}: description is required`);
-      if (entry.name === 'dforge' && /superpowers/i.test(JSON.stringify(entry))) errors.push(`${catalogPath}: dforge entry: retired superpowers name`);
+      if (WORKFLOW.includes(entry.name) && /superpowers/i.test(JSON.stringify(entry))) errors.push(`${catalogPath}: dforge entry: retired superpowers name`);
       const previous = manifests.get(entry.name);
       if (previous && previous.version !== manifest.version) errors.push(`${entry.name}: client version mismatch`);
       manifests.set(entry.name, manifest);
       if (client === 'codex') {
         if (entry.policy?.installation !== 'AVAILABLE') errors.push(`${entry.name}: installation must be AVAILABLE`);
         if (manifest.skills !== './skills/' || !existsSync(resolve(pluginRoot, 'skills'))) errors.push(`${entry.name}: skills path missing`);
-        if (entry.name === 'dforge' && (JSON.stringify(manifest.hooks) !== '{}')) errors.push(`${entry.name}: explicit empty Codex hooks required`);
+        if (WORKFLOW.includes(entry.name) && (JSON.stringify(manifest.hooks) !== '{}')) errors.push(`${entry.name}: explicit empty Codex hooks required`);
       }
-      if (client === 'claude' && entry.name === 'dforge' && manifest.dependencies?.length) {
-        errors.push('dforge: standalone plugin must not declare dependencies');
+      if (client === 'claude' && WORKFLOW.includes(entry.name) && manifest.dependencies?.length) {
+        errors.push(`${entry.name}: standalone plugin must not declare dependencies`);
       }
     }
   }
@@ -104,7 +113,7 @@ export function validateRepository(root, { names = maintained } = {}) {
   const legacyPattern = /(?:^|[^\w-])superpowers:|dr-superpowers:|dcc-superpower-companions:/;
   // dforge-migrate rewrites the older prefixes in active plans, so it and its
   // tests and the migrate skill must spell them.
-  const legacyAllowed = new Set([
+  const legacyAllowed = withDagents([
     'plugins/dforge/tests/cockpit.test.ts',
     'plugins/dforge/scripts/dforge-migrate',
     'plugins/dforge/tests/dforge-migrate.test.sh',
@@ -113,7 +122,7 @@ export function validateRepository(root, { names = maintained } = {}) {
   // dforge 3.0 spells the retired name only where it translates historical
   // citations, migrates a pre-3.0 layout, cites this repository's historical
   // specs, or credits upstream.
-  const superpowersAllowed = new Set([
+  const superpowersAllowed = withDagents([
     'plugins/dforge/README.md',
     'plugins/dforge/hooks/cockpit/lib.ts',
     'plugins/dforge/scripts/dforge-migrate',
@@ -125,17 +134,18 @@ export function validateRepository(root, { names = maintained } = {}) {
     'plugins/dforge/reference/auto-run.md',
     'plugins/dforge/reference/session-budget.md',
     'plugins/dforge/skills/migrate/SKILL.md',
+    'plugins/dagents/reference/parallel-waves.md',
   ]);
   // Third-party licence texts and the test suites spell every retired name.
-  const licensesOrTests = /^plugins\/dforge\/(?:LICENSES|tests)\//;
+  const licensesOrTests = /^plugins\/(?:dforge|dagents)\/(?:LICENSES|tests)\//;
   const superpowersExempt = rel => superpowersAllowed.has(rel) ||
     licensesOrTests.test(rel) ||
-    /^plugins\/dforge\/scripts\/lib\/(?:darkmem-(?:sync|mirror|reconcile)|dforge-home-migrate)\.mjs$/.test(rel);
+    /^plugins\/(?:dforge|dagents)\/scripts\/lib\/(?:darkmem-(?:sync|mirror|reconcile)|(?:dforge|dagents)-home-migrate)\.mjs$/.test(rel);
   // dforge 4.0 spells the dr-forge names only where it migrates or translates
   // them. A dated plan or spec name (2026-10-12-dr-forge-settings) cites
   // history and is not a retired name.
   const retiredForge = /dr-forge|(?<!D)FORGE|(?<![A-Za-z0-9d])forge(?![a-z])/;
-  const forgeAllowed = new Set([
+  const forgeAllowed = withDagents([
     'plugins/dforge/README.md',
     'plugins/dforge/hooks/cockpit/lib.ts',
     'plugins/dforge/scripts/dforge-migrate',
@@ -156,8 +166,8 @@ export function validateRepository(root, { names = maintained } = {}) {
         const path = resolve(dir, item.name);
         if (item.isDirectory()) { visit(path); continue; }
         const rel = relative(root, path).replaceAll('\\', '/');
-        const checksSuperpowers = name === 'dforge' && !superpowersExempt(rel);
-        const checksForge = name === 'dforge' && !forgeExempt(rel);
+        const checksSuperpowers = WORKFLOW.includes(name) && !superpowersExempt(rel);
+        const checksForge = WORKFLOW.includes(name) && !forgeExempt(rel);
         const lines = textLines(path);
         if (!lines) continue;
         lines.forEach((line, index) => {

@@ -83,7 +83,7 @@ for f in "$AGENTS"/*.md; do
       check "$base: does not set tools" "$(grep -c '^tools:' "$f")" "0"
       check "$base: drops the session-only tools" "$(fm "$f" disallowedTools)" "$IMPL_DISALLOWED"
       check "$base: preloads verification-before-completion" \
-        "$(grep -c '^  - dforge:verification-before-completion$' "$f")" "1"
+        "$(grep -c '^  - dagents:verification-before-completion$' "$f")" "1"
       ;;
     judge-*)
       # The absent tools are the point: no Edit, no Bash, no Agent. A judge's

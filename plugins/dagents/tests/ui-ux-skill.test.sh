@@ -28,7 +28,7 @@ done
 check "no macOS or iOS guide" "$(ls "$R/platforms" | grep -ciE 'mac|ios')" "0"
 
 # --- routing ---
-ENTRY="$P/skills/using-dforge/SKILL.md"
+ENTRY="$P/skills/using-dagents/SKILL.md"
 check "the entry point stays within 5500 bytes" "$([ "$(wc -c < "$ENTRY")" -le 5500 ] && echo yes || echo no)" "yes"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

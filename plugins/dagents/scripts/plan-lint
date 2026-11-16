@@ -33,7 +33,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
-dforge_stores_init "$(_plan_ctx "$plan")"
+dagents_stores_init "$(_plan_ctx "$plan")"
 [ "$amend_given" -eq 1 ] || amend=$(plan_amendments_file "$plan")
 
 TMP=$(mktemp -d)
@@ -49,7 +49,7 @@ if ! plan_apply_amendments "$plan" "$amend" > "$src" 2> "$TMP/amend.err"; then
 fi
 
 root=$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)
-dforge_stores_init "$root"
+dagents_stores_init "$root"
 SEP='( — | – | - | -- )'
 header=$(plan_header "$src")
 
@@ -110,7 +110,7 @@ done
 spec_line=$(header_line Spec)
 if [ -n "$spec_line" ]; then
   spec_path=$(sed -E 's/^\*\*Spec:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$spec_line")
-  [ -f "$(dforge_resolve "$spec_path" "$root")" ] || say ERROR header "Spec path does not exist: $spec_path"
+  [ -f "$(dagents_resolve "$spec_path" "$root")" ] || say ERROR header "Spec path does not exist: $spec_path"
 fi
 
 program=$(header_line Program)
@@ -118,7 +118,7 @@ if [ -n "$program" ]; then
   if [[ "$program" =~ ^\*\*Program:\*\*\ \`?([^\`\ ]+)\`?$SEP"sub-project "([0-9]+)" of "([0-9]+)$SEP(next:\ .+|last)$ ]]; then
     ppath=${BASH_REMATCH[1]} k=${BASH_REMATCH[3]} n=${BASH_REMATCH[4]}
     [ "$k" -le "$n" ] || say ERROR header "Program line: sub-project $k of $n"
-    [ -f "$(dforge_resolve "$ppath" "$root")" ] || say ERROR header "Program path does not exist: $ppath"
+    [ -f "$(dagents_resolve "$ppath" "$root")" ] || say ERROR header "Program path does not exist: $ppath"
   else
     say ERROR header "Program line does not match '**Program:** <path> — sub-project <k> of <n> — next: <title>' or '… — last'"
   fi
@@ -131,8 +131,8 @@ reg_specs=()
 [ -z "${spec_path:-}" ] || reg_specs+=("$spec_path")
 [ -z "${ppath:-}" ] || [ "${ppath:-}" = "${spec_path:-}" ] || reg_specs+=("$ppath")
 if [ ${#reg_specs[@]} -gt 0 ]; then
-  plan_rel=$(dforge_name "$plan" "$root")
-  plan_key=$(dforge_name_key "$plan_rel")
+  plan_rel=$(dagents_name "$plan" "$root")
+  plan_key=$(dagents_name_key "$plan_rel")
   : > "$TMP/reg-ids"
   : > "$TMP/reg-open"
   # reg-open holds the rows split on \037, not a tab: `read` collapses runs of
@@ -172,7 +172,7 @@ if [ ${#reg_specs[@]} -gt 0 ]; then
       || say WARN header "a register covers this plan's spec but no task carries an **Items:** line"
 
     while IFS=$'\037' read -r rname rid ritem rassigned _ _ _; do
-      [ "$(dforge_name_key "$rassigned")" = "$plan_key" ] || continue
+      [ "$(dagents_name_key "$rassigned")" = "$plan_key" ] || continue
       grep -qxF -e "$rname"$'\037'"$rid" -e $'\037'"$rid" <<<"$cited" \
         || say ERROR header "register row $(rlabel "$rname" "$rid") is assigned to this plan but no task cites it"
     done < "$TMP/reg-open"
@@ -194,7 +194,7 @@ if [ ${#reg_specs[@]} -gt 0 ]; then
     if grep -qE "$SEP"'last[ \t]*$' <<<"$program"; then
       others=""
       while IFS=$'\037' read -r rname rid _ rassigned _; do
-        [ "$(dforge_name_key "$rassigned")" = "$plan_key" ] || others="${others:+$others, }$(rlabel "$rname" "$rid")"
+        [ "$(dagents_name_key "$rassigned")" = "$plan_key" ] || others="${others:+$others, }$(rlabel "$rname" "$rid")"
       done < "$TMP/reg-open"
       [ -z "$others" ] \
         || say ERROR header "Program line says 'last' while register rows are open: $others"
@@ -392,7 +392,7 @@ for n in $nums; do
         say ERROR "$where" "Implementer '$name' is not fully qualified"
       else
         suffix=${name##*:} prefix=${name%%:*}
-        [ "$prefix" = "dforge" ] || say ERROR "$where" "Implementer '$name' is not a dforge agent (dforge:$suffix)"
+        [ "$prefix" = "dagents" ] || say ERROR "$where" "Implementer '$name' is not a dagents agent (dagents:$suffix)"
         want=$(awk -v t="$t" '$1 == t { print $2 }' <<<"$assignment")
         if grep -qxF "$suffix" <<<"$reserve"; then
           say "$sev" "$where" "$suffix is a reserve tier; it needs a human **Override:**"
@@ -764,13 +764,13 @@ if [ -n "$step1_covered" ]; then
   done <<<"$step1_covered"
 fi
 
-# --- UI/UX contract (dforge:ui-ux) ---
+# --- UI/UX contract (dagents:ui-ux) ---
 # A spec with a "## UI/UX contract" makes every task that touches a UI file
 # name the contract items it delivers, and every UI- and UX- item reach some
 # task. OP- items describe the whole result: they are proven, not built.
 if [ -n "${spec_path:-}" ]; then
   . "$HERE/lib/ui-ux.sh"
-  ui_spec=$(dforge_resolve "$spec_path" "$root")
+  ui_spec=$(dagents_resolve "$spec_path" "$root")
   ui_ids=""
   [ ! -f "$ui_spec" ] || ui_ids=$(uiux_contract_ids "$ui_spec")
   if [ -n "$ui_ids" ]; then

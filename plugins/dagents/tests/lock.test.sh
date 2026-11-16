@@ -67,7 +67,7 @@ printf '%s\n' "$gone" > "$LOCK/pid"
 uname -n > "$LOCK/host"
 mkdir "$LOCK.reclaim"
 : > "$LOCK.reclaim/claim"
-err="$(DR_LOCK_STALE_SECONDS=-1 dr_lock_reclaim "$LOCK" 2>&1)"; status=$?
+err="$(DAGENTS_LOCK_STALE_SECONDS=-1 dr_lock_reclaim "$LOCK" 2>&1)"; status=$?
 check "a stale claimed guard: the lock is reclaimed" "$status:$([ -e "$LOCK" ] && echo left || echo gone)" "0:gone"
 check "a stale claimed guard: no guard is left" "$(ls -d "$LOCK".reclaim* 2>/dev/null | grep -c .)" "0"
 check "a stale claimed guard: nothing printed" "$err" ""

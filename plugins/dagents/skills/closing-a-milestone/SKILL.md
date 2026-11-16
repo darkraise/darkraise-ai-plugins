@@ -25,10 +25,10 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    otherwise.
 2. **Mechanical check.** Run `scripts/roadmap open M<n>`. Exit 1 means rows are
    unresolved: report them, route by their Assigned cells as
-   dforge:project-status does, and stop. `verify` rows are the
+   dagents:project-status does, and stop. `verify` rows are the
    exception: they are built and wait on this audit, so continue with them.
 3. **Gates.** When `<docs>/gates.md` exists, run
-   dforge:running-gates on the integration branch with the base `all`, so
+   dagents:running-gates on the integration branch with the base `all`, so
    every gate runs, conditional ones included. A red gate stops the
    close. Keep each gate's output; the judge cannot run anything.
 4. **Collect the rows.** Every row of the milestone register, and every row of
@@ -36,7 +36,7 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    `deferred` or `n/a` carry their notes and are audited as decisions, not as
    work.
 5. **Commit, then dispatch the judge.** The tree must be clean. Dispatch
-   dforge:judge-opus with [milestone-judge.md](references/milestone-judge.md),
+   dagents:judge-opus with [milestone-judge.md](references/milestone-judge.md),
    the commit SHA, the milestone's exit criteria, the product spec path, the
    rows, and the gate outputs, and the report file
    `<state>/milestone-M<n>-audit-report.md`, outside the tree so it stays clean.
@@ -63,7 +63,7 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    merged-result verification leaves one full-suite row at each merge head.
    A plan's own worktree rows are gone with the worktree. The audit reads
    `suites.tsv` from the state directory of the checkout it runs in
-   (`bash <plugin-root>/scripts/dforge-path state`). The full-suite command is
+   (`bash <plugin-root>/scripts/dagents-path state`). The full-suite command is
    the `**Integration check:**` command of the plans the milestone merged, else
    the project's full test command. A row counts when column 2 is `clean`,
    column 4 is `0`, column 7 is a non-negative integer, and column 3 equals the
@@ -88,7 +88,7 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    equals the plan's `**Integration check:**`, byte for byte. Passing it means
    `<d1>` is above the seconds. When no such gate exists, the audit uses the
    20% rule only. The recommendation is the line
-   `Next: dforge:test-simplifier --modules <paths>`. `<paths>` are the distinct
+   `Next: dagents:test-simplifier --modules <paths>`. `<paths>` are the distinct
    directories of the files outside `<docs>` in
    `git diff --name-only <previous close sha7>..<milestone head>`, from the root
    commit when there is no previous milestone. It recommends only and removes

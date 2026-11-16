@@ -1,7 +1,7 @@
-// dforge's darkmem stores for one repository (darkmem store options spec
+// dagents's darkmem stores for one repository (darkmem store options spec
 // §1): whether darkmem is enabled (the darkmemEnabled setting), the mapping in
-// ~/.dforge/config.json, each family's configured store and its applied
-// store from ~/.dforge/stores.json, the mirror, the API key's variable, and
+// ~/.dagents/config.json, each family's configured store and its applied
+// store from ~/.dagents/stores.json, the mirror, the API key's variable, and
 // the run key a sync declares. A disabled or unmapped repository configures
 // both families local; a family still applied darkmem keeps its mirror until
 // reconcile moves it back.
@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolve as resolveSettings, withHomeLock } from "./dforge-config.mjs";
+import { resolve as resolveSettings, withHomeLock } from "./dagents-config.mjs";
 import { DOC_PREFIX } from "./darkmem-mirror.mjs";
 
 export class ConfigError extends Error {}
@@ -22,13 +22,13 @@ function homeOf(env) {
   return env.HOME || os.homedir();
 }
 
-export function dforgeHome(env = process.env) {
-  return path.join(homeOf(env), ".dforge");
+export function dagentsHome(env = process.env) {
+  return path.join(homeOf(env), ".dagents");
 }
 
-// A repository's dforge directory: docs/dforge/ or .dforge/.
-export function dforgeDir(kind, root) {
-  return kind === "docs" ? path.join(root, "docs", "dforge") : path.join(root, ".dforge");
+// A repository's dagents directory: docs/dagents/ or .dagents/.
+export function dagentsDir(kind, root) {
+  return kind === "docs" ? path.join(root, "docs", "dagents") : path.join(root, ".dagents");
 }
 
 function git(cwd, args) {
@@ -77,7 +77,7 @@ const OPTION = { documents: "documentStore", progress: "progressSource" };
 // Each primary checkout's applied store per family (darkmem store options
 // spec §4), written once a move or an import verifies.
 export function storesPath(env = process.env) {
-  return path.join(dforgeHome(env), "stores.json");
+  return path.join(dagentsHome(env), "stores.json");
 }
 
 function readRecord(env) {
@@ -136,17 +136,17 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
     documents: {
       configured: configured.documents,
       applied: applied.documents,
-      root: applied.documents === "darkmem" ? path.join(sync.mirror, DOC_PREFIX) : worktreeRoot && dforgeDir("docs", worktreeRoot),
+      root: applied.documents === "darkmem" ? path.join(sync.mirror, DOC_PREFIX) : worktreeRoot && dagentsDir("docs", worktreeRoot),
     },
     progress: {
       configured: configured.progress,
       applied: applied.progress,
       ledgerRoot: applied.progress === "darkmem"
         ? path.join(sync.mirror, "work", "sdd")
-        : worktreeRoot && path.join(dforgeDir("state", worktreeRoot), "sdd"),
+        : worktreeRoot && path.join(dagentsDir("state", worktreeRoot), "sdd"),
       latestFile: applied.progress === "darkmem"
         ? path.join(sync.mirror, "work", "handoff", "latest.md")
-        : (repoRoot ?? worktreeRoot) && path.join(dforgeDir("state", repoRoot ?? worktreeRoot), "handoff", "latest.md"),
+        : (repoRoot ?? worktreeRoot) && path.join(dagentsDir("state", repoRoot ?? worktreeRoot), "handoff", "latest.md"),
     },
     sync,
   });
@@ -168,7 +168,7 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
   // back to the checkout, and from there into the new project.
   const remapped = enabled && mapped.entry && inMirror && typeof recorded.project === "string"
     && (recorded.project !== mapped.entry.project
-      || (typeof recorded.mirror === "string" && !samePath(recorded.mirror, path.join(dforgeHome(env), "mirror", mapped.entry.project))));
+      || (typeof recorded.mirror === "string" && !samePath(recorded.mirror, path.join(dagentsHome(env), "mirror", mapped.entry.project))));
   // Disabled or unmapped: both families belong in the checkout. A family
   // still in the mirror resolves there, offline, until reconcile moves it.
   if (!enabled || !mapped.entry || remapped) {
@@ -183,9 +183,9 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
       : remapped ? `the mapping names project ${mapped.entry.project}, but the mirror in use is project ${recorded.project}'s; it moves back to the checkout first`
       : mapped.reason;
     const project = recorded.project ?? mapped.entry?.project;
-    const mirror = recorded.mirror ?? (mapped.entry && path.join(dforgeHome(env), "mirror", mapped.entry.project));
+    const mirror = recorded.mirror ?? (mapped.entry && path.join(dagentsHome(env), "mirror", mapped.entry.project));
     if (typeof project !== "string" || !PROJECT.test(project) || typeof mirror !== "string" || !path.isAbsolute(mirror)) {
-      throw new ConfigError(`${storesPath(env)}: ${repoRoot} is applied darkmem but its record names no project and mirror; map the repository in ~/.dforge/config.json again (or run scripts/dforge-migrate if it was mapped before 3.0) so reconcile can move it back`);
+      throw new ConfigError(`${storesPath(env)}: ${repoRoot} is applied darkmem but its record names no project and mirror; map the repository in ~/.dagents/config.json again (or run scripts/dagents-migrate if it was mapped before 3.0) so reconcile can move it back`);
     }
     const sync = syncOf(env, mapped, project, mirror, false);
     return result(reason, undecided ? applied : LOCAL, applied, remapped ? { ...sync, remappedTo: mapped.entry.project } : sync);
@@ -193,14 +193,14 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
   const entry = mapped.entry;
   const configured = {};
   for (const family of FAMILIES) configured[family] = entry[OPTION[family]] ?? settings[OPTION[family]];
-  const mirror = path.join(dforgeHome(env), "mirror", entry.project);
+  const mirror = path.join(dagentsHome(env), "mirror", entry.project);
   return result(`project ${entry.project}`, configured, applied, syncOf(env, mapped, entry.project, mirror, true));
 }
 
 // The repository's darkmem mapping: { file, entry, url, keyEnv }, or
 // { reason } when there is none. A malformed file or entry throws.
 function readMapping(env, repoRoot) {
-  const file = path.join(dforgeHome(env), "config.json");
+  const file = path.join(dagentsHome(env), "config.json");
   let text;
   try {
     text = fs.readFileSync(file, "utf8");
@@ -263,13 +263,13 @@ export function modeLines(stores) {
 }
 
 // The run a sync declares; darkmem refuses an undeclared one.
-// DFORGE_SESSION_ID lets a hook pass the id it holds; otherwise the
+// DAGENTS_SESSION_ID lets a hook pass the id it holds; otherwise the
 // record scripts/session-start.sh writes for this directory; otherwise one run
 // per machine per day, which is what a Codex session (no hooks) gets.
 export function runKey({ cwd = process.cwd(), env = process.env, now = new Date() } = {}) {
-  const declared = env.DFORGE_SESSION_ID?.trim();
+  const declared = env.DAGENTS_SESSION_ID?.trim();
   if (declared) return declared;
-  const sessions = path.join(homeOf(env), ".claude", "dforge", "sessions");
+  const sessions = path.join(homeOf(env), ".claude", "dagents", "sessions");
   for (const dir of [cwd, git(cwd, ["rev-parse", "--show-toplevel"]), primaryRoot(cwd)]) {
     if (!dir) continue;
     try {

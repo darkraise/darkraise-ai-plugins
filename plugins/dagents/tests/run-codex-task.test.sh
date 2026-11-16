@@ -18,7 +18,7 @@ check() { # check <name> <got> <want>
 
 # A fixed session id and a temporary directory keep the machine's real session
 # file out of every case, whatever the wrapper touches.
-export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=run-task-test
+export DAGENTS_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=run-task-test
 
 mkdir -p "$TMP/work"
 printf 'do the thing\n' > "$TMP/brief.md"

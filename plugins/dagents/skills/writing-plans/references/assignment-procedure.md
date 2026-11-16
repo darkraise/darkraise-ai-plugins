@@ -4,7 +4,7 @@ Every task records which implementer runs it, so the choice is a property of
 the plan rather than a judgment made from memory at dispatch time. Do this
 after the tasks are drafted and before the plan is committed. Retrofitting an
 existing plan is the same process: read it, rename any skill or agent written
-under an older plugin prefix to its `dforge:` name, score each task, and add
+under an older plugin prefix to its `dagents:` name, score each task, and add
 the lines.
 
 **Codex host:** follow [native-codex.md](../../../reference/native-codex.md) — its
@@ -24,7 +24,7 @@ user's inline or delegation preference on either host.
    `files + spec + coupling >= 6`, split the task where a reviewer could
    reject one half while approving the other, and re-score both halves; on a
    `Host: codex` plan, if it is `>= 4`, do the same. If `spec = 3`, the
-   approach is undecided: settle it with dforge:selecting-approaches, rewrite
+   approach is undecided: settle it with dagents:selecting-approaches, rewrite
    the task with the decision in its steps, and re-score. Never answer a
    reducible axis with a bigger model.
 3. **Assign** from the assignment table, which the total indexes directly.
@@ -41,7 +41,7 @@ user's inline or delegation preference on either host.
    its `**Items:**` line, or its `**Interfaces:**` block when it has neither,
    in this order:
    - `**Implementer:**` — always; the fully qualified agent, for example
-     `dforge:impl-sonnet-low`
+     `dagents:impl-sonnet-low`
    - `**Executor:**` — only when the lane gate passed, for example
      `codex gpt-6.1-sol / low`
    - `**Evaluation:**` — always, for example
@@ -57,7 +57,7 @@ user's inline or delegation preference on either host.
      rejects the line below risk 3 and an id with no lens file.
 
    ```markdown
-   **Implementer:** dforge:impl-sonnet-high
+   **Implementer:** dagents:impl-sonnet-high
    **Evaluation:** files 1 - spec 0 - coupling 2 - risk 2 = 5
    **Approach:** inline - skip 2: follows the existing exporter pattern
    ```
@@ -71,13 +71,13 @@ the first ticked executor in `executors ranked` order whose gate admits it.
 ticked executor admits the task, so no choice is left to the planner.
 
 A human may edit any `**Implementer:**` line by hand;
-dforge:subagent-driven-development obeys it and never recomputes.
+dagents:subagent-driven-development obeys it and never recomputes.
 Leave the `**Evaluation:**` line in place — the gap between the score and the
 choice is the interesting part. A hand edit that breaks a checked rule — a
 reserve tier, a kept `spec = 3`, a table mismatch — carries an
 `**Override:** <reason>` line below the Evaluation line, and `plan-lint` then
 reports it as a warning. Never write an Override line yourself. Under
-dforge:executing-plans the session implements every task that carries no
+dagents:executing-plans the session implements every task that carries no
 `**Executor:**` line, so the `**Implementer:**` line is read only by the
 deprecated subagent mode; an executor task's lines are read for its dispatch.
 [assigning-implementers.md](assigning-implementers.md) explains why

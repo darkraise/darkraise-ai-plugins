@@ -98,3 +98,38 @@ suite: exit code, then path.
 0 plugins/dagents/tests/working-directory.test.sh
 0 plugins/dagents/tests/worktree-instructions.test.sh
 ```
+
+## After the rename
+
+`node scripts/test-all.mjs --plugin dagents` after `dagents-rename.mjs tree`,
+with `CLAUDE_CONFIG_DIR` unset. Failing suites and their disposition:
+
+- `skill-size.test.sh`, `clean-session-phases.acceptance.test.sh` (A11),
+  `speed-and-cost.acceptance.test.sh` (A1): `skills/executing-plans/SKILL.md`
+  grew to 20014 bytes from the longer name. Fixed: two wording trims bring it
+  to 19995 bytes.
+- `lanes.test.sh` (agy calibration decision) and
+  `typed-seats-and-drafting.acceptance.sh` (A12, A13): they read this
+  repository's own notes and plans, which stay under `docs/dforge/`. Fixed:
+  the paths point at `docs/dforge/` again, and both files are on
+  `DAGENTS_DFORGE_ALLOWED`.
+- `faster-plans.acceptance.test.sh` A22: dropped the checks that lint this
+  repository's own pre-spec plans; they name `dforge:` implementers, which
+  dagents accepts only after `dagents-migrate`. The synthetic old-plan checks
+  stay.
+- `auto-run-worktree-setting.acceptance.test.sh` ("both manifests agree, at
+  4.14.0 or later") and `inline-only.acceptance.test.sh` ("version is 4.13.0
+  or later"): dropped; dagents starts at 1.0.0.
+- `inline-only.acceptance.test.sh` ("marketplace keyword swapped"): dropped;
+  the dagents catalog entry names `subagents` on purpose.
+- `antigravity-executor-lane.acceptance.test.sh` A2 and A5 (compare against
+  dforge commit `7349308b`) and A14's history checks (the commit that flipped
+  `trust.smoke`): dropped; `plugins/dagents` has no history before its copy.
+  A14's check of the shipped policy value stays.
+- `claude plugin test plugins/dagents` failed before the rename only (its mod
+  wrote state that dforge owns); it passes after it.
+- `inline-only-execution.acceptance.test.sh` and
+  `speed-and-cost-followups.acceptance.test.sh` failed in the first baseline
+  run only and passed in every later run.
+- `ui-ux-skill.acceptance.test.sh` failed in both runs before the rename and
+  passes after it.

@@ -16,7 +16,7 @@ check() { # check <name> <got> <want>
   if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
   else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
-run() { DR_EXECUTORS_DIR="$1" bash "$EXEC" "${@:2}"; }
+run() { DAGENTS_EXECUTORS_DIR="$1" bash "$EXEC" "${@:2}"; }
 
 mkdir -p "$TMP/reg"
 entry() { # entry <id> [extra jq assignment]
@@ -88,7 +88,7 @@ check "the shipped codex entry keeps the ladder block named gate" \
 check "the shipped codex entry keeps the session directory" \
   "$(bash "$EXEC" get codex session_dir)" "codex-sessions"
 check "the shipped codex entry keeps the session directory override" \
-  "$(bash "$EXEC" get codex session_dir_env)" "DR_CODEX_SESSION_DIR"
+  "$(bash "$EXEC" get codex session_dir_env)" "DAGENTS_CODEX_SESSION_DIR"
 check "the shipped codex entry opens both surfaces" \
   "$(bash "$EXEC" get codex surfaces | tr '\n' ',')" "review,lane,"
 check "the shipped codex entry names its wrapper" \
@@ -112,7 +112,7 @@ check "the shipped agy entry names its wrapper" \
 check "the shipped agy entry names its session directory" \
   "$(bash "$EXEC" get agy session_dir)" "agy-sessions"
 check "the shipped agy entry names its session directory override" \
-  "$(bash "$EXEC" get agy session_dir_env)" "DR_AGY_SESSION_DIR"
+  "$(bash "$EXEC" get agy session_dir_env)" "DAGENTS_AGY_SESSION_DIR"
 check "the shipped agy entry opens only the lane" \
   "$(bash "$EXEC" get agy surfaces | tr '\n' ',')" "lane,"
 check "the shipped agy entry declares no missing reason" \

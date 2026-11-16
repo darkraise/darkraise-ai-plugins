@@ -12,7 +12,7 @@ export class HttpError extends Error {
   }
 }
 
-const CLIENT = "dforge";
+const CLIENT = "dagents";
 
 // Records a darkmem answer that concerns one item as that item's failure line,
 // so the command goes on with the next item, and marks the run partial, since

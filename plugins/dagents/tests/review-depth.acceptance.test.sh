@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Acceptance tests for the review-depth spec
-# (docs/dforge/specs/2026-10-27-review-depth-design.md), statements A1-A8,
+# (docs/dagents/specs/2026-10-27-review-depth-design.md), statements A1-A8,
 # A10, A12, A13 and A16. Each test is written from the statement's text and
 # reaches the behaviour through the scripts the spec names (depth-route,
 # review-route, lens-route, plan-lint).
@@ -41,12 +41,12 @@ TMP="$(mktemp -d)"
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
-unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR DFORGE_LENS_CAP
+unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR DAGENTS_LENS_CAP
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
-export DFORGE_LENS_MINOR_FROM=0
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
+export DAGENTS_LENS_MINOR_FROM=0
 # No session gate file exists, so every plan round routes with reason=codex-off.
-export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=review-depth-acceptance
+export DAGENTS_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=review-depth-acceptance
 printf '%s\n' '#!/usr/bin/env bash' "echo '[{\"id\":\"codex\",\"usable\":true,\"reason\":null}]'" > "$TMP/roster-stub"
 export PLAN_LINT_ROSTER="$TMP/roster-stub"
 
@@ -57,13 +57,13 @@ git init -q "$R"
 git -C "$R" config user.email t@example.com
 git -C "$R" config user.name t
 git -C "$R" commit -q --allow-empty -m base
-mkdir -p "$R/docs/dforge/specs" "$R/docs/dforge/plans"
+mkdir -p "$R/docs/dagents/specs" "$R/docs/dagents/plans"
 
 mkspec() { # mkspec <file> [<Depth line>]
   { printf '# Fixture spec\n\n**Execution strategy:** parallel\n\n'
     [ -z "${2:-}" ] || printf '%s\n\n' "$2"
     printf '## Decisions\n\nFinish: merge\n\n## Problem\n\nSecurity, data loss and migration risk are named here on purpose.\n'
-  } > "$R/docs/dforge/specs/$1"
+  } > "$R/docs/dagents/specs/$1"
 }
 mkspec spec-light.md '**Depth:** light — unenumerable'
 mkspec spec-standard.md '**Depth:** standard — interface (set by hand)'
@@ -82,7 +82,7 @@ mkplan() {
     printf '# Fixture Plan\n\n'
     [ "$host" = - ] || printf 'Host: codex\n\n'
     printf '**Goal:** Fixture.\n\n'
-    [ "$spec" = - ] || printf '**Spec:** docs/dforge/specs/%s\n\n' "$spec"
+    [ "$spec" = - ] || printf '**Spec:** docs/dagents/specs/%s\n\n' "$spec"
     printf '**Execution:** subagent — `claude --model sonnet --effort high` — fixture\n\n'
     printf '**Parallelism:** sequential — fixture\n\n'
     [ -z "${PLAN_REVIEW:-}" ] || printf '%s\n\n' "$PLAN_REVIEW"
@@ -100,12 +100,12 @@ mkplan() {
         *) printf '**Evaluation:** files 0 - spec 0 - coupling 0 - risk %d = %d\n\n' "$t" "$t" ;;
       esac
     done
-  } > "$R/docs/dforge/plans/$f"
+  } > "$R/docs/dagents/plans/$f"
 }
 
 dt() { out=$(cd "$R" && timeout 60 bash "$DEPTH" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
 depth_of() { # depth_of <plan file> — the depth-route line for a plan in the fixture repository
-  dt "docs/dforge/plans/$1"
+  dt "docs/dagents/plans/$1"
 }
 rr() { out=$(cd "$R" && timeout 60 bash "$ROUTE" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
 lr() { out=$(cd "$R" && timeout 60 bash "${LENS_SCRIPT:-$LENS}" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
@@ -172,17 +172,17 @@ a3() {
   mkplan p3h.md spec-light.md - 1 1
   depth_of p3h.md
   check "A3: before the amendment the plan is light" "$rc:$out" "0:depth=light spec=light tasks=light reason=spec,task-risk:1"
-  mkdir -p "$R/.dforge/sdd/p3h"
+  mkdir -p "$R/.dagents/sdd/p3h"
   {
     printf '## A1 — Task 2\n\n### Old\n\n````\n'
     printf '**Evaluation:** files 0 - spec 0 - coupling 0 - risk 1 = 1\n'
     printf '````\n\n### New\n\n````\n'
     printf '**Evaluation:** files 0 - spec 0 - coupling 0 - risk 3 = 3\n'
     printf '````\n'
-  } > "$R/.dforge/sdd/p3h/amendments.md"
+  } > "$R/.dagents/sdd/p3h/amendments.md"
   depth_of p3h.md
   check "A3: an amendment that raises Task 2 to risk 3 gives full" "$rc:$out" "0:depth=full spec=light tasks=full reason=task-risk:2"
-  rm -rf "$R/.dforge/sdd/p3h"
+  rm -rf "$R/.dagents/sdd/p3h"
 }
 
 a4() {
@@ -191,8 +191,8 @@ a4() {
     if [ $((i % 5)) -eq 0 ]; then args+=(big); else args+=($((i % 2))); fi
   done
   mkplan p4.md spec-light.md - "${args[@]}"
-  check "A4: the fixture holds 40 tasks" "$(grep -c '^### Task ' "$R/docs/dforge/plans/p4.md")" "40"
-  check "A4: and tasks with a total of 8" "$(grep -c '= 8$' "$R/docs/dforge/plans/p4.md")" "8"
+  check "A4: the fixture holds 40 tasks" "$(grep -c '^### Task ' "$R/docs/dagents/plans/p4.md")" "40"
+  check "A4: and tasks with a total of 8" "$(grep -c '= 8$' "$R/docs/dagents/plans/p4.md")" "8"
   depth_of p4.md
   check "A4: 40 tasks at risk 1 or below stay light" "$rc:$out" "0:depth=light spec=light tasks=light reason=spec,task-risk:1"
 }
@@ -252,17 +252,17 @@ a16() {
   mkdir -p "$SH"
   git init -q "$SR"
   M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-  mkdir -p "$M/dforge/specs" "$M/dforge/plans" "$SR/docs/dforge/specs"
-  printf '# Spec\n\n**Depth:** light — unenumerable\n' > "$M/dforge/specs/s.md"
-  printf '# Stale local copy\n\n**Depth:** full — risk\n' > "$SR/docs/dforge/specs/s.md"
+  mkdir -p "$M/dagents/specs" "$M/dagents/plans" "$SR/docs/dagents/specs"
+  printf '# Spec\n\n**Depth:** light — unenumerable\n' > "$M/dagents/specs/s.md"
+  printf '# Stale local copy\n\n**Depth:** full — risk\n' > "$SR/docs/dagents/specs/s.md"
   {
-    printf '# P\n\n**Goal:** Fixture.\n\n**Spec:** docs/dforge/specs/s.md\n\n## Task index\n\n1. one\n\n'
+    printf '# P\n\n**Goal:** Fixture.\n\n**Spec:** docs/dagents/specs/s.md\n\n## Task index\n\n1. one\n\n'
     printf '### Task 1: one\n\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n'
-  } > "$M/dforge/plans/p.md"
-  out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$DEPTH" docs/dforge/plans/p.md 2>"$TMP/err"); rc=$?
+  } > "$M/dagents/plans/p.md"
+  out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$DEPTH" docs/dagents/plans/p.md 2>"$TMP/err"); rc=$?
   check "A16: a Spec path in the darkmem mirror resolves as plan-lint resolves it" "$rc:$out" \
     "0:depth=light spec=light tasks=light reason=spec,task-risk:1"
-  out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$LINT" docs/dforge/plans/p.md --no-probe 2>&1)
+  out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$LINT" docs/dagents/plans/p.md --no-probe 2>&1)
   check "A16: plan-lint finds the plan and resolves the same path" "$(grep -c -e 'Spec path does not exist' -e 'No such plan file' <<<"$out")" "0"
 }
 
@@ -272,21 +272,21 @@ a7() {
   mkplan p7l.md spec-light.md - 0 1
   mkplan p7s.md spec-standard.md - 1
   mkplan p7f.md spec-full.md - 0
-  rr docs/dforge/plans/p7l.md --plan-round 1
+  rr docs/dagents/plans/p7l.md --plan-round 1
   # Register row 1 of the review-depth register ruled that light keeps one plan-review round.
-  check "A7 (register row 1): light round 1 has cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=1"
-  rr docs/dforge/plans/p7l.md --plan-round 2
+  check "A7 (register row 1): light round 1 has cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dagents:judge-opus fallback=- reason=codex-off cap=1"
+  rr docs/dagents/plans/p7l.md --plan-round 2
   check "A7: light round 2 exits 2" "$rc" "2"
   has "A7: and says the round is past the cap" "$err" "plan round 2 is past the cap (1)"
-  rr docs/dforge/plans/p7s.md --plan-round 1
-  check "A7: standard round 1 has cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=1"
-  rr docs/dforge/plans/p7s.md --plan-round 2
+  rr docs/dagents/plans/p7s.md --plan-round 1
+  check "A7: standard round 1 has cap 1" "$rc:$out" "0:review-seat plan-round=1 primary=dagents:judge-opus fallback=- reason=codex-off cap=1"
+  rr docs/dagents/plans/p7s.md --plan-round 2
   check "A7: standard round 2 exits 2" "$rc" "2"
-  rr docs/dforge/plans/p7f.md --plan-round 1
-  check "A7: full round 1 has cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=dforge:judge-opus fallback=- reason=codex-off cap=2"
-  rr docs/dforge/plans/p7f.md --plan-round 2
-  check "A7: full round 2 is a round within cap 2" "$rc:$out" "0:review-seat plan-round=2 primary=dforge:judge-opus fallback=- reason=round cap=2"
-  rr docs/dforge/plans/p7f.md --plan-round 3
+  rr docs/dagents/plans/p7f.md --plan-round 1
+  check "A7: full round 1 has cap 2" "$rc:$out" "0:review-seat plan-round=1 primary=dagents:judge-opus fallback=- reason=codex-off cap=2"
+  rr docs/dagents/plans/p7f.md --plan-round 2
+  check "A7: full round 2 is a round within cap 2" "$rc:$out" "0:review-seat plan-round=2 primary=dagents:judge-opus fallback=- reason=round cap=2"
+  rr docs/dagents/plans/p7f.md --plan-round 3
   check "A7: full round 3 exits 2" "$rc" "2"
 
   # A Host: codex plan keeps its own cap rule, from its highest raw total.
@@ -294,19 +294,19 @@ a7() {
   for spec in spec-light.md -; do
     {
       printf '# Native Fixture\n\n**Host:** codex\n**Routing policy:** codex-v4\n'
-      [ "$spec" = - ] || printf '**Spec:** docs/dforge/specs/%s\n' "$spec"
+      [ "$spec" = - ] || printf '**Spec:** docs/dagents/specs/%s\n' "$spec"
       printf '**Execution:** inline — codex gpt-6.1-sol / high — x\n\n### Task 1: low\n\n'
       printf '**Implementer:** codex gpt-6-luna / high\n'
       printf '**Evaluation:** files=0, spec=0, coupling=0, risk=0; weighted routing score=0\n'
       printf '**Assignment source:** rubric\n'
-    } > "$R/docs/dforge/plans/p7n${spec%%.*}.md"
+    } > "$R/docs/dagents/plans/p7n${spec%%.*}.md"
   done
-  rr docs/dforge/plans/p7nspec-light.md --plan-round 1
+  rr docs/dagents/plans/p7nspec-light.md --plan-round 1
   local with=$out
-  rr docs/dforge/plans/p7n-.md --plan-round 1
+  rr docs/dagents/plans/p7n-.md --plan-round 1
   check "A7: a Codex plan's round 1 does not read the spec's depth" "$with" "$out"
   matches "A7: and keeps the cap its raw total sets (1)" "$with" 'plan-round=1 primary=native:[^ ]+ fallback=- reason=round cap=1$'
-  rr docs/dforge/plans/p7nspec-light.md --plan-round 2
+  rr docs/dagents/plans/p7nspec-light.md --plan-round 2
   matches "A7: a Codex plan keeps its cap-critical round" "$rc:$out" '^0:review-seat plan-round=2 .* reason=cap-critical cap=1$'
 }
 
@@ -327,27 +327,27 @@ a8() {
   mkplan p8s.md spec-standard.md - 1
   mkplan p8f.md spec-full.md - 0
 
-  lr docs/dforge/plans/p8f.md --final "$base" "$head"
+  lr docs/dagents/plans/p8f.md --final "$base" "$head"
   out_full=$out
   check "A8: full prints every lens up to the cap of 4, the rest skipped for the cap" "$(short <<<"$out_full")" \
     "lens security;lens silent-failures;lens test-quality;lens lang-bash;lens-skipped lang-python reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
 
-  lr docs/dforge/plans/p8l.md --final "$base" "$head"
+  lr docs/dagents/plans/p8l.md --final "$base" "$head"
   check "A8: light prints a lens line for security alone" "$(grep -c '^lens ' <<<"$out")" "1"
   check "A8: light keeps security" "$(grep -c '^lens security ' <<<"$out")" "1"
   check "A8: light skips every other applicable lens for the depth" "$(short <<<"$out")" \
     "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped lang-bash reason=depth;lens-skipped lang-python reason=depth;lens-skipped lang-typescript reason=depth;lens-skipped docs-comments reason=depth;"
   check "A8: light skips no lens for the cap" "$rc:$(grep -c 'reason=cap' <<<"$out")" "0:0"
 
-  lr docs/dforge/plans/p8s.md --final "$base" "$head"
+  lr docs/dagents/plans/p8s.md --final "$base" "$head"
   out_std=$out
   check "A8: standard prints the 2 lenses and test-quality" "$(grep -c '^lens ' <<<"$out_std")" "3"
   check "A8: standard skips the rest for the cap" "$(short <<<"$out_std")" \
     "lens security;lens silent-failures;lens test-quality;lens-skipped lang-bash reason=cap;lens-skipped lang-python reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
-  out=$(cd "$R" && DFORGE_LENS_CAP=1 timeout 60 bash "$LENS" docs/dforge/plans/p8s.md --final "$base" "$head" 2>&1); rc=$?
+  out=$(cd "$R" && DAGENTS_LENS_CAP=1 timeout 60 bash "$LENS" docs/dagents/plans/p8s.md --final "$base" "$head" 2>&1); rc=$?
   check "A8: standard with lensCap 1 prints 1 lens line" "$rc:$(grep -c '^lens ' <<<"$out")" "0:1"
 
-  out=$(cd "$R" && DFORGE_LENS_CAP=0 timeout 60 bash "$LENS" docs/dforge/plans/p8l.md --final "$base" "$head" 2>&1)
+  out=$(cd "$R" && DAGENTS_LENS_CAP=0 timeout 60 bash "$LENS" docs/dagents/plans/p8l.md --final "$base" "$head" 2>&1)
   check "A8: lenses off is unchanged at light" "$out" "lenses off"
 
   # Security prints only when its Applies clause matches: a copy of the lenses
@@ -357,20 +357,20 @@ a8() {
   cp -R "$S" "$copy/scripts"
   cp -R "$PLUGIN/criteria" "$PLUGIN/config" "$copy/"
   sed -i.bak 's#^Applies: .*#Applies: paths docs/never/*#' "$copy/criteria/lenses/security.md"
-  LENS_SCRIPT="$copy/scripts/lens-route" lr docs/dforge/plans/p8l.md --final "$base" "$head"
+  LENS_SCRIPT="$copy/scripts/lens-route" lr docs/dagents/plans/p8l.md --final "$base" "$head"
   check "A8: light prints no security line when its clause does not match" "$rc:$(grep -c 'security' <<<"$out")" "0:0"
   check "A8: and still skips the other lenses for the depth" "$(grep -c '^lens-skipped .* reason=depth$' <<<"$out")" "6"
-  LENS_SCRIPT="$copy/scripts/lens-route" lr docs/dforge/plans/p8f.md --final "$base" "$head"
+  LENS_SCRIPT="$copy/scripts/lens-route" lr docs/dagents/plans/p8f.md --final "$base" "$head"
   check "A8: full is unchanged without a matching security lens" "$(grep -c '^lens ' <<<"$out")" "4"
 }
 
 a10() {
   local out_with out_without
   mkplan p10.md spec-light.md - 0
-  out_without=$(cd "$R" && timeout 60 bash "$LINT" docs/dforge/plans/p10.md --no-probe 2>&1)
+  out_without=$(cd "$R" && timeout 60 bash "$LINT" docs/dagents/plans/p10.md --no-probe 2>&1)
   has "A10: plan-lint warns while the header has no Plan review line" "$out_without" 'no **Plan review:** line yet'
   PLAN_REVIEW='**Plan review:** 2026-10-27 — skipped (depth light)' mkplan p10b.md spec-light.md - 0
-  out_with=$(cd "$R" && timeout 60 bash "$LINT" docs/dforge/plans/p10b.md --no-probe 2>&1)
+  out_with=$(cd "$R" && timeout 60 bash "$LINT" docs/dagents/plans/p10b.md --no-probe 2>&1)
   lacks "A10: plan-lint still accepts an older light plan's skipped line" "$out_with" 'no **Plan review:** line yet'
   check "A10: and no header warning mentions it" "$(grep -ci 'WARN header.*plan review' <<<"$out_with")" "0"
 }
@@ -381,9 +381,9 @@ a12() {
   mkplan p12s.md spec-standard.md - 1
   mkplan p12f.md spec-full.md - 0 1
   for p in p12l p12s p12f; do
-    rr "docs/dforge/plans/$p.md" --final
+    rr "docs/dagents/plans/$p.md" --final
     check "A12: review-route --final still routes the whole-branch Claude review ($p)" "$rc:$out" \
-      "0:review-seat final primary=dforge:judge-opus fallback=- reason=plain"
+      "0:review-seat final primary=dagents:judge-opus fallback=- reason=plain"
   done
 }
 

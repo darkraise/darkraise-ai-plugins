@@ -20,8 +20,8 @@ export HOME="$TMP/home"; mkdir -p "$HOME"
 SID=s-flight
 export CLAUDE_CODE_SESSION_ID=$SID
 TP="$TMP/$SID.jsonl"
-mkdir -p "$HOME/.claude/dforge/sessions/by-id"
-jq -n --arg tp "$TP" '{session_id:"s-flight",transcript_path:$tp}' > "$HOME/.claude/dforge/sessions/by-id/$SID.json"
+mkdir -p "$HOME/.claude/dagents/sessions/by-id"
+jq -n --arg tp "$TP" '{session_id:"s-flight",transcript_path:$tp}' > "$HOME/.claude/dagents/sessions/by-id/$SID.json"
 
 # Git Bash rewrites arguments that look like POSIX paths, and a jq filter full
 # of </tag> text does; the fixtures are opaque data, so suppress the conversion.
@@ -181,7 +181,7 @@ check "without the running-agents suffix too" "$(grep -c '^- agent a14 ' <<<"$ou
 check "an agent the answer names as running stays listed" "$(grep -c '^- agent a11 ' <<<"$out")" "1"
 
 # --- no transcript for this session ---
-rm -f "$HOME/.claude/dforge/sessions/by-id/$SID.json"
+rm -f "$HOME/.claude/dagents/sessions/by-id/$SID.json"
 check "no session record: exit 3" "$(cd "$REPO" && bash "$INFLIGHT" >/dev/null; echo $?)" "3"
 check "no session record: next-step still prints" \
   "$(cd "$REPO" && bash "$NEXT" docs/superpowers/plans/2026-10-10-example.md 2>/dev/null | grep -c '## Next session')" "1"

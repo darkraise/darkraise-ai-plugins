@@ -8,7 +8,7 @@ is the seat's brief; final-review.md §0.5 is the session's part.
 
 ## The dispatch
 
-The session dispatches `dforge:impl-sonnet-high` (on a Codex host, the
+The session dispatches `dagents:impl-sonnet-high` (on a Codex host, the
 native implementer `gpt-6.1-sol / high`) with this file and:
 
 - `[SPEC]` — the spec's path.

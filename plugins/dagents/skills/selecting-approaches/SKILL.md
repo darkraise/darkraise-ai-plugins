@@ -24,7 +24,7 @@ approach decision."
 
 Two entry points:
 
-- **dforge:brainstorming**, at the architectural path's "propose 2-3
+- **dagents:brainstorming**, at the architectural path's "propose 2-3
   approaches" step.
 - **A plan task scoring 3 on spec completeness**, which Rule S in
   [`../../reference/ladder.md`](../../reference/ladder.md) routes here rather
@@ -69,7 +69,7 @@ Generating candidate approaches before a root cause is located produces N
 guesses, and a ranking pass returns a winner whether or not any candidate is
 right - laundering speculation into a confident pick, and a judge checking one
 guess does no better. An unlocated root cause is
-a debugging problem: use dforge:systematic-debugging. Come back here only
+a debugging problem: use dagents:systematic-debugging. Come back here only
 if, with the cause in hand, more than one structurally distinct fix exists.
 
 ## When advisor runs
@@ -87,7 +87,7 @@ send that choice to the advisor.
 ## Run advisor
 
 State your chosen approach in a paragraph, with the candidates you rejected and
-why, then dispatch one `dforge:judge-opus` to score it,
+why, then dispatch one `dagents:judge-opus` to score it,
 naming the report file `<state>/approaches-<decision>-advisor-report.md`:
 write nothing else, and reply in at most 10 lines; its `## Verdict` section
 holds `verdict: sound | wrong`. The judge scores it against the same criteria

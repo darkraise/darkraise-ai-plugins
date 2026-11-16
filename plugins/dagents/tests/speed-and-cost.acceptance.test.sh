@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Acceptance tests for the speed-and-cost spec
-# (docs/dforge/specs/2026-10-27-speed-and-cost-design.md), the plugin-side
+# (docs/dagents/specs/2026-10-27-speed-and-cost-design.md), the plugin-side
 # statements A1, A3, A4, A5, A6, A7, A9, A10 and A11. A12 and A13 (the eval
 # pipeline) are in evals/tiers/tests/speed-and-cost.acceptance.test.mjs.
 # Each test is written from the statement's text and reaches the behaviour
@@ -43,10 +43,10 @@ TMP="$(mktemp -d)"
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
-unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR CLAUDE_CODE_SESSION_ID
+unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR CLAUDE_CODE_SESSION_ID
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
-export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=speed-and-cost-acceptance
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
+export DAGENTS_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=speed-and-cost-acceptance
 printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 
@@ -95,7 +95,7 @@ if need_fixture; then
     printf '# Acceptance Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** subagent — `claude --model sonnet --effort high` — fixture\n\n## Task index\n\n'
     for n in 1 2 3 4 5; do printf '%s. Task %s\n' "$n" "$n"; done
     for n in 1 2 3 4 5; do
-      printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nRun: `bash check.sh`\n' "$n" "$n"
+      printf '\n### Task %s: Task %s\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nRun: `bash check.sh`\n' "$n" "$n"
     done
   } > "$FIX/docs/plan.md"
   printf '#!/usr/bin/env bash\nif grep -qx ok state.txt; then echo "ok 1 - alpha"; else echo "not ok 1 - alpha"; exit 1; fi\n' > "$FIX/suite.sh"
@@ -136,7 +136,7 @@ fi
 if selected A4; then
   # suite-run itself records a row at the head the controller runs it at.
   (cd "$FIX" && timeout 60 bash "$SUITE" -- bash -c "$CMD" >/dev/null 2>&1)
-  row=$(awk -F'\t' -v h="$(g rev-parse HEAD | tr -d '\r')" '$1 == h { print $4 }' "$FIX/.dforge/suites.tsv" 2>/dev/null | tail -n 1)
+  row=$(awk -F'\t' -v h="$(g rev-parse HEAD | tr -d '\r')" '$1 == h { print $4 }' "$FIX/.dagents/suites.tsv" 2>/dev/null | tail -n 1)
   check "A4: suite-run records a row at the head it ran at" "$row" "0"
 fi
 
@@ -220,7 +220,7 @@ fi
 if selected A6; then
   # Skipped: these checks write the items in spec Design §2's form, without
   # `expect`, which the 2026-10-28 owner decision (amendment A21) overrides.
-  # Deferred as register row 26 in docs/dforge/registers/2026-10-27-speed-and-cost.md.
+  # Deferred as register row 26 in docs/dagents/registers/2026-10-27-speed-and-cost.md.
   echo "skip: A6 spec-form checks (register row 26)"
 
   # The reviewer prompt's own form carries `expect`; the same items in that form.
@@ -245,7 +245,7 @@ if need_gate; then
   git init -q "$GREPO"
   git -C "$GREPO" config user.name t; git -C "$GREPO" config user.email t@example.invalid
   printf 'x\n' > "$GREPO/f"; git -C "$GREPO" add -A && git -C "$GREPO" commit -qm init
-  GSTATE=$(cd "$GREPO" && bash "$S/dforge-path" state | tr -d '\r')
+  GSTATE=$(cd "$GREPO" && bash "$S/dagents-path" state | tr -d '\r')
   mkdir -p "$TMP/reports"
   gate() { # gate <agent_type> <agent_id> <message> — sets grc and gerr
     jq -n --arg t "$1" --arg i "$2" --arg m "$3" --arg c "$GREPO" \
@@ -277,45 +277,45 @@ fi
 # ---------------------------------------------------------------- A9
 if selected A9; then
   hooks=$(jq -r '.hooks.SubagentStop[0] | [.matcher, .hooks[0].command] | @tsv' < "$PLUGIN/hooks/hooks.json" | tr -d '\r')
-  has "A9: hooks.json registers the gate on SubagentStop for impl agents" "$hooks" '(dforge:)?impl-.*'
+  has "A9: hooks.json registers the gate on SubagentStop for impl agents" "$hooks" '(dagents:)?impl-.*'
   has "A9: and runs scripts/impl-stop-gate" "$hooks" 'scripts/impl-stop-gate'
 
   report "$TMP/reports/ok.md" ok
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/ok.md")"
+  gate dagents:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/ok.md")"
   check "A9: a complete DONE report passes" "$grc" "0"
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE_WITH_CONCERNS "$TMP/reports/ok.md")"
+  gate dagents:impl-sonnet-high "$(newid)" "$(msg DONE_WITH_CONCERNS "$TMP/reports/ok.md")"
   check "A9: a complete DONE_WITH_CONCERNS report passes" "$grc" "0"
   report "$TMP/reports/fail.md" fail-bullet
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/fail.md")"
+  gate dagents:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/fail.md")"
   check "A9: a Verified bullet in the fail form counts" "$grc" "0"
 
-  gate dforge:impl-sonnet-high "$(newid)" $'**Status:** DONE\n- Commits: abc1234 feat: x'
+  gate dagents:impl-sonnet-high "$(newid)" $'**Status:** DONE\n- Commits: abc1234 feat: x'
   check "A9: DONE with no Report: line exits 2" "$grc" "2"
   has "A9: and the reason names the Report: line" "$gerr" "Report:"
-  gate dforge:impl-opus-high "$(newid)" $'**Status:** DONE_WITH_CONCERNS\n- one concern'
+  gate dagents:impl-opus-high "$(newid)" $'**Status:** DONE_WITH_CONCERNS\n- one concern'
   check "A9: DONE_WITH_CONCERNS with no Report: line exits 2" "$grc" "2"
   has "A9: and the reason names the Report: line" "$gerr" "Report:"
   gate impl-haiku "$(newid)" $'**Status:** DONE\nno report line here'
   check "A9: an agent type without the plugin prefix is gated too" "$grc" "2"
 
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/nothing-here.md")"
+  gate dagents:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/nothing-here.md")"
   check "A9: a missing report file exits 2" "$grc" "2"
   has "A9: and the reason names the missing file" "$gerr" "nothing-here.md"
 
   report "$TMP/reports/no-d.md" no-discovered
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/no-d.md")"
+  gate dagents:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/no-d.md")"
   check "A9: a report without ## Discovered issues (not fixed) exits 2" "$grc" "2"
   has "A9: and the reason names that section" "$gerr" "Discovered issues"
   report "$TMP/reports/no-a.md" no-assumptions
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/no-a.md")"
+  gate dagents:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/no-a.md")"
   check "A9: a report without ## Assumptions made exits 2" "$grc" "2"
   has "A9: and the reason names that section" "$gerr" "Assumptions made"
   report "$TMP/reports/no-v.md" no-verified
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/no-v.md")"
+  gate dagents:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/no-v.md")"
   check "A9: a report without ## Verified exits 2" "$grc" "2"
   has "A9: and the reason names that section" "$gerr" "Verified"
   report "$TMP/reports/prose.md" prose-only
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/prose.md")"
+  gate dagents:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/prose.md")"
   check "A9: a Verified section with no bullet in the grammar exits 2" "$grc" "2"
   has "A9: and the reason names the Verified section" "$gerr" "Verified"
 fi
@@ -323,42 +323,42 @@ fi
 # ---------------------------------------------------------------- A10
 if selected A10; then
   report "$TMP/reports/ok.md" ok
-  for kind in dforge:judge-opus general-purpose Explore dforge:judge-sonnet-high; do
+  for kind in dagents:judge-opus general-purpose Explore dagents:judge-sonnet-high; do
     gate "$kind" "$(newid)" $'**Status:** DONE\nno report line'
     check "A10: $kind with a DONE stop and no report exits 0" "$grc" "0"
   done
-  gate dforge:impl-sonnet-high "$(newid)" $'**Status:** BLOCKED - the brief is unclear'
+  gate dagents:impl-sonnet-high "$(newid)" $'**Status:** BLOCKED - the brief is unclear'
   check "A10: a BLOCKED impl stop exits 0" "$grc" "0"
-  gate dforge:impl-sonnet-high "$(newid)" $'**Status:** NEEDS_CONTEXT\nWhich file?'
+  gate dagents:impl-sonnet-high "$(newid)" $'**Status:** NEEDS_CONTEXT\nWhich file?'
   check "A10: a NEEDS_CONTEXT impl stop exits 0" "$grc" "0"
-  gate dforge:impl-sonnet-high "$(newid)" 'I finished the work and have nothing more to say.'
+  gate dagents:impl-sonnet-high "$(newid)" 'I finished the work and have nothing more to say.'
   check "A10: an impl stop with no status line exits 0" "$grc" "0"
 
   id=$(newid)
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nfirst try'
+  gate dagents:impl-opus-medium "$id" $'**Status:** DONE\nfirst try'
   r1=$grc
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nsecond try, different words'
+  gate dagents:impl-opus-medium "$id" $'**Status:** DONE\nsecond try, different words'
   r2=$grc
   check "A10: the first two distinct stops are blocked" "$r1 $r2" "2 2"
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nthird try, different again'
+  gate dagents:impl-opus-medium "$id" $'**Status:** DONE\nthird try, different again'
   check "A10: the third distinct stop after two blocks exits 0" "$grc" "0"
   log="$GSTATE/impl-stop-gate.log"
   check "A10: it appends exactly one line to <state>/impl-stop-gate.log" "$(wc -l < "$log" 2>/dev/null | tr -d ' ')" "1"
-  matches "A10: the log line is '<epoch> <agent_id> <agent_type> pass-through after 2 blocks — <reason>'" "$(cat "$log" 2>/dev/null)" "^[0-9]+ $id dforge:impl-opus-medium pass-through after 2 blocks — .+"
+  matches "A10: the log line is '<epoch> <agent_id> <agent_type> pass-through after 2 blocks — <reason>'" "$(cat "$log" 2>/dev/null)" "^[0-9]+ $id dagents:impl-opus-medium pass-through after 2 blocks — .+"
 
   # An identical stop fired twice does not raise the count.
   id=$(newid)
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nrepeated stop'
+  gate dagents:impl-opus-medium "$id" $'**Status:** DONE\nrepeated stop'
   a=$grc
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nrepeated stop'
+  gate dagents:impl-opus-medium "$id" $'**Status:** DONE\nrepeated stop'
   b=$grc
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\nrepeated stop'
+  gate dagents:impl-opus-medium "$id" $'**Status:** DONE\nrepeated stop'
   c=$grc
   check "A10: the same stop three times is blocked each time" "$a $b $c" "2 2 2"
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\na second, distinct stop'
+  gate dagents:impl-opus-medium "$id" $'**Status:** DONE\na second, distinct stop'
   d=$grc
   check "A10: after repeats the next distinct stop is still only the second block" "$d" "2"
-  gate dforge:impl-opus-medium "$id" $'**Status:** DONE\na third, distinct stop'
+  gate dagents:impl-opus-medium "$id" $'**Status:** DONE\na third, distinct stop'
   check "A10: and the stop after that passes" "$grc" "0"
   check "A10: the repeats added no second log line for the first agent" "$(grep -c " $id " "$log")" "1"
 fi
@@ -387,16 +387,16 @@ if selected A11; then
 
   OLDPATH=$PATH
   export PATH="$STUBS_PATH:$OLDPATH"
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/big.md")"
+  gate dagents:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/big.md")"
   check "A11: a complete 1,000-line report passes" "$grc" "0"
-  gate dforge:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/big-bad.md")"
+  gate dagents:impl-sonnet-high "$(newid)" "$(msg DONE "$TMP/reports/big-bad.md")"
   check "A11: an incomplete 1,000-line report is blocked" "$grc" "2"
-  gate dforge:impl-sonnet-high "$(newid)" $'**Status:** DONE\nno report line'
+  gate dagents:impl-sonnet-high "$(newid)" $'**Status:** DONE\nno report line'
   check "A11: a reply with no Report: line is blocked" "$grc" "2"
   id=$(newid)
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\none'
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\ntwo'
-  gate dforge:impl-sonnet-high "$id" $'**Status:** DONE\nthree'
+  gate dagents:impl-sonnet-high "$id" $'**Status:** DONE\none'
+  gate dagents:impl-sonnet-high "$id" $'**Status:** DONE\ntwo'
+  gate dagents:impl-sonnet-high "$id" $'**Status:** DONE\nthree'
   check "A11: the pass-through path passes" "$grc" "0"
   export PATH=$OLDPATH
   check "A11: no test runner or network tool stub was invoked by any gate run" "$(cat "$STUBLOG")" ""

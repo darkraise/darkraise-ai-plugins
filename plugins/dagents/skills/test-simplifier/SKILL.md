@@ -30,7 +30,7 @@ deletion. Commit it with each wave.
 ## Scope
 
 The skill takes an optional scope. `--modules <paths>` limits the run to those
-paths; the dforge:closing-a-milestone recommendation passes the milestone's
+paths; the dagents:closing-a-milestone recommendation passes the milestone's
 modules. `--since <ref>` limits it to tests added after the ref: the test files
 `git diff --diff-filter=A --name-only <ref>..HEAD` lists and the cases added to
 existing test files. With a scope, Phase 1 still profiles the whole suite, and
@@ -39,7 +39,7 @@ Phase 4 waves take candidates only from inside the scope.
 ## Division of labour
 
 Tests added on the current branch are merged or removed by the REFACTOR step of
-dforge:test-driven-development and the `test-quality` lens of the final review.
+dagents:test-driven-development and the `test-quality` lens of the final review.
 This skill handles tests already on the default branch.
 
 ## Phase 1. Measure
@@ -149,7 +149,7 @@ scoped to the wave's module:
 4. Coverage of the module does not drop either. Both must hold.
 
 **Without one**, the faults must still be caught. Before changing anything,
-dispatch dforge:judge-opus with the *fault* prompt in
+dispatch dagents:judge-opus with the *fault* prompt in
 [simplify-judge.md](references/simplify-judge.md): for each candidate it names
 three to five concrete faults that candidate catches today. Then make the wave's
 changes and, for each named fault, apply it to the production code as a
@@ -161,7 +161,7 @@ the last revert, `git status --porcelain` shows no production file.
 ### Verification
 
 Commit the wave, including its ledger section with the evidence, before the
-judge runs, and dispatch dforge:judge-opus with the *ruling* prompt in
+judge runs, and dispatch dagents:judge-opus with the *ruling* prompt in
 [simplify-judge.md](references/simplify-judge.md), naming that SHA and carrying
 its `git show` output, since the judge has no Bash. The working tree stays
 clean at that SHA until the verdict returns.

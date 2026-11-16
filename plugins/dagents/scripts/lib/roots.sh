@@ -1,4 +1,4 @@
-# Sourced. Where a repository's two dforge families live (darkmem store
+# Sourced. Where a repository's two dagents families live (darkmem store
 # options spec §2): documents (the docs directory) and progress (plan ledgers,
 # their handoff.md, and latest.md), each in the checkout or in the darkmem
 # mirror, as `darkmem-config.mjs --mode` resolves them. Defines functions only.
@@ -6,27 +6,27 @@
 # Every helper takes an optional trailing DIR naming the checkout (default: the
 # working directory). The resolution is cached per HOME and checkout in shell
 # variables; a helper called inside $(…) cannot fill the caller's cache, so a
-# script that calls helpers repeatedly calls dforge_stores_init in its main
+# script that calls helpers repeatedly calls dagents_stores_init in its main
 # shell first. A ConfigError exits the script with status 2.
 
-. "$(dirname "${BASH_SOURCE[0]}")/dforge-dir.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/dagents-dir.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/native-path.sh"
 _ROOTS_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-_DFORGE_KEY="" _DFORGE_TOP="" _DFORGE_DOCS_STORE="" _DFORGE_DOCS_ROOT=""
-_DFORGE_PROGRESS_STORE="" _DFORGE_LEDGER_ROOT="" _DFORGE_LATEST="" _DFORGE_PROJECT=""
+_DAGENTS_KEY="" _DAGENTS_TOP="" _DAGENTS_DOCS_STORE="" _DAGENTS_DOCS_ROOT=""
+_DAGENTS_PROGRESS_STORE="" _DAGENTS_LEDGER_ROOT="" _DAGENTS_LATEST="" _DAGENTS_PROJECT=""
 
 # Node prints native paths; Git Bash compares them in git's C:/… form, which
 # is always long: git expands an 8.3 short name such as RUNNER~1 in a TEMP
 # directory that cygpath keeps.
-_dforge_path() {
-  if command -v cygpath >/dev/null 2>&1; then _dforge_long "$(cygpath -m "$1" 2>/dev/null || printf '%s' "$1")"
+_dagents_path() {
+  if command -v cygpath >/dev/null 2>&1; then _dagents_long "$(cygpath -m "$1" 2>/dev/null || printf '%s' "$1")"
   else printf '%s\n' "$1"; fi
 }
 
 # The long form of a C:/… path. GetLongPathName, behind cygpath -l, needs the
 # path to exist, so the deepest existing ancestor is expanded and the rest kept.
-_dforge_long() {
+_dagents_long() {
   local head=$1 tail=""
   while [ -n "$head" ] && [ ! -e "$head" ]; do
     case $head in */*) tail="/${head##*/}$tail" head=${head%/*} ;; *) head="" ;; esac
@@ -37,173 +37,173 @@ _dforge_long() {
 
 # Both families local, computed without node: no node on PATH, or no git
 # repository (then DIR stands in for the checkout).
-_dforge_local() { # DIR TOP
+_dagents_local() { # DIR TOP
   local base=${2:-$1} primary=${2:-$1} common
   if [ -n "$2" ]; then
     if common=$(git -C "$2" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
       primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null) || primary=$2
     fi
   fi
-  _DFORGE_DOCS_STORE=local
-  _DFORGE_DOCS_ROOT=$(dforge_dir docs "$base")
-  _DFORGE_PROGRESS_STORE=local
-  _DFORGE_LEDGER_ROOT="$(dforge_dir state "$base")/sdd"
-  _DFORGE_LATEST="$(dforge_dir state "$primary")/handoff/latest.md"
-  _DFORGE_PROJECT=""
+  _DAGENTS_DOCS_STORE=local
+  _DAGENTS_DOCS_ROOT=$(dagents_dir docs "$base")
+  _DAGENTS_PROGRESS_STORE=local
+  _DAGENTS_LEDGER_ROOT="$(dagents_dir state "$base")/sdd"
+  _DAGENTS_LATEST="$(dagents_dir state "$primary")/handoff/latest.md"
+  _DAGENTS_PROJECT=""
 }
 
-dforge_stores_init() { # [DIR]
+dagents_stores_init() { # [DIR]
   local dir=${1:-$PWD} top key out kind store root extra
   # Git Bash's $PWD is /tmp/... or /d/...; under MSYS_NO_PATHCONV git.exe takes
   # that form verbatim and finds no repository.
   top=$(git -C "$(dr_native_path "$dir")" rev-parse --show-toplevel 2>/dev/null) || top=""
   key="${HOME:-}|${top:-nogit:$dir}"
-  [ "$_DFORGE_KEY" = "$key" ] && return 0
-  _DFORGE_TOP=$top
+  [ "$_DAGENTS_KEY" = "$key" ] && return 0
+  _DAGENTS_TOP=$top
   if [ -z "$top" ] || ! command -v node >/dev/null 2>&1; then
-    _dforge_local "$dir" "$top"
-    _DFORGE_KEY=$key
+    _dagents_local "$dir" "$top"
+    _DAGENTS_KEY=$key
     return 0
   fi
   if ! out=$(cd "$dir" && node "$(dr_native_path "$_ROOTS_LIB_DIR/darkmem-config.mjs")" --mode 2>&1); then
     printf '%s\n' "$out" >&2
     exit 2
   fi
-  _DFORGE_DOCS_STORE="" _DFORGE_DOCS_ROOT="" _DFORGE_PROGRESS_STORE="" _DFORGE_LEDGER_ROOT="" _DFORGE_LATEST="" _DFORGE_PROJECT=""
+  _DAGENTS_DOCS_STORE="" _DAGENTS_DOCS_ROOT="" _DAGENTS_PROGRESS_STORE="" _DAGENTS_LEDGER_ROOT="" _DAGENTS_LATEST="" _DAGENTS_PROJECT=""
   while IFS=$'\t' read -r kind store root extra; do
     case $kind in
-      documents) _DFORGE_DOCS_STORE=$store _DFORGE_DOCS_ROOT=$(_dforge_path "$root") ;;
+      documents) _DAGENTS_DOCS_STORE=$store _DAGENTS_DOCS_ROOT=$(_dagents_path "$root") ;;
       progress)
-        _DFORGE_PROGRESS_STORE=$store _DFORGE_LEDGER_ROOT=$(_dforge_path "$root")
-        _DFORGE_LATEST=$(_dforge_path "$extra")
+        _DAGENTS_PROGRESS_STORE=$store _DAGENTS_LEDGER_ROOT=$(_dagents_path "$root")
+        _DAGENTS_LATEST=$(_dagents_path "$extra")
         ;;
-      project) _DFORGE_PROJECT=$store ;;
+      project) _DAGENTS_PROJECT=$store ;;
     esac
   done <<<"$out"
   # A run that exits 0 without both lines (node's main-module check fails when
   # the plugin path holds a symbolic link) would leave every root empty, and
   # the helpers would print paths under /.
-  if [ -z "$_DFORGE_DOCS_STORE" ] || [ -z "$_DFORGE_DOCS_ROOT" ] || [ -z "$_DFORGE_PROGRESS_STORE" ] \
-     || [ -z "$_DFORGE_LEDGER_ROOT" ] || [ -z "$_DFORGE_LATEST" ]; then
+  if [ -z "$_DAGENTS_DOCS_STORE" ] || [ -z "$_DAGENTS_DOCS_ROOT" ] || [ -z "$_DAGENTS_PROGRESS_STORE" ] \
+     || [ -z "$_DAGENTS_LEDGER_ROOT" ] || [ -z "$_DAGENTS_LATEST" ]; then
     printf 'roots.sh: darkmem-config.mjs --mode printed no roots for %s\n' "$dir" >&2
     exit 2
   fi
-  _DFORGE_KEY=$key
+  _DAGENTS_KEY=$key
 }
 
-dforge_docs_root() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_DOCS_ROOT"; }
-dforge_docs_store() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_DOCS_STORE"; }
-dforge_progress_store() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_PROGRESS_STORE"; }
-dforge_ledger_root() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_LEDGER_ROOT"; }
-dforge_latest_file() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_LATEST"; }
-dforge_ledger_dir() { dforge_stores_init "${2:-}"; printf '%s/%s\n' "$_DFORGE_LEDGER_ROOT" "$1"; } # SLUG [DIR]
+dagents_docs_root() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_DOCS_ROOT"; }
+dagents_docs_store() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_DOCS_STORE"; }
+dagents_progress_store() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_PROGRESS_STORE"; }
+dagents_ledger_root() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_LEDGER_ROOT"; }
+dagents_latest_file() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_LATEST"; }
+dagents_ledger_dir() { dagents_stores_init "${2:-}"; printf '%s/%s\n' "$_DAGENTS_LEDGER_ROOT" "$1"; } # SLUG [DIR]
 
-# dforge_project [DIR] — the darkmem project the repository is mapped to;
+# dagents_project [DIR] — the darkmem project the repository is mapped to;
 # status 1 with nothing printed when it is unmapped, outside git or without node.
-dforge_project() { dforge_stores_init "${1:-}"; [ -n "$_DFORGE_PROJECT" ] || return 1; printf '%s\n' "$_DFORGE_PROJECT"; }
+dagents_project() { dagents_stores_init "${1:-}"; [ -n "$_DAGENTS_PROJECT" ] || return 1; printf '%s\n' "$_DAGENTS_PROJECT"; }
 
-dforge_workspace() { # SLUG [DIR]
-  dforge_stores_init "${2:-}"
-  printf '%s/sdd/%s\n' "$(dforge_dir state "${_DFORGE_TOP:-${2:-$PWD}}")" "$1"
+dagents_workspace() { # SLUG [DIR]
+  dagents_stores_init "${2:-}"
+  printf '%s/sdd/%s\n' "$(dagents_dir state "${_DAGENTS_TOP:-${2:-$PWD}}")" "$1"
 }
 
-# dforge_ledger_files [DIR] — "<ledger>\t<checkout>" for every worktree's
+# dagents_ledger_files [DIR] — "<ledger>\t<checkout>" for every worktree's
 # ledgers when progress is local; "<ledger>\tmirror" for the mirror's when it
 # is darkmem, listed once, since every worktree shares the mirror.
-dforge_ledger_files() {
+dagents_ledger_files() {
   local wt f
-  dforge_stores_init "${1:-}"
-  if [ "$_DFORGE_PROGRESS_STORE" = darkmem ]; then
-    for f in "$_DFORGE_LEDGER_ROOT"/*/progress.md; do
+  dagents_stores_init "${1:-}"
+  if [ "$_DAGENTS_PROGRESS_STORE" = darkmem ]; then
+    for f in "$_DAGENTS_LEDGER_ROOT"/*/progress.md; do
       [ -f "$f" ] && printf '%s\tmirror\n' "$f"
     done
     return 0
   fi
-  [ -n "$_DFORGE_TOP" ] || return 0
-  git -C "$_DFORGE_TOP" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p' |
+  [ -n "$_DAGENTS_TOP" ] || return 0
+  git -C "$_DAGENTS_TOP" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p' |
   while IFS= read -r wt; do
-    for f in "$(dforge_dir state "$wt")"/sdd/*/progress.md; do
+    for f in "$(dagents_dir state "$wt")"/sdd/*/progress.md; do
       [ -f "$f" ] && printf '%s\t%s\n' "$f" "$wt"
     done
   done
   return 0
 }
 
-# dforge_name_key NAME — the one name every docs prefix shares (store options
+# dagents_name_key NAME — the one name every docs prefix shares (store options
 # spec §7.1): docs/superpowers/<rest> (before 3.0) and docs/forge/<rest> (3.x)
-# are docs/dforge/<rest>. dforge has written only docs/dforge since 4.0.0, but
+# are docs/dagents/<rest>. dagents has written only docs/dagents since 4.0.0, but
 # plans, specs, ledgers and registers written before it cite an old prefix and
 # are never rewritten, so every comparison of two document names compares
 # their keys.
-dforge_name_key() {
+dagents_name_key() {
   local name=${1#./}
   [ "$name" = / ] || name=${name%/}
   case $name in
-    docs/superpowers|docs/forge) printf 'docs/dforge\n' ;;
-    docs/superpowers/*) printf 'docs/dforge/%s\n' "${name#docs/superpowers/}" ;;
-    docs/forge/*) printf 'docs/dforge/%s\n' "${name#docs/forge/}" ;;
+    docs/superpowers|docs/forge) printf 'docs/dagents\n' ;;
+    docs/superpowers/*) printf 'docs/dagents/%s\n' "${name#docs/superpowers/}" ;;
+    docs/forge/*) printf 'docs/dagents/%s\n' "${name#docs/forge/}" ;;
     *) printf '%s\n' "$name" ;;
   esac
 }
 
-# dforge_name_spellings NAME — the key, then for a document name the same name
+# dagents_name_spellings NAME — the key, then for a document name the same name
 # under the 3.x docs/forge and the pre-3.0 docs/superpowers. completed.md and
 # register cells keep the spelling they were written with, so a search runs
 # once per line and accepts any.
-dforge_name_spellings() {
+dagents_name_spellings() {
   local key rest
-  key=$(dforge_name_key "$1")
+  key=$(dagents_name_key "$1")
   printf '%s\n' "$key"
   case $key in
-    docs/dforge) printf 'docs/forge\ndocs/superpowers\n' ;;
-    docs/dforge/*)
-      rest=${key#docs/dforge/}
+    docs/dagents) printf 'docs/forge\ndocs/superpowers\n' ;;
+    docs/dagents/*)
+      rest=${key#docs/dagents/}
       printf 'docs/forge/%s\ndocs/superpowers/%s\n' "$rest" "$rest" ;;
   esac
 }
 
-# dforge_resolve NAME [DIR] — a document name under the docs root, any other
+# dagents_resolve NAME [DIR] — a document name under the docs root, any other
 # relative name under the worktree, an absolute path unchanged. A historical
-# citation docs/superpowers/… or docs/forge/… resolves as docs/dforge/… does.
-dforge_resolve() {
+# citation docs/superpowers/… or docs/forge/… resolves as docs/dagents/… does.
+dagents_resolve() {
   local name=${1#./}
-  dforge_stores_init "${2:-}"
+  dagents_stores_init "${2:-}"
   case $name in
     /*|[A-Za-z]:/*|[A-Za-z]:\\*) printf '%s\n' "$1" ;;
-    docs/dforge|docs/forge|docs/superpowers) printf '%s\n' "$_DFORGE_DOCS_ROOT" ;;
-    docs/dforge/*) printf '%s/%s\n' "$_DFORGE_DOCS_ROOT" "${name#docs/dforge/}" ;;
-    docs/forge/*) printf '%s/%s\n' "$_DFORGE_DOCS_ROOT" "${name#docs/forge/}" ;;
-    docs/superpowers/*) printf '%s/%s\n' "$_DFORGE_DOCS_ROOT" "${name#docs/superpowers/}" ;;
-    *) printf '%s/%s\n' "${_DFORGE_TOP:-${2:-$PWD}}" "$name" ;;
+    docs/dagents|docs/forge|docs/superpowers) printf '%s\n' "$_DAGENTS_DOCS_ROOT" ;;
+    docs/dagents/*) printf '%s/%s\n' "$_DAGENTS_DOCS_ROOT" "${name#docs/dagents/}" ;;
+    docs/forge/*) printf '%s/%s\n' "$_DAGENTS_DOCS_ROOT" "${name#docs/forge/}" ;;
+    docs/superpowers/*) printf '%s/%s\n' "$_DAGENTS_DOCS_ROOT" "${name#docs/superpowers/}" ;;
+    *) printf '%s/%s\n' "${_DAGENTS_TOP:-${2:-$PWD}}" "$name" ;;
   esac
 }
 
-_dforge_name_of() { # ABSOLUTE — its name when it lies under a root; status 1 otherwise
+_dagents_name_of() { # ABSOLUTE — its name when it lies under a root; status 1 otherwise
   local docs_name
-  docs_name=$(dforge_dir_rel docs "${_DFORGE_TOP:-$PWD}")
+  docs_name=$(dagents_dir_rel docs "${_DAGENTS_TOP:-$PWD}")
   case $1 in
-    "$_DFORGE_DOCS_ROOT") printf '%s\n' "$docs_name"; return 0 ;;
-    "$_DFORGE_DOCS_ROOT"/*) printf '%s/%s\n' "$docs_name" "${1#"$_DFORGE_DOCS_ROOT"/}"; return 0 ;;
+    "$_DAGENTS_DOCS_ROOT") printf '%s\n' "$docs_name"; return 0 ;;
+    "$_DAGENTS_DOCS_ROOT"/*) printf '%s/%s\n' "$docs_name" "${1#"$_DAGENTS_DOCS_ROOT"/}"; return 0 ;;
   esac
-  [ -n "$_DFORGE_TOP" ] || return 1
-  case $1 in "$_DFORGE_TOP"/*) printf '%s\n' "${1#"$_DFORGE_TOP"/}"; return 0 ;; esac
+  [ -n "$_DAGENTS_TOP" ] || return 1
+  case $1 in "$_DAGENTS_TOP"/*) printf '%s\n' "${1#"$_DAGENTS_TOP"/}"; return 0 ;; esac
   return 1
 }
 
-# dforge_name FILE [DIR] — the inverse of dforge_resolve, computed from the roots.
+# dagents_name FILE [DIR] — the inverse of dagents_resolve, computed from the roots.
 # A relative FILE is a path from the working directory, as every caller holds
 # it, even when DIR names another directory: one that exists from a
 # subdirectory of the checkout is made absolute first. A path spelled through a
 # symbolic link is retried in its physical form, and a Git Bash /c/… path in
 # git's C:/… form. A path under no root keeps its spelling when it names
 # nothing: cygpath would place a POSIX one under the Git installation.
-dforge_name() {
+dagents_name() {
   local file=${1//\\//} given physical
-  dforge_stores_init "${2:-}"
+  dagents_stores_init "${2:-}"
   case $file in
     /*|[A-Za-z]:/*) ;;
     *)
-      if [ -n "$_DFORGE_TOP" ] && [ "$PWD" != "$_DFORGE_TOP" ] && [ -e "$file" ]; then
+      if [ -n "$_DAGENTS_TOP" ] && [ "$PWD" != "$_DAGENTS_TOP" ] && [ -e "$file" ]; then
         file="$(cd "$(dirname "$file")" && pwd)/$(basename "$file")"
       else
         printf '%s\n' "${file#./}"; return 0
@@ -212,12 +212,12 @@ dforge_name() {
   given=$file
   if command -v cygpath >/dev/null 2>&1; then
     file=$(cygpath -m "$file" 2>/dev/null || printf '%s' "$file")
-    _dforge_name_of "$file" && return 0
-    file=$(_dforge_long "$file")
+    _dagents_name_of "$file" && return 0
+    file=$(_dagents_long "$file")
   fi
-  _dforge_name_of "$file" && return 0
+  _dagents_name_of "$file" && return 0
   physical="$(cd "$(dirname "$file")" 2>/dev/null && pwd -P)/$(basename "$file")"
-  [ "$physical" != "/$(basename "$file")" ] && physical=$(_dforge_path "$physical")
-  [ "$physical" != "/$(basename "$file")" ] && [ "$physical" != "$file" ] && _dforge_name_of "$physical" && return 0
+  [ "$physical" != "/$(basename "$file")" ] && physical=$(_dagents_path "$physical")
+  [ "$physical" != "/$(basename "$file")" ] && [ "$physical" != "$file" ] && _dagents_name_of "$physical" && return 0
   if [ -e "$file" ]; then printf '%s\n' "$file"; else printf '%s\n' "$given"; fi
 }

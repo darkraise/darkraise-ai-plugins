@@ -18,7 +18,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 # Entries go to jq on stdin: under MSYS_NO_PATHCONV, jq.exe cannot open the
 # /d/... form pwd gives on Git Bash.
-DIR="${DR_EXECUTORS_DIR:-$ROOT/reference/executors}"
+DIR="${DAGENTS_EXECUTORS_DIR:-$ROOT/reference/executors}"
 
 die() { printf 'executors: %s\n' "$1" >&2; exit 2; }
 

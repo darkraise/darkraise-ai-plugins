@@ -6,7 +6,7 @@
   "wrapper": "tests/fixtures/executors/bin/stub-wrapper",
   "reference": "reference/executor-lane.md",
   "session_dir": "stub-sessions",
-  "session_dir_env": "DR_STUB_SESSION_DIR",
+  "session_dir_env": "DAGENTS_STUB_SESSION_DIR",
   "surfaces": ["lane"],
   "blocks": {
     "gate": "stub-gate",

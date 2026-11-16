@@ -8,10 +8,10 @@ UIUX_DEFAULT_GLOBS='*.tsx *.jsx *.vue *.svelte *.astro *.html *.css *.scss *.sas
 UIUX_EXCLUDE_GLOBS='*.test.* *.spec.* *.stories.* *.acceptance.*'
 
 # uiux_profile ROOT — ROOT's UI profile path, whether or not it exists.
-uiux_profile() { printf '%s/ui-ux/profile.md\n' "$(dforge_docs_root "$1")"; }
+uiux_profile() { printf '%s/ui-ux/profile.md\n' "$(dagents_docs_root "$1")"; }
 
 # uiux_proofs_dir ROOT — where ROOT's proof reports live.
-uiux_proofs_dir() { printf '%s/ui-ux/proofs\n' "$(dforge_docs_root "$1")"; }
+uiux_proofs_dir() { printf '%s/ui-ux/proofs\n' "$(dagents_docs_root "$1")"; }
 
 # uiux_field FILE LABEL — the value of FILE's first "**LABEL:**" line outside
 # fences, trimmed, backticks removed; nothing when there is none.
@@ -195,15 +195,15 @@ uiux_rows() {
 }
 
 # uiux_ran_skill TRANSCRIPT — status 0 when the transcript shows a Skill tool
-# call for dforge:ui-ux (or ui-ux) or a typed /dforge:ui-ux command.
+# call for dagents:ui-ux (or ui-ux) or a typed /dagents:ui-ux command.
 uiux_ran_skill() {
   [ -n "${1:-}" ] && [ -f "$1" ] || return 1
   jq -rR 'fromjson? | objects
     | if .type? == "assistant" then
         .message.content? | arrays | .[] | select(.type? == "tool_use" and .name? == "Skill")
-        | .input.skill? | strings | select(. == "dforge:ui-ux" or . == "ui-ux")
+        | .input.skill? | strings | select(. == "dagents:ui-ux" or . == "ui-ux")
       elif .type? == "user" then
         .message.content? | (if type == "string" then . elif type == "array" then (.[] | select(.type? == "text") | .text?) else empty end)
-        | strings | select(contains("<command-name>/dforge:ui-ux"))
+        | strings | select(contains("<command-name>/dagents:ui-ux"))
       else empty end' "$1" 2>/dev/null | grep -q .
 }

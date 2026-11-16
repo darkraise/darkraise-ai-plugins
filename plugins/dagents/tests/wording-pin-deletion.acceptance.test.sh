@@ -3,8 +3,8 @@
 # path globs and the Test ratio must treat only real test directories and
 # test files as tests.
 set -uo pipefail
-unset CLAUDE_CONFIG_DIR DFORGE_LENS_CAP
-export DFORGE_NO_SETTINGS=1 DFORGE_LENS_MINOR_FROM=0
+unset CLAUDE_CONFIG_DIR DAGENTS_LENS_CAP
+export DAGENTS_NO_SETTINGS=1 DAGENTS_LENS_MINOR_FROM=0
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN="$HERE/.."

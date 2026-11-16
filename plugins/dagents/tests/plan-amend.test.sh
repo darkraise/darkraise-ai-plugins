@@ -57,7 +57,7 @@ cat > docs/plan.md <<'EOF'
 **Files:**
 - Create: `a.sh`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dagents:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 Print `hello NAME`.
@@ -67,12 +67,12 @@ Print `hello NAME`.
 **Files:**
 - Modify: `a.sh`
 
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dagents:impl-sonnet-medium
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 
 Print `hello NAME` twice.
 EOF
-WS="$REPO/.dforge/sdd/plan"
+WS="$REPO/.dagents/sdd/plan"
 LEDGER="$WS/amendments.md"
 
 entry() { # entry <file> <heading> <old> <new>
@@ -111,7 +111,7 @@ entry b6.md '## Header' '**Execution:** subagent — `claude --model sonnet --ef
 run docs/plan.md b6.md
 has "protected line" "$out" "rejected: Old text touches a line that cannot be amended"
 
-entry b7.md '## Task 2' '**Implementer:** dforge:impl-sonnet-medium' '**Implementer:** dforge:impl-opus-high'
+entry b7.md '## Task 2' '**Implementer:** dagents:impl-sonnet-medium' '**Implementer:** dagents:impl-opus-high'
 run docs/plan.md b7.md
 check "new lint error: exit 1" "$status" "1"
 has "new lint error: reason" "$out" "rejected: the amendment introduces lint errors:"
@@ -140,11 +140,11 @@ check "CRLF block, builds on A1: output" "$out" "amended: A3 Task 2"
 
 # --- a split into parts, as the ruling seat's AMEND writes it ---
 cp docs/plan.md docs/split.md
-SPLIT_LEDGER="$REPO/.dforge/sdd/split/amendments.md"
+SPLIT_LEDGER="$REPO/.dagents/sdd/split/amendments.md"
 part() { # part <letter> [evaluation line]
-  printf '#### Part %s: half %s\n\n**Files:**\n- Modify: `a.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n%s' "$1" "$1" "${2-}"
+  printf '#### Part %s: half %s\n\n**Files:**\n- Modify: `a.sh`\n\n**Implementer:** dagents:impl-sonnet-low\n%s' "$1" "$1" "${2-}"
 }
-split_old=$(printf '**Implementer:** dforge:impl-sonnet-medium\n**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4')
+split_old=$(printf '**Implementer:** dagents:impl-sonnet-medium\n**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4')
 ev='**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1'
 entry s1.md '## A? — Task 2' "$split_old" "$(printf '%s\n\n%s' "$(part A "$ev")" "$(part B)")"
 run docs/split.md s1.md
@@ -199,16 +199,16 @@ bash "$AMEND" docs/race.md r2.md > "$TMP/race2" 2>&1 &
 wait
 check "concurrent amendments: both numbered apart" \
   "$(cat "$TMP/race1" "$TMP/race2" | sed 's/ Task [12]$//' | sort | tr '\n' ' ')" "amended: A1 amended: A2 "
-check "concurrent amendments: both kept" "$(grep -c '^## A[12] — Task' "$REPO/.dforge/sdd/race/amendments.md")" "2"
+check "concurrent amendments: both kept" "$(grep -c '^## A[12] — Task' "$REPO/.dagents/sdd/race/amendments.md")" "2"
 
 # The same, without flock: the lock directory serializes them.
 cp docs/plan.md docs/race-mkdir.md
-DFORGE_FLOCK=no-such-flock bash "$AMEND" docs/race-mkdir.md r1.md > "$TMP/race1" 2>&1 &
-DFORGE_FLOCK=no-such-flock bash "$AMEND" docs/race-mkdir.md r2.md > "$TMP/race2" 2>&1 &
+DAGENTS_FLOCK=no-such-flock bash "$AMEND" docs/race-mkdir.md r1.md > "$TMP/race1" 2>&1 &
+DAGENTS_FLOCK=no-such-flock bash "$AMEND" docs/race-mkdir.md r2.md > "$TMP/race2" 2>&1 &
 wait
 check "no flock: concurrent amendments both numbered apart" \
   "$(cat "$TMP/race1" "$TMP/race2" | sed 's/ Task [12]$//' | sort | tr '\n' ' ')" "amended: A1 amended: A2 "
-check "no flock: concurrent amendments both kept" "$(grep -c '^## A[12] — Task' "$REPO/.dforge/sdd/race-mkdir/amendments.md")" "2"
+check "no flock: concurrent amendments both kept" "$(grep -c '^## A[12] — Task' "$REPO/.dagents/sdd/race-mkdir/amendments.md")" "2"
 check "no flock: the lock directory is gone" "$(find "$REPO" -name '*.lockd' | grep -c .)" "0"
 # A mkdir that answers 0 for a directory that exists, as uutils' mkdir does to
 # more than one of several shells racing for one: the claim still admits one.
@@ -217,12 +217,12 @@ mkdir -p "$LYING"
 printf '#!%s\n"%s" "$@" 2>/dev/null\nexit 0\n' "$BASH" "$(type -P mkdir)" > "$LYING/mkdir"
 chmod +x "$LYING/mkdir"
 cp docs/plan.md docs/race-lying.md
-PATH="$LYING:$PATH" DFORGE_FLOCK=no-such-flock bash "$AMEND" docs/race-lying.md r1.md > "$TMP/race1" 2>&1 &
-PATH="$LYING:$PATH" DFORGE_FLOCK=no-such-flock bash "$AMEND" docs/race-lying.md r2.md > "$TMP/race2" 2>&1 &
+PATH="$LYING:$PATH" DAGENTS_FLOCK=no-such-flock bash "$AMEND" docs/race-lying.md r1.md > "$TMP/race1" 2>&1 &
+PATH="$LYING:$PATH" DAGENTS_FLOCK=no-such-flock bash "$AMEND" docs/race-lying.md r2.md > "$TMP/race2" 2>&1 &
 wait
 check "a mkdir that is not exclusive: concurrent amendments numbered apart" \
   "$(cat "$TMP/race1" "$TMP/race2" | sed 's/ Task [12]$//' | sort | tr '\n' ' ')" "amended: A1 amended: A2 "
-check "a mkdir that is not exclusive: both kept" "$(grep -c '^## A[12] — Task' "$REPO/.dforge/sdd/race-lying/amendments.md")" "2"
+check "a mkdir that is not exclusive: both kept" "$(grep -c '^## A[12] — Task' "$REPO/.dagents/sdd/race-lying/amendments.md")" "2"
 
 # A write that fails is reported, never "amended".
 mkdir -p "$TMP/failcp"
@@ -231,13 +231,13 @@ case "$*" in *amendments.md.*) exit 1 ;; esac
 exec %s "$@"
 ' "$(command -v cp)" > "$TMP/failcp/cp"
 chmod +x "$TMP/failcp/cp"
-cp "$REPO/.dforge/sdd/race/amendments.md" "$TMP/race-snapshot"
+cp "$REPO/.dagents/sdd/race/amendments.md" "$TMP/race-snapshot"
 entry r3.md '## Task 1' 'Print `hello, NAME`.' 'Print `hi NAME`.'
 out=$(PATH="$TMP/failcp:$PATH" bash "$AMEND" docs/race.md r3.md 2>&1); status=$?
 check "a failed write: exit 2" "$status" "2"
 check "a failed write: never says amended" "$(grep -c '^amended' <<<"$out")" "0"
 check "a failed write: amendments unchanged" \
-  "$(cmp -s "$REPO/.dforge/sdd/race/amendments.md" "$TMP/race-snapshot" && echo same)" "same"
+  "$(cmp -s "$REPO/.dagents/sdd/race/amendments.md" "$TMP/race-snapshot" && echo same)" "same"
 
 # --- --report: an AMEND entry taken from a ruling report, never hand-copied ---
 # A ruling report numbers its entries A1, A2 … in the report; --id names one.
@@ -251,7 +251,7 @@ entry "$TMP/rep-e2" '## A2 — Header' '- Bash only.' '- Bash 4 or later.'
   printf '\n## Notes\n\nTrailing text that belongs to no entry.\n'
 } > "$TMP/ruling-report.md"
 for n in a b c d; do cp docs/plan.md "docs/rep-$n.md"; done
-REP_A="$REPO/.dforge/sdd/rep-a/amendments.md" REP_B="$REPO/.dforge/sdd/rep-b/amendments.md"
+REP_A="$REPO/.dagents/sdd/rep-a/amendments.md" REP_B="$REPO/.dagents/sdd/rep-b/amendments.md"
 run docs/rep-a.md b1.md
 check "report: the hand-copied block applies" "$out" "amended: A1 Task 2"
 run docs/rep-b.md --report "$TMP/ruling-report.md" --id A1
@@ -288,7 +288,7 @@ check "report: the refusals left amendments unchanged" "$(cmp -s "$REP_B" "$TMP/
 # A linked worktree session must not amend the primary checkout's plan: the
 # worktree's task-brief would never see the amendment.
 git add -A && git commit -qm 'test: seed' && git worktree add -q "$TMP/wt"
-amendments="$REPO/.dforge/sdd/plan/amendments.md"
+amendments="$REPO/.dagents/sdd/plan/amendments.md"
 before_amend=$(cat "$amendments" 2>/dev/null)
 (cd "$TMP/wt" && bash "$AMEND" "$REPO/docs/plan.md" "$REPO/b1.md") >/dev/null 2>&1
 check "primary plan from a linked worktree: refused" "$?" "2"

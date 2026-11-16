@@ -38,7 +38,7 @@ lacks() { # lacks <name> <haystack> <needle>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 cd "$TMP"
-# Every case reads this home, never the developer's ~/.dforge; the name-key
+# Every case reads this home, never the developer's ~/.dagents; the name-key
 # cases below set their own.
 export HOME="$TMP/home"
 mkdir -p "$HOME"
@@ -47,11 +47,11 @@ printf '# Spec\n' > docs/spec.md
 printf '# Program\n' > docs/program.md
 # The lane probe reads this session's Codex gate file. A fixed session id and a
 # temporary directory keep the machine's real session state out of every case.
-export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=plan-lint-test
+export DAGENTS_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=plan-lint-test
 lane_surface() { # lane_surface <true|false>
-  mkdir -p "$DR_CODEX_SESSION_DIR"
+  mkdir -p "$DAGENTS_CODEX_SESSION_DIR"
   printf '{"session_id":"plan-lint-test","usable":true,"review":false,"lane":%s}\n' "$1" \
-    > "$DR_CODEX_SESSION_DIR/plan-lint-test.json"
+    > "$DAGENTS_CODEX_SESSION_DIR/plan-lint-test.json"
 }
 lane_surface true
 # Stub rosters for the lane probe. Every case uses one, so no case depends on
@@ -87,7 +87,7 @@ claude_plan() {
 
 **CI:** none
 
-**Plan review:** 2026-09-12 — dforge:judge-fable — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
+**Plan review:** 2026-09-12 — dagents:judge-fable — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
 ## Global Constraints
 
@@ -111,7 +111,7 @@ None
 **Files:**
 - Create: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dagents:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 - [ ] **Step 1: Write the failing test**
@@ -126,7 +126,7 @@ echo hi
 **Files:**
 - Modify: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dagents:impl-sonnet-medium
 **Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 **Approach:** inline - skip 2: follows the pattern
 
@@ -268,7 +268,7 @@ variant v9d.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --mod
 lint v9d.md
 lacks "risk 3 is not delegated" "$out" "(heavy)"
 has "risk 3 inline needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
-variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dforge:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
+variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dagents:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dagents:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
 lint v9j.md
 lacks "a split task with a heavy part is not delegated" "$out" "(heavy)"
 check "a split task with a heavy part inline at effort high: exit 0" "$status" "0"
@@ -318,13 +318,13 @@ tplan() { # tplan <file> <mode> <model> <effort> <total ...> — one clean task 
   {
     printf '# Mode Plan\n\n**Goal:** Demo.\n\n**Spec:** `docs/spec.md`\n\n'
     printf '**Execution:** %s — `claude --model %s --effort %s` — x\n\n' "$mode" "$model" "$effort"
-    printf '**Plan review:** 2026-09-17 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)\n\n'
+    printf '**Plan review:** 2026-09-17 — dagents:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)\n\n'
     printf '## Global Constraints\n\n- Bash only.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n'
     for t in "$@"; do i=$((i + 1)); printf '%s. Step %s\n' "$i" "$i"; done
     i=0
     for t in "$@"; do
       i=$((i + 1)); e=$(ev "$t")
-      printf '\n### Task %s: Step %s\n\n**Files:**\n- Modify: `f%s.txt`\n\n**Implementer:** dforge:%s\n**Evaluation:** %s\n' \
+      printf '\n### Task %s: Step %s\n\n**Files:**\n- Modify: `f%s.txt`\n\n**Implementer:** dagents:%s\n**Evaluation:** %s\n' \
         "$i" "$i" "$i" "${e%% *}" "${e#* }"
     done
   } > "$f"
@@ -399,7 +399,7 @@ lacks "leading punctuation in a title survives the index check" "$out" "Task ind
 variant v9f.md '/^## Contracts$/{N;N;s/.*/```text\n## Contracts\n```/}'
 lint v9f.md
 has "a fenced section heading does not count" "$out" "ERROR header: missing '## Contracts' section"
-variant v9g.md 's/^\*\*Implementer:\*\* dforge:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-medium/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
+variant v9g.md 's/^\*\*Implementer:\*\* dagents:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dagents:impl-sonnet-medium/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
 lint v9g.md
 has "split parts: part B is missing its Evaluation" "$out" "ERROR Task 2 part B: missing **Evaluation:** line"
 lacks "split parts: part A is clean" "$out" "Task 2 part A"
@@ -464,9 +464,9 @@ variant t6.md 's/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - c
 lint t6.md
 lacks "impl-opus-high at total 6 is not a reserve finding" "$out" "reserve tier"
 lacks "impl-opus-high at total 6 matches" "$out" "does not match the assignment"
-variant t7.md "s/^(\*\*Implementer:\*\*) dforge:impl-sonnet-low$/\1 old-$(printf 'plug'):impl-sonnet-low/"
+variant t7.md "s/^(\*\*Implementer:\*\*) dagents:impl-sonnet-low$/\1 old-$(printf 'plug'):impl-sonnet-low/"
 lint t7.md
-has "an older plugin prefix is an error" "$out" "ERROR Task 1: Implementer 'old-plug:impl-sonnet-low' is not a dforge agent (dforge:impl-sonnet-low)"
+has "an older plugin prefix is an error" "$out" "ERROR Task 1: Implementer 'old-plug:impl-sonnet-low' is not a dagents agent (dagents:impl-sonnet-low)"
 variant t8.md 's/^\*\*Approach:\*\* .*/**Approach:** inline - follows the pattern/'
 lint t8.md
 has "inline Approach needs skip" "$out" "ERROR Task 2: an inline Approach must cite 'skip <n>'"
@@ -594,7 +594,7 @@ lane_surface false
 rm -f probe-calls; lint p1.md
 lacks "lane surface off: no lane warning" "$out" "lane-eligible"
 check "lane surface off: the roster never runs" "$(calls)" "0"
-rm -rf "$DR_CODEX_SESSION_DIR"
+rm -rf "$DAGENTS_CODEX_SESSION_DIR"
 rm -f probe-calls; lint p1.md
 check "no session file: the roster never runs" "$(calls)" "0"
 lane_surface true
@@ -626,11 +626,11 @@ Reason: the plan picked the wrong tier
 Cost if wrong: one re-dispatch
 ### Old
 ````text
-**Implementer:** dforge:impl-sonnet-medium
+**Implementer:** dagents:impl-sonnet-medium
 ````
 ### New
 ````text
-**Implementer:** dforge:impl-opus-medium
+**Implementer:** dagents:impl-opus-medium
 ````
 EOF
 lint clean.md --amendments am.md
@@ -650,9 +650,9 @@ check "CRLF plan: exit 0" "$status" "0"
 # --- item registers ---
 LREPO="$TMP/lint-registers"
 git init -q -b main "$LREPO"
-mkdir -p "$LREPO/docs/dforge/plans" "$LREPO/docs/dforge/specs" "$LREPO/docs/dforge/registers"
-: > "$LREPO/docs/dforge/specs/s-design.md"
-cat > "$LREPO/docs/dforge/registers/r.md" <<'REG'
+mkdir -p "$LREPO/docs/dagents/plans" "$LREPO/docs/dagents/specs" "$LREPO/docs/dagents/registers"
+: > "$LREPO/docs/dagents/specs/s-design.md"
+cat > "$LREPO/docs/dagents/registers/r.md" <<'REG'
 # R — item register
 
 **Source:** review 2026-09-20
@@ -665,7 +665,7 @@ cat > "$LREPO/docs/dforge/registers/r.md" <<'REG'
 REG
 
 write_plan() { # write_plan <program-suffix> <items-line>
-  cat > "$LREPO/docs/dforge/plans/p.md" <<PLAN
+  cat > "$LREPO/docs/dagents/plans/p.md" <<PLAN
 # P Implementation Plan
 
 **Goal:** g
@@ -700,7 +700,7 @@ None.
 - Consumes: nothing
 - Produces: nothing
 $2
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dagents:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 
 - [ ] **Step 1: Write the failing test**
@@ -732,10 +732,10 @@ OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
 has "plan-lint: 'last' with another sub-project's open row is an error" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
-# Either docs prefix names this plan: an Assigned cell spelled docs/dforge/ is
+# Either docs prefix names this plan: an Assigned cell spelled docs/dagents/ is
 # its row (spec §7.1).
 mkdir -p "$TMP/name-key-home"
-cat > "$LREPO/docs/dforge/registers/r.md" <<'REG'
+cat > "$LREPO/docs/dagents/registers/r.md" <<'REG'
 # R — item register
 
 **Source:** review 2026-09-20
@@ -743,7 +743,7 @@ cat > "$LREPO/docs/dforge/registers/r.md" <<'REG'
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
-| 1 | Covered | docs/dforge/plans/p.md | - | planned | - |
+| 1 | Covered | docs/dagents/plans/p.md | - | planned | - |
 | 2 | Someone else's | C2 | - | planned | - |
 REG
 write_plan "next: Two" ""
@@ -756,7 +756,7 @@ has "plan-lint: 'last' leaves out this plan's row under the other prefix" "$OUT"
   "ERROR header: Program line says 'last' while register rows are open: #2"
 
 # An empty Item cell keeps its place: the Assigned cell is still read as Assigned.
-cat > "$LREPO/docs/dforge/registers/r.md" <<'REG'
+cat > "$LREPO/docs/dagents/registers/r.md" <<'REG'
 # R — item register
 
 **Source:** review 2026-09-20
@@ -778,7 +778,7 @@ has "plan-lint: an empty Item cell: 'last' names only the other row" "$OUT" \
 
 # Two covering registers each number their rows from 1, so a bare id cannot
 # say which row a task discharges; a citation names the register.
-cat > "$LREPO/docs/dforge/registers/r2.md" <<'REG'
+cat > "$LREPO/docs/dagents/registers/r2.md" <<'REG'
 # R2 — item register
 
 **Source:** review 2026-09-21
@@ -813,10 +813,10 @@ write_plan "last" "**Items:** r#1, r2#1"
 OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
 has "plan-lint: 'last' names the open row with its register" "$OUT" \
   "ERROR header: Program line says 'last' while register rows are open: r#2"
-rm "$LREPO/docs/dforge/registers/r2.md"
+rm "$LREPO/docs/dagents/registers/r2.md"
 
 # A plan with no covering register lints exactly as it did before.
-rm "$LREPO/docs/dforge/registers/r.md"
+rm "$LREPO/docs/dagents/registers/r.md"
 write_plan "last" ""
 OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md --no-probe 2>&1)
 lacks "plan-lint: no register means no register findings" "$OUT" "register row"
@@ -825,7 +825,7 @@ lacks "plan-lint: no register means no premature-last finding" "$OUT" "register 
 fi
 if want two; then
 # --- priority routing: agy ranks before codex ---
-export DR_AGY_SESSION_DIR="$TMP/agy-sessions"
+export DAGENTS_AGY_SESSION_DIR="$TMP/agy-sessions"
 agy_rung() { # agy_rung <total> - "<model> / <effort>" from the shipped agy-assignment block
   tr -d '\r' < "$HERE/../reference/ladder.md" \
     | awk -v t="$1" '$0 == "```agy-assignment" { f = 1; next } f && /^```/ { exit } f && $1 == t { print $2 " / " $3 }'
@@ -864,9 +864,9 @@ has "a human override never takes an agy line" "$out" \
 OLD_ROSTER="${PLAN_LINT_ROSTER:-}"
 lane_surface true
 variant w1.md "$T2"
-mkdir -p "$DR_AGY_SESSION_DIR"
+mkdir -p "$DAGENTS_AGY_SESSION_DIR"
 printf '{"session_id":"plan-lint-test","usable":true,"review":false,"lane":true}\n' \
-  > "$DR_AGY_SESSION_DIR/plan-lint-test.json"
+  > "$DAGENTS_AGY_SESSION_DIR/plan-lint-test.json"
 cat > both.sh <<EOF
 printf 'called\n' >> "$TMP/probe-calls"
 echo '[{"id":"agy","usable":true,"reason":null},{"id":"codex","usable":true,"reason":null}]'
@@ -887,22 +887,22 @@ has "agy on but only codex ticked: the warning names codex" "$out" \
 lacks "agy on but only codex ticked: agy is never named" "$out" \
   "lane-eligible with no **Executor:** line (agy"
 lacks "agy on but only codex ticked: a risk-2 task is not named" "$out" "WARN Task 2: lane-eligible"
-rm -f "$DR_AGY_SESSION_DIR/plan-lint-test.json"
+rm -f "$DAGENTS_AGY_SESSION_DIR/plan-lint-test.json"
 rm -f probe-calls; lint w1.md
 has "agy off: codex is named as before" "$out" \
   "WARN Task 1: lane-eligible with no **Executor:** line (codex gpt-6.1-sol / low)"
 lacks "agy off: a risk-2 task is not named" "$out" "WARN Task 2: lane-eligible"
 export PLAN_LINT_ROSTER="$OLD_ROSTER"
-unset DR_AGY_SESSION_DIR
+unset DAGENTS_AGY_SESSION_DIR
 
 # --- Executor lines are validated against their own executor ----------------
-# DR_LADDER points at a fixture ladder that is the shipped one plus the stub's
+# DAGENTS_LADDER points at a fixture ladder that is the shipped one plus the stub's
 # blocks: ladder_block reads one file, and the shipped ladder must not carry
 # test fixtures.
 # This suite defines no $P; the plugin root is "$HERE/.." here.
-export DR_EXECUTORS_DIR="$HERE/fixtures/executors"
-export DR_LADDER="$TMP/stub-ladder.md"
-cat "$HERE/../reference/ladder.md" "$HERE/fixtures/stub-ladder.md" > "$DR_LADDER"
+export DAGENTS_EXECUTORS_DIR="$HERE/fixtures/executors"
+export DAGENTS_LADDER="$TMP/stub-ladder.md"
+cat "$HERE/../reference/ladder.md" "$HERE/fixtures/stub-ladder.md" > "$DAGENTS_LADDER"
 
 # A stub Executor line validates against the stub's own blocks. The fixture
 # ladder supplies them, so the shipped ladder is untouched.
@@ -913,19 +913,19 @@ lacks "a stub Executor line is accepted" "$out" "ERROR Task 1"
 # A gate block the ladder does not carry cannot certify a task, so it is an
 # error rather than an open gate. Only the gate fence is renamed, so
 # stub-assignment still resolves and the rung error does not also fire.
-DR_LADDER="$TMP/stub-ladder-nogate.md"
-cat "$HERE/../reference/ladder.md" > "$DR_LADDER"
-sed 's/^```stub-gate$/```stub-gate-unused/' "$HERE/fixtures/stub-ladder.md" >> "$DR_LADDER"
+DAGENTS_LADDER="$TMP/stub-ladder-nogate.md"
+cat "$HERE/../reference/ladder.md" > "$DAGENTS_LADDER"
+sed 's/^```stub-gate$/```stub-gate-unused/' "$HERE/fixtures/stub-ladder.md" >> "$DAGENTS_LADDER"
 lint s1.md
 has "a missing gate block is an error, not an open gate" "$out" \
   "ERROR Task 1: stub's gate block 'stub-gate' is missing from the ladder"
-DR_LADDER="$TMP/stub-ladder-noscore.md"
-cat "$HERE/../reference/ladder.md" > "$DR_LADDER"
-sed '/^max_score /d' "$HERE/fixtures/stub-ladder.md" >> "$DR_LADDER"
+DAGENTS_LADDER="$TMP/stub-ladder-noscore.md"
+cat "$HERE/../reference/ladder.md" > "$DAGENTS_LADDER"
+sed '/^max_score /d' "$HERE/fixtures/stub-ladder.md" >> "$DAGENTS_LADDER"
 lint s1.md
 has "a gate block without max_score cannot certify a task" "$out" \
   "ERROR Task 1: stub's gate block 'stub-gate' is missing from the ladder"
-DR_LADDER="$TMP/stub-ladder.md"
+DAGENTS_LADDER="$TMP/stub-ladder.md"
 
 # An id with no registry entry is rejected, naming the registry.
 variant s2.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 0 - spec 1 - coupling 1 - risk 0 = 2/; s/^(\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 0 = 2)$/\1\n**Executor:** nosuch m \/ medium/; s/^(\*\*Program:\*\* .*)$/\1\n\n> **External executors:** nosuch/'
@@ -941,7 +941,7 @@ has "the header must name the line's executor" "$out" "ERROR Task 1: Executor us
 RANKED="$TMP/ranked-reg"; mkdir -p "$RANKED"
 jq '. + {priority: 20}' < "$HERE/fixtures/executors/codex.json" > "$RANKED/codex.json"
 jq '. + {priority: 10}' < "$HERE/fixtures/executors/stub.json" > "$RANKED/stub.json"
-export DR_EXECUTORS_DIR="$RANKED"
+export DAGENTS_EXECUTORS_DIR="$RANKED"
 variant k1.md "$T2; ${EV2}codex gpt-6.1-sol \/ low/; $(TICK 'codex, stub')"
 lint k1.md
 has "a lower priority number outranks a lower name" "$out" \
@@ -949,7 +949,7 @@ has "a lower priority number outranks a lower name" "$out" \
 variant k2.md "$T2; ${EV2}stub stub-model \/ medium/; $(TICK 'codex, stub')"
 lint k2.md
 lacks "the executor that ranks first may be named" "$out" "ranks first"
-export DR_EXECUTORS_DIR="$HERE/fixtures/executors"
+export DAGENTS_EXECUTORS_DIR="$HERE/fixtures/executors"
 
 # --- the lane-eligible warning is per executor ------------------------------
 # The generalisation is invisible while codex is the only entry, so prove it
@@ -959,11 +959,11 @@ export DR_EXECUTORS_DIR="$HERE/fixtures/executors"
 # opencode.json borrows the stub's gate block, so it becomes a lane candidate
 # too and its session file is read. Export its directory as well, or that read
 # falls back to the real $HOME.
-export DR_STUB_SESSION_DIR="$TMP/stub-sessions"
-export DR_OPENCODE_SESSION_DIR="$TMP/opencode-sessions"
-mkdir -p "$DR_STUB_SESSION_DIR" "$DR_OPENCODE_SESSION_DIR"
+export DAGENTS_STUB_SESSION_DIR="$TMP/stub-sessions"
+export DAGENTS_OPENCODE_SESSION_DIR="$TMP/opencode-sessions"
+mkdir -p "$DAGENTS_STUB_SESSION_DIR" "$DAGENTS_OPENCODE_SESSION_DIR"
 printf '{"session_id":"plan-lint-test","usable":true,"lane":true}\n' \
-  > "$DR_STUB_SESSION_DIR/plan-lint-test.json"
+  > "$DAGENTS_STUB_SESSION_DIR/plan-lint-test.json"
 cat > stub-roster.sh <<EOF
 printf 'called\n' >> "$TMP/probe-calls"
 echo '[{"id":"codex","usable":false,"reason":"off"},{"id":"stub","usable":true,"reason":null}]'
@@ -978,13 +978,13 @@ lacks "an executor whose roster row is unusable does not warn" "$out" \
 check "the per-executor warning still probes once" "$(calls)" "1"
 
 # With no lane surface for either id, nothing warns and nothing probes.
-rm -rf "$DR_STUB_SESSION_DIR" "$DR_OPENCODE_SESSION_DIR"
+rm -rf "$DAGENTS_STUB_SESSION_DIR" "$DAGENTS_OPENCODE_SESSION_DIR"
 lane_surface false
 rm -f probe-calls; lint p1.md
 lacks "no executor has a lane surface: no warning" "$out" "lane-eligible"
 check "no executor has a lane surface: the roster never runs" "$(calls)" "0"
 lane_surface true
-unset PLAN_LINT_ROSTER DR_STUB_SESSION_DIR DR_OPENCODE_SESSION_DIR
+unset PLAN_LINT_ROSTER DAGENTS_STUB_SESSION_DIR DAGENTS_OPENCODE_SESSION_DIR
 
 # --- an inline plan that offloads ------------------------------------------
 # An offloaded task leaves self_max, and any delegation raises the required
@@ -1023,13 +1023,13 @@ inline_plan() { # inline_plan <file> <execution line>
 |
 |### Task 1: offloaded four band
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dagents:impl-sonnet-medium
 |**Executor:** codex gpt-6.1-sol / high
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
 |
 |### Task 2: small
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 EOF
   # awk does a literal, one-shot replacement: no regex metacharacter in $2 is
@@ -1060,7 +1060,7 @@ lintplan() { # lintplan <file> <task body>
 
 **Execution:** inline — `claude --model sonnet --effort medium` — one light task
 
-**Plan review:** 2026-09-21 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
+**Plan review:** 2026-09-21 — dagents:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
 ## Global Constraints
 
@@ -1085,40 +1085,40 @@ HDR
   } > "$1"
 }
 
-lintplan fenced-only.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n\n```markdown\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n```\n')"
+lintplan fenced-only.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n\n```markdown\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n```\n')"
 lint fenced-only.md
 has "a fenced-only score is a missing Evaluation line" "$out" "ERROR Task 1: missing **Evaluation:** line"
 
-lintplan stale-parent.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 1 = 6\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan stale-parent.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Evaluation:** files 2 - spec 1 - coupling 2 - risk 1 = 6\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint stale-parent.md
 has "a stale parent score is a NOTE" "$out" \
   "NOTE Task 1: an **Evaluation:** line above the first part does not score the task"
 lacks "a stale parent score is not an error" "$out" "ERROR Task 1"
 check "the stale-parent fixture is otherwise clean" "$status" "0"
 
-lintplan stale-parent-exec.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan stale-parent-exec.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint stale-parent-exec.md
 has "a stale parent Executor line is a NOTE" "$out" \
   "NOTE Task 1: an **Executor:** line above the first part does not route the task"
 lacks "a stale parent Executor line is not an error" "$out" "ERROR Task 1"
 check "the stale-parent-exec fixture is otherwise clean" "$status" "0"
 
-lintplan lettered.md "$(printf '### Task A1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan lettered.md "$(printf '### Task A1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint lettered.md
 has "lettered headings are named" "$out" "ERROR header: task headings must be numbered ('### Task N: <title>'): ### Task A1: One is not read"
 lacks "lettered headings are not a generic missing-heading error" "$out" "no task headings"
 lacks "lettered headings are not an index mismatch" "$out" "Task index does not match"
 
-lintplan clean-split.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
+lintplan clean-split.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint clean-split.md
 lacks "a clean split earns no NOTE" "$out" "above the first part"
 check "the clean-split fixture lints clean" "$status" "0"
 
-lintplan fenced-part.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n#### Part A: an example, not a part\n```\n')"
+lintplan fenced-part.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n#### Part A: an example, not a part\n```\n')"
 lint fenced-part.md
 lacks "a fenced part heading does not create a part" "$out" "Task 1 part A"
 
-lintplan fenced-files.md "$(printf '### Task 1: One\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Files:**\n- Create: `x.txt`\n```\n')"
+lintplan fenced-files.md "$(printf '### Task 1: One\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n```markdown\n**Files:**\n- Create: `x.txt`\n```\n')"
 lint fenced-files.md
 has "a fenced-only Files block is a missing Files block" "$out" "ERROR Task 1: missing **Files:** block"
 
@@ -1143,7 +1143,7 @@ waves_plan() { # waves_plan <Parallelism value> — three tasks; Tasks 2 and 3 s
 
 **CI:** none
 
-**Plan review:** 2026-10-10 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
+**Plan review:** 2026-10-10 — dagents:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
 ## Global Constraints
 
@@ -1170,7 +1170,7 @@ None
 
 **Depends on:** none
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dagents:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 2: Two
@@ -1181,7 +1181,7 @@ None
 
 **Depends on:** Task 1
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dagents:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 3: Three
@@ -1191,7 +1191,7 @@ None
 
 **Depends on:** Task 1
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dagents:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 EOF
 }
@@ -1383,10 +1383,10 @@ lacks "a No new test task with a reason draws no form WARN" "$out" 'Task 2: Step
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q "$SR"
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/dforge/specs" "$M/dforge/plans"
-printf '# Spec\n' > "$M/dforge/specs/s.md"
-printf '# P\n\n**Spec:** docs/dforge/specs/s.md\n\n### Task 1: One\n' > "$M/dforge/plans/p.md"
-out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/dforge/plans/p.md --no-probe 2>&1)
+mkdir -p "$M/dagents/specs" "$M/dagents/plans"
+printf '# Spec\n' > "$M/dagents/specs/s.md"
+printf '# P\n\n**Spec:** docs/dagents/specs/s.md\n\n### Task 1: One\n' > "$M/dagents/plans/p.md"
+out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/dagents/plans/p.md --no-probe 2>&1)
 lacks "darkmem: the Spec path resolves in the mirror" "$out" "Spec path does not exist"
 lacks "darkmem: the plan is found by name" "$out" "no such plan file"
 has "darkmem: the lint ran to its summary" "$out" " errors, "
@@ -1401,7 +1401,7 @@ has "an unknown lens id is an error" "$out" "ERROR Task 2: **Lenses:** names no 
 lacks "a known lens id is not flagged" "$out" "names no lens file: security"
 lacks "risk 3 takes a Lenses line" "$out" "a **Lenses:** line needs risk 3"
 
-# --- UI/UX contract (dforge:ui-ux) ---
+# --- UI/UX contract (dagents:ui-ux) ---
 cat > docs/ui-spec.md <<'EOF'
 # Spec
 

@@ -18,7 +18,7 @@ has() { # has <name> <haystack> <needle>
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-# finish-choice reads ~/.dforge/config.json; a temporary home keeps the real one out.
+# finish-choice reads ~/.dagents/config.json; a temporary home keeps the real one out.
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 export GIT_CONFIG_NOSYSTEM=1 TZ=UTC
@@ -30,9 +30,9 @@ T0=1760000000
 
 # --- a plan run ---
 FINISH_CHOICE_NOW=$T0 fc set pr --base main --plan docs/plans/p.md >/dev/null
-file=".dforge/sdd/p/finish.json"
+file=".dagents/sdd/p/finish.json"
 check "set: beside the plan's ledger" "$(jq -r '[.action, .base, .chosenAt] | join(" ")' "$file")" "pr main $T0"
-check "set: git-ignored" "$(git status --porcelain --untracked-files=all | grep -c dforge)" "0"
+check "set: git-ignored" "$(git status --porcelain --untracked-files=all | grep -c dagents)" "0"
 fc set later --plan docs/plans/p.md >/dev/null 2>&1
 check "set: refuses an unknown action" "$?" "2"
 check "get: prints the choice" "$(fc get --plan docs/plans/p.md | jq -r '[.action, .base] | join(" ")')" "pr main"
@@ -51,45 +51,45 @@ for cmd in arm "job cron-7" due; do
 done
 
 # --- a file an older version armed still reads ---
-mkdir -p .dforge/sdd/old && printf '# Plan\n' > docs/plans/old.md
+mkdir -p .dagents/sdd/old && printf '# Plan\n' > docs/plans/old.md
 printf '{"action":"merge","base":"main","chosenAt":%d,"armedAt":%d,"dueAt":%d,"job":"cron-8","firedAt":%d}\n' \
-  "$T0" "$T0" "$((T0 + 1800))" "$((T0 + 1800))" > .dforge/sdd/old/finish.json
+  "$T0" "$T0" "$((T0 + 1800))" "$((T0 + 1800))" > .dagents/sdd/old/finish.json
 out=$(fc get --plan docs/plans/old.md)
 check "old file: get exits 0" "$?" "0"
 check "old file: the action and base read" "$(jq -r '[.action, .base] | join(" ")' <<<"$out")" "merge main"
 
 # --- wait, and work without a plan ---
 fc set wait >/dev/null
-check "no plan: under .dforge/sdd" "$(jq -r .action .dforge/sdd/finish.json)" "wait"
+check "no plan: under .dagents/sdd" "$(jq -r .action .dagents/sdd/finish.json)" "wait"
 git init -q "$TMP/linked"
-mkdir -p "$TMP/linked/.dforge/sdd" "$TMP/outside"
-ln -s "$TMP/outside/planted" "$TMP/linked/.dforge/sdd/.gitignore"
+mkdir -p "$TMP/linked/.dagents/sdd" "$TMP/outside"
+ln -s "$TMP/outside/planted" "$TMP/linked/.dagents/sdd/.gitignore"
 (cd "$TMP/linked" && fc set wait >/dev/null 2>&1)
 check "no plan: a linked ignore is never written through" "$([ -e "$TMP/outside/planted" ] && echo yes || echo no)" "no"
-printf '!keep\n' > .dforge/sdd/.gitignore
+printf '!keep\n' > .dagents/sdd/.gitignore
 fc set wait >/dev/null
-check "no plan: an existing ignore is kept" "$(cat .dforge/sdd/.gitignore)" '!keep'
-printf '*\n' > .dforge/sdd/.gitignore
+check "no plan: an existing ignore is kept" "$(cat .dagents/sdd/.gitignore)" '!keep'
+printf '*\n' > .dagents/sdd/.gitignore
 fc clear
 fc get >/dev/null 2>&1
 check "clear: nothing chosen" "$?" "3"
 
 # --- the finishAction setting ---
-mkdir -p "$HOME/.dforge" docs/plans
+mkdir -p "$HOME/.dagents" docs/plans
 for name in s r w; do printf '# Plan\n' > "docs/plans/$name.md"; done
 fc get --plan docs/plans/s.md >/dev/null 2>&1
 check "setting ask: nothing chosen still exits 3" "$?" "3"
-printf '{"finishAction":"merge"}\n' > "$HOME/.dforge/config.json"
+printf '{"finishAction":"merge"}\n' > "$HOME/.dagents/config.json"
 out=$(FINISH_CHOICE_NOW=$T0 fc get --plan docs/plans/s.md)
 check "setting: get exits 0" "$?" "0"
 check "setting: get records the configured action" \
-  "$(jq -r '[.action, (.base | tostring), .source, (.chosenAt | tostring)] | join(" ")' .dforge/sdd/s/finish.json)" "merge null setting $T0"
+  "$(jq -r '[.action, (.base | tostring), .source, (.chosenAt | tostring)] | join(" ")' .dagents/sdd/s/finish.json)" "merge null setting $T0"
 has "setting: get prints the choice" "$out" '"action": "merge"'
 fc set keep --plan docs/plans/r.md >/dev/null
 check "a recorded choice wins over the setting" "$(fc get --plan docs/plans/r.md | jq -r '[.action, (.source // "asked")] | join(" ")')" "keep asked"
-printf '{"finishAction":"wait"}\n' > "$HOME/.dforge/config.json"
+printf '{"finishAction":"wait"}\n' > "$HOME/.dagents/config.json"
 check "setting wait: recorded" "$(fc get --plan docs/plans/w.md | jq -r .action)" "wait"
-rm -f "$HOME/.dforge/config.json"
+rm -f "$HOME/.dagents/config.json"
 
 # --- the spec's Finish line, which the spec review writes ---
 mkdir -p docs/specs
@@ -98,19 +98,19 @@ spec_plan() { # spec_plan <name> <spec text> [Spec line value]: a plan citing it
   printf '# Plan\n\n**Spec:** %s\n\n### Task 1: One\n' "${3:-\`docs/specs/$1.md\`}" > "docs/plans/$1.md"
 }
 spec_plan bare $'# S\n\n## Decisions\n\n1. Finish: "Ask at spec review" — the owner\'s words\n\nFinish: keep\n\n## Problem\n'
-printf '{"finishAction":"merge"}\n' > "$HOME/.dforge/config.json"
+printf '{"finishAction":"merge"}\n' > "$HOME/.dagents/config.json"
 out=$(FINISH_CHOICE_NOW=$T0 fc get --plan docs/plans/bare.md); status=$?
 check "spec line: get exits 0" "$status" "0"
 check "spec line: outranks the setting, recorded with its source" \
-  "$(jq -r '[.action, (.base | tostring), .source, (.chosenAt | tostring)] | join(" ")' .dforge/sdd/bare/finish.json)" "keep null spec $T0"
+  "$(jq -r '[.action, (.base | tostring), .source, (.chosenAt | tostring)] | join(" ")' .dagents/sdd/bare/finish.json)" "keep null spec $T0"
 has "spec line: get prints the choice" "$out" '"action": "keep"'
-rm -f "$HOME/.dforge/config.json"
+rm -f "$HOME/.dagents/config.json"
 for pair in 'dash:-' 'star:*' 'number:6.'; do
   name="marker-${pair%%:*}" marker=${pair#*:}
   spec_plan "$name" "# S"$'\n\n'"## Decisions"$'\n\n'"$marker Finish: pr"$'\n'
-  check "spec line after a '$marker' marker: a fresh record" "$([ -e ".dforge/sdd/$name/finish.json" ] && echo exists || echo none)" "none"
+  check "spec line after a '$marker' marker: a fresh record" "$([ -e ".dagents/sdd/$name/finish.json" ] && echo exists || echo none)" "none"
   check "spec line after a '$marker' marker" "$(fc get --plan "docs/plans/$name.md" | jq -r '[.action, .source] | join(" ")')" "pr spec"
-  check "spec line after a '$marker' marker: recorded in its own workspace" "$(jq -r .source ".dforge/sdd/$name/finish.json")" "spec"
+  check "spec line after a '$marker' marker: recorded in its own workspace" "$(jq -r .source ".dagents/sdd/$name/finish.json")" "spec"
 done
 { printf '# S\n\n## Decisions\n\nFinish: keep\n\n## Problem\n\n'; seq 1 200000 | sed 's/^/filler line /'; } > docs/specs/large.md
 printf '# Plan\n\n**Spec:** `docs/specs/large.md`\n\n### Task 1: One\n' > docs/plans/large.md
@@ -125,11 +125,11 @@ check "a recorded choice outranks the spec line" "$(fc get --plan docs/plans/pla
 spec_plan none $'# S\n\n## Decisions\n\n1. Keep it small.\n'
 fc get --plan docs/plans/none.md >/dev/null 2>&1
 check "no spec line, setting ask: exit 3" "$?" "3"
-printf '{"finishAction":"pr"}\n' > "$HOME/.dforge/config.json"
+printf '{"finishAction":"pr"}\n' > "$HOME/.dagents/config.json"
 check "no spec line: the setting stands in" "$(fc get --plan docs/plans/none.md | jq -r '[.action, .source] | join(" ")')" "pr setting"
-rm -f "$HOME/.dforge/config.json"
-mkdir -p docs/dforge/specs
-printf '# S\n\n## Decisions\n\nFinish: keep\n' > docs/dforge/specs/legacy.md
+rm -f "$HOME/.dagents/config.json"
+mkdir -p docs/dagents/specs
+printf '# S\n\n## Decisions\n\nFinish: keep\n' > docs/dagents/specs/legacy.md
 printf '# Plan\n\n**Spec:** docs/superpowers/specs/legacy.md\n\n### Task 1: One\n' > docs/plans/legacy.md
 check "a spec cited under the pre-4.0 prefix is found" "$(fc get --plan docs/plans/legacy.md | jq -r '[.action, .source] | join(" ")')" "keep spec"
 for case in outside fenced worded quoted; do

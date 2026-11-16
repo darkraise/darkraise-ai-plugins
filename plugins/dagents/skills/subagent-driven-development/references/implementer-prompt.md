@@ -198,7 +198,7 @@ Subagent ([IMPLEMENTER]):
 
 **Placeholders:**
 - `[IMPLEMENTER]` — the task's `**Implementer:**` agent (for example
-  `dforge:impl-sonnet-medium`), passed as `subagent_type` with no
+  `dagents:impl-sonnet-medium`), passed as `subagent_type` with no
   `model` argument: the agent file pins both model and effort
-- `[PLUGIN_ROOT]` — the resolved dforge plugin directory; expand it before
+- `[PLUGIN_ROOT]` — the resolved dagents plugin directory; expand it before
   sending, so the `context-size` path above names a real path

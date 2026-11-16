@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Acceptance tests for the faster-plans spec
-# (docs/dforge/specs/2026-10-26-faster-plans-design.md), statements A2-A13 and
+# (docs/dagents/specs/2026-10-26-faster-plans-design.md), statements A2-A13 and
 # A17-A23. Each test is written from the statement's text and reaches the
 # behaviour through the scripts and documents the spec names: plan-lint,
 # plan-revise, review-route, task-step, wave, next-step, plan-amend, the
@@ -53,10 +53,10 @@ if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
-unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
-export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=acceptance-session
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
+export DAGENTS_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=acceptance-session
 printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 # plan-lint's lane probe asks this roster; a fixed answer keeps the machine's
@@ -65,10 +65,10 @@ printf '%s\n' '#!/usr/bin/env bash' "echo '[{\"id\":\"codex\",\"usable\":true,\"
 export PLAN_LINT_ROSTER="$TMP/roster-stub"
 
 session() { # session <review true|false> <lane true|false> | absent — this session's Codex gate file
-  rm -rf "$DR_CODEX_SESSION_DIR"
+  rm -rf "$DAGENTS_CODEX_SESSION_DIR"
   [ "$1" != absent ] || return 0
-  mkdir -p "$DR_CODEX_SESSION_DIR"
-  printf '{"session_id":"%s","usable":true,"review":%s,"lane":%s}\n' "$CLAUDE_CODE_SESSION_ID" "$1" "$2" > "$DR_CODEX_SESSION_DIR/$CLAUDE_CODE_SESSION_ID.json"
+  mkdir -p "$DAGENTS_CODEX_SESSION_DIR"
+  printf '{"session_id":"%s","usable":true,"review":%s,"lane":%s}\n' "$CLAUDE_CODE_SESSION_ID" "$1" "$2" > "$DAGENTS_CODEX_SESSION_DIR/$CLAUDE_CODE_SESSION_ID.json"
 }
 session absent
 
@@ -119,7 +119,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Body.
@@ -129,7 +129,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-opus-high
+|**Implementer:** dagents:impl-opus-high
 |**Evaluation:** files 1 - spec 2 - coupling 1 - risk 3 = 7
 |
 |### Task 3: grouped two
@@ -137,7 +137,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dagents:impl-sonnet-medium
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
 |
 |### Task 4: risk two
@@ -145,7 +145,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dagents:impl-sonnet-medium
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 2 = 3
 |
 |### Task 5: total five
@@ -153,7 +153,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-high
+|**Implementer:** dagents:impl-sonnet-high
 |**Evaluation:** files 2 - spec 2 - coupling 1 - risk 0 = 5
 |
 |### Task 6: grouped three
@@ -161,7 +161,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `app.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 1 = 2
 |
 |### Task 7: grouped four
@@ -169,7 +169,7 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 |
 |### Task 8: unscored
@@ -177,14 +177,14 @@ PLAN_TEXT='|# Faster Plans Acceptance Fixture
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |
 |### Task 9: grouped five
 |
 |**Files:**
 |- Modify: `other.txt`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dagents:impl-sonnet-medium
 |**Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4'
 
 CODEX_PLAN_TEXT='|# Codex Fixture
@@ -228,7 +228,7 @@ gen_plan() { # gen_plan <extra header line or empty> <"F S C R impl[~label line.
   printf '%s\n' '# Gen Plan' '' '**Goal:** Fixture.' '' '**Spec:** `docs/spec.md`' '' \
     '**Execution:** subagent — `claude --model sonnet --effort high` — fixture' ''
   [ -z "$extra" ] || printf '%s\n\n' "$extra"
-  printf '%s\n' '**Plan review:** 2026-10-26 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)' '' \
+  printf '%s\n' '**Plan review:** 2026-10-26 — dagents:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)' '' \
     '## Global Constraints' '' '- None.' '' '## Contracts' '' 'None' '' '## Assumptions (evidence)' '' '- None.' '' '## Task index' ''
   for spec in "$@"; do i=$((i + 1)); printf '%d. T%d\n' "$i" "$i"; done
   printf '\n'
@@ -236,7 +236,7 @@ gen_plan() { # gen_plan <extra header line or empty> <"F S C R impl[~label line.
   for spec in "$@"; do
     i=$((i + 1))
     read -r f s c r impl more <<<"${spec//\~/ ~ }"
-    printf '### Task %d: T%d\n\n**Files:**\n- Create: `f%d.txt`\n\n**Implementer:** dforge:%s\n**Evaluation:** files %d - spec %d - coupling %d - risk %d = %d\n' \
+    printf '### Task %d: T%d\n\n**Files:**\n- Create: `f%d.txt`\n\n**Implementer:** dagents:%s\n**Evaluation:** files %d - spec %d - coupling %d - risk %d = %d\n' \
       "$i" "$i" "$i" "impl-$impl" "$f" "$s" "$c" "$r" $((f + s + c + r))
     if [ -n "${more:-}" ]; then
       tr '~' '\n' <<<"${more#~}" | sed 's/^ *//' | grep . || true
@@ -407,9 +407,9 @@ a5() {
 
   # With several tasks the route keeps going by the highest total.
   route docs/plan.md --task 1 6
-  check "A5: two light tasks route to the light judge" "$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$out")" "dforge:judge-sonnet-high"
+  check "A5: two light tasks route to the light judge" "$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$out")" "dagents:judge-sonnet-high"
   route docs/plan.md --task 1 5
-  check "A5: a batch holding a total-5 task stays on the light judge" "$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$out")" "dforge:judge-sonnet-high"
+  check "A5: a batch holding a total-5 task stays on the light judge" "$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$out")" "dagents:judge-sonnet-high"
 }
 
 # --- A6 ----------------------------------------------------------------------
@@ -469,10 +469,10 @@ a7() {
   for i in 2 3 4 5 6 7 8 9; do done_lines="${done_lines}Task $i: complete (commits aaaaaaa..bbbbbbb, review clean)"$'\n'; done
   {
     printf '# SDD ledger — plan: docs/plan.md\n'
-    printf 'Task 1: implementer dforge:impl-sonnet-low (assigned; base %s)\n' "$base7"
+    printf 'Task 1: implementer dagents:impl-sonnet-low (assigned; base %s)\n' "$base7"
     printf 'Task 1: awaiting group review (commits %s..%s)\n' "$base7" "$head7"
     printf '%s' "$done_lines" | grep -v '^Task 3:'
-    printf 'Task 3: implementer dforge:impl-sonnet-medium (assigned; base %s)\n' "$head7"
+    printf 'Task 3: implementer dagents:impl-sonnet-medium (assigned; base %s)\n' "$head7"
     printf 'Task 3: awaiting group review (commits %s..%s)\n' "$head7" "$head7"
   } > "$WS/progress.md"
   out=$(cd "$R" && env -u AR_SESSION timeout 60 bash "$NEXT" docs/plan.md 2>"$TMP/err"); rc=$?
@@ -612,22 +612,22 @@ a10() {
   local got
   got=$(cockpit_rounds "$(printf '%s\n' \
     '# SDD ledger — plan: docs/plans/p.md' \
-    'Task 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Task 2: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Task 3: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
+    'Task 1: implementer dagents:impl-sonnet-low (assigned; base abc1234)' \
+    'Task 2: implementer dagents:impl-sonnet-low (assigned; base abc1234)' \
+    'Task 3: implementer dagents:impl-sonnet-low (assigned; base abc1234)' \
     'Group 1,3: review round 1/2 (Task 1: 1 open — meter width; Task 3: clean; commits cde3456..def4567 (Task 1))')")
   check "A10: the Run card shows round 1/2 for the members of a comma-list Group line" "$got" "1=1/2 2=- 3=1/2"
   got=$(cockpit_rounds "$(printf '%s\n' \
     '# SDD ledger — plan: docs/plans/p.md' \
-    'Task 4: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Task 5: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Task 6: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
+    'Task 4: implementer dagents:impl-sonnet-low (assigned; base abc1234)' \
+    'Task 5: implementer dagents:impl-sonnet-low (assigned; base abc1234)' \
+    'Task 6: implementer dagents:impl-sonnet-low (assigned; base abc1234)' \
     'Group 4-6: review round 2/2 (Task 4: clean; Task 5: 1 open — x; Task 6: clean; commits def4567..efa5678 (Task 5))')")
   check "A10: the Run card shows round 2/2 for every member of a range Group line" "$got" "4=2/2 5=2/2 6=2/2"
   got=$(cockpit_rounds "$(printf '%s\n' \
     '# SDD ledger — plan: docs/plans/p.md' \
-    'Task 1: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Task 3: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
+    'Task 1: implementer dagents:impl-sonnet-low (assigned; base abc1234)' \
+    'Task 3: implementer dagents:impl-sonnet-low (assigned; base abc1234)' \
     'Group 1,3: review round 1/2 (Task 1: clean; Task 3: clean; commits cde3456..def4567 (Task 1))' \
     'Task 1: complete (commits abc1234..bcd2345, review clean) — done: x; verified: y; remaining: none; discovered: none; assumptions: none')")
   check "A10: a member's complete line clears its round" "$got" "1=- 3=1/2"
@@ -669,7 +669,7 @@ gen_old_plan() { # gen_old_plan <n> — a pre-spec sequential plan of n spec-0 t
   printf '%s\n' '# Old Plan' '' '**Goal:** Fixture.' '' '**Spec:** `docs/spec.md`' '' \
     '**Execution:** subagent — `claude --model sonnet --effort high` — fixture' '' \
     '**Parallelism:** sequential' '' \
-    '**Plan review:** 2026-10-02 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)' '' \
+    '**Plan review:** 2026-10-02 — dagents:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)' '' \
     '## Global Constraints' '' '- None.' '' '## Contracts' '' 'None' '' '## Assumptions (evidence)' '' '- None.' '' '## Task index' ''
   for i in $(seq 1 "$1"); do printf '%d. T%d\n' "$i" "$i"; done
   printf '\n'
@@ -684,7 +684,7 @@ gen_old_plan() { # gen_old_plan <n> — a pre-spec sequential plan of n spec-0 t
       *) f=0 c=1 r=1 agent=impl-sonnet-low ;;
     esac
     t=$((f + c + r))
-    printf '### Task %d: T%d\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:%s\n**Evaluation:** files %d - spec 0 - coupling %d - risk %d = %d\n\nBody.\n\n' \
+    printf '### Task %d: T%d\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dagents:%s\n**Evaluation:** files %d - spec 0 - coupling %d - risk %d = %d\n\nBody.\n\n' \
       "$i" "$i" "$agent" "$f" "$c" "$r" "$t"
   done
 }
@@ -699,8 +699,8 @@ a12() {
   absent "A12: and a task with a complete line shows no round (Task 7)" "$got" '(^| )7=[0-9]'
   got=$(cockpit_rounds "$(printf '%s\n' \
     '# SDD ledger — plan: docs/plans/p.md' \
-    'Task 4: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
-    'Task 5: implementer dforge:impl-sonnet-low (assigned; base abc1234)' \
+    'Task 4: implementer dagents:impl-sonnet-low (assigned; base abc1234)' \
+    'Task 5: implementer dagents:impl-sonnet-low (assigned; base abc1234)' \
     'Group 4-5: review round 1/5 (1 addressed, 1 open — meter width; commits def4567..efa5678; resumed)')")
   check "A12: and a Group range line of an older run keeps its R/5" "$got" "4=1/5 5=1/5"
 
@@ -720,7 +720,7 @@ wave_plan() { # wave_plan <ranges> <task count> <risk-3 task or 0> <wave check l
   for i in $(seq 1 "$n"); do
     risk=0; [ "$i" -ne "$r3" ] || risk=3
     total=$((1 + risk))
-    printf '### Task %d: T%d\n\n**Files:**\n- Create: `f%d.txt`\n\n**Depends on:** none\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk %d = %d\n\nBody.\n\n' \
+    printf '### Task %d: T%d\n\n**Files:**\n- Create: `f%d.txt`\n\n**Depends on:** none\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk %d = %d\n\nBody.\n\n' \
       "$i" "$i" "$i" "$risk" "$total"
   done
 }
@@ -944,7 +944,7 @@ AMEND_PLAN='|# Demo Implementation Plan
 |**Files:**
 |- Create: `a.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Print `hello NAME`.
@@ -954,7 +954,7 @@ AMEND_PLAN='|# Demo Implementation Plan
 |**Files:**
 |- Modify: `a.sh`
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dagents:impl-sonnet-medium
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 2 = 4
 |
 |Print `hello NAME` twice.'
@@ -1013,22 +1013,6 @@ a21() {
 
 a22() {
   local plan sum_before sum_after
-  # The real plans written before this spec lint clean, unedited.
-  for plan in 2026-10-24-ui-ux-skill 2026-10-25-typed-seats-and-drafting 2026-10-26-task-loop-steps; do
-    sum_before=$(cksum < "$REPO_ROOT/docs/dforge/plans/$plan.md")
-    out=$(cd "$REPO_ROOT" && timeout 120 bash "$LINT" "docs/dforge/plans/$plan.md" --no-probe 2>&1); rc=$?
-    check "A22: plan-lint passes the pre-spec plan $plan" "$rc" "0"
-    matches "A22: and reports no error for $plan" "$out" 'plan-lint: 0 errors'
-    check "A22: and leaves $plan as it was" "$(cksum < "$REPO_ROOT/docs/dforge/plans/$plan.md")" "$sum_before"
-    check "A22: and git sees no edit to $plan" "$(git -C "$REPO_ROOT" status --porcelain -- "docs/dforge/plans/$plan.md" | grep -c .)" "0"
-  done
-
-  # An old waves plan (no Wave check line) under the new cadence.
-  local old="$REPO_ROOT/docs/dforge/plans/2026-10-25-typed-seats-and-drafting.md"
-  absent "A22: the old waves plan carries no Wave check line" "$(cat "$old")" '^\*\*Wave check:\*\*'
-  check "A22: its waves run the full check on the cadence and nothing between" \
-    "$(due_all "$old" 1 3)" "1:none 2:none 3:full"
-
   # An old plan with spec-0 tasks up to total 6, run through §2 and the task loop, plan file untouched.
   new_repo a22
   gen_old_plan 20 > "$R/docs/old-plan.md"
@@ -1081,7 +1065,7 @@ a23() {
   # Per-task review: review-route and task-step do not take a Codex-host plan.
   new_repo a23
   local before
-  before=$(ls -A "$R/.dforge" 2>/dev/null | sort | tr '\n' ' ')
+  before=$(ls -A "$R/.dagents" 2>/dev/null | sort | tr '\n' ' ')
   route docs/codex-plan.md --task 1
   check "A23: review-route --task on a Host: codex plan exits 2" "$rc" "2"
   has "A23: and sends the review to the native Codex reference" "$err" "native-codex.md"
@@ -1091,7 +1075,7 @@ a23() {
     ts $sub
     check "A23: task-step $sub exits 2" "$rc" "2"
   done
-  check "A23: no task-step subcommand wrote workspace state for the Codex plan" "$(ls -A "$R/.dforge" 2>/dev/null | sort | tr '\n' ' ')" "$before"
+  check "A23: no task-step subcommand wrote workspace state for the Codex plan" "$(ls -A "$R/.dagents" 2>/dev/null | sort | tr '\n' ' ')" "$before"
 
   # Five fix rounds.
   check "A23: the Codex routing policy keeps review_cap 5" "$(jq -r '.review_cap' < "$PLUGIN/reference/codex-routing.json" | tr -d '\r')" "5"

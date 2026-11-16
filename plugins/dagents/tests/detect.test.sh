@@ -48,8 +48,8 @@ done
 # because the locator also reads a project's own .claude/settings*.json.
 # Required of every suite touching detect-executors.sh: a fixed session id and a
 # temporary directory keep the machine's real session file out of every case.
-export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=detect-test
-export HOME="$TMP/home" DR_AGY_SESSION_DIR="$TMP/agy-sessions"
+export DAGENTS_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=detect-test
+export HOME="$TMP/home" DAGENTS_AGY_SESSION_DIR="$TMP/agy-sessions"
 mkdir -p "$HOME"
 jq -nc '{cli:"agy", min_version:"1.4.12", max_major:1, calibrated:"1.4.12", trust:{smoke:"fail"}}' > "$TMP/agy-policy.json"
 STUB_PLUGIN="$HERE/fixtures/stub-codex-plugin"
@@ -66,8 +66,8 @@ jq -nc '{plugin:"codex@openai-codex", min_version:"1.0.3", max_major:1,
 # instead. CLAUDE_PROJECT_DIR is cleared because scripts/codex-plugin also reads
 # a project's own .claude/settings*.json.
 run() { PATH="$TMP/bin" CLAUDE_CONFIG_DIR="$TMP/config" CLAUDE_PROJECT_DIR= \
-        DR_CODEX_POLICY="$TMP/policy.json" STUB_MODE="${STUB_MODE:-ok}" \
-        DR_AGY_POLICY="$TMP/agy-policy.json" STUB_AGY_VERSION="${STUB_AGY_VERSION:-1.4.12}" \
+        DAGENTS_CODEX_POLICY="$TMP/policy.json" STUB_MODE="${STUB_MODE:-ok}" \
+        DAGENTS_AGY_POLICY="$TMP/agy-policy.json" STUB_AGY_VERSION="${STUB_AGY_VERSION:-1.4.12}" \
         STUB_AGY_AUTH="${STUB_AGY_AUTH:-ok}" "$BASH_BIN" "$SCRIPT"; }
 field() { jq -r --arg i "$1" --arg f "$2" '.[] | select(.id==$i) | .[$f]' <<< "$3"; }
 
@@ -245,7 +245,7 @@ check "logged out: names the plugin setup command, not codex login" \
 # two rows with one id would break every consumer that selects by id.
 FIXREG="$HERE/fixtures/executors"
 regrun() { PATH="$TMP/bin" CLAUDE_CONFIG_DIR="$TMP/config" CLAUDE_PROJECT_DIR= \
-           DR_CODEX_POLICY="$TMP/policy.json" DR_EXECUTORS_DIR="$FIXREG" \
+           DAGENTS_CODEX_POLICY="$TMP/policy.json" DAGENTS_EXECUTORS_DIR="$FIXREG" \
            STUB_MODE="${STUB_MODE:-ok}" "$BASH_BIN" "$SCRIPT"; }
 
 out=$(regrun)

@@ -1,4 +1,4 @@
-# Sourced by shell suites: a HOME whose dforge config maps a repository to
+# Sourced by shell suites: a HOME whose dagents config maps a repository to
 # darkmem with each family applied as the suite asks.
 
 # stores_home HOME REPO PROJECT DOCS PROGRESS — map REPO's primary checkout to
@@ -8,8 +8,8 @@ stores_home() {
   local home=$1 project=$3 common top dir
   common=$(git -C "$2" rev-parse --path-format=absolute --git-common-dir)
   top=$(git -C "$(dirname "$common")" rev-parse --show-toplevel)
-  dir="$home/.dforge"
-  mkdir -p "$dir/mirror/$project/dforge" "$dir/mirror/$project/work/sdd" "$dir/mirror/$project/work/handoff"
+  dir="$home/.dagents"
+  mkdir -p "$dir/mirror/$project/dagents" "$dir/mirror/$project/work/sdd" "$dir/mirror/$project/work/handoff"
   printf '{"darkmemEnabled":true,"darkmem":{"url":"http://127.0.0.1:9","repos":{"%s":{"project":"%s"}}}}\n' "$top" "$project" > "$dir/config.json"
   printf '{"%s":{"documents":"%s","progress":"%s"}}\n' "$top" "$4" "$5" > "$dir/stores.json"
   # As the scripts print it: under Git Bash, git's long C:/… form.

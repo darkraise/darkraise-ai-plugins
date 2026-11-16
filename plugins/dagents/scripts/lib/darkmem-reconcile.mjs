@@ -1,11 +1,11 @@
 // darkmem-sync reconcile (darkmem store options spec §4, §7.2): move each
 // family whose configured store differs from its applied store, under §4's
-// refusals, and record each completed move in ~/.dforge/stores.json.
+// refusals, and record each completed move in ~/.dagents/stores.json.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { HttpError, TransportError } from "./darkmem-client.mjs";
-import { ConfigError, dforgeDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
+import { ConfigError, dagentsDir, resolveStores, writeApplied } from "./darkmem-config.mjs";
 import {
   DOC_PREFIX, caseGroups, decodeUtf8, isArchiveUri, ledgerPlanPath, listDocumentFiles, sha256, uriFamily, uriProblem, utcStamp,
 } from "./darkmem-mirror.mjs";
@@ -15,7 +15,7 @@ import { pullDocuments } from "./darkmem-pull.mjs";
 const FAMILIES = ["documents", "progress"];
 // dr-forge wrote docs/forge, dr-superpowers docs/superpowers.
 const LEGACY = ["docs/forge", "docs/superpowers"];
-const DOCS = "docs/dforge";
+const DOCS = "docs/dagents";
 
 // Each move, under "<family>:<target store>". A move answers
 // { moved: true, details } or { moved: false, reason, details }.
@@ -58,8 +58,8 @@ function dirEntries(dir) {
   }
 }
 
-// One document name under any docs prefix (spec §7.1), as dforge_name_key
-// and dforge_name_spellings spell it in roots.sh. The older docs/forge and
+// One document name under any docs prefix (spec §7.1), as dagents_name_key
+// and dagents_name_spellings spell it in roots.sh. The older docs/forge and
 // docs/superpowers spellings stay readable because historical plans and
 // ledgers cite them.
 export function nameSpellings(name) {
@@ -106,7 +106,7 @@ export function refreshContext(context) {
 
 export function leftoverLines(cfg) {
   if (cfg.documents.applied !== "darkmem" || !cfg.worktreeRoot) return [];
-  return [path.join(cfg.worktreeRoot, "docs", "dforge")]
+  return [path.join(cfg.worktreeRoot, "docs", "dagents")]
     .filter(dir => fs.existsSync(dir))
     .map(dir => `darkmem-sync reconcile: ${dir} is not read while documents are applied darkmem`);
 }
@@ -122,14 +122,14 @@ function worktreeTops(cfg) {
 // local, the mirror's work tree while it is darkmem.
 function ledgerSources(cfg) {
   if (cfg.progress.applied === "darkmem") return [{ sdd: path.join(cfg.mirror, "work", "sdd"), checkout: cfg.repoRoot }];
-  return worktreeTops(cfg).map(tree => ({ sdd: path.join(dforgeDir("state", tree), "sdd"), checkout: tree }));
+  return worktreeTops(cfg).map(tree => ({ sdd: path.join(dagentsDir("state", tree), "sdd"), checkout: tree }));
 }
 
 function planFile(cfg, checkout, name) {
   if (path.isAbsolute(name)) return name;
   const [key] = nameSpellings(name);
   if (key === DOCS || key.startsWith(`${DOCS}/`)) {
-    const docsRoot = cfg.documents.applied === "darkmem" ? path.join(cfg.mirror, DOC_PREFIX) : dforgeDir("docs", checkout);
+    const docsRoot = cfg.documents.applied === "darkmem" ? path.join(cfg.mirror, DOC_PREFIX) : dagentsDir("docs", checkout);
     return path.join(docsRoot, ...key.slice(DOCS.length).split("/").filter(Boolean));
   }
   return path.join(checkout, key);
@@ -155,11 +155,11 @@ const realOr = file => {
 function rootedName(cfg, checkout, name) {
   if (!path.isAbsolute(name)) return name;
   const bases = [
-    [dforgeDir("docs", checkout), DOCS],
+    [dagentsDir("docs", checkout), DOCS],
     [checkout, null],
-    [dforgeDir("docs", cfg.repoRoot), DOCS],
+    [dagentsDir("docs", cfg.repoRoot), DOCS],
     [cfg.repoRoot, null],
-    ...worktreeTops(cfg).flatMap(tree => [[dforgeDir("docs", tree), DOCS], [tree, null]]),
+    ...worktreeTops(cfg).flatMap(tree => [[dagentsDir("docs", tree), DOCS], [tree, null]]),
   ];
   if (cfg.documents.applied === "darkmem") bases.unshift([path.join(cfg.mirror, DOC_PREFIX), DOCS]);
   for (const resolve of [file => path.resolve(file), realOr]) {
@@ -201,7 +201,7 @@ export function planFinished(cfg, checkout, identity) {
 export function inProgress(cfg) {
   const found = [];
   try {
-    const run = JSON.parse(readRegular(path.join(dforgeDir("state", cfg.repoRoot), "sdd", "auto-run.json"), { follow: true }).toString("utf8"));
+    const run = JSON.parse(readRegular(path.join(dagentsDir("state", cfg.repoRoot), "sdd", "auto-run.json"), { follow: true }).toString("utf8"));
     if (run?.active === true) found.push("an auto run is active");
   } catch {
     // No auto run, or an unreadable record, which auto-run.sh reads as inactive
@@ -360,7 +360,7 @@ function worktreeOnlyDocuments(cfg) {
   const found = [];
   for (const tree of worktreeTops(cfg)) {
     if (realOr(tree) === realOr(cfg.repoRoot)) continue;
-    const rel = slash(path.relative(tree, dforgeDir("docs", tree)));
+    const rel = slash(path.relative(tree, dagentsDir("docs", tree)));
     const committed = runGit(tree, ["diff", "--name-only", "-z", "--diff-filter=ACMR", `${head.stdout.trim()}...HEAD`, "--", rel]);
     if (committed.status !== 0) return { failed: `git diff failed in ${tree}: ${committed.stderr.trim()}` };
     const pending = runGit(tree, ["status", "--porcelain", "-z", "--untracked-files=all", "--", rel]);
@@ -385,7 +385,7 @@ function worktreeOnlyDocuments(cfg) {
 // A missing or empty docs directory has nothing tracked and moves as is.
 async function documentsToDarkmem(context) {
   const { cfg, client } = context;
-  const docsDir = dforgeDir("docs", cfg.repoRoot);
+  const docsDir = dagentsDir("docs", cfg.repoRoot);
   const rel = slash(path.relative(cfg.repoRoot, docsDir));
   const dirty = runGit(cfg.repoRoot, ["status", "--porcelain", "-z", "--untracked-files=all", "--", rel]);
   if (dirty.status !== 0) return { moved: false, reason: `git status failed: ${dirty.stderr.trim()}`, details: [] };
@@ -444,15 +444,15 @@ async function documentsToDarkmem(context) {
   const removed = runGit(cfg.repoRoot, ["rm", "-r", "-q", "--", rel]);
   if (removed.status !== 0) return { moved: false, reason: `git rm failed: ${removed.stderr.trim()}`, details: [] };
   const details = [`the deletion of ${rel} is staged in ${cfg.repoRoot}; commit it`];
-  const cites = runGit(cfg.repoRoot, ["grep", "-I", "-l", "-F", "-e", "docs/superpowers/", "-e", "docs/forge/", "-e", "docs/dforge/", "--", ".", `:(exclude)${rel}`]);
+  const cites = runGit(cfg.repoRoot, ["grep", "-I", "-l", "-F", "-e", "docs/superpowers/", "-e", "docs/forge/", "-e", "docs/dagents/", "--", ".", `:(exclude)${rel}`]);
   const citing = cites.status === 0 ? cites.stdout.split("\n").filter(Boolean) : [];
   // 1 is "no match"; anything else, a killed or timed-out run's null included, is a failure.
   if (cites.status !== 0 && cites.status !== 1) {
     const why = cites.stderr.trim() || `it did not finish (${cites.signal ?? "no exit status"})`;
-    details.push(`git grep failed: ${why}; check for docs/superpowers/, docs/forge/ and docs/dforge/ citations before you commit`);
+    details.push(`git grep failed: ${why}; check for docs/superpowers/, docs/forge/ and docs/dagents/ citations before you commit`);
   }
   if (citing.length) {
-    details.push("these tracked files cite docs/superpowers/, docs/forge/ or docs/dforge/ names; rewrite them before you commit the deletion:");
+    details.push("these tracked files cite docs/superpowers/, docs/forge/ or docs/dagents/ names; rewrite them before you commit the deletion:");
     details.push(...citing.slice(0, 20).map(file => `  ${file}`));
     if (citing.length > 20) details.push(`and ${citing.length - 20} more`);
   }
@@ -460,7 +460,7 @@ async function documentsToDarkmem(context) {
 }
 
 // Documents, darkmem -> repository (spec §4): the mirror, brought up to
-// darkmem and matching darkmem's hashes, is copied into docs/dforge untracked;
+// darkmem and matching darkmem's hashes, is copied into docs/dagents untracked;
 // darkmem keeps its copy, and the mirror tree is set aside so a later move
 // back cannot meet stale files. Offline (darkmem disabled, unmapped or not
 // answering) the mirror is copied as it stands, and every file darkmem does
@@ -486,7 +486,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
   const unpushed = Object.keys(state.documents).sort().filter(uri => uriFamily(uri) === "documents" && !isArchiveUri(uri)
     && !fs.existsSync(path.join(mirror.docsRoot, ...uri.slice(DOC_PREFIX.length + 1).split("/"))));
   if (unpushed.length && !offline) return { moved: false, reason: "the mirror holds deletions not yet pushed; push first", details: unpushed };
-  const target = path.join(cfg.repoRoot, "docs", "dforge");
+  const target = path.join(cfg.repoRoot, "docs", "dagents");
   // A file under the docs root's handoff/ or archive/ has uri null: never synced, not carried.
   const files = listDocumentFiles(mirror).filter(item => item.uri).map(({ file, uri }) => {
     const dest = path.join(target, path.relative(mirror.docsRoot, file));
@@ -524,7 +524,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
     }
     if (unverified.length) return { moved: false, reason: "the mirror does not match darkmem; nothing was copied", details: unverified };
   }
-  // mkdirSync cannot make docs/dforge where a file stands. A link is left to
+  // mkdirSync cannot make docs/dagents where a file stands. A link is left to
   // the walk below, which names it.
   for (const rel of ["docs", DOCS]) {
     const stat = fs.lstatSync(path.join(cfg.repoRoot, ...rel.split("/")), { throwIfNoEntry: false });
@@ -545,7 +545,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
   if (links.length) {
     return {
       moved: false,
-      reason: "docs/dforge is reached through symbolic links; nothing was copied",
+      reason: "docs/dagents is reached through symbolic links; nothing was copied",
       details: links.map(rel => `${rel}: a symbolic link, which the move will not write through`),
     };
   }
@@ -565,7 +565,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
       return false;
     })
     .map(({ name }) => `${name}: already exists with different content`);
-  if (differing.length) return { moved: false, reason: "docs/dforge already holds different copies; nothing was copied", details: differing };
+  if (differing.length) return { moved: false, reason: "docs/dagents already holds different copies; nothing was copied", details: differing };
   // A repository moved under the parent spec's §6 ignored its docs directory.
   // Asked before anything is copied so a git failure (exit above 1) can still refuse.
   const ignored = runGit(cfg.repoRoot, ["check-ignore", "--stdin"], files.map(({ name }) => name).join("\n"));
@@ -602,12 +602,12 @@ async function documentsToLocal(context, { offline = null } = {}) {
       }
       copied.push(name);
     }
-    if (landed.length) return { moved: false, reason: "docs/dforge changed during the move; nothing was overwritten", details: [...landed, ...copiedLines()] };
+    if (landed.length) return { moved: false, reason: "docs/dagents changed during the move; nothing was overwritten", details: [...landed, ...copiedLines()] };
     const mismatched = files.filter(({ dest, hash }) => sha256(readNoFollow(dest)) !== hash).map(({ name }) => `${name}: differs from the mirror's copy`);
     if (mismatched.length) return { moved: false, reason: "a copied file differs from the mirror's", details: [...mismatched, ...copiedLines()] };
   } catch (error) {
     if (typeof error?.code !== "string") throw error;
-    return { moved: false, reason: `a copy into docs/dforge failed (${error.code}); the files copied so far stay, and a rerun copies the rest`, details: copiedLines() };
+    return { moved: false, reason: `a copy into docs/dagents failed (${error.code}); the files copied so far stay, and a rerun copies the rest`, details: copiedLines() };
   }
   // Set aside before the sync state forgets the documents, so a failed rename
   // leaves a state that still describes the mirror.
@@ -616,14 +616,14 @@ async function documentsToLocal(context, { offline = null } = {}) {
     try {
       fs.renameSync(mirror.docsRoot, aside);
     } catch (error) {
-      return { moved: false, reason: `the mirror's copy could not be set aside (${error.code}); docs/dforge holds the copied files, and the next reconcile finishes the move`, details: [] };
+      return { moved: false, reason: `the mirror's copy could not be set aside (${error.code}); docs/dagents holds the copied files, and the next reconcile finishes the move`, details: [] };
     }
   }
   for (const uri of Object.keys(state.documents)) {
     if (uriFamily(uri) === "documents") delete state.documents[uri];
   }
   persist();
-  const details = [`copied ${files.length} files into docs/dforge, untracked; commit them`];
+  const details = [`copied ${files.length} files into docs/dagents, untracked; commit them`];
   if (notes.length) {
     details.push(`darkmem was not consulted; the mirror is kept at ${aside}. These differ from darkmem's last known copy:`);
     details.push(...notes.map(line => `  ${line}`));

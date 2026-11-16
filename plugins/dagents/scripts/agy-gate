@@ -16,17 +16,17 @@
 # Usage: agy-gate [--refresh]
 # Output: agy-gate usable=<bool> reason=<r> review=false lane=<bool> resets_at=<iso|-> fallback=<on|off> fallback_resets_at=<iso|-> source=<probe|cache|setting>
 #
-# The agyLane setting (scripts/dforge-config) switches the lane off whatever the
+# The agyLane setting (scripts/dagents-config) switches the lane off whatever the
 # probe says; off, the gate answers `reason=setting` without probing.
 # Exit: 0 answered, either way; 2 usage error, missing jq or node, or an
 # unreadable policy file.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-POLICY="${DR_AGY_POLICY:-$HERE/../reference/agy-policy.json}"
+POLICY="${DAGENTS_AGY_POLICY:-$HERE/../reference/agy-policy.json}"
 . "$HERE/lib/executor-session.sh"
 . "$HERE/lib/native-path.sh"
-. "$HERE/lib/dforge-env.sh"
+. "$HERE/lib/dagents-env.sh"
 
 die() { printf 'agy-gate: %s\n' "$1" >&2; exit 2; }
 
@@ -40,7 +40,7 @@ command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
 command -v node >/dev/null 2>&1 || die "node is required but not on PATH"
 [ -r "$POLICY" ] || die "policy file not found: $POLICY"
 
-want_lane=$(dforge_setting agyLane true)
+want_lane=$(dagents_setting agyLane true)
 
 usable="" reason="" version="" source=probe
 resets_at="" resets_epoch=""

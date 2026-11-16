@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # The finish action your human partner chose before execution started: what
-# dforge:finishing-a-development-branch carries out, with no menu, as soon as
+# dagents:finishing-a-development-branch carries out, with no menu, as soon as
 # the final review is clean (`wait` asks for the menu instead). The choice is
 # asked once, before the first task, so a finished run never stops to ask.
 #
 # One JSON file holds it: `<workspace>/finish.json` beside a plan's ledger, or
-# `.dforge/sdd/finish.json` for work done without a plan. Both are
+# `.dagents/sdd/finish.json` for work done without a plan. Both are
 # git-ignored; the cockpit Run card reads the file to show the choice.
 #
 # Usage: finish-choice <command> [--plan PLAN_FILE] [args]
@@ -23,8 +23,8 @@
 # FINISH_CHOICE_NOW (epoch seconds) stands in for the clock in tests.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-. "$HERE/lib/dforge-dir.sh"
-. "$HERE/lib/dforge-env.sh"
+. "$HERE/lib/dagents-dir.sh"
+. "$HERE/lib/dagents-env.sh"
 . "$HERE/lib/plan.sh"
 
 usage() { sed -n '/^# Usage:/,/^# FINISH_CHOICE_NOW/p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
@@ -46,9 +46,9 @@ if [ -n "$plan" ]; then
   dir=$(bash "$HERE/sdd-workspace" "$plan")
 else
   root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "not inside a git repository" >&2; exit 2; }
-  dir="$(dforge_dir state "$root")/sdd"
+  dir="$(dagents_dir state "$root")/sdd"
   mkdir -p "$dir"
-  dforge_self_ignore "$dir"
+  dagents_self_ignore "$dir"
 fi
 file="$dir/finish.json"
 now=${FINISH_CHOICE_NOW:-$(date +%s)}
@@ -70,7 +70,7 @@ need_file() { [ -s "$file" ] || { echo "no finish action chosen" >&2; exit 3; };
 from_setting() {
   [ ! -s "$file" ] || return 0
   local action
-  action=$(dforge_setting finishAction ask)
+  action=$(dagents_setting finishAction ask)
   valid_action "$action" || return 0
   jq -n --arg action "$action" --argjson now "$now" \
     '{action: $action, base: null, chosenAt: $now, source: "setting"}' > "$file"
@@ -103,7 +103,7 @@ from_spec() {
   [ -f "$located" ] || return 0
   name=$(plan_header_line "$located" Spec | sed -E 's/^\*\*Spec:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/')
   [ -n "$name" ] || return 0
-  spec=$(dforge_resolve "$name") || return 0
+  spec=$(dagents_resolve "$name") || return 0
   [ -f "$spec" ] || return 0
   action=$(spec_finish "$spec")
   [ -n "$action" ] || return 0

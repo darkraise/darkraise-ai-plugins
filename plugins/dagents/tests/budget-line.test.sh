@@ -25,7 +25,7 @@ printf '{"autoCompactWindow": 650000}
 ' > "$HOME/.claude/settings.json"
 export MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DFORGE_BUDGET DFORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
+unset DAGENTS_BUDGET DAGENTS_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -47,10 +47,10 @@ check "task-brief: last line is the budget line" "$(tail -n 1 <<<"$out")" \
 # --- over budget: handoff, exit unchanged ---
 native() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 KEY=$(printf '%s' "$(native "$(pwd)")" | tr -c 'A-Za-z0-9' '-')
-mkdir -p "$HOME/.claude/projects/$KEY" "$HOME/.claude/dforge/sessions"
+mkdir -p "$HOME/.claude/projects/$KEY" "$HOME/.claude/dagents/sessions"
 T="$HOME/.claude/projects/$KEY/s-1.jsonl"
 printf '{"type":"assistant","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":500000}}}\n' > "$T"
-jq -n --arg tp "$T" '{session_id:"s-1",transcript_path:$tp}' > "$HOME/.claude/dforge/sessions/$KEY.json"
+jq -n --arg tp "$T" '{session_id:"s-1",transcript_path:$tp}' > "$HOME/.claude/dagents/sessions/$KEY.json"
 
 out=$(bash "$P/scripts/review-package" docs/plan.md "$BASE" HEAD 2>/dev/null); status=$?
 check "review-package: exit 0 over budget" "$status" "0"
@@ -64,7 +64,7 @@ check "task-brief: budget line says handoff" "$(tail -n 1 <<<"$out")" \
 # --- the plan's last two tasks and its final phase keep the task budget ---
 # In strict mode they are measured against it but never hand off, so the plan
 # finishes here; review-package says where the plan stands as task-brief does.
-L="$REPO/.dforge/sdd/plan/progress.md"
+L="$REPO/.dagents/sdd/plan/progress.md"
 mkdir -p "$(dirname "$L")"
 printf '# SDD ledger — plan: docs/plan.md
 Task 1: complete (commit abc1234)
@@ -94,8 +94,8 @@ rm -f "$L"
 printf '{"type":"assistant","isSidechain":false,"message":{"model":"m","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":500000}}}\n' > "$T"
 
 # --- relaxed handoff: a task brief measures against the final-phase limit ---
-mkdir -p "$HOME/.dforge"
-printf '{"handoffMode":"relaxed"}\n' > "$HOME/.dforge/config.json"
+mkdir -p "$HOME/.dagents"
+printf '{"handoffMode":"relaxed"}\n' > "$HOME/.dagents/config.json"
 out=$(bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null)
 check "task-brief: relaxed measures against the final-phase limit" "$(tail -n 1 <<<"$out")" \
   "budget (relaxed): 500k of 553k (90%) — ok — source: record"
@@ -105,11 +105,11 @@ out=$(bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null)
 check "task-brief: relaxed at an 800k window" "$(tail -n 1 <<<"$out")" \
   "budget (relaxed): 500k of 680k (73%) — ok — source: record"
 printf '{"autoCompactWindow": 650000}\n' > "$HOME/.claude/settings.json"
-rm -f "$HOME/.dforge/config.json"
+rm -f "$HOME/.dagents/config.json"
 
 # --- an auto run bound to this session: its own rule replaces the budget ---
-mkdir -p "$HOME/.claude/dforge/sessions/cockpit"
-date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-1"
+mkdir -p "$HOME/.claude/dagents/sessions/cockpit"
+date +%s > "$HOME/.claude/dagents/sessions/cockpit/s-1"
 bash "$P/scripts/auto-run" --session s-1 start --spec docs/spec.md --register docs/reg.md >/dev/null
 out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null); status=$?
 check "task-brief: an auto run says compact" "$(tail -n 1 <<<"$out")" \
@@ -200,25 +200,25 @@ check "task-brief: fenced-heading excerpt omits Task index" "$(grep -c '^## Task
 out=$(bash "$P/scripts/task-brief" --header docs/full.md 2>/dev/null); status=$?
 check "task-brief --header: exit 0" "$status" "0"
 check "task-brief --header: default path" "$(sed -n 1p <<<"$out" | grep -c 'plan-header.md: ')" "1"
-check "task-brief --header: stops before Task 1" "$(tail -n 1 "$REPO/.dforge/sdd/full/plan-header.md")" ""
-check "task-brief --header: carries Task index" "$(grep -c '^## Task index$' "$REPO/.dforge/sdd/full/plan-header.md")" "1"
-mkdir -p "$REPO/.dforge/sdd/full"
+check "task-brief --header: stops before Task 1" "$(tail -n 1 "$REPO/.dagents/sdd/full/plan-header.md")" ""
+check "task-brief --header: carries Task index" "$(grep -c '^## Task index$' "$REPO/.dagents/sdd/full/plan-header.md")" "1"
+mkdir -p "$REPO/.dagents/sdd/full"
 printf '## A1 — Task 1\nReason: r\nCost if wrong: c\n### Old\n````text\nPrint `hello NAME`.\n````\n### New\n````text\nPrint `hi NAME`.\n````\n\n## A2 — Header\nReason: r\nCost if wrong: c\n### Old\n````text\n- Bash only.\n````\n### New\n````text\n- Bash 4 or later.\n````\n' \
-  > "$REPO/.dforge/sdd/full/amendments.md"
+  > "$REPO/.dagents/sdd/full/amendments.md"
 bash "$P/scripts/task-brief" docs/full.md 1 "$TMP/b2.md" >/dev/null 2>&1
 check "task-brief: amendment applied to the task, explicit OUTFILE" "$(grep -c '^Print `hi NAME`.$' "$TMP/b2.md")" "1"
 check "task-brief: amendment applied to the excerpt" "$(grep -c '^- Bash 4 or later.$' "$TMP/b2.md")" "1"
 bash "$P/scripts/task-brief" --header docs/full.md >/dev/null 2>&1
-check "task-brief --header: amendment applied" "$(grep -c '^- Bash 4 or later.$' "$REPO/.dforge/sdd/full/plan-header.md")" "1"
+check "task-brief --header: amendment applied" "$(grep -c '^- Bash 4 or later.$' "$REPO/.dagents/sdd/full/plan-header.md")" "1"
 printf '## A1 — Task 1\nReason: r\nCost if wrong: c\n### Old\n````text\nnot there\n````\n### New\n````text\nx\n````\n' \
-  > "$REPO/.dforge/sdd/full/amendments.md"
+  > "$REPO/.dagents/sdd/full/amendments.md"
 err=$(bash "$P/scripts/task-brief" docs/full.md 1 "$TMP/b3.md" 2>&1 >/dev/null); status=$?
 check "task-brief: non-applying amendment exits 4" "$status" "4"
 check "task-brief: names the amendment" "$err" "amendment A1 does not apply"
 bash "$P/scripts/task-brief" --header >/dev/null 2>&1; status=$?
 check "task-brief --header without a plan: exit 2" "$status" "2"
 
-# --- UI/UX contract items (dforge:ui-ux) ---
+# --- UI/UX contract items (dagents:ui-ux) ---
 cat > docs/ui-spec.md <<'EOF'
 # Spec
 
@@ -274,37 +274,37 @@ check "task-brief: a task without a UI/UX line gets no items" "$(grep -c 'UI/UX 
 # The suite's MSYS_NO_PATHCONV would hide a pathspec Git Bash rewrites.
 PKG="$TMP/pkg"
 git init -q "$PKG"
-mkdir -p "$PKG/docs/dforge/specs" "$PKG/docs/dforge/plans" "$PKG/docs/dforge/registers" "$PKG/docs/superpowers/plans" "$PKG/docs/guide" "$PKG/src/deep"
-printf '# Plan\n\n### Task 1: First\n\nBody.\n' > "$PKG/docs/dforge/plans/p.md"
+mkdir -p "$PKG/docs/dagents/specs" "$PKG/docs/dagents/plans" "$PKG/docs/dagents/registers" "$PKG/docs/superpowers/plans" "$PKG/docs/guide" "$PKG/src/deep"
+printf '# Plan\n\n### Task 1: First\n\nBody.\n' > "$PKG/docs/dagents/plans/p.md"
 printf 'a\n' > "$PKG/src/deep/code.txt"
 printf 'a\n' > "$PKG/docs/guide/g.md"
-printf 'a\n' > "$PKG/docs/dforge/specs/s.md"
-printf 'a\n' > "$PKG/docs/dforge/registers/r.md"
+printf 'a\n' > "$PKG/docs/dagents/specs/s.md"
+printf 'a\n' > "$PKG/docs/dagents/registers/r.md"
 printf 'a\n' > "$PKG/docs/superpowers/plans/old.md"
 git -C "$PKG" add -A && git -C "$PKG" commit -qm pkg-base
 PBASE=$(git -C "$PKG" rev-parse HEAD)
-for f in docs/dforge/specs/s.md docs/dforge/plans/p.md docs/dforge/registers/r.md docs/superpowers/plans/old.md; do printf 'b\n' >> "$PKG/$f"; done
+for f in docs/dagents/specs/s.md docs/dagents/plans/p.md docs/dagents/registers/r.md docs/superpowers/plans/old.md; do printf 'b\n' >> "$PKG/$f"; done
 git -C "$PKG" add -A && git -C "$PKG" commit -qm pkg-docs
 PDOCS=$(git -C "$PKG" rev-parse HEAD)
 printf 'b\n' >> "$PKG/src/deep/code.txt"
 printf 'b\n' >> "$PKG/docs/guide/g.md"
 git -C "$PKG" add -A && git -C "$PKG" commit -qm pkg-code
 pkg() { # pkg <directory to run from> <base> <head> <output name>
-  (cd "$1" && env -u MSYS_NO_PATHCONV bash "$P/scripts/review-package" "$PKG/docs/dforge/plans/p.md" "$2" "$3" "$TMP/$4" >/dev/null 2>&1)
+  (cd "$1" && env -u MSYS_NO_PATHCONV bash "$P/scripts/review-package" "$PKG/docs/dagents/plans/p.md" "$2" "$3" "$TMP/$4" >/dev/null 2>&1)
 }
 count() { grep -cF -- "$2" "$TMP/$1"; }
 pkg "$PKG" "$PBASE" HEAD mixed.diff
 check "package: the code is diffed" "$(count mixed.diff 'diff --git a/src/deep/code.txt')" "1"
-for f in docs/dforge/specs/s.md docs/dforge/plans/p.md docs/dforge/registers/r.md docs/superpowers/plans/old.md; do
+for f in docs/dagents/specs/s.md docs/dagents/plans/p.md docs/dagents/registers/r.md docs/superpowers/plans/old.md; do
   check "package: $f is not diffed" "$(count mixed.diff "diff --git a/$f")" "0"
   check "package: $f is not in the stat" "$(grep -cE -- " ${f//./\\.} +\\|" "$TMP/mixed.diff")" "0"
 done
 check "package: the left-out line names each file" "$(grep '^Left out: ' "$TMP/mixed.diff")" \
-  "Left out: docs/dforge/plans/p.md, docs/dforge/registers/r.md, docs/dforge/specs/s.md, docs/superpowers/plans/old.md — the seat has the spec and plan by path, or the brief"
+  "Left out: docs/dagents/plans/p.md, docs/dagents/registers/r.md, docs/dagents/specs/s.md, docs/superpowers/plans/old.md — the seat has the spec and plan by path, or the brief"
 check "package: another document stays" "$(count mixed.diff 'diff --git a/docs/guide/g.md')" "1"
 check "package: the commit list keeps every commit" "$(count mixed.diff ' pkg-docs'):$(count mixed.diff ' pkg-code')" "1:1"
 pkg "$PKG" "$PBASE" "$PDOCS" docs-only.diff
-check "package: a documents-only range keeps its diff" "$(count docs-only.diff 'diff --git a/docs/dforge/specs/s.md')" "1"
+check "package: a documents-only range keeps its diff" "$(count docs-only.diff 'diff --git a/docs/dagents/specs/s.md')" "1"
 check "package: a documents-only range leaves nothing out" "$(count docs-only.diff 'Left out:')" "0"
 pkg "$PKG/src/deep" "$PBASE" HEAD subdir.diff
 check "package: the same from a subdirectory" "$(cat "$TMP/subdir.diff")" "$(cat "$TMP/mixed.diff")"
@@ -312,9 +312,9 @@ check "package: the same from a subdirectory" "$(cat "$TMP/subdir.diff")" "$(cat
 SH="$TMP/stores-home"; mkdir -p "$SH"
 MIRROR=$(stores_home "$SH" "$PKG" p darkmem local)
 # plan_locate reads a plan from the applied store, never the checkout's copy.
-mkdir -p "$MIRROR/dforge/plans"
-cp "$PKG/docs/dforge/plans/p.md" "$MIRROR/dforge/plans/p.md"
-(cd "$PKG" && HOME="$SH" env -u MSYS_NO_PATHCONV bash "$P/scripts/review-package" "$PKG/docs/dforge/plans/p.md" "$PBASE" HEAD "$TMP/store.diff" >/dev/null 2>&1); status=$?
+mkdir -p "$MIRROR/dagents/plans"
+cp "$PKG/docs/dagents/plans/p.md" "$MIRROR/dagents/plans/p.md"
+(cd "$PKG" && HOME="$SH" env -u MSYS_NO_PATHCONV bash "$P/scripts/review-package" "$PKG/docs/dagents/plans/p.md" "$PBASE" HEAD "$TMP/store.diff" >/dev/null 2>&1); status=$?
 check "package: a document store: exit 0" "$status" "0"
 check "package: a document store: the code is still diffed" "$(count store.diff 'diff --git a/src/deep/code.txt')" "1"
 

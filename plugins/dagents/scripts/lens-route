@@ -30,9 +30,9 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/plan.sh"
 . "$HERE/lib/depth.sh"
-. "$HERE/lib/dforge-env.sh"
+. "$HERE/lib/dagents-env.sh"
 LENSES="$(cd "$HERE/../criteria/lenses" 2>/dev/null && pwd)"
-SEAT=dforge:judge-sonnet-high
+SEAT=dagents:judge-sonnet-high
 
 die() { printf 'lens-route: %s\n' "$1" >&2; exit 2; }
 usage() { die "usage: lens-route PLAN_FILE --final BASE HEAD | --task ID"; }
@@ -109,13 +109,13 @@ case $1 in
     base=$2 head=$3
     git rev-parse --verify --quiet "$base^{commit}" >/dev/null || die "bad BASE: $base"
     git rev-parse --verify --quiet "$head^{commit}" >/dev/null || die "bad HEAD: $head"
-    cap=${DFORGE_LENS_CAP:-$(dforge_setting lensCap 4)}
+    cap=${DAGENTS_LENS_CAP:-$(dagents_setting lensCap 4)}
     [[ "$cap" =~ ^[0-9]$ ]] || cap=4
     if [ "$cap" -eq 0 ]; then echo "lenses off"; exit 0; fi
     depth=$(depth_plan_depth "$src" "$(git -C "$(dirname "$plan")" rev-parse --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)")
     changed=$(git diff --name-only "$base..$head")
     added=$(git diff -U0 "$base..$head" | awk '/^\+\+\+ /{next} /^\+/{print substr($0, 2)}')
-    # dforge:ui-ux — the UI lens applies where the UI gate does.
+    # dagents:ui-ux — the UI lens applies where the UI gate does.
     . "$HERE/lib/ui-ux.sh"
     ui_top=$(git rev-parse --show-toplevel)
     ui_globs=$(uiux_globs "$ui_top") ui_active=0
@@ -123,7 +123,7 @@ case $1 in
     ui_spec_line=$(plan_header_line "$src" Spec)
     if [ "$ui_active" = 0 ] && [ -n "$ui_spec_line" ]; then
       ui_spec=$(sed -E 's/^\*\*Spec:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$ui_spec_line")
-      ui_spec=$(dforge_resolve "$ui_spec" "$ui_top")
+      ui_spec=$(dagents_resolve "$ui_spec" "$ui_top")
       [ ! -f "$ui_spec" ] || [ -z "$(uiux_contract_ids "$ui_spec")" ] || ui_active=1
     fi
     n=0 others=0
@@ -142,7 +142,7 @@ case $1 in
     done <<<"$(lens_order)"
     # Task count, not diff size: generated files make a short plan's diff as
     # large as a long one's.
-    from=${DFORGE_LENS_MINOR_FROM:-$(dforge_setting lensMinorFrom 20)}
+    from=${DAGENTS_LENS_MINOR_FROM:-$(dagents_setting lensMinorFrom 20)}
     [[ "$from" =~ ^[0-9]+$ ]] || from=20
     tasks=$(( $(plan_tasks "$src" | grep -c .) + $(plan_lettered "$src" | grep -c .) ))
     if [ "$n" -gt 0 ] && [ "$tasks" -lt "$from" ]; then

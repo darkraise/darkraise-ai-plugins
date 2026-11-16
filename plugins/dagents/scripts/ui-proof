@@ -21,7 +21,7 @@ usage() { die "usage: ui-proof paths | fingerprint | changed --base REF | contra
 
 [ $# -ge 1 ] || usage
 root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not inside a git checkout"
-dforge_stores_init "$root"
+dagents_stores_init "$root"
 cmd=$1; shift
 
 base="" spec="" active=0
@@ -44,7 +44,7 @@ case $cmd in
   changed) parse_args "$@"; uiux_changed "$root" "$base" ;;
   contract)
     [ $# -ge 1 ] || usage
-    f=$(dforge_resolve "$1" "$root"); shift
+    f=$(dagents_resolve "$1" "$root"); shift
     [ -f "$f" ] || die "no such spec: $f"
     if [ $# -eq 0 ]; then uiux_contract_ids "$f"; else uiux_items "$f" "UI/UX contract" "$@"; fi ;;
   stamp)
@@ -74,7 +74,7 @@ case $cmd in
     parse_args "$@"
     spec_bound=""
     if [ -n "$spec" ]; then
-      spec_file=$(dforge_resolve "$spec" "$root")
+      spec_file=$(dagents_resolve "$spec" "$root")
       [ -f "$spec_file" ] || die "no such spec: $spec"
       [ -z "$(uiux_contract_ids "$spec_file")" ] || spec_bound=$spec_file
     fi
@@ -96,7 +96,7 @@ case $cmd in
       [ -n "$r" ] || continue
       if [ -n "$spec_bound" ]; then
         rc=$(uiux_field "$r" Contract)
-        [ -n "$rc" ] && [ "$(dforge_resolve "$rc" "$root")" = "$spec_bound" ] || continue
+        [ -n "$rc" ] && [ "$(dagents_resolve "$rc" "$root")" = "$spec_bound" ] || continue
       fi
       newest=$r
       if [ "$(uiux_field "$r" Fingerprint)" = "$fp" ]; then reports+=("$r"); fi
@@ -104,9 +104,9 @@ case $cmd in
     report=""
     if [ ${#reports[@]} -eq 0 ]; then
       if [ -n "$newest" ]; then
-        failed freshness "$(dforge_name "$newest" "$root") was stamped at $(uiux_field "$newest" Fingerprint); the UI files are now at $fp"
+        failed freshness "$(dagents_name "$newest" "$root") was stamped at $(uiux_field "$newest" Fingerprint); the UI files are now at $fp"
       else
-        failed report "no proof report under $(dforge_name "$dir" "$root")${spec_bound:+ names $spec}"
+        failed report "no proof report under $(dagents_name "$dir" "$root")${spec_bound:+ names $spec}"
       fi
       failed scope "UI files changed since $base: $(head -n 10 <<<"$changed" | tr '\n' ' ')"
     fi
@@ -120,7 +120,7 @@ case $cmd in
         want=$(uiux_section "$report" Delta | uiux_ids)
         [ -n "$want" ] || failed coverage "the touch report has no ## Delta items"
       else
-        cf=$(dforge_resolve "$rc" "$root")
+        cf=$(dagents_resolve "$rc" "$root")
         want=""
         if [ -f "$cf" ]; then
           want=$(uiux_contract_ids "$cf")
@@ -175,7 +175,7 @@ case $cmd in
         elif [ "$jfp" != "$fp" ]; then
           failed judge "the verdict is for $jfp; the UI files are at $fp; judge again"
         else
-          jpath=$(dforge_resolve "$jfile" "$root")
+          jpath=$(dagents_resolve "$jfile" "$root")
           if [ ! -f "$jpath" ]; then
             failed judge "the judge file $jfile does not exist"
           else
@@ -185,12 +185,12 @@ case $cmd in
         fi
       fi
       if [ ${#fails[@]} -eq 0 ]; then
-        printf 'ui-proof: ok — %s proves the UI at %s\n' "$(dforge_name "$report" "$root")" "$fp"
+        printf 'ui-proof: ok — %s proves the UI at %s\n' "$(dagents_name "$report" "$root")" "$fp"
         exit 0
       fi
     done
     for f in "${fails[@]}"; do printf 'ui-proof: FAIL %s\n' "$f"; done
-    [ -z "$report" ] || printf 'ui-proof: report %s\n' "$(dforge_name "$report" "$root")"
+    [ -z "$report" ] || printf 'ui-proof: report %s\n' "$(dagents_name "$report" "$root")"
     exit 1 ;;
   *) usage ;;
 esac

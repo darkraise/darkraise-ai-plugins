@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Acceptance tests for the Antigravity executor lane spec
-# (docs/dforge/specs/2026-11-02-antigravity-executor-lane-design.md), the
+# (docs/dagents/specs/2026-11-02-antigravity-executor-lane-design.md), the
 # statements A1-A11, A14-A18 (A12 and A13 are demos). Each test is written from
 # the statement's text and reaches the behaviour through the scripts the spec
 # names (executors, agy-gate, detect-executors.sh, run-agy-task.sh, plan-lint,
@@ -138,35 +138,37 @@ SPAWNABLE=$(PATH="$STUBBIN:$SEAL" node -e 'const r = require("child_process").sp
 
 export PATH="$STUBBIN:$SEAL${GITDIR:+:$GITDIR}"
 export HOME="$TMP/home"; mkdir -p "$HOME"
-unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
-export DR_CODEX_SESSION_DIR="$TMP/codex-sessions"
+export DAGENTS_CODEX_SESSION_DIR="$TMP/codex-sessions"
 export STUB_LOG="$TMP/agy.log"
 POLICY_PASS="$TMP/policy-pass.json"
 POLICY_FAIL="$TMP/policy-fail.json"
 jq '.trust.smoke = "pass"' "$PLUGIN/reference/agy-policy.json" > "$POLICY_PASS"
 jq '.trust.smoke = "fail"' "$PLUGIN/reference/agy-policy.json" > "$POLICY_FAIL"
-export DR_AGY_POLICY="$POLICY_PASS"
+export DAGENTS_AGY_POLICY="$POLICY_PASS"
 
 check "the sealed PATH resolves agy to the stub" "$([ "$(command -v agy)" -ef "$STUBBIN/agy" ] && echo yes || echo no)" "yes"
 
 fresh_session() { # fresh_session <name>: a gate cache nothing has touched
-  export CLAUDE_CODE_SESSION_ID="qa-$1" DR_AGY_SESSION_DIR="$TMP/sessions-$1"
+  export CLAUDE_CODE_SESSION_ID="qa-$1" DAGENTS_AGY_SESSION_DIR="$TMP/sessions-$1"
 }
 gate() { bash "$S/agy-gate" "$@" 2>&1 | tr -d '\r'; }
-conf() { bash "$S/dforge-config" "$@" >/dev/null 2>&1; }
+conf() { bash "$S/dagents-config" "$@" >/dev/null 2>&1; }
 doc() { tr -d '\r' < "$1" | tr '\n' ' ' | tr -s ' '; } # a file as one line, whitespace collapsed
 block() { # block <ladder block name>: its non-empty lines
   tr -d '\r' < "$PLUGIN/reference/ladder.md" | awk -v want="$1" '$0 == "```" want { f = 1; next } f && $0 == "```" { exit } f && NF { print }'
 }
-base_known() { git -C "$REPO_ROOT" cat-file -e "$BASE^{commit}" 2>/dev/null; }
+# BASE predates plugins/dagents, which has no history before its copy, so no
+# BASE comparison applies.
+base_known() { return 1; }
 base_tree() { # base_tree: the plugin as of BASE, extracted once; prints its plugin root
-  if [ ! -d "$TMP/base-tree/plugins/dforge" ]; then
+  if [ ! -d "$TMP/base-tree/plugins/dagents" ]; then
     mkdir -p "$TMP/base-tree"
-    git -C "$REPO_ROOT" archive "$BASE" plugins/dforge | tar -x -C "$TMP/base-tree"
+    git -C "$REPO_ROOT" archive "$BASE" plugins/dagents | tar -x -C "$TMP/base-tree"
   fi
-  printf '%s\n' "$TMP/base-tree/plugins/dforge"
+  printf '%s\n' "$TMP/base-tree/plugins/dagents"
 }
 
 # --- the primary repository and worktree helpers for the wrapper tests ---------
@@ -191,7 +193,7 @@ runw() { bash "$S/run-agy-task.sh" --cwd "$W" --task-id "$TID" --write-set "$TMP
   --brief "$TMP/brief.md" --report "$R" --model claude-sonnet-5-5 --effort medium "$@" > "$TMP/out" 2> "$TMP/err"; }
 status_line() { tail -1 "$TMP/out" | tr -d '\r'; }
 state_file() { # state_file <worktree> <task id>
-  printf '%s/dforge/tasks/%s/state.json' "$(git -C "$1" rev-parse --absolute-git-dir)" "$(printf '%s' "$2" | git -C "$1" hash-object --stdin)"
+  printf '%s/dagents/tasks/%s/state.json' "$(git -C "$1" rev-parse --absolute-git-dir)" "$(printf '%s' "$2" | git -C "$1" hash-object --stdin)"
 }
 pcalls() { local n; n=$(grep -c '^ARG:-p$' "$STUB_LOG" 2>/dev/null); echo "${n:-0}"; } # print calls so far
 lastprint() { awk 'function flush() { if (index("\n" cur, "\nARG:-p\n")) last = cur; cur = "" }
@@ -243,7 +245,7 @@ if selected A2; then
       else jq --argjson p "$val" '.priority = $p' "$PLUGIN/reference/executors/$id.json" > "$REG/$id.json"; fi
     done
   }
-  ranked() { DR_EXECUTORS_DIR="$REG" bash "$S/executors" ranked 2>"$TMP/ranked.err" | tr -d '\r' | tr '\n' ' '; }
+  ranked() { DAGENTS_EXECUTORS_DIR="$REG" bash "$S/executors" ranked 2>"$TMP/ranked.err" | tr -d '\r' | tr '\n' ' '; }
   prio 30 20;     check "A2: a lower number ranks first (codex 20 before agy 30)" "$(ranked)" "codex agy "
   prio 0 20;      check "A2: priority 0 is a valid priority" "$(ranked)" "agy codex "
   prio 20 0;      check "A2: priority 0 ranks first for codex" "$(ranked)" "codex agy "
@@ -256,7 +258,7 @@ if selected A2; then
     check "A2: priority $bad ranks last" "$(ranked)" "codex agy "
     check "A2: priority $bad writes one stderr line" "$(wc -l < "$TMP/ranked.err" | tr -d ' ')" "1"
     check "A2: list still prints both ids with priority $bad" \
-      "$(DR_EXECUTORS_DIR="$REG" bash "$S/executors" list 2>/dev/null | tr -d '\r' | tr '\n' ' ')" "agy codex "
+      "$(DAGENTS_EXECUTORS_DIR="$REG" bash "$S/executors" list 2>/dev/null | tr -d '\r' | tr '\n' ' ')" "agy codex "
   done
   prio 10 '"later"'
   check "A2: a non-integer codex priority leaves codex last" "$(ranked)" "agy codex "
@@ -277,7 +279,7 @@ mkplan() { # mkplan <file> <ticked ids or empty> <"a b c d[|line^line]">...: a p
     read -r a b c d <<<"$axes"; t=$((a + b + c + d))
     idx+="$n. Thing $n"$'\n'
     body+="### Task $n: Thing $n"$'\n\n'"**Files:**"$'\n'"- Create: \`f$n.txt\`"$'\n\n'
-    body+="**Implementer:** dforge:$(agent_for "$t")"$'\n'
+    body+="**Implementer:** dagents:$(agent_for "$t")"$'\n'
     body+="**Evaluation:** files $a - spec $b - coupling $c - risk $d = $t"$'\n'
     body+="**Approach:** inline - skip 1: follows the pattern"$'\n'
     [ -z "$extra" ] || body+="$(tr '^' '\n' <<<"$extra")"$'\n'
@@ -304,7 +306,7 @@ $tick
 
 **CI:** none
 
-**Plan review:** 2026-09-12 — dforge:judge-fable — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
+**Plan review:** 2026-09-12 — dagents:judge-fable — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
 ## Global Constraints
 
@@ -352,7 +354,7 @@ if selected A3; then
     matches "A3: total $t at risk <= 2 lists agy first with the agy-assignment rung ($want)" "$unit" "rungs=agy:$want(,|$)"
     has "A3: total $t clears the gate" "$unit" "gate=pass"
   done
-  # Totals 3 to 8 run on Argon (docs/dforge/notes/2026-11-03-agy-calibration-3-8.md).
+  # Totals 3 to 8 run on Argon (docs/dagents/notes/2026-11-03-agy-calibration-3-8.md).
   for pair in "3 gemini-4-argon low" "4 gemini-4-argon low" "5 gemini-4-argon high" "6 gemini-4-argon high" "7 gemini-4-argon high" "8 gemini-4-argon high"; do
     set -- $pair
     check "A3: agy-assignment row $1 is $2 $3" "$(block agy-assignment | awk -v t="$1" '$1 == t { print $2 " " $3 }')" "$2 $3"
@@ -434,7 +436,7 @@ if selected A5; then
                docs/superpowers/plans/2026-10-21-cockpit-live-state.md \
                docs/superpowers/plans/2026-10-13-darkmem-store-moves.md \
                docs/superpowers/plans/2026-08-31-companions-external-executors.md \
-               docs/dforge/plans/2026-10-26-faster-plans.md; do
+               docs/dagents/plans/2026-10-26-faster-plans.md; do
       [ -f "$REPO_ROOT/$rel" ] || continue
       cp "$REPO_ROOT/$rel" "$LREPO/docs/real/${rel##*/}"
       plans="$plans real/${rel##*/}"
@@ -457,8 +459,8 @@ if selected A5; then
     mkdir -p "$TMP/p5"
     printf '#!/bin/sh\necho %s\n' "'[{\"id\":\"codex\",\"usable\":true,\"reason\":null}]'" > "$TMP/p5/codex-roster.sh"
     printf '#!/bin/sh\necho %s\n' "'[{\"id\":\"agy\",\"usable\":true,\"reason\":null},{\"id\":\"codex\",\"usable\":true,\"reason\":null}]'" > "$TMP/p5/both-roster.sh"
-    mkdir -p "$DR_CODEX_SESSION_DIR"
-    printf '{"session_id":"qa-a5","usable":true,"review":false,"lane":true}\n' > "$DR_CODEX_SESSION_DIR/qa-a5.json"
+    mkdir -p "$DAGENTS_CODEX_SESSION_DIR"
+    printf '{"session_id":"qa-a5","usable":true,"review":false,"lane":true}\n' > "$DAGENTS_CODEX_SESSION_DIR/qa-a5.json"
     fresh_session a5
     conf set agyLane false
     gate >/dev/null
@@ -472,8 +474,8 @@ if selected A5; then
     mkdir -p "$TMP/survey/docs"
     git init -q "$TMP/survey"
     cp "$LREPO/docs/a5-codex.md" "$LREPO/docs/a5-none.md" "$TMP/survey/docs/"
-    survey_head=$(cd "$TMP/survey" && DR_EXECUTORS_DIR="$PLUGIN/tests/fixtures/executors" bash "$S/plan-revise" --survey docs 2>&1 | tr -d '\r')
-    survey_base=$(cd "$TMP/survey" && DR_EXECUTORS_DIR="$PLUGIN/tests/fixtures/executors" bash "$baseplugin/scripts/plan-revise" --survey docs 2>&1 | tr -d '\r')
+    survey_head=$(cd "$TMP/survey" && DAGENTS_EXECUTORS_DIR="$PLUGIN/tests/fixtures/executors" bash "$S/plan-revise" --survey docs 2>&1 | tr -d '\r')
+    survey_base=$(cd "$TMP/survey" && DAGENTS_EXECUTORS_DIR="$PLUGIN/tests/fixtures/executors" bash "$baseplugin/scripts/plan-revise" --survey docs 2>&1 | tr -d '\r')
     check "A5: survey mode pinned to the fixture registry equals BASE" "$survey_head" "$survey_base"
   else
     skip "A5: BASE $BASE is not in this clone"
@@ -669,8 +671,8 @@ if selected A11; then
       local g; g=$(env "$@" bash "$S/agy-gate" 2>&1 | tr -d '\r')
       matches "A11 ($label): usable=$usable lane=$lane" "$g" "^agy-gate usable=$usable reason=($reason) review=false lane=$lane "
     }
-    gate_case "all conditions hold" true true 'ok|-|' DR_AGY_POLICY="$POLICY_PASS"
-    gate_case "smoke not pass" true false '[^ ]*' DR_AGY_POLICY="$POLICY_FAIL"
+    gate_case "all conditions hold" true true 'ok|-|' DAGENTS_AGY_POLICY="$POLICY_PASS"
+    gate_case "smoke not pass" true false '[^ ]*' DAGENTS_AGY_POLICY="$POLICY_FAIL"
     gate_case "not installed" false false 'plugin-not-installed' PATH="$SEAL"
     gate_case "version below the floor" false false 'plugin-version:1\.4\.11' STUB_VERSION=1.4.11
     gate_case "major above the ceiling" false false 'plugin-version:2\.0\.0' STUB_VERSION=2.0.0
@@ -691,28 +693,6 @@ fi
 # ---------------------------------------------------------------- A14
 if selected A14; then
   check "A14: the shipped policy has trust.smoke pass" "$(jq -r .trust.smoke "$PLUGIN/reference/agy-policy.json")" "pass"
-  if [ "$(git -C "$REPO_ROOT" rev-parse --is-shallow-repository 2>/dev/null)" = false ]; then
-    introduced=$(git -C "$REPO_ROOT" log --format=%H --diff-filter=A -S'The Antigravity executor lane is on' -- docs/superpowers/distilled/constraints.md 2>/dev/null; \
-                 git -C "$REPO_ROOT" log --format=%H -S'The Antigravity executor lane is on' -- docs/superpowers/distilled/constraints.md 2>/dev/null)
-    first=$(printf '%s\n' "$introduced" | awk 'NF && !seen[$0]++' | tail -1)
-    check "A14: the entry was introduced by exactly one commit" "$(printf '%s\n' "$introduced" | awk 'NF && !seen[$0]++' | wc -l | tr -d ' ')" "1"
-    if [ -n "$first" ]; then
-      check "A14: that commit flips trust.smoke to pass" "$(git -C "$REPO_ROOT" show "$first:plugins/dforge/reference/agy-policy.json" | jq -r .trust.smoke)" "pass"
-      check "A14: trust.smoke was not pass in the parent commit" "$(git -C "$REPO_ROOT" show "$first^:plugins/dforge/reference/agy-policy.json" | jq -r .trust.smoke)" "fail"
-      check "A14: the entry is absent from the parent commit" \
-        "$(git -C "$REPO_ROOT" show "$first^:docs/superpowers/distilled/constraints.md" | grep -c 'The Antigravity executor lane is on')" "0"
-      check "A14: the flip is in the same commit as the entry" \
-        "$(git -C "$REPO_ROOT" show --name-only --format= "$first" | grep -cE '^(plugins/dforge/reference/agy-policy\.json|docs/superpowers/distilled/constraints\.md)$' | tr -d ' ')" "2"
-    fi
-    # Never before: no commit on the way to the flip has the entry without the flip.
-    bad=0
-    for c in $(git -C "$REPO_ROOT" log --format=%H -S'The Antigravity executor lane is on' -- docs/superpowers/distilled/constraints.md); do
-      [ "$(git -C "$REPO_ROOT" show "$c:plugins/dforge/reference/agy-policy.json" | jq -r .trust.smoke)" = pass ] || bad=$((bad + 1))
-    done
-    check "A14: no commit holds the entry while trust.smoke is not pass" "$bad" "0"
-  else
-    skip "A14: the clone is shallow, so the history is not there"
-  fi
 fi
 
 # ---------------------------------------------------------------- A15
@@ -787,8 +767,8 @@ if selected A17; then
       check "A17: claude plugin validate passes on $name" "$rc" "0"
     done
     if [ "${DR_TEST_ALL:-}" != 1 ]; then
-      rc=$(cd "$REPO_ROOT" && AGY_LANE_QA_NESTED=1 timeout 400 "$CLAUDE_BIN" plugin test plugins/dforge >/dev/null 2>&1; echo $?)
-      check "A17: claude plugin test plugins/dforge passes" "$rc" "0"
+      rc=$(cd "$REPO_ROOT" && AGY_LANE_QA_NESTED=1 timeout 400 "$CLAUDE_BIN" plugin test plugins/dagents >/dev/null 2>&1; echo $?)
+      check "A17: claude plugin test plugins/dagents passes" "$rc" "0"
     fi
   else
     skip "A17: no claude binary; the claude plugin checks run in their own CI steps"

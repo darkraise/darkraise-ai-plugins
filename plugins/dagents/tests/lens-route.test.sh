@@ -5,11 +5,11 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROUTE="$HERE/../scripts/lens-route"
-export DFORGE_NO_SETTINGS=1
-unset DFORGE_LENS_CAP CLAUDE_CONFIG_DIR
+export DAGENTS_NO_SETTINGS=1
+unset DAGENTS_LENS_CAP CLAUDE_CONFIG_DIR
 # The floor cases set their own threshold; 0 keeps the other cases' output
 # free of the lens-floor line.
-export DFORGE_LENS_MINOR_FROM=0
+export DAGENTS_LENS_MINOR_FROM=0
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -61,7 +61,7 @@ out=$(bash "$ROUTE" plan.md --final "$BASE" "$HEAD1"); status=$?
 check "final: exit 0" "$status" "0"
 check "final: a shell-only change gets security and lang-bash" "$(short <<<"$out")" "lens security;lens lang-bash;"
 check "final: no lens whose clauses all fail" "$(grep -cE '^lens (lang-csharp|lang-python|lang-typescript|type-design)' <<<"$out")" "0"
-check "final: the seat and reason" "$(grep -c '^lens security criteria=[^ ]* seat=dforge:judge-sonnet-high reason=always$' <<<"$out")" "1"
+check "final: the seat and reason" "$(grep -c '^lens security criteria=[^ ]* seat=dagents:judge-sonnet-high reason=always$' <<<"$out")" "1"
 crit=$(sed -n 's/^lens lang-bash criteria=\([^ ]*\) .*/\1/p' <<<"$out")
 check "final: the criteria path exists" "$([ -f "$crit" ] && echo yes || echo no)" "yes"
 check "final: the reason names the glob" "$(grep -c '^lens lang-bash .* reason=paths:\*\.sh$' <<<"$out")" "1"
@@ -70,24 +70,24 @@ check "final: the reason names the glob" "$(grep -c '^lens lang-bash .* reason=p
 commit_file tests/a.test.ts 'try { run() } catch (e) {}'
 commit_file README.md 'Docs.'
 HEAD2=$(git rev-parse HEAD)
-out=$(DFORGE_LENS_CAP=2 bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
+out=$(DAGENTS_LENS_CAP=2 bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
 check "cap 2: two lenses, the rest skipped in order" "$(short <<<"$out")" \
   "lens security;lens silent-failures;lens-skipped test-quality reason=cap;lens-skipped lang-bash reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
 out=$(bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
 check "default cap 4" "$(short <<<"$out")" \
   "lens security;lens silent-failures;lens test-quality;lens lang-bash;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
-out=$(DFORGE_LENS_CAP=0 bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
+out=$(DAGENTS_LENS_CAP=0 bash "$ROUTE" plan.md --final "$BASE" "$HEAD2")
 check "cap 0: lenses off" "$out" "lenses off"
 
 # The Minor floor: the fixture plan has three tasks.
-out=$(DFORGE_LENS_MINOR_FROM=4 bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
+out=$(DAGENTS_LENS_MINOR_FROM=4 bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
 check "floor: a plan under the threshold gets the floor after the lenses" "$(short <<<"$out")" \
   "lens security;lens lang-bash;lens-floor important tasks=3 from=4;"
-out=$(DFORGE_LENS_MINOR_FROM=3 bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
+out=$(DAGENTS_LENS_MINOR_FROM=3 bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
 check "floor: a plan at the threshold gets none" "$(grep -c '^lens-floor' <<<"$out")" "0"
-out=$(DFORGE_LENS_MINOR_FROM=4 DFORGE_LENS_CAP=0 bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
+out=$(DAGENTS_LENS_MINOR_FROM=4 DAGENTS_LENS_CAP=0 bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
 check "floor: lenses off print no floor" "$out" "lenses off"
-out=$(unset DFORGE_LENS_MINOR_FROM; bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
+out=$(unset DAGENTS_LENS_MINOR_FROM; bash "$ROUTE" plan.md --final "$BASE" "$HEAD1")
 check "floor: the default threshold is 20" "$(grep -c '^lens-floor important tasks=3 from=20$' <<<"$out")" "1"
 
 # A4: per-task lenses.
@@ -137,23 +137,23 @@ sed 's#specs/light.md#specs/gone.md#' light-plan.md > gone-spec-plan.md
 out=$(bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD2")
 check "light: security only, every other applicable lens skipped for its depth" "$(short <<<"$out")" \
   "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped lang-bash reason=depth;lens-skipped lang-typescript reason=depth;lens-skipped docs-comments reason=depth;"
-out=$(DFORGE_LENS_CAP=1 bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD2")
+out=$(DAGENTS_LENS_CAP=1 bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD2")
 check "light: lensCap 1 still keeps security, the rest skipped for depth" "$(short <<<"$out")" \
   "lens security;lens-skipped silent-failures reason=depth;lens-skipped test-quality reason=depth;lens-skipped lang-bash reason=depth;lens-skipped lang-typescript reason=depth;lens-skipped docs-comments reason=depth;"
-out=$(DFORGE_LENS_CAP=0 bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD2")
+out=$(DAGENTS_LENS_CAP=0 bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD2")
 check "light: lensCap 0 is still lenses off" "$out" "lenses off"
-out=$(DFORGE_LENS_MINOR_FROM=4 bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD1")
+out=$(DAGENTS_LENS_MINOR_FROM=4 bash "$ROUTE" light-plan.md --final "$BASE" "$HEAD1")
 check "light: the floor counts the one lens printed" "$(short <<<"$out")" \
   "lens security;lens-skipped lang-bash reason=depth;lens-floor important tasks=1 from=4;"
 out=$(bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
 check "standard: two lenses plus test-quality, the rest past the cap" "$(short <<<"$out")" \
   "lens security;lens silent-failures;lens test-quality;lens-skipped lang-bash reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
-out=$(DFORGE_LENS_CAP=1 bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
+out=$(DAGENTS_LENS_CAP=1 bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
 check "standard: a lower lensCap wins" "$(grep -c '^lens ' <<<"$out")" "1"
-out=$(DFORGE_LENS_CAP=2 bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
+out=$(DAGENTS_LENS_CAP=2 bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
 check "standard: lensCap 2 skips test-quality for the cap" "$(short <<<"$out")" \
   "lens security;lens silent-failures;lens-skipped test-quality reason=cap;lens-skipped lang-bash reason=cap;lens-skipped lang-typescript reason=cap;lens-skipped docs-comments reason=cap;"
-out=$(DFORGE_LENS_CAP=3 bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
+out=$(DAGENTS_LENS_CAP=3 bash "$ROUTE" standard-plan.md --final "$BASE" "$HEAD2")
 check "standard: lensCap 3 keeps test-quality as the third" "$(grep -c '^lens ' <<<"$out")" "3"
 commit_file src/b.ts 'run() ?? fallback()'
 commit_file NOTES.md 'Notes.'
@@ -188,7 +188,7 @@ check "standard: without security, test-quality does not use a slot" "$(short <<
 out=$(bash "$ROUTE" light-lenses.md --task 1); status=$?
 check "light: --task names its lenses as before" "$status:$(sed -E 's/ criteria=[^ ]*//' <<<"$out")" "0:lens lang-bash"
 
-# --- the ui-ux lens (dforge:ui-ux) ---
+# --- the ui-ux lens (dagents:ui-ux) ---
 UIR="$TMP/uirepo"
 git init -q "$UIR" && cd "$UIR" || exit 1
 git config user.email t@example.com && git config user.name t
@@ -214,12 +214,12 @@ uroute() { HOME="$TMP/uihome" bash "$ROUTE" "$@"; }
 out=$(uroute plan.md --final "$UBASE" "$UHEAD")
 check "ui-ux: no profile and no contract: not routed" "$(short <<<"$out")" \
   "lens security;lens silent-failures;lens test-quality;lens lang-typescript;"
-mkdir -p docs/dforge/ui-ux && printf '# UI profile\n\n**Platform:** web\n' > docs/dforge/ui-ux/profile.md
+mkdir -p docs/dagents/ui-ux && printf '# UI profile\n\n**Platform:** web\n' > docs/dagents/ui-ux/profile.md
 out=$(uroute plan.md --final "$UBASE" "$UHEAD")
 check "ui-ux: with a profile it is second and survives the default cap" "$(short <<<"$out")" \
   "lens security;lens ui-ux;lens silent-failures;lens test-quality;lens-skipped lang-typescript reason=cap;"
 check "ui-ux: the reason" "$(grep -c '^lens ui-ux .* reason=ui-paths$' <<<"$out")" "1"
-rm docs/dforge/ui-ux/profile.md
+rm docs/dagents/ui-ux/profile.md
 printf '# Spec\n\n## UI/UX contract\n\n**UI/UX depth:** feature — x\n\n- **UX-1** — Escape closes the dialog.\n' > docs/s.md
 { printf '**Spec:** `docs/s.md`\n\n'; cat plan.md; } > plan-spec.md
 out=$(uroute plan-spec.md --final "$UBASE" "$UHEAD")
@@ -237,10 +237,10 @@ out=$(uroute plan-spec.md --final "$UHEAD" "$U2")
 check "ui-ux: no UI file changed: not routed" "$(grep -c '^lens ui-ux ' <<<"$out")" "0"
 printf 'test("x", () => <App />);\n' > tests/app.test.tsx && git add tests && git commit -q -m tsx-test
 U3=$(git rev-parse HEAD)
-mkdir -p docs/dforge/ui-ux && printf '# UI profile\n\n**Platform:** web\n' > docs/dforge/ui-ux/profile.md
+mkdir -p docs/dagents/ui-ux && printf '# UI profile\n\n**Platform:** web\n' > docs/dagents/ui-ux/profile.md
 out=$(uroute plan.md --final "$U2" "$U3")
 check "ui-ux: only a .test.tsx changed: not routed" "$(grep -c '^lens ui-ux ' <<<"$out")" "0"
-rm docs/dforge/ui-ux/profile.md
+rm docs/dagents/ui-ux/profile.md
 printf '# T\n\n## Task index\n\n1. r\n\n### Task 1: r\n\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 3 = 3\n**Lenses:** ui-ux\n' > plan-task.md
 check "ui-ux: a risk-3 task may name the lens" "$(uroute plan-task.md --task 1 | sed -E 's/ criteria=[^ ]*//')" "lens ui-ux"
 

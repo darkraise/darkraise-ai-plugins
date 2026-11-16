@@ -1,13 +1,13 @@
 # Auto run
 
 The default on Claude Code (`autoRun=on`): once your human partner approves the
-written spec at the spec review, dforge writes the plan, executes, reviews and
+written spec at the spec review, dagents writes the plan, executes, reviews and
 finishes without asking anything. Under `autoRun=ask` it is offered once the
 design is approved and starts before the spec is written; `autoRun=off` never
 starts one. The designs are
 `docs/superpowers/specs/2026-10-13-dr-forge-auto-run-design.md` and
 `docs/superpowers/specs/2026-10-18-auto-execution-default-design.md` in the
-dforge repository; this file is the contract the skills cite. Every
+dagents repository; this file is the contract the skills cite. Every
 `scripts/…` command runs as `bash <plugin-root>/scripts/<name>`.
 
 Claude Code only: the cockpit mod compacts, switches and clears the session.
@@ -15,8 +15,8 @@ No run starts on Codex, where `autoRun=on` behaves as `off`.
 
 ## Starting
 
-Under `autoRun=on`, dforge:brainstorming starts it once your human partner
-approves the spec at the spec review (dforge:brainstorming §Auto by default).
+Under `autoRun=on`, dagents:brainstorming starts it once your human partner
+approves the spec at the spec review (dagents:brainstorming §Auto by default).
 Under `autoRun=ask` it offers it once, after the last design section is
 approved and before the spec is written, and starts it on yes. Either way,
 from the checkout the design was made in:
@@ -61,7 +61,7 @@ when refused, 5 when the run stopped (`handoff` for `verdict` and
 ## The spec
 
 Under `autoRun=on` the critic and the Fable review run before the run starts,
-at the spec's depth (below), as dforge:brainstorming §Auto by default says:
+at the spec's depth (below), as dagents:brainstorming §Auto by default says:
 what Fable leaves undecided is
 asked at the spec review instead of deferred, and its rulings are imported
 after `start` with `scripts/auto-run ruling add`. The rest of this section is
@@ -78,11 +78,11 @@ critic runs first and Fable for one or two rounds. The depth decides, not the
 trigger list. What follows is the phase at `standard` and `full`.
 
 After your own self-review round and the architecture critic
-(dforge:brainstorming §Architecture critic, which folds the critic into
+(dagents:brainstorming §Architecture critic, which folds the critic into
 Fable's first round at depth standard), dispatch
-`dforge:judge-fable` on
+`dagents:judge-fable` on
 the spec against the approved design: the design sections as approved,
-verbatim, and the spec's path, naming its report file as dforge:brainstorming's
+verbatim, and the spec's path, naming its report file as dagents:brainstorming's
 The spec review's report says (`<state>/spec-review-<spec name>-<r>-report.md`):
 it is told to write nothing else, and reply in at most 10 lines. Apply what it rules, and record each ruling
 with
@@ -116,10 +116,10 @@ auto run.
 
 The ladder for anything you would have asked:
 
-1. **Opus.** During execution, the ruling seat (`dforge:judge-opus`) as the
+1. **Opus.** During execution, the ruling seat (`dagents:judge-opus`) as the
    execution skills dispatch it; CONFIRMED-GAP, PARK and AMEND are carried out
    as always. Before execution (a spec or planning choice), dispatch
-   `dforge:judge-opus` yourself with the question, its options with your
+   `dagents:judge-opus` yourself with the question, its options with your
    recommendation first, the spec's path and the plan's path when one exists,
    asking for `ruling: <choice> — <reason>` or `no ruling`, naming the report
    file `<state>/rulings-preexec-<k>-report.md` (`<k>` the next unused number)
@@ -132,7 +132,7 @@ The ladder for anything you would have asked:
 
        scripts/auto-run decision add --id <id> --question "<q>" --options "<recommended | other>" --opus-reason "<why Opus did not rule>" [--task <N>]
 
-3. **Fable, in one batch.** Dispatch `dforge:judge-fable` once with every
+3. **Fable, in one batch.** Dispatch `dagents:judge-fable` once with every
    line of `scripts/auto-run decision list`, asking for each item
    `ruling: <choice> — <reason>` or `no ruling`, naming the report file
    `<state>/rulings-fable-<k>-report.md` and telling it to
@@ -251,7 +251,7 @@ compaction that was booked (`pending` is `after-compact`): while a `clear` or
 `handoff` is pending it prints `handoff` and changes nothing.
 
 - `continue`: carry on with the phase `scripts/auto-run status` names. In
-  `plan`, resume dforge:writing-plans from the spec and the plan file on disk
+  `plan`, resume dagents:writing-plans from the spec and the plan file on disk
   (before `attach`, the newest file in the plans directory whose `**Spec:**`
   line names the spec). In
   `execute` and `final`, follow the After compaction steps of the execution
@@ -264,11 +264,11 @@ compaction that was booked (`pending` is `after-compact`): while a `clear` or
 ## The switch
 
 Once the plan is reviewed and attached, the run moves to execution in a
-cleared session; dforge:handoff does not end the run. In order:
+cleared session; dagents:handoff does not end the run. In order:
 
 1. When the spec's `## Decisions` holds a `Finish: <action>` line,
    `scripts/finish-choice set <action> --plan PLAN_FILE`.
-2. dforge:handoff steps 0-3: reconcile background agents and shells, commit
+2. dagents:handoff steps 0-3: reconcile background agents and shells, commit
    the plan and the spec, and update the handoff notes. Do not end the session.
 3. `scripts/next-step PLAN_FILE`. Exit 5 means background work is still
    listed: run `scripts/in-flight`, wait for or stop each launch it lists, and
@@ -294,12 +294,12 @@ either stage is retried once in that stage; the second stops the run.
 
 ## Clears
 
-The step that hands off owns the clear; dforge:handoff itself never runs it.
-Run dforge:handoff first (`scripts/auto-run clear` reads the first prompt
+The step that hands off owns the clear; dagents:handoff itself never runs it.
+Run dagents:handoff first (`scripts/auto-run clear` reads the first prompt
 and launch command `scripts/next-step` wrote to `latest.md`), then:
 
 - **A compaction that left too much:** `scripts/auto-run clear`.
-- **A plan that left inline mode before this change** (a ledger dforge:executing-plans' recovery.md sends to dforge:subagent-driven-development): `scripts/auto-run clear --phase`. A phase clear never counts as a self-resume.
+- **A plan that left inline mode before this change** (a ledger dagents:executing-plans' recovery.md sends to dagents:subagent-driven-development): `scripts/auto-run clear --phase`. A phase clear never counts as a self-resume.
 - **The switch** (§The switch): the cockpit runs `scripts/auto-run clear --phase` itself.
 - **Finishing** (§Finishing): `scripts/auto-run clear --phase`.
 
@@ -332,7 +332,7 @@ block alone, as Stopping says.
 ends as finished. Run it, then end as the attended flow would, when:
 
 - your human partner asks you to stop;
-- dforge:resume-execution would stop to ask (a worktree whose branch is
+- dagents:resume-execution would stop to ask (a worktree whose branch is
   gone, or the run's branch is gone);
 - finishing hits one of its unattended stops (failing tests at its first
   step or on the merged result, a rejected push, a refused worktree removal);
@@ -346,14 +346,14 @@ sends one Discord `blocked` notice when a run stops with a reason.
 ## Finishing
 
 Finishing runs in a session of its own. At the entry of
-dforge:finishing-a-development-branch, a run whose phase is not `finish` runs,
-in order, `scripts/auto-run phase finish`, dforge:handoff steps 0-3 (do not
+dagents:finishing-a-development-branch, a run whose phase is not `finish` runs,
+in order, `scripts/auto-run phase finish`, dagents:handoff steps 0-3 (do not
 end the session), `scripts/next-step PLAN_FILE` and
 `scripts/auto-run clear --phase`, and ends the turn with `Auto run: clearing`.
 A commit in handoff step 2 moves HEAD and costs one suite run at finishing's
 first step. `next-step`'s exits 4 and 5 are handled as §Clears says; a nonzero
 `clear --phase` stops the run as §Stopping says. The cleared session arrives
-through dforge:resume-execution with phase `finish`, and has no conversation
+through dagents:resume-execution with phase `finish`, and has no conversation
 behind it: what the final review left open is in the ledger's parked and
 `Ruling:` lines, the `final review residual` register rows, and the
 workspace's `final-fix-report.md` and `final-rereview-report.md`, which exist

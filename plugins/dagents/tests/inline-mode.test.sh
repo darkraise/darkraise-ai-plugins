@@ -22,7 +22,7 @@ FINAL="$P/reference/final-review.md"
 export CODEX_HOME="$HERE/no-such-codex-home"
 # The budget lines asserted here are the defaults'; the suite keeps the real
 # home, so the settings in it are kept out by name.
-export DFORGE_NO_SETTINGS=1
+export DAGENTS_NO_SETTINGS=1
 # Run inside an auto run's session, a brief would bind to that run.
 unset CLAUDE_CODE_SESSION_ID AR_SESSION
 
@@ -159,13 +159,13 @@ sed 's/^|//' > "$DTMP/offload.md" <<'EOF'
 |
 |### Task 1: offloaded
 |
-|**Implementer:** dforge:impl-sonnet-medium
+|**Implementer:** dagents:impl-sonnet-medium
 |**Executor:** codex gpt-6.1-sol / medium
 |**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
 |
 |### Task 2: plain
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 EOF
 

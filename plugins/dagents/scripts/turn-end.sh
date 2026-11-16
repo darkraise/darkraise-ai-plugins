@@ -39,7 +39,7 @@ hold() { # hold <reason> <what the user sees>
   jq -n --arg reason "$1" --arg msg "$2" '{decision: "block", reason: $reason, systemMessage: $msg}'
 }
 
-stamp="${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"
+stamp="${HOME:-}/.claude/dagents/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"
 # An auto run bound to this session (reference/auto-run.md) lives in the
 # primary checkout, whichever worktree the turn ran in: its pending action. It
 # is read before the stamp gate, so a session with no stamp (a cleared one,
@@ -49,7 +49,7 @@ auto_pending=$(cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 . "${SCRIPT_DIR}/lib/roots.sh"
 # In a subshell, so a malformed config costs only this check, never the hook.
-sdd=$(dforge_ledger_root "$root") || sdd=""
+sdd=$(dagents_ledger_root "$root") || sdd=""
 [ "$is_retry" = true ] && [ -z "$auto_pending" ] && exit 0
 [ -d "$sdd" ] || [ -n "$auto_pending" ] || exit 0
 root_shown=$PLUGIN_ROOT
@@ -89,7 +89,7 @@ if has_pending_background; then
       reason="Your message ends the session, but ${pending} background launch(es) are still running:
 $(inflight_text <<<"$running" | sed 's/^/- /')
 Wait for each (end the turn without the block), or stop it with TaskStop <id>, then run next-step again."
-      hold "$reason" "dforge held the stop: this message ends the session while ${pending} background launch(es) still run"
+      hold "$reason" "dagents held the stop: this message ends the session while ${pending} background launch(es) still run"
       ;;
   esac
   exit 0
@@ -115,7 +115,7 @@ if [ -n "$auto_pending" ]; then
     rm -f "$stamp.holds" 2>/dev/null
     why="the turn ended ${AUTO_HOLD_CAP} times in a row without its sentinel line"
     (cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" stop --reason "$why" >/dev/null 2>&1) || true
-    hold "The auto run stopped: ${why}. End as reference/auto-run.md §Stopping says." "dforge: the auto run stopped (${why})"
+    hold "The auto run stopped: ${why}. End as reference/auto-run.md §Stopping says." "dagents: the auto run stopped (${why})"
     exit 0
   fi
   reason="An auto run is bound to this session (pending: ${auto_pending}; see reference/auto-run.md), so its turns end only on a sentinel line. Do not stop: continue the run. When a budget line said compact, finish the task in flight, then end your message with the line \`Auto run: compacting\`. After \`auto-run clear\` exits 0, end with \`Auto run: clearing\`. After \`auto-run switch\` exits 0, end with \`Auto run: switching\`. If the run must stop (your human partner asked, or a stop the reference names), run \`bash \"${root_shown}/scripts/auto-run\" stop --reason \"<why>\"\` first, then end as the attended flow would."
@@ -126,9 +126,9 @@ if [ -n "$auto_pending" ]; then
     reason="An auto run is bound to this session and a compaction already ran (pending: after-compact; see reference/auto-run.md), so no sentinel ends this turn. Do not stop: run \`bash \"${root_shown}/scripts/auto-run\" after-compact\` now and follow what it prints (continue with the next task, or hand off and clear). If the run must stop, run \`bash \"${root_shown}/scripts/auto-run\" stop --reason \"<why>\"\` first, then end as the attended flow would."
   fi
   if [ "$auto_pending" = handoff ]; then
-    reason="An auto run is bound to this session and a compaction left too much behind (pending: handoff; see reference/auto-run.md §Clears), so this turn ends only on the clearing line, after the clear. Do not stop: finish the task in flight, run dforge:handoff, then \`bash \"${root_shown}/scripts/auto-run\" clear\` and end with the line \`Auto run: clearing\`. If the run must stop, run \`bash \"${root_shown}/scripts/auto-run\" stop --reason \"<why>\"\` first, then end as the attended flow would."
+    reason="An auto run is bound to this session and a compaction left too much behind (pending: handoff; see reference/auto-run.md §Clears), so this turn ends only on the clearing line, after the clear. Do not stop: finish the task in flight, run dagents:handoff, then \`bash \"${root_shown}/scripts/auto-run\" clear\` and end with the line \`Auto run: clearing\`. If the run must stop, run \`bash \"${root_shown}/scripts/auto-run\" stop --reason \"<why>\"\` first, then end as the attended flow would."
   fi
-  hold "$reason" "dforge held the stop (auto run, hold ${holds} of ${AUTO_HOLD_CAP}): pending ${auto_pending}, and the turn did not end on its sentinel line"
+  hold "$reason" "dagents held the stop (auto run, hold ${holds} of ${AUTO_HOLD_CAP}): pending ${auto_pending}, and the turn did not end on its sentinel line"
   exit 0
 fi
 
@@ -141,7 +141,7 @@ fi
 ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
 ledger="" clean=0
 [ -d "$sdd" ] || sdd=""
-ws="$(dforge_dir state "$root")/sdd"
+ws="$(dagents_dir state "$root")/sdd"
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
   # While progress is darkmem every worktree shares the mirror's work/sdd, and a
@@ -166,11 +166,11 @@ plan=$(head -n 1 "$ledger" | sed -n 's/^# SDD ledger — plan: //p' | tr -d '\r'
 [ -n "$plan" ] || plan="PLAN_FILE"
 
 if [ "$clean" = 1 ]; then
-  reason="Plan ${plan} passed its final review. Invoke dforge:finishing-a-development-branch with the Skill tool now and end on its menu or next-step block."
-  shown="dforge held the stop: plan ${plan} passed its final review, and the message ends without the finishing menu"
+  reason="Plan ${plan} passed its final review. Invoke dagents:finishing-a-development-branch with the Skill tool now and end on its menu or next-step block."
+  shown="dagents held the stop: plan ${plan} passed its final review, and the message ends without the finishing menu"
 else
   reason="Plan ${plan} advanced, but this message has no next step. Continue the work, or run \`bash \"${root_shown}/scripts/next-step\" ${plan}\` and end with the block it prints, verbatim; if background work is running, end the turn without the block."
-  shown="dforge held the stop: plan ${plan} advanced, and the message ends without the next step"
+  shown="dagents held the stop: plan ${plan} advanced, and the message ends without the next step"
 fi
 hold "$reason" "$shown"
 exit 0

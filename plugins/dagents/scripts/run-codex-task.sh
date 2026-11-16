@@ -153,18 +153,18 @@ cwd="$(dr_canonical "$cwd")" || die 'cannot resolve worktree'
 report="$(realpath -m -- "$report")" || die 'cannot resolve report path'
 case "$report" in
   "$cwd"/*)
-    case "$report" in "$cwd"/.dforge/*) ;; *) die 'report must be outside checkout or in ignored .dforge workspace' ;; esac
+    case "$report" in "$cwd"/.dagents/*) ;; *) die 'report must be outside checkout or in ignored .dagents workspace' ;; esac
     git -C "$cwd" check-ignore -q -- "$report" || die 'report workspace is not ignored'
     [ -z "$(git -C "$cwd" ls-files -- "$report")" ] || die 'report cannot be tracked' ;;
 esac
 dr_task_open "$cwd" "$task_id" "$write_set" || die 'task preflight failed'
 trap 'dr_task_unlock' EXIT
-record="$DR_TASK_DIR/state.json"
+record="$DAGENTS_TASK_DIR/state.json"
 phase="$(jq -r .phase "$record")"
 case "$phase" in ready|pending|complete) ;; *) die "task phase $phase requires explicit recovery" ;; esac
 [ "$(jq -r '.released // false' "$record")" = false ] || die 'task ownership was released; use a new task ID'
 [ "$(git -C "$cwd" rev-parse HEAD)" = "$(jq -r .expected_head "$record")" ] || die 'HEAD drift requires reconciliation'
-before_snapshot="$DR_TASK_DIR/before.json"
+before_snapshot="$DAGENTS_TASK_DIR/before.json"
 if [ "$phase" != ready ]; then
   jq '.pending // .baseline' "$record" > "$before_snapshot" && dr_task_assert_snapshot "$before_snapshot" || die 'pending/index/worktree drift requires reconciliation'
 fi
@@ -178,7 +178,7 @@ fi
 dr_snapshot "$cwd" "$before_snapshot" || die 'cannot snapshot worktree'
 human_report="$report"
 attempt="$(jq '.attempts | length + 1' "$record")"
-report="$DR_TASK_DIR/attempt-$attempt.md"
+report="$DAGENTS_TASK_DIR/attempt-$attempt.md"
 dr_task_update '.model = $model | .effort = $effort | .baseline = $snapshot[0] | .candidate = null |
   .attempts += [{number:$attempt,model:$model,effort:$effort,resume:$resume,prior_thread:.thread}] |
   .review_rounds = (if $review_round == "" then .review_rounds else ($review_round | tonumber) end) |
@@ -354,8 +354,8 @@ elif [ "$status" = DONE ]; then
   if [ "$(git -C "$cwd" rev-parse HEAD)" = "$base" ]; then committed=empty; else committed=yes; fi
 else
   dr_task_validate_scope "$before_snapshot" || { dr_task_block 'unexpected diff after incomplete run'; die 'task scope drift'; }
-  dr_snapshot "$cwd" "$DR_TASK_DIR/pending-snapshot.json" &&
-    dr_task_update '.phase = "pending" | .pending = $snapshot[0]' --slurpfile snapshot "$DR_TASK_DIR/pending-snapshot.json" || die 'cannot persist pending task'
+  dr_snapshot "$cwd" "$DAGENTS_TASK_DIR/pending-snapshot.json" &&
+    dr_task_update '.phase = "pending" | .pending = $snapshot[0]' --slurpfile snapshot "$DAGENTS_TASK_DIR/pending-snapshot.json" || die 'cannot persist pending task'
 fi
 
 head=$(git -C "$cwd" rev-parse HEAD)

@@ -13,7 +13,7 @@ session_id=$(jq -r '.session_id // empty' 2>/dev/null <<<"$stdin_json" || true)
 [ -n "$session_id" ] || exit 0
 cwd=$(jq -r '.cwd // empty' 2>/dev/null <<<"$stdin_json" || true)
 
-turns_dir="${HOME:-}/.claude/dforge/sessions/turns"
+turns_dir="${HOME:-}/.claude/dagents/sessions/turns"
 mkdir -p "$turns_dir" 2>/dev/null || exit 0
 stamp="${turns_dir}/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"
 touch "$stamp" 2>/dev/null || true

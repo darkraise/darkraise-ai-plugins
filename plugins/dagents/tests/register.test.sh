@@ -72,26 +72,26 @@ check "register_rows: a short row is not a row" "$(register_rows "$TMP/short.md"
 # look for these specs in the checkout running the suite.
 ROOT="$TMP/repo"
 git init -q -b main "$ROOT"
-mkdir -p "$ROOT/docs/dforge/registers" "$ROOT/docs/dforge/specs"
-: > "$ROOT/docs/dforge/specs/a-design.md"
-: > "$ROOT/docs/dforge/specs/b-design.md"
-reg "$ROOT/docs/dforge/registers/one.md" '| 1 | A | - | - | open | - |'
+mkdir -p "$ROOT/docs/dagents/registers" "$ROOT/docs/dagents/specs"
+: > "$ROOT/docs/dagents/specs/a-design.md"
+: > "$ROOT/docs/dagents/specs/b-design.md"
+reg "$ROOT/docs/dagents/registers/one.md" '| 1 | A | - | - | open | - |'
 printf '# Two — item register\n\n**Source:** s\n**Covers:** docs/superpowers/specs/z-design.md\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | B | - | - | open | - |\n' \
-  > "$ROOT/docs/dforge/registers/two.md"
+  > "$ROOT/docs/dagents/registers/two.md"
 check "register_files: both" "$(register_files "$ROOT" | wc -l | tr -d ' ')" "2"
 check "register_for_spec: matches one" \
   "$(register_for_spec "$ROOT" docs/superpowers/specs/a-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
 check "register_for_spec: no spec argument prints nothing" "$(register_for_spec "$ROOT")" ""
 check "register_for_spec: the other docs prefix matches" \
-  "$(register_for_spec "$ROOT" docs/dforge/specs/a-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
+  "$(register_for_spec "$ROOT" docs/dagents/specs/a-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
 check "register_for_spec: a leading ./ and the other prefix match" \
-  "$(register_for_spec "$ROOT" ./docs/dforge/specs/b-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
+  "$(register_for_spec "$ROOT" ./docs/dagents/specs/b-design.md | xargs -n1 basename | tr '\n' ' ')" "one.md "
 check "register_for_spec: docs/superpowersx is another name" \
   "$(register_for_spec "$ROOT" docs/superpowersx/specs/a-design.md)" ""
 check "register_files: no directory prints nothing" "$(register_files "$TMP/absent")" ""
-mkdir -p "$TMP/dforge/docs/dforge/registers"
-reg "$TMP/dforge/docs/dforge/registers/one.md" '| 1 | A | - | - | open | - |'
-check "register_files: a docs/dforge checkout" "$(register_files "$TMP/dforge" | xargs -n1 basename)" "one.md"
+mkdir -p "$TMP/dagents/docs/dagents/registers"
+reg "$TMP/dagents/docs/dagents/registers/one.md" '| 1 | A | - | - | open | - |'
+check "register_files: a docs/dagents checkout" "$(register_files "$TMP/dagents" | xargs -n1 basename)" "one.md"
 
 # --- register check ---
 REG="$HERE/../scripts/register"
@@ -233,8 +233,8 @@ mode_before=$(ls -l "$ROOT/many.md" | cut -c1-10)
 # Nine writers queue for one lock, which on a Windows runner (no flock, so the
 # lock directory) can outlast the default ten-second wait: a writer that gives
 # up says so in its .err file.
-for i in 1 2 3 4 5 6; do DR_LOCK_TENTHS=600 bash "$REG" set "$ROOT/many.md" "$i" done >/dev/null 2>"$TMP/fset-$i.err" & done
-for i in 1 2 3; do DR_LOCK_TENTHS=600 bash "$REG" add "$ROOT/many.md" "Added $i" >/dev/null 2>"$TMP/fadd-$i.err" & done
+for i in 1 2 3 4 5 6; do DAGENTS_LOCK_TENTHS=600 bash "$REG" set "$ROOT/many.md" "$i" done >/dev/null 2>"$TMP/fset-$i.err" & done
+for i in 1 2 3; do DAGENTS_LOCK_TENTHS=600 bash "$REG" add "$ROOT/many.md" "Added $i" >/dev/null 2>"$TMP/fadd-$i.err" & done
 wait
 check "concurrent sets: every row is done" "$(register_rows "$ROOT/many.md" | awk -F'\t' '$1 <= 6 && $5 == "done"' | grep -c .)" "6"
 check "concurrent adds: three distinct new rows" "$(register_rows "$ROOT/many.md" | awk -F'\t' '$1 > 6 { print $1 }' | sort -u | grep -c .)" "3"
@@ -245,8 +245,8 @@ check "a rewrite keeps the file's mode" "$(ls -l "$ROOT/many.md" | cut -c1-10)" 
 reg "$ROOT/many-mkdir.md" '| 1 | A | - | - | open | - |' '| 2 | B | - | - | open | - |' '| 3 | C | - | - | open | - |' \
   '| 4 | D | - | - | open | - |' '| 5 | E | - | - | open | - |' '| 6 | F | - | - | open | - |'
 # As above, with the lock directory everywhere.
-for i in 1 2 3 4 5 6; do DR_LOCK_TENTHS=600 DFORGE_FLOCK=no-such-flock bash "$REG" set "$ROOT/many-mkdir.md" "$i" done >/dev/null 2>"$TMP/set-$i.err" & done
-for i in 1 2 3; do DR_LOCK_TENTHS=600 DFORGE_FLOCK=no-such-flock bash "$REG" add "$ROOT/many-mkdir.md" "Added $i" >/dev/null 2>"$TMP/add-$i.err" & done
+for i in 1 2 3 4 5 6; do DAGENTS_LOCK_TENTHS=600 DAGENTS_FLOCK=no-such-flock bash "$REG" set "$ROOT/many-mkdir.md" "$i" done >/dev/null 2>"$TMP/set-$i.err" & done
+for i in 1 2 3; do DAGENTS_LOCK_TENTHS=600 DAGENTS_FLOCK=no-such-flock bash "$REG" add "$ROOT/many-mkdir.md" "Added $i" >/dev/null 2>"$TMP/add-$i.err" & done
 wait
 check "no flock: concurrent sets: every row is done" "$(register_rows "$ROOT/many-mkdir.md" | awk -F'\t' '$1 <= 6 && $5 == "done"' | grep -c .)" "6"
 check "no flock: no writer gave up" "$(cat "$TMP"/set-*.err "$TMP"/add-*.err)" ""
@@ -258,7 +258,7 @@ check "a rewrite leaves no temporary file" "$(ls -A "$ROOT" | grep -c '^\.many')
 # in the caller's working directory instead.
 LR="$TMP/lockless-repo"; git init -q "$LR"
 reg "$LR/r.md" '| 1 | A | - | - | open | - |'
-touch "$(git -C "$LR" rev-parse --absolute-git-dir)/dforge"
+touch "$(git -C "$LR" rev-parse --absolute-git-dir)/dagents"
 mkdir "$TMP/elsewhere"
 (cd "$TMP/elsewhere" && bash "$REG" set "$LR/r.md" 1 done >/dev/null 2>&1); set_rc=$?
 (cd "$TMP/elsewhere" && bash "$REG" add "$LR/r.md" "Unlocked" >/dev/null 2>&1); add_rc=$?
@@ -274,13 +274,13 @@ BASE=$(. "$HERE/../scripts/lib/lock.sh"; dr_lock_base "$BR/r.md")
 if command -v flock >/dev/null 2>&1; then
   flock "$BASE.lock" sleep 3 &
   sleep 0.5
-  out=$(DR_LOCK_TENTHS=10 bash "$REG" set "$BR/r.md" 1 done 2>&1); rc=$?
+  out=$(DAGENTS_LOCK_TENTHS=10 bash "$REG" set "$BR/r.md" 1 done 2>&1); rc=$?
   wait
   check "a busy lock: exit 1" "$rc" "1"
   check "a busy lock: says another process holds it" "$(grep -c 'is locked by another process' <<<"$out")" "1"
 fi
 printf '#!/bin/sh\nexit 64\n' > "$TMP/broken-flock"; chmod +x "$TMP/broken-flock"
-out=$(DFORGE_FLOCK="$TMP/broken-flock" bash "$REG" set "$BR/r.md" 1 done 2>&1); rc=$?
+out=$(DAGENTS_FLOCK="$TMP/broken-flock" bash "$REG" set "$BR/r.md" 1 done 2>&1); rc=$?
 check "a flock that fails: exit 1" "$rc" "1"
 check "a flock that fails: is not called a busy lock" "$(grep -c 'locked by another process' <<<"$out")" "0"
 check "a flock that fails: names the failure" "$(grep -c 'cannot lock .*flock exited 64' <<<"$out")" "1"
@@ -320,21 +320,21 @@ done < <(register_files "$REPO_ROOT")
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q "$SR"
 M=$(stores_home "$SH" "$SR" proj darkmem local)
-mkdir -p "$M/dforge/registers" "$M/dforge/specs"
-printf '# A\n' > "$M/dforge/specs/a-design.md"
-printf '# B\n' > "$M/dforge/specs/b-design.md"
-reg "$M/dforge/registers/r.md" '| 1 | One | - | - | planned | - |'
-check "register_files: the mirror's registers" "$(HOME=$SH register_files "$SR")" "$M/dforge/registers/r.md"
-out=$(cd "$SR" && HOME=$SH bash "$HERE/../scripts/register" check "$M/dforge/registers/r.md" 2>&1)
+mkdir -p "$M/dagents/registers" "$M/dagents/specs"
+printf '# A\n' > "$M/dagents/specs/a-design.md"
+printf '# B\n' > "$M/dagents/specs/b-design.md"
+reg "$M/dagents/registers/r.md" '| 1 | One | - | - | planned | - |'
+check "register_files: the mirror's registers" "$(HOME=$SH register_files "$SR")" "$M/dagents/registers/r.md"
+out=$(cd "$SR" && HOME=$SH bash "$HERE/../scripts/register" check "$M/dagents/registers/r.md" 2>&1)
 check "register check: Covers names resolve in the mirror" "$(tail -n 1 <<<"$out")" "register: 0 errors"
 out=$(cd "$SR" && HOME=$SH bash "$HERE/../scripts/register" open --spec docs/superpowers/specs/a-design.md 2>&1)
-check "register open: the register is named, not pathed" "$out" "docs/dforge/registers/r.md: #1 One — planned, assigned -"
+check "register open: the register is named, not pathed" "$out" "docs/dagents/registers/r.md: #1 One — planned, assigned -"
 
 # --- a ConfigError stops register instead of reporting nothing open ---
-BH="$TMP/bad-home"; mkdir -p "$BH/.dforge"
+BH="$TMP/bad-home"; mkdir -p "$BH/.dagents"
 BR="$TMP/bad-repo"; git init -q "$BR"
 printf '{"darkmem":{"url":"http://127.0.0.1:9","repos":{"%s":{"project":"p","documentStore":"bogus"}}}}\n' \
-  "$(git -C "$BR" rev-parse --show-toplevel)" > "$BH/.dforge/config.json"
+  "$(git -C "$BR" rev-parse --show-toplevel)" > "$BH/.dagents/config.json"
 (cd "$BR" && HOME=$BH bash "$HERE/../scripts/register" open --spec docs/x.md >/dev/null 2>&1)
 check "register open: a ConfigError exits 2" "$?" "2"
 reg "$BR/r.md" '| 1 | One | - | - | planned | - |'

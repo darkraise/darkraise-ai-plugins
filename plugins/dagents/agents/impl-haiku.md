@@ -4,7 +4,7 @@ description: "Task implementer running Haiku 4.5. No score assigns it, so it run
 model: haiku
 disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:
-  - dforge:verification-before-completion
+  - dagents:verification-before-completion
 color: cyan
 ---
 

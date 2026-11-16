@@ -12,7 +12,7 @@ export type SettingSpec = {
   label: string
   title: string
   description: string
-  target: 'dforge' | 'claude'
+  target: 'dagents' | 'claude'
   env?: string
   min?: number
   max?: number
@@ -31,7 +31,7 @@ export type SettingSpec = {
 
 export type Schema = Readonly<Record<string, SettingSpec>>
 
-/** ~/.dforge/config.json as parsed: schema keys and the reserved darkmem object. */
+/** ~/.dagents/config.json as parsed: schema keys and the reserved darkmem object. */
 export type SettingsFile = Record<string, unknown>
 
 export const SCHEMA: Schema = RAW as unknown as Schema
@@ -59,7 +59,7 @@ export function settingFromText(spec: SettingSpec, text: string): SettingValue |
 }
 
 /**
- * Every setting in force. A dforge key: the environment variable it names, then the file, then the default.
+ * Every setting in force. A dagents key: the environment variable it names, then the file, then the default.
  * A Claude key: Claude's own settings as the engine merged them, then the default.
  */
 export function resolveSettings(
@@ -120,14 +120,14 @@ export function settingProblems(
     if (raw !== undefined && raw !== '' && settingFromText(spec, raw) === undefined) {
       problems.push(`${spec.env}=${raw} is not a valid ${key}; ignored`)
     }
-    if (spec.target === 'dforge' && Object.prototype.hasOwnProperty.call(file, key) && !isValidSetting(spec, file[key])) {
+    if (spec.target === 'dagents' && Object.prototype.hasOwnProperty.call(file, key) && !isValidSetting(spec, file[key])) {
       const list = listNames(spec, file[key])
       if (list !== undefined && list.known.length > 0) {
-        problems.push(`${key} in ~/.dforge/config.json: unknown ${list.unknown.join(', ')} ignored`)
+        problems.push(`${key} in ~/.dagents/config.json: unknown ${list.unknown.join(', ')} ignored`)
         continue
       }
       const reading = invalidStored(key, spec)
-      problems.push(`${key} in ~/.dforge/config.json is not valid; ${reading === spec.default ? 'ignored' : `read as ${String(reading)}`}`)
+      problems.push(`${key} in ~/.dagents/config.json is not valid; ${reading === spec.default ? 'ignored' : `read as ${String(reading)}`}`)
     }
   }
   return problems
@@ -151,7 +151,7 @@ export function importedSettings(schema: Schema, claudeSettings: unknown): Setti
   const options = objectAt(objectAt(objectAt(claudeSettings, 'pluginConfigs'), 'dr-cockpit@darkraise'), 'options')
   for (const [key, spec] of Object.entries(schema)) {
     const value = options?.[key]
-    if (spec.target === 'dforge' && isValidSetting(spec, value) && value !== spec.default) file[key] = value
+    if (spec.target === 'dagents' && isValidSetting(spec, value) && value !== spec.default) file[key] = value
   }
   return file
 }

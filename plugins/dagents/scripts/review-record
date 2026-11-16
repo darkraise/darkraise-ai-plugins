@@ -40,9 +40,9 @@ retain() {
 
   slug=$(basename "$plan" .md)
   ctx=$(_plan_ctx "$plan")
-  dforge_stores_init "$ctx"
-  name=$(dforge_name "$plan" "$ctx")
-  key=$(dforge_name_key "$name")
+  dagents_stores_init "$ctx"
+  name=$(dagents_name "$plan" "$ctx")
+  key=$(dagents_name_key "$name")
 
   if [ "$have_from" -eq 1 ]; then
     dirs=("$from")
@@ -55,8 +55,8 @@ retain() {
   fi
 
   for dir in "${dirs[@]}"; do
-    dforge_stores_init "$dir"
-    file="$(dforge_ledger_dir "$slug" "$dir")/progress.md"
+    dagents_stores_init "$dir"
+    file="$(dagents_ledger_dir "$slug" "$dir")/progress.md"
     seen=0
     for c in ${candidates[@]+"${candidates[@]}"}; do [ "$c" != "$file" ] || seen=1; done
     [ "$seen" -eq 0 ] || continue
@@ -67,7 +67,7 @@ retain() {
     if command -v cygpath >/dev/null 2>&1; then
       named=$(cygpath -m "$named" 2>/dev/null || printf '%s' "$named")
     fi
-    if [ "$(dforge_name_key "$(cd "$dir" && dforge_name "$named")")" = "$key" ]; then
+    if [ "$(dagents_name_key "$(cd "$dir" && dagents_name "$named")")" = "$key" ]; then
       ledger=$file
       break
     fi
@@ -85,8 +85,8 @@ retain() {
     exit 3
   fi
 
-  dforge_stores_init
-  docs=$(dforge_docs_root)
+  dagents_stores_init
+  docs=$(dagents_docs_root)
   target="$docs/reviews/$slug.md"
   mkdir -p "$docs/reviews" || exit 1
   tmp=$(mktemp "$docs/reviews/.$slug.md.XXXXXX") || exit 1
@@ -133,8 +133,8 @@ ratio() {
     printf 'review-record: not in a work tree\n' >&2
     exit 2
   fi
-  dforge_stores_init
-  docs=$(dforge_docs_root)
+  dagents_stores_init
+  docs=$(dagents_docs_root)
   case $docs in "$top"/*) docs_rel=${docs#"$top"/}/ ;; esac
 
   while IFS= read -r -d '' rec; do

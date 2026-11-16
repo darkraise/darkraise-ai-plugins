@@ -1,6 +1,6 @@
 # Plan Review - Verifier Criteria
 
-Applied by dforge:writing-plans when a judge reviews an implementation
+Applied by dagents:writing-plans when a judge reviews an implementation
 plan before it is saved.
 
 ## Ground Truth Note

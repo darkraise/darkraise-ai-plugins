@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Acceptance tests for the "agy lane: Gemini first" spec
-# (docs/dforge/specs/2026-11-03-agy-gemini-first-design.md), statements A1-A14.
+# (docs/dagents/specs/2026-11-03-agy-gemini-first-design.md), statements A1-A14.
 # Each test is written from the statement's text and reaches the behaviour
 # through the file the plugin ships (reference/ladder.md), scripts/run-agy-task.sh,
 # scripts/agy-gate, the session file the two share, and scripts/lib/executor-session.sh.
@@ -29,16 +29,16 @@ selected() { [ "$ONLY" = "  " ] || [[ "$ONLY" == *" $1 "* ]]; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-export HOME="$TMP/home" DR_AGY_SESSION_DIR="$TMP/sessions" DR_AGY_POLICY="$TMP/policy.json" \
+export HOME="$TMP/home" DAGENTS_AGY_SESSION_DIR="$TMP/sessions" DAGENTS_AGY_POLICY="$TMP/policy.json" \
   CLAUDE_CODE_SESSION_ID=agy-gemini-first-acceptance CLAUDE_PROJECT_DIR=
-unset CLAUDE_CONFIG_DIR AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET
+unset CLAUDE_CONFIG_DIR AR_SESSION DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 mkdir -p "$HOME"
-jq '.trust.smoke = "pass"' "$PLUGIN/reference/agy-policy.json" > "$DR_AGY_POLICY"
+jq '.trust.smoke = "pass"' "$PLUGIN/reference/agy-policy.json" > "$DAGENTS_AGY_POLICY"
 export STUB_AGY_ARGS_LOG="$TMP/args.log"
 export PATH="$STUBDIR:$PATH"
-session_file="$DR_AGY_SESSION_DIR/$CLAUDE_CODE_SESSION_ID.json"
+session_file="$DAGENTS_AGY_SESSION_DIR/$CLAUDE_CODE_SESSION_ID.json"
 
 # --- helpers ------------------------------------------------------------------
 block() { # block <fence tag>: the non-blank lines of a fenced block in the ladder
@@ -87,7 +87,7 @@ run() { # run [wrapper flags]: a Claude Sonnet medium run unless the flags say o
     --brief "$TMP/brief.md" --report "$R" --model claude-sonnet-5-5 --effort medium "$@" > "$TMP/out" 2> "$TMP/err"
 }
 dry_rc() { timeout 30 bash "$S/run-agy-task.sh" --brief "$TMP/brief.md" --report "$TMP/dry.md" --cwd "$TMP/primary" --dry-run "$@" >/dev/null 2>&1; echo $?; }
-seed_open() { rm -rf "$DR_AGY_SESSION_DIR"; mkdir -p "$DR_AGY_SESSION_DIR"
+seed_open() { rm -rf "$DAGENTS_AGY_SESSION_DIR"; mkdir -p "$DAGENTS_AGY_SESSION_DIR"
   printf '{"session_id":"%s","usable":true,"review":false,"lane":true,"reason":"ok","resets_at":null,"resets_at_epoch":null}\n' \
     "$CLAUDE_CODE_SESSION_ID" > "$session_file"; }
 sfield() { jq -r "$1 | tostring" "$session_file" 2>/dev/null | tr -d '\r'; }
@@ -233,7 +233,7 @@ a8() {
 
 # --- A9 (neg) ----------------------------------------------------------------
 seed_fallback() { # an open session carrying an unexpired fallback mark
-  rm -rf "$DR_AGY_SESSION_DIR"; mkdir -p "$DR_AGY_SESSION_DIR"
+  rm -rf "$DAGENTS_AGY_SESSION_DIR"; mkdir -p "$DAGENTS_AGY_SESSION_DIR"
   printf '{"session_id":"%s","usable":true,"review":false,"lane":true,"reason":"ok","resets_at":null,"resets_at_epoch":null,"fallback":{"usable":false,"reason":"quota","resets_at":"2099-01-01T00:00:00Z","resets_at_epoch":4070908800}}\n' \
     "$CLAUDE_CODE_SESSION_ID" > "$session_file"
 }
@@ -311,7 +311,7 @@ a11() {
     skip "A11: with no session file the real gate must probe, and the probe cannot run the stub"
     return
   fi
-  rm -rf "$DR_AGY_SESSION_DIR"
+  rm -rf "$DAGENTS_AGY_SESSION_DIR"
   PATH="$TMP/stderrshim:$PATH" run "${GEMINI[@]}"
   check "A11: with no prior session file a stderr-only quota marks neither lane nor fallback" \
     "$(sfield '[.usable, .lane, (.fallback // "none" | tostring)] | map(tostring) | join("/")')" "true/true/none"

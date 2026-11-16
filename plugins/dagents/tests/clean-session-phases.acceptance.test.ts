@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
 import type { On, RenderElement, SessionMessage } from 'claude-code'
 
-// Acceptance tests for docs/dforge/specs/2026-11-09-clean-session-phases-design.md,
+// Acceptance tests for docs/dagents/specs/2026-11-09-clean-session-phases-design.md,
 // the cockpit statements (A1, A2, A13). They reach the cockpit only through the
 // engine's events: the auto-run state file it reads, the scripts/auto-run calls
 // it makes, the commands it runs and the prompts it submits. The auto-run
@@ -10,9 +10,9 @@ import type { On, RenderElement, SessionMessage } from 'claude-code'
 
 const START = { cwd: '/home/me/code/shop/web', surface: 'terminal', isInteractive: true } as never
 const SUMMARY: SessionMessage = { role: 'user', text: 'Summary.', toolUses: [] }
-const AUTO = '/home/me/code/shop/.dforge/sdd/auto-run.json'
+const AUTO = '/home/me/code/shop/.dagents/sdd/auto-run.json'
 const SWITCH_ANSWER = 'Plan saved.\n\nAuto run: switching'
-const FIRST_PROMPT = 'Execute docs/plan.md with dforge:subagent-driven-development.'
+const FIRST_PROMPT = 'Execute docs/plan.md with dagents:subagent-driven-development.'
 const FAILURE_CAP = 2
 
 type World = {

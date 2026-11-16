@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Acceptance tests for the speed-and-cost-followups spec
-# (docs/dforge/specs/2026-10-28-speed-and-cost-followups-design.md), the
+# (docs/dagents/specs/2026-10-28-speed-and-cost-followups-design.md), the
 # plugin-side statements A1 to A4, A7 to A16, A20 and the fast part
 # of A23 (A19 went with draft-pack). A5 is the `A5:` describe block in
 # cockpit.test.ts; A17 and A18 are in
@@ -37,10 +37,10 @@ TMP="$(mktemp -d)"
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
-unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR XDG_STATE_HOME
+unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR XDG_STATE_HOME
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL TASK_STEP_BASE_TIMEOUT SUITE_RUN_KILL_AFTER
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
-export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=followups-acceptance
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
+export DAGENTS_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=followups-acceptance
 printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason= review=true lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 
@@ -65,7 +65,7 @@ mkplan() { # mkplan <ntasks> [header line] [task 1 extra text]
   local i
   for ((i = 1; i <= $1; i++)); do printf '%d. Task %d\n' "$i" "$i"; done
   for ((i = 1; i <= $1; i++)); do
-    printf '\n### Task %d: Task %d\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$i" "$i"
+    printf '\n### Task %d: Task %d\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' "$i" "$i"
     if [ "$i" -eq 1 ] && [ -n "${3:-}" ]; then printf '\n%s\n' "$3"; fi
   done
 }
@@ -105,7 +105,7 @@ if selected A1 || selected A2 || selected A3 || selected A4; then
 |**Files:**
 |- Modify: `lib/new.sh`
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 |
 |Run: `bash mark.sh a1first 0` and then `bash mark.sh a3second 0`
@@ -344,8 +344,8 @@ fi
 # ---------------------------------------------------- A13, A14, A15 (gate)
 gate_setup() {
   GREPO="$TMP/gate-repo"; init_repo "$GREPO"
-  GSTATE=$(cd "$GREPO" && bash "$S/dforge-path" state | tr -d '\r')
-  FALLBACK="$HOME/.local/state/dforge/impl-stop-gate.log"
+  GSTATE=$(cd "$GREPO" && bash "$S/dagents-path" state | tr -d '\r')
+  FALLBACK="$HOME/.local/state/dagents/impl-stop-gate.log"
   RPT="$TMP/gate-reports"; mkdir -p "$RPT"
   printf '# Report\n\n## Verified\n- `bash t.sh` — pass: 3 passed, 0 failed\n\n## Discovered issues (not fixed)\nNone.\n\n## Assumptions made\nNone.\n' > "$RPT/full.md"
   printf '# Report\n\n## Discovered issues (not fixed)\nNone.\n\n## Assumptions made\nNone.\n' > "$RPT/no-verified.md"
@@ -355,7 +355,7 @@ gate_setup() {
 }
 gate() { # gate <agent id> <message> [cwd] — sets GRC and GERR
   local json
-  json=$(jq -nc --arg i "$1" --arg m "$2" --arg c "${3:-$GREPO}" '{session_id:"s",cwd:$c,hook_event_name:"SubagentStop",stop_hook_active:false,agent_id:$i,agent_type:"dforge:impl-sonnet-high",last_assistant_message:$m}')
+  json=$(jq -nc --arg i "$1" --arg m "$2" --arg c "${3:-$GREPO}" '{session_id:"s",cwd:$c,hook_event_name:"SubagentStop",stop_hook_active:false,agent_id:$i,agent_type:"dagents:impl-sonnet-high",last_assistant_message:$m}')
   timeout 30 bash "$GATE" <<<"$json" >"$TMP/gout" 2>"$TMP/gerr"; GRC=$?
   GERR=$(tr -d '\r' < "$TMP/gerr")
 }

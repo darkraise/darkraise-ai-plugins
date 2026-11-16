@@ -17,7 +17,7 @@ never a silent skip.
   macOS and iOS have no guide: their items are `unverifiable`.
 - Pick the slug: the spec's file name without its date and `-design.md`, or at
   touch depth the bug in a few words. Evidence goes to
-  `<checkout>/.dforge/ui-ux/<slug>/`. Create it; `.dforge/` is ignored by git
+  `<checkout>/.dagents/ui-ux/<slug>/`. Create it; `.dagents/` is ignored by git
   through its own `.gitignore` holding `*` (write that file when it is
   missing).
 
@@ -38,9 +38,9 @@ never a silent skip.
 6. **Screenshot each item and state**, named
    `<id>-<viewport>-<theme>[-<state>].png`, beside the state board it answers.
    Pass the tool the absolute path
-   `<checkout>/.dforge/ui-ux/<slug>/<name>.png`. When the tool refuses that
+   `<checkout>/.dagents/ui-ux/<slug>/<name>.png`. When the tool refuses that
    path, save with the bare file name and move the file from where the tool
-   reports it into `.dforge/ui-ux/<slug>/`.
+   reports it into `.dagents/ui-ux/<slug>/`.
 7. **Write the report** (format below) at
    `<docs>/ui-ux/proofs/<YYYY-MM-DD>-<slug>.md`.
 8. **Stamp it:** `bash <plugin-root>/scripts/ui-proof stamp <report>`.
@@ -66,20 +66,20 @@ stamp drops a judge line for another fingerprint, judge again.
 ````markdown
 # UI proof: Settings screen
 
-**Contract:** docs/dforge/specs/2026-10-24-settings-design.md
+**Contract:** docs/dagents/specs/2026-10-24-settings-design.md
 **Platform:** web
 **Viewports:** 375x812, 768x1024, 1440x900
 **Themes:** light, dark
 **Evidence:** local
 **Fingerprint:** 3f9a0c1e5b7d2a46
-**Judge:** ship 3f9a0c1e5b7d2a46 — docs/dforge/ui-ux/proofs/2026-10-24-settings.judge.md
+**Judge:** ship 3f9a0c1e5b7d2a46 — docs/dagents/ui-ux/proofs/2026-10-24-settings.judge.md
 
 ## Results
 
 | ID | Verdict | Evidence | Note |
 |---|---|---|---|
-| UI-1 | pass | .dforge/ui-ux/settings/ui-1-1440x900-light.png, .dforge/ui-ux/settings/ui-1-375x812-dark.png | |
-| UX-2 | deviation | .dforge/ui-ux/settings/ux-2-1440x900-light-error.png | cites: user answer 2026-10-24, no Retry on the error card |
+| UI-1 | pass | .dagents/ui-ux/settings/ui-1-1440x900-light.png, .dagents/ui-ux/settings/ui-1-375x812-dark.png | |
+| UX-2 | deviation | .dagents/ui-ux/settings/ux-2-1440x900-light-error.png | cites: user answer 2026-10-24, no Retry on the error card |
 | UX-3 | pass | A14: saving shows the pending state | |
 | OP-2 | unverifiable | - | no tablet emulator on this host |
 
@@ -103,15 +103,15 @@ stamp drops a judge line for another fingerprint, judge again.
   the user; with several unverifiable rows, one line per ID, as
   `**Accepted by:** OP-2: "<their words>"`. Never write that line unless the user said, in this
   conversation, that they accept the item unproven.
-- `**Evidence:** local` while screenshots live under `.dforge/`; they go when
+- `**Evidence:** local` while screenshots live under `.dagents/`; they go when
   the worktree is removed, and the verdict rows are what remains. With the
   profile's `**Screenshots:** commit`, put them beside the report and write
   `committed`.
 
 ## The judge
 
-Dispatch `dforge:judge-opus` at feature and product depth and
-`dforge:judge-sonnet-high` at touch depth (on a Codex host, the native judge
+Dispatch `dagents:judge-opus` at feature and product depth and
+`dagents:judge-sonnet-high` at touch depth (on a Codex host, the native judge
 `reference/native-codex.md` names for that rank):
 
 ```
@@ -144,9 +144,9 @@ Subagent (judge seat):
 ```
 
 Its `[REPORT_FILE]` is the absolute path
-`<checkout>/.dforge/ui-proof-<report name>-report.md`, where `<report name>`
+`<checkout>/.dagents/ui-proof-<report name>-report.md`, where `<report name>`
 is the proof report's file name without `.md`: a judge seat may write only a
-`-report.md` file under `.dforge`. A judge report that does not end with the
+`-report.md` file under `.dagents`. A judge report that does not end with the
 verdict line is re-dispatched once with that instruction repeated. When it
 returns ending with that line, copy that file to `<report name>.judge.md` beside the report,
 then set the report header's `**Judge:** <ship|fix> <fingerprint> — <the copy's repository path>`

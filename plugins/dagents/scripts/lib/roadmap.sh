@@ -15,7 +15,7 @@ ROADMAP_STATES='open closed'
 # roadmap_file ROOT — the roadmap path, printed only when it exists.
 roadmap_file() {
   local f
-  f="$(dforge_docs_root "$1")/roadmap.md"
+  f="$(dagents_docs_root "$1")/roadmap.md"
   [ -f "$f" ] && printf '%s\n' "$f"
   return 0
 }
@@ -68,7 +68,7 @@ roadmap_row() {
 # premature "done" is caught.
 roadmap_unresolved() {
   local root=$1 reg=$2 path rel key id item assigned acceptance state note a f seen=""
-  path=$(dforge_resolve "$reg" "$root")
+  path=$(dagents_resolve "$reg" "$root")
   [ -f "$path" ] || return 0
   while IFS=$'\037' read -r id item assigned acceptance state note; do
     printf '%s\t%s\t%s\t%s\t%s\n' "$reg" "$id" "$item" "$state" "${assigned:--}"
@@ -78,12 +78,12 @@ roadmap_unresolved() {
     a=${assigned#\`}
     a=${a%\`}
     case $a in ''|-) continue ;; esac
-    [ -f "$(dforge_resolve "$a" "$root")" ] || continue
+    [ -f "$(dagents_resolve "$a" "$root")" ] || continue
     while IFS= read -r f; do
       [ -n "$f" ] || continue
-      rel=$(dforge_name "$f" "$root")
-      [ "$(dforge_name_key "$rel")" != "$(dforge_name_key "$reg")" ] || continue
-      key=$(dforge_name_key "$rel")
+      rel=$(dagents_name "$f" "$root")
+      [ "$(dagents_name_key "$rel")" != "$(dagents_name_key "$reg")" ] || continue
+      key=$(dagents_name_key "$rel")
       case " $seen " in *" $key "*) continue ;; esac
       seen="$seen $key"
       while IFS=$'\037' read -r rid ritem rassigned racc rstate rnote; do
@@ -100,7 +100,7 @@ roadmap_unresolved() {
 # assigned to.
 roadmap_registers() {
   local root=$1 path id item assigned acceptance state note a
-  path=$(dforge_resolve "$2" "$root")
+  path=$(dagents_resolve "$2" "$root")
   printf '%s\n' "$path"
   [ -f "$path" ] || return 0
   while IFS=$'\037' read -r id item assigned acceptance state note; do
@@ -108,7 +108,7 @@ roadmap_registers() {
     a=${assigned#\`}
     a=${a%\`}
     case $a in ''|-) continue ;; esac
-    [ -f "$(dforge_resolve "$a" "$root")" ] || continue
+    [ -f "$(dagents_resolve "$a" "$root")" ] || continue
     register_for_spec "$root" "$a"
   done < <(register_rows "$path" | register_cells) | awk '!seen[$0]++'
   return 0
@@ -117,7 +117,7 @@ roadmap_registers() {
 # roadmap_epic_counts ROOT REGISTER — "<resolved> <total>" over the epic rows.
 roadmap_epic_counts() {
   local path
-  path=$(dforge_resolve "$2" "$1")
+  path=$(dagents_resolve "$2" "$1")
   [ -f "$path" ] || { echo "0 0"; return 0; }
   register_rows "$path" | awk -F'\t' -v u=" $REGISTER_UNRESOLVED " '
     { t++; if (index(u, " " $5 " ") == 0) r++ }
@@ -132,21 +132,21 @@ roadmap_line() {
   [ -n "$file" ] || return 0
   cur=$(roadmap_current "$file")
   if [ -z "$cur" ]; then
-    printf 'Roadmap: every milestone is closed (%s/roadmap.md).\n' "$(dforge_name "$(dforge_docs_root "$root")" "$root")"
+    printf 'Roadmap: every milestone is closed (%s/roadmap.md).\n' "$(dagents_name "$(dagents_docs_root "$root")" "$root")"
     return 0
   fi
   IFS=$'\037' read -r m name _ reg _ _ < <(register_cells <<<"$cur")
   read -r resolved total < <(roadmap_epic_counts "$root" "$reg")
-  open_list=$(register_open "$(dforge_resolve "$reg" "$root")" 2>/dev/null | awk -F'\t' '
+  open_list=$(register_open "$(dagents_resolve "$reg" "$root")" 2>/dev/null | awk -F'\t' '
     NR <= 4 { printf "%s#%s %s", (NR > 1 ? ", " : ""), $1, $2 }
     END { if (NR > 4) printf " +%d more", NR - 4 }')
   if [ -n "$open_list" ]; then
-    printf 'Roadmap: %s %s, %s of %s epics resolved, open: %s. A milestone closes only through dforge:closing-a-milestone.\n' \
+    printf 'Roadmap: %s %s, %s of %s epics resolved, open: %s. A milestone closes only through dagents:closing-a-milestone.\n' \
       "$m" "$name" "$resolved" "$total" "$open_list"
   elif [ -n "$(roadmap_unresolved "$root" "$reg")" ]; then
     printf 'Roadmap: %s %s, every epic row resolved but requirement rows below them are open — run `scripts/roadmap open`.\n' "$m" "$name"
   else
-    printf 'Roadmap: %s %s is ready to close with dforge:closing-a-milestone.\n' "$m" "$name"
+    printf 'Roadmap: %s %s is ready to close with dagents:closing-a-milestone.\n' "$m" "$name"
   fi
   return 0
 }

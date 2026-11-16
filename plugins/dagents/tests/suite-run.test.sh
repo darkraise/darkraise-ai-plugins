@@ -52,8 +52,8 @@ PROBE
 runs() { if [ -f "$PROBE_RUNS" ]; then wc -l < "$PROBE_RUNS" | tr -d ' '; else echo 0; fi; }
 probe() { run -- bash "$TMP/probe.sh" "$@"; }
 run() { out=$(cd "$REPO" && bash "$SUITE" "$@" 2>&1); rc=$?; }
-rows() { wc -l < "$REPO/.dforge/suites.tsv" | tr -d ' '; }
-last_row() { tail -n 1 "$REPO/.dforge/suites.tsv" | tr -d '\r'; }
+rows() { wc -l < "$REPO/.dagents/suites.tsv" | tr -d ' '; }
+last_row() { tail -n 1 "$REPO/.dagents/suites.tsv" | tr -d '\r'; }
 field() { last_row | cut -f"$1"; }
 
 printf '# tests 3\n# pass 3\n# fail 0\n' > "$TMP/out-tap-pass"
@@ -236,7 +236,7 @@ commit six
 HEAD6=$(git -C "$REPO" rev-parse HEAD)
 legacy_log="$TMP/legacy.log"
 : > "$legacy_log"
-printf '%s\tclean\t%s\t0\t%s\t%s\n' "$HEAD6" "bash $TMP/probe.sh 0 $TMP/out-tap-pass" "$legacy_log" "$(date +%s)" >> "$REPO/.dforge/suites.tsv"
+printf '%s\tclean\t%s\t0\t%s\t%s\n' "$HEAD6" "bash $TMP/probe.sh 0 $TMP/out-tap-pass" "$legacy_log" "$(date +%s)" >> "$REPO/.dagents/suites.tsv"
 before=$(runs)
 probe 0 "$TMP/out-tap-pass"
 has "a six-column row is reused" "$out" "suite: reused pass at ${HEAD6:0:7} ("

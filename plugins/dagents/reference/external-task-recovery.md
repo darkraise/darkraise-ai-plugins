@@ -9,7 +9,7 @@ line, and its wrapper is resolved with
 Prerequisites are Bash, Git, jq, GNU timeout/coreutils, a working CLI for that
 executor, and successful bounded login detection through its own gate.
 
-Reserve a linked dforge worktree for one task. Initial execution requires
+Reserve a linked dagents worktree for one task. Initial execution requires
 a clean index and no tracked/untracked changes. Stop only controller-owned
 competing writers; require user editing to cease in this worktree. The owner
 record and per-run lock prevent cooperating invocations from sharing it, but
@@ -23,7 +23,7 @@ Include both ends of renames. Paths are literal; traversal and symlink escapes
 are rejected. Additional paths require an approved recorded scope amendment.
 
 The authoritative version-1 record lives under the worktree's Git directory:
-`dforge/tasks/<Git-hash-of-task-id>/state.json`. It contains identities,
+`dagents/tasks/<Git-hash-of-task-id>/state.json`. It contains identities,
 initial/expected HEAD, scope, model/effort/thread, attempt and review history,
 process identities, phase, snapshots, artifacts, and the intended commit.
 Report filenames do not identify tasks. Human reports must be outside the

@@ -15,9 +15,9 @@ check() { # check <name> <got> <want>
   else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
 
-export DR_EXECUTORS_DIR="$HERE/fixtures/executors"
+export DAGENTS_EXECUTORS_DIR="$HERE/fixtures/executors"
 export CLAUDE_CODE_SESSION_ID=session-test
-export DR_CODEX_SESSION_DIR="$TMP/codex" DR_STUB_SESSION_DIR="$TMP/stub"
+export DAGENTS_CODEX_SESSION_DIR="$TMP/codex" DAGENTS_STUB_SESSION_DIR="$TMP/stub"
 . "$P/scripts/lib/executor-session.sh"
 
 check "the session id comes from the environment" "$(executor_session_id)" "session-test"
@@ -118,9 +118,9 @@ check "a week-old session file is pruned on write" \
 mkdir -p "$TMP/bad"
 printf 'not json\n' > "$TMP/bad/codex.json"
 check "a malformed entry still fails closed" \
-  "$(DR_EXECUTORS_DIR="$TMP/bad" executor_session_file codex >/dev/null 2>&1; echo $?)" "1"
+  "$(DAGENTS_EXECUTORS_DIR="$TMP/bad" executor_session_file codex >/dev/null 2>&1; echo $?)" "1"
 check "a malformed entry says why on stderr" \
-  "$(DR_EXECUTORS_DIR="$TMP/bad" executor_session_file codex 2>&1 >/dev/null | head -1 | tr -d '\r')" \
+  "$(DAGENTS_EXECUTORS_DIR="$TMP/bad" executor_session_file codex 2>&1 >/dev/null | head -1 | tr -d '\r')" \
   "executors: codex: missing or malformed required fields"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

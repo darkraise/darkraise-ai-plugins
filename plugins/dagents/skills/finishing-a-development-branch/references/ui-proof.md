@@ -15,7 +15,7 @@ for a bad base or spec, 124 for the timeout) means the check never ran: treat
 it as exit 1, with its output as the FAIL lines.
 
 **Exit 1:** the UI is unproven, and integrating it is blocked. In an auto
-run, first run the dforge:ui-ux Prove phase and check again; only that second
+run, first run the dagents:ui-ux Prove phase and check again; only that second
 exit 1 counts, and when it comes only from `unverifiable` rows, run
 `scripts/auto-run stop --reason "ui proof needs the user"` first. Remember the
 exit 1 for Step 4: it turns a recorded `merge` or `pr` into `keep`. Run
@@ -27,7 +27,7 @@ continue to Step 2 (Step 4 keeps the branch). Otherwise present only these two o
 The UI is unproven (ui-proof check):
 <its FAIL lines>
 
-1. Prove it first — run the dforge:ui-ux Prove phase, then return to Step 1b
+1. Prove it first — run the dagents:ui-ux Prove phase, then return to Step 1b
 2. Keep the branch as-is (I'll handle it later)
 
 Which option?

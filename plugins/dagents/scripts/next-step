@@ -3,7 +3,7 @@
 # finishing, next program sub-project or roadmap epic, a milestone audit, or
 # nothing; for a design draft: its
 # next step — as a "## Next session" block, and write the same block into the
-# primary checkout's .dforge/handoff/latest.md.
+# primary checkout's .dagents/handoff/latest.md.
 #
 # Sessions end by pasting this block verbatim, so what comes next is computed
 # here rather than remembered by the model: small executors reliably forget to
@@ -93,11 +93,11 @@ plan_finished() {
   local f s name
   name=$(plan_name "$1" "$2")
   case $name in /*|[A-Za-z]:/*|[A-Za-z]:\\*) return 1 ;; esac
-  f="$(dirname "$(dforge_resolve "$name" "$1")")/completed.md"
+  f="$(dirname "$(dagents_resolve "$name" "$1")")/completed.md"
   [ -f "$f" ] || return 1
   while IFS= read -r s; do
     grep -qF "\`$s\`" "$f" && return 0
-  done < <(dforge_name_spellings "$name")
+  done < <(dagents_name_spellings "$name")
   return 1
 }
 
@@ -105,12 +105,12 @@ plan_finished() {
 # read from: the docs root in use, then the docs directory and top level of the
 # checkout and of every worktree (the primary among them).
 _plan_roots() {
-  local top=${_DFORGE_TOP:-$1} tree
-  printf '%s\t%s\n' "$_DFORGE_DOCS_ROOT" "$(dforge_dir_rel docs "$top")"
+  local top=${_DAGENTS_TOP:-$1} tree
+  printf '%s\t%s\n' "$_DAGENTS_DOCS_ROOT" "$(dagents_dir_rel docs "$top")"
   { printf '%s\n' "$top"; git -C "$top" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p'; } |
   while IFS= read -r tree; do
-    tree=$(_dforge_path "$tree")
-    printf '%s\t%s\n' "$(dforge_dir docs "$tree")" "$(dforge_dir_rel docs "$tree")"
+    tree=$(_dagents_path "$tree")
+    printf '%s\t%s\n' "$(dagents_dir docs "$tree")" "$(dagents_dir_rel docs "$tree")"
     printf '%s\t\n' "$tree"
   done
 }
@@ -119,8 +119,8 @@ _plan_roots() {
 # exists, else unchanged.
 _plan_physical() {
   local dir
-  if [ -d "$1" ]; then dir=$(cd "$1" 2>/dev/null && pwd -P) && { _dforge_path "$dir"; return 0; }
-  else dir=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P) && { _dforge_path "$dir/$(basename "$1")"; return 0; }
+  if [ -d "$1" ]; then dir=$(cd "$1" 2>/dev/null && pwd -P) && { _dagents_path "$dir"; return 0; }
+  else dir=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P) && { _dagents_path "$dir/$(basename "$1")"; return 0; }
   fi
   printf '%s\n' "$1"
 }
@@ -139,8 +139,8 @@ plan_name() {
     /*|[A-Za-z]:/*) ;;
     *) printf '%s\n' "$2"; return 0 ;;
   esac
-  dforge_stores_init "$1"
-  name=$(_dforge_path "$name")
+  dagents_stores_init "$1"
+  name=$(_dagents_path "$name")
   for pass in written physical; do
     candidate=$name
     [ "$pass" = written ] || candidate=$(_plan_physical "$name")
@@ -197,16 +197,16 @@ else
   primary=$(plan_primary_root "$root")
   dir=$primary
 
-  dforge_stores_init "$root"
-  rel=$(dforge_name "$plan")
+  dagents_stores_init "$root"
+  rel=$(dagents_name "$plan")
   slug=$(basename "$plan" .md)
 fi
 
-dforge_stores_init "$root"
+dagents_stores_init "$root"
 # Shown repository-relative while progress is local, as before; the mirror's
 # path otherwise, which no checkout-relative name can reach.
-if [ "$(dforge_progress_store)" = darkmem ]; then latest_shown=$(dforge_latest_file)
-else latest_shown="$(dforge_dir_rel state "$primary")/handoff/latest.md"; fi
+if [ "$(dagents_progress_store)" = darkmem ]; then latest_shown=$(dagents_latest_file)
+else latest_shown="$(dagents_dir_rel state "$primary")/handoff/latest.md"; fi
 
 if [ "$adhoc" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
@@ -238,7 +238,7 @@ else
   launch_cmd=$(execution_launch "$execution")
   skill=$(execution_skill "$execution")
 
-  ledger_file="$(dforge_ledger_dir "$slug")/progress.md"
+  ledger_file="$(dagents_ledger_dir "$slug")/progress.md"
   ledger_note="no ledger at \`$ledger_file\`"
   ledger_text=""
   done_tasks=""
@@ -252,7 +252,7 @@ else
     if command -v cygpath >/dev/null 2>&1 && [ -n "$ledger_plan_path" ]; then
       ledger_plan_path=$(cygpath -m "$ledger_plan_path" 2>/dev/null || printf '%s' "$ledger_plan_path")
     fi
-    if [ -n "$ledger_plan_path" ] && [ "$(dforge_name_key "$(dforge_name "$ledger_plan_path")")" = "$(dforge_name_key "$rel")" ]; then
+    if [ -n "$ledger_plan_path" ] && [ "$(dagents_name_key "$(dagents_name "$ledger_plan_path")")" = "$(dagents_name_key "$rel")" ]; then
       has_ledger=1
       ledger_note="ledger \`$ledger_file\`"
       done_tasks=$(ledger_done "$ledger_file")
@@ -268,9 +268,9 @@ else
       if [[ $last_line =~ ^Task\ ([0-9]+):\ implementer\ ([^ ]+)\ \(assigned ]] \
          && [ "${BASH_REMATCH[2]}" != inline ]; then
         if [[ $last_line == *'thread pending)'* ]]; then
-          printf 'next-step: warning: Task %s is assigned with its thread pending: the executor wrapper has not reported. Wait for it or stop it and record a Ruling before handing off (dforge:handoff step 0).\n' "${BASH_REMATCH[1]}" >&2
+          printf 'next-step: warning: Task %s is assigned with its thread pending: the executor wrapper has not reported. Wait for it or stop it and record a Ruling before handing off (dagents:handoff step 0).\n' "${BASH_REMATCH[1]}" >&2
         else
-          printf 'next-step: warning: the ledger ends on an assigned line for Task %s. If the run it names is still going, wait for it or stop it and record a Ruling before handing off (dforge:handoff step 0).\n' "${BASH_REMATCH[1]}" >&2
+          printf 'next-step: warning: the ledger ends on an assigned line for Task %s. If the run it names is still going, wait for it or stop it and record a Ruling before handing off (dagents:handoff step 0).\n' "${BASH_REMATCH[1]}" >&2
         fi
       fi
     else
@@ -308,13 +308,13 @@ else
       if [ -n "$current_ms" ] && ! grep -qxF -- "$reg_file" <<<"$ms_regs"; then outside_ms=1; fi
       # Several registers may cover one spec; every one that has open rows is
       # named, so the count is never attributed to the wrong file.
-      reg_list="${reg_list:+$reg_list, }\`$(dforge_name "$reg_file")\`"
+      reg_list="${reg_list:+$reg_list, }\`$(dagents_name "$reg_file")\`"
       open_rows="${open_rows}${rows}
 "
     done < <(
       { [ ${#reg_specs[@]} -eq 0 ] || register_for_spec "$root" "${reg_specs[@]}"
         if [ -n "$current_ms" ]; then
-          roadmap_unresolved "$root" "$(cut -f4 <<<"$current_ms")" | cut -f1 | while IFS= read -r r; do dforge_resolve "$r"; done
+          roadmap_unresolved "$root" "$(cut -f4 <<<"$current_ms")" | cut -f1 | while IFS= read -r r; do dagents_resolve "$r"; done
         fi
       } | awk '!seen[$0]++'
     )
@@ -340,10 +340,10 @@ else
           waiting="${waiting:+$waiting, }#$rid"; continue
         elif [ -z "$a" ] || [ "$a" = "-" ]; then
           r=4 k=rule
-        elif [ "$(dforge_name_key "$(plan_name "$root" "$a")")" = "$(dforge_name_key "$rel")" ] || plan_finished "$root" "$a"; then
+        elif [ "$(dagents_name_key "$(plan_name "$root" "$a")")" = "$(dagents_name_key "$rel")" ] || plan_finished "$root" "$a"; then
           stale="${stale:+$stale, }#$rid"; continue
-        elif [ -f "$(dforge_resolve "$a")" ]; then
-          if [ -n "$(plan_tasks "$(dforge_resolve "$a")")" ] || [ -n "$(plan_lettered "$(dforge_resolve "$a")")" ]; then r=1 k=plan; else r=2 k=spec; fi
+        elif [ -f "$(dagents_resolve "$a")" ]; then
+          if [ -n "$(plan_tasks "$(dagents_resolve "$a")")" ] || [ -n "$(plan_lettered "$(dagents_resolve "$a")")" ]; then r=1 k=plan; else r=2 k=spec; fi
         elif [[ $a == *.md ]]; then
           elsewhere="${elsewhere:+$elsewhere, }#$rid"; continue
         else
@@ -357,17 +357,17 @@ else
       launch_cmd=$(launch_for design)
       case $kind in
         plan)
-          target_exec=$(plan_header_line "$(dforge_resolve "$target")" Execution)
-          if [ -n "$(plan_ledger "$(dforge_resolve "$target")")" ]; then
-            action="Resume \`$target\` with dforge:resume-execution."
+          target_exec=$(plan_header_line "$(dagents_resolve "$target")" Execution)
+          if [ -n "$(plan_ledger "$(dagents_resolve "$target")")" ]; then
+            action="Resume \`$target\` with dagents:resume-execution."
           else
-            action="Continue \`$target\` with dforge:$(execution_skill "$target_exec")."
+            action="Continue \`$target\` with dagents:$(execution_skill "$target_exec")."
           fi
           launch_cmd=$(execution_launch "$target_exec") launch_plan=$target
           ;;
-        spec)  action="\`$target\`: write its plan with dforge:writing-plans." ;;
+        spec)  action="\`$target\`: write its plan with dagents:writing-plans." ;;
         label) action="\`$target\`: write its spec in a fresh session." ;;
-        rule)  action="Rule on the open rows with dforge:brainstorming." ;;
+        rule)  action="Rule on the open rows with dagents:brainstorming." ;;
         *)
           action=""
           [ -z "$waiting" ] || action="Awaiting your check (verify): $waiting."
@@ -377,14 +377,14 @@ else
           if [ -n "$current_ms" ] && [ -n "$waiting" ] && [ -z "$stale$elsewhere$outside_ms" ]; then
             kind=milestone
             ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
-            action="$action Milestone $ms_id ($ms_name) has nothing else open: audit and close it with dforge:closing-a-milestone."
+            action="$action Milestone $ms_id ($ms_name) has nothing else open: audit and close it with dagents:closing-a-milestone."
           fi
           ;;
       esac
       status_line="Plan \`$rel\` is complete."
       next_line="Register rows still open ($open_n) in $reg_list: $row_list.${stale_note:+ $stale_note}${action:+ $action}"
       if [ "$kind" = milestone ]; then
-        prompt="Close milestone $ms_id ($ms_name) of \`$(dforge_name "$(dforge_docs_root)")/roadmap.md\` with dforge:closing-a-milestone; rows awaiting the owner's check (verify): $waiting."
+        prompt="Close milestone $ms_id ($ms_name) of \`$(dagents_name "$(dagents_docs_root)")/roadmap.md\` with dagents:closing-a-milestone; rows awaiting the owner's check (verify): $waiting."
         launch=1
       elif [ -n "$kind" ]; then
         prompt="Continue the work recorded in $reg_list: $open_n rows are open ($row_list). $action"
@@ -396,12 +396,12 @@ else
       status_line="Plan \`$rel\` is complete."
       if [ -n "$current_ms" ]; then
         ms_id=$(cut -f1 <<<"$current_ms") ms_name=$(cut -f2 <<<"$current_ms")
-        next_line="Milestone $ms_id ($ms_name) has nothing open: audit and close it with dforge:closing-a-milestone."
+        next_line="Milestone $ms_id ($ms_name) has nothing open: audit and close it with dagents:closing-a-milestone."
         launch_cmd=$(launch_for design)
-        prompt="Close milestone $ms_id ($ms_name) of \`$(dforge_name "$(dforge_docs_root)")/roadmap.md\` with dforge:closing-a-milestone."
+        prompt="Close milestone $ms_id ($ms_name) of \`$(dagents_name "$(dagents_docs_root)")/roadmap.md\` with dagents:closing-a-milestone."
         launch=1
       else
-        next_line="Nothing — every milestone in \`$(dforge_name "$(dforge_docs_root)")/roadmap.md\` is closed."
+        next_line="Nothing — every milestone in \`$(dagents_name "$(dagents_docs_root)")/roadmap.md\` is closed."
       fi
     elif [ -z "$program" ]; then
       status_line="Plan \`$rel\` is complete."
@@ -414,7 +414,7 @@ else
       status_line="Plan \`$rel\` is complete; sub-project $k of $n is done."
       next_line="Sub-project $k1 ($next_title): write its spec in a fresh session."
       launch_cmd=$(launch_for design)
-      prompt="Start sub-project $k1 ($next_title) of the program in \`$spec\`: use dforge:brainstorming to write its spec."
+      prompt="Start sub-project $k1 ($next_title) of the program in \`$spec\`: use dagents:brainstorming to write its spec."
       launch=1
     else
       status_line="Plan \`$rel\` is complete."
@@ -526,10 +526,10 @@ else
     elif [ -z "$first_open" ]; then
       if [ "$has_ledger" -eq 1 ] && grep -q '^Final review: clean' <<<"$ledger_text"; then
         status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
-        next_line="Run dforge:finishing-a-development-branch."
+        next_line="Run dagents:finishing-a-development-branch."
       else
         status_line="Plan \`$rel\`: all $total tasks complete."
-        next_line="Run the final whole-branch review, then dforge:finishing-a-development-branch."
+        next_line="Run the final whole-branch review, then dagents:finishing-a-development-branch."
       fi
     elif [ "$done_count" -eq 0 ]; then
       status_line="Plan \`$rel\`: 0 of $total tasks complete ($ledger_note)."
@@ -557,9 +557,9 @@ else
     if [ "$launch" -eq 0 ]; then
       prompt=""
     elif [ "$has_ledger" -eq 1 ]; then
-      prompt="Resume \`$rel\` with dforge:resume-execution. $next_line"
+      prompt="Resume \`$rel\` with dagents:resume-execution. $next_line"
     else
-      prompt="Continue \`$rel\` with dforge:$skill. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task $first_open ($open_title)."
+      prompt="Continue \`$rel\` with dagents:$skill. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task $first_open ($open_title)."
     fi
     if [ "$root" != "$primary" ]; then
       prompt="$prompt First enter the existing worktree \`$root\`."
@@ -593,13 +593,13 @@ block=$(
 )
 printf '%s\n' "$block"
 
-handoff=$(dforge_latest_file)
+handoff=$(dagents_latest_file)
 today=$(date -u +%Y-%m-%d)
 # Read, merged and replaced under the handoff's lock, so a concurrent writer's
 # notes are never overwritten with the copy read before them.
 write_handoff() {
   local tmp status=0
-  case $handoff in */.dforge/handoff/latest.md) dforge_state_ignore "${handoff%/.dforge/handoff/latest.md}" ;; esac
+  case $handoff in */.dagents/handoff/latest.md) dagents_state_ignore "${handoff%/.dagents/handoff/latest.md}" ;; esac
   tmp=$(mktemp) || return 1
   if [ "$complete" -eq 1 ] || [ ! -f "$handoff" ]; then
     printf '# Handoff — %s\n\n%s\n' "$today" "$block" > "$tmp" || status=1

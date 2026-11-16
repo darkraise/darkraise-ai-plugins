@@ -25,7 +25,7 @@ partner choosing it is the approval.
 Unless `fastMode=off`, offer fast mode in the message that states your
 Process line, before your first clarifying question, as one question (the
 AskUserQuestion tool where the host has it):
-"Fast mode, or the full dforge flow?" Fast mode works the request the way
+"Fast mode, or the full dagents flow?" Fast mode works the request the way
 plain Claude Code would; the full flow is the path the Process line named.
 Recommend fast mode for a spike or a bounded request, the full flow when a
 trigger holds. Take fast mode without asking when the request already asks
@@ -35,7 +35,7 @@ for it or for speed ("fast mode", "quick", "just do it"), or under
 
 On fast mode, say `Process: fast — <why>` on a line of its own and follow
 [fast-mode.md](../../reference/fast-mode.md): this skill, and every other
-dforge skill, ends there for the request. On the full flow, go on with your
+dagents skill, ends there for the request. On the full flow, go on with your
 path below.
 
 ## Three Paths
@@ -43,7 +43,7 @@ path below.
 Before your first question, classify the request and say it in one
 line — `Process: <spike|bounded|architectural> — <trigger | no trigger>` — so
 your human partner can override it. Every plan executes inline, so the line
-names no mode. The triggers are the seven in dforge:using-dforge's Process Depth:
+names no mode. The triggers are the seven in dagents:using-dagents's Process Depth:
 a new project or subsystem; an interface that something outside its own
 files depends on changes; the files touched cannot be enumerated after
 exploring; a load-bearing approach question is open; irreducible risk
@@ -86,9 +86,9 @@ downgrades mid-task.
 
 ## Settings
 
-The workflow settings in force arrive as one line at session start, `dforge
+The workflow settings in force arrive as one line at session start, `dagents
 settings in force (…): key=value; …`. With no such line in context, run
-`scripts/dforge-config workflow` once before your first question; it prints the
+`scripts/dagents-config workflow` once before your first question; it prints the
 same line, or nothing when every setting is at its default. A key the line does
 not name is at its default. Your human partner's own instructions outrank a
 setting, and no setting removes the approval gate. `fastMode=always` records
@@ -174,7 +174,7 @@ and 11-12 run as Auto by default says)
 7. **Offer an auto run** — unless `autoRun=off` or on a Codex host: one question once the acceptance statements are settled (see After the Design)
 8. **Write design doc** — save to `<docs>/specs/YYYY-MM-DD-<topic>-design.md` with its `**Depth:**` line, and commit
 9. **Spec self-review** — one round for placeholders, contradictions, ambiguity, scope, acceptance and the riskiest assumption; post its block before the user review (see below)
-10. **Architecture critic** — one `dforge:judge-opus` round on the written spec; fix or answer every Blocker and High finding (see Architecture critic: depth light skips it, and depth standard folds it into Fable's first round when Fable reviews)
+10. **Architecture critic** — one `dagents:judge-opus` round on the written spec; fix or answer every Blocker and High finding (see Architecture critic: depth light skips it, and depth standard folds it into Fable's first round when Fable reviews)
 11. **User reviews written spec** — ask user to review the spec file before proceeding; under `autoRun=on` this is Auto by default's spec review message, after Fable's review at depth standard or full (an auto run started from the offer has Fable review it instead, at those depths)
 12. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
@@ -206,7 +206,7 @@ and its self-review is the whole process.
   is the one a fresh design most reliably re-proposes. Neither is an error when
   absent.
 - When the design has a user-facing part — anything a user sees or does —
-  invoke dforge:ui-ux before drafting acceptance: its Shape phase writes the
+  invoke dagents:ui-ux before drafting acceptance: its Shape phase writes the
   spec's `## UI/UX contract`, the source of every UI acceptance statement.
   Under `autoRun=on`, ask its profile and state-board questions among your
   clarifying questions.
@@ -217,8 +217,8 @@ and its self-review is the whole process.
   months ago is a decision this design inherits; a findings file nobody reopens
   is how it was lost before.
 - Before asking detailed questions, assess scope: if the request describes multiple independent subsystems (e.g., "build a platform with chat, file storage, billing, and analytics"), flag this immediately. Don't spend questions refining details of a project that needs to be decomposed first.
-- Under `autoRun=ask` or `autoRun=off` only (under `on`, one spec covers the whole request) on Claude Code, and under any setting on a Codex host: if the project is too large for a single spec and the next bullet does not send it to dforge:planning-a-product, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
-- A new product built from scratch, or a request naming several subsystems in a repository with no `<docs>/roadmap.md`, goes to dforge:planning-a-product instead: its epics and milestones become register rows before any feature is designed, rather than prose in a program spec.
+- Under `autoRun=ask` or `autoRun=off` only (under `on`, one spec covers the whole request) on Claude Code, and under any setting on a Codex host: if the project is too large for a single spec and the next bullet does not send it to dagents:planning-a-product, help the user decompose into sub-projects: what are the independent pieces, how do they relate, what order should they be built? Then brainstorm the first sub-project through the normal design flow. Each sub-project gets its own spec → plan → implementation cycle.
+- A new product built from scratch, or a request naming several subsystems in a repository with no `<docs>/roadmap.md`, goes to dagents:planning-a-product instead: its epics and milestones become register rows before any feature is designed, rather than prose in a program spec.
 - When `<docs>/roadmap.md` exists, this spec is an epic. Find its row with `scripts/roadmap status`, set the row's Assigned cell to this spec's path once the spec is written (`scripts/register set <milestone register> <id> doing --assigned <spec path>`), and open the spec's requirement register below even when the request was one sentence: the roadmap is the list the requirements came from.
 - For appropriately-scoped projects, ask questions one at a time to refine the idea
 - Prefer multiple choice questions when possible, but open-ended is fine too
@@ -296,12 +296,12 @@ Read [user-review-gate.md](references/user-review-gate.md) before you ask your h
 
 - In an auto run skip this check: the plan is always written in this session.
   Otherwise run `scripts/context-size --plan`
-  (see using-dforge §Session Budget).
+  (see using-dagents §Session Budget).
   It measures against 150% of the task budget, capped at the
   final-phase limit: writing the plan here costs less than a fresh session's
-  baseline and reload. On exit 5 (handoff), invoke dforge:handoff with the spec
+  baseline and reload. On exit 5 (handoff), invoke dagents:handoff with the spec
   as the draft and the next action "Write the implementation plan with
-  dforge:writing-plans." — the plan is written in a fresh session.
+  dagents:writing-plans." — the plan is written in a fresh session.
 - Otherwise invoke the writing-plans skill to create a detailed implementation plan.
 - Do NOT invoke any other skill. writing-plans is the next step — in this
   session or, after a handoff, the next one.

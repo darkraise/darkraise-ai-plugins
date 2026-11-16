@@ -28,14 +28,14 @@ trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 export MSYS_NO_PATHCONV=1
-unset DFORGE_BUDGET DFORGE_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
+unset DAGENTS_BUDGET DAGENTS_JQ DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
 native() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 KEY=$(printf '%s' "$(native "$(cd "$REPO" && pwd)")" | tr -c 'A-Za-z0-9' '-')
 PROJ="$HOME/.claude/projects/$KEY"
-SESS="$HOME/.claude/dforge/sessions"
+SESS="$HOME/.claude/dagents/sessions"
 mkdir -p "$PROJ" "$SESS"
 settings() { printf '{
   "autoCompactWindow": %s
@@ -95,12 +95,12 @@ check "no usage: line" "$out" "budget: unknown of 465k — unknown — no usage 
 
 # --- budget override ---
 asst 285000 > "$T"
-DFORGE_BUDGET=300000 run
+DAGENTS_BUDGET=300000 run
 check "override: line" "$out" "budget: 285k of 300k (95%) — ok — source: record"
 DR_SUPERPOWERS_BUDGET=300000 run
 check "the pre-2.0 override name is not read" "$out" "budget: 285k of 465k (61%) — ok — source: record"
-DFORGE_BUDGET=380000 DR_SUPERPOWERS_BUDGET=300000 run
-check "the dforge name wins" "$out" "budget: 285k of 380k (75%) — ok — source: record"
+DAGENTS_BUDGET=380000 DR_SUPERPOWERS_BUDGET=300000 run
+check "the dagents name wins" "$out" "budget: 285k of 380k (75%) — ok — source: record"
 
 # --- the budget follows the model's window and autoCompactWindow ---
 asst 30000 false claude-haiku-4-5-20251001 > "$T"
@@ -134,7 +134,7 @@ run
 check "a small window holds a fifth of it" "$out" "budget: 15k of 20k (75%) — ok — source: record"
 asst 285000 false claude-sonnet-5 > "$T"
 settings 650000
-DFORGE_BUDGET=junk run
+DAGENTS_BUDGET=junk run
 check "invalid override is ignored" "$out" "budget: 285k of 465k (61%) — ok — source: record"
 run --plan docs/p.md
 check "arguments: exit 2" "$status" "2"
@@ -172,7 +172,7 @@ check "no transcript: exit 3" "$status" "3"
 check "no transcript: line, no settings" "$out" "budget: unknown of 790k — unknown — no transcript found"
 
 # --- no jq ---
-DFORGE_JQ=no-such-jq run
+DAGENTS_JQ=no-such-jq run
 check "no jq: exit 3" "$status" "3"
 check "no jq: line" "$out" "budget: unknown of 465k — unknown — no jq"
 
@@ -192,12 +192,12 @@ asst 700000 > "$T"
 run --final
 check "final: far over: exit 0, the final phase never hands off" "$status:$out" "0:budget (final): 700k of 465k (150%) — ok — source: record"
 asst 500000 > "$T"
-DFORGE_BUDGET=300000 run --final
+DAGENTS_BUDGET=300000 run --final
 check "final: a pinned budget is its limit" "$out" "budget (final): 500k of 300k (166%) — ok — source: record"
 settings 800000
-DFORGE_BUDGET=465000 run
+DAGENTS_BUDGET=465000 run
 check "800k window, pinned task budget: tasks still hand off at 465k" "$out" "budget: 500k of 465k (107%) — handoff — source: record"
-DFORGE_BUDGET=465000 run --final
+DAGENTS_BUDGET=465000 run --final
 check "800k window, pinned task budget: the final phase shows the pinned budget" "$out" "budget (final): 500k of 465k (107%) — ok — source: record"
 settings 650000
 
@@ -205,7 +205,7 @@ asst 500000 > "$T"
 run --tail 1
 check "tail of 1: past the task budget: exit 0" "$status" "0"
 check "tail of 1: line" "$out" "budget (last task): 500k of 465k (107%) — ok — source: record"
-DFORGE_BUDGET=300000 run --tail 2
+DAGENTS_BUDGET=300000 run --tail 2
 check "tail of 2: a pinned budget is its limit" "$out" "budget (last 2 tasks): 500k of 300k (166%) — ok — source: record"
 asst 700000 > "$T"
 run --tail 2
@@ -220,12 +220,12 @@ asst 500000 > "$T"
 run --plan
 check "plan: past the task budget, under the final cap: exit 0" "$status" "0"
 check "plan: capped at the final-phase limit" "$out" "budget (plan): 500k of 553k (90%) — ok — source: record"
-DFORGE_BUDGET=300000 run --plan
+DAGENTS_BUDGET=300000 run --plan
 check "plan: 150% of a pinned task budget" "$out" "budget (plan): 500k of 450k (111%) — handoff — source: record"
-DFORGE_BUDGET=300000 run --plan
+DAGENTS_BUDGET=300000 run --plan
 check "plan: over: exit 5" "$status" "5"
 settings 800000
-DFORGE_BUDGET=465000 run --plan
+DAGENTS_BUDGET=465000 run --plan
 check "800k window, pinned 465k: capped at 680k, not 698k" "$out" "budget (plan): 500k of 680k (73%) — ok — source: record"
 settings 650000
 run --plan extra
@@ -245,7 +245,7 @@ check "wave of 0: usage" "$status" "2"
 asst 30000 false claude-haiku-4-5-20251001 > "$T"
 run --final
 check "final: haiku's 200k window" "$out" "budget (final): 30k of 46k (65%) — ok — source: record"
-DFORGE_JQ=no-such-jq run --final
+DAGENTS_JQ=no-such-jq run --final
 check "final: no jq: line" "$out" "budget (final): unknown of 465k — unknown — no jq"
 run --final extra
 check "final: arguments: exit 2" "$status" "2"
@@ -255,8 +255,8 @@ check "final: arguments: exit 2" "$status" "2"
 # is 85% of the 650k window); the final, tail and plan checks do not move.
 cp "$T" "$TMP/t.keep"; cp "$SESS/$KEY.json" "$TMP/record.keep"
 settings 650000
-mkdir -p "$HOME/.dforge"
-printf '{"handoffMode":"relaxed"}\n' > "$HOME/.dforge/config.json"
+mkdir -p "$HOME/.dagents"
+printf '{"handoffMode":"relaxed"}\n' > "$HOME/.dagents/config.json"
 asst 500000 > "$T"; record s-1 "$T"
 run
 check "relaxed: exit 0 under the final-phase limit" "$status" "0"
@@ -278,19 +278,19 @@ run --tail 2
 check "relaxed: a tail task past the final-phase limit: exit 5" "$status" "5"
 run --final
 check "relaxed: the final phase never hands off" "$status:$out" "0:budget (final): 560k of 553k (101%) — ok — source: record"
-# The handoffTokens setting pins the task budget; DFORGE_BUDGET still wins.
-printf '{"handoffTokens":300000}\n' > "$HOME/.dforge/config.json"
+# The handoffTokens setting pins the task budget; DAGENTS_BUDGET still wins.
+printf '{"handoffTokens":300000}\n' > "$HOME/.dagents/config.json"
 asst 285000 > "$T"
 run
 check "handoffTokens pins the task budget" "$out" "budget: 285k of 300k (95%) — ok — source: record"
-export DFORGE_BUDGET=600000
+export DAGENTS_BUDGET=600000
 run
-check "DFORGE_BUDGET wins over the setting" "$out" "budget: 285k of 600k (47%) — ok — source: record"
-unset DFORGE_BUDGET
-printf 'not json' > "$HOME/.dforge/config.json"
+check "DAGENTS_BUDGET wins over the setting" "$out" "budget: 285k of 600k (47%) — ok — source: record"
+unset DAGENTS_BUDGET
+printf 'not json' > "$HOME/.dagents/config.json"
 run
 check "a broken settings file falls back to the rule" "$out" "budget: 285k of 465k (61%) — ok — source: record"
-rm -f "$HOME/.dforge/config.json"
+rm -f "$HOME/.dagents/config.json"
 cp "$TMP/t.keep" "$T"; cp "$TMP/record.keep" "$SESS/$KEY.json"
 
 # --- two sessions in one checkout: each measures its own transcript ---
@@ -434,8 +434,8 @@ run
 check "rollout: exit 3" "$status" "3"
 has "rollout: measured line" "$out" "budget: 187k measured — unknown — source: rollout"
 
-DFORGE_BUDGET=100000 run
-has "rollout: DFORGE_BUDGET does not make a verdict" "$out" "measured — unknown"
+DAGENTS_BUDGET=100000 run
+has "rollout: DAGENTS_BUDGET does not make a verdict" "$out" "measured — unknown"
 
 { meta "$REPO_NATIVE"; printf 'not json\n'; } > "$RB"
 run
@@ -468,20 +468,20 @@ rm -rf "$CODEX_HOME"
 unset CODEX_HOME
 
 # --- the observation log ---
-# It lives inside .dforge/sdd/, which self-ignores: an untracked file
+# It lives inside .dagents/sdd/, which self-ignores: an untracked file
 # elsewhere in the checkout enters task-state.sh's review snapshot.
 export CODEX_HOME="$TMP/codex3"
 mkdir -p "$CODEX_HOME"
-LOG="$REPO/.dforge/sdd/budget-log.tsv"
-rm -rf "$REPO/.dforge/sdd"
+LOG="$REPO/.dagents/sdd/budget-log.tsv"
+rm -rf "$REPO/.dagents/sdd"
 mkroll2() { mkdir -p "$CODEX_HOME/sessions/2026/09/15"; { meta "$REPO_NATIVE"; usage_line "$1" 999999; } > "$CODEX_HOME/sessions/2026/09/15/rollout-log.jsonl"; }
 
-mkdir -p "$REPO/.dforge/sdd" "$TMP/outside"
-ln -s "$TMP/outside/planted" "$REPO/.dforge/sdd/.gitignore"
+mkdir -p "$REPO/.dagents/sdd" "$TMP/outside"
+ln -s "$TMP/outside/planted" "$REPO/.dagents/sdd/.gitignore"
 mkroll2 150000
 run
 check "log: the ignore is never written through a link" "$([ -e "$TMP/outside/planted" ] && echo yes || echo no)" "no"
-rm -rf "$REPO/.dforge/sdd"
+rm -rf "$REPO/.dagents/sdd"
 
 run
 check "log: one row after a rollout measurement" "$(wc -l < "$LOG" | tr -d ' ')" "1"
@@ -489,10 +489,10 @@ check "log: the row has four fields" "$(awk -F'\t' 'NR==1 {print NF}' "$LOG")" "
 check "log: tokens land in field 2" "$(awk -F'\t' 'NR==1 {print $2}' "$LOG")" "150000"
 check "log: an unset caller writes direct" "$(awk -F'\t' 'NR==1 {print $3}' "$LOG")" "direct"
 check "log: the session id lands in field 4" "$(awk -F'\t' 'NR==1 {print $4}' "$LOG")" "01a0a58e-8e6c-72b0-92a3-b1586a8ca0ec"
-check "log: the directory self-ignores" "$(cat "$REPO/.dforge/sdd/.gitignore")" "*"
+check "log: the directory self-ignores" "$(cat "$REPO/.dagents/sdd/.gitignore")" "*"
 check "log: the checkout stays clean" "$(git -C "$REPO" status --porcelain=v1 --untracked-files=all)" ""
 
-DFORGE_BUDGET_CALLER=task-brief:3 run
+DAGENTS_BUDGET_CALLER=task-brief:3 run
 check "log: the caller tag lands in field 3" "$(awk -F'\t' 'END {print $3}' "$LOG")" "task-brief:3"
 check "log: a second measurement appends" "$(wc -l < "$LOG" | tr -d ' ')" "2"
 
@@ -518,8 +518,8 @@ check "log: a Claude measurement writes no row" "$([ -f "$LOG" ] && echo yes || 
 # --- reading the observations back ---
 # The growth between two briefs is one task's cost. A negative delta is a
 # compaction, which is the event phase two calibrates against, never data.
-mkdir -p "$REPO/.dforge/sdd"
-LOG="$REPO/.dforge/sdd/budget-log.tsv"
+mkdir -p "$REPO/.dagents/sdd"
+LOG="$REPO/.dagents/sdd/budget-log.tsv"
 { printf '2026-09-20T10:00:00Z\t40000\ttask-brief:1\tsess-a\n'
   printf '2026-09-20T10:05:00Z\t78000\ttask-brief:2\tsess-a\n'
   printf '2026-09-20T10:06:00Z\t79000\treview-package\tsess-a\n'
@@ -571,14 +571,14 @@ rm -rf "$CODEX_HOME"; unset CODEX_HOME
 AUTO_T="$PROJ/auto-1.jsonl"
 settings 800000
 asst 300000 > "$AUTO_T"; record auto-1 "$AUTO_T"
-mkdir -p "$HOME/.claude/dforge/sessions/cockpit"
-date +%s > "$HOME/.claude/dforge/sessions/cockpit/auto-1"
+mkdir -p "$HOME/.claude/dagents/sessions/cockpit"
+date +%s > "$HOME/.claude/dagents/sessions/cockpit/auto-1"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 start --spec docs/s.md --register docs/r.md >/dev/null)
 export CLAUDE_CODE_SESSION_ID=auto-1
-unset DFORGE_BUDGET
+unset DAGENTS_BUDGET
 run
 check "auto, unpinned: the derived budget at an 800k window" "$status:$out" "0:budget (auto): 300k of 604k (49%) — ok — source: record"
-export DFORGE_BUDGET=465000
+export DAGENTS_BUDGET=465000
 run
 check "auto: ok, exit 0" "$status:$out" "0:budget (auto): 300k of 465k (64%) — ok — source: record"
 run --plan
@@ -590,7 +590,7 @@ run
 check "auto: compact, exit 6" "$status:$out" "6:budget (auto): 470k of 465k (101%) — compact — source: record"
 run --final
 check "auto: --final follows the run's rule" "$out" "budget (auto): 470k of 465k (101%) — compact — source: record"
-AUTO_STATE="$REPO/.dforge/sdd/auto-run.json"
+AUTO_STATE="$REPO/.dagents/sdd/auto-run.json"
 jq '.pending = "handoff"' "$AUTO_STATE" > "$AUTO_STATE.tmp" && mv "$AUTO_STATE.tmp" "$AUTO_STATE"
 run --final
 check "auto: --final hands off while a handoff is pending" "$status:$out" "5:budget (auto): 470k of 465k (101%) — handoff — source: record"
@@ -612,7 +612,7 @@ run
 has "auto: an unreadable size names the run's limit" "$out" "budget (auto, high): unknown of 720k — unknown — no usage entry in"
 run --wave 2
 has "auto: an unreadable size in a wave names the run's limit" "$out" "budget (auto, high, wave of 2): unknown of 580k — unknown — no usage entry in"
-date +%s > "$HOME/.claude/dforge/sessions/cockpit/auto-1"
+date +%s > "$HOME/.claude/dagents/sessions/cockpit/auto-1"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 start --spec docs/s.md --register docs/r.md --force >/dev/null)
 run
 has "auto, normal: an unreadable size names the task budget" "$out" "budget (auto): unknown of 465k — unknown — no usage entry in"
@@ -620,32 +620,32 @@ has "auto, normal: an unreadable size names the task budget" "$out" "budget (aut
 # directory used without flock (Git for Windows) is a file.
 asst 470000 > "$AUTO_T"
 rm -f "$AUTO_STATE.lock"; mkdir "$AUTO_STATE.lock"; : > "$AUTO_STATE.lockd"
-DR_LOCK_TENTHS=2 run
+DAGENTS_LOCK_TENTHS=2 run
 check "auto: a compact it cannot book is unknown, exit 3" "$status:$out" "3:budget (auto): unknown — unknown — the run's state could not be updated"
 rmdir "$AUTO_STATE.lock"; rm -f "$AUTO_STATE.lockd"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 compacted)
 rm -f "$AUTO_STATE.lock"; mkdir "$AUTO_STATE.lock"; : > "$AUTO_STATE.lockd"
-DR_LOCK_TENTHS=2 run
+DAGENTS_LOCK_TENTHS=2 run
 check "auto: a compaction it cannot settle is unknown, exit 3" "$status:$out" "3:budget (auto): unknown — unknown — the run's state could not be updated"
 rmdir "$AUTO_STATE.lock"; rm -f "$AUTO_STATE.lockd"
 # --- --final after the last task's complete line starts the final phase ---
-date +%s > "$HOME/.claude/dforge/sessions/cockpit/auto-1"
+date +%s > "$HOME/.claude/dagents/sessions/cockpit/auto-1"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 start --spec docs/s.md --register docs/r.md --force >/dev/null)
-mkdir -p "$REPO/docs/plans" "$REPO/.dforge/sdd/fp"
+mkdir -p "$REPO/docs/plans" "$REPO/.dagents/sdd/fp"
 printf '# FP\n\n### Task 1: One\n\n### Task 2: Two\n' > "$REPO/docs/plans/fp.md"
-printf '# SDD ledger — plan: docs/plans/fp.md\nTask 1: complete (commits a..b, review clean)\n' > "$REPO/.dforge/sdd/fp/progress.md"
+printf '# SDD ledger — plan: docs/plans/fp.md\nTask 1: complete (commits a..b, review clean)\n' > "$REPO/.dagents/sdd/fp/progress.md"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 attach --plan docs/plans/fp.md)
 jq '.phase = "execute" | .setupDue = true' "$AUTO_STATE" > "$AUTO_STATE.tmp" && mv "$AUTO_STATE.tmp" "$AUTO_STATE"
 asst 300000 > "$AUTO_T"
 run --final
 check "--final with a task still open: the phase stays execute" "$(jq -r .phase "$AUTO_STATE")" "execute"
-printf 'Task 2: complete (commits b..c, review clean)\n' >> "$REPO/.dforge/sdd/fp/progress.md"
+printf 'Task 2: complete (commits b..c, review clean)\n' >> "$REPO/.dagents/sdd/fp/progress.md"
 run
 check "a task budget check never starts the final phase" "$(jq -r .phase "$AUTO_STATE")" "execute"
 run --final
 check "--final after the last task: the phase moves to final" "$status:$(jq -r '"\(.phase) \(.setupDue)"' "$AUTO_STATE")" "0:final false"
 (cd "$REPO" && bash "$HERE/../scripts/auto-run" --session auto-1 stop)
-unset DFORGE_BUDGET CLAUDE_CODE_SESSION_ID
+unset DAGENTS_BUDGET CLAUDE_CODE_SESSION_ID
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

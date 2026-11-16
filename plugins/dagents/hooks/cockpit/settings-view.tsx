@@ -99,7 +99,7 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
       <Text key={`set-${row.key}-value`} dimColor={row.shown === ''}>{`${row.shown || '(empty)'} `}</Text>,
       edit || (
         <Text key={`set-${row.key}-cli`} dimColor>
-          {`dforge-config set ${row.key}`}
+          {`dagents-config set ${row.key}`}
         </Text>
       ),
     ]
@@ -260,7 +260,7 @@ export function drawSettings(table: Elements, model: SettingsModel, act: Setting
           ? [press('settings-reset-confirm', 'Confirm reset', act.resetGroup, { hotkey: 'r', isMain: true }), press('settings-reset-cancel', 'Cancel', act.cancelReset)]
           : changed > 0 && press('settings-reset', 'Reset group', act.askResetGroup, { hotkey: 'r' })}
       </Box>
-      <Text dimColor>Saved to ~/.dforge/config.json{model.tab === 'Context' ? "; the auto-compact rows save to Claude's settings file" : ''}.</Text>
+      <Text dimColor>Saved to ~/.dagents/config.json{model.tab === 'Context' ? "; the auto-compact rows save to Claude's settings file" : ''}.</Text>
     </Box>
   )
 }

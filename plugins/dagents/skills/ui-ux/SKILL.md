@@ -50,7 +50,7 @@ and name `ui-proof check` as the done condition.
 ## The project UI profile
 
 Read `<docs>/ui-ux/profile.md` before any UI task
-(`bash <plugin-root>/scripts/dforge-path docs ui-ux/profile.md` prints its
+(`bash <plugin-root>/scripts/dagents-path docs ui-ux/profile.md` prints its
 path). When it does not exist, create it from
 [contract-template.md](references/contract-template.md) §Profile, asking the
 user for what the repository cannot tell you: who uses the product, the
@@ -59,8 +59,8 @@ the gate on for the project.
 
 ## Shape
 
-Run before acceptance statements are drafted (from dforge:brainstorming) and
-before the fix (from dforge:systematic-debugging, at touch depth).
+Run before acceptance statements are drafted (from dagents:brainstorming) and
+before the fix (from dagents:systematic-debugging, at touch depth).
 
 1. Read the profile, or create it.
 2. Write the contract (feature, product) or the delta (touch) from

@@ -25,7 +25,7 @@ git merge <feature-branch>
 echo "$PRE_MERGE"
 
 # Verify the merged result: gates when the project declares a manifest
-# (dforge:running-gates runs first, with the sha printed above as its base),
+# (dagents:running-gates runs first, with the sha printed above as its base),
 # then the full suite through suite-run in every case. Gates that passed on
 # the branch say nothing about the merged tree.
 bash <plugin-root>/scripts/suite-run -- bash -c '<full suite command>'
@@ -36,11 +36,11 @@ being finished, else the project's test command. `bash -c` keeps the row's
 key the one writing-plans, task-step and ci-mirror look up. The suite runs
 whether or not the project declares gates. suite-run reuses a pass a gate
 already recorded at this HEAD. The run in the main checkout leaves one
-full-suite row for each merge head. dforge:closing-a-milestone reads these
+full-suite row for each merge head. dagents:closing-a-milestone reads these
 rows.
 
 Shell variables do not survive between Bash calls, so `$PRE_MERGE` is gone by
-the time dforge:running-gates runs. Pass the base as the literal sha the
+the time dagents:running-gates runs. Pass the base as the literal sha the
 `echo` printed. A gates manifest whose `Repo` fields name several
 repositories needs one base per repository: capture each repository's
 pre-merge `git rev-parse HEAD` the same way, before that repository's merge,
@@ -131,7 +131,7 @@ When no run for the commit appears within 60 seconds, print one line saying so a
 Record `CI: <sha7> run <id> <green|red|still running at 90 min>` on the ledger. Read the result with `gh run view <id> --json conclusion,jobs`.
 
 - Green completes the branch.
-- Red reopens the branch through dforge:systematic-debugging, naming each failed job and step; push the fix and wait again.
+- Red reopens the branch through dagents:systematic-debugging, naming each failed job and step; push the fix and wait again.
 - A run still going after 90 minutes is reported as not done, never as done.
 - In an auto run, a run still going after 90 minutes runs `scripts/auto-run stop --reason "CI run <id> still running at 90 min"` before the final message.
 

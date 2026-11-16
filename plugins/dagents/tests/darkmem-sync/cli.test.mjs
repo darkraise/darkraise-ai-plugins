@@ -42,7 +42,7 @@ test("status in darkmem mode names the mirror and its local changes", async () =
     `darkmem-sync: project proj at http://127.0.0.1:9; mirror ${mirror}`,
     "documents: configured darkmem, applied darkmem",
     "progress: configured darkmem, applied darkmem",
-    "new: dforge/specs/a.md",
+    "new: dagents/specs/a.md",
     "unpushed: sdd/p1/progress.md (52 bytes, never synced)",
     "",
   ].join("\n"));
@@ -88,7 +88,7 @@ test("status names a local family as not synced and leaves its files out", async
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /^documents: configured darkmem, applied darkmem$/m);
   assert.match(result.stdout, /^progress: configured darkmem, applied local, not synced$/m);
-  assert.match(result.stdout, /^new: dforge\/specs\/a\.md$/m);
+  assert.match(result.stdout, /^new: dagents\/specs\/a\.md$/m);
   assert.doesNotMatch(result.stdout, /sdd\/p1/);
 });
 
@@ -120,7 +120,7 @@ test("push waits for a held lock and then runs; past its wait it refuses as befo
   t.after(() => stub.close());
   const repo = makeRepo();
   const { env, mirror, workRoot } = makeHome({ repo, url: stub.url });
-  const ledger = "# SDD ledger — plan: docs/dforge/plans/p1.md\nTask 1: a\n";
+  const ledger = "# SDD ledger — plan: docs/dagents/plans/p1.md\nTask 1: a\n";
   write(path.join(workRoot, "sdd", "p1", "progress.md"), ledger);
   const appended = () => stub.db.workstreams.find(w => w.key === "p1")?.entries.map(e => e.body).join("") ?? null;
   const lock = path.join(mirror, ".sync.lock");
@@ -128,7 +128,7 @@ test("push waits for a held lock and then runs; past its wait it refuses as befo
   const released = setTimeout(() => fs.rmdirSync(lock), 1500);
   t.after(() => clearTimeout(released));
   const started = Date.now();
-  const waited = await run(["push"], { cwd: repo, env: { ...env, DARKMEM_SYNC_LOCK_WAIT_MS: "20000" } });
+  const waited = await run(["push"], { cwd: repo, env: { ...env, DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS: "20000" } });
   assert.equal(waited.code, 0, waited.stdout + waited.stderr);
   assert.ok(Date.now() - started >= 1400, "push waited for the lock");
   assert.equal(appended(), ledger, "the push ran once the lock was free");
@@ -136,7 +136,7 @@ test("push waits for a held lock and then runs; past its wait it refuses as befo
   fs.appendFileSync(path.join(workRoot, "sdd", "p1", "progress.md"), "Task 1: complete\n");
   fs.mkdirSync(lock, { recursive: true });
   const again = Date.now();
-  const refused = await run(["push"], { cwd: repo, env: { ...env, DARKMEM_SYNC_LOCK_WAIT_MS: "1500" } });
+  const refused = await run(["push"], { cwd: repo, env: { ...env, DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS: "1500" } });
   const waitedFor = Date.now() - again;
   assert.equal(refused.code, 1);
   assert.ok(waitedFor >= 1400 && waitedFor < 15000, `refused after its wait, not at once or never (${waitedFor} ms)`);
@@ -150,14 +150,14 @@ test("a negative or infinite lock wait falls back to the default wait", async t 
   t.after(() => stub.close());
   const repo = makeRepo();
   const { env, mirror, workRoot } = makeHome({ repo, url: stub.url });
-  const ledger = "# SDD ledger — plan: docs/dforge/plans/p1.md\nTask 1: a\n";
+  const ledger = "# SDD ledger — plan: docs/dagents/plans/p1.md\nTask 1: a\n";
   write(path.join(workRoot, "sdd", "p1", "progress.md"), ledger);
   const lock = path.join(mirror, ".sync.lock");
   fs.mkdirSync(lock, { recursive: true });
   const released = setTimeout(() => fs.rmdirSync(lock), 1500);
   t.after(() => clearTimeout(released));
   const started = Date.now();
-  const waited = await run(["push"], { cwd: repo, env: { ...env, DARKMEM_SYNC_LOCK_WAIT_MS: "-5" } });
+  const waited = await run(["push"], { cwd: repo, env: { ...env, DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS: "-5" } });
   assert.equal(waited.code, 0, waited.stdout + waited.stderr);
   assert.ok(Date.now() - started >= 1400, "a negative wait did not refuse at once");
 });

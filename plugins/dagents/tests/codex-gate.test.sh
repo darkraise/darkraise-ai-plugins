@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-# The gate reads ~/.dforge/config.json; a temporary home keeps the real one out.
+# The gate reads ~/.dagents/config.json; a temporary home keeps the real one out.
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 
@@ -138,9 +138,9 @@ POLICY="$TMP/policy.json"
 jq '.trust = {"calibration":"pending","smoke":"pending"}' "$P/reference/codex-plugin.json" > "$POLICY"
 gate() { # gate <mode> [args...]; sets out and rc
   local mode="$1"; shift
-  out=$(cd "$TMP/work" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_PROJECT_DIR= DR_CODEX_SESSION_DIR="$SESS" DR_CODEX_POLICY="$POLICY" \
+  out=$(cd "$TMP/work" && CLAUDE_CONFIG_DIR="$CFG" CLAUDE_PROJECT_DIR= DAGENTS_CODEX_SESSION_DIR="$SESS" DAGENTS_CODEX_POLICY="$POLICY" \
     CLAUDE_CODE_SESSION_ID="${SID-s1}" GATE_STUB_MODE="$mode" GATE_STUB_LOG="$TMP/log" \
-    DR_CODEX_GATE_TIMEOUT_MS="${GATE_MS:-20000}" bash "$P/scripts/codex-gate" "$@" 2>"$TMP/err"); rc=$?
+    DAGENTS_CODEX_GATE_TIMEOUT_MS="${GATE_MS:-20000}" bash "$P/scripts/codex-gate" "$@" 2>"$TMP/err"); rc=$?
 }
 field() { jq -r ".$1 | tostring" "$SESS/s1.json" 2>/dev/null | tr -d '\r'; }
 fresh() { rm -rf "$SESS" "$TMP/log"; }
@@ -164,8 +164,8 @@ check "a cached answer starts no client" "$(grep -c connect "$TMP/log")" "1"
 
 # Trust is read on every call, cache or probe: flipping it must not wait for a
 # new session. Codex reviews are opt-in, so these checks turn them on.
-mkdir -p "$HOME/.dforge"
-printf '{"codexReview":true}\n' > "$HOME/.dforge/config.json"
+mkdir -p "$HOME/.dagents"
+printf '{"codexReview":true}\n' > "$HOME/.dagents/config.json"
 cp "$POLICY" "$TMP/policy.bak"
 jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
 gate usable
@@ -253,10 +253,10 @@ check "a close that never settles still answers, within its grace" "$out" \
 check "a close that never settles is waited on for its grace only" "$([ $((SECONDS - started)) -lt 12 ] && echo yes || echo no)" "yes"
 
 # --- the settings switch either surface off ----------------------------------
-# codexReview and codexLane come from ~/.dforge/config.json. With both off
+# codexReview and codexLane come from ~/.dagents/config.json. With both off
 # nothing may use Codex, so the gate answers without starting a client.
-mkdir -p "$HOME/.dforge"
-setting() { printf '%s\n' "$1" > "$HOME/.dforge/config.json"; }
+mkdir -p "$HOME/.dagents"
+setting() { printf '%s\n' "$1" > "$HOME/.dagents/config.json"; }
 jq '.trust = {"calibration":"pass","smoke":"pass"}' "$TMP/policy.bak" > "$POLICY"
 setting '{}'
 fresh; gate usable
@@ -282,7 +282,7 @@ gate usable
 check "switching Codex back on probes again" "$out" \
   "codex-gate usable=true reason=ok review=true lane=true resets_at=- source=probe"
 cp "$TMP/policy.bak" "$POLICY"
-rm -f "$HOME/.dforge/config.json"
+rm -f "$HOME/.dagents/config.json"
 
 # The quota answer is cached only until its reset time.
 fresh; gate quota
@@ -332,9 +332,9 @@ gate usable --bogus
 check "an unknown flag is a usage error" "$rc" "2"
 
 # --- the session readers -----------------------------------------------------
-export DR_EXECUTORS_DIR="$HERE/fixtures/executors"
+export DAGENTS_EXECUTORS_DIR="$HERE/fixtures/executors"
 . "$P/scripts/lib/executor-session.sh"
-export DR_CODEX_SESSION_DIR="$SESS" CLAUDE_CODE_SESSION_ID=s1
+export DAGENTS_CODEX_SESSION_DIR="$SESS" CLAUDE_CODE_SESSION_ID=s1
 on() { # on <name> <surface> <want: on|off>
   if executor_session_on codex "$2"; then check "$1" on "$3"; else check "$1" off "$3"; fi
 }

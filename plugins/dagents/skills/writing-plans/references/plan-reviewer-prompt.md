@@ -1,6 +1,6 @@
 # Plan Reviewer Prompt Template
 
-Use this template when dforge:writing-plans dispatches the plan review.
+Use this template when dagents:writing-plans dispatches the plan review.
 
 **Purpose:** score a finished plan against `criteria/plan-review.md` before it
 is saved, so that small models can execute it literally.
@@ -78,8 +78,8 @@ Subagent ([JUDGE]):
 **Placeholders:**
 - `[JUDGE]` - the seat that `scripts/review-route PLAN_FILE --plan-round 1`
   prints: its `primary` when Codex is off, or its `fallback` when the Codex
-  round produced nothing (`dforge:judge-opus`); no `model` or `effort` argument. On Codex, a native judge at the `primary=native:<model>/<effort>` pair it prints, or above.
-- `[PLUGIN_ROOT]` - REQUIRED: the resolved dforge plugin directory.
+  round produced nothing (`dagents:judge-opus`); no `model` or `effort` argument. On Codex, a native judge at the `primary=native:<model>/<effort>` pair it prints, or above.
+- `[PLUGIN_ROOT]` - REQUIRED: the resolved dagents plugin directory.
   Expand it before sending.
 - `[PLAN_FILE]`, `[SPEC_FILE]` - REQUIRED: absolute paths.
 - `[LINT_FILE]` - REQUIRED: `<workspace>/plan-lint.txt`, written with
@@ -137,8 +137,8 @@ for a judge.
 ## Later rounds
 
 Dispatch this template instead of the one above in every round after the
-first: when `scripts/review-route` prints `primary=dforge:judge-opus`, as
-`dforge:judge-opus`; when it prints `primary=native:<model>/<effort>` (every
+first: when `scripts/review-route` prints `primary=dagents:judge-opus`, as
+`dagents:judge-opus`; when it prints `primary=native:<model>/<effort>` (every
 round of a Codex-host plan), as a native judge at that pair or above
 ([native-codex.md](../../../reference/native-codex.md)). `[JUDGE]` is the seat
 the route printed.

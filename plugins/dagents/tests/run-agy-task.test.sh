@@ -19,11 +19,11 @@ check() { # check <name> <got> <want>
 
 # Every path the suite writes lives under $fixture, and the real session files,
 # policy and Antigravity login stay out of reach.
-export HOME="$fixture/home" DR_AGY_SESSION_DIR="$fixture/sessions" DR_AGY_POLICY="$fixture/policy.json" \
+export HOME="$fixture/home" DAGENTS_AGY_SESSION_DIR="$fixture/sessions" DAGENTS_AGY_POLICY="$fixture/policy.json" \
   CLAUDE_CODE_SESSION_ID=run-agy-task-test CLAUDE_PROJECT_DIR=
 unset CLAUDE_CONFIG_DIR
 mkdir -p "$HOME"
-printf '{"cli":"agy","min_version":"1.4.12","max_major":1,"calibrated":"1.4.12","trust":{"smoke":"pass"}}\n' > "$DR_AGY_POLICY"
+printf '{"cli":"agy","min_version":"1.4.12","max_major":1,"calibrated":"1.4.12","trust":{"smoke":"pass"}}\n' > "$DAGENTS_AGY_POLICY"
 export STUB_AGY_ARGS_LOG="$fixture/args.log"
 export PATH="$STUBDIR:$PATH"
 check "agy resolves to the stub" "$([ "$(command -v agy)" -ef "$STUBDIR/agy" ] && echo yes || echo no)" "yes"
@@ -58,7 +58,7 @@ run() { bash "$SCRIPT" --cwd "$W" --task-id task-one --write-set "$fixture/scope
 dry() { bash "$SCRIPT" --brief "$fixture/brief.md" --report "$fixture/dry.md" --cwd "$fixture/primary" --dry-run "$@" 2>"$fixture/err"; }
 dry_rc() { dry "$@" >/dev/null; echo $?; }
 state_of() { # state_of <worktree>
-  printf '%s/dforge/tasks/%s/state.json' "$(git -C "$1" rev-parse --absolute-git-dir)" "$(printf task-one | git -C "$1" hash-object --stdin)"
+  printf '%s/dagents/tasks/%s/state.json' "$(git -C "$1" rev-parse --absolute-git-dir)" "$(printf task-one | git -C "$1" hash-object --stdin)"
 }
 status_line() { tail -1 "$fixture/out" | tr -d '\r'; }
 
@@ -463,9 +463,9 @@ check "an index change commits nothing" "$(git -C "$W" log --format=%s | grep -c
 check "an index change leaves the staged file in place" "$(git -C "$W" diff --cached --name-only | tr -d '\r')" "out.txt"
 
 # --- a quota closes the lane for the rest of the session (A8) ------------------
-session_file="$DR_AGY_SESSION_DIR/run-agy-task-test.json"
+session_file="$DAGENTS_AGY_SESSION_DIR/run-agy-task-test.json"
 session_state() { jq -r '[.usable, .lane, .reason] | map(tostring) | join("/")' "$session_file" 2>/dev/null | tr -d '\r'; }
-rm -rf "$DR_AGY_SESSION_DIR"
+rm -rf "$DAGENTS_AGY_SESSION_DIR"
 newwork session-plain
 STUB_AGY_MODE=error STUB_AGY_ERROR="something failed" run
 check "a plain error leaves the session file absent" "$([ -e "$session_file" ] && echo yes || echo no)" "no"
@@ -476,7 +476,7 @@ sfield() { jq -r "$1 | tostring" "$session_file" 2>/dev/null | tr -d '\r'; }
 iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ; }
 in_window() { # in_window <epoch> <before> <after> <seconds>
   if [ "$1" -ge $(( $2 + $4 )) ] 2>/dev/null && [ "$1" -le $(( $3 + $4 )) ]; then echo yes; else echo no; fi; }
-seed_open() { rm -rf "$DR_AGY_SESSION_DIR"; mkdir -p "$DR_AGY_SESSION_DIR"
+seed_open() { rm -rf "$DAGENTS_AGY_SESSION_DIR"; mkdir -p "$DAGENTS_AGY_SESSION_DIR"
   printf '{"session_id":"run-agy-task-test","usable":true,"review":false,"lane":true,"reason":"ok","resets_at":null,"resets_at_epoch":null}\n' > "$session_file"; }
 quota_lines() { grep -A"$1" '^reason=quota$' "$R" | tr -d '\r' | tr '\n' ' '; }
 QUOTA_RESET='RESOURCE_EXHAUSTED (code 429): Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 1h2m3s.'
@@ -521,24 +521,24 @@ check "the report says the fallback was marked" "$(quota_lines 1)" "reason=quota
 
 # A mark the session file never received is not reported as made: the session
 # directory sits under a regular file, so it cannot be created, even as root.
-saved_sessions=$DR_AGY_SESSION_DIR
+saved_sessions=$DAGENTS_AGY_SESSION_DIR
 printf 'not a directory\n' > "$fixture/blocker"
-export DR_AGY_SESSION_DIR="$fixture/blocker/sessions"
+export DAGENTS_AGY_SESSION_DIR="$fixture/blocker/sessions"
 newwork mark-failed-lane
 STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_RESET" run --model gemini-3.8-flash --effort medium
 check "a lane mark that cannot be written reports marked=none" "$(quota_lines 1)" "reason=quota marked=none "
 newwork mark-failed-fallback
 STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_RESET" run
 check "a fallback mark that cannot be written reports marked=none" "$(quota_lines 1)" "reason=quota marked=none "
-export DR_AGY_SESSION_DIR=$saved_sessions
+export DAGENTS_AGY_SESSION_DIR=$saved_sessions
 
-rm -rf "$DR_AGY_SESSION_DIR"
+rm -rf "$DAGENTS_AGY_SESSION_DIR"
 newwork session-text
 STUB_AGY_MODE=text STUB_AGY_TEXT="RESOURCE_EXHAUSTED: try later" run --model gemini-3.8-flash --effort medium
 check "a plain-text quota turns agy off for the session" "$(session_state)" "false/false/quota"
 # stderr can carry output of the commands the model ran, so a quota word there
 # labels the run but marks nothing (A11).
-rm -rf "$DR_AGY_SESSION_DIR"
+rm -rf "$DAGENTS_AGY_SESSION_DIR"
 newwork session-stderr
 PATH="$fixture/stderrshim:$PATH" run --model gemini-3.8-flash --effort medium
 check "a quota seen only on stderr is still reported as quota" "$(grep -c '^reason=quota$' "$R")" "1"
@@ -551,7 +551,7 @@ SPAWNABLE=$(node -e 'const r = require("child_process").spawnSync(process.argv[1
 if [ "$SPAWNABLE" = yes ]; then
   saved_gate="$AGY_TASK_GATE"
   unset AGY_TASK_GATE
-  rm -rf "$DR_AGY_SESSION_DIR"
+  rm -rf "$DAGENTS_AGY_SESSION_DIR"
   gate_fields() { bash "$P/scripts/agy-gate" "$@" 2>/dev/null | tail -1 | tr -d '\r' \
     | sed -n 's/.* usable=\([a-z]*\) reason=\([^ ]*\) .* lane=\([a-z]*\) .*/\1 \2 \3/p'; }
   check "the real gate opens the lane on a trusted, signed-in stub" "$(gate_fields)" "true ok true"
@@ -567,7 +567,7 @@ if [ "$SPAWNABLE" = yes ]; then
   check "the next wrapper call never runs agy" "$(calls)" "$n"
   gate_line() { bash "$P/scripts/agy-gate" "$@" 2>/dev/null | tail -1 | tr -d '\r'; }
   # A reset time ends the lane mark: once it has passed, the gate probes again (A6).
-  rm -rf "$DR_AGY_SESSION_DIR"; gate_line >/dev/null
+  rm -rf "$DAGENTS_AGY_SESSION_DIR"; gate_line >/dev/null
   newwork quota-reset
   STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_RESET" run --model gemini-3.8-flash --effort medium
   epoch=$(sfield .resets_at_epoch)
@@ -591,7 +591,7 @@ if [ "$SPAWNABLE" = yes ]; then
   run
   check "a Claude run is refused while the fallback is off" "$?" "2"
   check "the refused Claude run never launches agy" "$(calls)" "$((n + 1))"
-  rm -rf "$DR_AGY_SESSION_DIR"; gate_line >/dev/null
+  rm -rf "$DAGENTS_AGY_SESSION_DIR"; gate_line >/dev/null
   newwork fallback-gate-bare
   STUB_AGY_MODE=error STUB_AGY_ERROR="$QUOTA_BARE" run
   check "a Claude quota with no reset keeps the fallback off through --refresh" "$(gate_line --refresh)" \

@@ -106,8 +106,8 @@ depth_plan() {
   if [ -n "$spec_line" ]; then
     spec_path=$(sed -E 's/^\*\*Spec:\*\*[ \t]*(`([^`]+)`|([^ \t]+)).*/\2\3/' <<<"$spec_line")
     if [ -n "$spec_path" ] && [ "$spec_path" != "$spec_line" ]; then
-      dforge_stores_init "$root"
-      spec_file=$(dforge_resolve "$spec_path" "$root")
+      dagents_stores_init "$root"
+      spec_file=$(dagents_resolve "$spec_path" "$root")
       spec=$(depth_spec_file "$spec_file")
     fi
   fi

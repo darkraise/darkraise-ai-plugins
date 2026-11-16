@@ -171,7 +171,7 @@ export type CockpitActivity = {
   isSent: boolean
 }
 
-/** One task of a dforge run, from its plan and its ledger. */
+/** One task of a dagents run, from its plan and its ledger. */
 export type CockpitRunTask = {
   n: number
   title: string
@@ -183,7 +183,7 @@ export type CockpitRunTask = {
   reason: string | null
 }
 
-/** A dforge run as its SDD ledger tells it. */
+/** A dagents run as its SDD ledger tells it. */
 export type CockpitRun = {
   plan: string | null
   tasks: CockpitRunTask[]
@@ -195,7 +195,7 @@ export type CockpitRun = {
 }
 
 /**
- * What dforge finishing does once the final review is clean, as its
+ * What dagents finishing does once the final review is clean, as its
  * `finish-choice` script keeps it (finish.json).
  */
 export type CockpitFinish = {
@@ -273,7 +273,7 @@ export type CockpitSettingsView = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'dforge': {
+    'dagents': {
       /** The settings in force, resolved from the settings file; null until read. */
       settings: Record<string, boolean | number | string> | null
       budget: CockpitBudget | null

@@ -19,7 +19,7 @@ printf '["base.txt","produced.txt","new file.txt"]\n' > "$fixture/scope.json"
 
 # The runner marks this session's Codex gate file off on a quota error. A fixed
 # session id and a temporary directory keep the machine's real file out of it.
-export DR_CODEX_SESSION_DIR="$fixture/sessions" CLAUDE_CODE_SESSION_ID=executor-recovery-test
+export DAGENTS_CODEX_SESSION_DIR="$fixture/sessions" CLAUDE_CODE_SESSION_ID=executor-recovery-test
 
 # The runner resolves its plugin root through scripts/codex-plugin, which reads
 # the profile settings and the policy file. Both are fixtures here, and
@@ -34,9 +34,9 @@ printf '{"enabledPlugins":{"codex@openai-codex":true}}\n' > "$CLAUDE_CONFIG_DIR/
 jq -nc --arg p "$STUB_PLUGIN" \
   '{version:2, plugins:{"codex@openai-codex":[{scope:"user", installPath:$p, version:"1.0.3"}]}}' \
   > "$CLAUDE_CONFIG_DIR/plugins/installed_plugins.json"
-export DR_CODEX_POLICY="$fixture/policy.json"
+export DAGENTS_CODEX_POLICY="$fixture/policy.json"
 jq -nc '{plugin:"codex@openai-codex", min_version:"1.0.3", max_major:1,
-         trust:{calibration:"pending", smoke:"pending"}}' > "$DR_CODEX_POLICY"
+         trust:{calibration:"pending", smoke:"pending"}}' > "$DAGENTS_CODEX_POLICY"
 
 export STUB_MODE=ok STUB_EVENT_LOG="$fixture/events.log"
 final_message() { printf '{"status":"%s","summary":"fixture","commit_subject":"feat(test): produce file","questions":[],"discovered_issues":["fixture issue"],"assumptions":[]}' "${1:-DONE}"; }
@@ -74,7 +74,7 @@ check 'report says None for empty assumptions' \
   "$(grep -A2 '^## Assumptions made$' "$fixture/report.md" | tail -1 | tr -d '\r')" 'None'
 gitdir="$(git -C "$fixture/work" rev-parse --absolute-git-dir)"
 task_key="$(printf task-one | git -C "$fixture/work" hash-object --stdin)"
-state="$gitdir/dforge/tasks/$task_key/state.json"
+state="$gitdir/dagents/tasks/$task_key/state.json"
 check 'success persists complete state' "$(jq -r .phase "$state" 2>/dev/null)" complete
 check 'success persists thread' "$(jq -r .thread "$state" 2>/dev/null)" stub-thread
 STUB_WRITE_CONTENT=review-fix run --resume stub-thread --review-round 1 --report "$fixture/fix-report.md"
@@ -112,7 +112,7 @@ git -C "$fixture/primary" worktree add -qb timeout-case "$fixture/timeout"
 STUB_MODE=hang run --cwd "$fixture/timeout" --timeout 1
 check 'timeout returns executed non-DONE' "$?" 1
 check "timeout interrupts the turn" "$(grep -c '^interruptAppServerTurn stub-thread stub-turn' "$STUB_EVENT_LOG")" 1
-check 'an interrupted timeout leaves pending work' "$(jq -r .phase "$(git -C "$fixture/timeout" rev-parse --absolute-git-dir)/dforge/tasks/$(printf task-one | git hash-object --stdin)/state.json")" pending
+check 'an interrupted timeout leaves pending work' "$(jq -r .phase "$(git -C "$fixture/timeout" rev-parse --absolute-git-dir)/dagents/tasks/$(printf task-one | git hash-object --stdin)/state.json")" pending
 
 # A broker the run did not start is never reaped, so a refused interrupt leaves
 # nothing proving the turn stopped.
@@ -120,7 +120,7 @@ git -C "$fixture/primary" worktree add -qb unstopped-case "$fixture/unstopped"
 STUB_MODE=hang STUB_PRE_EXISTING=1 STUB_INTERRUPT_FAILS=1 run --cwd "$fixture/unstopped" --timeout 1
 check 'an unconfirmed stop returns executed non-DONE' "$?" 1
 check 'an unconfirmed stop blocks the task' \
-  "$(jq -r .phase "$(git -C "$fixture/unstopped" rev-parse --absolute-git-dir)/dforge/tasks/$(printf task-one | git hash-object --stdin)/state.json")" blocked
+  "$(jq -r .phase "$(git -C "$fixture/unstopped" rev-parse --absolute-git-dir)/dagents/tasks/$(printf task-one | git hash-object --stdin)/state.json")" blocked
 check 'an unconfirmed stop is flagged on the status line' "$(grep -c 'note=writer-unconfirmed' "$fixture/out")" 1
 check 'an unconfirmed stop never claims codex was stopped' "$(grep -cE 'was (stopped|killed)' "$fixture/report.md")" 0
 run --cwd "$fixture/unstopped"
@@ -132,7 +132,7 @@ git -C "$fixture/primary" worktree add -qb transport-case "$fixture/transport"
 STUB_MODE=throw STUB_PRE_EXISTING=1 run --cwd "$fixture/transport"
 check 'an unreaped transport error returns executed non-DONE' "$?" 1
 check 'an unreaped transport error blocks the task' \
-  "$(jq -r .phase "$(git -C "$fixture/transport" rev-parse --absolute-git-dir)/dforge/tasks/$(printf task-one | git hash-object --stdin)/state.json")" blocked
+  "$(jq -r .phase "$(git -C "$fixture/transport" rev-parse --absolute-git-dir)/dagents/tasks/$(printf task-one | git hash-object --stdin)/state.json")" blocked
 check 'an unreaped transport error is flagged on the status line' "$(grep -c 'note=writer-unconfirmed' "$fixture/out")" 1
 check 'an unreaped transport error is not reported as a timeout' "$(grep -c 'note=timed-out' "$fixture/out")" 0
 
@@ -141,7 +141,7 @@ git -C "$fixture/primary" worktree add -qb load-fail-case "$fixture/load-fail"
 STUB_LOAD_FAILS=1 STUB_PRE_EXISTING=1 run --cwd "$fixture/load-fail"
 check 'a plugin load failure returns executed non-DONE' "$?" 1
 check 'a plugin load failure does not block the task' \
-  "$(jq -r .phase "$(git -C "$fixture/load-fail" rev-parse --absolute-git-dir)/dforge/tasks/$(printf task-one | git hash-object --stdin)/state.json")" pending
+  "$(jq -r .phase "$(git -C "$fixture/load-fail" rev-parse --absolute-git-dir)/dagents/tasks/$(printf task-one | git hash-object --stdin)/state.json")" pending
 check 'a plugin load failure is not flagged as an unconfirmed stop' "$(grep -c 'note=writer-unconfirmed' "$fixture/out")" 0
 
 git -C "$fixture/primary" worktree add -qb handback-case "$fixture/handback"
@@ -185,17 +185,17 @@ check 'initial unstaged changes are rejected' "$?" 2
 # stays resumable; and a quota error turns Codex off for the session.
 git -C "$fixture/primary" worktree add -qb thread-case "$fixture/thread"
 run --cwd "$fixture/thread"
-thread_state="$(git -C "$fixture/thread" rev-parse --absolute-git-dir)/dforge/tasks/$task_key/state.json"
+thread_state="$(git -C "$fixture/thread" rev-parse --absolute-git-dir)/dagents/tasks/$task_key/state.json"
 STUB_MODE=throw run --cwd "$fixture/thread"
 check 'a transport failure keeps the recorded thread' "$(jq -r .thread "$thread_state")" stub-thread
 STUB_WRITE_CONTENT=after-throw run --cwd "$fixture/thread" --resume stub-thread
 check 'the task resumes after a transport failure' "$?" 0
-mkdir -p "$DR_CODEX_SESSION_DIR"
-printf '{"session_id":"executor-recovery-test","usable":true,"review":true,"lane":true,"reason":"ok","plugin_version":"1.0.3"}\n' > "$DR_CODEX_SESSION_DIR/executor-recovery-test.json"
+mkdir -p "$DAGENTS_CODEX_SESSION_DIR"
+printf '{"session_id":"executor-recovery-test","usable":true,"review":true,"lane":true,"reason":"ok","plugin_version":"1.0.3"}\n' > "$DAGENTS_CODEX_SESSION_DIR/executor-recovery-test.json"
 STUB_MODE=quota run --cwd "$fixture/thread" --resume stub-thread
 check 'a quota error is not DONE' "$?" 1
 check 'a quota error turns Codex off for the session' \
-  "$(jq -r '[.usable, .lane, .reason] | map(tostring) | join("/")' "$DR_CODEX_SESSION_DIR/executor-recovery-test.json" | tr -d '\r')" "false/false/quota"
+  "$(jq -r '[.usable, .lane, .reason] | map(tostring) | join("/")' "$DAGENTS_CODEX_SESSION_DIR/executor-recovery-test.json" | tr -d '\r')" "false/false/quota"
 
 # A resumed attempt that reaches DONE must commit every change since the last
 # commit, including files an earlier incomplete attempt left uncommitted.
@@ -219,7 +219,7 @@ check 'deletion and path with spaces commit' "$?" 0
 check 'deletion is present in commit' "$(git -C "$fixture/paths" ls-tree --name-only HEAD base.txt)" ''
 check 'space-containing path has intended bytes' "$(git -C "$fixture/paths" show 'HEAD:new file.txt')" produced
 path_gitdir="$(git -C "$fixture/paths" rev-parse --absolute-git-dir)"
-path_state="$path_gitdir/dforge/tasks/$task_key/state.json"
+path_state="$path_gitdir/dagents/tasks/$task_key/state.json"
 jq --slurpfile staged "$(dirname "$path_state")/staged-snapshot.json" \
   '.phase="committing" | .expected_head=.candidate.parent | .pending=$staged[0]' "$path_state" > "$fixture/crash-state.json"
 cp "$fixture/crash-state.json" "$path_state"

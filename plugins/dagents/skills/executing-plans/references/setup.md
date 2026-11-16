@@ -1,7 +1,7 @@
 # Setup
 
 Ensure the work happens in an isolated workspace: use
-dforge:using-git-worktrees to create one or verify the existing one.
+dagents:using-git-worktrees to create one or verify the existing one.
 Never start implementation on a main/master branch without your human partner's
 explicit consent.
 
@@ -28,7 +28,7 @@ Conversation memory does not survive compaction. Track progress in a ledger
 file, not only in todos.
 
 - Each plan owns a workspace: run `scripts/sdd-workspace PLAN_FILE`
-  (see using-dforge §Session Budget), and it prints the plan's git-ignored directory
+  (see using-dagents §Session Budget), and it prints the plan's git-ignored directory
   (`<repo-root>/<state>/sdd/<plan-basename>/`), home to every artifact for
   THIS plan except its ledger and handoff note, which live in `<ledger dir>`.
   Another plan's directory is never yours to read or write.
@@ -38,14 +38,14 @@ file, not only in todos.
   plan - or a stray ledger at the old flat path `<state>/sdd/progress.md` - is
   another plan's progress: leave it in place and start your own, fresh.
 - Create the ledger with its identity as the first line:
-  `# SDD ledger — plan: <plan name>` — `bash <plugin-root>/scripts/dforge-path name PLAN_FILE`,
+  `# SDD ledger — plan: <plan name>` — `bash <plugin-root>/scripts/dagents-path name PLAN_FILE`,
   so the ledger names the plan in either store.
 - When a register covers this plan's spec, mark the rows this plan carries as
   in flight once, at the start of the run, skipping any row already at `verify`
   or `done`: `scripts/register set <register> <id> doing`. The register is read by
-  `next-step`, `repo-audit` and dforge:project-status, so a run that
+  `next-step`, `repo-audit` and dagents:project-status, so a run that
   never says it started reads as unscheduled work everywhere else.
-- Create `<ledger dir>/handoff.md` from the template in dforge:handoff
+- Create `<ledger dir>/handoff.md` from the template in dagents:handoff
   if it does not exist. Update it in the same message as a ledger write
   whenever an owner constraint, gotcha, prohibition or open question changes.
 - Read `<docs>/distilled/constraints.md` when the project has one. Its
@@ -56,7 +56,7 @@ file, not only in todos.
   that happens, recover from `git log`.
 
 Read the plan's header, never the whole plan: run
-`scripts/task-brief --header PLAN_FILE` (see using-dforge §Session Budget), and read the
+`scripts/task-brief --header PLAN_FILE` (see using-dagents §Session Budget), and read the
 file it prints (`<workspace>/plan-header.md`). Note the Execution line, the
 Global Constraints and the Contracts, and create a todo per Task index entry. A
 plan written before 1.4.0 may have no Task index: then run
@@ -70,11 +70,11 @@ the seat marks its rulings provisional.
 
 - It names `subagent`: log `Ruling: routed to subagent mode — the plan's
   Execution line names it — none` and use
-  dforge:subagent-driven-development instead.
+  dagents:subagent-driven-development instead.
 - Your human partner asks for subagent mode, at the start or mid-run: append
   `Task <N>: escalated inline -> subagent — owner request`, where `<N>` is the
   next task not yet started, log `Ruling: routed to subagent mode — owner
-  request — none`, and use dforge:subagent-driven-development. Do not edit the
+  request — none`, and use dagents:subagent-driven-development. Do not edit the
   plan: `**Execution:**` is a line `scripts/plan-amend` refuses to touch, and
   a resumed session reads the switch from the ledger. Only their explicit
   instruction moves the plan back; the next `implementer inline (assigned`

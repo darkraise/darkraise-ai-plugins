@@ -10,7 +10,7 @@ request:
 - `ok` or `unknown`: carry on, however high the percentage. Only the verdict
   stops you.
 - `handoff`: finish the task in flight — its reviews, fix rounds and
-  `Task N: complete` line — then invoke dforge:handoff. Start no new
+  `Task N: complete` line — then invoke dagents:handoff. Start no new
   task. The budget holds one task's worst growth, so the task lands before
   compaction.
 - The plan's last two tasks never hand off in strict mode: their budget

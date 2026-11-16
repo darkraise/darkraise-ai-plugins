@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Acceptance tests for docs/dforge/specs/2026-10-25-typed-seats-and-drafting-design.md
+# Acceptance tests for docs/dagents/specs/2026-10-25-typed-seats-and-drafting-design.md
 # (the shell-reachable statements: A5, A12, A13; the cockpit statements A1-A4
 # and A8 are in typed-seats-and-drafting.acceptance.test.ts).
 # Each test is written from the spec's acceptance statement. Usage:
@@ -30,7 +30,7 @@ sel() { # sel <A-id> - whether that test is selected
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
-unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DAGENTS_BUDGET CLAUDE_PROJECT_DIR
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 
@@ -117,7 +117,7 @@ if sel A13; then
   base=$(git -C "$REPO" merge-base HEAD main 2>/dev/null || git -C "$REPO" merge-base HEAD origin/main 2>/dev/null)
   if [ -n "$base" ]; then
     check "A13: the branch never touched the measured plan" "$(git -C "$REPO" diff --name-only "$base" HEAD -- docs/dforge/plans/2026-10-24-ui-ux-skill.md | wc -l | tr -d ' ')" "0"
-    check "A13: the branch committed no plan trimmed to six tasks or any file under .dforge/" "$(git -C "$REPO" diff --name-only "$base" HEAD | grep -cE '^\.dforge/|drafts/tasks-')" "0"
+    check "A13: the branch committed no plan trimmed to six tasks or any file under .dagents/" "$(git -C "$REPO" diff --name-only "$base" HEAD | grep -cE '^\.dagents/|drafts/tasks-')" "0"
   else
     echo "skip - A13: the two branch-diff checks (no main or origin/main to diff against)"
   fi

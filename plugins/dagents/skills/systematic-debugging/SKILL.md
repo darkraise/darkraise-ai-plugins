@@ -14,7 +14,7 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 ## Fast Mode
 
 Before Phase 1, unless `fastMode=off`, ask once:
-"Fast mode, or the full dforge flow?" (the AskUserQuestion tool where the
+"Fast mode, or the full dagents flow?" (the AskUserQuestion tool where the
 host has it). Fast mode fixes the bug the way plain Claude Code would; the full
 flow is the four phases below.
 Recommend the full flow when the failure is intermittent, spans components or
@@ -191,7 +191,7 @@ You MUST complete each phase before proceeding to the next.
    - Automated test if possible
    - One-off test script if no framework
    - MUST have before fixing
-   - Use the `dforge:test-driven-development` skill for writing proper failing tests
+   - Use the `dagents:test-driven-development` skill for writing proper failing tests
 
 2. **Implement Single Fix**
    - Address the root cause identified
@@ -203,8 +203,8 @@ You MUST complete each phase before proceeding to the next.
    - Test passes now?
    - No other tests broken?
    - Issue actually resolved?
-   - Use the `dforge:verification-before-completion` skill before claiming success
-   - Fix changes anything a user sees or does? Run `dforge:ui-ux` at touch depth: its delta and proof come before you claim the bug fixed
+   - Use the `dagents:verification-before-completion` skill before claiming success
+   - Fix changes anything a user sees or does? Run `dagents:ui-ux` at touch depth: its delta and proof come before you claim the bug fixed
 
 4. **If Fix Doesn't Work**
    - STOP

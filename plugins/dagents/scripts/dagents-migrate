@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# dforge-migrate [--dry-run] [DIR] — move a repository from the older names
+# dagents-migrate [--dry-run] [DIR] — move a repository from the older names
 # to dforge 4.0's, which reads only the new ones: dr-superpowers' (before 3.0)
 # and dr-forge's (3.x). For the repository at DIR (default: the working
 # directory), its primary checkout and every linked worktree:
-#   .superpowers/, .forge/                    -> .dforge/      (plain rename)
-#   docs/superpowers/ or docs/forge/          -> docs/dforge/  (git mv when tracked)
-#   <git dir>/dr-superpowers/, <git dir>/dr-forge/ -> <git dir>/dforge/
+#   .superpowers/, .forge/                    -> .dagents/      (plain rename)
+#   docs/superpowers/ or docs/forge/          -> docs/dagents/  (git mv when tracked)
+#   <git dir>/dr-superpowers/, <git dir>/dr-forge/ -> <git dir>/dagents/
 # then, once every move has succeeded, the lines of .gitignore, .gitattributes
 # and the shared info/exclude that name an older directory. An active plan
 # (one the completed.md beside it does not record) and the checkout's handoff
 # note have their dr-superpowers: and dr-forge: prefixes rewritten to
-# dforge:, so they keep running. No other file's content changes: finished
-# plans, specs, ledgers and registers keep the citations dforge translates
-# when it reads them. Last, scripts/lib/dforge-home-migrate.mjs moves the
-# homes (~/.dr-superpowers/ and ~/.dr-forge/ -> ~/.dforge/) when it is
+# dagents:, so they keep running. No other file's content changes: finished
+# plans, specs, ledgers and registers keep the citations dagents translates
+# when it reads them. Last, scripts/lib/dagents-home-migrate.mjs moves the
+# homes (~/.dr-superpowers/ and ~/.dr-forge/ -> ~/.dagents/) when it is
 # installed.
 #
-# A checkout holding an older state directory and .dforge/ is merged file by
+# A checkout holding an older state directory and .dagents/ is merged file by
 # file: a file or empty directory only the old one has moves, an identical
 # file is dropped, and a file that differs is refused and left. A checkout
 # holding two docs trees, or an older docs tree with uncommitted changes, is
@@ -38,15 +38,15 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 dry=0
 if [ "${1:-}" = --dry-run ]; then dry=1; shift; fi
-[ $# -le 1 ] || { echo "usage: dforge-migrate [--dry-run] [DIR]" >&2; exit 2; }
+[ $# -le 1 ] || { echo "usage: dagents-migrate [--dry-run] [DIR]" >&2; exit 2; }
 dir=${1:-$PWD}
 
 if command -v timeout >/dev/null 2>&1; then g() { timeout 60 git "$@"; }; else g() { git "$@"; }; fi
 
 root=$(g -C "$dir" rev-parse --show-toplevel 2>/dev/null) \
-  || { echo "dforge-migrate: $dir is not inside a git repository" >&2; exit 2; }
+  || { echo "dagents-migrate: $dir is not inside a git repository" >&2; exit 2; }
 common=$(g -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) \
-  || { echo "dforge-migrate: cannot read the git directory of $root" >&2; exit 2; }
+  || { echo "dagents-migrate: cannot read the git directory of $root" >&2; exit 2; }
 
 refused=0 moved=0 checkout_refused=0 docs_ok=1 docs_at=""
 checkouts=()
@@ -55,7 +55,7 @@ commit_notes=()
 # In a dry run, each path a line says would move.
 dry_moves=()
 
-refuse() { printf 'dforge-migrate: refused: %s\n' "$1" >&2; refused=1; checkout_refused=1; }
+refuse() { printf 'dagents-migrate: refused: %s\n' "$1" >&2; refused=1; checkout_refused=1; }
 done_move() {
   if [ "$dry" -eq 1 ]; then printf 'would move %s -> %s\n' "$1" "$2"; dry_moves+=("$1"); else printf 'moved %s -> %s\n' "$1" "$2"; fi
   moved=1
@@ -91,12 +91,12 @@ merge_into() {
       listed=1
       if [ ! -e "$to/$rel" ] && [ ! -L "$to/$rel" ]; then printf 'would move %s -> %s\n' "$file" "$to/$rel"; moved=1; dry_moves+=("$file")
       elif same_entry "$file" "$to/$rel"; then printf 'would drop %s, the same as %s\n' "$file" "$to/$rel"; moved=1
-      else refuse "$file differs from $to/$rel; keep one by hand, then run dforge-migrate again"; fi
+      else refuse "$file differs from $to/$rel; keep one by hand, then run dagents-migrate again"; fi
     done < <(find "$from" \( -type f -o -type l \) -print0)
     while IFS= read -r -d '' file; do
       rel=${file#"$from"/}
       if [ ! -e "$to/$rel" ] && [ ! -L "$to/$rel" ]; then printf 'would move %s -> %s\n' "$file" "$to/$rel"; moved=1 listed=1
-      elif [ ! -d "$to/$rel" ]; then refuse "$file is a directory and $to/$rel is not; keep one by hand, then run dforge-migrate again"; listed=1; fi
+      elif [ ! -d "$to/$rel" ]; then refuse "$file is a directory and $to/$rel is not; keep one by hand, then run dagents-migrate again"; listed=1; fi
     done < <(find "$from" -mindepth 1 -type d -empty -print0)
     # FROM holds nothing, or only directories TO already has: the real run
     # removes it and says it moved, so the dry run says so too.
@@ -111,20 +111,20 @@ merge_into() {
     elif same_entry "$file" "$to/$rel"; then
       rm -f -- "$file" && touched=1
     else
-      refuse "$file differs from $to/$rel; keep one by hand, then run dforge-migrate again"
+      refuse "$file differs from $to/$rel; keep one by hand, then run dagents-migrate again"
       conflicts=1
     fi
   done < <(find "$from" \( -type f -o -type l \) -print0)
-  # An empty directory can be a mkdir lock (<git dir>/dforge/run.lock), so
+  # An empty directory can be a mkdir lock (<git dir>/dagents/run.lock), so
   # one TO lacks is made there before FROM's empty directories go.
   while IFS= read -r -d '' file; do
     rel=${file#"$from"/}
     [ ! -d "$to/$rel" ] || continue
     if [ ! -e "$to/$rel" ] && [ ! -L "$to/$rel" ] && mkdir -p -- "$to/$rel" 2>/dev/null; then touched=1
-    else refuse "$file is a directory and $to/$rel is not; keep one by hand, then run dforge-migrate again"; conflicts=1 dir_conflicts=1; fi
+    else refuse "$file is a directory and $to/$rel is not; keep one by hand, then run dagents-migrate again"; conflicts=1 dir_conflicts=1; fi
   done < <(find "$from" -mindepth 1 -type d -empty -print0)
   [ "$dir_conflicts" -eq 1 ] || find "$from" -depth -type d -empty -delete 2>/dev/null
-  if [ "$conflicts" -eq 0 ] && [ -e "$from" ]; then refuse "$from still holds entries that are not files; move them by hand, then run dforge-migrate again"; fi
+  if [ "$conflicts" -eq 0 ] && [ -e "$from" ]; then refuse "$from still holds entries that are not files; move them by hand, then run dagents-migrate again"; fi
   if [ ! -e "$from" ]; then done_move "$from" "$to"; elif [ "$touched" -eq 1 ]; then moved=1; fi
 }
 
@@ -144,10 +144,10 @@ dir_link_in() {
 # 1 when it refused outright; merge_into's per-file refusals leave it 0.
 mv_plain() {
   [ -e "$1" ] || return 0
-  if [ -L "$(dirname -- "$1")" ] || [ -L "$(dirname -- "$2")" ]; then refuse "$1 or $2 lies in a linked directory; move it by hand, then run dforge-migrate again"; return 1; fi
+  if [ -L "$(dirname -- "$1")" ] || [ -L "$(dirname -- "$2")" ]; then refuse "$1 or $2 lies in a linked directory; move it by hand, then run dagents-migrate again"; return 1; fi
   if [ -e "$2" ]; then
-    if [ -L "$1" ] || dir_link_in "$2"; then refuse "$1 or $2 is or holds a symbolic link; merge them by hand, then run dforge-migrate again"; return 1; fi
-    if [ -d "$1" ] && [ -d "$2" ]; then merge_into "$1" "$2"; else refuse "$1 and $2 both exist and are not both directories; merge them by hand, then run dforge-migrate again"; return 1; fi
+    if [ -L "$1" ] || dir_link_in "$2"; then refuse "$1 or $2 is or holds a symbolic link; merge them by hand, then run dagents-migrate again"; return 1; fi
+    if [ -d "$1" ] && [ -d "$2" ]; then merge_into "$1" "$2"; else refuse "$1 and $2 both exist and are not both directories; merge them by hand, then run dagents-migrate again"; return 1; fi
     return 0
   fi
   if [ "$dry" -eq 1 ] || mv -- "$1" "$2"; then done_move "$1" "$2"; else refuse "could not rename $1"; return 1; fi
@@ -156,19 +156,19 @@ mv_plain() {
 # docs_trees CHECKOUT — each docs tree the checkout holds, one per line.
 docs_trees() {
   local name
-  for name in superpowers forge dforge; do [ ! -e "$1/docs/$name" ] || printf '%s\n' "$1/docs/$name"; done
+  for name in superpowers forge dagents; do [ ! -e "$1/docs/$name" ] || printf '%s\n' "$1/docs/$name"; done
 }
 
-# migrate_docs CHECKOUT — the one docs tree to docs/dforge/. Sets docs_ok to 0
+# migrate_docs CHECKOUT — the one docs tree to docs/dagents/. Sets docs_ok to 0
 # when it refused, and docs_at to where the plans are once it is done: the new
 # tree, or in a dry run the tree that would move.
 migrate_docs() {
-  local wt=$1 trees name old new="$1/docs/dforge"
+  local wt=$1 trees name old new="$1/docs/dagents"
   docs_ok=1 docs_at=""
   trees=$(docs_trees "$wt")
   [ -n "$trees" ] || return 0
   if [ "$(wc -l <<<"$trees")" -gt 1 ]; then
-    refuse "$(paste -sd, - <<<"$trees" | sed 's/,/ and /g') all exist; merge them by hand, then run dforge-migrate again"
+    refuse "$(paste -sd, - <<<"$trees" | sed 's/,/ and /g') all exist; merge them by hand, then run dagents-migrate again"
     docs_ok=0
     return 0
   fi
@@ -178,23 +178,23 @@ migrate_docs() {
   [ "$dry" -eq 0 ] || docs_at=$old
   if [ -z "$(g -C "$wt" ls-files -- "docs/$name" | head -n 1)" ]; then mv_plain "$old" "$new" || docs_ok=0; return 0; fi
   if [ -n "$(g --no-optional-locks -C "$wt" status --porcelain --untracked-files=all -- "docs/$name")" ]; then
-    refuse "$old has uncommitted changes; commit or stash them, then run dforge-migrate again"
+    refuse "$old has uncommitted changes; commit or stash them, then run dagents-migrate again"
     docs_ok=0
     return 0
   fi
-  if [ "$dry" -eq 1 ] || g -C "$wt" mv "docs/$name" docs/dforge; then
+  if [ "$dry" -eq 1 ] || g -C "$wt" mv "docs/$name" docs/dagents; then
     done_move "$old" "$new"
-    commit_notes+=("$wt: the staged rename docs/$name/ -> docs/dforge/")
+    commit_notes+=("$wt: the staged rename docs/$name/ -> docs/dagents/")
   else
-    refuse "git mv docs/$name docs/dforge failed in $wt"
+    refuse "git mv docs/$name docs/dagents failed in $wt"
     docs_ok=0
   fi
 }
 
 # renamed_lines FILE MODE — what rewrite_names would leave in FILE.
 renamed_lines() {
-  sed -E -e 's#(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)#\1.dforge\3#g' \
-         -e 's#docs/(superpowers|forge)([/[:space:]*]|$)#docs/dforge\2#g' "$1" \
+  sed -E -e 's#(^|[^A-Za-z0-9_-])\.(superpowers|forge)([/[:space:]*]|$)#\1.dagents\3#g' \
+         -e 's#docs/(superpowers|forge)([/[:space:]*]|$)#docs/dagents\2#g' "$1" \
     | awk -v mode="$2" '
       NR == FNR { old[FNR] = $0; have[$0] = 1; n = FNR; next }
       { new[FNR] = $0 }
@@ -228,7 +228,7 @@ rewrite_names() {
   fi
   # mktemp creates each name exclusively, so a link planted at it is never
   # written through.
-  tmp=$(mktemp "$file.dforge-migrate.XXXXXX") || return 1
+  tmp=$(mktemp "$file.dagents-migrate.XXXXXX") || return 1
   renamed_lines "$file" "$mode" > "$tmp" \
     && ! cmp -s -- "$tmp" "$file" \
     && cat "$tmp" > "$file" \
@@ -250,7 +250,7 @@ writable() {
 
 PREFIX_RE='(^|[^A-Za-z0-9_-])dr-(superpowers|forge):([a-z])'
 # prefixes_renamed FILE — FILE with the older plugin prefixes outside fenced
-# code blocks rewritten as dforge's own. A fence is quoted text, never rewritten.
+# code blocks rewritten as dagents's own. A fence is quoted text, never rewritten.
 prefixes_renamed() {
   # Git for Windows' gawk drops each carriage return unless BINMODE says
   # binary; any other awk takes it as a plain variable.
@@ -260,7 +260,7 @@ prefixes_renamed() {
       while (match(line, /dr-(superpowers|forge):[a-z]/)) {
         prev = RSTART > 1 ? substr(line, RSTART - 1, 1) : substr(out, length(out), 1)
         if (prev == "" || prev !~ /[A-Za-z0-9_-]/) {
-          out = out substr(line, 1, RSTART - 1) "dforge:"
+          out = out substr(line, 1, RSTART - 1) "dagents:"
           line = substr(line, RSTART + RLENGTH - 1)
         } else {
           out = out substr(line, 1, RSTART)
@@ -284,7 +284,7 @@ prefixes_renamed() {
 }
 
 # rewrite_prefixes FILE CHECKOUT — the older plugin prefixes before a skill or
-# agent name, as dforge's own. Status 1 when FILE names none outside a fenced
+# agent name, as dagents's own. Status 1 when FILE names none outside a fenced
 # block, or is not writable in CHECKOUT.
 rewrite_prefixes() {
   local file=$1 tmp
@@ -297,7 +297,7 @@ rewrite_prefixes() {
     moved=1
     return 0
   fi
-  tmp=$(mktemp "$file.dforge-migrate.XXXXXX") || { refuse "could not rewrite the plugin prefixes in $file"; return 1; }
+  tmp=$(mktemp "$file.dagents-migrate.XXXXXX") || { refuse "could not rewrite the plugin prefixes in $file"; return 1; }
   if ! prefixes_renamed "$file" > "$tmp"; then
     rm -f -- "$tmp"
     refuse "could not rewrite the plugin prefixes in $file"
@@ -324,7 +324,7 @@ rewrite_prefixes() {
 plan_done() {
   local f="$1/$(dirname -- "$2")/completed.md" spelling
   [ -f "$f" ] || return 1
-  for spelling in dforge forge superpowers; do
+  for spelling in dagents forge superpowers; do
     grep -qF "\`docs/$spelling/$2\`" "$f" && return 0
   done
   return 1
@@ -340,14 +340,14 @@ rewrite_active_plans() {
       [ "${rel##*/}" != completed.md ] || continue
       plan_done "$docs" "$rel" && continue
       if rewrite_prefixes "$plan" "$wt" && g -C "$wt" ls-files --error-unmatch -- "${docs#"$wt"/}/$rel" >/dev/null 2>&1; then
-        commit_notes+=("$wt: docs/dforge/$rel")
+        commit_notes+=("$wt: docs/dagents/$rel")
       fi
     done < <(find "$docs/plans" -type f -name '*.md' -print0)
   fi
-  # A real run rewrites only .dforge/'s note: one still under an old state
+  # A real run rewrites only .dagents/'s note: one still under an old state
   # directory was left there by a refused merge. A dry run moved nothing, so
   # it also lists an old directory's note that a line above would move.
-  [ ! -f "$wt/.dforge/handoff/latest.md" ] || rewrite_prefixes "$wt/.dforge/handoff/latest.md" "$wt" || true
+  [ ! -f "$wt/.dagents/handoff/latest.md" ] || rewrite_prefixes "$wt/.dagents/handoff/latest.md" "$wt" || true
   [ "$dry" -eq 1 ] || return 0
   for state in .forge .superpowers; do
     note="$wt/$state/handoff/latest.md"
@@ -365,15 +365,15 @@ for wt in "${checkouts[@]}"; do
   for old in .superpowers .forge; do
     tracked=0
     if [ -e "$wt/$old" ] && [ -n "$(g -C "$wt" ls-files -- "$old" | head -n 1)" ]; then tracked=1; fi
-    mv_plain "$wt/$old" "$wt/.dforge"
+    mv_plain "$wt/$old" "$wt/.dagents"
     if [ "$tracked" -eq 1 ] && [ ! -e "$wt/$old" ] && [ ! -L "$wt/$old" ]; then
-      commit_notes+=("$wt: the rename $old/ -> .dforge/ (git add -A $old .dforge)")
+      commit_notes+=("$wt: the rename $old/ -> .dagents/ (git add -A $old .dagents)")
     fi
   done
   migrate_docs "$wt"
   [ "$docs_ok" -eq 0 ] || rewrite_active_plans "$wt" "$docs_at"
   if gitdir=$(g -C "$wt" rev-parse --absolute-git-dir 2>/dev/null); then
-    for old in dr-superpowers dr-forge; do mv_plain "$gitdir/$old" "$gitdir/dforge"; done
+    for old in dr-superpowers dr-forge; do mv_plain "$gitdir/$old" "$gitdir/dagents"; done
   else
     refuse "cannot read the git directory of $wt"
   fi
@@ -396,7 +396,7 @@ mode=replace
 [ "$refused" -eq 0 ] || mode=add
 rewrite_names "$common/info/exclude" "$mode" || true
 
-if [ -f "$HERE/lib/dforge-home-migrate.mjs" ]; then
+if [ -f "$HERE/lib/dagents-home-migrate.mjs" ]; then
   if ! command -v node >/dev/null 2>&1; then
     if [ -e "${HOME:-}/.dr-superpowers" ] || [ -e "${HOME:-}/.dr-forge" ]; then
       refuse "node is not on PATH, so the homes (~/.dr-superpowers/, ~/.dr-forge/) were not migrated"
@@ -404,26 +404,26 @@ if [ -f "$HERE/lib/dforge-home-migrate.mjs" ]; then
   else
     home_args=()
     [ "$dry" -eq 0 ] || home_args=(--dry-run)
-    home_out=$(cd "$root" && node "$(dr_native_path "$HERE/lib/dforge-home-migrate.mjs")" "${home_args[@]+"${home_args[@]}"}")
+    home_out=$(cd "$root" && node "$(dr_native_path "$HERE/lib/dagents-home-migrate.mjs")" "${home_args[@]+"${home_args[@]}"}")
     home_status=$?
     if [ -n "$home_out" ]; then
       printf '%s\n' "$home_out"
       # Refusals and the darkmem notes are no action; the "already has a
       # darkmem section" note prints on every run while ~/.dr-superpowers stays.
-      if grep -qvE '^dforge-home-migrate: (refused: |darkmem is off until you turn it on: |.* already has a darkmem section; )' <<<"$home_out"; then moved=1; fi
+      if grep -qvE '^dagents-home-migrate: (refused: |darkmem is off until you turn it on: |.* already has a darkmem section; )' <<<"$home_out"; then moved=1; fi
     fi
     if [ "$home_status" -ne 0 ]; then
       # A dry run's refusals are foretold, not a failure to finish; a non-zero
       # exit with no refused: line is a crash in either mode.
-      if [ "$dry" -eq 1 ] && grep -q '^dforge-home-migrate: refused: ' <<<"$home_out"; then
+      if [ "$dry" -eq 1 ] && grep -q '^dagents-home-migrate: refused: ' <<<"$home_out"; then
         refuse "foretold refusals in the home; see above"
       else
-        refuse "scripts/lib/dforge-home-migrate.mjs did not finish; see its output above"
+        refuse "scripts/lib/dagents-home-migrate.mjs did not finish; see its output above"
       fi
     fi
   fi
 fi
 
 [ "$dry" -eq 1 ] || for note in "${commit_notes[@]+"${commit_notes[@]}"}"; do printf 'commit: %s\n' "$note"; done
-[ "$moved" -eq 1 ] || [ "$refused" -eq 1 ] || echo "dforge-migrate: nothing to migrate in $root"
+[ "$moved" -eq 1 ] || [ "$refused" -eq 1 ] || echo "dagents-migrate: nothing to migrate in $root"
 exit "$refused"

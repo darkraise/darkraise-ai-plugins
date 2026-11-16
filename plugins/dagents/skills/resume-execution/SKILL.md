@@ -13,7 +13,7 @@ session from memory or from a summary.
 
 ## Steps
 
-1. **Orient in one call.** Run `scripts/repo-audit` (see using-dforge §Session Budget). Read
+1. **Orient in one call.** Run `scripts/repo-audit` (see using-dagents §Session Budget). Read
    `<latest.md>`; the audit prints its path.
 2. **Verify the worktree** named in latest.md's `## State` against
    `git worktree list --porcelain`. Normalise both paths before comparing:
@@ -50,18 +50,18 @@ session from memory or from a summary.
    absent. See [project-state.md](../../reference/project-state.md).
 5. **Continue** with what latest.md's `**Next:**` line says:
    - Start or resume at Task N: invoke the skill the plan's `**Execution:**`
-     line names — dforge:subagent-driven-development for `subagent`,
-     dforge:executing-plans for `inline`. Its ledger recovery takes over.
+     line names — dagents:subagent-driven-development for `subagent`,
+     dagents:executing-plans for `inline`. Its ledger recovery takes over.
      A ledger with a `Task <N>: escalated inline -> subagent` line and no later
      `implementer inline (assigned` line has left inline mode: invoke
-     dforge:subagent-driven-development whatever the Execution line
+     dagents:subagent-driven-development whatever the Execution line
      says. Inline mode writes that line only when your human partner asks for
      subagent mode; older ledgers may also hold it from a failed task.
    - Run the final whole-branch review: invoke the skill the plan's
      `**Execution:**` line names, as the previous bullet does. With every task
      complete, each goes straight to its Final Review section, and both follow
      the same [final-review.md](../../reference/final-review.md).
-   - Run finishing: invoke dforge:finishing-a-development-branch.
+   - Run finishing: invoke dagents:finishing-a-development-branch.
 
 ## Auto run
 

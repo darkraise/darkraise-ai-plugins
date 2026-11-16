@@ -14,7 +14,7 @@ back. Before anything else:
 0. In an auto run, when `scripts/auto-run status` says setup is due, or when
    no ledger names this plan, no task has started: skip the rest of this
    section and follow Setup from its first step.
-1. Run `scripts/sdd-workspace PLAN_FILE` (see using-dforge §Session Budget),
+1. Run `scripts/sdd-workspace PLAN_FILE` (see using-dagents §Session Budget),
    and read `progress.md` and `handoff.md` in `<ledger dir>`, not in the
    directory it prints: while progress lives in darkmem the two differ.
 2. Trust the ledger and `git log` over the summary. For each task the last
@@ -24,7 +24,7 @@ back. Before anything else:
    phase never hands off. In an auto run it also moves the run to the final
    phase, and a `compact` line still ends the turn on `Auto run: compacting`.
    Otherwise run `scripts/context-size`; on exit 5, finish the task in
-   flight, then invoke dforge:handoff. In an auto run, exit 6 (`compact`) is
+   flight, then invoke dagents:handoff. In an auto run, exit 6 (`compact`) is
    [auto-run.md](../../reference/auto-run.md) §The budget line.
 4. Re-read this skill in full before the next task. If a task's last ledger
    line is an agent-named assigned line or `fix round R/2`, also re-read
@@ -37,12 +37,12 @@ When `scripts/auto-run status` exits 0, this run is unattended
 What changes here:
 
 - **After any compaction**, whether or not a prompt asks for it, run `scripts/auto-run after-compact` before step 0 above. On
-  `handoff` (exit 5), invoke dforge:handoff,
+  `handoff` (exit 5), invoke dagents:handoff,
   then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
 - **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute`
-  from the execution workspace once dforge:using-git-worktrees Step 0 has prepared it.
+  from the execution workspace once dagents:using-git-worktrees Step 0 has prepared it.
   Exit 4 means the workspace step was skipped:
-  follow dforge:using-git-worktrees Step 0 for the run, then run the command again.
+  follow dagents:using-git-worktrees Step 0 for the run, then run the command again.
 - **Nothing stops for your human partner.** A ruling-seat or exhausted
   `BLOCKED` goes on the pending list and one Fable batch runs at once. An
   irreversible, security-sensitive or outside-the-worktree action is never
@@ -65,7 +65,7 @@ What changes here:
 - **The budget line** reads `budget (auto…)`. On `compact` (exit 6), finish
   the task in flight, then end the turn with
   `Auto run: compacting` as its last line. On `handoff`, finish the task in
-  flight, then invoke dforge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
+  flight, then invoke dagents:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
   The tail rule and the final-phase limit do not apply;
   `scripts/context-size --final` prints the auto line too.
 - **Final review:** run `scripts/auto-run phase final`; on exit 4 (here or after the last task),
@@ -119,11 +119,11 @@ loop for it. On a Codex host, which writes no such line, the trigger is an
 **Why no per-task review of your own tasks.** Risk 3 is the one exception, and
 the session review loop is its gate. What catches the rest is the plan's own
 verification steps, your self-review of each diff, and one broad review of the
-whole branch at the end.
+whole branch.
 
 **Continuous execution.** Do not pause between tasks to check in. "Should I
 continue?" prompts and progress summaries waste your human partner's time -
-they asked you to execute the plan, so execute it.
+they asked you to execute the plan, so do.
 
 Read [ruling-seat.md](references/ruling-seat.md) for when to rule on a mechanical problem yourself.
 
@@ -140,15 +140,15 @@ which asks nothing (see Auto run).
 **Every session ends with the next step.** Whenever this session ends before
 the plan is finished - one of those four stops, a context-budget handoff, or
 your human partner asking you to stop - first
-reconcile live children exactly as dforge:handoff step 0 says: wait
+reconcile live children exactly as dagents:handoff step 0 says: wait
 for them, or `TaskStop` them and record a Ruling. Tell your partner which you
-did. Then run `scripts/next-step PLAN_FILE` (see using-dforge §Session
+did. Then run `scripts/next-step PLAN_FILE` (see using-dagents §Session
 Budget) as your last action. The
 last thing in your final message is the block it prints, verbatim. It also
 rewrites the `## Next session` section of
 `<latest.md>`; if it exits 4, say the handoff file could not
 be written. When the plan finishes,
-dforge:finishing-a-development-branch runs it instead.
+dagents:finishing-a-development-branch runs it instead.
 
 ## Setup
 
@@ -156,7 +156,7 @@ Read [setup.md](references/setup.md) before you set up the workspace, the ledger
 
 ## The Ledger
 
-This skill and dforge:subagent-driven-development share one grammar, so
+This skill and dagents:subagent-driven-development share one grammar, so
 a plan that changes mode mid-run leaves one readable record. The lines this
 mode writes:
 
@@ -223,7 +223,7 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   the agent-named assigned line, `fix round R/2`, `HANDBACK`, `parked`,
   dispatch `Ruling:` lines, `BLOCKED — <agent> exhausted`, and the complete line
   with `review clean` or `K parked` and its scores clause
-  (dforge:subagent-driven-development §The Ledger).
+  (dagents:subagent-driven-development §The Ledger).
 - A risk-3 task writes `fix round R/2` lines ending `; session)` and a
   reviewed complete line (delegated-task.md §The session review loop).
 
@@ -240,7 +240,7 @@ budget before every task at no extra request:
 - `ok` or `unknown`: carry on, however high the percentage. Only the verdict
   stops you.
 - `handoff`: finish the task in flight through its `Task N: complete` line,
-  then invoke dforge:handoff. Never hand off in the middle of a task,
+  then invoke dagents:handoff. Never hand off in the middle of a task,
   delegated ones included. The budget holds one task's worst growth.
 
 The plan's last two tasks never hand off in strict mode: their brief prints
@@ -274,7 +274,7 @@ For each task, in order:
    append `Task <N>: implementer inline (assigned; base <sha7>)`.
 3. **Implement exactly what the task names.** Follow its steps in order. Where
    the task says to write a test first, use
-   dforge:test-driven-development. Touch only the files and lines the
+   dagents:test-driven-development. Touch only the files and lines the
    task names; a change the task did not ask for is a deferred minor, not a
    bonus.
 4. **Run the verifications as written.** A step that says `Expected: PASS` is
@@ -339,12 +339,12 @@ deferred-minor lines.
 When the final review is clean and its fixes are committed, append
 `Final review: clean (commits <merge-base7>..<head7>[, K parked])` to the
 ledger. Do not delete the workspace:
-dforge:finishing-a-development-branch removes it with the worktree once
+dagents:finishing-a-development-branch removes it with the worktree once
 the work is merged or discarded, and until then it is what a later session
 resumes from.
 
 **Finishing is a Skill tool call in this same turn.** Call the Skill tool
-with `dforge:finishing-a-development-branch` right after the ledger
+with `dagents:finishing-a-development-branch` right after the ledger
 line. Writing its name in a message is not invoking it, and a turn that ends
 on a summary of the run leaves your human partner with no integration menu
 and no next step. Write no wrap-up message of your own: finishing's message is

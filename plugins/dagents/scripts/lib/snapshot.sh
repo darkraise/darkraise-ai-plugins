@@ -13,19 +13,19 @@
 
 SNAPSHOT_CAP=5500
 
-. "$(dirname "${BASH_SOURCE[0]}")/dforge-env.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/dagents-env.sh"
 
 snapshot_latest() { # CWD — the Next session block of this repository's latest.md
   local latest
-  latest=$(dforge_latest_file "$1") || return 0
+  latest=$(dagents_latest_file "$1") || return 0
   [ -f "$latest" ] || return 0
   echo "### From \`$latest\`"
   tr -d '\r' < "$latest" | awk '/^## Next session/ { f = 1; next } f && /^## / { exit } f'
 }
 
-snapshot_ledgers() { # CWD — every ledger dforge_ledger_files lists: last 8 lines, last 10 rulings
+snapshot_ledgers() { # CWD — every ledger dagents_ledger_files lists: last 8 lines, last 10 rulings
   local ledger _where plan_rel rulings
-  dforge_ledger_files "$1" | while IFS=$'\t' read -r ledger _where; do
+  dagents_ledger_files "$1" | while IFS=$'\t' read -r ledger _where; do
     plan_rel=$(ledger_plan "$ledger")
     echo "### Ledger \`$ledger\` (plan \`${plan_rel:-unknown}\`)"
     echo "Last lines:"
@@ -41,7 +41,7 @@ snapshot_ledgers() { # CWD — every ledger dforge_ledger_files lists: last 8 li
 # FILE — sections 4-6 from the transcript's last 3000 lines, separated by
 # @@4 / @@5 / @@6 marker lines.
 snapshot_transcript_sections() {
-  tail -n 3000 "$1" | tr -d '\r' | "${DFORGE_JQ:-jq}" -R -r -n '
+  tail -n 3000 "$1" | tr -d '\r' | "${DAGENTS_JQ:-jq}" -R -r -n '
     [inputs | select(length > 0) | (try fromjson catch null) | objects
      | select((.isSidechain // false) == false)] as $e
     | ([$e[] | select(.type == "assistant") | .message.content[]?
@@ -100,11 +100,11 @@ snapshot_build() {
 
 This session was just compacted. Trust this snapshot, the ledger and `git log`
 over the summary above. If anything is unclear, run `scripts/repo-audit` by its
-dforge plugin-root path, with the working directory inside the project;
-if the next budget line says `handoff`, run the dforge handoff skill.'
+dagents plugin-root path, with the working directory inside the project;
+if the next budget line says `handoff`, run the dagents handoff skill.'
   s2=$(snapshot_latest "$cwd")
   s3=$(snapshot_ledgers "$cwd")
-  if [ -n "$tp" ] && command -v "${DFORGE_JQ:-jq}" >/dev/null 2>&1; then
+  if [ -n "$tp" ] && command -v "${DAGENTS_JQ:-jq}" >/dev/null 2>&1; then
     if command -v cygpath >/dev/null 2>&1; then tp=$(cygpath -u "$tp"); fi
     if [ -f "$tp" ]; then
       raw=$(snapshot_transcript_sections "$tp")

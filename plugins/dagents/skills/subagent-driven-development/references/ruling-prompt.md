@@ -1,7 +1,7 @@
 # Ruling Seat Prompt Template
 
-Use this template when dforge:subagent-driven-development or
-dforge:executing-plans sends judgment items to the ruling seat. Each
+Use this template when dagents:subagent-driven-development or
+dagents:executing-plans sends judgment items to the ruling seat. Each
 skill's The Ruling Seat section says when, and how each verdict is carried
 out.
 
@@ -135,7 +135,7 @@ Subagent ([JUDGE]):
 
 **Placeholders:**
 - `[JUDGE]` — the `primary` that `scripts/review-route PLAN_FILE --ruling <kind>
-  [<task> ...]` prints, or `dforge:judge-opus` for a Header
+  [<task> ...]` prints, or `dagents:judge-opus` for a Header
   amendment's confirmation; no `model` or `effort` argument. On Codex, a native judge at Astra high or above.
 - `[N]`, `[POINT]` — the item count and the decision point, for the description.
 - `[SPEC_FILE]`, `[PLAN_FILE]` — REQUIRED: absolute paths.

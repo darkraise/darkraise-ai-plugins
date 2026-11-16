@@ -44,7 +44,7 @@ disagree.
 
 Codex runs no session-start hook, so nothing reports a repository or home that
 still uses an older layout. Run `scripts/repo-audit` once at the start of a
-session; if it prints an `older layout` line, use the `dforge:migrate` skill
+session; if it prints an `older layout` line, use the `dagents:migrate` skill
 before any other work.
 
 ## Waiting on children
@@ -127,8 +127,8 @@ recorded choice at once, so it needs no scheduler
 ## darkmem at session start
 
 Codex runs no hooks. In a repository that syncs with darkmem
-(`bash <plugin-root>/scripts/dforge-path project` prints its project), or one
-with a family still in the mirror (`bash <plugin-root>/scripts/dforge-path store`
+(`bash <plugin-root>/scripts/dagents-path project` prints its project), or one
+with a family still in the mirror (`bash <plugin-root>/scripts/dagents-path store`
 names `darkmem`), start each session with
 `bash <plugin-root>/scripts/darkmem-sync reconcile`, then `bash <plugin-root>/scripts/darkmem-sync pull`,
 and read what they print: a `darkmem-sync reconcile:` line names a family

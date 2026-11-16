@@ -159,18 +159,18 @@ cwd="$(dr_canonical "$cwd")" || die 'cannot resolve worktree'
 report="$(realpath -m -- "$report")" || die 'cannot resolve report path'
 case "$report" in
   "$cwd"/*)
-    case "$report" in "$cwd"/.dforge/*) ;; *) die 'report must be outside checkout or in ignored .dforge workspace' ;; esac
+    case "$report" in "$cwd"/.dagents/*) ;; *) die 'report must be outside checkout or in ignored .dagents workspace' ;; esac
     git -C "$cwd" check-ignore -q -- "$report" || die 'report workspace is not ignored'
     [ -z "$(git -C "$cwd" ls-files -- "$report")" ] || die 'report cannot be tracked' ;;
 esac
 dr_task_open "$cwd" "$task_id" "$write_set" || die 'task preflight failed'
 trap 'dr_task_unlock' EXIT
-record="$DR_TASK_DIR/state.json"
+record="$DAGENTS_TASK_DIR/state.json"
 phase="$(jq -r .phase < "$record")"
 case "$phase" in ready|pending|complete) ;; *) die "task phase $phase requires explicit recovery" ;; esac
 [ "$(jq -r '.released // false' < "$record")" = false ] || die 'task ownership was released; use a new task ID'
 [ "$(git -C "$cwd" rev-parse HEAD)" = "$(jq -r .expected_head < "$record")" ] || die 'HEAD drift requires reconciliation'
-before_snapshot="$DR_TASK_DIR/before.json"
+before_snapshot="$DAGENTS_TASK_DIR/before.json"
 if [ "$phase" != ready ]; then
   jq '.pending // .baseline' < "$record" > "$before_snapshot" && dr_task_assert_snapshot "$before_snapshot" || die 'pending/index/worktree drift requires reconciliation'
 fi
@@ -184,8 +184,8 @@ fi
 dr_snapshot "$cwd" "$before_snapshot" || die 'cannot snapshot worktree'
 human_report="$report"
 attempt="$(jq '.attempts | length + 1' < "$record")"
-report="$DR_TASK_DIR/attempt-$attempt.md"
-prompt="$DR_TASK_DIR/prompt/attempt-$attempt.md"
+report="$DAGENTS_TASK_DIR/attempt-$attempt.md"
+prompt="$DAGENTS_TASK_DIR/prompt/attempt-$attempt.md"
 dr_task_update '.model = $model | .effort = $effort | .baseline = $snapshot[0] | .candidate = null |
   .attempts += [{number:$attempt,model:$model,effort:$effort,resume:$resume,prior_thread:.thread}] |
   .review_rounds = (if $review_round == "" then .review_rounds else ($review_round | tonumber) end) |
@@ -199,7 +199,7 @@ last="$report.last.json"
 
 # agy is given access to the prompt directory, so it holds nothing but prompt
 # files; the task record stays one level up, out of its reach.
-mkdir -p "$DR_TASK_DIR/prompt" || die 'cannot create prompt directory'
+mkdir -p "$DAGENTS_TASK_DIR/prompt" || die 'cannot create prompt directory'
 {
   cat "$brief"
   # The host repo may have either file or neither. Inlining beats assuming:
@@ -232,7 +232,7 @@ record_refs() { # record_refs <file>
   # branch each stash was made on, which is what attributes one to this task.
   git -C "$cwd" stash list --format='%H %gs' | tr -d '\r' > "$1.stash"
 }
-record_refs "$DR_TASK_DIR/refs-before.txt" || die 'cannot record git refs'
+record_refs "$DAGENTS_TASK_DIR/refs-before.txt" || die 'cannot record git refs'
 
 # The interrupted-run guard and the unlock both live here, because the EXIT
 # trap is the only thing that releases the worktree lock. An interrupt also
@@ -269,7 +269,7 @@ dr_task_update '.phase = "running" | .processes = []' || die 'cannot persist run
 # CreateProcess limit.
 pointer="Your complete instructions are in $(dr_native_path "$prompt"). Read the whole file first and follow it."
 agy_args=(--output-format json --json-schema "$(dr_native_path "$SCHEMA")" --model "$model" --effort "$effort"
-  --dangerously-skip-permissions --add-dir "$(dr_native_path "$DR_TASK_DIR/prompt")" --print-timeout "${timeout_s}s")
+  --dangerously-skip-permissions --add-dir "$(dr_native_path "$DAGENTS_TASK_DIR/prompt")" --print-timeout "${timeout_s}s")
 [ -n "$thread" ] && agy_args+=(--conversation "$thread")
 agy_args+=(-p "$pointer")
 
@@ -428,10 +428,10 @@ fi
 # made on its branch - plus any change that can lose work: a deleted ref or
 # stash entry, a tag, or a branch moved to a commit that does not descend from
 # where it was. Other changes are listed in the report; refs/remotes is ignored.
-record_refs "$DR_TASK_DIR/refs-after.txt" || die 'cannot record git refs'
+record_refs "$DAGENTS_TASK_DIR/refs-after.txt" || die 'cannot record git refs'
 guard=''
 outside=''
-own=$(awk '$1 == "HEAD" { print $3 }' "$DR_TASK_DIR/refs-before.txt")
+own=$(awk '$1 == "HEAD" { print $3 }' "$DAGENTS_TASK_DIR/refs-before.txt")
 while read -r ref old new; do
   [ -n "$ref" ] || continue
   if [ "$new" = - ] || [ "$ref" = "$own" ] || [[ "$ref" == refs/tags/* || "$ref" == refs/bisect/* || "$ref" == refs/worktree/* ]] ||
@@ -444,10 +444,10 @@ done < <(awk 'FILENAME == ARGV[1] && /^refs\// { b[$1] = $2 } FILENAME == ARGV[2
   END {
     for (r in b) if (!(r in a)) print r, b[r], "-"; else if (a[r] != b[r]) print r, b[r], a[r]
     for (r in a) if (!(r in b)) print r, "-", a[r]
-  }' "$DR_TASK_DIR/refs-before.txt" "$DR_TASK_DIR/refs-after.txt" | awk '$1 != "refs/stash" && $1 !~ /^refs\/remotes\//' | LC_ALL=C sort)
+  }' "$DAGENTS_TASK_DIR/refs-before.txt" "$DAGENTS_TASK_DIR/refs-after.txt" | awk '$1 != "refs/stash" && $1 !~ /^refs\/remotes\//' | LC_ALL=C sort)
 if [ -z "$guard" ]; then
   stash_dropped=$(awk 'FILENAME == ARGV[1] { b[$1]; next } { a[$1] } END { for (s in b) if (!(s in a)) print s }' \
-    "$DR_TASK_DIR/refs-before.txt.stash" "$DR_TASK_DIR/refs-after.txt.stash")
+    "$DAGENTS_TASK_DIR/refs-before.txt.stash" "$DAGENTS_TASK_DIR/refs-after.txt.stash")
   stash_mine=no stash_other=no
   while read -r _ stash_subject; do
     if [ "$own" = detached ] || [[ "$stash_subject" == "WIP on ${own#refs/heads/}:"* || "$stash_subject" == "On ${own#refs/heads/}:"* ]]; then
@@ -455,7 +455,7 @@ if [ -z "$guard" ]; then
     else
       stash_other=yes
     fi
-  done < <(awk 'FILENAME == ARGV[1] { b[$1]; next } !($1 in b)' "$DR_TASK_DIR/refs-before.txt.stash" "$DR_TASK_DIR/refs-after.txt.stash")
+  done < <(awk 'FILENAME == ARGV[1] { b[$1]; next } !($1 in b)' "$DAGENTS_TASK_DIR/refs-before.txt.stash" "$DAGENTS_TASK_DIR/refs-after.txt.stash")
   if [ -n "$stash_dropped" ] || [ "$stash_mine" = yes ]; then
     guard='agy changed git refs: refs/stash'
   elif [ "$stash_other" = yes ]; then
@@ -464,7 +464,7 @@ if [ -z "$guard" ]; then
 fi
 if [ -n "$guard" ]; then
   :
-elif [ "$(grep '^HEAD ' "$DR_TASK_DIR/refs-before.txt")" != "$(grep '^HEAD ' "$DR_TASK_DIR/refs-after.txt")" ]; then
+elif [ "$(grep '^HEAD ' "$DAGENTS_TASK_DIR/refs-before.txt")" != "$(grep '^HEAD ' "$DAGENTS_TASK_DIR/refs-after.txt")" ]; then
   guard='agy changed git refs: HEAD'
 elif [ "$(git -C "$cwd" ls-files --stage -z | base64 | tr -d '\r\n')" != "$(jq -r .index < "$before_snapshot" | tr -d '\r')" ]; then
   guard='agy changed the git index'
@@ -484,8 +484,8 @@ elif [ "$status" = DONE ]; then
   if [ "$(git -C "$cwd" rev-parse HEAD)" = "$base" ]; then committed=empty; else committed=yes; fi
 else
   dr_task_validate_scope "$before_snapshot" || { dr_task_block 'unexpected diff after incomplete run'; die 'task scope drift'; }
-  dr_snapshot "$cwd" "$DR_TASK_DIR/pending-snapshot.json" &&
-    dr_task_update '.phase = "pending" | .pending = $snapshot[0]' --slurpfile snapshot "$DR_TASK_DIR/pending-snapshot.json" || die 'cannot persist pending task'
+  dr_snapshot "$cwd" "$DAGENTS_TASK_DIR/pending-snapshot.json" &&
+    dr_task_update '.phase = "pending" | .pending = $snapshot[0]' --slurpfile snapshot "$DAGENTS_TASK_DIR/pending-snapshot.json" || die 'cannot persist pending task'
 fi
 
 head=$(git -C "$cwd" rev-parse HEAD)

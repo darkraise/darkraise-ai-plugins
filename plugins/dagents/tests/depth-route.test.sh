@@ -24,18 +24,18 @@ absent() { # absent <name> <haystack> <needle>
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 # The darkmem cases below set their own home; every other case reads this one,
-# never the developer's ~/.dforge.
+# never the developer's ~/.dagents.
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 
 REPO="$TMP/repo"
 git init -q "$REPO"
-mkdir -p "$REPO/docs/dforge/specs" "$REPO/docs/dforge/plans"
-cp "$FIX"/spec-*.md "$REPO/docs/dforge/specs/"
+mkdir -p "$REPO/docs/dagents/specs" "$REPO/docs/dagents/plans"
+cp "$FIX"/spec-*.md "$REPO/docs/dagents/specs/"
 
 route() { (cd "$REPO" && bash "$ROUTE" "$@" 2>&1); }
 
-# mkplan NAME SPEC EXTRA RISK... — docs/dforge/plans/NAME.md with one task per
+# mkplan NAME SPEC EXTRA RISK... — docs/dagents/plans/NAME.md with one task per
 # RISK. SPEC is a spec fixture's basename ("" for no Spec line), EXTRA a header
 # line ("" for none). A RISK of "-" writes a task with no Evaluation line, "?" an
 # Evaluation line that does not parse, and "3t8" risk 3 with a total of 8.
@@ -49,7 +49,7 @@ mkplan() {
 |**Goal:** Fixture.
 |
 HEAD
-    [ -z "$spec" ] || printf '**Spec:** docs/dforge/specs/%s.md\n\n' "$spec"
+    [ -z "$spec" ] || printf '**Spec:** docs/dagents/specs/%s.md\n\n' "$spec"
     [ -z "$extra" ] || printf '%s\n\n' "$extra"
     printf '## Task index\n\n'
     for r in "$@"; do
@@ -62,9 +62,9 @@ HEAD
         *) printf '**Evaluation:** files 0 - spec 0 - coupling 0 - risk %s = %s\n\n' "$r" "$r" ;;
       esac
     done
-  } > "$REPO/docs/dforge/plans/$name.md"
+  } > "$REPO/docs/dagents/plans/$name.md"
 }
-plan_line() { route "docs/dforge/plans/$1.md"; }
+plan_line() { route "docs/dagents/plans/$1.md"; }
 
 # --- the library functions ---
 check "depth_rank light" "$(depth_rank light)" "0"
@@ -118,7 +118,7 @@ out=$(route --bogus); st=$?
 check "an unknown option exits 2" "$st:$out" "2:depth-route: unknown option: --bogus"
 out=$(route --spec-triggers); st=$?
 check "--spec-triggers without a list exits 2" "$st" "2"
-out=$(route docs/dforge/plans/missing.md); st=$?
+out=$(route docs/dagents/plans/missing.md); st=$?
 check "a missing plan exits 2" "$st" "2"
 check "a missing plan is named" "${out%%:*}:$(grep -c 'no such plan file' <<<"$out")" "depth-route:1"
 
@@ -183,8 +183,8 @@ check "a risk 3 task still raises an owner light spec to full" "$(plan_line owne
 # --- A3: the plan is read with its amendments applied ---
 mkplan amend spec-light "" 1 1
 check "before the amendment: light" "$(plan_line amend)" "depth=light spec=light tasks=light reason=spec,task-risk:1"
-mkdir -p "$REPO/.dforge/sdd/amend"
-sed 's/^|//' > "$REPO/.dforge/sdd/amend/amendments.md" <<'AMEND'
+mkdir -p "$REPO/.dagents/sdd/amend"
+sed 's/^|//' > "$REPO/.dagents/sdd/amend/amendments.md" <<'AMEND'
 |## A1 — Task 2
 |
 |### Old
@@ -200,16 +200,16 @@ sed 's/^|//' > "$REPO/.dforge/sdd/amend/amendments.md" <<'AMEND'
 |````
 AMEND
 check "after the amendment: full" "$(plan_line amend)" "depth=full spec=light tasks=full reason=task-risk:2"
-sed 's/risk 1 = 1/risk 2 = 2/' "$REPO/.dforge/sdd/amend/amendments.md" > "$TMP/broken-amend.md"
-cp "$TMP/broken-amend.md" "$REPO/.dforge/sdd/amend/amendments.md"
+sed 's/risk 1 = 1/risk 2 = 2/' "$REPO/.dagents/sdd/amend/amendments.md" > "$TMP/broken-amend.md"
+cp "$TMP/broken-amend.md" "$REPO/.dagents/sdd/amend/amendments.md"
 out=$(plan_line amend); st=$?
 check "an amendment that does not apply exits 2" "$st:$out" "2:depth-route: an amendment does not apply; run plan-lint"
-rm -rf "$REPO/.dforge/sdd/amend"
+rm -rf "$REPO/.dagents/sdd/amend"
 
 # --- A16: the Depth line is read by its first word, in the darkmem mirror too ---
 mkplan first-word spec-standard "" 0
 check "a Depth line with trailing text gives spec=standard" "$(plan_line first-word | grep -o 'spec=[a-z]*')" "spec=standard"
-sed 's/$/\r/' "$REPO/docs/dforge/specs/spec-light.md" > "$REPO/docs/dforge/specs/spec-crlf.md"
+sed 's/$/\r/' "$REPO/docs/dagents/specs/spec-light.md" > "$REPO/docs/dagents/specs/spec-crlf.md"
 mkplan crlf spec-crlf "" 0
 check "a CRLF spec is read" "$(plan_line crlf | grep -o 'spec=[a-z]*')" "spec=light"
 
@@ -217,12 +217,12 @@ check "a CRLF spec is read" "$(plan_line crlf | grep -o 'spec=[a-z]*')" "spec=li
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q "$SR"
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/dforge/specs" "$M/dforge/plans"
-cp "$FIX/spec-standard.md" "$M/dforge/specs/s.md"
-printf '# P\n\n**Goal:** Fixture.\n\n**Spec:** docs/dforge/specs/s.md\n\n## Task index\n\n### Task 1: One\n\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n' > "$M/dforge/plans/p.md"
-out=$(cd "$SR" && HOME=$SH bash "$ROUTE" docs/dforge/plans/p.md 2>&1)
+mkdir -p "$M/dagents/specs" "$M/dagents/plans"
+cp "$FIX/spec-standard.md" "$M/dagents/specs/s.md"
+printf '# P\n\n**Goal:** Fixture.\n\n**Spec:** docs/dagents/specs/s.md\n\n## Task index\n\n### Task 1: One\n\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n' > "$M/dagents/plans/p.md"
+out=$(cd "$SR" && HOME=$SH bash "$ROUTE" docs/dagents/plans/p.md 2>&1)
 check "a spec in the darkmem mirror resolves as plan-lint resolves it" "$out" "depth=standard spec=standard tasks=light reason=spec"
-out=$(cd "$SR" && HOME=$SH bash "$ROUTE" "$M/dforge/plans/p.md" 2>&1)
+out=$(cd "$SR" && HOME=$SH bash "$ROUTE" "$M/dagents/plans/p.md" 2>&1)
 check "the mirror plan is also found by its absolute path" "$out" "depth=standard spec=standard tasks=light reason=spec"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

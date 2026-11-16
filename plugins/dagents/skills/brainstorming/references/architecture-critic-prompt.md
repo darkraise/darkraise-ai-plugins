@@ -4,7 +4,7 @@ Use this template when dispatching the architecture critic: step 10 of the
 architectural checklist, after the spec self-review and before the spec review.
 
 ```
-Subagent (dforge:judge-opus; on a Codex host, a native judge at rank 8 or above):
+Subagent (dagents:judge-opus; on a Codex host, a native judge at rank 8 or above):
   description: "Critique the spec's design"
   prompt: |
     You are a principal engineer reviewing a design before anyone builds it.
@@ -46,5 +46,5 @@ Subagent (dforge:judge-opus; on a Codex host, a native judge at rank 8 or above)
 **Placeholders:** `[SPEC_FILE_PATH]` and `[REPO_ROOT]` are paths; `[DESIGN_SECTIONS]`
 is the approved design sections, verbatim, or under `autoRun=on` the spec's
 `## Decisions` section, verbatim; `[PLUGIN_ROOT]` is the resolved
-dforge plugin directory. `[REPORT_FILE]` is `<state>/critic-<spec name>-report.md`,
+dagents plugin directory. `[REPORT_FILE]` is `<state>/critic-<spec name>-report.md`,
 `<spec name>` the spec's file name without `.md`.

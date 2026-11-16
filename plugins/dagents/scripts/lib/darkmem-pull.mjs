@@ -142,7 +142,7 @@ function removeVanished({ roots, state, persist, report }, filed) {
   }
 }
 
-// Every document under dforge/ but the archives. Uris that differ only
+// Every document under dagents/ but the archives. Uris that differ only
 // in case are one file on a case-insensitive file system, so none of them is
 // written. A docs root that is gone entirely is a lost mirror, not a set of
 // deletions, so every document is pulled back into it.

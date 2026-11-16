@@ -36,17 +36,17 @@ export function makeRepo() {
   return dir;
 }
 
-// A HOME whose ~/.dforge/config.json maps `repo` to `project` with darkmem
+// A HOME whose ~/.dagents/config.json maps `repo` to `project` with darkmem
 // enabled (`enabled: false` leaves darkmemEnabled out, `enabled: "off"` sets it false).
 // `config` replaces the file's content (a string is written verbatim); null
-// writes no file at all. `stores` is the ~/.dforge/stores.json entry for
+// writes no file at all. `stores` is the ~/.dagents/stores.json entry for
 // `repo` (both families applied darkmem by default); null writes no record.
 export function makeHome({
   repo, url = "http://127.0.0.1:9", project = "proj", config, enabled = true,
   stores = { documents: "darkmem", progress: "darkmem" },
 } = {}) {
   const home = scratch("dms-home-");
-  const dir = path.join(home, ".dforge");
+  const dir = path.join(home, ".dagents");
   const mapping = { darkmem: { url, api_key_env: "DARKMEM_API_KEY", repos: { [repo]: { project } } } };
   if (enabled === true) mapping.darkmemEnabled = true;
   if (enabled === "off") mapping.darkmemEnabled = false;
@@ -64,10 +64,10 @@ export function makeHome({
     ...process.env,
     HOME: home,
     DARKMEM_API_KEY: KEY,
-    DFORGE_SESSION_ID: "sess-1",
-    DARKMEM_SYNC_TIMEOUT_MS: "3000",
+    DAGENTS_SESSION_ID: "sess-1",
+    DAGENTS_DARKMEM_SYNC_TIMEOUT_MS: "3000",
   };
-  return { home, env, mirror, docsRoot: path.join(mirror, "dforge"), workRoot: path.join(mirror, "work") };
+  return { home, env, mirror, docsRoot: path.join(mirror, "dagents"), workRoot: path.join(mirror, "work") };
 }
 
 // Runs scripts/darkmem-sync asynchronously: a stub server in this process
@@ -103,6 +103,6 @@ export function namedPipe(file) {
 // first injected failure meets the command, not that check.
 export function markMigrated(mirror) {
   write(path.join(mirror, ".sync-state.json"), JSON.stringify({
-    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [], pendingLinks: [], prefix: "dforge",
+    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: null, conflicts: [], pendingLinks: [], prefix: "dagents",
   }));
 }

@@ -21,7 +21,7 @@ over_cap() { # over_cap <skills dir> — one line per SKILL.md over the cap
   for f in "$1"/*/SKILL.md; do
     [ -f "$f" ] || continue
     bytes=$(wc -c < "$f" | tr -d ' \r')
-    [ "$bytes" -le "$CAP" ] || printf 'skill-size: plugins/dforge/skills/%s/SKILL.md %s bytes (cap %s)\n' "$(basename "$(dirname "$f")")" "$bytes" "$CAP"
+    [ "$bytes" -le "$CAP" ] || printf 'skill-size: plugins/dagents/skills/%s/SKILL.md %s bytes (cap %s)\n' "$(basename "$(dirname "$f")")" "$bytes" "$CAP"
   done
 }
 
@@ -32,7 +32,7 @@ head -c 20000 /dev/zero | tr '\0' x > "$TMP/at/SKILL.md"
 head -c 20001 /dev/zero | tr '\0' x > "$TMP/over/SKILL.md"
 head -c 30000 /dev/zero | tr '\0' x > "$TMP/way-over/SKILL.md"
 check "a skill at the cap passes; each skill over it is named with its size" "$(over_cap "$TMP")" \
-  "$(printf 'skill-size: plugins/dforge/skills/over/SKILL.md 20001 bytes (cap 20000)\nskill-size: plugins/dforge/skills/way-over/SKILL.md 30000 bytes (cap 20000)')"
+  "$(printf 'skill-size: plugins/dagents/skills/over/SKILL.md 20001 bytes (cap 20000)\nskill-size: plugins/dagents/skills/way-over/SKILL.md 30000 bytes (cap 20000)')"
 
 over=$(over_cap "$P/skills")
 [ -z "$over" ] || printf '%s\n' "$over"

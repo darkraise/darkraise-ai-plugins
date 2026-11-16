@@ -1,6 +1,6 @@
 # Task Review - Verifier Criteria
 
-Applied by dforge:subagent-driven-development when a task
+Applied by dagents:subagent-driven-development when a task
 reviewer scores one task's implementation.
 
 ## Ground Truth Note

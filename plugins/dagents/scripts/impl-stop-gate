@@ -22,7 +22,7 @@
 # that repeats its reply cannot be blocked for ever; each appends one line to
 # <state>/impl-stop-gate.log. When the gate has to let a stop through because
 # it cannot read its input or keep its counter, it appends a line to
-# ${XDG_STATE_HOME:-$HOME/.local/state}/dforge/impl-stop-gate.log instead
+# ${XDG_STATE_HOME:-$HOME/.local/state}/dagents/impl-stop-gate.log instead
 # (private, never through a symlink, control characters dropped).
 set -uo pipefail
 export LC_ALL=C
@@ -33,7 +33,7 @@ clean() { printf '%s' "${1//[[:cntrl:]]/}"; }
 # created private. A symlink in place of the directory or the file is never
 # followed, and control characters, newlines included, are dropped from the line.
 note() {
-  local dir="${XDG_STATE_HOME:-${HOME:-}/.local/state}/dforge" file line
+  local dir="${XDG_STATE_HOME:-${HOME:-}/.local/state}/dagents" file line
   [ -n "${XDG_STATE_HOME:-}${HOME:-}" ] || return 0
   file=$dir/impl-stop-gate.log
   line="$(date +%s 2>/dev/null) impl-stop-gate: $(clean "$1")"
@@ -68,7 +68,7 @@ sha256() {
 why=""
 locate_counter() {
   cd "${cwd:-$PWD}" 2>/dev/null || { why="cannot enter ${cwd:-$PWD}"; return 1; }
-  state=$(bash "$HERE/dforge-path" state 2>/dev/null | tr -d '\r') || { why="cannot find the state directory"; return 1; }
+  state=$(bash "$HERE/dagents-path" state 2>/dev/null | tr -d '\r') || { why="cannot find the state directory"; return 1; }
   [ -n "$state" ] || { why="cannot find the state directory"; return 1; }
   dir="$state/impl-stop-gate"
   counter="$dir/$agent_id"

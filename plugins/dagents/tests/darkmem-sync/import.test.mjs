@@ -12,11 +12,11 @@ async function setup(t, stubOptions = {}) {
   t.after(() => stub.close());
   const repo = makeRepo();
   const home = makeHome({ repo, url: stub.url });
-  write(path.join(repo, "docs", "dforge", "specs", "s.md"), "# Spec\n");
-  write(path.join(repo, "docs", "dforge", "plans", "p1.md"), "# P1\n\n**Spec:** `docs/superpowers/specs/s.md`\n");
-  write(path.join(repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER);
-  write(path.join(repo, ".dforge", "sdd", "p1", "handoff.md"), "# p1 handoff\n");
-  write(path.join(repo, ".dforge", "sdd", "brief-only", "task-1-brief.md"), "not synced\n");
+  write(path.join(repo, "docs", "dagents", "specs", "s.md"), "# Spec\n");
+  write(path.join(repo, "docs", "dagents", "plans", "p1.md"), "# P1\n\n**Spec:** `docs/superpowers/specs/s.md`\n");
+  write(path.join(repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER);
+  write(path.join(repo, ".dagents", "sdd", "p1", "handoff.md"), "# p1 handoff\n");
+  write(path.join(repo, ".dagents", "sdd", "brief-only", "task-1-brief.md"), "not synced\n");
   const importing = (...args) => run(["import", ...args], { cwd: repo, env: home.env });
   return { stub, repo, ...home, importing };
 }
@@ -28,7 +28,7 @@ test("import files every document, closes each ledger as a retained workstream, 
   assert.match(result.stdout, /note: verified: a pull of every imported file reads back byte-identical/);
   assert.match(result.stdout, /darkmem-sync import: 3 documents, 1 workstreams; 0 conflicts, 0 failures/);
   assert.deepEqual([...s.stub.db.documents.keys()].map(k => k.split("\u0000")[1]).sort(), [
-    "dforge/handoff/p1.md", "dforge/plans/p1.md", "dforge/specs/s.md",
+    "dagents/handoff/p1.md", "dagents/plans/p1.md", "dagents/specs/s.md",
   ]);
   const [ws] = s.stub.db.workstreams;
   assert.equal(ws.key, "p1");
@@ -42,9 +42,9 @@ test("import files every document, closes each ledger as a retained workstream, 
     "| a | b |\r\n\r\n",
     "Task 2: complete\n",
   ]);
-  const mtime = fs.statSync(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md")).mtime.toISOString();
+  const mtime = fs.statSync(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md")).mtime.toISOString();
   assert.deepEqual(ws.properties, {
-    plan_uri: "dforge/plans/p1.md", spec_uri: "dforge/specs/s.md", handoff_uri: "dforge/handoff/p1.md", imported_mtime: mtime,
+    plan_uri: "dagents/plans/p1.md", spec_uri: "dagents/specs/s.md", handoff_uri: "dagents/handoff/p1.md", imported_mtime: mtime,
   });
 });
 
@@ -67,7 +67,7 @@ test("a re-run refuses a workstream darkmem already holds; --replace purges and 
 test("a ledger of more than 100 pieces spans several appends in one workstream", async t => {
   const s = await setup(t);
   const big = Array.from({ length: 250 }, (_, i) => `Task ${i}: complete\n\n`).join("");
-  write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), big);
+  write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), big);
   assert.equal((await s.importing()).code, 0);
   const [ws] = s.stub.db.workstreams;
   assert.equal(ws.entries.length, 250);
@@ -79,7 +79,7 @@ test("the verification fails the import on a single changed byte", async t => {
   const s = await setup(t, { transformContent: content => content.replace("# Spec", "# Spex") });
   const result = await s.importing();
   assert.equal(result.code, 1);
-  const failed = /failed: dforge\/specs\/s\.md: a pull of darkmem's copy differs from the source; compare under (\S+)/.exec(result.stdout);
+  const failed = /failed: dagents\/specs\/s\.md: a pull of darkmem's copy differs from the source; compare under (\S+)/.exec(result.stdout);
   assert.ok(failed, result.stdout);
   fs.rmSync(failed[1], { recursive: true, force: true });
 });
@@ -99,11 +99,11 @@ test("a refused document and a refused ledger are reported once, and no scratch 
 
 test("a document darkmem holds with other content refuses the import; --replace overwrites only the version it read", async t => {
   const s = await setup(t);
-  const key = "proj\u0000dforge/specs/s.md";
-  s.stub.db.documents.set(key, storedDocument("proj", "dforge/specs/s.md", "# Spec, newer on darkmem\n"));
+  const key = "proj\u0000dagents/specs/s.md";
+  s.stub.db.documents.set(key, storedDocument("proj", "dagents/specs/s.md", "# Spec, newer on darkmem\n"));
   const refused = await s.importing();
   assert.equal(refused.code, 1, refused.stdout);
-  assert.match(refused.stdout, /failed: darkmem already holds different content for dforge\/specs\/s\.md; pull and compare, or run import --replace/);
+  assert.match(refused.stdout, /failed: darkmem already holds different content for dagents\/specs\/s\.md; pull and compare, or run import --replace/);
   assert.match(refused.stdout, /note: nothing was imported/);
   assert.equal(s.stub.db.documents.get(key).content, "# Spec, newer on darkmem\n");
   assert.equal(s.stub.db.requests.filter(r => r.method !== "GET").length, 0);
@@ -112,11 +112,11 @@ test("a document darkmem holds with other content refuses the import; --replace 
   s.stub.db.onRequest = (method, route) => {
     if (method !== "POST" || route !== "/api/v1/documents") return;
     s.stub.db.onRequest = null;
-    s.stub.db.documents.set(key, storedDocument("proj", "dforge/specs/s.md", "# Spec, edited again\n"));
+    s.stub.db.documents.set(key, storedDocument("proj", "dagents/specs/s.md", "# Spec, edited again\n"));
   };
   const raced = await s.importing("--replace");
   assert.equal(raced.code, 1, raced.stdout);
-  assert.match(raced.stdout, /failed: dforge\/specs\/s\.md: changed on darkmem during the import, so it was not overwritten/);
+  assert.match(raced.stdout, /failed: dagents\/specs\/s\.md: changed on darkmem during the import, so it was not overwritten/);
   assert.equal(s.stub.db.documents.get(key).content, "# Spec, edited again\n");
 
   const replaced = await s.importing("--replace");
@@ -126,7 +126,7 @@ test("a document darkmem holds with other content refuses the import; --replace 
 
 test("an empty source file refuses the whole import before any write", async t => {
   const s = await setup(t);
-  write(path.join(s.repo, "docs", "dforge", "notes", "empty.md"), "");
+  write(path.join(s.repo, "docs", "dagents", "notes", "empty.md"), "");
   const result = await s.importing();
   assert.equal(result.code, 1);
   assert.match(result.stdout, /failed: .*empty\.md: empty or not UTF-8 text/);
@@ -147,7 +147,7 @@ test("--replace purges before any document is written, so a refused purge writes
 
 test("a plan directory whose name cannot be a workstream key refuses the import", async t => {
   const s = await setup(t);
-  write(path.join(s.repo, ".dforge", "sdd", "bad name", "progress.md"), "x\n");
+  write(path.join(s.repo, ".dagents", "sdd", "bad name", "progress.md"), "x\n");
   const result = await s.importing();
   assert.equal(result.code, 1);
   assert.match(result.stdout, /failed: .*bad name: not a usable workstream key/);
@@ -158,7 +158,7 @@ test("a source file changed during the import fails its verification", async t =
   let repo = null;
   const s = await setup(t, {
     onRequest: request => {
-      if (request.method === "GET" && request.path === "/api/v1/documents/by-uri" && repo) write(path.join(repo, "docs", "dforge", "specs", "s.md"), "# Spec, edited mid-import\n");
+      if (request.method === "GET" && request.path === "/api/v1/documents/by-uri" && repo) write(path.join(repo, "docs", "dagents", "specs", "s.md"), "# Spec, edited mid-import\n");
     },
   });
   repo = s.repo;
@@ -180,11 +180,11 @@ test("a verified import records documents, never progress, as applied darkmem", 
   t.after(() => stub.close());
   const repo = makeRepo();
   const home = makeHome({ repo, url: stub.url, stores: null });
-  write(path.join(repo, "docs", "dforge", "specs", "s.md"), "# Spec\n");
-  write(path.join(repo, ".dforge", "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/dforge/plans/p1.md\nTask 1: complete\n");
+  write(path.join(repo, "docs", "dagents", "specs", "s.md"), "# Spec\n");
+  write(path.join(repo, ".dagents", "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/dagents/plans/p1.md\nTask 1: complete\n");
   const result = await run(["import"], { cwd: repo, env: home.env });
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  const record = JSON.parse(fs.readFileSync(path.join(home.home, ".dforge", "stores.json"), "utf8"));
+  const record = JSON.parse(fs.readFileSync(path.join(home.home, ".dagents", "stores.json"), "utf8"));
   assert.deepEqual(record, { [repo]: { project: "proj", mirror: home.mirror, documents: "darkmem" } });
   assert.match(result.stdout, /^note: recorded documents as applied darkmem in .*stores\.json$/m);
 });
@@ -195,11 +195,11 @@ test("an import with documents configured local records nothing", async t => {
   const repo = makeRepo();
   const config = { darkmemEnabled: true, documentStore: "local", darkmem: { url: stub.url, api_key_env: "DARKMEM_API_KEY", repos: { [repo]: { project: "proj" } } } };
   const home = makeHome({ repo, config, stores: null });
-  write(path.join(repo, "docs", "dforge", "specs", "s.md"), "# Spec\n");
-  write(path.join(repo, ".dforge", "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/dforge/plans/p1.md\nTask 1: complete\n");
+  write(path.join(repo, "docs", "dagents", "specs", "s.md"), "# Spec\n");
+  write(path.join(repo, ".dagents", "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/dagents/plans/p1.md\nTask 1: complete\n");
   const result = await run(["import"], { cwd: repo, env: home.env });
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.equal(fs.existsSync(path.join(home.home, ".dforge", "stores.json")), false);
+  assert.equal(fs.existsSync(path.join(home.home, ".dagents", "stores.json")), false);
 });
 
 test("an import with a refused document records nothing", async t => {
@@ -207,9 +207,9 @@ test("an import with a refused document records nothing", async t => {
   t.after(() => stub.close());
   const repo = makeRepo();
   const home = makeHome({ repo, url: stub.url, stores: null });
-  write(path.join(repo, "docs", "dforge", "specs", "s.md"), "# Spec\n");
+  write(path.join(repo, "docs", "dagents", "specs", "s.md"), "# Spec\n");
   stub.db.failures.push({ method: "POST", path: "/api/v1/documents", status: 422, detail: "refused" });
   const result = await run(["import"], { cwd: repo, env: home.env });
   assert.equal(result.code, 1, result.stdout);
-  assert.equal(fs.existsSync(path.join(home.home, ".dforge", "stores.json")), false);
+  assert.equal(fs.existsSync(path.join(home.home, ".dagents", "stores.json")), false);
 });

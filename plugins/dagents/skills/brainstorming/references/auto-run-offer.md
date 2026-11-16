@@ -3,7 +3,7 @@
 Unless `autoRun=off` (see Settings) or this is a Codex host, ask this once, as
 its own message, right after the Draft acceptance step and before you
 write the spec. `<finish>` follows the `finishAction`
-setting (`scripts/dforge-config get finishAction`): `merge` reads "merge to
+setting (`scripts/dagents-config get finishAction`): `merge` reads "merge to
 <the current branch>", `pr` reads "open a pull request", and `keep`, `ask` and
 `wait` read "keep the branch".
 

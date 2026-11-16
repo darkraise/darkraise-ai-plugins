@@ -5,7 +5,7 @@ description: Deprecated — use only when a plan's Execution line names subagent
 
 # Subagent-Driven Development
 
-> **Deprecated.** dforge:executing-plans replaces this skill: every new plan runs inline.
+> **Deprecated.** dagents:executing-plans replaces this skill: every new plan runs inline.
 > It stays runnable for plans whose Execution line names `subagent`; a later release deletes it.
 
 ## After compaction
@@ -17,7 +17,7 @@ back. Before anything else:
 0. In an auto run, when `scripts/auto-run status` says setup is due, or when
    no ledger names this plan, no task has started: skip the rest of this
    section and follow Setup from its first step.
-1. Run `scripts/sdd-workspace PLAN_FILE` (see using-dforge §Session Budget),
+1. Run `scripts/sdd-workspace PLAN_FILE` (see using-dagents §Session Budget),
    and read `progress.md` and `handoff.md` in `<ledger dir>`, not in the
    directory it prints: while progress lives in darkmem the two differ.
 2. Trust the ledger and `git log` over the summary. Read
@@ -41,7 +41,7 @@ back. Before anything else:
    never hands off. In an auto run it also moves the run to the final phase,
    and a `compact` line still ends the turn on `Auto run: compacting`.
    Otherwise run `scripts/context-size`; on exit 5, finish the task in flight,
-   then invoke dforge:handoff. In an auto run, exit 6 (`compact`) is
+   then invoke dagents:handoff. In an auto run, exit 6 (`compact`) is
    [auto-run.md](../../reference/auto-run.md) §The budget line.
 4. Re-read this skill in full before the next dispatch, and
    [delegated-task.md](../../reference/delegated-task.md) when a task is
@@ -56,13 +56,13 @@ What changes here:
 - **After any compaction**, whether or not a prompt asks for it (the
   cockpit's prompt does; a compaction Claude Code starts on its own comes with
   none), run `scripts/auto-run after-compact` before step 0 above. On
-  `handoff` (exit 5), invoke dforge:handoff,
+  `handoff` (exit 5), invoke dagents:handoff,
   then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
 - **Setup:** skip the finish-preference question; run `scripts/auto-run phase execute`
   from the execution workspace (the worktree, or the checkout on the run's
-  branch) once dforge:using-git-worktrees Step 0 has prepared it.
+  branch) once dagents:using-git-worktrees Step 0 has prepared it.
   Exit 4 means the workspace step was skipped:
-  follow dforge:using-git-worktrees Step 0 for the run, then run the command again.
+  follow dagents:using-git-worktrees Step 0 for the run, then run the command again.
 - **Nothing stops for your human partner.** A ruling-seat or exhausted
   `BLOCKED` goes on the pending list and one Fable batch runs at once. An
   irreversible, security-sensitive or outside-the-worktree action is never
@@ -92,7 +92,7 @@ What changes here:
 - **The budget line** reads `budget (auto…)`. On `compact` (exit 6), finish
   the task in flight (a wave through its merge), then end the turn with
   `Auto run: compacting` as its last line. On `handoff`, finish the task in
-  flight, then invoke dforge:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
+  flight, then invoke dagents:handoff, then run `scripts/auto-run clear` and end as auto-run.md §Clears says.
   The tail rule and the final-phase limit do not apply;
   `scripts/context-size --final` prints the auto line too.
 - **Final review:** run `scripts/auto-run phase final`; on exit 4,
@@ -144,20 +144,20 @@ which asks nothing (see Auto run).
 **Every session ends with the next step.** Whenever this session ends before
 the plan is finished — one of those four stops, a context-budget handoff, or
 your human partner asking you to stop — first reconcile live children
-exactly as dforge:handoff step 0 says: wait for them, or `TaskStop`
+exactly as dagents:handoff step 0 says: wait for them, or `TaskStop`
 them and record a Ruling. Tell your partner which you did. Then run
-`scripts/next-step PLAN_FILE` (see using-dforge §Session Budget) as your
+`scripts/next-step PLAN_FILE` (see using-dagents §Session Budget) as your
 last action. The last thing in your final message is the block it prints,
 verbatim. It also rewrites the `## Next session` section of
 `<latest.md>`; if it exits 4, say the handoff
 file could not be written. When the plan finishes,
-dforge:finishing-a-development-branch runs it instead.
+dagents:finishing-a-development-branch runs it instead.
 
 ## When to Use
 
 When a plan's `**Execution:**` line names `subagent`. Without a plan, use
-dforge:brainstorming first; with a line that names `inline`, use
-dforge:executing-plans. What this mode adds over inline is a fresh
+dagents:brainstorming first; with a line that names `inline`, use
+dagents:executing-plans. What this mode adds over inline is a fresh
 implementer per task and a judge-scored review after each one.
 
 The plan's `**Execution:**` line decides the mode. Your human partner's explicit
@@ -177,13 +177,13 @@ The flowchart is in [process-graph.md](references/process-graph.md); per task th
 4. Otherwise a finding that conflicts with plan text goes to the ruling seat first ([ruling-prompt.md](references/ruling-prompt.md)). Then run fix round R of 2 (R=1 resume or fresh by cache state, R=2 the successor rung, fresh), each followed by a scoped re-review ([re-review-prompt.md](references/re-review-prompt.md)).
 5. A finding still open after round 2 goes to the ruling seat as a `breaker` item: a CONFIRMED-GAP or AMEND is carried forward, BLOCKED stops, the rest are parked in the ledger with the ruling. Then append the `complete` line.
 
-After the last task: final review (a code reviewer and a Codex round, a judge verifies the union), ONE fix dispatch, one scoped re-review, the ruling seat on residuals, `Final review: clean`, then dforge:finishing-a-development-branch.
+After the last task: final review (a code reviewer and a Codex round, a judge verifies the union), ONE fix dispatch, one scoped re-review, the ruling seat on residuals, `Final review: clean`, then dagents:finishing-a-development-branch.
 
 Read [process-graph.md](references/process-graph.md) before you route a state the steps above do not place.
 
 ## Setup
 
-Ensure the work happens in an isolated workspace: use dforge:using-git-worktrees to create one or verify the existing one. Never start implementation on a main/master branch without your human partner's explicit consent.
+Ensure the work happens in an isolated workspace: use dagents:using-git-worktrees to create one or verify the existing one. Never start implementation on a main/master branch without your human partner's explicit consent.
 
 Read [setup.md](references/setup.md) before you create the ledger or dispatch Task 1.
 
@@ -248,7 +248,7 @@ idle for 30 minutes or more.
 
 On Codex, `wait_agent` covers the idle window instead, in bounded stretches,
 because completion mail does not wake an idle session: see Waiting on
-children in `skills/using-dforge/references/codex-tools.md`.
+children in `skills/using-dagents/references/codex-tools.md`.
 
 For each task, or batch, run [delegated-task.md](../../reference/delegated-task.md):
 dispatch the implementer, handle the report, review the task, the fix loop and
@@ -276,7 +276,7 @@ starts CI.
 
 This runs in the session that completed the last task. Only a stop the
 final phase cannot avoid (your human partner asked, or the session ended)
-brings it to a later session, through dforge:resume-execution.
+brings it to a later session, through dagents:resume-execution.
 
 Follow [final-review.md](../../reference/final-review.md), the procedure both
 execution skills share. Point the reviewer at the ledger's deferred-minor and
@@ -288,13 +288,13 @@ parked lines, the complete lines' `discovered:` fields, and every borderline
 When the final whole-branch review is clean and its fixes are committed,
 append `Final review: clean (commits <merge-base7>..<head7>[, K parked])` to
 the ledger. Do not delete the workspace:
-dforge:finishing-a-development-branch removes it with the worktree once
+dagents:finishing-a-development-branch removes it with the worktree once
 the work is merged or discarded, and until then it is what a later session
 resumes from. Then go on to finishing: it is never budget-checked, since it
 costs far less than the fresh session a handoff would start.
 
 **Finishing is a Skill tool call in this same turn.** Call the Skill tool
-with `dforge:finishing-a-development-branch` right after the ledger
+with `dagents:finishing-a-development-branch` right after the ledger
 line. Writing its name in a message is not invoking it, and a turn that ends
 on a summary of the run leaves your human partner with no integration menu
 and no next step. Write no wrap-up message of your own: finishing's message is

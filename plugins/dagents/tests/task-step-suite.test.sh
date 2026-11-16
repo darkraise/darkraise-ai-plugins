@@ -20,8 +20,8 @@ if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME/.claude"
-export MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1
-unset DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
+export MSYS_NO_PATHCONV=1 GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1
+unset DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -53,21 +53,21 @@ sed 's/^|//' > docs/plan.md <<'PLAN'
 |
 |### Task 1: first
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |Body one.
 |
 |### Task 2: second
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |Body two.
 |
 |### Task 3: third
 |
-|**Implementer:** dforge:impl-sonnet-low
+|**Implementer:** dagents:impl-sonnet-low
 |**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0
 |
 |Body three.
@@ -136,7 +136,7 @@ check "verdict, no row: writes no fix file" "$(ls "$WS"/task-1-fix-*.md 2>/dev/n
 
 # --- verdict: a passing row ---
 run_suite
-check "suite-run records the key verdict matches" "$(awk -F'\t' -v h="$HEAD_SHA" '$1 == h { print $3 }' .dforge/suites.tsv | tail -n 1)" "$KEY"
+check "suite-run records the key verdict matches" "$(awk -F'\t' -v h="$HEAD_SHA" '$1 == h { print $3 }' .dagents/suites.tsv | tail -n 1)" "$KEY"
 step verdict docs/plan.md 1
 check "verdict, passing row: exit 0" "$rc" "0"
 check "verdict, passing row: the suite line" "$(grep '^suite: ' <<<"$out")" "suite: pass (clean)"
@@ -205,7 +205,7 @@ check "verdict, 25 failing lines and 12 cannot-verify items: at most 20 lines be
 report "$WS/task-1-review-report.md"
 
 # --- verdict: past round 2 the rest of the failing lines are in the suite log ---
-LOG25=$(awk -F'\t' -v h="$HEAD_SHA" '$1 == h { print $5 }' .dforge/suites.tsv | tail -n 1 | tr -d '\r')
+LOG25=$(awk -F'\t' -v h="$HEAD_SHA" '$1 == h { print $5 }' .dagents/suites.tsv | tail -n 1 | tr -d '\r')
 jq '.round = 2' "$WS/task-1-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-1-step.json"
 rm -f "$WS"/task-1-fix-*.md
 step verdict docs/plan.md 1
@@ -224,7 +224,7 @@ H7=${HEAD_SHA:0:7}
 step start docs/plan.md 3 --suite 'bash slow.sh'
 set_review 3 "$HEAD_SHA" "$REPO"
 (SUITE_RUN_KILL_AFTER=1 bash "$SUITE" --timeout 1 -- bash -c 'bash slow.sh' >/dev/null 2>&1; true)
-check "suite-run records exit 124 for the slow suite" "$(awk -F'\t' -v h="$HEAD_SHA" '$1 == h { print $4 }' .dforge/suites.tsv | tail -n 1)" "124"
+check "suite-run records exit 124 for the slow suite" "$(awk -F'\t' -v h="$HEAD_SHA" '$1 == h { print $4 }' .dagents/suites.tsv | tail -n 1)" "124"
 printf 'not ok - alpha\n' > "$WS/task-3-base-failures.txt"
 report "$WS/task-3-review-report.md"
 step verdict docs/plan.md 3
@@ -280,7 +280,7 @@ jq -n --arg h "$G_HEAD" --arg c "$REPO" '{tasks: [1, 2], reviewHead: $h, t0: 0, 
 step verdict docs/plan.md 1 2 --group
 check "verdict --group: the last member's suite is checked" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: pass (clean)"
 jq '.wave = 1' "$WS/task-2-step.json" > "$TMP/w.json" && mv "$TMP/w.json" "$WS/task-2-step.json"
-rm -f .dforge/suites.tsv
+rm -f .dagents/suites.tsv
 step verdict docs/plan.md 1 2 --group
 check "verdict --group: a wave group has no per-group suite" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: none recorded"
 
@@ -288,7 +288,7 @@ git worktree remove --force "$WT"
 
 # --- verdict: a none task check schedules the suite by task number ---
 awk '{ print } /^\*\*Execution:\*\*/ { print ""; print "**Task check:** none — full suite every 3 tasks" }' docs/plan.md > docs/plan-none.md
-printf '\n### Task 4: fourth\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n\nBody four.\n' >> docs/plan-none.md
+printf '\n### Task 4: fourth\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n\nBody four.\n' >> docs/plan-none.md
 WS_MAIN=$WS
 WS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan-none.md)")
 rm -f "$WS"/*

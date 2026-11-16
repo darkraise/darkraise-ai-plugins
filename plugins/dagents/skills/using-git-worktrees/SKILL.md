@@ -47,7 +47,7 @@ Report with branch state:
 
 Outside an auto run:
 
-Has the user already indicated their worktree preference in your instructions? If not, the `worktree` setting decides (read it from the session-start line `dforge settings in force (…)`, or run `scripts/dforge-config workflow` when no such line is in context): `worktree=always` creates the worktree without asking, `worktree=never` works in place and skips to Step 2, and `ask`, the default and the value when the line does not name the key, asks for consent before creating a worktree:
+Has the user already indicated their worktree preference in your instructions? If not, the `worktree` setting decides (read it from the session-start line `dagents settings in force (…)`, or run `scripts/dagents-config workflow` when no such line is in context): `worktree=always` creates the worktree without asking, `worktree=never` works in place and skips to Step 2, and `ask`, the default and the value when the line does not name the key, asks for consent before creating a worktree:
 
 > "Would you like me to set up an isolated worktree? It protects your current branch from changes."
 
@@ -173,7 +173,7 @@ Ready to implement <feature-name>
 ### Work without a plan
 
 When no plan drives this work (it goes straight from the chat to
-dforge:finishing-a-development-branch), ask the finish preference now,
+dagents:finishing-a-development-branch), ask the finish preference now,
 before the first change: what finishing should do once the work is done. See
 [finish-preference.md](../../reference/finish-preference.md).
 A plan's execution skill asks it itself.

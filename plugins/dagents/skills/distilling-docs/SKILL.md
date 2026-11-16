@@ -37,7 +37,7 @@ An example entry, from `gotchas.md`:
 Cause: ripgrep is not on PATH in Git Bash on this machine; the suite assumes it
 Workaround: use the Grep tool, or `fd`; this one discovery failure is environmental
 Verified: 2026-09-11
-Source: docs/dforge/notes/2026-09-11-test-env.md@e4f5a6b
+Source: docs/dagents/notes/2026-09-11-test-env.md@e4f5a6b
 ```
 
 Every entry carries a `Source:` line: the file it came from and the short SHA of
@@ -84,7 +84,7 @@ are read as sources and are never targets.
 
 ## Waves
 
-Work on a branch (dforge:using-git-worktrees), in waves of **five to
+Work on a branch (dagents:using-git-worktrees), in waves of **five to
 fifteen** source files covering one area, never the whole tree. A wave fits one
 session with room for the judge round, and is the unit at which work can stop:
 git is the ledger, so a fresh session sees what remains from the distilled files
@@ -109,7 +109,7 @@ three conditions you must hold: the working tree is clean at that SHA when you
 dispatch, nothing is edited until the verdict returns, and the verdict names the
 SHA it was given. A verdict returned against an edited tree is void; re-judge.
 
-Dispatch dforge:judge-opus with
+Dispatch dagents:judge-opus with
 [distil-judge.md](references/distil-judge.md), its `[REPORT_FILE]` set to
 `<state>/distil-<wave>-report.md` (outside the tree). It must work in one order:
 enumerate every fact in each source as a numbered list first, then map each
@@ -157,13 +157,13 @@ having checked it.
 
 ## Documents in darkmem
 
-While `bash <plugin-root>/scripts/dforge-path store` prints `documents darkmem`,
+While `bash <plugin-root>/scripts/dagents-path store` prints `documents darkmem`,
 `<docs>` is the darkmem mirror, which git does not track. Five rules above
 change; everything else stands.
 
 - **Eligible** replaces tracked and clean: `bash <plugin-root>/scripts/darkmem-sync revision <name>`
   exits 0, which it does only for a file synced and unchanged since the last
-  push. `<name>` is the file's name (`dforge-path name <path>`). Unreferenced is
+  push. `<name>` is the file's name (`dagents-path name <path>`). Unreferenced is
   checked as above, over the checkout's tracked files, the mirror's documents
   outside those two directories, and `<latest.md>`.
 - **`Source:`** cites `<name>@r<id>`, the line `revision` printed, captured
@@ -172,7 +172,7 @@ change; everything else stands.
   `darkmem-sync push`; give the judge each distilled file's `revision` line
   where it expects the SHA, and hold the mirror unedited until the verdicts
   return. Then delete exactly the `CARRIED` sources from the mirror and push
-  again: push moves each deleted document to `dforge/archive/<stamp>/`
+  again: push moves each deleted document to `dagents/archive/<stamp>/`
   on darkmem. Never add entries and delete sources in one push.
 - **Recovery** is `bash <plugin-root>/scripts/darkmem-sync restore <name>`,
   which moves the newest archived copy back and pulls it, in place of

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The ui-ux hooks: after an edit to a UI file, PostToolUse returns ui-lint's
-# findings and names dforge:ui-ux once per session; at a stop, a turn that
+# findings and names dagents:ui-ux once per session; at a stop, a turn that
 # leaves UI changes without a passing proof is held once.
 set -uo pipefail
 
@@ -17,7 +17,7 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
-unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DAGENTS_BUDGET CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
@@ -37,23 +37,23 @@ ctx() { jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$1" 2>/dev/nu
 # --- PostToolUse ---
 check "edit: a non-UI file prints nothing" "$(edit e-1 "$REPO/README.md")" ""
 out=$(edit e-1 "$REPO/src/App.tsx")
-check "edit: the first UI edit names the skill" "$(ctx "$out" | grep -c 'Load dforge:ui-ux')" "1"
+check "edit: the first UI edit names the skill" "$(ctx "$out" | grep -c 'Load dagents:ui-ux')" "1"
 check "edit: the event name" "$(jq -r .hookSpecificOutput.hookEventName <<<"$out")" "PostToolUse"
 check "edit: never a decision" "$(jq -r '.decision // "none"' <<<"$out")" "none"
 check "edit: a clean UI file after the reminder prints nothing" "$(edit e-1 "$REPO/src/App.tsx")" ""
 printf '<img src="a.png">\n' > src/Bad.tsx
 out=$(edit e-1 "$REPO/src/Bad.tsx")
 check "edit: lint findings name the rule and line" "$(ctx "$out" | grep -c 'src/Bad.tsx:1: img-alt')" "1"
-check "edit: no second reminder" "$(ctx "$out" | grep -c 'Load dforge:ui-ux')" "0"
+check "edit: no second reminder" "$(ctx "$out" | grep -c 'Load dagents:ui-ux')" "0"
 TR="$TMP/skill.jsonl"
-jq -nc '{type:"assistant",message:{content:[{type:"tool_use",name:"Skill",input:{skill:"dforge:ui-ux"}}]}}' > "$TR"
+jq -nc '{type:"assistant",message:{content:[{type:"tool_use",name:"Skill",input:{skill:"dagents:ui-ux"}}]}}' > "$TR"
 check "edit: a session that loaded the skill gets no reminder" "$(edit e-2 "$REPO/src/App.tsx" "$TR")" ""
 check "edit: a relative path resolves against cwd" "$(ctx "$(edit e-3 src/Bad.tsx)" | grep -c 'img-alt')" "1"
 check "edit: malformed stdin exits 0 silently" "$(printf 'nope' | bash "$EDIT"; echo "exit $?")" "exit 0"
 FAST="$TMP/fast.jsonl"
 jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Process: fast — a one-line tweak"}]}}' > "$FAST"
 check "edit: fast mode prints neither findings nor the reminder" "$(edit e-4 "$REPO/src/Bad.tsx" "$FAST")" ""
-check "edit: fast mode leaves the session's reminder for later" "$(ctx "$(edit e-4 "$REPO/src/Bad.tsx")" | grep -c 'Load dforge:ui-ux')" "1"
+check "edit: fast mode leaves the session's reminder for later" "$(ctx "$(edit e-4 "$REPO/src/Bad.tsx")" | grep -c 'Load dagents:ui-ux')" "1"
 rm src/Bad.tsx
 
 # --- hooks.json wiring ---
@@ -80,8 +80,8 @@ printf '// change\n' >> src/App.tsx
 git commit -q -am 'ui change'
 check "stop: no profile and no skill run: passes" "$(stop s-1 'Done.')" ""
 
-mkdir -p docs/dforge/ui-ux
-printf '# UI profile\n\n**Platform:** web\n' > docs/dforge/ui-ux/profile.md
+mkdir -p docs/dagents/ui-ux
+printf '# UI profile\n\n**Platform:** web\n' > docs/dagents/ui-ux/profile.md
 prompt s-2
 printf '// change 2\n' >> src/App.tsx
 git commit -q -am 'ui change 2'
@@ -89,7 +89,7 @@ out=$(stop s-2 'Done.')
 check "stop: a committed UI change without proof is held" "$(decision "$out")" "block"
 check "stop: the reason names the changed file" "$(jq -r .reason <<<"$out" | grep -c 'src/App.tsx')" "1"
 check "stop: the reason names the pending line" "$(jq -r .reason <<<"$out" | grep -c 'UI proof: pending')" "1"
-check "stop: tells the user why" "$(jq -r .systemMessage <<<"$out" | grep -c 'dforge held the stop')" "1"
+check "stop: tells the user why" "$(jq -r .systemMessage <<<"$out" | grep -c 'dagents held the stop')" "1"
 check "stop: the user's message names the changed file" "$(jq -r .systemMessage <<<"$out" | grep -c 'src/App.tsx')" "1"
 check "stop: the retry passes" "$(stop s-2 'Done.' true)" ""
 check "stop: the pending line passes" "$(stop s-2 $'Done.\n\nUI proof: pending — no browser on this host')" ""
@@ -109,15 +109,15 @@ jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Process: bounded,
 check "stop: a later full-flow Process line holds again" "$(decision "$(stop s-8 'Done.' false "$FULL")")" "block"
 git checkout -q -- src/App.tsx
 
-mv docs/dforge/ui-ux/profile.md "$TMP/profile.md"
+mv docs/dagents/ui-ux/profile.md "$TMP/profile.md"
 prompt s-4
 printf '// change 3\n' >> src/App.tsx
 check "stop: no profile but the skill ran: held" "$(decision "$(stop s-4 'Done.' false "$TR")")" "block"
 check "stop: no profile and no skill: passes" "$(stop s-4 'Done.')" ""
-mv "$TMP/profile.md" docs/dforge/ui-ux/profile.md
+mv "$TMP/profile.md" docs/dagents/ui-ux/profile.md
 
-mkdir -p "$HOME/.claude/dforge/sessions/cockpit"
-date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-5"
+mkdir -p "$HOME/.claude/dagents/sessions/cockpit"
+date +%s > "$HOME/.claude/dagents/sessions/cockpit/s-5"
 (cd "$REPO" && bash "$AR" --session s-5 start --spec docs/s.md --register docs/r.md >/dev/null 2>&1)
 prompt s-5
 check "stop: an auto run bound to the session: passes" "$(stop s-5 'Done.')" ""
@@ -128,7 +128,7 @@ UP="$HERE/../scripts/ui-proof"
 prompt s-7
 printf '// change 7\n' >> src/App.tsx
 git commit -q -am 'ui change 7'
-refs="$HOME/.claude/dforge/sessions/turns/s-7.refs"
+refs="$HOME/.claude/dagents/sessions/turns/s-7.refs"
 sed 's/^[0-9a-f]\{40\}/0000000000000000000000000000000000000000/' "$refs" > "$refs.tmp" && mv "$refs.tmp" "$refs"
 out=$(stop s-7 'Done.')
 check "stop: a check that cannot run holds instead of passing" "$(decision "$out")" "block"
@@ -144,11 +144,11 @@ check "stop: many changed files: the reason stays short" "$(r=$(jq -r .reason <<
 prompt s-6
 printf '// change 6\n' >> src/App.tsx
 git commit -q -am 'ui change 6'
-PR=docs/dforge/ui-ux/proofs
-mkdir -p "$PR" .dforge/ui-ux/t
-printf '*\n' > .dforge/.gitignore
-printf 'png' > .dforge/ui-ux/t/a.png
-printf '# UI proof: t\n\n**Contract:** touch\n**Platform:** web\n**Evidence:** local\n\n## Delta\n\n**UI/UX depth:** touch — a fix\n\n- **UX-1** — the fix\n\n## Results\n\n| ID | Verdict | Evidence | Note |\n|---|---|---|---|\n| UX-1 | pass | .dforge/ui-ux/t/a.png | |\n' > "$PR/t.md"
+PR=docs/dagents/ui-ux/proofs
+mkdir -p "$PR" .dagents/ui-ux/t
+printf '*\n' > .dagents/.gitignore
+printf 'png' > .dagents/ui-ux/t/a.png
+printf '# UI proof: t\n\n**Contract:** touch\n**Platform:** web\n**Evidence:** local\n\n## Delta\n\n**UI/UX depth:** touch — a fix\n\n- **UX-1** — the fix\n\n## Results\n\n| ID | Verdict | Evidence | Note |\n|---|---|---|---|\n| UX-1 | pass | .dagents/ui-ux/t/a.png | |\n' > "$PR/t.md"
 bash "$UP" stamp "$PR/t.md" >/dev/null
 fp=$(bash "$UP" fingerprint)
 printf 'The proof holds.\n\nVerdict: ship %s\n' "$fp" > "$PR/t.judge.md"

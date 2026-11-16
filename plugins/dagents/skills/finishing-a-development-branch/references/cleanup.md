@@ -15,7 +15,7 @@ without `--force`. Options 2 and 3 keep it for the next session.
 work came from a plan, delete its workspace — `rm -rf` on the directory
 `scripts/sdd-workspace PLAN_FILE` prints. Done.
 
-**If `WORKTREE_PATH` is under `.worktrees/` or `worktrees/`:** dforge
+**If `WORKTREE_PATH` is under `.worktrees/` or `worktrees/`:** dagents
 created this worktree — we own cleanup:
 
 ```bash

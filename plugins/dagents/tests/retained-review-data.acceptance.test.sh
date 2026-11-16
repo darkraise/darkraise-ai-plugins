@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Acceptance tests for the retained-review-data spec
-# (docs/dforge/specs/2026-11-10-retained-review-data-design.md), the `test`
+# (docs/dagents/specs/2026-11-10-retained-review-data-design.md), the `test`
 # statements A1-A9, A13 and A14. Each test is written from the statement's
 # text and reaches the behaviour only through `scripts/review-record`'s
 # command line: `ratio MERGE_BASE HEAD` and `retain PLAN_FILE [--from DIR]`.
@@ -35,8 +35,8 @@ if command -v cygpath >/dev/null 2>&1; then
 fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
-unset CLAUDE_CONFIG_DIR DFORGE_DOCUMENT_STORE DFORGE_PROGRESS_STORE CLAUDE_PROJECT_DIR
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
+unset CLAUDE_CONFIG_DIR DAGENTS_DOCUMENT_STORE DAGENTS_PROGRESS_STORE CLAUDE_PROJECT_DIR
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 
@@ -146,7 +146,7 @@ a3() {
   newrepo "$R"; base=$(git -C "$R" rev-parse HEAD)
   put "$R" src/code.js 3
   put "$R" docs/guide.md 4
-  put "$R" docs/dforge/specs/s.md 5
+  put "$R" docs/dagents/specs/s.md 5
   put "$R" README.md 6
   put "$R" plugins/p/skills/s/SKILL.md 7
   for f in package-lock.json yarn.lock pnpm-lock.yaml bun.lock bun.lockb Cargo.lock poetry.lock \
@@ -185,15 +185,15 @@ a4() {
 # --- retain ----------------------------------------------------------------
 
 ledger() { # ledger <checkout> <slug> <plan named> <line>...
-  local dir="$1/.dforge/sdd/$2" named=$3
+  local dir="$1/.dagents/sdd/$2" named=$3
   shift 3
   mkdir -p "$dir"
   { printf '# SDD ledger — plan: %s\n' "$named"; printf '%s\n' "$@"; } > "$dir/progress.md"
 }
 repo_with_plan() { # repo_with_plan <dir> <slug> — a checkout holding the plan file
   git init -q -b main "$1"
-  mkdir -p "$1/docs/dforge/plans"
-  printf '# Plan %s\n' "$2" > "$1/docs/dforge/plans/$2.md"
+  mkdir -p "$1/docs/dagents/plans"
+  printf '# Plan %s\n' "$2" > "$1/docs/dagents/plans/$2.md"
   git -C "$1" add -A && git -C "$1" commit -q -m init
 }
 retain() { # retain <cwd> <args...> — sets OUT, ERR, RC
@@ -216,7 +216,7 @@ FINAL='Final review: clean (commits abc1234..def5678, 1 parked)'
 a5() {
   local R="$TMP/a5" S=2026-01-01-p target n want
   repo_with_plan "$R" "$S"
-  ledger "$R" "$S" "docs/dforge/plans/$S.md" \
+  ledger "$R" "$S" "docs/dagents/plans/$S.md" \
     "$DEPTH" \
     'Task 1: implementer impl-sonnet-high (assigned; base abc1234)' \
     "$QA_DONE" \
@@ -225,11 +225,11 @@ a5() {
     "$LENS_B" \
     "$RATIO_LINE" \
     "$FINAL"
-  target="$R/docs/dforge/reviews/$S.md"
-  retain "$R" "$R/docs/dforge/plans/$S.md"
+  target="$R/docs/dagents/reviews/$S.md"
+  retain "$R" "$R/docs/dagents/plans/$S.md"
   check "A5: exit 0 and the record's path on stdout" "$RC:$OUT" "0:$target"
   check "A5: the file is <docs>/reviews/<plan-basename>.md" "$(exists "$target")" yes
-  has "A5: the file holds the plan's document name" "$(cat "$target" 2>/dev/null)" "docs/dforge/plans/$S.md"
+  has "A5: the file holds the plan's document name" "$(cat "$target" 2>/dev/null)" "docs/dagents/plans/$S.md"
   want=$(printf '%s\n' "$DEPTH" "$QA_DONE" "$LENS_SKIPPED" "$LENS_A" "$LENS_B" "$RATIO_LINE" "$FINAL")
   n=$(printf '%s\n' "$want" | wc -l | tr -d ' ')
   check "A5: every selected ledger line, verbatim and in ledger order, incl. lens-skipped and lens lines" \
@@ -239,10 +239,10 @@ a5() {
 
   R="$TMP/a5-skipped"; S=2026-01-02-q
   repo_with_plan "$R" "$S"
-  ledger "$R" "$S" "docs/dforge/plans/$S.md" \
+  ledger "$R" "$S" "docs/dagents/plans/$S.md" \
     'Review depth: light (small change)' "$QA_SKIP" 'final review lenses off' "$RATIO_LINE" "$FINAL"
-  target="$R/docs/dforge/reviews/$S.md"
-  retain "$R" "$R/docs/dforge/plans/$S.md"
+  target="$R/docs/dagents/reviews/$S.md"
+  retain "$R" "$R/docs/dagents/plans/$S.md"
   want=$(printf '%s\n' 'Review depth: light (small change)' "$QA_SKIP" 'final review lenses off' "$RATIO_LINE" "$FINAL")
   check "A5: Acceptance QA: skipped and lenses-off lines are retained in order" \
     "$RC:$(tail -n 5 "$target" 2>/dev/null)" "0:$want"
@@ -251,7 +251,7 @@ a5() {
 a6() {
   local R="$TMP/a6" S=2026-01-03-r target body
   repo_with_plan "$R" "$S"
-  ledger "$R" "$S" "docs/dforge/plans/$S.md" \
+  ledger "$R" "$S" "docs/dagents/plans/$S.md" \
     "$DEPTH" \
     'Task 1: implementer impl-sonnet-high (assigned; base abc1234)' \
     'Task 1: fix round 1/2 (1 addressed, 0 open — a thing; commits abc1234..bcd2345)' \
@@ -265,8 +265,8 @@ a6() {
     'Early CI: green run 7' \
     "$LENS_A" \
     "$FINAL"
-  target="$R/docs/dforge/reviews/$S.md"
-  retain "$R" "$R/docs/dforge/plans/$S.md"
+  target="$R/docs/dagents/reviews/$S.md"
+  retain "$R" "$R/docs/dagents/plans/$S.md"
   body=$(cat "$target" 2>/dev/null)
   check "A6: retain succeeds" "$RC" 0
   lacks "A6: Acceptance QA: dispatched is not retained" "$body" 'Acceptance QA: dispatched'
@@ -284,24 +284,24 @@ a7() {
   repo_with_plan "$T" "$S"
   git -C "$T" worktree add -q -b wt "$W"
   TOP=$(git -C "$T" rev-parse --show-toplevel); WT=$(git -C "$W" rev-parse --show-toplevel)
-  ledger "$WT" "$S" "docs/dforge/plans/$S.md" "$DEPTH" "$QA_DONE" "$LENS_A" "$FINAL"
-  target="$TOP/docs/dforge/reviews/$S.md"
-  check "A7: the primary checkout has no ledger of its own" "$(exists "$TOP/.dforge/sdd/$S/progress.md")" no
+  ledger "$WT" "$S" "docs/dagents/plans/$S.md" "$DEPTH" "$QA_DONE" "$LENS_A" "$FINAL"
+  target="$TOP/docs/dagents/reviews/$S.md"
+  check "A7: the primary checkout has no ledger of its own" "$(exists "$TOP/.dagents/sdd/$S/progress.md")" no
 
-  retain "$TOP" "$TOP/docs/dforge/plans/$S.md" --from "$WT"
+  retain "$TOP" "$TOP/docs/dagents/plans/$S.md" --from "$WT"
   check "A7: --from <worktree>: exit 0 and the primary checkout's record path" "$RC:$OUT" "0:$target"
   check "A7: --from <worktree>: the record holds the worktree ledger's lines" \
     "$(tail -n 4 "$target" 2>/dev/null)" "$(printf '%s\n' "$DEPTH" "$QA_DONE" "$LENS_A" "$FINAL")"
   check "A7: --from <worktree>: nothing is written into the worktree's <docs>" \
-    "$(exists "$WT/docs/dforge/reviews/$S.md")" no
+    "$(exists "$WT/docs/dagents/reviews/$S.md")" no
 
   rm -f "$target"
-  retain "$TOP" "$TOP/docs/dforge/plans/$S.md"
+  retain "$TOP" "$TOP/docs/dagents/plans/$S.md"
   check "A7: no --from: exit 0 and the primary checkout's record path" "$RC:$OUT" "0:$target"
   check "A7: no --from: the record holds the worktree ledger's lines" \
     "$(tail -n 4 "$target" 2>/dev/null)" "$(printf '%s\n' "$DEPTH" "$QA_DONE" "$LENS_A" "$FINAL")"
   check "A7: no --from: nothing is written into the worktree's <docs>" \
-    "$(exists "$WT/docs/dforge/reviews/$S.md")" no
+    "$(exists "$WT/docs/dagents/reviews/$S.md")" no
 }
 
 a8() {
@@ -310,70 +310,70 @@ a8() {
   git -C "$T" worktree add -q -b wt "$W"
   TOP=$(git -C "$T" rev-parse --show-toplevel); WT=$(git -C "$W" rev-parse --show-toplevel)
 
-  retain "$TOP" "$TOP/docs/dforge/plans/$S.md"
+  retain "$TOP" "$TOP/docs/dagents/plans/$S.md"
   check "A8: no ledger anywhere: exit 4" "$RC" 4
-  has "A8: exit 4 names the primary checkout's ledger path" "$ERR" "$TOP/.dforge/sdd/$S/progress.md"
-  has "A8: exit 4 names the linked worktree's ledger path" "$ERR" "$WT/.dforge/sdd/$S/progress.md"
-  check "A8: exit 4 writes no file" "$(exists "$TOP/docs/dforge/reviews")" no
+  has "A8: exit 4 names the primary checkout's ledger path" "$ERR" "$TOP/.dagents/sdd/$S/progress.md"
+  has "A8: exit 4 names the linked worktree's ledger path" "$ERR" "$WT/.dagents/sdd/$S/progress.md"
+  check "A8: exit 4 writes no file" "$(exists "$TOP/docs/dagents/reviews")" no
 
-  retain "$TOP" "$TOP/docs/dforge/plans/$S.md" --from "$WT"
+  retain "$TOP" "$TOP/docs/dagents/plans/$S.md" --from "$WT"
   check "A8: --from with no ledger there: exit 4" "$RC" 4
-  has "A8: --from exit 4 names the path searched" "$ERR" "$WT/.dforge/sdd/$S/progress.md"
-  check "A8: --from exit 4 writes no file" "$(exists "$TOP/docs/dforge/reviews")" no
+  has "A8: --from exit 4 names the path searched" "$ERR" "$WT/.dagents/sdd/$S/progress.md"
+  check "A8: --from exit 4 writes no file" "$(exists "$TOP/docs/dagents/reviews")" no
 
-  ledger "$WT" "$S" "docs/dforge/plans/$S.md" \
+  ledger "$WT" "$S" "docs/dagents/plans/$S.md" \
     'Task 1: implementer impl-sonnet-high (assigned; base abc1234)' \
     'Task 1: complete (commits abc1234..bcd2345, review clean) — done: x; verified: y → pass; remaining: none; discovered: none; assumptions: none' \
     'Acceptance QA: dispatched (base abc1234)' \
     'Ruling: a thing — a reason — a cost'
-  retain "$TOP" "$TOP/docs/dforge/plans/$S.md" --from "$WT"
+  retain "$TOP" "$TOP/docs/dagents/plans/$S.md" --from "$WT"
   check "A8: a ledger with no selected lines (--from): exit 3" "$RC" 3
-  check "A8: exit 3 writes no file" "$(exists "$TOP/docs/dforge/reviews/$S.md")" no
-  retain "$TOP" "$TOP/docs/dforge/plans/$S.md"
+  check "A8: exit 3 writes no file" "$(exists "$TOP/docs/dagents/reviews/$S.md")" no
+  retain "$TOP" "$TOP/docs/dagents/plans/$S.md"
   check "A8: a ledger with no selected lines (no --from): exit 3" "$RC" 3
-  check "A8: exit 3 writes no file (no --from)" "$(exists "$TOP/docs/dforge/reviews/$S.md")" no
+  check "A8: exit 3 writes no file (no --from)" "$(exists "$TOP/docs/dagents/reviews/$S.md")" no
   check "A8: exit 3 leaves no stray file under reviews/" \
-    "$(ls -A "$TOP/docs/dforge/reviews" 2>/dev/null | wc -l | tr -d ' ')" 0
+    "$(ls -A "$TOP/docs/dagents/reviews" 2>/dev/null | wc -l | tr -d ' ')" 0
 }
 
 a9() {
   local R="$TMP/a9" S=2026-01-06-u target
   repo_with_plan "$R" "$S"
-  target="$R/docs/dforge/reviews/$S.md"
-  ledger "$R" "$S" "docs/dforge/plans/$S.md" "$DEPTH" "$FINAL"
-  retain "$R" "$R/docs/dforge/plans/$S.md"
+  target="$R/docs/dagents/reviews/$S.md"
+  ledger "$R" "$S" "docs/dagents/plans/$S.md" "$DEPTH" "$FINAL"
+  retain "$R" "$R/docs/dagents/plans/$S.md"
   check "A9: the first retain succeeds" "$RC" 0
-  ledger "$R" "$S" "docs/dforge/plans/$S.md" "$DEPTH" "$QA_DONE" "$LENS_A" "$RATIO_LINE" "$FINAL"
-  retain "$R" "$R/docs/dforge/plans/$S.md"
+  ledger "$R" "$S" "docs/dagents/plans/$S.md" "$DEPTH" "$QA_DONE" "$LENS_A" "$RATIO_LINE" "$FINAL"
+  retain "$R" "$R/docs/dagents/plans/$S.md"
   check "A9: the second retain succeeds and prints the same path" "$RC:$OUT" "0:$target"
   check "A9: the second retain replaced the file" "$(tail -n 5 "$target" 2>/dev/null)" \
     "$(printf '%s\n' "$DEPTH" "$QA_DONE" "$LENS_A" "$RATIO_LINE" "$FINAL")"
   check "A9: the replaced file holds no line twice" \
     "$(grep -cF "$FINAL" "$target" 2>/dev/null)" 1
   check "A9: exactly one file is left for the plan" \
-    "$(ls -A "$R/docs/dforge/reviews" | wc -l | tr -d ' '):$(ls -A "$R/docs/dforge/reviews")" "1:$S.md"
+    "$(ls -A "$R/docs/dagents/reviews" | wc -l | tr -d ' '):$(ls -A "$R/docs/dagents/reviews")" "1:$S.md"
 }
 
 a13() {
   local T="$TMP/a13" W="$TMP/a13-wt" S=2026-01-07-v TOP WT target
   repo_with_plan "$T" "$S"
-  mkdir -p "$T/docs/dforge/plans/old"
-  printf '# Old plan\n' > "$T/docs/dforge/plans/old/$S.md"
+  mkdir -p "$T/docs/dagents/plans/old"
+  printf '# Old plan\n' > "$T/docs/dagents/plans/old/$S.md"
   git -C "$T" add -A && git -C "$T" commit -q -m old
   git -C "$T" worktree add -q -b wt "$W"
   TOP=$(git -C "$T" rev-parse --show-toplevel); WT=$(git -C "$W" rev-parse --show-toplevel)
-  target="$TOP/docs/dforge/reviews/$S.md"
-  ledger "$TOP" "$S" "docs/dforge/plans/old/$S.md" 'Review depth: full (stale ledger line)' 'Final review: clean (commits 1111111..2222222)'
+  target="$TOP/docs/dagents/reviews/$S.md"
+  ledger "$TOP" "$S" "docs/dagents/plans/old/$S.md" 'Review depth: full (stale ledger line)' 'Final review: clean (commits 1111111..2222222)'
 
-  retain "$TOP" "$TOP/docs/dforge/plans/$S.md"
+  retain "$TOP" "$TOP/docs/dagents/plans/$S.md"
   check "A13: only a stale ledger under the same basename: exit 4" "$RC" 4
   check "A13: the stale ledger is not retained" "$(exists "$target")" no
-  retain "$TOP" "$TOP/docs/dforge/plans/$S.md" --from "$TOP"
+  retain "$TOP" "$TOP/docs/dagents/plans/$S.md" --from "$TOP"
   check "A13: --from a checkout holding only the stale ledger: exit 4" "$RC" 4
   check "A13: --from the stale ledger writes no file" "$(exists "$target")" no
 
-  ledger "$WT" "$S" "docs/dforge/plans/$S.md" "$DEPTH" "$FINAL"
-  retain "$TOP" "$TOP/docs/dforge/plans/$S.md"
+  ledger "$WT" "$S" "docs/dagents/plans/$S.md" "$DEPTH" "$FINAL"
+  retain "$TOP" "$TOP/docs/dagents/plans/$S.md"
   check "A13: the real ledger in a worktree is found past the stale one" "$RC:$OUT" "0:$target"
   check "A13: the record comes from the real ledger" "$(tail -n 2 "$target" 2>/dev/null)" "$(printf '%s\n' "$DEPTH" "$FINAL")"
   lacks "A13: no line of the stale ledger is retained" "$(cat "$target" 2>/dev/null)" 'stale ledger line'

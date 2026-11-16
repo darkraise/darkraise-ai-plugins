@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Every dforge seat is typed. A general-purpose prescription must name its
+# Every dagents seat is typed. A general-purpose prescription must name its
 # model, or it inherits the session's, usually the most expensive. A
 # prescription is a `Subagent (general-purpose):` template line, which needs a
 # `model:` line before its block's closing fence, or a table row whose second
@@ -47,7 +47,7 @@ collect_md() {
 }
 collect_md "$P/skills" "$P/reference"
 check "the prescription scan reads some files" "$([ "${#files[@]}" -gt 0 ] && echo yes || echo no)" "yes"
-check "no dforge prescription leaves a general-purpose seat unmodelled" "$(unmodelled ${files[@]+"${files[@]}"})" ""
+check "no dagents prescription leaves a general-purpose seat unmodelled" "$(unmodelled ${files[@]+"${files[@]}"})" ""
 
 cat > "$TMP/bad-block.md" <<'EOF'
 ```
@@ -180,8 +180,8 @@ check "judge templates: every report path ends -report.md" "$(bad_report_paths "
 sed 's|lens-<id>-report\.md|lens-<id>.md|' "$FR" > "$TMP/final-review.md"
 check "judge templates: the sweep flags a report path the guard refuses" \
   "$(bad_report_paths "$TMP/final-review.md" | grep -c '^FAIL .*: <workspace>/lens-<id>\.md$')" "1"
-names "walkthrough judge: the report file lies under .dforge" "$WT" '`<checkout>/.dforge/ui-proof-<report name>-report.md`'
-lacks "requesting review: the example report file is absolute" "$RCR" 'REPORT_FILE: .dforge/'
+names "walkthrough judge: the report file lies under .dagents" "$WT" '`<checkout>/.dagents/ui-proof-<report name>-report.md`'
+lacks "requesting review: the example report file is absolute" "$RCR" 'REPORT_FILE: .dagents/'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

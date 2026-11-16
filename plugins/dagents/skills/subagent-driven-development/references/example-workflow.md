@@ -9,7 +9,7 @@ You: I'm using Subagent-Driven Development to execute this plan.
 [Create todos for all tasks]
 [Pre-flight: ruling seat returns preflight.md — clean; ledger the pre-flight ruling]
 
-Task 1: Hook installation script  (**Implementer:** dforge:impl-sonnet-low)
+Task 1: Hook installation script  (**Implementer:** dagents:impl-sonnet-low)
 
 [task-step start PLAN_FILE 1: brief written, assigned line Task 1: implementer impl-sonnet-low (assigned; base a1b2c3d), dispatch file task-1-dispatch.md; dispatch impl-sonnet-low with that path, no model or effort argument]
 [Only waiting remains: end the turn; the implementer's completion starts the next one]
@@ -22,7 +22,7 @@ Judge: report task-1-review-report.md — spec pass, quality approved, scores 17
 
 [Ledger: Task 1: complete (commits a1b2c3d..d4e5f6a, review clean; scores spec 17 / scope 18 / verification 16 / quality 16) — done: install-hook command; verified: node --test test/hook.test.js → 5/5; remaining: none; discovered: none; assumptions: user-level install]
 
-Task 2: Recovery modes  (**Implementer:** dforge:impl-sonnet-medium)
+Task 2: Recovery modes  (**Implementer:** dagents:impl-sonnet-medium)
 
 [task-step start PLAN_FILE 2; dispatch impl-sonnet-medium with the dispatch file's path]
 Implementer: DONE — 8/8 passing
@@ -49,5 +49,5 @@ Re-reviewer: report task-2-rereview-1-report.md — fix round addressed, 0 open
 [ONE fix dispatch, told to run the full suite through suite-run after its last commit; one scoped re-review; clean]
 
 [Ledger: Final review: clean (commits a1b2c3d..f0e1d2c) — finishing is never budget-checked]
-[Skill tool: dforge:finishing-a-development-branch, in this turn — suite-run reuses the fix wave's pass at the unchanged HEAD; gates, Rulings I made, the three-option menu last]
+[Skill tool: dagents:finishing-a-development-branch, in this turn — suite-run reuses the fix wave's pass at the unchanged HEAD; gates, Rulings I made, the three-option menu last]
 ```

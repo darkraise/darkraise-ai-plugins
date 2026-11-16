@@ -7,9 +7,9 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LINT="$HERE/../scripts/plan-lint"
 ROUTE="$HERE/../scripts/lens-route"
-export DFORGE_NO_SETTINGS=1
-unset DFORGE_LENS_CAP CLAUDE_CONFIG_DIR
-export DFORGE_LENS_MINOR_FROM=0
+export DAGENTS_NO_SETTINGS=1
+unset DAGENTS_LENS_CAP CLAUDE_CONFIG_DIR
+export DAGENTS_LENS_MINOR_FROM=0
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -35,7 +35,7 @@ cd "$TMP" || exit 1
 export HOME="$TMP/home"
 mkdir -p "$HOME" docs
 printf '# Spec\n' > docs/spec.md
-export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=test-volume-rules-acceptance
+export DAGENTS_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=test-volume-rules-acceptance
 
 # ---------------------------------------------------------------- plan-lint
 
@@ -66,7 +66,7 @@ plan3() {
 
 **CI:** none
 
-**Plan review:** 2026-10-10 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
+**Plan review:** 2026-10-10 — dagents:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
 ## Global Constraints
 
@@ -91,7 +91,7 @@ None
 **Files:**
 - Create: `a.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dagents:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 2: Two
@@ -99,7 +99,7 @@ None
 **Files:**
 - Create: `b.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dagents:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 
 ### Task 3: Three
@@ -107,7 +107,7 @@ None
 **Files:**
 - Create: `c.txt`
 
-**Implementer:** dforge:impl-sonnet-low
+**Implementer:** dagents:impl-sonnet-low
 **Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1
 EOF
 }
@@ -234,7 +234,7 @@ lacks "A7: test-quality is not routed" "$(lines "$out")" "lens test-quality"
 new_repo "$TMP/a8" ; cd "$TMP/a8" || exit 1
 add_file tests/a.test.ts 'try { run() } catch (e) {}'
 H8=$(git rev-parse HEAD)
-out=$(DFORGE_LENS_CAP=2 route standard-plan.md --final "$BASE" "$H8")
+out=$(DAGENTS_LENS_CAP=2 route standard-plan.md --final "$BASE" "$H8")
 check "A8: lensCap 2: exactly two lens lines" "$(printed "$out")" "2"
 has "A8: lensCap 2: security is printed" "$(lines "$out")" "lens security;"
 has "A8: lensCap 2: silent-failures is printed" "$(lines "$out")" "lens silent-failures;"

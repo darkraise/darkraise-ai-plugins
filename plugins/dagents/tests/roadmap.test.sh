@@ -26,7 +26,7 @@ mkdir -p "$HOME"
 
 ROOT="$TMP/repo"
 git init -q -b main "$ROOT"
-D="$ROOT/docs/dforge"
+D="$ROOT/docs/dagents"
 mkdir -p "$D/registers" "$D/specs"
 printf '# Product design\n' > "$D/specs/2026-10-07-shop-design.md"
 printf '# Billing design\n' > "$D/specs/2026-10-08-billing-design.md"
@@ -98,7 +98,7 @@ run bash "$RM" open --root "$ROOT"
 check "open: rows open exits 1" "$RC" "1"
 check "open: epic and requirement rows" "$(grep -c '^M1: ' <<<"$OUT")" "4"
 check "open: a requirement row is attributed to its register" \
-  "$(grep -c 'docs/dforge/registers/billing.md #2 Refund — open' <<<"$OUT")" "1"
+  "$(grep -c 'docs/dagents/registers/billing.md #2 Refund — open' <<<"$OUT")" "1"
 run bash "$RM" open --root "$ROOT" M0
 check "open: a closed milestone with nothing open exits 0" "$RC" "0"
 run bash "$RM" open --root "$ROOT" M9
@@ -123,7 +123,7 @@ bash "$REG" set "$D/registers/m1.md" 1 doing >/dev/null
 run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
 check "settle: refuses while the spec's register is open" "$(grep -c '^not settled' <<<"$OUT")" "1"
 check "settle: the epic is untouched" "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $5 }')" "doing"
-run bash "$RM" settle --root "$ROOT" --spec docs/dforge/specs/2026-10-08-billing-design.md
+run bash "$RM" settle --root "$ROOT" --spec docs/dagents/specs/2026-10-08-billing-design.md
 check "settle: the other docs prefix still refuses while open" "$(grep -c '^not settled' <<<"$OUT")" "1"
 bash "$REG" set "$D/registers/billing.md" 1 done >/dev/null
 bash "$REG" set "$D/registers/billing.md" 2 done >/dev/null
@@ -134,7 +134,7 @@ check "settle: with the owner note" "$(register_rows "$D/registers/m1.md" | awk 
 run bash "$RM" settle --root "$ROOT" --spec "$BILLING"
 check "settle: idempotent" "$(grep -c '^no open epic row' <<<"$OUT")" "1"
 bash "$REG" set "$D/registers/m1.md" 1 doing >/dev/null
-run bash "$RM" settle --root "$ROOT" --spec docs/dforge/specs/2026-10-08-billing-design.md
+run bash "$RM" settle --root "$ROOT" --spec docs/dagents/specs/2026-10-08-billing-design.md
 check "settle: an epic matches its spec under the other docs prefix" \
   "$(register_rows "$D/registers/m1.md" | awk -F'\t' '$1 == 1 { print $5 }')" "verify"
 
@@ -148,7 +148,7 @@ run bash "$RM" open --root "$ROOT"
 check "ready: open exits 0" "$RC" "0"
 check "ready: says so" "$OUT" "M1: nothing open — ready to close"
 run bash "$RM" status --root "$ROOT"
-check "ready: status names the skill" "$(tail -n 1 <<<"$OUT")" "Current: M1 MVP — ready to close with dforge:closing-a-milestone"
+check "ready: status names the skill" "$(tail -n 1 <<<"$OUT")" "Current: M1 MVP — ready to close with dagents:closing-a-milestone"
 run bash "$RM" close --root "$ROOT" M1
 check "close: a note is required" "$RC" "2"
 run bash "$RM" close --root "$ROOT" M1 --note "audit 2026-10-09: 2 MET"
@@ -156,22 +156,22 @@ check "close: written" "$RC" "0"
 check "close: state" "$(roadmap_row "$D/roadmap.md" M1 | cut -f5)" "closed"
 check "close: note" "$(roadmap_row "$D/roadmap.md" M1 | cut -f6)" "audit 2026-10-09: 2 MET"
 run bash "$RM" status --root "$ROOT" --line
-check "all closed: the hook line" "$OUT" "Roadmap: every milestone is closed (docs/dforge/roadmap.md)."
+check "all closed: the hook line" "$OUT" "Roadmap: every milestone is closed (docs/dagents/roadmap.md)."
 run bash "$RM" check --root "$ROOT"
 check "close: the written roadmap checks clean" "$RC" "0"
 
-# --- a dforge checkout keeps its roadmap in docs/dforge ---
-FROOT="$TMP/dforge"
+# --- a dagents checkout keeps its roadmap in docs/dagents ---
+FROOT="$TMP/dagents"
 git init -q -b main "$FROOT"
 mkdir -p "$FROOT/docs"
-cp -R "$D" "$FROOT/docs/dforge"
-for f in "$FROOT"/docs/dforge/roadmap.md "$FROOT"/docs/dforge/registers/*.md; do
-  sed 's#docs/superpowers/#docs/dforge/#g' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+cp -R "$D" "$FROOT/docs/dagents"
+for f in "$FROOT"/docs/dagents/roadmap.md "$FROOT"/docs/dagents/registers/*.md; do
+  sed 's#docs/superpowers/#docs/dagents/#g' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 done
 run bash "$RM" status --root "$FROOT" --line
-check "docs/dforge: the hook line names its roadmap" "$OUT" "Roadmap: every milestone is closed (docs/dforge/roadmap.md)."
+check "docs/dagents: the hook line names its roadmap" "$OUT" "Roadmap: every milestone is closed (docs/dagents/roadmap.md)."
 run bash "$RM" check --root "$FROOT"
-check "docs/dforge: the roadmap checks clean" "$RC" "0"
+check "docs/dagents: the roadmap checks clean" "$RC" "0"
 
 # --- add, order and reopen ---
 register "$D/registers/m2.md" "$PRODUCT" '| 1 | Hardening review | - | - | open | - |'
@@ -206,7 +206,7 @@ check "check: unknown state" "$(grep -c 'unknown state: finished' <<<"$OUT")" "1
 # --- close refuses evidence it cannot read ---
 R2="$TMP/repo2"
 git init -q -b main "$R2"
-D2="$R2/docs/dforge"
+D2="$R2/docs/dagents"
 mkdir -p "$D2/registers" "$D2/specs"
 printf '# Product design\n' > "$D2/specs/2026-10-07-shop-design.md"
 cat > "$D2/roadmap.md" <<EOF
@@ -234,7 +234,7 @@ check "close: readable evidence closes" "$RC" "0"
 for i in 1 2 3 4; do bash "$RM" add --root "$R2" "Next $i" --exit x --register docs/superpowers/registers/gone.md >/dev/null 2>&1 & done
 wait
 check "add: concurrent additions get distinct milestones" "$(roadmap_rows "$D2/roadmap.md" | cut -f1 | sort -u | tr '\n' ' ')" "M1 M2 M3 M4 M5 "
-for i in 1 2 3 4; do DFORGE_FLOCK=no-such-flock bash "$RM" add --root "$R2" "Later $i" --exit x --register docs/superpowers/registers/gone.md >/dev/null 2>&1 & done
+for i in 1 2 3 4; do DAGENTS_FLOCK=no-such-flock bash "$RM" add --root "$R2" "Later $i" --exit x --register docs/superpowers/registers/gone.md >/dev/null 2>&1 & done
 wait
 check "no flock: concurrent additions get distinct milestones" "$(roadmap_rows "$D2/roadmap.md" | cut -f1 | sort -u | tr '\n' ' ')" "M1 M2 M3 M4 M5 M6 M7 M8 M9 "
 check "no flock: the lock directory is gone" "$(find "$R2" -name '*.lockd' | grep -c .)" "0"
@@ -249,36 +249,36 @@ check "usage: unknown verb" "$RC" "2"
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q -b main "$SR"
 M=$(stores_home "$SH" "$SR" proj darkmem local)
-mkdir -p "$M/dforge/registers"
-printf '# Roadmap\n' > "$M/dforge/roadmap.md"
-register "$M/dforge/registers/m1.md" "docs/dforge/specs/x.md" \
+mkdir -p "$M/dagents/registers"
+printf '# Roadmap\n' > "$M/dagents/roadmap.md"
+register "$M/dagents/registers/m1.md" "docs/dagents/specs/x.md" \
   '| 1 | A | - | - | done | - |' '| 2 | B | - | - | open | - |'
-check "roadmap_file: the mirror's roadmap" "$(HOME=$SH roadmap_file "$SR")" "$M/dforge/roadmap.md"
+check "roadmap_file: the mirror's roadmap" "$(HOME=$SH roadmap_file "$SR")" "$M/dagents/roadmap.md"
 check "roadmap_epic_counts: a register name resolves in the mirror" \
-  "$(HOME=$SH roadmap_epic_counts "$SR" docs/dforge/registers/m1.md)" "1 2"
+  "$(HOME=$SH roadmap_epic_counts "$SR" docs/dagents/registers/m1.md)" "1 2"
 check "roadmap_unresolved: rows named by register name" \
-  "$(HOME=$SH roadmap_unresolved "$SR" docs/dforge/registers/m1.md | cut -f1,2)" "$(printf 'docs/dforge/registers/m1.md\t2')"
+  "$(HOME=$SH roadmap_unresolved "$SR" docs/dagents/registers/m1.md | cut -f1,2)" "$(printf 'docs/dagents/registers/m1.md\t2')"
 
-mkdir -p "$M/dforge/specs"
-printf '# X\n' > "$M/dforge/specs/x.md"
-register "$M/dforge/registers/m9.md" "docs/dforge/specs/x.md" \
-  '| 1 | Epic | docs/dforge/specs/x.md | - | open | - |'
+mkdir -p "$M/dagents/specs"
+printf '# X\n' > "$M/dagents/specs/x.md"
+register "$M/dagents/registers/m9.md" "docs/dagents/specs/x.md" \
+  '| 1 | Epic | docs/dagents/specs/x.md | - | open | - |'
 check "roadmap_unresolved: the milestone register under the other prefix is not listed twice" \
   "$(HOME=$SH roadmap_unresolved "$SR" docs/superpowers/registers/m9.md | cut -f1,2 | tr '\n' '|')" \
-  "$(printf 'docs/superpowers/registers/m9.md\t1|docs/dforge/registers/m1.md\t2|')"
+  "$(printf 'docs/superpowers/registers/m9.md\t1|docs/dagents/registers/m1.md\t2|')"
 
 # --- an empty cell keeps its place ---
 # Tab-split reads collapse an empty cell, which shifts every later cell left:
 # the state would read as the note, and an epic's spec as its Item.
 printf '# Gift design\n' > "$D/specs/2026-10-09-gift-design.md"
-GIFT=docs/dforge/specs/2026-10-09-gift-design.md
+GIFT=docs/dagents/specs/2026-10-09-gift-design.md
 register "$D/registers/gift.md" "$GIFT" '| 1 | Wrap |  | - | open | - |'
 register "$D/registers/m5.md" "$GIFT" \
   '| 1 |  | - | - | open | - |' \
   "| 2 |  | $GIFT | - | done | - |"
 check "roadmap_unresolved: an empty cell keeps its place" \
-  "$(roadmap_unresolved "$ROOT" docs/dforge/registers/m5.md | tr '\t' ',' | tr '\n' '|')" \
-  "docs/dforge/registers/m5.md,1,,open,-|docs/dforge/registers/gift.md,1,Wrap,open,-|"
+  "$(roadmap_unresolved "$ROOT" docs/dagents/registers/m5.md | tr '\t' ',' | tr '\n' '|')" \
+  "docs/dagents/registers/m5.md,1,,open,-|docs/dagents/registers/gift.md,1,Wrap,open,-|"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

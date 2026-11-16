@@ -1,8 +1,8 @@
 # The delegated task loop
 
 One task's dispatch, review, fix loop and complete line.
-dforge:subagent-driven-development runs it for every task, and
-dforge:executing-plans runs it for each task whose brief carries
+dagents:subagent-driven-development runs it for every task, and
+dagents:executing-plans runs it for each task whose brief carries
 `**Dispatch:** delegated`: a task carrying an `**Executor:**` line, which runs
 on that executor's wrapper. A task the session implements itself and a judge
 reviews runs §The session review loop instead.
@@ -25,7 +25,7 @@ reviews runs §The session review loop instead.
 | Implementer | The task's `**Implementer:**` agent, as `subagent_type` | None |
 | External implementer | The task's `**Executor:**` line, via [executor-lane.md](executor-lane.md) | Set by the wrapper |
 | Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when a Codex seat's status line is `TIMEOUT` or `FAILED`; say every substitution aloud. On a Codex host, a native judge at Astra high or above ([native-codex.md](native-codex.md)) | None |
-| Scoped re-review | `dforge:judge-sonnet-high`; `dforge:judge-opus` for a subtle concurrency fix | None |
+| Scoped re-review | `dagents:judge-sonnet-high`; `dagents:judge-opus` for a subtle concurrency fix | None |
 
 **Fleet agents take no `model` or `effort` argument.** The Agent tool's `model`
 argument overrides the agent file's pinned model while `effort` keeps its
@@ -103,7 +103,7 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
     `--suite-base <sha>`; `review --group` records them on the group's last
     member. `<sha>` is the head of the last full-suite run, or the plan base
     before the first run. The last full-suite run is the last row of
-    `<state>/suites.tsv` (`dforge-path state`) whose command column is the
+    `<state>/suites.tsv` (`dagents-path state`) whose command column is the
     key `suite-run` records for `bash -c '<integration check>'`, whatever its
     exit, and whose HEAD is the task's base or an ancestor of it
     (`git merge-base --is-ancestor <row head> <task base>`; for a group, its
@@ -124,7 +124,7 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
     tasks (§2). A command task check on a waves plan still runs per task in
     its worktree, as it does today.
 - **Task brief:** `task-step start` extracted it to
-  `<workspace>/task-<N>-brief.md` (see using-dforge §Session Budget). The
+  `<workspace>/task-<N>-brief.md` (see using-dagents §Session Budget). The
   brief stays the single source of requirements: the dispatch file tells the
   implementer to read it first, with the exact values to use verbatim, and it
   ends with the plan's Global Constraints and Contracts. Your Agent prompt
@@ -144,7 +144,7 @@ task; exit 2 on a `Host: codex` plan sends you to *The steps by hand* below.
   the full report there and returns only status, commits, a one-line test
   summary, and concerns.
 - **UI tasks:** a brief that carries `## UI/UX contract items` is a UI task
-  (dforge:ui-ux). Say in the Agent prompt that the implementer renders the result
+  (dagents:ui-ux). Say in the Agent prompt that the implementer renders the result
   through the project UI profile's harness before reporting, and that the
   report maps each cited ID to a screenshot path or a test name; a cited ID
   with no evidence is a spec ❌ at review.
@@ -324,7 +324,7 @@ needed.
   as Codex seats below says. A Codex seat's line names
   both prompt files, `seat: codex:light prompt: <Codex prompt> fallback:
   <judge> prompt: <judge prompt>` or `seat: codex:heavy+judge-opus prompt:
-  <Codex prompt> then: dforge:judge-opus prompt: <judge prompt>`: run the
+  <Codex prompt> then: dagents:judge-opus prompt: <judge prompt>`: run the
   Codex seat as below, with the judge after `fallback:` as the seat when it
   fails and the judge after `then:` as the risk 3 second pass. Both judge
   prompts are already written, so you never run `review-route` again for
@@ -340,7 +340,7 @@ needed.
   line (`untrusted` when it printed `usable=true`). When the `seat:` line
   ends `(review-route exited <N>: …)`, `review-route` failed but
   `task-step review` still wrote the complete judge prompt: dispatch the
-  `dforge:judge-opus` seat it names as printed, and say why, quoting that
+  `dagents:judge-opus` seat it names as printed, and say why, quoting that
   note. If `task-step review` itself exits 2 (a `lens-route` failure, a bad
   `--base`, `--head` or `--cwd`, an unexpanded placeholder, or a checkout
   whose tracked files it cannot record for the verdict check), it printed
@@ -445,7 +445,7 @@ text. A plan-named command still runs on the controller host, unsandboxed and
 with your rights, as the suite is run there. Any other `baseline` command is
 not run: it stays for the ruling seat, its digest line ending
 ` (command not named in the plan)`. Review seats can write only their report
-files, the `-report.md` path under `.dforge` that the dispatch names or that
+files, the `-report.md` path under `.dagents` that the dispatch names or that
 the "Write your full report to" line of its prompt file names (the cockpit
 refuses any other write), so a seat cannot add a command to
 the plan, its amendments or the step file. An item whose check could not
@@ -476,7 +476,7 @@ restored the committed state and re-dispatched once
 same prompt file.
 A second failure dispatches the route's fallback judge:
 the judge after `fallback:` on the `seat:` line when it names one, otherwise
-`dforge:judge-opus`, a fresh dispatch even when the failed seat was
+`dagents:judge-opus`, a fresh dispatch even when the failed seat was
 judge-opus; say so. A third failure is `Task <N>: BLOCKED — review seat —
 no usable report after three dispatches`. Exit 6 with
 `run task-step review … first` means the review step never ran: run it.
@@ -516,7 +516,7 @@ Codex review from its JSON — `spec_verdict` (`compliant` or `issues`),
 exactly as to a judge's report.
 
 **Risk 3.** On `primary=codex:heavy+judge-opus`, run the Codex seat
-first, then dispatch `dforge:judge-opus` with the judge prompt file, whose
+first, then dispatch `dagents:judge-opus` with the judge prompt file, whose
 Second Pass section already names the Codex seat's `--out` path. The task's
 verdicts and scores are the judge's. Its findings,
 plus every Codex finding it marks CONFIRMED, drive the fix loop; each CONFIRMED
@@ -695,8 +695,8 @@ recorded round, and writes
 with the findings from your fix message, the brief, the report file and the
 diff path filled in. It prints the seat and that file; dispatch the seat with
 the prompt "your complete instructions are in `<prompt file>`: read it first
-and follow it". It prints `dforge:judge-sonnet-high`; for a subtle
-concurrency fix dispatch `dforge:judge-opus` with the same file and say so.
+and follow it". It prints `dagents:judge-sonnet-high`; for a subtle
+concurrency fix dispatch `dagents:judge-opus` with the same file and say so.
 When the seat returns, run
 `bash <plugin-root>/scripts/task-step verdict PLAN_FILE N --rereview <R>`.
 Its `fix round:` line says whether the round closed; its finding lines are
@@ -845,16 +845,16 @@ never stops the run. A `**CI:**` line that names no workflow declaring
 `workflow_dispatch` writes the same `skipped` line. A red run is a bullet you
 write into the next task's fix file, as §4 does for a mechanical check's
 finding. Inline mode writes no fix files: there, debug a red run with
-dforge:systematic-debugging before the next task's first step. With no task
+dagents:systematic-debugging before the next task's first step. With no task
 left, a red run is a final-review finding, debugged with
-dforge:systematic-debugging. On recovery, a `dispatched` line with no
+dagents:systematic-debugging. On recovery, a `dispatched` line with no
 `green`, `red` or `skipped` line after it gets
 `gh run view <id> --json status,conclusion` once, and a new background watch
 when the run is still going.
 
 ## The session review loop
 
-dforge:executing-plans runs this loop for a task the session implements and a
+dagents:executing-plans runs this loop for a task the session implements and a
 judge reviews: a task whose brief's second line is
 `**Review:** per-task — risk 3`. Nothing is dispatched to implement it; §3's
 review, §4's verdicts and re-reviews and §5's complete line run as written,
@@ -865,7 +865,7 @@ with the session in the implementer's place.
    writes no dispatch file and no task line. Append
    `Task <N>: implementer inline (assigned; base <sha7>)` yourself.
 2. **Implement and report.** Implement, verify, self-review and commit as
-   dforge:executing-plans §The Task Loop steps 3 to 6 say. Then write
+   dagents:executing-plans §The Task Loop steps 3 to 6 say. Then write
    `<workspace>/task-<N>-report.md` in the implementer report shape
    ([implementer-prompt.md](../skills/subagent-driven-development/references/implementer-prompt.md)
    §Report Format): status, commits, `## Verified`,
@@ -909,7 +909,7 @@ at Astra high or above as the seat ([native-codex.md](native-codex.md)).
 writing nothing, when `lens-route` does. Then run the mechanics yourself:
 
 - **§1.** Record BASE (`git rev-parse HEAD`) before dispatching. Run
-  `scripts/task-brief PLAN_FILE N` (see using-dforge §Session Budget): it
+  `scripts/task-brief PLAN_FILE N` (see using-dagents §Session Budget): it
   prints `wrote <path>: <N> lines`, then the budget line; read the path out of
   the first line and never pipe the output into a prompt as if it were a
   filename. Dispatch with

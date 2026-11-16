@@ -14,7 +14,7 @@ import { importRepository } from "./darkmem-import.mjs";
 import { pull, pullDocuments } from "./darkmem-pull.mjs";
 import { push } from "./darkmem-push.mjs";
 import { leftoverLines, pendingFamilies, reconcile, stayLine } from "./darkmem-reconcile.mjs";
-import { migrateMirrorLocked, migrateServer } from "./dforge-home-migrate.mjs";
+import { migrateMirrorLocked, migrateServer } from "./dagents-home-migrate.mjs";
 
 const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace] | restore NAME | revision NAME | reconcile";
 
@@ -60,12 +60,12 @@ async function revision({ cfg, roots, state, client, report, args, out }) {
   out(`${name}@r${String(newest.id)}`);
 }
 
-// A document name as ledgers and plans write it, docs/dforge/<rest> or the
+// A document name as ledgers and plans write it, docs/dagents/<rest> or the
 // older docs/forge/<rest> and docs/superpowers/<rest> that historical plans
-// cite, as its uri dforge/<rest>; null for a path, a handoff note, an
+// cite, as its uri dagents/<rest>; null for a path, a handoff note, an
 // archived copy, or a name that climbs.
 function documentUri(name) {
-  const match = /^(?:\.\/)?docs\/(?:dforge|forge|superpowers)\/(.+)$/.exec(name);
+  const match = /^(?:\.\/)?docs\/(?:dagents|forge|superpowers)\/(.+)$/.exec(name);
   if (!match || match[1].split("/").some(segment => segment === "" || segment === "." || segment === "..")) return null;
   const uri = `${DOC_PREFIX}/${match[1]}`;
   return uriFamily(uri) === "documents" && !isArchiveUri(uri) ? uri : null;
@@ -86,7 +86,7 @@ async function restore(context) {
   const rest = uri.slice(DOC_PREFIX.length + 1);
   const items = await client.manifest(cfg.project, DOC_PREFIX);
   if (items.some(item => item.uri === uri)) return refuse(`${uri} is occupied on darkmem; move or rename that document first`);
-  // dforge/archive/<stamp>/<rest>: a stamp sorts by time.
+  // dagents/archive/<stamp>/<rest>: a stamp sorts by time.
   const newest = items
     .filter(item => isArchiveUri(item.uri) && item.uri.slice(ARCHIVE_PREFIX.length + 1).replace(/^[^/]+\//, "") === rest)
     .sort((a, b) => (a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0))
@@ -175,11 +175,11 @@ const unsaved = (file, error) => `${file} could not be saved (${error.code ?? er
 
 // The Stop hook's push runs in the background, so a skill's push at a stop
 // point, or the next session start, can meet its lock: push waits for it,
-// 100 s unless DARKMEM_SYNC_LOCK_WAIT_MS says otherwise; every other command
-// refuses at once unless DARKMEM_SYNC_LOCK_WAIT_MS asks it to wait, as session
+// 100 s unless DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS says otherwise; every other command
+// refuses at once unless DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS asks it to wait, as session
 // start does.
 async function lockFor(name, mirror, env) {
-  const asked = Number(env.DARKMEM_SYNC_LOCK_WAIT_MS);
+  const asked = Number(env.DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS);
   const waitMs = Number.isFinite(asked) && asked > 0 ? asked : name === "push" ? 100000 : 0;
   if (!waitMs) return acquireLock(mirror);
   const deadline = Date.now() + waitMs;
@@ -218,7 +218,7 @@ async function main(argv, {
     ...stores.sync, reason: stores.reason, repoRoot: stores.repoRoot, worktreeRoot: stores.worktreeRoot, documents: stores.documents, progress: stores.progress,
   };
   // A command must not run on a mirror holding older (superpowers/ or forge/)
-  // uris: a pull would fill dforge/ beside them and every later run would
+  // uris: a pull would fill dagents/ beside them and every later run would
   // refuse.
   try {
     const migrated = migrateMirrorLocked(cfg.mirror);
@@ -305,12 +305,12 @@ async function main(argv, {
       url: cfg.url,
       apiKey: cfg.apiKey,
       runKey: runKey({ cwd, env }),
-      timeoutMs: Number(env.DARKMEM_SYNC_TIMEOUT_MS) || 10000,
+      timeoutMs: Number(env.DAGENTS_DARKMEM_SYNC_TIMEOUT_MS) || 10000,
     });
     const roots = { docsRoot: cfg.documents.root, workRoot: path.join(cfg.mirror, "work"), worktreeRoot: cfg.worktreeRoot, families };
     // darkmem's older (superpowers/ or forge/) uris move before anything
     // syncs: a pull would read a document still under an older prefix as
-    // deleted from dforge/. Answers why the command may not sync, or null.
+    // deleted from dagents/. Answers why the command may not sync, or null.
     // Reconcile calls it after its own refusals and still moves a family back
     // to the checkout, from the mirror.
     const migrate = async () => {

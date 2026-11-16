@@ -21,11 +21,11 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
-unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DAGENTS_BUDGET CLAUDE_PROJECT_DIR
 
 REPO="$TMP/repo"
 git init -q "$REPO"
-WS="$REPO/.dforge/sdd/2026-10-08-example"
+WS="$REPO/.dagents/sdd/2026-10-08-example"
 mkdir -p "$WS"
 LEDGER="$WS/progress.md"
 
@@ -46,7 +46,7 @@ write_ledger() {
 # --- turn-start ---
 check "turn-start prints nothing" "$(prompt s-1)" ""
 check "turn-start stamps the session" \
-  "$([ -f "$HOME/.claude/dforge/sessions/turns/s-1" ] && echo yes || echo no)" "yes"
+  "$([ -f "$HOME/.claude/dagents/sessions/turns/s-1" ] && echo yes || echo no)" "yes"
 check "turn-start tolerates malformed stdin" "$(printf 'nope' | bash "$START"; echo "exit $?")" "exit 0"
 
 # --- a turn that never touched the ledger ---
@@ -62,7 +62,7 @@ check "mid-plan summary: names next-step and the plan" \
   "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step" docs/superpowers/plans/2026-10-08-example.md')" "1"
 check "mid-plan summary: the plugin root is quoted" \
   "$(jq -r .reason <<<"$out" | grep -cF "\`bash \"$SHOWN/scripts/next-step\" docs/superpowers/plans/2026-10-08-example.md\`")" "1"
-check "mid-plan summary: tells the user why" "$(jq -r .systemMessage <<<"$out" | grep -c 'dforge held the stop')" "1"
+check "mid-plan summary: tells the user why" "$(jq -r .systemMessage <<<"$out" | grep -c 'dagents held the stop')" "1"
 check "mid-plan summary: the reason stays short" "$(r=$(jq -r .reason <<<"$out"); [ "${#r}" -lt 420 ] && echo short || echo "long: ${#r}")" "short"
 check "retry with stop_hook_active: passes" "$(stop s-1 'Task 1 is done.' true)" ""
 check "next-step block: passes" "$(stop s-1 $'Stopping here.\n\n## Next session\n\n**Status:** x')" ""
@@ -85,12 +85,12 @@ write_ledger $'Task 1: complete (commits a..b, review clean)\nFinal review: clea
 out=$(stop s-1 'All tasks complete and the final review is clean. Rulings I made: none.')
 check "clean final review summary: blocks" "$(decision "$out")" "block"
 check "clean final review summary: names finishing" \
-  "$(jq -r .reason <<<"$out" | grep -c 'dforge:finishing-a-development-branch')" "1"
+  "$(jq -r .reason <<<"$out" | grep -c 'dagents:finishing-a-development-branch')" "1"
 check "finishing menu: passes" "$(stop s-1 $'1. Merge back to main locally\n2. Push and create a Pull Request\n3. Keep the branch as-is\n\nWhich option?')" ""
 check "finishing test failure: passes" "$(stop s-1 'Tests failing (2 failures). Must fix before completing:')" ""
 
 # --- two ledgers written this turn: each needs its own ending ---
-WS2="$REPO/.dforge/sdd/2026-10-09-other"
+WS2="$REPO/.dagents/sdd/2026-10-09-other"
 mkdir -p "$WS2"
 printf '# SDD ledger — plan: docs/superpowers/plans/2026-10-09-other.md\nTask 2: complete (commits c..d, review clean)\n' > "$WS2/progress.md"
 out=$(stop s-1 $'1. Merge back to main locally\n\nWhich option?')
@@ -169,10 +169,10 @@ queue enqueue "$QN"
 queue dequeue
 check "dequeue takes the oldest entry: a notification behind a prompt passes" "$(stop s-1 'Waiting on the verdict.' false "$BG")" ""
 queue dequeue
-printf '2026-10-11T08:00:00.000Z\n' > "$HOME/.claude/dforge/sessions/turns/s-1.since"
+printf '2026-10-11T08:00:00.000Z\n' > "$HOME/.claude/dagents/sessions/turns/s-1.since"
 queue enqueue "$QN" 2026-10-10T08:00:00.000Z
 check "a notification queued before the resume: blocks" "$(decision "$(stop s-1 'Waiting on the verdict.' false "$BG")")" "block"
-rm -f "$HOME/.claude/dforge/sessions/turns/s-1.since"
+rm -f "$HOME/.claude/dagents/sessions/turns/s-1.since"
 queue dequeue
 
 # A launch stopped by TaskStop never sends a notification; it is not running.
@@ -225,30 +225,30 @@ check "launch with no restart since: holds" "$(decision "$(stop s-1 "$NEXT" fals
 jq -n --arg tp "$BG" --arg cwd "$REPO" '{session_id:"s-1",transcript_path:$tp,cwd:$cwd,source:"resume"}' \
   | bash "$HERE/../scripts/session-start.sh" >/dev/null
 check "session-start records the resume time" \
-  "$([ -f "$HOME/.claude/dforge/sessions/turns/s-1.since" ] && echo yes || echo no)" "yes"
+  "$([ -f "$HOME/.claude/dagents/sessions/turns/s-1.since" ] && echo yes || echo no)" "yes"
 check "launch from before the resume: passes" "$(stop s-1 "$NEXT" false "$BG")" ""
 jq -nc '{type:"user",timestamp:"2999-01-01T00:00:00.000Z",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_new",content:"Command running in background with ID: n1."}]}}' >> "$BG"
 check "launch after the resume: holds" "$(decision "$(stop s-1 "$NEXT" false "$BG")")" "block"
-before=$(cat "$HOME/.claude/dforge/sessions/turns/s-1.since")
+before=$(cat "$HOME/.claude/dagents/sessions/turns/s-1.since")
 sleep 1
 jq -n --arg tp "$BG" --arg cwd "$REPO" '{session_id:"s-1",transcript_path:$tp,cwd:$cwd,source:"compact"}' \
   | bash "$HERE/../scripts/session-start.sh" >/dev/null
 check "compaction keeps the running work's start time" \
-  "$(cat "$HOME/.claude/dforge/sessions/turns/s-1.since")" "$before"
+  "$(cat "$HOME/.claude/dagents/sessions/turns/s-1.since")" "$before"
 # A session running past the week-long prune keeps its resume time.
-touch -d '10 days ago' "$HOME/.claude/dforge/sessions/turns/s-1.since"
+touch -d '10 days ago' "$HOME/.claude/dagents/sessions/turns/s-1.since"
 prompt s-1
 check "a live session's resume time survives the prune" \
-  "$([ -f "$HOME/.claude/dforge/sessions/turns/s-1.since" ] && echo yes || echo no)" "yes"
-rm -f "$HOME/.claude/dforge/sessions/turns/s-1.since"
+  "$([ -f "$HOME/.claude/dagents/sessions/turns/s-1.since" ] && echo yes || echo no)" "yes"
+rm -f "$HOME/.claude/dagents/sessions/turns/s-1.since"
 H3="$TMP/home-no-record"
 mkdir -p "$H3"
 jq -n --arg cwd "$REPO" '{session_id:"s-6",cwd:$cwd,source:"startup"}' \
   | HOME="$H3" bash "$HERE/../scripts/session-start.sh" >/dev/null
 check "session-start without a transcript writes no session record" \
-  "$([ -e "$H3/.claude/dforge/sessions/by-id" ] && echo yes || echo no)" "no"
+  "$([ -e "$H3/.claude/dagents/sessions/by-id" ] && echo yes || echo no)" "no"
 check "session-start makes the cockpit directory without a session record" \
-  "$([ -d "$H3/.claude/dforge/sessions/cockpit" ] && echo yes || echo no)" "yes"
+  "$([ -d "$H3/.claude/dagents/sessions/cockpit" ] && echo yes || echo no)" "yes"
 # An empty HOME persists nothing: no path under /.claude reaches mkdir or find.
 # The shims log every argument and refuse such a path instead of running the
 # tool, so the case holds as root and never writes /.claude on the host.
@@ -270,7 +270,7 @@ out=$(jq -n --arg tp "$BG" --arg cwd "$REPO" '{session_id:"s-7",transcript_path:
   | HOME= PATH="$SHIM:$PATH" bash "$HERE/../scripts/session-start.sh")
 check "session-start with an empty HOME touches nothing under /.claude" "$(grep -c '^/\.claude' "$TMP/shim.log")" "0"
 check "session-start with an empty HOME still injects the entry point" \
-  "$(jq -r '.hookSpecificOutput.additionalContext | contains("You have dforge.")' <<<"$out" 2>/dev/null)" "true"
+  "$(jq -r '.hookSpecificOutput.additionalContext | contains("You have dagents.")' <<<"$out" 2>/dev/null)" "true"
 
 # --- another session, or no stamp ---
 check "unstamped session: passes" "$(stop s-other 'Done.')" ""
@@ -290,10 +290,10 @@ check "both hooks force bash" \
 # --- an auto run bound to the session ends its turns only on the sentinel ---
 AR="$HERE/../scripts/auto-run"
 git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init
-mkdir -p "$HOME/.claude/dforge/sessions/cockpit"
-date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-1"
+mkdir -p "$HOME/.claude/dagents/sessions/cockpit"
+date +%s > "$HOME/.claude/dagents/sessions/cockpit/s-1"
 (cd "$REPO" && bash "$AR" --session s-1 start --spec docs/s.md --register docs/r.md >/dev/null)
-STATE="$REPO/.dforge/sdd/auto-run.json"
+STATE="$REPO/.dagents/sdd/auto-run.json"
 pend() { jq --arg p "$1" '.pending = $p' "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
 stop_in() { # stop_in <cwd> <session> <last message> [transcript]
   jq -n --arg cwd "$1" --arg sid "$2" --arg msg "$3" --arg tp "${4:-}" \
@@ -328,7 +328,7 @@ check "auto run: the after-compact hold quotes the plugin root" "$(jq -r .reason
 pend handoff
 out=$(stop s-1 $'Task 3: complete.\n\nAuto run: compacting')
 check "auto run: a pending handoff is held" "$(decision "$out")" "block"
-check "auto run: the hold says to hand off and clear" "$(jq -r .reason <<<"$out" | grep -c 'run dforge:handoff')" "1"
+check "auto run: the hold says to hand off and clear" "$(jq -r .reason <<<"$out" | grep -c 'run dagents:handoff')" "1"
 check "auto run: the handoff hold quotes the plugin root" "$(jq -r .reason <<<"$out" | grep -cF "then \`bash \"$SHOWN/scripts/auto-run\" clear\`")" "1"
 check "auto run: the clearing line does not answer a handoff" "$(decision "$(stop s-1 $'Handed off.\n\nAuto run: clearing')")" "block"
 pend resume
@@ -352,15 +352,15 @@ check "auto run: then the retry passes" "$(stop s-1 'Done.' true)" ""
 check "a stopped run: back to the plain rules" "$(stop s-1 'Here is the answer.')" ""
 
 # --- an auto run holds a session that has no turn stamp ---
-date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-5"
+date +%s > "$HOME/.claude/dagents/sessions/cockpit/s-5"
 (cd "$REPO" && bash "$AR" --session s-5 start --spec docs/s.md --register docs/r.md --force >/dev/null)
 check "no stamp and no run bound: passes" "$(stop s-other 'Done.')" ""
 out=$(stop s-5 'Done.')
 check "auto run without a turn stamp: held" "$(decision "$out")" "block"
-check "auto run without a turn stamp: the count is kept" "$(cat "$HOME/.claude/dforge/sessions/turns/s-5.holds")" "1"
+check "auto run without a turn stamp: the count is kept" "$(cat "$HOME/.claude/dagents/sessions/turns/s-5.holds")" "1"
 H2="$TMP/home-turns-is-a-file"
-mkdir -p "$H2/.claude/dforge/sessions"
-printf 'not a directory\n' > "$H2/.claude/dforge/sessions/turns"
+mkdir -p "$H2/.claude/dagents/sessions"
+printf 'not a directory\n' > "$H2/.claude/dagents/sessions/turns"
 out=$(HOME="$H2" stop s-5 'Done.' true)
 check "a hold count that cannot be written: the run stops" "$(jq -r .active "$STATE"):$(jq -r .stopped "$STATE" | grep -c 'without its sentinel')" "false:1"
 check "a hold count that cannot be written: one hold asks for the attended ending" "$(jq -r .reason <<<"$out" | grep -c '§Stopping')" "1"
@@ -368,33 +368,33 @@ check "a hold count that cannot be written: one hold asks for the attended endin
 # --- progress kept in darkmem: the mirror's ledgers are the ones read ---
 . "$HERE/fixtures/darkmem-stores.sh"
 M=$(stores_home "$HOME" "$REPO" proj local darkmem)
-mkdir -p "$M/work/sdd/2026-10-10-mirror" "$REPO/.dforge/sdd/2026-10-10-mirror"
+mkdir -p "$M/work/sdd/2026-10-10-mirror" "$REPO/.dagents/sdd/2026-10-10-mirror"
 sleep 1; prompt s-2; sleep 1
-printf '# SDD ledger — plan: docs/dforge/plans/2026-10-10-mirror.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-10-mirror/progress.md"
+printf '# SDD ledger — plan: docs/dagents/plans/2026-10-10-mirror.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-10-mirror/progress.md"
 out=$(stop s-2 'Task 1 is done.')
 check "darkmem progress: a mirror ledger blocks a bare summary" "$(decision "$out")" "block"
 check "darkmem progress: names the plan" \
-  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step" docs/dforge/plans/2026-10-10-mirror.md')" "1"
+  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step" docs/dagents/plans/2026-10-10-mirror.md')" "1"
 mkdir -p "$M/work/sdd/2026-10-11-other"
 sleep 1; prompt s-3; sleep 1
-printf '# SDD ledger — plan: docs/dforge/plans/2026-10-11-other.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-11-other/progress.md"
+printf '# SDD ledger — plan: docs/dagents/plans/2026-10-11-other.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-11-other/progress.md"
 check "darkmem progress: another worktree's ledger does not block" "$(stop s-3 'Task 1 is done.')" ""
-rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
+rm -f "$HOME/.dagents/config.json" "$HOME/.dagents/stores.json"
 
 # --- a branch moved without a plan's ledger is not held ---
 commit_in() { git -C "$1" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m "$2"; }
 UT="$TMP/unplanned.jsonl"
-mkdir -p "$REPO/docs/dforge"
+mkdir -p "$REPO/docs/dagents"
 sleep 1; prompt s-4
 jq -nc --arg t "$(date -u +%Y-%m-%dT%H:%M:%S.999Z)" \
-  '{type:"assistant",timestamp:$t,message:{content:[{type:"tool_use",id:"toolu_s",name:"Skill",input:{skill:"dforge:test-driven-development"}}]}}' > "$UT"
+  '{type:"assistant",timestamp:$t,message:{content:[{type:"tool_use",id:"toolu_s",name:"Skill",input:{skill:"dagents:test-driven-development"}}]}}' > "$UT"
 check "turn-start records the branch heads" \
-  "$([ -f "$HOME/.claude/dforge/sessions/turns/s-4.refs" ] && echo yes || echo no)" "yes"
+  "$([ -f "$HOME/.claude/dagents/sessions/turns/s-4.refs" ] && echo yes || echo no)" "yes"
 commit_in "$REPO" adhoc
-check "a dforge turn that committed without a plan: passes" "$(stop s-4 'Fixed and committed.' false "$UT")" ""
+check "a dagents turn that committed without a plan: passes" "$(stop s-4 'Fixed and committed.' false "$UT")" ""
 sleep 1; prompt s-4 "$outside"
 check "a prompt outside git records no heads" \
-  "$([ -f "$HOME/.claude/dforge/sessions/turns/s-4.refs" ] && echo yes || echo no)" "no"
+  "$([ -f "$HOME/.claude/dagents/sessions/turns/s-4.refs" ] && echo yes || echo no)" "no"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

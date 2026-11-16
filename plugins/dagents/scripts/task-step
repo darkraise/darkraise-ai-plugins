@@ -37,7 +37,7 @@ die() { printf 'task-step: %s\n' "$1" >&2; exit "${2:-2}"; }
 plan_budget_line() {
   local mode=()
   read -r -a mode <<<"$(. "$1/lib/context.sh" && ctx_plan_mode "$3" "$4" 2>/dev/null)" || mode=()
-  DFORGE_BUDGET_CALLER=$2 bash "$1/context-size" ${mode[@]+"${mode[@]}"} 2>/dev/null
+  DAGENTS_BUDGET_CALLER=$2 bash "$1/context-size" ${mode[@]+"${mode[@]}"} 2>/dev/null
 }
 usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND] | start PLAN_FILE N --inline [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]"; }
 
@@ -92,7 +92,7 @@ suite_row() {
   local cmd sdir key
   cmd=$(jq -r '.suite // empty' "$1" 2>/dev/null | tr -d '\r')
   [ -n "$cmd" ] || return 0
-  sdir=$(cd "${3:-.}" && bash "$HERE/dforge-path" state | tr -d '\r') || return 0
+  sdir=$(cd "${3:-.}" && bash "$HERE/dagents-path" state | tr -d '\r') || return 0
   [ -f "$sdir/suites.tsv" ] || return 0
   key=$(suite_key "$cmd")
   tr -d '\r' < "$sdir/suites.tsv" | RH=$2 K=$key awk -F'\t' '
@@ -367,7 +367,7 @@ cmd_rereview() (
 
   plan=$(plan_locate "$plan_arg")
   [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
-  dforge_stores_init "$(_plan_ctx "$plan")"
+  dagents_stores_init "$(_plan_ctx "$plan")"
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
   src=$tmp/plan.md
@@ -387,7 +387,7 @@ cmd_rereview() (
 
   first=${tasks[0]}
   ids=$(IFS=,; echo "${tasks[*]}")
-  ws=$(dforge_workspace "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")
+  ws=$(dagents_workspace "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")
   state=$ws/task-$first-step.json
   review_head=""
   [ ! -f "$state" ] || review_head=$(jq -r '.reviewHead // empty' "$state" | tr -d '\r')
@@ -515,12 +515,12 @@ cmd_rereview() (
     printf 're-review: skipped (%s changed lines, 1 finding, %s)\n' "$lines" "$file"
   else
     printf 'task %s: re-review round %s: packaged %s..%s, prompt written (not skipped: %s)\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}" "$why"
-    printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$prompt"
+    printf 'seat: dagents:judge-sonnet-high prompt: %s\n' "$prompt"
     [ -z "$suite_why" ] || printf 're-review: not skipped (suite %s)\n' "$suite_why"
   fi
   printf 'state: base %s review-head %s round %s t0 %s\n' \
     "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "${head_sha:0:7}" "$new_round" "$now"
-  plan_budget_line "$here" task-step:rereview "$src" "$(dforge_ledger_dir "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")/progress.md" || true
+  plan_budget_line "$here" task-step:rereview "$src" "$(dagents_ledger_dir "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")/progress.md" || true
 )
 
 if [ "${1:-}" = rereview ]; then
@@ -572,7 +572,7 @@ plan=$(plan_locate "$plan_arg")
 [ -f "$plan" ] || die "no such plan file: $plan"
 plan_require_same_project "$plan"
 ctx=$(_plan_ctx "$plan")
-dforge_stores_init "$ctx"
+dagents_stores_init "$ctx"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -587,8 +587,8 @@ for n in "${ids[@]}"; do
 done
 
 slug=$(basename "$plan" .md)
-ws=$(dforge_workspace "$slug" "$ctx")
-ledger="$(dforge_ledger_dir "$slug" "$ctx")/progress.md"
+ws=$(dagents_workspace "$slug" "$ctx")
+ledger="$(dagents_ledger_dir "$slug" "$ctx")/progress.md"
 state="$ws/task-$first-step.json"
 plugin_root=$(cd "$HERE/.." && pwd)
 brief="$ws/task-$first-brief.md"
@@ -697,7 +697,7 @@ state_line() {
 ledger_init() {
   [ -f "$ledger" ] && return
   mkdir -p "$(dirname "$ledger")"
-  printf '# SDD ledger — plan: %s\n' "$(dforge_name "$plan" "$ctx")" > "$ledger"
+  printf '# SDD ledger — plan: %s\n' "$(dagents_name "$plan" "$ctx")" > "$ledger"
 }
 
 # terminal_line N: the task's last `Task <N>: ` ledger line, stepping over the
@@ -830,7 +830,7 @@ do_start() {
   elif [ -n "$exec_id" ]; then
     printf 'executor %s: follow executor-lane.md §Dispatch\n' "$exec_id"
   elif [ -n "$agent" ]; then
-    printf 'seat: dforge:%s prompt: %s\n' "$agent" "$dispatch"
+    printf 'seat: dagents:%s prompt: %s\n' "$agent" "$dispatch"
   else
     printf 'seat: unscored (no known **Implementer:** line; score it per ladder.md, dispatch that agent, end its assigned line with "; scored at dispatch") prompt: %s\n' "$dispatch"
   fi
@@ -868,15 +868,15 @@ do_review() {
   if [ "$rrc" -eq 0 ]; then
     primary=$(route_field primary) fallback=$(route_field fallback) reason=$(route_field reason)
   else
-    primary=dforge:judge-opus fallback=- reason=route-failed
+    primary=dagents:judge-opus fallback=- reason=route-failed
     note=" (review-route exited $rrc: $(tr -d '\r' < "$TMP/route.err" | head -n 1))"
   fi
   case $primary in
     codex:light) tier=light judge=$fallback ;;
-    codex:heavy+judge-opus) tier=heavy judge=dforge:judge-opus ;;
+    codex:heavy+judge-opus) tier=heavy judge=dagents:judge-opus ;;
     *) judge=$primary ;;
   esac
-  case $judge in dforge:*) ;; *) judge=dforge:judge-opus ;; esac
+  case $judge in dagents:*) ;; *) judge=dagents:judge-opus ;; esac
 
   for n in "${ids[@]}"; do
     lout=$(bash "$HERE/lens-route" "$plan" --task "$n" 2>&1); lrc=$?
@@ -1057,15 +1057,15 @@ do_group() {
   if [ "$rrc" -eq 0 ]; then
     primary=$(route_field primary) fallback=$(route_field fallback)
   else
-    primary=dforge:judge-opus fallback=-
+    primary=dagents:judge-opus fallback=-
     note=" (review-route exited $rrc: $(tr -d '\r' < "$TMP/route.err" | head -n 1))"
   fi
   case $primary in
     codex:light) judge=$fallback ;;
-    codex:*) judge=dforge:judge-opus ;;
+    codex:*) judge=dagents:judge-opus ;;
     *) judge=$primary ;;
   esac
-  case $judge in dforge:*) ;; *) judge=dforge:judge-opus ;; esac
+  case $judge in dagents:*) ;; *) judge=dagents:judge-opus ;; esac
 
   [ -f "$template" ] || die "missing template $template"
   prompt_text "$template" | fill '[GROUP_LIST]' "$list" '[PACKAGE_FILE]' "$pkg" \

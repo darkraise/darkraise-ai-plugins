@@ -1,6 +1,6 @@
 # Runner reference
 
-Flags for dforge:test-simplifier, by ecosystem. Check each against the
+Flags for dagents:test-simplifier, by ecosystem. Check each against the
 project's installed versions before relying on it; prefer a tool the project
 already uses over adding one.
 

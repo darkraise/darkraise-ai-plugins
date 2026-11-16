@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Acceptance QA for "Auto runs follow the worktree setting": each statement
-# A1-A12, A20 and A21 of docs/dforge/specs/2026-11-08-auto-run-worktree-setting-design.md
+# A1-A12, A20 and A21 of docs/dagents/specs/2026-11-08-auto-run-worktree-setting-design.md
 # is checked through the CLI (scripts/auto-run) in throwaway repositories.
 # ONLY="A3 A4" runs just those statements.
 set -uo pipefail
@@ -21,15 +21,15 @@ if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
-export MSYS_NO_PATHCONV=1 DFORGE_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
+export MSYS_NO_PATHCONV=1 DAGENTS_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DFORGE_BUDGET DFORGE_JQ DFORGE_FLOCK DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
+unset DAGENTS_BUDGET DAGENTS_JQ DAGENTS_FLOCK DR_SUPERPOWERS_BUDGET DR_SUPERPOWERS_JQ CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
 
-SPEC=docs/dforge/specs/2026-10-13-widget-design.md
+SPEC=docs/dagents/specs/2026-10-13-widget-design.md
 REPO="" CWD="" STATE=""
 
 beat() { # the heartbeat a live cockpit writes
-  local f="$HOME/.claude/dforge/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  local f="$HOME/.claude/dagents/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
   mkdir -p "$(dirname "$f")"
   printf '%s\n' "$(date +%s)" > "$f"
 }
@@ -39,7 +39,7 @@ fld() { jq -r --arg f "$1" '.[$f] | tostring' "$STATE" | tr -d '\r'; }
 snap() { jq -c '[.branch, .branchBase, .carried, .isolation, .phase, .base]' "$STATE" | tr -d '\r'; }
 
 newrepo() { # newrepo <name>: a repository on main with tracked files
-  REPO="$TMP/$1" CWD="$TMP/$1" STATE="$TMP/$1/.dforge/sdd/auto-run.json"
+  REPO="$TMP/$1" CWD="$TMP/$1" STATE="$TMP/$1/.dagents/sdd/auto-run.json"
   git init -q -b main "$REPO"
   mkdir -p "$REPO/tracked" "$REPO/docs"
   local f

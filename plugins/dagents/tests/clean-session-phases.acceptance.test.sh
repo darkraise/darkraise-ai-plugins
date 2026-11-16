@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Acceptance checks for docs/dforge/specs/2026-11-09-clean-session-phases-design.md
+# Acceptance checks for docs/dagents/specs/2026-11-09-clean-session-phases-design.md
 # (the script, document and review-package statements; the cockpit statements
 # are in clean-session-phases.acceptance.test.ts): the switch and finishing
 # take the cleared-session path, and review-package leaves a branch's own
@@ -15,9 +15,9 @@ if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
-export LC_ALL=C MSYS_NO_PATHCONV=1 DFORGE_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
+export LC_ALL=C MSYS_NO_PATHCONV=1 DAGENTS_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DFORGE_BUDGET DFORGE_JQ DFORGE_FLOCK CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
+unset DAGENTS_BUDGET DAGENTS_JQ DAGENTS_FLOCK CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -39,14 +39,14 @@ matches() { # matches <name> <haystack> <extended regex>
 
 # --- the script statements: A3, A4, A5 ---
 REPO="$TMP/repo"
-STATE="$REPO/.dforge/sdd/auto-run.json"
-HANDOFF="$REPO/.dforge/handoff/latest.md"
-SPEC=docs/dforge/specs/2026-11-09-widget-design.md
-PLAN_REL=docs/dforge/plans/2026-11-09-widget.md
-LEDGER="$REPO/.dforge/sdd/2026-11-09-widget/progress.md"
+STATE="$REPO/.dagents/sdd/auto-run.json"
+HANDOFF="$REPO/.dagents/handoff/latest.md"
+SPEC=docs/dagents/specs/2026-11-09-widget-design.md
+PLAN_REL=docs/dagents/plans/2026-11-09-widget.md
+LEDGER="$REPO/.dagents/sdd/2026-11-09-widget/progress.md"
 beat() { # beat <session>: the heartbeat a live cockpit writes
   local f
-  f="$HOME/.claude/dforge/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  f="$HOME/.claude/dagents/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
   mkdir -p "$(dirname "$f")"
   printf '%s\n' "$(date +%s)" > "$f"
 }
@@ -60,7 +60,7 @@ field() { jq -r --arg f "$1" '.[$f] | tostring' < "$STATE" | tr -d '\r'; }
 resumes() { arun "$1" status | sed -n 's/.* \([0-9][0-9]*\) resumes.*/\1/p'; }
 
 git init -q -b main "$REPO"
-mkdir -p "$REPO/docs/dforge/plans" "$REPO/docs/dforge/specs"
+mkdir -p "$REPO/docs/dagents/plans" "$REPO/docs/dagents/specs"
 printf '# Spec\n' > "$REPO/$SPEC"
 {
   printf '# Widget Implementation Plan\n\n**Spec:** `%s`\n\n' "$SPEC"
@@ -89,7 +89,7 @@ status_line=$(arun s-2 status)
 has "A3: status reports phase execute" "$status_line" "auto run: execute"
 matches "A3: status says setup is due" "$status_line" "setup due"
 check "A3: the resume count is unchanged" "$(resumes s-2)" "$before"
-check "A3: the first prompt is the one next-step wrote" "$(field resumePrompt | grep -c 'dforge:subagent-driven-development')" "1"
+check "A3: the first prompt is the one next-step wrote" "$(field resumePrompt | grep -c 'dagents:subagent-driven-development')" "1"
 
 # A4
 arun s-2 stop >/dev/null
@@ -121,7 +121,7 @@ arun s-4 phase final >/dev/null
 resumes_before=$(resumes s-4)
 block=$(cd "$REPO" && bash "$S/next-step" "$PLAN_REL")
 first_prompt=$(awk '/^Paste as the first prompt:/ { want = 1; next } want && /^```/ { if (seen) exit; seen = 1; next } want && seen { print }' <<<"$block")
-has "A5: next-step's block names finishing" "$block" "Run dforge:finishing-a-development-branch."
+has "A5: next-step's block names finishing" "$block" "Run dagents:finishing-a-development-branch."
 arun s-4 phase finish >/dev/null; status=$?
 check "A5: phase finish exits 0" "$status" "0"
 arun s-4 clear --phase >/dev/null; status=$?
@@ -130,7 +130,7 @@ has "A5: status reports phase finish" "$(arun s-4 status)" "auto run: finish"
 check "A5: the phase is finish" "$(field phase)" "finish"
 check "A5: clear is pending" "$(arun s-4 pending)" "clear"
 check "A5: the first prompt is next-step's finishing prompt" "$(field resumePrompt)" "$first_prompt"
-has "A5: the first prompt reaches finishing through resume-execution" "$(field resumePrompt)" "with dforge:resume-execution. Run dforge:finishing-a-development-branch."
+has "A5: the first prompt reaches finishing through resume-execution" "$(field resumePrompt)" "with dagents:resume-execution. Run dagents:finishing-a-development-branch."
 check "A5: the resume count is unchanged" "$(resumes s-4)" "$resumes_before"
 
 # --- the document statements: A11 ---
@@ -150,22 +150,22 @@ check "A11: the skill-size test passes" "$status" "0"
 RP="$S/review-package"
 RR="$TMP/rp"
 git init -q -b main "$RR"
-mkdir -p "$RR/docs/dforge/plans" "$RR/docs/dforge/specs" "$RR/docs/dforge/registers" "$RR/src/deep" "$RR/lib"
-printf '# Plan\n\n### Task 1: One\n\nBody.\n' > "$RR/docs/dforge/plans/2026-11-09-demo.md"
+mkdir -p "$RR/docs/dagents/plans" "$RR/docs/dagents/specs" "$RR/docs/dagents/registers" "$RR/src/deep" "$RR/lib"
+printf '# Plan\n\n### Task 1: One\n\nBody.\n' > "$RR/docs/dagents/plans/2026-11-09-demo.md"
 printf 'seed\n' > "$RR/src/seed.txt"
 printf 'seed\n' > "$RR/lib/seed.txt"
-printf 'seed\n' > "$RR/docs/dforge/notes.md"
+printf 'seed\n' > "$RR/docs/dagents/notes.md"
 printf 'seed\n' > "$RR/docs/guide.md"
 git -C "$RR" add -A
 git -C "$RR" commit -qm base
 BASE=$(git -C "$RR" rev-parse HEAD)
-PLAN="$RR/docs/dforge/plans/2026-11-09-demo.md"
+PLAN="$RR/docs/dagents/plans/2026-11-09-demo.md"
 
 printf 'code one\n' > "$RR/src/deep/code.js"
 printf 'code two\n' > "$RR/lib/code.js"
-printf 'spec text\n' > "$RR/docs/dforge/specs/2026-11-09-demo-design.md"
+printf 'spec text\n' > "$RR/docs/dagents/specs/2026-11-09-demo-design.md"
 printf '\nplan edit\n' >> "$PLAN"
-printf 'row\n' > "$RR/docs/dforge/registers/2026-11-09-demo.md"
+printf 'row\n' > "$RR/docs/dagents/registers/2026-11-09-demo.md"
 git -C "$RR" add -A
 git -C "$RR" commit -qm "code and own documents"
 C1=$(git -C "$RR" rev-parse HEAD)
@@ -184,17 +184,17 @@ has "A8: the stat lists src/deep/code.js" "$files" "src/deep/code.js"
 has "A8: the stat lists lib/code.js" "$files" "lib/code.js"
 has "A8: the diff carries src/deep/code.js" "$body" "diff --git a/src/deep/code.js b/src/deep/code.js"
 has "A8: the diff carries lib/code.js" "$body" "diff --git a/lib/code.js b/lib/code.js"
-for left in docs/dforge/specs/2026-11-09-demo-design.md docs/dforge/plans/2026-11-09-demo.md docs/dforge/registers/2026-11-09-demo.md; do
+for left in docs/dagents/specs/2026-11-09-demo-design.md docs/dagents/plans/2026-11-09-demo.md docs/dagents/registers/2026-11-09-demo.md; do
   lacks "A8: the diff does not carry $left" "$body" "$left"
   check "A8: the stat does not list $left" "$(grep -F "$left" <<<"$files" | grep -c ' | ')" "0"
   check "A8: one line under Files changed names $left as left out" "$(grep -cF "$left" <<<"$files")" "1"
 done
 
-printf 'notes edit\n' >> "$RR/docs/dforge/notes.md"
+printf 'notes edit\n' >> "$RR/docs/dagents/notes.md"
 printf 'guide edit\n' >> "$RR/docs/guide.md"
 git -C "$RR" add -A
 git -C "$RR" commit -qm "documents outside the three"
-printf 'late spec edit\n' >> "$RR/docs/dforge/specs/2026-11-09-demo-design.md"
+printf 'late spec edit\n' >> "$RR/docs/dagents/specs/2026-11-09-demo-design.md"
 git -C "$RR" add -A
 git -C "$RR" commit -qm "spec only commit"
 C3=$(git -C "$RR" rev-parse HEAD)
@@ -204,18 +204,18 @@ check "A9: review-package exits 0" "$status" "0"
 files=$(files_section "$TMP/a9.diff")
 body=$(diff_section "$TMP/a9.diff")
 commits=$(awk '/^## Commits$/ { on = 1; next } /^## Files changed$/ { on = 0 } on' "$TMP/a9.diff")
-has "A9: the diff keeps docs/dforge/notes.md" "$body" "diff --git a/docs/dforge/notes.md b/docs/dforge/notes.md"
+has "A9: the diff keeps docs/dagents/notes.md" "$body" "diff --git a/docs/dagents/notes.md b/docs/dagents/notes.md"
 has "A9: the diff keeps docs/guide.md" "$body" "diff --git a/docs/guide.md b/docs/guide.md"
-has "A9: the stat lists docs/dforge/notes.md" "$files" "docs/dforge/notes.md"
+has "A9: the stat lists docs/dagents/notes.md" "$files" "docs/dagents/notes.md"
 has "A9: the stat lists docs/guide.md" "$files" "docs/guide.md"
-lacks "A9: the diff still leaves out the spec" "$body" "docs/dforge/specs/2026-11-09-demo-design.md"
+lacks "A9: the diff still leaves out the spec" "$body" "docs/dagents/specs/2026-11-09-demo-design.md"
 for subject in "code and own documents" "documents outside the three" "spec only commit"; do
   has "A9: the commit list names '$subject'" "$commits" "$subject"
 done
 check "A9: the commit list has one line per commit" "$(grep -c . <<<"$commits")" "$(git -C "$RR" rev-list --count "$BASE..$C3")"
 
-printf 'only spec again\n' >> "$RR/docs/dforge/specs/2026-11-09-demo-design.md"
-printf 'only register again\n' >> "$RR/docs/dforge/registers/2026-11-09-demo.md"
+printf 'only spec again\n' >> "$RR/docs/dagents/specs/2026-11-09-demo-design.md"
+printf 'only register again\n' >> "$RR/docs/dagents/registers/2026-11-09-demo.md"
 printf 'only plan again\n' >> "$PLAN"
 git -C "$RR" add -A
 git -C "$RR" commit -qm "documents only"
@@ -225,7 +225,7 @@ rp "$RR" "$TMP/a10.diff" "$D_BASE" "$D_HEAD"; status=$?
 check "A10: review-package exits 0" "$status" "0"
 files=$(files_section "$TMP/a10.diff")
 body=$(diff_section "$TMP/a10.diff")
-for doc in docs/dforge/specs/2026-11-09-demo-design.md docs/dforge/registers/2026-11-09-demo.md docs/dforge/plans/2026-11-09-demo.md; do
+for doc in docs/dagents/specs/2026-11-09-demo-design.md docs/dagents/registers/2026-11-09-demo.md docs/dagents/plans/2026-11-09-demo.md; do
   has "A10: the diff shows $doc" "$body" "diff --git a/$doc b/$doc"
   check "A10: the stat lists $doc" "$(grep -F "$doc" <<<"$files" | grep -c ' | ')" "1"
 done
@@ -239,7 +239,7 @@ check "A14: the stat equals" "$(files_section "$TMP/sub.diff")" "$(files_section
 check "A14: the diff equals" "$(diff_section "$TMP/sub.diff")" "$(diff_section "$TMP/top.diff")"
 has "A14: the subdirectory run still diffs a file outside it" "$(diff_section "$TMP/sub.diff")" "diff --git a/lib/code.js b/lib/code.js"
 has "A14: the subdirectory run still diffs a document outside the three" "$(diff_section "$TMP/sub.diff")" "diff --git a/docs/guide.md b/docs/guide.md"
-lacks "A14: the subdirectory run still leaves the spec out" "$(diff_section "$TMP/sub.diff")" "docs/dforge/specs/2026-11-09-demo-design.md"
+lacks "A14: the subdirectory run still leaves the spec out" "$(diff_section "$TMP/sub.diff")" "docs/dagents/specs/2026-11-09-demo-design.md"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

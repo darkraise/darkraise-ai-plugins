@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Summarise where a test suite spends its time, from the JUnit XML reports its
-# runners already emit, so dforge:test-simplifier reads a short table
+# runners already emit, so dagents:test-simplifier reads a short table
 # instead of the raw reports.
 #
 # Usage: test-profile [--top N] [--layer NAME=ERE]... [--brief] <report.xml|dir>...

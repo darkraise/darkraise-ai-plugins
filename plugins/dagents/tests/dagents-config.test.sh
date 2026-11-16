@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# dforge-config: environment over file over default, set/unset, refusals, and
+# dagents-config: environment over file over default, set/unset, refusals, and
 # the one-time import of the pre-2.0 settings.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CMD="$HERE/../scripts/dforge-config"
-command -v node > /dev/null 2>&1 || { echo "dforge-config tests: node is required but not on PATH" >&2; exit 2; }
+CMD="$HERE/../scripts/dagents-config"
+command -v node > /dev/null 2>&1 || { echo "dagents-config tests: node is required but not on PATH" >&2; exit 2; }
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -16,9 +16,9 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 if command -v cygpath > /dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
-unset CLAUDE_CONFIG_DIR DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR
 fc() { bash "$CMD" "$@" 2> "$TMP/stderr"; }
-fresh() { export HOME="$TMP/home-$1"; mkdir -p "$HOME"; FILE="$HOME/.dforge/config.json"; }
+fresh() { export HOME="$TMP/home-$1"; mkdir -p "$HOME"; FILE="$HOME/.dagents/config.json"; }
 
 # --- the value check lives in the schema module, shared with the cockpit ---
 SCHEMA_MJS="$HERE/../config/schema.mjs"
@@ -68,10 +68,10 @@ check "refusals change nothing" "$(cat "$FILE")" "$before"
 # --- environment over file ---
 fc set handoffTokens 300000
 check "file value" "$(fc get handoffTokens)" "300000"
-check "DFORGE_BUDGET wins" "$(DFORGE_BUDGET=400000 fc get handoffTokens)" "400000"
+check "DAGENTS_BUDGET wins" "$(DAGENTS_BUDGET=400000 fc get handoffTokens)" "400000"
 check "the pre-2.0 DR_SUPERPOWERS_BUDGET is not read" "$(DR_SUPERPOWERS_BUDGET=450000 fc get handoffTokens)" "300000"
-check "an invalid override is ignored" "$(DFORGE_BUDGET=junk fc get handoffTokens)" "300000"
-check "and warned about" "$(grep -c 'DFORGE_BUDGET' "$TMP/stderr")" "1"
+check "an invalid override is ignored" "$(DAGENTS_BUDGET=junk fc get handoffTokens)" "300000"
+check "and warned about" "$(grep -c 'DAGENTS_BUDGET' "$TMP/stderr")" "1"
 
 # --- a file that is not JSON is refused, not overwritten ---
 printf 'not json' > "$FILE"
@@ -112,13 +112,13 @@ p2=$!
 wait "$p1" "$p2"
 case $(tr -d ' \n' < "$FILE") in '{"layout":"compact"}'|'{"layout":"full","warnAt":70}') whole=yes ;; *) whole=no ;; esac
 check "concurrent first runs: one whole import" "$whole" "yes"
-check "concurrent first runs: no temporary file left" "$(ls "$HOME/.dforge" | grep -c '\.import$')" "0"
+check "concurrent first runs: no temporary file left" "$(ls "$HOME/.dagents" | grep -c '\.import$')" "0"
 
 # --- two setters at once: both keys land ---
 # Each setter holds its read of config.json for 300 ms, so without a lock both
 # read the same file and the later rename drops the other's key.
 fresh race
-mkdir -p "$HOME/.dforge"
+mkdir -p "$HOME/.dagents"
 printf '{}\n' > "$FILE"
 slow_set() { # slow_set KEY VALUE
   node --input-type=module -e '
@@ -132,7 +132,7 @@ slow_set() { # slow_set KEY VALUE
       return data;
     };
     process.exitCode = main(["set", process.argv[2], process.argv[3]]);
-  ' "$HERE/../scripts/lib/dforge-config.mjs" "$1" "$2" > /dev/null 2>&1
+  ' "$HERE/../scripts/lib/dagents-config.mjs" "$1" "$2" > /dev/null 2>&1
 }
 slow_set notifyAfter 120 &
 p1=$!
@@ -144,7 +144,7 @@ check "concurrent setters: both keys kept" "$(fc get notifyAfter) $(fc get finis
 # --- run through a symbolic link to the scripts directory, it still runs ---
 fresh linked
 ln -s "$(cd "$HERE/../scripts" && pwd)" "$TMP/linked-scripts"
-check "through a linked directory: get answers" "$(node "$TMP/linked-scripts/lib/dforge-config.mjs" get warnAt 2>&1)" "80"
+check "through a linked directory: get answers" "$(node "$TMP/linked-scripts/lib/dagents-config.mjs" get warnAt 2>&1)" "80"
 
 # --- the workflow keys: defaults and refusals ---
 fresh w
@@ -186,8 +186,8 @@ fc set autoRun off; check "autoRun: off is accepted" "$?" "0"
 check "autoRun: off is read back" "$(fc get autoRun)" "off"
 
 fresh lens-env
-check "lensCap: the environment wins" "$(DFORGE_LENS_CAP=1 fc get lensCap)" "1"
-check "lensMinorFrom: the environment wins" "$(DFORGE_LENS_MINOR_FROM=0 fc get lensMinorFrom)" "0"
+check "lensCap: the environment wins" "$(DAGENTS_LENS_CAP=1 fc get lensCap)" "1"
+check "lensMinorFrom: the environment wins" "$(DAGENTS_LENS_MINOR_FROM=0 fc get lensMinorFrom)" "0"
 
 # --- Claude's own settings file: one key changed, everything else kept ---
 fresh k
@@ -202,7 +202,7 @@ fc set autoCompactWindow 800000; check "claude set: exit 0" "$?" "0"
 check "claude set: the value" "$(at "$CS" autoCompactWindow)" "800000"
 check "claude set: every other key and the order kept" "$(keys "$CS")" "permissions,autoCompactWindow,hooks"
 check "claude set: the permissions untouched" "$(at "$CS" permissions)" '{"allow":["Bash(ls:*)"]}'
-check "claude set: nothing in the dforge file" "$(keys "$FILE")" ""
+check "claude set: nothing in the dagents file" "$(keys "$FILE")" ""
 fc set autoCompactWindow 50000; check "claude: below the floor: exit 2" "$?" "2"
 fc set autoCompactWindow 1050000; check "claude: above the maximum: exit 2" "$?" "2"
 check "claude: a refusal changes nothing" "$(at "$CS" autoCompactWindow)" "800000"
@@ -216,12 +216,12 @@ fc unset autoCompactEnabled
 check "claude: unset removes the key" "$(keys "$CS")" "permissions,hooks"
 check "claude: get --json carries both" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.autoCompactWindow, v.autoCompactEnabled, v.warnAt)')" "0 true 80"
 
-# A file that cannot be parsed is never replaced, and the dforge keys still resolve.
+# A file that cannot be parsed is never replaced, and the dagents keys still resolve.
 printf 'not json' > "$CS"
 fc set autoCompactWindow 800000; check "claude: an unparseable file: exit 1" "$?" "1"
 check "claude: an unparseable file is left byte-identical" "$(cat "$CS")" "not json"
 check "claude: the file is named" "$(grep -c 'settings.json is not valid JSON' "$TMP/stderr")" "1"
-check "claude: dforge keys still resolve" "$(fc get warnAt)" "80"
+check "claude: dagents keys still resolve" "$(fc get warnAt)" "80"
 check "claude: the unreadable file reads as the default" "$(fc get autoCompactWindow)" "0"
 rm -f "$CS"
 fc set autoCompactWindow 800000
@@ -276,10 +276,10 @@ if ! command -v cygpath > /dev/null 2>&1; then
   check "claude: a 41-link dangling chain: nothing is created at its end" "$([ -e "$TMP/chain41/end.json" ] && echo yes || echo no)" "no"
   # The cap itself, reached by making realpath report the chain as missing, as
   # a system whose kernel allows longer chains would: the loop refuses it.
-  capped=$(DFORGE_CONFIG_MJS="$HERE/../scripts/lib/dforge-config.mjs" node --input-type=module -e '
+  capped=$(DAGENTS_CONFIG_MJS="$HERE/../scripts/lib/dagents-config.mjs" node --input-type=module -e '
     import fs from "node:fs";
     import { pathToFileURL } from "node:url";
-    const { main } = await import(pathToFileURL(process.env.DFORGE_CONFIG_MJS).href);
+    const { main } = await import(pathToFileURL(process.env.DAGENTS_CONFIG_MJS).href);
     // After the import: the module loader resolves paths with realpathSync too.
     fs.realpathSync = () => { throw Object.assign(new Error("ENOENT: realpath stubbed"), { code: "ENOENT" }); };
     process.exitCode = main(["set", "autoCompactWindow", "520000"]);
@@ -337,34 +337,34 @@ check "workflow: nothing at the defaults" "$(fc workflow)" ""
 fc workflow > /dev/null; check "workflow: exit 0" "$?" "0"
 fc set designApproval whole; fc set worktree always; fc set codexLane false; fc set finishAction merge
 check "workflow: only skill keys, in schema order" "$(fc workflow)" \
-  "dforge settings in force (each replaces the matching question or default in the skills): worktree=always; designApproval=whole"
+  "dagents settings in force (each replaces the matching question or default in the skills): worktree=always; designApproval=whole"
 fc workflow extra; check "workflow takes no argument: exit 2" "$?" "2"
 
-# --- dforge_setting: the value in force, or the default when the command cannot answer ---
-. "$HERE/../scripts/lib/dforge-env.sh"
-check "dforge_setting reads the file" "$(dforge_setting worktree ask)" "always"
-check "dforge_setting: an unknown key gives the default" "$(dforge_setting nope fallback)" "fallback"
+# --- dagents_setting: the value in force, or the default when the command cannot answer ---
+. "$HERE/../scripts/lib/dagents-env.sh"
+check "dagents_setting reads the file" "$(dagents_setting worktree ask)" "always"
+check "dagents_setting: an unknown key gives the default" "$(dagents_setting nope fallback)" "fallback"
 printf 'not json' > "$FILE"
-check "dforge_setting: a broken file gives the default" "$(dforge_setting worktree ask)" "ask"
-dforge_setting worktree ask > /dev/null; check "dforge_setting never fails" "$?" "0"
+check "dagents_setting: a broken file gives the default" "$(dagents_setting worktree ask)" "ask"
+dagents_setting worktree ask > /dev/null; check "dagents_setting never fails" "$?" "0"
 fresh y
-check "dforge_setting: a first read answers the default" "$(dforge_setting worktree ask)" "ask"
-check "dforge_setting: a read never creates the settings file" "$([ -e "$FILE" ] && echo created || echo absent)" "absent"
+check "dagents_setting: a first read answers the default" "$(dagents_setting worktree ask)" "ask"
+check "dagents_setting: a read never creates the settings file" "$([ -e "$FILE" ] && echo created || echo absent)" "absent"
 fc set worktree never
-check "DFORGE_NO_SETTINGS answers the default" "$(DFORGE_NO_SETTINGS=1 dforge_setting worktree ask)" "ask"
+check "DAGENTS_NO_SETTINGS answers the default" "$(DAGENTS_NO_SETTINGS=1 dagents_setting worktree ask)" "ask"
 # A command that fails is never read for what it printed, with or without
 # pipefail, and a caller under set -e and pipefail survives the failure.
 mkdir -p "$TMP/fake/lib"
-printf '#!/usr/bin/env bash\nprintf partial\nexit 1\n' > "$TMP/fake/dforge-config"
-check "dforge_setting: a failed command's output is not used" "$(set +o pipefail; _DFORGE_ENV_DIR="$TMP/fake/lib"; dforge_setting worktree ask)" "ask"
-check "dforge_setting: a set -e pipefail caller survives a failure" "$(set -eo pipefail; _DFORGE_ENV_DIR="$TMP/fake/lib"; dforge_setting worktree ask > /dev/null; echo survived)" "survived"
+printf '#!/usr/bin/env bash\nprintf partial\nexit 1\n' > "$TMP/fake/dagents-config"
+check "dagents_setting: a failed command's output is not used" "$(set +o pipefail; _DAGENTS_ENV_DIR="$TMP/fake/lib"; dagents_setting worktree ask)" "ask"
+check "dagents_setting: a set -e pipefail caller survives a failure" "$(set -eo pipefail; _DAGENTS_ENV_DIR="$TMP/fake/lib"; dagents_setting worktree ask > /dev/null; echo survived)" "survived"
 # Git Bash with path conversion off hands node the module path as written.
 check "the command runs with path conversion off" "$(MSYS_NO_PATHCONV=1 fc get worktree)" "never"
 # A number setting is a whole number.
 fc set notifyAfter 5.5; check "a fraction: exit 2" "$?" "2"
 # finishTimeout is retired: a value left in the file is ignored, and naming it is an error.
 fresh retired
-mkdir -p "$HOME/.dforge"
+mkdir -p "$HOME/.dagents"
 printf '{"finishAction":"merge","finishTimeout":45}\n' > "$FILE"
 check "retired finishTimeout: get --json reads the rest" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.finishAction + " " + ("finishTimeout" in v))')" "merge false"
 fc get finishTimeout > /dev/null 2>&1; check "retired finishTimeout: get exits 2" "$?" "2"

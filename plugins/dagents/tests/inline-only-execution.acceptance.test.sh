@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Acceptance tests for the inline-only-execution spec
-# (docs/dforge/specs/2026-11-07-inline-only-execution-design.md), statements
+# (docs/dagents/specs/2026-11-07-inline-only-execution-design.md), statements
 # A1 to A19. Each test is written from the statement's text and reaches the
 # behaviour through the scripts the spec names (plan-lint, task-brief,
-# task-step, next-step, plan-revise, dforge-config, plan.sh's functions) or,
+# task-step, next-step, plan-revise, dagents-config, plan.sh's functions) or,
 # for a statement about text, the text itself. The CI half of A13 needs a
 # pushed commit and is not testable here.
 # Usage:
@@ -46,10 +46,10 @@ TMP="$(mktemp -d)"
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
-unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR XDG_STATE_HOME
+unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR XDG_STATE_HOME
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
-export DR_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=inline-only-execution-acceptance
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
+export DAGENTS_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=inline-only-execution-acceptance
 printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=false reason=off review=false lane=false resets_at=- source=cache"' > "$TMP/gate-stub"
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub"
 TIMEOUT_BIN=$(command -v timeout)
@@ -83,7 +83,7 @@ ${2:+$2
 
 **CI:** none
 
-**Plan review:** 2026-09-12 — dforge:judge-fable — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
+**Plan review:** 2026-09-12 — dagents:judge-fable — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
 ## Global Constraints
 
@@ -103,10 +103,10 @@ EOF
 }
 agent_for() { # the assignment table, by total
   case $1 in
-    0|1|2) echo dforge:impl-sonnet-low ;;
-    3|4) echo dforge:impl-sonnet-medium ;;
-    5) echo dforge:impl-sonnet-high ;;
-    *) echo dforge:impl-opus-high ;;
+    0|1|2) echo dagents:impl-sonnet-low ;;
+    3|4) echo dagents:impl-sonnet-medium ;;
+    5) echo dagents:impl-sonnet-high ;;
+    *) echo dagents:impl-opus-high ;;
   esac
 }
 # plan <execution text> <spec of each task: "files spec coupling risk[ executor]">... — writes the plan on stdout
@@ -232,10 +232,10 @@ fi
 
 # ----------------------------------------------------------------------- A7
 if selected A7; then
-  out=$(cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/dforge-config" get executionStrategy 2>&1); rc=$?
+  out=$(cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/dagents-config" get executionStrategy 2>&1); rc=$?
   check "A7: get executionStrategy exits 0" "$rc" "0"
   check "A7: get executionStrategy prints sequential" "$out" "sequential"
-  out=$(cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/dforge-config" workflow 2>&1); rc=$?
+  out=$(cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/dagents-config" workflow 2>&1); rc=$?
   check "A7: workflow exits 0" "$rc" "0"
   check "A7: workflow prints nothing" "$out" ""
 fi
@@ -347,12 +347,12 @@ if selected A13; then
     if [ -x "$CLAUDE_BIN" ]; then
       out=$(cd "$REPO_ROOT" && HOME="$ORIG_HOME" "$TIMEOUT_BIN" 90 "$CLAUDE_BIN" plugin validate . 2>&1); rc=$?
       check "A13: claude plugin validate passes on the marketplace" "$rc" "0"
-      for p in dforge dr-status darkraise-ui darkraise-win32ui; do
+      for p in dagents dr-status darkraise-ui darkraise-win32ui; do
         out=$(cd "$REPO_ROOT" && HOME="$ORIG_HOME" "$TIMEOUT_BIN" 90 "$CLAUDE_BIN" plugin validate "plugins/$p" 2>&1); rc=$?
         check "A13: claude plugin validate passes on plugins/$p" "$rc" "0"
       done
       out=$(cd "$REPO_ROOT" && HOME="$ORIG_HOME" "$TIMEOUT_BIN" 300 "$CLAUDE_BIN" plugin test plugins/dforge 2>&1); rc=$?
-      check "A13: claude plugin test plugins/dforge passes" "$rc" "0"
+      check "A13: claude plugin test plugins/dagents passes" "$rc" "0"
     else
       printf 'skip - A13: no claude CLI at %s\n' "$CLAUDE_BIN"
     fi
@@ -367,10 +367,10 @@ if selected A14; then
   start=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/task-step" start "$P" 2 --inline 2>&1); rc=$?
   start=${start//$'\r'/}
   check "A14: task-step start 2 --inline exits 0" "$rc" "0"
-  step=$(find "$REPO/.dforge" -name 'task-2-step.json' 2>/dev/null | head -n 1)
+  step=$(find "$REPO/.dagents" -name 'task-2-step.json' 2>/dev/null | head -n 1)
   check "A14: step state task-2-step.json is written" "$([ -n "$step" ] && echo yes || echo no)" "yes"
-  ws=$(dirname "${step:-$REPO/.dforge/none}")
-  check "A14: no dispatch file is written" "$(find "$REPO/.dforge" -name '*dispatch*' 2>/dev/null | wc -l | tr -d ' ')" "0"
+  ws=$(dirname "${step:-$REPO/.dagents/none}")
+  check "A14: no dispatch file is written" "$(find "$REPO/.dagents" -name '*dispatch*' 2>/dev/null | wc -l | tr -d ' ')" "0"
   unmatched "A14: the ledger has no agent-named line for task 2" "$(cat "$ws/progress.md" 2>/dev/null)" '^Task 2: implementer '
   printf 'x\n' > "$REPO/f2.txt"; g add -A && g commit -qm "task 2"
   rev=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/task-step" review "$P" 2 2>&1); rc=$?
@@ -389,7 +389,7 @@ if selected A14; then
   } > "$L"
   nx=$(cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/next-step" "$P" 2>&1 | tr -d '\r')
   has "A14: after the fix-round line task 2 is still open" "$nx" 'Resume at Task 2'
-  printf 'Task 2: complete (commits %s..%s, review clean; scores spec 3 / scope 3 / verification 3 / quality 3, seat dforge:judge-opus) — done: x; verified: bash test.sh → pass; remaining: none; discovered: none; assumptions: none\n' "$base" "$head" >> "$L"
+  printf 'Task 2: complete (commits %s..%s, review clean; scores spec 3 / scope 3 / verification 3 / quality 3, seat dagents:judge-opus) — done: x; verified: bash test.sh → pass; remaining: none; discovered: none; assumptions: none\n' "$base" "$head" >> "$L"
   nx=$(cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/next-step" "$P" 2>&1 | tr -d '\r')
   has "A14: with the reviewed complete line next-step reads every task complete" "$nx" 'all 2 tasks complete'
   unmatched "A14: next-step no longer resumes task 2" "$nx" 'Resume at Task'

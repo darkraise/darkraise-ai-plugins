@@ -3,11 +3,11 @@
 A run ends while its human is away more often than not, and a finishing menu
 nobody answers leaves the finished branch unintegrated. So the finish action
 is asked once, before the first task, and
-dforge:finishing-a-development-branch carries it out as soon as the final
+dagents:finishing-a-development-branch carries it out as soon as the final
 review is clean, with no menu and no wait. Choosing "Ask me then" keeps the
 menu.
 
-`scripts/finish-choice` keeps the choice (see using-dforge §Session
+`scripts/finish-choice` keeps the choice (see using-dagents §Session
 Budget). Pass `--plan PLAN_FILE` in a plan run; leave it out for work done
 without a plan.
 
@@ -23,7 +23,7 @@ no menu.
 
 ## The setting
 
-`finishAction` (`scripts/dforge-config`, or the cockpit's Finish tab): `ask`,
+`finishAction` (`scripts/dagents-config`, or the cockpit's Finish tab): `ask`,
 the default, keeps the question below. With `merge`, `pr`, `keep` or `wait`,
 `scripts/finish-choice get` records and prints that action whenever nothing is
 chosen yet, so the question is never asked: the "skip the question when `get`
@@ -32,8 +32,8 @@ branch (`base` is null): finishing finds it as its Step 4 says.
 
 ## When to ask
 
-- **A plan run** (dforge:subagent-driven-development or
-  dforge:executing-plans): at Setup, before the pre-flight and Task 1.
+- **A plan run** (dagents:subagent-driven-development or
+  dagents:executing-plans): at Setup, before the pre-flight and Task 1.
   Skip the question when `scripts/finish-choice get --plan PLAN_FILE` already
   prints a choice, or when the plan's ledger already exists: a resumed run
   never stops to ask: finishing carries out the choice recorded at its
@@ -44,7 +44,7 @@ branch (`base` is null): finishing finds it as its Step 4 says.
 - **Work without a plan** that you will finish with
   finishing-a-development-branch (implementation on its own branch or
   worktree, straight from the chat): before the first change, once
-  dforge:using-git-worktrees has the workspace ready.
+  dagents:using-git-worktrees has the workspace ready.
 - Never in the middle of a run, and never again once answered.
 
 ## The question

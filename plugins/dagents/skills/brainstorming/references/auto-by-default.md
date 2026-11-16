@@ -8,7 +8,7 @@ Then:
 1. **Write the spec directly.** Present no design section and ask no
    acceptance question first. One spec covers the whole request: no
    sub-project decomposition, no program spec, no `**Program:**` line. A new
-   product still goes to dforge:planning-a-product.
+   product still goes to dagents:planning-a-product.
    While writing the spec, read the CI configuration as
    [ci-parity.md](../../../reference/ci-parity.md) says, so the spec review
    can tell whether a platform is uncovered.
@@ -23,9 +23,9 @@ Then:
 4. **Reviews before the stop,** by the spec's depth. At `light`, run the spec
    self-review round and nothing else: no critic, no Fable review, no
    `## Review rulings` section. At `standard`, run it, then one
-   `dforge:judge-fable` round on the spec against its `## Decisions` with the
+   `dagents:judge-fable` round on the spec against its `## Decisions` with the
    critic folded into it (Architecture critic), and no second round. At
-   `full`, run it, then the architecture critic, then `dforge:judge-fable` on
+   `full`, run it, then the architecture critic, then `dagents:judge-fable` on
    the spec against its `## Decisions`: one round, and a second only when
    round 1 leaves a Blocker or High finding open, checking only those
    answers. Apply what Fable rules and list each ruling as one line in a
@@ -83,7 +83,7 @@ Then:
    Then import each
    `## Review rulings` line with
    `scripts/auto-run ruling add "Fable, spec: <line>"` (none at depth light).
-   Invoke dforge:writing-plans in this session: `scripts/context-size --plan`
+   Invoke dagents:writing-plans in this session: `scripts/context-size --plan`
    does not run. On exit 2 or 4 from `start`, say why in one line and continue
    as **Approve, keep the normal stops**.
 7. **Approve, keep the normal stops** commits the spec and the register and

@@ -4,7 +4,7 @@
 # checkout's branch pointed at when the turn started (scripts/turn-start.sh
 # records it), committed or not; a passing proof is `ui-proof check` exit 0.
 # It applies only where the gate is on: the project has a UI profile, or the
-# session ran dforge:ui-ux. It stands down while an auto run is bound to the
+# session ran dagents:ui-ux. It stands down while an auto run is bound to the
 # session (turn-end.sh owns those stops), on the retry (stop_hook_active), in
 # fast mode (lib/fast-mode.sh), and when the last message ends with
 # "UI proof: pending — <why>". Anything
@@ -25,7 +25,7 @@ is_retry=$(jq -r '.stop_hook_active // false' <<<"$stdin_json")
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 if (cd "$root" && bash "$SCRIPT_DIR/auto-run" --session "$session_id" pending >/dev/null 2>&1); then exit 0; fi
 
-stamp="${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"
+stamp="${HOME:-}/.claude/dagents/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-')"
 [ -f "$stamp.refs" ] || exit 0
 base=$(tail -n +3 "$stamp.refs" | awk -F'\t' -v top="$root" 'stop { next } $2 == top { print $1; stop = 1 }')
 [ -n "$base" ] || exit 0
@@ -54,7 +54,7 @@ root_shown=$PLUGIN_ROOT
 if command -v cygpath >/dev/null 2>&1; then root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
 named=$(grep -E '^ui-proof: FAIL (scope|coverage)' <<<"$out" | sed 's/^ui-proof: FAIL //' | tr '\n' ';' | cut -c1-300)
 [ -n "$named" ] || named=$(head -n 1 <<<"$out" | cut -c1-200)
-reason="UI files changed without a passing UI proof (${named%;}). Run the dforge:ui-ux Prove phase, then \`bash \"${root_shown}/scripts/ui-proof\" check --base ${base}${act}\`; if the proof cannot happen this turn, end your message with the line \`UI proof: pending — <why>\`."
-jq -n --arg r "$reason" --arg m "dforge held the stop: UI files changed without a passing UI proof (${named%;})" \
+reason="UI files changed without a passing UI proof (${named%;}). Run the dagents:ui-ux Prove phase, then \`bash \"${root_shown}/scripts/ui-proof\" check --base ${base}${act}\`; if the proof cannot happen this turn, end your message with the line \`UI proof: pending — <why>\`."
+jq -n --arg r "$reason" --arg m "dagents held the stop: UI files changed without a passing UI proof (${named%;})" \
   '{decision: "block", reason: $r, systemMessage: $m}'
 exit 0

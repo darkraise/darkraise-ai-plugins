@@ -149,85 +149,85 @@ dr_task_schema_valid() {
 dr_task_write() {
   dr_task_schema_valid "$1" || return 2
   local tmp
-  tmp="$(mktemp "$DR_TASK_DIR/state.json.XXXXXX")" || return 2
-  cat -- "$1" > "$tmp" && mv -f -- "$tmp" "$DR_TASK_DIR/state.json" || { rm -f "$tmp"; return 2; }
+  tmp="$(mktemp "$DAGENTS_TASK_DIR/state.json.XXXXXX")" || return 2
+  cat -- "$1" > "$tmp" && mv -f -- "$tmp" "$DAGENTS_TASK_DIR/state.json" || { rm -f "$tmp"; return 2; }
 }
 
 dr_task_update() {
   local expression="$1" tmp
   shift
-  tmp="$(mktemp "$DR_TASK_DIR/update.XXXXXX")" || return 2
-  jq "$@" "$expression" "$DR_TASK_DIR/state.json" > "$tmp" && dr_task_write "$tmp"
+  tmp="$(mktemp "$DAGENTS_TASK_DIR/update.XXXXXX")" || return 2
+  jq "$@" "$expression" "$DAGENTS_TASK_DIR/state.json" > "$tmp" && dr_task_write "$tmp"
   local result=$?
   rm -f "$tmp"
   return "$result"
 }
 
 dr_task_lock() {
-  local lock="$DR_TASK_ROOT/run.lock"
+  local lock="$DAGENTS_TASK_ROOT/run.lock"
   dr_lock_take "$lock" ||
     { dr_state_error 'worktree run lock exists; confirm prior writers stopped before reconciliation'; return 2; }
   dr_lock_claim "$lock" || { dr_state_error 'cannot record the run lock owner'; return 2; }
-  DR_TASK_LOCK="$lock"
+  DAGENTS_TASK_LOCK="$lock"
 }
 
 dr_task_unlock() {
-  [ -n "${DR_TASK_LOCK:-}" ] || return 0
-  dr_lock_release "$DR_TASK_LOCK" || return 2
-  DR_TASK_LOCK=''
+  [ -n "${DAGENTS_TASK_LOCK:-}" ] || return 0
+  dr_lock_release "$DAGENTS_TASK_LOCK" || return 2
+  DAGENTS_TASK_LOCK=''
 }
 
 dr_task_scope_valid() {
   jq -e 'type == "array" and all(.[]; type == "string" and length > 0)' "$1" >/dev/null || return 2
   local path target
   while IFS= read -r -d '' path; do
-    case "$path" in /*|[A-Za-z]:*|*\\*|..|../*|*/../*|*/..|.git|.git/*|.dforge|.dforge/*) return 2 ;; esac
-    target="$(realpath -m -- "$DR_WORKTREE/$path")" || return 2
-    case "$target" in "$DR_WORKTREE"/*) ;; *) return 2 ;; esac
+    case "$path" in /*|[A-Za-z]:*|*\\*|..|../*|*/../*|*/..|.git|.git/*|.dagents|.dagents/*) return 2 ;; esac
+    target="$(realpath -m -- "$DAGENTS_WORKTREE/$path")" || return 2
+    case "$target" in "$DAGENTS_WORKTREE"/*) ;; *) return 2 ;; esac
   done < <(jq -j '.[] + "\u0000"' "$1")
 }
 
 dr_task_open() {
   local root="$1" task="$2" scope="${3:-}" accept="${4:-}" gitdir common prefix key owner record
   [ -n "$task" ] || { dr_state_error 'task ID is required'; return 2; }
-  DR_WORKTREE="$(dr_canonical "$root")" || return 2
-  prefix="$(git -C "$DR_WORKTREE" rev-parse --show-prefix)" || return 2
+  DAGENTS_WORKTREE="$(dr_canonical "$root")" || return 2
+  prefix="$(git -C "$DAGENTS_WORKTREE" rev-parse --show-prefix)" || return 2
   [ -z "$prefix" ] || { dr_state_error 'cwd must be the worktree root'; return 2; }
-  gitdir="$(git -C "$DR_WORKTREE" rev-parse --absolute-git-dir)" || return 2
+  gitdir="$(git -C "$DAGENTS_WORKTREE" rev-parse --absolute-git-dir)" || return 2
   gitdir="$(dr_canonical "$gitdir")" || return 2
-  common="$(git -C "$DR_WORKTREE" rev-parse --path-format=absolute --git-common-dir)" || return 2
+  common="$(git -C "$DAGENTS_WORKTREE" rev-parse --path-format=absolute --git-common-dir)" || return 2
   common="$(dr_canonical "$common")" || return 2
-  [ "$gitdir" != "$common" ] && [ -z "$(git -C "$DR_WORKTREE" rev-parse --show-superproject-working-tree)" ] || { dr_state_error 'an exclusively assigned linked worktree is required'; return 2; }
-  DR_TASK_ROOT="$gitdir/dforge"
-  key="$(printf '%s' "$task" | git -C "$DR_WORKTREE" hash-object --stdin)" || return 2
-  DR_TASK_DIR="$DR_TASK_ROOT/tasks/$key"
-  mkdir -p -- "$DR_TASK_ROOT" || return 2
+  [ "$gitdir" != "$common" ] && [ -z "$(git -C "$DAGENTS_WORKTREE" rev-parse --show-superproject-working-tree)" ] || { dr_state_error 'an exclusively assigned linked worktree is required'; return 2; }
+  DAGENTS_TASK_ROOT="$gitdir/dagents"
+  key="$(printf '%s' "$task" | git -C "$DAGENTS_WORKTREE" hash-object --stdin)" || return 2
+  DAGENTS_TASK_DIR="$DAGENTS_TASK_ROOT/tasks/$key"
+  mkdir -p -- "$DAGENTS_TASK_ROOT" || return 2
   dr_task_lock || return 2
-  owner="$DR_TASK_ROOT/owner.json"
-  if [ -e "$owner" ] && ! jq -e --arg task "$task" --arg root "$DR_WORKTREE" --arg accept "$accept" \
+  owner="$DAGENTS_TASK_ROOT/owner.json"
+  if [ -e "$owner" ] && ! jq -e --arg task "$task" --arg root "$DAGENTS_WORKTREE" --arg accept "$accept" \
     '.task_id == $task and .root == $root and (.holder == "external" or ($accept == "handed-back" and .holder == "claude"))' "$owner" >/dev/null 2>&1; then
     dr_task_unlock; dr_state_error 'worktree is reserved by another task or handed back'; return 2
   fi
-  if [ -e "$DR_TASK_DIR/state.json" ]; then
-    if ! dr_task_schema_valid "$DR_TASK_DIR/state.json" || ! jq -e --arg task "$task" --arg root "$DR_WORKTREE" --arg gitdir "$gitdir" --arg repository "$common" --arg accept "$accept" \
-      '.task_id == $task and .root == $root and .gitdir == $gitdir and .repository == $repository and (.phase != "handed-back" or $accept == "handed-back") and (.released // false) == false' "$DR_TASK_DIR/state.json" >/dev/null; then
+  if [ -e "$DAGENTS_TASK_DIR/state.json" ]; then
+    if ! dr_task_schema_valid "$DAGENTS_TASK_DIR/state.json" || ! jq -e --arg task "$task" --arg root "$DAGENTS_WORKTREE" --arg gitdir "$gitdir" --arg repository "$common" --arg accept "$accept" \
+      '.task_id == $task and .root == $root and .gitdir == $gitdir and .repository == $repository and (.phase != "handed-back" or $accept == "handed-back") and (.released // false) == false' "$DAGENTS_TASK_DIR/state.json" >/dev/null; then
       dr_task_unlock; dr_state_error 'invalid task state or identity'; return 2
     fi
-    if [ -n "$scope" ] && ! jq -e --slurpfile scope "$scope" '.write_set == $scope[0]' "$DR_TASK_DIR/state.json" >/dev/null; then
+    if [ -n "$scope" ] && ! jq -e --slurpfile scope "$scope" '.write_set == $scope[0]' "$DAGENTS_TASK_DIR/state.json" >/dev/null; then
       dr_task_unlock; dr_state_error 'write set changed without an amendment'; return 2
     fi
-    if ! jq .write_set "$DR_TASK_DIR/state.json" > "$DR_TASK_DIR/scope.json" || ! dr_task_scope_valid "$DR_TASK_DIR/scope.json"; then
+    if ! jq .write_set "$DAGENTS_TASK_DIR/state.json" > "$DAGENTS_TASK_DIR/scope.json" || ! dr_task_scope_valid "$DAGENTS_TASK_DIR/scope.json"; then
       dr_task_unlock; dr_state_error 'recorded write set is invalid or escapes worktree'; return 2
     fi
   else
-    if [ -e "$owner" ] || [ -z "$scope" ] || ! dr_task_scope_valid "$scope" || [ -n "$(git -C "$DR_WORKTREE" status --porcelain=v1 --untracked-files=all)" ]; then
+    if [ -e "$owner" ] || [ -z "$scope" ] || ! dr_task_scope_valid "$scope" || [ -n "$(git -C "$DAGENTS_WORKTREE" status --porcelain=v1 --untracked-files=all)" ]; then
       dr_task_unlock; dr_state_error 'initial execution requires a write set and clean index/worktree'; return 2
     fi
-    mkdir -p -- "$DR_TASK_DIR" || { dr_task_unlock; return 2; }
+    mkdir -p -- "$DAGENTS_TASK_DIR" || { dr_task_unlock; return 2; }
     local head
-    head="$(git -C "$DR_WORKTREE" rev-parse HEAD)" || { dr_task_unlock; return 2; }
-    record="$DR_TASK_DIR/initial.json"
-    jq -n --arg task "$task" --arg root "$DR_WORKTREE" --arg gitdir "$gitdir" --arg repo "$common" --arg head "$head" --slurpfile scope "$scope" \
+    head="$(git -C "$DAGENTS_WORKTREE" rev-parse HEAD)" || { dr_task_unlock; return 2; }
+    record="$DAGENTS_TASK_DIR/initial.json"
+    jq -n --arg task "$task" --arg root "$DAGENTS_WORKTREE" --arg gitdir "$gitdir" --arg repo "$common" --arg head "$head" --slurpfile scope "$scope" \
       '{version:1,task_id:$task,root:$root,gitdir:$gitdir,repository:$repo,initial_base:$head,expected_head:$head,
         write_set:$scope[0],model:null,effort:null,thread:null,attempts:[],review_rounds:0,processes:[],
         phase:"ready",prior_phase:null,history:[],pending:null,candidate:null,artifacts:{}}' > "$record" && dr_task_write "$record" || { dr_task_unlock; return 2; }
@@ -235,18 +235,18 @@ dr_task_open() {
   fi
   # A handed-back task belongs to Claude; reopening it must not hand the
   # worktree back to the external executor.
-  [ -e "$DR_TASK_DIR/state.json" ] && jq -e '.phase == "handed-back"' "$DR_TASK_DIR/state.json" >/dev/null && return 0
+  [ -e "$DAGENTS_TASK_DIR/state.json" ] && jq -e '.phase == "handed-back"' "$DAGENTS_TASK_DIR/state.json" >/dev/null && return 0
   local owner_tmp
   owner_tmp="$(mktemp "$owner.XXXXXX")" || { dr_task_unlock; return 2; }
-  jq -n --arg task "$task" --arg root "$DR_WORKTREE" --arg gitdir "$gitdir" \
+  jq -n --arg task "$task" --arg root "$DAGENTS_WORKTREE" --arg gitdir "$gitdir" \
     '{task_id:$task,root:$root,gitdir:$gitdir,holder:"external"}' > "$owner_tmp" && mv -f -- "$owner_tmp" "$owner" || { rm -f "$owner_tmp"; dr_task_unlock; return 2; }
 }
 
 dr_task_validate_scope() {
   local before="$1" actual scope result
-  actual="$(mktemp "$DR_TASK_DIR/snapshot.XXXXXX")" || return 2
-  dr_snapshot "$DR_WORKTREE" "$actual" || { rm -f "$actual"; return 2; }
-  scope="$(jq -c .write_set "$DR_TASK_DIR/state.json")" || { rm -f "$actual"; return 2; }
+  actual="$(mktemp "$DAGENTS_TASK_DIR/snapshot.XXXXXX")" || return 2
+  dr_snapshot "$DAGENTS_WORKTREE" "$actual" || { rm -f "$actual"; return 2; }
+  scope="$(jq -c .write_set "$DAGENTS_TASK_DIR/state.json")" || { rm -f "$actual"; return 2; }
   jq -e --slurpfile after "$actual" --argjson scope "$scope" '
     . as $before | $after[0] as $after |
     # Keyed lookups: nested selects made this quadratic in the file count.

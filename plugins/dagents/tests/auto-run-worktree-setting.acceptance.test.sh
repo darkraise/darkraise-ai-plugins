@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Acceptance checks for docs/dforge/specs/2026-11-08-auto-run-worktree-setting-design.md:
+# Acceptance checks for docs/dagents/specs/2026-11-08-auto-run-worktree-setting-design.md:
 # an auto run follows the worktree setting, guards its own branch and never
 # commits the changes it carried into an in-place run.
 set -uo pipefail
@@ -13,12 +13,12 @@ if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME"
-export LC_ALL=C MSYS_NO_PATHCONV=1 DFORGE_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
+export LC_ALL=C MSYS_NO_PATHCONV=1 DAGENTS_NO_SETTINGS=1 GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
   GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
-unset DFORGE_BUDGET DFORGE_JQ DFORGE_FLOCK CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
+unset DAGENTS_BUDGET DAGENTS_JQ DAGENTS_FLOCK CLAUDE_CONFIG_DIR CODEX_HOME CLAUDE_CODE_SESSION_ID AR_SESSION CLAUDE_PROJECT_DIR
 REPO="$TMP/repo"
-STATE="$REPO/.dforge/sdd/auto-run.json"
-SPEC=docs/dforge/specs/2026-11-08-widget-design.md
+STATE="$REPO/.dagents/sdd/auto-run.json"
+SPEC=docs/dagents/specs/2026-11-08-widget-design.md
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -35,7 +35,7 @@ has() { # has <name> <haystack> <needle>
 }
 beat() { # beat <session>: the heartbeat a live cockpit writes
   local f
-  f="$HOME/.claude/dforge/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  f="$HOME/.claude/dagents/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
   mkdir -p "$(dirname "$f")"
   printf '%s\n' "$(date +%s)" > "$f"
 }
@@ -112,7 +112,7 @@ fresh
 arun "$REPO" t2 start --spec "$SPEC" --register docs/r.md --isolation in-place >/dev/null
 out=$(arun "$REPO" t2 phase execute 2>&1); status=$?
 check "A4: phase execute on the base in the primary checkout: exit 4, phase unchanged" "$status:$(field phase)" "4:spec"
-has "A4: the refusal points at Step 0" "$out" "follow dforge:using-git-worktrees Step 0 for the run"
+has "A4: the refusal points at Step 0" "$out" "follow dagents:using-git-worktrees Step 0 for the run"
 git -C "$REPO" worktree add -q -b side "$TMP/side"
 arun "$TMP/side" t2 start --spec "$SPEC" --register docs/r.md --isolation worktree --force >/dev/null
 check "A4: a run started in a linked worktree takes its branch as base" "$(field base)" "side"
@@ -147,7 +147,7 @@ arun "$REPO" t2 start --spec "$SPEC" --register docs/r.md --isolation worktree >
 git -C "$REPO" switch -q -c feature
 out=$(arun "$REPO" t2 phase execute 2>&1); status=$?
 check "A7: a worktree run in the primary checkout: exit 4 off the base too" "$status:$(field phase)" "4:spec"
-has "A7: with today's message" "$out" "create the execution worktree first (dforge:using-git-worktrees)"
+has "A7: with today's message" "$out" "create the execution worktree first (dagents:using-git-worktrees)"
 
 fresh
 git -C "$REPO" switch -q --detach
@@ -225,18 +225,13 @@ check "A11: the run's branch is deleted" "$(git -C "$REPO" branch --list auto/wi
 # --- Task 5 ---
 present "schema: the worktree setting names auto runs" "$P/config/schema.mjs" 'an auto run asks at the spec review'
 
-# --- Task 6 ---
-v1=$(jq -r .version < "$P/.claude-plugin/plugin.json" | tr -d '\r')
-v2=$(jq -r .version < "$P/.codex-plugin/plugin.json" | tr -d '\r')
-check "release: both manifests agree, at 4.14.0 or later" "$v2:$(printf '4.14.0\n%s\n' "$v1" | sort -V | head -n 1)" "$v1:4.14.0"
-
 # --- Final review fixes ---
 fresh
 arun "$REPO" fx start --spec "$SPEC" --register docs/r.md --isolation in-place >/dev/null
 git -C "$REPO" switch -q -c feature
 out=$(arun "$REPO" fx phase execute 2>&1); status=$?
 check "an in-place run with no recorded branch: phase execute exits 4 off the base" "$status:$(field phase)" "4:spec"
-has "and points at Step 0" "$out" "follow dforge:using-git-worktrees Step 0 for the run"
+has "and points at Step 0" "$out" "follow dagents:using-git-worktrees Step 0 for the run"
 
 fresh
 arun "$REPO" fx start --spec "$SPEC" --register docs/r.md --isolation worktree >/dev/null
@@ -244,7 +239,7 @@ jq 'del(.isolation)' < "$STATE" > "$TMP/state.json" && mv "$TMP/state.json" "$ST
 git -C "$REPO" switch -q -c feature
 out=$(arun "$REPO" fx phase execute 2>&1); status=$?
 check "A2: a state without isolation is guarded as worktree in the primary checkout" "$status:$(field phase)" "4:spec"
-has "A2: with the worktree message" "$out" "create the execution worktree first (dforge:using-git-worktrees)"
+has "A2: with the worktree message" "$out" "create the execution worktree first (dagents:using-git-worktrees)"
 
 inplace fx
 before=$(field branchBase)

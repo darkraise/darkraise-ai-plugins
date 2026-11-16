@@ -35,8 +35,8 @@ run() { # run <dir> <script> <args...>; sets out, err and status
   out=$(cd "$1" && bash "$S/$2" "${@:3}" 2>"$TMP/err"); status=$?
   err=$(cat "$TMP/err")
 }
-state() { # state <dir> — yes when a .dforge directory exists there
-  if [ -d "$1/.dforge" ]; then echo yes; else echo no; fi
+state() { # state <dir> — yes when a .dagents directory exists there
+  if [ -d "$1/.dagents" ]; then echo yes; else echo no; fi
 }
 
 X="$TMP/x" Y="$TMP/y"
@@ -83,7 +83,7 @@ check "worktree: no state in the worktree" "$(state "$WT")" "no"
 check "worktree: no state in the primary checkout" "$(state "$X")" "no"
 run "$WT" sdd-workspace docs/plan.md
 check "worktree: its own plan passes" "$status" "0"
-has "worktree: the workspace is in the worktree" "$out" "/wt/.dforge/sdd/plan"
+has "worktree: the workspace is in the worktree" "$out" "/wt/.dagents/sdd/plan"
 git -C "$X" worktree remove --force "$WT" >/dev/null 2>&1
 
 # --- the same repository keeps working ---
@@ -103,10 +103,10 @@ check "same repository: next-step exits 0" "$status" "0"
 # every script a run takes it through, from lint to the next-step block.
 U="$TMP/r3 é x" UP="docs/a b/ñ/plan.md"
 git init -q "$U"
-mkdir -p "$U/docs/a b/ñ" "$U/docs/dforge/registers"
+mkdir -p "$U/docs/a b/ñ" "$U/docs/dagents/registers"
 printf '# Spec\n' > "$U/docs/a b/ñ/spec.md"
-printf '# Plan\n\n**Goal:** Demo.\n\n**Spec:** `docs/a b/ñ/spec.md`\n\n**Execution:** inline — `claude --model sonnet --effort low` — x\n\n## Global Constraints\n\n- Bash only.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. Only\n\n### Task 1: Only\n\n**Files:**\n- Create: `a.sh`\n\n**Implementer:** dforge:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nPrint `hello NAME`.\n' > "$U/$UP"
-printf '# R\n\n**Source:** s\n**Covers:** `docs/a b/ñ/spec.md`\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Spaced item | - | - | open | - |\n' > "$U/docs/dforge/registers/spaced.md"
+printf '# Plan\n\n**Goal:** Demo.\n\n**Spec:** `docs/a b/ñ/spec.md`\n\n**Execution:** inline — `claude --model sonnet --effort low` — x\n\n## Global Constraints\n\n- Bash only.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. Only\n\n### Task 1: Only\n\n**Files:**\n- Create: `a.sh`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\nPrint `hello NAME`.\n' > "$U/$UP"
+printf '# R\n\n**Source:** s\n**Covers:** `docs/a b/ñ/spec.md`\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Spaced item | - | - | open | - |\n' > "$U/docs/dagents/registers/spaced.md"
 git -C "$U" add -A && git -C "$U" commit -qm plan
 run "$U" plan-lint "$UP" --no-probe
 check "spaced path: plan-lint finds the spec" "$(grep '^ERROR' <<<"$out")" ""
@@ -145,18 +145,18 @@ git init -q "$SR"
 git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 STOP=$(git -C "$SR" rev-parse --show-toplevel)
 M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/dforge/plans"
-printf '# Mirror plan\n\n### Task 1: One\n' > "$M/dforge/plans/mp.md"
+mkdir -p "$M/dagents/plans"
+printf '# Mirror plan\n\n### Task 1: One\n' > "$M/dagents/plans/mp.md"
 check "sdd-workspace: a mirror plan by name gets a local workspace" \
-  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" docs/dforge/plans/mp.md)" "$STOP/.dforge/sdd/mp"
+  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" docs/dagents/plans/mp.md)" "$STOP/.dagents/sdd/mp"
 check "sdd-workspace: a mirror plan by path" \
-  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" "$M/dforge/plans/mp.md")" "$STOP/.dforge/sdd/mp"
+  "$(cd "$SR" && HOME=$SH bash "$P/scripts/sdd-workspace" "$M/dagents/plans/mp.md")" "$STOP/.dagents/sdd/mp"
 
 # --- a ConfigError stops a plan reader instead of dropping its amendments ---
-BH="$TMP/bad-home"; mkdir -p "$BH/.dforge"
+BH="$TMP/bad-home"; mkdir -p "$BH/.dagents"
 BR="$TMP/bad-repo"; git init -q "$BR"
 printf '{"darkmem":{"url":"http://127.0.0.1:9","repos":{"%s":{"project":"p","documentStore":"bogus"}}}}\n' \
-  "$(git -C "$BR" rev-parse --show-toplevel)" > "$BH/.dforge/config.json"
+  "$(git -C "$BR" rev-parse --show-toplevel)" > "$BH/.dagents/config.json"
 printf '# P\n\n### Task 1: One\n' > "$BR/p.md"
 (cd "$BR" && HOME=$BH bash "$P/scripts/task-brief" p.md 1 "$TMP/bad-brief.md" >/dev/null 2>&1)
 check "task-brief: a ConfigError exits 2" "$?" "2"

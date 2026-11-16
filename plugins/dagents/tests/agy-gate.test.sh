@@ -9,7 +9,7 @@ P="$(cd "$HERE/.." && pwd)"
 STUBDIR="$(cd "$HERE/fixtures/stub-agy" && pwd)"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-# The gate reads ~/.dforge/config.json; a temporary home keeps the real one out.
+# The gate reads ~/.dagents/config.json; a temporary home keeps the real one out.
 export HOME="$TMP/home"
 mkdir -p "$HOME" "$TMP/work"
 unset CLAUDE_CONFIG_DIR
@@ -85,7 +85,7 @@ check "the policy records the smoke gate as fail or pass" \
 
 # --- the locator -------------------------------------------------------------
 loc() { # loc [args...]; sets out and rc. LOC_PATH and LOC_POLICY override the defaults.
-  out=$(cd "$TMP/work" && PATH="${LOC_PATH:-$STUBDIR:$SEAL}" DR_AGY_POLICY="${LOC_POLICY:-$POLICY}" \
+  out=$(cd "$TMP/work" && PATH="${LOC_PATH:-$STUBDIR:$SEAL}" DAGENTS_AGY_POLICY="${LOC_POLICY:-$POLICY}" \
     "$BASH" "$P/scripts/agy-locate" "$@" 2>"$TMP/err"); rc=$?
   out=${out//$'\r'/}
 }
@@ -105,7 +105,7 @@ check "a carriage return after the version is stripped" "$out" "agy-locate ok ve
 STUB_AGY_VERSION=$'1.4.12\nsecond line' loc
 check "only the first line of the version output counts" "$out" "agy-locate ok version=1.4.12 root=$STUBDIR"
 LOC_POLICY="$HIGHFLOOR" loc
-check "DR_AGY_POLICY replaces the policy path" "$out" "agy-locate off reason=plugin-version:1.4.12"
+check "DAGENTS_AGY_POLICY replaces the policy path" "$out" "agy-locate off reason=plugin-version:1.4.12"
 LOC_PATH="$SEAL" loc
 check "no agy on PATH is not installed" "$out" "agy-locate off reason=plugin-not-installed"
 check "not installed exits 1" "$rc" "1"
@@ -157,18 +157,18 @@ jq -n '{id:"agy", locator:"scripts/agy-locate",
   probe:{command:"scripts/lib/agy-probe.mjs", op:"auth"},
   gate:"scripts/agy-gate", wrapper:"scripts/run-agy-task.sh",
   reference:"reference/executor-lane.md", session_dir:"agy-sessions",
-  session_dir_env:"DR_AGY_SESSION_DIR", surfaces:["lane"], blocks:{gate:"agy-lane-gate"}}' > "$REG/agy.json"
+  session_dir_env:"DAGENTS_AGY_SESSION_DIR", surfaces:["lane"], blocks:{gate:"agy-lane-gate"}}' > "$REG/agy.json"
 SESS="$TMP/sessions"
 ARGS="$TMP/args.log"
 gate() { # gate [args...]; sets out and rc. GATE_PATH, GATE_POLICY and SID override the defaults.
-  out=$(cd "$TMP/work" && PATH="${GATE_PATH:-$STUBDIR:$SEAL}" DR_AGY_POLICY="${GATE_POLICY:-$POLICY}" \
-    DR_EXECUTORS_DIR="$REG" DR_AGY_SESSION_DIR="$SESS" CLAUDE_CODE_SESSION_ID="${SID-s1}" \
+  out=$(cd "$TMP/work" && PATH="${GATE_PATH:-$STUBDIR:$SEAL}" DAGENTS_AGY_POLICY="${GATE_POLICY:-$POLICY}" \
+    DAGENTS_EXECUTORS_DIR="$REG" DAGENTS_AGY_SESSION_DIR="$SESS" CLAUDE_CODE_SESSION_ID="${SID-s1}" \
     STUB_AGY_ARGS_LOG="$ARGS" "$BASH" "$P/scripts/agy-gate" "$@" 2>"$TMP/err"); rc=$?
 }
 field() { jq -r ".$1 | tostring" "$SESS/s1.json" 2>/dev/null | tr -d '\r'; }
 fresh() { rm -rf "$SESS" "$ARGS"; }
-setting() { mkdir -p "$HOME/.dforge"; printf '%s\n' "$1" > "$HOME/.dforge/config.json"; }
-mark_off() { (export DR_EXECUTORS_DIR="$REG" DR_AGY_SESSION_DIR="$SESS" CLAUDE_CODE_SESSION_ID=s1
+setting() { mkdir -p "$HOME/.dagents"; printf '%s\n' "$1" > "$HOME/.dagents/config.json"; }
+mark_off() { (export DAGENTS_EXECUTORS_DIR="$REG" DAGENTS_AGY_SESSION_DIR="$SESS" CLAUDE_CODE_SESSION_ID=s1
   . "$P/scripts/lib/executor-session.sh"; executor_session_mark_off agy "$1"); }
 
 check "agy-gate exists" "$([ -f "$P/scripts/agy-gate" ] && echo yes || echo no)" "yes"

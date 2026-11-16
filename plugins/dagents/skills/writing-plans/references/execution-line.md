@@ -1,7 +1,7 @@
 **Read the settings first.** Two workflow settings shape a plan,
 `executionMode` and `executionStrategy`. They arrive in the session-start line
-`dforge settings in force (…)`. With no such line in context,
-run `scripts/dforge-config workflow` before you choose the Execution line
+`dagents settings in force (…)`. With no such line in context,
+run `scripts/dagents-config workflow` before you choose the Execution line
 or ask the strategy question; it prints nothing when both are at their
 defaults. A key the line does not name is at its default, and your human
 partner's own instructions outrank a setting.

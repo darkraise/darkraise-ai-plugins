@@ -2,7 +2,7 @@
 # PostToolUse hook (Edit, Write, MultiEdit): when the edited file is a UI file
 # (scripts/ui-proof paths), return scripts/ui-lint's findings as additional
 # context, and on the first UI edit of a session that has not loaded
-# dforge:ui-ux, name the skill once; in fast mode (lib/fast-mode.sh) it does
+# dagents:ui-ux, name the skill once; in fast mode (lib/fast-mode.sh) it does
 # neither. It never blocks: it prints nothing or one
 # hookSpecificOutput object, and always exits 0.
 set -uo pipefail
@@ -34,20 +34,20 @@ lint=$(cd "$root" && bash "$SCRIPT_DIR/ui-lint" "$rel" 2>/dev/null)
 lint_status=$?
 remind=""
 if [ -n "$session_id" ]; then
-  marker="${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').ui-ux"
+  marker="${HOME:-}/.claude/dagents/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').ui-ux"
   if [ ! -f "$marker" ]; then
     { mkdir -p "$(dirname "$marker")" && : > "$marker"; } 2>/dev/null
     uiux_ran_skill "$transcript_path" ||
-      remind="This edit changes a UI file (${rel}). Load dforge:ui-ux with the Skill tool: it owns UI/UX work, and the work is not done until it is proven in the running UI."
+      remind="This edit changes a UI file (${rel}). Load dagents:ui-ux with the Skill tool: it owns UI/UX work, and the work is not done until it is proven in the running UI."
   fi
 fi
 
 text=""
 if [ -n "$lint" ]; then
-  text="dforge ui-lint, $(grep -c . <<<"$lint") finding(s) in ${rel}:
+  text="dagents ui-lint, $(grep -c . <<<"$lint") finding(s) in ${rel}:
 $(sed 's/^/- /' <<<"$lint")"
 fi
-if [ "$lint_status" -eq 2 ]; then text="dforge ui-lint could not run on ${rel}; its findings are unknown, so lint it by hand."; fi
+if [ "$lint_status" -eq 2 ]; then text="dagents ui-lint could not run on ${rel}; its findings are unknown, so lint it by hand."; fi
 if [ -n "$remind" ]; then text="${text:+$text
 
 }$remind"; fi

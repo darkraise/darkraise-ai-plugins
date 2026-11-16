@@ -31,7 +31,7 @@ names only Platform-column names.
 Read the local platform with `uname -s`. `Linux` is a GNU Linux host.
 `Darwin` is macOS. `MINGW*` or `MSYS*` is Git Bash on Windows.
 
-A platform is uncovered when the host running dforge is not that platform.
+A platform is uncovered when the host running dagents is not that platform.
 The host covers `uutils (ubuntu-latest)` only when `cp --version` names
 uutils.
 
@@ -51,7 +51,7 @@ remedy.
 
 | Platform | Pitfall | Do instead |
 |---|---|---|
-| Windows Git Bash | A native program (`git.exe`, `jq.exe`) given a path built from `$PWD`, `$(pwd)` or `$TMPDIR` gets a POSIX form it cannot open, or has its argument rewritten when path conversion is on (`MSYS_NO_PATHCONV` unset). | Convert the path with `cygpath -m` before the call (dforge's `dr_native_path`, `plugins/dforge/scripts/lib/native-path.sh`), and feed `jq` a file on stdin in a script that exports `MSYS_NO_PATHCONV`. |
+| Windows Git Bash | A native program (`git.exe`, `jq.exe`) given a path built from `$PWD`, `$(pwd)` or `$TMPDIR` gets a POSIX form it cannot open, or has its argument rewritten when path conversion is on (`MSYS_NO_PATHCONV` unset). | Convert the path with `cygpath -m` before the call (dagents's `dr_native_path`, `plugins/dagents/scripts/lib/native-path.sh`), and feed `jq` a file on stdin in a script that exports `MSYS_NO_PATHCONV`. |
 | Windows Git Bash | The same directory is `/c/Users/x` in the shell and `C:/Users/x` from a native tool, so a string comparison never matches. | Normalise both sides with `cygpath -m`, or compare with `-ef`. |
 | Windows Git Bash | Files a Windows tool wrote, and native program output, end lines with `\r`, which `read`, `awk` and `[ = ]` keep. | Pipe through `tr -d '\r'` before comparing or parsing. |
 | Windows Git Bash | `awk -v name=value` processes backslash escapes in the value, so a regex or a Windows path changes. | Pass the value in the environment and read `ENVIRON["NAME"]`. |

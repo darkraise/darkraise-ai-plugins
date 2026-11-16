@@ -128,6 +128,6 @@ its step 0.5. A `Final fix:` line and no `Final review:` line: the fix wave was
 dispatched; after compaction the agent id is gone, so re-dispatch that agent
 fresh, then continue Final Review at the scoped re-review. A
 `Final review: clean` line: the review is done — go to
-dforge:finishing-a-development-branch. A ledger holding a
+dagents:finishing-a-development-branch. A ledger holding a
 `Plan: executor <id> off - unreliable (<k> handbacks)` line keeps that executor
 off for the rest of the plan.

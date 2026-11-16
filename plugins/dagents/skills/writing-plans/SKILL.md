@@ -25,7 +25,7 @@ minimum that meets the spec; each task ends with a check that proves it.
 implementation plan."
 
 **Context:** If working in an isolated worktree, it should have been created via
-the `dforge:using-git-worktrees` skill at execution time.
+the `dagents:using-git-worktrees` skill at execution time.
 
 **Save plans to:** `<docs>/plans/YYYY-MM-DD-<feature-name>.md`
 - (User preferences for plan location override this default)
@@ -93,7 +93,7 @@ Constraints and Contracts.
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: the skill the **Execution:** line names — dforge:subagent-driven-development for `subagent`, dforge:executing-plans for `inline`. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: the skill the **Execution:** line names — dagents:subagent-driven-development for `subagent`, dagents:executing-plans for `inline`. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -178,7 +178,7 @@ nothing.
 
 **Ask first** (subagent plans only). Read the spec's `**Execution strategy:**` line;
 brainstorming's [design-phase.md](../brainstorming/references/design-phase.md)
-writes it as `sequential` on every new spec. When the spec has none, take the `executionStrategy` setting (dforge:brainstorming §Settings;
+writes it as `sequential` on every new spec. When the spec has none, take the `executionStrategy` setting (dagents:brainstorming §Settings;
 the default is `sequential`). Under `ask`, ask your human partner one question
 before you draft any task, "Parallel subagent waves or sequential execution?",
 and wait for the answer. On a Codex host do not ask:
@@ -276,7 +276,7 @@ basename, for example `core#4, review#16`. Omit the line otherwise.]
 match `scripts/ui-proof paths`: the contract IDs this task delivers, for
 example `UI-2, UX-4`. Every `UI-` and `UX-` ID must reach some task; `OP-` IDs
 are proven, not built. `plan-lint` checks both, and `task-brief` appends the
-cited items to the brief (dforge:ui-ux).]
+cited items to the brief (dagents:ui-ux).]
 
 **Depends on:** [waves plans only: `none`, or the tasks whose output this one
 consumes, for example `Task 1, Task 3`. Omit the line in a sequential plan.]
@@ -318,7 +318,7 @@ Step 1's test sits at the lowest layer that can fail for the task's change. Plan
 an end-to-end test only for a new user journey, never for an edge case a unit or
 integration test reaches, and add a variant of an existing test as a row in its
 table, not as a new test. Suites grown one task at a time otherwise end up
-dforge:test-simplifier's job.
+dagents:test-simplifier's job.
 
 Plan tests per behaviour: one test per acceptance statement or behaviour, at
 the lowest layer that can fail for it, rather than one per task. A sentence in

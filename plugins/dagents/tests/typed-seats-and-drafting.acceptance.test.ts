@@ -4,16 +4,16 @@ import type { On } from 'claude-code'
 
 import { FORK_DRAFTING, seatDenial } from '../hooks/cockpit/lib'
 
-// Acceptance tests for docs/dforge/specs/2026-10-25-typed-seats-and-drafting-design.md,
+// Acceptance tests for docs/dagents/specs/2026-10-25-typed-seats-and-drafting-design.md,
 // the cockpit statements (A1-A4, A8). They reach the hook only through the
-// engine's agent.spawn surface: a session becomes a dforge session by running
-// a dforge skill, and the denial is read from the cockpit pane's refusals.
+// engine's agent.spawn surface: a session becomes a dagents session by running
+// a dagents skill, and the denial is read from the cockpit pane's refusals.
 
 const START = { cwd: '/home/me/code/shop/web', surface: 'terminal', isInteractive: true } as never
 const PANE = {
-  plugin: 'dforge',
+  plugin: 'dagents',
   component: 'Pane',
-  requestId: 'dforge',
+  requestId: 'dagents',
   surface: 'terminal',
   props: { title: 'Cockpit', isFocused: false, bodyColumns: 200, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
@@ -53,52 +53,52 @@ const spawn = (fields: Record<string, unknown>) =>
     ...fields,
   }) as never
 
-const REASON = /^dforge: /
+const REASON = /^dagents: /
 
 describe('typed seats and drafting: acceptance', () => {
   test('A1: an untyped general-purpose or claude spawn is denied, naming a judge seat, an impl seat and model "sonnet"', async ($, on) => {
     world(on)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
     for (const subagentType of ['general-purpose', 'claude']) {
       const out = await $.agent.spawn(spawn({ subagentType }))
       expect(out.deny).toMatch(REASON)
-      expect(out.deny).toMatch(/dforge:judge-sonnet-high/)
-      expect(out.deny).toMatch(/dforge:impl-sonnet-medium/)
+      expect(out.deny).toMatch(/dagents:judge-sonnet-high/)
+      expect(out.deny).toMatch(/dagents:impl-sonnet-medium/)
       expect(out.deny).toContain('model: "sonnet"')
     }
   })
 
-  test('A2: general-purpose with a model, any dforge: agent and a typed built-in are not denied', async ($, on) => {
+  test('A2: general-purpose with a model, any dagents: agent and a typed built-in are not denied', async ($, on) => {
     world(on)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
-    // The session is a dforge session: the untyped spawn is denied.
+    await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
+    // The session is a dagents session: the untyped spawn is denied.
     expect((await $.agent.spawn(spawn({}))).deny).toBeDefined()
     expect((await $.agent.spawn(spawn({ model: 'sonnet' }))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({ model: 'opus' }))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({ subagentType: 'claude', model: 'sonnet' }))).deny).toBeUndefined()
-    for (const subagentType of ['dforge:judge-opus', 'dforge:judge-sonnet-high', 'dforge:impl-sonnet-medium']) {
+    for (const subagentType of ['dagents:judge-opus', 'dagents:judge-sonnet-high', 'dagents:impl-sonnet-medium']) {
       expect((await $.agent.spawn(spawn({ subagentType }))).deny).toBeUndefined()
     }
     for (const subagentType of ['Explore', 'Plan']) expect((await $.agent.spawn(spawn({ subagentType }))).deny).toBeUndefined()
   })
 
-  test('A3: nothing is denied before a dforge skill or agent ran', async ($, on) => {
+  test('A3: nothing is denied before a dagents skill or agent ran', async ($, on) => {
     world(on)
     await $.session.start(START)
     expect((await $.agent.spawn(spawn({}))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({ subagentType: 'claude' }))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({ subagentType: 'fork', fork: true }))).deny).toBeUndefined()
-    // A non-dforge skill does not make the session a dforge session.
+    // A non-dagents skill does not make the session a dagents session.
     await $.tool.call({ tool: 'Skill', skill: 'simplify' })
     expect((await $.agent.spawn(spawn({}))).deny).toBeUndefined()
   })
 
-  test('A3: in a dforge session nothing is denied from a subagent loop, a workflow agent, a teammate or a resume', async ($, on) => {
+  test('A3: in a dagents session nothing is denied from a subagent loop, a workflow agent, a teammate or a resume', async ($, on) => {
     world(on)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
     expect((await $.agent.spawn(spawn({}))).deny).toBeDefined()
     expect((await $.agent.spawn(spawn({ parentAgentId: 'agent-1' }))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({ parentAgentId: 'agent-1', subagentType: 'fork', fork: true }))).deny).toBeUndefined()
@@ -107,18 +107,18 @@ describe('typed seats and drafting: acceptance', () => {
     expect((await $.agent.spawn(spawn({ resume: { agentId: 'agent-1' } }))).deny).toBeUndefined()
   })
 
-  test('A3: a spawn of a dforge agent makes the session a dforge session', async ($, on) => {
+  test('A3: a spawn of a dagents agent makes the session a dagents session', async ($, on) => {
     world(on)
     await $.session.start(START)
     expect((await $.agent.spawn(spawn({}))).deny).toBeUndefined()
-    expect((await $.agent.spawn(spawn({ subagentType: 'dforge:judge-opus' }))).deny).toBeUndefined()
+    expect((await $.agent.spawn(spawn({ subagentType: 'dagents:judge-opus' }))).deny).toBeUndefined()
     expect((await $.agent.spawn(spawn({}))).deny).toMatch(REASON)
   })
 
-  test('A4: a fork is denied in a dforge session, and a drafting-named fork too while forks do not draft', async ($, on) => {
+  test('A4: a fork is denied in a dagents session, and a drafting-named fork too while forks do not draft', async ($, on) => {
     world(on)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:writing-plans' })
+    await $.tool.call({ tool: 'Skill', skill: 'dagents:writing-plans' })
     for (const description of ['Verify the register rows', 'Draft plan tasks 1-2', 'Draft plan tasks 3-4']) {
       const out = await $.agent.spawn(spawn({ subagentType: 'fork', fork: true, description }))
       expect(out.deny).toMatch(REASON)
@@ -145,20 +145,20 @@ describe('typed seats and drafting: acceptance', () => {
   test('A8: a denied spawn is listed in the cockpit refusals with tool Agent and the deny reason', async ($, on) => {
     world(on)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
     const denied = await $.agent.spawn(spawn({}))
     expect(denied.deny).toMatch(REASON)
     const ui = await $.ui.mount(PANE as never)
     const row = await ui.find({ type: 'Text', text: /✗ Agent: / })
     expect(row).toBeDefined()
     // The line carries the reason's opening words, which name the remedy.
-    expect(await ui.find({ type: 'Text', text: /✗ Agent: dforge: name a seat/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /✗ Agent: dagents: name a seat/ })).toBeDefined()
   })
 
   test('A8: an allowed spawn adds no refusal', async ($, on) => {
     world(on)
     await $.session.start(START)
-    await $.tool.call({ tool: 'Skill', skill: 'dforge:subagent-driven-development' })
+    await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
     expect((await $.agent.spawn(spawn({ model: 'sonnet' }))).deny).toBeUndefined()
     const ui = await $.ui.mount(PANE as never)
     expect(await ui.find({ type: 'Text', text: /✗ Agent:/ })).toBeUndefined()

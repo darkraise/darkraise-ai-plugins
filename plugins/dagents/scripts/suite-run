@@ -3,7 +3,7 @@
 # so a session reads a verdict instead of digging through the output. The
 # record lets the session skip a rerun at a HEAD that already passed.
 #
-# One row per run goes to <state>/suites.tsv (<state> is `dforge-path state`):
+# One row per run goes to <state>/suites.tsv (<state> is `dagents-path state`):
 #   <HEAD sha> <clean|dirty> <command> <exit> <log path> <end epoch> <duration seconds>
 # separated by tabs, the command's arguments shell-quoted (printf %q) so two
 # commands that split the same text differently never share a row. The
@@ -36,7 +36,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-. "$HERE/lib/dforge-dir.sh"
+. "$HERE/lib/dagents-dir.sh"
 
 die() { printf 'suite-run: %s\n' "$1" >&2; exit 2; }
 usage() { die "usage: suite-run [--timeout SECONDS] -- COMMAND [ARG ...]"; }
@@ -57,9 +57,9 @@ command -v timeout >/dev/null 2>&1 || die "GNU timeout is required but not on PA
 root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not in a git checkout"
 head=$(git rev-parse HEAD 2>/dev/null | tr -d '\r') || head=""
 [ -n "$head" ] || die "the checkout has no commit"
-state=$(bash "$HERE/dforge-path" state | tr -d '\r') || die "no state directory"
+state=$(bash "$HERE/dagents-path" state | tr -d '\r') || die "no state directory"
 mkdir -p "$state/suites" || die "cannot create $state/suites"
-dforge_self_ignore "$state"
+dagents_self_ignore "$state"
 
 record="$state/suites.tsv"
 command_text=$(printf '%q ' "$@")

@@ -37,15 +37,15 @@ HEAD_SHA=$(git rev-parse HEAD)
 `scripts/review-package` needs a plan, so outside one write the diff file yourself:
 
 ```bash
-STATE_DIR=$(bash <plugin-root>/scripts/dforge-path state) && [ -n "$STATE_DIR" ] && [ -n "$BASE_SHA" ] && [ -n "$HEAD_SHA" ] &&
-  mkdir -p "$STATE_DIR" && . <plugin-root>/scripts/lib/dforge-dir.sh && dforge_self_ignore "$STATE_DIR" &&
+STATE_DIR=$(bash <plugin-root>/scripts/dagents-path state) && [ -n "$STATE_DIR" ] && [ -n "$BASE_SHA" ] && [ -n "$HEAD_SHA" ] &&
+  mkdir -p "$STATE_DIR" && . <plugin-root>/scripts/lib/dagents-dir.sh && dagents_self_ignore "$STATE_DIR" &&
   DIFF_FILE="$STATE_DIR/review-$(git rev-parse --short "$HEAD_SHA").diff" &&
   REPORT_FILE="$STATE_DIR/review-$(git rev-parse --short "$HEAD_SHA")-report.md" &&
   { git log --oneline "$BASE_SHA..$HEAD_SHA" && echo && git diff --stat "$BASE_SHA..$HEAD_SHA" && echo && git diff -U10 "$BASE_SHA..$HEAD_SHA"; } > "$DIFF_FILE" &&
   [ -s "$DIFF_FILE" ] && ! git diff --quiet "$BASE_SHA..$HEAD_SHA" || { echo "no diff file written: do not dispatch" >&2; false; }
 ```
 
-Dispatch `dforge:judge-opus` as `subagent_type`, with no `model` or `effort` argument, filling the template at [code-reviewer.md](references/code-reviewer.md). The judge has no shell and writes only its report file: the diff file is its view of the change, and its reply of at most 10 lines names the report.
+Dispatch `dagents:judge-opus` as `subagent_type`, with no `model` or `effort` argument, filling the template at [code-reviewer.md](references/code-reviewer.md). The judge has no shell and writes only its report file: the diff file is its view of the change, and its reply of at most 10 lines names the report.
 
 **Placeholders:**
 - `[DESCRIPTION]` - Brief summary of what you built
@@ -78,15 +78,15 @@ You: Let me request code review before proceeding.
 BASE_SHA=$(git log --oneline | grep "Task 1" | head -1 | awk '{print $1}')
 HEAD_SHA=$(git rev-parse HEAD)
 
-[Write the diff file, then dispatch dforge:judge-opus]
+[Write the diff file, then dispatch dagents:judge-opus]
   DESCRIPTION: Added verifyIndex() and repairIndex() with 4 issue types
-  DIFF_FILE: /home/me/project/.dforge/review-3df7661.diff
+  DIFF_FILE: /home/me/project/.dagents/review-3df7661.diff
   PLAN_OR_REQUIREMENTS: Task 2 from <docs>/plans/deployment-plan.md
   BASE_SHA: a7981ec
   HEAD_SHA: 3df7661
-  REPORT_FILE: /home/me/project/.dforge/review-3df7661-report.md
+  REPORT_FILE: /home/me/project/.dagents/review-3df7661-report.md
 
-[Subagent replies]: ready to merge: with fixes — 1 Important, 1 Minor — /home/me/project/.dforge/review-3df7661-report.md
+[Subagent replies]: ready to merge: with fixes — 1 Important, 1 Minor — /home/me/project/.dagents/review-3df7661-report.md
 
 You: [Fix progress indicators]
 [Continue to Task 3]

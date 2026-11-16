@@ -49,7 +49,7 @@ applies the gate by host.
 
 `spec = 3` means prose only with the approach undecided. That is not a
 model-selection problem; it is a design decision nobody made. Route it to
-dforge:selecting-approaches, settle the approach, rewrite the
+dagents:selecting-approaches, settle the approach, rewrite the
 task with the decision in it, and re-score. The task will then score 0, 1, or 2
 on that axis like every other compliant task.
 
@@ -200,7 +200,7 @@ ledger beyond the reserve tier itself.
 
 ## What the range actually reaches
 
-A Claude plan written to dforge:writing-plans gives each code task its tests
+A Claude plan written to dagents:writing-plans gives each code task its tests
 and interfaces but not its implementation, so a code task scores 2 on spec
 completeness and is drawn as a feature slice up to `reducible <= 5`.
 Sonnet takes totals 0 to 5; Opus takes 6 to 8, and is otherwise reached by escalation.
@@ -408,7 +408,7 @@ onto another quota, so even a score-0 task it takes is Claude quota saved.
 ```
 
 Totals 3 to 8 come from the replayed runs recorded in
-`docs/dforge/notes/2026-11-03-agy-calibration-3-8.md`: Argon at `low` passed
+`docs/dagents/notes/2026-11-03-agy-calibration-3-8.md`: Argon at `low` passed
 all three tasks scored 3-4, and Argon at `high` passed all three scored 6-7.
 Total 5 runs Argon at `high` because that is the only rung measured on all
 three high tasks. The models are those `agy models` lists.

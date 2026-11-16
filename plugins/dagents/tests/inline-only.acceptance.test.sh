@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Acceptance checks for docs/dforge/specs/2026-11-07-inline-only-execution-design.md:
+# Acceptance checks for docs/dagents/specs/2026-11-07-inline-only-execution-design.md:
 # the session implements every task, executor tasks still go out, and the
 # subagent path is deprecated but intact.
 set -uo pipefail
@@ -9,12 +9,12 @@ P="$(cd "$HERE/.." && pwd)"
 S="$P/scripts"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-export HOME="$TMP/home" CODEX_HOME="$TMP/no-codex-home" DFORGE_NO_SETTINGS=1
-export DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=inline-only-test
+export HOME="$TMP/home" CODEX_HOME="$TMP/no-codex-home" DAGENTS_NO_SETTINGS=1
+export DAGENTS_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=inline-only-test
 unset AR_SESSION CLAUDE_CONFIG_DIR
-mkdir -p "$HOME" "$DR_CODEX_SESSION_DIR"
+mkdir -p "$HOME" "$DAGENTS_CODEX_SESSION_DIR"
 printf '{"session_id":"inline-only-test","usable":false,"review":false,"lane":false}\n' \
-  > "$DR_CODEX_SESSION_DIR/inline-only-test.json"
+  > "$DAGENTS_CODEX_SESSION_DIR/inline-only-test.json"
 printf 'echo %s\n' "'[{\"id\":\"codex\",\"usable\":false,\"reason\":\"test\"}]'" > "$TMP/roster.sh"
 export PLAN_LINT_ROSTER="$TMP/roster.sh"
 cd "$TMP"
@@ -65,7 +65,7 @@ io_plan() { # io_plan <execution> "<f s c r>" "<f s c r>" [<executor for Task 2>
 
 **CI:** none
 
-**Plan review:** 2026-11-07 — dforge:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
+**Plan review:** 2026-11-07 — dagents:judge-opus — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
 
 ## Global Constraints
 
@@ -87,7 +87,7 @@ EOF
   for ev in "$e1" "$e2"; do
     i=$((i + 1)); read -r f s c r <<<"$ev"; t=$((f + s + c + r))
     printf '\n### Task %s: %s thing\n\n**Files:**\n- Modify: `a%s.txt`\n\n' "$i" "$([ $i = 1 ] && echo First || echo Second)" "$i"
-    printf '**Implementer:** dforge:%s\n' "$(impl_for "$t")"
+    printf '**Implementer:** dagents:%s\n' "$(impl_for "$t")"
     [ "$i" = 2 ] && [ -n "$x" ] && printf '**Executor:** %s\n' "$x"
     printf '**Evaluation:** files %s - spec %s - coupling %s - risk %s = %s\n\n- [ ] **Step 1: Do it**\n' "$f" "$s" "$c" "$r" "$t"
   done
@@ -161,14 +161,14 @@ check "A14: review routes after an inline start" "$review_rc" "0"
 has "A14: review prints a seat" "$review_out" "seat: "
 h7=$(git rev-parse --short=7 HEAD)
 printf 'Task 1: fix round 1/2 (1 addressed, 0 open; commits %s..%s; session)\n' "$h7" "$h7" >> "$ws/progress.md"
-printf 'Task 1: complete (commits %s..%s, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat dforge:judge-opus) — done: x; verified: x; remaining: none; discovered: none; assumptions: none\n' "$h7" "$h7" >> "$ws/progress.md"
+printf 'Task 1: complete (commits %s..%s, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat dagents:judge-opus) — done: x; verified: x; remaining: none; discovered: none; assumptions: none\n' "$h7" "$h7" >> "$ws/progress.md"
 check "A14: next-step reads the session walk as complete" \
   "$(bash "$S/next-step" loop.md 2>/dev/null | grep '^\*\*Next:\*\*' | grep -c 'Task 2')" "1"
 wave_out=$(bash "$S/task-step" start loop.md 2 --inline --wave 1 2>&1); wave_rc=$?
 check "A14: --inline with --wave is a usage error" "$wave_rc" "2"
 # --- Task 4 ---
-check "A7: executionStrategy defaults to sequential" "$(bash "$S/dforge-config" get executionStrategy | tr -d '\r')" "sequential"
-check "A7: the workflow line is empty at defaults" "$(bash "$S/dforge-config" workflow | tr -d '\r')" ""
+check "A7: executionStrategy defaults to sequential" "$(bash "$S/dagents-config" get executionStrategy | tr -d '\r')" "sequential"
+check "A7: the workflow line is empty at defaults" "$(bash "$S/dagents-config" workflow | tr -d '\r')" ""
 present "A7: the schema says parallel needs subagent mode" "$P/config/schema.mjs" "only with a subagent Execution line"
 absent "cockpit nudge: no Implementer agent for implementation" "$P/hooks/cockpit/lib.ts" "for implementation"
 # --- Task 5 ---
@@ -189,10 +189,7 @@ check "A11: an old escalation line still parses" "$(ledger_left_inline "$TMP/old
 for f in "$P/.claude-plugin/plugin.json" "$P/.codex-plugin/plugin.json" "$P/../../.claude-plugin/marketplace.json"; do
   absent "no tiered implementers in $f" "$f" "tiered implementers"
 done
-check "marketplace keyword swapped" "$(jq -r '.plugins[] | select(.name == "dforge") | .keywords | index("spec-driven") != null and index("subagents") == null' < "$P/../../.claude-plugin/marketplace.json" | tr -d '\r')" "true"
 check "plugin keyword swapped" "$(jq -r '.keywords | index("spec-driven") != null and index("subagents") == null' < "$P/.claude-plugin/plugin.json" | tr -d '\r')" "true"
-v=$(jq -r .version < "$P/.claude-plugin/plugin.json" | tr -d '\r')
-check "version is 4.13.0 or later" "$(printf '4.13.0\n%s\n' "$v" | sort -V | head -n 1)" "4.13.0"
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
