@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
-import { createClient } from "../../scripts/lib/darkmem-client.mjs";
+import { createClient, namespacedClient } from "../../scripts/lib/darkmem-client.mjs";
 import { emptyState, ledgerPieces, loadState, utcStamp } from "../../scripts/lib/darkmem-mirror.mjs";
 import { checkProgressTargets, gatherLocalProgress, progressToLocal, readNoFollow, readRegular } from "../../scripts/lib/darkmem-progress-move.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
@@ -58,12 +58,12 @@ test("an equal ledger on darkmem is already filed; a different ledger, handoff n
   write(path.join(repo, ".dagents", "sdd", "p2", "progress.md"), LEDGER("p2"));
   write(path.join(repo, ".dagents", "sdd", "p2", "handoff.md"), "# local note\n");
   write(path.join(repo, ".dagents", "handoff", "latest.md"), "local latest\n");
-  const { workstream } = await client.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
-  await client.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: "# SDD ledger — plan: elsewhere\n" }] });
+  const { workstream } = await client.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  await client.append({ project: "proj", workstream: "dagents/p2", entries: [{ kind: "ledger", body: "# SDD ledger — plan: elsewhere\n" }] });
   await client.putDocument({ project: "proj", uri: "dagents/handoff/p2.md", content: "# darkmem note\n" });
   write(path.join(mirror, "work", "handoff", "latest.md"), "mirror latest\n");
   const { sources } = gatherLocalProgress({ repoRoot: repo });
-  const { problems, filed } = await checkProgressTargets({ cfg: { project: "proj", mirror }, client }, sources);
+  const { problems, filed } = await checkProgressTargets({ cfg: { project: "proj", mirror }, client: namespacedClient(client) }, sources);
   assert.deepEqual([...filed], [["p1", workstream.id]]);
   assert.equal(problems.length, 3, problems.join("\n"));
   assert.match(problems.join("\n"), /^sdd\/p2\/progress\.md: darkmem already holds a different ledger for workstream p2$/m);
@@ -117,7 +117,7 @@ test("progress moves into darkmem from every checkout, and a second run does not
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
   for (const key of ["p1", "p2"]) {
-    const ws = s.stub.db.workstreams.find(w => w.key === key);
+    const ws = s.stub.db.workstreams.find(w => w.key === `dagents/${key}`);
     assert.equal(ws.state, "closed");
     const ledger = ws.entries.filter(e => e.kind === "ledger");
     assert.equal(ledger.map(e => e.body).join(""), LEDGER(key));
@@ -128,7 +128,7 @@ test("progress moves into darkmem from every checkout, and a second run does not
   assert.equal(read(path.join(s.workRoot, "sdd", "p1", "handoff.md")), "# Handoff p1\n");
   assert.equal(s.state().documents["dagents/handoff/p1.md"], sha("# Handoff p1\n"));
   assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), LATEST);
-  const p1 = s.stub.db.workstreams.find(w => w.key === "p1");
+  const p1 = s.stub.db.workstreams.find(w => w.key === "dagents/p1");
   const [checkpoint, ...more] = p1.entries.filter(e => e.kind === "checkpoint");
   assert.equal(checkpoint.body, LATEST, "latest.md is filed as a checkpoint of the plan it names");
   assert.deepEqual(more, []);
@@ -171,11 +171,11 @@ test("a plan's amendments move into darkmem with its ledger (A3)", async t => {
 test("a ledger darkmem already holds unchanged is not filed again, so a stopped move can run again", async t => {
   const s = await setup(t, "darkmem");
   write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
-  const ws = s.stub.db.workstreams.find(w => w.key === "p1");
+  const ws = s.stub.db.workstreams.find(w => w.key === "dagents/p1");
   assert.equal(ws.entries.length, 1);
   assert.equal(ws.state, "closed");
   assert.equal(s.state().ledgers.p1.lastSeq, ws.entries[0].seq);
@@ -183,7 +183,7 @@ test("a ledger darkmem already holds unchanged is not filed again, so a stopped 
 
 test("a latest.md that names no plan is copied unsent, behind darkmem's newest checkpoint", async t => {
   const s = await setup(t, "darkmem");
-  const { workstream } = await s.seed.append({ project: "proj", workstream: "p9", entries: [{ kind: "checkpoint", body: "## State\n- Plan: `docs/dagents/plans/p9.md`\n" }] });
+  const { workstream } = await s.seed.append({ project: "proj", workstream: "dagents/p9", entries: [{ kind: "checkpoint", body: "## State\n- Plan: `docs/dagents/plans/p9.md`\n" }] });
   write(path.join(s.repo, ".dagents", "handoff", "latest.md"), "a note with no State section\n");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
@@ -198,7 +198,7 @@ test("a latest.md that names no plan is copied unsent, behind darkmem's newest c
 
 test("a copy dated at a checkpoint of a workstream key with a slash leaves a loadable state", async t => {
   const s = await setup(t, "darkmem");
-  await s.seed.append({ project: "proj", workstream: "feature/foo", entries: [{ kind: "checkpoint", body: "# Foo\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/feature/foo", entries: [{ kind: "checkpoint", body: "# Foo\n" }] });
   write(path.join(s.repo, ".dagents", "handoff", "latest.md"), "a note with no State section\n");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
@@ -213,7 +213,7 @@ test("a ledger's workstream properties read its plan in its own checkout", async
   write(path.join(s.worktree, ".dagents", "sdd", "p4", "progress.md"), LEDGER("p4"));
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  const { plan_uri, spec_uri } = s.stub.db.workstreams.find(w => w.key === "p4").properties;
+  const { plan_uri, spec_uri } = s.stub.db.workstreams.find(w => w.key === "dagents/p4").properties;
   assert.deepEqual({ plan_uri, spec_uri }, { plan_uri: "dagents/plans/p4.md", spec_uri: "dagents/specs/s4.md" });
 });
 
@@ -230,7 +230,7 @@ test("documents and progress both move to darkmem in one run, and the ledger's p
   assert.match(result.stdout, /^darkmem-sync reconcile: documents moved to darkmem$/m);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
   assert.equal(fs.existsSync(path.join(s.repo, "docs", "dagents", "plans", "p1.md")), false, "the documents move ran first and removed the checkout's copy");
-  const { plan_uri, spec_uri } = s.stub.db.workstreams.find(w => w.key === "p1").properties;
+  const { plan_uri, spec_uri } = s.stub.db.workstreams.find(w => w.key === "dagents/p1").properties;
   assert.deepEqual({ plan_uri, spec_uri }, { plan_uri: "dagents/plans/p1.md", spec_uri: "dagents/specs/s1.md" });
   assert.deepEqual(s.stores(), { documents: "darkmem", progress: "darkmem" });
 });
@@ -253,7 +253,7 @@ const UP_REFUSALS = [
     name: "a different ledger on darkmem",
     plant: async s => {
       write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
-      await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "# SDD ledger — plan: elsewhere\n" }] });
+      await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "# SDD ledger — plan: elsewhere\n" }] });
     },
     detail: /^ {2}sdd\/p1\/progress\.md: darkmem already holds a different ledger for workstream p1$/m,
   },
@@ -293,7 +293,7 @@ test("a progress file or mirror copy that cannot be read is a problem, not a cra
   fs.mkdirSync(path.join(mirror, "work", "sdd", "p2", "progress.md"), { recursive: true });
   const { problems, sources } = gatherLocalProgress({ repoRoot: repo });
   assert.deepEqual(problems.map(line => line.replace(repo, "<repo>").split(path.sep).join("/")), ["<repo>/.dagents/sdd/p1/progress.md: could not be read (EISDIR)"]);
-  const checked = await checkProgressTargets({ cfg: { project: "proj", mirror }, client }, sources);
+  const checked = await checkProgressTargets({ cfg: { project: "proj", mirror }, client: namespacedClient(client) }, sources);
   assert.deepEqual(checked.problems.map(line => line.replace(mirror, "<mirror>").split(path.sep).join("/")), ["<mirror>/work/sdd/p2/progress.md: could not be read (EISDIR)"]);
 });
 
@@ -727,13 +727,13 @@ test("a move that sets every source aside but cannot write .gitignore still move
 
 test("latest.md filed for an active plan leaves its workstream open, even one that was closed", async t => {
   const s = await setup(t, "darkmem");
-  const { workstream } = await s.seed.append({ project: "proj", workstream: "p3", entries: [{ kind: "note", body: "earlier\n" }] });
+  const { workstream } = await s.seed.append({ project: "proj", workstream: "dagents/p3", entries: [{ kind: "note", body: "earlier\n" }] });
   await s.seed.updateWorkstream(workstream.id, { state: "closed", retain: true });
   write(path.join(s.repo, ".dagents", "handoff", "latest.md"), "## State\n- Plan: `docs/dagents/plans/p3.md`\n");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^ {2}latest\.md filed as a checkpoint of p3$/m);
-  assert.equal(s.stub.db.workstreams.find(w => w.key === "p3").state, "open", "p3 is not in completed.md");
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "dagents/p3").state, "open", "p3 is not in completed.md");
 });
 
 test("latest.md filed for a completed plan closes the workstream it opens", async t => {
@@ -741,7 +741,7 @@ test("latest.md filed for a completed plan closes the workstream it opens", asyn
   write(path.join(s.repo, ".dagents", "handoff", "latest.md"), "## State\n- Plan: `docs/dagents/plans/p2.md`\n");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  const ws = s.stub.db.workstreams.find(w => w.key === "p2");
+  const ws = s.stub.db.workstreams.find(w => w.key === "dagents/p2");
   assert.equal(ws.state, "closed", "completed.md records p2");
   assert.equal(ws.retain, true);
   assert.equal(ws.entries.filter(e => e.kind === "checkpoint").length, 1);
@@ -818,10 +818,10 @@ for (const { name, plant, linked, unwritten } of [
 
 test("progress moves back into the primary checkout from closed and open workstreams, and darkmem keeps its copy", async t => {
   const s = await setup(t, "local");
-  const { workstream } = await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: LATEST }] });
+  const { workstream } = await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: LATEST }] });
   await s.seed.updateWorkstream(workstream.id, { state: "closed", retain: true });
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: LEDGER("p2") }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p2", entries: [{ kind: "ledger", body: LEDGER("p2") }] });
   await s.seed.putDocument({ project: "proj", uri: "dagents/handoff/p1.md", content: "# Handoff p1\n" });
   assert.equal(fs.existsSync(s.mirror), false, "the mirror starts empty");
   const result = await s.reconcile();
@@ -851,7 +851,7 @@ test("progress moves back into the primary checkout from closed and open workstr
 
 test("a plan's amendments move back into the checkout with its ledger (A3)", async t => {
   const s = await setup(t, "local");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   await s.seed.putDocument({ project: "proj", uri: "dagents/amendments/p1.md", content: "## A1 — Task 1\n" });
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
@@ -863,7 +863,7 @@ test("a plan's amendments move back into the checkout with its ledger (A3)", asy
 
 test("progress stays in darkmem when the primary checkout holds a different file", async t => {
   const s = await setup(t, "local");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), "a local ledger\n");
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
@@ -876,7 +876,7 @@ test("progress stays in darkmem when the primary checkout holds a different file
 
 test("a workstream opened on darkmem since the mirror's last pull, for an unfinished plan, keeps progress in darkmem", async t => {
   const s = await setup(t, "local");
-  await s.seed.append({ project: "proj", workstream: "p3", entries: [{ kind: "ledger", body: "# SDD ledger — plan: docs/dagents/plans/p3.md\nTask 1: implementer x (assigned)\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p3", entries: [{ kind: "ledger", body: "# SDD ledger — plan: docs/dagents/plans/p3.md\nTask 1: implementer x (assigned)\n" }] });
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): a plan is in progress: /m);
@@ -887,7 +887,7 @@ test("a workstream opened on darkmem since the mirror's last pull, for an unfini
 
 test("a primary state directory reached through a symbolic link keeps progress in darkmem, and nothing is copied", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "local");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   const outside = scratch("dms-link-");
   fs.mkdirSync(path.join(s.repo, ".dagents"), { recursive: true });
   fs.symlinkSync(outside, path.join(s.repo, ".dagents", "sdd"));
@@ -903,7 +903,7 @@ test("a primary state directory reached through a symbolic link keeps progress i
 for (const [what, plant, code] of [["a directory", file => fs.mkdirSync(file, { recursive: true }), "EISDIR"], ["a named pipe", namedPipe, "EFTYPE"]]) {
   test(`a primary checkout file that is ${what} keeps progress in darkmem, not a crash or a blocking read`, { skip: code === "EFTYPE" && process.platform === "win32" }, async t => {
     const s = await setup(t, "local");
-    await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+    await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
     const target = path.join(s.repo, ".dagents", "sdd", "p1", "progress.md");
     plant(target);
     const result = await s.reconcile();
@@ -916,7 +916,7 @@ for (const [what, plant, code] of [["a directory", file => fs.mkdirSync(file, { 
 
 test("a mirror that lost latest.md takes darkmem's newest checkpoint again before the move back", async t => {
   const s = await setup(t, "local");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }, { kind: "checkpoint", body: LATEST }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }, { kind: "checkpoint", body: LATEST }] });
   assert.equal((await run(["pull"], { cwd: s.repo, env: s.env })).code, 0);
   const mirrored = path.join(s.workRoot, "handoff", "latest.md");
   assert.equal(read(mirrored), LATEST);
@@ -930,7 +930,7 @@ test("a mirror that lost latest.md takes darkmem's newest checkpoint again befor
 for (const [what, plant, code] of [["a directory", file => fs.mkdirSync(file, { recursive: true }), "EISDIR"], ["a named pipe", namedPipe, "EFTYPE"]]) {
   test(`a mirror latest.md that is ${what} keeps progress in darkmem, not a crash or a blocking read`, { skip: code === "EFTYPE" && process.platform === "win32" }, async t => {
     const s = await setup(t, "local");
-    await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }, { kind: "checkpoint", body: LATEST }] });
+    await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }, { kind: "checkpoint", body: LATEST }] });
     plant(path.join(s.workRoot, "handoff", "latest.md"));
     const result = await s.reconcile();
     assert.equal(result.code, 1, result.stdout + result.stderr);
@@ -942,7 +942,7 @@ for (const [what, plant, code] of [["a directory", file => fs.mkdirSync(file, { 
 
 test("a mirror latest.md that cannot be written keeps progress in darkmem, not a crash", async t => {
   const s = await setup(t, "local");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }, { kind: "checkpoint", body: LATEST }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }, { kind: "checkpoint", body: LATEST }] });
   // The atomic write's temporary file cannot be made where a directory stands.
   fs.mkdirSync(path.join(s.workRoot, "handoff", ".latest.md.tmp"), { recursive: true });
   const result = await s.reconcile();
@@ -956,7 +956,7 @@ test("a mirror latest.md that cannot be written keeps progress in darkmem, not a
 
 test("a symbolic link among the mirror's progress keeps progress in darkmem, and nothing is read through it", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "local");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   // A handoff note, which reconcile's in-progress check never reads, so the
   // move's own walk of the mirror is what refuses it.
   const outside = path.join(scratch("dms-link-"), "handoff.md");
@@ -974,7 +974,7 @@ test("a symbolic link among the mirror's progress keeps progress in darkmem, and
 
 test("a linked mirror ledger is refused before the pull, so newer darkmem content neither reads through nor replaces it", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "local");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   const outside = path.join(scratch("dms-link-"), "progress.md");
   const older = "# SDD ledger — plan: docs/dagents/plans/p1.md\n";
   write(outside, older);
@@ -992,7 +992,7 @@ test("a linked mirror ledger is refused before the pull, so newer darkmem conten
 
 test("a symbolic-linked mirror work directory keeps progress in darkmem, and nothing is read through it", { skip: process.platform === "win32" }, async t => {
   const s = await setup(t, "local");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   const outside = scratch("dms-link-");
   const outsideLedger = path.join(outside, "sdd", "p1", "progress.md");
   const outsideText = "# SDD ledger — plan: docs/dagents/plans/p1.md\n";
@@ -1314,11 +1314,11 @@ const ledgerAppends = s => s.stub.db.requests.filter(r => r.method === "POST" &&
 test("a move stopped after its first append batch resumes the import", async t => {
   const s = await setup(t, "darkmem");
   write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LONG);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: FIRST_BATCH() });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: FIRST_BATCH() });
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
-  const ws = s.stub.db.workstreams.find(w => w.key === "p1");
+  const ws = s.stub.db.workstreams.find(w => w.key === "dagents/p1");
   assert.equal(ws.state, "closed");
   assert.equal(ledgerOf(ws).map(e => e.body).join(""), LONG);
   assert.equal(ledgerOf(ws).length, ledgerPieces(LONG).length);
@@ -1333,12 +1333,12 @@ test("another writer's append during a resumed import refuses the move, and noth
   const s = await setup(t, "darkmem");
   const ledger = path.join(s.repo, ".dagents", "sdd", "p1", "progress.md");
   write(ledger, LONG);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: FIRST_BATCH() });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: FIRST_BATCH() });
   let competed = false;
   s.stub.db.onRequest = (method, pathname) => {
     if (competed || method !== "POST" || pathname !== "/api/v1/worklog/entries") return;
     competed = true;
-    const ws = s.stub.db.workstreams.find(w => w.key === "p1");
+    const ws = s.stub.db.workstreams.find(w => w.key === "dagents/p1");
     ws.entries.push({ id: "competing", seq: s.stub.db.nextSeq++, run_key: "other", kind: "ledger", body: "another writer\n", properties: {}, created_at: new Date().toISOString() });
   };
   const result = await s.reconcile();
@@ -1354,24 +1354,24 @@ test("another writer's append during a resumed import refuses the move, and noth
 test("an open workstream holding no ledger entries yet is resumed from the start", async t => {
   const s = await setup(t, "darkmem");
   write(path.join(s.repo, ".dagents", "sdd", "p1", "progress.md"), LEDGER("p1"));
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "## State\n- Plan: `docs/dagents/plans/p1.md`\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "## State\n- Plan: `docs/dagents/plans/p1.md`\n" }] });
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  const ws = s.stub.db.workstreams.find(w => w.key === "p1");
+  const ws = s.stub.db.workstreams.find(w => w.key === "dagents/p1");
   assert.equal(ws.state, "closed");
   assert.equal(ledgerOf(ws).map(e => e.body).join(""), LEDGER("p1"));
 });
 
 for (const [name, prepare] of [
   ["a closed workstream holding a prefix", async s => {
-    const { workstream } = await s.seed.append({ project: "proj", workstream: "p1", entries: FIRST_BATCH() });
+    const { workstream } = await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: FIRST_BATCH() });
     await s.seed.updateWorkstream(workstream.id, { state: "closed", retain: true });
   }],
   ["a prefix ending inside a piece", async s => {
-    await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LONG.slice(0, 20) }] });
+    await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: LONG.slice(0, 20) }] });
   }],
   ["a different ledger", async s => {
-    await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "# SDD ledger — plan: elsewhere\n" }] });
+    await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "# SDD ledger — plan: elsewhere\n" }] });
   }],
 ]) {
   test(`${name} refuses the move and sends nothing`, async t => {
@@ -1392,7 +1392,7 @@ for (const [name, prepare] of [
 test("a darkmem ledger whose absolute identity names a linked worktree's plan counts as finished", async t => {
   const s = await setup(t, "local");
   const identity = path.join(s.worktree, "docs", "dagents", "plans", "p2.md");
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: ABSOLUTE_LEDGER(identity) }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p2", entries: [{ kind: "ledger", body: ABSOLUTE_LEDGER(identity) }] });
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
@@ -1404,7 +1404,7 @@ test("a darkmem ledger whose absolute identity names a worktree nested in the pr
   const nested = path.join(s.repo, ".claude", "worktrees", "nested");
   git(s.repo, "worktree", "add", "-q", "-b", "nested", nested);
   const identity = path.join(nested, "docs", "dagents", "plans", "p2.md");
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: ABSOLUTE_LEDGER(identity) }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p2", entries: [{ kind: "ledger", body: ABSOLUTE_LEDGER(identity) }] });
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local$/m);

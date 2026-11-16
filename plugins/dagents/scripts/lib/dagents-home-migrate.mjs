@@ -91,7 +91,7 @@ export function migrateMirrorLocked(mirror) {
 export async function migrateServer({ cfg, client, state, persist }) {
   if (state.prefix === DOC_PREFIX) return [];
   const failures = [];
-  const held = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item.content_hash]));
+  const held = new Map((await client.manifest(cfg.project, `${DOC_PREFIX}/`)).map(item => [item.uri, item.content_hash]));
   for (const prefix of OLD_PREFIXES) {
     const old = (await client.manifest(cfg.project, prefix)).filter(item => item.uri.startsWith(`${prefix}/`));
     for (const item of old) {

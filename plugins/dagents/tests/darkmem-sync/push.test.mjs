@@ -16,7 +16,7 @@ async function setup(t, stubOptions = {}) {
   const push = (...args) => run(["push", ...args], { cwd: repo, env: home.env });
   const posts = path => stub.db.requests.filter(r => r.method === "POST" && r.path === path);
   const ledger = async slug => {
-    const ws = stub.db.workstreams.find(w => w.key === slug);
+    const ws = stub.db.workstreams.find(w => w.key === `dagents/${slug}`);
     return ws.entries.filter(e => e.kind === "ledger");
   };
   return { stub, repo, ...home, seed, push, posts, ledger };
@@ -81,7 +81,7 @@ test("a ledger whose plan completed.md records has its workstream closed once, a
   write(path.join(s.docsRoot, "plans", "completed.md"), "- `docs/dagents/plans/p1.md` — merged\n");
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  const ws = key => s.stub.db.workstreams.find(w => w.key === key);
+  const ws = key => s.stub.db.workstreams.find(w => w.key === `dagents/${key}`);
   assert.equal(ws("p1").state, "closed");
   assert.equal(ws("p1").retain, true);
   assert.equal(ws("p2").state, "open");
@@ -93,21 +93,21 @@ test("a ledger whose plan completed.md records has its workstream closed once, a
 
 test("handoff notes go up as documents and are linked from their workstream", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }] });
   write(path.join(s.workRoot, "sdd", "p1", "handoff.md"), "# Handoff p1\n");
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout);
   assert.equal(s.stub.db.documents.get("proj\u0000dagents/handoff/p1.md").content, "# Handoff p1\n");
-  assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "dagents/handoff/p1.md");
-  delete s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri;
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "dagents/p1").properties.handoff_uri, "dagents/handoff/p1.md");
+  delete s.stub.db.workstreams.find(w => w.key === "dagents/p1").properties.handoff_uri;
   fs.rmSync(path.join(s.mirror, ".sync-state.json"));
   assert.equal((await s.push()).code, 0);
-  assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "dagents/handoff/p1.md", "an adopted handoff note is linked too");
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "dagents/p1").properties.handoff_uri, "dagents/handoff/p1.md", "an adopted handoff note is linked too");
 });
 
 test("a plan's amendments go up beside its handoff note (A3)", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }] });
   write(path.join(s.workRoot, "sdd", "p1", "amendments.md"), "## A1 — Task 1\n");
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout);
@@ -176,7 +176,7 @@ test("a ledger goes up one entry per complete line, with the line's properties, 
     ["|---|---|\n", {}],
   ]);
   assert.equal(entries[0].run_key, "sess-1");
-  const ws = s.stub.db.workstreams.find(w => w.key === "p1");
+  const ws = s.stub.db.workstreams.find(w => w.key === "dagents/p1");
   assert.deepEqual(ws.properties, { plan_uri: "dagents/plans/p1.md", spec_uri: "dagents/specs/s.md" });
   fs.appendFileSync(file, "\n");
   assert.equal((await s.push()).code, 0);
@@ -245,11 +245,11 @@ test("a ledger append whose answer was lost is reconciled, never sent twice", as
   fs.appendFileSync(file, "two\n");
   assert.equal((await s.push()).code, 0);
   assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n", "two\n"]);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "three\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "three\n" }] });
   fs.appendFileSync(file, "three\n");
   assert.equal((await s.push()).code, 0);
   assert.deepEqual((await s.ledger("p1")).map(e => e.body), ["one\n", "two\n", "three\n"]);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "theirs\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "theirs\n" }] });
   fs.appendFileSync(file, "four\n");
   const stale = await s.push();
   assert.equal(stale.code, 1);
@@ -282,7 +282,7 @@ test("latest.md goes up as a checkpoint on the plan its State names, or on --wor
   const latest = path.join(s.workRoot, "handoff", "latest.md");
   write(latest, "# Handoff — 2026-09-24 (phase stop)\n\n## State\n- Plan: `docs/superpowers/plans/p1.md`; ledger: `x`\n");
   assert.equal((await s.push()).code, 0);
-  const p1 = s.stub.db.workstreams.find(w => w.key === "p1");
+  const p1 = s.stub.db.workstreams.find(w => w.key === "dagents/p1");
   assert.deepEqual(p1.entries.map(e => e.kind), ["checkpoint"]);
   assert.deepEqual(p1.properties, { plan_uri: "dagents/plans/p1.md" });
   assert.equal((await s.push()).code, 0);
@@ -292,15 +292,15 @@ test("latest.md goes up as a checkpoint on the plan its State names, or on --wor
   assert.equal(unnamed.code, 1);
   assert.match(unnamed.stdout, /failed: handoff\/latest\.md: its State section names no plan or draft; push again with --workstream KEY/);
   assert.equal((await s.push("--workstream", "adhoc")).code, 0);
-  assert.equal(s.stub.db.workstreams.find(w => w.key === "adhoc").entries[0].kind, "checkpoint");
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "dagents/adhoc").entries[0].kind, "checkpoint");
   write(latest, "# Handoff\n\n## State\n- Draft: `docs/superpowers/specs/d-design.md`\n");
   s.stub.db.failures.push({ method: "POST", path: "/api/v1/worklog/entries", status: 502, commit: true });
   const lost = await s.push();
   assert.equal(lost.code, 1);
   assert.match(lost.stdout, /^failed: handoff\/latest\.md: darkmem answered 502: injected failure$/m);
-  await s.seed.append({ project: "proj", workstream: "d-design", entries: [{ kind: "checkpoint", body: "# Handoff from another machine\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/d-design", entries: [{ kind: "checkpoint", body: "# Handoff from another machine\n" }] });
   assert.equal((await s.push()).code, 0);
-  const draft = s.stub.db.workstreams.find(w => w.key === "d-design");
+  const draft = s.stub.db.workstreams.find(w => w.key === "dagents/d-design");
   assert.equal(draft.entries.length, 2, "a checkpoint whose answer was lost is not filed twice, even behind another client's");
   assert.deepEqual(draft.properties, { spec_uri: "dagents/specs/d-design.md" });
   const bad = await s.push("--workstream", "../x");
@@ -338,7 +338,7 @@ test("every ledger append names the seq it follows; another mirror's append is a
   const [first] = s.posts("/api/v1/worklog/entries");
   assert.equal(first.body.expected_last_seq, 0, "a new ledger expects an empty one");
   const oneSeq = (await s.ledger("p1"))[0].seq;
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "two\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "two\n" }] });
   fs.appendFileSync(file, "two\nthree\n");
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout + result.stderr);
@@ -355,7 +355,7 @@ test("a second 409 in one push is a conflict and nothing more is sent", async t 
   const s = await setup(t, {
     onRequest: (request, db) => {
       if (racing.length && request.method === "POST" && request.path === "/api/v1/worklog/entries") {
-        const ws = db.workstreams.find(w => w.key === "p1");
+        const ws = db.workstreams.find(w => w.key === "dagents/p1");
         ws.entries.push({ id: `race-${db.nextSeq}`, seq: db.nextSeq++, run_key: "other", kind: "ledger", body: racing.shift(), properties: {}, created_at: ws.last_entry_at });
       }
     },
@@ -429,7 +429,7 @@ test("a 503 on one document names its uri, and the other documents, the ledger a
   assert.match(result.stdout, /^failed: dagents\/a\.md: darkmem answered 503: injected failure$/m);
   assert.equal(s.stub.db.documents.has("proj\u0000dagents/a.md"), false);
   assert.equal(s.stub.db.documents.get("proj\u0000dagents/b.md").content, "b\n");
-  assert.deepEqual(s.stub.db.workstreams.find(w => w.key === "p1").entries.map(e => e.kind), ["ledger", "checkpoint"]);
+  assert.deepEqual(s.stub.db.workstreams.find(w => w.key === "dagents/p1").entries.map(e => e.kind), ["ledger", "checkpoint"]);
   assert.equal((await s.push()).code, 0);
   assert.equal(s.stub.db.documents.get("proj\u0000dagents/a.md").content, "a\n");
 });
@@ -460,7 +460,7 @@ test("a failed document manifest fails the documents phase and the ledgers still
 
 test("a failed handoff link stays pending and the next push links it; a pending link with no workstream is dropped", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }] });
   write(path.join(s.workRoot, "sdd", "p1", "handoff.md"), "# Handoff p1\n");
   s.stub.db.failures.push({ method: "PATCH", path: "/api/v1/worklog/workstreams/", status: 503 });
   const failed = await s.push();
@@ -470,7 +470,7 @@ test("a failed handoff link stays pending and the next push links it; a pending 
   assert.deepEqual(JSON.parse(read(stateFile)).pendingLinks, ["dagents/handoff/p1.md"]);
   const retried = await s.push();
   assert.equal(retried.code, 0, retried.stdout);
-  assert.equal(s.stub.db.workstreams.find(w => w.key === "p1").properties.handoff_uri, "dagents/handoff/p1.md");
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "dagents/p1").properties.handoff_uri, "dagents/handoff/p1.md");
   assert.deepEqual(JSON.parse(read(stateFile)).pendingLinks, []);
   const state = JSON.parse(read(stateFile));
   state.pendingLinks = ["dagents/handoff/ghost.md"];
@@ -478,13 +478,13 @@ test("a failed handoff link stays pending and the next push links it; a pending 
   const dropped = await s.push();
   assert.equal(dropped.code, 0, dropped.stdout);
   assert.deepEqual(JSON.parse(read(stateFile)).pendingLinks, []);
-  assert.equal(s.stub.db.workstreams.some(w => w.key === "ghost"), false);
+  assert.equal(s.stub.db.workstreams.some(w => w.key === "dagents/ghost"), false);
 });
 
 test("a checkpoint filed a microsecond before the last synced one is not taken for this note", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# X\n" }] });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# Y\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "# X\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "# Y\n" }] });
   const [x, y] = s.stub.db.workstreams[0].entries;
   x.created_at = "2026-09-25T10:00:00.000001+00:00";
   y.created_at = "2026-09-25T10:00:00.000002+00:00";
@@ -510,7 +510,7 @@ test("a checkpoint whose answer was lost is found after a push to another workst
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout);
   assert.match(result.stdout, / 0 checkpoints;/);
-  const filed = key => s.stub.db.workstreams.find(w => w.key === key).entries;
+  const filed = key => s.stub.db.workstreams.find(w => w.key === `dagents/${key}`).entries;
   assert.equal(filed("p1").length, 1, "p1's lost checkpoint is recorded, not filed twice");
   const { checkpointAt, checkpointAtByWorkstream } = JSON.parse(read(path.join(s.mirror, ".sync-state.json")));
   const [at1, at2] = [filed("p1")[0].created_at, filed("p2")[0].created_at];
@@ -528,7 +528,7 @@ test("a note returned to an earlier workstream is filed again, so the newest che
     assert.equal(result.code, 0, result.stdout);
     assert.match(result.stdout, / 1 checkpoints;/, `${name} is filed`);
   }
-  const filed = key => s.stub.db.workstreams.find(w => w.key === key).entries.filter(e => e.kind === "checkpoint");
+  const filed = key => s.stub.db.workstreams.find(w => w.key === `dagents/${key}`).entries.filter(e => e.kind === "checkpoint");
   assert.equal(filed("p1").length, 2, "the second note for p1 is a new checkpoint, not the acknowledged first");
   assert.equal(filed("p2").length, 1);
   const other = makeHome({ repo: s.repo, url: s.stub.url });
@@ -539,7 +539,7 @@ test("a note returned to an earlier workstream is filed again, so the newest che
 
 test("an old state file's single checkpointAt stands for a workstream until it is pushed", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# X\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "# X\n" }] });
   const old = new Date(Date.parse(s.stub.db.workstreams[0].entries[0].created_at) + 500).toISOString();
   write(path.join(s.mirror, ".sync-state.json"), JSON.stringify({
     version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: old, conflicts: [], pendingLinks: [], prefix: "dagents",
@@ -776,7 +776,7 @@ test("a complete latest.md is pushed under the project workstream", async t => {
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /names no plan or draft/);
   assert.match(result.stdout, / 1 checkpoints;/);
-  const project = s.stub.db.workstreams.find(w => w.key === "project");
+  const project = s.stub.db.workstreams.find(w => w.key === "dagents/project");
   assert.deepEqual(project.entries.map(e => [e.kind, e.body]), [["checkpoint", COMPLETE_NOTE]]);
   assert.deepEqual(project.properties ?? {}, {});
 });
@@ -787,6 +787,32 @@ test("a project latest.md with stale notes is filed by its marker", async t => {
   write(path.join(s.workRoot, "handoff", "latest.md"), note);
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.equal(s.stub.db.workstreams.find(w => w.key === "project").entries.length, 1);
-  assert.equal(s.stub.db.workstreams.find(w => w.key === "Q"), undefined, "the stale State section does not name the workstream");
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "dagents/project").entries.length, 1);
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "dagents/Q"), undefined, "the stale State section does not name the workstream");
+});
+
+test("dagents keeps to its own darkmem client, documents and workstreams on push and pull", async t => {
+  const s = await setup(t);
+  markMigrated(s.mirror);
+  await s.seed.putDocument({ project: "proj", uri: "dforge/specs/old.md", content: "dforge's\n" });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "dforge's\n" }] });
+  write(path.join(s.docsRoot, "specs", "a.md"), "# A\n");
+  write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "# SDD ledger — plan: docs/dagents/plans/p1.md\nTask 1: complete (abc)\n");
+  const before = s.stub.db.requests.length;
+  const pushed = await s.push();
+  assert.equal(pushed.code, 0, pushed.stdout + pushed.stderr);
+  const pulled = await run(["pull"], { cwd: s.repo, env: s.env });
+  assert.equal(pulled.code, 0, pulled.stdout + pulled.stderr);
+  for (const r of s.stub.db.requests.slice(before)) {
+    if (r.body?.uri) assert.match(r.body.uri, /^dagents\//, JSON.stringify(r));
+    if (r.body?.workstream) assert.match(r.body.workstream, /^dagents\//, JSON.stringify(r));
+    if (r.query?.workstream) assert.match(r.query.workstream, /^dagents\//, JSON.stringify(r));
+    if (r.query?.uri_prefix) assert.match(r.query.uri_prefix, /^dagents\//, JSON.stringify(r));
+    if (r.query?.uri) assert.match(r.query.uri, /^dagents\//, JSON.stringify(r));
+    if (r.body?.client) assert.equal(r.body.client, "dagents");
+    assert.notEqual(r.method, "DELETE", JSON.stringify(r));
+  }
+  assert.ok(s.stub.db.workstreams.some(w => w.key === "dagents/p1"));
+  assert.equal(fs.existsSync(path.join(s.docsRoot, "specs", "old.md")), false, "a dforge document is never pulled");
+  assert.deepEqual(s.stub.db.workstreams.find(w => w.key === "p1").entries.map(e => e.body), ["dforge's\n"]);
 });

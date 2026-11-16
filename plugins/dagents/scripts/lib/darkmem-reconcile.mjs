@@ -402,7 +402,7 @@ async function documentsToDarkmem(context) {
   }
   // Import puts without a hash precondition, so this check is what keeps
   // darkmem's copies; the window between it and the puts is accepted.
-  const remote = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item.content_hash]));
+  const remote = new Map((await client.manifest(cfg.project, `${DOC_PREFIX}/`)).map(item => [item.uri, item.content_hash]));
   const differing = [];
   for (const doc of documents) {
     const held = remote.get(doc.uri);
@@ -505,7 +505,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
     }
     for (const uri of unpushed) notes.push(`${uri}: deleted since the last sync; darkmem still holds it, and a later move to darkmem brings it back`);
   } else {
-    const remote = new Map((await client.manifest(cfg.project, DOC_PREFIX))
+    const remote = new Map((await client.manifest(cfg.project, `${DOC_PREFIX}/`))
       .filter(item => uriFamily(item.uri) === "documents" && !isArchiveUri(item.uri))
       .map(item => [item.uri, item.content_hash]));
     // Only what darkmem holds is carried, so an unpushed or damaged mirror
@@ -662,7 +662,7 @@ export async function reconcile(context) {
   else if (!offline && !context.cfg.apiKey) offline = `${context.cfg.keyEnv} is not set`;
   else if (!offline) {
     try {
-      await client.manifest(context.cfg.project, DOC_PREFIX);
+      await client.manifest(context.cfg.project, `${DOC_PREFIX}/`);
     } catch (error) {
       if (error instanceof TransportError) offline = `darkmem is unreachable: ${error.message}`;
       else if (error instanceof HttpError) offline = `darkmem refused the manifest read: ${error.message}`;

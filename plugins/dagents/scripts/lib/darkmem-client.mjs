@@ -24,6 +24,23 @@ export function failItem(report, label, error, suffix = "") {
   report.partial = true;
 }
 
+// Another workflow plugin may file workstreams in the same darkmem project, so
+// dagents writes and reads only keys under dagents/; the mirror's directories,
+// sync state and --workstream keep the bare slug.
+export const WORKSTREAM_PREFIX = "dagents/";
+
+export function namespacedClient(client, prefix = WORKSTREAM_PREFIX) {
+  const local = ws => (ws && typeof ws.key === "string" && ws.key.startsWith(prefix) ? { ...ws, key: ws.key.slice(prefix.length) } : ws);
+  const answer = reply => (reply && reply.workstream ? { ...reply, workstream: local(reply.workstream) } : reply);
+  return {
+    ...client,
+    append: async args => answer(await client.append({ ...args, workstream: `${prefix}${args.workstream}` })),
+    resume: async (project, workstream) => answer(await client.resume(project, `${prefix}${workstream}`)),
+    workstreams: async (project, state) =>
+      (await client.workstreams(project, state)).filter(ws => typeof ws.key === "string" && ws.key.startsWith(prefix)).map(local),
+  };
+}
+
 export function createClient({ url, apiKey, runKey, timeoutMs = 10000, fetchImpl = globalThis.fetch }) {
   async function call(method, route, { query = {}, body } = {}) {
     const target = new URL(`${url}${route}`);

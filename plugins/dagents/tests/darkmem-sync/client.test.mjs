@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
-import { HttpError, TransportError, createClient, failItem } from "../../scripts/lib/darkmem-client.mjs";
+import { HttpError, TransportError, createClient, failItem, namespacedClient } from "../../scripts/lib/darkmem-client.mjs";
 import { STUB_KEY, startStub } from "./stub-server.mjs";
 
 async function withStub(options, body) {
@@ -152,3 +152,16 @@ test("failItem records any darkmem answer but a 401 as one item's failure and re
   }
   assert.equal(report.failures.length, 2);
 });
+
+test("the namespaced client files and reads only dagents/ workstreams, under their bare slugs", () => withStub({}, async (stub, client) => {
+  await client.append({ project: "p", workstream: "p1", entries: [{ kind: "ledger", body: "other\n" }] });
+  const own = namespacedClient(client);
+  const filed = await own.append({ project: "p", workstream: "p1", entries: [{ kind: "ledger", body: "mine\n" }] });
+  assert.equal(filed.workstream.key, "p1");
+  assert.deepEqual(stub.db.workstreams.map(w => w.key).sort(), ["dagents/p1", "p1"]);
+  assert.equal((await own.resume("p", "p1")).workstream.key, "p1");
+  assert.equal((await own.resume("p", "p1")).workstream.id, stub.db.workstreams.find(w => w.key === "dagents/p1").id);
+  assert.equal(await own.resume("p", "p2"), null);
+  assert.deepEqual((await own.workstreams("p")).map(w => w.key), ["p1"]);
+  assert.deepEqual(stub.db.requests.filter(r => r.query?.workstream).map(r => r.query.workstream), ["dagents/p1", "dagents/p1", "dagents/p2"]);
+}));

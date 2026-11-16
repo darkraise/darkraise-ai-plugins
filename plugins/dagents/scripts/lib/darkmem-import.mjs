@@ -138,7 +138,7 @@ export async function importRepository(context) {
   // A document darkmem holds with other content may be newer than this
   // checkout's copy, so only --replace overwrites it, and then only the
   // version read here: one changed since is a 409, not a silent overwrite.
-  const remote = new Map((await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item.content_hash]));
+  const remote = new Map((await client.manifest(cfg.project, `${DOC_PREFIX}/`)).map(item => [item.uri, item.content_hash]));
   for (const doc of snapshot.documents) doc.expectedHash = remote.get(doc.uri);
   const differing = snapshot.documents.filter(doc => doc.expectedHash !== undefined && doc.expectedHash !== sha256(doc.buffer)).map(doc => doc.uri);
   if ((existing.size || differing.length) && !options["--replace"]) {

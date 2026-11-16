@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ConfigError, recordWhere, resolveStores, runKey } from "./darkmem-config.mjs";
-import { HttpError, TransportError, createClient } from "./darkmem-client.mjs";
+import { HttpError, TransportError, createClient, namespacedClient } from "./darkmem-client.mjs";
 import {
   ARCHIVE_PREFIX, DOC_PREFIX, StateError, UsageError, acquireLock, checkRemote, isArchiveUri, loadState, localChanges, lockOwner, pathToUri,
   saveState, sha256, uriFamily, uriToLocal,
@@ -84,7 +84,7 @@ async function restore(context) {
     report.refused += 1;
   };
   const rest = uri.slice(DOC_PREFIX.length + 1);
-  const items = await client.manifest(cfg.project, DOC_PREFIX);
+  const items = await client.manifest(cfg.project, `${DOC_PREFIX}/`);
   if (items.some(item => item.uri === uri)) return refuse(`${uri} is occupied on darkmem; move or rename that document first`);
   // dagents/archive/<stamp>/<rest>: a stamp sorts by time.
   const newest = items
@@ -301,12 +301,12 @@ async function main(argv, {
         throw new StateError(unsaved(cfg.statePath, error));
       }
     };
-    const client = createClient({
+    const client = namespacedClient(createClient({
       url: cfg.url,
       apiKey: cfg.apiKey,
       runKey: runKey({ cwd, env }),
       timeoutMs: Number(env.DAGENTS_DARKMEM_SYNC_TIMEOUT_MS) || 10000,
-    });
+    }));
     const roots = { docsRoot: cfg.documents.root, workRoot: path.join(cfg.mirror, "work"), worktreeRoot: cfg.worktreeRoot, families };
     // darkmem's older (superpowers/ or forge/) uris move before anything
     // syncs: a pull would read a document still under an older prefix as

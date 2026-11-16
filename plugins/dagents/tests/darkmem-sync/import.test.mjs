@@ -31,7 +31,7 @@ test("import files every document, closes each ledger as a retained workstream, 
     "dagents/handoff/p1.md", "dagents/plans/p1.md", "dagents/specs/s.md",
   ]);
   const [ws] = s.stub.db.workstreams;
-  assert.equal(ws.key, "p1");
+  assert.equal(ws.key, "dagents/p1");
   assert.equal(ws.state, "closed");
   assert.equal(ws.retain, true);
   assert.equal(ws.entries.map(e => e.body).join(""), LEDGER);

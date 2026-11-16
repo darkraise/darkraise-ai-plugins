@@ -150,7 +150,7 @@ export async function pullDocuments(context) {
   const { cfg, client, roots, report } = context;
   let items;
   try {
-    items = await client.manifest(cfg.project, DOC_PREFIX);
+    items = await client.manifest(cfg.project, `${DOC_PREFIX}/`);
   } catch (error) {
     failItem(report, "document manifest", error, "; no document pulled");
     return;

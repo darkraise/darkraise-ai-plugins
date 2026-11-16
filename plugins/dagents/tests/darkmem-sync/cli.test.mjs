@@ -122,7 +122,7 @@ test("push waits for a held lock and then runs; past its wait it refuses as befo
   const { env, mirror, workRoot } = makeHome({ repo, url: stub.url });
   const ledger = "# SDD ledger — plan: docs/dagents/plans/p1.md\nTask 1: a\n";
   write(path.join(workRoot, "sdd", "p1", "progress.md"), ledger);
-  const appended = () => stub.db.workstreams.find(w => w.key === "p1")?.entries.map(e => e.body).join("") ?? null;
+  const appended = () => stub.db.workstreams.find(w => w.key === "dagents/p1")?.entries.map(e => e.body).join("") ?? null;
   const lock = path.join(mirror, ".sync.lock");
   fs.mkdirSync(lock, { recursive: true });
   const released = setTimeout(() => fs.rmdirSync(lock), 1500);

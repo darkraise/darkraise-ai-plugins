@@ -62,12 +62,12 @@ for (const mode of ["--complete", "--project"]) {
     const pushed = await run(["push"], { cwd: repo, env: home.env });
     assert.equal(pushed.code, 0, pushed.stdout + pushed.stderr);
     assert.doesNotMatch(pushed.stdout, /^failed:/m);
-    const project = stub.db.workstreams.find(w => w.key === "project");
+    const project = stub.db.workstreams.find(w => w.key === "dagents/project");
     assert.ok(project, "darkmem holds a workstream named project");
     const checkpoints = project.entries.filter(e => e.kind === "checkpoint");
     assert.equal(checkpoints.length, 1, "one checkpoint under it");
     assert.equal(checkpoints[0].body, text, "carrying latest.md as written");
-    const finished = stub.db.workstreams.find(w => w.key === "2026-11-01-p1");
+    const finished = stub.db.workstreams.find(w => w.key === "dagents/2026-11-01-p1");
     assert.equal((finished?.entries ?? []).filter(e => e.kind === "checkpoint").length, 0, "none under the finished plan's workstream");
 
     // A different machine: a fresh checkout, a fresh home, the same darkmem.

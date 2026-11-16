@@ -134,7 +134,7 @@ async function archiveDeleted(context, manifest) {
   }
   let remote;
   try {
-    remote = new Map((manifest ?? await client.manifest(cfg.project, DOC_PREFIX)).map(item => [item.uri, item]));
+    remote = new Map((manifest ?? await client.manifest(cfg.project, `${DOC_PREFIX}/`)).map(item => [item.uri, item]));
   } catch (error) {
     failItem(report, "document manifest", error, "; no document archived");
     return;
@@ -202,7 +202,7 @@ async function pushDocuments(context) {
   if (!changed.length) return null;
   let manifest;
   try {
-    manifest = await client.manifest(cfg.project, DOC_PREFIX);
+    manifest = await client.manifest(cfg.project, `${DOC_PREFIX}/`);
   } catch (error) {
     failItem(report, "document manifest", error, "; no document pushed");
     return null;

@@ -25,6 +25,8 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   'plugins/dagents/tests/darkmem-sync/mirror.test.mjs',
   'plugins/dagents/tests/darkmem-sync/reconcile.test.mjs',
   'plugins/dagents/tests/darkmem-sync/restore.test.mjs',
+  // Seeds another plugin's darkmem document and workstream that dagents must leave alone.
+  'plugins/dagents/tests/darkmem-sync/push.test.mjs',
 ]);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };

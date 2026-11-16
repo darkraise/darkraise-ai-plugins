@@ -76,27 +76,27 @@ test("a document changed on both sides is a conflict and the local copy stays", 
 
 test("open workstreams render their ledgers; closed ones do not", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "# SDD ledger — plan: x\n" }, { kind: "ledger", body: "Task 1: a\n\n| t |\n" }] });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "Task 2: b\n" }, { kind: "note", body: "not a ledger line" }] });
-  const { workstream } = await s.seed.append({ project: "proj", workstream: "done", entries: [{ kind: "ledger", body: "old\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "# SDD ledger — plan: x\n" }, { kind: "ledger", body: "Task 1: a\n\n| t |\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "Task 2: b\n" }, { kind: "note", body: "not a ledger line" }] });
+  const { workstream } = await s.seed.append({ project: "proj", workstream: "dagents/done", entries: [{ kind: "ledger", body: "old\n" }] });
   await s.seed.updateWorkstream(workstream.id, { state: "closed" });
   assert.equal((await s.pull()).code, 0);
   const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
   assert.equal(read(file), "# SDD ledger — plan: x\nTask 1: a\n\n| t |\nTask 2: b\n");
   assert.equal(fs.existsSync(path.join(s.workRoot, "sdd", "done")), false);
-  const newest = s.stub.db.workstreams.find(w => w.key === "p1").entries.filter(e => e.kind === "ledger").at(-1);
+  const newest = s.stub.db.workstreams.find(w => w.key === "dagents/p1").entries.filter(e => e.kind === "ledger").at(-1);
   assert.deepEqual(s.state().ledgers.p1, { offset: fs.statSync(file).size, prefix: sha(read(file)), lastSeq: newest.seq });
 });
 
 test("a ledger ahead locally is kept; a diverged one is a conflict", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }] });
   await s.pull();
   const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
   fs.appendFileSync(file, "two\n");
   assert.equal((await s.pull()).code, 0);
   assert.equal(read(file), "one\ntwo\n");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "three\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "three\n" }] });
   const result = await s.pull();
   assert.equal(result.code, 1);
   assert.match(result.stdout, /conflict: sdd\/p1\/progress\.md: the local ledger and darkmem's have diverged/);
@@ -105,14 +105,14 @@ test("a ledger ahead locally is kept; a diverged one is a conflict", async t => 
 
 test("latest.md takes the newest checkpoint across open workstreams, by darkmem's clock", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# older\n" }] });
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# newest\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "# older\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p2", entries: [{ kind: "checkpoint", body: "# newest\n" }] });
   assert.equal((await s.pull()).code, 0);
   const latest = path.join(s.workRoot, "handoff", "latest.md");
   assert.equal(read(latest), "# newest\n");
   const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
   fs.utimesSync(latest, future, future);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# later still\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "# later still\n" }] });
   assert.equal((await s.pull()).code, 0);
   assert.equal(read(latest), "# later still\n", "a file's mtime never hides a newer checkpoint");
   assert.equal(s.state().checkpoint, sha("# later still\n"));
@@ -120,7 +120,7 @@ test("latest.md takes the newest checkpoint across open workstreams, by darkmem'
 
 test("a deleted latest.md comes back on the next pull though darkmem's checkpoint is unchanged", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# synced\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "# synced\n" }] });
   assert.equal((await s.pull()).code, 0);
   const latest = path.join(s.workRoot, "handoff", "latest.md");
   fs.rmSync(latest);
@@ -132,13 +132,13 @@ test("a deleted latest.md comes back on the next pull though darkmem's checkpoin
 
 test("an unpushed edit to latest.md holds until darkmem has a newer checkpoint, which is then a conflict", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# synced\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "# synced\n" }] });
   await s.pull();
   const latest = path.join(s.workRoot, "handoff", "latest.md");
   write(latest, "# edited here\n");
   assert.equal((await s.pull()).code, 0);
   assert.equal(read(latest), "# edited here\n");
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# newer\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p2", entries: [{ kind: "checkpoint", body: "# newer\n" }] });
   const result = await s.pull();
   assert.equal(result.code, 1);
   assert.match(result.stdout, /conflict: handoff\/latest\.md: changed locally, and darkmem holds a newer checkpoint/);
@@ -198,7 +198,7 @@ test("pull in local mode does nothing and succeeds", async () => {
 
 test("a pulled ledger records its newest seq, so the next push appends without re-reading it", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }] });
   assert.equal((await s.pull()).code, 0);
   const file = path.join(s.workRoot, "sdd", "p1", "progress.md");
   fs.appendFileSync(file, "two\n");
@@ -216,7 +216,7 @@ test("a failed document fetch names its uri and the pull goes on; a failed manif
   const s = await setup(t);
   await s.seed.putDocument({ project: "proj", uri: "dagents/a.md", content: "a\n" });
   await s.seed.putDocument({ project: "proj", uri: "dagents/b.md", content: "b\n" });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }] });
   s.stub.db.failures.push({ method: "GET", path: "/api/v1/documents/by-uri", status: 503 });
   const one = await s.pull();
   assert.equal(one.code, 1);
@@ -224,7 +224,7 @@ test("a failed document fetch names its uri and the pull goes on; a failed manif
   assert.equal(fs.existsSync(path.join(s.docsRoot, "a.md")), false);
   assert.equal(read(path.join(s.docsRoot, "b.md")), "b\n");
   assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), "one\n");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "two\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "two\n" }] });
   s.stub.db.failures.push({ method: "GET", path: "/api/v1/documents/manifest", status: 503 });
   const manifest = await s.pull();
   assert.equal(manifest.code, 1);
@@ -239,15 +239,15 @@ test("a failed document fetch names its uri and the pull goes on; a failed manif
 
 test("a failed ledger or checkpoint read names its item and the rest still pull", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: "two\n" }, { kind: "checkpoint", body: "# p2\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p2", entries: [{ kind: "ledger", body: "two\n" }, { kind: "checkpoint", body: "# p2\n" }] });
   s.stub.db.failures.push({ method: "GET", path: `/api/v1/worklog/workstreams/${s.stub.db.workstreams[1].id}/entries`, status: 503 });
   const ledger = await s.pull();
   assert.equal(ledger.code, 1);
   assert.match(ledger.stdout, /^failed: sdd\/p2\/progress\.md: darkmem answered 503: injected failure$/m);
   assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), "one\n");
   assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "# p2\n");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# p1\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "# p1\n" }] });
   s.stub.db.failures.push({ method: "GET", path: "/api/v1/worklog/resume", status: 503 });
   const resumes = () => s.stub.db.requests.filter(r => r.path === "/api/v1/worklog/resume").length;
   const before = resumes();
@@ -261,13 +261,13 @@ test("a failed ledger or checkpoint read names its item and the rest still pull"
 
 test("checkpoints a microsecond apart are ordered by darkmem's clock, not rounded to the millisecond", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# A\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "# A\n" }] });
   s.stub.db.workstreams[0].entries[0].created_at = "2026-09-25T10:00:00.000001+00:00";
   assert.equal((await s.pull()).code, 0);
   const latest = path.join(s.workRoot, "handoff", "latest.md");
   assert.equal(read(latest), "# A\n");
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# C\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "# C\n" }] });
   s.stub.db.workstreams[1].entries[0].created_at = "2026-09-25T10:00:00.000002+00:00";
   s.stub.db.workstreams[0].entries[1].created_at = "2026-09-25T10:00:00.000003+00:00";
   assert.equal((await s.pull()).code, 0);
@@ -278,19 +278,19 @@ test("checkpoints a microsecond apart are ordered by darkmem's clock, not rounde
 
 test("latest.md stays the newest stop when the workstream that filed it closes", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# C\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "# C\n" }] });
   assert.equal((await s.pull()).code, 0);
   const latest = path.join(s.workRoot, "handoff", "latest.md");
   assert.equal(read(latest), "# C\n");
-  s.stub.db.workstreams.find(w => w.key === "p1").state = "closed";
+  s.stub.db.workstreams.find(w => w.key === "dagents/p1").state = "closed";
   assert.equal((await s.pull()).code, 0);
   assert.equal(read(latest), "# C\n", "p2's older checkpoint does not replace p1's newer one");
 });
 
 test("an old state file's single checkpointAt gates a pull, which then records the workstream", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# A\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "checkpoint", body: "# A\n" }] });
   const filed = s.stub.db.workstreams[0].entries[0].created_at;
   const old = new Date(Date.parse(filed) + 500).toISOString();
   write(path.join(s.mirror, ".sync-state.json"), JSON.stringify({
@@ -300,7 +300,7 @@ test("an old state file's single checkpointAt gates a pull, which then records t
   write(latest, "# synced\n");
   assert.equal((await s.pull()).code, 0);
   assert.equal(read(latest), "# synced\n", "a checkpoint older than the old value is not taken");
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
   assert.equal((await s.pull()).code, 0);
   assert.equal(read(latest), "# B\n");
   const recorded = s.stub.db.workstreams[1].entries[0].created_at;
@@ -311,7 +311,7 @@ test("an old state file's single checkpointAt gates a pull, which then records t
 test("a latest.md that cannot be read is one failure, and the rest of the pull still lands", async t => {
   const s = await setup(t);
   await s.seed.putDocument({ project: "proj", uri: "dagents/a.md", content: "a\n" });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }, { kind: "checkpoint", body: "# p1\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }, { kind: "checkpoint", body: "# p1\n" }] });
   fs.mkdirSync(path.join(s.workRoot, "handoff", "latest.md"), { recursive: true });
   const result = await s.pull();
   assert.equal(result.code, 1, result.stdout + result.stderr);
@@ -330,8 +330,8 @@ for (const [name, block] of [
     await s.seed.putDocument({ project: "proj", uri: "dagents/T.md", content: "T\n" });
     await s.seed.putDocument({ project: "proj", uri: "dagents/t.md", content: "t\n" });
     await s.seed.putDocument({ project: "proj", uri: "dagents/a.md", content: "a\n" });
-    await s.seed.append({ project: "proj", workstream: "k", entries: [{ kind: "ledger", body: "k\n" }] });
-    await s.seed.append({ project: "proj", workstream: "m", entries: [{ kind: "ledger", body: "m\n" }, { kind: "checkpoint", body: "# m\n" }] });
+    await s.seed.append({ project: "proj", workstream: "dagents/k", entries: [{ kind: "ledger", body: "k\n" }] });
+    await s.seed.append({ project: "proj", workstream: "dagents/m", entries: [{ kind: "ledger", body: "m\n" }, { kind: "checkpoint", body: "# m\n" }] });
     block(path.join(s.workRoot, "sdd", "k", "progress.md"));
     const result = await s.pull();
     assert.equal(result.code, 1, result.stdout + result.stderr);
@@ -350,7 +350,7 @@ for (const [name, block] of [
 test("a latest.md that cannot be written is one failure, and the rest of the pull still lands", async t => {
   const s = await setup(t);
   await s.seed.putDocument({ project: "proj", uri: "dagents/a.md", content: "a\n" });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }, { kind: "checkpoint", body: "# p1\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }, { kind: "checkpoint", body: "# p1\n" }] });
   // The atomic write's temporary file cannot be made where a directory stands.
   fs.mkdirSync(path.join(s.workRoot, "handoff", ".latest.md.tmp"), { recursive: true });
   const result = await s.pull();
@@ -366,7 +366,7 @@ test("a latest.md that cannot be written is one failure, and the rest of the pul
 test("a sync state that cannot be saved after a ledger is written still stops the pull with exit 2", async t => {
   const s = await setup(t);
   assert.equal((await s.pull()).code, 0);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }] });
   const stateFile = path.join(s.mirror, ".sync-state.json");
   s.stub.db.onRequest = (method, pathname) => {
     if (method !== "GET" || !pathname.endsWith("/entries") || fs.statSync(stateFile).isDirectory()) return;
@@ -400,7 +400,7 @@ test("a document that cannot be read is one failure, and the others are still pu
 
 test("a checkpoint from a workstream key the directory rule refuses is pulled once and the state stays loadable", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "feature/foo", entries: [{ kind: "checkpoint", body: "# Foo\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/feature/foo", entries: [{ kind: "checkpoint", body: "# Foo\n" }] });
   const first = await s.pull();
   assert.equal(first.code, 0, first.stdout + first.stderr);
   assert.match(first.stdout, / 1 checkpoints;/);
@@ -446,7 +446,7 @@ test("pull writes only the applied families, a handoff note with progress", asyn
   const records = stores => fs.writeFileSync(path.join(s.home, ".dagents", "stores.json"), JSON.stringify({ [s.repo]: stores }));
   await s.seed.putDocument({ project: "proj", uri: "dagents/specs/a.md", content: "# A\n" });
   await s.seed.putDocument({ project: "proj", uri: "dagents/handoff/p1.md", content: "# Handoff\n" });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }] });
   records({ documents: "darkmem", progress: "local" });
   const documents = await s.pull();
   assert.equal(documents.code, 0, documents.stdout + documents.stderr);
@@ -605,8 +605,8 @@ test("a synced archive uri is never removed, even once darkmem no longer files i
 
 test("a workstream list whose last page is exactly full ends without an empty page", async t => {
   const s = await setup(t, { pageSize: 2 });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: "two\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p2", entries: [{ kind: "ledger", body: "two\n" }] });
   assert.equal((await s.pull()).code, 0);
   const lists = s.stub.db.requests.filter(r => r.path === "/api/v1/worklog/workstreams");
   assert.equal(lists.length, 1, "two open workstreams fill one page of two, and no empty page follows");
@@ -673,7 +673,7 @@ test("a named pipe at a document or ledger path is one failure each, not a block
   const s = await setup(t);
   await s.seed.putDocument({ project: "proj", uri: "dagents/a.md", content: "a\n" });
   await s.seed.putDocument({ project: "proj", uri: "dagents/b.md", content: "b\n" });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
+  await s.seed.append({ project: "proj", workstream: "dagents/p1", entries: [{ kind: "ledger", body: "one\n" }] });
   namedPipe(path.join(s.docsRoot, "a.md"));
   namedPipe(path.join(s.workRoot, "sdd", "p1", "progress.md"));
   const result = await s.pull();
