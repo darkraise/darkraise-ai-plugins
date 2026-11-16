@@ -15,12 +15,7 @@ function list(...args) {
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.trim().split('\n');
 }
-function jobsWithLimits() {
-  return list('--limits').map(line => {
-    const [seconds, text] = line.split('\t');
-    return ['', text.split(' '), Number(seconds)];
-  });
-}
+function jobsWithLimits(...args) { return list('--limits', ...args).map(line => { const [seconds, text] = line.split('\t'); return ['', text.split(' '), Number(seconds)]; }); }
 const shell = (name, limit, ...part) => ['bash', [`plugins/dforge/tests/${name}`, ...part], limit];
 
 test('Windows shards cover every discovered suite exactly once', () => {
@@ -56,7 +51,7 @@ test('a suite run in parts splits its weight among them', () => {
 test('a suite with per-part weights schedules each part by its own weight', () => {
   const part = name => ['bash', ['plugins/dforge/tests/a.test.sh', name], 900];
   const jobs = ['start', 'verdict', 'x', 'y'].map(part);
-  const weights = { 'a.test.sh': { start: 700, verdict: 450, x: 100, y: 100 } };
+  const weights = { 'plugins/dforge/tests/a.test.sh': { start: 700, verdict: 450, x: 100, y: 100 } };
   assert.deepEqual(selectShard(jobs, '1/2', weights), [jobs[0]]);
   assert.deepEqual(selectShard(jobs, '2/2', weights), jobs.slice(1));
 });
@@ -76,16 +71,16 @@ test('a shell suite needs a weight of at most 80% of its limit', () => {
   const rows = [
     { name: 'no weight', jobs: [shell('new.test.sh', 600)], weights: {}, want: [/new\.test\.sh: no weight/] },
     { name: 'no weight for the dr-status suite', jobs: [['bash', ['plugins/dr-status/tests/run-all.sh'], 420]], weights: {}, want: [/run-all\.sh: no weight/] },
-    { name: 'exactly 80% passes', jobs: [shell('a.test.sh', 600)], weights: { 'a.test.sh': 480 }, want: [] },
-    { name: 'above 80%', jobs: [shell('a.test.sh', 600)], weights: { 'a.test.sh': 481 }, want: [/a\.test\.sh: .*raise its suiteSeconds or split it/] },
-    { name: 'a larger limit raises the bound', jobs: [shell('a.test.sh', 1200)], weights: { 'a.test.sh': 900 }, want: [] },
-    { name: 'parts split the weight', jobs: [shell('a.test.sh', 600, 'a1'), shell('a.test.sh', 600, 'a2')], weights: { 'a.test.sh': 960 }, want: [] },
-    { name: 'parts do not hide a heavy weight', jobs: [shell('a.test.sh', 600, 'a1'), shell('a.test.sh', 600, 'a2')], weights: { 'a.test.sh': 962 }, want: [/raise its suiteSeconds or split it/] },
-    { name: 'per-part weights within 80% pass', jobs: [shell('a.test.sh', 600, 'a1'), shell('a.test.sh', 600, 'a2')], weights: { 'a.test.sh': { a1: 480, a2: 100 } }, want: [] },
+    { name: 'exactly 80% passes', jobs: [shell('a.test.sh', 600)], weights: { 'plugins/dforge/tests/a.test.sh': 480 }, want: [] },
+    { name: 'above 80%', jobs: [shell('a.test.sh', 600)], weights: { 'plugins/dforge/tests/a.test.sh': 481 }, want: [/a\.test\.sh: .*raise its suiteSeconds or split it/] },
+    { name: 'a larger limit raises the bound', jobs: [shell('a.test.sh', 1200)], weights: { 'plugins/dforge/tests/a.test.sh': 900 }, want: [] },
+    { name: 'parts split the weight', jobs: [shell('a.test.sh', 600, 'a1'), shell('a.test.sh', 600, 'a2')], weights: { 'plugins/dforge/tests/a.test.sh': 960 }, want: [] },
+    { name: 'parts do not hide a heavy weight', jobs: [shell('a.test.sh', 600, 'a1'), shell('a.test.sh', 600, 'a2')], weights: { 'plugins/dforge/tests/a.test.sh': 962 }, want: [/raise its suiteSeconds or split it/] },
+    { name: 'per-part weights within 80% pass', jobs: [shell('a.test.sh', 600, 'a1'), shell('a.test.sh', 600, 'a2')], weights: { 'plugins/dforge/tests/a.test.sh': { a1: 480, a2: 100 } }, want: [] },
     {
       name: 'per-part weights name a heavy or missing part',
       jobs: [shell('a.test.sh', 600, 'a1'), shell('a.test.sh', 600, 'a2')],
-      weights: { 'a.test.sh': { a1: 481 } },
+      weights: { 'plugins/dforge/tests/a.test.sh': { a1: 481 } },
       want: [/a\.test\.sh a1: weight 481 s .*raise its suiteSeconds or split it/, /a\.test\.sh a2: no weight for this part/],
     },
     {
@@ -136,4 +131,42 @@ test('a suite past 75% of its limit is named in a GitHub warning that test-all p
   const source = readFileSync(runner, 'utf8');
   assert.match(source, /import \{[^}]*driftWarning[^}]*\} from '\.\/test-shards\.mjs'/);
   assert.match(source, /driftWarning\(args, /);
+});
+
+test('weights, limits and parts are keyed by repository path', () => {
+  for (const table of [sched.windowsSeconds, sched.suiteSeconds, sched.suiteParts]) {
+    for (const key of Object.keys(table)) assert.match(key, /^plugins\/[a-z0-9-]+\/tests\/[^/]+$/, key);
+  }
+});
+
+test('two plugins may hold suites with one basename', () => {
+  const jobs = [
+    ['bash', ['plugins/dforge/tests/plan-lint.test.sh', 'one'], 1200],
+    ['bash', ['plugins/dagents/tests/plan-lint.test.sh'], 600],
+  ];
+  const weights = { 'plugins/dforge/tests/plan-lint.test.sh': { one: 300 }, 'plugins/dagents/tests/plan-lint.test.sh': 100 };
+  assert.deepEqual(sched.checkShellWeights(jobs, weights), []);
+  assert.deepEqual(sched.checkShellWeights(jobs, { 'plugins/dforge/tests/plan-lint.test.sh': { one: 300 } }),
+    ['plugins/dagents/tests/plan-lint.test.sh: no weight in scripts/test-shards.mjs; add it to windowsSeconds']);
+});
+
+test('the default run leaves dagents to its own run, and --plugin dagents runs only dagents', () => {
+  assert.ok(list().every(line => !/plugins\/dagents(\/|$| )/.test(line)));
+  const dagents = list('--plugin', 'dagents');
+  assert.ok(dagents.length > 0);
+  assert.ok(dagents.every(line => /plugins\/dagents(\/|$| )/.test(line)), dagents.join('\n'));
+  const bad = spawnSync(process.execPath, [runner, '--list', '--plugin', 'nope'], { encoding: 'utf8', timeout: 10000 });
+  assert.equal(bad.status, 2);
+});
+
+test('a dagents suite sharing a dforge basename keeps its own limit and parts', () => {
+  const path = 'plugins/dagents/tests/plan-lint.test.sh';
+  const lines = list('--limits', '--plugin', 'dagents').map(line => line.split('\t')).filter(([, text]) => text.startsWith(path));
+  const expected = (sched.suiteParts[path] ?? [[]]).map(part => [path, ...part].join(' '));
+  assert.deepEqual(lines.map(([, text]) => text), expected);
+  for (const [seconds] of lines) assert.equal(Number(seconds), sched.suiteSeconds[path] ?? 600);
+});
+
+test('every dagents shell suite has a weight within 80% of its limit', () => {
+  assert.deepEqual(sched.checkShellWeights(jobsWithLimits('--plugin', 'dagents')), []);
 });

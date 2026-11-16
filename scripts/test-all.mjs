@@ -4,11 +4,15 @@ import { availableParallelism } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { driftWarning, selectShard } from './test-shards.mjs';
+import { driftWarning, selectShard, suiteParts, suiteSeconds } from './test-shards.mjs';
 
-const { values: options } = parseArgs({ options: { shard: { type: 'string' }, list: { type: 'boolean' }, limits: { type: 'boolean' }, jobs: { type: 'string' } } });
+const { values: options } = parseArgs({ options: { shard: { type: 'string' }, list: { type: 'boolean' }, limits: { type: 'boolean' }, jobs: { type: 'string' }, plugin: { type: 'string' } } });
 if (options.limits && !options.list) {
   console.error('test-all: --limits only changes what --list prints');
+  process.exit(2);
+}
+if (options.plugin !== undefined && options.plugin !== 'dagents') {
+  console.error('test-all: --plugin takes dagents');
   process.exit(2);
 }
 if (options.jobs !== undefined && !/^[1-9]\d*$/.test(options.jobs)) {
@@ -68,44 +72,42 @@ async function run(executable, args, seconds, buffered) {
 }
 // The cockpit's tests need the claude CLI; CI runs them in their own pinned-CLI step.
 const hasClaude = !options.list && process.platform !== 'win32' && spawnSync('claude', ['--version'], { stdio: 'ignore', timeout: 5000 }).status === 0;
-// The mod's type check needs tsc on PATH and the declarations Claude Code lays
-// beside a mod it loads from a folder, which are gitignored: a fresh clone has none.
-const typesGenerated = ['plugins/dforge/tsconfig.json', 'plugins/dforge/.claude-plugin/types/tsconfig.json'].every(path => existsSync(resolve(root, path)));
 // npm installs tsc on Windows as tsc.cmd, which Node spawns only through a
 // shell (EINVAL without one since the April 2024 security releases), so there
 // both the probe and the job run it through cmd.exe.
 const [tscExecutable, tscPrefix] = process.platform === 'win32' ? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'tsc']] : ['tsc', []];
+let tscFound;
+// The mod's type check needs tsc on PATH and the declarations Claude Code lays
+// beside a mod it loads from a folder, which are gitignored: a fresh clone has none.
 // Detected under --list too, so a listing shows the job that a run would start.
-const hasTsc = typesGenerated && spawnSync(tscExecutable, [...tscPrefix, '--version'], { stdio: 'ignore', timeout: 10000, windowsHide: true }).status === 0;
-// plan-lint runs about 320 checks of a few processes each, which take over
-// twenty minutes on a Windows runner and under a minute on Linux. next-step and
-// auto-run take about 500 s on a Windows runner; 700 s keeps that under 80% of
-// their limit. task-step's limit applies to each of its parts.
-const suiteSeconds = { 'plan-lint.test.sh': 1200, 'speed-and-cost-followups.acceptance.test.sh': 1200, 'task-loop-steps.acceptance.test.sh': 1200, 'task-step-base.test.sh': 1200, 'task-step.test.sh': 900, 'next-step.test.sh': 700, 'auto-run.test.sh': 700 };
-// faster-plans takes about 20 minutes on a Windows runner, more than a shard
-// can hold beside anything else, so it runs as three parts of its tests.
-// task-step and plan-lint each run as three parts, one per section of the
-// suite, whose limit applies to each.
-const suiteParts = {
-  'faster-plans.acceptance.test.sh': [['a2', 'a3', 'a5'], ['a11', 'a12'], ['a17', 'a19', 'a20', 'a21', 'a22', 'a23']],
-  'task-step.test.sh': [['start'], ['rereview'], ['verdict']],
-  'plan-lint.test.sh': [['one'], ['two'], ['paths']],
-  'speed-and-cost-followups.acceptance.test.sh': [['A1', 'A2', 'A3', 'A4', 'A7', 'A8', 'A11'], ['A13', 'A14', 'A15']],
-};
-const jobs = [
+function tscJobs(plugin) {
+  const typesGenerated = [`plugins/${plugin}/tsconfig.json`, `plugins/${plugin}/.claude-plugin/types/tsconfig.json`].every(path => existsSync(resolve(root, path)));
+  if (typesGenerated) tscFound ??= spawnSync(tscExecutable, [...tscPrefix, '--version'], { stdio: 'ignore', timeout: 10000, windowsHide: true }).status === 0;
+  if (typesGenerated && tscFound) return [[tscExecutable, [...tscPrefix, '--noEmit', '-p', `plugins/${plugin}`], 300]];
+  if (!options.list) console.log(`Skipped tsc --noEmit -p plugins/${plugin}: ${typesGenerated ? 'tsc not found' : `the generated types are missing (Claude Code writes them when it loads plugins/${plugin} from the folder)`}`);
+  return [];
+}
+// DR_TEST_ALL tells a suite that every other suite runs as its own job, so
+// the acceptance checks that re-run whole suites skip those re-runs.
+function shellJobs(plugin) {
+  return readdirSync(resolve(root, `plugins/${plugin}/tests`)).filter(name => name.endsWith('.test.sh') || name.endsWith('.acceptance.sh')).sort().flatMap(name => {
+    const path = `plugins/${plugin}/tests/${name}`;
+    return (suiteParts[path] ?? [[]]).map(part => [bash, [path, ...part], suiteSeconds[path] ?? 600]);
+  });
+}
+const jobs = options.plugin === 'dagents' ? [
+  ...shellJobs('dagents'),
+  ...(hasClaude ? [['claude', ['plugin', 'test', 'plugins/dagents'], 300]] : []),
+  ...tscJobs('dagents'),
+] : [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs')).map(name => `tests/${name}`)], 120],
   [bash, ['plugins/dr-status/tests/run-all.sh'], 420],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'plugins/dflow/tests')).filter(name => name.endsWith('.test.mjs')).map(name => `plugins/dflow/tests/${name}`)], 300],
-  // DR_TEST_ALL tells a suite that every other suite runs as its own job, so
-  // the acceptance checks that re-run whole suites skip those re-runs.
-  ...readdirSync(resolve(root, 'plugins/dforge/tests')).filter(name => name.endsWith('.test.sh') || name.endsWith('.acceptance.sh')).sort().flatMap(name => (suiteParts[name] ?? [[]]).map(part => [bash, [`plugins/dforge/tests/${name}`, ...part], suiteSeconds[name] ?? 600])),
+  ...shellJobs('dforge'),
   ...(hasClaude ? [['claude', ['plugin', 'test', 'plugins/dforge'], 300], ['claude', ['plugin', 'test', 'plugins/dflow'], 120]] : []),
-  ...(hasTsc ? [[tscExecutable, [...tscPrefix, '--noEmit', '-p', 'plugins/dforge'], 300]] : []),
+  ...tscJobs('dforge'),
 ];
-if (!options.list && !hasTsc) {
-  console.log(`Skipped tsc --noEmit -p plugins/dforge: ${typesGenerated ? 'tsc not found' : 'the generated types are missing (Claude Code writes them when it loads plugins/dforge from the folder)'}`);
-}
 const selected = selectShard(jobs, options.shard);
 if (options.list) {
   for (const [, args, seconds] of selected) console.log(options.limits ? `${seconds}\t${args.join(' ')}` : args.join(' '));
