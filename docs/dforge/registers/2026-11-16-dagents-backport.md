@@ -101,7 +101,7 @@
 | 94 | d102363 test(dforge): drop re-run suites and duplicate acceptance cases | - | - | n/a | test-only: drops re-run suites and duplicate acceptance cases |
 | 95 | f5e0fd9 fix(dforge): say what happens next when the UI stop is held | - | - | done | port 038abe1; fail@parent pass@port |
 | 96 | 31bd659 feat(dforge): ship /dforge:cockpit as a command file | - | - | n/a | 5-only |
-| 97 | bc09771 fix(dforge): cockpit issues, update frequency and settings | - | - | open | - |
+| 97 | bc09771 fix(dforge): cockpit issues, update frequency and settings | - | - | done | port 55b907b; fail@parent pass@port |
 | 98 | 12f6d95 feat(dforge): add API budgets and the spend file | - | - | n/a | feature: adds API budgets and the api-spend file |
 | 99 | f38bc95 feat(dforge): add the Decisions API ruling rung | - | - | n/a | 5-only |
 | 100 | e31290c feat(dforge): record and report Decisions API rulings | - | - | n/a | 5-only |
