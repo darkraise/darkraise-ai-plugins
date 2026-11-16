@@ -50,16 +50,71 @@ stamp="${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr 
 # primary checkout, whichever worktree the turn ran in: its pending action. It
 # is read before the stamp gate, so a session with no stamp (a cleared one,
 # whose first prompt the cockpit submitted) is still held.
-auto_pending=$(cd "${cwd:-$PWD}" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) || auto_pending=""
+# A turn that removed its own worktree (finishing's merge) still has the
+# checkout the turn started in: line 1 of the stamp's refs is the common git
+# directory, whose parent is the primary checkout, or else the first worktree
+# git lists for it.
+stamp_root() {
+  local common dir
+  common=$(head -n 1 "$stamp.refs" 2>/dev/null | tr -d '\r')
+  [ -n "$common" ] || return 1
+  case "$common" in
+    */.git) dir=${common%/.git} ;;
+    *) dir=$(git --git-dir="$common" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n '1s/^worktree //p') ;;
+  esac
+  [ -n "$dir" ] && [ -d "$dir" ] && printf '%s\n' "$dir"
+}
+root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || root=$(stamp_root) || root=""
+auto_pending=$([ -n "$root" ] && cd "$root" 2>/dev/null && bash "${SCRIPT_DIR}/auto-run" --session "$session_id" pending 2>/dev/null) || auto_pending=""
 [ -f "$stamp" ] || [ -n "$auto_pending" ] || exit 0
-root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -n "$root" ] || exit 0
 . "${SCRIPT_DIR}/lib/roots.sh"
 . "${SCRIPT_DIR}/lib/plan.sh"
+. "${SCRIPT_DIR}/lib/next-ending.sh"
 # In a subshell, so a malformed config costs only this check, never the hook.
 sdd=$(dforge_ledger_root "$root") || sdd=""
-[ -d "$sdd" ] || [ -n "$auto_pending" ] || exit 0
+latest=""
+# A turn that merged a plan or closed a milestone ends on next-step's block for
+# that transition, ledger or not: completed.md or roadmap.md changed this turn,
+# after latest.md was last written, and not by a pull (with documents in the
+# checkout: still uncommitted, or committed since the stamp); the roadmap only
+# when it now closes more milestones than at the turn's start.
+transition=""
+if [ -f "$stamp" ]; then
+  stamp_at=$(stat -c %Y "$stamp" 2>/dev/null || stat -f %m "$stamp" 2>/dev/null || echo 0)
+  docs_store="" docs=""
+  read -r docs_store docs < <(dforge_stores_init "$root" && printf '%s %s\n' "$_DFORGE_DOCS_STORE" "$_DFORGE_DOCS_ROOT")
+  turn_head=$(tr -d '\r' < "$stamp.refs" 2>/dev/null | TOP=$root awk -F'\t' 'NR > 2 && $2 == ENVIRON["TOP"] { print $1; exit }')
+  at_start() { [ -n "$turn_head" ] && git -C "$root" show "$turn_head:${1#"$root"/}" 2>/dev/null | tr -d '\r'; }
+  changed_here() { # FILE
+    local commit_at
+    [ -f "$1" ] && [ "$1" -nt "$stamp" ] || return 1
+    [ -n "$latest" ] || latest=$(dforge_latest_file "$root")
+    ! [ "$latest" -nt "$1" ] || return 1
+    [ "$docs_store" = local ] || return 0
+    [ -n "$(git -C "$root" status --porcelain -- "$1" 2>/dev/null)" ] && return 0
+    commit_at=$(git -C "$root" log -1 --format=%ct -- "$1" 2>/dev/null)
+    [ "${commit_at:-0}" -ge "$stamp_at" ]
+  }
+  if [ -n "$docs" ] && changed_here "$docs/plans/completed.md"; then
+    added=$(awk 'NR == FNR { seen[$0]; next } !($0 in seen) && /`/ { line = $0 } END { print line }' \
+      <(at_start "$docs/plans/completed.md") <(tr -d '\r' < "$docs/plans/completed.md"))
+    [ -n "$added" ] || added=$(tr -d '\r' < "$docs/plans/completed.md" | grep '`' | tail -n 1)
+    plan=$(sed -n 's/^[^`]*`\([^`]*\)`.*/\1/p' <<<"$added")
+    transition="complete ${plan:-PLAN_FILE}"
+  elif [ -n "$docs" ] && changed_here "$docs/roadmap.md"; then
+    if [ "$docs_store" = local ]; then
+      . "${SCRIPT_DIR}/lib/roadmap.sh"
+      closed_now=$(roadmap_rows "$docs/roadmap.md" | awk -F'\t' '$5 == "closed"' | grep -c . || true)
+      closed_then=$(roadmap_rows <(at_start "$docs/roadmap.md") | awk -F'\t' '$5 == "closed"' | grep -c . || true)
+      [ "$closed_now" -le "$closed_then" ] || transition=project
+    else
+      transition=project
+    fi
+  fi
+fi
+[ -d "$sdd" ] || [ -n "$auto_pending" ] || [ -n "$transition" ] || exit 0
 . "${SCRIPT_DIR}/lib/last-message.sh"
-. "${SCRIPT_DIR}/lib/next-ending.sh"
 last=$(last_message "$stdin_json" "$transcript_path")
 
 # Every ledger written this turn must have its ending, since two plans can be
@@ -73,7 +128,6 @@ last=$(last_message "$stdin_json" "$transcript_path")
 # next-step wrote it this turn (lib/next-ending.sh), never hand-typed. The
 # first ledger without its ending names the reason.
 ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
-latest=""
 wrote_block() { [ -n "$latest" ] || latest=$(dforge_latest_file "$root"); ending_released "$last" "$stamp" "$latest"; }
 ledger="" clean=0
 [ -d "$sdd" ] || sdd=""
@@ -99,13 +153,20 @@ while IFS= read -r candidate; do
   fi
   break
 done < <([ -z "$sdd" ] || find "$sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | sort)
+# A transition ends as a finished plan does: on finishing's own stops or on
+# the block next-step wrote this turn.
+if [ -n "$transition" ]; then
+  if ends_with 'Which option?' "Type 'discard' to confirm" 'Must fix before completing' 'Worktree removal refused' || wrote_block; then
+    transition=""
+  fi
+fi
 
 # The transcript scan below costs seconds on a long session, and its result is
 # read only when this stop could be held: an auto run is pending, a ledger
 # written this turn lacks its ending, or the message ends the session.
 case "$last" in
   *'## Next session'* | *'Which option?'*) ;;
-  *) [ -n "$auto_pending" ] || [ -n "$ledger" ] || exit 0 ;;
+  *) [ -n "$auto_pending" ] || [ -n "$ledger" ] || [ -n "$transition" ] || exit 0 ;;
 esac
 
 root_shown=$PLUGIN_ROOT
@@ -181,8 +242,20 @@ if [ -n "$auto_pending" ]; then
   exit 0
 fi
 
-[ -n "$ledger" ] || exit 0
+[ -n "$ledger" ] || [ -n "$transition" ] || exit 0
 inflight_queued "$transcript_path" "$since" && exit 0
+
+if [ -z "$ledger" ]; then
+  if [ "$transition" = project ]; then
+    reason="This turn closed a milestone in the roadmap. Run \`bash \"${root_shown}/scripts/next-step\" --project\` and end with its block verbatim."
+    shown="dforge held the stop: a milestone closed, and the message ends without the next step"
+  else
+    reason="This turn recorded plan ${transition#complete } in completed.md. Run \`bash \"${root_shown}/scripts/next-step\" --complete ${transition#complete }\` and end with its block verbatim."
+    shown="dforge held the stop: plan ${transition#complete } was recorded complete, and the message ends without the next step"
+  fi
+  hold "$reason" "$shown"
+  exit 0
+fi
 
 plan=$(head -n 1 "$ledger" | sed -n 's/^# SDD ledger — plan: //p' | tr -d '\r')
 [ -n "$plan" ] || plan="PLAN_FILE"
