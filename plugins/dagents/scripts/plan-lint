@@ -5,7 +5,7 @@
 # reference/ladder.md (Claude) or reference/codex-routing.json (Codex).
 #
 # Usage: plan-lint PLAN_FILE [--amendments FILE] [--no-probe]
-# Default amendments: <workspace>/amendments.md inside a git repository.
+# Default amendments: <ledger dir>/amendments.md inside a git repository.
 # --no-probe skips the lane probe, for runs whose verdict must not depend on
 # whether Codex is usable on the machine.
 # Output: "ERROR|WARN|NOTE <header|Task N>: <what>" lines, then a summary line.
@@ -34,7 +34,10 @@ while [ $# -gt 0 ]; do
 done
 [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
 dagents_stores_init "$(_plan_ctx "$plan")"
-[ "$amend_given" -eq 1 ] || amend=$(plan_amendments_file "$plan")
+if [ "$amend_given" -eq 0 ]; then
+  plan_amendments_ready "$plan"
+  amend=$(plan_amendments_file "$plan")
+fi
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

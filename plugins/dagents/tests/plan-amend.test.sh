@@ -294,5 +294,19 @@ before_amend=$(cat "$amendments" 2>/dev/null)
 check "primary plan from a linked worktree: refused" "$?" "2"
 check "primary plan from a linked worktree: amendments untouched" "$(cat "$amendments" 2>/dev/null)" "$before_amend"
 
+# --- under darkmem progress the amendment lands beside the mirror ledger (C7) ---
+. "$HERE/fixtures/darkmem-stores.sh"
+DH="$TMP/dm-home"; mkdir -p "$DH"
+DM=$(stores_home "$DH" "$REPO" proj local darkmem)
+mkdir -p "$DM/work/sdd/plan"
+printf '# SDD ledger — plan: docs/plan.md\n' > "$DM/work/sdd/plan/progress.md"
+had=$(grep -c '^## A[0-9]* ' "$amendments")
+entry b-dm.md '## A? — Task 1' 'Print `hello NAME`.' 'Print `hello NAME` once.'
+out=$(HOME="$DH" bash "$AMEND" docs/plan.md b-dm.md 2>&1); status=$?
+check "darkmem: append exits 0" "$status" "0"
+check "darkmem: the workspace file was moved, not shadowed" "$([ -e "$amendments" ] && echo left || echo moved)" "moved"
+check "darkmem: the ledger directory holds every entry" "$(grep -c '^## A[0-9]* ' "$DM/work/sdd/plan/amendments.md")" "$((had + 1))"
+check "darkmem: the move is logged in the mirror ledger" "$(grep -c '^Ruling: amendments moved beside the ledger — none$' "$DM/work/sdd/plan/progress.md")" "1"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

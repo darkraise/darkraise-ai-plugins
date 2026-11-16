@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Append one amendment, as the ruling seat returned it, to the plan's
-# <workspace>/amendments.md — validated, numbered, and lint-checked — so the
+# <ledger dir>/amendments.md, beside progress.md (the darkmem mirror's ledger
+# directory when progress is kept there) — validated, numbered, and
+# lint-checked — so the
 # controller transcribes a plan correction without composing it. The plan file
 # itself is never edited during execution.
 #
@@ -45,8 +47,15 @@ fi
 # Resolved from the working directory, like task-brief and review-route, so a
 # worktree session cannot amend the primary checkout's copy of the plan.
 plan_require_same_project "$plan"
-dir=$(bash "$HERE/sdd-workspace" "$plan") \
+bash "$HERE/sdd-workspace" "$plan" > /dev/null \
   || { echo "plan-amend needs the plan inside a git repository" >&2; exit 2; }
+ctx=$(_plan_ctx "$plan")
+dagents_stores_init "$ctx"
+# A workspace file left from before amendments moved beside the ledger is
+# moved first, so the new entry is appended to it rather than shadowing it.
+plan_amendments_ready "$plan"
+dir=$(dagents_ledger_dir "$(basename "$plan" .md)" "$ctx")
+mkdir -p "$dir" || { echo "could not create $dir" >&2; exit 2; }
 amend="$dir/amendments.md"
 reject() { echo "rejected: $1"; exit 1; }
 

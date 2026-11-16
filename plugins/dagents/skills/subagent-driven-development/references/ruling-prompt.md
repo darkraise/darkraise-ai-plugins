@@ -139,7 +139,7 @@ Subagent ([JUDGE]):
   amendment's confirmation; no `model` or `effort` argument. On Codex, a native judge at Astra high or above.
 - `[N]`, `[POINT]` — the item count and the decision point, for the description.
 - `[SPEC_FILE]`, `[PLAN_FILE]` — REQUIRED: absolute paths.
-- `[AMENDMENTS_FILE]`, `[LEDGER_FILE]` — REQUIRED: `<workspace>/amendments.md`
+- `[AMENDMENTS_FILE]`, `[LEDGER_FILE]` — REQUIRED: `<ledger dir>/amendments.md`
   and `<ledger dir>/progress.md`.
 - `[PROVISIONAL_NOTE]` — when the plan's Spec path is unreachable, "The spec is
   unreachable. Mark every Ruling (provisional)."; otherwise delete the line.
