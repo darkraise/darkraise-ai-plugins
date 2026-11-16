@@ -23,10 +23,13 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
 1. **Pick the milestone.** The one named, else the current one from
    `scripts/roadmap status`. Milestones close in order; `close` refuses
    otherwise.
-2. **Mechanical check.** Run `scripts/roadmap open M<n>`. Exit 1 means rows are
-   unresolved: report them, route by their Assigned cells as
-   dagents:project-status does, and stop. `verify` rows are the
-   exception: they are built and wait on this audit, so continue with them.
+2. **Mechanical check.** Run `scripts/next-step --print --project`. When its
+   Next line names this milestone's audit (`Milestone M<n> (` … `audit and
+   close it`), the unresolved rows are `verify` rows and the built rows its
+   `Built, awaiting the audit:` sentence lists: both wait on this audit, so
+   continue with them. Otherwise report the rows `scripts/roadmap open M<n>`
+   lists, run `scripts/next-step --project`, and end the message with the
+   block it prints, verbatim.
 3. **Gates.** When `<docs>/gates.md` exists, run
    dagents:running-gates on the integration branch with the base `all`, so
    every gate runs, conditional ones included. A red gate stops the
@@ -45,16 +48,19 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    UNVERIFIABLE rows.
    - Any `GAP`: write each back with
      `scripts/register set <file> <id> open --note "audit: <the judge's reason>"`
-     (or `scripts/register add` for a gap no row names), report them, and stop.
-     The milestone stays open; the reopened rows route like any other.
+     (or `scripts/register add` for a gap no row names) and report them. Then
+     run `scripts/next-step --project` and end the message with the block it
+     prints, verbatim. The milestone stays open; the reopened rows route like
+     any other.
    - Any `UNVERIFIABLE`: put the row to your human partner with what evidence
      would settle it. It counts as a GAP until they rule.
    - All `MET`: go to step 7.
 7. **Owner sign-off.** Present the verdict table and the exit criteria. On your
-   human partner's approval, set every `verify` row the audit covered to
-   `done` with `scripts/register set` — epic rows in the milestone register
-   and requirement rows in the registers below them alike, each in its own
-   register: `roadmap close` refuses while any of them is still `verify`. Then
+   human partner's approval, set every `verify` row the audit covered, and
+   every built row step 2 listed, to `done` with `scripts/register set` —
+   epic rows in the milestone register and requirement rows in the registers
+   below them alike, each in its own register: `roadmap close` refuses while
+   any of them is unresolved. Then
    run
    `scripts/roadmap close M<n> --note "audit <date> <sha7>: <k> MET, <d> deferred"`,
    and commit the registers and the roadmap together (or push them, while documents live in darkmem).
@@ -100,8 +106,10 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    (`git log -1 --format=%cs <previous close sha7>`), every one when there is
    no previous milestone. The lines inform the reader and do not change the
    recommendation.
-9. **Next.** Run `scripts/roadmap status` and name the next milestone's first
-   open epic, or say the roadmap is complete.
+9. **Next.** Run `scripts/next-step --project` and end the message with the
+   block it prints, verbatim: the next milestone's first open epic, or that
+   every milestone is closed. If it exits 4, say `latest.md` could not be
+   written.
 
 ## Red Flags
 
