@@ -6713,6 +6713,28 @@ describe('auto run', () => {
       expect(drops(w)).toEqual([])
       expect(told(w)).toEqual([])
     })
+
+    for (const model of ['sonnet', 'haiku'])
+      test(`says so when it cannot ${model === 'sonnet' ? 'put back the defaults of a dead session' : 'drop a stale snapshot'}`, async ($, on) => {
+        const files: NonNullable<World['files']> = { [SNAP]: SNAPSHOT, [BEAT]: { text: '700\n' } }
+        const w: World = { ...SIGNED_IN, runs: [], toasts: [], files, userSettings: { model }, isDforgeConfigRefusing: true }
+        const clock = world(on, w)
+        signedIn(on, files)
+        await $.session.start(START)
+        await settle(clock)
+        expect(told(w)).toEqual([
+          model === 'sonnet'
+            ? 'dforge: could not put back the default model that session sess-0 switched from; it stays sonnet, and its snapshot is kept for the next session start to try again.'
+            : 'dforge: could not drop the model switch snapshot of session sess-0, sess-0.json; the next session start tries again.',
+        ])
+      })
+
+    for (const beat of ['', 'garbled\n'])
+      test(`leaves the snapshot of a session whose heartbeat reads ${beat === '' ? 'empty' : 'malformed'}, which proves nothing about it`, async ($, on) => {
+        const w = await startWith($, on, 'sonnet', beat)
+        expect(restores(w)).toEqual([])
+        expect(drops(w)).toEqual([])
+      })
   })
 
   test('arms the watchdog when a read at the start fails', async ($, on) => {

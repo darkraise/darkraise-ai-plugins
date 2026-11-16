@@ -427,7 +427,7 @@ export const register: Register = on => {
     S.poll?.cancel()
     S.poll = $.clock.every(POLL_MS, () => void pollTick($).catch(() => undefined))
     await readSession($, true)
-    await sweepSnapshots($).catch(() => undefined)
+    await sweepSnapshots($).catch((error: unknown) => $.ui.toast(`dforge: the check for model switch snapshots other sessions left failed: ${error instanceof Error ? error.message : String(error)}.`))
     await writeSessionState($)
 
     return next(e)
@@ -2975,18 +2975,22 @@ async function readAutoRun($: EngineInterface): Promise<CockpitAutoRun | null> {
 // as ar_is_stale judges it (scripts/lib/auto-run.sh, AR_BEAT_SECONDS). The
 // engine gives a mod no process id or signal API, so the beat's age is all
 // there is. A beat up to BEAT_SECONDS ahead is clock skew and reads as now.
+// No beat file is a dead session; null, unknown, is a beat that reads as no
+// time (a write caught midway) or a check that failed, which callers must not
+// act on as a death.
 const BEAT_SECONDS = 180
-async function isSessionAlive($: EngineInterface, sid: string): Promise<boolean> {
+async function isSessionAlive($: EngineInterface, sid: string): Promise<boolean | null> {
   try {
     const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
-    if (!home) return false
-    const text = await $.fs.read(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/cockpit/${sid.replace(/[^A-Za-z0-9]/g, '-')}`)
+    if (!home) return null
+    const text = await $.fs.read(`${home.replace(/[\\/]+$/, '')}/.claude/dforge/sessions/cockpit/${sid.replace(/[^A-Za-z0-9]/g, '-')}`).catch(() => null)
+    if (text === null) return false
     const first = String(text).split(/\r?\n/)[0]?.trim() ?? ''
-    if (!/^[0-9]+$/.test(first)) return false
+    if (!/^[0-9]+$/.test(first)) return null
     const age = Math.floor((await $.clock.now()) / 1000) - Number(first)
     return age >= -BEAT_SECONDS && age <= BEAT_SECONDS
   } catch {
-    return false
+    return null
   }
 }
 
@@ -3003,7 +3007,7 @@ async function trackAutoRun($: EngineInterface) {
   const id = await $.session.id()
   const now = text === null ? null : autoRunFor(text, id)
   const owner = now === null && text !== null ? activeRunOwner(text) : null
-  const isLeft = owner !== null && owner !== id && !(await isSessionAlive($, owner))
+  const isLeft = owner !== null && owner !== id && (await isSessionAlive($, owner)) === false
   if ((await read($, autoRunLeft)) !== isLeft) await update($, autoRunLeft, () => isLeft)
   const before = await read($, autoRun)
   if (JSON.stringify(now) === JSON.stringify(before)) return
@@ -3192,9 +3196,14 @@ async function saveDefaults($: EngineInterface, sessionId: string, launchModel: 
   await $.fs.write(path, `${JSON.stringify(snapshot)}\n`).catch(() => undefined)
 }
 
-// A mod cannot delete a file: dforge-config.mjs does it.
-async function dropSnapshot($: EngineInterface, name: string) {
-  await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'drop-snapshot', name], { timeoutMs: 15_000 }).catch(() => null)
+// A mod cannot delete a file: dforge-config.mjs does it. Whether it did.
+async function dropSnapshot($: EngineInterface, name: string): Promise<boolean> {
+  const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dforge-config.mjs`, 'drop-snapshot', name], { timeoutMs: 15_000 }).catch(() => null)
+  return ran?.exitCode === 0
+}
+
+function undroppedToast(session: string, file: string): string {
+  return `dforge: could not drop the model switch snapshot of session ${session}, ${file}; the next session start tries again.`
 }
 
 // The snapshots other sessions left. A live writer's is still in use. A dead
@@ -3213,18 +3222,28 @@ async function sweepSnapshots($: EngineInterface) {
     if (text === null) continue
     const snapshot = snapshotOf(String(text))
     if (snapshot === null) {
-      await dropSnapshot($, name)
-      $.ui.toast(`dforge: dropped an unreadable model switch snapshot, ${entry.name}.`)
+      $.ui.toast(
+        (await dropSnapshot($, name))
+          ? `dforge: dropped an unreadable model switch snapshot, ${entry.name}.`
+          : `dforge: could not drop an unreadable model switch snapshot, ${entry.name}; the next session start tries again.`,
+      )
       continue
     }
-    if (await isSessionAlive($, snapshot.session)) continue
+    if ((await isSessionAlive($, snapshot.session)) !== false) continue
     const now = await userDefaults($)
     if (now === null) continue
     if (now.model === snapshot.launchModel) {
-      if (await restoreUserDefaults($, snapshot.saved)) await dropSnapshot($, name)
+      if (!(await restoreUserDefaults($, snapshot.saved))) {
+        $.ui.toast(`dforge: could not put back the default model that session ${snapshot.session} switched from; it stays ${snapshot.launchModel}, and its snapshot is kept for the next session start to try again.`)
+      } else if (!(await dropSnapshot($, name))) {
+        $.ui.toast(undroppedToast(snapshot.session, entry.name))
+      }
     } else {
-      await dropSnapshot($, name)
-      $.ui.toast(`dforge: dropped the model switch snapshot of session ${snapshot.session}: your default model is no longer ${snapshot.launchModel}.`)
+      $.ui.toast(
+        (await dropSnapshot($, name))
+          ? `dforge: dropped the model switch snapshot of session ${snapshot.session}: your default model is no longer ${snapshot.launchModel}.`
+          : undroppedToast(snapshot.session, entry.name),
+      )
     }
   }
 }
