@@ -244,7 +244,7 @@ if [ -z "$ledger" ]; then
 fi
 
 plan=$(head -n 1 "$ledger" | sed -n 's/^# SDD ledger — plan: //p' | tr -d '\r')
-[ -n "$plan" ] || plan="PLAN_FILE"
+[[ "$plan" =~ ^[A-Za-z0-9._/-]+\.md$ ]] || plan="PLAN_FILE"
 
 if [ "$clean" = 1 ]; then
   reason="Plan ${plan} passed its final review. Invoke dagents:finishing-a-development-branch with the Skill tool now and end on its menu or next-step block."
