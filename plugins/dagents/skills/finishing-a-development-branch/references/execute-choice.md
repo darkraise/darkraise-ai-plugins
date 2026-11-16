@@ -63,7 +63,7 @@ git branch -d <feature-branch>
 
 After a local merge, nothing was pushed, so do not wait: print `gh run list --commit <merge sha>` and `gh run watch <id>` for your human partner to run after pushing, and never call the branch CI-green.
 
-On a plan with an `**Early CI:**` line, run `git push origin --delete <feature-branch>` after the local merge. The delete applies only when `git ls-remote --exit-code --heads origin <feature-branch>` finds the branch and the sha it prints is an ancestor of the merge (`git merge-base --is-ancestor <sha> HEAD`), so a remote branch holding a commit the merge lacks, such as one pushed by someone else, is kept with one line saying so. A delete that fails prints one line and does not stop finishing.
+On a plan with an `**Early CI:**` line, delete the remote branch after the local merge when `git ls-remote --exit-code --heads origin <feature-branch>` finds it and the sha it prints is an ancestor of the merge (`git merge-base --is-ancestor <sha> HEAD`): `git push --force-with-lease=<feature-branch>:<sha> origin :<feature-branch>`. A remote branch holding a commit the merge lacks, such as one pushed by someone else, is kept with one line saying so; the lease keeps it too when that push lands between the check and the delete. A delete that fails prints one line and does not stop finishing.
 
 ### Option 2: Push and Create PR
 
