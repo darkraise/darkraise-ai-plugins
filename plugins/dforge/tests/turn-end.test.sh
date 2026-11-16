@@ -537,5 +537,44 @@ check "a design turn that edits the roadmap is not held" "$(stop_at s-tr4 "$TRP"
 sleep 1; prompt s-tr5 "$TRP"
 check "nothing changed, nothing held" "$(stop_at s-tr5 "$TRP" 'Done.')" ""
 
+# A transition turn is released by the block next-step wrote, by finishing's
+# menu, and by nothing hand-typed; an uncommitted index edit counts as its own.
+TRL="$TRP/.dforge/handoff/latest.md"
+record() { printf -- '- 2026-11-16 `docs/dforge/plans/2026-11-16-%s.md` — merged into `main`\n' "$1" >> "$TRP/docs/dforge/plans/completed.md"; }
+NB=$'Merged.\n\n## Next session\n\n**Next:** Nothing — no register holds an unresolved row.'
+sleep 1; prompt s-tr7 "$TRP"
+sleep 1; record r; commit_all "$TRP" 'docs: record r'
+sleep 1; mkdir -p "${TRL%/*}"
+printf '# Handoff\n\n## Next session\n\n**Status:** x\n**Next:** Nothing — no register holds an unresolved row.\n' > "$TRL"
+check "a finishing turn ending on the block next-step wrote passes" "$(stop_at s-tr7 "$TRP" "$NB")" ""
+sleep 1; prompt s-tr8 "$TRP"
+sleep 1; record s; commit_all "$TRP" 'docs: record s'
+check "a finishing turn ending on a hand-typed block is held" "$(decision "$(stop_at s-tr8 "$TRP" "$NB")")" "block"
+sleep 1; prompt s-tr9 "$TRP"
+sleep 1; record t
+out=$(stop_at s-tr9 "$TRP" 'Recorded.')
+check "an uncommitted completed.md entry this turn is held" "$(decision "$out")" "block"
+check "an uncommitted completed.md entry names its plan" \
+  "$(jq -r .reason <<<"$out" | grep -c 'next-step" --complete docs/dforge/plans/2026-11-16-t.md')" "1"
+commit_all "$TRP" 'docs: record t'
+sleep 1; prompt s-tr10 "$TRP"
+sleep 1; record u
+check "a transition turn ending on finishing's menu is not held" \
+  "$(stop_at s-tr10 "$TRP" $'1. Merge back to main locally\n2. Keep as-is\n\nWhich option?')" ""
+commit_all "$TRP" 'docs: record u'
+
+# latest.md absent and its nearest existing parent unwritable: next-step can
+# write nothing (exit 4), so the heading alone releases. Root writes any
+# directory, so this runs only as a regular user (CI).
+if [ "$(id -u)" = 0 ] && ! command -v cygpath >/dev/null 2>&1; then
+  echo "skip - an absent latest.md under an unwritable parent accepts the heading (running as root)"
+else
+  mkdir -p "$TMP/ro"
+  chmod 555 "$TMP/ro"
+  check "an absent latest.md under an unwritable parent accepts the heading" \
+    "$(ending_released "$HAND" "$HOME/.claude/dforge/sessions/turns/s-nx" "$TMP/ro/state/handoff/latest.md" && echo released || echo held)" "released"
+  chmod 755 "$TMP/ro"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
