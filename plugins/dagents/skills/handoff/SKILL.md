@@ -134,7 +134,7 @@ cleanly."
    facts ([project-state.md](../../reference/project-state.md) §darkmem sync
    points): the push carries the ledger, `handoff.md` and `latest.md`.
 
-   On Codex, add `--host codex` to the design-phase and unplanned-work calls,
+   On Codex, add `--host codex` to the design-phase, unplanned-work and between-plans calls,
    so the block names the Codex client rather than Claude. A plan states its
    own host in its header, so the execution call needs no flag.
 5. **End the session.** Your final message is one line on why you stopped,
