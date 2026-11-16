@@ -173,5 +173,16 @@ has "darkmem progress: the mirror's ledger" "$out" "### Ledger \`$M/work/sdd/mp/
 check "darkmem progress: listed once" "$(grep -c '^### Ledger' <<<"$out")" "1"
 has "darkmem progress: the mirror's latest.md" "$(HOME=$SH snapshot_latest "$REPO")" "**Next:** the mirror note"
 
+# --- the snapshot drops the marker and ages from its at ---
+AREPO="$TMP/aged"
+git init -q -b main "$AREPO"
+mkdir -p "$AREPO/.dforge/handoff"
+printf '# Handoff\n\n## Next session\n\n**Next:** aged note\n<!-- next-step: kind=adhoc done=0 closed=0 subject=- at=%s -->\n' "$(( $(date +%s) - 7200 ))" \
+  > "$AREPO/.dforge/handoff/latest.md"
+out=$(snapshot_latest "$AREPO")
+lacks "aged: the marker is dropped" "$out" "<!-- next-step:"
+has "aged: the age comes from the marker" "$out" " (2h old)"
+has "aged: the block is kept" "$out" "**Next:** aged note"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

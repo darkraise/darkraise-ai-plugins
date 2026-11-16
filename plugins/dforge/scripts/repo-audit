@@ -101,7 +101,21 @@ echo "## Handoff"
 latest=$(dforge_latest_file "$root")
 if [ -f "$latest" ]; then
   echo "- \`$latest\`"
-  tr -d '\r' < "$latest" | grep -E '^\*\*(Status|Next):\*\*' | sed 's/^/- /'
+  # The stored lines are a claim about the repository at writing time, so they
+  # are recomputed; only when that fails are they shown, marked as stored.
+  status=0
+  recomputed=$(cd "$primary" && bash "$here/with-timeout" 20 bash "$here/next-step" --print --latest 2>&1) || status=$?
+  case $status in
+    0)
+      echo "- recomputed from the repository"
+      grep -E '^\*\*(Status|Next):\*\*' <<<"$recomputed" | sed 's/^/- /'
+      ;;
+    6) echo "- nothing to resume (the stored block is superseded)" ;;
+    *)
+      echo "- stored, not recomputed: $(grep -m 1 . <<<"$recomputed")"
+      tr -d '\r' < "$latest" | grep -E '^\*\*(Status|Next):\*\*' | sed 's/^/- /'
+      ;;
+  esac
   mtime=$(stat -c %Y "$latest" 2>/dev/null || stat -f %m "$latest")
   since=$(git -C "$primary" log -n 500 --format=%ct HEAD 2>/dev/null | awk -v t="$mtime" '$1 > t' | grep -c . || true)
   echo "- Commits on the primary checkout's HEAD since it was written: $since"
