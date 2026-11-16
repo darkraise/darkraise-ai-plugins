@@ -373,8 +373,9 @@ plan file, when something follows (a register row this work left open, a
 finding awaiting a ruling), run
 `scripts/next-step --adhoc --phase <design|build> --next "<what follows>"` —
 `design` when what follows is rulings, a spec or a plan — and end with the
-block it prints, verbatim. When nothing follows, end with: "No plan file — no
-follow-on work recorded."
+block it prints, verbatim. When nothing follows, run
+`scripts/finish-choice clear` (the choice is used up) and end with: "No plan
+file — no follow-on work recorded."
 
 When the ledger holds a `CI:` line, the final message quotes it.
 

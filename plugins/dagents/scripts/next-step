@@ -18,8 +18,9 @@
 #               pending, so the block names the branch, its worktree and the
 #               finish choices still open, and reads no register or roadmap.
 #               Replaces latest.md wholesale.
-#   --complete, --kept and --adhoc delete the primary checkout's no-plan
-#   finish record (.dagents/sdd/finish.json) once the block is printed.
+#   --complete, --kept and --adhoc delete the no-plan finish record
+#   (.dagents/sdd/finish.json) of the current checkout and of the primary
+#   checkout once the block is printed.
 #   --draft     a design phase (brainstorming, a spec, a plan being written) is
 #               handing off; DRAFT_FILE is the authority and ACTION names the
 #               next step and its skill.
@@ -622,8 +623,10 @@ printf '%s\n' "$block"
 
 # The no-plan finish record has done its job once finishing has an outcome;
 # left behind, the next unplanned finish would act on it without asking.
+# finish-choice writes it under the checkout it runs in, a linked worktree
+# included, so both that checkout's and the primary's are cleared.
 if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ "$adhoc" -eq 1 ]; then
-  rm -f "$(dagents_dir state "$primary")/sdd/finish.json"
+  rm -f "$(dagents_dir state "$root")/sdd/finish.json" "$(dagents_dir state "$primary")/sdd/finish.json"
 fi
 
 handoff=$(dagents_latest_file)

@@ -278,6 +278,12 @@ has "worktree: prompt names the worktree" "$out" "First enter the existing workt
 has "worktree: launch dir is still the primary checkout" "$out" "Launch in \`$ROOT\`:"
 check "worktree: handoff written in the primary checkout" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes"
 check "worktree: no handoff inside the worktree" "$([ -f "$WT/.dagents/handoff/latest.md" ] && echo yes || echo no)" "no"
+mkdir -p "$WT/.dagents/sdd" "$REPO/.dagents/sdd"
+printf '{"action":"pr"}\n' > "$WT/.dagents/sdd/finish.json"
+printf '{"action":"pr"}\n' > "$REPO/.dagents/sdd/finish.json"
+run "$WT" --adhoc --phase build --next "Ship the fix"
+check "worktree: adhoc clears the no-plan record finish-choice wrote there" "$([ -e "$WT/.dagents/sdd/finish.json" ] && echo kept || echo gone)" "gone"
+check "worktree: adhoc clears the primary's no-plan record too" "$([ -e "$REPO/.dagents/sdd/finish.json" ] && echo kept || echo gone)" "gone"
 
 # --- handoff write failure still prints the block ---
 rm -rf "$REPO/.dagents/handoff"
