@@ -495,6 +495,120 @@ check "A23: no last_assistant_message: the transcript's UI proof: pending line p
 check "A23: a message ending UI proof: pending — why passes" "$(decision "$(u_stop u-22 $'Done.\n\nUI proof: pending — no browser here')")" "none"
 check "A23: a pending line with no reason is still held" "$(decision "$(u_stop u-22 $'Done.\n\nUI proof: pending')")" "block"
 
+# --- A21: session start is bounded when darkmem never answers ---
+R21="$TMP/hang"
+mkrepo "$R21"
+node -e 'const s=require("http").createServer(()=>{}); s.listen(0,"127.0.0.1",()=>{require("fs").writeFileSync(process.argv[1], String(s.address().port))})' "$TMP/hang.port" &
+HANG_PID=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$TMP/hang.port" ] && break; sleep 0.5; done
+M21=$(stores_home "$HOME" "$R21" hang darkmem darkmem)
+sed -i "s#http://127.0.0.1:9#http://127.0.0.1:$(cat "$TMP/hang.port")#" "$HOME/.dforge/config.json"
+start=$SECONDS
+out=$(jq -cn --arg cwd "$R21" '{hook_event_name:"SessionStart",session_id:"s-hang",transcript_path:"",cwd:$cwd,source:"startup"}' \
+  | DARKMEM_API_KEY=k DARKMEM_SYNC_TIMEOUT_MS=300000 timeout 120 bash "$S/session-start.sh" 2>/dev/null)
+elapsed=$((SECONDS - start))
+kill "$HANG_PID" 2>/dev/null; wait "$HANG_PID" 2>/dev/null
+ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out")
+check "A21: session start returned within 45 seconds ($elapsed s)" "$([ "$elapsed" -lt 45 ] && echo yes || echo no)" "yes"
+check "A21: it still injected the entry point" "$(grep -c 'dforge:using-dforge' <<<"$ctx")" "1"
+check "A21: exactly one line says the sync did not finish" "$(grep -c 'did not finish' <<<"$ctx")" "1"
+check "A21: and that line names the sync command" "$(grep 'did not finish' <<<"$ctx" | grep -c 'darkmem-sync')" "1"
+rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
+
+# --- A25: unnamed failures at the base and at the head count as new ---
+R25="$TMP/base"
+git init -q "$R25"; git -C "$R25" config user.name t; git -C "$R25" config user.email t@example.invalid
+mkdir -p "$R25/docs"
+{
+  printf '# Base Fixture Plan\n\n**Goal:** Fixture.\n\n**Execution:** inline — `claude --model sonnet --effort high` — fixture\n\n'
+  printf '## Task index\n\n1. One\n\n### Task 1: One\n\n**Files:**\n- Modify: `app.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n'
+} > "$R25/docs/plan.md"
+printf '#!/usr/bin/env bash\nif [ -s failing.txt ]; then cat failing.txt; exit 1; fi\n' > "$R25/suite.sh"
+printf 'one\n' > "$R25/app.txt"
+printf 'boom\n' > "$R25/failing.txt"
+printf '.dforge/\n' > "$R25/.gitignore"
+git -C "$R25" add -A && git -C "$R25" commit -qm base
+printf '%s\n' '#!/usr/bin/env bash' 'echo "codex-gate usable=true reason=ok review=true resets_at=- source=cache"' > "$TMP/gate-stub"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting"' > "$TMP/agy-gate-stub"
+export TASK_STEP_CODEX_GATE="$TMP/gate-stub" TASK_STEP_AGY_GATE="$TMP/agy-gate-stub" DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=acc-base SUITE_MARK="$TMP/marks"
+ts25() { out=$(cd "$R25" && bash "$S/task-step" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
+sr25() { (cd "$R25" && bash "$S/suite-run" -- bash -c 'bash suite.sh' >/dev/null 2>&1); }
+ts25 start docs/plan.md 1 --suite 'bash suite.sh'
+printf 'impl\n' >> "$R25/app.txt"
+git -C "$R25" add -A && git -C "$R25" commit -qm "work 1"
+sr25
+ts25 review docs/plan.md 1
+WS25=$(cd "$R25" && bash "$S/sdd-workspace" docs/plan.md)
+printf '## Verdict\nspec: pass\nquality: approved\nscores: spec 17 / scope 17 / verification 16 / quality 16\n\n## Strengths\nFine.\n\n## Findings\n\n## Cannot verify\n\n## Assessment\nFine.\n' > "$WS25/task-1-review-report.md"
+ts25 verdict docs/plan.md 1
+has "A25: an unnamed base failure and an unnamed head failure with the same exit code are a new failure" "$out" "suite: red (1 failing, 0 baseline)"
+
+# --- A26: suite-run records no reusable row after HEAD moved or a failed git status ---
+R26="$TMP/suite"
+mkrepo "$R26"
+git -C "$R26" config user.name t; git -C "$R26" config user.email t@example.invalid
+sr26() { out=$(cd "$R26" && bash "$S/suite-run" -- bash -c "$1" 2>&1); rc=$?; }
+sr26 'if [ ! -f .dforge/once ]; then mkdir -p .dforge; touch .dforge/once; git commit -q --allow-empty -m moved; fi'
+check "A26: the run that moves HEAD passes" "$rc" "0"
+sr26 'if [ ! -f .dforge/once ]; then mkdir -p .dforge; touch .dforge/once; git commit -q --allow-empty -m moved; fi'
+lacks "A26: no pass is reused at the new HEAD after HEAD moved during the run" "$out" "reused pass"
+rm -f "$R26/.dforge/once"
+sr26 'echo ok'
+sr26 'echo ok'
+has "A26: a plain run at a settled HEAD is reused (control)" "$out" "reused pass"
+rm -f "$R26/.dforge/suites.tsv"
+CORRUPT='if [ ! -f .dforge/once2 ]; then mkdir -p .dforge; touch .dforge/once2; printf garbage > "$(git rev-parse --git-dir)/index"; fi'
+sr26 "$CORRUPT"
+rm -f "$R26/.git/index" && git -C "$R26" reset -q
+sr26 "$CORRUPT"
+lacks "A26: a run whose git status failed afterwards is dirty, never reused" "$out" "reused pass"
+check "A26: the row of the run whose git status failed is not marked clean" "$(sed -n 1p "$R26/.dforge/suites.tsv" | cut -f2)" "dirty"
+
+# --- A27: a host with only gtimeout ---
+BIN27="$TMP/bin27"; mkdir -p "$BIN27"
+wrap27() { printf '#!%s\nexec "%s" "$@"\n' "$BASH" "$2" > "$BIN27/$1"; chmod +x "$BIN27/$1"; }
+for t in env sleep true cat head tr dirname basename jq sed grep; do wrap27 "$t" "$(type -P "$t")"; done
+wrap27 gtimeout "$(type -P timeout)"
+PATH="$BIN27" "$BASH" "$S/with-timeout" 5 true; rc=$?
+check "A27: with only gtimeout, with-timeout 5 true exits 0" "$rc" "0"
+printf '#!%s\nsleep 120\n' "$BASH" > "$BIN27/agy"; chmod +x "$BIN27/agy"
+start=$SECONDS
+out=$(timeout 90 env PATH="$BIN27" "$BASH" "$S/agy-locate" 2>&1); rc=$?
+check "A27: agy-locate bounds a hanging agy --version (returned in $((SECONDS - start)) s)" "$([ $((SECONDS - start)) -lt 60 ] && echo bounded || echo unbounded)" "bounded"
+check "A27: and reports the CLI unusable" "$rc" "1"
+rm -f "$BIN27/gtimeout"
+out=$(timeout 30 env PATH="$BIN27" "$BASH" "$S/agy-locate" 2>&1); rc=$?
+check "A27: with no timeout command at all agy-locate reports the CLI unusable" "$rc" "1"
+
+# --- A28: without setsid a timed-out panel runner leaves no descendant alive ---
+D28="$TMP/panel"; mkdir -p "$D28/work"
+printf '# r\n' > "$D28/prompt.md"
+for fam in codex agy; do
+  printf 'echo "%s-gate usable=true reason=ok review=true resets_at=- source=cache"\n' "$fam" > "$D28/$fam-gate"
+  printf 'echo "%s-judge none/none status=OK exit=0 out=- evidence=none"\n' "$fam" > "$D28/$fam-runner"
+done
+cat > "$D28/tree-runner" <<RUNNER
+#!/usr/bin/env bash
+( ( sleep 300 & echo \$! >> "$D28/pids"; wait ) & echo \$! >> "$D28/pids"; sleep 300 & echo \$! >> "$D28/pids"; wait ) &
+echo \$! >> "$D28/pids"
+sleep 300 &
+echo \$! >> "$D28/pids"
+wait
+RUNNER
+chmod +x "$D28/tree-runner" "$D28"/*-gate "$D28"/codex-runner "$D28"/agy-runner
+: > "$D28/pids"
+out=$(PANEL_NO_SETSID=1 PANEL_BOUND_SECONDS=3 PANEL_CODEX_GATE="$D28/codex-gate" PANEL_AGY_GATE="$D28/agy-gate" \
+  PANEL_CODEX_RUNNER="$D28/codex-runner" PANEL_AGY_RUNNER="$D28/tree-runner" CLAUDE_CODE_SESSION_ID=s-28 \
+  timeout 60 bash "$S/run-review-panel" --kind task --tier light --cwd "$D28/work" --out-dir "$D28/out" --prompt "$D28/prompt.md" 2>/dev/null)
+sleep 1
+alive=0
+while read -r p; do
+  [ -n "$p" ] || continue
+  if kill -0 "$p" 2>/dev/null; then alive=$((alive + 1)); kill -9 "$p" 2>/dev/null; fi
+done < "$D28/pids"
+has "A28: the timed-out runner is reported as TIMEOUT" "$out" "status=TIMEOUT"
+check "A28: every one of the runner's $(wc -l < "$D28/pids" | tr -d ' ') descendants is gone" "$alive" "0"
+
 # --- footer ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
