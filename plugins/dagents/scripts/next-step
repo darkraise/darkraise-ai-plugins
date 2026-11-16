@@ -483,10 +483,12 @@ else
     blocked_num=$(head -n 1 <<<"$blocked_tasks")
     if [ -n "$blocked_num" ]; then
       # BLOCKED is terminal: the next session must not be told to start the
-      # task. The line's last dash-separated field names what a human must
-      # decide (`BLOCKED — <who> — <decision>`).
+      # task. What follows the line's second dash names what a human must
+      # decide (`BLOCKED — <who> — <decision>`), dashes of its own included.
       blocked_why=$(grep -E "^Task ${blocked_num}: BLOCKED" <<<"$ledger_text" | tail -n 1 \
-        | awk -F' (—|-) ' '{ sub(/[ \t]+$/, "", $NF); print $NF }')
+        | awk '{ sep = " (—|-) "
+                 if (match($0, sep)) { $0 = substr($0, RSTART + RLENGTH); if (match($0, sep)) $0 = substr($0, RSTART + RLENGTH) }
+                 sub(/[ \t]+$/, ""); print }')
       status_line="Plan \`$rel\`: $done_count of $total tasks complete; Task $blocked_num is BLOCKED ($ledger_note)."
       next_line="Your human partner decides: ${blocked_why:-see the BLOCKED line in the ledger}. Record the ruling in the ledger, then run next-step again."
       launch=0

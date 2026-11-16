@@ -544,6 +544,9 @@ has "blocked: next carries the decision" "$out" "Your human partner decides: whe
 lacks "blocked: no start or resume instruction" "$out" "Resume at Task"
 lacks "blocked: no launch command" "$out" "Launch in"
 has "blocked: latest.md carries the block" "$(cat "$REPO/.dagents/handoff/latest.md")" "Task 2 is BLOCKED"
+printf '%s\n' "Task 2: BLOCKED — ruling seat — pick the store - sqlite or files" >> "$BLK_LEDGER/progress.md"
+run "$REPO" docs/plans/2026-01-01-blocked.md
+has "blocked: a decision with a dash of its own is carried whole" "$out" "Your human partner decides: pick the store - sqlite or files."
 
 # Writers share no temporary path: one another writer left behind, or holds,
 # does not stop this one, and two at once leave one well-formed block.
