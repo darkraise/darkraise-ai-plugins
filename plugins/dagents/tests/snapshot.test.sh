@@ -135,6 +135,22 @@ out=$(snapshot_build "$T" "$REPO" 1500)
 check "explicit cap: at most 1500 characters" "$([ "${#out}" -le 1500 ] && echo yes || echo no)" "yes"
 has "explicit cap: ledger kept" "$out" "Task 2: fix round 1/5"
 
+# --- latest.md is trusted only when this session wrote it or its ledger (row 5) ---
+TS="$TMP/ts.jsonl"
+jq -nc --arg t "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" '{type:"user",timestamp:$t,message:{role:"user",content:"go"}}' > "$TS"
+jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"Process: fast (session) — spikes"}]}}' >> "$TS"
+touch -d '-2 hours' "$REPO/.dagents/handoff/latest.md" "$WT/.dagents/sdd/plan/progress.md"
+out=$(snapshot_build "$TS" "$REPO")
+lacks "an old latest.md for an untouched ledger is left out" "$out" "**Next:** Resume at Task 2 (Two)."
+has "a session-scoped fast line is carried" "$out" "Process: fast (session) — spikes"
+touch "$REPO/.dagents/handoff/latest.md"
+out=$(snapshot_build "$TS" "$REPO")
+has "a latest.md newer than the session start is kept" "$out" "**Next:** Resume at Task 2 (Two)."
+has "its age is stated" "$out" "(0m old)"
+out=$(snapshot_build "$TS" "$REPO" 900)
+check "a small cap still fits" "$([ "${#out}" -le 900 ] && echo yes || echo no)" "yes"
+has "a small cap keeps the ledger's newest line" "$out" "$(tr -d '\r' < "$WT/.dagents/sdd/plan/progress.md" | grep -v '^[[:space:]]*$' | tail -n 1)"
+
 # --- an oversized Next session block: s1+s2 alone still fits under cap ---
 LONG_NEXT=$(printf '%08000d' 0)
 printf '# Handoff\n\n## State\nstate\n\n## Next session\n\n**Next:** %s\n\n## Do not\nKeep out.\n' "$LONG_NEXT" \
