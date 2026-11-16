@@ -488,7 +488,7 @@ async function documentsToLocal(context, { offline = null } = {}) {
     && !fs.existsSync(path.join(mirror.docsRoot, ...uri.slice(DOC_PREFIX.length + 1).split("/"))));
   if (unpushed.length && !offline) return { moved: false, reason: "the mirror holds deletions not yet pushed; push first", details: unpushed };
   const target = path.join(cfg.repoRoot, "docs", "dagents");
-  // A file under the docs root's handoff/ or archive/ has uri null: never synced, not carried.
+  // A file under the docs root's handoff/, amendments/ or archive/ has uri null: never synced, not carried.
   const files = listDocumentFiles(mirror).filter(item => item.uri).map(({ file, uri }) => {
     const dest = path.join(target, path.relative(mirror.docsRoot, file));
     return { file, uri, dest, name: slash(path.relative(cfg.repoRoot, dest)), hash: fileHash(file) };
