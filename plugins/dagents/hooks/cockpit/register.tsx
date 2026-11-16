@@ -77,6 +77,8 @@ import {
   SECTIONS,
   BAND_SEGMENTS,
   FORK_DRAFTING,
+  seatBarCells,
+  seatCounts,
   seatDenial,
   fastModeLine,
   bandLines,
@@ -417,15 +419,8 @@ export const register: Register = on => {
     const o = await live($)
     const now = await $.clock.now()
     const startedAt = (await read($, usage))?.startedAt ?? (await $.session.usage()).startedAt
-    const reading: CockpitUsage = {
-      startedAt,
-      readAt: now,
-      limits: e.rateLimits.map(limit => ({
-        kind: limit.kind,
-        percent: limit.percentUsed,
-        resetsAt: limit.resetsAt === undefined ? null : Date.parse(limit.resetsAt) || null,
-      })),
-    }
+    const reading: CockpitUsage = { startedAt, readAt: now, limits: limitsOf(e.rateLimits) }
+    S.limits = reading.limits
     await update($, usage, () => reading)
     if (o.limitAlertAt > 0) {
       for (const limit of await alertLimits($, reading, o.limitAlertAt)) {
@@ -1240,6 +1235,9 @@ export const register: Register = on => {
         </Box>
       )
     }
+    const seatText = (seat: CockpitSeat) => seatCounts(totalIn(seat), cacheShare(seat), seat.output)
+    // The details sit INDENT cells in: the bar takes what the counts leave.
+    const seatBar = (seat: CockpitSeat) => seatBarCells(inner - INDENT, seatText(seat))
     const details = (key: string, ...body: RenderChildren[]) => (
       <Box key={key} flexDirection="column" paddingLeft={INDENT}>
         {body}
@@ -1631,12 +1629,9 @@ export const register: Register = on => {
                   <Text dimColor> ×{seat.runs}</Text>
                 </Text>
                 <Text wrap="truncate-end">
-                  <Text color="magenta">{bar(totalIn(seat) / mostIn, Math.max(6, wide - 26)).replace(/▱+$/, rest => ' '.repeat(rest.length))}</Text>
-                  <Text bold> {kTokens(totalIn(seat))}</Text>
-                  <Text dimColor>
-                    {' '}
-                    in · {cacheShare(seat)}% cached · {kTokens(seat.output)} out
-                  </Text>
+                  {seatBar(seat) > 0 && <Text color="magenta">{bar(totalIn(seat) / mostIn, seatBar(seat)).replace(/▱+$/, rest => ' '.repeat(rest.length))} </Text>}
+                  <Text bold>{seatText(seat).slice(0, seatText(seat).indexOf(' '))}</Text>
+                  <Text dimColor>{seatText(seat).slice(seatText(seat).indexOf(' '))}</Text>
                 </Text>
               </Box>
             )),
@@ -1911,7 +1906,7 @@ export const register: Register = on => {
                 kind: 'text',
                 small: true,
                 left: [{ text: shortSeat(seat.seat) }, { text: ` ×${seat.runs}`, dim: true }],
-                right: [{ text: `${kTokens(totalIn(seat))} in · ${cacheShare(seat)}% cached · ${kTokens(seat.output)} out`, mono: true, dim: true }],
+                right: [{ text: seatCounts(totalIn(seat), cacheShare(seat), seat.output), mono: true, dim: true }],
               },
               { kind: 'picture', svg: seatSvg(totalIn(seat) / mostIn, cacheShare(seat) / 100, width, 'magenta') },
             ]),
@@ -2475,6 +2470,9 @@ const S = {
   heldDone: null as { startedAt: number; heldAt: number; answer: string } | null,
   // Sends the held Done if no turn starts within RELEASE_GRACE_MS of the work ending.
   releaseTimer: null as Timer | null,
+  // The last rate-limit windows read and the limits already alerted: /clear empties $.state but not these.
+  limits: [] as CockpitUsage['limits'],
+  alerted: [] as string[],
   // The poll's timer, whether a tick is running, how many ran, and when the slower readings last ran.
   poll: null as Timer | null,
   isPolling: false,
@@ -3742,6 +3740,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
   } else if (isStart && o.openAtStart) void $.ui.open(paneFor(o.layout))
   S.compactWindow = await readCompactWindow($)
   await onBudget($, await refresh($, o.tuning, S.compactWindow))
+  await seedUsage($)
   await readAccount($)
   await readPlace($)
   await readBreakdown($)
@@ -3895,6 +3894,34 @@ async function readJson($: EngineInterface, path: string): Promise<Record<string
   }
 }
 
+function limitsOf(windows: readonly { kind: string; percentUsed: number; resetsAt?: string }[]): CockpitUsage['limits'] {
+  return windows.map(limit => ({
+    kind: limit.kind,
+    percent: limit.percentUsed,
+    resetsAt: limit.resetsAt === undefined ? null : Date.parse(limit.resetsAt) || null,
+  }))
+}
+
+/**
+ * Fills the Usage section when no measurement has: a new session after /clear
+ * holds none until its first turn ends. The limits are the usage op's, else
+ * the last read ones whose window has not reset.
+ */
+async function seedUsage($: EngineInterface) {
+  if ((await read($, usage)) !== null) return
+  try {
+    const figures = await $.session.usage()
+    const now = await $.clock.now()
+    const fresh = limitsOf(figures.rateLimits)
+    const limits = fresh.length > 0 ? fresh : S.limits.filter(limit => limit.resetsAt === null || limit.resetsAt > now)
+    if (limits.length === 0) return
+    S.limits = limits
+    await update($, usage, () => ({ startedAt: figures.startedAt, readAt: now, limits }))
+  } catch {
+    // No reading yet: the section waits for the first measurement.
+  }
+}
+
 /** Whether the session's directory differs from the one the place was read in. */
 async function hasMoved($: EngineInterface): Promise<boolean> {
   const cwd = await $.session.cwd().catch(() => null)
@@ -3922,8 +3949,7 @@ async function readPlace($: EngineInterface) {
 async function readEngine($: EngineInterface) {
   try {
     const model = await $.session.model()
-    const effortLevel = ((await $.settings.read()) as { effortLevel?: unknown }).effortLevel
-    const effort = typeof effortLevel === 'string' ? effortLevel : null
+    const effort = effortFor(model, (await $.settings.read()) as SettingsEffort)
     await update($, engine, now => ({ ...now, model: now.model ?? model, effort: now.effort ?? effort }))
   } catch {
     // The first request fills them in.
@@ -3942,6 +3968,19 @@ async function readStyle($: EngineInterface) {
   }
 }
 
+type SettingsEffort = { effortLevel?: unknown; modelSettings?: Record<string, { effortLevel?: unknown } | undefined> }
+
+/**
+ * The effort a model starts with: its own modelSettings entry, under its id or
+ * the id with a context suffix such as [1m], else the global effortLevel.
+ */
+function effortFor(model: string, settings: SettingsEffort): string | null {
+  const own = settings.modelSettings ?? {}
+  const key = Object.keys(own).find(one => one === model) ?? Object.keys(own).find(one => one.startsWith(`${model}[`) || model.startsWith(`${one}[`))
+  const level = (key === undefined ? undefined : own[key]?.effortLevel) ?? settings.effortLevel
+  return typeof level === 'string' ? level : null
+}
+
 function cacheOf(usage: TurnUsage): number | null {
   const total = usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens
   return total > 0 ? usage.cache_read_input_tokens / total : null
@@ -3958,11 +3997,12 @@ async function readCompactWindow($: EngineInterface): Promise<number | undefined
 // The limits that crossed the alert line, once per window and reset, for the
 // Discord message; the pane's own gauges show them, so nothing pops up.
 async function alertLimits($: EngineInterface, reading: CockpitUsage, at: number) {
-  const said = await read($, alerted)
+  const said = [...(await read($, alerted)), ...S.alerted]
   const crossed: CockpitUsage['limits'] = []
   for (const limit of reading.limits) {
     const key = `${limit.kind}@${limit.resetsAt ?? ''}`
     if (limit.percent < at || said.includes(key)) continue
+    S.alerted = [...S.alerted, key].slice(-20)
     await update($, alerted, list => [...list, key].slice(-20))
     crossed.push(limit)
   }

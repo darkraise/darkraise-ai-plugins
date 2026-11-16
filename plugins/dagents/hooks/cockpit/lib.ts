@@ -127,6 +127,17 @@ export function kTokens(n: number): string {
   return `${Math.round(n / 1000)}k`
 }
 
+/** A seat's input, cached share and output, the cached share behind a glyph. */
+export function seatCounts(input: number, cachedPercent: number, output: number): string {
+  return `${kTokens(input)} in · ↻${cachedPercent}% · ${kTokens(output)} out`
+}
+
+/** The cells a seat row's bar gets beside its counts and the space between; 0 when fewer than 6 are left. */
+export function seatBarCells(rowCells: number, counts: string): number {
+  const left = rowCells - 1 - cellWidth(counts)
+  return left >= 6 ? left : 0
+}
+
 const ATTRIBUTION = [
   /co-authored-by:[^\n]*(claude|anthropic|codex|openai|copilot)/i,
   /claude-session:/i,

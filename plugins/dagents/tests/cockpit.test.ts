@@ -59,6 +59,8 @@ import {
   runList,
   runsWidth,
   runsCut,
+  seatBarCells,
+  seatCounts,
   sectionsToggled,
   sparkline,
   stackedRuns,
@@ -313,6 +315,8 @@ type World = {
   agentIds?: string[]
   /** `node --version` cannot start, as on a machine without node. */
   isNodeMissing?: boolean
+  /** The rate-limit windows `$.session.usage()` answers; none unless said. */
+  rateLimits?: { kind: string; percentUsed: number; resetsAt?: string }[]
   /** Reading the user settings rejects. */
   isUserSettingsUnreadable?: boolean
   /** How long each compaction takes, in the clock's milliseconds; at once unless said. */
@@ -353,7 +357,7 @@ function world(on: On, w: World) {
           window: w.window ?? 650_000,
           ...(e.breakdown === undefined ? {} : { breakdown: BREAKDOWN }),
         },
-        rateLimits: [],
+        rateLimits: w.rateLimits ?? [],
         cost: { usd: 1.5 },
       },
     }
@@ -608,7 +612,7 @@ function wipesState(on: On) {
 // A signed-in account working in a repository under home. In a linked
 // worktree the engine names the main working tree as the repository's root.
 const SIGNED_IN = { tokens: 284_000, env: { HOME: '/home/me' }, settings: { effortLevel: 'xhigh' } }
-function signedIn(on: On, files: World['files'] = {}, reads?: string[], repoRoot = '/home/me/code/shop', cwd = () => '/home/me/code/shop/web') {
+function signedIn(on: On, files: World['files'] = {}, reads?: string[], repoRoot = '/home/me/code/shop', cwd = () => '/home/me/code/shop/web', model: string | (() => string) = 'claude-opus-5-5[1m]') {
   on('fs.read', (_$, e) => {
     reads?.push(e.path)
     const file = files[e.path]
@@ -630,7 +634,7 @@ function signedIn(on: On, files: World['files'] = {}, reads?: string[], repoRoot
   })
   on('session.cwd', () => ({ value: cwd() }))
   on('session.repo', () => ({ value: { root: repoRoot, remote: null, internal: false, name: null } }))
-  on('session.model', () => ({ value: 'claude-opus-5-5[1m]' }))
+  on('session.model', () => ({ value: typeof model === 'string' ? model : model() }))
 }
 
 test('only a dagents name marks a workflow session', () => {
@@ -1316,15 +1320,59 @@ describe('cockpit pane', () => {
       if (surface === 'desktop') {
         const texts = await boxTexts(ui)
         expect(texts).toContain('impl-sonnet-low ×1')
-        expect(texts).toContain('40k in · 75% cached · 3k out')
+        expect(texts).toContain('40k in · ↻75% · 3k out')
         expect(texts).toContain('✓  impl-sonnet-low  Task 3')
       } else {
-        expect(await ui.find({ type: 'Text', text: /40k in · 75% cached · 3k out/ })).toBeDefined()
+        expect(await ui.find({ type: 'Text', text: /40k in · ↻75% · 3k out/ })).toBeDefined()
         expect(await ui.find({ type: 'Text', text: /✓ impl-sonnet-low Task 3/ })).toBeDefined()
       }
       await ui.unmount()
     }
   })
+
+  test('writes a seat\'s counts with a glyph for the cached share', () => {
+    expect(seatCounts(842_000, 97, 12_000)).toBe('842k in · ↻97% · 12k out')
+    expect(seatCounts(0, 0, 0)).toBe('0k in · ↻0% · 0k out')
+  })
+
+  test('gives a seat\'s bar what its counts leave of the row, and none under 6 cells', () => {
+    const counts = seatCounts(842_000, 97, 12_000)
+    expect(seatBarCells(54, counts)).toBe(54 - 1 - cellWidth(counts))
+    expect(seatBarCells(31, counts)).toBe(6)
+    expect(seatBarCells(30, counts)).toBe(0)
+    expect(seatBarCells(24, counts)).toBe(0)
+  })
+
+  for (const columns of [30, 44, 60, 100]) {
+    test(`keeps a seat row's output tokens in a ${columns}-column pane`, async ($, on) => {
+      world(on, { tokens: 50_000 })
+      await $.agent.spawn({
+        tool_use_id: 'toolu_1',
+        prompt: 'Implement task 3',
+        description: 'Task 3',
+        subagentType: 'dagents:impl-sonnet-low',
+        provider: { plugin: 'dagents', tier: 'user' },
+        parentModel: 'claude-opus-5-5',
+        background: false,
+        fork: false,
+      })
+      await $.turn.complete({
+        answer: 'done',
+        durationMs: 1000,
+        isAborted: false,
+        turnId: 'turn-1',
+        agentId: 'agent-1',
+        reason: 'answer',
+        usage: { model: 'claude-sonnet-5-5', input_tokens: 20_000, cache_read_input_tokens: 810_000, cache_creation_input_tokens: 12_000, output_tokens: 12_000 },
+      })
+      const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: columns }, surface: 'terminal' })
+      const row = (await ui.findAll({ type: 'Text' })).find(one => /842k in/.test(one.text))
+      expect(row?.text).toMatch(/842k in · ↻96% · 12k out$/)
+      expect(cellWidth(row?.text ?? '')).toBeLessThanOrEqual(Math.max(20, columns - 4) - 2)
+      const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+      expect(await boxTexts(desktop)).toContain('842k in · ↻96% · 12k out')
+    })
+  }
 
   test('groups agents in order, an ended record without an outcome done', () => {
     const one = (agentId: string, isDone: boolean, outcome?: 'done' | 'failed' | null) => ({ agentId, isDone, outcome })
@@ -3015,6 +3063,28 @@ describe('account', () => {
     expect(await ui.find({ type: 'Text', text: 'subscription' })).toBeDefined()
   })
 
+  for (const [model, key] of [
+    ['claude-opus-5-5', 'claude-opus-5-5'],
+    ['claude-opus-5-5', 'claude-opus-5-5[1m]'],
+    ['claude-opus-5-5[1m]', 'claude-opus-5-5'],
+  ] as const) {
+    test(`shows the effort of the model's own setting (${model} under ${key}) before the global one`, async ($, on) => {
+      world(on, { ...SIGNED_IN, settings: { effortLevel: 'xhigh', modelSettings: { [key]: { effortLevel: 'medium' }, 'claude-sonnet-5-5': { effortLevel: 'low' } } } })
+      signedIn(on, {}, undefined, undefined, undefined, model)
+      await $.session.start(START)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ type: 'Text', text: /Opus 5\.5 · medium effort/ })).toBeDefined()
+    })
+  }
+
+  test('falls back to the global effort when the model has none of its own', async ($, on) => {
+    world(on, { ...SIGNED_IN, settings: { effortLevel: 'xhigh', modelSettings: { 'claude-sonnet-5-5': { effortLevel: 'low' } } } })
+    signedIn(on, {}, undefined, undefined, undefined, 'claude-opus-5-5')
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Opus 5\.5 · xhigh effort/ })).toBeDefined()
+  })
+
   for (const reason of ['clear', 'resume'] as const) {
     test(`shows the card and the context again in the session a ${reason} carries the process into, the pane left shut`, async ($, on) => {
       const wipe = wipesState(on)
@@ -3052,6 +3122,58 @@ describe('account', () => {
       expect(w.closed).toEqual([])
     })
   }
+
+  test('shows the limits the session usage holds before any measurement lands', async ($, on) => {
+    world(on, { tokens: 50_000, rateLimits: [{ kind: 'five_hour', percentUsed: 23, resetsAt: new Date(1_000_000 + 3_600_000).toISOString() }] })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /23%/ })).toBeDefined()
+  })
+
+  describe('the Usage section after /clear', () => {
+    const cleared = async ($: Parameters<TestBody>[0], on: On, w: World) => {
+      const wipe = wipesState(on)
+      const clock = world(on, w)
+      mock.store(on, {})
+      on('session.end', (_$, e) => e as never)
+      await $.session.start(START)
+      await $.session.measure({
+        ...MEASURE,
+        rateLimits: [
+          { kind: 'five_hour', percentUsed: 92, resetsAt: new Date(1_000_000 + 3_600_000).toISOString() },
+          { kind: 'seven_day', percentUsed: 61, resetsAt: new Date(1_000_000 + 1_500).toISOString() },
+        ],
+      })
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      await $.session.end({ reason: 'clear', sessionId: 'sess-1', resume: { id: 'sess-1' } })
+      wipe()
+      w.sessionId = 'sess-2'
+      await clock.advance(2_000)
+      return ui
+    }
+
+    test('keeps the last limits when the usage op has none, and drops a window whose reset has passed', async ($, on) => {
+      const ui = await cleared($, on, { tokens: 50_000 })
+      expect(await ui.find({ type: 'Text', text: /92%/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /61%/ })).toBeUndefined()
+    })
+
+    test('takes the limits from the usage op when it has them', async ($, on) => {
+      const ui = await cleared($, on, { tokens: 50_000, rateLimits: [{ kind: 'five_hour', percentUsed: 40, resetsAt: new Date(1_000_000 + 3_600_000).toISOString() }] })
+      expect(await ui.find({ type: 'Text', text: /40%/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /92%/ })).toBeUndefined()
+    })
+
+    test('does not send a limit alert again for a window already alerted', async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      const w: World = { tokens: 50_000, fetches, env: { DAGENTS_NOTIFY_URL: WEBHOOK }, config: { notifyAfter: 0 } }
+      await cleared($, on, w)
+      const limits = () => fetches.filter(one => String((one.body.embeds as { title?: string }[] | undefined)?.[0]?.title).includes('limit at'))
+      expect(limits()).toHaveLength(1)
+      await $.session.measure({ ...MEASURE, rateLimits: [{ kind: 'five_hour', percentUsed: 93, resetsAt: new Date(1_000_000 + 3_600_000).toISOString() }] })
+      expect(limits()).toHaveLength(1)
+    })
+  })
 
   test('reads nothing again after a session end that ends the process', async ($, on) => {
     const wipe = wipesState(on)
@@ -5406,7 +5528,7 @@ describe('flight deck', () => {
     expect((await ui.find({ key: 'shells-line-0-right' }))?.text).toBe('0s')
     // Each seat's counts sit on a row above its bar, with no title or caption.
     expect(await boxTexts(ui)).toContain('judge-opus ×1')
-    expect(await boxTexts(ui)).toContain('64k in · 72% cached · 3k out')
+    expect(await boxTexts(ui)).toContain('64k in · ↻72% · 3k out')
     expect(drawn).not.toContain('Seats by input')
     expect(drawn).not.toContain('prompt cache.')
     // The window's labels slide clear of each other rather than drop out.
