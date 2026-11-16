@@ -335,11 +335,11 @@ prose note is not written. In the same commit as the index line:
 
 When `<docs>/roadmap.md` exists, run
 `scripts/roadmap settle --spec <the plan's Spec path>` after resolving those
-rows and commit its changes with them. It moves the epic row assigned to that
-spec to `verify` once every register covering the spec is resolved, and never
-to `done`: an epic is done only when dforge:closing-a-milestone has
-audited it. Settle before Step 7, so `next-step` routes to the next epic rather
-than back to this one.
+rows, and again for its `**Program:**` spec if any; commit the changes with
+them. Settle moves an epic row assigned to the spec to `verify` once every
+register covering it is resolved, never to `done`: only
+dforge:closing-a-milestone makes an epic done. Settle before Step 7, so
+`next-step` routes to the next epic, not this one.
 
 When no register covers the plan, write
 `<docs>/notes/<slug>-followups.md` instead, listing those same

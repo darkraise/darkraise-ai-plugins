@@ -120,6 +120,10 @@ cleanly."
      The phase is `design` when the next action, or any item the next
      session may pick up, is unscoped or awaits a design decision or
      feedback; otherwise `build`.
+   - Between plans on a roadmap or register project:
+     `scripts/next-step --project --keep-notes`, preferred over `--adhoc`
+     there. It routes from the roadmap and registers and replaces only the
+     `## Next session` section of `latest.md`.
    It prints the `## Next session` block and writes it into `latest.md`. If it
    exits 4, say `latest.md` could not be written.
 
