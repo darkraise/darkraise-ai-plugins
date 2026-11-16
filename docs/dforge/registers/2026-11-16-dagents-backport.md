@@ -149,42 +149,42 @@
 | 142 | 6b40c9d fix(dforge): read whole output paths in in-flight | - | - | done | port a912655; fail@parent pass@port |
 | 143 | cdd46ef test(dforge): close two gaps in task-loop acceptance | - | - | n/a | test-only: closes two coverage gaps in task-loop-steps acceptance; no defect |
 | 144 | 04dc582 fix(dforge): keep a quick SIGKILL out of timeouts | - | - | done | port 73ea085; fail@parent pass@port |
-| 145 | e0fdf31 fix(dforge): flag only template placeholders | - | - | open | - |
-| 146 | d84da62 fix(dforge): stop task-step on a lost state write | - | - | open | - |
-| 147 | 1189ce4 fix(dforge): keep the judge key out of Codex shells | - | - | open | - |
-| 148 | c9cb7c1 feat(dforge): require evidence in review findings | - | - | open | - |
-| 149 | a843d5b feat(dforge): check plan task paths and ranges | - | - | open | - |
-| 150 | 5423d0a feat(dforge): group code lenses into code-quality | - | - | open | - |
-| 151 | dba4859 docs(dforge): describe the code-quality lens | - | - | open | - |
-| 152 | c1bfc62 refactor(dforge): drop the small-fix re-review skip | - | - | open | - |
-| 153 | 16ea57d docs(dforge): drop the stale implementer wording | - | - | open | - |
-| 154 | 461e2cc feat(dforge): plan tests as contracts | - | - | open | - |
-| 155 | 9176b2e test(dforge): add acceptance tests A1-A12 for measured-proposals | - | - | open | - |
-| 156 | 0fbdf11 fix(dforge): bound the commands a fixer runs | - | - | open | - |
-| 157 | 2cda77f fix(dforge): group every lang lens into code-quality | - | - | open | - |
-| 158 | 9b0e9c8 test(dforge): cover range lists and later creators | - | - | open | - |
-| 159 | 5b0edf2 test(dforge): rename checks for the removed skip | - | - | open | - |
-| 160 | e749351 docs(dforge): name test contracts in scoring docs | - | - | open | - |
-| 161 | fd1e039 fix(dforge): trim finishing under its size cap | - | - | open | - |
-| 162 | 5e04dac test(dforge): drop the stale --covered rereview case | - | - | open | - |
-| 163 | 70701f3 docs(dforge): say test contracts in the Rule S gate | - | - | open | - |
-| 164 | 4b19885 docs(dforge): route read-only rejections to the check | - | - | open | - |
-| 165 | b73a6ec test(dforge): simplify task-step rereview tests | - | - | open | - |
-| 166 | 9d649bb fix(dforge): hold a retry ending over running work | - | - | open | - |
-| 167 | b4f4690 feat(dforge): let a mid-plan question end the turn | - | - | open | - |
-| 168 | d3e735d feat(dforge): write a per-session state file | - | - | open | - |
-| 169 | bde86b0 feat(dforge): read the cockpit session state file | - | - | open | - |
-| 170 | 38b6011 feat(dforge): tell services and timers from work | - | - | open | - |
-| 171 | 5854428 feat(dforge): share the service list with the cockpit | - | - | open | - |
-| 172 | cf6550a fix(dforge): let services pass the in-flight check | - | - | open | - |
-| 173 | 48db0cc fix(dforge): route a stale clean review to re-review | - | - | open | - |
-| 174 | 9037384 fix(dforge): hold stops over services and stale reviews | - | - | open | - |
-| 175 | 20ed236 fix(dforge): read the window, never assume a million | - | - | open | - |
-| 176 | 95b93b9 fix(dforge): scope fast mode to its request or session | - | - | open | - |
-| 177 | 6606385 fix(dforge): scope cockpit fast mode and its nudge | - | - | open | - |
-| 178 | 8b24b72 fix(dforge): trust only this session's handoff in snapshots | - | - | open | - |
-| 179 | badc9e9 fix(dforge): let the UI proof hold stand down | - | - | open | - |
-| 180 | 1b13c36 fix(dforge): clean up only the files QA listed | - | - | open | - |
+| 145 | e0fdf31 fix(dforge): flag only template placeholders | - | - | done | port 5bff7bd; fail@parent pass@port |
+| 146 | d84da62 fix(dforge): stop task-step on a lost state write | - | - | done | port 826f1d6; fail@parent pass@port |
+| 147 | 1189ce4 fix(dforge): keep the judge key out of Codex shells | - | - | n/a | 5-only |
+| 148 | c9cb7c1 feat(dforge): require evidence in review findings | - | - | n/a | feature: Evidence lines required in review findings and the fixer's reproduction step |
+| 149 | a843d5b feat(dforge): check plan task paths and ranges | - | - | n/a | feature: plan-lint checks of task paths and line ranges |
+| 150 | 5423d0a feat(dforge): group code lenses into code-quality | - | - | n/a | feature: lens-route grouping of code lenses into code-quality |
+| 151 | dba4859 docs(dforge): describe the code-quality lens | - | - | n/a | docs-only: describes the code-quality lens group 5423d0a added |
+| 152 | c1bfc62 refactor(dforge): drop the small-fix re-review skip | - | - | n/a | feature: retires task-step's small-fix re-review skip, which dagents keeps |
+| 153 | 16ea57d docs(dforge): drop the stale implementer wording | - | - | n/a | docs-only: rewords writing-plans for dforge 5's session-only implementer; dagents keeps subagent implementers, so its wording stands |
+| 154 | 461e2cc feat(dforge): plan tests as contracts | - | - | n/a | feature: plan tests written as contracts in writing-plans and plan review |
+| 155 | 9176b2e test(dforge): add acceptance tests A1-A12 for measured-proposals | - | - | n/a | test-only: acceptance tests for dforge 5's measured-proposals spec |
+| 156 | 0fbdf11 fix(dforge): bound the commands a fixer runs | - | - | n/a | 5-only: bounds the fixer's Evidence-line reproduction c9cb7c1 added; dagents' final-review.md has no such step |
+| 157 | 2cda77f fix(dforge): group every lang lens into code-quality | - | - | n/a | 5-only: extends the code-quality grouping 5423d0a added to lens-route |
+| 158 | 9b0e9c8 test(dforge): cover range lists and later creators | - | - | n/a | test-only: plan-lint cases for the range checks a843d5b added |
+| 159 | 5b0edf2 test(dforge): rename checks for the removed skip | - | - | n/a | test-only: renames checks for the re-review skip c1bfc62 removed |
+| 160 | e749351 docs(dforge): name test contracts in scoring docs | - | - | n/a | docs-only: names test contracts (461e2cc) in the scoring docs |
+| 161 | fd1e039 fix(dforge): trim finishing under its size cap | - | - | n/a | docs-only: dagents' finishing SKILL.md is 19988 bytes, already under the 20000-byte cap this trim restores |
+| 162 | 5e04dac test(dforge): drop the stale --covered rereview case | - | - | n/a | test-only: drops a --covered rereview case for the skip c1bfc62 removed |
+| 163 | 70701f3 docs(dforge): say test contracts in the Rule S gate | - | - | n/a | docs-only: says test contracts (461e2cc) in ladder.md's Rule S gate |
+| 164 | 4b19885 docs(dforge): route read-only rejections to the check | - | - | n/a | 5-only: words the fixer's reproduction rule c9cb7c1 added; dagents' final-review.md has no such rule |
+| 165 | b73a6ec test(dforge): simplify task-step rereview tests | - | - | n/a | test-only: simplifies dforge 5's task-step rereview tests after c1bfc62 |
+| 166 | 9d649bb fix(dforge): hold a retry ending over running work | - | - | done | port 5a66ff4; fail@parent pass@port |
+| 167 | b4f4690 feat(dforge): let a mid-plan question end the turn | - | - | n/a | feature: the Task <N>: waiting ledger line lets a mid-plan question end the turn |
+| 168 | d3e735d feat(dforge): write a per-session state file | - | - | n/a | feature: the cockpit's per-session state file |
+| 169 | bde86b0 feat(dforge): read the cockpit session state file | - | - | n/a | feature: session-state.sh reads the cockpit's session state file d3e735d added |
+| 170 | 38b6011 feat(dforge): tell services and timers from work | - | - | n/a | feature: services.json and in-flight's service and timer tags |
+| 171 | 5854428 feat(dforge): share the service list with the cockpit | - | - | n/a | feature: shares the service list 38b6011 added with the cockpit |
+| 172 | cf6550a fix(dforge): let services pass the in-flight check | - | - | n/a | 5-only: lets the service tags 38b6011 added pass in-flight and next-step; dagents' in-flight has no service tag |
+| 173 | 48db0cc fix(dforge): route a stale clean review to re-review | - | - | done | port ca08b57; fail@parent pass@port |
+| 174 | 9037384 fix(dforge): hold stops over services and stale reviews | - | - | done | port 24efa52; fail@parent pass@port |
+| 175 | 20ed236 fix(dforge): read the window, never assume a million | - | - | n/a | 5-only: reads the window from the cockpit session state file (d3e735d, bde86b0) dagents lacks; its table fallback alone turns every unlisted model's budget unknown |
+| 176 | 95b93b9 fix(dforge): scope fast mode to its request or session | - | - | done | port 504a2aa; fail@parent pass@port |
+| 177 | 6606385 fix(dforge): scope cockpit fast mode and its nudge | - | - | done | port 85017a7; fail@parent pass@port |
+| 178 | 8b24b72 fix(dforge): trust only this session's handoff in snapshots | - | - | done | port e2dfad4; fail@parent pass@port |
+| 179 | badc9e9 fix(dforge): let the UI proof hold stand down | - | - | done | port f0193a4; fail@parent pass@port |
+| 180 | 1b13c36 fix(dforge): clean up only the files QA listed | - | - | done | port f29fabf; fail@parent pass@port |
 | 181 | bd6ab26 fix(dforge): keep QA files when carried is unread | - | - | open | - |
 | 182 | 37e9bfa fix(dforge): keep amendments beside the ledger | - | - | open | - |
 | 183 | efac8da fix(dforge): refuse a plan whose amendments went missing | - | - | open | - |
