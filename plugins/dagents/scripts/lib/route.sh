@@ -157,7 +157,7 @@ route_rows() {
     plan)
       [ -n "$target_path" ] || target_path=$(dagents_resolve "$ROUTE_TARGET")
       target_exec=$(plan_header_line "$target_path" Execution)
-      if [ -n "$(plan_ledger "$target_path")" ]; then
+      if plan_ledger_any "$ROUTE_ROOT" "$target_path" >/dev/null; then
         ROUTE_ACTION="Resume \`$ROUTE_TARGET\` with dagents:resume-execution."
       else
         ROUTE_ACTION="Continue \`$ROUTE_TARGET\` with dagents:$(execution_skill "$target_exec")."

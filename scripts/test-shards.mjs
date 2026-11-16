@@ -150,6 +150,7 @@ export const windowsSeconds = {
   'plugins/dagents/tests/lock.test.sh': 10,
   'plugins/dagents/tests/native-routing.test.sh': 10,
   'plugins/dagents/tests/next-step.test.sh': 500,
+  'plugins/dagents/tests/next-step-print.test.sh': 150,
   'plugins/dagents/tests/plan-amend.test.sh': 390,
   'plugins/dagents/tests/plan-lib.test.sh': 43,
   'plugins/dagents/tests/plan-lint.test.sh': { one: 620, two: 660 },

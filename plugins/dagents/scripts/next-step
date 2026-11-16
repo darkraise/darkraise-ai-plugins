@@ -9,9 +9,11 @@
 # here rather than remembered by the model: small executors reliably forget to
 # say it, and a hand-written handoff goes stale the moment work moves on.
 #
-# Usage: next-step [--host claude|codex] [--complete|--kept] PLAN_FILE
-#        next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION
-#        next-step [--host claude|codex] --adhoc --phase design|build --next ACTION
+# Usage: next-step [--host claude|codex] [--print] [--complete|--kept] PLAN_FILE
+#        next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION
+#        next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION
+#   --print     compute and print the block only: write, create and delete
+#               nothing, and skip the background-work check.
 #   --complete  the plan is finished and its branch integrated; the ledger may
 #               already be deleted. Replaces latest.md wholesale.
 #   --kept      finishing kept the plan's branch as-is: integration is still
@@ -31,9 +33,13 @@
 #   --host      which client the next session launches; default claude. A plan
 #               states its own host in its header, so the flag serves the paths
 #               that have no plan to read.
+# latest.md's Next session section ends with a marker line the printed block
+# never carries, naming what the block was computed from:
+#   <!-- next-step: kind=<kind> [branch=<name>] done=<n> closed=<n> subject=<name or -> at=<epoch> -->
 # Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
 #       latest.md could not be written; 5 background work this session started
-#       is still running (scripts/in-flight): nothing printed or written.
+#       is still running (scripts/in-flight): nothing printed or written
+#       (never under --print).
 set -euo pipefail
 
 # Failures print on stdout as well as stderr. A session that surfaces only
@@ -45,18 +51,19 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--host claude|codex] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] --adhoc --phase design|build --next ACTION"; }
+usage() { fail 2 "usage: next-step [--host claude|codex] [--print] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/route.sh"
 
-# --host is pulled out wherever it sits so the remaining arguments keep their
-# strict positional contract.
-host=claude
+# --host and --print are pulled out wherever they sit so the remaining
+# arguments keep their strict positional contract.
+host=claude print_only=0
 hostless=()
 while [ $# -gt 0 ]; do
   case $1 in
+    --print) print_only=1; shift ;;
     --host)
       [ $# -ge 2 ] || usage
       case $2 in claude|codex) host=$2 ;; *) usage ;; esac
@@ -107,6 +114,18 @@ plan_finished() {
     grep -qF "\`$s\`" "$f" && return 0
   done < <(dagents_name_spellings "$name")
   return 1
+}
+
+# handoff_counts ROOT — "<done> <closed>": the plan entries of completed.md
+# and the roadmap's closed milestones, read from the files alone so every
+# write and every recompute can afford it.
+handoff_counts() {
+  local index map done_n=0 closed_n=0
+  index="$(dagents_docs_root "$1")/plans/completed.md"
+  [ ! -f "$index" ] || done_n=$(tr -d '\r' < "$index" | grep -cE '`[^`]+\.md`' || true)
+  map=$(roadmap_file "$1")
+  [ -z "$map" ] || closed_n=$(roadmap_rows "$map" | awk -F'\t' '$5 == "closed"' | grep -c . || true)
+  printf '%s %s\n' "$done_n" "$closed_n"
 }
 
 # _plan_roots ROOT — "<root>\t<name prefix>" for each place a plan name can be
@@ -247,21 +266,24 @@ else
   launch_cmd=$(execution_launch "$execution")
   skill=$(execution_skill "$execution")
 
+  # completed.md records the outcome, so an indexed plan is answered as
+  # complete whatever ledger is left behind or missing.
+  if [ "$complete" -eq 0 ] && [ "$kept" -eq 0 ] && plan_finished "$root" "$rel"; then complete=1; fi
+
   ledger_file="$(dagents_ledger_dir "$slug")/progress.md"
+  ledger_root=$root
   ledger_note="no ledger at \`$ledger_file\`"
   ledger_text=""
   done_tasks=""
   blocked_tasks=""
   has_ledger=0
-  if [ "$complete" -eq 0 ] && [ "$kept" -eq 0 ] && [ -f "$ledger_file" ]; then
-    ledger_text=$(tr -d '\r' < "$ledger_file")
+  if [ "$complete" -eq 0 ] && [ "$kept" -eq 0 ]; then
     # The identity line may carry the path as given on the command line: relative
-    # to the checkout, absolute, or in Windows form. Compare resolved paths.
-    ledger_plan_path=$(ledger_plan "$ledger_file")
-    if command -v cygpath >/dev/null 2>&1 && [ -n "$ledger_plan_path" ]; then
-      ledger_plan_path=$(cygpath -m "$ledger_plan_path" 2>/dev/null || printf '%s' "$ledger_plan_path")
-    fi
-    if [ -n "$ledger_plan_path" ] && [ "$(dagents_name_key "$(dagents_name "$ledger_plan_path")")" = "$(dagents_name_key "$rel")" ]; then
+    # to the checkout, absolute, or in Windows form; plan_ledger_any compares
+    # resolved names, here first and then in every worktree.
+    if found=$(plan_ledger_any "$root" "$plan"); then
+      ledger_file=${found%%$'\t'*} ledger_root=${found#*$'\t'}
+      ledger_text=$(tr -d '\r' < "$ledger_file")
       has_ledger=1
       ledger_note="ledger \`$ledger_file\`"
       done_tasks=$(ledger_done "$ledger_file")
@@ -282,7 +304,7 @@ else
           printf 'next-step: warning: the ledger ends on an assigned line for Task %s. If the run it names is still going, wait for it or stop it and record a Ruling before handing off (dagents:handoff step 0).\n' "${BASH_REMATCH[1]}" >&2
         fi
       fi
-    else
+    elif [ -f "$ledger_file" ]; then
       ledger_note="the ledger at \`$ledger_file\` belongs to another plan and is ignored"
     fi
   fi
@@ -504,7 +526,7 @@ else
       [ -z "$first_open" ] || next_line="$next_line Dispatch Task $first_open ($open_title) only once the group is clean."
     elif [ -z "$first_open" ]; then
       review_state=none
-      [ "$has_ledger" -eq 0 ] || review_state=$(plan_final_review_state "$ledger_file" "$root")
+      [ "$has_ledger" -eq 0 ] || review_state=$(plan_final_review_state "$ledger_file" "$ledger_root")
       case $review_state in
         current)
           status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
@@ -552,8 +574,8 @@ else
     else
       prompt="Continue \`$rel\` with dagents:$skill. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task $first_open ($open_title)."
     fi
-    if [ "$root" != "$primary" ]; then
-      prompt="$prompt First enter the existing worktree \`$root\`."
+    if [ "$ledger_root" != "$primary" ]; then
+      prompt="$prompt First enter the existing worktree \`$ledger_root\`."
     fi
     if [ "$has_ledger" -eq 1 ]; then
       prompt="$prompt Progress ledger: \`$ledger_file\` — trust its \`Task N: complete\` lines."
@@ -564,7 +586,8 @@ fi
 # A block printed over running work invites ending the session it would die
 # with, so nothing is printed while this session still has background work
 # listed. Without a transcript (Codex, tests) there is nothing to check.
-if running=$(bash "$(cd "$(dirname "$0")" && pwd)/in-flight" 2>/dev/null); then :; else
+if [ "$print_only" -eq 1 ]; then :
+elif running=$(bash "$(cd "$(dirname "$0")" && pwd)/in-flight" 2>/dev/null); then :; else
   if [ $? -eq 1 ]; then
     printf '%s\n' "$running"
     fail 5 "not printing the next-step block while background work runs; resolve the list above, then run next-step again"
@@ -583,6 +606,7 @@ block=$(
   fi
 )
 printf '%s\n' "$block"
+[ "$print_only" -eq 0 ] || exit 0
 
 # The no-plan finish record has done its job once finishing has an outcome;
 # left behind, the next unplanned finish would act on it without asking.
@@ -594,6 +618,14 @@ fi
 
 handoff=$(dagents_latest_file)
 today=$(date -u +%Y-%m-%d)
+if [ "$adhoc" -eq 1 ]; then marker_kind=adhoc marker_subject=-
+elif [ "$draft" -eq 1 ]; then marker_kind=draft marker_subject=$rel
+elif [ "$kept" -eq 1 ]; then marker_kind="kept branch=${branch##* }" marker_subject=$rel
+elif [ "$complete" -eq 1 ]; then marker_kind=complete marker_subject=$rel
+else marker_kind=plan marker_subject=$rel
+fi
+read -r marker_done marker_closed < <(handoff_counts "$root")
+marker="<!-- next-step: kind=$marker_kind done=$marker_done closed=$marker_closed subject=$marker_subject at=$(date +%s) -->"
 # Read, merged and replaced under the handoff's lock, so a concurrent writer's
 # notes are never overwritten with the copy read before them.
 write_handoff() {
@@ -601,10 +633,10 @@ write_handoff() {
   case $handoff in */.dagents/handoff/latest.md) dagents_state_ignore "${handoff%/.dagents/handoff/latest.md}" ;; esac
   tmp=$(mktemp) || return 1
   if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ ! -f "$handoff" ]; then
-    printf '# Handoff — %s\n\n%s\n' "$today" "$block" > "$tmp" || status=1
+    printf '# Handoff — %s\n\n%s\n%s\n' "$today" "$block" "$marker" > "$tmp" || status=1
   else
     # Replace only the Next session section; the rest is the session's own notes.
-    BLOCK="$block" awk '
+    BLOCK="$block"$'\n'"$marker" awk '
       /^## Next session[ \t\r]*$/ { print ENVIRON["BLOCK"]; skip = 1; found = 1; next }
       skip && /^## / { skip = 0; print "" }
       !skip { print }
