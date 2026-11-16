@@ -256,21 +256,24 @@ else
 
   launch_cmd=$(execution_launch "$execution")
 
+  # completed.md records the outcome, so an indexed plan is answered as
+  # complete whatever ledger is left behind or missing.
+  if [ "$complete" -eq 0 ] && [ "$kept" -eq 0 ] && plan_finished "$root" "$rel"; then complete=1; fi
+
   ledger_file="$(dforge_ledger_dir "$slug")/progress.md"
+  ledger_root=$root
   ledger_note="no ledger at \`$ledger_file\`"
   ledger_text=""
   done_tasks=""
   blocked_tasks=""
   has_ledger=0
-  if [ "$complete" -eq 0 ] && [ "$kept" -eq 0 ] && [ -f "$ledger_file" ]; then
-    ledger_text=$(tr -d '\r' < "$ledger_file")
+  if [ "$complete" -eq 0 ] && [ "$kept" -eq 0 ]; then
     # The identity line may carry the path as given on the command line: relative
-    # to the checkout, absolute, or in Windows form. Compare resolved paths.
-    ledger_plan_path=$(ledger_plan "$ledger_file")
-    if command -v cygpath >/dev/null 2>&1 && [ -n "$ledger_plan_path" ]; then
-      ledger_plan_path=$(cygpath -m "$ledger_plan_path" 2>/dev/null || printf '%s' "$ledger_plan_path")
-    fi
-    if [ -n "$ledger_plan_path" ] && [ "$(dforge_name_key "$(dforge_name "$ledger_plan_path")")" = "$(dforge_name_key "$rel")" ]; then
+    # to the checkout, absolute, or in Windows form; plan_ledger_any compares
+    # resolved names, here first and then in every worktree.
+    if found=$(plan_ledger_any "$root" "$plan"); then
+      ledger_file=${found%%$'\t'*} ledger_root=${found#*$'\t'}
+      ledger_text=$(tr -d '\r' < "$ledger_file")
       has_ledger=1
       ledger_note="ledger \`$ledger_file\`"
       done_tasks=$(ledger_done "$ledger_file")
@@ -283,7 +286,7 @@ else
          && [ "${BASH_REMATCH[2]}" != inline ]; then
         printf 'next-step: warning: the ledger ends on an assigned line for Task %s. If the run it names is still going, wait for it or stop it and record a Ruling before handing off (dforge:handoff step 0).\n' "${BASH_REMATCH[1]}" >&2
       fi
-    else
+    elif [ -f "$ledger_file" ]; then
       ledger_note="the ledger at \`$ledger_file\` belongs to another plan and is ignored"
     fi
   fi
@@ -422,7 +425,7 @@ else
       launch=0
     elif [ -z "$first_open" ]; then
       review_state=none
-      [ "$has_ledger" -eq 0 ] || review_state=$(plan_final_review_state "$ledger_file" "$root")
+      [ "$has_ledger" -eq 0 ] || review_state=$(plan_final_review_state "$ledger_file" "$ledger_root")
       case $review_state in
         current)
           status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
@@ -458,8 +461,8 @@ else
     else
       prompt="Continue \`$rel\` with dforge:executing-plans. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task $first_open ($open_title)."
     fi
-    if [ "$root" != "$primary" ]; then
-      prompt="$prompt First enter the existing worktree \`$root\`."
+    if [ "$ledger_root" != "$primary" ]; then
+      prompt="$prompt First enter the existing worktree \`$ledger_root\`."
     fi
     if [ "$has_ledger" -eq 1 ]; then
       prompt="$prompt Progress ledger: \`$ledger_file\` — trust its \`Task N: complete\` lines."

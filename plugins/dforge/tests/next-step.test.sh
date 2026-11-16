@@ -194,6 +194,8 @@ printf '{"action":"pr"}\n' > "$REPO/.dforge/sdd/finish.json"
 run "$WT" --adhoc --phase build --next "Ship the fix"
 check "worktree: adhoc clears the no-plan record finish-choice wrote there" "$([ -e "$WT/.dforge/sdd/finish.json" ] && echo kept || echo gone)" "gone"
 check "worktree: adhoc clears the primary's no-plan record too" "$([ -e "$REPO/.dforge/sdd/finish.json" ] && echo kept || echo gone)" "gone"
+# The primary finds a worktree's ledger, so the cases below start from none.
+rm -rf "$WT/.dforge/sdd/2026-01-01-demo"
 
 # --- handoff write failure still prints the block ---
 rm -rf "$REPO/.dforge/handoff"

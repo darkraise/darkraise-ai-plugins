@@ -189,5 +189,19 @@ has "no roadmap: built rows fall through to the Program-line branches" "$NEXT" "
 lacks "no roadmap: built rows are not listed as open" "$NEXT" "Register rows still open"
 lacks "no roadmap: built rows are not planned afresh" "$NEXT" "write its plan"
 
+# --- a plan row resumes a worktree ledger ---
+fixture
+plan 2026-09-01-p1 "$X"
+plan 2026-10-05-live "$X"
+completed 2026-09-01-p1
+register r "$X" "1|Do it|docs/dforge/plans/2026-10-05-live.md|doing"
+git -C "$R" add -A >/dev/null && git -C "$R" commit -qm fixture >/dev/null
+git -C "$R" worktree add -q "$TMP/wt$n" -b feat
+mkdir -p "$TMP/wt$n/.dforge/sdd/2026-10-05-live"
+printf '# SDD ledger — plan: docs/dforge/plans/2026-10-05-live.md\nTask 1: implementer inline (assigned; base abc1234)\n' \
+  > "$TMP/wt$n/.dforge/sdd/2026-10-05-live/progress.md"
+complete 2026-09-01-p1
+has "worktree ledger: the plan row resumes" "$NEXT" "Resume \`docs/dforge/plans/2026-10-05-live.md\` with dforge:resume-execution."
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

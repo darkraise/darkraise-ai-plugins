@@ -271,6 +271,54 @@ plan_locate() {
 # names PLAN; nothing otherwise. A stale ledger under the same slug is ignored.
 # Plan and identity are compared as name keys, so a ledger in darkmem can name a
 # plan in the checkout and the reverse, under either docs prefix.
+# plan_ledger_any ROOT PLAN — "<ledger>\t<checkout>" for the first progress.md
+# whose identity line names PLAN: this checkout's ledger directory first, then
+# every worktree's (dforge_ledger_files; a mirror ledger's checkout is the
+# worktree holding its state directory). Status 1, nothing printed, when none.
+plan_ledger_any() {
+  local root=$1 want slug file wt
+  dforge_stores_init "$root"
+  want=$(dforge_name_key "$(dforge_name "$2" "$root")")
+  slug=$(basename "$2" .md)
+  file="$(dforge_ledger_dir "$slug" "$root")/progress.md"
+  if _plan_ledger_names "$file" "$root" "$want"; then printf '%s\t%s\n' "$file" "$root"; return 0; fi
+  while IFS=$'\t' read -r file wt; do
+    [ -n "$file" ] || continue
+    [ "$wt" != mirror ] || wt=$(_plan_ledger_tree "$root" "$slug")
+    _plan_ledger_names "$file" "$wt" "$want" || continue
+    printf '%s\t%s\n' "$file" "$wt"
+    return 0
+  done < <(dforge_ledger_files "$root")
+  return 1
+}
+
+# _plan_ledger_names LEDGER CHECKOUT KEY — true when LEDGER's identity line
+# names the plan whose name key is KEY. An absolute path in another checkout is
+# named from that checkout's top by prefix: naming it through the store roots
+# would re-key them to that checkout for the rest of the caller.
+_plan_ledger_names() {
+  local named
+  [ -f "$1" ] || return 1
+  named=$(ledger_plan "$1")
+  [ -n "$named" ] || return 1
+  if command -v cygpath >/dev/null 2>&1; then
+    named=$(cygpath -m "$named" 2>/dev/null || printf '%s' "$named")
+  fi
+  if [ "$2" != "$_DFORGE_TOP" ]; then
+    case $named in "$2"/*) named=${named#"$2"/} ;; esac
+  fi
+  [ "$(dforge_name_key "$(dforge_name "$named")")" = "$3" ]
+}
+
+# _plan_ledger_tree ROOT SLUG — the worktree holding <state>/sdd/SLUG, else ROOT.
+_plan_ledger_tree() {
+  local wt
+  while IFS= read -r wt; do
+    [ -d "$(dforge_dir state "$wt")/sdd/$2" ] && { printf '%s\n' "$wt"; return 0; }
+  done < <(git -C "$1" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
+  printf '%s\n' "$1"
+}
+
 plan_ledger() {
   local ctx want file named
   ctx=$(_plan_ctx "$1")

@@ -157,7 +157,7 @@ route_rows() {
     plan)
       [ -n "$target_path" ] || target_path=$(dforge_resolve "$ROUTE_TARGET")
       target_exec=$(plan_header_line "$target_path" Execution)
-      if [ -n "$(plan_ledger "$target_path")" ]; then
+      if plan_ledger_any "$ROUTE_ROOT" "$target_path" >/dev/null; then
         ROUTE_ACTION="Resume \`$ROUTE_TARGET\` with dforge:resume-execution."
       else
         ROUTE_ACTION="Continue \`$ROUTE_TARGET\` with dforge:executing-plans."

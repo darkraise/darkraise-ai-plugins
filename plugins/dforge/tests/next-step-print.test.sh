@@ -121,6 +121,40 @@ for mode in plan complete kept draft adhoc; do
   check "marker $mode: one marker in the file" "$(grep -c '^<!-- next-step:' "$LATEST")" 1
 done
 
+# --- an indexed plan is answered as complete ---
+INDEXED=docs/dforge/plans/2026-10-01-a.md
+sed 's/^# Demo$/# A/' "$REPO/$PLAN" > "$REPO/$INDEXED"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm indexed
+plain=$(cd "$REPO" && timeout 60 bash "$SCRIPT" --print "$INDEXED" 2>&1 | grep '^\*\*Next:\*\*')
+completed_next=$(cd "$REPO" && timeout 60 bash "$SCRIPT" --print --complete "$INDEXED" 2>&1 | grep '^\*\*Next:\*\*')
+check "indexed: a plain run answers as --complete does" "$plain" "$completed_next"
+lacks "indexed: an indexed plan does not start at Task 1" "$plain" "Start at Task 1"
+
+# --- a ledger in a linked worktree is found from the primary ---
+THREE=docs/dforge/plans/2026-11-02-three.md
+{
+  printf '# Three\n\n**Spec:** docs/dforge/specs/demo.md\n'
+  printf '**Execution:** inline — `claude --model sonnet --effort high` — small\n\n'
+  printf '### Task 1: One\n\nBody.\n\n### Task 2: Two\n\nBody.\n\n### Task 3: Three\n\nBody.\n'
+} > "$REPO/$THREE"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm three
+git -C "$REPO" worktree add -q "$TMP/wt" -b feat
+WT=$(git -C "$TMP/wt" rev-parse --show-toplevel)
+WLEDGER="$TMP/wt/.dforge/sdd/2026-11-02-three/progress.md"
+mkdir -p "$(dirname "$WLEDGER")"
+printf '# SDD ledger — plan: %s\nTask 1: complete (commits a..b, unreviewed)\n' "$THREE" > "$WLEDGER"
+out=$(cd "$REPO" && timeout 60 bash "$SCRIPT" --print "$THREE" 2>&1)
+has "worktree ledger: the tasks done are counted" "$out" "1 of 3 tasks complete"
+has "worktree ledger: the next task resumes" "$out" "**Next:** Resume at Task 2"
+has "worktree ledger: the prompt enters the worktree" "$out" "First enter the existing worktree \`$WT\`"
+printf 'x\n' > "$TMP/wt/x.txt"
+git -C "$TMP/wt" add x.txt && git -C "$TMP/wt" commit -qm work
+whead=$(git -C "$TMP/wt" rev-parse --short HEAD)
+printf 'Task 2: complete (commits a..b, unreviewed)\nTask 3: complete (commits a..b, unreviewed)\nFinal review: clean (commits abc1234..%s)\n' "$whead" >> "$WLEDGER"
+out=$(cd "$REPO" && timeout 60 bash "$SCRIPT" --print "$THREE" 2>&1)
+has "worktree ledger: the clean review is read against the worktree" "$out" "the final review is clean"
+lacks "worktree ledger: the reviewed head is not taken as rewritten" "$out" "no longer in the branch history"
+
 # --- the auto run still reads the first prompt ---
 out=$(cd "$REPO" && timeout 60 bash "$SCRIPT" "$PLAN" 2>&1)
 . "$HERE/../scripts/lib/auto-run.sh"
