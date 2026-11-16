@@ -24,6 +24,7 @@ import {
   accountKey,
   attributionIn,
   autoLimitFor,
+  activeRunOwner,
   autoRunFor,
   agentGroups,
   bar,
@@ -54,6 +55,7 @@ import {
   limitForecast,
   limitLabel,
   modelName,
+  namedPlan,
   nowLine,
   parseFinish,
   parseLedger,
@@ -256,6 +258,8 @@ const isFastMode = atom({ plugin: 'dagents', key: 'isFastMode' } as const, false
 const isFastSession = atom({ plugin: 'dagents', key: 'isFastSession' } as const, false)
 const isRunSession = atom({ plugin: 'dagents', key: 'isRunSession' } as const, false)
 const autoRun = atom({ plugin: 'dagents', key: 'autoRun' } as const, null)
+const autoRunLeft = atom({ plugin: 'dagents', key: 'autoRunLeft' } as const, false)
+const boundPlan = atom({ plugin: 'dagents', key: 'boundPlan' } as const, null)
 const alerted = atom({ plugin: 'dagents', key: 'alerted' } as const, [])
 const trend = atom({ plugin: 'dagents', key: 'trend' } as const, [])
 const view = atom({ plugin: 'dagents', key: 'view' } as const, 'cockpit')
@@ -815,9 +819,18 @@ export const register: Register = on => {
       // A shell cd moves it too, as using-git-worktrees' fallback does.
       const isMove = ran.deny === undefined && !ran.isError && (WORKTREE_TOOLS.includes(tool) || (tool === 'Bash' && (await hasMoved($))))
       if (isMove) await readPlace($)
+      // The Run card follows the plan this session last named to a plan script.
+      let isRebound = false
+      if (tool === 'Bash' && ran.deny === undefined && !ran.isError) {
+        const named = namedPlan(String((e as { command?: unknown }).command ?? ''))
+        if (named !== null && (await read($, boundPlan)) !== named) {
+          await update($, boundPlan, () => named)
+          isRebound = true
+        }
+      }
       // The controller writes its ledger with its own tool calls; read it
       // before the budget, which measures a plan's tail by it.
-      if (isMove || touchesRun(e)) await readRun($)
+      if (isMove || isRebound || touchesRun(e)) await readRun($)
       await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
     }
 
@@ -933,9 +946,15 @@ export const register: Register = on => {
       </Box>
     )
     const autoNow = await read($, autoRun)
+    const isRunLeft = !autoNow?.active && (await read($, autoRunLeft))
     const isDense = o.density === 'dense'
     const actions = (
       <Box key="actions" flexDirection="row" flexWrap="wrap" columnGap={1}>
+        {isRunLeft && (
+          <Text key="auto-left" color="yellow">
+            auto run left by a closed session — run scripts/auto-run stop --stale
+          </Text>
+        )}
         {autoNow?.active && (
           <Text key="auto-line" color="magenta">
             {`Auto run · ${autoNow.phase} · ${autoNow.regime} · ${autoNow.compactions} ${autoNow.compactions === 1 ? 'compaction' : 'compactions'} · ${autoNow.resumes} ${autoNow.resumes === 1 ? 'resume' : 'resumes'}`}
@@ -2569,6 +2588,8 @@ const S = {
   runKey: '',
   runPlan: null as string | null,
   runReads: 0,
+  // The ledger directory's workspaces and its modification time when listed.
+  ledgerDirs: { base: '', at: null as number | null, names: [] as string[] },
   // Discord messages go out one at a time; the tail of the queue.
   outbox: Promise.resolve() as Promise<void>,
 }
@@ -2783,14 +2804,38 @@ async function endWait($: EngineInterface, id: string, outcome: string) {
   if (kind === 'background') await settleBackground($)
 }
 
-// The auto run state file in the primary checkout, as the run bound to this
-// session; null when there is none or another session owns it.
-async function readAutoRun($: EngineInterface): Promise<CockpitAutoRun | null> {
+// The auto run state file in the primary checkout; null when there is none.
+async function autoRunText($: EngineInterface): Promise<string | null> {
   const root = S.where.primary ?? (await read($, place))?.root ?? null
   if (root === null) return null
   const text = await $.fs.read(`${root}/.dagents/sdd/auto-run.json`).catch(() => null)
-  if (typeof text !== 'string') return null
-  return autoRunFor(text, await $.session.id())
+  return typeof text === 'string' ? text : null
+}
+
+// The auto run state file's run, as the run bound to this session; null when
+// there is none or another session owns it.
+async function readAutoRun($: EngineInterface): Promise<CockpitAutoRun | null> {
+  const text = await autoRunText($)
+  return text === null ? null : autoRunFor(text, await $.session.id())
+}
+
+// Whether a session's cockpit still beats, by the heartbeat beat() writes,
+// as ar_is_stale judges it (scripts/lib/auto-run.sh, AR_BEAT_SECONDS). The
+// engine gives a mod no process id or signal API, so the beat's age is all
+// there is. A beat up to BEAT_SECONDS ahead is clock skew and reads as now.
+const BEAT_SECONDS = 180
+async function isSessionAlive($: EngineInterface, sid: string): Promise<boolean> {
+  try {
+    const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
+    if (!home) return false
+    const text = await $.fs.read(`${home.replace(/[\\/]+$/, '')}/.claude/dagents/sessions/cockpit/${sid.replace(/[^A-Za-z0-9]/g, '-')}`)
+    const first = String(text).split(/\r?\n/)[0]?.trim() ?? ''
+    if (!/^[0-9]+$/.test(first)) return false
+    const age = Math.floor((await $.clock.now()) / 1000) - Number(first)
+    return age >= -BEAT_SECONDS && age <= BEAT_SECONDS
+  } catch {
+    return false
+  }
 }
 
 // Runs scripts/auto-run as `sessionId`; resolves its exit code, 1 when it could not run.
@@ -2802,7 +2847,12 @@ async function autoRunCall($: EngineInterface, sessionId: string, args: string[]
 // Keeps the pane's copy of the bound run, and says once on Discord when the
 // run stopped with a reason.
 async function trackAutoRun($: EngineInterface) {
-  const now = await readAutoRun($)
+  const text = await autoRunText($)
+  const id = await $.session.id()
+  const now = text === null ? null : autoRunFor(text, id)
+  const owner = now === null && text !== null ? activeRunOwner(text) : null
+  const isLeft = owner !== null && owner !== id && !(await isSessionAlive($, owner))
+  if ((await read($, autoRunLeft)) !== isLeft) await update($, autoRunLeft, () => isLeft)
   const before = await read($, autoRun)
   if (JSON.stringify(now) === JSON.stringify(before)) return
   await update($, autoRun, () => now)
@@ -3202,7 +3252,13 @@ async function finishPath($: EngineInterface, checkouts: readonly string[], slug
 // names only when theirs do: readRun runs at every turn. A ruling handoff is
 // withdrawn once every register it names is readable and fully resolved, since
 // nothing rewrites the note when the last row closes.
-async function readResumeOffer($: EngineInterface, latest: string, at: number | null, root: string) {
+async function readResumeOffer(
+  $: EngineInterface,
+  latest: string,
+  at: number | null,
+  docs: CockpitRoots['docs'] | null,
+  places: readonly { root: string; docsDir: string }[],
+) {
   const key = `${latest}\t${at}`
   if (S.offerRead !== key) {
     S.offerRead = key
@@ -3211,7 +3267,20 @@ async function readResumeOffer($: EngineInterface, latest: string, at: number | 
     S.offerRegisters = null
   }
   const found = S.offerFound
-  const registers = (found?.prompt == null ? [] : promptRegisters(found.prompt)).map(path => (/^(?:[A-Za-z]:)?[\\/]/.test(path) ? path : `${root}/${path}`))
+  // A register name resolves as a plan name does: into the darkmem docs
+  // mirror while documents live there, else the first checkout holding it.
+  const registers: string[] = []
+  for (const name of found?.prompt == null ? [] : promptRegisters(found.prompt)) {
+    const candidates = planCandidates(name, docs, places)
+    let chosen = candidates[0] ?? name
+    for (const candidate of candidates) {
+      if ((await $.fs.stat(candidate).catch(() => null))?.kind === 'file') {
+        chosen = candidate
+        break
+      }
+    }
+    registers.push(chosen)
+  }
   const stats = await Promise.all(registers.map(path => $.fs.stat(path).catch(() => null)))
   const registerKey = stats.map(info => (info?.kind === 'file' ? info.mtimeMs : '-')).join('\t')
   if (S.offerRegisters === registerKey) return
@@ -3256,17 +3325,21 @@ async function readRun($: EngineInterface) {
   const latest = roots?.progress.latestFile ?? `${state}/handoff/latest.md`
   S.latestName = roots?.progress.store === 'darkmem' ? latest : null
   const checkouts = [...new Set([session, root].filter((dir): dir is string => dir !== null))]
+  const places = checkouts.map(dir => ({ root: dir, docsDir: `${dir}/docs/dagents` }))
   try {
     const handoff = await $.fs.stat(latest).catch(() => null)
     const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
-    await readResumeOffer($, latest, handoffTime, root)
-    const base = roots?.progress.ledgerRoot ?? `${session ?? root}/.dagents/sdd`
-    const entries = await $.fs.list(base).catch(() => [])
+    await readResumeOffer($, latest, handoffTime, roots?.docs ?? null, places)
+    const local = `${session ?? root}/.dagents/sdd`
+    const base = roots?.progress.ledgerRoot ?? local
+    const bound = await read($, boundPlan)
     let newest: { slug: string; path: string; at: number } | null = null
-    for (const entry of entries) {
-      if (entry.kind !== 'dir') continue
-      const info = await $.fs.stat(`${base}/${entry.name}/progress.md`).catch(() => null)
-      if (info?.kind === 'file' && (newest === null || info.mtimeMs > newest.at)) newest = { slug: entry.name, path: `${base}/${entry.name}/progress.md`, at: info.mtimeMs }
+    if (bound !== null) newest = await boundLedger($, base, local, bound)
+    else {
+      for (const name of await ledgerDirs($, base)) {
+        const info = await $.fs.stat(`${base}/${name}/progress.md`).catch(() => null)
+        if (info?.kind === 'file' && (newest === null || info.mtimeMs > newest.at)) newest = { slug: name, path: `${base}/${name}/progress.md`, at: info.mtimeMs }
+      }
     }
     await readFinish($, await finishPath($, checkouts, newest?.slug ?? null))
     const startedAt = (await read($, usage))?.startedAt ?? (await $.session.usage().catch(() => null))?.startedAt ?? 0
@@ -3289,8 +3362,6 @@ async function readRun($: EngineInterface) {
     let titles: { n: number; title: string }[] = []
     let planPath: string | null = null
     if (ledger.plan !== null) {
-      const places: { root: string; docsDir: string }[] = []
-      for (const dir of checkouts) places.push({ root: dir, docsDir: `${dir}/docs/dagents` })
       for (const candidate of planCandidates(ledger.plan, roots?.docs ?? null, places)) {
         try {
           titles = planTasks(String(await $.fs.read(candidate)))
@@ -3337,6 +3408,32 @@ async function readRun($: EngineInterface) {
   } catch {
     // No readable ledger: the Plan card stays as it is.
   }
+}
+
+// The ledger of the plan this session named, in the workspace sdd-workspace
+// names for the plan file. While progress is darkmem every worktree shares the
+// mirror's ledgers and a plan's workspace is always local, so a ledger with no
+// workspace here is another session's (turn-end.sh's local-workspace test).
+async function boundLedger($: EngineInterface, base: string, local: string, plan: string): Promise<{ slug: string; path: string; at: number } | null> {
+  const slug = (plan.split(/[\\/]/).pop() ?? '').replace(/\.md$/, '')
+  if (slug === '') return null
+  if (base !== local && (await $.fs.stat(`${local}/${slug}`).catch(() => null))?.kind !== 'dir') return null
+  const path = `${base}/${slug}/progress.md`
+  const info = await $.fs.stat(path).catch(() => null)
+  return info?.kind === 'file' ? { slug, path, at: info.mtimeMs } : null
+}
+
+// The ledger directory's workspaces, listed again only when its modification
+// time changes or cannot be read. Appending to a ledger changes no
+// directory's time, so each progress.md is still stat'ed at every read.
+async function ledgerDirs($: EngineInterface, base: string): Promise<string[]> {
+  const info = await $.fs.stat(base).catch(() => null)
+  const at = info?.kind === 'dir' ? info.mtimeMs : null
+  if (at !== null && S.ledgerDirs.base === base && S.ledgerDirs.at === at) return S.ledgerDirs.names
+  const entries = await $.fs.list(base).catch(() => null)
+  const names = (entries ?? []).filter(entry => entry.kind === 'dir').map(entry => entry.name)
+  S.ledgerDirs = at !== null && entries !== null ? { base, at, names } : { base: '', at: null, names: [] }
+  return names
 }
 
 // The finish action dagents asked for before the run, from the run's

@@ -322,6 +322,10 @@ declare module 'claude-code' {
       isRunSession: boolean
       /** The auto run bound to this session, as last read; null without one. */
       autoRun: CockpitAutoRun | null
+      /** An active auto run another session owns and whose cockpit no longer beats: the pane names `auto-run stop --stale`. */
+      autoRunLeft: boolean
+      /** The plan file this session last named in a task-brief, task-step, task-close or next-step call; null before one. */
+      boundPlan: string | null
       /** The session id the cockpit last read every section for; '' when the id could not be read, null before the first read. */
       sessionRead: string | null
     }

@@ -1642,6 +1642,33 @@ export function autoRunFor(text: string, sessionId: string): CockpitAutoRun | nu
   }
 }
 
+/** The session that owns an active run in an auto-run state file; null when no run is active or the file does not parse. */
+export function activeRunOwner(text: string): string | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const s = parsed as Record<string, unknown>
+  return s.active === true && typeof s.session === 'string' && s.session !== '' ? s.session : null
+}
+
+/** The plan file the last task-brief, task-step, task-close or next-step call in a shell command names; null when none names one. */
+export function namedPlan(command: string): string | null {
+  let found: string | null = null
+  for (const match of command.matchAll(/scripts[\\/](?:task-brief|task-step|task-close|next-step)["']?((?:[ \t]+[^\s;&|]+)*)/g)) {
+    const word = (match[1] ?? '')
+      .trim()
+      .split(/\s+/)
+      .map(one => one.replace(/^["']|["']$/g, ''))
+      .find(one => one.endsWith('.md'))
+    if (word !== undefined) found = word
+  }
+  return found
+}
+
 /** The line an auto run's turn ends on, by the pending action it answers. */
 export const AUTO_SENTINELS: Readonly<Record<string, string>> = { compact: 'Auto run: compacting', clear: 'Auto run: clearing', switch: 'Auto run: switching' }
 
