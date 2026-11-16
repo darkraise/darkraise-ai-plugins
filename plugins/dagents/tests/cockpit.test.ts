@@ -7824,3 +7824,31 @@ describe('fast mode scope', () => {
     expect(notes.filter(text => /— handoff\./.test(text))).toEqual([])
   })
 })
+
+describe('saved-state honesty', () => {
+  test('a Claude-key save the engine drops is cleared and toasted', async ($, on) => {
+    const toasts: string[] = []
+    const clock = world(on, { tokens: 284_000, config: {}, toasts, runs: [], settings: { autoCompactWindow: 650_000 } })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'set-autoCompactWindow-more' })
+    await clock.advance(10_000)
+    expect(await ui.find({ type: 'Text', text: /^650k/ })).toBeDefined()
+    expect(toasts.filter(t => /autoCompactWindow .*did not stick/.test(t))).toHaveLength(1)
+  })
+
+  test('a skill-enforced key changed in the file mid-session adds the settings note', async ($, on) => {
+    const notes: string[] = []
+    const files: NonNullable<World['files']> = { [CONFIG]: { text: JSON.stringify({}), mtimeMs: 1 } }
+    const clock = world(on, { ...SIGNED_IN, files, notes })
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Skill', skill: 'dagents:executing-plans' })
+    files[CONFIG] = { text: JSON.stringify({ worktree: 'never' }), mtimeMs: 2 }
+    await clock.advance(10_000)
+    await $.turn.start({ text: 'next', turnId: 't2' })
+    expect(notes.some(n => /worktree/.test(n))).toBe(true)
+  })
+})

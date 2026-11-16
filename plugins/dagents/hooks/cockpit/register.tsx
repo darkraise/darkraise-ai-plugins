@@ -598,6 +598,7 @@ export const register: Register = on => {
     S.isMainTurn = true
     S.releaseTimer?.cancel()
     S.releaseTimer = null
+    await flushSettingNote($)
     const stamp = await $.clock.now()
     for (const [id, wait] of [...S.waits]) if (wait.agentId === null) await settleWait($, id, '⏹ Turn ended')
     await setActivity($, now => ({
@@ -3907,8 +3908,10 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
       const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dagents-config.mjs`, 'set', key, String(value)], { timeoutMs: 15_000 })
       if (ran.exitCode !== 0) throw new Error(ran.stderr.trim().replace(/^dagents-config: /, '') || `dagents-config exited ${ran.exitCode}`)
       // dagents-config removes a floored key saved as 0, so the user file then lacks it.
-      S.claudeSaved[key] = spec.floor !== undefined && value === 0 ? undefined : value
+      const saved = spec.floor !== undefined && value === 0 ? undefined : value
+      S.claudeSaved[key] = saved
       await applySettings($, file ?? {}, mtime)
+      void claudeReadBack($, key, saved)
       return true
     }
     if (path === null) throw new Error('no home directory is set')
@@ -4088,6 +4091,32 @@ async function pollTick($: EngineInterface) {
 }
 
 /** Puts the settings in force again when the file or the engine's settings changed; a file that is not a JSON object keeps the values in force. */
+// The engine can write its own settings over a save that lands right after
+// one of its own, so a Claude key is read back as restoreUserDefaults reads
+// the defaults. Unseen after the wait, the save is no longer shown as saved.
+// It runs apart from the press, which would otherwise wait out the polls.
+async function claudeReadBack($: EngineInterface, key: string, value: SettingValue | undefined) {
+  try {
+    let user: Record<string, unknown> | null = null
+    for (let waited = 0; ; waited += RESTORE_POLL_MS) {
+      user = (await $.settings.read({ source: 'user' }).catch(() => null)) as Record<string, unknown> | null
+      if (user !== null && user[key] === value) return
+      if (waited >= RESTORE_WAIT_MS) break
+      await $.clock.sleep(RESTORE_POLL_MS)
+    }
+    // An unreadable engine says nothing; a later save of the key owns the overlay.
+    if (user === null || !(key in S.claudeSaved) || S.claudeSaved[key] !== value) return
+    const engine = user[key]
+    delete S.claudeSaved[key]
+    const { path, mtime } = await configStamp($)
+    const file = path === null ? {} : await readSettingsFile($, path)
+    await applySettings($, file ?? {}, mtime)
+    $.ui.toast(`dagents: ${key} did not stick: the engine kept ${engine === undefined ? 'no value' : JSON.stringify(engine)}`)
+  } catch {
+    // The read-back is a courtesy: a failure leaves the save shown as saved.
+  }
+}
+
 async function rereadSettings($: EngineInterface) {
   const { path, mtime } = await configStamp($)
   const claude = await engineSettings($)
@@ -4101,7 +4130,11 @@ async function rereadSettings($: EngineInterface) {
     return
   }
   const before = (await live($)).layout
+  const was = ((await read($, settings)) ?? {}) as Record<string, SettingValue | undefined>
   await applySettings($, file, mtime)
+  // A skill-enforced key saved outside the pane reaches the session as a pane save does.
+  const values = ((await read($, settings)) ?? {}) as Record<string, SettingValue | undefined>
+  for (const [key, spec] of Object.entries(SCHEMA)) if (spec.enforcedBy === 'skill' && values[key] !== was[key] && values[key] !== undefined) S.changed[key] = values[key]
   await reseatPane($, before)
 }
 
