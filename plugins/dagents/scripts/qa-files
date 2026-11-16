@@ -78,11 +78,25 @@ if [ -f "$touched" ]; then
   done < "$touched"
 fi
 
-carried=()
-while IFS= read -r line; do
-  line=${line%$'\r'}
-  [ -n "$line" ] && carried+=("$line")
-done < <(bash "$HERE/auto-run" carried 2>/dev/null)
+carried=() blocked=0
+if out=$(bash "$HERE/auto-run" carried 2>/dev/null); then
+  while IFS= read -r line; do
+    line=${line%$'\r'}
+    [ -n "$line" ] && carried+=("$line")
+  done <<<"$out"
+else
+  # A failed read means nothing is carried only when no active run exists: a
+  # stopped run keeps its state file with active false. An active run bound to
+  # another session, an unparseable file or a missing jq could hide carried
+  # paths, so nothing is cleaned then.
+  . "$HERE/lib/auto-run.sh"
+  state=$(ar_path 2>/dev/null) || state=""
+  if [ -z "$state" ] || { [ -f "$state" ] \
+    && ! "${DAGENTS_JQ:-jq}" -e 'type == "object" and .active != true' < "$state" >/dev/null 2>&1; }; then
+    blocked=1
+    echo "qa-files: could not read the auto run's carried paths; nothing was cleaned" >&2
+  fi
+fi
 
 # remove_empty_parents PATH — rmdir each parent of PATH that is now empty, up
 # to (not including) the top level.
@@ -101,7 +115,8 @@ for i in "${!PATHS[@]}"; do
   has "$path" "${done_paths[@]+"${done_paths[@]}"}" && continue
   done_paths+=("$path")
   has "$path" "${old[@]+"${old[@]}"}" && continue
-  if has "$path" "${carried[@]+"${carried[@]}"}" || ! has "$path" "${listed[@]+"${listed[@]}"}"; then
+  if [ "$blocked" -eq 1 ] || has "$path" "${carried[@]+"${carried[@]}"}" \
+    || ! has "$path" "${listed[@]+"${listed[@]}"}"; then
     printf 'qa-files: left %s\n' "$path"
     continue
   fi

@@ -46,6 +46,18 @@ printf '{"active":true,"session":"s-qa","carried":["carried.txt"]}\n' > "$TMP/re
 printf 'carried.txt\n' >> "$WS/qa-touched.txt"; printf 'mine\n' > carried.txt
 out=$(CLAUDE_CODE_SESSION_ID=s-qa bash "$QA" clean "$WS")
 check "clean: a carried path stays though QA listed it" "$(cat carried.txt):$(grep -c '^qa-files: left carried.txt$' <<<"$out")" "mine:1"
+# An active run whose carried list this session cannot read: nothing is cleaned.
+bash "$QA" begin "$WS"
+printf '{"active":true,"session":"s-other","carried":["other.txt"]}\n' > "$TMP/repo/.dagents/sdd/auto-run.json"
+printf 'other.txt\n' >> "$WS/qa-touched.txt"; printf 'mine\n' > other.txt
+out=$(CLAUDE_CODE_SESSION_ID=s-qa bash "$QA" clean "$WS" 2>"$TMP/qa-err"); rc=$?
+check "clean: an unreadable active run's carried list cleans nothing" "$rc:$(cat other.txt):$(grep -c '^qa-files: left other.txt$' <<<"$out"):$(grep -c 'could not read the auto run' "$TMP/qa-err")" "0:mine:1:1"
+# A stopped run carries nothing, so its state file does not block a cleanup.
+bash "$QA" begin "$WS"
+printf '{"active":false,"session":"s-qa","carried":[]}\n' > "$TMP/repo/.dagents/sdd/auto-run.json"
+printf 'gone.txt\n' >> "$WS/qa-touched.txt"; printf 'x\n' > gone.txt
+out=$(CLAUDE_CODE_SESSION_ID=s-qa bash "$QA" clean "$WS")
+check "clean: a stopped run's state file does not block a cleanup" "$([ -e gone.txt ] && echo kept || echo gone)" "gone"
 rm -f "$TMP/repo/.dagents/sdd/auto-run.json"
 
 bash "$QA" begin "$WS"
