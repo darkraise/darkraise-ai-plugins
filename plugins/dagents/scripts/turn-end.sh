@@ -67,19 +67,8 @@ running=$(inflight_scan "$transcript_path" "$since") \
 pending=$(grep -c . <<<"$running" || true)
 has_pending_background() { [ "$pending" -gt 0 ]; }
 
-# last_text — the text of the last assistant entry on stdin. Streamed, never
-# slurped: a transcript reaches hundreds of megabytes.
-last_text() {
-  jq -nrR 'reduce (inputs | fromjson? | objects | select(.type == "assistant")) as $e (null; $e)
-    | values | .message.content
-    | if type == "string" then . elif type == "array" then map(select(.type == "text") | .text) | join("\n") else "" end' \
-    2>/dev/null || true
-}
-last=$(jq -r '.last_assistant_message // empty' <<<"$stdin_json")
-if [ -z "$last" ] && [ -f "$transcript_path" ]; then
-  last=$(tail -n 400 "$transcript_path" | last_text)
-  [ -n "$last" ] || last=$(last_text < "$transcript_path")
-fi
+. "${SCRIPT_DIR}/lib/last-message.sh"
+last=$(last_message "$stdin_json" "$transcript_path")
 
 # While background work runs, a plain stop is the controller waiting for it and
 # passes, in any turn. A message that ends the session over it (the next-step

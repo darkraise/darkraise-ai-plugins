@@ -6,8 +6,12 @@
 # It applies only where the gate is on: the project has a UI profile, or the
 # session ran dagents:ui-ux. It stands down while an auto run is bound to the
 # session (turn-end.sh owns those stops), on the retry (stop_hook_active), in
-# fast mode (lib/fast-mode.sh), and when the last message ends with
-# "UI proof: pending — <why>". Anything
+# fast mode (lib/fast-mode.sh), when the last message ends with
+# "UI proof: pending — <why>", when it carries a `## Next session` block (a
+# handoff), and while background work this session started runs
+# (lib/in-flight.sh): each of those stops is not a claim that the UI work is
+# done. The last message is the hook's, else the transcript's
+# (lib/last-message.sh). Anything
 # missing (jq, the turn stamp, a branch head for this checkout) passes.
 set -uo pipefail
 
@@ -36,13 +40,20 @@ if [ ! -f "$(uiux_profile "$root")" ]; then
   uiux_ran_skill "$transcript_path" || exit 0
   active=(--active) act=" --active"
 fi
-last=$(jq -r '.last_assistant_message // empty' <<<"$stdin_json" | tr -d '\r' | awk 'NF { l = $0 } END { print l }')
+. "$SCRIPT_DIR/lib/last-message.sh"
+message=$(last_message "$stdin_json" "$transcript_path")
+last=$(printf '%s\n' "$message" | tr -d '\r' | awk 'NF { l = $0 } END { print l }')
 last=$(sed -E 's/^[[:space:]`]+//; s/[[:space:]`]+$//' <<<"$last")
 # Only the closing line counts, so quoting the hook's own wording mid-message
 # does not release it.
 if grep -qE '^UI proof: pending[[:space:]]+(—|–|-)[[:space:]]*[^[:space:]]' <<<"$last"; then exit 0; fi
 . "$SCRIPT_DIR/lib/fast-mode.sh"
-fast_mode_on "$transcript_path" "$(jq -r '.last_assistant_message // empty' <<<"$stdin_json")" && exit 0
+fast_mode_on "$transcript_path" "$message" && exit 0
+grep -qF '## Next session' <<<"$message" && exit 0
+. "$SCRIPT_DIR/lib/in-flight.sh"
+if running=$(inflight_scan "$transcript_path" "$(inflight_since "$session_id")" 2>/dev/null) && [ -n "$running" ]; then
+  exit 0
+fi
 
 out=$(cd "$root" && bash "$SCRIPT_DIR/ui-proof" check --base "$base" ${active[@]+"${active[@]}"} 2>&1)
 status=$?
