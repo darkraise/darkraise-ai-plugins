@@ -54,6 +54,7 @@ export const windowsSeconds = {
   'lock.test.sh': 10,
   'measured-proposals.acceptance.test.sh': 60,
   'native-routing.test.sh': 10,
+  'next-session-routing.acceptance.test.sh': 400,
   'next-step.test.sh': 500,
   'next-step-print.test.sh': 150,
   'plan-amend.test.sh': 390,
