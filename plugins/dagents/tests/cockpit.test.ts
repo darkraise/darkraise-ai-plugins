@@ -10,6 +10,7 @@ import {
   autoRunFor,
   isAbsolutePath,
   isDagents,
+  gitMessageTexts,
   gitTextFiles,
   isPlanTail,
   kTokens,
@@ -771,6 +772,34 @@ describe('attribution guard', () => {
     expect(gitTextFiles('grep -F needle file && git commit -m x')).toEqual([])
   })
 
+  test('reads a commit or pull request message wherever the command writes it from', () => {
+    const TRAILER = ['Co', 'Authored-By:'].join('-')
+    const AI = `${TRAILER} Claude <noreply@anthropic.com>`
+    const GENERATED = ['Generated', 'with'].join(' ')
+    const COMMIT = ['git', 'commit'].join(' ')
+    const found = (command: string) => {
+      const { texts, isStdin } = gitMessageTexts(command)
+      return (isStdin ? [...texts, command] : texts).some(text => attributionIn(text) !== undefined)
+    }
+    const cases: [string, boolean][] = [
+      [`${COMMIT} -m "$(cat <<'EOF'\nfix: don't break\n\n${AI}\nEOF\n)"`, true],
+      [`${COMMIT} -F - <<'EOF'\nx\n\n${AI}\nEOF`, true],
+      [`${COMMIT} -F /dev/stdin <<'EOF'\nfix: x\n\n${AI}\nEOF`, true],
+      [`${COMMIT} --file=/dev/fd/0 <<'EOF'\nfix: x\n\n${AI}\nEOF`, true],
+      [`printf 'x\\n\\n${AI}' | ${COMMIT} -F -`, true],
+      [`${COMMIT} -m $'fix\\n\\n${AI}'`, true],
+      [`${COMMIT} -am 'x' -m '${TRAILER} ChatGPT <x@y.z>'`, true],
+      [`${COMMIT} --message="fix\n\n${TRAILER} Codex <codex@openai.com>"`, true],
+      [`GIT_AUTHOR_NAME=D ${COMMIT} -q -m "a; b && c" -m "${TRAILER} Copilot <c@github.com>"`, true],
+      [`gh pr create --title x --body "$(cat <<'EOF'\n## Summary\n${GENERATED} [Claude Code](https://claude.com/claude-code)\nEOF\n)"`, true],
+      [`${COMMIT} -q -m "fix(dagents): x"`, false],
+      [`${COMMIT} -m 'fix' -m '${TRAILER} Jane <jane@example.com>'`, false],
+      [`cat > f.sh <<'EOF'\necho '${AI}'\nEOF\n${COMMIT} -m x`, false],
+      [`git log --grep='${TRAILER} Claude' && ${COMMIT} -m 'fix: x'`, false],
+    ]
+    expect(cases.filter(([command, want]) => found(command) !== want).map(([command]) => command)).toEqual([])
+  })
+
   test('refuses a commit whose message file carries a trailer', async ($, on) => {
     const files: World['files'] = {
       '/home/me/code/shop/web/msg.txt': { text: 'fix: tidy\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n' },
@@ -1043,6 +1072,21 @@ describe('review seat write guard', () => {
       await $.session.start(START)
       await $.agent.spawn(dispatch(`Your complete instructions are in \`${promptFile}\`: read it first and follow it.`, 'dagents:judge-sonnet-high', 1))
     }
+
+    test('reads the prompt file when the dispatch\'s own report line names no path', async ($, on) => {
+      const files: NonNullable<World['files']> = { [PROMPT]: { text: FILLED } }
+      world(on, { tokens: 10_000, agentIds: ['judge-1'], files })
+      on('agent.list', () => ({ value: [] }) as never)
+      on('fs.read', (_$, e) => {
+        const file = files[e.path]
+        if (file === undefined) throw new Error('ENOENT')
+        return { value: file.text }
+      })
+      await $.session.start(START)
+      await $.agent.spawn(dispatch(`Your complete instructions are in \`${PROMPT}\`.\nWrite your full report to the path the prompt file names.`, 'dagents:judge-sonnet-high', 1))
+      expect((await write($, 'judge-1', REVIEW)).deny).toBeUndefined()
+      expect((await write($, 'judge-1', EARLIER)).deny).toBe(`dagents: a review seat writes only the report file its dispatch names (${REVIEW}); ${EARLIER} is not one.`)
+    })
 
     test('allows only the report on the prompt file\'s report line', async ($, on) => {
       await pointed($, on, PROMPT, { [PROMPT]: { text: FILLED } })

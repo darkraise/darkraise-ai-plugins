@@ -343,11 +343,12 @@ export function shellCommands(src: string): { raw: string; words: string[] }[] {
 // commit's -m and --message (alone or ending a cluster such as -am), gh pr's
 // --title, -t, --body and -b.
 const MESSAGE_FLAG = /^(?:-[A-Za-z]*m|--message|-t|--title|-b|--body)$/
-const STDIN_FILE = /^(?:-F-|--file=-|--body-file=-)$/
+// The names a message file can give stdin by.
+const STDIN_PATH = /^(?:-|\/dev\/stdin|\/dev\/fd\/0|\/proc\/self\/fd\/0)$/
 
 /**
  * The texts a commit or pull request command writes from its arguments, and
- * whether one reads its text from stdin (`-F -`), where it comes from the
+ * whether one reads its text from stdin (`-F -`, `-F /dev/stdin`), where it comes from the
  * command's own here-document or pipe.
  */
 export function gitMessageTexts(command: string): { texts: string[]; isStdin: boolean } {
@@ -360,7 +361,14 @@ export function gitMessageTexts(command: string): { texts: string[]; isStdin: bo
       if (MESSAGE_FLAG.test(word) && next !== undefined) texts.push(next)
       else if (/^--(?:message|title|body)=/.test(word)) texts.push(word.slice(word.indexOf('=') + 1))
       else if (/^-m./.test(word)) texts.push(word.slice(2))
-      if (STDIN_FILE.test(word) || (/^(?:-F|--file|--body-file)$/.test(word) && next === '-')) isStdin = true
+      const file = /^(?:-F|--file|--body-file)$/.test(word)
+        ? next
+        : /^--(?:file|body-file)=/.test(word)
+          ? word.slice(word.indexOf('=') + 1)
+          : /^-F./.test(word)
+            ? word.slice(2)
+            : undefined
+      if (file !== undefined && STDIN_PATH.test(file)) isStdin = true
     })
   }
   return { texts, isStdin }

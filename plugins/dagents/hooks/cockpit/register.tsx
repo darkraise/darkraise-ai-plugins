@@ -4268,9 +4268,10 @@ async function judgeReports($: EngineInterface, prompt: string): Promise<{ repor
   const dirs = await reviewDirs($)
   const reportRoots = rootsOf(dirs)
   // A prompt that names its report on the report line allows only that line's
-  // paths: a re-review prompt also names the prior round's report to read.
-  const lines = [...prompt.matchAll(REPORT_LINES)].map(match => match[1] ?? '')
-  if (lines.length > 0) return { reports: [...new Set(lines.flatMap(line => reportPathsIn(line, dirs)))], reportRoots }
+  // paths: a re-review prompt also names the prior round's report to read. A
+  // report line naming no path leaves the lookup below to answer.
+  const onLine = [...new Set([...prompt.matchAll(REPORT_LINES)].flatMap(match => reportPathsIn(match[1] ?? '', dirs)))]
+  if (onLine.length > 0) return { reports: onLine, reportRoots }
   const named = reportPathsIn(prompt, dirs)
   if (named.length > 0) return { reports: named, reportRoots }
   const reports = new Set<string>()
