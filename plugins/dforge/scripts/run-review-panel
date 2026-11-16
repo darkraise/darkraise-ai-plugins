@@ -191,7 +191,9 @@ alive() { kill -0 "$1" 2>/dev/null; }
 any_alive() { local p; for p in ${pids[@]+"${pids[@]}"}; do [ -n "$p" ] && alive "$p" && return 0; done; return 1; }
 
 while any_alive && [ "$(date +%s)" -lt "$deadline" ]; do sleep 0.5; done
+timed_out=false
 if any_alive; then
+  timed_out=true
   for i in "${!pids[@]}"; do
     p=${pids[$i]}
     [ -n "$p" ] && alive "$p" || continue
@@ -211,6 +213,16 @@ for p in ${pids[@]+"${pids[@]}"}; do
   rcs+=("$rc")
 done
 trap - INT TERM
+# Checked once the runners are reaped: until then a killed runner is a zombie
+# that kill -0 still finds.
+if [ "$timed_out" = true ]; then
+  survivors=()
+  for p in ${pids[@]+"${pids[@]}"} ${tree_pids[@]+"${tree_pids[@]}"}; do [ -n "$p" ] && alive "$p" && survivors+=("$p"); done
+  [ ${#survivors[@]} -eq 0 ] || printf 'run-review-panel: still alive after KILL: %s\n' "${survivors[*]}" >&2
+  if [ "$have_setsid" = false ] && ! command -v pgrep >/dev/null 2>&1; then
+    echo "run-review-panel: neither setsid nor pgrep is on PATH, so a timed-out runner's own children were not found or stopped" >&2
+  fi
+fi
 
 for i in "${!open_ids[@]}"; do
   id=${open_ids[$i]}

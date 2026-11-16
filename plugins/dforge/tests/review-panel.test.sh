@@ -173,5 +173,25 @@ else
   printf 'skip - no setsid tree walk: pgrep is not on PATH (Git Bash)\n'
 fi
 
+# --- without setsid or pgrep the tree cannot be walked, and the panel says so ---
+nopgrep_path() { # PATH with no pgrep: a directory holding it stood in for by links to its other programs
+  local d f m out='' IFS=:
+  for d in $PATH; do
+    if [ -x "$d/pgrep" ]; then
+      m="$TMP/nopgrep/$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
+      mkdir -p "$m"
+      for f in "$d"/*; do [ "${f##*/}" = pgrep ] || ln -s "$f" "$m/" 2>/dev/null; done
+      d=$m
+    fi
+    out=${out:+$out:}$d
+  done
+  printf '%s\n' "$out"
+}
+: > "$TMP/tree-pids"
+NOPGREP_PATH=$(nopgrep_path)
+PATH="$NOPGREP_PATH" PANEL_NO_SETSID=1 PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/tree-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
+check "no setsid or pgrep: the panel says the runner's children were not stopped" "$(grep -c 'neither setsid nor pgrep is on PATH' "$TMP/err")" "1"
+while read -r p; do kill -KILL "$p" 2>/dev/null; done < "$TMP/tree-pids"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
