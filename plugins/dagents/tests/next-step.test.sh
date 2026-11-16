@@ -987,6 +987,16 @@ mkdir -p "$REPO/docs/dagents/plans" && printf 'note\n' > "$REPO/docs/dagents/pla
 git -C "$REPO" add docs/dagents/plans/completed.md && git -C "$REPO" commit -qm "docs: index"
 run "$REPO" "$PLAN_REL"
 has "C5: docs-only commits after the head keep it current" "$out" "**Next:** Run dagents:finishing-a-development-branch."
+# A git call that fails is no evidence the head still covers HEAD.
+REAL_GIT=$(command -v git)
+for verb in 'rev-list --first-parent' 'log --format= --name-only'; do
+  mkdir -p "$TMP/git-fails"
+  printf '#!/usr/bin/env bash\ncase " $* " in *" %s "*) exit 128 ;; esac\nexec "%s" "$@"\n' "$verb" "$REAL_GIT" > "$TMP/git-fails/git"
+  chmod +x "$TMP/git-fails/git"
+  out=$(cd "$REPO" && PATH="$TMP/git-fails:$PATH" bash "$SCRIPT" "$PLAN_REL" 2>/dev/null)
+  has "C5: a failed git ${verb%% *} routes to a scoped re-review, not finishing" "$out" "Re-review $head7..HEAD"
+done
+rm -rf "$TMP/git-fails"
 printf 'x\n' > "$REPO/code.txt" && git -C "$REPO" add code.txt && git -C "$REPO" commit -qm "fix: later"
 run "$REPO" "$PLAN_REL"
 has "C5: a later code commit routes to a scoped re-review" "$out" "Re-review $head7..HEAD"
