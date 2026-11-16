@@ -5,42 +5,42 @@
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
-| 1 | 147082b feat(dforge): add the agy review runner | - | - | open | - |
-| 2 | 6c2159c refactor(dforge): stop routing by Executor lines | - | - | open | - |
-| 3 | 5b36192 refactor(dforge)!: retire the external executor lane | - | - | open | - |
-| 4 | c8a1819 refactor(dforge): warn on obsolete Executor lines | - | - | open | - |
-| 5 | 2495846 refactor(dforge): remove revising-plans and plan-revise | - | - | open | - |
-| 6 | ff847ca refactor(dforge): make the registry review-only | - | - | open | - |
-| 7 | eb85a46 refactor(dforge): drop the Codex lane surface | - | - | open | - |
-| 8 | 30eeb8d feat(dforge): add the agy review switch | - | - | open | - |
-| 9 | 439fbd6 feat(dforge): run external reviewers as a panel | - | - | open | - |
-| 10 | b7e6ca5 fix(dforge): keep the review panel inside its bound | - | - | open | - |
-| 11 | 13b2555 feat(dforge): route reviews to the reviewer panel | - | - | open | - |
-| 12 | 2f9803b feat(dforge): run the panel from task-step | - | - | open | - |
-| 13 | e427bde test(dforge): complete the cockpit test fixtures | - | - | open | - |
-| 14 | f1167a7 docs(dforge): describe the reviewer panel | - | - | open | - |
-| 15 | 35419b0 docs(dforge): drop the executor lane from skills | - | - | open | - |
-| 16 | dd5e658 docs(dforge): document the reviewer-only release | - | - | open | - |
-| 17 | c1f739b test(dforge): add reviewer-only acceptance tests | - | - | open | - |
-| 18 | 48f0caa fix(dforge): keep the Second Pass note on one line | - | - | open | - |
-| 19 | 7a8610d fix(dforge): check string enums in agy answers | - | - | open | - |
-| 20 | b8fd3e5 fix(dforge): reject an empty agy final review | - | - | open | - |
-| 21 | 8669084 fix(dforge): drop a failed reviewer's out file | - | - | open | - |
-| 22 | 0492abe fix(dforge): keep each gate's stderr in the panel | - | - | open | - |
-| 23 | 571ec2d fix(dforge): fail a family with no ladder block | - | - | open | - |
-| 24 | f25afb5 test(dforge): cover the panel's computed bound | - | - | open | - |
-| 25 | 0875ab5 test(dforge): tighten the review panel suite | - | - | open | - |
-| 26 | 5c7aedd fix(dforge): check git config and hooks after agy | - | - | open | - |
-| 27 | f7d8467 test(dforge): check agy resets and an unknown base | - | - | open | - |
-| 28 | 49ec859 test(dforge): retest codexReview off to on | - | - | open | - |
-| 29 | 0fca483 fix(dforge): harden the agy git-state check | - | - | open | - |
-| 30 | 02a858c test(dforge): drop checks that exact checks cover | - | - | open | - |
-| 31 | 0ebde99 test(dforge): check the 5.0 WARN and mid-lane rule | - | - | open | - |
-| 32 | 9712236 docs(dforge): drop HANDBACK from fix-round lines | - | - | open | - |
-| 33 | 06822b8 fix(dforge): name worktree-snapshot in its errors | - | - | open | - |
-| 34 | 0c58f7f docs(dforge): run the final panel in a worktree | - | - | open | - |
-| 35 | 62799cd fix(dforge): catch hook mode and config reorders | - | - | open | - |
-| 36 | e48eeaf fix(dforge): stop on a shared git state write | - | - | open | - |
+| 1 | 147082b feat(dforge): add the agy review runner | - | - | n/a | feature: adds run-agy-review.sh and worktree-snapshot.sh, dforge 5's agy reviewer seat, which dagents does not have |
+| 2 | 6c2159c refactor(dforge): stop routing by Executor lines | - | - | n/a | feature: stops Executor-line routing in review-route, next-step and task-step, which dagents keeps with its executor lane |
+| 3 | 5b36192 refactor(dforge)!: retire the external executor lane | - | - | n/a | feature: removes the external executor lane (run-codex-task.sh, run-agy-task.sh, lane-breaker), which dagents keeps |
+| 4 | c8a1819 refactor(dforge): warn on obsolete Executor lines | - | - | n/a | feature: turns plan-lint's Executor checks into an obsolete-line warning, while dagents keeps the executor lane |
+| 5 | 2495846 refactor(dforge): remove revising-plans and plan-revise | - | - | n/a | feature: removes revising-plans and plan-revise, which dagents keeps |
+| 6 | ff847ca refactor(dforge): make the registry review-only | - | - | n/a | feature: makes the executors registry review-only (detect-executors.sh, executors), while dagents' registry still drives the lane |
+| 7 | eb85a46 refactor(dforge): drop the Codex lane surface | - | - | n/a | feature: drops the codexLane setting and codex-gate's lane field, which dagents keeps |
+| 8 | 30eeb8d feat(dforge): add the agy review switch | - | - | n/a | feature: adds the agyReview setting and agy-gate's review switch for dforge 5's agy reviewer |
+| 9 | 439fbd6 feat(dforge): run external reviewers as a panel | - | - | n/a | 5-only |
+| 10 | b7e6ca5 fix(dforge): keep the review panel inside its bound | - | - | n/a | 5-only |
+| 11 | 13b2555 feat(dforge): route reviews to the reviewer panel | - | - | n/a | feature: routes review-route's seats to dforge 5's reviewer panel |
+| 12 | 2f9803b feat(dforge): run the panel from task-step | - | - | n/a | feature: runs dforge 5's reviewer panel from task-step |
+| 13 | e427bde test(dforge): complete the cockpit test fixtures | - | - | done | port 5d14b6f; fail@parent pass@port |
+| 14 | f1167a7 docs(dforge): describe the reviewer panel | - | - | n/a | docs-only: describes dforge 5's reviewer panel in delegated-task.md, external-review.md and final-review.md |
+| 15 | 35419b0 docs(dforge): drop the executor lane from skills | - | - | n/a | docs-only: drops the executor lane from the skills, which dagents keeps |
+| 16 | dd5e658 docs(dforge): document the reviewer-only release | - | - | n/a | feature: documents dforge 5's reviewer-only release in the README and manifests, with its acceptance suite |
+| 17 | c1f739b test(dforge): add reviewer-only acceptance tests | - | - | n/a | test-only: adds reviewer-only-externals.acceptance.test.sh for dforge 5's reviewer panel |
+| 18 | 48f0caa fix(dforge): keep the Second Pass note on one line | - | - | done | port f490210; fail@parent pass@port |
+| 19 | 7a8610d fix(dforge): check string enums in agy answers | - | - | n/a | 5-only |
+| 20 | b8fd3e5 fix(dforge): reject an empty agy final review | - | - | n/a | 5-only |
+| 21 | 8669084 fix(dforge): drop a failed reviewer's out file | - | - | n/a | 5-only |
+| 22 | 0492abe fix(dforge): keep each gate's stderr in the panel | - | - | n/a | 5-only |
+| 23 | 571ec2d fix(dforge): fail a family with no ladder block | - | - | n/a | 5-only |
+| 24 | f25afb5 test(dforge): cover the panel's computed bound | - | - | n/a | 5-only |
+| 25 | 0875ab5 test(dforge): tighten the review panel suite | - | - | n/a | test-only: tightens review-panel.test.sh, a dforge 5 suite |
+| 26 | 5c7aedd fix(dforge): check git config and hooks after agy | - | - | n/a | 5-only |
+| 27 | f7d8467 test(dforge): check agy resets and an unknown base | - | - | n/a | test-only: extends agy-review.test.sh, a dforge 5 suite |
+| 28 | 49ec859 test(dforge): retest codexReview off to on | - | - | n/a | test-only: dagents' codex-gate.test.sh already clears the cache before switching codexReview back on and expects source=probe |
+| 29 | 0fca483 fix(dforge): harden the agy git-state check | - | - | n/a | 5-only |
+| 30 | 02a858c test(dforge): drop checks that exact checks cover | - | - | n/a | test-only: removes checks in lanes.test.sh and task-step.test.sh that other checks cover; dagents' copies still hold |
+| 31 | 0ebde99 test(dforge): check the 5.0 WARN and mid-lane rule | - | - | n/a | test-only: extends reviewer-only.acceptance.test.sh, a dforge 5 suite |
+| 32 | 9712236 docs(dforge): drop HANDBACK from fix-round lines | - | - | n/a | docs-only: HANDBACK stays a fix-round outcome in dagents' delegated-task.md, since dagents keeps the executor lane |
+| 33 | 06822b8 fix(dforge): name worktree-snapshot in its errors | - | - | n/a | 5-only |
+| 34 | 0c58f7f docs(dforge): run the final panel in a worktree | - | - | n/a | docs-only: runs dforge 5's final reviewer panel in a worktree (external-review.md, final-review.md) |
+| 35 | 62799cd fix(dforge): catch hook mode and config reorders | - | - | n/a | 5-only |
+| 36 | e48eeaf fix(dforge): stop on a shared git state write | - | - | n/a | 5-only |
 | 37 | 0786918 test(dforge): match the A18 release line anywhere | - | - | open | - |
 | 38 | a109465 fix(dforge): run tools when a pane read fails | - | - | open | - |
 | 39 | 2470dcd docs(dforge): use neutral gates in the template | - | - | open | - |
