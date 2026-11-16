@@ -200,6 +200,8 @@ const BLOCKED =
 
 const UNFENCED = RESUMABLE.replace('```\nExecute docs/dforge/plans/2026-10-14-band.md.\n```\n', 'Execute the plan.\n')
 const REGISTER = '/home/me/code/shop/docs/dforge/registers/r.md'
+/** A `next-step --print --latest` run that fails: the cockpit falls back on the stored note. */
+const FAILED = { exitCode: 1, stdout: '' }
 function registerPrompt(names: string): string {
   return `Continue the work recorded in ${names}: 1 rows are open (#2 item 2). Rule on the open rows with dforge:brainstorming.`
 }
@@ -348,6 +350,25 @@ type World = {
   afterSettingsRead?: (source: string | undefined) => void
   /** The draft the person's prompt box holds; empty unless said. */
   draft?: string
+  /** What each `next-step --print --latest` run answers, in turn: an exit and its output, `timeout`, or `hang` (never settles); once they run out, latest.md's Next session block as stored. */
+  nextStepOuts?: ({ exitCode: number; stdout: string } | 'timeout' | 'hang')[]
+  /** The directory each `next-step --print --latest` run is given. */
+  nextStepRuns?: string[]
+}
+
+// What `next-step --print --latest` prints for a note it finds current: the
+// Next session block of latest.md as stored, ending on the marker it read
+// (one carrying the file's time when it has none); exit 6 without the block.
+function storedBlock(w: World): { exitCode: number; stdout: string } {
+  const found = Object.entries(w.files ?? {}).find(([path]) => path.endsWith('/handoff/latest.md') && !path.includes('/.superpowers/'))?.[1]
+  const lines = found?.text.split('\n') ?? []
+  const start = lines.indexOf('## Next session')
+  if (found === undefined || start < 0) return { exitCode: 6, stdout: '' }
+  const end = lines.findIndex((line, index) => index > start && line.startsWith('## '))
+  const block = lines.slice(start, end < 0 ? undefined : end)
+  while (block.at(-1) === '') block.pop()
+  if (!block.some(line => line.startsWith('<!-- next-step: '))) block.push(`<!-- next-step: kind=none subject=- at=${Math.floor((found.mtimeMs ?? 0) / 1000)} -->`)
+  return { exitCode: 0, stdout: `${block.join('\n')}\n` }
 }
 
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
@@ -436,6 +457,14 @@ function world(on: On, w: World) {
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('process.run', (_$, e) => {
     const argv = e.argv.join(' ')
+    if (e.argv[0] === 'bash' && e.argv[1] === '-c' && (e.argv[5] ?? '').endsWith('/scripts/next-step')) {
+      w.nextStepRuns?.push(e.argv[4] ?? '')
+      const out = w.nextStepOuts?.shift()
+      if (out === 'hang') return new Promise<never>(() => undefined)
+      if (out === 'timeout') return { deny: 'dforge: $.process.run(bash) aborted: still running after 20000ms' }
+      const { exitCode, stdout } = out ?? storedBlock(w)
+      return { value: { exitCode, stdout, stderr: exitCode === 0 ? '' : 'next-step: failed\n', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     const script = '/scripts/auto-run '
     if (argv.includes(script)) {
       const call = argv.slice(argv.indexOf(script) + script.length)
@@ -5448,14 +5477,14 @@ describe('resume offer', () => {
   })
 
   test('offers nothing for a ruling handoff whose register rows are all resolved', async ($, on) => {
-    await start($, on, rulingHandoff(), { [REGISTER]: { text: register(['done', 'deferred', 'n/a']), mtimeMs: 1 } })
+    await begin($, on, rulingHandoff(), { w: { nextStepOuts: [FAILED] }, more: { [REGISTER]: { text: register(['done', 'deferred', 'n/a']), mtimeMs: 1 } } })
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
   })
 
   test('withdraws a ruling handoff at the next turn once its last row closes', async ($, on) => {
     const files: NonNullable<World['files']> = { [LATEST]: { text: rulingHandoff(), mtimeMs: 900_000 }, [REGISTER]: { text: register(['done', 'open']), mtimeMs: 1 } }
-    world(on, { ...SIGNED_IN, files })
+    world(on, { ...SIGNED_IN, files, nextStepOuts: [FAILED, FAILED] })
     signedIn(on, files)
     await $.session.start(START)
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -5479,7 +5508,7 @@ describe('resume offer', () => {
       [LATEST]: { text: rulingHandoff(), mtimeMs: 900_000 },
       [STORED]: { text: register(['done', 'open']), mtimeMs: 1 },
     }
-    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
+    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' }, nextStepOuts: [FAILED, FAILED] })
     signedIn(on, files)
     await $.session.start(START)
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -5503,6 +5532,135 @@ describe('resume offer', () => {
     expect(prompts).toEqual([])
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
     expect(await ui.find({ key: 'resume-card' })).toBeUndefined()
+  })
+
+  // A note carrying the marker next-step computed it from, and a block as
+  // `next-step --print --latest` recomputes it.
+  const PLAN = 'docs/dforge/plans/2026-10-14-band.md'
+  const marker = (at: number) => `<!-- next-step: kind=plan subject=${PLAN} at=${at} -->`
+  const marked = (text: string, at: number) => text.replace('```\n\n## State', `\`\`\`\n${marker(at)}\n\n## State`)
+  const recomputed = (next: string, at: number) =>
+    ['## Next session', '', `**Status:** Plan \`${PLAN}\`: 2 of 6 tasks complete.`, `**Next:** ${next}`, '', 'Paste as the first prompt:', '', '```', `Continue \`${PLAN}\` from Task 3.`, '```', marker(at), ''].join('\n')
+  type Begin = { w?: Partial<World>; more?: World['files']; mtimeMs?: number; before?: () => Promise<unknown> }
+  const begin = async ($: Parameters<TestBody>[0], on: On, text: string, o: Begin = {}) => {
+    const files: NonNullable<World['files']> = { [LATEST]: { text, mtimeMs: o.mtimeMs ?? 900_000 }, ...o.more }
+    const w = { ...SIGNED_IN, files, prompts: [] as string[], nextStepRuns: [] as string[], ...o.w }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await o.before?.()
+    await $.session.start(START)
+    await settle(clock)
+    const turn = async () => {
+      await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+      await settle(clock)
+    }
+    return { ...w, files, turn }
+  }
+
+  test('shows the recomputed block', async ($, on) => {
+    const w = await begin($, on, RESUMABLE.replace('Task 4 — wire the band into the pane.', 'Write the plan'), {
+      w: { nextStepOuts: [{ exitCode: 0, stdout: recomputed('Resume at Task 3', 950) }] },
+    })
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ type: 'Text', text: /Next: Resume at Task 3$/ })).toBeDefined()
+    // Aged from the marker's 950 s, not the note's 900 s.
+    expect(await band.find({ type: 'Text', text: /Resumable work · handed off just now$/ })).toBeDefined()
+    expect(JSON.stringify(await band.drawn())).not.toContain('Write the plan')
+    await band.press({ key: 'band-resume' })
+    expect(w.prompts).toEqual([`Continue \`${PLAN}\` from Task 3.`])
+    expect(w.nextStepRuns).toEqual(['/home/me/code/shop'])
+  })
+
+  test('hides the offer when nothing is to resume', async ($, on) => {
+    await begin($, on, RESUMABLE, { w: { nextStepOuts: [{ exitCode: 6, stdout: '' }] } })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+    expect(await ui.find({ key: 'resume-card' })).toBeUndefined()
+  })
+
+  for (const [name, out] of [['exit 1', { exitCode: 1, stdout: '' }], ['a timeout', 'timeout']] as const) {
+    test(`falls back on a failed run and marks it: ${name}`, async ($, on) => {
+      await begin($, on, RESUMABLE, { w: { nextStepOuts: [out] } })
+      const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+      expect(await band.find({ type: 'Text', text: /Resumable work · handed off 1m ago · not rechecked$/ })).toBeDefined()
+      expect(await band.find({ type: 'Text', text: /Next: Task 4 — wire the band into the pane\.$/ })).toBeDefined()
+    })
+
+    test(`falls back with the register check: ${name}`, async ($, on) => {
+      await begin($, on, rulingHandoff(), { w: { nextStepOuts: [out] }, more: { [REGISTER]: { text: register(['done', 'deferred', 'n/a']), mtimeMs: 1 } } })
+      const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+      expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+    })
+  }
+
+  test('ages from the marker', async ($, on) => {
+    const w = await begin($, on, marked(RESUMABLE, Math.floor((1_000_000 - 4 * 86_400_000) / 1000)), { mtimeMs: 1_000_000 })
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+    expect(w.nextStepRuns).toEqual([])
+  })
+
+  test('ages from the marker: editing the notes keeps a dismissal', async ($, on) => {
+    const w = await begin($, on, marked(RESUMABLE, 900))
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    await band.press({ key: 'band-resume-dismiss' })
+    w.files[LATEST] = { text: marked(RESUMABLE, 900).replace('Worktree:', 'A note.\n\nWorktree:'), mtimeMs: 990_000 }
+    await w.turn()
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+    expect(w.nextStepRuns).toHaveLength(1)
+  })
+
+  test('never runs in a plan session', async ($, on) => {
+    const w = await begin($, on, RESUMABLE, { before: () => $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' }) })
+    expect(w.nextStepRuns).toEqual([])
+  })
+
+  test('never runs while an auto run is active', async ($, on) => {
+    const more = autoFiles({ pending: null })
+    const w = await begin($, on, RESUMABLE, { more, w: { autoRuns: [], autoFile: more[AUTO] } })
+    expect(w.nextStepRuns).toEqual([])
+  })
+
+  test('runs again only when its cache key changes', async ($, on) => {
+    const docs = '/home/me/code/shop/docs/dforge'
+    const keyed = [LATEST, `${docs}/plans/completed.md`, `${docs}/roadmap.md`, REGISTER, `${docs}/plans`, `/home/me/code/shop/${PLAN}`]
+    const w = await begin($, on, marked(RESUMABLE, 900), {
+      more: {
+        [`${docs}/plans/completed.md`]: { text: '# Completed\n', mtimeMs: 1 },
+        [`${docs}/roadmap.md`]: { text: '# Roadmap\n', mtimeMs: 1 },
+        [REGISTER]: { text: register(['open']), mtimeMs: 1 },
+        [`${docs}/plans`]: { text: '', kind: 'dir', mtimeMs: 1 },
+        [`/home/me/code/shop/${PLAN}`]: { text: '# Plan\n', mtimeMs: 1 },
+      },
+    })
+    expect(w.nextStepRuns).toHaveLength(1)
+    await w.turn()
+    await w.turn()
+    expect(w.nextStepRuns).toHaveLength(1)
+    for (const [index, path] of keyed.entries()) {
+      w.files[path] = { ...w.files[path]!, mtimeMs: 2 + index }
+      await w.turn()
+      expect(w.nextStepRuns).toHaveLength(2 + index)
+    }
+  })
+
+  test('never awaits a run, nor starts a second while one is in flight', async ($, on) => {
+    const w = await begin($, on, RESUMABLE, { w: { nextStepOuts: ['hang'] } })
+    w.files[LATEST] = { ...w.files[LATEST]!, mtimeMs: 950_000 }
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await w.turn()
+    expect(w.nextStepRuns).toHaveLength(1)
+  })
+
+  test("runs from the primary checkout when the session's directory is gone", async ($, on) => {
+    const WORKTREE = '/home/me/code/shop-wt'
+    const w = await begin($, on, RESUMABLE, { w: { checkout: WORKTREE }, more: { [WORKTREE]: { text: '', kind: 'dir' } } })
+    expect(w.nextStepRuns).toEqual([WORKTREE])
+    delete w.files[WORKTREE]
+    w.files[LATEST] = { ...w.files[LATEST]!, mtimeMs: 950_000 }
+    await w.turn()
+    expect(w.nextStepRuns).toEqual([WORKTREE, '/home/me/code/shop'])
   })
 })
 
@@ -7854,13 +8012,14 @@ describe('auto run in the pane', () => {
   test('hides Resume while a run is active and brings it back when the run stops', async ($, on) => {
     const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), '/home/me/code/shop/.dforge/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
     const w: World = { ...SIGNED_IN, files, autoRuns: [], autoFile: files[AUTO] }
-    world(on, w)
+    const clock = world(on, w)
     signedIn(on, files)
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ key: 'pane-stop-auto' })).toBeDefined()
     expect(await ui.find({ key: 'pane-resume' })).toBeUndefined()
     await ui.press({ key: 'pane-stop-auto' })
+    await settle(clock)
     expect(await ui.find({ key: 'pane-stop-auto' })).toBeUndefined()
     expect(await ui.find({ key: 'pane-resume' })).toBeDefined()
   })

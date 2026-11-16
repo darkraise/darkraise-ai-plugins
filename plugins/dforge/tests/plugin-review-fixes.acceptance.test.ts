@@ -729,6 +729,8 @@ describe('plugin-review-fixes: resume offer, model switch snapshot and session c
       [LATEST]: { text: rulingHandoffOf('docs/dforge/registers/r.md'), mtimeMs: 900_000 },
       [STORED]: { text: registerOf(['done', 'open']), mtimeMs: 1 },
     }
+    // next-step --print --latest fails, so the stored note and its register check stand.
+    on('process.run', { argv: /\/scripts\/next-step$/ } as never, (() => ({ value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })) as never)
     world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
     signedIn(on, files)
     await $.session.start(START)
