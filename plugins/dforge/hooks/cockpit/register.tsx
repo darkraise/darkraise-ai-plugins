@@ -4862,27 +4862,31 @@ async function attributionLine($: EngineInterface, tool: string, e: object): Pro
   if (tool === 'Bash') {
     const command = String((e as { command?: unknown }).command ?? '')
     if (!writesGitText(command)) return undefined
-    // Only the text the command writes is read: a message read from stdin
-    // comes from the command's own here-document or pipe, so the whole
-    // command is read then.
-    const { texts, isStdin } = gitMessageTexts(command)
-    for (const text of isStdin ? [...texts, command] : texts) {
+    // Only the text the command writes is read, unless the command may give
+    // its message text those words do not show (gitMessageTexts): then the
+    // whole command is read, as it is when a message file is not there yet.
+    const { texts, isWhole } = gitMessageTexts(command)
+    for (const text of texts) {
       const inline = attributionIn(text)
       if (inline !== undefined) return inline
     }
     // A relative file is read from the session's directory: a cd earlier in
-    // the command is not followed, and a file that cannot be read passes. Only
-    // a regular file is read: this hook runs before the tool, and a read of
-    // /dev/stdin or a pipe would wait on input the command has not yet given.
+    // the command is not followed. Only a regular file is read: this hook runs
+    // before the tool, and a read of /dev/stdin or a pipe would wait on input
+    // the command has not yet given.
+    let isUnseen = isWhole
     const cwd = await $.session.cwd().catch(() => null)
     for (const file of gitTextFiles(command)) {
       const path = isAbsolutePath(file) || cwd === null ? file : `${cwd.replace(/[\\/]+$/, '')}/${file}`
-      if ((await $.fs.stat(path).catch(() => null))?.kind !== 'file') continue
-      const text = await $.fs.read(path).catch(() => null)
-      const line = text === null ? undefined : attributionIn(String(text))
+      const text = (await $.fs.stat(path).catch(() => null))?.kind === 'file' ? await $.fs.read(path).catch(() => null) : null
+      if (text === null) {
+        isUnseen = true
+        continue
+      }
+      const line = attributionIn(String(text))
       if (line !== undefined) return line
     }
-    return undefined
+    return isUnseen ? attributionIn(command, true) : undefined
   }
   if (!isGitWriteTool(tool)) return undefined
   for (const text of stringsIn(e)) {

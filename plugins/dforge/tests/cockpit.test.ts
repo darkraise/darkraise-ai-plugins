@@ -11,6 +11,7 @@ import {
   isAbsolutePath,
   isDforge,
   gitMessageTexts,
+  shellCommands,
   gitTextFiles,
   isPlanTail,
   kTokens,
@@ -779,14 +780,21 @@ describe('attribution guard', () => {
     expect(gitTextFiles('grep -F needle file && git commit -m x')).toEqual([])
   })
 
+  test('reads a shell command as its simple commands, keeping redirections and here-documents whole', () => {
+    const words = (src: string) => shellCommands(src).map(one => one.words)
+    expect(words(`a 'b c' "d\\"e" && f 2>&1 | g &>/dev/null; h >|out 0<&3`)).toEqual([['a', 'b c', 'd"e'], ['f', '2>&1'], ['g', '&>/dev/null'], ['h', '>|out', '0<&3']])
+    expect(words('cat <<\\EOF\ngit commit -m x\nEOF\nnext')).toEqual([['cat'], ['next']])
+    expect(words("cat <<-'EOF'\n\tbody; x\n\tEOF\necho $(printf 'a;b') \\\n  more # c; d")).toEqual([['cat'], ['echo', "$(printf 'a;b')", 'more']])
+  })
+
   test('reads a commit or pull request message wherever the command writes it from', () => {
     const TRAILER = ['Co', 'Authored-By:'].join('-')
     const AI = `${TRAILER} Claude <noreply@anthropic.com>`
     const GENERATED = ['Generated', 'with'].join(' ')
     const COMMIT = ['git', 'commit'].join(' ')
     const found = (command: string) => {
-      const { texts, isStdin } = gitMessageTexts(command)
-      return (isStdin ? [...texts, command] : texts).some(text => attributionIn(text) !== undefined)
+      const { texts, isWhole } = gitMessageTexts(command)
+      return texts.some(text => attributionIn(text) !== undefined) || (isWhole && attributionIn(command, true) !== undefined)
     }
     const cases: [string, boolean][] = [
       [`${COMMIT} -m "$(cat <<'EOF'\nfix: don't break\n\n${AI}\nEOF\n)"`, true],
@@ -803,6 +811,27 @@ describe('attribution guard', () => {
       [`${COMMIT} -m 'fix' -m '${TRAILER} Jane <jane@example.com>'`, false],
       [`cat > f.sh <<'EOF'\necho '${AI}'\nEOF\n${COMMIT} -m x`, false],
       [`git log --grep='${TRAILER} Claude' && ${COMMIT} -m 'fix: x'`, false],
+      [`cat > /tmp/msg <<'EOF'\nfix: x\n\n${AI}\nEOF\n${COMMIT} -F /tmp/msg`, true],
+      [`printf 'fix\\n\\n${AI}\\n' > msg.txt && ${COMMIT} -F msg.txt`, true],
+      [`echo '${AI}' | tee -a msg.txt; ${COMMIT} --file=msg.txt`, true],
+      [`MSG=$'fix\\n\\n${AI}'; ${COMMIT} -m "$MSG"`, true],
+      [`${COMMIT} -m "$(echo '${AI}')"`, true],
+      [`${COMMIT} -m "fix" -m "\`printf '%s' '${AI}'\`"`, true],
+      [`${COMMIT} -F <(printf '${AI}')`, true],
+      [`${COMMIT} -aF - <<'EOF'\nfix\n\n${AI}\nEOF`, true],
+      [`${COMMIT} -qF /dev/stdin <<'EOF'\nfix\n\n${AI}\nEOF`, true],
+      [`printf '%s\\n' fix '${AI}' | ${COMMIT} -F -`, true],
+      [`${COMMIT} -m x --trailer "${AI}"`, true],
+      [`${COMMIT} -m x --trailer='Co-authored-by=Claude <noreply@anthropic.com>'`, true],
+      [`${COMMIT} 2>&1 -m 'fix' -m '${AI}'`, true],
+      [`${COMMIT} &>/dev/null -m 'fix' -m '${AI}'`, true],
+      [`${COMMIT} -m 'fix' -m '${TRAILER} Claude Opus 4.5'`, true],
+      [`${COMMIT} -m 'fix' -m '${TRAILER} Claude Code <bot@example.com>'`, true],
+      [`${COMMIT} -m 'fix' -m '${TRAILER} GitHub Copilot <175728472+Copilot@users.noreply.github.com>'`, true],
+      [`cat > f.sh <<'EOF'\necho '${AI}'\nEOF\n${COMMIT} -m "$(cat <<'X'\nfix: x\nX\n)"`, false],
+      [`cat > notes.md <<\\EOF\n${COMMIT} -m '${AI}'\nEOF`, false],
+      [`${COMMIT} -m 'fix' -m '${TRAILER} Claude Dupont <claude.dupont@example.com>'`, false],
+      [`${COMMIT} -m 'fix: cost is $5'`, false],
     ]
     expect(cases.filter(([command, want]) => found(command) !== want).map(([command]) => command)).toEqual([])
   })
@@ -817,6 +846,18 @@ describe('attribution guard', () => {
     const dirty = await $.tool.call({ tool: 'Bash', command: 'git commit -F msg.txt' })
     expect(dirty.deny).toBe('dforge: this project keeps AI attribution out of git. Remove "Co-Authored-By: Claude <noreply@anthropic.com>" and try again.')
     const clean = await $.tool.call({ tool: 'Bash', command: 'gh pr create --title x --body-file /tmp/clean.md' })
+    expect(clean.deny).toBeUndefined()
+  })
+
+  test('reads the whole command when its message file is not there yet', async ($, on) => {
+    world(on, { ...SIGNED_IN })
+    signedIn(on, {})
+    const written = await $.tool.call({
+      tool: 'Bash',
+      command: "cat > msg.txt <<'EOF'\nfix: tidy\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\ngit commit -F ./msg.txt",
+    })
+    expect(written.deny).toBe('dforge: this project keeps AI attribution out of git. Remove "Co-Authored-By: Claude <noreply@anthropic.com>" and try again.')
+    const clean = await $.tool.call({ tool: 'Bash', command: "cat > msg.txt <<'EOF'\nfix: tidy\nEOF\ngit commit -F ./msg.txt" })
     expect(clean.deny).toBeUndefined()
   })
 

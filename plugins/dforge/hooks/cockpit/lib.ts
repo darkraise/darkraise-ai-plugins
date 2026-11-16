@@ -136,14 +136,22 @@ export function seatBarCells(rowCells: number, counts: string): number {
 // string or a shell $'…' spells it), and running to the next real or escaped
 // newline. Only a trailer naming an AI counts (isAiAuthor).
 const CO_AUTHOR = /(?:^|\n|\\n)[ \t]*(co-authored-by:[^\n\\]*(?:\\(?!n)[^\n\\]*)*)/gi
-// An AI identity: the whole name, or an address at an AI vendor's domain.
-const AI_NAME = /^(?:claude|codex|copilot|chatgpt)$/i
+// The same trailer anywhere in a text: for a command whose message the guard
+// cannot see whole, as `echo "Co-authored-by: …" >> msg` builds one.
+const CO_AUTHOR_ANYWHERE = /(co-authored-by:[^\n\\]*(?:\\(?!n)[^\n\\]*)*)/gi
+// An AI identity: an AI product's name, alone or followed only by model and
+// product words ("Claude Opus 4.5", "GitHub Copilot"), or an address at an AI
+// vendor's domain. A person named Claude has a surname that is none of these.
+const AI_NAME = /^(?:claude|codex|copilot|github[ \t]+copilot|chatgpt|openai[ \t]+codex)(?:[ \t]+(?:opus|sonnet|haiku|fable|code|cli|agent|\d[\w.-]*))*$/i
 const AI_ADDRESS = /@(?:[\w-]+\.)*(?:anthropic|openai)\.com$/i
+const QUOTING_TAIL = /[\\"'`}\],\s]+$/
+// A name may also end a $(…) or a command: `echo 'Co-authored-by: Claude')`.
+const NAME_TAIL = /[\\"'`}\]),;\s]+$/
 
 function isAiAuthor(trailer: string): boolean {
   const body = trailer.replace(/^co-authored-by:/i, '')
   const at = body.indexOf('<')
-  const name = (at < 0 ? body : body.slice(0, at)).replace(/[\\"'`}\],\s]+$/, '').trim()
+  const name = (at < 0 ? body : body.slice(0, at)).replace(NAME_TAIL, '').trim()
   const address = at < 0 ? '' : (body.slice(at + 1).split('>')[0] ?? '').trim()
   return AI_NAME.test(name) || AI_ADDRESS.test(address)
 }
@@ -156,18 +164,19 @@ const ATTRIBUTION = [
 
 /**
  * The first AI attribution line in a text, if any, without the quoting around
- * it: a shell command's closing quote, or a JSON string's escapes.
+ * it: a shell command's closing quote, or a JSON string's escapes. A
+ * co-author trailer counts at a line start only, or anywhere with isAnywhere.
  */
-export function attributionIn(text: string): string | undefined {
-  for (const match of text.matchAll(CO_AUTHOR)) {
+export function attributionIn(text: string, isAnywhere = false): string | undefined {
+  for (const match of text.matchAll(isAnywhere ? CO_AUTHOR_ANYWHERE : CO_AUTHOR)) {
     const line = match[1] ?? ''
-    if (isAiAuthor(line)) return line.replace(/[\\"'`}\],\s]+$/, '').trim()
+    if (isAiAuthor(line)) return line.replace(QUOTING_TAIL, '').trim()
   }
   for (const pattern of ATTRIBUTION) {
     const match = pattern.exec(text)
     if (match) {
       const line = text.slice(match.index).split(/\n|\\n/)[0] ?? ''
-      return line.replace(/[\\"'`}\],\s]+$/, '').trim()
+      return line.replace(QUOTING_TAIL, '').trim()
     }
   }
   return undefined
@@ -188,8 +197,8 @@ export function stringsIn(value: unknown): string[] {
 
 // Where a here-document's operator and delimiter word end, and the delimiter.
 function heredocAt(src: string, at: number): { delim: string; isTabbed: boolean; end: number } | null {
-  const match = /^<<(-?)[ \t]*(['"]?)([A-Za-z0-9_.-]+)\2/.exec(src.slice(at))
-  return match === null || src[at + 2] === '<' ? null : { delim: match[3] ?? '', isTabbed: match[1] === '-', end: at + match[0].length }
+  const match = /^<<(-?)[ \t]*(?:\\([A-Za-z0-9_.-]+)|(['"]?)([A-Za-z0-9_.-]+)\3)/.exec(src.slice(at))
+  return match === null || src[at + 2] === '<' ? null : { delim: match[2] ?? match[4] ?? '', isTabbed: match[1] === '-', end: at + match[0].length }
 }
 
 // Past the bodies of the here-documents opened on the line that ended at `at`.
@@ -285,6 +294,10 @@ export function shellCommands(src: string): { raw: string; words: string[] }[] {
     if (c === ' ' || c === '\t' || c === '\r') {
       endWord()
       i++
+    } else if ((c === '&' || c === '|') && (src[i - 1] === '>' || src[i - 1] === '<' || (c === '&' && src[i + 1] === '>'))) {
+      // A redirection (`2>&1`, `&>file`, `>|file`), not a command separator.
+      word = (word ?? '') + c
+      i++
     } else if (c === '\n' || c === ';' || c === '&' || c === '|') {
       endCommand(i)
       i++
@@ -339,33 +352,65 @@ export function shellCommands(src: string): { raw: string; words: string[] }[] {
 const MESSAGE_FLAG = /^(?:-[A-Za-z]*m|--message|-t|--title|-b|--body)$/
 // The names a message file can give stdin by.
 const STDIN_PATH = /^(?:-|\/dev\/stdin|\/dev\/fd\/0|\/proc\/self\/fd\/0)$/
+// A `$(cat <<'EOF' … EOF)` message: its text is the body as written when the
+// delimiter is quoted, or when the body expands nothing.
+const CAT_HEREDOC = /^\$\(\s*cat\s+<<-?[ \t]*(\\|['"])?([A-Za-z0-9_.-]+)['"]?[ \t]*\n([\s\S]*)\n[ \t]*\2[ \t]*\n?\s*\)$/
+
+// Whether a message word expands to text the command does not spell out.
+function isExpanding(text: string): boolean {
+  const doc = CAT_HEREDOC.exec(text)
+  if (doc !== null) return doc[1] === undefined && /[$`]/.test(doc[3] ?? '')
+  return /[$`]/.test(text)
+}
 
 /**
- * The texts a commit or pull request command writes from its arguments, and
- * whether one reads its text from stdin (`-F -`, `-F /dev/stdin`), where it comes from the
- * command's own here-document or pipe.
+ * The texts a commit or pull request command writes from its arguments
+ * (`--trailer` values included), and whether its message may hold text those
+ * do not show, so the whole command must be read: a message from stdin (`-F
+ * -`), which the command's own here-document or pipe gives; a message word
+ * that expands a variable or a command; a message file the command itself
+ * writes, or a process substitution. A file that exists before the command
+ * runs is read by the caller.
  */
-export function gitMessageTexts(command: string): { texts: string[]; isStdin: boolean } {
+export function gitMessageTexts(command: string): { texts: string[]; isWhole: boolean } {
   const texts: string[] = []
-  let isStdin = false
-  for (const one of shellCommands(command)) {
+  let isWhole = false
+  const all = shellCommands(command)
+  for (const one of all) {
     if (!writesGitText(one.words.join(' '))) continue
     one.words.forEach((word, at) => {
       const next = one.words[at + 1]
-      if (MESSAGE_FLAG.test(word) && next !== undefined) texts.push(next)
-      else if (/^--(?:message|title|body)=/.test(word)) texts.push(word.slice(word.indexOf('=') + 1))
-      else if (/^-m./.test(word)) texts.push(word.slice(2))
-      const file = /^(?:-F|--file|--body-file)$/.test(word)
+      const text = MESSAGE_FLAG.test(word) && next !== undefined
+        ? next
+        : /^--(?:message|title|body)=/.test(word)
+          ? word.slice(word.indexOf('=') + 1)
+          : /^-m./.test(word)
+            ? word.slice(2)
+            : undefined
+      if (text !== undefined) {
+        texts.push(text)
+        if (isExpanding(text)) isWhole = true
+      }
+      const trailer = word === '--trailer' ? next : /^--trailer=/.test(word) ? word.slice(10) : undefined
+      if (trailer !== undefined) {
+        texts.push(trailer.replace(/^([\w-]+)[ \t]*=[ \t]*/, '$1: '))
+        if (isExpanding(trailer)) isWhole = true
+      }
+      const file = /^(?:-[a-z]*F|--file|--body-file)$/.test(word)
         ? next
         : /^--(?:file|body-file)=/.test(word)
           ? word.slice(word.indexOf('=') + 1)
-          : /^-F./.test(word)
-            ? word.slice(2)
+          : /^-[a-z]*F./.test(word)
+            ? word.slice(word.indexOf('F') + 1)
             : undefined
-      if (file !== undefined && STDIN_PATH.test(file)) isStdin = true
+      if (file === undefined) return
+      const isWritten = all.some(other =>
+        other.words.some((w, wAt) => (other !== one || wAt !== at + 1) && (w === file || w.replace(/^\d*(?:&>>?|>>?\|?)/, '') === file)),
+      )
+      if (STDIN_PATH.test(file) || file.startsWith('<(') || isExpanding(file) || isWritten) isWhole = true
     })
   }
-  return { texts, isStdin }
+  return { texts, isWhole }
 }
 
 /** The files a commit or pull request command takes its text from (`git commit -F`, `gh pr create --body-file`); stdin's `-` is the command's own text. */
@@ -373,7 +418,7 @@ export function gitTextFiles(command: string): string[] {
   const files: string[] = []
   for (const part of command.split(/[;&|\n]+/)) {
     if (!writesGitText(part)) continue
-    for (const match of part.matchAll(/(?:^|\s)(?:-F[ \t]*|--(?:body-)?file(?:=|[ \t]+))("[^"]*"|'[^']*'|[^\s"';&|]+)/g)) {
+    for (const match of part.matchAll(/(?:^|\s)(?:-[a-z]*F[ \t]*|--(?:body-)?file(?:=|[ \t]+))("[^"]*"|'[^']*'|[^\s"';&|]+)/g)) {
       const file = (match[1] ?? '').replace(/^(["'])(.*)\1$/, '$2')
       if (file !== '' && file !== '-') files.push(file)
     }
