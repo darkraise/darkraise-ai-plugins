@@ -6816,6 +6816,18 @@ describe('auto run', () => {
     expect(await ui.find({ type: 'Text', text: /284k of 650k ┃ handoff 465k/ })).toBeDefined()
   })
 
+  test('a session step that fails on every read is retried alone, and the slow tick still refreshes the pane', async ($, on) => {
+    const w: World = { ...SIGNED_IN, isUsageFailing: true, gitRuns: [] }
+    const clock = world(on, w)
+    signedIn(on, {})
+    await $.session.start(START)
+    const atStart = [...w.gitRuns!]
+    await clock.advance(31_000)
+    const later = w.gitRuns!.slice(atStart.length)
+    expect(later.filter(run => run.includes(' status ')).length).toBeGreaterThanOrEqual(2)
+    expect(later.filter(run => run.includes('--git-common-dir'))).toEqual([])
+  })
+
   test("a main compaction clears the turn readings, a subagent's does not", async ($, on) => {
     const sets: unknown[] = []
     on('state.set', { plugin: 'dforge', key: 'turnTokens' } as never, ((_$: unknown, e: { value: unknown }, next: (e: unknown) => unknown) => {
@@ -8417,9 +8429,36 @@ describe('display and saved-state honesty', () => {
     await ui.press({ key: 'settings-tab-Context' })
     await ui.press({ key: 'set-autoCompactWindow-more' })
     await clock.advance(10_000)
-    expect(toasts.filter(t => /did not stick/.test(t))).toEqual([
-      'dforge: autoCompactWindow did not stick: the engine kept 650000. Claude Code may have saved its own settings over it; set it again, or edit /home/me/.claude/settings.json.',
-    ])
+    const stuck = toasts.filter(t => /did not stick/.test(t))
+    expect(stuck).toEqual(["dforge: autoCompactWindow did not stick (the engine kept 650000). Set it again, or edit Claude's settings.json."])
+    // The terminal host draws a toast in a fixed box of three 40-column lines and cuts the rest.
+    const lines = (stuck[0] ?? '').split(' ').reduce<string[]>((all, word) => {
+      const last = all.at(-1)
+      if (last !== undefined && last.length + 1 + word.length <= 40) all[all.length - 1] = `${last} ${word}`
+      else all.push(word)
+      return all
+    }, [])
+    expect(lines.length).toBeLessThanOrEqual(3)
+  })
+
+  test('a Claude-key save the engine keeps stays and toasts nothing', async ($, on) => {
+    const toasts: string[] = []
+    const runs: string[] = []
+    const w: World = { tokens: 284_000, config: {}, toasts, runs, settings: { autoCompactWindow: 650_000 } }
+    const clock = world(on, w)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    await ui.press({ key: 'settings-tab-Context' })
+    await ui.press({ key: 'set-autoCompactWindow-more' })
+    const saved = Number(/ set autoCompactWindow (\d+)/.exec(runs.join('\n'))?.[1])
+    expect(saved).toBeGreaterThan(650_000)
+    w.userSettings = w.settings = { autoCompactWindow: saved }
+    for (let second = 0; second < 10; second++) {
+      await clock.advance(1_000)
+      expect(toasts.filter(t => /did not stick/.test(t))).toEqual([])
+    }
+    expect(await ui.find({ type: 'Text', text: new RegExp(`^${saved / 1000}k`) })).toBeDefined()
   })
 
   test('a skill-enforced key changed in the file mid-session adds the settings note', async ($, on) => {

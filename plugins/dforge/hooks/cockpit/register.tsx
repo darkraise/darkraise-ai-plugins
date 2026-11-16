@@ -1179,8 +1179,13 @@ export const register: Register = on => {
         const spec = SCHEMA[key]
         if (CONSENTS[key] === undefined || spec === undefined || Number(values[key] ?? spec.default) !== 0 || !(Number(value) > 0)) return false
         await show({})
-        S.consentPending = { key, value: Number(value) }
-        $.ui.invalidate('ui.render')
+        // Confirm's autoFocus acts only as the pane takes the keys; the pane
+        // already holds them, so the ring would stay at the pressed + button's
+        // place, which Cancel now fills.
+        await openField($, `set-${key}-confirm`, async () => {
+          S.consentPending = { key, value: Number(value) }
+          $.ui.invalidate('ui.render')
+        })
         return true
       }
       // A segment's chip on either line: on adds it last there and moves it off the other.
@@ -2628,8 +2633,8 @@ const S = {
   settingProblems: [] as string[],
   // A consent setting whose raise from 0 waits for its confirm press; null otherwise.
   consentPending: null as { key: string; value: number } | null,
-  // A session read one of whose steps threw: the slow poll tick reads it again.
-  isSessionPartial: false,
+  // The session read's steps that threw: the slow poll tick runs each again.
+  sessionUnread: [] as (() => Promise<unknown>)[],
   // The problem line for a settings file that does not parse (C15), while it does not; null otherwise.
   brokenConfig: null as string | null,
   // Keys something outside the settings file forces, with the words their rows show.
@@ -4203,9 +4208,9 @@ async function claudeReadBack($: EngineInterface, key: string, value: SettingVal
     const { path, mtime } = await configStamp($)
     const file = path === null ? {} : await readSettingsFile($, path)
     await applySettings($, inForce(file), mtime)
-    $.ui.toast(
-      `dforge: ${key} did not stick: the engine kept ${engine === undefined ? 'no value' : JSON.stringify(engine)}. Claude Code may have saved its own settings over it; set it again, or edit ${await userSettingsPath($)}.`,
-    )
+    // The terminal host cuts a toast after three 40-column lines, so the remedy
+    // comes before anything else and no path, which alone can fill a line, is named.
+    $.ui.toast(`dforge: ${key} did not stick (the engine kept ${engine === undefined ? 'no value' : JSON.stringify(engine)}). Set it again, or edit Claude's settings.json.`)
   } catch {
     // The read-back is a courtesy: a failure leaves the save shown as saved.
   }
@@ -4296,23 +4301,25 @@ async function readSession($: EngineInterface, isStart: boolean) {
   S.offerRead = ''
   S.offerRegisters = null
   // Each read fills its own section: one that throws leaves only that section
-  // unread, and the session partly read, so a slow poll tick reads it again.
-  let isPartial = false
-  const step = async (part: () => Promise<unknown>) => {
+  // unread, and a slow poll tick reads that one again, not the whole session,
+  // whose caches the reset above would otherwise clear on every retry.
+  const unread: (() => Promise<unknown>)[] = []
+  const step = async (part: () => Promise<unknown>, isRetried = true) => {
     try {
       await part()
     } catch {
-      isPartial = true
+      if (isRetried) unread.push(part)
     }
   }
   await step(() => loadSettings($))
   // Open first: the reads below run processes, and each fills its section as it lands.
+  // Not retried: a pane opening long after the start would come from nowhere.
   await step(async () => {
     const o = await live($)
     if (isStart && o.isMinimized) {
       if ((await read($, view)) !== 'settings') await shutPane($)
     } else if (isStart && o.openAtStart) void $.ui.open(paneFor(o.layout))
-  })
+  }, false)
   await step(async () => {
     S.compactWindow = await readCompactWindow($)
     await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
@@ -4331,7 +4338,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
   await step(() => beat($))
   await step(() => readVersion($))
   await step(() => readRemote($))
-  S.isSessionPartial = isPartial
+  S.sessionUnread = unread
   // '' when the id could not be read: the poll adopts the first id it reads.
   await update($, sessionRead, () => id ?? '')
 }
@@ -4359,9 +4366,10 @@ async function pollTick($: EngineInterface) {
     const isSlowTick = S.polls % DETAIL_EVERY === 0
     // An age crossing LIVE_MS stops a once-a-second clock with no event to say so.
     await syncTicker($)
-    if (isSlowTick && S.isSessionPartial) {
-      await readSession($, false)
-      return
+    if (isSlowTick && S.sessionUnread.length > 0) {
+      const parts = S.sessionUnread
+      S.sessionUnread = []
+      for (const part of parts) await part().catch(() => S.sessionUnread.push(part))
     }
     const isShown = (await live($)).isMinimized || (await isPaneUp($))
     // The quick pace is for a turn running under a drawn cockpit; every other
