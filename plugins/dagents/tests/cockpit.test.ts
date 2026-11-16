@@ -7969,9 +7969,16 @@ describe('saved-state honesty', () => {
     await ui.press({ key: 'settings-tab-Context' })
     await ui.press({ key: 'set-autoCompactWindow-more' })
     await clock.advance(10_000)
-    expect(toasts.filter(t => /did not stick/.test(t))).toEqual([
-      'dagents: autoCompactWindow did not stick: the engine kept 650000. Claude Code may have saved its own settings over it; set it again, or edit /home/me/.claude/settings.json.',
-    ])
+    const stuck = toasts.filter(t => /did not stick/.test(t))
+    expect(stuck).toEqual(["dagents: autoCompactWindow did not stick (the engine kept 650000). Set it again, or edit Claude's settings.json."])
+    // The terminal host draws a toast in a fixed box of three 40-column lines and cuts the rest.
+    const lines = (stuck[0] ?? '').split(' ').reduce<string[]>((all, word) => {
+      const last = all.at(-1)
+      if (last !== undefined && last.length + 1 + word.length <= 40) all[all.length - 1] = `${last} ${word}`
+      else all.push(word)
+      return all
+    }, [])
+    expect(lines.length).toBeLessThanOrEqual(3)
   })
 
   test('a skill-enforced key changed in the file mid-session adds the settings note', async ($, on) => {
