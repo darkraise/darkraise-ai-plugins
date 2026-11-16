@@ -446,7 +446,7 @@ plan_require_same_project() {
 # later commit on the first-parent chain touches code); `rewritten <head>`
 # (<head> is no commit, or no ancestor of HEAD). A clean line with no commits
 # clause, or a DIR where HEAD does not resolve, reads `current`: git cannot
-# judge it. The ledger records no branch, so the first-parent chain is the only
+# judge it. A failed walk of the history after <head> reads `stale <head>`. The ledger records no branch, so the first-parent chain is the only
 # base-branch test.
 plan_final_review_state() {
   local dir line head full now top docs path changed
@@ -461,8 +461,13 @@ plan_final_review_state() {
   if [ -z "$full" ]; then echo "rewritten $head"; return 0; fi
   if [ "$full" = "$now" ]; then echo current; return 0; fi
   if ! git -C "$dir" merge-base --is-ancestor "$full" "$now" 2>/dev/null; then echo "rewritten $head"; return 0; fi
-  if ! git -C "$dir" rev-list --first-parent "$now" 2>/dev/null | tr -d '\r' | grep -qxF "$full"; then echo current; return 0; fi
-  changed=$(git -C "$dir" log --format= --name-only "$full..$now" 2>/dev/null | tr -d '\r' | sed '/^$/d')
+  # A git call that fails proves nothing, so it reads as stale: the scoped
+  # re-review is the safe route, finishing is not.
+  local chain
+  chain=$(git -C "$dir" rev-list --first-parent "$now" 2>/dev/null) || { echo "stale $head"; return 0; }
+  if ! tr -d '\r' <<<"$chain" | grep -qxF "$full"; then echo current; return 0; fi
+  changed=$(git -C "$dir" log --format= --name-only "$full..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
+  changed=$(tr -d '\r' <<<"$changed" | sed '/^$/d')
   if [ -z "$changed" ]; then echo current; return 0; fi
   # Under darkmem documents no committed path is a docs path.
   if [ "$(dforge_docs_store "$dir")" != local ]; then echo "stale $head"; return 0; fi
