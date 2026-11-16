@@ -19,3 +19,4 @@
 - 2026-11-13 `docs/dforge/plans/2026-11-13-reviewer-only-externals.md` — merged into `main` at 2831e73a
 - 2026-11-15 `docs/dforge/plans/2026-11-14-api-decisions-keep-warm-hydrogen.md` — merged into `main` at e9bdc1e2
 - 2026-11-15 `docs/dforge/plans/2026-11-15-measured-proposals.md` — merged into `main` at 70701f32
+- 2026-11-16 `docs/dforge/plans/2026-11-16-next-session-routing.md` — merged into `main` at 2a5411ce
