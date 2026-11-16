@@ -54,8 +54,12 @@ if [ -f "$stamp" ]; then
   . "$SCRIPT_DIR/lib/roots.sh"
   . "$SCRIPT_DIR/lib/plan.sh"
   sdd=$(dforge_ledger_root "$root") || sdd=""
+  ws="$(dforge_dir state "$root")/sdd"
   if [ -d "$sdd" ]; then
     while IFS= read -r ledger; do
+      # As turn-end.sh reads it: under darkmem progress every worktree shares
+      # the mirror's ledgers, and one without a workspace here is another's.
+      [ -d "$ws/$(basename "$(dirname "$ledger")")" ] || continue
       tr -d '\r' < "$ledger" | awk 'NF { l = $0 } END { print l }' | grep -qE '^Task [0-9]+: waiting — ' && exit 0
     done < <(find "$sdd" -name progress.md -newer "$stamp" 2>/dev/null)
   fi

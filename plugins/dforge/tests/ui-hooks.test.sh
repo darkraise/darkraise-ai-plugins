@@ -172,6 +172,17 @@ mkdir -p .dforge/sdd/ui-plan
 printf '# SDD ledger — plan: docs/ui-plan.md\nTask 2: waiting — which colour?\n' > .dforge/sdd/ui-plan/progress.md
 check "a ledger ending on a waiting line stands down" "$(decision "$(stop u-9 'Which colour should the button be?')")" "none"
 rm -rf .dforge/sdd/ui-plan
+# Under darkmem progress every worktree shares the mirror's ledgers: only one
+# whose workspace is in this checkout is this session's.
+. "$HERE/fixtures/darkmem-stores.sh"
+M=$(stores_home "$HOME" "$REPO" proj local darkmem)
+mkdir -p "$M/work/sdd/other-plan"
+printf '# SDD ledger — plan: docs/other-plan.md\nTask 2: waiting — which colour?\n' > "$M/work/sdd/other-plan/progress.md"
+check "another worktree's waiting ledger does not stand down" "$(decision "$(stop u-9 'Task 2 is done.')")" "block"
+mkdir -p .dforge/sdd/other-plan
+touch "$M/work/sdd/other-plan/progress.md"
+check "a waiting ledger with its workspace here stands down" "$(decision "$(stop u-9 'Which colour should the button be?')")" "none"
+rm -rf .dforge/sdd/other-plan "$HOME/.dforge"
 BGT="$TMP/ui-bg.jsonl"
 jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"toolu_w",name:"Bash",input:{description:"Suite",command:"npm test",run_in_background:true}}]}}' > "$BGT"
 jq -nc '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_w",content:"Command running in background with ID: w1. Output is being written to: /tmp/w1.output."}]}}' >> "$BGT"
