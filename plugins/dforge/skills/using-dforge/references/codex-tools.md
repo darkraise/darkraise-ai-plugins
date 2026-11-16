@@ -104,6 +104,14 @@ BRANCH=$(git branch --show-current)
 See `using-git-worktrees` Step 0 and `finishing-a-development-branch`
 Step 1 for how each skill uses these signals.
 
+## Ending on the next-step block
+
+Codex has no Stop hook, so nothing holds a turn that ends without the next
+step. Run `scripts/next-step` at every step a skill says to end on its block,
+not only on an early stop: a plan finishing, a milestone audit's stop or
+close, a handoff. Add `--host codex` to a `--project`, `--draft` or `--adhoc`
+call, and end the message with the block it prints, verbatim.
+
 ## Codex App Finishing
 
 When the sandbox blocks branch/push operations (detached HEAD in an
