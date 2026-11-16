@@ -98,7 +98,9 @@ if [ -f "$stamp" ]; then
       <(at_start "$docs/plans/completed.md") <(tr -d '\r' < "$docs/plans/completed.md"))
     [ -n "$added" ] || added=$(tr -d '\r' < "$docs/plans/completed.md" | grep '`' | tail -n 1)
     plan=$(sed -n 's/^[^`]*`\([^`]*\)`.*/\1/p' <<<"$added")
-    transition="complete ${plan:-PLAN_FILE}"
+    # The name goes into a command the model runs: only a plain path stays.
+    [[ "$plan" =~ ^[A-Za-z0-9._/-]+\.md$ ]] || plan=PLAN_FILE
+    transition="complete $plan"
   elif [ -n "$docs" ] && changed_here "$docs/roadmap.md"; then
     if [ "$docs_store" = local ]; then
       . "${SCRIPT_DIR}/lib/roadmap.sh"

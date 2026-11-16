@@ -471,6 +471,13 @@ out=$(stop_at s-tr1 "$TMP/wt-p" 'Merged.')
 check "a finishing turn in a removed worktree is held" "$(decision "$out")" "block"
 check "a finishing turn in a removed worktree: names next-step --complete and the plan" \
   "$(jq -r .reason <<<"$out" | grep -c 'next-step" --complete docs/dagents/plans/2026-11-16-p.md')" "1"
+sleep 1; prompt s-tr6 "$TRP"
+sleep 1
+printf -- '- 2026-11-16 `x.md; rm -rf ~` — merged\n' >> "$TRP/docs/dagents/plans/completed.md"
+commit_all "$TRP" 'docs: a hostile entry'
+out=$(stop_at s-tr6 "$TRP" 'Merged.')
+check "a plan name that is not a plain path is not repeated" "$(jq -r .reason <<<"$out" | grep -c 'rm -rf')" "0"
+check "a plan name that is not a plain path: the placeholder stands" "$(jq -r .reason <<<"$out" | grep -c -- '--complete PLAN_FILE')" "1"
 sleep 1; prompt s-tr1 "$TMP/wt-p"
 check "a later turn still finds the primary" "$(cat "$HOME/.claude/dagents/sessions/turns/s-tr1.refs")" \
   "$(git -C "$TRP" rev-parse --path-format=absolute --git-common-dir)"
