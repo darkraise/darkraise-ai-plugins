@@ -119,7 +119,7 @@ mutation green: 0
 | A2 | `tests/foo.acceptance.sh` A2: never writes outside the root | pass | red |
 | A3 | `tests/foo.acceptance.sh` A3: refuses an empty list | fail | n/a |
 
-Command: timeout 300 bash tests/foo.acceptance.sh → 2 passed, 1 failed
+Command: bash <plugin-root>/scripts/with-timeout 300 bash tests/foo.acceptance.sh → 2 passed, 1 failed
 ```
 
 Then reply in at most 10 lines: the counts by result and the mutation

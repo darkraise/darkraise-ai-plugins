@@ -467,7 +467,8 @@ a list from an external reviewer alone still gets an independent reader.
 When the scoped re-review is clean, the clean line appended after it is a new
 `Final review: clean (commits <base>..<new head>)`, `<new head>` being the
 HEAD it reviewed; so is the one after a re-review of commits made after an
-earlier clean line (C5's `stale` state).
+earlier clean line (the `stale` state of `plan_final_review_state` in
+`scripts/lib/plan.sh`).
 
 **Acceptance tests.** The fixer never weakens a test whose name starts with
 `A<n>:`, or with `a<n>_` where the framework forbids a colon in a test name

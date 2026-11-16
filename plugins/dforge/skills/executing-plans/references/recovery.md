@@ -28,7 +28,7 @@ Then:
 sentence; a ledger with no `Early CI:` line whose `**Early CI:**` point is
 already complete runs that section now. Neither ends the turn. Then, whatever the per-task lines say: every task complete and no `Final review:`
 line: go to Final Review. A `Final review: clean` line is routed by its state,
-which `scripts/next-step PLAN_FILE` reads (`plan_final_review_state`, C5):
+which `scripts/next-step PLAN_FILE` reads (`plan_final_review_state` in `scripts/lib/plan.sh`):
 `current` goes to dforge:finishing-a-development-branch; `stale <head>`, a
 commit outside the docs root after the reviewed head, goes to the fix-wave's
 scoped re-review of `<head>..HEAD` in

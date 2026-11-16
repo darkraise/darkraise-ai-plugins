@@ -55,7 +55,7 @@ establish access through a native client or the external CLI.
 
 Treat an existing assignment without a source as human-pinned. Keep original
 assignments fixed; actual attempts, promotions, and substitutions go in the
-ledger. The selector and `scripts/plan-lint` accept only `codex-v4`: they reject
+ledger. `scripts/select-native-tier.sh` and `scripts/plan-lint` accept only `codex-v4`: they reject
 codex-v1, codex-v2, codex-v3 and unknown policy versions with a
 conversion-required error. Never reinterpret an older plan's scores or ranks as
 v4.
@@ -74,8 +74,8 @@ pair is the v4 execution tier at its score. The Execution line's pair maps by
 rank: an older execution pair becomes the v4 pair at the same rank (v3
 `gpt-6-sol / high`, rank 5, becomes `gpt-6.1-sol / high`; v2 `gpt-5.6-sol /
 high`, rank 7, becomes `gpt-6-astra / medium`), and a reserve pair stays itself.
-A human pin stays verbatim even when it names an older pair, which the selector
-still dispatches while it is advertised; the preview flags each such pin so
+A human pin stays verbatim even when it names an older pair, which still runs
+while it is advertised; the preview flags each such pin so
 your human partner keeps or re-pins it explicitly.
 
 The older ranks, kept here because the policy file no longer carries them.
