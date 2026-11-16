@@ -1,12 +1,12 @@
 # UI proof: next-session routing resume band
 
 **Contract:** touch
-**Fingerprint:** 3f9e18a285a8d92d
+**Fingerprint:** 44c41addcc6b3993
 **Platform:** terminal
 **Viewports:** 200x60, 120x40
 **Themes:** default
 **Evidence:** local
-**Judge:** ship 3f9e18a285a8d92d — docs/dforge/ui-ux/proofs/2026-11-16-next-session-routing.judge.md
+**Judge:** ship 44c41addcc6b3993 — docs/dforge/ui-ux/proofs/2026-11-16-next-session-routing.judge.md
 
 ## Delta
 
@@ -25,7 +25,7 @@
 
 | ID | Verdict | Evidence | Note |
 |---|---|---|---|
-| UX-1 | pass | .dforge/ui-ux/next-session-routing/recompute-band-v200x60.txt, .dforge/ui-ux/next-session-routing/recompute-band-v120x40.txt; test "resume offer > shows the recomputed block" | fixture `w/recompute`: latest.md written by `next-step <plan>` reads `**Next:** Start at Task 1 (Write the exporter).`, then the ledger gained `Task 1: complete`. Both captures draw `↻ Resumable work · handed off <age> — Next: Resume at Task 2 (Wire the export button).` (`just now` at 200x60, `1m ago` at 120x40) with `[ Resume ] Dismiss` and no `not rechecked`; the 200x60 pane's card (top right) reads `Next: Resume at Task 2 (Wire the export button).` with its `Resume` button |
+| UX-1 | pass | .dforge/ui-ux/next-session-routing/recompute-band-v200x60.txt, .dforge/ui-ux/next-session-routing/recompute-band-v120x40.txt; tests "resume offer > shows the recomputed block", "resume offer > runs again once an auto run ends, though no keyed file changed" | fixture `w/recompute`: latest.md written by `next-step <plan>` reads `**Next:** Start at Task 1 (Write the exporter).`, then the ledger gained `Task 1: complete`. Both captures draw `↻ Resumable work · handed off <age> — Next: Resume at Task 2 (Wire the export button).` (`just now` at 200x60, `1m ago` at 120x40) with `[ Resume ] Dismiss` and no `not rechecked`; the 200x60 pane's card (top right) reads `Next: Resume at Task 2 (Wire the export button).` with its `Resume` button |
 | UX-2 | pass | .dforge/ui-ux/next-session-routing/recompute-resume-focus-v200x60.ansi, .dforge/ui-ux/next-session-routing/recompute-after-resume-v200x60.txt | one `ctrl+x tab` put reverse video on `[ Resume ]` only (`-resume-focus`). Enter submitted `❯ Resume docs/dforge/plans/2026-11-11-billing-export.md with dforge:resume-execution. Resume at Task 2 (Wire the export button). Progress …`, the recomputed prompt (the stored one began `Continue … with dforge:executing-plans. No ledger exists yet`); the turn then failed `Invalid API key`, as the placeholder key makes every turn fail, and the band was gone |
 | UX-3 | pass | .dforge/ui-ux/next-session-routing/superseded-v200x60.txt, .dforge/ui-ux/next-session-routing/superseded-v120x40.txt, .dforge/ui-ux/next-session-routing/superseded-after-turn-v120x40.txt; test "resume offer > hides the offer when nothing is to resume" | fixture `w/superseded`: an `--adhoc` note (`done=0`), then completed.md indexed a plan; `next-step --print --latest` there exits 6 `a plan or a milestone closed since the block was written`. No `Resumable` text at either size, 25 s after launch and after a failed turn (which re-reads the note) |
 | UX-4 | pass | .dforge/ui-ux/next-session-routing/fallback-v200x60.txt, .dforge/ui-ux/next-session-routing/fallback-v120x40.txt; tests "resume offer > falls back on a failed run and marks it: …", "resume offer > falls back with the register check: …" | fixture `w/fallback`: the note's plan was deleted and committed, so `next-step --print --latest` exits 2 `no such file`. The band reads `↻ Resumable work · handed off 4m ago · not rechecked — Next: Start at Task 1 (Write the exporter).` at 200x60; at 120x40 `… · not rechecked — Next: Start at Task 1 (Write the exp… [ Resume ] Dismiss`. The pane's card shows the stored line without the mark: the spec (§3, A12) puts the mark on the band only |
@@ -40,6 +40,7 @@
 - `claude plugin test plugins/dforge` at c49d96a4: 675 pass, 0 fail (the integration check, and `ci-mirror`'s pass of the same command), among them the `resume offer` tests named above.
 - `ui-lint plugins/dforge/hooks/cockpit/register.tsx plugins/dforge/hooks/cockpit/lib.ts`: two `raw-color` hits, register.tsx lines 1729 and 1782, both from 2026-10-09 (`git blame`); the merge base's register.tsx gives the same two, so this branch adds none.
 
+- Re-proved at 3648e9f9 after the final review's fix 53d9182c, the one UI change since the walk at c49d96a4 (`git diff --stat c49d96a4 3648e9f9 -- plugins/dforge/hooks/` lists only register.tsx, 2 lines): `trackAutoRun` clears `S.offerRanKey` when an auto run stops being active, so the next read runs `next-step --print --latest` again instead of keeping the offer computed before the run. It changes when the offer is recomputed, not what the band or the card draws, so the captures above stand; the post-run recompute is proven by the test "resume offer > runs again once an auto run ends, though no keyed file changed" (cited under UX-1), which fails on the code before 53d9182c. No live walk drove an auto run to its end: the nested session has no working API key, so no run can start.
 - The two `-after-turn` 120x40 captures of the superseded and stale scenarios carry the host's footer `⚠ Transcript writes are failing (disk full — ENOSPC)`: the session's `/tmp` tmpfs filled during the walk (other sessions' scratch directories). It concerns the nested session's transcript, not the cockpit; the band's absence in those captures matches the earlier captures of the same scenarios taken before the disk filled.
 
 ## Not proven
