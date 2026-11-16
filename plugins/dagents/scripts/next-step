@@ -43,7 +43,7 @@
 #               that have no plan to read.
 # latest.md's Next session section ends with a marker line the printed block
 # never carries, naming what the block was computed from:
-#   <!-- next-step: kind=<kind> [branch=<name>] done=<n> closed=<n> subject=<name or -> at=<epoch> -->
+#   <!-- next-step: kind=<kind> [branch=<name> or branch=detached:<sha>] done=<n> closed=<n> subject=<name or -> at=<epoch> -->
 # Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
 #       latest.md could not be written; 5 background work this session started
 #       is still running (scripts/in-flight): nothing printed or written
@@ -331,15 +331,21 @@ if [ "$latest_mode" -eq 1 ]; then
       closed=*) m_closed=${word#closed=} ;;
     esac
   done
+  case $m_done$m_closed in *[!0-9]*) gone "malformed marker counts: $marker" ;; esac
+  case $m_kind in
+    plan|complete|kept|draft)
+      case $m_subject in -*|*[[:cntrl:]]*|'') gone "malformed marker subject: $m_subject" ;; esac
+      case $m_subject in *.md) ;; *) gone "malformed marker subject: $m_subject" ;; esac ;;
+  esac
   self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
   recompute() { # recompute ARGS... — this script's own --print block, then the marker
     local out status=0
-    out=$(cd "$root" && bash "$self" --host "$host" --print "$@" 2>&1) || status=$?
+    out=$(cd "$root" && bash "$self" --host "$host" --print "$@") || status=$?
     if [ "$status" -ne 0 ]; then printf '%s\n' "$out"; exit "$status"; fi
     printf '%s\n%s\n' "$out" "$marker"
     exit 0
   }
-  read -r now_done now_closed < <(handoff_counts "$root")
+  read -r now_done now_closed < <(handoff_counts "$primary")
   case $m_kind in
     plan)
       if grep -qE '^\*\*Status:\*\* .*[1-9][0-9]* of [0-9]+ tasks complete' <<<"$stored" \
@@ -351,8 +357,13 @@ if [ "$latest_mode" -eq 1 ]; then
     project) recompute --project ;;
     kept)
       plan_finished "$root" "$m_subject" && recompute --complete "$m_subject"
-      git -C "$primary" rev-parse --verify --quiet "refs/heads/$m_branch" >/dev/null || gone "the kept branch $m_branch is gone"
-      ! git -C "$primary" merge-base --is-ancestor "refs/heads/$m_branch" HEAD 2>/dev/null || gone "the kept branch $m_branch is merged"
+      case $m_branch in
+        detached:*) kept_ref="${m_branch#detached:}^{commit}" ;;
+        *) kept_ref="refs/heads/$m_branch" ;;
+      esac
+      case $m_branch in -*|detached:-*) gone "malformed marker branch: $m_branch" ;; esac
+      git -C "$primary" rev-parse --verify --quiet "$kept_ref" >/dev/null || gone "the kept branch $m_branch is gone"
+      ! git -C "$primary" merge-base --is-ancestor "$kept_ref" HEAD 2>/dev/null || gone "the kept branch $m_branch is merged"
       stored_block ;;
     draft|adhoc)
       { [ "$now_done" -gt "$m_done" ] || [ "$now_closed" -gt "$m_closed" ]; } && gone "a plan or a milestone closed since the block was written"
@@ -391,6 +402,13 @@ elif [ "$project" -eq 1 ]; then
     # outside it; no plan is being completed.
     ROUTE_ROOT=$root ROUTE_FINISHED="" ROUTE_MS=$current_ms ROUTE_OUTSIDE_MS=""
     route_rows <<<"$open_rows"
+    # As in --complete: with no current milestone no audit awaits built rows,
+    # so rows that are all built count as nothing open.
+    if [ -z "$current_ms" ] && [ -n "$ROUTE_BUILT" ] && [ "$(tr ',' '\n' <<<"$ROUTE_BUILT" | grep -c .)" -eq "$(grep -c . <<<"$open_rows")" ]; then
+      open_rows=""
+    fi
+  fi
+  if [ -n "$open_rows" ]; then
     render_rows
   elif [ -n "$current_ms" ]; then
     next_line="Milestone $ms_id ($ms_name) has nothing open: audit and close it with dagents:closing-a-milestone."
@@ -744,11 +762,13 @@ today=$(date -u +%Y-%m-%d)
 if [ "$adhoc" -eq 1 ]; then marker_kind=adhoc marker_subject=-
 elif [ "$project" -eq 1 ]; then marker_kind=project marker_subject=-
 elif [ "$draft" -eq 1 ]; then marker_kind=draft marker_subject=$rel
-elif [ "$kept" -eq 1 ]; then marker_kind="kept branch=${branch##* }" marker_subject=$rel
+elif [ "$kept" -eq 1 ]; then
+  case $branch in "detached HEAD "*) marker_kind="kept branch=detached:${branch##* }" ;; *) marker_kind="kept branch=$branch" ;; esac
+  marker_subject=$rel
 elif [ "$complete" -eq 1 ]; then marker_kind=complete marker_subject=$rel
 else marker_kind=plan marker_subject=$rel
 fi
-read -r marker_done marker_closed < <(handoff_counts "$root")
+read -r marker_done marker_closed < <(handoff_counts "$primary")
 marker="<!-- next-step: kind=$marker_kind done=$marker_done closed=$marker_closed subject=$marker_subject at=$(date +%s) -->"
 # Read, merged and replaced under the handoff's lock, so a concurrent writer's
 # notes are never overwritten with the copy read before them.

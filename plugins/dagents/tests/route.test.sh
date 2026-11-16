@@ -107,7 +107,6 @@ built_fixture() {
 }
 built_fixture
 complete 2026-09-01-p1
-has "built epic: the built rows are named" "$NEXT" "Built, awaiting the audit: #1."
 has "built epic: the milestone goes to its audit" "$NEXT" "Built, awaiting the audit: #1. Milestone M1 (MVP) has nothing else open: audit and close it with dagents:closing-a-milestone."
 lacks "built epic: not sent to writing-plans" "$NEXT" "write its plan"
 
@@ -153,6 +152,9 @@ complete 2026-09-01-p1
 has "unrecorded: no completed.md leaves the outcome unrecorded" "$NEXT" "plans exist, outcome unrecorded: #1"
 lacks "unrecorded: no completed.md executes nothing" "$NEXT" "executing-plans"
 lacks "unrecorded: no completed.md plans nothing" "$NEXT" "write its plan"
+live_fixture 2026-10-01-p2
+complete 2026-09-01-p1
+has "unrecorded: a plan dated the index's first entry is not older" "$NEXT" "Continue \`docs/dagents/plans/2026-10-01-p2.md\` with dagents:executing-plans."
 live_fixture 2026-09-15-p2
 complete 2026-09-01-p1
 has "unrecorded: a plan older than completed.md is unrecorded" "$NEXT" "plans exist, outcome unrecorded: #1"
@@ -209,6 +211,15 @@ project() { # project [args...] — run next-step --project in $R; sets OUT, NEX
   NEXT=$(grep '^\*\*Next:\*\*' <<<"$OUT")
   STATUS=$(grep '^\*\*Status:\*\*' <<<"$OUT")
 }
+
+# --- --project with only built rows and no milestone has nothing open ---
+fixture
+plan 2026-09-01-p1 "$S"
+completed 2026-09-01-p1
+register r "$X" "1|Build S|$S|doing"
+project --print --project
+has "project built only: no roadmap means nothing open" "$NEXT" "**Next:** Nothing — no register holds an unresolved row."
+lacks "project built only: no row list without an action" "$NEXT" "Register rows still open"
 
 # --- --project audits a milestone of verify or built rows ---
 built_fixture
