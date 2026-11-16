@@ -545,8 +545,11 @@ commit_all "$TRP" 'docs: record u'
 
 # latest.md absent and its nearest existing parent unwritable: next-step can
 # write nothing (exit 4), so the heading alone releases. Root writes any
-# directory, so this runs only as a regular user (CI).
-if [ "$(id -u)" = 0 ] && ! command -v cygpath >/dev/null 2>&1; then
+# directory, and Windows ignores a directory's read-only attribute, so this
+# runs only as a regular user on a POSIX host (Linux CI).
+if command -v cygpath >/dev/null 2>&1; then
+  echo "skip - an absent latest.md under an unwritable parent accepts the heading (Windows directory modes)"
+elif [ "$(id -u)" = 0 ]; then
   echo "skip - an absent latest.md under an unwritable parent accepts the heading (running as root)"
 else
   mkdir -p "$TMP/ro"
