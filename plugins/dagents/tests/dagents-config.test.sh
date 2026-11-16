@@ -388,5 +388,9 @@ check "drop-snapshot: only that session's snapshot is gone, its id sanitised" "$
 fc drop-snapshot sess-0; check "drop-snapshot: a missing snapshot: exit 0" "$?" "0"
 fc drop-snapshot; check "drop-snapshot: no session: exit 2" "$?" "2"
 
+fresh broken
+mkdir -p "$(dirname "$FILE")" && printf '{"layout": "full",}' > "$FILE"
+check "workflow: a broken file prints the problem line" "$(fc workflow)" "dagents: $FILE is not a JSON object; every setting reads its default and notifyOn reads none until it parses"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

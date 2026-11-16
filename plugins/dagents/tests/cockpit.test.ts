@@ -1839,6 +1839,20 @@ describe('settings', () => {
     expect(await ui.find({ type: 'Text', text: /warnAt in ~\/\.dagents\/config\.json is not valid; ignored/ })).toBeDefined()
   })
 
+  test('a settings file that does not parse is a problem and silences Discord', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const files: NonNullable<World['files']> = { [CONFIG]: { text: '{"layout": "full",}', mtimeMs: 1 } }
+    world(on, { ...SIGNED_IN, files, fetches, env: { HOME: '/home/me', DAGENTS_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-settings' })
+    expect(await ui.find({ type: 'Text', text: /config\.json is not a JSON object; every setting reads its default/ })).toBeDefined()
+    await $.turn.complete({ answer: 'done', durationMs: 120_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(fetches).toHaveLength(0)
+  })
+
   test('every setting has a row in exactly one tab', async ($, on) => {
     world(on, { tokens: 284_000, config: {} })
     await $.session.start(START)

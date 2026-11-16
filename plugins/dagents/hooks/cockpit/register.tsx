@@ -2493,6 +2493,8 @@ async function drawBand($: EngineInterface, e: RenderInput<'Pane' | 'AbovePrompt
 const S = {
   // Saved or environment values the settings in force ignored, for the settings view.
   settingProblems: [] as string[],
+  // The problem line for a settings file that does not parse (C15), while it does not; null otherwise.
+  brokenConfig: null as string | null,
   // Keys something outside the settings file forces, with the words their rows show.
   locks: {} as Record<string, string>,
   // Skill-enforced settings changed since the model was last told, with their new values.
@@ -3834,7 +3836,7 @@ async function applySettings($: EngineInterface, file: SettingsFile, mtime?: num
   const merged = { ...((mergedRead ?? {}) as Record<string, unknown>), ...S.claudeSaved }
   const user = { ...engineUser, ...S.claudeSaved }
   const values = resolveSettings(SCHEMA, file, env, merged)
-  S.settingProblems = settingProblems(SCHEMA, file, env)
+  S.settingProblems = [...(S.brokenConfig === null ? [] : [S.brokenConfig]), ...settingProblems(SCHEMA, file, env)]
   const locks = { ...envLocks(SCHEMA, env), ...claudeLocks(SCHEMA, merged, user) }
   S.locks = locks
   await update($, settings, () => values)
@@ -3885,6 +3887,7 @@ async function importWebhook($: EngineInterface) {
 async function loadSettings($: EngineInterface) {
   S.claudeSaved = {}
   S.changed = {}
+  S.brokenConfig = null
   const { path, mtime } = await configStamp($)
   if (path === null) return applySettings($, {}, null)
   let file = await readSettingsFile($, path)
@@ -3893,8 +3896,14 @@ async function loadSettings($: EngineInterface) {
     file = await importSettings($, path)
     readAt = undefined
   }
-  await applySettings($, file ?? {}, readAt)
+  if (file === null) S.brokenConfig = `dagents: ${path} is not a JSON object; every setting reads its default and notifyOn reads none until it parses`
+  await applySettings($, inForce(file), readAt)
   await importWebhook($).catch(() => undefined)
+}
+
+// What a settings file puts in force: a file that does not parse sends no notification, as dagents-config's workflow line says.
+function inForce(file: SettingsFile | null): SettingsFile {
+  return file ?? (S.brokenConfig === null ? {} : { notifyOn: 'none' })
 }
 
 /** Saves one setting and puts it in force, saying why if it could not; resolves whether it was saved. */
@@ -3910,7 +3919,7 @@ async function setOption($: EngineInterface, key: string, value: SettingValue): 
       // dagents-config removes a floored key saved as 0, so the user file then lacks it.
       const saved = spec.floor !== undefined && value === 0 ? undefined : value
       S.claudeSaved[key] = saved
-      await applySettings($, file ?? {}, mtime)
+      await applySettings($, inForce(file), mtime)
       void claudeReadBack($, key, saved)
       return true
     }
@@ -4110,7 +4119,7 @@ async function claudeReadBack($: EngineInterface, key: string, value: SettingVal
     delete S.claudeSaved[key]
     const { path, mtime } = await configStamp($)
     const file = path === null ? {} : await readSettingsFile($, path)
-    await applySettings($, file ?? {}, mtime)
+    await applySettings($, inForce(file), mtime)
     $.ui.toast(`dagents: ${key} did not stick: the engine kept ${engine === undefined ? 'no value' : JSON.stringify(engine)}`)
   } catch {
     // The read-back is a courtesy: a failure leaves the save shown as saved.
@@ -4124,11 +4133,14 @@ async function rereadSettings($: EngineInterface) {
   const file = path === null ? {} : await readSettingsFile($, path)
   if (file === null) {
     S.seen = { config: mtime, claude }
+    // A file that never parsed this session keeps its problem line until it does.
+    if (S.brokenConfig !== null) return
     const problem = `${path} is not a JSON object; the settings in force are kept`
     if (!S.settingProblems.includes(problem)) S.settingProblems = [...S.settingProblems, problem]
     $.ui.invalidate('ui.render')
     return
   }
+  S.brokenConfig = null
   const before = (await live($)).layout
   const was = ((await read($, settings)) ?? {}) as Record<string, SettingValue | undefined>
   await applySettings($, file, mtime)
