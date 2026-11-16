@@ -1179,8 +1179,13 @@ export const register: Register = on => {
         const spec = SCHEMA[key]
         if (CONSENTS[key] === undefined || spec === undefined || Number(values[key] ?? spec.default) !== 0 || !(Number(value) > 0)) return false
         await show({})
-        S.consentPending = { key, value: Number(value) }
-        $.ui.invalidate('ui.render')
+        // Confirm's autoFocus acts only as the pane takes the keys; the pane
+        // already holds them, so the ring would stay at the pressed + button's
+        // place, which Cancel now fills.
+        await openField($, `set-${key}-confirm`, async () => {
+          S.consentPending = { key, value: Number(value) }
+          $.ui.invalidate('ui.render')
+        })
         return true
       }
       // A segment's chip on either line: on adds it last there and moves it off the other.
