@@ -571,11 +571,26 @@ with the session in the implementer's place.
    builds the step state from that line.
 2. **Implement and report.** Implement, verify, self-review and commit as
    dforge:executing-plans §The Task Loop steps 3 to 6 say. Then write
-   `<workspace>/task-<N>-report.md` in the implementer report shape
-   ([implementer-prompt.md](prompts/implementer-prompt.md)
-   §Report Format): status, commits, `## Verified`,
-   `## Discovered issues (not fixed)` and `## Assumptions made`. The reviewer
-   prompt names that file.
+   `<workspace>/task-<N>-report.md`; the reviewer prompt names that file.
+   It holds:
+   - what you implemented and the commits, what you tested and anything you
+     could not run, the files changed, self-review findings and any concerns;
+   - `## Verified`: one bullet per command you ran to check your work. Each
+     bullet starts at the beginning of its line and has exactly this form,
+     where the separator is a space, an em dash and a space, `pass` means
+     the command exited 0, and the counts are the ones the command printed
+     (a command that prints none is `1 passed, 0 failed` on exit 0 and
+     `0 passed, 1 failed` otherwise):
+     - `<command>` — pass: <n> passed, <m> failed
+     - `<command>` — fail: <n> passed, <m> failed
+   - **TDD Evidence**, when the task required TDD: RED, the command, its
+     relevant failing output before the implementation and why that failure
+     was expected; GREEN, the command and its passing output after;
+   - `## Discovered issues (not fixed)`: problems you noticed and did not
+     fix because the task did not ask for them, one bullet each, or `None`.
+     Never fix one just to shorten this list;
+   - `## Assumptions made`: decisions you made where the brief was silent,
+     one bullet each, or `None`.
 3. **Review.** Start the suite as §2's *The suite runs beside the review*
    says, run `bash <plugin-root>/scripts/task-step review PLAN_FILE <N>`,
    dispatch the seat it prints, and run `task-step verdict` once both are in

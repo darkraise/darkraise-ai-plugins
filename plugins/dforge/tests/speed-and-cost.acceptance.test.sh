@@ -92,8 +92,7 @@ fi
 
 # ---------------------------------------------------------------- A3
 if selected A3; then
-  IP="$PLUGIN/reference/prompts/implementer-prompt.md"
-  has "A3: implementer-prompt.md names the Verified section" "$(doc "$IP")" '## Verified'
+  has "A3: the session report shape names the Verified section" "$(doc "$PLUGIN/reference/delegated-task.md")" '## Verified'
 fi
 
 # ---------------------------------------------------------------- A4
