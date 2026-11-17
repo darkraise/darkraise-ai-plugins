@@ -127,9 +127,10 @@ cleanly."
    It prints the `## Next session` block and writes it into `latest.md`. If it
    exits 4, say `latest.md` could not be written.
 
-   Then run `scripts/darkmem-sync push` and promote the session's durable
-   facts ([project-state.md](../../reference/project-state.md) §darkmem sync
-   points): the push carries the ledger, `handoff.md` and `latest.md`.
+   Then promote the session's durable facts
+   ([project-state.md](../../reference/project-state.md) §darkmem sync
+   points), and with `darkmemEnabled` true run `scripts/darkmem-sync push`:
+   the push carries the ledger, `handoff.md` and `latest.md`.
 
    On Codex, add `--host codex` to the design-phase, unplanned-work and between-plans calls,
    so the block names the Codex client rather than Claude. A plan states its
