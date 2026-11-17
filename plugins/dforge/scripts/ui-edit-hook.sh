@@ -13,6 +13,8 @@ stdin_json="$(cat 2>/dev/null || true)"
 jq -e . >/dev/null 2>&1 <<<"$stdin_json" || exit 0
 file=$(jq -r '.tool_input.file_path // empty' <<<"$stdin_json")
 session_id=$(jq -r '.session_id // empty' <<<"$stdin_json")
+. "$SCRIPT_DIR/lib/stand-down.sh"
+! stand_down_active "$session_id" || exit 0
 transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json")
 cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
 [ -n "$file" ] || exit 0

@@ -11,6 +11,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 stdin_json="$(cat 2>/dev/null || true)"
 session_id=$(jq -r '.session_id // empty' 2>/dev/null <<<"$stdin_json" || true)
 [ -n "$session_id" ] || exit 0
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/stand-down.sh"
+! stand_down_active "$session_id" || exit 0
 cwd=$(jq -r '.cwd // empty' 2>/dev/null <<<"$stdin_json" || true)
 
 turns_dir="${HOME:-}/.claude/dforge/sessions/turns"

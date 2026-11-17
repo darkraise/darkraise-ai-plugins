@@ -40,6 +40,7 @@ selected() { [ "$ONLY" = "  " ] || [[ "$ONLY" == *" $1 "* ]]; }
 
 TMP="$(mktemp -d)"
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+export WORKFLOW_GUARD_CLAUDE_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_MANAGED_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_PROJECT_DIR="$TMP/workflow-guard"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
 unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DFORGE_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR CLAUDE_CODE_SESSION_ID

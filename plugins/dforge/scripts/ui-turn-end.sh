@@ -26,6 +26,8 @@ cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
 transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json")
 is_retry=$(jq -r '.stop_hook_active // false' <<<"$stdin_json")
 [ -n "$session_id" ] || exit 0
+. "$SCRIPT_DIR/lib/stand-down.sh"
+! stand_down_active "$session_id" || exit 0
 [ "$is_retry" = true ] && exit 0
 root=$(git -C "${cwd:-$PWD}" rev-parse --show-toplevel 2>/dev/null) || exit 0
 if (cd "$root" && bash "$SCRIPT_DIR/auto-run" --session "$session_id" pending >/dev/null 2>&1); then exit 0; fi

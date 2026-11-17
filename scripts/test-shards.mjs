@@ -180,6 +180,7 @@ export const windowsSeconds = {
   'plugins/dagents/tests/speed-and-cost-followups.acceptance.test.sh': 470,
   'plugins/dagents/tests/speed-and-cost.acceptance.test.sh': 280,
   'plugins/dagents/tests/stand-down.test.sh': 20,
+  'plugins/dforge/tests/stand-down.test.sh': 20,
   'plugins/dagents/tests/suite-run.test.sh': 54,
   'plugins/dagents/tests/task-loop-steps.acceptance.test.sh': 920,
   'plugins/dagents/tests/task-state.test.sh': 10,

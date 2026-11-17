@@ -11,6 +11,7 @@ P="$(cd "$HERE/.." && pwd)"
 S="$P/scripts"
 TMP="$(mktemp -d)"
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+export WORKFLOW_GUARD_CLAUDE_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_MANAGED_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_PROJECT_DIR="$TMP/workflow-guard"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
 mkdir -p "$HOME/.claude"

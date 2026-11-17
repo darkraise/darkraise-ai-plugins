@@ -16,6 +16,7 @@ check() { # check <name> <got> <want>
 }
 
 TMP="$(mktemp -d)"
+export WORKFLOW_GUARD_CLAUDE_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_MANAGED_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_PROJECT_DIR="$TMP/workflow-guard"
 trap 'rm -rf "$TMP"' EXIT
 
 payload() {
@@ -197,7 +198,7 @@ fi
 check "hooks.json is valid JSON" \
   "$(jq -e . "$HOOKS" >/dev/null 2>&1 && echo yes || echo no)" "yes"
 check "hooks.json registers SessionStart with the full matcher" \
-  "$(jq -r '.hooks.SessionStart[0].matcher // "MISSING"' "$HOOKS" 2>/dev/null)" "startup|resume|clear|compact"
+  "$(jq -r '.hooks.SessionStart[0].matcher // "MISSING"' "$HOOKS" 2>/dev/null)" "startup|resume|clear|compact|fork"
 check "hooks.json is synchronous" \
   "$(jq -r '.hooks.SessionStart[0].hooks[0].async // false' "$HOOKS" 2>/dev/null)" "false"
 check "hooks.json forces the bash interpreter" \

@@ -11,6 +11,15 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 . "${SCRIPT_DIR}/lib/roots.sh"
 
 stdin_json="$(cat 2>/dev/null || true)"
+# A second workflow plugin enabled beside dforge: the guard's block is the
+# whole answer, and nothing else here runs (scripts/workflow-guard.mjs).
+if command -v node >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/workflow-guard.mjs" ]; then
+  guard_out=$(printf '%s' "$stdin_json" | node "$(dr_native_path "$SCRIPT_DIR/workflow-guard.mjs")" --host claude --self dforge --hook session-start)
+  if [ $? -eq 3 ]; then
+    printf '%s\n' "$guard_out"
+    exit 0
+  fi
+fi
 transcript_path="" cwd=""
 
 if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
