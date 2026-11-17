@@ -398,7 +398,7 @@ The dforge 4.x agent workflow (implementer agents, subagent mode, external execu
 
 ## How it fires
 
-A `SessionStart` hook (matcher `startup|resume|clear|compact`) injects the
+A `SessionStart` hook (matcher `startup|resume|clear|compact|fork`) injects the
 `dforge:using-dforge` entry point as `additionalContext`, so every
 session starts with the skill-routing rules — including the pointers to
 `selecting-approaches`, implementer assignment in `writing-plans`, and plan

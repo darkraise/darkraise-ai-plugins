@@ -1,9 +1,9 @@
 ## First: one workflow plugin at a time
 
 Before anything else in a Codex session, run
-`node <plugin-root>/scripts/workflow-guard.mjs --host codex` (the plugin root
-is the parent of the `skills/` directory). Exit 3 means another workflow
-plugin (dagents or dflow) is enabled beside dforge: show the user its output
+`node <plugin-root>/scripts/workflow-guard.mjs --host codex --self dforge` (the
+plugin root is the parent of the `skills/` directory). Exit 3 means another
+workflow plugin (dagents; dflow runs only on Claude Code) is enabled beside dforge: show the user its output
 as it is, then stop, and use no dforge skill, command or agent until only one
 of them is enabled. Any other exit: carry on.
 
