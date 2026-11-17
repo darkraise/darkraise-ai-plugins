@@ -22,7 +22,7 @@ account-aware status line and coding-agent skills for two design systems.
 | Plugin | What it does | Claude Code | Codex |
 | --- | --- | :---: | :---: |
 | [dforge](plugins/dforge/README.md) | Turns a request into a reviewed spec, a scored plan and an in-session execution run. On Claude Code it adds the cockpit pane, Discord notifications and an attribution guard. | ✓ | ✓ (no cockpit) |
-| [dagents](plugins/dagents/README.md) | The dforge 4.x workflow, continued: scored tasks run by implementer agents on a model ladder, subagent or inline execution, and external Antigravity and Codex executors, with the same cockpit on Claude Code. | ✓ | ✓ (no cockpit) |
+| [dagents](plugins/dagents/README.md) | The subagent-driven dforge 4.x workflow, continued: each scored task runs on an implementer agent on a model ladder with a judge review (inline execution on request), and external Antigravity and Codex executors, with the same cockpit on Claude Code. | ✓ | ✓ (no cockpit) |
 | [dflow](plugins/dflow/README.md) | Plans, builds, reviews and ships behind a task gate that only a passing command opens, with a board, living docs checked mechanically, UI proof and a HUD. | ✓ | |
 | [dr-status](plugins/dr-status/README.md) | A status line with git detail and usage meters, framed in the color of the Claude account. | ✓ | |
 | [darkraise-ui](plugins/darkraise-ui/README.md) | Teaches agents to write idiomatic darkraise-ui code. | ✓ | ✓ |
