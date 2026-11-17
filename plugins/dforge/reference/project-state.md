@@ -127,8 +127,9 @@ unchanged.
 ## darkmem sync points
 
 Run `bash <plugin-root>/scripts/darkmem-sync push` at each stop point: after
-every `Task <N>: complete` and fix-round ledger line, after a spec or plan is
-saved, and at handoff once `scripts/next-step` has written `<latest.md>`. In a
+every fix-round ledger line, after a spec or plan is saved, and at handoff
+once `scripts/next-step` has written `<latest.md>`. `scripts/task-close`
+pushes after the `Task <N>: complete` line it writes. In a
 repository that is not mapped to darkmem, or while darkmem is off, it prints
 one line and exits 0; the task loop skips it while `darkmemEnabled` is false. On Claude Code the SessionStart hook runs `darkmem-sync reconcile`, then `pull`,
 and the Stop hook pushes as a safety net. Codex has no hooks, so there these
