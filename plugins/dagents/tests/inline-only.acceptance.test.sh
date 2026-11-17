@@ -138,7 +138,8 @@ io_plan 'inline — `claude --model sonnet --effort medium` — x' "0 0 0 3" "0 
 lint risk3m.md
 has "A15: risk 3 raises the effort floor to high" "$out" "ERROR header: inline execution needs --effort high or above (effort medium)"
 io_plan 'inline — `claude --model sonnet --effort high` — x' "1 2 2 2" "0 1 1 0" > old.md
-rev=$(bash "$S/plan-revise" old.md 2>&1)
+mkdir -p "$TMP/inline-home/.dagents"; printf '{"executionMode":"inline"}\n' > "$TMP/inline-home/.dagents/config.json"
+rev=$(HOME="$TMP/inline-home" DAGENTS_NO_SETTINGS= bash "$S/plan-revise" old.md 2>&1)
 has "A9: plan-revise recommends the covering pair" "$rev" "recommend  execution=inline  model=opus  effort=high  delegated=0/2"
 # --- Task 3 ---
 io_plan "$INLINE_OPUS" "0 2 1 3" "0 1 1 0" > loop.md

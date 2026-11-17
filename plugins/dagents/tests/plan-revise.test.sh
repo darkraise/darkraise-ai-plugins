@@ -14,6 +14,8 @@ check() { # check <name> <got> <want>
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+export HOME="$TMP/home"
+mkdir -p "$HOME/.dagents"
 REPO="$TMP/repo"
 mkdir -p "$REPO/docs"
 git -C "$REPO" init -q
@@ -211,6 +213,16 @@ check "a legacy header reports a missing execution line" "$(field execution "$ou
 
 # --- the recommendation, which is writing-plans' rule as arithmetic ---
 plan "$(mktask 1 0 1 0 2)"
+out=$(run | grep '^recommend')
+check "the default recommends subagent" "$(field execution "$out")" "subagent"
+check "a subagent session runs on sonnet" "$(field model "$out")" "sonnet"
+check "a subagent session runs at effort high" "$(field effort "$out")" "high"
+printf '{"executionMode":"subagent"}\n' > "$HOME/.dagents/config.json"
+check "executionMode=subagent recommends subagent" "$(field execution "$(run | grep '^recommend')")" "subagent"
+
+# Under executionMode=inline the session implements, so the pair covers the
+# hardest self-implemented task.
+printf '{"executionMode":"inline"}\n' > "$HOME/.dagents/config.json"
 out=$(run | grep '^recommend')
 check "one light task recommends inline" "$(field execution "$out")" "inline"
 check "one light task recommends sonnet" "$(field model "$out")" "sonnet"

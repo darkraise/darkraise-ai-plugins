@@ -247,7 +247,9 @@ fi
 
 # ----------------------------------------------------------------------- A9
 if selected A9; then
-  rev() { (cd "$REPO" && "$TIMEOUT_BIN" 60 bash "$S/plan-revise" "$1" 2>&1) | tr -d '\r' | grep '^recommend' | tr -s ' '; }
+  # The covering pair is the inline rule, which applies under executionMode=inline.
+  mkdir -p "$TMP/inline-home/.dagents"; printf '{"executionMode":"inline"}\n' > "$TMP/inline-home/.dagents/config.json"
+  rev() { (cd "$REPO" && HOME="$TMP/inline-home" DAGENTS_NO_SETTINGS= "$TIMEOUT_BIN" 60 bash "$S/plan-revise" "$1" 2>&1) | tr -d '\r' | grep '^recommend' | tr -s ' '; }
   P=$(mk a9a 'inline — claude --model sonnet --effort high — x' "$HEAVY6" "$T3R2")
   check "A9: hardest task total 6, no executor: opus/high, nothing delegated" "$(rev "$P")" "recommend execution=inline model=opus effort=high delegated=0/2"
   P=$(mk a9b 'inline — claude --model sonnet --effort high — x' "$T5" "$T3R2" "$HEAVY8 codex")
