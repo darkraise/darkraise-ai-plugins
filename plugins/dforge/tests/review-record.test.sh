@@ -2,7 +2,7 @@
 # scripts/review-record: the retained review record a finished plan leaves,
 # and the per-plan test ratio its final review writes to the ledger.
 set -uo pipefail
-unset CLAUDE_CONFIG_DIR DFORGE_DOCUMENT_STORE DFORGE_PROGRESS_SOURCE CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/.."

@@ -46,7 +46,7 @@ test("a mapped repository applies each family as its record says", () => {
   assert.equal(both.progress.latestFile, path.join(path.dirname(both.documents.root), "work", "handoff", "latest.md"));
 });
 
-test("the configured store: the mapping entry, then the global key, then darkmem; no environment variable", () => {
+test("the configured store: the mapping entry, then the global key, then darkmem", () => {
   const repo = makeRepo();
   const rows = [
     [{}, {}, "darkmem"],
@@ -56,11 +56,9 @@ test("the configured store: the mapping entry, then the global key, then darkmem
   ];
   for (const [global, entry, want] of rows) {
     const { env } = makeHome({ repo, config: mapped(repo, entry, global) });
-    env.DFORGE_DOCUMENT_STORE = want === "local" ? "darkmem" : "local";
     assert.equal(resolveStores({ cwd: repo, env }).documents.configured, want, JSON.stringify({ global, entry }));
   }
   const { env } = makeHome({ repo, config: mapped(repo, { progressSource: "local" }) });
-  env.DFORGE_PROGRESS_SOURCE = "darkmem";
   assert.equal(resolveStores({ cwd: repo, env }).progress.configured, "local");
 });
 
