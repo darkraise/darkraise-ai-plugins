@@ -1104,6 +1104,16 @@ has "A14: darkmem: launches in the worktree holding the workspace" "$out" "Launc
 has "A14: darkmem: the prompt starts in the worktree" "$out" "Start in \`$WA_ROOT\`"
 check "A14: darkmem: the worktree's handoff is written" "$([ -f "$WA_H" ] && echo yes || echo no)" "yes"
 check "A14: darkmem: the mirror's handoff is not written" "$([ -f "$MIRROR/work/handoff/latest.md" ] && echo yes || echo no)" "no"
+# Both worktrees hold the workspace: the calling one is T, not the first listed.
+mkdir -p "$WB/.dforge/sdd/2026-01-01-demo"; rm -f "$WA_H" "$WB_H"
+run "$WB" "$PLAN_REL"
+has "A14: darkmem: the calling worktree holding the workspace launches" "$out" "Launch in \`$WB_ROOT\`:"
+check "A14: darkmem: the first worktree's handoff is not written" "$([ -f "$WA_H" ] && echo yes || echo no)" "no"
+# Only the primary holds it: a linked worktree's call makes the primary T.
+rm -rf "$WA/.dforge/sdd/2026-01-01-demo" "$WB/.dforge/sdd/2026-01-01-demo"; rm -f "$WA_H" "$WB_H"
+run "$WB" "$PLAN_REL"
+has "A14: darkmem: only the primary holding the workspace launches there" "$out" "Launch in \`$ROOT\`:"
+check "A14: darkmem: the calling worktree's handoff is not written" "$([ -f "$WB_H" ] && echo yes || echo no)" "no"
 rm -rf "$HOME/.dforge"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
