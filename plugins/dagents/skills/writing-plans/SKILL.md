@@ -103,7 +103,7 @@ Constraints and Contracts.
 
 **Spec:** [repository-relative path to the spec/design doc this plan implements]
 
-**Execution:** inline — `claude --model <model> --effort <effort>` — [why]
+**Execution:** subagent — `claude --model sonnet --effort high` — [why]
 
 **Parallelism:** [sequential — <why> | waves — <ranges, e.g. 1 | 2-4 | 5>] (see Parallel waves)
 
@@ -159,10 +159,11 @@ Read [task-check-line.md](references/task-check-line.md) before you write the he
 Codex plans also carry `Host: codex` and `Routing policy: codex-v4` lines
 ([native-codex.md](../../reference/native-codex.md)), and their Execution line
 names the native pair:
-`**Execution:** inline — codex <model> / <effort> — <why>`.
-That pair runs the main session for the whole plan, and names the execution
-tier at its highest weighted routing score. `scripts/plan-lint` warns on any other pair,
-and errors on an inline pair below that score.
+`**Execution:** subagent — codex gpt-6.1-sol / high — <why>`, or on an inline
+plan `**Execution:** inline — codex <model> / <effort> — <why>`.
+That pair runs the main session for the whole plan. An inline pair names the
+execution tier at its highest weighted routing score. `scripts/plan-lint` warns
+on any other pair, and errors on an inline pair below that score.
 
 **Read the settings first, then choose the Execution line.**
 

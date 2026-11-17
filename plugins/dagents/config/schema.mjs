@@ -162,12 +162,12 @@ export default {
   executionStrategy: {
     type: 'enum', values: ['ask', 'sequential', 'parallel'], default: 'sequential', enforcedBy: 'skill', group: 'Workflow', target: 'dagents',
     label: 'Strategy', title: 'Execution strategy',
-    description: 'How a plan executes. sequential, the default, runs one task at a time. parallel and ask take effect only with a subagent Execution line (executionMode=subagent, deprecated); an inline plan is always sequential.',
+    description: 'How a plan executes. sequential, the default, runs one task at a time. parallel and ask take effect only with a subagent Execution line, the default mode; an inline plan is always sequential.',
   },
   executionMode: {
     type: 'enum', values: ['auto', 'inline', 'subagent'], default: 'auto', enforcedBy: 'skill', group: 'Workflow', target: 'dagents',
     label: 'Execution mode', title: 'Execution mode',
-    description: 'Who implements plan tasks. auto and inline: the session implements every task, executor tasks excepted. subagent (deprecated) dispatches an implementer per task.',
+    description: 'Who implements plan tasks. auto, the default, and subagent dispatch an implementer per task, with a judge review. inline: the session implements every task, executor tasks excepted.',
   },
   worktree: {
     type: 'enum', values: ['ask', 'always', 'never'], default: 'ask', enforcedBy: 'skill', group: 'Workflow', target: 'dagents',

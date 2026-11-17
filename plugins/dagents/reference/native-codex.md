@@ -145,9 +145,12 @@ A Claude `Executor: codex` line never starts recursive CLI offload in a Codex ho
 ## Execution modes and session ends
 
 Both execution skills run on this host, and the plan's `**Execution:**` line
-names the mode and the native pair. A Codex-host plan is inline, heavy tasks
-included, and its session implements every task.
-A Codex plan therefore carries no delegated task, and `scripts/task-brief`
+names the mode and the native pair. A Codex-host plan executes in subagent
+mode by default, as on Claude: dagents:subagent-driven-development dispatches
+each task to a native implementer under the protocol below. An inline Codex
+plan (`executionMode=inline`, or your human partner asks) implements every task
+in its session, heavy tasks included.
+An inline Codex plan therefore carries no delegated task, and `scripts/task-brief`
 writes it no `**Dispatch:**` or `**Review:**` line. A task whose `**Evaluation:**` line
 reads `risk=3` is reviewed by hand with a native judge at Astra high or above
 ([delegated-task.md](delegated-task.md) §The session review loop); otherwise
