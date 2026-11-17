@@ -51,6 +51,8 @@ $MISSING")"
 check "another agent type passes" "$CODE|$OUT|$ERR" "0||"
 gate "$(input general-purpose a-gp 'Report: /nonexistent/report.md')"
 check "a general-purpose agent with a missing report passes" "$CODE|$OUT|$ERR" "0||"
+gate "$(input dagents:impl-sonnet-medium a-dagents "$MISSING")"
+check "another plugin's implementer with a missing report passes" "$CODE|$OUT|$ERR" "0||"
 gate '{"agent_type":"dforge:impl-sonnet-high"'
 check "malformed input passes" "$CODE|$OUT|$ERR" "0||"
 gate "$(fjq -nc --arg m "QA done.
@@ -73,9 +75,9 @@ gate "$(input dforge:impl-sonnet-high w-1 'Walkthrough done; screenshots saved.'
 check "a reply with no Report line passes" "$CODE|$OUT|$ERR" "0||"
 
 printf '## Verdict\npass: 1\n' > "$R"
-gate "$(input impl-opus-high a-ok "$GOOD")"
+gate "$(input impl-sonnet-high a-ok "$GOOD")"
 check "an unprefixed agent type is checked too" "$CODE|$OUT|$ERR" "0||"
-gate "$(input impl-opus-high a-miss "QA done.
+gate "$(input impl-sonnet-high a-miss "QA done.
 Report: $TMP/missing.md")"
 check "an unprefixed agent type with a missing report blocks" "$CODE:$(has "$ERR" 'does not exist')" "2:1"
 check "a passing stop writes no counter" "$([ -e "$STATE/impl-stop-gate/a-ok" ] && echo yes || echo no)" "no"
@@ -171,7 +173,7 @@ check "a missing working directory lets the stop through and logs why" "$CODE|$O
 
 LINES0=$(wc -l < "$FALLBACK" | tr -d ' ')
 gate "$(fjq -nc --arg m "All done.
-$MISSING" '{cwd:"/nonexistent/dir",agent_id:"a-nl",agent_type:"dforge:impl-sonnet-high\nFAKE injected line\u001b[31m",last_assistant_message:$m}')"
+$MISSING" '{cwd:"/nonexistent/dir\nFAKE injected line\u001b[31m",agent_id:"a-nl",agent_type:"dforge:impl-sonnet-high",last_assistant_message:$m}')"
 check "a value with a newline or an escape logs one clean line" "$CODE|$(($(wc -l < "$FALLBACK" | tr -d ' ') - LINES0))|$(grep -c '^FAKE' "$FALLBACK")|$(grep -c "$(printf '\033')" "$FALLBACK")" "0|1|0|0"
 
 # A symlink planted where the log goes is not followed.
@@ -215,10 +217,11 @@ check "the observed event name" "$(jq -r .hook_event_name "$FIXTURE")" "Subagent
 check "the observed input has the fields the gate reads" \
   "$(jq -r '[has("agent_id"), has("agent_type"), has("last_assistant_message"), has("cwd")] | all' "$FIXTURE")" "true"
 MATCHER=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS")
-check "hooks.json registers SubagentStop with the implementer matcher" "$MATCHER" '(dforge:)?impl-.*'
+check "hooks.json registers SubagentStop with the QA seat matcher" "$MATCHER" '^(dforge:)?impl-sonnet-high$'
 matches() { [[ $1 =~ ^($MATCHER)$ ]] && echo yes || echo no; }
 check "the matcher selects the observed agent_type" "$(matches "$(jq -r .agent_type "$FIXTURE")")" "yes"
-check "the matcher selects an unprefixed implementer" "$(matches impl-opus-high)" "yes"
+check "the matcher selects the unprefixed QA seat" "$(matches impl-sonnet-high)" "yes"
+check "the matcher leaves another plugin's implementer alone" "$(matches dagents:impl-sonnet-high)" "no"
 check "the matcher leaves a judge alone" "$(matches dforge:judge-opus)" "no"
 check "hooks.json runs the gate" "$(jq -r '.hooks.SubagentStop[0].hooks[0].command' "$HOOKS")" 'bash "${CLAUDE_PLUGIN_ROOT}/scripts/impl-stop-gate"'
 check "the gate hook is synchronous, bash, 30 s" \

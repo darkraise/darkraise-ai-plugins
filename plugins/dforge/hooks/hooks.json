@@ -70,7 +70,7 @@
     ],
     "SubagentStop": [
       {
-        "matcher": "(dforge:)?impl-.*",
+        "matcher": "^(dforge:)?impl-sonnet-high$",
         "hooks": [
           {
             "type": "command",

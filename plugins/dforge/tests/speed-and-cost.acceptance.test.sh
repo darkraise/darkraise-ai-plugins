@@ -222,7 +222,7 @@ fi
 # ---------------------------------------------------------------- A9
 if selected A9; then
   hooks=$(jq -r '.hooks.SubagentStop[0] | [.matcher, .hooks[0].command] | @tsv' < "$PLUGIN/hooks/hooks.json" | tr -d '\r')
-  has "A9: hooks.json registers the gate on SubagentStop for impl agents" "$hooks" '(dforge:)?impl-.*'
+  has "A9: hooks.json registers the gate on SubagentStop for the QA seat" "$hooks" '^(dforge:)?impl-sonnet-high$'
   has "A9: and runs scripts/impl-stop-gate" "$hooks" 'scripts/impl-stop-gate'
 
   printf '## Verdict\npass: 1\n' > "$TMP/reports/ok.md"
@@ -230,7 +230,7 @@ if selected A9; then
   check "A9: a report that opens with ## Verdict passes" "$grc" "0"
   gate dforge:impl-sonnet-high "$(newid)" $'**Status:** DONE\n- Commits: abc1234 feat: x'
   check "A9: a reply with no Report: line passes" "$grc" "0"
-  gate impl-haiku "$(newid)" "$(qa "$TMP/reports/nothing-here.md")"
+  gate impl-sonnet-high "$(newid)" "$(qa "$TMP/reports/nothing-here.md")"
   check "A9: an agent type without the plugin prefix is gated too" "$grc" "2"
   gate dforge:impl-sonnet-high "$(newid)" "$(qa "$TMP/reports/nothing-here.md")"
   check "A9: a missing report file exits 2" "$grc" "2"
