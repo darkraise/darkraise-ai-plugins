@@ -36,7 +36,8 @@ session cannot be bound: say so in one line and continue without an auto run.
 ## While a run is bound to this session
 
 `scripts/auto-run status` exits 0 and names the phase, the regime, the pending
-action, the plan, the base and the register. Every `scripts/auto-run` command
+action, the plan, the base and the register, then prints `api rungs: off`
+when the Decisions API is off and every API budget cap is 0. Every `scripts/auto-run` command
 exits 0 when done, 1 when it failed (no handoff file to read, or `jq` or
 `mktemp` failed), 2 on bad usage, 3 when no run is bound to this session, 4
 when refused, 5 when the run stopped (`handoff` for `after-compact`) and 6
@@ -115,7 +116,11 @@ auto run.
 ## Rulings
 
 The ladder for anything you would have asked. The `scripts/decide` and
-`scripts/run-api-judge` calls of rungs 1 and 2 are made only on Claude Code:
+`scripts/run-api-judge` calls of rungs 1 and 2 are made only on Claude Code,
+and only while `scripts/auto-run status` does not print `api rungs: off`. On
+that line skip both calls: a choice item starts at rung 2, and a ruling the
+route gives to `dforge:judge-opus` goes to that seat at once, with no
+background run and no turn end:
 
 1. **The Decisions API, for a choice item.** A choice item is a spec or
    planning choice before execution: a question with its options, your

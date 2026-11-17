@@ -66,6 +66,18 @@ cmd=$1
 shift
 
 bound() { ar_bound || { echo "auto-run: no auto run is bound to this session" >&2; exit 3; }; }
+# api_rungs — "api rungs: off" when the Decisions API is off and every API
+# budget cap is 0, so a ruling's rungs 1 and 2 have nothing to call. Settings
+# that cannot be read print nothing, and the session runs the rungs as before.
+api_rungs() {
+  local json
+  if [ -n "${DFORGE_NO_SETTINGS:-}" ]; then echo "api rungs: off"; return 0; fi
+  json=$(bash "$HERE/dforge-config" get --json 2>/dev/null) || return 0
+  ar_jq -e '(.decisionApi // "off") == "off"
+    and ([.apiBudgetAnthropic, .apiBudgetOpenai, .apiBudgetAgentRouter]
+      | map(((. // 0) | tonumber?) // 0) | all(. == 0))' <<<"$json" >/dev/null 2>&1 || return 0
+  echo "api rungs: off"
+}
 reason_arg() { # sets reason from [--reason TEXT]
   reason=""
   if [ "${1:-}" = --reason ]; then
@@ -96,7 +108,7 @@ case $cmd in
     [ -n "$AR_SESSION" ] || { echo "auto-run: no session id; CLAUDE_CODE_SESSION_ID is unset and no --session was given" >&2; exit 2; }
     ar_start "$spec" "$register" "$force" "$isolation"
     ;;
-  status) [ $# -eq 0 ] || usage; bound; ar_status ;;
+  status) [ $# -eq 0 ] || usage; bound; ar_status && api_rungs ;;
   pending) [ $# -eq 0 ] || usage; bound; ar_pending ;;
   attach)
     [ $# -eq 2 ] && [ "$1" = --plan ] && [ -n "$2" ] || usage
