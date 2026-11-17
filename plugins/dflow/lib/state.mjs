@@ -4,7 +4,6 @@ import { nowIso, readJson, readText, withLock, writeJson } from './util.mjs';
 
 export function loadState(paths) {
   const state = readJson(paths.state, null) ?? {};
-  state.version = 1;
   state.plans ??= {};
   return state;
 }

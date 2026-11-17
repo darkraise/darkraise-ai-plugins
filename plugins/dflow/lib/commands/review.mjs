@@ -66,10 +66,10 @@ function list(ctx, active, argv, out) {
 // 127 are the shell's own: the command could not run, which shows nothing
 // about the code.
 export function evidenceResult(finding, status) {
-  if (status === 126 || status === 127) return { lastExit: status, note: `the evidence command could not run (exit ${status}); correct it with the reviewer, or resolve the finding` };
-  if (status !== 0) return { lastExit: status, reproduced: true, note: null };
-  if (finding.reproduced) return { lastExit: status, status: 'fixed' };
-  return { lastExit: status, status: 'unproven', note: 'the evidence command passes, so it does not show the defect' };
+  if (status === 126 || status === 127) return { note: `the evidence command could not run (exit ${status}); correct it with the reviewer, or resolve the finding` };
+  if (status !== 0) return { reproduced: true, note: null };
+  if (finding.reproduced) return { status: 'fixed' };
+  return { status: 'unproven', note: 'the evidence command passes, so it does not show the defect' };
 }
 
 function summary(findings, out) {
@@ -135,8 +135,7 @@ function settle(ctx, active, argv, out, { statuses, verb }) {
   const finding = updateFindings(ctx, active.slug, findings => {
     const found = findings.find(entry => entry.id === id);
     if (!found) fail(`no finding ${id}`);
-    if (status === 'confirmed') found.confirmed = true;
-    else found.status = status;
+    if (status !== 'confirmed') found.status = status;
     if (note) found.note = note;
     return found;
   });

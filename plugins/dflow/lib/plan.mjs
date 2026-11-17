@@ -1,10 +1,6 @@
 import { backticked } from './util.mjs';
 
 export const RISKS = ['none', 'security', 'data-loss', 'migration', 'concurrency'];
-export const LOG_KINDS = {
-  D: 'decision', G: 'gotcha', X: 'extra files', V: 'verify amended', A: 'plan amended',
-  B: 'blocked', U: 'unblocked', W: 'test weakened', N: 'note',
-};
 
 // Kept identical to darkmem's board parser so both read the same tasks.
 const TASK = /^#+[ \t]+(Task[ \t]+([0-9]+)[A-Za-z]*[ \t]*[:.\-]?[ \t]*(.*))$/;

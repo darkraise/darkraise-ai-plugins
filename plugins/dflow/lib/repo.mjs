@@ -6,7 +6,6 @@ import { fail, git, gitOut, mustGit, readJson, writeJson } from './util.mjs';
 export const DEFAULTS = {
   defaultBranch: null,
   gates: [],
-  run: null,
   verifyTimeout: 600,
   budgets: { 'project.md': 150, 'gotchas.md': 100 },
   context: { resetAt: 150000 },
@@ -161,10 +160,6 @@ export function changedSince(ctx, since) {
   if (!own?.ok) return changed;
   const mine = new Set(own.stdout.split('\0'));
   return changed.filter(file => mine.has(file));
-}
-
-export function isAncestor(root, ancestor, descendant = 'HEAD') {
-  return git(root, ['merge-base', '--is-ancestor', ancestor, descendant]).ok;
 }
 
 export function context(cwd = process.cwd(), env = process.env) {
