@@ -604,6 +604,12 @@ check "A16: own block released after another worktree's later write" "$(stop s-w
 prompt s-we; write_ledger 'Task 1: complete (commits a..b, review clean)'
 wt_block 'other' 'Run dforge:finishing-a-development-branch.'
 check "A16: another checkout's Next line alone does not release" "$(decision "$(stop s-we $'## Next session\n\n**Next:** Run dforge:finishing-a-development-branch.')")" "block"
+wt_block 'stale wt' 'Resume at Task 3 (Stale).'
+sleep 1; prompt s-wi; write_ledger 'Task 1: complete (commits a..b, review clean)'
+STALE=$'## Next session\n\n**Status:** stale wt\n**Next:** Resume at Task 3 (Stale).'
+check "A16: another checkout's block written before the turn does not release" "$(decision "$(stop s-wi "$STALE")")" "block"
+wt_block 'stale wt' 'Resume at Task 3 (Stale).'
+check "A16: the same block rewritten this turn releases" "$(stop s-wi "$STALE")" ""
 prompt s-wf
 mkdir -p "$REPO/docs/dforge/plans"; sleep 1
 printf -- '- 2026-11-18 `docs/dforge/plans/2026-11-18-x.md` — merged into `main`\n' >> "$REPO/docs/dforge/plans/completed.md"

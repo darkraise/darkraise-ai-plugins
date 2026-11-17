@@ -248,6 +248,13 @@ sleep 1; prompt u-wt2
 printf '// change wt2\n' >> "$REPO/src/App.tsx"; git -C "$REPO" commit -qam 'ui change wt2'
 sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.\n' > "$UWT/.dagents/handoff/latest.md"
 check "A7: the worktree's block releases" "$(decision "$(stop u-wt2 $'## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.')")" "none"
+printf '# Handoff\n\n## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.\n' > "$UWT/.dagents/handoff/latest.md"
+sleep 1; prompt u-wt3
+printf '// change wt3\n' >> "$REPO/src/App.tsx"; git -C "$REPO" commit -qam 'ui change wt3'
+USTALE=$'## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.'
+check "A16: a worktree block written before the turn does not release" "$(decision "$(stop u-wt3 "$USTALE")")" "block"
+sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.\n' > "$UWT/.dagents/handoff/latest.md"
+check "A16: the same block rewritten this turn releases" "$(decision "$(stop u-wt3 "$USTALE")")" "none"
 git -C "$REPO" worktree remove --force "$UWT"
 
 
