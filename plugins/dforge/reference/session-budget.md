@@ -1,8 +1,6 @@
 # Session budget
 
-The numbers and rules behind dforge's handoffs. The cost model they rest
-on is §3 of the program design
-(`docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md`).
+The numbers and rules behind dforge's handoffs.
 
 The goal is a finished plan. The budget only keeps a session clear of
 auto-compaction: a session stops for a `handoff` verdict or a hard stop below,
@@ -18,11 +16,11 @@ never earlier.
 | Plan after the spec | 150% of the task budget (`DFORGE_BUDGET` included), capped at the final-phase limit: 680k at an 800,000 window with the budget pinned at 465,000 | Owner ruling, 2026-10-10 |
 | Tail | Strict: the last 2 tasks and the final phase are measured against the handoff budget and never hand off, so the plan finishes in the session past its budget. Relaxed: both are measured against the final-phase limit, and a tail task past it hands off. Finishing is never measured | Owner ruling, 2026-10-10; strict mode revised 2026-10-29 |
 | Model window | The cockpit's session state file first (`~/.claude/dforge/sessions/state/<sid>.json`); else 1,000,000 for Fable 5.1, Opus 5.5 and Sonnet 5.5 and 200,000 for Haiku 4.5; any other model has no window, never a guessed 1,000,000 | Claude API model table, cached 2026-06-24; Opus 5.5 from its launch notes; Sonnet 5.5 from the model table and a CLI probe, 2026-09-29 |
-| `autoCompactWindow` | 800,000 with `DFORGE_BUDGET` pinned at 465,000, in `~/.claude/settings.json` (650,000 before) | Set 2026-09-11; raised 2026-10-02 |
+| `autoCompactWindow` | Claude Code's own setting, read from `settings.json`; unset, the model window applies. One worked example, 800,000 with `DFORGE_BUDGET` pinned at 465,000, is under A larger compaction window below | Claude Code settings |
 | Where auto-compaction fires | About 93-96% of the window: 467k, 467k and 479k observed at 500,000 | Inference from three transcripts |
 | Hook output cap | 10,000 characters; longer output becomes a file reference | Claude Code hooks reference |
 | Skill bodies after compaction | First 5,000 tokens per skill, 25,000 in total, oldest dropped | Claude Code context-window docs |
-| Codex | Hand off every 3 tasks, or after a task that needed 3+ fix rounds | Program design R7; the measured line does not override it |
+| Codex | Hand off every 3 tasks, or after a task that needed 3+ fix rounds | The measured line does not override it |
 
 The budget sits below the point where compaction fires by one task's worst
 growth — a controller adds about 140k across a long fix loop — so a task that
