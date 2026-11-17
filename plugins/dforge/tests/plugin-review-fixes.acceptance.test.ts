@@ -741,11 +741,13 @@ describe('plugin-review-fixes: resume offer, model switch snapshot and session c
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
   })
 
-  describe('A41: a cockpit that crashed after /model and before the restore', () => {
+  describe('A41: a model switch snapshot an earlier version left', () => {
     const SNAP = '/home/me/.claude/dforge/sessions/saved-defaults/sess-2.json'
     const BEAT = '/home/me/.claude/dforge/sessions/cockpit/sess-2'
-    // The first cockpit: a switch that clears, sets the launch model sonnet and then cannot restore the person's settings.
-    const crashed = async ($: Parameters<TestBody>[0], on: On) => {
+    // What an earlier version's cockpit left when it crashed after /model and before the restore.
+    const EARLIER = JSON.stringify({ session: 'sess-2', launchModel: 'sonnet', saved: { model: 'opus[1m]', modelSettings: null, effortLevel: 'max' } })
+    // A switch now: it clears and sets the launch model sonnet without touching the person's settings.
+    const switched = async ($: Parameters<TestBody>[0], on: On) => {
       const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
       const written: Record<string, string> = {}
       const w: World = { ...SIGNED_IN, written, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]', effortLevel: 'max' }, isDforgeConfigRefusing: true, autoFile: files[AUTO] }
@@ -754,7 +756,7 @@ describe('plugin-review-fixes: resume offer, model switch snapshot and session c
       await $.session.start(START)
       await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
       await settle(clock)
-      return written[SNAP]
+      return { snapshot: written[SNAP], w }
     }
     // The next session, in a fresh process: the snapshot is all that is left of the first.
     const next = async ($: Parameters<TestBody>[0], on: On, snapshot: string, model: string, beat?: string) => {
@@ -767,12 +769,13 @@ describe('plugin-review-fixes: resume offer, model switch snapshot and session c
       return w
     }
     const restores = (w: World) => (w.runs ?? []).filter(run => run.includes(' claude-restore '))
-    const crashedSnapshot = { value: '' }
+    const crashedSnapshot = { value: EARLIER }
 
-    test('the crashed cockpit leaves its snapshot, naming the person\'s model', async ($, on) => {
-      crashedSnapshot.value = (await crashed($, on)) ?? ''
-      expect(crashedSnapshot.value).not.toBe('')
-      expect(crashedSnapshot.value).toContain('opus[1m]')
+    test('a switch now leaves no snapshot and writes no settings', async ($, on) => {
+      const { snapshot, w } = await switched($, on)
+      expect(snapshot).toBeUndefined()
+      expect(restores(w)).toEqual([])
+      expect(w.userSettings).toEqual({ model: 'opus[1m]', effortLevel: 'max' })
     })
     test('the next session start restores the person\'s model when the launch model is still the default', async ($, on) => {
       const snap = crashedSnapshot.value

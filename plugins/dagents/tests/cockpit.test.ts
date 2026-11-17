@@ -375,6 +375,21 @@ function storedBlock(w: World): { exitCode: number; stdout: string } {
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
 // so a test moves it) in a 650k window, every tool call answered, every toast
 // and every row the plugin appends recorded in `w.notes`.
+/** Records each turn.step request as it reaches the engine: its model, effort and loop. */
+function sentSteps(on: On): { model: string; effort?: unknown; agentId?: string }[] {
+  const sent: { model: string; effort?: unknown; agentId?: string }[] = []
+  on('turn.step', async function* (_$, e) {
+    sent.push({ model: e.model, ...(e.effort === undefined ? {} : { effort: e.effort }), ...(e.agentId === undefined ? {} : { agentId: e.agentId }) })
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: null, usage: null } as never
+  })
+  return sent
+}
+
+/** Reads a streaming call to its end. */
+async function drain(stream: AsyncIterable<unknown>) {
+  for await (const _ of stream) void _
+}
+
 function world(on: On, w: World) {
   mock.env(on, { ...(w.config === undefined ? {} : { HOME: '/home/me' }), ...(w.env ?? {}) })
   const clock = mock.clock(on, { now: 1_000_000 })
@@ -6727,57 +6742,12 @@ describe('auto run', () => {
     await $.session.start(START)
     await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
-    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
+    expect(w.commands).toEqual(['/clear'])
     expect(w.autoRuns).toContain('--session sess-2 rebind --to sess-2')
     expect(w.autoRuns).toContain('--session sess-2 resumed')
     expect(w.prompts).toEqual(['Execute docs/plan.md.'])
     expect(pendingOf(files)).toBeNull()
   })
-
-  test('puts back the default model and effort that /model and /effort save', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const userSettings = { model: 'opus[1m]', modelSettings: { 'claude-opus-5-5': { effortLevel: 'max' } }, theme: 'dark' }
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([
-      expect.stringContaining(`claude-restore ${JSON.stringify({ model: 'opus[1m]', modelSettings: { 'claude-opus-5-5': { effortLevel: 'max' } }, effortLevel: null })}`),
-    ])
-    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
-  })
-
-  for (const isRefusing of [false, true])
-    test(`saves the defaults before /model and ${isRefusing ? 'keeps them when the restore fails' : 'drops them once the restore reads back'}`, async ($, on) => {
-      const SNAP = '/home/me/.claude/dagents/sessions/saved-defaults/sess-2.json'
-      const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-      const written: Record<string, string> = {}
-      let atModel: string | undefined
-      const w: World = {
-        ...SIGNED_IN,
-        written,
-        commands: [],
-        autoRuns: [],
-        prompts: [],
-        runs: [],
-        userSettings: { model: 'opus[1m]', effortLevel: 'max' },
-        isDagentsConfigRefusing: isRefusing,
-        autoFile: files[AUTO],
-        onCommand: command => {
-          if (command === 'model') atModel = written[SNAP]
-        },
-      }
-      const clock = world(on, w)
-      signedIn(on, files)
-      await $.session.start(START)
-      await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-      await settle(clock)
-      expect(JSON.parse(atModel ?? 'null')).toEqual({ session: 'sess-2', launchModel: 'sonnet', saved: { model: 'opus[1m]', modelSettings: null, effortLevel: 'max' } })
-      expect(w.runs?.filter(run => run.includes(' drop-snapshot '))).toEqual(isRefusing ? [] : [expect.stringContaining('drop-snapshot sess-2')])
-    })
 
   describe('a model switch snapshot another session left', () => {
     const SNAP = '/home/me/.claude/dagents/sessions/saved-defaults/sess-0.json'
@@ -6906,68 +6876,39 @@ describe('auto run', () => {
     expect(sets.slice(before)).toEqual([[]])
   })
 
-  test('removes the defaults /model and /effort added where none were set', async ($, on) => {
+  test('sends the cleared session\'s main-loop requests on the launch model and effort, writing no settings', async ($, on) => {
     const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: {}, autoFile: files[AUTO] }
+    const userSettings = { model: 'opus[1m]', effortLevel: 'max' }
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings, autoFile: files[AUTO] }
     const clock = world(on, w)
+    const sent = sentSteps(on)
     signedIn(on, files)
     await $.session.start(START)
     await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([expect.stringContaining('claude-restore {"model":null,"modelSettings":null,"effortLevel":null}')])
+    expect(w.commands).toEqual(['/clear'])
+    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([])
+    expect(w.userSettings).toEqual(userSettings)
+    await drain($.turn.step({ turnId: 't2', index: 0, model: 'claude-opus-5-5', effort: 'max', messageCount: 1 }))
+    await drain($.turn.step({ turnId: 't2', index: 1, model: 'claude-opus-5-5', effort: 'max', messageCount: 2, agentId: 'agent-1' }))
+    expect(sent).toEqual([
+      { model: 'sonnet', effort: 'high' },
+      { model: 'claude-opus-5-5', effort: 'max', agentId: 'agent-1' },
+    ])
   })
 
-  test('restores nothing when the clear sets no model', async ($, on) => {
+  test('leaves the requests and the settings alone when the clear sets no model', async ($, on) => {
     const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: null })
     const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, autoFile: files[AUTO] }
     const clock = world(on, w)
+    const sent = sentSteps(on)
     signedIn(on, files)
     await $.session.start(START)
     await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
     expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([])
-  })
-
-  test('tells the cleared session when its default model could not be put back', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, isDagentsConfigRefusing: true, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/^Execute docs\/plan\.md\./)
-    expect(w.prompts?.[0]).toMatch(/could not put back the default model and effort/)
-    expect(w.prompts?.[0]).toMatch(/scripts\/auto-run ruling add/)
-  })
-
-  test('writes the defaults again when the engine misses the first write', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, missedRestores: 1, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.prompts).toEqual([])
-    for (let i = 0; i < 8; i++) await clock.advance(500)
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toHaveLength(2)
-    expect(w.userSettings).toEqual({ model: 'opus[1m]' })
-    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
-  })
-
-  test('tells the cleared session when the engine never takes the restored defaults', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, missedRestores: 3, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    for (let i = 0; i < 30; i++) await clock.advance(500)
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toHaveLength(3)
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/could not put back the default model and effort/)
+    await drain($.turn.step({ turnId: 't2', index: 0, model: 'claude-opus-5-5', effort: 'max', messageCount: 1 }))
+    expect(sent).toEqual([{ model: 'claude-opus-5-5', effort: 'max' }])
   })
 
   test('shows the cleared session\'s run at once', async ($, on) => {
@@ -6993,20 +6934,6 @@ describe('auto run', () => {
     await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
     expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 1 compaction · 0 resumes/ })).toBeDefined()
-  })
-
-  test('tells the cleared session when its model was refused', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], prompts: [], autoFile: files[AUTO], refusedCommands: ['model'] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/could not run \/model sonnet/)
-    expect(w.commands).toContain('/effort high')
-    expect(w.prompts?.[0]).toMatch(/auto-run ruling add/)
   })
 
   test('stops the run when the cleared session cannot be bound', async ($, on) => {
@@ -7169,7 +7096,7 @@ describe('auto run', () => {
     expect(w.autoRuns?.filter(call => call.includes(' compacted'))).toEqual([])
     expect(w.autoRuns).toContain('--session sess-1 clear --phase')
     expect(w.autoRuns).toContain('--session sess-2 rebind --to sess-2')
-    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
+    expect(w.commands).toEqual(['/clear'])
     expect(w.prompts).toEqual(['Continue `docs/plan.md` with dagents:subagent-driven-development.'])
     expect(pendingOf(files)).toBeNull()
   })
@@ -7259,39 +7186,6 @@ describe('auto run', () => {
       expect(w.autoRuns).toEqual([])
     })
   }
-
-  for (const [why, flag] of [['node cannot run the restore', { isNodeMissing: true }], ['the user settings cannot be read', { isUserSettingsUnreadable: true }]] as const) {
-    test(`runs neither /model nor /effort when ${why}`, async ($, on) => {
-      const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-      const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, ...flag, autoFile: files[AUTO] }
-      const clock = world(on, w)
-      signedIn(on, files)
-      await $.session.start(START)
-      await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-      await settle(clock)
-      expect(w.commands).toEqual(['/clear'])
-      expect(w.userSettings).toEqual({ model: 'opus[1m]' })
-      expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([])
-      expect(w.prompts).toHaveLength(1)
-      expect(w.prompts?.[0]).toMatch(/^Execute docs\/plan\.md\./)
-      expect(w.prompts?.[0]).toMatch(/kept this session on .+ because it could not put back your default model afterwards\. Record that with scripts\/auto-run ruling add\./)
-    })
-  }
-
-  test('sends a blocked notice naming the settings file when the defaults cannot be put back', async ($, on) => {
-    const fetches: World['fetches'] = []
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, fetches, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, isDagentsConfigRefusing: true, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    mock.store(on, { notifyUrl: WEBHOOK })
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    const notice = fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]).find(embed => embed?.title === '⛔ Default model not restored')
-    expect(notice).toBeDefined()
-    expect(JSON.stringify(notice)).toMatch(/\/home\/me\/\.claude\/settings\.json/)
-  })
 
   test('writes the heartbeat at the start and on every watchdog tick', async ($, on) => {
     const written: Record<string, string> = {}
