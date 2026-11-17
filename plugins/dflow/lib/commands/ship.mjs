@@ -114,9 +114,17 @@ export async function run(ctx, argv, { out }) {
 
   // An untracked file outside docs/dflow/ may be one the gates used, and the
   // commit would ship without it; drafts of other work there stay untracked.
-  const dirty = gitList(ctx.root, ['status', '--porcelain', '--untracked-files=normal', '--no-renames', '-z'])
+  const uncommitted = () => gitList(ctx.root, ['status', '--porcelain', '--untracked-files=normal', '--no-renames', '-z'])
     .filter(entry => !(entry.startsWith('??') && entry.slice(3).startsWith('docs/dflow/')));
+  const dirty = uncommitted();
   if (dirty.length) problems.push(`uncommitted changes: ${dirty.map(entry => entry.slice(3)).join(', ')}`);
+  // Gates and acceptance can run for minutes; what they passed is the tree at
+  // `sha`, and nothing else may be recorded or shipped on their word.
+  const moved = () => {
+    if (head(ctx.root) !== sha) return 'the head commit moved while ship ran its checks; run `dflow ship` again';
+    const changed = uncommitted();
+    return changed.length ? `the working tree changed while ship ran its checks: ${changed.map(entry => entry.slice(3)).join(', ')}` : null;
+  };
 
   if (!problems.length) {
     // A recorded pass counts only for this commit and a clean tree.
@@ -128,10 +136,14 @@ export async function run(ctx, argv, { out }) {
     const accepted = await acceptance(ctx, active, record, sha, values.check, out);
     problems.push(...accepted.problems);
     pending.push(...accepted.pending);
+    const movedDuring = moved();
+    if (movedDuring) problems.push(movedDuring);
     // runGates saved its own result meanwhile, so merge into the file's state.
-    updateState(ctx.paths, latest => {
-      planState(latest, active.slug).acceptance = record.acceptance;
-    });
+    else {
+      updateState(ctx.paths, latest => {
+        planState(latest, active.slug).acceptance = record.acceptance;
+      });
+    }
   }
 
   const required = buildPack(ctx, active).tier;
@@ -163,6 +175,12 @@ export async function run(ctx, argv, { out }) {
     if (pending.length) out(`Nothing is unmet at ${shortSha(sha)}. \`dflow ship\` still has to run: ${pending.join('; ')}`);
     else out(`Ready to ship: every condition of the definition of done holds at ${shortSha(sha)}.`);
     return 0;
+  }
+
+  const movedLate = moved();
+  if (movedLate) {
+    out(`Not shipped: ${movedLate}.`);
+    return 1;
   }
 
   // Everything ship writes, so that a refused closing commit can be undone

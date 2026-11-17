@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 import { dflow, git, makeProject, write } from './helpers.mjs';
 
@@ -32,6 +34,23 @@ test('a named subset runs but is not recorded, and an unknown name is refused', 
   assert.equal(dflow(root, ['gate', 'lint']).status, 0);
   assert.equal(JSON.parse(dflow(root, ['status', '--json']).stdout).gates, null);
   assert.match(dflow(root, ['gate', 'build']).stderr, /no gate named build; configured: lint, test/);
+});
+
+test('a commit or an edit made while the gates run is refused and nothing is recorded', t => {
+  const root = makeProject(t, { config: CONFIG });
+  write(root, 'lint.mjs', '\n');
+  write(root, 'suite.mjs', 'import { execFileSync } from \'node:child_process\';\nexecFileSync(\'git\', [\'commit\', \'-q\', \'--allow-empty\', \'-m\', \'chore: during the gate\']);\n');
+  const committed = dflow(root, ['gate']);
+  assert.equal(committed.status, 1, committed.stdout);
+  assert.match(committed.stdout, /the head commit moved while the gates ran; nothing was recorded/);
+  assert.equal(JSON.parse(dflow(root, ['status', '--json']).stdout).gates, null);
+  assert.equal(fs.existsSync(path.join(root, '.dflow/gate-history.jsonl')), false);
+
+  write(root, 'suite.mjs', 'import fs from \'node:fs\';\nfs.writeFileSync(\'README.md\', \'# edited\\n\');\n');
+  const edited = dflow(root, ['gate']);
+  assert.equal(edited.status, 1, edited.stdout);
+  assert.match(edited.stdout, /the working tree changed \(README\.md\) while the gates ran; nothing was recorded/);
+  assert.equal(JSON.parse(dflow(root, ['status', '--json']).stdout).gates, null);
 });
 
 test('a piped gate fails when an earlier stage fails', t => {

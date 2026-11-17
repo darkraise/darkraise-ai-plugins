@@ -16,9 +16,12 @@ export async function runGates(ctx, { names = [], out }) {
   const state = loadState(ctx.paths);
   const active = activePlan(ctx, state);
   const results = [];
+  const changes = () => mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=normal']).split('\n')
+    .filter(entry => entry && !(entry.startsWith('??') && entry.slice(3).startsWith('docs/dflow/')));
+  const shaBefore = head(ctx.root);
+  const changesBefore = changes();
   // A pass on uncommitted changes says nothing about the commit.
-  const dirty = mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=normal']).split('\n')
-    .some(entry => entry && !(entry.startsWith('??') && entry.slice(3).startsWith('docs/dflow/')));
+  const dirty = changesBefore.length > 0;
   for (const gate of selected) {
     const logFile = path.join(ctx.paths.logs, active?.slug ?? '_', `gate-${gate.name}.log`);
     fs.rmSync(logFile, { force: true });
@@ -32,8 +35,16 @@ export async function runGates(ctx, { names = [], out }) {
     for (const line of tail(result.output, 30)) out(`      ${line}`);
     out(`      full log: ${relative(ctx.root, logFile)}`);
   }
-  const ok = results.every(result => result.ok);
   const sha = head(ctx.root);
+  const changesAfter = changes();
+  const edited = [...new Set([...changesBefore, ...changesAfter].filter(entry => !changesBefore.includes(entry) || !changesAfter.includes(entry)).map(entry => entry.slice(3)))];
+  const moved = sha !== shaBefore ? 'the head commit moved' : edited.length ? `the working tree changed (${edited.join(', ')})` : null;
+  if (moved) {
+    out(`${moved} while the gates ran; nothing was recorded, since the gates did not run on one tree. Run \`dflow gate\` again once nothing else is changing the checkout.`);
+    refreshHud(ctx);
+    return false;
+  }
+  const ok = results.every(result => result.ok);
   if (!names.length) {
     if (active) {
       updateState(ctx.paths, fresh => {

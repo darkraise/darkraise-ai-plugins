@@ -187,6 +187,17 @@ test('an untracked file outside docs/dflow stops ship, and a gate pass beside it
   assert.match(check.stdout, /uncommitted changes: src\/helper\.mjs/);
 });
 
+test('a commit made while ship runs its checks stops ship before the closing commit', t => {
+  const root = readyToShip(t);
+  write(root, 'check.mjs', 'import { execFileSync } from \'node:child_process\';\nexecFileSync(\'git\', [\'commit\', \'-q\', \'--allow-empty\', \'-m\', \'chore: during ship\']);\n');
+  const shipped = dflow(root, ['ship']);
+  assert.equal(shipped.status, 1, shipped.stdout);
+  assert.match(shipped.stdout, /- the head commit moved while ship ran its checks/);
+  assert.equal(parsePlan(read(root, PLAN_FILE)).fields.shipped, undefined);
+  assert.equal(git(root, 'log', '-1', '--format=%s'), 'chore: during ship');
+  assert.equal(JSON.parse(read(root, '.dflow/state.json')).plans['2026-11-12-meter'].acceptance?.A1, undefined);
+});
+
 test('code committed after the review, and a gate that passed on uncommitted changes, both stop ship', t => {
   const root = readyToShip(t, { config: { gates: [{ name: 'test', cmd: 'node suite.mjs' }] } });
   write(root, 'suite.mjs', '\n');

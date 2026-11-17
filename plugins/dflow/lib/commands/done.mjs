@@ -10,7 +10,7 @@ import { runCommand } from '../run.mjs';
 import { appendEvent, loadState, planState, updateState, taskRecord } from '../state.mjs';
 import { refreshHud, taskBrief } from '../status.mjs';
 import { weakenedTests } from '../tests-check.mjs';
-import { fail, git, gitList, matchesAny, mustGit, readText, shortSha, tail, today, writeJson } from '../util.mjs';
+import { fail, git, gitList, gitOut, matchesAny, mustGit, readText, shortSha, tail, today, writeJson } from '../util.mjs';
 import { requireActive } from './next.mjs';
 import { flush } from './sync.mjs';
 
@@ -77,6 +77,9 @@ export async function run(ctx, argv, { out }) {
 
   const logFile = path.join(ctx.paths.logs, active.slug, `task-${number}.log`);
   fs.rmSync(logFile, { force: true });
+  // `git commit` takes the index as it is at the end, so a file staged or
+  // edited during a slow verify would ride along unverified.
+  const treeBefore = mustGit(ctx.root, ['write-tree']).trim();
   for (const command of task.verify) {
     const result = await runCommand(command, { cwd: ctx.root, timeoutSeconds: ctx.config.verifyTimeout, logFile, env: ctx.env });
     if (result.ok) continue;
@@ -94,6 +97,12 @@ export async function run(ctx, argv, { out }) {
     refreshHud(ctx);
     return 1;
   }
+  const treeAfter = gitOut(ctx.root, ['write-tree']);
+  const moved = new Set([
+    ...(treeAfter === treeBefore ? [] : treeAfter ? gitList(ctx.root, ['diff', '--name-only', '--no-renames', '-z', treeBefore, treeAfter]) : ['the index']),
+    ...unstaged(ctx).filter(file => !own(file)),
+  ]);
+  if (moved.size) fail(`the tree changed while verify ran: ${[...moved].slice(0, 12).join(', ')}${moved.size > 12 ? `, and ${moved.size - 12} more` : ''}\nverify did not see it, so nothing was ticked or committed; run \`dflow done ${number}\` again once nothing else is changing the checkout`);
 
   const planBefore = active.text;
   const boardBefore = readText(ctx.paths.board);

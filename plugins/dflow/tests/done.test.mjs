@@ -218,6 +218,28 @@ fs.writeFileSync(file, JSON.stringify(state));
   assert.equal(state.plans['2026-11-12-meter'].tasks[1].state, 'done');
 });
 
+test('a file staged or edited while verify runs stops done, since verify never saw it', t => {
+  const root = makeProject(t);
+  const before = git(root, 'rev-parse', 'HEAD');
+  stageTask1(root, `import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+fs.writeFileSync('src/late.mjs', '1\\n');
+execFileSync('git', ['add', 'src/late.mjs']);
+`);
+  const staged = dflow(root, ['done', '1', '-m', 'feat: parse']);
+  assert.equal(staged.status, 1, staged.stdout);
+  assert.match(staged.stderr, /changed while verify ran/);
+  assert.equal(git(root, 'rev-parse', 'HEAD'), before);
+  assert.equal(parsePlan(read(root, PLAN_FILE)).tasks[0].done, false);
+
+  git(root, 'rm', '-q', '-f', 'src/late.mjs');
+  write(root, 'verify1.mjs', 'import fs from \'node:fs\';\nfs.writeFileSync(\'src/limit.mjs\', \'export const parseLimit = () => 2;\\n\');\n');
+  const edited = dflow(root, ['done', '1', '-m', 'feat: parse']);
+  assert.equal(edited.status, 1, edited.stdout);
+  assert.match(edited.stderr, /changed while verify ran: src\/limit\.mjs/);
+  assert.equal(git(root, 'rev-parse', 'HEAD'), before);
+});
+
 test('a torn context file reads as no figure and breaks no command', t => {
   const root = makeProject(t);
   stageTask1(root);
