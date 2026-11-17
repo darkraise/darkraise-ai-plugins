@@ -125,7 +125,7 @@ fi
 
 echo
 echo "## Compaction"
-if [ -f "$root/CLAUDE.md" ] && tr -d '\r' < "$root/CLAUDE.md" | grep -qiE '^#+[[:space:]]*compact instructions'; then
+if [ -f "$root/CLAUDE.md" ] && grep -qiE '^#+[[:space:]]*compact instructions' < <(tr -d '\r' < "$root/CLAUDE.md"); then
   echo "- CLAUDE.md has a Compact Instructions section"
 else
   echo "- CLAUDE.md has no Compact Instructions section — see reference/session-budget.md"

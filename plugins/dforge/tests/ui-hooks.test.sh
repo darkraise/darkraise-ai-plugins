@@ -115,6 +115,12 @@ prompt s-4
 printf '// change 3\n' >> src/App.tsx
 check "stop: no profile but the skill ran: held" "$(decision "$(stop s-4 'Done.' false "$TR")")" "block"
 check "stop: no profile and no skill: passes" "$(stop s-4 'Done.')" ""
+MANY="$TMP/skill-many.jsonl"
+pad=$(head -c 20000 /dev/zero | tr '\0' 'x')
+for i in $(seq 1 20); do
+  jq -nc --arg t "<command-name>/dforge:ui-ux</command-name> $pad" '{type:"user",message:{content:[{type:"text",text:$t}]}}'
+done > "$MANY"
+check "stop: no profile, the skill ran many times: held" "$(decision "$(stop s-4 'Done.' false "$MANY")")" "block"
 mv "$TMP/profile.md" docs/dforge/ui-ux/profile.md
 
 mkdir -p "$HOME/.claude/dforge/sessions/cockpit"

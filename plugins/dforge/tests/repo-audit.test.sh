@@ -72,6 +72,9 @@ printf '# Project\n\n# Compact instructions\n\nKeep paths.\n' > "$REPO/CLAUDE.md
 run "$REPO"
 has "dirty: counted" "$out" "## Dirty files (1)"
 has "compact section: found" "$out" "- CLAUDE.md has a Compact Instructions section"
+{ printf '# Project\n\n# Compact instructions\n\n'; head -c 200000 /dev/zero | tr '\0' 'x' | fold -w 100; } > "$REPO/CLAUDE.md"
+run "$REPO"
+has "compact section: found in a CLAUDE.md over 64 KiB" "$out" "- CLAUDE.md has a Compact Instructions section"
 
 # --- from the worktree ---
 run "$WT"
