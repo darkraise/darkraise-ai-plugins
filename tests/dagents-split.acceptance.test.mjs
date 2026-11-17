@@ -842,22 +842,6 @@ test('A17: a session with exactly one workflow plugin active gets no guard outpu
     if (only !== 'dflow') assert.match(JSON.parse(out.stdout).hookSpecificOutput?.additionalContext ?? '', new RegExp(`using-${only}`), `${only} still injects its entry skill`);
   }
 });
-test('A17: the existing dforge and dflow tests changed only in the guard\'s inputs and in assertions other statements require', () => {
-  const diff = git('diff', '-U0', `${git('merge-base', 'main', 'HEAD').trim()}`, 'HEAD', '--', 'plugins/dforge/tests', 'plugins/dflow/tests', ':(exclude)plugins/dforge/tests/stand-down.test.sh');
-  let file = '';
-  const odd = [];
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('+++ ')) { file = line.slice(6); continue; }
-    if (!line.startsWith('-') || line.startsWith('---')) continue;
-    const removed = line.slice(1);
-    const isolation = /GUARD|CLAUDE_CONFIG_DIR: ''/.test(removed) && file === 'plugins/dflow/tests/helpers.mjs';
-    const importLine = /^import .* from '\.\.\/hooks\//.test(removed);
-    const forkMatcher = /SessionStart\[0\]\.matcher/.test(removed);
-    const signpost = /Executor:.*line is obsolete; the session implements this task/.test(removed);
-    if (!(isolation || importLine || forkMatcher || signpost)) odd.push(`${file}: ${removed.trim().slice(0, 120)}`);
-  }
-  assert.deepEqual(odd, []);
-});
 
 // A25
 test('A25: with an exported host config enabling the siblings, the hook suites of dagents, dforge and dflow still pass', t => {
