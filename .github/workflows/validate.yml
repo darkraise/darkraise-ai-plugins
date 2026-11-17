@@ -199,9 +199,11 @@ jobs:
           timeout 60s "$CLAUDE" plugin validate plugins/dagents
           timeout 240s "$CLAUDE" plugin test plugins/dagents
 
+      # dagents' suites are dforge 4.17.1's, so they take the bound dforge's
+      # suites took on GitHub's runner rather than one measured on a dev host.
       - name: Run dagents regression suites
         timeout-minutes: 18
-        run: timeout --kill-after=10s 249s node scripts/test-all.mjs --plugin dagents
+        run: timeout --kill-after=10s 1050s node scripts/test-all.mjs --plugin dagents
 
   windows:
     name: Windows (${{ matrix.shard }}/14)
