@@ -212,6 +212,18 @@ case "${OSTYPE:-}" in
     check 'macOS: a dangling symlink to outside escapes' "$(scope_check '["dangling"]')" 2
     rm "$fixture/mac/out" "$fixture/mac/dangling" ;;
 esac
+printf '["mac.txt"]\n' > "$fixture/mac-scope.json"
+(
+  PATH="$fixture/macbin:$PATH" DAGENTS_TIMEOUT=gtimeout
+  dr_task_open "$fixture/mac" mac-task "$fixture/mac-scope.json" || exit 3
+  dr_snapshot "$fixture/mac" "$fixture/mac-before.json" || exit 3
+  printf 'mac\n' > "$fixture/mac/mac.txt"
+  dr_task_stage "$fixture/mac-before.json" 'feat: on a mac'; rc=$?
+  dr_task_unlock
+  exit "$rc"
+)
+check 'macOS: a task commits with gtimeout as the only GNU timeout' "$?" 0
+check 'macOS: the commit landed' "$(git -C "$fixture/mac" log -1 --format=%s)" 'feat: on a mac'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
