@@ -21,8 +21,9 @@ Once fast mode is taken:
   requests) still apply, including how they verify, commit and push.
 
 dagents's UI proof hold, its UI edit hook and the cockpit's seat check stand
-down while the latest `Process:` line the main session wrote is
-`Process: fast`. Plan ledger and auto run holds do not.
+down while the main session has written `Process: fast` since the current
+prompt, or `Process: fast (session)` with no later `Process:` line naming
+another path. Plan ledger and auto run holds do not.
 
 `Process: fast` covers one request: the next request is routed as usual and
 offered the choice again. `Process: fast (session)` covers every request until
