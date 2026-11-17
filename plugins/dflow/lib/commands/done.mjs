@@ -12,7 +12,6 @@ import { refreshHud, taskBrief } from '../status.mjs';
 import { weakenedTests } from '../tests-check.mjs';
 import { fail, git, gitList, gitOut, matchesAny, mustGit, readText, shortSha, tail, today, writeJson } from '../util.mjs';
 import { requireActive } from './next.mjs';
-import { flush } from './sync.mjs';
 
 const CHOICE = [
   'Three verify failures on this task. Stop patching and decide which is wrong:',
@@ -169,7 +168,6 @@ export async function run(ctx, argv, { out }) {
     if (started) appendEvent(ctx, { plan: active.slug, event: 'wip', task: upcoming.number });
     for (const line of taskBrief(ctx, reloaded, upcoming, { designLimit: 0 })) out(line);
   }
-  await flush(ctx, { quiet: true });
   refreshHud(ctx);
   return 0;
 }

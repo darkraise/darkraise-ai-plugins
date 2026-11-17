@@ -17,7 +17,6 @@ export const COMMANDS = {
   review: ['commands/review.mjs', 'pack | add | list | verify | check | resolve | judge | record'],
   proof: ['commands/proof.mjs', 'record UI evidence for an acceptance line'],
   ship: ['commands/ship.mjs', 'check the definition of done and close the plan'],
-  sync: ['commands/sync.mjs', 'push | pull | status | enable | disable — the darkmem projection'],
   wave: ['commands/parallel.mjs', 'list worker tasks that can run at the same time'],
   worktree: ['commands/parallel.mjs', 'add | merge | drop a worker worktree'],
   plans: ['commands/parallel.mjs', 'list open plans across worktrees; --conflicts'],

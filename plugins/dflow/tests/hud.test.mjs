@@ -25,7 +25,7 @@ test('the CLI rewrites hud.json on every state change', t => {
   dflow(root, ['next']);
   let model = hud(root);
   assert.deepEqual([model.plan.title, model.plan.done, model.plan.total, model.plan.current.state], ['Rate-limit meter', 0, 2, 'wip']);
-  assert.deepEqual([model.gates, model.review.recorded, model.board.row.state, model.sync.enabled], [null, null, 'planned', false]);
+  assert.deepEqual([model.gates, model.review.recorded, model.board.row.state], [null, null, 'planned']);
 
   write(root, 'verify1.mjs', 'process.exit(1)\n');
   write(root, 'src/limit.mjs', '1\n');
@@ -131,7 +131,6 @@ const PLAN_HUD = {
   gates: null,
   review: { recorded: null, open: 2, blocking: 1 },
   board: { counts: { todo: 3, doing: 1, blocked: 1 }, row: { number: 12, state: 'doing' } },
-  sync: { enabled: true, queued: 3 },
   context: { resetAt: 150000 },
   workers: [{ task: 7, path: '.dflow/workers/7', branch: 'dflow/w7' }],
   checks: ['Task 2 is ticked without a recorded `dflow done`'],
@@ -181,16 +180,10 @@ test('the Checks card puts the worst reading in its headline', () => {
   assert.equal(rowsOf(checksCard({ ...PLAN_HUD, gates: { ok: true, stale: true, failed: [] } }))[0], 'Gates   ✓ passed · stale, the head moved');
 });
 
-test('the Board card reads darkmem in five states', () => {
+test('the Board card reads the row and the counts', () => {
   const card = boardCard(PLAN_HUD);
-  assert.deepEqual([text(card.headline), rowsOf(card)[0]], ['#12 doing', '3 todo · 1 doing · 1 blocked']);
-  const sync = fields => rowsOf(boardCard({ ...PLAN_HUD, sync: { enabled: true, queued: 3, ...fields } })).at(-1);
-  assert.deepEqual(
-    [sync({ queued: 0 }), sync({}), sync({ error: 'x', offline: true }), sync({ error: 'x', offline: false }), sync({ refused: 1 }), sync({ conflict: 'c' })],
-    ['darkmem ● synced · 0 queued', 'darkmem ◐ 3 queued', 'darkmem ○ offline · 3 queued', 'darkmem ✗ refused: run dflow sync push · 3 queued', 'darkmem ✗ refused: run dflow sync push · 3 queued', 'darkmem ✗ conflict: run dflow sync pull'],
-  );
-  assert.equal(boardCard({ ...PLAN_HUD, board: null, sync: { enabled: false } }), null);
-  assert.deepEqual(rowsOf(boardCard({ ...PLAN_HUD, board: null })), ['darkmem ◐ 3 queued']);
+  assert.deepEqual([text(card.headline), rowsOf(card)], ['#12 doing', ['3 todo · 1 doing · 1 blocked']]);
+  assert.equal(boardCard({ ...PLAN_HUD, board: null }), null);
   assert.equal(text(boardCard({ ...PLAN_HUD, board: { counts: { todo: 3, done: 1 }, row: null } }).headline), '4 rows');
 });
 
@@ -365,12 +358,12 @@ test('each band line shrinks a tier at a time until it fits', () => {
   assert.ok(noReset.startsWith('ctx ') && noReset.includes('118k of 1.0M') && !noReset.includes('NaN') && !noReset.includes('┃'));
 });
 
-test('a blocked task, failed gates or a darkmem conflict make a warning line', () => {
-  assert.deepEqual(bandWarning({ ...PLAN_HUD, sync: { enabled: false } }).map(run => run.text).join(''), '✗ Task 6 blocked');
-  const all = bandWarning({ ...PLAN_HUD, gates: { ok: false, stale: false, failed: ['lint'] }, sync: { enabled: true, conflict: 'c' } });
-  assert.equal(text(all), '✗ Task 6 blocked · ✗ gates failed · ✗ darkmem conflict');
+test('a blocked task or failed gates make a warning line', () => {
+  assert.deepEqual(bandWarning(PLAN_HUD).map(run => run.text).join(''), '✗ Task 6 blocked');
+  const all = bandWarning({ ...PLAN_HUD, gates: { ok: false, stale: false, failed: ['lint'] } });
+  assert.equal(text(all), '✗ Task 6 blocked · ✗ gates failed');
   assert.ok(all.filter(run => run.text !== ' · ').every(run => run.color === 'red'));
-  assert.deepEqual(bandWarning({ ...PLAN_HUD, plan: { ...PLAN_HUD.plan, blocked: [] }, sync: { enabled: false } }), []);
+  assert.deepEqual(bandWarning({ ...PLAN_HUD, plan: { ...PLAN_HUD.plan, blocked: [] } }), []);
   assert.deepEqual(['band', 'pane', 'off'].map(mode => nextMode(mode, '')), ['pane', 'off', 'band']);
   assert.deepEqual([nextMode('band', 'off'), nextMode('band', 'sideways')], ['off', null]);
 });

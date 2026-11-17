@@ -18,8 +18,7 @@ function blankNote(note) {
   return !note || note.trim() === '' || note.trim() === '-';
 }
 
-// The row rules mirror darkmem's board parser: six cells, a numeric first
-// cell, unique numbers.
+// The row rules: six cells, a numeric first cell, unique numbers.
 export function parseBoard(text) {
   const lines = splitLines(text);
   const fenced = fenceFlags(lines);

@@ -1,5 +1,5 @@
 {
-  "description": "At session start, adds two lines naming the active plan and the next step; before a compaction, tells the summary what a build in progress needs kept; at each stop, flushes the darkmem projection in the background. Loads the HUD mod: a band above the prompt and a pane showing plan progress, answered by /dflow:hud, which also compacts the context at a task boundary when dflow asks for a reset.",
+  "description": "At session start, adds two lines naming the active plan and the next step; before a compaction, tells the summary what a build in progress needs kept; at each stop, records the session's transcript and refreshes the HUD state in the background. Loads the HUD mod: a band above the prompt and a pane showing plan progress, answered by /dflow:hud, which also compacts the context at a task boundary when dflow asks for a reset.",
   "modules": [
     "./hud/register.tsx"
   ],

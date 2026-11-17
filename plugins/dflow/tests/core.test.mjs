@@ -9,15 +9,12 @@ import { PLAN, PLAN_FILE, dflow, git, makeProject, makeRepo, read, write } from 
 
 test('init scaffolds the docs once and ignores .dflow', t => {
   const root = makeRepo(t);
-  const first = dflow(root, ['init', '--gate', 'test=node t.mjs', '--darkmem', 'fixture']);
+  const first = dflow(root, ['init', '--gate', 'test=node t.mjs']);
   assert.equal(first.status, 0, first.stderr);
   for (const file of ['project.md', 'decisions.md', 'gotchas.md', 'board.md', 'config.json']) assert.ok(fs.existsSync(path.join(root, 'docs/dflow', file)), file);
-  assert.deepEqual(JSON.parse(read(root, 'docs/dflow/config.json')), { gates: [{ name: 'test', cmd: 'node t.mjs' }], darkmem: { project: 'fixture' } });
+  assert.deepEqual(JSON.parse(read(root, 'docs/dflow/config.json')), { gates: [{ name: 'test', cmd: 'node t.mjs' }] });
   assert.match(read(root, '.gitignore'), /^\.dflow\/$/m);
   assert.match(read(root, '.gitattributes'), /^docs\/dflow\/decisions\.md merge=union\ndocs\/dflow\/gotchas\.md merge=union$/m);
-  // The owner typed the project, so init records their consent for this machine.
-  assert.match(first.stdout, /darkmem enabled for this repository on this machine: project "fixture"/);
-  assert.deepEqual(Object.values(JSON.parse(read(root, '.test-home/.dflow/config.json')).darkmem.repositories), ['fixture']);
 
   write(root, 'docs/dflow/project.md', '# mine\n');
   const second = dflow(root, ['init']);
@@ -141,10 +138,29 @@ test('a board row that belongs to an open plan is not handed to another', t => {
 
 test('init accepts a configuration without gates', t => {
   const root = makeRepo(t);
-  write(root, 'docs/dflow/config.json', '{"darkmem": {"project": "x"}}');
-  const result = dflow(root, ['init', '--darkmem', 'y']);
+  write(root, 'docs/dflow/config.json', '{"autoShip": false}');
+  const result = dflow(root, ['init']);
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(read(root, 'docs/dflow/config.json')), { darkmem: { project: 'y' }, gates: [] });
+  assert.deepEqual(JSON.parse(read(root, 'docs/dflow/config.json')), { autoShip: false, gates: [] });
+});
+
+test('darkmem settings left in either config are ignored without a word', t => {
+  const root = makeProject(t, { config: { gates: [], darkmem: { project: 'x' } } });
+  write(root, '.test-home/.dflow/config.json', JSON.stringify({ darkmem: { url: 'http://127.0.0.1:9', repositories: { [root]: 'x' } } }));
+  const state = JSON.parse(read(root, '.dflow/state.json'));
+  write(root, '.dflow/state.json', JSON.stringify({ ...state, sync: { enabled: true, queued: 3, conflict: 'board row 1' } }));
+  const env = { DARKMEM_API_KEY: 'secret', DFLOW_DARKMEM_URL: 'http://127.0.0.1:9' };
+  write(root, 'verify1.mjs', '\n');
+  write(root, 'src/limit.mjs', '1\n');
+  git(root, 'add', 'src');
+  for (const args of [['status'], ['next'], ['done', '1', '-m', 'feat: parse'], ['block', '2', 'waiting'], ['unblock', '2', 'cleared'], ['hook', 'stop'], ['hook', 'session-start'], ['init']]) {
+    const result = dflow(root, args, { env, input: '{}' });
+    assert.equal(result.status, 0, `${args.join(' ')}: ${result.stderr}`);
+    assert.equal(result.stderr, '', args.join(' '));
+    assert.doesNotMatch(result.stdout, /darkmem|sync/i, args.join(' '));
+  }
+  assert.equal(JSON.parse(read(root, '.dflow/hud.json')).sync, undefined);
+  assert.deepEqual(JSON.parse(read(root, 'docs/dflow/config.json')).darkmem, { project: 'x' });
 });
 
 test('decisions added on two branches merge without a conflict', t => {

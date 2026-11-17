@@ -1,7 +1,6 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { fail, git, gitOut, mustGit, readJson, writeJson } from './util.mjs';
+import { fail, git, gitOut, mustGit, readJson } from './util.mjs';
 
 export const DEFAULTS = {
   defaultBranch: null,
@@ -16,7 +15,6 @@ export const DEFAULTS = {
     maxSuiteGrowth: 0.2,
   },
   ui: { paths: [] },
-  darkmem: { project: '' },
   // Off: the review ends the turn and shipping waits for the owner.
   autoShip: false,
 };
@@ -34,15 +32,6 @@ export function findRoot(cwd) {
   const root = gitOut(cwd, ['rev-parse', '--show-toplevel']);
   if (!root) fail('dflow runs inside a git repository; none found here');
   return path.resolve(root);
-}
-
-// The primary checkout of the repository, the same from each of its
-// worktrees: the key under which the user enables darkmem for it.
-export function primaryRoot(root) {
-  const common = gitOut(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
-  if (!common || !path.isAbsolute(common)) return root;
-  const top = gitOut(path.dirname(common), ['rev-parse', '--show-toplevel']);
-  return top ? path.resolve(top) : root;
 }
 
 export function layout(root) {
@@ -90,26 +79,6 @@ export function ensureStateDir(paths) {
 
 export function loadConfig(root) {
   return merge(DEFAULTS, readJson(layout(root).config, {}));
-}
-
-export function dflowHome(env = process.env) {
-  return env.DFLOW_HOME || path.join(env.HOME || os.homedir(), '.dflow');
-}
-
-export function userConfig(env = process.env) {
-  return readJson(path.join(dflowHome(env), 'config.json'), {});
-}
-
-// Records, in the user's own config, that this repository may send its docs to
-// a darkmem project; null as the project withdraws it.
-export function setDarkmemConsent(env, root, project) {
-  const file = path.join(dflowHome(env), 'config.json');
-  const config = readJson(file, {}) ?? {};
-  const repositories = { ...(config.darkmem?.repositories ?? {}) };
-  if (project) repositories[root] = project;
-  else delete repositories[root];
-  config.darkmem = { ...(config.darkmem ?? {}), repositories };
-  writeJson(file, config);
 }
 
 // What a commit would not hold: tracked changes, and untracked files that are

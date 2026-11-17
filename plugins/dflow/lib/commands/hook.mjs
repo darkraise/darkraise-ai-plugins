@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url';
 import { nextTask, taskStates } from '../plan.mjs';
 import { loadState, planState, updateState } from '../state.mjs';
 import { activePlan, briefLines, buildModel, refreshHud } from '../status.mjs';
-import { checkpoint, flush, pull } from './sync.mjs';
 
 function input() {
   if (process.stdin.isTTY) return {};
@@ -38,10 +37,9 @@ function currentTask(ctx, state, active) {
   return nextTask(taskStates(active.plan, planState(state, active.slug)));
 }
 
-async function sessionStart(ctx, event, out) {
+function sessionStart(ctx, event, out) {
   const state = loadState(ctx.paths);
   remember(ctx, state, event);
-  await pull(ctx, { quiet: true });
   const active = activePlan(ctx, state);
   if (!active) return;
   // After a compaction too: `Next:` names /dflow:build, whose `dflow next`
@@ -63,11 +61,9 @@ function preCompact(ctx, event, out) {
   out('Leave out tool output, file contents, finished tasks and the plan text itself.');
 }
 
-async function stop(ctx, event) {
+function stop(ctx, event) {
   const state = loadState(ctx.paths);
   remember(ctx, state, event);
-  await checkpoint(ctx);
-  await flush(ctx, { quiet: true });
   refreshHud(ctx);
 }
 
@@ -103,9 +99,9 @@ export async function run(ctx, argv, { out }) {
     if (argv[0] === 'session-start' && guardConflict(ctx, event, out)) return 0;
     if (argv[0] !== 'session-start' && standsDown(ctx, event)) return 0;
     if (!fs.existsSync(ctx.paths.docs)) return 0;
-    if (argv[0] === 'session-start') await sessionStart(ctx, event, out);
+    if (argv[0] === 'session-start') sessionStart(ctx, event, out);
     else if (argv[0] === 'pre-compact') preCompact(ctx, event, out);
-    else if (argv[0] === 'stop') await stop(ctx, event);
+    else if (argv[0] === 'stop') stop(ctx, event);
   } catch {
     // Deliberately silent.
   }

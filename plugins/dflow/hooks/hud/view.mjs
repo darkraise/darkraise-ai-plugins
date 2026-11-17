@@ -154,30 +154,14 @@ export function checksCard(hud) {
   };
 }
 
-// A server that cannot be reached and one that answered with a refusal need
-// different things from the owner, so they read differently.
-function darkmemRow(sync) {
-  const queued = `${sync.queued ?? 0} queued`;
-  let runs;
-  if (sync.conflict) runs = [{ text: '✗ conflict: run dflow sync pull', color: 'red' }];
-  else if (sync.error && sync.offline) runs = [{ text: '○', color: 'yellow' }, { text: ` offline · ${queued}` }];
-  else if (sync.error || sync.refused) runs = [{ text: '✗ refused: run dflow sync push', color: 'red' }, { text: ` · ${queued}` }];
-  else if (sync.queued) runs = [{ text: '◐', color: 'yellow' }, { text: ` ${queued}` }];
-  else runs = [{ text: '●', color: 'green' }, { text: ` synced · ${queued}` }];
-  return [{ text: 'darkmem ' }, ...runs];
-}
-
 export function boardCard(hud) {
-  const { board, sync } = hud;
-  if (!board && !sync?.enabled) return null;
+  const { board } = hud;
+  if (!board) return null;
   const card = { key: 'board', title: 'Board', color: 'white', headline: [], rows: [] };
-  if (board) {
-    const counts = Object.entries(board.counts);
-    if (board.row) card.headline = [{ text: `#${board.row.number} ${board.row.state}` }];
-    else if (counts.length) card.headline = [{ text: `${counts.reduce((sum, [, count]) => sum + count, 0)} rows` }];
-    if (counts.length) card.rows.push([{ text: counts.map(([state, count]) => `${count} ${state}`).join(' · ') }]);
-  }
-  if (sync?.enabled) card.rows.push(darkmemRow(sync));
+  const counts = Object.entries(board.counts);
+  if (board.row) card.headline = [{ text: `#${board.row.number} ${board.row.state}` }];
+  else if (counts.length) card.headline = [{ text: `${counts.reduce((sum, [, count]) => sum + count, 0)} rows` }];
+  if (counts.length) card.rows.push([{ text: counts.map(([state, count]) => `${count} ${state}`).join(' · ') }]);
   return card;
 }
 
@@ -453,15 +437,10 @@ function denseChecks({ hud }) {
 }
 
 function denseBoard({ hud }) {
-  const { board, sync } = hud;
-  if (!board && !sync?.enabled) return null;
-  const parts = [];
-  if (board?.row) parts.push([{ text: `#${board.row.number} ${board.row.state}` }]);
-  else if (board) parts.push([{ text: `${Object.values(board.counts).reduce((sum, count) => sum + count, 0)} rows` }]);
-  if (sync?.enabled) {
-    parts.push(sync.conflict ? [{ text: 'darkmem ✗ conflict: run dflow sync pull', color: 'red' }] : [{ text: `darkmem ${sync.queued ?? 0} queued` }]);
-  }
-  return parts.flatMap((runs, index) => (index ? [{ text: ' · ', dim: true }, ...runs] : runs));
+  const { board } = hud;
+  if (!board) return null;
+  if (board.row) return [{ text: `#${board.row.number} ${board.row.state}` }];
+  return [{ text: `${Object.values(board.counts).reduce((sum, count) => sum + count, 0)} rows` }];
 }
 
 function denseWorkers({ hud }) {

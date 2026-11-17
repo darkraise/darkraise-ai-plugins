@@ -14,7 +14,6 @@ import { git, gitOut, mustGit, readText, shortSha, tail, today } from '../util.m
 import { diagnose } from './doctor.mjs';
 import { runGates } from './gate.mjs';
 import { requireActive } from './next.mjs';
-import { closeWorkstream, flush } from './sync.mjs';
 
 const PROMOTED = { D: 'decisions.md', G: 'gotchas.md' };
 
@@ -210,8 +209,6 @@ export async function run(ctx, argv, { out }) {
     return 1;
   }
   appendEvent(ctx, { plan: active.slug, event: 'shipped', commit: head(ctx.root) });
-  await closeWorkstream(ctx, active.slug);
-  await flush(ctx, { quiet: true });
   refreshHud(ctx);
 
   out(`Shipped ${active.rel} at ${shortSha(head(ctx.root))}${written.length ? `; promoted ${written.join(' and ')}` : ''}. Board row ${row ? row.number : '-'} is done.`);
