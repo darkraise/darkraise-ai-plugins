@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { parseBoard } from '../lib/board.mjs';
@@ -55,6 +56,22 @@ test('.dflow ignores itself, also where init never ran or its line was dropped',
   const done = dflow(root, ['done', '1', '-m', 'feat: parse']);
   assert.equal(done.status, 0, done.stderr);
   assert.doesNotMatch(git(root, 'status', '--porcelain', '--untracked-files=all'), /\.dflow/);
+});
+
+test('the .dflow ignore file is never written through a symbolic link', t => {
+  const outside = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'dflow-outside-')));
+  t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
+
+  const dangling = makeRepo(t);
+  fs.mkdirSync(path.join(dangling, '.dflow'));
+  fs.symlinkSync(path.join(outside, 'target'), path.join(dangling, '.dflow/.gitignore'));
+  assert.equal(dflow(dangling, ['plan', 'new', 'demo', '--title', 'Demo']).status, 0);
+  assert.equal(fs.existsSync(path.join(outside, 'target')), false);
+
+  const linked = makeRepo(t);
+  fs.symlinkSync(outside, path.join(linked, '.dflow'), 'dir');
+  assert.equal(dflow(linked, ['plan', 'new', 'demo', '--title', 'Demo']).status, 0);
+  assert.equal(fs.existsSync(path.join(outside, '.gitignore')), false);
 });
 
 test('approve stamps the plan, links the row and commits only those files', t => {

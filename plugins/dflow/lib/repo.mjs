@@ -65,15 +65,27 @@ export function layout(root) {
 
 // .dflow/ ignores itself, so its machine state stays out of commits and out
 // of the dirty checks whether or not the repository's .gitignore names it.
+// A cloned repository may ship either path as a symbolic link, so the file is
+// created exclusively and never through a link or outside the checkout.
 export function ensureStateDir(paths) {
   const ignore = path.join(paths.stateDir, '.gitignore');
   if (fs.existsSync(ignore)) return;
   try {
-    fs.mkdirSync(paths.stateDir, { recursive: true });
-    fs.writeFileSync(ignore, '*\n');
+    let stat = null;
+    try {
+      stat = fs.lstatSync(paths.stateDir);
+    } catch (error) {
+      if (error.code !== 'ENOENT') return;
+    }
+    if (stat?.isSymbolicLink()) return;
+    if (!stat) fs.mkdirSync(paths.stateDir);
+    const inside = path.relative(fs.realpathSync(paths.root), fs.realpathSync(paths.stateDir));
+    if (!inside || inside.startsWith('..') || path.isAbsolute(inside)) return;
+    fs.writeFileSync(ignore, '*\n', { flag: 'wx' });
   } catch {
-    // A read-only checkout must not break a hook; the write that needs the
-    // directory reports the failure itself.
+    // EEXIST means a file or link is there already. Otherwise a read-only
+    // checkout must not break a hook; the write that needs the directory
+    // reports the failure itself.
   }
 }
 
