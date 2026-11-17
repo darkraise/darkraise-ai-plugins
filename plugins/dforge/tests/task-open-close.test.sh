@@ -90,6 +90,9 @@ check "open: the ledger names the plan" "$(head -n 1 "$LEDGER")" "# SDD ledger â
 check "open: the assigned line" "$(tail -n 1 "$LEDGER")" "Task 1: implementer inline (assigned; base $BASE7)"
 has "open: the task check line" "$out" "task check: bash t.sh"
 check "open: the budget line is last" "$(tail -n 1 <<<"$out" | cut -c1-6)" "budget"
+check "open: the first line names the brief file" "$(head -n 1 <<<"$out")" "wrote $WS/task-1-brief.md: $(wc -l < "$WS/task-1-brief.md" | tr -d ' ') lines"
+check "open: prints the brief between its markers" \
+  "$(sed -n '/^--- brief ---$/,/^--- end of brief ---$/p' <<<"$out" | sed '1d;$d')" "$(cat "$WS/task-1-brief.md")"
 check "open: the brief holds no header excerpt" "$(grep -c '^## Plan header excerpt$' "$WS/task-1-brief.md")" "0"
 check "open: the brief points at the header file" "$(grep -c "^Global Constraints and Contracts: $WS/plan-header.md " "$WS/task-1-brief.md")" "1"
 check "open: the header file holds the constraints" "$(grep -c '^- Fixture constraint\.$' "$WS/plan-header.md")" "1"
@@ -116,6 +119,7 @@ check "open: a Codex brief carries no Claude-only lines" "$(grep -c '^\*\*Review
 
 # A brief without --open writes no ledger line and still prints the check.
 run bash "$BRIEF" docs/plan.md 2
+check "plain brief: prints no brief body" "$(grep -c '^--- brief ---$' <<<"$out")" "0"
 check "plain brief: no assigned line for task 2" "$(grep -c '^Task 2:' "$LEDGER")" "0"
 has "plain brief: prints the task check" "$out" "task check: bash t.sh"
 

@@ -250,7 +250,7 @@ context fills, Claude Code's own compaction is the backstop.
 For each task, in order:
 
 1. **Open the task.** Run `scripts/task-brief --open PLAN_FILE N` and read the
-   brief file it prints. One call writes the brief (the task text with every
+   brief it prints. One call writes the brief (the task text with every
    amendment applied), rewrites `<workspace>/plan-header.md`, appends
    `Task <N>: implementer inline (assigned; base <sha7>)` once, and prints
    the `task check:` line and the budget line. A brief for a task you

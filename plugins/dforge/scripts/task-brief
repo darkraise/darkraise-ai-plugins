@@ -166,6 +166,10 @@ if [ "$open" -eq 1 ]; then
     printf 'Task %s: implementer inline (assigned; base %s)\n' "$n" "$open_base" >> "$ledger"
     echo "task $n: opened, base $open_base"
   fi
+  # The session reads the brief here, so opening a task costs no Read call.
+  echo "--- brief ---"
+  cat "$out"
+  echo "--- end of brief ---"
 fi
 
 if [ -n "$n" ]; then
