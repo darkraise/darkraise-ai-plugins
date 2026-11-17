@@ -139,10 +139,4 @@ emit() { # emit <id> <batch_capable> <incapable_reason>
     [ -n "$id" ] || continue
     emit "$id" true ""
   done <<<"$registered"
-
-  # Ids with no registry entry. Each is skipped when registered, so a second
-  # executor never produces two rows under one id.
-  path_row() { grep -qxF "$1" <<<"$registered" || emit "$1" "$2" "$3"; }
-  path_row cursor-agent true ""
-  path_row opencode true ""
 } | jq -s '.'

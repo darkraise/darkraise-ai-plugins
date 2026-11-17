@@ -1383,9 +1383,9 @@ review, `codex-review-schema.json` for the Codex task seats, and
 
 `scripts/` holds the external executor lane:
 
-- `detect-executors.sh` emits the JSON roster read at plan time and again as a
-  dispatch guard. `usable` means dispatchable, so a batch-capable CLI this
-  plugin ships no wrapper for reports `usable: false` with the reason.
+- `detect-executors.sh` emits the JSON roster of the registered executors, read
+  at plan time and again as a dispatch guard. `usable` means dispatchable, so
+  an executor whose wrapper is missing reports `usable: false` with the reason.
 - `run-codex-task.sh` runs one plan task on Codex, owns the commit, and prints
   one status line. Exit 0 is `DONE`, 1 is a run that did not reach it, and 2 is
   no status line - either a refusal before launch or a git failure after the run,
