@@ -63,6 +63,20 @@ export function layout(root) {
   };
 }
 
+// .dflow/ ignores itself, so its machine state stays out of commits and out
+// of the dirty checks whether or not the repository's .gitignore names it.
+export function ensureStateDir(paths) {
+  const ignore = path.join(paths.stateDir, '.gitignore');
+  if (fs.existsSync(ignore)) return;
+  try {
+    fs.mkdirSync(paths.stateDir, { recursive: true });
+    fs.writeFileSync(ignore, '*\n');
+  } catch {
+    // A read-only checkout must not break a hook; the write that needs the
+    // directory reports the failure itself.
+  }
+}
+
 export function loadConfig(root) {
   return merge(DEFAULTS, readJson(layout(root).config, {}));
 }

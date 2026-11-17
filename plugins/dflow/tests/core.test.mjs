@@ -39,6 +39,24 @@ test('plan new creates the file and a linked board row', t => {
   assert.equal(dflow(root, ['plan', 'new', 'meter', '--title', 'again']).status, 1);
 });
 
+test('.dflow ignores itself, also where init never ran or its line was dropped', t => {
+  const fresh = makeRepo(t);
+  assert.equal(dflow(fresh, ['plan', 'new', 'demo', '--title', 'Demo']).status, 0);
+  assert.equal(read(fresh, '.dflow/.gitignore'), '*\n');
+  assert.doesNotMatch(git(fresh, 'status', '--porcelain', '--untracked-files=all'), /\.dflow/);
+
+  const root = makeProject(t);
+  write(root, '.gitignore', read(root, '.gitignore').replace(/^\.dflow\/\n/m, ''));
+  git(root, 'commit', '-q', '-am', 'chore: drop the .dflow line');
+  fs.rmSync(path.join(root, '.dflow'), { recursive: true, force: true });
+  write(root, 'verify1.mjs', '\n');
+  write(root, 'src/limit.mjs', '1\n');
+  git(root, 'add', 'src');
+  const done = dflow(root, ['done', '1', '-m', 'feat: parse']);
+  assert.equal(done.status, 0, done.stderr);
+  assert.doesNotMatch(git(root, 'status', '--porcelain', '--untracked-files=all'), /\.dflow/);
+});
+
 test('approve stamps the plan, links the row and commits only those files', t => {
   const root = makeProject(t);
   assert.equal(parsePlan(read(root, PLAN_FILE)).fields.approved, '2026-11-12');

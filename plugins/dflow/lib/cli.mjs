@@ -1,4 +1,5 @@
-import { context } from './repo.mjs';
+import fs from 'node:fs';
+import { context, ensureStateDir } from './repo.mjs';
 import { CliError } from './util.mjs';
 
 export const COMMANDS = {
@@ -52,6 +53,10 @@ export async function main(argv, { cwd = process.cwd(), env = process.env, out =
     err(`dflow ${name}: ${error.message}`);
     return error.code;
   }
+  // Before the command for a repository that uses dflow, since done and gate
+  // compare the tree around commands that write logs there; after it for one
+  // the command just set up.
+  if (fs.existsSync(ctx.paths.docs)) ensureStateDir(ctx.paths);
   try {
     const module = await import(new URL(entry[0], import.meta.url));
     const code = await module.run(ctx, rest, { out, err, name });
@@ -60,5 +65,7 @@ export async function main(argv, { cwd = process.cwd(), env = process.env, out =
     if (!(error instanceof CliError)) throw error;
     err(`dflow ${name}: ${error.message}`);
     return error.code;
+  } finally {
+    if (fs.existsSync(ctx.paths.stateDir)) ensureStateDir(ctx.paths);
   }
 }
