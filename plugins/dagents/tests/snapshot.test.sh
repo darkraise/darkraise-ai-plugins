@@ -161,18 +161,6 @@ check "oversized handoff: heading kept" "$(sed -n 1p <<<"$out")" "## Compaction 
 
 git -C "$REPO" worktree remove --force "$WT" >/dev/null 2>&1
 
-# --- progress kept in darkmem: the mirror's ledgers and latest.md ---
-. "$HERE/fixtures/darkmem-stores.sh"
-SH="$TMP/stores-home"; mkdir -p "$SH"
-M=$(stores_home "$SH" "$REPO" proj local darkmem)
-mkdir -p "$M/work/sdd/mp"
-printf '# SDD ledger — plan: docs/dagents/plans/mp.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/mp/progress.md"
-printf '# Handoff\n\n## Next session\n\n**Next:** the mirror note\n' > "$M/work/handoff/latest.md"
-out=$(HOME=$SH snapshot_ledgers "$REPO")
-has "darkmem progress: the mirror's ledger" "$out" "### Ledger \`$M/work/sdd/mp/progress.md\` (plan \`docs/dagents/plans/mp.md\`)"
-check "darkmem progress: listed once" "$(grep -c '^### Ledger' <<<"$out")" "1"
-has "darkmem progress: the mirror's latest.md" "$(HOME=$SH snapshot_latest "$REPO")" "**Next:** the mirror note"
-
 # --- the snapshot drops the marker and ages from its at ---
 AREPO="$TMP/aged"
 git init -q -b main "$AREPO"

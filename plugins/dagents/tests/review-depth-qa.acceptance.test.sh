@@ -474,34 +474,6 @@ if want A16; then
   route "$p"; check "A16: a CRLF spec gives spec=light" "$(spec_of)" light
   p=$(mkplan a16-badword s-badword - "" r0t1)
   route "$p"; check "A16: a first word that is not a depth gives spec=none" "$(spec_of)" none
-
-  # A spec in the darkmem mirror resolves as plan-lint resolves it.
-  . "$HERE/fixtures/darkmem-stores.sh"
-  MH="$TMP/mhome"; mkdir -p "$MH"
-  MR="$TMP/mrepo"; mkdir -p "$MR"
-  git -C "$MR" init -q -b main
-  printf 'x\n' > "$MR/x.txt"; git -C "$MR" add -A >/dev/null 2>&1; git -C "$MR" commit -q -m init
-  MIRROR=$(stores_home "$MH" "$MR" qaproj darkmem local)
-  mkdir -p "$MIRROR/dagents/specs" "$MIRROR/dagents/plans"
-  printf '# Mirror spec\n\n**Execution strategy:** sequential\n\n**Depth:** standard — interface (set by hand)\n\n## Decisions\n' > "$MIRROR/dagents/specs/m-spec.md"
-  {
-    printf '# Mirror Plan\n\n**Goal:** Demo.\n\n**Spec:** `docs/dagents/specs/m-spec.md`\n\n'
-    printf '**Execution:** inline — `claude --model sonnet --effort high` — demo\n\n'
-    printf '**Plan review:** 2026-10-27 — skipped (depth light)\n\n'
-    printf '## Global Constraints\n\n- None.\n\n## Contracts\n\nNone\n\n## Assumptions (evidence)\n\n- None.\n\n## Task index\n\n1. Thing 1\n\n'
-    printf '### Task 1: Thing 1\n\n**Files:**\n- Create: `f1.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n'
-    printf '**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n\n- [ ] **Step 1: Do it**\n'
-  } > "$MIRROR/dagents/plans/m-plan.md"
-  lint_out=$(cd "$MR" && HOME="$MH" timeout 60 bash "$LINT" "$MIRROR/dagents/plans/m-plan.md" 2>&1)
-  absent "A16: plan-lint resolves the mirror spec path (no 'Spec path does not exist')" "$lint_out" "Spec path does not exist"
-  out=$(cd "$MR" && HOME="$MH" timeout 60 bash "$DR" "$MIRROR/dagents/plans/m-plan.md" 2>&1); status=$?
-  check "A16: a mirror spec path routes (exit 0)" "$status" 0
-  present "A16: a mirror spec path gives spec=standard" "$out" " spec=standard "
-  present "A16: a mirror spec path gives depth=standard" "$out" "^depth=standard "
-  # The same plan with the spec absent from the mirror falls to none, proving the spec was read from there.
-  mv "$MIRROR/dagents/specs/m-spec.md" "$MIRROR/dagents/specs/m-spec.moved"
-  out=$(cd "$MR" && HOME="$MH" timeout 60 bash "$DR" "$MIRROR/dagents/plans/m-plan.md" 2>&1)
-  present "A16: control: with the mirror spec gone the plan routes at full with spec=none" "$out" "^depth=full spec=none "
 fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"

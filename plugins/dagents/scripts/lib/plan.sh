@@ -320,34 +320,21 @@ plan_task_depends() {
 }
 
 # _plan_ctx PLAN — the directory whose checkout a plan belongs to: its own
-# directory inside a git repository, else the working directory. A plan in
-# the darkmem mirror belongs to the checkout it is worked from, even when the
-# mirror lies inside a repository (a home directory under git).
+# directory inside a git repository, else the working directory.
 _plan_ctx() {
-  local dir mirror physical
+  local dir
   dir=$(dirname "$1")
-  mirror=$(cd "${HOME:-}/.dagents/mirror" 2>/dev/null && pwd -P) || mirror=""
-  physical=$(cd "$dir" 2>/dev/null && pwd -P) || physical=""
-  if [ -n "$mirror" ] && [ -n "$physical" ]; then
-    case "$physical/" in "$mirror"/*) printf '%s\n' "$PWD"; return 0 ;; esac
-  fi
   if git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then printf '%s\n' "$dir"; else printf '%s\n' "$PWD"; fi
 }
 
-# plan_locate PLAN — prefer the applied document store, then an existing
-# checkout file; a missing mirror copy never falls back to stale local docs.
+# plan_locate PLAN — PLAN when it exists, else the file its name resolves to
+# under the docs root (an older docs prefix included), else PLAN unchanged.
 plan_locate() {
   local found name ctx
   ctx=$(_plan_ctx "$1")
   dagents_stores_init "$ctx"
   name=$(dagents_name "$1" "$ctx")
   found=$(dagents_resolve "$name" "$ctx")
-  if [ "$_DAGENTS_DOCS_STORE" = darkmem ]; then
-    case $(dagents_name_key "$name") in
-      docs/dagents/*)
-        if [ -f "$found" ] || [ -f "$1" ]; then printf '%s\n' "$found"; return 0; fi ;;
-    esac
-  fi
   if [ -f "$1" ]; then printf '%s\n' "$1"
   elif [ -f "$found" ]; then printf '%s\n' "$found"
   else printf '%s\n' "$1"; fi
@@ -355,12 +342,10 @@ plan_locate() {
 
 # plan_ledger PLAN — the plan's ledger file when it exists and its identity line
 # names PLAN; nothing otherwise. A stale ledger under the same slug is ignored.
-# Plan and identity are compared as name keys, so a ledger in darkmem can name a
-# plan in the checkout and the reverse, under either docs prefix.
+# Plan and identity are compared as name keys, so either docs prefix matches.
 # plan_ledger_any ROOT PLAN — "<ledger>\t<checkout>" for the first progress.md
 # whose identity line names PLAN: this checkout's ledger directory first, then
-# every worktree's (dagents_ledger_files; a mirror ledger's checkout is the
-# worktree holding its state directory). Status 1, nothing printed, when none.
+# every worktree's (dagents_ledger_files). Status 1, nothing printed, when none.
 plan_ledger_any() {
   local root=$1 want slug file wt
   dagents_stores_init "$root"
@@ -370,7 +355,6 @@ plan_ledger_any() {
   if _plan_ledger_names "$file" "$root" "$want"; then printf '%s\t%s\n' "$file" "$root"; return 0; fi
   while IFS=$'\t' read -r file wt; do
     [ -n "$file" ] || continue
-    [ "$wt" != mirror ] || wt=$(_plan_ledger_tree "$root" "$slug")
     _plan_ledger_names "$file" "$wt" "$want" || continue
     printf '%s\t%s\n' "$file" "$wt"
     return 0
@@ -396,19 +380,10 @@ _plan_ledger_names() {
   [ "$(dagents_name_key "$(dagents_name "$named")")" = "$3" ]
 }
 
-# _plan_ledger_tree ROOT SLUG — the worktree holding <state>/sdd/SLUG, else ROOT.
-_plan_ledger_tree() {
-  local wt
-  while IFS= read -r wt; do
-    [ -d "$(dagents_dir state "$wt")/sdd/$2" ] && { printf '%s\n' "$wt"; return 0; }
-  done < <(git -C "$1" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
-  printf '%s\n' "$1"
-}
-
 plan_ledger() {
   local ctx want file named
   ctx=$(_plan_ctx "$1")
-  # In this shell, so a ConfigError exits the caller rather than a $(…) below.
+  # In this shell, so the roots it caches serve the calls below.
   dagents_stores_init "$ctx"
   want=$(dagents_name_key "$(dagents_name "$1" "$ctx")")
   file="$(dagents_ledger_dir "$(basename "$1" .md)" "$ctx")/progress.md"
@@ -497,7 +472,7 @@ plan_apply_amendments() {
 }
 
 # plan_amendments_file PLAN — <ledger dir>/amendments.md, beside the ledger
-# (dagents_ledger_dir, the darkmem mirror's when progress is kept there), when
+# (dagents_ledger_dir), when
 # PLAN belongs to a git checkout and that file is non-empty; otherwise
 # nothing, which readers take as no amendments. Computed, not created: readers
 # never bring the ledger directory into being. plan-amend computes the same
@@ -513,8 +488,7 @@ plan_amendments_file() {
 
 # plan_amendments_ready PLAN — run in the caller's own shell, never inside
 # $(…): it exits the caller. Amendments used to live in the workspace, which
-# is not where darkmem keeps the ledger, so a session on another host lost
-# them. When the ledger directory has no amendments file and the workspace
+# is not where the ledger is. When the ledger directory has no amendments file and the workspace
 # has one, it is moved there (copied to a temporary name, renamed, then
 # removed from the workspace) and the move is logged in the ledger, once.
 # Then a ledger line citing `Ruling: amendment A<k>` whose `## A<k> ` heading
@@ -557,28 +531,19 @@ plan_amendments_ready() {
 }
 
 # plan_require_same_project FILE — return when FILE belongs to the working
-# directory's checkout: inside its top level, or under the darkmem mirror's
-# docs root while documents are applied darkmem. Otherwise name both on stderr
+# directory's checkout: inside its top level. Otherwise name both on stderr
 # and exit 2. Scripts find the repository from the working directory, but the
 # plan functions resolve from the plan's location, so a plan in another
 # checkout would split one plan's state across two. A linked worktree and its
 # primary checkout have different top levels, so a worktree session given the
 # primary checkout's plan path is refused as well.
 plan_require_same_project() {
-  local me cwd_top plan_top dir docs
+  local me cwd_top plan_top
   me=$(basename "$0")
   cwd_top=$(git rev-parse --show-toplevel 2>/dev/null) \
     || { printf '%s: not inside a git repository\n' "$me" >&2; exit 2; }
   plan_top=$(git -C "$(dirname "$1")" rev-parse --show-toplevel 2>/dev/null) || plan_top=""
   [ "$plan_top" != "$cwd_top" ] || return 0
-  dagents_stores_init
-  if [ "$_DAGENTS_DOCS_STORE" = darkmem ]; then
-    dir=$(cd "$(dirname "$1")" 2>/dev/null && pwd -P) || dir=""
-    docs=$(cd "$_DAGENTS_DOCS_ROOT" 2>/dev/null && pwd -P) || docs=""
-    if [ -n "$dir" ] && [ -n "$docs" ]; then
-      case "$dir/" in "$docs"/*) return 0 ;; esac
-    fi
-  fi
   printf "%s: %s is in %s, but the working directory is in %s; run from inside the plan's worktree\n" \
     "$me" "$1" "${plan_top:-no git repository}" "$cwd_top" >&2
   exit 2
@@ -616,8 +581,6 @@ plan_final_review_state() {
   changed=$(git -C "$dir" log --format= --name-only "$full..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
   changed=$(tr -d '\r' <<<"$changed" | sed '/^$/d')
   if [ -z "$changed" ]; then echo current; return 0; fi
-  # Under darkmem documents no committed path is a docs path.
-  if [ "$(dagents_docs_store "$dir")" != local ]; then echo "stale $head"; return 0; fi
   top=$(dr_native_path "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null | tr -d '\r')")
   docs=$(dr_native_path "$(dagents_docs_root "$dir")")
   while IFS= read -r path; do

@@ -61,7 +61,7 @@ while IFS=$'\t' read -r ledger wt; do
   [ -n "$ledger" ] || continue
   found=1
   plan_rel=$(ledger_plan "$ledger")
-  if [ "$wt" = mirror ]; then place="the darkmem mirror" base=$root; else place="\`$wt\`" base=$wt; fi
+  place="\`$wt\`" base=$wt
   total="?"
   if [ -n "$plan_rel" ]; then
     plan_file=$(dagents_resolve "$plan_rel" "$base")

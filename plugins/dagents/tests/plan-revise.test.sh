@@ -367,27 +367,26 @@ present() { # present <name> <file> <needle>
 check "the skill exists" "$([ -f "$SK" ] && echo yes || echo no)" "yes"
 present "the skill is named" "$SK" "name: revising-plans"
 
-# --- documents and progress kept in darkmem: the survey finds the mirror's ledger ---
-. "$HERE/fixtures/darkmem-stores.sh"
+# --- the survey finds a ledger under either docs prefix ---
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"
 git init -q "$SR"
 git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
-M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/dagents/plans" "$M/work/sdd/mp"
-printf '**Goal:** demo\n\n### Task 1: One\n' > "$M/dagents/plans/mp.md"
-printf '# SDD ledger — plan: docs/dagents/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
-row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/dagents/plans" | grep '^plan  mp\.md')
-check "darkmem survey: live" "$(field live "$row")" "yes"
-check "darkmem survey: the evidence names the mirror" "$(grep -c 'ledger in mirror' <<<"$row")" "1"
+STOP=$(git -C "$SR" rev-parse --show-toplevel)
+mkdir -p "$STOP/docs/dagents/plans" "$STOP/.dagents/sdd/mp"
+printf '**Goal:** demo\n\n### Task 1: One\n' > "$STOP/docs/dagents/plans/mp.md"
+printf '# SDD ledger — plan: docs/dagents/plans/mp.md\n' > "$STOP/.dagents/sdd/mp/progress.md"
+row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$STOP/docs/dagents/plans" | grep '^plan  mp\.md')
+check "checkout survey: live" "$(field live "$row")" "yes"
+check "checkout survey: the evidence names the checkout" "$(grep -c "ledger in $STOP" <<<"$row")" "1"
 
-printf '# SDD ledger — plan: docs/superpowers/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
-row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/dagents/plans" | grep '^plan  mp\.md')
-check "darkmem survey: a ledger under the other prefix is live" "$(field live "$row")" "yes"
-rm -f "$M/work/sdd/mp/progress.md"
-printf -- '- 2026-10-13 `docs/superpowers/plans/mp.md` — merged into `main` at abc1234\n' > "$M/dagents/plans/completed.md"
-row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$M/dagents/plans" | grep '^plan  mp\.md')
-check "darkmem survey: a completed entry under the other prefix" "$(field live "$row")" "no"
+printf '# SDD ledger — plan: docs/superpowers/plans/mp.md\n' > "$STOP/.dagents/sdd/mp/progress.md"
+row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$STOP/docs/dagents/plans" | grep '^plan  mp\.md')
+check "checkout survey: a ledger under the other prefix is live" "$(field live "$row")" "yes"
+rm -f "$STOP/.dagents/sdd/mp/progress.md"
+printf -- '- 2026-10-13 `docs/superpowers/plans/mp.md` — merged into `main` at abc1234\n' > "$STOP/docs/dagents/plans/completed.md"
+row=$(cd "$SR" && HOME=$SH bash "$SCRIPT" --survey "$STOP/docs/dagents/plans" | grep '^plan  mp\.md')
+check "checkout survey: a completed entry under the other prefix" "$(field live "$row")" "no"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

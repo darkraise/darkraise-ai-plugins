@@ -380,22 +380,19 @@ check "plan_lettered: an unfenced lettered heading only" \
 check "plan_lettered: a numbered plan has none" "$(plan_lettered "$TMP/split.md")" ""
 
 # --- the plan functions follow the roots ---
-. "$HERE/fixtures/darkmem-stores.sh"
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"
 git init -q "$SR"
 git -C "$SR" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 STOP=$(git -C "$SR" rev-parse --show-toplevel)
-M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
 # --- amendments live beside the ledger (C7) ---
 mkdir -p "$SR/docs" && printf '# P\n\n### Task 1: One\n' > "$SR/docs/am.md"
-LD="$M/work/sdd/am"; WSD="$SR/.dagents/sdd/am"
-mkdir -p "$LD" "$WSD"
+LD="$STOP/.dagents/sdd/am"
+mkdir -p "$LD"
 printf '# SDD ledger — plan: docs/am.md\nTask 1: Ruling: amendment A1 — x — y\n' > "$LD/progress.md"
-printf '## A1 — Task 1\n' > "$WSD/amendments.md"
+printf '## A1 — Task 1\n' > "$LD/amendments.md"
 (cd "$SR" && HOME=$SH plan_amendments_ready docs/am.md); rc=$?
-check "ready: migrates the workspace file" "$rc:$([ -s "$LD/amendments.md" ] && echo moved):$([ -e "$WSD/amendments.md" ] && echo left || echo gone)" "0:moved:gone"
-check "ready: logs the move once" "$(grep -c '^Ruling: amendments moved beside the ledger — none$' "$LD/progress.md")" "1"
+check "ready: a cited amendment the file holds passes" "$rc" "0"
 check "file: the ledger directory's copy" "$(cd "$SR" && HOME=$SH plan_amendments_file docs/am.md)" "$LD/amendments.md"
 printf 'Task 1: Ruling: amendment A2 — x — y\n' >> "$LD/progress.md"
 err=$(cd "$SR" && HOME=$SH plan_amendments_ready docs/am.md 2>&1); rc=$?
@@ -405,69 +402,19 @@ check "ready: the message names it" "$(grep -c 'cites amendment A2, which .*amen
   awk 'BEGIN { for (i = 0; i < 3000; i++) print "an old amendment body line that fills the file" }'; } > "$LD/amendments.md"
 (cd "$SR" && HOME=$SH plan_amendments_ready docs/am.md 2>/dev/null); rc=$?
 check "ready: a file past 64 KiB still finds an early amendment" "$rc" "0"
-mkdir -p "$M/dagents/plans" "$M/work/sdd/mp"
-printf '# MP\n' > "$M/dagents/plans/mp.md"
-printf '# SDD ledger — plan: docs/dagents/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
-check "plan_ledger: a mirror plan finds its mirror ledger by name" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$M/dagents/plans/mp.md")" "$M/work/sdd/mp/progress.md"
-printf '# SDD ledger — plan: %s\n' "$M/dagents/plans/mp.md" > "$M/work/sdd/mp/progress.md"
-check "plan_ledger: an absolute mirror path names it too" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$M/dagents/plans/mp.md")" "$M/work/sdd/mp/progress.md"
-printf '# SDD ledger — plan: docs/superpowers/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"
-check "plan_ledger: the pre-2.0 prefix names a mirror plan" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$M/dagents/plans/mp.md")" "$M/work/sdd/mp/progress.md"
-check "plan_locate: a document name finds the mirror's copy" \
-  "$(cd "$SR" && HOME=$SH plan_locate docs/dagents/plans/mp.md)" "$M/dagents/plans/mp.md"
-mkdir -p "$SR/docs/dagents/plans"
-printf '# Stale checkout copy\n' > "$SR/docs/dagents/plans/mp.md"
-check "plan_locate: applied mirror wins over leftover checkout" \
-  "$(cd "$SR" && HOME=$SH plan_locate docs/dagents/plans/mp.md)" "$M/dagents/plans/mp.md"
-check "plan_locate: absolute checkout path follows applied mirror" \
-  "$(cd "$SR" && HOME=$SH plan_locate "$SR/docs/dagents/plans/mp.md")" "$M/dagents/plans/mp.md"
-check "plan_locate: an absolute plan outside cwd keeps its store context" \
-  "$(cd "$TMP" && HOME=$SH plan_locate "$SR/docs/dagents/plans/mp.md")" "$M/dagents/plans/mp.md"
-mv "$M/dagents/plans/mp.md" "$M/dagents/plans/mp.saved"
-check "plan_locate: missing mirror does not revive stale checkout" \
-  "$(cd "$SR" && HOME=$SH plan_locate docs/dagents/plans/mp.md)" "$M/dagents/plans/mp.md"
-mv "$M/dagents/plans/mp.saved" "$M/dagents/plans/mp.md"
-rm "$SR/docs/dagents/plans/mp.md"
 check "plan_locate: an existing file stays" "$(cd "$REPO" && plan_locate docs/demo.md)" "docs/demo.md"
 check "plan_locate: a missing name stays" "$(cd "$SR" && HOME=$SH plan_locate docs/dagents/plans/none.md)" "docs/dagents/plans/none.md"
-mkdir -p "$M/work/sdd/mp"
-printf '## A1 — Task 1\n' > "$M/work/sdd/mp/amendments.md"
-check "amendments_file: a mirror plan's amendments sit beside its mirror ledger" \
-  "$(cd "$SR" && HOME=$SH plan_amendments_file "$M/dagents/plans/mp.md")" "$M/work/sdd/mp/amendments.md"
-(cd "$SR" && HOME=$SH plan_require_same_project "$M/dagents/plans/mp.md" 2>/dev/null)
-check "same project: a mirror plan while documents are in darkmem" "$?" "0"
 (cd "$SR" && HOME=$SH plan_require_same_project "$REPO/docs/demo.md" 2>/dev/null)
 check "same project: another checkout's plan is refused" "$?" "2"
-M=$(stores_home "$SH" "$SR" proj local darkmem)
 mkdir -p "$STOP/docs/dagents/plans"
 printf '# LP\n' > "$STOP/docs/dagents/plans/lp.md"
-mkdir -p "$M/work/sdd/lp"
-printf '# SDD ledger — plan: docs/dagents/plans/lp.md\n' > "$M/work/sdd/lp/progress.md"
-check "plan_ledger: a checkout plan finds its mirror ledger" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/dagents/plans/lp.md")" "$M/work/sdd/lp/progress.md"
-printf '# SDD ledger — plan: docs/superpowers/plans/lp.md\n' > "$M/work/sdd/lp/progress.md"
+mkdir -p "$STOP/.dagents/sdd/lp"
+printf '# SDD ledger — plan: docs/dagents/plans/lp.md\n' > "$STOP/.dagents/sdd/lp/progress.md"
+check "plan_ledger: a checkout plan finds its ledger" \
+  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/dagents/plans/lp.md")" "$STOP/.dagents/sdd/lp/progress.md"
+printf '# SDD ledger — plan: docs/superpowers/plans/lp.md\n' > "$STOP/.dagents/sdd/lp/progress.md"
 check "plan_ledger: the pre-2.0 prefix names a checkout plan" \
-  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/dagents/plans/lp.md")" "$M/work/sdd/lp/progress.md"
-(cd "$SR" && HOME=$SH plan_require_same_project "$M/dagents/plans/mp.md" 2>/dev/null)
-check "same project: a mirror plan while documents are local is refused" "$?" "2"
-
-# --- a home that is a git repository: a mirror plan still belongs to the
-# working directory's checkout, and a ConfigError stops plan_ledger ---
-GH="$TMP/git-home"
-git init -q "$GH"
-GM=$(stores_home "$GH" "$SR" proj darkmem darkmem)
-mkdir -p "$GM/dagents/plans" "$GM/work/sdd/gp"
-printf '# GP\n' > "$GM/dagents/plans/gp.md"
-printf '# SDD ledger — plan: docs/dagents/plans/gp.md\n' > "$GM/work/sdd/gp/progress.md"
-check "plan_ledger: a mirror plan in a home under git finds its ledger" \
-  "$(cd "$SR" && HOME=$GH plan_ledger "$GM/dagents/plans/gp.md")" "$GM/work/sdd/gp/progress.md"
-printf '{not json\n' > "$GH/.dagents/config.json"
-(cd "$SR" && HOME=$GH plan_ledger "$GM/dagents/plans/gp.md" > /dev/null 2> "$TMP/ledger-err")
-check "plan_ledger: a ConfigError exits 2" "$?" "2"
-check "plan_ledger: the ConfigError is named once" "$(grep -c 'not valid JSON' "$TMP/ledger-err")" "1"
+  "$(cd "$SR" && HOME=$SH plan_ledger "$STOP/docs/dagents/plans/lp.md")" "$STOP/.dagents/sdd/lp/progress.md"
 
 # --- a first-parent history past the 64 KiB pipe buffer: a code commit after
 # the reviewed head still reads stale ---

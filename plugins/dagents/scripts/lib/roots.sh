@@ -1,24 +1,21 @@
-# Sourced. Where a repository's two dagents families live (darkmem store
-# options spec §2): documents (the docs directory) and progress (plan ledgers,
-# their handoff.md, and latest.md), each in the checkout or in the darkmem
-# mirror, as `darkmem-config.mjs --mode` resolves them. Defines functions only.
+# Sourced. Where a repository's dagents files live: the docs directory, the
+# plan ledgers and their handoff.md, and latest.md, all in the checkout.
+# Defines functions only.
 #
 # Every helper takes an optional trailing DIR naming the checkout (default: the
-# working directory). The resolution is cached per HOME and checkout in shell
+# working directory). The roots are cached per HOME and checkout in shell
 # variables; a helper called inside $(…) cannot fill the caller's cache, so a
 # script that calls helpers repeatedly calls dagents_stores_init in its main
-# shell first. A ConfigError exits the script with status 2.
+# shell first.
 
 . "$(dirname "${BASH_SOURCE[0]}")/dagents-dir.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/native-path.sh"
-_ROOTS_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-_DAGENTS_KEY="" _DAGENTS_TOP="" _DAGENTS_DOCS_STORE="" _DAGENTS_DOCS_ROOT=""
-_DAGENTS_PROGRESS_STORE="" _DAGENTS_LEDGER_ROOT="" _DAGENTS_LATEST="" _DAGENTS_PROJECT=""
+_DAGENTS_KEY="" _DAGENTS_TOP="" _DAGENTS_DOCS_ROOT="" _DAGENTS_LEDGER_ROOT="" _DAGENTS_LATEST=""
 
-# Node prints native paths; Git Bash compares them in git's C:/… form, which
-# is always long: git expands an 8.3 short name such as RUNNER~1 in a TEMP
-# directory that cygpath keeps.
+# Git Bash compares paths in git's C:/… form, which is always long: git
+# expands an 8.3 short name such as RUNNER~1 in a TEMP directory that cygpath
+# keeps.
 _dagents_path() {
   if command -v cygpath >/dev/null 2>&1; then _dagents_long "$(cygpath -m "$1" 2>/dev/null || printf '%s' "$1")"
   else printf '%s\n' "$1"; fi
@@ -35,116 +32,31 @@ _dagents_long() {
   else printf '%s\n' "$1"; fi
 }
 
-# dagents_darkmem_possible — status 0 when this home could put a family in
-# darkmem: its config.json has a darkmem section, or stores.json records a
-# family already applied. Without either, darkmem-config.mjs --mode answers
-# local for both families, so the callers skip its node start: the common case
-# of a home that never used darkmem.
-dagents_darkmem_possible() {
-  [ -n "${HOME:-}" ] || return 0
-  grep -qs '"darkmem"[[:space:]]*:' "$HOME/.dagents/config.json" || [ -f "$HOME/.dagents/stores.json" ]
-}
-
-# Both families local, computed without node: no git repository (then DIR
-# stands in for the checkout), a home that never used darkmem, or no node on
-# PATH while stores.json applies no darkmem store to this checkout (one that
-# does exits 2: its documents or ledger are in the mirror, and a local root
-# would split the plan's state).
-_dagents_local() { # DIR TOP
-  local base=${2:-$1} primary=${2:-$1} common
-  if [ -n "$2" ]; then
-    if common=$(git -C "$2" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
-      primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null) || primary=$2
-    fi
-  fi
-  _DAGENTS_DOCS_STORE=local
-  _DAGENTS_DOCS_ROOT=$(dagents_dir docs "$base")
-  _DAGENTS_PROGRESS_STORE=local
-  _DAGENTS_LEDGER_ROOT="$(dagents_dir state "$base")/sdd"
-  _DAGENTS_LATEST="$(dagents_dir state "$primary")/handoff/latest.md"
-  _DAGENTS_PROJECT=""
-}
-
-# _dagents_applied_darkmem TOP — stores.json records documents or progress as
-# darkmem for TOP's primary checkout; without jq, for any checkout. A file that
-# does not parse may record either, so it counts as applied, said on stderr.
-_dagents_applied_darkmem() {
-  local stores="${HOME:-}/.dagents/stores.json" common primary=$1
-  [ -n "${HOME:-}" ] && [ -f "$stores" ] || return 1
-  if ! command -v jq >/dev/null 2>&1; then
-    grep -q '"darkmem"' "$stores"
-    return
-  fi
-  if common=$(git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
-    primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null) || primary=$1
-  fi
-  jq -e --arg k "$primary" '.[$k] | objects | .documents == "darkmem" or .progress == "darkmem"' \
-    < "$stores" >/dev/null 2>&1
-  case $? in
-    0) return 0 ;;
-    1 | 4) return 1 ;;
-    *) printf 'roots.sh: %s does not parse, so darkmem stores may be applied\n' "$stores" >&2; return 0 ;;
-  esac
-}
-
 dagents_stores_init() { # [DIR]
-  local dir=${1:-$PWD} top key out kind store root extra
+  local dir=${1:-$PWD} top key base primary common
   # Git Bash's $PWD is /tmp/... or /d/...; under MSYS_NO_PATHCONV git.exe takes
   # that form verbatim and finds no repository.
   top=$(git -C "$(dr_native_path "$dir")" rev-parse --show-toplevel 2>/dev/null) || top=""
   key="${HOME:-}|${top:-nogit:$dir}"
   [ "$_DAGENTS_KEY" = "$key" ] && return 0
   _DAGENTS_TOP=$top
-  if [ -z "$top" ] || ! dagents_darkmem_possible; then
-    _dagents_local "$dir" "$top"
-    _DAGENTS_KEY=$key
-    return 0
-  fi
-  if ! command -v node >/dev/null 2>&1; then
-    if _dagents_applied_darkmem "$top"; then
-      printf 'roots.sh: node is required while darkmem stores are applied\n' >&2
-      exit 2
+  # Outside git, DIR stands in for the checkout.
+  base=${top:-$dir} primary=${top:-$dir}
+  if [ -n "$top" ]; then
+    if common=$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
+      primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null) || primary=$top
     fi
-    _dagents_local "$dir" "$top"
-    _DAGENTS_KEY=$key
-    return 0
   fi
-  if ! out=$(cd "$dir" && node "$(dr_native_path "$_ROOTS_LIB_DIR/darkmem-config.mjs")" --mode 2>&1); then
-    printf '%s\n' "$out" >&2
-    exit 2
-  fi
-  _DAGENTS_DOCS_STORE="" _DAGENTS_DOCS_ROOT="" _DAGENTS_PROGRESS_STORE="" _DAGENTS_LEDGER_ROOT="" _DAGENTS_LATEST="" _DAGENTS_PROJECT=""
-  while IFS=$'\t' read -r kind store root extra; do
-    case $kind in
-      documents) _DAGENTS_DOCS_STORE=$store _DAGENTS_DOCS_ROOT=$(_dagents_path "$root") ;;
-      progress)
-        _DAGENTS_PROGRESS_STORE=$store _DAGENTS_LEDGER_ROOT=$(_dagents_path "$root")
-        _DAGENTS_LATEST=$(_dagents_path "$extra")
-        ;;
-      project) _DAGENTS_PROJECT=$store ;;
-    esac
-  done <<<"$out"
-  # A run that exits 0 without both lines (node's main-module check fails when
-  # the plugin path holds a symbolic link) would leave every root empty, and
-  # the helpers would print paths under /.
-  if [ -z "$_DAGENTS_DOCS_STORE" ] || [ -z "$_DAGENTS_DOCS_ROOT" ] || [ -z "$_DAGENTS_PROGRESS_STORE" ] \
-     || [ -z "$_DAGENTS_LEDGER_ROOT" ] || [ -z "$_DAGENTS_LATEST" ]; then
-    printf 'roots.sh: darkmem-config.mjs --mode printed no roots for %s\n' "$dir" >&2
-    exit 2
-  fi
+  _DAGENTS_DOCS_ROOT=$(dagents_dir docs "$base")
+  _DAGENTS_LEDGER_ROOT="$(dagents_dir state "$base")/sdd"
+  _DAGENTS_LATEST="$(dagents_dir state "$primary")/handoff/latest.md"
   _DAGENTS_KEY=$key
 }
 
 dagents_docs_root() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_DOCS_ROOT"; }
-dagents_docs_store() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_DOCS_STORE"; }
-dagents_progress_store() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_PROGRESS_STORE"; }
 dagents_ledger_root() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_LEDGER_ROOT"; }
 dagents_latest_file() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_LATEST"; }
 dagents_ledger_dir() { dagents_stores_init "${2:-}"; printf '%s/%s\n' "$_DAGENTS_LEDGER_ROOT" "$1"; } # SLUG [DIR]
-
-# dagents_project [DIR] — the darkmem project the repository is mapped to;
-# status 1 with nothing printed when it is unmapped, outside git or without node.
-dagents_project() { dagents_stores_init "${1:-}"; [ -n "$_DAGENTS_PROJECT" ] || return 1; printf '%s\n' "$_DAGENTS_PROJECT"; }
 
 dagents_workspace() { # SLUG [DIR]
   dagents_stores_init "${2:-}"
@@ -152,17 +64,10 @@ dagents_workspace() { # SLUG [DIR]
 }
 
 # dagents_ledger_files [DIR] — "<ledger>\t<checkout>" for every worktree's
-# ledgers when progress is local; "<ledger>\tmirror" for the mirror's when it
-# is darkmem, listed once, since every worktree shares the mirror.
+# ledgers.
 dagents_ledger_files() {
   local wt f
   dagents_stores_init "${1:-}"
-  if [ "$_DAGENTS_PROGRESS_STORE" = darkmem ]; then
-    for f in "$_DAGENTS_LEDGER_ROOT"/*/progress.md; do
-      [ -f "$f" ] && printf '%s\tmirror\n' "$f"
-    done
-    return 0
-  fi
   [ -n "$_DAGENTS_TOP" ] || return 0
   git -C "$_DAGENTS_TOP" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p' |
   while IFS= read -r wt; do

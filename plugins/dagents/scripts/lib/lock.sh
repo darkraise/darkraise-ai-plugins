@@ -122,8 +122,7 @@ dr_link_target() {
 
 # dr_replace FILE SOURCE — replace FILE with SOURCE's content through a
 # dotfile beside FILE: the rename is atomic (a temp file elsewhere may sit on
-# another filesystem), darkmem never syncs the partial copy, and FILE keeps
-# its mode. A symbolic link is written through: its target is replaced and the
+# another filesystem), and FILE keeps its mode. A symbolic link is written through: its target is replaced and the
 # link stays.
 dr_replace() {
   local file tmp
@@ -136,7 +135,7 @@ dr_replace() {
 # dr_lock_base FILE — the path FILE's lock is named from, after its links are
 # followed, so a link and its target share one lock: inside the git
 # directory for a file in a checkout, where a lock never shows as an untracked
-# file, else a dotfile beside FILE, which darkmem never syncs.
+# file, else a dotfile beside FILE.
 dr_lock_base() {
   local file dir name common key
   file="$(dr_link_target "$1")" || return 1

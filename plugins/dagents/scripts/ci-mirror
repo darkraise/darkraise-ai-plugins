@@ -3,7 +3,7 @@
 # checkout's top level, so the final review sees the CI commands' verdicts at
 # this HEAD and a later gate with the same command reuses the pass.
 #
-# Usage: ci-mirror PLAN_FILE (a path, or a name the darkmem docs mirror holds)
+# Usage: ci-mirror PLAN_FILE (a path, or a document name under the docs root)
 # The **CI:** line is read with the plan's amendments applied.
 # Output: for `**CI:** none`, the one line "ci: none". Otherwise one line per
 #         local command, in order,

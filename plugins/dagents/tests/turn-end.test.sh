@@ -400,22 +400,6 @@ out=$(stop s-stale 'All done.')
 check "a stale clean line: held" "$(decision "$out")" "block"
 check "a stale clean line: not sent to the finishing menu" "$(jq -r .reason <<<"$out" | grep -c 'passed its final review')" "0"
 
-# --- progress kept in darkmem: the mirror's ledgers are the ones read ---
-. "$HERE/fixtures/darkmem-stores.sh"
-M=$(stores_home "$HOME" "$REPO" proj local darkmem)
-mkdir -p "$M/work/sdd/2026-10-10-mirror" "$REPO/.dagents/sdd/2026-10-10-mirror"
-sleep 1; prompt s-2; sleep 1
-printf '# SDD ledger — plan: docs/dagents/plans/2026-10-10-mirror.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-10-mirror/progress.md"
-out=$(stop s-2 'Task 1 is done.')
-check "darkmem progress: a mirror ledger blocks a bare summary" "$(decision "$out")" "block"
-check "darkmem progress: names the plan" \
-  "$(jq -r .reason <<<"$out" | grep -c 'scripts/next-step" docs/dagents/plans/2026-10-10-mirror.md')" "1"
-mkdir -p "$M/work/sdd/2026-10-11-other"
-sleep 1; prompt s-3; sleep 1
-printf '# SDD ledger — plan: docs/dagents/plans/2026-10-11-other.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-11-other/progress.md"
-check "darkmem progress: another worktree's ledger does not block" "$(stop s-3 'Task 1 is done.')" ""
-rm -f "$HOME/.dagents/config.json" "$HOME/.dagents/stores.json"
-
 # --- a branch moved without a plan's ledger is not held ---
 commit_in() { git -C "$1" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m "$2"; }
 UT="$TMP/unplanned.jsonl"

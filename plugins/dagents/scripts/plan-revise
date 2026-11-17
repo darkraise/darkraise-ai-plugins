@@ -143,9 +143,9 @@ plan_units() {
 }
 
 # ledger_for PLAN — "<where>\t<ledger>" for the ledger whose identity line
-# names PLAN: every worktree's ledgers while progress is local (execution may
-# run in a linked worktree while the plan is read from the primary checkout),
-# the mirror's while it is darkmem. Identities compare as name keys, so either
+# names PLAN: every worktree's ledgers (execution may run in a linked worktree
+# while the plan is read from the primary checkout). Identities compare as
+# name keys, so either
 # docs prefix matches; an absolute local identity is stripped of the longest
 # worktree root it lies under, since
 # a worktree created inside the primary checkout has the primary root as a

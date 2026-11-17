@@ -308,15 +308,6 @@ check "package: a documents-only range keeps its diff" "$(count docs-only.diff '
 check "package: a documents-only range leaves nothing out" "$(count docs-only.diff 'Left out:')" "0"
 pkg "$PKG/src/deep" "$PBASE" HEAD subdir.diff
 check "package: the same from a subdirectory" "$(cat "$TMP/subdir.diff")" "$(cat "$TMP/mixed.diff")"
-. "$HERE/fixtures/darkmem-stores.sh"
-SH="$TMP/stores-home"; mkdir -p "$SH"
-MIRROR=$(stores_home "$SH" "$PKG" p darkmem local)
-# plan_locate reads a plan from the applied store, never the checkout's copy.
-mkdir -p "$MIRROR/dagents/plans"
-cp "$PKG/docs/dagents/plans/p.md" "$MIRROR/dagents/plans/p.md"
-(cd "$PKG" && HOME="$SH" env -u MSYS_NO_PATHCONV bash "$P/scripts/review-package" "$PKG/docs/dagents/plans/p.md" "$PBASE" HEAD "$TMP/store.diff" >/dev/null 2>&1); status=$?
-check "package: a document store: exit 0" "$status" "0"
-check "package: a document store: the code is still diffed" "$(count store.diff 'diff --git a/src/deep/code.txt')" "1"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -246,24 +246,6 @@ a16() {
   mkplan p16a.md spec-standard.md - 0
   depth_of p16a.md
   check "A16: a Depth line is read by its first word" "$rc:$out" "0:depth=standard spec=standard tasks=light reason=spec"
-
-  . "$HERE/fixtures/darkmem-stores.sh"
-  local SH="$TMP/stores-home" SR="$TMP/stores-repo" M
-  mkdir -p "$SH"
-  git init -q "$SR"
-  M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-  mkdir -p "$M/dagents/specs" "$M/dagents/plans" "$SR/docs/dagents/specs"
-  printf '# Spec\n\n**Depth:** light — unenumerable\n' > "$M/dagents/specs/s.md"
-  printf '# Stale local copy\n\n**Depth:** full — risk\n' > "$SR/docs/dagents/specs/s.md"
-  {
-    printf '# P\n\n**Goal:** Fixture.\n\n**Spec:** docs/dagents/specs/s.md\n\n## Task index\n\n1. one\n\n'
-    printf '### Task 1: one\n\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n'
-  } > "$M/dagents/plans/p.md"
-  out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$DEPTH" docs/dagents/plans/p.md 2>"$TMP/err"); rc=$?
-  check "A16: a Spec path in the darkmem mirror resolves as plan-lint resolves it" "$rc:$out" \
-    "0:depth=light spec=light tasks=light reason=spec,task-risk:1"
-  out=$(cd "$SR" && HOME="$SH" timeout 60 bash "$LINT" docs/dagents/plans/p.md --no-probe 2>&1)
-  check "A16: plan-lint finds the plan and resolves the same path" "$(grep -c -e 'Spec path does not exist' -e 'No such plan file' <<<"$out")" "0"
 }
 
 # --- A7: review-route's plan-round cap -------------------------------------

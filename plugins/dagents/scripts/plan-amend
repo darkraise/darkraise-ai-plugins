@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Append one amendment, as the ruling seat returned it, to the plan's
-# <ledger dir>/amendments.md, beside progress.md (the darkmem mirror's ledger
-# directory when progress is kept there) — validated, numbered, and
+# <ledger dir>/amendments.md, beside progress.md — validated, numbered, and
 # lint-checked — so the
 # controller transcribes a plan correction without composing it. The plan file
 # itself is never edited during execution.

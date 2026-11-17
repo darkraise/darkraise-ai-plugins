@@ -48,8 +48,7 @@ rm -rf "$G/.superpowers"
 (cd "$G" && bash "$HERE/../scripts/dagents-path" > /dev/null 2>&1)
 check "dagents-path: usage exit 2" "$?" "2"
 
-# --- dagents-path: the families' roots and names ---
-. "$HERE/fixtures/darkmem-stores.sh"
+# --- dagents-path: the roots and names, all in the checkout ---
 H=$HOME
 git -C "$G" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 FP="$HERE/../scripts/dagents-path"
@@ -58,14 +57,17 @@ check "dagents-path: ledger of a plan path" "$(cd "$G" && HOME=$H bash "$FP" led
 check "dagents-path: ledger of a backslashed plan path" "$(cd "$G" && HOME=$H bash "$FP" ledger 'docs\dagents\plans\2026-10-19-greet.md')" "$TOP/.dagents/sdd/2026-10-19-greet"
 check "dagents-path: ledger of a bare plan file name" "$(cd "$G" && HOME=$H bash "$FP" ledger 2026-10-19-greet.md)" "$TOP/.dagents/sdd/2026-10-19-greet"
 check "dagents-path: latest, local" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$TOP/.dagents/handoff/latest.md"
-check "dagents-path: store, local" "$(cd "$G" && HOME=$H bash "$FP" store | tr '\n' '|')" "documents local|progress local|"
-M=$(stores_home "$H" "$G" proj darkmem darkmem)
-check "dagents-path: docs, darkmem" "$(cd "$G" && HOME=$H bash "$FP" docs plans/p1.md)" "$M/dagents/plans/p1.md"
-check "dagents-path: ledger, darkmem" "$(cd "$G" && HOME=$H bash "$FP" ledger p1)" "$M/work/sdd/p1"
-check "dagents-path: latest, darkmem" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$M/work/handoff/latest.md"
-check "dagents-path: state stays local" "$(cd "$G" && HOME=$H bash "$FP" state)" "$TOP/.dagents"
-check "dagents-path: store, darkmem" "$(cd "$G" && HOME=$H bash "$FP" store | tr '\n' '|')" "documents darkmem|progress darkmem|"
-check "dagents-path: name" "$(cd "$G" && HOME=$H bash "$FP" name "$M/dagents/plans/p1.md")" "docs/dagents/plans/p1.md"
+# A home holding darkmem settings and a stores.json from an older build reads
+# as any other: every root stays in the checkout.
+mkdir -p "$H/.dagents"
+printf '{"darkmemEnabled":true,"documentStore":"darkmem","darkmem":{"url":"http://127.0.0.1:9","repos":{"%s":{"project":"proj"}}}}\n' "$TOP" > "$H/.dagents/config.json"
+printf '{"%s":{"documents":"darkmem","progress":"darkmem"}}\n' "$TOP" > "$H/.dagents/stores.json"
+check "dagents-path: docs, leftover darkmem settings" "$(cd "$G" && HOME=$H bash "$FP" docs plans/p1.md)" "$TOP/docs/dagents/plans/p1.md"
+check "dagents-path: ledger, leftover darkmem settings" "$(cd "$G" && HOME=$H bash "$FP" ledger p1)" "$TOP/.dagents/sdd/p1"
+check "dagents-path: latest, leftover darkmem settings" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$TOP/.dagents/handoff/latest.md"
+rm -f "$H/.dagents/config.json" "$H/.dagents/stores.json"
+check "dagents-path: state" "$(cd "$G" && HOME=$H bash "$FP" state)" "$TOP/.dagents"
+check "dagents-path: name" "$(cd "$G" && HOME=$H bash "$FP" name "$TOP/docs/dagents/plans/p1.md")" "docs/dagents/plans/p1.md"
 (cd "$G" && HOME=$H bash "$FP" ledger > /dev/null 2>&1)
 check "dagents-path: ledger needs a slug" "$?" "2"
 

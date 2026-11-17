@@ -297,10 +297,7 @@ else
 fi
 
 dagents_stores_init "$root"
-# Shown repository-relative while progress is local, as before; the mirror's
-# path otherwise, which no checkout-relative name can reach.
-if [ "$(dagents_progress_store)" = darkmem ]; then latest_shown=$(dagents_latest_file)
-else latest_shown="$(dagents_dir_rel state "$primary")/handoff/latest.md"; fi
+latest_shown="$(dagents_dir_rel state "$primary")/handoff/latest.md"
 
 # --print --latest: the stored block, recomputed from what its marker names
 # when the repository can answer it, so a reader never replays a stale one.

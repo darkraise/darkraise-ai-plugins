@@ -1359,18 +1359,17 @@ lint nnt-cov.md --no-probe
 has "Covered by a No new test task: it has no test step" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 has no test step"
 lacks "a No new test task with a reason draws no form WARN" "$out" 'Task 2: Step 1'
 
-# --- documents kept in darkmem: Spec paths resolve in the mirror ---
-. "$HERE/fixtures/darkmem-stores.sh"
+# --- Spec paths resolve in the docs root ---
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q "$SR"
-M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
+M="$(git -C "$SR" rev-parse --show-toplevel)/docs"
 mkdir -p "$M/dagents/specs" "$M/dagents/plans"
 printf '# Spec\n' > "$M/dagents/specs/s.md"
 printf '# P\n\n**Spec:** docs/dagents/specs/s.md\n\n### Task 1: One\n' > "$M/dagents/plans/p.md"
 out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/dagents/plans/p.md --no-probe 2>&1)
-lacks "darkmem: the Spec path resolves in the mirror" "$out" "Spec path does not exist"
-lacks "darkmem: the plan is found by name" "$out" "no such plan file"
-has "darkmem: the lint ran to its summary" "$out" " errors, "
+lacks "docs root: the Spec path resolves" "$out" "Spec path does not exist"
+lacks "docs root: the plan is found by name" "$out" "no such plan file"
+has "docs root: the lint ran to its summary" "$out" " errors, "
 
 # --- Lenses lines ---
 variant lens-low.md 's/^(\*\*Approach:\*\* inline - skip 2: follows the pattern)$/\1\n**Lenses:** security/'
