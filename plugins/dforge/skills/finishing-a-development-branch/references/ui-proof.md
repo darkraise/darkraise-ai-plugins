@@ -19,8 +19,8 @@ it as exit 1, with its output as the FAIL lines.
 run, first run the dforge:ui-ux Prove phase and check again; only that second
 exit 1 counts, and when it comes only from `unverifiable` rows, run
 `scripts/auto-run stop --reason "ui proof needs the user"` first. Remember the
-exit 1 for Step 4: it turns a recorded `merge` or `pr` into `keep`, and
-Step 4 says so and that the UI is unproven. Run
+exit 1 for Step 4: it turns a recorded `merge` or `pr` into `keep`, and at
+Step 4 you say so and that the UI is unproven. Run
 `scripts/finish-choice get [--plan PLAN_FILE]` now: when it prints `merge`,
 `pr` or `keep` with no `answer` or `firedAt` field, or an auto run is bound,
 continue to Step 2 (Step 4 keeps the branch). Otherwise present only these two options:

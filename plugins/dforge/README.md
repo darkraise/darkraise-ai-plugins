@@ -1030,9 +1030,8 @@ implement a task.
   whose last line for a task is `escalated inline -> subagent` sends that task
   to the ruling seat as a `breaker` item.
 - **Implementers.** Fifteen of the sixteen `impl-*` agents are gone; only
-  `impl-sonnet-high` stays, for Acceptance QA. `task-step start` takes one task
-  and writes no dispatch file or assigned line, `review-route --final-fix` is
-  gone, and `reference/escalation.md` with the escalation and reserve tables in
+  `impl-sonnet-high` stays, for Acceptance QA. `task-step start` and
+  `review-route --final-fix` are gone (`task-brief --open` opens a task), and `reference/escalation.md` with the escalation and reserve tables in
   `reference/ladder.md` went with them. A task no longer carries an
   `**Implementer:**` line (or, on a Codex plan, an `**Assignment source:**`
   line): `plan-lint` ignores the line in an older plan, and
@@ -1316,8 +1315,8 @@ differences:
 3. **No escalation ladder.** The session implements every task and fixes its
    own findings, so there is no implementer to escalate; a task that will not
    converge goes to the ruling seat.
-4. **Cache-aware resumes.** A delegated task's fix round 1 resumes its executor
-   only while its cache is warm; see
+4. **A reviewed loop for risk-3 tasks only.** The session implements a risk-3
+   task and a judge reviews it per task; see
    [delegated-task.md](reference/delegated-task.md).
 5. **One ledger grammar.** Every task gets an assigned line and a complete line
    carrying a checkpoint (done, verified, remaining, discovered
@@ -1333,7 +1332,7 @@ differences:
    upstream's unmeasured sessions - see [Session budget](#session-budget).
 9. **Small-model planning.** A strong model plans once; the session executes.
    A brief for a task the session implements points at the header file for the
-   Global Constraints and Contracts (a risk-3 or delegated task's brief carries
+   Global Constraints and Contracts (a risk-3 task's brief carries
    them), the controller reads only the header and one brief at a time, and judgment
    calls go to a read-only ruling seat (`judge-opus`, with the reason
    `review-route --ruling` prints). Its plan corrections

@@ -228,8 +228,9 @@ budget before every task at no extra request:
 
     budget: 312k of 465k (67%) — ok — source: record
 
-The verdicts are using-dforge's §Session Budget: `unknown` reads as `ok`, and
-on `handoff` the task in flight finishes through its `Task N: complete` line.
+- `ok` or `unknown`: carry on, however high the percentage.
+- `handoff`: finish the task in flight through its `Task N: complete` line,
+  then invoke dforge:handoff. Never hand off in the middle of a task.
 
 The plan's last two tasks never hand off in strict mode: their brief prints
 `budget (last 2 tasks)` or `budget (last task)` and says `ok` past the budget. After the last

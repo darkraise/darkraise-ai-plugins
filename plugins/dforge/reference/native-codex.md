@@ -177,6 +177,7 @@ profile (`<docs>/ui-ux/profile.md`) or the plan's spec has a
 ## Claude plans
 
 Claude plans carry no Host or Routing policy line: `scripts/plan-lint` reads a
-plan without `Host: codex` as a Claude plan. Native-to-Claude conversion uses the explicit
-preview/approval process above: preserve raw axes and previous assignments, and
-explicitly recalculate Claude's unweighted total for its own policy.
+plan without `Host: codex` as a Claude plan. Native-to-Claude conversion uses the
+preview and approval process of the plugin's README.md §Migrating Codex plans
+to codex-v4: preserve raw axes and previous assignments, and explicitly
+recalculate Claude's unweighted total for its own policy.
