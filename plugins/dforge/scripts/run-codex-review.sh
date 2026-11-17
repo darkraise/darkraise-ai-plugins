@@ -7,6 +7,11 @@
 # prose, and the runtime never reached the paragraph describing them: the
 # fallback was unreachable code written in English. Anything a seat must decide
 # lives here, where a test can reach it.
+#
+# Usage: run-codex-review.sh --kind task|plan|final --cwd DIR --out FILE
+#          (--prompt FILE | --base SHA) [--tier heavy] [--dry-run]
+# --dry-run prints the request it would send and its status line, and starts
+# no Codex turn.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

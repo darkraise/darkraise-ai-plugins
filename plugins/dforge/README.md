@@ -1390,8 +1390,8 @@ table, and the external judge tables. Native Codex reads
 score, request format, and plan conversion.
 
 `reference/executors/` holds one JSON entry per external reviewer family and
-`scripts/executors` is the only reader of it: `executors list` prints every
-valid id, `executors ranked` the same ids by ascending `priority`,
+`scripts/executors` is the only reader of it: `executors ranked` prints every
+valid id by ascending `priority`,
 `executors get <id> <dotted.key>` one field, and
 `executors path <id> <dotted.key>` that field resolved against the plugin root.
 An entry names the family's gate, review runner, session

@@ -190,7 +190,7 @@ aloud when it ends `source=probe`.
 One JSON entry per reviewer family lives in `reference/executors/<id>.json`,
 and `scripts/executors` is its only reader. An entry is valid when it parses as
 JSON, carries every required field, and its `id` matches `^[a-z][a-z0-9-]*$`
-and equals its filename stem; `executors list` skips an invalid entry with one
+and equals its filename stem; `executors ranked` skips an invalid entry with one
 diagnostic line on stderr.
 
 | Field | Required | What it names |

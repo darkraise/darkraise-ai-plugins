@@ -4,6 +4,8 @@
 #
 # Usage: run-agy-review.sh --kind task|plan|final --cwd DIR --out FILE
 #          (--prompt FILE | --base SHA) [--tier heavy] [--dry-run]
+# --dry-run prints the request it would send and its status line, and starts
+# no agy run.
 # Output: agy-judge <model>/<effort> status=<OK|FALLBACK|TIMEOUT|FAILED>
 #           exit=<n> out=<path> evidence=<e>[ reason=<token>]
 # Exit: 0 on OK or FALLBACK, 1 on TIMEOUT or FAILED, 2 on a usage error.
