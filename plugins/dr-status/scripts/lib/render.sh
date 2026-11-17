@@ -9,13 +9,12 @@ printf -v DCC_DOT_FILLED '\342\227\217'    # U+25CF
 printf -v DCC_DOT_HOLLOW '\342\227\213'    # U+25CB
 
 DCC_RAMP_COLOR=""
-DCC_RAMP_BOLD=""
 DCC_BAR_ON=""; DCC_BAR_OFF=""; DCC_BAR_ON_N=0; DCC_BAR_OFF_N=0
 DCC_ETA=""
 
-dcc_ramp() { # dcc_ramp <pct> -> DCC_RAMP_COLOR, DCC_RAMP_BOLD
+dcc_ramp() { # dcc_ramp <pct> -> DCC_RAMP_COLOR
   local pct="${1:-}" stop at rest
-  DCC_RAMP_COLOR=""; DCC_RAMP_BOLD=""
+  DCC_RAMP_COLOR=""
   [ -n "$pct" ] || return 0
   # DCC_RAMP is sorted ascending, so the last stop at or below pct wins.
   for stop in $DCC_RAMP; do
@@ -23,7 +22,6 @@ dcc_ramp() { # dcc_ramp <pct> -> DCC_RAMP_COLOR, DCC_RAMP_BOLD
     rest="${stop#*:}"
     [ "$pct" -ge "$at" ] 2>/dev/null || continue
     DCC_RAMP_COLOR="${rest%%:*}"
-    DCC_RAMP_BOLD="${rest#*:}"
   done
 }
 

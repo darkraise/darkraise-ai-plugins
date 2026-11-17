@@ -19,8 +19,6 @@ for pair in "0 green" "49 green" "50 yellow" "74 yellow" "75 orange" "89 orange"
   dcc_ramp "$1"
   check "ramp at $1% is $2" "$DCC_RAMP_COLOR" "$2"
 done
-dcc_ramp 90;  check "the top ramp stop is bold" "$DCC_RAMP_BOLD" "bold"
-dcc_ramp 89;  check "lower ramp stops are not bold" "$DCC_RAMP_BOLD" ""
 dcc_ramp "";  check "empty percentage yields no ramp color" "$DCC_RAMP_COLOR" ""
 
 # --- bar fill and clamps ------------------------------------------------------
