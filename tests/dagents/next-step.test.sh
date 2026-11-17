@@ -1009,10 +1009,17 @@ head7=$(git -C "$REPO" rev-parse --short HEAD)
 done3 "Final review: clean (commits 0000000..$head7)"
 git -C "$REPO" checkout -q -
 git -C "$REPO" merge -q --no-ff --allow-unrelated-histories -m "merge feat-c5" feat-c5
-printf 'y\n' > "$REPO/base.txt" && git -C "$REPO" add base.txt && git -C "$REPO" commit -qm "fix: on base"
+merge7=$(git -C "$REPO" rev-parse --short HEAD)
 run "$REPO" "$PLAN_REL"
 has "C5: a base branch that merged the head routes to finishing" "$out" "**Next:** Run dagents:finishing-a-development-branch."
-git -C "$REPO" reset -q --hard HEAD~2 && git -C "$REPO" branch -qD feat-c5
+printf 'note\n' > "$REPO/docs/dagents/plans/after-merge.md"
+git -C "$REPO" add docs/dagents/plans/after-merge.md && git -C "$REPO" commit -qm "docs: after merge"
+run "$REPO" "$PLAN_REL"
+has "C5: docs-only commits after the merge keep it current" "$out" "**Next:** Run dagents:finishing-a-development-branch."
+printf 'y\n' > "$REPO/base.txt" && git -C "$REPO" add base.txt && git -C "$REPO" commit -qm "fix: on base"
+run "$REPO" "$PLAN_REL"
+has "C5: a code commit after the merge routes to a re-review from the merge" "$out" "Re-review $merge7..HEAD"
+git -C "$REPO" reset -q --hard HEAD~3 && git -C "$REPO" branch -qD feat-c5
 
 # --- Keep as-is keeps the branch pending (C9) ---
 ledger 'Task 1: complete (commits a..b, review clean)' 'Task 2: complete (commits b..c, review clean)' 'Task 3: complete (commits c..d, review clean)' 'Final review: clean (commits a..d)'
