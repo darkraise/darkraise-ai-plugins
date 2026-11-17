@@ -104,9 +104,7 @@ first_block() { awk '{ sub(/\r$/, "") } /^$/ { exit } { print }' "$1" | tr '\n' 
 step start docs/plan.md 1 --suite "$CMD"
 check "start --suite: exit 0" "$rc" "0"
 check "start --suite: the command is the step file's suite field" "$(jq -r '.suite' "$WS/task-1-step.json" | tr -d '\r')" "$CMD"
-check "start --suite: the first start logs the ruling" "$(grep -cxF "Task 1: Ruling: suite command — $CMD — none" "$LEDGER")" "1"
 step start docs/plan.md 2 --suite "$CMD"
-check "start --suite: a second start adds no ruling" "$(grep -c 'Ruling: suite command' "$LEDGER")" "1"
 step start docs/plan.md 3
 check "start without --suite: no suite field" "$(jq -r '.suite // "absent"' "$WS/task-3-step.json" | tr -d '\r')" "absent"
 step start docs/plan.md 3 --suite
@@ -304,6 +302,18 @@ step verdict docs/plan-cmd.md 1
 check "a command task check with no suite recorded keeps none recorded" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: none recorded"
 WS=$WS_MAIN
 rm -f docs/plan-none.md docs/plan-cmd.md
+
+# --- the first review --suite on a plan logs the suite ruling, once ---
+cp docs/plan.md docs/plan-ruling.md
+RWS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan-ruling.md)")
+rm -f "$RWS"/*
+for t in 1 2; do bash "$P/scripts/task-brief" --open docs/plan-ruling.md "$t" >/dev/null; done
+step review docs/plan-ruling.md 1 --suite "$CMD" --suite-base "$(git rev-parse HEAD)"
+check "review --suite: exit 0" "$rc" "0"
+check "review --suite: the first review logs the ruling" "$(grep -cxF "Task 1: Ruling: suite command — $CMD — none" "$RWS/progress.md")" "1"
+step review docs/plan-ruling.md 2 --suite "$CMD" --suite-base "$(git rev-parse HEAD)"
+check "review --suite: a second review adds no ruling" "$(grep -c 'Ruling: suite command' "$RWS/progress.md")" "1"
+rm -f docs/plan-ruling.md
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

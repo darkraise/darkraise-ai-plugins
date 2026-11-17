@@ -626,9 +626,6 @@ do_start() {
 
   if [ -n "$suite_arg" ]; then
     jq --arg s "$suite_arg" '.suite = $s' "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
-    if [ "$(tr -d '\r' < "$ledger" | grep -cF 'Ruling: suite command —')" -eq 0 ]; then
-      printf 'Task %s: Ruling: suite command — %s — none\n' "$first" "$suite_arg" >> "$ledger"
-    fi
   fi
 
   printf 'task %s: briefed %s, base %s' "$idlist" "$brief" "$base7"
@@ -774,6 +771,12 @@ do_review() {
      | .reviewCheck = $chk | (if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
   drop_base_cache "$state" "$first" "$old_base"
+  if [ -n "$suite_arg" ]; then
+    ledger_init
+    if [ "$(tr -d '\r' < "$ledger" | grep -cF 'Ruling: suite command —')" -eq 0 ]; then
+      printf 'Task %s: Ruling: suite command — %s — none\n' "$first" "$suite_arg" >> "$ledger"
+    fi
+  fi
 
   printf 'task %s: reviewed %s..%s (%s commit(s)), diff %s\n' "$idlist" "${basesha:0:7}" "${headsha:0:7}" \
     "$(git -C "$top" rev-list --count "$basesha..$headsha")" "$diff"
