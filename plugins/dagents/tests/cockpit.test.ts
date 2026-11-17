@@ -5565,12 +5565,32 @@ describe('resume offer', () => {
 
   test("runs from the primary checkout when the session's directory is gone", async ($, on) => {
     const WORKTREE = '/home/me/code/shop-wt'
-    const w = await begin($, on, RESUMABLE, { w: { checkout: WORKTREE }, more: { [WORKTREE]: { text: '', kind: 'dir' } } })
+    const WT_LATEST = `${WORKTREE}/.dagents/handoff/latest.md`
+    const w = await begin($, on, RESUMABLE, { w: { checkout: WORKTREE }, more: { [WORKTREE]: { text: '', kind: 'dir' }, [WT_LATEST]: { text: RESUMABLE, mtimeMs: 900_000 } } })
     expect(w.nextStepRuns).toEqual([WORKTREE])
     delete w.files[WORKTREE]
+    delete w.files[WT_LATEST]
     w.files[LATEST] = { ...w.files[LATEST]!, mtimeMs: 950_000 }
     await w.turn()
     expect(w.nextStepRuns).toEqual([WORKTREE, '/home/me/code/shop'])
+  })
+
+  test("reads the session worktree's handoff, not the primary's (spec A9)", async ($, on) => {
+    const WORKTREE = '/home/me/code/shop-wt'
+    const w = await begin($, on, RESUMABLE, { w: { checkout: WORKTREE }, more: { [WORKTREE]: { text: '', kind: 'dir' } } })
+    expect(w.nextStepRuns).toEqual([])
+  })
+
+  test('names the absolute handoff path in the fallback resume prompt (spec A9)', async ($, on) => {
+    const WORKTREE = '/home/me/code/shop-wt'
+    const WT_LATEST = `${WORKTREE}/.dagents/handoff/latest.md`
+    const w = await begin($, on, '# Handoff\n', {
+      w: { checkout: WORKTREE, nextStepOuts: [{ exitCode: 0, stdout: UNFENCED }] },
+      more: { [WORKTREE]: { text: '', kind: 'dir' }, [WT_LATEST]: { text: UNFENCED, mtimeMs: 900_000 } },
+    })
+    const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await pane.press({ key: 'pane-resume' })
+    expect(w.prompts).toEqual([`Resume the work in ${WT_LATEST} with the dagents resume-execution skill.`])
   })
 })
 
@@ -5822,7 +5842,7 @@ describe('cockpit roots', () => {
 
   test('takes the primary checkout from the common directory, as the scripts do', async ($, on) => {
     // stores.json makes the cockpit ask darkmem-config for the primary's roots.
-    const files: NonNullable<World['files']> = { '/home/me/.dagents/stores.json': { text: '{}', mtimeMs: 1 } }
+    const files: NonNullable<World['files']> = { '/home/me/.dagents/stores.json': { text: '{}', mtimeMs: 1 }, '/home/me/code/shop': { text: '', kind: 'dir' } }
     const gitRuns: string[] = []
     const modeRuns: string[] = []
     world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main', gitRuns, modeRuns })
@@ -6680,6 +6700,21 @@ describe('auto run', () => {
     expect(w.prompts?.[0]).toMatch(/`bash "[^"]*\/scripts\/auto-run" status` names/)
     expect(w.prompts?.[0]).toMatch(/docs\/plan\.md/)
     expect(pendingOf(files)).toBe('after-compact')
+  })
+
+  test('passes the session checkout to every auto-run call (spec A8)', async ($, on) => {
+    const WORKTREE = '/home/me/code/shop-wt'
+    const files = { ...autoFiles(), [WORKTREE]: { text: '', kind: 'dir' as const } }
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], processRuns: [], autoFile: files[AUTO], checkout: WORKTREE }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.autoRuns).toContain('--session sess-1 compacted')
+    const calls = (w.processRuns ?? []).filter(argv => argv.includes('/scripts/auto-run '))
+    expect(calls.length).toBeGreaterThan(0)
+    for (const argv of calls) expect(argv.startsWith(`bash -c cd -- "$1" && shift && exec bash "$@" auto-run ${WORKTREE} `)).toBe(true)
   })
 
   test('stays still without the sentinel, on an interrupted turn, or for another session', async ($, on) => {

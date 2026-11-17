@@ -2932,9 +2932,13 @@ async function isSessionAlive($: EngineInterface, sid: string): Promise<boolean 
   }
 }
 
-// Runs scripts/auto-run as `sessionId`; resolves its exit code, 1 when it could not run.
+// Runs scripts/auto-run as `sessionId` in the session's checkout, where its
+// handoff lives; resolves its exit code, 1 when it could not run.
 async function autoRunCall($: EngineInterface, sessionId: string, args: string[]): Promise<number> {
-  const ran = await $.process.run(['bash', `${$.plugin.root}/scripts/auto-run`, '--session', sessionId, ...args], { timeoutMs: 15_000 }).catch(() => null)
+  const checkout = S.where.checkout ?? S.where.primary ?? '.'
+  // The directory travels in argv: no cockpit call passes $.process.run a cwd.
+  const argv = ['bash', '-c', 'cd -- "$1" && shift && exec bash "$@"', 'auto-run', checkout, `${$.plugin.root}/scripts/auto-run`, '--session', sessionId, ...args]
+  const ran = await $.process.run(argv, { timeoutMs: 15_000 }).catch(() => null)
   return ran?.exitCode ?? 1
 }
 
@@ -3530,18 +3534,21 @@ async function resume($: EngineInterface, offer: CockpitResumeOffer) {
 
 // The run's ledger, its plan's tasks, and the newest handoff, read where the
 // roots put them (store options spec §7.3): while progress is local, the
-// ledgers under the session worktree's .dagents/, as sdd-workspace writes them,
-// and the handoff under the primary checkout's; the darkmem mirror while it is not.
+// ledgers and the handoff under the session worktree's .dagents/, as
+// sdd-workspace and next-step write them; the darkmem mirror while it is not.
 async function readRun($: EngineInterface) {
   // A poll tick's read and a tool call's can overlap: only the latest writes.
   const reading = ++S.runReads
   const session = S.where.checkout ?? (await read($, place))?.root ?? null
   const root = S.where.primary ?? session
   if (root === null) return
-  const state = `${root}/.dagents`
-  const roots = await readRoots($, session ?? root)
+  // A removed worktree took its handoff with it: the primary's stands in.
+  const isGone = session !== null && session !== root && (await $.fs.stat(session).catch(() => null))?.kind !== 'dir'
+  const here = isGone ? root : (session ?? root)
+  const state = `${here}/.dagents`
+  const roots = await readRoots($, here)
   const latest = roots?.progress.latestFile ?? `${state}/handoff/latest.md`
-  S.latestName = roots?.progress.store === 'darkmem' ? latest : null
+  S.latestName = latest
   const checkouts = [...new Set([session, root].filter((dir): dir is string => dir !== null))]
   const places = checkouts.map(dir => ({ root: dir, docsDir: `${dir}/docs/dagents` }))
   try {
