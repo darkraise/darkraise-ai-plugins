@@ -90,7 +90,7 @@ fi
 now="${DCC_NOW:-$(date +%s)}"
 payload="$(cat <<JSON
 {
-  "workspace": { "current_dir": "$PWD" },
+  "workspace": { "current_dir": $(MSYS2_ARG_CONV_EXCL='*' jq -n --arg dir "$PWD" '$dir') },
   "model": { "display_name": "Opus 4.8" },
   "effort": { "level": "xhigh" },
   "cost": { "total_cost_usd": 1.2 },

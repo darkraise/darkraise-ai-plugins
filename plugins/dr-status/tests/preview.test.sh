@@ -46,6 +46,15 @@ out="$(bash "$PREVIEW" --config /dev/null --theme minimal --width 100 2>&1)"
 check "--theme minimal drops the frame" \
   "$(printf '%s' "$out" | grep -c '╭')" "0"
 
+qdir="$tmpcwd/a\"b\\c"
+if mkdir "$qdir" 2>/dev/null; then
+  out="$(cd "$qdir" && bash "$PREVIEW" --config /dev/null --width 100 2>&1)"
+  check "a directory name with a quote and a backslash still previews" \
+    "$(printf '%s' "$out" | strip_ansi | grep -c 'Opus')" "1"
+else
+  printf 'skip - a directory name with a quote: this file system refuses one\n'
+fi
+
 bash "$PREVIEW" --config /dev/null --nonsense >/dev/null 2>&1; rc=$?
 check "an unknown flag exits 2" "$rc" "2"
 
