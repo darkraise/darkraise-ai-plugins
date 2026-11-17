@@ -11,7 +11,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import SCHEMA, { isValidValue } from "../../config/schema.mjs";
 import { HttpError, TransportError, WORKSTREAM_PREFIX, createClient } from "./darkmem-client.mjs";
-import { DOC_PREFIX, LEGACY_PREFIX, MAX_ENTRIES_PER_APPEND, StateError, acquireLock, loadState, saveState } from "./darkmem-mirror.mjs";
+import { DOC_PREFIX, LEGACY_PREFIX, MAX_ENTRIES_PER_APPEND, StateError, loadState, saveState } from "./darkmem-mirror.mjs";
+import { acquireLock } from "./home-lock.mjs";
 import { claudeSettingsPath, withHomeLock } from "./dagents-config.mjs";
 import { primaryRoot, runKey } from "./darkmem-config.mjs";
 

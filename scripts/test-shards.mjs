@@ -139,6 +139,7 @@ export const windowsSeconds = {
   'plugins/dagents/tests/finish-choice.test.sh': 78,
   'plugins/dagents/tests/fleet.test.sh': 10,
   'plugins/dagents/tests/gates-manifest.test.sh': 10,
+  'plugins/dagents/tests/home.test.sh': 20,
   'plugins/dagents/tests/hook.test.sh': 75,
   'plugins/dagents/tests/impl-stop-gate.test.sh': 64,
   'plugins/dagents/tests/in-flight.test.sh': 36,
