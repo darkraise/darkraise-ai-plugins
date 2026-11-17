@@ -177,6 +177,14 @@ if command -v node >/dev/null 2>&1; then
   HOME_S="$TMP/s"; mkdir -p "$HOME_S/.dforge"
   s_ctx=$(payload | HOME="$HOME_S" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
   check "settings: nothing injected at the defaults" "$(grep -c '^dforge settings in force' <<<"$s_ctx")" "0"
+  # The line reads only config.json, so with none there is no node start for it.
+  mkdir -p "$TMP/node-log"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> %q\nexec %q "$@"\n' "$TMP/node-log/calls" "$(command -v node)" > "$TMP/node-log/node"
+  chmod +x "$TMP/node-log/node"
+  payload | HOME="$HOME_S" PATH="$TMP/node-log:$PATH" bash "$SCRIPT" >/dev/null 2>&1
+  check "settings: no config.json starts no node for the line" "$(grep -c 'dforge-config.mjs' "$TMP/node-log/calls")" "0"
+  check "settings: every key the line reads lives in config.json" \
+    "$(cd "$HERE/.." && node --input-type=module -e "const S = (await import('./config/schema.mjs')).default; console.log(Object.values(S).filter(s => s.enforcedBy === 'skill').flatMap(s => [s, ...(s.inertWhen ? [S[s.inertWhen.key]] : [])]).every(s => s.target === 'dforge' && s.env === undefined))")" "true"
   printf '{"worktree":"always","processBias":"lighter","codexReview":false}\n' > "$HOME_S/.dforge/config.json"
   s_out=$(payload | HOME="$HOME_S" bash "$SCRIPT" 2>/dev/null)
   check "settings: output stays valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$s_out" && echo yes || echo no)" "yes"
@@ -190,6 +198,8 @@ if command -v node >/dev/null 2>&1; then
   check "settings: a broken file still exits 0" "$status" "0"
   check "settings: a broken file injects no line" \
     "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c '^dforge settings in force')" "0"
+  check "settings: a broken file injects its problem line" \
+    "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c '^dforge: .*config.json is not a JSON object')" "1"
   check "settings: a broken file keeps the entry point" \
     "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$s_out" | grep -c 'dforge:using-dforge')" "1"
 fi

@@ -120,9 +120,14 @@ fi
 
 # The workflow settings that differ from their defaults, as one line the skills
 # read where they would otherwise ask (scripts/dforge-config workflow). Without
-# Node, or with a settings file that cannot be read, nothing is added.
-settings_line=$(bash "${SCRIPT_DIR}/dforge-config" workflow 2>/dev/null \
-  | head -n 1 | tr -d '\001-\010\013\014\016-\037\r' || true)
+# Node, or with a settings file that cannot be read, nothing is added. Every key
+# the line names lives in ~/.dforge/config.json, so with no such file there is
+# nothing to report and no node to start (tests/hook.test.sh pins this).
+settings_line=""
+if [ -z "${HOME:-}" ] || [ -e "$HOME/.dforge/config.json" ]; then
+  settings_line=$(bash "${SCRIPT_DIR}/dforge-config" workflow 2>/dev/null \
+    | head -n 1 | tr -d '\001-\010\013\014\016-\037\r' || true)
+fi
 if [ -n "$settings_line" ]; then
   context="${context}\n\n$(escape_for_json "$settings_line")"
 fi
