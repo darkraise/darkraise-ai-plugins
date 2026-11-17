@@ -39,8 +39,8 @@ session cannot be bound: say so in one line and continue without an auto run.
 action, the plan, the base and the register. Every `scripts/auto-run` command
 exits 0 when done, 1 when it failed (no handoff file to read, or `jq` or
 `mktemp` failed), 2 on bad usage, 3 when no run is bound to this session, 4
-when refused, 5 when the run stopped (`handoff` for `verdict` and
-`after-compact`) and 6 for `compact`. Then:
+when refused, 5 when the run stopped (`handoff` for `after-compact`) and 6
+for `compact`. Then:
 
 - **Ask nothing.** No clarifying question, approval or menu. What you would
   have asked goes to the ladder under Rulings.
