@@ -93,8 +93,8 @@ function tscJobs(plugin) {
 // DR_TEST_ALL tells a suite that every other suite runs as its own job, so
 // the acceptance checks that re-run whole suites skip those re-runs.
 function shellJobs(plugin) {
-  return readdirSync(resolve(root, `plugins/${plugin}/tests`)).filter(name => name.endsWith('.test.sh') || name.endsWith('.acceptance.sh')).sort().flatMap(name => {
-    const path = `plugins/${plugin}/tests/${name}`;
+  return readdirSync(resolve(root, `tests/${plugin}`)).filter(name => name.endsWith('.test.sh') || name.endsWith('.acceptance.sh')).sort().flatMap(name => {
+    const path = `tests/${plugin}/${name}`;
     return (suiteParts[path] ?? [[]]).map(part => [bash, [path, ...part], suiteSeconds[path] ?? 600]);
   });
 }
@@ -106,8 +106,8 @@ const jobs = options.plugin === 'dagents' ? [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs') && name !== 'guard-isolation.test.mjs' && name !== 'dagents-split.acceptance.test.mjs').sort().map(name => `tests/${name}`)], 120],
   [process.execPath, ['--test', 'tests/guard-isolation.test.mjs', 'tests/dagents-split.acceptance.test.mjs'], 1200],
-  [bash, ['plugins/dr-status/tests/run-all.sh'], 420],
-  [process.execPath, ['--test', ...readdirSync(resolve(root, 'plugins/dflow/tests')).filter(name => name.endsWith('.test.mjs')).sort().map(name => `plugins/dflow/tests/${name}`)], 300],
+  [bash, ['tests/dr-status/run-all.sh'], 420],
+  [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests/dflow')).filter(name => name.endsWith('.test.mjs')).sort().map(name => `tests/dflow/${name}`)], 300],
   ...shellJobs('dforge'),
   ...(hasClaude ? [['claude', ['plugin', 'test', 'plugins/dforge'], 300], ['claude', ['plugin', 'test', 'plugins/dflow'], 120]] : []),
   ...tscJobs('dforge'),

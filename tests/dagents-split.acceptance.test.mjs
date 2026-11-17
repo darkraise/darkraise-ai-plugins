@@ -565,13 +565,13 @@ test('A22: a dagents suite sharing a dforge suite\'s basename has its own limit,
   };
   const forge = listing([]);
   const agents = listing(['--plugin', 'dagents']);
-  const names = dir => readdirSync(join(ROOT, 'plugins', dir, 'tests')).filter(name => /\.(test|acceptance)(\.test)?\.sh$/.test(name));
+  const names = dir => readdirSync(join(ROOT, 'tests', dir)).filter(name => /\.(test|acceptance)(\.test)?\.sh$/.test(name));
   const shared = names('dforge').filter(name => names('dagents').includes(name));
   assert.ok(shared.length > 20, 'many suites share a basename');
   let differing = 0;
   for (const name of shared) {
-    const forgePath = `plugins/dforge/tests/${name}`;
-    const agentsPath = `plugins/dagents/tests/${name}`;
+    const forgePath = `tests/dforge/${name}`;
+    const agentsPath = `tests/dagents/${name}`;
     const f = forge.get(forgePath); const a = agents.get(agentsPath);
     assert.ok(f, `${forgePath} is not run by test-all`);
     assert.ok(a, `${agentsPath} is not run by test-all --plugin dagents`);
@@ -584,7 +584,7 @@ test('A22: a dagents suite sharing a dforge suite\'s basename has its own limit,
   }
   assert.ok(differing > 0, 'at least one shared basename is limited, split or weighed differently per plugin');
   for (const map of [shards.windowsSeconds, shards.suiteSeconds, shards.suiteParts]) {
-    for (const key of Object.keys(map)) assert.match(key, /^(plugins\/[a-z0-9-]+\/)?tests\/[^/]+$/, `${key} is keyed by repository path`);
+    for (const key of Object.keys(map)) assert.match(key, /^tests\/([a-z0-9-]+\/)?[^/]+$/, `${key} is keyed by repository path`);
   }
   for (const [path, entry] of agents) assert.equal(shards.checkShellWeights([[ 'bash', [path, ...entry.parts[0]], entry.seconds ]]).filter(problem => problem.includes('no weight')).length, 0, path);
 });
@@ -871,9 +871,9 @@ test('A25: with an exported host config enabling the siblings, the hook suites o
   writeFileSync(join(claude, 'plugins/installed_plugins.json'), JSON.stringify({ version: 2, plugins: Object.fromEntries(SIBLINGS.map(name => [`${name}@darkraise`, [{ scope: 'user', installPath: '/x', version: '1' }]])) }));
   const env = cleanEnv({ CLAUDE_CONFIG_DIR: claude, CLAUDE_PROJECT_DIR: project });
   const suites = [
-    ['bash', ['plugins/dagents/tests/hook.test.sh']],
-    ['bash', ['plugins/dforge/tests/hook.test.sh']],
-    [process.execPath, ['--test', 'plugins/dflow/tests/hooks.test.mjs']],
+    ['bash', ['tests/dagents/hook.test.sh']],
+    ['bash', ['tests/dforge/hook.test.sh']],
+    [process.execPath, ['--test', 'tests/dflow/hooks.test.mjs']],
   ];
   for (const [command, args] of suites) {
     const result = run(command, args, { env, timeout: 240000 });

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# The ui-ux skill's files, its UI proof line form and the entry point's size
+# cap.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+P="$HERE/../../plugins/dforge"
+S="$P/skills/ui-ux/SKILL.md"
+R="$P/skills/ui-ux/references"
+
+pass=0 fail=0
+check() { # check <name> <got> <want>
+  if [ "$2" = "$3" ]; then printf 'ok   - %s\n' "$1"; pass=$((pass + 1))
+  else printf 'FAIL - %s\n       want: [%s]\n       got:  [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
+}
+names() { # names <label> <file> <text>
+  check "$1" "$(grep -qF -- "$3" "$2" && echo yes || echo no)" "yes"
+}
+
+# --- the skill ---
+check "the skill exists" "$([ -f "$S" ] && echo yes || echo no)" "yes"
+check "its name is ui-ux" "$(sed -n '2p' "$S")" "name: ui-ux"
+names "the pending line" "$S" '`UI proof: pending — <why>`'
+for f in contract-template.md state-catalogue.md interaction-rules.md walkthrough.md \
+         platforms/web.md platforms/windows.md platforms/linux-desktop.md platforms/android.md platforms/terminal.md; do
+  check "reference $f exists" "$([ -f "$R/$f" ] && echo yes || echo no)" "yes"
+done
+check "no macOS or iOS guide" "$(ls "$R/platforms" | grep -ciE 'mac|ios')" "0"
+
+# --- routing ---
+ENTRY="$P/skills/using-dforge/SKILL.md"
+check "the entry point stays within 5500 bytes" "$([ "$(wc -c < "$ENTRY")" -le 5500 ] && echo yes || echo no)" "yes"
+
+printf '\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]

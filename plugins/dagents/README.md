@@ -1318,7 +1318,7 @@ frozen at 6.3.0 with no upstream sync, and
 ## Tests
 
 ```bash
-for t in plugins/dagents/tests/*.test.sh; do bash "$t"; done
+for t in tests/dagents/*.test.sh; do bash "$t"; done
 ```
 
 Requires `jq` and `git`. No model calls: the executor suites run against a stub
@@ -1336,7 +1336,7 @@ background Stop push (`scripts/darkmem-stop-push.sh`) against the stub.
 against a stub `codex`, so every branch — refusal, fallback, timeout, empty
 report — is exercised without a model call.
 `darkmem-sync.test.sh` runs the `node:test` suites under
-`tests/darkmem-sync/` against an in-memory stub of darkmem's routes, so no
+`tests/dagents/darkmem-sync/` against an in-memory stub of darkmem's routes, so no
 darkmem instance is needed.
 The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one passing fixture per rule), `ui-hooks.test.sh` and `ui-ux-skill.test.sh` — run against temporary repositories and the skill text.
 
@@ -1378,7 +1378,7 @@ settles a disagreement between them.
 review, `codex-review-schema.json` for the Codex task seats, and
 `codex-plan-review-schema.json` for the Codex plan-review round;
 `criteria/TEMPLATE.md` documents the format.
-`tests/criteria.test.sh` validates every file in that directory.
+`tests/dagents/criteria.test.sh` validates every file in that directory.
 
 `scripts/` holds the external executor lane:
 

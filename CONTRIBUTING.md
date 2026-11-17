@@ -11,9 +11,9 @@ an issue first so the scope can be agreed before you write code.
 | --- | --- |
 | `.claude-plugin/marketplace.json` | The Claude Code catalog: `dforge`, `dflow`, `dr-status`, `darkraise-ui`, `darkraise-win32ui`. |
 | `.agents/plugins/marketplace.json` | The Codex catalog: `dforge` and the two UI plugins. Codex discovers it from the repository root. |
-| `plugins/<name>/` | One plugin: its manifests, skills, hooks, scripts and tests. |
+| `plugins/<name>/` | One plugin as it installs: its manifests, skills, hooks and scripts, plus a mod's `*.test.ts` files and the fixtures they import, which `claude plugin test` finds only inside the plugin. |
 | `scripts/` | Repository validation and the full test runner. |
-| `tests/` | Repository-level tests (catalog layout, shards, UI discovery). |
+| `tests/` | Repository-level tests (catalog layout, shards, UI discovery), and in `tests/<name>/` each plugin's shell and Node suites, kept out of the installed plugin. |
 | `docs/` | Design records, testing notes and the migration guide. |
 
 ## Conventions
@@ -76,7 +76,7 @@ raised or the suite is split.
 Add a test with a behavior change, and write it first: watch it fail for the
 expected reason, then make it pass. Put each test at the lowest layer that can
 fail for the change. dforge's shell suites live in
-`plugins/dforge/tests/*.test.sh` and print one `ok` or `FAIL` line per check,
+`tests/dforge/*.test.sh` and print one `ok` or `FAIL` line per check,
 ending with a `N passed, M failed` line.
 
 ## Pull requests

@@ -319,7 +319,7 @@ both sides is reported and nothing is overwritten.
 ## Development
 
 ```text
-node --test "plugins/dflow/tests/*.test.mjs"
+node --test "tests/dflow/*.test.mjs"
 claude plugin validate plugins/dflow
 claude plugin test plugins/dflow
 ```

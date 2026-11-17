@@ -4,7 +4,7 @@ The raw axis definitions are shared across hosts; Rule S's threshold is set by
 host below. The unweighted totals, agent tables, and external CLI lane here
 apply to Claude. Native Codex uses [native-codex.md](native-codex.md) and its
 weighted `codex-v4` score.
-The fenced blocks below are parsed by `tests/ladder.test.sh`; keep them machine-readable.
+The fenced blocks below are parsed by `tests/dagents/ladder.test.sh` in the repository; keep them machine-readable.
 
 ## Scoring rubric
 
@@ -134,7 +134,7 @@ Rank each agent as `model_rank * 10 + effort_rank`, where Haiku ranks 0, Sonnet
 puts Haiku at 0, Sonnet at 10 to 14, Opus at 20 to 24, and Fable at 30 to 34.
 Every successor in this table and in the reserve table has a strictly higher
 rank, so both graphs are acyclic and every walk reaches a terminal: `SPLIT`
-here, `BLOCKED` there. `tests/ladder.test.sh` asserts the ranking and both walks
+here, `BLOCKED` there. `tests/dagents/ladder.test.sh` in the repository asserts the ranking and both walks
 rather than trusting this argument.
 
 Judges are not on the ladder. They are not implementers, so they are
@@ -348,14 +348,14 @@ clock on exactly the plans that already ran out of it.
 The two rows carry different bounds on purpose. `gpt-6-astra/xhigh` appears
 only here, so its 5400 is free to be set for review work. `gpt-6.1-sol/xhigh`
 also appears in `codex-timeout`, where 2400 bounds *task execution*, and
-`tests/lanes.test.sh` requires the two blocks to agree on any pair they share
+`tests/dagents/lanes.test.sh` in the repository requires the two blocks to agree on any pair they share
 — a constant in two places drifts otherwise. Widening the judge row would mean
 widening execution too, which is a different decision about how long a wedged
 task may hang, so the shared pair keeps the execution constant.
 
 It is a separate block for two mechanical reasons. `scripts/run-codex-task.sh`
 validates `--model` against `codex-assignment`, so a judge model there would
-widen execution admission. And `tests/lanes.test.sh` ranks only the execution
+widen execution admission. And `tests/dagents/lanes.test.sh` in the repository ranks only the execution
 models, so a judge row in `codex-successor` would fail the termination proof.
 Judges are excluded from the implementer ladder anyway: nothing escalates into
 a review seat.

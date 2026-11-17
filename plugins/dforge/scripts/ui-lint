@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # High-precision UI defect patterns for the ui-ux skill, one line per finding:
 #   <file>:<line>: <rule> <message>
-# Each rule has a failing and a passing fixture in tests/fixtures/ui-lint/.
+# Each rule has a failing and a passing fixture in the repository's tests/dforge/fixtures/ui-lint/.
 # Patterns read one line at a time (an Android image element across lines);
 # a pattern that would need a parser does not belong here. The awk program is
 # lib/ui-lint.awk: bash 3.2 cannot parse its quotes inside a $( ) heredoc.
