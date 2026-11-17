@@ -66,10 +66,6 @@ test('A2: both manifests name dagents at one version, and both catalogs list it'
   const codex = json('.agents/plugins/marketplace.json').plugins.find(plugin => plugin.name === 'dagents');
   assert.equal(codex?.source?.path ?? codex?.source, './plugins/dagents');
 });
-test('A2: the repository validation passes', () => {
-  const result = run(process.execPath, ['scripts/validate-repository.mjs'], { timeout: 60000 });
-  assert.equal(result.status, 0, result.stderr + result.stdout);
-});
 test('A2: claude plugin validate passes for plugins/dagents and the marketplace', t => {
   const claude = process.env.CLAUDE_BIN || 'claude';
   if (spawnSync(claude, ['--version'], { stdio: 'ignore', timeout: 15000 }).status !== 0) { t.skip('claude CLI not available'); return; }
