@@ -5723,7 +5723,7 @@ describe('cockpit roots', () => {
     const darkmem = { store: 'darkmem' as const, root: `${MIRROR}/superpowers` }
     const w = { root: '/w', docsDir: '/w/docs/dagents' }
     const p = { root: '/p', docsDir: '/p/docs/dagents' }
-    for (const name of ['docs/superpowers/plans/p.md', 'docs/forge/plans/p.md', 'docs/dagents/plans/p.md', './docs/dagents/plans/p.md']) {
+    for (const name of ['docs/superpowers/plans/p.md', 'docs/forge/plans/p.md', 'docs/dforge/plans/p.md', 'docs/dagents/plans/p.md', './docs/dagents/plans/p.md']) {
       expect(planCandidates(name, darkmem, [w, p])).toEqual([`${MIRROR}/superpowers/plans/p.md`])
       // Every prefix names the same document: an older citation reads under each checkout's docs/dagents.
       expect(planCandidates(name, { store: 'local', root: '/p/docs/dagents' }, [w, p])).toEqual(['/w/docs/dagents/plans/p.md', '/p/docs/dagents/plans/p.md'])

@@ -1086,14 +1086,15 @@ export function statMissing(error: unknown, isAboveDir: boolean): boolean {
  * §7.1 and §7.3): an absolute name as written; a document name under the docs
  * root while documents are in darkmem, else under each checkout's own docs
  * directory; any other name under each checkout. The session's checkout comes
- * first. A ledger written before 4.0.0 cites its plan as docs/forge/<rest>,
- * or before 3.0.0 as docs/superpowers/<rest>; both still name
- * docs/dagents/<rest>: ledgers are never rewritten.
+ * first. A ledger dforge 4.x wrote cites its plan as docs/dforge/<rest>, one
+ * written before 4.0.0 as docs/forge/<rest>, or before 3.0.0 as
+ * docs/superpowers/<rest>; each still names docs/dagents/<rest>: ledgers are
+ * never rewritten.
  */
 export function planCandidates(plan: string, docs: CockpitRoots['docs'] | null, checkouts: readonly { root: string; docsDir: string }[]): string[] {
   if (isAbsolutePath(plan)) return [plan]
   const name = plan.replace(/^\.\//, '')
-  const doc = /^docs\/(?:dagents|forge|superpowers)(?:\/(.*))?$/.exec(name)
+  const doc = /^docs\/(?:dagents|dforge|forge|superpowers)(?:\/(.*))?$/.exec(name)
   const under = (dir: string) => (doc?.[1] ? `${dir}/${doc[1]}` : dir)
   if (doc && docs?.store === 'darkmem') return [under(docs.root)]
   const seen = new Set<string>()
@@ -1730,10 +1731,10 @@ export function activeRunOwner(text: string): string | null {
   return s.active === true && typeof s.session === 'string' && s.session !== '' ? s.session : null
 }
 
-/** The plan file the last task-brief, task-step, task-close or next-step call in a shell command names; null when none names one. */
+/** The plan file the last task-brief, task-step or next-step call in a shell command names; null when none names one. */
 export function namedPlan(command: string): string | null {
   let found: string | null = null
-  for (const match of command.matchAll(/scripts[\\/](?:task-brief|task-step|task-close|next-step)["']?((?:[ \t]+[^\s;&|]+)*)/g)) {
+  for (const match of command.matchAll(/scripts[\\/](?:task-brief|task-step|next-step)["']?((?:[ \t]+[^\s;&|]+)*)/g)) {
     const word = (match[1] ?? '')
       .trim()
       .split(/\s+/)

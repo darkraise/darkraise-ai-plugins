@@ -18,6 +18,7 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   'plugins/dagents/tests/typed-seats-and-drafting.acceptance.sh',
   // dforge 4.x's docs/dforge is read as an older spelling of docs/dagents.
   'plugins/dagents/scripts/lib/roots.sh',
+  'plugins/dagents/hooks/cockpit/lib.ts',
   'plugins/dagents/scripts/lib/darkmem-mirror.mjs',
   'plugins/dagents/scripts/lib/darkmem-sync.mjs',
   'plugins/dagents/scripts/lib/darkmem-reconcile.mjs',
@@ -93,7 +94,7 @@ export function validateRepository(root, { names = maintained } = {}) {
       if (manifest.name !== entry.name) errors.push(`${client}: manifest name mismatch for ${entry.name}`);
       if (!/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(manifest.version ?? '')) errors.push(`${entry.name}: invalid version`);
       if (!manifest.description || typeof manifest.description !== 'string') errors.push(`${entry.name}: description is required`);
-      if (WORKFLOW.includes(entry.name) && /superpowers/i.test(JSON.stringify(entry))) errors.push(`${catalogPath}: dforge entry: retired superpowers name`);
+      if (WORKFLOW.includes(entry.name) && /superpowers/i.test(JSON.stringify(entry))) errors.push(`${catalogPath}: ${entry.name} entry: retired superpowers name`);
       const previous = manifests.get(entry.name);
       if (previous && previous.version !== manifest.version) errors.push(`${entry.name}: client version mismatch`);
       manifests.set(entry.name, manifest);
