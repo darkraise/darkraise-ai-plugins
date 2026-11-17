@@ -46,6 +46,7 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   'plugins/dagents/tests/isolation.acceptance.test.sh',
   // Builds dforge 4.x projects and homes to prove migrate and the guard's isolation.
   'plugins/dagents/tests/dagents-split.acceptance.test.sh',
+  'plugins/dagents/tests/darkmem-sync/dagents-split.acceptance.test.mjs',
 ]);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
