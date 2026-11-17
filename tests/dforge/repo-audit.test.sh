@@ -63,7 +63,7 @@ has "primary: clean tree" "$out" "## Dirty files (0)"
 has "primary: plan in flight" "$out" "- \`docs/plan.md\` in \`$WT_ROOT\`: 1 of 3 tasks complete; handoff.md: yes"
 has "primary: last ledger line" "$out" "  - last ledger line: Task 2: fix round 1/5 (1 addressed, 1 open — x)"
 has "primary: handoff status" "$out" "- **Status:** Plan \`docs/plan.md\`: 1 of 3 tasks complete."
-has "primary: handoff staleness" "$out" "- Commits on the primary checkout's HEAD since it was written: 2"
+has "primary: handoff staleness" "$out" "- Commits on this checkout's HEAD since it was written: 2"
 has "primary: no compact section" "$out" "- CLAUDE.md has no Compact Instructions section"
 has "primary: recent commits" "$out" " second"
 
@@ -187,6 +187,25 @@ SECTION=$(handoff_section)
 has "handoff: a failed recompute is named" "$SECTION" "- stored, not recomputed: next-step: no such file"
 has "handoff: a failed recompute prints the stored Status" "$SECTION" "- **Status:** Plan stored status."
 has "handoff: a failed recompute prints the stored Next" "$SECTION" "- **Next:** Resume at Task 2 (Two)."
+
+# --- every checkout's handoff (spec A10) ---
+A10="$TMP/a10"; git -C "$REPO" worktree add -q -b a10 "$A10"
+A10_ROOT=$(git -C "$A10" rev-parse --show-toplevel)
+mkdir -p "$A10/.dforge/handoff"
+printf '# Handoff\n\n## Next session\n\n**Status:** a10 status\n**Next:** a10 next\n<!-- next-step: kind=adhoc done=0 closed=0 subject=- at=%s -->\n' "$(( $(date +%s) - 7200 ))" > "$A10/.dforge/handoff/latest.md"
+NOH="$TMP/noh"; git -C "$REPO" worktree add -q -b noh "$NOH"
+NOH_ROOT=$(git -C "$NOH" rev-parse --show-toplevel)
+git -C "$REPO" worktree add -q -b gone "$TMP/gone"
+GONE_ROOT=$(git -C "$TMP/gone" rev-parse --show-toplevel); rm -rf "$TMP/gone"
+run "$REPO"
+HSEC=$(sed -n '/^## Handoff/,/^## /p' <<<"$out")
+has "A10: the own handoff first" "$(sed -n 2p <<<"$HSEC")" "- \`$ROOT/.dforge/handoff/latest.md\`"
+has "A10: the worktree's handoff listed with its branch" "$HSEC" "- \`$A10_ROOT/.dforge/handoff/latest.md\` [a10]"
+has "A10: marked stored with its age" "$HSEC" "- stored, not recomputed: another checkout's handoff, written 2h ago"
+has "A10: its stored status" "$HSEC" "- **Status:** a10 status"
+check "A10: a checkout with no handoff gets no entry" "$(grep -cF -- "$NOH_ROOT" <<<"$HSEC")" "0"
+has "A10: a missing worktree is skipped" "$HSEC" "- skipped \`$GONE_ROOT\`: prunable or missing"
+git -C "$REPO" worktree remove --force "$A10"; git -C "$REPO" worktree remove --force "$NOH"; git -C "$REPO" worktree prune
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -112,6 +112,23 @@ if [ -n "$roadmap_root" ] && [ -f "$(dforge_docs_root "$roadmap_root")/roadmap.m
   fi
 fi
 
+# Other checkouts' recent handoffs, counted only: the compaction snapshot
+# keeps to the session's own, and repo-audit lists them.
+handoffs_line=""
+if [ -n "$roadmap_root" ]; then
+  own_latest=$(dforge_latest_file "$roadmap_root")
+  others=0
+  while IFS= read -r other; do
+    [ -f "$other" ] || continue
+    ! [ -f "$own_latest" ] || ! [ "$other" -ef "$own_latest" ] || continue
+    [ -n "$(find "$other" -mmin -4320 2>/dev/null)" ] && others=$((others + 1))
+  done < <(dforge_latest_files "$roadmap_root")
+  if [ "$others" -ge 1 ]; then
+    handoffs_line="$others other checkouts hold a handoff (scripts/repo-audit lists them)."
+    context="${context}\n\n$(escape_for_json "$handoffs_line")"
+  fi
+fi
+
 # The workflow settings that differ from their defaults, as one line the skills
 # read where they would otherwise ask (scripts/dforge-config workflow). Without
 # Node, or with a settings file that cannot be read, nothing is added.
@@ -162,7 +179,7 @@ fi
 # seconds for the snapshot and the reply, since a killed hook injects nothing.
 darkmem_lines=""
 if . "${SCRIPT_DIR}/lib/darkmem-hook.sh" 2>/dev/null; then
-  room=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} - ${#nonode_line} ))
+  room=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#handoffs_line} - ${#settings_line} - ${#legacy_line} - ${#nonode_line} ))
   if [ "$room" -ge 100 ]; then
     darkmem_lines=$(darkmem_session_lines "${cwd:-$PWD}" "${session_id:-}" "$room" $(( 270 - SECONDS )) \
       | tr -d '\001-\010\013\014\016-\037')
@@ -180,7 +197,7 @@ fi
 # point leaves, with headroom for the wrapper text.
 if grep -qE '"source"[[:space:]]*:[[:space:]]*"compact"' <<<"$stdin_json" \
    && . "${SCRIPT_DIR}/lib/snapshot.sh" 2>/dev/null; then
-  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#settings_line} - ${#legacy_line} - ${#nonode_line} - ${#darkmem_lines} ))
+  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#handoffs_line} - ${#settings_line} - ${#legacy_line} - ${#nonode_line} - ${#darkmem_lines} ))
   [ "$cap" -le "$SNAPSHOT_CAP" ] || cap=$SNAPSHOT_CAP
   if [ "$cap" -gt 1000 ]; then
     # Transcript text can carry raw C0 controls (pasted terminal output with

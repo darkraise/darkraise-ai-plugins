@@ -98,13 +98,15 @@ fi
 
 echo
 echo "## Handoff"
+listed=0
 latest=$(dforge_latest_file "$root")
 if [ -f "$latest" ]; then
+  listed=1
   echo "- \`$latest\`"
   # The stored lines are a claim about the repository at writing time, so they
   # are recomputed; only when that fails are they shown, marked as stored.
   status=0
-  recomputed=$(cd "$primary" && bash "$here/with-timeout" 20 bash "$here/next-step" --print --latest 2>&1) || status=$?
+  recomputed=$(cd "$root" && bash "$here/with-timeout" 20 bash "$here/next-step" --print --latest 2>&1) || status=$?
   case $status in
     0)
       echo "- recomputed from the repository"
@@ -117,11 +119,36 @@ if [ -f "$latest" ]; then
       ;;
   esac
   mtime=$(stat -c %Y "$latest" 2>/dev/null || stat -f %m "$latest")
-  since=$(git -C "$primary" log -n 500 --format=%ct HEAD 2>/dev/null | awk -v t="$mtime" '$1 > t' | grep -c . || true)
-  echo "- Commits on the primary checkout's HEAD since it was written: $since"
-else
-  echo "- none"
+  since=$(git -C "$root" log -n 500 --format=%ct HEAD 2>/dev/null | awk -v t="$mtime" '$1 > t' | grep -c . || true)
+  echo "- Commits on this checkout's HEAD since it was written: $since"
 fi
+# Every other checkout's handoff, as stored: recomputing it means running
+# next-step in that checkout. dforge_latest_files prints one line per entry whose
+# directory exists, in porcelain order, so the entries pair with it by index.
+handoffs=()
+while IFS= read -r line; do handoffs+=("$line"); done < <(dforge_latest_files "$root")
+i=0
+now=$(date +%s)
+while IFS=$'\t' read -r wt wbranch wprune; do
+  wt=$(_dforge_path "$wt")
+  file=""
+  if [ -d "$wt" ]; then file=${handoffs[$i]:-}; i=$((i + 1)); fi
+  if [ -n "$wprune" ] || [ ! -d "$wt" ]; then echo "- skipped \`$wt\`: prunable or missing"; continue; fi
+  [ -n "$file" ] && [ -f "$file" ] || continue
+  [ -f "$latest" ] && [ "$file" -ef "$latest" ] && continue
+  listed=1
+  at=$(tr -d '\r' < "$file" | sed -n 's/^<!-- next-step: .* at=\([0-9][0-9]*\).*-->$/\1/p' | tail -n 1)
+  [ -n "$at" ] || at=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file")
+  echo "- \`$file\` [$wbranch]"
+  echo "- stored, not recomputed: another checkout's handoff, written $(( (now - at) / 3600 ))h ago"
+  tr -d '\r' < "$file" | grep -E '^\*\*(Status|Next):\*\*' | sed 's/^/- /'
+done < <(git -C "$(dr_native_path "$root")" worktree list --porcelain 2>/dev/null | tr -d '\r' | awk '
+  /^worktree / { if (p != "") print p "\t" b "\t" pr; p = substr($0, 10); b = "detached"; pr = ""; next }
+  /^branch /   { b = substr($0, 8); sub(/^refs\/heads\//, "", b); next }
+  /^prunable/  { pr = "prunable"; next }
+  END { if (p != "") print p "\t" b "\t" pr }
+')
+[ "$listed" -eq 1 ] || echo "- none"
 
 echo
 echo "## Compaction"

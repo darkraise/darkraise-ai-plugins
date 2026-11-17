@@ -163,6 +163,17 @@ check "roadmap: survives compaction alongside the snapshot" "$(grep -c '^Roadmap
 check "roadmap: still under the 10,000-character hook cap" "$([ "${#rm_ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
 check "no roadmap: nothing injected" "$(grep -c '^Roadmap:' <<<"$startup_ctx")" "0"
 
+# --- other checkouts' handoffs are counted on every source (spec A10) ---
+git -C "$REPO" worktree add -q -b hc "$TMP/hc"; mkdir -p "$TMP/hc/.dagents/handoff"
+printf '# Handoff\n\n## Next session\n\n**Next:** hc next\n' > "$TMP/hc/.dagents/handoff/latest.md"
+hc_start=$(startup_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
+check "count line on startup" "$(grep -c '^1 other checkouts hold a handoff [(]scripts/repo-audit lists them)\.$' <<<"$hc_start")" "1"
+hc_compact=$(compact_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
+check "the compaction snapshot shows only the session's handoff" "$(grep -c 'hc next' <<<"$hc_compact"):$(grep -c 'Resume at Task 4 (Four)' <<<"$hc_compact")" "0:1"
+touch -d '4 days ago' "$TMP/hc/.dagents/handoff/latest.md"
+check "no count line for a handoff older than three days" "$(grep -c 'other checkouts hold a handoff' <<<"$(startup_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')")" "0"
+git -C "$REPO" worktree remove --force "$TMP/hc"
+
 # --- an older directory left behind is named, with the skill that moves it ---
 check "4.0 layout: no migration line" "$(grep -c 'still uses an older layout' <<<"$rm_ctx")" "0"
 mkdir -p "$REPO/.superpowers"
