@@ -40,17 +40,12 @@ _dagents_long() {
 # darkmem store to this checkout (one that does exits 2: its documents or
 # ledger are in the mirror, and a local root would split the plan's state).
 _dagents_local() { # DIR TOP
-  local base=${2:-$1} primary=${2:-$1} common
-  if [ -n "$2" ]; then
-    if common=$(git -C "$2" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
-      primary=$(git -C "$(dirname "$common")" rev-parse --show-toplevel 2>/dev/null) || primary=$2
-    fi
-  fi
+  local base=${2:-$1}
   _DAGENTS_DOCS_STORE=local
   _DAGENTS_DOCS_ROOT=$(dagents_dir docs "$base")
   _DAGENTS_PROGRESS_STORE=local
   _DAGENTS_LEDGER_ROOT="$(dagents_dir state "$base")/sdd"
-  _DAGENTS_LATEST="$(dagents_dir state "$primary")/handoff/latest.md"
+  _DAGENTS_LATEST="$(dagents_dir state "$base")/handoff/latest.md"
   _DAGENTS_PROJECT=""
 }
 
@@ -138,6 +133,25 @@ dagents_project() { dagents_stores_init "${1:-}"; [ -n "$_DAGENTS_PROJECT" ] || 
 dagents_workspace() { # SLUG [DIR]
   dagents_stores_init "${2:-}"
   printf '%s/sdd/%s\n' "$(dagents_dir state "${_DAGENTS_TOP:-${2:-$PWD}}")" "$1"
+}
+
+# dagents_latest_files [DIR] — every checkout's latest.md, one per line, in
+# `git worktree list` order, skipping a worktree whose directory is gone; under
+# darkmem progress, the mirror's one file, which every checkout shares.
+dagents_latest_files() {
+  local wt
+  dagents_stores_init "${1:-}"
+  if [ "$_DAGENTS_PROGRESS_STORE" = darkmem ]; then
+    printf '%s\n' "$_DAGENTS_LATEST"
+    return 0
+  fi
+  [ -n "$_DAGENTS_TOP" ] || return 0
+  git -C "$(dr_native_path "$_DAGENTS_TOP")" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p' |
+  while IFS= read -r wt; do
+    wt=$(_dagents_path "$wt")
+    [ -d "$wt" ] && printf '%s/handoff/latest.md\n' "$(dagents_dir state "$wt")"
+  done
+  return 0
 }
 
 # dagents_ledger_files [DIR] — "<ledger>\t<checkout>" for every worktree's

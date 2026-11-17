@@ -32,7 +32,8 @@ WT=$(git -C "$TMP/wt" rev-parse --show-toplevel)
 check "no config: docs root" "$(cd "$REPO" && dforge_docs_root)" "$TOP/docs/dforge"
 check "no config: stores" "$(cd "$REPO" && dforge_docs_store) $(cd "$REPO" && dforge_progress_store)" "local local"
 check "no config: a worktree's ledger dir" "$(cd "$WT" && dforge_ledger_dir p1)" "$WT/.dforge/sdd/p1"
-check "no config: latest.md from a worktree" "$(cd "$WT" && dforge_latest_file)" "$TOP/.dforge/handoff/latest.md"
+check "no config: latest.md from a worktree" "$(cd "$WT" && dforge_latest_file)" "$WT/.dforge/handoff/latest.md"
+check "no config: latest.md from the primary" "$(cd "$REPO" && dforge_latest_file)" "$TOP/.dforge/handoff/latest.md"
 check "no config: a DIR argument" "$(dforge_docs_root "$WT")" "$WT/docs/dforge"
 check "outside git: local under the directory" "$(cd "$TMP" && dforge_docs_root)" "$TMP/docs/dforge"
 
@@ -42,7 +43,7 @@ printf '#!/bin/sh\n: > "%s"\nexit 1\n' "$TMP/node-ran" > "$TMP/marknode/node"
 chmod +x "$TMP/marknode/node"
 printf '{"handoffTokens": 300000, "darkmemEnabled": true}\n' > "$HOME/.dforge/config.json"
 check "settings only: docs root" "$(cd "$REPO" && PATH="$TMP/marknode:$PATH" dforge_docs_root)" "$TOP/docs/dforge"
-check "settings only: latest.md from a worktree" "$(cd "$WT" && PATH="$TMP/marknode:$PATH" dforge_latest_file)" "$TOP/.dforge/handoff/latest.md"
+check "settings only: latest.md from a worktree" "$(cd "$WT" && PATH="$TMP/marknode:$PATH" dforge_latest_file)" "$WT/.dforge/handoff/latest.md"
 check "settings only: node is not started" "$([ -e "$TMP/node-ran" ] && echo ran || echo skipped)" "skipped"
 printf '{"darkmem": {}}\n' > "$HOME/.dforge/config.json"
 (cd "$REPO" && PATH="$TMP/marknode:$PATH" dforge_docs_root > /dev/null 2>&1)
@@ -61,10 +62,12 @@ for docs in local darkmem; do
       label="$docs/$progress from $(basename "$where")"
       if [ "$docs" = darkmem ]; then want_docs="$MIRROR/dforge"; else want_docs="$where/docs/dforge"; fi
       if [ "$progress" = darkmem ]; then
-        want_ledger="$MIRROR/work/sdd/p1" want_latest="$MIRROR/work/handoff/latest.md"
+        want_ledger="$MIRROR/work/sdd/p1"
       else
-        want_ledger="$where/.dforge/sdd/p1" want_latest="$TOP/.dforge/handoff/latest.md"
+        want_ledger="$where/.dforge/sdd/p1"
       fi
+      if [ "$progress" = darkmem ] && [ "$where" = "$TOP" ]; then want_latest="$MIRROR/work/handoff/latest.md"
+      else want_latest="$where/.dforge/handoff/latest.md"; fi
       check "$label: stores" "$(cd "$where" && dforge_docs_store) $(cd "$where" && dforge_progress_store)" "$docs $progress"
       check "$label: docs root" "$(cd "$where" && dforge_docs_root)" "$want_docs"
       check "$label: ledger dir" "$(cd "$where" && dforge_ledger_dir p1)" "$want_ledger"
@@ -78,6 +81,8 @@ for docs in local darkmem; do
       check "$label: a working file round-trips" "$(cd "$where" && dforge_name "$where/.dforge/x.md")" ".dforge/x.md"
       check "$label: a name stays a name" "$(cd "$where" && dforge_name ./docs/dforge/specs/s.md)" "docs/dforge/specs/s.md"
       check "$label: an outside path stays" "$(cd "$where" && dforge_name /elsewhere/superpowers/a.md)" "/elsewhere/superpowers/a.md"
+      check "$label: every checkout's handoff" "$(cd "$where" && dforge_latest_files | tr '\n' ' ')" \
+        "$( [ "$progress" = darkmem ] && printf '%s ' "$MIRROR/work/handoff/latest.md" || printf '%s ' "$TOP/.dforge/handoff/latest.md")$WT/.dforge/handoff/latest.md "
     done
   done
 done
@@ -198,6 +203,12 @@ else
   rm -f "$HOME/.dforge/stores.json"
   check "no node, nothing applied: still local" "$(cd "$REPO" && _DFORGE_KEY= PATH="$NONODE_PATH" dforge_ledger_dir p1)" "$TOP/.dforge/sdd/p1"
 fi
+
+# --- dforge_latest_files skips a worktree whose directory is gone ---
+git -C "$REPO" worktree add -q -b gone "$TMP/gone"
+rm -rf "$TMP/gone"
+check "latest files: a missing worktree is skipped" "$(cd "$REPO" && dforge_latest_files | grep -c gone)" "0"
+git -C "$REPO" worktree prune
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

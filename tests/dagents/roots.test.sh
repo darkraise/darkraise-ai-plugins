@@ -32,7 +32,8 @@ WT=$(git -C "$TMP/wt" rev-parse --show-toplevel)
 check "no config: docs root" "$(cd "$REPO" && dagents_docs_root)" "$TOP/docs/dagents"
 check "no config: stores" "$(cd "$REPO" && dagents_docs_store) $(cd "$REPO" && dagents_progress_store)" "local local"
 check "no config: a worktree's ledger dir" "$(cd "$WT" && dagents_ledger_dir p1)" "$WT/.dagents/sdd/p1"
-check "no config: latest.md from a worktree" "$(cd "$WT" && dagents_latest_file)" "$TOP/.dagents/handoff/latest.md"
+check "no config: latest.md from a worktree" "$(cd "$WT" && dagents_latest_file)" "$WT/.dagents/handoff/latest.md"
+check "no config: latest.md from the primary" "$(cd "$REPO" && dagents_latest_file)" "$TOP/.dagents/handoff/latest.md"
 check "no config: a DIR argument" "$(dagents_docs_root "$WT")" "$WT/docs/dagents"
 check "outside git: local under the directory" "$(cd "$TMP" && dagents_docs_root)" "$TMP/docs/dagents"
 
@@ -46,7 +47,7 @@ for docs in local darkmem; do
       if [ "$progress" = darkmem ]; then
         want_ledger="$MIRROR/work/sdd/p1" want_latest="$MIRROR/work/handoff/latest.md"
       else
-        want_ledger="$where/.dagents/sdd/p1" want_latest="$TOP/.dagents/handoff/latest.md"
+        want_ledger="$where/.dagents/sdd/p1" want_latest="$where/.dagents/handoff/latest.md"
       fi
       check "$label: stores" "$(cd "$where" && dagents_docs_store) $(cd "$where" && dagents_progress_store)" "$docs $progress"
       check "$label: docs root" "$(cd "$where" && dagents_docs_root)" "$want_docs"
@@ -61,6 +62,8 @@ for docs in local darkmem; do
       check "$label: a working file round-trips" "$(cd "$where" && dagents_name "$where/.dagents/x.md")" ".dagents/x.md"
       check "$label: a name stays a name" "$(cd "$where" && dagents_name ./docs/dagents/specs/s.md)" "docs/dagents/specs/s.md"
       check "$label: an outside path stays" "$(cd "$where" && dagents_name /elsewhere/superpowers/a.md)" "/elsewhere/superpowers/a.md"
+      check "$label: every checkout's handoff" "$(cd "$where" && dagents_latest_files | tr '\n' ' ')" \
+        "$( [ "$progress" = darkmem ] && printf '%s ' "$MIRROR/work/handoff/latest.md" || printf '%s %s ' "$TOP/.dagents/handoff/latest.md" "$WT/.dagents/handoff/latest.md")"
     done
   done
 done
@@ -187,6 +190,12 @@ check "dforge key" "$(dagents_name_key docs/dforge/plans/x.md)" "docs/dagents/pl
 check "dforge root key" "$(dagents_name_key docs/dforge)" "docs/dagents"
 check "spellings: key, then dforge first" "$(dagents_name_spellings docs/dagents/plans/x.md | tr '\n' '|')" "docs/dagents/plans/x.md|docs/dforge/plans/x.md|docs/forge/plans/x.md|docs/superpowers/plans/x.md|"
 check "dforge citation resolves" "$(cd "$TOP" && dagents_resolve docs/dforge/plans/x.md)" "$(cd "$TOP" && dagents_docs_root)/plans/x.md"
+
+# --- dagents_latest_files skips a worktree whose directory is gone ---
+git -C "$REPO" worktree add -q -b gone "$TMP/gone"
+rm -rf "$TMP/gone"
+check "latest files: a missing worktree is skipped" "$(cd "$REPO" && dagents_latest_files | grep -c gone)" "0"
+git -C "$REPO" worktree prune
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
