@@ -74,6 +74,7 @@ async function run(executable, args, seconds, buffered) {
 }
 // The cockpit's tests need the claude CLI; CI runs them in their own pinned-CLI step.
 const hasClaude = !options.list && process.platform !== 'win32' && spawnSync('claude', ['--version'], { stdio: 'ignore', timeout: 5000 }).status === 0;
+if (!options.list && !hasClaude) console.log(`Skipped claude plugin test: ${process.platform === 'win32' ? 'not run on Windows' : 'claude not found'}`);
 // npm installs tsc on Windows as tsc.cmd, which Node spawns only through a
 // shell (EINVAL without one since the April 2024 security releases), so there
 // both the probe and the job run it through cmd.exe.

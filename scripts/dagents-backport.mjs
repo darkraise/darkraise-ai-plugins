@@ -16,17 +16,23 @@ function gitOk(...args) {
   }
 }
 
+// A revision that began with '-' would reach git as an option.
+const revision = value => {
+  if (!/^[0-9A-Za-z][0-9A-Za-z._/~^-]*$/.test(String(value))) throw new Error(`not a revision: ${value}`);
+  return value;
+};
+
 const changedPaths = (sha, prefix) => git('diff-tree', '--root', '--no-commit-id', '-r', '--name-only', '-z', sha, '--', prefix).split('\0').filter(Boolean);
 
 export function rows(from, to) {
-  return git('log', '--no-merges', '--reverse', '--abbrev=7', '--format=%h %s', `${from}..${to}`, '--', 'plugins/dforge').split('\n').filter(Boolean);
+  return git('log', '--no-merges', '--reverse', '--abbrev=7', '--format=%h %s', `${revision(from)}..${revision(to)}`, '--', 'plugins/dforge').split('\n').filter(Boolean);
 }
 
 let tagPaths;
 
 export function fiveOnly(sha) {
   tagPaths ??= new Set(git('ls-tree', '-r', '--name-only', '-z', TAG, '--', 'plugins/dforge').split('\0'));
-  const paths = changedPaths(sha, 'plugins/dforge').filter(path => !path.includes('/tests/'));
+  const paths = changedPaths(revision(sha), 'plugins/dforge').filter(path => !path.includes('/tests/'));
   return paths.length > 0 && paths.every(path => !tagPaths.has(path));
 }
 
