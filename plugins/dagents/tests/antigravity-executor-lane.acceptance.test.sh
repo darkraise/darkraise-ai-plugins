@@ -67,7 +67,7 @@ for tool in jq node git; do
   chmod +x "$SEAL/$tool"
 done
 # Node finds git through the Windows PATH, where neither a link nor a wrapper
-# script runs: darkmem-config.mjs then sees no repository. On Git Bash, give
+# script runs: a node module that runs git then sees no repository. On Git Bash, give
 # native callers git's own directory instead; it holds no agy.
 GITDIR=''
 if command -v cygpath >/dev/null 2>&1; then

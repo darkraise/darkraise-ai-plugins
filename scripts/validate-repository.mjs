@@ -19,15 +19,7 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   // dforge 4.x's docs/dforge is read as an older spelling of docs/dagents.
   'plugins/dagents/scripts/lib/roots.sh',
   'plugins/dagents/hooks/cockpit/lib.ts',
-  'plugins/dagents/scripts/lib/darkmem-mirror.mjs',
-  'plugins/dagents/scripts/lib/darkmem-sync.mjs',
-  'plugins/dagents/scripts/lib/darkmem-reconcile.mjs',
   'plugins/dagents/tests/roots.test.sh',
-  'plugins/dagents/tests/darkmem-sync/mirror.test.mjs',
-  'plugins/dagents/tests/darkmem-sync/reconcile.test.mjs',
-  'plugins/dagents/tests/darkmem-sync/restore.test.mjs',
-  // Seeds another plugin's darkmem document and workstream that dagents must leave alone.
-  'plugins/dagents/tests/darkmem-sync/push.test.mjs',
   // Migrate moves a dforge 4.x project's names to dagents' and says when one is found.
   'plugins/dagents/scripts/dagents-migrate',
   'plugins/dagents/scripts/lib/dagents-dir.sh',
@@ -47,7 +39,6 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   'plugins/dagents/tests/isolation.acceptance.test.sh',
   // Builds dforge 4.x projects and homes to prove migrate and the guard's isolation.
   'plugins/dagents/tests/dagents-split.acceptance.test.sh',
-  'plugins/dagents/tests/darkmem-sync/dagents-split.acceptance.test.mjs',
 ]);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };

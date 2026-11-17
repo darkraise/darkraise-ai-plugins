@@ -124,7 +124,6 @@ export const windowsSeconds = {
   'plugins/dagents/tests/codex-review.test.sh': 141,
   'plugins/dagents/tests/context-size.test.sh': 222,
   'plugins/dagents/tests/criteria.test.sh': 10,
-  'plugins/dagents/tests/darkmem-sync.test.sh': 155,
   'plugins/dagents/tests/depth-route.test.sh': 88,
   'plugins/dagents/tests/detect.test.sh': 10,
   'plugins/dagents/tests/dagents-config.test.sh': 34,
