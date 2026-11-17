@@ -1,6 +1,6 @@
 ---
 name: judge-opus
-description: "Read-only judge running Opus 5.5 at medium effort; it writes only its report file. Final review, plan review, rulings, risk-3 task reviews, the approach advisor and distillation checks."
+description: "Read-only judge (Opus, medium effort) writing only its report file: final review, plan review, rulings, risk-3 task reviews, the approach advisor and distillation checks."
 model: opus
 effort: medium
 tools: Read, Grep, Glob, Write
