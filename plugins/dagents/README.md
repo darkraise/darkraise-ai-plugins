@@ -356,75 +356,14 @@ reset time the error names, or for the session when it names none.
   `test-driven-development` and `writing-plans` now place each test at the
   lowest layer that can fail for its change, so the suite stops regrowing.
 
-**darkmem mirror (optional, off by default).** `scripts/darkmem-sync` keeps
-  a repository's planning documents and progress in a darkmem instance over
-  its keyed REST routes. It does nothing until you opt in: turn on **Use
-  darkmem** (`darkmemEnabled`) in the cockpit's darkmem settings or with
-  `bash <plugin-root>/scripts/dagents-config set darkmemEnabled true`, and map
-  the repository's primary checkout in `~/.dagents/config.json` —
-  `{"darkmem": {"url": "http://<host>:8000", "api_key_env": "DARKMEM_API_KEY", "repos": {"<primary checkout path>": {"project": "<name>"}}}}`
-  — and export a `dmk_` key in that variable. The repository then syncs a
-  mirror at `~/.dagents/mirror/<project>/`, whose documents live under the
-  darkmem uri prefix `dagents/`. The key needs the `read` and `capture` scopes,
-  and `import --replace` also `admin`. Two settings choose each family's
-  store while darkmem is on: `documentStore` (specs, plans, registers, notes)
-  and `progressSource` (ledgers and handoffs), `local` or `darkmem`, both
-  `darkmem` by default; a mapping entry may override either, for example
-  `{"project": "plugins", "documentStore": "local"}`. `~/.dagents/stores.json`
-  records where each family actually lives, with its project and mirror, and
-  the scripts and skills read and write there through `scripts/lib/roots.sh`
-  and `scripts/dagents-path`.
-  `pull` fetches what changed; `push` sends documents under their last synced
-  hash and each new ledger line as its own entry, with `task`, `state` and
-  `commit` properties a progress board can read; `status` lists each family's
-  store and local changes;
-  `import` files an existing `docs/dagents/` and its ledgers once, verified byte
-  for byte. A store that changes moves its family at the next session start
-  with no plan in progress and no auto run active:
-  `reconcile` copies the files across, verifies every hash, records the new
-  store in `stores.json`, and leaves documents leaving the repository as a
-  staged `git rm` for you to commit. Every move refuses, naming the reason,
-  while a plan is in progress (a ledger whose plan `completed.md` does not
-  record) or an auto run is active. A move into darkmem also refuses while
-  darkmem is unreachable or the key is unset, while a linked worktree holds
-  documents the primary checkout does not, or when a file cannot be carried
-  (a dotfile, a symbolic link, an empty or non-UTF-8 file, a name some
-  platform cannot hold, a case twin, an ignored file); it never overwrites a different darkmem copy, and moved
-  progress files are kept under a dated `moved-<stamp>` backup.
-  **Falling back to the file system.** While darkmem is on, the mirror is plain
-  local files: without the key or the server, work goes on from it and `pull`
-  and `push` say why they skipped. Turn darkmem off (`darkmemEnabled` false) or
-  remove the mapping, and the next session start with no plan in progress
-  moves every family back into the repository from the mirror alone, without
-  asking darkmem, naming each file darkmem does not hold as the mirror does and keeping the mirror
-  as a dated `dagents-moved-<stamp>` / `work-moved-<stamp>` backup; until then
-  the scripts keep reading the mirror, and `push` and `pull` do nothing. A
-  store set back to `local` while darkmem is on and reachable is pulled from
-  darkmem first. A repository a 2.x release moved into darkmem stays there,
-  unsynced, while `darkmemEnabled` is unset: each session start says so until
-  you set it either way. A repository with no mapping but a record that still
-  places a family in the mirror is read and reconciled the same way: the
-  scripts read the mirror until a session start with no plan in progress
-  moves the family back. Without the darkmem MCP tools, or with darkmem off,
-  the durable facts the skills would file with `memory_add` go to
-  `<docs>/notes/<date>-facts.md` instead. Session start runs `reconcile` and
-  `pull`; the skills' stop points run `push`, and a
-  background Stop hook pushes as a safety net in at most 140 seconds: its
-  config lookup is bounded at 30 seconds and its push at 100, each sent
-  SIGTERM at its bound and SIGKILL 5 seconds later. `push` waits up to 100
-  seconds for another run's mirror lock before refusing;
-  `DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS` sets that wait in milliseconds, and a value that
-  is not a positive number means the 100 seconds. The Stop hook's push never
-  waits: it refuses at once while another run holds the lock and the next stop
-  sends what it missed. A
-  move stopped part-way through filing a ledger resumes it at the next session
-  start. A document deleted from the mirror is archived on darkmem under
-  `dagents/archive/<stamp>/` and `restore <name>` brings it back;
-  `revision <name>` prints the `<name>@r<id>` a distilled `Source:` line
-  cites. `docs/superpowers/<rest>` and `docs/dagents/<rest>` name the same
-  document everywhere names are compared, so historical plans keep resolving.
-  A conflict is reported, never merged. Without a mapping every command but
-  `import` prints one line and does nothing.
+**Everything stays in the repository.** dagents keeps its documents,
+  ledgers, handoff notes and state in the checkout and `~/.dagents/`, and
+  never talks to a darkmem server. `docs/superpowers/<rest>`,
+  `docs/forge/<rest>`, `docs/dforge/<rest>` and `docs/dagents/<rest>` name the
+  same document everywhere names are compared, so historical plans keep
+  resolving. A dforge 4.x project whose documents or progress dforge keeps in
+  darkmem moves them home in dforge first (`documentStore` or
+  `progressSource` set to `local`); `dagents-migrate` refuses until then.
 
 **UI/UX work proven in the running UI.** `dagents:ui-ux` turns a design into a
 numbered UI/UX contract (UI, UX and an Output promise) in the spec,
@@ -1052,9 +991,6 @@ The same settings can be set with
 | Notifications | `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |
 | Notifications | `notifyAskAfter` | `20` | Seconds an approval or question waits before it sends. `0` sends at once. |
 | Notifications | `notifyDetail` | `full` | `full` includes command and answer excerpts; `brief` sends titles and fields only. |
-| darkmem | `darkmemEnabled` | `false` | Use darkmem for mapped repositories. Off keeps everything in the repository, and a family already in the mirror moves back at the next session start with no plan in progress, from the mirror alone. |
-| darkmem | `documentStore` | `darkmem` | While darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: `local` in the repository, `darkmem` through the mirror. A mapping entry's own `documentStore` outranks it; an unmapped repository is local, though a family its record still places in the mirror is read there until a session start with no plan in progress moves it back. |
-| darkmem | `progressSource` | `darkmem` | The same choice for plan ledgers and handoffs. A mapping entry's own `progressSource` outranks it. |
 
 The cockpit settings (Cockpit, Minimized, Context, Notifications) apply at once, whether
 you change them in the pane, with `dagents-config` or in the file, except the
@@ -1111,7 +1047,6 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
 | `~/.dr-forge/` | `~/.dagents/` |
 | `DR_FORGE_*` environment variables | `DAGENTS_*` |
 | `scripts/forge-config`, `scripts/forge-path`, `scripts/forge-migrate` | `scripts/dagents-config`, `scripts/dagents-path`, `scripts/dagents-migrate` |
-| darkmem documents under `forge/` | `dagents/` |
 
 1. Install dagents, then uninstall dr-forge, so their hooks do not run twice.
    The cockpit's Discord webhook and mention stay in dr-forge's plugin store,
@@ -1141,10 +1076,6 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
    repository straight to 4.0 as well. Session start and `repo-audit` name
    any older path still present.
 3. Rename any `DR_FORGE_*` variable a shell profile sets to `DAGENTS_*`.
-
-darkmem's documents move from `forge/` to `dagents/` at the first sync after
-the mirror moved. A name darkmem already holds under `dagents/` is refused,
-never overwritten.
 
 The sections below record the earlier migrations under the names of their
 day; their steps now run through `/dagents:migrate`.
@@ -1209,16 +1140,10 @@ No other file is edited: plans, specs and ledgers that cite
 older plugin prefix fails `scripts/plan-lint` until they name `dr-forge:`.
 Rename any `DR_SUPERPOWERS_*` variable you set to its `DR_FORGE_*` name.
 `DR_FORGE_DOCUMENT_STORE` and `DR_FORGE_PROGRESS_SOURCE`, which 2.x read, are
-no longer read at all: set `documentStore` and `progressSource` instead.
+no longer read at all.
 
-`dagents-migrate` also moves the home: the darkmem mapping in
-`~/.dr-superpowers/config.json` into `~/.dr-forge/config.json` when that file
-has none, and each `~/.dr-superpowers/mirror/<project>/` that
-`~/.dr-forge/mirror/` lacks. darkmem itself is off in 3.0 until you set
-`darkmemEnabled`. A mirror's `superpowers/` folder becomes `forge/` at the next
-`darkmem-sync` run, and the first online run moves darkmem's `superpowers/`
-documents to `forge/`; upgrade every machine that shares a darkmem project,
-since a 2.x client no longer sees the moved documents.
+`dagents-migrate` leaves a home's darkmem mapping and mirrors where they are:
+dagents keeps nothing in darkmem.
 
 ## What a plan looks like
 
@@ -1337,15 +1262,12 @@ exist and validates the template against the documented format.
 and runs `scripts/test-profile` against fixture reports. `roadmap.test.sh` runs every
 `scripts/roadmap` verb against a temporary repository. `turn-end.test.sh`
 drives the turn-stamp and Stop hooks against a temporary repository, its
-ledgers and its branch heads;
-`darkmem-sync/hooks.test.mjs` drives darkmem's session-start sync and the
-background Stop push (`scripts/darkmem-stop-push.sh`) against the stub.
+ledgers and its branch heads.
 `codex-review.test.sh` covers the judge seats' selection and outcome policy
 against a stub `codex`, so every branch — refusal, fallback, timeout, empty
 report — is exercised without a model call.
-`darkmem-sync.test.sh` runs the `node:test` suites under
-`tests/darkmem-sync/` against an in-memory stub of darkmem's routes, so no
-darkmem instance is needed.
+`home.test.sh` runs the `node:test` suites under `tests/home/`: the home
+lock and the home half of `dagents-migrate`.
 The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one passing fixture per rule), `ui-hooks.test.sh` and `ui-ux-skill.test.sh` — run against temporary repositories and the skill text.
 
 ## Reference
