@@ -396,13 +396,22 @@ _plan_ledger_names() {
   [ "$(dagents_name_key "$(dagents_name "$named")")" = "$3" ]
 }
 
-# _plan_ledger_tree ROOT SLUG — the worktree holding <state>/sdd/SLUG, else ROOT.
+# _plan_ledger_tree ROOT SLUG — the checkout holding <state>/sdd/SLUG: ROOT
+# when it is a linked worktree holding it, else the first linked worktree that
+# does, else the primary when it does, else ROOT. The plan review leaves a
+# workspace in the planning checkout, usually the primary, whatever worktree
+# executes the plan, so the primary is tried last.
 _plan_ledger_tree() {
-  local wt
+  local wt primary="" found=""
   while IFS= read -r wt; do
-    [ -d "$(dagents_dir state "$wt")/sdd/$2" ] && { printf '%s\n' "$wt"; return 0; }
+    if [ -z "$primary" ]; then primary=$wt; continue; fi
+    [ -d "$(dagents_dir state "$wt")/sdd/$2" ] || continue
+    if [ "$wt" -ef "$1" ]; then printf '%s\n' "$1"; return 0; fi
+    [ -n "$found" ] || found=$wt
   done < <(git -C "$1" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
-  printf '%s\n' "$1"
+  if [ -n "$found" ]; then printf '%s\n' "$found"
+  elif [ -n "$primary" ] && [ -d "$(dagents_dir state "$primary")/sdd/$2" ]; then printf '%s\n' "$primary"
+  else printf '%s\n' "$1"; fi
 }
 
 plan_ledger() {

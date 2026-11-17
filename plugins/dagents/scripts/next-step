@@ -3,7 +3,8 @@
 # finishing, next program sub-project or roadmap epic, a milestone audit, or
 # nothing; for a design draft: its
 # next step — as a "## Next session" block, and write the same block into the
-# primary checkout's .dagents/handoff/latest.md.
+# handoff of the checkout the next session works in (T): the plan's worktree
+# for a plan in flight, the primary once it is complete, else this checkout.
 #
 # Sessions end by pasting this block verbatim, so what comes next is computed
 # here rather than remembered by the model: small executors reliably forget to
@@ -38,6 +39,9 @@
 #               wholesale unless --keep-notes, which keeps the notes above it.
 #   --latest    recompute the block latest.md holds from what its marker
 #               names (requires --print), and print it with the marker last.
+#   --target    print the absolute path of the handoff the same call would
+#               write, and exit 0: write nothing, and skip the background-work
+#               check. A usage error with --latest.
 #   --host      which client the next session launches; default claude. A plan
 #               states its own host in its header, so the flag serves the paths
 #               that have no plan to read.
@@ -70,11 +74,12 @@ usage() { fail 2 "usage: next-step [--host claude|codex] [--print] [--complete|-
 
 # --host and --print are pulled out wherever they sit so the remaining
 # arguments keep their strict positional contract.
-host=claude host_given=0 print_only=0
+host=claude host_given=0 print_only=0 target_only=0
 hostless=()
 while [ $# -gt 0 ]; do
   case $1 in
     --print) print_only=1; shift ;;
+    --target) target_only=1; shift ;;
     --host)
       [ $# -ge 2 ] || usage
       case $2 in claude|codex) host=$2 host_given=1 ;; *) usage ;; esac
@@ -206,7 +211,7 @@ complete=0 kept=0 draft=0 adhoc=0 project=0 keep_notes=0 latest_mode=0 phase="" 
 case "${1:-}" in
   --latest)
     latest_mode=1; shift
-    { [ $# -eq 0 ] && [ "$print_only" -eq 1 ]; } || usage
+    { [ $# -eq 0 ] && [ "$print_only" -eq 1 ] && [ "$target_only" -eq 0 ]; } || usage
     ;;
   --project)
     project=1; shift
@@ -280,7 +285,6 @@ status_line="" next_line="" prompt="" launch=1 launch_cmd="" launch_plan="" esca
 if [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ] || [ "$latest_mode" -eq 1 ]; then
   root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
   primary=$(plan_primary_root "$root")
-  dir=$primary
 else
   [ $# -eq 1 ] || usage
   plan=$(plan_locate "$1")
@@ -289,7 +293,6 @@ else
 
   root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
   primary=$(plan_primary_root "$root")
-  dir=$primary
 
   dagents_stores_init "$root"
   rel=$(dagents_name "$plan")
@@ -297,10 +300,19 @@ else
 fi
 
 dagents_stores_init "$root"
-# Shown repository-relative while progress is local, as before; the mirror's
-# path otherwise, which no checkout-relative name can reach.
-if [ "$(dagents_progress_store)" = darkmem ]; then latest_shown=$(dagents_latest_file)
-else latest_shown="$(dagents_dir_rel state "$primary")/handoff/latest.md"; fi
+# The draft and adhoc prompts name it; their T is this checkout.
+latest_shown=$(dagents_latest_file)
+
+# handoff_target — T, the checkout the next session works in (spec §2). A
+# mirror ledger has no checkout of its own: the one holding its workspace
+# stands in (_plan_ledger_tree).
+handoff_target() {
+  if [ "$complete" -eq 1 ]; then printf '%s\n' "$primary"
+  elif [ "$kept" -eq 1 ] || [ "$draft" -eq 1 ] || [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ]; then printf '%s\n' "$root"
+  elif [ "$has_ledger" -eq 1 ] && [ "$(dagents_progress_store)" = darkmem ]; then _plan_ledger_tree "$root" "$slug"
+  elif [ "$has_ledger" -eq 1 ]; then printf '%s\n' "$ledger_root"
+  else printf '%s\n' "$root"; fi
+}
 
 # --print --latest: the stored block, recomputed from what its marker names
 # when the repository can answer it, so a reader never replays a stale one.
@@ -670,7 +682,7 @@ else
       [ -z "$first_open" ] || next_line="$next_line Dispatch Task $first_open ($open_title) only once the group is clean."
     elif [ -z "$first_open" ]; then
       review_state=none
-      [ "$has_ledger" -eq 0 ] || review_state=$(plan_final_review_state "$ledger_file" "$ledger_root")
+      [ "$has_ledger" -eq 0 ] || review_state=$(plan_final_review_state "$ledger_file" "$(handoff_target)")
       case $review_state in
         current)
           status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
@@ -727,6 +739,12 @@ else
   fi
 fi
 
+# T's handoff is resolved in a subshell, so the cached roots stay this
+# checkout's.
+dir=$(handoff_target)
+handoff=$(dagents_stores_init "$dir"; dagents_latest_file "$dir")
+if [ "$target_only" -eq 1 ]; then printf '%s\n' "$handoff"; exit 0; fi
+
 # A block printed over running work invites ending the session it would die
 # with, so nothing is printed while this session still has background work
 # listed. Without a transcript (Codex, tests) there is nothing to check.
@@ -760,7 +778,6 @@ if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ "$adhoc" -eq 1 ]; then
   rm -f "$(dagents_dir state "$root")/sdd/finish.json" "$(dagents_dir state "$primary")/sdd/finish.json"
 fi
 
-handoff=$(dagents_latest_file)
 today=$(date -u +%Y-%m-%d)
 if [ "$adhoc" -eq 1 ]; then marker_kind=adhoc marker_subject=-
 elif [ "$project" -eq 1 ]; then marker_kind=project marker_subject=-

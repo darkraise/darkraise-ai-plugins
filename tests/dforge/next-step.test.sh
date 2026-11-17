@@ -174,7 +174,7 @@ run "$REPO" "$PLAN_REL"
 has "crlf: tasks still counted" "$out" "0 of 3 tasks complete"
 lacks "crlf: no carriage return in output" "$out" $'\r'
 
-# --- worktree: ledger in the worktree, handoff in the primary checkout ---
+# --- worktree: ledger in the worktree, handoff in the worktree ---
 write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
 WT="$TMP/wt"
 git -C "$REPO" worktree add -q -b feat "$WT"
@@ -184,10 +184,10 @@ printf '# SDD ledger — plan: %s\nTask 1: complete (x)\n' "$PLAN_REL" > "$WT/.d
 rm -f "$HANDOFF"
 run "$WT" "$PLAN_REL"
 has "worktree: reads the worktree ledger" "$out" "1 of 3 tasks complete"
-has "worktree: prompt names the worktree" "$out" "First enter the existing worktree \`$WT_ROOT\`."
-has "worktree: launch dir is still the primary checkout" "$out" "Launch in \`$ROOT\`:"
-check "worktree: handoff written in the primary checkout" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes"
-check "worktree: no handoff inside the worktree" "$([ -f "$WT/.dforge/handoff/latest.md" ] && echo yes || echo no)" "no"
+has "worktree: launch dir is the worktree" "$out" "Launch in \`$WT_ROOT\`:"
+check "worktree: handoff written in the worktree" "$([ -f "$WT_ROOT/.dforge/handoff/latest.md" ] && echo yes || echo no)" "yes"
+check "worktree: no handoff in the primary" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "no"
+rm -f "$WT_ROOT/.dforge/handoff/latest.md"
 mkdir -p "$WT/.dforge/sdd" "$REPO/.dforge/sdd"
 printf '{"action":"pr"}\n' > "$WT/.dforge/sdd/finish.json"
 printf '{"action":"pr"}\n' > "$REPO/.dforge/sdd/finish.json"
@@ -224,7 +224,7 @@ check "draft: exits 0" "$status" "0"
 has "draft: status names the authority" "$out" "**Status:** Design in progress: \`docs/specs/draft.md\` is the authority."
 has "draft: next action gains a full stop" "$out" "**Next:** Write the implementation plan with dforge:writing-plans."
 has "draft: planning launch command" "$out" "claude --model opus --effort high"
-has "draft: prompt" "$out" "Continue from \`docs/specs/draft.md\` (the authority): Write the implementation plan with dforge:writing-plans. Read \`.dforge/handoff/latest.md\` first."
+has "draft: prompt" "$out" "Continue from \`docs/specs/draft.md\` (the authority): Write the implementation plan with dforge:writing-plans. Read \`$ROOT/.dforge/handoff/latest.md\` first."
 hand=$(cat "$HANDOFF")
 has "draft: handoff keeps the notes" "$hand" "Keep me."
 lacks "draft: handoff drops the stale block" "$hand" "Old block."
@@ -237,10 +237,10 @@ check "draft of a missing file: exits 2" "$status" "2"
 printf '# Handoff\n\n## State\nItem C unscoped.\n\n## Next session\nOld block.\n' > "$HANDOFF"
 run "$REPO" --adhoc --phase design --next "Scope item C with dforge:brainstorming"
 check "adhoc design: exits 0" "$status" "0"
-has "adhoc: status names the authority" "$out" "**Status:** Unplanned work: the notes in \`.dforge/handoff/latest.md\` are the authority."
+has "adhoc: status names the authority" "$out" "**Status:** Unplanned work: the notes in \`$ROOT/.dforge/handoff/latest.md\` are the authority."
 has "adhoc: next action gains a full stop" "$out" "**Next:** Scope item C with dforge:brainstorming."
 has "adhoc design: opus launch command" "$out" "claude --model opus --effort high"
-has "adhoc: prompt" "$out" "Continue the unplanned work recorded in \`.dforge/handoff/latest.md\`: Scope item C with dforge:brainstorming."
+has "adhoc: prompt" "$out" "Continue the unplanned work recorded in \`$ROOT/.dforge/handoff/latest.md\`: Scope item C with dforge:brainstorming."
 hand=$(cat "$HANDOFF")
 has "adhoc: handoff keeps the notes" "$hand" "Item C unscoped."
 lacks "adhoc: handoff drops the stale block" "$hand" "Old block."
@@ -962,6 +962,86 @@ check "darkmem: latest.md is written to the mirror" \
   "$(grep -c '^## Next session' "$M/work/handoff/latest.md")" "1"
 check "darkmem: only latest.md and dotfiles sit beside it" "$(ls -A "$M/work/handoff" | grep -v '^\.' | tr '\n' ' ')" "latest.md "
 check "darkmem: nothing is written in the checkout" "$([ -e "$SR/.dforge/handoff/latest.md" ] && echo yes || echo no)" "no"
+
+# --- per-worktree handoffs (spec A2, A3, A6, A13, A14) ---
+# The Keep as-is block left a ledger for this plan in the primary; plan_ledger_any
+# checks the caller's checkout first, so it would make the primary T.
+rm -rf "$LEDGER_DIR"
+rm -rf "$HOME/.dforge" "$REPO/.dforge/handoff"
+# A Program line and an open register row, so --complete and --project print a block.
+write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
+OTHER_REL="docs/plans/2026-01-02-other.md"
+write_plan "$REPO/$OTHER_REL" "$EXEC_SUB" ""
+mkdir -p "$REPO/docs/dforge/registers"
+printf '# Demo — item register\n\n**Source:** test\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Open item | - | - | open | - |\n' \
+  > "$REPO/docs/dforge/registers/demo.md"
+git -C "$REPO" add "$PLAN_REL" "$OTHER_REL" docs/dforge/registers/demo.md && git -C "$REPO" commit -qm "two plans"
+WA="$TMP/wa"; WB="$TMP/wb"
+git -C "$REPO" worktree add -q -b wa "$WA"; git -C "$REPO" worktree add -q -b wb "$WB"
+WA_ROOT=$(git -C "$WA" rev-parse --show-toplevel); WB_ROOT=$(git -C "$WB" rev-parse --show-toplevel)
+WA_H="$WA_ROOT/.dforge/handoff/latest.md"; WB_H="$WB_ROOT/.dforge/handoff/latest.md"
+# The primary holds both plans' workspaces, as a plan review leaves them.
+mkdir -p "$REPO/.dforge/sdd/2026-01-01-demo" "$REPO/.dforge/sdd/2026-01-02-other" \
+  "$WA/.dforge/sdd/2026-01-01-demo" "$WB/.dforge/sdd/2026-01-02-other"
+printf 'lint\n' > "$REPO/.dforge/sdd/2026-01-01-demo/plan-lint.txt"
+printf 'lint\n' > "$REPO/.dforge/sdd/2026-01-02-other/plan-lint.txt"
+printf '# SDD ledger — plan: %s\nTask 1: complete (x)\n' "$PLAN_REL" > "$WA/.dforge/sdd/2026-01-01-demo/progress.md"
+printf '# SDD ledger — plan: %s\nTask 1: complete (x)\n' "$OTHER_REL" > "$WB/.dforge/sdd/2026-01-02-other/progress.md"
+run "$WA" "$PLAN_REL"; run "$WB" "$OTHER_REL"
+has "A2: the first worktree holds its plan's block" "$(cat "$WA_H")" "$PLAN_REL"
+lacks "A2: the first worktree does not name the other plan" "$(cat "$WA_H")" "2026-01-02-other"
+has "A2: the second worktree holds its plan's block" "$(cat "$WB_H")" "$OTHER_REL"
+lacks "A2: the second worktree does not name the first plan" "$(cat "$WB_H")" "2026-01-01-demo"
+check "A2: the primary's handoff is not written" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "no"
+rm -f "$WA_H"
+run "$REPO" "$PLAN_REL"
+has "A3: from the primary, the block launches in the ledger's worktree" "$out" "Launch in \`$WA_ROOT\`:"
+check "A3: from the primary, the worktree's handoff is written" "$([ -f "$WA_H" ] && echo yes || echo no)" "yes"
+check "A3: from the primary, the primary's handoff is not written" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "no"
+check "A13: --target from the primary names the worktree's handoff" "$(cd "$REPO" && bash "$SCRIPT" --target "$PLAN_REL")" "$WA_H"
+rm -f "$WA_H"
+check "A13: --target writes nothing" "$(cd "$WA" && bash "$SCRIPT" --target "$PLAN_REL" >/dev/null; [ -f "$WA_H" ] && echo yes || echo no)" "no"
+check "A13: --target for adhoc work names this checkout's" "$(cd "$WB" && bash "$SCRIPT" --target --adhoc --phase build --next x)" "$WB_H"
+(cd "$REPO" && bash "$SCRIPT" --target --latest >/dev/null 2>&1); check "A13: --target with --latest is a usage error" "$?" "2"
+(cd "$REPO" && bash "$SCRIPT" --target docs/plans/missing.md >/dev/null 2>&1); check "A13: --target of a missing plan exits 2" "$?" "2"
+# A13, every mode: --target names exactly the file the same call then writes.
+# Paths as git spells them (C:/… on Windows Git Bash), as --target prints them.
+written() { local f; for f in "$ROOT/.dforge/handoff/latest.md" "$WA_H" "$WB_H"; do [ -f "$f" ] && printf '%s ' "$f"; done; }
+for args in "$PLAN_REL" "--complete $PLAN_REL" "--kept $PLAN_REL" "--draft $OTHER_REL --next x" "--adhoc --phase build --next x" "--project"; do
+  rm -f "$HANDOFF" "$WA_H" "$WB_H"
+  # shellcheck disable=SC2086
+  t=$(cd "$WA" && bash "$SCRIPT" --target $args 2>/dev/null)
+  # shellcheck disable=SC2086
+  run "$WA" $args
+  check "A13: --target names the file written ($args)" "$(written)" "$t "
+done
+rm -f "$HANDOFF" "$WA_H" "$WB_H"
+# A13: background work running never stops --target (the stub in-flight reports a live launch).
+rm -rf "$TMP/stubscripts" && cp -R "$(dirname "$SCRIPT")" "$TMP/stubscripts"
+printf '#!/usr/bin/env bash\nprintf -- "- shell b1 10:00 idle 1m sleep\\n"\nexit 1\n' > "$TMP/stubscripts/in-flight"
+(cd "$WA" && bash "$TMP/stubscripts/next-step" "$PLAN_REL" >/dev/null 2>&1); check "A13: the in-flight stub makes a plain run exit 5" "$?" "5"
+t=$(cd "$WA" && bash "$TMP/stubscripts/next-step" --target "$PLAN_REL" 2>/dev/null); status=$?
+check "A13: --target with background work running exits 0 and names the path" "$status:$t" "0:$WA_H"
+rm -rf "$TMP/stubscripts"
+rm -f "$HANDOFF" "$WA_H"
+run "$WA" --complete "$PLAN_REL"
+has "A6: --complete launches in the primary" "$out" "Launch in \`$ROOT\`:"
+check "A6: --complete writes the primary's handoff" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes"
+rm -f "$HANDOFF" "$WA_H"
+run "$WA" --kept "$PLAN_REL"
+check "A6: --kept writes the handoff of the checkout it runs in" "$([ -f "$WA_H" ] && echo yes || echo no):$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes:no"
+rm -f "$WA_H"
+# A14: darkmem progress, ledger in the mirror; the primary also holds the workspace.
+. "$HERE/fixtures/darkmem-stores.sh"
+MIRROR=$(stores_home "$HOME" "$REPO" demo local darkmem)
+mkdir -p "$MIRROR/work/sdd/2026-01-01-demo"
+printf '# SDD ledger — plan: %s\nTask 1: complete (x)\n' "$PLAN_REL" > "$MIRROR/work/sdd/2026-01-01-demo/progress.md"
+rm -f "$WA/.dforge/sdd/2026-01-01-demo/progress.md"
+run "$REPO" "$PLAN_REL"
+has "A14: darkmem: launches in the worktree holding the workspace" "$out" "Launch in \`$WA_ROOT\`:"
+check "A14: darkmem: the worktree's handoff is written" "$([ -f "$WA_H" ] && echo yes || echo no)" "yes"
+check "A14: darkmem: the mirror's handoff is not written" "$([ -f "$MIRROR/work/handoff/latest.md" ] && echo yes || echo no)" "no"
+rm -rf "$HOME/.dforge"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

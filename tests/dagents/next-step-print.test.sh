@@ -334,9 +334,9 @@ printf -- '- 2026-10-02 — `docs/dagents/plans/2026-10-02-b.md` — merged\n' >
 git -C "$L" add -A && git -C "$L" commit -qm index
 git -C "$L" worktree add -q --detach "$TMP/latest-wt" HEAD~1
 (cd "$TMP/latest-wt" && timeout 60 bash "$SCRIPT" --adhoc --phase build --next "Fix the thing." >/dev/null 2>&1)
-has "counts: a block written in an older worktree counts the primary's index" "$(LATEST=$LL section_last)" " done=2 "
-latest
-check "counts: that block is not superseded in the primary" "$status" 0
+has "counts: a block written in an older worktree counts the primary's index" "$(LATEST="$TMP/latest-wt/.dagents/handoff/latest.md" section_last)" " done=2 "
+out=$(cd "$TMP/latest-wt" && timeout 120 bash "$SCRIPT" --print --latest 2>/dev/null); status=$?
+check "counts: that block is not superseded in its worktree" "$status" 0
 git -C "$L" worktree remove --force "$TMP/latest-wt"
 
 # --- timing: 1,000 rows across 10 registers and 25 plans naming one spec ---
