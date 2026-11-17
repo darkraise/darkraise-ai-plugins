@@ -584,7 +584,7 @@ test('A22: a dagents suite sharing a dforge suite\'s basename has its own limit,
   }
   assert.ok(differing > 0, 'at least one shared basename is limited, split or weighed differently per plugin');
   for (const map of [shards.windowsSeconds, shards.suiteSeconds, shards.suiteParts]) {
-    for (const key of Object.keys(map)) assert.match(key, /^plugins\//, `${key} is keyed by plugin-relative path`);
+    for (const key of Object.keys(map)) assert.match(key, /^(plugins\/[a-z0-9-]+\/)?tests\/[^/]+$/, `${key} is keyed by repository path`);
   }
   for (const [path, entry] of agents) assert.equal(shards.checkShellWeights([[ 'bash', [path, ...entry.parts[0]], entry.seconds ]]).filter(problem => problem.includes('no weight')).length, 0, path);
 });
