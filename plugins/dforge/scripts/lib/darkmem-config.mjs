@@ -144,9 +144,9 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
       ledgerRoot: applied.progress === "darkmem"
         ? path.join(sync.mirror, "work", "sdd")
         : worktreeRoot && path.join(dforgeDir("state", worktreeRoot), "sdd"),
-      latestFile: applied.progress === "darkmem"
+      latestFile: applied.progress === "darkmem" && samePath(worktreeRoot, repoRoot)
         ? path.join(sync.mirror, "work", "handoff", "latest.md")
-        : (repoRoot ?? worktreeRoot) && path.join(dforgeDir("state", repoRoot ?? worktreeRoot), "handoff", "latest.md"),
+        : worktreeRoot && path.join(dforgeDir("state", worktreeRoot), "handoff", "latest.md"),
     },
     sync,
   });

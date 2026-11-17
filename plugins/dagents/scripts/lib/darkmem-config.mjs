@@ -146,7 +146,7 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
         : worktreeRoot && path.join(dagentsDir("state", worktreeRoot), "sdd"),
       latestFile: applied.progress === "darkmem"
         ? path.join(sync.mirror, "work", "handoff", "latest.md")
-        : (repoRoot ?? worktreeRoot) && path.join(dagentsDir("state", repoRoot ?? worktreeRoot), "handoff", "latest.md"),
+        : worktreeRoot && path.join(dagentsDir("state", worktreeRoot), "handoff", "latest.md"),
     },
     sync,
   });

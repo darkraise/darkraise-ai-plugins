@@ -188,7 +188,7 @@ test("a pre-2.0 checkout's directories and home are not read", () => {
   assert.equal(stores.progress.ledgerRoot, path.join(repo, ".dagents", "sdd"));
 });
 
-test("a linked worktree keeps local families in itself and latest.md in the primary checkout", () => {
+test("a linked worktree keeps local families and latest.md in itself", () => {
   const repo = makeRepo();
   const { env } = makeHome({ repo, stores: { documents: "local", progress: "local" } });
   const worktree = path.join(scratch("dms-wt-"), "wt");
@@ -197,7 +197,8 @@ test("a linked worktree keeps local families in itself and latest.md in the prim
   assert.equal(stores.sync.project, "proj");
   assert.equal(stores.documents.root, path.join(worktree, "docs", "dagents"));
   assert.equal(stores.progress.ledgerRoot, path.join(worktree, ".dagents", "sdd"));
-  assert.equal(stores.progress.latestFile, path.join(repo, ".dagents", "handoff", "latest.md"));
+  assert.equal(stores.progress.latestFile, path.join(worktree, ".dagents", "handoff", "latest.md"));
+  assert.equal(resolveStores({ cwd: repo, env }).progress.latestFile, path.join(repo, ".dagents", "handoff", "latest.md"));
 });
 
 test("an unmapped repository and no git repository are local", () => {
