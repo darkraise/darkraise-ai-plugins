@@ -479,10 +479,13 @@ async function copyDarkmem(client, project) {
     const copy = await client.getDocument(project, uri);
     if (copy?.content !== source.content || copy?.content_hash !== item.content_hash) problems.push(`${uri} reads back other than ${item.uri}`);
   }
-  const all = await client.workstreams(project);
+  // Each state asked for by name: a server listing only open ones by default
+  // would otherwise skip every finished plan's ledger.
+  const listed = [...await client.workstreams(project, "open"), ...await client.workstreams(project, "closed")];
+  const all = [...new Map(listed.map(ws => [ws.id, ws])).values()];
   const byKey = new Map(all.map(ws => [ws.key, ws]));
-  const keys = all.filter(ws => typeof ws.key === "string" && !ws.key.includes("/")).map(ws => ws.key).sort();
-  for (const key of keys) {
+  const keys = [];
+  for (const key of all.filter(ws => typeof ws.key === "string" && !ws.key.includes("/")).map(ws => ws.key).sort()) {
     const ws = byKey.get(key);
     const target = `${WORKSTREAM_PREFIX}${key}`;
     const source = await client.entries(ws.id);
@@ -501,10 +504,13 @@ async function copyDarkmem(client, project) {
       const answer = await client.append({ project, workstream: target, entries, properties });
       copy = answer.workstream;
     }
+    // An empty workstream has nothing to copy and is not offered for deletion.
     if (!copy) continue;
-    if (missing.length && (ws.state === "closed" || ws.retain === true)) {
-      await client.updateWorkstream(copy.id, { ...(ws.state === "closed" ? { state: "closed" } : {}), ...(ws.retain === true ? { retain: true } : {}) });
-    }
+    keys.push(key);
+    const patch = {};
+    if (ws.state === "closed" && copy.state !== "closed") patch.state = "closed";
+    if (ws.retain === true && copy.retain !== true) patch.retain = true;
+    if (Object.keys(patch).length) await client.updateWorkstream(copy.id, patch);
     const back = await client.entries(copy.id);
     if (!source.every((entry, index) => back[index] && sameEntry(entry, back[index]))) problems.push(`${target} reads back other than ${key}`);
   }
@@ -625,6 +631,11 @@ export async function migrateDforge(env = process.env, { dryRun = false, root, l
   const mirror = typeof record?.mirror === "string" ? record.mirror : undefined;
   const mirrorHeld = mirror !== undefined && fs.existsSync(mirror);
   const sharedMirror = mirrorHeld && Object.entries(stores).some(([key, other]) => key !== recordKey && typeof other?.mirror === "string" && samePath(other.mirror, mirror));
+  // The path comes from a hand-editable file and is deleted once copied.
+  if (mirrorHeld && !fs.existsSync(path.join(mirror, ".sync-state.json")) && !fs.existsSync(path.join(mirror, DFORGE_PREFIX))) {
+    refuse(`${mirror}, which ${storesFile} names as ${root}'s mirror, holds neither .sync-state.json nor ${DFORGE_PREFIX}/; fix the record, then run dagents-migrate again`);
+    return answer();
+  }
   if (mirrorHeld && fs.existsSync(target)) {
     refuse(`${target} exists, so ${mirror} was not moved; move one aside, then run dagents-migrate again`);
     return answer();
@@ -635,62 +646,74 @@ export async function migrateDforge(env = process.env, { dryRun = false, root, l
     return answer();
   }
 
-  const applied = ["documents", "progress"].some(family => record?.[family] === "darkmem");
-  if (applied || (mapping !== undefined && config.darkmemEnabled === true)) {
-    const keyEnv = typeof darkmem?.api_key_env === "string" && darkmem.api_key_env ? darkmem.api_key_env : "DARKMEM_API_KEY";
-    if (typeof darkmem?.url !== "string" || !/^https?:\/\/\S+$/.test(darkmem.url) || !env[keyEnv]) {
-      refuse(`copying darkmem project ${project} needs darkmem.url in ${configFile} and ${keyEnv} set; nothing in the home was moved`);
+  // Held from before the darkmem copy until the mirror is in place, so no
+  // sync appends a ledger line the copy misses but the moved state records.
+  let release = null;
+  if (!dryRun && mirrorHeld) {
+    release = acquireLock(mirror);
+    if (!release) {
+      refuse(`${mirror} is held by a darkmem sync; try again once it is done`);
       return answer();
     }
-    if (dryRun) {
-      lines.push(`would copy darkmem project ${project}'s ${DFORGE_PREFIX}/ documents and its workstreams to ${DOC_PREFIX}/, reading each copy back and deleting nothing`);
-    } else {
-      let copied;
-      try {
-        const client = connect({ url: darkmem.url.replace(/\/+$/, ""), apiKey: env[keyEnv], runKey: runKey({ cwd: root, env }) });
-        copied = await copyDarkmem(client, project);
-      } catch (error) {
-        if (!(error instanceof HttpError) && !(error instanceof TransportError)) throw error;
-        refuse(`darkmem could not be copied (${error.message}); nothing in the home was moved and nothing in darkmem was deleted`);
-        return answer();
-      }
-      if (copied.problems.length) {
-        for (const problem of copied.problems) refuse(problem);
-        lines.push(`nothing in the home was moved and nothing in darkmem was deleted`);
-        return answer();
-      }
-      if (copied.documents || copied.keys.length) {
-        const purge = copied.keys.length ? ` and worklog_purge (project ${project}) on the workstreams ${copied.keys.join(", ")}` : "";
-        lines.push(`copied darkmem project ${project}'s ${copied.documents} ${DFORGE_PREFIX}/ document(s) and ${copied.keys.length} workstream(s) to ${DOC_PREFIX}/ and read each copy back`);
-        lines.push(`${DFORGE_PREFIX}/ documents and workstreams were copied, not deleted; to delete them once no dforge checkout maps ${project}, run: the darkmem MCP tools document_delete_subtree (project ${project}, uri_prefix ${DFORGE_PREFIX}/)${purge}; they need an admin-scoped key`);
-      } else {
-        lines.push(`darkmem project ${project} holds no ${DFORGE_PREFIX}/ documents or workstreams to copy`);
-      }
-    }
+  }
+  try {
+    if (!(await moveData())) return answer();
+  } finally {
+    release?.();
   }
 
-  if (mirrorHeld) {
-    const verb = sharedMirror ? "copied" : "moved";
-    if (!dryRun) {
-      const release = acquireLock(mirror);
-      if (!release) {
-        refuse(`${mirror} is held by a darkmem sync; try again once it is done`);
-        return answer();
+  async function moveData() {
+    const applied = ["documents", "progress"].some(family => record?.[family] === "darkmem");
+    if (applied || (mapping !== undefined && config.darkmemEnabled === true)) {
+      const keyEnv = typeof darkmem?.api_key_env === "string" && darkmem.api_key_env ? darkmem.api_key_env : "DARKMEM_API_KEY";
+      if (typeof darkmem?.url !== "string" || !/^https?:\/\/\S+$/.test(darkmem.url) || !env[keyEnv]) {
+        refuse(`copying darkmem project ${project} needs darkmem.url in ${configFile} and ${keyEnv} set; nothing in the home was moved`);
+        return false;
       }
-      try {
-        copyMirror(mirror, target);
-        if (!sharedMirror) fs.rmSync(mirror, { recursive: true, force: true });
-      } catch (error) {
-        if (!(error instanceof StateError)) throw error;
-        refuse(error.message);
-        return answer();
-      } finally {
-        release();
+      if (dryRun) {
+        lines.push(`would copy darkmem project ${project}'s ${DFORGE_PREFIX}/ documents and its workstreams to ${DOC_PREFIX}/, reading each copy back and deleting nothing`);
+      } else {
+        let copied;
+        try {
+          const client = connect({ url: darkmem.url.replace(/\/+$/, ""), apiKey: env[keyEnv], runKey: runKey({ cwd: root, env }) });
+          copied = await copyDarkmem(client, project);
+        } catch (error) {
+          if (!(error instanceof HttpError) && !(error instanceof TransportError)) throw error;
+          refuse(`darkmem could not be copied (${error.message}); nothing in the home was moved and nothing in darkmem was deleted`);
+          return false;
+        }
+        if (copied.problems.length) {
+          for (const problem of copied.problems) refuse(problem);
+          lines.push(`nothing in the home was moved and nothing in darkmem was deleted`);
+          return false;
+        }
+        if (copied.documents || copied.keys.length) {
+          const purge = copied.keys.length ? ` and worklog_purge (project ${project}) on the workstreams ${copied.keys.join(", ")}` : "";
+          lines.push(`copied darkmem project ${project}'s ${copied.documents} ${DFORGE_PREFIX}/ document(s) and ${copied.keys.length} workstream(s) to ${DOC_PREFIX}/ and read each copy back`);
+          lines.push(`${DFORGE_PREFIX}/ documents and workstreams were copied, not deleted; to delete them once no dforge checkout maps ${project}, run: the darkmem MCP tools document_delete_subtree (project ${project}, uri_prefix ${DFORGE_PREFIX}/)${purge}; they need an admin-scoped key`);
+        } else {
+          lines.push(`darkmem project ${project} holds no ${DFORGE_PREFIX}/ documents or workstreams to copy`);
+        }
       }
     }
-    const why = sharedMirror ? ` (another ${storesFile} record still names it)` : "";
-    did(`${verb} ${mirror} to ${target}${why}, its ${DFORGE_PREFIX}/ folder and sync state renamed to ${DOC_PREFIX}/`,
-      `would ${sharedMirror ? "copy" : "move"} ${mirror} to ${target}${why}, renaming its ${DFORGE_PREFIX}/ folder and sync state to ${DOC_PREFIX}/`);
+
+    if (mirrorHeld) {
+      const verb = sharedMirror ? "copied" : "moved";
+      if (!dryRun) {
+        try {
+          copyMirror(mirror, target);
+          if (!sharedMirror) fs.rmSync(mirror, { recursive: true, force: true });
+        } catch (error) {
+          if (!(error instanceof StateError)) throw error;
+          refuse(error.message);
+          return false;
+        }
+      }
+      const why = sharedMirror ? ` (another ${storesFile} record still names it)` : "";
+      did(`${verb} ${mirror} to ${target}${why}, its ${DFORGE_PREFIX}/ folder and sync state renamed to ${DOC_PREFIX}/`,
+        `would ${sharedMirror ? "copy" : "move"} ${mirror} to ${target}${why}, renaming its ${DFORGE_PREFIX}/ folder and sync state to ${DOC_PREFIX}/`);
+    }
+    return true;
   }
 
   if (record !== undefined) {
