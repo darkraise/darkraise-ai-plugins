@@ -114,10 +114,6 @@ type World = {
   autoRunExits?: Record<string, number>
   /** The auto-run state file the fake script updates, as the real one would. */
   autoFile?: { text: string }
-  /** What `darkmem-config.mjs --mode` answers; `missing` rejects as a missing node does. Git porcelain with exit 0 unless said. */
-  modeOut?: { exitCode: number; stdout: string; stderr: string } | 'missing' | 'rejects' | 'timeout'
-  /** The directory each `--mode` call names. */
-  modeRuns?: string[]
   /** The primary checkout `git rev-parse --git-common-dir` points into; the session's repository unless said. */
   primary?: string
   /** What each `next-step --print --latest` run answers, in turn: an exit and its stdout, `timeout`, `hang` (never settles) or a function that settles it later; with none left, exit 6. */
@@ -325,16 +321,6 @@ function world(on: On, w: World) {
       }
       const stderr = w.isDagentsConfigRefusing ? 'dagents-config: /home/me/.claude/settings.json is not valid JSON; fix or remove it\n' : ''
       return { value: { exitCode: w.isDagentsConfigRefusing ? 1 : 0, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false } }
-    }
-    if (argv.includes('/scripts/lib/darkmem-config.mjs ')) {
-      w.modeRuns?.push(e.argv[e.argv.length - 1] ?? '')
-      if (w.modeOut === 'missing') {
-        return clock.advance(5_000).then(() => ({ deny: 'dagents: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"' }))
-      }
-      if (w.modeOut === 'rejects') return { deny: 'the engine refused to start the process' }
-      if (w.modeOut === 'timeout') return { deny: 'dagents: $.process.run(node) aborted: still running after 5000ms' }
-      const out = w.modeOut ?? { exitCode: 0, stdout: PORCELAIN, stderr: '' }
-      return { value: { ...out, isStdoutTruncated: false, isStderrTruncated: false } }
     }
     if (argv === 'node --version') {
       if (w.isNodeMissing) return { deny: 'dagents: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"' }

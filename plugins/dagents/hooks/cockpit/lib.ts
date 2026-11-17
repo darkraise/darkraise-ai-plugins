@@ -1,4 +1,4 @@
-import type { CockpitAutoRun, CockpitFinish, CockpitRoots } from '../../types'
+import type { CockpitAutoRun, CockpitFinish } from '../../types'
 
 // Pure helpers, kept apart from the hooks so tests can reach them directly.
 
@@ -1074,21 +1074,18 @@ export function statMissing(error: unknown, isAboveDir: boolean): boolean {
 }
 
 /**
- * Where a ledger's plan name may be read, in order (darkmem store options spec
- * §7.1 and §7.3): an absolute name as written; a document name under the docs
- * root while documents are in darkmem, else under each checkout's own docs
- * directory; any other name under each checkout. The session's checkout comes
- * first. A ledger dforge 4.x wrote cites its plan as docs/dforge/<rest>, one
+ * Where a ledger's plan name may be read, in order: an absolute name as
+ * written; a document name under each checkout's own docs directory; any
+ * other name under each checkout. The session's checkout comes first. A ledger dforge 4.x wrote cites its plan as docs/dforge/<rest>, one
  * written before 4.0.0 as docs/forge/<rest>, or before 3.0.0 as
  * docs/superpowers/<rest>; each still names docs/dagents/<rest>: ledgers are
  * never rewritten.
  */
-export function planCandidates(plan: string, docs: CockpitRoots['docs'] | null, checkouts: readonly { root: string; docsDir: string }[]): string[] {
+export function planCandidates(plan: string, checkouts: readonly { root: string; docsDir: string }[]): string[] {
   if (isAbsolutePath(plan)) return [plan]
   const name = plan.replace(/^\.\//, '')
   const doc = /^docs\/(?:dagents|dforge|forge|superpowers)(?:\/(.*))?$/.exec(name)
   const under = (dir: string) => (doc?.[1] ? `${dir}/${doc[1]}` : dir)
-  if (doc && docs?.store === 'darkmem') return [under(docs.root)]
   const seen = new Set<string>()
   return checkouts.filter(one => !seen.has(one.root) && Boolean(seen.add(one.root))).map(one => (doc ? under(one.docsDir) : `${one.root}/${name}`))
 }
@@ -1616,25 +1613,6 @@ export function parseFinish(text: string): CockpitFinish | null {
   } catch {
     return null
   }
-}
-
-/**
- * The roots `darkmem-config.mjs --mode` prints (darkmem store options spec
- * §7.3): a documents and a progress line, then a project line when the
- * repository is mapped. Null when either family's line is missing.
- */
-export function parseModeLines(text: string): CockpitRoots | null {
-  let docs: CockpitRoots['docs'] | null = null
-  let progress: CockpitRoots['progress'] | null = null
-  let project: string | null = null
-  for (const line of text.split(/\r?\n/)) {
-    const [kind, store, root, extra] = line.split('\t')
-    if (kind === 'project' && store) project = store
-    if (store !== 'local' && store !== 'darkmem') continue
-    if (kind === 'documents' && root) docs = { store, root }
-    if (kind === 'progress' && root && extra) progress = { store, ledgerRoot: root, latestFile: extra }
-  }
-  return docs === null || progress === null ? null : { docs, progress, project }
 }
 
 /**

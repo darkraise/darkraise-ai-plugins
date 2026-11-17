@@ -11,7 +11,6 @@ import type {
   CockpitPlanItem,
   CockpitRefusal,
   CockpitResumeOffer,
-  CockpitRoots,
   CockpitRun,
   CockpitSeat,
   CockpitSettingsView,
@@ -59,7 +58,6 @@ import {
   nowLine,
   parseFinish,
   parseLedger,
-  parseModeLines,
   planCandidates,
   planTasks,
   planFromTodos,
@@ -140,7 +138,7 @@ const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dagents handoff skill. Start no new task.'
 function resumePrompt(): string {
-  return `Resume the work in ${S.latestName ?? '.dagents/handoff/latest.md'} with the dagents resume-execution skill.`
+  return 'Resume the work in .dagents/handoff/latest.md with the dagents resume-execution skill.'
 }
 // A handoff older than this is not offered for resuming.
 const RESUME_WITHIN = 3 * 86_400_000
@@ -275,7 +273,6 @@ const run = atom({ plugin: 'dagents', key: 'run' } as const, null)
 const finish = atom({ plugin: 'dagents', key: 'finish' } as const, null)
 const resumeOffer = atom({ plugin: 'dagents', key: 'resumeOffer' } as const, null)
 const resumeDismissed = atom({ plugin: 'dagents', key: 'resumeDismissed' } as const, null)
-const rootsNote = atom({ plugin: 'dagents', key: 'rootsNote' } as const, null)
 const settings = atom({ plugin: 'dagents', key: 'settings' } as const, null)
 const SETTINGS_VIEW: CockpitSettingsView = { tab: '', isHelpShown: true, editing: null, error: null, isConfirmingReset: false }
 const settingsView = atom({ plugin: 'dagents', key: 'settingsView' } as const, SETTINGS_VIEW)
@@ -957,7 +954,6 @@ export const register: Register = on => {
     const act = await read($, activity)
     const summary = await read($, run)
     const finishNow = await read($, finish)
-    const rootsNow = await read($, rootsNote)
     const offer = await offerNow($, now)
     const drawRuns = (key: string, runs: Run[]) =>
       runs.map((one, index) => (
@@ -1472,12 +1468,6 @@ export const register: Register = on => {
     const engineNow = await read($, engine)
     const turnsLeft = head === null ? null : turnsToBudget(await read($, turnTokens), head.limit)
     const isFinishingPast = head !== null && head.isFinishing && head.tokens >= head.limit
-    // Why the plan section reads checkout paths rather than the roots.
-    const rootsLine = rootsNow !== null && (
-      <Text key="plan-roots" color="red" wrap="truncate-end">
-        {rootsNow}
-      </Text>
-    )
     const runCard = () => {
       if (summary === null) return null
       const blocked = summary.tasks.filter(task => task.state === 'blocked')
@@ -1508,7 +1498,6 @@ export const register: Register = on => {
             plan {summary.plan}
           </Text>
         ),
-        rootsLine,
         finishNow !== null && finishLine(finishNow).length > 0 && (
           <Text key="plan-finish" wrap="truncate-end">
             {drawRuns('plan-finish-runs', finishLine(finishNow))}
@@ -1826,23 +1815,20 @@ export const register: Register = on => {
               {drawRuns('plan-finish-runs', finishLine(finishNow))}
             </Text>
           ),
-          rootsLine,
         )
         ) : (
-          (rootsLine !== false || (finishNow !== null && finishLine(finishNow).length > 0)) &&
+          finishNow !== null &&
+          finishLine(finishNow).length > 0 &&
           section(
             'plan',
             'Plan',
-            rootsLine !== false ? 'red' : 'yellow',
+            'yellow',
             <Text key="plan-head" dimColor>
-              {rootsLine !== false ? 'checkout paths' : 'no plan'}
+              no plan
             </Text>,
-            finishNow !== null && finishLine(finishNow).length > 0 && (
-              <Text key="plan-finish" wrap="truncate-end">
-                {drawRuns('plan-finish-runs', finishLine(finishNow))}
-              </Text>
-            ),
-            rootsLine,
+            <Text key="plan-finish" wrap="truncate-end">
+              {drawRuns('plan-finish-runs', finishLine(finishNow))}
+            </Text>,
           )
         ),
       repo:
@@ -2076,7 +2062,6 @@ export const register: Register = on => {
             const round = runRound(summary)
             const lines: PanelLine[] = [{ kind: 'picture', svg: segmentsSvg(summary.tasks.map(task => RUN_SEGMENTS[task.state] ?? 'todo'), width, 6) }]
             if (summary.plan !== null) lines.push({ kind: 'text', small: true, left: [{ text: summary.plan, mono: true, dim: true }] })
-            if (rootsNow !== null) lines.push({ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] })
             if (finishNow !== null && finishLine(finishNow).length > 0) lines.push({ kind: 'chips', chips: [{ ...pill(finishLine(finishNow).map(run => run.text).join('')), color: 'yellow' }] })
             for (const task of runList(summary.tasks, 6)) {
               const label = `Task ${task.n}${task.title === '' ? '' : `: ${task.title}`}`
@@ -2121,10 +2106,7 @@ export const register: Register = on => {
           }
           const finishChips: PanelLine[] = finishNow !== null && finishLine(finishNow).length > 0 ? [{ kind: 'chips', chips: [{ ...pill(finishLine(finishNow).map(run => run.text).join('')), color: 'yellow' }] }] : []
           if (items.length === 0) {
-            return (rootsNow !== null || finishChips.length > 0) && panel('plan', 'Plan', rootsNow !== null ? 'red' : 'yellow', [{ text: rootsNow !== null ? 'checkout paths' : 'no plan' }], [
-              ...finishChips,
-              ...(rootsNow !== null ? [{ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] } as PanelLine] : []),
-            ])
+            return finishChips.length > 0 && panel('plan', 'Plan', 'yellow', [{ text: 'no plan' }], finishChips)
           }
           return panel('plan', 'Plan', 'yellow', [{ text: `${doneCount}/${items.length}` }], [
             { kind: 'picture', svg: segmentsSvg(items.map(item => (item.status === 'completed' ? 'done' : item.status === 'in_progress' ? 'active' : 'todo')), width, 6) },
@@ -2138,7 +2120,6 @@ export const register: Register = on => {
               }),
             ),
             ...finishChips,
-            ...(rootsNow !== null ? [{ kind: 'text', small: true, left: [{ text: rootsNow, color: 'red' }] } as PanelLine] : []),
           ])
         })(),
         repo:
@@ -2634,12 +2615,6 @@ const S = {
   reconcileSeen: { key: '', count: 0 },
   // The watchdog's timer, every WATCHDOG_MS.
   watchdog: null as Timer | null,
-  // The roots --mode last named, and the checkout and the
-  // modification times of stores.json and config.json they were read for.
-  roots: { key: '', value: null } as { key: string; value: CockpitRoots | null },
-  // latest.md's absolute path while progress is in darkmem; null while it is
-  // in the checkout, where the resume prompt names it by its state directory.
-  latestName: null as string | null,
   // The latest.md path and modification time the resume offer was read for.
   offerRead: '',
   // That note's text and its age (its marker's at, else the file's time).
@@ -3366,12 +3341,6 @@ async function stopAutoRun($: EngineInterface) {
   await readRun($)
 }
 
-// The roots darkmem-config.mjs --mode names for the session's checkout (store
-// options spec §7.3). Read again when the checkout, ~/.dagents/stores.json or
-// ~/.dagents/config.json changes, so the session that ran a move or mapped the
-// repository sees the new roots. Null keeps the checkout paths: silently
-// without node, mode lines or either file, with a note in the pane when the
-// run fails or outruns its 5 seconds.
 // A node that cannot start: the engine's "failed to start", or a shell's
 // "node: not found" (exit 127). Any other stderr is the script's own, ENOENT
 // included.
@@ -3380,40 +3349,6 @@ const NO_NODE = /failed to start|\bnode: (?:command )?not found/i
 // 2.1.299: "…aborted: still running after 5000ms"); a command that cannot
 // start rejects "…failed to start: ENOENT…" instead.
 const TIMED_OUT = /still running after/i
-
-async function readRoots($: EngineInterface, checkout: string): Promise<CockpitRoots | null> {
-  const home = (await read($, place))?.home ?? null
-  const mtimeOf = async (name: string) => (home === null ? null : ((await $.fs.stat(`${home}/.dagents/${name}`).catch(() => null))?.mtimeMs ?? null))
-  const stores = await mtimeOf('stores.json')
-  const config = await mtimeOf('config.json')
-  const key = `${checkout}|${stores ?? 'none'}|${config ?? 'none'}`
-  if (S.roots.key === key) return S.roots.value
-  let value: CockpitRoots | null = null
-  let note: string | null = null
-  let isTimedOut = false
-  // Without either file every store is local, which the checkout paths
-  // already are: there is nothing to ask node.
-  if (stores !== null || config !== null) {
-    try {
-      const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/darkmem-config.mjs`, '--mode', checkout], { timeoutMs: 5000 })
-      if (ran.exitCode === 0) value = parseModeLines(ran.stdout)
-      else if (!NO_NODE.test(ran.stderr)) {
-        note = ran.stderr.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? `darkmem-config.mjs --mode exited ${ran.exitCode}`
-      }
-    } catch (error) {
-      // run rejects only when the command cannot start or outlives timeoutMs;
-      // any other wording, a later engine's included, keeps the paths silently.
-      if (TIMED_OUT.test(String(error))) {
-        isTimedOut = true
-        note = 'darkmem-config.mjs --mode gave no answer within 5 seconds'
-      }
-    }
-  }
-  // A run that timed out is not kept: the next read tries again.
-  S.roots = isTimedOut ? { key: '', value: null } : { key, value }
-  if ((await read($, rootsNote)) !== note) await update($, rootsNote, () => note)
-  return value
-}
 
 // finish.json for the newest ledger's slug, or the no-plan one: it stays in
 // the workspace of the worktree that ran the plan, so the session's checkout
@@ -3439,7 +3374,6 @@ async function readResumeOffer(
   $: EngineInterface,
   latest: string,
   mtime: number | null,
-  docs: CockpitRoots['docs'] | null,
   places: readonly { root: string; docsDir: string }[],
   primary: string,
 ) {
@@ -3456,7 +3390,7 @@ async function readResumeOffer(
     return
   }
   if ((await read($, resumeDismissed)) === stored.at || (await read($, isPlanSession)) || (await read($, autoRun))?.active) return
-  const runKey = [key, ...(await offerTimes($, docs, places, stored.subject))].join('\t')
+  const runKey = [key, ...(await offerTimes($, places, stored.subject))].join('\t')
   if (S.isOfferRunning || S.offerRanKey === runKey) return
   S.offerRanKey = runKey
   S.isOfferRunning = true
@@ -3467,7 +3401,7 @@ async function readResumeOffer(
   void $.process
     .run(argv, { timeoutMs: 20_000 })
     .catch(() => null)
-    .then(ran => offerFrom($, ran, stored, docs, places))
+    .then(ran => offerFrom($, ran, stored, places))
     .then(async offer => {
       if (JSON.stringify(await read($, resumeOffer)) !== JSON.stringify(offer)) await update($, resumeOffer, () => offer)
     })
@@ -3482,11 +3416,10 @@ async function readResumeOffer(
 // The subject's ledger is left out: the offer is hidden in a plan session.
 async function offerTimes(
   $: EngineInterface,
-  docs: CockpitRoots['docs'] | null,
   places: readonly { root: string; docsDir: string }[],
   subject: string | null,
 ): Promise<string[]> {
-  const where = (name: string) => planCandidates(name, docs, places)
+  const where = (name: string) => planCandidates(name, places)
   const paths = [...where('docs/dagents/plans/completed.md'), ...where('docs/dagents/roadmap.md'), ...where('docs/dagents/plans'), ...(subject === null ? [] : where(subject))]
   for (const dir of where('docs/dagents/registers')) {
     for (const entry of (await $.fs.list(dir).catch(() => null)) ?? []) {
@@ -3505,7 +3438,6 @@ async function offerFrom(
   $: EngineInterface,
   ran: { exitCode: number; stdout: string } | null,
   stored: { text: string; at: number },
-  docs: CockpitRoots['docs'] | null,
   places: readonly { root: string; docsDir: string }[],
 ): Promise<CockpitResumeOffer | null> {
   if (ran?.exitCode === 6) return null
@@ -3515,11 +3447,10 @@ async function offerFrom(
   }
   const found = resumeOfferOf(stored.text)
   if (found === null) return null
-  // A register name resolves as a plan name does: into the darkmem docs
-  // mirror while documents live there, else the first checkout holding it.
+  // A register name resolves as a plan name does: the first checkout holding it.
   const registers: string[] = []
   for (const name of found.prompt === null ? [] : promptRegisters(found.prompt)) {
-    const candidates = planCandidates(name, docs, places)
+    const candidates = planCandidates(name, places)
     let chosen = candidates[0] ?? name
     for (const candidate of candidates) {
       if ((await $.fs.stat(candidate).catch(() => null))?.kind === 'file') {
@@ -3553,10 +3484,9 @@ async function resume($: EngineInterface, offer: CockpitResumeOffer) {
   await $.prompt.submit({ text: offer.prompt ?? resumePrompt(), asUser: true })
 }
 
-// The run's ledger, its plan's tasks, and the newest handoff, read where the
-// roots put them (store options spec §7.3): while progress is local, the
-// ledgers under the session worktree's .dagents/, as sdd-workspace writes them,
-// and the handoff under the primary checkout's; the darkmem mirror while it is not.
+// The run's ledger, its plan's tasks, and the newest handoff: the ledgers
+// under the session worktree's .dagents/, as sdd-workspace writes them, and
+// the handoff under the primary checkout's.
 async function readRun($: EngineInterface) {
   // A poll tick's read and a tool call's can overlap: only the latest writes.
   const reading = ++S.runReads
@@ -3564,20 +3494,17 @@ async function readRun($: EngineInterface) {
   const root = S.where.primary ?? session
   if (root === null) return
   const state = `${root}/.dagents`
-  const roots = await readRoots($, session ?? root)
-  const latest = roots?.progress.latestFile ?? `${state}/handoff/latest.md`
-  S.latestName = roots?.progress.store === 'darkmem' ? latest : null
+  const latest = `${state}/handoff/latest.md`
   const checkouts = [...new Set([session, root].filter((dir): dir is string => dir !== null))]
   const places = checkouts.map(dir => ({ root: dir, docsDir: `${dir}/docs/dagents` }))
   try {
     const handoff = await $.fs.stat(latest).catch(() => null)
     const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
-    await readResumeOffer($, latest, handoffTime, roots?.docs ?? null, places, root)
-    const local = `${session ?? root}/.dagents/sdd`
-    const base = roots?.progress.ledgerRoot ?? local
+    await readResumeOffer($, latest, handoffTime, places, root)
+    const base = `${session ?? root}/.dagents/sdd`
     const bound = await read($, boundPlan)
     let newest: { slug: string; path: string; at: number } | null = null
-    if (bound !== null) newest = await boundLedger($, base, local, bound)
+    if (bound !== null) newest = await boundLedger($, base, bound)
     else {
       for (const name of await ledgerDirs($, base)) {
         const info = await $.fs.stat(`${base}/${name}/progress.md`).catch(() => null)
@@ -3605,7 +3532,7 @@ async function readRun($: EngineInterface) {
     let titles: { n: number; title: string }[] = []
     let planPath: string | null = null
     if (ledger.plan !== null) {
-      for (const candidate of planCandidates(ledger.plan, roots?.docs ?? null, places)) {
+      for (const candidate of planCandidates(ledger.plan, places)) {
         try {
           titles = planTasks(String(await $.fs.read(candidate)))
           if (titles.length > 0) {
@@ -3654,13 +3581,10 @@ async function readRun($: EngineInterface) {
 }
 
 // The ledger of the plan this session named, in the workspace sdd-workspace
-// names for the plan file. While progress is darkmem every worktree shares the
-// mirror's ledgers and a plan's workspace is always local, so a ledger with no
-// workspace here is another session's (turn-end.sh's local-workspace test).
-async function boundLedger($: EngineInterface, base: string, local: string, plan: string): Promise<{ slug: string; path: string; at: number } | null> {
+// names for the plan file.
+async function boundLedger($: EngineInterface, base: string, plan: string): Promise<{ slug: string; path: string; at: number } | null> {
   const slug = (plan.split(/[\\/]/).pop() ?? '').replace(/\.md$/, '')
   if (slug === '') return null
-  if (base !== local && (await $.fs.stat(`${local}/${slug}`).catch(() => null))?.kind !== 'dir') return null
   const path = `${base}/${slug}/progress.md`
   const info = await $.fs.stat(path).catch(() => null)
   return info?.kind === 'file' ? { slug, path, at: info.mtimeMs } : null
@@ -4184,8 +4108,7 @@ function resetSessionGuards() {
 async function readSession($: EngineInterface, isStart: boolean) {
   const id = await $.session.id().catch(() => null)
   // These caches outlive a /clear or /resume, and the values they stand for do
-  // not: read again, or the resume offer and the roots note stay unwritten.
-  S.roots = { key: '', value: null }
+  // not: read again, or the resume offer stays unwritten.
   S.offerRead = ''
   S.offerRanKey = null
   await $.command.register({
