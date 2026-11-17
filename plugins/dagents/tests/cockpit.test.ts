@@ -16,7 +16,6 @@ import {
   isPlanTail,
   kTokens,
   attributionIn,
-  FORK_DRAFTING,
   seatDenial,
   fastModeLine,
   guardLine,
@@ -968,35 +967,33 @@ describe('seat check', () => {
   const base = { subagentType: 'general-purpose', description: 'Look around', fork: false }
 
   test('denies an untyped dispatch and a fork in a dagents session, and passes typed ones', () => {
-    const untyped = seatDenial(base, true, false)
+    const untyped = seatDenial(base, true)
     expect(untyped).toMatch(/dagents:judge-sonnet-high/)
     expect(untyped).toMatch(/Execution line/)
     expect(untyped).not.toMatch(/for implementation/)
     expect(untyped).toMatch(/dagents:impl-sonnet-medium/)
     expect(untyped).toMatch(/model: "sonnet"/)
     expect(untyped).toMatch(/using-dagents §Seats/)
-    for (const subagentType of ['general-purpose', 'claude']) expect(seatDenial({ ...base, subagentType }, true, false)).toBe(untyped)
-    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, true, false)).toMatch(/^dagents: forks are kept out of dagents sessions\./)
-    expect(seatDenial({ ...base, model: 'sonnet' }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, subagentType: 'dagents:judge-opus' }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, subagentType: 'Explore' }, true, false)).toBeNull()
+    for (const subagentType of ['general-purpose', 'claude']) expect(seatDenial({ ...base, subagentType }, true)).toBe(untyped)
+    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, true)).toMatch(/^dagents: forks are kept out of dagents sessions\./)
+    expect(seatDenial({ ...base, model: 'sonnet' }, true)).toBeNull()
+    expect(seatDenial({ ...base, subagentType: 'dagents:judge-opus' }, true)).toBeNull()
+    expect(seatDenial({ ...base, subagentType: 'Explore' }, true)).toBeNull()
   })
 
   test('passes everything before a dagents skill runs, and spawns the main loop does not make', () => {
-    expect(seatDenial(base, false, false)).toBeNull()
-    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, false, false)).toBeNull()
-    expect(seatDenial({ ...base, parentAgentId: 'agent-1' }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, workflow: { runId: 'wf_1', agentIndex: 1 } }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, isTeammate: true }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, resume: { agentId: 'agent-1' } }, true, false)).toBeNull()
+    expect(seatDenial(base, false)).toBeNull()
+    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, false)).toBeNull()
+    expect(seatDenial({ ...base, parentAgentId: 'agent-1' }, true)).toBeNull()
+    expect(seatDenial({ ...base, workflow: { runId: 'wf_1', agentIndex: 1 } }, true)).toBeNull()
+    expect(seatDenial({ ...base, isTeammate: true }, true)).toBeNull()
+    expect(seatDenial({ ...base, resume: { agentId: 'agent-1' } }, true)).toBeNull()
   })
 
-  test('admits a drafting fork only when forks draft', () => {
+  test('denies a drafting fork like any other fork', () => {
     const fork = { ...base, subagentType: 'fork', fork: true, description: 'Draft plan tasks 1-2' }
-    expect(seatDenial(fork, true, true)).toBeNull()
-    expect(seatDenial({ ...fork, description: 'Verify the register rows' }, true, true)).toMatch(/^dagents: forks are kept out/)
-    expect(seatDenial(fork, true, false)).toMatch(/^dagents: forks are kept out/)
-    expect(FORK_DRAFTING).toBe(false)
+    expect(seatDenial(fork, true)).toMatch(/^dagents: forks are kept out/)
+    expect(seatDenial({ ...fork, description: 'Verify the register rows' }, true)).toMatch(/^dagents: forks are kept out/)
   })
 
   test('denies a drafting fork through the hook once a dagents skill ran', async ($, on) => {
@@ -1084,7 +1081,7 @@ describe('review seat write guard', () => {
       `${WS}/../amendments.md`,
       `${WS}/other/../task-1-review-report.md`,
     ]
-    const tools = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
+    const tools = ['Write', 'Edit', 'NotebookEdit']
     const got: (string | undefined)[] = []
     const want: string[] = []
     for (const path of refused) {
@@ -1094,9 +1091,9 @@ describe('review seat write guard', () => {
       }
     }
     expect(got).toEqual(want)
-    expect(await Promise.all(tools.map(async tool => (await write($, 'judge-1', REVIEW, tool)).deny))).toEqual([undefined, undefined, undefined, undefined])
+    expect(await Promise.all(tools.map(async tool => (await write($, 'judge-1', REVIEW, tool)).deny))).toEqual([undefined, undefined, undefined])
     expect((await write($, 'judge-1', `${WS}/./task-1-review-report.md`)).deny).toBeUndefined()
-    // Only the four write tools are looked at.
+    // Only the three write tools are looked at.
     expect((await $.tool.call({ tool: 'Read', file_path: `${WS}/amendments.md`, agentId: 'judge-1' } as never)).deny).toBeUndefined()
   })
 
@@ -8014,7 +8011,7 @@ describe('A5: the judge write guard (speed-and-cost-followups acceptance)', () =
     await judgeNaming($, on, NAMED)
     const paths = [`${WS}/amendments.md`, `${WS}/task-1-step.json`, '/home/me/code/shop/docs/dagents/plans/2026-10-28-plan.md', '/etc/passwd', '/home/me/code/shop/src/index.ts']
     expect(await Promise.all(paths.map(async path => (await write($, 'judge-1', path)).deny))).toEqual(paths.map(path => refusal(NAMED, path)))
-    for (const tool of ['Edit', 'MultiEdit', 'NotebookEdit']) expect((await write($, 'judge-1', `${WS}/amendments.md`, tool)).deny).toMatch(REFUSED)
+    for (const tool of ['Edit', 'NotebookEdit']) expect((await write($, 'judge-1', `${WS}/amendments.md`, tool)).deny).toMatch(REFUSED)
   })
 
   test('A5: a judge Write to another report name, a relative path or a .. path is refused when the dispatch named only task-1-review-report.md', async ($, on) => {

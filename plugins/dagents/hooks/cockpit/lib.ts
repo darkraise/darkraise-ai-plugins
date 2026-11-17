@@ -457,14 +457,6 @@ export type SeatSpawn = {
 }
 
 /**
- * Whether a fork described `Draft plan tasks …` may run in a dagents session:
- * docs/dforge/notes/2026-10-25-drafter-measurement.md in this plugin's
- * repository ruled forks out, and
- * plans are now drafted in the session. Changing it takes a plugin release.
- */
-export const FORK_DRAFTING = false
-
-/**
  * The cockpit's one line while dagents shares the session with another
  * workflow plugin: the plugin ids the standalone workflow-guard check printed,
  * from its `{ exitCode, stdout }` (null when it failed to start). Exit 3 only;
@@ -503,10 +495,9 @@ const CATCH_ALL = ['general-purpose', 'claude']
  * agents, teammates, resumes and spawns inside a subagent are not the main
  * loop's dispatch, and nothing is checked before a dagents skill or agent ran.
  */
-export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean, forkDrafting: boolean): string | null {
+export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean): string | null {
   if (!isPlanSession || spawn.parentAgentId !== undefined || spawn.workflow !== undefined || spawn.isTeammate === true || spawn.resume !== undefined) return null
   if (spawn.fork) {
-    if (forkDrafting && spawn.description.startsWith('Draft plan tasks')) return null
     return "dagents: forks are kept out of dagents sessions. Use dagents:judge-sonnet-high for a read-only check; plans are drafted in the session. See using-dagents §Seats."
   }
   if (CATCH_ALL.includes(spawn.subagentType) && spawn.model === undefined) {
