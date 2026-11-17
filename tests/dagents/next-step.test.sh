@@ -1175,6 +1175,13 @@ printf '# Handoff\n\n## State\nWA notes.\n\n## Next session\n\n**Next:** y\n<!--
 run "$WA" --kept "$PLAN_REL"
 has "A15: kept over another plan's block keeps the notes" "$(cat "$WA_H")" "WA notes."
 has "A15: stderr names the subject" "$(cat "$TMP/stderr")" "next-step: replaced the block for $OTHER_REL"
+CM="$WA/$(dirname "$OTHER_REL")/completed.md"; rm -f "$TMP/cm.bak"; [ ! -f "$CM" ] || cp "$CM" "$TMP/cm.bak"
+printf -- '- 2026-01-02 `%s` — merged into `main`\n' "$OTHER_REL" >> "$CM"
+printf '# Handoff\n\n## State\nFinished notes.\n\n## Next session\n\n**Next:** y\n<!-- next-step: kind=plan done=0 closed=0 subject=%s at=1 -->\n' "$OTHER_REL" > "$WA_H"
+run "$WA" --kept "$PLAN_REL"
+lacks "A15: a finished plan's block is replaced wholesale" "$(cat "$WA_H")" "Finished notes."
+lacks "A15: and stderr names no replaced block" "$(cat "$TMP/stderr")" "replaced the block"
+if [ -f "$TMP/cm.bak" ]; then mv "$TMP/cm.bak" "$CM"; else rm -f "$CM"; fi
 rm -f "$HANDOFF" "$WA_H"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
