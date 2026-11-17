@@ -1,12 +1,12 @@
 # UI proof: dflow HUD guard line
 
 **Contract:** touch
-**Fingerprint:** e99527a131618d7d
+**Fingerprint:** bc488cb026818f4a
 **Platform:** terminal
 **Viewports:** 200x60, 120x40
 **Themes:** default
 **Evidence:** local
-**Judge:** ship e99527a131618d7d — docs/dforge/ui-ux/proofs/2026-11-17-dflow-guard-line.judge.md
+**Judge:** ship bc488cb026818f4a — docs/dforge/ui-ux/proofs/2026-11-17-dflow-guard-line.judge.md
 
 ## Delta
 
@@ -34,7 +34,7 @@
 
 ## Automated checks
 
-- Walked on 2026-11-17 on Claude Code 2.1.326 in tmux (a throwaway HOME and `CLAUDE_CONFIG_DIR`, a dummy API key, `installed_plugins.json` recording dforge@darkraise at user scope, `settings.json` enabling it, a scratch repository set up with `dflow init`, and `--plugin-dir plugins/dflow` at 310e3761). No model turn was needed.
+- Walked on 2026-11-17 on Claude Code 2.1.326 in tmux (a throwaway HOME and `CLAUDE_CONFIG_DIR`, a dummy API key, `installed_plugins.json` recording dforge@darkraise at user scope, `settings.json` enabling it, a scratch repository set up with `dflow init` and `dflow status`, and `--plugin-dir plugins/dflow` at 73ed2f2f). No model turn was needed. Re-walked after the final review's fix wave (6b2af58a: a check that timed out or failed to start is asked again rather than cached), which does not change what a check that answers draws; every capture was taken again, each tmux window pinned to its size (`window-size manual`, `resize-window`).
 - `claude plugin test plugins/dflow`: 41 pass, 0 fail, the two guard tests among them; `node --test plugins/dflow/tests/*.test.mjs`: 130 pass, the guard line test among them.
 
 ## Not proven

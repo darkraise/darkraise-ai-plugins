@@ -1,12 +1,12 @@
 # UI proof: dagents cockpit guard line
 
 **Contract:** touch
-**Fingerprint:** 9db6821dd90b35d3
+**Fingerprint:** bc488cb026818f4a
 **Platform:** terminal
 **Viewports:** 200x60, 120x40
 **Themes:** default
 **Evidence:** local
-**Judge:** ship 9db6821dd90b35d3 — docs/dforge/ui-ux/proofs/2026-11-17-dagents-guard-line.judge.md
+**Judge:** ship bc488cb026818f4a — docs/dforge/ui-ux/proofs/2026-11-17-dagents-guard-line.judge.md
 
 ## Delta
 
@@ -24,17 +24,17 @@
 
 | ID | Verdict | Evidence | Note |
 |---|---|---|---|
-| UI-1 | pass | .dforge/ui-ux/2026-11-17-dagents-guard-line/band-200x60.ansi, .dforge/ui-ux/2026-11-17-dagents-guard-line/band-120x40.ansi; test "the workflow guard > under a conflict the cockpit draws the guard line alone and runs nothing else" | Above the prompt the capture holds only the guard line (and the engine's own `[-]` collapse control and effort hint); the transcript above it holds the SessionStart conflict block. The test asserts the band's Text list equals `[guardLine(...)]` exactly |
+| UI-1 | pass | .dforge/ui-ux/2026-11-17-dagents-guard-line/resume-200x60.ansi, .dforge/ui-ux/2026-11-17-dagents-guard-line/no-conflict-resume-200x60.ansi, .dforge/ui-ux/2026-11-17-dagents-guard-line/band-200x60.ansi, .dforge/ui-ux/2026-11-17-dagents-guard-line/band-120x40.ansi; test "the workflow guard > under a conflict the cockpit draws the guard line alone and runs nothing else" | Above the prompt the capture holds only the guard line (and the engine's own `[-]` collapse control and effort hint); the transcript above it holds the SessionStart conflict block. The test asserts the band's Text list equals `[guardLine(...)]` exactly. With a handoff seeded (`.dagents/handoff/latest.md` holding a `Paste as the first prompt:` block), the conflict capture `resume-200x60.ansi` still holds the guard line alone above the prompt and no Resume offer anywhere, while the same seed without the conflict (`no-conflict-resume-200x60.ansi`) draws `↻ Resumable work · handed off just now` with Resume and Dismiss in the pane and in the band |
 | UX-1 | pass | .dforge/ui-ux/2026-11-17-dagents-guard-line/cockpit-command-200x60.ansi | `/cockpit` + Enter drew `● Unknown command: /cockpit`; the guard line stayed and no pane opened. The command is registered in session.start, which returns before it under a conflict |
 | UX-2 | pass | .dforge/ui-ux/2026-11-17-dagents-guard-line/band-200x60.ansi; test "the guard line names the active plugins and the check, only on a conflict" | The line names both plugin ids and the absolute path of the check; running that check by hand (`--host claude --self dagents` against the walk's config) printed one line per active plugin and exit 3 |
-| UX-3 | pass | .dforge/ui-ux/2026-11-17-dagents-guard-line/no-conflict-200x60.ansi, .dforge/ui-ux/2026-11-17-dagents-guard-line/no-conflict-cockpit-command-200x60.ansi, .dforge/ui-ux/2026-11-17-dagents-guard-line/no-conflict-120x40.ansi; test "the workflow guard > with no conflict the cockpit draws as before" | Same scratch config with `dforge@darkraise: false`: the guard printed `dagents@darkraise self`, exit 0; the docked pane showed its Context card; `/cockpit` answered `dagents: Cockpit pane opened.`; no capture holds `enabled together` |
+| UX-3 | pass | .dforge/ui-ux/2026-11-17-dagents-guard-line/no-conflict-cockpit-command-120x40.ansi, .dforge/ui-ux/2026-11-17-dagents-guard-line/no-conflict-resume-200x60.ansi, .dforge/ui-ux/2026-11-17-dagents-guard-line/no-conflict-200x60.ansi, .dforge/ui-ux/2026-11-17-dagents-guard-line/no-conflict-cockpit-command-200x60.ansi, .dforge/ui-ux/2026-11-17-dagents-guard-line/no-conflict-120x40.ansi; test "the workflow guard > with no conflict the cockpit draws as before" | Same scratch config with `dforge@darkraise: false`: the guard printed `dagents@darkraise self`, exit 0; the docked pane showed its Context card; `/cockpit` answered `dagents: Cockpit pane opened.`; no capture holds `enabled together`. At 120x40 no pane docks at session start, as before: Claude Code shows the pane only from 144 columns (README, `openAtStart`), so `no-conflict-120x40.ansi` holds only the engine's own rows and no guard line; `/cockpit` at 120x40 answers `dagents: Cockpit pane opened.` and docks the pane with its Context card (`no-conflict-cockpit-command-120x40.ansi`). With a seeded handoff the Resume offer draws as before (`no-conflict-resume-200x60.ansi`) |
 | OP-1 | pass | .dforge/ui-ux/2026-11-17-dagents-guard-line/band-120x40.ansi, .dforge/ui-ux/2026-11-17-dagents-guard-line/band-200x60.ansi | 200x60: one row. 120x40: the line wraps after `run node` onto a second row, every word present |
 | OP-2 | pass | .dforge/ui-ux/2026-11-17-dagents-guard-line/band-200x60.ansi | The line's only SGR is `38;5;220` (foreground yellow) and the reset; no state depends on it |
 | OP-3 | pass | test "the workflow guard > under a conflict the cockpit draws the guard line alone and runs nothing else" | The test records every `$.process.run` call, advances the clock 130 s (past the 2 s poll and the 60 s watchdog) and asserts no call but the guard's. With the guard's answer forced to no conflict the test fails (mutation run) |
 
 ## Automated checks
 
-- Walked on 2026-11-17 on Claude Code 2.1.326 in tmux (a throwaway HOME and `CLAUDE_CONFIG_DIR` under the scratch directory, a dummy API key, `installed_plugins.json` recording dforge@darkraise at user scope, `settings.json` enabling it, and `--plugin-dir plugins/dagents` from the uncommitted working tree). No model turn was needed.
+- Walked on 2026-11-17 on Claude Code 2.1.326 in tmux (a throwaway HOME and `CLAUDE_CONFIG_DIR` under the scratch directory, a dummy API key, `installed_plugins.json` recording dforge@darkraise at user scope, `settings.json` enabling it, and `--plugin-dir plugins/dagents` at 73ed2f2f). No model turn was needed. Re-walked after the final review's fix wave (6b2af58a: a check that timed out or failed to start is asked again rather than cached; d5e62f2d: `docs/dforge` plan lookup), neither of which changes what a check that answers draws; every capture was taken again, each tmux window pinned to its size (`window-size manual`, `resize-window`).
 - `claude plugin test plugins/dagents`: 616 pass, 0 fail (5 files), the three guard tests among them.
 - `ui-lint` on the two changed files: only the two raw-colour findings at lines that predate this change (`#ffaf5f` turns-left text and its sibling).
 
