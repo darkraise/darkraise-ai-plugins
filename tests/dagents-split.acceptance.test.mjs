@@ -740,3 +740,107 @@ test('A11: control, a conflict-free turn-start hook does write its stamp', t => 
     }
   }
 });
+
+// A28
+test('A28: dforge 5\'s plan-lint names dagents and /dagents:migrate in its subagent-mode error and Executor-line warning', t => {
+  const dir = scratch(t);
+  const project = join(dir, 'project');
+  mkdirSync(join(project, 'docs'), { recursive: true });
+  writeFileSync(join(project, 'docs/spec.md'), '# Spec\n');
+  execFileSync('git', ['init', '-q', project], { timeout: 30000 });
+  const plan = mode => `# Demo Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: the skill the **Execution:** line names.
+
+**Goal:** Demo.
+
+**Spec:** \`docs/spec.md\`
+
+**Execution:** ${mode} — \`claude --model sonnet --effort high\` — Task 1 scores 2
+
+**Task check:** \`bash quick.sh\` — gate 1 has Tier: task
+
+**Integration check:** \`bash test.sh\`
+
+**CI:** none
+
+## Global Constraints
+
+- Bash only.
+
+## Contracts
+
+None
+
+## Assumptions (evidence)
+
+- None.
+
+## Task index
+
+1. First thing
+
+### Task 1: First thing
+
+**Files:**
+- Create: \`a.txt\`
+
+**Implementer:** dforge:impl-sonnet-low
+**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = 2
+**Executor:** codex gpt-6.1-sol / low
+
+- [ ] **Step 1: Write the failing test**
+`;
+  const lint = mode => {
+    const file = join(project, `plan-${mode}.md`);
+    writeFileSync(file, plan(mode));
+    const env = cleanEnv({ HOME: join(dir, 'home') });
+    mkdirSync(env.HOME, { recursive: true });
+    const result = run('bash', [join(ROOT, 'plugins/dforge/scripts/plan-lint'), file], { cwd: project, env });
+    return result.stdout + result.stderr;
+  };
+  const subagent = lint('subagent').split('\n');
+  const error = subagent.find(line => /^ERROR header:.*subagent/i.test(line));
+  assert.ok(error, `no subagent-mode error:\n${subagent.join('\n')}`);
+  assert.match(error, /dagents/);
+  assert.match(error, /\/dagents:migrate/);
+  const warning = lint('inline').split('\n').find(line => /^WARN Task 1:.*Executor/.test(line));
+  assert.ok(warning, 'no Executor-line warning');
+  assert.match(warning, /dagents/);
+  assert.match(warning, /\/dagents:migrate/);
+});
+
+// A17
+test('A17: a session with exactly one workflow plugin active gets no guard output and no marker', t => {
+  for (const only of SIBLINGS) {
+    const w = hookWorld(t);
+    w.install(w.user(...SIBLINGS));
+    w.enable(w.user_settings(), Object.fromEntries(SIBLINGS.map(name => [name, name === only])));
+    for (const self of [only]) {
+      for (const source of ['startup', 'resume', 'clear', 'compact', 'fork']) {
+        const result = w.fire(self, 'SessionStart', { session_id: `sess-A17-${source}`, source });
+        assert.equal(result.status, 0, `${self} ${source}: ${result.stderr}`);
+        assert.doesNotMatch(result.stdout + result.stderr, /Workflow plugins conflict|workflow-guard|claude plugin disable/, `${self} ${source} with only ${only}`);
+      }
+      assert.deepEqual(Object.keys(w.files(w.datas[self])), [], `${self} wrote a marker with only ${only} active`);
+    }
+    const out = w.fire(only, 'SessionStart', { source: 'startup' });
+    if (only !== 'dflow') assert.match(JSON.parse(out.stdout).hookSpecificOutput?.additionalContext ?? '', new RegExp(`using-${only}`), `${only} still injects its entry skill`);
+  }
+});
+test('A17: the existing dforge and dflow tests changed only in the guard\'s inputs and in assertions other statements require', () => {
+  const diff = git('diff', '-U0', `${git('merge-base', 'main', 'HEAD').trim()}`, 'HEAD', '--', 'plugins/dforge/tests', 'plugins/dflow/tests', ':(exclude)plugins/dforge/tests/stand-down.test.sh');
+  let file = '';
+  const odd = [];
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('+++ ')) { file = line.slice(6); continue; }
+    if (!line.startsWith('-') || line.startsWith('---')) continue;
+    const removed = line.slice(1);
+    const isolation = /GUARD|CLAUDE_CONFIG_DIR: ''/.test(removed) && file === 'plugins/dflow/tests/helpers.mjs';
+    const importLine = /^import .* from '\.\.\/hooks\//.test(removed);
+    const forkMatcher = /SessionStart\[0\]\.matcher/.test(removed);
+    const signpost = /Executor:.*line is obsolete; the session implements this task/.test(removed);
+    if (!(isolation || importLine || forkMatcher || signpost)) odd.push(`${file}: ${removed.trim().slice(0, 120)}`);
+  }
+  assert.deepEqual(odd, []);
+});
