@@ -240,25 +240,6 @@ the deletion that would make it fail.
 | "Manual test faster" | Manual doesn't prove edge cases. You'll re-test every change. |
 | "Existing code has no tests" | Add tests for the behaviour you change, not for the rest of the code. |
 
-## Red Flags - STOP and Start Over
-
-- Code before test
-- Test after implementation
-- Test passes immediately
-- Test still passes with `return <constant>`, or with the implementation deleted
-- Can't explain why test failed
-- Tests added "later"
-- Rationalizing "just this once"
-- "I already manually tested it"
-- "Tests after achieve the same purpose"
-- "It's about spirit not ritual"
-- "Keep as reference" or "adapt existing code"
-- "Already spent X hours, deleting is wasteful"
-- "TDD is dogmatic, I'm being pragmatic"
-- "This is different because..."
-
-**All of these mean: Delete code. Start over with TDD.**
-
 ## Example: Bug Fix
 
 **Bug:** Empty email accepted
@@ -325,12 +306,3 @@ Can't check all boxes? You skipped TDD. Start over.
 Bug found? Write failing test reproducing it. Follow TDD cycle. Test proves fix and prevents regression.
 
 Never fix bugs without a test.
-
-## Final Rule
-
-```
-Production behaviour → test exists and failed first
-Otherwise → not TDD
-```
-
-No exceptions without your human partner's permission.
