@@ -98,7 +98,7 @@ the gate.
 
 **Why this mode.** Every plan runs inline: this session has read the code the
 plan changes, and a subagent per task would rebuild that context from nothing.
-You implement every task, heavy tasks included. A task that still carries an
+A task that still carries an
 `**Executor:**` line is implemented here too: `plan-lint` warns that the line
 is obsolete. The `**Execution:**` line's model and effort cover the hardest
 task, at least high effort when a task has risk 3.
@@ -228,10 +228,8 @@ budget before every task at no extra request:
 
     budget: 312k of 465k (67%) — ok — source: record
 
-- `ok` or `unknown`: carry on, however high the percentage. Only the verdict
-  stops you.
-- `handoff`: finish the task in flight through its `Task N: complete` line,
-  then invoke dforge:handoff. Never hand off in the middle of a task. The budget holds one task's worst growth.
+The verdicts are using-dforge's §Session Budget: `unknown` reads as `ok`, and
+on `handoff` the task in flight finishes through its `Task N: complete` line.
 
 The plan's last two tasks never hand off in strict mode: their brief prints
 `budget (last 2 tasks)` or `budget (last task)` and says `ok` past the budget. After the last
@@ -303,11 +301,9 @@ For each task, in order:
    did not. After any other task, go to the next task's step 1: its brief
    prints the budget line.
 
-**When a verification will not pass.** Fix, re-run, then append
-`Task <N>: fix round R/3 (<what failed>; commits a..b; passing | still failing)`
-with the round's outcome. Rounds 1 through 3 are yours. A task still failing
-after `3/3` goes to the ruling seat as a `breaker` item (in an auto run, the
-pending list) - not to a fourth round, and not to a complete line.
+**When a verification will not pass.** Fix, re-run, then append the
+`fix round R/3` line with the round's outcome; §The Ledger gives the cap and
+the `breaker` item after `3/3`, never a complete line.
 
 **When the plan is silent** - it does not say which of two reasonable things to
 do - rule, log it, and carry on.

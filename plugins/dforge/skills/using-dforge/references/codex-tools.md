@@ -16,8 +16,7 @@ Add to your Codex config (`~/.codex/config.toml`):
 multi_agent = true
 ```
 
-This enables the multi-agent tools that the review seats use. On Codex too
-every plan executes inline: the session implements every task.
+This enables the multi-agent tools that the review seats use.
 Which tools you get depends on the multi-agent version your model
 preset selects (current presets run V2; older ones run V1). Trust your
 actual tool list over any table — including this one — when they

@@ -171,9 +171,8 @@ Read [ci-line.md](references/ci-line.md) before you write the header's CI line a
 
 ## Parallelism
 
-Every plan runs one task at a time: write
-`**Parallelism:** sequential — inline execution`. Parallel waves were retired
-in 5.0.0, and `plan-lint` warns on an older plan's waves line.
+Write `**Parallelism:** sequential — inline execution`; `plan-lint` warns on
+an older plan's waves line.
 
 ## Drafting the tasks
 

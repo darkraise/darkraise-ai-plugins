@@ -10,7 +10,7 @@
 
 **Choosing the execution strategy:**
 
-Ask nothing. Every plan executes inline, one task after another, so record
+Ask nothing. Record
 `**Execution strategy:** sequential — inline execution` near the top of the
 spec, below its title. The plan inherits it.
 

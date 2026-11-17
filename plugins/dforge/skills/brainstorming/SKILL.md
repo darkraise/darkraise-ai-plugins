@@ -44,18 +44,13 @@ path below.
 
 Before your first question, classify the request and say it in one
 line — `Process: <spike|bounded|architectural> — <trigger | no trigger>` — so
-your human partner can override it. Every plan executes inline, so the line
-names no mode. The triggers are the seven in dforge:using-dforge's Process Depth:
-a new project or subsystem; an interface that something outside its own
-files depends on changes; the files touched cannot be enumerated after
-exploring; a load-bearing approach question is open; irreducible risk
-(security, data loss, migration, concurrency); behaviour too intricate for
-a chat design; or your human partner asked for a spec.
+your human partner can override it. The triggers are the seven in
+dforge:using-dforge's Process Depth.
 
 On the architectural path the line also names the depth,
 `Process: architectural, depth <d> — <triggers>`. Name each
 trigger that holds by its id (`new-subsystem`, `interface`, `unenumerable`,
-`approach`, `risk`, `intricate`, `asked`, in the order of the list above), and
+`approach`, `risk`, `intricate`, `asked`, in the order of that list), and
 take `<d>` from `scripts/depth-route --spec-triggers <ids>`: `full` for `risk`
 or `new-subsystem`, `standard` for `interface`, `light` otherwise. The depth
 sizes the reviews that follow the spec; it never removes the approval. Your
