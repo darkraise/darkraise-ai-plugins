@@ -2,7 +2,8 @@
 // and where it is stored. An ES module rather than JSON because a Claude Code
 // mod imports only code files; the cockpit, scripts/lib/dagents-config.mjs and
 // scripts/validate-repository.mjs all import it. Values live in
-// ~/.dagents/config.json, whose `darkmem` key is reserved for the darkmem mapping.
+// ~/.dagents/config.json, whose `darkmem` key is reserved: no setting takes
+// that name.
 //
 // The groups are the settings view's tabs, in the order they first appear here.
 // label is the row's label there (at most 16 characters); unit and zero say how
@@ -233,20 +234,5 @@ export default {
     type: 'enum', values: ['full', 'brief'], default: 'full', group: 'Notifications', target: 'dagents',
     label: 'Detail', title: 'Discord: detail',
     description: 'full sends command, question and answer excerpts (secrets masked); brief sends titles and figures only.',
-  },
-  darkmemEnabled: {
-    type: 'boolean', default: false, keepDefault: true, group: 'darkmem', target: 'dagents',
-    label: 'Use darkmem', title: 'Use darkmem',
-    description: 'Keep a mapped repository\'s documents and progress in darkmem through the mirror. Off keeps both in the repository: a family already in the mirror moves back at the next session start with no plan in progress, from the mirror alone. Left unset after an upgrade, a family a 2.x release put in the mirror stays there unsynced until you choose. A repository is mapped under darkmem.repos in ~/.dagents/config.json.',
-  },
-  documentStore: {
-    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'dagents',
-    label: 'Documents', title: 'Document store',
-    description: 'While Use darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: local in the repository, or darkmem through the mirror. A change moves them at the next session start with no plan in progress.',
-  },
-  progressSource: {
-    type: 'enum', values: ['local', 'darkmem'], default: 'darkmem', group: 'darkmem', target: 'dagents',
-    label: 'Progress', title: 'Progress tracking source',
-    description: 'While Use darkmem is on, where a mapped repository keeps its plan ledgers and handoffs: local in the repository, or darkmem through the mirror. A change moves them at the next session start with no plan in progress.',
   },
 };

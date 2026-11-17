@@ -3,7 +3,7 @@
 # from a linked worktree, and names round-trip, including a checkout named
 # superpowers.
 set -uo pipefail
-unset CLAUDE_CONFIG_DIR DAGENTS_DOCUMENT_STORE DAGENTS_PROGRESS_SOURCE CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/../scripts/lib/roots.sh"

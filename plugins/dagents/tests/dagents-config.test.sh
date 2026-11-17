@@ -47,9 +47,6 @@ fc set warnAt 80
 check "a default value is not stored" "$(node -e 'console.log(Object.keys(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))).join(","))' "$FILE")" "layout"
 fc unset layout
 check "unset" "$(fc get layout)" "auto"
-fc set darkmemEnabled false
-check "a keepDefault key is stored at its default" "$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).darkmemEnabled)' "$FILE")" "false"
-fc unset darkmemEnabled
 
 # --- refusals leave the file unchanged ---
 before=$(cat "$FILE")
@@ -141,6 +138,16 @@ p2=$!
 wait "$p1" "$p2"
 check "concurrent setters: both keys kept" "$(fc get notifyAfter) $(fc get finishAction)" "120 merge"
 
+# --- darkmem settings an older build stored: kept, read as no setting, no crash ---
+fresh leftover
+mkdir -p "$HOME/.dagents"
+printf '{"warnAt":75,"darkmemEnabled":true,"documentStore":"darkmem","progressSource":"darkmem","darkmem":{"url":"http://127.0.0.1:9","repos":{}}}\n' > "$FILE"
+check "leftover darkmem keys: get --json answers" "$(fc get --json | node -e 'const v = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(v.warnAt, "darkmemEnabled" in v, "documentStore" in v)')" "75 false false"
+fc workflow > /dev/null; check "leftover darkmem keys: workflow exits 0" "$?" "0"
+fc set warnAt 85; check "leftover darkmem keys: set exits 0" "$?" "0"
+check "leftover darkmem keys: kept as they were" "$(node -e 'const v = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log(v.warnAt, v.darkmemEnabled, v.documentStore, v.darkmem.url)' "$FILE")" "85 true darkmem http://127.0.0.1:9"
+fc get darkmemEnabled; check "leftover darkmem keys: no longer a setting" "$?" "2"
+
 # --- run through a symbolic link to the scripts directory, it still runs ---
 fresh linked
 ln -s "$(cd "$HERE/../scripts" && pwd)" "$TMP/linked-scripts"
@@ -175,8 +182,6 @@ specReview true false no
 questionStyle single batched many
 fastMode ask always sometimes
 finishAction ask merge discard
-documentStore darkmem local remote
-progressSource darkmem local remote
 ROWS
 check "agyLane: follows codexReview, labelled Agy tasks, enforced by script" \
   "$(node --input-type=module -e "import { pathToFileURL } from 'node:url'; const { default: schema } = await import(pathToFileURL(process.argv[1]).href); const keys = Object.keys(schema); console.log([keys[keys.indexOf('codexReview') + 1], schema.agyLane?.label, schema.agyLane?.enforcedBy, schema.agyLane?.group].join(' | '))" "$(cd "$HERE/../config" && pwd)/schema.mjs")" \

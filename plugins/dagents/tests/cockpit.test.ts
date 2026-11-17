@@ -5998,7 +5998,7 @@ describe('settings rows', () => {
 
   test('the tabs are the groups in schema order', () => {
     expect(tabsOf(ROWS)).toEqual(['Cockpit', 'Context', 'Finish'])
-    expect(tabsOf(SCHEMA)).toEqual(['Cockpit', 'Minimized', 'Context', 'Workflow', 'Process', 'Finish', 'Notifications', 'darkmem'])
+    expect(tabsOf(SCHEMA)).toEqual(['Cockpit', 'Minimized', 'Context', 'Workflow', 'Process', 'Finish', 'Notifications'])
   })
 
   test('a value reads through its unit and zero word', () => {
