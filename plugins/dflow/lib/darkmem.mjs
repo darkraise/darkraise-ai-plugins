@@ -6,7 +6,7 @@ import { nextTask, taskStates } from './plan.mjs';
 import { currentBranch, defaultBranch, head, primaryRoot, relative, userConfig } from './repo.mjs';
 import { loadState, planState, readEvents, updateState } from './state.mjs';
 import { activePlan } from './status.mjs';
-import { acquireLock, nowIso, readJson, readText, shortSha, writeJson } from './util.mjs';
+import { CliError, acquireLock, nowIso, readJson, readText, shortSha, writeJson } from './util.mjs';
 
 export const PREFIX = 'dflow';
 const CLIENT = 'dflow';
@@ -24,11 +24,19 @@ export class TransportError extends Error {}
 // consent to that project for this repository. A cloned repository names any
 // project it likes, and must not steer writes made with the user's key.
 export function settings(ctx) {
-  const user = userConfig(ctx.env).darkmem ?? {};
-  const url = (ctx.env.DFLOW_DARKMEM_URL || user.url || '').replace(/\/+$/, '');
-  const keyEnv = user.api_key_env || 'DARKMEM_API_KEY';
   const project = ctx.config.darkmem?.project || '';
   if (!project) return { off: 'the repository names no darkmem project (dflow init --darkmem <project>)' };
+  // done, ship and block push after they commit: a config the user broke by
+  // hand must turn darkmem off, not fail a command whose work is done.
+  let user;
+  try {
+    user = userConfig(ctx.env)?.darkmem ?? {};
+  } catch (error) {
+    if (!(error instanceof CliError)) throw error;
+    return { off: error.message };
+  }
+  const url = (ctx.env.DFLOW_DARKMEM_URL || user.url || '').replace(/\/+$/, '');
+  const keyEnv = user.api_key_env || 'DARKMEM_API_KEY';
   if (!url) return { off: 'no darkmem URL is configured (~/.dflow/config.json: {"darkmem": {"url": "..."}})' };
   if (!ctx.env[keyEnv]) return { off: `the API key variable ${keyEnv} is not set` };
   const enabled = user.repositories?.[primaryRoot(ctx.root)];

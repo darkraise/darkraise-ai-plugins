@@ -111,6 +111,19 @@ test('with no project, URL or key every sync command exits 0 with one line', asy
   assert.equal(dflow(mapped, ['done', '1', '-m', 'feat: parse']).status, 0);
 });
 
+test('a malformed user config turns darkmem off and fails no command that already wrote', t => {
+  const root = makeProject(t, { config: CONFIG });
+  write(root, '.test-home/.dflow/config.json', '{"darkmem": {"url": "x",}}');
+  const env = { DFLOW_DARKMEM_URL: 'http://127.0.0.1:1', DARKMEM_API_KEY: 'secret' };
+  assert.match(dflow(root, ['sync', 'status'], { env }).stdout, /^darkmem is off: .+config\.json is not valid JSON/);
+  finishTask1(root);
+  const done = dflow(root, ['done', '1', '-m', 'feat: parse'], { env });
+  assert.equal(done.status, 0, done.stderr);
+  assert.equal(git(root, 'log', '-1', '--format=%s'), 'feat: parse');
+  const blocked = dflow(root, ['block', '2', 'waiting on the owner'], { env });
+  assert.equal(blocked.status, 0, blocked.stderr);
+});
+
 test('on the default branch push files every document by hash, once', async t => {
   const server = await stub(t);
   const root = enabled(t);
