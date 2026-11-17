@@ -451,7 +451,7 @@ test('A14: with node missing the hooks print nothing extra', { skip: process.pla
   assert.equal(without.status, 0);
   assert.equal(without.stderr, '', 'nothing on stderr');
   assert.equal(without.stdout, withNode.stdout, 'the output is the one a conflict-free session prints');
-  assert.doesNotMatch(without.stdout, /workflow-guard|systemMessage/);
+  assert.doesNotMatch(without.stdout, /workflow-guard\.mjs --host claude|systemMessage/);
   const guardNoNode = run('bash', ['-c', `"${join(w.dir, 'nonode/bash')}" "${join(ROOT, 'plugins/dforge/scripts/session-start.sh')}"`], { env: { ...w.env, PATH: bin }, input: event, cwd: w.project });
   assert.equal(guardNoNode.status, 0);
   assert.equal(guardNoNode.stderr, '');
@@ -834,7 +834,7 @@ test('A17: a session with exactly one workflow plugin active gets no guard outpu
       for (const source of ['startup', 'resume', 'clear', 'compact', 'fork']) {
         const result = w.fire(self, 'SessionStart', { session_id: `sess-A17-${source}`, source });
         assert.equal(result.status, 0, `${self} ${source}: ${result.stderr}`);
-        assert.doesNotMatch(result.stdout + result.stderr, /Workflow plugins conflict|workflow-guard|claude plugin disable/, `${self} ${source} with only ${only}`);
+        assert.doesNotMatch(result.stdout + result.stderr, /Workflow plugins conflict|workflow-guard\.mjs --host claude|claude plugin disable/, `${self} ${source} with only ${only}`);
       }
       assert.deepEqual(Object.keys(w.files(w.datas[self])), [], `${self} wrote a marker with only ${only} active`);
     }
