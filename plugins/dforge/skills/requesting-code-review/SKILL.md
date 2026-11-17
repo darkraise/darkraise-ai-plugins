@@ -66,7 +66,9 @@ severity; do not score them."
 - Fix Important issues before proceeding
 - Note Minor issues for later
 - Push back if the reviewer is wrong, with reasoning — outside a plan only;
-  under a plan the ruling seat adjudicates, never you
+  under a plan, [final-review.md](../../reference/final-review.md) and
+  [delegated-task.md](../../reference/delegated-task.md) decide how a
+  finding is rejected
 
 ## Example
 
