@@ -67,6 +67,19 @@ test('an exemption needs its reason and covers only its own line', () => {
   assert.deepEqual(lintText('a.sh', 'git -C "$PWD" status  # portability: ok — reason\r\n'), []);
 });
 
+test('a git -C hit names the native-path helper of its own plugin', () => {
+  const advice = file => lintText(file, 'git -C "$PWD" status\n')[0].message;
+  for (const plugin of ['dagents', 'dflow', 'dr-status']) {
+    for (const dir of ['scripts', 'tests']) {
+      const message = advice(`plugins/${plugin}/${dir}/x.sh`);
+      assert.ok(message.includes(`plugins/${plugin}/scripts/lib/native-path.sh`), message);
+      assert.ok(!message.includes('plugins/dforge/scripts/lib/native-path.sh'), message);
+    }
+  }
+  assert.ok(advice('plugins/dforge/scripts/x.sh').includes('plugins/dforge/scripts/lib/native-path.sh'));
+  assert.ok(advice('scripts/x.sh').includes('plugins/dforge/scripts/lib/native-path.sh'));
+});
+
 function fixtureTree(files) {
   const dir = mkdtempSync(join(tmpdir(), 'lint-portability-'));
   for (const [path, text] of Object.entries(files)) {
