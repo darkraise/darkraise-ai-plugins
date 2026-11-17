@@ -654,6 +654,67 @@ test("a dforge record whose mirror path holds no mirror is refused and the path 
   assert.equal(fs.existsSync(path.join(home, ".dagents")), false);
 });
 
+test("a dforge 4.x migrate keeps every value ~/.dagents already has", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const home = scratch("home-");
+  const a = makeRepo();
+  write(path.join(home, ".dforge", "config.json"), JSON.stringify({ autoRun: "off", notifyAfter: 7, darkmem: { url: stub.url, repos: { [a]: { project: "projA" } } } }));
+  write(path.join(home, ".dforge", "stores.json"), JSON.stringify({ [a]: { documents: "local", progress: "local", project: "projA" } }));
+  write(path.join(home, ".dagents", "config.json"), JSON.stringify({ autoRun: "on" }));
+  const out = await runMigrate(a, { ...process.env, HOME: home, DARKMEM_API_KEY: STUB_KEY, CLAUDE_CONFIG_DIR: "" });
+  assert.equal(out.status, 0, out.stdout + out.stderr);
+  const config = JSON.parse(read(path.join(home, ".dagents", "config.json")));
+  assert.deepEqual([config.autoRun, config.notifyAfter, config.darkmem.repos[a].project], ["on", 7, "projA"]);
+});
+
+test("a ~/.dagents record, mapping or mirror that clashes with dforge's refuses the move and changes neither home", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const cases = [
+    ["a record setting documents differently", (home, a) => write(path.join(home, ".dagents", "stores.json"), JSON.stringify({ [a]: { documents: "darkmem", project: "projA" } })), /set documents differently for /],
+    ["a mapping to another project", (home, a) => write(path.join(home, ".dagents", "config.json"), JSON.stringify({ darkmem: { url: stub.url, repos: { [a]: { project: "other" } } } })), /maps .* to another darkmem project than /],
+    ["a mirror already in place", home => write(path.join(home, ".dagents", "mirror", "projA", "keep.md"), "mine\n"), /exists, so .* was not moved/],
+  ];
+  for (const [name, seed, refusal] of cases) {
+    const home = scratch("home-");
+    const a = makeRepo();
+    const mirror = path.join(home, ".dforge", "mirror", "projA");
+    write(path.join(mirror, "dforge", "plans", "p.md"), "# P\n");
+    write(path.join(mirror, ".sync-state.json"), JSON.stringify({ ...JSON.parse(STATE({})), prefix: "dforge" }));
+    write(path.join(home, ".dforge", "config.json"), JSON.stringify({ darkmem: { url: stub.url, repos: { [a]: { project: "projA" } } } }));
+    write(path.join(home, ".dforge", "stores.json"), JSON.stringify({ [a]: { documents: "local", progress: "local", project: "projA", mirror } }));
+    seed(home, a);
+    // The home lock's file stays behind any run that took the lock; it holds no data.
+    const tree = dir => fs.readdirSync(dir, { recursive: true }).filter(file => file !== ".lock").sort().map(file => {
+      const full = path.join(dir, file);
+      return fs.statSync(full).isFile() ? `${file}:${read(full)}` : file;
+    });
+    const before = [tree(path.join(home, ".dforge")), tree(path.join(home, ".dagents"))];
+    const out = await runMigrate(a, { ...process.env, HOME: home, DARKMEM_API_KEY: STUB_KEY, CLAUDE_CONFIG_DIR: "" });
+    assert.equal(out.status, 1, `${name}: ${out.stdout}${out.stderr}`);
+    assert.match(out.stdout, refusal, name);
+    assert.deepEqual([tree(path.join(home, ".dforge")), tree(path.join(home, ".dagents"))], before, `${name}: a home changed`);
+  }
+});
+
+test("a dforge mirror holding no sync state is copied and left in place", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const home = scratch("home-");
+  const a = makeRepo();
+  const mirror = scratch("mirror-");
+  write(path.join(mirror, "dforge", "plans", "p.md"), "# P\n");
+  write(path.join(mirror, "keep.txt"), "mine\n");
+  write(path.join(home, ".dforge", "config.json"), JSON.stringify({ darkmem: { url: stub.url, repos: { [a]: { project: "projA" } } } }));
+  write(path.join(home, ".dforge", "stores.json"), JSON.stringify({ [a]: { documents: "local", progress: "local", project: "projA", mirror } }));
+  const out = await runMigrate(a, { ...process.env, HOME: home, DARKMEM_API_KEY: STUB_KEY, CLAUDE_CONFIG_DIR: "" });
+  assert.equal(out.status, 0, out.stdout + out.stderr);
+  assert.match(out.stdout, /copied .* \(it holds no \.sync-state\.json, so it was left in place\)/);
+  assert.equal(read(path.join(mirror, "keep.txt")), "mine\n");
+  assert.equal(read(path.join(home, ".dagents", "mirror", "projA", "dagents", "plans", "p.md")), "# P\n");
+});
+
 test("a dforge mirror a sync holds is refused before anything is copied to darkmem", async t => {
   const stub = await startStub();
   t.after(() => stub.close());
