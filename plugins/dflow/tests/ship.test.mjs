@@ -221,6 +221,15 @@ test('a rebase onto the default branch does not count its changes as made after 
   assert.equal(check.status, 0, check.stdout);
 });
 
+test('a file put back to the base after the review still counts as changed since it', t => {
+  const root = readyToShip(t);
+  git(root, 'rm', '-q', 'src/meter.mjs');
+  git(root, 'commit', '-q', '-m', 'refactor: drop the meter');
+  const check = dflow(root, ['ship', '--check']);
+  assert.equal(check.status, 1, check.stdout);
+  assert.match(check.stdout, /1 file\(s\) changed after the recorded review \(src\/meter\.mjs\)/);
+});
+
 test('a review or a proof of a commit git no longer has counts as stale', t => {
   const root = makeProject(t, { plan: UI_PLAN });
   buildAll(root);

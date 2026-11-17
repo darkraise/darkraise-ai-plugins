@@ -240,6 +240,17 @@ execFileSync('git', ['add', 'src/late.mjs']);
   assert.equal(git(root, 'rev-parse', 'HEAD'), before);
 });
 
+test('a commit made while verify runs refuses the task, even with the index unchanged', t => {
+  const root = makeProject(t);
+  stageTask1(root, `import { execFileSync } from 'node:child_process';
+execFileSync('git', ['commit', '-q', '-m', 'chore: someone else commits']);
+`);
+  const moved = dflow(root, ['done', '1', '-m', 'feat: parse']);
+  assert.equal(moved.status, 1, moved.stdout);
+  assert.match(moved.stderr, /the head commit moved while verify ran/);
+  assert.equal(parsePlan(read(root, PLAN_FILE)).tasks[0].done, false);
+});
+
 test('a torn context file reads as no figure and breaks no command', t => {
   const root = makeProject(t);
   stageTask1(root);

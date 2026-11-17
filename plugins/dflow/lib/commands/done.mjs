@@ -80,6 +80,7 @@ export async function run(ctx, argv, { out }) {
   // `git commit` takes the index as it is at the end, so a file staged or
   // edited during a slow verify would ride along unverified.
   const treeBefore = mustGit(ctx.root, ['write-tree']).trim();
+  const headBefore = mustGit(ctx.root, ['rev-parse', 'HEAD']).trim();
   for (const command of task.verify) {
     const result = await runCommand(command, { cwd: ctx.root, timeoutSeconds: ctx.config.verifyTimeout, logFile, env: ctx.env });
     if (result.ok) continue;
@@ -97,6 +98,7 @@ export async function run(ctx, argv, { out }) {
     refreshHud(ctx);
     return 1;
   }
+  if (gitOut(ctx.root, ['rev-parse', 'HEAD']) !== headBefore) fail(`the head commit moved while verify ran, so verify did not run on what would be committed; nothing was ticked or committed. Run \`dflow done ${number}\` again once nothing else is changing the checkout`);
   const treeAfter = gitOut(ctx.root, ['write-tree']);
   const moved = new Set([
     ...(treeAfter === treeBefore ? [] : treeAfter ? gitList(ctx.root, ['diff', '--name-only', '--no-renames', '-z', treeBefore, treeAfter]) : ['the index']),
