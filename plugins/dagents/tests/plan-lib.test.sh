@@ -465,5 +465,19 @@ printf '{not json\n' > "$GH/.dagents/config.json"
 check "plan_ledger: a ConfigError exits 2" "$?" "2"
 check "plan_ledger: the ConfigError is named once" "$(grep -c 'not valid JSON' "$TMP/ledger-err")" "1"
 
+# --- a first-parent history past the 64 KiB pipe buffer: a code commit after
+# the reviewed head still reads stale ---
+LH="$TMP/long-history"
+git init -q "$LH"
+git -C "$LH" symbolic-ref HEAD refs/heads/main
+awk 'BEGIN { for (i = 1; i <= 2000; i++) printf "commit refs/heads/main\ncommitter t <t@example.com> %d +0000\ndata 2\nc\n\n", 1700000000 + i }' \
+  | git -C "$LH" fast-import --quiet
+reviewed=$(git -C "$LH" rev-parse --short HEAD)
+printf 'commit refs/heads/main\ncommitter t <t@example.com> 1700009999 +0000\ndata 2\nf\nfrom %s\nM 644 inline code.txt\ndata 2\nx\n\n' "$(git -C "$LH" rev-parse HEAD)" \
+  | git -C "$LH" fast-import --quiet
+printf 'Final review: clean (commits 0000000..%s)\n' "$reviewed" > "$TMP/long-ledger.md"
+check "final review: a later code commit is stale on a long history" \
+  "$(cd "$LH" && HOME="$TMP/long-home" plan_final_review_state "$TMP/long-ledger.md")" "stale $reviewed"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
