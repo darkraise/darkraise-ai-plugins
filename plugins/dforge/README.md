@@ -821,8 +821,7 @@ one card with slim meters whose ticks mark how far each window has run.
 Each button sits in a rounded box, the letter of its hotkey underlined in the
 label as a desktop app marks one; the hotkey presses it while the pane has the
 keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `d` **Dense** or **Detailed**, `s` **Settings**, `m` **Minimize**,
-and `b` **Back** in the settings view. Before Claude Code 2.1.295, which first
-draws a styled label, the hotkey leads the label instead (`c: Compact`). The box is gray at rest and takes the accent color on the one
+and `b` **Back** in the settings view. The box is gray at rest and takes the accent color on the one
 that matters: **Hand off** once the context passes 80% of the handoff budget, **Resume**
 whenever it shows. In the terminal's settings view a switch reads `● On` or `○ Off`, the
 chosen option of a row takes the accent, and what is off is drawn dim.
