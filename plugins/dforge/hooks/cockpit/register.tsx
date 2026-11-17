@@ -88,6 +88,7 @@ import {
   BAND_SEGMENTS,
   seatDenial,
   fastModeLine,
+  guardLine,
   bandLines,
   bandLinesFrom,
   bandLineToggled,
@@ -413,8 +414,39 @@ function applyNotify(o: Live) {
   S.notifyAskAfter = o.notifyAskAfter
 }
 
+// $ exists only once a hook runs, and the engine loads only hooks written as
+// function literals, so the workflow guard's standalone check runs in the
+// first hook and every hook awaits it at its top. While another workflow
+// plugin shares the session, each hook passes its event on untouched, and the
+// band above the prompt and the pane draw the guard line alone.
+let guardCheck: Promise<string | null> | null = null
+
+function guardNow($: EngineInterface): Promise<string | null> {
+  guardCheck ??= $.process
+    .run(['node', `${$.plugin.root}/scripts/workflow-guard.mjs`, '--host', 'claude', '--self', 'dforge'], { timeoutMs: 5_000 })
+    .then(
+      ran => guardLine(ran, $.plugin.root),
+      () => guardLine(null, $.plugin.root),
+    )
+  return guardCheck
+}
+
+/** True while another workflow plugin shares the session: each hook then passes its event on. */
+async function standsDown($: EngineInterface): Promise<boolean> {
+  return (await guardNow($)) !== null
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    // The check holds for the process: a /clear or /resume fires no
+    // session.start, and enabling a plugin takes a new session anyway.
+    if ((await guardNow($)) !== null) {
+      S.watchdog?.cancel()
+      S.watchdog = null
+      S.poll?.cancel()
+      S.poll = null
+      return next(e)
+    }
     S.permissionMode = null
     S.watchedSince = await $.clock.now()
     S.reconciledAt = null
@@ -435,6 +467,8 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'dforge:cockpit' }, async ($, e) => {
+    const conflict = await guardNow($)
+    if (conflict !== null) return { text: conflict }
     const o = await live($)
     const words = e.args.trim().split(/\s+/)
     if (words[0]?.toLowerCase() === 'notify') return notifyCommand($, words.slice(1))
@@ -463,6 +497,7 @@ export const register: Register = on => {
 
   // The engine's own commands change what the Account section and the band show: read it again once they ran.
   on('command.run', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const done = await next(e)
     if (REREAD_COMMANDS.includes(e.command)) {
       try {
@@ -477,6 +512,7 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('session.measure', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const done = await next(e)
     const o = await live($)
     const now = await $.clock.now()
@@ -502,6 +538,7 @@ export const register: Register = on => {
   })
 
   on('session.end', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const ended = e.reason === 'clear' ? null : await endedEvent($, e.sessionId)
     S.ticker?.cancel()
     S.ticker = null
@@ -534,6 +571,7 @@ export const register: Register = on => {
   // A compaction leaves no reading until the next response: drop the stale
   // one and re-arm the note, so it does not stay latched.
   on('session.compact', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const done = await next(e)
     if (e.agentId === undefined && e.trigger !== 'precompute' && 'messages' in done && done.messages !== undefined) {
       await update($, budget, () => null)
@@ -550,6 +588,7 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('agent.spawn', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const denial = seatDenial(e, (await read($, isPlanSession)) && !(await read($, isFastMode)))
     if (denial !== null) {
       const refusal: CockpitRefusal = { at: await $.clock.now(), tool: 'Agent', line: seatRefusalLine(e) }
@@ -583,6 +622,7 @@ export const register: Register = on => {
 
   // Remote Control clients joining and leaving; the terminal raises neither.
   on('session.attach', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const joined = await next(e)
     const o = await live($)
     await update($, remote, now => ({ ...now, clients: [...now.clients.filter(one => one.id !== e.clientId), { id: e.clientId, surface: e.surface }] }))
@@ -594,6 +634,7 @@ export const register: Register = on => {
 
   // A skill typed as a slash command makes no Skill tool call; its prompt is expanded on every path.
   on('skill.prompt', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const expanded = await next(e)
     if (isDforge(e.skill)) {
       await update($, isPlanSession, () => true)
@@ -604,12 +645,14 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('ui.close', { id: PANE }, async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     if (e.origin.kind === 'person') S.isClosedByPerson = true
     await flushSettingNote($)
     return next(e)
   }).catch(($, e, next) => next(e))
 
   on('session.detach', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const left = await next(e)
     await update($, remote, now => ({ ...now, clients: now.clients.filter(one => one.id !== e.clientId) }))
     return left
@@ -619,6 +662,7 @@ export const register: Register = on => {
   // of the loop that started it: the main conversation's, or a subagent's,
   // which no prompt.submit announces.
   on('session.append', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const kept = await next(e)
     if (e.message.role === 'user') {
       const text = e.message.content.map(block => (block.type === 'text' ? block.text : '')).join('\n')
@@ -638,6 +682,7 @@ export const register: Register = on => {
   // listed, since a Done covering more work beats a lost one. The cockpit's own
   // keep-warm prompt continues the chain it keeps warm.
   on('prompt.submit', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     if (S.isKeepWarmSubmitted && e.text === keepWarmPrompt()) return submitted($, await next(e))
     S.isKeepWarmSubmitted = false
     if (e.origin !== undefined && NEW_CHAIN_ORIGINS.has(e.origin.kind)) S.heldDone = null
@@ -649,6 +694,7 @@ export const register: Register = on => {
 
   // A main turn begins: the Now row starts its clock.
   on('turn.start', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     if (e.agentId !== undefined) return next(e)
     S.isMainTurn = true
     // A wake-up can start between the keep-warm submit and its turn; the
@@ -673,12 +719,14 @@ export const register: Register = on => {
 
   // The function-hook tool.check carries no permission mode; the classic hook
   // inputs do, so the mode the session runs in now is read from them.
-  on('classic.UserPromptSubmit', ($, e, next) => {
+  on('classic.UserPromptSubmit', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     if (typeof e.permission_mode === 'string' && e.permission_mode !== '') S.permissionMode = e.permission_mode
     return next(e)
   })
   // A subagent's request carries the subagent's mode, not the session's.
-  on('classic.PermissionRequest', ($, e, next) => {
+  on('classic.PermissionRequest', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     if (e.agent_id === undefined && typeof e.permission_mode === 'string' && e.permission_mode !== '') S.permissionMode = e.permission_mode
     return next(e)
   })
@@ -686,6 +734,7 @@ export const register: Register = on => {
   // Watches the permission decision, never changes it: an "ask" on a call
   // means the person is about to be asked, unless the mode settles it alone.
   on('tool.check', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const decided = await next(e)
     const id = e.tool_use_id
     const isUnattended = S.permissionMode === null ? S.isUnattended : UNATTENDED_MODES.includes(S.permissionMode)
@@ -704,6 +753,7 @@ export const register: Register = on => {
   // so an approval waiting on it was given. Drawing may not write state, so
   // the wait settles once this draw is done.
   on('ui.render', { component: 'ToolProgress' }, async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const id = e.props.tool_use_id
     if (S.waits.has(id)) $.clock.after(0, () => void endWait($, id, '✓ Approved'))
     return next(e)
@@ -712,6 +762,7 @@ export const register: Register = on => {
   // The model and effort the main loop's requests go out with, as the status
   // line shows them.
   on('turn.step', async function* ($, e, next) {
+    if (await standsDown($)) return yield* next(e)
     if (e.agentId === undefined) {
       const effort = typeof e.effort === 'string' ? e.effort : null
       const before = await read($, engine)
@@ -724,6 +775,7 @@ export const register: Register = on => {
   })
 
   on('turn.complete', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const done = await next(e)
     if (e.agentId === undefined) {
       S.isMainTurn = false
@@ -823,13 +875,14 @@ export const register: Register = on => {
     return done
   })
 
-  on('attribution.text', { kind: 'commit' }, async ($, e, next) => ((await live($)).guardAttribution ? { text: '' } : next(e)))
-  on('attribution.text', { kind: 'pr' }, async ($, e, next) => ((await live($)).guardAttribution ? { text: '' } : next(e)))
+  on('attribution.text', { kind: 'commit' }, async ($, e, next) => (!(await standsDown($)) && (await live($)).guardAttribution ? { text: '' } : next(e)))
+  on('attribution.text', { kind: 'pr' }, async ($, e, next) => (!(await standsDown($)) && (await live($)).guardAttribution ? { text: '' } : next(e)))
 
   // One hook for every tool: the attribution guard judges before anything
   // runs, and the main loop's budget and plan are read after each call, the
   // only point its context grows between turns.
   on('tool.call', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const tool = String(e.tool)
     if (e.agentId !== undefined && REVIEW_WRITE_TOOLS.includes(tool)) {
       const denial = await judgeWriteDenial($, tool, e)
@@ -932,6 +985,11 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const conflict = await guardNow($)
+    if (conflict !== null) {
+      const { Text } = $.ui.resolve(e)
+      return <Text color="yellow">{conflict}</Text>
+    }
     const table = $.ui.resolve(e)
     const o = await live($)
     const { Box, Button, Text } = table
@@ -2338,6 +2396,11 @@ export const register: Register = on => {
   // to resume rides above it, or alone while the pane is open.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
+    const conflict = await guardNow($)
+    if (conflict !== null) {
+      const { Text } = $.ui.resolve(e)
+      return <Text color="yellow">{conflict}</Text>
+    }
     const o = await live($)
     const offer = await offerNow($, await $.clock.now())
     const band = o.isMinimized ? await drawBand($, e, () => expand($, e.viewport?.isFullscreen === true), e.props.bodyColumns) : null

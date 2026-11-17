@@ -509,7 +509,7 @@ check "the clean plan lints clean" "$(bash "$LINT" "$TMP/clean-plan.md" >/dev/nu
 out=$(bash "$LINT" "$TMP/exec-plan.md" 2>&1); rc=$?
 check "an Executor line is no error" "$rc" "0"
 check "an Executor line gets one warning" \
-  "$(grep -c '^WARN Task 2: the \*\*Executor:\*\* line is obsolete; the session implements this task$' <<<"$out")" "1"
+  "$(grep -c '^WARN Task 2: the \*\*Executor:\*\* line is obsolete; the session implements this task — the 4.x agent workflow continues in the dagents plugin; run /dagents:migrate there$' <<<"$out")" "1"
 check "the External executors header is accepted silently" "$(grep -c 'External executors' <<<"$out")" "0"
 check "an Executor line raises no effort floor" "$(grep -c -i 'delegated' <<<"$out")" "0"
 lint clean.md --amendments am-none.md
@@ -717,6 +717,13 @@ OUT=$(cd "$LREPO" && bash "$LINT" docs/superpowers/plans/p.md 2>&1)
 lacks "plan-lint: no register means no register findings" "$OUT" "register row"
 lacks "plan-lint: no register means no premature-last finding" "$OUT" "register rows are open"
 
+# --- the 4.x signposts name dagents ---
+printf '# P\n\n**Goal:** g\n\n**Execution:** subagent — `claude --model sonnet --effort high` — legacy\n\n## Task index\n\n1. One\n\n---\n\n### Task 1: One\n\n**Files:**\n- Modify: `a.sh`\n' > "$TMP/signpost-sub.md"
+sub=$(bash "$LINT" "$TMP/signpost-sub.md" 2>&1)
+check "subagent error names dagents" "$(printf '%s' "$sub" | grep -q 'dagents.*/dagents:migrate' && echo yes || echo no)" "yes"
+printf '# P\n\n**Goal:** g\n\n**Execution:** inline — `claude --model sonnet --effort low` — x\n\n## Task index\n\n1. One\n\n---\n\n### Task 1: One\n\n**Files:**\n- Modify: `a.sh`\n\n**Executor:** codex gpt-6.1-sol / low\n' > "$TMP/signpost-exe.md"
+exe=$(bash "$LINT" "$TMP/signpost-exe.md" 2>&1)
+check "Executor warning names dagents" "$(printf '%s' "$exe" | grep -q 'dagents.*/dagents:migrate' && echo yes || echo no)" "yes"
 fi
 if want two; then
 # --- the shared Evaluation reader ---
@@ -771,7 +778,7 @@ check "the stale-parent fixture is otherwise clean" "$status" "0"
 lintplan stale-parent-exec.md "$(printf '### Task 1: One\n\n**Files:**\n- Create: `x.txt`\n\n**Executor:** codex gpt-6.1-sol / medium\n\n#### Part A: a\n\n**Files:**\n- Create: `a.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n\n#### Part B: b\n\n**Files:**\n- Create: `b.txt`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 0 = 2\n')"
 lint stale-parent-exec.md
 check "a parent Executor line gets the obsolete warning once" \
-  "$(grep -c '^WARN Task 1: the \*\*Executor:\*\* line is obsolete; the session implements this task$' <<<"$out")" "1"
+  "$(grep -c '^WARN Task 1: the \*\*Executor:\*\* line is obsolete; the session implements this task — the 4.x agent workflow continues in the dagents plugin; run /dagents:migrate there$' <<<"$out")" "1"
 lacks "a stale parent Executor line is not an error" "$out" "ERROR Task 1"
 check "the stale-parent-exec fixture is otherwise clean" "$status" "0"
 

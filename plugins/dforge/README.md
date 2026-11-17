@@ -355,6 +355,47 @@ machine with no Git Bash, where the command is meaningless, and with it the
 user gets Claude Code's actionable "requires bash but Git Bash was not found"
 message instead.
 
+## One workflow plugin at a time
+
+dforge, dagents and dflow each own a whole workflow: their hooks, skills and
+state collide in one session. `scripts/workflow-guard.mjs`, shipped
+byte-identical in each of the three, decides which of them are active and
+stands dforge down when more than one is.
+
+- **On Claude Code**, the SessionStart hook runs the guard first. The guard
+  reads the managed settings (`managed-settings.json` and the
+  `managed-settings.d/` drop-ins), the project's `.claude/settings.local.json`
+  and `.claude/settings.json`, your user `settings.json`, and the install
+  record `plugins/installed_plugins.json`. With two or more of the three
+  enabled, the hook prints a block naming each one with its disable commands,
+  `claude plugin disable <name>@darkraise --scope local` first, then the
+  enabling scope's command for one enabled at user or project scope. It tells
+  the model to show the block and use none of the plugins. For the rest of the
+  session every other dforge hook exits at once, and the cockpit draws one
+  line naming the active plugins and the check to run, and nothing else. Run
+  the check yourself with
+  `node <plugin-root>/scripts/workflow-guard.mjs --host claude`: one line per
+  active plugin with the scope that enables it, exit 3 on a conflict.
+- **On Codex**, the check runs only when the entry skill loads: its
+  `codex-tools.md` reference has the session run
+  `node <plugin-root>/scripts/workflow-guard.mjs --host codex`, which reads the
+  project's `.codex/config.toml` and then `$CODEX_HOME/config.toml`, and stop
+  on exit 3. Codex runs no hooks and no cockpit.
+- **Skills stay invocable.** Claude Code gives a plugin no way to hide its
+  skills, so a stood-down dforge's skills, commands and scripts still run when
+  asked for by name; the hook's instruction to the model is the only check.
+- **Older siblings do not stand down.** A dflow older than its first tagged
+  release ships no guard: dforge still stands down beside it, but dflow keeps
+  running its own hooks. Every dagents release carries the guard.
+- **Blind spots.** The guard reads files only, so it misses a plugin enabled
+  through `--settings` or `--plugin-dir`, settings a server delivers,
+  MDM, registry or plist policy, and, on Codex, a project `config.toml` Codex
+  ignores because the project is not trusted (the guard still reads it). A
+  file it cannot read or parse prints one `workflow-guard: <reason>` line and
+  counts as no conflict.
+
+The dforge 4.x agent workflow (implementer agents, subagent mode, external executors) continues as the dagents plugin.
+
 ## How it fires
 
 A `SessionStart` hook (matcher `startup|resume|clear|compact`) injects the

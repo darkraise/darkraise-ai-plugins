@@ -252,7 +252,7 @@ if [ -n "$execution" ]; then
   else
     say ERROR header "Execution line does not match '**Execution:** inline — claude --model <m> --effort <e> — <reason>'"
   fi
-  [ "$mode" != subagent ] || say ERROR header "subagent execution was retired in 5.0.0; use inline"
+  [ "$mode" != subagent ] || say ERROR header "subagent execution was retired in 5.0.0; use inline — the 4.x agent workflow continues in the dagents plugin; run /dagents:migrate there"
 fi
 
 # --- placeholders ---
@@ -379,7 +379,7 @@ for n in $nums; do
     say NOTE "Task $n" "an **Evaluation:** line above the first part does not score the task"
   fi
   [ -z "$(plan_lines Executor <<<"$full")" ] \
-    || say WARN "Task $n" "the **Executor:** line is obsolete; the session implements this task"
+    || say WARN "Task $n" "the **Executor:** line is obsolete; the session implements this task — the 4.x agent workflow continues in the dagents plugin; run /dagents:migrate there"
   for part in ${parts:--}; do
   if [ "$part" = - ]; then
     where="Task $n" text=$full
