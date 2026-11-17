@@ -86,8 +86,6 @@ type World = {
   /** Each pane the plugin closes, by id. */
   closed?: string[]
   isPaneShut?: boolean
-  /** The Claude Code release the engine reports; absent, `$.session.version()` fails. */
-  version?: string
   /** The /config row "Enable Remote Control for all sessions"; absent unless said. */
   remoteControl?: string
   /** Tools that answer in their own way, by name. */
@@ -198,10 +196,6 @@ function world(on: On, w: World) {
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: w.agentIds?.shift() ?? 'agent-1' }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
-  on('session.version', () => {
-    if (w.version === undefined) throw new Error('no version')
-    return { value: { version: w.version, base: w.version } }
-  })
   on('prompt.submit', (_$, e) => {
     if ((w.submitFailures ?? 0) > 0) {
       w.submitFailures = (w.submitFailures ?? 1) - 1

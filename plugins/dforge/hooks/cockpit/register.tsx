@@ -44,7 +44,6 @@ import {
   fitBand,
   folderRuns,
   handedOff,
-  isAtLeast,
   isGitWriteTool,
   isDforge,
   gitMessageTexts,
@@ -135,8 +134,6 @@ const BUTTON_MAIN = 'permission'
 const BUTTON_REST = 'inactive'
 // The rows the band asks for: its frame, two lines and a warning.
 const COMPACT_ROWS = 5
-// The first Claude Code that takes styled children in a Button.
-const UNDERLINE_SINCE = '2.1.295'
 // The most /context categories the pane lists (breakdownRows caps it lower).
 const MAX_BREAKDOWN_ROWS = 12
 // Below this the band drops its frame.
@@ -1069,7 +1066,6 @@ export const register: Register = on => {
 
     // Every control is a button in a rounded box: gray at rest, the accent on
     // the one that matters (`isMain`), dim when it reads as off.
-    if (S.canUnderline === null) await readVersion($)
     const button = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean; isCompact?: boolean; isFocused?: boolean } = {}) => {
       const autoFocus = look.isFocused === true ? true : undefined
       // The desktop draws its own buttons, the main one in its primary look. A compact
@@ -1079,14 +1075,7 @@ export const register: Register = on => {
       }
       // The hotkey's letter is underlined in the label, as a desktop app marks
       // one; a hidden twin holds the hotkey, since a Button with one draws "c: "
-      // before its label. Older Claude Code draws that prefix instead.
-      if (!S.canUnderline) {
-        return (
-          <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
-            <Button key={key} label={label} hotkey={look.hotkey} plain dimColor={look.isOff} hover={{ bold: true }} autoFocus={autoFocus} onPress={onPress} />
-          </Box>
-        )
-      }
+      // before its label.
       const at = look.hotkey === undefined ? -1 : label.toLowerCase().indexOf(look.hotkey)
       return (
         <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
@@ -1513,15 +1502,11 @@ export const register: Register = on => {
       return (
         <Box key={key} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>
           <Box key={`${key}-head`} flexDirection="row" justifyContent="space-between">
-            {S.canUnderline ? (
-              <Button key={`${key}-title`} label={label} plain hover={{ bold: true }} onPress={() => toggle(key)}>
-                <Text color={color} bold>
-                  {label}
-                </Text>
-              </Button>
-            ) : (
-              <Button key={`${key}-title`} label={label} plain hover={{ bold: true }} onPress={() => toggle(key)} />
-            )}
+            <Button key={`${key}-title`} label={label} plain hover={{ bold: true }} onPress={() => toggle(key)}>
+              <Text color={color} bold>
+                {label}
+              </Text>
+            </Button>
             {headline}
           </Box>
           {isCollapsed ? body.filter(part => part === actions) : body}
@@ -2775,9 +2760,6 @@ const S = {
   isUnattended: false,
   // The permission mode the last classic hook input carried; null before one.
   permissionMode: null as string | null,
-  // Whether this Claude Code draws a Button's label from styled children,
-  // so the hotkey's letter can be underlined in it.
-  canUnderline: null as boolean | null,
   // The person closed the pane this session: a desktop joining reopens nothing.
   isClosedByPerson: false,
   // The auto run's scheduled stage, at most one.
@@ -4558,7 +4540,6 @@ async function readSession($: EngineInterface, isStart: boolean) {
   await step(() => trackAutoRun($))
   await step(() => readRun($))
   await step(() => beat($))
-  await step(() => readVersion($))
   await step(() => readRemote($))
   S.sessionUnread = unread
   // '' when the id could not be read: the poll adopts the first id it reads.
@@ -4861,15 +4842,6 @@ async function shutPane($: EngineInterface) {
     if ((await $.ui.panes()).some(pane => pane.id === PANE)) await $.ui.close({ id: PANE })
   } catch {
     // No pane to close on this host.
-  }
-}
-
-async function readVersion($: EngineInterface) {
-  try {
-    const { base } = await $.session.version()
-    S.canUnderline = isAtLeast(base, UNDERLINE_SINCE)
-  } catch {
-    S.canUnderline = false
   }
 }
 

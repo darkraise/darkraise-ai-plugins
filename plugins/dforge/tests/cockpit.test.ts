@@ -40,7 +40,6 @@ import {
   folderRuns,
   handedOff,
   hasUnresolvedRows,
-  isAtLeast,
   isServiceCommand,
   isTimerCommand,
   reconcileStep,
@@ -291,8 +290,6 @@ type World = {
   /** Each pane the plugin closes, by id. */
   closed?: string[]
   isPaneShut?: boolean
-  /** The Claude Code release the engine reports; absent, `$.session.version()` fails. */
-  version?: string
   /** The /config row "Enable Remote Control for all sessions"; absent unless said. */
   remoteControl?: string
   /** Tools that answer in their own way, by name. */
@@ -418,10 +415,6 @@ function world(on: On, w: World) {
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: w.agentIds?.shift() ?? 'agent-1' }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
-  on('session.version', () => {
-    if (w.version === undefined) throw new Error('no version')
-    return { value: { version: w.version, base: w.version } }
-  })
   on('prompt.submit', (_$, e) => {
     if ((w.submitFailures ?? 0) > 0) {
       w.submitFailures = (w.submitFailures ?? 1) - 1
@@ -1863,24 +1856,8 @@ describe('settings', () => {
     expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ collapsed: 'context,repo' })
   })
 
-  test('a collapsed title is a bare label on a Claude Code without styled labels', async ($, on) => {
-    world(on, { tokens: 284_000, config: { collapsed: 'usage,context' }, version: '2.1.292' })
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    await $.session.measure(MEASURE)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    const title = await ui.find({ key: 'usage-title' })
-    expect(title?.props).toMatchObject({ label: '▸ Usage', plain: true })
-    expect(title?.children).toEqual([])
-    expect(await ui.find({ type: 'Text', text: /^\$1\.50/ })).toBeDefined()
-    expect(await ui.find({ key: 'limit-five_hour' })).toBeUndefined()
-    expect((await ui.find({ key: 'context-title' }))?.children).toEqual([])
-    expect(await ui.find({ type: 'Text', text: /handoff 465k/ })).toBeUndefined()
-    expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
-  })
-
-  test('a collapsed title is drawn in its card color where Claude Code styles labels', async ($, on) => {
-    world(on, { tokens: 284_000, config: { collapsed: 'usage,context' }, version: '2.1.295' })
+  test('a collapsed title is drawn in its card color', async ($, on) => {
+    world(on, { tokens: 284_000, config: { collapsed: 'usage,context' } })
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     await $.session.measure(MEASURE)
@@ -1888,6 +1865,7 @@ describe('settings', () => {
     expect((await ui.find({ key: 'usage-title' }))?.children[0]).toMatchObject({ type: 'Text', props: { color: 'blue', bold: true }, children: ['▸ Usage'] })
     expect(await ui.find({ type: 'Text', text: /^\$1\.50/ })).toBeDefined()
     expect(await ui.find({ key: 'limit-five_hour' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /handoff 465k/ })).toBeUndefined()
     expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
   })
 
@@ -2578,7 +2556,8 @@ describe('buttons', () => {
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect((await ui.find({ key: 'pane-handoff-box' }))?.props).toMatchObject({ borderStyle: 'round', borderColor: 'inactive' })
-    expect((await ui.find({ key: 'pane-handoff' }))?.props).toMatchObject({ hotkey: 'h', plain: true })
+    expect((await ui.find({ key: 'pane-handoff' }))?.props).toMatchObject({ plain: true })
+    expect((await ui.find({ key: 'pane-handoff-hotkey' }))?.props.hotkey).toBe('h')
     await ui.unmount()
     // Past 80% of the budget, Hand off is the one to press.
     w.tokens = 350_000
@@ -2588,8 +2567,8 @@ describe('buttons', () => {
     expect((await ui.find({ key: 'pane-compact-box' }))?.props.borderColor).toBe('inactive')
   })
 
-  test('underline the hotkey letter where Claude Code draws styled labels', async ($, on) => {
-    world(on, { ...SIGNED_IN, version: '2.1.295' })
+  test('underline the hotkey letter', async ($, on) => {
+    world(on, { ...SIGNED_IN })
     signedIn(on)
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -2606,19 +2585,6 @@ describe('buttons', () => {
     // The settings controls are single-line buttons, the hotkey on the button itself.
     expect((await ui.find({ key: 'settings-back' }))?.props).toMatchObject({ label: 'Back', hotkey: 'b' })
     expect(await ui.find({ key: 'settings-back-box' })).toBeUndefined()
-  })
-
-  test('keep the "c: " prefix on an older Claude Code', async ($, on) => {
-    world(on, { ...SIGNED_IN, version: '2.1.292' })
-    signedIn(on)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect((await ui.find({ key: 'pane-compact' }))?.props).toMatchObject({ hotkey: 'c', plain: true })
-    expect(await ui.find({ key: 'pane-compact-hotkey' })).toBeUndefined()
-    expect(isAtLeast('2.1.300-dev', '2.1.295')).toBe(true)
-    expect(isAtLeast('2.2.0', '2.1.295')).toBe(true)
-    expect(isAtLeast('2.1.294', '2.1.295')).toBe(false)
-    expect(isAtLeast(undefined, '2.1.295')).toBe(false)
   })
 
   test('read as on, chosen or off in the settings', async ($, on) => {
