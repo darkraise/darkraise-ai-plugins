@@ -2,6 +2,7 @@
 # A5 and A7: dagents keeps 4.17.1's feature set without version 5's, and a
 # full cycle neither touches nor reads dforge's names.
 set -uo pipefail
+unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DAGENTS_BUDGET CLAUDE_PROJECT_DIR
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 REPO="$(cd "$ROOT/../.." && pwd)"
