@@ -11,16 +11,18 @@ and `handoff.md` while progress is local) is git-ignored and lives in the
 worktree, so it goes with it — `git worktree remove` deletes ignored files
 without `--force`. Options 2 and 3 keep it for the next session.
 
-**Carry the worktree's handoff (Option 1 from a linked worktree).** Each
-checkout keeps its own `latest.md`, and the next session starts in the main
-repo root, so before removing or leaving the worktree, read its handoff
+**Carry the worktree's handoff (Option 1 from a linked worktree, work
+without a plan file).** Each checkout keeps its own `latest.md`, and the next
+session starts in the main repo root, so before removing or leaving the
+worktree, read its handoff
 (`(cd "$WORKTREE_PATH" && bash <plugin-root>/scripts/dagents-path latest)`
-prints its path). An open item in its notes counts as something that follows, beside a
-register row this work left open and a finding awaiting a ruling. When there
-is one, write the notes sections (handoff step 3) carrying every open item
-to the path `scripts/next-step --target --adhoc --phase <design|build>
---next "<what follows>"` prints in the main repo root, and in Step 7 run that
-`--adhoc` call in place of `--complete`.
+prints its path). An open item in its notes counts as something that follows
+in Step 7, beside a register row this work left open and a finding awaiting a
+ruling. When there is one, write the notes sections (handoff step 3) carrying
+every open item to the path `scripts/next-step --target --adhoc --phase
+<design|build> --next "<what follows>"` prints in the main repo root; Step 7's
+`--adhoc` call keeps those notes. Work from a plan file carries nothing here:
+its ledger and register hold what follows, and Step 7 runs `--complete`.
 
 **If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. If this
 work came from a plan, delete its workspace — `rm -rf` on the directory
