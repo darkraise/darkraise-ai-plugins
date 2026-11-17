@@ -318,7 +318,11 @@ your own: QA commits on this branch.
    outside the diff.
    ```
 
-   Then run `scripts/review-route PLAN_FILE --final` and dispatch
+   Then run each reviewer gate, `scripts/agy-gate` and `scripts/codex-gate`
+   (say a line aloud when it ends `source=probe`; add `--refresh` when a
+   reviewer may have come back since a gate last answered, such as after a
+   login): `review-route` reads only the answers the gates recorded in this
+   session. Then run `scripts/review-route PLAN_FILE --final` and dispatch
    the `primary` it prints: `dforge:judge-opus`, with `reason=intricate`
    for a plan with a task at risk 3 or totalling 6. Use
    dforge:requesting-code-review's
