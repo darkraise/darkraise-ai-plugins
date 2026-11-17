@@ -236,8 +236,9 @@ Subagent ([JUDGE]):
 - `[ROUND]` - REQUIRED: this round's number.
 - `[DELTA_FILE]` - REQUIRED: `<workspace>/plan-delta-<r>.diff`.
 - `[PRIOR_FINDINGS_FILE]` - REQUIRED: the previous round's
-  `<workspace>/plan-review-round-<r-1>.json` or
-  `<workspace>/plan-review-round-<r-1>-report.md`.
+  `<workspace>/plan-review-round-<r-1>-report.md`, or, when round 1 ran on
+  the panel, every `<workspace>/plan-review-round-1-panel/<id>.json` that
+  returned a list, given as a list of paths.
 
 **Reviewer writes** a verdict per prior Critical or Important finding, new
 findings graded Critical, Important or Minor, and four scores for the whole
