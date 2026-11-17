@@ -34,9 +34,11 @@ async function status({ cfg, roots, state, report, out }) {
 // stopped part-way, or failed an item or phase darkmem answered with an error,
 // adds what it found, since it never re-checked the rest. Each command keeps
 // its own list, because pull does not re-check what push found (local case
-// twins, for one). conflicts, which status prints, is their union.
+// twins, for one). conflicts, which status prints, is their union. A state
+// written before each command kept its own list holds only the union: it is
+// read as push's, the one list a pull cannot re-check.
 function recordConflicts(state, name, found, completed) {
-  const by = state.conflictsBy ?? {};
+  const by = state.conflictsBy ?? (state.conflicts.length ? { push: [...state.conflicts] } : {});
   by[name] = completed ? found : [...new Set([...(by[name] ?? []), ...found])];
   state.conflictsBy = by;
   state.conflicts = completed ? [...new Set(Object.values(by).flat())] : [...new Set([...state.conflicts, ...found])];

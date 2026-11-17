@@ -194,6 +194,20 @@ test("a completed pull keeps the conflicts a push recorded, and a completed push
   assert.deepEqual(s.state().conflicts, []);
 });
 
+test("a completed pull keeps conflicts recorded before each command kept its own", { skip: process.platform !== "linux" && "needs a case-sensitive file system" }, async t => {
+  const s = await setup(t);
+  write(path.join(s.docsRoot, "notes", "A.md"), "one\n");
+  write(path.join(s.docsRoot, "notes", "a.md"), "two\n");
+  assert.equal((await run(["push"], { cwd: s.repo, env: s.env })).code, 1);
+  const file = path.join(s.mirror, ".sync-state.json");
+  const older = s.state();
+  delete older.conflictsBy;
+  fs.writeFileSync(file, JSON.stringify(older));
+  const pulled = await s.pull();
+  assert.equal(pulled.code, 0, pulled.stdout + pulled.stderr);
+  assert.equal(s.state().conflicts.length, 1);
+});
+
 test("pull fails open: an unreachable darkmem is one line and exit 3 within the timeout", async () => {
   const repo = makeRepo();
   const { env } = makeHome({ repo, url: "http://127.0.0.1:9" });
