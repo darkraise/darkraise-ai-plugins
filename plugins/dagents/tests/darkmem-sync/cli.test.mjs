@@ -23,6 +23,15 @@ test("local mode prints one line and succeeds", async () => {
   assert.match(result.stdout, /^darkmem-sync: local mode — darkmem is disabled \(darkmemEnabled is false\)\n$/);
 });
 
+// Git Bash with path conversion off hands node the module path as written.
+test("the wrapper runs with path conversion off", async () => {
+  const repo = makeRepo();
+  const { env } = makeHome({ repo, config: null, stores: null });
+  const result = await run(["status"], { cwd: repo, env: { ...env, MSYS_NO_PATHCONV: "1" } });
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /^darkmem-sync: local mode/);
+});
+
 test("a malformed config is exit 2 naming the file", async () => {
   const repo = makeRepo();
   const { env } = makeHome({ repo, config: "{nope" });
