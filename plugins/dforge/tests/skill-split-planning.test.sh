@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # brainstorming and writing-plans keep each moved section reachable: a
 # reference file, a "Read ... before you ..." line at the step that needs it,
-# links that still resolve, and a SKILL.md under the 20,000-byte cap.
+# links that still resolve, and a SKILL.md under skill-size.test.sh's cap.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
