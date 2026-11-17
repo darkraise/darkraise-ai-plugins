@@ -127,6 +127,21 @@ export function baseCommit(root, config) {
   return gitOut(root, ['merge-base', 'HEAD', branch]);
 }
 
+// The files that changed from `since` to HEAD and that the branch itself
+// changes: after a rebase, what the default branch brought in is not work
+// done since. null when git cannot compare the two, as after a gc drops
+// `since`; callers read that as changed.
+export function changedSince(ctx, since) {
+  const files = git(ctx.root, ['diff', '--name-only', '--no-renames', '-z', `${since}..HEAD`]);
+  if (!files.ok) return null;
+  const changed = files.stdout.split('\0').filter(Boolean);
+  const base = baseCommit(ctx.root, ctx.config);
+  const own = base && git(ctx.root, ['diff', '--name-only', '--no-renames', '-z', `${base}..HEAD`]);
+  if (!own?.ok) return changed;
+  const mine = new Set(own.stdout.split('\0'));
+  return changed.filter(file => mine.has(file));
+}
+
 export function isAncestor(root, ancestor, descendant = 'HEAD') {
   return git(root, ['merge-base', '--is-ancestor', ancestor, descendant]).ok;
 }

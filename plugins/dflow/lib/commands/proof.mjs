@@ -17,7 +17,7 @@ export async function run(ctx, argv, { out }) {
   if (values.list || !positionals.length) {
     const lines = proofStatus(ctx, active, sha);
     if (!lines.length) out('This plan has no UI acceptance lines.');
-    for (const line of lines) out(`${line.id} ${line.state}${line.state === 'stale' ? ` (changed since: ${line.touched.join(', ')})` : line.proof ? ` at ${shortSha(line.proof.sha)}` : ''}`);
+    for (const line of lines) out(`${line.id} ${line.state}${line.state === 'stale' ? (line.touched ? ` (changed since: ${line.touched.join(', ')})` : ' (its commit cannot be compared with HEAD)') : line.proof ? ` at ${shortSha(line.proof.sha)}` : ''}`);
     return lines.every(line => line.state === 'proven') ? 0 : 1;
   }
   const id = positionals[0];

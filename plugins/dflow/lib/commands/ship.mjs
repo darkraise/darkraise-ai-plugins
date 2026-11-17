@@ -5,7 +5,7 @@ import { amendedAcceptance, approvedPlan } from '../approval.mjs';
 import { parseBoard, rewriteRow } from '../board.mjs';
 import { blockedTasks, setField } from '../plan.mjs';
 import { proofStatus } from '../proof.mjs';
-import { baseCommit, defaultBranch, head, relative } from '../repo.mjs';
+import { baseCommit, changedSince, defaultBranch, head, relative } from '../repo.mjs';
 import { buildPack } from '../review.mjs';
 import { runCommand } from '../run.mjs';
 import { appendEvent, loadState, planState, updateState } from '../state.mjs';
@@ -45,7 +45,8 @@ async function acceptance(ctx, active, record, sha, checkOnly, out) {
   }
   for (const line of proofStatus(ctx, active, sha)) {
     if (line.state === 'missing') problems.push(`${line.id} (UI) has no proof; drive it in the running app and record it with \`dflow proof ${line.id}\``);
-    if (line.state === 'stale') problems.push(`${line.id} (UI) was proven at ${shortSha(line.proof.sha)}, before ${line.touched.join(', ')} changed; prove it again`);
+    if (line.state === 'stale' && !line.touched) problems.push(`${line.id} (UI) was proven at ${shortSha(line.proof.sha)}, which git cannot compare with HEAD any more; prove it again`);
+    else if (line.state === 'stale') problems.push(`${line.id} (UI) was proven at ${shortSha(line.proof.sha)}, before ${line.touched.join(', ')} changed; prove it again`);
   }
   return { problems, pending };
 }
@@ -153,8 +154,9 @@ export async function run(ctx, argv, { out }) {
     if (review.tier < required) problems.push(`the recorded review is tier ${review.tier}; this diff needs tier ${required}`);
     // Fixes made after the review are expected, so the review is recorded
     // once they are in. Code committed after that has been seen by nobody.
-    const since = gitList(ctx.root, ['diff', '--name-only', '--no-renames', '-z', `${review.sha}..HEAD`]).filter(file => !(file.startsWith('docs/dflow/') && file.endsWith('.md')));
-    if (since.length) problems.push(`${since.length} file(s) changed after the recorded review (${since.slice(0, 5).join(', ')}${since.length > 5 ? ', …' : ''}); review them and run \`dflow review record\` again`);
+    const since = changedSince(ctx, review.sha)?.filter(file => !(file.startsWith('docs/dflow/') && file.endsWith('.md')));
+    if (!since) problems.push(`the recorded review is of ${shortSha(review.sha)}, which git cannot compare with HEAD any more; review again and run \`dflow review record\``);
+    else if (since.length) problems.push(`${since.length} file(s) changed after the recorded review (${since.slice(0, 5).join(', ')}${since.length > 5 ? ', …' : ''}); review them and run \`dflow review record\` again`);
   }
   const findings = loadFindings(ctx, active.slug);
   const blocking = findings.filter(finding => finding.status === 'open' && finding.severity === 'blocking');
