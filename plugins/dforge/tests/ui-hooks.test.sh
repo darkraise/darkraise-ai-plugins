@@ -112,6 +112,7 @@ git checkout -q -- src/App.tsx
 
 mv docs/dforge/ui-ux/profile.md "$TMP/profile.md"
 prompt s-4
+check "stop: no profile, the skill ran, no UI change: passes" "$(stop s-4 'Done.' false "$TR")" ""
 printf '// change 3\n' >> src/App.tsx
 check "stop: no profile but the skill ran: held" "$(decision "$(stop s-4 'Done.' false "$TR")")" "block"
 check "stop: no profile and no skill: passes" "$(stop s-4 'Done.')" ""
