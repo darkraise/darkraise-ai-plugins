@@ -5700,6 +5700,8 @@ describe('cockpit roots', () => {
   const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n'
   // darkmem-config runs only once one of the ~/.dforge files exists.
   const storesFile = (): NonNullable<World['files']> => ({ '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 } })
+  // The plan's workspace sdd-workspace makes in the session's checkout, the mirror's ledger aside.
+  const localWorkspace = (): NonNullable<World['files']> => ({ '/home/me/code/shop/.dforge/sdd/p': { text: '', kind: 'dir' } })
   const checkoutFiles = (): NonNullable<World['files']> => ({
     ...storesFile(),
     '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
@@ -5893,6 +5895,7 @@ describe('cockpit roots', () => {
   test('reads the ledger and the plan from the mirror when both families are in darkmem', async ($, on) => {
     const files: World['files'] = {
       ...storesFile(),
+      ...localWorkspace(),
       [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
       [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
     }
@@ -5904,6 +5907,20 @@ describe('cockpit roots', () => {
     expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
     expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
+  })
+
+  test("shows no mirror ledger whose workspace is another worktree's, before a plan is named", async ($, on) => {
+    const files: World['files'] = {
+      ...storesFile(),
+      [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
+      [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
+    }
+    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeUndefined()
   })
 
   test('offers Resume for latest.md in the mirror, naming it when the note has no first prompt', async ($, on) => {
@@ -6022,6 +6039,7 @@ describe('cockpit roots', () => {
   test('a changed stores.json moves the card to the new roots', async ($, on) => {
     const files: NonNullable<World['files']> = {
       '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 },
+      ...localWorkspace(),
       [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
       [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
     }

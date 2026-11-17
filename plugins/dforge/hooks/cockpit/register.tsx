@@ -3863,7 +3863,10 @@ async function readRun($: EngineInterface) {
     else {
       for (const name of await ledgerDirs($, base)) {
         const info = await $.fs.stat(`${base}/${name}/progress.md`).catch(() => null)
-        if (info?.kind === 'file' && (newest === null || info.mtimeMs > newest.at)) newest = { slug: name, path: `${base}/${name}/progress.md`, at: info.mtimeMs }
+        if (info?.kind !== 'file' || (newest !== null && info.mtimeMs <= newest.at)) continue
+        // As boundLedger: a shared ledger with no workspace here is another session's.
+        if (base !== local && (await $.fs.stat(`${local}/${name}`).catch(() => null))?.kind !== 'dir') continue
+        newest = { slug: name, path: `${base}/${name}/progress.md`, at: info.mtimeMs }
       }
     }
     await readFinish($, await finishPath($, checkouts, newest?.slug ?? null))
