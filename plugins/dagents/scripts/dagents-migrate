@@ -17,7 +17,9 @@
 # the citations dagents translates when it reads them, and each other tracked
 # file that names dforge is listed on a report: line. Last,
 # scripts/lib/dagents-home-migrate.mjs moves the homes (~/.dr-superpowers/ and
-# ~/.dr-forge/ -> ~/.dagents/) when it is installed.
+# ~/.dr-forge/ -> ~/.dagents/) when it is installed, and this repository's
+# dforge 4.x home record, mirror, settings and darkmem data (copied, never
+# deleted); it lists the DFORGE_* and DR_* variables to rename.
 #
 # A checkout holding an older state directory and .dagents/ is merged file by
 # file: a file or empty directory only the old one has moves, an identical
@@ -501,19 +503,23 @@ rewrite_names "$common/info/exclude" "$mode" || true
 
 if [ -f "$HERE/lib/dagents-home-migrate.mjs" ]; then
   if ! command -v node >/dev/null 2>&1; then
-    if [ -e "${HOME:-}/.dr-superpowers" ] || [ -e "${HOME:-}/.dr-forge" ]; then
-      refuse "node is not on PATH, so the homes (~/.dr-superpowers/, ~/.dr-forge/) were not migrated"
+    if [ -e "${HOME:-}/.dr-superpowers" ] || [ -e "${HOME:-}/.dr-forge" ] || [ -e "${HOME:-}/.dforge/stores.json" ] || [ -e "${HOME:-}/.dforge/config.json" ]; then
+      refuse "node is not on PATH, so the homes (~/.dr-superpowers/, ~/.dr-forge/, ~/.dforge/) were not migrated"
     fi
   else
     home_args=()
     [ "$dry" -eq 0 ] || home_args=(--dry-run)
+    for found in "${dforge_found[@]+"${dforge_found[@]}"}"; do
+      [ "$found" -eq 0 ] || { home_args+=(--dforge-layout); break; }
+    done
     home_out=$(cd "$root" && node "$(dr_native_path "$HERE/lib/dagents-home-migrate.mjs")" "${home_args[@]+"${home_args[@]}"}")
     home_status=$?
     if [ -n "$home_out" ]; then
       printf '%s\n' "$home_out"
-      # Refusals and the darkmem notes are no action; the "already has a
-      # darkmem section" note prints on every run while ~/.dr-superpowers stays.
-      if grep -qvE '^dagents-home-migrate: (refused: |darkmem is off until you turn it on: |.* already has a darkmem section; )' <<<"$home_out"; then moved=1; fi
+      # Refusals, the darkmem notes and the variables to rename are no action;
+      # the "already has a darkmem section" note prints on every run while
+      # ~/.dr-superpowers stays.
+      if grep -qvE '^dagents-home-migrate: (refused: |darkmem is off until you turn it on: |.* already has a darkmem section; |[A-Z0-9_]+ is set in .*; dagents reads )' <<<"$home_out"; then moved=1; fi
     fi
     if [ "$home_status" -ne 0 ]; then
       # A dry run's refusals are foretold, not a failure to finish; a non-zero

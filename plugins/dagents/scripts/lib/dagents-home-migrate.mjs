@@ -1,15 +1,19 @@
 // The moves from dagents's older darkmem names to its own: the homes
 // ~/.dr-superpowers/ and ~/.dr-forge/ to ~/.dagents/, a mirror's superpowers/
 // or forge/ folder and sync state uris to dagents/, and darkmem's superpowers/
-// and forge/ documents to dagents/. The only module besides the document-name
-// translation that reads the old names.
+// and forge/ documents to dagents/. For one repository, dforge 4.x's home
+// record, mirror and settings, and its darkmem dforge/ documents and bare-key
+// workstreams, are copied or moved to dagents' names (migrateDforge). The only
+// module besides the document-name translation that reads the old names.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { HttpError } from "./darkmem-client.mjs";
-import { DOC_PREFIX, LEGACY_PREFIX, StateError, acquireLock, loadState, saveState } from "./darkmem-mirror.mjs";
-import { withHomeLock } from "./dagents-config.mjs";
+import SCHEMA, { isValidValue } from "../../config/schema.mjs";
+import { HttpError, TransportError, WORKSTREAM_PREFIX, createClient } from "./darkmem-client.mjs";
+import { DOC_PREFIX, LEGACY_PREFIX, MAX_ENTRIES_PER_APPEND, StateError, acquireLock, loadState, saveState } from "./darkmem-mirror.mjs";
+import { claudeSettingsPath, withHomeLock } from "./dagents-config.mjs";
+import { primaryRoot, runKey } from "./darkmem-config.mjs";
 
 // dr-superpowers wrote superpowers/, dr-forge forge/.
 export const OLD_PREFIXES = [LEGACY_PREFIX, "forge"];
@@ -383,6 +387,360 @@ export function migrateHome(env = process.env, { dryRun = false } = {}) {
   return { lines, refused };
 }
 
+// dforge 4.x's half, for one repository. dforge keeps ~/.dforge/ for every
+// other repository, so only this one's record leaves ~/.dforge/stores.json;
+// its settings and mapping are copied, never over a value dagents has. The
+// darkmem copy runs first and every copy is read back: on any problem the
+// home is left as it was, and nothing in darkmem is ever deleted.
+const DFORGE_PREFIX = "dforge";
+const DFORGE_LOCK_WAIT_MS = 10000;
+const PROJECT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
+// Shared on purpose with dforge and the older plugins, so never renamed.
+const SHARED_VARIABLE = /^DR_(TEST_BASH|TEST_ALL)$|^DR_(FORGE|SUPERPOWERS)_/;
+
+function realOrResolved(file) {
+  try {
+    return fs.realpathSync.native(file);
+  } catch {
+    return path.resolve(file);
+  }
+}
+
+function samePath(a, b) {
+  const x = realOrResolved(a);
+  const y = realOrResolved(b);
+  return process.platform === "win32" ? x.toLowerCase() === y.toLowerCase() : x === y;
+}
+
+const keyFor = (data, root) => Object.keys(data ?? {}).find(key => samePath(key, root));
+const dagentsUri = uri => `${DOC_PREFIX}/${uri.slice(DFORGE_PREFIX.length + 1)}`;
+const fromDforge = value => (typeof value === "string" && value.startsWith(`${DFORGE_PREFIX}/`) ? dagentsUri(value) : value);
+const sameUrl = (a, b) => String(a).replace(/\/+$/, "") === String(b).replace(/\/+$/, "");
+
+export function renamedVariable(name) {
+  if (name.startsWith("DFORGE_")) return `DAGENTS_${name.slice("DFORGE_".length)}`;
+  if (/^DR_[A-Z0-9_]+$/.test(name) && !SHARED_VARIABLE.test(name)) return `DAGENTS_${name.slice("DR_".length)}`;
+  return null;
+}
+
+// dforge's own home lock, the one its config and stores writers take.
+function withDforgeLock(home, change) {
+  const dir = path.join(home, ".dforge", ".lock");
+  const deadline = Date.now() + DFORGE_LOCK_WAIT_MS;
+  let release;
+  while (!(release = acquireLock(dir))) {
+    if (Date.now() >= deadline) throw new Error(`another dforge process has held ${dir} for ${DFORGE_LOCK_WAIT_MS / 1000} s; if none is running, remove it`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+  }
+  try {
+    return change();
+  } finally {
+    release();
+  }
+}
+
+function variableLines(env) {
+  const found = [];
+  for (const name of Object.keys(env).sort()) if (renamedVariable(name)) found.push([name, "the environment"]);
+  try {
+    const settings = JSON.parse(fs.readFileSync(claudeSettingsPath(env), "utf8"));
+    if (settings && !notObject(settings.env)) {
+      for (const name of Object.keys(settings.env).sort()) if (renamedVariable(name)) found.push([name, claudeSettingsPath(env)]);
+    }
+  } catch {
+    // No readable Claude settings: only the environment is listed.
+  }
+  return found.map(([name, where]) => `${name} is set in ${where}; dagents reads ${renamedVariable(name)}, so set that name for it`);
+}
+
+const sameEntry = (a, b) => a.kind === b.kind && a.body === b.body;
+
+// darkmem's half: every dforge/ document to the same name under dagents/, and
+// every bare-key workstream (dforge 4.x's) to dagents/<key>, each read back.
+// A copy already there is kept; a dagents copy a later dforge append left
+// short gains the missing entries. Answers { problems, documents, keys }.
+async function copyDarkmem(client, project) {
+  const problems = [];
+  const held = new Map((await client.manifest(project, `${DOC_PREFIX}/`)).map(item => [item.uri, item]));
+  const originals = (await client.manifest(project, `${DFORGE_PREFIX}/`)).filter(item => item.uri.startsWith(`${DFORGE_PREFIX}/`));
+  for (const item of originals) {
+    const uri = dagentsUri(item.uri);
+    const existing = held.get(uri);
+    if (existing) {
+      if (existing.content_hash !== item.content_hash) problems.push(`darkmem holds ${uri} with other content than ${item.uri}; keep one, then run dagents-migrate again`);
+      continue;
+    }
+    const source = await client.getDocument(project, item.uri);
+    if (typeof source?.content !== "string" || source.content_hash !== item.content_hash) {
+      problems.push(`${item.uri} changed while it was read; run dagents-migrate again`);
+      continue;
+    }
+    await client.putDocument({ project, uri, content: source.content });
+    const copy = await client.getDocument(project, uri);
+    if (copy?.content !== source.content || copy?.content_hash !== item.content_hash) problems.push(`${uri} reads back other than ${item.uri}`);
+  }
+  const all = await client.workstreams(project);
+  const byKey = new Map(all.map(ws => [ws.key, ws]));
+  const keys = all.filter(ws => typeof ws.key === "string" && !ws.key.includes("/")).map(ws => ws.key).sort();
+  for (const key of keys) {
+    const ws = byKey.get(key);
+    const target = `${WORKSTREAM_PREFIX}${key}`;
+    const source = await client.entries(ws.id);
+    let copy = byKey.get(target);
+    const have = copy ? await client.entries(copy.id) : [];
+    // One must begin with the other: either the copy is whole, or dforge
+    // appended after an earlier run and only the tail is missing.
+    if (!source.slice(0, have.length).every((entry, index) => sameEntry(entry, have[index]))) {
+      problems.push(`darkmem's ${target} holds entries ${key} does not; keep one, then run dagents-migrate again`);
+      continue;
+    }
+    const missing = source.slice(have.length);
+    for (let start = 0; start < missing.length; start += MAX_ENTRIES_PER_APPEND) {
+      const entries = missing.slice(start, start + MAX_ENTRIES_PER_APPEND).map(entry => ({ kind: entry.kind, body: entry.body, properties: entry.properties ?? {} }));
+      const properties = start === 0 && !notObject(ws.properties) && Object.keys(ws.properties).length ? ws.properties : undefined;
+      const answer = await client.append({ project, workstream: target, entries, properties });
+      copy = answer.workstream;
+    }
+    if (!copy) continue;
+    if (missing.length && (ws.state === "closed" || ws.retain === true)) {
+      await client.updateWorkstream(copy.id, { ...(ws.state === "closed" ? { state: "closed" } : {}), ...(ws.retain === true ? { retain: true } : {}) });
+    }
+    const back = await client.entries(copy.id);
+    if (!source.every((entry, index) => back[index] && sameEntry(entry, back[index]))) problems.push(`${target} reads back other than ${key}`);
+  }
+  return { problems, documents: originals.length, keys };
+}
+
+// A copy of a dforge mirror in dagents' layout at `target`: its dforge/
+// folder renamed and its state's prefix and uris rewritten, written aside
+// first so a half-made copy is never found at `target`.
+function copyMirror(source, target) {
+  const aside = path.join(path.dirname(target), `.${path.basename(target)}.migrating-${process.pid}`);
+  fs.rmSync(aside, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  try {
+    fs.cpSync(source, aside, { recursive: true, filter: file => !path.basename(file).startsWith(".sync.lock") });
+    const folders = [DFORGE_PREFIX, DOC_PREFIX].filter(prefix => fs.existsSync(path.join(aside, prefix)));
+    if (folders.length > 1) throw new StateError(`${source} holds ${DFORGE_PREFIX}/ and ${DOC_PREFIX}/; move one aside`);
+    if (folders[0] === DFORGE_PREFIX) fs.renameSync(path.join(aside, DFORGE_PREFIX), path.join(aside, DOC_PREFIX));
+    const statePath = path.join(aside, ".sync-state.json");
+    if (fs.existsSync(statePath)) {
+      let raw;
+      try {
+        raw = JSON.parse(fs.readFileSync(statePath, "utf8"));
+      } catch (error) {
+        throw new StateError(`${path.join(source, ".sync-state.json")} is unreadable (${error.message}); fix or delete it, then run dagents-migrate again`);
+      }
+      if (notObject(raw)) throw new StateError(`${path.join(source, ".sync-state.json")} does not hold a sync state`);
+      if (!notObject(raw.documents)) raw.documents = Object.fromEntries(Object.entries(raw.documents).map(([uri, hash]) => [fromDforge(uri), hash]));
+      if (Array.isArray(raw.pendingLinks)) raw.pendingLinks = raw.pendingLinks.map(fromDforge);
+      if (raw.prefix === DFORGE_PREFIX) raw.prefix = DOC_PREFIX;
+      writeJson(statePath, raw);
+      loadState(statePath);
+    }
+    fs.renameSync(aside, target);
+  } catch (error) {
+    fs.rmSync(aside, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+export async function migrateDforge(env = process.env, { dryRun = false, root, layout = false, connect = createClient } = {}) {
+  const home = env.HOME || os.homedir();
+  const dforgeHome = path.join(home, ".dforge");
+  const newHome = path.join(home, ".dagents");
+  const lines = [];
+  let refused = 0;
+  const refuse = line => {
+    lines.push(`refused: ${line}`);
+    refused += 1;
+  };
+  const did = (done, would) => lines.push(dryRun ? would : done);
+  const answer = () => ({ lines, refused });
+  if (!root) return answer();
+  const readObject = file => {
+    let data;
+    try {
+      data = readJson(file);
+    } catch (error) {
+      refuse(`${error.message}; fix or delete it, then run dagents-migrate again`);
+      return UNREADABLE;
+    }
+    if (data !== undefined && notObject(data)) {
+      refuse(`${file} does not hold a JSON object; fix or delete it, then run dagents-migrate again`);
+      return UNREADABLE;
+    }
+    return data;
+  };
+  const configFile = path.join(dforgeHome, "config.json");
+  const storesFile = path.join(dforgeHome, "stores.json");
+  const config = readObject(configFile);
+  const stores = readObject(storesFile);
+  if (config === UNREADABLE || stores === UNREADABLE) return answer();
+  const recordKey = keyFor(stores, root);
+  const darkmem = notObject(config?.darkmem) ? undefined : config.darkmem;
+  const mapKey = notObject(darkmem?.repos) ? undefined : keyFor(darkmem.repos, root);
+  const record = recordKey === undefined ? undefined : stores[recordKey];
+  const mapping = mapKey === undefined ? undefined : darkmem.repos[mapKey];
+  if (layout || record !== undefined || mapping !== undefined) lines.push(...variableLines(env));
+  if (record === undefined && mapping === undefined) return answer();
+  if (record !== undefined && notObject(record)) {
+    refuse(`${storesFile}: the record for ${root} is not a JSON object; fix or delete it, then run dagents-migrate again`);
+    return answer();
+  }
+
+  // Everything that can refuse is read before anything is written.
+  const dagentsConfigFile = path.join(newHome, "config.json");
+  const dagentsStoresFile = path.join(newHome, "stores.json");
+  const dagentsConfig = readObject(dagentsConfigFile);
+  const dagentsStores = readObject(dagentsStoresFile);
+  if (dagentsConfig === UNREADABLE || dagentsStores === UNREADABLE) return answer();
+  const project = record?.project ?? mapping?.project;
+  if (typeof project !== "string" || !PROJECT_NAME.test(project)) {
+    refuse(`${root}'s dforge record and mapping name no usable darkmem project; fix ${storesFile} or ${configFile}, then run dagents-migrate again`);
+    return answer();
+  }
+  const heldRecordKey = keyFor(dagentsStores, root);
+  const heldRecord = heldRecordKey === undefined ? undefined : dagentsStores[heldRecordKey];
+  const target = path.join(newHome, "mirror", project);
+  const clash = heldRecord && record ? Object.keys(record).filter(key => key !== "mirror" && key in heldRecord && JSON.stringify(heldRecord[key]) !== JSON.stringify(record[key])) : [];
+  if (clash.length) {
+    refuse(`${dagentsStoresFile} and ${storesFile} set ${clash.join(", ")} differently for ${root}; keep one, then run dagents-migrate again`);
+    return answer();
+  }
+  const heldDarkmem = dagentsConfig?.darkmem;
+  if (heldDarkmem !== undefined && notObject(heldDarkmem)) {
+    refuse(`${dagentsConfigFile}: darkmem is not an object; fix it, then run dagents-migrate again`);
+    return answer();
+  }
+  if (mapping !== undefined && heldDarkmem?.url !== undefined && darkmem.url !== undefined && !sameUrl(heldDarkmem.url, darkmem.url)) {
+    refuse(`${dagentsConfigFile} names darkmem ${heldDarkmem.url} and ${configFile} ${darkmem.url}; ${root}'s mapping was not copied`);
+    return answer();
+  }
+  const heldMapKey = notObject(heldDarkmem?.repos) ? undefined : keyFor(heldDarkmem.repos, root);
+  if (mapping !== undefined && heldMapKey !== undefined && heldDarkmem.repos[heldMapKey]?.project !== mapping.project) {
+    refuse(`${dagentsConfigFile} maps ${root} to another darkmem project than ${configFile}; keep one, then run dagents-migrate again`);
+    return answer();
+  }
+  const mirror = typeof record?.mirror === "string" ? record.mirror : undefined;
+  const mirrorHeld = mirror !== undefined && fs.existsSync(mirror);
+  const sharedMirror = mirrorHeld && Object.entries(stores).some(([key, other]) => key !== recordKey && typeof other?.mirror === "string" && samePath(other.mirror, mirror));
+  if (mirrorHeld && fs.existsSync(target)) {
+    refuse(`${target} exists, so ${mirror} was not moved; move one aside, then run dagents-migrate again`);
+    return answer();
+  }
+  // The real run takes the lock over when it is abandoned; a dry run cannot tell.
+  if (dryRun && mirrorHeld && fs.existsSync(path.join(mirror, ".sync.lock"))) {
+    refuse(`${mirror} is held by a darkmem sync; try again once it is done`);
+    return answer();
+  }
+
+  const applied = ["documents", "progress"].some(family => record?.[family] === "darkmem");
+  if (applied || (mapping !== undefined && config.darkmemEnabled === true)) {
+    const keyEnv = typeof darkmem?.api_key_env === "string" && darkmem.api_key_env ? darkmem.api_key_env : "DARKMEM_API_KEY";
+    if (typeof darkmem?.url !== "string" || !/^https?:\/\/\S+$/.test(darkmem.url) || !env[keyEnv]) {
+      refuse(`copying darkmem project ${project} needs darkmem.url in ${configFile} and ${keyEnv} set; nothing in the home was moved`);
+      return answer();
+    }
+    if (dryRun) {
+      lines.push(`would copy darkmem project ${project}'s ${DFORGE_PREFIX}/ documents and its workstreams to ${DOC_PREFIX}/, reading each copy back and deleting nothing`);
+    } else {
+      let copied;
+      try {
+        const client = connect({ url: darkmem.url.replace(/\/+$/, ""), apiKey: env[keyEnv], runKey: runKey({ cwd: root, env }) });
+        copied = await copyDarkmem(client, project);
+      } catch (error) {
+        if (!(error instanceof HttpError) && !(error instanceof TransportError)) throw error;
+        refuse(`darkmem could not be copied (${error.message}); nothing in the home was moved and nothing in darkmem was deleted`);
+        return answer();
+      }
+      if (copied.problems.length) {
+        for (const problem of copied.problems) refuse(problem);
+        lines.push(`nothing in the home was moved and nothing in darkmem was deleted`);
+        return answer();
+      }
+      if (copied.documents || copied.keys.length) {
+        const purge = copied.keys.length ? ` and worklog_purge (project ${project}) on the workstreams ${copied.keys.join(", ")}` : "";
+        lines.push(`copied darkmem project ${project}'s ${copied.documents} ${DFORGE_PREFIX}/ document(s) and ${copied.keys.length} workstream(s) to ${DOC_PREFIX}/ and read each copy back`);
+        lines.push(`${DFORGE_PREFIX}/ documents and workstreams were copied, not deleted; to delete them once no dforge checkout maps ${project}, run: the darkmem MCP tools document_delete_subtree (project ${project}, uri_prefix ${DFORGE_PREFIX}/)${purge}; they need an admin-scoped key`);
+      } else {
+        lines.push(`darkmem project ${project} holds no ${DFORGE_PREFIX}/ documents or workstreams to copy`);
+      }
+    }
+  }
+
+  if (mirrorHeld) {
+    const verb = sharedMirror ? "copied" : "moved";
+    if (!dryRun) {
+      const release = acquireLock(mirror);
+      if (!release) {
+        refuse(`${mirror} is held by a darkmem sync; try again once it is done`);
+        return answer();
+      }
+      try {
+        copyMirror(mirror, target);
+        if (!sharedMirror) fs.rmSync(mirror, { recursive: true, force: true });
+      } catch (error) {
+        if (!(error instanceof StateError)) throw error;
+        refuse(error.message);
+        return answer();
+      } finally {
+        release();
+      }
+    }
+    const why = sharedMirror ? ` (another ${storesFile} record still names it)` : "";
+    did(`${verb} ${mirror} to ${target}${why}, its ${DFORGE_PREFIX}/ folder and sync state renamed to ${DOC_PREFIX}/`,
+      `would ${sharedMirror ? "copy" : "move"} ${mirror} to ${target}${why}, renaming its ${DFORGE_PREFIX}/ folder and sync state to ${DOC_PREFIX}/`);
+  }
+
+  if (record !== undefined) {
+    if (!dryRun) {
+      withDforgeLock(home, () => withHomeLock(env, () => {
+        const now = readJson(storesFile) ?? {};
+        const nowKey = keyFor(now, root);
+        const moving = nowKey === undefined ? record : now[nowKey];
+        const ours = readJson(dagentsStoresFile) ?? {};
+        const oursKey = keyFor(ours, root);
+        const held = oursKey === undefined ? {} : ours[oursKey];
+        if (oursKey !== undefined) delete ours[oursKey];
+        ours[root] = { ...moving, ...held, mirror: target };
+        fs.mkdirSync(newHome, { recursive: true });
+        writeJson(dagentsStoresFile, ours);
+        if (nowKey !== undefined) {
+          delete now[nowKey];
+          writeJson(storesFile, now);
+        }
+      }));
+    }
+    did(`moved ${root}'s record from ${storesFile} to ${dagentsStoresFile}`, `would move ${root}'s record from ${storesFile} to ${dagentsStoresFile}`);
+  }
+
+  const settings = Object.keys(SCHEMA).filter(key => SCHEMA[key].target === "dagents" && config && key in config && !(dagentsConfig && key in dagentsConfig));
+  for (const key of settings.filter(key => !isValidValue(SCHEMA[key], config[key]))) lines.push(`${configFile} sets ${key} to a value dagents does not take; it was not copied`);
+  const keys = settings.filter(key => isValidValue(SCHEMA[key], config[key]));
+  const addMapping = mapping !== undefined && heldMapKey === undefined;
+  if (keys.length || addMapping) {
+    if (!dryRun) {
+      withHomeLock(env, () => {
+        const current = readJson(dagentsConfigFile) ?? {};
+        for (const key of keys) if (!(key in current)) current[key] = config[key];
+        if (addMapping) {
+          const next = notObject(current.darkmem) ? {} : current.darkmem;
+          if (next.url === undefined && darkmem.url !== undefined) next.url = darkmem.url;
+          if (next.api_key_env === undefined && darkmem.api_key_env !== undefined) next.api_key_env = darkmem.api_key_env;
+          next.repos = { ...(notObject(next.repos) ? {} : next.repos), [root]: mapping };
+          current.darkmem = next;
+        }
+        fs.mkdirSync(newHome, { recursive: true });
+        writeJson(dagentsConfigFile, current);
+      });
+    }
+    const named = [...keys, ...(addMapping ? [`the darkmem mapping for ${root}`] : [])].join(", ");
+    did(`copied ${named} from ${configFile} into ${dagentsConfigFile}`, `would copy ${named} from ${configFile} into ${dagentsConfigFile}`);
+  }
+  return answer();
+}
+
 function isMain() {
   if (!process.argv[1]) return false;
   try {
@@ -393,10 +751,14 @@ function isMain() {
 }
 
 if (isMain()) {
+  const dryRun = process.argv.includes("--dry-run");
+  const say = lines => { for (const line of lines) process.stdout.write(`dagents-home-migrate: ${line}\n`); };
   try {
-    const { lines, refused } = migrateHome(process.env, { dryRun: process.argv.includes("--dry-run") });
-    for (const line of lines) process.stdout.write(`dagents-home-migrate: ${line}\n`);
-    process.exitCode = refused ? 1 : 0;
+    const home = migrateHome(process.env, { dryRun });
+    say(home.lines);
+    const dforge = await migrateDforge(process.env, { dryRun, root: primaryRoot(process.cwd()), layout: process.argv.includes("--dforge-layout") });
+    say(dforge.lines);
+    process.exitCode = home.refused || dforge.refused ? 1 : 0;
   } catch (error) {
     process.stderr.write(`dagents-home-migrate: ${error.message}\n`);
     process.exitCode = 1;

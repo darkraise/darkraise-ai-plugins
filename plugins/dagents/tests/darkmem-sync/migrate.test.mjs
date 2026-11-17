@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { migrateHome } from "../../scripts/lib/dagents-home-migrate.mjs";
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
@@ -500,4 +502,109 @@ test("migrateHome refuses an unreadable config or stores file once and finishes 
     }
     assert.equal(read(bad), "{not json", label);
   }
+});
+
+const MIGRATE = fileURLToPath(new URL("../../scripts/dagents-migrate", import.meta.url));
+// Spawned, not spawnSync: the stub darkmem answers from this process's event loop.
+const runMigrate = (repo, env, ...args) => new Promise(resolve => {
+  const child = spawn(process.env.DR_TEST_BASH ?? "bash", [MIGRATE, ...args, repo], { cwd: repo, env });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", chunk => { stdout += chunk; });
+  child.stderr.on("data", chunk => { stderr += chunk; });
+  const timer = setTimeout(() => child.kill("SIGKILL"), 120000);
+  child.on("close", status => {
+    clearTimeout(timer);
+    resolve({ status, stdout, stderr });
+  });
+});
+
+test("a dforge 4.x project's home record and darkmem data move to dagents, and dforge keeps the rest", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const seed = createClient({ url: stub.url, apiKey: STUB_KEY, runKey: "seed" });
+  const home = scratch("home-");
+  const a = makeRepo(); const b = makeRepo();
+  const dforgeHome = path.join(home, ".dforge");
+  const mirrorA = path.join(dforgeHome, "mirror", "projA");
+  write(path.join(dforgeHome, "config.json"), JSON.stringify({ autoRun: "off", darkmemEnabled: true, darkmem: { url: stub.url, repos: { [a]: { project: "projA" }, [b]: { project: "projB" } } } }));
+  write(path.join(dforgeHome, "stores.json"), JSON.stringify({
+    [a]: { documents: "darkmem", progress: "darkmem", project: "projA", mirror: mirrorA },
+    [b]: { documents: "darkmem", progress: "darkmem", project: "projB", mirror: path.join(dforgeHome, "mirror", "projB") },
+  }));
+  write(path.join(mirrorA, "dforge", "plans", "p1.md"), "# P1\n");
+  write(path.join(mirrorA, ".sync-state.json"), JSON.stringify({
+    ...JSON.parse(STATE({ "dforge/plans/p1.md": sha("# P1\n") })), prefix: "dforge", remote: { url: stub.url, project: "projA" },
+  }));
+  await seed.putDocument({ project: "projA", uri: "dforge/plans/p1.md", content: "# P1\n" });
+  await seed.append({ project: "projA", workstream: "p1", entries: [{ kind: "ledger", body: "Task 1: complete (abc)\n" }] });
+  const env = { ...process.env, HOME: home, DARKMEM_API_KEY: STUB_KEY, CLAUDE_CONFIG_DIR: "" };
+
+  const out = await runMigrate(a, env);
+  assert.equal(out.status, 0, out.stdout + out.stderr);
+  const dagentsConfig = JSON.parse(read(path.join(home, ".dagents", "config.json")));
+  assert.equal(dagentsConfig.autoRun, "off");
+  assert.equal(dagentsConfig.darkmem.repos[a].project, "projA");
+  assert.equal(dagentsConfig.darkmem.repos[b], undefined);
+  const dforgeStores = JSON.parse(read(path.join(dforgeHome, "stores.json")));
+  assert.equal(dforgeStores[a], undefined);
+  assert.equal(dforgeStores[b].project, "projB");
+  assert.equal(JSON.parse(read(path.join(dforgeHome, "config.json"))).darkmem.repos[b].project, "projB");
+  const dagentsStores = JSON.parse(read(path.join(home, ".dagents", "stores.json")));
+  assert.match(dagentsStores[a].mirror, /\.dagents[\\/]mirror[\\/]projA$/);
+  assert.equal(read(path.join(dagentsStores[a].mirror, "dagents", "plans", "p1.md")), "# P1\n");
+  const movedState = read(path.join(dagentsStores[a].mirror, ".sync-state.json"));
+  assert.equal(JSON.parse(movedState).documents["dagents/plans/p1.md"], sha("# P1\n"));
+  assert.doesNotMatch(movedState, /dforge/);
+  assert.equal(fs.existsSync(mirrorA), false);
+  assert.ok(stub.db.workstreams.some(w => w.key === "dagents/p1"));
+  assert.ok(stub.db.workstreams.some(w => w.key === "p1"), "the dforge workstream is kept");
+  assert.ok(!stub.db.requests.some(r => r.method === "DELETE"));
+  assert.match(out.stdout, /dforge\/ documents and workstreams were copied, not deleted; to delete them once no dforge checkout maps projA, run: /);
+
+  const before = stub.db.requests.length;
+  const sync = await run(["push"], { cwd: a, env: { ...env } });
+  assert.equal(sync.code, 0, sync.stdout + sync.stderr);
+  const after = stub.db.requests.slice(before);
+  assert.ok(!after.some(r => r.method === "DELETE"));
+  assert.ok(!after.some(r => r.method === "POST" && r.path === "/api/v1/documents"), "nothing is re-uploaded");
+});
+
+test("the migrate dry run lists the home steps and the variables to rename, and writes nothing", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const home = scratch("home-");
+  const a = makeRepo();
+  write(path.join(home, ".dforge", "config.json"), JSON.stringify({ autoRun: "off", darkmem: { url: stub.url, repos: { [a]: { project: "projA" } } } }));
+  write(path.join(home, ".dforge", "stores.json"), JSON.stringify({ [a]: { documents: "darkmem", progress: "darkmem", project: "projA", mirror: path.join(home, ".dforge", "mirror", "projA") } }));
+  const env = { ...process.env, HOME: home, DARKMEM_API_KEY: STUB_KEY, CLAUDE_CONFIG_DIR: "", DFORGE_BUDGET: "200k" };
+  const before = stub.db.requests.filter(r => r.method !== "GET").length;
+  const out = await runMigrate(a, env, "--dry-run");
+  assert.equal(out.status, 0, out.stdout + out.stderr);
+  assert.match(out.stdout, /DFORGE_BUDGET .*DAGENTS_BUDGET/);
+  assert.equal(fs.existsSync(path.join(home, ".dagents")), false);
+  assert.equal(JSON.parse(read(path.join(home, ".dforge", "stores.json")))[a].project, "projA");
+  assert.equal(stub.db.requests.filter(r => r.method !== "GET").length, before);
+});
+
+test("a darkmem copy that differs from its dforge original stops the home migration and deletes nothing", async t => {
+  const stub = await startStub();
+  t.after(() => stub.close());
+  const seed = createClient({ url: stub.url, apiKey: STUB_KEY, runKey: "seed" });
+  const home = scratch("home-");
+  const a = makeRepo();
+  const mirror = path.join(home, ".dforge", "mirror", "projA");
+  write(path.join(home, ".dforge", "config.json"), JSON.stringify({ autoRun: "off", darkmem: { url: stub.url, repos: { [a]: { project: "projA" } } } }));
+  write(path.join(home, ".dforge", "stores.json"), JSON.stringify({ [a]: { documents: "darkmem", progress: "darkmem", project: "projA", mirror } }));
+  write(path.join(mirror, "dforge", "plans", "p1.md"), "# P1\n");
+  await seed.putDocument({ project: "projA", uri: "dforge/plans/p1.md", content: "# P1\n" });
+  await seed.putDocument({ project: "projA", uri: "dagents/plans/p1.md", content: "# P1, edited\n" });
+  const out = await runMigrate(a, { ...process.env, HOME: home, DARKMEM_API_KEY: STUB_KEY, CLAUDE_CONFIG_DIR: "" });
+  assert.equal(out.status, 1, out.stdout + out.stderr);
+  assert.match(out.stdout, /refused: darkmem holds dagents\/plans\/p1\.md with other content than dforge\/plans\/p1\.md/);
+  assert.doesNotMatch(out.stdout, /were copied, not deleted/);
+  assert.equal(JSON.parse(read(path.join(home, ".dforge", "stores.json")))[a].project, "projA");
+  assert.equal(read(path.join(mirror, "dforge", "plans", "p1.md")), "# P1\n");
+  assert.equal(fs.existsSync(path.join(home, ".dagents")), false);
+  assert.ok(!stub.db.requests.some(r => r.method === "DELETE"));
 });

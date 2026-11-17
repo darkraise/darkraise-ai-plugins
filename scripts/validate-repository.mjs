@@ -34,6 +34,9 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   'plugins/dagents/scripts/session-start.sh',
   'plugins/dagents/skills/migrate/SKILL.md',
   'plugins/dagents/tests/dagents-migrate.test.sh',
+  // Migrate copies a dforge 4.x repository's home record, settings and darkmem data.
+  'plugins/dagents/scripts/lib/dagents-home-migrate.mjs',
+  'plugins/dagents/tests/darkmem-sync/migrate.test.mjs',
 ]);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
