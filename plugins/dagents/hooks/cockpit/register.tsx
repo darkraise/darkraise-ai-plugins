@@ -3813,8 +3813,8 @@ async function refresh(
   // measures them: strict keeps the handoff budget and runs past it to finish
   // the plan, relaxed measures against the final-phase limit.
   const summary = await read($, run)
-  // Only a session running the plan: a darkmem pull at the start writes the
-  // ledgers of a finished plan anew, and the newest one then reads as this session's.
+  // Only a session running the plan: a finished plan's ledger written anew at
+  // the start would otherwise read as this session's.
   const isTail = summary !== null && isPlanTail(summary) && (await read($, isRunSession))
   const limit = isAuto
     ? autoLimitFor(auto.regime, handoffTokens, window, compactWindow)
