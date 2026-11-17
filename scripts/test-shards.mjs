@@ -79,7 +79,6 @@ export const windowsSeconds = {
   'plugins/dforge/tests/roadmap.test.sh': 170,
   'plugins/dforge/tests/roots.test.sh': 84,
   'plugins/dforge/tests/route.test.sh': 120,
-  'plugins/dforge/tests/sdd-references.test.sh': 10,
   'plugins/dforge/tests/seats.test.sh': 10,
   'plugins/dforge/tests/session-state.test.sh': 20,
   'plugins/dforge/tests/settings-skills.test.sh': 10,
