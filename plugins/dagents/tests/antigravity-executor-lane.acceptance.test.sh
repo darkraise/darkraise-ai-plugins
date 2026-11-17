@@ -354,7 +354,7 @@ if selected A3; then
     matches "A3: total $t at risk <= 2 lists agy first with the agy-assignment rung ($want)" "$unit" "rungs=agy:$want(,|$)"
     has "A3: total $t clears the gate" "$unit" "gate=pass"
   done
-  # Totals 3 to 8 run on Argon (docs/dagents/notes/2026-11-03-agy-calibration-3-8.md).
+  # Totals 3 to 8 run on Argon (the 2026-11-03 calibration).
   for pair in "3 gemini-4-argon low" "4 gemini-4-argon low" "5 gemini-4-argon high" "6 gemini-4-argon high" "7 gemini-4-argon high" "8 gemini-4-argon high"; do
     set -- $pair
     check "A3: agy-assignment row $1 is $2 $3" "$(block agy-assignment | awk -v t="$1" '$1 == t { print $2 " " $3 }')" "$2 $3"

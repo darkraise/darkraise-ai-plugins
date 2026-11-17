@@ -213,9 +213,8 @@ window and no effort control. `impl-haiku` stays in the fleet for a human
 matches Opus 5.5 on well-scoped agentic coding (Terminal-Bench, CursorBench) at
 half the price and trails it on FrontierCode's open-ended work. Totals 2 to 5
 each moved to a cheaper agent in 1.24.0 on a replay of this plugin's own plan
-history (the 2026-10-02 tier evaluation, `evals/tiers/` in the plugin's
-repository): the cheaper agent passed every case the old one passed, at a lower
-cost per pass. That was one repetition, mostly of tasks whose plan supplied the
+history (the 2026-10-02 tier evaluation): the cheaper agent passed every
+case the old one passed, at a lower cost per pass. That was one repetition, mostly of tasks whose plan supplied the
 code, so the escalation table stays the backstop.
 
 That is the intended outcome. Do not inflate an axis to land on a tier that feels
@@ -407,9 +406,8 @@ onto another quota, so even a score-0 task it takes is Claude quota saved.
 8 gemini-4-argon high
 ```
 
-Totals 3 to 8 come from the replayed runs recorded in
-`docs/dagents/notes/2026-11-03-agy-calibration-3-8.md`: Argon at `low` passed
-all three tasks scored 3-4, and Argon at `high` passed all three scored 6-7.
+Totals 3 to 8 come from the replayed runs of the 2026-11-03 calibration:
+Argon at `low` passed all three tasks scored 3-4, and Argon at `high` passed all three scored 6-7.
 Total 5 runs Argon at `high` because that is the only rung measured on all
 three high tasks. The models are those `agy models` lists.
 

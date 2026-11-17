@@ -458,7 +458,8 @@ export type SeatSpawn = {
 
 /**
  * Whether a fork described `Draft plan tasks …` may run in a dagents session:
- * docs/dagents/notes/2026-10-25-drafter-measurement.md ruled forks out, and
+ * docs/dforge/notes/2026-10-25-drafter-measurement.md in this plugin's
+ * repository ruled forks out, and
  * plans are now drafted in the session. Changing it takes a plugin release.
  */
 export const FORK_DRAFTING = false

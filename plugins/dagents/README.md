@@ -197,7 +197,8 @@ Antigravity CLI (priority 10, wrapper `scripts/run-agy-task.sh`), takes totals 0
 implementation only: totals 0-2 run on `gemini-3.8-flash` at medium effort, as
 the 2026-11-02 calibration record decided, totals 3-4 on `gemini-4-argon` at
 low effort and totals 5-8 on `gemini-4-argon` at high effort, as
-`docs/dagents/notes/2026-11-03-agy-calibration-3-8.md` decided; Claude Sonnet
+the 2026-11-03 calibration record (`docs/dforge/notes/2026-11-03-agy-calibration-3-8.md`
+in this plugin's repository) decided; Claude Sonnet
 runs through `agy` only as the single retry after a Gemini run fails. Codex (priority 20) keeps the
 tasks `agy` refuses. Planning gives each task to the first ticked executor, in
 `executors ranked` order, whose gate admits it. The `agyLane` setting (`Agy
