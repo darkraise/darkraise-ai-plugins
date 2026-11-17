@@ -926,6 +926,20 @@ printf 'y\n' > "$REPO/base.txt" && git -C "$REPO" add base.txt && git -C "$REPO"
 run "$REPO" "$PLAN_REL"
 has "C5: a base branch that merged the head routes to finishing" "$out" "**Next:** Run dforge:finishing-a-development-branch."
 git -C "$REPO" reset -q --hard HEAD~2 && git -C "$REPO" branch -qD feat-c5
+# A first-parent chain over 64 KiB (1,700 ids) must still find the head.
+base_c5=$(git -C "$REPO" rev-parse HEAD)
+for ((i = 1; i <= 1700; i++)); do
+  printf 'commit refs/heads/c5-long\ncommitter t <t@example.invalid> %d +0000\ndata 0\n' $((1700000000 + i))
+  [ "$i" = 1 ] && printf 'from %s\n' "$base_c5"
+  printf '\n'
+done | git -C "$REPO" fast-import --quiet
+git -C "$REPO" checkout -q c5-long
+head7=$(git -C "$REPO" rev-parse --short HEAD)
+done3 "Final review: clean (commits 0000000..$head7)"
+printf 'z\n' > "$REPO/long.txt" && git -C "$REPO" add long.txt && git -C "$REPO" commit -qm "fix: after a long history"
+run "$REPO" "$PLAN_REL"
+has "C5: a later code commit over a long history routes to a scoped re-review" "$out" "Re-review $head7..HEAD"
+git -C "$REPO" checkout -q - && git -C "$REPO" branch -qD c5-long
 
 # --- Keep as-is keeps the branch pending (C9) ---
 ledger 'Task 1: complete (commits a..b, review clean)' 'Task 2: complete (commits b..c, review clean)' 'Task 3: complete (commits c..d, review clean)' 'Final review: clean (commits a..d)'

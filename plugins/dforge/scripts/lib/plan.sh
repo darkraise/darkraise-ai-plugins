@@ -513,7 +513,7 @@ plan_final_review_state() {
   # re-review is the safe route, finishing is not.
   local chain
   chain=$(git -C "$dir" rev-list --first-parent "$now" 2>/dev/null) || { echo "stale $head"; return 0; }
-  if ! tr -d '\r' <<<"$chain" | grep -qxF "$full"; then echo current; return 0; fi
+  if ! grep -qxF -- "$full" <<<"${chain//$'\r'/}"; then echo current; return 0; fi
   changed=$(git -C "$dir" log --format= --name-only "$full..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
   changed=$(tr -d '\r' <<<"$changed" | sed '/^$/d')
   if [ -z "$changed" ]; then echo current; return 0; fi
