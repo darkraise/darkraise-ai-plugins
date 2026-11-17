@@ -10,8 +10,12 @@ pass=0 fail=0
 check() { if [ "$2" = "$3" ]; then pass=$((pass + 1)); else printf 'FAIL - %s\n       got:  [%s]\n       want: [%s]\n' "$1" "$2" "$3"; fail=$((fail + 1)); fi; }
 
 # --- A5: the feature set ---
-want=$(git -C "$REPO" ls-tree --name-only dforge-v4.17.1:plugins/dforge/agents | sed 's/dforge/dagents/g' | sort | tr '\n' ' ')
-check "agent set equals the tag's" "$(ls "$ROOT/agents" | sort | tr '\n' ' ')" "$want"
+if git -C "$REPO" rev-parse --verify --quiet 'dforge-v4.17.1^{commit}' > /dev/null; then
+  want=$(git -C "$REPO" ls-tree --name-only dforge-v4.17.1:plugins/dforge/agents | tr -d '\r' | sed 's/dforge/dagents/g' | sort | tr '\n' ' ')
+  check "agent set equals the tag's" "$(ls "$ROOT/agents" | sort | tr '\n' ' ')" "$want"
+else
+  printf 'skip - agent set equals the tag'"'"'s: tag dforge-v4.17.1 is not in this clone\n'
+fi
 for skill in subagent-driven-development revising-plans; do
   check "skill $skill present" "$( [ -f "$ROOT/skills/$skill/SKILL.md" ] && echo yes)" "yes"
 done

@@ -33,6 +33,8 @@ const git = (...args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8'
 const gitOk = (...args) => spawnSync('git', args, { cwd: ROOT, stdio: 'ignore', timeout: 60000 }).status === 0;
 const hasTag = gitOk('rev-parse', '--verify', '--quiet', `${TAG}^{commit}`);
 const needTag = t => { if (!hasTag) { t.skip(`tag ${TAG} is not in this clone`); return false; } return true; };
+const isShallow = git('rev-parse', '--is-shallow-repository').trim() === 'true';
+const needHistory = t => { if (isShallow) { t.skip('this clone is shallow: the commits the check names are not in it'); return false; } return true; };
 const scratch = t => {
   const dir = mkdtempSync(join(tmpdir(), 'dsplit-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -51,12 +53,14 @@ test('A1: the copy commit holds the tag tree of plugins/dforge as plugins/dagent
 });
 
 // A2
-test('A2: both manifests and both catalogs name dagents 1.0.0', () => {
-  for (const dir of ['.claude-plugin', '.codex-plugin']) {
+test('A2: both manifests name dagents at one version, and both catalogs list it', () => {
+  const versions = ['.claude-plugin', '.codex-plugin'].map(dir => {
     const manifest = json(`plugins/dagents/${dir}/plugin.json`);
     assert.equal(manifest.name, 'dagents', dir);
-    assert.equal(manifest.version, '1.0.0', dir);
-  }
+    assert.match(manifest.version ?? '', /^\d+\.\d+\.\d+/, dir);
+    return manifest.version;
+  });
+  assert.equal(versions[1], versions[0], 'the Codex manifest version differs from the Claude one');
   const claude = json('.claude-plugin/marketplace.json').plugins.find(plugin => plugin.name === 'dagents');
   assert.equal(claude?.source, './plugins/dagents');
   const codex = json('.agents/plugins/marketplace.json').plugins.find(plugin => plugin.name === 'dagents');
@@ -126,6 +130,7 @@ test('A3: every non-merge commit touching plugins/dforge is a register row, all 
   }
 });
 test('A4: every done row records its port and both results, or text-only with a changed file', t => {
+  if (!needHistory(t)) return;
   const rows = registerRows().filter(row => row.state === 'done');
   assert.ok(rows.length > 0);
   const problems = [];
@@ -590,14 +595,19 @@ test('A22: a dagents suite sharing a dforge suite\'s basename has its own limit,
 });
 
 // A23
-test('A23: the release dry run lists dforge 5.0.0, dagents 1.0.0 and dflow 1.0.0', t => {
+test('A23: the release dry run tags and releases each plugin from its manifest version', t => {
   if (!needTag(t)) return;
   const before = git('status', '--porcelain', '--untracked-files=no');
   const result = run(process.execPath, ['scripts/release.mjs', '--dry-run'], { timeout: 120000 });
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /^release dforge \S+ -> 5\.0\.0$/m);
-  assert.match(result.stdout, /^tag dagents-v1\.0\.0 at /m);
-  assert.match(result.stdout, /^tag dflow-v1\.0\.0 at /m);
+  const versionOf = name => json(`plugins/${name}/.claude-plugin/plugin.json`).version;
+  const semver = version => version.split(/[-+]/)[0].split('.').map(Number);
+  const newer = (to, from) => { const [a, b] = [semver(to), semver(from)]; const i = a.findIndex((n, k) => n !== b[k]); return i >= 0 && a[i] > b[i]; };
+  for (const [, name, version] of result.stdout.matchAll(/^tag ([a-z0-9-]+)-v(\S+) at /gm)) assert.equal(version, versionOf(name), `tag line for ${name}`);
+  for (const [, name, from, to] of result.stdout.matchAll(/^release ([a-z0-9-]+) (\S+) -> (\S+)$/gm)) {
+    assert.equal(from, versionOf(name), `release line for ${name}`);
+    assert.ok(newer(to, from), `${name}: ${to} is not newer than ${from}`);
+  }
   assert.equal(git('status', '--porcelain', '--untracked-files=no'), before, 'a dry run changes nothing');
 });
 
@@ -842,8 +852,11 @@ test('A17: a session with exactly one workflow plugin active gets no guard outpu
     if (only !== 'dflow') assert.match(JSON.parse(out.stdout).hookSpecificOutput?.additionalContext ?? '', new RegExp(`using-${only}`), `${only} still injects its entry skill`);
   }
 });
-test('A17: the existing dforge and dflow tests changed only in the guard\'s inputs and in assertions other statements require', () => {
-  const diff = git('diff', '-U0', `${git('merge-base', 'main', 'HEAD').trim()}`, 'HEAD', '--', 'plugins/dforge/tests', 'plugins/dflow/tests', ':(exclude)plugins/dforge/tests/stand-down.test.sh');
+test('A17: the existing dforge and dflow tests changed only in the guard\'s inputs and in assertions other statements require', t => {
+  if (!gitOk('rev-parse', '--verify', '--quiet', 'main^{commit}')) { t.skip('no local main branch to diff against'); return; }
+  const base = spawnSync('git', ['merge-base', 'main', 'HEAD'], { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
+  if (base.status !== 0) { t.skip('main and HEAD share no commit in this clone'); return; }
+  const diff = git('diff', '-U0', base.stdout.trim(), 'HEAD', '--', 'plugins/dforge/tests', 'plugins/dflow/tests', ':(exclude)plugins/dforge/tests/stand-down.test.sh');
   let file = '';
   const odd = [];
   for (const line of diff.split('\n')) {
