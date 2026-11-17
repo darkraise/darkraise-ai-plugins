@@ -72,6 +72,9 @@ printf '# Project\n\n# Compact instructions\n\nKeep paths.\n' > "$REPO/CLAUDE.md
 run "$REPO"
 has "dirty: counted" "$out" "## Dirty files (1)"
 has "compact section: found" "$out" "- CLAUDE.md has a Compact Instructions section"
+awk 'BEGIN { for (i = 0; i < 3000; i++) print "a long project note that pushes CLAUDE.md past the pipe buffer" }' >> "$REPO/CLAUDE.md"
+run "$REPO"
+has "compact section: found early in a CLAUDE.md past 64 KiB" "$out" "- CLAUDE.md has a Compact Instructions section"
 
 # --- from the worktree ---
 run "$WT"
