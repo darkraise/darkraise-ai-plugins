@@ -9,8 +9,8 @@
 # state that is not a positive answer for this session is off.
 #
 # Every function takes the executor id first. One shared file would mean one
-# executor's mark-off closing another's surfaces, and review-route and
-# plan-lint both read these files.
+# executor's mark-off closing another's surfaces, and review-route reads
+# both families' files.
 #
 # Source this file; it defines functions only.
 
