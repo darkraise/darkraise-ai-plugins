@@ -1,0 +1,44 @@
+# UI proof: dforge cockpit guard line
+
+**Contract:** touch
+**Fingerprint:** 725607f44d838649
+**Platform:** terminal
+**Viewports:** 200x60, 120x40
+**Themes:** default
+**Evidence:** local
+**Judge:** ship 725607f44d838649 — docs/dforge/ui-ux/proofs/2026-11-17-dforge-guard-line.judge.md
+
+## Delta
+
+**UI/UX depth:** touch — one line on the dforge cockpit's surfaces (`plugins/dforge/hooks/cockpit/register.tsx`, `lib.ts`) while another workflow plugin is enabled beside dforge; with no conflict nothing drawn changes
+
+- **UI-1** — With dforge and dagents both enabled, the band above the prompt draws one line, `dagents@darkraise, dforge@darkraise are enabled together; run node <plugin root>/scripts/workflow-guard.mjs --host claude`, and no other cockpit row: no pane, no framed band, no resume offer.
+- **UX-1** — Under the conflict `/dforge:cockpit` (a command the plugin declares, so it stays listed) answers with the same line and opens nothing.
+- **UX-2** — The line names the plugins that collide and the exact command to run for the details; the SessionStart block above it carries the disable commands.
+- **UX-3** — With dagents disabled the cockpit draws as before: the docked pane opens at session start, `/dforge:cockpit` answers `Cockpit pane opened.`, and no guard line appears.
+- **OP-1** — Proven at 200x60 and 120x40, default theme; at 120x40 the line wraps onto two rows and stays whole.
+- **OP-2** — The line reads without colour: its meaning is all in its words, and the colour (yellow) is emphasis only.
+- **OP-3** — Under the conflict the cockpit runs no command but the guard check, before and after its refresh interval.
+
+## Results
+
+| ID | Verdict | Evidence | Note |
+|---|---|---|---|
+| UI-1 | pass | .dforge/ui-ux/2026-11-17-dforge-guard-line/band-200x60.ansi, .dforge/ui-ux/2026-11-17-dforge-guard-line/band-120x40.ansi; test "the workflow guard > under a conflict the cockpit draws the guard line alone and runs nothing else" | Above the prompt the capture holds only the guard line (and the engine's own `[-]` collapse control); the transcript above holds the SessionStart conflict block naming `dagents@darkraise (user), dforge@darkraise (this session)`. The test asserts the band's Text list equals `[guardLine(...)]` exactly |
+| UX-1 | pass | .dforge/ui-ux/2026-11-17-dforge-guard-line/cockpit-command-200x60.ansi | `/dforge:cockpit` + Enter drew `⎿ dforge: dagents@darkraise, dforge@darkraise are enabled together; run node …/plugins/dforge/scripts/workflow-guard.mjs --host claude`; no pane opened and the band still held the line alone |
+| UX-2 | pass | .dforge/ui-ux/2026-11-17-dforge-guard-line/band-200x60.ansi; test "the guard line names the active plugins and the check, only on a conflict" | The line names both plugin ids and the absolute path of the check; running that check by hand against the walk's config (`--host claude --self dforge`) printed `dagents@darkraise user` and `dforge@darkraise self`, exit 3 |
+| UX-3 | pass | .dforge/ui-ux/2026-11-17-dforge-guard-line/no-conflict-200x60.ansi, .dforge/ui-ux/2026-11-17-dforge-guard-line/no-conflict-cockpit-command-200x60.ansi, .dforge/ui-ux/2026-11-17-dforge-guard-line/no-conflict-120x40.ansi; test "the workflow guard > with no conflict the cockpit draws as before" | Same scratch config with `dagents@darkraise: false`: the docked pane showed its Context card; `/dforge:cockpit` answered `Cockpit pane opened.`; no capture holds `enabled together` |
+| OP-1 | pass | .dforge/ui-ux/2026-11-17-dforge-guard-line/band-120x40.ansi, .dforge/ui-ux/2026-11-17-dforge-guard-line/band-200x60.ansi | 200x60: one row. 120x40: the line wraps after `run node` onto a second row, every word present |
+| OP-2 | pass | .dforge/ui-ux/2026-11-17-dforge-guard-line/band-200x60.ansi | The line's only colour is a yellow foreground; no state depends on it |
+| OP-3 | pass | test "the workflow guard > under a conflict the cockpit draws the guard line alone and runs nothing else" | The test records every `$.process.run` call, advances the clock 130 s (past the 2 s poll and the 60 s watchdog) and asserts no call but the guard's. With the guard's answer forced to no conflict the test fails (mutation run) |
+
+## Automated checks
+
+- Walked on 2026-11-17 on Claude Code 2.1.326 in tmux (a throwaway HOME and `CLAUDE_CONFIG_DIR` under the scratch directory, a dummy API key, `installed_plugins.json` recording dagents@darkraise at user scope, `settings.json` enabling it, and `--plugin-dir plugins/dforge` from the uncommitted working tree). No model turn was needed.
+- `claude plugin test plugins/dforge`: 702 pass, 0 fail (7 files), the three guard tests among them.
+- Unlike dagents' cockpit, dforge's does not reset its check at `session.start`: a second guard run there armed the cockpit's timers after the roots test's simulated 5 s node failure, and a `/clear` or `/resume` fires no `session.start` anyway.
+
+## Not proven
+
+- A pointer press is not exercised: tmux sends keys only, and the line has no control.
+- The recorded dagents install was not loaded by the host (no marketplace copy), so only dforge's half of the conflict ran in the walk; dagents' half is proven in docs/dforge/ui-ux/proofs/2026-11-17-dagents-guard-line.md.
