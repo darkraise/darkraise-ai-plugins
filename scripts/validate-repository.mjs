@@ -37,6 +37,8 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   // Migrate copies a dforge 4.x repository's home record, settings and darkmem data.
   'plugins/dagents/scripts/lib/dagents-home-migrate.mjs',
   'plugins/dagents/tests/darkmem-sync/migrate.test.mjs',
+  // The workflow guard names its siblings.
+  'plugins/dagents/scripts/workflow-guard.mjs',
 ]);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
