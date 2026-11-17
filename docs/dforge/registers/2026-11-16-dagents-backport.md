@@ -283,7 +283,7 @@
 | 276 | 53d9182 fix(dforge): recompute the resume offer after a run | - | - | done | port 329e618; fail@parent pass@port |
 | 277 | 38bb71d fix(dforge): name only a plain plan in a ledger hold | - | - | done | port 6506637; fail@parent pass@port |
 | 278 | 3648e9f chore(dforge): weigh the routing acceptance suite | - | - | done | port 7a0a57e; text-only plugins/dagents/skills/handoff/SKILL.md |
-| 279 | addd102 test(dforge): skip the directory-mode check on Windows | - | - | done | port 6ee479c; text-only plugins/dagents/tests/turn-end.test.sh |
+| 279 | addd102 test(dforge): skip the directory-mode check on Windows | - | - | done | port 6ee479c; fail@parent pass@port |
 | 280 | 9f2161e fix(dforge): drop built rows with no current milestone | - | - | done | port ffc8818; fail@parent pass@port |
 | 281 | d7089d6 fix(dforge): keep full refs after a removed checkout | - | - | done | port e619228; fail@parent pass@port |
 | 282 | 86c359c docs(dforge): route rules 4-5 without an index to rule 6 | - | - | done | port eadd783; text-only plugins/dagents/skills/project-status/SKILL.md |

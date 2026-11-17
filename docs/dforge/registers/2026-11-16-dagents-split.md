@@ -11,3 +11,5 @@
 | 4 | Also apply all the bugs fix from version 5 to version 4 | docs/dforge/plans/2026-11-17-dagents-split.md | A3, A4, A8, A22 | doing | - |
 | 5 | New dagents plugin will start at version 1.0 | docs/dforge/plans/2026-11-17-dagents-split.md | A2 | doing | - |
 | 6 | dagents does not follow dforge fixes that land after the split; a later backport reruns scripts/dagents-backport.mjs | - | - | deferred | spec out of scope: later dforge fixes |
+| 7 | ar_switch matches the plan's file name as a substring of the first prompt (dagents and dforge alike) | - | - | deferred | final review: Task 14 minor; port dforge's fix when it lands |
+| 8 | workflow-guard prunes a stand-down marker older than 7 days though its session may still run | - | - | deferred | final review lens:security minor; touch the marker on each guarded hook or prune only ended sessions |
