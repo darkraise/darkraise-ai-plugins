@@ -5,11 +5,11 @@
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
-| 1 | Move the dforge version 5 to new plugin named: dforge | docs/dforge/plans/2026-11-17-dagents-split.md | A2, A17, A19, A23, A28, A29 | verify | built on auto/dagents-split, unmerged; waits on the merge and a green Validate marketplace run (A19) |
-| 2 | The last version of version 4.x move into new plugin named: dagents | docs/dforge/plans/2026-11-17-dagents-split.md | A1, A2, A5-A10, A13, A20, A21, A26 | verify | built on auto/dagents-split, unmerged; waits on the merge and a green Validate marketplace run (A19); A6 and A26 deferred as rows 9-10 |
-| 3 | Add script to check when install plugin to prevent install and enable more than 1 of [dforge, dagents, dflow] at the same time | docs/dforge/plans/2026-11-17-dagents-split.md | A11, A12, A14-A18, A24, A25, A27 | verify | built on auto/dagents-split, unmerged; waits on the merge and a green Validate marketplace run (A19) |
-| 4 | Also apply all the bugs fix from version 5 to version 4 | docs/dforge/plans/2026-11-17-dagents-split.md | A3, A4, A8, A22 | verify | built on auto/dagents-split, unmerged; waits on the merge and a green Validate marketplace run (A19); A8 passed in the finishing integration check at 73ed2f2f |
-| 5 | New dagents plugin will start at version 1.0 | docs/dforge/plans/2026-11-17-dagents-split.md | A2 | verify | built on auto/dagents-split, unmerged; waits on the merge and a green Validate marketplace run (A19) |
+| 1 | Move the dforge version 5 to new plugin named: dforge | docs/dforge/plans/2026-11-17-dagents-split.md | A2, A17, A19, A23, A28, A29 | verify | merged into main locally at 44cf99c5, not pushed; owed: push and a green Validate marketplace run (A19) |
+| 2 | The last version of version 4.x move into new plugin named: dagents | docs/dforge/plans/2026-11-17-dagents-split.md | A1, A2, A5-A10, A13, A20, A21, A26 | done | merged into main locally at 44cf99c5, not pushed; A6 and A26 deferred as rows 9-10 |
+| 3 | Add script to check when install plugin to prevent install and enable more than 1 of [dforge, dagents, dflow] at the same time | docs/dforge/plans/2026-11-17-dagents-split.md | A11, A12, A14-A18, A24, A25, A27 | verify | merged into main locally at 44cf99c5, not pushed; owed: the A24 Codex demo with dforge and dagents both enabled |
+| 4 | Also apply all the bugs fix from version 5 to version 4 | docs/dforge/plans/2026-11-17-dagents-split.md | A3, A4, A8, A22 | done | merged into main locally at 44cf99c5, not pushed |
+| 5 | New dagents plugin will start at version 1.0 | docs/dforge/plans/2026-11-17-dagents-split.md | A2 | done | merged into main locally at 44cf99c5, not pushed |
 | 6 | dagents does not follow dforge fixes that land after the split; a later backport reruns scripts/dagents-backport.mjs | - | - | deferred | spec out of scope: later dforge fixes |
 | 7 | ar_switch matches the plan's file name as a substring of the first prompt (dagents and dforge alike) | - | - | deferred | final review: Task 14 minor; port dforge's fix when it lands |
 | 8 | workflow-guard prunes a stand-down marker older than 7 days though its session may still run | - | - | deferred | final review lens:security minor; touch the marker on each guarded hook or prune only ended sessions |
@@ -18,3 +18,6 @@
 | 11 | dforge cockpit tests plugin-review-fixes A20 and api-decisions-keep-warm A22 time out at 5 s under host load; they predate 9d669ab3 | - | - | deferred | final review residual: raise their timeout if CI runners fail them |
 | 12 | no test covers the mods' guard-check reset after a timed-out or failed check (dagents, dforge, dflow guardNow) | - | - | deferred | final review residual |
 | 13 | backport row 279's fail@parent pass@port rests on a root run under a cygpath stub; the opt-in A4 replay cannot show a Windows-only skip | - | - | deferred | final review residual |
+| 14 | test-shards.mjs keys every node --test job as --test, so their shard weights collide; fixing the key reshuffles the 14 Windows shards | - | - | open | final review deferred minor; reviewer accepted deferral if the Windows shards pass |
+| 15 | dagents README and reference/fast-mode.md say the hooks stand down while the latest Process line is fast, which backport row 176 narrowed to its request | - | - | open | Task 12 deferred minor |
+| 16 | dagents-home-migrate's shared-mirror path (two stores records naming one mirror: copy, keep the source) has no test | - | - | open | Task 19 review minor |
