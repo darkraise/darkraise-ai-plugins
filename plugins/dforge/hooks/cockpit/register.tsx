@@ -425,8 +425,15 @@ function guardNow($: EngineInterface): Promise<string | null> {
   guardCheck ??= $.process
     .run(['node', `${$.plugin.root}/scripts/workflow-guard.mjs`, '--host', 'claude', '--self', 'dforge'], { timeoutMs: 5_000 })
     .then(
-      ran => guardLine(ran, $.plugin.root),
-      () => guardLine(null, $.plugin.root),
+      ran => {
+        // A check that timed out or failed to start decides nothing: the next hook asks again.
+        if (ran.exitCode === null) guardCheck = null
+        return guardLine(ran, $.plugin.root)
+      },
+      () => {
+        guardCheck = null
+        return guardLine(null, $.plugin.root)
+      },
     )
   return guardCheck
 }

@@ -83,7 +83,8 @@ function managedDefault() {
 function projectDir(env) {
   if (env.WORKFLOW_GUARD_PROJECT_DIR) return env.WORKFLOW_GUARD_PROJECT_DIR;
   if (env.CLAUDE_PROJECT_DIR) return env.CLAUDE_PROJECT_DIR;
-  const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8', timeout: 10000 });
+  // Inside the 5 s every caller gives the whole check.
+  const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8', timeout: 3000 });
   return top.status === 0 && top.stdout.trim() ? top.stdout.trim() : process.cwd();
 }
 
@@ -249,11 +250,15 @@ function hookRun(env, options) {
   const block = conflictBlock(active, options.host);
   const others = active.map(plugin => `${plugin.name}@${MARKETPLACE}`).join(', ');
   const relay = `Show the block above to the user as it is, before anything else. Until only one of ${others} is enabled, use no skill, command or agent of any of them.`;
-  if (marker) {
-    mkdirSync(markers, { recursive: true });
-    writeFileSync(marker, `${new Date().toISOString()}\n`);
-  }
   process.stdout.write(`${JSON.stringify({ systemMessage: block, hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `${block}\n\n${relay}` } })}\n`);
+  if (marker) {
+    try {
+      mkdirSync(markers, { recursive: true });
+      writeFileSync(marker, `${new Date().toISOString()}\n`);
+    } catch (error) {
+      process.stderr.write(`workflow-guard: the stand-down marker could not be written, so this plugin's other hooks keep running: ${String(error?.message ?? error).split('\n')[0]}\n`);
+    }
+  }
   return 3;
 }
 

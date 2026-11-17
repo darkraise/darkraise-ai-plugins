@@ -87,6 +87,8 @@ function guardConflict(ctx, event, out) {
     encoding: 'utf8',
     timeout: 5000,
   });
+  if (ran.stderr) process.stderr.write(ran.stderr);
+  if (ran.error || ran.status === null) process.stderr.write(`workflow-guard: the check did not finish (${ran.error?.message ?? ran.signal}); dflow runs as usual\n`);
   if (ran.status !== 3) return false;
   out(ran.stdout.trimEnd());
   return true;
