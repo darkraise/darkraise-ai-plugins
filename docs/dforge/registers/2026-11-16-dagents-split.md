@@ -13,3 +13,5 @@
 | 6 | dagents does not follow dforge fixes that land after the split; a later backport reruns scripts/dagents-backport.mjs | - | - | deferred | spec out of scope: later dforge fixes |
 | 7 | ar_switch matches the plan's file name as a substring of the first prompt (dagents and dforge alike) | - | - | deferred | final review: Task 14 minor; port dforge's fix when it lands |
 | 8 | workflow-guard prunes a stand-down marker older than 7 days though its session may still run | - | - | deferred | final review lens:security minor; touch the marker on each guarded hook or prune only ended sessions |
+| 9 | A6: dforge is spelled only where the allowlist and version-qualified origin text allow | - | - | deferred | rejection upheld: the test's filename regex omits hooks/cockpit/lib.ts, an older-spelling reader spec §3 allows |
+| 10 | A26: a dagents push and pull request only the dagents client, dagents/ documents and dagents/ workstream keys | - | - | deferred | rejection upheld: migrateServer's superpowers/ and forge/ manifest requests are the 4.17.1 older-spelling move spec §3 keeps |

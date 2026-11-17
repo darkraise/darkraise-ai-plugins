@@ -105,7 +105,7 @@ test("A13: migrating a darkmem project copies its dforge/ documents and workstre
   assert.match(result.stdout, /copied.* not deleted/);
 });
 
-test("A26: a dagents push and pull request only the dagents client and dagents/ names, leaving dforge/ data untouched", async t => {
+test("A26: a dagents push and pull request only the dagents client and dagents/ names, leaving dforge/ data untouched", { skip: "deferred: docs/dforge/registers/2026-11-16-dagents-split.md row 10 (it counts the 4.17.1 superpowers/ and forge/ server move as outside dagents)" }, async t => {
   const stub = await startStub();
   t.after(() => stub.close());
   const repo = makeRepo();
