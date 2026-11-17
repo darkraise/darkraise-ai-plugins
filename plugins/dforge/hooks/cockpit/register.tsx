@@ -571,7 +571,10 @@ export const register: Register = on => {
     await setActivity($, () => IDLE)
     const result = await next(e)
     // Last, so a slow webhook cannot use up the bound every plugin's end hook shares.
-    if (ended !== null) await notify($, ended)
+    if (ended !== null) {
+      await notify($, ended)
+      await flushOutbox($)
+    }
     return result
   }).catch(($, e, next) => next(e))
 
@@ -2860,28 +2863,30 @@ async function endedEvent($: EngineInterface, sessionId: string): Promise<Notify
   }
 }
 
-// How long a hook waits for its Discord message before it goes on; the
-// message still goes out, behind the ones queued before it.
+// How long session.end waits for the queued Discord messages before the
+// process may go.
 const NOTIFY_WAIT_MS = 1000
 // How long one Discord request may stay unanswered before the queue moves on.
 const SEND_LIMIT_MS = 8000
 
 /**
- * Queues one event for Discord when it is on, and waits no longer than
- * NOTIFY_WAIT_MS for it, so a slow or hung webhook never holds a hook. The
- * messages go out one at a time in order. `onSent` runs when Discord took it,
- * given the message id, whether or not the caller still waits. A message
- * whose `isDue` says false by its turn in the queue is not sent.
+ * Queues one event for Discord when it is on, and waits for none of it, so a
+ * webhook never holds a hook. The messages go out one at a time in order.
+ * `onSent` runs when Discord took it, given the message id. A message whose
+ * `isDue` says false by its turn in the queue is not sent.
  */
 async function notify($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>, isDue?: () => boolean): Promise<void> {
   if (!S.kinds.includes(event.kind)) return
-  const job = S.outbox.then(() => (isDue?.() === false ? undefined : deliver($, event, editId, onSent))).catch(() => undefined)
-  S.outbox = job
+  S.outbox = S.outbox.then(() => (isDue?.() === false ? undefined : deliver($, event, editId, onSent))).catch(() => undefined)
+}
+
+// Waits no longer than NOTIFY_WAIT_MS for the messages queued so far.
+async function flushOutbox($: EngineInterface) {
   let timer = null as Timer | null
   const late = new Promise<void>(resolve => {
     timer = $.clock.after(NOTIFY_WAIT_MS, resolve)
   })
-  await Promise.race([job, late])
+  await Promise.race([S.outbox, late])
   timer?.cancel()
 }
 
@@ -3040,8 +3045,7 @@ async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'aski
       async messageId => {
         wait.messageId = messageId
         // Answered while its message was on its way: the message says how it went.
-        // Not awaited: the edit queues behind the send this runs inside.
-        if (wait.outcome !== null) void notify($, { ...event, title: wait.outcome }, messageId)
+        if (wait.outcome !== null) await notify($, { ...event, title: wait.outcome }, messageId)
         else await update($, activity, now => (now.kind === kind ? { ...now, isSent: true } : now))
       },
       () => wait.outcome === null,

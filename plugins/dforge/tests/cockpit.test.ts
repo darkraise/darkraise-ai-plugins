@@ -4551,11 +4551,12 @@ describe('discord', () => {
 
   test('says when a turn fails', async ($, on) => {
     const fetches: World['fetches'] = []
-    world(on, { tokens: 50_000, fetches })
+    const clock = world(on, { tokens: 50_000, fetches })
     mock.store(on, { notifyUrl: WEBHOOK })
     await $.session.start(START)
     await $.turn.start({ text: 'go', turnId: 't1' })
     await $.turn.complete({ answer: 'API Error: 529 overloaded', durationMs: 360_000, isAborted: false, turnId: 't1', reason: 'error' })
+    await clock.advance(1)
     expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.title).toBe('❌ Turn failed: API Error: 529 overloaded')
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /✗ last turn failed/ })).toBeDefined()
@@ -4684,6 +4685,27 @@ describe('discord', () => {
     await $.turn.complete({ answer: 'again', durationMs: 5_000, isAborted: false, turnId: 't2', reason: 'answer' })
     await clock.advance(1)
     expect(fetches).toHaveLength(2)
+  })
+
+  test('a turn end waits for no Discord message, which still goes out', async ($, on) => {
+    const fetches: World['fetches'] = []
+    let release: () => void = () => {}
+    const fetchGate = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const clock = world(on, { tokens: 50_000, fetches, fetchGate, config: { notifyAfter: 0 }, env: { DFORGE_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    await $.session.start(START)
+    let isReturned = false
+    const ending = $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' }).then(() => {
+      isReturned = true
+    })
+    for (let i = 0; i < 10; i++) await clock.advance(1)
+    expect(isReturned).toBe(true)
+    release()
+    await ending
+    await clock.advance(1)
+    expect(fetches?.map(one => (one.body.embeds as Record<string, unknown>[])[0]?.title)).toEqual(['✅ Done in 5s'])
   })
 
   test('a rate limit whose body is not JSON is retried', async ($, on) => {
@@ -5058,7 +5080,7 @@ describe('run card', () => {
   test("says a second plan's tasks though the first had the same numbers", async ($, on) => {
     const files: NonNullable<World['files']> = { ...runFiles(LEDGER), [CONFIG]: { text: JSON.stringify({ notifyOn: 'task' }) } }
     const fetches: World['fetches'] = []
-    world(on, { ...SIGNED_IN, files, fetches })
+    const clock = world(on, { ...SIGNED_IN, files, fetches })
     signedIn(on, files)
     mock.store(on, { notifyUrl: WEBHOOK })
     await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
@@ -5068,6 +5090,7 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/q/progress.md' })
     files['/home/me/code/shop/.dforge/sdd/q/progress.md'] = { text: `${next}\nTask 1: complete (commits a..b, review clean) — done: x`, mtimeMs: 2_200_000 }
     await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/q/progress.md' })
+    await clock.advance(1)
     expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[])[0]?.title)).toEqual(['✅ Task 1 complete, review clean'])
   })
 
@@ -5087,7 +5110,7 @@ describe('run card', () => {
   test('a brief message names no task title and no agent description', async ($, on) => {
     const files: NonNullable<World['files']> = { ...runFiles(LEDGER), [CONFIG]: { text: JSON.stringify({ notifyOn: 'task,agent', notifyDetail: 'brief' }) } }
     const fetches: World['fetches'] = []
-    world(on, { ...SIGNED_IN, files, fetches })
+    const clock = world(on, { ...SIGNED_IN, files, fetches })
     signedIn(on, files)
     mock.store(on, { notifyUrl: WEBHOOK })
     await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
@@ -5096,6 +5119,7 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
     await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement', description: 'Migrate the billing secrets', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
     await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-1' })
+    await clock.advance(1)
     const embeds = fetches.map(one => (one.body.embeds as Record<string, unknown>[])[0])
     expect(embeds.map(embed => embed?.title)).toEqual(['✅ Task 2 complete, review clean', '🤖 impl-sonnet-low finished'])
     expect(embeds.map(embed => embed?.description)).toEqual([undefined, undefined])
@@ -8169,7 +8193,7 @@ describe('auto run in the pane', () => {
   test('says the handoff budget again after a run that stopped', async ($, on) => {
     const fetches: World['fetches'] = []
     const w: World = { tokens: 100_000, env: { HOME: '/home/me' }, fetches }
-    world(on, w)
+    const clock = world(on, w)
     mock.store(on, { notifyUrl: WEBHOOK })
     const files: NonNullable<World['files']> = {}
     signedIn(on, files)
@@ -8177,6 +8201,7 @@ describe('auto run in the pane', () => {
     await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     w.tokens = 470_000
     await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await clock.advance(1)
     const sent = () => fetches.filter(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title === '🔶 Handoff budget reached').length
     expect(sent()).toBe(1)
     files[AUTO] = autoFiles({ pending: null })[AUTO]!
@@ -8185,6 +8210,7 @@ describe('auto run in the pane', () => {
     files[AUTO] = autoFiles({ pending: null, active: false })[AUTO]!
     w.tokens = 470_000
     await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await clock.advance(1)
     expect(sent()).toBe(2)
   })
 
