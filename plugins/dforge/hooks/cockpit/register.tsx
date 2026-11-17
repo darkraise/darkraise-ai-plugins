@@ -572,9 +572,9 @@ export const register: Register = on => {
     S.releaseTimer = null
     S.heldDone = null
     // A wait of the ended session would ping for it later and, while it is
-    // held, keep endWait from restoring the next session's activity.
-    for (const wait of S.waits.values()) wait.timer?.cancel()
-    S.waits.clear()
+    // held, keep endWait from restoring the next session's activity. Settled,
+    // a ping still queued for it is not sent, and one out says so.
+    for (const id of [...S.waits.keys()]) await settleWait($, id, '⏹ Session ended')
     S.waitFrom = null
     S.isMainTurn = false
     await setActivity($, () => IDLE)

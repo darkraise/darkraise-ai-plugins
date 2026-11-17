@@ -4525,6 +4525,40 @@ describe('discord', () => {
     ])
   })
 
+  for (const reason of ['clear', 'resume'] as const)
+    test(`a /${reason} sends no queued approval ping and ends the ones out`, async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      let release: () => void = () => {}
+      on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
+      const w: World = { tokens: 50_000, fetches, settings: { permissions: { defaultMode: 'default' } }, config: { notifyAskAfter: 20 } }
+      const clock = world(on, w)
+      on('session.end', (_$, e) => e as never)
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.tool.check({ tool: 'Bash', input: { command: 'make' }, tool_use_id: 'toolu_7', agentId: 'agent-1' })
+      await clock.advance(20_000)
+      // The first ping went out; the second is on its way, the third queued behind it.
+      w.fetchGate = new Promise<void>(resolve => {
+        release = resolve
+      })
+      await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_8', agentId: 'agent-1' })
+      await $.tool.check({ tool: 'Bash', input: { command: 'pwd' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+      await clock.advance(20_000)
+      expect(fetches).toHaveLength(2)
+      const ending = $.session.end({ reason, sessionId: 'sess-1', resume: { id: 'sess-1' } })
+      await clock.advance(1)
+      release()
+      await ending
+      await clock.advance(1_500)
+      const sent = fetches.map(one => [one.method, (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title]).filter(([, title]) => !String(title).startsWith('🏁'))
+      expect(sent).toEqual([
+        ['POST', '⏳ Waiting for approval'],
+        ['POST', '⏳ Waiting for approval'],
+        ['PATCH', '⏹ Session ended'],
+        ['PATCH', '⏹ Session ended'],
+      ])
+    })
+
   test('says when a turn fails', async ($, on) => {
     const fetches: World['fetches'] = []
     const clock = world(on, { tokens: 50_000, fetches })
