@@ -1,7 +1,7 @@
 # Per-worktree handoff
 
 **Source:** the owner's request of 2026-11-18 in the session that merged fix/open-bugs-and-rulings
-**Covers:** -
+**Covers:** docs/dforge/specs/2026-11-18-per-worktree-handoff-design.md
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
