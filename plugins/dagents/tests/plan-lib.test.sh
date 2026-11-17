@@ -401,6 +401,10 @@ printf 'Task 1: Ruling: amendment A2 — x — y\n' >> "$LD/progress.md"
 err=$(cd "$SR" && HOME=$SH plan_amendments_ready docs/am.md 2>&1); rc=$?
 check "ready: a cited amendment missing from the file exits 2" "$rc" "2"
 check "ready: the message names it" "$(grep -c 'cites amendment A2, which .*amendments.md lacks' <<<"$err")" "1"
+{ printf '## A1 — Task 1\n## A2 — Task 1\n'
+  awk 'BEGIN { for (i = 0; i < 3000; i++) print "an old amendment body line that fills the file" }'; } > "$LD/amendments.md"
+(cd "$SR" && HOME=$SH plan_amendments_ready docs/am.md 2>/dev/null); rc=$?
+check "ready: a file past 64 KiB still finds an early amendment" "$rc" "0"
 mkdir -p "$M/dagents/plans" "$M/work/sdd/mp"
 printf '# MP\n' > "$M/dagents/plans/mp.md"
 printf '# SDD ledger — plan: docs/dagents/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"

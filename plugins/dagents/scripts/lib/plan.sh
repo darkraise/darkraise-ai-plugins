@@ -549,7 +549,7 @@ plan_amendments_ready() {
   for k in $(tr -d '\r' < "$ledger" | grep -oE 'Ruling: amendment A[0-9]+' | sed 's/.*A//'); do
     case $seen in *" $k "*) continue ;; esac
     seen="$seen$k "
-    [ -f "$file" ] && tr -d '\r' < "$file" | grep -q "^## A$k " && continue
+    [ -f "$file" ] && grep -q "^## A$k " < <(tr -d '\r' < "$file") && continue
     printf '%s: the ledger cites amendment A%s, which %s lacks\n' "$me" "$k" "$file" >&2
     bad=1
   done
