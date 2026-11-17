@@ -23,18 +23,18 @@ Four findings from real transcripts drove the fork; the numbers are in
   task but has no field for the choice, and the Agent tool could not pass
   reasoning effort before Claude Code 2.1.292 (it now can, but a fleet
   dispatch still passes neither model nor effort, so the pinned pair is what
-  runs). Here every task records an implementer from a model ×
-  effort grid, the plan's `**Execution:**` line names the session's model and
-  effort, and `plan-lint` checks the header, the scores and the mode before a
+  runs). Here every task records its scores, the plan's `**Execution:**`
+  line names the session's model and effort for the hardest of them, and
+  `plan-lint` checks the header, the scores and the mode before a
   plan is saved.
-- **Judgment in one seat.** Executors and controllers rule only on mechanical
-  conflicts and log every ruling. Plan defects, contested findings and
+- **Judgment in one seat.** The executing session rules only on mechanical
+  conflicts and logs every ruling. Plan defects, contested findings and
   cannot-verify items go to an Opus judge whose verdicts —
   CONFIRMED-GAP, PARK, AMEND, BLOCKED — are carried out verbatim; AMEND edits
   the plan through `scripts/plan-amend` so the plan on disk stays immutable.
 - **Karpathy guidelines baked in.** Think before coding, simplicity first,
   surgical changes, goal-driven verification: in the entry point, the plan
-  template, the implementer template and TDD.
+  template and TDD.
 
 **Codex host.** Read [native-codex.md](reference/native-codex.md). Its
 `codex-v4` policy routes scores 0–9 through Luna, Sol and Astra with
@@ -71,7 +71,7 @@ rather than to a larger model. That cap is what makes the execution floor
 table stop at 8.
 
 **A fix cap.** A task the session implements gets at most three fix rounds,
-then goes to the ruling seat as a `breaker` item. A delegated task keeps two.
+then goes to the ruling seat as a `breaker` item. A risk-3 task's reviewed loop keeps two.
 A `Host: codex` plan keeps `review_cap: 5`.
 
 **Review depth.** An architectural plan runs at one of three depths, sized by
@@ -158,9 +158,7 @@ allowlist; `scripts/lib/codex-client.mjs` runs one turn through the plugin's own
 client and reaps the broker it causes to exist. This plugin never names the
 `codex` executable and never reads Codex-owned state.
 
-That probe is a dated observation, not a standing fact: the same two models were
-listed in the local catalog on 2026-09-14, and `gpt-6-astra` ran there on that
-date. This plugin reads no model catalog at all: the judge seats attempt the preferred
+This plugin reads no model catalog at all: the judge seats attempt the preferred
 rung and fall back once on a refusal, which is the only evidence of entitlement
 that has ever been reliable.
 
@@ -1406,8 +1404,8 @@ entry, a runner and a ladder block rather than an edit to every script.
 `reference/external-review.md` states the entry schema and describes the
 reviewer panel, `reference/session-budget.md` holds the budget numbers,
 checkpoints, stops and the Compact Instructions block, and
-`reference/final-review.md` holds the whole-branch review both execution skills
-end at. `scripts/run-review-panel` runs every open family's runner at once;
+`reference/final-review.md` holds the whole-branch review dforge:executing-plans
+ends at. `scripts/run-review-panel` runs every open family's runner at once;
 `scripts/run-codex-review.sh` and `scripts/run-agy-review.sh` each select the
 judge row from their block (`codex-judge`, `agy-judge`), bound the run, and
 classify the outcome as `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`.
