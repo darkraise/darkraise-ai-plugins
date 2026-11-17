@@ -2836,6 +2836,8 @@ const S = {
   ledgerDirs: { base: '', at: null as number | null, names: [] as string[] },
   // Discord messages go out one at a time; the tail of the queue.
   outbox: Promise.resolve() as Promise<void>,
+  // Whether readSender has read S.where's host and tmux session.
+  isSenderRead: false,
   // The tail of the auto run reads trackAutoRun queues, and the run the last
   // one found; undefined before the first.
   autoTracking: Promise.resolve() as Promise<void>,
@@ -2887,6 +2889,7 @@ async function notify($: EngineInterface, event: NotifyEvent, editId?: string, o
 async function deliver($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>) {
   const state = await read($, notifier)
   if (state.url === null) return
+  await readSender($)
   const git = await read($, repo)
   const at = await read($, place)
   const who = await read($, account)
@@ -4075,7 +4078,7 @@ async function readNotifier($: EngineInterface) {
   }
 }
 
-// Where the messages come from and S.where the state file goes, read once.
+// The settings' default mode and where the state file goes, read once per session.
 async function readWhere($: EngineInterface) {
   try {
     const settings = (await $.settings.read()) as { permissions?: { defaultMode?: unknown } }
@@ -4083,17 +4086,7 @@ async function readWhere($: EngineInterface) {
   } catch {
     S.isUnattended = false
   }
-  const firstLine = async (argv: string[]) => {
-    try {
-      const ran = await $.process.run(argv, { timeoutMs: 2000 })
-      const line = ran.exitCode === 0 ? (ran.stdout.split('\n')[0] ?? '').trim() : ''
-      return line === '' ? null : line
-    } catch {
-      return null
-    }
-  }
-  S.where.host = (await $.env.get('HOSTNAME')) || (await firstLine(['hostname']))
-  S.where.tmux = (await $.env.get('TMUX')) ? await firstLine(['tmux', 'display-message', '-p', '#S']) : null
+  const firstLine = (argv: string[]) => firstLineOf($, argv)
   // A worktree's .dforge/ lives in the primary checkout: the work tree of the
   // common git directory's parent, as ar_primary_root (scripts/lib/auto-run.sh)
   // finds it, so a layout the scripts resolve no primary for (a submodule)
@@ -4101,6 +4094,25 @@ async function readWhere($: EngineInterface) {
   const common = await firstLine(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
   const parent = common === null ? '' : common.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '')
   S.where.primary = parent === '' ? null : await firstLine(['git', '-C', parent, 'rev-parse', '--show-toplevel'])
+}
+
+async function firstLineOf($: EngineInterface, argv: string[]): Promise<string | null> {
+  try {
+    const ran = await $.process.run(argv, { timeoutMs: 2000 })
+    const line = ran.exitCode === 0 ? (ran.stdout.split('\n')[0] ?? '').trim() : ''
+    return line === '' ? null : line
+  } catch {
+    return null
+  }
+}
+
+// The host and tmux session the messages name, which serve nothing else: read
+// once per process, at the first message, so a session start runs neither.
+async function readSender($: EngineInterface) {
+  if (S.isSenderRead) return
+  S.isSenderRead = true
+  S.where.host = (await $.env.get('HOSTNAME')) || (await firstLineOf($, ['hostname']))
+  S.where.tmux = (await $.env.get('TMUX')) ? await firstLineOf($, ['tmux', 'display-message', '-p', '#S']) : null
 }
 
 // The context crossed its handoff budget: said once per crossing.
@@ -4156,6 +4168,7 @@ async function saveMention($: EngineInterface, value: string): Promise<string | 
 async function sendTest($: EngineInterface): Promise<string> {
   const state = await read($, notifier)
   if (state.url === null) return 'No Discord webhook is set.'
+  await readSender($)
   const body = discordBody(
     { kind: 'done', title: '🔔 Test from dforge', detail: 'Notifications reach this channel.', isPlain: true },
     { host: S.where.host, repo: null, branch: null, tmux: S.where.tmux, account: (await read($, account))?.key ?? null },

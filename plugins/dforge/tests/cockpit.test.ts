@@ -4440,6 +4440,20 @@ describe('discord', () => {
     expect(await ui.find({ type: 'Text', text: /Discord ✓/ })).toBeUndefined()
   })
 
+  for (const isHooked of [false, true])
+    test(`reads the host and the tmux session ${isHooked ? 'once, for the first message' : 'never without a webhook'}`, async ($, on) => {
+      const fetches: World['fetches'] = []
+      const processRuns: string[] = []
+      world(on, { tokens: 50_000, fetches, processRuns, config: { notifyAfter: 0 }, env: { TMUX: '/tmp/tmux-0/default,1,0', ...(isHooked ? { DFORGE_NOTIFY_URL: WEBHOOK } : {}) } })
+      mock.store(on, {})
+      await $.session.start(START)
+      const named = () => processRuns.filter(run => run === 'hostname' || run.startsWith('tmux '))
+      expect(named()).toEqual([])
+      for (const turnId of ['t1', 't2']) await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId, reason: 'answer' })
+      expect(named()).toEqual(isHooked ? ['hostname', 'tmux display-message -p #S'] : [])
+      expect(fetches).toHaveLength(isHooked ? 2 : 0)
+    })
+
   test('says nothing when no webhook is set', async ($, on) => {
     const fetches: World['fetches'] = []
     world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 } })
