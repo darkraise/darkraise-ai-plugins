@@ -161,6 +161,6 @@ cleanly."
 - <a question for your human partner, and what you assumed meanwhile>
 ```
 
-dforge:executing-plans writes it at Setup and update it in the same message as
+dforge:executing-plans writes it at Setup and updates it in the same message as
 a ledger write whenever one of these sections changes — not after every task:
 task state lives in the ledger and git.
