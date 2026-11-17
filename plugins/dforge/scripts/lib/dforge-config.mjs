@@ -1,8 +1,7 @@
 // dforge's settings: their schema (config/schema.mjs), the values in
 // ~/.dforge/config.json, and the environment variable a key names, which wins
 // over both. A key whose target is `claude` lives in Claude's own user settings
-// file instead, and this module is its only writer. The first command on a
-// machine imports the pre-2.0 settings once.
+// file instead, and this module is its only writer.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
