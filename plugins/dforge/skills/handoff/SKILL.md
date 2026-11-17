@@ -24,7 +24,7 @@ cleanly."
   only when it has 4 or more tasks, or when `scripts/context-size` does not
   say `ok` after steps 0-4 (dforge:writing-plans §Execution Handoff): a light
   plan of 1-3 tasks runs steps 0-4 and continues in this session.
-  The last task completing is never a stop in either execution mode: the
+  The last task completing is never a stop: the
   final review and finishing run in the same session whatever
   `scripts/context-size --final` prints. A task budget line printed during
   that final phase does not stop it, and nothing stops finishing once the
@@ -161,7 +161,7 @@ cleanly."
 - <a question for your human partner, and what you assumed meanwhile>
 ```
 
-Both execution skills write it at Setup and update it in the same message as
+dforge:executing-plans writes it at Setup and update it in the same message as
 a ledger write whenever one of these sections changes — not after every task:
 task state lives in the ledger and git.
 

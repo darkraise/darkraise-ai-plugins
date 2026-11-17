@@ -131,7 +131,7 @@ under `ok` is not a reason to stop.
   dforge:handoff once the plan is reviewed. In an auto run the plan saved is
   no stop: the cockpit clears the session and starts execution
   ([auto-run.md](auto-run.md) §The switch).
-- **Never a stop:** the last task completing, in either mode. The final review
+- **Never a stop:** the last task completing. The final review
   and finishing follow in the same session whatever `context-size --final`
   prints: it never says `handoff`, and a task budget line saying `handoff`
   inside the final phase does not stop it. When the context fills there,

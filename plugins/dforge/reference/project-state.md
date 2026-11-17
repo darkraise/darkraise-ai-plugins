@@ -45,10 +45,10 @@ it does without it.
 |---|---|---|
 | `gates.md` | a human, or dforge:running-gates' bootstrap on approval | dforge:running-gates |
 | `plans/completed.md` | dforge:finishing-a-development-branch | dforge:project-status |
-| `registers/*.md` | dforge:brainstorming, dforge:writing-plans, both execution skills, dforge:finishing-a-development-branch — all through `scripts/register` | `scripts/next-step`, `scripts/plan-lint`, `scripts/repo-audit`, dforge:project-status, dforge:brainstorming |
+| `registers/*.md` | dforge:brainstorming, dforge:writing-plans, dforge:executing-plans, dforge:finishing-a-development-branch — all through `scripts/register` | `scripts/next-step`, `scripts/plan-lint`, `scripts/repo-audit`, dforge:project-status, dforge:brainstorming |
 | `reviews/*.md` | dforge:finishing-a-development-branch, through `scripts/review-record` | dforge:closing-a-milestone, and a person weighing review depth |
 | `roadmap.md` | dforge:planning-a-product and dforge:closing-a-milestone, through `scripts/roadmap` | `scripts/next-step`, `scripts/repo-audit`, the SessionStart hook, dforge:project-status, dforge:brainstorming, dforge:finishing-a-development-branch |
-| `distilled/*.md` | dforge:distilling-docs, or a human recording an approved spec's owner decision | dforge:project-status, dforge:brainstorming, dforge:resume-execution, both execution skills; `constraints.md` also dforge:writing-plans |
+| `distilled/*.md` | dforge:distilling-docs, or a human recording an approved spec's owner decision | dforge:project-status, dforge:brainstorming, dforge:resume-execution, dforge:executing-plans; `constraints.md` also dforge:writing-plans |
 
 ## Precedence
 

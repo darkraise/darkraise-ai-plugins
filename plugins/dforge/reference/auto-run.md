@@ -164,9 +164,8 @@ The ladder for anything you would have asked. The `scripts/decide` and
    When `decisionApi` is `shadow` and this rung ruled a choice item, run
    `scripts/decide record --id <id> --ruling "<the option it chose, or other>"`.
 
-3. **The pending list.** An Opus `BLOCKED` or `no ruling`, a task the session
-   implements still open at its fix cap, or an implementer that exhausted the
-   ladder, is added:
+3. **The pending list.** An Opus `BLOCKED` or `no ruling`, or a task still
+   open at its fix cap, is added:
 
        scripts/auto-run decision add --id <id> --question "<q>" --options "<recommended | other>" --opus-reason "<why Opus did not rule>" [--task <N>]
 

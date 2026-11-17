@@ -92,8 +92,8 @@ proof-report row proves it.
   `UX-` ID reaches some task. `scripts/plan-lint` enforces both.
 - **The brief.** `scripts/task-brief` appends the cited items verbatim under
   `## UI/UX contract items`.
-- **The implementer** renders its work through the profile's harness before
-  reporting, and maps each cited ID to a screenshot path or a test name.
+- **The session**, implementing the task, renders its work through the
+  profile's harness before reporting, and maps each cited ID to a screenshot path or a test name.
 
 ## Prove
 

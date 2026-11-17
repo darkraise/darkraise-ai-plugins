@@ -272,7 +272,7 @@ If you catch yourself thinking:
 | "Multiple fixes at once saves time" | Can't isolate what worked. Causes new bugs. |
 | "Reference too long, I'll adapt the pattern" | Partial understanding guarantees bugs. Read it completely. |
 | "I see the problem, let me fix it" | Seeing symptoms ≠ understanding root cause. |
-| "One more fix attempt" (after 2+ failures) | 3+ failures = architectural problem. Question the assumption behind the fixes, don't fix again; as a subagent, report BLOCKED with what you tried. |
+| "One more fix attempt" (after 2+ failures) | 3+ failures = architectural problem. Question the assumption behind the fixes, don't fix again. |
 
 ## Quick Reference
 

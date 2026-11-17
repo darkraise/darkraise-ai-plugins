@@ -113,7 +113,7 @@ wins, and the report names which one matched.
 
 `BLOCKED` outranks everything: `scripts/next-step` already treats it as terminal
 and hands the decision to your human partner. Rule 0 reads each task's **last**
-line, as both execution skills' recovery tables do, so a task that was blocked
+line, as executing-plans' recovery table does, so a task that was blocked
 and later ruled and completed no longer matches.
 
 Rules 4 and 5 require `completed.md` to exist. Without it nothing can be shown to

@@ -1,13 +1,13 @@
 # The final whole-branch review
 
-Both execution skills end here. It is the broad review the per-task loop cannot
+dforge:executing-plans ends here. It is the broad review the per-task loop cannot
 be: one reading of the whole branch against the spec, by reviewers that saw none
 of the work being done.
 
 ## Who runs it, and when
 
-- **Either execution mode:** the session that completed the last task: the
-  final phase never hands off. The final phase - this review, its one fix wave
+- **Who:** the session that completed the last task: the final phase never
+  hands off. The final phase - this review, its one fix wave
   and finishing - is measured against the handoff budget in strict mode and
   the final-phase limit in relaxed mode, and its `budget (final)` lines say
   `ok` past either; a plain budget line saying `handoff` here does not stop it.
@@ -21,7 +21,7 @@ of the work being done.
   review from the ledger as the execution skill's After compaction section
   says. It never hands off, and once a compaction has run in this phase every
   budget line says `ok`.
-- **Either mode:** point the reviewer at the ledger's deferred-minor and
+- **What it reads:** point the reviewer at the ledger's deferred-minor and
   parked lines, the complete lines' `discovered:` fields, every borderline
   (9-13) score, and every `(unseated)` ruling, so it can triage what must be
   fixed before merge. Give it the ledger's path and name those line kinds;
@@ -233,7 +233,7 @@ your own: QA commits on this branch.
    `bash <plugin-root>/scripts/suite-run -- bash -c '<integration check>'`
    (a single quote escaped as [delegated-task.md](delegated-task.md) §2 says)
    as a background command at the same HEAD the Claude review reads, on
-   every final review and in either execution mode, with the Bash call's
+   every final review, with the Bash call's
    `timeout` set to (3600 + 120) × 1000 ms. A plan with no such line runs
    the suite command [delegated-task.md](delegated-task.md) §1 resolves.
    With QA skipped, run it from the checkout's top level. QA commits in the
@@ -502,7 +502,7 @@ when no register covers it, and counts it in its lens line's Important count
 only, neither fixed nor rejected.
 
 **Suites.** Any test or validation suite you run in the final review — the
-check after the fix wave, or the project's full suite in inline mode — goes
+check after the fix wave, or the project's full suite — goes
 through `bash <plugin-root>/scripts/suite-run -- <command>`, which records the
 HEAD it ran at and prints a digest in place of the output. Run the plan's
 `**Integration check:**` command yourself the same way,

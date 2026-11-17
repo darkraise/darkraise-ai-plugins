@@ -32,16 +32,10 @@ disagree.
   schema's call, and it may inherit yours instead. Every routed dispatch
   sets both, so use an isolated fork for it
   ([native-codex.md](../../../reference/native-codex.md)).
-- **Fix rounds:** resume the implementer with `followup_task` — it
-  delivers your message, triggers a turn, and transparently reloads a
-  child the harness evicted. Never dispatch a fresh implementer on the
-  theory that a spawned agent cannot be messaged again; on V2 it
-  always can.
 - **Lifecycle:** V2 has no `close_agent`. Finished children are
   evicted automatically when slots are needed; leaving them unclosed
   costs nothing. Only V1 sessions have `close_agent` — there, close
-  reviewers when their review returns, and close each implementer
-  after its task's review passes.
+  each reviewer when its review returns.
 - **Model names:** never copy a model name from a skill, table, or old
   session into `spawn_agent` without checking it against your current
   spawn allowlist — V2 accepts only V2-capable presets and hard-errors

@@ -547,9 +547,7 @@ A watch that ends with no conclusion, the run still going at 90 minutes,
 writes `Early CI: skipped — run <id> still running at 90 min`. Any failure of
 `git push` or `gh` prints one line, writes `Early CI: skipped — <reason>`, and
 never stops the run. A `**CI:**` line that names no workflow declaring
-`workflow_dispatch` writes the same `skipped` line. A red run is a bullet you
-write into the next task's fix file, as §4 does for a mechanical check's
-finding. Inline mode writes no fix files: there, debug a red run with
+`workflow_dispatch` writes the same `skipped` line. Debug a red run with
 dforge:systematic-debugging before the next task's first step. With no task
 left, a red run is a final-review finding, debugged with
 dforge:systematic-debugging. On recovery, a `dispatched` line with no

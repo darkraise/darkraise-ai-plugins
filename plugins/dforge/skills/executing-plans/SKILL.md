@@ -198,7 +198,7 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   `Final review:` line.
 - There is no scores clause. A scores clause appears only when a judge scored
   the task.
-- The fix cap is 3 for a task you implement; a delegated task keeps 2 (5 on a `Host: codex` plan). You are fixing your own work, so a
+- The fix cap is 3 for a task you implement; a risk-3 task's reviewed loop keeps 2 (5 on a `Host: codex` plan). You are fixing your own work, so a
   fourth round is not a better round. A fix-round line is written after the
   round, with its outcome: `passing`
   when the task's verifications now pass, `still failing` otherwise.
