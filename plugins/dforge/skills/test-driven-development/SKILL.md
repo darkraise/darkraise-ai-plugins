@@ -27,10 +27,9 @@ Write the test first. Watch it fail. Write minimal code to pass.
 
 **Refactoring** keeps existing tests green and writes no test, except one characterization test written first when no existing test reaches the code being moved.
 
-**Under a plan, the task's steps decide.** An implementer dispatched with a
-brief cannot ask: where the brief's steps call for a test first, follow this
-skill; where they do not, the plan's author already chose, and the agent file
-says so.
+**Under a plan, the task's steps decide; do not stop to ask about an
+exception.** Where the brief's steps call for a test first, follow this skill;
+where they do not, the plan's author already chose.
 
 Thinking "skip TDD just this once"? Stop. That's rationalization.
 
