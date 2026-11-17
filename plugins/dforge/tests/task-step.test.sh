@@ -597,6 +597,19 @@ rr_fix 1 1 "- app.txt: wrong value"
 rr_run rereview docs/plan.md 01
 check "rereview names Task 1 as 01" "$rr_rc $(rr_verdict 1 1)" "0 prompt"
 
+# The package's budget line is the digest's: context-size runs once.
+RR_KIT=$RR_TMP/kit
+mkdir -p "$RR_KIT" && cp -R "$RR_S" "$RR_S/../reference" "$RR_S/../criteria" "$RR_KIT/"
+printf '#!/usr/bin/env bash\necho run >> "%s"\necho "budget: kit"\n' "$RR_TMP/context-size.count" > "$RR_KIT/scripts/context-size"
+rr_reset
+rr_edit app.txt mod
+rr_git add -A && rr_git commit -qm fix
+rr_fix 1 1 "- app.txt: wrong value"
+RR_S_KEEP=$RR_S RR_S=$RR_KIT/scripts
+rr_run rereview docs/plan.md 1
+RR_S=$RR_S_KEEP
+check "rereview runs context-size once and prints its line" "$rr_rc:$(grep -c '' "$RR_TMP/context-size.count" 2>/dev/null):$(tail -n 1 <<<"$rr_out")" "0:1:budget: kit"
+
 # Refusals write nothing.
 rr_reset
 rr_run rereview docs/plan.md 3

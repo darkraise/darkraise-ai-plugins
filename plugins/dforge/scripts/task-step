@@ -425,7 +425,9 @@ cmd_rereview() (
   printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$prompt"
   printf 'state: base %s review-head %s round %s t0 %s\n' \
     "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "${head_sha:0:7}" "$new_round" "$now"
-  plan_budget_line "$here" task-step:rereview "$src" "$(dforge_ledger_dir "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")/progress.md" || true
+  # review-package already measured the session; its line is the digest's.
+  budget=$(grep -E '^budget' <<<"$pkg" | tail -n 1)
+  printf '%s\n' "${budget:-budget: unknown}"
 )
 
 if [ "${1:-}" = rereview ]; then
