@@ -421,17 +421,28 @@ function applyNotify(o: Live) {
 // band above the prompt and the pane draw the guard line alone.
 let guardCheck: Promise<string | null> | null = null
 
+// How long a check that decided nothing stands as "no conflict" before a hook asks again.
+const GUARD_RETRY_MS = 60_000
+
 function guardNow($: EngineInterface): Promise<string | null> {
+  // A check that timed out decides nothing: it reads as no conflict, and a
+  // hook asks again after GUARD_RETRY_MS rather than every hook at once. One
+  // that cannot start node never will in this process: no node, no other
+  // workflow plugin's check either.
+  const retryLater = () => {
+    $.clock.after(GUARD_RETRY_MS, () => {
+      guardCheck = null
+    })
+  }
   guardCheck ??= $.process
     .run(['node', `${$.plugin.root}/scripts/workflow-guard.mjs`, '--host', 'claude', '--self', 'dforge'], { timeoutMs: 5_000 })
     .then(
       ran => {
-        // A check that timed out or failed to start decides nothing: the next hook asks again.
-        if (ran.exitCode === null) guardCheck = null
+        if (ran.exitCode === null) retryLater()
         return guardLine(ran, $.plugin.root)
       },
-      () => {
-        guardCheck = null
+      (error: unknown) => {
+        if (!NO_NODE.test(String(error))) retryLater()
         return guardLine(null, $.plugin.root)
       },
     )

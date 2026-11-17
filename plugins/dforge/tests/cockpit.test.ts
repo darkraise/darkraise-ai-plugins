@@ -253,6 +253,8 @@ type World = {
   processRuns?: string[]
   /** What the workflow guard's standalone check answers; unset, the fallback answer (exit 0). */
   guardOut?: { exitCode: number; stdout: string }
+  /** The workflow guard's check cannot start (no node), or outruns its timeout. */
+  guardFails?: 'missing' | 'timeout'
   /** dforge-config refuses, as on a Claude settings file it cannot parse. */
   isDforgeConfigRefusing?: boolean
   /** How many claude-restore writes the engine misses, as one landing right after its own save. */
@@ -467,6 +469,14 @@ function world(on: On, w: World) {
   on('process.run', (_$, e) => {
     const argv = e.argv.join(' ')
     w.processRuns?.push(argv)
+    if (w.guardFails !== undefined && (e.argv[1] ?? '').endsWith('/scripts/workflow-guard.mjs')) {
+      return {
+        deny:
+          w.guardFails === 'missing'
+            ? 'dforge: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"'
+            : 'dforge: $.process.run(node) aborted: still running after 5000ms',
+      }
+    }
     if (w.guardOut !== undefined && (e.argv[1] ?? '').endsWith('/scripts/workflow-guard.mjs')) {
       return { value: { ...w.guardOut, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
@@ -8959,5 +8969,29 @@ describe('the workflow guard', () => {
     expect(await band.find({ key: 'band-expand' })).toBeDefined()
     expect(await band.find({ type: 'Text', text: /^╭─ me@example\.com/ })).toBeDefined()
     expect(runs.filter(run => GUARD.test(run))).toHaveLength(1)
+  })
+
+  test('without node the check runs once for the process, and the cockpit draws as before', async ($, on) => {
+    const runs: string[] = []
+    world(on, { ...SIGNED_IN, guardFails: 'missing', processRuns: runs })
+    signedIn(on, configured({ layout: 'compact' }))
+    await $.session.start(START)
+    for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.session.measure(MEASURE)
+    const band = await $.ui.mount(minimized('terminal'))
+    expect(await band.find({ key: 'band-expand' })).toBeDefined()
+    expect(runs.filter(run => GUARD.test(run))).toHaveLength(1)
+  })
+
+  test('a check that outran its timeout is tried again a minute later, not by every hook', async ($, on) => {
+    const runs: string[] = []
+    const clock = world(on, { ...SIGNED_IN, guardFails: 'timeout', processRuns: runs })
+    signedIn(on)
+    await $.session.start(START)
+    for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(runs.filter(run => GUARD.test(run))).toHaveLength(1)
+    await clock.advance(60_000)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(runs.filter(run => GUARD.test(run))).toHaveLength(2)
   })
 })
