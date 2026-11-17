@@ -11,7 +11,7 @@ check() {
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-W="$P/skills/using-git-worktrees/SKILL.md"
+W="$P/skills/using-git-worktrees/references/git-worktree-fallback.md"
 git init -q "$TMP/repo"
 mkdir "$TMP/repo/.worktrees" "$TMP/repo/worktrees"
 printf 'worktrees/\n' > "$TMP/repo/.gitignore"
