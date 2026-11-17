@@ -398,6 +398,8 @@ const DFORGE_LOCK_WAIT_MS = 10000;
 const PROJECT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
 // Shared on purpose with dforge and the older plugins, so never renamed.
 const SHARED_VARIABLE = /^DR_(TEST_BASH|TEST_ALL)$|^DR_(FORGE|SUPERPOWERS)_/;
+// dforge's DARKMEM_* tuning names; DARKMEM_API_KEY stays shared.
+const DFORGE_DARKMEM_VARIABLE = /^DARKMEM_SESSION_STEP_SECONDS$/;
 
 function realOrResolved(file) {
   try {
@@ -421,6 +423,7 @@ const sameUrl = (a, b) => String(a).replace(/\/+$/, "") === String(b).replace(/\
 export function renamedVariable(name) {
   if (name.startsWith("DFORGE_")) return `DAGENTS_${name.slice("DFORGE_".length)}`;
   if (/^DR_[A-Z0-9_]+$/.test(name) && !SHARED_VARIABLE.test(name)) return `DAGENTS_${name.slice("DR_".length)}`;
+  if (DFORGE_DARKMEM_VARIABLE.test(name)) return `DAGENTS_${name}`;
   return null;
 }
 

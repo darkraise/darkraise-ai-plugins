@@ -105,8 +105,8 @@ _darkmem_session_step() {
 # a hook killed at its timeout loses the whole note, the entry point with it.
 # Reconcile gets what pull's 60 seconds leave, up to 200; pull what reconcile
 # left, up to 60; a step left under 10 seconds is skipped with a line. Each
-# step is bounded again at DARKMEM_SESSION_STEP_SECONDS (20), so a slow sync
-# delays the session's first prompt by seconds rather than minutes, and waits
+# step is bounded again at DAGENTS_DARKMEM_SESSION_STEP_SECONDS (20), so a slow
+# sync delays the session's first prompt by seconds rather than minutes, and waits
 # up to 10 seconds, below that bound, for a mirror lock a Stop push still
 # running in the background may hold. A step that overruns its bound is one
 # line naming the command to run by hand.
@@ -120,7 +120,7 @@ darkmem_session_lines() {
     || [ "$( (dagents_docs_store "$1") 2>/dev/null)" = darkmem ] \
     || [ "$( (dagents_progress_store "$1") 2>/dev/null)" = darkmem ] \
     || return 0
-  end=$(( SECONDS + ${4:-270} )) grace=${DAGENTS_DARKMEM_KILL_GRACE:-5} step=${DARKMEM_SESSION_STEP_SECONDS:-20}
+  end=$(( SECONDS + ${4:-270} )) grace=${DAGENTS_DARKMEM_KILL_GRACE:-5} step=${DAGENTS_DARKMEM_SESSION_STEP_SECONDS:-20}
   {
     bound=$(( end - SECONDS - 60 - 2 * grace ))
     [ "$bound" -le 200 ] || bound=200

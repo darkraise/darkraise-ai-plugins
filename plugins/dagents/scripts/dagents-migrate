@@ -19,7 +19,7 @@
 # scripts/lib/dagents-home-migrate.mjs moves the homes (~/.dr-superpowers/ and
 # ~/.dr-forge/ -> ~/.dagents/) when it is installed, and this repository's
 # dforge 4.x home record, mirror, settings and darkmem data (copied, never
-# deleted); it lists the DFORGE_* and DR_* variables to rename.
+# deleted); it lists the DFORGE_*, DR_* and dforge DARKMEM_* variables to rename.
 #
 # A checkout holding an older state directory and .dagents/ is merged file by
 # file: a file or empty directory only the old one has moves, an identical

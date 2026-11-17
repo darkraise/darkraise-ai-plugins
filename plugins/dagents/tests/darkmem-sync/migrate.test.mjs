@@ -578,11 +578,12 @@ test("the migrate dry run lists the home steps and the variables to rename, and 
   const a = makeRepo();
   write(path.join(home, ".dforge", "config.json"), JSON.stringify({ autoRun: "off", darkmem: { url: stub.url, repos: { [a]: { project: "projA" } } } }));
   write(path.join(home, ".dforge", "stores.json"), JSON.stringify({ [a]: { documents: "darkmem", progress: "darkmem", project: "projA", mirror: path.join(home, ".dforge", "mirror", "projA") } }));
-  const env = { ...process.env, HOME: home, DARKMEM_API_KEY: STUB_KEY, CLAUDE_CONFIG_DIR: "", DFORGE_BUDGET: "200k" };
+  const env = { ...process.env, HOME: home, DARKMEM_API_KEY: STUB_KEY, CLAUDE_CONFIG_DIR: "", DFORGE_BUDGET: "200k", DARKMEM_SESSION_STEP_SECONDS: "5" };
   const before = stub.db.requests.filter(r => r.method !== "GET").length;
   const out = await runMigrate(a, env, "--dry-run");
   assert.equal(out.status, 0, out.stdout + out.stderr);
   assert.match(out.stdout, /DFORGE_BUDGET .*DAGENTS_BUDGET/);
+  assert.match(out.stdout, /DARKMEM_SESSION_STEP_SECONDS .*DAGENTS_DARKMEM_SESSION_STEP_SECONDS/);
   assert.equal(fs.existsSync(path.join(home, ".dagents")), false);
   assert.equal(JSON.parse(read(path.join(home, ".dforge", "stores.json")))[a].project, "projA");
   assert.equal(stub.db.requests.filter(r => r.method !== "GET").length, before);
