@@ -5,6 +5,6 @@
 
 | # | Item | Assigned | Acceptance | State | Note |
 |---|---|---|---|---|---|
-| 1 | the handoff file is shared across all worktree, this will block the ability to work in parallel using multiple sessions. I want that each worktree will keep its own handoff file | docs/dforge/plans/2026-11-18-per-worktree-handoff.md | A1, A2, A3, A6, A12, A14 | planned | - |
-| 2 | the promt after handoff (which tell what should do in next session) will point to correct handoff file | docs/dforge/plans/2026-11-18-per-worktree-handoff.md | A5, A13, A17 | planned | - |
-| 3 | include the worktree to use | docs/dforge/plans/2026-11-18-per-worktree-handoff.md | A4, A5 | planned | - |
+| 1 | the handoff file is shared across all worktree, this will block the ability to work in parallel using multiple sessions. I want that each worktree will keep its own handoff file | docs/dforge/plans/2026-11-18-per-worktree-handoff.md | A1, A2, A3, A6, A12, A14 | doing | - |
+| 2 | the promt after handoff (which tell what should do in next session) will point to correct handoff file | docs/dforge/plans/2026-11-18-per-worktree-handoff.md | A5, A13, A17 | doing | - |
+| 3 | include the worktree to use | docs/dforge/plans/2026-11-18-per-worktree-handoff.md | A4, A5 | doing | - |
