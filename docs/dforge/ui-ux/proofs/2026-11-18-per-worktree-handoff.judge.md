@@ -1,31 +1,38 @@
 ## Verdict
-verdict: ship de31263525d8c6cd
-scores: coverage 17 / fidelity 17 / states 16 / deviations 16
+verdict: ship 2406b7defe6d1675
+scores: coverage 17 / fidelity 17 / states 16 / deviations 17
 
-Round two. Both earlier disputes are answered by captures I opened. No item is
-disputed.
+## Scope of what I opened
 
-## Item review
+- Criteria, report and its Delta (touch depth, UI-1, UX-1 to UX-4, OP-1, OP-2).
+- All nine captures under `.dforge/ui-ux/2026-11-18-per-worktree-handoff/`, read as text with their SGR codes: `dforge-card-200x60`, `dforge-card-120x40`, `dforge-resume-focus-200x60`, `dforge-resume-200x60`, `dforge-after-120x40`, `dagents-card-200x60`, `dagents-card-120x40`, `dagents-resume-focus-200x60`, `dagents-resume-200x60`.
+- The probe note `docs/dforge/notes/2026-11-18-worktree-cwd-probe.md`.
+- In both `plugins/*/tests/cockpit.test.ts`, the five named tests (the dforge ones at lines 5695, 5707, 5713, 6828, 6843; the dagents ones at 5566, 5578, 5584, 6705, 6720), plus the mock `process.run` and `fs.stat` handlers in the dforge file.
+- `autoRunCall` in both `register.tsx` files. Every `scripts/auto-run` call goes through it; a grep found no other `process.run` of `auto-run`.
 
-| ID | Ruling | What I opened |
+I could not run the tests or check git (no shell). I take the `claude plugin test` counts (702/0, 616/0) from the dispatch, not from my own run. I could not confirm from git that the captures were taken at 6a6bc3a4. Nothing in the captures contradicts the report.
+
+## Per item
+
+| ID | Judgement | What I saw |
 |---|---|---|
-| UI-1 | proven | dforge-card-200x60 and dagents-card-200x60. Pane card reads `↻ Resumable work · handed off just now` (dagents: `1m ago`) over `Next: Probe: the worktree's next step.`. The band reads the same Next line after `—`. The string "primary's next step" appears in neither capture. The setup (the primary holding a different block) is the report's statement only; the test "reads the session worktree's handoff, not the primary's" backs the behaviour. |
-| UX-1 | proven | dforge-resume-focus and dagents-resume-focus: the band `[ Resume ]` is SGR `1;7` (reverse), where the card captures show it as `1` only. dforge-resume and dagents-resume: `› Prompt from the dforge plugin` (dagents: `dagents`) followed by `Start in <wt> (branch w); its handoff is <wt>/.dforge/handoff/latest.md. If your working directory is not <wt>, enter it first. Continue the unplanned work recorded in <wt>/.dforge/handoff/latest.md: Probe: the worktree's next step.` (dagents path `.dagents`). The text matches the contract's opening. The keystrokes `ctrl+x tab` and Enter are not in the captures; the focus-then-submit sequence is inferred from the before/after states. This is the earlier UX-1 dispute: the dagents focus capture now exists and shows reverse video. |
-| UX-2 | proven by test | Test "names the absolute handoff path in the fallback resume prompt (spec A9)" in both cockpit.test.ts files (dforge 5713, dagents 5584). It uses a worktree handoff with no fence and asserts the submitted prompt equals `Resume the work in <WT_LATEST> with the <plugin> resume-execution skill.`. `resumePrompt()` in both register.tsx files builds exactly that string from `S.latestName`. |
-| UX-3 | proven by test | "reads the session worktree's handoff, not the primary's (spec A9)" asserts `nextStepRuns` is empty when only the primary holds a handoff. In the sibling test a worktree handoff makes `nextStepRuns` equal `[WORKTREE]`, so an empty list does mean no offer was raised. The test does not assert `resume-card` absent directly; that is a weaker form, but sound. "runs from the primary checkout when the session's directory is gone" deletes the worktree and its handoff and asserts the next run is from `/home/me/code/shop`. `readRun` (`isGone`, `here`) matches in both plugins. |
-| UX-4 | proven by test | "passes the session checkout to every auto-run call (spec A8)" asserts every auto-run argv starts `bash -c cd -- "$1" && shift && exec bash "$@" auto-run <WORKTREE> ` and that at least one call was made. `autoRunCall` in both plugins builds that argv. The probe note records the cockpit's calls running in the worktree after `EnterWorktree`. |
-| OP-1 | proven | dforge-card-120x40 and dagents-card-120x40 show the pane card with `Next: Probe: the worktree's next step.` in both plugins. dforge-after-120x40 shows the submitted `Start in …` prompt wrapped to 66 columns. 200x60 captures exist for both plugins. This is the earlier OP-1 dispute: the 120x40 card is now shown. The band at 120x40 truncates before the Next line (dforge title cut to `just no…`, dagents `1m ago …`), so the Next line there comes from the card, which the report says. |
-| OP-2 | proven | Card text and prompt are plain words (`Next: …`, `Start in …`). The Resume focus state is reverse video, not colour-only. |
-
-## Per criterion
-
-- coverage 17: every item has a row. UI-1, UX-1 and OP-1 are backed by opened captures; UX-2 to UX-4 by tests I read plus the code they exercise. UX-3's test is indirect, and the "different block in the primary" setup is not visible in any capture.
-- fidelity 17: the copy of the card, band title, Resume and Dismiss controls, and the submitted prompt match the contract in both plugins. Nothing is dropped or substituted.
-- states 16: 200x60 and 120x40 are covered, keyboard focus is shown for both plugins, and the after-submit state is shown. Fallback prompt, no-handoff, gone-directory and auto-run cwd are test-only. No hover, no pointer press (the report says why), and no 120x40 focus or after-Resume capture for dagents; none is required by the contract.
-- deviations 16: the report marks no row as deviation. The only difference I found is the 120x40 band truncation, which the report states openly, and the band layout is not something this delta changed. Nothing is passed with an uncited difference.
+| UI-1 | proven | In `dforge-card-200x60` and `dagents-card-200x60`, the pane card reads `↻ Resumable work · handed off just now` over `Next: Probe: the worktree's next step.`. The band at the bottom reads the same text after `—`. The session path ends `…/uiw-<plugin>/wt` and the Repo card shows `⎇ w`. The text "worktree's next step" can only come from the worktree's file, and "primary's next step" appears in none of the nine captures. |
+| UX-1 | proven | In both `*-resume-focus-200x60` captures, `[ Resume ]` is `1;7` (reverse video); in the matching card captures it is `1` only. In both `*-resume-200x60` captures, the submitted text is under `Prompt from the dforge plugin` (`dagents` in the dagents walk). It reads `Start in …/wt (branch w); its handoff is …/wt/.dforge/handoff/latest.md. If your working directory is not …/wt, enter it first. Continue the unplanned work recorded in …: Probe: the worktree's next step.`. The dagents handoff path ends `.dagents/handoff/latest.md`. The `Invalid API key` result is the report's stated placeholder-key behaviour. The keypress itself is not captured, only the before and after states. |
+| UX-2 | proven by test | Both tests build a worktree session with an unfenced handoff at `<wt>/.dforge/handoff/latest.md` (`.dagents` in dagents). They press `pane-resume` and assert the single prompt `Resume the work in ${WT_LATEST} with the <plugin> resume-execution skill.`. This is a mock-level test, and the report says it was not walked live. |
+| UX-3 | proven by test | The "reads the session worktree's handoff, not the primary's" test has only the primary's `latest.md` and a worktree session. It asserts `nextStepRuns` is empty, so no offer is raised. The "runs from the primary checkout when the session's directory is gone" test first shows a run from the worktree. It then deletes the worktree directory and its handoff, touches the primary's `latest.md`, and asserts the next run happens from `/home/me/code/shop`. A run only starts when an offer exists, so this shows the offer reads the primary's handoff. No assertion looks at a card. Same pair in both plugins. |
+| UX-4 | proven by test and code | `autoRunCall` stats the session checkout and falls back to the primary when it is not a directory. It then runs `bash -c 'cd -- "$1" && shift && exec bash "$@"' auto-run <checkout> …/scripts/auto-run --session …`. The two named tests assert, for every recorded `auto-run` argv, a prefix of `… auto-run <worktree> ` and `… auto-run /home/me/code/shop ` respectively, and that the `compacted` call still runs. The test flow shows `compacted`/`resumed`-style calls, not a `stop` call directly. Both `stop` callers use the same `autoRunCall`, so I count this as covered. The probe note shows that `process.run` already follows `EnterWorktree` into the worktree, so the explicit `cd --` makes that explicit and changes nothing else. |
+| OP-1 | proven | Card captures exist at 200x60 and 120x40 for both plugins. The dforge 120x40 pane card is intact with the path cut to `/…/scratchpad/uiw-dforge/wt`. The dforge 120x40 band truncates its title to `…just no…` before the Next line but keeps `[ Resume ]` and `Dismiss`. The dagents 120x40 capture has no pane, and its band carries the full Next line plus both buttons. `dforge-after-120x40` shows the wrapped `Start in` prompt after Resume. |
+| OP-2 | proven | The Next line, the card title, the band and the submitted prompt are all plain words in the captures. The focus indicator is reverse video, not colour. |
 
 ## Disputed items
 
 None.
 
-Verdict: ship de31263525d8c6cd
+## Observations (not disputed)
+
+- At dforge 120x40 the band truncates before the Next line. UI-1 is stated for the 200x60 walk, and the pane card at 120x40 carries the Next line. The report discloses the truncation in OP-1. I count it as existing responsive layout, not a deviation, since this change drew no new control.
+- UX-2 and UX-3 have only test evidence. A live walk of the fallback prompt and of the gone-directory case does not exist. The report says so under "Not proven", and the criteria accept a named test whose file I read.
+- The report's Automated checks paragraph still describes both the 7b86861c first walk and the 6a6bc3a4 re-walk. It states that the captures come from the re-walk and replace the earlier ones. I cannot confirm that from the files alone.
+- No pointer press and no hover were exercised. The report names this under "Not proven", and the touch delta draws no new control.
+
+Verdict: ship 2406b7defe6d1675
