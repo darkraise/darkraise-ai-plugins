@@ -1,6 +1,6 @@
 # Per-worktree handoff files — design
 
-**Status:** spec — awaiting the spec review.
+**Status:** approved — the owner, 2026-11-18: "Approve and run unattended".
 **Execution strategy:** sequential — inline execution
 **Depth:** full — risk
 **Register:** docs/dforge/registers/2026-11-18-per-worktree-handoff.md
@@ -15,7 +15,13 @@
 - Rejected: B (every handoff in the primary, keyed per worktree: key mapping and cleanup), C (one file with a section per worktree under a lock: every reader learns sections, sessions still contend).
 - darkmem in dagents: the owner's ruling of 2026-11-17, "remove the darkmem mirror for both dflow and dagents". dagents gets no darkmem design work; only its local path line changes (§1).
 - Early CI: none — the owner, 2026-11-18: "merge locally, do not push".
-- Windows launch line (Fable ruling, for the owner to approve knowingly): on a Windows host the launch command carries no `cd` prefix, since no one line runs in PowerShell 5.1, cmd.exe and Git Bash; the `Launch in` line and the prompt name the directory instead.
+- darkmem worktree handoffs (A11): "Right" — a linked worktree's handoff stays local under darkmem.
+- `--complete` after Option 2: "Primary checkout (Recommended)" — a completed plan's follow-on block always goes to the primary.
+- Windows launch line (Fable ruling, approved with the spec): on a Windows host the launch command carries no `cd` prefix, since no one line runs in PowerShell 5.1, cmd.exe and Git Bash; the `Launch in` line and the prompt name the directory instead.
+
+Finish: merge
+
+Worktree: in-place
 
 ## Problem
 
@@ -53,7 +59,7 @@ the cwd's checkout's file (`:656`, `:672-697`):
 | Mode | T |
 |---|---|
 | plan in flight | in order: (1) progress local — the checkout of the plan's identity-checked ledger, the second field `plan_ledger_any` prints; (2) progress in darkmem with a ledger in the mirror — among linked worktrees holding `<state>/sdd/<slug>/`: the checkout next-step runs in when it is one of them, else the first `git worktree list` names; when none holds it, the primary if the primary does; (3) otherwise the checkout next-step runs in |
-| `--complete`, or a plan found finished | the primary, as today: the follow-on work starts there, whichever finishing option ran (Option 2 keeps the worktree for review feedback) — pending the owner's answer at the spec review |
+| `--complete`, or a plan found finished | the primary, as today: the follow-on work starts there, whichever finishing option ran (Option 2 keeps the worktree for review feedback) |
 | `--kept`, `--draft`, `--adhoc`, `--project` | the checkout next-step runs in — after Option 3 (`--kept`) the kept worktree, whose block already names it (`:474-475`) |
 
 The primary holds `<state>/sdd/<slug>/` for most plans whatever worktree
@@ -218,7 +224,7 @@ rewritten to say the guard catches a block another session left in T.
 
 ### 9. darkmem (dforge only)
 
-Recommended, to be confirmed at the spec review (A11): while progress is in
+Confirmed by the owner (A11): while progress is in
 darkmem, the primary's handoff stays `<mirror>/work/handoff/latest.md`, and a
 worktree's handoff stays local at `<worktree>/.dforge/handoff/latest.md`.
 `dforge_latest_file` and `darkmem-config.mjs` return the local path for a
@@ -297,7 +303,7 @@ A7. [test, neg, high] In `turn-end.sh` and `ui-turn-end.sh`, a primary turn that
 A8. [test, neg, high] `auto-run clear` for a run whose attached plan executes in worktree W reads W's handoff and stores its first prompt, whether it runs in W, in the primary (where the primary's handoff still holds the plan's start block, which is not read), or as the cockpit's phase clear with no working directory passed.
 A9. [test, neg, high] The cockpit of a session whose checkout is worktree W reads W's handoff for the resume offer and its resume prompt names that file by absolute path; a handoff in the primary raises no offer in W's session.
 A10. [test, high] `repo-audit` lists every checkout that has a handoff, the session's own first and recomputed, every other with its stored Status and Next marked `stored` and its age; a checkout with none gets no entry; a prunable worktree gets one skip line and no entry. On a `startup` source the SessionStart context carries the count line for other checkouts' handoffs younger than three days, and the compaction snapshot shows only the session checkout's handoff.
-A11. [test, medium] With progress in darkmem, a linked worktree's handoff is `<worktree>/.dforge/handoff/latest.md`, the primary's stays `<mirror>/work/handoff/latest.md`, darkmem push and pull carry only the primary's, and push run from a linked worktree prints `worktree handoff stays local: <path>`. Q: keep linked worktrees' handoffs local under darkmem (recommended), or give each a mirror path keyed by worktree directory name?
+A11. [test, confirmed] With progress in darkmem, a linked worktree's handoff is `<worktree>/.dforge/handoff/latest.md`, the primary's stays `<mirror>/work/handoff/latest.md`, darkmem push and pull carry only the primary's, and push run from a linked worktree prints `worktree handoff stays local: <path>`.
 A12. [test, neg, high] The primary's handoff path is unchanged: a `latest.md` written there before this change is read by `next-step --print --latest`, repo-audit and the cockpit without migration.
 A13. [test, high] For every mode, `next-step --target <arguments>` prints the path the same `next-step <arguments>` then writes, writes nothing itself, never exits 5 over background work, exits as the real call does on a usage error or a missing plan, and is a usage error with `--latest`.
 A14. [test, neg, high] With progress in darkmem, `next-step PLAN` run in the primary for a plan whose workspace is in worktree W, while the primary also holds `<state>/sdd/<slug>/`, writes W's handoff and leaves the primary's handoff unmodified, launches in W and names W in its prompt, not the primary (dforge only).
@@ -374,6 +380,6 @@ Fable, round 1 (`.dforge/spec-review-2026-11-18-per-worktree-handoff-design-1-re
 - [Low] Windows exception kept and recorded in `## Decisions` for the owner.
 - [Nit] A10 asserts the prunable skip line; stored entries show their age.
 - [Nit] §10 adds `next-step:1-53`, `executing-plans/SKILL.md:144-146`, `project-state.md:106-111,131`.
-- Undecided, to the spec review: A11 (darkmem location), and `--complete` after Option 2 (the spec carries the recommended "always the primary").
+- Undecided, settled at the spec review: A11 (local, confirmed) and `--complete` after Option 2 (always the primary).
 
 Fable, round 2 (`.dforge/spec-review-2026-11-18-per-worktree-handoff-design-2-report.md`): both Blockers closed, 0 Blocker and 0 High open; five wording rulings applied — §2 rule (2) cell text, §4 `changed_here` sentence, A14 asserts the file written, A17 and §7 aligned on "under Option 1, before Step 6" with open notes counted as something that follows, and the superseded line under `## Critic findings`.
