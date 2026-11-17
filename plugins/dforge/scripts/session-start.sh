@@ -18,10 +18,16 @@ stdin_json="$(cat 2>/dev/null || true)"
 # guard is given the 5 seconds its own timings assume; a guard that overruns
 # them is treated as no conflict. The event goes in as an argument: the
 # watchdog runs its command in the background, where stdin is /dev/null.
-if [ "$darkmem_hook" = 1 ] && command -v node >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/workflow-guard.mjs" ]; then
-  guard_out=$(_darkmem_bounded 5 bash -c 'printf "%s" "$2" | node "$1" --host claude --self dforge --hook session-start' \
-    guard "$(dr_native_path "$SCRIPT_DIR/workflow-guard.mjs")" "$stdin_json")
-  if [ $? -eq 3 ]; then
+if command -v node >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/workflow-guard.mjs" ]; then
+  if [ "$darkmem_hook" = 1 ]; then
+    guard_out=$(_darkmem_bounded 5 bash -c 'printf "%s" "$2" | node "$1" --host claude --self dforge --hook session-start' \
+      guard "$(dr_native_path "$SCRIPT_DIR/workflow-guard.mjs")" "$stdin_json")
+    guard_rc=$?
+  else
+    guard_out=$(printf '%s' "$stdin_json" | node "$(dr_native_path "$SCRIPT_DIR/workflow-guard.mjs")" --host claude --self dforge --hook session-start)
+    guard_rc=$?
+  fi
+  if [ "$guard_rc" -eq 3 ]; then
     printf '%s\n' "$guard_out"
     exit 0
   fi
