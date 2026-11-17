@@ -8443,6 +8443,23 @@ describe('update frequency', () => {
     expect(seen.count).toBeLessThanOrEqual(5)
   })
 
+  test('ticks no second while the pane is closed and the band off, and again once it opens', async ($, on) => {
+    const w: World = { ...SIGNED_IN, isPaneShut: true }
+    const clock = world(on, w)
+    signedIn(on)
+    const seen = redraws(on)
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    seen.count = 0
+    await clock.advance(10_000)
+    expect(seen.count).toBe(0)
+    w.isPaneShut = false
+    await clock.advance(2_000)
+    seen.count = 0
+    await clock.advance(10_000)
+    expect(seen.count).toBeGreaterThanOrEqual(9)
+  })
+
   describe('a command that changes what the cockpit shows', () => {
     const run = ($: Parameters<TestBody>[0], command: string, args: string) => $.command.run({ ...COCKPIT, command, args })
 

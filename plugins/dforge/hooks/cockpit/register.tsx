@@ -506,6 +506,7 @@ export const register: Register = on => {
       : o.isMinimized
         ? await expand($, e.presentation.isFullscreen === true)
         : await $.ui.open(paneFor(o.layout))
+    await syncTicker($)
     await refreshDetail($)
 
     // A surface that seats no panes (an older desktop) holds it undrawn: say
@@ -669,7 +670,9 @@ export const register: Register = on => {
     if (await standsDown($)) return next(e)
     if (e.origin.kind === 'person') S.isClosedByPerson = true
     await flushSettingNote($)
-    return next(e)
+    const closed = await next(e)
+    await syncTicker($)
+    return closed
   }).catch(($, e, next) => next(e))
 
   on('session.detach', async ($, e, next) => {
@@ -3009,14 +3012,16 @@ async function setActivity($: EngineInterface, change: (now: CockpitActivity) =>
 // The pane's clock: a redraw a second while a turn runs, or a background shell
 // or subagent younger than LIVE_MS works, so their timers count seconds. The
 // elapsed text drops its seconds at an hour; an older one is drawn with the
-// slow redraw the poll gives an idle pane.
+// slow redraw the poll gives an idle pane. Only while the pane or the band
+// shows: the poll's tick starts it again after an open.
 async function syncTicker($: EngineInterface) {
   const now = await read($, activity)
   S.isTurnLive = now.kind === 'running' || now.kind === 'waiting' || now.kind === 'asking'
   const stamp = await $.clock.now()
   const isYoung = (startedAt: number) => stamp - startedAt < LIVE_MS
   const isTicking =
-    S.isTurnLive || (await read($, shells)).some(one => isYoung(one.startedAt)) || (await read($, spawns)).some(one => !one.isDone && isYoung(one.startedAt))
+    (S.isTurnLive || (await read($, shells)).some(one => isYoung(one.startedAt)) || (await read($, spawns)).some(one => !one.isDone && isYoung(one.startedAt))) &&
+    ((await live($)).isMinimized || (await isPaneUp($)))
   if (isTicking && S.ticker === null) {
     S.ticker = $.clock.every(1000, () => $.ui.invalidate('ui.render'))
   } else if (!isTicking && S.ticker !== null) {
