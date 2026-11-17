@@ -173,6 +173,10 @@ run bash "$BRIEF" --open docs/plan.md 3
 run bash "$CLOSE" docs/plan.md 3 "$CP"
 check "close: the last task prints a budget line" "$(grep -c '^budget' <<<"$out")" "1"
 check "close: a middle task prints none" "$(run bash "$CLOSE" docs/plan.md 2 "$CP"; grep -c '^budget' <<<"$out")" "0"
+# The budget mode reads the plan's ledger, not the working directory's.
+git init -q "$TMP/other"
+out=$(cd "$TMP/other" && bash "$BRIEF" "$REPO/docs/plan.md" 3 "$TMP/other-brief.md" 2>/dev/null)
+check "brief from another repository: the plan's ledger sets the budget mode" "$(tail -n 1 <<<"$out" | cut -d: -f1)" "budget (final)"
 
 # --- every amendment consumer refuses a ledger citing a missing amendment (A4) ---
 printf 'Task 1: Ruling: amendment A7 — x — y\n' >> "$LEDGER"
