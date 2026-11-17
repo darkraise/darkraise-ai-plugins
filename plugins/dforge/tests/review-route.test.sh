@@ -339,22 +339,18 @@ absent "review-route never prints judge-fable" "$ROUTE" 'judge-fable'
 shape_plan "$TMP/final-plain.md" '**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1' \
   '**Evaluation:** files 1 - spec 1 - coupling 1 - risk 2 = 5'
 rule "$TMP/final-plain.md" --final
-check "final: a plain plan takes judge-opus" "$out" "review-seat final primary=dforge:judge-opus fallback=- reason=plain external=on"
+check "final: the seat is judge-opus" "$out" "review-seat final primary=dforge:judge-opus fallback=- reason=final external=on"
 shape_plan "$TMP/final-risk.md" '**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1' \
   '**Evaluation:** files 0 - spec 0 - coupling 1 - risk 3 = 4'
 rule "$TMP/final-risk.md" --final
-check "final: risk 3 is intricate" "$out" \
-  "review-seat final primary=dforge:judge-opus fallback=- reason=intricate external=on"
-shape_plan "$TMP/final-six.md" '**Evaluation:** files 1 - spec 1 - coupling 2 - risk 2 = 6'
-rule "$TMP/final-six.md" --final
-check "final: total 6 is intricate" "$out" \
-  "review-seat final primary=dforge:judge-opus fallback=- reason=intricate external=on"
+check "final: a risk-3 plan takes the same seat" "$out" \
+  "review-seat final primary=dforge:judge-opus fallback=- reason=final external=on"
 review_surface false
 rule "$TMP/final-plain.md" --final
-check "final: the seat ignores the gate, and no open surface says external=off" "$out" "review-seat final primary=dforge:judge-opus fallback=- reason=plain external=off"
+check "final: the seat ignores the gate, and no open surface says external=off" "$out" "review-seat final primary=dforge:judge-opus fallback=- reason=final external=off"
 review_surface false true
 rule "$TMP/final-plain.md" --final
-check "final: an open agy surface alone says external=on" "$out" "review-seat final primary=dforge:judge-opus fallback=- reason=plain external=on"
+check "final: an open agy surface alone says external=on" "$out" "review-seat final primary=dforge:judge-opus fallback=- reason=final external=on"
 rule "$TMP/final-plain.md" --final extra
 check "final: an extra argument exits 2" "$rc" "2"
 rule "$TMP/final-plain.md" --task

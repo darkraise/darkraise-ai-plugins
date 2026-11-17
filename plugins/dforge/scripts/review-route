@@ -181,12 +181,9 @@ case "$1" in
     exit 0 ;;
   --final)
     [ $# -eq 1 ] || usage
-    plan_shape
-    reason=plain
-    [ "$intricate" -eq 0 ] || reason=intricate
     external=off
     ! reviewers_on || external=on
-    printf 'review-seat final primary=%s fallback=- reason=%s external=%s\n' "$OPUS" "$reason" "$external"
+    printf 'review-seat final primary=%s fallback=- reason=final external=%s\n' "$OPUS" "$external"
     exit 0 ;;
   --task) shift; [ $# -eq 1 ] || usage ;;
   *) usage ;;

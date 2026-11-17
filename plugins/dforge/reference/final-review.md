@@ -323,8 +323,7 @@ your own: QA commits on this branch.
    reviewer may have come back since a gate last answered, such as after a
    login): `review-route` reads only the answers the gates recorded in this
    session. Then run `scripts/review-route PLAN_FILE --final` and dispatch
-   the `primary` it prints: `dforge:judge-opus`, with `reason=intricate`
-   for a plan with a task at risk 3 or totalling 6. Use
+   the `primary` it prints, `dforge:judge-opus`. Use
    dforge:requesting-code-review's
    [code-reviewer.md](../skills/requesting-code-review/references/code-reviewer.md)
    with `[REPORT_FILE]` set to `<workspace>/final-review-report.md`,
