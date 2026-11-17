@@ -14,7 +14,8 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const TAG = 'dforge-v4.17.1';
 const SIBLINGS = ['dforge', 'dagents', 'dflow'];
 const GUARD = name => join(ROOT, 'plugins', name, 'scripts/workflow-guard.mjs');
-const REGISTER = join(ROOT, 'docs/dforge/registers/2026-11-16-dagents-backport.md');
+const REGISTER_PATH = 'docs/dforge/registers/2026-11-16-dagents-backport.md';
+const REGISTER = join(ROOT, REGISTER_PATH);
 
 function cleanEnv(extra = {}) {
   const env = { ...process.env };
@@ -92,12 +93,14 @@ function registerRows() {
 }
 const mainEnd = () => {
   if (!gitOk('rev-parse', '--verify', '--quiet', 'main')) return null;
+  // The register stops at the split; once main holds it, main's later dforge commits are not rows.
+  if (gitOk('cat-file', '-e', `main:${REGISTER_PATH}`)) return null;
   return gitOk('merge-base', '--is-ancestor', 'HEAD', 'main') ? null : 'main';
 };
 test('A3: every non-merge commit touching plugins/dforge is a register row, all answered', t => {
   if (!needTag(t)) return;
   const end = mainEnd();
-  if (!end) { t.skip('no main ref, or HEAD is already merged into it: run this at merge time'); return; }
+  if (!end) { t.skip('no main ref, main already holds the register, or HEAD is merged into main: run this at merge time'); return; }
   const commits = git('log', '--no-merges', '--reverse', '--abbrev=7', '--format=%h %s', `${TAG}..${end}`, '--', 'plugins/dforge').split('\n').filter(Boolean);
   const rows = registerRows();
   assert.deepEqual(rows.map(row => row.item).sort(), [...commits].sort(), 'the register lists exactly the commits');
