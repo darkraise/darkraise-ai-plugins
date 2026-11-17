@@ -253,10 +253,9 @@ A session that starts on an approved plan with work left offers to resume it:
 a card above the Now row, or a row above the band, with **Resume** (runs
 `/dflow:build`) and **Dismiss**.
 
-The HUD costs no model tokens. Outside a checkout holding `.dflow` it does not
-poll. Inside one, git status runs every ten seconds unless the HUD is off, and
-the `/context` breakdown is estimated locally only while the Context card is
-shown.
+The HUD costs no model tokens. git status runs every ten seconds unless the
+HUD is off, and the `/context` breakdown is estimated locally only while the
+Context card is shown.
 
 ## Parallel work
 

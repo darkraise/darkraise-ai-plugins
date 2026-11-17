@@ -714,38 +714,6 @@ async function setMode($: any, mode: Mode): Promise<void> {
   $.ui.invalidate('ui.render')
 }
 
-// Outside a checkout with .dflow there is nothing to draw, so the poll stops
-// there; .dflow appears only through a command run in a turn, and the end of
-// the turn starts it again.
-function arm($: any): void {
-  polls = 0
-  timer = $.clock.every(POLL_MS, async () => {
-    await poll($)
-  })
-}
-
-async function poll($: any): Promise<void> {
-  await refresh($)
-
-  if (!hasState) {
-    timer?.cancel()
-    timer = null
-    return
-  }
-
-  polls += 1
-  const isReread = isRereadDue
-  isRereadDue = false
-
-  if (isReread || polls % BREAKDOWN_EVERY === 0) {
-    await readBreakdown($)
-  }
-
-  if (isReread || polls % GIT_EVERY === 0) {
-    await readRepo($)
-  }
-}
-
 // The check holds for the process: a /clear or /resume fires no
 // session.start, and enabling a plugin takes a new session anyway. The engine
 // gives register no $, so every hook awaits the check at its top instead.
@@ -784,9 +752,23 @@ export const register: Register = on => {
     startCwd = e.cwd ?? ''
     sessionId = ''
     await refresh($)
+
     timer?.cancel()
-    timer = null
-    if (hasState) arm($)
+    polls = 0
+    timer = $.clock.every(POLL_MS, async () => {
+      await refresh($)
+      polls += 1
+      const isReread = isRereadDue
+      isRereadDue = false
+
+      if (isReread || polls % BREAKDOWN_EVERY === 0) {
+        await readBreakdown($)
+      }
+
+      if (isReread || polls % GIT_EVERY === 0) {
+        await readRepo($)
+      }
+    })
 
     return started
   })
@@ -798,7 +780,6 @@ export const register: Register = on => {
     // A subagent's turn ends here too; only the main loop's end is a boundary.
     if (e.agentId === undefined) {
       await refresh($)
-      if (hasState && !timer) arm($)
       await pushReading($).catch(() => undefined)
       await resetIfAsked($).catch(() => undefined)
     }
