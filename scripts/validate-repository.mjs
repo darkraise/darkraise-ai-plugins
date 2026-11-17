@@ -42,6 +42,8 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   'plugins/dagents/tests/stand-down.test.sh',
   'plugins/dagents/skills/using-dagents/references/codex-tools.md',
   'plugins/dagents/tests/cockpit.test.ts',
+  // Proves dagents never touches or reads dforge's names, so it seeds them.
+  'plugins/dagents/tests/isolation.acceptance.test.sh',
 ]);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };

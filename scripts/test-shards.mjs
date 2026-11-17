@@ -143,6 +143,7 @@ export const windowsSeconds = {
   'plugins/dagents/tests/inline-mode.test.sh': 65,
   'plugins/dagents/tests/inline-only-execution.acceptance.test.sh': 200,
   'plugins/dagents/tests/inline-only.acceptance.test.sh': 110,
+  'plugins/dagents/tests/isolation.acceptance.test.sh': 40,
   'plugins/dagents/tests/ladder.test.sh': 10,
   'plugins/dagents/tests/lane-breaker.test.sh': 10,
   'plugins/dagents/tests/lanes.test.sh': 10,
