@@ -2830,6 +2830,10 @@ const S = {
   ledgerDirs: { base: '', at: null as number | null, names: [] as string[] },
   // Discord messages go out one at a time; the tail of the queue.
   outbox: Promise.resolve() as Promise<void>,
+  // The tail of the auto run reads trackAutoRun queues, and the run the last
+  // one found; undefined before the first.
+  autoTracking: Promise.resolve() as Promise<void>,
+  autoRunSeen: undefined as CockpitAutoRun | null | undefined,
 }
 
 async function endedEvent($: EngineInterface, sessionId: string): Promise<NotifyEvent> {
@@ -3092,17 +3096,29 @@ async function autoRunCall($: EngineInterface, sessionId: string, args: string[]
 }
 
 // Keeps the pane's copy of the bound run, and says once on Discord when the
-// run stopped with a reason.
-async function trackAutoRun($: EngineInterface) {
+// run stopped with a reason. The poll, a Bash call and a turn's end can each
+// call it at once, one at a time here.
+function trackAutoRun($: EngineInterface): Promise<void> {
+  const tracked = S.autoTracking.then(() => syncAutoRun($))
+  S.autoTracking = tracked.catch(() => undefined)
+  return tracked
+}
+
+async function syncAutoRun($: EngineInterface) {
   const text = await autoRunText($)
   const id = await $.session.id()
   const now = text === null ? null : autoRunFor(text, id)
   const owner = now === null && text !== null ? activeRunOwner(text) : null
   const isLeft = owner !== null && owner !== id && (await isSessionAlive($, owner)) === false
   if ((await read($, autoRunLeft)) !== isLeft) await update($, autoRunLeft, () => isLeft)
-  const before = await read($, autoRun)
+  const stored = await read($, autoRun)
+  // A hook running beside the one that wrote the atom still reads the old
+  // run, so the change is judged against the last run read in this process;
+  // the atom stands in only for the first read after a reload.
+  const before = S.autoRunSeen === undefined ? stored : S.autoRunSeen
+  S.autoRunSeen = now
+  if (JSON.stringify(now) !== JSON.stringify(stored)) await update($, autoRun, () => now)
   if (JSON.stringify(now) === JSON.stringify(before)) return
-  await update($, autoRun, () => now)
   // The run moved the ledger the offer's cache key leaves out: recompute once it ends.
   if (before?.active === true && now?.active !== true) S.offerRanKey = null
   if (before?.active === true && now !== null && !now.active && now.stopped !== null) {

@@ -7253,6 +7253,21 @@ describe('auto run', () => {
     expect(w.autoRuns?.some(call => call.includes(' stop --reason '))).toBe(true)
   })
 
+  test('says once that the run stopped when two reads of it overlap', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, fetches, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    signedIn(on, files)
+    await $.session.start(START)
+    files[AUTO] = autoFiles({ pending: null, active: false, stopped: 'the person stopped it' })[AUTO]!
+    await Promise.all([$.tool.call({ tool: 'Bash', command: 'true' }), $.tool.call({ tool: 'Bash', command: 'true' })])
+    await settle(clock)
+    const titles = fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)
+    expect(titles.filter(title => title === '⛔ Auto run stopped')).toHaveLength(1)
+  })
+
   test('books a compaction the engine made', async ($, on) => {
     const w: World = { ...SIGNED_IN, autoRuns: [] }
     world(on, w)
