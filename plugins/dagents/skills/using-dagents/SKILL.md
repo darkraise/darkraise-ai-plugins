@@ -56,7 +56,7 @@ Every dispatch names a seat: a `dagents:` agent or a typed built-in (`Explore`);
 
 ## Process Depth
 
-Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural> — <trigger | no trigger>`, and still get approval (under `autoRun=on`, the spec review). That is on Claude Code; Codex runs `on` as `off`. Architectural: `Process: architectural, depth <d> — <triggers>`, `<d>` from `scripts/depth-route --spec-triggers`. Every plan executes inline: the session implements every task but those carrying an `**Executor:**` line, heavy tasks included.
+Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural> — <trigger | no trigger>`, and still get approval (under `autoRun=on`, the spec review). On Codex, `on` runs as `off`. Architectural: `Process: architectural, depth <d> — <triggers>`, `<d>` from `scripts/depth-route --spec-triggers`. Every plan executes inline: the session implements every task but those carrying an `**Executor:**` line, heavy tasks included.
 
 With the darkmem MCP, prefer its `code_search` over Explore subagents.
 
@@ -70,6 +70,6 @@ With the darkmem MCP, prefer its `code_search` over Explore subagents.
 
 ## Platform and Precedence
 
-- Codex: first run `node <plugin-root>/scripts/workflow-guard.mjs --host codex --self dagents`; on exit 3 show its output as it is and stop, using no dagents skill. Then read `<plugin-root>/skills/using-dagents/references/codex-tools.md`. Codex has no Stop hook: run `scripts/next-step` at every step a skill says to end on its block, not only on early stops.
+- Codex: first run `node <plugin-root>/scripts/workflow-guard.mjs --host codex --self dagents`; on exit 3 show its output and stop. Then follow `<plugin-root>/skills/using-dagents/references/codex-tools.md`.
 - No todo tool? Use the ledger or a checklist.
 - User instructions (CLAUDE.md, AGENTS.md, direct requests, fast mode) outrank skills, which outrank defaults.
