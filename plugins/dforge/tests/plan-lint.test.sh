@@ -435,18 +435,18 @@ has "weighted score mismatch" "$out" "ERROR Task 1: weighted routing score 4 is 
 codex_plan | sed 's#^Routing policy: codex-v4$#Routing policy: codex-v2#; s#codex gpt-6.1-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6.1-sol / low#codex gpt-5.6-terra / medium#' > cv2.md
 lint cv2.md
 check "codex-v2 plan: exit 1" "$status" "1"
-has "codex-v2 plan: conversion error" "$out" "ERROR header: Routing policy is codex-v2, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
+has "codex-v2 plan: conversion error" "$out" "ERROR header: Routing policy is codex-v2, not codex-v4; convert the plan per README.md §Migrating Codex plans to codex-v4"
 lacks "codex-v2 plan: no Execution pair error" "$out" "is not in codex-routing.json"
 has "codex-v2 plan: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
 codex_plan | sed '/^Routing policy:/d; s#codex gpt-6.1-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6.1-sol / low#codex gpt-5.6-terra / medium#' > cnone.md
 lint cnone.md
 check "no Routing policy line: exit 1" "$status" "1"
-has "no Routing policy line: conversion error names it missing" "$out" "ERROR header: Routing policy is missing, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
+has "no Routing policy line: conversion error names it missing" "$out" "ERROR header: Routing policy is missing, not codex-v4; convert the plan per README.md §Migrating Codex plans to codex-v4"
 lacks "no Routing policy line: no Execution pair error" "$out" "is not in codex-routing.json"
 has "no Routing policy line: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
 codex_plan | sed '/^Routing policy:/d; s#codex gpt-6.1-sol / high#codex gpt-5.6-sol / high#; s#codex gpt-6.1-sol / low#codex gpt-5.6-terra / medium#; s#^\*\*Goal:\*\* Demo\.$#**Goal:** Demo.\n\n```text\nRouting policy: codex-v4\n```#' > cfenced.md
 lint cfenced.md
-has "a fenced Routing policy line does not count" "$out" "ERROR header: Routing policy is missing, not codex-v4; convert the plan per reference/native-codex.md §Existing plans"
+has "a fenced Routing policy line does not count" "$out" "ERROR header: Routing policy is missing, not codex-v4; convert the plan per README.md §Migrating Codex plans to codex-v4"
 lacks "a fenced Routing policy line: no Execution pair error" "$out" "is not in codex-routing.json"
 has "a fenced Routing policy line: the conversion error is the only finding" "$out" "plan-lint: 1 errors, 0 warnings"
 # A fenced Host line is an example, not the host: the plan stays a Claude plan.

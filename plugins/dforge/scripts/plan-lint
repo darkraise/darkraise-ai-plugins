@@ -92,7 +92,7 @@ if [ "$codex" -eq 1 ]; then
   got_policy=$(sed -nE 's/^(\*\*)?Routing policy:(\*\*)?[ \t]+`?([^ \t`]+)`?[ \t]*$/\3/p' <<<"$unfenced_header" | head -n 1)
   if [ "$got_policy" != "$want_policy" ]; then
     policy_ok=0
-    say ERROR header "Routing policy is ${got_policy:-missing}, not $want_policy; convert the plan per reference/native-codex.md §Existing plans"
+    say ERROR header "Routing policy is ${got_policy:-missing}, not $want_policy; convert the plan per README.md §Migrating Codex plans to codex-v4"
   fi
 fi
 

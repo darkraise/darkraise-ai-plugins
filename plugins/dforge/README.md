@@ -1054,6 +1054,91 @@ implement a task.
   last task. The brief of a task the session implements no longer repeats the
   header's Global Constraints and Contracts.
 
+## Migrating Codex plans to codex-v4
+
+Treat an existing assignment without a source as human-pinned. Keep original
+assignments fixed; actual attempts, promotions, and substitutions go in the
+ledger. `scripts/select-native-tier.sh` and `scripts/plan-lint` accept only `codex-v4`: they reject
+codex-v1, codex-v2, codex-v3 and unknown policy versions with a
+conversion-required error. Never reinterpret an older plan's scores or ranks as
+v4.
+
+For an old Codex or Claude plan, preview the preserved raw axes, original policy,
+old total, new weighted score, and old/proposed assignments. Obtain approval
+before recording the converted plan. Recalculate the total from existing axes;
+do not change the underlying assessments to fit a preferred tier. If axes are
+missing, obtain an explicit evaluation instead of inferring them from the total.
+Keep original evaluations and assignments in the conversion record, preserve
+human pins, and never automatically translate reserve overrides.
+
+A codex-v2 or codex-v3 plan keeps its scores: v2, v3 and v4 share the weighted
+formula, so the preview states each score as unchanged. A rubric task's proposed
+pair is the v4 execution tier at its score. The Execution line's pair maps by
+rank: an older execution pair becomes the v4 pair at the same rank (v3
+`gpt-6-sol / high`, rank 5, becomes `gpt-6.1-sol / high`; v2 `gpt-5.6-sol /
+high`, rank 7, becomes `gpt-6-astra / medium`), and a reserve pair stays itself.
+A human pin stays verbatim even when it names an older pair, which still runs
+while it is advertised; the preview flags each such pin so
+your human partner keeps or re-pins it explicitly.
+
+The older ranks, kept here because the policy file no longer carries them.
+codex-v3 differs from v4 only at ranks 3 to 6:
+
+```text
+rank  codex-v3 pair
+3     gpt-6-sol / low
+4     gpt-6-sol / medium
+5     gpt-6-sol / high
+6     gpt-6-sol / xhigh
+```
+
+```text
+rank  codex-v2 pair
+0     gpt-5.6-luna / low
+1     gpt-5.6-luna / medium
+2     gpt-5.6-terra / low
+3     gpt-5.6-terra / medium
+4     gpt-5.6-terra / high
+5     gpt-5.6-sol / low
+6     gpt-5.6-sol / medium
+7     gpt-5.6-sol / high
+8     gpt-6-astra / high
+9     gpt-6-astra / xhigh
+reserve  gpt-6-astra / max, then gpt-6-astra / ultra
+```
+
+An unstarted plan, one with no ledger, is converted in place and committed:
+its `Routing policy:` line becomes `codex-v4` in its existing bold or plain
+form and the Execution line take their v4 pairs, Evaluation lines stay untouched, and a conversion record
+goes in the header immediately before `## Task index`, so no task's text
+absorbs it:
+
+```text
+## Policy conversion
+
+codex-v3 → codex-v4, approved <date>. Scores unchanged.
+
+| Task | Axes (f/s/c/r) | Score | codex-v3 | codex-v4 | Source |
+|---|---|---|---|---|---|
+| 1 | 1/1/1/0 | 3 | gpt-6-sol / low | gpt-6.1-sol / low | rubric |
+| 2 | 0/1/0/1 | 3 | gpt-6-sol / high | gpt-6-sol / high | human (kept) |
+```
+
+`scripts/plan-lint` must pass on the converted plan.
+
+A plan with a ledger does not change: it is immutable during execution, and
+`scripts/plan-amend` refuses `Routing policy:` lines. Convert active work only
+at a reconciled task boundary, recording the approved preview as one ledger
+line:
+
+```text
+Ruling: policy conversion codex-v3 -> codex-v4 — approved preview; Task 4 gpt-6.1-sol / low, Task 5 gpt-6-astra / medium — attempts above this line stay codex-v3
+```
+
+Tasks after that line run under `codex-v4`. Keep the ledger lines above it as
+they are: never relabel them, fabricate v4 ranks, or reset a review budget. If
+v4 cannot represent the task in flight, stop for an explicit handoff decision.
+
 ## Migrating to 4.11
 
 dforge 4.11 ran the `agy` lane Gemini first, ran Claude through `agy` only as
