@@ -42,7 +42,10 @@ cycle() { # cycle LABEL — run the cycle; print a listing of dforge-named paths
   out=$( cd "$T/p" && printf '%s' "$ev" | bash "$ROOT/scripts/session-start.sh" 2>&1 | sed 's/\\n\\ndagents: dforge 4\.x layout found[^"\\]*//'
          bash "$ROOT/scripts/task-brief" docs/dagents/plans/p.md 1 2>&1
          bash "$ROOT/scripts/next-step" docs/dagents/plans/p.md 2>&1
-         printf '%s' "$ev" | bash "$ROOT/scripts/turn-end.sh" 2>&1 )
+         printf '%s' "$ev" | bash "$ROOT/scripts/turn-end.sh" 2>&1
+         # The readers of the two seeded variables' dagents names.
+         bash "$ROOT/scripts/context-size" 2>&1 | tail -n 1
+         bash -c '. "$1/scripts/lib/executor-session.sh" && executor_session_dir codex' _ "$ROOT" 2>&1; echo )
   unset DFORGE_BUDGET DR_CODEX_SESSION_DIR
   printf '%s\n' "$out" | sed "s#$T#T#g"
   find "$T" -name '*dforge*' -newer "$T/p/docs/dagents/plans/p.md" | sed "s#$T#T#g"

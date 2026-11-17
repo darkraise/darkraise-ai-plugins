@@ -43,14 +43,14 @@ test('tree renames contents and paths in place and refuses a collision', t => {
   writeFileSync(join(dir, 'skills/using-dforge/SKILL.md'), 'name: using-dforge\n');
   writeFileSync(join(dir, 'scripts/dforge-path'), '. "$HERE/lib/dforge-dir.sh"\n');
   writeFileSync(join(dir, 'scripts/lib/dforge-dir.sh'), 'echo "${DFORGE_DOCS_ROOT:-docs/dforge}"\n');
-  writeFileSync(join(dir, 'blob.bin'), Buffer.from([0x64, 0x66, 0x00, 0x6f]));
+  writeFileSync(join(dir, 'blob.bin'), Buffer.from('dforge\0dforge:x', 'binary'));
   const ok = run(['tree', dir]);
   assert.equal(ok.status, 0, ok.stderr);
   assert.equal(readFileSync(join(dir, 'skills/using-dagents/SKILL.md'), 'utf8'), 'name: using-dagents\n');
   assert.equal(readFileSync(join(dir, 'scripts/dagents-path'), 'utf8'), '. "$HERE/lib/dagents-dir.sh"\n');
   assert.equal(readFileSync(join(dir, 'scripts/lib/dagents-dir.sh'), 'utf8'), 'echo "${DAGENTS_DOCS_ROOT:-docs/dagents}"\n');
   assert.equal(existsSync(join(dir, 'skills/using-dforge')), false);
-  assert.deepEqual([...readFileSync(join(dir, 'blob.bin'))], [0x64, 0x66, 0x00, 0x6f]);
+  assert.equal(readFileSync(join(dir, 'blob.bin'), 'binary'), 'dforge\0dforge:x', 'a file holding a NUL keeps its bytes');
 
   writeFileSync(join(dir, 'clash.sh'), 'echo "$DFORGE_LOCK_TENTHS $DR_LOCK_TENTHS"\n');
   const clash = run(['tree', dir]);

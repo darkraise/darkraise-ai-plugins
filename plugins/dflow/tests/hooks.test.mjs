@@ -76,8 +76,16 @@ test('a conflicted session start returns the guard block and the other hooks sta
   const out = JSON.parse(started.stdout);
   assert.match(out.systemMessage, /dforge@darkraise/);
   assert.match(out.hookSpecificOutput.additionalContext, /claude plugin disable dforge@darkraise --scope local/);
-  const stopped = dflow(root, ['hook', 'stop'], { input: event({}), env });
+  const tree = () => fs.readdirSync(path.join(root, '.dflow'), { recursive: true }).sort().map(file => {
+    const full = path.join(root, '.dflow', file);
+    return fs.statSync(full).isFile() ? `${file}:${fs.readFileSync(full, 'utf8')}` : file;
+  });
+  const held = tree();
+  const stopped = dflow(root, ['hook', 'stop'], { input: event({ transcript_path: '/tmp/conflicted.jsonl' }), env });
   assert.deepEqual([stopped.status, stopped.stdout, stopped.stderr], [0, '', '']);
+  assert.deepEqual(tree(), held, 'a stood-down stop records nothing');
+  dflow(root, ['hook', 'stop'], { input: event({ session_id: 's2', transcript_path: '/tmp/conflicted.jsonl' }), env });
+  assert.notDeepEqual(tree(), held, 'the same stop in a session with no marker records its transcript');
   const compact = dflow(root, ['hook', 'pre-compact'], { input: event({}), env });
   assert.deepEqual([compact.status, compact.stdout], [0, '']);
   assert.equal(JSON.parse(fs.readFileSync(path.join(PLUGIN, 'hooks/hooks.json'), 'utf8')).hooks.SessionStart[0].matcher, 'startup|resume|clear|compact|fork');

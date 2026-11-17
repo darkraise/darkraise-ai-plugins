@@ -21,6 +21,9 @@ check "conflict: marker written" "$( [ -e "$TMP/data/workflow-guard/s1" ] && ech
 for hook in $(jq -r '.hooks | to_entries[] | select(.key != "SessionStart") | .value[].hooks[].command' "$ROOT/hooks/hooks.json" | sed -E 's#^bash "\$\{CLAUDE_PLUGIN_ROOT\}/##; s#"$##'); do
   silent=$(event startup Stop | (cd "$TMP/project" && bash "$ROOT/$hook" 2>&1)); code=$?
   check "conflict: $hook is silent" "$code:$silent" "0:"
+  # It stops at its stand-down check: the marker test is its last command.
+  trace=$(event startup Stop | (cd "$TMP/project" && bash -x "$ROOT/$hook" 2>&1 >/dev/null) | grep '^+' | tail -n 2 | tr '\n' '|')
+  check "conflict: $hook exits at its stand-down check" "$trace" "+ '[' -e $TMP/data/workflow-guard/s1 ']'|+ exit 0|"
 done
 check "conflict: no transcript record" "$(ls "$HOME/.claude/dforge/sessions/by-id" 2>/dev/null | wc -l | tr -d ' ')" "0"
 printf '{"enabledPlugins":{"dagents@darkraise":false}}' > "$TMP/claude/settings.json"

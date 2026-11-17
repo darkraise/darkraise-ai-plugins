@@ -624,7 +624,16 @@ mkdir -p "$DW/.dforge/handoff"
 printf 'next: dforge:executing-plans\n' > "$DW/.dforge/handoff/latest.md"
 DWG=$(git -C "$DW" rev-parse --absolute-git-dir)
 mkdir -p "$DWG/dforge/tasks"
-tree_of() { (cd "$1" && find . -path ./.git -prune -o -print | sort; cat .gitignore .gitattributes 2>/dev/null) | cksum; }
+# Every path and file content in the checkout, its worktree and both git
+# directories, plus the index: a dry run changes none of them.
+tree_of() {
+  local c
+  for c in "$1" "$DW" "$DG" "$DWG"; do
+    (cd "$c" && find . -path ./.git -prune -o -path ./objects -prune -o -path ./logs -prune -o -name index -prune -o -print | sort \
+      | while IFS= read -r f; do if [ -f "$f" ]; then printf '%s %s\n' "$(cksum < "$f")" "$f"; else printf 'dir %s\n' "$f"; fi; done)
+  done
+  git -C "$1" status --porcelain=v1 --untracked-files=all; git -C "$DW" status --porcelain=v1 --untracked-files=all
+}
 before=$(tree_of "$D")
 
 dry=$(migrate "$FM" --dry-run "$D" 2>&1)
@@ -642,7 +651,9 @@ check "dforge: active plan prefixes rewritten" "$(grep -c 'dagents:' "$D/docs/da
 check "dforge: ignore twin added, original kept" "$(tr '\n' '|' < "$D/.gitignore")" ".dforge/|.dagents/|"
 check "dforge: attributes twin added" "$(grep -c 'docs/dagents/\*\* linguist-documentation' "$D/.gitattributes")" "1"
 check "dforge: CLAUDE.md reported, not rewritten" "$(cat "$D/CLAUDE.md")|$(printf '%s' "$out" | grep -c 'CLAUDE.md')" "see dforge:brainstorming|1"
+settled=$(tree_of "$D")
 again=$(migrate "$FM" "$D" 2>&1); check "dforge: a second run finds nothing" "$?" "0"
+check "dforge: a second run moves and stages nothing" "$(printf '%s\n' "$again" | grep -c '^moved\|^staged\|^rewrote\|^added\|^copied')|$(tree_of "$D" | cksum)" "0|$(printf '%s\n' "$settled" | cksum)"
 
 # --- A21: after the move, dforge citations still resolve ---
 NS="$HERE/../scripts/next-step"
