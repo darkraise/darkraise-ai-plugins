@@ -2727,8 +2727,9 @@ const S = {
   },
   // An approval or question the person has not answered yet, by tool call: its
   // timer, the Discord message sent for it (edited once it is answered), and
-  // the subagent whose approval it is.
-  waits: new Map<string, { timer: Timer | null; messageId: string | null; event: NotifyEvent; agentId: string | null }>(),
+  // the subagent whose approval it is. Its outcome is set once it is
+  // answered, for a send still queued or on its way then.
+  waits: new Map<string, { timer: Timer | null; messageId: string | null; event: NotifyEvent; agentId: string | null; outcome: string | null }>(),
   // The activity the first open wait replaced, given back when the last wait
   // ends outside a main turn.
   waitFrom: null as CockpitActivity | null,
@@ -2862,11 +2863,12 @@ const SEND_LIMIT_MS = 8000
  * Queues one event for Discord when it is on, and waits no longer than
  * NOTIFY_WAIT_MS for it, so a slow or hung webhook never holds a hook. The
  * messages go out one at a time in order. `onSent` runs when Discord took it,
- * given the message id, whether or not the caller still waits.
+ * given the message id, whether or not the caller still waits. A message
+ * whose `isDue` says false by its turn in the queue is not sent.
  */
-async function notify($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>): Promise<void> {
+async function notify($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>, isDue?: () => boolean): Promise<void> {
   if (!S.kinds.includes(event.kind)) return
-  const job = S.outbox.then(() => deliver($, event, editId, onSent)).catch(() => undefined)
+  const job = S.outbox.then(() => (isDue?.() === false ? undefined : deliver($, event, editId, onSent))).catch(() => undefined)
   S.outbox = job
   let timer = null as Timer | null
   const late = new Promise<void>(resolve => {
@@ -3006,6 +3008,7 @@ async function settleWait($: EngineInterface, id: string, outcome: string) {
   if (wait === undefined) return
   S.waits.delete(id)
   wait.timer?.cancel()
+  wait.outcome = outcome
   if (wait.messageId !== null) {
     await notify($, { ...wait.event, title: outcome }, wait.messageId)
   }
@@ -3022,13 +3025,22 @@ async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'aski
     const wait = S.waits.get(id)
     if (wait === undefined) return
     wait.timer = null
-    await notify($, event, undefined, async messageId => {
-      wait.messageId = messageId
-      await update($, activity, now => (now.kind === kind ? { ...now, isSent: true } : now))
-    })
+    await notify(
+      $,
+      event,
+      undefined,
+      async messageId => {
+        wait.messageId = messageId
+        // Answered while its message was on its way: the message says how it went.
+        // Not awaited: the edit queues behind the send this runs inside.
+        if (wait.outcome !== null) void notify($, { ...event, title: wait.outcome }, messageId)
+        else await update($, activity, now => (now.kind === kind ? { ...now, isSent: true } : now))
+      },
+      () => wait.outcome === null,
+    )
   }
   const delay = Math.max(0, S.notifyAskAfter) * 1000
-  S.waits.set(id, { timer: delay === 0 ? null : $.clock.after(delay, () => void send().catch(() => undefined)), messageId: null, event, agentId })
+  S.waits.set(id, { timer: delay === 0 ? null : $.clock.after(delay, () => void send().catch(() => undefined)), messageId: null, event, agentId, outcome: null })
   if (delay === 0) await send()
 }
 

@@ -277,6 +277,8 @@ type World = {
   isFetchFailing?: boolean
   /** Every fetch stays unanswered, as on a stalled connection. */
   isFetchHanging?: boolean
+  /** Each fetch is answered only once this settles, as over a slow connection. */
+  fetchGate?: Promise<void>
   /** The first fetch answers 429 with this body; the next ones succeed. */
   rateLimitBody?: string
   /** How Claude Code answers the pane opening; placed unless said. */
@@ -617,7 +619,8 @@ function world(on: On, w: World) {
     if (w.isFetchFailing) return { deny: `fetch failed for ${e.url}` }
     if (w.isFetchHanging) return new Promise<never>(() => undefined)
     if (w.rateLimitBody !== undefined && w.fetches?.length === 1) return { value: { status: 429, ok: false, headers: {}, text: w.rateLimitBody } }
-    return { value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }
+    const answer = { value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }
+    return w.fetchGate === undefined ? answer : w.fetchGate.then(() => answer)
   })
   on('ui.panes', () => ({ value: w.isPaneShut ? [] : [{ id: 'dforge', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
   on('session.append', (_$, e, next) => {
@@ -4499,6 +4502,32 @@ describe('discord', () => {
       await clock.advance(30_000)
       expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)).toEqual(isAsked ? ['⏳ Waiting for approval'] : [])
     })
+
+  test('an approval answered before its message went out ends with the outcome, never a stale ping', async ($, on) => {
+    const fetches: NonNullable<World['fetches']> = []
+    let release: () => void = () => {}
+    const fetchGate = new Promise<void>(resolve => {
+      release = resolve
+    })
+    on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
+    const clock = world(on, { tokens: 50_000, fetches, fetchGate, settings: { permissions: { defaultMode: 'default' } }, config: { notifyAskAfter: 20 } })
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.session.start(START)
+    await $.tool.check({ tool: 'Bash', input: { command: 'make' }, tool_use_id: 'toolu_8', agentId: 'agent-1' })
+    await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+    // The first ping is out and unanswered, the second queued behind it.
+    await clock.advance(20_000)
+    expect(fetches).toHaveLength(1)
+    await $.tool.call({ tool: 'Bash', command: 'make', tool_use_id: 'toolu_8', agentId: 'agent-1' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'toolu_9', agentId: 'agent-1' } as never)
+    release()
+    await clock.advance(1_500)
+    const sent = fetches.map(one => [one.method, (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title])
+    expect(sent).toEqual([
+      ['POST', '⏳ Waiting for approval'],
+      ['PATCH', '✓ Approved'],
+    ])
+  })
 
   test('says when a turn fails', async ($, on) => {
     const fetches: World['fetches'] = []
