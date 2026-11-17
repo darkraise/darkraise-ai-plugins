@@ -22,27 +22,15 @@ calls.
 | Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when the reviewer panel returns no list (`lists=0`); say every substitution aloud. On a Codex host, a native judge at Astra high or above ([native-codex.md](native-codex.md)) | None |
 | Scoped re-review | `dforge:judge-sonnet-high`; `dforge:judge-opus` for a subtle concurrency fix | None |
 
-**Fleet agents take no `model` or `effort` argument.** The Agent tool's `model`
-argument overrides the agent file's pinned model while `effort` keeps its
-frontmatter value, and its `effort` argument (Claude Code 2.1.292 and later)
-overrides the pinned effort while the model stays; either runs the agent at a
-tier the ledger does not record.
-
 General-purpose seats always take an explicit model:
 [using-dforge](../skills/using-dforge/SKILL.md) §Seats.
 
-**Turn count beats token price.** Wall-clock and context cost scale with how
-many turns a subagent takes, and the cheapest models routinely take 2-3× the
-turns on multi-step work. Use a mid-tier model as the floor for reviewers.
-
 ## 1. Open the task
 
-**Open the task with one call:**
-`bash <plugin-root>/scripts/task-brief --open PLAN_FILE N`. It writes the
-brief, rewrites `<workspace>/plan-header.md`, appends the
-`implementer inline (assigned; base <sha7>)` line once and prints the task
-check and the budget line (see the caller's Session Budget section). That open
-line is the task's BASE: `task-step review` creates
+`bash <plugin-root>/scripts/task-brief --open PLAN_FILE N` opens the task
+(dforge:executing-plans §The Task Loop step 1) with the
+`implementer inline (assigned; base <sha7>)` line. That open line is the
+task's BASE: `task-step review` creates
 `<workspace>/task-<N>-step.json` from it, recording the suite command you pass
 as `--suite '<suite command>'` (below), so you never carry a SHA. Calling
 `--open` again for a task that has its open line adds none, and the review
@@ -404,9 +392,7 @@ Before the loop starts, two routes leave it immediately:
   the plan without the seat's verdict in the ledger.
 
 Everything else enters the loop. A fix round is one fix of your own plus one
-scoped re-review. Two rounds at most per task:
-
-Each round is your own fix, followed by one scoped re-review.
+scoped re-review. Two rounds at most per task.
 
 A `Host: codex` plan keeps its five-round cap (`review_cap: 5` in
 [codex-routing.json](codex-routing.json)): its ledger line reads
