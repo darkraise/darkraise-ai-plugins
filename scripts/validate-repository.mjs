@@ -35,9 +35,9 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   'plugins/dagents/scripts/session-start.sh',
   'plugins/dagents/skills/migrate/SKILL.md',
   'plugins/dagents/tests/dagents-migrate.test.sh',
-  // Migrate copies a dforge 4.x repository's home record, settings and darkmem data.
+  // Migrate copies a dforge 4.x repository's settings and refuses its darkmem-held families.
   'plugins/dagents/scripts/lib/dagents-home-migrate.mjs',
-  'plugins/dagents/tests/darkmem-sync/migrate.test.mjs',
+  'plugins/dagents/tests/home/home-migrate.test.mjs',
   // The workflow guard names its siblings.
   'plugins/dagents/scripts/workflow-guard.mjs',
   'plugins/dagents/tests/stand-down.test.sh',

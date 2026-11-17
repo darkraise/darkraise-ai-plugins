@@ -532,17 +532,41 @@ check "a failing prefix rewrite: the plan keeps its text" "$(cat "$PA/docs/dagen
 
 # --- a home note that is no action still leaves nothing to migrate ---
 SH="$TMP/settled-home"
-mkdir -p "$SH/.dr-superpowers" "$SH/.dagents"
-printf '{"darkmem":{"repos":{}}}\n' > "$SH/.dr-superpowers/config.json"
-printf '{"darkmem":{"repos":{}}}\n' > "$SH/.dagents/config.json"
+mkdir -p "$SH/.dr-forge/mirror/p" "$SH/.dagents"
+printf '{"/r":{"documents":"local","progress":"local"}}\n' > "$SH/.dr-forge/stores.json"
 SR="$TMP/settled-repo"
 repo "$SR"
 for mode in --dry-run ""; do
   out=$(HOME="$SH" migrate "$FM" $mode "$SR" 2>&1); code=$?
   check "settled home ${mode:-real}: exit 0" "$code" "0"
-  check "settled home ${mode:-real}: the darkmem note shown" "$(grep -c "already has a darkmem section" <<<"$out")" "1"
+  check "settled home ${mode:-real}: the mirror left in place" "$(grep -cxF "dagents-home-migrate: left $SH/.dr-forge/mirror in place; dagents keeps no darkmem mirror or stores" <<<"$out")" "1"
   check "settled home ${mode:-real}: nothing to migrate" "$(grep -cxF "dagents-migrate: nothing to migrate in $SR" <<<"$out")" "1"
 done
+check "settled home: the session start names no old home" "$(HOME="$SH" bash -c '. "$1"; dagents_legacy_layout "$2"' _ "$HERE/../scripts/lib/dagents-dir.sh" "$SR")" ""
+
+# --- a family an older home keeps in darkmem refuses before anything moves ---
+DMH="$TMP/darkmem-home"
+DMR="$TMP/darkmem-repo"
+repo "$DMR"
+mkdir -p "$DMR/.forge/sdd/p1" "$DMH/.dforge" "$DMH/.dr-forge"
+echo ledger > "$DMR/.forge/sdd/p1/progress.md"
+printf '{"handoffTokens":1}\n' > "$DMH/.dr-forge/config.json"
+DMT=$(git -C "$DMR" rev-parse --show-toplevel)
+printf '{"%s":{"project":"p","documents":"darkmem","progress":"local"}}\n' "$DMT" > "$DMH/.dforge/stores.json"
+before=$(snapshot "$DMR" "$DMH")
+for mode in --dry-run ""; do
+  out=$(HOME="$DMH" migrate "$FM" $mode "$DMR" 2>&1); code=$?
+  check "darkmem documents ${mode:-real}: exit 1" "$code" "1"
+  check "darkmem documents ${mode:-real}: says to set them local in dforge" \
+    "$(grep -c "^dagents-migrate: refused: $DMH/.dforge/stores.json keeps .*'s documents in darkmem, which dagents does not read; set documentStore to local in dforge first" <<<"$out")" "1"
+  check "darkmem documents ${mode:-real}: nothing moved" "$(snapshot "$DMR" "$DMH")" "$before"
+done
+printf '{"%s":{"project":"p","documents":"local","progress":"local"}}\n' "$DMT" > "$DMH/.dforge/stores.json"
+out=$(HOME="$DMH" migrate "$FM" "$DMR" 2>&1); code=$?
+check "local stores: exit 0" "$code" "0"
+check "local stores: the checkout moved" "$(exists "$DMR/.dagents/sdd/p1/progress.md")" "yes"
+check "local stores: the home moved" "$(exists "$DMH/.dagents/config.json")$(exists "$DMH/.dr-forge")" "yesno"
+check "local stores: dforge's record kept" "$(grep -c '"documents":"local"' "$DMH/.dforge/stores.json")" "1"
 
 # --- a dry run's foretold home refusal is named as one ---
 RH="$TMP/refusing-home"
@@ -593,9 +617,16 @@ check "no node, no old home: exit 0" "$code" "0"
 check "no node, no old home: nothing to migrate" "$out" "dagents-migrate: nothing to migrate in $H"
 mkdir -p "$NH/.dr-superpowers"
 out=$(HOME="$NH" PATH="$NB" migrate "$P/dagents-migrate" "$H" 2>&1); code=$?
-check "no node, old home present: exit 1" "$code" "1"
-check "no node, old home present: refused" "$(grep -c 'refused: node is not on PATH' <<<"$out")" "1"
+check "no node, a dr-superpowers home: nothing dagents moves" "$out" "dagents-migrate: nothing to migrate in $H"
 rm -rf "$NH/.dr-superpowers"
+mkdir -p "$NH/.dforge"
+printf '{"/other":{"documents":"darkmem"}}\n' > "$NH/.dforge/stores.json"
+mkdir -p "$H/.forge"
+out=$(HOME="$NH" PATH="$NB" migrate "$P/dagents-migrate" "$H" 2>&1); code=$?
+check "no node, a stores.json naming darkmem: exit 1" "$code" "1"
+check "no node, a stores.json naming darkmem: refused" "$(grep -c "refused: node is not on PATH, so whether $NH/.dforge/stores.json keeps" <<<"$out")" "1"
+check "no node, a stores.json naming darkmem: nothing moved" "$(exists "$H/.forge")$(exists "$H/.dagents")" "yesno"
+rm -rf "$NH/.dforge" "$H/.forge"
 mkdir -p "$NH/.dr-forge"
 out=$(HOME="$NH" PATH="$NB" migrate "$P/dagents-migrate" "$H" 2>&1); code=$?
 check "no node, dr-forge home present: exit 1" "$code" "1"

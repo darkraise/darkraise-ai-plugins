@@ -14,7 +14,6 @@ import { importRepository } from "./darkmem-import.mjs";
 import { pull, pullDocuments } from "./darkmem-pull.mjs";
 import { push } from "./darkmem-push.mjs";
 import { leftoverLines, pendingFamilies, reconcile, stayLine } from "./darkmem-reconcile.mjs";
-import { migrateMirrorLocked, migrateServer } from "./dagents-home-migrate.mjs";
 
 const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace] | restore NAME | revision NAME | reconcile";
 
@@ -217,21 +216,6 @@ async function main(argv, {
   const cfg = {
     ...stores.sync, reason: stores.reason, repoRoot: stores.repoRoot, worktreeRoot: stores.worktreeRoot, documents: stores.documents, progress: stores.progress,
   };
-  // A command must not run on a mirror holding older (superpowers/ or forge/)
-  // uris: a pull would fill dagents/ beside them and every later run would
-  // refuse.
-  try {
-    const migrated = migrateMirrorLocked(cfg.mirror);
-    if (migrated?.blocked) {
-      err(`darkmem-sync: ${parsed.name} refused: ${migrated.line}`);
-      return 1;
-    }
-    if (migrated) out(`darkmem-sync: ${migrated.line}`);
-  } catch (error) {
-    if (!(error instanceof StateError)) throw error;
-    err(`darkmem-sync: ${error.message}`);
-    return 2;
-  }
   const families = { documents: cfg.documents.applied === "darkmem", progress: cfg.progress.applied === "darkmem" };
   // A 2.x record names no project or mirror; without them a family in the
   // mirror could not be found once the mapping is gone.
@@ -308,22 +292,7 @@ async function main(argv, {
       timeoutMs: Number(env.DAGENTS_DARKMEM_SYNC_TIMEOUT_MS) || 10000,
     }));
     const roots = { docsRoot: cfg.documents.root, workRoot: path.join(cfg.mirror, "work"), worktreeRoot: cfg.worktreeRoot, families };
-    // darkmem's older (superpowers/ or forge/) uris move before anything
-    // syncs: a pull would read a document still under an older prefix as
-    // deleted from dagents/. Answers why the command may not sync, or null.
-    // Reconcile calls it after its own refusals and still moves a family back
-    // to the checkout, from the mirror.
-    const migrate = async () => {
-      if (!cfg.enabled || !cfg.url || !cfg.apiKey || state.prefix === DOC_PREFIX) return null;
-      const failures = await migrateServer({ cfg, client, state, persist });
-      if (!failures.length) return null;
-      report.failures.push(...failures);
-      return `darkmem still holds superpowers/ or forge/ documents it could not move to ${DOC_PREFIX}/`;
-    };
-    if (parsed.command.needsKey) {
-      const blocked = await migrate();
-      if (blocked) throw new UsageError(`${parsed.name} refused: ${blocked}`);
-    }
+    const migrate = async () => null;
     await parsed.command.run({ cfg, roots, state, persist, client, report, options: parsed.options, args: parsed.args, out, env, migrate });
   } catch (error) {
     if (error instanceof TransportError || error instanceof HttpError) {

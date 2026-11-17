@@ -80,29 +80,11 @@ check "worktree: its git dir and the primary's state" "$(dagents_legacy_layout "
 rm -rf "$WG/dr-superpowers" "$G/.superpowers"
 check "worktree: nothing left" "$(dagents_legacy_layout "$W")" ""
 
-# --- dagents_legacy_layout: an unmigrated home ---
+# --- dagents_legacy_layout: a dr-superpowers home holds nothing dagents moves ---
 SAVED_HOME=$HOME
-export HOME="$TMP/home2"; mkdir -p "$HOME"
-OLDH="$HOME/.dr-superpowers"
-NEWH="$HOME/.dagents"
-mkdir -p "$OLDH"
-printf '{"darkmem":{"repos":{}}}\n' > "$OLDH/config.json"
-check "home: old darkmem mapping, new home lacks it" "$(dagents_legacy_layout "$R")" "$OLDH"
-mkdir -p "$NEWH"
-printf '{"darkmemEnabled":true}\n' > "$NEWH/config.json"
-check "home: a new config without the mapping still counts" "$(dagents_legacy_layout "$R")" "$OLDH"
-printf '{"darkmem":{"repos":{}}}\n' > "$NEWH/config.json"
-check "home: the new config holds the mapping" "$(dagents_legacy_layout "$R")" ""
-printf '{"darkmemEnabled":true}\n' > "$OLDH/config.json"
-check "home: an old config without a mapping" "$(dagents_legacy_layout "$R")" ""
-mkdir -p "$OLDH/mirror"
-check "home: an empty old mirror folder" "$(dagents_legacy_layout "$R")" ""
-mkdir -p "$OLDH/mirror/proj"
-check "home: a mirror left in the old home" "$(dagents_legacy_layout "$R")" "$OLDH"
-printf '{"darkmem":{}}\n' > "$OLDH/config.json"
-rm -rf "$NEWH" "$OLDH/mirror/proj"
-check "home: reported once beside a repository path" "$(mkdir -p "$R/.superpowers"; dagents_legacy_layout "$R" | tr '\n' '|')" "$OLDH|$R/.superpowers|"
-rm -rf "$R/.superpowers" "$OLDH"
+export HOME="$TMP/home2"; mkdir -p "$HOME/.dr-superpowers/mirror/proj"
+printf '{"darkmem":{"repos":{}}}\n' > "$HOME/.dr-superpowers/config.json"
+check "home: a dr-superpowers darkmem mapping and mirror" "$(dagents_legacy_layout "$R")" ""
 export HOME=$SAVED_HOME
 
 # --- dagents_legacy_layout: dr-forge's 3.x names ---
@@ -115,8 +97,11 @@ rm -rf "$WG/dr-forge" "$G/.forge"
 SAVED_HOME=$HOME
 export HOME="$TMP/home3"; mkdir -p "$HOME/.dr-forge"
 check "dr-forge: an empty ~/.dr-forge is not named" "$(dagents_legacy_layout "$R")" ""
+mkdir -p "$HOME/.dr-forge/mirror/proj"
+printf '{}\n' > "$HOME/.dr-forge/stores.json"
+check "dr-forge: the mirror and stores.json migrate leaves are not named" "$(dagents_legacy_layout "$R")" ""
 printf '{}\n' > "$HOME/.dr-forge/config.json"
-check "dr-forge: a ~/.dr-forge holding anything is named" "$(dagents_legacy_layout "$R")" "$HOME/.dr-forge"
+check "dr-forge: a ~/.dr-forge holding anything else is named" "$(dagents_legacy_layout "$R")" "$HOME/.dr-forge"
 export HOME=$SAVED_HOME
 
 # --- dagents_legacy_layout: both older names at once ---
@@ -127,10 +112,10 @@ mkdir -p "$WG/dr-superpowers" "$WG/dr-forge" "$G/.superpowers" "$G/.forge"
 check "mixed: a worktree's git dir and the primary's state, both names" "$(dagents_legacy_layout "$W" | tr '\n' '|')" "$WG/dr-superpowers|$WG/dr-forge|$TOP/.superpowers|$TOP/.forge|"
 rm -rf "$WG/dr-superpowers" "$WG/dr-forge" "$G/.superpowers" "$G/.forge"
 SAVED_HOME=$HOME
-export HOME="$TMP/home4"; mkdir -p "$HOME/.dr-superpowers" "$HOME/.dr-forge"
-printf '{"darkmem":{"repos":{}}}\n' > "$HOME/.dr-superpowers/config.json"
+export HOME="$TMP/home4"; mkdir -p "$HOME/.dr-forge"
 printf '{}\n' > "$HOME/.dr-forge/config.json"
-check "mixed: both old homes" "$(dagents_legacy_layout "$R" | tr '\n' '|')" "$HOME/.dr-superpowers|$HOME/.dr-forge|"
+check "mixed: the old home beside a checkout's older path" "$(mkdir -p "$R/.superpowers"; dagents_legacy_layout "$R" | tr '\n' '|')" "$HOME/.dr-forge|$R/.superpowers|"
+rm -rf "$R/.superpowers"
 export HOME=$SAVED_HOME
 
 # --- dagents_legacy_layout: the primary checkout's own .forge ---
