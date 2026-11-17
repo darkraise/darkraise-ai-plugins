@@ -408,6 +408,11 @@ scoped re-review. Two rounds at most per task:
 
 Each round is your own fix, followed by one scoped re-review.
 
+A `Host: codex` plan keeps its five-round cap (`review_cap: 5` in
+[codex-routing.json](codex-routing.json)): its ledger line reads
+`fix round <R>/5`, and the breaker comes after round 5's re-review instead
+of round 2's.
+
 **Every round:** you fix, re-run the tests covering the amended code and
 append your fix report to the same report file. Before dispatching the
 re-review, confirm the fix report contains the covering tests, the command
