@@ -13,7 +13,6 @@
 
 SNAPSHOT_CAP=5500
 
-. "$(dirname "${BASH_SOURCE[0]}")/dforge-env.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/fast-mode.sh"
 
 _snapshot_mtime() { # FILE — modification time in epoch seconds, or nothing
