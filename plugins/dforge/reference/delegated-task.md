@@ -47,8 +47,8 @@ line is the task's BASE: `task-step review` creates
 as `--suite '<suite command>'` (below), so you never carry a SHA. Calling
 `--open` again for a task that has its open line adds none, and the review
 still packages every commit made since that base. Exit 3 means the plan has no
-such task; exit 2 on a `Host: codex` plan sends you to *The steps by hand*
-below.
+such task. `--open` works the same on a `Host: codex` plan; there `task-step`
+refuses, so the review runs through *The steps by hand* below.
 
 - **Suite command.** Read the plan header's `**Task check:**` line first,
   then resolve the plan's suite command once:
@@ -486,9 +486,8 @@ completion line to the ledger in the same message as your other bookkeeping.
 Write it with `scripts/task-close PLAN_FILE N '<checkpoint>' --review '<text>'`
 (the checkpoint is the part after the dash, `<text>` the part inside the
 parentheses after the commit range): it takes the range from the open line and
-`HEAD`, pushes the ledger and runs the auto-run bookkeeping. A Codex plan has
-no open line from `task-brief --open` (it exits 2 there), so `task-close`
-exits 3 and you append the line by hand.
+`HEAD`, pushes the ledger and runs the auto-run bookkeeping, on a Codex plan
+too.
 A confirmed gap goes to the next task that depends on this one; with none, to
 the next task in plan order; after the last task, to the final review, written
 `carried to final review`, where it is a confirmed finding:
@@ -604,11 +603,9 @@ at Astra high or above as the seat ([native-codex.md](native-codex.md)).
 `task-step` exits 2 on a `Host: codex` plan, and `task-step review` exits 2,
 writing nothing, when `lens-route` does. Then run the mechanics yourself:
 
-- **§1.** Record BASE (`git rev-parse HEAD`) before you start. Run
-  `scripts/task-brief PLAN_FILE N` (see using-dforge §Session Budget): it
-  prints `wrote <path>: <N> lines`, then the budget line; read the path out of
-  the first line. Write the assigned line
-  `Task <N>: implementer inline (assigned; base <sha7>)`.
+- **§1.** Open the task with `task-brief --open` as §1 says, on a Codex
+  plan too: BASE is the base its open line records, and `task-close` (§5)
+  reads the same line.
 - **§2.** On a DONE report, run
   `bash <plugin-root>/scripts/suite-run -- <suite command>` yourself in the
   background at the task's head and treat a non-baseline failure as §3's
