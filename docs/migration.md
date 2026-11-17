@@ -14,6 +14,24 @@ registration, add the new root, and reinstall the selected supported plugins.
 Preserve plugin data when uninstalling; do not assume that removing a
 marketplace keeps its installations.
 
+## dforge 4.x to dagents
+
+dforge 4.17.1 updates to dforge 5.0.0, which drops the 4.x agent workflow
+(implementer agents, subagent mode, external executors). That workflow
+continues as the dagents plugin. To keep it in a project:
+
+1. Install dagents: `/plugin install dagents@darkraise`.
+2. Disable dforge in the project:
+   `claude plugin disable dforge@darkraise --scope local`. Only one of dforge,
+   dagents and dflow may be enabled per project; the workflow guard stands
+   the others down.
+3. Run `/dagents:migrate`. It moves `docs/dforge/` and `.dforge/` to
+   `docs/dagents/` and `.dagents/`, and the home record to `~/.dagents/`. It
+   copies darkmem's `dforge/` documents and workstreams to `dagents/` and
+   deletes nothing there; it prints the darkmem tool calls (they need an
+   admin-scoped key) that delete the `dforge/` copies once no dforge checkout
+   maps the project.
+
 ## From the previous public catalog
 
 The catalog's previous public release listed `dr-superpowers`, `dr-cockpit`,

@@ -16,13 +16,15 @@ A plugin marketplace for Claude Code and Codex. The marketplace ID is `darkraise
 
 ## Validation
 
-Run `node scripts/validate-repository.mjs`, the maintained test suites, and
-`claude plugin validate` on the marketplace and every Claude plugin, and
-`claude plugin test` on `plugins/dforge` and `plugins/dflow`. Bound test
-and CLI execution and clean up all processes started by the validation run.
+Run `node scripts/validate-repository.mjs`, the maintained test suites
+(`node scripts/test-all.mjs` and `node scripts/test-all.mjs --plugin
+dagents`), and `claude plugin validate` on the marketplace and every Claude
+plugin, and `claude plugin test` on `plugins/dforge`, `plugins/dagents` and
+`plugins/dflow`. Bound test and CLI execution and clean up all processes
+started by the validation run.
 
 A task that ends in a push is done only when the CI run for the pushed
 commit is green: every job of `Validate marketplace`, the Windows shards
 included (`gh run list --commit <sha>`, then `gh run view <id>`). Local
 passes do not stand in for it; a failed or still-running run means the task
-is not done.
+is not done. A dagents job skipped by its path filter counts as green.

@@ -22,10 +22,19 @@ account-aware status line and coding-agent skills for two design systems.
 | Plugin | What it does | Claude Code | Codex |
 | --- | --- | :---: | :---: |
 | [dforge](plugins/dforge/README.md) | Turns a request into a reviewed spec, a scored plan and an in-session execution run. On Claude Code it adds the cockpit pane, Discord notifications and an attribution guard. | ✓ | ✓ (no cockpit) |
+| [dagents](plugins/dagents/README.md) | The dforge 4.x workflow, continued: scored tasks run by implementer agents on a model ladder, subagent or inline execution, and external Antigravity and Codex executors, with the same cockpit on Claude Code. | ✓ | ✓ (no cockpit) |
 | [dflow](plugins/dflow/README.md) | Plans, builds, reviews and ships behind a task gate that only a passing command opens, with a board, living docs checked mechanically, UI proof, a HUD and a darkmem projection. | ✓ | |
 | [dr-status](plugins/dr-status/README.md) | A status line with git detail and usage meters, framed in the color of the Claude account. | ✓ | |
 | [darkraise-ui](plugins/darkraise-ui/README.md) | Teaches agents to write idiomatic darkraise-ui code. | ✓ | ✓ |
 | [darkraise-win32ui](plugins/darkraise-win32ui/README.md) | Teaches agents to write idiomatic Darkraise.Win32UI code. | ✓ | ✓ |
+
+dforge, dagents and dflow are alternatives: enable only one of them per
+project. Each ships `scripts/workflow-guard.mjs`; with two or more enabled, the
+one starting a session stands down and names the commands that disable the
+others. Run the check yourself with
+`node <plugin-root>/scripts/workflow-guard.mjs --host claude` (or
+`--host codex`): it prints one line per enabled plugin and exits 3 on a
+conflict.
 
 ## Install
 
@@ -36,7 +45,7 @@ account-aware status line and coding-agent skills for two design systems.
 /plugin install dforge@darkraise
 ```
 
-The other plugins install the same way (`dflow@darkraise`,
+The other plugins install the same way (`dagents@darkraise`, `dflow@darkraise`,
 `dr-status@darkraise`, `darkraise-ui@darkraise`,
 `darkraise-win32ui@darkraise`). Start a new
 session, or run `/reload-plugins`, afterwards. An installed copy stays at the
@@ -59,8 +68,8 @@ codex plugin add dforge@darkraise
 Register the repository root (its Git URL or a local checkout's absolute path),
 not the catalog file: Codex 0.153.4's CLI rejects direct catalog-file
 registration, and root discovery selects the dedicated Codex catalog
-(`.agents/plugins/marketplace.json`). That catalog lists `dforge` and the two
-UI plugins; `dflow` and `dr-status` are Claude Code only. On Codex, dforge uses the
+(`.agents/plugins/marketplace.json`). That catalog lists `dforge`, `dagents` and
+the two UI plugins; `dflow` and `dr-status` are Claude Code only. On Codex, dforge uses the
 client's native agent tools; see
 [native-codex.md](plugins/dforge/reference/native-codex.md).
 
