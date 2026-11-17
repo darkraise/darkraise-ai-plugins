@@ -113,8 +113,8 @@ check "spaced path: plan-lint finds the spec" "$(grep '^ERROR' <<<"$out")" ""
 printf '## A? — Task 1\nReason: r\nCost if wrong: c\n### Old\n````text\nPrint `hello NAME`.\n````\n### New\n````text\nPrint `hello, NAME`.\n````\n' > "$TMP/spaced-block.md"
 run "$U" plan-amend "$UP" "$TMP/spaced-block.md"
 check "spaced path: plan-amend applies" "$out" "amended: A1 Task 1"
-run "$U" review-route "$UP" --task 1
-has "spaced path: review-route routes the task" "$out" "review-seat task=1 primary="
+run "$U" review-route "$UP" --plan-round 1
+has "spaced path: review-route routes the plan round" "$out" "review-seat plan-round=1 primary="
 run "$U" task-brief "$UP" 1 "$TMP/spaced-brief.md"
 check "spaced path: task-brief exits 0" "$status" "0"
 check "spaced path: the brief carries the amendment" "$(grep -c 'hello, NAME' "$TMP/spaced-brief.md")" "1"
