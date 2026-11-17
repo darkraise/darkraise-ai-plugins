@@ -512,6 +512,20 @@ test('A18: Codex reads config.toml, and the two hosts never combine', t => {
   assert.doesNotMatch(codex.stdout, /dforge/);
 });
 
+// A Codex session resolved a skill-relative `references/codex-tools.md`
+// against the plugin root, missed the file and never ran the guard.
+test('A24: each Codex entry skill names the guard itself and its reference by a plugin-root path', () => {
+  for (const plugin of ['dforge', 'dagents']) {
+    const reference = `skills/using-${plugin}/references/codex-tools.md`;
+    const line = readFileSync(join(ROOT, 'plugins', plugin, 'skills', `using-${plugin}`, 'SKILL.md'), 'utf8').split('\n').find(text => text.startsWith('- Codex:'));
+    assert.ok(line, `${plugin}: the entry skill has a Codex line`);
+    assert.ok(line.includes(`\`node <plugin-root>/scripts/workflow-guard.mjs --host codex --self ${plugin}\``), `${plugin}: ${line}`);
+    assert.match(line, /exit 3/, `${plugin}: ${line}`);
+    assert.ok(line.includes(`\`<plugin-root>/${reference}\``), `${plugin}: ${line}`);
+    assert.ok(existsSync(join(ROOT, 'plugins', plugin, reference)), `${plugin}: ${reference} exists`);
+  }
+});
+
 // A16
 test('A16: the three guard copies are byte-identical, and validate-repository fails when one differs', t => {
   const bytes = SIBLINGS.map(name => readFileSync(GUARD(name)));

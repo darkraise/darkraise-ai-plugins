@@ -69,6 +69,6 @@ With the darkmem MCP, prefer its `code_search` over Explore subagents.
 
 ## Platform and Precedence
 
-- Codex: read `references/codex-tools.md`. It has no Stop hook: run `scripts/next-step` at every step a skill says to end on its block, not only on early stops.
+- Codex: first run `node <plugin-root>/scripts/workflow-guard.mjs --host codex --self dforge`; on exit 3 show its output as it is and stop, using no dforge skill. Then read `<plugin-root>/skills/using-dforge/references/codex-tools.md`. Codex has no Stop hook: run `scripts/next-step` at every step a skill says to end on its block, not only on early stops.
 - No todo tool? Use the ledger or a checklist.
 - User instructions (CLAUDE.md, AGENTS.md, direct requests, fast mode) outrank skills, which outrank defaults.
