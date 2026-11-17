@@ -471,8 +471,8 @@ the next task in plan order; after the last task, to the final review, written
 - `Task <N>: complete (commits <base7>..<head7>, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat <seat>) — done: …; verified: …; remaining: none; discovered: …; assumptions: …`
 - `Task <N>: complete (commits <base7>..<head7>, <K> parked, <C> carried to Task <M>; scores …, seat <seat>) — …; remaining: <parked and carried one-liners>; …` after a tripped breaker; drop the `carried` clause when nothing was
 - end the scores clause with `, seat <seat>`: the reviewers that returned a
-  list and the judge, joined with `+` (`codex gpt-6.1-sol/xhigh`,
-  `codex gpt-6.1-sol/xhigh+agy gemini-4-argon/high+judge-sonnet-high`,
+  list and the judge, joined with `+` (`codex gpt-6-astra/xhigh+judge-opus`,
+  `codex gpt-6.1-sol/xhigh+agy gemini-4-argon/high+judge-opus`,
   `agy gemini-4-argon/high+judge-opus`), or the judge's short name alone,
   followed by ` (<id> <STATUS> — <reason>)` for each reviewer that ran and
   returned no list, or by ` (reviewers off — <answers>)` when §3's `gate:`
@@ -595,7 +595,7 @@ writing nothing, when `lens-route` does. Then run the mechanics yourself:
 - **§1.** Open the task with `task-brief --open` as §1 says, on a Codex
   plan too: BASE is the base its open line records, and `task-close` (§5)
   reads the same line.
-- **§2.** On a DONE report, run
+- **§2.** Once the report is written, run
   `bash <plugin-root>/scripts/suite-run -- <suite command>` yourself in the
   background at the task's head and treat a non-baseline failure as §3's
   Important finding. `<suite command>` is resolved as §1's Suite command
