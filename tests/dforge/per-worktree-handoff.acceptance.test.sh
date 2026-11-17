@@ -253,13 +253,13 @@ for args in "$DOCS/plans/$PA.md" "--complete $DOCS/plans/$PA.md" "--kept $DOCS/p
   check "A13: --target names the file the call then writes ($args)" "$(written)" "$target "
 done
 rm -f "$(handoff "$TOP")" "$(handoff "$W1")"
-rm -rf "$TMP/stubscripts" && cp -R "$SCRIPTS" "$TMP/stubscripts"
-printf '#!/usr/bin/env bash\nprintf -- "- shell b1 10:00 idle 1m sleep\\n"\nexit 1\n' > "$TMP/stubscripts/in-flight"
-(cd "$W1" && timeout 60 bash "$TMP/stubscripts/next-step" "$DOCS/plans/$PA.md" >/dev/null 2>&1)
+rm -rf "$TMP/stubplugin" && cp -R "$SCRIPTS/.." "$TMP/stubplugin"
+printf '#!/usr/bin/env bash\nprintf -- "- shell b1 10:00 idle 1m sleep\\n"\nexit 1\n' > "$TMP/stubplugin/scripts/in-flight"
+(cd "$W1" && timeout 60 bash "$TMP/stubplugin/scripts/next-step" "$DOCS/plans/$PA.md" >/dev/null 2>&1)
 check "A13: with background work a plain run exits 5" "$?" 5
-t=$(cd "$W1" && timeout 60 bash "$TMP/stubscripts/next-step" --target "$DOCS/plans/$PA.md" 2>/dev/null); rc=$?
+t=$(cd "$W1" && timeout 60 bash "$TMP/stubplugin/scripts/next-step" --target "$DOCS/plans/$PA.md" 2>/dev/null); rc=$?
 check "A13: with background work --target exits 0 and names the path" "$rc:$t" "0:$(handoff "$W1")"
-rm -rf "$TMP/stubscripts"
+rm -rf "$TMP/stubplugin"
 for args in "" "--adhoc --phase build" "$DOCS/plans/missing.md" "--complete $DOCS/plans/missing.md"; do
   # shellcheck disable=SC2086
   ns "$W1" $args; real=$RC
@@ -436,7 +436,7 @@ a16 "$UIEND"
 # ---------------------------------------------------------------- A8
 AR="$SCRIPTS/auto-run"
 beat() { # a live cockpit heartbeat for a session
-  local f="$HOME/.claude/dforge/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  local f="$HOME/.claude/$PLUGIN/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
   mkdir -p "$(dirname "$f")"; printf '%s\n' "$(date +%s)" > "$f"
 }
 ar() { # ar <dir> <args...>
