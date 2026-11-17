@@ -1500,6 +1500,8 @@ printf 'judge edit\n' >> "$RR_REPO/app.txt"
 rr_run verdict docs/plan.md 1
 check "verdict: a tracked file changed during the review exits 6" "$rr_rc" "6"
 check "verdict: the changed file is named on its own line" "$(grep -cx 'app.txt' <<<"$rr_err")" "1"
+check "verdict: a file clean at review time is restored from HEAD" \
+  "$(grep -A1 -x 'app.txt' <<<"$rr_err" | sed -n 2p | grep -c '^  restore: git -C .* checkout -- app.txt$')" "1"
 rr_git checkout -- app.txt
 rr_run verdict docs/plan.md 1
 check "verdict: restored files pass the check" "$rr_rc" "0"
@@ -1529,6 +1531,30 @@ printf 'more\n' >> "$RR_REPO/other.txt"
 rr_run verdict docs/plan.md 1
 check "verdict: a further change to it exits 6" "$rr_rc" "6"
 check "verdict: and names it" "$(grep -cx 'other.txt' <<<"$rr_err")" "1"
+check "verdict: a file dirty at review time is never restored from HEAD" "$(grep -c 'checkout -- other.txt' <<<"$rr_err")" "0"
+restore=$(grep -A1 -x 'other.txt' <<<"$rr_err" | sed -n 2p | sed 's/^  restore: //')
+(cd "$RR_REPO" && bash -c "$restore")
+check "verdict: its restore command keeps the edit made before the review" "$(tail -n 1 "$RR_REPO/other.txt")" "dirty"
+rr_run verdict docs/plan.md 1
+check "verdict: and the restored file passes the check" "$rr_rc" "0"
+rm -f "$RR_REPO/other.txt"
+rr_run verdict docs/plan.md 1
+check "verdict: a file deleted by the reviewer gets a restore command" \
+  "$(grep -A1 -x 'other.txt' <<<"$rr_err" | sed -n 2p | grep -c '^  restore: ')" "1"
+restore=$(grep -A1 -x 'other.txt' <<<"$rr_err" | sed -n 2p | sed 's/^  restore: //')
+(cd "$RR_REPO" && bash -c "$restore")
+check "verdict: which brings back the recorded content" "$(tail -n 1 "$RR_REPO/other.txt")" "dirty"
+# The snapshot is data in the task's state file: a hash that is no object id,
+# or a path outside the work tree, gets no command to run.
+jq '.reviewCheck.dirty += [{path: "../outside.txt", hash: "deleted"}, {path: "/tmp/abs.txt", hash: "deleted"}, {path: "tampered.txt", hash: "HEAD;touch pwned"}]' \
+  "$RR_WS/task-1-step.json" > "$RR_TMP/tampered.json" && mv "$RR_TMP/tampered.json" "$RR_WS/task-1-step.json"
+rr_run verdict docs/plan.md 1
+check "verdict: a tampered snapshot still exits 6" "$rr_rc" "6"
+check "verdict: a path outside the work tree gets no command" \
+  "$(grep -A1 -x -e '../outside.txt' -e '/tmp/abs.txt' <<<"$rr_err" | grep -c '^  restore: none: ')" "2"
+check "verdict: a hash that is no object id gets no command" \
+  "$(grep -A1 -x 'tampered.txt' <<<"$rr_err" | sed -n 2p | grep -c '^  restore: none: ')" "1"
+check "verdict: and its text is printed nowhere" "$(grep -c 'pwned' <<<"$rr_err")" "0"
 rr_git checkout -- other.txt
 
 # A state recorded before the check existed still reads its report; usage.
