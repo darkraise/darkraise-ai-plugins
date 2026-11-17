@@ -760,6 +760,20 @@ check "clear: another plan's prompt is refused, nothing booked" "$status:$(field
 printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/myplan.md` with dforge:resume-execution.\n```\n' > "$REPO/.dforge/handoff/latest.md"
 ar --session s-1 clear >/dev/null 2>&1; status=$?
 check "clear: a plan whose name only ends in this one's is another plan" "$status:$(field pending):$(field resumes)" "4:$pending_before:$resumes_before"
+# --- clear reads the attached plan's handoff (spec A8) ---
+printf '# P\n\n**Execution:** inline — `claude --model sonnet --effort high` — x\n\n## Task index\n\n1. One\n\n### Task 1: One\n\nBody.\n' > "$REPO/docs/wplan.md"
+git -C "$REPO" add docs/wplan.md && git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -qm wplan
+ARW="$TMP/ar-wt"; git -C "$REPO" worktree add -q -b ar-wt "$ARW"
+mkdir -p "$ARW/.dforge/sdd/wplan" "$ARW/.dforge/handoff" "$REPO/.dforge/sdd/wplan"
+printf '# SDD ledger — plan: docs/wplan.md\nTask 1: in progress\n' > "$ARW/.dforge/sdd/wplan/progress.md"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/wplan.md` with dforge:resume-execution. From W.\n```\n' > "$ARW/.dforge/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nContinue `docs/wplan.md` with dforge:executing-plans. From the primary.\n```\n' > "$REPO/.dforge/handoff/latest.md"
+ar --session s-1 attach --plan docs/wplan.md
+ar --session s-1 clear --phase >/dev/null 2>&1; status=$?
+check "A8: clear in the primary reads the worktree's handoff" "$status:$(field resumePrompt)" "0:Resume \`docs/wplan.md\` with dforge:resume-execution. From W."
+(cd "$ARW" && bash "$AR" --session s-1 clear --phase >/dev/null 2>&1); status=$?
+check "A8: clear in the worktree reads its own handoff" "$status:$(field resumePrompt)" "0:Resume \`docs/wplan.md\` with dforge:resume-execution. From W."
+ar --session s-1 attach --plan docs/plan.md
 # --- stop --stale (row 33) ---
 ar --session s-2 stop --stale >/dev/null 2>&1; status=$?
 check "stop --stale: refused while the owner lives" "$status:$(field active)" "3:true"
