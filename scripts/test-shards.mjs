@@ -56,7 +56,6 @@ export const windowsSeconds = {
   'plugins/dforge/tests/lens-route.test.sh': 185,
   'plugins/dforge/tests/lock.test.sh': 10,
   'plugins/dforge/tests/measured-proposals.acceptance.test.sh': 60,
-  'plugins/dforge/tests/native-routing.test.sh': 10,
   'plugins/dforge/tests/next-session-routing.acceptance.test.sh': 400,
   'plugins/dforge/tests/next-step.test.sh': 500,
   'plugins/dforge/tests/next-step-print.test.sh': 150,

@@ -1053,7 +1053,7 @@ implement a task.
 
 Treat an existing assignment without a source as human-pinned. Keep original
 assignments fixed; actual attempts, promotions, and substitutions go in the
-ledger. `scripts/select-native-tier.sh` and `scripts/plan-lint` accept only `codex-v4`: they reject
+ledger. `scripts/plan-lint` accepts only `codex-v4`: it rejects
 codex-v1, codex-v2, codex-v3 and unknown policy versions with a
 conversion-required error. Never reinterpret an older plan's scores or ranks as
 v4.
@@ -1387,8 +1387,7 @@ The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one 
 `reference/ladder.md` holds the raw rubric, Rule S, the Claude execution floor
 table, and the external judge tables. Native Codex reads
 `reference/codex-routing.json`; `reference/native-codex.md` explains its weighted
-score, request format, and plan conversion. `scripts/select-native-tier.sh`
-validates raw scores and history before returning a native routing decision.
+score, request format, and plan conversion.
 
 `reference/executors/` holds one JSON entry per external reviewer family and
 `scripts/executors` is the only reader of it: `executors list` prints every

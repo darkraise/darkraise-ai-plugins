@@ -51,9 +51,8 @@ currently advertised and user-allowed model/effort pairs can run; API model
 availability does not establish access through a native client or the
 external CLI.
 
-`scripts/select-native-tier.sh` and `scripts/plan-lint` accept only
-`codex-v4`. Converting an older plan is described in the plugin's README.md
-§Migrating Codex plans to codex-v4.
+`scripts/plan-lint` accepts only `codex-v4`. Converting an older plan is
+described in the plugin's README.md §Migrating Codex plans to codex-v4.
 
 ## Execution modes and session ends
 
