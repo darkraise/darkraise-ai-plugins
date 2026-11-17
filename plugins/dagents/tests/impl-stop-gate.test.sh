@@ -66,6 +66,10 @@ gate "$(input dagents:judge-opus a-judge "$DONE")"
 check "another agent type passes" "$CODE|$OUT|$ERR" "0||"
 gate "$(input general-purpose a-gp $'**Status:** DONE\nReport: /nonexistent/report.md')"
 check "a general-purpose agent with a missing report passes" "$CODE|$OUT|$ERR" "0||"
+gate "$(input other:impl-sonnet-high a-other $'**Status:** DONE\nReport: /nonexistent/report.md')"
+check "another plugin's implementer passes" "$CODE|$OUT|$ERR" "0||"
+gate "$(input impl-custom a-custom $'**Status:** DONE\nReport: /nonexistent/report.md')"
+check "an impl- name dagents does not ship passes" "$CODE|$OUT|$ERR" "0||"
 gate "$(input dagents:impl-sonnet-high a-b $'**Status:** BLOCKED\nReport: /nonexistent/report.md')"
 check "BLOCKED passes" "$CODE|$OUT|$ERR" "0||"
 gate "$(input dagents:impl-sonnet-high a-n $'**Status:** NEEDS_CONTEXT\nReport: /nonexistent/report.md')"
@@ -195,7 +199,7 @@ gate "$(fjq -nc --arg m $'**Status:** DONE\nAll done.' '{cwd:"/nonexistent/dir",
 check "a missing working directory lets the stop through and logs why" "$CODE|$OUT|$ERR|$(grep -c 'a-nocwd .*cannot enter /nonexistent/dir' "$FALLBACK")" "0|||1"
 
 LINES0=$(wc -l < "$FALLBACK" | tr -d ' ')
-gate "$(fjq -nc --arg m $'**Status:** DONE\nAll done.' '{cwd:"/nonexistent/dir",agent_id:"a-nl",agent_type:"dagents:impl-haiku\nFAKE injected line\u001b[31m",last_assistant_message:$m}')"
+gate "$(fjq -nc --arg m $'**Status:** DONE\nAll done.' '{cwd:"/nonexistent/dir\nFAKE injected line\u001b[31m",agent_id:"a-nl",agent_type:"dagents:impl-haiku",last_assistant_message:$m}')"
 check "a value with a newline or an escape logs one clean line" "$CODE|$(($(wc -l < "$FALLBACK" | tr -d ' ') - LINES0))|$(grep -c '^FAKE' "$FALLBACK")|$(grep -c "$(printf '\033')" "$FALLBACK")" "0|1|0|0"
 
 # A symlink planted where the log goes is not followed.
@@ -296,11 +300,18 @@ check "the observed event name" "$(jq -r .hook_event_name "$FIXTURE")" "Subagent
 check "the observed input has the fields the gate reads" \
   "$(jq -r '[has("agent_id"), has("agent_type"), has("last_assistant_message"), has("cwd")] | all' "$FIXTURE")" "true"
 MATCHER=$(jq -r '.hooks.SubagentStop[0].matcher' "$HOOKS")
-check "hooks.json registers SubagentStop with the implementer matcher" "$MATCHER" '(dagents:)?impl-.*'
-matches() { [[ $1 =~ ^($MATCHER)$ ]] && echo yes || echo no; }
+# Unanchored, as a harness that searches the name would read it.
+matches() { [[ $1 =~ $MATCHER ]] && echo yes || echo no; }
 check "the matcher selects the observed agent_type" "$(matches "$(jq -r .agent_type "$FIXTURE")")" "yes"
 check "the matcher selects an unprefixed implementer" "$(matches impl-opus-high)" "yes"
 check "the matcher leaves a judge alone" "$(matches dagents:judge-opus)" "no"
+check "the matcher leaves another plugin's implementer alone" "$(matches other:impl-sonnet-high)" "no"
+unmatched=""
+for f in "$HERE"/../agents/impl-*.md; do
+  name=$(basename "$f" .md)
+  [ "$(matches "dagents:$name")" = yes ] || unmatched="$unmatched $name"
+done
+check "the matcher selects every implementer dagents ships" "$unmatched" ""
 check "hooks.json runs the gate" "$(jq -r '.hooks.SubagentStop[0].hooks[0].command' "$HOOKS")" 'bash "${CLAUDE_PLUGIN_ROOT}/scripts/impl-stop-gate"'
 check "the gate hook is synchronous, bash, 30 s" \
   "$(jq -r '.hooks.SubagentStop[0].hooks[0] | [.type, .async, .shell, .timeout] | map(tostring) | join(",")' "$HOOKS")" "command,false,bash,30"
