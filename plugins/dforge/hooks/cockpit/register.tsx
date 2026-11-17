@@ -2826,6 +2826,7 @@ const S = {
   detailAt: 0,
   // When git last ran, which a tool call's own refresh spaces by GIT_EVERY_MS.
   gitAt: -GIT_EVERY_MS,
+  gitReads: 0,
   // The settings file's modification time and the engine's settings, as last put in force.
   seen: { config: null as number | null, claude: '' },
   // The finish file and its modification time as last read.
@@ -4640,14 +4641,17 @@ async function refreshDetail($: EngineInterface) {
 }
 
 async function refreshGit($: EngineInterface) {
+  // A tool call's refresh, the poll's and the command's can overlap: only the latest writes.
+  const reading = ++S.gitReads
   S.gitAt = await $.clock.now()
   try {
     const ran = await $.process.run(GIT_STATUS, { timeoutMs: 3000 })
     const state = ran.exitCode === 0 ? repoFromPorcelain(ran.stdout) : null
+    if (reading !== S.gitReads) return
     if (JSON.stringify(await read($, repo)) !== JSON.stringify(state)) await update($, repo, () => state)
   } catch (error) {
     // A large repository can outrun the timeout: its last reading stands rather than a blank card.
-    if (!TIMED_OUT.test(String(error)) && (await read($, repo)) !== null) await update($, repo, () => null)
+    if (reading === S.gitReads && !TIMED_OUT.test(String(error)) && (await read($, repo)) !== null) await update($, repo, () => null)
   }
 }
 

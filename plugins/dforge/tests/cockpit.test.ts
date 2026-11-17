@@ -342,6 +342,10 @@ type World = {
   gitStatusOut?: 'timeout' | 'missing'
   /** `git status` answers only once this settles, as in a large repository. */
   gitGate?: Promise<void>
+  /** One gate per `git status`, in turn, each answering what `porcelain` held when it started. */
+  gitGates?: Promise<void>[]
+  /** What a gated `git status` prints; PORCELAIN unless said. */
+  porcelain?: string
   /** Each git command the plugin runs, as one line. */
   gitRuns?: string[]
   /** What `git rev-parse --git-common-dir` answers; `<primary>/.git` unless said. */
@@ -554,9 +558,10 @@ function world(on: On, w: World) {
     }
     if (argv.startsWith('git --no-optional-locks') && w.gitStatusOut === 'timeout') return { deny: 'dforge: $.process.run(git) aborted: still running after 3000ms' }
     if (argv.startsWith('git --no-optional-locks') && w.gitStatusOut === 'missing') return { deny: 'dforge: $.process.run(git) failed to start: ENOENT' }
-    if (argv.startsWith('git --no-optional-locks') && w.gitGate !== undefined) {
+    if (argv.startsWith('git --no-optional-locks') && (w.gitGate !== undefined || (w.gitGates?.length ?? 0) > 0)) {
       w.gitRuns?.push(argv)
-      return w.gitGate.then(() => ({ value: { exitCode: 0, stdout: PORCELAIN, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+      const stdout = w.porcelain ?? PORCELAIN
+      return (w.gitGates?.shift() ?? w.gitGate)!.then(() => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
     }
     if (argv.startsWith('git ')) w.gitRuns?.push(argv)
     const common = w.commonDir ?? `${w.primary ?? '/home/me/code/shop'}/.git`
@@ -8568,6 +8573,31 @@ describe('update frequency', () => {
       await clock.advance(1)
       const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
       expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
+    })
+
+    test('keeps the newer reading when an older status lands after it', async ($, on) => {
+      const w: World = { ...SIGNED_IN }
+      const clock = world(on, w)
+      signedIn(on)
+      await $.session.start(START)
+      let release: () => void = () => {}
+      w.gitGates = [
+        new Promise<void>(resolve => {
+          release = resolve
+        }),
+        Promise.resolve(),
+      ]
+      w.porcelain = PORCELAIN.replace('feat/pane', 'feat/old')
+      await $.tool.call({ tool: 'Edit', file_path: '/home/me/code/shop/a.ts' } as never)
+      await clock.advance(2_000)
+      w.porcelain = PORCELAIN.replace('feat/pane', 'feat/new')
+      await $.tool.call({ tool: 'Edit', file_path: '/home/me/code/shop/a.ts' } as never)
+      await clock.advance(1)
+      release()
+      await clock.advance(1)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ type: 'Text', text: /feat\/new/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /feat\/old/ })).toBeUndefined()
     })
 
     test('is not read after a call while no pane or band is drawn', async ($, on) => {
