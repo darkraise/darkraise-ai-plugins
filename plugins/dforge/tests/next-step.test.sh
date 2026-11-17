@@ -95,7 +95,7 @@ check "mid-plan: handoff has one Next session section" "$(grep -c '^## Next sess
 has "mid-plan: handoff carries the new next step" "$hand" "Resume at Task 3 (Third thing)."
 lacks "mid-plan: no assigned-line warning" "$(cat "$TMP/stderr")" "warning"
 
-# --- a ledger ending on an assigned line warns, and still prints the block ---
+# --- a ledger ending on an assigned line prints the block ---
 ledger 'Task 1: complete (commits a..b, review clean)' \
        'Task 2: implementer impl-sonnet-low (assigned; base bbbbbbb; executor codex gpt-6.1-sol/low, thread pending)'
 run "$REPO" "$PLAN_REL"
@@ -105,7 +105,8 @@ lacks "thread pending: no warning names the pending thread" "$(cat "$TMP/stderr"
 ledger 'Task 1: complete (commits a..b, review clean)' \
        'Task 2: implementer dforge:impl-sonnet-high (assigned; base bbbbbbb)'
 run "$REPO" "$PLAN_REL"
-has "agent assigned: warns on stderr" "$(cat "$TMP/stderr")" "the ledger ends on an assigned line for Task 2"
+has "an older ledger's agent assigned line still prints the block" "$out" "**Next:** Resume at Task 2 (Second thing)."
+lacks "an older ledger's agent assigned line: no warning" "$(cat "$TMP/stderr")" "warning"
 ledger 'Task 1: complete (commits a..b, review clean)' \
        'Task 2: implementer inline (assigned; base bbbbbbb)'
 run "$REPO" "$PLAN_REL"
