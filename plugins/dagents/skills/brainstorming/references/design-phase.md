@@ -10,11 +10,15 @@
 
 **Choosing the execution strategy:**
 
-Ask nothing. Every plan executes inline, one task after another, so record
-`**Execution strategy:** sequential — inline execution` near the top of the
-spec, below its title. The plan inherits it. The `executionStrategy` setting is
-honoured only for a plan whose Execution line names `subagent` (deprecated),
-where dagents:writing-plans §Parallel waves decides the waves.
+Ask nothing here. Record the `executionStrategy` setting near the top of the
+spec, below its title: `**Execution strategy:** sequential — <why>` under
+`sequential`, the default, or `**Execution strategy:** parallel — <why>` under
+`parallel`. Under `ask`, record no line: dagents:writing-plans §Parallel waves
+asks the question. The plan inherits the line. Waves run only for a plan whose
+Execution line names `subagent`, the default mode, on Claude Code; an inline
+plan (`executionMode=inline`, or your human partner asks) or a Codex plan is
+sequential whatever the line says. dagents:writing-plans §Parallel waves
+groups a parallel plan's waves.
 
 **Presenting the design:**
 

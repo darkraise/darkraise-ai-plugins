@@ -93,13 +93,14 @@ the gate.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-**Why this mode.** Every plan runs inline: this session has read the code the
-plan changes, and a subagent per task would rebuild that context from nothing.
-You implement every task that carries no `**Executor:**` line, heavy tasks included.
+**Why this mode.** An `inline` line (`executionMode=inline`, or on request)
+runs here; the default is subagent mode. This session has read the code,
+which a subagent would rebuild. You implement every task that
+carries no `**Executor:**` line, heavy tasks included.
 The `**Execution:**` line's model and effort cover the hardest task you
 implement, at least high effort when a task has risk 3 or the plan offloads one.
-Subagent availability has nothing to do with it - the line decides, and only
-your human partner overrides it.
+The line decides, not subagent availability, and only your human partner
+overrides it.
 
 **Delegated tasks.** A delegated task is one carrying an `**Executor:**` line:
 it runs on its executor's wrapper, not in this session. Its brief's second line

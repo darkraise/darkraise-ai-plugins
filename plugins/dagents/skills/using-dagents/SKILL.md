@@ -28,7 +28,7 @@ If a skill might apply to what you are doing, invoke it before any response or a
 | An approach decision is open | dagents:selecting-approaches |
 | A spec is approved | dagents:writing-plans |
 | A plan predates the executor lane | dagents:revising-plans |
-| Executing a plan | dagents:executing-plans; dagents:subagent-driven-development only for a plan whose Execution line names subagent |
+| Executing a plan | dagents:subagent-driven-development; dagents:executing-plans when the Execution line names inline |
 | Writing code | dagents:test-driven-development |
 | Isolating work | dagents:using-git-worktrees |
 | Before claiming done | dagents:verification-before-completion |
@@ -56,7 +56,7 @@ Every dispatch names a seat: a `dagents:` agent or a typed built-in (`Explore`);
 
 ## Process Depth
 
-Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural> — <trigger | no trigger>`, and still get approval (under `autoRun=on`, the spec review). On Codex, `on` runs as `off`. Architectural: `Process: architectural, depth <d> — <triggers>`, `<d>` from `scripts/depth-route --spec-triggers`. Every plan executes inline: the session implements every task but those carrying an `**Executor:**` line, heavy tasks included.
+Take the lightest path that fits. Write a spec and a plan only when a trigger holds: a new project or subsystem; an interface that something outside its own files depends on changes; the files touched cannot be enumerated after exploring; a load-bearing approach question is open; irreducible risk (security, data loss, migration, concurrency); behaviour too intricate for a chat design; or your human partner asked for a spec. State the choice in one line before acting, `Process: <spike|bounded|architectural> — <trigger | no trigger>`, and still get approval (under `autoRun=on`, the spec review). On Codex, `on` runs as `off`. Architectural: `Process: architectural, depth <d> — <triggers>`, `<d>` from `scripts/depth-route --spec-triggers`. A plan executes in subagent mode, one implementer agent per task, unless `executionMode=inline` or your human partner asks for inline.
 
 With the darkmem MCP, prefer its `code_search` over Explore subagents.
 

@@ -129,17 +129,18 @@ A task carrying an `**Executor:**` line runs on that CLI instead of its
 the ledger, the two-round cap - is unchanged, because the contract the loop
 enforces is files and commits, not a particular runtime.
 
-**The fallback is the session.** Wherever this file says a task falls back -
-its gate is closed, its CLI is unusable, the per-plan breaker has tripped, a
-run or a fix round hands back - dagents:executing-plans implements the task
-itself under [delegated-task.md](delegated-task.md) §The session review loop,
-never closing it `unreviewed`, and its assigned line's agent slot reads
-`inline`. A task that falls back before any run joins that loop at its
-implement step after the plain `task-step start` the executor path already ran
-(never `--inline`, which refuses an executor task); a handback mid-loop joins
-it at the round it was in. Deprecated dagents:subagent-driven-development
-dispatches the task's `**Implementer:**` agent instead, with that agent in the
-slot.
+**The fallback is the plan's own mode.** Wherever this file says a task falls
+back - its gate is closed, its CLI is unusable, the per-plan breaker has
+tripped, a run or a fix round hands back - dagents:subagent-driven-development,
+the default mode, dispatches the task's `**Implementer:**` agent, with that
+agent in the assigned line's agent slot. On an inline plan
+dagents:executing-plans implements the task itself under
+[delegated-task.md](delegated-task.md) §The session review loop, never closing
+it `unreviewed`, and its assigned line's agent slot reads `inline`. A task
+that falls back there before any run joins that loop at its implement step
+after the plain `task-step start` the executor path already ran (never
+`--inline`, which refuses an executor task); a handback mid-loop joins it at
+the round it was in.
 
 **There is no driver subagent.** Run the wrapper yourself as a background Bash
 call. It prints one status line and writes everything else to files.

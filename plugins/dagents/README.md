@@ -7,8 +7,8 @@ dforge 5. Its state lives under `.dagents/`, `docs/dagents/` and
 
 A standalone fork of [superpowers](https://github.com/obra/superpowers) 6.3.0
 (MIT — see `LICENSES/`) for Claude Code and Codex, built around one idea: a
-strong model writes the plan, the session executes it literally, one task at a
-time, at the model and effort its hardest task needs, and every judgment call
+strong model writes the plan, implementer agents execute it literally, one task
+at a time, each at the model and effort its score names, and every judgment call
 goes to one strong ruling seat. Install `dagents@darkraise` from the repository-root
 marketplace, then disable the upstream `superpowers` plugin,
 `dcc-superpower-companions` and `andrej-karpathy-skills`: same-named skills in
@@ -22,8 +22,8 @@ Four findings from real transcripts drove the fork; the numbers are in
 - **Cost.** The main session was 92% of token spend, most of it re-reading a
   400–700k context. The plugin hands off at a budget printed by its own
   scripts (the compaction point minus one task's growth, 465k at a 650000
-  window), runs execution at the lowest model and effort that covers the
-  plan's hardest task, and reads the plan one task at a time instead of whole.
+  window), runs each task at the lowest model and effort that covers it,
+  and reads the plan one task at a time instead of whole.
 - **Small models executing literally.** Upstream advises picking a model per
   task but has no field for the choice, and the Agent tool could not pass
   reasoning effort before Claude Code 2.1.292 (it now can, but a fleet
@@ -156,26 +156,30 @@ send most decisions to inline, including bug fixes with a located root cause -
 where an advisor consulted before the root cause is known would launder
 guesses into a confident pick.
 
-**Every plan runs inline.** Under executing-plans the session that read the
-code implements every task, heavy ones (total 5 or more, or risk 3) included;
-an implementer subagent would rebuild that context from nothing. The one
-exception is every task carrying an `**Executor:**` line, which runs on that
-executor (Codex or Antigravity) with the full per-task review loop in
-`reference/delegated-task.md`. A risk-3 task the session implements gets a
-per-task judge review too, through that file's session review loop; the other
-tasks are covered by one whole-branch review at the end. `plan-lint` requires
-the Execution line's model and effort to cover the hardest task the session
-implements, and `--effort high` at risk 3 or once it delegates. A task that will
-not converge after three fix rounds goes to the ruling seat as a `breaker`
-item. subagent-driven-development, a dispatch and a scored review per task, is
-deprecated: it runs only for a plan whose Execution line names `subagent` or
-on your instruction, and `plan-lint` warns on that line.
+**Subagent mode by default.** A new plan's Execution line names `subagent`:
+subagent-driven-development dispatches each task to the implementer agent its
+`**Implementer:**` line names and gives it a judge-scored review, alone or in a
+group, and the session only coordinates, on `claude --model sonnet --effort
+high`. A task carrying an `**Executor:**` line runs on that executor (Codex or
+Antigravity) with the same per-task review loop in
+`reference/delegated-task.md`.
+
+**Inline on request.** With `executionMode=inline`, or when you ask for it,
+the plan's line names `inline` and executing-plans runs it: the session that
+read the code implements every task, heavy ones (total 5 or more, or risk 3)
+included, except the tasks carrying an `**Executor:**` line. A risk-3 task the
+session implements gets a per-task judge review through
+`reference/delegated-task.md`'s session review loop; the other tasks are
+covered by one whole-branch review at the end. `plan-lint` requires an inline line's model and effort to cover the
+hardest task the session implements, and `--effort high` at risk 3 or once it
+delegates. A task that will not converge after three fix rounds goes to the
+ruling seat as a `breaker` item.
 
 **Parallel waves, subagent plans only.** The `executionStrategy` setting
 defaults to `sequential`, and an inline plan always runs one task after
 another. `parallel` and `ask` take effect only for a plan whose Execution line
-names `subagent`. Brainstorming records `**Execution strategy:** sequential —
-inline execution` in the spec. A parallel
+names `subagent`. Brainstorming records the setting's value as the spec's
+`**Execution strategy:**` line, and under `ask` writing-plans asks. A parallel
 plan groups its tasks into waves, written `**Parallelism:** waves — 1 | 2-4 | 5`:
 contiguous task ranges whose tasks share no file and consume nothing from each
 other, with a `**Depends on:**` line on every task. Subagent mode runs a wave's
@@ -223,6 +227,8 @@ than it saves.
 an override on a second line, which is what makes a machine without Codex, a cold
 session, and an executor whose auth has lapsed all degrade by reading a line that
 is already there rather than re-deriving the assignment at dispatch. Under
+`dagents:subagent-driven-development`, the default, `**Implementer:**` is the
+agent each task is dispatched to. Under
 `dagents:executing-plans` both lines are read only for the tasks an
 inline plan delegates; for the tasks the session implements itself they are
 inert, so nothing falls back.
@@ -1032,7 +1038,7 @@ The same settings can be set with
 | Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DAGENTS_LENS_CAP` overrides it. |
 | Workflow | `lensMinorFrom` | `20` | The plan size, in tasks, from which the final review's lenses also report Minor findings. A smaller plan's lenses report Critical and Important findings only, so the fix wave does not triage a long Minor tail. `0` always asks for Minor findings. `DAGENTS_LENS_MINOR_FROM` overrides it. |
 | Workflow | `executionStrategy` | `sequential` | `sequential` runs one task at a time; `parallel` (independent tasks in waves) and `ask` take effect only with a subagent Execution line. |
-| Workflow | `executionMode` | `auto` | `auto` means inline; `inline` and `subagent` fix the plan's Execution line, and `subagent` (deprecated) is the only mode that runs waves. |
+| Workflow | `executionMode` | `auto` | `auto` means subagent, the default; `inline` and `subagent` fix the plan's Execution line. Only a subagent plan runs waves. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
 | Workflow | `autoRun` | `on` | `on` runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; `off` on Codex); `ask` offers that once the design is approved; `off` never runs one. See [Auto run](#auto-run). |
 | Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
@@ -1217,7 +1223,7 @@ since a 2.x client no longer sees the moved documents.
 ## What a plan looks like
 
 A plan opens with a header block: Goal, Spec, the `**Execution:**` line
-(inline on every new plan, with the session's model and effort), Global Constraints, Contracts (every name
+(subagent on every new plan unless you ask for inline, with the session's model and effort), Global Constraints, Contracts (every name
 one task produces and another consumes), Assumptions with evidence, and a Task
 index. `scripts/plan-lint` checks it, and a judge reviews it against
 `criteria/plan-review.md` before it is saved. That Execution line is binding: a
@@ -1298,15 +1304,16 @@ differences:
    `review-route --ruling` prints). Its plan corrections
    land in an append-only `amendments.md` through `scripts/plan-amend`; the
    plan file is never edited during execution.
-10. **Inline by default.** Upstream picks `executing-plans` when subagents are
-    unavailable and recommends subagent execution otherwise. Here every new
-    plan's `**Execution:**` line names inline: `executing-plans` is a full
-    inline mode that writes the same ledger, sends its judgment to the same
-    ruling seat, and ends at the same shared
-    [final-review.md](reference/final-review.md); only risk-3 and executor
-    tasks get a per-task review. A task it cannot land in three fix rounds
-    goes to the ruling seat as a `breaker` item. Subagent mode is deprecated
-    and runs only for an older plan's subagent line or on your instruction.
+10. **Subagent by default, inline on request.** Upstream picks
+    `executing-plans` when subagents are unavailable and recommends subagent
+    execution otherwise. Here every new plan's `**Execution:**` line names
+    subagent unless `executionMode=inline` or you ask for inline, whatever
+    tools the session has. `executing-plans` is a full inline mode that
+    writes the same ledger, sends its judgment to the same ruling seat, and
+    ends at the same shared [final-review.md](reference/final-review.md);
+    only risk-3 and executor tasks get a per-task review there. A task it
+    cannot land in three fix rounds goes to the ruling seat as a `breaker`
+    item.
 
 ## Licenses
 

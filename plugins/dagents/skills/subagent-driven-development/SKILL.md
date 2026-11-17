@@ -1,12 +1,13 @@
 ---
 name: subagent-driven-development
-description: Deprecated — use only when a plan's Execution line names subagent or your human partner asks for subagent mode
+description: Use when a plan's Execution line names subagent, dagents' default mode, or your human partner asks for subagent mode - dispatches an implementer agent and a judge review per task
 ---
 
 # Subagent-Driven Development
 
-> **Deprecated.** dagents:executing-plans replaces this skill: every new plan runs inline.
-> It stays runnable for plans whose Execution line names `subagent`; a later release deletes it.
+Subagent mode is dagents' default: a plan runs here unless its Execution line
+names `inline` (`executionMode=inline`, or your human partner asked), which
+dagents:executing-plans runs.
 
 ## After compaction
 
@@ -155,7 +156,7 @@ dagents:finishing-a-development-branch runs it instead.
 
 ## When to Use
 
-When a plan's `**Execution:**` line names `subagent`. Without a plan, use
+When a plan's `**Execution:**` line names `subagent`, the default. Without a plan, use
 dagents:brainstorming first; with a line that names `inline`, use
 dagents:executing-plans. What this mode adds over inline is a fresh
 implementer per task and a judge-scored review after each one.
