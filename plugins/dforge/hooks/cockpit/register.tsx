@@ -921,7 +921,8 @@ export const register: Register = on => {
         return { deny: denial.deny }
       }
     }
-    const line = (await live($)).guardAttribution ? await attributionLine($, tool, e) : undefined
+    const options = await live($)
+    const line = options.guardAttribution ? await attributionLine($, tool, e) : undefined
     if (line !== undefined) {
       const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line }
       await update($, refusals, list => [...list, refusal].slice(-20))
@@ -943,7 +944,7 @@ export const register: Register = on => {
       }
       // The response asking for this call already measured the window: show it while the tool
       // runs. Only shown: the note and the alert wait for the ledger this call may write.
-      if (e.agentId === undefined) await refresh($, (await live($)).tuning, S.compactWindow, { isShownOnly: true })
+      if (e.agentId === undefined) await refresh($, options.tuning, S.compactWindow, { isShownOnly: true })
     } catch {
       // The pane misses this call; the tool still runs.
     }
@@ -987,14 +988,16 @@ export const register: Register = on => {
       // before the budget, which measures a plan's tail by it. It is keyed on
       // modification times and returns early when nothing changed.
       if (isMove || tool === 'Bash' || touchesRun(e)) await readRun($)
+      // Read again after the call, which may have saved a setting.
+      const o = await live($)
       // What the call changed in the tree shows in the git card now, not at the
       // poll. Not awaited: a large repository's status would hold the result.
       const gitStamp = await $.clock.now()
-      if (GIT_TOOLS.includes(tool) && gitStamp - S.gitAt >= GIT_EVERY_MS && ((await live($)).isMinimized || (await isPaneUp($)))) {
+      if (GIT_TOOLS.includes(tool) && gitStamp - S.gitAt >= GIT_EVERY_MS && (o.isMinimized || (await isPaneUp($)))) {
         S.gitAt = gitStamp
         void refreshGit($).catch(() => undefined)
       }
-      await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
+      await onBudget($, await refresh($, o.tuning, S.compactWindow))
     }
 
     return ran

@@ -8638,6 +8638,21 @@ describe('update frequency', () => {
   })
 
   describe("a tool call's own reads", () => {
+    test('reads the options once before a main-loop call and once after it', async ($, on) => {
+      const clock = world(on, { ...SIGNED_IN })
+      signedIn(on)
+      let optionReads = 0
+      on('state.get', { plugin: 'dforge' } as never, ((_$: unknown, e: { key: string }, next: (e: unknown) => unknown) => {
+        if (e.key === 'settings') optionReads++
+        return next(e)
+      }) as never)
+      await $.session.start(START)
+      await clock.advance(2_000)
+      optionReads = 0
+      await $.tool.call({ tool: 'Edit', file_path: '/home/me/code/shop/a.ts' } as never)
+      expect(optionReads).toBe(2)
+    })
+
     test('reads the session directory only for a command that can change it', async ($, on) => {
       let cwdReads = 0
       world(on, { ...SIGNED_IN })
