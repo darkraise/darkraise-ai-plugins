@@ -622,3 +622,121 @@ test('A29: a change outside plugins/dagents, scripts, tests and the workflow sta
     assert.match(job, /if: needs\.dagents-changes\.outputs\.dagents == 'true'/);
   }
 });
+
+// A11 and A27: the three plugins' hooks under a conflict
+const hooksOf = name => json(`plugins/${name}/hooks/hooks.json`).hooks;
+const commandsOf = (name, event) => (hooksOf(name)[event] ?? []).flatMap(group => group.hooks.map(hook => hook.command));
+function hookWorld(t) {
+  const w = world(t);
+  const datas = Object.fromEntries(SIBLINGS.map(name => [name, join(w.dir, `data-${name}`)]));
+  for (const dir of Object.values(datas)) mkdirSync(dir, { recursive: true });
+  const fire = (name, event, payload = {}, extraEnv = {}) => run('bash', ['-c', commandsOf(name, event)[0]], {
+    cwd: w.project,
+    env: { ...w.env, CLAUDE_PLUGIN_ROOT: join(ROOT, 'plugins', name), CLAUDE_PLUGIN_DATA: datas[name], ...extraEnv },
+    input: JSON.stringify({ session_id: 'sess-A11-one', cwd: w.project, transcript_path: join(w.dir, 'transcript.jsonl'), hook_event_name: event, source: 'startup', stop_hook_active: false, prompt: 'hello', tool_name: 'Edit', tool_input: { file_path: join(w.project, 'a.txt') }, ...payload }),
+    timeout: 120000,
+  });
+  const files = dir => {
+    const out = {};
+    const visit = base => { for (const item of readdirSync(base, { withFileTypes: true })) {
+      const path = join(base, item.name);
+      if (item.name === '.git') continue;
+      if (item.isDirectory()) visit(path); else out[path] = readFileSync(path, 'utf8');
+    } };
+    visit(dir);
+    return out;
+  };
+  return { ...w, datas, fire, files };
+}
+const COMBOS = [['dforge', 'dagents'], ['dagents', 'dflow'], ['dforge', 'dflow'], ['dforge', 'dagents', 'dflow']];
+test('A11: each plugin\'s SessionStart names every active plugin with the local command first, then stays quiet', t => {
+  for (const active of COMBOS) {
+    const w = hookWorld(t);
+    w.install(w.user(...SIBLINGS));
+    const scopeFile = { dforge: w.user_settings(), dagents: join(w.project, '.claude/settings.json'), dflow: join(w.project, '.claude/settings.local.json') };
+    w.enable(w.user_settings(), { dforge: false, dagents: false, dflow: false });
+    for (const name of active) w.enable(scopeFile[name], { [name]: true });
+    const scopeOf = { dforge: 'user', dagents: 'project', dflow: 'local' };
+    for (const self of active) {
+      const result = w.fire(self, 'SessionStart');
+      assert.equal(result.status, 0, `${active} ${self}: ${result.stderr}`);
+      const out = JSON.parse(result.stdout);
+      for (const [label, text] of [['systemMessage', out.systemMessage], ['additionalContext', out.hookSpecificOutput?.additionalContext]]) {
+        assert.equal(typeof text, 'string', `${self} ${label}`);
+        for (const name of active) assert.ok(text.includes(`${name}@darkraise`), `${active} ${self} ${label} omits ${name}`);
+        for (const other of active.filter(name => name !== self)) {
+          const local = text.indexOf(`claude plugin disable ${other}@darkraise --scope local`);
+          assert.ok(local >= 0, `${self} ${label}: no --scope local command for ${other}`);
+          if (scopeOf[other] !== 'local') {
+            const enabling = text.indexOf(`claude plugin disable ${other}@darkraise --scope ${scopeOf[other]}`);
+            assert.ok(enabling > local, `${self} ${label}: ${other}'s ${scopeOf[other]} command must follow its local command`);
+          }
+        }
+      }
+      const marker = Object.keys(w.files(w.datas[self]));
+      assert.ok(marker.length > 0, `${self} wrote no marker`);
+      const before = { home: w.files(w.env.HOME), project: w.files(w.project), data: w.files(w.datas[self]) };
+      for (const event of Object.keys(hooksOf(self)).filter(event => event !== 'SessionStart')) {
+        for (const index of commandsOf(self, event).keys()) {
+          const hook = run('bash', ['-c', commandsOf(self, event)[index]], {
+            cwd: w.project,
+            env: { ...w.env, CLAUDE_PLUGIN_ROOT: join(ROOT, 'plugins', self), CLAUDE_PLUGIN_DATA: w.datas[self] },
+            input: JSON.stringify({ session_id: 'sess-A11-one', cwd: w.project, transcript_path: join(w.dir, 'transcript.jsonl'), hook_event_name: event, stop_hook_active: false, prompt: 'hello', tool_name: 'Edit', tool_input: { file_path: join(w.project, 'a.txt') }, agent_type: 'dagents:impl-sonnet-low', last_assistant_message: 'x' }),
+            timeout: 120000,
+          });
+          assert.deepEqual([hook.status, hook.stdout, hook.stderr], [0, '', ''], `${self} ${event} hook #${index} under a conflict`);
+        }
+      }
+      assert.deepEqual({ home: w.files(w.env.HOME), project: w.files(w.project), data: w.files(w.datas[self]) }, before, `${self}: a later hook wrote something`);
+    }
+  }
+});
+test('A27: a no-conflict SessionStart deletes its session\'s marker, and a fork start runs the guard', t => {
+  const w = hookWorld(t);
+  w.install(w.user(...SIBLINGS));
+  w.enable(w.user_settings(), { dforge: true, dagents: true, dflow: true });
+  const mine = dir => Object.keys(w.files(dir)).filter(file => file.includes('sess-A27-marker'));
+  for (const self of SIBLINGS) {
+    for (const source of ['startup', 'resume', 'clear', 'compact', 'fork']) {
+      const hit = w.fire(self, 'SessionStart', { session_id: 'sess-A27-marker', source });
+      assert.equal(hit.status, 0, `${self} ${source}: ${hit.stderr}`);
+      assert.match(JSON.parse(hit.stdout).systemMessage, /--scope local/, `${self} ${source} runs the guard`);
+      assert.equal(mine(w.datas[self]).length, 1, `${self} ${source}: one marker`);
+      const other = w.fire(self, 'SessionStart', { session_id: 'sess-A27-other', source });
+      assert.equal(other.status, 0);
+      w.enable(w.user_settings(), { dforge: false, dagents: false, dflow: false });
+      const clear = w.fire(self, 'SessionStart', { session_id: 'sess-A27-marker', source });
+      assert.equal(clear.status, 0, `${self} ${source}: ${clear.stderr}`);
+      assert.doesNotMatch(clear.stdout, /scope local/, `${self} ${source}: no conflict`);
+      assert.deepEqual(mine(w.datas[self]), [], `${self} ${source}: the marker survives a conflict-free start`);
+      assert.equal(Object.keys(w.files(w.datas[self])).filter(file => file.includes('sess-A27-other')).length, 1, `${self} ${source}: another session's marker is kept`);
+      w.enable(w.user_settings(), { dforge: true, dagents: true, dflow: true });
+      for (const file of Object.keys(w.files(w.datas[self]))) rmSync(file, { force: true });
+    }
+  }
+  const matchers = SIBLINGS.map(name => hooksOf(name).SessionStart[0].matcher);
+  for (const matcher of matchers) assert.equal(matcher, 'startup|resume|clear|compact|fork');
+});
+test('A11: control, a conflict-free turn-start hook does write its stamp', t => {
+  const w = hookWorld(t);
+  w.install(w.user(...SIBLINGS));
+  w.enable(w.user_settings(), { dforge: true, dagents: false, dflow: false });
+  for (const self of ['dforge', 'dagents']) {
+    const before = Object.keys(w.files(w.env.HOME)).length;
+    const hook = run('bash', ['-c', commandsOf(self, 'UserPromptSubmit')[0]], {
+      cwd: w.project, env: { ...w.env, CLAUDE_PLUGIN_ROOT: join(ROOT, 'plugins', self), CLAUDE_PLUGIN_DATA: w.datas[self] },
+      input: JSON.stringify({ session_id: 'sess-A11-ctl', cwd: w.project, hook_event_name: 'UserPromptSubmit', prompt: 'hi' }),
+    });
+    assert.equal(hook.status, 0, hook.stderr);
+    if (self === 'dforge') assert.ok(Object.keys(w.files(w.env.HOME)).length >= before, 'dforge stays on');
+    else {
+      w.enable(w.user_settings(), { dforge: false, dagents: true, dflow: false });
+      const hook2 = run('bash', ['-c', commandsOf(self, 'UserPromptSubmit')[0]], {
+        cwd: w.project, env: { ...w.env, CLAUDE_PLUGIN_ROOT: join(ROOT, 'plugins', self), CLAUDE_PLUGIN_DATA: w.datas[self] },
+        input: JSON.stringify({ session_id: 'sess-A11-ctl', cwd: w.project, hook_event_name: 'UserPromptSubmit', prompt: 'hi' }),
+      });
+      assert.equal(hook2.status, 0, hook2.stderr);
+      assert.ok(Object.keys(w.files(w.env.HOME)).length > before, 'a plugin that is the only one active writes its turn stamp');
+    }
+  }
+});

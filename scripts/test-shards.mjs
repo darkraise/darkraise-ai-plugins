@@ -129,6 +129,7 @@ export const windowsSeconds = {
   'plugins/dagents/tests/dagents-config.test.sh': 34,
   'plugins/dagents/tests/dagents-dir.test.sh': 10,
   'plugins/dagents/tests/dagents-migrate.test.sh': 64,
+  'plugins/dagents/tests/dagents-split.acceptance.test.sh': 90,
   'plugins/dagents/tests/dagents-state.test.sh': 10,
   'plugins/dagents/tests/executor-recovery.test.sh': 10,
   'plugins/dagents/tests/executor-session.test.sh': 10,
