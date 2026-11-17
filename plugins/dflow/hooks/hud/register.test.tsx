@@ -2,6 +2,7 @@ import type { CommandRunInput } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { accountColor } from './account.mjs'
+import { guardLine } from './band.mjs'
 import { cellWidth } from './meter.mjs'
 
 // The person typing the command at a wide fullscreen terminal.
@@ -89,6 +90,8 @@ type World = {
   sessionId?: string
   remoteControl?: string
   compactFailures?: number
+  processRuns?: string[]
+  guardOut?: { exitCode: number; stdout: string }
   calls: string[]
   stored: Record<string, unknown>
   clock?: { advance: (ms: number) => Promise<void> }
@@ -105,6 +108,8 @@ function world(on: any, given: Partial<World> & { files: Record<string, string> 
   on('process.run', (_: unknown, e: any) => {
     const argv = e.argv.join(' ')
     w.calls.push(argv)
+    w.processRuns?.push(argv)
+    if (w.guardOut !== undefined && (e.argv[1] ?? '').endsWith('/scripts/workflow-guard.mjs')) return { value: { ...w.guardOut, stderr: '' } }
     if (argv.includes('rev-parse')) return { value: { exitCode: 0, stdout: '/repo\n', stderr: '' } }
     if (argv.includes('status')) return { value: { exitCode: w.porcelain === undefined ? 1 : 0, stdout: w.porcelain ?? '', stderr: '' } }
     if (argv.includes('get-url')) return { value: { exitCode: w.remoteUrl ? 0 : 2, stdout: `${w.remoteUrl ?? ''}\n`, stderr: '' } }
@@ -850,4 +855,39 @@ test('drawing the band and the pane makes no file, process or usage call', async
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await band.unmount()
   expect(w.calls.slice(before)).toEqual([])
+})
+
+const CONFLICT = { exitCode: 3, stdout: 'dflow@darkraise self\ndforge@darkraise user\n' }
+const GUARD = /^node (.+)\/scripts\/workflow-guard\.mjs --host claude --self dflow$/
+
+test('under a conflict the HUD draws the guard line alone and runs nothing else', async ($, on) => {
+  const runs: string[] = []
+  const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, porcelain: '# branch.head feat/x\n', guardOut: CONFLICT, processRuns: runs, stored: { mode: 'pane' } })
+  await $.session.start(START)
+  await $.turn.complete({ ...TURN, turnId: 't1' })
+  const root = GUARD.exec(runs[0] ?? '')?.[1]
+  expect(root).toBeDefined()
+  const line = guardLine(CONFLICT, root!)
+  expect((await $.command.run(run('dflow:hud'))).text).toBe(line)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await band.findAll({ type: 'Text' })).map((one: any) => one.text)).toEqual([line])
+  await band.unmount()
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await pane.findAll({ type: 'Text' })).map((one: any) => one.text)).toEqual([line])
+  await pane.unmount()
+  await w.clock!.advance(130_000)
+  expect(runs.filter(one => !GUARD.test(one))).toEqual([])
+  expect(w.calls).not.toContain('open dflow-hud')
+})
+
+test('with no conflict the HUD draws as before', async ($, on) => {
+  const runs: string[] = []
+  world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) }, porcelain: '# branch.head feat/x\n', guardOut: { exitCode: 0, stdout: 'dflow@darkraise self\n' }, processRuns: runs })
+  await $.session.start(START)
+  await $.turn.complete({ ...TURN, turnId: 't1' })
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ key: 'band-expand' })).toBeDefined()
+  expect((await band.find({ key: 'band-line-0' }))?.text).toContain('dflow 4/7 · Task 5')
+  expect(runs.filter(one => GUARD.test(one))).toHaveLength(1)
+  expect(runs.filter(one => !GUARD.test(one)).length).toBeGreaterThan(0)
 })

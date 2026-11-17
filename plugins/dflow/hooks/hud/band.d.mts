@@ -17,3 +17,4 @@ export function bandLines(input: BandInput, tier: number): [Run[], Run[]]
 export function fitBand(input: BandInput, width: number): [Run[], Run[]]
 export function bandTop(input: { account: HudAccount | null; remote: HudRemote | null }): Run[]
 export function bandWarning(hud: Hud): Run[]
+export function guardLine(result: { exitCode: number | null; stdout: string } | null, root: string): string | null

@@ -103,7 +103,8 @@ const jobs = options.plugin === 'dagents' ? [
   ...tscJobs('dagents'),
 ] : [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],
-  [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs')).map(name => `tests/${name}`)], 120],
+  [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs') && name !== 'guard-isolation.test.mjs').map(name => `tests/${name}`)], 120],
+  [process.execPath, ['--test', 'tests/guard-isolation.test.mjs'], 1200],
   [bash, ['plugins/dr-status/tests/run-all.sh'], 420],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'plugins/dflow/tests')).filter(name => name.endsWith('.test.mjs')).map(name => `plugins/dflow/tests/${name}`)], 300],
   ...shellJobs('dforge'),

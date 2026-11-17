@@ -1,4 +1,7 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { nextTask, taskStates } from '../plan.mjs';
 import { loadState, planState, updateState } from '../state.mjs';
 import { activePlan, briefLines, buildModel, refreshHud, taskBrief } from '../status.mjs';
@@ -72,11 +75,36 @@ async function stop(ctx, event) {
   refreshHud(ctx);
 }
 
+// Resolved from this module, never from CLAUDE_PLUGIN_ROOT, so the guard that
+// runs is the one shipped beside this file.
+const GUARD = fileURLToPath(new URL('../../scripts/workflow-guard.mjs', import.meta.url));
+
+// On a conflict the guard's JSON is the session start's whole output.
+function guardConflict(ctx, event, out) {
+  const ran = spawnSync(process.execPath, [GUARD, '--host', 'claude', '--self', 'dflow', '--hook', 'session-start'], {
+    input: JSON.stringify(event),
+    env: ctx.env,
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  if (ran.status !== 3) return false;
+  out(ran.stdout.trimEnd());
+  return true;
+}
+
+function standsDown(ctx, event) {
+  const data = ctx.env.CLAUDE_PLUGIN_DATA;
+  const session = typeof event.session_id === 'string' ? event.session_id : '';
+  return Boolean(data && session) && fs.existsSync(path.join(data, 'workflow-guard', session.replace(/[^A-Za-z0-9]/g, '-')));
+}
+
 // A hook must never break the session: every failure ends in exit 0.
 export async function run(ctx, argv, { out }) {
   try {
-    if (!fs.existsSync(ctx.paths.docs)) return 0;
     const event = input();
+    if (argv[0] === 'session-start' && guardConflict(ctx, event, out)) return 0;
+    if (argv[0] !== 'session-start' && standsDown(ctx, event)) return 0;
+    if (!fs.existsSync(ctx.paths.docs)) return 0;
     if (argv[0] === 'session-start') await sessionStart(ctx, event, out);
     else if (argv[0] === 'pre-compact') preCompact(ctx, event, out);
     else if (argv[0] === 'stop') await stop(ctx, event);

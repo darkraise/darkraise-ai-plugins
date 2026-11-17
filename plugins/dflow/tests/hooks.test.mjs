@@ -61,3 +61,24 @@ test('no hook writes into a repository that does not use dflow', t => {
   dflow(root, ['status']);
   assert.ok(!fs.existsSync(path.join(root, '.dflow')));
 });
+
+test('a conflicted session start returns the guard block and the other hooks stay silent', t => {
+  const root = makeProject(t);
+  const claude = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-'));
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'data-'));
+  t.after(() => { fs.rmSync(claude, { recursive: true, force: true }); fs.rmSync(data, { recursive: true, force: true }); });
+  fs.mkdirSync(path.join(claude, 'plugins'));
+  fs.writeFileSync(path.join(claude, 'plugins/installed_plugins.json'), JSON.stringify({ version: 2, plugins: { 'dforge@darkraise': [{ scope: 'user', installPath: '/x', version: '5' }] } }));
+  fs.writeFileSync(path.join(claude, 'settings.json'), JSON.stringify({ enabledPlugins: { 'dforge@darkraise': true } }));
+  const env = { WORKFLOW_GUARD_CLAUDE_DIR: claude, WORKFLOW_GUARD_MANAGED_DIR: claude, WORKFLOW_GUARD_PROJECT_DIR: root, CLAUDE_PLUGIN_DATA: data };
+  const started = dflow(root, ['hook', 'session-start'], { input: event({ source: 'startup' }), env });
+  assert.equal(started.status, 0);
+  const out = JSON.parse(started.stdout);
+  assert.match(out.systemMessage, /dforge@darkraise/);
+  assert.match(out.hookSpecificOutput.additionalContext, /claude plugin disable dforge@darkraise --scope local/);
+  const stopped = dflow(root, ['hook', 'stop'], { input: event({}), env });
+  assert.deepEqual([stopped.status, stopped.stdout, stopped.stderr], [0, '', '']);
+  const compact = dflow(root, ['hook', 'pre-compact'], { input: event({}), env });
+  assert.deepEqual([compact.status, compact.stdout], [0, '']);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(PLUGIN, 'hooks/hooks.json'), 'utf8')).hooks.SessionStart[0].matcher, 'startup|resume|clear|compact|fork');
+});

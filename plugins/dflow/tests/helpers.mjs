@@ -7,6 +7,12 @@ import { fileURLToPath } from 'node:url';
 export const BIN = fileURLToPath(new URL('../bin/dflow', import.meta.url));
 export const PLUGIN = fileURLToPath(new URL('../', import.meta.url));
 
+// The session-start hook runs the workflow guard, which must not read the
+// host's plugin settings: a caller that wants it to sets these itself.
+const GUARD_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'dflow-guard-'));
+process.on('exit', () => fs.rmSync(GUARD_DIR, { recursive: true, force: true }));
+const GUARD_ENV = { WORKFLOW_GUARD_CLAUDE_DIR: GUARD_DIR, WORKFLOW_GUARD_MANAGED_DIR: GUARD_DIR, WORKFLOW_GUARD_PROJECT_DIR: GUARD_DIR };
+
 export function sh(cwd, command, args, options = {}) {
   const result = spawnSync(command, args, { cwd, encoding: 'utf8', timeout: 60000, ...options });
   return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
@@ -48,7 +54,7 @@ export function dflow(root, args, { env = {}, input, cwd = '.' } = {}) {
   const home = path.join(root, '.test-home');
   return sh(path.join(root, cwd), process.execPath, [BIN, ...args], {
     input,
-    env: { ...process.env, HOME: home, DFLOW_HOME: path.join(home, '.dflow'), DFLOW_TODAY: '2026-11-12', CLAUDE_CONFIG_DIR: '', CLAUDE_CODE_SESSION_ID: '', ...env },
+    env: { ...process.env, HOME: home, DFLOW_HOME: path.join(home, '.dflow'), DFLOW_TODAY: '2026-11-12', CLAUDE_CONFIG_DIR: '', CLAUDE_CODE_SESSION_ID: '', ...GUARD_ENV, ...env },
   });
 }
 
@@ -113,7 +119,7 @@ export function dflowAsync(root, args, { env = {} } = {}) {
   return new Promise(resolve => {
     const child = spawn(process.execPath, [BIN, ...args], {
       cwd: root,
-      env: { ...process.env, HOME: home, DFLOW_HOME: path.join(home, '.dflow'), DFLOW_TODAY: '2026-11-12', CLAUDE_CONFIG_DIR: '', CLAUDE_CODE_SESSION_ID: '', ...env },
+      env: { ...process.env, HOME: home, DFLOW_HOME: path.join(home, '.dflow'), DFLOW_TODAY: '2026-11-12', CLAUDE_CONFIG_DIR: '', CLAUDE_CODE_SESSION_ID: '', ...GUARD_ENV, ...env },
     });
     let stdout = '';
     let stderr = '';

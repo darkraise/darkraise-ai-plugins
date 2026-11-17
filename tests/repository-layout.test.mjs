@@ -266,3 +266,14 @@ test('dagents spells dforge only where it must, and names only its 1.x version',
   assert.ok(errors.includes('plugins/dagents/reference/stray.md:2: dagents version other than 1.x'), errors.join('\n'));
   assert.ok(!errors.some(e => e.startsWith('plugins/dagents/reference/stray.md:3')), errors.join('\n'));
 });
+
+test('the three workflow-guard copies are byte-identical', async t => {
+  const { validateRepository } = await import('../scripts/validate-repository.mjs');
+  const copies = ['dforge', 'dagents', 'dflow'].map(p => readFileSync(resolve(root, `plugins/${p}/scripts/workflow-guard.mjs`), 'utf8'));
+  assert.ok(copies.every(c => c === copies[0]));
+  const dir = mkdtempSync(resolve(tmpdir(), 'guard-copy-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
+  writeFileSync(resolve(dir, 'plugins/dflow/scripts/workflow-guard.mjs'), copies[0] + '\n// drift\n');
+  assert.ok(validateRepository(dir).includes('plugins/dflow/scripts/workflow-guard.mjs: differs from plugins/dforge/scripts/workflow-guard.mjs'));
+});

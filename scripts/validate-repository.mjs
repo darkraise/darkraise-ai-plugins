@@ -107,6 +107,14 @@ export function validateRepository(root, { names = maintained } = {}) {
   for (const name of claudeOnly) {
     if (existsSync(resolve(root, `plugins/${name}/.codex-plugin/plugin.json`))) errors.push(`${name}: Claude-only plugin has a Codex manifest`);
   }
+  const guardBase = 'plugins/dforge/scripts/workflow-guard.mjs';
+  const guard = existsSync(resolve(root, guardBase)) ? readFileSync(resolve(root, guardBase)) : null;
+  if (guard === null) errors.push(`${guardBase}: missing`);
+  for (const name of ['dagents', 'dflow']) {
+    const rel = `plugins/${name}/scripts/workflow-guard.mjs`;
+    const copy = existsSync(resolve(root, rel)) ? readFileSync(resolve(root, rel)) : null;
+    if (guard !== null && (copy === null || !copy.equals(guard))) errors.push(`${rel}: differs from ${guardBase}`);
+  }
   for (const name of names) {
     const skillRoot = resolve(root, 'plugins', name, 'skills');
     if (!existsSync(skillRoot)) continue;

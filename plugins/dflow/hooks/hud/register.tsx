@@ -30,7 +30,7 @@ import {
   usageCard,
   workersCard,
 } from './view.mjs'
-import { bandTop, bandWarning, fitBand } from './band.mjs'
+import { bandTop, bandWarning, fitBand, guardLine } from './band.mjs'
 import { cellWidth, isAtLeast, runsCut, runsWidth } from './meter.mjs'
 
 type Run = { text: string; color?: string; bold?: boolean; dim?: boolean; underline?: boolean }
@@ -714,8 +714,33 @@ async function setMode($: any, mode: Mode): Promise<void> {
   $.ui.invalidate('ui.render')
 }
 
+// The check holds for the process: a /clear or /resume fires no
+// session.start, and enabling a plugin takes a new session anyway. The engine
+// gives register no $, so every hook awaits the check at its top instead.
+let guardCheck: Promise<string | null> | null = null
+
+function guardNow($: any): Promise<string | null> {
+  guardCheck ??= $.process
+    .run(['node', `${$.plugin.root}/scripts/workflow-guard.mjs`, '--host', 'claude', '--self', 'dflow'], { timeoutMs: 5_000 })
+    .then(
+      (ran: { exitCode: number | null; stdout: string }) => guardLine(ran, $.plugin.root),
+      () => guardLine(null, $.plugin.root),
+    )
+  return guardCheck!
+}
+
+async function standsDown($: any): Promise<boolean> {
+  return (await guardNow($)) !== null
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    if (await standsDown($)) {
+      timer?.cancel()
+      timer = null
+      return next(e)
+    }
+
     const started = await next(e)
     startCwd = e.cwd ?? ''
     sessionId = ''
@@ -742,6 +767,7 @@ export const register: Register = on => {
   })
 
   on('turn.complete', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const completed = await next(e)
 
     // A subagent's turn ends here too; only the main loop's end is a boundary.
@@ -756,6 +782,7 @@ export const register: Register = on => {
 
   // The model and effort the main loop's requests go out with.
   on('turn.step', async function* ($, e, next) {
+    if (await standsDown($)) return yield* next(e)
     if (e.agentId === undefined) {
       const effort = typeof e.effort === 'string' ? e.effort : null
       const before = await read($, engineAtom)
@@ -770,6 +797,7 @@ export const register: Register = on => {
 
   // Remote Control clients joining and leaving; the terminal raises neither.
   on('session.attach', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const joined = await next(e)
     await update($, remoteAtom, now => ({
       ...now,
@@ -780,6 +808,7 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('session.detach', async ($, e, next) => {
+    if (await standsDown($)) return next(e)
     const left = await next(e)
     await update($, remoteAtom, now => ({ ...now, clients: now.clients.filter(one => one.id !== e.clientId) }))
 
@@ -790,6 +819,8 @@ export const register: Register = on => {
   // cannot hold a colon. Answering it here spends no model turn; if this hook
   // fails, the skill runs and prints the status as text.
   on('command.run', { command: COMMAND }, async ($, e) => {
+    const conflict = await guardNow($)
+    if (conflict !== null) return { text: conflict }
     const args = (e.args ?? '').trim()
     const current = await read($, modeAtom)
 
@@ -836,6 +867,7 @@ export const register: Register = on => {
 
   // A build started by hand takes up the work the offer was for.
   on('command.run', { command: 'dflow:build' }, async ($, e, next) => {
+    if (await standsDown($)) return next({ ...e, args: e.args ?? '' })
     try {
       if ((await read($, offerAtom)) !== null) {
         await clearOffer($)
@@ -849,9 +881,17 @@ export const register: Register = on => {
 
   // The prompt holds the keyboard, so Expand, Resume and Dismiss take no hotkey.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey) return next(e)
+    const conflict = await guardNow($)
+
+    if (conflict !== null) {
+      const { Text } = $.ui.resolve(e)
+      return <Text color="yellow">{conflict}</Text>
+    }
+
     const hud = await read($, hudAtom)
 
-    if (e.props.hasSurvey || hud === null || (await read($, modeAtom)) !== 'band') {
+    if (hud === null || (await read($, modeAtom)) !== 'band') {
       return next(e)
     }
 
@@ -945,6 +985,13 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const conflict = await guardNow($)
+
+    if (conflict !== null) {
+      const { Text } = $.ui.resolve(e)
+      return <Text color="yellow">{conflict}</Text>
+    }
+
     const columns = e.props.bodyColumns
     const table = { ...$.ui.resolve(e), columns }
     const { Box, Text } = table

@@ -140,3 +140,9 @@ export function bandWarning(hud) {
   else if (sync?.enabled && (sync.refused || (sync.error && !sync.offline))) parts.push('✗ darkmem refused');
   return parts.flatMap((part, index) => [...(index ? [{ text: ' · ', dim: true }] : []), { text: part, color: 'red' }]);
 }
+
+export function guardLine(result, root) {
+  if (result === null || result.exitCode !== 3) return null;
+  const ids = result.stdout.split('\n').map(line => line.trim().split(/\s+/)[0] ?? '').filter(id => id !== '');
+  return `${ids.join(', ')} are enabled together; run node ${root}/scripts/workflow-guard.mjs --host claude`;
+}

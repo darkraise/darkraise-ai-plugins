@@ -12,7 +12,7 @@ import { usageCard } from '../hooks/hud/view.mjs';
 import { repoFromPorcelain, repoName, shortDir } from '../hooks/hud/repo.mjs';
 import { repoCard } from '../hooks/hud/view.mjs';
 import { denseLines } from '../hooks/hud/view.mjs';
-import { BAND_TIERS, bandLines, bandTop, bandWarning, fitBand } from '../hooks/hud/band.mjs';
+import { BAND_TIERS, bandLines, bandTop, bandWarning, fitBand, guardLine } from '../hooks/hud/band.mjs';
 import { sectionsArg, sectionsFrom, sectionsMoved, sectionsToggled } from '../hooks/hud/view.mjs';
 import { isOfferOver, resumeOffer } from '../hooks/hud/view.mjs';
 import { withoutControls } from '../hooks/hud/view.mjs';
@@ -404,4 +404,11 @@ test('an approved, unfinished plan with a current task is offered for resuming',
 test('control characters are stripped from every hud.json text', () => {
   const read = withoutControls({ next: 'go\u001b[31mred\u0007', plan: { title: 'a\u009bb', tasks: [{ title: 'x\ny\u007f', number: 1 }] }, done: 3, gates: null, ok: true });
   assert.deepEqual(read, { next: 'go[31mred', plan: { title: 'ab', tasks: [{ title: 'xy', number: 1 }] }, done: 3, gates: null, ok: true });
+});
+
+test('the HUD guard line names the active plugins and the check, only on a conflict', () => {
+  assert.equal(guardLine({ exitCode: 3, stdout: 'dflow@darkraise self\ndforge@darkraise user\n' }, '/p'),
+    'dflow@darkraise, dforge@darkraise are enabled together; run node /p/scripts/workflow-guard.mjs --host claude');
+  assert.equal(guardLine({ exitCode: 0, stdout: '' }, '/p'), null);
+  assert.equal(guardLine(null, '/p'), null);
 });
