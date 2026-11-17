@@ -34,7 +34,7 @@ a ledger file, not only in todos.
   — is another plan's progress: leave it in place and start your own, fresh.
 - Create the ledger with its identity as the first line:
   `# SDD ledger — plan: <plan name>` — `bash <plugin-root>/scripts/dagents-path name PLAN_FILE`,
-  so the ledger names the plan in either store.
+  so the ledger names the plan by its repository-relative name.
 - When a register covers this plan's spec, mark the rows this plan carries as
   in flight once, at the start of the run, skipping any row already at `verify`
   or `done`: `scripts/register set <register> <id> doing`. The register is read by

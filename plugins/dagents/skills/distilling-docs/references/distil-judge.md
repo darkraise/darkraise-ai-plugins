@@ -8,14 +8,10 @@ instruction set: the judge has no other context.
 
 - `[SOURCES]` — the wave's source file paths, one per line.
 - `[DISTILLED]` — the four `<docs>/distilled/*.md` paths.
-- `[COMMIT]` — the SHA of the commit that added this wave's distilled entries;
-  with documents in darkmem, one `<name>@r<id>` line per distilled file, as
-  `darkmem-sync revision` printed it after the push.
+- `[COMMIT]` — the SHA of the commit that added this wave's distilled entries.
 - `[REWRITES]` — for each pre-existing entry this wave edited, its diff and a
-  `git show` extract of every source named in its `Source:` lines (with
-  documents in darkmem, the text of each source restored with `darkmem-sync restore`,
-  as distilling-docs §Documents in darkmem says). `none` when the wave added
-  entries only.
+  `git show` extract of every source named in its `Source:` lines. `none`
+  when the wave added entries only.
 - `[REPORT_FILE]` — `<state>/distil-<wave>-report.md`, `<wave>` the wave's
   number.
 
@@ -39,7 +35,7 @@ Distilled files as they now stand, at [COMMIT]:
 Pre-existing distilled entries this wave rewrote:
 [REWRITES]
 
-The files are unedited since [COMMIT] (a commit, or one revision per file). Read
+The files are unedited since [COMMIT]. Read
 them where they stand.
 Name [COMMIT] in your report so a later reader can tell what you judged.
 

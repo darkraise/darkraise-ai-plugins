@@ -15,8 +15,7 @@ back. Before anything else:
    no ledger names this plan, no task has started: skip the rest of this
    section and follow Setup from its first step.
 1. Run `scripts/sdd-workspace PLAN_FILE` (see using-dagents §Session Budget),
-   and read `progress.md` and `handoff.md` in `<ledger dir>`, not in the
-   directory it prints: while progress lives in darkmem the two differ.
+   and read `progress.md` and `handoff.md` in `<ledger dir>`.
 2. Trust the ledger and `git log` over the summary. For each task the last
    ledger line decides; see the Recovery table in [recovery.md](references/recovery.md).
 3. When every task has its `complete` line, run `scripts/context-size --final`
@@ -191,9 +190,8 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   `Review depth: <light|standard|full> (<reason>)` is written once, before
   step 0 of the final review, and is read on recovery, never recomputed; it is
   not a `Final review:` line, which recovery keys on.
-- After each `complete` and `fix round` line, run `scripts/darkmem-sync push`;
-  at `complete`, also promote the task's durable facts
-  ([project-state.md](../../reference/project-state.md) §darkmem sync points).
+- At each `complete` line, record the task's durable facts
+  ([project-state.md](../../reference/project-state.md) §Durable facts).
 - `implementer inline` is this mode's assigned line. You are the implementer,
   so the agent slot says so, and `base` is `git rev-parse --short HEAD` taken
   before you change anything.

@@ -60,9 +60,8 @@ Plan: executor <id> off - unreliable (<k> handbacks)
   `Review depth: <light|standard|full> (<reason>)` is written once, before
   step 0 of the final review, and is read on recovery, never recomputed; it is
   not a `Final review:` line, which recovery keys on.
-- After each `complete` and `fix round` line, run `scripts/darkmem-sync push`;
-  at `complete`, also promote the task's durable facts
-  ([project-state.md](../../../reference/project-state.md) §darkmem sync points).
+- At each `complete` line, record the task's durable facts
+  ([project-state.md](../../../reference/project-state.md) §Durable facts).
 - Every task gets its own assigned line and its own complete line, including
   tasks reviewed as a batch or in a group review. Batches are contiguous task
   ranges named `Group <a>-<b>`; only a batch's review rounds log on its Group

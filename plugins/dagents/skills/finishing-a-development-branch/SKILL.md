@@ -285,7 +285,7 @@ never add a second line for it.
 | Path | When | Which form |
 |---|---|---|
 | Option 1, merge locally | On the base branch, as its own commit, after Step 5's merged-result verification passes | the `merged into` form |
-| Option 2, push and PR | On the branch, before the push; darkmem documents: after the PR exists (execute-choice.md) | the `via PR` form |
+| Option 2, push and PR | On the branch, before the push | the `via PR` form |
 | Option 3, keep as-is | Never | — |
 | Confirmed discard | Never | — |
 
@@ -304,8 +304,7 @@ with this first line; do not backfill plans whose outcome you cannot verify.
 The date is the date the plan landed, which is today's date when you write the
 line — not the plan file's own date. Commit an Option 1 index line as
 `docs(plans): complete <slug>`, which fits the 50-character subject limit where
-a full basename would not. While documents live in darkmem, `completed.md` is
-in the mirror: push it instead of committing it (see project-state.md).
+a full basename would not.
 
 **Carry open findings with it.** The ledger is the only record of what the run
 left open, and Step 6 deletes it.

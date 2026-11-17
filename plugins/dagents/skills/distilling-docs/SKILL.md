@@ -155,39 +155,6 @@ source named in its `Source:` lines in the dispatch, so the judge rules on the
 rewrite too. Without that, a fact can be rewritten out of the corpus with no seat
 having checked it.
 
-## Documents in darkmem
-
-While `bash <plugin-root>/scripts/dagents-path store` prints `documents darkmem`,
-`<docs>` is the darkmem mirror, which git does not track. Five rules above
-change; everything else stands.
-
-- **Eligible** replaces tracked and clean: `bash <plugin-root>/scripts/darkmem-sync revision <name>`
-  exits 0, which it does only for a file synced and unchanged since the last
-  push. `<name>` is the file's name (`dagents-path name <path>`). Unreferenced is
-  checked as above, over the checkout's tracked files, the mirror's documents
-  outside those two directories, and `<latest.md>`.
-- **`Source:`** cites `<name>@r<id>`, the line `revision` printed, captured
-  before deletion; darkmem keeps that revision.
-- **The two commits become two pushes.** Write the entries and run
-  `darkmem-sync push`; give the judge each distilled file's `revision` line
-  where it expects the SHA, and hold the mirror unedited until the verdicts
-  return. Then delete exactly the `CARRIED` sources from the mirror and push
-  again: push moves each deleted document to `dagents/archive/<stamp>/`
-  on darkmem. Never add entries and delete sources in one push.
-- **Recovery** is `bash <plugin-root>/scripts/darkmem-sync restore <name>`,
-  which moves the newest archived copy back and pulls it, in place of
-  `git revert`.
-- **Rewrites** of an earlier wave's entries need the exact text of each
-  source their `Source:` lines cite, where local mode uses `git show`.
-  `darkmem-sync restore <name>` brings the newest archived copy back into the
-  mirror, which is not necessarily the cited revision. Run
-  `darkmem-sync revision <name>` on the restored file: quote the copy in the
-  judge's `[REWRITES]` only when the `@r<id>` it prints equals the cited one.
-  When it differs, undo the restore: delete the restored file from the mirror
-  and run `darkmem-sync push`, which moves it back to the archive. Then stop
-  and tell your human partner that the cited text is not recoverable by name.
-  When it matches, delete the restored copy again in this wave's removal push.
-
 ## An external memory store
 
 These files are repo-scoped, committed, and readable with no MCP server present:

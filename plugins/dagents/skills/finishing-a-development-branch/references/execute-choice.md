@@ -69,11 +69,10 @@ On a plan with an `**Early CI:**` line, delete the remote branch after the local
 
 ### Option 2: Push and Create PR
 
-With local documents, write the plan's review record before Step 5b's commit
-(The review record, below) and commit it with the index line: first record the
-plan in the completed index (Step 5b) and commit it on the branch, so the line
-travels with the PR. While documents live in darkmem, write none of Step 5b's
-records yet. Then:
+Write the plan's review record before Step 5b's commit (The review record,
+below) and commit it with the index line: first record the plan in the
+completed index (Step 5b) and commit it on the branch, so the line travels
+with the PR. Then:
 
 ```bash
 git push -u origin <feature-branch>
@@ -85,12 +84,6 @@ Then create the pull/merge request against <base-branch> with the code host's
 tooling — its CLI if one is available, or the creation URL most forges
 print when you push — following the repo's PR template and conventions if
 present, and report the URL to your human partner.
-
-While documents live in darkmem, only once `git push` and the PR creation
-have both succeeded, write Step 5b's records (the index line, the register
-rows, the roadmap settle and the review record) and sync them with
-`bash <plugin-root>/scripts/darkmem-sync push`. When either failed, write none
-of them and say so: the plan is not completed.
 
 Keep the worktree — your human partner iterates on PR feedback there.
 
@@ -107,9 +100,7 @@ bash <plugin-root>/scripts/review-record retain PLAN_FILE [--from <worktree path
 On Option 1 from a linked worktree, pass the literal `WORKTREE_PATH` Step 2
 captured as `--from`: Step 5b runs in the main checkout, and the ledger is
 in the worktree. Option 2 runs where the ledger is and needs no `--from`.
-Add the path the script prints to the commit that holds the index line, or
-push it with the mirror, as `completed.md` is, while documents live in
-darkmem.
+Add the path the script prints to the commit that holds the index line.
 
 - Exit 3: the ledger holds no review lines. Say so in one line and go on.
 - Exit 4: no ledger was found, and the script printed where it looked. Do

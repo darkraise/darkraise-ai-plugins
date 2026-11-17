@@ -140,16 +140,3 @@ names, commit messages, and PR descriptions for the user to copy.
 Ask the finish preference before a run and record it. Finishing carries out a
 recorded choice at once, so it needs no scheduler
 ([finish-preference.md](../../../reference/finish-preference.md)).
-
-## darkmem at session start
-
-Codex runs no hooks. In a repository that syncs with darkmem
-(`bash <plugin-root>/scripts/dagents-path project` prints its project), or one
-with a family still in the mirror (`bash <plugin-root>/scripts/dagents-path store`
-names `darkmem`), start each session with
-`bash <plugin-root>/scripts/darkmem-sync reconcile`, then `bash <plugin-root>/scripts/darkmem-sync pull`,
-and read what they print: a `darkmem-sync reconcile:` line names a family
-that moved or stayed and why. At the stop points
-[project-state.md](../../../reference/project-state.md) §darkmem sync points
-names, run `bash <plugin-root>/scripts/darkmem-sync push`;
-nothing pushes for you at the end of a turn.

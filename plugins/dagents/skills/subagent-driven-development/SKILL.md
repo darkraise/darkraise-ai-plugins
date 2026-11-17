@@ -19,8 +19,7 @@ back. Before anything else:
    no ledger names this plan, no task has started: skip the rest of this
    section and follow Setup from its first step.
 1. Run `scripts/sdd-workspace PLAN_FILE` (see using-dagents §Session Budget),
-   and read `progress.md` and `handoff.md` in `<ledger dir>`, not in the
-   directory it prints: while progress lives in darkmem the two differ.
+   and read `progress.md` and `handoff.md` in `<ledger dir>`.
 2. Trust the ledger and `git log` over the summary. Read
    [ledger.md](references/ledger.md) §Recovery before you act on a ledger line. For each task the last
    ledger line decides: `complete` is done;
