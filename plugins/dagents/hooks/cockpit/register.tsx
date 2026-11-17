@@ -2935,7 +2935,9 @@ async function isSessionAlive($: EngineInterface, sid: string): Promise<boolean 
 // Runs scripts/auto-run as `sessionId` in the session's checkout, where its
 // handoff lives; resolves its exit code, 1 when it could not run.
 async function autoRunCall($: EngineInterface, sessionId: string, args: string[]): Promise<number> {
-  const checkout = S.where.checkout ?? S.where.primary ?? '.'
+  const session = S.where.checkout
+  const isGone = session !== null && session !== S.where.primary && (await $.fs.stat(session).catch(() => null))?.kind !== 'dir'
+  const checkout = (isGone ? S.where.primary : session) ?? S.where.primary ?? '.'
   // The directory travels in argv: no cockpit call passes $.process.run a cwd.
   const argv = ['bash', '-c', 'cd -- "$1" && shift && exec bash "$@"', 'auto-run', checkout, `${$.plugin.root}/scripts/auto-run`, '--session', sessionId, ...args]
   const ran = await $.process.run(argv, { timeoutMs: 15_000 }).catch(() => null)

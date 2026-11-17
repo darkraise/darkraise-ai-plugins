@@ -646,6 +646,7 @@ function phaseWorld(on: On, w: PhaseWorld) {
   })
   on('fs.stat', (_$, e) => {
     if (e.path === AUTO) return { value: { kind: 'file', size: w.autoFile.text.length, mtimeMs: 0, isLink: false } }
+    if (e.path === WORKTREE) return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false } }
     throw new Error('ENOENT')
   })
   on('fs.list', () => {

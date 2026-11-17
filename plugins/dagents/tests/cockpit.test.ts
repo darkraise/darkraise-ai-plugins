@@ -6705,7 +6705,7 @@ describe('auto run', () => {
   test('passes the session checkout to every auto-run call (spec A8)', async ($, on) => {
     const WORKTREE = '/home/me/code/shop-wt'
     const files = { ...autoFiles(), [WORKTREE]: { text: '', kind: 'dir' as const } }
-    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], processRuns: [], autoFile: files[AUTO], checkout: WORKTREE }
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], processRuns: [], files, autoFile: files[AUTO], checkout: WORKTREE }
     const clock = world(on, w)
     signedIn(on, files)
     await $.session.start(START)
@@ -6715,6 +6715,20 @@ describe('auto run', () => {
     const calls = (w.processRuns ?? []).filter(argv => argv.includes('/scripts/auto-run '))
     expect(calls.length).toBeGreaterThan(0)
     for (const argv of calls) expect(argv.startsWith(`bash -c cd -- "$1" && shift && exec bash "$@" auto-run ${WORKTREE} `)).toBe(true)
+  })
+
+  test("runs auto-run from the primary when the session's checkout is gone", async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], processRuns: [], files, autoFile: files[AUTO], checkout: '/home/me/code/shop-wt' }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.autoRuns).toContain('--session sess-1 compacted')
+    const calls = (w.processRuns ?? []).filter(argv => argv.includes('/scripts/auto-run '))
+    expect(calls.length).toBeGreaterThan(0)
+    for (const argv of calls) expect(argv.startsWith('bash -c cd -- "$1" && shift && exec bash "$@" auto-run /home/me/code/shop ')).toBe(true)
   })
 
   test('stays still without the sentinel, on an interrupted turn, or for another session', async ($, on) => {
