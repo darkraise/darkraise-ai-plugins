@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { makeHome, makeRepo, run, write } from "./helpers.mjs";
+import { makeHome, makeRepo, read, run, scratch, write } from "./helpers.mjs";
 import { startStub } from "./stub-server.mjs";
 
 test("no command, an unknown command or an unknown flag is a usage error", async () => {
@@ -21,6 +21,25 @@ test("local mode prints one line and succeeds", async () => {
   const result = await run(["status"], { cwd: repo, env });
   assert.equal(result.code, 0);
   assert.match(result.stdout, /^darkmem-sync: local mode — darkmem is disabled \(darkmemEnabled is false\)\n$/);
+});
+
+// Off Windows there is no cygpath, so a stub that logs its argument stands in
+// for the conversion Git Bash needs when MSYS_NO_PATHCONV=1 disables its own.
+test("the wrapper hands node a native module path", async () => {
+  const repo = makeRepo();
+  const { env } = makeHome({ repo, config: null, stores: null });
+  env.MSYS_NO_PATHCONV = "1";
+  const log = path.join(scratch("dms-cygpath-"), "log");
+  if (process.platform !== "win32") {
+    const bin = scratch("dms-bin-");
+    write(path.join(bin, "cygpath"), `#!/bin/sh\nprintf '%s\\n' "$2" >> '${log}'\nprintf '%s' "$2"\n`);
+    fs.chmodSync(path.join(bin, "cygpath"), 0o755);
+    env.PATH = `${bin}${path.delimiter}${env.PATH}`;
+  }
+  const result = await run(["status"], { cwd: repo, env });
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /local mode/);
+  if (process.platform !== "win32") assert.match(read(log), /lib\/darkmem-sync\.mjs$/m);
 });
 
 test("a malformed config is exit 2 naming the file", async () => {
