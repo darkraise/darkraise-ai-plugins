@@ -288,3 +288,15 @@
 | 281 | d7089d6 fix(dforge): keep full refs after a removed checkout | - | - | done | port e619228; fail@parent pass@port |
 | 282 | 86c359c docs(dforge): route rules 4-5 without an index to rule 6 | - | - | done | port eadd783; text-only plugins/dagents/skills/project-status/SKILL.md |
 | 283 | 71ab192 fix(dforge): record a Codex host in the next-step marker | - | - | done | port e63fb22; fail@parent pass@port |
+| 284 | 2f85767 feat(dforge): stand hooks down under a conflict | - | - | n/a | feature: adds dforge's hook stand-down under a workflow-plugin conflict; dagents ships its own lib/stand-down.sh from the split |
+| 285 | 0466002 feat(dforge): guard the cockpit, point to dagents | - | - | n/a | feature: guards dforge's cockpit and points plan-lint and the README to dagents; dagents' cockpit runs its own workflow guard |
+| 286 | 6b2af58 fix(guard): announce a conflict before its marker | - | - | done | port 6b2af58; fail@parent pass@port |
+| 287 | 0424566 docs: name fork and --self in the guard docs | - | - | done | port 0424566; text-only plugins/dagents/README.md |
+| 288 | 31961fa test: make the stand-down and isolation checks bite | - | - | n/a | test-only: tightens the stand-down and isolation tests of dforge, dagents and dflow in one commit |
+| 289 | 0577787 docs: scope the fast-mode stand-down to its turn | - | - | done | port 0577787; text-only plugins/dagents/reference/fast-mode.md |
+| 290 | cce6711 fix: state the Codex guard in the entry skills | - | - | done | port cce6711; fail@parent pass@port |
+| 291 | 455727b fix: keep the entry skills within 5,500 bytes | - | - | done | port 455727b; text-only plugins/dagents/skills/using-dagents/SKILL.md |
+| 292 | 02ba7fb test: move plugin suites to tests/<plugin> | - | - | n/a | test-only: moves dforge's suites to tests/dforge and dagents' to tests/dagents in one commit |
+| 293 | 59478d8 fix: restore reviewed files to their recorded state | - | - | done | port 59478d8; fail@parent pass@port |
+| 294 | 7d75ac3 fix: re-review code merged in after a final review | - | - | done | port 7d75ac3; fail@parent pass@port |
+| 295 | 9c1bf2f fix(cockpit): switch the launch model per request | - | - | done | port 9c1bf2f; fail@parent pass@port |
