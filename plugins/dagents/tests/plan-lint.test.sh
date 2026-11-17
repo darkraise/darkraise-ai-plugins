@@ -194,8 +194,8 @@ if want one; then
 claude_plan > clean.md
 lint clean.md
 check "clean Claude plan: exit 0" "$status" "0"
-has "clean Claude plan: summary" "$out" "plan-lint: 0 errors, 2 warnings"
-has "a light plan on subagent is deprecated" "$out" "WARN header: subagent execution is deprecated; inline is the default"
+has "clean Claude plan: summary" "$out" "plan-lint: 0 errors, 1 warnings"
+lacks "a subagent plan gets no deprecation warning" "$out" "deprecated"
 lacks "a plan with no heavy task gets no delegation note" "$out" "NOTE header"
 has "fenced TODO is a warning" "$out" "WARN Task 1: placeholder: # a fenced TODO is only a warning"
 lacks "inline-code TODO is not a finding" "$out" 'for the `TODO` column'
@@ -516,7 +516,7 @@ variant chost.md 's/^\*\*Goal:\*\* Demo\.$/**Goal:** Demo.\n\n```text\nHost: cod
 lint chost.md
 check "a fenced Host line: exit 0" "$status" "0"
 lacks "a fenced Host line: no Codex checks" "$out" "Routing policy"
-has "a fenced Host line: lints as the Claude plan" "$out" "plan-lint: 0 errors, 2 warnings"
+has "a fenced Host line: lints as the Claude plan" "$out" "plan-lint: 0 errors, 1 warnings"
 # A backticked Routing policy value is the value.
 codex_plan | sed 's#^Routing policy: codex-v4$#Routing policy: `codex-v4`#' > cbt.md
 lint cbt.md
@@ -1183,8 +1183,7 @@ EOF
 waves_plan 'waves — 1 | 2-3' > waves.md
 lint waves.md --no-probe
 check "waves: a clean plan exits 0" "$status" "0"
-check "waves: only the deprecation warning" "$out" "WARN header: subagent execution is deprecated; inline is the default
-plan-lint: 0 errors, 1 warnings"
+check "waves: no finding" "$out" "plan-lint: 0 errors, 0 warnings"
 waves_plan 'sequential — one chain' > waves-seq.md
 lint waves-seq.md --no-probe
 lacks "sequential: Depends on lines are not checked" "$out" "Depends on"
@@ -1227,8 +1226,7 @@ with_wave_check() { # with_wave_check <line> — stdin plan with <line> after th
 }
 waves_plan 'waves — 1 | 2-3' | with_wave_check '**Wave check:** `bash quick.sh`' > waves-check.md
 lint waves-check.md --no-probe
-check "waves: a Wave check line is accepted" "$out" "WARN header: subagent execution is deprecated; inline is the default
-plan-lint: 0 errors, 1 warnings"
+check "waves: a Wave check line is accepted" "$out" "plan-lint: 0 errors, 0 warnings"
 waves_plan 'waves — 1 | 2-3' | with_wave_check '**Wave check:**' > waves-check-empty.md
 lint waves-check-empty.md --no-probe
 has "waves: a Wave check line needs a command" "$out" "ERROR header: the **Wave check:** line names no command"
@@ -1246,7 +1244,7 @@ check "missing tier and CI lines: warnings only, exit 0" "$status" "0"
 has "a missing Task check warns" "$out" "WARN header: no **Task check:** line yet"
 has "a missing Integration check warns on a sequential plan" "$out" "WARN header: no **Integration check:** line yet"
 has "a missing CI line warns" "$out" "WARN header: no **CI:** line yet"
-has "the three warnings add to the fixture's two" "$out" "plan-lint: 0 errors, 5 warnings"
+has "the three warnings add to the fixture's one" "$out" "plan-lint: 0 errors, 4 warnings"
 
 for bad in 'run the quick tests' 'none' '`bash a.sh` `bash b.sh` — two commands' '`none — full suite every 3 tasks`'; do
   variant tc-bad.md "s#^\*\*Task check:\*\* .*#**Task check:** $bad#"
@@ -1263,7 +1261,7 @@ CI_FULL='**CI:** `.github/workflows/validate.yml` — platforms: ubuntu-latest, 
 variant tc-none.md "s#^\*\*Task check:\*\* .*#**Task check:** none — full suite every 3 tasks#; s#^\*\*CI:\*\* none\$#${CI_FULL}#"
 lint tc-none.md
 check "the none form and a full CI line: exit 0" "$status" "0"
-has "the none form and a full CI line add no finding" "$out" "plan-lint: 0 errors, 2 warnings"
+has "the none form and a full CI line add no finding" "$out" "plan-lint: 0 errors, 1 warnings"
 
 for bad in 'maybe' \
   '`ci.yml` — platforms: linux — uncovered: none' \

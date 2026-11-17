@@ -177,23 +177,22 @@ fi
 
 # ----------------------------------------------------------------------- A3
 if selected A3; then
-  DEPR='WARN header: subagent execution is deprecated; inline is the default'
   P=$(mk a3a 'subagent — claude --model sonnet --effort high — x' --parallelism '**Parallelism:** sequential — one task at a time' "$T1" "$T1" "$T1")
   lint "$P"
   check "A3: subagent plan with no heavy task: exit 0" "$lrc" "0"
-  has "A3: the deprecation WARN" "$lout" "$DEPR"
+  unmatched "A3: no deprecation WARN" "$lout" 'deprecated'
   unmatched "A3: no majority-rule warning (no heavy task)" "$lout" 'heavy'
   unmatched "A3: no ERROR (no heavy task)" "$lout" '^ERROR'
   P=$(mk a3b 'subagent — claude --model sonnet --effort high — x' --parallelism '**Parallelism:** sequential — one task at a time' "$HEAVY6" "$T1")
   lint "$P"
   check "A3: subagent plan with a heavy minority: exit 0" "$lrc" "0"
-  has "A3: the deprecation WARN (heavy minority)" "$lout" "$DEPR"
+  unmatched "A3: no deprecation WARN (heavy minority)" "$lout" 'deprecated'
   unmatched "A3: no majority-rule warning (heavy minority)" "$lout" 'heavy'
   unmatched "A3: no ERROR (heavy minority)" "$lout" '^ERROR'
   P=$(mk a3c 'subagent — claude --model sonnet --effort high — x' --parallelism '**Parallelism:** sequential — one task at a time' "$HEAVY6" "$HEAVY8")
   lint "$P"
   check "A3: subagent plan with every task heavy: exit 0" "$lrc" "0"
-  has "A3: the deprecation WARN (all heavy)" "$lout" "$DEPR"
+  unmatched "A3: no deprecation WARN (all heavy)" "$lout" 'deprecated'
   unmatched "A3: no majority-rule warning (all heavy)" "$lout" 'heavy'
   unmatched "A3: no ERROR (all heavy)" "$lout" '^ERROR'
 fi

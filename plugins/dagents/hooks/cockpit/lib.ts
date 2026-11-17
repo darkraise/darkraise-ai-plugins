@@ -501,7 +501,7 @@ export function seatDenial(spawn: SeatSpawn, isPlanSession: boolean): string | n
     return "dagents: forks are kept out of dagents sessions. Use dagents:judge-sonnet-high for a read-only check; plans are drafted in the session. See using-dagents §Seats."
   }
   if (CATCH_ALL.includes(spawn.subagentType) && spawn.model === undefined) {
-    return 'dagents: name a seat for this dispatch: dagents:judge-sonnet-high or dagents:judge-opus for a review or read-only check, or pass an explicit model (model: "sonnet") to general-purpose. The session implements plan tasks itself, as the plan\'s Execution line says; an implementer seat such as dagents:impl-sonnet-medium runs only for a deprecated subagent plan. See using-dagents §Seats.'
+    return 'dagents: name a seat for this dispatch: dagents:judge-sonnet-high or dagents:judge-opus for a review or read-only check, or pass an explicit model (model: "sonnet") to general-purpose. A plan task goes to the implementer seat its **Implementer:** line names, such as dagents:impl-sonnet-medium, unless the plan\'s Execution line names inline. See using-dagents §Seats.'
   }
   return null
 }

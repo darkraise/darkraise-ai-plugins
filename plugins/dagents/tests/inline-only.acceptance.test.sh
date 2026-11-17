@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance checks for docs/dagents/specs/2026-11-07-inline-only-execution-design.md:
-# the session implements every task, executor tasks still go out, and the
-# subagent path is deprecated but intact.
+# an inline plan's session implements every task, executor tasks still go
+# out, and the subagent path, dagents' default, is intact.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -132,7 +132,7 @@ lint sonnet6.md
 has "A2: total 6 on sonnet is the model-floor error" "$out" "ERROR header: inline execution needs --model opus (model sonnet)"
 io_plan 'subagent — `claude --model sonnet --effort high` — x' "0 1 1 0" "0 1 1 1" > sub.md
 lint sub.md
-has "A3: a subagent line is deprecated" "$out" "WARN header: subagent execution is deprecated; inline is the default"
+lacks "A3: a subagent line is not deprecated" "$out" "deprecated"
 lacks "A3: no mode error" "$out" "ERROR header: subagent"
 io_plan 'inline — `claude --model sonnet --effort medium` — x' "0 0 0 3" "0 1 1 0" > risk3m.md
 lint risk3m.md
