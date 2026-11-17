@@ -10,7 +10,9 @@ description: Use when a roadmap milestone or project phase looks finished, when 
 The session that built a milestone is the worst judge of whether it is
 finished: it remembers what it did, not what was asked. A milestone on
 `<docs>/roadmap.md` is done only when `scripts/roadmap close` has
-written `closed`, and this skill is the only path to that command.
+written `closed`, and this skill is the only path to that command. Each
+milestone closes on its own rows: work folded into a later milestone
+(hardening into the release, say) moves its rows explicitly, with a note.
 
 <HARD-GATE>
 Never tell your human partner a phase or milestone is done, complete or
@@ -110,14 +112,3 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    block it prints, verbatim: the next milestone's first open epic, or that
    every milestone is closed. If it exits 4, say `latest.md` could not be
    written.
-
-## Red Flags
-
-| Thought | Reality |
-|---------|---------|
-| "All the plans are merged, so the milestone is done" | Merged plans are not requirements met. Run the audit. |
-| "I built it, I know it works" | That is why a fresh judge audits it. |
-| "The judge said GAP but it's minor" | Reopen the row; your human partner can defer it with a note. Never close over a GAP. |
-| "The gate is flaky, I'll skip it" | A red gate stops the close. Fix it, or get a ruling recorded in `gates.md`. |
-| "I'll mark it closed in the table" | `roadmap check` rejects a hand-closed milestone. Only `roadmap close` writes it. |
-| "Hardening can be folded into the release" | Each milestone closes on its own rows. Move rows explicitly, with a note. |

@@ -164,15 +164,3 @@ cleanly."
 dforge:executing-plans writes it at Setup and update it in the same message as
 a ledger write whenever one of these sections changes — not after every task:
 task state lives in the ledger and git.
-
-## Red Flags
-
-| Thought | Reality |
-|---------|---------|
-| "One more task, then I'll hand off" | Finish the task in flight; start no new one. |
-| "The line says 89% — I'll hand off now to be safe" | `ok` means continue. Only a `handoff` verdict or a hard stop ends the session; the budget already holds a task's margin. |
-| "The next session can read my summary" | It has none of your context. Only files cross the boundary. |
-| "I'll write the resume prompt myself" | `next-step` computes it from the plan and ledger. Hand-written guides go stale. |
-| "There is no plan, so I'll write the block myself" | Use `next-step --adhoc`. A hand-written launch command guesses the model. |
-| "The agent is nearly done, I'll hand off and it will finish" | Its result arrives in a session that has ended, and nobody reads it. Wait for it or stop it and record a Ruling (step 0). |
-| "Compaction will take care of it" | Compaction drops reports, findings and rulings. Hand off before it fires. |

@@ -60,7 +60,8 @@ the roadmap exists, and new work is an epic row (see Changing the roadmap).
    --acceptance "<the requirement numbers it carries>"`. The label in Assigned
    is replaced by the epic's spec path once that spec exists. M0's rows are the
    discovery deliverables (brief, requirements, non-goals approved) and M1's
-   include the walking skeleton, CI and `gates.md`.
+   include the walking skeleton, CI and `gates.md`, which make every later
+   "done" checkable, so they are never deferred past M1.
 7. **Write `<docs>/roadmap.md`** from the template, one table row per
    milestone, every one `open`. Run `scripts/roadmap check` until it reports
    `0 errors`, and `scripts/roadmap status`.
@@ -89,19 +90,10 @@ milestone closes only through dforge:closing-a-milestone.
 Scope changes are rows, never silent edits:
 
 - **A new epic:** `scripts/register add <milestone register> "<title>" --assigned "<title>"`.
-- **A dropped or postponed epic:** `scripts/register set <file> <id> deferred --note "<owner's ruling>"`,
+- **A dropped, postponed or folded epic:** `scripts/register set <file> <id> deferred --note "<owner's ruling>"`
+  (a folded epic's note names the epic it went into),
   and add it to a later milestone's register when it is postponed rather than dropped.
 - **A new milestone:** `scripts/roadmap add "<name>" --exit "<criteria>" --register <path>`.
 - **A milestone closed wrongly:** `scripts/roadmap reopen M<n> --note "<why>"`.
 
 Only `scripts/register` and `scripts/roadmap` write these files.
-
-## Red Flags
-
-| Thought | Reality |
-|---------|---------|
-| "The user just wants the app; skip discovery" | M0 is short. Skipping it is how requirements end up invented mid-build. |
-| "I'll list the epics in the spec, that's enough" | Prose in a spec is the failure this skill exists for. Every epic is a register row. |
-| "Foundations can come later" | M1 is where CI, gates and the walking skeleton make every later "done" checkable. |
-| "This epic is small, I'll fold it into another" | Fold it explicitly: one row deferred with a note naming where it went. |
-| "I'll edit the roadmap table by hand" | Only the scripts write it; `roadmap check` rejects a hand-closed milestone. |
