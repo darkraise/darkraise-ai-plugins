@@ -6842,6 +6842,23 @@ describe('auto run', () => {
     expect(w.compacts).toHaveLength(1)
   })
 
+  test('tries a stage again when a read before it fails, without waiting for the watchdog', async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    // The armed stage's own read of the session id fails once.
+    w.sessionIdFailures = 1
+    await settle(clock)
+    expect(w.compacts).toEqual([])
+    await clock.advance(5_000)
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(pendingOf(files)).toBe('after-compact')
+  })
+
   test('clears, binds the cleared session, sets its model and submits its first prompt', async ($, on) => {
     const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
     const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }

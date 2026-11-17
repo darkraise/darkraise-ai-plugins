@@ -762,7 +762,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'ToolProgress' }, async ($, e, next) => {
     if (await standsDown($)) return next(e)
     const id = e.props.tool_use_id
-    if (S.waits.has(id)) $.clock.after(0, () => void endWait($, id, '✓ Approved'))
+    if (S.waits.has(id)) $.clock.after(0, () => void endWait($, id, '✓ Approved').catch(() => undefined))
     return next(e)
   })
 
@@ -3024,7 +3024,7 @@ async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'aski
     })
   }
   const delay = Math.max(0, S.notifyAskAfter) * 1000
-  S.waits.set(id, { timer: delay === 0 ? null : $.clock.after(delay, () => void send()), messageId: null, event, agentId })
+  S.waits.set(id, { timer: delay === 0 ? null : $.clock.after(delay, () => void send().catch(() => undefined)), messageId: null, event, agentId })
   if (delay === 0) await send()
 }
 
@@ -3123,7 +3123,7 @@ async function armAutoRun($: EngineInterface, answer: string) {
 
 function scheduleAutoAct($: EngineInterface, stage: AutoStage, ms: number) {
   S.autoTimer?.cancel()
-  S.autoTimer = $.clock.after(ms, () => void autoAct($, stage))
+  S.autoTimer = $.clock.after(ms, () => void autoAct($, stage).catch(() => undefined))
 }
 
 // Carries the bound run through its pending stages: compact, then the
@@ -3138,6 +3138,10 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
   S.autoBusy = true
   try {
     await autoStage($, stage)
+  } catch {
+    // A read before the stage's own try threw: the stage is still due, and
+    // the watchdog would re-arm it only after STALL_MS.
+    if (S.autoTimer === null) scheduleAutoAct($, stage, AUTO_RETRY_MS)
   } finally {
     S.autoBusy = false
     S.autoActedAt = await $.clock.now()
