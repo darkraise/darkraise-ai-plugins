@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { loadProofs, proofDir, proofStatus } from '../proof.mjs';
-import { head, relative } from '../repo.mjs';
+import { head, relative, uncommitted } from '../repo.mjs';
 import { loadState } from '../state.mjs';
-import { fail, mustGit, nowIso, shortSha, writeJson } from '../util.mjs';
+import { fail, nowIso, shortSha, writeJson } from '../util.mjs';
 import { requireActive } from './next.mjs';
 
 export async function run(ctx, argv, { out }) {
@@ -28,7 +28,8 @@ export async function run(ctx, argv, { out }) {
   if (!line.visual && !values.text) fail(`${id} is proven on text: pass --text "<the text or state the page showed>"`);
   const source = path.resolve(ctx.cwd, values.shot);
   if (!fs.existsSync(source)) fail(`no screenshot at ${values.shot}`);
-  const dirty = mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=no']).split('\n').filter(entry => entry && !entry.slice(3).startsWith('docs/dflow/'));
+  // The plan's own log lines may wait uncommitted; they change no screen.
+  const dirty = uncommitted(ctx).filter(entry => !entry.file.startsWith('docs/dflow/'));
   if (dirty.length) fail('the working tree has uncommitted changes; a proof is of a commit, so commit first');
   const directory = proofDir(ctx, active.slug);
   const target = path.join(directory, `${id}${path.extname(source) || '.png'}`);

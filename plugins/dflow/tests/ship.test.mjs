@@ -66,6 +66,17 @@ test('a proof is of a commit, needs text unless visual, and goes stale when a UI
   assert.match(stale.stdout, /^A2 stale \(changed since: src\/meter\.mjs\)/m);
 });
 
+test('a proof refuses an untracked file but not a draft under docs/dflow', t => {
+  const root = makeProject(t, { plan: UI_PLAN });
+  buildAll(root);
+  write(root, 'shot.png', 'png');
+  write(root, 'docs/dflow/my notes ü.md', 'draft\n');
+  write(root, 'src/extra.mjs', 'export const c = 3;\n');
+  assert.match(dflow(root, ['proof', 'A3', '--shot', 'shot.png']).stderr, /uncommitted changes/);
+  fs.rmSync(path.join(root, 'src/extra.mjs'));
+  assert.equal(dflow(root, ['proof', 'A3', '--shot', 'shot.png']).status, 0);
+});
+
 test('ship runs gates and acceptance, promotes the log, closes the plan and the board row', t => {
   const root = makeProject(t, { config: { gates: [{ name: 'test', cmd: 'node suite.mjs' }] }, plan: PLAN.replace('**Docs:** none — the fixture has no living docs', '**Docs:** decisions.md, gotchas.md') });
   buildAll(root);

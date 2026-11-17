@@ -53,6 +53,15 @@ test('a commit or an edit made while the gates run is refused and nothing is rec
   assert.equal(JSON.parse(dflow(root, ['status', '--json']).stdout).gates, null);
 });
 
+test('a draft under docs/dflow leaves a gate pass clean, whatever its name', t => {
+  const root = makeProject(t, { config: CONFIG });
+  write(root, 'lint.mjs', '\n');
+  write(root, 'suite.mjs', '\n');
+  write(root, 'docs/dflow/my notes ü.md', 'draft\n');
+  assert.equal(dflow(root, ['gate']).status, 0);
+  assert.equal(JSON.parse(dflow(root, ['status', '--json']).stdout).gates.stale, false);
+});
+
 test('a piped gate fails when an earlier stage fails', t => {
   const root = makeProject(t, { config: { gates: [{ name: 'test', cmd: 'node suite.mjs 2>&1 | tail -1' }] } });
   write(root, 'suite.mjs', 'console.log("1 failed"); process.exit(1)\n');

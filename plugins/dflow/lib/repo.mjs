@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fail, git, gitOut, readJson, writeJson } from './util.mjs';
+import { fail, git, gitOut, mustGit, readJson, writeJson } from './util.mjs';
 
 export const DEFAULTS = {
   defaultBranch: null,
@@ -111,6 +111,15 @@ export function setDarkmemConsent(env, root, project) {
   else delete repositories[root];
   config.darkmem = { ...(config.darkmem ?? {}), repositories };
   writeJson(file, config);
+}
+
+// What a commit would not hold: tracked changes, and untracked files that are
+// not ignored, except under docs/dflow/, where drafts of other work stay
+// untracked. Read NUL-separated, since git quotes a path with a space.
+export function uncommitted(ctx) {
+  return mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=normal', '--no-renames', '-z']).split('\0').filter(Boolean)
+    .map(entry => ({ code: entry.slice(0, 2), file: entry.slice(3) }))
+    .filter(entry => !(entry.code === '??' && entry.file.startsWith('docs/dflow/')));
 }
 
 export function currentBranch(root) {

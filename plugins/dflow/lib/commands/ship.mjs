@@ -5,12 +5,12 @@ import { amendedAcceptance, approvedPlan } from '../approval.mjs';
 import { parseBoard, rewriteRow } from '../board.mjs';
 import { blockedTasks, setField } from '../plan.mjs';
 import { proofStatus } from '../proof.mjs';
-import { baseCommit, changedSince, defaultBranch, head, relative } from '../repo.mjs';
+import { baseCommit, changedSince, defaultBranch, head, relative, uncommitted } from '../repo.mjs';
 import { buildPack } from '../review.mjs';
 import { runCommand } from '../run.mjs';
 import { appendEvent, loadState, planState, updateState } from '../state.mjs';
 import { loadFindings, refreshHud, unrecordedTicks } from '../status.mjs';
-import { git, gitList, gitOut, mustGit, readText, shortSha, tail, today } from '../util.mjs';
+import { git, gitOut, mustGit, readText, shortSha, tail, today } from '../util.mjs';
 import { diagnose } from './doctor.mjs';
 import { runGates } from './gate.mjs';
 import { requireActive } from './next.mjs';
@@ -114,17 +114,15 @@ export async function run(ctx, argv, { out }) {
   }
 
   // An untracked file outside docs/dflow/ may be one the gates used, and the
-  // commit would ship without it; drafts of other work there stay untracked.
-  const uncommitted = () => gitList(ctx.root, ['status', '--porcelain', '--untracked-files=normal', '--no-renames', '-z'])
-    .filter(entry => !(entry.startsWith('??') && entry.slice(3).startsWith('docs/dflow/')));
-  const dirty = uncommitted();
-  if (dirty.length) problems.push(`uncommitted changes: ${dirty.map(entry => entry.slice(3)).join(', ')}`);
+  // commit would ship without it.
+  const dirty = uncommitted(ctx);
+  if (dirty.length) problems.push(`uncommitted changes: ${dirty.map(entry => entry.file).join(', ')}`);
   // Gates and acceptance can run for minutes; what they passed is the tree at
   // `sha`, and nothing else may be recorded or shipped on their word.
   const moved = () => {
     if (head(ctx.root) !== sha) return 'the head commit moved while ship ran its checks; run `dflow ship` again';
-    const changed = uncommitted();
-    return changed.length ? `the working tree changed while ship ran its checks: ${changed.map(entry => entry.slice(3)).join(', ')}` : null;
+    const changed = uncommitted(ctx);
+    return changed.length ? `the working tree changed while ship ran its checks: ${changed.map(entry => entry.file).join(', ')}` : null;
   };
 
   if (!problems.length) {

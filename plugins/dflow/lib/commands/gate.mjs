@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { currentBranch, head, relative } from '../repo.mjs';
+import { currentBranch, head, relative, uncommitted } from '../repo.mjs';
 import { runCommand } from '../run.mjs';
 import { loadState, planState, updateState } from '../state.mjs';
 import { activePlan, refreshHud } from '../status.mjs';
-import { fail, mustGit, nowIso, tail } from '../util.mjs';
+import { fail, nowIso, tail } from '../util.mjs';
 
 // Runs the configured gates in order. A run of every gate is recorded against
 // the head commit; a run of a named subset is not, since it proves less.
@@ -16,8 +16,7 @@ export async function runGates(ctx, { names = [], out }) {
   const state = loadState(ctx.paths);
   const active = activePlan(ctx, state);
   const results = [];
-  const changes = () => mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=normal']).split('\n')
-    .filter(entry => entry && !(entry.startsWith('??') && entry.slice(3).startsWith('docs/dflow/')));
+  const changes = () => uncommitted(ctx).map(entry => `${entry.code} ${entry.file}`);
   const shaBefore = head(ctx.root);
   const changesBefore = changes();
   // A pass on uncommitted changes says nothing about the commit.
