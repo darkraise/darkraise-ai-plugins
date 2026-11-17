@@ -265,7 +265,10 @@ jq '.trust = {"calibration":"pass"}' "$TMP/policy.bak" > "$POLICY"
 setting '{"codexReview":false}'; fresh; gate usable
 check "codexReview off answers setting without probing" "$out" "codex-gate usable=false reason=setting review=false resets_at=- source=setting"
 check "codexReview off starts no client" "$(grep -c connect "$TMP/log" 2>/dev/null || echo 0)" "0"
-check "codexReview off is written for the readers" "$(field usable)/$(field reason)" "false/setting"
+check "codexReview off writes no session file" "$([ -e "$SESS/s1.json" ] && echo written || echo none)" "none"
+setting '{"codexReview":true}'; fresh; gate usable
+setting '{"codexReview":false}'; gate usable
+check "codexReview turned off removes an earlier review=true" "$([ -e "$SESS/s1.json" ] && echo kept || echo removed)" "removed"
 setting '{}'; fresh; gate usable
 check "codexReview is off by default" "$(grep -c 'reason=setting' <<<"$out")" "1"
 setting '{"codexReview":true,"codexLane":false}'; fresh; gate usable

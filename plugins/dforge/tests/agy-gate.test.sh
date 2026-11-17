@@ -178,6 +178,7 @@ fresh; GATE_PATH="$SEAL" gate
 check "no agy on PATH turns the gate off" "$out" \
   "agy-gate usable=false reason=plugin-not-installed review=false resets_at=- claude=on claude_resets_at=- source=probe"
 check "the gate exits 0 when it answers" "$rc" "0"
+check "the session file carries no lane key" "$(jq -r 'has("lane")' "$SESS/s1.json" | tr -d '\r')" "false"
 fresh; STUB_AGY_VERSION=1.4.11 gate
 check "a version out of range turns the gate off" "$out" \
   "agy-gate usable=false reason=plugin-version:1.4.11 review=false resets_at=- claude=on claude_resets_at=- source=probe"
@@ -207,8 +208,9 @@ check "an extra argument is a usage error" "$rc" "2"
 setting '{}'; fresh; gate
 check "agyReview unset answers setting without probing" "$out" "agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting"
 check "agyReview unset never runs agy" "$([ -f "$ARGS" ] && echo ran || echo none)" "none"
-check "agyReview off is written for the readers" "$(field usable)/$(field reason)/$(field review)" "false/setting/false"
-check "the session file carries no lane key" "$(jq -r 'has("lane")' "$SESS/s1.json" | tr -d '\r')" "false"
+check "agyReview off writes no session file" "$([ -e "$SESS/s1.json" ] && echo written || echo none)" "none"
+mkdir -p "$SESS"; jq -cn '{session_id:"s1", usable:true, review:true, reason:"ok"}' > "$SESS/s1.json"; gate
+check "agyReview off removes an earlier review=true" "$([ -e "$SESS/s1.json" ] && echo kept || echo removed)" "removed"
 setting '{"agyReview":false}'; fresh; gate
 check "agyReview false answers setting too" "$(grep -o 'reason=[a-z]* review=[a-z]*' <<<"$out")" "reason=setting review=false"
 setting '{"agyReview":true}'

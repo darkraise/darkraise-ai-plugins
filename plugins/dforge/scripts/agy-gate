@@ -42,14 +42,22 @@ command -v node >/dev/null 2>&1 || die "node is required but not on PATH"
 [ -r "$POLICY" ] || die "policy file not found: $POLICY"
 
 want_review=$(dforge_setting agyReview false)
+if [ "$want_review" = false ]; then
+  # Off, there is nothing to probe or record. A review=true this session wrote
+  # while the setting was on would still open review-route's panel route, so
+  # that file goes; any other keeps its quota marks for a switch back on.
+  if file=$(executor_session_file agy) && [ -r "$file" ] \
+     && [ "$(jq -r '.review == true' < "$file" 2>/dev/null | tr -d '\r')" = true ]; then
+    rm -f "$file"
+  fi
+  printf 'agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting\n'
+  exit 0
+fi
 
 usable="" reason="" version="" source=probe
 resets_at="" resets_epoch=""
 now=$(date -u +%s)
 file=$(executor_session_file agy) || file=""
-if [ "$want_review" = false ]; then
-  usable=false reason=setting source=setting
-fi
 c_usable="" c_reason="" c_version="" c_resets="" c_epoch="" f_has="" f_resets="" f_epoch=""
 if [ -n "$file" ] && [ -r "$file" ]; then
   # A unit separator, not a tab: read collapses runs of whitespace separators,
