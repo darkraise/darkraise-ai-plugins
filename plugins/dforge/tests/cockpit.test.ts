@@ -7455,6 +7455,21 @@ describe('auto run', () => {
     })
   }
 
+  test('runs neither /model nor /effort when the snapshot of the defaults cannot be written', async ($, on) => {
+    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, isReadOnly: true, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.commands).toEqual(['/clear'])
+    expect(w.userSettings).toEqual({ model: 'opus[1m]' })
+    expect(w.prompts).toHaveLength(1)
+    expect(w.prompts?.[0]).toMatch(/^Execute docs\/plan\.md\./)
+    expect(w.prompts?.[0]).toMatch(/kept this session on .+ because it could not save your default model before switching\. Record that with scripts\/auto-run ruling add\./)
+  })
+
   test('sends a blocked notice naming the settings file when the defaults cannot be put back', async ($, on) => {
     const fetches: World['fetches'] = []
     const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })

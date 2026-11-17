@@ -3243,13 +3243,15 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
     }
     const refused: string[] = []
     let isRestored = true
-    let isKept = false
+    let keptWhy: string | null = null
     if (auto.launch !== null) {
       // /model and /effort save the user's defaults: run them only when those
-      // can be read now and put back after (the restore runs node).
+      // can be read now, kept in a snapshot a later session restores from if
+      // this one dies, and put back after (the restore runs node).
       const saved = await userDefaults($)
-      if (saved !== null && (await nodeRuns($))) {
-        await saveDefaults($, bound, auto.launch.model, saved)
+      if (saved === null || !(await nodeRuns($))) keptWhy = 'it could not put back your default model afterwards'
+      else if (!(await saveDefaults($, bound, auto.launch.model, saved))) keptWhy = 'it could not save your default model before switching'
+      else {
         for (const [command, args] of [['model', auto.launch.model], ['effort', auto.launch.effort]] as const) {
           await $.command.run({ command, args }).catch(() => refused.push(`/${command} ${args}`))
         }
@@ -3259,10 +3261,10 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
         else {
           await notify($, { kind: 'blocked', title: '⛔ Default model not restored', detail: `/model and /effort left the auto run's launch model as the default in ${await userSettingsPath($)}.`, isPlain: true })
         }
-      } else isKept = true
+      }
     }
     const notes: string[] = []
-    if (isKept) notes.push(`The cockpit kept this session on ${await $.session.model()} because it could not put back your default model afterwards.`)
+    if (keptWhy !== null) notes.push(`The cockpit kept this session on ${await $.session.model()} because ${keptWhy}.`)
     if (refused.length > 0) notes.push(`The cockpit could not run ${refused.join(' or ')}; this session runs on ${await $.session.model()}.`)
     if (!isRestored) notes.push('The cockpit could not put back the default model and effort that /model and /effort saved in your user settings.')
     const note = notes.length === 0 ? '' : `\n\n${notes.join(' ')} Record that with scripts/auto-run ruling add.`
@@ -3301,12 +3303,16 @@ async function snapshotPath($: EngineInterface, sessionId: string): Promise<stri
 }
 
 // Written before /model, never over a snapshot already there: that one holds
-// the defaults from before an earlier switch.
-async function saveDefaults($: EngineInterface, sessionId: string, launchModel: string, saved: SavedDefaults) {
+// the defaults from before an earlier switch. Whether a snapshot is in place.
+async function saveDefaults($: EngineInterface, sessionId: string, launchModel: string, saved: SavedDefaults): Promise<boolean> {
   const path = await snapshotPath($, sessionId)
-  if (path === null || (await $.fs.stat(path).catch(() => null)) !== null) return
+  if (path === null) return false
+  if ((await $.fs.stat(path).catch(() => null)) !== null) return true
   const snapshot = { session: sessionId, launchModel, saved: { model: saved.model, modelSettings: saved.modelSettings, effortLevel: saved.effortLevel } }
-  await $.fs.write(path, `${JSON.stringify(snapshot)}\n`).catch(() => undefined)
+  return $.fs.write(path, `${JSON.stringify(snapshot)}\n`).then(
+    () => true,
+    () => false,
+  )
 }
 
 // A mod cannot delete a file: dforge-config.mjs does it. Whether it did.
