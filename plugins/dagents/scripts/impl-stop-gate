@@ -49,6 +49,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 command -v jq >/dev/null 2>&1 || { note "jq is not installed; the gate is off"; exit 0; }
 input=$(cat 2>/dev/null || true)
 jq -e . >/dev/null 2>&1 <<<"$input" || { note "input is not JSON; the stop passes unchecked"; exit 0; }
+. "$HERE/lib/stand-down.sh"
+! stand_down_active "$(jq -r '.session_id // empty' <<<"$input" | tr -d '\r')" || exit 0
 
 agent_type=$(jq -r '.agent_type // empty' <<<"$input" | tr -d '\r')
 agent_id=$(jq -r '.agent_id // empty' <<<"$input" | tr -d '\r\n' | tr -c 'A-Za-z0-9._-' '-')

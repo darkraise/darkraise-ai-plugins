@@ -179,6 +179,7 @@ export const windowsSeconds = {
   'plugins/dagents/tests/snapshot.test.sh': 10,
   'plugins/dagents/tests/speed-and-cost-followups.acceptance.test.sh': 470,
   'plugins/dagents/tests/speed-and-cost.acceptance.test.sh': 280,
+  'plugins/dagents/tests/stand-down.test.sh': 20,
   'plugins/dagents/tests/suite-run.test.sh': 54,
   'plugins/dagents/tests/task-loop-steps.acceptance.test.sh': 920,
   'plugins/dagents/tests/task-state.test.sh': 10,
@@ -293,6 +294,16 @@ export function checkShellWeights(jobs, weights = windowsSeconds) {
     }
   }
   return problems;
+}
+
+// The workflow guard reads the host's own Claude settings by default, so a
+// job runs it against an empty directory unless its environment names one.
+export function guardIsolation(env, dir) {
+  const isolated = { ...env };
+  for (const name of ['WORKFLOW_GUARD_CLAUDE_DIR', 'WORKFLOW_GUARD_MANAGED_DIR', 'WORKFLOW_GUARD_PROJECT_DIR']) {
+    if (isolated[name] === undefined) isolated[name] = dir;
+  }
+  return isolated;
 }
 
 export function driftWarning(args, seconds, limit) {

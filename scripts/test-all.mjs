@@ -1,10 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
-import { availableParallelism } from 'node:os';
-import { resolve } from 'node:path';
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { availableParallelism, tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { driftWarning, selectShard, suiteParts, suiteSeconds } from './test-shards.mjs';
+import { driftWarning, guardIsolation, selectShard, suiteParts, suiteSeconds } from './test-shards.mjs';
 
 const { values: options } = parseArgs({ options: { shard: { type: 'string' }, list: { type: 'boolean' }, limits: { type: 'boolean' }, jobs: { type: 'string' }, plugin: { type: 'string' } } });
 if (options.limits && !options.list) {
@@ -25,6 +25,8 @@ const parallelJobs = options.jobs !== undefined ? Number(options.jobs) : process
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bash = process.env.DR_TEST_BASH ?? 'bash';
 const running = new Set();
+const guardDir = options.list ? null : mkdtempSync(join(tmpdir(), 'workflow-guard-'));
+if (guardDir) process.on('exit', () => rmSync(guardDir, { recursive: true, force: true }));
 let interrupted = false;
 function terminate(job, force = false) {
   if (!job.child?.pid) return;
@@ -47,7 +49,7 @@ async function run(executable, args, seconds, buffered) {
   const job = {};
   running.add(job);
   const ok = await new Promise((resolveRun, reject) => {
-    job.child = spawn(executable, args, { cwd: root, stdio: buffered ? ['inherit', 'pipe', 'pipe'] : 'inherit', windowsHide: true, detached: process.platform !== 'win32', env: { ...process.env, DR_TEST_BASH: bash, DR_TEST_ALL: '1' } });
+    job.child = spawn(executable, args, { cwd: root, stdio: buffered ? ['inherit', 'pipe', 'pipe'] : 'inherit', windowsHide: true, detached: process.platform !== 'win32', env: guardIsolation({ ...process.env, DR_TEST_BASH: bash, DR_TEST_ALL: '1' }, guardDir) });
     const closed = buffered ? Promise.all([job.child.stdout, job.child.stderr].map(stream => new Promise(done => { stream.on('data', chunk => chunks.push(chunk)); stream.on('close', done); }))) : Promise.resolve();
     job.timer = setTimeout(() => { timedOut = true; say(`Timeout after ${seconds}s`, console.error); stop(job); }, seconds * 1000);
     job.child.on('error', error => { clearTimeout(job.timer); clearTimeout(job.forceTimer); running.delete(job); reject(error); });

@@ -13,6 +13,8 @@ jq -e . >/dev/null 2>&1 <<<"$stdin_json" || exit 0
 session_id=$(jq -r '.session_id // empty' <<<"$stdin_json")
 cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
 [ -n "$session_id" ] || exit 0
+. "$SCRIPT_DIR/lib/stand-down.sh"
+! stand_down_active "$session_id" || exit 0
 hook_lib="${SCRIPT_DIR}/lib/darkmem-hook.sh"
 # darkmem_push_quietly bounds its config lookup and its push apart; a bound
 # here around both would not reach the push's own.

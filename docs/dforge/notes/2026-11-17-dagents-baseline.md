@@ -133,3 +133,17 @@ with `CLAUDE_CONFIG_DIR` unset. Failing suites and their disposition:
   run only and passed in every later run.
 - `ui-ux-skill.acceptance.test.sh` failed in both runs before the rename and
   passes after it.
+
+## Guard message
+
+Checked by hand on 2026-11-17 with Claude Code 2.1.326. The nested session
+used a fresh config directory whose `installed_plugins.json` and
+`settings.json` install and enable `dforge@darkraise` at user scope, with
+dagents loaded through `--plugin-dir plugins/dagents`. At startup the
+transcript showed the guard's `systemMessage` as
+`SessionStart:startup says: Workflow plugins conflict: dagents@darkraise (this session), dforge@darkraise (user) are enabled together.`
+It also showed the two disable steps (`--scope local` for dagents;
+`--scope local`, then `--scope user` for dforge) and "Then start a new
+session." Injected context does not show on screen; stand-down.test.sh is
+what checks that the dagents entry point is not injected. The cockpit pane
+still rendered: its own guard line comes in Task 22.

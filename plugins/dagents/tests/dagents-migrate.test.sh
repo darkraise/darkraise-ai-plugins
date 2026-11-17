@@ -15,6 +15,7 @@ check() { # check <name> <got> <want>
 exists() { [ -e "$1" ] && echo yes || echo no; }
 
 TMP="$(mktemp -d)"
+export WORKFLOW_GUARD_CLAUDE_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_MANAGED_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_PROJECT_DIR="$TMP/workflow-guard"
 trap 'rm -rf "$TMP"' EXIT
 # Under Git Bash, git and node name TMP in Windows forms (git's long C:/…, the
 # 8.3 short name TEMP carries, node's backslashes): migrate prints its output in

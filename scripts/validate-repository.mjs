@@ -39,6 +39,7 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   'plugins/dagents/tests/darkmem-sync/migrate.test.mjs',
   // The workflow guard names its siblings.
   'plugins/dagents/scripts/workflow-guard.mjs',
+  'plugins/dagents/tests/stand-down.test.sh',
 ]);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };

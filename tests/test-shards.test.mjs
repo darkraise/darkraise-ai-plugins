@@ -191,3 +191,9 @@ test('dagents jobs run only when dagents, scripts, tests or the workflow change'
   }
   assert.match(workflow, /\.name == "validate-dagents"/, 'the homelab wait job watches validate-dagents');
 });
+
+test('jobs run with the guard isolated from the host', () => {
+  const env = sched.guardIsolation({ CLAUDE_CONFIG_DIR: '/host', KEEP: 'x' }, '/empty');
+  assert.deepEqual([env.WORKFLOW_GUARD_CLAUDE_DIR, env.WORKFLOW_GUARD_MANAGED_DIR, env.WORKFLOW_GUARD_PROJECT_DIR, env.KEEP], ['/empty', '/empty', '/empty', 'x']);
+  assert.equal(sched.guardIsolation({ WORKFLOW_GUARD_CLAUDE_DIR: '/set' }, '/empty').WORKFLOW_GUARD_CLAUDE_DIR, '/set');
+});

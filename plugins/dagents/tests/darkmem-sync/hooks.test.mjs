@@ -8,6 +8,10 @@ import { createClient } from "../../scripts/lib/darkmem-client.mjs";
 import { STUB_KEY, startStub } from "./stub-server.mjs";
 import { makeHome, makeRepo, scratch, write } from "./helpers.mjs";
 
+// The session-start guard reads the host's own Claude settings unless told otherwise.
+const guardDir = scratch("dmh-guard-");
+for (const name of ["WORKFLOW_GUARD_CLAUDE_DIR", "WORKFLOW_GUARD_MANAGED_DIR", "WORKFLOW_GUARD_PROJECT_DIR"]) process.env[name] = guardDir;
+
 const LIB = fileURLToPath(new URL("../../scripts/lib/darkmem-hook.sh", import.meta.url));
 
 // Runs bash asynchronously: the stub in this process must keep answering.
