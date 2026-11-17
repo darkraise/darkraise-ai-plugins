@@ -11,8 +11,8 @@ that only a passing command can open. Claude Code only.
   verify command and only then ticks, commits and moves on.
 - **One review per branch, sized to the diff.** Every finding carries evidence
   that can be re-run.
-- **Docs that cannot rot quietly.** Four living files with line budgets, a
-  dead-path check, and a plan that names the docs it invalidates.
+- **Docs that cannot rot quietly.** Four living files, two of them with line
+  budgets, a dead-path check, and a plan that names the docs it invalidates.
 
 ## Install
 
@@ -81,7 +81,7 @@ docs/dflow/
   board.md       the backlog table
   config.json    gates, run command, darkmem project, thresholds
   plans/         one file per unit of work
-.dflow/          run state, gitignored
+.dflow/          run state, ignored by its own .gitignore
 ```
 
 `dflow init` also marks `decisions.md` and `gotchas.md` `merge=union` in
@@ -206,8 +206,9 @@ is capped, the session works from a task brief, and when the context passes
 line at the task boundary. The HUD mod then compacts and resumes the build.
 The mod keeps the size and the reset request per session, so another session
 open in the same checkout is never compacted by it.
-Without the mod, the PreCompact and SessionStart hooks shape and follow the
-harness's own compaction.
+Without the mod, the PreCompact hook prints what the summary of a build in
+progress should keep, and after a compaction the SessionStart hook names the
+next step.
 
 ## HUD
 
@@ -252,8 +253,10 @@ A session that starts on an approved plan with work left offers to resume it:
 a card above the Now row, or a row above the band, with **Resume** (runs
 `/dflow:build`) and **Dismiss**.
 
-The HUD costs no model tokens. git status runs every ten seconds and the
-`/context` breakdown is estimated locally, each only while it is shown.
+The HUD costs no model tokens. Outside a checkout holding `.dflow` it does not
+poll. Inside one, git status runs every ten seconds unless the HUD is off, and
+the `/context` breakdown is estimated locally only while the Context card is
+shown.
 
 ## Parallel work
 
