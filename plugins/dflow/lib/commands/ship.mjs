@@ -122,7 +122,7 @@ export async function run(ctx, argv, { out }) {
   const moved = () => {
     if (head(ctx.root) !== sha) return 'the head commit moved while ship ran its checks; run `dflow ship` again';
     const changed = uncommitted(ctx);
-    return changed.length ? `the working tree changed while ship ran its checks: ${changed.map(entry => entry.file).join(', ')}` : null;
+    return changed.length ? `the working tree changed while ship ran its checks: ${changed.map(entry => entry.file).join(', ')} (a file a check writes itself belongs in .gitignore)` : null;
   };
 
   if (!problems.length) {

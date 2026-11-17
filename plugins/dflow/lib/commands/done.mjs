@@ -102,7 +102,7 @@ export async function run(ctx, argv, { out }) {
     ...(treeAfter === treeBefore ? [] : treeAfter ? gitList(ctx.root, ['diff', '--name-only', '--no-renames', '-z', treeBefore, treeAfter]) : ['the index']),
     ...unstaged(ctx).filter(file => !own(file)),
   ]);
-  if (moved.size) fail(`the tree changed while verify ran: ${[...moved].slice(0, 12).join(', ')}${moved.size > 12 ? `, and ${moved.size - 12} more` : ''}\nverify did not see it, so nothing was ticked or committed; run \`dflow done ${number}\` again once nothing else is changing the checkout`);
+  if (moved.size) fail(`the tree changed while verify ran: ${[...moved].slice(0, 12).join(', ')}${moved.size > 12 ? `, and ${moved.size - 12} more` : ''}\nverify did not see it, so nothing was ticked or committed; run \`dflow done ${number}\` again once nothing else is changing the checkout (a file the verify command writes itself belongs in .gitignore)`);
 
   const planBefore = active.text;
   const boardBefore = readText(ctx.paths.board);

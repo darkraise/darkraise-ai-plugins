@@ -39,7 +39,7 @@ export async function runGates(ctx, { names = [], out }) {
   const edited = [...new Set([...changesBefore, ...changesAfter].filter(entry => !changesBefore.includes(entry) || !changesAfter.includes(entry)).map(entry => entry.slice(3)))];
   const moved = sha !== shaBefore ? 'the head commit moved' : edited.length ? `the working tree changed (${edited.join(', ')})` : null;
   if (moved) {
-    out(`${moved} while the gates ran; nothing was recorded, since the gates did not run on one tree. Run \`dflow gate\` again once nothing else is changing the checkout.`);
+    out(`${moved} while the gates ran; nothing was recorded, since the gates did not run on one tree. Run \`dflow gate\` again once nothing else is changing the checkout; a file a gate writes itself belongs in .gitignore.`);
     refreshHud(ctx);
     return false;
   }
