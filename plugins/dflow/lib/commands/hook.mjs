@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { nextTask, taskStates } from '../plan.mjs';
 import { loadState, planState, updateState } from '../state.mjs';
-import { activePlan, briefLines, buildModel, refreshHud, taskBrief } from '../status.mjs';
+import { activePlan, briefLines, buildModel, refreshHud } from '../status.mjs';
 import { checkpoint, flush, pull } from './sync.mjs';
 
 function input() {
@@ -44,13 +44,9 @@ async function sessionStart(ctx, event, out) {
   await pull(ctx, { quiet: true });
   const active = activePlan(ctx, state);
   if (!active) return;
+  // After a compaction too: `Next:` names /dflow:build, whose `dflow next`
+  // prints the task's brief once.
   for (const line of briefLines(buildModel(ctx))) out(line);
-  if (event.source !== 'compact') return;
-  const task = currentTask(ctx, state, active);
-  if (!task) return;
-  out('');
-  out('The conversation was compacted. The task in progress, from the plan:');
-  for (const line of taskBrief(ctx, active, task)) out(line);
 }
 
 function preCompact(ctx, event, out) {

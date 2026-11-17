@@ -21,12 +21,13 @@ test('session start says nothing without a plan and two lines with one', t => {
   assert.equal(JSON.parse(read(root, '.dflow/state.json')).transcript, '/tmp/none.jsonl');
 });
 
-test('after a compaction the hook adds the task in progress with the design', t => {
+test('after a compaction the hook names the next step, and the brief is left to dflow next', t => {
   const root = makeProject(t);
   const compacted = dflow(root, ['hook', 'session-start'], { input: event({ source: 'compact' }) });
-  assert.match(compacted.stdout, /The conversation was compacted/);
-  assert.match(compacted.stdout, /## Design\n- D1: a parser function/);
-  assert.match(compacted.stdout, /### Task 1: Parse the header/);
+  assert.deepEqual(compacted.stdout.trim().split('\n'), [
+    'dflow: plan "Rate-limit meter" (docs/dflow/plans/2026-11-12-meter.md) is 0/2 done on feat/x.',
+    'Next: /dflow:build — Task 1: Parse the header',
+  ]);
 });
 
 test('pre-compact prints summary instructions only while a plan is active', t => {
