@@ -6,8 +6,9 @@
 
 - [ ] `node scripts/validate-repository.mjs`
 - [ ] `node scripts/test-all.mjs`
+- [ ] `node scripts/test-all.mjs --plugin dagents` (when dagents, `scripts/` or `tests/` changed)
 - [ ] `claude plugin validate` on the marketplace and each changed Claude plugin
-- [ ] `claude plugin test plugins/dforge` (when dforge changed)
+- [ ] `claude plugin test plugins/<plugin>` for each changed plugin among dforge, dagents and dflow
 
 ## Checklist
 

@@ -66,8 +66,8 @@ codex plugin add dforge@darkraise
 ```
 
 Register the repository root (its Git URL or a local checkout's absolute path),
-not the catalog file: Codex 0.153.4's CLI rejects direct catalog-file
-registration, and root discovery selects the dedicated Codex catalog
+not the catalog file: Codex's CLI rejects direct catalog-file registration,
+and root discovery selects the dedicated Codex catalog
 (`.agents/plugins/marketplace.json`). That catalog lists `dforge`, `dagents` and
 the two UI plugins; `dflow` and `dr-status` are Claude Code only. On Codex, dforge uses the
 client's native agent tools; see
@@ -76,7 +76,8 @@ client's native agent tools; see
 ### Requirements
 
 dforge needs Bash, Git and `jq` (on Windows, Git for Windows provides Bash).
-The cockpit is built against Claude Code 2.1.299 to 2.1.306; the mod API it
+The Claude Code versions the cockpit is tested against are listed under
+[Cockpit](plugins/dforge/README.md#cockpit) in dforge's README; the mod API it
 uses is early access and may change between releases.
 
 ## dforge in brief
@@ -153,8 +154,8 @@ CI bumps each changed plugin (a breaking commit major, a `feat` minor,
 anything else patch), commits the bump to `main`, and tags and publishes it
 as `<plugin>-v<version>`. Renamed plugins, retired plugins and
 re-registering the marketplace are covered in [docs/migration.md](docs/migration.md);
-dforge's own steps are in its README under
-[Migrating to 4.0](plugins/dforge/README.md#migrating-to-40).
+dforge's own steps are in the Migrating sections of
+[its README](plugins/dforge/README.md).
 
 ## Contributing
 
