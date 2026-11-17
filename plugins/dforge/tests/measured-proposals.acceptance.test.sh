@@ -497,7 +497,7 @@ sr_git() { git -C "$SR" "$@"; }
 sr_state() { jq -r "$2" "$SR_WS/task-$1-step.json" | tr -d '\r'; }
 sr_fix_case() { # sr_fix_case <name> <task> <lines appended by the fix>
   local t=$2 i
-  (cd "$SR" && env HOME="$TMP/srhome" bash "$PLUGIN/scripts/task-brief" --open docs/plan.md "$t" >/dev/null); sr_rc=$?
+  (cd "$SR" && env HOME="$TMP/srhome" CLAUDE_CODE_SESSION_ID=mp-acceptance AR_SESSION= bash "$PLUGIN/scripts/task-brief" --open docs/plan.md "$t" >/dev/null); sr_rc=$?
   check "A12: $1: open" "$sr_rc" "0"
   printf 'work %s\n' "$t" >> "$SR/app.txt"
   sr_git add -A && sr_git commit -qm "work $t"

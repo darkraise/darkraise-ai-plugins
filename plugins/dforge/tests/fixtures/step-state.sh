@@ -7,7 +7,7 @@
 # state is replaced.
 seed_step() {
   local ws
-  bash "$1/task-brief" --open "$2" "$3" >/dev/null || return
+  CLAUDE_CODE_SESSION_ID= AR_SESSION= bash "$1/task-brief" --open "$2" "$3" >/dev/null || return
   ws=$(bash "$1/sdd-workspace" "$2") || return
   jq -n --argjson t "$((10#$3))" --arg b "$(git rev-parse HEAD | tr -d '\r')" --arg s "${4:-}" \
     '{tasks: [$t], base: $b, head: null, reviewHead: null, round: 0, t0: null}
