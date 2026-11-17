@@ -4377,6 +4377,10 @@ describe('discord', () => {
     expect(redact("{'api_key': 'a\\'b', 'n': 1}")).toBe("{'api_key': [hidden], 'n': 1}")
     expect(redact('max_tokens: 4096')).toBe('max_tokens: 4096')
     expect(redact(`post ${WEBHOOK}`)).toBe('post [webhook]')
+    expect(redact('psql postgres://admin:hunter2@db.local:5432/app')).toBe('psql postgres://admin:[hidden]@db.local:5432/app')
+    expect(redact('DATABASE_URL=mysql://u:p%40ss@h/db npm start')).toBe('DATABASE_URL=mysql://u:[hidden]@h/db npm start')
+    expect(redact('git clone ssh://git@github.com/o/r https://example.com:8443/x')).toBe('git clone ssh://git@github.com/o/r https://example.com:8443/x')
+    expect(redact('curl "https://maps.googleapis.com/x?key=AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q"')).toBe('curl "https://maps.googleapis.com/x?key=[token]"')
     expect(excerpt('a'.repeat(20), 10)).toBe(`${'a'.repeat(9)}…`)
   })
 
