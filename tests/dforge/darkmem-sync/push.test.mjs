@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { createClient } from "../../../plugins/dforge/scripts/lib/darkmem-client.mjs";
 import { STUB_KEY, sha, startStub, storedDocument } from "./stub-server.mjs";
-import { makeHome, makeRepo, markMigrated, read, run, write } from "./helpers.mjs";
+import { git, makeHome, makeRepo, markMigrated, read, run, scratch, write } from "./helpers.mjs";
 
 async function setup(t, stubOptions = {}) {
   const stub = await startStub(stubOptions);
@@ -308,6 +308,20 @@ test("latest.md goes up as a checkpoint on the plan its State names, or on --wor
   assert.match(bad.stderr, /--workstream "\.\.\/x" is not a workstream key/);
 });
 
+
+test("a push from a linked worktree says its handoff stays local (spec A11)", async t => {
+  const s = await setup(t);
+  write(path.join(s.workRoot, "handoff", "latest.md"), "# Handoff\n\n## State\n- Plan: `docs/superpowers/plans/p1.md`\n");
+  const worktree = path.join(scratch("dms-push-wt-"), "wt");
+  git(s.repo, "worktree", "add", "-q", "-b", "wt", worktree);
+  write(path.join(worktree, ".dforge", "handoff", "latest.md"), "# Handoff\n\n## State\n- Plan: `docs/superpowers/plans/p2.md`\n");
+  const result = await run(["push"], { cwd: worktree, env: s.env });
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, new RegExp(`^worktree handoff stays local: ${path.join(worktree, ".dforge", "handoff", "latest.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m"));
+  assert.equal(s.stub.db.workstreams.find(w => w.key === "p2"), undefined);
+  const primary = await s.push();
+  assert.doesNotMatch(primary.stdout, /worktree handoff stays local/);
+});
 test("without a declared session the run key falls back to the machine and day", async t => {
   const s = await setup(t);
   delete s.env.DFORGE_SESSION_ID;

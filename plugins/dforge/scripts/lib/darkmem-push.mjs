@@ -381,6 +381,10 @@ async function pushLedgers(context) {
 }
 
 async function pushCheckpoint(context, named) {
+  // Only the primary's latest.md lives in the mirror; a linked worktree's
+  // stays in the worktree, so its path differs from the mirror's file.
+  const own = context.cfg.progress?.latestFile;
+  if (own && own !== path.join(context.roots.workRoot, "handoff", "latest.md")) context.out(`worktree handoff stays local: ${own}`);
   try {
     await sendCheckpoint(context, named);
   } catch (error) {
