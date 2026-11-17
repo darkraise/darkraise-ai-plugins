@@ -175,10 +175,7 @@ a2() {
     [ -n "$p" ] || continue
     has "A2: the judge prompt names the lens criteria path $(basename "$p")" "$(cat "$JP")" "$p"
   done <<<"$lens_paths"
-  route=$(cd "$R" && bash "$ROUTE" docs/plan.md --task 1)
-  primary=$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$route")
-  check "A2: review-route prints a Claude judge seat with Codex off" "$primary" "dforge:judge-sonnet-high"
-  has "A2: the digest names the seat review-route prints" "$out" "$primary"
+  check "A2: below risk 3 the digest names the judge-opus seat" "$(grep -c '^seat: dforge:judge-opus ' <<<"$out")" "1"
   local nchecks
   nchecks=$(grep -cE '^check [A-Za-z_-]+: ' <<<"$out")
   check "A2: the digest prints at least two check lines" "$([ "$nchecks" -ge 2 ] && echo yes || echo no)" "yes"
@@ -191,10 +188,13 @@ a2() {
   absent "A2: and the judge prompt has no lens section" "$(cat "$WS/task-3-review-prompt.md")" '[Ll]ens'
   absent "A2: and no unexpanded placeholder" "$(cat "$WS/task-3-review-prompt.md")" '\[[A-Z][A-Z_]+\]'
 
-  # A panel seat: the reviewers' prompt and the panel command.
+  # A panel seat on the risk-3 task: the reviewers' prompt and the panel command.
+  open_t 2
+  commit_file b.txt b "feat: add b"
   review_surface true
-  ts review docs/plan.md 1
-  route=$(cd "$R" && bash "$ROUTE" docs/plan.md --task 1)
+  ts review docs/plan.md 2
+  JP="$WS/task-2-review-prompt.md"
+  route=$(cd "$R" && bash "$ROUTE" docs/plan.md --task 2)
   primary=$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$route")
   has "A2: the open route's primary is a panel seat" "$primary" "panel:"
   has "A2: the digest names the panel seat" "$out" "$primary"
@@ -208,8 +208,6 @@ a2() {
   has "A2: and carries the Second Pass on every panel review" "$(cat "$JP")" 'Second Pass'
 
   # Risk 3: the judge prompt carries the Second Pass section.
-  open_t 2
-  commit_file b.txt b "feat: add b"
   ts review docs/plan.md 2
   has "A2: a risk-3 judge prompt carries the Second Pass section" "$(cat "$WS/task-2-review-prompt.md")" "Second Pass"
   absent "A2: the risk-3 judge prompt has no unexpanded placeholder" "$(cat "$WS/task-2-review-prompt.md")" '\[[A-Z][A-Z_]+\]'

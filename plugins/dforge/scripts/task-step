@@ -625,7 +625,6 @@ do_review() {
     note=" (review-route exited $rrc: $(tr -d '\r' < "$TMP/route.err" | head -n 1))"
   fi
   case $primary in
-    panel:light) tier=light judge=$fallback ;;
     panel:heavy+judge-opus) tier=heavy judge=dforge:judge-opus ;;
     *) judge=$primary ;;
   esac
@@ -664,17 +663,14 @@ do_review() {
       printf '## Output\n\nYour final message is one JSON object that satisfies the output schema, and nothing else: no markdown and no preamble. It carries the four scores (spec, scope, verification, quality), spec_verdict (compliant or issues), task_quality (approved or needs_fixes), findings (severity, file, line and summary for each; line is 0 when a finding has no single line) and cannot_verify (the requirements you could not verify from the diff alone; an empty array when there are none). This overrides any instruction above about the shape of your final message.\n'
     } > "$panel_prompt"
     # The host call must outlast the panel, whose bound is the slowest family's
-    # row of this tier plus that family's grace (run-review-panel).
+    # first row plus that family's grace (run-review-panel).
     timeout_ms=0
     for id in codex:60 agy:70; do
-      case $tier in
-        light) secs=$(ladder_block "${id%%:*}-judge" | awk 'END { print $3 }') ;;
-        *) secs=$(ladder_block "${id%%:*}-judge" | awk 'NR == 1 { print $3 }') ;;
-      esac
+      secs=$(ladder_block "${id%%:*}-judge" | awk 'NR == 1 { print $3 }')
       [ -n "$secs" ] || continue
       [ $(( (secs + ${id##*:} + 120) * 1000 )) -le "$timeout_ms" ] || timeout_ms=$(( (secs + ${id##*:} + 120) * 1000 ))
     done
-    cmd="bash \"$plugin_root\"/scripts/run-review-panel --kind task --tier $tier --cwd \"$top\" --out-dir \"$panel_dir\" --prompt \"$panel_prompt\""
+    cmd="bash \"$plugin_root\"/scripts/run-review-panel --kind task --tier heavy --cwd \"$top\" --out-dir \"$panel_dir\" --prompt \"$panel_prompt\""
   fi
   # Only a token the template holds is a placeholder: a filled value, such as a
   # checkout path, may hold a bracketed capital word of its own.
@@ -704,7 +700,6 @@ do_review() {
     "$(git -C "$top" rev-list --count "$basesha..$headsha")" "$diff"
   if [ "$reason" = reviewers-off ] || [ "$probed" -eq 1 ]; then printf 'gate: %s\n' "${gate:--}"; fi
   case $tier in
-    light) printf 'seat: panel:light prompt: %s fallback: %s\n' "$judge_prompt" "$judge" ;;
     heavy) printf 'seat: panel:heavy+judge-opus prompt: %s then: %s\n' "$judge_prompt" "$judge" ;;
     *) printf 'seat: %s prompt: %s%s\n' "$judge" "$judge_prompt" "$note" ;;
   esac

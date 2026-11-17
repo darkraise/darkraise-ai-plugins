@@ -160,10 +160,8 @@ needed.
   Never Read the report file yourself: the digest carries the verdicts, the
   scores, one line per Critical or Important finding and the cannot-verify
   items, and verdict has already written the fix file and logged the Minor
-  findings. A `panel:light` seat that returned one list writes no report:
-  read its JSON as Panel seats below says. A panel seat's line names the
-  judge prompt and the judge, `seat: panel:light prompt: <judge prompt>
-  fallback: <judge>` or `seat: panel:heavy+judge-opus prompt: <judge prompt>
+  findings. A panel seat's line names the judge prompt and the judge,
+  `seat: panel:heavy+judge-opus prompt: <judge prompt>
   then: dforge:judge-opus`, and `panel: <command>` and `timeout: <ms>`
   follow it: run the panel as below, then the judge as Panel seats says. The
   judge prompt is already written, so you never run `review-route` again for
@@ -325,34 +323,26 @@ call `verdict` again. Exits 5 and 6 are checked before 7.
 [external-review.md](external-review.md) §Task review seats describes, and
 printed the panel command and its `timeout` (the command's `--cwd` is your
 checkout's top level).
-Run that command as a background Bash call with the printed `timeout`:
-2590000 ms for `--tier light`, 5590000 for `--tier heavy`. Its shape is:
+Run that command as a background Bash call with the printed `timeout`,
+5590000 ms. Its shape is:
 
 ```bash
-bash "<plugin-root>/scripts/run-review-panel" --kind task --tier <light|heavy> \
+bash "<plugin-root>/scripts/run-review-panel" --kind task --tier heavy \
   --cwd <worktree-root> --out-dir <workspace>/task-<N>-review-panel \
   --prompt <workspace>/task-<N>-review-panel-prompt.md
 ```
 
-It prints one status line per reviewer family, then `panel tier=<t>
+It prints one status line per reviewer family, then `panel tier=heavy
 lists=<n>`. Read those lines and take their word: `OK` and `FALLBACK` are a
 reviewer that returned a list in `<out-dir>/<id>.json`, and on `FALLBACK` you
 say the substitution aloud. `SKIPPED`, `TIMEOUT` and `FAILED` are a reviewer
 that returned none: never run it again, since each runner has already applied
 its own one-shot fallback. Then, by `lists=`:
 
-- **`lists=0`:** dispatch the judge the `seat:` line names after `fallback:`
-  or `then:` with the judge prompt file and one added line, "No external
+- **`lists=0`:** dispatch the judge the `seat:` line names after `then:`
+  with the judge prompt file and one added line, "No external
   review file exists: skip the Second Pass section", and say so with each
   reviewer's reason.
-- **`panel:light`, one list:** read that review from its JSON:
-  `spec_verdict` (`compliant` or `issues`), `task_quality` (`approved` or
-  `needs_fixes`), the four scores, `findings` and `cannot_verify`. Apply the
-  bands, the cannot-verify route and the fix loop to it exactly as to a
-  judge's report; its verdict and scores are the task's.
-- **`panel:light`, two lists:** dispatch the judge after `fallback:` with the
-  judge prompt file. Its Second Pass dedupes both lists and rules CONFIRMED
-  or REJECTED on each finding; its verdict and scores are the task's.
 - **`panel:heavy+judge-opus`, one or two lists:** dispatch
   `dforge:judge-opus` with the judge prompt file, whose Second Pass already
   names every list's path. The task's verdicts and scores are the judge's.
@@ -418,8 +408,8 @@ covering test files.
 carrying the finding's `:<line>`, with the severity lines after the blank
 line; append the ruling's smallest fix and the covering test files below
 them. Write the file yourself only for findings no report holds: a
-mechanical check's finding, a CONFIRMED-GAP from the ruling seat, or a
-light panel seat's JSON review. `task-step rereview` reads the bullets for the
+mechanical check's finding or a CONFIRMED-GAP from the ruling seat.
+`task-step rereview` reads the bullets for the
 findings list, so write the file before you call it.
 
 **The re-review is scoped.** Run

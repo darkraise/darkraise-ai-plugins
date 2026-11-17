@@ -39,15 +39,15 @@ done
 export PANEL_CODEX_GATE="$TMP/codex-gate" PANEL_AGY_GATE="$TMP/agy-gate" PANEL_CODEX_RUNNER="$TMP/codex-runner" PANEL_AGY_RUNNER="$TMP/agy-runner"
 panel() { rm -f "$TMP/times" "$TMP"/*.args; rm -rf "$TMP/out"; out=$(bash "$PANEL" --cwd "$TMP/work" --out-dir "$TMP/out" "$@" 2>"$TMP/err"); rc=$?; }
 
-panel --kind task --tier light --prompt "$TMP/prompt.md"
-check "light panel prints both reviewers in ranked order and a summary" "$out" "agy-judge gemini-4-argon/high status=OK exit=0 out=$TMP/out/agy.json evidence=none
-codex-judge gpt-6.1-sol/xhigh status=OK exit=0 out=$TMP/out/codex.json evidence=none
-panel tier=light lists=2"
+panel --kind task --tier heavy --prompt "$TMP/prompt.md"
+check "a task panel prints both reviewers in ranked order and a summary" "$out" "agy-judge claude-opus-5-5/high status=OK exit=0 out=$TMP/out/agy.json evidence=none
+codex-judge gpt-6-astra/xhigh status=OK exit=0 out=$TMP/out/codex.json evidence=none
+panel tier=heavy lists=2"
 check "the panel exits 0" "$rc" "0"
 first_end=$(awk '$2 == "end" { print $3; exit }' "$TMP/times")
 last_start=$(awk '$2 == "start" { s = $3 } END { print s }' "$TMP/times")
 check "both reviewers run at the same time" "$([ "$last_start" -lt "$first_end" ] && echo overlap || echo serial)" "overlap"
-check "the light tier reaches the runners" "$(grep -c -- '--tier light' "$TMP/codex.args" "$TMP/agy.args" | awk -F: '{ s += $2 } END { print s }')" "2"
+check "the heavy tier reaches the runners" "$(grep -c -- '--tier heavy' "$TMP/codex.args" "$TMP/agy.args" | awk -F: '{ s += $2 } END { print s }')" "2"
 
 panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "heavy panel runs Astra and agy Opus" "$(grep -c -e 'gpt-6-astra/xhigh status=OK' -e 'claude-opus-5-5/high status=OK' <<<"$out")" "2"
@@ -56,22 +56,22 @@ AGY_STATUS=FALLBACK panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "a FALLBACK runner counts as a list" "$(tail -1 <<<"$out")" "panel tier=heavy lists=2"
 
 AGY_GATE_LINE='agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting' \
-  panel --kind task --tier light --prompt "$TMP/prompt.md"
+  panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "a closed gate skips its family with the gate's reason" "$(head -1 <<<"$out")" "agy-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=setting"
 check "a skipped family is never started" "$([ -f "$TMP/agy.args" ] && echo started || echo skipped)" "skipped"
 AGY_GATE_LINE='agy-gate usable=true reason=ok review=false resets_at=- claude=on claude_resets_at=- source=probe' \
-  panel --kind task --tier light --prompt "$TMP/prompt.md"
+  panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "an untrusted surface is skipped as untrusted" "$(head -1 <<<"$out")" "agy-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=untrusted"
 CODEX_GATE_LINE='codex-gate usable=false reason=logged-out review=false resets_at=- source=probe' \
 AGY_GATE_LINE='agy-gate usable=false reason=quota review=false resets_at=- claude=on claude_resets_at=- source=cache' \
-  panel --kind task --tier light --prompt "$TMP/prompt.md"
-check "with both skipped the panel has no list" "$(tail -1 <<<"$out")" "panel tier=light lists=0"
+  panel --kind task --tier heavy --prompt "$TMP/prompt.md"
+check "with both skipped the panel has no list" "$(tail -1 <<<"$out")" "panel tier=heavy lists=0"
 check "with both skipped the panel still exits 0" "$rc" "0"
 CLAUDE_CODE_SESSION_ID= AGY_GATE_LINE='agy-gate usable=true reason=ok review=false resets_at=- claude=on claude_resets_at=- source=probe' \
-  panel --kind task --tier light --prompt "$TMP/prompt.md"
+  panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "no session id is named as the reason" "$(head -1 <<<"$out" | grep -o 'reason=.*')" "reason=no-session-id"
 printf '%s\n' '#!/usr/bin/env bash' 'echo "agy-gate: jq is required" >&2' 'exit 2' > "$TMP/dead-gate"
-PANEL_AGY_GATE="$TMP/dead-gate" panel --kind task --tier light --prompt "$TMP/prompt.md"
+PANEL_AGY_GATE="$TMP/dead-gate" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "a gate that dies skips its family as gate" "$(head -1 <<<"$out")" "agy-judge none/none status=SKIPPED exit=0 out=- evidence=none reason=gate"
 check "a gate's stderr has its own file" "$(cat "$TMP/out/agy.gate.log" 2>/dev/null)" "agy-gate: jq is required"
 
@@ -84,9 +84,9 @@ check "a plan panel writes one JSON list per reviewer" "$(ls "$TMP/out" | grep -
 check "a plan panel never passes --tier" "$(cat "$TMP/codex.args" "$TMP/agy.args" | grep -c -- '--tier')" "0"
 check "a plan panel runs on the heavy rows" "$(tail -1 <<<"$out")" "panel tier=heavy lists=2"
 
-AGY_STATUS=FAILED panel --kind task --tier light --prompt "$TMP/prompt.md"
+AGY_STATUS=FAILED panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "each runner's stderr has its own file" "$(ls "$TMP/out"/*.stderr | wc -l | tr -d ' ')" "2"
-check "a FAILED runner is not counted as a list" "$(tail -1 <<<"$out")" "panel tier=light lists=1"
+check "a FAILED runner is not counted as a list" "$(tail -1 <<<"$out")" "panel tier=heavy lists=1"
 check "a FAILED runner's out file is removed" "$([ -e "$TMP/out/agy.json" ] && echo kept || echo removed)" "removed"
 check "an OK runner's list is kept" "$([ -e "$TMP/out/codex.json" ] && echo kept || echo removed)" "kept"
 
@@ -96,7 +96,7 @@ out=""; while [ \$# -gt 0 ]; do case "\$1" in --out) out="\$2"; shift 2 ;; *) sh
 sleep 300 & printf '%s\n' \$! > "$TMP/child.pid"; printf '%s\n' \$! >> "$TMP/children"; wait
 EOF
 chmod +x "$TMP/hang-runner"
-PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/hang-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
+PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/hang-runner" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "a runner past the bound is reported as TIMEOUT" "$(head -1 <<<"$out")" "agy-judge none/none status=TIMEOUT exit=124 out=$TMP/out/agy.json evidence=none reason=timeout"
 if command -v setsid >/dev/null 2>&1; then
   check "the bound kills the runner's children" "$(kill -0 "$(cat "$TMP/child.pid")" 2>/dev/null && echo alive || echo dead)" "dead"
@@ -104,7 +104,7 @@ fi
 # Called without panel(), which clears the out dir, so an earlier run's list is there.
 mkdir -p "$TMP/out"; printf '{"stale":true}' > "$TMP/out/agy.json"
 PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/hang-runner" bash "$PANEL" --cwd "$TMP/work" --out-dir "$TMP/out" \
-  --kind task --tier light --prompt "$TMP/prompt.md" >/dev/null 2>&1
+  --kind task --tier heavy --prompt "$TMP/prompt.md" >/dev/null 2>&1
 check "a timed-out runner leaves no list from an earlier run" "$([ -e "$TMP/out/agy.json" ] && echo stale || echo none)" "none"
 
 cat > "$TMP/slow-gate" <<EOF
@@ -116,7 +116,7 @@ chmod +x "$TMP/slow-gate"
 # A 10 s gate against a 10 s bound: counted from panel start the run ends near
 # 10 s, counted after the gates at 20 s or more, and 16 s leaves room for slow forks.
 t0=$(date +%s)
-PANEL_BOUND_SECONDS=10 PANEL_AGY_GATE="$TMP/slow-gate" PANEL_AGY_RUNNER="$TMP/hang-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
+PANEL_BOUND_SECONDS=10 PANEL_AGY_GATE="$TMP/slow-gate" PANEL_AGY_RUNNER="$TMP/hang-runner" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "the bound counts from panel start, gates included" "$([ $(( $(date +%s) - t0 )) -le 16 ] && echo inside || echo over)" "inside"
 
 for fam in codex agy; do
@@ -128,30 +128,30 @@ EOF
   chmod +x "$TMP/$fam-count-gate"
 done
 : > "$TMP/gates.log"
-PANEL_CODEX_GATE="$TMP/codex-count-gate" PANEL_AGY_GATE="$TMP/agy-count-gate" panel --kind task --tier light --prompt "$TMP/prompt.md"
+PANEL_CODEX_GATE="$TMP/codex-count-gate" PANEL_AGY_GATE="$TMP/agy-count-gate" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "one panel run reads each gate once" "$(sort "$TMP/gates.log" | uniq -c | awk '{ printf "%s=%s ", $2, $1 }')" "agy=1 codex=1 "
 
-# Each wrong rule gives another figure: the first row on light (1180), the
-# graces swapped (490), or a closed family still counted (485).
+# Each wrong rule gives another figure: the last rows (485), the graces
+# swapped (1190), or a closed family still counted (1180).
 printf '%s\n' '```codex-judge' 'gpt-6-astra xhigh 1000' 'gpt-6.1-sol xhigh 300' '```' \
   '```agy-judge' 'claude-opus-5-5 high 900' 'gemini-4-argon high 295' '```' > "$TMP/bound-ladder.md"
 bound_of() { grep -o 'bound .*' "$TMP/err" | tr -d '\r'; }
-PANEL_LADDER="$TMP/bound-ladder.md" panel --kind task --tier light --prompt "$TMP/prompt.md"
-check "the light bound is the slower last row plus its grace and 120 s" "$(bound_of)" "bound 485 s, watchdog at 470 s"
 PANEL_LADDER="$TMP/bound-ladder.md" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "the heavy bound takes the first rows" "$(bound_of)" "bound 1180 s, watchdog at 1165 s"
-AGY_GATE_LINE='agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting' \
-  PANEL_LADDER="$TMP/bound-ladder.md" panel --kind task --tier light --prompt "$TMP/prompt.md"
-check "a skipped family adds nothing to the bound" "$(bound_of)" "bound 480 s, watchdog at 465 s"
+CODEX_GATE_LINE='codex-gate usable=false reason=setting review=false resets_at=- source=setting' \
+  PANEL_LADDER="$TMP/bound-ladder.md" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
+check "a skipped family adds nothing to the bound" "$(bound_of)" "bound 1090 s, watchdog at 1075 s"
 printf '%s\n' '```codex-judge' 'gpt-6-astra xhigh 30' 'gpt-6.1-sol xhigh 20' '```' > "$TMP/codex-only-ladder.md"
-PANEL_LADDER="$TMP/codex-only-ladder.md" panel --kind task --tier light --prompt "$TMP/prompt.md"
+PANEL_LADDER="$TMP/codex-only-ladder.md" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "a family with no ladder block fails as error" "$(head -1 <<<"$out")" "agy-judge none/none status=FAILED exit=0 out=- evidence=none reason=error"
 check "and its cause is in its stderr file" "$(grep -c 'agy-judge block' "$TMP/out/agy.stderr" 2>/dev/null)" "1"
 check "and the other family still runs" "$(grep -c '^codex-judge .* status=OK ' <<<"$out")" "1"
 check "a missing ladder block is no usage error" "$rc" "0"
 
 panel --kind task --prompt "$TMP/prompt.md"
-check "a task panel without --tier is a usage error" "$rc" "2"
+check "a task panel without --tier takes the heavy rows" "$rc|$(tail -1 <<<"$out")" "0|panel tier=heavy lists=2"
+panel --kind task --tier light --prompt "$TMP/prompt.md"
+check "a task panel names no tier but heavy" "$rc" "2"
 
 # --- without setsid, a timed-out runner leaves no descendant (row 58) ---
 # The grandchild is the case today's walk misses: it signals a child before
@@ -165,7 +165,7 @@ EOF
 chmod +x "$TMP/tree-runner"
 if command -v pgrep >/dev/null 2>&1; then
   : > "$TMP/tree-pids"
-  PANEL_NO_SETSID=1 PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/tree-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
+  PANEL_NO_SETSID=1 PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/tree-runner" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
   check "no setsid: the timed-out runner is reported as TIMEOUT" "$(head -1 <<<"$out" | grep -c 'status=TIMEOUT')" "1"
   alive=0; while read -r p; do kill -0 "$p" 2>/dev/null && alive=$((alive + 1)); done < "$TMP/tree-pids"
   check "no setsid: no child or grandchild survives the timeout" "$alive:$(wc -l < "$TMP/tree-pids" | tr -d ' ')" "0:2"
@@ -189,7 +189,7 @@ nopgrep_path() { # PATH with no pgrep: a directory holding it stood in for by li
 }
 : > "$TMP/tree-pids"
 NOPGREP_PATH=$(nopgrep_path)
-PATH="$NOPGREP_PATH" PANEL_NO_SETSID=1 PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/tree-runner" panel --kind task --tier light --prompt "$TMP/prompt.md"
+PATH="$NOPGREP_PATH" PANEL_NO_SETSID=1 PANEL_BOUND_SECONDS=3 PANEL_AGY_RUNNER="$TMP/tree-runner" panel --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "no setsid or pgrep: the panel says the runner's children were not stopped" "$(grep -c 'neither setsid nor pgrep is on PATH' "$TMP/err")" "1"
 while read -r p; do kill -KILL "$p" 2>/dev/null; done < "$TMP/tree-pids"
 

@@ -222,7 +222,8 @@ for flag in --base --head --cwd --reset; do
 done
 BASE1=$(git rev-parse HEAD)
 
-# review: a judge seat below risk 3, Codex off for the session.
+# review: a task below risk 3 gets no per-task route; the judge prompt is
+# still written for judge-opus.
 echo a > a.txt && git add a.txt && git commit -qm "feat: add a"
 C1=$(git rev-parse HEAD)
 review_surface absent
@@ -230,8 +231,8 @@ step review docs/plan.md 1
 JP="$WS/task-1-review-prompt.md"
 check "review: exit 0" "$rc" "0"
 check "review: the digest is at most 15 lines" "$([ "$(count_lines "$out")" -le 15 ] && echo yes || echo no)" "yes"
-check "review: the judge seat" "$(grep '^seat:' <<<"$out")" "seat: dforge:judge-sonnet-high prompt: $JP"
-check "review: reviewers off shows each family's gate reason" "$(grep '^gate:' <<<"$out")" "gate: agy=setting codex=open"
+check "review: below risk 3 the seat is judge-opus, saying why" "$(grep '^seat:' <<<"$out")" \
+  "seat: dforge:judge-opus prompt: $JP (review-route exited 2: review-route: Task 1 is risk 0: only a risk-3 task gets a per-task review)"
 check "review: no runner lines for a judge seat" "$(grep -cE '^(panel|codex|timeout):' <<<"$out")" "0"
 check "review: no panel prompt for a judge seat" "$([ -e "$WS/task-1-review-panel-prompt.md" ] && echo yes || echo no)" "no"
 check "review: the judge prompt has no unexpanded placeholder" "$(placeholders "$JP")" "0"
@@ -261,31 +262,10 @@ step review docs/plan.md 2
 check "review: a task with no lens drops the section" "$(grep -c 'Lens Criteria' "$WS/task-2-review-prompt.md")" "0"
 check "review: and leaves no placeholder" "$(placeholders "$WS/task-2-review-prompt.md")" "0"
 
-# review: a light panel seat, with the judge prompt as the fallback.
-review_surface true
-step review docs/plan.md 1
-PP="$WS/task-1-review-panel-prompt.md"
-check "a light panel's timeout covers both rows" "$(grep '^timeout:' <<<"$out")" "timeout: 2590000"
-check "a light judge prompt keeps the Second Pass for two lists" "$(grep -c '^## Second Pass' "$WS/task-1-review-prompt.md")" "1"
-check "review: the judge prompt keeps no template instruction text" "$(grep -cE '^\[Include |otherwise\.\]$' "$WS/task-1-review-prompt.md")" "0"
-check "review: the light seat names the band fallback" "$(grep '^seat:' <<<"$out")" "seat: panel:light prompt: $JP fallback: dforge:judge-sonnet-high"
-check "review: the panel command in full" "$(grep '^panel:' <<<"$out")" \
-  "panel: bash \"$PR\"/scripts/run-review-panel --kind task --tier light --cwd \"$TOP\" --out-dir \"$WS/task-1-review-panel\" --prompt \"$PP\""
-check "review: no gate line while a surface is open" "$(grep -c '^gate:' <<<"$out")" "0"
-check "review: the judge prompt is still written, with its lens" "$(grep -c 'Lens Criteria' "$JP")" "1"
-check "review: the panel prompt has no unexpanded placeholder" "$(placeholders "$PP")" "0"
-check "review: the panel prompt asks for one JSON object" "$(grep -c 'one JSON object' "$PP")" "1"
-check "review: the panel prompt carries the criteria" "$(grep -c '^#### Spec Compliance {#spec}$' "$PP")" "1"
-check "review: the panel prompt drops the markdown report" "$(grep -cE 'Verification Scores|Output Format|Lens Criteria|Second Pass' "$PP")" "0"
-check "review: the panel prompt names the diff file" "$(grep -c "^\*\*Diff file:\*\* $WS/review-" "$PP")" "1"
-check "review: no Codex prompt is written" "$([ -e "$WS/task-1-review-codex-prompt.md" ] && echo yes || echo no)" "no"
-printf '%s\n' '#!/usr/bin/env bash' 'echo "agy-gate usable=true reason=ok review=false resets_at=- claude=on claude_resets_at=- source=probe"' > "$TMP/agy-probe-stub"
-TASK_STEP_AGY_GATE="$TMP/agy-probe-stub" step review docs/plan.md 1
-check "review: a gate that probed prints the gate line, untrusted named" "$(grep '^gate:' <<<"$out")" "gate: agy=untrusted codex=open"
-
 # review: a heavy panel seat on risk 3, then the judge with the Second Pass section.
 echo b > b.txt && git add b.txt && git commit -qm "feat: add b"
 C2=$(git rev-parse HEAD)
+review_surface true
 step review docs/plan.md 7
 JP7="$WS/task-7-review-prompt.md"
 check "a heavy review prints the heavy panel seat" "$(grep -c '^seat: panel:heavy+judge-opus prompt: .* then: dforge:judge-opus' <<<"$out")" "1"
@@ -294,9 +274,24 @@ check "the Second Pass names each reviewer's file" "$(grep -c -e 'task-7-review-
 check "review: the heavy command names the tier" "$(grep -c -- '--kind task --tier heavy --cwd' <<<"$out")" "1"
 check "review: the panel prompt leaves the Second Pass out" "$(grep -c 'Second Pass' "$WS/task-7-review-panel-prompt.md")" "0"
 check "review: the risk-3 judge prompt has no placeholder" "$(placeholders "$JP7")" "0"
+PP="$WS/task-7-review-panel-prompt.md"
+check "review: the judge prompt keeps no template instruction text" "$(grep -cE '^\[Include |otherwise\.\]$' "$JP7")" "0"
+check "review: the panel command in full" "$(grep '^panel:' <<<"$out")" \
+  "panel: bash \"$PR\"/scripts/run-review-panel --kind task --tier heavy --cwd \"$TOP\" --out-dir \"$WS/task-7-review-panel\" --prompt \"$PP\""
+check "review: no gate line while a surface is open" "$(grep -c '^gate:' <<<"$out")" "0"
+check "review: the panel prompt has no unexpanded placeholder" "$(placeholders "$PP")" "0"
+check "review: the panel prompt asks for one JSON object" "$(grep -c 'one JSON object' "$PP")" "1"
+check "review: the panel prompt carries the criteria" "$(grep -c '^#### Spec Compliance {#spec}$' "$PP")" "1"
+check "review: the panel prompt drops the markdown report" "$(grep -cE 'Verification Scores|Output Format|Lens Criteria|Second Pass' "$PP")" "0"
+check "review: the panel prompt names the diff file" "$(grep -c "^\*\*Diff file:\*\* $WS/review-" "$PP")" "1"
+check "review: no Codex prompt is written" "$([ -e "$WS/task-7-review-codex-prompt.md" ] && echo yes || echo no)" "no"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "agy-gate usable=true reason=ok review=false resets_at=- claude=on claude_resets_at=- source=probe"' > "$TMP/agy-probe-stub"
+TASK_STEP_AGY_GATE="$TMP/agy-probe-stub" step review docs/plan.md 7
+check "review: a gate that probed prints the gate line, untrusted named" "$(grep '^gate:' <<<"$out")" "gate: agy=untrusted codex=open"
 review_surface false
 step review docs/plan.md 7
 check "review: risk 3 with reviewers off is a judge-opus seat" "$(grep '^seat:' <<<"$out")" "seat: dforge:judge-opus prompt: $JP7"
+check "review: reviewers off shows each family's gate reason" "$(grep '^gate:' <<<"$out")" "gate: agy=setting codex=open"
 check "review: and carries no Second Pass section" "$(grep -c 'Second Pass' "$JP7")" "0"
 review_surface absent
 
@@ -385,11 +380,11 @@ check "review report: the implementer's report keeps its own line" "$(grep -cF "
 check "review report: no placeholder is left" "$(placeholders "$RP2")" "0"
 check "review report: a fresh review discards the last report" "$([ -e "$WS/task-2-review-report.md" ] && echo yes || echo no)" "no"
 review_surface true
-step review docs/plan.md 1
+step review docs/plan.md 7
 check "review report: the panel prompt carries no report-file rule" \
-  "$(grep -c 'review-report.md\|write nothing else' "$WS/task-1-review-panel-prompt.md")" "0"
+  "$(grep -c 'review-report.md\|write nothing else' "$WS/task-7-review-panel-prompt.md")" "0"
 check "review report: the panel prompt keeps the implementer's report" \
-  "$(grep -cF "Read the implementer's report: $WS/task-1-report.md" "$WS/task-1-review-panel-prompt.md")" "1"
+  "$(grep -cF "Read the implementer's report: $WS/task-7-report.md" "$WS/task-7-review-panel-prompt.md")" "1"
 review_surface absent
 fi
 

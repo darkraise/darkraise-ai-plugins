@@ -51,8 +51,8 @@ case "$kind" in
 esac
 case "$tier" in
   "") tier=heavy ;;
-  light|heavy) [ "$kind" = task ] || die "--tier applies only to --kind task" ;;
-  *) die "--tier must be light or heavy" ;;
+  heavy) [ "$kind" = task ] || die "--tier applies only to --kind task" ;;
+  *) die "--tier must be heavy" ;;
 esac
 [ -n "$cwd" ] || die "--cwd is required"
 [ -n "$out" ] || die "--out is required"
@@ -107,13 +107,7 @@ fi
 # is attempted, and a refusal falls back, which is the guarantee that matters.
 evidence=none
 
-# The light tier is the last row by definition: the known-good rung, and already
-# the fallback row, so the refusal branch never retries it against itself.
-if [ "$tier" = light ]; then
-  model="$back_model"; effort="$back_effort"
-else
-  model="$pref_model"; effort="$pref_effort"
-fi
+model="$pref_model"; effort="$pref_effort"
 secs=$(secs_of "$model" "$effort")
 [ -n "$secs" ] || die "no timeout for $model/$effort in the codex-judge block"
 

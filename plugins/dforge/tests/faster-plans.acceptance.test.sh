@@ -314,14 +314,8 @@ a3() {
 a5() {
   new_repo a5
   route docs/plan.md --task 8
-  check "A5: a task with no Evaluation line exits 0" "$rc" "0"
-  has "A5: and prints reason=unscored" "$out" "reason=unscored"
-
-  # With several tasks the route keeps going by the highest total.
-  route docs/plan.md --task 1 6
-  check "A5: two light tasks route to the light judge" "$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$out")" "dforge:judge-sonnet-high"
-  route docs/plan.md --task 1 5
-  check "A5: a batch holding a total-5 task stays on the light judge" "$(sed -n 's/.*primary=\([^ ]*\).*/\1/p' <<<"$out")" "dforge:judge-sonnet-high"
+  check "A5: a task with no Evaluation line gets no per-task route" "$rc" "2"
+  has "A5: and the refusal names the missing line" "$err" "has no **Evaluation:** line"
 }
 
 # --- A11 ---------------------------------------------------------------------
@@ -650,9 +644,9 @@ a22() {
   local n tier ok=1
   for n in 1 2 3 4 5 6; do
     route docs/old-plan.md --task "$n"
-    [ "$rc" -eq 0 ] && grep -qE ' primary=[^ ]+ ' <<<"$out" || ok=0
+    { [ "$rc" -eq 0 ] && grep -qE ' primary=[^ ]+ ' <<<"$out"; } || grep -qF 'only a risk-3 task gets a per-task review' <<<"$err" || ok=0
   done
-  check "A22: review-route gives every old task a seat" "$ok" "1"
+  check "A22: review-route reads every old task's Evaluation line" "$ok" "1"
   WS=$(winpath "$(cd "$R" && bash "$S/sdd-workspace" docs/old-plan.md)")
   seed docs/old-plan.md 1
   check "A22: an old task opens" "$rc" "0"

@@ -606,7 +606,7 @@ chmod +x "$D28/tree-runner" "$D28"/*-gate "$D28"/codex-runner "$D28"/agy-runner
 : > "$D28/pids"
 out=$(PANEL_NO_SETSID=1 PANEL_BOUND_SECONDS=3 PANEL_CODEX_GATE="$D28/codex-gate" PANEL_AGY_GATE="$D28/agy-gate" \
   PANEL_CODEX_RUNNER="$D28/codex-runner" PANEL_AGY_RUNNER="$D28/tree-runner" CLAUDE_CODE_SESSION_ID=s-28 \
-  timeout 60 bash "$S/run-review-panel" --kind task --tier light --cwd "$D28/work" --out-dir "$D28/out" --prompt "$D28/prompt.md" 2>/dev/null)
+  timeout 60 bash "$S/run-review-panel" --kind task --tier heavy --cwd "$D28/work" --out-dir "$D28/out" --prompt "$D28/prompt.md" 2>/dev/null)
 sleep 1
 alive=0
 while read -r p; do

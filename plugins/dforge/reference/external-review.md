@@ -6,23 +6,18 @@ run beside the Claude judges as a parallel panel chosen by risk, and every
 finding they return is weighed by a Claude judge or read as a judge's report
 would be. With both surfaces off, the default, every review stays on Claude.
 
-## Reviewers and tiers
+## Reviewers
 
 Each family has a judge block in [ladder.md](ladder.md), first row preferred,
 last row the fallback, each row `model effort seconds`: `codex-judge`
 (`gpt-6-astra xhigh 5400`, then `gpt-6.1-sol xhigh 2400`) and `agy-judge`
 (`claude-opus-5-5 high 5400`, then `gemini-4-argon high 2400`).
 
-| Review | Tier | Reviewers run in parallel |
-|---|---|---|
-| Task or batch at risk 0-2 | light | Codex `gpt-6.1-sol`, agy `gemini-4-argon` (each block's last row; no fallback) |
-| Task at risk 3 | heavy | Codex `gpt-6-astra`, agy `claude-opus-5-5` (each block's first row, falling back once to its last row on a refusal) |
-| Plan review round 1 | heavy | as risk 3 |
-| Final review's external round | heavy | as risk 3 |
-
-Under an inline plan only risk-3 tasks get a per-task review and the final
-external round runs at depth full only, so the light tier never runs there:
-Sol and Argon are reached as heavy fallbacks.
+Every panel run starts each family on its first row and falls back once to
+its last row on a refusal: Codex `gpt-6-astra`, then `gpt-6.1-sol`; agy
+`claude-opus-5-5`, then `gemini-4-argon`. The panel runs for a risk-3 task's
+review (only a risk-3 task gets a per-task review), plan review round 1 and
+the final review's external round.
 
 ## The panel
 
@@ -30,7 +25,7 @@ Sol and Argon are reached as heavy fallbacks.
 
 ```bash
 bash "<plugin-root>/scripts/run-review-panel" --kind task|plan|final \
-  --tier light|heavy --cwd <worktree-root> --out-dir <dir> \
+  [--tier heavy] --cwd <worktree-root> --out-dir <dir> \
   (--prompt <file> | --base <sha>)
 ```
 
@@ -49,14 +44,12 @@ bash "<plugin-root>/scripts/run-review-panel" --kind task|plan|final \
 - It prints each runner's own status line,
   `<id>-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<path> evidence=<e>`,
   with ` reason=<token>` on every line that is not `OK`, then
-  `panel tier=<t> lists=<n>`, where `<n>` counts the `OK` and `FALLBACK`
+  `panel tier=heavy lists=<n>`, where `<n>` counts the `OK` and `FALLBACK`
   lines.
-- Its bound is the slowest family's first row for the tier plus that family's
-  grace (60 s for codex, 70 s for agy), plus 120 s: 2590 s light and 5590 s
-  heavy. A watchdog ends every runner still going 15 s before it. Run the
-  panel as a background Bash call with `timeout` 2590000 ms for light and
-  5590000 ms for heavy, plan and final; a foreground call caps at ten
-  minutes.
+- Its bound is the slowest family's first row plus that family's grace
+  (60 s for codex, 70 s for agy), plus 120 s: 5590 s. A watchdog ends every
+  runner still going 15 s before it. Run the panel as a background Bash call
+  with `timeout` 5590000 ms; a foreground call caps at ten minutes.
 - It exits 0 whenever it answered, `lists=0` included, and 2 on a usage
   error.
 
@@ -82,12 +75,13 @@ the `.wrote` lines to the user.
 
 ## Task review seats
 
-`scripts/review-route PLAN_FILE --task <N>` names a panel seat while either
-family's session file says `review=true`:
+`scripts/review-route PLAN_FILE --task <N>` routes a risk-3 task, and exits
+2 for any other:
 
-- risk 0-2: `primary=panel:light fallback=<band seat> reason=band`;
-- risk 3: `primary=panel:heavy+judge-opus fallback=dforge:judge-opus reason=risk`;
-- neither surface open: the Claude seat with `reason=reviewers-off`.
+- either family's session file says `review=true`:
+  `primary=panel:heavy+judge-opus fallback=dforge:judge-opus reason=risk`;
+- neither surface open: `primary=dforge:judge-opus` with
+  `reason=reviewers-off`.
 
 `scripts/task-step review` writes the judge prompt, whose Second Pass names
 one review file per ranked family, and the reviewers' prompt
@@ -101,15 +95,8 @@ consumed this way:
 - **No list:** the Claude seat the route names as `fallback`, with the judge
   prompt and the line "No external review file exists: skip the Second Pass
   section".
-- **Light tier, one list:** read the list as a judge's report is read; its
-  verdict and scores are the task's.
-- **Light tier, two lists:** the band judge (`judge-sonnet-high` for totals
-  0-5, `judge-opus` for 6) dedupes both lists and rules CONFIRMED or REJECTED
-  on each finding.
-- **Heavy tier:** `judge-opus` rules on every finding of every list, one or
-  two.
-- **Whose verdict counts:** when a judge runs, the judge's verdict and scores
-  go on the ledger; with one list and no judge, that list's.
+- **One or two lists:** `judge-opus` rules on every finding of every list.
+- **Whose verdict counts:** the judge's verdict and scores go on the ledger.
 
 The judge's report carries its reading of the lists as `## External findings`,
 its last section, which `task-step verdict` reads.

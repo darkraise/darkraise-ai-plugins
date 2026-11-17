@@ -7,10 +7,10 @@
 # family's runner starts in the background, and a watchdog ends any runner
 # still going at the bound, so one hung reviewer cannot hold the others' lists.
 #
-# Usage: run-review-panel --kind task|plan|final --tier light|heavy --cwd DIR
+# Usage: run-review-panel --kind task|plan|final [--tier heavy] --cwd DIR
 #          --out-dir DIR (--prompt FILE | --base SHA)
-#   --tier is required for task and ignored for plan and final, which take
-#   the heavy rows; --prompt goes with task and plan, --base with final.
+#   Every kind takes the heavy rows, the only tier; --prompt goes with task
+#   and plan, --base with final.
 #   Each gate's stderr goes to <out-dir>/<id>.gate.log, each runner's to
 #   <out-dir>/<id>.stderr. The panel's own stderr names its bound and the
 #   second its watchdog fires.
@@ -45,11 +45,10 @@ while [ $# -gt 0 ]; do
 done
 
 case "$kind" in
-  task)
-    case "$tier" in light|heavy) ;; *) die "--kind task needs --tier light|heavy" ;; esac ;;
-  plan|final) tier=heavy ;;
+  task|plan|final) ;;
   *) die "--kind must be task, plan or final" ;;
 esac
+case "$tier" in ""|heavy) tier=heavy ;; *) die "--tier must be heavy" ;; esac
 if [ "$kind" = final ]; then
   [ -n "$base" ] || die "--kind final needs --base"
   [ -z "$prompt" ] || die "--kind final takes --base, not --prompt"
@@ -81,14 +80,12 @@ seam() { # seam <id> <GATE|RUNNER>; prints the override path, if any
 
 field() { sed -n "s/.* $1=\\([^ ]*\\).*/\\1/p" <<<" $2"; }
 
-# Ladder rows are `model effort seconds`; the light tier runs the last row
-# first, every other kind the first row.
+# Ladder rows are `model effort seconds`; a run starts on the first row.
 first_secs() { # first_secs <block>
-  awk -v tag='```'"$1" -v light="$([ "$tier" = light ] && echo 1 || echo 0)" '
+  awk -v tag='```'"$1" '
     $0 == tag { f = 1; next }
     f && $0 == "```" { exit }
-    f && NF { last = $3; if (!seen++) first = $3 }
-    END { print (light ? last : first) }
+    f && NF { print $3; exit }
   ' "$LADDER"
 }
 

@@ -3,7 +3,7 @@
 # plan mode under a bound, proves it wrote nothing, and classifies the outcome.
 #
 # Usage: run-agy-review.sh --kind task|plan|final --cwd DIR --out FILE
-#          (--prompt FILE | --base SHA) [--tier light|heavy] [--dry-run]
+#          (--prompt FILE | --base SHA) [--tier heavy] [--dry-run]
 # Output: agy-judge <model>/<effort> status=<OK|FALLBACK|TIMEOUT|FAILED>
 #           exit=<n> out=<path> evidence=<e>[ reason=<token>]
 # Exit: 0 on OK or FALLBACK, 1 on TIMEOUT or FAILED, 2 on a usage error.
@@ -54,8 +54,8 @@ case "$kind" in
 esac
 case "$tier" in
   "") tier=heavy ;;
-  light|heavy) [ "$kind" = task ] || die "--tier applies only to --kind task" ;;
-  *) die "--tier must be light or heavy" ;;
+  heavy) [ "$kind" = task ] || die "--tier applies only to --kind task" ;;
+  *) die "--tier must be heavy" ;;
 esac
 [ -n "$cwd" ] || die "--cwd is required"
 [ -n "$out" ] || die "--out is required"
@@ -119,14 +119,10 @@ if [ -z "$git_version" ] || [ "${git_version%%.*}" -lt 2 ] ||
   exit 1
 fi
 
-if [ "$tier" = light ]; then
-  model="$back_model"; effort="$back_effort"
-else
-  model="$pref_model"; effort="$pref_effort"
-  # Fails closed: a line that does not say claude=on keeps Claude out.
-  if [[ "$model" == claude-* && "$gate_line" != *" claude=on "* ]]; then
-    model="$back_model"; effort="$back_effort"; evidence=claude-off
-  fi
+model="$pref_model"; effort="$pref_effort"
+# Fails closed: a line that does not say claude=on keeps Claude out.
+if [[ "$model" == claude-* && "$gate_line" != *" claude=on "* ]]; then
+  model="$back_model"; effort="$back_effort"; evidence=claude-off
 fi
 secs=$(secs_of "$model" "$effort")
 [ -n "$secs" ] || die "no timeout for $model/$effort in the agy-judge block"

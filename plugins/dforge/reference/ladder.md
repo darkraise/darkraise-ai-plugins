@@ -99,11 +99,8 @@ by its review runner.
 
 Every Claude-hosted Codex review seat — the task seats, plan-review round 1,
 and the final-review round — takes its model from this block. The first row is
-preferred; the last row is the fallback. `--tier light` runs the last row
-directly, for tasks totalling 0 to 8 below risk 3; every other seat (risk 3,
-plan review, the final round) uses the first row with its fallback. Totals 4
-to 6 moved from Astra to the light row on 2026-10-07, when `gpt-6.1-sol`
-replaced `gpt-6-sol` there, at about a fifth of Astra's price.
+preferred; the last row is the fallback. Every seat (risk 3, plan review,
+the final round) uses the first row with its fallback.
 
 ```codex-judge
 gpt-6-astra xhigh 5400
@@ -115,8 +112,8 @@ on the largest plans, so raising a row's effort without raising its bound only
 buys `TIMEOUT` rows.
 
 The two rows carry different bounds. `gpt-6-astra/xhigh` runs the heavy seats,
-so its 5400 is set for whole plans and branches. `gpt-6.1-sol/xhigh` runs the
-light tier and keeps the 2400 it carried when the same pair also bounded task
+so its 5400 is set for whole plans and branches. `gpt-6.1-sol/xhigh`, the
+fallback, keeps the 2400 it carried when the same pair also bounded task
 execution.
 
 `gpt-6-astra` is also the floor `reference/codex-routing.json` sets for native
@@ -131,10 +128,10 @@ Revise them when real runs warrant it.
 
 Every agy review seat takes its model from this block, read by
 `scripts/run-agy-review.sh`. The first row is preferred; the last row is the
-fallback and the light tier, which runs it directly. A heavy task review, a
-plan review and a final review use the first row with one fallback to the
-last on a refused model, and a `claude-*` row whose Claude quota is out runs
-the last row instead. The bounds copy the Codex rows of the same tier.
+fallback. A task review, a plan review and a final review use the first
+row with one fallback to the last on a refused model, and a `claude-*` row
+whose Claude quota is out runs the last row instead. The bounds copy the
+Codex rows in the same position.
 
 ```agy-judge
 claude-opus-5-5 high 5400

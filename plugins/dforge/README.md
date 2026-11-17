@@ -139,11 +139,9 @@ error.
 
 **A reviewer panel.** Codex and agy review; neither implements a task. When a
 family's review surface is open, `scripts/run-review-panel` runs every open
-family at once, chosen by risk: the light tier (Codex `gpt-6.1-sol`, agy
-`gemini-4-argon`) for tasks at risk 0 to 2, and the heavy tier (Codex
-`gpt-6-astra`, agy `claude-opus-5-5`, each falling back once to the light row on
-a refusal) at risk 3, for plan review round 1 and for the final review's
-external round at depth full. A family whose gate is closed is skipped with its
+family at once (Codex `gpt-6-astra`, agy `claude-opus-5-5`, each falling back
+once to its last row on a refusal) for a risk-3 task, for plan review round 1
+and for the final review's external round at depth full. A family whose gate is closed is skipped with its
 reason, so the panel answers with whatever lists came back, and a Claude judge
 reviews alone when none did. A heavy panel's lists go to `judge-opus`, which
 rules on every finding. Antigravity's Claude quota is small, so after one or two
@@ -178,14 +176,13 @@ A different machine, account, or Codex version must verify the tables against
 its own account before relying on them. Do not make paid capability probes.
 
 **Cross-family review.** External reviews are opt-in. By default every review
-runs on Claude judges: `judge-sonnet-high` for tasks totalling 0 to 5,
-`judge-opus` for 6 and at risk 3, plan review and the final review. For a
+runs on Claude judges: `judge-opus` for a risk-3 task, plan review and the
+final review. For a
 one-off Codex review, run `/codex:review` or `/codex:adversarial-review` from
 the codex plugin. Turning the `codexReview` or `agyReview` setting on gives
 that family the panel seats for every run (`reference/external-review.md`):
-a light panel's one list is read as a judge's report, two lists go to the band
-judge to dedupe and verify, and a heavy panel's lists always go to
-`judge-opus`; when the panel returns no list, the Claude seat reviews alone.
+the panel's lists always go to `judge-opus`; when the panel returns no list,
+the Claude seat reviews alone.
 Plan review runs the panel for round 1 (`judge-opus` when it returns nothing
 or every reviewer is off) and `judge-opus` for the delta round: at most two
 rounds on a Claude plan. The final whole-branch review runs on `judge-opus`,
