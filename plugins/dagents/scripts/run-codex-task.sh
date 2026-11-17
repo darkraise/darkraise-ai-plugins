@@ -151,7 +151,7 @@ if [[ "$gate_line" != *" lane=true "* ]]; then
   die "codex lane is off for this session (${gate_reason:-no gate answer})"
 fi
 cwd="$(dr_canonical "$cwd")" || die 'cannot resolve worktree'
-report="$(realpath -m -- "$report")" || die 'cannot resolve report path'
+report="$(dr_resolve "$report")" || die 'cannot resolve report path'
 case "$report" in
   "$cwd"/*)
     case "$report" in "$cwd"/.dagents/*) ;; *) die 'report must be outside checkout or in ignored .dagents workspace' ;; esac

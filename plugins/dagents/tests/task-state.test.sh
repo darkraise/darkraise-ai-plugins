@@ -190,5 +190,28 @@ check 'the commit records the new submodule commit' \
   "$(git -C "$fixture/subs" ls-tree HEAD lib | awk '{print $3}')" "$(git -C "$fixture/subs/lib" rev-parse HEAD)"
 dr_task_unlock
 
+# --- macOS: GNU timeout only as gtimeout, and a realpath without -m -----------
+mkdir -p "$fixture/macbin" "$fixture/outside"
+printf '#!/usr/bin/env bash\necho "timeout: command not found" >&2\nexit 127\n' > "$fixture/macbin/timeout"
+printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$(command -v timeout)" > "$fixture/macbin/gtimeout"
+printf '#!/usr/bin/env bash\necho "realpath: illegal option -- ${1#-}" >&2\nexit 1\n' > "$fixture/macbin/realpath"
+chmod +x "$fixture/macbin/timeout" "$fixture/macbin/gtimeout" "$fixture/macbin/realpath"
+git -C "$fixture/primary" worktree add -q -b mac "$fixture/mac"
+scope_check() { # scope_check <json array> — dr_task_scope_valid's status on a mac
+  printf '%s\n' "$1" > "$fixture/mac-check.json"
+  (PATH="$fixture/macbin:$PATH" DAGENTS_WORKTREE="$(dr_canonical "$fixture/mac")"; dr_task_scope_valid "$fixture/mac-check.json")
+  echo "$?"
+}
+check 'macOS: a new nested path is in scope' "$(scope_check '["new/dir/file.txt"]')" 0
+case "${OSTYPE:-}" in
+  msys*|cygwin*) ;;
+  *)
+    ln -s "$fixture/outside" "$fixture/mac/out"
+    ln -s "$fixture/outside/missing.txt" "$fixture/mac/dangling"
+    check 'macOS: a path through a symlinked directory escapes' "$(scope_check '["out/x.txt"]')" 2
+    check 'macOS: a dangling symlink to outside escapes' "$(scope_check '["dangling"]')" 2
+    rm "$fixture/mac/out" "$fixture/mac/dangling" ;;
+esac
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

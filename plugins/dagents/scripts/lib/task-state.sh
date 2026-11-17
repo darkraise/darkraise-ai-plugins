@@ -4,6 +4,33 @@
 dr_state_error() { printf 'task-state: %s\n' "$1" >&2; return 2; }
 dr_canonical() { (cd -- "$1" && pwd -P); }
 
+# dr_resolve PATH — PATH with every symbolic link resolved and . and ..
+# removed, whether or not it exists: GNU realpath -m, which macOS lacks.
+dr_resolve() {
+  local path=$1 rest="" link hops=0 s out="" part
+  case $path in /*) ;; *) path="$PWD/$path" ;; esac
+  while :; do
+    while [ ! -e "$path" ] && [ ! -L "$path" ]; do
+      rest="/${path##*/}$rest" path=${path%/*}
+      [ -n "$path" ] || { path=/; break; }
+    done
+    [ -L "$path" ] || break
+    hops=$((hops + 1))
+    [ "$hops" -le 40 ] || return 1
+    link=$(readlink -- "$path") || return 1
+    case $link in /*) path=$link ;; *) path="${path%/*}/$link" ;; esac
+  done
+  if [ -d "$path" ]; then path=$(cd -P -- "$path" && pwd -P) || return 1
+  else path="$(cd -P -- "${path%/*}/" && pwd -P)/${path##*/}" || return 1
+  fi
+  s="$path$rest/"
+  while [ -n "$s" ]; do
+    part=${s%%/*} s=${s#*/}
+    case $part in '' | .) ;; ..) out=${out%/*} ;; *) out="$out/$part" ;; esac
+  done
+  printf '%s\n' "${out:-/}"
+}
+
 dr_snapshot() {
   local root output="$2" index files temp indexfile filesfile filemode
   root="$(dr_canonical "$1")" || return 2
@@ -182,7 +209,7 @@ dr_task_scope_valid() {
   local path target
   while IFS= read -r -d '' path; do
     case "$path" in /*|[A-Za-z]:*|*\\*|..|../*|*/../*|*/..|.git|.git/*|.dagents|.dagents/*) return 2 ;; esac
-    target="$(realpath -m -- "$DAGENTS_WORKTREE/$path")" || return 2
+    target="$(dr_resolve "$DAGENTS_WORKTREE/$path")" || return 2
     case "$target" in "$DAGENTS_WORKTREE"/*) ;; *) return 2 ;; esac
   done < <(jq -j '.[] + "\u0000"' "$1")
 }
