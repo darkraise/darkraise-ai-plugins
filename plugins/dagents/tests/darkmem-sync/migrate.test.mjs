@@ -623,6 +623,10 @@ test("a mirror another dforge record still names is copied, not moved, and a clo
     [b]: { documents: "darkmem", progress: "darkmem", project: "projA", mirror },
   }));
   write(path.join(mirror, "dforge", "plans", "p1.md"), "# P1\n");
+  // A sync state, so the shared record alone keeps the source in place.
+  write(path.join(mirror, ".sync-state.json"), JSON.stringify({
+    ...JSON.parse(STATE({ "dforge/plans/p1.md": sha("# P1\n") })), prefix: "dforge", remote: { url: stub.url, project: "projA" },
+  }));
   await seed.putDocument({ project: "projA", uri: "dforge/plans/p1.md", content: "# P1\n" });
   const done = await seed.append({ project: "projA", workstream: "done", entries: [{ kind: "ledger", body: "Task 1: complete (abc)\n" }] });
   await seed.updateWorkstream(done.workstream.id, { state: "closed" });
@@ -631,6 +635,10 @@ test("a mirror another dforge record still names is copied, not moved, and a clo
   assert.match(out.stdout, /copied .*projA to .*\.dagents[\\/]mirror[\\/]projA \(another .* record still names it\)/);
   assert.equal(read(path.join(mirror, "dforge", "plans", "p1.md")), "# P1\n");
   assert.equal(read(path.join(home, ".dagents", "mirror", "projA", "dagents", "plans", "p1.md")), "# P1\n");
+  const sourceState = JSON.parse(read(path.join(mirror, ".sync-state.json")));
+  assert.deepEqual([sourceState.prefix, Object.keys(sourceState.documents)], ["dforge", ["dforge/plans/p1.md"]]);
+  const copyState = JSON.parse(read(path.join(home, ".dagents", "mirror", "projA", ".sync-state.json")));
+  assert.deepEqual([copyState.prefix, Object.keys(copyState.documents)], ["dagents", ["dagents/plans/p1.md"]]);
   const dforgeStores = JSON.parse(read(path.join(home, ".dforge", "stores.json")));
   assert.deepEqual([dforgeStores[a], dforgeStores[b].mirror], [undefined, mirror]);
   assert.equal(stub.db.workstreams.find(w => w.key === "dagents/done")?.state, "closed");
