@@ -15,6 +15,7 @@
 - Rejected: B (every handoff in the primary, keyed per worktree: key mapping and cleanup), C (one file with a section per worktree under a lock: every reader learns sections, sessions still contend).
 - darkmem in dagents: the owner's ruling of 2026-11-17, "remove the darkmem mirror for both dflow and dagents". dagents gets no darkmem design work; only its local path line changes (§1).
 - Early CI: none — the owner, 2026-11-18: "merge locally, do not push".
+- Windows launch line (Fable ruling, for the owner to approve knowingly): on a Windows host the launch command carries no `cd` prefix, since no one line runs in PowerShell 5.1, cmd.exe and Git Bash; the `Launch in` line and the prompt name the directory instead.
 
 ## Problem
 
@@ -30,7 +31,9 @@ the existing worktree" instead of starting it there.
 
 Terms: the **primary** is the main checkout; a **worktree** is a linked
 worktree; a **checkout** is either. The **handoff** of a checkout is
-`<checkout>/.dforge/handoff/latest.md` (dagents `<checkout>/.dagents/handoff/latest.md`).
+`<checkout>/.dforge/handoff/latest.md` (dagents `<checkout>/.dagents/handoff/latest.md`),
+except the primary's while progress is in darkmem, which is
+`<mirror>/work/handoff/latest.md` (§9).
 
 ### 1. Path source
 
@@ -49,12 +52,25 @@ the cwd's checkout's file (`:656`, `:672-697`):
 
 | Mode | T |
 |---|---|
-| plan in flight | the checkout holding the plan's workspace `<state>/sdd/<slug>/`, found with `_plan_ledger_tree` (`plan.sh:287`, `:313`) in both stores — under darkmem the ledger is in the mirror, so `ledger_root` (`plan.sh:284`) cannot name it; the checkout next-step runs in when no workspace exists |
-| everything else: `--complete`, `--kept`, a plan found finished, `--draft`, `--adhoc`, `--project` | the checkout next-step runs in — after finishing's Option 1 that is the primary, after Option 3 (`--kept`) the kept worktree, whose block already names it (`:474-475`) |
+| plan in flight | in order: (1) progress local — the checkout of the plan's identity-checked ledger, the second field `plan_ledger_any` prints; (2) progress in darkmem with a ledger in the mirror — a linked worktree holding `<state>/sdd/<slug>/`: the checkout next-step runs in when it is one of several, else the only one; the primary only when no linked worktree holds one; (3) otherwise the checkout next-step runs in |
+| `--complete`, or a plan found finished | the primary, as today: the follow-on work starts there, whichever finishing option ran (Option 2 keeps the worktree for review feedback) — pending the owner's answer at the spec review |
+| `--kept`, `--draft`, `--adhoc`, `--project` | the checkout next-step runs in — after Option 3 (`--kept`) the kept worktree, whose block already names it (`:474-475`) |
+
+The primary holds `<state>/sdd/<slug>/` for most plans whatever worktree
+executes them: the plan review writes its lint and rounds into the workspace
+`sdd-workspace` creates in the planning checkout (`sdd-workspace:38-41`), and
+an auto run's switch runs `finish-choice set --plan` there. So the lookup
+never takes the first checkout `git worktree list` names, which is the
+primary. `_plan_ledger_tree` (`plan.sh:287`, `:313-320`) takes the same order,
+since it shares the fault. `plan_final_review_state` (`:572`) is given T, not
+`ledger_root`, which under darkmem is the caller's checkout.
 
 One helper computes T, and `next-step --target <same arguments>` prints T's
-absolute handoff path and exits without writing; the handoff skill (§7) uses
-it, so the notes and the block cannot land in different files.
+absolute handoff path and exits without writing; the handoff skill (§7),
+finishing (§7) and auto-run (§5) use it, so the notes, the block and its
+readers cannot disagree. `--target` skips the background-work check as
+`--print` does (it never exits 5), fails with the same usage and missing-file
+exits as the real call, and is a usage error with `--latest`.
 
 `dir` (the `Launch in` directory, today always `$primary` at `:274`, `:283`)
 becomes T. T's handoff path is resolved in a subshell
@@ -64,10 +80,12 @@ roots stay the session checkout's. The marker counts
 `--print --latest` reads the handoff of the checkout it runs in.
 
 `--complete` and `--kept` replace the file wholesale today (`:676-678`). They
-still do when the existing marker names the same subject or there is no
-marker; when it names another subject (another session's block in the same
-checkout), they keep the notes, replace only the `## Next session` section,
-and print `next-step: replaced the block for <subject>` on stderr.
+still do when there is no marker, when the marker names the same subject, when
+its kind is `complete`, or when `plan_finished` records its plan: none of these
+is another session's live block. Otherwise (another session's block in the
+same checkout) they keep the notes, replace only the `## Next session`
+section, and print `next-step: replaced the block for <subject>` on stderr,
+naming the marker's kind (`adhoc`, `project`) when its subject is `-`.
 
 ### 3. Launch line and prompt
 
@@ -80,11 +98,17 @@ and print `next-step: replaced the block for <subject>` on stderr.
   `Launch in `<T>`` line names the directory. With no launch command (the
   `Launch: see the **Execution:** line` case) the line becomes
   ``Launch from `<T>`: see the **Execution:** line in `<plan>`.``
-- **Prompt.** Every first prompt opens with
-  ``Work in `<T>` (branch <b>); its handoff is `<absolute handoff path>`. If your working directory is not `<T>`, enter it first.``
-  The second sentence matters where no relaunch happens: an auto run's
-  cockpit clears the session and pastes the prompt, so the `cd` prefix never
-  runs. `<b>` is `git -C T branch --show-current`, or `detached at <sha7>`. This
+- **Prompt.** Every first prompt next-step writes — plan, draft, adhoc,
+  project, complete and kept — opens with
+  ``Start in `<T>` (branch <b>); its handoff is `<absolute handoff path>`. If your working directory is not `<T>`, enter it first.``
+  "Start in", not "Work in": a plan with no workspace yet begins at
+  executing-plans' Setup, which creates the worktree, and an executor that
+  read "Work in `<primary>`" literally would commit tasks there, which stops an
+  auto run (`auto-run.sh:296-302`). The second sentence matters where no
+  relaunch happens: an auto run's cockpit clears the session and pastes the
+  prompt, so the `cd` prefix never runs. `(branch <b>)` is
+  `git -C T branch --show-current`; a detached checkout reads
+  ``(detached at `<sha7>`)``. This
   replaces both "First enter the existing worktree" sentences (`:376-377`,
   `:608-609`). `latest_shown` (`:293-294`) becomes T's absolute handoff path,
   so the draft and adhoc prompts name the same file.
@@ -95,29 +119,43 @@ and print `next-step: replaced the block for <subject>` on stderr.
 
 - `wrote_block` in `turn-end.sh` (`:127`) and the release in `ui-turn-end.sh`
   (`:58`): `next-step` run in the primary may now write a worktree's file, so
-  the stop is released when **any** checkout's handoff newer than the turn's
-  stamp has a Next line that appears in the message (`ending_released`,
-  `next-ending.sh:12-14`, applied to each file). Taking only the newest file
-  would hold a session whose own block was followed by another session's
-  write. A new `roots.sh` helper `dforge_latest_files [DIR]` (dagents
-  `dagents_latest_files`) prints the handoff path of every checkout
-  `git worktree list --porcelain` names whose directory exists, plus the
-  mirror's file while progress is in darkmem.
-- `changed_here` (`turn-end.sh:86`) keeps comparing against the session
-  checkout's own handoff: the `--complete` and `--project` next-step it waits
-  for writes there (§2), so another worktree's write cannot release it.
+  the stop is released by the session checkout's handoff as today
+  (`ending_released`, `next-ending.sh:12-28`), or by another checkout's
+  handoff newer than the turn's stamp whose Status line and Next line both
+  appear in the message. Taking only the newest file would hold a session
+  whose own block was followed by another session's write; matching the Next
+  line alone would let another worktree's fresh block release a hand-typed
+  one, since final-phase Next lines are the same for every plan. The
+  cannot-write branch (a hand-typed block passes when the file cannot be
+  written, `next-ending.sh:16-28`) applies to the session checkout's handoff
+  only.
+- A new `roots.sh` helper `dforge_latest_files [DIR]` (dagents
+  `dagents_latest_files`) prints each checkout's resolved handoff once, for
+  every checkout `git worktree list --porcelain` names whose directory exists:
+  under darkmem the mirror's file in place of the primary's local path
+  (dagents under darkmem: the mirror's file alone), computed by rule with no
+  node start per worktree.
+- `changed_here` (`turn-end.sh:86`) compares against the file the
+  transition's next-step writes: the primary's handoff for a completed plan
+  (§2), the session checkout's for `--project`. Another worktree's write
+  cannot release it.
 - The released condition is otherwise unchanged: a block next-step wrote this
   turn, never a hand-typed one.
 
 ### 5. auto-run
 
-`ar_handoff` (`auto-run.sh:464-476`) reads the handoff of the checkout it runs
-in (`git rev-parse --show-toplevel`), not `ar_primary_root`'s. The cockpit and
-the model call it from the session's checkout, which is where next-step wrote
-the block (§2: an in-flight plan's T is its workspace's checkout, where an
-executing session already is). The plan-name guard in `ar_clear` stays; its
-comment (`:503`, "One latest.md serves every worktree") is rewritten to say the
-guard catches a block another session left in this checkout.
+`ar_handoff` (`auto-run.sh:464-476`) reads the handoff the T helper (§2)
+resolves for the run's attached plan, and the handoff of the checkout it runs
+in only when no plan is attached; never `ar_primary_root`'s unless T is the
+primary. Reading by plan, not by working directory, matters twice: the
+cockpit's own `auto-run clear --phase` at the switch (`autoRunCall`,
+`register.tsx:3095`, `:3214`) passes `$.process.run` no directory, and after
+the switch the primary's handoff still holds the plan's start block, which
+passes `ar_clear`'s plan-name guard, so a clear run from the primary while the
+plan executes in W would resume at "begin at Setup". `autoRunCall` also passes
+the session checkout in argv, as `:3696` does with `cd --`. The plan-name
+guard stays; its comment (`:503`, "One latest.md serves every worktree") is
+rewritten to say the guard catches a block another session left in T.
 
 ### 6. Cockpit
 
@@ -135,10 +173,23 @@ guard catches a block another session left in this checkout.
 
 ### 7. Handoff skill
 
-`skills/handoff/SKILL.md` step 3 writes the notes to the path
-`scripts/next-step --target` prints for the same arguments step 4 will pass,
-so the notes and the block next-step merges land in one file. `skills/resume-execution`
-step 1 reads the handoff of the checkout it starts in (repo-audit prints it).
+- `skills/handoff/SKILL.md` step 3 writes the notes to the path
+  `scripts/next-step --target` prints for the same arguments step 4 will pass,
+  so the notes and the block next-step merges land in one file.
+- `skills/resume-execution` step 1 reads the handoff the first prompt names by
+  absolute path, and the session checkout's only when the prompt names none:
+  the session may not have entered T yet, the case §3's second sentence
+  exists for.
+- **Finishing carries a worktree's notes.** For unplanned work the notes in
+  `latest.md` are the only record (`skills/handoff/SKILL.md:83-85`), and
+  finishing's Option 1 removes the worktree, whose ignored files
+  `git worktree remove` deletes (`references/cleanup.md:9-12`), before Step 7
+  runs `next-step --adhoc` in the primary (`SKILL.md:372-377`), whose block
+  names the primary's handoff as the authority. So before Step 6, finishing
+  reads the worktree's handoff; when something follows, it writes the notes
+  sections with every item still open to the path
+  `next-step --target --adhoc …` prints in the primary, then runs `--adhoc`,
+  as Step 5b already carries the ledger's open findings (`SKILL.md:311-312`).
 
 ### 8. Listing
 
@@ -149,10 +200,15 @@ step 1 reads the handoff of the checkout it starts in (repo-audit prints it).
   since it was written; every other entry shows its stored Status and Next
   lines marked `stored`, so the cost does not grow with the worktree count.
   A worktree that is prunable or whose directory is gone is skipped with one
-  line. No handoff anywhere prints `- none`.
+  line. Each stored entry shows its age from the marker's `at=`, since it is
+  never recomputed. No handoff anywhere prints `- none`.
 - `project-status` lists them the same way and recommends the session's own.
-- The SessionStart snapshot (`snapshot.sh:41`) shows only the session's own
-  handoff, plus one count line when other checkouts hold one:
+- The compaction snapshot (`snapshot.sh:41`, built only on the `compact`
+  source, `session-start.sh:181-195`) stays own-only.
+- The SessionStart context, on every source, beside the roadmap line
+  (`session-start.sh:104-113`), adds one count line when other checkouts hold
+  a handoff younger than the cockpit's three-day offer window
+  (`register.tsx:150`), so an abandoned worktree adds no permanent line:
   `<n> other checkouts hold a handoff (scripts/repo-audit lists them).`
 
 ### 9. darkmem (dforge only)
@@ -182,17 +238,23 @@ worktree's file. Two worktrees with one directory name collide.
 
 `reference/project-state.md:97`, `skills/project-status/SKILL.md:32-35`,
 `skills/distilling-docs/SKILL.md:74,168`, `reference/auto-run.md:288`,
-`skills/finishing-a-development-branch/SKILL.md:362-370`,
+`skills/finishing-a-development-branch/SKILL.md:362-379` and its
+`references/cleanup.md` (the carry, §7),
 `skills/resume-execution/SKILL.md:17-18`, `skills/handoff/SKILL.md:89-132`,
+`scripts/next-step:1-53` (the header's "the primary checkout's" and the usage
+for `--target`), `skills/executing-plans/SKILL.md:144-146`,
+`reference/project-state.md:106-111,131`,
 `README.md:337,719`; dagents: `README.md:440,812`, `auto-run.md:259` and the
 matching skill lines.
 
 ### 11. Out of scope
 
 - Two sessions in one checkout still share its handoff. This includes a
-  worktree session that finishes with Option 1 and so runs `--complete` in the
-  primary beside a primary session; §2's notes-keeping rule limits the loss to
-  the other session's `## Next session` block, named on stderr.
+  worktree session whose plan completes, since `--complete` writes the
+  primary's handoff beside any primary session; §2's notes-keeping rule limits
+  the loss to the other session's `## Next session` block, named on stderr.
+- Finishing carries a worktree's unplanned-work notes into the primary (§7);
+  a discarded worktree's handoff goes with it.
 - No migration: a primary `latest.md` written before this change that sends the
   next session to a worktree still works, since its prompt says to enter it;
   it stays in the primary, offered to primary sessions, until the next write
@@ -221,21 +283,22 @@ dagents: `tests/dagents/roots.test.sh:35,47,49`; `tests/dagents/next-step.test.s
 Each statement holds in dforge and in dagents (`.dagents/`, local progress), except A11 and A14 (dforge only).
 
 A1. [test, high] With progress local, `dforge-path latest` run in a linked worktree prints `<worktree>/.dforge/handoff/latest.md`, and run in the primary prints `<primary>/.dforge/handoff/latest.md`.
-A2. [test, neg, high] Two linked worktrees each run `next-step` for their own plan: each worktree's handoff holds its own block, and neither file names the other's plan.
-A3. [test, neg, high] `next-step PLAN` run in the primary for a plan whose workspace is in worktree W writes W's handoff, its block reads ``Launch in `W`:``, and the primary's handoff is not modified.
+A2. [test, neg, high] Two linked worktrees each run `next-step` for their own plan, while the primary also holds `<state>/sdd/<slug>/` for both plans: each worktree's handoff holds its own block, neither file names the other's plan, and the primary's handoff is not modified.
+A3. [test, neg, high] `next-step PLAN` run in the primary for a plan whose ledger is in worktree W, while the primary also holds `<state>/sdd/<slug>/`, writes W's handoff, its block reads ``Launch in `W`:``, and the primary's handoff is not modified.
 A4. [test, high] On a POSIX host the block's launch command is `cd '<T>' && ` followed by the host's command; run by bash with the claude or codex command stubbed, it starts in T, including for a T that contains a space and a single quote. With `cygpath` on PATH the command carries no `cd` prefix.
-A5. [test, neg, high] Every first prompt opens with ``Work in `<T>` (branch <b>); its handoff is `<absolute handoff path>`. If your working directory is not `<T>`, enter it first.``, and no prompt contains "First enter the existing worktree".
-A6. [test, high] `next-step --complete PLAN` and `next-step --kept PLAN` write the handoff of the checkout they run in, and their block launches there.
-A7. [test, neg, high] A turn in the primary that ran next-step and so wrote a worktree's handoff, ending on that block, is released by the stop hook; a turn ending on a hand-typed block with no handoff written this turn is still held.
-A8. [test, high] `auto-run clear` run in worktree W reads W's handoff and stores its first prompt; a block in the primary's handoff is not read.
+A5. [test, neg, high] The first prompt of every mode — plan, draft, adhoc, project, complete and kept — opens with ``Start in `<T>` (branch <b>); its handoff is `<absolute handoff path>`. If your working directory is not `<T>`, enter it first.``, a detached T reading ``(detached at `<sha7>`)``; no prompt contains "First enter the existing worktree".
+A6. [test, high] `next-step --complete PLAN` run in a worktree writes the primary's handoff and its block launches in the primary; `next-step --kept PLAN` writes the handoff of the checkout it runs in and launches there.
+A7. [test, neg, high] In `turn-end.sh` and `ui-turn-end.sh`, a primary turn that is held (a ledger written this turn; UI changes for `ui-turn-end.sh`) and ran next-step, which wrote a worktree's handoff, is released when it ends on that block, including a darkmem case where the block is in the mirror's file; the same turn ending on a hand-typed block with no handoff written this turn is still held.
+A8. [test, neg, high] `auto-run clear` for a run whose attached plan executes in worktree W reads W's handoff and stores its first prompt, whether it runs in W, in the primary (where the primary's handoff still holds the plan's start block, which is not read), or as the cockpit's phase clear with no working directory passed.
 A9. [test, neg, high] The cockpit of a session whose checkout is worktree W reads W's handoff for the resume offer and its resume prompt names that file by absolute path; a handoff in the primary raises no offer in W's session.
-A10. [test, high] `repo-audit` lists every checkout that has a handoff, the session's own first and recomputed, every other with its stored Status and Next marked `stored`; a checkout with none, or a prunable worktree, gets no entry; the SessionStart snapshot shows only the session checkout's handoff plus the count line for the others.
+A10. [test, high] `repo-audit` lists every checkout that has a handoff, the session's own first and recomputed, every other with its stored Status and Next marked `stored` and its age; a checkout with none gets no entry; a prunable worktree gets one skip line and no entry. On a `startup` source the SessionStart context carries the count line for other checkouts' handoffs younger than three days, and the compaction snapshot shows only the session checkout's handoff.
 A11. [test, medium] With progress in darkmem, a linked worktree's handoff is `<worktree>/.dforge/handoff/latest.md`, the primary's stays `<mirror>/work/handoff/latest.md`, darkmem push and pull carry only the primary's, and push run from a linked worktree prints `worktree handoff stays local: <path>`. Q: keep linked worktrees' handoffs local under darkmem (recommended), or give each a mirror path keyed by worktree directory name?
 A12. [test, neg, high] The primary's handoff path is unchanged: a `latest.md` written there before this change is read by `next-step --print --latest`, repo-audit and the cockpit without migration.
-A13. [test, high] For every mode, `next-step --target <arguments>` prints the path the same `next-step <arguments>` then writes, and writes nothing itself.
-A14. [test, neg, high] With progress in darkmem, `next-step PLAN` run in the primary for a plan whose workspace is in worktree W launches in W and names W in its prompt, not the primary (dforge only).
-A15. [test, neg, high] `next-step --complete PLAN` run where the existing handoff's marker names another subject keeps that file's notes, replaces only its `## Next session` section and names the displaced subject on stderr.
-A16. [test, neg, high] While session S's turn runs, another worktree's session writes its own handoff: S's turn ending on its own next-step block is still released, and S's turn that completed a plan without running next-step is still held.
+A13. [test, high] For every mode, `next-step --target <arguments>` prints the path the same `next-step <arguments>` then writes, writes nothing itself, never exits 5 over background work, exits as the real call does on a usage error or a missing plan, and is a usage error with `--latest`.
+A14. [test, neg, high] With progress in darkmem, `next-step PLAN` run in the primary for a plan whose workspace is in worktree W, while the primary also holds `<state>/sdd/<slug>/`, launches in W and names W in its prompt, not the primary (dforge only).
+A15. [test, neg, high] `next-step --complete PLAN` and `next-step --kept PLAN`, run where the existing handoff's marker names another live subject, keep that file's notes, replace only its `## Next session` section and name the displaced subject (or its kind, for a subject of `-`) on stderr; a marker of kind `complete` or for a finished plan is replaced wholesale.
+A16. [test, neg, high] While session S's turn runs, another worktree's session writes its own handoff: S's turn ending on its own next-step block is still released, S's turn that completed a plan without running next-step is still held, and S's hand-typed block carrying only the other block's Next line is still held.
+A17. [demo, high] finishing-a-development-branch tells the session, before removing a worktree under Option 1, to carry the worktree handoff's open notes into the path `next-step --target --adhoc …` prints in the primary, and only then run `--adhoc`.
 
 ## Riskiest assumption
 
@@ -243,6 +306,9 @@ A session's checkout — the directory its scripts run in and the one the
 cockpit's `$.process.run` sees — is the worktree after
 `cd '<worktree>' && claude …`, after `EnterWorktree` mid-session, and still
 after the cockpit clears that session (`/clear`) for an auto run's next phase.
+The cockpit's `$.process.run` calls pass no directory: the resume offer's
+next-step (`register.tsx:3696`, which already passes one in argv) and the
+auto-run calls through `autoRunCall` (`:3095`, `:3214`, given one by §5).
 
 Evidence: the launch case is shell semantics (Claude Code starts in the
 directory it is launched from). The mid-session case: the cockpit re-reads its
@@ -256,14 +322,16 @@ Whether `/clear` keeps the working directory has no evidence in the
 repository.
 
 Status: unverified on a live host — the plan's first task verifies it with a
-nested session that enters a worktree, checks the cockpit's resume offer,
-clears the session and checks its working directory again. If `/clear` resets
+nested session that enters a worktree, checks the cockpit's resume offer and
+an `autoRunCall` phase clear, clears the session and checks its working
+directory again. If `/clear` resets
 it, the prompt's "If your working directory is not `<T>`, enter it first"
 (§3) is what moves the session back.
-The design limits the damage if it is wrong: next-step picks T from the ledger,
-not the cwd (§2), and the stop hooks look at every checkout (§4); only the
-cockpit (§6) would read the primary's file, and its fix is to pass the
-session's `$.session.cwd()` explicitly, as `:3696` already does with `cd --`.
+The design limits the damage if it is wrong: next-step picks T from the
+ledger, not the cwd (§2); auto-run reads by the attached plan (§5); the stop
+hooks look at every checkout (§4). Only the cockpit's `readRun` (§6) would read
+the primary's file, and its fix is to pass the session's `$.session.cwd()`
+explicitly, as `:3696` already does with `cd --`.
 
 ## Critic findings
 
@@ -281,3 +349,23 @@ One `dforge:judge-opus` round: 0 Blocker, 4 High, 6 Medium, 2 Nit.
 - [Medium, fixed] A primary session got no sign of worktree handoffs: §8 adds the snapshot count line.
 - [Nit, fixed] `dforge_stores_init` for T switched next-step's cached roots: §2 resolves T's path in a subshell.
 - [Nit, fixed] A pre-upgrade block for a worktree stays in the primary: §11 says so.
+
+## Review rulings
+
+Fable, round 1 (`.dforge/spec-review-2026-11-18-per-worktree-handoff-design-1-report.md`): 14 rulings, 2 undecided.
+
+- [Blocker] §2 T for a plan in flight resolved to the primary, which holds `<state>/sdd/<slug>/` after the plan review — T now comes from the identity-checked ledger (local) or a linked worktree's workspace (darkmem); `_plan_ledger_tree` and `plan_final_review_state` follow; A2, A3, A14 state the primary's workspace.
+- [Blocker] Unplanned-work notes in a worktree's handoff were lost when Option 1 removes the worktree — finishing carries them into the primary before Step 6 (§7); A17 (demo, since it is skill wording no script reads).
+- [Medium] Cockpit `autoRunCall` and a primary-side clear could read the wrong handoff — `ar_handoff` reads by the attached plan through the T helper, `autoRunCall` passes the checkout; A8 and the riskiest assumption extended.
+- [Medium] The count line reached only compacted sessions — moved to the SessionStart context on every source, three-day window; A10 tests a `startup` source.
+- [Low] Notes-keeping rule: kind named for a `-` subject; `complete` or finished-plan markers replaced wholesale; A15 covers `--kept`.
+- [Low] Prompt opens "Start in", detached reads "(detached at `<sha7>`)"; A5 names the modes.
+- [Low] Stop-hook release: cannot-write branch for the own handoff only; another checkout releases only on Status and Next both in the message.
+- [Low] `dforge_latest_files` prints each checkout's resolved handoff once, the mirror's in place of the primary's under darkmem; the Terms paragraph names the exception.
+- [Low] resume-execution reads the handoff the first prompt names.
+- [Low] `--target` skips the background-work check, keeps the real call's exits, and is a usage error with `--latest`; A13.
+- [Low] A7 names the hold, covers both hooks and a darkmem case.
+- [Low] Windows exception kept and recorded in `## Decisions` for the owner.
+- [Nit] A10 asserts the prunable skip line; stored entries show their age.
+- [Nit] §10 adds `next-step:1-53`, `executing-plans/SKILL.md:144-146`, `project-state.md:106-111,131`.
+- Undecided, to the spec review: A11 (darkmem location), and `--complete` after Option 2 (the spec carries the recommended "always the primary").
