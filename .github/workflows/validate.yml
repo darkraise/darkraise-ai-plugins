@@ -15,6 +15,13 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request cancels its older run. Every other run has a
+# group of its own: release.yml needs main's runs to finish, and the homelab
+# fallback below dispatches a run on the same ref before cancelling its own.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   # validate runs on ghr's homelab runner, except in a dispatched fallback run
   # and a fork's pull request: ghr refuses fork jobs, which would run their
