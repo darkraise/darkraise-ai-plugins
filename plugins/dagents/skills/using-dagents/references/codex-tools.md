@@ -1,3 +1,12 @@
+## First: one workflow plugin at a time
+
+Before anything else in a Codex session, run
+`node <plugin-root>/scripts/workflow-guard.mjs --host codex` (the plugin root
+is the parent of the `skills/` directory). Exit 3 means another workflow
+plugin (dforge or dflow) is enabled beside dagents: show the user its output
+as it is, then stop, and use no dagents skill, command or agent until only one
+of them is enabled. Any other exit: carry on.
+
 ## Subagent dispatch requires multi-agent support
 
 Add to your Codex config (`~/.codex/config.toml`):

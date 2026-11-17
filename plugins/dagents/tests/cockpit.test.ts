@@ -19,6 +19,7 @@ import {
   FORK_DRAFTING,
   seatDenial,
   fastModeLine,
+  guardLine,
   bar,
   billingLabel,
   budgetFor,
@@ -248,6 +249,10 @@ type World = {
   userSettings?: Record<string, unknown>
   /** Each dagents-config command the plugin runs, as one line. */
   runs?: string[]
+  /** Every command the plugin runs, as one line. */
+  processRuns?: string[]
+  /** What the workflow guard's standalone check answers; unset, the fallback answer (exit 0). */
+  guardOut?: { exitCode: number; stdout: string }
   /** dagents-config refuses, as on a Claude settings file it cannot parse. */
   isDagentsConfigRefusing?: boolean
   /** How many claude-restore writes the engine misses, as one landing right after its own save. */
@@ -449,6 +454,10 @@ function world(on: On, w: World) {
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('process.run', (_$, e) => {
     const argv = e.argv.join(' ')
+    w.processRuns?.push(argv)
+    if (w.guardOut !== undefined && (e.argv[1] ?? '').endsWith('/scripts/workflow-guard.mjs')) {
+      return { value: { ...w.guardOut, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     if (e.argv[0] === 'bash' && e.argv[1] === '-c' && (e.argv[5] ?? '').endsWith('/scripts/next-step')) {
       w.nextStepRuns?.push(e.argv[4] ?? '')
       const out = w.nextStepOuts?.shift()
@@ -8178,5 +8187,46 @@ describe('saved-state honesty', () => {
     await clock.advance(10_000)
     await $.turn.start({ text: 'next', turnId: 't2' })
     expect(notes.some(n => /worktree/.test(n))).toBe(true)
+  })
+})
+
+test('the guard line names the active plugins and the check, only on a conflict', () => {
+  expect(guardLine({ exitCode: 3, stdout: 'dagents@darkraise self\ndforge@darkraise user\n' }, '/p'))
+    .toBe('dagents@darkraise, dforge@darkraise are enabled together; run node /p/scripts/workflow-guard.mjs --host claude')
+  expect(guardLine({ exitCode: 0, stdout: 'dagents@darkraise self\n' }, '/p')).toBe(null)
+  expect(guardLine(null, '/p')).toBe(null)
+})
+
+describe('the workflow guard', () => {
+  const CONFLICT = { exitCode: 3, stdout: 'dagents@darkraise self\ndforge@darkraise user\n' }
+  const GUARD = /^node (.+)\/scripts\/workflow-guard\.mjs --host claude --self dagents$/
+
+  test('under a conflict the cockpit draws the guard line alone and runs nothing else', async ($, on) => {
+    const runs: string[] = []
+    const clock = world(on, { ...SIGNED_IN, guardOut: CONFLICT, processRuns: runs })
+    signedIn(on, configured({ layout: 'compact' }))
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.session.measure(MEASURE)
+    const band = await $.ui.mount(minimized('terminal'))
+    const root = GUARD.exec(runs[0] ?? '')?.[1]
+    expect(root).toBeDefined()
+    expect((await band.findAll({ type: 'Text' })).map(one => one.text)).toEqual([guardLine(CONFLICT, root!)])
+    await band.unmount()
+    await clock.advance(130_000)
+    expect(runs.filter(run => !GUARD.test(run))).toEqual([])
+  })
+
+  test('with no conflict the cockpit draws as before', async ($, on) => {
+    const runs: string[] = []
+    world(on, { ...SIGNED_IN, guardOut: { exitCode: 0, stdout: 'dagents@darkraise self\n' }, processRuns: runs })
+    signedIn(on, configured({ layout: 'compact' }))
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.session.measure(MEASURE)
+    const band = await $.ui.mount(minimized('terminal'))
+    expect(await band.find({ key: 'band-expand' })).toBeDefined()
+    expect(await band.find({ type: 'Text', text: /^╭─ me@example\.com/ })).toBeDefined()
+    expect(runs.filter(run => GUARD.test(run))).toHaveLength(1)
   })
 })

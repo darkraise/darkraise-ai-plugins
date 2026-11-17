@@ -464,6 +464,18 @@ export type SeatSpawn = {
 export const FORK_DRAFTING = false
 
 /**
+ * The cockpit's one line while dagents shares the session with another
+ * workflow plugin: the plugin ids the standalone workflow-guard check printed,
+ * from its `{ exitCode, stdout }` (null when it failed to start). Exit 3 only;
+ * any other answer is no conflict.
+ */
+export function guardLine(result: { exitCode: number | null; stdout: string } | null, root: string): string | null {
+  if (result === null || result.exitCode !== 3) return null
+  const ids = result.stdout.split('\n').map(line => line.trim().split(/\s+/)[0] ?? '').filter(id => id !== '')
+  return `${ids.join(', ')} are enabled together; run node ${root}/scripts/workflow-guard.mjs --host claude`
+}
+
+/**
  * What the last `Process:` line of a response says about fast mode
  * (reference/fast-mode.md): 'session' for `Process: fast (session)`, on until
  * another Process line; 'request' for any other `Process: fast`, on for its

@@ -40,6 +40,8 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   // The workflow guard names its siblings.
   'plugins/dagents/scripts/workflow-guard.mjs',
   'plugins/dagents/tests/stand-down.test.sh',
+  'plugins/dagents/skills/using-dagents/references/codex-tools.md',
+  'plugins/dagents/tests/cockpit.test.ts',
 ]);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
