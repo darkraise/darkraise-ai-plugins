@@ -384,6 +384,9 @@ check "a missing plan exits 2" "$rc" "2"
 out=$(bash "$ROUTE" "$TMP/codex.md" --task 1 2>"$TMP/err"); rc=$?
 check "a Codex-host plan exits 2" "$rc" "2"
 present "a Codex-host plan names native-codex.md" "$TMP/err" "native-codex.md"
+{ printf '# Fenced Host\n\n```markdown\n**Host:** codex\n```\n'; sed 1d "$TMP/plan.md"; } > "$TMP/fenced-host.md"
+out=$(bash "$ROUTE" "$TMP/fenced-host.md" --task 8 2>/dev/null); rc=$?
+check "a fenced Host: codex example leaves a Claude plan routable" "$rc|$out" "0|$(bash "$ROUTE" "$TMP/plan.md" --task 8 2>/dev/null)"
 
 sed 's/$/\r/' "$TMP/plan.md" > "$TMP/crlf.md"
 out=$(bash "$ROUTE" "$TMP/crlf.md" --task 4 2>/dev/null)

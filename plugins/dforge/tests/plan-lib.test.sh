@@ -62,6 +62,8 @@ printf '# P\n\n**Spec:** `a.md`\n\n```\n**Execution:** fenced\n```\n**Execution:
 check "plan_header_line: first unfenced match" "$(plan_header_line "$TMP/h.md" Execution)" "**Execution:** inline — x"
 check "plan_header_line: no match prints nothing" "$(plan_header_line "$TMP/h.md" Program)" ""
 check "plan_header: stops before the first task" "$(plan_header "$TMP/h.md" | tail -n 2 | head -n 1)" "- c"
+check "plan_is_codex: an unfenced Host line" "$(plan_is_codex $'# P\n\n**Host:** codex\n' && echo yes || echo no)" "yes"
+check "plan_is_codex: a fenced Host line is an example" "$(plan_is_codex $'# P\n\n```markdown\n**Host:** codex\n```\n' && echo yes || echo no)" "no"
 check "plan_task_text: heading to the next task" "$(plan_task_text "$TMP/h.md" 1 | tr '\n' '|')" "### Task 1: One||body 1||"
 check "plan_task_text: last task runs to the end" "$(plan_task_text "$TMP/h.md" 2 | tr '\n' '|')" "### Task 2: Two||body 2|"
 plan_task_text "$TMP/h.md" 7 > /dev/null

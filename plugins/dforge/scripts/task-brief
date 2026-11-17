@@ -76,7 +76,7 @@ fi
 # it gets the same lines.
 dispatch=0
 exec_line=$(plan_header_line "$src" Execution)
-if ! grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")" \
+if ! plan_is_codex "$(plan_header "$src")" \
    && { [ -z "$exec_line" ] || grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$exec_line"; }; then
   dispatch=1
 fi

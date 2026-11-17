@@ -365,7 +365,7 @@ cmd_rereview() (
     exit 4
   fi
   header=$(plan_header "$src")
-  if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header"; then
+  if plan_is_codex "$header"; then
     echo "task-step: a Host: codex plan runs the Codex loop; task-step does not apply" >&2
     exit 2
   fi
@@ -498,7 +498,7 @@ src="$TMP/plan.md"
 plan_amendments_ready "$plan"
 plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null \
   || die "an amendment does not apply; run plan-lint" 4
-if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")"; then
+if plan_is_codex "$(plan_header "$src")"; then
   die "a Host: codex plan runs the Codex loop (reference/native-codex.md); task-step is for Claude Code"
 fi
 for n in "${ids[@]}"; do

@@ -87,7 +87,7 @@ depth_plan() {
   local src=$1 root=$2 header spec_line spec_path spec_file spec tasks depth
   local codex=0 n t r hi=-1 hi_task="" unscored="" count=0 reasons=()
   header=$(plan_header "$src")
-  grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header" && codex=1
+  plan_is_codex "$header" && codex=1
 
   spec_line=$(awk "$_PLAN_AWK"'
     in_fence($0) { next }

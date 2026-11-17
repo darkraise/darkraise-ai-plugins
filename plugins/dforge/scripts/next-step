@@ -428,7 +428,7 @@ else
 
   # A Codex plan states its host in the header and its native pair on the
   # Execution line; the flag is for the paths with no plan to read.
-  if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$plan")"; then host=codex; fi
+  if plan_is_codex "$(plan_header "$plan")"; then host=codex; fi
 
   launch_cmd=$(execution_launch "$execution")
 

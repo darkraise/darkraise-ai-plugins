@@ -123,6 +123,16 @@ plan_header() {
   '
 }
 
+# plan_is_codex HEADER — true when the plan header text HEADER has a
+# `Host: codex` line outside a fence. A fenced Host line is an example, not
+# the plan's own.
+plan_is_codex() {
+  awk "$_PLAN_AWK"'
+    in_fence($0) { next }
+    /^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$/ { found = 1 }
+    END { exit !found }' <<<"$1"
+}
+
 # plan_task_text FILE N — task N from its heading to the line before the next
 # task heading. Exit 3 when there is no such task.
 plan_task_text() {

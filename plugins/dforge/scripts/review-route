@@ -62,7 +62,7 @@ plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/
 # writer's SIGPIPE would decide the if, not the match.
 header=$(plan_header "$src")
 native=0
-grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header" && native=1
+plan_is_codex "$header" && native=1
 if [ "$native" -eq 1 ] && [ "$1" != --plan-round ]; then
   die "a Host: codex plan routes reviews through reference/native-codex.md"
 fi

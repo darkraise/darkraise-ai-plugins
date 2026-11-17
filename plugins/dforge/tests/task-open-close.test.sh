@@ -102,6 +102,9 @@ check "open again: no second assigned line" "$(grep -c '^Task 1: implementer' "$
 run bash "$BRIEF" --open docs/plan.md 3
 check "open: a risk-3 brief keeps the header excerpt for its judge" "$(grep -c '^## Plan header excerpt$' "$WS/task-3-brief.md")" "1"
 check "open: a risk-3 brief carries the review marker" "$(sed -n 2p "$WS/task-3-brief.md")" "**Review:** per-task — risk 3"
+awk 'NR == 2 { print "```markdown"; print "**Host:** codex"; print "```" } { print }' docs/plan.md > "$TMP/fenced-host.md"
+run bash "$BRIEF" "$TMP/fenced-host.md" 3 "$TMP/fenced-brief.md"
+check "brief: a fenced Host: codex example keeps the risk-3 marker" "$rc|$(sed -n 2p "$TMP/fenced-brief.md")" "0|**Review:** per-task — risk 3"
 
 run bash "$BRIEF" --open docs/plan.md 99
 check "open: no such task exits 3" "$rc" "3"
