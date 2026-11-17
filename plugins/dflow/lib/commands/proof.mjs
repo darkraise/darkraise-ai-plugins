@@ -28,8 +28,9 @@ export async function run(ctx, argv, { out }) {
   if (!line.visual && !values.text) fail(`${id} is proven on text: pass --text "<the text or state the page showed>"`);
   const source = path.resolve(ctx.cwd, values.shot);
   if (!fs.existsSync(source)) fail(`no screenshot at ${values.shot}`);
-  // The plan's own log lines may wait uncommitted; they change no screen.
-  const dirty = uncommitted(ctx).filter(entry => !entry.file.startsWith('docs/dflow/'));
+  // The plan's own log lines may wait uncommitted; they change no screen. Nor
+  // does the screenshot itself, saved in the checkout to be recorded.
+  const dirty = uncommitted(ctx).filter(entry => !entry.file.startsWith('docs/dflow/') && !(entry.code === '??' && path.resolve(ctx.root, entry.file) === source));
   if (dirty.length) fail('the working tree has uncommitted changes; a proof is of a commit, so commit first');
   const directory = proofDir(ctx, active.slug);
   const target = path.join(directory, `${id}${path.extname(source) || '.png'}`);

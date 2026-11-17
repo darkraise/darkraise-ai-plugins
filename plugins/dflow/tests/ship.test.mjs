@@ -221,6 +221,14 @@ test('a rebase onto the default branch does not count its changes as made after 
   assert.equal(check.status, 0, check.stdout);
 });
 
+test('the screenshot being recorded does not make the tree dirty for its own proof', t => {
+  const root = makeProject(t, { plan: UI_PLAN });
+  buildAll(root);
+  write(root, 'capture.png', 'png');
+  const proven = dflow(root, ['proof', 'A2', '--shot', 'capture.png', '--text', 'meter is red']);
+  assert.equal(proven.status, 0, proven.stderr);
+});
+
 test('a file put back to the base after the review still counts as changed since it', t => {
   const root = readyToShip(t);
   git(root, 'rm', '-q', 'src/meter.mjs');
