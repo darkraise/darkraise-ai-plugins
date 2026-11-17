@@ -510,9 +510,7 @@ row and never falls back. `codex:heavy+judge-opus` passes
 `--tier heavy`: the runner takes the block's first row, and falls back once to
 the last row on a refusal. There is no catalog to consult first - the codex
 plugin advertises no model list, and reading Codex's own cache would cross the
-boundary the session gate exists to hold. `--kind risk3` is the
-same seat under its earlier name and stays accepted. The runner prints one
-status line:
+boundary the session gate exists to hold. The runner prints one status line:
 
 ```
 codex-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<path> evidence=none

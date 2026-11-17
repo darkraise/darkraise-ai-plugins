@@ -43,17 +43,15 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# task is the name scripts/review-route prints; risk3 is the same seat under
-# its sub-project 7 name, kept so earlier callers keep working.
 case "$kind" in
-  task|risk3) [ -n "$prompt" ] || die "--kind $kind requires --prompt"; kind=task ;;
+  task) [ -n "$prompt" ] || die "--kind task requires --prompt" ;;
   plan) [ -n "$prompt" ] || die "--kind plan requires --prompt" ;;
   final) [ -n "$base" ] || die "--kind final requires --base" ;;
-  *) die "--kind must be task, risk3, plan or final" ;;
+  *) die "--kind must be task, plan or final" ;;
 esac
 case "$tier" in
   "") tier=heavy ;;
-  light|heavy) [ "$kind" = task ] || die "--tier applies only to --kind task or risk3" ;;
+  light|heavy) [ "$kind" = task ] || die "--tier applies only to --kind task" ;;
   *) die "--tier must be light or heavy" ;;
 esac
 [ -n "$cwd" ] || die "--cwd is required"
