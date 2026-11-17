@@ -346,6 +346,8 @@ type World = {
   gitGates?: Promise<void>[]
   /** What a gated `git status` prints; PORCELAIN unless said. */
   porcelain?: string
+  /** `hostname` answers only once this settles. */
+  hostGate?: Promise<void>
   /** Each git command the plugin runs, as one line. */
   gitRuns?: string[]
   /** What `git rev-parse --git-common-dir` answers; `<primary>/.git` unless said. */
@@ -588,7 +590,8 @@ function world(on: On, w: World) {
       return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
     const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? `${common}\n` : PORCELAIN
-    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    const answer = { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    return argv === 'hostname' && w.hostGate !== undefined ? w.hostGate.then(() => answer) : answer
   })
   on('session.id', () => {
     if ((w.sessionIdFailures ?? 0) > 0) {
@@ -4434,6 +4437,27 @@ describe('discord', () => {
       expect(named()).toEqual(isHooked ? ['hostname', 'tmux display-message -p #S'] : [])
       expect(fetches).toHaveLength(isHooked ? 2 : 0)
     })
+
+  test('a message sent while another reads the host waits for that read', async ($, on) => {
+    const fetches: World['fetches'] = []
+    let release: () => void = () => {}
+    const hostGate = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const clock = world(on, { tokens: 50_000, fetches, hostGate, config: { notifyAfter: 0 }, env: { DFORGE_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(1)
+    const tested = $.command.run({ ...COCKPIT, args: 'notify test' })
+    await clock.advance(1)
+    release()
+    await tested
+    await clock.advance(1)
+    const authors = fetches.map(one => (one.body.embeds as Record<string, unknown>[])[0]?.author)
+    expect(authors).toHaveLength(2)
+    for (const author of authors) expect(JSON.stringify(author)).toContain('devbox')
+  })
 
   test('says nothing when no webhook is set', async ($, on) => {
     const fetches: World['fetches'] = []

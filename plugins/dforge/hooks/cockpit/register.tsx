@@ -571,6 +571,7 @@ export const register: Register = on => {
     S.releaseTimer?.cancel()
     S.releaseTimer = null
     S.heldDone = null
+    if (!S.isSenderRead) S.senderRead = null
     // A wait of the ended session would ping for it later and, while it is
     // held, keep endWait from restoring the next session's activity. Settled,
     // a ping still queued for it is not sent, and one out says so.
@@ -2839,7 +2840,10 @@ const S = {
   ledgerDirs: { base: '', at: null as number | null, names: [] as string[] },
   // Discord messages go out one at a time; the tail of the queue.
   outbox: Promise.resolve() as Promise<void>,
-  // Whether readSender has read S.where's host and tmux session.
+  // readSender's read of S.where's host and tmux session, and whether it is
+  // done: one a session end left unfinished is dropped, so the next session
+  // reads again rather than wait on the ended one's.
+  senderRead: null as Promise<void> | null,
   isSenderRead: false,
   // The tail of the auto run reads trackAutoRun queues, and the run the last
   // one found; undefined before the first.
@@ -4114,11 +4118,18 @@ async function firstLineOf($: EngineInterface, argv: string[]): Promise<string |
 
 // The host and tmux session the messages name, which serve nothing else: read
 // once per process, at the first message, so a session start runs neither.
-async function readSender($: EngineInterface) {
-  if (S.isSenderRead) return
+// A message sent while the read runs waits for the same read.
+function readSender($: EngineInterface): Promise<void> {
+  S.senderRead ??= readSenderNow($)
+  return S.senderRead
+}
+
+async function readSenderNow($: EngineInterface) {
+  const host = (await $.env.get('HOSTNAME')) || (await firstLineOf($, ['hostname']))
+  const tmux = (await $.env.get('TMUX')) ? await firstLineOf($, ['tmux', 'display-message', '-p', '#S']) : null
+  S.where.host = host
+  S.where.tmux = tmux
   S.isSenderRead = true
-  S.where.host = (await $.env.get('HOSTNAME')) || (await firstLineOf($, ['hostname']))
-  S.where.tmux = (await $.env.get('TMUX')) ? await firstLineOf($, ['tmux', 'display-message', '-p', '#S']) : null
 }
 
 // The context crossed its handoff budget: said once per crossing.
