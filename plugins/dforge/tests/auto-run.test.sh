@@ -784,6 +784,17 @@ else
   printf 'skip - stop --stale race: no flock on this host\n'
 fi
 
+# --- with no run, pending and status answer before the libraries load ---
+NORUN="$TMP/norun"; git init -q "$NORUN"
+KIT="$TMP/kit"; mkdir -p "$KIT"; cp -R "$HERE/../scripts" "$KIT/"
+printf 'exit 99\n' > "$KIT/scripts/lib/context.sh"
+for sub in pending status; do
+  (cd "$NORUN" && bash "$KIT/scripts/auto-run" --session s-1 "$sub") >/dev/null 2>"$TMP/err"; status=$?
+  check "no run: $sub exits 3 before the libraries load" "$status:$(grep -c 'no auto run is bound' "$TMP/err")" "3:1"
+done
+(cd "$NORUN" && bash "$AR" --session s-1 pending extra) >/dev/null 2>&1; status=$?
+check "no run: pending with an argument is still a usage error" "$status" "2"
+
 # --- every suite that runs the run-control scripts names its own session ---
 # A subagent's shell carries the controller's CLAUDE_CODE_SESSION_ID, so a
 # suite run there that leaves it set binds to the live auto run. A line runs a

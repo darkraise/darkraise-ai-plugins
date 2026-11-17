@@ -3,6 +3,24 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+
+# With no state file there is no run to answer for, so pending (every Stop)
+# and status (every task-close) say so before the libraries load. The path is
+# ar_path's: the primary checkout's state directory.
+fast_cmd=${1:-} fast_n=$#
+if [ "$fast_cmd" = --session ] && [ $# -ge 3 ] && [ -n "$2" ]; then fast_cmd=$3 fast_n=$(($# - 2)); fi
+case "$fast_cmd:$fast_n" in
+  pending:1 | status:1)
+    . "$HERE/lib/dforge-dir.sh"
+    if fast_common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | tr -d '\r') \
+       && fast_primary=$(git -C "$(dirname "$fast_common")" rev-parse --show-toplevel 2>/dev/null | tr -d '\r') \
+       && [ -n "$fast_primary" ] && [ ! -f "$(dforge_dir state "$fast_primary")/sdd/auto-run.json" ]; then
+      echo "auto-run: no auto run is bound to this session" >&2
+      exit 3
+    fi
+    ;;
+esac
+
 . "$HERE/lib/context.sh"
 . "$HERE/lib/auto-run.sh"
 
