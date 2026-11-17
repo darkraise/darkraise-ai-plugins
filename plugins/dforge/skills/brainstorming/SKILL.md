@@ -179,8 +179,6 @@ and 11-12 run as Auto by default says)
 
 ## Process Flow
 
-Read [process-flow.md](references/process-flow.md) before you change the order of the spec phase or the path a request takes through it.
-
 **Terminal states are path-bound.** Architectural: the ONLY skill you
 invoke after brainstorming is writing-plans — never frontend-design,
 mcp-builder, or any other implementation skill. Bounded: after

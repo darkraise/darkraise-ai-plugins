@@ -14,7 +14,6 @@ check() { # check <name> <got> <want>
 }
 
 MOVED="
-brainstorming:process-flow
 brainstorming:design-phase
 brainstorming:auto-by-default
 brainstorming:drafting-acceptance
