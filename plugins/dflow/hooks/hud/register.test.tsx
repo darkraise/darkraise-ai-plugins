@@ -288,6 +288,22 @@ test('with no dflow directory the mod draws nothing and writes nothing', async (
   expect(w.calls.filter(call => call.startsWith('write'))).toEqual([])
 })
 
+test('outside a dflow checkout the poll stops, and a turn that leaves one behind starts it again', async ($, on) => {
+  const w = world(on, { files: {}, hasState: false })
+  const checks = () => w.calls.filter(call => call === 'exists /repo/.dflow').length
+  await $.session.start(START)
+  const atStart = checks()
+  await w.clock!.advance(10000)
+  expect(checks()).toBe(atStart)
+
+  w.hasState = true
+  w.files[HUD_FILE] = JSON.stringify(HUD)
+  await $.turn.complete({ ...TURN, turnId: 't1' })
+  const afterTurn = checks()
+  await w.clock!.advance(4000)
+  expect(checks()).toBe(afterTurn + 2)
+})
+
 test('Minimize puts the HUD in the band and closes the pane; its hotkey letter is underlined', async ($, on) => {
   const w = world(on, { files: { [HUD_FILE]: JSON.stringify(HUD) } })
   await $.session.start(START)
