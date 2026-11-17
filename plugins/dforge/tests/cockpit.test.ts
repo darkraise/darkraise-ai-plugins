@@ -341,6 +341,8 @@ type World = {
   compactMs?: number
   /** `git status` outruns its timeout, or cannot start. */
   gitStatusOut?: 'timeout' | 'missing'
+  /** `git status` answers only once this settles, as in a large repository. */
+  gitGate?: Promise<void>
   /** Each git command the plugin runs, as one line. */
   gitRuns?: string[]
   /** What `git rev-parse --git-common-dir` answers; `<primary>/.git` unless said. */
@@ -549,6 +551,10 @@ function world(on: On, w: World) {
     }
     if (argv.startsWith('git --no-optional-locks') && w.gitStatusOut === 'timeout') return { deny: 'dforge: $.process.run(git) aborted: still running after 3000ms' }
     if (argv.startsWith('git --no-optional-locks') && w.gitStatusOut === 'missing') return { deny: 'dforge: $.process.run(git) failed to start: ENOENT' }
+    if (argv.startsWith('git --no-optional-locks') && w.gitGate !== undefined) {
+      w.gitRuns?.push(argv)
+      return w.gitGate.then(() => ({ value: { exitCode: 0, stdout: PORCELAIN, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+    }
     if (argv.startsWith('git ')) w.gitRuns?.push(argv)
     const common = w.commonDir ?? `${w.primary ?? '/home/me/code/shop'}/.git`
     // A directory is a work tree when the common directory is its .git: a
@@ -8466,6 +8472,30 @@ describe('update frequency', () => {
       await clock.advance(2_000)
       await $.tool.call({ tool: 'Read', file_path: '/home/me/code/shop/b.ts' } as never)
       expect(statuses(gitRuns)).toBe(0)
+    })
+
+    test("does not hold a call's result while git status runs, and shows it once it lands", async ($, on) => {
+      const gitRuns: string[] = []
+      const w: World = { ...SIGNED_IN, gitRuns }
+      const clock = world(on, w)
+      signedIn(on)
+      await $.session.start(START)
+      let release: () => void = () => {}
+      w.gitGate = new Promise<void>(resolve => {
+        release = resolve
+      })
+      let isReturned = false
+      const call = $.tool.call({ tool: 'Bash', command: 'ls' }).then(() => {
+        isReturned = true
+      })
+      for (let i = 0; i < 10; i++) await clock.advance(1)
+      expect(statuses(gitRuns)).toBe(1)
+      expect(isReturned).toBe(true)
+      release()
+      await call
+      await clock.advance(1)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
     })
 
     test('is not read after a call while no pane or band is drawn', async ($, on) => {

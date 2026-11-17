@@ -970,8 +970,13 @@ export const register: Register = on => {
       // before the budget, which measures a plan's tail by it. It is keyed on
       // modification times and returns early when nothing changed.
       if (isMove || tool === 'Bash' || touchesRun(e)) await readRun($)
-      // What the call changed in the tree shows in the git card now, not at the poll.
-      if (GIT_TOOLS.includes(tool) && (await $.clock.now()) - S.gitAt >= GIT_EVERY_MS && ((await live($)).isMinimized || (await isPaneUp($)))) await refreshGit($)
+      // What the call changed in the tree shows in the git card now, not at the
+      // poll. Not awaited: a large repository's status would hold the result.
+      const gitStamp = await $.clock.now()
+      if (GIT_TOOLS.includes(tool) && gitStamp - S.gitAt >= GIT_EVERY_MS && ((await live($)).isMinimized || (await isPaneUp($)))) {
+        S.gitAt = gitStamp
+        void refreshGit($).catch(() => undefined)
+      }
       await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
     }
 
