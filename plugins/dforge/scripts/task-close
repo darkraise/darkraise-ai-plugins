@@ -77,7 +77,8 @@ printf '%s\n' "$line" >> "$ledger"
 echo "wrote: $line"
 
 # A failed push is not a failed close: the ledger line is already written.
-if ! push_out=$(bash "$HERE/darkmem-sync" push 2>&1); then
+# A home that never used darkmem has nothing to push, so no node starts.
+if dforge_darkmem_possible && ! push_out=$(bash "$HERE/darkmem-sync" push 2>&1); then
   echo "darkmem-sync push failed: $(tail -n 1 <<<"$push_out")"
 fi
 

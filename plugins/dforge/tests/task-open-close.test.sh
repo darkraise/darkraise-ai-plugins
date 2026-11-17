@@ -143,8 +143,12 @@ check "review: a task never opened still exits 6" "$rc" "6"
 # --- task-close ---
 CP='done: x; verified: bash t.sh → pass; remaining: none; discovered: none; assumptions: none'
 HEAD7=$(git rev-parse --short HEAD)
-run bash "$CLOSE" docs/plan.md 1 "$CP"
+mkdir -p "$TMP/node-shim"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$TMP/node.log" "$(command -v node)" > "$TMP/node-shim/node"
+chmod +x "$TMP/node-shim/node"
+PATH="$TMP/node-shim:$PATH" run bash "$CLOSE" docs/plan.md 1 "$CP"
 check "close: exit 0" "$rc" "0"
+check "close: a home without darkmem starts no darkmem push" "$(cat "$TMP/node.log" 2>/dev/null | grep -c 'darkmem-sync')" "0"
 check "close: the complete line" "$(tail -n 1 "$LEDGER")" "Task 1: complete (commits $BASE7..$HEAD7, unreviewed) — $CP"
 has "close: prints the line it wrote" "$out" "wrote: Task 1: complete"
 run bash "$CLOSE" docs/plan.md 1 "$CP"
