@@ -610,10 +610,9 @@ discarded. `--kind final` still takes no `--prompt`, and the round still returns
 a markdown findings list, which is what [final-review.md](final-review.md) step 3
 deduplicates.
 
-The runner establishes usability itself from the same `detect-executors.sh`
-roster the task seats use, so this round needs no separate guard; a Codex that
-is not usable comes back as `status=FAILED` with the roster's own reason on
-stderr.
+The runner establishes usability itself from the session's `codex-gate`
+answer, so this round needs no separate guard; a Codex that is not usable comes
+back as `status=FAILED` with the gate's reason on stderr.
 
 Unlike the task seats, this round is **not** self-review-free. The branch
 contains whatever the executor lane produced, so Codex is reviewing some of its
