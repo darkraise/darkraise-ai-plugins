@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 import { head, relative } from '../repo.mjs';
-import { addFinding, buildPack, factLines, findingLine, quotePresent, updateFindings, writePack } from '../review.mjs';
+import { addFinding, buildPack, diffTier, factLines, findingLine, quotePresent, updateFindings, writePack } from '../review.mjs';
 import { appendEvent, loadState, planState, updateState } from '../state.mjs';
 import { loadFindings, refreshHud } from '../status.mjs';
 import { fail, nowIso } from '../util.mjs';
@@ -149,7 +149,7 @@ function record(ctx, active, argv, out) {
   if (!/^[012]$/.test(values.tier ?? '')) fail('usage: dflow review record --tier 0|1|2 [--task N]');
   const tier = Number(values.tier);
   const task = taskOption(values.task);
-  const required = buildPack(ctx, active, task).tier;
+  const required = diffTier(ctx, active, task);
   if (tier < required) fail(`this diff needs a tier ${required} review; tier ${tier} is not enough`);
   const entry = { tier, sha: head(ctx.root), at: nowIso(ctx.env) };
   updateState(ctx.paths, state => {

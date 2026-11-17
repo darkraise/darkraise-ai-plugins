@@ -6,7 +6,7 @@ import { parseBoard, rewriteRow } from '../board.mjs';
 import { blockedTasks, setField } from '../plan.mjs';
 import { proofStatus } from '../proof.mjs';
 import { baseCommit, changedSince, defaultBranch, head, relative, uncommitted } from '../repo.mjs';
-import { buildPack } from '../review.mjs';
+import { diffTier } from '../review.mjs';
 import { runCommand } from '../run.mjs';
 import { appendEvent, loadState, planState, updateState } from '../state.mjs';
 import { loadFindings, refreshHud, unrecordedTicks } from '../status.mjs';
@@ -145,7 +145,7 @@ export async function run(ctx, argv, { out }) {
     }
   }
 
-  const required = buildPack(ctx, active).tier;
+  const required = diffTier(ctx, active);
   const review = planState(loadState(ctx.paths), active.slug).review;
   if (!review) problems.push(`no review is recorded; this diff needs tier ${required} (/dflow:review)`);
   else {

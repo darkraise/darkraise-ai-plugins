@@ -61,6 +61,12 @@ export function requiredTier(ctx, active, files) {
   return lines <= limits.tier0Lines ? 0 : 1;
 }
 
+// The tier the diff needs, without the rest of the pack.
+export function diffTier(ctx, active, taskNumber) {
+  const range = reviewRange(ctx, active, taskNumber);
+  return taskNumber === undefined ? requiredTier(ctx, active, numstat(ctx, range)) : 1;
+}
+
 export function buildPack(ctx, active, taskNumber) {
   const range = reviewRange(ctx, active, taskNumber);
   const files = numstat(ctx, range);

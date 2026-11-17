@@ -167,11 +167,11 @@ export function taskBrief(ctx, active, task, { designLimit = 40 } = {}) {
   return capLines(lines, 90, more => `… ${more} more lines; read ${active.rel}`);
 }
 
-export function refreshHud(ctx) {
+export function refreshHud(ctx, model) {
   // Only a repository that uses dflow gets a .dflow directory.
   if (!fs.existsSync(ctx.paths.docs)) return;
   try {
-    writeJson(ctx.paths.hud, buildModel(ctx));
+    writeJson(ctx.paths.hud, model ?? buildModel(ctx));
   } catch {
     // The HUD is a view; a failure to refresh it must not fail the command.
   }

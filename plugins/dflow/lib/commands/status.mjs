@@ -6,6 +6,6 @@ export async function run(ctx, argv, { out }) {
   const model = buildModel(ctx);
   if (values.json) out(JSON.stringify(model, null, 2));
   else for (const line of values.brief ? briefLines(model) : statusLines(model)) out(line);
-  refreshHud(ctx);
+  refreshHud(ctx, model);
   return 0;
 }
