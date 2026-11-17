@@ -142,9 +142,8 @@ for them, or `TaskStop` them and record a Ruling. Tell your partner which you
 did. Then run `scripts/next-step PLAN_FILE` (see using-dforge §Session
 Budget) as your last action. The
 last thing in your final message is the block it prints, verbatim. It also
-rewrites the `## Next session` section of
-`<latest.md>`; if it exits 4, say the handoff file could not
-be written. When the plan finishes,
+rewrites that block in the next session's checkout's `<latest.md>`; on
+exit 4, say it could not be written. When the plan finishes,
 dforge:finishing-a-development-branch runs it instead.
 
 ## Setup

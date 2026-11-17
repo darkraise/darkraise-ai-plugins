@@ -285,8 +285,9 @@ compaction that was booked (`pending` is `after-compact`): while a `clear` or
   line names the spec). In
   `execute` and `final`, follow the After compaction steps of the execution
   skill the plan's Execution line names, for the plan `status` names: its
-  workspace, ledger and `git log` are the authority. `latest.md` predates the
-  execution worktree, so do not resume from it. When the line says the size
+  workspace, ledger and `git log` are the authority. Each checkout keeps its
+  own `latest.md`, and the one here can predate the run, so do not resume
+  from it. When the line says the size
   is unknown, record that with `scripts/auto-run ruling add`.
 - `handoff`: follow Clears.
 
@@ -325,7 +326,9 @@ either stage is retried once in that stage; the second stops the run.
 
 The step that hands off owns the clear; dforge:handoff itself never runs it.
 Run dforge:handoff first (`scripts/auto-run clear` reads the first prompt
-and launch command `scripts/next-step` wrote to `latest.md`), then:
+and launch command `scripts/next-step` wrote to the attached plan's handoff,
+the `latest.md` `scripts/next-step --target` names: the checkout the next
+session works in, its first prompt naming that checkout), then:
 
 - **A compaction that left too much:** `scripts/auto-run clear`.
 - **The switch** (§The switch): the cockpit runs `scripts/auto-run clear --phase` itself.

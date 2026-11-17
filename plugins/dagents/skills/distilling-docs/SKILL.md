@@ -71,7 +71,8 @@ Three conditions, checked per file, all required:
    the content you actually distilled went unrecoverable. Commit it first, or
    leave it out of the wave.
 3. **Unreferenced** — `git grep` over tracked files outside those two
-   directories, plus `<latest.md>`,
+   directories, plus every checkout's `<latest.md>` (each checkout keeps
+   its own; `scripts/repo-audit` lists them under `## Handoff`),
    finds neither the file's path, nor its basename, nor any **ancestor**
    directory path beneath those roots. The ancestor check matters: a plan naming
    a capture directory references every file in it without naming one.
@@ -165,7 +166,7 @@ change; everything else stands.
   exits 0, which it does only for a file synced and unchanged since the last
   push. `<name>` is the file's name (`dagents-path name <path>`). Unreferenced is
   checked as above, over the checkout's tracked files, the mirror's documents
-  outside those two directories, and `<latest.md>`.
+  outside those two directories, and every checkout's `<latest.md>`.
 - **`Source:`** cites `<name>@r<id>`, the line `revision` printed, captured
   before deletion; darkmem keeps that revision.
 - **The two commits become two pushes.** Write the entries and run

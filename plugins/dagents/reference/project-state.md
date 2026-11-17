@@ -94,7 +94,15 @@ darkmem.
 |---|---|---|
 | `<docs>` | `<worktree>/docs/dagents` | `~/.dagents/mirror/<project>/dagents` |
 | `<ledger dir>` | `<worktree>/<state>/sdd/<plan-basename>` | `~/.dagents/mirror/<project>/work/sdd/<plan-basename>` |
-| `<latest.md>` | `<primary checkout>/<state>/handoff/latest.md` | `~/.dagents/mirror/<project>/work/handoff/latest.md` |
+| `<latest.md>` | `<checkout>/<state>/handoff/latest.md` | `~/.dagents/mirror/<project>/work/handoff/latest.md` |
+
+While progress is local, each checkout keeps its own `<latest.md>`.
+`scripts/next-step` writes the handoff of the checkout the next session works
+in: for a plan in flight, the worktree holding its ledger; once the plan is
+complete, the primary's; otherwise the checkout it runs in. Its first prompt
+opens by naming that checkout and its handoff. While progress is in darkmem,
+every checkout shares the mirror's one. `scripts/repo-audit` lists every
+checkout's.
 
 `<state>` and a plan's workspace (`scripts/sdd-workspace`: briefs, reports,
 review packages) stay in the checkout either way. A plan's ledger is

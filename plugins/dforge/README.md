@@ -334,7 +334,10 @@ set — brainstorming through finishing-a-development-branch — frozen at upstr
 frontmatter, and writing-plans and executing-plans use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
 `context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
-action and keeps `.dforge/handoff/latest.md` pointing at it. Disable the
+action and keeps `.dforge/handoff/latest.md` pointing at it. Each checkout
+keeps its own: `next-step` writes the one in the checkout the next session
+works in (a plan's worktree while it runs), and its first prompt opens by
+naming that checkout. Disable the
 upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
@@ -716,7 +719,8 @@ desktop window joins the session, unless you closed it.
   tool starts. **⇣ Compact** stays on the card, and **↪ Hand off** appears in
   `dforge` sessions.
 - **Resumable work** is a card at the top of the pane, framed in the accent
-  color, when `.dforge/handoff/latest.md` is under three days old and its
+  color, when the session checkout's `.dforge/handoff/latest.md` is under
+  three days old and its
   `## Next session` block has a first prompt to paste (a finished plan, or a
   task blocked on your ruling, has none). It names the note's age and its
   **Next:** line, and **Resume** (`r`) queues the prompt that resumes it. The
