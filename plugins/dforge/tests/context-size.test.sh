@@ -309,6 +309,12 @@ record s-win "$TW"
 run
 check "unlisted model, no state file: unknown, exit 3" "$status:$(grep -c ' — unknown — ' <<<"$out")" "3:1"
 check "unlisted model: no arithmetic error" "$(grep -c 'syntax error\|integer expression' "$TMP/stderr")" "0"
+for m in claude-fable-5-2 claude-opus-5-6 claude-sonnet-5-7; do
+  asst 300000 false "$m" > "$TW"
+  run
+  check "a later $m, no state file: the table's window, not unknown" "$(grep -c ' — unknown — ' <<<"$out"):$(grep -c 'budget: 300k of' <<<"$out")" "0:1"
+done
+asst 300000 false claude-mystery-9 > "$TW"
 mkdir -p "$HOME/.claude/dforge/sessions/state"
 jq -nc --argjson u "$(( $(date +%s) * 1000 ))" '{session:"s-win",updated:$u,window:400000,model:"claude-mystery-9",partial:false,launches:[]}' > "$HOME/.claude/dforge/sessions/state/s-win.json"
 run
