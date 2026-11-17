@@ -136,6 +136,18 @@ check 'an unreaped transport error blocks the task' \
 check 'an unreaped transport error is flagged on the status line' "$(grep -c 'note=writer-unconfirmed' "$fixture/out")" 1
 check 'an unreaped transport error is not reported as a timeout' "$(grep -c 'note=timed-out' "$fixture/out")" 0
 
+# A client that dies without printing a result proves nothing about the turn,
+# so it blocks the task exactly as an unconfirmed stop does.
+git -C "$fixture/primary" worktree add -qb died-case "$fixture/died"
+STUB_MODE=die run --cwd "$fixture/died"
+check 'a client that printed no result returns executed non-DONE' "$?" 1
+check 'a client that printed no result blocks the task' \
+  "$(jq -r .phase "$(git -C "$fixture/died" rev-parse --absolute-git-dir)/dagents/tasks/$(printf task-one | git hash-object --stdin)/state.json")" blocked
+check 'a client that printed no result is flagged on the status line' "$(grep -c 'note=writer-unconfirmed' "$fixture/out")" 1
+check 'a client that printed no result says so in the report' "$(grep -c 'codex client returned no result' "$fixture/report.md")" 1
+run --cwd "$fixture/died"
+check 'a task whose client printed no result cannot relaunch' "$?" 2
+
 # A plugin that fails to load never sent a turn, so nothing can still be writing.
 git -C "$fixture/primary" worktree add -qb load-fail-case "$fixture/load-fail"
 STUB_LOAD_FAILS=1 STUB_PRE_EXISTING=1 run --cwd "$fixture/load-fail"

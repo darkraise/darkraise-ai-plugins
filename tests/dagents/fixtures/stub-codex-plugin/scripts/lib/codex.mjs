@@ -117,6 +117,10 @@ async function turn(cwd, options, label) {
   if (m === "hang") {
     await new Promise(() => {});
   }
+  // The client process dies after the turn started, printing no result.
+  if (m === "die") {
+    process.exit(1);
+  }
   if (m === "refusal") {
     return {
       status: 1, threadId: "stub-thread", turnId: "stub-turn", finalMessage: null,
