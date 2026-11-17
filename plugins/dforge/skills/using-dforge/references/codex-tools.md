@@ -81,8 +81,9 @@ two-thirds of all wait calls were short polls that timed out.
 
 Every `spawn_agent` you issue — including when you are yourself a
 spawned child running a fan-out — sets `model` AND `reasoning_effort`
-explicitly, per the Model Selection rules of the skill you are
-executing. Setting `model` alone is a trap: the child's effort
+explicitly, from the rank table in
+[native-codex.md](../../../reference/native-codex.md) §Scoring and
+assignment and the rank the dispatching step names. Setting `model` alone is a trap: the child's effort
 silently resets to that model's default, not to yours.
 
 Ask your human partner to add a machine-level backstop to
