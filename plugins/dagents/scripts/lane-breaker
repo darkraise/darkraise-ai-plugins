@@ -33,8 +33,10 @@ fi
 
 # `^Task [0-9]+:` keys on the whole number, so Task 10 is never Task 1. The
 # trailing space in `executor <id> ` keeps one id from matching a longer one.
-# Ruling, parked and deferred-minor lines are free text, so a word in them
-# ("not a HANDBACK") says nothing about the task's lane.
+# A handback is one of its structured forms on an implementer or fix-round
+# line: the `executor <id> HANDBACK` clause or the `; HANDBACK to <agent>`
+# slot. Everywhere else the word is free text ("not a HANDBACK", a complete
+# line's Ruling or discovered clause) and says nothing about the task's lane.
 tr -d '\r' < "$ledger" | LB_ID="$id" awk '
   BEGIN { id = ENVIRON["LB_ID"]; mark = "executor " id " "; off = "Plan: executor " id " off - unreliable (" }
   index($0, off) == 1 { plan_off = 1; next }
@@ -43,7 +45,7 @@ tr -d '\r' < "$ledger" | LB_ID="$id" awk '
   {
     n = $2; sub(/:$/, "", n)
     if (index($0, mark)) assigned[n] = 1
-    if (index($0, "HANDBACK")) handed[n] = 1
+    if (/^Task [0-9]+: (implementer|fix round) / && (/executor [a-z][a-z0-9-]* HANDBACK/ || index($0, "; HANDBACK to "))) handed[n] = 1
   }
   END {
     k = 0

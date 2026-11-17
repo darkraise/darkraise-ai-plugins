@@ -91,6 +91,14 @@ ledger "$AGY1" "Task 1: Ruling: the round-1 diff is kept — not a HANDBACK — 
   "$AGY4" "Task 4: parked: HANDBACK question for the owner" "Task 4: minor (deferred): a.txt:1 — HANDBACK wording"
 check "Ruling, parked and minor lines never count as a handback" "$(breaker agy)" "lane-breaker agy state=open handbacks=0"
 
+ledger "$AGY1" 'Task 1: complete (commits aaaaaaa..bbbbbbb, review clean) — done: x; discovered: none; assumptions: none; Ruling: no HANDBACK needed — none' \
+  "$AGY4" 'Task 4: fix round 1/2 (1 addressed, 0 open — the HANDBACK wording; commits ddddddd..eeeeeee; resumed)' \
+  'Task 4: complete (commits ddddddd..eeeeeee, review clean) — done: y; discovered: a HANDBACK to impl-sonnet-low was weighed; assumptions: none'
+check "free text on complete and fix-round lines never counts as a handback" "$(breaker agy)" "lane-breaker agy state=open handbacks=0"
+HBFQ='Task 4: fix round 1/2 (0 addressed, 1 open — y; commits ddddddd..ddddddd; executor agy HANDBACK - fallback quota until session end)'
+ledger "$AGY1" "$HB1" "$AGY4" "$HBFQ"
+check "a fix-round line's executor HANDBACK clause counts" "$(breaker agy)" "lane-breaker agy state=tripped handbacks=2"
+
 printf '%s\n' '# SDD ledger — plan: docs/other.md' "$AGY1" "$HB1" "$AGY4" "$HB4" > "$LEDGER"
 check "a ledger naming another plan still answers open" \
   "$(bash "$BREAKER" "$PLAN" agy 2>/dev/null)" "lane-breaker agy state=open handbacks=0"

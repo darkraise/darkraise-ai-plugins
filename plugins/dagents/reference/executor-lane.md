@@ -186,8 +186,10 @@ run neither the gate, the roster nor the wrapper: fall back to the session,
 say `agy off — unreliable (2 handbacks)` aloud, and record the assigned line
 `Task <N>: implementer inline (assigned; base <sha7>; executor agy unavailable - off for this plan: unreliable (2 handbacks))`.
 The breaker counts a task as handed back when one of its lines names
-`executor agy ` and one says `HANDBACK`, so every handback must carry the word.
-A review-loop handback already does, on its `HANDBACK to inline` fix-round
+`executor agy ` and an implementer or fix-round line records the handback in
+one of two forms, `executor <id> HANDBACK - <reason>` or `; HANDBACK to
+<agent>`; the word anywhere else is free text and does not count. A
+review-loop handback already does, on its `HANDBACK to inline` fix-round
 line. A run that fails before review (a refusal, a second failed run, a gate
 closed after `--refresh`, a preflight exit 2, a git-guard block once recovered) hands back on the
 fallback's assigned line, in its substitution slot:
