@@ -21,3 +21,4 @@
 - 2026-11-15 `docs/dforge/plans/2026-11-15-measured-proposals.md` — merged into `main` at 70701f32
 - 2026-11-16 `docs/dforge/plans/2026-11-16-next-session-routing.md` — merged into `main` at 2a5411ce
 - 2026-11-17 `docs/dforge/plans/2026-11-17-dagents-split.md` — merged into `main` at 44cf99c5
+- 2026-11-18 `docs/dforge/plans/2026-11-18-per-worktree-handoff.md` — merged into `main` at c6519565
