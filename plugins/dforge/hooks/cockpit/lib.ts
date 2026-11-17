@@ -1264,7 +1264,8 @@ export function parseLedger(text: string): Ledger {
     const assigned = /^implementer (\S+) \(assigned/.exec(rest)
     if (assigned) {
       const one = task(n)
-      one.seat = assigned[1] ?? null
+      // dforge writes `inline` for every task it runs itself: no seat to show.
+      one.seat = assigned[1] === undefined || assigned[1] === 'inline' ? null : assigned[1]
       if (one.state !== 'complete' && one.state !== 'deferred') one.state = 'assigned'
       one.reason = null
       one.question = null

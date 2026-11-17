@@ -4766,6 +4766,11 @@ describe('run card', () => {
     expect(ledger.tasks[2]?.isClean).toBe(false)
   })
 
+  test("an inline assigned line names no seat, and an older ledger's seat stays", () => {
+    expect(parseLedger(`${LEDGER}\nTask 3: implementer inline (assigned; base 1234567)`).tasks.find(task => task.n === 3)?.seat).toBeNull()
+    expect(parseLedger('Task 4: implementer dforge:impl-sonnet-low (assigned; base 1234567)').tasks[0]?.seat).toBe('dforge:impl-sonnet-low')
+  })
+
   test('a waiting line sends one question and a deferred task no completion', async ($, on) => {
     const files = runFiles(LEDGER)
     const fetches: World['fetches'] = []
