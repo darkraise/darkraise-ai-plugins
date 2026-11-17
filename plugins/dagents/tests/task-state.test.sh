@@ -212,6 +212,12 @@ case "${OSTYPE:-}" in
     check 'macOS: a dangling symlink to outside escapes' "$(scope_check '["dangling"]')" 2
     rm "$fixture/mac/out" "$fixture/mac/dangling" ;;
 esac
+# Git Bash: a drive-letter path is rooted, and resolves to the POSIX form the
+# callers compare with. cygpath is stubbed as a function for this one call.
+check 'a drive-letter path resolves through cygpath, not under $PWD' "$(
+  cygpath() { [ "$1" = -u ] && printf '%s\n' "$fixture/primary${2#D:/repo}"; }
+  cd "$fixture" && dr_resolve 'D:/repo/new/report.md'
+)" "$(dr_canonical "$fixture/primary")/new/report.md"
 printf '["mac.txt"]\n' > "$fixture/mac-scope.json"
 (
   PATH="$fixture/macbin:$PATH" DAGENTS_TIMEOUT=gtimeout

@@ -8,6 +8,11 @@ dr_canonical() { (cd -- "$1" && pwd -P); }
 # removed, whether or not it exists: GNU realpath -m, which macOS lacks.
 dr_resolve() {
   local path=$1 rest="" link hops=0 s out="" part
+  # On Git Bash a drive-letter path is rooted; the callers compare the answer
+  # with the POSIX form pwd -P gives.
+  case $path in
+    [A-Za-z]:[/\\]*) if command -v cygpath >/dev/null 2>&1; then path=$(cygpath -u "$path") || return 1; fi ;;
+  esac
   case $path in /*) ;; *) path="$PWD/$path" ;; esac
   while :; do
     while [ ! -e "$path" ] && [ ! -L "$path" ]; do
