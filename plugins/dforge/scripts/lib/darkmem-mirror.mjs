@@ -169,6 +169,7 @@ function dictOf(value, check) {
 }
 
 const isHash = value => typeof value === "string" && HASH.test(value);
+const isLines = value => Array.isArray(value) && value.every(line => typeof line === "string");
 const isLedgerRecord = (slug, record) => validKey(slug) && record !== null && typeof record === "object"
   && Number.isSafeInteger(record.offset) && record.offset >= 0 && isHash(record.prefix)
   && (record.pending === undefined || typeof record.pending === "boolean")
@@ -239,10 +240,14 @@ export function loadState(file) {
   const documents = dictOf(raw?.documents, (uri, hash) => isHash(hash));
   const ledgers = dictOf(raw?.ledgers, isLedgerRecord);
   const checkpointAt = checkpointAtRecord(raw?.checkpointAt, raw?.checkpointAtByWorkstream);
+  // Each command's own conflicts (darkmem-sync.mjs recordConflicts); absent
+  // in a state written before it was kept.
+  const conflictsBy = raw?.conflictsBy === undefined ? undefined : dictOf(raw.conflictsBy, (name, lines) => isLines(lines));
   const valid = raw?.version === 1 && documents && ledgers
     && (raw.checkpoint === null || isHash(raw.checkpoint))
     && checkpointAt !== undefined
-    && Array.isArray(raw.conflicts) && raw.conflicts.every(line => typeof line === "string")
+    && isLines(raw.conflicts)
+    && conflictsBy !== null
     && (raw.pendingLinks === undefined || (Array.isArray(raw.pendingLinks) && raw.pendingLinks.every(uri => typeof uri === "string")))
     // dr-forge recorded forge; migrateServer moves its documents on and records dforge.
     && (raw.prefix === undefined || raw.prefix === DOC_PREFIX || raw.prefix === "forge")
@@ -256,6 +261,7 @@ export function loadState(file) {
   // (dforge-home-migrate.mjs).
   if (raw.prefix !== undefined) state.prefix = raw.prefix;
   if (raw.remote !== undefined) state.remote = { url: raw.remote.url, project: raw.remote.project };
+  if (conflictsBy !== undefined) state.conflictsBy = conflictsBy;
   return state;
 }
 
@@ -277,6 +283,7 @@ export function checkRemote(file, state, url, project) {
     state.remote = { url, project };
     delete state.prefix;
     state.conflicts = [];
+    delete state.conflictsBy;
     return;
   }
   if (state.remote.url !== url || state.remote.project !== project) {
