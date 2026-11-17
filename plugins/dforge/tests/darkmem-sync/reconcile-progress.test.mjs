@@ -849,6 +849,32 @@ test("progress moves back into the primary checkout from closed and open workstr
   assert.equal(again.stdout, "");
 });
 
+test("a mirror work tree that cannot be set aside refuses the move back, and a rerun finishes it", async t => {
+  const s = await setup(t, "local");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
+  // Every name the aside rename can take for the next minute is a non-empty directory.
+  const now = Date.now();
+  const blockers = [];
+  for (let i = 0; i < 60; i += 1) {
+    const dir = path.join(s.mirror, `work-moved-${utcStamp(new Date(now + i * 1000))}`);
+    blockers.push(dir);
+    write(path.join(dir, "keep.md"), "taken\n");
+  }
+  const result = await s.reconcile();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stderr, /unexpected error/);
+  assert.match(result.stdout, /^darkmem-sync reconcile: progress stay darkmem \(configured local\): the mirror's progress could not be set aside \(\w+\); the primary checkout holds the copied files, and the next reconcile finishes the move$/m);
+  assert.equal(read(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md")), LEDGER("p1"));
+  assert.equal(fs.existsSync(s.workRoot), true);
+  assert.equal(s.stores().progress, "darkmem");
+  for (const dir of blockers) fs.rmSync(dir, { recursive: true });
+  const again = await s.reconcile();
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.match(again.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
+  assert.equal(fs.existsSync(s.workRoot), false);
+  assert.deepEqual(s.stores(), { documents: "local", progress: "local" });
+});
+
 test("a plan's amendments move back into the checkout with its ledger (A3)", async t => {
   const s = await setup(t, "local");
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
