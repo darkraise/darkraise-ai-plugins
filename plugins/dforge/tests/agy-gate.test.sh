@@ -209,8 +209,8 @@ setting '{}'; fresh; gate
 check "agyReview unset answers setting without probing" "$out" "agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting"
 check "agyReview unset never runs agy" "$([ -f "$ARGS" ] && echo ran || echo none)" "none"
 check "agyReview off writes no session file" "$([ -e "$SESS/s1.json" ] && echo written || echo none)" "none"
-mkdir -p "$SESS"; jq -cn '{session_id:"s1", usable:true, review:true, reason:"ok"}' > "$SESS/s1.json"; gate
-check "agyReview off removes an earlier review=true" "$([ -e "$SESS/s1.json" ] && echo kept || echo removed)" "removed"
+mkdir -p "$SESS"; jq -cn '{session_id:"s1", usable:true, review:true, reason:"ok", fallback:{reason:"quota", resets_at_epoch:4102444800}}' > "$SESS/s1.json"; gate
+check "agyReview off closes an earlier review=true and keeps its quota mark" "$(jq -c '[.review, .fallback.reason]' "$SESS/s1.json" | tr -d '\r')" '[false,"quota"]'
 setting '{"agyReview":false}'; fresh; gate
 check "agyReview false answers setting too" "$(grep -o 'reason=[a-z]* review=[a-z]*' <<<"$out")" "reason=setting review=false"
 setting '{"agyReview":true}'

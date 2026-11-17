@@ -113,6 +113,24 @@ _executor_session_write_unlocked() {
   find "$dir" -maxdepth 1 \( -name '*.json' -o -name '.*.json.lock' \) -mtime +7 -delete 2>/dev/null || true
 }
 
+# executor_session_review_off <id> - records in this session's file that the
+# setting turned the reviewer off: the answer a gate writes for an off
+# setting, so a switch back on probes again, with the fallback mark kept. A
+# file that does not say review=true is left alone, with no lock taken.
+executor_session_review_off() {
+  local f
+  f=$(executor_session_file "$1") || return 0
+  [ -r "$f" ] || return 0
+  [ "$(jq -r '.review == true' < "$f" 2>/dev/null | tr -d '\r')" = true ] || return 0
+  _executor_session_locked "$1" _executor_session_review_off_unlocked "$f"
+}
+
+_executor_session_review_off_unlocked() {
+  jq -c '.review = false | .usable = false | .reason = "setting" | .resets_at = null | .resets_at_epoch = null' \
+    < "$1" > "$1.tmp.$$" 2>/dev/null && mv -f "$1.tmp.$$" "$1" \
+    || { rm -f "$1.tmp.$$" 2>/dev/null; return 1; }
+}
+
 # executor_session_iso <epoch> - the epoch in ISO 8601 UTC; prints nothing
 # when neither GNU nor BSD date can convert it.
 executor_session_iso() {

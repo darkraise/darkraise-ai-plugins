@@ -268,7 +268,7 @@ check "codexReview off starts no client" "$(grep -c connect "$TMP/log" 2>/dev/nu
 check "codexReview off writes no session file" "$([ -e "$SESS/s1.json" ] && echo written || echo none)" "none"
 setting '{"codexReview":true}'; fresh; gate usable
 setting '{"codexReview":false}'; gate usable
-check "codexReview turned off removes an earlier review=true" "$([ -e "$SESS/s1.json" ] && echo kept || echo removed)" "removed"
+check "codexReview turned off closes an earlier review=true and keeps the file" "$(jq -r '.review' "$SESS/s1.json" 2>/dev/null | tr -d '\r')" "false"
 setting '{}'; fresh; gate usable
 check "codexReview is off by default" "$(grep -c 'reason=setting' <<<"$out")" "1"
 setting '{"codexReview":true,"codexLane":false}'; fresh; gate usable

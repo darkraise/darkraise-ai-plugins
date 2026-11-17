@@ -45,11 +45,8 @@ want_review=$(dforge_setting agyReview false)
 if [ "$want_review" = false ]; then
   # Off, there is nothing to probe or record. A review=true this session wrote
   # while the setting was on would still open review-route's panel route, so
-  # that file goes; any other keeps its quota marks for a switch back on.
-  if file=$(executor_session_file agy) && [ -r "$file" ] \
-     && [ "$(jq -r '.review == true' < "$file" 2>/dev/null | tr -d '\r')" = true ]; then
-    rm -f "$file"
-  fi
+  # it is closed; the file keeps its quota marks for a switch back on.
+  executor_session_review_off agy || true
   printf 'agy-gate usable=false reason=setting review=false resets_at=- claude=on claude_resets_at=- source=setting\n'
   exit 0
 fi
