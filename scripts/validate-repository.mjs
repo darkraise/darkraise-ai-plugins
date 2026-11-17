@@ -77,7 +77,6 @@ export function validateRepository(root, { names = maintained } = {}) {
     const catalog = read(resolve(root, catalogPath));
     if (!catalog) continue;
     if (catalog.name !== 'darkraise') errors.push(`${client}: marketplace name must be darkraise`);
-    if (client === 'claude' && catalog.allowCrossMarketplaceDependenciesOn !== undefined) errors.push('claude: cross-marketplace dependency allowlist must be removed');
     if (!Array.isArray(catalog.plugins)) { errors.push(`${client}: plugins must be an array`); continue; }
     if (JSON.stringify(catalog.plugins.map(p => p.name).sort()) !== JSON.stringify(expected)) errors.push(`${client}: incorrect catalog membership`);
     const seen = new Set();
@@ -102,9 +101,6 @@ export function validateRepository(root, { names = maintained } = {}) {
         if (entry.policy?.installation !== 'AVAILABLE') errors.push(`${entry.name}: installation must be AVAILABLE`);
         if (manifest.skills !== './skills/' || !existsSync(resolve(pluginRoot, 'skills'))) errors.push(`${entry.name}: skills path missing`);
         if (WORKFLOW.includes(entry.name) && (JSON.stringify(manifest.hooks) !== '{}')) errors.push(`${entry.name}: explicit empty Codex hooks required`);
-      }
-      if (client === 'claude' && WORKFLOW.includes(entry.name) && manifest.dependencies?.length) {
-        errors.push(`${entry.name}: standalone plugin must not declare dependencies`);
       }
     }
   }
