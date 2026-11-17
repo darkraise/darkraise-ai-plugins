@@ -50,7 +50,7 @@
     {
       "name": "dflow",
       "source": "./plugins/dflow",
-      "description": "Plan, build, review and ship with a task gate that only a passing command can open: lean plans tracked on a board, one evidence-bound review per branch, UI proof, living docs checked mechanically, a HUD, and a one-way darkmem projection.",
+      "description": "Plan, build, review and ship with a task gate that only a passing command can open: lean plans tracked on a board, one evidence-bound review per branch, UI proof, living docs checked mechanically, and a HUD.",
       "category": "workflow",
       "keywords": [
         "workflow",
@@ -59,7 +59,6 @@
         "code-review",
         "board",
         "docs",
-        "darkmem",
         "hud",
         "mod",
         "token-efficiency"

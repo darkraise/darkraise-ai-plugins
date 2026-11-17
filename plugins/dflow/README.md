@@ -5,8 +5,8 @@ that only a passing command can open. Claude Code only.
 
 - **One document per unit of work.** The design is the head of the plan; plans
   hold decisions, signatures and test assertions, not code.
-- **Scripts keep the books.** Ticking a task, moving a board row, pushing to
-  darkmem and writing a checkpoint cost no model tokens.
+- **Scripts keep the books.** Ticking a task and moving a board row cost no
+  model tokens.
 - **A task is done when its command passes.** `dflow done` runs the task's
   verify command and only then ticks, commits and moves on.
 - **One review per branch, sized to the diff.** Every finding carries evidence
@@ -79,7 +79,7 @@ docs/dflow/
   decisions.md   append-only decisions with their reasons
   gotchas.md     tooling and environment traps (100 lines at most)
   board.md       the backlog table
-  config.json    gates, run command, darkmem project, thresholds
+  config.json    gates, run command, thresholds
   plans/         one file per unit of work
 .dflow/          run state, ignored by its own .gitignore
 ```
@@ -153,7 +153,7 @@ the owner drops is removed from the plan with a logged amendment.
 
 | Command | Purpose |
 | --- | --- |
-| `dflow init [--gate "name=cmd"] [--darkmem <project>]` | Scaffold `docs/dflow`, add gates, map darkmem |
+| `dflow init [--gate "name=cmd"]` | Scaffold `docs/dflow`, add gates |
 | `dflow plan new\|check\|approve\|use` | Create, lint, approve or select a plan |
 | `dflow status [--json\|--brief]` | State and the one next step |
 | `dflow next` | Start the next ready task and print its brief |
@@ -168,7 +168,6 @@ the owner drops is removed from the plan with a logged amendment.
 | `dflow doctor` | Docs, board and plan checks |
 | `dflow wave`, `dflow worktree add\|merge\|drop <N>` | Worker tasks side by side |
 | `dflow plans [--conflicts]`, `dflow session <row>` | Plans across worktrees |
-| `dflow sync push\|pull\|status\|enable\|disable` | The darkmem projection, and your consent to it |
 | `dflow cost [--plan <slug>]` | Token use by phase and model |
 | `dflow context` | Context size and the reset threshold |
 
@@ -232,7 +231,7 @@ The pane shows a Now row, then one framed card per section, then the Next row:
 - **Usage** (blue): the 5-hour and 7-day limits with pace and reset, other
   limits, and the session's cost.
 - **Checks** (red): gates and the review.
-- **Board** (white): the board row or counts, and darkmem's sync state.
+- **Board** (white): the board row or counts.
 - **Workers** (magenta): each running worker's task and branch.
 - **Repo** (green): the repository, the folder, the branch with ahead and
   behind, and changed and untracked files.
@@ -246,7 +245,7 @@ The band is a frame in the account's color above the prompt: the email,
 billing and Remote Control on its top rule beside **Expand**; a line with the
 folder, branch, model, effort, plan progress and workers; a line with the
 context, the 5-hour and 7-day limits and the cost; and a red line when a task
-is blocked, gates failed or darkmem has a conflict or refusal. Each line
+is blocked or gates failed. Each line
 shrinks to fit, and below 48 columns the frame goes.
 
 A session that starts on an approved plan with work left offers to resume it:
@@ -265,39 +264,6 @@ more are ready with disjoint files. Separate plans run as separate background
 sessions (`dflow session <row>` prints the command); `dflow plans --conflicts`
 refuses overlap.
 
-## darkmem
-
-Off unless all four hold: the project in `docs/dflow/config.json`
-(`dflow init --darkmem <project>`), the server in `~/.dflow/config.json`
-(`{"darkmem": {"url": "…"}}`), the key in `DARKMEM_API_KEY`, and your consent
-to that project for this repository. A repository can name any project, so a
-clone never sends anything with your key until you agree: `dflow init
---darkmem` records the consent, and `dflow sync enable` records it for the
-project the repository names now (`dflow sync disable` withdraws it). It is
-kept per repository in `~/.dflow/config.json` under `darkmem.repositories`,
-and covers every worktree of the repository.
-
-The repository is the source of truth; darkmem is a projection.
-
-| Thing | Form |
-| --- | --- |
-| Document URI | the path below `docs/`: `dflow/board.md`, `dflow/plans/<file>.md` |
-| Board sources | register `dflow/board.md`; plans `dflow/plans/*.md` |
-| Row to plan | the Assigned cell holds `docs/dflow/plans/<file>.md` |
-| Workstream | one per plan, keyed by the plan's file name without `.md`, property `plan_uri` |
-| Task state | a `ledger` entry with properties `task`, `state` (`todo`, `wip`, `review`, `blocked`, `done`) and `commit`; a blocked entry's body is the reason |
-| Checkpoint | a `checkpoint` entry at each stop: progress, next task, branch, commit |
-| Client | header `X-Darkmem-Client: dflow` |
-
-darkmem's board row edit route has to accept the API key; where it does not,
-the row is reported as refused and the rest of the projection goes on.
-
-On the default branch every document under `docs/dflow` is pushed by content
-hash. On a plan branch only that plan and its own board row are, so branches
-never overwrite each other. The one inbound change is a board row edited in
-darkmem's UI, pulled on the default branch at session start; a row changed on
-both sides is reported and nothing is overwritten.
-
 ## Configuration
 
 `docs/dflow/config.json`, all keys optional:
@@ -312,7 +278,6 @@ both sides is reported and nothing is overwritten.
   "context": { "resetAt": 150000 },
   "review": { "tier0Lines": 40, "tier2Lines": 800, "tier2Files": 25 },
   "tests": { "maxRatio": 2, "maxSuiteGrowth": 0.2 },
-  "darkmem": { "project": "" },
   "autoShip": false,
   "defaultBranch": "main"
 }
