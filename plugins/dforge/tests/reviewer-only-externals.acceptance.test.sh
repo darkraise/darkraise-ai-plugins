@@ -630,11 +630,13 @@ EOF
   absent "A9: task-brief names no dispatch to an executor" "$(norm <<<"$b_exec")" '[Dd]ispatch|[Ll]ane'
 
   local s_exec s_plain
-  s_exec=$(cd "$R" && timeout 60 bash "$STEP" start plan-exec.md 2 --reset 2>&1; echo "rc=$?")
-  s_plain=$(cd "$R" && timeout 60 bash "$STEP" start plan-plain.md 2 --reset 2>&1; echo "rc=$?")
-  check "A9: task-step start treats the Executor task as the ordinary task" "$(norm <<<"$s_exec")" "$(norm <<<"$s_plain")"
-  check "A9: task-step start exits 0" "$(tail -1 <<<"$s_exec")" "rc=0"
-  absent "A9: task-step start names no executor" "$(norm <<<"$s_exec")" '[Cc]odex|[Ee]xecutor|agy'
+  (cd "$R" && timeout 60 bash "$BRIEF" --open plan-exec.md 2 >/dev/null 2>&1 && timeout 60 bash "$BRIEF" --open plan-plain.md 2 >/dev/null 2>&1)
+  s_exec=$(cd "$R" && timeout 60 bash "$STEP" review plan-exec.md 2 2>&1; echo "rc=$?")
+  s_plain=$(cd "$R" && timeout 60 bash "$STEP" review plan-plain.md 2 2>&1; echo "rc=$?")
+  check "A9: task-step review treats the Executor task as the ordinary task" \
+    "$(norm <<<"$s_exec" | grep -v '^gate: ' | sed 's/ t0 [0-9]*$//')" "$(norm <<<"$s_plain" | grep -v '^gate: ' | sed 's/ t0 [0-9]*$//')"
+  check "A9: task-step review exits 0" "$(tail -1 <<<"$s_exec")" "rc=0"
+  absent "A9: task-step review names no executor" "$(norm <<<"$s_exec" | grep -v '^gate: ')" '[Cc]odex|[Ee]xecutor|agy'
   check "A9: the same files are written for both plans" \
     "$(cd "$R/.dforge/sdd/plan-exec" && ls | tr '\n' ' ')" "$(cd "$R/.dforge/sdd/plan-plain" && ls | tr '\n' ' ')"
 }
@@ -699,13 +701,13 @@ prepare_step_repo() {
   git -C "$STEPREPO" commit -q -m plan
   STEP_BASE=$(git -C "$STEPREPO" rev-parse HEAD)
   local n
-  for n in 1 2 3 4 5 6; do (cd "$STEPREPO" && timeout 60 bash "$STEP" start route.md "$n" >/dev/null 2>&1); done
+  for n in 1 2 3 4 5 6; do (cd "$STEPREPO" && timeout 60 bash "$BRIEF" --open route.md "$n" >/dev/null 2>&1); done
   printf 'change\n' > "$STEPREPO/change.txt"
   git -C "$STEPREPO" add -A
   git -C "$STEPREPO" commit -q -m change
 }
 step_review() { # step_review <task>; sets sout and seat_line, panel_line
-  sout=$(cd "$STEPREPO" && timeout 60 bash "$STEP" review route.md "$1" --base "$STEP_BASE" 2>&1 | tr -d '\r')
+  sout=$(cd "$STEPREPO" && timeout 60 bash "$STEP" review route.md "$1" 2>&1 | tr -d '\r')
   seat_line=$(grep -m1 '^seat: ' <<<"$sout")
   panel_line=$(grep -m1 '^panel: ' <<<"$sout")
 }

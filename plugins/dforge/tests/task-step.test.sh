@@ -159,72 +159,35 @@ short() { git rev-parse --short "$1"; }
 placeholders() { grep -cE '\[[A-Z][A-Z_]*\]' "$1"; }
 ws_count() { ls -A "$WS" | wc -l | tr -d ' '; }
 state_of() { jq -r "$2" "$WS/task-$1-step.json" | tr -d '\r'; }
+open_task() { bash "$P/scripts/task-brief" --open docs/plan.md "$1" >/dev/null; }
+base_at() { # base_at <task> <sha> — the review range starts at SHA
+  jq --arg b "$2" '.base = $b' "$WS/task-$1-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-$1-step.json"
+}
 RR_S="$HERE/../scripts"
 
 if want start; then
-# start: the identity line, the state and the digest. No dispatch file and no
-# task line: the session writes its own `implementer inline` line.
-step start docs/plan.md 1
-check "start: exit 0" "$rc" "0"
-check "start: the ledger holds no task line" "$(grep -c '^Task ' "$LEDGER" || true)" "0"
-check "start: the ledger names the plan" "$(head -n 1 "$LEDGER")" "# SDD ledger — plan: docs/plan.md"
-check "start: the brief exists" "$([ -f "$WS/task-1-brief.md" ] && echo yes || echo no)" "yes"
-check "start: no dispatch file" "$([ -e "$WS/task-1-dispatch.md" ] && echo yes || echo no)" "no"
-check "start: the digest is at most 15 lines" "$([ "$(count_lines "$out")" -le 15 ] && echo yes || echo no)" "yes"
-check "start: the state line precedes the budget line" "$(tail -n 2 <<<"$out" | head -n 1)" \
-  "state: base ${BASE:0:7} review-head - round 0 t0 -"
-check "start: the last line is the budget line" "$(tail -n 1 <<<"$out" | cut -c1-6)" "budget"
-check "start: the state file" \
-  "$(jq -c '[.tasks, .base == "'"$BASE"'", .head, .reviewHead, .round, .t0]' "$WS/task-1-step.json" | tr -d '\r')" '[[1],true,null,null,0,null]'
-
-step start docs/plan.md 3
-check "an Executor task starts like any other" "$rc" "0"
-check "an Executor task names no executor" "$(grep -c -i 'executor' <<<"$out")" "0"
-check "an Executor task writes no task line" "$(grep -c '^Task ' "$LEDGER" || true)" "0"
-
-step start docs/plan.md 2
-step start docs/plan.md 4
-
-# start: one task only.
-step start docs/plan.md 5 6
-check "start: a second task exits 2" "$rc" "2"
-check "start: a second task writes no state" "$([ -f "$WS/task-5-step.json" ] && echo yes || echo no)" "no"
-
-# start: a second call keeps the recorded state; --reset discards the state
-# and starts over.
-echo moved > moved.txt && git add moved.txt && git commit -qm "chore: move head"
-MOVED=$(git rev-parse HEAD)
-before=$(wc -l < "$LEDGER")
-step start docs/plan.md 1
-check "start again: exit 0" "$rc" "0"
-check "start again: no second ledger line" "$(wc -l < "$LEDGER" | tr -d ' ')" "$(echo "$before" | tr -d ' ')"
-check "start again: the recorded base is kept" "$(jq -r .base "$WS/task-1-step.json" | tr -d '\r')" "$BASE"
-check "start again: the digest says the state is kept" "$(head -n 1 <<<"$out" | grep -c 'state kept')" "1"
-check "start again: the state line shows the kept base" "$(tail -n 2 <<<"$out" | head -n 1)" \
-  "state: base ${BASE:0:7} review-head - round 0 t0 -"
-step start docs/plan.md 1 --reset
-check "start --reset: the base is HEAD again" "$(jq -r .base "$WS/task-1-step.json" | tr -d '\r')" "$MOVED"
-check "start --reset: the ledger still holds no task line" "$(grep -c '^Task ' "$LEDGER" || true)" "0"
-check "start --reset: the digest does not say kept" "$(head -n 1 <<<"$out" | grep -c 'state kept')" "0"
+for t in 1 2 3 4 7 8 9; do open_task "$t"; done
 
 # Negative: usage, a missing task, a Codex host, an amendment that does not apply.
-step start docs/plan.md 99
-check "start: no such task exits 3" "$rc" "3"
-step start docs/plan.md
-check "start: no task number exits 2" "$rc" "2"
-step start docs/plan.md x
-check "start: a non-numeric task exits 2" "$rc" "2"
-step start docs/plan.md 1 --nope
-check "start: an unknown flag exits 2" "$rc" "2"
+step start docs/plan.md 1
+check "start is no subcommand" "$rc" "2"
+step review docs/plan.md 99
+check "review: no such task exits 3" "$rc" "3"
+step review docs/plan.md
+check "review: no task number exits 2" "$rc" "2"
+step review docs/plan.md x
+check "review: a non-numeric task exits 2" "$rc" "2"
+step review docs/plan.md 1 --nope
+check "review: an unknown flag exits 2" "$rc" "2"
+step review docs/plan.md 5 6
+check "review: a second task exits 2" "$rc" "2"
+check "review: a second task writes no state" "$([ -f "$WS/task-5-step.json" ] && echo yes || echo no)" "no"
 step bogus docs/plan.md 1
 check "an unknown subcommand exits 2" "$rc" "2"
-step start docs/missing.md 1
-check "start: a missing plan exits 2" "$rc" "2"
+step review docs/missing.md 1
+check "review: a missing plan exits 2" "$rc" "2"
 CWS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/codex-plan.md)")
 rm -rf "$CWS"
-step start docs/codex-plan.md 1
-check "start: a Host: codex plan exits 2" "$rc" "2"
-check "start: a Host: codex plan writes nothing" "$([ -e "$CWS" ] && ls -A "$CWS" | grep -c . || echo 0)" "0"
 mkdir -p "$WS"
 sed 's/^|//' > "$WS/amendments.md" <<'AMEND'
 |## A1 — Task 1
@@ -239,31 +202,24 @@ sed 's/^|//' > "$WS/amendments.md" <<'AMEND'
 |replacement
 |````
 AMEND
-step start docs/plan.md 1
-check "start: an amendment that does not apply exits 4" "$rc" "4"
+step review docs/plan.md 1
+check "review: an amendment that does not apply exits 4" "$rc" "4"
 rm -f "$WS/amendments.md"
 
 # review: the preconditions.
 before=$(ws_count)
-step review docs/plan.md 7
-check "review: before start exits 6" "$rc" "6"
-check "review: before start writes nothing" "$(ws_count)" "$before"
+step review docs/plan.md 6
+check "review: a task never opened exits 6" "$rc" "6"
+check "review: a task never opened writes nothing" "$(ws_count)" "$before"
 step review docs/codex-plan.md 1
 check "review: a Host: codex plan exits 2" "$rc" "2"
 check "review: a Host: codex plan writes nothing" "$([ -e "$CWS" ] && echo yes || echo no)" "no"
 step review docs/plan.md 99
 check "review: no such task exits 3" "$rc" "3"
-step review docs/plan.md 1 --base
-check "review: --base without a value exits 2" "$rc" "2"
-step start docs/plan.md 1 --head HEAD
-check "start: --head is a review flag only" "$rc" "2"
-step start docs/plan.md 1 --cwd "$TMP"
-check "start: --cwd is a review flag only" "$rc" "2"
-step review docs/plan.md 1 --reset
-check "review: --reset is a start flag only" "$rc" "2"
-step review docs/plan.md 1 --cwd
-check "review: --cwd without a value exits 2" "$rc" "2"
-step start docs/plan.md 1 --reset
+for flag in --base --head --cwd --reset; do
+  step review docs/plan.md 1 "$flag" x
+  check "review: $flag is no flag" "$rc" "2"
+done
 BASE1=$(git rev-parse HEAD)
 
 # review: a judge seat below risk 3, Codex off for the session.
@@ -323,32 +279,11 @@ check "review: the panel prompt carries the criteria" "$(grep -c '^#### Spec Com
 check "review: the panel prompt drops the markdown report" "$(grep -cE 'Verification Scores|Output Format|Lens Criteria|Second Pass' "$PP")" "0"
 check "review: the panel prompt names the diff file" "$(grep -c "^\*\*Diff file:\*\* $WS/review-" "$PP")" "1"
 check "review: no Codex prompt is written" "$([ -e "$WS/task-1-review-codex-prompt.md" ] && echo yes || echo no)" "no"
-mkdir -p "$TMP/plain"
-state1=$(cat "$WS/task-1-step.json")
-step review docs/plan.md 1 --cwd "$TMP/plain"
-check "review: a --cwd outside any git work tree exits 2" "$rc" "2"
-check "review: and says the tracked files cannot be recorded" "$(grep -c 'cannot record the tracked files' "$TMP/err")" "1"
-check "review: and leaves the state file alone" "$(cat "$WS/task-1-step.json")" "$state1"
-git worktree add -q --detach "$TMP/wt" HEAD
-step review docs/plan.md 1 --cwd "$TMP/wt"
-check "review: --cwd names the panel's working directory" "$(grep -c -- "--kind task --tier light --cwd \"$TMP/wt\" --out-dir" <<<"$out")" "1"
-git worktree remove --force "$TMP/wt"
-# --- --cwd's checkout answers every git question (row 56) ---
-state_keep=$(cat "$WS/task-1-step.json")
-git worktree add -q --detach "$TMP/wt-cwd" HEAD
-git -C "$TMP/wt-cwd" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m "only in the worktree"
-step review docs/plan.md 1 --cwd "$TMP/wt-cwd"
-check "review: the review head is --cwd's HEAD" "$rc:$(jq -r '.reviewHead' "$WS/task-1-step.json" | tr -d '\r')" "0:$(git -C "$TMP/wt-cwd" rev-parse HEAD)"
-git worktree remove --force "$TMP/wt-cwd"
-printf '%s\n' "$state_keep" > "$WS/task-1-step.json"
-step review docs/plan.md 1 --cwd "$TMP/no-such-dir"
-check "review: a missing --cwd directory exits 2" "$rc" "2"
 printf '%s\n' '#!/usr/bin/env bash' 'echo "agy-gate usable=true reason=ok review=false resets_at=- claude=on claude_resets_at=- source=probe"' > "$TMP/agy-probe-stub"
 TASK_STEP_AGY_GATE="$TMP/agy-probe-stub" step review docs/plan.md 1
 check "review: a gate that probed prints the gate line, untrusted named" "$(grep '^gate:' <<<"$out")" "gate: agy=untrusted codex=open"
 
 # review: a heavy panel seat on risk 3, then the judge with the Second Pass section.
-step start docs/plan.md 7
 echo b > b.txt && git add b.txt && git commit -qm "feat: add b"
 C2=$(git rev-parse HEAD)
 step review docs/plan.md 7
@@ -365,91 +300,77 @@ check "review: risk 3 with reviewers off is a judge-opus seat" "$(grep '^seat:' 
 check "review: and carries no Second Pass section" "$(grep -c 'Second Pass' "$JP7")" "0"
 review_surface absent
 
-# review: --head and --base.
+# review: a step file written before 5.0 may name a head ref; the package
+# still stops there.
 git branch taskref "$C1"
-step review docs/plan.md 1 --head taskref
-check "review: --head records the ref" "$(state_of 1 .head)" "taskref"
-check "review: --head records the ref's commit" "$(state_of 1 .reviewHead)" "$C1"
-check "review: --head packages base..REF" "$(grep -c "^\*\*Head:\*\* $C1\$" "$JP")" "1"
+jq '.head = "taskref"' "$WS/task-1-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-1-step.json"
 step review docs/plan.md 1
-check "review: a later review reuses the recorded ref" "$(state_of 1 .reviewHead)" "$C1"
-step review docs/plan.md 2 --base "$C1"
-DIFF2="$WS/review-$(short "$C1")..$(short "$C2").diff"
-check "review: --base starts the package at SHA" "$(grep -c "^\*\*Diff file:\*\* $DIFF2\$" "$WS/task-2-review-prompt.md")" "1"
-check "review: --base leaves the earlier commit out" "$(grep -c 'add a' "$DIFF2")" "0"
-check "review: --base is recorded" "$(state_of 2 .base)" "$C1"
-step review docs/plan.md 1 --head nope
-check "review: a bad ref exits 2" "$rc" "2"
-check "review: a bad ref leaves the state alone" "$(state_of 1 .head)" "taskref"
-step review docs/plan.md 1 --base nope
-check "review: a bad base exits 2" "$rc" "2"
+check "review: a recorded head ref bounds the package" "$rc:$(state_of 1 .reviewHead)" "0:$C1"
+jq 'del(.head)' "$WS/task-1-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-1-step.json"
 
 # review: the mechanical checks.
 CO="Co-Authored""-By"
 CS="Claude""-Session"
 PREV=$(git rev-parse HEAD)
 git commit -q --allow-empty --author="Other <other@example.invalid>" -m "feat: written by another author"
-step review docs/plan.md 2 --base "$PREV"
+base_at 2 "$PREV"; step review docs/plan.md 2
 check "check identity: a different author" "$(grep '^check identity' <<<"$out")" \
   "check identity: $(short HEAD) author Other <other@example.invalid> (expected Darkraise <dark@example.invalid>)"
 check "check attribution: clean beside a bad identity" "$(grep '^check attribution' <<<"$out")" "check attribution: clean"
 PREV=$(git rev-parse HEAD)
 GIT_COMMITTER_NAME=Other GIT_COMMITTER_EMAIL=other@example.invalid git commit -q --allow-empty -m "feat: committed by another"
-step review docs/plan.md 2 --base "$PREV"
+base_at 2 "$PREV"; step review docs/plan.md 2
 check "check identity: a different committer" "$(grep '^check identity' <<<"$out")" \
   "check identity: $(short HEAD) committer Other <other@example.invalid> (expected Darkraise <dark@example.invalid>)"
 PREV=$(git rev-parse HEAD)
 git -c user.name=Other -c user.email=other@example.invalid commit -q --allow-empty -m "feat: both differ"
-step review docs/plan.md 2 --base "$PREV"
+base_at 2 "$PREV"; step review docs/plan.md 2
 check "check identity: author and committer" "$(grep '^check identity' <<<"$out")" \
   "check identity: $(short HEAD) author Other <other@example.invalid>, committer Other <other@example.invalid> (expected Darkraise <dark@example.invalid>)"
 PREV=$(git rev-parse HEAD)
 git commit -q --allow-empty -m "feat: with a co-author" -m "$CO: X <x@example.invalid>"
-step review docs/plan.md 2 --base "$PREV"
+base_at 2 "$PREV"; step review docs/plan.md 2
 check "check attribution: a co-author trailer" "$(grep '^check attribution' <<<"$out")" \
   "check attribution: $(short HEAD) $CO: X <x@example.invalid>"
 check "check identity: clean beside a bad attribution" "$(grep '^check identity' <<<"$out")" "check identity: clean"
 PREV=$(git rev-parse HEAD)
 git commit -q --allow-empty -m "feat: with a session" -m "$CS: abc123"
-step review docs/plan.md 2 --base "$PREV"
+base_at 2 "$PREV"; step review docs/plan.md 2
 check "check attribution: a session trailer" "$(grep '^check attribution' <<<"$out")" "check attribution: $(short HEAD) $CS: abc123"
 PREV=$(git rev-parse HEAD)
 git commit -q --allow-empty -m "feat: tool line" -m "Generated with a tool"
-step review docs/plan.md 2 --base "$PREV"
+base_at 2 "$PREV"; step review docs/plan.md 2
 check "check attribution: a generated-with line" "$(grep '^check attribution' <<<"$out")" "check attribution: $(short HEAD) Generated with a tool"
 PREV=$(git rev-parse HEAD)
 git commit -q --allow-empty -m "feat: emoji line" -m "🤖 Generated with a tool"
-step review docs/plan.md 2 --base "$PREV"
+base_at 2 "$PREV"; step review docs/plan.md 2
 check "check attribution: a symbol before generated-with still counts" "$(grep '^check attribution' <<<"$out")" "check attribution: $(short HEAD) 🤖 Generated with a tool"
 PREV=$(git rev-parse HEAD)
 git commit -q --allow-empty -m "feat: lowercase trailer" -m "co-authored-by: X <x@example.invalid>"
-step review docs/plan.md 2 --base "$PREV"
+base_at 2 "$PREV"; step review docs/plan.md 2
 check "check attribution: the trailer name is case-insensitive" "$(grep '^check attribution' <<<"$out")" "check attribution: $(short HEAD) co-authored-by: X <x@example.invalid>"
 PREV=$(git rev-parse HEAD)
 git commit -q --allow-empty -m "feat: mentions the words" -m "The table is generated with a script, and a co-authored-by: note is prose here."
-step review docs/plan.md 2 --base "$PREV"
+base_at 2 "$PREV"; step review docs/plan.md 2
 check "check attribution: the words inside a sentence are not a trailer" "$(grep '^check attribution' <<<"$out")" "check attribution: clean"
 PREV=$(git rev-parse HEAD)
 git commit -q --allow-empty -m "feat: clean one"
-step review docs/plan.md 2 --base "$PREV"
+base_at 2 "$PREV"; step review docs/plan.md 2
 check "checks: a clean commit passes both" "$(grep '^check' <<<"$out" | tr '\n' ';')" "check identity: clean;check attribution: clean;"
-step review docs/plan.md 2 --base "$(git rev-parse HEAD~9)"
+base_at 2 "$(git rev-parse HEAD~9)"; step review docs/plan.md 2
 check "checks: several offenders name the first and count the rest" "$(grep '^check attribution' <<<"$out" | grep -c '; 4 more commit(s)$')" "1"
 
 # review: a route that fails.
-step start docs/plan.md 8
 step review docs/plan.md 8
 check "review: a failed route falls back to judge-opus and says why" \
   "$(grep -c "^seat: dforge:judge-opus prompt: $WS/task-8-review-prompt.md (review-route exited 2: review-route: Task 8: the Evaluation line does not parse" <<<"$out")" "1"
 
 # review: a lens-route failure stops the step before it writes anything.
-step start docs/plan.md 9
-state9=$(cat "$WS/task-9-step.json")
 step review docs/plan.md 9
 check "review: a lens-route failure exits 2" "$rc" "2"
 check "review: a lens-route failure says which lens" "$(grep -c 'unknown lens id: no-such-lens' "$TMP/err")" "1"
 check "review: a lens-route failure writes no prompt file" "$([ -e "$WS/task-9-review-prompt.md" ] && echo yes || echo no)" "no"
-check "review: a lens-route failure leaves the state file alone" "$(cat "$WS/task-9-step.json")" "$state9"
+check "review: a lens-route failure records no review head" "$(state_of 9 .reviewHead)" "null"
 
 # review: the judge writes its report where the prompt says, and a fresh
 # review discards the last one; the Codex seat gets no report-file rule.
@@ -572,12 +493,10 @@ printf 'a\000b' > "$RR_REPO/bin.dat"
 rr_git add -A && rr_git commit -qm base
 RR_N=0
 
-rr_run start docs/plan.md 1
-check "rereview fixture: start 1" "$rr_rc" "0"
-rr_run start docs/plan.md 2
-check "rereview fixture: start 2" "$rr_rc" "0"
-rr_run start docs/plan.md 3
-check "rereview fixture: start 3" "$rr_rc" "0"
+for t in 1 2 3; do
+  (cd "$RR_REPO" && env HOME="$RR_TMP/home" GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1 bash "$RR_S/task-brief" --open docs/plan.md "$t" >/dev/null)
+  check "rereview fixture: open $t" "$?" "0"
+done
 rr_edit app.txt mod
 rr_git add -A && rr_git commit -qm work
 rr_run review docs/plan.md 1
@@ -675,33 +594,6 @@ rr_run rereview docs/plan.md 1
 check "rereview after an older run's round 4: exits 7" "$rr_rc" "7"
 check "rereview after an older run's round 4: names round 5" "$(grep -c 'fix round 5 is past the cap of 2' <<<"$rr_err")" "1"
 
-# --base moves the package start.
-rr_reset
-rr_edit app.txt mod
-rr_git add -A && rr_git commit -qm fix-a
-RR_A=$(rr_git rev-parse HEAD)
-rr_edit app.txt add3
-rr_git add -A && rr_git commit -qm fix-b
-rr_fix 1 1 "- app.txt: wrong value"
-rr_run rereview docs/plan.md 1 --base "$RR_A"
-check "rereview --base: the prompt's fix base is the given base" "$(grep -c "Fix base:\*\* $RR_A " "$RR_WS/task-1-rereview-1-prompt.md")" "1"
-check "rereview --base: the diff file starts at the given base" "$(sed -n 's/^\*\*Diff file:\*\* //p' "$RR_WS/task-1-rereview-1-prompt.md" | xargs basename | grep -c "^review-$(rr_git rev-parse --short "$RR_A")\.\.")" "1"
-check "rereview --base: the state records it as the base" "$(rr_state 1 .base)" "$RR_A"
-check "rereview --base: the state line shows it" "$(grep -c "^state: base $(rr_git rev-parse --short "$RR_A") " <<<"$rr_out")" "1"
-
-# --head packages up to the task ref and leaves later commits out.
-rr_reset
-rr_edit app.txt mod
-rr_git add -A && rr_git commit -qm fix-a
-rr_git branch -f rr-task-ref
-rr_edit app.txt add4
-rr_git add -A && rr_git commit -qm later
-rr_fix 1 1 "- app.txt: wrong value"
-rr_run rereview docs/plan.md 1 --head rr-task-ref
-check "rereview --head: prompts on the ref's diff" "$(rr_verdict 1 1)" "prompt"
-check "rereview --head: records the ref's commit as the review head" "$(rr_state 1 .reviewHead)" "$(rr_git rev-parse rr-task-ref)"
-check "rereview --head: records the ref" "$(rr_state 1 .head)" "rr-task-ref"
-
 # A zero-padded task number names the same task.
 rr_reset
 rr_edit app.txt mod
@@ -729,10 +621,10 @@ check "rereview on a Host: codex plan exits 2" "$rr_rc" "2"
 check "rereview on a Host: codex plan writes nothing" "$(ls -A "$(dirname "$RR_WS")/codex-plan" 2>/dev/null | wc -l | tr -d ' ')" "0"
 rr_run rereview docs/plan.md 1 --bogus
 check "rereview with an unknown flag exits 2" "$rr_rc" "2"
-rr_run rereview docs/plan.md 1 --base ""
-check "rereview with an empty --base exits 2" "$rr_rc" "2"
-rr_run rereview docs/plan.md 1 --head ""
-check "rereview with an empty --head exits 2" "$rr_rc" "2"
+for flag in --base --head; do
+  rr_run rereview docs/plan.md 1 "$flag" x
+  check "rereview: $flag is no flag" "$rr_rc" "2"
+done
 fi
 
 if want verdict; then
@@ -1036,8 +928,8 @@ rr_run verdict docs/plan.md 1
 check "verdict: a state without a recorded check exits 0" "$rr_rc" "0"
 check "verdict: and says the check was not recorded" "$(grep -c '^check tracked: not recorded' <<<"$rr_out")" "1"
 rr_reset
-rr_run verdict docs/plan.md 1 --cwd "$RR_TMP/no-such-dir"
-check "verdict: a missing --cwd directory exits 2" "$rr_rc" "2"
+rr_run verdict docs/plan.md 1 --cwd x
+check "verdict: --cwd is no flag" "$rr_rc" "2"
 jq '.reviewHead = null' "$RR_TMP/state2.0" > "$RR_WS/task-2-step.json"
 rr_run verdict docs/plan.md 2
 check "verdict: before review exits 6" "$rr_rc" "6"
@@ -1056,11 +948,11 @@ fi
 if want start; then
   cd "$REPO" || exit 1
   rm -f "$WS/task-5-step.json"
+  open_task 5
   mkdir "$WS/task-5-step.json.tmp"
-  step start docs/plan.md 5
-  check "start: a step state that cannot be written fails" "$rc:$(grep -c 'cannot update' "$TMP/err")" "2:1"
+  step review docs/plan.md 5
+  check "review: a step state that cannot be written fails" "$rc:$(grep -c 'cannot update' "$TMP/err")" "2:1"
   rmdir "$WS/task-5-step.json.tmp"
-  step start docs/plan.md 5
   echo w > w5.txt && git add w5.txt && git commit -qm "feat: add w5"
   mkdir "$WS/task-5-step.json.tmp"
   step review docs/plan.md 5

@@ -180,9 +180,9 @@ needed.
   ends `(review-route exited <N>: …)`, `review-route` failed but
   `task-step review` still wrote the complete judge prompt: dispatch the
   `dforge:judge-opus` seat it names as printed, and say why, quoting that
-  note. If `task-step review` itself exits 2 (a `lens-route` failure, a bad
-  `--base`, `--head` or `--cwd`, an unexpanded placeholder, or a checkout
-  whose tracked files it cannot record for the verdict check), it printed
+  note. If `task-step review` itself exits 2 (a `lens-route` failure, an
+  unexpanded placeholder, or a checkout whose tracked files it cannot
+  record for the verdict check), it printed
   no digest and left its state file unchanged; any prompt file it left is
   stale: take *The steps by hand*.
   Codex hosts are the exception: `review-route --task` exits 2 on every `Host: codex`
@@ -324,7 +324,7 @@ call `verdict` again. Exits 5 and 6 are checked before 7.
 `<workspace>/task-<N>-review-panel-prompt.md`, as
 [external-review.md](external-review.md) §Task review seats describes, and
 printed the panel command and its `timeout` (the command's `--cwd` is your
-checkout's top level, or the `--cwd DIR` you passed to `task-step review`).
+checkout's top level).
 Run that command as a background Bash call with the printed `timeout`:
 2590000 ms for `--tier light`, 5590000 for `--tier heavy`. Its shape is:
 

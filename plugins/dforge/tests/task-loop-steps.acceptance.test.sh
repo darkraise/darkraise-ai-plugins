@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance tests for the task-loop steps spec
 # (docs/dforge/specs/2026-10-26-task-loop-steps-design.md), statements
-# A1-A8 and A11. Each test is written from the statement's text and
+# A2, A3, A7, A8 and A11. Each test is written from the statement's text and
 # reaches the behaviour through the scripts and documents the spec names. The
 # cockpit statements (A12, A13) are in task-loop-steps.acceptance.test.ts.
 # Usage:
@@ -73,6 +73,7 @@ GW="Generated"" with"
 short() { git -C "$R" rev-parse --short=7 "$1"; }
 full() { git -C "$R" rev-parse "$1"; }
 ts() { out=$(cd "$R" && bash "$STEP" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
+open_t() { (cd "$R" && bash "$S/task-brief" --open docs/plan.md "$1" >/dev/null); }
 count_lines() { printf '%s\n' "$1" | grep -c .; }
 commit_file() { # commit_file <file> <content> <message>
   printf '%s\n' "$2" > "$R/$1"
@@ -154,26 +155,11 @@ new_repo() { # new_repo <name> — a throwaway repository with the fixture plans
   review_surface absent
 }
 
-# --- A1 ----------------------------------------------------------------------
-
-a1() {
-  new_repo a1
-  local base7
-  base7=$(short HEAD)
-  ts start docs/plan.md 1
-  check "A1: start exits 0" "$rc" "0"
-  check "A1: the ledger holds only its identity line" "$(grep -c '^Task ' "$WS/progress.md" || true)" "0"
-  check "A1: no dispatch file is written" "$([ -e "$WS/task-1-dispatch.md" ] && echo yes || echo no)" "no"
-  check "A1: the digest is at most 15 lines" "$([ "$(count_lines "$out")" -le 15 ] && echo yes || echo no)" "yes"
-  matches "A1: the digest's last line is the budget line" "$(tail -n 1 <<<"$out")" '^budget'
-  has "A1: the line before it records the state (base)" "$(tail -n 2 <<<"$out" | head -n 1)" "$base7"
-}
-
 # --- A2 ----------------------------------------------------------------------
 
 a2() {
   new_repo a2
-  ts start docs/plan.md 1
+  open_t 1
   commit_file a.txt a "feat: add a"
   review_surface absent
   ts review docs/plan.md 1
@@ -199,7 +185,7 @@ a2() {
   absent "A2: no Second Pass section below risk 3" "$(cat "$JP")" 'Second Pass'
 
   # A task whose lens-route prints none has no lens section.
-  ts start docs/plan.md 3
+  open_t 3
   ts review docs/plan.md 3
   check "A2: lens-route prints no lens for task 3" "$(cd "$R" && bash "$LROUTE" docs/plan.md --task 3 | grep -c '^lens ')" "0"
   absent "A2: and the judge prompt has no lens section" "$(cat "$WS/task-3-review-prompt.md")" '[Ll]ens'
@@ -222,7 +208,7 @@ a2() {
   has "A2: and carries the Second Pass on every panel review" "$(cat "$JP")" 'Second Pass'
 
   # Risk 3: the judge prompt carries the Second Pass section.
-  ts start docs/plan.md 2
+  open_t 2
   commit_file b.txt b "feat: add b"
   ts review docs/plan.md 2
   has "A2: a risk-3 judge prompt carries the Second Pass section" "$(cat "$WS/task-2-review-prompt.md")" "Second Pass"
@@ -237,10 +223,10 @@ a3() {
   local before
   before=$(ws_files)
   ts review docs/plan.md 1
-  check "A3: review before start exits 6" "$rc" "6"
+  check "A3: review before the task is opened exits 6" "$rc" "6"
   check "A3: and writes nothing" "$(ws_files)" "$before"
 
-  ts start docs/plan.md 1
+  open_t 1
   printf '%s\n\nFixed.\n' '- app.txt: a finding' > "$WS/task-1-fix-1.md"
   before=$(ws_files)
   ts rereview docs/plan.md 1
@@ -250,76 +236,11 @@ a3() {
   local CWS sub
   CWS=$(winpath "$(cd "$R" && bash "$S/sdd-workspace" docs/codex-plan.md)")
   rm -rf "$CWS"
-  for sub in start review rereview; do
+  for sub in review rereview; do
     ts "$sub" docs/codex-plan.md 1
     check "A3: $sub on a Host: codex plan exits 2" "$rc" "2"
     check "A3: $sub on a Host: codex plan writes nothing" "$([ -d "$CWS" ] && ls -A "$CWS" | grep -c . || echo 0)" "0"
   done
-}
-
-# --- A4 ----------------------------------------------------------------------
-
-a4() {
-  new_repo a4
-  ts start docs/plan.md 1
-  local base c1 c2
-  base=$(full HEAD)
-  commit_file a.txt a "feat: add a"
-  c1=$(full HEAD)
-  commit_file b.txt b "feat: add b"
-  c2=$(full HEAD)
-  git -C "$R" branch taskref "$c1"
-
-  ts review docs/plan.md 1 --head taskref
-  check "A4: review --head exits 0" "$rc" "0"
-  local JP="$WS/task-1-review-prompt.md" diff
-  diff=$(prompt_path "$JP")
-  check "A4: the judge prompt names a diff file" "$([ -n "$diff" ] && [ -f "$diff" ] && echo yes || echo no)" "yes"
-  has "A4: --head packages base..REF: the task ref's file is in" "$(cat "$diff")" "a.txt"
-  lacks "A4: --head packages base..REF: a later commit's file is out" "$(cat "$diff")" "b.txt"
-  has "A4: the digest's state shows the REF's commit as the review head" "$out" "${c1:0:7}"
-  has "A4: the state file records REF" "$(cat "$WS/task-1-step.json")" "taskref"
-
-  # --base on review: the package starts at SHA and not at the recorded base.
-  ts review docs/plan.md 1 --head "$c2" --base "$c1"
-  check "A4: review --base exits 0" "$rc" "0"
-  diff=$(prompt_path "$JP")
-  has "A4: --base on review: the package holds the commit after SHA" "$(cat "$diff")" "b.txt"
-  lacks "A4: --base on review: the package leaves out the commit before SHA" "$(cat "$diff")" "a.txt"
-  has "A4: the package starts at SHA" "$(cat "$diff")" "# Review package: $c1.."
-  lacks "A4: the package does not start at the recorded base" "$(cat "$diff")" "# Review package: $base.."
-
-  # --base on rereview: the same, from the fix base.
-  new_repo a4r
-  ts start docs/plan.md 1
-  commit_file a.txt a "feat: add a"
-  ts review docs/plan.md 1
-  local f1 f2
-  commit_file other.txt fix1 "fix: first"
-  f1=$(full HEAD)
-  commit_file test.txt fix2 "fix: second"
-  f2=$(full HEAD)
-  printf '%s\n\nFixed.\n' '- app.txt: a finding' > "$WS/task-1-fix-1.md"
-  local state_bak="$TMP/a4-state.json"
-  cp "$WS/task-1-step.json" "$state_bak"
-  local pre post newp
-  pre=$(ls "$WS" | sort)
-  ts rereview docs/plan.md 1 --base "$f1"
-  check "A4: rereview --base exits 0" "$rc" "0"
-  post=$(ls "$WS" | sort)
-  newp=$(comm -13 <(printf '%s\n' "$pre") <(printf '%s\n' "$post") | grep -i 'prompt' | head -n 1)
-  check "A4: rereview wrote a prompt" "$([ -n "$newp" ] && echo yes || echo no)" "yes"
-  diff=$(prompt_path "$WS/$newp")
-  check "A4: the re-review prompt names a diff file" "$([ -n "$diff" ] && [ -f "$diff" ] && echo yes || echo no)" "yes"
-  has "A4: --base on rereview: the package holds the commit after SHA" "$(cat "$diff")" "test.txt"
-  lacks "A4: --base on rereview: the package leaves out the commit up to SHA" "$(cat "$diff")" "other.txt"
-
-  cp "$state_bak" "$WS/task-1-step.json"
-  rm -f "$WS/$newp"
-  ts rereview docs/plan.md 1
-  newp=$(comm -13 <(printf '%s\n' "$pre") <(ls "$WS" | sort) | grep -i 'prompt' | head -n 1)
-  diff=$(prompt_path "$WS/$newp")
-  has "A4: without --base the package starts at the recorded review head" "$(cat "$diff")" "other.txt"
 }
 
 # --- A7 ----------------------------------------------------------------------
@@ -346,7 +267,7 @@ a7() {
 # check_case <name> — start, run the offending commit by the caller, review, print check lines
 a8_case() { # a8_case <name> <commit-fn> <expect clean|dirty>
   new_repo "a8-$1"
-  ts start docs/plan.md 1
+  open_t 1
   "$2"
   local sha7
   sha7=$(short HEAD)
@@ -459,7 +380,7 @@ a11() {
   export CLAUDE_CODE_SESSION_ID=$ENV_SID
 }
 
-ALL="a1 a2 a3 a4 a7 a8 a11"
+ALL="a2 a3 a7 a8 a11"
 if [ $# -gt 0 ]; then
   sel=""
   for n in "$@"; do sel="$sel $(tr 'A-Z' 'a-z' <<<"$n")"; done

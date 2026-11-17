@@ -74,6 +74,8 @@ lines_of() { printf '%s\n' "$1" | grep -c .; }
 short() { git -C "$R" rev-parse --short=7 "$1"; }
 full() { git -C "$R" rev-parse "$1"; }
 ts() { out=$(cd "$R" && timeout 120 bash "$STEP" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
+. "$HERE/fixtures/step-state.sh"
+seed() { (cd "$R" && seed_step "$S" "$@"); rc=$?; } # seed <plan> <task> [suite]
 route() { out=$(cd "$R" && timeout 60 bash "$ROUTE" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
 commit_file() { # commit_file <file> <content> <message>
   printf '%s\n' "$2" > "$R/$1"
@@ -326,7 +328,7 @@ a5() {
 
 a11() {
   new_repo a11
-  ts start docs/plan.md 1
+  seed docs/plan.md 1
   commit_file a.txt a "feat: add a"
   ts review docs/plan.md 1
   check "A11: the first review exits 0" "$rc" "0"
@@ -444,7 +446,7 @@ write_report() { # write_report <file> <cannot-verify count>
 
 review_ready() { # review_ready <repo name> — a repo with Task 1 started, committed and reviewed
   new_repo "$1"
-  ts start docs/plan.md 1
+  seed docs/plan.md 1
   commit_file a.txt a "feat: add a"
   ts review docs/plan.md 1
 }
@@ -504,7 +506,7 @@ a20() {
 
   # A tracked file that was already modified when the review began is not a change.
   new_repo a20c
-  ts start docs/plan.md 1
+  seed docs/plan.md 1
   commit_file a.txt a "feat: add a"
   printf 'dirty before the review\n' >> "$R/other.txt"
   ts review docs/plan.md 1
@@ -652,8 +654,8 @@ a22() {
   done
   check "A22: review-route gives every old task a seat" "$ok" "1"
   WS=$(winpath "$(cd "$R" && bash "$S/sdd-workspace" docs/old-plan.md)")
-  ts start docs/old-plan.md 1
-  check "A22: task-step starts an old task" "$rc" "0"
+  seed docs/old-plan.md 1
+  check "A22: an old task opens" "$rc" "0"
   commit_file a.txt a "feat: a"
   ts review docs/old-plan.md 1
   check "A22: task-step reviews an old task" "$rc" "0"
@@ -684,7 +686,7 @@ a23() {
   check "A23: review-route --task on a Host: codex plan exits 2" "$rc" "2"
   has "A23: and sends the review to the native Codex reference" "$err" "native-codex.md"
   local sub
-  for sub in "start docs/codex-plan.md 1" "review docs/codex-plan.md 1" "rereview docs/codex-plan.md 1"; do
+  for sub in "review docs/codex-plan.md 1" "rereview docs/codex-plan.md 1"; do
     ts $sub
     check "A23: task-step $sub exits 2" "$rc" "2"
   done

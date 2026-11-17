@@ -76,6 +76,8 @@ if need_fixture; then
   g add -A && g commit -qm base
   CMD='bash suite.sh'
   ts() { out=$(cd "$FIX" && bash "$STEP" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
+  . "$HERE/fixtures/step-state.sh"
+  seed() { (cd "$FIX" && seed_step "$S" "$@"); rc=$?; } # seed <plan> <task> [suite]
   commit_file() { # commit_file <path> <content> — one commit
     printf '%s\n' "$2" > "$FIX/$1"; g add -A && g commit -qm "change $1"
     HEAD_SHA=$(g rev-parse HEAD | tr -d '\r')
@@ -105,7 +107,7 @@ fi
 
 # ---------------------------------------------------------------- A5
 if selected A5; then
-  ts start docs/plan.md 1 --suite "$CMD"
+  seed docs/plan.md 1 "$CMD"
   commit_file state.txt bad
   H1=$HEAD_SHA; H1_7=${H1:0:7}
   ts review docs/plan.md 1
@@ -131,7 +133,7 @@ if selected A5; then
   matches "A5: the fix file holds suite: <test> fails at <head7>" "$(cat "$fixfile" 2>/dev/null)" "suite: .*alpha.* fails at $H1_7"
 
   # A failure the base commit also has is not a finding.
-  ts start docs/plan.md 2 --suite "$CMD"
+  seed docs/plan.md 2 "$CMD"
   commit_file lib/new.sh 'echo new'
   H2=$HEAD_SHA
   ts review docs/plan.md 2
@@ -145,7 +147,7 @@ fi
 
 # ---------------------------------------------------------------- A6, A7
 if selected A6 || selected A7; then
-  ts start docs/plan.md 3
+  seed docs/plan.md 3
   commit_file lib/new.sh $'#!/usr/bin/env bash\ncompute_total() {\n  echo 1\n}'
   ts review docs/plan.md 3
   good_report 3 \
@@ -157,7 +159,7 @@ if selected A6 || selected A7; then
   rc3=$rc; out3=$out
   ledger3=$(tr -d '\r' < "$LEDGER" | grep '^Task 3: Ruling: cannot-verify' || true)
 
-  ts start docs/plan.md 4
+  seed docs/plan.md 4
   commit_file lib/other.sh $'#!/usr/bin/env bash\ncompute_other() {\n  echo 2\n}'
   ts review docs/plan.md 4
   good_report 4 \
@@ -169,7 +171,7 @@ if selected A6 || selected A7; then
   rc4=$rc; out4=$out
   ledger4=$(tr -d '\r' < "$LEDGER" | grep '^Task 4: Ruling: cannot-verify' || true)
 
-  ts start docs/plan.md 5
+  seed docs/plan.md 5
   commit_file lib/third.sh 'echo third'
   ts review docs/plan.md 5
   good_report 5 \

@@ -304,18 +304,16 @@ fi
 if selected A14; then
   P=$(mk p 'inline — claude --model opus --effort high — x' "$T5" "$T3R3")
   g add -A && g commit -qm init
-  start=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/task-step" start "$P" 2 2>&1); rc=$?
-  start=${start//$'\r'/}
-  check "A14: task-step start 2 exits 0" "$rc" "0"
-  step=$(find "$REPO/.dforge" -name 'task-2-step.json' 2>/dev/null | head -n 1)
-  check "A14: step state task-2-step.json is written" "$([ -n "$step" ] && echo yes || echo no)" "yes"
-  ws=$(dirname "${step:-$REPO/.dforge/none}")
+  (cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/task-brief" --open "$P" 2 >/dev/null 2>&1); rc=$?
+  check "A14: task-brief --open 2 exits 0" "$rc" "0"
+  ws=$(cd "$REPO" && bash "$S/sdd-workspace" "$P" | tr -d '\r')
   check "A14: no dispatch file is written" "$(find "$REPO/.dforge" -name '*dispatch*' 2>/dev/null | wc -l | tr -d ' ')" "0"
-  unmatched "A14: the ledger has no agent-named line for task 2" "$(cat "$ws/progress.md" 2>/dev/null)" '^Task 2: implementer '
+  unmatched "A14: the ledger has no agent-named line for task 2" "$(cat "$ws/progress.md" 2>/dev/null)" '^Task 2: implementer (dforge:)?impl-'
   printf 'x\n' > "$REPO/f2.txt"; g add -A && g commit -qm "task 2"
   rev=$(cd "$REPO" && "$TIMEOUT_BIN" 120 bash "$S/task-step" review "$P" 2 2>&1); rc=$?
   rev=${rev//$'\r'/}
   check "A14: task-step review 2 exits 0" "$rc" "0"
+  check "A14: step state task-2-step.json is written" "$([ -f "$ws/task-2-step.json" ] && echo yes || echo no)" "yes"
   matches "A14: task-step review routes a seat" "$rev" '^seat: [^ ]*judge[^ ]*'
   L="$ws/progress.md"
   base=$(g rev-parse --short=7 HEAD~1)

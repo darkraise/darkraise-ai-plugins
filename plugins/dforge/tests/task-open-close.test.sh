@@ -184,7 +184,7 @@ check "brief from another repository: the plan's ledger sets the budget mode" "$
 # --- every amendment consumer refuses a ledger citing a missing amendment (A4) ---
 printf 'Task 1: Ruling: amendment A7 — x — y\n' >> "$LEDGER"
 for argv in "task-brief|docs/plan.md|1" \
-    "task-step|start|docs/plan.md|1" \
+    "task-step|review|docs/plan.md|1" \
     "task-close|docs/plan.md|1|done: x; verified: y; remaining: none; discovered: none; assumptions: none" \
     "plan-lint|docs/plan.md" \
     "review-route|docs/plan.md|--task|1" \
