@@ -114,7 +114,7 @@ export function lintTree(root) {
   const dirs = [join(root, 'scripts')];
   if (existsSync(plugins)) {
     for (const name of readdirSync(plugins)) {
-      if (isDirectory(join(plugins, name))) dirs.push(join(plugins, name, 'scripts'), join(plugins, name, 'tests'));
+      if (isDirectory(join(plugins, name))) dirs.push(join(plugins, name, 'scripts'), join(plugins, name, 'tests'), join(root, 'tests', name));
     }
   }
   const skipped = [];

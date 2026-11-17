@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 # Config diagnostics. NEVER sourced by statusline.sh -- this file forks freely,
-# and the render path budgets five processes. tests/validate.test.sh asserts the
+# and the render path budgets five processes. tests/dr-status/validate.test.sh asserts the
 # boundary, because a stray source line would cost forks on every keystroke
 # without failing any rendering assertion.
 

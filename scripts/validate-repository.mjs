@@ -14,40 +14,40 @@ const withDagents = paths => new Set(paths.flatMap(path => [path, renamePath(pat
 export const DAGENTS_DFORGE_ALLOWED = new Set([
   'plugins/dagents/README.md',
   // These suites read this repository's own notes and plans under docs/dforge.
-  'plugins/dagents/tests/lanes.test.sh',
-  'plugins/dagents/tests/typed-seats-and-drafting.acceptance.sh',
+  'tests/dagents/lanes.test.sh',
+  'tests/dagents/typed-seats-and-drafting.acceptance.sh',
   // dforge 4.x's docs/dforge is read as an older spelling of docs/dagents.
   'plugins/dagents/scripts/lib/roots.sh',
   'plugins/dagents/hooks/cockpit/lib.ts',
   'plugins/dagents/scripts/lib/darkmem-mirror.mjs',
   'plugins/dagents/scripts/lib/darkmem-sync.mjs',
   'plugins/dagents/scripts/lib/darkmem-reconcile.mjs',
-  'plugins/dagents/tests/roots.test.sh',
-  'plugins/dagents/tests/darkmem-sync/mirror.test.mjs',
-  'plugins/dagents/tests/darkmem-sync/reconcile.test.mjs',
-  'plugins/dagents/tests/darkmem-sync/restore.test.mjs',
+  'tests/dagents/roots.test.sh',
+  'tests/dagents/darkmem-sync/mirror.test.mjs',
+  'tests/dagents/darkmem-sync/reconcile.test.mjs',
+  'tests/dagents/darkmem-sync/restore.test.mjs',
   // Seeds another plugin's darkmem document and workstream that dagents must leave alone.
-  'plugins/dagents/tests/darkmem-sync/push.test.mjs',
+  'tests/dagents/darkmem-sync/push.test.mjs',
   // Migrate moves a dforge 4.x project's names to dagents' and says when one is found.
   'plugins/dagents/scripts/dagents-migrate',
   'plugins/dagents/scripts/lib/dagents-dir.sh',
   'plugins/dagents/scripts/repo-audit',
   'plugins/dagents/scripts/session-start.sh',
   'plugins/dagents/skills/migrate/SKILL.md',
-  'plugins/dagents/tests/dagents-migrate.test.sh',
+  'tests/dagents/dagents-migrate.test.sh',
   // Migrate copies a dforge 4.x repository's home record, settings and darkmem data.
   'plugins/dagents/scripts/lib/dagents-home-migrate.mjs',
-  'plugins/dagents/tests/darkmem-sync/migrate.test.mjs',
+  'tests/dagents/darkmem-sync/migrate.test.mjs',
   // The workflow guard names its siblings.
   'plugins/dagents/scripts/workflow-guard.mjs',
-  'plugins/dagents/tests/stand-down.test.sh',
+  'tests/dagents/stand-down.test.sh',
   'plugins/dagents/skills/using-dagents/references/codex-tools.md',
   'plugins/dagents/tests/cockpit.test.ts',
   // Proves dagents never touches or reads dforge's names, so it seeds them.
-  'plugins/dagents/tests/isolation.acceptance.test.sh',
+  'tests/dagents/isolation.acceptance.test.sh',
   // Builds dforge 4.x projects and homes to prove migrate and the guard's isolation.
-  'plugins/dagents/tests/dagents-split.acceptance.test.sh',
-  'plugins/dagents/tests/darkmem-sync/dagents-split.acceptance.test.mjs',
+  'tests/dagents/dagents-split.acceptance.test.sh',
+  'tests/dagents/darkmem-sync/dagents-split.acceptance.test.mjs',
 ]);
 const claudeOnly = ['dflow', 'dr-status'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
@@ -156,7 +156,7 @@ export function validateRepository(root, { names = maintained } = {}) {
   const legacyAllowed = withDagents([
     'plugins/dforge/tests/cockpit.test.ts',
     'plugins/dforge/scripts/dforge-migrate',
-    'plugins/dforge/tests/dforge-migrate.test.sh',
+    'tests/dforge/dforge-migrate.test.sh',
     'plugins/dforge/skills/migrate/SKILL.md',
   ]);
   // dforge 3.0 spells the retired name only where it translates historical

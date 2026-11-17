@@ -1280,7 +1280,7 @@ frozen at 6.3.0 with no upstream sync, and
 ## Tests
 
 ```bash
-for t in plugins/dforge/tests/*.test.sh; do bash "$t"; done
+for t in tests/dforge/*.test.sh; do bash "$t"; done
 ```
 
 Requires `jq` and `git`. No model calls: the reviewer suites run against a stub
@@ -1298,7 +1298,7 @@ background Stop push (`scripts/darkmem-stop-push.sh`) against the stub.
 against a stub `codex`, so every branch — refusal, fallback, timeout, empty
 report — is exercised without a model call.
 `darkmem-sync.test.sh` runs the `node:test` suites under
-`tests/darkmem-sync/` against an in-memory stub of darkmem's routes, so no
+`tests/dforge/darkmem-sync/` against an in-memory stub of darkmem's routes, so no
 darkmem instance is needed.
 The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one passing fixture per rule), `ui-hooks.test.sh` and `ui-ux-skill.test.sh` — run against temporary repositories and the skill text.
 
@@ -1336,7 +1336,7 @@ review, `codex-review-schema.json` for the external task reviews,
 `codex-plan-review-schema.json` for the plan-review round, and
 `agy-final-review-schema.json` for agy's final-review answer;
 `criteria/TEMPLATE.md` documents the format.
-`tests/criteria.test.sh` validates every file in that directory.
+`tests/dforge/criteria.test.sh` validates every file in that directory.
 
 `scripts/` holds the external reviewers' plumbing:
 

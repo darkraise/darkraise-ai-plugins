@@ -587,15 +587,16 @@ plan_require_same_project() {
 # plan_final_review_state LEDGER [DIR] — whether the ledger's last
 # `Final review: clean (commits <base>..<head>)` line still covers HEAD in DIR
 # (default the working directory): `none` (no clean line); `current` (HEAD is
-# <head>, only docs-root paths changed since, or <head> reached HEAD through a
-# merge into a base branch, off its first-parent chain); `stale <head>` (a
-# later commit on the first-parent chain touches code); `rewritten <head>`
-# (<head> is no commit, or no ancestor of HEAD). A clean line with no commits
-# clause, or a DIR where HEAD does not resolve, reads `current`: git cannot
-# judge it. A failed walk of the history after <head> reads `stale <head>`. The ledger records no branch, so the first-parent chain is the only
-# base-branch test.
+# <head>, or only docs-root paths changed since); `stale <from>` (a later
+# commit touches code); `rewritten <head>` (<head> is no commit, or no
+# ancestor of HEAD). <from> is <head>, or, when <head> reached HEAD through a
+# merge, off its first-parent chain, that merge: only what came after it is
+# unreviewed. A clean line with no commits clause, or a DIR where HEAD does not
+# resolve, reads `current`: git cannot judge it. A failed walk of the history
+# after <head> reads `stale <head>`. The ledger records no branch, so the
+# first-parent chain is the only base-branch test.
 plan_final_review_state() {
-  local dir line head full now top docs path changed
+  local dir line head full now top docs path changed from desc
   dir=$(dr_native_path "${2:-$PWD}")
   line=$(tr -d '\r' < "$1" 2>/dev/null | grep '^Final review: clean' | tail -n 1)
   if [ -z "$line" ]; then echo none; return 0; fi
@@ -611,8 +612,18 @@ plan_final_review_state() {
   # re-review is the safe route, finishing is not.
   local chain
   chain=$(git -C "$dir" rev-list --first-parent "$now" 2>/dev/null) || { echo "stale $head"; return 0; }
-  if ! tr -d '\r' <<<"$chain" | grep -qxF "$full"; then echo current; return 0; fi
-  changed=$(git -C "$dir" log --format= --name-only "$full..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
+  from=$full
+  if ! tr -d '\r' <<<"$chain" | grep -qxF "$full"; then
+    # The oldest first-parent commit that descends from <head> is the merge
+    # that brought it in.
+    desc=$(git -C "$dir" rev-list --ancestry-path "$full..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
+    from=$(printf '%s\n--\n%s\n' "$desc" "$chain" | tr -d '\r' |
+      awk '$0 == "--" { past = 1; next } !past { s[$0] = 1; next } $0 in s { m = $0 } END { print m }')
+    [ -n "$from" ] || { echo "stale $head"; return 0; }
+    head=$(git -C "$dir" rev-parse --short "$from" 2>/dev/null | tr -d '\r')
+    [ -n "$head" ] || head=$from
+  fi
+  changed=$(git -C "$dir" log --format= --name-only "$from..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
   changed=$(tr -d '\r' <<<"$changed" | sed '/^$/d')
   if [ -z "$changed" ]; then echo current; return 0; fi
   # Under darkmem documents no committed path is a docs path.
