@@ -165,7 +165,7 @@ has "codex pair: the launch command names the Codex client" "$out" "codex -m gpt
 lacks "codex pair: no claude command" "$out" "claude --model"
 write_plan "$PLAN" '**Execution:** inline — whatever the owner pinned' ""
 run "$REPO" "$PLAN_REL"
-has "an Execution line naming no pair: points at the Execution line" "$out" "Launch: see the **Execution:** line in \`$PLAN_REL\`."
+has "an Execution line naming no pair: points at the Execution line" "$out" "Launch from \`$ROOT\`: see the **Execution:** line in \`$PLAN_REL\`."
 
 # --- CRLF plan ---
 write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
@@ -527,7 +527,7 @@ write_plan "$CODEX_PLAN" "$EXEC_CODEX" "$PROG_NEXT"
 run "$REPO" "$CODEX_PLAN_REL"
 check "codex plan: exits 0" "$status" "0"
 has "codex plan: launch command from the Execution line" "$out" "codex -m gpt-6.1-sol -c model_reasoning_effort=medium"
-lacks "codex plan: no fallback to reading the Execution line" "$out" "Launch: see the"
+lacks "codex plan: no fallback to reading the Execution line" "$out" "see the **Execution:** line"
 
 run "$REPO" --complete "$CODEX_PLAN_REL"
 check "codex plan complete: exits 0" "$status" "0"
@@ -1031,6 +1031,61 @@ rm -f "$HANDOFF" "$WA_H"
 run "$WA" --kept "$PLAN_REL"
 check "A6: --kept writes the handoff of the checkout it runs in" "$([ -f "$WA_H" ] && echo yes || echo no):$([ -f "$HANDOFF" ] && echo yes || echo no)" "yes:no"
 rm -f "$WA_H"
+# --- launch line and prompt (spec A4, A5, A15) ---
+launch_of() { awk '/^Launch in /{f=1; next} f && /^```$/{ if (g) exit; g=1; next } f && g { print; exit }' <<<"$1"; }
+mkdir -p "$TMP/stub"
+printf '#!/bin/sh\npwd -P > "%s"\n' "$TMP/started" > "$TMP/stub/claude"; chmod +x "$TMP/stub/claude"
+# A Windows Git Bash host has cygpath on PATH and gets no prefix (spec §3).
+if command -v cygpath >/dev/null 2>&1; then a4_pre=""; else a4_pre="cd '$WA_ROOT' && "; fi
+run "$WA" "$PLAN_REL"
+launch=$(launch_of "$out")
+check "A4: cd prefix on a POSIX host only" "$launch" "${a4_pre}claude --model sonnet --effort high"
+if [ -n "$a4_pre" ]; then
+  rm -f "$TMP/started"; (cd / && PATH="$TMP/stub:$PATH" bash -c "$launch")
+  check "A4: the launch starts in the worktree" "$(cat "$TMP/started" 2>/dev/null)" "$(cd "$WA" && pwd -P)"
+  ODD="$TMP/it's here"; git -C "$REPO" worktree add -q -b odd "$ODD"
+  run "$ODD" --adhoc --phase build --next x
+  rm -f "$TMP/started"; (cd / && PATH="$TMP/stub:$PATH" bash -c "$(launch_of "$out")")
+  check "A4: a path with a space and a quote survives" "$(cat "$TMP/started" 2>/dev/null)" "$(cd "$ODD" && pwd -P)"
+  printf '#!/bin/sh\nfor a; do last=$a; done\nprintf "%%s\\n" "$last"\n' > "$TMP/stub/cygpath"; chmod +x "$TMP/stub/cygpath"
+  out=$(cd "$WA" && PATH="$TMP/stub:$PATH" bash "$SCRIPT" "$PLAN_REL" 2>/dev/null)
+  check "A4: with cygpath on PATH no cd prefix" "$(launch_of "$out")" "claude --model sonnet --effort high"
+  rm -f "$TMP/stub/cygpath"
+fi
+# A Codex Execution line gets the same prefix (spec §3); WA reads its own copy of the plan.
+write_plan "$WA/$PLAN_REL" '**Execution:** inline — codex gpt-6.1-sol / high — Codex host' "$PROG_NEXT"
+run "$WA" "$PLAN_REL"
+check "A4: a Codex launch gets the same prefix" "$(launch_of "$out")" "${a4_pre}codex -m gpt-6.1-sol -c model_reasoning_effort=high"
+git -C "$WA" checkout -q -- "$PLAN_REL"
+start="Start in \`$WA_ROOT\` (branch wa); its handoff is \`$WA_H\`. If your working directory is not \`$WA_ROOT\`, enter it first."
+for args in "$PLAN_REL" "--draft $OTHER_REL --next x" "--adhoc --phase build --next x" "--project" "--kept $PLAN_REL"; do
+  run "$WA" $args
+  has "A5: prompt opens with Start in ($args)" "$out" "$start"
+  lacks "A5: no First enter ($args)" "$out" "First enter the existing worktree"
+done
+run "$WA" --complete "$PLAN_REL"
+has "A5: complete's prompt starts in the primary" "$out" "Start in \`$ROOT\`"
+git -C "$WA" checkout -q --detach
+run "$WA" --adhoc --phase build --next x
+has "A5: a detached checkout" "$out" "Start in \`$WA_ROOT\` (detached at \`$(git -C "$WA" rev-parse --short HEAD)\`)"
+git -C "$WA" checkout -q wa
+printf '# Handoff\n\n## State\nKeep these notes.\n\n## Next session\n\n**Next:** other\n<!-- next-step: kind=adhoc done=0 closed=0 subject=- at=1 -->\n' > "$HANDOFF"
+run "$WA" --complete "$PLAN_REL"
+has "A15: complete over another live block keeps the notes" "$(cat "$HANDOFF")" "Keep these notes."
+lacks "A15: and replaces its block" "$(cat "$HANDOFF")" "**Next:** other"
+has "A15: stderr names the kind" "$(cat "$TMP/stderr")" "next-step: replaced the block for adhoc"
+printf '# Handoff\n\n## State\nOld notes.\n\n## Next session\n\n**Next:** x\n<!-- next-step: kind=plan done=0 closed=0 subject=%s at=1 -->\n' "$PLAN_REL" > "$HANDOFF"
+run "$WA" --complete "$PLAN_REL"
+lacks "A15: its own plan's block is replaced wholesale" "$(cat "$HANDOFF")" "Old notes."
+printf '# Handoff\n\n## State\nOld notes.\n\n## Next session\n\n**Next:** x\n<!-- next-step: kind=complete done=0 closed=0 subject=%s at=1 -->\n' "$OTHER_REL" > "$HANDOFF"
+run "$WA" --complete "$PLAN_REL"
+lacks "A15: a complete marker is replaced wholesale" "$(cat "$HANDOFF")" "Old notes."
+mkdir -p "${WA_H%/*}"
+printf '# Handoff\n\n## State\nWA notes.\n\n## Next session\n\n**Next:** y\n<!-- next-step: kind=plan done=0 closed=0 subject=%s at=1 -->\n' "$OTHER_REL" > "$WA_H"
+run "$WA" --kept "$PLAN_REL"
+has "A15: kept over another plan's block keeps the notes" "$(cat "$WA_H")" "WA notes."
+has "A15: stderr names the subject" "$(cat "$TMP/stderr")" "next-step: replaced the block for $OTHER_REL"
+rm -f "$HANDOFF" "$WA_H"
 # A14: darkmem progress, ledger in the mirror; the primary also holds the workspace.
 . "$HERE/fixtures/darkmem-stores.sh"
 MIRROR=$(stores_home "$HOME" "$REPO" demo local darkmem)
@@ -1039,6 +1094,7 @@ printf '# SDD ledger — plan: %s\nTask 1: complete (x)\n' "$PLAN_REL" > "$MIRRO
 rm -f "$WA/.dforge/sdd/2026-01-01-demo/progress.md"
 run "$REPO" "$PLAN_REL"
 has "A14: darkmem: launches in the worktree holding the workspace" "$out" "Launch in \`$WA_ROOT\`:"
+has "A14: darkmem: the prompt starts in the worktree" "$out" "Start in \`$WA_ROOT\`"
 check "A14: darkmem: the worktree's handoff is written" "$([ -f "$WA_H" ] && echo yes || echo no)" "yes"
 check "A14: darkmem: the mirror's handoff is not written" "$([ -f "$MIRROR/work/handoff/latest.md" ] && echo yes || echo no)" "no"
 rm -rf "$HOME/.dforge"

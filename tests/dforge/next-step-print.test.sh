@@ -146,7 +146,7 @@ printf '# SDD ledger — plan: %s\nTask 1: complete (commits a..b, unreviewed)\n
 out=$(cd "$REPO" && timeout 60 bash "$SCRIPT" --print "$THREE" 2>&1)
 has "worktree ledger: the tasks done are counted" "$out" "1 of 3 tasks complete"
 has "worktree ledger: the next task resumes" "$out" "**Next:** Resume at Task 2"
-has "worktree ledger: the prompt enters the worktree" "$out" "First enter the existing worktree \`$WT\`"
+has "worktree ledger: the prompt starts in the worktree" "$out" "Start in \`$WT\` (branch feat)"
 printf 'x\n' > "$TMP/wt/x.txt"
 git -C "$TMP/wt" add x.txt && git -C "$TMP/wt" commit -qm work
 whead=$(git -C "$TMP/wt" rev-parse --short HEAD)

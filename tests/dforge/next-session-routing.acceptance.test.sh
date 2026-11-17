@@ -257,6 +257,8 @@ ns --print docs/dforge/plans/2026-11-02-three.md
 has "A9: the worktree ledger's progress is reported" "$OUT" "1 of 3 tasks complete"
 has "A9: the next task resumes after the ledger's" "$NEXT" "Task 2"
 has "A9: the worktree is named" "$OUT" "$WT"
+has "A9: the launch line names the worktree" "$OUT" "Launch in \`$WT\`:"
+lacks "A9: no First enter sentence" "$OUT" "First enter the existing worktree"
 printf 'x\n' > "$TMP/wt$n/x.txt"
 git -C "$TMP/wt$n" add x.txt && git -C "$TMP/wt$n" commit -qm work
 whead=$(git -C "$TMP/wt$n" rev-parse --short HEAD)
