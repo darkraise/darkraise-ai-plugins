@@ -174,7 +174,7 @@ test('A4: a port that changes tests has them fail at its parent and pass at the 
       }
       return { status: 0, label };
     };
-    const commands = tsOnly ? [['/root/.local/bin/claude', ['plugin', 'test', 'plugins/dagents']]] : files.map(file => runner(file));
+    const commands = tsOnly ? [[process.env.CLAUDE_BIN || 'claude', ['plugin', 'test', 'plugins/dagents']]] : files.map(file => runner(file));
     assert.ok(commands.length > 0, `${sha}: no runnable test file`);
     assert.equal(sub('checkout', '-q', '--detach', sha).status, 0);
     verdict.port = attempt('port', commands);
@@ -430,7 +430,7 @@ test('A14: what is and is not a conflict', t => {
   assert.equal(stderr.trim().split('\n').length, 1, `one diagnostic line: ${stderr}`);
   assert.deepEqual(names, []);
 });
-test('A14: with node missing the hooks print nothing extra', t => {
+test('A14: with node missing the hooks print nothing extra', { skip: process.platform === 'win32' && 'POSIX PATH surgery; stand-down.test.sh covers the node-missing hooks on every host' }, t => {
   const w = world(t);
   w.install(w.user('dforge', 'dagents'));
   w.enable(w.user_settings(), { dforge: false, dagents: false });

@@ -15,3 +15,6 @@
 | 8 | workflow-guard prunes a stand-down marker older than 7 days though its session may still run | - | - | deferred | final review lens:security minor; touch the marker on each guarded hook or prune only ended sessions |
 | 9 | A6: dforge is spelled only where the allowlist and version-qualified origin text allow | - | - | deferred | rejection upheld: the test's filename regex omits hooks/cockpit/lib.ts, an older-spelling reader spec §3 allows |
 | 10 | A26: a dagents push and pull request only the dagents client, dagents/ documents and dagents/ workstream keys | - | - | deferred | rejection upheld: migrateServer's superpowers/ and forge/ manifest requests are the 4.17.1 older-spelling move spec §3 keeps |
+| 11 | dforge cockpit tests plugin-review-fixes A20 and api-decisions-keep-warm A22 time out at 5 s under host load; they predate 9d669ab3 | - | - | deferred | final review residual: raise their timeout if CI runners fail them |
+| 12 | no test covers the mods' guard-check reset after a timed-out or failed check (dagents, dforge, dflow guardNow) | - | - | deferred | final review residual |
+| 13 | backport row 279's fail@parent pass@port rests on a root run under a cygpath stub; the opt-in A4 replay cannot show a Windows-only skip | - | - | deferred | final review residual |
