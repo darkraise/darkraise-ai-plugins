@@ -35,10 +35,21 @@ _dagents_long() {
   else printf '%s\n' "$1"; fi
 }
 
+# dagents_darkmem_possible — status 0 when this home could put a family in
+# darkmem: its config.json has a darkmem section, or stores.json records a
+# family already applied. Without either, darkmem-config.mjs --mode answers
+# local for both families, so the callers skip its node start: the common case
+# of a home that never used darkmem.
+dagents_darkmem_possible() {
+  [ -n "${HOME:-}" ] || return 0
+  grep -qs '"darkmem"[[:space:]]*:' "$HOME/.dagents/config.json" || [ -f "$HOME/.dagents/stores.json" ]
+}
+
 # Both families local, computed without node: no git repository (then DIR
-# stands in for the checkout), or no node on PATH while stores.json applies no
-# darkmem store to this checkout (one that does exits 2: its documents or
-# ledger are in the mirror, and a local root would split the plan's state).
+# stands in for the checkout), a home that never used darkmem, or no node on
+# PATH while stores.json applies no darkmem store to this checkout (one that
+# does exits 2: its documents or ledger are in the mirror, and a local root
+# would split the plan's state).
 _dagents_local() { # DIR TOP
   local base=${2:-$1} primary=${2:-$1} common
   if [ -n "$2" ]; then
@@ -84,7 +95,7 @@ dagents_stores_init() { # [DIR]
   key="${HOME:-}|${top:-nogit:$dir}"
   [ "$_DAGENTS_KEY" = "$key" ] && return 0
   _DAGENTS_TOP=$top
-  if [ -z "$top" ]; then
+  if [ -z "$top" ] || ! dagents_darkmem_possible; then
     _dagents_local "$dir" "$top"
     _DAGENTS_KEY=$key
     return 0
