@@ -1,6 +1,6 @@
 ---
 name: judge-fable
-description: "Verifier and ruling seat running Fable 5.1 at high effort; it writes only its report file. No dagents route names it: an auto run (reference/auto-run.md) dispatches it for the spec review and the batched rulings, and otherwise it runs only when your human partner asks for Fable on a judge seat, in place of the judge-opus seat the route printed."
+description: "Verifier and ruling seat running Fable at high effort; it writes only its report file. No dagents route names it: an auto run (reference/auto-run.md) dispatches it for the spec review and the batched rulings, and otherwise it runs only when your human partner asks for Fable on a judge seat, in place of the judge-opus seat the route printed."
 model: fable
 effort: high
 tools: Read, Grep, Glob, WebFetch, Write

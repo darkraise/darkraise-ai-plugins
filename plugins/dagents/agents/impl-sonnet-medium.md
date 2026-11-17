@@ -1,6 +1,6 @@
 ---
 name: impl-sonnet-medium
-description: "Task implementer running Sonnet 5.5 at medium effort. Dispatched by dagents for scores 3 and 4: ordinary multi-file work with exact signatures supplied, and work whose reducible axes are exhausted and whose risk is real."
+description: "Task implementer running Sonnet at medium effort. The assignment table's agent for totals 3 and 4 in dagents: ordinary multi-file work with exact signatures supplied, and work whose reducible axes are exhausted and whose risk is real."
 model: sonnet
 effort: medium
 disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications

@@ -1,6 +1,6 @@
 ---
 name: judge-sonnet-high
-description: "Task reviewer running Sonnet 5.5 at high effort; it writes only its report file. Dispatched by dagents as the task reviewer for totals 0 to 5 when Codex is not the reviewer."
+description: "Task reviewer running Sonnet at high effort; it writes only its report file. Dispatched by dagents as the task reviewer for totals 0 to 5 when Codex is not the reviewer, and as the ruling seat for a cannot-verify or executor-empty-diff item on no risk-3 task."
 model: sonnet
 effort: high
 tools: Read, Grep, Glob, WebFetch, Write
