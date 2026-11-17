@@ -844,3 +844,25 @@ test('A17: the existing dforge and dflow tests changed only in the guard\'s inpu
   }
   assert.deepEqual(odd, []);
 });
+
+// A25
+test('A25: with an exported host config enabling the siblings, the hook suites of dagents, dforge and dflow still pass', t => {
+  const dir = scratch(t);
+  const claude = join(dir, 'claude'); const project = join(dir, 'project');
+  mkdirSync(join(claude, 'plugins'), { recursive: true });
+  mkdirSync(join(project, '.claude'), { recursive: true });
+  const everyone = Object.fromEntries(SIBLINGS.map(name => [`${name}@darkraise`, true]));
+  writeFileSync(join(claude, 'settings.json'), JSON.stringify({ enabledPlugins: everyone }));
+  writeFileSync(join(project, '.claude/settings.json'), JSON.stringify({ enabledPlugins: everyone }));
+  writeFileSync(join(claude, 'plugins/installed_plugins.json'), JSON.stringify({ version: 2, plugins: Object.fromEntries(SIBLINGS.map(name => [`${name}@darkraise`, [{ scope: 'user', installPath: '/x', version: '1' }]])) }));
+  const env = cleanEnv({ CLAUDE_CONFIG_DIR: claude, CLAUDE_PROJECT_DIR: project });
+  const suites = [
+    ['bash', ['plugins/dagents/tests/hook.test.sh']],
+    ['bash', ['plugins/dforge/tests/hook.test.sh']],
+    [process.execPath, ['--test', 'plugins/dflow/tests/hooks.test.mjs']],
+  ];
+  for (const [command, args] of suites) {
+    const result = run(command, args, { env, timeout: 240000 });
+    assert.equal(result.status, 0, `${args.join(' ')}\n${result.stdout.slice(-1500)}${result.stderr.slice(-500)}`);
+  }
+});
