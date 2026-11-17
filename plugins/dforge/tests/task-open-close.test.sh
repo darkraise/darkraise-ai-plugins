@@ -148,6 +148,11 @@ run bash "$CLOSE" docs/plan.md 1 "$CP"
 check "close again: exit 0" "$rc" "0"
 has "close again: says it is already complete" "$out" "task 1: already complete"
 check "close again: writes no second line" "$(grep -c '^Task 1: complete' "$LEDGER")" "1"
+LEDGER_BEFORE=$(cat "$LEDGER")
+for ((i = 0; i < 4000; i++)); do printf 'Task 2: note %04d — filler that takes the ledger past one pipe buffer\n' "$i"; done >> "$LEDGER"
+run bash "$CLOSE" docs/plan.md 1 "$CP"
+check "close again past 64 KiB: still finds the complete line" "$rc|$(grep -c '^Task 1: complete' "$LEDGER")" "0|1"
+printf '%s\n' "$LEDGER_BEFORE" > "$LEDGER"
 
 run bash "$BRIEF" --open docs/plan.md 2
 run bash "$CLOSE" docs/plan.md 2 "$CP" --review "review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat dforge:judge-opus"

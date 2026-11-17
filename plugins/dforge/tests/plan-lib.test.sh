@@ -258,6 +258,9 @@ printf 'Task 1: Ruling: amendment A2 — x — y\n' >> "$LD/progress.md"
 err=$(cd "$SR" && HOME=$SH plan_amendments_ready docs/am.md 2>&1); rc=$?
 check "ready: a cited amendment missing from the file exits 2" "$rc" "2"
 check "ready: the message names it" "$(grep -c 'cites amendment A2, which .*amendments.md lacks' <<<"$err")" "1"
+{ printf '## A1 — Task 1\n\n## A2 — Task 1\n'; for ((i = 0; i < 4000; i++)); do printf 'filler %04d that takes the amendments past one pipe buffer\n' "$i"; done; } > "$LD/amendments.md"
+(cd "$SR" && HOME=$SH plan_amendments_ready docs/am.md); rc=$?
+check "ready: finds a cited amendment in a file past 64 KiB" "$rc" "0"
 mkdir -p "$M/dforge/plans" "$M/work/sdd/mp"
 printf '# MP\n' > "$M/dforge/plans/mp.md"
 printf '# SDD ledger — plan: docs/dforge/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"

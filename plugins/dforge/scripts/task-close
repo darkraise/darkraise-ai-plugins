@@ -62,7 +62,9 @@ plan_task_text "$src" "$n" >/dev/null || die "no Task $n in $plan" 3
 
 [ -f "$ledger" ] || die "no ledger for $plan; run task-brief --open first" 3
 
-if tr -d '\r' < "$ledger" | grep -q "^Task $n: complete"; then
+# grep -c reads the whole ledger: grep -q would close the pipe early and,
+# under pipefail, a SIGPIPE'd tr would read as "not there yet".
+if [ "$(tr -d '\r' < "$ledger" | grep -c "^Task $n: complete")" -gt 0 ]; then
   echo "task $n: already complete"
   exit 0
 fi
