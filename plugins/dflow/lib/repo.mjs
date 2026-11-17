@@ -113,12 +113,14 @@ export function setDarkmemConsent(env, root, project) {
 }
 
 // What a commit would not hold: tracked changes, and untracked files that are
-// not ignored, except under docs/dflow/, where drafts of other work stay
-// untracked. Read NUL-separated, since git quotes a path with a space.
+// not ignored, except documents under docs/dflow/, where drafts of other work
+// stay untracked. The configuration and anything a gate could run are not
+// drafts. Each untracked file is listed, since a directory entry would hide
+// what it holds. Read NUL-separated, since git quotes a path with a space.
 export function uncommitted(ctx) {
-  return mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=normal', '--no-renames', '-z']).split('\0').filter(Boolean)
+  return mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=all', '--no-renames', '-z']).split('\0').filter(Boolean)
     .map(entry => ({ code: entry.slice(0, 2), file: entry.slice(3) }))
-    .filter(entry => !(entry.code === '??' && entry.file.startsWith('docs/dflow/')));
+    .filter(entry => !(entry.code === '??' && entry.file.startsWith('docs/dflow/') && entry.file.endsWith('.md')));
 }
 
 export function currentBranch(root) {

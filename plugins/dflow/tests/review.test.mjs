@@ -33,6 +33,19 @@ test('the tier follows diff size and risk', t => {
   assert.match(dflow(risky, ['review', 'record', '--tier', '1']).stderr, /needs a tier 2 review/);
 });
 
+test('a diff git cannot produce is refused, not read as an empty change', t => {
+  const root = makeProject(t);
+  build(root);
+  const file = path.join(root, '.dflow/state.json');
+  const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const record = Object.values(state.plans)[0];
+  record.tasks[1].commit = '0123456789abcdef0123456789abcdef01234567';
+  fs.writeFileSync(file, JSON.stringify(state));
+  const refused = dflow(root, ['review', 'pack', '--json', '--task', '1']);
+  assert.equal(refused.status, 1, refused.stdout);
+  assert.match(refused.stderr, /git cannot diff 0123456789abcdef0123456789abcdef01234567\^\.\.0123456789abcdef0123456789abcdef01234567/);
+});
+
 test('the pack lists the mechanical facts', t => {
   const root = makeProject(t);
   write(root, 'verify1.mjs', '\n');

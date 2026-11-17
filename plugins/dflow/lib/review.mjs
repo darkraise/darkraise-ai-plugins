@@ -25,7 +25,9 @@ export function reviewRange(ctx, active, taskNumber) {
 }
 
 function numstat(ctx, range) {
-  const output = gitOut(ctx.root, ['diff', '--numstat', '--no-renames', `${range.base}..${range.head}`, '--', '.', OWN]) ?? '';
+  const output = gitOut(ctx.root, ['diff', '--numstat', '--no-renames', `${range.base}..${range.head}`, '--', '.', OWN]);
+  // An empty answer would understate the change and so the review tier.
+  if (output === null) fail(`git cannot diff ${range.base}..${range.head}; the commits a review covers have to exist`);
   return output.split('\n').filter(Boolean).map(line => {
     const [added, deleted, file] = line.split('\t');
     return { file, added: Number(added) || 0, deleted: Number(deleted) || 0 };
