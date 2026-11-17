@@ -853,6 +853,8 @@ test('A17: a session with exactly one workflow plugin active gets no guard outpu
 });
 test('A17: the existing dforge and dflow tests changed only in the guard\'s inputs and in assertions other statements require', t => {
   if (!gitOk('rev-parse', '--verify', '--quiet', 'main^{commit}')) { t.skip('no local main branch to diff against'); return; }
+  // The statement is about the split's own diff; once main holds the split, a later branch's test edits are not its subject.
+  if (gitOk('cat-file', '-e', `main:${REGISTER_PATH}`)) { t.skip('main already holds the split: run this at merge time'); return; }
   const base = spawnSync('git', ['merge-base', 'main', 'HEAD'], { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
   if (base.status !== 0) { t.skip('main and HEAD share no commit in this clone'); return; }
   const diff = git('diff', '-U0', base.stdout.trim(), 'HEAD', '--', 'plugins/dforge/tests', 'plugins/dflow/tests', ':(exclude)plugins/dforge/tests/stand-down.test.sh');
