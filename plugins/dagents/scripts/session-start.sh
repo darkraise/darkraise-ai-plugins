@@ -74,7 +74,8 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
   esac
 fi
 
-content="$(cat "${PLUGIN_ROOT}/skills/using-dagents/SKILL.md" 2>/dev/null || true)"
+# The frontmatter repeats the description the skill list already shows.
+content="$(awk 'NR == 1 && $0 == "---" { fm = 1; next } fm && $0 == "---" { fm = 0; next } !fm' "${PLUGIN_ROOT}/skills/using-dagents/SKILL.md" 2>/dev/null || true)"
 [ -n "$content" ] || exit 0
 
 # Escape for JSON embedding with bash parameter substitution (single C-level
@@ -94,7 +95,7 @@ escaped=$(escape_for_json "$content")
 # the project; this line is where the root is named.
 plugin_root_shown=$PLUGIN_ROOT
 if command -v cygpath >/dev/null 2>&1; then plugin_root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
-context="<EXTREMELY_IMPORTANT>\nYou have dagents.\n\n**Below is the full content of your 'dagents:using-dagents' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${escaped}\n\nPlugin root: $(escape_for_json "$plugin_root_shown") — call scripts by this path, with the working directory inside the project\n</EXTREMELY_IMPORTANT>"
+context="You have dagents. Its entry skill, 'dagents:using-dagents', follows; load every other skill with the Skill tool.\n\n${escaped}\n\nPlugin root: $(escape_for_json "$plugin_root_shown") — call scripts by this path, with the working directory inside the project"
 
 # A greenfield project's position: one line computed from its roadmap, so a
 # fresh or compacted session never has to remember which milestone it is in or

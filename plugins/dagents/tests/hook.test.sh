@@ -41,6 +41,12 @@ check "well-formed: additionalContext is non-empty" \
   "$(jq -r '(.hookSpecificOutput.additionalContext // "") | length > 0' <<<"$out" 2>/dev/null)" "true"
 check "well-formed: context names the entry-point skill" \
   "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c 'dagents:using-dagents')" "1"
+check "well-formed: the skill's frontmatter, which the skill list shows, is not injected" \
+  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -cE '^(name|description): ')" "0"
+check "well-formed: no EXTREMELY_IMPORTANT wrapper" \
+  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c 'EXTREMELY_IMPORTANT')" "0"
+check "well-formed: the SUBAGENT-STOP block stays" \
+  "$(jq -r '.hookSpecificOutput.additionalContext' <<<"$out" 2>/dev/null | grep -c '^<SUBAGENT-STOP>$')" "1"
 check "well-formed: emits no permissionDecision" \
   "$(jq -r '.hookSpecificOutput.permissionDecision // "ABSENT"' <<<"$out" 2>/dev/null)" "ABSENT"
 
