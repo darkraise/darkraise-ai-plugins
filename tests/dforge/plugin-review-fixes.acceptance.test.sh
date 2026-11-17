@@ -500,6 +500,16 @@ jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"
 check "A23: no last_assistant_message: the transcript's UI proof: pending line passes" "$(decision "$(u_stop u-22 '' "$LT23")")" "none"
 check "A23: a message ending UI proof: pending — why passes" "$(decision "$(u_stop u-22 $'Done.\n\nUI proof: pending — no browser here')")" "none"
 check "A23: a pending line with no reason is still held" "$(decision "$(u_stop u-22 $'Done.\n\nUI proof: pending')")" "block"
+# Per-worktree handoff (spec A7): a block next-step wrote into a linked worktree releases the UI proof hold.
+UWT="$TMP/u-wt"; git -C "$R17" worktree add -q -b u-wt "$UWT"; mkdir -p "$UWT/.dforge/handoff"
+sleep 1; u_prompt u-wt1
+printf '// change wt1\n' >> "$R17/src/App.tsx"; git -C "$R17" commit -qam 'ui change wt1'
+check "ui-turn-end A7: held on a UI change" "$(decision "$(u_stop u-wt1 'Done.')")" "block"
+sleep 1; u_prompt u-wt2
+printf '// change wt2\n' >> "$R17/src/App.tsx"; git -C "$R17" commit -qam 'ui change wt2'
+sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.\n' > "$UWT/.dforge/handoff/latest.md"
+check "ui-turn-end A7: the worktree's block releases" "$(decision "$(u_stop u-wt2 $'## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.')")" "none"
+git -C "$R17" worktree remove --force "$UWT"
 
 # --- A21: session start is bounded when darkmem never answers ---
 R21="$TMP/hang"

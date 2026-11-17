@@ -238,5 +238,18 @@ else
 fi
 rm -f "$tp"
 
+# --- per-worktree handoff (spec A7): a block next-step wrote into a linked worktree releases the hold ---
+git -C "$REPO" commit -q --allow-empty -am 'before the worktree cases'
+UWT="$TMP/u-wt"; git -C "$REPO" worktree add -q -b u-wt "$UWT"; mkdir -p "$UWT/.dagents/handoff"
+sleep 1; prompt u-wt1
+printf '// change wt1\n' >> "$REPO/src/App.tsx"; git -C "$REPO" commit -qam 'ui change wt1'
+check "A7: held on a UI change" "$(decision "$(stop u-wt1 'Done.')")" "block"
+sleep 1; prompt u-wt2
+printf '// change wt2\n' >> "$REPO/src/App.tsx"; git -C "$REPO" commit -qam 'ui change wt2'
+sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.\n' > "$UWT/.dagents/handoff/latest.md"
+check "A7: the worktree's block releases" "$(decision "$(stop u-wt2 $'## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.')")" "none"
+git -C "$REPO" worktree remove --force "$UWT"
+
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

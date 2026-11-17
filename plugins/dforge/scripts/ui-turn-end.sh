@@ -55,7 +55,7 @@ fast_mode_on "$transcript_path" "$message" && exit 0
 . "$SCRIPT_DIR/lib/roots.sh"
 . "$SCRIPT_DIR/lib/next-ending.sh"
 if [ -f "$stamp" ]; then
-  ending_released "$message" "$stamp" "$(dforge_latest_file "$root")" && exit 0
+  ending_released_any "$message" "$stamp" "$(dforge_latest_file "$root")" "$root" && exit 0
 else
   grep -qF '## Next session' <<<"$message" && exit 0
 fi

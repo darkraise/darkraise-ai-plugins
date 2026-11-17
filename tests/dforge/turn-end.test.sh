@@ -585,5 +585,44 @@ else
   chmod 755 "$TMP/ro"
 fi
 
+# --- per-worktree handoffs (spec A7, A16) ---
+git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m base
+WTD="$TMP/wt-hand"; git -C "$REPO" worktree add -q -b wt-hand "$WTD"
+WT_LATEST="$WTD/.dforge/handoff/latest.md"; mkdir -p "${WT_LATEST%/*}"
+wt_block() { sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** %s\n**Next:** %s\n' "$1" "$2" > "$WT_LATEST"; }
+prompt s-wa; write_ledger 'Task 1: complete (commits a..b, review clean)'
+check "A7: a held primary turn: held on a summary" "$(decision "$(stop s-wa 'Task 1 is done.')")" "block"
+prompt s-wb; write_ledger 'Task 1: complete (commits a..b, review clean)'
+wt_block 'wt status' 'Resume at Task 2 (Wt).'
+check "A7: the worktree's block written this turn releases" "$(stop s-wb $'Stopping.\n\n## Next session\n\n**Status:** wt status\n**Next:** Resume at Task 2 (Wt).')" ""
+prompt s-wc; write_ledger 'Task 1: complete (commits a..b, review clean)'
+check "A7: a hand-typed block with no handoff written: held" "$(decision "$(stop s-wc $'## Next session\n\n**Status:** typed\n**Next:** typed.')")" "block"
+prompt s-wd; write_ledger 'Task 1: complete (commits a..b, review clean)'
+wrote_next 'Own next.'
+wt_block 'other' 'Other next.'
+check "A16: own block released after another worktree's later write" "$(stop s-wd $'## Next session\n\n**Status:** x\n**Next:** Own next.')" ""
+prompt s-we; write_ledger 'Task 1: complete (commits a..b, review clean)'
+wt_block 'other' 'Run dforge:finishing-a-development-branch.'
+check "A16: another checkout's Next line alone does not release" "$(decision "$(stop s-we $'## Next session\n\n**Next:** Run dforge:finishing-a-development-branch.')")" "block"
+prompt s-wf
+mkdir -p "$REPO/docs/dforge/plans"; sleep 1
+printf -- '- 2026-11-18 `docs/dforge/plans/2026-11-18-x.md` — merged into `main`\n' >> "$REPO/docs/dforge/plans/completed.md"
+wt_block 'other' 'Other next.'
+check "A16: a completed plan stays held after another worktree writes" "$(decision "$(stop s-wf 'All done.')")" "block"
+. "$HERE/fixtures/darkmem-stores.sh"
+MIRROR=$(stores_home "$HOME" "$REPO" demo local darkmem)
+mkdir -p "$MIRROR/work/sdd/2026-10-12-dm" "$REPO/.dforge/sdd/2026-10-12-dm"
+dm_ledger() { sleep 1; printf '# SDD ledger — plan: docs/dforge/plans/2026-10-12-dm.md\nTask 1: complete (commits a..b, review clean)\n' > "$MIRROR/work/sdd/2026-10-12-dm/progress.md"; }
+prompt s-wg; dm_ledger
+check "A7: darkmem: a mirror ledger holds the primary turn" "$(decision "$(stop s-wg 'Task 1 is done.')")" "block"
+prompt s-wh; dm_ledger
+wt_block 'dm wt' 'Resume at Task 2 (Dm).'
+check "A7: darkmem: a linked worktree's local block releases" "$(stop s-wh $'## Next session\n\n**Status:** dm wt\n**Next:** Resume at Task 2 (Dm).')" ""
+prompt s-wi; dm_ledger
+sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** m\n**Next:** Mirror next.\n' > "$MIRROR/work/handoff/latest.md"
+check "A7: darkmem: the primary's own block in the mirror's file releases" "$(stop s-wi $'## Next session\n\n**Next:** Mirror next.')" ""
+rm -rf "$REPO/.dforge/sdd/2026-10-12-dm"
+rm -f "$HOME/.dforge/config.json" "$HOME/.dforge/stores.json"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

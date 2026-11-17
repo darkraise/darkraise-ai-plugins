@@ -77,17 +77,19 @@ if [ -f "$stamp" ]; then
   read -r docs_store docs < <(dagents_stores_init "$root" && printf '%s %s\n' "$_DAGENTS_DOCS_STORE" "$_DAGENTS_DOCS_ROOT")
   turn_head=$(tr -d '\r' < "$stamp.refs" 2>/dev/null | TOP=$root awk -F'\t' 'NR > 2 && $2 == ENVIRON["TOP"] { print $1; exit }')
   at_start() { [ -n "$turn_head" ] && git -C "$root" show "$turn_head:${1#"$root"/}" 2>/dev/null | tr -d '\r'; }
-  changed_here() { # FILE
+  # FILE changed this turn after HANDOFF was last written: the primary's for a
+  # merged plan (next-step --complete writes it), this checkout's for the
+  # roadmap (--project).
+  changed_here() { # FILE HANDOFF
     local commit_at
     [ -f "$1" ] && [ "$1" -nt "$stamp" ] || return 1
-    [ -n "$latest" ] || latest=$(dagents_latest_file "$root")
-    ! [ "$latest" -nt "$1" ] || return 1
+    ! [ "$2" -nt "$1" ] || return 1
     [ "$docs_store" = local ] || return 0
     [ -n "$(git -C "$root" status --porcelain -- "$1" 2>/dev/null)" ] && return 0
     commit_at=$(git -C "$root" log -1 --format=%ct -- "$1" 2>/dev/null)
     [ "${commit_at:-0}" -ge "$stamp_at" ]
   }
-  if [ -n "$docs" ] && changed_here "$docs/plans/completed.md"; then
+  if [ -n "$docs" ] && changed_here "$docs/plans/completed.md" "$(dagents_latest_file "$(plan_primary_root "$root" || printf '%s' "$root")")"; then
     added=$(awk 'NR == FNR { seen[$0]; next } !($0 in seen) && /`/ { line = $0 } END { print line }' \
       <(at_start "$docs/plans/completed.md") <(tr -d '\r' < "$docs/plans/completed.md"))
     [ -n "$added" ] || added=$(tr -d '\r' < "$docs/plans/completed.md" | grep '`' | tail -n 1)
@@ -95,7 +97,7 @@ if [ -f "$stamp" ]; then
     # The name goes into a command the model runs: only a plain path stays.
     [[ "$plan" =~ ^[A-Za-z0-9._/-]+\.md$ ]] || plan=PLAN_FILE
     transition="complete $plan"
-  elif [ -n "$docs" ] && changed_here "$docs/roadmap.md"; then
+  elif [ -n "$docs" ] && changed_here "$docs/roadmap.md" "$(dagents_latest_file "$root")"; then
     if [ "$docs_store" = local ]; then
       . "${SCRIPT_DIR}/lib/roadmap.sh"
       closed_now=$(roadmap_rows "$docs/roadmap.md" | awk -F'\t' '$5 == "closed"' | grep -c . || true)
@@ -190,7 +192,7 @@ fi
 # this turn (lib/next-ending.sh), never hand-typed. The first ledger without its
 # ending names the reason.
 ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
-wrote_block() { [ -n "$latest" ] || latest=$(dagents_latest_file "$root"); ending_released "$last" "$stamp" "$latest"; }
+wrote_block() { [ -n "$latest" ] || latest=$(dagents_latest_file "$root"); ending_released_any "$last" "$stamp" "$latest" "$root"; }
 ledger="" clean=0
 [ -d "$sdd" ] || sdd=""
 ws="$(dagents_dir state "$root")/sdd"
