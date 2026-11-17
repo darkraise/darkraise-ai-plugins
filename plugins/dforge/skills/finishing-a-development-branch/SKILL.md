@@ -388,7 +388,3 @@ When the ledger holds a `CI:` line, the final message quotes it.
 | 2. Create PR | - | yes | yes | - |
 | 3. Keep as-is | - | - | yes | - |
 | Discard (explicit request only) | - | - | - | yes (force) |
-
-## Common Rationalizations
-
-Read [rationalizations.md](references/rationalizations.md) before you skip a step of finishing.

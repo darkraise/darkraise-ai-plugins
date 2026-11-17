@@ -81,6 +81,9 @@ git push -u origin <feature-branch>
 # git push origin HEAD:refs/heads/<new-branch>
 ```
 
+A rejected push means the remote moved: investigate, and force-push only on
+your human partner's explicit request.
+
 Then create the pull/merge request against <base-branch> with the code host's
 tooling — its CLI if one is available, or the creation URL most forges
 print when you push — following the repo's PR template and conventions if

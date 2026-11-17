@@ -348,9 +348,3 @@ line. Writing its name in a message is not invoking it, and a turn that ends
 on a summary of the run leaves your human partner with no integration menu
 and no next step. Write no wrap-up message of your own: finishing's message is
 the final one.
-
-Read [finish-rulings.md](references/finish-rulings.md) before you invoke finishing.
-
-## Common Rationalizations
-
-Read [rationalizations.md](references/rationalizations.md) before you skip a step of the task loop.
