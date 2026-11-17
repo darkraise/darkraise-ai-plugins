@@ -93,4 +93,38 @@ mkdir "$registry.lock"; touch -t 200001010000 "$registry.lock"
 bash "$install_script" install >/dev/null 2>&1
 check 'an old ownerless lock is broken' "$?" 0
 rm -rf "$registry.lock"
+
+# Two waiters break one stale lock. The rm hook lets the second act after the
+# first has passed its checks; it must not end up holding a lock the first
+# then removes.
+race="$fake/race.lock"
+sleep 0 & dead=$!; wait "$dead"
+mkdir "$race"; printf '%s\n' "$dead" > "$race/pid"
+(
+  source "$HERE/../scripts/lib/installations.sh"
+  first=1
+  rm() {
+    if [ "$first" = 1 ]; then
+      first=0
+      if _dcc_installation_break_stale "$race" && mkdir "$race" 2>/dev/null; then
+        printf '%s\n' "$$" > "$race/pid"; : > "$fake/second-took"
+      fi
+    fi
+    command rm "$@"
+  }
+  _dcc_installation_break_stale "$race"
+)
+check 'the first waiter breaks the stale lock' "$?" 0
+took=$([ -e "$fake/second-took" ] && echo yes || echo no)
+held=$([ -f "$race/pid" ] && echo yes || echo no)
+check 'a lock the second waiter took is still held' "took=$took held=$held" "took=$took held=$took"
+command rm -rf "$race" "$fake/second-took"
+
+mkdir "$registry.lock.break"; touch -t 200001010000 "$registry.lock.break"
+sleep 0 & dead=$!; wait "$dead"
+mkdir "$registry.lock"; printf '%s\n' "$dead" > "$registry.lock/pid"
+bash "$install_script" install >/dev/null 2>&1
+check 'an abandoned breaker guard does not block breaking a stale lock' "$?" 0
+check 'the abandoned guard is cleared' "$([ -e "$registry.lock.break" ] && echo present || echo gone)" gone
+rm -rf "$registry.lock" "$registry.lock.break"
 finish

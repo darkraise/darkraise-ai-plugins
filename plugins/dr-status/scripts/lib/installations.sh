@@ -118,7 +118,21 @@ dcc_installation_lock() {
 # without this the installed copy silently stops following plugin updates.
 # A lock with no pid file is either mid-acquire or from a release before the
 # pid was written; only an old one is treated as abandoned.
+# One waiter breaks at a time: a second, already past its checks, would
+# otherwise remove the lock the first took after breaking the stale one.
 _dcc_installation_break_stale() { # _dcc_installation_break_stale <lock>
+  local guard="$1.break" status
+  if ! mkdir -- "$guard" 2>/dev/null; then
+    # A breaker killed inside its guard leaves the guard behind.
+    [ -n "$(find "$guard" -maxdepth 0 -mmin +1 2>/dev/null)" ] && rmdir -- "$guard" 2>/dev/null
+    return 1
+  fi
+  _dcc_installation_break_guarded "$1"; status=$?
+  rmdir -- "$guard" 2>/dev/null
+  return "$status"
+}
+
+_dcc_installation_break_guarded() { # _dcc_installation_break_guarded <lock>
   local lock="$1" pid=""
   if [ -r "$lock/pid" ]; then
     IFS= read -r pid < "$lock/pid" || true
