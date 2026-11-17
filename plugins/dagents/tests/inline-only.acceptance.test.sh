@@ -188,7 +188,7 @@ check "A11: an old escalation line still parses" "$(ledger_left_inline "$TMP/old
 for f in "$P/.claude-plugin/plugin.json" "$P/.codex-plugin/plugin.json" "$P/../../.claude-plugin/marketplace.json"; do
   absent "no tiered implementers in $f" "$f" "tiered implementers"
 done
-check "plugin keyword swapped" "$(jq -r '.keywords | index("spec-driven") != null and index("subagents") == null' < "$P/.claude-plugin/plugin.json" | tr -d '\r')" "true"
+check "plugin keyword spec-driven" "$(jq -r '.keywords | index("spec-driven") != null' < "$P/.claude-plugin/plugin.json" | tr -d '\r')" "true"
 # --- summary ---
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

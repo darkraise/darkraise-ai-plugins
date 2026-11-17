@@ -256,6 +256,9 @@ lacks "codex pair: no claude command" "$out" "claude --model"
 write_plan "$PLAN" '**Execution:** subagent — whatever the owner pinned' ""
 run "$REPO" "$PLAN_REL"
 has "an Execution line naming no pair: points at the Execution line" "$out" "Launch: see the **Execution:** line in \`$PLAN_REL\`."
+write_plan "$PLAN" '' ""
+run "$REPO" "$PLAN_REL"
+has "no Execution line: prompt names the default, subagent-driven-development" "$out" "with dagents:subagent-driven-development."
 
 # --- CRLF plan ---
 write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
