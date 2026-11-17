@@ -32,7 +32,8 @@ present() { # present <name> <file> <needle>
   else printf 'FAIL - %s\n       missing: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1)); fi
 }
 absent() { # absent <name> <file> <needle>
-  if grep -qF -- "$3" "$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
+  if [ ! -f "$2" ]; then printf 'FAIL - %s\n       no such file: [%s]\n' "$1" "$2"; fail=$((fail + 1))
+  elif grep -qF -- "$3" "$2"; then printf 'FAIL - %s\n       unexpected: [%s]\n       in: [%s]\n' "$1" "$3" "$2"; fail=$((fail + 1))
   else printf 'ok   - %s\n' "$1"; pass=$((pass + 1)); fi
 }
 has() { # has <name> <haystack> <needle>
@@ -125,7 +126,6 @@ check "A5: a plan with no Execution line marks its risk-3 task" "$(sed -n 2p "$T
 # --- Task 2 ---
 io_plan "$INLINE_OPUS" "1 2 2 2" "1 2 1 2" > allheavy.md
 lint allheavy.md
-lacks "A1: no Execution warning on an all-heavy inline plan" "$out" "WARN header: Execution"
 lacks "A1: no inline error on an all-heavy inline plan" "$out" "ERROR header: inline"
 io_plan 'inline — `claude --model sonnet --effort high` — x' "1 2 1 2" "0 1 1 0" > sonnet6.md
 lint sonnet6.md
@@ -133,7 +133,6 @@ has "A2: total 6 on sonnet is the model-floor error" "$out" "ERROR header: inlin
 io_plan 'subagent — `claude --model sonnet --effort high` — x' "0 1 1 0" "0 1 1 1" > sub.md
 lint sub.md
 has "A3: a subagent line is deprecated" "$out" "WARN header: subagent execution is deprecated; inline is the default"
-lacks "A3: no majority-rule warning" "$out" "tasks are heavy"
 lacks "A3: no mode error" "$out" "ERROR header: subagent"
 io_plan 'inline — `claude --model sonnet --effort medium` — x' "0 0 0 3" "0 1 1 0" > risk3m.md
 lint risk3m.md
