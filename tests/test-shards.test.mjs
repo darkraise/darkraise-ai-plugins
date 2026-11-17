@@ -48,6 +48,15 @@ test('a suite run in parts splits its weight among them', () => {
   assert.deepEqual(selectShard(jobs, '2/2'), [first, second]);
 });
 
+test('each node --test job is scheduled by the weight of its first test file', () => {
+  const heavy = ['node', ['--test', 'tests/heavy.test.mjs', 'tests/more.test.mjs'], 1200];
+  const light = ['node', ['--test', 'tests/light.test.mjs'], 120];
+  const suite = shell('a.test.sh', 600);
+  const weights = { 'tests/heavy.test.mjs': 500, 'tests/light.test.mjs': 10, 'plugins/dforge/tests/a.test.sh': 400 };
+  assert.deepEqual(selectShard([heavy, light, suite], '1/2', weights), [heavy]);
+  assert.deepEqual(selectShard([heavy, light, suite], '2/2', weights), [light, suite]);
+});
+
 test('a suite with per-part weights schedules each part by its own weight', () => {
   const part = name => ['bash', ['plugins/dforge/tests/a.test.sh', name], 900];
   const jobs = ['start', 'verdict', 'x', 'y'].map(part);
@@ -85,9 +94,15 @@ test('a shell suite needs a weight of at most 80% of its limit', () => {
     },
     {
       name: 'jobs that are not shell suites keep the default weight',
-      jobs: [['node', ['scripts/validate-repository.mjs'], 60], ['node', ['--test', 'tests/a.test.mjs'], 120], ['claude', ['plugin', 'test', 'plugins/dforge'], 300], ['tsc', ['--noEmit', '-p', 'plugins/dforge'], 300]],
+      jobs: [['node', ['scripts/validate-repository.mjs'], 60], ['claude', ['plugin', 'test', 'plugins/dforge'], 300], ['tsc', ['--noEmit', '-p', 'plugins/dforge'], 300]],
       weights: {},
       want: [],
+    },
+    {
+      name: 'a node --test job needs a weight under its first test file',
+      jobs: [['node', ['--test', 'tests/a.test.mjs', 'tests/b.test.mjs'], 120], ['node', ['--test', 'tests/c.test.mjs'], 100]],
+      weights: { 'tests/c.test.mjs': 90 },
+      want: [/^tests\/a\.test\.mjs: no weight in scripts\/test-shards\.mjs/, /^tests\/c\.test\.mjs: weight 90 s is above 80% of its 100 s limit/],
     },
   ];
   for (const row of rows) {
@@ -135,7 +150,7 @@ test('a suite past 75% of its limit is named in a GitHub warning that test-all p
 
 test('weights, limits and parts are keyed by repository path', () => {
   for (const table of [sched.windowsSeconds, sched.suiteSeconds, sched.suiteParts]) {
-    for (const key of Object.keys(table)) assert.match(key, /^plugins\/[a-z0-9-]+\/tests\/[^/]+$/, key);
+    for (const key of Object.keys(table)) assert.match(key, /^(plugins\/[a-z0-9-]+\/)?tests\/[^/]+$/, key);
   }
 });
 

@@ -1,15 +1,18 @@
 // Approximate Windows seconds from recent Actions runs; this file's git history
 // names them. A weight for a suite with no Windows run yet is an
 // estimate from its Linux time.
-// These are scheduling weights, not timeouts. The jobs that are not shell
-// suites (validate-repository.mjs, the --test jobs, claude plugin test, tsc)
-// take the default weight of 10. Every shell suite needs an entry here, with a
-// weight of at most 80% of the suite's limit; tests/test-shards.test.mjs
+// These are scheduling weights, not timeouts. validate-repository.mjs, claude
+// plugin test and tsc take the default weight of 10. Every shell suite, and
+// every node --test job under its first test file, needs an entry here, with a
+// weight of at most 80% of the job's limit; tests/test-shards.test.mjs
 // enforces both. A suite test-all runs in parts splits its weight evenly among
 // them, unless its entry maps each part to its own weight, as task-step's and
 // plan-lint's do: task-step's start and verdict parts together overran one
 // shard at an even split, and plan-lint's paths part is a small fraction of it.
 export const windowsSeconds = {
+  'tests/dagents-backport.test.mjs': 60,
+  'tests/guard-isolation.test.mjs': 300,
+  'plugins/dflow/tests/board.test.mjs': 120,
   'plugins/dr-status/tests/run-all.sh': 157,
   'plugins/dforge/tests/agy-gate.test.sh': 20,
   'plugins/dforge/tests/agy-review.test.sh': 60,
@@ -240,6 +243,12 @@ export const suiteParts = {
   'plugins/dagents/tests/task-step.test.sh': [['start'], ['rereview'], ['group'], ['verdict']],
 };
 
+// A node --test job's first argument is the --test flag every such job shares,
+// so the job is named by its first test file instead.
+const nodeTest = args => args[0] === '--test';
+const suiteName = args => nodeTest(args) ? args[1] : args[0];
+const suitePart = args => nodeTest(args) ? '' : args.slice(1).join(' ');
+
 function partWeight(entry, part, parts) {
   if (entry === undefined) return 10 / parts;
   if (typeof entry !== 'object') return entry / parts;
@@ -255,12 +264,12 @@ export function selectShard(jobs, shard, weights = windowsSeconds) {
     throw new Error('Shard requires 1 <= INDEX <= TOTAL <= number of suites');
   }
   const buckets = Array.from({ length: total }, () => ({ seconds: 0, positions: [] }));
-  const name = job => job[1][0];
+  const name = job => suiteName(job[1]);
   const parts = new Map();
   for (const job of jobs) parts.set(name(job), (parts.get(name(job)) ?? 0) + 1);
   const weighted = jobs.map((job, position) => ({
     position,
-    seconds: partWeight(weights[name(job)], job[1].slice(1).join(' '), parts.get(name(job))),
+    seconds: partWeight(weights[name(job)], suitePart(job[1]), parts.get(name(job))),
   })).sort((a, b) => b.seconds - a.seconds || a.position - b.position);
   for (const { position, seconds } of weighted) {
     const bucket = buckets.reduce((best, current) => current.seconds < best.seconds ? current : best);
@@ -274,10 +283,10 @@ export function selectShard(jobs, shard, weights = windowsSeconds) {
 export function checkShellWeights(jobs, weights = windowsSeconds) {
   const suites = new Map();
   for (const [, args, limit] of jobs) {
-    if (args[0] !== 'plugins/dr-status/tests/run-all.sh' && !/^plugins\/[a-z0-9-]+\/tests\/[^/]+\.(test|acceptance)\.sh$/.test(args[0])) continue;
-    const name = args[0];
+    if (!nodeTest(args) && args[0] !== 'plugins/dr-status/tests/run-all.sh' && !/^plugins\/[a-z0-9-]+\/tests\/[^/]+\.(test|acceptance)\.sh$/.test(args[0])) continue;
+    const name = suiteName(args);
     const suite = suites.get(name) ?? { parts: [], limit };
-    suite.parts.push(args.slice(1).join(' '));
+    suite.parts.push(suitePart(args));
     suites.set(name, suite);
   }
   const problems = [];
