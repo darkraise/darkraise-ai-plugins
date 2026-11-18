@@ -53,9 +53,8 @@ section() { # section <file> <heading line>: the body up to the next "## " headi
 }
 iso() { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ; }
 epoch_of() { date -u -d "$1" +%s 2>/dev/null || date -u -j -f %Y-%m-%dT%H:%M:%SZ "$1" +%s 2>/dev/null; }
-within() { # within <epoch> <want> <slack>
-  local d=$(( $1 - $2 )); [ "$d" -lt 0 ] && d=$(( -d ))
-  if [ "$d" -le "$3" ] 2>/dev/null; then echo yes; else echo no; fi
+between() { # between <epoch> <before> <after> <offset> <slack>: epoch is in [before, after] plus offset, give or take slack
+  if [ "$1" -ge $(( $2 + $4 - $5 )) ] && [ "$1" -le $(( $3 + $4 + $5 )) ] 2>/dev/null; then echo yes; else echo no; fi
 }
 gfield() { tr ' ' '\n' <<<"$1" | sed -n "s/^$2=//p"; } # gfield <gate line> <key>
 
@@ -170,6 +169,7 @@ a5() {
 a6() {
   if [ "$SPAWNABLE" != yes ]; then skip "A6: the real gate needs a probe that can run the stub"; return; fi
   real_gate; seed_open
+  local before; before=$(now)
   STUB_AGY_MODE=error STUB_AGY_ERROR="$RESET_ERR" run "${GEMINI[@]}"
   local after; after=$(now)
   local line; line=$(gate_line)
@@ -177,8 +177,8 @@ a6() {
   check "A6: after a Gemini quota the gate line reads reason=quota" "$(gfield "$line" reason)" "quota"
   local at; at=$(gfield "$line" resets_at)
   check "A6: resets_at is an ISO 8601 UTC time" "$(grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' <<<"$at")" "1"
-  check "A6: resets_at is 3723 s after the wrapper exits, give or take 5 s" \
-    "$(within "$(epoch_of "$at")" "$((after + 3723))" 5)" "yes"
+  check "A6: resets_at is 3723 s after the wrapper runs, give or take 5 s" \
+    "$(between "$(epoch_of "$at")" "$before" "$after" 3723 5)" "yes"
   jq '.resets_at_epoch = 1000' "$session_file" > "$session_file.tmp" && mv -f "$session_file.tmp" "$session_file"
   line=$(gate_line)
   check "A6: once the reset has passed the next gate call probes" "$(gfield "$line" source)" "probe"
@@ -189,14 +189,15 @@ a6() {
 a7() {
   if [ "$SPAWNABLE" != yes ]; then skip "A7: the real gate needs a probe that can run the stub"; return; fi
   real_gate; seed_open
+  local before; before=$(now)
   STUB_AGY_MODE=error STUB_AGY_ERROR="$RESET_ERR" run "${CLAUDE[@]}"
   local after; after=$(now)
   local line; line=$(gate_line)
   check "A7: after a Claude quota the lane is still open" "$(gfield "$line" lane)" "true"
   check "A7: after a Claude quota the fallback is off" "$(gfield "$line" fallback)" "off"
   local at; at=$(gfield "$line" fallback_resets_at)
-  check "A7: fallback_resets_at is 3723 s after the wrapper exits, give or take 5 s" \
-    "$(within "$(epoch_of "$at")" "$((after + 3723))" 5)" "yes"
+  check "A7: fallback_resets_at is 3723 s after the wrapper runs, give or take 5 s" \
+    "$(between "$(epoch_of "$at")" "$before" "$after" 3723 5)" "yes"
   local n rc; n=$(calls)
   run "${GEMINI[@]}"; rc=$?
   check "A7: a Gemini run still launches agy" "$(calls)" "$((n + 1))"
@@ -328,15 +329,15 @@ a14() {
   check "A14: a Gemini quota with a reset reports marked=lane" "$(grep -cx 'marked=lane' <<<"$sec")" "1"
   until_at=$(sed -n 's/^until=//p' <<<"$sec")
   check "A14: and an until= line in ISO 8601 UTC" "$(grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' <<<"$until_at")" "1"
-  check "A14: that until= is the reset, 3723 s after the run" "$(within "$(epoch_of "$until_at")" "$((after + 3723))" 5)" "yes"
+  check "A14: that until= is the reset, 3723 s after the run" "$(between "$(epoch_of "$until_at")" "$before" "$after" 3723 5)" "yes"
   check "A14: marked= sits under reason=quota" "$(grep -A1 -x 'reason=quota' <<<"$sec" | tail -1)" "marked=lane"
 
-  seed_open
+  seed_open; before=$(now)
   STUB_AGY_MODE=error STUB_AGY_ERROR="$RESET_ERR" run "${CLAUDE[@]}"; after=$(now)
   sec=$(agy_error_section)
   check "A14: a Claude quota with a reset reports marked=fallback" "$(grep -cx 'marked=fallback' <<<"$sec")" "1"
   until_at=$(sed -n 's/^until=//p' <<<"$sec")
-  check "A14: and an until= line 3723 s after the run" "$(within "$(epoch_of "$until_at")" "$((after + 3723))" 5)" "yes"
+  check "A14: and an until= line 3723 s after the run" "$(between "$(epoch_of "$until_at")" "$before" "$after" 3723 5)" "yes"
 
   seed_open
   STUB_AGY_MODE=error STUB_AGY_ERROR="$BARE_ERR" run "${GEMINI[@]}"
