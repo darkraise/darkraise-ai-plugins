@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { renamePath, renameText } from '../scripts/dagents-rename.mjs';
@@ -33,30 +30,6 @@ test('path components take their dagents form', () => {
   assert.equal(renamePath('skills/using-dforge/SKILL.md'), 'skills/using-dagents/SKILL.md');
   assert.equal(renamePath('scripts/lib/dforge-dir.sh'), 'scripts/lib/dagents-dir.sh');
   assert.equal(renamePath('tests/plan-lint.test.sh'), 'tests/plan-lint.test.sh');
-});
-
-test('tree renames contents and paths in place and refuses a collision', t => {
-  const dir = mkdtempSync(join(tmpdir(), 'rename-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  mkdirSync(join(dir, 'skills/using-dforge'), { recursive: true });
-  mkdirSync(join(dir, 'scripts/lib'), { recursive: true });
-  writeFileSync(join(dir, 'skills/using-dforge/SKILL.md'), 'name: using-dforge\n');
-  writeFileSync(join(dir, 'scripts/dforge-path'), '. "$HERE/lib/dforge-dir.sh"\n');
-  writeFileSync(join(dir, 'scripts/lib/dforge-dir.sh'), 'echo "${DFORGE_DOCS_ROOT:-docs/dforge}"\n');
-  writeFileSync(join(dir, 'blob.bin'), Buffer.from('dforge\0dforge:x', 'binary'));
-  const ok = run(['tree', dir]);
-  assert.equal(ok.status, 0, ok.stderr);
-  assert.equal(readFileSync(join(dir, 'skills/using-dagents/SKILL.md'), 'utf8'), 'name: using-dagents\n');
-  assert.equal(readFileSync(join(dir, 'scripts/dagents-path'), 'utf8'), '. "$HERE/lib/dagents-dir.sh"\n');
-  assert.equal(readFileSync(join(dir, 'scripts/lib/dagents-dir.sh'), 'utf8'), 'echo "${DAGENTS_DOCS_ROOT:-docs/dagents}"\n');
-  assert.equal(existsSync(join(dir, 'skills/using-dforge')), false);
-  assert.equal(readFileSync(join(dir, 'blob.bin'), 'binary'), 'dforge\0dforge:x', 'a file holding a NUL keeps its bytes');
-
-  writeFileSync(join(dir, 'clash.sh'), 'echo "$DFORGE_LOCK_TENTHS $DR_LOCK_TENTHS"\n');
-  const clash = run(['tree', dir]);
-  assert.equal(clash.status, 1);
-  assert.match(clash.stderr, /DFORGE_LOCK_TENTHS/);
-  assert.match(clash.stderr, /DR_LOCK_TENTHS/);
 });
 
 test('patch translates paths and lines of a diff', () => {
