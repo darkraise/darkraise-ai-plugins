@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, resolve, sep } from 'node:path';
@@ -70,14 +70,31 @@ test('repository validator rejects broken distribution contracts', async t => {
   }
 });
 
-test('dforge ships /dforge:cockpit as a command file that names the unloaded mod', () => {
-  const text = readFileSync(resolve(root, 'plugins/dforge/commands/cockpit.md'), 'utf8');
-  const head = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text);
-  assert.ok(head, 'frontmatter is required');
-  assert.match(head[1], /^description: \S/m);
-  assert.match(head[1], /^argument-hint: \[settings \| notify test \| notify mention <id>\]$/m);
-  assert.match(head[1], /^disable-model-invocation: true$/m);
-  assert.match(head[2], /did not load/);
+for (const plugin of ['dforge', 'dagents']) {
+  test(`${plugin} ships /${plugin}:cockpit as a command file that names the unloaded mod`, () => {
+    const text = readFileSync(resolve(root, `plugins/${plugin}/commands/cockpit.md`), 'utf8');
+    const head = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text);
+    assert.ok(head, 'frontmatter is required');
+    assert.match(head[1], /^description: \S/m);
+    assert.match(head[1], /^argument-hint: \[settings \| notify test \| notify mention <id>\]$/m);
+    assert.match(head[1], /^disable-model-invocation: true$/m);
+    assert.match(head[2], new RegExp(`The ${plugin} cockpit mod answers this command itself`));
+    assert.match(head[2], /did not load/);
+  });
+}
+
+// A mod cannot register a name with a colon, so a command it registered would
+// be unnamespaced: every command ships as a file and the mod answers it.
+test('no plugin mod registers a command of its own', () => {
+  const offenders = readdirSync(resolve(root, 'plugins')).flatMap(plugin => {
+    const hooks = resolve(root, 'plugins', plugin, 'hooks');
+    if (!existsSync(hooks)) return [];
+    return readdirSync(hooks, { recursive: true })
+      .filter(file => /\.(?:ts|tsx|mjs)$/.test(file) && !/\.test\./.test(file))
+      .filter(file => readFileSync(join(hooks, file), 'utf8').includes('command.register('))
+      .map(file => `plugins/${plugin}/hooks/${file}`);
+  });
+  assert.deepEqual(offenders, []);
 });
 
 test('bundled-link check ignores links inside fenced code blocks', async () => {

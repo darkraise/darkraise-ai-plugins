@@ -158,9 +158,9 @@ const MEASURE: SessionMeasureInput = {
   changed: ['context', 'rateLimits'],
 }
 
-// The person typing /cockpit at a wide fullscreen terminal.
+// The person typing /dagents:cockpit at a wide fullscreen terminal.
 const COCKPIT: CommandRunInput = {
-  command: 'cockpit',
+  command: 'dagents:cockpit',
   args: '',
   origin: { kind: 'composer' },
   presentation: { isFullscreen: true, columns: 160 },
@@ -337,6 +337,8 @@ type World = {
   compactMs?: number
   /** `git status` outruns its timeout, or cannot start. */
   gitStatusOut?: 'timeout' | 'missing'
+  /** The name of each command the plugin registers. */
+  registered?: string[]
   /** Each git command the plugin runs, as one line. */
   gitRuns?: string[]
   /** What `git rev-parse --git-common-dir` answers; `<primary>/.git` unless said. */
@@ -393,7 +395,10 @@ async function drain(stream: AsyncIterable<unknown>) {
 function world(on: On, w: World) {
   mock.env(on, { ...(w.config === undefined ? {} : { HOME: '/home/me' }), ...(w.env ?? {}) })
   const clock = mock.clock(on, { now: 1_000_000 })
-  on('command.register', () => ({ value: undefined }) as never)
+  on('command.register', (_$, e) => {
+    w.registered?.push(e.name)
+    return { value: undefined } as never
+  })
   on('session.start', (_$, e) => e as never)
   on('session.usage', (_$, e) => {
     if (w.isUsageFailing) throw new Error('usage unavailable')
@@ -2325,7 +2330,7 @@ describe('minimized band', () => {
     expect(await band.find({ type: 'Text', text: /⎇ feat\/pane\*/ })).toBeDefined()
   })
 
-  test('/cockpit expands a minimized cockpit', async ($, on) => {
+  test('/dagents:cockpit expands a minimized cockpit', async ($, on) => {
     const written: Record<string, string> = {}
     const opened: string[] = []
     world(on, { tokens: 284_000, opened, written, config: { layout: 'compact' } })
@@ -2590,7 +2595,7 @@ describe('dense pane', () => {
   })
 })
 
-describe('/cockpit', () => {
+describe('/dagents:cockpit', () => {
   test('says the pane opened when Claude Code draws it', async ($, on) => {
     world(on, { tokens: 284_000 })
     const answer = await $.command.run(COCKPIT)
@@ -2603,11 +2608,18 @@ describe('/cockpit', () => {
     expect(answer.text).toBe('Cockpit pane is waiting: this desktop app places no panes')
   })
 
+  test('registers no command of its own: the command file names it', async ($, on) => {
+    const registered: string[] = []
+    world(on, { tokens: 284_000, registered })
+    await $.session.start(START)
+    expect(registered).toEqual([])
+  })
+
   test('answers an unknown argument with its usage and opens nothing', async ($, on) => {
     const opened: string[] = []
     world(on, { tokens: 284_000, opened })
     const answer = await $.command.run({ ...COCKPIT, args: 'bogus' })
-    expect(answer.text).toBe('Unknown argument "bogus". Usage: /cockpit [settings | notify test | notify mention <id>]')
+    expect(answer.text).toBe('Unknown argument "bogus". Usage: /dagents:cockpit [settings | notify test | notify mention <id>]')
     expect(opened).toEqual([])
   })
 })
@@ -2724,7 +2736,7 @@ describe('settings view', () => {
     expect(await ui.find({ type: 'Text', text: 'ctx · cache · cost · 5h · 7d · model' })).toBeDefined()
   })
 
-  test('/cockpit settings opens the settings', async ($, on) => {
+  test('/dagents:cockpit settings opens the settings', async ($, on) => {
     world(on, { tokens: 284_000 })
     await $.command.run({ ...COCKPIT, args: 'settings' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -4499,7 +4511,7 @@ describe('discord', () => {
     expect(fetches).toHaveLength(2)
   })
 
-  test('/cockpit notify tests the webhook', async ($, on) => {
+  test('/dagents:cockpit notify tests the webhook', async ($, on) => {
     const fetches: World['fetches'] = []
     world(on, { tokens: 50_000, fetches, env: { DAGENTS_NOTIFY_URL: WEBHOOK } })
     mock.store(on, {})
@@ -4508,12 +4520,12 @@ describe('discord', () => {
     expect(fetches).toHaveLength(1)
   })
 
-  test('/cockpit notify takes no webhook on the command line, which the transcript keeps', async ($, on) => {
+  test('/dagents:cockpit notify takes no webhook on the command line, which the transcript keeps', async ($, on) => {
     world(on, { tokens: 50_000 })
     mock.store(on, {})
     await $.session.start(START)
     await $.command.run({ ...COCKPIT, args: `notify url ${WEBHOOK}` })
-    expect((await $.command.run({ ...COCKPIT, args: 'notify' })).text).toBe('No Discord webhook is set. Set one in /cockpit settings (Notifications) in a terminal, or with DAGENTS_NOTIFY_URL.')
+    expect((await $.command.run({ ...COCKPIT, args: 'notify' })).text).toBe('No Discord webhook is set. Set one in /dagents:cockpit settings (Notifications) in a terminal, or with DAGENTS_NOTIFY_URL.')
   })
 
   test('a failed send reports its reason with the webhook masked', async ($, on) => {
@@ -6515,7 +6527,7 @@ describe('settings held outside the file', () => {
     expect(notes.filter(note => note.startsWith(NOTE))).toHaveLength(1)
   })
 
-  test('leaving the settings through /cockpit tells the model too', async ($, on) => {
+  test('leaving the settings through /dagents:cockpit tells the model too', async ($, on) => {
     const notes: string[] = []
     world(on, { tokens: 50_000, config: {}, notes, written: {} })
     await $.session.start(START)

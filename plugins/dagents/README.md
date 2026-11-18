@@ -699,7 +699,7 @@ mod API is early access and may change between releases.
 ### What it does
 
 **Cockpit pane.** A pane with the session at a glance. It opens by itself when
-a session starts, once the terminal is 144 columns wide; `/cockpit` opens it at
+a session starts, once the terminal is 144 columns wide; `/dagents:cockpit` opens it at
 any width, and says why if Claude Code holds it back. In fullscreen at 110
 columns or more it docks beside the transcript; otherwise it sits above the
 prompt. In the full layout each section is a framed card in its own color, its
@@ -879,12 +879,12 @@ timing.
 **Minimize** (`m`) closes the pane. The cockpit then draws as a band directly
 above the prompt, across the transcript's width, in the terminal and the
 desktop app alike.
-**Expand** on the top rule opens the pane again, and so does `/cockpit`. Each
+**Expand** on the top rule opens the pane again, and so does `/dagents:cockpit`. Each
 saves the `layout` setting, so the next session opens the same way: a
-minimized cockpit starts with the box or band and no pane. `/cockpit settings`
+minimized cockpit starts with the box or band and no pane. `/dagents:cockpit settings`
 still opens the settings, and **Back** closes them again. Minimize is offered
 in the terminal and the desktop app; elsewhere a minimized cockpit shows
-nothing until `/cockpit` opens it. The band is also what a pane that is not
+nothing until `/dagents:cockpit` opens it. The band is also what a pane that is not
 docked draws (`layout` `auto`, the default). Its frame takes the account's
 color, with the email, billing and Remote Control (`connected`, `on` or
 `not connected`, as on the Account card) on the top rule. Its two lines show
@@ -923,7 +923,7 @@ that matters: **Hand off** once the context passes `warnAt`, **Resume**
 whenever it shows. In the terminal's settings view a switch reads `● On` or `○ Off`, the
 chosen option of a row takes the accent, and what is off is drawn dim.
 
-**Settings view.** **Settings** (or `/cockpit settings`) turns the pane into the
+**Settings view.** **Settings** (or `/dagents:cockpit settings`) turns the pane into the
 mod's settings: whether it shows at session start, the layout, which sections
 show, the handoff budget, where Hand off takes the accent and the Discord limit
 message goes out, how many context rows to list, the note and guard switches, and the
@@ -941,7 +941,7 @@ The cockpit pops up nothing in the normal course: usage limits show in the
 gauges and the band, and a Discord message that fails to send shows in the
 settings view. A toast appears only when it cannot do what was asked: a
 setting that could not be saved, or a handoff note the session would not take.
-`/cockpit` with an argument it does not know answers with its usage.
+`/dagents:cockpit` with an argument it does not know answers with its usage.
 
 **Handoff reading.** The handoff reading shows only in the cockpit: the
 Context card and the band. The main session re-reads its whole context on every request, so a session that
@@ -959,8 +959,8 @@ session needs you, which works the same over ssh and tmux. Create a webhook
 settings view's **Notifications** group (a typed slash command would keep the
 token in the transcript, so there is none for it). It is kept in the plugin's own store, not in `settings.json`, and only ever
 shows masked; `DAGENTS_NOTIFY_URL` in the environment wins over it (`DAGENTS_COCKPIT_NOTIFY_URL` still read). **Send
-test** (or `/cockpit notify test`) posts a sample. Set your Discord user id
-(**Mention**, or `/cockpit notify mention <id>`) to be pinged for the events
+test** (or `/dagents:cockpit notify test`) posts a sample. Set your Discord user id
+(**Mention**, or `/dagents:cockpit notify mention <id>`) to be pinged for the events
 that need you; everything else posts silently.
 
 | Event | When | Default | Pings |
@@ -992,7 +992,7 @@ Code" or a Claude session link). Human co-authors pass.
 
 ### Settings
 
-Open the settings with **Settings** in the pane or `/cockpit settings`. They are
+Open the settings with **Settings** in the pane or `/dagents:cockpit settings`. They are
 one tab per group: press `1` to `8` to switch, `i` to hide or show each
 setting's description, and `b` to go back. A row whose value differs from its
 default is marked `*` and shows the default with a **Reset**; `r` resets the
@@ -1014,7 +1014,7 @@ The same settings can be set with
 
 | Tab | Option | Default | Effect |
 | --- | --- | --- | --- |
-| Cockpit | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
+| Cockpit | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/dagents:cockpit` opens it at any width. |
 | Cockpit | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane, and the band above the prompt. **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
 | Cockpit | `density` | `detailed` | `detailed`: cards, charts and lists. `dense`: one line per section. **Dense** and **Detailed** in the pane set it. |
 | Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band draws the lines the Minimized tab picks instead. |
@@ -1115,8 +1115,8 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
    `~/.claude/plugins/store/dr-forge_darkraise-*.json` (under
    `$CLAUDE_CONFIG_DIR` when set), as `notifyUrl` and `notifyMention`. Copy
    them before you uninstall, then set them in a dagents session: the webhook
-   in `/cockpit settings` (or `DAGENTS_NOTIFY_URL`), the mention with
-   `/cockpit notify mention <id>`.
+   in `/dagents:cockpit settings` (or `DAGENTS_NOTIFY_URL`), the mention with
+   `/dagents:cockpit notify mention <id>`.
 
        /plugin install dagents@darkraise
        /plugin uninstall dr-forge@darkraise

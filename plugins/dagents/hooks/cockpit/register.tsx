@@ -443,7 +443,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'cockpit' }, async ($, e) => {
+  on('command.run', { command: 'dagents:cockpit' }, async ($, e) => {
     const conflict = await guardNow($)
     if (conflict !== null) return { text: conflict }
     const o = await live($)
@@ -451,7 +451,7 @@ export const register: Register = on => {
     if (words[0]?.toLowerCase() === 'notify') return notifyCommand($, words.slice(1))
     const wantsSettings = e.args.trim().toLowerCase() === 'settings'
     if (!wantsSettings && e.args.trim() !== '') {
-      return { text: `Unknown argument "${e.args.trim()}". Usage: /cockpit [settings | notify test | notify mention <id>]` }
+      return { text: `Unknown argument "${e.args.trim()}". Usage: /dagents:cockpit [settings | notify test | notify mention <id>]` }
     }
     if (wantsSettings) await showSettings($)
     else {
@@ -1118,7 +1118,7 @@ export const register: Register = on => {
                 notes.url !== null && compact('set-notify-test', 'Send test', () => sendTest($), { isMain: true }),
                 !notes.isFromEnv && canType && compact('set-notify-url-edit', notes.url === null ? 'Set' : 'Change', () => edit('url'), { isMain: notes.url === null }),
                 !notes.isFromEnv && notes.url !== null && compact('set-notify-url-remove', 'Remove', () => saveWebhook($, '')),
-                !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it in /cockpit settings in a terminal, or with DAGENTS_NOTIFY_URL</Text>,
+                !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it in /dagents:cockpit settings in a terminal, or with DAGENTS_NOTIFY_URL</Text>,
               )}
           {notes.last !== null && (
             <Text key="set-notify-last" color={notes.last.isError ? 'red' : 'green'} wrap="truncate-end">
@@ -3848,7 +3848,7 @@ async function notifyCommand($: EngineInterface, words: string[]): Promise<{ tex
   }
   const state = await read($, notifier)
   return {
-    text: state.url === null ? 'No Discord webhook is set. Set one in /cockpit settings (Notifications) in a terminal, or with DAGENTS_NOTIFY_URL.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from the environment)' : ''}.`,
+    text: state.url === null ? 'No Discord webhook is set. Set one in /dagents:cockpit settings (Notifications) in a terminal, or with DAGENTS_NOTIFY_URL.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from the environment)' : ''}.`,
   }
 }
 
@@ -4152,7 +4152,7 @@ async function engineSettings($: EngineInterface): Promise<string> {
 }
 
 /**
- * Registers /cockpit and reads every section, then marks the session read.
+ * Reads every section, then marks the session read.
  * session.start runs it once per process, opening or shutting the pane first;
  * the poll runs it again in a session /clear or /resume carried the process
  * into, whose values the host keeps apart and no session.start announces, and
@@ -4172,11 +4172,6 @@ async function readSession($: EngineInterface, isStart: boolean) {
   S.roots = { key: '', value: null }
   S.offerRead = ''
   S.offerRanKey = null
-  await $.command.register({
-    name: 'cockpit',
-    description: 'Show context, usage, subagents, the plan and the repo in a pane',
-    argumentHint: '[settings | notify test | notify mention <id>]',
-  })
   // Each read fills its own section: one that throws leaves only that section
   // unread, and a slow poll tick reads that one again, not the whole session,
   // whose caches the reset above would otherwise clear on every retry.

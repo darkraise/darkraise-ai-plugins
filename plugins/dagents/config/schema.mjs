@@ -62,7 +62,7 @@ export default {
   openAtStart: {
     type: 'boolean', default: true, group: 'Cockpit', target: 'dagents',
     label: 'Show at start', title: 'Open the pane at session start',
-    description: 'Open the cockpit when a session starts, once the terminal is 144 columns wide (110 after the first time). /cockpit opens it at any width.',
+    description: 'Open the cockpit when a session starts, once the terminal is 144 columns wide (110 after the first time). /dagents:cockpit opens it at any width.',
   },
   layout: {
     type: 'enum', values: ['auto', 'full', 'compact'], default: 'auto', group: 'Cockpit', target: 'dagents',
