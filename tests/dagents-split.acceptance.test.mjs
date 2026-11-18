@@ -3,9 +3,9 @@
 // the CI path filter, run through the repository scripts and the shipped files.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 
@@ -231,7 +231,10 @@ test('A16: the three guard copies are byte-identical, and validate-repository fa
   const dir = scratch(t);
   const copy = join(dir, 'repo');
   mkdirSync(copy);
-  execFileSync('bash', ['-c', `git ls-files -z | tar --null -T - -cf - | tar -x -C "${copy}"`], { cwd: ROOT, timeout: 120000 });
+  for (const path of execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', timeout: 120000 }).split('\0').filter(Boolean)) {
+    mkdirSync(dirname(join(copy, path)), { recursive: true });
+    copyFileSync(join(ROOT, path), join(copy, path));
+  }
   const clean = run(process.execPath, [join(copy, 'scripts/validate-repository.mjs'), copy], { cwd: copy, timeout: 90000 });
   assert.equal(clean.status, 0, clean.stderr);
   for (const name of SIBLINGS) {

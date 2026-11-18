@@ -13,6 +13,8 @@ check() { # check <name> <got> <want>
   else printf 'FAIL - %s\n       got:  [%s]\n       want: [%s]\n' "$1" "$2" "$3"; fail=$((fail + 1)); fi
 }
 exists() { [ -e "$1" ] && echo yes || echo no; }
+# dagents keys ~/.dagents/stores.json by node's path.resolve form: C:\… on Windows.
+native() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 2; }
 
 TMP="$(mktemp -d)"
@@ -111,8 +113,11 @@ normalized() { # normalized W FILE
 named() { # named DIR — every path under DIR with dforge in its name
   find "$1" -iname '*dforge*' 2>/dev/null | sed "s#^$1#@#" | sort
 }
+# Git Bash spells $TMP as /tmp/…, C:/…, C:\… or with the 8.3 user name, and
+# the files hold several of those, so a world's path is matched by $TMP's leaf.
 sums() { # sums DIR — a checksum per file under DIR
-  ( cd "$1" && find . -type f -not -path './.git/*' | sort | while IFS= read -r f; do printf '%s %s\n' "$(sed "s#$TMP/[a-z]*#@W#g; s#at=[0-9]*#at=N#" "$f" | cksum)" "$f"; done )
+  local leaf=${TMP##*/}
+  ( cd "$1" && find . -type f -not -path './.git/*' | sort | while IFS= read -r f; do printf '%s %s\n' "$(sed -E "s#[^[:space:]'\`]*${leaf//./\\.}[/\\][a-z]*#@W#g; s#at=[0-9]*#at=N#" "$f" | cksum)" "$f"; done )
 }
 
 # --- A7: dagents reads and writes none of dforge's names ---------------------
@@ -258,7 +263,7 @@ check "A9: with a home record for the project, the move exits 0" "$rc" "0"
 check "A9: dagents' settings gain the schema keys dforge's home held (record present)" "$(in_world "$W" bash "$PLUGIN/scripts/dagents-config" get handoffTokens)/$(in_world "$W" bash "$PLUGIN/scripts/dagents-config" get notifyAfter)" "77777/5"
 check "A9: a value dagents already had is not overwritten (record present)" "$(in_world "$W" bash "$PLUGIN/scripts/dagents-config" get worktree)" "always"
 check "A9: a key outside dagents' schema is not copied (record present)" "$(jq 'has("agyReview")' "$W/home/.dagents/config.json")" "false"
-check "A9: the project's record moves to ~/.dagents/stores.json and leaves dforge's" "$(jq -r --arg k "$top" 'has($k)' "$W/home/.dagents/stores.json")/$(jq -r --arg k "$top" 'has($k)' "$W/home/.dforge/stores.json")" "true/false"
+check "A9: the project's record moves to ~/.dagents/stores.json and leaves dforge's" "$(jq -r --arg k "$(native "$top")" 'has($k)' "$W/home/.dagents/stores.json")/$(jq -r --arg k "$top" 'has($k)' "$W/home/.dforge/stores.json")" "true/false"
 check "A9: dforge's config.json stays where it is (record present)" "$(jq -c '.handoffTokens' "$W/home/.dforge/config.json")" "77777"
 
 # A10: refusals, one case each, each in its own project
