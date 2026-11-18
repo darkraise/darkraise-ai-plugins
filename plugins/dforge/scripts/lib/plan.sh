@@ -238,14 +238,17 @@ plan_task_paths() {
 # the darkmem mirror belongs to the checkout it is worked from, even when the
 # mirror lies inside a repository (a home directory under git).
 _plan_ctx() {
-  local dir mirror physical
-  dir=$(dirname "$1")
+  local dir here mirror physical
+  # Native forms: callers hand the result to git -C, which under
+  # MSYS_NO_PATHCONV=1 cannot open Git Bash's /tmp/... spelling of $PWD.
+  dir=$(dr_native_path "$(dirname "$1")")
+  here=$(dr_native_path "$PWD")
   mirror=$(cd "${HOME:-}/.dforge/mirror" 2>/dev/null && pwd -P) || mirror=""
   physical=$(cd "$dir" 2>/dev/null && pwd -P) || physical=""
   if [ -n "$mirror" ] && [ -n "$physical" ]; then
-    case "$physical/" in "$mirror"/*) printf '%s\n' "$PWD"; return 0 ;; esac
+    case "$physical/" in "$mirror"/*) printf '%s\n' "$here"; return 0 ;; esac
   fi
-  if git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then printf '%s\n' "$dir"; else printf '%s\n' "$PWD"; fi
+  if git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then printf '%s\n' "$dir"; else printf '%s\n' "$here"; fi
 }
 
 # plan_locate PLAN — prefer the applied document store, then an existing
