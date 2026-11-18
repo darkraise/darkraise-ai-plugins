@@ -11,8 +11,7 @@ two enabled plugins can double-trigger.
 
 ## Why
 
-Four findings from real transcripts drove the fork; the numbers are in
-`docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md`.
+Four findings from real transcripts drove the fork:
 
 - **Cost.** The main session was 92% of token spend, most of it re-reading a
   400–700k context. The plugin hands off at a budget printed by its own
@@ -422,15 +421,26 @@ clean, otherwise the `## Next session` block from `next-step`. Controllers,
 Sonnet especially, tend to summarize the run and stop instead. A
 `UserPromptSubmit` hook stamps the start of each turn under
 `~/.claude/dforge/sessions/turns/`, and a `Stop` hook checks whether
-that turn wrote a plan ledger (`.dforge/sdd/*/progress.md`). If it did and
-the last message carries neither ending, the hook blocks the stop once and
-tells Claude which one is missing. The retry always passes, and without `jq`,
-a stamp or a ledger written this turn, the hook does nothing. While an agent or
+that turn wrote a plan ledger (`.dforge/sdd/*/progress.md`), recorded a plan
+in `plans/completed.md` or closed a milestone in `roadmap.md`. If it did and
+the last message carries no ending, the hook blocks the stop once and tells
+Claude which one is missing. A `## Next session` block counts only when
+`next-step` wrote it this turn: its `**Next:**` line matches the `latest.md`
+written since the turn started, or its `**Status:**` and `**Next:**` lines
+both match another checkout's `latest.md` written this turn, since `next-step`
+writes the handoff of the checkout the next session works in. A block Claude
+typed or reworded is held. A plan's turn may also end on a question to you
+that the ledger's last line records (`Task <N>: waiting — <question>`). The
+retry passes, except under the background-work hold below and in an auto run,
+and without `jq`, a stamp, or a ledger or transition this turn, the hook does
+nothing. While an agent or
 command the session started in the background has not reported back, a plain
 stop passes (the controller is waiting on it), and a message that ends the
 session over it, with the next-step block or the finishing menu, is held once
-in any turn: a handoff there would invite ending a session whose work is still
-in flight. Work stopped with `TaskStop`, and work launched before the session
+in any turn, retries included: a handoff there would invite ending a session
+whose work is still in flight. A service that never ends on its own (a dev
+server, a watcher) is not waited on: it neither passes a plain stop nor holds
+a handoff. Work stopped with `TaskStop`, and work launched before the session
 last started or resumed, sends no notification and does not count as running.
 An agent that sent its report but left a shell or agent of its own alive still
 counts: Claude Code keeps listing it, and its notification says so.
@@ -439,7 +449,8 @@ finishing menu run it, and `scripts/next-step` prints no block (exit 5) while
 anything is on it.
 When the turn wrote more than one ledger, each one must have its
 ending. Each hold also shows you a one-line note saying why the session went
-on.
+on. Claude Code labels a held stop `Stop hook error` in the transcript: that
+is the hold working, not a failed hook.
 
 The prompt hook also records which commits the repository's local branches
 point at; that record serves the UI proof hold only.
@@ -470,8 +481,12 @@ returns `scripts/ui-lint` findings as additional context and, once per
 session, names `dforge:ui-ux`; it never blocks. A third `Stop` hook,
 `scripts/ui-turn-end.sh`, holds a turn once when it leaves UI changes without
 a passing `ui-proof check` in a project with a UI profile (or a session that
-ran the skill); the line `UI proof: pending — <why>` releases it, and it
-stands down while an auto run is bound.
+ran the skill); the line `UI proof: pending — <why>` releases it. It stands
+down on the retry, while an auto run is bound, in fast mode, when the message
+carries the `## Next session` block `next-step` wrote this turn, when a ledger
+written this turn ends on a `Task <N>: waiting — ` question, and while finite
+background work or a timer runs: none of those stops claims the UI work is
+done, so a handoff is not held for a proof the next session will run.
 
 ### Fast mode
 
