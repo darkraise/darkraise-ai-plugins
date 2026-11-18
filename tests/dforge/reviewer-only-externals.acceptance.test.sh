@@ -825,7 +825,7 @@ t_A18() {
   after=$(git -C "$REPO_ROOT" status --porcelain)
   check "A18: the release dry run changes no file" "$after" "$before"
   check "A18: no marketplace file holds a dforge version" \
-    "$(jq -r '[.plugins[] | select(.name == "dforge") | has("version")] | any' "$REPO_ROOT/.claude-plugin/marketplace.json" "$REPO_ROOT/.agents/plugins/marketplace.json" 2>&1 | tr '\n' ' ')" "false false "
+    "$(jq -r '[.plugins[] | select(.name == "dforge") | has("version")] | any' "$REPO_ROOT/.claude-plugin/marketplace.json" "$REPO_ROOT/.agents/plugins/marketplace.json" 2>&1 | tr -d '\r' | tr '\n' ' ')" "false false "
 }
 
 for id in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A13 A14 A15 A16 A17 A18; do

@@ -480,13 +480,17 @@ a11() {
   ladder 30
 }
 
+live_count() { tr -d '\r' < "$TMP/live.out" 2>/dev/null | grep -c "$1" | tr -d ' '; }
+live_wait() { local i; for i in $(seq 1 150); do [ "$(live_count "$1")" -ge 1 ] && return 0; sleep 0.1; done; return 1; }
+
 a12() {
   reset; caps 1000 1000 1000; ladder 60
   rm -f "$ARGS" "$TMP/live.out"
   (cd "$WORK" && env API_JUDGE_BEAT=1 STUB_JUDGE_ANTHROPIC=slow STUB_JUDGE_SLOW=5 bash "$RUN" --prompt "$TMP/prompt.md" --report "$REPORT" --cwd "$WORK" > "$TMP/live.out" 2>>"$TMP/err") & local pid=$!
-  sleep 2.5
-  check "A12: while the row still runs, its started line has been printed" "$(kill -0 "$pid" 2>/dev/null && echo running):$(grep -c '^api-judge anthropic:claude-opus-5-5/medium started$' "$TMP/live.out" | tr -d ' ')" "running:1"
-  check "A12: and a running line has reached the output" "$([ "$(grep -c '^api-judge anthropic running [0-9]*s$' "$TMP/live.out")" -ge 1 ] && echo yes || echo no)" "yes"
+  live_wait '^api-judge anthropic:claude-opus-5-5/medium started$'
+  check "A12: while the row still runs, its started line has been printed" "$(kill -0 "$pid" 2>/dev/null && echo running):$(live_count '^api-judge anthropic:claude-opus-5-5/medium started$')" "running:1"
+  live_wait '^api-judge anthropic running [0-9]*s$'
+  check "A12: and a running line has reached the output" "$([ "$(live_count '^api-judge anthropic running [0-9]*s$')" -ge 1 ] && echo yes || echo no)" "yes"
   wait "$pid"
   check "A12: a running line at least every beat over a five-second run" "$([ "$(grep -c '^api-judge anthropic running [0-9]*s$' "$TMP/live.out")" -ge 3 ] && echo yes || echo no)" "yes"
   check "A12: the run still ruled" "$(head -1 "$REPORT" | tr -d '\r')" "## Verdict"
@@ -613,11 +617,13 @@ a18() {
   jrun
   local following
   following=$(awk -v b="budget anthropic" '$0 == b { f = 1; next } f && $0 == "--" { exit } f { if (p == "--add-dir") print; p = $0 }' "$ARGS" | tr '\n' ' ')
-  check "A18: each --add-dir directory reaches the Anthropic CLI as an --add-dir argument" "$following" "$TMP/ws $TMP/mirror "
+  local native=$TMP
+  if command -v cygpath >/dev/null 2>&1; then native=$(cygpath -m "$TMP"); fi
+  check "A18: each --add-dir directory reaches the Anthropic CLI as an --add-dir argument" "$following" "$native/ws $native/mirror "
 }
 
 a25() {
-  local s; s=$(node -e "import('$P/config/schema.mjs').then(m => console.log(JSON.stringify(m.default)))" | tr -d '\r')
+  local s; s=$(node --input-type=module -e "import { pathToFileURL } from 'node:url'; const m = await import(pathToFileURL(process.argv[1]).href); console.log(JSON.stringify(m.default))" "$P/config/schema.mjs" | tr -d '\r')
   field() { printf '%s' "$s" | jq -c "$1"; }
   check "A25: decisionApi is off by default and takes off, shadow, on" "$(field '.decisionApi | [.default, .values]')" '["off",["off","shadow","on"]]'
   check "A25: decisionConfidence defaults to 85, range 50 to 99" "$(field '.decisionConfidence | [.default, .min, .max]')" "[85,50,99]"
