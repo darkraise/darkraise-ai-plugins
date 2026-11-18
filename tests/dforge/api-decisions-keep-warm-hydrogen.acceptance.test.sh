@@ -238,16 +238,20 @@ ROWS
   check "A2: a failed request (HTTP 500)" "$rc:$out" "3:no ruling reason=error"
   DFORGE_DECISIONS_URL="http://127.0.0.1:1/v1/decisions" ask "${Q[@]}"
   check "A2: an endpoint that cannot be reached" "$rc:$out" "3:no ruling reason=error"
-  reply alpha 0.95 alpha 0.95 0.05 0.02 1000 4000
+  # An ask spends seconds outside the request on a slow host (about 4 under
+  # Git Bash), so each late answer lands past decide's own guard (timeout + 15)
+  # and the bound sits between the request timeout and that guard.
+  reply alpha 0.95 alpha 0.95 0.05 0.02 1000 20000
   local before; before=$(date +%s)
   DFORGE_DECISIONS_TIMEOUT=1 ask "${Q[@]}"
   check "A2: no answer inside the shortened timeout" "$rc:$out" "3:no ruling reason=error"
-  check "A2: the shortened timeout bounds the wait" "$([ $(( $(date +%s) - before )) -lt 4 ] && echo yes || echo no)" "yes"
-  reply alpha 0.95 alpha 0.95 0.05 0.02 1000 33000
+  check "A2: the shortened timeout bounds the wait" "$([ $(( $(date +%s) - before )) -lt 12 ] && echo yes || echo no)" "yes"
+  reply alpha 0.95 alpha 0.95 0.05 0.02 1000 60000
   before=$(date +%s)
   out=$(cd "$WORK" && timeout 60 bash "$DECIDE" ask "${Q[@]}" </dev/null 2>>"$TMP/err"); rc=$?; out=${out//$'\r'/}
+  local waited=$(( $(date +%s) - before ))
   check "A2: an answer that arrives after 30 seconds is no ruling" "$rc:$out" "3:no ruling reason=error"
-  check "A2: the default wait ends near 30 seconds, before the late answer" "$([ $(( $(date +%s) - before )) -le 32 ] && echo yes || echo no)" "yes"
+  check "A2: the default wait ends near 30 seconds, before the late answer" "$([ "$waited" -ge 29 ] && [ "$waited" -lt 42 ] && echo yes || echo no)" "yes"
 }
 
 a3() {
@@ -511,8 +515,11 @@ a13() {
   jrun API_JUDGE_CHAIN=2 STUB_JUDGE_ANTHROPIC=hang
   check "A13: the chain's seconds end a row that has more of its own: TIMEOUT, no further budget" "$rc $(tried)$(started)$([ $(( $(date +%s) - before )) -lt 20 ] && echo bounded)" "3 anthropic TIMEOUT timeout 1bounded"
   before=$(date +%s)
-  jrun API_JUDGE_CHAIN=5 STUB_JUDGE_ANTHROPIC=slow-fail STUB_JUDGE_SLOW=3 STUB_JUDGE_OPENAI=hang
-  check "A13: a later row gets only what is left of the chain: TIMEOUT, agentrouter never tried" "$rc $(tried)$(started)$([ $(( $(date +%s) - before )) -lt 20 ] && echo bounded)" "3 anthropic FAILED error openai TIMEOUT timeout 2bounded"
+  # The chain also pays for each row's set-up and worktree snapshots, a few
+  # seconds a row on a slow host, so it leaves the second row room to start;
+  # the bound stays under that row's own 30 seconds.
+  jrun API_JUDGE_CHAIN=12 STUB_JUDGE_ANTHROPIC=slow-fail STUB_JUDGE_SLOW=3 STUB_JUDGE_OPENAI=hang
+  check "A13: a later row gets only what is left of the chain: TIMEOUT, agentrouter never tried" "$rc $(tried)$(started)$([ $(( $(date +%s) - before )) -lt 25 ] && echo bounded)" "3 anthropic FAILED error openai TIMEOUT timeout 2bounded"
   check "A13: the second timed-out CLI is stopped" "$(kill -0 "$(cat "$TMP/stub.pid")" 2>/dev/null && echo running || echo stopped)" "stopped"
   rm -f "$REPORT"
   jrun QA_MUTATE=untracked
