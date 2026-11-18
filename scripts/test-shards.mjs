@@ -213,9 +213,10 @@ export const windowsSeconds = {
 };
 
 // plan-lint runs about 320 checks of a few processes each, which take over
-// twenty minutes on a Windows runner and under a minute on Linux. next-step and
-// auto-run take about 760-800 s on a Windows runner; 1000 s keeps that within
-// 80% of their limit. task-step's limit applies to each of its parts.
+// twenty minutes on a Windows runner and under a minute on Linux. next-step
+// takes about 760-800 s on a Windows runner; 1000 s keeps that within 80% of
+// its limit. auto-run took 479 s on one runner and over 1000 s on another, so
+// its limit is 1600 s. task-step's limit applies to each of its parts.
 export const suiteSeconds = {
   'tests/dforge/plan-lint.test.sh': 1200,
   'tests/dforge/speed-and-cost-followups.acceptance.test.sh': 1200,
@@ -223,14 +224,14 @@ export const suiteSeconds = {
   'tests/dforge/task-step-base.test.sh': 1200,
   'tests/dforge/task-step.test.sh': 900,
   'tests/dforge/next-step.test.sh': 1000,
-  'tests/dforge/auto-run.test.sh': 1000,
+  'tests/dforge/auto-run.test.sh': 1600,
   'tests/dforge/measured-proposals.acceptance.test.sh': 900,
   'tests/dforge/next-session-routing.acceptance.test.sh': 650,
   'tests/dforge/turn-end.test.sh': 650,
   'tests/dagents/turn-end.test.sh': 750,
   'tests/dforge/per-worktree-handoff.acceptance.test.sh': 1000,
   'tests/dagents/per-worktree-handoff.acceptance.test.sh': 1000,
-  'tests/dagents/auto-run.test.sh': 1000,
+  'tests/dagents/auto-run.test.sh': 1600,
   'tests/dagents/faster-plans.acceptance.test.sh': 1125,
   'tests/dagents/next-step.test.sh': 1000,
   'tests/dagents/plan-lint.test.sh': 1200,
