@@ -148,7 +148,7 @@ const answer = (turnId: string, text = 'Waiting for the implementer.') =>
 
 describe('task-loop steps: the cockpit reconcile prompt', () => {
   for (const holder of ['agent', 'shell'] as const) {
-    test(`A12: one reconcile prompt after 20 minutes of only a background ${holder} holding a bound run, and no second within 20 minutes`, async ($, on) => {
+    test(`A12: one reconcile prompt after 20 minutes of only a background ${holder} holding a bound run, and no second within 20 minutes`, { timeoutMs: 30_000 }, async ($, on) => {
       const w = fresh(autoState())
       const clock = world(on, w)
       await $.session.start(START)

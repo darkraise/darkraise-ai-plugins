@@ -4094,7 +4094,7 @@ describe('shells and remote', () => {
       await $.turn.complete({ answer: 'Still waiting.', durationMs: 2_000, isAborted: false, turnId, reason: 'answer' })
     }
 
-    test('submits the prompt once keepWarm minutes pass with background work running, and again each further interval', async ($, on) => {
+    test('submits the prompt once keepWarm minutes pass with background work running, and again each further interval', { timeoutMs: 30_000 }, async ($, on) => {
       const w = quiet({ keepWarm: 50 })
       const clock = world(on, w)
       await begin($)

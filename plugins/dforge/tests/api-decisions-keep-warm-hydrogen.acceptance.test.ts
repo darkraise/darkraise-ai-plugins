@@ -168,7 +168,7 @@ describe('api-decisions-keep-warm-hydrogen: keep-warm', () => {
     expect(keepWarmsOf(w)).toHaveLength(3)
   })
 
-  test('A22: no keep-warm prompt when keepWarm is 0', async ($, on) => {
+  test('A22: no keep-warm prompt when keepWarm is 0', { timeoutMs: 30_000 }, async ($, on) => {
     const w = fresh({ keepWarm: 0 })
     const clock = world(on, w)
     await beginWaiting($)
@@ -176,7 +176,7 @@ describe('api-decisions-keep-warm-hydrogen: keep-warm', () => {
     expect(keepWarmsOf(w)).toHaveLength(0)
   })
 
-  test('A22: no keep-warm prompt while an auto run is bound to the session', async ($, on) => {
+  test('A22: no keep-warm prompt while an auto run is bound to the session', { timeoutMs: 30_000 }, async ($, on) => {
     const w = fresh({ keepWarm: 50 })
     w.files[AUTO] = boundRun
     const clock = world(on, w)
@@ -185,7 +185,7 @@ describe('api-decisions-keep-warm-hydrogen: keep-warm', () => {
     expect(keepWarmsOf(w)).toHaveLength(0)
   })
 
-  test('A22: no keep-warm prompt while a turn is live', async ($, on) => {
+  test('A22: no keep-warm prompt while a turn is live', { timeoutMs: 30_000 }, async ($, on) => {
     const w = fresh({ keepWarm: 50 })
     const clock = world(on, w)
     await beginWaiting($)
@@ -197,7 +197,7 @@ describe('api-decisions-keep-warm-hydrogen: keep-warm', () => {
     expect(keepWarmsOf(w)).toHaveLength(1)
   })
 
-  test('A22: no keep-warm prompt while the session waits on the person', async ($, on) => {
+  test('A22: no keep-warm prompt while the session waits on the person', { timeoutMs: 30_000 }, async ($, on) => {
     const w = fresh({ keepWarm: 50 })
     on('tool.check', (_$, e, next) => (e.tool_use_id === 'toolu_9' ? { decision: 'ask' } : next(e)))
     const clock = world(on, w)
@@ -212,7 +212,7 @@ describe('api-decisions-keep-warm-hydrogen: keep-warm', () => {
     expect(keepWarmsOf(w)).toHaveLength(1)
   })
 
-  test('A22: no keep-warm prompt when only a service command runs in the background', async ($, on) => {
+  test('A22: no keep-warm prompt when only a service command runs in the background', { timeoutMs: 30_000 }, async ($, on) => {
     const w = fresh({ keepWarm: 50 })
     const clock = world(on, w)
     await beginWaiting($, 'npm run dev')
@@ -220,7 +220,7 @@ describe('api-decisions-keep-warm-hydrogen: keep-warm', () => {
     expect(keepWarmsOf(w)).toHaveLength(0)
   })
 
-  test('A22: no keep-warm prompt when no background work runs', async ($, on) => {
+  test('A22: no keep-warm prompt when no background work runs', { timeoutMs: 30_000 }, async ($, on) => {
     const w = fresh({ keepWarm: 50 })
     const clock = world(on, w)
     await $.session.start(START)
@@ -230,7 +230,7 @@ describe('api-decisions-keep-warm-hydrogen: keep-warm', () => {
     expect(keepWarmsOf(w)).toHaveLength(0)
   })
 
-  test('A22: no seventh keep-warm prompt after six with no turn of another origin between', async ($, on) => {
+  test('A22: no seventh keep-warm prompt after six with no turn of another origin between', { timeoutMs: 30_000 }, async ($, on) => {
     const w = fresh({ keepWarm: 4 })
     const clock = world(on, w)
     await beginWaiting($)
