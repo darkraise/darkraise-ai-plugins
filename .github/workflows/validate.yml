@@ -81,7 +81,7 @@ jobs:
         timeout-minutes: 6
         run: |
           for attempt in 1 2 3; do
-            timeout 120s npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.306 && break
+            timeout 120s npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.327 && break
             [ "$attempt" -lt 3 ] || exit 1
           done
           # The package's postinstall links its native binary; an npm that
@@ -184,7 +184,7 @@ jobs:
         timeout-minutes: 6
         run: |
           for attempt in 1 2 3; do
-            timeout 120s npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.306 && break
+            timeout 120s npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.327 && break
             [ "$attempt" -lt 3 ] || exit 1
           done
           # The package's postinstall links its native binary; an npm that

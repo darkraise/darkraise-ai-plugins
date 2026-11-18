@@ -615,7 +615,7 @@ already gives the session a turn every 20 minutes.
 
 ## Cockpit
 
-Claude Code only. Built and tested against Claude Code 2.1.299 to 2.1.325; the
+Claude Code only. Built and tested against Claude Code 2.1.299 to 2.1.327; the
 mod API is early access and may change between releases.
 
 ### What it does
