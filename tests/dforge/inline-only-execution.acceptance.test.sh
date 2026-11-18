@@ -278,7 +278,7 @@ fi
 
 # ---------------------------------------------------------------------- A13
 if selected A13; then
-  CLAUDE_BIN=${CLAUDE_BIN:-/root/.local/bin/claude}
+  CLAUDE_BIN=${CLAUDE_BIN:-$(command -v claude 2>/dev/null)}
   if [ -n "${DR_TEST_ALL:-}" ]; then
     printf 'skip - A13: validate-repository, claude plugin validate and claude plugin test run as their own jobs under test-all\n'
   else

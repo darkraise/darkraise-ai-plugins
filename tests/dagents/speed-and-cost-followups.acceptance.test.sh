@@ -434,7 +434,7 @@ fi
 if selected A23; then
   out=$(cd "$REPO_ROOT" && timeout 120 node scripts/validate-repository.mjs 2>&1); rc=$?
   check "A23: node scripts/validate-repository.mjs passes" "$rc" "0"
-  CLAUDE_BIN=${CLAUDE_BIN:-/root/.local/bin/claude}
+  CLAUDE_BIN=${CLAUDE_BIN:-$(command -v claude 2>/dev/null)}
   if [ -x "$CLAUDE_BIN" ]; then
     out=$(cd "$REPO_ROOT" && timeout 120 "$CLAUDE_BIN" plugin validate . 2>&1); rc=$?
     check "A23: claude plugin validate passes on the marketplace" "$rc" "0"

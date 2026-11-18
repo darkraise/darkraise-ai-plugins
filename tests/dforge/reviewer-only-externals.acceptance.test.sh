@@ -155,7 +155,7 @@ WORK="$TMP/work"
 mkdir -p "$WORK"
 git -C "$WORK" init -q -b main
 git -C "$WORK" config user.name Darkraise
-git -C "$WORK" config user.email quangtc94@gmail.com
+git -C "$WORK" config user.email darkraise@example.com
 printf 'original\n' > "$WORK/tracked.txt"
 git -C "$WORK" add -A
 git -C "$WORK" commit -q -m base
@@ -315,7 +315,7 @@ PLANREPO="$TMP/planrepo"
 mkdir -p "$PLANREPO/docs"
 git -C "$PLANREPO" init -q -b main
 git -C "$PLANREPO" config user.name Darkraise
-git -C "$PLANREPO" config user.email quangtc94@gmail.com
+git -C "$PLANREPO" config user.email darkraise@example.com
 printf '# Spec\n' > "$PLANREPO/docs/spec.md"
 cat > "$PLANREPO/route.md" <<'EOF'
 # Route Plan
@@ -603,7 +603,7 @@ EOF
   mkdir -p "$R/docs"
   git -C "$R" init -q -b main
   git -C "$R" config user.name Darkraise
-  git -C "$R" config user.email quangtc94@gmail.com
+  git -C "$R" config user.email darkraise@example.com
   printf '# Spec\n' > "$R/docs/spec.md"
   printf '%s\n' "$body" > "$R/plan-plain.md"
   printf '%s\n' "$body" | awk '/^### Task 2:/ { t = 1 } { print } t && /^\*\*Implementer:\*\*/ { print "**Executor:** codex gpt-6.1-sol / high"; t = 0 }' > "$R/plan-exec.md"
@@ -692,7 +692,7 @@ prepare_step_repo() {
   mkdir -p "$STEPREPO/docs"
   git -C "$STEPREPO" init -q -b main
   git -C "$STEPREPO" config user.name Darkraise
-  git -C "$STEPREPO" config user.email quangtc94@gmail.com
+  git -C "$STEPREPO" config user.email darkraise@example.com
   printf '# Spec\n' > "$STEPREPO/docs/spec.md"
   cp "$PLANREPO/route.md" "$STEPREPO/route.md"
   git -C "$STEPREPO" add -A

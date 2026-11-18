@@ -41,7 +41,7 @@ if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
 unset CLAUDE_CONFIG_DIR CODEX_HOME AR_SESSION DAGENTS_BUDGET DR_SUPERPOWERS_BUDGET CLAUDE_PROJECT_DIR DAGENTS_LENS_CAP DAGENTS_LENS_MINOR_FROM
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DAGENTS_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
-export GIT_AUTHOR_NAME=Darkraise GIT_AUTHOR_EMAIL=quangtc94@gmail.com GIT_COMMITTER_NAME=Darkraise GIT_COMMITTER_EMAIL=quangtc94@gmail.com
+export GIT_AUTHOR_NAME=Darkraise GIT_AUTHOR_EMAIL=darkraise@example.com GIT_COMMITTER_NAME=Darkraise GIT_COMMITTER_EMAIL=darkraise@example.com
 export DAGENTS_CODEX_SESSION_DIR="$TMP/codex-sessions" CLAUDE_CODE_SESSION_ID=review-depth-qa
 
 WANT=("$@")
