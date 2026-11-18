@@ -2,7 +2,8 @@
 
 Notes for moving to the current plugin names and for re-registering the
 marketplace. dforge's own upgrade steps live in its README:
-[Migrating to 4.0](../plugins/dforge/README.md#migrating-to-40).
+[Migrating to 5.0](../plugins/dforge/README.md#migrating-to-50) and the earlier
+Migrating sections.
 
 ## Re-registering the marketplace
 

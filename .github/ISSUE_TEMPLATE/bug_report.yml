@@ -8,6 +8,8 @@ body:
       label: Plugin
       options:
         - dforge
+        - dagents
+        - dflow
         - dr-status
         - darkraise-ui
         - darkraise-win32ui

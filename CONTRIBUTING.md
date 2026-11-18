@@ -4,17 +4,19 @@ Thanks for your interest. This repository is a plugin marketplace for Claude
 Code and Codex; each plugin lives under `plugins/<name>/`. Bug reports, fixes and
 documentation improvements are welcome. For a new feature or a new plugin, open
 an issue first so the scope can be agreed before you write code.
+Everyone taking part is expected to follow the
+[code of conduct](CODE_OF_CONDUCT.md).
 
 ## Repository layout
 
 | Path | Contents |
 | --- | --- |
-| `.claude-plugin/marketplace.json` | The Claude Code catalog: `dforge`, `dflow`, `dr-status`, `darkraise-ui`, `darkraise-win32ui`. |
-| `.agents/plugins/marketplace.json` | The Codex catalog: `dforge` and the two UI plugins. Codex discovers it from the repository root. |
+| `.claude-plugin/marketplace.json` | The Claude Code catalog: `dforge`, `dagents`, `dflow`, `dr-status`, `darkraise-ui`, `darkraise-win32ui`. |
+| `.agents/plugins/marketplace.json` | The Codex catalog: `dforge`, `dagents` and the two UI plugins. Codex discovers it from the repository root. |
 | `plugins/<name>/` | One plugin as it installs: its manifests, skills, hooks and scripts, plus a mod's `*.test.ts` files and the fixtures they import, which `claude plugin test` finds only inside the plugin. |
 | `scripts/` | Repository validation and the full test runner. |
 | `tests/` | Repository-level tests (catalog layout, shards, UI discovery), and in `tests/<name>/` each plugin's shell and Node suites, kept out of the installed plugin. |
-| `docs/` | Design records, testing notes and the migration guide. |
+| `docs/` | The marketplace and dflow design records, the migration guide and the README images. Maintainers' dforge and dflow working records stay local and are ignored. |
 
 ## Conventions
 
@@ -46,9 +48,11 @@ repository root with a timeout on each, and stop anything they start:
 ```text
 node scripts/validate-repository.mjs
 node scripts/test-all.mjs
+node scripts/test-all.mjs --plugin dagents
 claude plugin validate .
 claude plugin validate plugins/<plugin>
 claude plugin test plugins/dforge
+claude plugin test plugins/dagents
 claude plugin test plugins/dflow
 ```
 
@@ -65,7 +69,8 @@ installed plugins or call a paid model.
 
 CI runs the same checks on Ubuntu, and on Windows split across fourteen shards
 (`--shard 1/14` through `--shard 14/14`; add `--list` to inspect a shard without
-running it). A new shell suite is discovered automatically, but it needs a
+running it), plus thirteen for dagents (`--plugin dagents --shard N/13`). A pull
+request from a fork always runs on GitHub's hosted runners. A new shell suite is discovered automatically, but it needs a
 weight in `scripts/test-shards.mjs`: `tests/test-shards.test.mjs` fails without
 one. A weight above 80% of the suite's limit (its `suiteSeconds` in
 `scripts/test-all.mjs`, else 600 s) fails the same test until the limit is

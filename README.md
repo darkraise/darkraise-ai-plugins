@@ -76,7 +76,7 @@ client's native agent tools; see
 ### Requirements
 
 dforge needs Bash, Git and `jq` (on Windows, Git for Windows provides Bash).
-The cockpit is built against Claude Code 2.1.299 to 2.1.306; the mod API it
+The cockpit is built against Claude Code 2.1.299 to 2.1.325; the mod API it
 uses is early access and may change between releases.
 
 ## dforge in brief
@@ -154,13 +154,15 @@ anything else patch), commits the bump to `main`, and tags and publishes it
 as `<plugin>-v<version>`. Renamed plugins, retired plugins and
 re-registering the marketplace are covered in [docs/migration.md](docs/migration.md);
 dforge's own steps are in its README under
-[Migrating to 4.0](plugins/dforge/README.md#migrating-to-40).
+[Migrating to 5.0](plugins/dforge/README.md#migrating-to-50) and the earlier
+Migrating sections.
 
 ## Contributing
 
 Bug reports and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md)
-for the repository layout, conventions and the checks to run. Report security
-issues privately as described in [SECURITY.md](SECURITY.md).
+for the repository layout, conventions and the checks to run, and the
+[code of conduct](CODE_OF_CONDUCT.md). Report security issues privately as
+described in [SECURITY.md](SECURITY.md).
 
 ## License
 
