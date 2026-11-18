@@ -151,10 +151,10 @@ dcc_doctor() {
     if cmp -s "$DCC_SRC_DIR/VERSION" "$DCC_DEST/VERSION"; then
       printf 'ok   - installed copy matches the plugin version\n'
     else
-      printf 'warn - installed copy is stale; run: /dr-status install\n'
+      printf 'warn - installed copy is stale; run: /dr-status:dr-status install\n'
     fi
   else
-    printf 'FAIL - scripts are not installed; run: /dr-status install\n'; rc=1
+    printf 'FAIL - scripts are not installed; run: /dr-status:dr-status install\n'; rc=1
   fi
   if [ -r "$DCC_DEST/icons.detected" ]; then
     read -r dcc_m dcc_w < "$DCC_DEST/icons.detected"
@@ -198,7 +198,7 @@ dcc_doctor() {
       cmp -s "$DCC_SRC_DIR/VERSION" "$DCC_DEST/VERSION" || printf 'warn - stale or missing script version for %s\n' "$d"
       iv="$(jq -r '.statusLine.refreshInterval // "unset"' "$d/settings.json" 2>/dev/null)"
       if [ "$iv" != "$DCC_REFRESH" ]; then
-        printf 'warn - %s has refreshInterval %s; a resize will lag. Run: /dr-status install\n' \
+        printf 'warn - %s has refreshInterval %s; a resize will lag. Run: /dr-status:dr-status install\n' \
           "$d" "$iv"
       fi
     else

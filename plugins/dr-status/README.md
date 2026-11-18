@@ -91,7 +91,7 @@ would read as empty at any figure below 100% — so the percentage carries the
 reading alone. This is the one place where the widest rendering is not simply
 the fullest one.
 
-Run `/dr-status preview` to see your own config at five widths side by
+Run `/dr-status:dr-status preview` to see your own config at five widths side by
 side. A block too narrow to frame is labelled `unframed` rather than given a
 tier -- but its content still shrinks to the known width, same as a framed
 block; only the border and the tier label are missing.
@@ -136,8 +136,8 @@ Add the plugin, then install the status line:
 ```
 
 ```
-/dr-status install        # the account you are running now
-/dr-status install --all  # every account on this machine
+/dr-status:dr-status install        # the account you are running now
+/dr-status:dr-status install --all  # every account on this machine
 ```
 
 Installing copies the scripts to `~/.claude/dcc-statusline/` and adds a
@@ -254,7 +254,7 @@ turn icons on yourself:
 Icon width matters when you do: a font named "Nerd Font" draws icons at two
 cells, while its "Nerd Font Mono" variant draws them at one. Getting this wrong
 shifts the box's right edge by one cell per icon. Set `icons.width` if the
-detected value is wrong, and run `/dr-status doctor` to see what was
+detected value is wrong, and run `/dr-status:dr-status doctor` to see what was
 detected.
 
 ## Design notes
@@ -275,7 +275,7 @@ so a missing block shortens the line instead of breaking it.
 
 ## Troubleshooting
 
-Run `/dr-status doctor`. It checks `jq` and `git`, whether the installed copy
+Run `/dr-status:dr-status doctor`. It checks `jq` and `git`, whether the installed copy
 matches the plugin version, whether the config parses **and validates** — naming
 unknown keys, unrecognised names and enum values, invalid colours, and
 out-of-range numbers; a value of the wrong JSON type inside a valid key can
@@ -291,5 +291,5 @@ key the plugin resolved for the current `CLAUDE_CONFIG_DIR`, which is what your
 all resolve to the same `~/.claude-alt` key, so write the `~` form.
 
 - **The status line does not follow a terminal resize.** The account's
-  `refreshInterval` has drifted from 2. Run `/dr-status doctor` to confirm,
-  then `/dr-status install --all`.
+  `refreshInterval` has drifted from 2. Run `/dr-status:dr-status doctor` to confirm,
+  then `/dr-status:dr-status install --all`.

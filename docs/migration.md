@@ -95,8 +95,8 @@ Statusline script storage remains `~/.claude/dcc-statusline/`; a registry at
 `~/.claude/dcc-statusline-installations.json` remembers custom account
 destinations. Set `DCC_STATUSLINE_HOME` only when installing or intentionally
 moving a copy. Sync, status, doctor and uninstall use the recorded destination
-afterward. To register the status line, run `/dr-status install`, or
-`/dr-status install --all` for all discovered accounts.
+afterward. To register the status line, run `/dr-status:dr-status install`, or
+`/dr-status:dr-status install --all` for all discovered accounts.
 
 ## Retired plugins
 
