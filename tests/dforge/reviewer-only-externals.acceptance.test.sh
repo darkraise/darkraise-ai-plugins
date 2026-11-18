@@ -79,6 +79,14 @@ while IFS= read -r dir; do
     [ -e "$SEAL/$name" ] || ln -s "$tool" "$SEAL/$name" 2>/dev/null
   done
 done < <(for tool in bash node jq git cat date sleep timeout setsid; do dirname "$(type -P "$tool")"; done | sort -u)
+# A Chocolatey shim such as jq.exe finds its program from its own directory, so
+# these run from where they are. The link goes first: writing to it would
+# overwrite the program it names.
+for tool in jq node git; do
+  rm -f "$SEAL/$tool"
+  printf '#!%s\nexec "%s" "$@"\n' "$BASH" "$(type -P "$tool")" > "$SEAL/$tool"
+  chmod +x "$SEAL/$tool"
+done
 
 # The agy on PATH is a thin wrapper over the stub: for a print call it can log
 # start and end times and wait, so a test can see two reviewers overlap.
@@ -100,8 +108,10 @@ esac
 exec "$FIXTURE_AGY" "\$@"
 EOF
 chmod +x "$AGYBIN/agy"
-export PATH="$AGYBIN:$SEAL"
-NOAGY_PATH="$SEAL"
+# PATH takes POSIX paths: the drive colon of TMP's C:/ form would split an entry.
+path_entry() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi; }
+NOAGY_PATH=$(path_entry "$SEAL")
+export PATH="$(path_entry "$AGYBIN"):$NOAGY_PATH"
 
 # Node cannot run a bash-script stub on Windows, which the agy gate's sign-in
 # probe needs.
