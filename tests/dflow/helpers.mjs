@@ -121,6 +121,11 @@ export function dflowAsync(root, args, { env = {} } = {}) {
       cwd: root,
       env: { ...process.env, HOME: home, DFLOW_HOME: path.join(home, '.dflow'), DFLOW_TODAY: '2026-11-12', CLAUDE_CONFIG_DIR: '', CLAUDE_CODE_SESSION_ID: '', ...GUARD_ENV, ...env },
     });
+    // A hook reads stdin to its end. A Windows pipe left open blocks that read
+    // until the kill below; on Linux the read fails at once with EAGAIN. A
+    // child that exits first fails the write: EPIPE, or EOF on Windows.
+    child.stdin.on('error', () => {});
+    child.stdin.end();
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });

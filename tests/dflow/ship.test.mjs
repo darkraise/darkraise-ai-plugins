@@ -146,7 +146,8 @@ test('a refused closing commit leaves the plan unshipped and every file as it wa
   const before = [PLAN_FILE, 'docs/dflow/board.md', 'docs/dflow/decisions.md'].map(file => read(root, file));
   const shipped = dflow(root, ['ship']);
   assert.equal(shipped.status, 1);
-  assert.match(shipped.stdout, /closing commit failed, so the plan is not shipped and nothing was changed:\nrefused by the hook/);
+  // Git for Windows warns about line endings before the hook's own output.
+  assert.match(shipped.stdout, /closing commit failed, so the plan is not shipped and nothing was changed:\n(?:.*\n)*refused by the hook$/m);
   assert.deepEqual([PLAN_FILE, 'docs/dflow/board.md', 'docs/dflow/decisions.md'].map(file => read(root, file)), before);
   assert.equal(git(root, 'status', '--porcelain', '--untracked-files=no'), '');
   fs.rmSync(path.join(root, '.git/hooks/pre-commit'));
