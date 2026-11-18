@@ -256,6 +256,13 @@ A run's turn ends only with one of three lines as the last line of the message:
 - `Auto run: clearing` after `scripts/auto-run clear` exits 0;
 - `Auto run: switching` after `scripts/auto-run switch` exits 0.
 
+A message that ends on a sentinel line carries no next-step block: no launch
+command and no first prompt to paste. `scripts/next-step` still writes the
+block into `latest.md`, where `scripts/auto-run clear` reads it, and the
+cockpit submits the first prompt itself; printed in the message, it reads as a
+request to start the next session by hand while the run is still going. Only
+a run that has stopped ends on the block (§Stopping).
+
 `scripts/auto-run pending` prints `compact`, `after-compact`, `handoff`,
 `clear`, `resume`, `switch` or `none`. `handoff` is a
 compaction that left too much
@@ -350,7 +357,8 @@ exit 5 runs
 and ends as Stopping says; do not run `scripts/auto-run clear`.
 
 When `scripts/auto-run clear` exits 0, end the turn with `Auto run: clearing`
-as the last line, below the next-step block. The cleared session runs on the
+as the last line, with no next-step block above it (§Ending a turn). The
+cleared session runs on the
 launch command's model and effort: the cockpit sends its main-loop requests on
 them and never writes them to the user settings. On exit 5 the run has stopped (the
 third self-resume in a row without a completed task): end with the next-step

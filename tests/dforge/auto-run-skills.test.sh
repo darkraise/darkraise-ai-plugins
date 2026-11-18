@@ -15,12 +15,22 @@ names() { # names <label> <file> <text>
   check "$1" "$(grep -qF -- "$3" "$2" && echo yes || echo no)" "yes"
 }
 
+flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
+
 names "executing-plans: compact ends the turn" "$P/skills/executing-plans/SKILL.md" '`Auto run: compacting` as its last line'
 R="$P/reference/auto-run.md"
 names "auto-run.md: the switching line" "$R" '- `Auto run: switching` after `scripts/auto-run switch` exits 0.'
 
+# --- a running auto run prints no resume guide: the cockpit submits its prompt ---
+ending=$(awk '/^## Ending a turn/ { f = 1; next } f && /^## / { exit } f' "$R" | tr '\n' ' ' | tr -s ' ')
+check "auto-run.md: a sentinel turn prints no next-step block" \
+  "$(grep -cF 'A message that ends on a sentinel line carries no next-step block' <<<"$ending")" "1"
+check "auto-run.md: §Clears no longer ends below the next-step block" "$(grep -c 'below the next-step block' "$R")" "0"
+H="$P/skills/handoff/SKILL.md"
+check "handoff: an auto run skips step 5's resume guide" \
+  "$(flat "$H" | grep -cF 'run steps 0-4 only: no resume guide')" "1"
+
 # --- the ruling ladder starts at the API rungs ---
-flat() { tr '\n' ' ' < "$1" | tr -s ' '; }
 PLAN_REF="$P/skills/writing-plans/references/auto-run-plan.md"
 check "A31: auto-run-plan.md does not name the Opus seat" "$(grep -c 'dforge:judge-opus' "$PLAN_REF")" "0"
 check "A31: auto-run-plan.md sends a planning choice up the ladder from its first rung" \

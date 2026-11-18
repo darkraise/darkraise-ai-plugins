@@ -38,8 +38,9 @@ cleanly."
   (auto-run.md §The switch): only steps 0-3 below run, and the cockpit clears
   the session. It also clears before finishing
   (auto-run.md §Finishing), through dforge:finishing-a-development-branch.
-  On a handoff the steps below run as always, but the turn does not
-  end on the next-step block: return to the step that invoked this skill,
+  On a handoff run steps 0-4 only: no resume guide, and the message does
+  not print the next-step block, since the cockpit submits its first prompt.
+  Return to the step that invoked this skill,
   which runs `scripts/auto-run clear` and ends the turn (auto-run.md §Clears).
   This skill never runs `scripts/auto-run clear` itself.
 - Your human partner says they are stepping away for more than an hour, or
