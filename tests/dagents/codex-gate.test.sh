@@ -242,8 +242,10 @@ done
 fresh; PATH="$NOTIMEOUT" gate usable
 check "without timeout on PATH Codex is unusable, as the runner would die" "$out" \
   "codex-gate usable=false reason=no-timeout review=false lane=false resets_at=- source=probe"
-# Homebrew's coreutils installs it as gtimeout.
-ln -s "$(type -P timeout)" "$NOTIMEOUT/gtimeout" 2>/dev/null || cp "$(type -P timeout)" "$NOTIMEOUT/gtimeout"
+# Homebrew's coreutils installs it as gtimeout. A wrapper, not a link: uutils'
+# timeout is a multi-call binary that reads the name it was started under.
+printf '#!%s\nexec "%s" "$@"\n' "$BASH" "$(type -P timeout)" > "$NOTIMEOUT/gtimeout"
+chmod +x "$NOTIMEOUT/gtimeout"
 fresh; PATH="$NOTIMEOUT" gate usable
 check "gtimeout stands in for timeout" "$out" \
   "codex-gate usable=true reason=ok review=false lane=false resets_at=- source=probe"
