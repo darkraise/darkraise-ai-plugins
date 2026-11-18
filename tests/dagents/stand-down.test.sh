@@ -41,8 +41,12 @@ check "fork: guard runs" "$( [ -e "$TMP/data/workflow-guard/s2" ] && echo yes)" 
 
 printf '{"enabledPlugins":{"dforge@darkraise":false}}' > "$TMP/claude/settings.json"
 mkdir -p "$TMP/nonode"
-for tool in bash sh cat jq git sed awk tr mkdir rm date grep head tail sort uname mktemp dirname basename printf wc cut env ls find cp mv touch stat od; do
-  where=$(command -v "$tool" 2>/dev/null) && [ "$where" != "$(command -v node 2>/dev/null)" ] && ln -sf "$where" "$TMP/nonode/$tool"
+# Wrappers, not links: Git Bash's ln copies, and a copied Chocolatey shim such
+# as jq.exe no longer finds the program it stands for.
+for tool in bash sh cat jq git sed awk tr mkdir rm date grep head tail sort uname mktemp dirname basename printf wc cut env ls find cp mv touch stat od cygpath; do
+  where=$(type -P "$tool" 2>/dev/null) || continue
+  printf '#!%s\nexec "%s" "$@"\n' "$BASH" "$where" > "$TMP/nonode/$tool"
+  chmod +x "$TMP/nonode/$tool"
 done
 with_node=$(event resume SessionStart | (cd "$TMP/project" && bash "$ROOT/scripts/session-start.sh" 2>/dev/null))
 no_node_out=$(event resume SessionStart | (cd "$TMP/project" && PATH="$TMP/nonode" bash "$ROOT/scripts/session-start.sh" 2>"$TMP/nonode.err"))
