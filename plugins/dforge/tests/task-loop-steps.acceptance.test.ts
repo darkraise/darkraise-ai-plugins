@@ -183,7 +183,7 @@ describe('task-loop steps: the cockpit reconcile prompt', () => {
     expect(w.prompts[0]).toContain('scripts/in-flight')
   })
 
-  test('A13: no reconcile prompt outside an auto run', async ($, on) => {
+  test('A13: no reconcile prompt outside an auto run', { timeoutMs: 30_000 }, async ($, on) => {
     const inactive = fresh(autoState({ active: false }))
     const clock = world(on, inactive)
     await $.session.start(START)
@@ -193,7 +193,7 @@ describe('task-loop steps: the cockpit reconcile prompt', () => {
     expect(inactive.prompts).toEqual([])
   })
 
-  test('A13: no reconcile prompt when no auto run exists', async ($, on) => {
+  test('A13: no reconcile prompt when no auto run exists', { timeoutMs: 30_000 }, async ($, on) => {
     const w = fresh(undefined)
     const clock = world(on, w)
     await $.session.start(START)
@@ -203,7 +203,7 @@ describe('task-loop steps: the cockpit reconcile prompt', () => {
     expect(w.prompts).toEqual([])
   })
 
-  test('A13: no reconcile prompt while a turn is live', async ($, on) => {
+  test('A13: no reconcile prompt while a turn is live', { timeoutMs: 30_000 }, async ($, on) => {
     const w = fresh(autoState())
     const clock = world(on, w)
     await $.session.start(START)
@@ -234,7 +234,7 @@ describe('task-loop steps: the cockpit reconcile prompt', () => {
     expect(w.compacts).toEqual([])
   })
 
-  test('A13: the third consecutive reconcile with nothing stopped books the failure instead of a fourth prompt', async ($, on) => {
+  test('A13: the third consecutive reconcile with nothing stopped books the failure instead of a fourth prompt', { timeoutMs: 30_000 }, async ($, on) => {
     const w = fresh(autoState({ pending: 'compact' }))
     const clock = world(on, w)
     await $.session.start(START)

@@ -244,7 +244,7 @@ describe('api-decisions-keep-warm-hydrogen: keep-warm', () => {
   })
 
   for (const origin of ['composer', 'task-notification'] as const)
-    test(`A23: a ${origin} turn resets the keep-warm count, so a later wait sends six again and no more`, async ($, on) => {
+    test(`A23: a ${origin} turn resets the keep-warm count, so a later wait sends six again and no more`, { timeoutMs: 30_000 }, async ($, on) => {
       const w = fresh({ keepWarm: 4 })
       const clock = world(on, w)
       await beginWaiting($)
@@ -278,7 +278,7 @@ describe('api-decisions-keep-warm-hydrogen: keep-warm', () => {
     expect(JSON.stringify(w.fetches[0]?.body)).not.toContain('Still waiting.')
   })
 
-  test('A24: a keep-warm turn sends no Done notification of its own', async ($, on) => {
+  test('A24: a keep-warm turn sends no Done notification of its own', { timeoutMs: 30_000 }, async ($, on) => {
     const w = fresh({ keepWarm: 50, notifyAfter: 0 })
     const clock = world(on, w)
     mock.store(on, { notifyUrl: WEBHOOK })

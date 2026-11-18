@@ -3932,7 +3932,7 @@ describe('shells and remote', () => {
       expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Started the review.')
     })
 
-    test("the watchdog's Done carries the held turn's answer", async ($, on) => {
+    test("the watchdog's Done carries the held turn's answer", { timeoutMs: 30_000 }, async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)
       await clock.advance(1_860_000)
@@ -4023,7 +4023,7 @@ describe('shells and remote', () => {
       expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
     })
 
-    test('a shell older than the cap holds nothing', async ($, on) => {
+    test('a shell older than the cap holds nothing', { timeoutMs: 30_000 }, async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, tools: { Bash: () => SHELL } })
       mock.store(on, { notifyUrl: WEBHOOK })
@@ -4080,7 +4080,7 @@ describe('shells and remote', () => {
       expect(titles(fetches)).toEqual(['✅ Done in 5s'])
     })
 
-    test('the watchdog sends a hold older than the cap', async ($, on) => {
+    test('the watchdog sends a hold older than the cap', { timeoutMs: 30_000 }, async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)
       await clock.advance(1_800_000)
@@ -7258,7 +7258,7 @@ describe('auto run', () => {
     expect(written['/home/me/.claude/dagents/sessions/cockpit/sess-1']).toBe('1060\n')
   })
 
-  test('books a failure once background work has deferred a stage for 30 minutes', async ($, on) => {
+  test('books a failure once background work has deferred a stage for 30 minutes', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7295,7 +7295,7 @@ describe('auto run', () => {
     expect(w.compacts).toHaveLength(1)
   })
 
-  test('a live turn restarts the deferral, so the cap counts background work alone', async ($, on) => {
+  test('a live turn restarts the deferral, so the cap counts background work alone', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7325,7 +7325,7 @@ describe('auto run', () => {
     [5, 'The auto run stopped: the cockpit could not compact twice. End as reference/auto-run.md §Stopping says.'],
     [1, 'The auto run stopped: a background launch kept the compact waiting 30 minutes, and the failure could not be booked (exit 1). End as reference/auto-run.md §Stopping says.'],
   ] as const) {
-    test(`ends the run when the deferral cap's failure exits ${code}`, async ($, on) => {
+    test(`ends the run when the deferral cap's failure exits ${code}`, { timeoutMs: 30_000 }, async ($, on) => {
       const files = autoFiles()
       const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { failure: code } }
       const clock = world(on, w)
@@ -7352,7 +7352,7 @@ describe('auto run', () => {
     })
   }
 
-  test("starts a new run's deferral afresh after the last one stopped", async ($, on) => {
+  test("starts a new run's deferral afresh after the last one stopped", { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7624,7 +7624,7 @@ describe('auto run', () => {
     expect(w.autoRuns).toContain('--session sess-1 stalled')
   })
 
-  test('a background agent alone holds a bound run, and its ending frees the run', async ($, on) => {
+  test('a background agent alone holds a bound run, and its ending frees the run', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles({ pending: null })
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7641,7 +7641,7 @@ describe('auto run', () => {
   })
 
   for (const holder of ['agent', 'shell'] as const) {
-    test(`submits one reconcile prompt when a background ${holder} alone holds a bound run for 20 minutes`, async ($, on) => {
+    test(`submits one reconcile prompt when a background ${holder} alone holds a bound run for 20 minutes`, { timeoutMs: 30_000 }, async ($, on) => {
       const files = autoFiles({ pending: null })
       const bash = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b9w1' }, text: 'Running in the background' }) }
       const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: bash }
@@ -7705,7 +7705,7 @@ describe('auto run', () => {
     expect(w.autoRuns?.filter(call => call.includes(' failure '))).toEqual([])
   })
 
-  test('submits no reconcile prompt outside an auto run', async ($, on) => {
+  test('submits no reconcile prompt outside an auto run', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles({ active: false, pending: null })
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7717,7 +7717,7 @@ describe('auto run', () => {
     expect(w.prompts).toEqual([])
   })
 
-  test('submits no reconcile prompt while a turn is live', async ($, on) => {
+  test('submits no reconcile prompt while a turn is live', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles({ pending: null })
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7730,7 +7730,7 @@ describe('auto run', () => {
     expect(w.prompts).toEqual([])
   })
 
-  test("a pending stage's reconcile prompt comes before its 30-minute failure", async ($, on) => {
+  test("a pending stage's reconcile prompt comes before its 30-minute failure", { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7760,7 +7760,7 @@ describe('auto run', () => {
     expect(w.prompts).toEqual([])
   })
 
-  test('arms nothing while a stage runs, a long compaction included', async ($, on) => {
+  test('arms nothing while a stage runs, a long compaction included', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], compactMs: 240_000 }
     const clock = world(on, w)

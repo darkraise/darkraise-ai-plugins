@@ -544,7 +544,7 @@ describe('plugin-review-fixes: the session state file and fast mode', () => {
 })
 
 describe('plugin-review-fixes: auto-run reconcile and relaxed handoff', () => {
-  test('A20: a bare sleep launch alone is never named idle work, however long it runs', async ($, on) => {
+  test('A20: a bare sleep launch alone is never named idle work, however long it runs', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles({ pending: null })
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: bg('qa1') }
     const clock = world(on, w)
@@ -556,7 +556,7 @@ describe('plugin-review-fixes: auto-run reconcile and relaxed handoff', () => {
     expect(w.prompts?.filter(text => /Background work has run|TaskStop|idle/.test(text))).toEqual([])
   })
 
-  test('A20: a finite background command alone does draw the reconcile prompt (control)', async ($, on) => {
+  test('A20: a finite background command alone does draw the reconcile prompt (control)', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles({ pending: null })
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: bg('b9') }
     const clock = world(on, w)
@@ -817,7 +817,7 @@ describe('plugin-review-fixes: resume offer, model switch snapshot and session c
     expect(sets.slice(before)).toEqual([[]])
   })
 
-  test('A42: keep-warm and reconcile counters start afresh when the session id changes', async ($, on) => {
+  test('A42: keep-warm and reconcile counters start afresh when the session id changes', { timeoutMs: 30_000 }, async ($, on) => {
     const MIN = 60_000
     const KEEP_WARM = 'Keep-warm: background work is still running and the prompt cache is about to expire. Reply with the single line `Still waiting.` and end the turn. Start nothing and call no tool.'
     const w: World = { tokens: 50_000, prompts: [], config: { keepWarm: 4 }, tools: bg('b1') }

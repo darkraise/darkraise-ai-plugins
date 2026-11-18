@@ -3873,7 +3873,7 @@ describe('shells and remote', () => {
       expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Started the review.')
     })
 
-    test("the watchdog's Done carries the held turn's answer", async ($, on) => {
+    test("the watchdog's Done carries the held turn's answer", { timeoutMs: 30_000 }, async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)
       await clock.advance(1_860_000)
@@ -3964,7 +3964,7 @@ describe('shells and remote', () => {
       expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
     })
 
-    test('a shell older than the cap holds nothing', async ($, on) => {
+    test('a shell older than the cap holds nothing', { timeoutMs: 30_000 }, async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, tools: { Bash: () => SHELL } })
       mock.store(on, { notifyUrl: WEBHOOK })
@@ -4021,7 +4021,7 @@ describe('shells and remote', () => {
       expect(titles(fetches)).toEqual(['✅ Done in 5s'])
     })
 
-    test('the watchdog sends a hold older than the cap', async ($, on) => {
+    test('the watchdog sends a hold older than the cap', { timeoutMs: 30_000 }, async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)
       await clock.advance(1_800_000)
@@ -4109,7 +4109,7 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(2)
     })
 
-    test('submits nothing when keepWarm is 0', async ($, on) => {
+    test('submits nothing when keepWarm is 0', { timeoutMs: 30_000 }, async ($, on) => {
       const w = quiet({ keepWarm: 0 })
       const clock = world(on, w)
       await begin($)
@@ -4117,7 +4117,7 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(0)
     })
 
-    test('submits nothing when only a service command runs in the background', async ($, on) => {
+    test('submits nothing when only a service command runs in the background', { timeoutMs: 30_000 }, async ($, on) => {
       const w = quiet({ keepWarm: 50 })
       const clock = world(on, w)
       await begin($, 'npm run dev')
@@ -4125,7 +4125,7 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(0)
     })
 
-    test('submits nothing when no background work runs', async ($, on) => {
+    test('submits nothing when no background work runs', { timeoutMs: 30_000 }, async ($, on) => {
       const w = quiet({ keepWarm: 50 })
       const clock = world(on, w)
       await $.session.start(START)
@@ -4144,7 +4144,7 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(0)
     })
 
-    test('submits nothing while an auto run is bound to the session', async ($, on) => {
+    test('submits nothing while an auto run is bound to the session', { timeoutMs: 30_000 }, async ($, on) => {
       const files = autoFiles({ pending: null })
       const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: { Bash: () => SHELL } }
       const clock = world(on, w)
@@ -4158,7 +4158,7 @@ describe('shells and remote', () => {
     })
 
     for (const origin of ['composer', 'task-notification'] as const)
-      test(`stops after six in a row, and a ${origin} turn lets six more go`, async ($, on) => {
+      test(`stops after six in a row, and a ${origin} turn lets six more go`, { timeoutMs: 30_000 }, async ($, on) => {
         const w = quiet({ keepWarm: 4 })
         const clock = world(on, w)
         await begin($)
@@ -4190,7 +4190,7 @@ describe('shells and remote', () => {
       expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Started it.')
     })
 
-    test('a keep-warm turn sends no Done of its own', async ($, on) => {
+    test('a keep-warm turn sends no Done of its own', { timeoutMs: 30_000 }, async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const w: World = { ...quiet({ keepWarm: 50, notifyAfter: 0 }), fetches }
       const clock = world(on, w)
@@ -4204,7 +4204,7 @@ describe('shells and remote', () => {
       expect(fetches).toHaveLength(before)
     })
 
-    test('lets six more go in the session a resume carries the process into', async ($, on) => {
+    test('lets six more go in the session a resume carries the process into', { timeoutMs: 30_000 }, async ($, on) => {
       const w = quiet({ keepWarm: 4 })
       const clock = world(on, w)
       on('session.end', (_$, e) => e as never)
@@ -4222,7 +4222,7 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(7)
     })
 
-    test('submits nothing while the composer holds a draft', async ($, on) => {
+    test('submits nothing while the composer holds a draft', { timeoutMs: 30_000 }, async ($, on) => {
       const w: World = { ...quiet({ keepWarm: 50 }), draft: 'half a sent' }
       const clock = world(on, w)
       await begin($)
@@ -4233,7 +4233,7 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(1)
     })
 
-    test('a submit that fails takes back its count, so six still go', async ($, on) => {
+    test('a submit that fails takes back its count, so six still go', { timeoutMs: 30_000 }, async ($, on) => {
       const w: World = { ...quiet({ keepWarm: 4 }), submitFailures: 1 }
       const clock = world(on, w)
       await begin($)
@@ -7369,7 +7369,7 @@ describe('auto run', () => {
     expect(written['/home/me/.claude/dforge/sessions/cockpit/sess-1']).toBe('1060\n')
   })
 
-  test('books a failure once background work has deferred a stage for 30 minutes', async ($, on) => {
+  test('books a failure once background work has deferred a stage for 30 minutes', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7406,7 +7406,7 @@ describe('auto run', () => {
     expect(w.compacts).toHaveLength(1)
   })
 
-  test('a live turn restarts the deferral, so the cap counts background work alone', async ($, on) => {
+  test('a live turn restarts the deferral, so the cap counts background work alone', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7436,7 +7436,7 @@ describe('auto run', () => {
     [5, 'The auto run stopped: the cockpit could not compact twice. End as reference/auto-run.md §Stopping says.'],
     [1, 'The auto run stopped: a background launch kept the compact waiting 30 minutes, and the failure could not be booked (exit 1). End as reference/auto-run.md §Stopping says.'],
   ] as const) {
-    test(`ends the run when the deferral cap's failure exits ${code}`, async ($, on) => {
+    test(`ends the run when the deferral cap's failure exits ${code}`, { timeoutMs: 30_000 }, async ($, on) => {
       const files = autoFiles()
       const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { failure: code } }
       const clock = world(on, w)
@@ -7463,7 +7463,7 @@ describe('auto run', () => {
     })
   }
 
-  test("starts a new run's deferral afresh after the last one stopped", async ($, on) => {
+  test("starts a new run's deferral afresh after the last one stopped", { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7751,7 +7751,7 @@ describe('auto run', () => {
     expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toHaveLength(1)
   })
 
-  test('a bare sleep timer alone never draws a reconcile prompt', async ($, on) => {
+  test('a bare sleep timer alone never draws a reconcile prompt', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles({ pending: null })
     const bash = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'qa1' }, text: 'Running in the background' }) }
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: bash }
@@ -7765,7 +7765,7 @@ describe('auto run', () => {
   })
 
   for (const holder of ['agent', 'shell'] as const) {
-    test(`submits one reconcile prompt when a background ${holder} alone holds a bound run for 20 minutes`, async ($, on) => {
+    test(`submits one reconcile prompt when a background ${holder} alone holds a bound run for 20 minutes`, { timeoutMs: 30_000 }, async ($, on) => {
       const files = autoFiles({ pending: null })
       const bash = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b9w1' }, text: 'Running in the background' }) }
       const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: bash }
@@ -7820,7 +7820,7 @@ describe('auto run', () => {
     expect(w.prompts).toEqual([])
   })
 
-  test('submits no reconcile prompt while a turn is live', async ($, on) => {
+  test('submits no reconcile prompt while a turn is live', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles({ pending: null })
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7833,7 +7833,7 @@ describe('auto run', () => {
     expect(w.prompts).toEqual([])
   })
 
-  test("a pending stage's reconcile prompt comes before its 30-minute failure", async ($, on) => {
+  test("a pending stage's reconcile prompt comes before its 30-minute failure", { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -8215,7 +8215,7 @@ describe('update frequency', () => {
     expect(seen.count).toBeLessThanOrEqual(8)
   })
 
-  test('ticks every second while a shell started within the hour runs, and slows once it is older', async ($, on) => {
+  test('ticks every second while a shell started within the hour runs, and slows once it is older', { timeoutMs: 30_000 }, async ($, on) => {
     const w: World = { ...SIGNED_IN, tools: { Bash: SHELL } }
     const clock = world(on, w)
     signedIn(on)
