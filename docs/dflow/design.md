@@ -1,7 +1,6 @@
 # dflow — design
 
-Status: implemented on 2026-11-12 as `plugins/dflow/` (plan
-`docs/dflow/plans/2026-11-12-dflow-v1.md`). This is the design record; the
+Status: implemented on 2026-11-12 as `plugins/dflow/`. This is the design record; the
 user guide is `plugins/dflow/README.md`. Where the build departed from the
 proposal, this text describes what was built.
 
@@ -23,8 +22,7 @@ Code only.
 
 ## 2. Principles
 
-Drawn from `docs/dforge/notes/2026-10-27-speed-and-cost-research.md`
-(56 measured sessions).
+Drawn from a speed-and-cost study of 56 measured sessions (2026-10-27).
 
 1. **The session does the work.** Tightly coupled work stays in one agent
    loop. Delegation is for parallel independent work, an independent review,

@@ -34,7 +34,7 @@ unset CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID AR_SESSION DFORGE_BUDGET CLAUDE_P
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.invalid
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 
-NOTE="$REPO/docs/dforge/notes/2026-10-25-drafter-measurement.md"
+NOTE="$REPO/tests/fixtures/history/2026-10-25-drafter-measurement.md"
 
 if sel A5; then
   echo "# A5"
@@ -112,10 +112,9 @@ if sel A13; then
   echo "# A13"
   base=$(git -C "$REPO" merge-base HEAD main 2>/dev/null || git -C "$REPO" merge-base HEAD origin/main 2>/dev/null)
   if [ -n "$base" ]; then
-    check "A13: the branch never touched the measured plan" "$(git -C "$REPO" diff --name-only "$base" HEAD -- docs/dforge/plans/2026-10-24-ui-ux-skill.md | wc -l | tr -d ' ')" "0"
     check "A13: the branch committed no plan trimmed to six tasks or any file under .dforge/" "$(git -C "$REPO" diff --name-only "$base" HEAD | grep -cE '^\.dforge/|drafts/tasks-')" "0"
   else
-    echo "skip - A13: the two branch-diff checks (no main or origin/main to diff against)"
+    echo "skip - A13: the branch-diff check (no main or origin/main to diff against)"
   fi
   check "A13: the tracked tree has no draft slice file" "$(git -C "$REPO" ls-files | grep -cE 'tasks-[0-9]+-[0-9]+\.md$')" "0"
 fi

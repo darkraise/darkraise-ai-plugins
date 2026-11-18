@@ -18,10 +18,10 @@
 
 ## Global Constraints
 
-- All code changes are under `plugins/dforge/` in this repository; never edit the installed copy under `/root/.claude/plugins/cache/`. Task 11 writes only under `/tmp/dforge-loop-measure-2026-10-26/` (outside the repository, deleted at its end) and `docs/dforge/notes/`.
-- Commit as `Darkraise <quangtc94@gmail.com>` (`git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit …`). No `Co-Authored-By`, `Claude-Session`, "Generated with" or other AI attribution in any commit. Subjects follow `<type>(<scope>): <subject>`, at most 50 characters, imperative, no period.
-- Every test suite, build, network call and long-running CLI command runs under `timeout` (quick local `git` calls are exempt). Shell suites run from the repository root as `env -u AR_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR timeout 600 bash plugins/dforge/tests/<name>.test.sh`; the cockpit suite as `timeout 600 /root/.local/bin/claude plugin test plugins/dforge`; the whole sweep as `env -u AR_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR timeout 3600 node scripts/test-all.mjs`.
-- `claude` and `rg` are shell functions on this host: call `/root/.local/bin/claude`, and use `grep` in scripts and steps.
+- All code changes are under `plugins/dforge/` in this repository; never edit the installed copy under `~/.claude/plugins/cache/`. Task 11 writes only under `/tmp/dforge-loop-measure-2026-10-26/` (outside the repository, deleted at its end) and `docs/dforge/notes/`.
+- Commit as `Darkraise <darkraise@example.com>` (`git -c user.name=Darkraise -c user.email=darkraise@example.com commit …`). No `Co-Authored-By`, `Claude-Session`, "Generated with" or other AI attribution in any commit. Subjects follow `<type>(<scope>): <subject>`, at most 50 characters, imperative, no period.
+- Every test suite, build, network call and long-running CLI command runs under `timeout` (quick local `git` calls are exempt). Shell suites run from the repository root as `env -u AR_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR timeout 600 bash plugins/dforge/tests/<name>.test.sh`; the cockpit suite as `timeout 600 claude plugin test plugins/dforge`; the whole sweep as `env -u AR_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR timeout 3600 node scripts/test-all.mjs`.
+- `claude` and `rg` are shell functions on this host: call `claude`, and use `grep` in scripts and steps.
 - Shell code must run under bash 3.2+ and Git Bash on Windows CI: no awk interval expressions (`{m,n}`; the host awk is mawk 1.3.4), no `grep -P`, no `mapfile`, no `flock`; expand a possibly empty array as `${a[@]+"${a[@]}"}`; strip `\r` from anything read from a file or a command; never rely on `stat -c` alone (fall back to `stat -f %m` for BSD and to `date -r` where neither works).
 - New scripts and tests are committed with mode 100644, like `scripts/task-brief` and `tests/fleet.test.sh`, and are run through `bash`.
 - `node scripts/validate-repository.mjs` resolves every `dforge:<name>` written under `plugins/dforge/` against `skills/` and `agents/`: never write a glob such as `dforge:judge-*`; name concrete seats.
@@ -67,7 +67,7 @@
 - Planning ruling on spec §4: suite records live in `<state>/suites.tsv` rather than the plan workspace, because `suite-run` takes no plan argument and the spec places a row "in the checkout the implementer ran in"; `<state>` is per checkout.
 - Planning ruling on spec §2: the spec's `task-step` digest names a seat and prompt file; the session still writes the Agent prompt itself (the prompt file's path plus the items only it knows), so no task changes how an Agent call is made.
 - Planning ruling on spec §2: two flags beyond the spec's usage lines. `start --reset` exists because a restarted task must keep the base its first `start` recorded (delegated-task.md §Recovery re-enters §1 after a resume), so a repeated `start` keeps the state file and `--reset` is the explicit way to discard it. `review --cwd DIR` exists because the Codex runner command names a working directory, which in a wave is the task's worktree and not the session's top level.
-- Task 11's environment, both observed on this host 2026-10-26 and both checked by its steps: `/root/.claude-alt2` holds a login the nested session can use (Step 4 runs it; an invalid login is BLOCKED), and the baseline transcript `/root/.claude/projects/-root-repositories-darkraise-ai-plugins/40cb3d10-fb44-41ea-a1f9-91e02a074fd1.jsonl` is on disk (the store keeps about 30 days; Step 3 handles its absence).
+- Task 11's environment, both observed on this host 2026-10-26 and both checked by its steps: `~/.claude-alt` holds a login the nested session can use (Step 4 runs it; an invalid login is BLOCKED), and the baseline transcript `~/.claude/projects/-root-repositories-darkraise-ai-plugins/40cb3d10-fb44-41ea-a1f9-91e02a074fd1.jsonl` is on disk (the store keeps about 30 days; Step 3 handles its absence).
 - Codex lane: off for this session (`codex-gate`, 2026-10-26), so the plan is Claude-only.
 - Plan review round 1 scored coherence 12 (borderline): its five Important findings were seams between the parallel-drafted slices (the `rereview` state, Task 10's account of Task 6's digest and exit codes, the recovery path, a Common Rationalizations row); all are fixed in place, and no round 2 ran because the round returned no Critical finding and no score of 8 or below.
 
@@ -152,7 +152,7 @@ Then insert this test directly before the line `  test('leaves the run alone whi
 
 - [ ] **Step 2: Run it against the unchanged cockpit: the assumption must hold**
 
-Run (from the repository root): `timeout 600 /root/.local/bin/claude plugin test plugins/dforge`
+Run (from the repository root): `timeout 600 claude plugin test plugins/dforge`
 Expected: PASS for `auto run > a background agent alone holds a bound run, and its ending frees the run`, and `0 fail` overall. The test shows the cockpit telling the two states apart: while the agent runs, the watchdog books no stall and submits nothing for 18 minutes (so the run counts as held by background work); once the agent ends, the next tick books the stall. If this test fails, stop: the assumption is false and the rest of this task cannot be built on it. Report BLOCKED with the failing output.
 
 - [ ] **Step 3: Write the reconcile tests**
@@ -278,7 +278,7 @@ with
 
 - [ ] **Step 4: Run the suite to see the new tests fail**
 
-Run: `timeout 600 /root/.local/bin/claude plugin test plugins/dforge`
+Run: `timeout 600 claude plugin test plugins/dforge`
 Expected: FAIL. `tests/cockpit.test.ts` does not load: the runner prints `(fail) the file did not load` with `Export named 'reconcileStep' not found in module` and the path of `hooks/cockpit/lib.ts`.
 
 - [ ] **Step 5: Implement the reconcile prompt in the watchdog**
@@ -503,14 +503,14 @@ async function reconcileBackground($: EngineInterface, auto: CockpitAutoRun) {
 
 - [ ] **Step 6: Run the suite to verify it passes**
 
-Run: `timeout 600 /root/.local/bin/claude plugin test plugins/dforge`
+Run: `timeout 600 claude plugin test plugins/dforge`
 Expected: PASS, `0 fail`, with the new tests listed: the Step 1 test, both `reconcileStep` tests, both `submits one reconcile prompt …` variants, the two no-prompt tests and the pending-stage test, beside every existing test. If the run reports `(fail) the file did not load` again, a test is running close to the 5-second limit: run the suite once more on an idle machine before changing a test. Then run `node scripts/validate-repository.mjs`; expected: it prints that the repository is valid.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add plugins/dforge/hooks/cockpit/lib.ts plugins/dforge/hooks/cockpit/register.tsx plugins/dforge/tests/cockpit.test.ts
-git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "feat(cockpit): reconcile background-held runs"
+git -c user.name=Darkraise -c user.email=darkraise@example.com commit -m "feat(cockpit): reconcile background-held runs"
 ```
 
 ### Task 2: Print launch ages from in-flight
@@ -830,7 +830,7 @@ The `next-step` run proves `scripts/next-step` still counts and names the launch
 
 ```bash
 git add plugins/dforge/scripts/lib/in-flight.sh plugins/dforge/scripts/in-flight plugins/dforge/scripts/turn-end.sh plugins/dforge/tests/in-flight.test.sh plugins/dforge/tests/turn-end.test.sh
-git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "feat(in-flight): print start time and idle age"
+git -c user.name=Darkraise -c user.email=darkraise@example.com commit -m "feat(in-flight): print start time and idle age"
 ```
 
 ### Task 3: Route simple rulings to judge-sonnet-high
@@ -1003,7 +1003,7 @@ Expected: four lines, each ending `0 failed`.
 
 ```bash
 git add plugins/dforge/scripts/review-route plugins/dforge/tests/review-route.test.sh
-git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "feat(review-route): route simple rulings to Sonnet"
+git -c user.name=Darkraise -c user.email=darkraise@example.com commit -m "feat(review-route): route simple rulings to Sonnet"
 ```
 
 ### Task 4: Add suite-run
@@ -1428,7 +1428,7 @@ Expected: `Repository catalogs, manifests, versions, bundled links and the setti
 
 ```bash
 git add plugins/dforge/scripts/suite-run plugins/dforge/tests/suite-run.test.sh
-git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "feat(suite-run): record and digest suite runs"
+git -c user.name=Darkraise -c user.email=darkraise@example.com commit -m "feat(suite-run): record and digest suite runs"
 ```
 
 ### Task 5: Add task-step start
@@ -1911,7 +1911,7 @@ Expected: `Repository catalogs, manifests, versions, bundled links and the setti
 ```bash
 git add plugins/dforge/scripts/task-step plugins/dforge/tests/task-step.test.sh
 git ls-files -s plugins/dforge/scripts/task-step plugins/dforge/tests/task-step.test.sh
-git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "feat(dforge): add task-step start"
+git -c user.name=Darkraise -c user.email=darkraise@example.com commit -m "feat(dforge): add task-step start"
 ```
 
 `git ls-files -s` must show mode `100644` for both files.
@@ -2473,7 +2473,7 @@ Expected: `Repository catalogs, manifests, versions, bundled links and the setti
 
 ```bash
 git add plugins/dforge/scripts/task-step plugins/dforge/tests/task-step.test.sh
-git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "feat(dforge): add task-step review"
+git -c user.name=Darkraise -c user.email=darkraise@example.com commit -m "feat(dforge): add task-step review"
 ```
 
 ### Task 7: Type the re-review seat
@@ -2667,7 +2667,7 @@ Expected: no `FAIL` line; each suite ends `N passed, 0 failed`, and the validato
 
 ```bash
 git add plugins/dforge/skills/subagent-driven-development/references/re-review-prompt.md plugins/dforge/reference/delegated-task.md plugins/dforge/skills/subagent-driven-development/SKILL.md plugins/dforge/tests/seats.test.sh plugins/dforge/tests/review-route.test.sh
-git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "feat(dforge): type the scoped re-review seat"
+git -c user.name=Darkraise -c user.email=darkraise@example.com commit -m "feat(dforge): type the scoped re-review seat"
 ```
 
 ### Task 8: Add task-step rereview and the skip rule
@@ -3184,7 +3184,7 @@ Expected: no `FAIL` line.
 
 ```bash
 git add plugins/dforge/scripts/task-step plugins/dforge/tests/task-step.test.sh
-git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "feat(dforge): add task-step rereview"
+git -c user.name=Darkraise -c user.email=darkraise@example.com commit -m "feat(dforge): add task-step rereview"
 ```
 
 ### Task 9: End the turn to wait in subagent-driven-development
@@ -3363,7 +3363,7 @@ Expected: every line ends `0 failed`, and `waiting-text` prints `13 passed, 0 fa
 
 ```bash
 git add plugins/dforge/tests/waiting-text.test.sh plugins/dforge/skills/subagent-driven-development/SKILL.md plugins/dforge/reference/delegated-task.md
-git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "docs(dforge): wait by ending the turn"
+git -c user.name=Darkraise -c user.email=darkraise@example.com commit -m "docs(dforge): wait by ending the turn"
 ```
 
 - [ ] **Step 7: Extend the test with the ruling-seat text**
@@ -3496,7 +3496,7 @@ Expected: every suite line ends `0 failed`, `waiting-text` prints `20 passed, 0 
 
 ```bash
 git add plugins/dforge/tests/waiting-text.test.sh plugins/dforge/skills/subagent-driven-development/SKILL.md plugins/dforge/skills/executing-plans/SKILL.md
-git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "docs(dforge): route simple rulings to Sonnet"
+git -c user.name=Darkraise -c user.email=darkraise@example.com commit -m "docs(dforge): route simple rulings to Sonnet"
 ```
 
 ---
@@ -4633,7 +4633,7 @@ Expected: every suite line ends `0 failed`, `task-step-text` prints `40 passed, 
 
 ```bash
 git add plugins/dforge/tests/task-step-text.test.sh plugins/dforge/tests/process-roles.test.sh plugins/dforge/tests/review-route.test.sh plugins/dforge/reference/delegated-task.md plugins/dforge/reference/parallel-waves.md plugins/dforge/reference/final-review.md plugins/dforge/skills/subagent-driven-development/SKILL.md plugins/dforge/skills/subagent-driven-development/references/implementer-prompt.md plugins/dforge/skills/finishing-a-development-branch/SKILL.md evals/tiers/build-case.mjs
-git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "docs(dforge): run the task loop through task-step"
+git -c user.name=Darkraise -c user.email=darkraise@example.com commit -m "docs(dforge): run the task loop through task-step"
 ```
 
 ---
@@ -4654,7 +4654,7 @@ git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "docs(dfo
 **Implementer:** dforge:impl-sonnet-medium
 **Evaluation:** files 1 - spec 1 - coupling 1 - risk 1 = 4
 
-The subject is the trimmed ui-ux plan of the drafter measurement (`docs/dforge/notes/2026-10-25-drafter-measurement.md`): Tasks 1-6 of `docs/dforge/plans/2026-10-24-ui-ux-skill.md` at `6df85ec4`, with their drafted bodies (the measurement's scratch plan was deleted, but the plan at that commit already holds the six tasks, with `**Implementer:**` and `**Evaluation:**` lines). Two changes keep the run safe and runnable: the clone's plan keeps only its header, a six-row Task index and Tasks 1-6, and Task 1's Playwright probe, which edits paths inside the real checkout and needs Playwright MCP tools the nested session does not have, becomes a two-step stand-in that writes the note without probing. The nested session runs `claude --model sonnet --effort high` (the plan's Execution line) with `--plugin-dir` on a copy of this branch's `plugins/dforge`, in `/root/.claude-alt2` with `--setting-sources project,local`, as the drafter measurement launched its sessions. It executes with `dforge:subagent-driven-development` and stops at `Task 6: complete`, so the final review and finishing are not part of the count. The baseline is the typed-seats session `40cb3d10-fb44-41ea-a1f9-91e02a074fd1`: 330 main-loop calls over 5 tasks and a final review, of which 230 fall up to the fifth task's complete line (Step 3 recomputes both).
+The subject is the trimmed ui-ux plan of the drafter measurement (`docs/dforge/notes/2026-10-25-drafter-measurement.md`): Tasks 1-6 of `docs/dforge/plans/2026-10-24-ui-ux-skill.md` at `6df85ec4`, with their drafted bodies (the measurement's scratch plan was deleted, but the plan at that commit already holds the six tasks, with `**Implementer:**` and `**Evaluation:**` lines). Two changes keep the run safe and runnable: the clone's plan keeps only its header, a six-row Task index and Tasks 1-6, and Task 1's Playwright probe, which edits paths inside the real checkout and needs Playwright MCP tools the nested session does not have, becomes a two-step stand-in that writes the note without probing. The nested session runs `claude --model sonnet --effort high` (the plan's Execution line) with `--plugin-dir` on a copy of this branch's `plugins/dforge`, in `~/.claude-alt` with `--setting-sources project,local`, as the drafter measurement launched its sessions. It executes with `dforge:subagent-driven-development` and stops at `Task 6: complete`, so the final review and finishing are not part of the count. The baseline is the typed-seats session `40cb3d10-fb44-41ea-a1f9-91e02a074fd1`: 330 main-loop calls over 5 tasks and a final review, of which 230 fall up to the fifth task's complete line (Step 3 recomputes both).
 
 Shell variables do not survive from one Bash call to the next, so every command below spells the scratch root out as `/tmp/dforge-loop-measure-2026-10-26`, called `M` in the prose. Run Steps 4 and 5 with the Bash tool's `timeout` at 600000 ms, and every other command with at most 180000 ms except Step 7, whose command waits up to 590 seconds.
 
@@ -4672,8 +4672,8 @@ Expected: no status line that names a file under `plugins/dforge/` or `docs/dfor
 ```bash
 mkdir /tmp/dforge-loop-measure-2026-10-26
 git rev-parse --show-toplevel > /tmp/dforge-loop-measure-2026-10-26/repo
-jq -r .model /root/.claude-alt2/settings.json > /tmp/dforge-loop-measure-2026-10-26/model-before
-jq -r '.model // "none"' /root/.claude/settings.json >> /tmp/dforge-loop-measure-2026-10-26/model-before
+jq -r .model ~/.claude-alt/settings.json > /tmp/dforge-loop-measure-2026-10-26/model-before
+jq -r '.model // "none"' ~/.claude/settings.json >> /tmp/dforge-loop-measure-2026-10-26/model-before
 cat /tmp/dforge-loop-measure-2026-10-26/model-before
 ```
 
@@ -4873,16 +4873,16 @@ REPO=$(cat "$M/repo")
 BASE=6df85ec4
 PLAN=docs/dforge/plans/2026-10-24-ui-ux-skill.md
 NODEBIN=$(dirname "$(command -v node)")
-CFG=/root/.claude-alt2
+CFG=~/.claude-alt
 SESSION=loop-measure
 nested() { # nested CMD... - run CMD in a clean environment on the nested login
-  env -i HOME=/root PATH="/root/.local/bin:$NODEBIN:/usr/local/bin:/usr/bin:/bin" TERM=xterm-256color LANG=C.UTF-8 \
+  env -i HOME=/root PATH="~/.local/bin:$NODEBIN:/usr/local/bin:/usr/bin:/bin" TERM=xterm-256color LANG=C.UTF-8 \
     CLAUDE_CONFIG_DIR="$CFG" IS_SANDBOX=1 "$@"
 }
 
 case ${1:-} in
   login) # login - exit 0 only when the nested login answers
-    out=$(nested timeout 150 /root/.local/bin/claude -p --model sonnet --setting-sources project,local \
+    out=$(nested timeout 150 claude -p --model sonnet --setting-sources project,local \
       "Reply with the single word OK." </dev/null 2>&1 || true)
     printf '%s\n' "$out" | tail -n 3
     printf '%s\n' "$out" | grep -qx 'OK'
@@ -4895,7 +4895,7 @@ case ${1:-} in
       [ "$b" = main ] || git -C "$M/clone" branch -q -D "$b"
     done
     python3 -I "$M/make-subject.py" "$M/clone/$PLAN"
-    git -C "$M/clone" -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -q -am "docs(plans): trim the ui-ux plan to Tasks 1-6"
+    git -C "$M/clone" -c user.name=Darkraise -c user.email=darkraise@example.com commit -q -am "docs(plans): trim the ui-ux plan to Tasks 1-6"
     mkdir -p "$M/plugin"
     git -C "$REPO" archive HEAD plugins/dforge | tar -x -C "$M/plugin"
     printf '{}\n' > "$M/measure-settings.json"
@@ -4906,8 +4906,8 @@ case ${1:-} in
     ;;
   launch) # launch - the nested interactive session, in tmux
     printf '#!/usr/bin/env bash\ncd %q\n' "$M/clone" > "$M/start.sh"
-    printf 'exec env -i HOME=/root PATH=%q TERM=xterm-256color LANG=C.UTF-8 CLAUDE_CONFIG_DIR=%q IS_SANDBOX=1 /root/.local/bin/claude --model sonnet --effort high --setting-sources project,local --settings %q --plugin-dir %q --dangerously-skip-permissions\n' \
-      "/root/.local/bin:$NODEBIN:/usr/local/bin:/usr/bin:/bin" "$CFG" "$M/measure-settings.json" "$M/plugin/plugins/dforge" >> "$M/start.sh"
+    printf 'exec env -i HOME=/root PATH=%q TERM=xterm-256color LANG=C.UTF-8 CLAUDE_CONFIG_DIR=%q IS_SANDBOX=1 claude --model sonnet --effort high --setting-sources project,local --settings %q --plugin-dir %q --dangerously-skip-permissions\n' \
+      "~/.local/bin:$NODEBIN:/usr/local/bin:/usr/bin:/bin" "$CFG" "$M/measure-settings.json" "$M/plugin/plugins/dforge" >> "$M/start.sh"
     date +%s > "$M/launched"
     timeout 30 tmux new-session -d -s "$SESSION" -x 200 -y 50 "bash $M/start.sh"
     ;;
@@ -4953,7 +4953,7 @@ esac
 - [ ] **Step 3: Check the counter against the baseline transcript**
 
 ```bash
-timeout 120 python3 -I /tmp/dforge-loop-measure-2026-10-26/count.py /root/.claude/projects/-root-repositories-darkraise-ai-plugins/40cb3d10-fb44-41ea-a1f9-91e02a074fd1.jsonl 5 | tee /tmp/dforge-loop-measure-2026-10-26/baseline.txt
+timeout 120 python3 -I /tmp/dforge-loop-measure-2026-10-26/count.py ~/.claude/projects/-root-repositories-darkraise-ai-plugins/40cb3d10-fb44-41ea-a1f9-91e02a074fd1.jsonl 5 | tee /tmp/dforge-loop-measure-2026-10-26/baseline.txt
 ```
 
 Expected: a table whose `total` row starts `| total | 330 |`, then `**Run:** complete: all 5 tasks done` and `**Wait calls:** 114`. In that session Tasks 2-4 ran as one parallel wave, so the table shows their calls under Task 1 and Task 4; use its totals. If the transcript is gone (the store keeps about 30 days), skip this check, write `baseline transcript no longer on disk; the spec's totals only` in the note, and compare against 330 calls over 5 tasks.
@@ -5009,8 +5009,8 @@ Expected from `count.py` on a finished run: a table with `setup`, `Task 1` to `T
 - [ ] **Step 9: Check the host's settings, and compute the comparison figures**
 
 ```bash
-jq -r .model /root/.claude-alt2/settings.json > /tmp/dforge-loop-measure-2026-10-26/model-after
-jq -r '.model // "none"' /root/.claude/settings.json >> /tmp/dforge-loop-measure-2026-10-26/model-after
+jq -r .model ~/.claude-alt/settings.json > /tmp/dforge-loop-measure-2026-10-26/model-after
+jq -r '.model // "none"' ~/.claude/settings.json >> /tmp/dforge-loop-measure-2026-10-26/model-after
 diff /tmp/dforge-loop-measure-2026-10-26/model-before /tmp/dforge-loop-measure-2026-10-26/model-after && echo models-unchanged
 python3 -I - <<'PY'
 import os, re
@@ -5046,7 +5046,7 @@ Write `docs/dforge/notes/2026-10-26-task-loop-measurement.md`. The first two lin
 **Wait calls:** <n, from count.txt>
 **Run:** <the count.txt Run line> (<`finished after <n> s` | the wait command's last line, with its exit code>)
 
-Subject: Tasks 1-6 of `docs/dforge/plans/2026-10-24-ui-ux-skill.md` at `6df85ec4`, trimmed to its header, a six-row Task index and six tasks; Task 1's Playwright probe is a two-step stand-in because the nested session has no Playwright MCP. The nested session ran `claude --model sonnet --effort high` in `/root/.claude-alt2` with `--setting-sources project,local` and `--plugin-dir` on a copy of this branch's `plugins/dforge` at `<sha7 of git rev-parse --short HEAD>`, answered the finish preference `keep`, and stopped at `Task 6: complete`: no final review and no finishing are in the count.
+Subject: Tasks 1-6 of `docs/dforge/plans/2026-10-24-ui-ux-skill.md` at `6df85ec4`, trimmed to its header, a six-row Task index and six tasks; Task 1's Playwright probe is a two-step stand-in because the nested session has no Playwright MCP. The nested session ran `claude --model sonnet --effort high` in `~/.claude-alt` with `--setting-sources project,local` and `--plugin-dir` on a copy of this branch's `plugins/dforge` at `<sha7 of git rev-parse --short HEAD>`, answered the finish preference `keep`, and stopped at `Task 6: complete`: no final review and no finishing are in the count.
 
 ## Per task
 
@@ -5087,7 +5087,7 @@ Expected: `0`, `0`, and a status that lists `?? docs/dforge/notes/2026-10-26-tas
 
 ```bash
 git add docs/dforge/notes/2026-10-26-task-loop-measurement.md
-git -c user.name=Darkraise -c user.email=quangtc94@gmail.com commit -m "docs(notes): measure the task-loop run"
+git -c user.name=Darkraise -c user.email=darkraise@example.com commit -m "docs(notes): measure the task-loop run"
 ```
 
 If the run was incomplete after at least one task, the note says so in its `**Run:**` line and this task reports DONE_WITH_CONCERNS naming the reason (timeout, login, usage limit); if the nested login was invalid (Step 4) or no task completed (Step 8), it reports BLOCKED and commits nothing. A finished run with `**Wait calls:** 0` is DONE; a finished run with a non-zero count is DONE_WITH_CONCERNS naming the calls, since A16's one hard bar failed.

@@ -622,7 +622,7 @@ a25() {
 }
 
 a27() {
-  local note="$P/../../docs/dforge/notes/2026-11-14-agy-hydrogen-review.md"
+  local note="$HERE/../fixtures/history/2026-11-14-agy-hydrogen-review.md"
   local verdict model effort version row
   verdict=$(grep -E '^Verdict: ' "$note" | tail -1 | tr -d '\r')
   model=$(printf '%s' "$verdict" | awk '{print $2}'); effort=$(printf '%s' "$verdict" | awk '{print $3}')

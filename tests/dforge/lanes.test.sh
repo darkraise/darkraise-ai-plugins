@@ -69,7 +69,7 @@ check "agy-judge preferred row" "$(printf '%s\n' "$agy" | sed -n 1p)" "claude-op
 # The fallback row follows the measurement note's verdict (docs/dforge/notes). The note
 # records one measurement and is not edited afterwards: a later roster change replaces
 # these checks with a literal row.
-NOTE="$P/../../docs/dforge/notes/2026-11-14-agy-hydrogen-review.md"
+NOTE="$HERE/../fixtures/history/2026-11-14-agy-hydrogen-review.md"
 verdict=$(grep '^Verdict: ' "$NOTE" 2>/dev/null | tail -1 | tr -d '\r')
 vmodel=$(printf '%s\n' "$verdict" | awk '{print $2}'); veffort=$(printf '%s\n' "$verdict" | awk '{print $3}')
 measured=$(sed -n 's/^agy version: //p' "$NOTE" 2>/dev/null | head -1 | tr -d '\r')

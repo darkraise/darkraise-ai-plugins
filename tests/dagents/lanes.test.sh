@@ -331,7 +331,7 @@ check "no agy block names a Codex model" \
 # --- the agy calibration decision ---
 # Rows 0-2 of agy-assignment, that rung's successor and timeout rows come from
 # replayed runs, so they are checked against what the record decided.
-NOTES="$HERE/../../docs/dforge/notes/2026-11-02-agy-calibration.md"
+NOTES="$HERE/../fixtures/history/2026-11-02-agy-calibration.md"
 
 decision=$(sed -n 's|^\*\*Decision:\*\* totals 0-2 run \([a-z0-9.-]*/[a-z]*\).*$|\1|p' "$NOTES" 2>/dev/null | head -n 1)
 band=$(block agy-assignment | awk '$1 + 0 <= 2 { print $2 "/" $3 }' | sort -u | tr '\n' ' ' | sed 's/ $//')

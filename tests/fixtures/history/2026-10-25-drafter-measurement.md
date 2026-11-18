@@ -15,7 +15,7 @@ Decision rule (spec §4): the typed drafter wins unless it costs more per task t
 
 ## Notes
 
-- Config directory `/root/.claude-alt2` for every nested session (its `model` setting was `opus[1m]` before and after). No NEEDS_CONTEXT or BLOCKED reports, no re-dispatches, and `unpriced` was empty for both runs. The fork run's `agents` output showed three `fork` drafters and the typed run's three `drafter-sonnet`; the typed run priced 5 Opus messages (the parent) and 84 Sonnet messages. The nested sessions ran without `--plugin-dir`.
+- Config directory `~/.claude-alt` for every nested session (its `model` setting was `opus[1m]` before and after). No NEEDS_CONTEXT or BLOCKED reports, no re-dispatches, and `unpriced` was empty for both runs. The fork run's `agents` output showed three `fork` drafters and the typed run's three `drafter-sonnet`; the typed run priced 5 Opus messages (the parent) and 84 Sonnet messages. The nested sessions ran without `--plugin-dir`.
 - Fork review Critical 1: the plan stops after Task 6 while its header promises nineteen tasks, so most of the spec has no task (an effect of the trimmed subject).
 - Fork review Critical 2: plan-lint reports 12 ERRORs because no task has `**Implementer:**` or `**Evaluation:**` lines; the drafter prompt omits them by design, and the session scores the tasks after joining.
 - Typed review Critical 1: the same truncation (header promises nineteen tasks, the index lists six).

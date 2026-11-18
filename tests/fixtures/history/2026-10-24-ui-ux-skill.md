@@ -18,10 +18,10 @@
 
 ## Global Constraints
 
-- All code changes are under `plugins/dforge/` in this repository; never edit the installed copy under `/root/.claude/plugins/cache/`. `<plugin-root>` in commands below means the dforge root the session's entry point prints (`Plugin root: …`); scripts this plan creates are run from the repository copy, `plugins/dforge/scripts/…`.
-- Commit as `Darkraise <quangtc94@gmail.com>`. No `Co-Authored-By`, `Claude-Session`, "Generated with" or other AI attribution in any commit. Subjects follow `<type>(<scope>): <subject>`, type one of feat|fix|docs|style|refactor|test|chore|perf, at most 50 characters, imperative, no period.
+- All code changes are under `plugins/dforge/` in this repository; never edit the installed copy under `~/.claude/plugins/cache/`. `<plugin-root>` in commands below means the dforge root the session's entry point prints (`Plugin root: …`); scripts this plan creates are run from the repository copy, `plugins/dforge/scripts/…`.
+- Commit as `Darkraise <darkraise@example.com>`. No `Co-Authored-By`, `Claude-Session`, "Generated with" or other AI attribution in any commit. Subjects follow `<type>(<scope>): <subject>`, type one of feat|fix|docs|style|refactor|test|chore|perf, at most 50 characters, imperative, no period.
 - Every test, git and CLI command runs under `timeout`; test suites run as `env -u AR_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR timeout 600 bash plugins/dforge/tests/<name>.test.sh` from the repository root. Leave no process running: close every browser, kill every server, tmux session and emulator you start, and confirm with `ps` before a task ends.
-- `claude` and `rg` are shell functions on this host: call `/root/.local/bin/claude`, and use `grep` in scripts and steps.
+- `claude` and `rg` are shell functions on this host: call `claude`, and use `grep` in scripts and steps.
 - Shell code must run under bash 3.2+ and Git Bash on Windows CI: no awk interval expressions (`{m,n}`; the host awk is mawk 1.3.4), no `grep -P`, no `sha256sum`, no `mapfile`; expand a possibly empty array as `${a[@]+"${a[@]}"}`; split rows that may hold empty cells on `\037`, never on a tab.
 - Files under `plugins/dforge/criteria/` are ASCII only (`tests/criteria.test.sh` checks it): no em dashes or curly quotes there.
 - `plugins/dforge/skills/using-dforge/SKILL.md` stays at most 5100 bytes (`tests/hook.test.sh`).
@@ -62,7 +62,7 @@
 
 ## Assumptions (evidence)
 
-- A `dforge:impl-sonnet-low` subagent loaded the deferred `mcp__playwright__*` tools, drove a page, took a screenshot and the session's Read tool displayed it (probe, 2026-10-24). A screenshot path outside `/root/repositories/darkraise-ai-plugins` was refused ("outside allowed roots"); a bare filename landed in the primary checkout's root, not a worktree. Whether an absolute path into a worktree under `.worktrees/` is accepted is unverified — Task 1 verifies it.
+- A `dforge:impl-sonnet-low` subagent loaded the deferred `mcp__playwright__*` tools, drove a page, took a screenshot and the session's Read tool displayed it (probe, 2026-10-24). A screenshot path outside `/path/to/darkraise-ai-plugins` was refused ("outside allowed roots"); a bare filename landed in the primary checkout's root, not a worktree. Whether an absolute path into a worktree under `.worktrees/` is accepted is unverified — Task 1 verifies it.
 - `tsc` covers `plugins/dforge/tests` (`plugins/dforge/.claude-plugin/types/tsconfig.json` `include`, read 2026-10-24), hence the `.fixture` constraint.
 - The host awk is `mawk 1.3.4 20250131` (`awk --version`, 2026-10-24); interval expressions are avoided for it and for older CI awks.
 - `plugins/dforge/skills/using-dforge/SKILL.md` is 5089 bytes (`wc -c`, 2026-10-24) against the 5100 cap in `tests/hook.test.sh`; Task 15's three trims save 42 bytes and its row adds 48, ending at 5095 (computed on a copy, 2026-10-24).
@@ -121,7 +121,7 @@ Run this in the execution worktree (the checkout whose `git rev-parse --show-top
 WT=$(git rev-parse --show-toplevel); echo "$WT"
 mkdir -p "$WT/.dforge/ui-ux/probe"
 ls -a "$WT/.dforge" | grep -c '^.gitignore$'   # expect 1; if 0: printf '*\n' > "$WT/.dforge/.gitignore"
-if [ -d /root/repositories/darkraise-ai-plugins/.playwright-mcp ]; then echo yes; else echo no; fi > "$WT/.dforge/pw-preexisting"
+if [ -d /path/to/darkraise-ai-plugins/.playwright-mcp ]; then echo yes; else echo no; fi > "$WT/.dforge/pw-preexisting"
 cat "$WT/.dforge/pw-preexisting"   # no: the probe may create it, and Step 5 removes it
 ```
 
@@ -131,7 +131,7 @@ Load `mcp__playwright__browser_navigate`, `mcp__playwright__browser_take_screens
 
 - [ ] **Step 3: Probe with a bare filename**
 
-Take a second screenshot with `filename` set to `bare-probe.png`. Record the path the tool reports, then find the file: `ls -l "$WT/bare-probe.png" /root/repositories/darkraise-ai-plugins/bare-probe.png 2>&1`. Close the browser.
+Take a second screenshot with `filename` set to `bare-probe.png`. Record the path the tool reports, then find the file: `ls -l "$WT/bare-probe.png" /path/to/darkraise-ai-plugins/bare-probe.png 2>&1`. Close the browser.
 
 - [ ] **Step 4: Write the note**
 
@@ -157,8 +157,8 @@ Fill each `<…>` with what Steps 2-3 observed.
 
 ```bash
 WT=$(git rev-parse --show-toplevel)
-rm -rf "$WT/.dforge/ui-ux/probe" "$WT/bare-probe.png" /root/repositories/darkraise-ai-plugins/bare-probe.png "$WT/.playwright-mcp"
-if [ "$(cat "$WT/.dforge/pw-preexisting")" = no ]; then rm -rf /root/repositories/darkraise-ai-plugins/.playwright-mcp; fi
+rm -rf "$WT/.dforge/ui-ux/probe" "$WT/bare-probe.png" /path/to/darkraise-ai-plugins/bare-probe.png "$WT/.playwright-mcp"
+if [ "$(cat "$WT/.dforge/pw-preexisting")" = no ]; then rm -rf /path/to/darkraise-ai-plugins/.playwright-mcp; fi
 rm -f "$WT/.dforge/pw-preexisting"
 git status --short    # expect only the note
 git add docs/dforge/notes/2026-10-24-ui-ux-playwright-worktree.md
@@ -1996,7 +1996,7 @@ implementer can drive a browser is unverified.
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `env -u AR_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR timeout 60 bash plugins/dforge/tests/ui-ux-skill.test.sh`
-Expected: `N passed, 0 failed`, exit 0. Then `timeout 60 node scripts/validate-repository.mjs` exits 0 and `timeout 120 /root/.local/bin/claude plugin validate plugins/dforge` passes (acceptance A1).
+Expected: `N passed, 0 failed`, exit 0. Then `timeout 60 node scripts/validate-repository.mjs` exits 0 and `timeout 120 claude plugin validate plugins/dforge` passes (acceptance A1).
 
 - [ ] **Step 5: Commit**
 
@@ -3235,8 +3235,8 @@ In both `plugins/dforge/.claude-plugin/plugin.json` and `plugins/dforge/.codex-p
 
 ```bash
 timeout 60 node scripts/validate-repository.mjs
-timeout 120 /root/.local/bin/claude plugin validate plugins/dforge
-timeout 120 /root/.local/bin/claude plugin validate .
+timeout 120 claude plugin validate plugins/dforge
+timeout 120 claude plugin validate .
 git add plugins/dforge/README.md plugins/dforge/.claude-plugin/plugin.json plugins/dforge/.codex-plugin/plugin.json
 git commit -m "docs(dforge): describe the ui-ux skill"
 ```
@@ -3397,9 +3397,9 @@ From the repository root:
 ```bash
 timeout 120 node scripts/validate-repository.mjs
 env -u AR_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR timeout 3600 node scripts/test-all.mjs
-timeout 120 /root/.local/bin/claude plugin validate .
-for p in dforge dr-status darkraise-ui darkraise-win32ui; do timeout 120 /root/.local/bin/claude plugin validate plugins/$p || echo "FAILED $p"; done
-env -u AR_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR timeout 600 /root/.local/bin/claude plugin test plugins/dforge
+timeout 120 claude plugin validate .
+for p in dforge dr-status darkraise-ui darkraise-win32ui; do timeout 120 claude plugin validate plugins/$p || echo "FAILED $p"; done
+env -u AR_SESSION -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR timeout 600 claude plugin test plugins/dforge
 ```
 
 Expected: every command exits 0 and no `FAILED` line. A failing suite this plan touched is fixed in the task's file it names, by the rule it broke; a failure in a suite this plan never touched is reported with its output, not worked around. Confirm with `ps` that no test process is left.

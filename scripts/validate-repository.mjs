@@ -237,7 +237,7 @@ export function validateRepository(root, { names = maintained } = {}) {
   }
   // The UI plugins dropped their dcc- prefix in 0.3.0; only the migration
   // notes and the historical plans and specs still spell it.
-  const dccAllowed = new Set(['docs/migration.md', 'scripts/validate-repository.mjs', 'tests/repository-layout.test.mjs', 'docs/dforge/plans/2026-11-17-dagents-split.md']);
+  const dccAllowed = new Set(['docs/migration.md', 'scripts/validate-repository.mjs', 'tests/repository-layout.test.mjs']);
   const unswept = new Set(['.git', '.claude', 'node_modules', '.worktrees', '.dforge', '.dagents', '.forge', '.superpowers']);
   const sweep = dir => {
     for (const item of readdirSync(dir, { withFileTypes: true })) {

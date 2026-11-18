@@ -626,14 +626,24 @@ a21() {
 
 a22() {
   local plan sum_before sum_after
-  # The real plans written before this spec lint clean, unedited.
+  # Two real plans written before this spec lint clean, unedited, in the layout
+  # they shipped in: completed.md records them and their specs exist.
+  local H="$TMP/a22-history"
+  git init -q -b main "$H"
+  mkdir -p "$H/docs/dforge/plans" "$H/docs/dforge/specs"
   for plan in 2026-10-24-ui-ux-skill 2026-10-26-task-loop-steps; do
-    sum_before=$(cksum < "$REPO_ROOT/docs/dforge/plans/$plan.md")
-    out=$(cd "$REPO_ROOT" && timeout 120 bash "$LINT" "docs/dforge/plans/$plan.md" 2>&1); rc=$?
+    cp "$REPO_ROOT/tests/fixtures/history/$plan.md" "$H/docs/dforge/plans/"
+    : > "$H/docs/dforge/specs/$plan-design.md"
+    printf -- '- `docs/dforge/plans/%s.md` — merged\n' "$plan" >> "$H/docs/dforge/plans/completed.md"
+  done
+  git -C "$H" add -A && git -C "$H" -c user.name=t -c user.email=t@example.invalid commit -qm history
+  for plan in 2026-10-24-ui-ux-skill 2026-10-26-task-loop-steps; do
+    sum_before=$(cksum < "$H/docs/dforge/plans/$plan.md")
+    out=$(cd "$H" && timeout 120 bash "$LINT" "docs/dforge/plans/$plan.md" 2>&1); rc=$?
     check "A22: plan-lint passes the pre-spec plan $plan" "$rc" "0"
     matches "A22: and reports no error for $plan" "$out" 'plan-lint: 0 errors'
-    check "A22: and leaves $plan as it was" "$(cksum < "$REPO_ROOT/docs/dforge/plans/$plan.md")" "$sum_before"
-    check "A22: and git sees no edit to $plan" "$(git -C "$REPO_ROOT" status --porcelain -- "docs/dforge/plans/$plan.md" | grep -c .)" "0"
+    check "A22: and leaves $plan as it was" "$(cksum < "$H/docs/dforge/plans/$plan.md")" "$sum_before"
+    check "A22: and git sees no edit to $plan" "$(git -C "$H" status --porcelain -- "docs/dforge/plans/$plan.md" | grep -c .)" "0"
   done
 
   # An old plan with spec-0 tasks up to total 6, run through §2 and the task loop, plan file untouched.
