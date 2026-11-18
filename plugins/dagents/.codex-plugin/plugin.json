@@ -7,7 +7,7 @@
   },
   "skills": "./skills/",
   "interface": {
-    "shortDescription": "Brainstorm, plan and execute with scored tasks, implementer agents on a model ladder, subagent or inline execution, external Antigravity and Codex executors, criteria-based review and UI/UX work proven in the running UI; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget and usage limits. Continues the dforge 4.x workflow.",
+    "shortDescription": "Planned work with task scoring, implementer agents on a model ladder, subagent or inline execution, and external Antigravity and Codex executors.",
     "category": "Development",
     "displayName": "dagents",
     "developerName": "Darkraise"
