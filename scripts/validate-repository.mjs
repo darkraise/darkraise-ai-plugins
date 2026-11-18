@@ -239,10 +239,14 @@ export function validateRepository(root, { names = maintained } = {}) {
   // notes and the historical plans and specs still spell it.
   const dccAllowed = new Set(['docs/migration.md', 'scripts/validate-repository.mjs', 'tests/repository-layout.test.mjs']);
   const unswept = new Set(['.git', '.claude', 'node_modules', '.worktrees', '.dforge', '.dagents', '.forge', '.superpowers']);
+  // Maintainers' working records, ignored by .gitignore but present in their
+  // checkouts; historical plans there still spell the old names.
+  const records = rel => rel === 'docs/dforge' || (rel.startsWith('docs/dflow/') && rel !== 'docs/dflow/design.md');
   const sweep = dir => {
     for (const item of readdirSync(dir, { withFileTypes: true })) {
       const path = resolve(dir, item.name);
       const rel = relative(root, path).replaceAll('\\', '/');
+      if (records(rel)) continue;
       if (item.isDirectory()) {
         if (!unswept.has(item.name)) sweep(path);
         continue;
