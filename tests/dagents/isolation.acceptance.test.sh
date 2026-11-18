@@ -52,11 +52,12 @@ cycle() { # cycle LABEL — run the cycle; print a listing of dforge-named paths
          bash "$ROOT/scripts/context-size" 2>&1 | tail -n 1
          bash -c '. "$1/scripts/lib/executor-session.sh" && executor_session_dir codex' _ "$ROOT" 2>&1; echo )
   unset DFORGE_BUDGET DR_CODEX_SESSION_DIR
-  # Git Bash prints T both as /tmp/... and in its C:/... form.
-  local TN=$T
-  if command -v cygpath >/dev/null 2>&1; then TN=$(cygpath -m "$T"); fi
-  printf '%s\n' "$out" | sed "s#$TN#T#g; s#$T#T#g"
-  find "$T" -name '*dforge*' -newer "$T/p/docs/dagents/plans/p.md" | sed "s#$TN#T#g; s#$T#T#g"
+  # Git Bash prints T as /tmp/..., in its C:/... form, and in that form with
+  # the 8.3 user directory (RUNNER~1) expanded.
+  local TN=$T TL=$T
+  if command -v cygpath >/dev/null 2>&1; then TN=$(cygpath -m "$T"); TL=$(cygpath -m -l "$T"); fi
+  printf '%s\n' "$out" | sed "s#$TL#T#g; s#$TN#T#g; s#$T#T#g"
+  find "$T" -name '*dforge*' -newer "$T/p/docs/dagents/plans/p.md" | sed "s#$TL#T#g; s#$TN#T#g; s#$T#T#g"
   rm -rf "$T"
 }
 plain=$(cycle plain)
