@@ -67,9 +67,9 @@ answers its default without reading `~/.dforge/config.json`. Installation and up
 disposable profiles, caches and Git repositories; they must never modify your
 installed plugins or call a paid model.
 
-CI runs the same checks on Ubuntu, and on Windows split across fourteen shards
-(`--shard 1/14` through `--shard 14/14`; add `--list` to inspect a shard without
-running it), plus thirteen for dagents (`--plugin dagents --shard N/13`). A pull
+CI runs the same checks on Ubuntu, and on Windows split across sixteen shards
+(`--shard 1/16` through `--shard 16/16`; add `--list` to inspect a shard without
+running it), plus seventeen for dagents (`--plugin dagents --shard N/17`). A pull
 request from a fork always runs on GitHub's hosted runners. A new shell suite is discovered automatically, but it needs a
 weight in `scripts/test-shards.mjs`: `tests/test-shards.test.mjs` fails without
 one. A weight above 80% of the suite's limit (its `suiteSeconds` in

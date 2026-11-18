@@ -206,13 +206,13 @@ jobs:
         run: timeout --kill-after=10s 1050s node scripts/test-all.mjs --plugin dagents
 
   windows:
-    name: Windows (${{ matrix.shard }}/14)
+    name: Windows (${{ matrix.shard }}/16)
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -230,10 +230,10 @@ jobs:
           # Git Bash's ln -s copies its target unless told to make a real link,
           # which the runner's administrator account may create.
           MSYS: winsymlinks:nativestrict
-        run: node scripts/test-all.mjs --shard ${{ matrix.shard }}/14
+        run: node scripts/test-all.mjs --shard ${{ matrix.shard }}/16
 
   windows-dagents:
-    name: Windows dagents (${{ matrix.shard }}/13)
+    name: Windows dagents (${{ matrix.shard }}/17)
     needs: dagents-changes
     if: needs.dagents-changes.outputs.dagents == 'true'
     runs-on: windows-latest
@@ -241,7 +241,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -259,4 +259,4 @@ jobs:
           # Git Bash's ln -s copies its target unless told to make a real link,
           # which the runner's administrator account may create.
           MSYS: winsymlinks:nativestrict
-        run: node scripts/test-all.mjs --plugin dagents --shard ${{ matrix.shard }}/13
+        run: node scripts/test-all.mjs --plugin dagents --shard ${{ matrix.shard }}/17
