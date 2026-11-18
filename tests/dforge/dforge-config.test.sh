@@ -392,7 +392,10 @@ fc drop-snapshot; check "drop-snapshot: no session: exit 2" "$?" "2"
 
 fresh broken
 mkdir -p "$(dirname "$FILE")" && printf '{"layout": "full",}' > "$FILE"
-check "workflow: a broken file prints the problem line" "$(fc workflow)" "dforge: $FILE is not a JSON object; every setting reads its default and notifyOn reads none until it parses"
+# Node names the file in its platform's own form: backslashes on Windows.
+SHOWN_FILE=$FILE
+if command -v cygpath > /dev/null 2>&1; then SHOWN_FILE=$(cygpath -w "$FILE"); fi
+check "workflow: a broken file prints the problem line" "$(fc workflow)" "dforge: $SHOWN_FILE is not a JSON object; every setting reads its default and notifyOn reads none until it parses"
 
 fresh resolver
 mkdir -p "$(dirname "$FILE")" && printf '{"notifyOn": "off", "sections": "plan,unknown"}' > "$FILE"

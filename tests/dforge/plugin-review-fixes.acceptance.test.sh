@@ -11,6 +11,8 @@ P="$(cd "$HERE/../../plugins/dforge" && pwd)"
 S="$P/scripts"
 TMP="$(mktemp -d)"
 if command -v cygpath >/dev/null 2>&1; then TMP=$(cygpath -m "$TMP"); fi
+# PATH takes POSIX paths: the drive colon of TMP's C:/ form would split an entry.
+path_entry() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1"; else printf '%s' "$1"; fi; }
 export WORKFLOW_GUARD_CLAUDE_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_MANAGED_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_PROJECT_DIR="$TMP/workflow-guard"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
@@ -295,16 +297,30 @@ check "A12: resume-execution names a stale run and the command that stops it" "$
 # --- A13: darkmem stores applied and no Node on PATH ---
 R13="$TMP/nonode"
 mkrepo "$R13"
-NB="$TMP/nonode-bin"
-mkdir -p "$NB"
+is_node_tool() { # is_node_tool <file name>
+  local b=${1%.exe}
+  b=${b%.cmd} b=${b%.ps1}
+  case $b in node | nodejs | npm | npx | corepack) return 0 ;; esac
+  return 1
+}
+# Only a directory holding Node is stood in for, by links to its other
+# programs: Git Bash's ln -s copies, and a copied Chocolatey shim cannot find
+# what it runs.
+NB=""
 IFS=: read -r -a pdirs <<<"$PATH"
 for d in "${pdirs[@]}"; do
   [ -d "$d" ] || continue
   for f in "$d"/*; do
-    b=${f##*/}
-    case $b in node | nodejs | npm | npx | corepack) continue ;; esac
-    [ -e "$NB/$b" ] || ln -s "$f" "$NB/$b" 2>/dev/null
+    is_node_tool "${f##*/}" || continue
+    m="$TMP/nonode-bin/$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
+    mkdir -p "$m"
+    for g in "$d"/*; do
+      [ -f "$g" ] && ! is_node_tool "${g##*/}" && ln -s "$g" "$m/" 2>/dev/null
+    done
+    d=$(path_entry "$m")
+    break
   done
+  NB="${NB:+$NB:}$d"
 done
 . "$HERE/fixtures/darkmem-stores.sh"
 M13=$(stores_home "$HOME" "$R13" nonode local darkmem)
@@ -585,15 +601,15 @@ BIN27="$TMP/bin27"; mkdir -p "$BIN27"
 wrap27() { printf '#!%s\nexec "%s" "$@"\n' "$BASH" "$2" > "$BIN27/$1"; chmod +x "$BIN27/$1"; }
 for t in env sleep true cat head tr dirname basename jq sed grep; do wrap27 "$t" "$(type -P "$t")"; done
 wrap27 gtimeout "$(type -P timeout)"
-PATH="$BIN27" "$BASH" "$S/with-timeout" 5 true; rc=$?
+PATH="$(path_entry "$BIN27")" "$BASH" "$S/with-timeout" 5 true; rc=$?
 check "A27: with only gtimeout, with-timeout 5 true exits 0" "$rc" "0"
 printf '#!%s\nsleep 120\n' "$BASH" > "$BIN27/agy"; chmod +x "$BIN27/agy"
 start=$SECONDS
-out=$(timeout 90 env PATH="$BIN27" "$BASH" "$S/agy-locate" 2>&1); rc=$?
+out=$(timeout 90 env PATH="$(path_entry "$BIN27")" "$BASH" "$S/agy-locate" 2>&1); rc=$?
 check "A27: agy-locate bounds a hanging agy --version (returned in $((SECONDS - start)) s)" "$([ $((SECONDS - start)) -lt 60 ] && echo bounded || echo unbounded)" "bounded"
 check "A27: and reports the CLI unusable" "$rc" "1"
 rm -f "$BIN27/gtimeout"
-out=$(timeout 30 env PATH="$BIN27" "$BASH" "$S/agy-locate" 2>&1); rc=$?
+out=$(timeout 30 env PATH="$(path_entry "$BIN27")" "$BASH" "$S/agy-locate" 2>&1); rc=$?
 check "A27: with no timeout command at all agy-locate reports the CLI unusable" "$rc" "1"
 
 # --- A28: without setsid a timed-out panel runner leaves no descendant alive ---
@@ -623,7 +639,13 @@ while read -r p; do
   if kill -0 "$p" 2>/dev/null; then alive=$((alive + 1)); kill -9 "$p" 2>/dev/null; fi
 done < "$D28/pids"
 has "A28: the timed-out runner is reported as TIMEOUT" "$out" "status=TIMEOUT"
-check "A28: every one of the runner's $(wc -l < "$D28/pids" | tr -d ' ') descendants is gone" "$alive" "0"
+# Without setsid the panel walks the tree with pgrep; with neither it says it
+# cannot (review-panel.test.sh checks that line).
+if command -v pgrep >/dev/null 2>&1; then
+  check "A28: every one of the runner's $(wc -l < "$D28/pids" | tr -d ' ') descendants is gone" "$alive" "0"
+else
+  printf 'skip - A28: no setsid tree walk: pgrep is not on PATH (Git Bash)\n'
+fi
 
 # --- A29: task-step --cwd, and a header command with a trailing note ---
 R29="$TMP/cwd"

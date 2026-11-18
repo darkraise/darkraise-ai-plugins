@@ -151,27 +151,41 @@ check "A3: the primary's handoff is not modified" "$(digest "$(handoff "$TOP")")
 fixture
 WEIRD="$TMP/it's a dir"
 mkdir -p "$WEIRD"
-git -C "$R" worktree add -q -b wq "$WEIRD/wt q" >/dev/null 2>&1
-WQ=$(git -C "$WEIRD/wt q" rev-parse --show-toplevel)
+# MSYS passes an argument holding a quote to git.exe unconverted, so Git Bash
+# needs the native form of this path.
+WQN="$WEIRD/wt q"
+if command -v cygpath >/dev/null 2>&1; then WQN=$(cygpath -m "$WQN"); fi
+git -C "$R" worktree add -q -b wq "$WQN" >/dev/null 2>&1
+WQ=$(git -C "$WQN" rev-parse --show-toplevel)
+check "A4: fixture: the worktree under a space and a quote exists" "$([ -n "$WQ" ] && [ -d "$WQ" ] && echo yes || echo no)" yes
 ESC=${WQ//\'/\'\\\'\'}
-STUB="$TMP/stubbin"; mkdir -p "$STUB"
-for c in claude codex; do printf '#!/bin/sh\npwd\n' > "$STUB/$c"; chmod +x "$STUB/$c"; done
-ns "$WQ" --adhoc --phase build --next go
-cmd=$(launch_of "$OUT")
-check "A4: claude launch command is cd then the command" "$cmd" "cd '$ESC' && claude --model sonnet --effort high"
-check "A4: bash runs the claude command in T (space and quote)" "$(cd "$TMP" && PATH="$STUB:$PATH" timeout 20 bash -c "$cmd")" "$WQ"
-ns "$WQ" --host codex --adhoc --phase build --next go
-cmd=$(launch_of "$OUT")
-case $cmd in "cd '$ESC' && codex "*) pre=yes ;; *) pre=no ;; esac
-check "A4: codex launch command carries the same cd prefix" "$pre" yes
-check "A4: bash runs the codex command in T (space and quote)" "$(cd "$TMP" && PATH="$STUB:$PATH" timeout 20 bash -c "$cmd")" "$WQ"
+if command -v cygpath >/dev/null 2>&1; then
+  # Where cygpath is on PATH next-step prints the bare command by design; the
+  # checks below cover that form.
+  for c in "claude launch command is cd then the command" "bash runs the claude command in T (space and quote)" \
+    "codex launch command carries the same cd prefix" "bash runs the codex command in T (space and quote)"; do
+    printf 'skip - A4: %s (cygpath on PATH)\n' "$c"
+  done
+else
+  STUB="$TMP/stubbin"; mkdir -p "$STUB"
+  for c in claude codex; do printf '#!/bin/sh\npwd\n' > "$STUB/$c"; chmod +x "$STUB/$c"; done
+  ns "$WQ" --adhoc --phase build --next go
+  cmd=$(launch_of "$OUT")
+  check "A4: claude launch command is cd then the command" "$cmd" "cd '$ESC' && claude --model sonnet --effort high"
+  check "A4: bash runs the claude command in T (space and quote)" "$(cd "$TMP" && PATH="$STUB:$PATH" timeout 20 bash -c "$cmd")" "$WQ"
+  ns "$WQ" --host codex --adhoc --phase build --next go
+  cmd=$(launch_of "$OUT")
+  case $cmd in "cd '$ESC' && codex "*) pre=yes ;; *) pre=no ;; esac
+  check "A4: codex launch command carries the same cd prefix" "$pre" yes
+  check "A4: bash runs the codex command in T (space and quote)" "$(cd "$TMP" && PATH="$STUB:$PATH" timeout 20 bash -c "$cmd")" "$WQ"
+fi
 WIN="$TMP/winbin"; mkdir -p "$WIN"
 printf '#!/bin/sh\nfor a; do last=$a; done\nprintf "%%s\\n" "$last"\n' > "$WIN/cygpath"; chmod +x "$WIN/cygpath"
 OUT=$(cd "$WQ" && PATH="$WIN:$PATH" timeout 90 bash "$NS" --adhoc --phase build --next go 2>/dev/null)
 cmd=$(launch_of "$OUT")
 check "A4: with cygpath on PATH the command carries no cd prefix" "$cmd" "claude --model sonnet --effort high"
 OUT=$(cd "$WQ" && PATH="$WIN:$PATH" timeout 90 bash "$NS" --host codex --adhoc --phase build --next go 2>/dev/null)
-case $(launch_of "$OUT") in cd*) pre=yes ;; *) pre=no ;; esac
+case $(launch_of "$OUT") in "codex "*) pre=no ;; *) pre=yes ;; esac
 check "A4: with cygpath on PATH a codex command carries no cd prefix" "$pre" no
 
 # ---------------------------------------------------------------- A5
@@ -481,9 +495,9 @@ for c in "$W1" "$TOP" "$W2" "$W3"; do
   has "A10: repo-audit lists $(basename "$c")'s handoff" "$SEC" "\`$(handoff "$c")\`"
 done
 lacks "A10: a checkout with no handoff gets no entry" "$SEC" "\`$(handoff "$W4")\`"
-has "A10: a prunable worktree gets a skip line" "$SEC" "skipped \`$TMP/w$n-w5\`"
+has "A10: a prunable worktree gets a skip line" "$SEC" "skipped \`$W5\`"
 lacks "A10: a prunable worktree gets no entry" "$SEC" "\`$(handoff "$W5")\`"
-check "A10: the prunable worktree is named once in the section" "$(grep -cF "$TMP/w$n-w5" <<<"$SEC")" 1
+check "A10: the prunable worktree is named once in the section" "$(grep -cF "$W5" <<<"$SEC")" 1
 own_at=$(grep -nF "\`$(handoff "$W1")\`" <<<"$SEC" | head -1 | cut -d: -f1)
 other_at=$(grep -nF "\`$(handoff "$W2")\`" <<<"$SEC" | head -1 | cut -d: -f1)
 top_at=$(grep -nF "\`$(handoff "$TOP")\`" <<<"$SEC" | head -1 | cut -d: -f1)
