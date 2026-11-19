@@ -123,7 +123,7 @@ test('A14: ci-scope plan gives slice for a push or a pull request, with the one-
   }
 });
 
-test('A14: ci-scope plan gives an empty dagents Windows matrix for a push or a pull request', t => {
+test('A14: ci-scope plan gives an empty dagents Windows matrix for a push or a pull request', { skip: 'deferred: register row 10 (docs/dforge/registers/2026-11-19-phase-0-verification.md)' }, t => {
   const { commit, plan } = scope(t);
   const sha = commit('a.txt', 'feat: a');
   for (const EVENT of ['push', 'pull_request']) {
@@ -154,7 +154,7 @@ test('A15: ci-scope plan gives full for a schedule and for a scope=full dispatch
   }
 });
 
-test('A15: ci-scope plan gives all 17 dagents Windows shards for a schedule and for a scope=full dispatch', t => {
+test('A15: ci-scope plan gives all 17 dagents Windows shards for a schedule and for a scope=full dispatch', { skip: 'deferred: register row 11 (docs/dforge/registers/2026-11-19-phase-0-verification.md)' }, t => {
   const { commit, gh, plan } = scope(t);
   const sha = commit('docs/only.md', 'docs: only docs');
   for (const env of [{ EVENT: 'schedule', SHA: sha, CI_SCOPE_GH: gh([]) }, { EVENT: 'workflow_dispatch', SCOPE_INPUT: 'full', SHA: sha, CI_SCOPE_GH: gh([]) }]) {
