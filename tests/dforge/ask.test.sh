@@ -41,5 +41,44 @@ check "empty roots are skipped" "$(ask_marker_released "$STAMP" "" "" && echo re
 sleep 1; touch "$STAMP"
 check "a marker older than the stamp: held" "$(rel)" "held"
 
+# --- scripts/ask ---
+ASK="$P/scripts/ask"; START="$P/scripts/turn-start.sh"
+REPO="$TMP/repo"; git init -q "$REPO"
+git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m base
+PLAN=docs/dforge/plans/2026-11-19-x.md
+WS="$REPO/.dforge/sdd/2026-11-19-x"; mkdir -p "$WS"; LEDGER="$WS/progress.md"
+printf '# SDD ledger — plan: %s\nTask 2: implementer inline (assigned; base abc1234)' "$PLAN" > "$LEDGER"
+ask() { (cd "$REPO" && CLAUDE_CODE_SESSION_ID="${SID-s-ask}" bash "$ASK" "$@"); }
+out=$(ask "$PLAN" 2 $'Which width:\nnarrow or wide?'); st=$?
+check "ask with a plan: exit 0" "$st" "0"
+check "ask prints the question on one line" "$out" "Which width: narrow or wide?"
+check "ask: the waiting line ends the ledger" "$(tail -n 1 "$LEDGER")" "Task 2: waiting — Which width: narrow or wide?"
+check "ask: a missing final newline is added first" "$(tail -n 2 "$LEDGER" | head -n 1)" "Task 2: implementer inline (assigned; base abc1234)"
+check "ask: the marker holds the question" "$(cat "$TURNS/s-ask.asked")" "Which width: narrow or wide?"
+check "ask: the marker is not older than the ledger" "$([ "$LEDGER" -nt "$TURNS/s-ask.asked" ] && echo older || echo ok)" "ok"
+rm -f "$TURNS/s-ask.asked"
+out=$(ask 'Merge now?'); st=$?
+check "ask without a plan: exit 0 and the marker" "$st:$(cat "$TURNS/s-ask.asked")" "0:Merge now?"
+rm -f "$TURNS/s-ask.asked"; before=$(cat "$LEDGER")
+ask "$PLAN" two 'q?' >/dev/null 2>&1; check "a non-numeric N: exit 2" "$?" "2"
+ask "$PLAN" 2 '' >/dev/null 2>&1; check "an empty question: exit 2" "$?" "2"
+ask docs/dforge/plans/absent.md 2 'q?' >/dev/null 2>&1; check "a plan with no ledger: exit 2" "$?" "2"
+SID='' ask 'q?' >/dev/null 2>&1; check "no plan and no session id: exit 2" "$?" "2"
+check "the refusals wrote no ledger line" "$(cat "$LEDGER")" "$before"
+check "the refusals wrote no marker" "$([ -e "$TURNS/s-ask.asked" ] && echo yes || echo no)" "no"
+out=$(SID='' ask "$PLAN" 3 'Codex host?' 2>"$TMP/err"); st=$?
+check "no session id with a plan: exit 0" "$st" "0"
+check "no session id with a plan: the ledger line" "$(tail -n 1 "$LEDGER")" "Task 3: waiting — Codex host?"
+check "no session id with a plan: says no marker was written" "$(grep -c 'no marker' "$TMP/err")" "1"
+if [ "$(id -u)" != 0 ] && ! command -v cygpath >/dev/null 2>&1; then
+  chmod 555 "$TURNS"
+  ask "$PLAN" 4 'Unwritable?' >/dev/null 2>&1; st=$?
+  chmod 755 "$TURNS"
+  check "an unwritable marker after the ledger line: exit 1" "$st" "1"
+fi
+printf 'q\n' > "$TURNS/s-ask.asked"
+jq -n --arg cwd "$REPO" '{hook_event_name:"UserPromptSubmit",session_id:"s-ask",cwd:$cwd,prompt:"go"}' | bash "$START"
+check "turn-start deletes the session's marker" "$([ -e "$TURNS/s-ask.asked" ] && echo yes || echo no)" "no"
+
 printf '%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
