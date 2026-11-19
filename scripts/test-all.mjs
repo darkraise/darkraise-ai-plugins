@@ -4,9 +4,13 @@ import { availableParallelism, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { driftWarning, guardIsolation, selectShard, suiteParts, suiteSeconds } from './test-shards.mjs';
+import { driftWarning, guardIsolation, selectShard, suiteName, suiteParts, suiteSeconds, windowsSlice } from './test-shards.mjs';
 
-const { values: options } = parseArgs({ options: { shard: { type: 'string' }, list: { type: 'boolean' }, limits: { type: 'boolean' }, jobs: { type: 'string' }, plugin: { type: 'string' } } });
+const { values: options } = parseArgs({ options: { shard: { type: 'string' }, list: { type: 'boolean' }, limits: { type: 'boolean' }, jobs: { type: 'string' }, plugin: { type: 'string' }, slice: { type: 'boolean' } } });
+if (options.slice && (options.shard !== undefined || options.plugin !== undefined)) {
+  console.error('test-all: --slice runs alone');
+  process.exit(2);
+}
 if (options.limits && !options.list) {
   console.error('test-all: --limits only changes what --list prints');
   process.exit(2);
@@ -111,7 +115,7 @@ const jobs = options.plugin === 'dagents' ? [
   ...(hasClaude ? [['claude', ['plugin', 'test', 'plugins/dforge'], 300], ['claude', ['plugin', 'test', 'plugins/dflow'], 120]] : []),
   ...tscJobs('dforge'),
 ];
-const selected = selectShard(jobs, options.shard);
+const selected = options.slice ? jobs.filter(([, args]) => windowsSlice.includes(suiteName(args))) : selectShard(jobs, options.shard);
 if (options.list) {
   for (const [, args, seconds] of selected) console.log(options.limits ? `${seconds}\t${args.join(' ')}` : args.join(' '));
 } else {

@@ -218,3 +218,24 @@ test('jobs run with the guard isolated from the host', () => {
   assert.deepEqual([env.WORKFLOW_GUARD_CLAUDE_DIR, env.WORKFLOW_GUARD_MANAGED_DIR, env.WORKFLOW_GUARD_PROJECT_DIR, env.KEEP], ['/empty', '/empty', '/empty', 'x']);
   assert.equal(sched.guardIsolation({ WORKFLOW_GUARD_CLAUDE_DIR: '/set' }, '/empty').WORKFLOW_GUARD_CLAUDE_DIR, '/set');
 });
+
+test('the Windows slice names the seven suites with a portability fault, and each exists', async () => {
+  const { windowsSlice } = await import(new URL('../scripts/test-shards.mjs', import.meta.url).href);
+  assert.deepEqual([...windowsSlice].sort(), [
+    'tests/dforge/darkmem-sync.test.sh', 'tests/dforge/dforge-migrate.test.sh', 'tests/dforge/dforge-state.test.sh',
+    'tests/dforge/plan-amend.test.sh', 'tests/dforge/register.test.sh', 'tests/dforge/roadmap.test.sh',
+    'tests/dforge/working-directory.test.sh',
+  ]);
+  for (const suite of windowsSlice) assert.ok(existsSync(new URL(`../${suite}`, import.meta.url)), `${suite} exists`);
+});
+
+test('--slice lists exactly the slice, and runs alone', async () => {
+  const { windowsSlice } = await import(new URL('../scripts/test-shards.mjs', import.meta.url).href);
+  const listed = list('--slice');
+  assert.deepEqual(listed.map(line => line.split(' ')[0]).sort(), [...windowsSlice].sort());
+  for (const other of [['--shard', '1/16'], ['--plugin', 'dagents']]) {
+    const r = spawnSync(process.execPath, ['scripts/test-all.mjs', '--slice', ...other, '--list'], { cwd: root, encoding: 'utf8' });
+    assert.equal(r.status, 2, other.join(' '));
+    assert.match(r.stderr, /--slice runs alone/);
+  }
+});

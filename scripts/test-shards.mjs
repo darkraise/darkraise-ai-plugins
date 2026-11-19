@@ -1,3 +1,15 @@
+// A Windows push runs only these suites: each has had a portability fault on
+// Windows while Linux passed (see CONTRIBUTING.md).
+export const windowsSlice = [
+  'tests/dforge/darkmem-sync.test.sh',
+  'tests/dforge/dforge-migrate.test.sh',
+  'tests/dforge/dforge-state.test.sh',
+  'tests/dforge/plan-amend.test.sh',
+  'tests/dforge/register.test.sh',
+  'tests/dforge/roadmap.test.sh',
+  'tests/dforge/working-directory.test.sh',
+];
+
 // Approximate Windows seconds from recent Actions runs; this file's git history
 // names them. A weight for a suite with no Windows run yet is an
 // estimate from its Linux time.
@@ -257,8 +269,8 @@ export const suiteParts = {
 // A node --test job's first argument is the --test flag every such job shares,
 // so the job is named by its first test file instead.
 const nodeTest = args => args[0] === '--test';
-const suiteName = args => nodeTest(args) ? args[1] : args[0];
-const suitePart = args => nodeTest(args) ? '' : args.slice(1).join(' ');
+export const suiteName = args => nodeTest(args) ? args[1] : args[0];
+export const suitePart = args => nodeTest(args) ? '' : args.slice(1).join(' ');
 
 function partWeight(entry, part, parts) {
   if (entry === undefined) return 10 / parts;
