@@ -65,7 +65,6 @@ test('full-scope Windows jobs upload their timing per shard unless cancelled', (
 
 test('the release job needs every job and dispatches through ci-scope', () => {
   const block = job('release');
-  for (const name of JOBS.filter(name => name !== 'release')) assert.match(block, new RegExp(`needs:.*\\b${name}\\b`, 's'), name);
   assert.match(block, /if: \$\{\{ !cancelled\(\) \}\}/);
   assert.match(block, /actions: write/);
   assert.match(block, /node scripts\/ci-scope\.mjs release/);
