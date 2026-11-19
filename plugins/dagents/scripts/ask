@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Record a question for your human partner so the Stop hooks let this turn end
+# on it. With a plan: the ledger line `Task <N>: waiting — <question>`. With a
+# session id: the marker beside the turn stamp (lib/ask-marker.sh), written
+# last, which releases the hold for this turn only. Prints the question,
+# flattened to one line. Run inside the checkout.
+#
+# Usage: ask [PLAN_FILE N] "<question>"
+# Exit: 0 written (with a plan and no session id: the ledger line alone);
+#       1 the ledger line was appended but the marker could not be written;
+#       2 usage: N is not a number, the question is empty, the plan has no
+#         ledger, or there is neither a plan nor CLAUDE_CODE_SESSION_ID;
+#         nothing was written.
+set -uo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+. "$here/lib/roots.sh"
+. "$here/lib/ask-marker.sh"
+
+usage() { echo 'usage: ask [PLAN_FILE N] "<question>"' >&2; exit 2; }
+case $# in
+  1) plan="" n="" question=$1 ;;
+  3) plan=$1 n=$2 question=$3 ;;
+  *) usage ;;
+esac
+
+question=$(printf '%s' "$question" | tr '\n\t\r' '   ' | sed 's/  */ /g; s/^ //; s/ $//')
+[ -n "$question" ] || { echo "ask: the question is empty" >&2; exit 2; }
+sid=${CLAUDE_CODE_SESSION_ID:-}
+ledger=""
+if [ -n "$plan" ]; then
+  [[ $n =~ ^[0-9]+$ ]] || { echo "ask: N must be a task number, not '$n'" >&2; exit 2; }
+  ledger="$(dagents_workspace "$(basename "$plan" .md)")/progress.md"
+  [ -f "$ledger" ] || { echo "ask: no ledger at $ledger" >&2; exit 2; }
+elif [ -z "$sid" ]; then
+  echo "ask: neither a plan nor CLAUDE_CODE_SESSION_ID, so the question has nowhere to go" >&2
+  exit 2
+fi
+
+if [ -n "$ledger" ]; then
+  if [ -s "$ledger" ] && [ -n "$(tail -c 1 "$ledger")" ]; then printf '\n' >> "$ledger"; fi
+  printf 'Task %s: waiting — %s\n' "$n" "$question" >> "$ledger" \
+    || { echo "ask: could not append to $ledger" >&2; exit 1; }
+fi
+
+printf '%s\n' "$question"
+if [ -z "$sid" ]; then
+  echo "ask: no session id, so no marker was written" >&2
+  exit 0
+fi
+marker=$(ask_marker_path "$sid")
+tmp="$marker.$$.tmp"
+if ! { mkdir -p "${marker%/*}" && printf '%s\n' "$question" > "$tmp" && mv -f "$tmp" "$marker"; } 2>/dev/null; then
+  rm -f "$tmp" 2>/dev/null
+  echo "ask: could not write the marker $marker" >&2
+  exit 1
+fi

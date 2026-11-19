@@ -124,6 +124,7 @@ export const windowsSeconds = {
   'tests/dagents/agy-gate.test.sh': 65,
   'tests/dagents/agy-gemini-first.acceptance.test.sh': 145,
   'tests/dagents/antigravity-executor-lane.acceptance.test.sh': 255,
+  'tests/dagents/ask.test.sh': 60,
   'tests/dagents/auto-default.test.sh': 10,
   'tests/dagents/auto-run-skills.test.sh': 10,
   'tests/dagents/auto-run-worktree-setting-qa.acceptance.test.sh': 435,
