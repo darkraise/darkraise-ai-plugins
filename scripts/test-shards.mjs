@@ -30,6 +30,7 @@ export const windowsSeconds = {
   'tests/dforge/api-decisions-keep-warm-hydrogen.acceptance.test.sh': { 'A1 A2 A3 A4 A5 A6 A7': 340, 'A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A25 A27 A28 A31': 380 },
   'tests/dforge/api-judge.test.sh': 260,
   'tests/dforge/api-spend.test.sh': 50,
+  'tests/dforge/ask.test.sh': 60,
   'tests/dforge/auto-default.test.sh': 10,
   'tests/dforge/auto-run-skills.test.sh': 10,
   'tests/dforge/auto-run-worktree-setting-qa.acceptance.test.sh': 420,
