@@ -51,6 +51,9 @@ Plan: executor <id> off - unreliable (<k> handbacks)
 - `Plan: executor <id> off - unreliable (<k> handbacks)` is written by
   [executor-lane.md](../../../reference/executor-lane.md) §Dispatch. It names
   no task, so no per-task Recovery row reads it; `scripts/lane-breaker` does.
+- `Task <N>: waiting — <question>` is a question to your human partner: the
+  controller runs `scripts/ask PLAN_FILE N "<question>"`, which writes the
+  line, and ends on the question.
 - `Acceptance QA:` lines are written by
   [final-review.md](../../../reference/final-review.md) step 0.5. On recovery:
   a `complete` line skips step 0.5; a `dispatched` line with no `complete`
