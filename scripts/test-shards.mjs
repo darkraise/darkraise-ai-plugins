@@ -10,7 +10,7 @@
 // plan-lint's do: task-step's start and verdict parts together overran one
 // shard at an even split, and plan-lint's paths part is a small fraction of it.
 export const windowsSeconds = {
-  'tests/dagents-rename.test.mjs': 60,
+  'tests/ci-scope.test.mjs': 70,
   'tests/guard-isolation.test.mjs': 375,
   'tests/dflow/board.test.mjs': 150,
   'tests/dforge/agy-gate.test.sh': 70,
