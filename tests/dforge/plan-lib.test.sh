@@ -51,6 +51,10 @@ printf '# SDD ledger — plan: x\nTask 4: BLOCKED — ruling seat — what\nTask
 check "ledger_blocked: a BLOCKED a later assignment superseded" "$(ledger_blocked "$TMP/bl-restarted.md")" ""
 printf '# SDD ledger — plan: x\nTask 3: BLOCKED — ruling seat — what\nTask 3: minor (deferred): a wart\nTask 3: parked — f — Ruling: why\nTask 3: Ruling: a call — why — cost\nRuling: a bare ruling — why — cost\nTask 3: waiting — which way?\n' > "$TMP/bl-skipped.md"
 check "ledger_blocked: non-terminal lines do not clear it" "$(ledger_blocked "$TMP/bl-skipped.md" | tr '\n' ' ')" "3 "
+for dash in '—' '–' '-'; do
+  printf '# SDD ledger — plan: x\nTask 3: BLOCKED — ruling seat — what\nTask 3: waiting %s which way?\n' "$dash" > "$TMP/bl-dash.md"
+  check "ledger_blocked: a waiting line with '$dash' does not clear it" "$(ledger_blocked "$TMP/bl-dash.md" | tr '\n' ' ')" "3 "
+done
 printf '# SDD ledger — plan: x\nTask 10: BLOCKED — a\nTask 2: BLOCKED — b\nTask 10: BLOCKED — c\n' > "$TMP/bl-many.md"
 check "ledger_blocked: unique and numerically sorted" "$(ledger_blocked "$TMP/bl-many.md" | tr '\n' ' ')" "2 10 "
 sed 's/$/\r/' "$TMP/bl-resolved.md" > "$TMP/bl-crlf.md"

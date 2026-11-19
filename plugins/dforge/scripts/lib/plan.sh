@@ -94,7 +94,7 @@ ladder_block() {
 ledger_blocked() {
   tr -d '\r' < "$1" | awk '
     !/^Task [0-9]+:/ { next }
-    /^Task [0-9]+: (minor \(deferred\)|parked|Ruling:|waiting — )/ { next }
+    /^Task [0-9]+: (minor \(deferred\)|parked|Ruling:|waiting[[:space:]]+(—|–|-)[[:space:]])/ { next }
     { n = $2; sub(/:$/, "", n); blocked[n] = ($0 ~ /^Task [0-9]+: BLOCKED/) }
     END { for (n in blocked) if (blocked[n]) print n }
   ' | sort -un

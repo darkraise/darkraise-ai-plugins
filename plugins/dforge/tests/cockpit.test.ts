@@ -4842,6 +4842,10 @@ describe('run card', () => {
     expect(ledger.tasks.map(task => [task.n, task.state])).toEqual([[1, 'complete'], [2, 'waiting'], [3, 'deferred']])
     expect(ledger.tasks[1]?.question).toBe('which meter width?')
     expect(ledger.tasks[2]?.isClean).toBe(false)
+    for (const dash of ['—', '–', '-']) {
+      const one = parseLedger(`${LEDGER}\nTask 2: waiting ${dash} which meter width?`).tasks.find(task => task.n === 2)
+      expect([one?.state, one?.question]).toEqual(['waiting', 'which meter width?'])
+    }
   })
 
   test("an inline assigned line names no seat, and an older ledger's seat stays", () => {
