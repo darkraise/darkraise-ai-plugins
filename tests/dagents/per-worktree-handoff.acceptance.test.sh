@@ -492,7 +492,7 @@ e2=$(entry "$W2")
 has "A10: another checkout's entry is marked stored" "$e2" "stored"
 has "A10: another checkout's entry carries its Status line" "$e2" "**Status:** Unplanned work"
 has "A10: another checkout's entry carries its Next line" "$e2" "**Next:** other-work."
-check "A10: another checkout's entry shows its age (3 days)" "$(grep -cE '72h|72 hours|3d|3 days' <<<"$e2")" 1
+check "A10: another checkout's entry shows its age (3 days)" "$(grep -cE 'written 72h ago' <<<"$e2")" 1
 check "A10: another checkout's entry is not recomputed" "$(grep -c '^- recomputed' <<<"$e2")" 0
 start_ctx() { # start_ctx <source> <cwd>
   jq -n --arg cwd "$2" --arg src "$1" '{hook_event_name:"SessionStart",session_id:"s-10",transcript_path:"",cwd:$cwd,source:$src}' \
