@@ -206,10 +206,10 @@ test('dagents jobs run only when a change can reach them', () => {
   const workflow = readFileSync(new URL('../.github/workflows/validate.yml', import.meta.url), 'utf8');
   assert.match(workflow, /^ {2}dagents-changes:$/m);
   assert.ok(workflow.includes('^(plugins/dagents/|tests/dagents/|scripts/(test-all|test-shards|validate-repository|lint-portability|dagents-rename)\\.mjs$|\\.github/workflows/validate\\.yml$)'), 'the path filter');
-  for (const job of ['validate-dagents', 'windows-dagents']) {
-    const block = workflow.slice(workflow.indexOf(`  ${job}:`));
-    assert.match(block.slice(0, 600), /needs\.dagents-changes\.outputs\.dagents == 'true'/, job);
-  }
+  const dagentsJob = workflow.slice(workflow.indexOf('  validate-dagents:')).slice(0, 600);
+  assert.match(dagentsJob, /needs\.dagents-changes\.outputs\.dagents == 'true'/, 'validate-dagents');
+  const windowsDagents = workflow.slice(workflow.indexOf('  windows-dagents:')).slice(0, 900);
+  assert.match(windowsDagents, /needs\.scope\.outputs\.scope == 'full'/, 'windows-dagents');
   assert.match(workflow, /\.name == "validate-dagents"/, 'the homelab wait job watches validate-dagents');
 });
 

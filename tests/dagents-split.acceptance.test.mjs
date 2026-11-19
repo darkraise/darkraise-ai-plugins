@@ -329,12 +329,16 @@ test('A29: only dagents, its suites, the root scripts its jobs run and the workf
     for (const match of readFileSync(join(ROOT, script), 'utf8').matchAll(/from '\.\/([\w-]+\.mjs)'/g)) named.add(`scripts/${match[1]}`);
   }
   for (const script of named) assert.ok(ROOT_SCRIPTS.includes(script), `${script} runs in a dagents job but the filter misses it`);
-  for (const name of ['validate-dagents', 'windows-dagents']) {
-    const job = new RegExp(`\\n  ${name}:\\n(?:    .*\\n|\\n)+`).exec(workflow)?.[0];
-    assert.ok(job, `${name} job`);
-    assert.match(job, /needs: dagents-changes/);
-    assert.match(job, /if: needs\.dagents-changes\.outputs\.dagents == 'true'/);
-  }
+  const jobOf = name => new RegExp(`\\n  ${name}:\\n(?:    .*\\n|\\n)+`).exec(workflow)?.[0];
+  const validateDagents = jobOf('validate-dagents');
+  assert.ok(validateDagents, 'validate-dagents job');
+  assert.match(validateDagents, /needs: \[scope, dagents-changes\]/);
+  assert.match(validateDagents, /needs\.dagents-changes\.outputs\.dagents == 'true'/);
+  const windowsDagents = jobOf('windows-dagents');
+  assert.ok(windowsDagents, 'windows-dagents job');
+  assert.match(windowsDagents, /needs: \[scope, homelab\]/);
+  assert.match(windowsDagents, /needs\.scope\.outputs\.scope == 'full'/);
+  assert.doesNotMatch(windowsDagents, /dagents-changes/);
 });
 
 // A11 and A27: the three plugins' hooks under a conflict

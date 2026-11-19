@@ -1,11 +1,21 @@
 name: Validate marketplace
+# ci-scope.mjs finds the last full run by this title's "(full)" suffix.
+run-name: Validate marketplace (${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.scope != 'slice')) && 'full' || 'slice' }})
 
 on:
   push:
     branches: [main]
   pull_request:
+  # 02:17 at UTC+7, off the hour, when scheduled runs queue less.
+  schedule:
+    - cron: '17 19 * * *'
   workflow_dispatch:
     inputs:
+      scope:
+        description: "full: every Windows shard and the release; slice: what a push runs"
+        type: choice
+        options: [slice, full]
+        default: full
       runner:
         description: "homelab: ghr's runner, falling back to GitHub's; hosted: GitHub's"
         type: choice
@@ -20,13 +30,46 @@ permissions:
   contents: read
 
 # A newer push to a pull request cancels its older run. Every other run has a
-# group of its own: release.yml needs main's runs to finish, and the homelab
+# group of its own: a full run of main dispatches release.yml, and the homelab
 # fallback below dispatches a run on the same ref before cancelling its own.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
+  # A push or pull request runs the slice: validate, the dagents jobs when a
+  # change can reach dagents, and the Windows portability slice. The nightly
+  # schedule and a dispatch run the full scope: every Windows shard, dagents
+  # included, and then release dispatches release.yml with the validated
+  # commit. A nightly run whose commit a full run already validated, or that
+  # only release commits follow, runs nothing.
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      scope: ${{ steps.plan.outputs.scope }}
+      run: ${{ steps.plan.outputs.run }}
+      windows: ${{ steps.plan.outputs.windows }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          SCOPE_INPUT: ${{ inputs.scope }}
+          SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: timeout 60s node scripts/ci-scope.mjs plan
+
   # validate runs on ghr's homelab runner, except in a dispatched fallback run
   # and a fork's pull request: ghr refuses fork jobs, which would run their
   # code on the homelab host. The two conditions below must stay the same.
@@ -35,7 +78,8 @@ jobs:
   # this dispatches the workflow again on GitHub's runners and cancels the run.
   homelab:
     name: Wait for the homelab runner
-    if: ${{ inputs.runner != 'hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: scope
+    if: ${{ needs.scope.outputs.run == 'true' && inputs.runner != 'hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     permissions:
@@ -45,6 +89,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REF: ${{ github.head_ref || github.ref_name }}
           FROM: ${{ github.event.before || github.event.pull_request.base.sha }}
+          SCOPE: ${{ needs.scope.outputs.scope }}
         run: |
           jobs="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs"
           deadline=$((SECONDS + 300))
@@ -59,10 +104,12 @@ jobs:
             sleep 10
           done
           echo "::warning::No homelab runner took validate and validate-dagents in five minutes; running again on GitHub's runners."
-          timeout 30s gh workflow run validate.yml --repo "$GITHUB_REPOSITORY" --ref "$REF" -f runner=hosted -f from="$FROM"
+          timeout 30s gh workflow run validate.yml --repo "$GITHUB_REPOSITORY" --ref "$REF" -f runner=hosted -f scope="$SCOPE" -f from="$FROM"
           timeout 30s gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   validate:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     timeout-minutes: 50
     runs-on: ${{ fromJSON((inputs.runner != 'hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","homelab"]' || '"ubuntu-latest"') }}
     steps:
@@ -137,6 +184,8 @@ jobs:
   # A new branch's push has no readable before commit, and a dispatch without
   # `from` has none either, so both run them.
   dagents-changes:
+    needs: scope
+    if: needs.scope.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     outputs:
@@ -170,8 +219,8 @@ jobs:
           fi
 
   validate-dagents:
-    needs: dagents-changes
-    if: needs.dagents-changes.outputs.dagents == 'true'
+    needs: [scope, dagents-changes]
+    if: ${{ needs.scope.outputs.run == 'true' && (needs.scope.outputs.scope == 'full' || needs.dagents-changes.outputs.dagents == 'true') }}
     timeout-minutes: 50
     runs-on: ${{ fromJSON((inputs.runner != 'hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","homelab"]' || '"ubuntu-latest"') }}
     steps:
@@ -223,14 +272,18 @@ jobs:
         timeout-minutes: 27
         run: timeout --kill-after=10s 1500s node scripts/test-all.mjs --plugin dagents
 
+  # Waiting for homelab keeps a run the fallback cancels from also starting
+  # Windows jobs that the hosted run it dispatched starts again.
   windows:
-    name: Windows (${{ matrix.shard }}/16)
+    name: Windows (${{ matrix.shard }})
+    needs: [scope, homelab]
+    if: ${{ !cancelled() && needs.scope.outputs.run == 'true' && contains(fromJSON('["success","skipped"]'), needs.homelab.result) }}
     runs-on: windows-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        shard: ${{ fromJSON(needs.scope.outputs.windows) }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -248,12 +301,22 @@ jobs:
           # Git Bash's ln -s copies its target unless told to make a real link,
           # which the runner's administrator account may create.
           MSYS: winsymlinks:nativestrict
-        run: node scripts/test-all.mjs --shard ${{ matrix.shard }}/16
+        # --junit junit stays literal: pwsh passes a variable holding both
+        # words to node as one argument. A numbered shard runs only in a full run.
+        run: if ('${{ matrix.shard }}' -eq 'slice') { node scripts/test-all.mjs --slice } else { node scripts/test-all.mjs --shard ${{ matrix.shard }}/16 --junit junit }
+      - name: Upload JUnit timing
+        if: ${{ !cancelled() && needs.scope.outputs.scope == 'full' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-windows-${{ matrix.shard }}
+          path: junit
+          retention-days: 14
+          if-no-files-found: ignore
 
   windows-dagents:
     name: Windows dagents (${{ matrix.shard }}/17)
-    needs: dagents-changes
-    if: needs.dagents-changes.outputs.dagents == 'true'
+    needs: [scope, homelab]
+    if: ${{ !cancelled() && needs.scope.outputs.run == 'true' && needs.scope.outputs.scope == 'full' && contains(fromJSON('["success","skipped"]'), needs.homelab.result) }}
     runs-on: windows-latest
     timeout-minutes: 45
     strategy:
@@ -277,4 +340,44 @@ jobs:
           # Git Bash's ln -s copies its target unless told to make a real link,
           # which the runner's administrator account may create.
           MSYS: winsymlinks:nativestrict
-        run: node scripts/test-all.mjs --plugin dagents --shard ${{ matrix.shard }}/17
+        run: node scripts/test-all.mjs --plugin dagents --shard ${{ matrix.shard }}/17 --junit junit
+      - name: Upload JUnit timing
+        if: ${{ !cancelled() && needs.scope.outputs.scope == 'full' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-windows-dagents-${{ matrix.shard }}
+          path: junit
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ci-scope.mjs releases only a full run of main in which every job passed
+  # (homelab may be skipped, as in the hosted fallback run). The dispatch
+  # carries the commit, and release.mjs releases nothing if main moved past it.
+  release:
+    needs: [scope, homelab, validate, dagents-changes, validate-dagents, windows, windows-dagents]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Dispatch the release of the validated commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCOPE: ${{ needs.scope.outputs.scope }}
+          REF: ${{ github.ref }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          status=0
+          timeout 30s node scripts/ci-scope.mjs release || status=$?
+          if [ "$status" -eq 1 ]; then exit 0; fi
+          if [ "$status" -ne 0 ]; then exit "$status"; fi
+          for attempt in 1 2 3; do
+            timeout 30s gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f validated="$GITHUB_SHA" && break
+            [ "$attempt" -lt 3 ] || exit 1
+          done
