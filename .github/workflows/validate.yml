@@ -11,6 +11,10 @@ on:
         type: choice
         options: [homelab, hosted]
         default: homelab
+      from:
+        description: "the commit a slice dispatch compares against"
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -40,6 +44,7 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           REF: ${{ github.head_ref || github.ref_name }}
+          FROM: ${{ github.event.before || github.event.pull_request.base.sha }}
         run: |
           jobs="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs"
           deadline=$((SECONDS + 300))
@@ -54,7 +59,7 @@ jobs:
             sleep 10
           done
           echo "::warning::No homelab runner took validate and validate-dagents in five minutes; running again on GitHub's runners."
-          timeout 30s gh workflow run validate.yml --repo "$GITHUB_REPOSITORY" --ref "$REF" -f runner=hosted
+          timeout 30s gh workflow run validate.yml --repo "$GITHUB_REPOSITORY" --ref "$REF" -f runner=hosted -f from="$FROM"
           timeout 30s gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   validate:
@@ -126,7 +131,11 @@ jobs:
         run: timeout --kill-after=10s 1500s node scripts/test-all.mjs
 
   # dagents is the frozen dforge 4.x line: its jobs run only when a change can
-  # reach it. A new branch's push has no readable before commit, so it runs them.
+  # reach it: dagents itself, its suites, the workflow, or a root script a
+  # dagents job runs (its suites run test-all and validate-repository, which
+  # import test-shards, lint-portability and dagents-rename).
+  # A new branch's push has no readable before commit, and a dispatch without
+  # `from` has none either, so both run them.
   dagents-changes:
     runs-on: ubuntu-latest
     timeout-minutes: 3
@@ -141,18 +150,20 @@ jobs:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
           BASE: ${{ github.event.pull_request.base.sha }}
+          FROM: ${{ inputs.from }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           case "$EVENT" in
             push) from=$BEFORE ;;
             pull_request) from=$BASE ;;
+            workflow_dispatch) from=$FROM ;;
             *) echo "dagents=true" >> "$GITHUB_OUTPUT"; exit 0 ;;
           esac
           if ! git cat-file -e "$from^{commit}" 2>/dev/null || ! changed=$(timeout 30s git diff --name-only "$from" "$HEAD"); then
             echo "dagents=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if printf '%s\n' "$changed" | grep -Eq '^(plugins/dagents/|scripts/|tests/|\.github/workflows/validate\.yml)'; then
+          if printf '%s\n' "$changed" | grep -Eq '^(plugins/dagents/|tests/dagents/|scripts/(test-all|test-shards|validate-repository|lint-portability|dagents-rename)\.mjs$|\.github/workflows/validate\.yml$)'; then
             echo "dagents=true" >> "$GITHUB_OUTPUT"
           else
             echo "dagents=false" >> "$GITHUB_OUTPUT"

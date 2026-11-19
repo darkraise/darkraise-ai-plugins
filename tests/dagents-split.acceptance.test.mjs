@@ -291,7 +291,7 @@ test('A22: a dagents suite sharing a dforge suite\'s basename has its own limit,
 });
 
 // A29
-test('A29: a change outside plugins/dagents, scripts, tests and the workflow starts no dagents job', t => {
+test('A29: only dagents, its suites, the root scripts its jobs run and the workflow start a dagents job', t => {
   const workflow = readFileSync(join(ROOT, '.github/workflows/validate.yml'), 'utf8');
   const step = /- id: filter\n(?:.*\n)*?\s+run: \|\n((?:\s{10}.*\n|\n)+)/.exec(workflow);
   assert.ok(step, 'the dagents change filter step is missing');
@@ -307,17 +307,28 @@ test('A29: a change outside plugins/dagents, scripts, tests and the workflow sta
     const head = commit(file, `change ${file}`);
     const out = join(dir, `out-${head}`);
     writeFileSync(out, '');
-    const result = run('bash', ['-c', script], { cwd: repo, env: cleanEnv({ EVENT: event, BEFORE: base, BASE: base, HEAD: head, GITHUB_OUTPUT: out }) });
+    const result = run('bash', ['-c', script], { cwd: repo, env: cleanEnv({ EVENT: event, BEFORE: base, BASE: base, FROM: base, HEAD: head, GITHUB_OUTPUT: out }) });
     assert.equal(result.status, 0, result.stderr);
     const value = /dagents=(\w+)/.exec(readFileSync(out, 'utf8'))?.[1];
     g('reset', '-q', '--hard', base);
     return value;
   };
-  for (const file of ['plugins/dflow/x.md', 'plugins/dforge/x.md', 'plugins/darkraise-ui/x.md', 'docs/a.md', 'README.md2']) {
+  const ROOT_SCRIPTS = ['test-all', 'test-shards', 'validate-repository', 'lint-portability', 'dagents-rename'].map(name => `scripts/${name}.mjs`);
+  for (const file of ['plugins/dflow/x.md', 'plugins/dforge/x.md', 'plugins/darkraise-ui/x.md', 'docs/a.md', 'README.md2', 'tests/dforge/x.test.sh', 'tests/dflow/x.test.mjs', 'tests/x.test.mjs', 'scripts/release.mjs']) {
     assert.equal(decide(file), 'false', `${file} starts a dagents job`);
     assert.equal(decide(file, 'pull_request'), 'false', `${file} (pull request) starts a dagents job`);
   }
-  for (const file of ['plugins/dagents/x.md', 'scripts/x.mjs', 'tests/x.mjs', '.github/workflows/validate.yml']) assert.equal(decide(file), 'true', `${file} skips the dagents jobs`);
+  for (const file of ['plugins/dagents/x.md', 'tests/dagents/x.test.sh', ...ROOT_SCRIPTS, '.github/workflows/validate.yml']) assert.equal(decide(file), 'true', `${file} skips the dagents jobs`);
+  assert.equal(decide('tests/dforge/x.test.sh', 'workflow_dispatch'), 'false', 'a slice dispatch compares against from');
+  // Drift: every root script a dagents suite runs, and what it imports, is in the filter.
+  const named = new Set();
+  for (const suite of readdirSync(join(ROOT, 'tests/dagents')).filter(name => name.endsWith('.sh'))) {
+    for (const match of readFileSync(join(ROOT, 'tests/dagents', suite), 'utf8').matchAll(/(?<![\w/])scripts\/([\w-]+\.mjs)/g)) named.add(`scripts/${match[1]}`);
+  }
+  for (const script of [...named]) {
+    for (const match of readFileSync(join(ROOT, script), 'utf8').matchAll(/from '\.\/([\w-]+\.mjs)'/g)) named.add(`scripts/${match[1]}`);
+  }
+  for (const script of named) assert.ok(ROOT_SCRIPTS.includes(script), `${script} runs in a dagents job but the filter misses it`);
   for (const name of ['validate-dagents', 'windows-dagents']) {
     const job = new RegExp(`\\n  ${name}:\\n(?:    .*\\n|\\n)+`).exec(workflow)?.[0];
     assert.ok(job, `${name} job`);

@@ -202,10 +202,10 @@ test('dagents Windows shards cover every dagents suite exactly once', () => {
   assert.deepEqual(shards.flat().sort(), all.sort());
 });
 
-test('dagents jobs run only when dagents, scripts, tests or the workflow change', () => {
+test('dagents jobs run only when a change can reach them', () => {
   const workflow = readFileSync(new URL('../.github/workflows/validate.yml', import.meta.url), 'utf8');
   assert.match(workflow, /^ {2}dagents-changes:$/m);
-  assert.ok(workflow.includes('^(plugins/dagents/|scripts/|tests/|\\.github/workflows/validate\\.yml)'), 'the path filter');
+  assert.ok(workflow.includes('^(plugins/dagents/|tests/dagents/|scripts/(test-all|test-shards|validate-repository|lint-portability|dagents-rename)\\.mjs$|\\.github/workflows/validate\\.yml$)'), 'the path filter');
   for (const job of ['validate-dagents', 'windows-dagents']) {
     const block = workflow.slice(workflow.indexOf(`  ${job}:`));
     assert.match(block.slice(0, 600), /needs\.dagents-changes\.outputs\.dagents == 'true'/, job);
