@@ -1248,7 +1248,7 @@ export function parseLedger(text: string): Ledger {
       one.question = null
       continue
     }
-    const waiting = /^waiting\s*[—-]+\s*(.*)$/.exec(rest)
+    const waiting = /^waiting\s+[—–-]\s+(.*)$/.exec(rest)
     if (waiting) {
       const one = task(n)
       if (one.state === 'complete' || one.state === 'deferred') continue

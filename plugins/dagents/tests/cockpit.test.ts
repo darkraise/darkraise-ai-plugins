@@ -4625,6 +4625,13 @@ describe('run card', () => {
     ])
   })
 
+  test('reads a waiting line with any dash', () => {
+    for (const dash of ['—', '–', '-']) {
+      const one = parseLedger(`${LEDGER}\nTask 2: waiting ${dash} which meter width?`).tasks.find(task => task.n === 2)
+      expect([one?.state, one?.question]).toEqual(['waiting', 'which meter width?'])
+    }
+  })
+
   const GROUPED = [
     '# SDD ledger — plan: docs/plans/p.md',
     'Task 1: implementer dagents:impl-sonnet-low (assigned; base abc1234)',
