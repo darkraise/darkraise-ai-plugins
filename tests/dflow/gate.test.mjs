@@ -103,3 +103,12 @@ test('a gate without green is unchanged, and a bad green fails without running',
   assert.match(r.stdout, /^FAIL {2}typed: green is not a valid pattern/m);
   assert.equal(fs.existsSync(path.join(root, 'ran')), false, 'a bad pattern does not run its command');
 });
+
+test('green matches any line of the output, not only the first', t => {
+  const root = makeProject(t, { config: { gates: [
+    { name: 'summary', cmd: `node -e "console.log('header'); console.log('pass 3')"`, green: '^pass [1-9]' },
+  ] } });
+  const r = dflow(root, ['gate']);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /^ok {4}summary/m);
+});
