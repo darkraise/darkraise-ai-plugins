@@ -9,9 +9,11 @@
 # fast mode (lib/fast-mode.sh), when the last message ends with
 # "UI proof: pending — <why>", when it carries the `## Next session` block
 # next-step wrote this turn (a handoff; lib/next-ending.sh; without a turn
-# stamp, any such block), and while background work this session started runs
-# (lib/in-flight.sh): each of those stops is not a claim that the UI work is
-# done. The last message is the hook's, else the transcript's
+# stamp, any such block), when a question was asked through scripts/ask this
+# turn (lib/ask-marker.sh) or a ledger written this turn ends on a
+# `Task <N>: waiting — ` question (any dash), and while background work this
+# session started runs (lib/in-flight.sh): each of those stops is not a claim
+# that the UI work is done. The last message is the hook's, else the transcript's
 # (lib/last-message.sh). Anything
 # missing (jq, the turn stamp, a branch head for this checkout) passes.
 set -uo pipefail
@@ -50,9 +52,22 @@ last=$(sed -E 's/^[[:space:]`]+//; s/[[:space:]`]+$//' <<<"$last")
 # Only the closing line counts, so quoting the hook's own wording mid-message
 # does not release it.
 if grep -qE '^UI proof: pending[[:space:]]+(—|–|-)[[:space:]]*[^[:space:]]' <<<"$last"; then exit 0; fi
+. "$SCRIPT_DIR/lib/roots.sh"
+. "$SCRIPT_DIR/lib/ask-marker.sh"
+sdd=$(dagents_ledger_root "$root") || sdd=""
+docs=$(dagents_docs_root "$root") || docs=""
+[ -f "$stamp" ] && ask_marker_released "$stamp" "$sdd" "$docs" && exit 0
+if [ -f "$stamp" ] && [ -d "$sdd" ]; then
+  ws="$(dagents_dir state "$root")/sdd"
+  while IFS= read -r ledger; do
+    # As turn-end.sh reads it: a ledger without a workspace here is another
+    # checkout's.
+    [ -d "$ws/$(basename "$(dirname "$ledger")")" ] || continue
+    tr -d '\r' < "$ledger" | awk 'NF { l = $0 } END { print l }' | grep -qE '^Task [0-9]+: waiting[[:space:]]+(—|–|-)[[:space:]]' && exit 0
+  done < <(find "$sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null)
+fi
 . "$SCRIPT_DIR/lib/fast-mode.sh"
 fast_mode_on "$transcript_path" "$message" && exit 0
-. "$SCRIPT_DIR/lib/roots.sh"
 . "$SCRIPT_DIR/lib/next-ending.sh"
 if [ -f "$stamp" ]; then
   ending_released_any "$message" "$stamp" "$(dagents_latest_file "$root")" "$root" && exit 0

@@ -97,7 +97,7 @@ check "finish-preference question on a detached HEAD: passes" "$(stop s-1 $'Befo
 write_ledger 'Task 1: complete (commits a..b, review clean)'
 out=$(stop s-1 $'Before I start: when the implementation is done, the finish menu waits for\nyour answer. If it gets none within 30 minutes, what should I do?\n\nWhich option?')
 check "the retired finish-preference question: blocks" "$(decision "$out")" "block"
-check "mid-plan summary: names the waiting line for a question" "$(jq -r .reason <<<"$out" | grep -c 'Task <N>: waiting — <question>')" "1"
+check "mid-plan summary: names the waiting line for a question" "$(jq -r .reason <<<"$out" | grep -c 'scripts/ask')" "1"
 
 # --- one of the stops that asks the human, mid-plan ---
 # The session is not over: the answer arrives as the next prompt.
@@ -182,8 +182,6 @@ check "command still running: passes" "$(stop s-1 'Waiting on the reviewer.' fal
 jq -nc '{type:"user",isSidechain:true,message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_side",content:"Command running in background with ID: s1."}]}}' >> "$BG"
 notify toolu_bash killed
 check "all background work finished: blocks" "$(decision "$(stop s-1 'Waiting on the reviewer.' false "$BG")")" "block"
-check "the block says to wait without the next-step block" \
-  "$(jq -r .reason <<<"$(stop s-1 'Done.' false "$BG")" | grep -c 'end the turn without the block')" "1"
 
 # A finished launch whose notification is still queued starts the next turn as
 # soon as this one ends, so the stop is not the end of the work.

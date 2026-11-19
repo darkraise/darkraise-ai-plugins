@@ -6,7 +6,10 @@
 # stop (common on Sonnet) leave the human with neither. When the last message carries neither,
 # block the stop once with the instruction; Claude Code sets stop_hook_active on
 # the retry, which passes unless it ends the session over running work (below).
-# A question to the human is no ending: the ledger's last line records it.
+# A question to the human is no ending: scripts/ask records it in the ledger
+# and leaves a marker beside the turn stamp, which releases this turn's hold
+# unless work was recorded after it (lib/ask-marker.sh). It never releases an
+# auto run's hold or a session-ending message over running work.
 # Anything missing (jq, a ledger written this turn, or the turn stamp from scripts/turn-start.sh unless an auto run is
 # bound to the session) passes silently, and so
 # does a plain stop while an agent or command this session started in the
@@ -63,6 +66,7 @@ auto_pending=$([ -n "$root" ] && cd "$root" 2>/dev/null && bash "${SCRIPT_DIR}/a
 . "${SCRIPT_DIR}/lib/roots.sh"
 . "${SCRIPT_DIR}/lib/plan.sh"
 . "${SCRIPT_DIR}/lib/next-ending.sh"
+. "${SCRIPT_DIR}/lib/ask-marker.sh"
 # In a subshell, so a malformed config costs only this check, never the hook.
 sdd=$(dagents_ledger_root "$root") || sdd=""
 latest=""
@@ -71,7 +75,7 @@ latest=""
 # after latest.md was last written, and still uncommitted or committed since
 # the stamp; the roadmap only
 # when it now closes more milestones than at the turn's start.
-transition=""
+transition="" docs=""
 if [ -f "$stamp" ]; then
   stamp_at=$(stat -c %Y "$stamp" 2>/dev/null || stat -f %m "$stamp" 2>/dev/null || echo 0)
   docs=$(dagents_docs_root "$root")
@@ -104,6 +108,8 @@ if [ -f "$stamp" ]; then
   fi
 fi
 [ -d "$sdd" ] || [ -n "$auto_pending" ] || [ -n "$transition" ] || exit 0
+asked=0
+[ -f "$stamp" ] && ask_marker_released "$stamp" "$sdd" "$docs" && asked=1
 root_shown=$PLUGIN_ROOT
 if command -v cygpath >/dev/null 2>&1; then root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
 . "${SCRIPT_DIR}/lib/in-flight.sh"
@@ -183,8 +189,9 @@ fi
 # finishing menu, one of finishing's own stops (failing tests, a discard or
 # worktree prompt) or the next-step block, which names finishing; any other
 # plan ends on the next-step block, on the finish-preference question asked
-# before its first task, or on a question to the human that the ledger's last
-# line records (`Task <N>: waiting — <question>`): the answer is the next
+# before its first task, or on a question to the human, asked through
+# scripts/ask this turn or typed as the ledger's last line
+# (`Task <N>: waiting — <question>`, any dash): the answer is the next
 # prompt, so the session is not over. The next-step block counts only as
 # next-step wrote it this turn (lib/next-ending.sh), never hand-typed. The
 # first ledger without its ending names the reason.
@@ -203,19 +210,21 @@ while IFS= read -r candidate; do
     ends_with 'Which option?' "Type 'discard' to confirm" \
               'Must fix before completing' 'Worktree removal refused' && continue
     wrote_block && continue
+    [ "$asked" = 1 ] && continue
     ledger=$candidate clean=1
   else
     ends_with 'Ask me then: show the finish menu' && continue
     wrote_block && continue
-    tr -d '\r' < "$candidate" | sed '/^[[:space:]]*$/d' | tail -n 1 | grep -q '^Task [0-9][0-9]*: waiting — ' && continue
+    tr -d '\r' < "$candidate" | sed '/^[[:space:]]*$/d' | tail -n 1 | grep -Eq '^Task [0-9]+: waiting[[:space:]]+(—|–|-)[[:space:]]' && continue
+    [ "$asked" = 1 ] && continue
     ledger=$candidate clean=0
   fi
   break
 done < <([ -z "$sdd" ] || find "$sdd" -mindepth 2 -maxdepth 2 -name progress.md -newer "$stamp" 2>/dev/null | sort)
-# A transition ends as a finished plan does: on finishing's own stops or on
-# the block next-step wrote this turn.
+# A transition ends as a finished plan does: on finishing's own stops, on
+# the block next-step wrote this turn, or on a question asked this turn.
 if [ -n "$transition" ]; then
-  if ends_with 'Which option?' "Type 'discard' to confirm" 'Must fix before completing' 'Worktree removal refused' || wrote_block; then
+  if ends_with 'Which option?' "Type 'discard' to confirm" 'Must fix before completing' 'Worktree removal refused' || wrote_block || [ "$asked" = 1 ]; then
     transition=""
   fi
 fi
@@ -225,10 +234,10 @@ inflight_queued "$transcript_path" "$since" && exit 0
 
 if [ -z "$ledger" ]; then
   if [ "$transition" = project ]; then
-    reason="This turn closed a milestone in the roadmap. Run \`bash \"${root_shown}/scripts/next-step\" --project\` and end with its block verbatim."
+    reason="This turn closed a milestone in the roadmap. Run \`bash \"${root_shown}/scripts/next-step\" --project\` and end with its block verbatim. To ask your human partner first, run \`bash \"${root_shown}/scripts/ask\" \"<question>\"\` and end on the question."
     shown="dagents held the stop: a milestone closed, and the message ends without the next step"
   else
-    reason="This turn recorded plan ${transition#complete } in completed.md. Run \`bash \"${root_shown}/scripts/next-step\" --complete ${transition#complete }\` and end with its block verbatim."
+    reason="This turn recorded plan ${transition#complete } in completed.md. Run \`bash \"${root_shown}/scripts/next-step\" --complete ${transition#complete }\` and end with its block verbatim. To ask your human partner first, run \`bash \"${root_shown}/scripts/ask\" \"<question>\"\` and end on the question."
     shown="dagents held the stop: plan ${transition#complete } was recorded complete, and the message ends without the next step"
   fi
   hold "$reason" "$shown"
@@ -239,10 +248,10 @@ plan=$(head -n 1 "$ledger" | sed -n 's/^# SDD ledger — plan: //p' | tr -d '\r'
 [[ "$plan" =~ ^[A-Za-z0-9._/-]+\.md$ ]] || plan="PLAN_FILE"
 
 if [ "$clean" = 1 ]; then
-  reason="Plan ${plan} passed its final review. Invoke dagents:finishing-a-development-branch with the Skill tool now and end on its menu or next-step block."
+  reason="Plan ${plan} passed its final review. Invoke dagents:finishing-a-development-branch with the Skill tool now and end on its menu or next-step block. To ask your human partner first, run \`bash \"${root_shown}/scripts/ask\" \"<question>\"\` and end on the question."
   shown="dagents held the stop: plan ${plan} passed its final review, and the message ends without the finishing menu"
 else
-  reason="Plan ${plan} advanced without a next step. Continue the work, or ask: end the ledger with \`Task <N>: waiting — <question>\` and stop on the question. Else run \`bash \"${root_shown}/scripts/next-step\" ${plan}\` and end with its block verbatim. If background work runs, end the turn without the block."
+  reason="Plan ${plan} advanced without a next step. Continue, or ask: run \`bash \"${root_shown}/scripts/ask\" ${plan} N \"<question>\"\` and end on the question. If the session is ending, run \`bash \"${root_shown}/scripts/next-step\" ${plan}\` and end with its block verbatim."
   shown="dagents held the stop: plan ${plan} advanced, and the message ends without the next step"
 fi
 hold "$reason" "$shown"
