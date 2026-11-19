@@ -204,6 +204,9 @@ ui_hold=$(ui_stop "$SID" 'Done.')
 check "${PFX}A3: a UI change without proof is held without a question" "$(decision "$ui_hold")" "block"
 ask_cli 'Which colour should the button be?' >/dev/null 2>&1
 check "${PFX}A3: a UI change without proof: passes after scripts/ask" "$(ui_stop "$SID" 'Which colour should the button be?')" ""
+# The next turn's stamp, however it came to be newer than the marker, ends the question's release.
+sleep 1; touch "$TURNS/$SID"
+check "${PFX}A4: a UI change without proof: a marker older than the turn's stamp releases nothing" "$(decision "$(ui_stop "$SID" 'Done.')")" "block"
 turn "$SID"; ui_change 2
 check "${PFX}A4: a UI change without proof: a question from an earlier turn releases nothing" "$(decision "$(ui_stop "$SID" 'Done.')")" "block"
 
