@@ -78,3 +78,28 @@ test('a piped gate fails when an earlier stage fails', t => {
   assert.equal(failed.status, 1, failed.stdout);
   assert.match(failed.stdout, /^FAIL  test: `node suite\.mjs 2>&1 \| tail -1` exited 1/m);
 });
+
+test('a gate with green passes only when its output matches', t => {
+  const root = makeProject(t, { config: { gates: [
+    { name: 'matches', cmd: `node -e "console.log('pass 3')"`, green: '^pass [1-9]' },
+    { name: 'empty', cmd: `node -e "console.log('pass 0')"`, green: '^pass [1-9]' },
+  ] } });
+  const r = dflow(root, ['gate']);
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /^ok {4}matches/m);
+  assert.match(r.stdout, /^FAIL {2}empty: output does not match green \/\^pass \[1-9\]\//m);
+});
+
+test('a gate without green is unchanged, and a bad green fails without running', t => {
+  const root = makeProject(t, { config: { gates: [
+    { name: 'plain', cmd: `node -e "process.exit(0)"` },
+    { name: 'bad', cmd: `node -e "require('fs').writeFileSync('ran', '')"`, green: '(' },
+    { name: 'typed', cmd: `node -e "process.exit(0)"`, green: 5 },
+  ] } });
+  const r = dflow(root, ['gate']);
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /^ok {4}plain/m);
+  assert.match(r.stdout, /^FAIL {2}bad: green is not a valid pattern/m);
+  assert.match(r.stdout, /^FAIL {2}typed: green is not a valid pattern/m);
+  assert.equal(fs.existsSync(path.join(root, 'ran')), false, 'a bad pattern does not run its command');
+});

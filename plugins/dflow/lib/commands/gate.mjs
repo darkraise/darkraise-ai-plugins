@@ -24,13 +24,27 @@ export async function runGates(ctx, { names = [], out }) {
   for (const gate of selected) {
     const logFile = path.join(ctx.paths.logs, active?.slug ?? '_', `gate-${gate.name}.log`);
     fs.rmSync(logFile, { force: true });
+    let green = null;
+    if (gate.green !== undefined) {
+      try {
+        if (typeof gate.green !== 'string') throw new Error(`a ${typeof gate.green}, not a string`);
+        green = new RegExp(gate.green, 'm');
+      } catch (error) {
+        results.push({ name: gate.name, ok: false, seconds: 0 });
+        out(`FAIL  ${gate.name}: green is not a valid pattern (${error.message})`);
+        continue;
+      }
+    }
     const result = await runCommand(gate.cmd, { cwd: ctx.root, timeoutSeconds: gate.timeout ?? 900, logFile, env: ctx.env });
-    results.push({ name: gate.name, ok: result.ok, seconds: Number(result.seconds.toFixed(1)) });
-    if (result.ok) {
+    const matched = !green || !result.ok || green.test(result.output);
+    results.push({ name: gate.name, ok: result.ok && matched, seconds: Number(result.seconds.toFixed(1)) });
+    if (result.ok && matched) {
       out(`ok    ${gate.name} (${result.seconds.toFixed(1)}s)`);
       continue;
     }
-    out(`FAIL  ${gate.name}: \`${gate.cmd}\` ${result.timedOut ? `timed out after ${gate.timeout ?? 900}s` : `exited ${result.status}`} (${result.seconds.toFixed(1)}s)`);
+    out(result.ok
+      ? `FAIL  ${gate.name}: output does not match green /${gate.green}/ (${result.seconds.toFixed(1)}s)`
+      : `FAIL  ${gate.name}: \`${gate.cmd}\` ${result.timedOut ? `timed out after ${gate.timeout ?? 900}s` : `exited ${result.status}`} (${result.seconds.toFixed(1)}s)`);
     for (const line of tail(result.output, 30)) out(`      ${line}`);
     out(`      full log: ${relative(ctx.root, logFile)}`);
   }

@@ -283,6 +283,12 @@ refuses overlap.
 }
 ```
 
+A gate may also carry `green`, a regular expression (multiline) that the last
+256 KiB of the command's output must match: a gate whose command exits 0
+without a match fails, which catches a suite that passes because it ran
+nothing. A `green` that is not a valid pattern fails the gate without running
+its command.
+
 ## Development
 
 ```text
