@@ -79,7 +79,6 @@ test('invalid shard arguments fail instead of silently skipping tests', () => {
 test('a shell suite needs a weight of at most 80% of its limit', () => {
   const rows = [
     { name: 'no weight', jobs: [shell('new.test.sh', 600)], weights: {}, want: [/new\.test\.sh: no weight/] },
-    { name: 'no weight for the dr-status suite', jobs: [['bash', ['tests/dr-status/run-all.sh'], 420]], weights: {}, want: [/run-all\.sh: no weight/] },
     { name: 'exactly 80% passes', jobs: [shell('a.test.sh', 600)], weights: { 'tests/dforge/a.test.sh': 480 }, want: [] },
     { name: 'above 80%', jobs: [shell('a.test.sh', 600)], weights: { 'tests/dforge/a.test.sh': 481 }, want: [/a\.test\.sh: .*raise its suiteSeconds or split it/] },
     { name: 'a larger limit raises the bound', jobs: [shell('a.test.sh', 1200)], weights: { 'tests/dforge/a.test.sh': 900 }, want: [] },

@@ -106,7 +106,6 @@ const jobs = options.plugin === 'dagents' ? [
   [process.execPath, ['scripts/validate-repository.mjs'], 60],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests')).filter(name => name.endsWith('.test.mjs') && name !== 'guard-isolation.test.mjs' && name !== 'dagents-split.acceptance.test.mjs').sort().map(name => `tests/${name}`)], 120],
   [process.execPath, ['--test', 'tests/guard-isolation.test.mjs', 'tests/dagents-split.acceptance.test.mjs'], 1200],
-  [bash, ['tests/dr-status/run-all.sh'], 420],
   [process.execPath, ['--test', ...readdirSync(resolve(root, 'tests/dflow')).filter(name => name.endsWith('.test.mjs')).sort().map(name => `tests/dflow/${name}`)], 300],
   ...shellJobs('dforge'),
   ...(hasClaude ? [['claude', ['plugin', 'test', 'plugins/dforge'], 300], ['claude', ['plugin', 'test', 'plugins/dflow'], 120]] : []),

@@ -287,7 +287,7 @@ if selected A13; then
     if [ -x "$CLAUDE_BIN" ]; then
       out=$(cd "$REPO_ROOT" && HOME="$ORIG_HOME" "$TIMEOUT_BIN" 90 "$CLAUDE_BIN" plugin validate . 2>&1); rc=$?
       check "A13: claude plugin validate passes on the marketplace" "$rc" "0"
-      for p in dforge dr-status darkraise-ui darkraise-win32ui; do
+      for p in dforge darkraise-ui darkraise-win32ui; do
         out=$(cd "$REPO_ROOT" && HOME="$ORIG_HOME" "$TIMEOUT_BIN" 90 "$CLAUDE_BIN" plugin validate "plugins/$p" 2>&1); rc=$?
         check "A13: claude plugin validate passes on plugins/$p" "$rc" "0"
       done

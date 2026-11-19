@@ -1140,8 +1140,9 @@ day; their steps now run through `/dforge:migrate`.
    `~/.claude/settings.json` may still name `darkraise/claude-code-plugins`;
    the canonical repository is `darkraise/darkraise-ai-plugins`. Remove and
    re-add the marketplace (or edit the registration) to point there.
-2. **Statusline.** `dcc-statusline` is `dr-status` in this catalog; enable
-   `dr-status@darkraise` and disable the old name.
+2. **Statusline.** `dcc-statusline` has no replacement in this catalog:
+   disable it (see
+   [Retired plugins](../../docs/migration.md#retired-plugins)).
 3. **Telegram notifications.** `dcc-telegram-notify` is not in this catalog;
    keep it installed from its previous source or drop it.
 4. **Disable the superseded plugins:** `superpowers` (its skills now ship

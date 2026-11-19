@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { renamePath } from './dagents-rename.mjs';
 import { lintTree } from './lint-portability.mjs';
 
-const maintained = ['dagents', 'darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status'];
+const maintained = ['dagents', 'darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge'];
 const NAMESPACED = ['dforge', 'dagents'];
 // dagents is dforge 4.17.1 renamed, so it keeps dforge's rules and allowlists under its own paths.
 const WORKFLOW = ['dforge', 'dagents'];
@@ -49,7 +49,7 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   'tests/dagents/dagents-split.acceptance.test.sh',
   'tests/dagents/darkmem-sync/dagents-split.acceptance.test.mjs',
 ]);
-const claudeOnly = ['dflow', 'dr-status'];
+const claudeOnly = ['dflow'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
 // A file's lines for the name sweeps, or null for a binary file (one holding a
 // NUL character), whose bytes are not text to read names in. UTF-16 text holds
@@ -108,8 +108,6 @@ export function validateRepository(root, { names = maintained } = {}) {
       }
     }
   }
-  const versionPath = resolve(root, 'plugins/dr-status/scripts/VERSION');
-  if (!existsSync(versionPath) || readFileSync(versionPath, 'utf8').trim() !== manifests.get('dr-status')?.version) errors.push('dr-status: script version mismatch');
   for (const name of claudeOnly) {
     if (existsSync(resolve(root, `plugins/${name}/.codex-plugin/plugin.json`))) errors.push(`${name}: Claude-only plugin has a Codex manifest`);
   }

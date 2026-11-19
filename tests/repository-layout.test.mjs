@@ -7,9 +7,9 @@ import test from 'node:test';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const json = path => JSON.parse(readFileSync(resolve(root, path), 'utf8'));
-test('Claude offers six maintained plugins', () => {
+test('Claude offers five maintained plugins', () => {
   assert.deepEqual(json('.claude-plugin/marketplace.json').plugins.map(p => p.name).sort(),
-    ['dagents', 'darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status']);
+    ['dagents', 'darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge']);
 });
 test('Codex root discovery offers only supported plugins', () => {
   assert.ok(existsSync(resolve(root, '.agents/plugins/marketplace.json')), 'dedicated Codex catalog is required');
@@ -52,7 +52,7 @@ test('repository validator rejects broken distribution contracts', async t => {
     ['retired forge_ code name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'forge_dir .\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
     ['retired FORGE variable', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'echo "$FORGE_HOME"\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
     ['retired _forge code name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'my_forge_dir=.\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
-    ['retired dcc- plugin name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-status/stray.md'), 'install dcc-darkraise-ui\n'); }, /plugins\/dr-status\/stray\.md:1: retired dcc- plugin name/],
+    ['retired dcc- plugin name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/darkraise-ui/stray.md'), 'install dcc-darkraise-ui\n'); }, /plugins\/darkraise-ui\/stray\.md:1: retired dcc- plugin name/],
   ]) {
     await t.test(name, () => {
       const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));
@@ -119,7 +119,7 @@ test('the retired superpowers name is allowed only in the allowlisted files', as
     for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
       cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
     }
-    for (const path of ['plugins/dforge/tests/stray.test.sh', 'plugins/dforge/LICENSES/stray-LICENSE', 'plugins/dforge/scripts/lib/dforge-home-migrate.mjs', 'plugins/dr-status/stray.md']) {
+    for (const path of ['plugins/dforge/tests/stray.test.sh', 'plugins/dforge/LICENSES/stray-LICENSE', 'plugins/dforge/scripts/lib/dforge-home-migrate.mjs', 'plugins/darkraise-ui/stray.md']) {
       writeFileSync(resolve(dir, path), 'superpowers\n');
     }
     const retired = () => validateRepository(dir).filter(error => error.includes('retired superpowers name'));
@@ -173,7 +173,7 @@ test('the name sweeps skip binary files', async () => {
     }
     const bytes = Buffer.from('superpowers dr-forge\u0000 dcc-darkraise-ui\n', 'utf8');
     writeFileSync(resolve(dir, 'plugins/dforge/reference/image.bin'), bytes);
-    writeFileSync(resolve(dir, 'plugins/dr-status/image.bin'), bytes);
+    writeFileSync(resolve(dir, 'plugins/darkraise-ui/image.bin'), bytes);
     assert.deepEqual(validateRepository(dir), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -242,7 +242,7 @@ test('a namespaced plugin resolves references within its own tree', async t => {
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
   writeFileSync(resolve(dir, 'plugins/dagents/reference/stray.md'), 'see dagents:no-such-skill and dagents:brainstorming\n');
-  const names = ['darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status', 'dagents'];
+  const names = ['darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dagents'];
   const errors = validateRepository(dir, { names });
   assert.ok(errors.includes('plugins/dagents/reference/stray.md:1: unresolved dagents reference no-such-skill'), errors.join('\n'));
   assert.ok(!errors.some(e => e.includes('dagents reference brainstorming')), errors.join('\n'));

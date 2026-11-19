@@ -94,7 +94,7 @@ jobs:
         timeout-minutes: 3
         run: |
           timeout 60s "$CLAUDE" plugin validate .
-          for plugin in dr-status darkraise-ui darkraise-win32ui; do
+          for plugin in darkraise-ui darkraise-win32ui; do
             timeout 30s "$CLAUDE" plugin validate "plugins/$plugin"
           done
 

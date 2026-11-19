@@ -37,7 +37,8 @@ continues as the dagents plugin. To keep it in a project:
 
 The catalog's previous public release listed `dr-superpowers`, `dr-cockpit`,
 `dcc-darkraise-ui`, `dcc-darkraise-win32ui` and `dr-status`. The first four
-are replaced; `dr-status` keeps its name.
+are replaced; `dr-status` kept its name until it was retired (see
+[Retired plugins](#retired-plugins)).
 
 | Installed | Install instead |
 |---|---|
@@ -71,8 +72,9 @@ them.
 
 ## Replaced plugins
 
-Disable the old Claude `dcc-statusline` and `dcc-superpower-companions` plugins
-before enabling `dr-status` and `dforge`, so their hooks do not run twice.
+Disable the old Claude `dcc-superpower-companions` plugin before enabling
+`dforge`, so its hooks do not run twice. The old `dcc-statusline` plugin has no
+replacement; see [Retired plugins](#retired-plugins).
 
 `dr-forge` 2.0.0 replaces `dr-superpowers` and `dr-cockpit`: install it, start
 one session so it imports their settings, then uninstall both (see
@@ -90,16 +92,16 @@ dr-superpowers repository straight to 4.0 as well (see
 `dcc-darkraise-win32ui`, with the same skills: install the new names, then
 uninstall the old ones.
 
-## Status line
-
-Statusline script storage remains `~/.claude/dcc-statusline/`; a registry at
-`~/.claude/dcc-statusline-installations.json` remembers custom account
-destinations. Set `DCC_STATUSLINE_HOME` only when installing or intentionally
-moving a copy. Sync, status, doctor and uninstall use the recorded destination
-afterward. To register the status line, run `/dr-status:dr-status install`, or
-`/dr-status:dr-status install --all` for all discovered accounts.
-
 ## Retired plugins
+
+`dr-status` is retired and no longer in the catalog. Its status line runs from
+the copy it installed (by default `~/.claude/dcc-statusline/`), so it keeps
+working after you uninstall the plugin, but it gets no further updates. To
+remove it, run `/dr-status:dr-status uninstall` (add `--all` for every
+account) while the plugin is still installed, then uninstall
+`dr-status@darkraise`. That removes only the `statusLine` key it registered;
+the copied scripts, `~/.claude/dcc-statusline.json` and
+`~/.claude/dcc-statusline-installations.json` stay until you delete them.
 
 Telegram notification support is retired. Uninstall `dcc-telegram-notify` from
 existing clients yourself; removing its catalog entry does not remove cached

@@ -11,7 +11,7 @@ Everyone taking part is expected to follow the
 
 | Path | Contents |
 | --- | --- |
-| `.claude-plugin/marketplace.json` | The Claude Code catalog: `dforge`, `dagents`, `dflow`, `dr-status`, `darkraise-ui`, `darkraise-win32ui`. |
+| `.claude-plugin/marketplace.json` | The Claude Code catalog: `dforge`, `dagents`, `dflow`, `darkraise-ui`, `darkraise-win32ui`. |
 | `.agents/plugins/marketplace.json` | The Codex catalog: `dforge`, `dagents` and the two UI plugins. Codex discovers it from the repository root. |
 | `plugins/<name>/` | One plugin as it installs: its manifests, skills, hooks and scripts, plus a mod's `*.test.ts` files and the fixtures they import, which `claude plugin test` finds only inside the plugin. |
 | `scripts/` | Repository validation and the full test runner. |
@@ -23,9 +23,9 @@ Everyone taking part is expected to follow the
 - The marketplace ID is `darkraise`. A plugin's directory name, its catalog
   entries and its client manifest names must agree.
 - Keep the Claude (`.claude-plugin/plugin.json`) and Codex
-  (`.codex-plugin/plugin.json`) manifest versions equal. `dflow` and `dr-status` are Claude
-  Code only and have no Codex manifest; add a Codex manifest only for a plugin
-  Codex supports. `plugins/dr-status/scripts/VERSION` must match its manifest.
+  (`.codex-plugin/plugin.json`) manifest versions equal. `dflow` is Claude Code
+  only and has no Codex manifest; add a Codex manifest only for a plugin Codex
+  supports.
 - Preserve existing `DCC_*` environment variables and the statusline's user
   storage paths.
 - Do not enroll unrelated plugin directories in a catalog.

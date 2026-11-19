@@ -13,7 +13,6 @@ export const windowsSeconds = {
   'tests/dagents-rename.test.mjs': 60,
   'tests/guard-isolation.test.mjs': 375,
   'tests/dflow/board.test.mjs': 150,
-  'tests/dr-status/run-all.sh': 157,
   'tests/dforge/agy-gate.test.sh': 70,
   'tests/dforge/agy-review.test.sh': 150,
   'tests/dforge/api-decisions-keep-warm-hydrogen.acceptance.test.sh': { 'A1 A2 A3 A4 A5 A6 A7': 340, 'A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A25 A27 A28 A31': 380 },
@@ -295,7 +294,7 @@ export function selectShard(jobs, shard, weights = windowsSeconds) {
 export function checkShellWeights(jobs, weights = windowsSeconds) {
   const suites = new Map();
   for (const [, args, limit] of jobs) {
-    if (!nodeTest(args) && args[0] !== 'tests/dr-status/run-all.sh' && !/^tests\/[a-z0-9-]+\/[^/]+\.(test|acceptance)\.sh$/.test(args[0])) continue;
+    if (!nodeTest(args) && !/^tests\/[a-z0-9-]+\/[^/]+\.(test|acceptance)\.sh$/.test(args[0])) continue;
     const name = suiteName(args);
     const suite = suites.get(name) ?? { parts: [], limit };
     suite.parts.push(suitePart(args));
