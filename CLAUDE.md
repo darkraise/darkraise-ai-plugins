@@ -32,4 +32,7 @@ path filter counts as green. Also read the latest full run on `main`
 (`gh run list --workflow validate.yml --branch main --json
 displayTitle,conclusion,headSha,createdAt,url`, titles ending `(full)`):
 report a failed one, or none in the last 48 hours, as a finding against the
-commits since the last green full run.
+commits since the last green full run. Read the latest `release.yml` run too
+(`gh run list --workflow release.yml --limit 1`): a nightly skips a commit a
+full run already validated, so a failed release is not retried; report it,
+and rerun it with `gh workflow run release.yml -f validated=<sha>`.
