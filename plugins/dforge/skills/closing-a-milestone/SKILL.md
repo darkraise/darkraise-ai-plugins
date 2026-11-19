@@ -55,7 +55,9 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
      prints, verbatim. The milestone stays open; the reopened rows route like
      any other.
    - Any `UNVERIFIABLE`: put the row to your human partner with what evidence
-     would settle it. It counts as a GAP until they rule.
+     would settle it. It counts as a GAP until they rule. A question to your
+     human partner other than this skill's own stops goes through
+     `scripts/ask "<question>"`; end on the question.
    - All `MET`: go to step 7.
 7. **Owner sign-off.** Present the verdict table and the exit criteria. On your
    human partner's approval, set every `verify` row the audit covered, and

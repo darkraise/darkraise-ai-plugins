@@ -14,6 +14,9 @@ Clean up → Report the next step.
 **Announce at start:** "I'm using the finishing-a-development-branch skill to
 complete this work."
 
+A question to your human partner other than this skill's own stops goes
+through `scripts/ask "<question>"`; end on the question.
+
 ## Auto run
 
 When `scripts/auto-run status` exits 0
