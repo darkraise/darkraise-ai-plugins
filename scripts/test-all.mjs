@@ -44,7 +44,7 @@ function stop(job) {
 }
 const junitDir = options.junit === undefined || options.list ? null : resolve(options.junit);
 if (junitDir) mkdirSync(junitDir, { recursive: true });
-const xmlEscape = text => String(text).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]);
+const xmlEscape = text => String(text).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]);
 // A case runs from the previous ok/FAIL line, the first from the job's first
 // output line, so a suite's setup before any output is left as overhead.
 function writeJunit(args, lines, elapsed, failure) {
@@ -59,6 +59,7 @@ function writeJunit(args, lines, elapsed, failure) {
     previous = at;
   }
   if (cases.length === 0) cases.push({ name, seconds: elapsed, failure });
+  else if (failure !== undefined && !cases.some(c => c.failure !== undefined)) cases.push({ name: `${name}: ${failure}`, seconds: 0, failure });
   const suite = xmlEscape(name);
   const xml = [
     '<?xml version="1.0" encoding="UTF-8"?>',

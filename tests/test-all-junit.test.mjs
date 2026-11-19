@@ -63,3 +63,15 @@ test('without --junit the output and exit status are unchanged', t => {
     assert.equal(existsSync(join(dir, 'junit')), false);
   }
 });
+
+test('--junit fails a job that exits non-zero after passing checks, and drops control characters', t => {
+  const dir = tree(t);
+  rmSync(join(dir, 'tests/dagents/alpha.test.sh'));
+  writeFileSync(join(dir, 'tests/dagents/beta.test.sh'), "echo 'ok   - first check'\nprintf 'ok   - \\033[31mcolored\\033[0m check\\n'\nexit 3\n");
+  const r = run(dir, '--jobs', '1', '--junit', 'junit');
+  assert.equal(r.status, 1);
+  const beta = readFileSync(join(dir, 'junit/tests-dagents-beta.test.sh.xml'), 'utf8');
+  assert.deepEqual(cases(beta).map(row => row.name), ['first check', '[31mcolored[0m check', 'tests/dagents/beta.test.sh: exit 3']);
+  assert.equal((beta.match(/<failure\b/g) ?? []).length, 1);
+  assert.doesNotMatch(beta, /\x1b/);
+});
