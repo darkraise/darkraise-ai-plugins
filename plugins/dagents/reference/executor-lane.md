@@ -129,17 +129,18 @@ A task carrying an `**Executor:**` line runs on that CLI instead of its
 the ledger, the two-round cap - is unchanged, because the contract the loop
 enforces is files and commits, not a particular runtime.
 
-**The fallback is the session.** Wherever this file says a task falls back -
-its gate is closed, its CLI is unusable, the per-plan breaker has tripped, a
-run or a fix round hands back - dagents:executing-plans implements the task
-itself under [delegated-task.md](delegated-task.md) §The session review loop,
-never closing it `unreviewed`, and its assigned line's agent slot reads
-`inline`. A task that falls back before any run joins that loop at its
-implement step after the plain `task-step start` the executor path already ran
-(never `--inline`, which refuses an executor task); a handback mid-loop joins
-it at the round it was in. Deprecated dagents:subagent-driven-development
-dispatches the task's `**Implementer:**` agent instead, with that agent in the
-slot.
+**The fallback is the plan's own mode.** Wherever this file says a task falls
+back - its gate is closed, its CLI is unusable, the per-plan breaker has
+tripped, a run or a fix round hands back - dagents:subagent-driven-development,
+the default mode, dispatches the task's `**Implementer:**` agent, with that
+agent in the assigned line's agent slot. On an inline plan
+dagents:executing-plans implements the task itself under
+[delegated-task.md](delegated-task.md) §The session review loop, never closing
+it `unreviewed`, and its assigned line's agent slot reads `inline`. A task
+that falls back there before any run joins that loop at its implement step
+after the plain `task-step start` the executor path already ran (never
+`--inline`, which refuses an executor task); a handback mid-loop joins it at
+the round it was in.
 
 **There is no driver subagent.** Run the wrapper yourself as a background Bash
 call. It prints one status line and writes everything else to files.
@@ -186,8 +187,10 @@ run neither the gate, the roster nor the wrapper: fall back to the session,
 say `agy off — unreliable (2 handbacks)` aloud, and record the assigned line
 `Task <N>: implementer inline (assigned; base <sha7>; executor agy unavailable - off for this plan: unreliable (2 handbacks))`.
 The breaker counts a task as handed back when one of its lines names
-`executor agy ` and one says `HANDBACK`, so every handback must carry the word.
-A review-loop handback already does, on its `HANDBACK to inline` fix-round
+`executor agy ` and an implementer or fix-round line records the handback in
+one of two forms, `executor <id> HANDBACK - <reason>` or `; HANDBACK to
+<agent>`; the word anywhere else is free text and does not count. A
+review-loop handback already does, on its `HANDBACK to inline` fix-round
 line. A run that fails before review (a refusal, a second failed run, a gate
 closed after `--refresh`, a preflight exit 2, a git-guard block once recovered) hands back on the
 fallback's assigned line, in its substitution slot:
@@ -508,9 +511,7 @@ row and never falls back. `codex:heavy+judge-opus` passes
 `--tier heavy`: the runner takes the block's first row, and falls back once to
 the last row on a refusal. There is no catalog to consult first - the codex
 plugin advertises no model list, and reading Codex's own cache would cross the
-boundary the session gate exists to hold. `--kind risk3` is the
-same seat under its earlier name and stays accepted. The runner prints one
-status line:
+boundary the session gate exists to hold. The runner prints one status line:
 
 ```
 codex-judge <model>/<effort> status=OK|FALLBACK|TIMEOUT|FAILED exit=<n> out=<path> evidence=none
@@ -608,10 +609,9 @@ discarded. `--kind final` still takes no `--prompt`, and the round still returns
 a markdown findings list, which is what [final-review.md](final-review.md) step 3
 deduplicates.
 
-The runner establishes usability itself from the same `detect-executors.sh`
-roster the task seats use, so this round needs no separate guard; a Codex that
-is not usable comes back as `status=FAILED` with the roster's own reason on
-stderr.
+The runner establishes usability itself from the session's `codex-gate`
+answer, so this round needs no separate guard; a Codex that is not usable comes
+back as `status=FAILED` with the gate's reason on stderr.
 
 Unlike the task seats, this round is **not** self-review-free. The branch
 contains whatever the executor lane produced, so Codex is reviewing some of its

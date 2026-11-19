@@ -46,100 +46,17 @@ The machine policy is [codex-routing.json](codex-routing.json):
 | 9 | gpt-6-astra | xhigh |
 
 These tiers are policy choices, not benchmark results: no calibration replay
-backs ranks 3 to 6 on `gpt-6.1-sol` (codex-v3 ran them on `gpt-6-sol`, as the
-table under Existing plans shows). Only currently advertised
-and user-allowed model/effort pairs can run; API model availability does not
-establish access through a native client or the external CLI.
+backs ranks 3 to 6 on `gpt-6.1-sol` (codex-v3 ran them on `gpt-6-sol`). Only
+currently advertised and user-allowed model/effort pairs can run; API model
+availability does not establish access through a native client or the
+external CLI.
 
-## Existing plans
-
-Treat an existing assignment without a source as human-pinned. Keep original
-assignments fixed; actual attempts, promotions, and substitutions go in the
-ledger. `scripts/select-native-tier.sh` and `scripts/plan-lint` accept only `codex-v4`: they reject
-codex-v1, codex-v2, codex-v3 and unknown policy versions with a
-conversion-required error. Never reinterpret an older plan's scores or ranks as
-v4.
-
-For an old Codex or Claude plan, preview the preserved raw axes, original policy,
-old total, new weighted score, and old/proposed assignments. Obtain approval
-before recording the converted plan. Recalculate the total from existing axes;
-do not change the underlying assessments to fit a preferred tier. If axes are
-missing, obtain an explicit evaluation instead of inferring them from the total.
-Keep original evaluations and assignments in the conversion record, preserve
-human pins, and never automatically translate reserve overrides.
-
-A codex-v2 or codex-v3 plan keeps its scores: v2, v3 and v4 share the weighted
-formula, so the preview states each score as unchanged. A rubric task's proposed
-pair is the v4 execution tier at its score. The Execution line's pair maps by
-rank: an older execution pair becomes the v4 pair at the same rank (v3
-`gpt-6-sol / high`, rank 5, becomes `gpt-6.1-sol / high`; v2 `gpt-5.6-sol /
-high`, rank 7, becomes `gpt-6-astra / medium`), and a reserve pair stays itself.
-A human pin stays verbatim even when it names an older pair, which still runs
-while it is advertised; the preview flags each such pin so
-your human partner keeps or re-pins it explicitly.
-
-The older ranks, kept here because the policy file no longer carries them.
-codex-v3 differs from v4 only at ranks 3 to 6:
-
-```text
-rank  codex-v3 pair
-3     gpt-6-sol / low
-4     gpt-6-sol / medium
-5     gpt-6-sol / high
-6     gpt-6-sol / xhigh
-```
-
-```text
-rank  codex-v2 pair
-0     gpt-5.6-luna / low
-1     gpt-5.6-luna / medium
-2     gpt-5.6-terra / low
-3     gpt-5.6-terra / medium
-4     gpt-5.6-terra / high
-5     gpt-5.6-sol / low
-6     gpt-5.6-sol / medium
-7     gpt-5.6-sol / high
-8     gpt-6-astra / high
-9     gpt-6-astra / xhigh
-reserve  gpt-6-astra / max, then gpt-6-astra / ultra
-```
-
-An unstarted plan, one with no ledger, is converted in place and committed:
-its `Routing policy:` line becomes `codex-v4` in its existing bold or plain
-form and the Execution line take their v4 pairs, Evaluation lines stay untouched, and a conversion record
-goes in the header immediately before `## Task index`, so no task's text
-absorbs it:
-
-```text
-## Policy conversion
-
-codex-v3 → codex-v4, approved <date>. Scores unchanged.
-
-| Task | Axes (f/s/c/r) | Score | codex-v3 | codex-v4 | Source |
-|---|---|---|---|---|---|
-| 1 | 1/1/1/0 | 3 | gpt-6-sol / low | gpt-6.1-sol / low | rubric |
-| 2 | 0/1/0/1 | 3 | gpt-6-sol / high | gpt-6-sol / high | human (kept) |
-```
-
-`scripts/plan-lint` must pass on the converted plan.
-
-A plan with a ledger does not change: it is immutable during execution, and
-`scripts/plan-amend` refuses `Routing policy:` lines. Convert active work only
-at a reconciled task boundary, recording the approved preview as one ledger
-line:
-
-```text
-Ruling: policy conversion codex-v3 -> codex-v4 — approved preview; Task 4 gpt-6.1-sol / low, Task 5 gpt-6-astra / medium — attempts above this line stay codex-v3
-```
-
-Tasks after that line run under `codex-v4`. Keep the ledger lines above it as
-they are: never relabel them, fabricate v4 ranks, or reset a review budget. If
-v4 cannot represent the task in flight, stop for an explicit handoff decision.
+`scripts/plan-lint` accepts only `codex-v4`. Converting an older plan is
+described in the plugin's README.md §Migrating Codex plans to codex-v4.
 
 ## Execution modes and session ends
 
-Both execution skills run on this host, and the plan's `**Execution:**` line
-names the mode and the native pair. A Codex-host plan is inline, heavy tasks
+The plan's `**Execution:**` line names the native pair. A Codex-host plan is inline, heavy tasks
 included, and its session implements every task.
 A Codex plan therefore carries no delegated task, and `scripts/task-brief`
 writes it no `**Dispatch:**` or `**Review:**` line. The task loop opens each
@@ -150,11 +67,10 @@ dforge:executing-plans dispatches nothing here but its ruling seat and the
 final review.
 
 The Execution pair runs the main session, so it is sized to what that session
-does, not to the judge floor. A subagent session coordinates and dispatches, and
-names `gpt-6.1-sol / high`. An inline session implements every task it does not delegate, and
-names the execution tier at its highest weighted routing score. `scripts/plan-lint`
+does, not to the judge floor. The session implements every task, so the
+pair is the execution tier at the plan's highest weighted routing score. `scripts/plan-lint`
 warns on any other pair and errors on an inline pair below that score. Design
-handoffs from `scripts/next-step` launch Sol high as well.
+handoffs from `scripts/next-step` launch `gpt-6.1-sol / high`.
 
 `scripts/review-route` exits 2 for a task, a ruling or the final review on
 every `Host: codex` plan by design: seats come from this file, not from the
@@ -261,6 +177,7 @@ profile (`<docs>/ui-ux/profile.md`) or the plan's spec has a
 ## Claude plans
 
 Claude plans carry no Host or Routing policy line: `scripts/plan-lint` reads a
-plan without `Host: codex` as a Claude plan. Native-to-Claude conversion uses the explicit
-preview/approval process above: preserve raw axes and previous assignments, and
-explicitly recalculate Claude's unweighted total for its own policy.
+plan without `Host: codex` as a Claude plan. Native-to-Claude conversion uses the
+preview and approval process of the plugin's README.md §Migrating Codex plans
+to codex-v4: preserve raw axes and previous assignments, and explicitly
+recalculate Claude's unweighted total for its own policy.

@@ -511,7 +511,7 @@ if [ -n "$lane" ] && [ "$probe" -eq 1 ] && [ "$mode" != inline ]; then
   fi
 fi
 
-# R5: execution mode. Inline is the default and subagent mode is deprecated.
+# R5: execution mode. Subagent is the default and inline the explicit alternative.
 # On Claude, plan_delegated names the executor tasks an inline plan delegates;
 # the session implements every other task, heavy ones included, so the inline
 # model and effort follow the hardest of those. A self-implemented risk-3 task
@@ -544,7 +544,6 @@ elif [ -n "$mode" ]; then
   family=$exec_model
   case $exec_model in claude-*opus*) family=opus ;; claude-*sonnet*) family=sonnet ;; esac
   if [ "$mode" = subagent ]; then
-    say WARN header "subagent execution is deprecated; inline is the default"
     { [ "$family" = sonnet ] && [ "$exec_effort" = high ]; } \
       || say WARN header "subagent Execution line should be claude --model sonnet --effort high"
   else

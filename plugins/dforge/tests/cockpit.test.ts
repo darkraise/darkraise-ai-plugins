@@ -40,7 +40,6 @@ import {
   folderRuns,
   handedOff,
   hasUnresolvedRows,
-  isAtLeast,
   isServiceCommand,
   isTimerCommand,
   reconcileStep,
@@ -253,6 +252,8 @@ type World = {
   processRuns?: string[]
   /** What the workflow guard's standalone check answers; unset, the fallback answer (exit 0). */
   guardOut?: { exitCode: number; stdout: string }
+  /** The workflow guard's check cannot start (no node), or outruns its timeout. */
+  guardFails?: 'missing' | 'timeout'
   /** dforge-config refuses, as on a Claude settings file it cannot parse. */
   isDforgeConfigRefusing?: boolean
   /** How many claude-restore writes the engine misses, as one landing right after its own save. */
@@ -277,6 +278,8 @@ type World = {
   isFetchFailing?: boolean
   /** Every fetch stays unanswered, as on a stalled connection. */
   isFetchHanging?: boolean
+  /** Each fetch is answered only once this settles, as over a slow connection. */
+  fetchGate?: Promise<void>
   /** The first fetch answers 429 with this body; the next ones succeed. */
   rateLimitBody?: string
   /** How Claude Code answers the pane opening; placed unless said. */
@@ -287,8 +290,6 @@ type World = {
   /** Each pane the plugin closes, by id. */
   closed?: string[]
   isPaneShut?: boolean
-  /** The Claude Code release the engine reports; absent, `$.session.version()` fails. */
-  version?: string
   /** The /config row "Enable Remote Control for all sessions"; absent unless said. */
   remoteControl?: string
   /** Tools that answer in their own way, by name. */
@@ -339,6 +340,14 @@ type World = {
   compactMs?: number
   /** `git status` outruns its timeout, or cannot start. */
   gitStatusOut?: 'timeout' | 'missing'
+  /** `git status` answers only once this settles, as in a large repository. */
+  gitGate?: Promise<void>
+  /** One gate per `git status`, in turn, each answering what `porcelain` held when it started. */
+  gitGates?: Promise<void>[]
+  /** What a gated `git status` prints; PORCELAIN unless said. */
+  porcelain?: string
+  /** `hostname` answers only once this settles. */
+  hostGate?: Promise<void>
   /** Each git command the plugin runs, as one line. */
   gitRuns?: string[]
   /** What `git rev-parse --git-common-dir` answers; `<primary>/.git` unless said. */
@@ -427,10 +436,6 @@ function world(on: On, w: World) {
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: w.agentIds?.shift() ?? 'agent-1' }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
-  on('session.version', () => {
-    if (w.version === undefined) throw new Error('no version')
-    return { value: { version: w.version, base: w.version } }
-  })
   on('prompt.submit', (_$, e) => {
     if ((w.submitFailures ?? 0) > 0) {
       w.submitFailures = (w.submitFailures ?? 1) - 1
@@ -478,6 +483,14 @@ function world(on: On, w: World) {
   on('process.run', (_$, e) => {
     const argv = e.argv.join(' ')
     w.processRuns?.push(argv)
+    if (w.guardFails !== undefined && (e.argv[1] ?? '').endsWith('/scripts/workflow-guard.mjs')) {
+      return {
+        deny:
+          w.guardFails === 'missing'
+            ? 'dforge: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"'
+            : 'dforge: $.process.run(node) aborted: still running after 5000ms',
+      }
+    }
     if (w.guardOut !== undefined && (e.argv[1] ?? '').endsWith('/scripts/workflow-guard.mjs')) {
       return { value: { ...w.guardOut, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
@@ -562,6 +575,11 @@ function world(on: On, w: World) {
     }
     if (argv.startsWith('git --no-optional-locks') && w.gitStatusOut === 'timeout') return { deny: 'dforge: $.process.run(git) aborted: still running after 3000ms' }
     if (argv.startsWith('git --no-optional-locks') && w.gitStatusOut === 'missing') return { deny: 'dforge: $.process.run(git) failed to start: ENOENT' }
+    if (argv.startsWith('git --no-optional-locks') && (w.gitGate !== undefined || (w.gitGates?.length ?? 0) > 0)) {
+      w.gitRuns?.push(argv)
+      const stdout = w.porcelain ?? PORCELAIN
+      return (w.gitGates?.shift() ?? w.gitGate)!.then(() => ({ value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+    }
     if (argv.startsWith('git ')) w.gitRuns?.push(argv)
     const common = w.commonDir ?? `${w.primary ?? '/home/me/code/shop'}/.git`
     // A directory is a work tree when the common directory is its .git: a
@@ -587,7 +605,8 @@ function world(on: On, w: World) {
       return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
     const stdout = argv === 'hostname' ? 'devbox\n' : argv.startsWith('git rev-parse') ? `${common}\n` : PORCELAIN
-    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    const answer = { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    return argv === 'hostname' && w.hostGate !== undefined ? w.hostGate.then(() => answer) : answer
   })
   on('session.id', () => {
     if ((w.sessionIdFailures ?? 0) > 0) {
@@ -632,7 +651,8 @@ function world(on: On, w: World) {
     if (w.isFetchFailing) return { deny: `fetch failed for ${e.url}` }
     if (w.isFetchHanging) return new Promise<never>(() => undefined)
     if (w.rateLimitBody !== undefined && w.fetches?.length === 1) return { value: { status: 429, ok: false, headers: {}, text: w.rateLimitBody } }
-    return { value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }
+    const answer = { value: { status: 200, ok: true, headers: {}, text: '{"id":"m1"}' } }
+    return w.fetchGate === undefined ? answer : w.fetchGate.then(() => answer)
   })
   on('ui.panes', () => ({ value: w.isPaneShut ? [] : [{ id: 'dforge', title: 'Cockpit', isShown: true, isFocused: false, isPlaced: true }] }))
   on('session.append', (_$, e, next) => {
@@ -1859,24 +1879,8 @@ describe('settings', () => {
     expect(JSON.parse(written[CONFIG] ?? '{}')).toEqual({ collapsed: 'context,repo' })
   })
 
-  test('a collapsed title is a bare label on a Claude Code without styled labels', async ($, on) => {
-    world(on, { tokens: 284_000, config: { collapsed: 'usage,context' }, version: '2.1.292' })
-    await $.session.start(START)
-    await $.tool.call({ tool: 'Bash', command: 'ls' })
-    await $.session.measure(MEASURE)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    const title = await ui.find({ key: 'usage-title' })
-    expect(title?.props).toMatchObject({ label: '▸ Usage', plain: true })
-    expect(title?.children).toEqual([])
-    expect(await ui.find({ type: 'Text', text: /^\$1\.50/ })).toBeDefined()
-    expect(await ui.find({ key: 'limit-five_hour' })).toBeUndefined()
-    expect((await ui.find({ key: 'context-title' }))?.children).toEqual([])
-    expect(await ui.find({ type: 'Text', text: /handoff 465k/ })).toBeUndefined()
-    expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
-  })
-
-  test('a collapsed title is drawn in its card color where Claude Code styles labels', async ($, on) => {
-    world(on, { tokens: 284_000, config: { collapsed: 'usage,context' }, version: '2.1.295' })
+  test('a collapsed title is drawn in its card color', async ($, on) => {
+    world(on, { tokens: 284_000, config: { collapsed: 'usage,context' } })
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     await $.session.measure(MEASURE)
@@ -1884,6 +1888,7 @@ describe('settings', () => {
     expect((await ui.find({ key: 'usage-title' }))?.children[0]).toMatchObject({ type: 'Text', props: { color: 'blue', bold: true }, children: ['▸ Usage'] })
     expect(await ui.find({ type: 'Text', text: /^\$1\.50/ })).toBeDefined()
     expect(await ui.find({ key: 'limit-five_hour' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /handoff 465k/ })).toBeUndefined()
     expect(await ui.find({ key: 'pane-compact' })).toBeDefined()
   })
 
@@ -2574,7 +2579,8 @@ describe('buttons', () => {
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
     let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect((await ui.find({ key: 'pane-handoff-box' }))?.props).toMatchObject({ borderStyle: 'round', borderColor: 'inactive' })
-    expect((await ui.find({ key: 'pane-handoff' }))?.props).toMatchObject({ hotkey: 'h', plain: true })
+    expect((await ui.find({ key: 'pane-handoff' }))?.props).toMatchObject({ plain: true })
+    expect((await ui.find({ key: 'pane-handoff-hotkey' }))?.props.hotkey).toBe('h')
     await ui.unmount()
     // Past 80% of the budget, Hand off is the one to press.
     w.tokens = 350_000
@@ -2584,8 +2590,8 @@ describe('buttons', () => {
     expect((await ui.find({ key: 'pane-compact-box' }))?.props.borderColor).toBe('inactive')
   })
 
-  test('underline the hotkey letter where Claude Code draws styled labels', async ($, on) => {
-    world(on, { ...SIGNED_IN, version: '2.1.295' })
+  test('underline the hotkey letter', async ($, on) => {
+    world(on, { ...SIGNED_IN })
     signedIn(on)
     await $.session.start(START)
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -2602,19 +2608,6 @@ describe('buttons', () => {
     // The settings controls are single-line buttons, the hotkey on the button itself.
     expect((await ui.find({ key: 'settings-back' }))?.props).toMatchObject({ label: 'Back', hotkey: 'b' })
     expect(await ui.find({ key: 'settings-back-box' })).toBeUndefined()
-  })
-
-  test('keep the "c: " prefix on an older Claude Code', async ($, on) => {
-    world(on, { ...SIGNED_IN, version: '2.1.292' })
-    signedIn(on)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect((await ui.find({ key: 'pane-compact' }))?.props).toMatchObject({ hotkey: 'c', plain: true })
-    expect(await ui.find({ key: 'pane-compact-hotkey' })).toBeUndefined()
-    expect(isAtLeast('2.1.300-dev', '2.1.295')).toBe(true)
-    expect(isAtLeast('2.2.0', '2.1.295')).toBe(true)
-    expect(isAtLeast('2.1.294', '2.1.295')).toBe(false)
-    expect(isAtLeast(undefined, '2.1.295')).toBe(false)
   })
 
   test('read as on, chosen or off in the settings', async ($, on) => {
@@ -4392,6 +4385,10 @@ describe('discord', () => {
     expect(redact("{'api_key': 'a\\'b', 'n': 1}")).toBe("{'api_key': [hidden], 'n': 1}")
     expect(redact('max_tokens: 4096')).toBe('max_tokens: 4096')
     expect(redact(`post ${WEBHOOK}`)).toBe('post [webhook]')
+    expect(redact('psql postgres://admin:hunter2@db.local:5432/app')).toBe('psql postgres://admin:[hidden]@db.local:5432/app')
+    expect(redact('DATABASE_URL=mysql://u:p%40ss@h/db npm start')).toBe('DATABASE_URL=mysql://u:[hidden]@h/db npm start')
+    expect(redact('git clone ssh://git@github.com/o/r https://example.com:8443/x')).toBe('git clone ssh://git@github.com/o/r https://example.com:8443/x')
+    expect(redact('curl "https://maps.googleapis.com/x?key=AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q"')).toBe('curl "https://maps.googleapis.com/x?key=[token]"')
     expect(excerpt('a'.repeat(20), 10)).toBe(`${'a'.repeat(9)}…`)
   })
 
@@ -4440,6 +4437,41 @@ describe('discord', () => {
     expect(embed?.author).toEqual({ name: 'devbox · shop' })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /Discord ✓/ })).toBeUndefined()
+  })
+
+  for (const isHooked of [false, true])
+    test(`reads the host and the tmux session ${isHooked ? 'once, for the first message' : 'never without a webhook'}`, async ($, on) => {
+      const fetches: World['fetches'] = []
+      const processRuns: string[] = []
+      world(on, { tokens: 50_000, fetches, processRuns, config: { notifyAfter: 0 }, env: { TMUX: '/tmp/tmux-0/default,1,0', ...(isHooked ? { DFORGE_NOTIFY_URL: WEBHOOK } : {}) } })
+      mock.store(on, {})
+      await $.session.start(START)
+      const named = () => processRuns.filter(run => run === 'hostname' || run.startsWith('tmux '))
+      expect(named()).toEqual([])
+      for (const turnId of ['t1', 't2']) await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId, reason: 'answer' })
+      expect(named()).toEqual(isHooked ? ['hostname', 'tmux display-message -p #S'] : [])
+      expect(fetches).toHaveLength(isHooked ? 2 : 0)
+    })
+
+  test('a message sent while another reads the host waits for that read', async ($, on) => {
+    const fetches: World['fetches'] = []
+    let release: () => void = () => {}
+    const hostGate = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const clock = world(on, { tokens: 50_000, fetches, hostGate, config: { notifyAfter: 0 }, env: { DFORGE_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    await $.session.start(START)
+    await $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' })
+    await clock.advance(1)
+    const tested = $.command.run({ ...COCKPIT, args: 'notify test' })
+    await clock.advance(1)
+    release()
+    await tested
+    await clock.advance(1)
+    const authors = fetches.map(one => (one.body.embeds as Record<string, unknown>[])[0]?.author)
+    expect(authors).toHaveLength(2)
+    for (const author of authors) expect(JSON.stringify(author)).toContain('devbox')
   })
 
   test('says nothing when no webhook is set', async ($, on) => {
@@ -4511,13 +4543,74 @@ describe('discord', () => {
       expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)).toEqual(isAsked ? ['⏳ Waiting for approval'] : [])
     })
 
+  test('an approval answered before its message went out ends with the outcome, never a stale ping', async ($, on) => {
+    const fetches: NonNullable<World['fetches']> = []
+    let release: () => void = () => {}
+    const fetchGate = new Promise<void>(resolve => {
+      release = resolve
+    })
+    on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
+    const clock = world(on, { tokens: 50_000, fetches, fetchGate, settings: { permissions: { defaultMode: 'default' } }, config: { notifyAskAfter: 20 } })
+    mock.store(on, { notifyUrl: WEBHOOK })
+    await $.session.start(START)
+    await $.tool.check({ tool: 'Bash', input: { command: 'make' }, tool_use_id: 'toolu_8', agentId: 'agent-1' })
+    await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+    // The first ping is out and unanswered, the second queued behind it.
+    await clock.advance(20_000)
+    expect(fetches).toHaveLength(1)
+    await $.tool.call({ tool: 'Bash', command: 'make', tool_use_id: 'toolu_8', agentId: 'agent-1' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'toolu_9', agentId: 'agent-1' } as never)
+    release()
+    await clock.advance(1_500)
+    const sent = fetches.map(one => [one.method, (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title])
+    expect(sent).toEqual([
+      ['POST', '⏳ Waiting for approval'],
+      ['PATCH', '✓ Approved'],
+    ])
+  })
+
+  for (const reason of ['clear', 'resume'] as const)
+    test(`a /${reason} sends no queued approval ping and ends the ones out`, async ($, on) => {
+      const fetches: NonNullable<World['fetches']> = []
+      let release: () => void = () => {}
+      on('tool.check', (_$, e, next) => (e.agentId === undefined ? next(e) : { decision: 'ask' }))
+      const w: World = { tokens: 50_000, fetches, settings: { permissions: { defaultMode: 'default' } }, config: { notifyAskAfter: 20 } }
+      const clock = world(on, w)
+      on('session.end', (_$, e) => e as never)
+      mock.store(on, { notifyUrl: WEBHOOK })
+      await $.session.start(START)
+      await $.tool.check({ tool: 'Bash', input: { command: 'make' }, tool_use_id: 'toolu_7', agentId: 'agent-1' })
+      await clock.advance(20_000)
+      // The first ping went out; the second is on its way, the third queued behind it.
+      w.fetchGate = new Promise<void>(resolve => {
+        release = resolve
+      })
+      await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'toolu_8', agentId: 'agent-1' })
+      await $.tool.check({ tool: 'Bash', input: { command: 'pwd' }, tool_use_id: 'toolu_9', agentId: 'agent-1' })
+      await clock.advance(20_000)
+      expect(fetches).toHaveLength(2)
+      const ending = $.session.end({ reason, sessionId: 'sess-1', resume: { id: 'sess-1' } })
+      await clock.advance(1)
+      release()
+      await ending
+      await clock.advance(1_500)
+      const sent = fetches.map(one => [one.method, (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title]).filter(([, title]) => !String(title).startsWith('🏁'))
+      expect(sent).toEqual([
+        ['POST', '⏳ Waiting for approval'],
+        ['POST', '⏳ Waiting for approval'],
+        ['PATCH', '⏹ Session ended'],
+        ['PATCH', '⏹ Session ended'],
+      ])
+    })
+
   test('says when a turn fails', async ($, on) => {
     const fetches: World['fetches'] = []
-    world(on, { tokens: 50_000, fetches })
+    const clock = world(on, { tokens: 50_000, fetches })
     mock.store(on, { notifyUrl: WEBHOOK })
     await $.session.start(START)
     await $.turn.start({ text: 'go', turnId: 't1' })
     await $.turn.complete({ answer: 'API Error: 529 overloaded', durationMs: 360_000, isAborted: false, turnId: 't1', reason: 'error' })
+    await clock.advance(1)
     expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.title).toBe('❌ Turn failed: API Error: 529 overloaded')
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
     expect(await ui.find({ type: 'Text', text: /✗ last turn failed/ })).toBeDefined()
@@ -4648,6 +4741,27 @@ describe('discord', () => {
     expect(fetches).toHaveLength(2)
   })
 
+  test('a turn end waits for no Discord message, which still goes out', async ($, on) => {
+    const fetches: World['fetches'] = []
+    let release: () => void = () => {}
+    const fetchGate = new Promise<void>(resolve => {
+      release = resolve
+    })
+    const clock = world(on, { tokens: 50_000, fetches, fetchGate, config: { notifyAfter: 0 }, env: { DFORGE_NOTIFY_URL: WEBHOOK } })
+    mock.store(on, {})
+    await $.session.start(START)
+    let isReturned = false
+    const ending = $.turn.complete({ answer: 'ok', durationMs: 5_000, isAborted: false, turnId: 't1', reason: 'answer' }).then(() => {
+      isReturned = true
+    })
+    for (let i = 0; i < 10; i++) await clock.advance(1)
+    expect(isReturned).toBe(true)
+    release()
+    await ending
+    await clock.advance(1)
+    expect(fetches?.map(one => (one.body.embeds as Record<string, unknown>[])[0]?.title)).toEqual(['✅ Done in 5s'])
+  })
+
   test('a rate limit whose body is not JSON is retried', async ($, on) => {
     const fetches: World['fetches'] = []
     const clock = world(on, { tokens: 50_000, fetches, rateLimitBody: '<html>Cloudflare</html>', config: { notifyAfter: 0 }, env: { DFORGE_NOTIFY_URL: WEBHOOK } })
@@ -4728,6 +4842,11 @@ describe('run card', () => {
     expect(ledger.tasks.map(task => [task.n, task.state])).toEqual([[1, 'complete'], [2, 'waiting'], [3, 'deferred']])
     expect(ledger.tasks[1]?.question).toBe('which meter width?')
     expect(ledger.tasks[2]?.isClean).toBe(false)
+  })
+
+  test("an inline assigned line names no seat, and an older ledger's seat stays", () => {
+    expect(parseLedger(`${LEDGER}\nTask 3: implementer inline (assigned; base 1234567)`).tasks.find(task => task.n === 3)?.seat).toBeNull()
+    expect(parseLedger('Task 4: implementer dforge:impl-sonnet-low (assigned; base 1234567)').tasks[0]?.seat).toBe('dforge:impl-sonnet-low')
   })
 
   test('a waiting line sends one question and a deferred task no completion', async ($, on) => {
@@ -5020,7 +5139,7 @@ describe('run card', () => {
   test("says a second plan's tasks though the first had the same numbers", async ($, on) => {
     const files: NonNullable<World['files']> = { ...runFiles(LEDGER), [CONFIG]: { text: JSON.stringify({ notifyOn: 'task' }) } }
     const fetches: World['fetches'] = []
-    world(on, { ...SIGNED_IN, files, fetches })
+    const clock = world(on, { ...SIGNED_IN, files, fetches })
     signedIn(on, files)
     mock.store(on, { notifyUrl: WEBHOOK })
     await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
@@ -5030,6 +5149,7 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/q/progress.md' })
     files['/home/me/code/shop/.dforge/sdd/q/progress.md'] = { text: `${next}\nTask 1: complete (commits a..b, review clean) — done: x`, mtimeMs: 2_200_000 }
     await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/q/progress.md' })
+    await clock.advance(1)
     expect(fetches.map(one => (one.body.embeds as Record<string, unknown>[])[0]?.title)).toEqual(['✅ Task 1 complete, review clean'])
   })
 
@@ -5049,7 +5169,7 @@ describe('run card', () => {
   test('a brief message names no task title and no agent description', async ($, on) => {
     const files: NonNullable<World['files']> = { ...runFiles(LEDGER), [CONFIG]: { text: JSON.stringify({ notifyOn: 'task,agent', notifyDetail: 'brief' }) } }
     const fetches: World['fetches'] = []
-    world(on, { ...SIGNED_IN, files, fetches })
+    const clock = world(on, { ...SIGNED_IN, files, fetches })
     signedIn(on, files)
     mock.store(on, { notifyUrl: WEBHOOK })
     await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
@@ -5058,6 +5178,7 @@ describe('run card', () => {
     await $.tool.call({ tool: 'Bash', command: 'cat .dforge/sdd/p/progress.md' })
     await $.agent.spawn({ tool_use_id: 'toolu_1', prompt: 'Implement', description: 'Migrate the billing secrets', subagentType: 'dforge:impl-sonnet-low', provider: { plugin: 'dforge', tier: 'user' }, parentModel: 'claude-opus-5-5', background: true, fork: false })
     await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, turnId: 'a1', reason: 'answer', agentId: 'agent-1' })
+    await clock.advance(1)
     const embeds = fetches.map(one => (one.body.embeds as Record<string, unknown>[])[0])
     expect(embeds.map(embed => embed?.title)).toEqual(['✅ Task 2 complete, review clean', '🤖 impl-sonnet-low finished'])
     expect(embeds.map(embed => embed?.description)).toEqual([undefined, undefined])
@@ -5735,6 +5856,8 @@ describe('cockpit roots', () => {
   const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n'
   // darkmem-config runs only once one of the ~/.dforge files exists.
   const storesFile = (): NonNullable<World['files']> => ({ '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 } })
+  // The plan's workspace sdd-workspace makes in the session's checkout, the mirror's ledger aside.
+  const localWorkspace = (): NonNullable<World['files']> => ({ '/home/me/code/shop/.dforge/sdd/p': { text: '', kind: 'dir' } })
   const checkoutFiles = (): NonNullable<World['files']> => ({
     ...storesFile(),
     '/home/me/code/shop/.dforge/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
@@ -5928,6 +6051,7 @@ describe('cockpit roots', () => {
   test('reads the ledger and the plan from the mirror when both families are in darkmem', async ($, on) => {
     const files: World['files'] = {
       ...storesFile(),
+      ...localWorkspace(),
       [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
       [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
     }
@@ -5939,6 +6063,20 @@ describe('cockpit roots', () => {
     expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
     expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
+  })
+
+  test("shows no mirror ledger whose workspace is another worktree's, before a plan is named", async ($, on) => {
+    const files: World['files'] = {
+      ...storesFile(),
+      [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
+      [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
+    }
+    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeUndefined()
   })
 
   test('offers Resume for latest.md in the mirror, naming it when the note has no first prompt', async ($, on) => {
@@ -6057,6 +6195,7 @@ describe('cockpit roots', () => {
   test('a changed stores.json moves the card to the new roots', async ($, on) => {
     const files: NonNullable<World['files']> = {
       '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 },
+      ...localWorkspace(),
       [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
       [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
     }
@@ -6906,6 +7045,23 @@ describe('auto run', () => {
     expect(w.compacts).toHaveLength(1)
   })
 
+  test('tries a stage again when a read before it fails, without waiting for the watchdog', async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    // The armed stage's own read of the session id fails once.
+    w.sessionIdFailures = 1
+    await settle(clock)
+    expect(w.compacts).toEqual([])
+    await clock.advance(5_000)
+    await settle(clock)
+    expect(w.compacts).toHaveLength(1)
+    expect(pendingOf(files)).toBe('after-compact')
+  })
+
   test('clears, binds the cleared session, sets its model and submits its first prompt', async ($, on) => {
     const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
     const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
@@ -7210,6 +7366,21 @@ describe('auto run', () => {
     const titles = fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)
     expect(titles.filter(title => title === '⛔ Auto run stopped')).toHaveLength(1)
     expect(w.autoRuns?.some(call => call.includes(' stop --reason '))).toBe(true)
+  })
+
+  test('says once that the run stopped when two reads of it overlap', async ($, on) => {
+    const fetches: World['fetches'] = []
+    const files = autoFiles({ pending: null })
+    const w: World = { ...SIGNED_IN, fetches, autoFile: files[AUTO] }
+    const clock = world(on, w)
+    mock.store(on, { notifyUrl: WEBHOOK })
+    signedIn(on, files)
+    await $.session.start(START)
+    files[AUTO] = autoFiles({ pending: null, active: false, stopped: 'the person stopped it' })[AUTO]!
+    await Promise.all([$.tool.call({ tool: 'Bash', command: 'true' }), $.tool.call({ tool: 'Bash', command: 'true' })])
+    await settle(clock)
+    const titles = fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title)
+    expect(titles.filter(title => title === '⛔ Auto run stopped')).toHaveLength(1)
   })
 
   test('books a compaction the engine made', async ($, on) => {
@@ -7994,7 +8165,7 @@ describe('auto run in the pane', () => {
   test('says the handoff budget again after a run that stopped', async ($, on) => {
     const fetches: World['fetches'] = []
     const w: World = { tokens: 100_000, env: { HOME: '/home/me' }, fetches }
-    world(on, w)
+    const clock = world(on, w)
     mock.store(on, { notifyUrl: WEBHOOK })
     const files: NonNullable<World['files']> = {}
     signedIn(on, files)
@@ -8002,6 +8173,7 @@ describe('auto run in the pane', () => {
     await $.tool.call({ tool: 'Skill', skill: 'dforge:executing-plans' })
     w.tokens = 470_000
     await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await clock.advance(1)
     const sent = () => fetches.filter(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]?.title === '🔶 Handoff budget reached').length
     expect(sent()).toBe(1)
     files[AUTO] = autoFiles({ pending: null })[AUTO]!
@@ -8010,6 +8182,7 @@ describe('auto run in the pane', () => {
     files[AUTO] = autoFiles({ pending: null, active: false })[AUTO]!
     w.tokens = 470_000
     await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await clock.advance(1)
     expect(sent()).toBe(2)
   })
 
@@ -8232,6 +8405,23 @@ describe('update frequency', () => {
     expect(seen.count).toBeLessThanOrEqual(5)
   })
 
+  test('ticks no second while the pane is closed and the band off, and again once it opens', async ($, on) => {
+    const w: World = { ...SIGNED_IN, isPaneShut: true }
+    const clock = world(on, w)
+    signedIn(on)
+    const seen = redraws(on)
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    seen.count = 0
+    await clock.advance(10_000)
+    expect(seen.count).toBe(0)
+    w.isPaneShut = false
+    await clock.advance(2_000)
+    seen.count = 0
+    await clock.advance(10_000)
+    expect(seen.count).toBeGreaterThanOrEqual(9)
+  })
+
   describe('a command that changes what the cockpit shows', () => {
     const run = ($: Parameters<TestBody>[0], command: string, args: string) => $.command.run({ ...COCKPIT, command, args })
 
@@ -8313,6 +8503,55 @@ describe('update frequency', () => {
       expect(statuses(gitRuns)).toBe(0)
     })
 
+    test("does not hold a call's result while git status runs, and shows it once it lands", async ($, on) => {
+      const gitRuns: string[] = []
+      const w: World = { ...SIGNED_IN, gitRuns }
+      const clock = world(on, w)
+      signedIn(on)
+      await $.session.start(START)
+      let release: () => void = () => {}
+      w.gitGate = new Promise<void>(resolve => {
+        release = resolve
+      })
+      let isReturned = false
+      const call = $.tool.call({ tool: 'Bash', command: 'ls' }).then(() => {
+        isReturned = true
+      })
+      for (let i = 0; i < 10; i++) await clock.advance(1)
+      expect(statuses(gitRuns)).toBe(1)
+      expect(isReturned).toBe(true)
+      release()
+      await call
+      await clock.advance(1)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ type: 'Text', text: /feat\/pane/ })).toBeDefined()
+    })
+
+    test('keeps the newer reading when an older status lands after it', async ($, on) => {
+      const w: World = { ...SIGNED_IN }
+      const clock = world(on, w)
+      signedIn(on)
+      await $.session.start(START)
+      let release: () => void = () => {}
+      w.gitGates = [
+        new Promise<void>(resolve => {
+          release = resolve
+        }),
+        Promise.resolve(),
+      ]
+      w.porcelain = PORCELAIN.replace('feat/pane', 'feat/old')
+      await $.tool.call({ tool: 'Edit', file_path: '/home/me/code/shop/a.ts' } as never)
+      await clock.advance(2_000)
+      w.porcelain = PORCELAIN.replace('feat/pane', 'feat/new')
+      await $.tool.call({ tool: 'Edit', file_path: '/home/me/code/shop/a.ts' } as never)
+      await clock.advance(1)
+      release()
+      await clock.advance(1)
+      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+      expect(await ui.find({ type: 'Text', text: /feat\/new/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /feat\/old/ })).toBeUndefined()
+    })
+
     test('is not read after a call while no pane or band is drawn', async ($, on) => {
       const gitRuns: string[] = []
       world(on, { ...SIGNED_IN, gitRuns, isPaneShut: true })
@@ -8386,6 +8625,21 @@ describe('update frequency', () => {
   })
 
   describe("a tool call's own reads", () => {
+    test('reads the options once before a main-loop call and once after it', async ($, on) => {
+      const clock = world(on, { ...SIGNED_IN })
+      signedIn(on)
+      let optionReads = 0
+      on('state.get', { plugin: 'dforge' } as never, ((_$: unknown, e: { key: string }, next: (e: unknown) => unknown) => {
+        if (e.key === 'settings') optionReads++
+        return next(e)
+      }) as never)
+      await $.session.start(START)
+      await clock.advance(2_000)
+      optionReads = 0
+      await $.tool.call({ tool: 'Edit', file_path: '/home/me/code/shop/a.ts' } as never)
+      expect(optionReads).toBe(2)
+    })
+
     test('reads the session directory only for a command that can change it', async ($, on) => {
       let cwdReads = 0
       world(on, { ...SIGNED_IN })
@@ -8734,5 +8988,29 @@ describe('the workflow guard', () => {
     expect(await band.find({ key: 'band-expand' })).toBeDefined()
     expect(await band.find({ type: 'Text', text: /^╭─ me@example\.com/ })).toBeDefined()
     expect(runs.filter(run => GUARD.test(run))).toHaveLength(1)
+  })
+
+  test('without node the check runs once for the process, and the cockpit draws as before', async ($, on) => {
+    const runs: string[] = []
+    world(on, { ...SIGNED_IN, guardFails: 'missing', processRuns: runs })
+    signedIn(on, configured({ layout: 'compact' }))
+    await $.session.start(START)
+    for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+    await $.session.measure(MEASURE)
+    const band = await $.ui.mount(minimized('terminal'))
+    expect(await band.find({ key: 'band-expand' })).toBeDefined()
+    expect(runs.filter(run => GUARD.test(run))).toHaveLength(1)
+  })
+
+  test('a check that outran its timeout is tried again a minute later, not by every hook', async ($, on) => {
+    const runs: string[] = []
+    const clock = world(on, { ...SIGNED_IN, guardFails: 'timeout', processRuns: runs })
+    signedIn(on)
+    await $.session.start(START)
+    for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(runs.filter(run => GUARD.test(run))).toHaveLength(1)
+    await clock.advance(60_000)
+    await $.tool.call({ tool: 'Bash', command: 'ls' })
+    expect(runs.filter(run => GUARD.test(run))).toHaveLength(2)
   })
 })

@@ -5,9 +5,10 @@
 ## Checks run
 
 - [ ] `node scripts/validate-repository.mjs`
-- [ ] `node scripts/test-all.mjs` (and `--plugin dagents` when dagents changed)
+- [ ] `node scripts/test-all.mjs`
+- [ ] `node scripts/test-all.mjs --plugin dagents` (when dagents, `scripts/` or `tests/` changed)
 - [ ] `claude plugin validate` on the marketplace and each changed Claude plugin
-- [ ] `claude plugin test plugins/<plugin>` for each changed dforge, dagents or dflow
+- [ ] `claude plugin test plugins/<plugin>` for each changed plugin among dforge, dagents and dflow
 
 ## Checklist
 

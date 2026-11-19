@@ -256,17 +256,16 @@ check "usage: no verb" "$RC" "2"
 run bash "$RM" frobnicate --root "$ROOT"
 check "usage: unknown verb" "$RC" "2"
 
-# --- documents kept in darkmem: the roadmap and its registers are read in the mirror ---
-. "$HERE/fixtures/darkmem-stores.sh"
+# --- the roadmap and its registers are read in the docs root by name ---
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q -b main "$SR"
-M=$(stores_home "$SH" "$SR" proj darkmem local)
+M="$(git -C "$SR" rev-parse --show-toplevel)/docs"
 mkdir -p "$M/dagents/registers"
 printf '# Roadmap\n' > "$M/dagents/roadmap.md"
 register "$M/dagents/registers/m1.md" "docs/dagents/specs/x.md" \
   '| 1 | A | - | - | done | - |' '| 2 | B | - | - | open | - |'
-check "roadmap_file: the mirror's roadmap" "$(HOME=$SH roadmap_file "$SR")" "$M/dagents/roadmap.md"
-check "roadmap_epic_counts: a register name resolves in the mirror" \
+check "roadmap_file: the docs root's roadmap" "$(HOME=$SH roadmap_file "$SR")" "$M/dagents/roadmap.md"
+check "roadmap_epic_counts: a register name resolves in the docs root" \
   "$(HOME=$SH roadmap_epic_counts "$SR" docs/dagents/registers/m1.md)" "1 2"
 check "roadmap_unresolved: rows named by register name" \
   "$(HOME=$SH roadmap_unresolved "$SR" docs/dagents/registers/m1.md | cut -f1,2)" "$(printf 'docs/dagents/registers/m1.md\t2')"

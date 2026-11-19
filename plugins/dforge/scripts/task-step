@@ -1,18 +1,13 @@
 #!/usr/bin/env bash
-# One command per mechanical phase of the delegated task loop
-# (reference/delegated-task.md): each wraps today's scripts, writes the filled
-# prompt to a file in the plan workspace and prints a digest of at most 15
-# lines. State for a task, or a batch named after its first task, lives in
-# <workspace>/task-<N>-step.json.
+# One command per mechanical step of a risk-3 task's session review loop
+# (reference/delegated-task.md §The session review loop): each writes the
+# filled prompt to a file in the plan workspace and prints a digest of at most
+# 15 lines. A task's state lives in <workspace>/task-<N>-step.json; review
+# builds it from the task's open line, which task-brief --open writes.
 #
-# Usage: task-step start  PLAN_FILE N [--reset] [--suite COMMAND]
-#        task-step review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA]
-#        task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF]
-#        task-step verdict PLAN_FILE N [M ...] [--rereview R] [--cwd DIR]
-# A start opens the session's own review loop for a task it implements: step
-# state and the ledger's identity line, but no task line, since the session
-# writes its own `implementer inline` assigned line. A start that finds the
-# task's state file keeps it unless --reset is given.
+# Usage: task-step review PLAN_FILE N [--suite COMMAND] [--suite-base SHA]
+#        task-step rereview PLAN_FILE N
+#        task-step verdict PLAN_FILE N [--rereview R]
 # Exit: 0 ok; 2 usage, or any subcommand on a Host: codex plan; 3 no such task;
 # 4 an amendment does not apply; 5 (verdict) the seat
 # wrote no report, or one outside the grammar; 6 a required earlier step has
@@ -33,7 +28,7 @@ plan_budget_line() {
   read -r -a mode <<<"$(. "$1/lib/context.sh" && ctx_plan_mode "$3" "$4" 2>/dev/null)" || mode=()
   DFORGE_BUDGET_CALLER=$2 bash "$1/context-size" ${mode[@]+"${mode[@]}"} 2>/dev/null
 }
-usage() { die "usage: task-step start PLAN_FILE N [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] | verdict PLAN_FILE N [M ...] [--rereview R] [--cwd DIR]"; }
+usage() { die "usage: task-step review PLAN_FILE N [--suite COMMAND] [--suite-base SHA] | rereview PLAN_FILE N | verdict PLAN_FILE N [--rereview R]"; }
 
 # dirty_list DIR [-w]: "<path>\t<hash>" for each tracked path that differs from
 # HEAD, sorted; the hash is git's content hash, or "deleted". Paths are
@@ -275,8 +270,8 @@ drop_base_cache() {
 
 NONE_RE='^\*\*Task check:\*\*[[:space:]]*none([[:space:]]|$)'
 
-# require_scheduled_suite STEP_FILE N...: exits 2 when the plan's task check
-# is none, one of tasks N... is due the integration check (a multiple of 3, or
+# require_scheduled_suite STEP_FILE N: exits 2 when the plan's task check
+# is none, task N is due the integration check (a multiple of 3, or
 # the last task), and neither --suite nor STEP_FILE names a suite. verdict
 # would otherwise read the task as not scheduled.
 require_scheduled_suite() {
@@ -303,7 +298,7 @@ require_suite_base() {
 }
 
 rr_usage() {
-  echo "usage: task-step rereview PLAN_FILE N [M ...] [--base SHA] [--head REF]" >&2
+  echo "usage: task-step rereview PLAN_FILE N" >&2
   exit 2
 }
 
@@ -338,20 +333,11 @@ rr_render() { # rr_render TEMPLATE FINDINGS_FILE — the fenced prompt body, de-
 cmd_rereview() (
   local here plan_arg plan tmp src header ws state first t
   local fix bullets nopen review_head round new_round head_ref head_sha fix_base fix_base_sha
-  local pkg diff_file now prompt tpl ids check_dir snap old_base
-  local tasks=() base_arg="" head_arg=""
+  local pkg diff_file now prompt tpl check_dir snap old_base
   here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   . "$here/lib/plan.sh"
-  [ $# -ge 2 ] || rr_usage
-  plan_arg=$1; shift
-  while [ $# -gt 0 ]; do
-    case $1 in
-      --base) [ $# -ge 2 ] && [ -n "$2" ] || rr_usage; base_arg=$2; shift 2 ;;
-      --head) [ $# -ge 2 ] && [ -n "$2" ] || rr_usage; head_arg=$2; shift 2 ;;
-      *) [[ $1 =~ ^[0-9]+$ ]] || rr_usage; tasks+=("$((10#$1))"); shift ;;
-    esac
-  done
-  [ "${#tasks[@]}" -ge 1 ] || rr_usage
+  [ $# -eq 2 ] && [[ $2 =~ ^[0-9]+$ ]] || rr_usage
+  plan_arg=$1 first=$((10#$2))
 
   plan=$(plan_locate "$plan_arg")
   [ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
@@ -366,17 +352,13 @@ cmd_rereview() (
     exit 4
   fi
   header=$(plan_header "$src")
-  if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header"; then
+  if plan_is_codex "$header"; then
     echo "task-step: a Host: codex plan runs the Codex loop; task-step does not apply" >&2
     exit 2
   fi
   plan_require_same_project "$plan"
-  for t in "${tasks[@]}"; do
-    plan_task_text "$src" "$t" >/dev/null || { echo "task $t not found in $plan" >&2; exit 3; }
-  done
+  plan_task_text "$src" "$first" >/dev/null || { echo "task $first not found in $plan" >&2; exit 3; }
 
-  first=${tasks[0]}
-  ids=$(IFS=,; echo "${tasks[*]}")
   ws=$(dforge_workspace "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")
   state=$ws/task-$first-step.json
   review_head=""
@@ -404,13 +386,11 @@ cmd_rereview() (
     exit 2
   fi
 
-  head_ref=$head_arg
-  [ -n "$head_ref" ] || head_ref=$(jq -r '.head // empty' "$state" | tr -d '\r')
+  # A step file written before 5.0 may name a head ref; it still packages to it.
+  head_ref=$(jq -r '.head // empty' "$state" | tr -d '\r')
   [ -n "$head_ref" ] || head_ref=HEAD
   head_sha=$(git rev-parse --verify --quiet "$head_ref^{commit}") || { echo "bad HEAD: $head_ref" >&2; exit 2; }
-  fix_base=$base_arg
-  [ -n "$fix_base" ] || fix_base=$review_head
-  fix_base_sha=$(git rev-parse --verify --quiet "$fix_base^{commit}") || { echo "bad BASE: $fix_base" >&2; exit 2; }
+  fix_base_sha=$(git rev-parse --verify --quiet "$review_head^{commit}") || { echo "bad BASE: $review_head" >&2; exit 2; }
 
   pkg=$(bash "$here/review-package" "$plan" "$fix_base_sha" "$head_sha") || { printf '%s\n' "$pkg" >&2; exit 2; }
   diff_file=$(printf '%s\n' "$pkg" | sed -n -E '/^wrote /{s/^wrote (.*): [0-9]+ commit\(s\), [0-9]+ bytes$/\1/;p;q;}')
@@ -437,18 +417,18 @@ cmd_rereview() (
   }
   now=$(date +%s)
   old_base=$(suite_base_sha "$state")
-  jq --arg rh "$head_sha" --argjson r "$new_round" --argjson t "$now" \
-    --arg base "$base_arg" --arg bsha "$fix_base_sha" --arg head "$head_arg" --argjson chk "$snap" \
-    '.reviewHead = $rh | .round = $r | .t0 = $t | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
-     | .reviewCheck = $chk' \
+  jq --arg rh "$head_sha" --argjson r "$new_round" --argjson t "$now" --argjson chk "$snap" \
+    '.reviewHead = $rh | .round = $r | .t0 = $t | .reviewCheck = $chk' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
   drop_base_cache "$state" "$first" "$old_base"
 
-  printf 'task %s: re-review round %s: packaged %s..%s, prompt written\n' "$ids" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}"
+  printf 'task %s: re-review round %s: packaged %s..%s, prompt written\n' "$first" "$new_round" "${fix_base_sha:0:7}" "${head_sha:0:7}"
   printf 'seat: dforge:judge-sonnet-high prompt: %s\n' "$prompt"
   printf 'state: base %s review-head %s round %s t0 %s\n' \
     "$(jq -r '.base' "$state" | tr -d '\r' | cut -c1-7)" "${head_sha:0:7}" "$new_round" "$now"
-  plan_budget_line "$here" task-step:rereview "$src" "$(dforge_ledger_dir "$(basename "$plan" .md)" "$(_plan_ctx "$plan")")/progress.md" || true
+  # review-package already measured the session; its line is the digest's.
+  budget=$(grep -E '^budget' <<<"$pkg" | tail -n 1)
+  printf '%s\n' "${budget:-budget: unknown}"
 )
 
 if [ "${1:-}" = rereview ]; then
@@ -458,33 +438,26 @@ if [ "${1:-}" = rereview ]; then
 fi
 [ $# -ge 3 ] || usage
 sub=$1; shift
-case $sub in start|review|verdict) ;; *) usage ;; esac
+case $sub in review|verdict) ;; *) usage ;; esac
 plan_arg=$1; shift
 
-ids=() reset=0 base_arg="" head_arg="" cwd_arg="" rereview_arg="" suite_arg="" suite_base_arg="" suite_base_sha_arg=""
+first="" rereview_arg="" suite_arg="" suite_base_arg="" suite_base_sha_arg=""
 while [ $# -gt 0 ]; do
   case $1 in
-    --reset) [ "$sub" = start ] || usage; reset=1; shift ;;
-    --suite) [[ $sub =~ ^(start|review)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_arg=$2; shift 2 ;;
+    --suite) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_arg=$2; shift 2 ;;
     --suite-base) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; suite_base_arg=$2; shift 2 ;;
-    --base) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; base_arg=$2; shift 2 ;;
-    --head) [ "$sub" = review ] && [ $# -ge 2 ] && [ -n "$2" ] || usage; head_arg=$2; shift 2 ;;
-    --cwd) [[ $sub =~ ^(review|verdict)$ ]] && [ $# -ge 2 ] && [ -n "$2" ] || usage; cwd_arg=$2; shift 2 ;;
     --rereview) [ "$sub" = verdict ] && [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; rereview_arg=$2; shift 2 ;;
     -*) usage ;;
-    *) [[ $1 =~ ^[0-9]+$ ]] || usage; ids+=("$((10#$1))"); shift ;;
+    *) [ -z "$first" ] && [[ $1 =~ ^[0-9]+$ ]] || usage; first=$((10#$1)); shift ;;
   esac
 done
-[ ${#ids[@]} -ge 1 ] || usage
-[ "$sub" != start ] || [ ${#ids[@]} -eq 1 ] || usage
+[ -n "$first" ] || usage
 # Without its base, a review's suite would be compared with the task's own base.
-[ -z "$suite_arg" ] || [ "$sub" = start ] || [ -n "$suite_base_arg" ] || usage
+[ -z "$suite_arg" ] || [ -n "$suite_base_arg" ] || usage
 if [ -n "$suite_base_arg" ]; then
-  suite_base_sha_arg=$(git -C "${cwd_arg:-.}" rev-parse --verify --quiet "$suite_base_arg^{commit}" 2>/dev/null | tr -d '\r') \
+  suite_base_sha_arg=$(git rev-parse --verify --quiet "$suite_base_arg^{commit}" 2>/dev/null | tr -d '\r') \
     && [ -n "$suite_base_sha_arg" ] || die "bad --suite-base: $suite_base_arg"
 fi
-first=${ids[0]}
-idlist=$(IFS=,; echo "${ids[*]}")
 
 plan=$(plan_locate "$plan_arg")
 [ -f "$plan" ] || die "no such plan file: $plan"
@@ -499,12 +472,10 @@ src="$TMP/plan.md"
 plan_amendments_ready "$plan"
 plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null \
   || die "an amendment does not apply; run plan-lint" 4
-if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")"; then
+if plan_is_codex "$(plan_header "$src")"; then
   die "a Host: codex plan runs the Codex loop (reference/native-codex.md); task-step is for Claude Code"
 fi
-for n in "${ids[@]}"; do
-  plan_task_text "$src" "$n" >/dev/null || die "no Task $n in $plan" 3
-done
+plan_task_text "$src" "$first" >/dev/null || die "no Task $first in $plan" 3
 
 slug=$(basename "$plan" .md)
 ws=$(dforge_workspace "$slug" "$ctx")
@@ -601,44 +572,6 @@ ledger_init() {
   printf '# SDD ledger — plan: %s\n' "$(dforge_name "$plan" "$ctx")" > "$ledger"
 }
 
-do_start() {
-  local base base7 out rc kept=0 budget=""
-
-  if [ -f "$state" ] && [ "$reset" -eq 0 ]; then
-    kept=1
-    base=$(jq -r '.base' "$state" | tr -d '\r')
-  else
-    base=$(git rev-parse HEAD) || die "not inside a git checkout"
-  fi
-  base7=${base:0:7}
-  bash "$HERE/sdd-workspace" "$plan" >/dev/null || exit 2
-
-  out=$(bash "$HERE/task-brief" "$plan" "$first"); rc=$?
-  [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; exit "$rc"; }
-  budget=$(budget_of <<<"$out")
-
-  ledger_init
-
-  if [ "$kept" -eq 0 ]; then
-    jq -n --argjson tasks "$(printf '%s\n' "${ids[@]}" | jq -sc .)" --arg base "$base" \
-      '{tasks: $tasks, base: $base, head: null, reviewHead: null, round: 0, t0: null}' > "$state.tmp" \
-      && mv "$state.tmp" "$state" || die "cannot update $state"
-  fi
-
-  if [ -n "$suite_arg" ]; then
-    jq --arg s "$suite_arg" '.suite = $s' "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
-    if [ "$(tr -d '\r' < "$ledger" | grep -cF 'Ruling: suite command —')" -eq 0 ]; then
-      printf 'Task %s: Ruling: suite command — %s — none\n' "$first" "$suite_arg" >> "$ledger"
-    fi
-  fi
-
-  printf 'task %s: briefed %s, base %s' "$idlist" "$brief" "$base7"
-  if [ "$kept" -eq 1 ]; then printf '; state kept (--reset discards the state)\n'
-  else printf '\n'; fi
-  state_line
-  printf '%s\n' "${budget:-budget: unknown}"
-}
-
 route_field() { sed -n "s/.* $1=\\([^ ]*\\).*/\\1/p" <<<"$route" | tr -d '\r'; }
 
 do_review() {
@@ -649,33 +582,23 @@ do_review() {
   local panel_dir="$ws/task-$first-review-panel" external_files=""
 
   if [ ! -f "$state" ]; then
-    # task-brief --open recorded the base on the task's ledger line, so a
-    # review needs no start of its own.
+    # task-brief --open recorded the base on the task's ledger line.
     open_base=$(tr -d '\r' < "$ledger" 2>/dev/null | sed -n "s/^Task $first: implementer inline (assigned; base \([0-9a-f]*\)).*/\1/p" | tail -n 1)
     [ -n "$open_base" ] || die "Task $first has no step state or open line; run task-brief --open first" 6
     open_sha=$(git rev-parse --verify --quiet "$open_base^{commit}") || die "the open line's base $open_base is not a commit" 6
     ledger_init
-    jq -n --argjson tasks "$(printf '%s\n' "${ids[@]}" | jq -sc .)" --arg base "$open_sha" \
-      '{tasks: $tasks, base: $base, head: null, reviewHead: null, round: 0, t0: null}' > "$state.tmp" \
+    jq -n --argjson task "$first" --arg base "$open_sha" \
+      '{tasks: [$task], base: $base, head: null, reviewHead: null, round: 0, t0: null}' > "$state.tmp" \
       && mv "$state.tmp" "$state" || die "cannot update $state"
   fi
   top=$(git rev-parse --show-toplevel)
-  if [ -n "$cwd_arg" ]; then
-    [ -d "$cwd_arg" ] || die "bad --cwd: $cwd_arg"
-    top=$(dr_native_path "$cwd_arg")
-    [ "$(git -C "$top" rev-parse --is-inside-work-tree 2>/dev/null | tr -d '\r')" = true ] \
-      || die "cannot record the tracked files of $top for the verdict check: not a git work tree"
-  fi
-  base=$base_arg
-  [ -n "$base" ] || base=$(jq -r '.base' "$state" | tr -d '\r')
-  head=$head_arg
-  [ -n "$head" ] || head=$(jq -r '.head // empty' "$state" | tr -d '\r')
+  base=$(jq -r '.base' "$state" | tr -d '\r')
+  # A step file written before 5.0 may name a head ref; it still packages to it.
+  head=$(jq -r '.head // empty' "$state" | tr -d '\r')
   [ -n "$head" ] || head=HEAD
-  # --cwd's checkout answers every git question below: HEAD there may be a
-  # commit this checkout's HEAD never reached.
   basesha=$(git -C "$top" rev-parse --verify --quiet "$base^{commit}") || die "bad BASE: $base"
   headsha=$(git -C "$top" rev-parse --verify --quiet "$head^{commit}") || die "bad head: $head"
-  require_scheduled_suite "$state" "${ids[@]}"
+  require_scheduled_suite "$state" "$first"
   require_suite_base "$basesha" "$first"
 
   # One gate per reviewer family; the digest names each family's reason when
@@ -697,7 +620,7 @@ do_review() {
     external_files="${external_files:+$external_files
 }$panel_dir/$id.json"
   done
-  route=$(bash "$HERE/review-route" "$plan" --task "${ids[@]}" 2>"$TMP/route.err"); rrc=$?
+  route=$(bash "$HERE/review-route" "$plan" --task "$first" 2>"$TMP/route.err"); rrc=$?
   if [ "$rrc" -eq 0 ]; then
     primary=$(route_field primary) fallback=$(route_field fallback) reason=$(route_field reason)
   else
@@ -705,22 +628,19 @@ do_review() {
     note=" (review-route exited $rrc: $(tr -d '\r' < "$TMP/route.err" | head -n 1))"
   fi
   case $primary in
-    panel:light) tier=light judge=$fallback ;;
     panel:heavy+judge-opus) tier=heavy judge=dforge:judge-opus ;;
     *) judge=$primary ;;
   esac
   case $judge in dforge:*) ;; *) judge=dforge:judge-opus ;; esac
 
-  for n in "${ids[@]}"; do
-    lout=$(bash "$HERE/lens-route" "$plan" --task "$n" 2>&1); lrc=$?
-    [ "$lrc" -eq 0 ] || die "lens-route: $(tr -d '\r' <<<"$lout" | head -n 1)"
-    while IFS= read -r line; do
-      line=$(sed -n 's/^lens [^ ]* criteria=\(.*\)$/\1/p' <<<"$line" | tr -d '\r')
-      [ -n "$line" ] || continue
-      case ", $lens_files, " in *", $line, "*) continue ;; esac
-      lens_files="${lens_files:+$lens_files, }$line"
-    done <<<"$lout"
-  done
+  lout=$(bash "$HERE/lens-route" "$plan" --task "$first" 2>&1); lrc=$?
+  [ "$lrc" -eq 0 ] || die "lens-route: $(tr -d '\r' <<<"$lout" | head -n 1)"
+  while IFS= read -r line; do
+    line=$(sed -n 's/^lens [^ ]* criteria=\(.*\)$/\1/p' <<<"$line" | tr -d '\r')
+    [ -n "$line" ] || continue
+    case ", $lens_files, " in *", $line, "*) continue ;; esac
+    lens_files="${lens_files:+$lens_files, }$line"
+  done <<<"$lout"
 
   pkgout=$(bash "$HERE/review-package" "$plan" "$basesha" "$headsha"); rc=$?
   [ "$rc" -eq 0 ] || { printf '%s\n' "$pkgout" >&2; exit "$rc"; }
@@ -746,17 +666,14 @@ do_review() {
       printf '## Output\n\nYour final message is one JSON object that satisfies the output schema, and nothing else: no markdown and no preamble. It carries the four scores (spec, scope, verification, quality), spec_verdict (compliant or issues), task_quality (approved or needs_fixes), findings (severity, file, line and summary for each; line is 0 when a finding has no single line) and cannot_verify (the requirements you could not verify from the diff alone; an empty array when there are none). This overrides any instruction above about the shape of your final message.\n'
     } > "$panel_prompt"
     # The host call must outlast the panel, whose bound is the slowest family's
-    # row of this tier plus that family's grace (run-review-panel).
+    # first row plus that family's grace (run-review-panel).
     timeout_ms=0
     for id in codex:60 agy:70; do
-      case $tier in
-        light) secs=$(ladder_block "${id%%:*}-judge" | awk 'END { print $3 }') ;;
-        *) secs=$(ladder_block "${id%%:*}-judge" | awk 'NR == 1 { print $3 }') ;;
-      esac
+      secs=$(ladder_block "${id%%:*}-judge" | awk 'NR == 1 { print $3 }')
       [ -n "$secs" ] || continue
       [ $(( (secs + ${id##*:} + 120) * 1000 )) -le "$timeout_ms" ] || timeout_ms=$(( (secs + ${id##*:} + 120) * 1000 ))
     done
-    cmd="bash \"$plugin_root\"/scripts/run-review-panel --kind task --tier $tier --cwd \"$top\" --out-dir \"$panel_dir\" --prompt \"$panel_prompt\""
+    cmd="bash \"$plugin_root\"/scripts/run-review-panel --kind task --tier heavy --cwd \"$top\" --out-dir \"$panel_dir\" --prompt \"$panel_prompt\""
   fi
   # Only a token the template holds is a placeholder: a filled value, such as a
   # checkout path, may hold a bracketed capital word of its own.
@@ -769,18 +686,23 @@ do_review() {
 
   snap=$(tracked_snapshot "$top") || die "cannot record the tracked files of $top for the verdict check"
   old_base=$(suite_base_sha "$state")
-  jq --arg rh "$headsha" --argjson t0 "$t0" --arg base "$base_arg" --arg bsha "$basesha" --arg head "$head_arg" --argjson chk "$snap" \
+  jq --arg rh "$headsha" --argjson t0 "$t0" --argjson chk "$snap" \
     --arg suite "$suite_arg" --arg sbase "$suite_base_sha_arg" \
-    '.reviewHead = $rh | .t0 = $t0 | (if $base == "" then . else .base = $bsha end) | (if $head == "" then . else .head = $head end)
+    '.reviewHead = $rh | .t0 = $t0
      | .reviewCheck = $chk | (if $suite == "" then . else .suite = $suite end) | (if $sbase == "" then . else .suiteBase = $sbase end)' \
     "$state" > "$state.tmp" && mv "$state.tmp" "$state" || die "cannot update $state"
   drop_base_cache "$state" "$first" "$old_base"
+  if [ -n "$suite_arg" ]; then
+    ledger_init
+    if [ "$(tr -d '\r' < "$ledger" | grep -cF 'Ruling: suite command —')" -eq 0 ]; then
+      printf 'Task %s: Ruling: suite command — %s — none\n' "$first" "$suite_arg" >> "$ledger"
+    fi
+  fi
 
-  printf 'task %s: reviewed %s..%s (%s commit(s)), diff %s\n' "$idlist" "${basesha:0:7}" "${headsha:0:7}" \
+  printf 'task %s: reviewed %s..%s (%s commit(s)), diff %s\n' "$first" "${basesha:0:7}" "${headsha:0:7}" \
     "$(git -C "$top" rev-list --count "$basesha..$headsha")" "$diff"
   if [ "$reason" = reviewers-off ] || [ "$probed" -eq 1 ]; then printf 'gate: %s\n' "${gate:--}"; fi
   case $tier in
-    light) printf 'seat: panel:light prompt: %s fallback: %s\n' "$judge_prompt" "$judge" ;;
     heavy) printf 'seat: panel:heavy+judge-opus prompt: %s then: %s\n' "$judge_prompt" "$judge" ;;
     *) printf 'seat: %s prompt: %s%s\n' "$judge" "$judge_prompt" "$note" ;;
   esac
@@ -830,15 +752,11 @@ parse_report() {
     }
     sect == "Findings" && /^- / {
       if (tolower($0) ~ /^- none\.?[ \t]*$/) next
-      if ($0 !~ /^- \[(Critical|Important|Minor)\] (\(Task [0-9]+\) )?[^ ].*:[0-9]+(-[0-9]+)? (—|-) .+$/) err("line " NR " is not a finding line: " $0)
+      if ($0 !~ /^- \[(Critical|Important|Minor)\] [^ ].*:[0-9]+(-[0-9]+)? (—|-) .+$/) err("line " NR " is not a finding line: " $0)
       rest = substr($0, 4); sev = rest; sub(/\].*$/, "", sev)
       rest = substr(rest, length(sev) + 3)
-      task = ""
-      if (rest ~ /^\(Task [0-9]+\) /) {
-        task = rest; sub(/\).*$/, "", task); sub(/^\(Task /, "", task)
-        rest = substr(rest, index(rest, ") ") + 2)
-      }
-      if (task != "") err("line " NR " is not a finding line: " $0)
+      # A batch review prefixed findings with the task; one task has no prefix.
+      if (rest ~ /^\(Task [0-9]+\) /) err("line " NR " is not a finding line: " $0)
       task = first
       if (sev != "Minor") serious[task]++
       # The path may hold spaces, so the location ends at the first
@@ -920,12 +838,11 @@ check_tracked() {
     echo "check tracked: not recorded (the review step predates this check)"
     return
   fi
-  dir=$cwd_arg
-  [ -n "$dir" ] || dir=$(jq -r '.cwd' <<<"$snap" | tr -d '\r')
-  [ -d "$dir" ] || die "bad --cwd: $dir"
+  dir=$(jq -r '.cwd' <<<"$snap" | tr -d '\r')
+  [ -d "$dir" ] || die "the reviewed checkout $dir is gone"
   old=$(jq -r '.head' <<<"$snap" | tr -d '\r')
   new=$(git -C "$dir" rev-parse HEAD 2>/dev/null | tr -d '\r')
-  [ -n "$new" ] || die "bad --cwd: $dir"
+  [ -n "$new" ] || die "the reviewed checkout $dir has no HEAD"
   if [ "$new" != "$old" ]; then
     {
       printf 'task-step: HEAD moved during the review in %s (%s -> %s); files changed since:\n' "$dir" "${old:0:7}" "${new:0:7}"
@@ -1133,7 +1050,7 @@ suite_check() {
   fi
   rh=$(jq -r '.reviewHead // empty' "$vstate" | tr -d '\r')
   head7=${rh:0:7}
-  row=$(suite_row "$st" "$rh" "${cwd_arg:-.}")
+  row=$(suite_row "$st" "$rh" .)
   if [ -z "$row" ]; then
     suite_state=notrun suite_line="suite: not run ($suite_cmd)"
     return 0
@@ -1152,7 +1069,7 @@ suite_check() {
     fails=$(suite_fail_set "$log" "$code")
   fi
   printf '%s\n' "$fails" > "$TMP/suite-fails"
-  suite_base_lines "$st" "$target" "${cwd_arg:-.}" > "$TMP/suite-base"
+  suite_base_lines "$st" "$target" . > "$TMP/suite-base"
   if [ -s "$TMP/suite-base" ]; then grep -vxF -f "$TMP/suite-base" "$TMP/suite-fails" > "$TMP/suite-new"; else cp "$TMP/suite-fails" "$TMP/suite-new"; fi
   nfail=$(grep -c '' "$TMP/suite-fails")
   nnew=$(grep -c '' "$TMP/suite-new")
@@ -1182,7 +1099,6 @@ do_verdict() {
   mode=review
   [ -z "$rereview_arg" ] || mode=rereview
 
-  [ -z "$cwd_arg" ] || [ -d "$cwd_arg" ] || die "bad --cwd: $cwd_arg"
   check_line=$(check_tracked "$vstate"); rc=$?
   [ "$rc" -eq 0 ] || exit "$rc"
 
@@ -1192,7 +1108,7 @@ do_verdict() {
 
   suite_check
   if [ "$suite_state" = notrun ]; then
-    printf 'task %s: verdict from %s\n' "$idlist" "$rpath"
+    printf 'task %s: verdict from %s\n' "$first" "$rpath"
     printf '%s\n' "$suite_line"
     exit 7
   fi
@@ -1257,7 +1173,7 @@ do_verdict() {
     printf '%s\n' "$l" >> "$ledger"
   done
 
-  printf 'task %s: verdict from %s\n' "$idlist" "$rpath"
+  printf 'task %s: verdict from %s\n' "$first" "$rpath"
   # The verdict keys the fix loop reads are always printed; only the other
   # Verdict lines are cut to fit 12 lines.
   if [ "$mode" = rereview ]; then
@@ -1316,7 +1232,6 @@ do_verdict() {
 }
 
 case $sub in
-  start) do_start ;;
   review) do_review ;;
   verdict) do_verdict ;;
 esac

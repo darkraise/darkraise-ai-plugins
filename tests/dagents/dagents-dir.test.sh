@@ -48,8 +48,7 @@ rm -rf "$G/.superpowers"
 (cd "$G" && bash "$HERE/../../plugins/dagents/scripts/dagents-path" > /dev/null 2>&1)
 check "dagents-path: usage exit 2" "$?" "2"
 
-# --- dagents-path: the families' roots and names ---
-. "$HERE/fixtures/darkmem-stores.sh"
+# --- dagents-path: the roots and names, all in the checkout ---
 H=$HOME
 git -C "$G" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
 FP="$HERE/../../plugins/dagents/scripts/dagents-path"
@@ -58,14 +57,17 @@ check "dagents-path: ledger of a plan path" "$(cd "$G" && HOME=$H bash "$FP" led
 check "dagents-path: ledger of a backslashed plan path" "$(cd "$G" && HOME=$H bash "$FP" ledger 'docs\dagents\plans\2026-10-19-greet.md')" "$TOP/.dagents/sdd/2026-10-19-greet"
 check "dagents-path: ledger of a bare plan file name" "$(cd "$G" && HOME=$H bash "$FP" ledger 2026-10-19-greet.md)" "$TOP/.dagents/sdd/2026-10-19-greet"
 check "dagents-path: latest, local" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$TOP/.dagents/handoff/latest.md"
-check "dagents-path: store, local" "$(cd "$G" && HOME=$H bash "$FP" store | tr '\n' '|')" "documents local|progress local|"
-M=$(stores_home "$H" "$G" proj darkmem darkmem)
-check "dagents-path: docs, darkmem" "$(cd "$G" && HOME=$H bash "$FP" docs plans/p1.md)" "$M/dagents/plans/p1.md"
-check "dagents-path: ledger, darkmem" "$(cd "$G" && HOME=$H bash "$FP" ledger p1)" "$M/work/sdd/p1"
-check "dagents-path: latest, darkmem" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$M/work/handoff/latest.md"
-check "dagents-path: state stays local" "$(cd "$G" && HOME=$H bash "$FP" state)" "$TOP/.dagents"
-check "dagents-path: store, darkmem" "$(cd "$G" && HOME=$H bash "$FP" store | tr '\n' '|')" "documents darkmem|progress darkmem|"
-check "dagents-path: name" "$(cd "$G" && HOME=$H bash "$FP" name "$M/dagents/plans/p1.md")" "docs/dagents/plans/p1.md"
+# A home holding darkmem settings and a stores.json from an older build reads
+# as any other: every root stays in the checkout.
+mkdir -p "$H/.dagents"
+printf '{"darkmemEnabled":true,"documentStore":"darkmem","darkmem":{"url":"http://127.0.0.1:9","repos":{"%s":{"project":"proj"}}}}\n' "$TOP" > "$H/.dagents/config.json"
+printf '{"%s":{"documents":"darkmem","progress":"darkmem"}}\n' "$TOP" > "$H/.dagents/stores.json"
+check "dagents-path: docs, leftover darkmem settings" "$(cd "$G" && HOME=$H bash "$FP" docs plans/p1.md)" "$TOP/docs/dagents/plans/p1.md"
+check "dagents-path: ledger, leftover darkmem settings" "$(cd "$G" && HOME=$H bash "$FP" ledger p1)" "$TOP/.dagents/sdd/p1"
+check "dagents-path: latest, leftover darkmem settings" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$TOP/.dagents/handoff/latest.md"
+rm -f "$H/.dagents/config.json" "$H/.dagents/stores.json"
+check "dagents-path: state" "$(cd "$G" && HOME=$H bash "$FP" state)" "$TOP/.dagents"
+check "dagents-path: name" "$(cd "$G" && HOME=$H bash "$FP" name "$TOP/docs/dagents/plans/p1.md")" "docs/dagents/plans/p1.md"
 (cd "$G" && HOME=$H bash "$FP" ledger > /dev/null 2>&1)
 check "dagents-path: ledger needs a slug" "$?" "2"
 
@@ -78,29 +80,11 @@ check "worktree: its git dir and the primary's state" "$(dagents_legacy_layout "
 rm -rf "$WG/dr-superpowers" "$G/.superpowers"
 check "worktree: nothing left" "$(dagents_legacy_layout "$W")" ""
 
-# --- dagents_legacy_layout: an unmigrated home ---
+# --- dagents_legacy_layout: a dr-superpowers home holds nothing dagents moves ---
 SAVED_HOME=$HOME
-export HOME="$TMP/home2"; mkdir -p "$HOME"
-OLDH="$HOME/.dr-superpowers"
-NEWH="$HOME/.dagents"
-mkdir -p "$OLDH"
-printf '{"darkmem":{"repos":{}}}\n' > "$OLDH/config.json"
-check "home: old darkmem mapping, new home lacks it" "$(dagents_legacy_layout "$R")" "$OLDH"
-mkdir -p "$NEWH"
-printf '{"darkmemEnabled":true}\n' > "$NEWH/config.json"
-check "home: a new config without the mapping still counts" "$(dagents_legacy_layout "$R")" "$OLDH"
-printf '{"darkmem":{"repos":{}}}\n' > "$NEWH/config.json"
-check "home: the new config holds the mapping" "$(dagents_legacy_layout "$R")" ""
-printf '{"darkmemEnabled":true}\n' > "$OLDH/config.json"
-check "home: an old config without a mapping" "$(dagents_legacy_layout "$R")" ""
-mkdir -p "$OLDH/mirror"
-check "home: an empty old mirror folder" "$(dagents_legacy_layout "$R")" ""
-mkdir -p "$OLDH/mirror/proj"
-check "home: a mirror left in the old home" "$(dagents_legacy_layout "$R")" "$OLDH"
-printf '{"darkmem":{}}\n' > "$OLDH/config.json"
-rm -rf "$NEWH" "$OLDH/mirror/proj"
-check "home: reported once beside a repository path" "$(mkdir -p "$R/.superpowers"; dagents_legacy_layout "$R" | tr '\n' '|')" "$OLDH|$R/.superpowers|"
-rm -rf "$R/.superpowers" "$OLDH"
+export HOME="$TMP/home2"; mkdir -p "$HOME/.dr-superpowers/mirror/proj"
+printf '{"darkmem":{"repos":{}}}\n' > "$HOME/.dr-superpowers/config.json"
+check "home: a dr-superpowers darkmem mapping and mirror" "$(dagents_legacy_layout "$R")" ""
 export HOME=$SAVED_HOME
 
 # --- dagents_legacy_layout: dr-forge's 3.x names ---
@@ -113,8 +97,11 @@ rm -rf "$WG/dr-forge" "$G/.forge"
 SAVED_HOME=$HOME
 export HOME="$TMP/home3"; mkdir -p "$HOME/.dr-forge"
 check "dr-forge: an empty ~/.dr-forge is not named" "$(dagents_legacy_layout "$R")" ""
+mkdir -p "$HOME/.dr-forge/mirror/proj"
+printf '{}\n' > "$HOME/.dr-forge/stores.json"
+check "dr-forge: the mirror and stores.json migrate leaves are not named" "$(dagents_legacy_layout "$R")" ""
 printf '{}\n' > "$HOME/.dr-forge/config.json"
-check "dr-forge: a ~/.dr-forge holding anything is named" "$(dagents_legacy_layout "$R")" "$HOME/.dr-forge"
+check "dr-forge: a ~/.dr-forge holding anything else is named" "$(dagents_legacy_layout "$R")" "$HOME/.dr-forge"
 export HOME=$SAVED_HOME
 
 # --- dagents_legacy_layout: both older names at once ---
@@ -125,10 +112,10 @@ mkdir -p "$WG/dr-superpowers" "$WG/dr-forge" "$G/.superpowers" "$G/.forge"
 check "mixed: a worktree's git dir and the primary's state, both names" "$(dagents_legacy_layout "$W" | tr '\n' '|')" "$WG/dr-superpowers|$WG/dr-forge|$TOP/.superpowers|$TOP/.forge|"
 rm -rf "$WG/dr-superpowers" "$WG/dr-forge" "$G/.superpowers" "$G/.forge"
 SAVED_HOME=$HOME
-export HOME="$TMP/home4"; mkdir -p "$HOME/.dr-superpowers" "$HOME/.dr-forge"
-printf '{"darkmem":{"repos":{}}}\n' > "$HOME/.dr-superpowers/config.json"
+export HOME="$TMP/home4"; mkdir -p "$HOME/.dr-forge"
 printf '{}\n' > "$HOME/.dr-forge/config.json"
-check "mixed: both old homes" "$(dagents_legacy_layout "$R" | tr '\n' '|')" "$HOME/.dr-superpowers|$HOME/.dr-forge|"
+check "mixed: the old home beside a checkout's older path" "$(mkdir -p "$R/.superpowers"; dagents_legacy_layout "$R" | tr '\n' '|')" "$HOME/.dr-forge|$R/.superpowers|"
+rm -rf "$R/.superpowers"
 export HOME=$SAVED_HOME
 
 # --- dagents_legacy_layout: the primary checkout's own .forge ---

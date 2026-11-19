@@ -717,7 +717,12 @@ export async function progressToLocal(context, { offline = null } = {}) {
   // back to darkmem as differing files.
   if (fs.existsSync(workRoot)) {
     const aside = path.join(cfg.mirror, `work-moved-${utcStamp()}`);
-    fs.renameSync(workRoot, aside);
+    try {
+      fs.renameSync(workRoot, aside);
+    } catch (error) {
+      if (typeof error?.code !== "string") throw error;
+      return refuse(`the mirror's progress could not be set aside (${error.code}); the primary checkout holds the copied files, and the next reconcile finishes the move`);
+    }
     details.push(`the mirror's copies moved to ${aside}`);
   }
   state.ledgers = Object.create(null);

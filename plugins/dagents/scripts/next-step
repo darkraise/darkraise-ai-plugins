@@ -306,13 +306,10 @@ dagents_stores_init "$root"
 # The draft and adhoc prompts name it; their T is this checkout.
 latest_shown=$(dagents_latest_file)
 
-# handoff_target — T, the checkout the next session works in (spec §2). A
-# mirror ledger has no checkout of its own: the one holding its workspace
-# stands in (_plan_ledger_tree).
+# handoff_target — T, the checkout the next session works in (spec §2).
 handoff_target() {
   if [ "$complete" -eq 1 ]; then printf '%s\n' "$primary"
   elif [ "$kept" -eq 1 ] || [ "$draft" -eq 1 ] || [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ]; then printf '%s\n' "$root"
-  elif [ "$has_ledger" -eq 1 ] && [ "$(dagents_progress_store)" = darkmem ]; then _plan_ledger_tree "$root" "$slug"
   elif [ "$has_ledger" -eq 1 ]; then printf '%s\n' "$ledger_root"
   else printf '%s\n' "$root"; fi
 }

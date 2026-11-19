@@ -9,13 +9,25 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 . "${SCRIPT_DIR}/lib/roots.sh"
+darkmem_hook=0
+. "${SCRIPT_DIR}/lib/darkmem-hook.sh" 2>/dev/null && darkmem_hook=1
 
 stdin_json="$(cat 2>/dev/null || true)"
 # A second workflow plugin enabled beside dforge: the guard's block is the
-# whole answer, and nothing else here runs (scripts/workflow-guard.mjs).
+# whole answer, and nothing else here runs (scripts/workflow-guard.mjs). The
+# guard is given the 5 seconds its own timings assume; a guard that overruns
+# them is treated as no conflict. The event goes in as an argument: the
+# watchdog runs its command in the background, where stdin is /dev/null.
 if command -v node >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/workflow-guard.mjs" ]; then
-  guard_out=$(printf '%s' "$stdin_json" | node "$(dr_native_path "$SCRIPT_DIR/workflow-guard.mjs")" --host claude --self dforge --hook session-start)
-  if [ $? -eq 3 ]; then
+  if [ "$darkmem_hook" = 1 ]; then
+    guard_out=$(_darkmem_bounded 5 bash -c 'printf "%s" "$2" | node "$1" --host claude --self dforge --hook session-start' \
+      guard "$(dr_native_path "$SCRIPT_DIR/workflow-guard.mjs")" "$stdin_json")
+    guard_rc=$?
+  else
+    guard_out=$(printf '%s' "$stdin_json" | node "$(dr_native_path "$SCRIPT_DIR/workflow-guard.mjs")" --host claude --self dforge --hook session-start)
+    guard_rc=$?
+  fi
+  if [ "$guard_rc" -eq 3 ]; then
     printf '%s\n' "$guard_out"
     exit 0
   fi
@@ -131,9 +143,14 @@ fi
 
 # The workflow settings that differ from their defaults, as one line the skills
 # read where they would otherwise ask (scripts/dforge-config workflow). Without
-# Node, or with a settings file that cannot be read, nothing is added.
-settings_line=$(bash "${SCRIPT_DIR}/dforge-config" workflow 2>/dev/null \
-  | head -n 1 | tr -d '\001-\010\013\014\016-\037\r' || true)
+# Node, or with a settings file that cannot be read, nothing is added. Every key
+# the line names lives in ~/.dforge/config.json, so with no such file there is
+# nothing to report and no node to start (tests/hook.test.sh pins this).
+settings_line=""
+if [ -z "${HOME:-}" ] || [ -e "$HOME/.dforge/config.json" ]; then
+  settings_line=$(bash "${SCRIPT_DIR}/dforge-config" workflow 2>/dev/null \
+    | head -n 1 | tr -d '\001-\010\013\014\016-\037\r' || true)
+fi
 if [ -n "$settings_line" ]; then
   context="${context}\n\n$(escape_for_json "$settings_line")"
 fi
@@ -178,7 +195,7 @@ fi
 # nothing. The sync gets what is left of the hook's 300-second timeout less 30
 # seconds for the snapshot and the reply, since a killed hook injects nothing.
 darkmem_lines=""
-if . "${SCRIPT_DIR}/lib/darkmem-hook.sh" 2>/dev/null; then
+if [ "$darkmem_hook" = 1 ]; then
   room=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#handoffs_line} - ${#settings_line} - ${#legacy_line} - ${#nonode_line} ))
   if [ "$room" -ge 100 ]; then
     darkmem_lines=$(darkmem_session_lines "${cwd:-$PWD}" "${session_id:-}" "$room" $(( 270 - SECONDS )) \

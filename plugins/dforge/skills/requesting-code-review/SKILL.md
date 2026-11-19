@@ -66,31 +66,9 @@ severity; do not score them."
 - Fix Important issues before proceeding
 - Note Minor issues for later
 - Push back if the reviewer is wrong, with reasoning — outside a plan only;
-  under a plan the ruling seat adjudicates, never you
-
-## Example
-
-```
-[Just completed Task 2: Add verification function]
-
-You: Let me request code review before proceeding.
-
-BASE_SHA=$(git log --oneline | grep "Task 1" | head -1 | awk '{print $1}')
-HEAD_SHA=$(git rev-parse HEAD)
-
-[Write the diff file, then dispatch dforge:judge-opus]
-  DESCRIPTION: Added verifyIndex() and repairIndex() with 4 issue types
-  DIFF_FILE: /home/me/project/.dforge/review-3df7661.diff
-  PLAN_OR_REQUIREMENTS: Task 2 from <docs>/plans/deployment-plan.md
-  BASE_SHA: a7981ec
-  HEAD_SHA: 3df7661
-  REPORT_FILE: /home/me/project/.dforge/review-3df7661-report.md
-
-[Subagent replies]: ready to merge: with fixes — 1 Important, 1 Minor — /home/me/project/.dforge/review-3df7661-report.md
-
-You: [Fix progress indicators]
-[Continue to Task 3]
-```
+  under a plan, [final-review.md](../../reference/final-review.md) and
+  [delegated-task.md](../../reference/delegated-task.md) decide how a
+  finding is rejected
 
 ## Common Rationalizations
 
@@ -98,18 +76,3 @@ You: [Fix progress indicators]
 |--------|---------|
 | "I'll just review the diff myself instead of dispatching a reviewer" | You're the coordinator — reviewing the diff inline burns the context window you need to keep driving the work. Dispatch a reviewer subagent: the diff and the evaluation live in its context, and only the findings come back to you. |
 | "The reviewer needs my whole session history to understand the change" | Hand it precisely crafted context, never your session's history. That keeps the reviewer on the work product, not your thought process. |
-
-## Red Flags
-
-**Never:**
-- Skip review because "it's simple"
-- Ignore Critical issues
-- Proceed with unfixed Important issues
-- Argue with valid technical feedback
-
-**If reviewer wrong:**
-- Push back with technical reasoning
-- Show code/tests that prove it works
-- Request clarification
-
-See template at: [code-reviewer.md](references/code-reviewer.md)

@@ -44,7 +44,6 @@ import {
   fitBand,
   folderRuns,
   handedOff,
-  isAtLeast,
   isGitWriteTool,
   isDforge,
   gitMessageTexts,
@@ -135,8 +134,6 @@ const BUTTON_MAIN = 'permission'
 const BUTTON_REST = 'inactive'
 // The rows the band asks for: its frame, two lines and a warning.
 const COMPACT_ROWS = 5
-// The first Claude Code that takes styled children in a Button.
-const UNDERLINE_SINCE = '2.1.295'
 // The most /context categories the pane lists (breakdownRows caps it lower).
 const MAX_BREAKDOWN_ROWS = 12
 // Below this the band drops its frame.
@@ -421,17 +418,28 @@ function applyNotify(o: Live) {
 // band above the prompt and the pane draw the guard line alone.
 let guardCheck: Promise<string | null> | null = null
 
+// How long a check that decided nothing stands as "no conflict" before a hook asks again.
+const GUARD_RETRY_MS = 60_000
+
 function guardNow($: EngineInterface): Promise<string | null> {
+  // A check that timed out decides nothing: it reads as no conflict, and a
+  // hook asks again after GUARD_RETRY_MS rather than every hook at once. One
+  // that cannot start node never will in this process: no node, no other
+  // workflow plugin's check either.
+  const retryLater = () => {
+    $.clock.after(GUARD_RETRY_MS, () => {
+      guardCheck = null
+    })
+  }
   guardCheck ??= $.process
     .run(['node', `${$.plugin.root}/scripts/workflow-guard.mjs`, '--host', 'claude', '--self', 'dforge'], { timeoutMs: 5_000 })
     .then(
       ran => {
-        // A check that timed out or failed to start decides nothing: the next hook asks again.
-        if (ran.exitCode === null) guardCheck = null
+        if (ran.exitCode === null) retryLater()
         return guardLine(ran, $.plugin.root)
       },
-      () => {
-        guardCheck = null
+      (error: unknown) => {
+        if (!NO_NODE.test(String(error))) retryLater()
         return guardLine(null, $.plugin.root)
       },
     )
@@ -495,6 +503,7 @@ export const register: Register = on => {
       : o.isMinimized
         ? await expand($, e.presentation.isFullscreen === true)
         : await $.ui.open(paneFor(o.layout))
+    await syncTicker($)
     await refreshDetail($)
 
     // A surface that seats no panes (an older desktop) holds it undrawn: say
@@ -562,16 +571,20 @@ export const register: Register = on => {
     S.releaseTimer?.cancel()
     S.releaseTimer = null
     S.heldDone = null
+    if (!S.isSenderRead) S.senderRead = null
     // A wait of the ended session would ping for it later and, while it is
-    // held, keep endWait from restoring the next session's activity.
-    for (const wait of S.waits.values()) wait.timer?.cancel()
-    S.waits.clear()
+    // held, keep endWait from restoring the next session's activity. Settled,
+    // a ping still queued for it is not sent, and one out says so.
+    for (const id of [...S.waits.keys()]) await settleWait($, id, '⏹ Session ended')
     S.waitFrom = null
     S.isMainTurn = false
     await setActivity($, () => IDLE)
     const result = await next(e)
     // Last, so a slow webhook cannot use up the bound every plugin's end hook shares.
-    if (ended !== null) await notify($, ended)
+    if (ended !== null) {
+      await notify($, ended)
+      await flushOutbox($)
+    }
     return result
   }).catch(($, e, next) => next(e))
 
@@ -655,7 +668,9 @@ export const register: Register = on => {
     if (await standsDown($)) return next(e)
     if (e.origin.kind === 'person') S.isClosedByPerson = true
     await flushSettingNote($)
-    return next(e)
+    const closed = await next(e)
+    await syncTicker($)
+    return closed
   }).catch(($, e, next) => next(e))
 
   on('session.detach', async ($, e, next) => {
@@ -762,7 +777,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'ToolProgress' }, async ($, e, next) => {
     if (await standsDown($)) return next(e)
     const id = e.props.tool_use_id
-    if (S.waits.has(id)) $.clock.after(0, () => void endWait($, id, '✓ Approved'))
+    if (S.waits.has(id)) $.clock.after(0, () => void endWait($, id, '✓ Approved').catch(() => undefined))
     return next(e)
   })
 
@@ -905,7 +920,8 @@ export const register: Register = on => {
         return { deny: denial.deny }
       }
     }
-    const line = (await live($)).guardAttribution ? await attributionLine($, tool, e) : undefined
+    const options = await live($)
+    const line = options.guardAttribution ? await attributionLine($, tool, e) : undefined
     if (line !== undefined) {
       const refusal: CockpitRefusal = { at: await $.clock.now(), tool, line }
       await update($, refusals, list => [...list, refusal].slice(-20))
@@ -927,7 +943,7 @@ export const register: Register = on => {
       }
       // The response asking for this call already measured the window: show it while the tool
       // runs. Only shown: the note and the alert wait for the ledger this call may write.
-      if (e.agentId === undefined) await refresh($, (await live($)).tuning, S.compactWindow, { isShownOnly: true })
+      if (e.agentId === undefined) await refresh($, options.tuning, S.compactWindow, { isShownOnly: true })
     } catch {
       // The pane misses this call; the tool still runs.
     }
@@ -971,9 +987,16 @@ export const register: Register = on => {
       // before the budget, which measures a plan's tail by it. It is keyed on
       // modification times and returns early when nothing changed.
       if (isMove || tool === 'Bash' || touchesRun(e)) await readRun($)
-      // What the call changed in the tree shows in the git card now, not at the poll.
-      if (GIT_TOOLS.includes(tool) && (await $.clock.now()) - S.gitAt >= GIT_EVERY_MS && ((await live($)).isMinimized || (await isPaneUp($)))) await refreshGit($)
-      await onBudget($, await refresh($, (await live($)).tuning, S.compactWindow))
+      // Read again after the call, which may have saved a setting.
+      const o = await live($)
+      // What the call changed in the tree shows in the git card now, not at the
+      // poll. Not awaited: a large repository's status would hold the result.
+      const gitStamp = await $.clock.now()
+      if (GIT_TOOLS.includes(tool) && gitStamp - S.gitAt >= GIT_EVERY_MS && (o.isMinimized || (await isPaneUp($)))) {
+        S.gitAt = gitStamp
+        void refreshGit($).catch(() => undefined)
+      }
+      await onBudget($, await refresh($, o.tuning, S.compactWindow))
     }
 
     return ran
@@ -1045,7 +1068,6 @@ export const register: Register = on => {
 
     // Every control is a button in a rounded box: gray at rest, the accent on
     // the one that matters (`isMain`), dim when it reads as off.
-    if (S.canUnderline === null) await readVersion($)
     const button = (key: string, label: string, onPress: () => unknown, look: { hotkey?: string; isMain?: boolean; isOff?: boolean; isCompact?: boolean; isFocused?: boolean } = {}) => {
       const autoFocus = look.isFocused === true ? true : undefined
       // The desktop draws its own buttons, the main one in its primary look. A compact
@@ -1055,14 +1077,7 @@ export const register: Register = on => {
       }
       // The hotkey's letter is underlined in the label, as a desktop app marks
       // one; a hidden twin holds the hotkey, since a Button with one draws "c: "
-      // before its label. Older Claude Code draws that prefix instead.
-      if (!S.canUnderline) {
-        return (
-          <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
-            <Button key={key} label={label} hotkey={look.hotkey} plain dimColor={look.isOff} hover={{ bold: true }} autoFocus={autoFocus} onPress={onPress} />
-          </Box>
-        )
-      }
+      // before its label.
       const at = look.hotkey === undefined ? -1 : label.toLowerCase().indexOf(look.hotkey)
       return (
         <Box key={`${key}-box`} borderStyle="round" borderColor={look.isMain ? BUTTON_MAIN : BUTTON_REST} paddingX={1}>
@@ -1489,15 +1504,11 @@ export const register: Register = on => {
       return (
         <Box key={key} flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>
           <Box key={`${key}-head`} flexDirection="row" justifyContent="space-between">
-            {S.canUnderline ? (
-              <Button key={`${key}-title`} label={label} plain hover={{ bold: true }} onPress={() => toggle(key)}>
-                <Text color={color} bold>
-                  {label}
-                </Text>
-              </Button>
-            ) : (
-              <Button key={`${key}-title`} label={label} plain hover={{ bold: true }} onPress={() => toggle(key)} />
-            )}
+            <Button key={`${key}-title`} label={label} plain hover={{ bold: true }} onPress={() => toggle(key)}>
+              <Text color={color} bold>
+                {label}
+              </Text>
+            </Button>
             {headline}
           </Box>
           {isCollapsed ? body.filter(part => part === actions) : body}
@@ -2728,8 +2739,9 @@ const S = {
   },
   // An approval or question the person has not answered yet, by tool call: its
   // timer, the Discord message sent for it (edited once it is answered), and
-  // the subagent whose approval it is.
-  waits: new Map<string, { timer: Timer | null; messageId: string | null; event: NotifyEvent; agentId: string | null }>(),
+  // the subagent whose approval it is. Its outcome is set once it is
+  // answered, for a send still queued or on its way then.
+  waits: new Map<string, { timer: Timer | null; messageId: string | null; event: NotifyEvent; agentId: string | null; outcome: string | null }>(),
   // The activity the first open wait replaced, given back when the last wait
   // ends outside a main turn.
   waitFrom: null as CockpitActivity | null,
@@ -2750,9 +2762,6 @@ const S = {
   isUnattended: false,
   // The permission mode the last classic hook input carried; null before one.
   permissionMode: null as string | null,
-  // Whether this Claude Code draws a Button's label from styled children,
-  // so the hotkey's letter can be underlined in it.
-  canUnderline: null as boolean | null,
   // The person closed the pane this session: a desktop joining reopens nothing.
   isClosedByPerson: false,
   // The auto run's scheduled stage, at most one.
@@ -2823,6 +2832,7 @@ const S = {
   detailAt: 0,
   // When git last ran, which a tool call's own refresh spaces by GIT_EVERY_MS.
   gitAt: -GIT_EVERY_MS,
+  gitReads: 0,
   // The settings file's modification time and the engine's settings, as last put in force.
   seen: { config: null as number | null, claude: '' },
   // The finish file and its modification time as last read.
@@ -2835,6 +2845,15 @@ const S = {
   ledgerDirs: { base: '', at: null as number | null, names: [] as string[] },
   // Discord messages go out one at a time; the tail of the queue.
   outbox: Promise.resolve() as Promise<void>,
+  // readSender's read of S.where's host and tmux session, and whether it is
+  // done: one a session end left unfinished is dropped, so the next session
+  // reads again rather than wait on the ended one's.
+  senderRead: null as Promise<void> | null,
+  isSenderRead: false,
+  // The tail of the auto run reads trackAutoRun queues, and the run the last
+  // one found; undefined before the first.
+  autoTracking: Promise.resolve() as Promise<void>,
+  autoRunSeen: undefined as CockpitAutoRun | null | undefined,
 }
 
 async function endedEvent($: EngineInterface, sessionId: string): Promise<NotifyEvent> {
@@ -2853,27 +2872,30 @@ async function endedEvent($: EngineInterface, sessionId: string): Promise<Notify
   }
 }
 
-// How long a hook waits for its Discord message before it goes on; the
-// message still goes out, behind the ones queued before it.
+// How long session.end waits for the queued Discord messages before the
+// process may go.
 const NOTIFY_WAIT_MS = 1000
 // How long one Discord request may stay unanswered before the queue moves on.
 const SEND_LIMIT_MS = 8000
 
 /**
- * Queues one event for Discord when it is on, and waits no longer than
- * NOTIFY_WAIT_MS for it, so a slow or hung webhook never holds a hook. The
- * messages go out one at a time in order. `onSent` runs when Discord took it,
- * given the message id, whether or not the caller still waits.
+ * Queues one event for Discord when it is on, and waits for none of it, so a
+ * webhook never holds a hook. The messages go out one at a time in order.
+ * `onSent` runs when Discord took it, given the message id. A message whose
+ * `isDue` says false by its turn in the queue is not sent.
  */
-async function notify($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>): Promise<void> {
+async function notify($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>, isDue?: () => boolean): Promise<void> {
   if (!S.kinds.includes(event.kind)) return
-  const job = S.outbox.then(() => deliver($, event, editId, onSent)).catch(() => undefined)
-  S.outbox = job
+  S.outbox = S.outbox.then(() => (isDue?.() === false ? undefined : deliver($, event, editId, onSent))).catch(() => undefined)
+}
+
+// Waits no longer than NOTIFY_WAIT_MS for the messages queued so far.
+async function flushOutbox($: EngineInterface) {
   let timer = null as Timer | null
   const late = new Promise<void>(resolve => {
     timer = $.clock.after(NOTIFY_WAIT_MS, resolve)
   })
-  await Promise.race([job, late])
+  await Promise.race([S.outbox, late])
   timer?.cancel()
 }
 
@@ -2881,6 +2903,7 @@ async function notify($: EngineInterface, event: NotifyEvent, editId?: string, o
 async function deliver($: EngineInterface, event: NotifyEvent, editId?: string, onSent?: (id: string) => Promise<void>) {
   const state = await read($, notifier)
   if (state.url === null) return
+  await readSender($)
   const git = await read($, repo)
   const at = await read($, place)
   const who = await read($, account)
@@ -2984,14 +3007,16 @@ async function setActivity($: EngineInterface, change: (now: CockpitActivity) =>
 // The pane's clock: a redraw a second while a turn runs, or a background shell
 // or subagent younger than LIVE_MS works, so their timers count seconds. The
 // elapsed text drops its seconds at an hour; an older one is drawn with the
-// slow redraw the poll gives an idle pane.
+// slow redraw the poll gives an idle pane. Only while the pane or the band
+// shows: the poll's tick starts it again after an open.
 async function syncTicker($: EngineInterface) {
   const now = await read($, activity)
   S.isTurnLive = now.kind === 'running' || now.kind === 'waiting' || now.kind === 'asking'
   const stamp = await $.clock.now()
   const isYoung = (startedAt: number) => stamp - startedAt < LIVE_MS
   const isTicking =
-    S.isTurnLive || (await read($, shells)).some(one => isYoung(one.startedAt)) || (await read($, spawns)).some(one => !one.isDone && isYoung(one.startedAt))
+    (S.isTurnLive || (await read($, shells)).some(one => isYoung(one.startedAt)) || (await read($, spawns)).some(one => !one.isDone && isYoung(one.startedAt))) &&
+    ((await live($)).isMinimized || (await isPaneUp($)))
   if (isTicking && S.ticker === null) {
     S.ticker = $.clock.every(1000, () => $.ui.invalidate('ui.render'))
   } else if (!isTicking && S.ticker !== null) {
@@ -3007,6 +3032,7 @@ async function settleWait($: EngineInterface, id: string, outcome: string) {
   if (wait === undefined) return
   S.waits.delete(id)
   wait.timer?.cancel()
+  wait.outcome = outcome
   if (wait.messageId !== null) {
     await notify($, { ...wait.event, title: outcome }, wait.messageId)
   }
@@ -3023,13 +3049,21 @@ async function startWait($: EngineInterface, id: string, kind: 'waiting' | 'aski
     const wait = S.waits.get(id)
     if (wait === undefined) return
     wait.timer = null
-    await notify($, event, undefined, async messageId => {
-      wait.messageId = messageId
-      await update($, activity, now => (now.kind === kind ? { ...now, isSent: true } : now))
-    })
+    await notify(
+      $,
+      event,
+      undefined,
+      async messageId => {
+        wait.messageId = messageId
+        // Answered while its message was on its way: the message says how it went.
+        if (wait.outcome !== null) await notify($, { ...event, title: wait.outcome }, messageId)
+        else await update($, activity, now => (now.kind === kind ? { ...now, isSent: true } : now))
+      },
+      () => wait.outcome === null,
+    )
   }
   const delay = Math.max(0, S.notifyAskAfter) * 1000
-  S.waits.set(id, { timer: delay === 0 ? null : $.clock.after(delay, () => void send()), messageId: null, event, agentId })
+  S.waits.set(id, { timer: delay === 0 ? null : $.clock.after(delay, () => void send().catch(() => undefined)), messageId: null, event, agentId, outcome: null })
   if (delay === 0) await send()
 }
 
@@ -3103,17 +3137,29 @@ async function autoRunCall($: EngineInterface, sessionId: string, args: string[]
 }
 
 // Keeps the pane's copy of the bound run, and says once on Discord when the
-// run stopped with a reason.
-async function trackAutoRun($: EngineInterface) {
+// run stopped with a reason. The poll, a Bash call and a turn's end can each
+// call it at once, one at a time here.
+function trackAutoRun($: EngineInterface): Promise<void> {
+  const tracked = S.autoTracking.then(() => syncAutoRun($))
+  S.autoTracking = tracked.catch(() => undefined)
+  return tracked
+}
+
+async function syncAutoRun($: EngineInterface) {
   const text = await autoRunText($)
   const id = await $.session.id()
   const now = text === null ? null : autoRunFor(text, id)
   const owner = now === null && text !== null ? activeRunOwner(text) : null
   const isLeft = owner !== null && owner !== id && (await isSessionAlive($, owner)) === false
   if ((await read($, autoRunLeft)) !== isLeft) await update($, autoRunLeft, () => isLeft)
-  const before = await read($, autoRun)
+  const stored = await read($, autoRun)
+  // A hook running beside the one that wrote the atom still reads the old
+  // run, so the change is judged against the last run read in this process;
+  // the atom stands in only for the first read after a reload.
+  const before = S.autoRunSeen === undefined ? stored : S.autoRunSeen
+  S.autoRunSeen = now
+  if (JSON.stringify(now) !== JSON.stringify(stored)) await update($, autoRun, () => now)
   if (JSON.stringify(now) === JSON.stringify(before)) return
-  await update($, autoRun, () => now)
   // The run moved the ledger the offer's cache key leaves out: recompute once it ends.
   if (before?.active === true && now?.active !== true) S.offerRanKey = null
   if (before?.active === true && now !== null && !now.active && now.stopped !== null) {
@@ -3134,7 +3180,7 @@ async function armAutoRun($: EngineInterface, answer: string) {
 
 function scheduleAutoAct($: EngineInterface, stage: AutoStage, ms: number) {
   S.autoTimer?.cancel()
-  S.autoTimer = $.clock.after(ms, () => void autoAct($, stage))
+  S.autoTimer = $.clock.after(ms, () => void autoAct($, stage).catch(() => undefined))
 }
 
 // Carries the bound run through its pending stages: compact, then the
@@ -3149,6 +3195,10 @@ async function autoAct($: EngineInterface, stage: AutoStage) {
   S.autoBusy = true
   try {
     await autoStage($, stage)
+  } catch {
+    // A read before the stage's own try threw: the stage is still due, and
+    // the watchdog would re-arm it only after STALL_MS.
+    if (S.autoTimer === null) scheduleAutoAct($, stage, AUTO_RETRY_MS)
   } finally {
     S.autoBusy = false
     S.autoActedAt = await $.clock.now()
@@ -3820,7 +3870,10 @@ async function readRun($: EngineInterface) {
     else {
       for (const name of await ledgerDirs($, base)) {
         const info = await $.fs.stat(`${base}/${name}/progress.md`).catch(() => null)
-        if (info?.kind === 'file' && (newest === null || info.mtimeMs > newest.at)) newest = { slug: name, path: `${base}/${name}/progress.md`, at: info.mtimeMs }
+        if (info?.kind !== 'file' || (newest !== null && info.mtimeMs <= newest.at)) continue
+        // As boundLedger: a shared ledger with no workspace here is another session's.
+        if (base !== local && (await $.fs.stat(`${local}/${name}`).catch(() => null))?.kind !== 'dir') continue
+        newest = { slug: name, path: `${base}/${name}/progress.md`, at: info.mtimeMs }
       }
     }
     await readFinish($, await finishPath($, checkouts, newest?.slug ?? null))
@@ -4006,7 +4059,7 @@ async function readNotifier($: EngineInterface) {
   }
 }
 
-// Where the messages come from and S.where the state file goes, read once.
+// The settings' default mode and where the state file goes, read once per session.
 async function readWhere($: EngineInterface) {
   try {
     const settings = (await $.settings.read()) as { permissions?: { defaultMode?: unknown } }
@@ -4014,17 +4067,7 @@ async function readWhere($: EngineInterface) {
   } catch {
     S.isUnattended = false
   }
-  const firstLine = async (argv: string[]) => {
-    try {
-      const ran = await $.process.run(argv, { timeoutMs: 2000 })
-      const line = ran.exitCode === 0 ? (ran.stdout.split('\n')[0] ?? '').trim() : ''
-      return line === '' ? null : line
-    } catch {
-      return null
-    }
-  }
-  S.where.host = (await $.env.get('HOSTNAME')) || (await firstLine(['hostname']))
-  S.where.tmux = (await $.env.get('TMUX')) ? await firstLine(['tmux', 'display-message', '-p', '#S']) : null
+  const firstLine = (argv: string[]) => firstLineOf($, argv)
   // A worktree's .dforge/ lives in the primary checkout: the work tree of the
   // common git directory's parent, as ar_primary_root (scripts/lib/auto-run.sh)
   // finds it, so a layout the scripts resolve no primary for (a submodule)
@@ -4032,6 +4075,32 @@ async function readWhere($: EngineInterface) {
   const common = await firstLine(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
   const parent = common === null ? '' : common.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '')
   S.where.primary = parent === '' ? null : await firstLine(['git', '-C', parent, 'rev-parse', '--show-toplevel'])
+}
+
+async function firstLineOf($: EngineInterface, argv: string[]): Promise<string | null> {
+  try {
+    const ran = await $.process.run(argv, { timeoutMs: 2000 })
+    const line = ran.exitCode === 0 ? (ran.stdout.split('\n')[0] ?? '').trim() : ''
+    return line === '' ? null : line
+  } catch {
+    return null
+  }
+}
+
+// The host and tmux session the messages name, which serve nothing else: read
+// once per process, at the first message, so a session start runs neither.
+// A message sent while the read runs waits for the same read.
+function readSender($: EngineInterface): Promise<void> {
+  S.senderRead ??= readSenderNow($)
+  return S.senderRead
+}
+
+async function readSenderNow($: EngineInterface) {
+  const host = (await $.env.get('HOSTNAME')) || (await firstLineOf($, ['hostname']))
+  const tmux = (await $.env.get('TMUX')) ? await firstLineOf($, ['tmux', 'display-message', '-p', '#S']) : null
+  S.where.host = host
+  S.where.tmux = tmux
+  S.isSenderRead = true
 }
 
 // The context crossed its handoff budget: said once per crossing.
@@ -4087,6 +4156,7 @@ async function saveMention($: EngineInterface, value: string): Promise<string | 
 async function sendTest($: EngineInterface): Promise<string> {
   const state = await read($, notifier)
   if (state.url === null) return 'No Discord webhook is set.'
+  await readSender($)
   const body = discordBody(
     { kind: 'done', title: '🔔 Test from dforge', detail: 'Notifications reach this channel.', isPlain: true },
     { host: S.where.host, repo: null, branch: null, tmux: S.where.tmux, account: (await read($, account))?.key ?? null },
@@ -4453,7 +4523,6 @@ async function readSession($: EngineInterface, isStart: boolean) {
   await step(() => trackAutoRun($))
   await step(() => readRun($))
   await step(() => beat($))
-  await step(() => readVersion($))
   await step(() => readRemote($))
   S.sessionUnread = unread
   // '' when the id could not be read: the poll adopts the first id it reads.
@@ -4554,14 +4623,17 @@ async function refreshDetail($: EngineInterface) {
 }
 
 async function refreshGit($: EngineInterface) {
+  // A tool call's refresh, the poll's and the command's can overlap: only the latest writes.
+  const reading = ++S.gitReads
   S.gitAt = await $.clock.now()
   try {
     const ran = await $.process.run(GIT_STATUS, { timeoutMs: 3000 })
     const state = ran.exitCode === 0 ? repoFromPorcelain(ran.stdout) : null
+    if (reading !== S.gitReads) return
     if (JSON.stringify(await read($, repo)) !== JSON.stringify(state)) await update($, repo, () => state)
   } catch (error) {
     // A large repository can outrun the timeout: its last reading stands rather than a blank card.
-    if (!TIMED_OUT.test(String(error)) && (await read($, repo)) !== null) await update($, repo, () => null)
+    if (reading === S.gitReads && !TIMED_OUT.test(String(error)) && (await read($, repo)) !== null) await update($, repo, () => null)
   }
 }
 
@@ -4756,15 +4828,6 @@ async function shutPane($: EngineInterface) {
     if ((await $.ui.panes()).some(pane => pane.id === PANE)) await $.ui.close({ id: PANE })
   } catch {
     // No pane to close on this host.
-  }
-}
-
-async function readVersion($: EngineInterface) {
-  try {
-    const { base } = await $.session.version()
-    S.canUnderline = isAtLeast(base, UNDERLINE_SINCE)
-  } catch {
-    S.canUnderline = false
   }
 }
 

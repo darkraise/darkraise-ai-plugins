@@ -7,8 +7,7 @@
 # empty the roster: a reader that sees no executors concludes no lane is
 # available, which is the silent downgrade the roster was written to avoid.
 #
-# Usage: executors list
-#        executors ranked
+# Usage: executors ranked
 #        executors get  <id> <dotted.key>
 #        executors path <id> <dotted.key>
 # Exit: 0 answered; 1 unknown id or key; 2 usage error or missing jq.
@@ -23,7 +22,7 @@ DIR="${DR_EXECUTORS_DIR:-$ROOT/reference/executors}"
 die() { printf 'executors: %s\n' "$1" >&2; exit 2; }
 
 command -v jq >/dev/null 2>&1 || die "jq is required but not on PATH"
-[ $# -ge 1 ] || die "usage: executors list | ranked | get <id> <key> | path <id> <key>"
+[ $# -ge 1 ] || die "usage: executors ranked | get <id> <key> | path <id> <key>"
 
 # An entry is valid when it parses, carries every required field, its id
 # matches the pattern, and its id matches its filename stem. The stem check is
@@ -68,10 +67,6 @@ entry_file() { # entry_file <id>; prints the path when the id is valid
 }
 
 case "$1" in
-  list)
-    [ $# -eq 1 ] || die "usage: executors list"
-    list_ids
-    ;;
   ranked)
     [ $# -eq 1 ] || die "usage: executors ranked"
     # Each id gets a sort key: 0 and its priority when it has a valid one, 1

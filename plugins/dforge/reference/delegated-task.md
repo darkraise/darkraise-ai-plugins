@@ -22,33 +22,21 @@ calls.
 | Task reviewer | The seat `scripts/review-route PLAN_FILE --task <N>` prints (§3); its `fallback` when the reviewer panel returns no list (`lists=0`); say every substitution aloud. On a Codex host, a native judge at Astra high or above ([native-codex.md](native-codex.md)) | None |
 | Scoped re-review | `dforge:judge-sonnet-high`; `dforge:judge-opus` for a subtle concurrency fix | None |
 
-**Fleet agents take no `model` or `effort` argument.** The Agent tool's `model`
-argument overrides the agent file's pinned model while `effort` keeps its
-frontmatter value, and its `effort` argument (Claude Code 2.1.292 and later)
-overrides the pinned effort while the model stays; either runs the agent at a
-tier the ledger does not record.
-
 General-purpose seats always take an explicit model:
 [using-dforge](../skills/using-dforge/SKILL.md) §Seats.
 
-**Turn count beats token price.** Wall-clock and context cost scale with how
-many turns a subagent takes, and the cheapest models routinely take 2-3× the
-turns on multi-step work. Use a mid-tier model as the floor for reviewers.
-
 ## 1. Open the task
 
-**Open the task with one call:**
-`bash <plugin-root>/scripts/task-brief --open PLAN_FILE N`. It writes the
-brief, rewrites `<workspace>/plan-header.md`, appends the
-`implementer inline (assigned; base <sha7>)` line once and prints the task
-check and the budget line (see the caller's Session Budget section). That open
-line is the task's BASE: `task-step review` creates
+`bash <plugin-root>/scripts/task-brief --open PLAN_FILE N` opens the task
+(dforge:executing-plans §The Task Loop step 1) with the
+`implementer inline (assigned; base <sha7>)` line. That open line is the
+task's BASE: `task-step review` creates
 `<workspace>/task-<N>-step.json` from it, recording the suite command you pass
 as `--suite '<suite command>'` (below), so you never carry a SHA. Calling
 `--open` again for a task that has its open line adds none, and the review
 still packages every commit made since that base. Exit 3 means the plan has no
-such task; exit 2 on a `Host: codex` plan sends you to *The steps by hand*
-below.
+such task. `--open` works the same on a `Host: codex` plan; there `task-step`
+refuses, so the review runs through *The steps by hand* below.
 
 - **Suite command.** Read the plan header's `**Task check:**` line first,
   then resolve the plan's suite command once:
@@ -172,10 +160,8 @@ needed.
   Never Read the report file yourself: the digest carries the verdicts, the
   scores, one line per Critical or Important finding and the cannot-verify
   items, and verdict has already written the fix file and logged the Minor
-  findings. A `panel:light` seat that returned one list writes no report:
-  read its JSON as Panel seats below says. A panel seat's line names the
-  judge prompt and the judge, `seat: panel:light prompt: <judge prompt>
-  fallback: <judge>` or `seat: panel:heavy+judge-opus prompt: <judge prompt>
+  findings. A panel seat's line names the judge prompt and the judge,
+  `seat: panel:heavy+judge-opus prompt: <judge prompt>
   then: dforge:judge-opus`, and `panel: <command>` and `timeout: <ms>`
   follow it: run the panel as below, then the judge as Panel seats says. The
   judge prompt is already written, so you never run `review-route` again for
@@ -192,9 +178,9 @@ needed.
   ends `(review-route exited <N>: …)`, `review-route` failed but
   `task-step review` still wrote the complete judge prompt: dispatch the
   `dforge:judge-opus` seat it names as printed, and say why, quoting that
-  note. If `task-step review` itself exits 2 (a `lens-route` failure, a bad
-  `--base`, `--head` or `--cwd`, an unexpanded placeholder, or a checkout
-  whose tracked files it cannot record for the verdict check), it printed
+  note. If `task-step review` itself exits 2 (a `lens-route` failure, an
+  unexpanded placeholder, or a checkout whose tracked files it cannot
+  record for the verdict check), it printed
   no digest and left its state file unchanged; any prompt file it left is
   stale: take *The steps by hand*.
   Codex hosts are the exception: `review-route --task` exits 2 on every `Host: codex`
@@ -337,35 +323,27 @@ call `verdict` again. Exits 5 and 6 are checked before 7.
 `<workspace>/task-<N>-review-panel-prompt.md`, as
 [external-review.md](external-review.md) §Task review seats describes, and
 printed the panel command and its `timeout` (the command's `--cwd` is your
-checkout's top level, or the `--cwd DIR` you passed to `task-step review`).
-Run that command as a background Bash call with the printed `timeout`:
-2590000 ms for `--tier light`, 5590000 for `--tier heavy`. Its shape is:
+checkout's top level).
+Run that command as a background Bash call with the printed `timeout`,
+5590000 ms. Its shape is:
 
 ```bash
-bash "<plugin-root>/scripts/run-review-panel" --kind task --tier <light|heavy> \
+bash "<plugin-root>/scripts/run-review-panel" --kind task --tier heavy \
   --cwd <worktree-root> --out-dir <workspace>/task-<N>-review-panel \
   --prompt <workspace>/task-<N>-review-panel-prompt.md
 ```
 
-It prints one status line per reviewer family, then `panel tier=<t>
+It prints one status line per reviewer family, then `panel tier=heavy
 lists=<n>`. Read those lines and take their word: `OK` and `FALLBACK` are a
 reviewer that returned a list in `<out-dir>/<id>.json`, and on `FALLBACK` you
 say the substitution aloud. `SKIPPED`, `TIMEOUT` and `FAILED` are a reviewer
 that returned none: never run it again, since each runner has already applied
 its own one-shot fallback. Then, by `lists=`:
 
-- **`lists=0`:** dispatch the judge the `seat:` line names after `fallback:`
-  or `then:` with the judge prompt file and one added line, "No external
+- **`lists=0`:** dispatch the judge the `seat:` line names after `then:`
+  with the judge prompt file and one added line, "No external
   review file exists: skip the Second Pass section", and say so with each
   reviewer's reason.
-- **`panel:light`, one list:** read that review from its JSON:
-  `spec_verdict` (`compliant` or `issues`), `task_quality` (`approved` or
-  `needs_fixes`), the four scores, `findings` and `cannot_verify`. Apply the
-  bands, the cannot-verify route and the fix loop to it exactly as to a
-  judge's report; its verdict and scores are the task's.
-- **`panel:light`, two lists:** dispatch the judge after `fallback:` with the
-  judge prompt file. Its Second Pass dedupes both lists and rules CONFIRMED
-  or REJECTED on each finding; its verdict and scores are the task's.
 - **`panel:heavy+judge-opus`, one or two lists:** dispatch
   `dforge:judge-opus` with the judge prompt file, whose Second Pass already
   names every list's path. The task's verdicts and scores are the judge's.
@@ -405,9 +383,12 @@ Before the loop starts, two routes leave it immediately:
   the plan without the seat's verdict in the ledger.
 
 Everything else enters the loop. A fix round is one fix of your own plus one
-scoped re-review. Two rounds at most per task:
+scoped re-review. Two rounds at most per task.
 
-Each round is your own fix, followed by one scoped re-review.
+A `Host: codex` plan keeps its five-round cap (`review_cap: 5` in
+[codex-routing.json](codex-routing.json)): its ledger line reads
+`fix round <R>/5`, and the breaker comes after round 5's re-review instead
+of round 2's.
 
 **Every round:** you fix, re-run the tests covering the amended code and
 append your fix report to the same report file. Before dispatching the
@@ -428,8 +409,8 @@ covering test files.
 carrying the finding's `:<line>`, with the severity lines after the blank
 line; append the ruling's smallest fix and the covering test files below
 them. Write the file yourself only for findings no report holds: a
-mechanical check's finding, a CONFIRMED-GAP from the ruling seat, or a
-light panel seat's JSON review. `task-step rereview` reads the bullets for the
+mechanical check's finding or a CONFIRMED-GAP from the ruling seat.
+`task-step rereview` reads the bullets for the
 findings list, so write the file before you call it.
 
 **The re-review is scoped.** Run
@@ -482,9 +463,8 @@ completion line to the ledger in the same message as your other bookkeeping.
 Write it with `scripts/task-close PLAN_FILE N '<checkpoint>' --review '<text>'`
 (the checkpoint is the part after the dash, `<text>` the part inside the
 parentheses after the commit range): it takes the range from the open line and
-`HEAD`, pushes the ledger and runs the auto-run bookkeeping. A Codex plan has
-no open line from `task-brief --open` (it exits 2 there), so `task-close`
-exits 3 and you append the line by hand.
+`HEAD`, pushes the ledger and runs the auto-run bookkeeping, on a Codex plan
+too.
 A confirmed gap goes to the next task that depends on this one; with none, to
 the next task in plan order; after the last task, to the final review, written
 `carried to final review`, where it is a confirmed finding:
@@ -492,8 +472,8 @@ the next task in plan order; after the last task, to the final review, written
 - `Task <N>: complete (commits <base7>..<head7>, review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat <seat>) — done: …; verified: …; remaining: none; discovered: …; assumptions: …`
 - `Task <N>: complete (commits <base7>..<head7>, <K> parked, <C> carried to Task <M>; scores …, seat <seat>) — …; remaining: <parked and carried one-liners>; …` after a tripped breaker; drop the `carried` clause when nothing was
 - end the scores clause with `, seat <seat>`: the reviewers that returned a
-  list and the judge, joined with `+` (`codex gpt-6.1-sol/xhigh`,
-  `codex gpt-6.1-sol/xhigh+agy gemini-4-argon/high+judge-sonnet-high`,
+  list and the judge, joined with `+` (`codex gpt-6-astra/xhigh+judge-opus`,
+  `codex gpt-6.1-sol/xhigh+agy gemini-4-argon/high+judge-opus`,
   `agy gemini-4-argon/high+judge-opus`), or the judge's short name alone,
   followed by ` (<id> <STATUS> — <reason>)` for each reviewer that ran and
   returned no list, or by ` (reviewers off — <answers>)` when §3's `gate:`
@@ -544,9 +524,7 @@ A watch that ends with no conclusion, the run still going at 90 minutes,
 writes `Early CI: skipped — run <id> still running at 90 min`. Any failure of
 `git push` or `gh` prints one line, writes `Early CI: skipped — <reason>`, and
 never stops the run. A `**CI:**` line that names no workflow declaring
-`workflow_dispatch` writes the same `skipped` line. A red run is a bullet you
-write into the next task's fix file, as §4 does for a mechanical check's
-finding. Inline mode writes no fix files: there, debug a red run with
+`workflow_dispatch` writes the same `skipped` line. Debug a red run with
 dforge:systematic-debugging before the next task's first step. With no task
 left, a red run is a final-review finding, debugged with
 dforge:systematic-debugging. On recovery, a `dispatched` line with no
@@ -568,11 +546,26 @@ with the session in the implementer's place.
    builds the step state from that line.
 2. **Implement and report.** Implement, verify, self-review and commit as
    dforge:executing-plans §The Task Loop steps 3 to 6 say. Then write
-   `<workspace>/task-<N>-report.md` in the implementer report shape
-   ([implementer-prompt.md](prompts/implementer-prompt.md)
-   §Report Format): status, commits, `## Verified`,
-   `## Discovered issues (not fixed)` and `## Assumptions made`. The reviewer
-   prompt names that file.
+   `<workspace>/task-<N>-report.md`; the reviewer prompt names that file.
+   It holds:
+   - what you implemented and the commits, what you tested and anything you
+     could not run, the files changed, self-review findings and any concerns;
+   - `## Verified`: one bullet per command you ran to check your work. Each
+     bullet starts at the beginning of its line and has exactly this form,
+     where the separator is a space, an em dash and a space, `pass` means
+     the command exited 0, and the counts are the ones the command printed
+     (a command that prints none is `1 passed, 0 failed` on exit 0 and
+     `0 passed, 1 failed` otherwise):
+     - `<command>` — pass: <n> passed, <m> failed
+     - `<command>` — fail: <n> passed, <m> failed
+   - **TDD Evidence**, when the task required TDD: RED, the command, its
+     relevant failing output before the implementation and why that failure
+     was expected; GREEN, the command and its passing output after;
+   - `## Discovered issues (not fixed)`: problems you noticed and did not
+     fix because the task did not ask for them, one bullet each, or `None`.
+     Never fix one just to shorten this list;
+   - `## Assumptions made`: decisions you made where the brief was silent,
+     one bullet each, or `None`.
 3. **Review.** Start the suite as §2's *The suite runs beside the review*
    says, run `bash <plugin-root>/scripts/task-step review PLAN_FILE <N>`,
    dispatch the seat it prints, and run `task-step verdict` once both are in
@@ -600,12 +593,10 @@ at Astra high or above as the seat ([native-codex.md](native-codex.md)).
 `task-step` exits 2 on a `Host: codex` plan, and `task-step review` exits 2,
 writing nothing, when `lens-route` does. Then run the mechanics yourself:
 
-- **§1.** Record BASE (`git rev-parse HEAD`) before you start. Run
-  `scripts/task-brief PLAN_FILE N` (see using-dforge §Session Budget): it
-  prints `wrote <path>: <N> lines`, then the budget line; read the path out of
-  the first line. Write the assigned line
-  `Task <N>: implementer inline (assigned; base <sha7>)`.
-- **§2.** On a DONE report, run
+- **§1.** Open the task with `task-brief --open` as §1 says, on a Codex
+  plan too: BASE is the base its open line records, and `task-close` (§5)
+  reads the same line.
+- **§2.** Once the report is written, run
   `bash <plugin-root>/scripts/suite-run -- <suite command>` yourself in the
   background at the task's head and treat a non-baseline failure as §3's
   Important finding. `<suite command>` is resolved as §1's Suite command

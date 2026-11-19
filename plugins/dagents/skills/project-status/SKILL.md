@@ -33,10 +33,9 @@ calls `scripts/next-step` only with `--print`, which writes nothing. See
    `plan-lint` requires it, but only plans written since 1.4.0 have one, so it
    would hide most plans. Then, in order:
    - **In flight** — `<ledger dir>/progress.md` exists with incomplete tasks.
-     While progress is local, check it under every worktree the audit lists
+     Check it under every worktree the audit lists
      (`<worktree>/<state>/sdd/<basename minus .md>/progress.md`), because a
-     ledger lives in the worktree executing it; while it lives in darkmem,
-     every worktree shares the mirror's one. Use `scripts/dagents-path ledger`
+     ledger lives in the worktree executing it. Use `scripts/dagents-path ledger`
      or compute the path directly; never call `scripts/sdd-workspace`, which
      creates the directory.
      A plan whose tasks are all complete but which is not yet indexed as merged

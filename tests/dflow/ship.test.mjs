@@ -66,6 +66,17 @@ test('a proof is of a commit, needs text unless visual, and goes stale when a UI
   assert.match(stale.stdout, /^A2 stale \(changed since: src\/meter\.mjs\)/m);
 });
 
+test('a proof refuses an untracked file but not a draft under docs/dflow', t => {
+  const root = makeProject(t, { plan: UI_PLAN });
+  buildAll(root);
+  write(root, 'shot.png', 'png');
+  write(root, 'docs/dflow/my notes ü.md', 'draft\n');
+  write(root, 'src/extra.mjs', 'export const c = 3;\n');
+  assert.match(dflow(root, ['proof', 'A3', '--shot', 'shot.png']).stderr, /uncommitted changes/);
+  fs.rmSync(path.join(root, 'src/extra.mjs'));
+  assert.equal(dflow(root, ['proof', 'A3', '--shot', 'shot.png']).status, 0);
+});
+
 test('ship runs gates and acceptance, promotes the log, closes the plan and the board row', t => {
   const root = makeProject(t, { config: { gates: [{ name: 'test', cmd: 'node suite.mjs' }] }, plan: PLAN.replace('**Docs:** none — the fixture has no living docs', '**Docs:** decisions.md, gotchas.md') });
   buildAll(root);
@@ -186,6 +197,62 @@ test('an untracked file outside docs/dflow stops ship, and a gate pass beside it
   const check = dflow(root, ['ship', '--check']);
   assert.equal(check.status, 1);
   assert.match(check.stdout, /uncommitted changes: src\/helper\.mjs/);
+});
+
+test('a commit made while ship runs its checks stops ship before the closing commit', t => {
+  const root = readyToShip(t);
+  write(root, 'check.mjs', 'import { execFileSync } from \'node:child_process\';\nexecFileSync(\'git\', [\'commit\', \'-q\', \'--allow-empty\', \'-m\', \'chore: during ship\']);\n');
+  const shipped = dflow(root, ['ship']);
+  assert.equal(shipped.status, 1, shipped.stdout);
+  assert.match(shipped.stdout, /- the head commit moved while ship ran its checks/);
+  assert.equal(parsePlan(read(root, PLAN_FILE)).fields.shipped, undefined);
+  assert.equal(git(root, 'log', '-1', '--format=%s'), 'chore: during ship');
+  assert.equal(JSON.parse(read(root, '.dflow/state.json')).plans['2026-11-12-meter'].acceptance?.A1, undefined);
+});
+
+test('a rebase onto the default branch does not count its changes as made after the review', t => {
+  const root = readyToShip(t);
+  git(root, 'switch', '-q', 'main');
+  write(root, 'other.txt', 'main moved\n');
+  git(root, 'add', 'other.txt');
+  git(root, 'commit', '-q', '-m', 'chore: main moves');
+  git(root, 'switch', '-q', 'feat/x');
+  git(root, 'rebase', '-q', 'main');
+  const check = dflow(root, ['ship', '--check']);
+  assert.equal(check.status, 0, check.stdout);
+});
+
+test('the screenshot being recorded does not make the tree dirty for its own proof', t => {
+  const root = makeProject(t, { plan: UI_PLAN });
+  buildAll(root);
+  write(root, 'capture.png', 'png');
+  const proven = dflow(root, ['proof', 'A2', '--shot', 'capture.png', '--text', 'meter is red']);
+  assert.equal(proven.status, 0, proven.stderr);
+});
+
+test('a file put back to the base after the review still counts as changed since it', t => {
+  const root = readyToShip(t);
+  git(root, 'rm', '-q', 'src/meter.mjs');
+  git(root, 'commit', '-q', '-m', 'refactor: drop the meter');
+  const check = dflow(root, ['ship', '--check']);
+  assert.equal(check.status, 1, check.stdout);
+  assert.match(check.stdout, /1 file\(s\) changed after the recorded review \(src\/meter\.mjs\)/);
+});
+
+test('a review or a proof of a commit git no longer has counts as stale', t => {
+  const root = makeProject(t, { plan: UI_PLAN });
+  buildAll(root);
+  write(root, 'shot.png', 'png');
+  assert.equal(dflow(root, ['proof', 'A2', '--shot', 'shot.png', '--text', 'meter is red']).status, 0);
+  dflow(root, ['review', 'record', '--tier', '0']);
+  git(root, 'commit', '-q', '--amend', '-m', 'feat: draw the meter');
+  git(root, 'reflog', 'expire', '--expire=now', '--all');
+  git(root, 'gc', '-q', '--prune=now');
+  const check = dflow(root, ['ship', '--check']);
+  assert.equal(check.status, 1);
+  assert.match(check.stdout, /- the recorded review is of [0-9a-f]{7}, which git cannot compare with HEAD/);
+  assert.match(check.stdout, /- A2 \(UI\) was proven at [0-9a-f]{7}, which git cannot compare with HEAD/);
+  assert.match(dflow(root, ['proof', '--list']).stdout, /^A2 stale \(its commit cannot be compared with HEAD\)/m);
 });
 
 test('code committed after the review, and a gate that passed on uncommitted changes, both stop ship', t => {

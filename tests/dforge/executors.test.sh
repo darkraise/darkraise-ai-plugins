@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The registry is the one place an executor is described. A malformed entry
 # must not remove every other executor from the roster: that is the silent
-# downgrade the panel avoids, and it is why list skips bad entries rather than
+# downgrade the panel avoids, and it is why ranked skips bad entries rather than
 # failing.
 set -uo pipefail
 
@@ -29,11 +29,9 @@ entry beta
 
 check "script exists" "$([ -f "$EXEC" ] && echo yes || echo no)" "yes"
 
-# --- list ------------------------------------------------------------------
-check "list names every valid entry, sorted" "$(run "$TMP/reg" list | tr '\n' ' ')" "alpha beta "
-check "list exits 0" "$(run "$TMP/reg" list >/dev/null; echo $?)" "0"
-check "an empty directory lists nothing and still exits 0" \
-  "$(mkdir -p "$TMP/empty"; run "$TMP/empty" list; echo "rc=$?")" "rc=0"
+# --- the valid entries ---------------------------------------------------
+check "ranked names every valid entry, sorted" "$(run "$TMP/reg" ranked | tr '\n' ' ')" "alpha beta "
+check "ranked exits 0" "$(run "$TMP/reg" ranked >/dev/null; echo $?)" "0"
 
 # --- get and path ----------------------------------------------------------
 check "get reads a top-level field" "$(run "$TMP/reg" get alpha id)" "alpha"
@@ -51,30 +49,30 @@ check "path takes a dotted key too" \
 # Each case keeps alpha and beta valid, so the assertion proves the bad entry
 # was dropped rather than that the whole listing collapsed.
 printf 'not json\n' > "$TMP/reg/broken.json"
-check "malformed JSON is skipped" "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta "
-check "malformed JSON still exits 0" "$(run "$TMP/reg" list >/dev/null 2>&1; echo $?)" "0"
+check "malformed JSON is skipped" "$(run "$TMP/reg" ranked 2>/dev/null | tr '\n' ' ')" "alpha beta "
+check "malformed JSON still exits 0" "$(run "$TMP/reg" ranked >/dev/null 2>&1; echo $?)" "0"
 check "malformed JSON is reported on stderr" \
-  "$(run "$TMP/reg" list 2>&1 >/dev/null | grep -c 'broken')" "1"
+  "$(run "$TMP/reg" ranked 2>&1 >/dev/null | grep -c 'broken')" "1"
 rm -f "$TMP/reg/broken.json"
 
 jq -n '{id:"missing", gate:"scripts/x"}' > "$TMP/reg/missing.json"
-check "a missing required field is skipped" "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta "
+check "a missing required field is skipped" "$(run "$TMP/reg" ranked 2>/dev/null | tr '\n' ' ')" "alpha beta "
 rm -f "$TMP/reg/missing.json"
 
 entry noblocks; jq 'del(.blocks)' "$TMP/reg/noblocks.json" > "$TMP/x" && mv "$TMP/x" "$TMP/reg/noblocks.json"
 check "an entry without ladder blocks is valid" \
-  "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta noblocks "
+  "$(run "$TMP/reg" ranked 2>/dev/null | tr '\n' ' ')" "alpha beta noblocks "
 rm -f "$TMP/reg/noblocks.json"
 
 for key in runner gate; do
   entry "no$key"; jq "del(.$key)" "$TMP/reg/no$key.json" > "$TMP/x" && mv "$TMP/x" "$TMP/reg/no$key.json"
-  check "an entry without $key is rejected" "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta "
+  check "an entry without $key is rejected" "$(run "$TMP/reg" ranked 2>/dev/null | tr '\n' ' ')" "alpha beta "
   rm -f "$TMP/reg/no$key.json"
 done
 
 entry gamma; jq '.id = "delta"' "$TMP/reg/gamma.json" > "$TMP/x" && mv "$TMP/x" "$TMP/reg/gamma.json"
 check "an id that disagrees with its filename is skipped" \
-  "$(run "$TMP/reg" list 2>/dev/null | tr '\n' ' ')" "alpha beta "
+  "$(run "$TMP/reg" ranked 2>/dev/null | tr '\n' ' ')" "alpha beta "
 rm -f "$TMP/reg/gamma.json"
 
 # A separate directory: NTFS is case-insensitive, so writing Alpha.json beside
@@ -86,11 +84,11 @@ jq -n '{id:"Alpha", locator:"a", probe:{command:"b", op:"auth"}, gate:"g", runne
 jq -n '{id:"zeta", locator:"a", probe:{command:"b", op:"auth"}, gate:"g", runner:"c",
         session_dir:"d", surfaces:["review"]}' > "$TMP/case/zeta.json"
 check "an id outside the pattern is skipped" \
-  "$(run "$TMP/case" list 2>/dev/null | tr '\n' ' ')" "zeta "
+  "$(run "$TMP/case" ranked 2>/dev/null | tr '\n' ' ')" "zeta "
 
 # --- the shipped entry -----------------------------------------------------
-check "the shipped registry lists codex" \
-  "$(bash "$EXEC" list | grep -cx codex)" "1"
+check "the shipped registry names codex" \
+  "$(bash "$EXEC" ranked | grep -cx codex)" "1"
 check "the shipped codex entry keeps only its judge block" \
   "$(jq -r '.blocks | keys | join(",")' < "$P/reference/executors/codex.json")" "judge"
 check "the shipped codex judge block exists in the ladder" \
@@ -103,8 +101,6 @@ check "the shipped codex entry names its runner and the review surface" \
   "$(jq -r '[.runner, (.surfaces|join(","))] | join(" ")' < "$P/reference/executors/codex.json")" "scripts/run-codex-review.sh review"
 
 # --- the shipped agy entry -----------------------------------------------------
-check "the shipped registry lists agy before codex" \
-  "$(bash "$EXEC" list | tr '\n' ' ')" "agy codex "
 check "the shipped registry ranks agy before codex" \
   "$(bash "$EXEC" ranked | tr '\n' ' ')" "agy codex "
 check "the shipped agy entry has priority 10" "$(bash "$EXEC" get agy priority)" "10"
@@ -158,12 +154,9 @@ check "priority 1.0 is an integer and ranks; null ranks as absent" \
 check "only the null priority is reported" \
   "$(run "$TMP/rank-edge" ranked 2>&1 >/dev/null | tr '\n' '|')" "executors: nul: priority is not a non-negative integer|"
 check "ranked takes no argument" "$(run "$TMP/rank" ranked extra >/dev/null 2>&1; echo $?)" "2"
-check "list ignores priority and stays silent about it" \
-  "$(run "$TMP/rank" list 2>&1 | tr '\n' ' ')" \
-  "aardvark alpha beta delta epsilon eta gamma lambda theta zeta "
 check "a registry without priorities ranks by id" "$(run "$TMP/reg" ranked | tr '\n' ' ')" "alpha beta "
 check "an empty registry ranks nothing and still exits 0" "$(run "$TMP/empty" ranked; echo "rc=$?")" "rc=0"
-check "ranked skips a malformed entry like list does" \
+check "ranked skips a malformed entry" \
   "$(printf 'not json\n' > "$TMP/reg/broken.json"; run "$TMP/reg" ranked 2>/dev/null | tr '\n' ' '; rm -f "$TMP/reg/broken.json")" "alpha beta "
 check "the shipped codex entry carries priority 20" "$(bash "$EXEC" get codex priority)" "20"
 check "the shipped registry ranks codex" "$(bash "$EXEC" ranked | grep -cx codex)" "1"
@@ -174,8 +167,8 @@ check "an unknown subcommand is a usage error" "$(bash "$EXEC" frobnicate >/dev/
 
 # --- the shipped test fixture registry --------------------------------------
 FIX="$HERE/fixtures/executors"
-check "the fixture registry lists two ids" \
-  "$(run "$FIX" list | tr '\n' ' ')" "codex stub "
+check "the fixture registry names two ids" \
+  "$(run "$FIX" ranked | tr '\n' ' ')" "codex stub "
 check "the fixture codex entry matches the shipped one" \
   "$(diff -q "$FIX/codex.json" "$P/reference/executors/codex.json" >/dev/null && echo same || echo differs)" "same"
 check "the fixture registry ranks the prioritised codex entry before the unranked ones" \

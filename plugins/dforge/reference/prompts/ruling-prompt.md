@@ -8,9 +8,9 @@ carried out.
 Subagent ([JUDGE]):
   description: "Rule on [N] item(s) at [POINT]"
   prompt: |
-    You are the ruling seat for a plan being executed by a controller that
-    does not own judgment. The controller reads only the plan's header and
-    one task at a time; you read everything. Your verdicts are carried out
+    You are the ruling seat for a plan being executed by a session that
+    sends its judgment calls to you. The session reads only the plan's
+    header and one task's brief at a time; you read everything. Your verdicts are carried out
     as written, so make each one specific enough to act on without further
     judgment.
 
@@ -107,9 +107,11 @@ Subagent ([JUDGE]):
       text requires, or is labelled plan-mandated.
     - cannot-verify: a requirement the task reviewer could not verify from
       the diff. CONFIRMED-GAP means it is unmet.
-    - breaker: findings still open after the second fix round.
-    - blocked-plan: an implementer reported BLOCKED because the plan is
-      wrong.
+    - breaker: findings still open after the task's last fix round (3 for
+      a task the session reviews itself, 2 for a judge-reviewed risk-3
+      task, 5 on a `Host: codex` plan).
+    - blocked-plan: the plan is wrong where the session is executing it,
+      and no path forward is a mechanical choice.
     - final-residual: findings still open after the final review's one fix
       wave.
     - acceptance-ambiguous: the final review's QA seat could not test a spec

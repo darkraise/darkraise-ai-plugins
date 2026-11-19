@@ -52,7 +52,6 @@ export function buildModel(ctx) {
     gates: null,
     review: null,
     board: board && { counts: boardCounts(board), row: null },
-    sync: state.sync ?? { enabled: false },
     context: null,
     workers: Object.values(state.workers ?? {}),
     checks: [],
@@ -138,7 +137,6 @@ export function statusLines(model) {
     lines.push(`Board   ${model.board.row ? `#${model.board.row.number} ${model.board.row.state} · ` : ''}${counts}`);
   }
   if (model.context) lines.push(`Context ${formatTokens(model.context.tokens)}${model.context.window ? ` of ${formatTokens(model.context.window)}` : ''} · resets at ${formatTokens(model.context.resetAt)}`);
-  if (model.sync.enabled) lines.push(`darkmem ${model.sync.conflict ? `conflict: ${model.sync.conflict}` : `${model.sync.queued ?? 0} queued${model.sync.lastAt ? ` · last push ${model.sync.lastAt}` : ''}`}`);
   for (const check of model.checks) lines.push(`Check   ${check}`);
   lines.push(`Next    ${model.next}`);
   return lines;
@@ -167,11 +165,11 @@ export function taskBrief(ctx, active, task, { designLimit = 40 } = {}) {
   return capLines(lines, 90, more => `… ${more} more lines; read ${active.rel}`);
 }
 
-export function refreshHud(ctx) {
+export function refreshHud(ctx, model) {
   // Only a repository that uses dflow gets a .dflow directory.
   if (!fs.existsSync(ctx.paths.docs)) return;
   try {
-    writeJson(ctx.paths.hud, buildModel(ctx));
+    writeJson(ctx.paths.hud, model ?? buildModel(ctx));
   } catch {
     // The HUD is a view; a failure to refresh it must not fail the command.
   }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# task-step records a task's suite command at start and reads the suite-run
+# task-step records a task's suite command at review and reads the suite-run
 # record at the review head in verdict. Each case runs against a throwaway
 # repository; suite-run writes the records the verdict reads.
 set -uo pipefail
@@ -84,6 +84,10 @@ LEDGER="$WS/progress.md"
 rm -f "$WS"/*
 n=0
 step() { out=$(bash "$STEP" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
+. "$HERE/fixtures/step-state.sh"
+set_suite() { # set_suite <task> <command> — the suite a later review --suite records
+  jq --arg s "$2" '.suite = $s' "$WS/task-$1-step.json" > "$TMP/s.json" && mv "$TMP/s.json" "$WS/task-$1-step.json"
+}
 commit_result() { # commit_result <result.txt lines...> — a new commit; sets HEAD_SHA
   n=$((n + 1))
   printf '%s\n' "$@" > result.txt
@@ -100,23 +104,20 @@ report() { # report <file> — a passing task report
 run_suite() { bash "$SUITE" -- bash -c "$CMD" >/dev/null 2>&1; true; }
 first_block() { awk '{ sub(/\r$/, "") } /^$/ { exit } { print }' "$1" | tr '\n' ';'; }
 
-# --- start --suite ---
-step start docs/plan.md 1 --suite "$CMD"
-check "start --suite: exit 0" "$rc" "0"
-check "start --suite: the command is the step file's suite field" "$(jq -r '.suite' "$WS/task-1-step.json" | tr -d '\r')" "$CMD"
-check "start --suite: the first start logs the ruling" "$(grep -cxF "Task 1: Ruling: suite command — $CMD — none" "$LEDGER")" "1"
-step start docs/plan.md 2 --suite "$CMD"
-check "start --suite: a second start adds no ruling" "$(grep -c 'Ruling: suite command' "$LEDGER")" "1"
-step start docs/plan.md 3
-check "start without --suite: no suite field" "$(jq -r '.suite // "absent"' "$WS/task-3-step.json" | tr -d '\r')" "absent"
-step start docs/plan.md 3 --suite
-check "start --suite without a command exits 2" "$rc" "2"
+# --- review --suite ---
+for t in 1 2; do bash "$P/scripts/task-brief" --open docs/plan.md "$t" >/dev/null; done
+seed_step "$P/scripts" docs/plan.md 3
+step review docs/plan.md 1 --suite "$CMD" --suite-base "$(git rev-parse HEAD)"
+check "review --suite: exit 0" "$rc" "0"
+check "review --suite: the command is the step file's suite field" "$(jq -r '.suite' "$WS/task-1-step.json" | tr -d '\r')" "$CMD"
+step review docs/plan.md 2 --suite "$CMD" --suite-base "$(git rev-parse HEAD)"
+check "no --suite: no suite field" "$(jq -r '.suite // "absent"' "$WS/task-3-step.json" | tr -d '\r')" "absent"
+step review docs/plan.md 3 --suite
+check "review --suite without a command exits 2" "$rc" "2"
 step review docs/plan.md 1 --suite-base nope
 check "review --suite-base: a ref that is no commit exits 2" "$rc $(grep -cF 'bad --suite-base: nope' <<<"$err")" "2 1"
 step review docs/plan.md 1 --suite "$CMD"
 check "review --suite without --suite-base exits 2" "$rc" "2"
-step start docs/plan.md 1 --suite-base "$(git rev-parse HEAD)"
-check "start does not take --suite-base" "$rc" "2"
 
 # --- verdict: no suite recorded ---
 HEAD_SHA=$(git rev-parse HEAD | tr -d '\r')
@@ -221,7 +222,7 @@ printf '%s\n' 'echo "not ok 1 - alpha"' 'sleep 20' > slow.sh
 git add slow.sh && git commit -qm "slow suite"
 HEAD_SHA=$(git rev-parse HEAD | tr -d '\r')
 H7=${HEAD_SHA:0:7}
-step start docs/plan.md 3 --suite 'bash slow.sh'
+set_suite 3 'bash slow.sh'
 set_review 3 "$HEAD_SHA" "$REPO"
 (SUITE_RUN_KILL_AFTER=1 bash "$SUITE" --timeout 1 -- bash -c 'bash slow.sh' >/dev/null 2>&1; true)
 check "suite-run records exit 124 for the slow suite" "$(awk -F'\t' -v h="$HEAD_SHA" '$1 == h { print $4 }' .dforge/suites.tsv | tail -n 1)" "124"
@@ -254,21 +255,7 @@ step verdict docs/plan.md 1
 git checkout -q -- docs/plan.md
 check "verdict, tracked file changed and no row: exit 6" "$rc" "6"
 
-# --- verdict --cwd reads the state of that checkout ---
-git worktree add -q --detach "$TMP/wt" HEAD
-WT=$TMP/wt
-git -C "$WT" -c user.name=Darkraise -c user.email=dark@example.invalid commit -q --allow-empty -m "worktree work"
-WT_SHA=$(git -C "$WT" rev-parse HEAD | tr -d '\r')
-set_review 2 "$WT_SHA" "$WT"
-report "$WS/task-2-review-report.md"
-(cd "$WT" && bash "$SUITE" -- bash -c "$CMD" >/dev/null 2>&1; true)
-step verdict docs/plan.md 2 --cwd "$WT"
-check "verdict --cwd: the row in that checkout's state counts" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: pass (clean)"
-step verdict docs/plan.md 2
-check "verdict without --cwd: the checkout's own state has no such row" "$rc" "7"
 rm -f .dforge/suites.tsv
-
-git worktree remove --force "$WT"
 
 # --- verdict: a none task check schedules the suite by task number ---
 awk '{ print } /^\*\*Execution:\*\*/ { print ""; print "**Task check:** none — full suite every 3 tasks" }' docs/plan.md > docs/plan-none.md
@@ -278,7 +265,7 @@ WS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan-none.md)")
 rm -f "$WS"/*
 HEAD_SHA=$(git rev-parse HEAD | tr -d '\r')
 for t in 1 2 3 4; do
-  step start docs/plan-none.md "$t"
+  seed_step "$P/scripts" docs/plan-none.md "$t"
   set_review "$t" "$HEAD_SHA" "$REPO"
   report "$WS/task-$t-review-report.md"
 done
@@ -291,19 +278,31 @@ step review docs/plan-none.md 3
 check "none task check, Task 3: review without --suite is refused" "$rc $(grep -cF 'Task 3 is due the integration check' <<<"$err")" "2 1"
 step verdict docs/plan-none.md 3
 check "none task check, Task 3 of 4: the last task caps the next multiple" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: not scheduled (next at Task 4)"
-step start docs/plan-none.md 3 --suite "$CMD"
+set_suite 3 "$CMD"
 step verdict docs/plan-none.md 3
 check "none task check: a recorded suite is still read, so no row exits 7" "$rc $(grep '^suite: ' <<<"$out")" "7 suite: not run ($CMD)"
 sed 's/^\*\*Task check:\*\* none.*$/**Task check:** `bash suite.sh` — fixture/' docs/plan-none.md > docs/plan-cmd.md
 WS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan-cmd.md)")
 rm -f "$WS"/*
-step start docs/plan-cmd.md 1
+seed_step "$P/scripts" docs/plan-cmd.md 1
 set_review 1 "$HEAD_SHA" "$REPO"
 report "$WS/task-1-review-report.md"
 step verdict docs/plan-cmd.md 1
 check "a command task check with no suite recorded keeps none recorded" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: none recorded"
 WS=$WS_MAIN
 rm -f docs/plan-none.md docs/plan-cmd.md
+
+# --- the first review --suite on a plan logs the suite ruling, once ---
+cp docs/plan.md docs/plan-ruling.md
+RWS=$(winpath "$(bash "$P/scripts/sdd-workspace" docs/plan-ruling.md)")
+rm -f "$RWS"/*
+for t in 1 2; do bash "$P/scripts/task-brief" --open docs/plan-ruling.md "$t" >/dev/null; done
+step review docs/plan-ruling.md 1 --suite "$CMD" --suite-base "$(git rev-parse HEAD)"
+check "review --suite: exit 0" "$rc" "0"
+check "review --suite: the first review logs the ruling" "$(grep -cxF "Task 1: Ruling: suite command — $CMD — none" "$RWS/progress.md")" "1"
+step review docs/plan-ruling.md 2 --suite "$CMD" --suite-base "$(git rev-parse HEAD)"
+check "review --suite: a second review adds no ruling" "$(grep -c 'Ruling: suite command' "$RWS/progress.md")" "1"
+rm -f docs/plan-ruling.md
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

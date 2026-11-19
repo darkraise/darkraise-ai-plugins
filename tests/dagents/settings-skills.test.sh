@@ -30,5 +30,8 @@ for key in $keys; do
   check "a skill names $key" "$(grep -lE -- "\`$key\`|$key=" "$P"/skills/*/SKILL.md | head -n 1 | grep -c .)" "1"
 done
 
+mode=$(node -e 'const { pathToFileURL } = require("url"); import(pathToFileURL(process.argv[1]).href).then(m => { const s = m.default.executionMode; console.log(s.default + " " + /auto, the default, and subagent dispatch/.test(s.description)) })' "$P/config/schema.mjs")
+check "executionMode: auto is the default and dispatches like subagent" "$mode" "auto true"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

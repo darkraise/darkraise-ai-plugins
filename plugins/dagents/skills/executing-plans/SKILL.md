@@ -15,8 +15,7 @@ back. Before anything else:
    no ledger names this plan, no task has started: skip the rest of this
    section and follow Setup from its first step.
 1. Run `scripts/sdd-workspace PLAN_FILE` (see using-dagents §Session Budget),
-   and read `progress.md` and `handoff.md` in `<ledger dir>`, not in the
-   directory it prints: while progress lives in darkmem the two differ.
+   and read `progress.md` and `handoff.md` in `<ledger dir>`.
 2. Trust the ledger and `git log` over the summary. For each task the last
    ledger line decides; see the Recovery table in [recovery.md](references/recovery.md).
 3. When every task has its `complete` line, run `scripts/context-size --final`
@@ -93,13 +92,14 @@ the gate.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-**Why this mode.** Every plan runs inline: this session has read the code the
-plan changes, and a subagent per task would rebuild that context from nothing.
-You implement every task that carries no `**Executor:**` line, heavy tasks included.
+**Why this mode.** An `inline` line (`executionMode=inline`, or on request)
+runs here; the default is subagent mode. This session has read the code,
+which a subagent would rebuild. You implement every task that
+carries no `**Executor:**` line, heavy tasks included.
 The `**Execution:**` line's model and effort cover the hardest task you
 implement, at least high effort when a task has risk 3 or the plan offloads one.
-Subagent availability has nothing to do with it - the line decides, and only
-your human partner overrides it.
+The line decides, not subagent availability, and only your human partner
+overrides it.
 
 **Delegated tasks.** A delegated task is one carrying an `**Executor:**` line:
 it runs on its executor's wrapper, not in this session. Its brief's second line
@@ -190,9 +190,8 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   `Review depth: <light|standard|full> (<reason>)` is written once, before
   step 0 of the final review, and is read on recovery, never recomputed; it is
   not a `Final review:` line, which recovery keys on.
-- After each `complete` and `fix round` line, run `scripts/darkmem-sync push`;
-  at `complete`, also promote the task's durable facts
-  ([project-state.md](../../reference/project-state.md) §darkmem sync points).
+- At each `complete` line, record the task's durable facts
+  ([project-state.md](../../reference/project-state.md) §Durable facts).
 - `implementer inline` is this mode's assigned line. You are the implementer,
   so the agent slot says so, and `base` is `git rev-parse --short HEAD` taken
   before you change anything.

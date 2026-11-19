@@ -68,14 +68,13 @@ sdd=$(dagents_ledger_root "$root") || sdd=""
 latest=""
 # A turn that merged a plan or closed a milestone ends on next-step's block for
 # that transition, ledger or not: completed.md or roadmap.md changed this turn,
-# after latest.md was last written, and not by a pull (with documents in the
-# checkout: still uncommitted, or committed since the stamp); the roadmap only
+# after latest.md was last written, and still uncommitted or committed since
+# the stamp; the roadmap only
 # when it now closes more milestones than at the turn's start.
 transition=""
 if [ -f "$stamp" ]; then
   stamp_at=$(stat -c %Y "$stamp" 2>/dev/null || stat -f %m "$stamp" 2>/dev/null || echo 0)
-  docs_store="" docs=""
-  read -r docs_store docs < <(dagents_stores_init "$root" && printf '%s %s\n' "$_DAGENTS_DOCS_STORE" "$_DAGENTS_DOCS_ROOT")
+  docs=$(dagents_docs_root "$root")
   turn_head=$(tr -d '\r' < "$stamp.refs" 2>/dev/null | TOP=$root awk -F'\t' 'NR > 2 && $2 == ENVIRON["TOP"] { print $1; exit }')
   at_start() { [ -n "$turn_head" ] && git -C "$root" show "$turn_head:${1#"$root"/}" 2>/dev/null | tr -d '\r'; }
   # FILE changed this turn after HANDOFF was last written: the primary's for a
@@ -85,7 +84,6 @@ if [ -f "$stamp" ]; then
     local commit_at
     [ -f "$1" ] && [ "$1" -nt "$stamp" ] || return 1
     ! [ "$2" -nt "$1" ] || return 1
-    [ "$docs_store" = local ] || return 0
     [ -n "$(git -C "$root" status --porcelain -- "$1" 2>/dev/null)" ] && return 0
     commit_at=$(git -C "$root" log -1 --format=%ct -- "$1" 2>/dev/null)
     [ "${commit_at:-0}" -ge "$stamp_at" ]
@@ -99,14 +97,10 @@ if [ -f "$stamp" ]; then
     [[ "$plan" =~ ^[A-Za-z0-9._/-]+\.md$ ]] || plan=PLAN_FILE
     transition="complete $plan"
   elif [ -n "$docs" ] && changed_here "$docs/roadmap.md" "$(dagents_latest_file "$root")"; then
-    if [ "$docs_store" = local ]; then
-      . "${SCRIPT_DIR}/lib/roadmap.sh"
-      closed_now=$(roadmap_rows "$docs/roadmap.md" | awk -F'\t' '$5 == "closed"' | grep -c . || true)
-      closed_then=$(roadmap_rows <(at_start "$docs/roadmap.md") | awk -F'\t' '$5 == "closed"' | grep -c . || true)
-      [ "$closed_now" -le "$closed_then" ] || transition=project
-    else
-      transition=project
-    fi
+    . "${SCRIPT_DIR}/lib/roadmap.sh"
+    closed_now=$(roadmap_rows "$docs/roadmap.md" | awk -F'\t' '$5 == "closed"' | grep -c . || true)
+    closed_then=$(roadmap_rows <(at_start "$docs/roadmap.md") | awk -F'\t' '$5 == "closed"' | grep -c . || true)
+    [ "$closed_now" -le "$closed_then" ] || transition=project
   fi
 fi
 [ -d "$sdd" ] || [ -n "$auto_pending" ] || [ -n "$transition" ] || exit 0
@@ -201,9 +195,7 @@ ledger="" clean=0
 ws="$(dagents_dir state "$root")/sdd"
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
-  # While progress is darkmem every worktree shares the mirror's work/sdd, and a
-  # plan's workspace is always local: a ledger without one here is another
-  # session's.
+  # A ledger whose plan has no workspace in this checkout is another session's.
   [ -d "$ws/$(basename "$(dirname "$candidate")")" ] || continue
   # Only a clean line that still covers HEAD sends the session to finishing; a
   # stale or rewritten one is a plan advanced without its next step.

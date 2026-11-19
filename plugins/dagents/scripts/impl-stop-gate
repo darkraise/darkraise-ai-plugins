@@ -57,7 +57,12 @@ agent_id=$(jq -r '.agent_id // empty' <<<"$input" | tr -d '\r\n' | tr -c 'A-Za-z
 cwd=$(jq -r '.cwd // empty' <<<"$input" | tr -d '\r')
 message=$(jq -r '.last_assistant_message // empty' <<<"$input" | tr -d '\r')
 
-grep -qE '(^|:)impl-' <<<"$agent_type" || exit 0
+# Only dagents' own implementers: another plugin's impl-* agent ends its reply
+# by another contract.
+name=${agent_type#dagents:}
+case $name in impl-*) ;; *) exit 0 ;; esac
+case $name in *[!a-z0-9-]*) exit 0 ;; esac
+[ -f "$HERE/../agents/$name.md" ] || exit 0
 [ -n "$agent_id" ] || exit 0
 
 sha256() {

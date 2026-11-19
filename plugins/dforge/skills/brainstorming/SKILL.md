@@ -44,8 +44,8 @@ path below.
 
 Before your first question, classify the request and say it in one
 line — `Process: <spike|bounded|architectural> — <trigger | no trigger>` — so
-your human partner can override it. Every plan executes inline, so the line
-names no mode. The triggers are the seven in dforge:using-dforge's Process Depth:
+your human partner can override it. The triggers are the seven in
+dforge:using-dforge's Process Depth:
 a new project or subsystem; an interface that something outside its own
 files depends on changes; the files touched cannot be enumerated after
 exploring; a load-bearing approach question is open; irreducible risk
@@ -117,15 +117,6 @@ your human partner's standing choice of fast mode, which is itself the approval.
   `autoRun=off`: never offer an auto run. On a Codex host `on` behaves as
   `off`; say so in one line.
 
-## Anti-Pattern: "Too Simple To Need Approval"
-
-Every path ends with your human partner approving your intent before
-implementation. A todo list, a single-function utility, a config
-change — the design may be two sentences in chat, but you MUST present
-it and get approval. "Simple" tasks are where unexamined assumptions
-cause the most wasted work. What scales with simplicity is the
-artifact, never the approval.
-
 ## Red Flags
 
 | Thought | Reality |
@@ -178,8 +169,6 @@ and 11-12 run as Auto by default says)
 12. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
-
-Read [process-flow.md](references/process-flow.md) before you change the order of the spec phase or the path a request takes through it.
 
 **Terminal states are path-bound.** Architectural: the ONLY skill you
 invoke after brainstorming is writing-plans — never frontend-design,

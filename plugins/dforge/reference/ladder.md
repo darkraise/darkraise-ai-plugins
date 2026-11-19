@@ -99,59 +99,46 @@ by its review runner.
 
 Every Claude-hosted Codex review seat — the task seats, plan-review round 1,
 and the final-review round — takes its model from this block. The first row is
-preferred; the last row is the fallback. `--tier light` runs the last row
-directly, for tasks totalling 0 to 8 below risk 3; every other seat (risk 3,
-plan review, the final round) uses the first row with its fallback. Totals 4
-to 6 moved from Astra to the light row on 2026-10-07, when `gpt-6.1-sol`
-replaced `gpt-6-sol` there, at about a fifth of Astra's price.
+preferred; the last row is the fallback. Every seat (risk 3, plan review,
+the final round) uses the first row with its fallback.
 
 ```codex-judge
 gpt-6-astra xhigh 5400
 gpt-6.1-sol xhigh 2400
 ```
 
-The effort and the bound move together. At `high` with 1800 seconds the
-largest plan in the 2026-09-20 calibration exceeded the bound on both
-attempts and was never reviewed, so the one plan carrying that run's planted
-defects produced no evidence. Raising the effort without raising the bound
-would only buy more `TIMEOUT` rows, because more thinking takes more wall
-clock on exactly the plans that already ran out of it.
+The effort and the bound move together: more thinking takes more wall clock
+on the largest plans, so raising a row's effort without raising its bound only
+buys `TIMEOUT` rows.
 
 The two rows carry different bounds. `gpt-6-astra/xhigh` runs the heavy seats,
-so its 5400 is set for whole plans and branches. `gpt-6.1-sol/xhigh` runs the
-light tier and keeps the 2400 it carried when the same pair also bounded task
+so its 5400 is set for whole plans and branches. `gpt-6.1-sol/xhigh`, the
+fallback, keeps the 2400 it carried when the same pair also bounded task
 execution.
 
-`gpt-6-astra` is the rung `reference/codex-routing.json` already floors native
-judges at, so both hosts now judge at the same tier. This plugin reads no model
+`gpt-6-astra` is also the floor `reference/codex-routing.json` sets for native
+judges, so both hosts judge at the same tier. This plugin reads no model
 catalog: `scripts/run-codex-review.sh` attempts the first row and falls back
-once to the last row on a refusal, which is the only evidence of entitlement
-that has ever been reliable.
+once to the last row on a refusal, the only reliable evidence of entitlement.
 
-The judge bounds are provisional operational budgets, not derived figures. Two
-measurements exist: a `gpt-5.6-sol/high` whole-branch round at roughly four
-minutes on 2026-09-14, and `project-state` completing at `gpt-6-astra/xhigh`
-inside 3600 on 2026-09-21 after exceeding 1800 twice at `high`. The astra row
-was raised to 5400 on 2026-09-21 for headroom above that single completion, on
-the owner's instruction; nothing measures where its ceiling actually is.
+The judge bounds are provisional operational budgets, not measured ceilings.
 Revise them when real runs warrant it.
 
 ### Agy judge rung
 
 Every agy review seat takes its model from this block, read by
 `scripts/run-agy-review.sh`. The first row is preferred; the last row is the
-fallback and the light tier, which runs it directly. A heavy task review, a
-plan review and a final review use the first row with one fallback to the
-last on a refused model, and a `claude-*` row whose Claude quota is out runs
-the last row instead. The bounds copy the Codex rows of the same tier.
+fallback. A task review, a plan review and a final review use the first
+row with one fallback to the last on a refused model, and a `claude-*` row
+whose Claude quota is out runs the last row instead. The bounds copy the
+Codex rows in the same position.
 
 ```agy-judge
 claude-opus-5-5 high 5400
 gemini-4-argon high 2400
 ```
 
-The Claude quota on Antigravity is small: the 2026-11-03 calibration drained it
-after about 500k tokens. A review that finds it out runs the Gemini row, so a
+The Claude quota on Antigravity is small. A review that finds it out runs the Gemini row, so a
 drained quota costs a seat its preferred model, never its review.
 
 ## API-billed ruling judges

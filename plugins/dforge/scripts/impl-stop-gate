@@ -53,7 +53,7 @@ agent_id=$(jq -r '.agent_id // empty' <<<"$input" | tr -d '\r\n' | tr -c 'A-Za-z
 cwd=$(jq -r '.cwd // empty' <<<"$input" | tr -d '\r')
 message=$(jq -r '.last_assistant_message // empty' <<<"$input" | tr -d '\r')
 
-grep -qE '(^|:)impl-' <<<"$agent_type" || exit 0
+case $agent_type in dforge:impl-sonnet-high | impl-sonnet-high) ;; *) exit 0 ;; esac
 [ -n "$agent_id" ] || exit 0
 
 sha256() {

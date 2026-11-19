@@ -90,6 +90,8 @@ check "dry run: never bypasses the sandbox" \
 check "deadline defaults from codex-timeout" "$(jq -r '.deadlineMs' <<<"$req")" "1200000"
 check "explicit timeout wins" \
   "$(dry --model gpt-6.1-sol --effort medium --timeout 42 | sed -n '2p' | jq -r '.deadlineMs')" "42000"
+check "a zero-padded timeout is read in base 10" \
+  "$(dry --model gpt-6.1-sol --effort medium --timeout 0900 | sed -n '2p' | jq -r '.deadlineMs')" "900000"
 
 # A resumed run must still re-send the model and the effort: the client starts a
 # fresh thread unless resumeThreadId is set, and a resumed thread has to carry

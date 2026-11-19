@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Acceptance tests for the reviewer-only externals spec
 # (docs/dforge/specs/2026-11-12-reviewer-only-externals-design.md), statements
-# A1-A11 and A13-A18. Written from the statements' text and run through the
+# A1-A11 and A15-A18. Written from the statements' text and run through the
 # public surface: the panel and the agy runner as commands, the gates, the
 # review routing, task-step, plan-lint, dforge-config and the release script. Real gates and real runners run against the stub agy
 # (fixtures/stub-agy) and a copy of the stub Codex plugin; the host's own agy
@@ -198,14 +198,14 @@ agy_prints() { if [ -f "$STUB_AGY_ARGS_LOG" ]; then grep -c -x -e '-p' "$STUB_AG
 t_A1() {
   needs_spawn A1 || return
   fresh; settings true true
-  TS_LOG="$TMP/ts.log" AGY_DELAY=3 TURN_DELAY_MS=3000 panel light
-  check "A1: the light panel prints the Codex gpt-6.1-sol line once" "$(grep -c '^codex-judge gpt-6.1-sol/xhigh status=OK ' <<<"$out")" "1"
-  check "A1: the light panel prints the agy gemini-4-argon line once" "$(grep -c '^agy-judge gemini-4-argon/high status=OK ' <<<"$out")" "1"
-  check "A1: the light panel prints one status line per reviewer and the summary" "$(grep -c '' <<<"$out")" "3"
-  check "A1: the summary is panel tier=light lists=2" "$(tail -1 <<<"$out")" "panel tier=light lists=2"
+  TS_LOG="$TMP/ts.log" AGY_DELAY=3 TURN_DELAY_MS=3000 panel heavy
+  check "A1: the panel prints the Codex gpt-6-astra line once" "$(grep -c '^codex-judge gpt-6-astra/xhigh status=OK ' <<<"$out")" "1"
+  check "A1: the panel prints the agy claude-opus-5-5 line once" "$(grep -c '^agy-judge claude-opus-5-5/high status=OK ' <<<"$out")" "1"
+  check "A1: the panel prints one status line per reviewer and the summary" "$(grep -c '' <<<"$out")" "3"
+  check "A1: the summary is panel tier=heavy lists=2" "$(tail -1 <<<"$out")" "panel tier=heavy lists=2"
   check "A1: the panel exits 0" "$rc" "0"
-  check "A1: Codex ran gpt-6.1-sol" "$(turns)" "gpt-6.1-sol/xhigh "
-  check "A1: agy ran gemini-4-argon" "$(agy_models)" "gemini-4-argon "
+  check "A1: Codex ran gpt-6-astra" "$(turns)" "gpt-6-astra/xhigh "
+  check "A1: agy ran claude-opus-5-5" "$(agy_models)" "claude-opus-5-5 "
   local cs as ae
   cs=$(awk '$1 == "codex" && $2 == "start" { print $3 }' "$TMP/ts.log" | head -1)
   as=$(awk '$1 == "agy" && $2 == "start" { print $3 }' "$TMP/ts.log" | head -1)
@@ -256,43 +256,43 @@ t_A3() {
   local gr
 
   fresh; settings false false
-  panel light
+  panel heavy
   skipped_check "both settings off" agy setting
   skipped_check "both settings off" codex setting
-  check "A3: with both skipped the panel prints lists=0" "$(tail -1 <<<"$out")" "panel tier=light lists=0"
+  check "A3: with both skipped the panel prints lists=0" "$(tail -1 <<<"$out")" "panel tier=heavy lists=0"
   check "A3: with both skipped the panel exits 0" "$rc" "0"
   check "A3: no Codex turn started" "$(turns)" ""
   check "A3: agy never ran a print call" "$(agy_prints)" "0"
 
   fresh; settings true false
-  panel light
+  panel heavy
   skipped_check "agy setting off" agy setting
   check "A3: agy setting off: Codex still runs" "$(sval "$(sline codex)" status)" "OK"
-  check "A3: agy setting off: the panel counts one list" "$(tail -1 <<<"$out")" "panel tier=light lists=1"
+  check "A3: agy setting off: the panel counts one list" "$(tail -1 <<<"$out")" "panel tier=heavy lists=1"
   check "A3: agy setting off: agy never ran a print call" "$(agy_prints)" "0"
 
   fresh; settings false true
-  panel light
+  panel heavy
   skipped_check "codex setting off" codex setting
   check "A3: codex setting off: agy still runs" "$(sval "$(sline agy)" status)" "OK"
   check "A3: codex setting off: no Codex turn started" "$(turns)" ""
 
   fresh; settings true true
-  PATH="$NOAGY_PATH" panel light
+  PATH="$NOAGY_PATH" panel heavy
   gr=$(PATH="$NOAGY_PATH" gate_line agy | sed -n 's/.* reason=\([^ ]*\).*/\1/p')
   skipped_check "agy not installed" agy "$gr"
   absent "A3: agy not installed: the reason is the gate's, never ok" "reason=$gr" '^reason=(ok)?$'
   check "A3: agy not installed: Codex still runs" "$(sval "$(sline codex)" status)" "OK"
 
   fresh; settings true true
-  STUB_AGY_AUTH=logged-out panel light
+  STUB_AGY_AUTH=logged-out panel heavy
   gr=$(STUB_AGY_AUTH=logged-out gate_line agy | sed -n 's/.* reason=\([^ ]*\).*/\1/p')
   skipped_check "agy signed out" agy "$gr"
   absent "A3: agy signed out: the reason is the gate's, never ok" "reason=$gr" '^reason=(ok)?$'
   check "A3: agy signed out: agy never ran a print call" "$(agy_prints)" "0"
 
   fresh; settings true true
-  STUB_GATE_MODE=logged-out panel light
+  STUB_GATE_MODE=logged-out panel heavy
   gr=$(STUB_GATE_MODE=logged-out gate_line codex | sed -n 's/.* reason=\([^ ]*\).*/\1/p')
   skipped_check "codex signed out" codex "$gr"
   absent "A3: codex signed out: the reason is the gate's, never ok" "reason=$gr" '^reason=(ok)?$'
@@ -300,22 +300,25 @@ t_A3() {
   check "A3: codex signed out: agy still runs" "$(sval "$(sline agy)" status)" "OK"
 
   fresh; settings true true
-  STUB_GATE_MODE=quota panel light
+  STUB_GATE_MODE=quota panel heavy
   skipped_check "codex quota" codex quota
   check "A3: codex quota: no Codex turn started" "$(turns)" ""
 
   fresh; settings true true
-  STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota for gemini-4-argon. Resets in 2h' panel light
+  # The first run's quota error lands on the Claude row; with Claude off, the
+  # second lands on the Gemini row and marks the family.
+  STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota for gemini-4-argon. Resets in 2h' panel heavy
+  STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota for gemini-4-argon. Resets in 2h' panel heavy
   : > "$STUB_AGY_ARGS_LOG"
-  panel light
+  panel heavy
   skipped_check "agy quota marked by an earlier run" agy quota
   check "A3: agy quota: agy never ran a print call" "$(agy_prints)" "0"
 
   fresh; settings true true
-  STUB_GATE_MODE=quota STUB_AGY_AUTH=logged-out panel light
+  STUB_GATE_MODE=quota STUB_AGY_AUTH=logged-out panel heavy
   skipped_check "both gates closed for different reasons" agy -
   skipped_check "both gates closed for different reasons" codex quota
-  check "A3: both closed: lists=0" "$(tail -1 <<<"$out")" "panel tier=light lists=0"
+  check "A3: both closed: lists=0" "$(tail -1 <<<"$out")" "panel tier=heavy lists=0"
   check "A3: both closed: the panel exits 0" "$rc" "0"
   check "A3: both closed: nothing started" "$(turns)|$(agy_prints)" "|0"
 }
@@ -391,7 +394,7 @@ t_A4() {
     local tag="codex=${mode% *} agy=${mode#* }"
     for t in 1 2 3 4; do
       route --task "$t"
-      check "A4: $tag: risk 0-2 task $t routes to panel:light" "$(sval "$rline" primary)" "panel:light"
+      check "A4: $tag: risk 0-2 task $t gets no per-task route" "$rline" ""
     done
     route --task 5
     check "A4: $tag: risk 3 (total 6) routes to the heavy panel then Opus" "$(sval "$rline" primary)" "panel:heavy+judge-opus"
@@ -400,26 +403,17 @@ t_A4() {
   done
 
   open_gates false false
-  route --task 1
-  check "A4: neither open: risk 0 is the Sonnet band seat" "$(sval "$rline" primary)" "dforge:judge-sonnet-high"
-  check "A4: neither open: risk 0 says reviewers-off" "$(sval "$rline" reason)" "reviewers-off"
-  route --task 3
-  check "A4: neither open: total 5 is the Sonnet band seat" "$(sval "$rline" primary)" "dforge:judge-sonnet-high"
-  check "A4: neither open: total 5 says reviewers-off" "$(sval "$rline" reason)" "reviewers-off"
-  route --task 4
-  check "A4: neither open: total 6 is the Opus band seat" "$(sval "$rline" primary)" "dforge:judge-opus"
-  check "A4: neither open: total 6 says reviewers-off" "$(sval "$rline" reason)" "reviewers-off"
   route --task 5
-  check "A4: neither open: risk 3 is the Opus band seat" "$(sval "$rline" primary)" "dforge:judge-opus"
+  check "A4: neither open: risk 3 is the Opus seat" "$(sval "$rline" primary)" "dforge:judge-opus"
   check "A4: neither open: risk 3 says reviewers-off" "$(sval "$rline" reason)" "reviewers-off"
   route --task 6
-  check "A4: neither open: risk 3 at total 4 is the Opus band seat" "$(sval "$rline" primary)" "dforge:judge-opus"
+  check "A4: neither open: risk 3 at total 4 is the Opus seat" "$(sval "$rline" primary)" "dforge:judge-opus"
   absent "A4: neither open: no route names a panel" "$rline" 'panel:'
 
   # An untrusted agy surface with Codex off is neither open.
   fresh; settings false true
   DR_AGY_POLICY="$UNTRUSTED" gate_line agy >/dev/null; gate_line codex >/dev/null
-  route --task 1
+  route --task 5
   check "A4: an untrusted agy surface does not count as open" "$(sval "$rline" reason)" "reviewers-off"
 }
 
@@ -456,7 +450,7 @@ named_in_output() { # named_in_output <word> - the word appears in the status ou
 t_A6() {
   needs_spawn A6 || return
   local kind mode
-  for kind in "task light" "task heavy" "plan" "final"; do
+  for kind in "task heavy" "plan" "final"; do
     fresh; settings false true
     case ${kind%% *} in plan) mode=plan-review ;; final) mode=final-review ;; *) mode=review ;; esac
     STUB_AGY_MODE=$mode agyrun $kind
@@ -467,25 +461,25 @@ t_A6() {
   done
 
   fresh; settings false true
-  STUB_AGY_SIDE=write STUB_AGY_WRITE=tracked.txt agyrun task light
+  STUB_AGY_SIDE=write STUB_AGY_WRITE=tracked.txt agyrun task heavy
   check "A6: a changed tracked file ends FAILED" "$(sval "$out" status)" "FAILED"
   check "A6: a changed tracked file is evidence=wrote" "$(sval "$out" evidence)" "wrote"
   check "A6: a changed tracked file is named" "$(named_in_output tracked.txt)" "named"
 
   fresh; settings false true
-  STUB_AGY_SIDE=write STUB_AGY_WRITE=brand-new.txt agyrun task light
+  STUB_AGY_SIDE=write STUB_AGY_WRITE=brand-new.txt agyrun task heavy
   check "A6: a new untracked file ends FAILED" "$(sval "$out" status)" "FAILED"
   check "A6: a new untracked file is evidence=wrote" "$(sval "$out" evidence)" "wrote"
   check "A6: a new untracked file is named" "$(named_in_output brand-new.txt)" "named"
 
   fresh; settings false true
-  STUB_AGY_SIDE=commit STUB_AGY_WRITE=committed.txt agyrun task light
+  STUB_AGY_SIDE=commit STUB_AGY_WRITE=committed.txt agyrun task heavy
   check "A6: a run that moves HEAD ends FAILED" "$(sval "$out" status)" "FAILED"
   check "A6: a run that moves HEAD is evidence=wrote" "$(sval "$out" evidence)" "wrote"
   check "A6: a run that moves HEAD names HEAD" "$(named_in_output HEAD)" "named"
 
   fresh; settings false true
-  STUB_AGY_SIDE=stash STUB_AGY_WRITE=stashed.txt agyrun task light
+  STUB_AGY_SIDE=stash STUB_AGY_WRITE=stashed.txt agyrun task heavy
   check "A6: a run that changes the stash list ends FAILED" "$(sval "$out" status)" "FAILED"
   check "A6: a run that changes the stash list is evidence=wrote" "$(sval "$out" evidence)" "wrote"
   check "A6: a run that changes the stash list names the stash" "$(named_in_output stash)" "named"
@@ -640,11 +634,13 @@ EOF
   absent "A9: task-brief names no dispatch to an executor" "$(norm <<<"$b_exec")" '[Dd]ispatch|[Ll]ane'
 
   local s_exec s_plain
-  s_exec=$(cd "$R" && timeout 60 bash "$STEP" start plan-exec.md 2 --reset 2>&1; echo "rc=$?")
-  s_plain=$(cd "$R" && timeout 60 bash "$STEP" start plan-plain.md 2 --reset 2>&1; echo "rc=$?")
-  check "A9: task-step start treats the Executor task as the ordinary task" "$(norm <<<"$s_exec")" "$(norm <<<"$s_plain")"
-  check "A9: task-step start exits 0" "$(tail -1 <<<"$s_exec")" "rc=0"
-  absent "A9: task-step start names no executor" "$(norm <<<"$s_exec")" '[Cc]odex|[Ee]xecutor|agy'
+  (cd "$R" && timeout 60 bash "$BRIEF" --open plan-exec.md 2 >/dev/null 2>&1 && timeout 60 bash "$BRIEF" --open plan-plain.md 2 >/dev/null 2>&1)
+  s_exec=$(cd "$R" && timeout 60 bash "$STEP" review plan-exec.md 2 2>&1; echo "rc=$?")
+  s_plain=$(cd "$R" && timeout 60 bash "$STEP" review plan-plain.md 2 2>&1; echo "rc=$?")
+  check "A9: task-step review treats the Executor task as the ordinary task" \
+    "$(norm <<<"$s_exec" | grep -v '^gate: ' | sed 's/ t0 [0-9]*$//')" "$(norm <<<"$s_plain" | grep -v '^gate: ' | sed 's/ t0 [0-9]*$//')"
+  check "A9: task-step review exits 0" "$(tail -1 <<<"$s_exec")" "rc=0"
+  absent "A9: task-step review names no executor" "$(norm <<<"$s_exec" | grep -v '^gate: ')" '[Cc]odex|[Ee]xecutor|agy'
   check "A9: the same files are written for both plans" \
     "$(cd "$R/.dforge/sdd/plan-exec" && ls | tr '\n' ' ')" "$(cd "$R/.dforge/sdd/plan-plain" && ls | tr '\n' ' ')"
 }
@@ -695,75 +691,6 @@ t_A11() {
   printf '{}\n' > "$HOME/.dforge/config.json"
 }
 
-# --- A13 and A14: task-step on the routed plan ---
-STEPREPO="$TMP/steprepo"
-prepare_step_repo() {
-  [ -d "$STEPREPO/.git" ] && return
-  mkdir -p "$STEPREPO/docs"
-  git -C "$STEPREPO" init -q -b main
-  git -C "$STEPREPO" config user.name Darkraise
-  git -C "$STEPREPO" config user.email darkraise@example.com
-  printf '# Spec\n' > "$STEPREPO/docs/spec.md"
-  cp "$PLANREPO/route.md" "$STEPREPO/route.md"
-  git -C "$STEPREPO" add -A
-  git -C "$STEPREPO" commit -q -m plan
-  STEP_BASE=$(git -C "$STEPREPO" rev-parse HEAD)
-  local n
-  for n in 1 2 3 4 5 6; do (cd "$STEPREPO" && timeout 60 bash "$STEP" start route.md "$n" >/dev/null 2>&1); done
-  printf 'change\n' > "$STEPREPO/change.txt"
-  git -C "$STEPREPO" add -A
-  git -C "$STEPREPO" commit -q -m change
-}
-step_review() { # step_review <task>; sets sout and seat_line, panel_line
-  sout=$(cd "$STEPREPO" && timeout 60 bash "$STEP" review route.md "$1" --base "$STEP_BASE" 2>&1 | tr -d '\r')
-  seat_line=$(grep -m1 '^seat: ' <<<"$sout")
-  panel_line=$(grep -m1 '^panel: ' <<<"$sout")
-}
-t_A13() {
-  needs_spawn A13 || return
-  prepare_step_repo
-  open_gates true true
-  local t
-  for t in 1 2 3; do
-    route --task "$t"
-    check "A13: risk 0-2 task $t maps to the light panel" "$(sval "$rline" primary)" "panel:light"
-    absent "A13: risk 0-2 task $t is not the heavy panel" "$rline" 'heavy'
-  done
-  route --task 4
-  check "A13: risk 2 at total 6 maps to the light panel" "$(sval "$rline" primary)" "panel:light"
-  absent "A13: risk 2 at total 6 is not the heavy panel" "$rline" 'heavy'
-  for t in 1 2 3 4; do
-    step_review "$t"
-    present "A13: task-step review of task $t prints the light panel seat" "$seat_line" '^seat: panel:light '
-    present "A13: task-step review of task $t runs the panel at tier light" "$panel_line" '--tier light'
-    absent "A13: task-step review of task $t never names the heavy tier" "$sout" '--tier heavy|panel:heavy'
-  done
-  step_review 5
-  present "A13: a risk 3 task is the heavy seat" "$seat_line" '^seat: panel:heavy\+judge-opus '
-  present "A13: a risk 3 task runs the panel at tier heavy" "$panel_line" '--tier heavy'
-}
-t_A14() {
-  needs_spawn A14 || return
-  prepare_step_repo
-  open_gates true true
-  local prompt_file
-  step_review 2
-  present "A14: a total 4 light-panel task falls to the Sonnet band judge" "$seat_line" 'fallback: dforge:judge-sonnet-high'
-  step_review 3
-  present "A14: a total 5 light-panel task falls to the Sonnet band judge" "$seat_line" 'fallback: dforge:judge-sonnet-high'
-  step_review 1
-  present "A14: a total 1 light-panel task falls to the Sonnet band judge" "$seat_line" 'fallback: dforge:judge-sonnet-high'
-  step_review 4
-  present "A14: a total 6 light-panel task falls to the Opus judge" "$seat_line" 'fallback: dforge:judge-opus'
-  prompt_file=$(sed -n 's/^seat: [^ ]* prompt: \(.*\) fallback: .*/\1/p' <<<"$seat_line")
-  check "A14: the judge prompt exists before the panel runs" "$([ -s "$prompt_file" ] && echo yes || echo no)" "yes"
-  local prompt; prompt=$(tr -d '\r' < "$prompt_file")
-  present "A14: the judge prompt names the agy list" "$prompt" 'task-4-review-panel/agy\.json'
-  present "A14: the judge prompt names the Codex list" "$prompt" 'task-4-review-panel/codex\.json'
-  present "A14: the judge rules CONFIRMED or REJECTED on each finding" "$prompt" '\[CONFIRMED\|REJECTED\]'
-  present "A14: the judge writes an External findings section" "$prompt" '## External findings'
-}
-
 # --- A15 ---
 t_A15() {
   needs_spawn A15 || return
@@ -782,7 +709,7 @@ t_A16() {
   trust=$(jq -r '.trust.review' "$PLUGIN/reference/agy-policy.json" | tr -d '\r')
   present "A16: agy-policy.json ships trust.review as pass or pending" "$trust" '^(pass|pending)$'
   fresh; settings true true
-  DR_AGY_POLICY="$PLUGIN/reference/agy-policy.json" panel light
+  DR_AGY_POLICY="$PLUGIN/reference/agy-policy.json" panel heavy
   if [ "$trust" = pending ]; then
     local g; g=$(DR_AGY_POLICY="$PLUGIN/reference/agy-policy.json" gate_line agy)
     check "A16: pending: the shipped policy keeps agy review off whatever the setting" "$(sval "$g" usable)/$(sval "$g" review)" "true/false"
@@ -800,20 +727,17 @@ t_A17() {
   needs_spawn A17 || return
   local order
   fresh; settings true true
-  panel light
-  check "A17: a light panel run makes no Codex auth probe of its own" "$(auth_probes)" "0"
-  check "A17: the light panel run did run Codex" "$(sval "$(sline codex)" status)" "OK"
-  order=$(grep -E '^(getCodexAuthStatus|runAppServerTurn) ' "$STUB_EVENT_LOG" | awk '{ print $1 }' | tr '\n' ' ')
-  check "A17: the light panel run goes straight to the Codex turn" "$order" "runAppServerTurn "
-  fresh; settings true true
   panel heavy
-  check "A17: a heavy panel run makes no Codex auth probe of its own" "$(auth_probes)" "0"
+  check "A17: a panel run makes no Codex auth probe of its own" "$(auth_probes)" "0"
+  check "A17: the panel run did run Codex" "$(sval "$(sline codex)" status)" "OK"
+  order=$(grep -E '^(getCodexAuthStatus|runAppServerTurn) ' "$STUB_EVENT_LOG" | awk '{ print $1 }' | tr '\n' ' ')
+  check "A17: the panel run goes straight to the Codex turn" "$order" "runAppServerTurn "
   fresh; settings true true
   STUB_REFUSE_ONCE=1 panel heavy
   check "A17: a heavy run with a Codex fallback still makes no auth probe" "$(auth_probes)" "0"
   check "A17: that run made both Codex attempts" "$(turns)" "gpt-6-astra/xhigh gpt-6.1-sol/xhigh "
   fresh; settings false true
-  panel light
+  panel heavy
   check "A17: a panel run with Codex skipped makes no Codex auth probe" "$(auth_probes)" "0"
 }
 
@@ -828,7 +752,7 @@ t_A18() {
     "$(jq -r '[.plugins[] | select(.name == "dforge") | has("version")] | any' "$REPO_ROOT/.claude-plugin/marketplace.json" "$REPO_ROOT/.agents/plugins/marketplace.json" 2>&1 | tr -d '\r' | tr '\n' ' ')" "false false "
 }
 
-for id in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A13 A14 A15 A16 A17 A18; do
+for id in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A15 A16 A17 A18; do
   want "$id" && "t_$id"
 done
 

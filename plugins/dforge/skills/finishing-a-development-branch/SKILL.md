@@ -63,16 +63,11 @@ In phase `finish`, follow this skill with these changes:
   Step 1 or Step 5's "Whose choice it is" says. In place, list the carried paths (`scripts/auto-run carried`) with the failure.
 - **In place,** `pr` and `keep` end with: This checkout is on `auto/<slug>`; your uncommitted changes are here.
 - **The rulings** printed at Step 3 also include every line of
-  `scripts/auto-run ruling list`, and Step 7's final message lists every
-  deferred row the run added to its register (`scripts/auto-run status` names
-  it; the `final review residual` rows among them),
-  every `A<n>` statement tagged `test` under `not verified (depth light)`
-  when the ledger's `Review depth:` line names light (no acceptance QA ran),
-  every `demo` statement of the spec, every lens
-  a `final review lens-skipped <id> reason=<reason>` ledger line names,
-  whatever its reason (the final
-  review wrote them; never run `scripts/lens-route` here, since after a merge
-  base..HEAD is empty), and auto-run.md §Finishing's API lines. Run
+  `scripts/auto-run ruling list`, and Step 7's final message repeats Step 3's
+  light-depth and lens-skipped lists and adds every deferred row the run added
+  to its register (`scripts/auto-run status` names it; the `final review
+  residual` rows among them), every `demo` statement of the spec, and
+  auto-run.md §Finishing's API lines. Run
   `scripts/auto-run stop` with no `--reason` before printing the next-step block:
   a reason marks the run as stopped and sends a `blocked` notice.
 
@@ -184,8 +179,6 @@ exit 3 after checking by hand.
 
 - It prints `merge`, `pr` or `keep` with no `answer` or `firedAt` field: show
   no menu.
-  When Step 1b's `ui-proof check` exited 1, `merge` and `pr` become `keep`:
-  say so, and that the UI is unproven.
   Run `scripts/finish-choice answer <action> [--plan PLAN_FILE]`, then carry
   the option out from Step 5 by name, exactly as if your human partner had
   chosen it; never discard. The base is the recorded `base`. When that is
@@ -379,16 +372,3 @@ block it prints, verbatim. When nothing follows, run
 file — no follow-on work recorded."
 
 When the ledger holds a `CI:` line, the final message quotes it.
-
-## Quick Reference
-
-| Option | Merge | Push | Keep Worktree | Cleanup Branch |
-|---|---|---|---|---|
-| 1. Merge locally | yes | - | - | yes |
-| 2. Create PR | - | yes | yes | - |
-| 3. Keep as-is | - | - | yes | - |
-| Discard (explicit request only) | - | - | - | yes (force) |
-
-## Common Rationalizations
-
-Read [rationalizations.md](references/rationalizations.md) before you skip a step of finishing.

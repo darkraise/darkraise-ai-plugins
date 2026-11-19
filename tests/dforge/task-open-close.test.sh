@@ -90,6 +90,9 @@ check "open: the ledger names the plan" "$(head -n 1 "$LEDGER")" "# SDD ledger �
 check "open: the assigned line" "$(tail -n 1 "$LEDGER")" "Task 1: implementer inline (assigned; base $BASE7)"
 has "open: the task check line" "$out" "task check: bash t.sh"
 check "open: the budget line is last" "$(tail -n 1 <<<"$out" | cut -c1-6)" "budget"
+check "open: the first line names the brief file" "$(head -n 1 <<<"$out")" "wrote $WS/task-1-brief.md: $(wc -l < "$WS/task-1-brief.md" | tr -d ' ') lines"
+check "open: prints the brief between its markers" \
+  "$(sed -n '/^--- brief ---$/,/^--- end of brief ---$/p' <<<"$out" | sed '1d;$d')" "$(cat "$WS/task-1-brief.md")"
 check "open: the brief holds no header excerpt" "$(grep -c '^## Plan header excerpt$' "$WS/task-1-brief.md")" "0"
 check "open: the brief points at the header file" "$(grep -c "^Global Constraints and Contracts: $WS/plan-header.md " "$WS/task-1-brief.md")" "1"
 check "open: the header file holds the constraints" "$(grep -c '^- Fixture constraint\.$' "$WS/plan-header.md")" "1"
@@ -102,6 +105,9 @@ check "open again: no second assigned line" "$(grep -c '^Task 1: implementer' "$
 run bash "$BRIEF" --open docs/plan.md 3
 check "open: a risk-3 brief keeps the header excerpt for its judge" "$(grep -c '^## Plan header excerpt$' "$WS/task-3-brief.md")" "1"
 check "open: a risk-3 brief carries the review marker" "$(sed -n 2p "$WS/task-3-brief.md")" "**Review:** per-task — risk 3"
+awk 'NR == 2 { print "```markdown"; print "**Host:** codex"; print "```" } { print }' docs/plan.md > "$TMP/fenced-host.md"
+run bash "$BRIEF" "$TMP/fenced-host.md" 3 "$TMP/fenced-brief.md"
+check "brief: a fenced Host: codex example keeps the risk-3 marker" "$rc|$(sed -n 2p "$TMP/fenced-brief.md")" "0|**Review:** per-task — risk 3"
 
 run bash "$BRIEF" --open docs/plan.md 99
 check "open: no such task exits 3" "$rc" "3"
@@ -113,6 +119,7 @@ check "open: a Codex brief carries no Claude-only lines" "$(grep -c '^\*\*Review
 
 # A brief without --open writes no ledger line and still prints the check.
 run bash "$BRIEF" docs/plan.md 2
+check "plain brief: prints no brief body" "$(grep -c '^--- brief ---$' <<<"$out")" "0"
 check "plain brief: no assigned line for task 2" "$(grep -c '^Task 2:' "$LEDGER")" "0"
 has "plain brief: prints the task check" "$out" "task check: bash t.sh"
 
@@ -140,14 +147,23 @@ check "review: a task never opened still exits 6" "$rc" "6"
 # --- task-close ---
 CP='done: x; verified: bash t.sh → pass; remaining: none; discovered: none; assumptions: none'
 HEAD7=$(git rev-parse --short HEAD)
-run bash "$CLOSE" docs/plan.md 1 "$CP"
+mkdir -p "$TMP/node-shim"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$TMP/node.log" "$(command -v node)" > "$TMP/node-shim/node"
+chmod +x "$TMP/node-shim/node"
+PATH="$TMP/node-shim:$PATH" run bash "$CLOSE" docs/plan.md 1 "$CP"
 check "close: exit 0" "$rc" "0"
+check "close: a home without darkmem starts no darkmem push" "$(cat "$TMP/node.log" 2>/dev/null | grep -c 'darkmem-sync')" "0"
 check "close: the complete line" "$(tail -n 1 "$LEDGER")" "Task 1: complete (commits $BASE7..$HEAD7, unreviewed) — $CP"
 has "close: prints the line it wrote" "$out" "wrote: Task 1: complete"
 run bash "$CLOSE" docs/plan.md 1 "$CP"
 check "close again: exit 0" "$rc" "0"
 has "close again: says it is already complete" "$out" "task 1: already complete"
 check "close again: writes no second line" "$(grep -c '^Task 1: complete' "$LEDGER")" "1"
+LEDGER_BEFORE=$(cat "$LEDGER")
+for ((i = 0; i < 4000; i++)); do printf 'Task 2: note %04d — filler that takes the ledger past one pipe buffer\n' "$i"; done >> "$LEDGER"
+run bash "$CLOSE" docs/plan.md 1 "$CP"
+check "close again past 64 KiB: still finds the complete line" "$rc|$(grep -c '^Task 1: complete' "$LEDGER")" "0|1"
+printf '%s\n' "$LEDGER_BEFORE" > "$LEDGER"
 
 run bash "$BRIEF" --open docs/plan.md 2
 run bash "$CLOSE" docs/plan.md 2 "$CP" --review "review clean; scores spec 17 / scope 18 / verification 15 / quality 16, seat dforge:judge-opus"
@@ -168,11 +184,15 @@ run bash "$BRIEF" --open docs/plan.md 3
 run bash "$CLOSE" docs/plan.md 3 "$CP"
 check "close: the last task prints a budget line" "$(grep -c '^budget' <<<"$out")" "1"
 check "close: a middle task prints none" "$(run bash "$CLOSE" docs/plan.md 2 "$CP"; grep -c '^budget' <<<"$out")" "0"
+# The budget mode reads the plan's ledger, not the working directory's.
+git init -q "$TMP/other"
+out=$(cd "$TMP/other" && bash "$BRIEF" "$REPO/docs/plan.md" 3 "$TMP/other-brief.md" 2>/dev/null)
+check "brief from another repository: the plan's ledger sets the budget mode" "$(tail -n 1 <<<"$out" | cut -d: -f1)" "budget (final)"
 
 # --- every amendment consumer refuses a ledger citing a missing amendment (A4) ---
 printf 'Task 1: Ruling: amendment A7 — x — y\n' >> "$LEDGER"
 for argv in "task-brief|docs/plan.md|1" \
-    "task-step|start|docs/plan.md|1" \
+    "task-step|review|docs/plan.md|1" \
     "task-close|docs/plan.md|1|done: x; verified: y; remaining: none; discovered: none; assumptions: none" \
     "plan-lint|docs/plan.md" \
     "review-route|docs/plan.md|--task|1" \

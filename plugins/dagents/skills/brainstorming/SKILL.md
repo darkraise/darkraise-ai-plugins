@@ -44,8 +44,9 @@ path below.
 
 Before your first question, classify the request and say it in one
 line — `Process: <spike|bounded|architectural> — <trigger | no trigger>` — so
-your human partner can override it. Every plan executes inline, so the line
-names no mode. The triggers are the seven in dagents:using-dagents's Process Depth:
+your human partner can override it. The line names no mode: the plan's
+Execution line does, `subagent` unless `executionMode=inline` or your human
+partner asks for inline. The triggers are the seven in dagents:using-dagents's Process Depth:
 a new project or subsystem; an interface that something outside its own
 files depends on changes; the files touched cannot be enumerated after
 exploring; a load-bearing approach question is open; irreducible risk
@@ -108,9 +109,9 @@ your human partner's standing choice of fast mode, which is itself the approval.
   for approval once, instead of after each section. It has no effect on Claude
   Code under `autoRun=on`, which presents no design.
 - `executionStrategy`: honoured only for a plan whose Execution line names
-  `subagent` (deprecated, chosen by `executionMode=subagent` or your human
-  partner). Ask no execution-strategy question: the spec
-  records `**Execution strategy:** sequential — inline execution`.
+  `subagent`, the default mode. Ask no execution-strategy question: the spec
+  records the setting's value as its `**Execution strategy:**` line, and
+  under `ask` dagents:writing-plans asks (design-phase.md).
 - `specReview=false`: after the spec self-review block, skip the User Review
   Gate and go on to Implementation. It has no effect under `autoRun=on`:
   on Claude Code the spec review always happens.

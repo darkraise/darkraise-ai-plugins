@@ -15,8 +15,8 @@
 # .gitignore at .dforge/sdd/ keeps every plan's workspace out of
 # `git status` and out of accidental commits without modifying any tracked file.
 #
-# Single source of truth for the workspace location, so task-brief and
-# review-package cannot drift to different directories.
+# The scripts that source lib/roots.sh compute the same path with
+# dforge_workspace; this one also creates it and its self-ignoring .gitignore.
 #
 # Usage: sdd-workspace PLAN_FILE
 set -euo pipefail

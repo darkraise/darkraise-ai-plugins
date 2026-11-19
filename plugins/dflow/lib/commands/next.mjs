@@ -25,7 +25,6 @@ export async function run(ctx, argv, { out }) {
     const record = taskRecord(fresh, active.slug, task.number);
     if (record.state !== 'wip') {
       record.state = 'wip';
-      record.startedAt = new Date().toISOString();
       appendEvent(ctx, { plan: active.slug, event: 'wip', task: task.number });
     }
     fresh.plan = active.rel;

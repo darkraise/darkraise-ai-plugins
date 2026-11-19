@@ -113,6 +113,9 @@ fi
 # and the run is reported as BLOCKED - the exact opposite of what raising the
 # timeout was meant to do.
 printf '%s' "$timeout_s" | grep -qE '^[0-9]+$' || die "--timeout must be whole seconds: $timeout_s"
+# Base 10 now: a leading zero ("0900") would otherwise be read as octal by the
+# arithmetic that builds the deadline and the outer bound.
+timeout_s=$((10#$timeout_s))
 if [ -n "$review_round" ]; then
   [[ "$review_round" =~ ^[1-5]$ ]] && [ -n "$thread" ] || die '--review-round requires a resume and a round from 1 to 5'
 fi
@@ -151,7 +154,7 @@ if [[ "$gate_line" != *" lane=true "* ]]; then
   die "codex lane is off for this session (${gate_reason:-no gate answer})"
 fi
 cwd="$(dr_canonical "$cwd")" || die 'cannot resolve worktree'
-report="$(realpath -m -- "$report")" || die 'cannot resolve report path'
+report="$(dr_resolve "$report")" || die 'cannot resolve report path'
 case "$report" in
   "$cwd"/*)
     case "$report" in "$cwd"/.dagents/*) ;; *) die 'report must be outside checkout or in ignored .dagents workspace' ;; esac

@@ -278,7 +278,7 @@ fi
 # ---------------------------------------------------------------- A9
 if selected A9; then
   hooks=$(jq -r '.hooks.SubagentStop[0] | [.matcher, .hooks[0].command] | @tsv' < "$PLUGIN/hooks/hooks.json" | tr -d '\r')
-  has "A9: hooks.json registers the gate on SubagentStop for impl agents" "$hooks" '(dagents:)?impl-.*'
+  has "A9: hooks.json registers the gate on SubagentStop for impl agents" "$hooks" '^(dagents:)?impl-(haiku|(sonnet|opus|fable)-(low|medium|high|xhigh|max))$'
   has "A9: and runs scripts/impl-stop-gate" "$hooks" 'scripts/impl-stop-gate'
 
   report "$TMP/reports/ok.md" ok

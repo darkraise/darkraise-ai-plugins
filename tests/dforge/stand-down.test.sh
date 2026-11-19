@@ -18,6 +18,11 @@ check "conflict: JSON with a systemMessage" "$(printf '%s' "$out" | jq -r '.syst
 check "conflict: the model is told too" "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext | contains("claude plugin disable dagents@darkraise --scope local")')" "true"
 check "conflict: no dforge injection" "$(printf '%s' "$out" | grep -c 'using-dforge')" "0"
 check "conflict: marker written" "$( [ -e "$TMP/data/workflow-guard/s1" ] && echo yes)" "yes"
+# Without GNU timeout (macOS) the guard runs under the watchdog, and still reads the event.
+mkdir -p "$TMP/no-timeout"; printf '#!/bin/sh\nexit 1\n' > "$TMP/no-timeout/timeout"; chmod +x "$TMP/no-timeout/timeout"
+rm -f "$TMP/data/workflow-guard/s1"
+event startup SessionStart | (cd "$TMP/project" && PATH="$TMP/no-timeout:$PATH" bash "$ROOT/scripts/session-start.sh") > /dev/null
+check "conflict under the watchdog: marker written" "$( [ -e "$TMP/data/workflow-guard/s1" ] && echo yes)" "yes"
 for hook in $(jq -r '.hooks | to_entries[] | select(.key != "SessionStart") | .value[].hooks[].command' "$ROOT/hooks/hooks.json" | sed -E 's#^bash "\$\{CLAUDE_PLUGIN_ROOT\}/##; s#"$##'); do
   silent=$(event startup Stop | (cd "$TMP/project" && bash "$ROOT/$hook" 2>&1)); code=$?
   check "conflict: $hook is silent" "$code:$silent" "0:"
@@ -29,6 +34,13 @@ check "conflict: no transcript record" "$(ls "$HOME/.claude/dforge/sessions/by-i
 printf '{"enabledPlugins":{"dagents@darkraise":false}}' > "$TMP/claude/settings.json"
 event startup SessionStart | (cd "$TMP/project" && bash "$ROOT/scripts/session-start.sh") > /dev/null
 check "clean start: marker removed" "$( [ -e "$TMP/data/workflow-guard/s1" ] && echo yes || echo no)" "no"
+mkdir -p "$TMP/hung"
+printf '#!/usr/bin/env bash\ncase "$1" in *workflow-guard.mjs) exec sleep 60 ;; esac\nexec %q "$@"\n' "$(command -v node)" > "$TMP/hung/node"
+chmod +x "$TMP/hung/node"
+started=$SECONDS
+out=$(event startup SessionStart | (cd "$TMP/project" && PATH="$TMP/hung:$PATH" DARKMEM_KILL_GRACE=1 bash "$ROOT/scripts/session-start.sh"))
+check "a hung guard: the entry skill is still injected" "$(printf '%s' "$out" | grep -c 'using-dforge')" "1"
+check "a hung guard: session start ends within its bound" "$(( SECONDS - started < 20 ))" "1"
 check "the guard's matcher includes fork" "$(jq -r '.hooks.SessionStart[0].matcher' "$ROOT/hooks/hooks.json")" "startup|resume|clear|compact|fork"
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

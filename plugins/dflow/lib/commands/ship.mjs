@@ -5,16 +5,15 @@ import { amendedAcceptance, approvedPlan } from '../approval.mjs';
 import { parseBoard, rewriteRow } from '../board.mjs';
 import { blockedTasks, setField } from '../plan.mjs';
 import { proofStatus } from '../proof.mjs';
-import { baseCommit, defaultBranch, head, relative } from '../repo.mjs';
-import { buildPack } from '../review.mjs';
+import { baseCommit, changedSince, defaultBranch, head, relative, uncommitted } from '../repo.mjs';
+import { diffTier } from '../review.mjs';
 import { runCommand } from '../run.mjs';
 import { appendEvent, loadState, planState, updateState } from '../state.mjs';
 import { loadFindings, refreshHud, unrecordedTicks } from '../status.mjs';
-import { git, gitList, gitOut, mustGit, readText, shortSha, tail, today } from '../util.mjs';
+import { git, gitOut, mustGit, readText, shortSha, tail, today } from '../util.mjs';
 import { diagnose } from './doctor.mjs';
 import { runGates } from './gate.mjs';
 import { requireActive } from './next.mjs';
-import { closeWorkstream, flush } from './sync.mjs';
 
 const PROMOTED = { D: 'decisions.md', G: 'gotchas.md' };
 
@@ -45,7 +44,8 @@ async function acceptance(ctx, active, record, sha, checkOnly, out) {
   }
   for (const line of proofStatus(ctx, active, sha)) {
     if (line.state === 'missing') problems.push(`${line.id} (UI) has no proof; drive it in the running app and record it with \`dflow proof ${line.id}\``);
-    if (line.state === 'stale') problems.push(`${line.id} (UI) was proven at ${shortSha(line.proof.sha)}, before ${line.touched.join(', ')} changed; prove it again`);
+    if (line.state === 'stale' && !line.touched) problems.push(`${line.id} (UI) was proven at ${shortSha(line.proof.sha)}, which git cannot compare with HEAD any more; prove it again`);
+    else if (line.state === 'stale') problems.push(`${line.id} (UI) was proven at ${shortSha(line.proof.sha)}, before ${line.touched.join(', ')} changed; prove it again`);
   }
   return { problems, pending };
 }
@@ -113,10 +113,16 @@ export async function run(ctx, argv, { out }) {
   }
 
   // An untracked file outside docs/dflow/ may be one the gates used, and the
-  // commit would ship without it; drafts of other work there stay untracked.
-  const dirty = gitList(ctx.root, ['status', '--porcelain', '--untracked-files=normal', '--no-renames', '-z'])
-    .filter(entry => !(entry.startsWith('??') && entry.slice(3).startsWith('docs/dflow/')));
-  if (dirty.length) problems.push(`uncommitted changes: ${dirty.map(entry => entry.slice(3)).join(', ')}`);
+  // commit would ship without it.
+  const dirty = uncommitted(ctx);
+  if (dirty.length) problems.push(`uncommitted changes: ${dirty.map(entry => entry.file).join(', ')}`);
+  // Gates and acceptance can run for minutes; what they passed is the tree at
+  // `sha`, and nothing else may be recorded or shipped on their word.
+  const moved = () => {
+    if (head(ctx.root) !== sha) return 'the head commit moved while ship ran its checks; run `dflow ship` again';
+    const changed = uncommitted(ctx);
+    return changed.length ? `the working tree changed while ship ran its checks: ${changed.map(entry => entry.file).join(', ')} (a file a check writes itself belongs in .gitignore)` : null;
+  };
 
   if (!problems.length) {
     // A recorded pass counts only for this commit and a clean tree.
@@ -128,21 +134,26 @@ export async function run(ctx, argv, { out }) {
     const accepted = await acceptance(ctx, active, record, sha, values.check, out);
     problems.push(...accepted.problems);
     pending.push(...accepted.pending);
+    const movedDuring = moved();
+    if (movedDuring) problems.push(movedDuring);
     // runGates saved its own result meanwhile, so merge into the file's state.
-    updateState(ctx.paths, latest => {
-      planState(latest, active.slug).acceptance = record.acceptance;
-    });
+    else {
+      updateState(ctx.paths, latest => {
+        planState(latest, active.slug).acceptance = record.acceptance;
+      });
+    }
   }
 
-  const required = buildPack(ctx, active).tier;
+  const required = diffTier(ctx, active);
   const review = planState(loadState(ctx.paths), active.slug).review;
   if (!review) problems.push(`no review is recorded; this diff needs tier ${required} (/dflow:review)`);
   else {
     if (review.tier < required) problems.push(`the recorded review is tier ${review.tier}; this diff needs tier ${required}`);
     // Fixes made after the review are expected, so the review is recorded
     // once they are in. Code committed after that has been seen by nobody.
-    const since = gitList(ctx.root, ['diff', '--name-only', '--no-renames', '-z', `${review.sha}..HEAD`]).filter(file => !(file.startsWith('docs/dflow/') && file.endsWith('.md')));
-    if (since.length) problems.push(`${since.length} file(s) changed after the recorded review (${since.slice(0, 5).join(', ')}${since.length > 5 ? ', …' : ''}); review them and run \`dflow review record\` again`);
+    const since = changedSince(ctx, review.sha)?.filter(file => !(file.startsWith('docs/dflow/') && file.endsWith('.md')));
+    if (!since) problems.push(`the recorded review is of ${shortSha(review.sha)}, which git cannot compare with HEAD any more; review again and run \`dflow review record\``);
+    else if (since.length) problems.push(`${since.length} file(s) changed after the recorded review (${since.slice(0, 5).join(', ')}${since.length > 5 ? ', …' : ''}); review them and run \`dflow review record\` again`);
   }
   const findings = loadFindings(ctx, active.slug);
   const blocking = findings.filter(finding => finding.status === 'open' && finding.severity === 'blocking');
@@ -163,6 +174,12 @@ export async function run(ctx, argv, { out }) {
     if (pending.length) out(`Nothing is unmet at ${shortSha(sha)}. \`dflow ship\` still has to run: ${pending.join('; ')}`);
     else out(`Ready to ship: every condition of the definition of done holds at ${shortSha(sha)}.`);
     return 0;
+  }
+
+  const movedLate = moved();
+  if (movedLate) {
+    out(`Not shipped: ${movedLate}.`);
+    return 1;
   }
 
   // Everything ship writes, so that a refused closing commit can be undone
@@ -192,8 +209,6 @@ export async function run(ctx, argv, { out }) {
     return 1;
   }
   appendEvent(ctx, { plan: active.slug, event: 'shipped', commit: head(ctx.root) });
-  await closeWorkstream(ctx, active.slug);
-  await flush(ctx, { quiet: true });
   refreshHud(ctx);
 
   out(`Shipped ${active.rel} at ${shortSha(head(ctx.root))}${written.length ? `; promoted ${written.join(' and ')}` : ''}. Board row ${row ? row.number : '-'} is done.`);

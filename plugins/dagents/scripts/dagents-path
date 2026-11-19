@@ -1,16 +1,12 @@
 #!/usr/bin/env bash
-# dagents-path state [RELATIVE] | docs [RELATIVE] | ledger SLUG|PLAN_FILE | latest | store | name PATH | project
-# Where this repository's dagents files live: the state directory (.dagents/,
-# always in the checkout), the docs root and a
-# plan's ledger directory and latest.md (in the checkout or in the darkmem
-# mirror, as documentStore and progressSource apply them), each family's
-# applied store, the repository-relative name of a path, or the darkmem
-# project the repository syncs with (exit 1 when darkmem is off or the
-# repository is unmapped).
+# dagents-path state [RELATIVE] | docs [RELATIVE] | ledger SLUG|PLAN_FILE | latest | name PATH
+# Where this repository's dagents files live, all in the checkout: the state
+# directory (.dagents/), the docs root, a plan's ledger directory and
+# latest.md, or the repository-relative name of a path.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/roots.sh"
-usage() { echo "usage: dagents-path state|docs [RELATIVE] | ledger SLUG|PLAN_FILE | latest | store | name PATH | project" >&2; exit 2; }
+usage() { echo "usage: dagents-path state|docs [RELATIVE] | ledger SLUG|PLAN_FILE | latest | name PATH" >&2; exit 2; }
 [ $# -ge 1 ] || usage
 [ "$1" = state ] || dagents_stores_init
 case $1 in
@@ -28,9 +24,7 @@ case $1 in
     exit 0
     ;;
   latest) [ $# -eq 1 ] || usage; dagents_latest_file; exit 0 ;;
-  store) [ $# -eq 1 ] || usage; printf 'documents %s\nprogress %s\n' "$(dagents_docs_store)" "$(dagents_progress_store)"; exit 0 ;;
   name) [ $# -eq 2 ] || usage; dagents_name "$2"; exit 0 ;;
-  project) [ $# -eq 1 ] || usage; dagents_project; exit $? ;;
   *) usage ;;
 esac
 if [ $# -eq 2 ]; then printf '%s/%s\n' "$dir" "$2"; else printf '%s\n' "$dir"; fi

@@ -4,7 +4,6 @@ import { appendEvent, loadState, planState, updateState, taskRecord } from '../s
 import { loadPlan, refreshHud } from '../status.mjs';
 import { fail, today } from '../util.mjs';
 import { requireActive } from './next.mjs';
-import { flush } from './sync.mjs';
 
 export async function run(ctx, argv, { out, name }) {
   const number = Number(argv[0]);
@@ -27,7 +26,6 @@ export async function run(ctx, argv, { out, name }) {
     if (name === 'unblock') record.attempts = 0;
   });
   appendEvent(ctx, { plan: active.slug, event: name === 'block' ? 'blocked' : 'unblocked', task: number, reason });
-  await flush(ctx, { quiet: true });
 
   const reloaded = loadPlan(ctx, active.file);
   const upcoming = nextTask(taskStates(reloaded.plan, planState(state, active.slug)));

@@ -22,18 +22,18 @@ Four findings from real transcripts drove the fork:
   task but has no field for the choice, and the Agent tool could not pass
   reasoning effort before Claude Code 2.1.292 (it now can, but a fleet
   dispatch still passes neither model nor effort, so the pinned pair is what
-  runs). Here every task records an implementer from a model ×
-  effort grid, the plan's `**Execution:**` line names the session's model and
-  effort, and `plan-lint` checks the header, the scores and the mode before a
+  runs). Here every task records its scores, the plan's `**Execution:**`
+  line names the session's model and effort for the hardest of them, and
+  `plan-lint` checks the header, the scores and the mode before a
   plan is saved.
-- **Judgment in one seat.** Executors and controllers rule only on mechanical
-  conflicts and log every ruling. Plan defects, contested findings and
+- **Judgment in one seat.** The executing session rules only on mechanical
+  conflicts and logs every ruling. Plan defects, contested findings and
   cannot-verify items go to an Opus judge whose verdicts —
   CONFIRMED-GAP, PARK, AMEND, BLOCKED — are carried out verbatim; AMEND edits
   the plan through `scripts/plan-amend` so the plan on disk stays immutable.
 - **Karpathy guidelines baked in.** Think before coding, simplicity first,
   surgical changes, goal-driven verification: in the entry point, the plan
-  template, the implementer template and TDD.
+  template and TDD.
 
 **Codex host.** Read [native-codex.md](reference/native-codex.md). Its
 `codex-v4` policy routes scores 0–9 through Luna, Sol and Astra with
@@ -70,7 +70,7 @@ rather than to a larger model. That cap is what makes the execution floor
 table stop at 8.
 
 **A fix cap.** A task the session implements gets at most three fix rounds,
-then goes to the ruling seat as a `breaker` item. A delegated task keeps two.
+then goes to the ruling seat as a `breaker` item. A risk-3 task's reviewed loop keeps two.
 A `Host: codex` plan keeps `review_cap: 5`.
 
 **Review depth.** An architectural plan runs at one of three depths, sized by
@@ -138,11 +138,9 @@ error.
 
 **A reviewer panel.** Codex and agy review; neither implements a task. When a
 family's review surface is open, `scripts/run-review-panel` runs every open
-family at once, chosen by risk: the light tier (Codex `gpt-6.1-sol`, agy
-`gemini-4-argon`) for tasks at risk 0 to 2, and the heavy tier (Codex
-`gpt-6-astra`, agy `claude-opus-5-5`, each falling back once to the light row on
-a refusal) at risk 3, for plan review round 1 and for the final review's
-external round at depth full. A family whose gate is closed is skipped with its
+family at once (Codex `gpt-6-astra`, agy `claude-opus-5-5`, each falling back
+once to its last row on a refusal) for a risk-3 task, for plan review round 1
+and for the final review's external round at depth full. A family whose gate is closed is skipped with its
 reason, so the panel answers with whatever lists came back, and a Claude judge
 reviews alone when none did. A heavy panel's lists go to `judge-opus`, which
 rules on every finding. Antigravity's Claude quota is small, so after one or two
@@ -157,9 +155,7 @@ allowlist; `scripts/lib/codex-client.mjs` runs one turn through the plugin's own
 client and reaps the broker it causes to exist. This plugin never names the
 `codex` executable and never reads Codex-owned state.
 
-That probe is a dated observation, not a standing fact: the same two models were
-listed in the local catalog on 2026-09-14, and `gpt-6-astra` ran there on that
-date. This plugin reads no model catalog at all: the judge seats attempt the preferred
+This plugin reads no model catalog at all: the judge seats attempt the preferred
 rung and fall back once on a refusal, which is the only evidence of entitlement
 that has ever been reliable.
 
@@ -179,14 +175,13 @@ A different machine, account, or Codex version must verify the tables against
 its own account before relying on them. Do not make paid capability probes.
 
 **Cross-family review.** External reviews are opt-in. By default every review
-runs on Claude judges: `judge-sonnet-high` for tasks totalling 0 to 5,
-`judge-opus` for 6 and at risk 3, plan review and the final review. For a
+runs on Claude judges: `judge-opus` for a risk-3 task, plan review and the
+final review. For a
 one-off Codex review, run `/codex:review` or `/codex:adversarial-review` from
 the codex plugin. Turning the `codexReview` or `agyReview` setting on gives
 that family the panel seats for every run (`reference/external-review.md`):
-a light panel's one list is read as a judge's report, two lists go to the band
-judge to dedupe and verify, and a heavy panel's lists always go to
-`judge-opus`; when the panel returns no list, the Claude seat reviews alone.
+the panel's lists always go to `judge-opus`; when the panel returns no list,
+the Claude seat reviews alone.
 Plan review runs the panel for round 1 (`judge-opus` when it returns nothing
 or every reviewer is off) and `judge-opus` for the delta round: at most two
 rounds on a Claude plan. The final whole-branch review runs on `judge-opus`,
@@ -845,8 +840,7 @@ one card with slim meters whose ticks mark how far each window has run.
 Each button sits in a rounded box, the letter of its hotkey underlined in the
 label as a desktop app marks one; the hotkey presses it while the pane has the
 keyboard: `h` **Hand off**, `r` **Resume**, `c` **Compact**, `d` **Dense** or **Detailed**, `s` **Settings**, `m` **Minimize**,
-and `b` **Back** in the settings view. Before Claude Code 2.1.295, which first
-draws a styled label, the hotkey leads the label instead (`c: Compact`). The box is gray at rest and takes the accent color on the one
+and `b` **Back** in the settings view. The box is gray at rest and takes the accent color on the one
 that matters: **Hand off** once the context passes 80% of the handoff budget, **Resume**
 whenever it shows. In the terminal's settings view a switch reads `● On` or `○ Off`, the
 chosen option of a row takes the accent, and what is off is drawn dim.
@@ -1055,9 +1049,8 @@ implement a task.
   whose last line for a task is `escalated inline -> subagent` sends that task
   to the ruling seat as a `breaker` item.
 - **Implementers.** Fifteen of the sixteen `impl-*` agents are gone; only
-  `impl-sonnet-high` stays, for Acceptance QA. `task-step start` takes one task
-  and writes no dispatch file or assigned line, `review-route --final-fix` is
-  gone, and `reference/escalation.md` with the escalation and reserve tables in
+  `impl-sonnet-high` stays, for Acceptance QA. `task-step start` and
+  `review-route --final-fix` are gone (`task-brief --open` opens a task), and `reference/escalation.md` with the escalation and reserve tables in
   `reference/ladder.md` went with them. A task no longer carries an
   `**Implementer:**` line (or, on a Codex plan, an `**Assignment source:**`
   line): `plan-lint` ignores the line in an older plan, and
@@ -1072,6 +1065,91 @@ implement a task.
   records an auto run's completion and prints the final budget line after the
   last task. The brief of a task the session implements no longer repeats the
   header's Global Constraints and Contracts.
+
+## Migrating Codex plans to codex-v4
+
+Treat an existing assignment without a source as human-pinned. Keep original
+assignments fixed; actual attempts, promotions, and substitutions go in the
+ledger. `scripts/plan-lint` accepts only `codex-v4`: it rejects
+codex-v1, codex-v2, codex-v3 and unknown policy versions with a
+conversion-required error. Never reinterpret an older plan's scores or ranks as
+v4.
+
+For an old Codex or Claude plan, preview the preserved raw axes, original policy,
+old total, new weighted score, and old/proposed assignments. Obtain approval
+before recording the converted plan. Recalculate the total from existing axes;
+do not change the underlying assessments to fit a preferred tier. If axes are
+missing, obtain an explicit evaluation instead of inferring them from the total.
+Keep original evaluations and assignments in the conversion record, preserve
+human pins, and never automatically translate reserve overrides.
+
+A codex-v2 or codex-v3 plan keeps its scores: v2, v3 and v4 share the weighted
+formula, so the preview states each score as unchanged. A rubric task's proposed
+pair is the v4 execution tier at its score. The Execution line's pair maps by
+rank: an older execution pair becomes the v4 pair at the same rank (v3
+`gpt-6-sol / high`, rank 5, becomes `gpt-6.1-sol / high`; v2 `gpt-5.6-sol /
+high`, rank 7, becomes `gpt-6-astra / medium`), and a reserve pair stays itself.
+A human pin stays verbatim even when it names an older pair, which still runs
+while it is advertised; the preview flags each such pin so
+your human partner keeps or re-pins it explicitly.
+
+The older ranks, kept here because the policy file no longer carries them.
+codex-v3 differs from v4 only at ranks 3 to 6:
+
+```text
+rank  codex-v3 pair
+3     gpt-6-sol / low
+4     gpt-6-sol / medium
+5     gpt-6-sol / high
+6     gpt-6-sol / xhigh
+```
+
+```text
+rank  codex-v2 pair
+0     gpt-5.6-luna / low
+1     gpt-5.6-luna / medium
+2     gpt-5.6-terra / low
+3     gpt-5.6-terra / medium
+4     gpt-5.6-terra / high
+5     gpt-5.6-sol / low
+6     gpt-5.6-sol / medium
+7     gpt-5.6-sol / high
+8     gpt-6-astra / high
+9     gpt-6-astra / xhigh
+reserve  gpt-6-astra / max, then gpt-6-astra / ultra
+```
+
+An unstarted plan, one with no ledger, is converted in place and committed:
+its `Routing policy:` line becomes `codex-v4` in its existing bold or plain
+form and the Execution line take their v4 pairs, Evaluation lines stay untouched, and a conversion record
+goes in the header immediately before `## Task index`, so no task's text
+absorbs it:
+
+```text
+## Policy conversion
+
+codex-v3 → codex-v4, approved <date>. Scores unchanged.
+
+| Task | Axes (f/s/c/r) | Score | codex-v3 | codex-v4 | Source |
+|---|---|---|---|---|---|
+| 1 | 1/1/1/0 | 3 | gpt-6-sol / low | gpt-6.1-sol / low | rubric |
+| 2 | 0/1/0/1 | 3 | gpt-6-sol / high | gpt-6-sol / high | human (kept) |
+```
+
+`scripts/plan-lint` must pass on the converted plan.
+
+A plan with a ledger does not change: it is immutable during execution, and
+`scripts/plan-amend` refuses `Routing policy:` lines. Convert active work only
+at a reconciled task boundary, recording the approved preview as one ledger
+line:
+
+```text
+Ruling: policy conversion codex-v3 -> codex-v4 — approved preview; Task 4 gpt-6.1-sol / low, Task 5 gpt-6-astra / medium — attempts above this line stay codex-v3
+```
+
+Tasks after that line run under `codex-v4`. Keep the ledger lines above it as
+they are: never relabel them, fabricate v4 ranks, or reset a review budget. If
+v4 cannot represent the task in flight, stop for an explicit handoff decision.
 
 ## Migrating to 4.11
 
@@ -1257,8 +1335,8 @@ differences:
 3. **No escalation ladder.** The session implements every task and fixes its
    own findings, so there is no implementer to escalate; a task that will not
    converge goes to the ruling seat.
-4. **Cache-aware resumes.** A delegated task's fix round 1 resumes its executor
-   only while its cache is warm; see
+4. **A reviewed loop for risk-3 tasks only.** The session implements a risk-3
+   task and a judge reviews it per task; see
    [delegated-task.md](reference/delegated-task.md).
 5. **One ledger grammar.** Every task gets an assigned line and a complete line
    carrying a checkpoint (done, verified, remaining, discovered
@@ -1274,7 +1352,7 @@ differences:
    upstream's unmeasured sessions - see [Session budget](#session-budget).
 9. **Small-model planning.** A strong model plans once; the session executes.
    A brief for a task the session implements points at the header file for the
-   Global Constraints and Contracts (a risk-3 or delegated task's brief carries
+   Global Constraints and Contracts (a risk-3 task's brief carries
    them), the controller reads only the header and one brief at a time, and judgment
    calls go to a read-only ruling seat (`judge-opus`, with the reason
    `review-route --ruling` prints). Its plan corrections
@@ -1327,12 +1405,11 @@ The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one 
 `reference/ladder.md` holds the raw rubric, Rule S, the Claude execution floor
 table, and the external judge tables. Native Codex reads
 `reference/codex-routing.json`; `reference/native-codex.md` explains its weighted
-score, request format, and plan conversion. `scripts/select-native-tier.sh`
-validates raw scores and history before returning a native routing decision.
+score, request format, and plan conversion.
 
 `reference/executors/` holds one JSON entry per external reviewer family and
-`scripts/executors` is the only reader of it: `executors list` prints every
-valid id, `executors ranked` the same ids by ascending `priority`,
+`scripts/executors` is the only reader of it: `executors ranked` prints every
+valid id by ascending `priority`,
 `executors get <id> <dotted.key>` one field, and
 `executors path <id> <dotted.key>` that field resolved against the plugin root.
 An entry names the family's gate, review runner, session
@@ -1341,8 +1418,8 @@ entry, a runner and a ladder block rather than an edit to every script.
 `reference/external-review.md` states the entry schema and describes the
 reviewer panel, `reference/session-budget.md` holds the budget numbers,
 checkpoints, stops and the Compact Instructions block, and
-`reference/final-review.md` holds the whole-branch review both execution skills
-end at. `scripts/run-review-panel` runs every open family's runner at once;
+`reference/final-review.md` holds the whole-branch review dforge:executing-plans
+ends at. `scripts/run-review-panel` runs every open family's runner at once;
 `scripts/run-codex-review.sh` and `scripts/run-agy-review.sh` each select the
 judge row from their block (`codex-judge`, `agy-judge`), bound the run, and
 classify the outcome as `OK`, `FALLBACK`, `TIMEOUT` or `FAILED`.

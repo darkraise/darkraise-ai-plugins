@@ -76,7 +76,7 @@ fi
 # it gets the same lines.
 dispatch=0
 exec_line=$(plan_header_line "$src" Execution)
-if ! grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$src")" \
+if ! plan_is_codex "$(plan_header "$src")" \
    && { [ -z "$exec_line" ] || grep -qE '^\*\*Execution:\*\*[ \t]*`?inline' <<<"$exec_line"; }; then
   dispatch=1
 fi
@@ -166,6 +166,10 @@ if [ "$open" -eq 1 ]; then
     printf 'Task %s: implementer inline (assigned; base %s)\n' "$n" "$open_base" >> "$ledger"
     echo "task $n: opened, base $open_base"
   fi
+  # The session reads the brief here, so opening a task costs no Read call.
+  echo "--- brief ---"
+  cat "$out"
+  echo "--- end of brief ---"
 fi
 
 if [ -n "$n" ]; then
@@ -198,6 +202,6 @@ fi
 budget_mode=()
 if [ -n "$n" ]; then
   . "$HERE/lib/context.sh"
-  read -r -a budget_mode <<<"$(ctx_plan_mode "$src" "$(dforge_ledger_dir "$(basename "$plan" .md)" "$ctx")/progress.md")"
+  read -r -a budget_mode <<<"$(ctx_plan_mode "$src" "${ledger:-$(dforge_ledger_dir "$(basename "$plan" .md)" "$ctx")/progress.md}")"
 fi
 DFORGE_BUDGET_CALLER="task-brief:${n:-header}" bash "$HERE/context-size" ${budget_mode[@]+"${budget_mode[@]}"} 2>/dev/null || true

@@ -11,8 +11,8 @@ check() { if [ "$2" = "$3" ]; then pass=$((pass + 1)); else printf 'FAIL - %s\n 
 
 # --- A5: the feature set ---
 # CI's shallow checkout carries no tags; the comparison needs a full clone.
-if git -C "$REPO" rev-parse -q --verify 'dforge-v4.17.1^{tree}' >/dev/null 2>&1; then
-  want=$(git -C "$REPO" ls-tree --name-only dforge-v4.17.1:plugins/dforge/agents | sed 's/dforge/dagents/g' | sort | tr '\n' ' ')
+if git -C "$REPO" rev-parse --verify --quiet 'dforge-v4.17.1^{commit}' > /dev/null; then
+  want=$(git -C "$REPO" ls-tree --name-only dforge-v4.17.1:plugins/dforge/agents | tr -d '\r' | sed 's/dforge/dagents/g' | sort | tr '\n' ' ')
   check "agent set equals the tag's" "$(ls "$ROOT/agents" | sort | tr '\n' ' ')" "$want"
 else
   printf 'skip - agent set equals the tag'"'"'s: tag dforge-v4.17.1 is not in this clone\n'

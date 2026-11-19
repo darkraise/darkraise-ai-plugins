@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostToolUse hook (Edit, Write, MultiEdit): when the edited file is a UI file
+# PostToolUse hook (Edit, Write): when the edited file is a UI file
 # (scripts/ui-proof paths), return scripts/ui-lint's findings as additional
 # context, and on the first UI edit of a session that has not loaded
 # dagents:ui-ux, name the skill once; in fast mode (lib/fast-mode.sh) it does

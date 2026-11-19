@@ -86,10 +86,10 @@ code and is scored with spec 2 (Score every task, step 1).
 ## Plan Document Header
 
 **Every plan MUST start with this header.** Everything before the first
-`### Task` heading is the header. Execution controllers read only the header
-and one task at a time. A brief for a task the session implements points at the
-header file (`plan-header.md`) for the Global Constraints and Contracts; a
-brief for a delegated or risk-3 task carries them.
+`### Task` heading is the header. The executing session reads only the header
+and one task's brief at a time. A brief points at the header file
+(`plan-header.md`) for the Global Constraints and Contracts; a brief for a
+risk-3 task, or on a `Host: codex` plan, carries them.
 
 ```markdown
 # [Feature Name] Implementation Plan
@@ -171,9 +171,8 @@ Read [ci-line.md](references/ci-line.md) before you write the header's CI line a
 
 ## Parallelism
 
-Every plan runs one task at a time: write
-`**Parallelism:** sequential — inline execution`. Parallel waves were retired
-in 5.0.0, and `plan-lint` warns on an older plan's waves line.
+Write `**Parallelism:** sequential — inline execution`; `plan-lint` warns on
+an older plan's waves line.
 
 ## Drafting the tasks
 

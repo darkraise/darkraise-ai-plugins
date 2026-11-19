@@ -74,7 +74,8 @@ if command -v jq >/dev/null 2>&1 && [ -n "$stdin_json" ] \
   esac
 fi
 
-content="$(cat "${PLUGIN_ROOT}/skills/using-dagents/SKILL.md" 2>/dev/null || true)"
+# The frontmatter repeats the description the skill list already shows.
+content="$(awk 'NR == 1 && $0 == "---" { fm = 1; next } fm && $0 == "---" { fm = 0; next } !fm' "${PLUGIN_ROOT}/skills/using-dagents/SKILL.md" 2>/dev/null || true)"
 [ -n "$content" ] || exit 0
 
 # Escape for JSON embedding with bash parameter substitution (single C-level
@@ -94,7 +95,7 @@ escaped=$(escape_for_json "$content")
 # the project; this line is where the root is named.
 plugin_root_shown=$PLUGIN_ROOT
 if command -v cygpath >/dev/null 2>&1; then plugin_root_shown=$(cygpath -m "$PLUGIN_ROOT" 2>/dev/null || printf '%s' "$PLUGIN_ROOT"); fi
-context="<EXTREMELY_IMPORTANT>\nYou have dagents.\n\n**Below is the full content of your 'dagents:using-dagents' skill - your introduction to using skills. For all other skills, use the 'Skill' tool:**\n\n${escaped}\n\nPlugin root: $(escape_for_json "$plugin_root_shown") — call scripts by this path, with the working directory inside the project\n</EXTREMELY_IMPORTANT>"
+context="You have dagents. Its entry skill, 'dagents:using-dagents', follows; load every other skill with the Skill tool.\n\n${escaped}\n\nPlugin root: $(escape_for_json "$plugin_root_shown") — call scripts by this path, with the working directory inside the project"
 
 # A greenfield project's position: one line computed from its roadmap, so a
 # fresh or compacted session never has to remember which milestone it is in or
@@ -155,55 +156,13 @@ if [ -n "$roadmap_root" ] && dagents_dforge4_layout "$roadmap_root"; then
   context="${context}\n\n$(escape_for_json "$dforge_line")"
 fi
 
-# A darkmem store applied with no node to read it: every script exits 2 from
-# lib/roots.sh, and the hooks that read a root pass silently, so the session
-# is told once, on its first start (a marker beside the turn stamp).
-nonode_line=""
-if [ -n "$roadmap_root" ] && ! command -v node >/dev/null 2>&1; then
-  nonode_err=$( (dagents_stores_init "$roadmap_root") 2>&1 >/dev/null )
-  case $nonode_err in
-    *'node is required while darkmem stores are applied'*)
-      nonode_marker=""
-      if [ -n "${HOME:-}" ] && [ -n "${session_id:-}" ]; then
-        nonode_marker="${HOME}/.claude/dagents/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').nonode"
-      fi
-      if [ -z "$nonode_marker" ] || [ ! -e "$nonode_marker" ]; then
-        nonode_line="dagents: node is required while darkmem stores are applied; install Node or set the stores local"
-        context="${context}\n\n$(escape_for_json "$nonode_line")"
-        [ -z "$nonode_marker" ] || { mkdir -p "$(dirname "$nonode_marker")" && : > "$nonode_marker"; } 2>/dev/null || true
-      fi
-      ;;
-  esac
-fi
-
-# darkmem's reconcile and pull (darkmem store options spec §5), on every
-# source: a line per moved or refused family and the pull's result, fitted to
-# the room the hook's 10,000-character cap leaves the entry point. A
-# compaction's snapshot gets what remains after them. Under 100 characters of
-# room the closing line alone would not fit, so the sync still runs but prints
-# nothing. The sync gets what is left of the hook's 300-second timeout less 30
-# seconds for the snapshot and the reply, since a killed hook injects nothing.
-darkmem_lines=""
-if . "${SCRIPT_DIR}/lib/darkmem-hook.sh" 2>/dev/null; then
-  room=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#handoffs_line} - ${#settings_line} - ${#legacy_line} - ${#dforge_line} - ${#nonode_line} ))
-  if [ "$room" -ge 100 ]; then
-    darkmem_lines=$(darkmem_session_lines "${cwd:-$PWD}" "${session_id:-}" "$room" $(( 270 - SECONDS )) \
-      | tr -d '\001-\010\013\014\016-\037')
-  else
-    darkmem_session_lines "${cwd:-$PWD}" "${session_id:-}" 0 $(( 270 - SECONDS )) >/dev/null
-  fi
-  if [ -n "$darkmem_lines" ]; then
-    context="${context}\n\n$(escape_for_json "$darkmem_lines")"
-  fi
-fi
-
 # The compact source is detected without jq, so a machine without jq still
 # gets the handoff and ledger sections. Hook output over 10,000 characters is
 # replaced by a file reference, so the snapshot gets only the room the entry
 # point leaves, with headroom for the wrapper text.
 if grep -qE '"source"[[:space:]]*:[[:space:]]*"compact"' <<<"$stdin_json" \
    && . "${SCRIPT_DIR}/lib/snapshot.sh" 2>/dev/null; then
-  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#handoffs_line} - ${#settings_line} - ${#legacy_line} - ${#dforge_line} - ${#nonode_line} - ${#darkmem_lines} ))
+  cap=$(( 9500 - ${#content} - 400 - ${#roadmap_line} - ${#handoffs_line} - ${#settings_line} - ${#legacy_line} - ${#dforge_line} ))
   [ "$cap" -le "$SNAPSHOT_CAP" ] || cap=$SNAPSHOT_CAP
   if [ "$cap" -gt 1000 ]; then
     # Transcript text can carry raw C0 controls (pasted terminal output with

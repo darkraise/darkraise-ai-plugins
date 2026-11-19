@@ -15,9 +15,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LADDER="${CODEX_REVIEW_LADDER:-$HERE/../reference/ladder.md}"
 TASK_SCHEMA="$HERE/../criteria/codex-review-schema.json"
 PLAN_SCHEMA="$HERE/../criteria/codex-plan-review-schema.json"
-# Tests point this at a stub roster. Unset in production, where the real
-# detector runs and its auth probe is the usability guard.
-ROSTER="${CODEX_REVIEW_ROSTER:-$HERE/detect-executors.sh}"
 # Tests point this at a stub gate. Unset in production, where scripts/codex-gate
 # answers from this session's cache or probes the codex plugin.
 GATE="${CODEX_REVIEW_GATE:-$HERE/codex-gate}"
@@ -46,17 +43,15 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# task is the name scripts/review-route prints; risk3 is the same seat under
-# its sub-project 7 name, kept so earlier callers keep working.
 case "$kind" in
-  task|risk3) [ -n "$prompt" ] || die "--kind $kind requires --prompt"; kind=task ;;
+  task) [ -n "$prompt" ] || die "--kind task requires --prompt" ;;
   plan) [ -n "$prompt" ] || die "--kind plan requires --prompt" ;;
   final) [ -n "$base" ] || die "--kind final requires --base" ;;
-  *) die "--kind must be task, risk3, plan or final" ;;
+  *) die "--kind must be task, plan or final" ;;
 esac
 case "$tier" in
   "") tier=heavy ;;
-  light|heavy) [ "$kind" = task ] || die "--tier applies only to --kind task or risk3" ;;
+  light|heavy) [ "$kind" = task ] || die "--tier applies only to --kind task" ;;
   *) die "--tier must be light or heavy" ;;
 esac
 [ -n "$cwd" ] || die "--cwd is required"
@@ -93,7 +88,7 @@ back_model=$(printf '%s\n' "$judge" | tail -1 | awk '{print $1}')
 back_effort=$(printf '%s\n' "$judge" | tail -1 | awk '{print $2}')
 secs_of() { printf '%s\n' "$judge" | awk -v m="$1" -v e="$2" '$1 == m && $2 == e {print $3; exit}'; }
 
-# The session gate runs before the roster, on every kind and on a dry run: a
+# The session gate is the usability guard, on every kind and on a dry run: a
 # Codex this session may not use is never selected or run. Only `usable` is
 # read, never the review surface, so a shipping gate can still exercise an
 # untrusted surface.
@@ -104,21 +99,6 @@ if [ "$gate_rc" -ne 0 ] || [[ "$gate_line" != *" usable=true "* ]]; then
   [ "$gate_rc" -eq 0 ] || gate_reason="codex-gate exited $gate_rc"
   printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
   printf 'run-codex-review: codex is off for this session (%s)\n' "${gate_reason:-no gate answer}" >&2
-  exit 1
-fi
-
-# Invoked through bash, not executed directly: core.filemode is false on some
-# checkouts, so the detector can arrive at mode 100644 and a direct call would
-# fail every seat with "no codex row".
-roster=$(bash "$ROSTER" 2>/dev/null) || roster=""
-codex_row=$(printf '%s' "$roster" | jq -c '.[]? | select(.id=="codex")' 2>/dev/null)
-[ -n "$codex_row" ] || die "no codex row in the executor roster"
-
-usable=$(printf '%s' "$codex_row" | jq -r '.usable')
-if [ "$usable" != true ]; then
-  reason=$(printf '%s' "$codex_row" | jq -r '.reason // "codex is not usable"')
-  printf 'codex-judge none/none status=FAILED exit=0 out=%s evidence=none\n' "$out"
-  printf 'run-codex-review: %s\n' "$reason" >&2
   exit 1
 fi
 

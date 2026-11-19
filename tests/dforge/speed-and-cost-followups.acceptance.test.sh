@@ -54,6 +54,8 @@ ts() { # ts <args...> — task-step in $REPO; sets out, err, rc
   out=${out//$'\r'/}
   err=$(tr -d '\r' < "$TMP/err")
 }
+. "$HERE/fixtures/step-state.sh"
+seed() { (cd "$REPO" && seed_step "$S" "$@"); rc=$?; } # seed <plan> <task> [suite]
 workspace() { winpath "$(cd "$REPO" && bash "$S/sdd-workspace" "$1")"; }
 sr() { (cd "$REPO" && bash "$SUITE" -- bash -c "$1" >/dev/null 2>&1); } # the controller's own suite run, recorded for the head
 worktrees() { g worktree list | wc -l | tr -d ' '; }
@@ -120,7 +122,7 @@ PLAN
   printf '#!/usr/bin/env bash\n: > "$MARK_DIR/$1"\nexit "${2:-0}"\n' > "$REPO/mark.sh"
   echo old > "$REPO/lib/new.sh"; echo present > "$REPO/base-only.txt"
   commit_all base
-  ts start docs/plan.md 1 --suite 'bash mark.sh a2suite 0'
+  seed docs/plan.md 1 'bash mark.sh a2suite 0'
   WS=$(workspace docs/plan.md); LEDGER="$WS/progress.md"
   g rm -q base-only.txt; echo work > "$REPO/lib/new.sh"; commit_all work
   (cd "$REPO" && MARK_DIR="$TMP/s1-sr" bash "$SUITE" -- bash -c 'bash mark.sh a2suite 0' >/dev/null 2>&1)
@@ -190,7 +192,7 @@ SHIM
   if command -v cygpath >/dev/null 2>&1; then SHIM_PATH=$(cygpath -u "$SHIM_PATH"); fi
 
   # a baseline item whose setup runs past the bound
-  ts start docs/plan.md 1
+  seed docs/plan.md 1
   WS=$(workspace docs/plan.md)
   echo 1 >> "$REPO/app.txt"; commit_all work1
   ts review docs/plan.md 1
@@ -205,7 +207,7 @@ SHIM
   check "A7: the setup ran once" "$(grep -c . "$SETUP_MARK")" "1"
 
   # the suite's base run
-  ts start docs/plan.md 2 --suite 'bash suite.sh'
+  seed docs/plan.md 2 'bash suite.sh'
   : > "$REPO/broken.txt"; echo 2 >> "$REPO/app.txt"; commit_all work2
   sr 'bash suite.sh'
   ts review docs/plan.md 2
@@ -230,7 +232,7 @@ if selected A8 || selected A11; then
   printf '#!/usr/bin/env bash\nif [ -f broken.txt ]; then for i in $(seq -w 1 25); do echo "not ok $i - tc$i"; done; exit 1; fi\nexit 0\n' > "$REPO/suite.sh"
   echo 0 > "$REPO/app.txt"
   commit_all base
-  ts start docs/plan.md 1 --suite 'bash suite.sh'
+  seed docs/plan.md 1 'bash suite.sh'
   WS=$(workspace docs/plan.md); LEDGER="$WS/progress.md"
   : > "$REPO/broken.txt"; commit_all "break 25 tests"
   sr 'bash suite.sh'
@@ -247,7 +249,7 @@ if selected A8 || selected A11; then
   check "A8: the digest names the fix file" "$(grep '^fix: ' <<<"$out" | cut -d' ' -f1-2)" "fix: $FIX"
 
   # A11: a symbol only a binary file holds
-  ts start docs/plan.md 2
+  seed docs/plan.md 2
   printf 'only_in_blob\0\0' > "$REPO/blob.bin"; echo 'text_symbol_zz lives here' > "$REPO/notes.txt"
   commit_all "a binary file and a text file"
   ts review docs/plan.md 2

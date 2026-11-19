@@ -24,7 +24,7 @@ cleanly."
   only when it has 4 or more tasks, or when `scripts/context-size` does not
   say `ok` after steps 0-4 (dforge:writing-plans §Execution Handoff): a light
   plan of 1-3 tasks runs steps 0-4 and continues in this session.
-  The last task completing is never a stop in either execution mode: the
+  The last task completing is never a stop: the
   final review and finishing run in the same session whatever
   `scripts/context-size --final` prints. A task budget line printed during
   that final phase does not stop it, and nothing stops finishing once the
@@ -133,11 +133,12 @@ cleanly."
    `latest.md` step 3 wrote. Its first prompt opens by naming that checkout
    and its handoff. If it exits 4, say `latest.md` could not be written.
 
-   Then run `scripts/darkmem-sync push` and promote the session's durable
-   facts ([project-state.md](../../reference/project-state.md) §darkmem sync
-   points): the push carries the ledger, `handoff.md` and the primary's
-   `latest.md`. A linked worktree's `latest.md` stays in the worktree, and
-   the push says so (`worktree handoff stays local: <path>`).
+   Then promote the session's durable facts
+   ([project-state.md](../../reference/project-state.md) §darkmem sync
+   points), and with `darkmemEnabled` true run `scripts/darkmem-sync push`:
+   the push carries the ledger, `handoff.md` and the primary's `latest.md`. A
+   linked worktree's `latest.md` stays in the worktree, and the push says so
+   (`worktree handoff stays local: <path>`).
 
    On Codex, add `--host codex` to the design-phase, unplanned-work and between-plans calls,
    so the block names the Codex client rather than Claude. A plan states its
@@ -168,18 +169,6 @@ cleanly."
 - <a question for your human partner, and what you assumed meanwhile>
 ```
 
-Both execution skills write it at Setup and update it in the same message as
+dforge:executing-plans writes it at Setup and updates it in the same message as
 a ledger write whenever one of these sections changes — not after every task:
 task state lives in the ledger and git.
-
-## Red Flags
-
-| Thought | Reality |
-|---------|---------|
-| "One more task, then I'll hand off" | Finish the task in flight; start no new one. |
-| "The line says 89% — I'll hand off now to be safe" | `ok` means continue. Only a `handoff` verdict or a hard stop ends the session; the budget already holds a task's margin. |
-| "The next session can read my summary" | It has none of your context. Only files cross the boundary. |
-| "I'll write the resume prompt myself" | `next-step` computes it from the plan and ledger. Hand-written guides go stale. |
-| "There is no plan, so I'll write the block myself" | Use `next-step --adhoc`. A hand-written launch command guesses the model. |
-| "The agent is nearly done, I'll hand off and it will finish" | Its result arrives in a session that has ended, and nobody reads it. Wait for it or stop it and record a Ruling (step 0). |
-| "Compaction will take care of it" | Compaction drops reports, findings and rulings. Hand off before it fires. |

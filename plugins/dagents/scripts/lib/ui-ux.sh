@@ -205,5 +205,5 @@ uiux_ran_skill() {
       elif .type? == "user" then
         .message.content? | (if type == "string" then . elif type == "array" then (.[] | select(.type? == "text") | .text?) else empty end)
         | strings | select(contains("<command-name>/dagents:ui-ux"))
-      else empty end' "$1" 2>/dev/null | grep -q .
+      else empty end' "$1" 2>/dev/null | grep -c . >/dev/null
 }

@@ -292,11 +292,6 @@
       "state": "doing"
     }
   },
-  "sync": {
-    "enabled": true,
-    "queued": 3,
-    "conflict": "board row 12"
-  },
   "context": {
     "resetAt": 150000
   },

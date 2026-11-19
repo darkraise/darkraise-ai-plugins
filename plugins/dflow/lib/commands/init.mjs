@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { emptyBoard } from '../board.mjs';
-import { primaryRoot, relative, setDarkmemConsent } from '../repo.mjs';
+import { relative } from '../repo.mjs';
 import { fail, readJson, readText, writeJson } from '../util.mjs';
 
 const PROJECT = name => `# ${name}
@@ -23,7 +23,7 @@ const DECISIONS = '# Decisions\n\nAppend-only. Each entry states the decision, t
 const GOTCHAS = '# Gotchas\n\nSymptom first. Delete an entry when its cause is fixed.\n';
 
 export async function run(ctx, argv, { out }) {
-  const { values } = parseArgs({ args: argv, options: { darkmem: { type: 'string' }, gate: { type: 'string', multiple: true } } });
+  const { values } = parseArgs({ args: argv, options: { gate:{ type: 'string', multiple: true } } });
   if (Number(process.versions.node.split('.')[0]) < 20) fail(`Node ${process.versions.node} is too old; dflow needs Node 20 or later`);
   const { paths, root } = ctx;
   const created = [];
@@ -40,7 +40,7 @@ export async function run(ctx, argv, { out }) {
   write(paths.board, emptyBoard(`${name} board`));
   fs.mkdirSync(paths.plans, { recursive: true });
 
-  const config = readJson(paths.config, null) ?? { gates: [], darkmem: { project: '' } };
+  const config = readJson(paths.config, null) ?? { gates: [] };
   config.gates ??= [];
   for (const gate of values.gate ?? []) {
     const at = gate.indexOf('=');
@@ -48,7 +48,6 @@ export async function run(ctx, argv, { out }) {
     const entry = { name: gate.slice(0, at), cmd: gate.slice(at + 1) };
     config.gates = [...(config.gates ?? []).filter(existing => existing.name !== entry.name), entry];
   }
-  if (values.darkmem !== undefined) config.darkmem = { ...(config.darkmem ?? {}), project: values.darkmem };
   if (!fs.existsSync(paths.config)) created.push(relative(root, paths.config));
   writeJson(paths.config, config);
 
@@ -70,12 +69,6 @@ export async function run(ctx, argv, { out }) {
   }
 
   out(created.length ? `dflow init: created ${created.join(', ')}` : 'dflow init: already set up; nothing created');
-  // The owner typed the project, so this is their consent for this machine.
-  if (values.darkmem) {
-    setDarkmemConsent(ctx.env, primaryRoot(root), values.darkmem);
-    out(`darkmem enabled for this repository on this machine: project "${values.darkmem}"`);
-  }
   if (!config.gates.length) out('No gates configured: add them with `dflow init --gate "test=<command>"` (lint, type check, full suite, build).');
-  if (!config.darkmem?.project) out('darkmem is off for this repository: `dflow init --darkmem <project>` maps it.');
   return 0;
 }

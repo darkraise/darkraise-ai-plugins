@@ -62,6 +62,8 @@ printf '# P\n\n**Spec:** `a.md`\n\n```\n**Execution:** fenced\n```\n**Execution:
 check "plan_header_line: first unfenced match" "$(plan_header_line "$TMP/h.md" Execution)" "**Execution:** inline — x"
 check "plan_header_line: no match prints nothing" "$(plan_header_line "$TMP/h.md" Program)" ""
 check "plan_header: stops before the first task" "$(plan_header "$TMP/h.md" | tail -n 2 | head -n 1)" "- c"
+check "plan_is_codex: an unfenced Host line" "$(plan_is_codex $'# P\n\n**Host:** codex\n' && echo yes || echo no)" "yes"
+check "plan_is_codex: a fenced Host line is an example" "$(plan_is_codex $'# P\n\n```markdown\n**Host:** codex\n```\n' && echo yes || echo no)" "no"
 check "plan_task_text: heading to the next task" "$(plan_task_text "$TMP/h.md" 1 | tr '\n' '|')" "### Task 1: One||body 1||"
 check "plan_task_text: last task runs to the end" "$(plan_task_text "$TMP/h.md" 2 | tr '\n' '|')" "### Task 2: Two||body 2|"
 plan_task_text "$TMP/h.md" 7 > /dev/null
@@ -258,6 +260,9 @@ printf 'Task 1: Ruling: amendment A2 — x — y\n' >> "$LD/progress.md"
 err=$(cd "$SR" && HOME=$SH plan_amendments_ready docs/am.md 2>&1); rc=$?
 check "ready: a cited amendment missing from the file exits 2" "$rc" "2"
 check "ready: the message names it" "$(grep -c 'cites amendment A2, which .*amendments.md lacks' <<<"$err")" "1"
+{ printf '## A1 — Task 1\n\n## A2 — Task 1\n'; for ((i = 0; i < 4000; i++)); do printf 'filler %04d that takes the amendments past one pipe buffer\n' "$i"; done; } > "$LD/amendments.md"
+(cd "$SR" && HOME=$SH plan_amendments_ready docs/am.md); rc=$?
+check "ready: finds a cited amendment in a file past 64 KiB" "$rc" "0"
 mkdir -p "$M/dforge/plans" "$M/work/sdd/mp"
 printf '# MP\n' > "$M/dforge/plans/mp.md"
 printf '# SDD ledger — plan: docs/dforge/plans/mp.md\n' > "$M/work/sdd/mp/progress.md"

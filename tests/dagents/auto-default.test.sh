@@ -23,6 +23,12 @@ says() { # says <label> <file> <text>
   check "$1" "$(flat "$2" | grep -qF -- "$3" && echo yes || echo no)" "yes"
 }
 
+# The default execution mode: subagent, unless executionMode=inline or the human asks.
+EL="$P/skills/writing-plans/references/execution-line.md"
+says "execution-line: auto and subagent write a subagent line" "$EL" 'Under `executionMode=auto` (the default) and `executionMode=subagent` the line is `subagent`.'
+says "execution-line: inline only on the setting or a request" "$EL" '`inline` only when the `executionMode` setting is `inline` or your human partner asks for it.'
+names "writing-plans: the header template's Execution line names subagent" "$W" '**Execution:** subagent — `claude --model sonnet --effort high` — [why]'
+
 # CI parity (test tiers plan, part 5): the reference, the plan header's CI line
 # and its early-CI forms.
 CIP="$P/reference/ci-parity.md"

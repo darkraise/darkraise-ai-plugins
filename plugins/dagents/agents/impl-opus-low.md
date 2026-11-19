@@ -1,6 +1,6 @@
 ---
 name: impl-opus-low
-description: "Task implementer running Opus 5.5 at low effort. Escalation rung for impl-sonnet-low in dagents: no score assigns it."
+description: "Task implementer running Opus at low effort. Escalation rung for impl-sonnet-low in dagents: no score assigns it."
 model: opus
 effort: low
 disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications

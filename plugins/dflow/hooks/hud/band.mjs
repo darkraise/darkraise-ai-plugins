@@ -127,17 +127,12 @@ export function bandTop({ account, remote }) {
   return parts.flatMap((runs, index) => (index ? [{ text: ' · ', dim: true }, ...runs] : runs));
 }
 
-// A darkmem server that cannot be reached is not a warning: the Board card
-// shows it as offline.
 export function bandWarning(hud) {
   const parts = [];
   const blocked = hud.plan?.blocked ?? [];
   if (blocked.length === 1) parts.push(`✗ Task ${blocked[0].number} blocked`);
   else if (blocked.length > 1) parts.push(`✗ ${blocked.length} tasks blocked`);
   if (hud.gates && !hud.gates.ok) parts.push('✗ gates failed');
-  const { sync } = hud;
-  if (sync?.enabled && sync.conflict) parts.push('✗ darkmem conflict');
-  else if (sync?.enabled && (sync.refused || (sync.error && !sync.offline))) parts.push('✗ darkmem refused');
   return parts.flatMap((part, index) => [...(index ? [{ text: ' · ', dim: true }] : []), { text: part, color: 'red' }]);
 }
 

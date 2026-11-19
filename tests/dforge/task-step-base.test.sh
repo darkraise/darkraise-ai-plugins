@@ -177,6 +177,8 @@ ts() { # ts <args...> — task-step in the fixture repo; sets out, err, rc
   out=$(cd "$REPO" && bash "$S/task-step" "$@" 2>"$TMP/err"); rc=$?
   err=$(cat "$TMP/err")
 }
+. "$HERE/fixtures/step-state.sh"
+seed() { (cd "$REPO" && seed_step "$S" "$@"); rc=$?; } # seed <plan> <task> [suite]
 sr() { (cd "$REPO" && bash "$S/suite-run" -- bash -c 'bash suite.sh' >/dev/null 2>&1); } # the controller's own suite run
 sr_timeout() { (cd "$REPO" && SUITE_RUN_KILL_AFTER=1 bash "$S/suite-run" --timeout 1 -- bash -c 'bash suite.sh' >/dev/null 2>&1); } # a run that records exit 124
 commit() { g add -A && g commit -qm "$1"; }
@@ -201,8 +203,8 @@ Fine.
 REPORT
 }
 
-ts start docs/plan.md 1 --suite 'bash suite.sh'
-check "start --suite: exit 0" "$rc" "0"
+seed docs/plan.md 1 'bash suite.sh'
+check "the task opens with its suite" "$rc" "0"
 WS=$(winpath "$(cd "$REPO" && bash "$S/sdd-workspace" docs/plan.md)")
 
 # Task 1: no base row, no file: the suite runs once at the base, after the setup.
@@ -224,7 +226,7 @@ ts verdict docs/plan.md 1
 check "task 1: a second verdict reuses the file" "$(marks setup) $(grep '^suite: ' <<<"$out")" "1 suite: red (1 failing, 1 baseline)"
 
 # Task 2: a suite row at the base sha (task 1's head) answers without a run.
-ts start docs/plan.md 2 --suite 'bash suite.sh'
+seed docs/plan.md 2 'bash suite.sh'
 set_failing $'not ok 1 - alpha\nnot ok 2 - beta\nnot ok 3 - gamma\n'
 commit "work 2"
 sr
@@ -237,7 +239,7 @@ check "task 2: the fix file names gamma and not beta" "$(grep -qF gamma "$WS/tas
 # Task 3: a passing base gives an empty file, and the new failure is not baseline.
 set_failing ''
 commit "green"
-ts start docs/plan.md 3 --suite 'bash suite.sh'
+seed docs/plan.md 3 'bash suite.sh'
 set_failing $'not ok 1 - delta\n'
 commit "work 3"
 sr
@@ -251,7 +253,7 @@ check "task 3: the base run used the setup" "$(marks setup)" "2"
 # Task 6: a base run that cannot start leaves no file, and every failure is new.
 sed 's/`touch setup.done`/`false`/' "$REPO/docs/plan.md" > "$REPO/docs/plan.tmp" && mv "$REPO/docs/plan.tmp" "$REPO/docs/plan.md"
 commit "setup that fails"
-ts start docs/plan.md 6 --suite 'bash suite.sh'
+seed docs/plan.md 6 'bash suite.sh'
 set_failing $'not ok 1 - alpha\nnot ok 2 - zeta\n'
 commit "work 6"
 sr
@@ -272,7 +274,7 @@ commit "setup that works"
 set_failing $'not ok 1 - alpha\n'
 commit "alpha fails at the base"
 sr
-ts start docs/plan.md 9 --suite 'bash suite.sh'
+seed docs/plan.md 9 'bash suite.sh'
 printf 'impl 9\n' >> "$REPO/app.txt"
 commit "work 9"
 sr
@@ -287,7 +289,7 @@ check "task 9: no fix file is written" "$([ -e "$WS/task-9-fix-1.md" ] && echo f
 set_failing $'boom\n'
 commit "a suite that fails without test lines"
 sr
-ts start docs/plan.md 10 --suite 'bash suite.sh'
+seed docs/plan.md 10 'bash suite.sh'
 printf 'impl 10\n' >> "$REPO/app.txt"
 commit "work 10"
 sr
@@ -299,7 +301,7 @@ check "task 10: an unnamed failure at base and head counts as new" "$rc $(grep '
 # Task 11: the same, when the suite has to run at the base.
 printf 'more\n' >> "$REPO/app.txt"
 commit "no suite row at this commit"
-ts start docs/plan.md 11 --suite 'bash suite.sh'
+seed docs/plan.md 11 'bash suite.sh'
 printf 'impl 11\n' >> "$REPO/app.txt"
 commit "work 11"
 sr
@@ -313,7 +315,7 @@ check "task 11: the base failures hold the exit code, marked unnamed" "$(grep -c
 set_failing $'not ok 1 - alpha\n'
 : > "$REPO/slow.txt"
 commit "a base that is slow"
-ts start docs/plan.md 12 --suite 'bash suite.sh'
+seed docs/plan.md 12 'bash suite.sh'
 g rm -q slow.txt
 commit "work 12"
 sr
@@ -347,7 +349,7 @@ setup_runs() { grep -c . "$SUITE_MARK.setup" 2>/dev/null || true; }
 set_setup 'echo hanging; echo ran >> "$SUITE_MARK.setup"; exec sleep 20'
 printf 'more\n' >> "$REPO/app.txt"
 commit "a setup that hangs"
-ts start docs/plan.md 13 --suite 'bash suite.sh'
+seed docs/plan.md 13 'bash suite.sh'
 printf 'impl 13\n' >> "$REPO/app.txt"
 commit "work 13"
 sr
@@ -370,7 +372,7 @@ check "task 13: the temporary worktree is gone" "$(g worktree list | wc -l | tr 
 # Task 14: a baseline item whose setup times out goes to the seat, with the setup log kept.
 set_setup 'echo setup-124; echo ran >> "$SUITE_MARK.setup"; exit 124'
 commit "a setup that reports a timeout"
-ts start docs/plan.md 14
+seed docs/plan.md 14
 printf 'impl 14\n' >> "$REPO/app.txt"
 commit "work 14"
 ts review docs/plan.md 14
@@ -414,7 +416,7 @@ set_setup 'touch setup.done'
 set_failing ''
 commit "green base for task 15"
 sr
-ts start docs/plan.md 15 --suite 'bash suite.sh'
+seed docs/plan.md 15 'bash suite.sh'
 set_failing $'not ok 1 - delta\n'
 commit "work 15"
 sr
@@ -431,7 +433,7 @@ commit "alpha fails at the base of task 16"
 : > "$REPO/slow.txt"
 sr_timeout
 rm -f "$REPO/slow.txt"
-ts start docs/plan.md 16 --suite 'bash suite.sh'
+seed docs/plan.md 16 'bash suite.sh'
 set_failing $'not ok 1 - alpha\nnot ok 2 - beta\n'
 commit "work 16"
 sr
@@ -442,25 +444,6 @@ ts verdict docs/plan.md 16
 check "task 16: a timed-out base row falls through to a base run" "$rc $(grep '^suite: ' <<<"$out") $(($(marks setup) - setups0))" "0 suite: red (1 failing, 1 baseline) 1"
 check "task 16: the base run's failures are kept" "$(cat "$WS/task-16-base-failures.txt" 2>/dev/null)" "not ok - alpha"
 check "task 16: no timeout is recorded" "$([ -e "$WS/task-16-base-timeout" ] && echo marker || echo none)" "none"
-
-# Task 17: verdict --cwd finds the base row in that checkout's state when the main checkout's has none.
-set_failing $'not ok 1 - alpha\n'
-commit "alpha fails at the base of task 17"
-ts start docs/plan.md 17 --suite 'bash suite.sh'
-WT=$TMP/wt17
-g worktree add -q --detach "$WT" HEAD
-(cd "$WT" && bash "$S/suite-run" -- bash -c 'bash suite.sh' >/dev/null 2>&1)
-printf 'not ok 1 - alpha\nnot ok 2 - beta\n' > "$WT/failing.txt"
-git -C "$WT" add -A && git -C "$WT" commit -qm "work 17"
-W17=$(git -C "$WT" rev-parse HEAD | tr -d '\r')
-(cd "$WT" && bash "$S/suite-run" -- bash -c 'bash suite.sh' >/dev/null 2>&1)
-ts review docs/plan.md 17 --head "$W17" --cwd "$WT"
-clean_report 17
-setups0=$(marks setup)
-ts verdict docs/plan.md 17 --cwd "$WT"
-check "task 17: the base row in the --cwd checkout's state excuses alpha" "$rc $(grep '^suite: ' <<<"$out")" "0 suite: red (1 failing, 1 baseline)"
-check "task 17: no base run and no base failures file" "$(($(marks setup) - setups0)) $([ -e "$WS/task-17-base-failures.txt" ] && echo file || echo nofile)" "0 nofile"
-g worktree remove --force "$WT"
 
 # Task 19 joins the fixture plan: review takes the suite and its base.
 for n in 19; do
@@ -476,7 +459,7 @@ LAST_FULL=$(g rev-parse HEAD | tr -d '\r')
 set_failing $'not ok 1 - regress\n'
 commit "an earlier task breaks a test"
 sr
-ts start docs/plan.md 19
+seed docs/plan.md 19
 printf 'impl 19\n' >> "$REPO/app.txt"
 commit "work 19"
 sr
@@ -502,7 +485,7 @@ printf '\n### Task 22: Task 22\n\n**Files:**\n- Modify: `app.txt`\n\n**Implement
 set_failing $'not ok 1 - alpha\n'
 : > "$REPO/slow.txt"
 commit "a base that is slow, again"
-ts start docs/plan.md 22 --suite 'bash suite.sh'
+seed docs/plan.md 22 'bash suite.sh'
 g rm -q slow.txt
 commit "work 22"
 sr

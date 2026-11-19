@@ -87,8 +87,7 @@ cleanly."
      or draft file): the notes in `latest.md` are the authority, so step 3's
      `State` must carry every item.
 2. **Commit the plan and the spec** if either has uncommitted changes, in a
-   `docs(<scope>): …` commit of their own (push instead while documents live
-   in darkmem; see project-state.md). Never commit `<state>/`.
+   `docs(<scope>): …` commit of their own. Never commit `<state>/`.
 3. **Write the notes sections of `latest.md`** in the handoff of the
    checkout the next session works in: the path `scripts/next-step --target
    <the arguments step 4 will pass>` prints. Each checkout keeps its own
@@ -114,8 +113,7 @@ cleanly."
 
    In a design phase, `State` names the draft instead of a plan and ledger,
    on the line ``- Draft: `<spec path>` `` in place of the `- Plan:` line, where
-   `<spec path>` is the draft's name (`dagents-path name`). darkmem files the
-   checkpoint under the workstream either line names.
+   `<spec path>` is the draft's name (`dagents-path name`).
    For unplanned work, `State` lists each item with its state: implemented
    and uncommitted, committed, awaiting feedback (with the link), or
    unscoped.
@@ -135,9 +133,8 @@ cleanly."
    `latest.md` step 3 wrote. Its first prompt opens by naming that checkout
    and its handoff. If it exits 4, say `latest.md` could not be written.
 
-   Then run `scripts/darkmem-sync push` and promote the session's durable
-   facts ([project-state.md](../../reference/project-state.md) §darkmem sync
-   points): the push carries the ledger, `handoff.md` and `latest.md`.
+   Then record the session's durable facts
+   ([project-state.md](../../reference/project-state.md) §Durable facts).
 
    On Codex, add `--host codex` to the design-phase, unplanned-work and between-plans calls,
    so the block names the Codex client rather than Claude. A plan states its

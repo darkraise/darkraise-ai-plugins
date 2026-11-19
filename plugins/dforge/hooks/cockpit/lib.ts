@@ -1264,7 +1264,8 @@ export function parseLedger(text: string): Ledger {
     const assigned = /^implementer (\S+) \(assigned/.exec(rest)
     if (assigned) {
       const one = task(n)
-      one.seat = assigned[1] ?? null
+      // dforge writes `inline` for every task it runs itself: no seat to show.
+      one.seat = assigned[1] === undefined || assigned[1] === 'inline' ? null : assigned[1]
       if (one.state !== 'complete' && one.state !== 'deferred') one.state = 'assigned'
       one.reason = null
       one.question = null
@@ -1566,18 +1567,6 @@ export function isServiceCommand(command: string): boolean {
 /** Whether a background command, by its first line, is a bare `sleep`: a timer that ends on its own. */
 export function isTimerCommand(command: string): boolean {
   return TIMER.test(command.split('\n')[0]!.trim())
-}
-
-/** Whether a release (`2.1.295`) is at least `least`, compared part by part; an unreadable one is not. */
-export function isAtLeast(base: string | undefined, least: string): boolean {
-  const parts = (text: string) => text.split('-')[0]!.split('.').map(Number)
-  if (base === undefined || !/^\d+\.\d+\.\d+/.test(base)) return false
-  const have = parts(base)
-  const want = parts(least)
-  for (let i = 0; i < want.length; i++) {
-    if ((have[i] ?? 0) !== want[i]) return (have[i] ?? 0) > want[i]!
-  }
-  return true
 }
 
 /**

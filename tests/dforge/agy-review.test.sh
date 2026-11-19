@@ -38,29 +38,29 @@ near() { # near <epoch> <seconds from now>: the epoch is that far ahead, within 
   [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -ge $((now + $2 - 60)) ] && [ "$1" -le $((now + $2)) ] && echo near || echo "$1"
 }
 
-STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
-check "light review answers OK" "$out" "agy-judge gemini-4-argon/high status=OK exit=0 out=$TMP/out.json evidence=none"
-check "light review exits 0" "$rc" "0"
+STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
+check "a task review answers OK" "$out" "agy-judge claude-opus-5-5/high status=OK exit=0 out=$TMP/out.json evidence=none"
+check "a task review exits 0" "$rc" "0"
 has "the reviewer runs in plan mode" "$(args)" "--mode plan"
 has "the task schema is enforced" "$(args)" "codex-review-schema.json"
 has "the prompt directory is added" "$(args)" "--add-dir"
 lacks "permissions are never skipped" "$(args)" "--dangerously-skip-permissions"
 check "the list lands in --out" "$(jq -r .spec_verdict "$TMP/out.json")" "compliant"
-STUB_AGY_SCHEMA_COPY="$TMP/seen-schema.json" STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+STUB_AGY_SCHEMA_COPY="$TMP/seen-schema.json" STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "agy receives no integer enum" "$(jq '[.. | objects | select(.type == "integer" and has("enum"))] | length' < "$TMP/seen-schema.json")" "0"
 check "the scores keep their bounds" "$(jq -c '.properties.spec | [.minimum, .maximum]' < "$TMP/seen-schema.json")" "[1,20]"
 check "the shipped schema keeps its enums" "$(jq '.properties.spec.enum | length' < "$P/criteria/codex-review-schema.json")" "20"
-STUB_AGY_SCORE=21 STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+STUB_AGY_SCORE=21 STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "a score outside the shipped enum is a schema failure" "$out" "reason=schema"
-STUB_AGY_VERDICT=PASS STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+STUB_AGY_VERDICT=PASS STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "a verdict outside the shipped enum is a schema failure" "$out" "reason=schema"
 
 STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "heavy review prefers agy Opus" "$out" "agy-judge claude-opus-5-5/high status=OK exit=0 out=$TMP/out.json evidence=none"
 STUB_AGY_REFUSE_MODEL=claude-opus-5-5 STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "a refused Opus falls back to Argon" "$out" "agy-judge gemini-4-argon/high status=FALLBACK"
-STUB_AGY_REFUSE_MODEL=gemini-4-argon STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
-has "the light tier never falls back" "$out" "status=FAILED"
+GATE_LINE=${GATE_ON/claude=on/claude=off} STUB_AGY_REFUSE_MODEL=gemini-4-argon STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
+has "the last row never falls back to itself" "$out" "status=FAILED"
 has "a refusal names its reason" "$out" "reason=refused"
 
 reset_work() {
@@ -71,7 +71,7 @@ reset_work() {
 }
 for side in write commit stash modify delete hook hook-link config global; do
   reset_work
-  STUB_AGY_WRITE=$side.txt STUB_AGY_SIDE=$side STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+  STUB_AGY_WRITE=$side.txt STUB_AGY_SIDE=$side STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
   has "a reviewer that does $side fails" "$out" "status=FAILED"
   has "a $side run is evidence=wrote" "$out" "evidence=wrote reason=wrote"
   check "a $side run names what changed" "$([ -s "$TMP/out.json.wrote" ] && echo named || echo none)" "named"
@@ -89,41 +89,41 @@ reset_work
 # Two hooks of the same length and POSIX cksum: only a real hash tells them apart.
 hooks=$(git -C "$TMP/work" rev-parse --path-format=absolute --git-path hooks); mkdir -p "$hooks"
 printf '\043\041\057\142\151\156\057\163\150\012\145\170\151\164\040\060\040\043\040\141\142\143\144\145\146\147\150\012' > "$hooks/pre-commit"
-STUB_AGY_HOOK='\043\041\057\142\151\156\057\163\150\012\145\170\151\164\040\060\040\043\040\316\312\307\224\173\064\377\243\012' STUB_AGY_SIDE=hook STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+STUB_AGY_HOOK='\043\041\057\142\151\156\057\163\150\012\145\170\151\164\040\060\040\043\040\316\312\307\224\173\064\377\243\012' STUB_AGY_SIDE=hook STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "a hook rewritten to the same cksum is wrote" "$out" "evidence=wrote reason=wrote"
 reset_work
 # Git Bash copies on ln -s and reads the exec bit from a file's first bytes,
 # so each case below runs only where the host can show its change.
 printf 'base\n' > "$TMP/hook-target"; ln -s "$TMP/hook-target" "$hooks/post-checkout" 2>/dev/null
 if [ -L "$hooks/post-checkout" ]; then
-  STUB_AGY_HOOK_TARGET="$TMP/hook-target" STUB_AGY_SIDE=hook-target STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+  STUB_AGY_HOOK_TARGET="$TMP/hook-target" STUB_AGY_SIDE=hook-target STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
   has "a change behind a symlinked hook is wrote" "$out" "evidence=wrote reason=wrote"
 fi
 reset_work
 printf 'echo hook\n' > "$hooks/pre-commit"; chmod -x "$hooks/pre-commit"
 if [ ! -x "$hooks/pre-commit" ] && chmod +x "$hooks/pre-commit" && [ -x "$hooks/pre-commit" ]; then
   chmod -x "$hooks/pre-commit"
-  STUB_AGY_SIDE=hook-exec STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+  STUB_AGY_SIDE=hook-exec STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
   has "a hook made executable is wrote" "$out" "evidence=wrote reason=wrote"
 fi
 reset_work
 git -C "$TMP/work" config --add dforge.order 1; git -C "$TMP/work" config --add dforge.order 2
-STUB_AGY_SIDE=reorder STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+STUB_AGY_SIDE=reorder STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "a config reorder that changes the last value is wrote" "$out" "evidence=wrote reason=wrote"
 git -C "$TMP/work" config --unset-all dforge.order
 
-rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_FINDING='{"severity":"Minor","where":"a","what":"quota wording"}' STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_FINDING='{"severity":"Minor","where":"a","what":"quota wording"}' STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "a clean answer mentioning quota is a list" "$out" "status=OK"
 check "a clean answer marks nothing" "$([ -f "$DR_AGY_SESSION_DIR/s1.json" ] && echo marked || echo none)" "none"
 
-rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=stderr-quota run --kind task --tier light --prompt "$TMP/prompt.md"
+rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=stderr-quota run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "a stderr-only quota fails the run" "$out" "reason=quota-stderr"
 check "a stderr-only quota marks nothing" "$([ -f "$DR_AGY_SESSION_DIR/s1.json" ] && echo marked || echo none)" "none"
 
-rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='request 14290 failed' run --kind task --tier light --prompt "$TMP/prompt.md"
+rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='request 14290 failed' run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "429 inside a number is no quota" "$out" "reason=error"
 
-STUB_AGY_MODE=print-timeout run --kind task --tier light --prompt "$TMP/prompt.md"
+STUB_AGY_MODE=print-timeout run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "a print timeout is TIMEOUT" "$out" "status=TIMEOUT"
 
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota for claude. Resets in 2h' run --kind task --tier heavy --prompt "$TMP/prompt.md"
@@ -134,9 +134,9 @@ check "a Claude quota's reset is two hours ahead" "$(near "$(field fallback.rese
 GATE_LINE="${GATE_ON/claude=on/claude=off}" STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "the next heavy review runs Argon directly" "$out" "agy-judge gemini-4-argon/high status=OK exit=0 out=$TMP/out.json evidence=claude-off"
 
-rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota' run --kind task --tier light --prompt "$TMP/prompt.md"
+rm -rf "$DR_AGY_SESSION_DIR"; GATE_LINE=${GATE_ON/claude=on/claude=off} STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota' run --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "a Gemini quota turns agy off" "$(field usable)/$(field reason)" "false/quota"
-rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota. Resets in 1d2h3m4s' run --kind task --tier light --prompt "$TMP/prompt.md"
+rm -rf "$DR_AGY_SESSION_DIR"; GATE_LINE=${GATE_ON/claude=on/claude=off} STUB_AGY_MODE=error STUB_AGY_ERROR='RESOURCE_EXHAUSTED quota. Resets in 1d2h3m4s' run --kind task --tier heavy --prompt "$TMP/prompt.md"
 check "a Gemini quota's reset counts days, hours, minutes and seconds" "$(near "$(field resets_at_epoch)" 93784)" "near"
 
 rm -rf "$DR_AGY_SESSION_DIR"; STUB_AGY_MODE=plan-review run --kind plan --prompt "$TMP/prompt.md"
@@ -163,13 +163,13 @@ done
 mkdir -p "$TMP/oldgit"
 printf '#!/usr/bin/env bash\n[ "$1" = --version ] && { echo "git version 2.30.0"; exit 0; }\nexec "%s" "$@"\n' "$(command -v git)" > "$TMP/oldgit/git"
 chmod +x "$TMP/oldgit/git"
-PATH="$TMP/oldgit:$PATH" STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+PATH="$TMP/oldgit:$PATH" STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "a git older than 2.31 fails before agy runs" "$out" "status=FAILED exit=0 out=$TMP/out.json evidence=none reason=git"
 has "a git older than 2.31 names the version" "$(cat "$TMP/err")" "git 2.31 or later is required (found 2.30.0)"
 check "a git older than 2.31 exits 1" "$rc" "1"
 check "a git older than 2.31 never calls agy" "$([ -e "$TMP/args" ] && echo called || echo none)" "none"
 sed -i 's/git version 2.30.0/git version 2.31.0.windows.1/' "$TMP/oldgit/git"
-PATH="$TMP/oldgit:$PATH" STUB_AGY_MODE=review run --kind task --tier light --prompt "$TMP/prompt.md"
+PATH="$TMP/oldgit:$PATH" STUB_AGY_MODE=review run --kind task --tier heavy --prompt "$TMP/prompt.md"
 has "git 2.31 with a Windows suffix passes the floor" "$out" "status=OK"
 
 run --kind task

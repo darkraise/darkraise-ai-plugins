@@ -689,18 +689,17 @@ check "A18: a turn that changed no ledger, completed.md or roadmap.md passes" "$
 check "A18: and passes when it asks a question" "$(stop_at s-a18 "$TRP" 'Which way?')" ""
 rm -rf "$WS"
 
-# A19: another worktree's ledger written during the turn (progress in darkmem).
-. "$HERE/fixtures/darkmem-stores.sh"
+# A19: another worktree's ledger written during the turn.
 DM="$TMP/dm"
 git init -q -b main "$DM"
 git -C "$DM" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m init
-M=$(stores_home "$HOME" "$DM" proj local darkmem)
-mkdir -p "$M/work/sdd/2026-10-11-other"
+git -C "$DM" worktree add -q -b other "$TMP/dm-other"
+OW=$(git -C "$TMP/dm-other" rev-parse --show-toplevel)
+mkdir -p "$OW/.dagents/sdd/2026-10-11-other"
 sleep 1; prompt s-a19 "$DM"
 sleep 1
-printf '# SDD ledger — plan: docs/dagents/plans/2026-10-11-other.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/2026-10-11-other/progress.md"
+printf '# SDD ledger — plan: docs/dagents/plans/2026-10-11-other.md\nTask 1: complete (commits a..b, review clean)\n' > "$OW/.dagents/sdd/2026-10-11-other/progress.md"
 check "A19: another worktree's ledger written during the turn never holds it" "$(stop_at s-a19 "$DM" 'Task 1 is done.')" ""
-rm -f "$HOME/.dagents/config.json" "$HOME/.dagents/stores.json"
 
 # A29: latest.md cannot be written, so the heading alone releases a held turn.
 UNSH=0

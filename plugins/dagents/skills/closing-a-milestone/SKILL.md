@@ -63,7 +63,7 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    any of them is unresolved. Then
    run
    `scripts/roadmap close M<n> --note "audit <date> <sha7>: <k> MET, <d> deferred"`,
-   and commit the registers and the roadmap together (or push them, while documents live in darkmem).
+   and commit the registers and the roadmap together.
 8. **Suite cost.** This step runs after `roadmap close`, in the checkout the
    skill runs in: the main checkout. It holds the rows because finishing's
    merged-result verification leaves one full-suite row at each merge head.
@@ -101,11 +101,8 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    nothing. When it recommends the cleanup, the report also lists the
    `Test ratio:` line of each `<docs>/reviews/*.md` file that
    `git diff --name-only --diff-filter=A <previous close sha7>..<milestone head> -- <docs>/reviews`
-   names, or, while documents live in the darkmem mirror, of each whose
-   `Retained:` date is after the previous close's commit date
-   (`git log -1 --format=%cs <previous close sha7>`), every one when there is
-   no previous milestone. The lines inform the reader and do not change the
-   recommendation.
+   names, every one when there is no previous milestone. The lines inform the
+   reader and do not change the recommendation.
 9. **Next.** Run `scripts/next-step --project` and end the message with the
    block it prints, verbatim: the next milestone's first open epic, or that
    every milestone is closed. If it exits 4, say `latest.md` could not be

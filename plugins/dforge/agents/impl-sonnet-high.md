@@ -1,6 +1,6 @@
 ---
 name: impl-sonnet-high
-description: "Implementer running Sonnet 5.5 at high effort. The only implementer dforge keeps: Acceptance QA runs on it; sessions implement their own plan tasks."
+description: "Acceptance QA and UI walkthrough seat (Sonnet, high effort)."
 model: sonnet
 effort: high
 disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(dirname "${BASH_SOURCE[0]}")/timeout.sh"
 
 dr_task_block() {
   local reason="$1" snapshot="$DAGENTS_TASK_DIR/blocked-snapshot.json"
@@ -32,7 +33,8 @@ dr_task_commit() {
   actual_tree="$(git -C "$DAGENTS_WORKTREE" write-tree)" || return 2
   [ "$actual_tree" = "$tree" ] || return 2
   dr_task_update '.phase = "committing"' || return 2
-  timeout 60s git -C "$DAGENTS_WORKTREE" commit -q -m "$subject" || { dr_task_block 'commit failed'; return 2; }
+  [ -n "${DAGENTS_TIMEOUT:-}" ] || dagents_timeout || { dr_task_block 'GNU timeout (timeout or gtimeout) is not on PATH'; return 2; }
+  "$DAGENTS_TIMEOUT" 60s git -C "$DAGENTS_WORKTREE" commit -q -m "$subject" || { dr_task_block 'commit failed'; return 2; }
   [ "$(git -C "$DAGENTS_WORKTREE" show -s --format=%T HEAD)" = "$tree" ] &&
     [ "$(git -C "$DAGENTS_WORKTREE" show -s --format=%P HEAD)" = "$parent" ] &&
     [ "$(git -C "$DAGENTS_WORKTREE" show -s --format=%s HEAD)" = "$subject" ] || { dr_task_block 'commit hooks changed the candidate'; return 2; }

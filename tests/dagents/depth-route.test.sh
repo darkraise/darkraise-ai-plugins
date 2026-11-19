@@ -23,8 +23,7 @@ absent() { # absent <name> <haystack> <needle>
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-# The darkmem cases below set their own home; every other case reads this one,
-# never the developer's ~/.dagents.
+# Every case reads this home, never the developer's ~/.dagents.
 export HOME="$TMP/home"
 mkdir -p "$HOME"
 
@@ -206,24 +205,23 @@ out=$(plan_line amend); st=$?
 check "an amendment that does not apply exits 2" "$st:$out" "2:depth-route: an amendment does not apply; run plan-lint"
 rm -rf "$REPO/.dagents/sdd/amend"
 
-# --- A16: the Depth line is read by its first word, in the darkmem mirror too ---
+# --- A16: the Depth line is read by its first word ---
 mkplan first-word spec-standard "" 0
 check "a Depth line with trailing text gives spec=standard" "$(plan_line first-word | grep -o 'spec=[a-z]*')" "spec=standard"
 sed 's/$/\r/' "$REPO/docs/dagents/specs/spec-light.md" > "$REPO/docs/dagents/specs/spec-crlf.md"
 mkplan crlf spec-crlf "" 0
 check "a CRLF spec is read" "$(plan_line crlf | grep -o 'spec=[a-z]*')" "spec=light"
 
-. "$HERE/fixtures/darkmem-stores.sh"
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q "$SR"
-M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
+M="$(git -C "$SR" rev-parse --show-toplevel)/docs"
 mkdir -p "$M/dagents/specs" "$M/dagents/plans"
 cp "$FIX/spec-standard.md" "$M/dagents/specs/s.md"
 printf '# P\n\n**Goal:** Fixture.\n\n**Spec:** docs/dagents/specs/s.md\n\n## Task index\n\n### Task 1: One\n\n**Evaluation:** files 0 - spec 0 - coupling 0 - risk 0 = 0\n' > "$M/dagents/plans/p.md"
 out=$(cd "$SR" && HOME=$SH bash "$ROUTE" docs/dagents/plans/p.md 2>&1)
-check "a spec in the darkmem mirror resolves as plan-lint resolves it" "$out" "depth=standard spec=standard tasks=light reason=spec"
+check "a spec in the docs root resolves as plan-lint resolves it" "$out" "depth=standard spec=standard tasks=light reason=spec"
 out=$(cd "$SR" && HOME=$SH bash "$ROUTE" "$M/dagents/plans/p.md" 2>&1)
-check "the mirror plan is also found by its absolute path" "$out" "depth=standard spec=standard tasks=light reason=spec"
+check "the plan is also found by its absolute path" "$out" "depth=standard spec=standard tasks=light reason=spec"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -5,7 +5,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P="$HERE/../../plugins/dforge"
-IP="$P/reference/prompts/implementer-prompt.md"
+DT="$P/reference/delegated-task.md"
 
 pass=0 fail=0
 check() { # check <name> <got> <want>
@@ -16,9 +16,8 @@ names() { # names <label> <file> <text>
   check "$1" "$(grep -qF -- "$3" "$2" 2>/dev/null && echo yes || echo no)" "yes"
 }
 
-names "the reply ends with the Report line" "$IP" '`Report: <absolute path of the report file>`'
-verified=$(grep -E '^ +- `<command>` — (pass|fail): <n> passed, <m> failed$' "$IP" | sed -E 's/^ +//; s/<command>/bash t.sh/; s/<n>/3/; s/<m>/0/')
-check "the prompt shows both Verified bullet forms" "$(printf '%s\n' "$verified" | grep -c .)" "2"
+verified=$(grep -E '^ +- `<command>` — (pass|fail): <n> passed, <m> failed$' "$DT" | sed -E 's/^ +//; s/<command>/bash t.sh/; s/<n>/3/; s/<m>/0/')
+check "the session report shape shows both Verified bullet forms" "$(printf '%s\n' "$verified" | grep -c .)" "2"
 check "each Verified bullet form matches the stop gate's grammar" "$(printf '%s\n' "$verified" | grep -cE '^- `[^`]+` — (pass|fail)(: .*)?$')" "2"
 
 # --- the Task check and Integration check header lines (test tiers) ---

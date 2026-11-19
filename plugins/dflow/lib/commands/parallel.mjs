@@ -186,7 +186,7 @@ function session(ctx, argv, out) {
   const plan = /^docs\/dflow\/plans\//.test(row.assigned) && fs.existsSync(path.join(ctx.root, row.assigned));
   out('Start this in your own terminal; a background session keeps running after the terminal closes:');
   // Single quotes: a board item may hold `$(...)` or backticks, and the row
-  // text can come from another person through darkmem.
+  // text can come from another person through the shared board.
   const quoted = text => `'${text.replaceAll("'", "'\\''")}'`;
   out(`  claude --bg ${quoted(plan ? `/dflow:build ${row.assigned}` : `/dflow:plan board row ${row.number}: ${row.item}`)}`);
   out('It works in a worktree of its own. A permission prompt makes it wait: attach with `claude attach` to answer.');

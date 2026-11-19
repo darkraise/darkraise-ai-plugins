@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import SCHEMA, { isValidValue, resolveStored } from "../../config/schema.mjs";
-import { acquireLock } from "./darkmem-mirror.mjs";
+import { acquireLock } from "./home-lock.mjs";
 
 export class SettingError extends Error {}
 

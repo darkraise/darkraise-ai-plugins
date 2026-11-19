@@ -55,17 +55,6 @@ BEFORE claiming any status or expressing satisfaction:
 - Relying on partial verification
 - **ANY wording implying success without having run verification**
 
-## Rationalization Prevention
-
-| Excuse | Reality |
-|--------|---------|
-| "Should work now" | RUN the verification |
-| "I'm confident" | Confidence ≠ evidence |
-| "Linter passed" | Linter ≠ compiler |
-| "Agent said success" | Verify independently |
-| "Partial check is enough" | Partial proves nothing |
-| "Different words so rule doesn't apply" | Spirit over letter |
-
 ## Key Patterns
 
 **Tests:**
@@ -97,19 +86,3 @@ BEFORE claiming any status or expressing satisfaction:
 ✅ Agent reports success → Check VCS diff → Verify changes → Report actual state
 ❌ Trust agent report
 ```
-
-## When To Apply
-
-**ALWAYS before:**
-- ANY variation of success/completion claims
-- ANY expression of satisfaction
-- ANY positive statement about work state
-- Committing, PR creation, task completion
-- Moving to next task
-- Delegating to agents
-
-**Rule applies to:**
-- Exact phrases
-- Paraphrases and synonyms
-- Implications of success
-- ANY communication suggesting completion/correctness

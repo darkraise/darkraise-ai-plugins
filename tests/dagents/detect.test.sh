@@ -76,8 +76,8 @@ check "script exists" "$([ -f "$SCRIPT" ] && echo yes || echo no)" "yes"
 # --- nothing installed ------------------------------------------------------
 out=$(run)
 check "empty PATH: emits valid JSON" "$(jq -e 'type=="array"' >/dev/null 2>&1 <<<"$out" && echo yes || echo no)" "yes"
-check "empty PATH: reports the four executors by id" \
-  "$(jq -r '[.[].id] | sort | join(",")' <<<"$out")" "agy,codex,cursor-agent,opencode"
+check "empty PATH: reports the registered executors by id" \
+  "$(jq -r '[.[].id] | sort | join(",")' <<<"$out")" "agy,codex"
 # No plugin enabled in the fixture profile, so there is no codex lane at all.
 printf '{"enabledPlugins":{}}\n' > "$TMP/config/settings.json"
 out=$(run)
@@ -186,25 +186,6 @@ else
 fi
 rm -f "$TMP/bin/agy"
 
-# --- batch-capable tools with no lane ---------------------------------------
-# Both CLIs can run a task headlessly, so batch_capable is honestly true, but
-# this plugin ships a wrapper only for codex. Reporting them usable puts them in
-# the plan header, where the executor line is then written from the
-# codex-assignment block - a codex rung under a non-codex header, which the
-# assigning skill's own final check rejects with nothing to fall back to.
-for tool in cursor-agent opencode; do
-  out=$(run)
-  check "$tool absent is not usable" "$(field "$tool" usable "$out")" "false"
-  make_stub "$tool" "$tool 1.0.0"
-  out=$(run)
-  check "$tool present" "$(field "$tool" present "$out")" "true"
-  check "$tool is batch capable" "$(field "$tool" batch_capable "$out")" "true"
-  check "$tool has no auth answer" "$(field "$tool" authed "$out")" "null"
-  check "$tool is still not usable" "$(field "$tool" usable "$out")" "false"
-  check "$tool reason names the missing lane" \
-    "$(field "$tool" reason "$out" | grep -qi 'lane' && echo yes || echo no)" "yes"
-done
-
 # --- jq is a hard dependency, and its absence must be loud -------------------
 # Without this guard the script exits 127 with empty stdout, which the
 # dispatching skill reads as "no executor usable": the lane disappears with no
@@ -273,7 +254,7 @@ check "a probe without authed is a failed probe" "$(field stub auth_status "$out
 check "a failed probe uses the entry's probe_failed reason" \
   "$(field stub reason "$out" | grep -c '/stub:setup')" "1"
 
-# A registered id suppresses its PATH row even when the binary is on PATH.
+# A registered id yields one row even when its binary is on PATH.
 make_stub opencode "opencode 1.0.0"
 out=$(regrun)
 check "a registered id yields exactly one row" \
@@ -281,15 +262,6 @@ check "a registered id yields exactly one row" \
 check "the registered opencode row is lane-implemented" \
   "$(field opencode usable "$out")" "true"
 rm -f "$TMP/bin/opencode"
-
-# An unregistered batch-capable id keeps the PATH probe and its missing-lane
-# reason, which must name the registry rather than assert codex is unique.
-make_stub cursor-agent "cursor-agent 1.0.0"
-out=$(regrun)
-check "an unregistered id is still not usable" "$(field cursor-agent usable "$out")" "false"
-check "the missing-lane reason names the registry" \
-  "$(field cursor-agent reason "$out" | grep -c 'executors list')" "1"
-rm -f "$TMP/bin/cursor-agent"
 
 # The probe receives a native-form cwd, as the codex probe does.
 : > "$TMP/probe-cwd.log"

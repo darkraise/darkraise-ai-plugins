@@ -79,11 +79,13 @@ ts() { # ts <args...> — task-step in the fixture repo; sets out, err, rc
   out=$(cd "$REPO" && bash "$S/task-step" "$@" 2>"$TMP/err"); rc=$?
   err=$(cat "$TMP/err")
 }
+. "$HERE/fixtures/step-state.sh"
+seed() { (cd "$REPO" && seed_step "$S" "$@"); rc=$?; } # seed <plan> <task> [suite]
 ledger_count() { grep -cxF -- "$1" "$LEDGER" 2>/dev/null || true; }
 first_block() { awk '{ sub(/\r$/, "") } /^$/ { exit } { print }' "$1" | tr '\n' ';'; }
 
-ts start docs/plan.md 1
-check "start exits 0" "$rc" "0"
+seed docs/plan.md 1
+check "the task opens" "$rc" "0"
 WS=$(winpath "$(cd "$REPO" && bash "$S/sdd-workspace" docs/plan.md)")
 LEDGER="$WS/progress.md"
 printf '#!/usr/bin/env bash\ncompute_total() {\n  echo 1\n}\n' > "$REPO/lib/new.sh"
@@ -165,7 +167,7 @@ check "free text is printed" "$(grep '^cannot-verify: ' <<<"$out")" "cannot-veri
 check "free text writes no ledger line" "$(grep -c . "$LEDGER")" "$before"
 
 # Two baseline items write two logs.
-ts start docs/plan.md 2
+seed docs/plan.md 2
 printf '#!/usr/bin/env bash\ncompute_total() {\n  echo 2\n}\n' > "$REPO/lib/new.sh"
 g add -A && g commit -qm work2
 ts review docs/plan.md 2
@@ -277,7 +279,7 @@ sed 's/^|//' > "$REPO/docs/named.md" <<'PLAN'
 |**Check:** ` ` prints nothing.
 PLAN
 g add -A && g commit -qm "named commands fixture"
-ts start docs/named.md 1 --suite 'bash mark.sh suite 0'
+seed docs/named.md 1 'bash mark.sh suite 0'
 NWS=$(winpath "$(cd "$REPO" && bash "$S/sdd-workspace" docs/named.md)")
 NLEDGER="$NWS/progress.md"
 printf '#!/usr/bin/env bash\ncompute_total() {\n  echo 3\n}\n' > "$REPO/lib/new.sh"
@@ -337,7 +339,7 @@ check "named: no temporary worktree is left" "$(g worktree list | wc -l | tr -d 
 # backticks, are named trimmed, as the seat's text is; an unclosed span, a span
 # closed by a double backtick and a blank span name nothing.
 rm -f "$MARK_DIR"/*
-ts start docs/named.md 2 --suite ' bash mark.sh suite2 0 '
+seed docs/named.md 2 ' bash mark.sh suite2 0 '
 printf 'echo two\n' >> "$REPO/lib/new.sh"
 g add -A && g commit -qm "named work 2"
 (cd "$REPO" && MARK_DIR="$TMP/marks-sr" bash "$S/suite-run" -- bash -c ' bash mark.sh suite2 0 ' >/dev/null 2>&1)
@@ -371,7 +373,7 @@ check "named spans: the spans name nothing" "$(grep -c '(command not named in th
 # reads as a path when verdict runs from a subdirectory.
 printf '\n### Task 3: Three\n\n**Files:**\n- Modify: `lib/new.sh`\n\n**Implementer:** dforge:impl-sonnet-high\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n' >> "$REPO/docs/plan.md"
 g add -A && g commit -qm "task 3 fixture"
-ts start docs/plan.md 3
+seed docs/plan.md 3
 printf 'only_in_blob\0\0' > "$REPO/blob.bin"
 g add -A && g commit -qm "a binary file"
 ts review docs/plan.md 3

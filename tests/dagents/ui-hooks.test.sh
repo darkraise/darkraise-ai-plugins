@@ -49,6 +49,10 @@ check "edit: no second reminder" "$(ctx "$out" | grep -c 'Load dagents:ui-ux')" 
 TR="$TMP/skill.jsonl"
 jq -nc '{type:"assistant",message:{content:[{type:"tool_use",name:"Skill",input:{skill:"dagents:ui-ux"}}]}}' > "$TR"
 check "edit: a session that loaded the skill gets no reminder" "$(edit e-2 "$REPO/src/App.tsx" "$TR")" ""
+LONG="$TMP/long-command.jsonl"
+awk 'BEGIN { for (i = 0; i < 3000; i++) print "an expanded command line that makes the message long" }' \
+  | jq -Rsc '{type:"user",message:{content:("<command-name>/dagents:ui-ux</command-name>\n" + .)}}' > "$LONG"
+check "edit: a typed command past 64 KiB counts as the skill run" "$(edit e-6 "$REPO/src/App.tsx" "$LONG")" ""
 check "edit: a relative path resolves against cwd" "$(ctx "$(edit e-3 src/Bad.tsx)" | grep -c 'img-alt')" "1"
 check "edit: malformed stdin exits 0 silently" "$(printf 'nope' | bash "$EDIT"; echo "exit $?")" "exit 0"
 FAST="$TMP/fast.jsonl"
@@ -58,7 +62,7 @@ check "edit: fast mode leaves the session's reminder for later" "$(ctx "$(edit e
 rm src/Bad.tsx
 
 # --- hooks.json wiring ---
-check "hooks.json registers the edit hook's matcher" "$(jq -r '.hooks.PostToolUse[0].matcher' "$HOOKS")" "Edit|Write|MultiEdit"
+check "hooks.json registers the edit hook's matcher" "$(jq -r '.hooks.PostToolUse[0].matcher' "$HOOKS")" "Edit|Write"
 check "hooks.json runs ui-edit-hook.sh" "$(jq -r '.hooks.PostToolUse[0].hooks[0].command' "$HOOKS")" 'bash "${CLAUDE_PLUGIN_ROOT}/scripts/ui-edit-hook.sh"'
 check "hooks.json: the edit hook is synchronous, bash, 30 s" \
   "$(jq -r '.hooks.PostToolUse[0].hooks[0] | [.async, .shell, .timeout] | map(tostring) | join(",")' "$HOOKS")" "false,bash,30"

@@ -103,7 +103,7 @@ Constraints and Contracts.
 
 **Spec:** [repository-relative path to the spec/design doc this plan implements]
 
-**Execution:** inline — `claude --model <model> --effort <effort>` — [why]
+**Execution:** subagent — `claude --model sonnet --effort high` — [why]
 
 **Parallelism:** [sequential — <why> | waves — <ranges, e.g. 1 | 2-4 | 5>] (see Parallel waves)
 
@@ -159,10 +159,11 @@ Read [task-check-line.md](references/task-check-line.md) before you write the he
 Codex plans also carry `Host: codex` and `Routing policy: codex-v4` lines
 ([native-codex.md](../../reference/native-codex.md)), and their Execution line
 names the native pair:
-`**Execution:** inline — codex <model> / <effort> — <why>`.
-That pair runs the main session for the whole plan, and names the execution
-tier at its highest weighted routing score. `scripts/plan-lint` warns on any other pair,
-and errors on an inline pair below that score.
+`**Execution:** subagent — codex gpt-6.1-sol / high — <why>`, or on an inline
+plan `**Execution:** inline — codex <model> / <effort> — <why>`.
+That pair runs the main session for the whole plan. An inline pair names the
+execution tier at its highest weighted routing score. `scripts/plan-lint` warns
+on any other pair, and errors on an inline pair below that score.
 
 **Read the settings first, then choose the Execution line.**
 
@@ -172,13 +173,13 @@ Read [ci-line.md](references/ci-line.md) before you write the header's CI line a
 
 ## Parallel waves
 
-Parallel waves apply only when the Execution line is `subagent` (deprecated):
-otherwise write `**Parallelism:** sequential — inline execution` and ask
-nothing.
+Parallel waves apply only when the Execution line is `subagent`, the default:
+on an inline plan write `**Parallelism:** sequential — inline execution` and
+ask nothing.
 
 **Ask first** (subagent plans only). Read the spec's `**Execution strategy:**` line;
 brainstorming's [design-phase.md](../brainstorming/references/design-phase.md)
-writes it as `sequential` on every new spec. When the spec has none, take the `executionStrategy` setting (dagents:brainstorming §Settings;
+writes the `executionStrategy` setting's value there, and no line under `ask`. When the spec has none, take the `executionStrategy` setting (dagents:brainstorming §Settings;
 the default is `sequential`). Under `ask`, ask your human partner one question
 before you draft any task, "Parallel subagent waves or sequential execution?",
 and wait for the answer. On a Codex host do not ask:
@@ -236,7 +237,7 @@ never invents parallelism the work does not have:
 8. **The Execution line names `subagent`**, `claude --model sonnet --effort
    high`: inline mode implements its tasks in the session itself, one after
    another, so it has nothing to run in parallel. Parallel waves apply only
-   to a subagent plan, which `plan-lint` warns is deprecated.
+   to a subagent plan.
 
 `plan-lint` checks the waves mechanically — ranges, dependencies, shared
 files, the tasks that must run alone, the header lines — and the pre-flight
@@ -346,10 +347,11 @@ Read [test-step-forms.md](references/test-step-forms.md) before you write a task
 
 Read [assignment-procedure.md](references/assignment-procedure.md) before you score the tasks or write their assignment lines.
 
-The scores still set the Execution line's floor and mark the risk-3 tasks a
-judge reviews. The `**Implementer:**` lines are kept for the deprecated
-subagent mode and for scoring an executor task's fallback; under inline mode
-the session implements the task.
+In subagent mode, the default, the `**Implementer:**` line names the agent
+dispatched for the task, an executor task's fallback included, and the scores
+route its review. Under inline mode the session implements the task; there
+the scores set the Execution line's floor and mark the risk-3 tasks a judge
+reviews.
 
 ## Assign the register rows
 

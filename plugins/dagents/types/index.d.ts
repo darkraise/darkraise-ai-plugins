@@ -209,14 +209,6 @@ export type CockpitFinish = {
   answer: string | null
 }
 
-/** Where a repository's documents and progress live, as `darkmem-config.mjs --mode` prints them. */
-export type CockpitRoots = {
-  docs: { store: 'local' | 'darkmem'; root: string }
-  progress: { store: 'local' | 'darkmem'; ledgerRoot: string; latestFile: string }
-  /** The darkmem project the repository is mapped to; null when it is not. */
-  project: string | null
-}
-
 /** A handoff note that starts a next session, as the resume card and band offer it. */
 export type CockpitResumeOffer = {
   /** When the note was written, in milliseconds since the epoch: its next-step marker's `at`, else the file's time. */
@@ -311,8 +303,6 @@ declare module 'claude-code' {
       resumeOffer: CockpitResumeOffer | null
       /** The handoff time whose offer this session resumed or dismissed. */
       resumeDismissed: number | null
-      /** Why the plan section reads checkout paths, not the roots `--mode` names: its first line of stderr; null otherwise. */
-      rootsNote: string | null
       notifier: CockpitNotifier
       isNudged: boolean
       isPlanSession: boolean

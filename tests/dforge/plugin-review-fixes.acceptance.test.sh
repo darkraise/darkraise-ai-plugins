@@ -328,7 +328,7 @@ mkdir -p "$R13/.dforge/sdd/plan"
 printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commits a..b, review clean)\nTask 2: complete (commits b..c, review clean)\n' > "$R13/.dforge/sdd/plan/progress.md"
 cp "$R13/.dforge/sdd/plan/progress.md" "$TMP/ledger13.before"
 check "A13: the sandbox PATH has no node" "$(PATH=$NB command -v node || echo none)" "none"
-for argv in "task-brief|--open|docs/plan.md|1" "next-step|docs/plan.md" "task-close|docs/plan.md|1|$CP" "task-step|start|docs/plan.md|1"; do
+for argv in "task-brief|--open|docs/plan.md|1" "next-step|docs/plan.md" "task-close|docs/plan.md|1|$CP" "task-step|review|docs/plan.md|1"; do
   IFS='|' read -r -a a <<<"$argv"
   run bash -c "cd '$R13' && PATH='$NB' bash '$S/${a[0]}' \"\${@:1}\"" _ "${a[@]:1}"
   check "A13: ${a[0]} exits 2 without node" "$rc" "2"
@@ -565,7 +565,8 @@ printf '%s\n' '#!/usr/bin/env bash' 'echo "agy-gate usable=false reason=setting 
 export TASK_STEP_CODEX_GATE="$TMP/gate-stub" TASK_STEP_AGY_GATE="$TMP/agy-gate-stub" DR_CODEX_SESSION_DIR="$TMP/sessions" CLAUDE_CODE_SESSION_ID=acc-base SUITE_MARK="$TMP/marks"
 ts25() { out=$(cd "$R25" && bash "$S/task-step" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
 sr25() { (cd "$R25" && bash "$S/suite-run" -- bash -c 'bash suite.sh' >/dev/null 2>&1); }
-ts25 start docs/plan.md 1 --suite 'bash suite.sh'
+. "$HERE/fixtures/step-state.sh"
+(cd "$R25" && seed_step "$S" docs/plan.md 1 'bash suite.sh')
 printf 'impl\n' >> "$R25/app.txt"
 git -C "$R25" add -A && git -C "$R25" commit -qm "work 1"
 sr25
@@ -631,7 +632,7 @@ chmod +x "$D28/tree-runner" "$D28"/*-gate "$D28"/codex-runner "$D28"/agy-runner
 : > "$D28/pids"
 out=$(PANEL_NO_SETSID=1 PANEL_BOUND_SECONDS=3 PANEL_CODEX_GATE="$D28/codex-gate" PANEL_AGY_GATE="$D28/agy-gate" \
   PANEL_CODEX_RUNNER="$D28/codex-runner" PANEL_AGY_RUNNER="$D28/tree-runner" CLAUDE_CODE_SESSION_ID=s-28 \
-  timeout 60 bash "$S/run-review-panel" --kind task --tier light --cwd "$D28/work" --out-dir "$D28/out" --prompt "$D28/prompt.md" 2>/dev/null)
+  timeout 60 bash "$S/run-review-panel" --kind task --tier heavy --cwd "$D28/work" --out-dir "$D28/out" --prompt "$D28/prompt.md" 2>/dev/null)
 sleep 1
 alive=0
 while read -r p; do
@@ -647,7 +648,7 @@ else
   printf 'skip - A28: no setsid tree walk: pgrep is not on PATH (Git Bash)\n'
 fi
 
-# --- A29: task-step --cwd, and a header command with a trailing note ---
+# --- A29: a header command with a trailing note ---
 R29="$TMP/cwd"
 git init -q "$R29"; git -C "$R29" config user.name t; git -C "$R29" config user.email t@example.invalid
 mkdir -p "$R29/docs"
@@ -661,23 +662,20 @@ printf 'one\n' > "$R29/app.txt"; printf '.dforge/\n' > "$R29/.gitignore"
 git -C "$R29" add -A && git -C "$R29" commit -qm base
 BASE29=$(git -C "$R29" rev-parse --short HEAD)
 ts29() { out=$(cd "$R29" && bash "$S/task-step" "$@" 2>"$TMP/err"); rc=$?; err=$(cat "$TMP/err"); }
-ts29 start docs/plan.md 1
-git -C "$R29" worktree add -q -b wt "$TMP/wt29"
-printf 'two\n' > "$TMP/wt29/wtonly.txt"
-git -C "$TMP/wt29" add -A && git -C "$TMP/wt29" commit -qm "work in the worktree"
-WTHEAD=$(git -C "$TMP/wt29" rev-parse --short HEAD)
-ts29 review docs/plan.md 1 --cwd "$TMP/wt29"
-check "A29: review --cwd exits 0" "$rc" "0"
-has "A29: review --cwd resolves HEAD in that directory" "$out" "$BASE29..$WTHEAD"
-check "A29: the review diff holds the worktree's change" "$(grep -q '^+++ b/wtonly.txt$' "$R29"/.dforge/sdd/plan/review-*.diff && echo yes || echo no)" "yes"
+(cd "$R29" && bash "$S/task-brief" --open docs/plan.md 1 >/dev/null)
+printf 'two\n' > "$R29/work.txt"
+git -C "$R29" add -A && git -C "$R29" commit -qm "work"
+HEAD29=$(git -C "$R29" rev-parse --short HEAD)
+ts29 review docs/plan.md 1
+check "A29: review exits 0" "$rc" "0"
+has "A29: review packages the task's range" "$out" "$BASE29..$HEAD29"
 WS29=$(cd "$R29" && bash "$S/sdd-workspace" docs/plan.md)
 printf '## Verdict\nspec: cannot-verify\nquality: approved\nscores: spec 15 / scope 17 / verification 12 / quality 16\n\n## Strengths\nFine.\n\n## Findings\n\n## Cannot verify\n- cannot-verify: baseline bash mark.sh integ 0, expect pass — the Integration check\n\n## Assessment\nFine.\n' > "$WS29/task-1-review-report.md"
 mkdir -p "$TMP/marks29"
-out=$(cd "$R29" && MARK_DIR="$TMP/marks29" bash "$S/task-step" verdict docs/plan.md 1 --cwd "$TMP/wt29" 2>"$TMP/err"); rc=$?
-check "A29: verdict --cwd exits 0" "$rc" "0"
+out=$(cd "$R29" && MARK_DIR="$TMP/marks29" bash "$S/task-step" verdict docs/plan.md 1 2>"$TMP/err"); rc=$?
+check "A29: verdict exits 0" "$rc" "0"
 check "A29: the Integration check's command ran, taken from before its trailing note" "$(ls "$TMP/marks29" | tr '\n' ' ')" "integ "
 check "A29: and the item is settled, not a finding" "$(grep -c 'settled by task-step check baseline' "$WS29/progress.md")" "1"
-git -C "$R29" worktree remove --force "$TMP/wt29"
 
 # --- A30: ui-proof check with documents in darkmem and screenshots in the checkout ---
 R30="$TMP/proof"

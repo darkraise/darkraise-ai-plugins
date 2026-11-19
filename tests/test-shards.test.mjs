@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import * as sched from '../scripts/test-shards.mjs';
@@ -150,6 +151,12 @@ test('a suite past 75% of its limit is named in a GitHub warning that test-all p
 test('weights, limits and parts are keyed by repository path', () => {
   for (const table of [sched.windowsSeconds, sched.suiteSeconds, sched.suiteParts]) {
     for (const key of Object.keys(table)) assert.match(key, /^tests\/([a-z0-9-]+\/)?[^/]+$/, key);
+  }
+});
+
+test('weights, limits and parts name only suites that exist', () => {
+  for (const table of [sched.windowsSeconds, sched.suiteSeconds, sched.suiteParts]) {
+    assert.deepEqual(Object.keys(table).filter(key => !existsSync(join(root, key))), []);
   }
 });
 

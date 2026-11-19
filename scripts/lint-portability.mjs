@@ -4,8 +4,13 @@ import { fileURLToPath } from 'node:url';
 
 // No message or comment in this file may hold the text the rules look for:
 // the file lies under scripts/, which the tree scan reads.
+// A plugin is installed alone, so it can source only its own helper.
+const nativePathHelper = path => {
+  const plugin = /^plugins\/([^/]+)\//.exec(path)?.[1] ?? 'dforge';
+  return `plugins/${plugin}/scripts/lib/native-path.sh${plugin === 'dforge' ? '' : ", a copy of dforge's"}`;
+};
 const MESSAGES = {
-  'git-c-pwd': 'git.exe cannot open a POSIX $PWD path; pass it through dr_native_path (plugins/dforge/scripts/lib/native-path.sh)',
+  'git-c-pwd': path => `git.exe cannot open a POSIX $PWD path; pass it through dr_native_path from ${nativePathHelper(path)}`,
   'awk-v-backslash': 'awk -v expands a backslash in its value; pass the value through ENVIRON instead',
   'jq-pwd-file': 'jq.exe cannot open a POSIX path built from $PWD or $TMPDIR; feed the file on stdin',
   'import-path': 'a dynamic import of a path must go through pathToFileURL',
@@ -74,7 +79,7 @@ export function lintText(path, text) {
   const exempt = index => EXEMPT.test(lines[index]);
   const msys = MSYS_EXPORT.test(lines.join('\n'));
   const hits = [];
-  const hit = (line, rule) => hits.push({ line, rule, message: MESSAGES[rule] });
+  const hit = (line, rule) => hits.push({ line, rule, message: typeof MESSAGES[rule] === 'function' ? MESSAGES[rule](path) : MESSAGES[rule] });
   lines.forEach((line, index) => {
     if (exempt(index)) return;
     if (gitCPwd(line)) hit(index + 1, 'git-c-pwd');

@@ -1,12 +1,13 @@
 ---
 name: subagent-driven-development
-description: Deprecated — use only when a plan's Execution line names subagent or your human partner asks for subagent mode
+description: Use when a plan's Execution line names subagent, dagents' default mode, or your human partner asks for subagent mode - dispatches an implementer agent and a judge review per task
 ---
 
 # Subagent-Driven Development
 
-> **Deprecated.** dagents:executing-plans replaces this skill: every new plan runs inline.
-> It stays runnable for plans whose Execution line names `subagent`; a later release deletes it.
+Subagent mode is dagents' default: a plan runs here unless its Execution line
+names `inline` (`executionMode=inline`, or your human partner asked), which
+dagents:executing-plans runs.
 
 ## After compaction
 
@@ -18,8 +19,7 @@ back. Before anything else:
    no ledger names this plan, no task has started: skip the rest of this
    section and follow Setup from its first step.
 1. Run `scripts/sdd-workspace PLAN_FILE` (see using-dagents §Session Budget),
-   and read `progress.md` and `handoff.md` in `<ledger dir>`, not in the
-   directory it prints: while progress lives in darkmem the two differ.
+   and read `progress.md` and `handoff.md` in `<ledger dir>`.
 2. Trust the ledger and `git log` over the summary. Read
    [ledger.md](references/ledger.md) §Recovery before you act on a ledger line. For each task the last
    ledger line decides: `complete` is done;
@@ -157,7 +157,7 @@ dagents:finishing-a-development-branch runs it instead.
 
 ## When to Use
 
-When a plan's `**Execution:**` line names `subagent`. Without a plan, use
+When a plan's `**Execution:**` line names `subagent`, the default. Without a plan, use
 dagents:brainstorming first; with a line that names `inline`, use
 dagents:executing-plans. What this mode adds over inline is a fresh
 implementer per task and a judge-scored review after each one.

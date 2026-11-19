@@ -34,7 +34,6 @@ const HUD = {
   gates: null,
   review: { recorded: null, open: 2, blocking: 1 },
   board: { counts: { doing: 1, open: 3 }, row: { number: 12, state: 'doing' } },
-  sync: { enabled: false },
   context: { resetAt: 150000 },
   workers: [{ task: 7, path: '.dflow/workers/7', branch: 'dflow/w7' }],
   checks: [],

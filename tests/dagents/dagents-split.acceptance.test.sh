@@ -263,8 +263,20 @@ check "A9: with a home record for the project, the move exits 0" "$rc" "0"
 check "A9: dagents' settings gain the schema keys dforge's home held (record present)" "$(in_world "$W" bash "$PLUGIN/scripts/dagents-config" get handoffTokens)/$(in_world "$W" bash "$PLUGIN/scripts/dagents-config" get notifyAfter)" "77777/5"
 check "A9: a value dagents already had is not overwritten (record present)" "$(in_world "$W" bash "$PLUGIN/scripts/dagents-config" get worktree)" "always"
 check "A9: a key outside dagents' schema is not copied (record present)" "$(jq 'has("agyReview")' "$W/home/.dagents/config.json")" "false"
-check "A9: the project's record moves to ~/.dagents/stores.json and leaves dforge's" "$(jq -r --arg k "$(native "$top")" 'has($k)' "$W/home/.dagents/stores.json")/$(jq -r --arg k "$top" 'has($k)' "$W/home/.dforge/stores.json")" "true/false"
+check "A9: the project's record stays in dforge's stores.json, and dagents keeps none" "$(exists "$W/home/.dagents/stores.json")/$(jq -r --arg k "$top" 'has($k)' "$W/home/.dforge/stores.json")" "no/true"
 check "A9: dforge's config.json stays where it is (record present)" "$(jq -c '.handoffTokens' "$W/home/.dforge/config.json")" "77777"
+check "A9: no darkmem setting is copied (record present)" "$(jq -c 'has("darkmemEnabled") or has("darkmem")' "$W/home/.dagents/config.json")" "false"
+
+# The same project once its home keeps its progress in darkmem: refused
+# before anything moves, saying to bring it home in dforge first.
+mk4x m1c
+W="$TMP/m1c"; P="$W/proj"
+top=$(git -C "$P" rev-parse --show-toplevel)
+printf '{"%s":{"documents":"local","progress":"darkmem","project":"acc-project"}}\n' "$top" > "$W/home/.dforge/stores.json"
+migrate "$W"
+check "A9: progress kept in darkmem refuses the move" "$rc" "1"
+check "A9: the refusal says to set progressSource local in dforge first" "$(printf '%s\n' "$out" | grep -c "progress in darkmem.*set progressSource to local in dforge first")" "1"
+check "A9: nothing moved while progress is in darkmem" "$(exists "$P/docs/dforge")$(exists "$P/.dforge")$(exists "$P/docs/dagents")$(exists "$P/.dagents")" "yesyesnono"
 
 # A10: refusals, one case each, each in its own project
 case_refused() { # case_refused NAME PREPARE-FUNCTION WHAT — prepares a project, migrates, and returns with out/rc set

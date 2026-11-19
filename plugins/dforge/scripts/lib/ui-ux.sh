@@ -198,12 +198,14 @@ uiux_rows() {
 # call for dforge:ui-ux (or ui-ux) or a typed /dforge:ui-ux command.
 uiux_ran_skill() {
   [ -n "${1:-}" ] && [ -f "$1" ] || return 1
-  jq -rR 'fromjson? | objects
+  local hits
+  hits=$(jq -rR 'fromjson? | objects
     | if .type? == "assistant" then
         .message.content? | arrays | .[] | select(.type? == "tool_use" and .name? == "Skill")
         | .input.skill? | strings | select(. == "dforge:ui-ux" or . == "ui-ux")
       elif .type? == "user" then
         .message.content? | (if type == "string" then . elif type == "array" then (.[] | select(.type? == "text") | .text?) else empty end)
         | strings | select(contains("<command-name>/dforge:ui-ux"))
-      else empty end' "$1" 2>/dev/null | grep -q .
+      else empty end' "$1" 2>/dev/null | grep -c .)
+  [ "${hits:-0}" -gt 0 ]
 }

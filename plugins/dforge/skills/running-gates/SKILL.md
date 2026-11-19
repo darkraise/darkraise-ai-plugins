@@ -27,8 +27,9 @@ sessions read it the same way.
 - Optional, nine of them: **`Applies`** (default `always`), **`Evidence`**
   (default `output`), **`Repo`**, **`Setup`**, **`Teardown`**,
   **`Known-flaky`** — the specific failure that is known noise — **`Why`**,
-  the reason the gate exists, which is what stops a later session deleting it,
-  **`Tier`** and **`Budget`**.
+  the reason the gate exists, which is what stops a later session deleting it
+  (a gate that looks obsolete still runs; if its `Why` is dead, propose
+  deleting it from the manifest), **`Tier`** and **`Budget`**.
 - **Value form:** when a value both begins and ends with a backtick, those two
   delimiters are stripped and the rest is the value. Otherwise the value is the
   remainder of the line verbatim, backticks included.
@@ -154,13 +155,3 @@ entry points under `scripts/` or the package manifest, any CI workflow, and the
 verification commands `CLAUDE.md` already names. Present the draft — ordered,
 with a `Green` for each — and write it only after approval. The first version
 does not need every gate; it needs the ones that are run today.
-
-## Red Flags
-
-| Thought | Reality |
-|---------|---------|
-| "The metrics say zero overlaps, so the picture is fine" | Open the picture. That is what `Evidence: image` means. |
-| "It failed, but it's just this machine" | Only a failure matching `Known-flaky` gets a retry. Everything else is red. |
-| "The later gates will probably pass" | Stop at the first red. Results after a failed dependency mean nothing. |
-| "This gate seems obsolete, I'll skip it" | Read its `Why`. If it is dead, propose deleting it from the manifest. |
-| "I'll run the gates for each task" | Gates are branch level. Per-task verification is the task's own tests. |

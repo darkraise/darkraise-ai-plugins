@@ -163,7 +163,7 @@ _ctx_window_lookup() {
   else
     case $1 in
       *haiku*) w=200000 ;;
-      claude-fable-5-1* | claude-opus-5-5* | claude-sonnet-5-5*) w=1000000 ;;
+      claude-fable-5-* | claude-opus-5-* | claude-sonnet-5-*) w=1000000 ;;
       *) w="" ;;
     esac
     [ -z "$w" ] || CTX_WINDOW_SOURCE=table

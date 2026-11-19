@@ -16,7 +16,6 @@ import {
   isPlanTail,
   kTokens,
   attributionIn,
-  FORK_DRAFTING,
   seatDenial,
   fastModeLine,
   guardLine,
@@ -50,7 +49,6 @@ import {
   nowLine,
   parseFinish,
   parseLedger,
-  parseModeLines,
   planCandidates,
   planTasks,
   planWithUpdate,
@@ -319,9 +317,7 @@ type World = {
   autoRunExits?: Record<string, number>
   /** The auto-run state file the fake script updates, as the real one would. */
   autoFile?: { text: string }
-  /** What `darkmem-config.mjs --mode` answers; `missing` rejects as a missing node does. Git porcelain with exit 0 unless said. */
-  modeOut?: { exitCode: number; stdout: string; stderr: string } | 'missing' | 'rejects' | 'timeout'
-  /** The directory each `--mode` call names. */
+  /** The directory each `darkmem-config.mjs --mode` call names; the cockpit makes none. */
   modeRuns?: string[]
   /** The primary checkout `git rev-parse --git-common-dir` points into; the session's repository unless said. */
   primary?: string
@@ -550,13 +546,7 @@ function world(on: On, w: World) {
     }
     if (argv.includes('/scripts/lib/darkmem-config.mjs ')) {
       w.modeRuns?.push(e.argv[e.argv.length - 1] ?? '')
-      if (w.modeOut === 'missing') {
-        return clock.advance(5_000).then(() => ({ deny: 'dagents: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"' }))
-      }
-      if (w.modeOut === 'rejects') return { deny: 'the engine refused to start the process' }
-      if (w.modeOut === 'timeout') return { deny: 'dagents: $.process.run(node) aborted: still running after 5000ms' }
-      const out = w.modeOut ?? { exitCode: 0, stdout: PORCELAIN, stderr: '' }
-      return { value: { ...out, isStdoutTruncated: false, isStderrTruncated: false } }
+      return { deny: 'the cockpit runs no darkmem-config.mjs' }
     }
     if (argv === 'node --version') {
       if (w.isNodeMissing) return { deny: 'dagents: $.process.run(node) failed to start: ENOENT: Executable not found in $PATH: "node"' }
@@ -988,35 +978,33 @@ describe('seat check', () => {
   const base = { subagentType: 'general-purpose', description: 'Look around', fork: false }
 
   test('denies an untyped dispatch and a fork in a dagents session, and passes typed ones', () => {
-    const untyped = seatDenial(base, true, false)
+    const untyped = seatDenial(base, true)
     expect(untyped).toMatch(/dagents:judge-sonnet-high/)
     expect(untyped).toMatch(/Execution line/)
     expect(untyped).not.toMatch(/for implementation/)
     expect(untyped).toMatch(/dagents:impl-sonnet-medium/)
     expect(untyped).toMatch(/model: "sonnet"/)
     expect(untyped).toMatch(/using-dagents §Seats/)
-    for (const subagentType of ['general-purpose', 'claude']) expect(seatDenial({ ...base, subagentType }, true, false)).toBe(untyped)
-    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, true, false)).toMatch(/^dagents: forks are kept out of dagents sessions\./)
-    expect(seatDenial({ ...base, model: 'sonnet' }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, subagentType: 'dagents:judge-opus' }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, subagentType: 'Explore' }, true, false)).toBeNull()
+    for (const subagentType of ['general-purpose', 'claude']) expect(seatDenial({ ...base, subagentType }, true)).toBe(untyped)
+    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, true)).toMatch(/^dagents: forks are kept out of dagents sessions\./)
+    expect(seatDenial({ ...base, model: 'sonnet' }, true)).toBeNull()
+    expect(seatDenial({ ...base, subagentType: 'dagents:judge-opus' }, true)).toBeNull()
+    expect(seatDenial({ ...base, subagentType: 'Explore' }, true)).toBeNull()
   })
 
   test('passes everything before a dagents skill runs, and spawns the main loop does not make', () => {
-    expect(seatDenial(base, false, false)).toBeNull()
-    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, false, false)).toBeNull()
-    expect(seatDenial({ ...base, parentAgentId: 'agent-1' }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, workflow: { runId: 'wf_1', agentIndex: 1 } }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, isTeammate: true }, true, false)).toBeNull()
-    expect(seatDenial({ ...base, resume: { agentId: 'agent-1' } }, true, false)).toBeNull()
+    expect(seatDenial(base, false)).toBeNull()
+    expect(seatDenial({ ...base, subagentType: 'fork', fork: true }, false)).toBeNull()
+    expect(seatDenial({ ...base, parentAgentId: 'agent-1' }, true)).toBeNull()
+    expect(seatDenial({ ...base, workflow: { runId: 'wf_1', agentIndex: 1 } }, true)).toBeNull()
+    expect(seatDenial({ ...base, isTeammate: true }, true)).toBeNull()
+    expect(seatDenial({ ...base, resume: { agentId: 'agent-1' } }, true)).toBeNull()
   })
 
-  test('admits a drafting fork only when forks draft', () => {
+  test('denies a drafting fork like any other fork', () => {
     const fork = { ...base, subagentType: 'fork', fork: true, description: 'Draft plan tasks 1-2' }
-    expect(seatDenial(fork, true, true)).toBeNull()
-    expect(seatDenial({ ...fork, description: 'Verify the register rows' }, true, true)).toMatch(/^dagents: forks are kept out/)
-    expect(seatDenial(fork, true, false)).toMatch(/^dagents: forks are kept out/)
-    expect(FORK_DRAFTING).toBe(false)
+    expect(seatDenial(fork, true)).toMatch(/^dagents: forks are kept out/)
+    expect(seatDenial({ ...fork, description: 'Verify the register rows' }, true)).toMatch(/^dagents: forks are kept out/)
   })
 
   test('denies a drafting fork through the hook once a dagents skill ran', async ($, on) => {
@@ -1104,7 +1092,7 @@ describe('review seat write guard', () => {
       `${WS}/../amendments.md`,
       `${WS}/other/../task-1-review-report.md`,
     ]
-    const tools = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit']
+    const tools = ['Write', 'Edit', 'NotebookEdit']
     const got: (string | undefined)[] = []
     const want: string[] = []
     for (const path of refused) {
@@ -1114,9 +1102,9 @@ describe('review seat write guard', () => {
       }
     }
     expect(got).toEqual(want)
-    expect(await Promise.all(tools.map(async tool => (await write($, 'judge-1', REVIEW, tool)).deny))).toEqual([undefined, undefined, undefined, undefined])
+    expect(await Promise.all(tools.map(async tool => (await write($, 'judge-1', REVIEW, tool)).deny))).toEqual([undefined, undefined, undefined])
     expect((await write($, 'judge-1', `${WS}/./task-1-review-report.md`)).deny).toBeUndefined()
-    // Only the four write tools are looked at.
+    // Only the three write tools are looked at.
     expect((await $.tool.call({ tool: 'Read', file_path: `${WS}/amendments.md`, agentId: 'judge-1' } as never)).deny).toBeUndefined()
   })
 
@@ -5078,7 +5066,7 @@ describe('run card', () => {
   }
 
   test('a plan at its tail finishes past the budget only in the session that runs it', async ($, on) => {
-    // Written as the session started, as a darkmem pull on a new machine writes it.
+    // Written as the session started.
     const files: World['files'] = {
       '/home/me/code/shop/.dagents/sdd/p/progress.md': { text: tailLedger(5, true), mtimeMs: 2_000_000 },
       '/home/me/code/shop/docs/plans/p.md': { text: TAIL_PLAN },
@@ -5401,30 +5389,6 @@ describe('resume offer', () => {
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
   })
 
-  test('withdraws a ruling handoff once every row of its register in the darkmem docs store is resolved', async ($, on) => {
-    const MIRROR = '/home/me/.dagents/mirror/shop'
-    const MODE = [
-      `documents\tdarkmem\t${MIRROR}/dagents`,
-      'progress\tlocal\t/home/me/code/shop/.dagents/sdd\t/home/me/code/shop/.dagents/handoff/latest.md',
-      'project\tshop',
-      '',
-    ].join('\n')
-    const STORED = `${MIRROR}/dagents/registers/r.md`
-    const files: NonNullable<World['files']> = {
-      '/home/me/.dagents/stores.json': { text: '{}', mtimeMs: 1 },
-      [LATEST]: { text: rulingHandoff(), mtimeMs: 900_000 },
-      [STORED]: { text: register(['done', 'open']), mtimeMs: 1 },
-    }
-    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' }, nextStepOuts: [FAILED, FAILED] })
-    signedIn(on, files)
-    await $.session.start(START)
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect(await band.find({ key: 'band-resume' })).toBeDefined()
-    files[STORED] = { text: register(['done', 'done']), mtimeMs: 2 }
-    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
-    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
-  })
-
   test('keeps a ruling handoff whose register cannot be read', async ($, on) => {
     await start($, on, rulingHandoff())
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -5607,152 +5571,12 @@ describe('resume offer', () => {
 })
 
 describe('cockpit roots', () => {
-  const MIRROR = '/home/me/.dagents/mirror/shop'
-  const MODE = [
-    `documents\tdarkmem\t${MIRROR}/superpowers`,
-    `progress\tdarkmem\t${MIRROR}/work/sdd\t${MIRROR}/work/handoff/latest.md`,
-    'project\tshop',
-    '',
-  ].join('\n')
   const LEDGER = '# SDD ledger — plan: docs/superpowers/plans/p.md\nTask 1: implementer dagents:impl-sonnet-low (assigned; base abc1234)\n'
   const PLAN = '# Plan\n\n### Task 1: Add the helpers\n\n### Task 2: Draw the card\n'
-  // darkmem-config runs only once one of the ~/.dagents files exists.
-  const storesFile = (): NonNullable<World['files']> => ({ '/home/me/.dagents/stores.json': { text: '{}', mtimeMs: 1 } })
-  const checkoutFiles = (): NonNullable<World['files']> => ({
-    ...storesFile(),
-    '/home/me/code/shop/.dagents/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
-    '/home/me/code/shop/docs/dagents/plans/p.md': { text: PLAN },
-  })
-
-  test('reads the roots --mode prints', () => {
-    expect(parseModeLines(MODE)).toEqual({
-      docs: { store: 'darkmem', root: `${MIRROR}/superpowers` },
-      progress: { store: 'darkmem', ledgerRoot: `${MIRROR}/work/sdd`, latestFile: `${MIRROR}/work/handoff/latest.md` },
-      project: 'shop',
-    })
-    expect(parseModeLines('documents\tlocal\t/r/docs/dagents\nprogress\tlocal\t/r/.dagents/sdd\t/r/.dagents/handoff/latest.md\n')?.project).toBeNull()
-    expect(parseModeLines(PORCELAIN)).toBeNull()
-    expect(parseModeLines('documents\tlocal\t/r/docs/dagents\n')).toBeNull()
-    expect(parseModeLines('documents\telsewhere\t/r\nprogress\tlocal\t/a\t/b\n')).toBeNull()
-  })
-
-  test('a failing --mode keeps the checkout paths and says why', async ($, on) => {
-    const files = checkoutFiles()
-    const stderr = 'darkmem-config: /home/me/.dagents/stores.json is not valid JSON: Unexpected token\nat line 2\n'
-    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 2, stdout: '', stderr } })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^darkmem-config: \/home\/me\/\.dagents\/stores\.json is not valid JSON: Unexpected token$/ })).toBeDefined()
-    await ui.unmount()
-    const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
-    expect(JSON.stringify(await desk.drawn())).toContain('stores.json is not valid JSON')
-  })
-
-  test('without node the checkout paths stay silently', async ($, on) => {
-    const files = checkoutFiles()
-    world(on, { ...SIGNED_IN, files, modeOut: 'missing' })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-    expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
-  })
-
-  for (const [name, modeOut] of [
-    ['a run that fails at once without naming node', 'rejects'],
-    ['an exit 127', { exitCode: 127, stdout: '', stderr: 'sh: 1: node: not found\n' }],
-  ] as const) {
-    test(`${name} keeps the checkout paths silently`, async ($, on) => {
-      const files = checkoutFiles()
-      world(on, { ...SIGNED_IN, files, modeOut })
-      signedIn(on, files)
-      await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
-      await $.session.start(START)
-      const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-      expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-      expect(JSON.stringify(await ui.drawn())).not.toMatch(/gave no answer|exited 127|not found/)
-    })
-  }
-
-  test('a run the engine stops at its timeout says it gave no answer', async ($, on) => {
-    const files = checkoutFiles()
-    world(on, { ...SIGNED_IN, files, modeOut: 'timeout' })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /darkmem-config\.mjs --mode gave no answer within 5 seconds/ })).toBeDefined()
-  })
-
-  test('a run that prints no mode lines keeps the checkout paths silently', async ($, on) => {
-    const files = checkoutFiles()
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, modeRuns })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(modeRuns).toEqual(['/home/me/code/shop'])
-    expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
-    expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
-  })
-
-  test('reads the roots once per stores.json change, re-read from a mirror path', async ($, on) => {
-    const files: NonNullable<World['files']> = { ...checkoutFiles(), '/home/me/.dagents/stores.json': { text: '{}', mtimeMs: 1 } }
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, modeRuns })
-    signedIn(on, files)
-    await $.session.start(START)
-    expect(modeRuns).toEqual(['/home/me/code/shop'])
-    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dagents/mirror/shop/work/sdd/p/progress.md' })
-    expect(modeRuns).toHaveLength(1)
-    files['/home/me/.dagents/stores.json']!.mtimeMs = 2
-    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dagents/mirror/shop/work/sdd/p/progress.md' })
-    expect(modeRuns).toEqual(['/home/me/code/shop', '/home/me/code/shop'])
-  })
-
-  test('reads the roots again when ~/.dagents/config.json changes', async ($, on) => {
-    const files: NonNullable<World['files']> = { ...checkoutFiles(), [CONFIG]: { text: '{}', mtimeMs: 1 } }
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, modeRuns })
-    signedIn(on, files)
-    await $.session.start(START)
-    expect(modeRuns).toEqual(['/home/me/code/shop'])
-    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dagents/config.json' })
-    expect(modeRuns).toHaveLength(1)
-    files[CONFIG]!.mtimeMs = 2
-    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dagents/config.json' })
-    expect(modeRuns).toHaveLength(2)
-  })
-
-  test('a --mode failure that names a missing file is shown, not taken for a missing node', async ($, on) => {
-    const files = checkoutFiles()
-    const stderr = "darkmem-config: ENOENT: no such file or directory, open '/home/me/.dagents/mirror/shop/.sync-state.json'\n"
-    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 1, stdout: '', stderr } })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /^darkmem-config: ENOENT: no such file or directory/ })).toBeDefined()
-  })
-
-  test('a run that timed out is tried again at the next read', async ($, on) => {
-    const files = checkoutFiles()
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, modeRuns, modeOut: 'timeout' })
-    signedIn(on, files)
-    await $.session.start(START)
-    expect(modeRuns).toHaveLength(1)
-    await $.tool.call({ tool: 'Bash', command: 'cat .dagents/sdd/p/progress.md' })
-    expect(modeRuns).toHaveLength(2)
-  })
-
-  test('runs no node while neither ~/.dagents/config.json nor stores.json exists', async ($, on) => {
+  test('reads the checkout with no darkmem-config run, even beside darkmem settings an older build left', async ($, on) => {
     const files: NonNullable<World['files']> = {
+      '/home/me/.dagents/stores.json': { text: '{"/home/me/code/shop":{"documents":"darkmem","progress":"darkmem"}}', mtimeMs: 1 },
+      '/home/me/.dagents/config.json': { text: '{"darkmemEnabled":true,"darkmem":{"url":"http://d.test","repos":{"/home/me/code/shop":{"project":"shop"}}}}', mtimeMs: 1 },
       '/home/me/code/shop/.dagents/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
       '/home/me/code/shop/docs/dagents/plans/p.md': { text: PLAN },
     }
@@ -5766,20 +5590,18 @@ describe('cockpit roots', () => {
     expect(await ui.find({ type: 'Text', text: /Task 1: Add the helpers/ })).toBeDefined()
   })
 
-  test('resolves a plan under the docs root in darkmem, under the docs directory of each checkout otherwise', () => {
-    const darkmem = { store: 'darkmem' as const, root: `${MIRROR}/superpowers` }
+  test('resolves a plan under the docs directory of each checkout', () => {
     const w = { root: '/w', docsDir: '/w/docs/dagents' }
     const p = { root: '/p', docsDir: '/p/docs/dagents' }
     for (const name of ['docs/superpowers/plans/p.md', 'docs/forge/plans/p.md', 'docs/dforge/plans/p.md', 'docs/dagents/plans/p.md', './docs/dagents/plans/p.md']) {
-      expect(planCandidates(name, darkmem, [w, p])).toEqual([`${MIRROR}/superpowers/plans/p.md`])
       // Every prefix names the same document: an older citation reads under each checkout's docs/dagents.
-      expect(planCandidates(name, { store: 'local', root: '/p/docs/dagents' }, [w, p])).toEqual(['/w/docs/dagents/plans/p.md', '/p/docs/dagents/plans/p.md'])
-      expect(planCandidates(name, null, [p, p])).toEqual(['/p/docs/dagents/plans/p.md'])
+      expect(planCandidates(name, [w, p])).toEqual(['/w/docs/dagents/plans/p.md', '/p/docs/dagents/plans/p.md'])
+      expect(planCandidates(name, [p, p])).toEqual(['/p/docs/dagents/plans/p.md'])
     }
-    expect(planCandidates('docs/plans/p.md', null, [w, p])).toEqual(['/w/docs/plans/p.md', '/p/docs/plans/p.md'])
-    expect(planCandidates('/abs/plans/p.md', darkmem, [w])).toEqual(['/abs/plans/p.md'])
-    expect(planCandidates('docs/superpowersx/p.md', darkmem, [w])).toEqual(['/w/docs/superpowersx/p.md'])
-    expect(planCandidates('docs/forgex/p.md', darkmem, [w])).toEqual(['/w/docs/forgex/p.md'])
+    expect(planCandidates('docs/plans/p.md', [w, p])).toEqual(['/w/docs/plans/p.md', '/p/docs/plans/p.md'])
+    expect(planCandidates('/abs/plans/p.md', [w])).toEqual(['/abs/plans/p.md'])
+    expect(planCandidates('docs/superpowersx/p.md', [w])).toEqual(['/w/docs/superpowersx/p.md'])
+    expect(planCandidates('docs/forgex/p.md', [w])).toEqual(['/w/docs/forgex/p.md'])
   })
 
   test('reads a plan named under docs/superpowers from a checkout that has only docs/dagents', async ($, on) => {
@@ -5808,33 +5630,6 @@ describe('cockpit roots', () => {
     expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeUndefined()
   })
 
-  test('reads the ledger and the plan from the mirror when both families are in darkmem', async ($, on) => {
-    const files: World['files'] = {
-      ...storesFile(),
-      [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
-      [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
-    }
-    world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Task 2: Draw the card/ })).toBeDefined()
-    expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
-  })
-
-  test('offers Resume for latest.md in the mirror, naming it when the note has no first prompt', async ($, on) => {
-    const files: World['files'] = { ...storesFile(), [`${MIRROR}/work/handoff/latest.md`]: { text: UNFENCED, mtimeMs: 900_000 } }
-    const prompts: string[] = []
-    world(on, { ...SIGNED_IN, files, prompts, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
-    signedIn(on, files)
-    await $.session.start(START)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await ui.press({ key: 'pane-resume' })
-    expect(prompts).toEqual([expect.stringContaining(`${MIRROR}/work/handoff/latest.md`)])
-  })
-
   test("reads finish.json and a local plan from the session's worktree before the primary", async ($, on) => {
     const files: World['files'] = {
       '/home/me/code/shop/.dagents/sdd/p/progress.md': { text: LEDGER, mtimeMs: 2_000_000 },
@@ -5853,16 +5648,11 @@ describe('cockpit roots', () => {
   })
 
   test('takes the primary checkout from the common directory, as the scripts do', async ($, on) => {
-    // stores.json makes the cockpit ask darkmem-config for the primary's roots.
-    const files: NonNullable<World['files']> = { '/home/me/.dagents/stores.json': { text: '{}', mtimeMs: 1 }, '/home/me/code/shop': { text: '', kind: 'dir' } }
     const gitRuns: string[] = []
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main', gitRuns, modeRuns })
-    signedIn(on, files, undefined, '/home/me/code/main')
+    world(on, { ...SIGNED_IN, primary: '/home/me/code/main', gitRuns })
+    signedIn(on, undefined, undefined, '/home/me/code/main')
     await $.session.start(START)
     expect(gitRuns).toContain('git -C /home/me/code/main rev-parse --show-toplevel')
-    // The roots are the linked worktree's, as sdd-workspace resolves them there.
-    expect(modeRuns).toEqual(['/home/me/code/shop'])
   })
 
   test("reads a linked worktree's own ledger, not the primary checkout's", async ($, on) => {
@@ -5927,37 +5717,6 @@ describe('cockpit roots', () => {
     expect(gitRuns.slice(before)).toEqual([])
   })
 
-  test('a submodule has no primary checkout, as in the scripts', async ($, on) => {
-    const files: NonNullable<World['files']> = { '/home/me/.dagents/stores.json': { text: '{}', mtimeMs: 1 } }
-    const modeRuns: string[] = []
-    world(on, { ...SIGNED_IN, files, commonDir: '/home/me/code/shop/.git/modules/web', modeRuns })
-    signedIn(on, files)
-    await $.session.start(START)
-    // With no primary, the session's own repository stands in.
-    expect(modeRuns).toEqual(['/home/me/code/shop'])
-  })
-
-  test('a changed stores.json moves the card to the new roots', async ($, on) => {
-    const files: NonNullable<World['files']> = {
-      '/home/me/.dagents/stores.json': { text: '{}', mtimeMs: 1 },
-      [`${MIRROR}/work/sdd/p/progress.md`]: { text: LEDGER, mtimeMs: 2_000_000 },
-      [`${MIRROR}/superpowers/plans/p.md`]: { text: PLAN },
-    }
-    const w: World = { ...SIGNED_IN, files }
-    world(on, w)
-    signedIn(on, files)
-    await $.tool.call({ tool: 'Skill', skill: 'dagents:subagent-driven-development' })
-    await $.session.start(START)
-    let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeUndefined()
-    expect(await ui.find({ type: 'Button', text: '▸ Run' })).toBeUndefined()
-    await ui.unmount()
-    w.modeOut = { exitCode: 0, stdout: MODE, stderr: '' }
-    files['/home/me/.dagents/stores.json']!.mtimeMs = 2
-    await $.tool.call({ tool: 'Bash', command: 'cat ~/.dagents/stores.json' })
-    ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Button', text: '▾ Run' })).toBeDefined()
-  })
 })
 
 describe('flight deck', () => {
@@ -6286,7 +6045,7 @@ describe('settings rows', () => {
 
   test('the tabs are the groups in schema order', () => {
     expect(tabsOf(ROWS)).toEqual(['Cockpit', 'Context', 'Finish'])
-    expect(tabsOf(SCHEMA)).toEqual(['Cockpit', 'Minimized', 'Context', 'Workflow', 'Process', 'Finish', 'Notifications', 'darkmem'])
+    expect(tabsOf(SCHEMA)).toEqual(['Cockpit', 'Minimized', 'Context', 'Workflow', 'Process', 'Finish', 'Notifications'])
   })
 
   test('a value reads through its unit and zero word', () => {
@@ -7969,7 +7728,7 @@ describe('A5: the judge write guard (speed-and-cost-followups acceptance)', () =
     await judgeNaming($, on, NAMED)
     const paths = [`${WS}/amendments.md`, `${WS}/task-1-step.json`, '/home/me/code/shop/docs/dagents/plans/2026-10-28-plan.md', '/etc/passwd', '/home/me/code/shop/src/index.ts']
     expect(await Promise.all(paths.map(async path => (await write($, 'judge-1', path)).deny))).toEqual(paths.map(path => refusal(NAMED, path)))
-    for (const tool of ['Edit', 'MultiEdit', 'NotebookEdit']) expect((await write($, 'judge-1', `${WS}/amendments.md`, tool)).deny).toMatch(REFUSED)
+    for (const tool of ['Edit', 'NotebookEdit']) expect((await write($, 'judge-1', `${WS}/amendments.md`, tool)).deny).toMatch(REFUSED)
   })
 
   test('A5: a judge Write to another report name, a relative path or a .. path is refused when the dispatch named only task-1-review-report.md', async ($, on) => {

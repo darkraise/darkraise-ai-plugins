@@ -4,7 +4,6 @@ import { nowIso, readJson, readText, withLock, writeJson } from './util.mjs';
 
 export function loadState(paths) {
   const state = readJson(paths.state, null) ?? {};
-  state.version = 1;
   state.plans ??= {};
   return state;
 }
@@ -37,8 +36,8 @@ export function taskRecord(state, slug, number) {
   return plan.tasks[number];
 }
 
-// One line per transition: the source for the darkmem work log, the cost
-// phases and the tick-without-commit check.
+// One line per transition: the source for the cost phases and the
+// tick-without-commit check.
 export function appendEvent(ctx, event) {
   fs.mkdirSync(path.dirname(ctx.paths.events), { recursive: true });
   fs.appendFileSync(ctx.paths.events, `${JSON.stringify({ at: nowIso(ctx.env), ...event })}\n`);

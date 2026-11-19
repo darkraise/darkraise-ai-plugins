@@ -117,7 +117,7 @@ wins, and the report names which one matched.
 
 `BLOCKED` outranks everything: `scripts/next-step` already treats it as terminal
 and hands the decision to your human partner. Rule 0 reads each task's **last**
-line, as both execution skills' recovery tables do, so a task that was blocked
+line, as executing-plans' recovery table does, so a task that was blocked
 and later ruled and completed no longer matches.
 
 Rules 4 and 5 require `completed.md` to exist. Without it nothing can be shown to
@@ -125,14 +125,3 @@ have finished, and firing rule 5 would recommend re-executing merged work — sk
 to rule 6 and continue from there, and say the index is absent. When several plans match one rule, take
 the newest filename date and say so. When a rule matches in more than one
 worktree, report each and recommend the one whose branch has the newest commit.
-
-## Red Flags
-
-| Thought | Reality |
-|---------|---------|
-| "I'll list every plan so nothing is missed" | A list of forty is a list of none. Unfinished, plus seven days. |
-| "Three things look important" | Pick one by the table and say which rule matched. |
-| "I know roughly where this stands" | Every line comes from the audit or the tree. Nothing from memory. |
-| "Every plan in the phase merged, so the phase is done" | Only `closed` in `roadmap status` means done. Report what `roadmap open` lists. |
-| "No ledger, so nobody ever ran it" | The workspace is deleted on merge. Check `completed.md` first. |
-| "I should write the handoff while I'm here" | This skill writes nothing. `latest.md` belongs to dforge:handoff. |

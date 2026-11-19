@@ -25,7 +25,9 @@ export function reviewRange(ctx, active, taskNumber) {
 }
 
 function numstat(ctx, range) {
-  const output = gitOut(ctx.root, ['diff', '--numstat', '--no-renames', `${range.base}..${range.head}`, '--', '.', OWN]) ?? '';
+  const output = gitOut(ctx.root, ['diff', '--numstat', '--no-renames', `${range.base}..${range.head}`, '--', '.', OWN]);
+  // An empty answer would understate the change and so the review tier.
+  if (output === null) fail(`git cannot diff ${range.base}..${range.head}; the commits a review covers have to exist`);
   return output.split('\n').filter(Boolean).map(line => {
     const [added, deleted, file] = line.split('\t');
     return { file, added: Number(added) || 0, deleted: Number(deleted) || 0 };
@@ -59,6 +61,12 @@ export function requiredTier(ctx, active, files) {
   const limits = ctx.config.review;
   if (active.plan.risk !== 'none' || active.plan.tasks.some(task => task.risk !== 'none') || lines > limits.tier2Lines || files.length > limits.tier2Files) return 2;
   return lines <= limits.tier0Lines ? 0 : 1;
+}
+
+// The tier the diff needs, without the rest of the pack.
+export function diffTier(ctx, active, taskNumber) {
+  const range = reviewRange(ctx, active, taskNumber);
+  return taskNumber === undefined ? requiredTier(ctx, active, numstat(ctx, range)) : 1;
 }
 
 export function buildPack(ctx, active, taskNumber) {

@@ -1,12 +1,10 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { fail, git, gitOut, readJson, writeJson } from './util.mjs';
+import { fail, git, gitOut, mustGit, readJson } from './util.mjs';
 
 export const DEFAULTS = {
   defaultBranch: null,
   gates: [],
-  run: null,
   verifyTimeout: 600,
   budgets: { 'project.md': 150, 'gotchas.md': 100 },
   context: { resetAt: 150000 },
@@ -17,7 +15,6 @@ export const DEFAULTS = {
     maxSuiteGrowth: 0.2,
   },
   ui: { paths: [] },
-  darkmem: { project: '' },
   // Off: the review ends the turn and shipping waits for the owner.
   autoShip: false,
 };
@@ -37,15 +34,6 @@ export function findRoot(cwd) {
   return path.resolve(root);
 }
 
-// The primary checkout of the repository, the same from each of its
-// worktrees: the key under which the user enables darkmem for it.
-export function primaryRoot(root) {
-  const common = gitOut(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
-  if (!common || !path.isAbsolute(common)) return root;
-  const top = gitOut(path.dirname(common), ['rev-parse', '--show-toplevel']);
-  return top ? path.resolve(top) : root;
-}
-
 export function layout(root) {
   const docs = path.join(root, 'docs', 'dflow');
   const stateDir = path.join(root, '.dflow');
@@ -63,28 +51,45 @@ export function layout(root) {
   };
 }
 
+// .dflow/ ignores itself, so its machine state stays out of commits and out
+// of the dirty checks whether or not the repository's .gitignore names it.
+// A cloned repository may ship either path as a symbolic link, so the file is
+// created exclusively and never through a link or outside the checkout.
+export function ensureStateDir(paths) {
+  const ignore = path.join(paths.stateDir, '.gitignore');
+  if (fs.existsSync(ignore)) return;
+  try {
+    let stat = null;
+    try {
+      stat = fs.lstatSync(paths.stateDir);
+    } catch (error) {
+      if (error.code !== 'ENOENT') return;
+    }
+    if (stat?.isSymbolicLink()) return;
+    if (!stat) fs.mkdirSync(paths.stateDir);
+    const inside = path.relative(fs.realpathSync(paths.root), fs.realpathSync(paths.stateDir));
+    if (!inside || inside.startsWith('..') || path.isAbsolute(inside)) return;
+    fs.writeFileSync(ignore, '*\n', { flag: 'wx' });
+  } catch {
+    // EEXIST means a file or link is there already. Otherwise a read-only
+    // checkout must not break a hook; the write that needs the directory
+    // reports the failure itself.
+  }
+}
+
 export function loadConfig(root) {
   return merge(DEFAULTS, readJson(layout(root).config, {}));
 }
 
-export function dflowHome(env = process.env) {
-  return env.DFLOW_HOME || path.join(env.HOME || os.homedir(), '.dflow');
-}
-
-export function userConfig(env = process.env) {
-  return readJson(path.join(dflowHome(env), 'config.json'), {});
-}
-
-// Records, in the user's own config, that this repository may send its docs to
-// a darkmem project; null as the project withdraws it.
-export function setDarkmemConsent(env, root, project) {
-  const file = path.join(dflowHome(env), 'config.json');
-  const config = readJson(file, {}) ?? {};
-  const repositories = { ...(config.darkmem?.repositories ?? {}) };
-  if (project) repositories[root] = project;
-  else delete repositories[root];
-  config.darkmem = { ...(config.darkmem ?? {}), repositories };
-  writeJson(file, config);
+// What a commit would not hold: tracked changes, and untracked files that are
+// not ignored, except documents under docs/dflow/, where drafts of other work
+// stay untracked. The configuration and anything a gate could run are not
+// drafts. Each untracked file is listed, since a directory entry would hide
+// what it holds. Read NUL-separated, since git quotes a path with a space.
+export function uncommitted(ctx) {
+  return mustGit(ctx.root, ['status', '--porcelain', '--untracked-files=all', '--no-renames', '-z']).split('\0').filter(Boolean)
+    .map(entry => ({ code: entry.slice(0, 2), file: entry.slice(3) }))
+    .filter(entry => !(entry.code === '??' && entry.file.startsWith('docs/dflow/') && entry.file.endsWith('.md')));
 }
 
 export function currentBranch(root) {
@@ -113,8 +118,21 @@ export function baseCommit(root, config) {
   return gitOut(root, ['merge-base', 'HEAD', branch]);
 }
 
-export function isAncestor(root, ancestor, descendant = 'HEAD') {
-  return git(root, ['merge-base', '--is-ancestor', ancestor, descendant]).ok;
+// The files that changed from `since` to HEAD. After a rebase `since` is no
+// ancestor of HEAD and the diff also holds what the default branch brought
+// in, which is not work done since: only then is it narrowed to the files the
+// branch itself changes. null when git cannot compare the two, as after a gc
+// drops `since`; callers read that as changed.
+export function changedSince(ctx, since) {
+  const files = git(ctx.root, ['diff', '--name-only', '--no-renames', '-z', `${since}..HEAD`]);
+  if (!files.ok) return null;
+  const changed = files.stdout.split('\0').filter(Boolean);
+  if (git(ctx.root, ['merge-base', '--is-ancestor', since, 'HEAD']).ok) return changed;
+  const base = baseCommit(ctx.root, ctx.config);
+  const own = base && git(ctx.root, ['diff', '--name-only', '--no-renames', '-z', `${base}..HEAD`]);
+  if (!own?.ok) return changed;
+  const mine = new Set(own.stdout.split('\0'));
+  return changed.filter(file => mine.has(file));
 }
 
 export function context(cwd = process.cwd(), env = process.env) {

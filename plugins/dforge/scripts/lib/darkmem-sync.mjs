@@ -30,6 +30,20 @@ async function status({ cfg, roots, state, report, out }) {
   report.conflicts.push(...(state.conflicts ?? []));
 }
 
+// A completed run replaces the conflicts it recorded before; a run that
+// stopped part-way, or failed an item or phase darkmem answered with an error,
+// adds what it found, since it never re-checked the rest. Each command keeps
+// its own list, because pull does not re-check what push found (local case
+// twins, for one). conflicts, which status prints, is their union. A state
+// written before each command kept its own list holds only the union: it is
+// read as push's, the one list a pull cannot re-check.
+function recordConflicts(state, name, found, completed) {
+  const by = state.conflictsBy ?? (state.conflicts.length ? { push: [...state.conflicts] } : {});
+  by[name] = completed ? found : [...new Set([...(by[name] ?? []), ...found])];
+  state.conflictsBy = by;
+  state.conflicts = completed ? [...new Set(Object.values(by).flat())] : [...new Set([...state.conflicts, ...found])];
+}
+
 const notCitable = (name, reason) => `refused: ${name} is not synced and unchanged: ${reason}`;
 
 // NAME@r<id>: the darkmem revision a distillation cites. Only a document the
@@ -339,12 +353,7 @@ async function main(argv, {
   } finally {
     try {
       if (state && !unsavable) {
-        // A completed run replaces the recorded conflicts; a run that stopped
-        // part-way, or failed an item or phase darkmem answered with an error,
-        // adds what it found, since it never re-checked the rest.
-        if (parsed.command.recordsConflicts) {
-          state.conflicts = code === 0 && !report.partial ? report.conflicts : [...new Set([...state.conflicts, ...report.conflicts])];
-        }
+        if (parsed.command.recordsConflicts) recordConflicts(state, parsed.name, report.conflicts, code === 0 && !report.partial);
         try {
           saveState(cfg.statePath, state);
         } catch (error) {

@@ -42,17 +42,12 @@ dagents_dir_rel() {
 # and dr-forge's (3.x) state directories .superpowers/ and .forge/, docs trees
 # docs/superpowers/ and docs/forge/, its git dir's dr-superpowers/ and
 # dr-forge/, and the primary checkout's .superpowers/ and .forge/, which hold a
-# linked worktree's handoff. It also names ~/.dr-superpowers when that home is
-# unmigrated (its config holds a darkmem mapping the new config lacks, or its
-# mirror folder still holds a mirror) and ~/.dr-forge while it holds anything.
+# linked worktree's handoff. It also names ~/.dr-forge while it holds anything
+# besides the mirror/ and stores.json migrate leaves there for darkmem.
 # dagents reads none of them, so the migrate skill must move them first.
 dagents_legacy_layout() {
-  local root=${1:-.} gitdir common primary home=${HOME:-}/.dr-superpowers name
-  if [ -n "${HOME:-}" ] && {
-    { grep -qs '"darkmem"[[:space:]]*:' "$home/config.json" && ! grep -qs '"darkmem"[[:space:]]*:' "${HOME}/.dagents/config.json"; } ||
-    [ -n "$(ls -A "$home/mirror" 2>/dev/null)" ]
-  }; then printf '%s\n' "$home"; fi
-  [ -z "${HOME:-}" ] || [ -z "$(ls -A "$HOME/.dr-forge" 2>/dev/null)" ] || printf '%s\n' "$HOME/.dr-forge"
+  local root=${1:-.} gitdir common primary name
+  [ -z "${HOME:-}" ] || [ -z "$(ls -A "$HOME/.dr-forge" 2>/dev/null | grep -vxE 'mirror|stores\.json')" ] || printf '%s\n' "$HOME/.dr-forge"
   for name in .superpowers .forge docs/superpowers docs/forge; do
     [ ! -e "$root/$name" ] || printf '%s\n' "$root/$name"
   done

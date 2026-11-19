@@ -76,11 +76,3 @@ is bound to no live session, so `scripts/auto-run status` exits 3 here while
 `scripts/auto-run stop --stale` before resuming: it stops that run and prints
 its pending decisions and rulings, which you read before going on. It exits 3
 and changes nothing while the owner still lives.
-
-## Red Flags
-
-| Thought | Reality |
-|---------|---------|
-| "The summary says Task 5 is done" | Only a `Task 5: complete` ledger line says that. |
-| "The worktree is gone — I'll recreate the branch from main" | A missing branch means merged or discarded. Ask. |
-| "I'll look around instead of running repo-audit" | Looking around costs five to eight requests at a fresh session's full reload; the audit is one. |

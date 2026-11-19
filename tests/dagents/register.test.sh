@@ -315,31 +315,19 @@ while IFS= read -r own; do
   check "own register parses: $(basename "$own")" "$RC" "0"
 done < <(register_files "$REPO_ROOT")
 
-# --- documents kept in darkmem: registers are listed and checked in the mirror ---
-. "$HERE/fixtures/darkmem-stores.sh"
+# --- registers are listed and checked in the docs root ---
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q "$SR"
-M=$(stores_home "$SH" "$SR" proj darkmem local)
+M="$(git -C "$SR" rev-parse --show-toplevel)/docs"
 mkdir -p "$M/dagents/registers" "$M/dagents/specs"
 printf '# A\n' > "$M/dagents/specs/a-design.md"
 printf '# B\n' > "$M/dagents/specs/b-design.md"
 reg "$M/dagents/registers/r.md" '| 1 | One | - | - | planned | - |'
-check "register_files: the mirror's registers" "$(HOME=$SH register_files "$SR")" "$M/dagents/registers/r.md"
+check "register_files: the docs root's registers" "$(HOME=$SH register_files "$SR")" "$M/dagents/registers/r.md"
 out=$(cd "$SR" && HOME=$SH bash "$HERE/../../plugins/dagents/scripts/register" check "$M/dagents/registers/r.md" 2>&1)
-check "register check: Covers names resolve in the mirror" "$(tail -n 1 <<<"$out")" "register: 0 errors"
+check "register check: Covers names resolve in the docs root" "$(tail -n 1 <<<"$out")" "register: 0 errors"
 out=$(cd "$SR" && HOME=$SH bash "$HERE/../../plugins/dagents/scripts/register" open --spec docs/superpowers/specs/a-design.md 2>&1)
 check "register open: the register is named, not pathed" "$out" "docs/dagents/registers/r.md: #1 One — planned, assigned -"
-
-# --- a ConfigError stops register instead of reporting nothing open ---
-BH="$TMP/bad-home"; mkdir -p "$BH/.dagents"
-BR="$TMP/bad-repo"; git init -q "$BR"
-printf '{"darkmem":{"url":"http://127.0.0.1:9","repos":{"%s":{"project":"p","documentStore":"bogus"}}}}\n' \
-  "$(git -C "$BR" rev-parse --show-toplevel)" > "$BH/.dagents/config.json"
-(cd "$BR" && HOME=$BH bash "$HERE/../../plugins/dagents/scripts/register" open --spec docs/x.md >/dev/null 2>&1)
-check "register open: a ConfigError exits 2" "$?" "2"
-reg "$BR/r.md" '| 1 | One | - | - | planned | - |'
-(cd "$BR" && HOME=$BH bash "$HERE/../../plugins/dagents/scripts/register" check "$BR/r.md" >/dev/null 2>&1)
-check "register check: a ConfigError exits 2" "$?" "2"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

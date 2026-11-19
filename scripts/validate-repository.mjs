@@ -19,15 +19,7 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   // dforge 4.x's docs/dforge is read as an older spelling of docs/dagents.
   'plugins/dagents/scripts/lib/roots.sh',
   'plugins/dagents/hooks/cockpit/lib.ts',
-  'plugins/dagents/scripts/lib/darkmem-mirror.mjs',
-  'plugins/dagents/scripts/lib/darkmem-sync.mjs',
-  'plugins/dagents/scripts/lib/darkmem-reconcile.mjs',
   'tests/dagents/roots.test.sh',
-  'tests/dagents/darkmem-sync/mirror.test.mjs',
-  'tests/dagents/darkmem-sync/reconcile.test.mjs',
-  'tests/dagents/darkmem-sync/restore.test.mjs',
-  // Seeds another plugin's darkmem document and workstream that dagents must leave alone.
-  'tests/dagents/darkmem-sync/push.test.mjs',
   // Migrate moves a dforge 4.x project's names to dagents' and says when one is found.
   'plugins/dagents/scripts/dagents-migrate',
   'plugins/dagents/scripts/lib/dagents-dir.sh',
@@ -35,9 +27,9 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   'plugins/dagents/scripts/session-start.sh',
   'plugins/dagents/skills/migrate/SKILL.md',
   'tests/dagents/dagents-migrate.test.sh',
-  // Migrate copies a dforge 4.x repository's home record, settings and darkmem data.
+  // Migrate copies a dforge 4.x repository's settings and refuses its darkmem-held families.
   'plugins/dagents/scripts/lib/dagents-home-migrate.mjs',
-  'tests/dagents/darkmem-sync/migrate.test.mjs',
+  'tests/dagents/home/home-migrate.test.mjs',
   // The workflow guard names its siblings.
   'plugins/dagents/scripts/workflow-guard.mjs',
   'tests/dagents/stand-down.test.sh',
@@ -47,7 +39,6 @@ export const DAGENTS_DFORGE_ALLOWED = new Set([
   'tests/dagents/isolation.acceptance.test.sh',
   // Builds dforge 4.x projects and homes to prove migrate and the guard's isolation.
   'tests/dagents/dagents-split.acceptance.test.sh',
-  'tests/dagents/darkmem-sync/dagents-split.acceptance.test.mjs',
 ]);
 const claudeOnly = ['dflow'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
@@ -77,7 +68,6 @@ export function validateRepository(root, { names = maintained } = {}) {
     const catalog = read(resolve(root, catalogPath));
     if (!catalog) continue;
     if (catalog.name !== 'darkraise') errors.push(`${client}: marketplace name must be darkraise`);
-    if (client === 'claude' && catalog.allowCrossMarketplaceDependenciesOn !== undefined) errors.push('claude: cross-marketplace dependency allowlist must be removed');
     if (!Array.isArray(catalog.plugins)) { errors.push(`${client}: plugins must be an array`); continue; }
     if (JSON.stringify(catalog.plugins.map(p => p.name).sort()) !== JSON.stringify(expected)) errors.push(`${client}: incorrect catalog membership`);
     const seen = new Set();
@@ -102,9 +92,6 @@ export function validateRepository(root, { names = maintained } = {}) {
         if (entry.policy?.installation !== 'AVAILABLE') errors.push(`${entry.name}: installation must be AVAILABLE`);
         if (manifest.skills !== './skills/' || !existsSync(resolve(pluginRoot, 'skills'))) errors.push(`${entry.name}: skills path missing`);
         if (WORKFLOW.includes(entry.name) && (JSON.stringify(manifest.hooks) !== '{}')) errors.push(`${entry.name}: explicit empty Codex hooks required`);
-      }
-      if (client === 'claude' && WORKFLOW.includes(entry.name) && manifest.dependencies?.length) {
-        errors.push(`${entry.name}: standalone plugin must not declare dependencies`);
       }
     }
   }

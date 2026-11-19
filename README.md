@@ -22,8 +22,8 @@ account-aware status line and coding-agent skills for two design systems.
 | Plugin | What it does | Claude Code | Codex |
 | --- | --- | :---: | :---: |
 | [dforge](plugins/dforge/README.md) | Turns a request into a reviewed spec, a scored plan and an in-session execution run. On Claude Code it adds the cockpit pane, Discord notifications and an attribution guard. | ✓ | ✓ (no cockpit) |
-| [dagents](plugins/dagents/README.md) | The dforge 4.x workflow, continued: scored tasks run by implementer agents on a model ladder, subagent or inline execution, and external Antigravity and Codex executors, with the same cockpit on Claude Code. | ✓ | ✓ (no cockpit) |
-| [dflow](plugins/dflow/README.md) | Plans, builds, reviews and ships behind a task gate that only a passing command opens, with a board, living docs checked mechanically, UI proof, a HUD and a darkmem projection. | ✓ | |
+| [dagents](plugins/dagents/README.md) | The subagent-driven dforge 4.x workflow, continued: each scored task runs on an implementer agent on a model ladder with a judge review (inline execution on request), and external Antigravity and Codex executors, with the same cockpit on Claude Code. | ✓ | ✓ (no cockpit) |
+| [dflow](plugins/dflow/README.md) | Plans, builds, reviews and ships behind a task gate that only a passing command opens, with a board, living docs checked mechanically, UI proof and a HUD. | ✓ | |
 | [darkraise-ui](plugins/darkraise-ui/README.md) | Teaches agents to write idiomatic darkraise-ui code. | ✓ | ✓ |
 | [darkraise-win32ui](plugins/darkraise-win32ui/README.md) | Teaches agents to write idiomatic Darkraise.Win32UI code. | ✓ | ✓ |
 
@@ -64,8 +64,8 @@ codex plugin add dforge@darkraise
 ```
 
 Register the repository root (its Git URL or a local checkout's absolute path),
-not the catalog file: Codex 0.153.4's CLI rejects direct catalog-file
-registration, and root discovery selects the dedicated Codex catalog
+not the catalog file: Codex's CLI rejects direct catalog-file registration,
+and root discovery selects the dedicated Codex catalog
 (`.agents/plugins/marketplace.json`). That catalog lists `dforge`, `dagents` and
 the two UI plugins; `dflow` is Claude Code only. On Codex, dforge uses the
 client's native agent tools; see
@@ -74,7 +74,8 @@ client's native agent tools; see
 ### Requirements
 
 dforge needs Bash, Git and `jq` (on Windows, Git for Windows provides Bash).
-The cockpit is built against Claude Code 2.1.299 to 2.1.327; the mod API it
+The Claude Code versions the cockpit is tested against are listed under
+[Cockpit](plugins/dforge/README.md#cockpit) in dforge's README; the mod API it
 uses is early access and may change between releases.
 
 ## dforge in brief

@@ -1,6 +1,6 @@
 ---
 name: impl-sonnet-xhigh
-description: "Task implementer running Sonnet 5.5 at xhigh effort. Reserve tier in dagents: no score reaches it, so it runs only on a human override."
+description: "Task implementer running Sonnet at xhigh effort. Reserve tier in dagents: no score reaches it, so it runs only on a human override."
 model: sonnet
 effort: xhigh
 disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications

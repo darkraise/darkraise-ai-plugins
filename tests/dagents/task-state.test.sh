@@ -190,5 +190,46 @@ check 'the commit records the new submodule commit' \
   "$(git -C "$fixture/subs" ls-tree HEAD lib | awk '{print $3}')" "$(git -C "$fixture/subs/lib" rev-parse HEAD)"
 dr_task_unlock
 
+# --- macOS: GNU timeout only as gtimeout, and a realpath without -m -----------
+mkdir -p "$fixture/macbin" "$fixture/outside"
+printf '#!/usr/bin/env bash\necho "timeout: command not found" >&2\nexit 127\n' > "$fixture/macbin/timeout"
+printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$(command -v timeout)" > "$fixture/macbin/gtimeout"
+printf '#!/usr/bin/env bash\necho "realpath: illegal option -- ${1#-}" >&2\nexit 1\n' > "$fixture/macbin/realpath"
+chmod +x "$fixture/macbin/timeout" "$fixture/macbin/gtimeout" "$fixture/macbin/realpath"
+git -C "$fixture/primary" worktree add -q -b mac "$fixture/mac"
+scope_check() { # scope_check <json array> — dr_task_scope_valid's status on a mac
+  printf '%s\n' "$1" > "$fixture/mac-check.json"
+  (PATH="$fixture/macbin:$PATH" DAGENTS_WORKTREE="$(dr_canonical "$fixture/mac")"; dr_task_scope_valid "$fixture/mac-check.json")
+  echo "$?"
+}
+check 'macOS: a new nested path is in scope' "$(scope_check '["new/dir/file.txt"]')" 0
+case "${OSTYPE:-}" in
+  msys*|cygwin*) ;;
+  *)
+    ln -s "$fixture/outside" "$fixture/mac/out"
+    ln -s "$fixture/outside/missing.txt" "$fixture/mac/dangling"
+    check 'macOS: a path through a symlinked directory escapes' "$(scope_check '["out/x.txt"]')" 2
+    check 'macOS: a dangling symlink to outside escapes' "$(scope_check '["dangling"]')" 2
+    rm "$fixture/mac/out" "$fixture/mac/dangling" ;;
+esac
+# Git Bash: a drive-letter path is rooted, and resolves to the POSIX form the
+# callers compare with. cygpath is stubbed as a function for this one call.
+check 'a drive-letter path resolves through cygpath, not under $PWD' "$(
+  cygpath() { [ "$1" = -u ] && printf '%s\n' "$fixture/primary${2#D:/repo}"; }
+  cd "$fixture" && dr_resolve 'D:/repo/new/report.md'
+)" "$(dr_canonical "$fixture/primary")/new/report.md"
+printf '["mac.txt"]\n' > "$fixture/mac-scope.json"
+(
+  PATH="$fixture/macbin:$PATH" DAGENTS_TIMEOUT=gtimeout
+  dr_task_open "$fixture/mac" mac-task "$fixture/mac-scope.json" || exit 3
+  dr_snapshot "$fixture/mac" "$fixture/mac-before.json" || exit 3
+  printf 'mac\n' > "$fixture/mac/mac.txt"
+  dr_task_stage "$fixture/mac-before.json" 'feat: on a mac'; rc=$?
+  dr_task_unlock
+  exit "$rc"
+)
+check 'macOS: a task commits with gtimeout as the only GNU timeout' "$?" 0
+check 'macOS: the commit landed' "$(git -C "$fixture/mac" log -1 --format=%s)" 'feat: on a mac'
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

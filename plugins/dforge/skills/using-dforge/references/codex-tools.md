@@ -16,8 +16,7 @@ Add to your Codex config (`~/.codex/config.toml`):
 multi_agent = true
 ```
 
-This enables the multi-agent tools that the review seats use. On Codex too
-every plan executes inline: the session implements every task.
+This enables the multi-agent tools that the review seats use.
 Which tools you get depends on the multi-agent version your model
 preset selects (current presets run V2; older ones run V1). Trust your
 actual tool list over any table — including this one — when they
@@ -32,16 +31,10 @@ disagree.
   schema's call, and it may inherit yours instead. Every routed dispatch
   sets both, so use an isolated fork for it
   ([native-codex.md](../../../reference/native-codex.md)).
-- **Fix rounds:** resume the implementer with `followup_task` — it
-  delivers your message, triggers a turn, and transparently reloads a
-  child the harness evicted. Never dispatch a fresh implementer on the
-  theory that a spawned agent cannot be messaged again; on V2 it
-  always can.
 - **Lifecycle:** V2 has no `close_agent`. Finished children are
   evicted automatically when slots are needed; leaving them unclosed
   costs nothing. Only V1 sessions have `close_agent` — there, close
-  reviewers when their review returns, and close each implementer
-  after its task's review passes.
+  each reviewer when its review returns.
 - **Model names:** never copy a model name from a skill, table, or old
   session into `spawn_agent` without checking it against your current
   spawn allowlist — V2 accepts only V2-capable presets and hard-errors
@@ -81,8 +74,9 @@ two-thirds of all wait calls were short polls that timed out.
 
 Every `spawn_agent` you issue — including when you are yourself a
 spawned child running a fan-out — sets `model` AND `reasoning_effort`
-explicitly, per the Model Selection rules of the skill you are
-executing. Setting `model` alone is a trap: the child's effort
+explicitly, from the rank table in
+[native-codex.md](../../../reference/native-codex.md) §Scoring and
+assignment and the rank the dispatching step names. Setting `model` alone is a trap: the child's effort
 silently resets to that model's default, not to yours.
 
 Ask your human partner to add a machine-level backstop to

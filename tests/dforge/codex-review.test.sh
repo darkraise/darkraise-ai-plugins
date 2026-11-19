@@ -132,7 +132,7 @@ seat() { # seat <kind> <extra-args...>; STUB_* in the environment scripts the st
 }
 
 
-out=$(STUB_MODE=hang seat task --tier light --out "$TMP/o.json" --prompt "$TMP/p.txt")
+out=$(STUB_MODE=hang seat task --tier heavy --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "a timeout names its reason" "$out" "reason=timeout"
 
 out=$(seat final --out "$TMP/o.md" --base main); rc=$?
@@ -214,15 +214,11 @@ out=$(STUB_REFUSE_ONCE=1 STUB_FINAL_MESSAGE='{}' seat task --out "$TMP/o.json" -
 present "malformed fallback is FAILED" "$out" 'status=FAILED'
 present "the malformed report came from the fallback seat" "$out" "codex-judge gpt-6.1-sol/high status=FAILED"
 
-# --- task and plan kinds, and the light tier ---------------------------------
+# --- task and plan kinds -----------------------------------------------------
 out=$(run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 r=$(req_of "$out")
 check "task: passes the task-review schema"   "$(jq -r '.schemaPath' <<<"$r" | grep -c 'codex-review-schema.json')" "1"
 present "task defaults to the heavy tier" "$out" "codex-judge gpt-6-astra/high"
-
-out=$(run --kind task --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
-present "the light tier selects the last judge row" "$out" "codex-judge gpt-6.1-sol/high"
-present "the light tier reports no catalog evidence" "$out" "evidence=none"
 
 out=$(run --kind plan --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run)
 r=$(req_of "$out")
@@ -234,12 +230,14 @@ run --kind task --cwd "$TMP/work" --out "$TMP/o.json" --dry-run >/dev/null; rc=$
 check "task without --prompt is a usage error" "$rc" "2"
 run --kind plan --cwd "$TMP/work" --out "$TMP/o.json" --dry-run >/dev/null; rc=$?
 check "plan without --prompt is a usage error" "$rc" "2"
-run --kind plan --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run >/dev/null; rc=$?
+run --kind plan --tier heavy --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run >/dev/null; rc=$?
 check "--tier with plan is a usage error" "$rc" "2"
-run --kind final --tier light --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run >/dev/null; rc=$?
+run --kind final --tier heavy --cwd "$TMP/work" --out "$TMP/o.md" --base main --dry-run >/dev/null; rc=$?
 check "--tier with final is a usage error" "$rc" "2"
 run --kind task --tier medium --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run >/dev/null; rc=$?
 check "an unknown tier is a usage error" "$rc" "2"
+run --kind task --tier light --cwd "$TMP/work" --out "$TMP/o.json" --prompt "$TMP/p.txt" --dry-run >/dev/null; rc=$?
+check "--tier light is a usage error" "$rc" "2"
 
 out=$(STUB_FINAL_MESSAGE='{"executability":17,"coherence":16,"coverage":17,"assumptions":16,"findings":[]}'   seat plan --out "$TMP/o.json" --prompt "$TMP/p.txt"); rc=$?
 present "a schema-shaped plan report is OK" "$out" "status=OK"
@@ -248,9 +246,6 @@ out=$(STUB_FINAL_MESSAGE='{"spec":18,"scope":18,"verification":18,"quality":18,"
 present "a task-shaped report is not a plan review" "$out" "status=FAILED"
 out=$(STUB_FINAL_MESSAGE='{"spec":18,"scope":18,"verification":18,"quality":18,"spec_verdict":"compliant","task_quality":"approved","findings":[],"cannot_verify":[]}'   seat task --out "$TMP/o.json" --prompt "$TMP/p.txt")
 present "a schema-shaped task report is OK" "$out" "status=OK"
-out=$(STUB_MODE=refusal seat task --tier light --out "$TMP/o.json" --prompt "$TMP/p.txt")
-present "a refused light run is FAILED" "$out" "status=FAILED"
-check "the light tier never falls back" "$(cat "$TMP/calls")" "1"
 
 # --- the session gate and the quota ------------------------------------------
 OFF='codex-gate usable=false reason=quota review=false resets_at=2026-09-20T10:03:27Z source=cache'

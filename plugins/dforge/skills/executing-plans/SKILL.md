@@ -98,7 +98,7 @@ the gate.
 
 **Why this mode.** Every plan runs inline: this session has read the code the
 plan changes, and a subagent per task would rebuild that context from nothing.
-You implement every task, heavy tasks included. A task that still carries an
+A task that still carries an
 `**Executor:**` line is implemented here too: `plan-lint` warns that the line
 is obsolete. The `**Execution:**` line's model and effort cover the hardest
 task, at least high effort when a task has risk 3.
@@ -185,8 +185,8 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   `Review depth: <light|standard|full> (<reason>)` is written once, before
   step 0 of the final review, and is read on recovery, never recomputed; it is
   not a `Final review:` line, which recovery keys on.
-- With `darkmemEnabled` true, after each `complete` and `fix round` line, run
-  `scripts/darkmem-sync push`, and at `complete` also promote the task's durable
+- With `darkmemEnabled` true, after each `fix round` line, run
+  `scripts/darkmem-sync push`, and at `complete` promote the task's durable
   facts ([project-state.md](../../reference/project-state.md) §darkmem sync points).
   With it false, run neither.
 - `implementer inline` is this mode's assigned line. You are the implementer,
@@ -197,7 +197,7 @@ Final review: clean (commits <merge-base7>..<head7>[, K parked])
   `Final review:` line.
 - There is no scores clause. A scores clause appears only when a judge scored
   the task.
-- The fix cap is 3 for a task you implement; a delegated task keeps 2 (5 on a `Host: codex` plan). You are fixing your own work, so a
+- The fix cap is 3 for a task you implement; a risk-3 task's reviewed loop keeps 2 (5 on a `Host: codex` plan). You are fixing your own work, so a
   fourth round is not a better round. A fix-round line is written after the
   round, with its outcome: `passing`
   when the task's verifications now pass, `still failing` otherwise.
@@ -227,10 +227,9 @@ budget before every task at no extra request:
 
     budget: 312k of 465k (67%) — ok — source: record
 
-- `ok` or `unknown`: carry on, however high the percentage. Only the verdict
-  stops you.
+- `ok` or `unknown`: carry on, however high the percentage.
 - `handoff`: finish the task in flight through its `Task N: complete` line,
-  then invoke dforge:handoff. Never hand off in the middle of a task. The budget holds one task's worst growth.
+  then invoke dforge:handoff. Never hand off in the middle of a task.
 
 The plan's last two tasks never hand off in strict mode: their brief prints
 `budget (last 2 tasks)` or `budget (last task)` and says `ok` past the budget. After the last
@@ -251,7 +250,7 @@ context fills, Claude Code's own compaction is the backstop.
 For each task, in order:
 
 1. **Open the task.** Run `scripts/task-brief --open PLAN_FILE N` and read the
-   brief file it prints. One call writes the brief (the task text with every
+   brief it prints. One call writes the brief (the task text with every
    amendment applied), rewrites `<workspace>/plan-header.md`, appends
    `Task <N>: implementer inline (assigned; base <sha7>)` once, and prints
    the `task check:` line and the budget line. A brief for a task you
@@ -302,11 +301,9 @@ For each task, in order:
    did not. After any other task, go to the next task's step 1: its brief
    prints the budget line.
 
-**When a verification will not pass.** Fix, re-run, then append
-`Task <N>: fix round R/3 (<what failed>; commits a..b; passing | still failing)`
-with the round's outcome. Rounds 1 through 3 are yours. A task still failing
-after `3/3` goes to the ruling seat as a `breaker` item (in an auto run, the
-pending list) - not to a fourth round, and not to a complete line.
+**When a verification will not pass.** Fix, re-run, then append the
+`fix round R/3` line with the round's outcome; §The Ledger gives the cap and
+the `breaker` item after `3/3`, never a complete line.
 
 **When the plan is silent** - it does not say which of two reasonable things to
 do - rule, log it, and carry on.
@@ -347,9 +344,3 @@ line. Writing its name in a message is not invoking it, and a turn that ends
 on a summary of the run leaves your human partner with no integration menu
 and no next step. Write no wrap-up message of your own: finishing's message is
 the final one.
-
-Read [finish-rulings.md](references/finish-rulings.md) before you invoke finishing.
-
-## Common Rationalizations
-
-Read [rationalizations.md](references/rationalizations.md) before you skip a step of the task loop.

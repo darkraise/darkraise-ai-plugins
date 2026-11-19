@@ -67,7 +67,7 @@ for tool in jq node git; do
   chmod +x "$SEAL/$tool"
 done
 # Node finds git through the Windows PATH, where neither a link nor a wrapper
-# script runs: darkmem-config.mjs then sees no repository. On Git Bash, give
+# script runs: a node module that runs git then sees no repository. On Git Bash, give
 # native callers git's own directory instead; it holds no agy.
 GITDIR=''
 if command -v cygpath >/dev/null 2>&1; then
@@ -354,7 +354,7 @@ if selected A3; then
     matches "A3: total $t at risk <= 2 lists agy first with the agy-assignment rung ($want)" "$unit" "rungs=agy:$want(,|$)"
     has "A3: total $t clears the gate" "$unit" "gate=pass"
   done
-  # Totals 3 to 8 run on Argon (docs/dagents/notes/2026-11-03-agy-calibration-3-8.md).
+  # Totals 3 to 8 run on Argon (the 2026-11-03 calibration).
   for pair in "3 gemini-4-argon low" "4 gemini-4-argon low" "5 gemini-4-argon high" "6 gemini-4-argon high" "7 gemini-4-argon high" "8 gemini-4-argon high"; do
     set -- $pair
     check "A3: agy-assignment row $1 is $2 $3" "$(block agy-assignment | awk -v t="$1" '$1 == t { print $2 " " $3 }')" "$2 $3"
@@ -420,7 +420,7 @@ fi
 # Delegation and the Execution-line floor changed after BASE by design, so the
 # lines they own are left out of the comparison; every other line must not move.
 a5_scope() {
-  grep -vE '^(NOTE header: delegated:|WARN header: Execution line is (inline|subagent) but|WARN header: subagent execution is deprecated|ERROR header: inline execution needs|WARN Task [0-9]+: Step 1 ".*" is none of the forms in test-step-forms\.md|ERROR Task [0-9]+: Step 1 must read "No new test, because <reason>"|plan-lint: [0-9]+ errors?, [0-9]+ warnings?$|recommend  )' || true
+  grep -vE '^(NOTE header: delegated:|WARN header: Execution line is (inline|subagent) but|ERROR header: inline execution needs|WARN Task [0-9]+: Step 1 ".*" is none of the forms in test-step-forms\.md|ERROR Task [0-9]+: Step 1 must read "No new test, because <reason>"|plan-lint: [0-9]+ errors?, [0-9]+ warnings?$|recommend  )' || true
 }
 if selected A5; then
   if base_known; then

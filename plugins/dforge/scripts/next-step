@@ -440,7 +440,7 @@ else
 
   # A Codex plan states its host in the header and its native pair on the
   # Execution line; the flag is for the paths with no plan to read.
-  if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$(plan_header "$plan")"; then host=codex; fi
+  if plan_is_codex "$(plan_header "$plan")"; then host=codex; fi
 
   launch_cmd=$(execution_launch "$execution")
 
@@ -466,14 +466,6 @@ else
       ledger_note="ledger \`$ledger_file\`"
       done_tasks=$(ledger_done "$ledger_file")
       blocked_tasks=$(ledger_blocked "$ledger_file")
-      # A last line that assigns a task to an agent means that
-      # run may still be going. The block is still printed, since it is the
-      # resume guide either way, but a handoff over a live run loses its result.
-      last_line=$(grep -v '^[[:space:]]*$' <<<"$ledger_text" | tail -n 1 || true)
-      if [[ $last_line =~ ^Task\ ([0-9]+):\ implementer\ ([^ ]+)\ \(assigned ]] \
-         && [ "${BASH_REMATCH[2]}" != inline ]; then
-        printf 'next-step: warning: the ledger ends on an assigned line for Task %s. If the run it names is still going, wait for it or stop it and record a Ruling before handing off (dforge:handoff step 0).\n' "${BASH_REMATCH[1]}" >&2
-      fi
     elif [ -f "$ledger_file" ]; then
       ledger_note="the ledger at \`$ledger_file\` belongs to another plan and is ignored"
     fi

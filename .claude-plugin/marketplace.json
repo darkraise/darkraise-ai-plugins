@@ -31,7 +31,7 @@
     {
       "name": "dagents",
       "source": "./plugins/dagents",
-      "description": "Brainstorm, plan and execute with scored tasks, implementer agents on a model ladder, subagent or inline execution, external Antigravity and Codex executors, criteria-based review and UI/UX work proven in the running UI; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget and usage limits. Continues the dforge 4.x workflow.",
+      "description": "Subagent-driven development: brainstorm, plan and execute scored tasks, each dispatched to an implementer agent on a model ladder and reviewed by a judge (inline execution on request), with external Antigravity and Codex executors, criteria-based review and UI/UX work proven in the running UI; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget and usage limits. Continues the dforge 4.x workflow.",
       "category": "workflow",
       "keywords": [
         "spec-driven",
@@ -50,7 +50,7 @@
     {
       "name": "dflow",
       "source": "./plugins/dflow",
-      "description": "Plan, build, review and ship with a task gate that only a passing command can open: lean plans tracked on a board, one evidence-bound review per branch, UI proof, living docs checked mechanically, a HUD, and a one-way darkmem projection.",
+      "description": "Plan, build, review and ship with a task gate that only a passing command can open: lean plans tracked on a board, one evidence-bound review per branch, UI proof, living docs checked mechanically, and a HUD.",
       "category": "workflow",
       "keywords": [
         "workflow",
@@ -59,7 +59,6 @@
         "code-review",
         "board",
         "docs",
-        "darkmem",
         "hud",
         "mod",
         "token-efficiency"

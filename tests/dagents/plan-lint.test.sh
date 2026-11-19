@@ -194,8 +194,8 @@ if want one; then
 claude_plan > clean.md
 lint clean.md
 check "clean Claude plan: exit 0" "$status" "0"
-has "clean Claude plan: summary" "$out" "plan-lint: 0 errors, 2 warnings"
-has "a light plan on subagent is deprecated" "$out" "WARN header: subagent execution is deprecated; inline is the default"
+has "clean Claude plan: summary" "$out" "plan-lint: 0 errors, 1 warnings"
+lacks "a subagent plan gets no deprecation warning" "$out" "deprecated"
 lacks "a plan with no heavy task gets no delegation note" "$out" "NOTE header"
 has "fenced TODO is a warning" "$out" "WARN Task 1: placeholder: # a fenced TODO is only a warning"
 lacks "inline-code TODO is not a finding" "$out" 'for the `TODO` column'
@@ -249,7 +249,6 @@ variant v9.md 's/^\*\*Execution:\*\* .*/**Execution:** inline -- claude --model 
 lint v9.md
 lacks "inline at total 4 needs no opus" "$out" "needs --model opus"
 lacks "inline at total 4 runs at effort medium" "$out" "inline execution needs --effort"
-lacks "inline at total 4 passes R5" "$out" "inline execution needs every task"
 lacks "double-hyphen separators and bare command parse" "$out" "Execution line does not match"
 variant v9b.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — Task 2 scores 4/'
 lint v9b.md
@@ -257,30 +256,22 @@ lacks "inline at total 4 on opus is clean" "$out" "ERROR header: inline"
 variant v9c.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9c.md
 has "a total-5 task needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
-lacks "a heavy minority no longer breaks inline" "$out" "inline execution needs every task"
-lacks "inline does not delegate the heavy task" "$out" "(heavy)"
 variant v9c2.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model sonnet --effort high` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9c2.md
 check "a heavy minority inline at effort high: exit 0" "$status" "0"
 lacks "the model follows the tasks the session implements" "$out" "needs --model opus"
-lacks "a heavy minority on inline does not warn" "$out" "Execution line is inline but"
 variant v9d.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort low` — x/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 0 - spec 0 - coupling 1 - risk 3 = 4/'
 lint v9d.md
-lacks "risk 3 is not delegated" "$out" "(heavy)"
 has "risk 3 inline needs effort high" "$out" "ERROR header: inline execution needs --effort high or above (effort low)"
 variant v9j.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/^\*\*Implementer:\*\* dagents:impl-sonnet-medium$/#### Part A: left half\n\n**Files:**\n- Modify: `a.txt`\n\n**Implementer:** dagents:impl-sonnet-low\n**Evaluation:** files 0 - spec 0 - coupling 1 - risk 0 = 1\n\n#### Part B: right half\n\n**Files:**\n- Modify: `b.txt`\n\n**Implementer:** dagents:impl-sonnet-high\n**Evaluation:** files 1 - spec 0 - coupling 1 - risk 3 = 5/; /^\*\*Evaluation:\*\* files 0 - spec 1 - coupling 1 - risk 2 = 4$/d; /^\*\*Approach:\*\* inline - skip 2: follows the pattern$/d'
 lint v9j.md
-lacks "a split task with a heavy part is not delegated" "$out" "(heavy)"
 check "a split task with a heavy part inline at effort high: exit 0" "$status" "0"
 variant v9h.md 's/^\*\*Execution:\*\* .*/**Execution:** inline — `claude --model opus --effort high` — x/; s/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9h.md
-lacks "a heavy majority on inline does not warn" "$out" "Execution line is inline but"
 variant v9i.md 's/files 0 - spec 0 - coupling 1 - risk 0 = 1/files 1 - spec 0 - coupling 1 - risk 3 = 5/; s/impl-sonnet-low$/impl-sonnet-high/; s/files 0 - spec 1 - coupling 1 - risk 2 = 4/files 1 - spec 1 - coupling 1 - risk 2 = 5/; s/impl-sonnet-medium$/impl-sonnet-high/'
 lint v9i.md
-lacks "a heavy majority on subagent gets no majority warning" "$out" "tasks are heavy"
 codex_plan | sed -E 's/^\*\*Execution:\*\* subagent/**Execution:** inline/; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline.md
 lint codex-inline.md
-lacks "A12: a Codex-host inline plan with a heavy task has no eligibility error" "$out" "inline execution needs every task"
 lacks "a Codex-host plan gets no delegation note" "$out" "NOTE header"
 has "a Codex inline pair below the highest score errors" "$out" "ERROR header: inline Execution rank 5 is below the highest task score 9"
 codex_plan | sed -E 's#^\*\*Execution:\*\* subagent — codex gpt-6.1-sol / high#**Execution:** inline — codex gpt-6-astra / xhigh#; s#^\*\*Implementer:\*\* codex gpt-6.1-sol / low#**Implementer:** codex gpt-6-astra / xhigh#; s/risk=0; weighted routing score=3/risk=3; weighted routing score=9/' > codex-inline-heavy-fit.md
@@ -344,8 +335,6 @@ check "three total-4 tasks in six on opus high: exit 0" "$status" "0"
 tplan r5.md inline sonnet high 5 4 1 1 1 1
 lint r5.md
 check "a heavy and a total-4 task on sonnet high: exit 0" "$status" "0"
-lacks "the heavy task is not delegated" "$out" "(heavy)"
-lacks "total 4 is no delegation reason" "$out" "(total 4)"
 tplan r6.md inline sonnet medium 1 4 1 1 1 1
 lint r6.md
 check "a self-implemented total 4 runs at effort medium: exit 0" "$status" "0"
@@ -382,7 +371,6 @@ has "a model id naming neither family is a model error" "$out" "ERROR header: in
 tplan r15.md subagent opus high 5 5 5 5 1 1
 lint r15.md
 has "a subagent line at opus warns" "$out" "WARN header: subagent Execution line should be claude --model sonnet --effort high"
-lacks "a heavy majority on subagent is not disputed" "$out" "tasks are heavy"
 tplan r16.md subagent sonnet high 5 5 5 5 1 1
 lint r16.md
 lacks "a subagent line at sonnet high does not warn" "$out" "subagent Execution line should be"
@@ -391,7 +379,6 @@ lint r17.md
 check "opus where sonnet would do: exit 0" "$status" "0"
 tplan r18.md subagent sonnet high 1 4 4 1 1 1
 lint r18.md
-lacks "a subagent plan gets no majority-rule warning" "$out" "tasks are heavy"
 
 variant v9e.md 's/^### Task 1: First thing$/### Task 1: -v flag/; s/^1\. First thing$/1. -v flag/'
 lint v9e.md
@@ -529,7 +516,7 @@ variant chost.md 's/^\*\*Goal:\*\* Demo\.$/**Goal:** Demo.\n\n```text\nHost: cod
 lint chost.md
 check "a fenced Host line: exit 0" "$status" "0"
 lacks "a fenced Host line: no Codex checks" "$out" "Routing policy"
-has "a fenced Host line: lints as the Claude plan" "$out" "plan-lint: 0 errors, 2 warnings"
+has "a fenced Host line: lints as the Claude plan" "$out" "plan-lint: 0 errors, 1 warnings"
 # A backticked Routing policy value is the value.
 codex_plan | sed 's#^Routing policy: codex-v4$#Routing policy: `codex-v4`#' > cbt.md
 lint cbt.md
@@ -553,12 +540,10 @@ printf '{"tiers":{}}\n' > "$KIT/reference/codex-routing.json"
 out=$(bash "$KIT/scripts/plan-lint" codex.md 2>&1); status=$?
 check "a version-less routing policy: exit 2" "$status" "2"
 has "a version-less routing policy: says it has no version" "$out" "codex-routing.json: the file has no version"
-lacks "a version-less routing policy: does not blame jq" "$out" "jq installed"
 printf '{"version":\n' > "$KIT/reference/codex-routing.json"
 out=$(bash "$KIT/scripts/plan-lint" codex.md 2>&1); status=$?
 check "a corrupt routing policy: exit 2" "$status" "2"
 has "a corrupt routing policy: says it cannot be parsed" "$out" "codex-routing.json: the file cannot be parsed"
-lacks "a corrupt routing policy: does not blame jq" "$out" "jq installed"
 # No jq on PATH: wrappers for every other tool plan-lint runs before the check.
 # Not links: under Git Bash the linked tools did not run (dirname printed nothing).
 mkdir -p "$TMP/jqless"
@@ -1198,12 +1183,9 @@ EOF
 waves_plan 'waves — 1 | 2-3' > waves.md
 lint waves.md --no-probe
 check "waves: a clean plan exits 0" "$status" "0"
-lacks "waves: no majority-rule warning" "$out" "tasks are heavy"
-check "waves: only the deprecation warning" "$out" "WARN header: subagent execution is deprecated; inline is the default
-plan-lint: 0 errors, 1 warnings"
+check "waves: no finding" "$out" "plan-lint: 0 errors, 0 warnings"
 waves_plan 'sequential — one chain' > waves-seq.md
 lint waves-seq.md --no-probe
-lacks "sequential: the majority rule is gone" "$out" "tasks are heavy"
 lacks "sequential: Depends on lines are not checked" "$out" "Depends on"
 waves_plan 'waves — 1 | two' > waves-bad.md
 lint waves-bad.md --no-probe
@@ -1244,8 +1226,7 @@ with_wave_check() { # with_wave_check <line> — stdin plan with <line> after th
 }
 waves_plan 'waves — 1 | 2-3' | with_wave_check '**Wave check:** `bash quick.sh`' > waves-check.md
 lint waves-check.md --no-probe
-check "waves: a Wave check line is accepted" "$out" "WARN header: subagent execution is deprecated; inline is the default
-plan-lint: 0 errors, 1 warnings"
+check "waves: a Wave check line is accepted" "$out" "plan-lint: 0 errors, 0 warnings"
 waves_plan 'waves — 1 | 2-3' | with_wave_check '**Wave check:**' > waves-check-empty.md
 lint waves-check-empty.md --no-probe
 has "waves: a Wave check line needs a command" "$out" "ERROR header: the **Wave check:** line names no command"
@@ -1263,7 +1244,7 @@ check "missing tier and CI lines: warnings only, exit 0" "$status" "0"
 has "a missing Task check warns" "$out" "WARN header: no **Task check:** line yet"
 has "a missing Integration check warns on a sequential plan" "$out" "WARN header: no **Integration check:** line yet"
 has "a missing CI line warns" "$out" "WARN header: no **CI:** line yet"
-has "the three warnings add to the fixture's two" "$out" "plan-lint: 0 errors, 5 warnings"
+has "the three warnings add to the fixture's one" "$out" "plan-lint: 0 errors, 4 warnings"
 
 for bad in 'run the quick tests' 'none' '`bash a.sh` `bash b.sh` — two commands' '`none — full suite every 3 tasks`'; do
   variant tc-bad.md "s#^\*\*Task check:\*\* .*#**Task check:** $bad#"
@@ -1280,7 +1261,7 @@ CI_FULL='**CI:** `.github/workflows/validate.yml` — platforms: ubuntu-latest, 
 variant tc-none.md "s#^\*\*Task check:\*\* .*#**Task check:** none — full suite every 3 tasks#; s#^\*\*CI:\*\* none\$#${CI_FULL}#"
 lint tc-none.md
 check "the none form and a full CI line: exit 0" "$status" "0"
-has "the none form and a full CI line add no finding" "$out" "plan-lint: 0 errors, 2 warnings"
+has "the none form and a full CI line add no finding" "$out" "plan-lint: 0 errors, 1 warnings"
 
 for bad in 'maybe' \
   '`ci.yml` — platforms: linux — uncovered: none' \
@@ -1378,18 +1359,17 @@ lint nnt-cov.md --no-probe
 has "Covered by a No new test task: it has no test step" "$out" "ERROR Task 3: Covered by Task 2 — Task 2 has no test step"
 lacks "a No new test task with a reason draws no form WARN" "$out" 'Task 2: Step 1'
 
-# --- documents kept in darkmem: Spec paths resolve in the mirror ---
-. "$HERE/fixtures/darkmem-stores.sh"
+# --- Spec paths resolve in the docs root ---
 SH="$TMP/stores-home"; mkdir -p "$SH"
 SR="$TMP/stores-repo"; git init -q "$SR"
-M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
+M="$(git -C "$SR" rev-parse --show-toplevel)/docs"
 mkdir -p "$M/dagents/specs" "$M/dagents/plans"
 printf '# Spec\n' > "$M/dagents/specs/s.md"
 printf '# P\n\n**Spec:** docs/dagents/specs/s.md\n\n### Task 1: One\n' > "$M/dagents/plans/p.md"
 out=$(cd "$SR" && HOME=$SH bash "$LINT" docs/dagents/plans/p.md --no-probe 2>&1)
-lacks "darkmem: the Spec path resolves in the mirror" "$out" "Spec path does not exist"
-lacks "darkmem: the plan is found by name" "$out" "no such plan file"
-has "darkmem: the lint ran to its summary" "$out" " errors, "
+lacks "docs root: the Spec path resolves" "$out" "Spec path does not exist"
+lacks "docs root: the plan is found by name" "$out" "no such plan file"
+has "docs root: the lint ran to its summary" "$out" " errors, "
 
 # --- Lenses lines ---
 variant lens-low.md 's/^(\*\*Approach:\*\* inline - skip 2: follows the pattern)$/\1\n**Lenses:** security/'

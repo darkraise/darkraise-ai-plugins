@@ -50,6 +50,9 @@ TR="$TMP/skill.jsonl"
 jq -nc '{type:"assistant",message:{content:[{type:"tool_use",name:"Skill",input:{skill:"dforge:ui-ux"}}]}}' > "$TR"
 check "edit: a session that loaded the skill gets no reminder" "$(edit e-2 "$REPO/src/App.tsx" "$TR")" ""
 check "edit: a relative path resolves against cwd" "$(ctx "$(edit e-3 src/Bad.tsx)" | grep -c 'img-alt')" "1"
+check "edit: no session id still lints, and names no skill" \
+  "$(jq -n --arg cwd "$REPO" '{cwd:$cwd,tool_input:{file_path:"src/Bad.tsx"}}' | bash "$EDIT" | jq -r .hookSpecificOutput.additionalContext | grep -c 'img-alt\|Load dforge')" "1"
+check "edit: a non-object tool_input exits 0 silently" "$(jq -n --arg cwd "$REPO" '{session_id:"e-9",cwd:$cwd,tool_input:"x"}' | bash "$EDIT"; echo "exit $?")" "exit 0"
 check "edit: malformed stdin exits 0 silently" "$(printf 'nope' | bash "$EDIT"; echo "exit $?")" "exit 0"
 FAST="$TMP/fast.jsonl"
 jq -nc '{type:"assistant",message:{content:[{type:"text",text:"Process: fast — a one-line tweak"}]}}' > "$FAST"
@@ -112,9 +115,16 @@ git checkout -q -- src/App.tsx
 
 mv docs/dforge/ui-ux/profile.md "$TMP/profile.md"
 prompt s-4
+check "stop: no profile, the skill ran, no UI change: passes" "$(stop s-4 'Done.' false "$TR")" ""
 printf '// change 3\n' >> src/App.tsx
 check "stop: no profile but the skill ran: held" "$(decision "$(stop s-4 'Done.' false "$TR")")" "block"
 check "stop: no profile and no skill: passes" "$(stop s-4 'Done.')" ""
+MANY="$TMP/skill-many.jsonl"
+pad=$(head -c 20000 /dev/zero | tr '\0' 'x')
+for i in $(seq 1 20); do
+  jq -nc --arg t "<command-name>/dforge:ui-ux</command-name> $pad" '{type:"user",message:{content:[{type:"text",text:$t}]}}'
+done > "$MANY"
+check "stop: no profile, the skill ran many times: held" "$(decision "$(stop s-4 'Done.' false "$MANY")")" "block"
 mv "$TMP/profile.md" docs/dforge/ui-ux/profile.md
 
 mkdir -p "$HOME/.claude/dforge/sessions/cockpit"

@@ -17,4 +17,3 @@ For more, on request:
 - `dflow ship --check`: each condition of the definition of done that is unmet.
 - `dflow doctor`: doc budgets, dead path references, the board and open plans.
 - `dflow cost`: the plan's token use by phase and model.
-- `dflow sync status`: what is queued for darkmem.

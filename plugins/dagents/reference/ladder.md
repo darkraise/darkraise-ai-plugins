@@ -61,27 +61,19 @@ tier is needed.
 
 ### The one legacy floor
 
-0.1.0 assigned a `spec = 3` task no lower than `impl-opus-low`. That floor now
-applies only when a human overrides Rule S and keeps an undecided-approach task
-as written. It raises; it never lowers.
+When a human overrides Rule S and keeps an undecided-approach task (`spec = 3`)
+as written, it is assigned no lower than `impl-opus-low`. The floor raises; it
+never lowers.
 
-### Plans written before 1.27.0
+### Plans written against an older table
 
-The assignment table has changed three times. Until 1.23.0 it sent total 4 to
-`impl-opus-low`. Until 1.24.0 it sent total 2 to `impl-sonnet-medium`, totals 3
-and 4 to `impl-sonnet-high`, and total 5 to `impl-opus-medium`. Until 1.27.0 it
-sent total 0 to `impl-haiku`. A plan written
-before either change names the old agent, and `plan-lint` reports the line as a
-table mismatch. Change it to the agent the table below names, or keep the old
-agent with a human `**Override:**` line below the Evaluation line, which turns
-the finding into a warning. An inline Execution line must still meet the effort
-check, which reads the current table: an `opus low` line with a self-implemented
-total 4 task must rise to `--effort medium`.
-
-The relaxed gate is one-way. A Claude plan with a task at `reducible` 4 or 5,
-or a total of 7 or 8, fails `plan-lint` on a plugin older than the relaxed gate:
-that checker splits at `reducible >= 4` and has no row above 6. A plan written
-before the relaxed gate lints unchanged on this one, since rows 0-6 did not move.
+A plan whose Implementer line names an agent the table below no longer gives
+for its total fails `plan-lint` as a table mismatch. Change it to the agent the
+table names, or keep the old agent with a human `**Override:**` line below the
+Evaluation line, which turns the finding into a warning. An inline Execution
+line must still meet the effort check, which reads the current table: an
+`opus low` line with a self-implemented total 4 task must rise to
+`--effort medium`.
 
 ## Assignment table
 
@@ -193,11 +185,6 @@ order. That is a statement about how the chain is traversed, not a claim that
 Fable at low effort out-thinks Opus at max: `impl-fable-low` is reachable only
 by a human naming it, and the automatic path enters Fable at `impl-fable-high`.
 
-0.1.0 plans name every one of these nine agents, and they now resolve natively.
-A plan that recorded `impl-fable-max` runs at `impl-fable-max`, which is what it
-asked for. Nothing is substituted on read, so there is nothing to state in the
-ledger beyond the reserve tier itself.
-
 ## What the range actually reaches
 
 A Claude plan written to dagents:writing-plans gives each code task its tests
@@ -205,18 +192,8 @@ and interfaces but not its implementation, so a code task scores 2 on spec
 completeness and is drawn as a feature slice up to `reducible <= 5`.
 Sonnet takes totals 0 to 5; Opus takes 6 to 8, and is otherwise reached by escalation.
 A Codex plan still carries the code, so its tasks score 0 or 1 there.
-Total 0 moved from `impl-haiku` to `impl-sonnet-low` in 1.27.0: on
-the tier evaluation's row 1 cases both passed 7 of 7, and Haiku 4.5 cost $0.18
-per pass against $0.12, and it is the only fleet model with a 200,000-token
-window and no effort control. `impl-haiku` stays in the fleet for a human
-`**Implementer:**` override, with its escalation row. Total 4 went to Opus until Sonnet 5.5, which
-matches Opus 5.5 on well-scoped agentic coding (Terminal-Bench, CursorBench) at
-half the price and trails it on FrontierCode's open-ended work. Totals 2 to 5
-each moved to a cheaper agent in 1.24.0 on a replay of this plugin's own plan
-history (the 2026-10-02 tier evaluation, `evals/tiers/` in the plugin's
-repository): the cheaper agent passed every case the old one passed, at a lower
-cost per pass. That was one repetition, mostly of tasks whose plan supplied the
-code, so the escalation table stays the backstop.
+`impl-haiku` stays in the fleet for a human `**Implementer:**` override, with
+its escalation row. The escalation table stays the backstop.
 
 That is the intended outcome. Do not inflate an axis to land on a tier that feels
 right; if a task feels harder than its score, the plan text is probably hiding
@@ -264,18 +241,7 @@ orchestrate.
 ```
 
 Only `gpt-6.1-sol` appears in this external CLI *execution* policy; the review
-seats take their rows from the `codex-judge` block below. `gpt-6-sol` replaced
-`gpt-5.5` and `gpt-5.6-sol` on 2026-09-23: `gpt-5.5` retires from Codex with
-ChatGPT sign-in on 2026-10-14, and Codex's own catalog listed `gpt-6-sol` as the
-upgrade for `gpt-5.6-sol`. `gpt-6.1-sol` replaced `gpt-6-sol` on 2026-10-07: it
-has been Codex's default model since 0.159.1, OpenAI describes it as near-Astra
-on software work, and the move rests on that description; no calibration
-replay was run. On 2026-08-31, Codex 0.151.0 on Windows with
-ChatGPT-subscription authentication rejected GPT-5.6 Luna and Terra with HTTP
-400 and provided no metadata for them; GPT-6 Luna has not run through this lane
-yet. Those historical
-observations do not establish current access on another account, CLI version,
-or native client. Native Codex routes Terra through its separate capability filter.
+seats take their rows from the `codex-judge` block below.
 
 This CLI policy allows `low`, `medium`, `high`, and `xhigh`, and rejects
 `minimal` and `ultra`: no row assigns or succeeds to `ultra`, and no bound has
@@ -329,21 +295,16 @@ and the final-review round — takes its model from this block, not from
 `codex-assignment`. The first row is preferred; the last row is the fallback.
 `--tier light` runs the last row directly, for tasks totalling 0 to 8 below
 risk 3; every other seat (risk 3, plan review, the final round) uses the first
-row with its fallback. Totals 4 to 6 moved from Astra to the light row on
-2026-10-07, when `gpt-6.1-sol` replaced `gpt-6-sol` there, at about a fifth of
-Astra's price.
+row with its fallback.
 
 ```codex-judge
 gpt-6-astra xhigh 5400
 gpt-6.1-sol xhigh 2400
 ```
 
-The effort and the bound move together. At `high` with 1800 seconds the
-largest plan in the 2026-09-20 calibration exceeded the bound on both
-attempts and was never reviewed, so the one plan carrying that run's planted
-defects produced no evidence. Raising the effort without raising the bound
-would only buy more `TIMEOUT` rows, because more thinking takes more wall
-clock on exactly the plans that already ran out of it.
+The effort and the bound move together. Raising the effort without raising
+the bound would only buy more `TIMEOUT` rows, because more thinking takes more
+wall clock on exactly the plans that already ran out of it.
 
 The two rows carry different bounds on purpose. `gpt-6-astra/xhigh` appears
 only here, so its 5400 is free to be set for review work. `gpt-6.1-sol/xhigh`
@@ -366,12 +327,7 @@ catalog: `scripts/run-codex-review.sh` attempts the first row and falls back
 once to the last row on a refusal, which is the only evidence of entitlement
 that has ever been reliable.
 
-The judge bounds are provisional operational budgets, not derived figures. Two
-measurements exist: a `gpt-5.6-sol/high` whole-branch round at roughly four
-minutes on 2026-09-14, and `project-state` completing at `gpt-6-astra/xhigh`
-inside 3600 on 2026-09-21 after exceeding 1800 twice at `high`. The astra row
-was raised to 5400 on 2026-09-21 for headroom above that single completion, on
-the owner's instruction; nothing measures where its ceiling actually is.
+The judge bounds are provisional operational budgets, not derived figures.
 Revise them when real runs warrant it.
 
 ### The agy lane gate
@@ -407,9 +363,8 @@ onto another quota, so even a score-0 task it takes is Claude quota saved.
 8 gemini-4-argon high
 ```
 
-Totals 3 to 8 come from the replayed runs recorded in
-`docs/dagents/notes/2026-11-03-agy-calibration-3-8.md`: Argon at `low` passed
-all three tasks scored 3-4, and Argon at `high` passed all three scored 6-7.
+Totals 3 to 8 come from the replayed runs of the 2026-11-03 calibration:
+Argon at `low` passed all three tasks scored 3-4, and Argon at `high` passed all three scored 6-7.
 Total 5 runs Argon at `high` because that is the only rung measured on all
 three high tasks. The models are those `agy models` lists.
 

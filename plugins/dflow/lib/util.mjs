@@ -163,10 +163,6 @@ export function writeJson(file, value) {
   writeAtomic(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-export function posix(file) {
-  return file.split(path.sep).join('/');
-}
-
 export function tail(text, count) {
   const lines = text.replace(/\s+$/, '').split('\n');
   return lines.length <= count ? lines : [`… ${lines.length - count} earlier lines omitted`, ...lines.slice(-count)];

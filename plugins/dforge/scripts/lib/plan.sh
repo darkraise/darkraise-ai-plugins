@@ -123,6 +123,16 @@ plan_header() {
   '
 }
 
+# plan_is_codex HEADER — true when the plan header text HEADER has a
+# `Host: codex` line outside a fence. A fenced Host line is an example, not
+# the plan's own.
+plan_is_codex() {
+  awk "$_PLAN_AWK"'
+    in_fence($0) { next }
+    /^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$/ { found = 1 }
+    END { exit !found }' <<<"$1"
+}
+
 # plan_task_text FILE N — task N from its heading to the line before the next
 # task heading. Exit 3 when there is no such task.
 plan_task_text() {
@@ -463,7 +473,7 @@ plan_amendments_ready() {
   for k in $(tr -d '\r' < "$ledger" | grep -oE 'Ruling: amendment A[0-9]+' | sed 's/.*A//'); do
     case $seen in *" $k "*) continue ;; esac
     seen="$seen$k "
-    [ -f "$file" ] && tr -d '\r' < "$file" | grep -q "^## A$k " && continue
+    [ -f "$file" ] && [ "$(tr -d '\r' < "$file" | grep -c "^## A$k ")" -gt 0 ] && continue
     printf '%s: the ledger cites amendment A%s, which %s lacks\n' "$me" "$k" "$file" >&2
     bad=1
   done
@@ -527,7 +537,7 @@ plan_final_review_state() {
   local chain
   chain=$(git -C "$dir" rev-list --first-parent "$now" 2>/dev/null) || { echo "stale $head"; return 0; }
   from=$full
-  if ! tr -d '\r' <<<"$chain" | grep -qxF "$full"; then
+  if ! grep -qxF -- "$full" <<<"${chain//$'\r'/}"; then
     # The oldest first-parent commit that descends from <head> is the merge
     # that brought it in.
     desc=$(git -C "$dir" rev-list --ancestry-path "$full..$now" 2>/dev/null) || { echo "stale $head"; return 0; }

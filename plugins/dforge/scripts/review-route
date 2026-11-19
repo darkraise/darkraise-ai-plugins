@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Print the review seat for a task, a batch, or a plan-review round, and the
+# Print the review seat for a risk-3 task or a plan-review round, and the
 # Claude seat that replaces it when the external reviewer panel produces no list.
 #
 # The routing table lives here rather than in prose for the reason
@@ -11,11 +11,12 @@
 # each gate on every run, and its status lines decide whether the fallback is
 # used.
 #
-# Usage: review-route PLAN_FILE --task ID [ID ...]
+# Usage: review-route PLAN_FILE --task N
 #        review-route PLAN_FILE --plan-round R
 #        review-route PLAN_FILE --ruling KIND[,KIND...] [ID ...]
 #        review-route PLAN_FILE --final
-# ID is a task number, or a task number and part letter for a split task (7B).
+# Only a risk-3 task gets a per-task review, so --task routes risk 3 alone.
+# A ruling's ID is a task number, or a task number and part letter (7B).
 # Output: review-seat <scope> primary=<seat> fallback=<seat|-> reason=<why>
 #         (a plan round appends cap=<n>; --final appends external=on|off, off
 #         while no external reviewer's review surface is open)
@@ -24,10 +25,9 @@
 # A Host: codex plan routes only --plan-round, to a native seat printed as
 # primary=native:<model>/<effort>; its other seats come from
 # reference/native-codex.md.
-# Exit: 0 routed, including a lone --task ID with no Evaluation line, which
-# prints reason=unscored; 2 usage error, missing task, unparseable
-# Evaluation, a batch task with no Evaluation line, or any other route on a
-# Codex-host plan.
+# Exit: 0 routed; 2 usage error, missing task, a task with no or an
+# unparseable Evaluation line, a task below risk 3, or any route but
+# --plan-round on a Codex-host plan.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -44,7 +44,7 @@ SEP='( — | – | - | -- )'
 
 die() { printf 'review-route: %s\n' "$1" >&2; exit 2; }
 reviewers_on() { executor_session_on codex review || executor_session_on agy review; }
-usage() { die "usage: review-route PLAN_FILE --task ID [ID ...] | --plan-round R | --ruling KIND[,KIND...] [ID ...] | --final"; }
+usage() { die "usage: review-route PLAN_FILE --task N | --plan-round R | --ruling KIND[,KIND...] [ID ...] | --final"; }
 
 [ $# -ge 2 ] || usage
 plan=$(plan_locate "$1"); shift
@@ -62,7 +62,7 @@ plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/
 # writer's SIGPIPE would decide the if, not the match.
 header=$(plan_header "$src")
 native=0
-grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header" && native=1
+plan_is_codex "$header" && native=1
 if [ "$native" -eq 1 ] && [ "$1" != --plan-round ]; then
   die "a Host: codex plan routes reviews through reference/native-codex.md"
 fi
@@ -181,66 +181,36 @@ case "$1" in
     exit 0 ;;
   --final)
     [ $# -eq 1 ] || usage
-    plan_shape
-    reason=plain
-    [ "$intricate" -eq 0 ] || reason=intricate
     external=off
     ! reviewers_on || external=on
-    printf 'review-seat final primary=%s fallback=- reason=%s external=%s\n' "$OPUS" "$reason" "$external"
+    printf 'review-seat final primary=%s fallback=- reason=final external=%s\n' "$OPUS" "$external"
     exit 0 ;;
-  --task) shift; [ $# -ge 1 ] || usage ;;
+  --task) shift; [ $# -eq 1 ] || usage ;;
   *) usage ;;
 esac
 
-max_total=-1 max_risk=-1
-for id in "$@"; do
-  [[ "$id" =~ ^([0-9]+)([A-Z]?)$ ]] || die "not a task id: $id"
-  n=${BASH_REMATCH[1]} part=${BASH_REMATCH[2]}
-  text=$(plan_task_text "$src" "$n") || die "no Task $n in the plan"
-  if [ -n "$part" ]; then
-    text=$(plan_part_text "$part" <<<"$text")
-    [ -n "$text" ] || die "no part $part in Task $n"
-  fi
-  evs=$(plan_eval_lines <<<"$text")
-  if [ -z "$evs" ] && [ $# -eq 1 ]; then
-    # An unscored task has no band to read, so it takes the strongest judge
-    # alone, whatever the Codex gate says.
-    printf 'review-seat task=%s primary=%s fallback=- reason=unscored\n' "$id" "$OPUS"
-    exit 0
-  fi
-  [ -n "$evs" ] || die "Task $id has no **Evaluation:** line"
-  # A task without a part letter carries every part's Evaluation line, so it
-  # routes on its heaviest part.
-  while IFS= read -r ev; do
-    [[ "$ev" =~ ^\*\*Evaluation:\*\*\ files\ [0-9]+$SEP"spec "[0-9]+$SEP"coupling "[0-9]+$SEP"risk "([0-9]+)\ =\ ([0-9]+) ]] \
-      || die "Task $id: the Evaluation line does not parse: $ev"
-    [ "${BASH_REMATCH[4]}" -le "$max_risk" ] || max_risk=${BASH_REMATCH[4]}
-    [ "${BASH_REMATCH[5]}" -le "$max_total" ] || max_total=${BASH_REMATCH[5]}
-  done <<<"$evs"
-done
+[[ "$1" =~ ^[0-9]+$ ]] || die "not a task number: $1"
+n=$((10#$1))
+text=$(plan_task_text "$src" "$n") || die "no Task $n in the plan"
+evs=$(plan_eval_lines <<<"$text")
+[ -n "$evs" ] || die "Task $n has no **Evaluation:** line"
+# A task without a part letter carries every part's Evaluation line, so it
+# routes on its heaviest part.
+max_risk=-1
+while IFS= read -r ev; do
+  [[ "$ev" =~ ^\*\*Evaluation:\*\*\ files\ [0-9]+$SEP"spec "[0-9]+$SEP"coupling "[0-9]+$SEP"risk "([0-9]+)\ =\ ([0-9]+) ]] \
+    || die "Task $n: the Evaluation line does not parse: $ev"
+  [ "${BASH_REMATCH[4]}" -le "$max_risk" ] || max_risk=${BASH_REMATCH[4]}
+done <<<"$evs"
+[ "$max_risk" -ge 3 ] || die "Task $n is risk $max_risk: only a risk-3 task gets a per-task review"
 
-band() { # band <total> - the Claude judge for a score band
-  if [ "$1" -le 5 ]; then echo "$SONNET"
-  else echo "$OPUS"
-  fi
-}
-
-# Risk 3 (security, data loss, migration, concurrency) takes Opus whatever its
-# total; every other task takes its band. An **Executor:** line changes nothing:
-# the session implements every task.
-if ! reviewers_on; then
-  # No external reviewer is open for this session, so the panel rows name
-  # their Claude seat directly, and there is nothing left to fall back to.
-  # Risk 3 stays with Opus.
-  if [ "$max_risk" -ge 3 ]; then primary=$OPUS; else primary=$(band "$max_total"); fi
-  fallback=- reason=reviewers-off
-elif [ "$max_risk" -ge 3 ]; then
+# An **Executor:** line changes nothing: the session implements every task.
+if reviewers_on; then
   primary=panel:heavy+judge-opus fallback=$OPUS reason=risk
 else
-  # Below risk 3 every total takes the light rows; the heavy rows are kept for
-  # risk 3, plan review and the final round.
-  primary=panel:light fallback=$(band "$max_total") reason=band
+  # No external reviewer is open for this session, so there is nothing left
+  # to fall back to.
+  primary=$OPUS fallback=- reason=reviewers-off
 fi
 
-printf 'review-seat task=%s primary=%s fallback=%s reason=%s\n' \
-  "$(IFS=,; echo "$*")" "$primary" "$fallback" "$reason"
+printf 'review-seat task=%s primary=%s fallback=%s reason=%s\n' "$n" "$primary" "$fallback" "$reason"

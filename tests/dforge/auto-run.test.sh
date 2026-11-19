@@ -85,7 +85,14 @@ ar --session s-2 stop >/dev/null 2>&1; status=$?
 check "another session cannot stop it" "$status:$(field active)" "3:true"
 out=$(ar --session s-1 status); status=$?
 check "status: exit 0" "$status" "0"
-check "status: one line" "$out" "auto run: spec — regime normal — pending none — 0 compactions — 0 resumes — 0 pending decisions — spec $SPEC — plan none — base main — register $reg — isolation worktree"
+check "status: the run line" "$(head -n 1 <<<"$out")" "auto run: spec — regime normal — pending none — 0 compactions — 0 resumes — 0 pending decisions — spec $SPEC — plan none — base main — register $reg — isolation worktree"
+check "status: the default settings leave the API rungs off" "$(sed -n 2p <<<"$out")" "api rungs: off"
+mkdir -p "$HOME/.dforge"
+for cfg in '{}|api rungs: off' '{"apiBudgetOpenai":5}|' '{"apiBudgetAnthropic":5}|' '{"apiBudgetAgentRouter":5}|' '{"decisionApi":"shadow"}|'; do
+  printf '%s\n' "${cfg%%|*}" > "$HOME/.dforge/config.json"
+  check "status with ${cfg%%|*}: the API rungs line" "$(DFORGE_NO_SETTINGS= ar --session s-1 status | sed -n 2p)" "${cfg#*|}"
+done
+rm -f "$HOME/.dforge/config.json"
 check "pending: none" "$(ar --session s-1 pending)" "none"
 check "the environment names the session" "$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=s-1 bash "$AR" pending)" "none"
 
@@ -442,12 +449,16 @@ check "stop without a reason: finished" "$(field stopped)" "null"
 
 # --- the rules (reference/auto-run.md §The budget line) ---
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
-verdict() { ar --session s-1 verdict --budget 465000 --window 800000 "$@"; }
+verdict() { # verdict --tokens T [--budget B] [--window W] — ar_verdict for s-1, as the budget line calls it
+  local t="" b=465000 w=800000
+  while [ $# -gt 1 ]; do case $1 in --tokens) t=$2 ;; --budget) b=$2 ;; --window) w=$2 ;; esac; shift 2; done
+  (cd "$REPO" && . "$HERE/../../plugins/dforge/scripts/lib/context.sh" && . "$HERE/../../plugins/dforge/scripts/lib/auto-run.sh" && AR_SESSION=s-1 ar_verdict "$t" "$b" "$w") 2>/dev/null
+}
 out=$(verdict --tokens 464999); status=$?
 check "normal: under the budget" "$status:$out" "0:ok 465000 normal"
 check "normal: ok leaves nothing pending" "$(field pending)" "null"
 out=$(verdict --tokens 465000); status=$?
-check "normal: at the budget, compact" "$status:$out" "6:compact 465000 normal"
+check "normal: at the budget, compact" "$status:$out" "0:compact 465000 normal"
 check "compact is pending" "$(field pending)" "compact"
 out=$(verdict --tokens 464999)
 check "an ok after a compact cancels the compaction" "$out:$(field pending)" "ok 465000 normal:null"
@@ -460,7 +471,7 @@ check "after a compaction at 85% of the budget: high" "$out" "ok 720000 high"
 out=$(verdict --tokens 719999)
 check "high: under 90% of the window" "$out" "ok 720000 high"
 out=$(verdict --tokens 720000); status=$?
-check "high: at 90% of the window, compact" "$status:$out" "6:compact 720000 high"
+check "high: at 90% of the window, compact" "$status:$out" "0:compact 720000 high"
 ar --session s-1 compacted
 out=$(verdict --tokens 679999)
 check "after a compaction under 85% of the window: high stays" "$out" "ok 720000 high"
@@ -469,21 +480,19 @@ out=$(verdict --tokens 100000)
 check "after a small compaction: back to normal" "$out" "ok 465000 normal"
 ar --session s-1 compacted
 out=$(verdict --tokens 680000); status=$?
-check "after a compaction at 85% of the window: handoff" "$status:${out%% *}" "5:handoff"
+check "after a compaction at 85% of the window: handoff" "$status:${out%% *}" "0:handoff"
 check "a handoff stays pending" "$(field pending)" "handoff"
 out=$(verdict --tokens 10000); status=$?
-check "a re-probe before clear still hands off" "$status:${out%% *}" "5:handoff"
+check "a re-probe before clear still hands off" "$status:${out%% *}" "0:handoff"
 ar --session s-1 clear --phase
 out=$(verdict --tokens 10000); status=$?
-check "a pending clear answers handoff" "$status:${out%% *}" "5:handoff"
+check "a pending clear answers handoff" "$status:${out%% *}" "0:handoff"
 ar --session s-1 rebind --to s-1
 ar --session s-1 compacted
-out=$(ar --session s-1 verdict --tokens 260000 --budget 300000 --window 400000)
+out=$(verdict --tokens 260000 --budget 300000 --window 400000)
 check "another budget and window" "$out" "ok 360000 high"
-ar --session s-x verdict --tokens 1 --budget 1 --window 1 >/dev/null 2>&1; status=$?
-check "verdict for another session: exit 3" "$status" "3"
-ar --session s-1 verdict --tokens 1 --budget 1 >/dev/null 2>&1; status=$?
-check "verdict without a window: exit 2" "$status" "2"
+ar --session s-1 verdict --tokens 1 --budget 1 --window 1 >/dev/null 2>&1; status=$?
+check "verdict is no subcommand" "$status" "2"
 
 # --- an ok verdict clears a resume the cockpit never confirmed ---
 ar --session s-1 clear --phase
@@ -626,7 +635,7 @@ check "after-compact in execute: 85% of the window still hands off" "$status:${o
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 ar --session s-1 phase final
 out=$(verdict --tokens 465000); status=$?
-check "final, before a compaction: at the budget, compact" "$status:${out%% *}" "6:compact"
+check "final, before a compaction: at the budget, compact" "$status:${out%% *}" "0:compact"
 ar --session s-1 compacted
 check "a final-phase compaction is recorded" "$(field finalCompacted)" "true"
 out=$(verdict --tokens 750000); status=$?
@@ -795,6 +804,17 @@ if command -v flock >/dev/null 2>&1; then
 else
   printf 'skip - stop --stale race: no flock on this host\n'
 fi
+
+# --- with no run, pending and status answer before the libraries load ---
+NORUN="$TMP/norun"; git init -q "$NORUN"
+KIT="$TMP/kit"; mkdir -p "$KIT"; cp -R "$HERE/../../plugins/dforge/scripts" "$KIT/"
+printf 'exit 99\n' > "$KIT/scripts/lib/context.sh"
+for sub in pending status; do
+  (cd "$NORUN" && bash "$KIT/scripts/auto-run" --session s-1 "$sub") >/dev/null 2>"$TMP/err"; status=$?
+  check "no run: $sub exits 3 before the libraries load" "$status:$(grep -c 'no auto run is bound' "$TMP/err")" "3:1"
+done
+(cd "$NORUN" && bash "$AR" --session s-1 pending extra) >/dev/null 2>&1; status=$?
+check "no run: pending with an argument is still a usage error" "$status" "2"
 
 # --- every suite that runs the run-control scripts names its own session ---
 # A subagent's shell carries the controller's CLAUDE_CODE_SESSION_ID, so a

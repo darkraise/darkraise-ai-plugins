@@ -34,8 +34,6 @@ test('repository validator rejects broken distribution contracts', async t => {
     ['client version mismatch', c => { c.version = '0.9.0'; }, /version mismatch/, 'plugins/dforge/.codex-plugin/plugin.json'],
     ['implicit Claude hooks', c => { delete c.hooks; }, /empty Codex hooks/, 'plugins/dforge/.codex-plugin/plugin.json'],
     ['missing bundled reference', (c, dir) => { rmSync(resolve(dir, 'plugins/dforge/reference/native-codex.md')); }, /missing bundled reference/],
-    ['reintroduced dependency', c => { c.dependencies = [{ name: 'superpowers', marketplace: 'claude-plugins-official' }]; }, /must not declare dependencies/, 'plugins/dforge/.claude-plugin/plugin.json'],
-    ['reintroduced allowlist', c => { c.allowCrossMarketplaceDependenciesOn = ['claude-plugins-official']; }, /allowlist/],
     ['legacy name reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
     ['pre-2.0 plugin prefix', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'see dr-superpowers:brainstorming\n'); }, /legacy plugin-name reference/],
     ['unresolved dforge reference', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/reference/stray.md'), 'see dforge:no-such-skill\n'); }, /unresolved dforge reference no-such-skill/],

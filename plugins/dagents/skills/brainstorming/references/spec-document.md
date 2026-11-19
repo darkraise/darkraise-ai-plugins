@@ -23,4 +23,4 @@
   `unverified — the plan's first task verifies it`, so a wrong design fails
   before the rest is built on it.
 - Use elements-of-style:writing-clearly-and-concisely skill if available
-- Commit the design document to git (push instead while documents live in darkmem; see project-state.md)
+- Commit the design document to git

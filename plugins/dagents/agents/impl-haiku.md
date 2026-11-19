@@ -1,6 +1,6 @@
 ---
 name: impl-haiku
-description: "Task implementer running Haiku 4.5. No score assigns it, so it runs only on a human Implementer override: single-file transcription where the plan supplies the complete code."
+description: "Task implementer running Haiku. No score assigns it, so it runs only on a human Implementer override: single-file transcription where the plan supplies the complete code."
 model: haiku
 disallowedTools: Agent, Skill, Workflow, Artifact, ArtifactComments, ArtifactData, AskUserQuestion, EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, CronCreate, CronDelete, CronList, RemoteTrigger, ScheduleWakeup, SendMessage, ListAgents, SendUserFile, PushNotification, DesignSync, ReportFindings, SendFeedback, ReadNotifications
 skills:

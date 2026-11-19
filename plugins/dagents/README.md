@@ -7,8 +7,8 @@ dforge 5. Its state lives under `.dagents/`, `docs/dagents/` and
 
 A standalone fork of [superpowers](https://github.com/obra/superpowers) 6.3.0
 (MIT — see `LICENSES/`) for Claude Code and Codex, built around one idea: a
-strong model writes the plan, the session executes it literally, one task at a
-time, at the model and effort its hardest task needs, and every judgment call
+strong model writes the plan, implementer agents execute it literally, one task
+at a time, each at the model and effort its score names, and every judgment call
 goes to one strong ruling seat. Install `dagents@darkraise` from the repository-root
 marketplace, then disable the upstream `superpowers` plugin,
 `dcc-superpower-companions` and `andrej-karpathy-skills`: same-named skills in
@@ -21,8 +21,8 @@ Four findings from real transcripts drove the fork:
 - **Cost.** The main session was 92% of token spend, most of it re-reading a
   400–700k context. The plugin hands off at a budget printed by its own
   scripts (the compaction point minus one task's growth, 465k at a 650000
-  window), runs execution at the lowest model and effort that covers the
-  plan's hardest task, and reads the plan one task at a time instead of whole.
+  window), runs each task at the lowest model and effort that covers it,
+  and reads the plan one task at a time instead of whole.
 - **Small models executing literally.** Upstream advises picking a model per
   task but has no field for the choice, and the Agent tool could not pass
   reasoning effort before Claude Code 2.1.292 (it now can, but a fleet
@@ -155,26 +155,30 @@ send most decisions to inline, including bug fixes with a located root cause -
 where an advisor consulted before the root cause is known would launder
 guesses into a confident pick.
 
-**Every plan runs inline.** Under executing-plans the session that read the
-code implements every task, heavy ones (total 5 or more, or risk 3) included;
-an implementer subagent would rebuild that context from nothing. The one
-exception is every task carrying an `**Executor:**` line, which runs on that
-executor (Codex or Antigravity) with the full per-task review loop in
-`reference/delegated-task.md`. A risk-3 task the session implements gets a
-per-task judge review too, through that file's session review loop; the other
-tasks are covered by one whole-branch review at the end. `plan-lint` requires
-the Execution line's model and effort to cover the hardest task the session
-implements, and `--effort high` at risk 3 or once it delegates. A task that will
-not converge after three fix rounds goes to the ruling seat as a `breaker`
-item. subagent-driven-development, a dispatch and a scored review per task, is
-deprecated: it runs only for a plan whose Execution line names `subagent` or
-on your instruction, and `plan-lint` warns on that line.
+**Subagent mode by default.** A new plan's Execution line names `subagent`:
+subagent-driven-development dispatches each task to the implementer agent its
+`**Implementer:**` line names and gives it a judge-scored review, alone or in a
+group, and the session only coordinates, on `claude --model sonnet --effort
+high`. A task carrying an `**Executor:**` line runs on that executor (Codex or
+Antigravity) with the same per-task review loop in
+`reference/delegated-task.md`.
+
+**Inline on request.** With `executionMode=inline`, or when you ask for it,
+the plan's line names `inline` and executing-plans runs it: the session that
+read the code implements every task, heavy ones (total 5 or more, or risk 3)
+included, except the tasks carrying an `**Executor:**` line. A risk-3 task the
+session implements gets a per-task judge review through
+`reference/delegated-task.md`'s session review loop; the other tasks are
+covered by one whole-branch review at the end. `plan-lint` requires an inline line's model and effort to cover the
+hardest task the session implements, and `--effort high` at risk 3 or once it
+delegates. A task that will not converge after three fix rounds goes to the
+ruling seat as a `breaker` item.
 
 **Parallel waves, subagent plans only.** The `executionStrategy` setting
 defaults to `sequential`, and an inline plan always runs one task after
 another. `parallel` and `ask` take effect only for a plan whose Execution line
-names `subagent`. Brainstorming records `**Execution strategy:** sequential —
-inline execution` in the spec. A parallel
+names `subagent`. Brainstorming records the setting's value as the spec's
+`**Execution strategy:**` line, and under `ask` writing-plans asks. A parallel
 plan groups its tasks into waves, written `**Parallelism:** waves — 1 | 2-4 | 5`:
 contiguous task ranges whose tasks share no file and consume nothing from each
 other, with a `**Depends on:**` line on every task. Subagent mode runs a wave's
@@ -221,6 +225,8 @@ than it saves.
 an override on a second line, which is what makes a machine without Codex, a cold
 session, and an executor whose auth has lapsed all degrade by reading a line that
 is already there rather than re-deriving the assignment at dispatch. Under
+`dagents:subagent-driven-development`, the default, `**Implementer:**` is the
+agent each task is dispatched to. Under
 `dagents:executing-plans` both lines are read only for the tasks an
 inline plan delegates; for the tasks the session implements itself they are
 inert, so nothing falls back.
@@ -348,75 +354,14 @@ reset time the error names, or for the session when it names none.
   `test-driven-development` and `writing-plans` now place each test at the
   lowest layer that can fail for its change, so the suite stops regrowing.
 
-**darkmem mirror (optional, off by default).** `scripts/darkmem-sync` keeps
-  a repository's planning documents and progress in a darkmem instance over
-  its keyed REST routes. It does nothing until you opt in: turn on **Use
-  darkmem** (`darkmemEnabled`) in the cockpit's darkmem settings or with
-  `bash <plugin-root>/scripts/dagents-config set darkmemEnabled true`, and map
-  the repository's primary checkout in `~/.dagents/config.json` —
-  `{"darkmem": {"url": "http://<host>:8000", "api_key_env": "DARKMEM_API_KEY", "repos": {"<primary checkout path>": {"project": "<name>"}}}}`
-  — and export a `dmk_` key in that variable. The repository then syncs a
-  mirror at `~/.dagents/mirror/<project>/`, whose documents live under the
-  darkmem uri prefix `dagents/`. The key needs the `read` and `capture` scopes,
-  and `import --replace` also `admin`. Two settings choose each family's
-  store while darkmem is on: `documentStore` (specs, plans, registers, notes)
-  and `progressSource` (ledgers and handoffs), `local` or `darkmem`, both
-  `darkmem` by default; a mapping entry may override either, for example
-  `{"project": "plugins", "documentStore": "local"}`. `~/.dagents/stores.json`
-  records where each family actually lives, with its project and mirror, and
-  the scripts and skills read and write there through `scripts/lib/roots.sh`
-  and `scripts/dagents-path`.
-  `pull` fetches what changed; `push` sends documents under their last synced
-  hash and each new ledger line as its own entry, with `task`, `state` and
-  `commit` properties a progress board can read; `status` lists each family's
-  store and local changes;
-  `import` files an existing `docs/dagents/` and its ledgers once, verified byte
-  for byte. A store that changes moves its family at the next session start
-  with no plan in progress and no auto run active:
-  `reconcile` copies the files across, verifies every hash, records the new
-  store in `stores.json`, and leaves documents leaving the repository as a
-  staged `git rm` for you to commit. Every move refuses, naming the reason,
-  while a plan is in progress (a ledger whose plan `completed.md` does not
-  record) or an auto run is active. A move into darkmem also refuses while
-  darkmem is unreachable or the key is unset, while a linked worktree holds
-  documents the primary checkout does not, or when a file cannot be carried
-  (a dotfile, a symbolic link, an empty or non-UTF-8 file, a name some
-  platform cannot hold, a case twin, an ignored file); it never overwrites a different darkmem copy, and moved
-  progress files are kept under a dated `moved-<stamp>` backup.
-  **Falling back to the file system.** While darkmem is on, the mirror is plain
-  local files: without the key or the server, work goes on from it and `pull`
-  and `push` say why they skipped. Turn darkmem off (`darkmemEnabled` false) or
-  remove the mapping, and the next session start with no plan in progress
-  moves every family back into the repository from the mirror alone, without
-  asking darkmem, naming each file darkmem does not hold as the mirror does and keeping the mirror
-  as a dated `dagents-moved-<stamp>` / `work-moved-<stamp>` backup; until then
-  the scripts keep reading the mirror, and `push` and `pull` do nothing. A
-  store set back to `local` while darkmem is on and reachable is pulled from
-  darkmem first. A repository a 2.x release moved into darkmem stays there,
-  unsynced, while `darkmemEnabled` is unset: each session start says so until
-  you set it either way. A repository with no mapping but a record that still
-  places a family in the mirror is read and reconciled the same way: the
-  scripts read the mirror until a session start with no plan in progress
-  moves the family back. Without the darkmem MCP tools, or with darkmem off,
-  the durable facts the skills would file with `memory_add` go to
-  `<docs>/notes/<date>-facts.md` instead. Session start runs `reconcile` and
-  `pull`; the skills' stop points run `push`, and a
-  background Stop hook pushes as a safety net in at most 140 seconds: its
-  config lookup is bounded at 30 seconds and its push at 100, each sent
-  SIGTERM at its bound and SIGKILL 5 seconds later. `push` waits up to 100
-  seconds for another run's mirror lock before refusing;
-  `DAGENTS_DARKMEM_SYNC_LOCK_WAIT_MS` sets that wait in milliseconds, and a value that
-  is not a positive number means the 100 seconds. The Stop hook's push never
-  waits: it refuses at once while another run holds the lock and the next stop
-  sends what it missed. A
-  move stopped part-way through filing a ledger resumes it at the next session
-  start. A document deleted from the mirror is archived on darkmem under
-  `dagents/archive/<stamp>/` and `restore <name>` brings it back;
-  `revision <name>` prints the `<name>@r<id>` a distilled `Source:` line
-  cites. `docs/superpowers/<rest>` and `docs/dagents/<rest>` name the same
-  document everywhere names are compared, so historical plans keep resolving.
-  A conflict is reported, never merged. Without a mapping every command but
-  `import` prints one line and does nothing.
+**Everything stays in the repository.** dagents keeps its documents,
+  ledgers, handoff notes and state in the checkout and `~/.dagents/`, and
+  never talks to a darkmem server. `docs/superpowers/<rest>`,
+  `docs/forge/<rest>`, `docs/dforge/<rest>` and `docs/dagents/<rest>` name the
+  same document everywhere names are compared, so historical plans keep
+  resolving. A dforge 4.x project whose documents or progress dforge keeps in
+  darkmem moves them home in dforge first (`documentStore` or
+  `progressSource` set to `local`); `dagents-migrate` refuses until then.
 
 **UI/UX work proven in the running UI.** `dagents:ui-ux` turns a design into a
 numbered UI/UX contract (UI, UX and an Output promise) in the spec,
@@ -574,7 +519,7 @@ Codex has no Stop hook: the Codex manifest declares no hooks, so nothing
 catches a summarize-and-stop there. On Codex you must run `next-step` yourself
 on every early stop.
 
-A `PostToolUse` hook on `Edit`, `Write` and `MultiEdit` runs
+A `PostToolUse` hook on `Edit` and `Write` runs
 `scripts/ui-edit-hook.sh`: for a UI file (`scripts/ui-proof paths`) it
 returns `scripts/ui-lint` findings as additional context and, once per
 session, names `dagents:ui-ux`; it never blocks. A third `Stop` hook,
@@ -1036,7 +981,7 @@ The same settings can be set with
 | Workflow | `lensCap` | `4` | How many specialist review lenses (security, silent failures, test quality, the language lenses, type design, docs) the final review runs at most, in that priority order. `0` turns them off. `DAGENTS_LENS_CAP` overrides it. |
 | Workflow | `lensMinorFrom` | `20` | The plan size, in tasks, from which the final review's lenses also report Minor findings. A smaller plan's lenses report Critical and Important findings only, so the fix wave does not triage a long Minor tail. `0` always asks for Minor findings. `DAGENTS_LENS_MINOR_FROM` overrides it. |
 | Workflow | `executionStrategy` | `sequential` | `sequential` runs one task at a time; `parallel` (independent tasks in waves) and `ask` take effect only with a subagent Execution line. |
-| Workflow | `executionMode` | `auto` | `auto` means inline; `inline` and `subagent` fix the plan's Execution line, and `subagent` (deprecated) is the only mode that runs waves. |
+| Workflow | `executionMode` | `auto` | `auto` means subagent, the default; `inline` and `subagent` fix the plan's Execution line. Only a subagent plan runs waves. |
 | Workflow | `worktree` | `ask` | `always` isolates work in a git worktree without asking, `never` works in place, `ask` keeps the consent question. |
 | Workflow | `autoRun` | `on` | `on` runs the plan, execution, review and finish unattended once you approve the written spec (Claude Code only; `off` on Codex); `ask` offers that once the design is approved; `off` never runs one. See [Auto run](#auto-run). |
 | Process | `processBias` | `standard` | How readily a request gets a written spec and plan: `lighter` resolves doubt to a short in-chat design, `heavier` to a spec. |
@@ -1050,9 +995,6 @@ The same settings can be set with
 | Notifications | `notifyAfter` | `60` | Seconds a turn must run before `done` sends. `0` sends every turn. |
 | Notifications | `notifyAskAfter` | `20` | Seconds an approval or question waits before it sends. `0` sends at once. |
 | Notifications | `notifyDetail` | `full` | `full` includes command and answer excerpts; `brief` sends titles and fields only. |
-| darkmem | `darkmemEnabled` | `false` | Use darkmem for mapped repositories. Off keeps everything in the repository, and a family already in the mirror moves back at the next session start with no plan in progress, from the mirror alone. |
-| darkmem | `documentStore` | `darkmem` | While darkmem is on, where a mapped repository keeps its specs, plans, registers and notes: `local` in the repository, `darkmem` through the mirror. A mapping entry's own `documentStore` outranks it; an unmapped repository is local, though a family its record still places in the mirror is read there until a session start with no plan in progress moves it back. |
-| darkmem | `progressSource` | `darkmem` | The same choice for plan ledgers and handoffs. A mapping entry's own `progressSource` outranks it. |
 
 The cockpit settings (Cockpit, Minimized, Context, Notifications) apply at once, whether
 you change them in the pane, with `dagents-config` or in the file, except the
@@ -1109,7 +1051,6 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
 | `~/.dr-forge/` | `~/.dagents/` |
 | `DR_FORGE_*` environment variables | `DAGENTS_*` |
 | `scripts/forge-config`, `scripts/forge-path`, `scripts/forge-migrate` | `scripts/dagents-config`, `scripts/dagents-path`, `scripts/dagents-migrate` |
-| darkmem documents under `forge/` | `dagents/` |
 
 1. Install dagents, then uninstall dr-forge, so their hooks do not run twice.
    The cockpit's Discord webhook and mention stay in dr-forge's plugin store,
@@ -1139,10 +1080,6 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
    repository straight to 4.0 as well. Session start and `repo-audit` name
    any older path still present.
 3. Rename any `DR_FORGE_*` variable a shell profile sets to `DAGENTS_*`.
-
-darkmem's documents move from `forge/` to `dagents/` at the first sync after
-the mirror moved. A name darkmem already holds under `dagents/` is refused,
-never overwritten.
 
 The sections below record the earlier migrations under the names of their
 day; their steps now run through `/dagents:migrate`.
@@ -1208,21 +1145,15 @@ No other file is edited: plans, specs and ledgers that cite
 older plugin prefix fails `scripts/plan-lint` until they name `dr-forge:`.
 Rename any `DR_SUPERPOWERS_*` variable you set to its `DR_FORGE_*` name.
 `DR_FORGE_DOCUMENT_STORE` and `DR_FORGE_PROGRESS_SOURCE`, which 2.x read, are
-no longer read at all: set `documentStore` and `progressSource` instead.
+no longer read at all.
 
-`dagents-migrate` also moves the home: the darkmem mapping in
-`~/.dr-superpowers/config.json` into `~/.dr-forge/config.json` when that file
-has none, and each `~/.dr-superpowers/mirror/<project>/` that
-`~/.dr-forge/mirror/` lacks. darkmem itself is off in 3.0 until you set
-`darkmemEnabled`. A mirror's `superpowers/` folder becomes `forge/` at the next
-`darkmem-sync` run, and the first online run moves darkmem's `superpowers/`
-documents to `forge/`; upgrade every machine that shares a darkmem project,
-since a 2.x client no longer sees the moved documents.
+`dagents-migrate` leaves a home's darkmem mapping and mirrors where they are:
+dagents keeps nothing in darkmem.
 
 ## What a plan looks like
 
 A plan opens with a header block: Goal, Spec, the `**Execution:**` line
-(inline on every new plan, with the session's model and effort), Global Constraints, Contracts (every name
+(subagent on every new plan unless you ask for inline, with the session's model and effort), Global Constraints, Contracts (every name
 one task produces and another consumes), Assumptions with evidence, and a Task
 index. `scripts/plan-lint` checks it, and a judge reviews it against
 `criteria/plan-review.md` before it is saved. That Execution line is binding: a
@@ -1303,15 +1234,16 @@ differences:
    `review-route --ruling` prints). Its plan corrections
    land in an append-only `amendments.md` through `scripts/plan-amend`; the
    plan file is never edited during execution.
-10. **Inline by default.** Upstream picks `executing-plans` when subagents are
-    unavailable and recommends subagent execution otherwise. Here every new
-    plan's `**Execution:**` line names inline: `executing-plans` is a full
-    inline mode that writes the same ledger, sends its judgment to the same
-    ruling seat, and ends at the same shared
-    [final-review.md](reference/final-review.md); only risk-3 and executor
-    tasks get a per-task review. A task it cannot land in three fix rounds
-    goes to the ruling seat as a `breaker` item. Subagent mode is deprecated
-    and runs only for an older plan's subagent line or on your instruction.
+10. **Subagent by default, inline on request.** Upstream picks
+    `executing-plans` when subagents are unavailable and recommends subagent
+    execution otherwise. Here every new plan's `**Execution:**` line names
+    subagent unless `executionMode=inline` or you ask for inline, whatever
+    tools the session has. `executing-plans` is a full inline mode that
+    writes the same ledger, sends its judgment to the same ruling seat, and
+    ends at the same shared [final-review.md](reference/final-review.md);
+    only risk-3 and executor tasks get a per-task review there. A task it
+    cannot land in three fix rounds goes to the ruling seat as a `breaker`
+    item.
 
 ## Licenses
 
@@ -1335,15 +1267,12 @@ exist and validates the template against the documented format.
 and runs `scripts/test-profile` against fixture reports. `roadmap.test.sh` runs every
 `scripts/roadmap` verb against a temporary repository. `turn-end.test.sh`
 drives the turn-stamp and Stop hooks against a temporary repository, its
-ledgers and its branch heads;
-`darkmem-sync/hooks.test.mjs` drives darkmem's session-start sync and the
-background Stop push (`scripts/darkmem-stop-push.sh`) against the stub.
+ledgers and its branch heads.
 `codex-review.test.sh` covers the judge seats' selection and outcome policy
 against a stub `codex`, so every branch — refusal, fallback, timeout, empty
 report — is exercised without a model call.
-`darkmem-sync.test.sh` runs the `node:test` suites under
-`tests/dagents/darkmem-sync/` against an in-memory stub of darkmem's routes, so no
-darkmem instance is needed.
+`home.test.sh` runs the `node:test` suites under `tests/dagents/home/`: the home
+lock and the home half of `dagents-migrate`.
 The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one passing fixture per rule), `ui-hooks.test.sh` and `ui-ux-skill.test.sh` — run against temporary repositories and the skill text.
 
 ## Reference
@@ -1388,9 +1317,9 @@ review, `codex-review-schema.json` for the Codex task seats, and
 
 `scripts/` holds the external executor lane:
 
-- `detect-executors.sh` emits the JSON roster read at plan time and again as a
-  dispatch guard. `usable` means dispatchable, so a batch-capable CLI this
-  plugin ships no wrapper for reports `usable: false` with the reason.
+- `detect-executors.sh` emits the JSON roster of the registered executors, read
+  at plan time and again as a dispatch guard. `usable` means dispatchable, so
+  an executor whose wrapper is missing reports `usable: false` with the reason.
 - `run-codex-task.sh` runs one plan task on Codex, owns the commit, and prints
   one status line. Exit 0 is `DONE`, 1 is a run that did not reach it, and 2 is
   no status line - either a refusal before launch or a git failure after the run,

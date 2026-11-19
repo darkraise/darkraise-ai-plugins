@@ -106,10 +106,6 @@ if sel A12; then
   check "A12: the per-task cost is the run's total over its six tasks (fork)" "$(awk -v t="$(row fork 3)" -v p="$fork_cost" 'BEGIN { printf "%.2f", t / 6 }')" "$fork_cost"
   check "A12: the Critical findings the note lists match its counts (fork)" "$(grep -c '^- Fork review Critical' "$NOTE")" "$fork_crit"
   check "A12: the Critical findings the note lists match its counts (typed)" "$(grep -c '^- Typed review Critical' "$NOTE")" "$typed_crit"
-  # Forks still do not draft; the typed drafter itself was removed when plans
-  # came to be drafted in the session.
-  ff=$(grep -E '^export const FORK_DRAFTING = ' "$PLUGIN/hooks/cockpit/lib.ts" | sed 's/.*= *//')
-  check "A12: the cockpit's FORK_DRAFTING is false" "$ff" "false"
 fi
 
 if sel A13; then

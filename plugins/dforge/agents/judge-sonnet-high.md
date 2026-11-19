@@ -1,6 +1,6 @@
 ---
 name: judge-sonnet-high
-description: "Read-only judge running Sonnet 5.5 at high effort; it writes only its report file. Scoped re-reviews, the lens seat, simple rulings and read-only checks."
+description: "Read-only judge (Sonnet, high effort) writing only its report file: scoped re-reviews, the lens seat, simple rulings and read-only checks."
 model: sonnet
 effort: high
 tools: Read, Grep, Glob, Write

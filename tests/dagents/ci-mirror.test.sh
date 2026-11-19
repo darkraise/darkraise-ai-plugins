@@ -182,14 +182,5 @@ mirror docs/amended.md
 has "an amended CI line is the one read" "$out$err" "none-amended"
 rm -rf "$REPO/.dagents/sdd/amended" "$REPO/docs/amended.md"
 
-# --- a plan stored only in the darkmem docs mirror is found (A5) ---
-. "$HERE/fixtures/darkmem-stores.sh"
-DM=$(stores_home "$HOME" "$REPO" proj darkmem local)
-mkdir -p "$DM/dagents/plans" && cp "$TMP/none.md" "$DM/dagents/plans/mp.md"
-mirror docs/dagents/plans/mp.md
-check "a mirror-only plan: exit 0" "$rc" "0"
-check "a mirror-only plan: its CI line is read" "$out" "ci: none"
-rm -f "$HOME/.dagents/stores.json" "$HOME/.dagents/config.json"
-
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

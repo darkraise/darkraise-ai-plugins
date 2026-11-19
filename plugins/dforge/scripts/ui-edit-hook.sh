@@ -10,22 +10,22 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 command -v jq >/dev/null 2>&1 || exit 0
 stdin_json="$(cat 2>/dev/null || true)"
-jq -e . >/dev/null 2>&1 <<<"$stdin_json" || exit 0
-file=$(jq -r '.tool_input.file_path // empty' <<<"$stdin_json")
-session_id=$(jq -r '.session_id // empty' <<<"$stdin_json")
+# One jq call; \037 separates the fields, so an empty one keeps its place.
+fields=$(jq -j '[(.tool_input.file_path? // ""), (.session_id? // ""), (.transcript_path? // ""), (.cwd? // "")]
+  | map(tostring) | join("\u001f")' <<<"$stdin_json" 2>/dev/null) || exit 0
+file="" session_id="" transcript_path="" cwd="" root="" prefix=""
+IFS=$'\037' read -r -d '' file session_id transcript_path cwd < <(printf '%s' "$fields")
 . "$SCRIPT_DIR/lib/stand-down.sh"
 ! stand_down_active "$session_id" || exit 0
-transcript_path=$(jq -r '.transcript_path // empty' <<<"$stdin_json")
-cwd=$(jq -r '.cwd // empty' <<<"$stdin_json")
 [ -n "$file" ] || exit 0
 file=${file//\\//}
 case $file in /*|[A-Za-z]:/*) ;; *) file="${cwd:-$PWD}/$file" ;; esac
 [ -f "$file" ] || exit 0
 dir=$(dirname "$file")
-root=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || exit 0
 # Not ${file#"$root"/}: git prints its top level resolved (C:/ on Windows,
 # symlinks followed), so it need not spell the start of $file.
-prefix=$(git -C "$dir" rev-parse --show-prefix 2>/dev/null) || exit 0
+{ IFS= read -r root && IFS= read -r prefix; } < <(git -C "$dir" rev-parse --show-toplevel --show-prefix 2>/dev/null | tr -d '\r')
+[ -n "$root" ] || exit 0
 . "$SCRIPT_DIR/lib/ui-ux.sh"
 rel="$prefix$(basename "$file")"
 uiux_is_ui "$rel" "$(uiux_globs "$root")" || exit 0

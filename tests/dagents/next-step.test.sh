@@ -256,6 +256,9 @@ lacks "codex pair: no claude command" "$out" "claude --model"
 write_plan "$PLAN" '**Execution:** subagent — whatever the owner pinned' ""
 run "$REPO" "$PLAN_REL"
 has "an Execution line naming no pair: points at the Execution line" "$out" "Launch from \`$ROOT\`: see the **Execution:** line in \`$PLAN_REL\`."
+write_plan "$PLAN" '' ""
+run "$REPO" "$PLAN_REL"
+has "no Execution line: prompt names the default, subagent-driven-development" "$out" "with dagents:subagent-driven-development."
 
 # --- CRLF plan ---
 write_plan "$PLAN" "$EXEC_SUB" "$PROG_NEXT"
@@ -1031,26 +1034,6 @@ lacks "kept: never says complete" "$out" "is complete"
 has "kept: the finish choices stay open" "$out" "merge, pr or discard"
 check "kept: the no-plan finish record is cleared" "$([ -e "$REPO/.dagents/sdd/finish.json" ] && echo kept || echo gone)" "gone"
 
-
-# --- documents and progress kept in darkmem ---
-. "$HERE/fixtures/darkmem-stores.sh"
-SH="$TMP/stores-home"; mkdir -p "$SH"
-SR="$TMP/stores-repo"
-git init -q "$SR"
-git -C "$SR" commit -q --allow-empty -m init
-M=$(stores_home "$SH" "$SR" proj darkmem darkmem)
-mkdir -p "$M/dagents/plans" "$M/work/sdd/2026-02-02-mirror"
-write_plan "$M/dagents/plans/2026-02-02-mirror.md" '**Execution:** subagent — `claude --model sonnet --effort high` — demo' ""
-printf '# SDD ledger — plan: docs/dagents/plans/2026-02-02-mirror.md\nTask 1: complete (commits a..b, review clean)\n' \
-  > "$M/work/sdd/2026-02-02-mirror/progress.md"
-out=$(cd "$SR" && HOME=$SH bash "$SCRIPT" docs/dagents/plans/2026-02-02-mirror.md)
-check "darkmem: exit 0" "$?" "0"
-has "darkmem: the plan is named" "$out" "docs/dagents/plans/2026-02-02-mirror.md"
-has "darkmem: the mirror ledger is read" "$out" "ledger \`$M/work/sdd/2026-02-02-mirror/progress.md\`"
-check "darkmem: latest.md is written to the mirror" \
-  "$(grep -c '^## Next session' "$M/work/handoff/latest.md")" "1"
-check "darkmem: only latest.md and dotfiles sit beside it" "$(ls -A "$M/work/handoff" | grep -v '^\.' | tr '\n' ' ')" "latest.md "
-check "darkmem: nothing is written in the checkout" "$([ -e "$SR/.dagents/handoff/latest.md" ] && echo yes || echo no)" "no"
 
 # --- per-worktree handoffs (spec A2, A3, A6, A13, A14) ---
 # The Keep as-is block left a ledger for this plan in the primary; plan_ledger_any

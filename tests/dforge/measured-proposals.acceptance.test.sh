@@ -50,7 +50,7 @@ if command -v cygpath >/dev/null 2>&1; then
 fi
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME"
-unset CLAUDE_CONFIG_DIR DFORGE_DOCUMENT_STORE DFORGE_PROGRESS_STORE CLAUDE_PROJECT_DIR \
+unset CLAUDE_CONFIG_DIR CLAUDE_PROJECT_DIR \
   DFORGE_LENS_CAP DFORGE_LENS_MINOR_FROM
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 DFORGE_NO_SETTINGS=1 MSYS_NO_PATHCONV=1
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid \
@@ -497,8 +497,8 @@ sr_git() { git -C "$SR" "$@"; }
 sr_state() { jq -r "$2" "$SR_WS/task-$1-step.json" | tr -d '\r'; }
 sr_fix_case() { # sr_fix_case <name> <task> <lines appended by the fix>
   local t=$2 i
-  sr_run start docs/plan.md "$t"
-  check "A12: $1: start" "$sr_rc" "0"
+  (cd "$SR" && env HOME="$TMP/srhome" CLAUDE_CODE_SESSION_ID=mp-acceptance AR_SESSION= bash "$PLUGIN/scripts/task-brief" --open docs/plan.md "$t" >/dev/null); sr_rc=$?
+  check "A12: $1: open" "$sr_rc" "0"
   printf 'work %s\n' "$t" >> "$SR/app.txt"
   sr_git add -A && sr_git commit -qm "work $t"
   sr_run review docs/plan.md "$t"
@@ -555,8 +555,6 @@ a12() {
   check "A12: review --covered is a usage error" "$sr_rc" "2"
   sr_run verdict docs/plan.md 1 --covered
   check "A12: verdict --covered is a usage error" "$sr_rc" "2"
-  sr_run start docs/plan.md 1 --covered
-  check "A12: start --covered is a usage error" "$sr_rc" "2"
 }
 
 for t in $sel; do

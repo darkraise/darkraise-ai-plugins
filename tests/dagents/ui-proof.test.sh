@@ -295,19 +295,5 @@ printf 'a {}\n' > '"q.css'
 check "quoting: a top-level file name starting with a double quote fingerprints" "$(up fingerprint >/dev/null 2>&1; echo $?)" "0"
 rm '"q.css'
 
-# --- darkmem documents: a docs name for a screenshot resolves through the store (row 27) ---
-. "$HERE/fixtures/darkmem-stores.sh"
-M=$(stores_home "$HOME" "$REPO" proj darkmem local)
-# The profile and the reports live in the mirror too, or the gate is off and
-# every row passes unread.
-CHECKOUT_PROOFS=$PROOFS PROOFS="$M/dagents/ui-ux/proofs"
-mkdir -p "$PROOFS"
-printf '# UI profile\n\n**Platform:** web\n' > "$M/dagents/ui-ux/profile.md"
-printf 'png\n' > "$PROOFS/a.png"
-check "darkmem: a screenshot cited by its docs name resolves through the store" "$(try '| UX-1 | pass | docs/dagents/ui-ux/proofs/a.png | ok |')" "0"
-check "darkmem: a docs name with no screenshot behind it fails" "$(try '| UX-1 | pass | docs/dagents/ui-ux/proofs/missing.png | ok |')" "1"
-rm -f "$HOME/.dagents/config.json" "$HOME/.dagents/stores.json"
-PROOFS=$CHECKOUT_PROOFS
-
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

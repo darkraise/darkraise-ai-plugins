@@ -58,7 +58,7 @@ plan_amendments_ready "$plan"
 plan_apply_amendments "$plan" "$(plan_amendments_file "$plan")" > "$src" 2>/dev/null \
   || die "an amendment does not apply; run plan-lint"
 header=$(plan_header "$src")
-if grep -qE '^(\*\*)?Host:(\*\*)?[ \t]+codex[ \t]*$' <<<"$header"; then
+if plan_is_codex "$header"; then
   die "a Host: codex plan routes reviews through reference/native-codex.md"
 fi
 

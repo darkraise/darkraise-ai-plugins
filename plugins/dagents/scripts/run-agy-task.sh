@@ -157,7 +157,7 @@ if [[ "$model" == claude-* && "$gate_line" != *" fallback=on "* ]]; then
   die "the agy Claude fallback is off until $fallback_until (quota)"
 fi
 cwd="$(dr_canonical "$cwd")" || die 'cannot resolve worktree'
-report="$(realpath -m -- "$report")" || die 'cannot resolve report path'
+report="$(dr_resolve "$report")" || die 'cannot resolve report path'
 case "$report" in
   "$cwd"/*)
     case "$report" in "$cwd"/.dagents/*) ;; *) die 'report must be outside checkout or in ignored .dagents workspace' ;; esac

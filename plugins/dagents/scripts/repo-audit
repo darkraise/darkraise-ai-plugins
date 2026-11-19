@@ -61,7 +61,7 @@ while IFS=$'\t' read -r ledger wt; do
   [ -n "$ledger" ] || continue
   found=1
   plan_rel=$(ledger_plan "$ledger")
-  if [ "$wt" = mirror ]; then place="the darkmem mirror" base=$root; else place="\`$wt\`" base=$wt; fi
+  place="\`$wt\`" base=$wt
   total="?"
   if [ -n "$plan_rel" ]; then
     plan_file=$(dagents_resolve "$plan_rel" "$base")
@@ -130,17 +130,12 @@ fi
 # directory exists, in porcelain order, so the entries pair with it by index.
 handoffs=()
 while IFS= read -r line; do handoffs+=("$line"); done < <(dagents_latest_files "$root")
-store=$(dagents_progress_store)
-n=0
 i=0
 now=$(date +%s)
 while IFS=$'\t' read -r wt wbranch wprune; do
   wt=$(_dagents_path "$wt")
   file=""
-  # Under darkmem the one mirror handoff is the primary's: no other entry has one.
-  if [ "$store" = darkmem ]; then [ "$n" -gt 0 ] || file=${handoffs[0]:-}
-  elif [ -d "$wt" ]; then file=${handoffs[$i]:-}; i=$((i + 1)); fi
-  n=$((n + 1))
+  if [ -d "$wt" ]; then file=${handoffs[$i]:-}; i=$((i + 1)); fi
   if [ -n "$wprune" ] || [ ! -d "$wt" ]; then echo "- skipped \`$wt\`: prunable or missing"; continue; fi
   [ -n "$file" ] && [ -f "$file" ] || continue
   [ -f "$latest" ] && [ "$file" -ef "$latest" ] && continue
@@ -160,7 +155,7 @@ done < <(git -C "$(dr_native_path "$root")" worktree list --porcelain 2>/dev/nul
 
 echo
 echo "## Compaction"
-if [ -f "$root/CLAUDE.md" ] && tr -d '\r' < "$root/CLAUDE.md" | grep -qiE '^#+[[:space:]]*compact instructions'; then
+if [ -f "$root/CLAUDE.md" ] && grep -qiE '^#+[[:space:]]*compact instructions' < <(tr -d '\r' < "$root/CLAUDE.md"); then
   echo "- CLAUDE.md has a Compact Instructions section"
 else
   echo "- CLAUDE.md has no Compact Instructions section — see reference/session-budget.md"

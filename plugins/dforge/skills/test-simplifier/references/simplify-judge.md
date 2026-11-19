@@ -8,7 +8,7 @@ path it can read or text in the prompt.
 ## Placeholders
 
 - `[MODULE]` — the production module or package the wave covers.
-- `[CANDIDATES]` — each candidate test, as `path::name`, with its class (1 to 5
+- `[CANDIDATES]` — each candidate test, as `path::name`, with its class (1 to 6
   from the skill) and the action proposed: remove, merge into `<test>`, move to
   `<layer>`, rewrite.
 - `[TESTS]` — the test file paths the wave touches, as they stood before it.

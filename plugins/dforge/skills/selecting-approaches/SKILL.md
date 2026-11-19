@@ -105,7 +105,3 @@ Write one line into the plan task or the design document:
 **Approach:** inline - skip 2: follows the existing hook-script pattern
 **Approach:** advisor - load-bearing (produces the criteria file format)
 ```
-
-An existing `**Approach:** best-of-3 - …` line is the record of a decision made
-before best-of-3 was removed; `plan-lint` still accepts it, and nothing reruns
-it.
