@@ -70,12 +70,12 @@ out=$(SID='' ask "$PLAN" 3 'Codex host?' 2>"$TMP/err"); st=$?
 check "no session id with a plan: exit 0" "$st" "0"
 check "no session id with a plan: the ledger line" "$(tail -n 1 "$LEDGER")" "Task 3: waiting — Codex host?"
 check "no session id with a plan: says no marker was written" "$(grep -c 'no marker' "$TMP/err")" "1"
-if [ "$(id -u)" != 0 ] && ! command -v cygpath >/dev/null 2>&1; then
-  chmod 555 "$TURNS"
-  ask "$PLAN" 4 'Unwritable?' >/dev/null 2>&1; st=$?
-  chmod 755 "$TURNS"
-  check "an unwritable marker after the ledger line: exit 1" "$st" "1"
-fi
+# A file where the turns directory's parent belongs fails the marker write
+# for root too, where a read-only directory would not.
+BADHOME="$TMP/bad-home"; mkdir -p "$BADHOME"; : > "$BADHOME/.claude"
+(cd "$REPO" && HOME="$BADHOME" CLAUDE_CODE_SESSION_ID=s-ask bash "$ASK" "$PLAN" 4 'Unwritable?') >/dev/null 2>&1; st=$?
+check "an unwritable marker after the ledger line: exit 1" "$st" "1"
+check "an unwritable marker: the ledger line stands" "$(tail -n 1 "$LEDGER")" "Task 4: waiting — Unwritable?"
 printf 'q\n' > "$TURNS/s-ask.asked"
 jq -n --arg cwd "$REPO" '{hook_event_name:"UserPromptSubmit",session_id:"s-ask",cwd:$cwd,prompt:"go"}' | bash "$START"
 check "turn-start deletes the session's marker" "$([ -e "$TURNS/s-ask.asked" ] && echo yes || echo no)" "no"
