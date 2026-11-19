@@ -68,11 +68,18 @@ answers its default without reading `~/.dforge/config.json`. Installation and up
 disposable profiles, caches and Git repositories; they must never modify your
 installed plugins or call a paid model.
 
-CI runs the same checks on Ubuntu, and on Windows split into shards
-(`--shard <n>/<count>`, with the count `.github/workflows/validate.yml` sets
-for each run; dagents runs its own shards under `--plugin dagents`; add
-`--list` to inspect a shard without running it). A pull request from a fork
-always runs on GitHub's hosted runners. A new shell suite is discovered
+CI runs at two scopes. Each push runs the Linux suites and one Windows job,
+`node scripts/test-all.mjs --slice`, which runs the Windows portability slice
+(`windowsSlice` in `scripts/test-shards.mjs`). The full run comes nightly at
+02:17 UTC+7, and on `gh workflow run validate.yml -f scope=full`: the Linux
+suites and every Windows shard, 16 for the main suite and 17 under
+`--plugin dagents` (`--shard <n>/<count>`; add `--list` to inspect a shard
+without running it), each uploading its JUnit timings as an artifact, and
+then the release when every job of a full run of `main` passed. A suite that
+fails on Windows only in a full run joins `windowsSlice`, so the next push
+catches it. A manual `release.yml` dispatch without `validated` releases
+`main` as it is, bypassing the full run. A pull request from a fork always
+runs on GitHub's hosted runners. A new shell suite is discovered
 automatically, but it needs a weight in `scripts/test-shards.mjs`:
 `tests/test-shards.test.mjs` fails without one. A weight above 80% of the
 suite's limit (its `suiteSeconds` in `scripts/test-shards.mjs`, else 600 s)

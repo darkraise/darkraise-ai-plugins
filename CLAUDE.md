@@ -23,8 +23,13 @@ plugin, and `claude plugin test` on `plugins/dforge`, `plugins/dagents` and
 `plugins/dflow`. Bound test and CLI execution and clean up all processes
 started by the validation run.
 
-A task that ends in a push is done only when the CI run for the pushed
-commit is green: every job of `Validate marketplace`, the Windows shards
-included (`gh run list --commit <sha>`, then `gh run view <id>`). Local
-passes do not stand in for it; a failed or still-running run means the task
-is not done. A dagents job skipped by its path filter counts as green.
+A push runs the slice: the Linux suites and the Windows portability slice.
+A task that ends in a push is done only when every job of the run for the
+pushed commit is green (`gh run list --commit <sha>`, then
+`gh run view <id>`). Local passes do not stand in for it; a failed or
+still-running run means the task is not done. A dagents job skipped by its
+path filter counts as green. Also read the latest full run on `main`
+(`gh run list --workflow validate.yml --branch main --json
+displayTitle,conclusion,headSha,createdAt,url`, titles ending `(full)`):
+report a failed one, or none in the last 48 hours, as a finding against the
+commits since the last green full run.
