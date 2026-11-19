@@ -29,7 +29,7 @@ function lastFullRun(repository) {
   } catch (error) {
     return { error: `unreadable gh output: ${oneLine(error.message)}` };
   }
-  return { run: Array.isArray(runs) ? runs.find(run => String(run.displayTitle ?? '').endsWith(' (full)')) : undefined };
+  return { run: Array.isArray(runs) ? runs.find(run => run.displayTitle === RUN_TITLES.full) : undefined };
 }
 
 function onlyReleaseCommits(base, sha) {

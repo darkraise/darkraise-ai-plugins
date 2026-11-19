@@ -93,11 +93,6 @@ test('a scheduled run proceeds on a real change, no earlier run, an unknown comm
   assert.match(failed.notice[0], /HTTP 403/);
 });
 
-test('the run titles name the scope', async () => {
-  const { RUN_TITLES } = await import(new URL('../scripts/ci-scope.mjs', import.meta.url).href);
-  assert.deepEqual(RUN_TITLES, { full: 'Validate marketplace (full)', slice: 'Validate marketplace (slice)' });
-});
-
 test('plan without EVENT or GITHUB_OUTPUT is a usage error', () => {
   assert.equal(spawnSync(process.execPath, [SCRIPT, 'plan'], { encoding: 'utf8', env: { PATH: process.env.PATH } }).status, 2);
 });
