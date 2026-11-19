@@ -8,7 +8,8 @@ export const RUN_TITLES = { full: 'Validate marketplace (full)', slice: 'Validat
 
 const WINDOWS_SHARDS = Array.from({ length: 16 }, (_, i) => i + 1);
 const RELEASE_SUBJECT = /^chore\(([^)\s]+)\): release \S+$/;
-const USAGE = 'usage: ci-scope.mjs plan';
+const RELEASE_GATE = ['scope', 'validate', 'dagents-changes', 'validate-dagents', 'windows', 'windows-dagents'];
+const USAGE = 'usage: ci-scope.mjs plan|release';
 
 const oneLine = text => String(text).replace(/\s+/g, ' ').trim();
 
@@ -72,8 +73,35 @@ function plan(env) {
   return 0;
 }
 
+function releaseBlocker({ SCOPE: scope, REF: ref }, needs) {
+  if (scope !== 'full') return `scope is ${scope || 'unset'}, not full`;
+  if (ref !== 'refs/heads/main') return `ref is ${ref || 'unset'}, not refs/heads/main`;
+  const homelab = needs.homelab?.result;
+  if (homelab !== 'success' && homelab !== 'skipped') return `homelab is ${homelab ?? 'missing'}, not success or skipped`;
+  const job = RELEASE_GATE.find(name => needs[name]?.result !== 'success');
+  return job && `${job} is ${needs[job]?.result ?? 'missing'}, not success`;
+}
+
+function release(env) {
+  let needs;
+  try {
+    needs = JSON.parse(env.NEEDS ?? '');
+  } catch {
+    console.error('ci-scope release: NEEDS is not JSON');
+    return 2;
+  }
+  if (needs === null || typeof needs !== 'object' || Array.isArray(needs)) {
+    console.error('ci-scope release: NEEDS is not a JSON object');
+    return 2;
+  }
+  const blocker = releaseBlocker(env, needs);
+  console.log(blocker ? `No release: ${blocker}.` : 'Release: a full run of main where every job passed.');
+  return blocker ? 1 : 0;
+}
+
 function main(argv, env) {
   if (argv[0] === 'plan') return plan(env);
+  if (argv[0] === 'release') return release(env);
   console.error(USAGE);
   return 2;
 }

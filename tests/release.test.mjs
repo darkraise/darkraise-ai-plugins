@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,4 +50,24 @@ test('commits after that first tag make the next release, and none leaves nothin
   const out = dryRun();
   assert.match(out, /^release foo 1\.0\.0 -> 1\.0\.1$/m);
   assert.doesNotMatch(out, /the rest/);
+});
+
+test('--validated releases nothing once main has moved past the validated commit', t => {
+  const { git, commit, dir } = repo(t);
+  const old = commit('.claude-plugin/plugin.json', '{"version":"1.0.0"}');
+  commit('lib.mjs', 'feat(foo): more');
+  const head = git('rev-parse', 'HEAD');
+  const out = execFileSync(process.execPath, ['scripts/release.mjs', '--validated', old], { cwd: dir, encoding: 'utf8' });
+  assert.match(out, new RegExp(`^::warning::main moved past the validated commit ${old}; the next full run releases it\\.$`, 'm'));
+  assert.equal(git('tag', '--list'), '');
+  assert.equal(git('rev-parse', 'HEAD'), head);
+  const same = execFileSync(process.execPath, ['scripts/release.mjs', '--validated', head, '--dry-run'], { cwd: dir, encoding: 'utf8' });
+  assert.match(same, /^tag foo-v1\.0\.0 at /m);
+});
+
+test('release.yml is dispatched with the validated commit and has no workflow_run trigger', () => {
+  const yml = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../.github/workflows/release.yml'), 'utf8');
+  assert.doesNotMatch(yml, /workflow_run/);
+  assert.match(yml, /^ {6}validated:$/m);
+  assert.match(yml, /--validated/);
 });

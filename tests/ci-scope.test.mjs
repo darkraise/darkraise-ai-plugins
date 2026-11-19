@@ -101,3 +101,30 @@ test('the run titles name the scope', async () => {
 test('plan without EVENT or GITHUB_OUTPUT is a usage error', () => {
   assert.equal(spawnSync(process.execPath, [SCRIPT, 'plan'], { encoding: 'utf8', env: { PATH: process.env.PATH } }).status, 2);
 });
+
+const JOBS = ['scope', 'homelab', 'validate', 'dagents-changes', 'validate-dagents', 'windows', 'windows-dagents'];
+const needs = (over = {}, drop = []) => JSON.stringify(Object.fromEntries(JOBS.filter(job => !drop.includes(job)).map(job => [job, { result: over[job] ?? 'success', outputs: {} }])));
+const release = env => spawnSync(process.execPath, [SCRIPT, 'release'], { encoding: 'utf8', env: { PATH: process.env.PATH, SCOPE: 'full', REF: 'refs/heads/main', ...env } });
+
+test('release: a full run of main where every job passed releases', () => {
+  assert.equal(release({ NEEDS: needs() }).status, 0);
+  assert.equal(release({ NEEDS: needs({ homelab: 'skipped' }) }).status, 0, 'the hosted fallback skips homelab');
+});
+
+test('release: a slice, another ref, or any job not passing does not', () => {
+  const cases = [
+    ['slice', { SCOPE: 'slice', NEEDS: needs() }],
+    ['a branch', { REF: 'refs/heads/feature', NEEDS: needs() }],
+    ['validate failed', { NEEDS: needs({ validate: 'failure' }) }],
+    ['a Windows shard cancelled', { NEEDS: needs({ windows: 'cancelled' }) }],
+    ['dagents skipped', { NEEDS: needs({ 'validate-dagents': 'skipped' }) }],
+    ['homelab failed', { NEEDS: needs({ homelab: 'failure' }) }],
+    ['windows-dagents missing', { NEEDS: needs({}, ['windows-dagents']) }],
+  ];
+  for (const [name, env] of cases) {
+    const r = release(env);
+    assert.equal(r.status, 1, name);
+    assert.ok(r.stdout.trim().length > 0, `${name}: says why`);
+  }
+  assert.equal(release({ NEEDS: 'not json' }).status, 2);
+});

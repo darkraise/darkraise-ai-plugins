@@ -4,11 +4,18 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-const { values: options } = parseArgs({ options: { 'dry-run': { type: 'boolean' } } });
+const { values: options } = parseArgs({ options: { 'dry-run': { type: 'boolean' }, validated: { type: 'string' } } });
 const isDryRun = options['dry-run'] ?? false;
 const root = fileURLToPath(new URL('../', import.meta.url));
 const run = (command, args) => execFileSync(command, args, { cwd: root, encoding: 'utf8', timeout: 120_000, stdio: ['ignore', 'pipe', 'inherit'] }).trim();
 const git = (...args) => run('git', args);
+
+if (options.validated !== undefined && git('rev-parse', 'HEAD') !== options.validated) {
+  // Awaiting the write suspends module evaluation, so nothing below runs even
+  // where stdout is an asynchronous pipe (Windows).
+  await new Promise(done => process.stdout.write(`::warning::main moved past the validated commit ${options.validated}; the next full run releases it.\n`, done));
+  process.exit(0);
+}
 
 const names = JSON.parse(readFileSync(resolve(root, '.claude-plugin/marketplace.json'), 'utf8')).plugins.map(plugin => plugin.name);
 const tagOf = (name, version) => `${name}-v${version}`;
