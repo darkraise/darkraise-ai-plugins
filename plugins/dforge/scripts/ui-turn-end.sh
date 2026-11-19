@@ -9,8 +9,10 @@
 # fast mode (lib/fast-mode.sh), when the last message ends with
 # "UI proof: pending — <why>", when it carries the `## Next session` block
 # next-step wrote this turn (a handoff; lib/next-ending.sh; without a turn
-# stamp, any such block), when a ledger written this turn ends on a `Task <N>: waiting — `
-# question, and while finite background work or a timer runs (lib/in-flight.sh):
+# stamp, any such block), when a question was asked through scripts/ask this
+# turn (lib/ask-marker.sh) or a ledger written this turn ends on a
+# `Task <N>: waiting — ` question (any dash), and while finite background work
+# or a timer runs (lib/in-flight.sh):
 # each of those stops is not a claim that the UI work is done. The last message
 # is the hook's, else the transcript's (lib/last-message.sh). Anything
 # missing (jq, the turn stamp, a branch head for this checkout) passes.
@@ -68,14 +70,17 @@ else
 fi
 if [ -f "$stamp" ]; then
   . "$SCRIPT_DIR/lib/plan.sh"
+  . "$SCRIPT_DIR/lib/ask-marker.sh"
   sdd=$(dforge_ledger_root "$root") || sdd=""
+  docs=$(dforge_stores_init "$root" && printf '%s' "$_DFORGE_DOCS_ROOT") || docs=""
+  ask_marker_released "$stamp" "$sdd" "$docs" && exit 0
   ws="$(dforge_dir state "$root")/sdd"
   if [ -d "$sdd" ]; then
     while IFS= read -r ledger; do
       # As turn-end.sh reads it: under darkmem progress every worktree shares
       # the mirror's ledgers, and one without a workspace here is another's.
       [ -d "$ws/$(basename "$(dirname "$ledger")")" ] || continue
-      tr -d '\r' < "$ledger" | awk 'NF { l = $0 } END { print l }' | grep -qE '^Task [0-9]+: waiting — ' && exit 0
+      tr -d '\r' < "$ledger" | awk 'NF { l = $0 } END { print l }' | grep -qE '^Task [0-9]+: waiting[[:space:]]+(—|–|-)[[:space:]]' && exit 0
     done < <(find "$sdd" -name progress.md -newer "$stamp" 2>/dev/null)
   fi
 fi

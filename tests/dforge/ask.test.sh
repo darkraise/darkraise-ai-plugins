@@ -80,5 +80,85 @@ printf 'q\n' > "$TURNS/s-ask.asked"
 jq -n --arg cwd "$REPO" '{hook_event_name:"UserPromptSubmit",session_id:"s-ask",cwd:$cwd,prompt:"go"}' | bash "$START"
 check "turn-start deletes the session's marker" "$([ -e "$TURNS/s-ask.asked" ] && echo yes || echo no)" "no"
 
+# --- the Stop hooks ---
+END="$P/scripts/turn-end.sh"; UIEND="$P/scripts/ui-turn-end.sh"; AR="$P/scripts/auto-run"
+SHOWN="$(cd "$P" && pwd)"; if command -v cygpath >/dev/null 2>&1; then SHOWN=$(cygpath -m "$SHOWN"); fi
+prompt() { jq -n --arg sid "$1" --arg cwd "${2:-$REPO}" '{hook_event_name:"UserPromptSubmit",session_id:$sid,cwd:$cwd,prompt:"go"}' | bash "$START"; }
+stop_with() { # stop_with <hook> <session> <message> [transcript]
+  jq -n --arg sid "$2" --arg cwd "$REPO" --arg msg "$3" --arg tp "${4:-}" \
+    '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:$tp,stop_hook_active:false,last_assistant_message:$msg}' | bash "$1"
+}
+stop() { stop_with "$END" "$@"; }
+decision() { jq -r '.decision // "none"' <<<"${1:-{\}}" 2>/dev/null || echo none; }
+ledger() { sleep 1; printf '# SDD ledger — plan: %s\n%s\n' "$PLAN" "$1" > "$LEDGER"; }
+asked() { sleep 1; SID="$1" ask "${@:2}" >/dev/null; }
+
+sleep 1; prompt s-h; ledger 'Task 1: complete (commits a..b, review clean)'
+out=$(stop s-h 'Task 1 is done.')
+check "mid-plan summary: held" "$(decision "$out")" "block"
+check "the mid-plan reason names ask with the plan" "$(jq -r .reason <<<"$out" | grep -cF "\`bash \"$SHOWN/scripts/ask\" $PLAN N")" "1"
+check "the mid-plan reason offers next-step only for an ending session" "$(jq -r .reason <<<"$out" | grep -c 'If the session is ending, run')" "1"
+asked s-h 'Which width?'
+check "mid-plan, asked this turn: passes" "$(stop s-h 'Which width?')" ""
+sleep 1; prompt s-h; ledger 'Task 2: complete (commits c..d, review clean)'
+check "a question asked in an earlier turn releases nothing" "$(decision "$(stop s-h 'Task 2 is done.')")" "block"
+asked s-h 'Which width?'; ledger 'Task 3: complete (commits e..f, review clean)'
+check "work recorded after the question: held" "$(decision "$(stop s-h 'Task 3 is done.')")" "block"
+
+h=$(git -C "$REPO" rev-parse --short HEAD)
+sleep 1; prompt s-c; ledger "Task 1: complete (commits a..b, review clean)"$'\n'"Final review: clean (commits $h..$h)"
+out=$(stop s-c 'All done.')
+check "clean final review summary: held" "$(decision "$out")" "block"
+check "the clean final review takes the clean branch" "$(jq -r .reason <<<"$out" | grep -c 'passed its final review')" "1"
+check "the clean-review reason names ask without a plan" "$(jq -r .reason <<<"$out" | grep -cF "\`bash \"$SHOWN/scripts/ask\" \"<question>\"\`")" "1"
+asked s-c 'Merge, or open a pull request?'
+check "clean final review, asked: passes" "$(stop s-c 'Merge, or open a pull request?')" ""
+
+mkdir -p "$REPO/docs/dforge/plans"; printf '# Completed plans\n' > "$REPO/docs/dforge/plans/completed.md"
+git -C "$REPO" add docs && git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -qm 'docs: completed'
+sleep 1; prompt s-t; sleep 1
+printf -- '- 2026-11-19 `docs/dforge/plans/2026-11-19-y.md` — merged into `main`\n' >> "$REPO/docs/dforge/plans/completed.md"
+out=$(stop s-t 'Merged.')
+check "a transition summary: held" "$(decision "$out")" "block"
+check "the transition reason names ask" "$(jq -r .reason <<<"$out" | grep -c 'scripts/ask')" "1"
+asked s-t 'Start the next milestone now?'
+check "a transition, asked: passes" "$(stop s-t 'Start the next milestone now?')" ""
+
+for dash in '—' '–' '-'; do
+  sleep 1; prompt s-d; ledger "Task 4: waiting $dash which colour?"
+  check "a typed waiting line with '$dash': passes" "$(stop s-d 'Which colour?')" ""
+done
+
+BG="$TMP/bg.jsonl"
+jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"toolu_bg",name:"Bash",input:{description:"Long suite",command:"sleep 600",run_in_background:true}}]}}' > "$BG"
+jq -nc '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_bg",content:"Command running in background with ID: b1. Output is being written to: /tmp/b1.output."}]}}' >> "$BG"
+sleep 1; prompt s-b; ledger 'Task 5: complete (commits a..b, review clean)'; asked s-b 'Which width?'
+check "a question does not release a session-ending block over running work" \
+  "$(decision "$(stop s-b $'## Next session\n\n**Status:** x\n**Next:** x' "$BG")")" "block"
+
+mkdir -p "$HOME/.claude/dforge/sessions/cockpit"; date +%s > "$HOME/.claude/dforge/sessions/cockpit/s-ar"
+(cd "$REPO" && bash "$AR" --session s-ar start --spec docs/s.md --register docs/r.md >/dev/null)
+sleep 1; prompt s-ar; asked s-ar 'Which width?'
+check "a question does not release the auto-run hold" "$(decision "$(stop s-ar 'Which width?')")" "block"
+(cd "$REPO" && bash "$AR" --session s-ar stop --reason test >/dev/null 2>&1)
+
+# ui-turn-end: a UI change without proof is held unless a question was asked.
+mkdir -p "$REPO/src" "$REPO/docs/dforge/ui-ux"
+printf '# UI profile\n\n**Platform:** web\n' > "$REPO/docs/dforge/ui-ux/profile.md"
+printf 'export const A = () => <main/>;\n' > "$REPO/src/App.tsx"
+git -C "$REPO" add -A && git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -qm base-ui
+sleep 1; prompt s-u
+printf '// change\n' >> "$REPO/src/App.tsx"; git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -qam 'ui change'
+rm -rf "$REPO/.dforge/sdd"
+check "ui: a UI change without proof is held" "$(decision "$(stop_with "$UIEND" s-u 'Done.')")" "block"
+asked s-u 'Which colour?'
+check "ui: asked this turn: passes" "$(decision "$(stop_with "$UIEND" s-u 'Which colour?')")" "none"
+mkdir -p "$WS"
+for dash in '—' '–' '-'; do
+  sleep 1; prompt s-u2; printf '// %s\n' "$dash" >> "$REPO/src/App.tsx"; git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -qam "ui $dash"
+  ledger "Task 4: waiting $dash which colour?"
+  check "ui: a typed waiting line with '$dash': passes" "$(decision "$(stop_with "$UIEND" s-u2 'Which colour?')")" "none"
+done
+
 printf '%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
