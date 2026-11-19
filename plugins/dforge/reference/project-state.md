@@ -94,7 +94,15 @@ darkmem.
 |---|---|---|
 | `<docs>` | `<worktree>/docs/dforge` | `~/.dforge/mirror/<project>/dforge` |
 | `<ledger dir>` | `<worktree>/<state>/sdd/<plan-basename>` | `~/.dforge/mirror/<project>/work/sdd/<plan-basename>` |
-| `<latest.md>` | `<primary checkout>/<state>/handoff/latest.md` | `~/.dforge/mirror/<project>/work/handoff/latest.md` |
+| `<latest.md>` | `<checkout>/<state>/handoff/latest.md` | the primary's: `~/.dforge/mirror/<project>/work/handoff/latest.md`; a linked worktree's: `<worktree>/<state>/handoff/latest.md` |
+
+Each checkout keeps its own `<latest.md>`. `scripts/next-step` writes the
+handoff of the checkout the next session works in: for a plan in flight, the
+worktree holding its ledger; once the plan is complete, the primary's;
+otherwise the checkout it runs in. Its first prompt opens by naming that
+checkout and its handoff. Only the primary's handoff is in the mirror while
+progress is in darkmem: a linked worktree's stays local, and `darkmem-sync
+push` run there says so. `scripts/repo-audit` lists every checkout's.
 
 `<state>` and a plan's workspace (`scripts/sdd-workspace`: briefs, reports,
 review packages) stay in the checkout either way. A plan's ledger is

@@ -257,8 +257,10 @@ dr_task_update '.phase = "running" | .processes = []' || die 'cannot persist run
 result=$(build_request | "$DAGENTS_TIMEOUT" $((timeout_s + 60)) node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$report.stderr")
 client_rc=$?
 # A node that died before printing leaves $result empty, and every jq below would
-# then fail and take the runner with it. One guard here covers all of them.
-[ -n "$result" ] || result='{}'
+# then fail and take the runner with it. One guard here covers all of them. It
+# may have died after the turn went out, so nothing proves the turn stopped.
+no_result=no
+[ -n "$result" ] || { result='{}'; no_result=yes; }
 printf '%s\n' "$result" > "$jsonl"
 
 # The report the verdict is read from. The client returns the model's structured
@@ -295,9 +297,9 @@ rc=0
 # killed by the outer bound - can leave Codex writing into this worktree. A
 # plugin-api failure without a turn status, once the turn request went out, is
 # a transport error that may have come after the turn started, so it proves no
-# more than a timeout does.
+# more than a timeout does, and neither does a client that printed no result.
 writer_stopped=yes
-if [ "$timed_out" = yes ] || [ "$(jq -r '.reason == "plugin-api" and .turnSent == true and (.turnStatus | type) != "number"' <<<"$result")" = true ]; then
+if [ "$timed_out" = yes ] || [ "$no_result" = yes ] || [ "$(jq -r '.reason == "plugin-api" and .turnSent == true and (.turnStatus | type) != "number"' <<<"$result")" = true ]; then
   [ "$(jq -r '.interrupted == true or .reaped == true' <<<"$result")" = true ] || writer_stopped=no
 fi
 
@@ -374,6 +376,8 @@ head=$(git -C "$cwd" rev-parse HEAD)
   [ "$committed" = empty ] && printf -- '- note: DONE with an empty diff; nothing was committed\n'
   if [ "$writer_stopped" = no ] && [ "$timed_out" = yes ]; then
     printf -- '- note: timed out after %ss and the codex turn could not be confirmed stopped; the task is blocked until it is\n' "$timeout_s"
+  elif [ "$writer_stopped" = no ] && [ "$no_result" = yes ]; then
+    printf -- '- note: the codex client returned no result and the codex turn could not be confirmed stopped; the task is blocked until it is\n'
   elif [ "$writer_stopped" = no ]; then
     printf -- '- note: the connection to codex failed and the codex turn could not be confirmed stopped; the task is blocked until it is\n'
   elif [ "$timed_out" = yes ]; then

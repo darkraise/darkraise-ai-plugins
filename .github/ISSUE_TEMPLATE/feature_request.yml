@@ -10,7 +10,6 @@ body:
         - dforge
         - dagents
         - dflow
-        - dr-status
         - darkraise-ui
         - darkraise-win32ui
         - New plugin

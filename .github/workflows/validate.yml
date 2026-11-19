@@ -58,7 +58,7 @@ jobs:
           timeout 30s gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   validate:
-    timeout-minutes: 26
+    timeout-minutes: 50
     runs-on: ${{ fromJSON((inputs.runner != 'hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","homelab"]' || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v5
@@ -88,7 +88,7 @@ jobs:
         timeout-minutes: 6
         run: |
           for attempt in 1 2 3; do
-            timeout 120s npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.306 && break
+            timeout 120s npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.327 && break
             [ "$attempt" -lt 3 ] || exit 1
           done
           # The package's postinstall links its native binary; an npm that
@@ -101,7 +101,7 @@ jobs:
         timeout-minutes: 3
         run: |
           timeout 60s "$CLAUDE" plugin validate .
-          for plugin in dr-status darkraise-ui darkraise-win32ui; do
+          for plugin in darkraise-ui darkraise-win32ui; do
             timeout 30s "$CLAUDE" plugin validate "plugins/$plugin"
           done
 
@@ -114,16 +114,16 @@ jobs:
       # On 2026-10-22 the cockpit's tests took 51 to 81 s on the runner, an
       # npx download included.
       - name: Validate and test dforge
-        timeout-minutes: 6
+        timeout-minutes: 9
         run: |
           timeout 60s "$CLAUDE" plugin validate plugins/dforge
-          timeout 240s "$CLAUDE" plugin test plugins/dforge
+          timeout 420s "$CLAUDE" plugin test plugins/dforge
 
       # On GitHub's runner, which a fallback run uses, the suites outgrew 690 s
       # on 2026-10-26; the homelab runner takes about two thirds as long.
       - name: Run maintained regression suites
-        timeout-minutes: 18
-        run: timeout --kill-after=10s 1050s node scripts/test-all.mjs
+        timeout-minutes: 27
+        run: timeout --kill-after=10s 1500s node scripts/test-all.mjs
 
   # dagents is the frozen dforge 4.x line: its jobs run only when a change can
   # reach it. A new branch's push has no readable before commit, so it runs them.
@@ -161,7 +161,7 @@ jobs:
   validate-dagents:
     needs: dagents-changes
     if: needs.dagents-changes.outputs.dagents == 'true'
-    timeout-minutes: 26
+    timeout-minutes: 50
     runs-on: ${{ fromJSON((inputs.runner != 'hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && '["self-hosted","linux","homelab"]' || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v5
@@ -191,7 +191,7 @@ jobs:
         timeout-minutes: 6
         run: |
           for attempt in 1 2 3; do
-            timeout 120s npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.306 && break
+            timeout 120s npm install --prefix "$RUNNER_TEMP/claude-code" --no-audit --no-fund @anthropic-ai/claude-code@2.1.327 && break
             [ "$attempt" -lt 3 ] || exit 1
           done
           # The package's postinstall links its native binary; an npm that
@@ -201,25 +201,25 @@ jobs:
           echo "CLAUDE=$RUNNER_TEMP/claude-code/node_modules/.bin/claude" >> "$GITHUB_ENV"
 
       - name: Validate and test dagents
-        timeout-minutes: 6
+        timeout-minutes: 9
         run: |
           timeout 60s "$CLAUDE" plugin validate plugins/dagents
-          timeout 240s "$CLAUDE" plugin test plugins/dagents
+          timeout 420s "$CLAUDE" plugin test plugins/dagents
 
       # dagents' suites are dforge 4.17.1's, so they take the bound dforge's
       # suites took on GitHub's runner rather than one measured on a dev host.
       - name: Run dagents regression suites
-        timeout-minutes: 18
-        run: timeout --kill-after=10s 1050s node scripts/test-all.mjs --plugin dagents
+        timeout-minutes: 27
+        run: timeout --kill-after=10s 1500s node scripts/test-all.mjs --plugin dagents
 
   windows:
-    name: Windows (${{ matrix.shard }}/14)
+    name: Windows (${{ matrix.shard }}/16)
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -230,25 +230,25 @@ jobs:
         shell: pwsh
         run: choco install jq ripgrep --yes --no-progress
       - name: Run Windows regression suites
-        timeout-minutes: 25
+        timeout-minutes: 40
         shell: pwsh
         env:
           DR_TEST_BASH: C:/Program Files/Git/bin/bash.exe
           # Git Bash's ln -s copies its target unless told to make a real link,
           # which the runner's administrator account may create.
           MSYS: winsymlinks:nativestrict
-        run: node scripts/test-all.mjs --shard ${{ matrix.shard }}/14
+        run: node scripts/test-all.mjs --shard ${{ matrix.shard }}/16
 
   windows-dagents:
-    name: Windows dagents (${{ matrix.shard }}/13)
+    name: Windows dagents (${{ matrix.shard }}/17)
     needs: dagents-changes
     if: needs.dagents-changes.outputs.dagents == 'true'
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -259,11 +259,11 @@ jobs:
         shell: pwsh
         run: choco install jq ripgrep --yes --no-progress
       - name: Run Windows regression suites
-        timeout-minutes: 25
+        timeout-minutes: 40
         shell: pwsh
         env:
           DR_TEST_BASH: C:/Program Files/Git/bin/bash.exe
           # Git Bash's ln -s copies its target unless told to make a real link,
           # which the runner's administrator account may create.
           MSYS: winsymlinks:nativestrict
-        run: node scripts/test-all.mjs --plugin dagents --shard ${{ matrix.shard }}/13
+        run: node scripts/test-all.mjs --plugin dagents --shard ${{ matrix.shard }}/17

@@ -24,7 +24,6 @@ account-aware status line and coding-agent skills for two design systems.
 | [dforge](plugins/dforge/README.md) | Turns a request into a reviewed spec, a scored plan and an in-session execution run. On Claude Code it adds the cockpit pane, Discord notifications and an attribution guard. | ✓ | ✓ (no cockpit) |
 | [dagents](plugins/dagents/README.md) | The subagent-driven dforge 4.x workflow, continued: each scored task runs on an implementer agent on a model ladder with a judge review (inline execution on request), and external Antigravity and Codex executors, with the same cockpit on Claude Code. | ✓ | ✓ (no cockpit) |
 | [dflow](plugins/dflow/README.md) | Plans, builds, reviews and ships behind a task gate that only a passing command opens, with a board, living docs checked mechanically, UI proof and a HUD. | ✓ | |
-| [dr-status](plugins/dr-status/README.md) | A status line with git detail and usage meters, framed in the color of the Claude account. | ✓ | |
 | [darkraise-ui](plugins/darkraise-ui/README.md) | Teaches agents to write idiomatic darkraise-ui code. | ✓ | ✓ |
 | [darkraise-win32ui](plugins/darkraise-win32ui/README.md) | Teaches agents to write idiomatic Darkraise.Win32UI code. | ✓ | ✓ |
 
@@ -46,8 +45,7 @@ conflict.
 ```
 
 The other plugins install the same way (`dagents@darkraise`, `dflow@darkraise`,
-`dr-status@darkraise`, `darkraise-ui@darkraise`,
-`darkraise-win32ui@darkraise`). Start a new
+`darkraise-ui@darkraise`, `darkraise-win32ui@darkraise`). Start a new
 session, or run `/reload-plugins`, afterwards. An installed copy stays at the
 version it was installed at; take a new release with
 `claude plugin update <plugin>@darkraise`.
@@ -69,7 +67,7 @@ Register the repository root (its Git URL or a local checkout's absolute path),
 not the catalog file: Codex's CLI rejects direct catalog-file registration,
 and root discovery selects the dedicated Codex catalog
 (`.agents/plugins/marketplace.json`). That catalog lists `dforge`, `dagents` and
-the two UI plugins; `dflow` and `dr-status` are Claude Code only. On Codex, dforge uses the
+the two UI plugins; `dflow` is Claude Code only. On Codex, dforge uses the
 client's native agent tools; see
 [native-codex.md](plugins/dforge/reference/native-codex.md).
 
@@ -154,14 +152,16 @@ CI bumps each changed plugin (a breaking commit major, a `feat` minor,
 anything else patch), commits the bump to `main`, and tags and publishes it
 as `<plugin>-v<version>`. Renamed plugins, retired plugins and
 re-registering the marketplace are covered in [docs/migration.md](docs/migration.md);
-dforge's own steps are in the Migrating sections of
-[its README](plugins/dforge/README.md).
+dforge's own steps are in its README under
+[Migrating to 5.0](plugins/dforge/README.md#migrating-to-50) and the earlier
+Migrating sections.
 
 ## Contributing
 
 Bug reports and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md)
-for the repository layout, conventions and the checks to run. Report security
-issues privately as described in [SECURITY.md](SECURITY.md).
+for the repository layout, conventions and the checks to run, and the
+[code of conduct](CODE_OF_CONDUCT.md). Report security issues privately as
+described in [SECURITY.md](SECURITY.md).
 
 ## License
 

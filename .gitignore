@@ -17,6 +17,7 @@ npm-debug.log*
 .forge/
 .superpowers/
 .worktrees/
+.claude/worktrees/
 
 # Type declarations Claude Code lays beside a mod it loads from a folder
 plugins/*/.claude-plugin/types/
@@ -24,3 +25,9 @@ plugins/*/tsconfig.json
 
 # dflow run state (task in progress, logs, review findings, proofs)
 .dflow/
+
+# Maintainers' dforge and dflow working records (plans, specs, notes, proofs);
+# kept locally and in darkmem, not published
+docs/dforge/
+docs/dflow/*
+!docs/dflow/design.md

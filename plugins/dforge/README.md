@@ -11,8 +11,7 @@ two enabled plugins can double-trigger.
 
 ## Why
 
-Four findings from real transcripts drove the fork; the numbers are in
-`docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md`.
+Four findings from real transcripts drove the fork:
 
 - **Cost.** The main session was 92% of token spend, most of it re-reading a
   400–700k context. The plugin hands off at a budget printed by its own
@@ -329,7 +328,10 @@ set — brainstorming through finishing-a-development-branch — frozen at upstr
 frontmatter, and writing-plans and executing-plans use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
 `context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
-action and keeps `.dforge/handoff/latest.md` pointing at it. Disable the
+action and keeps `.dforge/handoff/latest.md` pointing at it. Each checkout
+keeps its own: `next-step` writes the one in the checkout the next session
+works in (a plan's worktree while it runs), and its first prompt opens by
+naming that checkout. Disable the
 upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
@@ -414,15 +416,26 @@ clean, otherwise the `## Next session` block from `next-step`. Controllers,
 Sonnet especially, tend to summarize the run and stop instead. A
 `UserPromptSubmit` hook stamps the start of each turn under
 `~/.claude/dforge/sessions/turns/`, and a `Stop` hook checks whether
-that turn wrote a plan ledger (`.dforge/sdd/*/progress.md`). If it did and
-the last message carries neither ending, the hook blocks the stop once and
-tells Claude which one is missing. The retry always passes, and without `jq`,
-a stamp or a ledger written this turn, the hook does nothing. While an agent or
+that turn wrote a plan ledger (`.dforge/sdd/*/progress.md`), recorded a plan
+in `plans/completed.md` or closed a milestone in `roadmap.md`. If it did and
+the last message carries no ending, the hook blocks the stop once and tells
+Claude which one is missing. A `## Next session` block counts only when
+`next-step` wrote it this turn: its `**Next:**` line matches the `latest.md`
+written since the turn started, or its `**Status:**` and `**Next:**` lines
+both match another checkout's `latest.md` written this turn, since `next-step`
+writes the handoff of the checkout the next session works in. A block Claude
+typed or reworded is held. A plan's turn may also end on a question to you
+that the ledger's last line records (`Task <N>: waiting — <question>`). The
+retry passes, except under the background-work hold below and in an auto run,
+and without `jq`, a stamp, or a ledger or transition this turn, the hook does
+nothing. While an agent or
 command the session started in the background has not reported back, a plain
 stop passes (the controller is waiting on it), and a message that ends the
 session over it, with the next-step block or the finishing menu, is held once
-in any turn: a handoff there would invite ending a session whose work is still
-in flight. Work stopped with `TaskStop`, and work launched before the session
+in any turn, retries included: a handoff there would invite ending a session
+whose work is still in flight. A service that never ends on its own (a dev
+server, a watcher) is not waited on: it neither passes a plain stop nor holds
+a handoff. Work stopped with `TaskStop`, and work launched before the session
 last started or resumed, sends no notification and does not count as running.
 An agent that sent its report but left a shell or agent of its own alive still
 counts: Claude Code keeps listing it, and its notification says so.
@@ -431,7 +444,8 @@ finishing menu run it, and `scripts/next-step` prints no block (exit 5) while
 anything is on it.
 When the turn wrote more than one ledger, each one must have its
 ending. Each hold also shows you a one-line note saying why the session went
-on.
+on. Claude Code labels a held stop `Stop hook error` in the transcript: that
+is the hold working, not a failed hook.
 
 The prompt hook also records which commits the repository's local branches
 point at; that record serves the UI proof hold only.
@@ -462,8 +476,12 @@ returns `scripts/ui-lint` findings as additional context and, once per
 session, names `dforge:ui-ux`; it never blocks. A third `Stop` hook,
 `scripts/ui-turn-end.sh`, holds a turn once when it leaves UI changes without
 a passing `ui-proof check` in a project with a UI profile (or a session that
-ran the skill); the line `UI proof: pending — <why>` releases it, and it
-stands down while an auto run is bound.
+ran the skill); the line `UI proof: pending — <why>` releases it. It stands
+down on the retry, while an auto run is bound, in fast mode, when the message
+carries the `## Next session` block `next-step` wrote this turn, when a ledger
+written this turn ends on a `Task <N>: waiting — ` question, and while finite
+background work or a timer runs: none of those stops claims the UI work is
+done, so a handoff is not held for a proof the next session will run.
 
 ### Fast mode
 
@@ -592,7 +610,7 @@ already gives the session a turn every 20 minutes.
 
 ## Cockpit
 
-Claude Code only. Built and tested against Claude Code 2.1.299 to 2.1.325; the
+Claude Code only. Built and tested against Claude Code 2.1.299 to 2.1.327; the
 mod API is early access and may change between releases.
 
 ### What it does
@@ -711,7 +729,8 @@ desktop window joins the session, unless you closed it.
   tool starts. **⇣ Compact** stays on the card, and **↪ Hand off** appears in
   `dforge` sessions.
 - **Resumable work** is a card at the top of the pane, framed in the accent
-  color, when `.dforge/handoff/latest.md` is under three days old and its
+  color, when the session checkout's `.dforge/handoff/latest.md` is under
+  three days old and its
   `## Next session` block has a first prompt to paste (a finished plan, or a
   task blocked on your ruling, has none). It names the note's age and its
   **Next:** line, and **Resume** (`r`) queues the prompt that resumes it. The
@@ -1199,8 +1218,9 @@ day; their steps now run through `/dforge:migrate`.
    `~/.claude/settings.json` may still name `darkraise/claude-code-plugins`;
    the canonical repository is `darkraise/darkraise-ai-plugins`. Remove and
    re-add the marketplace (or edit the registration) to point there.
-2. **Statusline.** `dcc-statusline` is `dr-status` in this catalog; enable
-   `dr-status@darkraise` and disable the old name.
+2. **Statusline.** `dcc-statusline` has no replacement in this catalog:
+   disable it (see
+   [Retired plugins](../../docs/migration.md#retired-plugins)).
 3. **Telegram notifications.** `dcc-telegram-notify` is not in this catalog;
    keep it installed from its previous source or drop it.
 4. **Disable the superseded plugins:** `superpowers` (its skills now ship
@@ -1358,7 +1378,7 @@ frozen at 6.3.0 with no upstream sync, and
 ## Tests
 
 ```bash
-for t in plugins/dforge/tests/*.test.sh; do bash "$t"; done
+for t in tests/dforge/*.test.sh; do bash "$t"; done
 ```
 
 Requires `jq` and `git`. No model calls: the reviewer suites run against a stub
@@ -1376,7 +1396,7 @@ background Stop push (`scripts/darkmem-stop-push.sh`) against the stub.
 against a stub `codex`, so every branch — refusal, fallback, timeout, empty
 report — is exercised without a model call.
 `darkmem-sync.test.sh` runs the `node:test` suites under
-`tests/darkmem-sync/` against an in-memory stub of darkmem's routes, so no
+`tests/dforge/darkmem-sync/` against an in-memory stub of darkmem's routes, so no
 darkmem instance is needed.
 The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one passing fixture per rule), `ui-hooks.test.sh` and `ui-ux-skill.test.sh` — run against temporary repositories and the skill text.
 
@@ -1413,7 +1433,7 @@ review, `codex-review-schema.json` for the external task reviews,
 `codex-plan-review-schema.json` for the plan-review round, and
 `agy-final-review-schema.json` for agy's final-review answer;
 `criteria/TEMPLATE.md` documents the format.
-`tests/criteria.test.sh` validates every file in that directory.
+`tests/dforge/criteria.test.sh` validates every file in that directory.
 
 `scripts/` holds the external reviewers' plumbing:
 

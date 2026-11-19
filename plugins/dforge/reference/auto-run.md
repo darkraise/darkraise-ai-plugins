@@ -260,6 +260,13 @@ A run's turn ends only with one of three lines as the last line of the message:
 - `Auto run: clearing` after `scripts/auto-run clear` exits 0;
 - `Auto run: switching` after `scripts/auto-run switch` exits 0.
 
+A message that ends on a sentinel line carries no next-step block: no launch
+command and no first prompt to paste. `scripts/next-step` still writes the
+block into `latest.md`, where `scripts/auto-run clear` reads it, and the
+cockpit submits the first prompt itself; printed in the message, it reads as a
+request to start the next session by hand while the run is still going. Only
+a run that has stopped ends on the block (§Stopping).
+
 `scripts/auto-run pending` prints `compact`, `after-compact`, `handoff`,
 `clear`, `resume`, `switch` or `none`. `handoff` is a
 compaction that left too much
@@ -289,8 +296,9 @@ compaction that was booked (`pending` is `after-compact`): while a `clear` or
   line names the spec). In
   `execute` and `final`, follow the After compaction steps of the execution
   skill the plan's Execution line names, for the plan `status` names: its
-  workspace, ledger and `git log` are the authority. `latest.md` predates the
-  execution worktree, so do not resume from it. When the line says the size
+  workspace, ledger and `git log` are the authority. Each checkout keeps its
+  own `latest.md`, and the one here can predate the run, so do not resume
+  from it. When the line says the size
   is unknown, record that with `scripts/auto-run ruling add`.
 - `handoff`: follow Clears.
 
@@ -317,9 +325,9 @@ cleared session; dforge:handoff does not end the run. In order:
    `Auto run: switching` as its last line.
 
 The cockpit then runs `scripts/auto-run clear --phase`, clears the session and
-binds the new one, runs `/model` and `/effort` from the plan's launch command,
-puts back the user's default model and effort, and submits the plan's first
-prompt. Follow it in the new session. No ledger exists yet, so the
+binds the new one, sends that session's requests on the model and effort of
+the plan's launch command without changing the user's settings, and submits
+the plan's first prompt. Follow it in the new session. No ledger exists yet, so the
 execution skill starts at its Setup, workspace first: `scripts/auto-run status`
 says setup is due until `phase execute` runs from the execution workspace. A
 switch is a phase transition: it never counts as a self-resume. A failure in
@@ -329,7 +337,9 @@ either stage is retried once in that stage; the second stops the run.
 
 The step that hands off owns the clear; dforge:handoff itself never runs it.
 Run dforge:handoff first (`scripts/auto-run clear` reads the first prompt
-and launch command `scripts/next-step` wrote to `latest.md`), then:
+and launch command `scripts/next-step` wrote to the attached plan's handoff,
+the `latest.md` `scripts/next-step --target` names: the checkout the next
+session works in, its first prompt naming that checkout), then:
 
 - **A compaction that left too much:** `scripts/auto-run clear`.
 - **The switch** (§The switch): the cockpit runs `scripts/auto-run clear --phase` itself.
@@ -351,10 +361,10 @@ exit 5 runs
 and ends as Stopping says; do not run `scripts/auto-run clear`.
 
 When `scripts/auto-run clear` exits 0, end the turn with `Auto run: clearing`
-as the last line, below the next-step block. The cleared session runs on the
-launch command's model and effort; the cockpit then puts back the default model
-and effort that its `/model` and `/effort` saved in the user settings, writing
-them again until the engine reads them back. On exit 5 the run has stopped (the
+as the last line, with no next-step block above it (§Ending a turn). The
+cleared session runs on the
+launch command's model and effort: the cockpit sends its main-loop requests on
+them and never writes them to the user settings. On exit 5 the run has stopped (the
 third self-resume in a row without a completed task): end with the next-step
 block alone, as Stopping says.
 

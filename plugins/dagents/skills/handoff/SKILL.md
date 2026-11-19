@@ -88,7 +88,11 @@ cleanly."
      `State` must carry every item.
 2. **Commit the plan and the spec** if either has uncommitted changes, in a
    `docs(<scope>): …` commit of their own. Never commit `<state>/`.
-3. **Write the notes sections of `latest.md`** at `<latest.md>`.
+3. **Write the notes sections of `latest.md`** in the handoff of the
+   checkout the next session works in: the path `scripts/next-step --target
+   <the arguments step 4 will pass>` prints. Each checkout keeps its own
+   `latest.md`, and a plan in flight hands off into its worktree's, which may
+   not be this session's.
    Replace everything above `## Next session` with exactly these sections,
    each under 15 lines:
 
@@ -125,8 +129,9 @@ cleanly."
      `scripts/next-step --project --keep-notes`, preferred over `--adhoc`
      there. It routes from the roadmap and registers and replaces only the
      `## Next session` section of `latest.md`.
-   It prints the `## Next session` block and writes it into `latest.md`. If it
-   exits 4, say `latest.md` could not be written.
+   It prints the `## Next session` block and writes it into the same
+   `latest.md` step 3 wrote. Its first prompt opens by naming that checkout
+   and its handoff. If it exits 4, say `latest.md` could not be written.
 
    Then record the session's durable facts
    ([project-state.md](../../reference/project-state.md) §Durable facts).

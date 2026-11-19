@@ -10,6 +10,7 @@
 . "$(dirname "${BASH_SOURCE[0]}")/plan.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lock.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/register.sh"
+AR_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 AR_STALE_MINUTES=60
 AR_RESUME_CAP=3
@@ -463,11 +464,16 @@ ar_fenced() {
 # ar_handoff — the first prompt and launch from the handoff scripts/next-step
 # just wrote, into AR_PROMPT, AR_MODEL and AR_EFFORT.
 ar_handoff() {
-  local primary latest launch
+  local primary here plan latest="" launch
   AR_PROMPT="" AR_MODEL="" AR_EFFORT=""
   primary=$(ar_primary_root) || return 1
   dagents_stores_init "$primary"
-  latest=$(dagents_latest_file "$primary")
+  here=$(git rev-parse --show-toplevel 2>/dev/null) || here=$primary
+  # The attached plan's handoff is the one next-step wrote for it, from this
+  # checkout: where T falls can depend on where next-step runs.
+  plan=$(ar_get plan)
+  [ -z "$plan" ] || latest=$(cd "$here" && bash "$AR_LIB_DIR/../next-step" --target "$plan" 2>/dev/null) || latest=""
+  [ -n "$latest" ] || latest=$(dagents_latest_file "$here")
   [ -f "$latest" ] && AR_PROMPT=$(ar_fenced "$latest" 'Paste as the first prompt:')
   [ -n "$AR_PROMPT" ] || { echo "auto-run: no first prompt in $latest; run scripts/next-step first" >&2; return 1; }
   launch=$(ar_fenced "$latest" 'Launch in ' | head -n 1)
@@ -501,8 +507,8 @@ ar_switch() {
 ar_clear() {
   local is_phase=$1 resumes plan
   ar_handoff || return 1
-  # One latest.md serves every worktree, so the prompt read may be another
-  # plan's; storing it would resume the wrong plan.
+  # The plan's checkout may hold a block another session left there for
+  # another plan; storing its prompt would resume the wrong plan.
   plan=$(ar_get plan)
   # The plan's file name as a whole word: `myplan.md` is not `plan.md`.
   local name

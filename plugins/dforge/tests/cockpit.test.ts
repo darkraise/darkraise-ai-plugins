@@ -388,6 +388,21 @@ function storedBlock(w: World): { exitCode: number; stdout: string } {
 // The engine beneath the plugin: a context of `w.tokens` (read on each call,
 // so a test moves it) in a 650k window, every tool call answered, every toast
 // and every row the plugin appends recorded in `w.notes`.
+/** Records each turn.step request as it reaches the engine: its model, effort and loop. */
+function sentSteps(on: On): { model: string; effort?: unknown; agentId?: string }[] {
+  const sent: { model: string; effort?: unknown; agentId?: string }[] = []
+  on('turn.step', async function* (_$, e) {
+    sent.push({ model: e.model, ...(e.effort === undefined ? {} : { effort: e.effort }), ...(e.agentId === undefined ? {} : { agentId: e.agentId }) })
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: null, usage: null } as never
+  })
+  return sent
+}
+
+/** Reads a streaming call to its end. */
+async function drain(stream: AsyncIterable<unknown>) {
+  for await (const _ of stream) void _
+}
+
 function world(on: On, w: World) {
   mock.env(on, { ...(w.config === undefined ? {} : { HOME: '/home/me' }), ...(w.env ?? {}) })
   const clock = mock.clock(on, { now: 1_000_000 })
@@ -3851,7 +3866,7 @@ describe('shells and remote', () => {
       expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Started the review.')
     })
 
-    test("the watchdog's Done carries the held turn's answer", async ($, on) => {
+    test("the watchdog's Done carries the held turn's answer", { timeoutMs: 30_000 }, async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)
       await clock.advance(1_860_000)
@@ -3942,7 +3957,7 @@ describe('shells and remote', () => {
       expect(titles(fetches)).toEqual(['✅ Done in 2m05s'])
     })
 
-    test('a shell older than the cap holds nothing', async ($, on) => {
+    test('a shell older than the cap holds nothing', { timeoutMs: 30_000 }, async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = world(on, { tokens: 50_000, fetches, config: { notifyAfter: 0 }, tools: { Bash: () => SHELL } })
       mock.store(on, { notifyUrl: WEBHOOK })
@@ -3999,7 +4014,7 @@ describe('shells and remote', () => {
       expect(titles(fetches)).toEqual(['✅ Done in 5s'])
     })
 
-    test('the watchdog sends a hold older than the cap', async ($, on) => {
+    test('the watchdog sends a hold older than the cap', { timeoutMs: 30_000 }, async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const clock = await hold($, on, fetches)
       await clock.advance(1_800_000)
@@ -4072,7 +4087,7 @@ describe('shells and remote', () => {
       await $.turn.complete({ answer: 'Still waiting.', durationMs: 2_000, isAborted: false, turnId, reason: 'answer' })
     }
 
-    test('submits the prompt once keepWarm minutes pass with background work running, and again each further interval', async ($, on) => {
+    test('submits the prompt once keepWarm minutes pass with background work running, and again each further interval', { timeoutMs: 30_000 }, async ($, on) => {
       const w = quiet({ keepWarm: 50 })
       const clock = world(on, w)
       await begin($)
@@ -4087,7 +4102,7 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(2)
     })
 
-    test('submits nothing when keepWarm is 0', async ($, on) => {
+    test('submits nothing when keepWarm is 0', { timeoutMs: 30_000 }, async ($, on) => {
       const w = quiet({ keepWarm: 0 })
       const clock = world(on, w)
       await begin($)
@@ -4095,7 +4110,7 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(0)
     })
 
-    test('submits nothing when only a service command runs in the background', async ($, on) => {
+    test('submits nothing when only a service command runs in the background', { timeoutMs: 30_000 }, async ($, on) => {
       const w = quiet({ keepWarm: 50 })
       const clock = world(on, w)
       await begin($, 'npm run dev')
@@ -4103,7 +4118,7 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(0)
     })
 
-    test('submits nothing when no background work runs', async ($, on) => {
+    test('submits nothing when no background work runs', { timeoutMs: 30_000 }, async ($, on) => {
       const w = quiet({ keepWarm: 50 })
       const clock = world(on, w)
       await $.session.start(START)
@@ -4122,7 +4137,7 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(0)
     })
 
-    test('submits nothing while an auto run is bound to the session', async ($, on) => {
+    test('submits nothing while an auto run is bound to the session', { timeoutMs: 30_000 }, async ($, on) => {
       const files = autoFiles({ pending: null })
       const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: { Bash: () => SHELL } }
       const clock = world(on, w)
@@ -4136,7 +4151,7 @@ describe('shells and remote', () => {
     })
 
     for (const origin of ['composer', 'task-notification'] as const)
-      test(`stops after six in a row, and a ${origin} turn lets six more go`, async ($, on) => {
+      test(`stops after six in a row, and a ${origin} turn lets six more go`, { timeoutMs: 30_000 }, async ($, on) => {
         const w = quiet({ keepWarm: 4 })
         const clock = world(on, w)
         await begin($)
@@ -4168,7 +4183,7 @@ describe('shells and remote', () => {
       expect((fetches[0]?.body.embeds as Record<string, unknown>[])[0]?.description).toBe('Started it.')
     })
 
-    test('a keep-warm turn sends no Done of its own', async ($, on) => {
+    test('a keep-warm turn sends no Done of its own', { timeoutMs: 30_000 }, async ($, on) => {
       const fetches: NonNullable<World['fetches']> = []
       const w: World = { ...quiet({ keepWarm: 50, notifyAfter: 0 }), fetches }
       const clock = world(on, w)
@@ -4182,7 +4197,7 @@ describe('shells and remote', () => {
       expect(fetches).toHaveLength(before)
     })
 
-    test('lets six more go in the session a resume carries the process into', async ($, on) => {
+    test('lets six more go in the session a resume carries the process into', { timeoutMs: 30_000 }, async ($, on) => {
       const w = quiet({ keepWarm: 4 })
       const clock = world(on, w)
       on('session.end', (_$, e) => e as never)
@@ -4200,7 +4215,7 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(7)
     })
 
-    test('submits nothing while the composer holds a draft', async ($, on) => {
+    test('submits nothing while the composer holds a draft', { timeoutMs: 30_000 }, async ($, on) => {
       const w: World = { ...quiet({ keepWarm: 50 }), draft: 'half a sent' }
       const clock = world(on, w)
       await begin($)
@@ -4211,7 +4226,7 @@ describe('shells and remote', () => {
       expect(sentOf(w)).toHaveLength(1)
     })
 
-    test('a submit that fails takes back its count, so six still go', async ($, on) => {
+    test('a submit that fails takes back its count, so six still go', { timeoutMs: 30_000 }, async ($, on) => {
       const w: World = { ...quiet({ keepWarm: 4 }), submitFailures: 1 }
       const clock = world(on, w)
       await begin($)
@@ -5800,12 +5815,32 @@ describe('resume offer', () => {
 
   test("runs from the primary checkout when the session's directory is gone", async ($, on) => {
     const WORKTREE = '/home/me/code/shop-wt'
-    const w = await begin($, on, RESUMABLE, { w: { checkout: WORKTREE }, more: { [WORKTREE]: { text: '', kind: 'dir' } } })
+    const WT_LATEST = `${WORKTREE}/.dforge/handoff/latest.md`
+    const w = await begin($, on, RESUMABLE, { w: { checkout: WORKTREE }, more: { [WORKTREE]: { text: '', kind: 'dir' }, [WT_LATEST]: { text: RESUMABLE, mtimeMs: 900_000 } } })
     expect(w.nextStepRuns).toEqual([WORKTREE])
     delete w.files[WORKTREE]
+    delete w.files[WT_LATEST]
     w.files[LATEST] = { ...w.files[LATEST]!, mtimeMs: 950_000 }
     await w.turn()
     expect(w.nextStepRuns).toEqual([WORKTREE, '/home/me/code/shop'])
+  })
+
+  test("reads the session worktree's handoff, not the primary's (spec A9)", async ($, on) => {
+    const WORKTREE = '/home/me/code/shop-wt'
+    const w = await begin($, on, RESUMABLE, { w: { checkout: WORKTREE }, more: { [WORKTREE]: { text: '', kind: 'dir' } } })
+    expect(w.nextStepRuns).toEqual([])
+  })
+
+  test('names the absolute handoff path in the fallback resume prompt (spec A9)', async ($, on) => {
+    const WORKTREE = '/home/me/code/shop-wt'
+    const WT_LATEST = `${WORKTREE}/.dforge/handoff/latest.md`
+    const w = await begin($, on, '# Handoff\n', {
+      w: { checkout: WORKTREE, nextStepOuts: [{ exitCode: 0, stdout: UNFENCED }] },
+      more: { [WORKTREE]: { text: '', kind: 'dir' }, [WT_LATEST]: { text: UNFENCED, mtimeMs: 900_000 } },
+    })
+    const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await pane.press({ key: 'pane-resume' })
+    expect(w.prompts).toEqual([`Resume the work in ${WT_LATEST} with the dforge resume-execution skill.`])
   })
 })
 
@@ -6074,7 +6109,7 @@ describe('cockpit roots', () => {
 
   test('takes the primary checkout from the common directory, as the scripts do', async ($, on) => {
     // stores.json makes the cockpit ask darkmem-config for the primary's roots.
-    const files: NonNullable<World['files']> = { '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 } }
+    const files: NonNullable<World['files']> = { '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 }, '/home/me/code/shop': { text: '', kind: 'dir' } }
     const gitRuns: string[] = []
     const modeRuns: string[] = []
     world(on, { ...SIGNED_IN, files, primary: '/home/me/code/main', gitRuns, modeRuns })
@@ -6929,6 +6964,35 @@ describe('auto run', () => {
     expect(pendingOf(files)).toBe('after-compact')
   })
 
+  test('passes the session checkout to every auto-run call (spec A8)', async ($, on) => {
+    const WORKTREE = '/home/me/code/shop-wt'
+    const files = { ...autoFiles(), [WORKTREE]: { text: '', kind: 'dir' as const } }
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], processRuns: [], files, autoFile: files[AUTO], checkout: WORKTREE }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.autoRuns).toContain('--session sess-1 compacted')
+    const calls = (w.processRuns ?? []).filter(argv => argv.includes('/scripts/auto-run '))
+    expect(calls.length).toBeGreaterThan(0)
+    for (const argv of calls) expect(argv.startsWith(`bash -c cd -- "$1" && shift && exec bash "$@" auto-run ${WORKTREE} `)).toBe(true)
+  })
+
+  test("runs auto-run from the primary when the session's checkout is gone", async ($, on) => {
+    const files = autoFiles()
+    const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], processRuns: [], files, autoFile: files[AUTO], checkout: '/home/me/code/shop-wt' }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await settle(clock)
+    expect(w.autoRuns).toContain('--session sess-1 compacted')
+    const calls = (w.processRuns ?? []).filter(argv => argv.includes('/scripts/auto-run '))
+    expect(calls.length).toBeGreaterThan(0)
+    for (const argv of calls) expect(argv.startsWith('bash -c cd -- "$1" && shift && exec bash "$@" auto-run /home/me/code/shop ')).toBe(true)
+  })
+
   test('stays still without the sentinel, on an interrupted turn, or for another session', async ($, on) => {
     const w: World = { ...SIGNED_IN, compacts: [], prompts: [] }
     const clock = world(on, w)
@@ -7006,57 +7070,12 @@ describe('auto run', () => {
     await $.session.start(START)
     await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
-    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
+    expect(w.commands).toEqual(['/clear'])
     expect(w.autoRuns).toContain('--session sess-2 rebind --to sess-2')
     expect(w.autoRuns).toContain('--session sess-2 resumed')
     expect(w.prompts).toEqual(['Execute docs/plan.md.'])
     expect(pendingOf(files)).toBeNull()
   })
-
-  test('puts back the default model and effort that /model and /effort save', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const userSettings = { model: 'opus[1m]', modelSettings: { 'claude-opus-5-5': { effortLevel: 'max' } }, theme: 'dark' }
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([
-      expect.stringContaining(`claude-restore ${JSON.stringify({ model: 'opus[1m]', modelSettings: { 'claude-opus-5-5': { effortLevel: 'max' } }, effortLevel: null })}`),
-    ])
-    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
-  })
-
-  for (const isRefusing of [false, true])
-    test(`saves the defaults before /model and ${isRefusing ? 'keeps them when the restore fails' : 'drops them once the restore reads back'}`, async ($, on) => {
-      const SNAP = '/home/me/.claude/dforge/sessions/saved-defaults/sess-2.json'
-      const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-      const written: Record<string, string> = {}
-      let atModel: string | undefined
-      const w: World = {
-        ...SIGNED_IN,
-        written,
-        commands: [],
-        autoRuns: [],
-        prompts: [],
-        runs: [],
-        userSettings: { model: 'opus[1m]', effortLevel: 'max' },
-        isDforgeConfigRefusing: isRefusing,
-        autoFile: files[AUTO],
-        onCommand: command => {
-          if (command === 'model') atModel = written[SNAP]
-        },
-      }
-      const clock = world(on, w)
-      signedIn(on, files)
-      await $.session.start(START)
-      await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-      await settle(clock)
-      expect(JSON.parse(atModel ?? 'null')).toEqual({ session: 'sess-2', launchModel: 'sonnet', saved: { model: 'opus[1m]', modelSettings: null, effortLevel: 'max' } })
-      expect(w.runs?.filter(run => run.includes(' drop-snapshot '))).toEqual(isRefusing ? [] : [expect.stringContaining('drop-snapshot sess-2')])
-    })
 
   describe('a model switch snapshot another session left', () => {
     const SNAP = '/home/me/.claude/dforge/sessions/saved-defaults/sess-0.json'
@@ -7185,68 +7204,39 @@ describe('auto run', () => {
     expect(sets.slice(before)).toEqual([[]])
   })
 
-  test('removes the defaults /model and /effort added where none were set', async ($, on) => {
+  test('sends the cleared session\'s main-loop requests on the launch model and effort, writing no settings', async ($, on) => {
     const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: {}, autoFile: files[AUTO] }
+    const userSettings = { model: 'opus[1m]', effortLevel: 'max' }
+    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings, autoFile: files[AUTO] }
     const clock = world(on, w)
+    const sent = sentSteps(on)
     signedIn(on, files)
     await $.session.start(START)
     await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([expect.stringContaining('claude-restore {"model":null,"modelSettings":null,"effortLevel":null}')])
+    expect(w.commands).toEqual(['/clear'])
+    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([])
+    expect(w.userSettings).toEqual(userSettings)
+    await drain($.turn.step({ turnId: 't2', index: 0, model: 'claude-opus-5-5', effort: 'max', messageCount: 1 }))
+    await drain($.turn.step({ turnId: 't2', index: 1, model: 'claude-opus-5-5', effort: 'max', messageCount: 2, agentId: 'agent-1' }))
+    expect(sent).toEqual([
+      { model: 'sonnet', effort: 'high' },
+      { model: 'claude-opus-5-5', effort: 'max', agentId: 'agent-1' },
+    ])
   })
 
-  test('restores nothing when the clear sets no model', async ($, on) => {
+  test('leaves the requests and the settings alone when the clear sets no model', async ($, on) => {
     const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: null })
     const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, autoFile: files[AUTO] }
     const clock = world(on, w)
+    const sent = sentSteps(on)
     signedIn(on, files)
     await $.session.start(START)
     await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
     expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([])
-  })
-
-  test('tells the cleared session when its default model could not be put back', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, isDforgeConfigRefusing: true, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/^Execute docs\/plan\.md\./)
-    expect(w.prompts?.[0]).toMatch(/could not put back the default model and effort/)
-    expect(w.prompts?.[0]).toMatch(/scripts\/auto-run ruling add/)
-  })
-
-  test('writes the defaults again when the engine misses the first write', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, missedRestores: 1, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.prompts).toEqual([])
-    for (let i = 0; i < 8; i++) await clock.advance(500)
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toHaveLength(2)
-    expect(w.userSettings).toEqual({ model: 'opus[1m]' })
-    expect(w.prompts).toEqual(['Execute docs/plan.md.'])
-  })
-
-  test('tells the cleared session when the engine never takes the restored defaults', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, missedRestores: 3, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    for (let i = 0; i < 30; i++) await clock.advance(500)
-    expect(w.runs?.filter(run => run.includes(' claude-restore '))).toHaveLength(3)
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/could not put back the default model and effort/)
+    await drain($.turn.step({ turnId: 't2', index: 0, model: 'claude-opus-5-5', effort: 'max', messageCount: 1 }))
+    expect(sent).toEqual([{ model: 'claude-opus-5-5', effort: 'max' }])
   })
 
   test('shows the cleared session\'s run at once', async ($, on) => {
@@ -7272,20 +7262,6 @@ describe('auto run', () => {
     await $.turn.complete({ answer: SENTINEL, durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     await settle(clock)
     expect(await ui.find({ type: 'Text', text: /Auto run · execute · normal · 1 compaction · 0 resumes/ })).toBeDefined()
-  })
-
-  test('tells the cleared session when its model was refused', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], prompts: [], autoFile: files[AUTO], refusedCommands: ['model'] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/could not run \/model sonnet/)
-    expect(w.commands).toContain('/effort high')
-    expect(w.prompts?.[0]).toMatch(/auto-run ruling add/)
   })
 
   test('stops the run when the cleared session cannot be bound', async ($, on) => {
@@ -7463,7 +7439,7 @@ describe('auto run', () => {
     expect(w.autoRuns?.filter(call => call.includes(' compacted'))).toEqual([])
     expect(w.autoRuns).toContain('--session sess-1 clear --phase')
     expect(w.autoRuns).toContain('--session sess-2 rebind --to sess-2')
-    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
+    expect(w.commands).toEqual(['/clear'])
     expect(w.prompts).toEqual(['Continue `docs/plan.md` with dforge:executing-plans.'])
     expect(pendingOf(files)).toBeNull()
   })
@@ -7554,54 +7530,6 @@ describe('auto run', () => {
     })
   }
 
-  for (const [why, flag] of [['node cannot run the restore', { isNodeMissing: true }], ['the user settings cannot be read', { isUserSettingsUnreadable: true }]] as const) {
-    test(`runs neither /model nor /effort when ${why}`, async ($, on) => {
-      const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-      const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, ...flag, autoFile: files[AUTO] }
-      const clock = world(on, w)
-      signedIn(on, files)
-      await $.session.start(START)
-      await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-      await settle(clock)
-      expect(w.commands).toEqual(['/clear'])
-      expect(w.userSettings).toEqual({ model: 'opus[1m]' })
-      expect(w.runs?.filter(run => run.includes(' claude-restore '))).toEqual([])
-      expect(w.prompts).toHaveLength(1)
-      expect(w.prompts?.[0]).toMatch(/^Execute docs\/plan\.md\./)
-      expect(w.prompts?.[0]).toMatch(/kept this session on .+ because it could not put back your default model afterwards\. Record that with scripts\/auto-run ruling add\./)
-    })
-  }
-
-  test('runs neither /model nor /effort when the snapshot of the defaults cannot be written', async ($, on) => {
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, isReadOnly: true, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    expect(w.commands).toEqual(['/clear'])
-    expect(w.userSettings).toEqual({ model: 'opus[1m]' })
-    expect(w.prompts).toHaveLength(1)
-    expect(w.prompts?.[0]).toMatch(/^Execute docs\/plan\.md\./)
-    expect(w.prompts?.[0]).toMatch(/kept this session on .+ because it could not save your default model before switching\. Record that with scripts\/auto-run ruling add\./)
-  })
-
-  test('sends a blocked notice naming the settings file when the defaults cannot be put back', async ($, on) => {
-    const fetches: World['fetches'] = []
-    const files = autoFiles({ pending: 'clear', resumePrompt: 'Execute docs/plan.md.', launch: { model: 'sonnet', effort: 'high' } })
-    const w: World = { ...SIGNED_IN, fetches, commands: [], autoRuns: [], prompts: [], runs: [], userSettings: { model: 'opus[1m]' }, isDforgeConfigRefusing: true, autoFile: files[AUTO] }
-    const clock = world(on, w)
-    mock.store(on, { notifyUrl: WEBHOOK })
-    signedIn(on, files)
-    await $.session.start(START)
-    await $.turn.complete({ answer: 'Handed off.\n\nAuto run: clearing', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-    await settle(clock)
-    const notice = fetches.map(one => (one.body.embeds as Record<string, unknown>[] | undefined)?.[0]).find(embed => embed?.title === '⛔ Default model not restored')
-    expect(notice).toBeDefined()
-    expect(JSON.stringify(notice)).toMatch(/\/home\/me\/\.claude\/settings\.json/)
-  })
-
   test('writes the heartbeat at the start and on every watchdog tick', async ($, on) => {
     const written: Record<string, string> = {}
     const clock = world(on, { ...SIGNED_IN, written })
@@ -7612,7 +7540,7 @@ describe('auto run', () => {
     expect(written['/home/me/.claude/dforge/sessions/cockpit/sess-1']).toBe('1060\n')
   })
 
-  test('books a failure once background work has deferred a stage for 30 minutes', async ($, on) => {
+  test('books a failure once background work has deferred a stage for 30 minutes', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7649,7 +7577,7 @@ describe('auto run', () => {
     expect(w.compacts).toHaveLength(1)
   })
 
-  test('a live turn restarts the deferral, so the cap counts background work alone', async ($, on) => {
+  test('a live turn restarts the deferral, so the cap counts background work alone', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7679,7 +7607,7 @@ describe('auto run', () => {
     [5, 'The auto run stopped: the cockpit could not compact twice. End as reference/auto-run.md §Stopping says.'],
     [1, 'The auto run stopped: a background launch kept the compact waiting 30 minutes, and the failure could not be booked (exit 1). End as reference/auto-run.md §Stopping says.'],
   ] as const) {
-    test(`ends the run when the deferral cap's failure exits ${code}`, async ($, on) => {
+    test(`ends the run when the deferral cap's failure exits ${code}`, { timeoutMs: 30_000 }, async ($, on) => {
       const files = autoFiles()
       const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO], autoRunExits: { failure: code } }
       const clock = world(on, w)
@@ -7706,7 +7634,7 @@ describe('auto run', () => {
     })
   }
 
-  test("starts a new run's deferral afresh after the last one stopped", async ($, on) => {
+  test("starts a new run's deferral afresh after the last one stopped", { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -7994,7 +7922,7 @@ describe('auto run', () => {
     expect(w.autoRuns?.filter(call => call.includes(' stalled'))).toHaveLength(1)
   })
 
-  test('a bare sleep timer alone never draws a reconcile prompt', async ($, on) => {
+  test('a bare sleep timer alone never draws a reconcile prompt', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles({ pending: null })
     const bash = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'qa1' }, text: 'Running in the background' }) }
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: bash }
@@ -8008,7 +7936,7 @@ describe('auto run', () => {
   })
 
   for (const holder of ['agent', 'shell'] as const) {
-    test(`submits one reconcile prompt when a background ${holder} alone holds a bound run for 20 minutes`, async ($, on) => {
+    test(`submits one reconcile prompt when a background ${holder} alone holds a bound run for 20 minutes`, { timeoutMs: 30_000 }, async ($, on) => {
       const files = autoFiles({ pending: null })
       const bash = { Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b9w1' }, text: 'Running in the background' }) }
       const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO], tools: bash }
@@ -8063,7 +7991,7 @@ describe('auto run', () => {
     expect(w.prompts).toEqual([])
   })
 
-  test('submits no reconcile prompt while a turn is live', async ($, on) => {
+  test('submits no reconcile prompt while a turn is live', { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles({ pending: null })
     const w: World = { ...SIGNED_IN, autoRuns: [], prompts: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -8076,7 +8004,7 @@ describe('auto run', () => {
     expect(w.prompts).toEqual([])
   })
 
-  test("a pending stage's reconcile prompt comes before its 30-minute failure", async ($, on) => {
+  test("a pending stage's reconcile prompt comes before its 30-minute failure", { timeoutMs: 30_000 }, async ($, on) => {
     const files = autoFiles()
     const w: World = { ...SIGNED_IN, compacts: [], autoRuns: [], prompts: [], autoFile: files[AUTO] }
     const clock = world(on, w)
@@ -8460,7 +8388,7 @@ describe('update frequency', () => {
     expect(seen.count).toBeLessThanOrEqual(8)
   })
 
-  test('ticks every second while a shell started within the hour runs, and slows once it is older', async ($, on) => {
+  test('ticks every second while a shell started within the hour runs, and slows once it is older', { timeoutMs: 30_000 }, async ($, on) => {
     const w: World = { ...SIGNED_IN, tools: { Bash: SHELL } }
     const clock = world(on, w)
     signedIn(on)

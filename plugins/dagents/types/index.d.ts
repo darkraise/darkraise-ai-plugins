@@ -118,7 +118,7 @@ export type CockpitRefusal = {
   line: string
 }
 
-/** The account the session runs as, from its .claude.json and dr-status' config. */
+/** The account the session runs as, from its .claude.json. */
 export type CockpitAccount = {
   email: string | null
   name: string | null
@@ -126,9 +126,9 @@ export type CockpitAccount = {
   role: string | null
   /** Claude's billing type, such as `stripe_subscription`. */
   billing: string | null
-  /** The config directory as dr-status keys it: `~/.claude`, `~/.claude-work`. */
+  /** The config directory in `~` form: `~/.claude`, `~/.claude-work`. */
   key: string
-  /** The frame color dr-status assigns this account, as configured. */
+  /** The frame color derived from `key`, the same for every session of the account. */
   color: string | null
 }
 

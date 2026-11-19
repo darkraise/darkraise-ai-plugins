@@ -248,14 +248,17 @@ plan_task_paths() {
 # the darkmem mirror belongs to the checkout it is worked from, even when the
 # mirror lies inside a repository (a home directory under git).
 _plan_ctx() {
-  local dir mirror physical
-  dir=$(dirname "$1")
+  local dir here mirror physical
+  # Native forms: callers hand the result to git -C, which under
+  # MSYS_NO_PATHCONV=1 cannot open Git Bash's /tmp/... spelling of $PWD.
+  dir=$(dr_native_path "$(dirname "$1")")
+  here=$(dr_native_path "$PWD")
   mirror=$(cd "${HOME:-}/.dforge/mirror" 2>/dev/null && pwd -P) || mirror=""
   physical=$(cd "$dir" 2>/dev/null && pwd -P) || physical=""
   if [ -n "$mirror" ] && [ -n "$physical" ]; then
-    case "$physical/" in "$mirror"/*) printf '%s\n' "$PWD"; return 0 ;; esac
+    case "$physical/" in "$mirror"/*) printf '%s\n' "$here"; return 0 ;; esac
   fi
-  if git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then printf '%s\n' "$dir"; else printf '%s\n' "$PWD"; fi
+  if git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then printf '%s\n' "$dir"; else printf '%s\n' "$here"; fi
 }
 
 # plan_locate PLAN — prefer the applied document store, then an existing
@@ -320,13 +323,22 @@ _plan_ledger_names() {
   [ "$(dforge_name_key "$(dforge_name "$named")")" = "$3" ]
 }
 
-# _plan_ledger_tree ROOT SLUG — the worktree holding <state>/sdd/SLUG, else ROOT.
+# _plan_ledger_tree ROOT SLUG — the checkout holding <state>/sdd/SLUG: ROOT
+# when it is a linked worktree holding it, else the first linked worktree that
+# does, else the primary when it does, else ROOT. The plan review leaves a
+# workspace in the planning checkout, usually the primary, whatever worktree
+# executes the plan, so the primary is tried last.
 _plan_ledger_tree() {
-  local wt
+  local wt primary="" found=""
   while IFS= read -r wt; do
-    [ -d "$(dforge_dir state "$wt")/sdd/$2" ] && { printf '%s\n' "$wt"; return 0; }
+    if [ -z "$primary" ]; then primary=$wt; continue; fi
+    [ -d "$(dforge_dir state "$wt")/sdd/$2" ] || continue
+    if [ "$wt" -ef "$1" ]; then printf '%s\n' "$1"; return 0; fi
+    [ -n "$found" ] || found=$wt
   done < <(git -C "$1" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
-  printf '%s\n' "$1"
+  if [ -n "$found" ]; then printf '%s\n' "$found"
+  elif [ -n "$primary" ] && [ -d "$(dforge_dir state "$primary")/sdd/$2" ]; then printf '%s\n' "$primary"
+  else printf '%s\n' "$1"; fi
 }
 
 plan_ledger() {
@@ -499,15 +511,16 @@ plan_require_same_project() {
 # plan_final_review_state LEDGER [DIR] — whether the ledger's last
 # `Final review: clean (commits <base>..<head>)` line still covers HEAD in DIR
 # (default the working directory): `none` (no clean line); `current` (HEAD is
-# <head>, only docs-root paths changed since, or <head> reached HEAD through a
-# merge into a base branch, off its first-parent chain); `stale <head>` (a
-# later commit on the first-parent chain touches code); `rewritten <head>`
-# (<head> is no commit, or no ancestor of HEAD). A clean line with no commits
-# clause, or a DIR where HEAD does not resolve, reads `current`: git cannot
-# judge it. A failed walk of the history after <head> reads `stale <head>`. The ledger records no branch, so the first-parent chain is the only
-# base-branch test.
+# <head>, or only docs-root paths changed since); `stale <from>` (a later
+# commit touches code); `rewritten <head>` (<head> is no commit, or no
+# ancestor of HEAD). <from> is <head>, or, when <head> reached HEAD through a
+# merge, off its first-parent chain, that merge: only what came after it is
+# unreviewed. A clean line with no commits clause, or a DIR where HEAD does not
+# resolve, reads `current`: git cannot judge it. A failed walk of the history
+# after <head> reads `stale <head>`. The ledger records no branch, so the
+# first-parent chain is the only base-branch test.
 plan_final_review_state() {
-  local dir line head full now top docs path changed
+  local dir line head full now top docs path changed from desc
   dir=$(dr_native_path "${2:-$PWD}")
   line=$(tr -d '\r' < "$1" 2>/dev/null | grep '^Final review: clean' | tail -n 1)
   if [ -z "$line" ]; then echo none; return 0; fi
@@ -523,8 +536,18 @@ plan_final_review_state() {
   # re-review is the safe route, finishing is not.
   local chain
   chain=$(git -C "$dir" rev-list --first-parent "$now" 2>/dev/null) || { echo "stale $head"; return 0; }
-  if ! grep -qxF -- "$full" <<<"${chain//$'\r'/}"; then echo current; return 0; fi
-  changed=$(git -C "$dir" log --format= --name-only "$full..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
+  from=$full
+  if ! grep -qxF -- "$full" <<<"${chain//$'\r'/}"; then
+    # The oldest first-parent commit that descends from <head> is the merge
+    # that brought it in.
+    desc=$(git -C "$dir" rev-list --ancestry-path "$full..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
+    from=$(printf '%s\n--\n%s\n' "$desc" "$chain" | tr -d '\r' |
+      awk '$0 == "--" { past = 1; next } !past { s[$0] = 1; next } $0 in s { m = $0 } END { print m }')
+    [ -n "$from" ] || { echo "stale $head"; return 0; }
+    head=$(git -C "$dir" rev-parse --short "$from" 2>/dev/null | tr -d '\r')
+    [ -n "$head" ] || head=$from
+  fi
+  changed=$(git -C "$dir" log --format= --name-only "$from..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
   changed=$(tr -d '\r' <<<"$changed" | sed '/^$/d')
   if [ -z "$changed" ]; then echo current; return 0; fi
   # Under darkmem documents no committed path is a docs path.

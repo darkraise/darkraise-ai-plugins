@@ -3,25 +3,29 @@
 # finishing, next program sub-project or roadmap epic, a milestone audit, or
 # nothing; for a design draft: its
 # next step — as a "## Next session" block, and write the same block into the
-# primary checkout's .dforge/handoff/latest.md.
+# handoff of the checkout the next session works in (T): the plan's worktree
+# for a plan in flight, the primary once it is complete, else this checkout.
 #
 # Sessions end by pasting this block verbatim, so what comes next is computed
 # here rather than remembered by the model: small executors reliably forget to
 # say it, and a hand-written handoff goes stale the moment work moves on.
 #
-# Usage: next-step [--host claude|codex] [--print] [--complete|--kept] PLAN_FILE
-#        next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION
-#        next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION
-#        next-step [--host claude|codex] [--print] --project [--keep-notes]
+# Usage: next-step [--host claude|codex] [--print|--target] [--complete|--kept] PLAN_FILE
+#        next-step [--host claude|codex] [--print|--target] --draft DRAFT_FILE --next ACTION
+#        next-step [--host claude|codex] [--print|--target] --adhoc --phase design|build --next ACTION
+#        next-step [--host claude|codex] [--print|--target] --project [--keep-notes]
 #        next-step [--host claude|codex] --print --latest
 #   --print     compute and print the block only: write, create and delete
 #               nothing, and skip the background-work check.
 #   --complete  the plan is finished and its branch integrated; the ledger may
-#               already be deleted. Replaces latest.md wholesale.
+#               already be deleted. Replaces the handoff wholesale unless
+#               it holds another session's block (another plan's, or adhoc or
+#               project work): then only its Next session section, said on
+#               stderr.
 #   --kept      finishing kept the plan's branch as-is: integration is still
 #               pending, so the block names the branch, its worktree and the
 #               finish choices still open, and reads no register or roadmap.
-#               Replaces latest.md wholesale.
+#               Replaces the handoff as --complete does.
 #   --complete, --kept and --adhoc delete the no-plan finish record
 #   (.dforge/sdd/finish.json) of the current checkout and of the primary
 #   checkout once the block is printed.
@@ -38,6 +42,9 @@
 #               wholesale unless --keep-notes, which keeps the notes above it.
 #   --latest    recompute the block latest.md holds from what its marker
 #               names (requires --print), and print it with the marker last.
+#   --target    print the absolute path of the handoff the same call would
+#               write, and exit 0: write nothing, and skip the background-work
+#               check. A usage error with --latest.
 #   --host      which client the next session launches; default claude. A plan
 #               states its own host in its header, so the flag serves the paths
 #               that have no plan to read.
@@ -62,7 +69,7 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--host claude|codex] [--print] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print] --project [--keep-notes] | next-step [--host claude|codex] --print --latest"; }
+usage() { fail 2 "usage: next-step [--host claude|codex] [--print|--target] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print|--target] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print|--target] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print|--target] --project [--keep-notes] | next-step [--host claude|codex] --print --latest"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
@@ -70,11 +77,12 @@ usage() { fail 2 "usage: next-step [--host claude|codex] [--print] [--complete|-
 
 # --host and --print are pulled out wherever they sit so the remaining
 # arguments keep their strict positional contract.
-host=claude host_given=0 print_only=0
+host=claude host_given=0 print_only=0 target_only=0
 hostless=()
 while [ $# -gt 0 ]; do
   case $1 in
     --print) print_only=1; shift ;;
+    --target) target_only=1; shift ;;
     --host)
       [ $# -ge 2 ] || usage
       case $2 in claude|codex) host=$2 host_given=1 ;; *) usage ;; esac
@@ -197,7 +205,7 @@ complete=0 kept=0 draft=0 adhoc=0 project=0 keep_notes=0 latest_mode=0 phase="" 
 case "${1:-}" in
   --latest)
     latest_mode=1; shift
-    { [ $# -eq 0 ] && [ "$print_only" -eq 1 ]; } || usage
+    { [ $# -eq 0 ] && [ "$print_only" -eq 1 ] && [ "$target_only" -eq 0 ]; } || usage
     ;;
   --project)
     project=1; shift
@@ -271,7 +279,6 @@ status_line="" next_line="" prompt="" launch=1 launch_cmd="" launch_plan=""
 if [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ] || [ "$latest_mode" -eq 1 ]; then
   root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
   primary=$(plan_primary_root "$root")
-  dir=$primary
 else
   [ $# -eq 1 ] || usage
   plan=$(plan_locate "$1")
@@ -280,7 +287,6 @@ else
 
   root=$(git rev-parse --show-toplevel 2>/dev/null) || fail 2 "not inside a git repository"
   primary=$(plan_primary_root "$root")
-  dir=$primary
 
   dforge_stores_init "$root"
   rel=$(dforge_name "$plan")
@@ -288,10 +294,19 @@ else
 fi
 
 dforge_stores_init "$root"
-# Shown repository-relative while progress is local, as before; the mirror's
-# path otherwise, which no checkout-relative name can reach.
-if [ "$(dforge_progress_store)" = darkmem ]; then latest_shown=$(dforge_latest_file)
-else latest_shown="$(dforge_dir_rel state "$primary")/handoff/latest.md"; fi
+# The draft and adhoc prompts name it; their T is this checkout.
+latest_shown=$(dforge_latest_file)
+
+# handoff_target — T, the checkout the next session works in (spec §2). A
+# mirror ledger has no checkout of its own: the one holding its workspace
+# stands in (_plan_ledger_tree).
+handoff_target() {
+  if [ "$complete" -eq 1 ]; then printf '%s\n' "$primary"
+  elif [ "$kept" -eq 1 ] || [ "$draft" -eq 1 ] || [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ]; then printf '%s\n' "$root"
+  elif [ "$has_ledger" -eq 1 ] && [ "$(dforge_progress_store)" = darkmem ]; then _plan_ledger_tree "$root" "$slug"
+  elif [ "$has_ledger" -eq 1 ]; then printf '%s\n' "$ledger_root"
+  else printf '%s\n' "$root"; fi
+}
 
 # --print --latest: the stored block, recomputed from what its marker names
 # when the repository can answer it, so a reader never replays a stale one.
@@ -373,9 +388,6 @@ if [ "$adhoc" -eq 1 ]; then
   next_line=$next_action
   launch_cmd=$(launch_for "$phase")
   prompt="Continue the unplanned work recorded in \`$latest_shown\`: $next_action"
-  if [ "$root" != "$primary" ]; then
-    prompt="$prompt First enter the existing worktree \`$root\`."
-  fi
 elif [ "$project" -eq 1 ]; then
   launch=0 rel=""
   roadmap=$(roadmap_file "$root")
@@ -561,7 +573,7 @@ else
       launch=0
     elif [ -z "$first_open" ]; then
       review_state=none
-      [ "$has_ledger" -eq 0 ] || review_state=$(plan_final_review_state "$ledger_file" "$ledger_root")
+      [ "$has_ledger" -eq 0 ] || review_state=$(plan_final_review_state "$ledger_file" "$(handoff_target)")
       case $review_state in
         current)
           status_line="Plan \`$rel\`: all $total tasks complete; the final review is clean."
@@ -597,13 +609,25 @@ else
     else
       prompt="Continue \`$rel\` with dforge:executing-plans. No ledger exists yet: begin at the skill's Setup, workspace first; the first task is Task $first_open ($open_title)."
     fi
-    if [ "$ledger_root" != "$primary" ]; then
-      prompt="$prompt First enter the existing worktree \`$ledger_root\`."
-    fi
     if [ "$has_ledger" -eq 1 ]; then
       prompt="$prompt Progress ledger: \`$ledger_file\` — trust its \`Task N: complete\` lines."
     fi
   fi
+fi
+
+# T's handoff is resolved in a subshell, so the cached roots stay this
+# checkout's.
+dir=$(handoff_target)
+handoff=$(dforge_stores_init "$dir"; dforge_latest_file "$dir")
+if [ "$target_only" -eq 1 ]; then printf '%s\n' "$handoff"; exit 0; fi
+
+# Every prompt opens on T: an auto run's cockpit pastes it into a cleared
+# session where no launch line ran, so the prompt itself says where to work.
+if [ -n "$prompt" ]; then
+  t_branch=$(git -C "$dir" branch --show-current 2>/dev/null | tr -d '\r')
+  if [ -n "$t_branch" ]; then t_where="branch $t_branch"
+  else t_where="detached at \`$(git -C "$dir" rev-parse --short HEAD 2>/dev/null | tr -d '\r')\`"; fi
+  prompt="Start in \`$dir\` ($t_where); its handoff is \`$handoff\`. If your working directory is not \`$dir\`, enter it first. $prompt"
 fi
 
 # A block printed over running work invites ending the session it would die
@@ -627,9 +651,12 @@ block=$(
   [ -z "$services_line" ] || printf '%s\n' "$services_line"
   if [ "$launch" -eq 1 ]; then
     if [ -n "$launch_cmd" ]; then
+      # A POSIX shell runs the cd; PowerShell 5.1 has no && and cmd.exe keeps
+      # single quotes, so a Windows host (cygpath on PATH) gets the bare command.
+      command -v cygpath >/dev/null 2>&1 || launch_cmd="cd '$(sed "s/'/'\\\\''/g" <<<"$dir")' && $launch_cmd"
       printf '\nLaunch in `%s`:\n\n```\n%s\n```\n' "$dir" "$launch_cmd"
     else
-      printf '\nLaunch: see the **Execution:** line in `%s`.\n' "${launch_plan:-$rel}"
+      printf '\nLaunch from `%s`: see the **Execution:** line in `%s`.\n' "$dir" "${launch_plan:-$rel}"
     fi
     printf '\nPaste as the first prompt:\n\n```\n%s\n```\n' "$prompt"
   fi
@@ -645,7 +672,6 @@ if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ "$adhoc" -eq 1 ]; then
   rm -f "$(dforge_dir state "$root")/sdd/finish.json" "$(dforge_dir state "$primary")/sdd/finish.json"
 fi
 
-handoff=$(dforge_latest_file)
 today=$(date -u +%Y-%m-%d)
 if [ "$adhoc" -eq 1 ]; then marker_kind=adhoc marker_subject=-
 elif [ "$project" -eq 1 ]; then marker_kind=project marker_subject=-
@@ -659,14 +685,35 @@ fi
 read -r marker_done marker_closed < <(handoff_counts "$primary")
 marker_host=""; [ "$host" != codex ] || marker_host=" host=codex"
 marker="<!-- next-step: kind=$marker_kind$marker_host done=$marker_done closed=$marker_closed subject=$marker_subject at=$(date +%s) -->"
+# replaces_own_block — true when --complete or --kept may replace the handoff
+# wholesale: it holds no marker, or the marker is this plan's, a completed
+# plan's, or a finished plan's. Anything else is another session's live block,
+# whose notes stay; held_subject names it (its kind when the subject is -).
+replaces_own_block() {
+  local held h_kind h_subject
+  held=$(tr -d '\r' < "$handoff" | grep -E '^<!-- next-step: .* -->$' | tail -n 1 || true)
+  [ -n "$held" ] || return 0
+  held=${held#<!-- next-step: }; held=${held% -->}; held=${held% at=*}
+  h_subject=${held#* subject=}
+  h_kind=${held#kind=}; h_kind=${h_kind%% *}
+  [ "$h_kind" != complete ] && [ "$h_subject" != "$rel" ] || return 0
+  [ "$h_subject" = - ] || ! plan_finished "$root" "$h_subject" || return 0
+  held_subject=$h_subject
+  [ "$held_subject" != - ] || held_subject=$h_kind
+  return 1
+}
 # Read, merged and replaced under the handoff's lock, so a concurrent writer's
 # notes are never overwritten with the copy read before them.
 write_handoff() {
-  local tmp status=0
+  local tmp status=0 wholesale=0
   case $handoff in */.dforge/handoff/latest.md) dforge_state_ignore "${handoff%/.dforge/handoff/latest.md}" ;; esac
   tmp=$(mktemp) || return 1
-  if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ ! -f "$handoff" ] \
-     || { [ "$project" -eq 1 ] && [ "$keep_notes" -eq 0 ]; }; then
+  if [ ! -f "$handoff" ] || { [ "$project" -eq 1 ] && [ "$keep_notes" -eq 0 ]; }; then wholesale=1
+  elif [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ]; then
+    if replaces_own_block; then wholesale=1
+    else printf 'next-step: replaced the block for %s\n' "$held_subject" >&3; fi
+  fi
+  if [ "$wholesale" -eq 1 ]; then
     printf '# Handoff — %s\n\n%s\n%s\n' "$today" "$block" "$marker" > "$tmp" || status=1
   else
     # Replace only the Next session section; the rest is the session's own notes.
@@ -684,6 +731,6 @@ write_handoff() {
 if ! { mkdir -p "$(dirname "$handoff")" && handoff_lock=$(dr_lock_base "$handoff"); } 2>/dev/null; then
   fail 4 "could not write $handoff — copy the block above into it by hand"
 fi
-if ! dr_locked "$handoff_lock" write_handoff 2>/dev/null; then
+if ! dr_locked "$handoff_lock" write_handoff 3>&2 2>/dev/null; then
   fail 4 "could not write $handoff — copy the block above into it by hand"
 fi

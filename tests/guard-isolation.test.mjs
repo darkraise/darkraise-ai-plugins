@@ -18,10 +18,10 @@ test('the hook suites pass, each run alone, under a host config that enables eve
   const host = { ...process.env, CLAUDE_CONFIG_DIR: dir };
   // A nested `node --test` that inherits NODE_TEST_CONTEXT exits 0 whatever its tests do.
   for (const key of ['WORKFLOW_GUARD_CLAUDE_DIR', 'WORKFLOW_GUARD_MANAGED_DIR', 'WORKFLOW_GUARD_PROJECT_DIR', 'NODE_TEST_CONTEXT']) delete host[key];
-  for (const suite of ['plugins/dagents/tests/hook.test.sh', 'plugins/dforge/tests/hook.test.sh']) {
+  for (const suite of ['tests/dagents/hook.test.sh', 'tests/dforge/hook.test.sh']) {
     const r = spawnSync(process.env.DR_TEST_BASH ?? 'bash', [suite], { cwd: repoRoot, env: host, encoding: 'utf8', timeout: 600000 });
     assert.equal(r.status, 0, `${suite}\n${(r.stdout ?? '').slice(-2000)}`);
   }
-  const d = spawnSync(process.execPath, ['--test', 'plugins/dflow/tests/hooks.test.mjs'], { cwd: repoRoot, env: host, encoding: 'utf8', timeout: 300000 });
+  const d = spawnSync(process.execPath, ['--test', 'tests/dflow/hooks.test.mjs'], { cwd: repoRoot, env: host, encoding: 'utf8', timeout: 300000 });
   assert.equal(d.status, 0, (d.stdout ?? '').slice(-2000));
 });

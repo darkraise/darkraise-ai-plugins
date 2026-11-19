@@ -42,12 +42,13 @@ plan_budget_line() {
 }
 usage() { die "usage: task-step start PLAN_FILE N [M ...] [--wave K] [--reset] [--suite COMMAND] | start PLAN_FILE N --inline [--reset] [--suite COMMAND] | review PLAN_FILE N [M ...] [--base SHA] [--head REF] [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | hold PLAN_FILE N [--head REF] [--cwd DIR] | review --group PLAN_FILE N M ... [--cwd DIR] [--suite COMMAND] [--suite-base SHA] | rereview PLAN_FILE N [M ...] [--base SHA] [--head REF] [--covered] | verdict PLAN_FILE N [M ...] [--group] [--rereview R] [--cwd DIR]"; }
 
-# dirty_list DIR: "<path>\t<hash>" for each tracked path that differs from
+# dirty_list DIR [-w]: "<path>\t<hash>" for each tracked path that differs from
 # HEAD, sorted; the hash is git's content hash, or "deleted". Paths are
 # relative to the work tree's top, so they are hashed from there. Fails when
-# git cannot list or hash them: an empty list must mean a clean tree.
+# git cannot list or hash them: an empty list must mean a clean tree. -w also
+# writes each content to the object store, so a later restore can read it back.
 dirty_list() {
-  local root names p h
+  local root names p h write=${2:-}
   root=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null | tr -d '\r')
   [ -n "$root" ] || return 1
   names=$(git -C "$1" -c core.quotepath=off diff --name-only --no-renames HEAD) || return 1
@@ -56,7 +57,7 @@ dirty_list() {
     while IFS= read -r p; do
       [ -n "$p" ] || continue
       if [ -f "$root/$p" ]; then
-        h=$(git -C "$root" hash-object -- "$p" | tr -d '\r')
+        h=$(git -C "$root" hash-object ${write:+"$write"} -- "$p" | tr -d '\r')
         [ -n "$h" ] || exit 1
         printf '%s\t%s\n' "$p" "$h"
       else
@@ -73,7 +74,7 @@ tracked_snapshot() {
   [ "$(git -C "$1" rev-parse --is-inside-work-tree 2>/dev/null | tr -d '\r')" = true ] || return 1
   head=$(git -C "$1" rev-parse HEAD 2>/dev/null | tr -d '\r')
   [ -n "$head" ] || return 1
-  dirty=$(dirty_list "$1") || return 1
+  dirty=$(dirty_list "$1" -w) || return 1
   printf '%s' "$dirty" | jq -R -s -c --arg cwd "$1" --arg head "$head" \
     '{cwd: $cwd, head: $head, dirty: [split("\n")[] | select(. != "") | split("\t") | {path: .[0], hash: .[1]}]}'
 }
@@ -1256,6 +1257,39 @@ parse_report() {
     }'
 }
 
+# restore_hints DIR RECORDED: for each changed path on stdin, its name and
+# then "  restore: <command>", the command that puts back what the snapshot
+# recorded. A path dirty at review time held uncommitted edits, so it comes
+# back from its recorded content, never from HEAD. A snapshot taken before
+# contents were stored has none to read. The snapshot is read back from the
+# task's state file, so a path outside the work tree or a hash that is no
+# object id gets no command: the session runs these lines as printed.
+restore_hints() {
+  local root p h
+  root=$(git -C "$1" rev-parse --show-toplevel | tr -d '\r')
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    h=$(awk -F'\t' -v p="$p" '$1 == p { print $2; exit }' "$2")
+    printf '%s\n' "$p"
+    case /$p/ in
+      //* | */../*)
+        printf '  restore: none: the recorded path is outside the work tree; restore it by hand\n'
+        continue ;;
+    esac
+    if [ -z "$h" ]; then
+      printf '  restore: git -C %q checkout -- %q\n' "$root" "$p"
+    elif [ "$h" = deleted ]; then
+      printf '  restore: rm -f -- %q\n' "$root/$p"
+    elif ! [[ $h =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
+      printf '  restore: none: the recorded content hash is no object id; restore it by hand\n'
+    elif git -C "$root" cat-file -e "$h" 2>/dev/null; then
+      printf '  restore: git -C %q cat-file --filters --path=%q %q > %q\n' "$root" "$p" "$h" "$root/$p"
+    else
+      printf '  restore: none: its content at review time (%s) was not stored; restore it by hand\n' "$h"
+    fi
+  done
+}
+
 # check_tracked: the check line, after comparing every snapshot the review
 # step recorded with its checkout now. Exits 6 on a change, naming it.
 check_tracked() {
@@ -1298,8 +1332,8 @@ check_tracked() {
       END { for (p in rec) print p }' "$TMP/recorded" "$TMP/now" | LC_ALL=C sort -u)
     if [ -n "$changed" ]; then
       {
-        printf 'task-step: tracked files changed during the review in %s; restore them with git -C %s checkout -- <files>:\n' "$dir" "$dir"
-        printf '%s\n' "$changed"
+        printf 'task-step: tracked files changed during the review in %s; restore each to its recorded state with the command under it:\n' "$dir"
+        restore_hints "$dir" "$TMP/recorded" <<<"$changed"
       } >&2
       exit 6
     fi

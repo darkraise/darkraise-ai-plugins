@@ -138,7 +138,7 @@ const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dagents handoff skill. Start no new task.'
 function resumePrompt(): string {
-  return 'Resume the work in .dagents/handoff/latest.md with the dagents resume-execution skill.'
+  return `Resume the work in ${S.latestName ?? '.dagents/handoff/latest.md'} with the dagents resume-execution skill.`
 }
 // A handoff older than this is not offered for resuming.
 const RESUME_WITHIN = 3 * 86_400_000
@@ -439,7 +439,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'cockpit' }, async ($, e) => {
+  on('command.run', { command: 'dagents:cockpit' }, async ($, e) => {
     const conflict = await guardNow($)
     if (conflict !== null) return { text: conflict }
     const o = await live($)
@@ -447,7 +447,7 @@ export const register: Register = on => {
     if (words[0]?.toLowerCase() === 'notify') return notifyCommand($, words.slice(1))
     const wantsSettings = e.args.trim().toLowerCase() === 'settings'
     if (!wantsSettings && e.args.trim() !== '') {
-      return { text: `Unknown argument "${e.args.trim()}". Usage: /cockpit [settings | notify test | notify mention <id>]` }
+      return { text: `Unknown argument "${e.args.trim()}". Usage: /dagents:cockpit [settings | notify test | notify mention <id>]` }
     }
     if (wantsSettings) await showSettings($)
     else {
@@ -706,7 +706,8 @@ export const register: Register = on => {
 
   // The model and effort the main loop's requests go out with, as the status
   // line shows them.
-  on('turn.step', async function* ($, e, next) {
+  on('turn.step', async function* ($, raw, next) {
+    const e = await launched($, raw)
     if (await standsDown($)) return yield* next(e)
     if (e.agentId === undefined) {
       const effort = typeof e.effort === 'string' ? e.effort : null
@@ -1112,7 +1113,7 @@ export const register: Register = on => {
                 notes.url !== null && compact('set-notify-test', 'Send test', () => sendTest($), { isMain: true }),
                 !notes.isFromEnv && canType && compact('set-notify-url-edit', notes.url === null ? 'Set' : 'Change', () => edit('url'), { isMain: notes.url === null }),
                 !notes.isFromEnv && notes.url !== null && compact('set-notify-url-remove', 'Remove', () => saveWebhook($, '')),
-                !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it in /cockpit settings in a terminal, or with DAGENTS_NOTIFY_URL</Text>,
+                !canType && notes.url === null && <Text key="set-notify-url-cli" dimColor>set it in /dagents:cockpit settings in a terminal, or with DAGENTS_NOTIFY_URL</Text>,
               )}
           {notes.last !== null && (
             <Text key="set-notify-last" color={notes.last.isError ? 'red' : 'green'} wrap="truncate-end">
@@ -2604,6 +2605,10 @@ const S = {
   autoActedAt: null as number | null,
   // When this session started: one with no turn yet ages from it.
   watchedSince: null as number | null,
+  // The model and effort of the auto run's launch command, for the session it
+  // cleared into: that session's main-loop requests go out on them, so the
+  // person's settings never change. Kept outside $.state, which /clear wipes.
+  launch: null as { session: string; model: string; effort: Effort | null } | null,
   // When background work began deferring the pending stage; null while nothing
   // does or a turn is live.
   autoDeferredSince: null as number | null,
@@ -2646,6 +2651,8 @@ const S = {
   runKey: '',
   runPlan: null as string | null,
   runReads: 0,
+  // The session checkout's latest.md by absolute path, which the resume prompt names.
+  latestName: null as string | null,
   // The ledger directory's workspaces and its modification time when listed.
   ledgerDirs: { base: '', at: null as number | null, names: [] as string[] },
   // Discord messages go out one at a time; the tail of the queue.
@@ -2901,9 +2908,15 @@ async function isSessionAlive($: EngineInterface, sid: string): Promise<boolean 
   }
 }
 
-// Runs scripts/auto-run as `sessionId`; resolves its exit code, 1 when it could not run.
+// Runs scripts/auto-run as `sessionId` in the session's checkout, where its
+// handoff lives; resolves its exit code, 1 when it could not run.
 async function autoRunCall($: EngineInterface, sessionId: string, args: string[]): Promise<number> {
-  const ran = await $.process.run(['bash', `${$.plugin.root}/scripts/auto-run`, '--session', sessionId, ...args], { timeoutMs: 15_000 }).catch(() => null)
+  const session = S.where.checkout
+  const isGone = session !== null && session !== S.where.primary && (await $.fs.stat(session).catch(() => null))?.kind !== 'dir'
+  const checkout = (isGone ? S.where.primary : session) ?? S.where.primary ?? '.'
+  // The directory travels in argv: no cockpit call passes $.process.run a cwd.
+  const argv = ['bash', '-c', 'cd -- "$1" && shift && exec bash "$@"', 'auto-run', checkout, `${$.plugin.root}/scripts/auto-run`, '--session', sessionId, ...args]
+  const ran = await $.process.run(argv, { timeoutMs: 15_000 }).catch(() => null)
   return ran?.exitCode ?? 1
 }
 
@@ -3037,32 +3050,10 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
       bound = cleared
       at = 'resume'
     }
-    const refused: string[] = []
-    let isRestored = true
-    let isKept = false
-    if (auto.launch !== null) {
-      // /model and /effort save the user's defaults: run them only when those
-      // can be read now and put back after (the restore runs node).
-      const saved = await userDefaults($)
-      if (saved !== null && (await nodeRuns($))) {
-        await saveDefaults($, bound, auto.launch.model, saved)
-        for (const [command, args] of [['model', auto.launch.model], ['effort', auto.launch.effort]] as const) {
-          await $.command.run({ command, args }).catch(() => refused.push(`/${command} ${args}`))
-        }
-        isRestored = await restoreUserDefaults($, saved)
-        // A restore that did not read back leaves the snapshot for a later session.
-        if (isRestored) await dropSnapshot($, bound)
-        else {
-          await notify($, { kind: 'blocked', title: '⛔ Default model not restored', detail: `/model and /effort left the auto run's launch model as the default in ${await userSettingsPath($)}.`, isPlain: true })
-        }
-      } else isKept = true
-    }
-    const notes: string[] = []
-    if (isKept) notes.push(`The cockpit kept this session on ${await $.session.model()} because it could not put back your default model afterwards.`)
-    if (refused.length > 0) notes.push(`The cockpit could not run ${refused.join(' or ')}; this session runs on ${await $.session.model()}.`)
-    if (!isRestored) notes.push('The cockpit could not put back the default model and effort that /model and /effort saved in your user settings.')
-    const note = notes.length === 0 ? '' : `\n\n${notes.join(' ')} Record that with scripts/auto-run ruling add.`
-    await $.prompt.submit({ text: `${auto.resumePrompt ?? resumePrompt()}${note}`, asUser: true })
+    // /model and /effort would save the launch values as the person's
+    // defaults; the turn.step hook sends this session's requests on them instead.
+    if (auto.launch !== null) S.launch = { session: bound, model: auto.launch.model, effort: effortOf(auto.launch.effort) }
+    await $.prompt.submit({ text: auto.resumePrompt ?? resumePrompt(), asUser: true })
     await autoRunCall($, bound, ['resumed'])
     await trackAutoRun($)
   } catch (error) {
@@ -3074,6 +3065,20 @@ async function autoStage($: EngineInterface, stage: AutoStage) {
     // Unbooked, nothing would retry the stage: stop rather than stall unseen.
     else await endUnboundRun($, bound, `the cockpit could not ${action} and could not book the failure (exit ${code})`)
   }
+}
+
+type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+function effortOf(value: string): Effort | null {
+  return (['low', 'medium', 'high', 'xhigh', 'max'] as const).find(level => level === value) ?? null
+}
+
+// The step as the auto run's launch command would send it: a main-loop request
+// of the session the run cleared into goes out on the launch model and effort.
+async function launched<E extends { agentId?: string; model: string; effort?: unknown }>($: EngineInterface, e: E): Promise<E> {
+  const launch = S.launch
+  if (launch === null || e.agentId !== undefined || launch.session !== (await $.session.id())) return e
+  return { ...e, model: launch.model, ...(launch.effort === null ? {} : { effort: launch.effort }) } as E
 }
 
 // What /model and /effort save as the user's defaults, as the engine has them
@@ -3088,23 +3093,6 @@ async function userDefaults($: EngineInterface): Promise<SavedDefaults | null> {
 // restore's read-back compares JSON text.
 type SavedDefaults = { model: unknown; modelSettings: unknown; effortLevel: unknown }
 
-// Where the defaults are kept while a model switch is in flight, so a session
-// that dies before the restore leaves them for the next one; null without a home.
-async function snapshotPath($: EngineInterface, sessionId: string): Promise<string | null> {
-  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
-  if (!home) return null
-  return `${home.replace(/[\\/]+$/, '')}/.claude/dagents/sessions/saved-defaults/${sessionId.replace(/[^A-Za-z0-9]/g, '-')}.json`
-}
-
-// Written before /model, never over a snapshot already there: that one holds
-// the defaults from before an earlier switch.
-async function saveDefaults($: EngineInterface, sessionId: string, launchModel: string, saved: SavedDefaults) {
-  const path = await snapshotPath($, sessionId)
-  if (path === null || (await $.fs.stat(path).catch(() => null)) !== null) return
-  const snapshot = { session: sessionId, launchModel, saved: { model: saved.model, modelSettings: saved.modelSettings, effortLevel: saved.effortLevel } }
-  await $.fs.write(path, `${JSON.stringify(snapshot)}\n`).catch(() => undefined)
-}
-
 // A mod cannot delete a file: dagents-config.mjs does it. Whether it did.
 async function dropSnapshot($: EngineInterface, name: string): Promise<boolean> {
   const ran = await $.process.run(['node', `${$.plugin.root}/scripts/lib/dagents-config.mjs`, 'drop-snapshot', name], { timeoutMs: 15_000 }).catch(() => null)
@@ -3115,9 +3103,10 @@ function undroppedToast(session: string, file: string): string {
   return `dagents: could not drop the model switch snapshot of session ${session}, ${file}; the next session start tries again.`
 }
 
-// The snapshots other sessions left. A live writer's is still in use. A dead
-// one's defaults go back while its launch model is still the default, the sign
-// that nothing changed them since; otherwise they are stale and only dropped.
+// The snapshots sessions of earlier versions left, which switched models with
+// /model and /effort. A live writer's is still in use. A dead one's defaults go
+// back while its launch model is still the default, the sign that nothing
+// changed them since; otherwise they are stale and only dropped.
 async function sweepSnapshots($: EngineInterface) {
   const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
   if (!home) return
@@ -3174,13 +3163,6 @@ function snapshotOf(text: string): { session: string; launchModel: string; saved
 async function nodeRuns($: EngineInterface): Promise<boolean> {
   const ran = await $.process.run(['node', '--version'], { timeoutMs: 5_000 }).catch(() => null)
   return ran?.exitCode === 0
-}
-
-// The user settings file /model and /effort write, for the notice that names it.
-async function userSettingsPath($: EngineInterface): Promise<string> {
-  const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
-  const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || (home ? `${home.replace(/[\\/]+$/, '')}/.claude` : '~/.claude')
-  return `${configDir}/settings.json`
 }
 
 // /model and /effort save their values as the user's defaults for every new
@@ -3484,17 +3466,21 @@ async function resume($: EngineInterface, offer: CockpitResumeOffer) {
   await $.prompt.submit({ text: offer.prompt ?? resumePrompt(), asUser: true })
 }
 
-// The run's ledger, its plan's tasks, and the newest handoff: the ledgers
-// under the session worktree's .dagents/, as sdd-workspace writes them, and
-// the handoff under the primary checkout's.
+// The run's ledger, its plan's tasks, and the newest handoff: the ledgers and
+// the handoff under the session worktree's .dagents/, as sdd-workspace and
+// next-step write them.
 async function readRun($: EngineInterface) {
   // A poll tick's read and a tool call's can overlap: only the latest writes.
   const reading = ++S.runReads
   const session = S.where.checkout ?? (await read($, place))?.root ?? null
   const root = S.where.primary ?? session
   if (root === null) return
-  const state = `${root}/.dagents`
+  // A removed worktree took its handoff with it: the primary's stands in.
+  const isGone = session !== null && session !== root && (await $.fs.stat(session).catch(() => null))?.kind !== 'dir'
+  const here = isGone ? root : (session ?? root)
+  const state = `${here}/.dagents`
   const latest = `${state}/handoff/latest.md`
+  S.latestName = latest
   const checkouts = [...new Set([session, root].filter((dir): dir is string => dir !== null))]
   const places = checkouts.map(dir => ({ root: dir, docsDir: `${dir}/docs/dagents` }))
   try {
@@ -3788,7 +3774,7 @@ async function notifyCommand($: EngineInterface, words: string[]): Promise<{ tex
   }
   const state = await read($, notifier)
   return {
-    text: state.url === null ? 'No Discord webhook is set. Set one in /cockpit settings (Notifications) in a terminal, or with DAGENTS_NOTIFY_URL.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from the environment)' : ''}.`,
+    text: state.url === null ? 'No Discord webhook is set. Set one in /dagents:cockpit settings (Notifications) in a terminal, or with DAGENTS_NOTIFY_URL.' : `Discord webhook: ${maskWebhook(state.url)}${state.isFromEnv ? ' (from the environment)' : ''}.`,
   }
 }
 
@@ -4092,7 +4078,7 @@ async function engineSettings($: EngineInterface): Promise<string> {
 }
 
 /**
- * Registers /cockpit and reads every section, then marks the session read.
+ * Reads every section, then marks the session read.
  * session.start runs it once per process, opening or shutting the pane first;
  * the poll runs it again in a session /clear or /resume carried the process
  * into, whose values the host keeps apart and no session.start announces, and
@@ -4111,11 +4097,6 @@ async function readSession($: EngineInterface, isStart: boolean) {
   // not: read again, or the resume offer stays unwritten.
   S.offerRead = ''
   S.offerRanKey = null
-  await $.command.register({
-    name: 'cockpit',
-    description: 'Show context, usage, subagents, the plan and the repo in a pane',
-    argumentHint: '[settings | notify test | notify mention <id>]',
-  })
   // Each read fills its own section: one that throws leaves only that section
   // unread, and a slow poll tick reads that one again, not the whole session,
   // whose caches the reset above would otherwise clear on every retry.

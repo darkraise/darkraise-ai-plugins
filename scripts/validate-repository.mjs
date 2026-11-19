@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { renamePath } from './dagents-rename.mjs';
 import { lintTree } from './lint-portability.mjs';
 
-const maintained = ['dagents', 'darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status'];
+const maintained = ['dagents', 'darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge'];
 const NAMESPACED = ['dforge', 'dagents'];
 // dagents is dforge 4.17.1 renamed, so it keeps dforge's rules and allowlists under its own paths.
 const WORKFLOW = ['dforge', 'dagents'];
@@ -14,33 +14,33 @@ const withDagents = paths => new Set(paths.flatMap(path => [path, renamePath(pat
 export const DAGENTS_DFORGE_ALLOWED = new Set([
   'plugins/dagents/README.md',
   // These suites read this repository's own notes and plans under docs/dforge.
-  'plugins/dagents/tests/lanes.test.sh',
-  'plugins/dagents/tests/typed-seats-and-drafting.acceptance.sh',
+  'tests/dagents/lanes.test.sh',
+  'tests/dagents/typed-seats-and-drafting.acceptance.sh',
   // dforge 4.x's docs/dforge is read as an older spelling of docs/dagents.
   'plugins/dagents/scripts/lib/roots.sh',
   'plugins/dagents/hooks/cockpit/lib.ts',
-  'plugins/dagents/tests/roots.test.sh',
+  'tests/dagents/roots.test.sh',
   // Migrate moves a dforge 4.x project's names to dagents' and says when one is found.
   'plugins/dagents/scripts/dagents-migrate',
   'plugins/dagents/scripts/lib/dagents-dir.sh',
   'plugins/dagents/scripts/repo-audit',
   'plugins/dagents/scripts/session-start.sh',
   'plugins/dagents/skills/migrate/SKILL.md',
-  'plugins/dagents/tests/dagents-migrate.test.sh',
+  'tests/dagents/dagents-migrate.test.sh',
   // Migrate copies a dforge 4.x repository's settings and refuses its darkmem-held families.
   'plugins/dagents/scripts/lib/dagents-home-migrate.mjs',
-  'plugins/dagents/tests/home/home-migrate.test.mjs',
+  'tests/dagents/home/home-migrate.test.mjs',
   // The workflow guard names its siblings.
   'plugins/dagents/scripts/workflow-guard.mjs',
-  'plugins/dagents/tests/stand-down.test.sh',
+  'tests/dagents/stand-down.test.sh',
   'plugins/dagents/skills/using-dagents/references/codex-tools.md',
   'plugins/dagents/tests/cockpit.test.ts',
   // Proves dagents never touches or reads dforge's names, so it seeds them.
-  'plugins/dagents/tests/isolation.acceptance.test.sh',
+  'tests/dagents/isolation.acceptance.test.sh',
   // Builds dforge 4.x projects and homes to prove migrate and the guard's isolation.
-  'plugins/dagents/tests/dagents-split.acceptance.test.sh',
+  'tests/dagents/dagents-split.acceptance.test.sh',
 ]);
-const claudeOnly = ['dflow', 'dr-status'];
+const claudeOnly = ['dflow'];
 const contained = (root, path) => { const rel = relative(root, path); return rel !== '..' && !rel.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(rel); };
 // A file's lines for the name sweeps, or null for a binary file (one holding a
 // NUL character), whose bytes are not text to read names in. UTF-16 text holds
@@ -95,8 +95,6 @@ export function validateRepository(root, { names = maintained } = {}) {
       }
     }
   }
-  const versionPath = resolve(root, 'plugins/dr-status/scripts/VERSION');
-  if (!existsSync(versionPath) || readFileSync(versionPath, 'utf8').trim() !== manifests.get('dr-status')?.version) errors.push('dr-status: script version mismatch');
   for (const name of claudeOnly) {
     if (existsSync(resolve(root, `plugins/${name}/.codex-plugin/plugin.json`))) errors.push(`${name}: Claude-only plugin has a Codex manifest`);
   }
@@ -143,7 +141,7 @@ export function validateRepository(root, { names = maintained } = {}) {
   const legacyAllowed = withDagents([
     'plugins/dforge/tests/cockpit.test.ts',
     'plugins/dforge/scripts/dforge-migrate',
-    'plugins/dforge/tests/dforge-migrate.test.sh',
+    'tests/dforge/dforge-migrate.test.sh',
     'plugins/dforge/skills/migrate/SKILL.md',
   ]);
   // dforge 3.0 spells the retired name only where it translates historical
@@ -224,12 +222,16 @@ export function validateRepository(root, { names = maintained } = {}) {
   }
   // The UI plugins dropped their dcc- prefix in 0.3.0; only the migration
   // notes and the historical plans and specs still spell it.
-  const dccAllowed = new Set(['docs/migration.md', 'scripts/validate-repository.mjs', 'tests/repository-layout.test.mjs', 'docs/dforge/plans/2026-11-17-dagents-split.md']);
+  const dccAllowed = new Set(['docs/migration.md', 'scripts/validate-repository.mjs', 'tests/repository-layout.test.mjs']);
   const unswept = new Set(['.git', '.claude', 'node_modules', '.worktrees', '.dforge', '.dagents', '.forge', '.superpowers']);
+  // Maintainers' working records, ignored by .gitignore but present in their
+  // checkouts; historical plans there still spell the old names.
+  const records = rel => rel === 'docs/dforge' || (rel.startsWith('docs/dflow/') && rel !== 'docs/dflow/design.md');
   const sweep = dir => {
     for (const item of readdirSync(dir, { withFileTypes: true })) {
       const path = resolve(dir, item.name);
       const rel = relative(root, path).replaceAll('\\', '/');
+      if (records(rel)) continue;
       if (item.isDirectory()) {
         if (!unswept.has(item.name)) sweep(path);
         continue;

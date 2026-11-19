@@ -90,12 +90,13 @@ ladder_block() {
 # "Task N: BLOCKED", sorted, unique. BLOCKED is terminal: a resumed session must
 # not start the task. The Recovery rule both execution skills define reads the
 # last "Task N:" line in file order, stepping over the kinds that are not
-# terminal, so a BLOCKED the owner resolved and the task re-ran is not blocked
-# any more — a flat grep would keep reporting it forever.
+# terminal (a waiting line is a question asked, not a state), so a BLOCKED
+# the owner resolved and the task re-ran is not blocked any more — a flat
+# grep would keep reporting it forever.
 ledger_blocked() {
   tr -d '\r' < "$1" | awk '
     !/^Task [0-9]+:/ { next }
-    /^Task [0-9]+: (minor \(deferred\)|parked|Ruling:)/ { next }
+    /^Task [0-9]+: (minor \(deferred\)|parked|Ruling:|waiting — )/ { next }
     { n = $2; sub(/:$/, "", n); blocked[n] = ($0 ~ /^Task [0-9]+: BLOCKED/) }
     END { for (n in blocked) if (blocked[n]) print n }
   ' | sort -un
@@ -322,9 +323,12 @@ plan_task_depends() {
 # _plan_ctx PLAN — the directory whose checkout a plan belongs to: its own
 # directory inside a git repository, else the working directory.
 _plan_ctx() {
-  local dir
-  dir=$(dirname "$1")
-  if git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then printf '%s\n' "$dir"; else printf '%s\n' "$PWD"; fi
+  local dir here
+  # Native forms: callers hand the result to git -C, which under
+  # MSYS_NO_PATHCONV=1 cannot open Git Bash's /tmp/... spelling of $PWD.
+  dir=$(dr_native_path "$(dirname "$1")")
+  here=$(dr_native_path "$PWD")
+  if git -C "$dir" rev-parse --show-toplevel >/dev/null 2>&1; then printf '%s\n' "$dir"; else printf '%s\n' "$here"; fi
 }
 
 # plan_locate PLAN — PLAN when it exists, else the file its name resolves to
@@ -552,15 +556,16 @@ plan_require_same_project() {
 # plan_final_review_state LEDGER [DIR] — whether the ledger's last
 # `Final review: clean (commits <base>..<head>)` line still covers HEAD in DIR
 # (default the working directory): `none` (no clean line); `current` (HEAD is
-# <head>, only docs-root paths changed since, or <head> reached HEAD through a
-# merge into a base branch, off its first-parent chain); `stale <head>` (a
-# later commit on the first-parent chain touches code); `rewritten <head>`
-# (<head> is no commit, or no ancestor of HEAD). A clean line with no commits
-# clause, or a DIR where HEAD does not resolve, reads `current`: git cannot
-# judge it. A failed walk of the history after <head> reads `stale <head>`. The ledger records no branch, so the first-parent chain is the only
-# base-branch test.
+# <head>, or only docs-root paths changed since); `stale <from>` (a later
+# commit touches code); `rewritten <head>` (<head> is no commit, or no
+# ancestor of HEAD). <from> is <head>, or, when <head> reached HEAD through a
+# merge, off its first-parent chain, that merge: only what came after it is
+# unreviewed. A clean line with no commits clause, or a DIR where HEAD does not
+# resolve, reads `current`: git cannot judge it. A failed walk of the history
+# after <head> reads `stale <head>`. The ledger records no branch, so the
+# first-parent chain is the only base-branch test.
 plan_final_review_state() {
-  local dir line head full now top docs path changed
+  local dir line head full now top docs path changed from desc
   dir=$(dr_native_path "${2:-$PWD}")
   line=$(tr -d '\r' < "$1" 2>/dev/null | grep '^Final review: clean' | tail -n 1)
   if [ -z "$line" ]; then echo none; return 0; fi
@@ -577,8 +582,18 @@ plan_final_review_state() {
   local chain
   chain=$(git -C "$dir" rev-list --first-parent "$now" 2>/dev/null) || { echo "stale $head"; return 0; }
   chain=$(tr -d '\r' <<<"$chain")
-  if ! grep -qxF -- "$full" <<<"$chain"; then echo current; return 0; fi
-  changed=$(git -C "$dir" log --format= --name-only "$full..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
+  from=$full
+  if ! grep -qxF -- "$full" <<<"$chain"; then
+    # The oldest first-parent commit that descends from <head> is the merge
+    # that brought it in.
+    desc=$(git -C "$dir" rev-list --ancestry-path "$full..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
+    from=$(printf '%s\n--\n%s\n' "$desc" "$chain" | tr -d '\r' |
+      awk '$0 == "--" { past = 1; next } !past { s[$0] = 1; next } $0 in s { m = $0 } END { print m }')
+    [ -n "$from" ] || { echo "stale $head"; return 0; }
+    head=$(git -C "$dir" rev-parse --short "$from" 2>/dev/null | tr -d '\r')
+    [ -n "$head" ] || head=$from
+  fi
+  changed=$(git -C "$dir" log --format= --name-only "$from..$now" 2>/dev/null) || { echo "stale $head"; return 0; }
   changed=$(tr -d '\r' <<<"$changed" | sed '/^$/d')
   if [ -z "$changed" ]; then echo current; return 0; fi
   top=$(dr_native_path "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null | tr -d '\r')")

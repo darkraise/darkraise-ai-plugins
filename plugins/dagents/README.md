@@ -16,8 +16,7 @@ two enabled plugins can double-trigger.
 
 ## Why
 
-Four findings from real transcripts drove the fork; the numbers are in
-`docs/superpowers/specs/2026-09-11-dr-superpowers-fork-design.md`.
+Four findings from real transcripts drove the fork:
 
 - **Cost.** The main session was 92% of token spend, most of it re-reading a
   400–700k context. The plugin hands off at a budget printed by its own
@@ -200,9 +199,8 @@ second model family in the loop. Two executors are registered. `agy`, the
 Antigravity CLI (priority 10, wrapper `scripts/run-agy-task.sh`), takes totals 0-8 at risk 2 or below,
 implementation only: totals 0-2 run on `gemini-3.8-flash` at medium effort, as
 the 2026-11-02 calibration record decided, totals 3-4 on `gemini-4-argon` at
-low effort and totals 5-8 on `gemini-4-argon` at high effort, as
-the 2026-11-03 calibration record (`docs/dforge/notes/2026-11-03-agy-calibration-3-8.md`
-in this plugin's repository) decided; Claude Sonnet
+low effort and totals 5-8 on `gemini-4-argon` at high effort, as the
+2026-11-03 calibration record decided; Claude Sonnet
 runs through `agy` only as the single retry after a Gemini run fails. Codex (priority 20) keeps the
 tasks `agy` refuses. Planning gives each task to the first ticked executor, in
 `executors ranked` order, whose gate admits it. The `agyLane` setting (`Agy
@@ -383,7 +381,10 @@ set — brainstorming through finishing-a-development-branch — frozen at upstr
 frontmatter, and writing-plans and subagent-driven-development use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
 `context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
-action and keeps `.dagents/handoff/latest.md` pointing at it. Disable the
+action and keeps `.dagents/handoff/latest.md` pointing at it. Each checkout
+keeps its own: `next-step` writes the one in the checkout the next session
+works in (a plan's worktree while it runs), and its first prompt opens by
+naming that checkout. Disable the
 upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
@@ -468,15 +469,22 @@ clean, otherwise the `## Next session` block from `next-step`. Controllers,
 Sonnet especially, tend to summarize the run and stop instead. A
 `UserPromptSubmit` hook stamps the start of each turn under
 `~/.claude/dagents/sessions/turns/`, and a `Stop` hook checks whether
-that turn wrote a plan ledger (`.dagents/sdd/*/progress.md`). If it did and
-the last message carries neither ending, the hook blocks the stop once and
-tells Claude which one is missing. The retry always passes, and without `jq`,
-a stamp or a ledger written this turn, the hook does nothing. While an agent or
+that turn wrote a plan ledger (`.dagents/sdd/*/progress.md`), recorded a plan
+in `plans/completed.md` or closed a milestone in `roadmap.md`. If it did and
+the last message carries no ending, the hook blocks the stop once and tells
+Claude which one is missing. A `## Next session` block counts only when
+`next-step` wrote it this turn: its `**Next:**` line matches the `latest.md`
+written since the turn started, or its `**Status:**` and `**Next:**` lines
+both match another checkout's `latest.md` written this turn, since `next-step`
+writes the handoff of the checkout the next session works in. A block Claude
+typed or reworded is held. The retry passes, except under the background-work
+hold below and in an auto run, and without `jq`, a stamp, or a ledger or
+transition this turn, the hook does nothing. While an agent or
 command the session started in the background has not reported back, a plain
 stop passes (the controller is waiting on it), and a message that ends the
 session over it, with the next-step block or the finishing menu, is held once
-in any turn: a handoff there would invite ending a session whose work is still
-in flight. Work stopped with `TaskStop`, and work launched before the session
+in any turn, retries included: a handoff there would invite ending a session
+whose work is still in flight. Work stopped with `TaskStop`, and work launched before the session
 last started or resumed, sends no notification and does not count as running.
 An agent that sent its report but left a shell or agent of its own alive still
 counts: Claude Code keeps listing it, and its notification says so.
@@ -485,19 +493,11 @@ finishing menu run it, and `scripts/next-step` prints no block (exit 5) while
 anything is on it.
 When the turn wrote more than one ledger, each one must have its
 ending. Each hold also shows you a one-line note saying why the session went
-on.
+on. Claude Code labels a held stop `Stop hook error` in the transcript: that
+is the hold working, not a failed hook.
 
-Unplanned work gets the same hold. The prompt hook also records which commits
-the repository's local branches point at. A turn that wrote no ledger but
-changed that set (a commit, a merge, or deleting a branch's only pointer to a
-commit) in a project with dagents docs must end on the `## Next session` block
-from `next-step --adhoc`, the finishing menu, or finishing's "No plan file"
-line. Otherwise the hook holds the stop once and tells Claude to continue
-remaining work, finish a branch that is ready to integrate, or print the block. Creating
-a branch on an existing commit, or a stop in another repository than the
-prompt's, does not count. Neither does a turn that ran no dagents skill (no
-Skill call and no typed `/dagents:` command since the prompt): a commit made
-without dagents is never held for dagents's ending.
+The prompt hook also records which commits the repository's local branches
+point at; that record serves the UI proof hold only.
 
 A run also asks one question before its first task: what finishing should do
 once the final review is clean (merge locally, push and open a pull request,
@@ -525,8 +525,11 @@ returns `scripts/ui-lint` findings as additional context and, once per
 session, names `dagents:ui-ux`; it never blocks. A third `Stop` hook,
 `scripts/ui-turn-end.sh`, holds a turn once when it leaves UI changes without
 a passing `ui-proof check` in a project with a UI profile (or a session that
-ran the skill); the line `UI proof: pending — <why>` releases it, and it
-stands down while an auto run is bound.
+ran the skill); the line `UI proof: pending — <why>` releases it. It stands
+down on the retry, while an auto run is bound, in fast mode, when the message
+carries the `## Next session` block `next-step` wrote this turn, and while
+background work the session started runs: none of those stops claims the UI
+work is done, so a handoff is not held for a proof the next session will run.
 
 ### Fast mode
 
@@ -636,13 +639,13 @@ with a reason, which the cockpit sends to Discord. See
 
 ## Cockpit
 
-Claude Code only. Built and tested against Claude Code 2.1.299 to 2.1.306; the
+Claude Code only. Built and tested against Claude Code 2.1.299 to 2.1.327; the
 mod API is early access and may change between releases.
 
 ### What it does
 
 **Cockpit pane.** A pane with the session at a glance. It opens by itself when
-a session starts, once the terminal is 144 columns wide; `/cockpit` opens it at
+a session starts, once the terminal is 144 columns wide; `/dagents:cockpit` opens it at
 any width, and says why if Claude Code holds it back. In fullscreen at 110
 columns or more it docks beside the transcript; otherwise it sits above the
 prompt. In the full layout each section is a framed card in its own color, its
@@ -755,7 +758,8 @@ desktop window joins the session, unless you closed it.
   tool starts. **⇣ Compact** stays on the card, and **↪ Hand off** appears in
   `dagents` sessions.
 - **Resumable work** is a card at the top of the pane, framed in the accent
-  color, when `.dagents/handoff/latest.md` is under three days old and its
+  color, when the session checkout's `.dagents/handoff/latest.md` is under
+  three days old and its
   `## Next session` block has a first prompt to paste (a finished plan, or a
   task blocked on your ruling, has none). It names the note's age and its
   **Next:** line, and **Resume** (`r`) queues the prompt that resumes it. The
@@ -821,12 +825,12 @@ timing.
 **Minimize** (`m`) closes the pane. The cockpit then draws as a band directly
 above the prompt, across the transcript's width, in the terminal and the
 desktop app alike.
-**Expand** on the top rule opens the pane again, and so does `/cockpit`. Each
+**Expand** on the top rule opens the pane again, and so does `/dagents:cockpit`. Each
 saves the `layout` setting, so the next session opens the same way: a
-minimized cockpit starts with the box or band and no pane. `/cockpit settings`
+minimized cockpit starts with the box or band and no pane. `/dagents:cockpit settings`
 still opens the settings, and **Back** closes them again. Minimize is offered
 in the terminal and the desktop app; elsewhere a minimized cockpit shows
-nothing until `/cockpit` opens it. The band is also what a pane that is not
+nothing until `/dagents:cockpit` opens it. The band is also what a pane that is not
 docked draws (`layout` `auto`, the default). Its frame takes the account's
 color, with the email, billing and Remote Control (`connected`, `on` or
 `not connected`, as on the Account card) on the top rule. Its two lines show
@@ -865,7 +869,7 @@ that matters: **Hand off** once the context passes `warnAt`, **Resume**
 whenever it shows. In the terminal's settings view a switch reads `● On` or `○ Off`, the
 chosen option of a row takes the accent, and what is off is drawn dim.
 
-**Settings view.** **Settings** (or `/cockpit settings`) turns the pane into the
+**Settings view.** **Settings** (or `/dagents:cockpit settings`) turns the pane into the
 mod's settings: whether it shows at session start, the layout, which sections
 show, the handoff budget, where Hand off takes the accent and the Discord limit
 message goes out, how many context rows to list, the note and guard switches, and the
@@ -883,7 +887,7 @@ The cockpit pops up nothing in the normal course: usage limits show in the
 gauges and the band, and a Discord message that fails to send shows in the
 settings view. A toast appears only when it cannot do what was asked: a
 setting that could not be saved, or a handoff note the session would not take.
-`/cockpit` with an argument it does not know answers with its usage.
+`/dagents:cockpit` with an argument it does not know answers with its usage.
 
 **Handoff reading.** The handoff reading shows only in the cockpit: the
 Context card and the band. The main session re-reads its whole context on every request, so a session that
@@ -901,8 +905,8 @@ session needs you, which works the same over ssh and tmux. Create a webhook
 settings view's **Notifications** group (a typed slash command would keep the
 token in the transcript, so there is none for it). It is kept in the plugin's own store, not in `settings.json`, and only ever
 shows masked; `DAGENTS_NOTIFY_URL` in the environment wins over it (`DAGENTS_COCKPIT_NOTIFY_URL` still read). **Send
-test** (or `/cockpit notify test`) posts a sample. Set your Discord user id
-(**Mention**, or `/cockpit notify mention <id>`) to be pinged for the events
+test** (or `/dagents:cockpit notify test`) posts a sample. Set your Discord user id
+(**Mention**, or `/dagents:cockpit notify mention <id>`) to be pinged for the events
 that need you; everything else posts silently.
 
 | Event | When | Default | Pings |
@@ -934,7 +938,7 @@ Code" or a Claude session link). Human co-authors pass.
 
 ### Settings
 
-Open the settings with **Settings** in the pane or `/cockpit settings`. They are
+Open the settings with **Settings** in the pane or `/dagents:cockpit settings`. They are
 one tab per group: press `1` to `8` to switch, `i` to hide or show each
 setting's description, and `b` to go back. A row whose value differs from its
 default is marked `*` and shows the default with a **Reset**; `r` resets the
@@ -956,7 +960,7 @@ The same settings can be set with
 
 | Tab | Option | Default | Effect |
 | --- | --- | --- | --- |
-| Cockpit | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/cockpit` opens it at any width. |
+| Cockpit | `openAtStart` | `true` | Open the pane when a session starts. Claude Code shows it once the terminal is 144 columns wide (110 once you have opened it before); `/dagents:cockpit` opens it at any width. |
 | Cockpit | `layout` | `auto` | `auto`: the full layout docked beside the transcript, the band in a pane above the prompt. `full`: always the full layout. `compact`: minimized, no pane, and the band above the prompt. **Minimize** sets `compact`, **Expand** sets `auto` (`full` where the pane does not dock). |
 | Cockpit | `density` | `detailed` | `detailed`: cards, charts and lists. `dense`: one line per section. **Dense** and **Detailed** in the pane set it. |
 | Cockpit | `sections` | empty | The pane's sections and their order, comma-separated: `account`, `context`, `usage`, `shells`, `agents`, `plan`, `repo`, `guard`. Empty shows all eight. The band draws the lines the Minimized tab picks instead. |
@@ -1053,8 +1057,8 @@ dforge 4.0 is dr-forge renamed, internals included, and it reads none of the
    `~/.claude/plugins/store/dr-forge_darkraise-*.json` (under
    `$CLAUDE_CONFIG_DIR` when set), as `notifyUrl` and `notifyMention`. Copy
    them before you uninstall, then set them in a dagents session: the webhook
-   in `/cockpit settings` (or `DAGENTS_NOTIFY_URL`), the mention with
-   `/cockpit notify mention <id>`.
+   in `/dagents:cockpit settings` (or `DAGENTS_NOTIFY_URL`), the mention with
+   `/dagents:cockpit notify mention <id>`.
 
        /plugin install dagents@darkraise
        /plugin uninstall dr-forge@darkraise
@@ -1088,8 +1092,9 @@ day; their steps now run through `/dagents:migrate`.
    `~/.claude/settings.json` may still name `darkraise/claude-code-plugins`;
    the canonical repository is `darkraise/darkraise-ai-plugins`. Remove and
    re-add the marketplace (or edit the registration) to point there.
-2. **Statusline.** `dcc-statusline` is `dr-status` in this catalog; enable
-   `dr-status@darkraise` and disable the old name.
+2. **Statusline.** `dcc-statusline` has no replacement in this catalog:
+   disable it (see
+   [Retired plugins](../../docs/migration.md#retired-plugins)).
 3. **Telegram notifications.** `dcc-telegram-notify` is not in this catalog;
    keep it installed from its previous source or drop it.
 4. **Disable the superseded plugins:** `superpowers` (its skills now ship
@@ -1251,7 +1256,7 @@ frozen at 6.3.0 with no upstream sync, and
 ## Tests
 
 ```bash
-for t in plugins/dagents/tests/*.test.sh; do bash "$t"; done
+for t in tests/dagents/*.test.sh; do bash "$t"; done
 ```
 
 Requires `jq` and `git`. No model calls: the executor suites run against a stub
@@ -1266,7 +1271,7 @@ ledgers and its branch heads.
 `codex-review.test.sh` covers the judge seats' selection and outcome policy
 against a stub `codex`, so every branch — refusal, fallback, timeout, empty
 report — is exercised without a model call.
-`home.test.sh` runs the `node:test` suites under `tests/home/`: the home
+`home.test.sh` runs the `node:test` suites under `tests/dagents/home/`: the home
 lock and the home half of `dagents-migrate`.
 The ui-ux suites — `ui-proof.test.sh`, `ui-lint.test.sh` (one failing and one passing fixture per rule), `ui-hooks.test.sh` and `ui-ux-skill.test.sh` — run against temporary repositories and the skill text.
 
@@ -1308,7 +1313,7 @@ settles a disagreement between them.
 review, `codex-review-schema.json` for the Codex task seats, and
 `codex-plan-review-schema.json` for the Codex plan-review round;
 `criteria/TEMPLATE.md` documents the format.
-`tests/criteria.test.sh` validates every file in that directory.
+`tests/dagents/criteria.test.sh` validates every file in that directory.
 
 `scripts/` holds the external executor lane:
 

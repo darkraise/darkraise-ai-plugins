@@ -4,26 +4,28 @@ Thanks for your interest. This repository is a plugin marketplace for Claude
 Code and Codex; each plugin lives under `plugins/<name>/`. Bug reports, fixes and
 documentation improvements are welcome. For a new feature or a new plugin, open
 an issue first so the scope can be agreed before you write code.
+Everyone taking part is expected to follow the
+[code of conduct](CODE_OF_CONDUCT.md).
 
 ## Repository layout
 
 | Path | Contents |
 | --- | --- |
-| `.claude-plugin/marketplace.json` | The Claude Code catalog: `dforge`, `dagents`, `dflow`, `dr-status`, `darkraise-ui`, `darkraise-win32ui`. |
+| `.claude-plugin/marketplace.json` | The Claude Code catalog: `dforge`, `dagents`, `dflow`, `darkraise-ui`, `darkraise-win32ui`. |
 | `.agents/plugins/marketplace.json` | The Codex catalog: `dforge`, `dagents` and the two UI plugins. Codex discovers it from the repository root. |
-| `plugins/<name>/` | One plugin: its manifests, skills, hooks, scripts and tests. |
+| `plugins/<name>/` | One plugin as it installs: its manifests, skills, hooks and scripts, plus a mod's `*.test.ts` files and the fixtures they import, which `claude plugin test` finds only inside the plugin. |
 | `scripts/` | Repository validation and the full test runner. |
-| `tests/` | Repository-level tests: catalog layout, shards, release and checks across plugins. |
-| `docs/` | Design records, testing notes and the migration guide. |
+| `tests/` | Repository-level tests (catalog layout, shards, UI discovery), and in `tests/<name>/` each plugin's shell and Node suites, kept out of the installed plugin. |
+| `docs/` | The marketplace and dflow design records, the migration guide and the README images. Maintainers' dforge and dflow working records stay local and are ignored. |
 
 ## Conventions
 
 - The marketplace ID is `darkraise`. A plugin's directory name, its catalog
   entries and its client manifest names must agree.
 - Keep the Claude (`.claude-plugin/plugin.json`) and Codex
-  (`.codex-plugin/plugin.json`) manifest versions equal. `dflow` and `dr-status` are Claude
-  Code only and have no Codex manifest; add a Codex manifest only for a plugin
-  Codex supports. `plugins/dr-status/scripts/VERSION` must match its manifest.
+  (`.codex-plugin/plugin.json`) manifest versions equal. `dflow` is Claude Code
+  only and has no Codex manifest; add a Codex manifest only for a plugin Codex
+  supports.
 - Preserve existing `DCC_*` environment variables and the statusline's user
   storage paths.
 - Do not enroll unrelated plugin directories in a catalog.
@@ -68,11 +70,13 @@ installed plugins or call a paid model.
 
 CI runs the same checks on Ubuntu, and on Windows split into shards
 (`--shard <n>/<count>`, with the count `.github/workflows/validate.yml` sets
-for each run; add `--list` to inspect a shard without running it). A new
-shell suite is discovered automatically, but it needs a weight in
-`scripts/test-shards.mjs`: `tests/test-shards.test.mjs` fails without one. A
-weight above 80% of the suite's limit (its `suiteSeconds` in
-`scripts/test-shards.mjs`, else 600 s) fails the same test until the limit is
+for each run; dagents runs its own shards under `--plugin dagents`; add
+`--list` to inspect a shard without running it). A pull request from a fork
+always runs on GitHub's hosted runners. A new shell suite is discovered
+automatically, but it needs a weight in `scripts/test-shards.mjs`:
+`tests/test-shards.test.mjs` fails without one. A weight above 80% of the
+suite's limit (its `suiteSeconds` in `scripts/test-shards.mjs`, else 600 s)
+fails the same test until the limit is
 raised or the suite is split.
 
 ### Tests
@@ -80,7 +84,7 @@ raised or the suite is split.
 Add a test with a behavior change, and write it first: watch it fail for the
 expected reason, then make it pass. Put each test at the lowest layer that can
 fail for the change. dforge's shell suites live in
-`plugins/dforge/tests/*.test.sh` and print one `ok` or `FAIL` line per check,
+`tests/dforge/*.test.sh` and print one `ok` or `FAIL` line per check,
 ending with a `N passed, M failed` line.
 
 ## Pull requests

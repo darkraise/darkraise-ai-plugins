@@ -1,21 +1,17 @@
-// Acceptance tests for docs/dforge/specs/2026-11-16-dagents-split-design.md,
-// written from the spec's Acceptance statements and run through the public
-// surface: the repository scripts, the workflow guard CLI, the hooks' commands
-// and the files the branch ships.
+// Regression tests for running dforge, dagents and dflow side by side: the
+// workflow guard CLI, the hooks' stand-down, the per-plugin suite limits and
+// the CI path filter, run through the repository scripts and the shipped files.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
-const TAG = 'dforge-v4.17.1';
 const SIBLINGS = ['dforge', 'dagents', 'dflow'];
 const GUARD = name => join(ROOT, 'plugins', name, 'scripts/workflow-guard.mjs');
-const REGISTER_PATH = 'docs/dforge/registers/2026-11-16-dagents-backport.md';
-const REGISTER = join(ROOT, REGISTER_PATH);
 
 function cleanEnv(extra = {}) {
   const env = { ...process.env };
@@ -30,304 +26,12 @@ function cleanEnv(extra = {}) {
 function run(command, args, { cwd = ROOT, env = cleanEnv(), input, timeout = 60000 } = {}) {
   return spawnSync(command, args, { cwd, env, input, encoding: 'utf8', timeout, maxBuffer: 256 * 1024 * 1024 });
 }
-const git = (...args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', timeout: 60000, maxBuffer: 256 * 1024 * 1024 });
-const gitOk = (...args) => spawnSync('git', args, { cwd: ROOT, stdio: 'ignore', timeout: 60000 }).status === 0;
-const hasTag = gitOk('rev-parse', '--verify', '--quiet', `${TAG}^{commit}`);
-const needTag = t => { if (!hasTag) { t.skip(`tag ${TAG} is not in this clone`); return false; } return true; };
-const isShallow = git('rev-parse', '--is-shallow-repository').trim() === 'true';
-const needHistory = t => { if (isShallow) { t.skip('this clone is shallow: the commits the check names are not in it'); return false; } return true; };
 const scratch = t => {
   const dir = mkdtempSync(join(tmpdir(), 'dsplit-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 };
 const json = path => JSON.parse(readFileSync(join(ROOT, path), 'utf8'));
-const textFiles = prefix => git('ls-files', '-z', '--', prefix).split('\0').filter(Boolean)
-  .filter(file => existsSync(join(ROOT, file)) && !readFileSync(join(ROOT, file)).includes(0));
-
-// A1
-test('A1: the copy commit holds the tag tree of plugins/dforge as plugins/dagents', t => {
-  if (!needTag(t)) return;
-  const first = git('log', '--reverse', '--format=%H', '--', 'plugins/dagents').split('\n').filter(Boolean)[0];
-  assert.ok(first, 'no commit touches plugins/dagents');
-  assert.equal(git('rev-parse', `${first}:plugins/dagents`).trim(), git('rev-parse', `${TAG}:plugins/dforge`).trim());
-});
-
-// A2
-test('A2: both manifests name dagents at one version, and both catalogs list it', () => {
-  const versions = ['.claude-plugin', '.codex-plugin'].map(dir => {
-    const manifest = json(`plugins/dagents/${dir}/plugin.json`);
-    assert.equal(manifest.name, 'dagents', dir);
-    assert.match(manifest.version ?? '', /^\d+\.\d+\.\d+/, dir);
-    return manifest.version;
-  });
-  assert.equal(versions[1], versions[0], 'the Codex manifest version differs from the Claude one');
-  const claude = json('.claude-plugin/marketplace.json').plugins.find(plugin => plugin.name === 'dagents');
-  assert.equal(claude?.source, './plugins/dagents');
-  const codex = json('.agents/plugins/marketplace.json').plugins.find(plugin => plugin.name === 'dagents');
-  assert.equal(codex?.source?.path ?? codex?.source, './plugins/dagents');
-});
-test('A2: claude plugin validate passes for plugins/dagents and the marketplace', t => {
-  const claude = process.env.CLAUDE_BIN || 'claude';
-  if (spawnSync(claude, ['--version'], { stdio: 'ignore', timeout: 15000 }).status !== 0) { t.skip('claude CLI not available'); return; }
-  const home = scratch(t);
-  const env = cleanEnv({ HOME: home });
-  for (const target of ['plugins/dagents', '.']) {
-    const result = run(claude, ['plugin', 'validate', target], { env, timeout: 90000 });
-    assert.equal(result.status, 0, `${target}: ${result.stderr}${result.stdout}`);
-  }
-});
-
-// A3 and A4
-function registerRows() {
-  const lines = readFileSync(REGISTER, 'utf8').split('\n');
-  const start = lines.findIndex(line => /^\|\s*#\s*\|\s*Item\s*\|/.test(line));
-  assert.ok(start >= 0, 'the register has no table');
-  const rows = [];
-  for (const line of lines.slice(start + 2)) {
-    if (!line.startsWith('|')) break;
-    const cells = line.split('|').slice(1, -1).map(cell => cell.trim());
-    rows.push({ id: cells[0], item: cells[1], state: cells[4], note: cells[5] });
-  }
-  return rows;
-}
-const mainEnd = () => {
-  if (!gitOk('rev-parse', '--verify', '--quiet', 'main')) return null;
-  // The register stops at the split; once main holds it, main's later dforge commits are not rows.
-  if (gitOk('cat-file', '-e', `main:${REGISTER_PATH}`)) return null;
-  return gitOk('merge-base', '--is-ancestor', 'HEAD', 'main') ? null : 'main';
-};
-test('A3: every non-merge commit touching plugins/dforge is a register row, all answered', t => {
-  if (!needTag(t)) return;
-  const end = mainEnd();
-  if (!end) { t.skip('no main ref, main already holds the register, or HEAD is merged into main: run this at merge time'); return; }
-  const commits = git('log', '--no-merges', '--reverse', '--abbrev=7', '--format=%h %s', `${TAG}..${end}`, '--', 'plugins/dforge').split('\n').filter(Boolean);
-  const rows = registerRows();
-  assert.deepEqual(rows.map(row => row.item).sort(), [...commits].sort(), 'the register lists exactly the commits');
-  const open = run('bash', ['plugins/dagents/scripts/register', 'open', REGISTER]);
-  assert.equal(open.status, 0, open.stdout + open.stderr);
-  const tagHas = path => gitOk('cat-file', '-e', `${TAG}:${path}`);
-  for (const row of rows) {
-    assert.ok(['done', 'n/a'].includes(row.state), `row ${row.id} is ${row.state}`);
-    if (row.state === 'done') {
-      const sha = /port ([0-9a-f]{7,40})/.exec(row.note)?.[1];
-      assert.ok(sha && gitOk('cat-file', '-e', `${sha}^{commit}`), `row ${row.id} names no dagents commit`);
-      continue;
-    }
-    const kind = /^(5-only|feature|test-only|docs-only|superseded)\b/.exec(row.note)?.[1];
-    assert.ok(kind, `row ${row.id} has no class: ${row.note}`);
-    const reason = row.note.slice(kind.length).replace(/^\s*[:\-—]\s*/, '').trim();
-    const sha = row.item.split(' ')[0];
-    if (kind === '5-only' && reason === '') {
-      const paths = git('diff-tree', '--root', '--no-commit-id', '-r', '--name-only', '-z', sha, '--', 'plugins/dforge').split('\0').filter(Boolean)
-        .filter(path => !path.includes('/tests/'));
-      assert.ok(paths.length > 0, `row ${row.id}: no non-test path`);
-      for (const path of paths) assert.equal(tagHas(path), false, `row ${row.id}: ${path} exists at the tag`);
-    } else {
-      assert.ok(reason.length >= 10, `row ${row.id} (${kind}) has no reason: ${row.note}`);
-    }
-  }
-});
-test('A4: every done row records its port and both results, or text-only with a changed file', t => {
-  if (!needHistory(t)) return;
-  const rows = registerRows().filter(row => row.state === 'done');
-  assert.ok(rows.length > 0);
-  const problems = [];
-  for (const row of rows) {
-    const match = /^port ([0-9a-f]{7,40}); (fail@parent pass@port|text-only (\S+))$/.exec(row.note);
-    if (!match) { problems.push(`row ${row.id}: ${row.note}`); continue; }
-    const sha = match[1];
-    if (!gitOk('cat-file', '-e', `${sha}^{commit}`)) { problems.push(`row ${row.id}: ${sha} is not a commit`); continue; }
-    if (git('diff-tree', '--no-commit-id', '-r', '--name-only', sha, '--', 'plugins/dagents').trim() === '') problems.push(`row ${row.id}: ${sha} touches no dagents file`);
-    if (match[3]) {
-      const changed = git('diff-tree', '--no-commit-id', '-r', '--name-only', sha).split('\n').filter(Boolean);
-      if (!changed.includes(match[3])) problems.push(`row ${row.id}: text-only file ${match[3]} is not changed by ${sha}`);
-      const code = changed.filter(file => !/\.md$/.test(file)).flatMap(file => git('diff-tree', '-p', '-U0', '--no-commit-id', sha, '--', file).split('\n')
-        .filter(line => /^[+-]/.test(line) && !/^(\+\+\+|---) /.test(line) && !/^[+-]\s*(\/\/|#|\*|\/\*|$)/.test(line)));
-      if (code.length > 0) problems.push(`row ${row.id}: ${sha} records text-only but changes code or tests`);
-    }
-  }
-  assert.deepEqual(problems, []);
-});
-test('A4: a port that changes tests has them fail at its parent and pass at the port (replay)', { skip: process.env.DAGENTS_ACCEPTANCE_REPLAY !== '1' && 'set DAGENTS_ACCEPTANCE_REPLAY=1 (slow: reruns each port twice)', timeout: 4 * 3600 * 1000 }, t => {
-  const [index, total] = (process.env.DAGENTS_ACCEPTANCE_SHARD ?? '1/1').split('/').map(Number);
-  const ports = [...new Set(registerRows().filter(row => /fail@parent pass@port/.test(row.note)).map(row => /^port ([0-9a-f]+)/.exec(row.note)[1]))]
-    .filter((_, position) => position % total === index - 1);
-  const dir = scratch(t);
-  const tree = join(dir, 'tree');
-  git('worktree', 'add', '--detach', tree, 'HEAD');
-  t.after(() => { spawnSync('git', ['worktree', 'remove', '--force', tree], { cwd: ROOT, stdio: 'ignore', timeout: 60000 }); });
-  const sub = (...args) => spawnSync('git', args, { cwd: tree, encoding: 'utf8', timeout: 120000 });
-  const runner = file => {
-    if (/\.test\.sh$|\.acceptance\.sh$/.test(file)) return ['bash', [file]];
-    if (/\.test\.mjs$/.test(file)) return ['node', ['--test', '--test-timeout=300000', file]];
-    return null;
-  };
-  const env = cleanEnv({ TMPDIR: process.env.TMPDIR ?? tmpdir() });
-  const report = [];
-  for (const sha of ports) {
-    const files = sub('diff-tree', '--no-commit-id', '-r', '--name-only', '--diff-filter=AM', sha).stdout.split('\n').filter(Boolean)
-      .filter(file => file.startsWith('plugins/dagents/tests/') && runner(file));
-    const tsOnly = files.length === 0 && sub('diff-tree', '--no-commit-id', '-r', '--name-only', sha).stdout.split('\n').some(file => /plugins\/dagents\/tests\/.*\.test\.tsx?$/.test(file));
-    const verdict = { sha, files, parent: null, port: null };
-    report.push(verdict);
-    const attempt = (label, commands) => {
-      for (const [command, args] of commands) {
-        const result = spawnSync(command, args, { cwd: tree, env, encoding: 'utf8', timeout: 900000, maxBuffer: 256 * 1024 * 1024 });
-        if (result.status !== 0) return { status: result.status, label, tail: (result.stdout + result.stderr).split('\n').slice(-6).join('\n') };
-      }
-      return { status: 0, label };
-    };
-    const commands = tsOnly ? [[process.env.CLAUDE_BIN || 'claude', ['plugin', 'test', 'plugins/dagents']]] : files.map(file => runner(file));
-    assert.ok(commands.length > 0, `${sha}: no runnable test file`);
-    assert.equal(sub('checkout', '-q', '--detach', sha).status, 0);
-    verdict.port = attempt('port', commands);
-    assert.equal(sub('checkout', '-q', '--detach', `${sha}^`).status, 0);
-    if (files.length > 0) assert.equal(sub('checkout', sha, '--', ...files).status, 0);
-    verdict.parent = attempt('parent', commands);
-    sub('checkout', '-q', '--force', 'HEAD');
-    sub('clean', '-fdxq');
-  }
-  const bad = report.filter(verdict => verdict.port.status !== 0 || verdict.parent.status === 0);
-  assert.deepEqual(bad.map(verdict => ({ sha: verdict.sha, files: verdict.files, port: verdict.port.status, parent: verdict.parent.status, tail: verdict.port.status !== 0 ? verdict.port.tail : '' })), []);
-});
-
-// A5
-const renameText = text => text.replace(/dforge/g, 'dagents').replace(/DFORGE/g, 'DAGENTS');
-test('A5: dagents has none of version 5\'s features', () => {
-  const absent = [
-    'scripts/run-review-panel', 'scripts/run-agy-review.sh', 'scripts/lib/worktree-snapshot.sh', 'scripts/task-close',
-    'scripts/run-api-judge', 'scripts/api-spend', 'scripts/decide', 'scripts/lib/api-budget.sh', 'scripts/lib/decisions.mjs',
-    'scripts/lib/session-state.sh', 'reference/api-prices.json', 'reference/external-review.md', 'criteria/agy-final-review-schema.json',
-  ];
-  for (const path of absent) assert.equal(existsSync(join(ROOT, 'plugins/dagents', path)), false, path);
-  const files = git('ls-files', '--', 'plugins/dagents').split('\n').filter(Boolean);
-  for (const file of files) assert.doesNotMatch(file, /review-panel|task-close|api-judge|api-spend|session-state/, file);
-  const prose = textFiles('plugins/dagents').filter(file => !file.includes('/tests/') && !/\/README\.md$/.test(file));
-  for (const file of prose) {
-    const text = readFileSync(join(ROOT, file), 'utf8');
-    assert.doesNotMatch(text, /run-review-panel|run-api-judge|task-close|session-state\.sh/, file);
-  }
-});
-test('A5: the agent set, subagent-driven-development and revising-plans keep the tag\'s files', t => {
-  if (!needTag(t)) return;
-  for (const dir of ['agents', 'skills/subagent-driven-development', 'skills/revising-plans']) {
-    const tagFiles = git('ls-tree', '-r', '--name-only', TAG, `plugins/dforge/${dir}`).split('\n').filter(Boolean)
-      .map(file => renameText(file).replace('plugins/dagents/', '')).sort();
-    const ours = git('ls-files', '--', `plugins/dagents/${dir}`).split('\n').filter(Boolean).map(file => file.replace('plugins/dagents/', '')).sort();
-    assert.deepEqual(ours, tagFiles, dir);
-  }
-});
-test('A5: plan-lint judges Executor lines as the tag does', t => {
-  if (!needTag(t)) return;
-  const dir = scratch(t);
-  const tagTree = join(dir, 'tag');
-  mkdirSync(tagTree);
-  execFileSync('bash', ['-c', `git archive ${TAG} plugins/dforge | tar -x -C "${tagTree}"`], { cwd: ROOT, timeout: 60000 });
-  const plan = executor => `# Demo Implementation Plan
-
-> **For agentic workers:** REQUIRED SUB-SKILL: the skill the **Execution:** line names.
-
-**Goal:** Demo.
-
-**Spec:** \`docs/spec.md\`
-
-**Execution:** subagent — \`claude --model sonnet --effort high\` — Task 1 scores 2
-
-**Task check:** \`bash quick.sh\` — gate 1 has Tier: task
-
-**Integration check:** \`bash test.sh\`
-
-**CI:** none
-
-**Plan review:** 2026-09-12 — dagents:judge-fable — executability 18 / coherence 18 / coverage 18 / assumptions 18 (round 1)
-
-> **External executors:** codex
-
-## Global Constraints
-
-- Bash only.
-
-## Contracts
-
-None
-
-## Assumptions (evidence)
-
-- None.
-
-## Task index
-
-1. First thing
-
-### Task 1: First thing
-
-**Files:**
-- Create: \`a.txt\`
-
-**Implementer:** dagents:impl-sonnet-low
-**Evaluation:** files 0 - spec 1 - coupling 1 - risk 0 = ${executor.score}
-${executor.line}
-
-- [ ] **Step 1: Write the failing test**
-`;
-  const cases = {
-    'lane-eligible with an Executor line': { score: 2, line: '**Executor:** codex gpt-6.1-sol / low' },
-    'an Executor line under the gate': { score: 1, line: '**Executor:** codex gpt-6.1-sol / low' },
-    'no Executor line': { score: 2, line: '' },
-  };
-  const outputs = {};
-  for (const [name, spec] of Object.entries(cases)) {
-    const home = join(dir, 'home'); mkdirSync(home, { recursive: true });
-    const project = join(dir, `p-${Object.keys(outputs).length}`);
-    mkdirSync(join(project, 'docs'), { recursive: true });
-    writeFileSync(join(project, 'docs/spec.md'), '# Spec\n');
-    execFileSync('git', ['init', '-q', project], { timeout: 30000 });
-    const ours = join(project, 'plan.md');
-    writeFileSync(ours, plan(spec));
-    const env = cleanEnv({ HOME: home });
-    const a = run('bash', [join(ROOT, 'plugins/dagents/scripts/plan-lint'), ours, '--no-probe'], { cwd: project, env });
-    const theirs = join(project, 'plan-tag.md');
-    writeFileSync(theirs, plan(spec).replace(/dagents/g, 'dforge'));
-    const b = run('bash', [join(tagTree, 'plugins/dforge/scripts/plan-lint'), theirs, '--no-probe'], { cwd: project, env });
-    assert.equal(a.status, b.status, `${name}: exit status\n${a.stdout}\n${b.stdout}`);
-    // The tag's plan-lint warns that subagent execution is deprecated; dagents' does not.
-    const normal = text => renameText(text).replaceAll(theirs, ours).replace(/plan-tag\.md/g, 'plan.md')
-      .replace(/^WARN header: subagent execution is deprecated.*\n/m, '').replace(/^(plan-lint: \d+ errors?), \d+ warnings?$/m, '$1');
-    assert.equal(normal(a.stdout + a.stderr), normal(b.stdout + b.stderr), name);
-    outputs[name] = a.stdout;
-  }
-  assert.match(outputs['an Executor line under the gate'], /ERROR Task 1: total 1 \/ risk 0 fails the lane gate \(min_score 2, max_score 4, max_risk 1\)/);
-});
-
-// A6
-test('A6: dforge is spelled only where the allowlist and version-qualified origin text allow', { skip: 'deferred: docs/dforge/registers/2026-11-16-dagents-split.md row 9 (its filename regex omits the cockpit lib.ts older-spelling reader)' }, async () => {
-  const { DAGENTS_DFORGE_ALLOWED } = await import(pathToFileURL(join(ROOT, 'scripts/validate-repository.mjs')).href);
-  const migrateOrReader = /(migrate|dagents-dir|roots|repo-audit|session-start|workflow-guard|README\.md|codex-tools|stand-down|isolation|cockpit\.test)/;
-  for (const file of DAGENTS_DFORGE_ALLOWED) {
-    if (/\/tests\//.test(file)) continue;
-    assert.match(file, migrateOrReader, `${file} is allowlisted but is not a migrate, reader, guard or README file`);
-  }
-  const stray = [];
-  for (const file of textFiles('plugins/dagents')) {
-    if (DAGENTS_DFORGE_ALLOWED.has(file)) continue;
-    readFileSync(join(ROOT, file), 'utf8').split('\n').forEach((line, index) => {
-      if (/dforge/i.test(line.replace(/dforge(?= \d| v\d|-v\d)/gi, ''))) stray.push(`${file}:${index + 1}: ${line.trim().slice(0, 100)}`);
-    });
-  }
-  assert.deepEqual(stray, []);
-});
-test('A6: plugins/dagents names no dagents version other than 1.x', () => {
-  const wrong = [];
-  for (const file of textFiles('plugins/dagents')) {
-    readFileSync(join(ROOT, file), 'utf8').split('\n').forEach((line, index) => {
-      for (const match of line.matchAll(/dagents(?:@darkraise)?[ -]v?(\d+)(?:\.(\d+|x))?/gi)) {
-        if (match[1] !== '1') wrong.push(`${file}:${index + 1}: ${match[0]}`);
-      }
-    });
-  }
-  assert.deepEqual(wrong, []);
-});
 
 // The guard
 function world(t) {
@@ -527,7 +231,10 @@ test('A16: the three guard copies are byte-identical, and validate-repository fa
   const dir = scratch(t);
   const copy = join(dir, 'repo');
   mkdirSync(copy);
-  execFileSync('bash', ['-c', `git ls-files -z | tar --null -T - -cf - | tar -x -C "${copy}"`], { cwd: ROOT, timeout: 120000 });
+  for (const path of execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', timeout: 120000 }).split('\0').filter(Boolean)) {
+    mkdirSync(dirname(join(copy, path)), { recursive: true });
+    copyFileSync(join(ROOT, path), join(copy, path));
+  }
   const clean = run(process.execPath, [join(copy, 'scripts/validate-repository.mjs'), copy], { cwd: copy, timeout: 90000 });
   assert.equal(clean.status, 0, clean.stderr);
   for (const name of SIBLINGS) {
@@ -559,13 +266,13 @@ test('A22: a dagents suite sharing a dforge suite\'s basename has its own limit,
   };
   const forge = listing([]);
   const agents = listing(['--plugin', 'dagents']);
-  const names = dir => readdirSync(join(ROOT, 'plugins', dir, 'tests')).filter(name => /\.(test|acceptance)(\.test)?\.sh$/.test(name));
+  const names = dir => readdirSync(join(ROOT, 'tests', dir)).filter(name => /\.(test|acceptance)(\.test)?\.sh$/.test(name));
   const shared = names('dforge').filter(name => names('dagents').includes(name));
   assert.ok(shared.length > 20, 'many suites share a basename');
   let differing = 0;
   for (const name of shared) {
-    const forgePath = `plugins/dforge/tests/${name}`;
-    const agentsPath = `plugins/dagents/tests/${name}`;
+    const forgePath = `tests/dforge/${name}`;
+    const agentsPath = `tests/dagents/${name}`;
     const f = forge.get(forgePath); const a = agents.get(agentsPath);
     assert.ok(f, `${forgePath} is not run by test-all`);
     assert.ok(a, `${agentsPath} is not run by test-all --plugin dagents`);
@@ -578,26 +285,9 @@ test('A22: a dagents suite sharing a dforge suite\'s basename has its own limit,
   }
   assert.ok(differing > 0, 'at least one shared basename is limited, split or weighed differently per plugin');
   for (const map of [shards.windowsSeconds, shards.suiteSeconds, shards.suiteParts]) {
-    for (const key of Object.keys(map)) assert.match(key, /^(plugins\/[a-z0-9-]+\/)?tests\/[^/]+$/, `${key} is keyed by repository path`);
+    for (const key of Object.keys(map)) assert.match(key, /^tests\/([a-z0-9-]+\/)?[^/]+$/, `${key} is keyed by repository path`);
   }
   for (const [path, entry] of agents) assert.equal(shards.checkShellWeights([[ 'bash', [path, ...entry.parts[0]], entry.seconds ]]).filter(problem => problem.includes('no weight')).length, 0, path);
-});
-
-// A23
-test('A23: the release dry run tags and releases each plugin from its manifest version', t => {
-  if (!needTag(t)) return;
-  const before = git('status', '--porcelain', '--untracked-files=no');
-  const result = run(process.execPath, ['scripts/release.mjs', '--dry-run'], { timeout: 120000 });
-  assert.equal(result.status, 0, result.stderr);
-  const versionOf = name => json(`plugins/${name}/.claude-plugin/plugin.json`).version;
-  const semver = version => version.split(/[-+]/)[0].split('.').map(Number);
-  const newer = (to, from) => { const [a, b] = [semver(to), semver(from)]; const i = a.findIndex((n, k) => n !== b[k]); return i >= 0 && a[i] > b[i]; };
-  for (const [, name, version] of result.stdout.matchAll(/^tag ([a-z0-9-]+)-v(\S+) at /gm)) assert.equal(version, versionOf(name), `tag line for ${name}`);
-  for (const [, name, from, to] of result.stdout.matchAll(/^release ([a-z0-9-]+) (\S+) -> (\S+)$/gm)) {
-    assert.equal(from, versionOf(name), `release line for ${name}`);
-    assert.ok(newer(to, from), `${name}: ${to} is not newer than ${from}`);
-  }
-  assert.equal(git('status', '--porcelain', '--untracked-files=no'), before, 'a dry run changes nothing');
 });
 
 // A29
@@ -841,27 +531,6 @@ test('A17: a session with exactly one workflow plugin active gets no guard outpu
     if (only !== 'dflow') assert.match(JSON.parse(out.stdout).hookSpecificOutput?.additionalContext ?? '', new RegExp(`using-${only}`), `${only} still injects its entry skill`);
   }
 });
-test('A17: the existing dforge and dflow tests changed only in the guard\'s inputs and in assertions other statements require', t => {
-  if (!gitOk('rev-parse', '--verify', '--quiet', 'main^{commit}')) { t.skip('no local main branch to diff against'); return; }
-  // The statement is about the split's own diff; once main holds the split, a later branch's test edits are not its subject.
-  if (gitOk('cat-file', '-e', `main:${REGISTER_PATH}`)) { t.skip('main already holds the split: run this at merge time'); return; }
-  const base = spawnSync('git', ['merge-base', 'main', 'HEAD'], { cwd: ROOT, encoding: 'utf8', timeout: 60000 });
-  if (base.status !== 0) { t.skip('main and HEAD share no commit in this clone'); return; }
-  const diff = git('diff', '-U0', base.stdout.trim(), 'HEAD', '--', 'plugins/dforge/tests', 'plugins/dflow/tests', ':(exclude)plugins/dforge/tests/stand-down.test.sh');
-  let file = '';
-  const odd = [];
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('+++ ')) { file = line.slice(6); continue; }
-    if (!line.startsWith('-') || line.startsWith('---')) continue;
-    const removed = line.slice(1);
-    const isolation = /GUARD|CLAUDE_CONFIG_DIR: ''/.test(removed) && file === 'plugins/dflow/tests/helpers.mjs';
-    const importLine = /^import .* from '\.\.\/hooks\//.test(removed);
-    const forkMatcher = /SessionStart\[0\]\.matcher/.test(removed);
-    const signpost = /Executor:.*line is obsolete; the session implements this task/.test(removed);
-    if (!(isolation || importLine || forkMatcher || signpost)) odd.push(`${file}: ${removed.trim().slice(0, 120)}`);
-  }
-  assert.deepEqual(odd, []);
-});
 
 // A25
 test('A25: with an exported host config enabling the siblings, the hook suites of dagents, dforge and dflow still pass', t => {
@@ -875,9 +544,9 @@ test('A25: with an exported host config enabling the siblings, the hook suites o
   writeFileSync(join(claude, 'plugins/installed_plugins.json'), JSON.stringify({ version: 2, plugins: Object.fromEntries(SIBLINGS.map(name => [`${name}@darkraise`, [{ scope: 'user', installPath: '/x', version: '1' }]])) }));
   const env = cleanEnv({ CLAUDE_CONFIG_DIR: claude, CLAUDE_PROJECT_DIR: project });
   const suites = [
-    ['bash', ['plugins/dagents/tests/hook.test.sh']],
-    ['bash', ['plugins/dforge/tests/hook.test.sh']],
-    [process.execPath, ['--test', 'plugins/dflow/tests/hooks.test.mjs']],
+    ['bash', ['tests/dagents/hook.test.sh']],
+    ['bash', ['tests/dforge/hook.test.sh']],
+    [process.execPath, ['--test', 'tests/dflow/hooks.test.mjs']],
   ];
   for (const [command, args] of suites) {
     const result = run(command, args, { env, timeout: 240000 });

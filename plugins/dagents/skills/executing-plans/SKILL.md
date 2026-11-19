@@ -135,19 +135,18 @@ Four things stop you, and only these: an irreversible or destructive operation;
 a security-sensitive action; a side effect outside the execution workspace that norms say
 you ask about first (a merge, a push to a shared branch, a publish); and a
 ruling-seat `BLOCKED` verdict. For those, stop and ask — except in an auto run,
-which asks nothing (see Auto run).
+which asks nothing (see Auto run). Asking does not end the session: make
+`Task <N>: waiting — <question>` the ledger's last line and end on the
+question, with no next-step block.
 
-**Every session ends with the next step.** Whenever this session ends before
-the plan is finished - one of those four stops, a context-budget handoff, or
-your human partner asking you to stop - first
-reconcile live children exactly as dagents:handoff step 0 says: wait
-for them, or `TaskStop` them and record a Ruling. Tell your partner which you
-did. Then run `scripts/next-step PLAN_FILE` (see using-dagents §Session
-Budget) as your last action. The
-last thing in your final message is the block it prints, verbatim. It also
-rewrites the `## Next session` section of
-`<latest.md>`; if it exits 4, say the handoff file could not
-be written. When the plan finishes,
+**Every session ends with the next step.** When this session ends before the
+plan is finished (a context-budget handoff, or your partner asks you to stop),
+first reconcile live children as dagents:handoff step 0 says: wait for them,
+or `TaskStop` them and record a Ruling, and tell your partner which. Then run
+`scripts/next-step PLAN_FILE` (using-dagents §Session Budget) last, and end
+your final message with the block it prints, verbatim. It also rewrites that
+block in the next session's checkout's `<latest.md>`; on exit 4, say it could
+not be written. When the plan finishes,
 dagents:finishing-a-development-branch runs it instead.
 
 ## Setup
@@ -171,6 +170,7 @@ Task <N>: Ruling: (unseated) <item> — <decision> — <cost if wrong>
 Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
 Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
 Task <N>: BLOCKED — ruling seat — <what a human must decide>
+Task <N>: waiting — <question>
 Task <N>: complete (commits a..b, unreviewed | K parked) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
 Ruling: <what> — <why> — <cost if wrong>
 Review depth: <light|standard|full> (<reason>)
@@ -298,10 +298,8 @@ For each task, in order:
    run [delegated-task.md](../../reference/delegated-task.md) §Early CI when
    the header's `**Early CI:**` line names this task.
 8. **Check the budget after the last task.** Run
-   `scripts/context-size --final`; in an auto run it moves the run to the
-   final phase, and a `compact` line still ends the turn on
-   `Auto run: compacting`. After any other task, go to the
-   next task's step 1: its brief prints the same budget line.
+   `scripts/context-size --final` (§Session Budget). After any other task, go
+   to the next task's step 1: its brief prints the same budget line.
 
 **When a verification will not pass.** Fix, re-run, then append
 `Task <N>: fix round R/3 (<what failed>; commits a..b; passing | still failing)`

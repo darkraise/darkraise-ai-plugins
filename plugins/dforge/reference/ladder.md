@@ -4,7 +4,7 @@ The raw axis definitions are shared across hosts; Rule S's threshold is set by
 host below. The unweighted totals, the execution floor table and the external
 judge rungs here apply to Claude. Native Codex uses
 [native-codex.md](native-codex.md) and its weighted `codex-v4` score.
-The fenced blocks below are parsed by `tests/ladder.test.sh`; keep them machine-readable.
+The fenced blocks below are parsed by `tests/dforge/ladder.test.sh` in the repository; keep them machine-readable.
 
 ## Scoring rubric
 

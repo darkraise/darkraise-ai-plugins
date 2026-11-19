@@ -170,10 +170,17 @@ describe('clean-session-phases: the switch clears the session', () => {
   test('A1: with switch pending the cockpit clears, binds the new session and submits the first prompt on the launch model and effort', async ($, on) => {
     const w = fresh(switchState())
     const clock = world(on, w)
+    const sent: { model: string; effort?: unknown }[] = []
+    on('turn.step', async function* (_$, e) {
+      sent.push({ model: e.model, effort: e.effort })
+      return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: null, usage: null } as never
+    })
     await $.session.start(START)
     await finishSwitchTurn($)
     await settle(clock)
-    expect(w.commands).toEqual(['/clear', '/model sonnet', '/effort high'])
+    expect(w.commands).toEqual(['/clear'])
+    for await (const _ of $.turn.step({ turnId: 't2', index: 0, model: 'claude-opus-5-5', effort: 'max', messageCount: 1 })) void _
+    expect(sent).toEqual([{ model: 'sonnet', effort: 'high' }])
     expect(w.autoRuns).toContain('--session sess-1 clear --phase')
     expect(w.autoRuns).toContain('--session sess-2 rebind --to sess-2')
     expect(w.prompts).toEqual([FIRST_PROMPT])

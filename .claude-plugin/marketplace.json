@@ -65,20 +65,6 @@
       ]
     },
     {
-      "name": "dr-status",
-      "source": "./plugins/dr-status",
-      "description": "A Claude Code status line: git detail, model and session state, plus context, prompt-cache and rate-limit meters colored by usage level, framed in the color of the Claude account the session belongs to.",
-      "category": "productivity",
-      "keywords": [
-        "statusline",
-        "status-line",
-        "multi-account",
-        "rate-limits",
-        "context-window",
-        "prompt-cache"
-      ]
-    },
-    {
       "name": "darkraise-ui",
       "source": "./plugins/darkraise-ui",
       "description": "Teaches coding agents to write idiomatic darkraise-ui code: the style, preset and theme-axis system, the CSS layer override contract, kit form and layout primitives over hand-rolled markup, and exact component props read live from the installed package's type definitions.",

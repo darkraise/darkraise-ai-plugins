@@ -300,12 +300,13 @@ neither a bullet nor its indented detail, or a `spec: fail`,
 `quality: changes` or `fix round: open` with no Critical or Important
 finding), and stderr says which; exit 6 means a tracked
 file in the reviewed checkout changed during the review, or HEAD moved, and
-stderr names the files and the checkout. The review saw the committed
-state, so on exit 6 restore it with
-`git -C <dir> checkout -- <files>`.
+stderr names the files and the checkout. On exit 6 put back the state the
+review step recorded: run the `restore:` command stderr prints under each
+file, and nothing broader. A file that was already dirty at review time
+holds uncommitted edits HEAD lacks, so `git checkout --` would discard them.
 Then, either way, log `Task <N>: Ruling: review seat <seat> <wrote no
 report | wrote a malformed report | changed <files>> —
-restored the committed state and re-dispatched once
+restored the recorded state and re-dispatched once
 — none`, delete the report file, and re-dispatch the same seat once with the
 same prompt file.
 A second failure dispatches the route's fallback judge:

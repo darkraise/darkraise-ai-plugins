@@ -88,7 +88,13 @@ All four are in the checkout:
 |---|---|
 | `<docs>` | `<worktree>/docs/dagents` |
 | `<ledger dir>` | `<worktree>/<state>/sdd/<plan-basename>` |
-| `<latest.md>` | `<primary checkout>/<state>/handoff/latest.md` |
+| `<latest.md>` | `<checkout>/<state>/handoff/latest.md` |
+
+Each checkout keeps its own `<latest.md>`. `scripts/next-step` writes the
+handoff of the checkout the next session works in: for a plan in flight, the
+worktree holding its ledger; once the plan is complete, the primary's;
+otherwise the checkout it runs in. Its first prompt opens by naming that
+checkout and its handoff. `scripts/repo-audit` lists every checkout's.
 
 A plan's workspace (`scripts/sdd-workspace`: briefs, reports, review
 packages) is in the checkout too. A plan's ledger is

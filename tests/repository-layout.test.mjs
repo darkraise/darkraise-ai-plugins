@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, resolve, sep } from 'node:path';
@@ -7,9 +7,9 @@ import test from 'node:test';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const json = path => JSON.parse(readFileSync(resolve(root, path), 'utf8'));
-test('Claude offers six maintained plugins', () => {
+test('Claude offers five maintained plugins', () => {
   assert.deepEqual(json('.claude-plugin/marketplace.json').plugins.map(p => p.name).sort(),
-    ['dagents', 'darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status']);
+    ['dagents', 'darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge']);
 });
 test('Codex root discovery offers only supported plugins', () => {
   assert.ok(existsSync(resolve(root, '.agents/plugins/marketplace.json')), 'dedicated Codex catalog is required');
@@ -50,7 +50,7 @@ test('repository validator rejects broken distribution contracts', async t => {
     ['retired forge_ code name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'forge_dir .\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
     ['retired FORGE variable', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'echo "$FORGE_HOME"\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
     ['retired _forge code name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dforge/scripts/stray.sh'), 'my_forge_dir=.\n'); }, /plugins\/dforge\/scripts\/stray\.sh:1: retired dr-forge name/],
-    ['retired dcc- plugin name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/dr-status/stray.md'), 'install dcc-darkraise-ui\n'); }, /plugins\/dr-status\/stray\.md:1: retired dcc- plugin name/],
+    ['retired dcc- plugin name', (c, dir) => { writeFileSync(resolve(dir, 'plugins/darkraise-ui/stray.md'), 'install dcc-darkraise-ui\n'); }, /plugins\/darkraise-ui\/stray\.md:1: retired dcc- plugin name/],
   ]) {
     await t.test(name, () => {
       const dir = mkdtempSync(resolve(tmpdir(), 'dr-catalog-'));
@@ -68,14 +68,31 @@ test('repository validator rejects broken distribution contracts', async t => {
   }
 });
 
-test('dforge ships /dforge:cockpit as a command file that names the unloaded mod', () => {
-  const text = readFileSync(resolve(root, 'plugins/dforge/commands/cockpit.md'), 'utf8');
-  const head = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text);
-  assert.ok(head, 'frontmatter is required');
-  assert.match(head[1], /^description: \S/m);
-  assert.match(head[1], /^argument-hint: \[settings \| notify test \| notify mention <id>\]$/m);
-  assert.match(head[1], /^disable-model-invocation: true$/m);
-  assert.match(head[2], /did not load/);
+for (const plugin of ['dforge', 'dagents']) {
+  test(`${plugin} ships /${plugin}:cockpit as a command file that names the unloaded mod`, () => {
+    const text = readFileSync(resolve(root, `plugins/${plugin}/commands/cockpit.md`), 'utf8');
+    const head = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text);
+    assert.ok(head, 'frontmatter is required');
+    assert.match(head[1], /^description: \S/m);
+    assert.match(head[1], /^argument-hint: \[settings \| notify test \| notify mention <id>\]$/m);
+    assert.match(head[1], /^disable-model-invocation: true$/m);
+    assert.match(head[2], new RegExp(`The ${plugin} cockpit mod answers this command itself`));
+    assert.match(head[2], /did not load/);
+  });
+}
+
+// A mod cannot register a name with a colon, so a command it registered would
+// be unnamespaced: every command ships as a file and the mod answers it.
+test('no plugin mod registers a command of its own', () => {
+  const offenders = readdirSync(resolve(root, 'plugins')).flatMap(plugin => {
+    const hooks = resolve(root, 'plugins', plugin, 'hooks');
+    if (!existsSync(hooks)) return [];
+    return readdirSync(hooks, { recursive: true })
+      .filter(file => /\.(?:ts|tsx|mjs)$/.test(file) && !/\.test\./.test(file))
+      .filter(file => readFileSync(join(hooks, file), 'utf8').includes('command.register('))
+      .map(file => `plugins/${plugin}/hooks/${file}`);
+  });
+  assert.deepEqual(offenders, []);
 });
 
 test('bundled-link check ignores links inside fenced code blocks', async () => {
@@ -100,7 +117,7 @@ test('the retired superpowers name is allowed only in the allowlisted files', as
     for (const path of ['.claude-plugin', '.agents/plugins', ...json('.claude-plugin/marketplace.json').plugins.map(p => p.source)]) {
       cpSync(resolve(root, path), resolve(dir, path), { recursive: true });
     }
-    for (const path of ['plugins/dforge/tests/stray.test.sh', 'plugins/dforge/LICENSES/stray-LICENSE', 'plugins/dforge/scripts/lib/dforge-home-migrate.mjs', 'plugins/dr-status/stray.md']) {
+    for (const path of ['plugins/dforge/tests/stray.test.sh', 'plugins/dforge/LICENSES/stray-LICENSE', 'plugins/dforge/scripts/lib/dforge-home-migrate.mjs', 'plugins/darkraise-ui/stray.md']) {
       writeFileSync(resolve(dir, path), 'superpowers\n');
     }
     const retired = () => validateRepository(dir).filter(error => error.includes('retired superpowers name'));
@@ -154,7 +171,7 @@ test('the name sweeps skip binary files', async () => {
     }
     const bytes = Buffer.from('superpowers dr-forge\u0000 dcc-darkraise-ui\n', 'utf8');
     writeFileSync(resolve(dir, 'plugins/dforge/reference/image.bin'), bytes);
-    writeFileSync(resolve(dir, 'plugins/dr-status/image.bin'), bytes);
+    writeFileSync(resolve(dir, 'plugins/darkraise-ui/image.bin'), bytes);
     assert.deepEqual(validateRepository(dir), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -223,7 +240,7 @@ test('a namespaced plugin resolves references within its own tree', async t => {
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
   writeFileSync(resolve(dir, 'plugins/dagents/reference/stray.md'), 'see dagents:no-such-skill and dagents:brainstorming\n');
-  const names = ['darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dr-status', 'dagents'];
+  const names = ['darkraise-ui', 'darkraise-win32ui', 'dflow', 'dforge', 'dagents'];
   const errors = validateRepository(dir, { names });
   assert.ok(errors.includes('plugins/dagents/reference/stray.md:1: unresolved dagents reference no-such-skill'), errors.join('\n'));
   assert.ok(!errors.some(e => e.includes('dagents reference brainstorming')), errors.join('\n'));
