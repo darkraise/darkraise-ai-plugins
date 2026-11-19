@@ -69,6 +69,14 @@ export function ensureStateDir(paths) {
     if (!stat) fs.mkdirSync(paths.stateDir);
     const inside = path.relative(fs.realpathSync(paths.root), fs.realpathSync(paths.stateDir));
     if (!inside || inside.startsWith('..') || path.isAbsolute(inside)) return;
+    // On Windows an exclusive create follows a dangling link and makes its
+    // target, so any entry at the path, a link included, is left alone.
+    try {
+      fs.lstatSync(ignore);
+      return;
+    } catch (error) {
+      if (error.code !== 'ENOENT') return;
+    }
     fs.writeFileSync(ignore, '*\n', { flag: 'wx' });
   } catch {
     // EEXIST means a file or link is there already. Otherwise a read-only
