@@ -16,8 +16,8 @@ check() { # check <name> <got> <want>
 check "exists: skills/running-gates/SKILL.md" \
   "$([ -f "$SKILL" ] && echo yes || echo no)" "yes"
 
-TPL="$P/skills/running-gates/references/gates-template.md"
-check "exists: references/gates-template.md" \
+TPL="${1:-$P/skills/running-gates/references/gates-template.md}"
+check "exists: ${1:-references/gates-template.md}" \
   "$([ -f "$TPL" ] && echo yes || echo no)" "yes"
 
 # The template is the worked example the format documents, so it must satisfy
