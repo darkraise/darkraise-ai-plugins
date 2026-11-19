@@ -6,6 +6,7 @@
 # stop (common on Sonnet) leave the human with neither. When the last message carries neither,
 # block the stop once with the instruction; Claude Code sets stop_hook_active on
 # the retry, which passes unless it ends the session over running work (below).
+# A question to the human is no ending: the ledger's last line records it.
 # Anything missing (jq, a ledger written this turn, or the turn stamp from scripts/turn-start.sh unless an auto run is
 # bound to the session) passes silently, and so
 # does a plain stop while an agent or command this session started in the
@@ -187,10 +188,12 @@ fi
 # active in one checkout. A plan whose final review is clean ends on the
 # finishing menu, one of finishing's own stops (failing tests, a discard or
 # worktree prompt) or the next-step block, which names finishing; any other
-# plan ends on the next-step block, or on the finish-preference question asked
-# before its first task. The next-step block counts only as next-step wrote it
-# this turn (lib/next-ending.sh), never hand-typed. The first ledger without its
-# ending names the reason.
+# plan ends on the next-step block, on the finish-preference question asked
+# before its first task, or on a question to the human that the ledger's last
+# line records (`Task <N>: waiting — <question>`): the answer is the next
+# prompt, so the session is not over. The next-step block counts only as
+# next-step wrote it this turn (lib/next-ending.sh), never hand-typed. The
+# first ledger without its ending names the reason.
 ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
 wrote_block() { [ -n "$latest" ] || latest=$(dagents_latest_file "$root"); ending_released_any "$last" "$stamp" "$latest" "$root"; }
 ledger="" clean=0
@@ -212,6 +215,7 @@ while IFS= read -r candidate; do
   else
     ends_with 'Ask me then: show the finish menu' && continue
     wrote_block && continue
+    tr -d '\r' < "$candidate" | sed '/^[[:space:]]*$/d' | tail -n 1 | grep -q '^Task [0-9][0-9]*: waiting — ' && continue
     ledger=$candidate clean=0
   fi
   break
@@ -246,7 +250,7 @@ if [ "$clean" = 1 ]; then
   reason="Plan ${plan} passed its final review. Invoke dagents:finishing-a-development-branch with the Skill tool now and end on its menu or next-step block."
   shown="dagents held the stop: plan ${plan} passed its final review, and the message ends without the finishing menu"
 else
-  reason="Plan ${plan} advanced, but this message has no next step. Continue the work, or run \`bash \"${root_shown}/scripts/next-step\" ${plan}\` and end with the block it prints, verbatim; if background work is running, end the turn without the block."
+  reason="Plan ${plan} advanced without a next step. Continue the work, or ask: end the ledger with \`Task <N>: waiting — <question>\` and stop on the question. Else run \`bash \"${root_shown}/scripts/next-step\" ${plan}\` and end with its block verbatim. If background work runs, end the turn without the block."
   shown="dagents held the stop: plan ${plan} advanced, and the message ends without the next step"
 fi
 hold "$reason" "$shown"

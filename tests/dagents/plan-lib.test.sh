@@ -41,7 +41,7 @@ check "ledger_done: nothing complete" "$(ledger_done "$TMP/open.md")" ""
 
 # --- ledger_blocked: the Recovery rule, not a flat grep ---
 # Both execution skills read the LAST "Task N:" line in file order, stepping
-# over minor (deferred), parked and Ruling lines. A BLOCKED a later line
+# over minor (deferred), parked, Ruling and waiting lines. A BLOCKED a later line
 # superseded is not blocked any more, or a resolved task stays blocked forever.
 printf '# SDD ledger — plan: x\nTask 2: BLOCKED — ruling seat — what to do\n' > "$TMP/bl-plain.md"
 check "ledger_blocked: a terminal BLOCKED" "$(ledger_blocked "$TMP/bl-plain.md" | tr '\n' ' ')" "2 "
@@ -49,7 +49,7 @@ printf '# SDD ledger — plan: x\nTask 6: BLOCKED — ruling seat — quota\nTas
 check "ledger_blocked: a BLOCKED a later complete superseded" "$(ledger_blocked "$TMP/bl-resolved.md")" ""
 printf '# SDD ledger — plan: x\nTask 4: BLOCKED — ruling seat — what\nTask 4: implementer inline (assigned; base abc1234)\n' > "$TMP/bl-restarted.md"
 check "ledger_blocked: a BLOCKED a later assignment superseded" "$(ledger_blocked "$TMP/bl-restarted.md")" ""
-printf '# SDD ledger — plan: x\nTask 3: BLOCKED — ruling seat — what\nTask 3: minor (deferred): a wart\nTask 3: parked — f — Ruling: why\nTask 3: Ruling: a call — why — cost\nRuling: a bare ruling — why — cost\n' > "$TMP/bl-skipped.md"
+printf '# SDD ledger — plan: x\nTask 3: BLOCKED — ruling seat — what\nTask 3: minor (deferred): a wart\nTask 3: parked — f — Ruling: why\nTask 3: Ruling: a call — why — cost\nRuling: a bare ruling — why — cost\nTask 3: waiting — which way?\n' > "$TMP/bl-skipped.md"
 check "ledger_blocked: non-terminal lines do not clear it" "$(ledger_blocked "$TMP/bl-skipped.md" | tr '\n' ' ')" "3 "
 printf '# SDD ledger — plan: x\nTask 10: BLOCKED — a\nTask 2: BLOCKED — b\nTask 10: BLOCKED — c\n' > "$TMP/bl-many.md"
 check "ledger_blocked: unique and numerically sorted" "$(ledger_blocked "$TMP/bl-many.md" | tr '\n' ' ')" "2 10 "

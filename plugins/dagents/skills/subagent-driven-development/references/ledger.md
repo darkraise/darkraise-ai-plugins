@@ -21,6 +21,7 @@ Task <N>: parked — <finding> — Ruling: <why the code stands>
 Task <N>: Ruling: <finding> — <what was decided and why>
 Task <N>: BLOCKED — <agent> exhausted — <what a human must decide>
 Task <N>: BLOCKED — ruling seat — <what a human must decide>
+Task <N>: waiting — <question>
 Task <N>: Ruling: amendment A<k> — <reason> — <cost if wrong>
 Ruling: amendment A<k> (Header) — <reason> — <cost if wrong>
 Task <N>: complete (commits a..b[; merged <sha7>], review clean | K parked[, C carried to Task M | C carried to final review][; parts A, B][; scores spec s / scope c / verification v / quality q, seat <seat>]) — done: …; verified: <command → result>; remaining: none | <parked>; discovered: none | …; assumptions: none | …
@@ -91,9 +92,10 @@ Plan: executor <id> off - unreliable (<k> handbacks)
 **Recovery.** For task N, take the last line in file order among its
 `Task <N>:` lines and any `Group` line covering N
 (a range covers the tasks inside it; a comma list covers the tasks it names),
-stepping over `minor (deferred)`, `parked`, `Task <N>: Ruling:`, and bare
-`Ruling:` lines. A group review's `Group` line is the one whose clause starts
-`Task <N>:`. Then:
+stepping over `minor (deferred)`, `parked`, `waiting`, `Task <N>: Ruling:`,
+and bare `Ruling:` lines. A group review's `Group` line is the one whose
+clause starts `Task <N>:`. A `waiting` line that ends the ledger is a question
+never answered: ask it again before you resume the task. Then:
 
 | Last line | Action |
 |---|---|

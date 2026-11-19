@@ -1,8 +1,10 @@
 # Recovery and plan state
 
 **Recovery.** For task N, take the last line in file order among its
-`Task <N>:` lines, stepping over `minor (deferred)`, `parked`,
-`Task <N>: Ruling:` and bare `Ruling:` lines. Then:
+`Task <N>:` lines, stepping over `minor (deferred)`, `parked`, `waiting`,
+`Task <N>: Ruling:` and bare `Ruling:` lines. A `waiting` line that ends the
+ledger is a question never answered: ask it again before you resume the task.
+Then:
 
 | Last line | Action |
 |---|---|
