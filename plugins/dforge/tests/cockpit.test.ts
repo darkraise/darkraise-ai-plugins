@@ -5942,6 +5942,22 @@ describe('resume offer', () => {
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
   })
 
+  test('a claim taken while the pane is closed withdraws the band offer on a slow tick', async ($, on) => {
+    const files: NonNullable<World['files']> = { [`${HANDOFFS}/b.md`]: { text: keyedNote('B-NEXT', 'Resume b.'), mtimeMs: 980_000 } }
+    const w = { ...SIGNED_IN, files, prompts: [] as string[], nextStepHandoffs: [] as string[], liveSessions: [] as string[], isPaneShut: true }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await settle(clock)
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ type: 'Text', text: /Next: B-NEXT$/ })).toBeDefined()
+    files[`${HANDOFFS}/claims/b`] = claimOf('sess-other')
+    w.liveSessions.push('sess-other')
+    for (let i = 0; i < 6; i++) await clock.advance(2_000)
+    await settle(clock)
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+  })
+
   test('own claim raises no offer', async ($, on) => {
     const files: NonNullable<World['files']> = {
       [`${HANDOFFS}/b.md`]: { text: keyedNote('B-NEXT', 'Resume b.'), mtimeMs: 980_000 },

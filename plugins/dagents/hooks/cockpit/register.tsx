@@ -4251,7 +4251,12 @@ async function pollTick($: EngineInterface) {
       S.sessionUnread = []
       for (const part of parts) await part().catch(() => S.sessionUnread.push(part))
     }
-    if (!(await live($)).isMinimized && !(await isPaneUp($))) return
+    if (!(await live($)).isMinimized && !(await isPaneUp($))) {
+      // The resume band draws without the pane, so its offer is read again on
+      // the slow ticks: a claim taken or released elsewhere reaches it.
+      if (isSlowTick) await readRun($)
+      return
+    }
     await rereadSettings($)
     await readRun($)
     if (!isSlowTick) return

@@ -4653,7 +4653,12 @@ async function pollTick($: EngineInterface) {
     // saved elsewhere, which the hooks act on.
     if (!isSlowTick && !(isShown && S.isTurnLive)) return
     await rereadSettings($)
-    if (!isShown) return
+    if (!isShown) {
+      // The resume band draws without the pane, so its offer is read again on
+      // the slow ticks: a claim taken or released elsewhere reaches it.
+      if (isSlowTick) await readRun($)
+      return
+    }
     await readRun($)
     if (isSlowTick) {
       await refreshDetail($)
