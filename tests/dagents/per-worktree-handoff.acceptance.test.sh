@@ -479,13 +479,15 @@ has "A10: another checkout's entry carries its Status line" "$e2" "**Status:** U
 has "A10: another checkout's entry carries its Next line" "$e2" "**Next:** other-work."
 check "A10: another checkout's entry shows its age (2 days)" "$(grep -cE ', 2d old, unclaimed$' <<<"$e2")" 1
 check "A10: another checkout's entry is not recomputed" "$(grep -c '^- recomputed' <<<"$e2")" 0
-start_ctx() { # start_ctx <source> <cwd>
-  jq -n --arg cwd "$2" --arg src "$1" '{hook_event_name:"SessionStart",session_id:"s-10",transcript_path:"",cwd:$cwd,source:$src}' \
+start_ctx() { # start_ctx <source> <cwd> [session]
+  jq -n --arg cwd "$2" --arg src "$1" --arg sid "${3:-s-10}" '{hook_event_name:"SessionStart",session_id:$sid,transcript_path:"",cwd:$cwd,source:$src}' \
     | bash "$SCRIPTS/session-start.sh" | jq -r '.hookSpecificOutput.additionalContext // .additional_context // empty'
 }
 CTX=$(start_ctx startup "$W1")
-has "A10: the startup context counts the other checkouts' recent handoffs" "$CTX" "2 other checkouts hold a handoff (scripts/repo-audit lists them)."
-SNAP=$(start_ctx compact "$W1")
+# Spec 2026-11-20 A10: every unclaimed handoff younger than three days (W1, W2, the primary; not W3).
+has "A10: the startup context counts the open handoffs" "$CTX" "3 open handoffs (scripts/repo-audit lists them)."
+# The snapshot shows the compacted session's own handoff: W1's, which its writer's marker names.
+SNAP=$(start_ctx compact "$W1" a1000001-0000-0000-0000-000000000000)
 has "A10: the compaction snapshot shows the session checkout's handoff" "$SNAP" "own-work"
 lacks "A10: the compaction snapshot omits another worktree's handoff" "$SNAP" "other-work"
 lacks "A10: the compaction snapshot omits the primary's handoff" "$SNAP" "primary-work"

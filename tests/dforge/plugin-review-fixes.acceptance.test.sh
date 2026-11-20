@@ -236,12 +236,13 @@ out=$(snap_payload "$TR11" | bash "$S/session-start.sh" 2>/dev/null)
 ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out")
 has "A11: the snapshot is built" "$ctx" "## Compaction snapshot"
 lacks "A11: a latest.md naming another plan that predates the session is omitted" "$ctx" "OTHERPLAN-MARK"
-printf '# Handoff\n\n## Next session\n\n**Next:** Resume docs/plan.md at Task 2 (OWNPLAN-MARK).\n' > "$R11/.dforge/handoff/latest.md"
+# Spec 2026-11-20 §5: the snapshot shows the handoff this session claimed or wrote.
+printf '# Handoff\n\n## Next session\n\n**Next:** Resume docs/plan.md at Task 2 (OWNPLAN-MARK).\n<!-- next-step: kind=plan session=s-snap done=1 closed=0 subject=docs/plan.md at=1 -->\n' > "$R11/.dforge/handoff/latest.md"
 touch -d '3 hours ago' "$R11/.dforge/handoff/latest.md"
 printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commits a..b, review clean)\n' > "$R11/.dforge/sdd/plan/progress.md"
 out=$(snap_payload "$TR11" | bash "$S/session-start.sh" 2>/dev/null)
 ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out")
-has "A11: a latest.md naming a plan whose ledger this session wrote is kept" "$ctx" "OWNPLAN-MARK"
+has "A11: a handoff whose marker names this session is kept, however old" "$ctx" "OWNPLAN-MARK"
 # Over the cap: the ledger's newest lines survive.
 pad=$(printf 'x%.0s' $(seq 1 600))
 {
