@@ -62,6 +62,8 @@ trans_repo() { # trans_repo <name>: a checkout with a completed.md and a two-mil
   { printf '# Roadmap\n\n| M | Name | Exit | Register | State | Note |\n|---|---|---|---|---|---|\n'
     printf '| M1 | One | it works | `docs/%s/registers/M1.md` | open | - |\n| M2 | Two | it works | `docs/%s/registers/M2.md` | open | - |\n' "$PL" "$PL"; } > "$CWD/docs/$PL/roadmap.md"
   commit_all "$CWD" 'docs: roadmap'
+  # A turn's stamp is set 6 seconds back; the setup must not read as written during it.
+  back "$CWD/docs/$PL/plans/completed.md" 60; back "$CWD/docs/$PL/roadmap.md" 60
 }
 record_plan() { # record_plan <slug>: a plan recorded complete this turn
   printf -- '- 2026-11-16 `docs/%s/plans/%s.md` — merged into `main`\n' "$PL" "$1" >> "$CWD/docs/$PL/plans/completed.md"
@@ -184,14 +186,9 @@ road_hold=$(stop "$SID" 'M1 closed.')
 check "${PFX}A2: a roadmap transition is held without a question" "$(decision "$road_hold")" "block"
 ask_cli 'Which milestone next?' >/dev/null 2>&1
 check "${PFX}A2: a roadmap transition: passes after scripts/ask" "$(stop "$SID" 'Which milestone next?')" ""
+turn "$SID"
 sed 's/| M2 | Two | \(.*\) | open |/| M2 | Two | \1 | closed |/' "$CWD/docs/$PL/roadmap.md" > "$TMP/roadmap.tmp" && mv "$TMP/roadmap.tmp" "$CWD/docs/$PL/roadmap.md"
 commit_all "$CWD" 'docs: close M2'
-turn "$SID"
-sed 's/| M2 | Two | \(.*\) | closed |/| M2 | Two | \1 | open |/' "$CWD/docs/$PL/roadmap.md" > "$TMP/roadmap.tmp" && mv "$TMP/roadmap.tmp" "$CWD/docs/$PL/roadmap.md"
-sed 's/| M1 | One | \(.*\) | closed |/| M1 | One | \1 | open |/' "$CWD/docs/$PL/roadmap.md" > "$TMP/roadmap.tmp" && mv "$TMP/roadmap.tmp" "$CWD/docs/$PL/roadmap.md"
-commit_all "$CWD" 'docs: reopen M1'
-sed 's/| M2 | Two | \(.*\) | open |/| M2 | Two | \1 | closed |/' "$CWD/docs/$PL/roadmap.md" > "$TMP/roadmap.tmp" && mv "$TMP/roadmap.tmp" "$CWD/docs/$PL/roadmap.md"
-commit_all "$CWD" 'docs: close M2 again'
 back "$CWD/docs/$PL/roadmap.md" 3
 check "${PFX}A4: a roadmap transition: a question from an earlier turn releases nothing" "$(decision "$(stop "$SID" 'M2 closed.')")" "block"
 
