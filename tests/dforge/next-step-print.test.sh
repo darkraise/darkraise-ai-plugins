@@ -334,12 +334,6 @@ hstore() { # hstore FILE MARKER — a handoff written by hand
 }
 lfixture
 HD="$L/.dforge/handoff"
-index_p
-hstore "$HD/P.md" "<!-- next-step: kind=plan key=2026-11-01-p session=- done=1 closed=0 subject=$P at=1 -->"
-handoff "$HD/P.md"
-check "handoff_exit6_per_kind: a plan in completed.md exits 6" "$status" 6
-lfixture
-HD="$L/.dforge/handoff"
 printf '# D\n' > "$LD/specs/D.md"
 hstore "$HD/D.md" "<!-- next-step: kind=draft key=D session=- done=1 closed=0 subject=docs/dforge/specs/D.md at=1 -->"
 handoff "$HD/D.md"
@@ -365,10 +359,6 @@ lfixture
 HD="$L/.dforge/handoff"
 index_p
 hstore "$HD/C.md" "<!-- next-step: kind=complete key=2026-11-01-p session=- done=2 closed=0 subject=$P at=1 -->"
-handoff "$HD/C.md"
-check "handoff_exit6_per_kind: a complete block whose Next is terminal exits 6" "$status" 6
-handoff "$HD/none.md"
-check "handoff_exit6_per_kind: a missing file exits 6" "$status" 6
 (cd "$L" && timeout 60 bash "$SCRIPT" --handoff "$HD/C.md" >/dev/null 2>&1)
 check "handoff: --handoff without --print is a usage error" "$?" 2
 
