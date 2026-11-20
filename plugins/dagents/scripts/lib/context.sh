@@ -51,24 +51,19 @@ ctx_candidates() {
 }
 
 # Sets CTX_TRANSCRIPT and CTX_SOURCE (record | record? | guessed); returns 1
-# when no transcript is found. The running session's own record, keyed by
-# CLAUDE_CODE_SESSION_ID, goes first: two sessions in one checkout share the cwd
-# record, and the last one started would otherwise measure for both. Then the
-# cwd records go first across every candidate, so a worktree's own old
+# when no transcript is found. With CLAUDE_CODE_SESSION_ID the session's own
+# transcript is the only answer: two sessions in one checkout share the cwd
+# record, and entering a worktree moves the transcript away from the path its
+# record holds, so any other record would measure another session. Without it
+# the cwd records go first across every candidate, so a worktree's own old
 # transcript never outranks the running session's record.
 ctx_find_transcript() {
   CTX_TRANSCRIPT="" CTX_SOURCE=""
   local cands c key rec tp sid newest own="${CLAUDE_CODE_SESSION_ID:-}"
   if [ -n "$own" ]; then
-    rec="$HOME/.claude/dagents/sessions/by-id/$(printf '%s' "$own" | tr -c 'A-Za-z0-9' '-').json"
-    if [ -f "$rec" ]; then
-      tp=$(ctx_jq -r '.transcript_path // empty' <"$rec" 2>/dev/null | tr -d '\r')
-      [ -z "$tp" ] || tp=$(ctx_posix "$tp")
-      if [ -n "$tp" ] && [ -f "$tp" ]; then
-        CTX_TRANSCRIPT=$tp CTX_SOURCE=record
-        return 0
-      fi
-    fi
+    CTX_TRANSCRIPT=$(ar_transcript "$own") || { CTX_TRANSCRIPT=""; return 1; }
+    CTX_SOURCE=record
+    return 0
   fi
   cands=$(ctx_candidates)
   while IFS= read -r c; do
@@ -86,10 +81,6 @@ ctx_find_transcript() {
     sid=$(ctx_jq -r '.session_id // empty' <"$rec" 2>/dev/null | tr -d '\r')
     newest=$(ls -t "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$key"/*.jsonl 2>/dev/null | head -n 1)
     if [ -n "$newest" ] && [ -n "$sid" ] && [ "$(basename "$newest" .jsonl)" != "$sid" ]; then
-      CTX_SOURCE='record?'
-    fi
-    # The cwd record belongs to another session in this checkout.
-    if [ -n "$own" ] && [ -n "$sid" ] && [ "$sid" != "$own" ]; then
       CTX_SOURCE='record?'
     fi
     return 0
