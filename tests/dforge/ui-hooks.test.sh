@@ -181,9 +181,11 @@ check "a UI change with no proof: held" "$(decision "$(stop u-9 'Task 2 is done.
 # Only the block next-step wrote this turn is a handoff: one typed by hand is not.
 check "a hand-typed Next session block does not stand down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** x')")" "block"
 sleep 1
-mkdir -p .dforge/handoff
-printf '# Handoff\n\n## Next session\n\n**Next:** x\n' > .dforge/handoff/latest.md
-check "a Next session block stands down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** x')")" "none"
+# The turn record next-step writes for the session (C13), no handoff file.
+mkdir -p "$HOME/.claude/dforge/sessions/turns"
+printf 'status=Plan p: 1 of 2 tasks complete.\nnext=Resume at Task 2 (Two).\n' > "$HOME/.claude/dforge/sessions/turns/u-9.next"
+check "ui_turn_released_on_record: a hand-typed block with another Next is still held" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** x')")" "block"
+check "ui_turn_released_on_record: the block whose Next the record holds stands down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** Resume at Task 2 (Two).')")" "none"
 rm -f .dforge/handoff/latest.md
 mkdir -p .dforge/sdd/ui-plan
 printf '# SDD ledger — plan: docs/ui-plan.md\nTask 2: waiting — which colour?\n' > .dforge/sdd/ui-plan/progress.md

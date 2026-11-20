@@ -707,49 +707,22 @@ sleep 1
 printf '# SDD ledger — plan: docs/dagents/plans/2026-10-11-other.md\nTask 1: complete (commits a..b, review clean)\n' > "$OW/.dagents/sdd/2026-10-11-other/progress.md"
 check "A19: another worktree's ledger written during the turn never holds it" "$(stop_at s-a19 "$DM" 'Task 1 is done.')" ""
 
-# A29: latest.md cannot be written, so the heading alone releases a held turn.
-UNSH=0
-if command -v unshare >/dev/null 2>&1 && unshare -m true >/dev/null 2>&1; then UNSH=1; fi
-if [ "$UNSH" = 1 ]; then
-  W29="$TMP/w29"
-  git init -q -b main "$W29"
-  mkdir -p "$W29/.dagents/handoff" "$W29/.dagents/sdd/2026-10-08-example" "$W29/docs/dagents/plans"
-  printf '.dagents/\n' > "$W29/.gitignore"
-  printf '# Completed plans\n' > "$W29/docs/dagents/plans/completed.md"
-  tcommit "$W29" init
-  printf '# Handoff\n\n## Next session\n\n**Status:** old\n**Next:** old\n' > "$W29/.dagents/handoff/latest.md"
-  touch -t 200101010000 "$W29/.dagents/handoff/latest.md"
-  sleep 1; prompt s-a29 "$W29"
-  sleep 1
-  printf '# SDD ledger — plan: docs/dagents/plans/2026-10-08-example.md\nTask 1: complete (commits a..b, review clean)\n' > "$W29/.dagents/sdd/2026-10-08-example/progress.md"
-  check "A29: control — a writable latest.md does not accept the heading" "$(decision "$(stop_at s-a29 "$W29" "$BLOCK")")" block
-  # Read-only bind mount of the handoff directory, in a private mount namespace.
-  cat > "$TMP/stop-json.sh" <<'STOPJSON'
-#!/usr/bin/env bash
-# stop-json.sh END SESSION CWD MESSAGE
-jq -n --arg sid "$2" --arg cwd "$3" --arg msg "$4" \
-  '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:"",stop_hook_active:false,last_assistant_message:$msg}' | bash "$1"
-STOPJSON
-  ro_stop() { # ro_stop <session> <cwd> <message>
-    unshare -m bash -c '
-      mount --bind "$1/.dagents/handoff" "$1/.dagents/handoff" && mount -o remount,ro,bind "$1/.dagents/handoff" || exit 99
-      shift
-      exec bash "$@"
-    ' _ "$W29" "$TMP/stop-json.sh" "$END" "$1" "$2" "$3"
-  }
-  out=$(ro_stop s-a29 "$W29" "$BLOCK"); rc=$?
-  check "A29: an unwritable latest.md: the heading releases the held turn" "$out" ""
-  # Absent latest.md in an unwritable directory.
-  rm -f "$W29/.dagents/handoff/latest.md"
-  sleep 1; prompt s-a29b "$W29"
-  sleep 1
-  printf 'Task 2: complete (commits a..b, review clean)\n' >> "$W29/.dagents/sdd/2026-10-08-example/progress.md"
-  check "A29: control — an absent latest.md in a writable directory holds" "$(decision "$(stop_at s-a29b "$W29" "$BLOCK")")" block
-  out=$(ro_stop s-a29b "$W29" "$BLOCK")
-  check "A29: an absent latest.md in an unwritable directory: the heading releases" "$out" ""
-else
-  echo "skip - A29: no private mount namespace (unshare -m) on this host"
-fi
+# A29: next-step that cannot write the handoff prints the block (exit 4) and
+# still writes the session's turn record (C13), which releases the held turn;
+# the heading alone never does.
+W29="$TMP/w29"
+git init -q -b main "$W29"
+mkdir -p "$W29/.dagents/sdd/2026-10-08-example" "$W29/docs/dagents/plans"
+printf '.dagents/\n' > "$W29/.gitignore"
+printf '# Completed plans\n' > "$W29/docs/dagents/plans/completed.md"
+tcommit "$W29" init
+sleep 1; prompt s-a29 "$W29"
+sleep 1
+printf '# SDD ledger — plan: docs/dagents/plans/2026-10-08-example.md\nTask 1: complete (commits a..b, review clean)\n' > "$W29/.dagents/sdd/2026-10-08-example/progress.md"
+check "A29: control — the heading alone does not release the held turn" "$(decision "$(stop_at s-a29 "$W29" "$BLOCK")")" block
+sleep 1
+printf 'status=x\nnext=x\n' > "$HOME/.claude/dagents/sessions/turns/s-a29.next"
+check "A29: the turn record of a block next-step could not write releases the held turn" "$(stop_at s-a29 "$W29" "$BLOCK")" ""
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

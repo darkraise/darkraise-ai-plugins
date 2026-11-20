@@ -501,7 +501,8 @@ check "A18: a later Process: line naming another path turns the hooks back on" "
 sleep 1; u_prompt u-22
 printf '// change 3\n' >> "$R17/src/App.tsx"; git -C "$R17" commit -qam 'ui change 3'
 check "A22: a UI change with no proof is held" "$(decision "$(u_stop u-22 'Task 2 is done.')")" "block"
-sleep 1; mkdir -p "$R17/.dforge/handoff"; printf '# Handoff\n\n## Next session\n\n**Next:** x\n' > "$R17/.dforge/handoff/latest.md"
+# The turn record next-step writes for the session's printed block (C13).
+sleep 1; printf 'status=x\nnext=x\n' > "$TURNS/u-22.next"
 check "A22: a stop carrying ## Next session passes" "$(decision "$(u_stop u-22 $'Done.\n\n## Next session\n\n**Next:** x')")" "none"
 mkdir -p "$R17/.dforge/sdd/ui-plan"
 printf '# SDD ledger — plan: docs/ui-plan.md\nTask 2: waiting — which colour?\n' > "$R17/.dforge/sdd/ui-plan/progress.md"

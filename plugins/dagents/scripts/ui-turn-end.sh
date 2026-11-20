@@ -70,7 +70,7 @@ fi
 fast_mode_on "$transcript_path" "$message" && exit 0
 . "$SCRIPT_DIR/lib/next-ending.sh"
 if [ -f "$stamp" ]; then
-  ending_released_any "$message" "$stamp" "$(dagents_latest_file "$root")" "$root" && exit 0
+  ending_released_any "$message" "$stamp" "$session_id" "$root" && exit 0
 else
   grep -qF '## Next session' <<<"$message" && exit 0
 fi

@@ -1,50 +1,36 @@
 # shellcheck shell=bash
-# ending_released MESSAGE STAMP LATEST — whether a stop message ends on the
-# next-step block this turn wrote, which releases a held turn. Status 0 when
-# LATEST is newer than STAMP and MESSAGE contains LATEST's `**Next:**` line
-# (the text after `**Next:** `, verbatim); or when MESSAGE has a line reading
-# exactly `## Next session` and LATEST cannot be written (next-step then
-# prints the block and exits 4): it exists and is not writable, or it is absent
-# and its nearest existing parent directory is not writable. Status 1
-# otherwise. A hand-typed block passes neither test. Only grep and awk run.
-ending_released() {
-  local message=$1 stamp=$2 latest=$3 next dir parent
-  if [ -f "$latest" ] && [ "$latest" -nt "$stamp" ]; then
-    next=$(awk '{ sub(/\r$/, "") } $0 == "## Next session" { in_block = 1; next } in_block && /^## / { exit } in_block && index($0, "**Next:** ") == 1 { print substr($0, 11); exit }' "$latest")
-    [ -n "$next" ] && grep -qF -- "$next" <<<"$message" && return 0
-  fi
-  awk '{ sub(/\r$/, "") } $0 == "## Next session" { found = 1; exit } END { exit !found }' <<<"$message" || return 1
-  if [ -e "$latest" ]; then
-    [ ! -w "$latest" ]
-    return
-  fi
-  dir=${latest%/*}
-  [ "$dir" != "$latest" ] || dir=.
-  while [ ! -d "$dir" ]; do
-    parent=${dir%/*}
-    if [ "$parent" = "$dir" ]; then dir=.; break; fi
-    dir=${parent:-/}
-  done
-  [ ! -w "$dir" ]
+# ending_turn_record SID — the turn record next-step writes for SID
+# (~/.claude/dagents/sessions/turns/<sid>.next, the id spelled as the turn
+# stamp spells it): the Status and Next lines of the last block it printed,
+# written or not. Prints nothing without a session id.
+ending_turn_record() {
+  [ -n "$1" ] || return 0
+  printf '%s/.claude/dagents/sessions/turns/%s.next\n' "${HOME:-}" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
 }
 
-# ending_released_any MESSAGE STAMP OWN_LATEST [ROOT] — ending_released for
-# the session checkout's own handoff OWN_LATEST, or another checkout's handoff
-# (dagents_latest_files ROOT, default the working directory) newer than STAMP
-# whose `**Status:**` and `**Next:**` lines both appear in MESSAGE: next-step
-# run here may write the handoff of the checkout the next session works in.
-# Both lines, since final-phase Next lines read the same for every plan. Only
-# the own handoff has the cannot-write release.
+# ending_released_any MESSAGE STAMP SID [ROOT] — whether a stop message ends on
+# a next-step block printed this turn, which releases a held turn. Status 0
+# when SID's turn record is newer than STAMP and MESSAGE contains its Next line
+# (verbatim); or when a handoff of any checkout or the mirror
+# (dagents_handoff_files ROOT, default the working directory) is newer than
+# STAMP and both its `**Status:**` and `**Next:**` lines appear in MESSAGE:
+# next-step run without a session id (Codex) writes no record. Both lines,
+# since final-phase Next lines read the same for every plan. Status 1
+# otherwise, so a hand-typed block is held. Only grep, sed and awk run.
 ending_released_any() {
-  local message=$1 stamp=$2 own=$3 f status next
-  ending_released "$message" "$stamp" "$own" && return 0
+  local message=$1 stamp=$2 record f status next
+  record=$(ending_turn_record "$3")
+  if [ -n "$record" ] && [ -f "$record" ] && [ "$record" -nt "$stamp" ]; then
+    next=$(tr -d '\r' < "$record" | sed -n 's/^next=//p' | head -n 1)
+    [ -n "$next" ] && grep -qF -- "$next" <<<"$message" && return 0
+  fi
   while IFS= read -r f; do
-    [ -n "$f" ] && [ "$f" != "$own" ] && ! [ "$f" -ef "$own" ] && [ -f "$f" ] && [ "$f" -nt "$stamp" ] || continue
+    [ -n "$f" ] && [ -f "$f" ] && [ "$f" -nt "$stamp" ] || continue
     status=$(_ending_field '**Status:** ' "$f")
     next=$(_ending_field '**Next:** ' "$f")
     [ -n "$status" ] && [ -n "$next" ] || continue
     grep -qF -- "$status" <<<"$message" && grep -qF -- "$next" <<<"$message" && return 0
-  done < <(dagents_latest_files "${4:-$PWD}" 2>/dev/null)
+  done < <(dagents_handoff_files "${4:-$PWD}" 2>/dev/null)
   return 1
 }
 

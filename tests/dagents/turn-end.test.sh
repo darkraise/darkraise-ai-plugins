@@ -51,6 +51,13 @@ wrote_next() { # wrote_next [Next text]
   mkdir -p "${LATEST%/*}"
   printf '# Handoff\n\n## Next session\n\n**Status:** x\n**Next:** %s\n' "${1:-x}" > "$LATEST"
 }
+# The turn record next-step writes for a session (C13): the Status and Next
+# lines of the block it printed, written or not.
+turn_rec() { # turn_rec <session> <Status> <Next>
+  local f
+  f="$HOME/.claude/dagents/sessions/turns/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-').next"
+  sleep 1; mkdir -p "${f%/*}"; printf 'status=%s\nnext=%s\n' "$2" "$3" > "$f"
+}
 
 # --- turn-start ---
 check "turn-start prints nothing" "$(prompt s-1)" ""
@@ -427,24 +434,13 @@ sleep 1; prompt s-nx
 write_ledger 'Task 1: complete (commits a..b, review clean)'
 HAND=$'Done.\n\n## Next session\n\n**Next:** Resume at Task 2.'
 check "a hand-typed block does not release a ledger turn" "$(decision "$(stop s-nx "$HAND")")" "block"
-wrote_next 'Resume at Task 2.'
-check "a written block releases a ledger turn" "$(stop s-nx "$HAND")" ""
-wrote_next 'Resume at Task 3.'
-check "a block with another Next line does not release it" "$(decision "$(stop s-nx "$HAND")")" "block"
-# next-step prints the block and writes nothing (exit 4) where latest.md cannot
-# be written: there the heading alone stands. Root writes any file.
-if [ "$(id -u)" = 0 ] && ! command -v cygpath >/dev/null 2>&1; then
-  echo "skip - an unwritable latest.md accepts the heading (running as root)"
-else
-  chmod 444 "$LATEST"
-  check "an unwritable latest.md accepts the heading" "$(stop s-nx "$HAND")" ""
-  chmod 644 "$LATEST"
-fi
+turn_rec s-nx 'Plan p: 1 of 3 tasks complete.' 'Resume at Task 2.'
+check "the session's turn record releases a ledger turn on its Next line" "$(stop s-nx "$HAND")" ""
+turn_rec s-nx 'Plan p: 1 of 3 tasks complete.' 'Resume at Task 3.'
+check "a record with another Next line does not release it" "$(decision "$(stop s-nx "$HAND")")" "block"
 . "$HERE/../../plugins/dagents/scripts/lib/next-ending.sh"
-check "a writable latest.md: the heading alone is not enough" \
-  "$(ending_released "$HAND" "$HOME/.claude/dagents/sessions/turns/s-nx" "$TMP/absent/handoff/latest.md" && echo released || echo held)" "held"
-check "a line merely containing the heading is not the block" \
-  "$(ending_released $'Done. ## Next session' "$HOME/.claude/dagents/sessions/turns/s-nx" "$TMP/absent/handoff/latest.md" && echo released || echo held)" "held"
+check "no session id: no turn record" "$(ending_turn_record '')" ""
+check "the turn record sits beside the stamp" "$(ending_turn_record 's/1')" "$HOME/.claude/dagents/sessions/turns/s-1.next"
 
 # --- a turn that merges a plan or closes a milestone ends on next-step (rows 2, 7) ---
 stop_at() { # stop_at <session> <cwd> <last message> [stop_hook_active]
@@ -520,9 +516,9 @@ record() { printf -- '- 2026-11-16 `docs/dagents/plans/2026-11-16-%s.md` — mer
 NB=$'Merged.\n\n## Next session\n\n**Next:** Nothing — no register holds an unresolved row.'
 sleep 1; prompt s-tr7 "$TRP"
 sleep 1; record r; commit_all "$TRP" 'docs: record r'
-sleep 1; mkdir -p "${TRL%/*}"
-printf '# Handoff\n\n## Next session\n\n**Status:** x\n**Next:** Nothing — no register holds an unresolved row.\n' > "$TRL"
-check "a finishing turn ending on the block next-step wrote passes" "$(stop_at s-tr7 "$TRP" "$NB")" ""
+turn_rec s-tr7 'Plan p is complete.' 'Nothing — no register holds an unresolved row.'
+check "terminal_complete_released: a finishing turn ending on its printed, unwritten terminal block passes" "$(stop_at s-tr7 "$TRP" "$NB")" ""
+check "terminal_complete_released: no handoff was written" "$([ -e "$TRL" ] && echo yes || echo no)" "no"
 sleep 1; prompt s-tr8 "$TRP"
 sleep 1; record s; commit_all "$TRP" 'docs: record s'
 check "a finishing turn ending on a hand-typed block is held" "$(decision "$(stop_at s-tr8 "$TRP" "$NB")")" "block"
@@ -535,25 +531,13 @@ check "an uncommitted completed.md entry names its plan" \
 commit_all "$TRP" 'docs: record t'
 sleep 1; prompt s-tr10 "$TRP"
 sleep 1; record u
+sleep 1; prompt s-tr11 "$TRP"
+sleep 1; record w; commit_all "$TRP" 'docs: record w'
+turn_rec s-tr11 'Plan w is complete.' 'Nothing — no register holds an unresolved row.'
+check "terminal_complete_released: next-step run after the record is not held by the transition test" "$(stop_at s-tr11 "$TRP" 'All merged.')" ""
 check "a transition turn ending on finishing's menu is not held" \
   "$(stop_at s-tr10 "$TRP" $'1. Merge back to main locally\n2. Keep as-is\n\nWhich option?')" ""
 commit_all "$TRP" 'docs: record u'
-
-# latest.md absent and its nearest existing parent unwritable: next-step can
-# write nothing (exit 4), so the heading alone releases. Root writes any
-# directory, and Windows ignores a directory's read-only attribute, so this
-# runs only as a regular user on a POSIX host (Linux CI).
-if command -v cygpath >/dev/null 2>&1; then
-  echo "skip - an absent latest.md under an unwritable parent accepts the heading (Windows directory modes)"
-elif [ "$(id -u)" = 0 ]; then
-  echo "skip - an absent latest.md under an unwritable parent accepts the heading (running as root)"
-else
-  mkdir -p "$TMP/ro"
-  chmod 555 "$TMP/ro"
-  check "an absent latest.md under an unwritable parent accepts the heading" \
-    "$(ending_released "$HAND" "$HOME/.claude/dagents/sessions/turns/s-nx" "$TMP/ro/state/handoff/latest.md" && echo released || echo held)" "released"
-  chmod 755 "$TMP/ro"
-fi
 
 # --- per-worktree handoffs (spec A7, A16) ---
 git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m base
@@ -569,8 +553,16 @@ prompt s-wc; write_ledger 'Task 1: complete (commits a..b, review clean)'
 check "A7: a hand-typed block with no handoff written: held" "$(decision "$(stop s-wc $'## Next session\n\n**Status:** typed\n**Next:** typed.')")" "block"
 prompt s-wd; write_ledger 'Task 1: complete (commits a..b, review clean)'
 wrote_next 'Own next.'
+turn_rec s-wd 'Own status' 'Own next.'
 wt_block 'other' 'Other next.'
-check "A16: own block released after another worktree's later write" "$(stop s-wd $'## Next session\n\n**Status:** x\n**Next:** Own next.')" ""
+check "released_on_own_record_after_other_write: S1's block is released after S2's later write" "$(stop s-wd $'## Next session\n\n**Next:** Own next.')" ""
+prompt s-wj; write_ledger 'Task 1: complete (commits a..b, review clean)'
+turn_rec s-wk 'S2 status' 'S2 next.'
+check "hand_typed_other_next_held: S1 carrying only S2's Next line is held" "$(decision "$(stop s-wj $'## Next session\n\n**Next:** S2 next.')")" "block"
+prompt s-wl; write_ledger 'Task 1: complete (commits a..b, review clean)'
+wt_block 'codex status' 'Codex next.'
+check "released_by_other_handoff_without_record: no record, another handoff's Status and Next this turn" \
+  "$(stop s-wl $'## Next session\n\n**Status:** codex status\n**Next:** Codex next.')" ""
 prompt s-we; write_ledger 'Task 1: complete (commits a..b, review clean)'
 wt_block 'other' 'Run dagents:finishing-a-development-branch.'
 check "A16: another checkout's Next line alone does not release" "$(decision "$(stop s-we $'## Next session\n\n**Next:** Run dagents:finishing-a-development-branch.')")" "block"
