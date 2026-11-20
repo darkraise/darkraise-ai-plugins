@@ -606,10 +606,10 @@ needs. dagents hands off instead.
   `autoCompactWindow` and the model's window; see
   [session-budget.md](reference/session-budget.md) for the numbers and the
   full Stops table.
-- **Resuming.** `resume-execution` runs `scripts/repo-audit` — one read-only
-  snapshot of branch, worktrees, dirty files, plans in flight and handoff
-  staleness — verifies the worktree, and hands control back to the plan's
-  execution skill.
+- **Resuming.** `resume-execution` runs `scripts/repo-audit` — one snapshot
+  of branch, worktrees, dirty files, plans in flight and handoff staleness,
+  which also deletes the handoffs left with nothing to resume — verifies the
+  worktree, and hands control back to the plan's execution skill.
 - **Compaction.** The SessionStart hook appends a snapshot of what summaries
   drop. Compaction fires at about 93-96% of `autoCompactWindow`, so set the
   window to suit you — the budget follows it, 465k at 650000 — and paste the
