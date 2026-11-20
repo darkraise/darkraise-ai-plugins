@@ -1064,6 +1064,9 @@ if ! { mkdir -p "$claims" && dagents_self_ignore "${claims%/handoff/claims}"; } 
   write_turn_record
   fail 4 "could not write $handoff (no claims directory $claims) — copy the block above into it by hand"
 fi
+# The notes file is deleted once the handoff is written, so notes that are the
+# handoff itself would delete what was just written.
+if [ -n "$notes_file" ] && [ "$notes_file" -ef "$handoff" ]; then fail 2 "--notes names the handoff itself: $handoff"; fi
 status=0
 progress_file=$(mktemp 2>/dev/null) || progress_file=""
 dr_locked "$claims/" hand_off || status=$?

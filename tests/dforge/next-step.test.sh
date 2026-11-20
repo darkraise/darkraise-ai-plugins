@@ -212,6 +212,27 @@ has "unwritable handoff: block still printed" "$out" "**Next:** Start at Task 1 
 has "unwritable handoff: says so on stderr" "$(cat "$TMP/stderr")" "could not write"
 has "unwritable handoff: says so on stdout" "$out" "next-step: could not write"
 rm -f "$REPO/.dforge/handoff"
+# A write that fails keeps the notes file: it is deleted only after a write.
+printf 'not a dir' > "$REPO/.dforge/handoff"
+printf 'session notes\n' > "$TMP/notes-4.md"
+run "$REPO" --notes "$TMP/notes-4.md" "$PLAN_REL"
+check "unwritable handoff: with --notes, exits 4" "$status" "4"
+check "unwritable handoff: the notes file is kept as it was" "$(cat "$TMP/notes-4.md" 2>/dev/null)" "session notes"
+rm -f "$REPO/.dforge/handoff"
+target=$(cd "$REPO" && bash "$SCRIPT" --target "$PLAN_REL")
+mkdir -p "$target"
+run "$REPO" --notes "$TMP/notes-4.md" "$PLAN_REL"
+check "handoff path is a directory: with --notes, exits 4" "$status" "4"
+check "handoff path is a directory: the notes file is kept as it was" "$(cat "$TMP/notes-4.md" 2>/dev/null)" "session notes"
+rmdir "$target"
+# Notes that are the handoff itself are refused: the write would delete them.
+run "$REPO" "$PLAN_REL"
+before=$(cat "$target")
+run "$REPO" --notes "$target" "$PLAN_REL"
+check "notes naming the handoff: exits 2" "$status" "2"
+has "notes naming the handoff: says why" "$(cat "$TMP/stderr")" "--notes names the handoff itself"
+check "notes naming the handoff: the handoff is left as it was" "$(cat "$target" 2>/dev/null)" "$before"
+rm -f "$target" "$TMP/notes-4.md"
 
 # --- final review clean: finishing is next ---
 ledger 'Task 1: complete (x)' 'Task 2: complete (x)' 'Task 3: complete (x)' "Final review: clean (commits a1b2c3d..$(git -C "$REPO" rev-parse --short HEAD))"
