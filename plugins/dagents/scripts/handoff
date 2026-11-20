@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# Usage: handoff claim FILE
+#        handoff list [--checkout] [DIR]
+#
+# claim: record this session (CLAUDE_CODE_SESSION_ID) as the one resuming the
+# handoff FILE, in the repository-wide claim file
+# <primary>/<state>/handoff/claims/<key>, taken under claims/.lock. Exit 0
+# when claimed ("claimed <key>"), taken over from a gone session ("took over
+# the claim of <id8> (gone: <reason>)"), or not claimed because FILE is
+# missing or no session id is set; exit 3 when a live session holds it ("held
+# by <id8> (live, claimed <age> ago)"), after stopping this session's auto run;
+# exit 2 for an invalid key or usage.
+#
+# list: one tab-separated line per handoff file of every checkout (with
+# --checkout, DIR's checkout only): <path> <key> <kind> <age seconds> <claim>, the claim one of
+# unclaimed, "claimed <id8> live", "claimed <id8> gone".
+set -uo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/lib/plan.sh"
+. "$HERE/lib/lock.sh"
+. "$HERE/lib/session-live.sh"
+
+usage() { echo "usage: handoff claim FILE | handoff list [--checkout] [DIR]" >&2; exit 2; }
+
+id8() { printf '%s' "${1:0:8}"; }
+
+# claims_dir DIR — the primary checkout's claims directory, for any checkout.
+claims_dir() {
+  local primary
+  primary=$(plan_primary_root "$1") || return 1
+  printf '%s/handoff/claims\n' "$(dagents_dir state "$(dr_native_path "$primary")")"
+}
+
+claim_field() { tr -d '\r' < "$1" | sed -n "s/^$2=//p" | head -n 1; }
+
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null; }
+
+# take_claim CLAIM KEY SESSION — run under the claims lock.
+take_claim() {
+  local file=$1 key=$2 sid=$3 held at now reason
+  now=$(date +%s)
+  if [ -f "$file" ]; then
+    held=$(claim_field "$file" session)
+    if [ "$held" = "$sid" ]; then echo "claimed $key"; return 0; fi
+    if session_gone "$held"; then
+      reason=$SESSION_GONE_REASON
+      printf 'session=%s\nat=%s\nprevious=%s %s\n' "$sid" "$now" "${held:--}" "$reason" > "$file.$$" &&
+        mv -f "$file.$$" "$file" || { rm -f "$file.$$"; echo "handoff: cannot write $file" >&2; return 1; }
+      echo "took over the claim of $(id8 "${held:--}") (gone: $reason)"
+      return 0
+    fi
+    at=$(claim_field "$file" at)
+    [[ $at =~ ^[0-9]+$ ]] || at=$now
+    echo "held by $(id8 "$held") (live, claimed $(session_age_text $(( now > at ? now - at : 0 ))) ago)"
+    return 3
+  fi
+  if ! (set -C; printf 'session=%s\nat=%s\n' "$sid" "$now" > "$file") 2>/dev/null; then
+    echo "handoff: cannot write $file" >&2
+    return 1
+  fi
+  echo "claimed $key"
+}
+
+cmd_claim() {
+  [ $# -eq 1 ] || usage
+  local file=$1 key dir out status sid=${CLAUDE_CODE_SESSION_ID:-}
+  key=$(basename "$file" .md)
+  if [[ ! $key =~ ^[A-Za-z0-9._-]+$ ]] || [ "$key" = latest ]; then
+    echo "handoff: invalid key $key" >&2
+    exit 2
+  fi
+  if [ ! -f "$file" ]; then echo "no handoff file at $file"; exit 0; fi
+  if [ -z "$sid" ]; then echo "claims are Claude Code only; not claimed"; exit 0; fi
+  dir=$(claims_dir "$(dirname "$file")") || dir=$(claims_dir "$PWD") ||
+    { echo "handoff: $file is in no git repository" >&2; exit 2; }
+  mkdir -p "$dir" || { echo "handoff: cannot create $dir" >&2; exit 1; }
+  dagents_self_ignore "${dir%/handoff/claims}"
+  out=$(dr_locked "$dir/" take_claim "$dir/$key" "$key" "$sid")
+  status=$?
+  [ -n "$out" ] && printf '%s\n' "$out"
+  if [ "$status" -eq 3 ] && bash "$HERE/auto-run" status > /dev/null 2>&1; then
+    bash "$HERE/auto-run" stop --reason "handoff $key is held by $(sed -n 's/^held by \([^ ]*\).*/\1/p' <<<"$out")" > /dev/null
+  fi
+  exit "$status"
+}
+
+cmd_list() {
+  local checkout="" dir="$PWD" top keep="" claims f key kind age claim held now
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --checkout) checkout=1; shift ;;
+      -*) usage ;;
+      *) [ "$dir" = "$PWD" ] || usage; dir=$1; shift ;;
+    esac
+  done
+  dagents_stores_init "$dir"
+  claims=$(claims_dir "$dir") || claims=""
+  if [ -n "$checkout" ]; then
+    top=$(git -C "$(dr_native_path "$dir")" rev-parse --show-toplevel 2>/dev/null | tr -d '\r') || top=$dir
+    keep="$(dagents_dir state "$(_dagents_path "${top:-$dir}")")/handoff/"
+  fi
+  now=$(date +%s)
+  dagents_handoff_files "$dir" | while IFS= read -r f; do
+    if [ -n "$checkout" ]; then
+      case $f in "$keep"*) ;; *) continue ;; esac
+    fi
+    key=$(basename "$f" .md)
+    kind=$(tr -d '\r' < "$f" | sed -n 's/^<!-- next-step: .*kind=\([^ ]*\).*/\1/p' | tail -n 1)
+    age=$(mtime "$f") && age=$(( now - age )) || age=0
+    [ "$age" -ge 0 ] || age=0
+    claim=unclaimed
+    if [ -n "$claims" ] && [ -f "$claims/$key" ]; then
+      held=$(claim_field "$claims/$key" session)
+      if session_gone "$held"; then claim="claimed $(id8 "$held") gone"; else claim="claimed $(id8 "$held") live"; fi
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\n' "$f" "$key" "${kind:-none}" "$age" "$claim"
+  done
+}
+
+[ $# -ge 1 ] || usage
+case $1 in
+  claim) shift; cmd_claim "$@" ;;
+  list) shift; cmd_list "$@" ;;
+  *) usage ;;
+esac
