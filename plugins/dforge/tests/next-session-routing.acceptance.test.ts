@@ -490,7 +490,7 @@ async function settle(clock: ReturnType<typeof world>) {
 const bg = (id: string) => ({ Bash: () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: id }, text: 'Running in the background' }) })
 
 
-const LATEST = '/home/me/code/shop/.dforge/handoff/latest.md'
+const HANDOFF = '/home/me/code/shop/.dforge/handoff/stored.md'
 const DOCS = '/home/me/code/shop/docs/dforge'
 const REGISTER_FILE = `${DOCS}/registers/r.md`
 const PLAN = 'docs/dforge/plans/2026-10-14-band.md'
@@ -518,7 +518,7 @@ const block = (next: string, prompt: string, at: number) =>
     marker(at),
     '',
   ].join('\n')
-/** latest.md as it stands on disk: notes above, the block last. */
+/** A handoff as it stands on disk: notes above, the block last. */
 const stored = (next: string, prompt: string, at: number, notes = 'Notes from the last session.') => `# Handoff\n\n## Notes\n\n${notes}\n\n${block(next, prompt, at)}`
 const registerFile = (...states: string[]) =>
   [
@@ -536,7 +536,7 @@ const rulingPrompt = 'Continue the work recorded in `docs/dforge/registers/r.md`
 
 type Begin = { w?: Partial<World>; more?: World['files']; mtimeMs?: number; before?: () => Promise<unknown> }
 async function begin($: Parameters<TestBody>[0], on: On, text: string, o: Begin = {}) {
-  const files: NonNullable<World['files']> = { [LATEST]: { text, mtimeMs: o.mtimeMs ?? 900_000 }, ...o.more }
+  const files: NonNullable<World['files']> = { [HANDOFF]: { text, mtimeMs: o.mtimeMs ?? 900_000 }, ...o.more }
   const w = { ...SIGNED_IN, files, prompts: [] as string[], nextStepRuns: [] as NonNullable<World['nextStepRuns']>, inFlight: { now: 0, max: 0 }, ...o.w }
   const clock = world(on, w)
   signedIn(on, files)
@@ -634,11 +634,11 @@ describe('next-session-routing: the cockpit band recomputes the offer (A12)', ()
     expect(await band.find({ key: 'band-resume' }), 'offered at first').toBeDefined()
     await band.press({ key: 'band-resume-dismiss' })
     expect(await band.find({ key: 'band-resume' }), 'dismissed').toBeUndefined()
-    w.files[LATEST] = { text: stored('Stored.', 'p', 900, 'Notes, edited by the owner.'), mtimeMs: 995_000 }
+    w.files[HANDOFF] = { text: stored('Stored.', 'p', 900, 'Notes, edited by the owner.'), mtimeMs: 995_000 }
     await w.turn()
     expect(await band.find({ key: 'band-resume' }), 'still dismissed after the notes were edited').toBeUndefined()
     // A block next-step writes anew carries a new marker and is offered again.
-    w.files[LATEST] = { text: stored('Newer.', 'q', 990), mtimeMs: 996_000 }
+    w.files[HANDOFF] = { text: stored('Newer.', 'q', 990), mtimeMs: 996_000 }
     await w.turn()
     expect(await band.find({ key: 'band-resume' }), 'a new marker is offered again').toBeDefined()
   })
@@ -712,7 +712,7 @@ describe('next-session-routing: the cockpit runs next-step sparingly (A13)', () 
   test('A13: a change to any file the block is computed from is a new cache key', async ($, on) => {
     const w = await begin($, on, stored('Stored.', 'p', 900), { more: KEYED(), w: { nextSteps: answers() } })
     expect(w.nextStepRuns).toHaveLength(1)
-    const keyed = [LATEST, `${DOCS}/plans/completed.md`, `${DOCS}/roadmap.md`, REGISTER_FILE, `${DOCS}/plans`, `/home/me/code/shop/${PLAN}`]
+    const keyed = [HANDOFF, `${DOCS}/plans/completed.md`, `${DOCS}/roadmap.md`, REGISTER_FILE, `${DOCS}/plans`, `/home/me/code/shop/${PLAN}`]
     for (const [index, path] of keyed.entries()) {
       w.files[path] = { ...w.files[path]!, mtimeMs: 5_000 + index }
       await w.turn()
@@ -746,7 +746,7 @@ describe('next-session-routing: the cockpit runs next-step sparingly (A13)', () 
   test('A13: the tool-call path never waits for a run that does not finish', async ($, on) => {
     const w = await begin($, on, stored('Stored.', 'p', 900), { more: KEYED(), w: { nextSteps: ['hang'] } })
     expect(w.nextStepRuns).toHaveLength(1)
-    w.files[LATEST] = { ...w.files[LATEST]!, mtimeMs: 950_000 }
+    w.files[HANDOFF] = { ...w.files[HANDOFF]!, mtimeMs: 950_000 }
     let finished = false
     void $.tool.call({ tool: 'Bash', command: 'ls' }).then(() => {
       finished = true

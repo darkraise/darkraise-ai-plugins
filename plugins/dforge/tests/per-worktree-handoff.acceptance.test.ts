@@ -471,8 +471,8 @@ async function settle(clock: ReturnType<typeof world>) {
 
 const PRIMARY = '/home/me/code/shop'
 const WORKTREE = '/home/me/code/shop-w1'
-const PRIMARY_LATEST = `${PRIMARY}/.dforge/handoff/latest.md`
-const WORKTREE_LATEST = `${WORKTREE}/.dforge/handoff/latest.md`
+const PRIMARY_HANDOFF = `${PRIMARY}/.dforge/handoff/stored.md`
+const WORKTREE_HANDOFF = `${WORKTREE}/.dforge/handoff/stored.md`
 const PLAN = 'docs/dforge/plans/2026-10-14-band.md'
 
 const marker = (at: number) => `<!-- next-step: kind=plan done=0 closed=0 subject=${PLAN} at=${at} -->`
@@ -517,8 +517,8 @@ async function begin($: Parameters<TestBody>[0], on: On, o: Begin) {
 describe('per-worktree-handoff: the cockpit reads its own checkout (A9, A12)', () => {
   test("A9: a worktree session's resume offer is built from the worktree's handoff, not the primary's", async ($, on) => {
     const files = {
-      [WORKTREE_LATEST]: { text: stored('WORKTREE-STORED-NEXT', 'Worktree stored prompt.', 900), mtimeMs: 900_000 },
-      [PRIMARY_LATEST]: { text: stored('PRIMARY-STORED-NEXT', 'Primary stored prompt.', 900), mtimeMs: 900_000 },
+      [WORKTREE_HANDOFF]: { text: stored('WORKTREE-STORED-NEXT', 'Worktree stored prompt.', 900), mtimeMs: 900_000 },
+      [PRIMARY_HANDOFF]: { text: stored('PRIMARY-STORED-NEXT', 'Primary stored prompt.', 900), mtimeMs: 900_000 },
       [WORKTREE]: { text: '', kind: 'dir' as const, mtimeMs: 1 },
     }
     const w = await begin($, on, { files, cwd: WORKTREE, checkout: WORKTREE, nextSteps: [{ exitCode: 1, stdout: '' }] })
@@ -533,21 +533,21 @@ describe('per-worktree-handoff: the cockpit reads its own checkout (A9, A12)', (
 
   test("A9: the resume prompt of a worktree session names the worktree's handoff by absolute path", async ($, on) => {
     const files = {
-      [WORKTREE_LATEST]: { text: stored('WORKTREE-STORED-NEXT', null, 900), mtimeMs: 900_000 },
-      [PRIMARY_LATEST]: { text: stored('PRIMARY-STORED-NEXT', null, 900), mtimeMs: 900_000 },
+      [WORKTREE_HANDOFF]: { text: stored('WORKTREE-STORED-NEXT', null, 900), mtimeMs: 900_000 },
+      [PRIMARY_HANDOFF]: { text: stored('PRIMARY-STORED-NEXT', null, 900), mtimeMs: 900_000 },
       [WORKTREE]: { text: '', kind: 'dir' as const, mtimeMs: 1 },
     }
     const w = await begin($, on, { files, cwd: WORKTREE, checkout: WORKTREE, nextSteps: [{ exitCode: 1, stdout: '' }] })
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     await band.press({ key: 'band-resume' })
     expect(w.prompts).toHaveLength(1)
-    expect(w.prompts[0]).toContain(WORKTREE_LATEST)
-    expect(w.prompts[0]).not.toContain(PRIMARY_LATEST)
+    expect(w.prompts[0]).toContain(WORKTREE_HANDOFF)
+    expect(w.prompts[0]).not.toContain(PRIMARY_HANDOFF)
   })
 
   test("A9: a handoff in the primary raises no offer in a worktree session", async ($, on) => {
     const files = {
-      [PRIMARY_LATEST]: { text: stored('PRIMARY-STORED-NEXT', 'Primary stored prompt.', 900), mtimeMs: 900_000 },
+      [PRIMARY_HANDOFF]: { text: stored('PRIMARY-STORED-NEXT', 'Primary stored prompt.', 900), mtimeMs: 900_000 },
       [WORKTREE]: { text: '', kind: 'dir' as const, mtimeMs: 1 },
     }
     const w = await begin($, on, { files, cwd: WORKTREE, checkout: WORKTREE, nextSteps: [exit0('Recomputed.', 'p', 950)] })
@@ -561,7 +561,7 @@ describe('per-worktree-handoff: the cockpit reads its own checkout (A9, A12)', (
 
   test("A12: a primary session reads the primary's handoff as before", async ($, on) => {
     const files = {
-      [PRIMARY_LATEST]: { text: stored('PRIMARY-STORED-NEXT', 'Primary stored prompt.', 900), mtimeMs: 900_000 },
+      [PRIMARY_HANDOFF]: { text: stored('PRIMARY-STORED-NEXT', 'Primary stored prompt.', 900), mtimeMs: 900_000 },
     }
     const w = await begin($, on, { files, cwd: PRIMARY, checkout: PRIMARY, nextSteps: [{ exitCode: 1, stdout: '' }] })
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -572,13 +572,13 @@ describe('per-worktree-handoff: the cockpit reads its own checkout (A9, A12)', (
 
   test("A12: the primary session's resume prompt names the primary's handoff path", async ($, on) => {
     const files = {
-      [PRIMARY_LATEST]: { text: stored('PRIMARY-STORED-NEXT', null, 900), mtimeMs: 900_000 },
+      [PRIMARY_HANDOFF]: { text: stored('PRIMARY-STORED-NEXT', null, 900), mtimeMs: 900_000 },
     }
     const w = await begin($, on, { files, cwd: PRIMARY, checkout: PRIMARY, nextSteps: [{ exitCode: 1, stdout: '' }] })
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     await band.press({ key: 'band-resume' })
     expect(w.prompts).toHaveLength(1)
-    expect(w.prompts[0]).toContain(PRIMARY_LATEST)
+    expect(w.prompts[0]).toContain(PRIMARY_HANDOFF)
   })
 })
 

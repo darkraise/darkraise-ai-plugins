@@ -199,7 +199,7 @@ const BLOCKED =
 
 const UNFENCED = RESUMABLE.replace('```\nExecute docs/dagents/plans/2026-10-14-band.md.\n```\n', 'Execute the plan.\n')
 const REGISTER = '/home/me/code/shop/docs/dagents/registers/r.md'
-/** A `next-step --print --latest` run that fails: the cockpit falls back on the stored note. */
+/** A `next-step --print --handoff` run that fails: the cockpit falls back on the stored note. */
 const FAILED = { exitCode: 1, stdout: '' }
 function registerPrompt(names: string): string {
   return `Continue the work recorded in ${names}: 1 rows are open (#2 item 2). Rule on the open rows with dagents:brainstorming.`
@@ -5251,7 +5251,7 @@ describe('run card', () => {
   })
 
   test('offers Resume for a handoff under .dagents', async ($, on) => {
-    const files: World['files'] = { '/home/me/code/shop/.dagents/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
+    const files: World['files'] = { '/home/me/code/shop/.dagents/handoff/stored.md': { text: RESUMABLE, mtimeMs: 900_000 } }
     const prompts: string[] = []
     world(on, { ...SIGNED_IN, files, prompts })
     signedIn(on, files)
@@ -5261,13 +5261,28 @@ describe('run card', () => {
     await ui.press({ key: 'pane-resume' })
     expect(prompts).toEqual(['Execute docs/dagents/plans/2026-10-14-band.md.'])
   })
+
+  test('offers the keyed handoff, never a newer latest.md from the older layout', async ($, on) => {
+    const KEYED = '/home/me/code/shop/.dagents/handoff/stored.md'
+    const files: World['files'] = {
+      '/home/me/code/shop/.dagents/handoff/latest.md': { text: RESUMABLE, mtimeMs: 950_000 },
+      [KEYED]: { text: UNFENCED, mtimeMs: 900_000 },
+    }
+    const prompts: string[] = []
+    world(on, { ...SIGNED_IN, files, prompts })
+    signedIn(on, files)
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: 'pane-resume' })
+    expect(prompts).toEqual([expect.stringContaining(KEYED)])
+  })
 })
 
 describe('resume offer', () => {
-  const LATEST = '/home/me/code/shop/.dagents/handoff/latest.md'
+  const HANDOFF = '/home/me/code/shop/.dagents/handoff/stored.md'
   const COMPACT = configured({ layout: 'compact' })
   const start = async ($: Parameters<TestBody>[0], on: On, text: string, more: World['files'] = {}, mtimeMs = 900_000) => {
-    const files: World['files'] = { [LATEST]: { text, mtimeMs }, ...more }
+    const files: World['files'] = { [HANDOFF]: { text, mtimeMs }, ...more }
     const prompts: string[] = []
     world(on, { ...SIGNED_IN, files, prompts })
     signedIn(on, files)
@@ -5317,7 +5332,7 @@ describe('resume offer', () => {
   for (const reason of ['clear', 'resume'] as const) {
     test(`offers the handoff again in the session a ${reason} carries the process into`, async ($, on) => {
       const wipe = wipesState(on)
-      const files: World['files'] = { [LATEST]: { text: RESUMABLE, mtimeMs: 900_000 } }
+      const files: World['files'] = { [HANDOFF]: { text: RESUMABLE, mtimeMs: 900_000 } }
       const w: World = { ...SIGNED_IN, files }
       const clock = world(on, w)
       on('session.end', (_$, e) => e as never)
@@ -5432,7 +5447,7 @@ describe('resume offer', () => {
   })
 
   test('withdraws a ruling handoff at the next turn once its last row closes', async ($, on) => {
-    const files: NonNullable<World['files']> = { [LATEST]: { text: rulingHandoff(), mtimeMs: 900_000 }, [REGISTER]: { text: register(['done', 'open']), mtimeMs: 1 } }
+    const files: NonNullable<World['files']> = { [HANDOFF]: { text: rulingHandoff(), mtimeMs: 900_000 }, [REGISTER]: { text: register(['done', 'open']), mtimeMs: 1 } }
     world(on, { ...SIGNED_IN, files, nextStepOuts: [FAILED, FAILED] })
     signedIn(on, files)
     await $.session.start(START)
@@ -5460,7 +5475,7 @@ describe('resume offer', () => {
   })
 
   // A note carrying the marker next-step computed it from, and a block as
-  // `next-step --print --latest` recomputes it.
+  // `next-step --print --handoff` recomputes it.
   const PLAN = 'docs/dagents/plans/2026-10-14-band.md'
   const marker = (at: number) => `<!-- next-step: kind=plan subject=${PLAN} at=${at} -->`
   const marked = (text: string, at: number) => text.replace('```\n\n## State', `\`\`\`\n${marker(at)}\n\n## State`)
@@ -5468,7 +5483,7 @@ describe('resume offer', () => {
     ['## Next session', '', `**Status:** Plan \`${PLAN}\`: 2 of 6 tasks complete.`, `**Next:** ${next}`, '', 'Paste as the first prompt:', '', '```', `Continue \`${PLAN}\` from Task 3.`, '```', marker(at), ''].join('\n')
   type Begin = { w?: Partial<World>; more?: World['files']; mtimeMs?: number; before?: () => Promise<unknown> }
   const begin = async ($: Parameters<TestBody>[0], on: On, text: string, o: Begin = {}) => {
-    const files: NonNullable<World['files']> = { [LATEST]: { text, mtimeMs: o.mtimeMs ?? 900_000 }, ...o.more }
+    const files: NonNullable<World['files']> = { [HANDOFF]: { text, mtimeMs: o.mtimeMs ?? 900_000 }, ...o.more }
     const w = { ...SIGNED_IN, files, prompts: [] as string[], nextStepRuns: [] as string[], ...o.w }
     const clock = world(on, w)
     signedIn(on, files)
@@ -5530,7 +5545,7 @@ describe('resume offer', () => {
     const w = await begin($, on, marked(RESUMABLE, 900))
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     await band.press({ key: 'band-resume-dismiss' })
-    w.files[LATEST] = { text: marked(RESUMABLE, 900).replace('Worktree:', 'A note.\n\nWorktree:'), mtimeMs: 990_000 }
+    w.files[HANDOFF] = { text: marked(RESUMABLE, 900).replace('Worktree:', 'A note.\n\nWorktree:'), mtimeMs: 990_000 }
     await w.turn()
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
     expect(w.nextStepRuns).toHaveLength(1)
@@ -5549,7 +5564,7 @@ describe('resume offer', () => {
 
   test('runs again only when its cache key changes', async ($, on) => {
     const docs = '/home/me/code/shop/docs/dagents'
-    const keyed = [LATEST, `${docs}/plans/completed.md`, `${docs}/roadmap.md`, REGISTER, `${docs}/plans`, `/home/me/code/shop/${PLAN}`]
+    const keyed = [HANDOFF, `${docs}/plans/completed.md`, `${docs}/roadmap.md`, REGISTER, `${docs}/plans`, `/home/me/code/shop/${PLAN}`]
     const w = await begin($, on, marked(RESUMABLE, 900), {
       more: {
         [`${docs}/plans/completed.md`]: { text: '# Completed\n', mtimeMs: 1 },
@@ -5587,7 +5602,7 @@ describe('resume offer', () => {
 
   test('never awaits a run, nor starts a second while one is in flight', async ($, on) => {
     const w = await begin($, on, RESUMABLE, { w: { nextStepOuts: ['hang'] } })
-    w.files[LATEST] = { ...w.files[LATEST]!, mtimeMs: 950_000 }
+    w.files[HANDOFF] = { ...w.files[HANDOFF]!, mtimeMs: 950_000 }
     await $.tool.call({ tool: 'Bash', command: 'ls' })
     await w.turn()
     expect(w.nextStepRuns).toHaveLength(1)
@@ -5595,12 +5610,12 @@ describe('resume offer', () => {
 
   test("runs from the primary checkout when the session's directory is gone", async ($, on) => {
     const WORKTREE = '/home/me/code/shop-wt'
-    const WT_LATEST = `${WORKTREE}/.dagents/handoff/latest.md`
-    const w = await begin($, on, RESUMABLE, { w: { checkout: WORKTREE }, more: { [WORKTREE]: { text: '', kind: 'dir' }, [WT_LATEST]: { text: RESUMABLE, mtimeMs: 900_000 } } })
+    const WT_HANDOFF = `${WORKTREE}/.dagents/handoff/stored.md`
+    const w = await begin($, on, RESUMABLE, { w: { checkout: WORKTREE }, more: { [WORKTREE]: { text: '', kind: 'dir' }, [WT_HANDOFF]: { text: RESUMABLE, mtimeMs: 900_000 } } })
     expect(w.nextStepRuns).toEqual([WORKTREE])
     delete w.files[WORKTREE]
-    delete w.files[WT_LATEST]
-    w.files[LATEST] = { ...w.files[LATEST]!, mtimeMs: 950_000 }
+    delete w.files[WT_HANDOFF]
+    w.files[HANDOFF] = { ...w.files[HANDOFF]!, mtimeMs: 950_000 }
     await w.turn()
     expect(w.nextStepRuns).toEqual([WORKTREE, '/home/me/code/shop'])
   })
@@ -5613,14 +5628,14 @@ describe('resume offer', () => {
 
   test('names the absolute handoff path in the fallback resume prompt (spec A9)', async ($, on) => {
     const WORKTREE = '/home/me/code/shop-wt'
-    const WT_LATEST = `${WORKTREE}/.dagents/handoff/latest.md`
+    const WT_HANDOFF = `${WORKTREE}/.dagents/handoff/stored.md`
     const w = await begin($, on, '# Handoff\n', {
       w: { checkout: WORKTREE, nextStepOuts: [{ exitCode: 0, stdout: UNFENCED }] },
-      more: { [WORKTREE]: { text: '', kind: 'dir' }, [WT_LATEST]: { text: UNFENCED, mtimeMs: 900_000 } },
+      more: { [WORKTREE]: { text: '', kind: 'dir' }, [WT_HANDOFF]: { text: UNFENCED, mtimeMs: 900_000 } },
     })
     const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await pane.press({ key: 'pane-resume' })
-    expect(w.prompts).toEqual([`Resume the work in ${WT_LATEST} with the dagents resume-execution skill. Before anything else, claim it with dagents' \`scripts/handoff claim\` on that file.`])
+    expect(w.prompts).toEqual([`Resume the work in ${WT_HANDOFF} with the dagents resume-execution skill. Before anything else, claim it with dagents' \`scripts/handoff claim\` on that file.`])
   })
 
   // Keyed handoffs (parallel-session handoff spec A9): the offer is the newest
@@ -7758,7 +7773,7 @@ describe('auto run in the pane', () => {
   })
 
   test('hides Resume while a run is active and brings it back when the run stops', async ($, on) => {
-    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), '/home/me/code/shop/.dagents/handoff/latest.md': { text: RESUMABLE, mtimeMs: 900_000 } }
+    const files: NonNullable<World['files']> = { ...autoFiles({ pending: null }), '/home/me/code/shop/.dagents/handoff/stored.md': { text: RESUMABLE, mtimeMs: 900_000 } }
     const w: World = { ...SIGNED_IN, files, autoRuns: [], autoFile: files[AUTO] }
     const clock = world(on, w)
     signedIn(on, files)

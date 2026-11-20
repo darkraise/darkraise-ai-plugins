@@ -3784,7 +3784,10 @@ async function offerHandoffs($: EngineInterface, dirs: readonly string[]): Promi
   const found: OfferHandoff[] = []
   for (const dir of dirs) {
     for (const entry of (await $.fs.list(dir).catch(() => null)) ?? []) {
-      if (!entry.name.endsWith('.md')) continue
+      const key = entry.name.slice(0, -3)
+      // The key rule of scripts/lib/roots.sh: an older layout's latest.md is not a
+      // handoff, and `scripts/handoff claim` refuses it.
+      if (!entry.name.endsWith('.md') || !/^[A-Za-z0-9._-]+$/.test(key) || key === 'latest') continue
       const path = `${dir}/${entry.name}`
       const info = await $.fs.stat(path).catch(() => null)
       if (info?.kind !== 'file') continue
@@ -3796,7 +3799,7 @@ async function offerHandoffs($: EngineInterface, dirs: readonly string[]): Promi
         known = { mtime: info.mtimeMs, text, at: mark?.at ?? Math.floor(info.mtimeMs / 1000) * 1000, subject: mark?.subject ?? null }
         S.offerTexts.set(path, known)
       }
-      found.push({ path, key: entry.name.slice(0, -3), ...known })
+      found.push({ path, key, ...known })
     }
   }
   return found
