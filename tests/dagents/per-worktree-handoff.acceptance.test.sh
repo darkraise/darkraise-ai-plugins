@@ -454,7 +454,9 @@ SID=a1000004-0000-0000-0000-000000000000 ns "$TOP" --adhoc --phase build --next 
 rm -rf "$W5"
 touch -d '4 days ago' "$(handoff "$W3")"
 sed -i "s/at=[0-9]*/at=$(( $(date +%s) - 3 * 86400 ))/" "$(handoff "$W2")"
-AUDIT=$(cd "$W1" && timeout 60 bash "$SCRIPTS/repo-audit" 2>&1)
+touch -d '2 days ago' "$(handoff "$W2")"
+# The session's own handoff is the one its marker names (spec 2026-11-20 §5).
+AUDIT=$(cd "$W1" && CLAUDE_CODE_SESSION_ID=a1000001-0000-0000-0000-000000000000 timeout 60 bash "$SCRIPTS/repo-audit" 2>&1)
 SEC=$(sed -n '/^## Handoff/,/^## /p' <<<"$AUDIT" | sed '$d')
 for c in "$W1" "$TOP" "$W2" "$W3"; do
   has "A10: repo-audit lists $(basename "$c")'s handoff" "$SEC" "\`$(handoff "$c")\`"
@@ -475,7 +477,7 @@ e2=$(entry "$W2")
 has "A10: another checkout's entry is marked stored" "$e2" "stored"
 has "A10: another checkout's entry carries its Status line" "$e2" "**Status:** Unplanned work"
 has "A10: another checkout's entry carries its Next line" "$e2" "**Next:** other-work."
-check "A10: another checkout's entry shows its age (3 days)" "$(grep -cE 'written 72h ago' <<<"$e2")" 1
+check "A10: another checkout's entry shows its age (2 days)" "$(grep -cE ', 2d old, unclaimed$' <<<"$e2")" 1
 check "A10: another checkout's entry is not recomputed" "$(grep -c '^- recomputed' <<<"$e2")" 0
 start_ctx() { # start_ctx <source> <cwd>
   jq -n --arg cwd "$2" --arg src "$1" '{hook_event_name:"SessionStart",session_id:"s-10",transcript_path:"",cwd:$cwd,source:$src}' \

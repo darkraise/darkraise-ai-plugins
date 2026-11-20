@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Print a read-only orientation snapshot for a session that picks up work, so
-# it costs one command instead of the five to eight a fresh session otherwise
-# spends on git status, logs, worktrees, ledgers and the handoff file.
+# Print an orientation snapshot for a session that picks up work, so it costs
+# one command instead of the five to eight a fresh session otherwise spends on
+# git status, logs, worktrees, ledgers and the handoff files. It deletes the
+# handoffs whose recompute finds nothing left to resume (see ## Handoff) and
+# writes nothing else.
 #
 # Usage: repo-audit
 # Exit: 0 ok; 2 usage or not inside a git repository.
@@ -11,6 +13,8 @@ set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 . "$here/lib/plan.sh"
 . "$here/lib/roadmap.sh"
+. "$here/lib/lock.sh"
+. "$here/lib/session-live.sh"
 
 root=$(git rev-parse --show-toplevel 2>/dev/null) \
   || { echo "repo-audit: not inside a git repository" >&2; exit 2; }
@@ -98,57 +102,144 @@ fi
 
 echo
 echo "## Handoff"
-listed=0
-latest=$(dforge_latest_file "$root")
-if [ -f "$latest" ]; then
+# Every handoff of every checkout and the mirror (scripts/handoff list), this
+# session's own first: the newest one it claims or whose marker names it. The
+# stored lines are a claim about the repository at writing time, so this
+# session's handoff and every plan, draft, complete or kept one are recomputed
+# from their own checkout (the primary's for the mirror). A recompute that
+# finds nothing left to resume (exit 6) deletes the handoff, unless a live
+# session other than this one claims it; adhoc handoffs are only listed.
+sid=${CLAUDE_CODE_SESSION_ID:-}
+claims="$(dforge_dir state "$(dr_native_path "$primary")")/handoff/claims"
+mirror_dir=""
+[ "$_DFORGE_PROGRESS_STORE" != darkmem ] || mirror_dir=$(_dforge_path "${_DFORGE_LEDGER_ROOT%/*}/handoff")
+listed=0 stale=""
+
+claim_session() { [ -f "$claims/$1" ] && tr -d '\r' < "$claims/$1" | sed -n 's/^session=//p' | head -n 1; }
+
+marker_session() { # FILE — the session= word of FILE's marker, read by name
+  local m word words
+  m=$(tr -d '\r' < "$1" | grep -E '^<!-- next-step: .* -->$' | tail -n 1) || return 0
+  m=${m#<!-- next-step: }
+  read -ra words <<<"${m%% subject=*}"
+  for word in "${words[@]}"; do
+    case $word in session=*) printf '%s\n' "${word#session=}"; return 0 ;; esac
+  done
+}
+
+handoff_checkout() { # FILE — the checkout whose next-step recomputes FILE
+  local dir top
+  dir=$(_dforge_path "$(dirname "$1")")
+  if [ -n "$mirror_dir" ] && [ "$dir" = "$mirror_dir" ]; then printf '%s\n' "$primary"; return 0; fi
+  top=$(git -C "$(dr_native_path "$dir")" rev-parse --show-toplevel 2>/dev/null | tr -d '\r')
+  [ -n "$top" ] || return 1
+  _dforge_path "$top"
+}
+
+# remove_finished FILE KEY — run under the claims lock, so a claim taken since
+# the listing counts: status 3 when a live session other than this one holds
+# KEY, else rm's.
+remove_finished() {
+  local held
+  held=$(claim_session "$2")
+  if [ -n "$held" ] && [ "$held" != "$sid" ] && ! session_gone "$held"; then return 3; fi
+  rm -f -- "$1"
+}
+
+stored_lines() { tr -d '\r' < "$1" | grep -E '^\*\*(Status|Next):\*\*' | sed 's/^/- /'; }
+
+# show_handoff FILE KEY KIND AGE CLAIM MINE — one handoff's lines; FILE goes
+# on the stale list when it stays and is older than 14 days.
+show_handoff() {
+  local f=$1 key=$2 kind=$3 age=$4 claim=$5 mine=$6 line co out rc=0 rrc=0 reason first mtime since
   listed=1
-  echo "- \`$latest\`"
-  # The stored lines are a claim about the repository at writing time, so they
-  # are recomputed; only when that fails are they shown, marked as stored.
-  status=0
-  recomputed=$(cd "$root" && bash "$here/with-timeout" 20 bash "$here/next-step" --print --latest 2>&1) || status=$?
-  case $status in
-    0)
-      echo "- recomputed from the repository"
-      grep -E '^\*\*(Status|Next):\*\*' <<<"$recomputed" | sed 's/^/- /'
-      ;;
-    6) echo "- nothing to resume (the stored block is superseded)" ;;
+  line="- \`$f\` — key $key, kind $kind, $(session_age_text "$age") old, $claim"
+  [ "$mine" -eq 0 ] || line="$line (this session's)"
+  case $kind in
+    plan|draft|complete|kept) ;;
     *)
-      echo "- stored, not recomputed: $(grep -m 1 . <<<"$recomputed")"
-      tr -d '\r' < "$latest" | grep -E '^\*\*(Status|Next):\*\*' | sed 's/^/- /'
+      if [ "$mine" -eq 0 ]; then
+        echo "$line"
+        echo "- stored (kind $kind is not recomputed)"
+        stored_lines "$f"
+        [ "$age" -le 1209600 ] || stale+="- $(session_age_text "$age") \`$f\`"$'\n'
+        return
+      fi ;;
+  esac
+  if co=$(handoff_checkout "$f"); then
+    out=$(cd "$co" && bash "$here/with-timeout" 20 bash "$here/next-step" --print --handoff "$f" 2>&1 </dev/null) || rc=$?
+  else
+    out="repo-audit: $f is in no checkout" rc=1
+  fi
+  case $rc in
+    0)
+      echo "$line"
+      echo "- recomputed from the repository"
+      grep -E '^\*\*(Status|Next):\*\*' <<<"$out" | sed 's/^/- /'
+      ;;
+    6)
+      reason=$(grep -m 1 '^next-step: ' <<<"$out" | sed 's/^next-step: //')
+      reason=${reason:-nothing to resume}
+      case $kind in
+        plan|draft|complete|kept)
+          if [ -d "$claims" ]; then dr_locked "$claims/" remove_finished "$f" "$key" || rrc=$?
+          else remove_finished "$f" "$key" || rrc=$?; fi
+          case $rrc in
+            0) echo "- removed finished handoff $f — $reason"; return ;;
+            3) echo "$line"; echo "- finished, kept while a live session claims it: $reason" ;;
+            *) echo "$line"; echo "- finished, but it could not be removed: $reason" ;;
+          esac
+          stored_lines "$f" ;;
+        *) echo "$line"; echo "- nothing to resume: $reason" ;;
+      esac
+      ;;
+    *)
+      first=$(grep -m 1 . <<<"$out")
+      echo "$line"
+      echo "- stored, not recomputed: ${first:-next-step exited $rc}"
+      stored_lines "$f"
       ;;
   esac
-  mtime=$(stat -c %Y "$latest" 2>/dev/null || stat -f %m "$latest")
-  since=$(git -C "$root" log -n 500 --format=%ct HEAD 2>/dev/null | awk -v t="$mtime" '$1 > t' | grep -c . || true)
-  echo "- Commits on this checkout's HEAD since it was written: $since"
+  if [ "$mine" -eq 1 ]; then
+    mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")
+    since=$(git -C "$root" log -n 500 --format=%ct HEAD 2>/dev/null | awk -v t="$mtime" '$1 > t' | grep -c . || true)
+    echo "- Commits on this checkout's HEAD since it was written: $since"
+  fi
+  [ "$age" -le 1209600 ] || stale+="- $(session_age_text "$age") \`$f\`"$'\n'
+}
+
+handoffs=$(bash "$here/handoff" list "$root" | tr -d '\r')
+own=""
+if [ -n "$sid" ]; then
+  own=$(while IFS=$'\t' read -r f key kind age claim; do
+          [ -n "$f" ] || continue
+          if [ "$(claim_session "$key")" = "$sid" ] || [ "$(marker_session "$f")" = "$sid" ]; then
+            printf '%s\t%s\n' "$age" "$f"
+          fi
+        done <<<"$handoffs" | sort -n | head -n 1 | cut -f2-)
 fi
-# Every other checkout's handoff, as stored: recomputing it means running
-# next-step in that checkout. dforge_latest_files prints one line per entry whose
-# directory exists, in porcelain order, so the entries pair with it by index.
-handoffs=()
-while IFS= read -r line; do handoffs+=("$line"); done < <(dforge_latest_files "$root")
-i=0
-now=$(date +%s)
-while IFS=$'\t' read -r wt wbranch wprune; do
+if [ -n "$own" ]; then
+  while IFS=$'\t' read -r f key kind age claim; do
+    [ "$f" = "$own" ] && show_handoff "$f" "$key" "$kind" "$age" "$claim" 1
+  done <<<"$handoffs"
+fi
+while IFS=$'\t' read -r f key kind age claim; do
+  [ -n "$f" ] && [ "$f" != "$own" ] || continue
+  show_handoff "$f" "$key" "$kind" "$age" "$claim" 0
+done <<<"$handoffs"
+while IFS=$'\t' read -r wt wprune; do
   wt=$(_dforge_path "$wt")
-  file=""
-  if [ -d "$wt" ]; then file=${handoffs[$i]:-}; i=$((i + 1)); fi
-  if [ -n "$wprune" ] || [ ! -d "$wt" ]; then echo "- skipped \`$wt\`: prunable or missing"; continue; fi
-  [ -n "$file" ] && [ -f "$file" ] || continue
-  [ -f "$latest" ] && [ "$file" -ef "$latest" ] && continue
-  listed=1
-  at=$(tr -d '\r' < "$file" | sed -n 's/^<!-- next-step: .* at=\([0-9][0-9]*\).*-->$/\1/p' | tail -n 1)
-  [ -n "$at" ] || at=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file")
-  echo "- \`$file\` [$wbranch]"
-  echo "- stored, not recomputed: another checkout's handoff, written $(( (now - at) / 3600 ))h ago"
-  tr -d '\r' < "$file" | grep -E '^\*\*(Status|Next):\*\*' | sed 's/^/- /'
+  [ -z "$wprune" ] && [ -d "$wt" ] || echo "- skipped \`$wt\`: prunable or missing"
 done < <(git -C "$(dr_native_path "$root")" worktree list --porcelain 2>/dev/null | tr -d '\r' | awk '
-  /^worktree / { if (p != "") print p "\t" b "\t" pr; p = substr($0, 10); b = "detached"; pr = ""; next }
-  /^branch /   { b = substr($0, 8); sub(/^refs\/heads\//, "", b); next }
+  /^worktree / { if (p != "") print p "\t" pr; p = substr($0, 10); pr = ""; next }
   /^prunable/  { pr = "prunable"; next }
-  END { if (p != "") print p "\t" b "\t" pr }
+  END { if (p != "") print p "\t" pr }
 ')
 [ "$listed" -eq 1 ] || echo "- none"
+
+echo
+echo "## Stale handoffs"
+if [ -n "$stale" ]; then printf '%s' "$stale"; else echo "- none"; fi
 
 echo
 echo "## Compaction"

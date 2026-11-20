@@ -553,7 +553,8 @@ lacks "A14: the stale stored Next line is not printed" "$SEC" "Resume at Task 1 
 printf '# Completed plans\n\n- 2026-11-01 — `docs/dforge/plans/2026-11-01-p.md` — merged\n' > "$H/docs/dforge/plans/completed.md"
 hstored "<!-- next-step: kind=plan done=0 closed=0 subject=docs/dforge/plans/2026-11-01-p.md at=1 -->"
 SEC=$(section)
-has "A14: exit 6 says nothing is to resume" "$SEC" "nothing to resume"
+has "A14: exit 6 removes the finished handoff" "$SEC" "removed finished handoff $H/.dforge/handoff/latest.md"
+check "A14: the finished handoff is gone" "$([ -e "$H/.dforge/handoff/latest.md" ] && echo yes || echo no)" no
 lacks "A14: exit 6 prints no Next line" "$SEC" "**Next:**"
 hstored "<!-- next-step: kind=plan done=1 closed=0 subject=docs/dforge/plans/missing.md at=1 -->"
 SEC=$(section)
