@@ -119,5 +119,32 @@ rm -rf "$TMP/gone"
 check "latest files: a missing worktree is skipped" "$(cd "$REPO" && dagents_latest_files | grep -c gone)" "0"
 git -C "$REPO" worktree prune
 
+# --- keyed handoff files (C1, C2, C3) ---
+FP="$HERE/../../plugins/dagents/scripts/dagents-path"
+check "handoff_file_keys: a key from a worktree" "$(cd "$REPO" && dagents_handoff_file P "$WT")" "$WT/.dagents/handoff/P.md"
+check "handoff_file_keys: a key from the primary" "$(cd "$WT" && dagents_handoff_file P "$REPO")" "$TOP/.dagents/handoff/P.md"
+out=$(cd "$REPO" && dagents_handoff_file 'a b' 2>&1); rc=$?
+check "handoff_file_keys: a space is invalid" "$rc:$out" "2:handoff: invalid key a b"
+out=$(cd "$REPO" && dagents_handoff_file latest 2>&1); rc=$?
+check "handoff_file_keys: latest is invalid" "$rc:$out" "2:handoff: invalid key latest"
+
+kc() { dagents_handoff_key_check "$@" > /dev/null 2>&1; printf '%s' "$?"; }
+check "handoff_key_check: plan rejects an adhoc key" "$(kc plan adhoc-x)" "2"
+check "handoff_key_check: plan rejects latest" "$(kc plan latest)" "2"
+check "handoff_key_check: draft takes a spec basename" "$(kc draft P-design)" "0"
+check "handoff_key_check: adhoc takes 8 hex digits" "$(kc adhoc adhoc-0a1b2c3d)" "0"
+check "handoff_key_check: adhoc takes a legacy key" "$(kc adhoc adhoc-legacy-1700000000)" "0"
+check "handoff_key_check: adhoc rejects non-hex" "$(kc adhoc adhoc-zz)" "2"
+
+mkdir -p "$REPO/.dagents/handoff/claims" "$REPO/.dagents/handoff/notes" "$WT/.dagents/handoff"
+printf 'x\n' > "$REPO/.dagents/handoff/latest.md"
+printf 'x\n' > "$REPO/.dagents/handoff/P.md"
+printf 'x\n' > "$WT/.dagents/handoff/Q.md"
+printf 'session=s\n' > "$REPO/.dagents/handoff/claims/Q"
+printf 'n\n' > "$REPO/.dagents/handoff/notes/Q.md"
+check "handoff_files_lists_every_checkout: dagents-path handoffs" "$(cd "$WT" && bash "$FP" handoffs)" \
+  "$(printf '%s\n%s\n%s' "$TOP/.dagents/handoff/P.md" "$TOP/.dagents/handoff/latest.md" "$WT/.dagents/handoff/Q.md")"
+rm -rf "$REPO/.dagents/handoff" "$WT/.dagents/handoff"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

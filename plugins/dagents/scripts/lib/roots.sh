@@ -72,6 +72,48 @@ dagents_latest_files() {
   return 0
 }
 
+# dagents_handoff_file KEY [DIR] — the handoff file of KEY under DIR's
+# checkout's state directory. Exit 2 for a key that is no plain file name, or
+# is latest.
+dagents_handoff_file() {
+  local key=$1
+  if [[ ! $key =~ ^[A-Za-z0-9._-]+$ ]] || [ "$key" = latest ]; then
+    printf 'handoff: invalid key %s\n' "$key" >&2
+    return 2
+  fi
+  dagents_stores_init "${2:-}"
+  printf '%s/%s.md\n' "${_DAGENTS_LATEST%/*}" "$key"
+}
+
+# dagents_handoff_key_check KIND KEY — exit 2 when KEY cannot name a handoff
+# of KIND: a plan or draft key that starts adhoc- or is latest, or an adhoc key
+# that is neither adhoc-<8 hex digits> nor adhoc-legacy-*.
+dagents_handoff_key_check() {
+  case $1 in
+    plan | draft) case $2 in adhoc-* | latest) return 2 ;; esac ;;
+    adhoc) [[ $2 =~ ^adhoc-[0-9a-f]{8}$ || $2 =~ ^adhoc-legacy-[A-Za-z0-9._-]+$ ]] || return 2 ;;
+    *) return 2 ;;
+  esac
+  return 0
+}
+
+# dagents_handoff_files [DIR] — every handoff/*.md of every checkout, in `git
+# worktree list` order; never the claims/ or notes/ contents.
+dagents_handoff_files() {
+  local wt f
+  dagents_stores_init "${1:-}"
+  [ -n "$_DAGENTS_TOP" ] || return 0
+  git -C "$(dr_native_path "$_DAGENTS_TOP")" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p' |
+  while IFS= read -r wt; do
+    wt=$(_dagents_path "$wt")
+    [ -d "$wt" ] || continue
+    for f in "$(dagents_dir state "$wt")"/handoff/*.md; do
+      [ -f "$f" ] && printf '%s\n' "$f"
+    done
+  done
+  return 0
+}
+
 # dagents_ledger_files [DIR] — "<ledger>\t<checkout>" for every worktree's
 # ledgers.
 dagents_ledger_files() {

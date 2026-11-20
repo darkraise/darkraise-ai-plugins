@@ -166,6 +166,58 @@ dforge_latest_files() {
   return 0
 }
 
+# dforge_handoff_file KEY [DIR] — the handoff file of KEY for DIR's checkout:
+# in the darkmem mirror for the primary while progress is kept there (the
+# directory latest.md resolves to), otherwise under the checkout's state
+# directory. Exit 2 for a key that is no plain file name, or is latest.
+dforge_handoff_file() {
+  local key=$1
+  if [[ ! $key =~ ^[A-Za-z0-9._-]+$ ]] || [ "$key" = latest ]; then
+    printf 'handoff: invalid key %s\n' "$key" >&2
+    return 2
+  fi
+  dforge_stores_init "${2:-}"
+  printf '%s/%s.md\n' "${_DFORGE_LATEST%/*}" "$key"
+}
+
+# dforge_handoff_key_check KIND KEY — exit 2 when KEY cannot name a handoff of
+# KIND: a plan or draft key that starts adhoc- or is latest, or an adhoc key
+# that is neither adhoc-<8 hex digits> nor adhoc-legacy-*.
+dforge_handoff_key_check() {
+  case $1 in
+    plan | draft) case $2 in adhoc-* | latest) return 2 ;; esac ;;
+    adhoc) [[ $2 =~ ^adhoc-[0-9a-f]{8}$ || $2 =~ ^adhoc-legacy-[A-Za-z0-9._-]+$ ]] || return 2 ;;
+    *) return 2 ;;
+  esac
+  return 0
+}
+
+# dforge_handoff_files [DIR] — every handoff/*.md of every checkout, in `git
+# worktree list` order, then the mirror's while progress is darkmem; never the
+# claims/ or notes/ contents.
+dforge_handoff_files() {
+  local wt f mirror=""
+  dforge_stores_init "${1:-}"
+  # From a linked worktree latest.md is local; the ledger root is the mirror's.
+  [ "$_DFORGE_PROGRESS_STORE" = darkmem ] && mirror="${_DFORGE_LEDGER_ROOT%/*}/handoff"
+  if [ -n "$_DFORGE_TOP" ]; then
+    git -C "$(dr_native_path "$_DFORGE_TOP")" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p' |
+    while IFS= read -r wt; do
+      wt=$(_dforge_path "$wt")
+      [ -d "$wt" ] || continue
+      for f in "$(dforge_dir state "$wt")"/handoff/*.md; do
+        [ -f "$f" ] && printf '%s\n' "$f"
+      done
+    done
+  fi
+  if [ -n "$mirror" ]; then
+    for f in "$mirror"/*.md; do
+      [ -f "$f" ] && printf '%s\n' "$f"
+    done
+  fi
+  return 0
+}
+
 # dforge_ledger_files [DIR] — "<ledger>\t<checkout>" for every worktree's
 # ledgers when progress is local; "<ledger>\tmirror" for the mirror's when it
 # is darkmem, listed once, since every worktree shares the mirror.

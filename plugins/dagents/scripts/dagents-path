@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# dagents-path state [RELATIVE] | docs [RELATIVE] | ledger SLUG|PLAN_FILE | latest | name PATH
+# dagents-path state [RELATIVE] | docs [RELATIVE] | ledger SLUG|PLAN_FILE | latest | handoff MODE-ARGS… | handoffs | name PATH
 # Where this repository's dagents files live, all in the checkout: the state
 # directory (.dagents/), the docs root, a plan's ledger directory and
-# latest.md, or the repository-relative name of a path.
+# latest.md, the handoff a next-step call with the same mode arguments would
+# write (`next-step --target`), every handoff file of every checkout, or the
+# repository-relative name of a path.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/roots.sh"
-usage() { echo "usage: dagents-path state|docs [RELATIVE] | ledger SLUG|PLAN_FILE | latest | name PATH" >&2; exit 2; }
+usage() { echo "usage: dagents-path state|docs [RELATIVE] | ledger SLUG|PLAN_FILE | latest | handoff MODE-ARGS… | handoffs | name PATH" >&2; exit 2; }
 [ $# -ge 1 ] || usage
 [ "$1" = state ] || dagents_stores_init
 case $1 in
@@ -24,6 +26,8 @@ case $1 in
     exit 0
     ;;
   latest) [ $# -eq 1 ] || usage; dagents_latest_file; exit 0 ;;
+  handoff) shift; bash "$HERE/next-step" --target "$@"; exit $? ;;
+  handoffs) [ $# -eq 1 ] || usage; dagents_handoff_files; exit 0 ;;
   name) [ $# -eq 2 ] || usage; dagents_name "$2"; exit 0 ;;
   *) usage ;;
 esac

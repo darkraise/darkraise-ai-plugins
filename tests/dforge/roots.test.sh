@@ -210,5 +210,44 @@ rm -rf "$TMP/gone"
 check "latest files: a missing worktree is skipped" "$(cd "$REPO" && dforge_latest_files | grep -c gone)" "0"
 git -C "$REPO" worktree prune
 
+# --- keyed handoff files (C1, C2, C3) ---
+stores_home "$HOME" "$REPO" superpowers local local > /dev/null
+check "handoff_file_keys: a key from a worktree" "$(cd "$REPO" && dforge_handoff_file P "$WT")" "$WT/.dforge/handoff/P.md"
+check "handoff_file_keys: a key from the primary" "$(cd "$WT" && dforge_handoff_file P "$REPO")" "$TOP/.dforge/handoff/P.md"
+out=$(cd "$REPO" && dforge_handoff_file 'a b' 2>&1); rc=$?
+check "handoff_file_keys: a space is invalid" "$rc:$out" "2:handoff: invalid key a b"
+out=$(cd "$REPO" && dforge_handoff_file latest 2>&1); rc=$?
+check "handoff_file_keys: latest is invalid" "$rc:$out" "2:handoff: invalid key latest"
+out=$(cd "$REPO" && dforge_handoff_file 'a/b' 2>&1); rc=$?
+check "handoff_file_keys: a slash is invalid" "$rc" "2"
+
+kc() { dforge_handoff_key_check "$@" > /dev/null 2>&1; printf '%s' "$?"; }
+check "handoff_key_check: plan rejects an adhoc key" "$(kc plan adhoc-x)" "2"
+check "handoff_key_check: plan rejects latest" "$(kc plan latest)" "2"
+check "handoff_key_check: draft takes a spec basename" "$(kc draft P-design)" "0"
+check "handoff_key_check: adhoc takes 8 hex digits" "$(kc adhoc adhoc-0a1b2c3d)" "0"
+check "handoff_key_check: adhoc takes a legacy key" "$(kc adhoc adhoc-legacy-1700000000)" "0"
+check "handoff_key_check: adhoc rejects non-hex" "$(kc adhoc adhoc-zz)" "2"
+check "handoff_key_check: adhoc rejects 7 hex digits" "$(kc adhoc adhoc-0a1b2c3)" "2"
+
+mkdir -p "$REPO/.dforge/handoff/claims" "$REPO/.dforge/handoff/notes" "$WT/.dforge/handoff"
+printf 'x\n' > "$REPO/.dforge/handoff/latest.md"
+printf 'x\n' > "$REPO/.dforge/handoff/P.md"
+printf 'x\n' > "$WT/.dforge/handoff/Q.md"
+printf 'session=s\n' > "$REPO/.dforge/handoff/claims/Q"
+printf 'n\n' > "$REPO/.dforge/handoff/notes/Q.md"
+check "handoff_files_lists_every_checkout: dforge-path handoffs" "$(cd "$WT" && bash "$FP" handoffs)" \
+  "$(printf '%s\n%s\n%s' "$TOP/.dforge/handoff/P.md" "$TOP/.dforge/handoff/latest.md" "$WT/.dforge/handoff/Q.md")"
+check "handoff_files_lists_every_checkout: dforge_handoff_files" "$(cd "$REPO" && dforge_handoff_files)" \
+  "$(printf '%s\n%s\n%s' "$TOP/.dforge/handoff/P.md" "$TOP/.dforge/handoff/latest.md" "$WT/.dforge/handoff/Q.md")"
+
+MIRROR=$(stores_home "$HOME" "$REPO" superpowers local darkmem)
+printf 'x\n' > "$MIRROR/work/handoff/M.md"
+check "handoff_file_darkmem: the primary's key is in the mirror" "$(cd "$REPO" && dforge_handoff_file P "$REPO")" "$MIRROR/work/handoff/P.md"
+check "handoff_file_darkmem: a worktree's key stays in the worktree" "$(cd "$REPO" && dforge_handoff_file P "$WT")" "$WT/.dforge/handoff/P.md"
+check "handoff_file_darkmem: dforge-path handoffs lists the mirror's" "$(cd "$WT" && bash "$FP" handoffs | grep -c "^$MIRROR/work/handoff/M.md\$")" "1"
+check "handoff_file_darkmem: and every checkout's" "$(cd "$WT" && bash "$FP" handoffs | grep -c "^$WT/.dforge/handoff/Q.md\$")" "1"
+rm -rf "$REPO/.dforge/handoff" "$WT/.dforge/handoff" "$MIRROR/work/handoff/M.md"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
