@@ -575,7 +575,7 @@ rmdir "$BLK_H.tmp"
 (cd "$REPO" && bash "$SCRIPT" docs/plans/2026-01-01-blocked.md >/dev/null 2>&1) &
 wait
 check "handoff: concurrent writers leave one Next session block" "$(grep -c '^## Next session' "$BLK_H")" "1"
-check "handoff: no temporary file is left beside it" "$(ls -A "$REPO/.dagents/handoff" | grep -cv '\.md$')" "0"
+check "handoff: no temporary file is left beside it" "$(ls -A "$REPO/.dagents/handoff" | grep -cvE '\.md$|^claims$')" "0"
 # A note another writer adds to the handoff while next-step holds its copy must
 # survive: the slowed awk delivers the merged copy two seconds after it read
 # the file, and the other writer appends under the same lock meanwhile.

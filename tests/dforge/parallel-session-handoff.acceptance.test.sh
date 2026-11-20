@@ -104,6 +104,9 @@ git -C "$R" worktree add -q -b p "$TMP/w$n" >/dev/null 2>&1
 W=$(git -C "$TMP/w$n" rev-parse --show-toplevel)
 mkdir -p "$W/$STATE/sdd/$P"
 printf '# SDD ledger — plan: %s/plans/%s.md\nTask 1: complete (commits a..b, review clean)\nTask 2: complete (commits b..c, review clean)\n' "$DOCS" "$P" > "$W/$STATE/sdd/$P/progress.md"
+# A next sub-project keeps the --complete block from being terminal (printed, not written).
+SPEC_DIR=$DOCS awk '{ print } /^\*\*Spec:\*\*/ { print "**Program:** `" ENVIRON["SPEC_DIR"] "/specs/S.md` — sub-project 1 of 2 — next: Two" }' \
+  "$W/$DOCS/plans/$P.md" > "$TMP/plan" && mv "$TMP/plan" "$W/$DOCS/plans/$P.md"
 ns "$S3" "$W" --complete "$DOCS/plans/$P.md"
 check "base_repo_and_worktree: --complete exits 0" "$RC" "0"
 check "base_repo_and_worktree: --complete writes the primary's keyed handoff" "$(grep -c '^## Next session' "$HD/$P.md" 2>/dev/null)" "1"
@@ -132,6 +135,161 @@ notes_of "$HD/$K1.md" > "$TMP/k1-notes-after"
 check "interleaved_notes: and keeps k1's notes byte-identical" "$(digest "$TMP/k1-notes-after")" "$(digest "$TMP/k1-notes")"
 has "interleaved_notes: with the new block" "$(cat "$HD/$K1.md")" "**Next:** Then the last step."
 check "interleaved_notes: one block" "$(grep -c '^## Next session' "$HD/$K1.md")" "1"
+
+H="$SCRIPTS/handoff"
+beat() { # beat <session> — the heartbeat a live cockpit writes
+  local f
+  f="$HOME/.claude/$PLUGIN/sessions/cockpit/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  mkdir -p "${f%/*}"; date +%s > "$f"
+}
+claim() { # claim <session> <dir> <file> — handoff claim as <session> in <dir>; sets OUT and RC
+  OUT=$(cd "$2" && CLAUDE_CODE_SESSION_ID=$1 timeout 30 bash "$H" claim "$3" 2>&1); RC=$?
+}
+exists() { if [ -e "$1" ]; then echo yes; else echo no; fi; }
+worktree() { # worktree — a linked worktree in $W on branch p whose ledger has Task 1 complete
+  git -C "$R" worktree add -q -b p "$TMP/w$n" >/dev/null 2>&1
+  W=$(git -C "$TMP/w$n" rev-parse --show-toplevel)
+  mkdir -p "$W/$STATE/sdd/$P"
+  printf '# SDD ledger — plan: %s/plans/%s.md\nTask 1: complete (commits a..b, review clean)\n' "$DOCS" "$P" > "$W/$STATE/sdd/$P/progress.md"
+}
+
+# ---------------------------------------------------------------- held_claim_refuses_write
+fixture
+ns "$S2" "$TOP" --draft "$DOCS/specs/D.md" --next "Write the plan"
+beat "$S2"
+claim "$S2" "$TOP" "$HD/D.md"
+check "held_claim_refuses_write: S2 claims D" "$RC $OUT" "0 claimed D"
+d1=$(digest "$HD/D.md")
+notes D "S3 design notes"
+n1=$(digest "$HD/notes/D.md")
+ns "$S3" "$TOP" --draft "$DOCS/specs/D.md" --next "Write the plan" --notes "$HD/notes/D.md"
+check "held_claim_refuses_write: the write exits 7" "$RC" "7"
+has "held_claim_refuses_write: it names the holder and the claim's age" "$OUT" "next-step: handoff D is held by ${S2:0:8} (live, claimed "
+has "held_claim_refuses_write: on stderr too" "$(cat "$TMP/stderr")" "next-step: handoff D is held by ${S2:0:8} (live, claimed "
+lacks "held_claim_refuses_write: it prints no block" "$OUT" "## Next session"
+check "held_claim_refuses_write: the handoff is byte-identical" "$(digest "$HD/D.md")" "$d1"
+check "held_claim_refuses_write: the notes file is byte-identical" "$(digest "$HD/notes/D.md")" "$n1"
+ns "$S3" "$TOP" --target --draft "$DOCS/specs/D.md" --next "Write the plan"
+check "held_claim_refuses_write: --target exits 7" "$RC" "7"
+has "held_claim_refuses_write: --target names the holder" "$OUT" "next-step: handoff D is held by ${S2:0:8} (live, claimed "
+beat "$S3"
+(cd "$TOP" && timeout 30 bash "$SCRIPTS/auto-run" --session "$S3" start --spec "$DOCS/specs/D.md" --isolation in-place > /dev/null 2>&1)
+check "held_claim_refuses_write: S3's auto run is active" "$(cd "$TOP" && timeout 30 bash "$SCRIPTS/auto-run" --session "$S3" status > /dev/null 2>&1; echo $?)" "0"
+ns "$S3" "$TOP" --draft "$DOCS/specs/D.md" --next "Write the plan"
+check "held_claim_refuses_write: in an auto run the write still exits 7" "$RC" "7"
+check "held_claim_refuses_write: and stops S3's run first" "$(jq -r '.active' "$TOP/$STATE/sdd/auto-run.json")" "false"
+check "held_claim_refuses_write: naming the key and the holder" "$(jq -r '.stopped // empty' "$TOP/$STATE/sdd/auto-run.json")" "handoff D is held by ${S2:0:8}"
+check "held_claim_refuses_write: the claim is still S2's" "$(sed -n 1p "$HD/claims/D")" "session=$S2"
+ns "$S2" "$TOP" --draft "$DOCS/specs/D.md" --next "Write the plan"
+check "held_claim_refuses_write: the holder itself writes" "$RC" "0"
+check "held_claim_refuses_write: and so releases its claim" "$(exists "$HD/claims/D")" "no"
+
+# ---------------------------------------------------------------- consume_and_supersede
+fixture
+A="$HD/adhoc-${S1:0:8}.md"
+ns "$S1" "$TOP" --adhoc --phase build --next "Finish item C"
+claim "$S2" "$TOP" "$A"
+notes D "S2 design notes"
+ns "$S2" "$TOP" --draft "$DOCS/specs/D.md" --next "Write the plan" --notes "$HD/notes/D.md"
+check "consume_and_supersede: the draft write exits 0" "$RC" "0"
+has "consume_and_supersede: the draft handoff is written" "$(cat "$HD/D.md" 2>/dev/null)" "S2 design notes"
+check "consume_and_supersede: the claimed adhoc handoff is consumed" "$(exists "$A")" "no"
+check "consume_and_supersede: with its claim" "$(exists "$HD/claims/adhoc-${S1:0:8}")" "no"
+has "consume_and_supersede: stderr names the consumed path" "$(cat "$TMP/stderr")" "next-step: consumed $A (claimed by this session)"
+ns "$S1" "$TOP" --adhoc --phase build --next "Finish item C"
+claim "$S2" "$TOP" "$A"
+ns "$S2" "$TOP" --draft "$DOCS/specs/D.md" --next "Write the plan"
+check "consume_and_supersede: without --notes the run exits 0" "$RC" "0"
+check "consume_and_supersede: and keeps the adhoc handoff" "$(exists "$A")" "yes"
+check "consume_and_supersede: and releases its claim" "$(exists "$HD/claims/adhoc-${S1:0:8}")" "no"
+has "consume_and_supersede: stderr names the kept path" "$(cat "$TMP/stderr")" "next-step: kept $A (released)"
+printf '# D1 design\n' > "$D/specs/D1-design.md"
+ns "$S3" "$TOP" "$DOCS/plans/$P.md"
+ns "$S3" "$TOP" --draft "$DOCS/specs/D1-design.md" --next "Write the plan"
+claim "$S2" "$TOP" "$HD/$P.md"
+claim "$S2" "$TOP" "$HD/D1-design.md"
+notes "adhoc-${S2:0:8}" "S2 punch list"
+ns "$S2" "$TOP" --adhoc --phase build --next "Go on" --notes "$HD/notes/adhoc-${S2:0:8}.md"
+check "consume_and_supersede: the adhoc write with --notes exits 0" "$RC" "0"
+check "consume_and_supersede: an unfinished plan's handoff is kept" "$(exists "$HD/$P.md")" "yes"
+check "consume_and_supersede: a live draft's handoff is kept" "$(exists "$HD/D1-design.md")" "yes"
+check "consume_and_supersede: both claims are released" "$(exists "$HD/claims/$P") $(exists "$HD/claims/D1-design")" "no no"
+has "consume_and_supersede: stderr names the kept plan handoff" "$(cat "$TMP/stderr")" "next-step: kept $HD/$P.md (released)"
+has "consume_and_supersede: stderr names the kept draft handoff" "$(cat "$TMP/stderr")" "next-step: kept $HD/D1-design.md (released)"
+worktree
+ns "$S3" "$W" "$DOCS/plans/$P.md"
+check "consume_and_supersede: the executor's handoff from W exits 0" "$RC" "0"
+check "consume_and_supersede: W's handoff is written" "$(exists "$W/$STATE/handoff/$P.md")" "yes"
+check "consume_and_supersede: the primary's copy is superseded" "$(exists "$HD/$P.md")" "no"
+has "consume_and_supersede: stderr names the superseded path" "$(cat "$TMP/stderr")" "next-step: superseded $HD/$P.md"
+beat "$S3"
+claim "$S3" "$W" "$W/$STATE/handoff/$P.md"
+claim "$S1" "$TOP" "$W/$STATE/handoff/$P.md"
+check "consume_and_supersede: a primary session's claim on W's live-claimed P exits 3" "$RC" "3"
+
+# ---------------------------------------------------------------- terminal_blocks
+fixture
+ns "$S3" "$TOP" "$DOCS/plans/$P.md"
+worktree
+mkdir -p "$W/$STATE/handoff"
+cp "$HD/$P.md" "$W/$STATE/handoff/$P.md"
+claim "$S3" "$TOP" "$HD/$P.md"
+notes "$P" "Last words"
+ns "$S3" "$W" --complete "$DOCS/plans/$P.md" --notes "$HD/notes/$P.md"
+check "terminal_blocks: the terminal --complete run exits 0" "$RC" "0"
+has "terminal_blocks: it prints the terminal block" "$OUT" "**Next:** Nothing — the plan records no follow-on work."
+check "terminal_blocks: no copy of P remains" "$(exists "$HD/$P.md") $(exists "$W/$STATE/handoff/$P.md")" "no no"
+check "terminal_blocks: the claim is released" "$(exists "$HD/claims/$P")" "no"
+check "terminal_blocks: the notes file is deleted" "$(exists "$HD/notes/$P.md")" "no"
+has "terminal_blocks: stderr says so" "$(cat "$TMP/stderr")" "next-step: deleted notes $HD/notes/$P.md (terminal block)"
+A="$HD/adhoc-${S1:0:8}.md"
+ns "$S1" "$TOP" --adhoc --phase build --next "Finish item C"
+a1=$(digest "$A")
+ns "$S1" "$TOP" --project
+check "terminal_blocks: the terminal --project run exits 0" "$RC" "0"
+has "terminal_blocks: it prints the terminal block" "$OUT" "**Next:** Nothing — no register holds an unresolved row."
+check "terminal_blocks: the session's adhoc handoff is byte-identical" "$(digest "$A")" "$a1"
+mkdir -p "$TOP/$STATE/sdd/$P"
+printf '# SDD ledger — plan: %s/plans/%s.md\nTask 1: BLOCKED — ruling seat — choose the storage format\n' "$DOCS" "$P" > "$TOP/$STATE/sdd/$P/progress.md"
+ns "$S3" "$TOP" "$DOCS/plans/$P.md"
+check "terminal_blocks: a BLOCKED plan's run exits 0" "$RC" "0"
+has "terminal_blocks: its block is written" "$(cat "$HD/$P.md" 2>/dev/null)" "Task 1 is BLOCKED"
+
+# ---------------------------------------------------------------- first_prompt_claims
+fixture
+ns "$S1" "$TOP" --print "$DOCS/plans/$P.md"
+has "first_prompt_claims: a plan's prompt claims its handoff" "$OUT" "scripts/handoff claim"
+ns "$S1" "$TOP" --print --kept "$DOCS/plans/$P.md"
+has "first_prompt_claims: a kept plan's prompt" "$OUT" "scripts/handoff claim"
+ns "$S1" "$TOP" --print --draft "$DOCS/specs/D.md" --next "Write the plan"
+has "first_prompt_claims: a draft's prompt" "$OUT" "scripts/handoff claim"
+ns "$S1" "$TOP" --adhoc --phase build --next "Finish item C"
+has "first_prompt_claims: an adhoc prompt" "$OUT" "scripts/handoff claim"
+ns "$S1" "$TOP" --print --handoff "$HD/adhoc-${S1:0:8}.md"
+has "first_prompt_claims: a recomputed prompt" "$OUT" "scripts/handoff claim"
+ns "" "$TOP" --host codex --print --draft "$DOCS/specs/D.md" --next "Write the plan"
+lacks "first_prompt_claims: a Codex draft prompt has no claim clause" "$OUT" "scripts/handoff claim"
+ns "" "$TOP" --host codex --print --adhoc --phase build --next "Finish item C"
+lacks "first_prompt_claims: nor a Codex adhoc prompt" "$OUT" "scripts/handoff claim"
+k=$(grep -o 'adhoc-[0-9a-f]\{8\}\.md' <<<"$OUT" | head -n 1)
+has "first_prompt_claims: which names the key to pass" "$OUT" "--key ${k%.md}"
+
+# ---------------------------------------------------------------- turn_record_written
+fixture
+TR="$HOME/.claude/$PLUGIN/sessions/turns"
+rec() { printf '%s/%s.next' "$TR" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"; }
+ns "$S1" "$TOP" --adhoc --phase build --next "Finish item C"
+check "turn_record_written: after a write, the block's Status and Next" "$(cat "$(rec "$S1")" 2>/dev/null)" \
+  "status=$(sed -n 's/^\*\*Status:\*\* //p' <<<"$OUT")
+next=Finish item C."
+ns "$S1" "$TOP" --project
+check "turn_record_written: after a terminal run, its Next" "$(sed -n 2p "$(rec "$S1")" 2>/dev/null)" "next=Nothing — no register holds an unresolved row."
+rm -rf "$TR"
+ns "" "$TOP" --adhoc --phase build --next "Finish item C" --key adhoc-0123abcd
+check "turn_record_written: a write without a session id exits 0" "$RC" "0"
+ns "$S2" "$TOP" --print --adhoc --phase build --next "Finish item C"
+ns "$S2" "$TOP" --target --adhoc --phase build --next "Finish item C"
+check "turn_record_written: no record without a session id, nor for --print or --target" "$(ls -A "$TR" 2>/dev/null | wc -l | tr -d ' ')" "0"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

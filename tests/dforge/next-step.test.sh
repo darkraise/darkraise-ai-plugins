@@ -472,7 +472,7 @@ rmdir "$BLK_H.tmp"
 (cd "$REPO" && bash "$SCRIPT" docs/plans/2026-01-01-blocked.md >/dev/null 2>&1) &
 wait
 check "handoff: concurrent writers leave one Next session block" "$(grep -c '^## Next session' "$BLK_H")" "1"
-check "handoff: no temporary file is left beside it" "$(ls -A "$REPO/.dforge/handoff" | grep -cv '\.md$')" "0"
+check "handoff: no temporary file is left beside it" "$(ls -A "$REPO/.dforge/handoff" | grep -cvE '\.md$|^claims$')" "0"
 # A note another writer adds to the handoff while next-step holds its copy must
 # survive: the slowed awk delivers the merged copy two seconds after it read
 # the file, and the other writer appends under the same lock meanwhile.
@@ -982,7 +982,8 @@ has "darkmem: the mirror ledger is read" "$out" "ledger \`$M/work/sdd/2026-02-02
 check "darkmem: the plan's handoff is written to the mirror" \
   "$(grep -c '^## Next session' "$M/work/handoff/2026-02-02-mirror.md")" "1"
 check "darkmem: only that handoff and dotfiles sit beside it" "$(ls -A "$M/work/handoff" | grep -v '^\.' | tr '\n' ' ')" "2026-02-02-mirror.md "
-check "darkmem: nothing is written in the checkout" "$([ -e "$SR/.dforge/handoff" ] && echo yes || echo no)" "no"
+# Claims stay in the checkout, never in the mirror (spec §4).
+check "darkmem: nothing but the claims is written in the checkout" "$(ls -A "$SR/.dforge/handoff" 2>/dev/null | tr '\n' ' ')" "claims "
 
 # --- per-worktree handoffs (spec A2, A3, A6, A13, A14) ---
 # The Keep as-is block left a ledger for this plan in the primary; plan_ledger_any

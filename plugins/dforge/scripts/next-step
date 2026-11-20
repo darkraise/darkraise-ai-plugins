@@ -60,6 +60,17 @@
 #   --host      which client the next session launches; default claude. A plan
 #               states its own host in its header, so the flag serves the paths
 #               that have no plan to read.
+# A write holds the repository's claims lock (<primary>/<state>/handoff/claims,
+# which scripts/handoff claim writes) from the claim check through the write:
+# it exits 7 when another live session claims the key, removes the key's
+# handoff from every other checkout and the mirror (superseded), releases this
+# session's claim on the key, and releases the handoffs this session claimed
+# under other keys, deleting them (consumed) when --notes carries their open
+# items and they name no unfinished plan or draft. A terminal block (a
+# "Nothing —" Next line of --complete or --project) is printed, not written,
+# and a terminal --complete removes every copy of the key. Each block a write
+# prints is recorded for the Stop hooks in
+# ~/.claude/dforge/sessions/turns/<session>.next.
 # The handoff's Next session section ends with a marker line the printed block
 # never carries, naming what the block was computed from and who wrote it:
 #   <!-- next-step: kind=<kind> [branch=<name> or branch=detached:<sha>] key=<key> session=<id or -> [host=codex] done=<n> closed=<n> subject=<name or -> at=<epoch> -->
@@ -73,7 +84,9 @@
 #       completed.md, or whose ledger is gone and is unrecorded; a draft a
 #       plan's Spec line names, or that is gone; a complete or project block
 #       whose recomputed Next is terminal; a kept branch merged or gone. An
-#       adhoc handoff is never superseded.
+#       adhoc handoff is never superseded; 7 another live session claims the
+#       handoff's key: nothing printed or written (--target too), and this
+#       session's auto run is stopped first.
 set -euo pipefail
 
 # Failures print on stdout as well as stderr. A session that surfaces only
@@ -90,6 +103,7 @@ usage() { fail 2 "usage: next-step [--host claude|codex] [--print|--target] [--n
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/route.sh"
+. "$(cd "$(dirname "$0")" && pwd)/lib/session-live.sh"
 
 # --host, --print, --target, --notes and --key are pulled out wherever they
 # sit so the remaining arguments keep their strict positional contract.
@@ -697,7 +711,30 @@ dir=$(handoff_target)
 # A recompute of a named handoff (--print --handoff) names that file.
 if [ "$print_only" -eq 1 ] && [ -n "${DFORGE_NEXT_STEP_HANDOFF:-}" ]; then handoff=$DFORGE_NEXT_STEP_HANDOFF
 else handoff=$(dforge_stores_init "$dir"; dforge_handoff_file "$key" "$dir"); fi
-if [ "$target_only" -eq 1 ]; then printf '%s\n' "$handoff"; exit 0; fi
+
+# Claims (spec §4): one directory for the repository, in the primary checkout,
+# whatever checkout holds the handoff; scripts/handoff claim writes them.
+claims="$(dforge_dir state "$(dr_native_path "$primary")")/handoff/claims"
+claim_field() { tr -d '\r' < "$1" | sed -n "s/^$2=//p" | head -n 1; }
+
+# refuse_if_held — exit 7 when another live session holds the key's claim,
+# after stopping this session's auto run (C16), so nothing is written over the
+# work that session resumed.
+refuse_if_held() {
+  local file="$claims/$key" held at now
+  [ -n "$key" ] && [ -f "$file" ] || return 0
+  held=$(claim_field "$file" session)
+  [ -n "$held" ] && [ "$held" != "$session_id" ] || return 0
+  ! session_gone "$held" || return 0
+  now=$(date +%s) at=$(claim_field "$file" at)
+  [[ $at =~ ^[0-9]+$ ]] || at=$now
+  if bash "$(cd "$(dirname "$0")" && pwd)/auto-run" status > /dev/null 2>&1; then
+    bash "$(cd "$(dirname "$0")" && pwd)/auto-run" stop --reason "handoff $key is held by ${held:0:8}" > /dev/null 2>&1 || true
+  fi
+  fail 7 "handoff $key is held by ${held:0:8} (live, claimed $(session_age_text $(( now > at ? now - at : 0 ))) ago)"
+}
+
+if [ "$target_only" -eq 1 ]; then refuse_if_held; printf '%s\n' "$handoff"; exit 0; fi
 
 # Every prompt opens on T: an auto run's cockpit pastes it into a cleared
 # session where no launch line ran, so the prompt itself says where to work.
@@ -705,7 +742,12 @@ if [ -n "$prompt" ]; then
   t_branch=$(git -C "$dir" branch --show-current 2>/dev/null | tr -d '\r')
   if [ -n "$t_branch" ]; then t_where="branch $t_branch"
   else t_where="detached at \`$(git -C "$dir" rev-parse --short HEAD 2>/dev/null | tr -d '\r')\`"; fi
-  prompt="Start in \`$dir\` ($t_where); its handoff is \`$handoff\`. If your working directory is not \`$dir\`, enter it first. $prompt"
+  # A Claude session claims the handoff it resumes; Codex has no session id to
+  # claim with, so its next write names the key instead.
+  claim_clause=""
+  if [ "$host" = claude ]; then claim_clause="Before anything else, claim it with dforge's \`scripts/handoff claim\` on that file. "
+  else case $key in adhoc-*) claim_clause="When you hand off, pass \`--key $key\` to next-step. " ;; esac; fi
+  prompt="Start in \`$dir\` ($t_where); its handoff is \`$handoff\`. If your working directory is not \`$dir\`, enter it first. $claim_clause$prompt"
 fi
 
 # A block printed over running work invites ending the session it would die
@@ -739,16 +781,7 @@ block=$(
     printf '\nPaste as the first prompt:\n\n```\n%s\n```\n' "$prompt"
   fi
 )
-printf '%s\n' "$block"
-[ "$print_only" -eq 0 ] || exit 0
-
-# The no-plan finish record has done its job once finishing has an outcome;
-# left behind, the next unplanned finish would act on it without asking.
-# finish-choice writes it under the checkout it runs in, a linked worktree
-# included, so both that checkout's and the primary's are cleared.
-if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ "$adhoc" -eq 1 ]; then
-  rm -f "$(dforge_dir state "$root")/sdd/finish.json" "$(dforge_dir state "$primary")/sdd/finish.json"
-fi
+if [ "$print_only" -eq 1 ]; then printf '%s\n' "$block"; exit 0; fi
 
 today=$(date -u +%Y-%m-%d)
 if [ "$adhoc" -eq 1 ]; then marker_kind=adhoc marker_subject=-
@@ -791,10 +824,125 @@ write_handoff() {
   rm -f "$tmp"
   return "$status"
 }
-if ! { mkdir -p "$(dirname "$handoff")" && handoff_lock=$(dr_lock_base "$handoff"); } 2>/dev/null; then
-  fail 4 "could not write $handoff — copy the block above into it by hand"
+
+# The turn record (C13): the Stop hooks release a turn that ends on this block,
+# written or not. Without a session id there is no turn to name.
+write_turn_record() {
+  [ -n "$session_id" ] || return 0
+  local f
+  f="${HOME:-}/.claude/dforge/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').next"
+  { mkdir -p "${f%/*}" && printf 'status=%s\nnext=%s\n' "$status_line" "$next_line" > "$f.$$" && mv -f "$f.$$" "$f"; } 2>/dev/null \
+    || { rm -f "$f.$$"; printf 'next-step: could not write the turn record %s\n' "$f" >&2; }
+}
+
+# copies_of KEY — every handoff of KEY in every checkout and the mirror.
+copies_of() {
+  local f
+  while IFS= read -r f; do [ "${f##*/}" != "$1.md" ] || printf '%s\n' "$f"; done < <(dforge_handoff_files "$root")
+}
+
+release_claim() { # release_claim KEY — remove this session's claim on KEY
+  local f="$claims/$1"
+  if [ -n "$session_id" ] && [ -f "$f" ] && [ "$(claim_field "$f" session)" = "$session_id" ]; then rm -f "$f"; fi
+}
+
+# handoff_unfinished FILE — FILE's marker names a plan not in completed.md, or
+# a draft that exists and no plan's Spec line names: work a consume must keep.
+handoff_unfinished() {
+  local m kind="" subject word
+  m=$(tr -d '\r' < "$1" | grep -E '^<!-- next-step: .* -->$' | tail -n 1)
+  m=${m#<!-- next-step: }; m=${m% -->}; m=${m% at=*}
+  subject=${m#* subject=}
+  for word in ${m%% subject=*}; do case $word in kind=*) kind=${word#kind=} ;; esac; done
+  case $kind in
+    plan|kept) ! plan_finished "$root" "$subject" ;;
+    draft) [ -f "$(dforge_resolve "$subject" "$root")" ] && ! draft_planned "$root" "$subject" ;;
+    *) return 1 ;;
+  esac
+}
+
+# consume_claims — the handoffs this session claimed under other keys: with
+# --notes the new handoff carries their open items, so they go, unless they
+# name unfinished work; without --notes they stay. Either way the claim goes.
+consume_claims() {
+  local c k f keep paths
+  [ -n "$session_id" ] || return 0
+  for c in "$claims"/*; do
+    [ -f "$c" ] || continue
+    k=${c##*/}
+    [ "$k" != "$key" ] && [ "$(claim_field "$c" session)" = "$session_id" ] || continue
+    keep=1 paths=()
+    [ -z "$notes_file" ] || keep=0
+    while IFS= read -r f; do
+      paths+=("$f")
+      [ "$keep" -eq 1 ] || ! handoff_unfinished "$f" || keep=1
+    done < <(copies_of "$k")
+    for f in ${paths[@]+"${paths[@]}"}; do
+      if [ "$keep" -eq 1 ]; then printf 'next-step: kept %s (released)\n' "$f" >&2
+      elif rm -f "$f"; then printf 'next-step: consumed %s (claimed by this session)\n' "$f" >&2; fi
+    done
+    rm -f "$c"
+  done
+}
+
+# A terminal block (C11) has nothing to resume: it is printed, never written.
+terminal=0
+case $next_line in "Nothing — "*) if [ "$complete" -eq 1 ] || [ "$project" -eq 1 ]; then terminal=1; fi ;; esac
+
+# hand_off — run under the claims lock (spec §3), from the claim check through
+# the write, supersede, release and consume; the handoff's own lock nests
+# inside. Exits 0, 4 or 7 only, so 1 means the lock was not had.
+hand_off() {
+  set +e
+  local f
+  refuse_if_held
+  printf '%s\n' "$block"
+  write_turn_record
+  # The no-plan finish record has done its job once finishing has an outcome;
+  # left behind, the next unplanned finish would act on it without asking.
+  # finish-choice writes it under the checkout it runs in, a linked worktree
+  # included, so both that checkout's and the primary's are cleared.
+  if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ "$adhoc" -eq 1 ]; then
+    rm -f "$(dforge_dir state "$root")/sdd/finish.json" "$(dforge_dir state "$primary")/sdd/finish.json"
+  fi
+  if [ "$terminal" -eq 1 ]; then
+    # A finished plan's handoffs go everywhere; a terminal --project leaves the
+    # session's adhoc handoff as it was.
+    if [ "$complete" -eq 1 ]; then
+      while IFS= read -r f; do
+        if rm -f "$f"; then printf 'next-step: removed %s (terminal block)\n' "$f" >&2; fi
+      done < <(copies_of "$key")
+    fi
+    release_claim "$key"
+    if [ -n "$notes_file" ] && rm -f "$notes_file"; then
+      printf 'next-step: deleted notes %s (terminal block)\n' "$notes_file" >&2
+    fi
+    exit 0
+  fi
+  if ! { mkdir -p "$(dirname "$handoff")" && handoff_lock=$(dr_lock_base "$handoff"); } 2>/dev/null \
+     || ! dr_locked "$handoff_lock" write_handoff 2>/dev/null; then
+    fail 4 "could not write $handoff — copy the block above into it by hand"
+  fi
+  [ -z "$notes_file" ] || rm -f "$notes_file"
+  # A key has one handoff: the one just written, in the checkout that resumes it.
+  while IFS= read -r f; do
+    [ "$f" -ef "$handoff" ] || { rm -f "$f" && printf 'next-step: superseded %s\n' "$f" >&2; }
+  done < <(copies_of "$key")
+  release_claim "$key"
+  consume_claims
+  exit 0
+}
+
+if ! { mkdir -p "$claims" && dforge_self_ignore "${claims%/handoff/claims}"; } 2>/dev/null; then
+  printf '%s\n' "$block"
+  write_turn_record
+  fail 4 "could not write $handoff (no claims directory $claims) — copy the block above into it by hand"
 fi
-if ! dr_locked "$handoff_lock" write_handoff 2>/dev/null; then
-  fail 4 "could not write $handoff — copy the block above into it by hand"
-fi
-[ -z "$notes_file" ] || rm -f "$notes_file"
+status=0
+dr_locked "$claims/" hand_off || status=$?
+case $status in
+  0|4|7) exit "$status" ;;
+esac
+printf '%s\n' "$block"
+write_turn_record
+fail 4 "could not write $handoff (the claims lock in $claims was not had) — copy the block above into it by hand"
