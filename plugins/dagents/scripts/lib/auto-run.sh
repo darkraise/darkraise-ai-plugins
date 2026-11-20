@@ -10,14 +10,13 @@
 . "$(dirname "${BASH_SOURCE[0]}")/plan.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/lock.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/register.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/session-live.sh"
 AR_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-AR_STALE_MINUTES=60
 AR_RESUME_CAP=3
 AR_FAILURE_CAP=2
 AR_STALL_CAP=3
 AR_COMPACTION_CAP=3
-AR_BEAT_SECONDS=180
 
 # A native jq.exe ends its lines CRLF; every script sourcing this sets
 # pipefail, so jq's own status, which -e relies on, still decides.
@@ -106,59 +105,15 @@ ar_get() {
   ar_state | ar_jq -r --arg f "$1" '.[$f] // empty | if type == "array" or type == "object" then tojson else tostring end'
 }
 
-# ar_transcript SESSION — the session's transcript: its by-id record's path,
-# else the projects tree's <SESSION>.jsonl. Records hold native paths, so a
-# Windows path is converted as scripts/lib/context.sh does.
-ar_transcript() {
-  local rec tp
-  rec="$HOME/.claude/dagents/sessions/by-id/$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-').json"
-  if [ -f "$rec" ]; then
-    tp=$(ar_jq -r '.transcript_path // empty' < "$rec" 2>/dev/null | tr -d '\r')
-    if [ -n "$tp" ] && command -v cygpath >/dev/null 2>&1; then tp=$(cygpath -u "$tp"); fi
-    if [ -n "$tp" ] && [ -f "$tp" ]; then printf '%s\n' "$tp"; return 0; fi
-  fi
-  tp=$(ls -t "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/projects/*/"$1".jsonl 2>/dev/null | head -n 1)
-  [ -n "$tp" ] || return 1
-  printf '%s\n' "$tp"
-}
+# The session helpers live in session-live.sh, beside AR_STALE_MINUTES and
+# AR_BEAT_SECONDS.
+ar_transcript() { session_transcript "$@"; }
+ar_beat_file() { session_beat_file "$@"; }
+ar_beat_age() { session_beat_age "$@"; }
 
-# ar_beat_file SESSION — where the session's cockpit writes its heartbeat: the
-# epoch seconds of its last beat.
-ar_beat_file() {
-  printf '%s/.claude/dagents/sessions/cockpit/%s\n' "${HOME:-}" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
-}
-
-# ar_beat_age SESSION — seconds since the session's cockpit last beat; fails
-# when the file is missing or holds no number. A beat up to AR_BEAT_SECONDS
-# ahead of this clock is clock skew and reads as age 0; one further ahead
-# fails, so ar_is_stale reads it as stale.
-ar_beat_age() {
-  local file beat age
-  file=$(ar_beat_file "$1")
-  [ -f "$file" ] || return 1
-  beat=$(head -n 1 "$file" | tr -dc '0-9')
-  [ -n "$beat" ] || return 1
-  age=$(( $(date +%s) - beat ))
-  [ "$age" -ge $(( -AR_BEAT_SECONDS )) ] || return 1
-  [ "$age" -ge 0 ] || age=0
-  echo "$age"
-}
-
-# ar_is_stale — true when whoever owned the run is gone: its session's cockpit
-# heartbeat is older than AR_BEAT_SECONDS, or, for a session with no heartbeat
-# file, its transcript was not written within AR_STALE_MINUTES or it has none.
-ar_is_stale() {
-  local sid tp age
-  sid=$(ar_get session)
-  [ -n "$sid" ] || return 0
-  if [ -f "$(ar_beat_file "$sid")" ]; then
-    age=$(ar_beat_age "$sid") || return 0
-    [ "$age" -gt "$AR_BEAT_SECONDS" ]
-    return
-  fi
-  tp=$(ar_transcript "$sid") || return 0
-  [ -n "$(find "$tp" -mmin +"$AR_STALE_MINUTES" 2>/dev/null)" ]
-}
+# ar_is_stale — true when whoever owned the run is gone (session_gone); a run
+# with no session counts as gone.
+ar_is_stale() { session_gone "$(ar_get session)"; }
 
 # ar_busy — true when the recorded run is active and its owner is not gone.
 ar_busy() {
