@@ -1295,7 +1295,13 @@ export const register: Register = on => {
     }
 
     if (isDense) {
+      // A task waiting on the person is the one to name: the row is all the dense layout has.
+      const waiting = summary?.tasks.find(task => task.state === 'waiting') ?? null
       const inFlight = summary?.tasks.find(task => task.state === 'assigned') ?? null
+      const current =
+        waiting !== null ? `? Task ${waiting.n} waiting${waiting.question === null ? '' : `: ${waiting.question}`}`
+        : inFlight === null ? null
+        : `Task ${inFlight.n}${inFlight.title === '' ? '' : `: ${inFlight.title}`}`
       const dense: DenseInput = {
         email: who?.email ?? null,
         billing,
@@ -1306,7 +1312,7 @@ export const register: Register = on => {
         limits,
         shells: background,
         agents: running.map(one => shortSeat(one.seat)),
-        run: summary === null || summary.total === 0 ? null : { done: summary.done, total: summary.total, current: inFlight === null ? null : `Task ${inFlight.n}${inFlight.title === '' ? '' : `: ${inFlight.title}`}` },
+        run: summary === null || summary.total === 0 ? null : { done: summary.done, total: summary.total, current },
         todos: items.length === 0 ? null : { done: doneCount, total: items.length, current: items.find(item => item.status === 'in_progress')?.text ?? null },
         repo: git,
         refused: refused.length,

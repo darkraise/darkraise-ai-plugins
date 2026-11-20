@@ -4589,6 +4589,19 @@ describe('run card', () => {
     expect(titles.filter(t => /✅ Task 3 complete/.test(t))).toEqual([])
   })
 
+  test('the dense plan row names a waiting task and its question ahead of an assigned one', async ($, on) => {
+    const files = {
+      ...runFiles(`${LEDGER}\nTask 3: implementer inline (assigned; base 1234567)\nTask 3: waiting — which meter width?`),
+      ...configured({ density: 'dense' }),
+    }
+    world(on, { ...SIGNED_IN, files })
+    signedIn(on, files)
+    await $.tool.call({ tool: 'Skill', skill: 'dagents:executing-plans' })
+    await $.session.start(START)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect((await ui.find({ key: 'dense-plan' }))?.text).toMatch(/1\/3 · \? Task 3 waiting: which meter width\?$/)
+  })
+
   test('a main turn ending on Which option? sends a question', async ($, on) => {
     const fetches: World['fetches'] = []
     world(on, { ...SIGNED_IN, fetches })
