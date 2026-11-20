@@ -1,6 +1,6 @@
 {
   "name": "dagents",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Subagent-driven development: brainstorm, plan and execute scored tasks, each dispatched to an implementer agent on a model ladder and reviewed by a judge (inline execution on request), with external Antigravity and Codex executors, criteria-based review and UI/UX work proven in the running UI; on Claude Code a cockpit pane shows the session, the run, context against its handoff budget and usage limits. Continues the dforge 4.x workflow.",
   "author": {
     "name": "Darkraise"
