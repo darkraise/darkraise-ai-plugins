@@ -141,7 +141,7 @@ const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dforge handoff skill. Start no new task.'
 function resumePrompt(): string {
-  return `Resume the work in ${S.latestName ?? '.dforge/handoff/latest.md'} with the dforge resume-execution skill.`
+  return `Resume the work in ${S.latestName ?? '.dforge/handoff/latest.md'} with the dforge resume-execution skill. Before anything else, claim it with dforge's \`scripts/handoff claim\` on that file.`
 }
 // A handoff older than this is not offered for resuming.
 const RESUME_WITHIN = 3 * 86_400_000
@@ -2807,15 +2807,14 @@ const S = {
   // The roots --mode last named, and the checkout and the
   // modification times of stores.json and config.json they were read for.
   roots: { key: '', value: null } as { key: string; value: CockpitRoots | null },
-  // latest.md's absolute path while progress is in darkmem; null while it is
-  // in the checkout, where the resume prompt names it by its state directory.
+  // The absolute path of the handoff the resume offer last named.
   latestName: null as string | null,
-  // The latest.md path and modification time the resume offer was read for.
-  offerRead: '',
-  // That note's text and its age (its marker's at, else the file's time).
-  offerStored: null as { text: string; at: number; subject: string | null } | null,
-  // The cache key of the last next-step --print --latest run started, and
-  // whether one is in flight: one at a time, never awaited.
+  // Each handoff read for the offer, by path: the modification time it was
+  // read at, its text and its age (its marker's at, else the file's time).
+  offerTexts: new Map<string, { mtime: number; text: string; at: number; subject: string | null }>(),
+  // The cache key of the last offer run started (handoff list, then next-step
+  // --print --handoff per candidate), and whether one is in flight: one at a
+  // time, never awaited.
   offerRanKey: null as string | null,
   isOfferRunning: false,
   // A Done held while the main conversation's background work runs: when its
@@ -3721,45 +3720,55 @@ async function finishPath($: EngineInterface, checkouts: readonly string[], slug
   return paths[paths.length - 1] ?? ''
 }
 
-// The offer is what `next-step --print --latest` recomputes from the
-// repository. The run is started detached, so no turn or tool hook waits on
-// it; one at a time; again only when a file the block is computed from
-// changes; and never while the offer cannot show. Until a run resolves, the
-// offer the last one produced stands. latest.md is read again only when it
-// changes: its marker dates the offer, so editing the notes keeps a dismissal.
+// A handoff the offer may name, as read from the session's checkout.
+type OfferHandoff = { path: string; key: string; mtime: number; text: string; at: number; subject: string | null }
+// A handoff's claim file as read here: its session, and whether that
+// session's cockpit still beats (null: unknown, or no claim).
+type OfferClaim = { session: string | null; isAlive: boolean | null }
+
+// The offer is the newest handoff of the session's checkout (the darkmem
+// mirror's too, for the primary while progress lives there) that is
+// unclaimed or claimed by a gone session other than this one, as `handoff
+// list --checkout` judges it, and that `next-step --print --handoff`
+// recomputes to something to resume; exit 6 tries the next newest. The runs
+// are started detached, so no turn or tool hook waits on them; one chain at a
+// time; again only when a handoff, its claim (content, time and the
+// claimant's liveness) or a file the block is computed from changes; and
+// never while the offer cannot show. Until a chain resolves, the offer the
+// last one produced stands. A handoff is read again only when it changes: its
+// marker dates the offer, so editing the notes keeps a dismissal.
 async function readResumeOffer(
   $: EngineInterface,
-  latest: string,
-  mtime: number | null,
+  here: string,
+  dirs: readonly string[],
   docs: CockpitRoots['docs'] | null,
   places: readonly { root: string; docsDir: string }[],
   primary: string,
 ) {
-  const key = `${latest}\t${mtime}`
-  if (S.offerRead !== key) {
-    S.offerRead = key
-    const text = mtime === null ? null : await $.fs.read(latest).catch(() => null)
-    const mark = typeof text === 'string' ? markerOf(text) : null
-    S.offerStored = typeof text === 'string' && mtime !== null ? { text, at: mark?.at ?? Math.floor(mtime / 1000) * 1000, subject: mark?.subject ?? null } : null
-  }
-  const stored = S.offerStored
-  if (stored === null || (await $.clock.now()) - stored.at >= RESUME_WITHIN) {
+  const now = await $.clock.now()
+  const fresh = (await offerHandoffs($, dirs)).filter(one => now - one.at < RESUME_WITHIN).sort((a, b) => b.at - a.at)
+  if (fresh.length === 0) {
     if ((await read($, resumeOffer)) !== null) await update($, resumeOffer, () => null)
     return
   }
-  if ((await read($, resumeDismissed)) === stored.at || (await read($, isPlanSession)) || (await read($, autoRun))?.active) return
-  const runKey = [key, ...(await offerTimes($, docs, places, stored.subject))].join('\t')
+  if ((await read($, isPlanSession)) || (await read($, autoRun))?.active) return
+  const claims = new Map<string, OfferClaim>()
+  const claimKeys: string[] = []
+  for (const key of new Set(fresh.map(one => one.key))) {
+    const path = `${primary}/.dforge/handoff/claims/${key}`
+    const info = await $.fs.stat(path).catch(() => null)
+    const text = info === null ? null : await $.fs.read(path).catch(() => null)
+    const session = typeof text === 'string' ? (/^session=(\S+)/m.exec(text)?.[1] ?? null) : null
+    const isAlive = session === null ? null : await isSessionAlive($, session)
+    claims.set(key, { session, isAlive })
+    claimKeys.push(`${key}=${info?.mtimeMs ?? '-'}:${text ?? ''}:${isAlive}`)
+  }
+  const handoffKeys = fresh.map(one => `${one.path}=${one.mtime}`)
+  const runKey = [...handoffKeys, ...claimKeys, ...(await offerTimes($, docs, places, fresh.map(one => one.subject)))].join('\t')
   if (S.isOfferRunning || S.offerRanKey === runKey) return
   S.offerRanKey = runKey
   S.isOfferRunning = true
-  const checkout = S.where.checkout
-  const isGone = checkout === null || (await $.fs.stat(checkout).catch(() => null))?.kind !== 'dir'
-  // The directory travels in argv: no cockpit call passes $.process.run a cwd.
-  const argv = ['bash', '-c', 'cd -- "$1" && exec bash "$2" --print --latest', 'next-step', isGone ? primary : checkout, `${$.plugin.root}/scripts/next-step`]
-  void $.process
-    .run(argv, { timeoutMs: 20_000 })
-    .catch(() => null)
-    .then(ran => offerFrom($, ran, stored, docs, places))
+  void offerChain($, here, fresh, claims, docs, places)
     .then(async offer => {
       if (JSON.stringify(await read($, resumeOffer)) !== JSON.stringify(offer)) await update($, resumeOffer, () => offer)
     })
@@ -3769,17 +3778,86 @@ async function readResumeOffer(
     })
 }
 
+// Every handoff file in these directories, read again only when it changes.
+async function offerHandoffs($: EngineInterface, dirs: readonly string[]): Promise<OfferHandoff[]> {
+  const found: OfferHandoff[] = []
+  for (const dir of dirs) {
+    for (const entry of (await $.fs.list(dir).catch(() => null)) ?? []) {
+      if (!entry.name.endsWith('.md')) continue
+      const path = `${dir}/${entry.name}`
+      const info = await $.fs.stat(path).catch(() => null)
+      if (info?.kind !== 'file') continue
+      let known = S.offerTexts.get(path)
+      if (known?.mtime !== info.mtimeMs) {
+        const text = await $.fs.read(path).catch(() => null)
+        if (typeof text !== 'string') continue
+        const mark = markerOf(text)
+        known = { mtime: info.mtimeMs, text, at: mark?.at ?? Math.floor(info.mtimeMs / 1000) * 1000, subject: mark?.subject ?? null }
+        S.offerTexts.set(path, known)
+      }
+      found.push({ path, key: entry.name.slice(0, -3), ...known })
+    }
+  }
+  return found
+}
+
+// Runs a script of the plugin in `dir`, detached from every hook; null when
+// it could not run or outran its 20 seconds.
+async function runScript($: EngineInterface, dir: string, script: string, args: string[]) {
+  // The directory travels in argv: no cockpit call passes $.process.run a cwd.
+  const argv = ['bash', '-c', 'cd -- "$1" && shift && exec bash "$@"', script, dir, `${$.plugin.root}/scripts/${script}`, ...args]
+  return $.process.run(argv, { timeoutMs: 20_000 }).catch(() => null)
+}
+
+// The offer one chain settles on: each candidate newest first, skipping a
+// dismissed one, until next-step gives one to resume.
+async function offerChain(
+  $: EngineInterface,
+  here: string,
+  fresh: readonly OfferHandoff[],
+  claims: ReadonlyMap<string, OfferClaim>,
+  docs: CockpitRoots['docs'] | null,
+  places: readonly { root: string; docsDir: string }[],
+): Promise<CockpitResumeOffer | null> {
+  const own = await $.session.id().catch(() => null)
+  const listed = new Map<string, string>()
+  const ran = await runScript($, here, 'handoff', ['list', '--checkout', here])
+  for (const line of ran?.exitCode === 0 ? ran.stdout.split(/\r?\n/) : []) {
+    const fields = line.split('\t')
+    if (fields.length >= 5 && fields[1]) listed.set(fields[1], fields[4] ?? '')
+  }
+  const dismissed = await read($, resumeDismissed)
+  for (const one of fresh) {
+    // The listing judges a claim; a key it does not name (it failed, or the
+    // file is newer than it) is judged from the claim file read here.
+    const claim = listed.get(one.key)
+    const local = claims.get(one.key)
+    const isOpen =
+      claim === undefined
+        ? local?.session == null || (local.session !== own && local.isAlive === false)
+        : claim === 'unclaimed' || (/^claimed \S+ gone$/.test(claim) && claim.split(' ')[1] !== own?.slice(0, 8))
+    if (!isOpen || dismissed === one.at) continue
+    const recomputed = await runScript($, here, 'next-step', ['--print', '--handoff', one.path])
+    const offer = await offerFrom($, recomputed, one, docs, places)
+    if (offer === null) continue
+    S.latestName = one.path
+    return offer
+  }
+  return null
+}
+
 // The modification times a recomputed block depends on: completed.md,
-// roadmap.md, each register, the plans directory and the note's subject plan.
-// The subject's ledger is left out: the offer is hidden in a plan session.
+// roadmap.md, each register, the plans directory and each handoff's subject
+// plan. The subject's ledger is left out: the offer is hidden in a plan session.
 async function offerTimes(
   $: EngineInterface,
   docs: CockpitRoots['docs'] | null,
   places: readonly { root: string; docsDir: string }[],
-  subject: string | null,
+  subjects: readonly (string | null)[],
 ): Promise<string[]> {
   const where = (name: string) => planCandidates(name, docs, places)
-  const paths = [...where('docs/dforge/plans/completed.md'), ...where('docs/dforge/roadmap.md'), ...where('docs/dforge/plans'), ...(subject === null ? [] : where(subject))]
+  const named = [...new Set(subjects.filter((subject): subject is string => subject !== null))]
+  const paths = [...where('docs/dforge/plans/completed.md'), ...where('docs/dforge/roadmap.md'), ...where('docs/dforge/plans'), ...named.flatMap(where)]
   for (const dir of where('docs/dforge/registers')) {
     for (const entry of (await $.fs.list(dir).catch(() => null)) ?? []) {
       if (entry.name.endsWith('.md')) paths.push(`${dir}/${entry.name}`)
@@ -3860,14 +3938,11 @@ async function readRun($: EngineInterface) {
   const here = isGone ? root : (session ?? root)
   const state = `${here}/.dforge`
   const roots = await readRoots($, here)
-  const latest = roots?.progress.latestFile ?? `${state}/handoff/latest.md`
-  S.latestName = latest
+  const handoffDirs = [...new Set([`${state}/handoff`, ...(roots === null ? [] : [roots.progress.handoffDir])])]
   const checkouts = [...new Set([session, root].filter((dir): dir is string => dir !== null))]
   const places = checkouts.map(dir => ({ root: dir, docsDir: `${dir}/docs/dforge` }))
   try {
-    const handoff = await $.fs.stat(latest).catch(() => null)
-    const handoffTime = handoff?.kind === 'file' ? handoff.mtimeMs : null
-    await readResumeOffer($, latest, handoffTime, roots?.docs ?? null, places, root)
+    await readResumeOffer($, here, handoffDirs, roots?.docs ?? null, places, root)
     const local = `${session ?? root}/.dforge/sdd`
     const base = roots?.progress.ledgerRoot ?? local
     const bound = await read($, boundPlan)
@@ -4490,7 +4565,7 @@ async function readSession($: EngineInterface, isStart: boolean) {
   // These caches outlive a /clear or /resume, and the values they stand for do
   // not: read again, or the resume offer and the roots note stay unwritten.
   S.roots = { key: '', value: null }
-  S.offerRead = ''
+  S.offerTexts.clear()
   S.offerRanKey = null
   // Each read fills its own section: one that throws leaves only that section
   // unread, and a slow poll tick reads that one again, not the whole session,

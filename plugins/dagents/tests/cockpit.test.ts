@@ -349,17 +349,45 @@ type World = {
   sessionIdFailures?: number
   /** Runs after each settings read has taken its answer, given the source it named. */
   afterSettingsRead?: (source: string | undefined) => void
-  /** What each `next-step --print --latest` run answers, in turn: an exit and its output, `timeout`, or `hang` (never settles); once they run out, latest.md's Next session block as stored. */
+  /** What each `next-step --print --handoff` run answers, in turn: an exit and its output, `timeout`, or `hang` (never settles); once they run out, the named handoff's Next session block as stored. */
   nextStepOuts?: ({ exitCode: number; stdout: string } | 'timeout' | 'hang')[]
-  /** The directory each `next-step --print --latest` run is given. */
+  /** The directory each `next-step --print --handoff` run is given. */
   nextStepRuns?: string[]
+  /** The handoff each `next-step --print --handoff` run names. */
+  nextStepHandoffs?: string[]
+  /** The sessions `handoff list` judges live; every other claimant is gone. */
+  liveSessions?: string[]
+  /** What `handoff list` answers in place of the listing built from `files`. */
+  handoffListOut?: { exitCode: number; stdout: string }
 }
 
-// What `next-step --print --latest` prints for a note it finds current: the
-// Next session block of latest.md as stored, ending on the marker it read
-// (one carrying the file's time when it has none); exit 6 without the block.
-function storedBlock(w: World): { exitCode: number; stdout: string } {
-  const found = Object.entries(w.files ?? {}).find(([path]) => path.endsWith('/handoff/latest.md') && !path.includes('/.superpowers/'))?.[1]
+// The primary checkout every world's repository has.
+const PRIMARY = '/home/me/code/shop'
+
+// What `handoff list [--checkout] DIR` prints for `files`: each handoff under
+// DIR's state directory (every checkout's, without --checkout), with its key,
+// marker kind, age and the claim the primary's claims directory holds.
+function handoffListing(w: World, argv: readonly string[], now: number): string {
+  const dir = argv[argv.length - 1] ?? ''
+  const isOne = argv.includes('--checkout')
+  const rows: string[] = []
+  for (const [path, file] of Object.entries(w.files ?? {})) {
+    const match = /^(.*)\/\.dagents\/handoff\/([^/]+)\.md$/.exec(path)
+    if (match === null || (file.kind ?? 'file') !== 'file' || (isOne && match[1] !== dir)) continue
+    const key = match[2]!
+    const kind = /<!-- next-step: .*?\bkind=(\S+)/.exec(file.text)?.[1] ?? 'none'
+    const session = /^session=(\S+)/m.exec(w.files?.[`${w.primary ?? PRIMARY}/.dagents/handoff/claims/${key}`]?.text ?? '')?.[1]
+    const claim = session === undefined ? 'unclaimed' : `claimed ${session.slice(0, 8)} ${w.liveSessions?.includes(session) ? 'live' : 'gone'}`
+    rows.push([path, key, kind, Math.floor((now - (file.mtimeMs ?? 0)) / 1000), claim].join('\t'))
+  }
+  return rows.map(row => `${row}\n`).join('')
+}
+
+// What `next-step --print --handoff FILE` prints for a note it finds current:
+// the Next session block of FILE as stored, ending on the marker it read (one
+// carrying the file's time when it has none); exit 6 without the block.
+function storedBlock(w: World, handoff: string): { exitCode: number; stdout: string } {
+  const found = w.files?.[handoff]
   const lines = found?.text.split('\n') ?? []
   const start = lines.indexOf('## Next session')
   if (found === undefined || start < 0) return { exitCode: 6, stdout: '' }
@@ -474,12 +502,18 @@ function world(on: On, w: World) {
     if (w.guardOut !== undefined && (e.argv[1] ?? '').endsWith('/scripts/workflow-guard.mjs')) {
       return { value: { ...w.guardOut, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
+    if (e.argv[0] === 'bash' && e.argv[1] === '-c' && (e.argv[5] ?? '').endsWith('/scripts/handoff') && e.argv[6] === 'list') {
+      const { exitCode, stdout } = w.handoffListOut ?? { exitCode: 0, stdout: handoffListing(w, e.argv, clock.now()) }
+      return { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     if (e.argv[0] === 'bash' && e.argv[1] === '-c' && (e.argv[5] ?? '').endsWith('/scripts/next-step')) {
       w.nextStepRuns?.push(e.argv[4] ?? '')
+      const handoff = e.argv[e.argv.indexOf('--handoff') + 1] ?? ''
+      w.nextStepHandoffs?.push(handoff)
       const out = w.nextStepOuts?.shift()
       if (out === 'hang') return new Promise<never>(() => undefined)
       if (out === 'timeout') return { deny: 'dagents: $.process.run(bash) aborted: still running after 20000ms' }
-      const { exitCode, stdout } = out ?? storedBlock(w)
+      const { exitCode, stdout } = out ?? storedBlock(w, handoff)
       return { value: { exitCode, stdout, stderr: exitCode === 0 ? '' : 'next-step: failed\n', isStdoutTruncated: false, isStderrTruncated: false } }
     }
     const script = '/scripts/auto-run '
@@ -5586,7 +5620,78 @@ describe('resume offer', () => {
     })
     const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
     await pane.press({ key: 'pane-resume' })
-    expect(w.prompts).toEqual([`Resume the work in ${WT_LATEST} with the dagents resume-execution skill.`])
+    expect(w.prompts).toEqual([`Resume the work in ${WT_LATEST} with the dagents resume-execution skill. Before anything else, claim it with dagents' \`scripts/handoff claim\` on that file.`])
+  })
+
+  // Keyed handoffs (parallel-session handoff spec A9): the offer is the newest
+  // handoff `handoff list --checkout` leaves open that next-step can resume.
+  const HANDOFFS = '/home/me/code/shop/.dagents/handoff'
+  const keyedNote = (next: string, prompt: string) => RESUMABLE.replace('Task 4 — wire the band into the pane.', next).replace('Execute docs/dagents/plans/2026-10-14-band.md.', prompt)
+  const claimOf = (session: string) => ({ text: `session=${session}\nat=900\n`, mtimeMs: 900_000 })
+  const keyedWorld = async ($: Parameters<TestBody>[0], on: On, files: NonNullable<World['files']>, more: Partial<World> = {}) => {
+    const w = { ...SIGNED_IN, files, prompts: [] as string[], nextStepHandoffs: [] as string[], liveSessions: [] as string[], ...more }
+    const clock = world(on, w)
+    signedIn(on, files)
+    await $.session.start(START)
+    await settle(clock)
+    const turn = async () => {
+      await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'turn-1', reason: 'answer' })
+      await settle(clock)
+    }
+    return { ...w, turn }
+  }
+
+  test('offers newest unclaimed handoff', async ($, on) => {
+    const files: NonNullable<World['files']> = {
+      [`${HANDOFFS}/a.md`]: { text: keyedNote('A-NEXT', 'Resume a.'), mtimeMs: 990_000 },
+      [`${HANDOFFS}/claims/a`]: claimOf('sess-live'),
+      [`${HANDOFFS}/b.md`]: { text: keyedNote('B-NEXT', 'Resume b.'), mtimeMs: 980_000 },
+      [`${HANDOFFS}/claims/b`]: claimOf('sess-gone'),
+      [`${HANDOFFS}/c.md`]: { text: keyedNote('C-NEXT', 'Resume c.'), mtimeMs: 970_000 },
+    }
+    const w = await keyedWorld($, on, files, { liveSessions: ['sess-live'], nextStepOuts: [{ exitCode: 6, stdout: '' }] })
+    // a is held by a live session; b, whose claimant is gone, recomputes to exit 6.
+    expect(w.nextStepHandoffs).toEqual([`${HANDOFFS}/b.md`, `${HANDOFFS}/c.md`])
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ type: 'Text', text: /Next: C-NEXT$/ })).toBeDefined()
+    await band.press({ key: 'band-resume' })
+    expect(w.prompts).toEqual(['Resume c.'])
+  })
+
+  test('claim after offer withdraws it', async ($, on) => {
+    const files: NonNullable<World['files']> = { [`${HANDOFFS}/b.md`]: { text: keyedNote('B-NEXT', 'Resume b.'), mtimeMs: 980_000 } }
+    const w = await keyedWorld($, on, files)
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ type: 'Text', text: /Next: B-NEXT$/ })).toBeDefined()
+    files[`${HANDOFFS}/claims/b`] = claimOf('sess-other')
+    w.liveSessions.push('sess-other')
+    await w.turn()
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+  })
+
+  test('own claim raises no offer', async ($, on) => {
+    const files: NonNullable<World['files']> = {
+      [`${HANDOFFS}/b.md`]: { text: keyedNote('B-NEXT', 'Resume b.'), mtimeMs: 980_000 },
+      // The listing reads this session's claim as gone: its beat is not written yet.
+      [`${HANDOFFS}/claims/b`]: claimOf('sess-1'),
+      [`${HANDOFFS}/c.md`]: { text: keyedNote('C-NEXT', 'Resume c.'), mtimeMs: 970_000 },
+    }
+    const w = await keyedWorld($, on, files)
+    expect(w.nextStepHandoffs).toEqual([`${HANDOFFS}/c.md`])
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ type: 'Text', text: /Next: C-NEXT$/ })).toBeDefined()
+  })
+
+  test('other worktree handoff not offered', async ($, on) => {
+    const files: NonNullable<World['files']> = {
+      [`${HANDOFFS}/b.md`]: { text: keyedNote('B-NEXT', 'Resume b.'), mtimeMs: 970_000 },
+      '/home/me/code/shop-wt/.dagents/handoff/n.md': { text: keyedNote('N-NEXT', 'Resume n.'), mtimeMs: 990_000 },
+    }
+    const w = await keyedWorld($, on, files, { worktrees: ['/home/me/code/shop', '/home/me/code/shop-wt'] })
+    expect(w.nextStepHandoffs).toEqual([`${HANDOFFS}/b.md`])
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    await band.press({ key: 'band-resume' })
+    expect(w.prompts).toEqual(['Resume b.'])
   })
 })
 

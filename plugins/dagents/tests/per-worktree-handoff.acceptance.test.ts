@@ -9,7 +9,7 @@ import { SCHEMA, settingWritten } from '../hooks/cockpit/config'
 // the cockpit statements A9 and A12. The engine below is the same set of event
 // answers the other cockpit suites use: it records what the plugin writes, runs,
 // toasts and submits, and the tests reach the plugin only through the engine's
-// events. A run of `scripts/next-step --print --latest` is answered by the
+// events. A run of `scripts/next-step --print --handoff` is answered by the
 // test, in turn.
 
 const BAND = {
@@ -120,9 +120,9 @@ type World = {
   modeRuns?: string[]
   /** The primary checkout `git rev-parse --git-common-dir` points into; the session's repository unless said. */
   primary?: string
-  /** What each `next-step --print --latest` run answers, in turn: an exit and its stdout, `timeout`, `hang` (never settles) or a function that settles it later; with none left, exit 6. */
+  /** What each `next-step --print --handoff` run answers, in turn: an exit and its stdout, `timeout`, `hang` (never settles) or a function that settles it later; with none left, exit 6. */
   nextSteps?: ({ exitCode: number; stdout: string } | 'timeout' | 'hang' | { later: Promise<{ exitCode: number; stdout: string }> })[]
-  /** Each `next-step --print --latest` run, as the engine saw it. */
+  /** Each `next-step --print --handoff` run, as the engine saw it. */
   nextStepRuns?: { argv: string; cwd: string; timeoutMs: number | undefined }[]
   /** How many next-step runs are in flight now, and the most that ever were. */
   inFlight?: { now: number; max: number }
@@ -248,7 +248,7 @@ function world(on: On, w: World) {
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('process.run', (_$, e) => {
     const argv = e.argv.join(' ')
-    if (argv.includes('/scripts/next-step') && argv.includes('--print --latest')) {
+    if (argv.includes('/scripts/next-step') && argv.includes('--print --handoff')) {
       const extra = { cwd: '', timeoutMs: (e as unknown as { init?: { timeoutMs?: number } }).init?.timeoutMs }
       w.nextStepRuns?.push({ argv, cwd: extra.cwd ?? '', timeoutMs: extra.timeoutMs })
       const out = w.nextSteps?.shift() ?? { exitCode: 6, stdout: '' }
@@ -556,7 +556,7 @@ describe('per-worktree-handoff: the cockpit reads its own checkout (A9, A12)', (
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
     expect(await ui.find({ key: 'resume-card' })).toBeUndefined()
     expect(JSON.stringify(await band.drawn())).not.toContain('PRIMARY-STORED-NEXT')
-    expect(w.nextStepRuns.filter(run => run.argv.includes('--print --latest'))).toHaveLength(0)
+    expect(w.nextStepRuns.filter(run => run.argv.includes('--print --handoff'))).toHaveLength(0)
   })
 
   test("A12: a primary session reads the primary's handoff as before", async ($, on) => {

@@ -217,7 +217,7 @@ export type CockpitResumeOffer = {
   next: string
   /** The note's fenced first prompt; null when it has none, and Resume falls back to resume-execution. */
   prompt: string | null
-  /** Whether `next-step --print --latest` recomputed it; false when the stored note stands in for a failed run. */
+  /** Whether `next-step --print --handoff` recomputed it; false when the stored note stands in for a failed run. */
   isRechecked: boolean
 }
 

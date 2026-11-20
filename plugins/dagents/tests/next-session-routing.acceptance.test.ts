@@ -9,7 +9,7 @@ import { SCHEMA, settingWritten } from '../hooks/cockpit/config'
 // the cockpit statements A12 and A13. The engine below is the same set of event
 // answers the other cockpit suites use: it records what the plugin writes, runs,
 // toasts and submits, and the tests reach the plugin only through the engine's
-// events. A run of `scripts/next-step --print --latest` is answered by the
+// events. A run of `scripts/next-step --print --handoff` is answered by the
 // test, in turn.
 
 const BAND = {
@@ -116,9 +116,9 @@ type World = {
   autoFile?: { text: string }
   /** The primary checkout `git rev-parse --git-common-dir` points into; the session's repository unless said. */
   primary?: string
-  /** What each `next-step --print --latest` run answers, in turn: an exit and its stdout, `timeout`, `hang` (never settles) or a function that settles it later; with none left, exit 6. */
+  /** What each `next-step --print --handoff` run answers, in turn: an exit and its stdout, `timeout`, `hang` (never settles) or a function that settles it later; with none left, exit 6. */
   nextSteps?: ({ exitCode: number; stdout: string } | 'timeout' | 'hang' | { later: Promise<{ exitCode: number; stdout: string }> })[]
-  /** Each `next-step --print --latest` run, as the engine saw it. */
+  /** Each `next-step --print --handoff` run, as the engine saw it. */
   nextStepRuns?: { argv: string; cwd: string; timeoutMs: number | undefined }[]
   /** How many next-step runs are in flight now, and the most that ever were. */
   inFlight?: { now: number; max: number }
@@ -244,7 +244,7 @@ function world(on: On, w: World) {
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('process.run', (_$, e) => {
     const argv = e.argv.join(' ')
-    if (argv.includes('/scripts/next-step') && argv.includes('--print --latest')) {
+    if (argv.includes('/scripts/next-step') && argv.includes('--print --handoff')) {
       const extra = { cwd: '', timeoutMs: (e as unknown as { init?: { timeoutMs?: number } }).init?.timeoutMs }
       w.nextStepRuns?.push({ argv, cwd: extra.cwd ?? '', timeoutMs: extra.timeoutMs })
       const out = w.nextSteps?.shift() ?? { exitCode: 6, stdout: '' }
@@ -559,7 +559,7 @@ describe('next-session-routing: the cockpit band recomputes the offer (A12)', ()
   test('A12: the run is bounded at 20 seconds', async ($, on) => {
     const w = await begin($, on, stored('Stored.', 'Stored prompt.', 900), { w: { nextSteps: [exit0('Recomputed.', 'p', 950)] } })
     expect(w.nextStepRuns).toHaveLength(1)
-    expect(w.nextStepRuns[0]!.argv).toContain('--print --latest')
+    expect(w.nextStepRuns[0]!.argv).toContain('--print --handoff')
     expect(w.nextStepRuns[0]!.timeoutMs).toBe(20_000)
   })
 
