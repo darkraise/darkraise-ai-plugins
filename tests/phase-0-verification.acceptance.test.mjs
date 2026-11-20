@@ -536,7 +536,7 @@ for (const jobs of ['1', '2']) {
 
 // What base's test-all printed for these suites, as literal text, with the job
 // times masked; parallel output is compared as a sorted set of lines.
-const SKIP_CLAUDE = 'Skipped claude plugin test: claude not found';
+const SKIP_CLAUDE = `Skipped claude plugin test: ${process.platform === 'win32' ? 'not run on Windows' : 'claude not found'}`;
 const SKIP_TSC = 'Skipped tsc --noEmit -p plugins/dagents: the generated types are missing (Claude Code writes them when it loads plugins/dagents from the folder)';
 const masked = text => text.replace(/ in \d+\.\d+s \(/g, ' in Ns (');
 test('A26: without --junit a sequential run prints and exits as it did', t => {
