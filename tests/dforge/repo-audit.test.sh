@@ -182,8 +182,9 @@ hstored "<!-- next-step: kind=plan done=0 closed=0 subject=docs/dforge/plans/202
 SECTION=$(handoff_section)
 has "handoff: the lines are recomputed" "$SECTION" "- recomputed from the repository"
 has "handoff: the recomputed Next line" "$SECTION" "- **Next:** Resume at Task 3"
-printf '# Completed plans\n\n- 2026-10-01 — `docs/dforge/plans/2026-10-01-a.md` — merged\n' > "$H/docs/dforge/plans/completed.md"
-hstored "<!-- next-step: kind=adhoc done=0 closed=0 subject=- at=1 -->"
+# An adhoc block is never superseded (C10); a finished plan's is.
+printf '# Completed plans\n\n- 2026-11-01 — `docs/dforge/plans/2026-11-01-p.md` — merged\n' > "$H/docs/dforge/plans/completed.md"
+hstored "<!-- next-step: kind=plan done=0 closed=0 subject=docs/dforge/plans/2026-11-01-p.md at=1 -->"
 has "handoff: a superseded block says nothing to resume" "$(handoff_section)" "- nothing to resume (the stored block is superseded)"
 hstored "<!-- next-step: kind=plan done=1 closed=0 subject=docs/dforge/plans/missing.md at=1 -->"
 SECTION=$(handoff_section)

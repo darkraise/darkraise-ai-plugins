@@ -200,14 +200,14 @@ has "latest adhoc: matching counts print the stored block" "$out" "**Next:** Sto
 check "latest adhoc: the marker is the last line" "$(tail -n 1 <<<"$out")" "<!-- next-step: kind=adhoc done=1 closed=0 subject=- at=1 -->"
 printf -- '- 2026-10-02 — `docs/dagents/plans/2026-10-02-b.md` — merged\n' >> "$LD/plans/completed.md"
 latest
-check "latest adhoc: a newer completed plan supersedes it" "$status" 6
-check "latest adhoc: superseded prints nothing" "$out" ""
+check "latest adhoc: a newer completed plan never supersedes it" "$status" 0
+has "latest adhoc: the stored block is still printed" "$out" "**Next:** Stored next."
 lfixture
 printf '# M1\n\n**Source:** roadmap\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | E | - | - | done | - |\n' > "$LD/registers/m1.md"
 printf '# R\n\n**Product:** p\n**Spec:** docs/dagents/specs/demo.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | One | x | docs/dagents/registers/m1.md | closed | audit |\n' > "$LD/roadmap.md"
 stored "<!-- next-step: kind=adhoc done=1 closed=0 subject=- at=1 -->"
 latest
-check "latest adhoc: a newly closed milestone supersedes it" "$status" 6
+check "latest adhoc: a newly closed milestone never supersedes it" "$status" 0
 
 lfixture
 printf '# D\n' > "$LD/specs/D.md"
@@ -268,7 +268,8 @@ for kind in plan project; do
   touch -t 200101010000 "$LL"
   before=$( (cd "$L" && find .dagents -print | LC_ALL=C sort); digest "$LL"; mtime "$LL")
   latest
-  check "latest $kind: exits 0" "$status" 0
+  # With no register the project block is terminal (C10): exit 6.
+  check "latest $kind: exits $( [ "$kind" = plan ] && echo 0 || echo 6)" "$status" "$( [ "$kind" = plan ] && echo 0 || echo 6)"
   check "latest $kind: changes nothing" "$( (cd "$L" && find .dagents -print | LC_ALL=C sort); digest "$LL"; mtime "$LL")" "$before"
 done
 
@@ -296,13 +297,14 @@ index_p
 want=$(cd "$L" && bash "$SCRIPT" --print --complete "$P" 2>/dev/null | grep '^\*\*Next:\*\*')
 stored "<!-- next-step: kind=complete done=2 closed=0 subject=$P at=1 -->"
 latest
-check "latest complete: exits 0" "$status" 0
-has "latest complete: recomputes the --complete block" "$out" "$want"
+check "latest complete: a terminal --complete block exits 6" "$status" 6
+check "latest complete: the recomputed Next is terminal" "${want#\*\*Next:\*\* Nothing — }" "the plan records no follow-on work."
+check "latest complete: nothing on stdout" "$out" ""
 want=$(cd "$L" && bash "$SCRIPT" --print "$P" 2>/dev/null | grep '^\*\*Next:\*\*')
 stored "<!-- next-step: kind=plan done=1 closed=0 subject=$P at=1 -->" "Plan \`$P\`: 2 of 3 tasks complete (ledger \`x\`)." "Resume at Task 3 (Three)."
 latest
-check "latest plan: an indexed plan with no ledger recomputes" "$status" 0
-has "latest plan: an indexed plan with no ledger prints its block" "$out" "$want"
+check "latest plan: a plan in completed.md exits 6" "$status" 6
+has "latest plan: the reason is named" "$err" "the plan is finished"
 for bad in --latest -x docs/dagents/plans/p.txt; do
   stored "<!-- next-step: kind=plan done=1 closed=0 subject=$bad at=1 -->" "Plan \`$P\`: 0 of 3 tasks complete." "Start at Task 1 (One)."
   latest
@@ -312,6 +314,65 @@ done
 stored "<!-- next-step: kind=adhoc done=1x closed=0 subject=- at=1 -->"
 latest
 check "latest edges: non-numeric counts exit 6" "$status" 6
+
+# --- --print --handoff FILE: per-kind exit 6 (C10) ---
+handoff() { # handoff FILE — run --print --handoff FILE in $L; sets out, err, status
+  out=$(cd "$L" && timeout 120 bash "$SCRIPT" --print --handoff "$1" 2>"$TMP/lerr"); status=$?
+  err=$(cat "$TMP/lerr")
+}
+hstore() { # hstore FILE MARKER — a handoff written by hand
+  mkdir -p "$(dirname "$1")"
+  printf '# Handoff\n\n## Next session\n\n**Status:** Stored status.\n**Next:** Stored next.\n%s\n' "$2" > "$1"
+}
+lfixture
+HD="$L/.dagents/handoff"
+index_p
+hstore "$HD/P.md" "<!-- next-step: kind=plan key=2026-11-01-p session=- done=1 closed=0 subject=$P at=1 -->"
+handoff "$HD/P.md"
+check "handoff_exit6_per_kind: a plan in completed.md exits 6" "$status" 6
+lfixture
+HD="$L/.dagents/handoff"
+printf '# D\n' > "$LD/specs/D.md"
+hstore "$HD/D.md" "<!-- next-step: kind=draft key=D session=- done=1 closed=0 subject=docs/dagents/specs/D.md at=1 -->"
+handoff "$HD/D.md"
+check "handoff_exit6_per_kind: a draft with no plan exits 0" "$status" 0
+printf -- '- 2026-10-02 — `docs/dagents/plans/2026-10-02-b.md` — merged\n' >> "$LD/plans/completed.md"
+handoff "$HD/D.md"
+check "handoff_exit6_per_kind: a draft after done= grew exits 0" "$status" 0
+{ printf '# Q\n\n**Spec:** docs/dagents/specs/demo.md\n**Program:** docs/dagents/specs/D.md — sub-project 1\n'
+  printf '**Execution:** inline — `claude --model sonnet --effort high` — small\n\n### Task 1: One\n\nBody.\n'; } > "$LD/plans/2026-11-03-q.md"
+handoff "$HD/D.md"
+check "handoff_exit6_per_kind: a draft named only by a Program line exits 0" "$status" 0
+sed 's#docs/dagents/specs/demo.md#docs/dagents/specs/D.md#' "$L/$P" > "$LD/plans/2026-11-02-d.md"
+handoff "$HD/D.md"
+check "handoff_exit6_per_kind: a draft named by a Spec line exits 6" "$status" 6
+rm -f "$LD/plans/2026-11-02-d.md" "$LD/specs/D.md"
+handoff "$HD/D.md"
+check "handoff_exit6_per_kind: a deleted draft exits 6" "$status" 6
+has "handoff_exit6_per_kind: the deleted draft is named" "$err" "is gone"
+hstore "$HD/adhoc-0a1b2c3d.md" "<!-- next-step: kind=adhoc key=adhoc-0a1b2c3d session=- done=0 closed=0 subject=- at=1 -->"
+handoff "$HD/adhoc-0a1b2c3d.md"
+check "handoff_exit6_per_kind: an adhoc handoff exits 0" "$status" 0
+lfixture
+HD="$L/.dagents/handoff"
+index_p
+hstore "$HD/C.md" "<!-- next-step: kind=complete key=2026-11-01-p session=- done=2 closed=0 subject=$P at=1 -->"
+handoff "$HD/C.md"
+check "handoff_exit6_per_kind: a complete block whose Next is terminal exits 6" "$status" 6
+handoff "$HD/none.md"
+check "handoff_exit6_per_kind: a missing file exits 6" "$status" 6
+(cd "$L" && timeout 60 bash "$SCRIPT" --handoff "$HD/C.md" >/dev/null 2>&1)
+check "handoff: --handoff without --print is a usage error" "$?" 2
+
+# handoff_prompt_names_file
+lfixture
+HD="$L/.dagents/handoff"
+hstore "$HD/D.md" "<!-- next-step: kind=plan key=2026-11-01-p session=- done=1 closed=0 subject=$P at=1 -->"
+handoff "$HD/D.md"
+check "handoff_prompt_names_file: exits 0" "$status" 0
+has "handoff_prompt_names_file: the first prompt names the file" "$out" "its handoff is \`$HD/D.md\`"
+handoff .dagents/handoff/D.md
+has "handoff_prompt_names_file: a relative file is named absolute" "$out" "its handoff is \`$L/.dagents/handoff/D.md\`"
 
 # --- a kept detached HEAD is recorded as a commit and recomputed as one ---
 lfixture

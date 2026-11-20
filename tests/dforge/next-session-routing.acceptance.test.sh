@@ -443,7 +443,9 @@ close_m1() { # a roadmap whose M1 is closed
   printf '# R\n\n**Product:** p\n**Spec:** docs/dforge/specs/demo.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | One | x | docs/dforge/registers/m1.md | closed | audit |\n' > "$LD/roadmap.md"
 }
 
-# A10
+# A10, as the parallel-session handoff spec's C10 revised it: neither an
+# adhoc nor a draft block is superseded by a newer completed plan or a closed
+# milestone; a draft goes only when a plan's Spec line names it or it is gone.
 for kind in adhoc draft; do
   lfixture
   : > "$LD/specs/D.md"
@@ -453,14 +455,14 @@ for kind in adhoc draft; do
   check "A10: $kind with matching counts exits 0" "$status" 0
   printf -- '- 2026-10-02 — `docs/dforge/plans/2026-10-02-b.md` — merged\n' >> "$LD/plans/completed.md"
   latest
-  check "A10: $kind followed by one more completed.md entry exits 6" "$status" 6
-  check "A10: $kind superseded prints nothing on stdout" "$out" ""
+  check "A10: $kind followed by one more completed.md entry still exits 0" "$status" 0
+  check "A10: $kind still prints its stored block" "$(grep -c '^\*\*Next:\*\*' <<<"$out")" "1"
   lfixture
   : > "$LD/specs/D.md"
   close_m1
   stored "<!-- next-step: kind=$kind done=1 closed=0 subject=$subj at=1 -->"
   latest
-  check "A10: $kind followed by one more closed milestone exits 6" "$status" 6
+  check "A10: $kind followed by one more closed milestone still exits 0" "$status" 0
 done
 lfixture
 close_m1
@@ -544,8 +546,8 @@ has "A14: the lines are labelled recomputed" "$SEC" "recomputed from the reposit
 has "A14: the recomputed Status line is printed" "$SEC" "- **Status:** Plan \`docs/dforge/plans/2026-11-01-p.md\`: 2 of 3 tasks complete"
 has "A14: the recomputed Next line is printed, not the stored one" "$SEC" "Resume at Task 3"
 lacks "A14: the stale stored Next line is not printed" "$SEC" "Resume at Task 1 (One)."
-printf '# Completed plans\n\n- 2026-10-01 — `docs/dforge/plans/2026-10-01-a.md` — merged\n' > "$H/docs/dforge/plans/completed.md"
-hstored "<!-- next-step: kind=adhoc done=0 closed=0 subject=- at=1 -->"
+printf '# Completed plans\n\n- 2026-11-01 — `docs/dforge/plans/2026-11-01-p.md` — merged\n' > "$H/docs/dforge/plans/completed.md"
+hstored "<!-- next-step: kind=plan done=0 closed=0 subject=docs/dforge/plans/2026-11-01-p.md at=1 -->"
 SEC=$(section)
 has "A14: exit 6 says nothing is to resume" "$SEC" "nothing to resume"
 lacks "A14: exit 6 prints no Next line" "$SEC" "**Next:**"

@@ -14,7 +14,7 @@
 #        next-step [--host claude|codex] [--print|--target] --draft DRAFT_FILE --next ACTION
 #        next-step [--host claude|codex] [--print|--target] --adhoc --phase design|build --next ACTION
 #        next-step [--host claude|codex] [--print|--target] --project [--keep-notes]
-#        next-step [--host claude|codex] --print --latest
+#        next-step [--host claude|codex] --print --handoff FILE | --latest
 #   --print     compute and print the block only: write, create and delete
 #               nothing, and skip the background-work check.
 #   --complete  the plan is finished and its branch integrated; the ledger may
@@ -40,8 +40,10 @@
 #               the block comes from the current milestone's registers, or
 #               every register when no milestone is current. Replaces latest.md
 #               wholesale unless --keep-notes, which keeps the notes above it.
-#   --latest    recompute the block latest.md holds from what its marker
-#               names (requires --print), and print it with the marker last.
+#   --handoff   recompute the block the handoff FILE holds from what its
+#               marker names (requires --print), and print it with the marker
+#               last; its first prompt names FILE as the handoff. --latest is
+#               --handoff with this checkout's latest.md.
 #   --target    print the absolute path of the handoff the same call would
 #               write, and exit 0: write nothing, and skip the background-work
 #               check. A usage error with --latest.
@@ -56,8 +58,12 @@
 # Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
 #       latest.md could not be written; 5 background work this session started
 #       is still running (scripts/in-flight): nothing printed or written
-#       (never under --print); 6 --print --latest has nothing to resume
-#       (nothing on stdout, at most one reason on stderr).
+#       (never under --print); 6 --print --handoff has nothing to resume
+#       (nothing on stdout, at most one reason on stderr): a plan in
+#       completed.md, or whose ledger is gone and is unrecorded; a draft a
+#       plan's Spec line names, or that is gone; a complete or project block
+#       whose recomputed Next is terminal; a kept branch merged or gone. An
+#       adhoc handoff is never superseded.
 set -euo pipefail
 
 # Failures print on stdout as well as stderr. A session that surfaces only
@@ -69,7 +75,7 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--host claude|codex] [--print|--target] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print|--target] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print|--target] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print|--target] --project [--keep-notes] | next-step [--host claude|codex] --print --latest"; }
+usage() { fail 2 "usage: next-step [--host claude|codex] [--print|--target] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print|--target] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print|--target] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print|--target] --project [--keep-notes] | next-step [--host claude|codex] --print --handoff FILE | --latest"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
@@ -210,10 +216,12 @@ execution_skill() { # execution_skill EXECUTION_LINE
   fi
 }
 
-complete=0 kept=0 draft=0 adhoc=0 project=0 keep_notes=0 latest_mode=0 phase="" next_action=""
+complete=0 kept=0 draft=0 adhoc=0 project=0 keep_notes=0 latest_mode=0 handoff_file="" phase="" next_action=""
 case "${1:-}" in
-  --latest)
-    latest_mode=1; shift
+  --latest | --handoff)
+    latest_mode=1
+    if [ "$1" = --handoff ]; then [ $# -ge 2 ] && [ -n "$2" ] || usage; handoff_file=$2; shift; fi
+    shift
     { [ $# -eq 0 ] && [ "$print_only" -eq 1 ] && [ "$target_only" -eq 0 ]; } || usage
     ;;
   --project)
@@ -314,17 +322,31 @@ handoff_target() {
   else printf '%s\n' "$root"; fi
 }
 
-# --print --latest: the stored block, recomputed from what its marker names
-# when the repository can answer it, so a reader never replays a stale one.
+# draft_planned ROOT DRAFT — a plan's Spec line names DRAFT; a Program line
+# alone does not, since a program's draft outlives each of its plans.
+draft_planned() {
+  local want name file sub spec
+  want=$(dagents_name_key "$2")
+  while IFS=$'\t' read -r name file sub; do
+    spec=$(tr -d '\r' < "$file" | sed -n 's/^\*\*Spec:\*\*[[:space:]]*//p' | head -n 1 | sed 's/^`\([^`]*\)`.*/\1/; s/[[:space:]].*//')
+    [ "$(dagents_name_key "$spec")" = "$want" ] && return 0
+  done < <(_spec_plan_files "$1" "$2")
+  return 1
+}
+
+# --print --handoff FILE: the stored block, recomputed from what its marker
+# names when the repository can answer it, so a reader never replays a stale
+# one.
 if [ "$latest_mode" -eq 1 ]; then
   gone() { printf 'next-step: %s\n' "$1" >&2; exit 6; }
-  latest=$(dagents_latest_file)
-  [ -f "$latest" ] || gone "no latest.md at $latest"
+  latest=${handoff_file:-$(dagents_latest_file)}
+  case $latest in /* | [A-Za-z]:[\\/]*) ;; *) latest="$PWD/$latest" ;; esac
+  [ -f "$latest" ] || gone "no handoff at $latest"
   stored=$(tr -d '\r' < "$latest" | awk '
     /^## Next session[ \t]*$/ { on = 1; print; next }
     on && /^## / { exit }
     on')
-  [ -n "$stored" ] || gone "latest.md has no Next session section"
+  [ -n "$stored" ] || gone "$latest has no Next session section"
   marker=$(grep -E '^<!-- next-step: .* -->$' <<<"$stored" | tail -n 1 || true)
   stored=$(grep -vE '^<!-- next-step: ' <<<"$stored" | awk 'NF { last = NR } { line[NR] = $0 } END { for (i = 1; i <= last; i++) print line[i] }')
   stored_block() { printf '%s\n%s\n' "$stored" "$marker"; exit 0; }
@@ -353,23 +375,27 @@ if [ "$latest_mode" -eq 1 ]; then
       case $m_subject in *.md) ;; *) gone "malformed marker subject: $m_subject" ;; esac ;;
   esac
   self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
-  recompute() { # recompute ARGS... — this script's own --print block, then the marker
+  terminal_gone=0
+  recompute() { # recompute ARGS... — this script's own --print block, naming the handoff, then the marker
     local out status=0
-    out=$(cd "$root" && bash "$self" --host "$host" --print "$@") || status=$?
+    out=$(cd "$root" && DAGENTS_NEXT_STEP_HANDOFF=$latest bash "$self" --host "$host" --print "$@") || status=$?
     if [ "$status" -ne 0 ]; then printf '%s\n' "$out"; exit "$status"; fi
+    if [ "$terminal_gone" -eq 1 ] && grep -q '^\*\*Next:\*\* Nothing — ' <<<"$out"; then
+      gone "the recomputed block is terminal"
+    fi
     printf '%s\n%s\n' "$out" "$marker"
     exit 0
   }
-  read -r now_done now_closed < <(handoff_counts "$primary")
   case $m_kind in
     plan)
+      plan_finished "$root" "$m_subject" && gone "the plan is finished: $m_subject"
       if grep -qE '^\*\*Status:\*\* .*[1-9][0-9]* of [0-9]+ tasks complete' <<<"$stored" \
          && ! plan_ledger_any "$root" "$m_subject" >/dev/null && ! plan_finished "$root" "$m_subject"; then
         gone "the ledger is gone and the plan is unrecorded: $m_subject"
       fi
       recompute "$m_subject" ;;
-    complete) recompute --complete "$m_subject" ;;
-    project) recompute --project ;;
+    complete) terminal_gone=1; recompute --complete "$m_subject" ;;
+    project) terminal_gone=1; recompute --project ;;
     kept)
       plan_finished "$root" "$m_subject" && recompute --complete "$m_subject"
       case $m_branch in
@@ -380,10 +406,11 @@ if [ "$latest_mode" -eq 1 ]; then
       git -C "$primary" rev-parse --verify --quiet "$kept_ref" >/dev/null || gone "the kept branch $m_branch is gone"
       ! git -C "$primary" merge-base --is-ancestor "$kept_ref" HEAD 2>/dev/null || gone "the kept branch $m_branch is merged"
       stored_block ;;
-    draft|adhoc)
-      { [ "$now_done" -gt "$m_done" ] || [ "$now_closed" -gt "$m_closed" ]; } && gone "a plan or a milestone closed since the block was written"
-      [ "$m_kind" != draft ] || [ -z "$(spec_plans "$root" "$m_subject")" ] || gone "a plan names the draft $m_subject"
+    draft)
+      [ -f "$(dagents_resolve "$m_subject" "$root")" ] || gone "the draft $m_subject is gone"
+      ! draft_planned "$root" "$m_subject" || gone "a plan's Spec line names the draft $m_subject"
       stored_block ;;
+    adhoc) stored_block ;;
     *) gone "unknown marker kind: ${m_kind:-none}" ;;
   esac
 fi
@@ -736,7 +763,9 @@ fi
 # T's handoff is resolved in a subshell, so the cached roots stay this
 # checkout's.
 dir=$(handoff_target)
-handoff=$(dagents_stores_init "$dir"; dagents_latest_file "$dir")
+# A recompute of a named handoff (--print --handoff) names that file.
+if [ "$print_only" -eq 1 ] && [ -n "${DAGENTS_NEXT_STEP_HANDOFF:-}" ]; then handoff=$DAGENTS_NEXT_STEP_HANDOFF
+else handoff=$(dagents_stores_init "$dir"; dagents_latest_file "$dir"); fi
 if [ "$target_only" -eq 1 ]; then printf '%s\n' "$handoff"; exit 0; fi
 
 # Every prompt opens on T: an auto run's cockpit pastes it into a cleared
