@@ -3813,8 +3813,10 @@ async function runScript($: EngineInterface, dir: string, script: string, args: 
   return $.process.run(argv, { timeoutMs: 20_000 }).catch(() => null)
 }
 
-// The offer one chain settles on: each candidate newest first, skipping a
-// dismissed one, until next-step gives one to resume.
+// The offer one chain settles on: each candidate newest first, until
+// next-step gives one to resume. The chain stops at the handoff last
+// dismissed or resumed (Resume dismisses it too), so neither brings an older
+// handoff up in its place, in a band that does not name which one it offers.
 async function offerChain(
   $: EngineInterface,
   here: string,
@@ -3832,6 +3834,7 @@ async function offerChain(
   }
   const dismissed = await read($, resumeDismissed)
   for (const one of fresh) {
+    if (dismissed === one.at) return null
     // The listing judges a claim; a key it does not name (it failed, or the
     // file is newer than it) is judged from the claim file read here.
     const claim = listed.get(one.key)
@@ -3840,7 +3843,7 @@ async function offerChain(
       claim === undefined
         ? local?.session == null || (local.session !== own && local.isAlive === false)
         : claim === 'unclaimed' || (/^claimed \S+ gone$/.test(claim) && claim.split(' ')[1] !== own?.slice(0, 8))
-    if (!isOpen || dismissed === one.at) continue
+    if (!isOpen) continue
     const recomputed = await runScript($, here, 'next-step', ['--print', '--handoff', one.path])
     const offer = await offerFrom($, recomputed, one, docs, places)
     if (offer === null) continue

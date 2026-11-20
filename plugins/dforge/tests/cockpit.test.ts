@@ -5955,6 +5955,36 @@ describe('resume offer', () => {
     expect(await band.find({ type: 'Text', text: /Next: C-NEXT$/ })).toBeDefined()
   })
 
+  test('after Resume, an older handoff is not offered in its place', async ($, on) => {
+    const files: NonNullable<World['files']> = {
+      [`${HANDOFFS}/b.md`]: { text: keyedNote('B-NEXT', 'Resume b.'), mtimeMs: 980_000 },
+      [`${HANDOFFS}/c.md`]: { text: keyedNote('C-NEXT', 'Resume c.'), mtimeMs: 970_000 },
+    }
+    const w = await keyedWorld($, on, files)
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    await band.press({ key: 'band-resume' })
+    expect(w.prompts).toEqual(['Resume b.'])
+    // The resumed session claims b, which reruns the chain.
+    files[`${HANDOFFS}/claims/b`] = claimOf('sess-1')
+    await w.turn()
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+    expect(w.nextStepHandoffs).toEqual([`${HANDOFFS}/b.md`])
+  })
+
+  test('after Dismiss, an older handoff is not offered in its place', async ($, on) => {
+    const files: NonNullable<World['files']> = {
+      [`${HANDOFFS}/b.md`]: { text: keyedNote('B-NEXT', 'Resume b.'), mtimeMs: 980_000 },
+      [`${HANDOFFS}/c.md`]: { text: keyedNote('C-NEXT', 'Resume c.'), mtimeMs: 970_000 },
+    }
+    const w = await keyedWorld($, on, files)
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    await band.press({ key: 'band-resume-dismiss' })
+    files[`${HANDOFFS}/c.md`] = { ...files[`${HANDOFFS}/c.md`]!, mtimeMs: 975_000 }
+    await w.turn()
+    expect(await band.find({ key: 'band-resume' })).toBeUndefined()
+    expect(w.nextStepHandoffs).toEqual([`${HANDOFFS}/b.md`])
+  })
+
   test('other worktree handoff not offered', async ($, on) => {
     const files: NonNullable<World['files']> = {
       [`${HANDOFFS}/b.md`]: { text: keyedNote('B-NEXT', 'Resume b.'), mtimeMs: 970_000 },
