@@ -25,13 +25,13 @@ test("progress sources come from every checkout, and agreeing copies are one sou
   write(path.join(repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
   write(path.join(repo, ".dforge", "sdd", "p1", "handoff.md"), "# Handoff p1\n");
   write(path.join(repo, ".dforge", "sdd", "p1", "brief.md"), "a workspace file, not progress\n");
-  write(path.join(repo, ".dforge", "handoff", "latest.md"), LATEST);
+  write(path.join(repo, ".dforge", "handoff", "stored.md"), LATEST);
   write(path.join(worktree, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
   write(path.join(worktree, ".dforge", "sdd", "p2", "progress.md"), LEDGER("p2"));
-  write(path.join(worktree, ".dforge", "handoff", "latest.md"), "a linked worktree's latest.md is not progress\n");
+  write(path.join(worktree, ".dforge", "handoff", "stored.md"), "a linked worktree's handoff is not progress\n");
   const { problems, files, sources } = gatherLocalProgress({ repoRoot: repo });
   assert.deepEqual(problems, []);
-  assert.deepEqual(sources.map(item => item.rel).sort(), ["handoff/latest.md", "sdd/p1/handoff.md", "sdd/p1/progress.md", "sdd/p2/progress.md"]);
+  assert.deepEqual(sources.map(item => item.rel).sort(), ["handoff/stored.md", "sdd/p1/handoff.md", "sdd/p1/progress.md", "sdd/p2/progress.md"]);
   assert.equal(files.length, 5);
   assert.equal(sources.find(item => item.kind === "handoff").uri, "dforge/handoff/p1.md");
 });
@@ -60,18 +60,18 @@ test("an equal ledger on darkmem is already filed; a different ledger, handoff n
   write(path.join(repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
   write(path.join(repo, ".dforge", "sdd", "p2", "progress.md"), LEDGER("p2"));
   write(path.join(repo, ".dforge", "sdd", "p2", "handoff.md"), "# local note\n");
-  write(path.join(repo, ".dforge", "handoff", "latest.md"), "local latest\n");
+  write(path.join(repo, ".dforge", "handoff", "stored.md"), "local latest\n");
   const { workstream } = await client.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }] });
   await client.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: "# SDD ledger — plan: elsewhere\n" }] });
   await client.putDocument({ project: "proj", uri: "dforge/handoff/p2.md", content: "# darkmem note\n" });
-  write(path.join(mirror, "work", "handoff", "latest.md"), "mirror latest\n");
+  write(path.join(mirror, "work", "handoff", "stored.md"), "mirror latest\n");
   const { sources } = gatherLocalProgress({ repoRoot: repo });
   const { problems, filed } = await checkProgressTargets({ cfg: { project: "proj", mirror }, client }, sources);
   assert.deepEqual([...filed], [["p1", workstream.id]]);
   assert.equal(problems.length, 3, problems.join("\n"));
   assert.match(problems.join("\n"), /^sdd\/p2\/progress\.md: darkmem already holds a different ledger for workstream p2$/m);
   assert.match(problems.join("\n"), /^dforge\/handoff\/p2\.md: darkmem already holds a different handoff note$/m);
-  assert.match(problems.join("\n"), /work[\\/]handoff[\\/]latest\.md: the mirror already holds a different copy of handoff\/latest\.md$/m);
+  assert.match(problems.join("\n"), /work[\\/]handoff[\\/]stored\.md: the mirror already holds a different copy of handoff\/stored\.md$/m);
 });
 
 // A mapped repository whose only pending family is progress, moving toward
@@ -113,7 +113,7 @@ test("progress moves into darkmem from every checkout, and a second run does not
   write(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
   write(path.join(s.repo, ".dforge", "sdd", "p1", "handoff.md"), "# Handoff p1\n");
   write(path.join(s.repo, ".dforge", "sdd", "p1", "brief.md"), "workspace\n");
-  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), LATEST);
+  write(path.join(s.repo, ".dforge", "handoff", "stored.md"), LATEST);
   write(path.join(s.worktree, ".dforge", "sdd", "p1", "progress.md"), LEDGER("p1"));
   write(path.join(s.worktree, ".dforge", "sdd", "p2", "progress.md"), LEDGER("p2"));
   const result = await s.reconcile();
@@ -130,22 +130,23 @@ test("progress moves into darkmem from every checkout, and a second run does not
   assert.equal(s.stub.db.documents.get("proj\u0000dforge/handoff/p1.md").content, "# Handoff p1\n");
   assert.equal(read(path.join(s.workRoot, "sdd", "p1", "handoff.md")), "# Handoff p1\n");
   assert.equal(s.state().documents["dforge/handoff/p1.md"], sha("# Handoff p1\n"));
-  assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), LATEST);
+  assert.equal(read(path.join(s.workRoot, "handoff", "stored.md")), LATEST);
   const p1 = s.stub.db.workstreams.find(w => w.key === "p1");
   const [checkpoint, ...more] = p1.entries.filter(e => e.kind === "checkpoint");
-  assert.equal(checkpoint.body, LATEST, "latest.md is filed as a checkpoint of the plan it names");
+  assert.equal(checkpoint.body, LATEST, "the handoff is filed as a checkpoint of the plan it names");
   assert.deepEqual(more, []);
   assert.equal(p1.state, "closed", "a closed workstream is closed again after its checkpoint");
-  assert.equal(s.state().checkpoint, sha(LATEST));
+  assert.deepEqual(s.state().checkpoints, { stored: sha(LATEST) });
+  assert.equal(s.state().checkpoint, null);
   for (const dir of [s.repo, s.worktree]) assert.equal(git(dir, "status", "--porcelain", "--untracked-files=all", "--", ".dforge"), "", `${dir}'s backup is ignored`);
   assert.equal(s.state().checkpointAt, checkpoint.created_at);
   assert.deepEqual(s.state().checkpointAtByWorkstream, { p1: checkpoint.created_at });
-  assert.match(result.stdout, /^ {2}latest\.md filed as a checkpoint of p1$/m);
+  assert.match(result.stdout, /^ {2}stored\.md filed as a checkpoint of p1$/m);
   assert.deepEqual(s.stores(), { documents: "local", progress: "darkmem" });
   const [primaryAside] = movedAside(s.repo);
   assert.equal(read(path.join(s.repo, ".dforge", primaryAside, "sdd", "p1", "progress.md")), LEDGER("p1"));
   assert.equal(read(path.join(s.repo, ".dforge", primaryAside, "sdd", "p1", "handoff.md")), "# Handoff p1\n");
-  assert.equal(read(path.join(s.repo, ".dforge", primaryAside, "handoff", "latest.md")), LATEST);
+  assert.equal(read(path.join(s.repo, ".dforge", primaryAside, "handoff", "stored.md")), LATEST);
   assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "sdd", "p1", "progress.md")), false);
   assert.equal(read(path.join(s.repo, ".dforge", "sdd", "p1", "brief.md")), "workspace\n", "workspaces stay");
   const [sideAside] = movedAside(s.worktree);
@@ -184,16 +185,16 @@ test("a ledger darkmem already holds unchanged is not filed again, so a stopped 
   assert.equal(s.state().ledgers.p1.lastSeq, ws.entries[0].seq);
 });
 
-test("a latest.md that names no plan is copied unsent, and dates no checkpoint", async t => {
+test("a handoff that names no plan is copied unsent, and dates no checkpoint", async t => {
   const s = await setup(t, "darkmem");
   await s.seed.append({ project: "proj", workstream: "p9", entries: [{ kind: "checkpoint", body: "## State\n- Plan: `docs/dforge/plans/p9.md`\n" }] });
-  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), "a note with no State section\n");
+  write(path.join(s.repo, ".dforge", "handoff", "stored.md"), "a note with no State section\n");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to darkmem$/m);
-  assert.match(result.stdout, /^ {2}latest\.md names no plan or draft; copied to the mirror, not sent$/m);
-  assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "a note with no State section\n");
-  assert.equal(s.state().checkpoint, sha("a note with no State section\n"));
+  assert.match(result.stdout, /^ {2}stored\.md names no plan or draft; copied to the mirror, not sent$/m);
+  assert.equal(read(path.join(s.workRoot, "handoff", "stored.md")), "a note with no State section\n");
+  assert.deepEqual(s.state().checkpoints, { stored: sha("a note with no State section\n") });
   assert.equal(s.state().checkpointAt, null, "a pull never writes over another key's file, so the copy needs no date");
   assert.equal(s.stub.db.workstreams.flatMap(w => w.entries).filter(e => e.kind === "checkpoint").length, 1);
 });
@@ -201,7 +202,7 @@ test("a latest.md that names no plan is copied unsent, and dates no checkpoint",
 test("an unsent copy beside a checkpoint of a workstream key with a slash leaves a loadable state", async t => {
   const s = await setup(t, "darkmem");
   await s.seed.append({ project: "proj", workstream: "feature/foo", entries: [{ kind: "checkpoint", body: "# Foo\n" }] });
-  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), "a note with no State section\n");
+  write(path.join(s.repo, ".dforge", "handoff", "stored.md"), "a note with no State section\n");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.doesNotThrow(() => loadState(path.join(s.mirror, ".sync-state.json")));
@@ -524,7 +525,7 @@ test("a handoff note that darkmem reads back different stays local, and nothing 
 
 test("a checkpoint that darkmem reads back different stays local, and nothing is copied or moved", async t => {
   const s = await setup(t, "darkmem");
-  const latest = path.join(s.repo, ".dforge", "handoff", "latest.md");
+  const latest = path.join(s.repo, ".dforge", "handoff", "stored.md");
   write(latest, LATEST);
   s.stub.db.onRequest = (method, pathname) => {
     if (method !== "GET" || pathname !== "/api/v1/worklog/resume") return;
@@ -533,11 +534,11 @@ test("a checkpoint that darkmem reads back different stays local, and nothing is
   const result = await s.reconcile();
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.ok(result.stdout.includes("darkmem-sync reconcile: progress stay local (configured darkmem): a read-back of darkmem's copies differs; nothing was moved locally\n"), result.stdout);
-  assert.ok(result.stdout.includes("  handoff/latest.md: darkmem's checkpoint reads back different\n"), result.stdout);
+  assert.ok(result.stdout.includes("  handoff/stored.md: darkmem's checkpoint reads back different\n"), result.stdout);
   assert.equal(s.stores().progress, "local");
   assert.deepEqual(movedAside(s.repo), []);
   assert.equal(read(latest), LATEST);
-  assert.equal(fs.existsSync(path.join(s.workRoot, "handoff", "latest.md")), false);
+  assert.equal(fs.existsSync(path.join(s.workRoot, "handoff", "stored.md")), false);
 });
 
 test("a plan that starts while darkmem is written keeps progress local, and nothing is copied or moved", async t => {
@@ -727,20 +728,20 @@ test("a move that sets every source aside but cannot write .gitignore still move
   assert.equal(s.stores().progress, "darkmem");
 });
 
-test("latest.md filed for an active plan leaves its workstream open, even one that was closed", async t => {
+test("a handoff filed for an active plan leaves its workstream open, even one that was closed", async t => {
   const s = await setup(t, "darkmem");
   const { workstream } = await s.seed.append({ project: "proj", workstream: "p3", entries: [{ kind: "note", body: "earlier\n" }] });
   await s.seed.updateWorkstream(workstream.id, { state: "closed", retain: true });
-  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), "## State\n- Plan: `docs/dforge/plans/p3.md`\n");
+  write(path.join(s.repo, ".dforge", "handoff", "stored.md"), "## State\n- Plan: `docs/dforge/plans/p3.md`\n");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /^ {2}latest\.md filed as a checkpoint of p3$/m);
+  assert.match(result.stdout, /^ {2}stored\.md filed as a checkpoint of p3$/m);
   assert.equal(s.stub.db.workstreams.find(w => w.key === "p3").state, "open", "p3 is not in completed.md");
 });
 
-test("latest.md filed for a completed plan closes the workstream it opens", async t => {
+test("a handoff filed for a completed plan closes the workstream it opens", async t => {
   const s = await setup(t, "darkmem");
-  write(path.join(s.repo, ".dforge", "handoff", "latest.md"), "## State\n- Plan: `docs/dforge/plans/p2.md`\n");
+  write(path.join(s.repo, ".dforge", "handoff", "stored.md"), "## State\n- Plan: `docs/dforge/plans/p2.md`\n");
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   const ws = s.stub.db.workstreams.find(w => w.key === "p2");

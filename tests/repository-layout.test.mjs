@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync, mkdtempSync, mkdirSync, cpSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, resolve, sep } from 'node:path';
@@ -291,4 +291,23 @@ test('the three workflow-guard copies are byte-identical', async t => {
   cpSync(root, dir, { recursive: true, filter: src => !/[\\/](\.git|node_modules|\.dforge|\.worktrees)([\\/]|$)/.test(src) });
   writeFileSync(resolve(dir, 'plugins/dflow/scripts/workflow-guard.mjs'), copies[0] + '\n// drift\n');
   assert.ok(validateRepository(dir).includes('plugins/dflow/scripts/workflow-guard.mjs: differs from plugins/dforge/scripts/workflow-guard.mjs'));
+});
+
+// A18 (2026-11-20 parallel-session handoff spec): handoffs are keyed files, and
+// only the migrate scripts, which rename an older checkout's latest.md, name it.
+// Skills, references and READMEs are rewritten by the plan's last task.
+test('no reader names latest.md', () => {
+  const allowed = new Set(['plugins/dforge/scripts/dforge-migrate', 'plugins/dagents/scripts/dagents-migrate']);
+  const pending = rel => /^plugins\/[^/]+\/(skills|reference)\//.test(rel) || /^plugins\/[^/]+\/README\.md$/.test(rel);
+  const walk = rel => {
+    const full = resolve(root, rel);
+    if (!existsSync(full)) return [];
+    if (!statSync(full).isDirectory()) return [rel];
+    return readdirSync(full).filter(name => name !== 'node_modules').flatMap(name => walk(`${rel}/${name}`));
+  };
+  const named = ['dforge', 'dagents']
+    .flatMap(plugin => ['scripts', 'hooks', 'skills', 'reference', 'types', 'README.md'].flatMap(part => walk(`plugins/${plugin}/${part}`)))
+    .filter(rel => !allowed.has(rel) && !pending(rel))
+    .filter(rel => /latest\.md|latest_file|latestFile/.test(readFileSync(resolve(root, rel), 'latin1')));
+  assert.deepEqual(named, []);
 });

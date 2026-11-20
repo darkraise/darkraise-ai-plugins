@@ -14,7 +14,7 @@
 #        next-step [--host claude|codex] [--print|--target] [--notes FILE] --draft DRAFT_FILE --next ACTION
 #        next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --adhoc --phase design|build --next ACTION
 #        next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --project
-#        next-step [--host claude|codex] --print --handoff FILE | --latest
+#        next-step [--host claude|codex] --print --handoff FILE
 # The handoff is <checkout>/<state>/handoff/<key>.md (scripts/lib/roots.sh
 # dagents_handoff_file): the key is the plan's or the draft's basename, and for
 # --adhoc and --project adhoc-<the first 8 characters of
@@ -52,11 +52,10 @@
 #               every register when no milestone is current.
 #   --handoff   recompute the block the handoff FILE holds from what its
 #               marker names (requires --print), and print it with the marker
-#               last; its first prompt names FILE as the handoff. --latest is
-#               --handoff with this checkout's newest handoff.
+#               last; its first prompt names FILE as the handoff.
 #   --target    print the absolute path of the handoff the same call would
 #               write, and exit 0: write nothing, and skip the background-work
-#               check. A usage error with --latest.
+#               check. A usage error with --handoff.
 #   --host      which client the next session launches; default claude. A plan
 #               states its own host in its header, so the flag serves the paths
 #               that have no plan to read.
@@ -75,7 +74,7 @@
 # The handoff's Next session section ends with a marker line the printed block
 # never carries, naming what the block was computed from and who wrote it:
 #   <!-- next-step: kind=<kind> [branch=<name> or branch=detached:<sha>] key=<key> session=<id or -> [host=codex] done=<n> closed=<n> subject=<name or -> at=<epoch> -->
-#   host=codex appears only for a Codex block; --print --latest without --host
+#   host=codex appears only for a Codex block; --print --handoff without --host
 #   recomputes for the host it names.
 # Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
 #       the handoff could not be written; 5 background work this session started
@@ -99,7 +98,7 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--host claude|codex] [--print|--target] [--notes FILE] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print|--target] [--notes FILE] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --project | next-step [--host claude|codex] --print --handoff FILE | --latest"; }
+usage() { fail 2 "usage: next-step [--host claude|codex] [--print|--target] [--notes FILE] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print|--target] [--notes FILE] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --project | next-step [--host claude|codex] --print --handoff FILE"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
@@ -252,10 +251,11 @@ execution_skill() { # execution_skill EXECUTION_LINE
 
 complete=0 kept=0 draft=0 adhoc=0 project=0 latest_mode=0 handoff_file="" phase="" next_action=""
 case "${1:-}" in
-  --latest | --handoff)
+  --handoff)
     latest_mode=1
-    if [ "$1" = --handoff ]; then [ $# -ge 2 ] && [ -n "$2" ] || usage; handoff_file=$2; shift; fi
-    shift
+    { [ $# -ge 2 ] && [ -n "$2" ]; } || usage
+    handoff_file=$2
+    shift 2
     { [ $# -eq 0 ] && [ "$print_only" -eq 1 ] && [ "$target_only" -eq 0 ]; } || usage
     ;;
   --project)
@@ -359,8 +359,8 @@ dagents_stores_init "$root"
 session_id=${CLAUDE_CODE_SESSION_ID:-} key=""
 if [ "$latest_mode" -eq 1 ]; then :
 elif [ "$print_only" -eq 1 ] && [ -n "${DAGENTS_NEXT_STEP_HANDOFF:-}" ]; then
-  # A recompute names the file it recomputes, whatever its name (latest.md
-  # included), so its key is never checked.
+  # A recompute names the file it recomputes, whatever its name, so its key
+  # is never checked.
   key=$(basename "$DAGENTS_NEXT_STEP_HANDOFF" .md)
 elif [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ]; then
   if [ -n "$session_id" ]; then key="adhoc-${session_id:0:8}"
@@ -403,7 +403,7 @@ draft_planned() {
 # one.
 if [ "$latest_mode" -eq 1 ]; then
   gone() { printf 'next-step: %s\n' "$1" >&2; exit 6; }
-  latest=${handoff_file:-$(dagents_latest_file)}
+  latest=$handoff_file
   case $latest in /* | [A-Za-z]:[\\/]*) ;; *) latest="$PWD/$latest" ;; esac
   [ -f "$latest" ] || gone "no handoff at $latest"
   stored=$(tr -d '\r' < "$latest" | awk '

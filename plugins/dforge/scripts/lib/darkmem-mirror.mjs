@@ -204,8 +204,9 @@ export function checkpointAtOf(state, workstream) {
   return held[workstream] ?? held[EVERY_WORKSTREAM] ?? null;
 }
 
-// The newest checkpoint this mirror synced in any workstream: latest.md is the
-// most recent stop, so a pull replaces it only with a newer one.
+// The newest checkpoint this mirror synced in any workstream: the baseline of
+// a workstream with no entry of its own, and the saved form's string
+// checkpointAt.
 export function newestCheckpointAt(state) {
   const held = state.checkpointAt;
   if (held === null || typeof held === "string") return held;
@@ -235,17 +236,19 @@ export function handoffMarker(text) {
   return { kind, subject: subject === "-" ? null : subject };
 }
 
-// The key a mirror handoff's checkpoint hash is kept under: its file name, or
-// for a latest.md the plan or draft its marker names, as the migration keys
-// it; null for a latest.md naming neither, or a name the key rule refuses.
-export function handoffKey(name, text) {
-  if (name !== "latest.md") {
-    const key = name.slice(0, -".md".length);
-    return validKey(key) && key !== "latest" ? key : null;
-  }
+// The key a mirror handoff's checkpoint hash is kept under: its file name;
+// null for a name the key rule refuses, which is no handoff.
+export function handoffKey(name) {
+  const key = name.slice(0, -".md".length);
+  return validKey(key) && key !== "latest" ? key : null;
+}
+
+// The key the migration gives a handoff of the older layout (one whose name is
+// no key): the plan or draft its marker names; null for neither.
+function subjectKey(text) {
   const subject = handoffMarker(text)?.subject;
   const key = subject && path.posix.basename(subject.replace(/\\/g, "/"), ".md");
-  return key && validKey(key) ? key : null;
+  return key && validKey(key) && key !== "latest" ? key : null;
 }
 
 // The key of the mirror handoff whose content hashes to `hash`; null for none.
@@ -263,7 +266,7 @@ function keyHashing(dir, hash) {
     } catch {
       continue;
     }
-    if (sha256(buffer) === hash) return handoffKey(name, buffer.toString("utf8"));
+    if (sha256(buffer) === hash) return handoffKey(name) ?? subjectKey(buffer.toString("utf8"));
   }
   return null;
 }
@@ -272,7 +275,7 @@ function keyHashing(dir, hash) {
 // error, not a fresh start: forgetting a ledger's offset would re-send lines.
 // checkpoints holds each mirror handoff's synced hash by key; a state an older
 // dforge wrote holds one checkpoint, kept under the key of the handoff it
-// hashes to, or dropped. checkpoint stays the hash of latest.md for its readers.
+// hashes to (an older layout's keyed as the migration keys it), or dropped.
 export function loadState(file) {
   try {
     fs.statSync(file);
@@ -385,17 +388,17 @@ export function writeFileAtomic(file, data, root) {
 // fields it does not know, so the per-workstream record is saved beside a
 // string checkpointAt holding its newest date. loadState trusts the record
 // only while that string is still its newest date. An older dforge reads
-// checkpoint as latest.md's synced hash, so it is null once latest.md is gone.
-function savedForm(state, file) {
-  const isLatest = fs.existsSync(path.join(handoffDirOf(file), "latest.md"));
-  const saved = { ...state, checkpoint: isLatest ? (state.checkpoint ?? null) : null, checkpoints: state.checkpoints ?? Object.create(null) };
+// checkpoint as the synced hash of its one handoff file, which this dforge
+// never syncs, so it is saved null.
+function savedForm(state) {
+  const saved = { ...state, checkpoint: null, checkpoints: state.checkpoints ?? Object.create(null) };
   const held = state.checkpointAt;
   if (held === null || typeof held === "string") return saved;
   return { ...saved, checkpointAt: newestCheckpointAt(state), checkpointAtByWorkstream: held };
 }
 
 export function saveState(file, state) {
-  writeFileAtomic(file, `${JSON.stringify(savedForm(state, file), null, 2)}\n`);
+  writeFileAtomic(file, `${JSON.stringify(savedForm(state), null, 2)}\n`);
 }
 
 function processAlive(pid) {
@@ -871,8 +874,8 @@ export function localChanges(roots, state) {
     else if (buffer.length > record.offset) lines.push(`unpushed: sdd/${slug}/progress.md (${buffer.length - record.offset} bytes)`);
   }
   for (const dir of unsupportedPlanDirs(roots.workRoot)) lines.push(`unsupported: ${dir} (not a usable workstream key)`);
-  // Each handoff against its key's synced hash; latest.md against checkpoint,
-  // the hash its readers keep until the migration renames it.
+  // Each handoff against its key's synced hash; a file whose name is no key
+  // has none.
   const dir = path.join(roots.workRoot, "handoff");
   let names = [];
   try {
@@ -882,7 +885,8 @@ export function localChanges(roots, state) {
   }
   for (const name of names) {
     const buffer = fs.readFileSync(path.join(dir, name));
-    const synced = name === "latest.md" ? state.checkpoint : state.checkpoints?.[handoffKey(name, "")];
+    const key = handoffKey(name);
+    const synced = key === null ? undefined : state.checkpoints?.[key];
     if (sha256(buffer) !== synced) lines.push(`modified: handoff/${name}`);
   }
   return lines;

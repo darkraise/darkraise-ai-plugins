@@ -43,8 +43,8 @@ write_ledger() {
   sleep 1 # -newer compares whole seconds on some filesystems
   printf '# SDD ledger — plan: docs/superpowers/plans/2026-10-08-example.md\n%s\n' "$1" > "$LEDGER"
 }
-LATEST="$REPO/.dagents/handoff/latest.md"
-# latest.md as scripts/next-step writes it, after the turn's stamp: a block in
+LATEST="$REPO/.dagents/handoff/stored.md"
+# A handoff as scripts/next-step writes it, after the turn's stamp: a block in
 # the stop message releases a ledger turn only with that file's Next line.
 wrote_next() { # wrote_next [Next text]
   sleep 1
@@ -511,7 +511,7 @@ check "nothing changed, nothing held" "$(stop_at s-tr5 "$TRP" 'Done.')" ""
 
 # A transition turn is released by the block next-step wrote, by finishing's
 # menu, and by nothing hand-typed; an uncommitted index edit counts as its own.
-TRL="$TRP/.dagents/handoff/latest.md"
+TRL="$TRP/.dagents/handoff/stored.md"
 record() { printf -- '- 2026-11-16 `docs/dagents/plans/2026-11-16-%s.md` — merged into `main`\n' "$1" >> "$TRP/docs/dagents/plans/completed.md"; }
 NB=$'Merged.\n\n## Next session\n\n**Next:** Nothing — no register holds an unresolved row.'
 sleep 1; prompt s-tr7 "$TRP"
@@ -542,7 +542,7 @@ commit_all "$TRP" 'docs: record u'
 # --- per-worktree handoffs (spec A7, A16) ---
 git -C "$REPO" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m base
 WTD="$TMP/wt-hand"; git -C "$REPO" worktree add -q -b wt-hand "$WTD"
-WT_LATEST="$WTD/.dagents/handoff/latest.md"; mkdir -p "${WT_LATEST%/*}"
+WT_LATEST="$WTD/.dagents/handoff/stored.md"; mkdir -p "${WT_LATEST%/*}"
 wt_block() { sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** %s\n**Next:** %s\n' "$1" "$2" > "$WT_LATEST"; }
 prompt s-wa; write_ledger 'Task 1: complete (commits a..b, review clean)'
 check "A7: a held primary turn: held on a summary" "$(decision "$(stop s-wa 'Task 1 is done.')")" "block"

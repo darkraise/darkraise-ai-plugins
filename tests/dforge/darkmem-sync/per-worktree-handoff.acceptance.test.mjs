@@ -17,8 +17,8 @@ async function setup(t) {
   const seed = createClient({ url: stub.url, apiKey: STUB_KEY, runKey: "seed" });
   const worktree = path.join(scratch("dms-a11-wt-"), "wt");
   git(repo, "worktree", "add", "-q", "-b", "wt", worktree);
-  const primaryFile = path.join(home.workRoot, "handoff", "latest.md");
-  const worktreeFile = path.join(worktree, ".dforge", "handoff", "latest.md");
+  const primaryFile = path.join(home.workRoot, "handoff", "stored.md");
+  const worktreeFile = path.join(worktree, ".dforge", "handoff", "stored.md");
   return { stub, repo, worktree, seed, primaryFile, worktreeFile, ...home };
 }
 

@@ -224,9 +224,9 @@ export async function pullLedgers({ client, roots, state, persist, report }, wor
 }
 
 // The handoff key a pulled checkpoint is written under: its marker's key=, or
-// for a checkpoint without one the key the migration gives a latest.md (the
-// plan or draft its marker names, else adhoc-legacy-<marker at, else the
-// checkpoint's time>). Null when that key fails the handoff key rule, which
+// for a checkpoint without one the key the migration gives an older layout's
+// handoff (the plan or draft its marker names, else adhoc-legacy-<marker at,
+// else the checkpoint's time>). Null when that key fails the handoff key rule, which
 // adds "latest" to the state's own key rule, or when no time can be read.
 export function pulledKey(body, createdAt) {
   const last = (body.match(/^<!-- next-step: .* -->\r?$/gm) ?? []).at(-1);

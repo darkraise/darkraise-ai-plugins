@@ -44,8 +44,8 @@ printf '# Handoff notes\n' > "$WS/handoff.md"
 
 mkdir -p "$REPO/.dforge/handoff"
 printf '# Handoff\n\n## Next session\n\n**Status:** Plan `docs/plan.md`: 1 of 3 tasks complete.\n**Next:** Resume at Task 2 (Two).\n' \
-  > "$REPO/.dforge/handoff/latest.md"
-touch -d '1 hour ago' "$REPO/.dforge/handoff/latest.md"
+  > "$REPO/.dforge/handoff/plan.md"
+touch -d '1 hour ago' "$REPO/.dforge/handoff/plan.md"
 printf 'later\n' > "$REPO/later.txt"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm second
 
@@ -133,16 +133,16 @@ SECTION=$(sed -n '/## Roadmap/,/^$/p' <<<"$OUT")
 has "audit: lists the milestone" "$SECTION" "- M1 MVP — open — 0 of 1 epics resolved; open: #1 Search (open)"
 has "audit: names the current milestone" "$SECTION" "- Current: M1 MVP"
 
-# --- progress kept in darkmem: the mirror's ledgers and latest.md ---
+# --- progress kept in darkmem: the mirror's ledgers and handoffs ---
 . "$HERE/fixtures/darkmem-stores.sh"
 SH="$TMP/stores-home"; mkdir -p "$SH"
 M=$(stores_home "$SH" "$REPO" proj local darkmem)
 mkdir -p "$M/work/sdd/plan"
 printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/plan/progress.md"
-printf '# Handoff\n\n## Next session\n\n**Status:** mirror status\n' > "$M/work/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\n**Status:** mirror status\n' > "$M/work/handoff/plan.md"
 out=$(cd "$REPO" && HOME=$SH bash "$SCRIPT")
 has "darkmem: the mirror's ledger" "$out" "- \`docs/plan.md\` in the darkmem mirror: 1 of 3 tasks complete"
-has "darkmem: the mirror's latest.md" "$out" "- \`$M/work/handoff/latest.md\`"
+has "darkmem: the mirror's handoff" "$out" "- \`$M/work/handoff/plan.md\`"
 has "darkmem: its status" "$out" "**Status:** mirror status"
 # A mirror handoff is recomputed from the primary: a gone draft's is removed.
 printf '# Handoff\n\n## Next session\n\n**Status:** s\n**Next:** n\n<!-- next-step: kind=draft key=gone-design session=- done=0 closed=0 subject=docs/gone-design.md at=1 -->\n' > "$M/work/handoff/gone-design.md"
@@ -159,7 +159,7 @@ has "lettered: the task total is unknown" "$out" "- \`docs/lettered.md\` in \`$R
 rm -rf "$REPO/docs/lettered.md" "$REPO/.dforge/sdd/lettered"
 
 # --- an older directory is named with the skill that moves it ---
-check "4.0 layout: no migration line" "$(grep -c 'still uses an older layout' <<<"$out")" "0"
+check "4.0 layout: no migration line" "$(grep -c 'older layout' <<<"$out")" "0"
 W2="$TMP/wt2"
 git -C "$REPO" worktree add -q --detach "$W2"
 W2_ROOT="$(git -C "$W2" rev-parse --show-toplevel)"
@@ -182,8 +182,8 @@ printf '# P\n\n**Spec:** docs/dforge/specs/p.md\n**Execution:** inline — `clau
   > "$H/docs/dforge/plans/2026-11-01-p.md"
 git -C "$H" add -A && git -C "$H" commit -qm init
 printf '# SDD ledger — plan: docs/dforge/plans/2026-11-01-p.md\nTask 1: complete (x)\nTask 2: complete (x)\n' > "$H/.dforge/sdd/2026-11-01-p/progress.md"
-hstored() { # hstored <marker> — latest.md by hand, its Next line stale
-  printf '# Handoff\n\n## Next session\n\n**Status:** Plan stored status.\n**Next:** Resume at Task 2 (Two).\n%s\n' "$1" > "$H/.dforge/handoff/latest.md"
+hstored() { # hstored <marker> — a handoff by hand, its Next line stale
+  printf '# Handoff\n\n## Next session\n\n**Status:** Plan stored status.\n**Next:** Resume at Task 2 (Two).\n%s\n' "$1" > "$H/.dforge/handoff/2026-11-01-p.md"
 }
 handoff_section() { (cd "$H" && bash "$SCRIPT" 2>/dev/null) | sed -n '/^## Handoff/,/^$/p'; }
 hstored "<!-- next-step: kind=plan done=0 closed=0 subject=docs/dforge/plans/2026-11-01-p.md at=1 -->"
@@ -193,7 +193,7 @@ has "handoff: the recomputed Next line" "$SECTION" "- **Next:** Resume at Task 3
 # An adhoc block is never superseded (C10); a finished plan's is.
 printf '# Completed plans\n\n- 2026-11-01 — `docs/dforge/plans/2026-11-01-p.md` — merged\n' > "$H/docs/dforge/plans/completed.md"
 hstored "<!-- next-step: kind=plan done=0 closed=0 subject=docs/dforge/plans/2026-11-01-p.md at=1 -->"
-has "handoff: a finished plan's block is removed" "$(handoff_section)" "- removed finished handoff $H/.dforge/handoff/latest.md — the plan is finished: docs/dforge/plans/2026-11-01-p.md"
+has "handoff: a finished plan's block is removed" "$(handoff_section)" "- removed finished handoff $H/.dforge/handoff/2026-11-01-p.md — the plan is finished: docs/dforge/plans/2026-11-01-p.md"
 hstored "<!-- next-step: kind=plan done=1 closed=0 subject=docs/dforge/plans/missing.md at=1 -->"
 SECTION=$(handoff_section)
 has "handoff: a failed recompute is named" "$SECTION" "- stored, not recomputed: next-step: no such file"
@@ -204,16 +204,16 @@ has "handoff: a failed recompute prints the stored Next" "$SECTION" "- **Next:**
 A10="$TMP/a10"; git -C "$REPO" worktree add -q -b a10 "$A10"
 A10_ROOT=$(git -C "$A10" rev-parse --show-toplevel)
 mkdir -p "$A10/.dforge/handoff"
-printf '# Handoff\n\n## Next session\n\n**Status:** a10 status\n**Next:** a10 next\n<!-- next-step: kind=adhoc done=0 closed=0 subject=- at=%s -->\n' "$(( $(date +%s) - 7200 ))" > "$A10/.dforge/handoff/latest.md"
-touch -d '2 hours ago' "$A10/.dforge/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\n**Status:** a10 status\n**Next:** a10 next\n<!-- next-step: kind=adhoc done=0 closed=0 subject=- at=%s -->\n' "$(( $(date +%s) - 7200 ))" > "$A10/.dforge/handoff/adhoc-0a100000.md"
+touch -d '2 hours ago' "$A10/.dforge/handoff/adhoc-0a100000.md"
 NOH="$TMP/noh"; git -C "$REPO" worktree add -q -b noh "$NOH"
 NOH_ROOT=$(git -C "$NOH" rev-parse --show-toplevel)
 git -C "$REPO" worktree add -q -b gone "$TMP/gone"
 GONE_ROOT=$(git -C "$TMP/gone" rev-parse --show-toplevel); rm -rf "$TMP/gone"
 run "$REPO"
 HSEC=$(sed -n '/^## Handoff/,/^## /p' <<<"$out")
-has "A10: the own handoff first" "$(sed -n 2p <<<"$HSEC")" "- \`$ROOT/.dforge/handoff/latest.md\`"
-has "A10: the worktree's handoff listed with its key, kind, age and claim" "$HSEC" "- \`$A10_ROOT/.dforge/handoff/latest.md\` — key latest, kind adhoc, 2h old, unclaimed"
+has "A10: the own handoff first" "$(sed -n 2p <<<"$HSEC")" "- \`$ROOT/.dforge/handoff/plan.md\`"
+has "A10: the worktree's handoff listed with its key, kind, age and claim" "$HSEC" "- \`$A10_ROOT/.dforge/handoff/adhoc-0a100000.md\` — key adhoc-0a100000, kind adhoc, 2h old, unclaimed"
 has "A10: marked stored" "$HSEC" "- stored (kind adhoc is not recomputed)"
 has "A10: its stored status" "$HSEC" "- **Status:** a10 status"
 check "A10: a checkout with no handoff gets no entry" "$(grep -cF -- "$NOH_ROOT" <<<"$HSEC")" "0"

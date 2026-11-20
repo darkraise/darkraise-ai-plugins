@@ -212,8 +212,8 @@ export type CockpitFinish = {
 /** Where a repository's documents and progress live, as `darkmem-config.mjs --mode` prints them. */
 export type CockpitRoots = {
   docs: { store: 'local' | 'darkmem'; root: string }
-  /** `handoffDir` is the directory holding `latestFile`: the darkmem mirror's handoffs while progress lives there. */
-  progress: { store: 'local' | 'darkmem'; ledgerRoot: string; latestFile: string; handoffDir: string }
+  /** `handoffDir` holds the checkout's handoff files: the darkmem mirror's while progress lives there. */
+  progress: { store: 'local' | 'darkmem'; ledgerRoot: string; handoffDir: string }
   /** The darkmem project the repository is mapped to; null when it is not. */
   project: string | null
 }

@@ -138,7 +138,8 @@ const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dagents handoff skill. Start no new task.'
 function resumePrompt(): string {
-  return `Resume the work in ${S.latestName ?? '.dagents/handoff/latest.md'} with the dagents resume-execution skill. Before anything else, claim it with dagents' \`scripts/handoff claim\` on that file.`
+  if (S.latestName === null) return `Resume the work with the dagents resume-execution skill. Before anything else, claim the handoff it reads with dagents' \`scripts/handoff claim\`.`
+  return `Resume the work in ${S.latestName} with the dagents resume-execution skill. Before anything else, claim it with dagents' \`scripts/handoff claim\` on that file.`
 }
 // A handoff older than this is not offered for resuming.
 const RESUME_WITHIN = 3 * 86_400_000

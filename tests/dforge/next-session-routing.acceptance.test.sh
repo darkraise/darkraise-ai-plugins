@@ -288,7 +288,7 @@ register m2 "$X" "1|Epic|-|open"
 : > "$D/specs/shop.md"
 commit_all "$R"
 P6=docs/dforge/plans/2026-11-01-demo.md
-LATEST="$R/.dforge/handoff/latest.md"
+LATEST="$R/.dforge/handoff/stored.md"
 FINISH="$R/.dforge/sdd/finish.json"
 snap() { # snap — the tree outside .git and the home directory, with digests and mtimes
   (cd "$R" && find . -path ./.git -prune -o -print | LC_ALL=C sort)
@@ -310,12 +310,12 @@ modes=(
   "adhoc-build|--adhoc --phase build --next x"
   "adhoc-design|--adhoc --phase design --next x"
   "codex|--host codex --project"
-  "latest-project|--latest"
-  "latest-complete|--latest"
-  "latest-kept|--latest"
-  "latest-draft|--latest"
-  "latest-adhoc|--latest"
-  "latest-plan|--latest"
+  "latest-project|--handoff $LATEST"
+  "latest-complete|--handoff $LATEST"
+  "latest-kept|--handoff $LATEST"
+  "latest-draft|--handoff $LATEST"
+  "latest-adhoc|--handoff $LATEST"
+  "latest-plan|--handoff $LATEST"
 )
 for entry in "${modes[@]}"; do
   name=${entry%%|*}; args=${entry#*|}
@@ -338,16 +338,16 @@ for entry in "${modes[@]}"; do
   # shellcheck disable=SC2086
   (cd "$R" && timeout 90 bash "$TMP/stubscripts/next-step" --print $args >"$TMP/o6" 2>"$TMP/e6"); rc=$?
   case $rc in 0|6) ok=ok ;; *) ok="exit $rc" ;; esac
-  check "A6: --print $name exits 0 (or 6 for --latest), never 5" "$ok" ok
+  check "A6: --print $name exits 0 (or 6 for --handoff), never 5" "$ok" ok
   check "A6: --print $name leaves every file and mtime alone" "$(snap)" "$before"
-  check "A6: --print $name keeps latest.md byte-identical" "$(digest "$LATEST")" "$digest_before"
-  check "A6: --print $name keeps latest.md's mtime" "$(mtime "$LATEST")" "$mtime_before"
+  check "A6: --print $name keeps the handoff byte-identical" "$(digest "$LATEST")" "$digest_before"
+  check "A6: --print $name keeps the handoff's mtime" "$(mtime "$LATEST")" "$mtime_before"
   check "A6: --print $name keeps finish.json" "$(cat "$FINISH")" '{"action":"merge"}'
   check "A6: --print $name keeps finish.json's mtime" "$(mtime "$FINISH")" "$mtime_before"
 done
 rm -rf "$R/.dforge"
 before=$(snap)
-for entry in "plan|$P6" "complete|--complete $P6" "project|--project" "adhoc|--adhoc --phase build --next x" "latest|--latest"; do
+for entry in "plan|$P6" "complete|--complete $P6" "project|--project" "adhoc|--adhoc --phase build --next x" "handoff|--handoff $LATEST"; do
   name=${entry%%|*}; args=${entry#*|}
   # shellcheck disable=SC2086
   (cd "$R" && timeout 90 bash "$TMP/stubscripts/next-step" --print $args >/dev/null 2>&1); rc=$?
@@ -374,7 +374,7 @@ register m2 "$X" "1|Epic|-|open"
 : > "$D/specs/shop.md"
 commit_all "$R"
 P11=docs/dforge/plans/2026-11-01-p.md
-LATEST="$R/.dforge/handoff/latest.md"
+LATEST="$R/.dforge/handoff/stored.md"
 section_last() { awk '/^## Next session[ \t\r]*$/ { on = 1; next } on && /^## / { exit } on && NF { last = $0 } END { print last }' "$LATEST"; }
 for entry in "plan|$P11|$P11" "complete|--complete $P11|$P11" "kept|--kept $P11|$P11" "project|--project|-" "draft|--draft docs/dforge/specs/D.md --next x|docs/dforge/specs/D.md" "adhoc|--adhoc --phase build --next x|-"; do
   IFS='|' read -r kind args subject <<<"$entry"
@@ -431,15 +431,15 @@ lfixture() { # lfixture — $L with plan P (3 tasks) and completed.md of one ent
   } > "$LD/plans/2026-11-01-p.md"
   printf '# Completed plans\n\n- 2026-10-01 — `docs/dforge/plans/2026-10-01-a.md` — merged\n' > "$LD/plans/completed.md"
   git -C "$L" add -A && git -C "$L" commit -qm init
-  LL="$L/.dforge/handoff/latest.md"
+  LL="$L/.dforge/handoff/2026-11-01-p.md"
 }
 LP=docs/dforge/plans/2026-11-01-p.md
 stored() { # stored <marker or empty> [status] [next]
   { printf '# Handoff\n\n## Notes\n\nmine\n\n## Next session\n\n**Status:** %s\n**Next:** %s\n' "${2:-Stored status.}" "${3:-Stored next.}"
     [ -z "$1" ] || printf '%s\n' "$1"; } > "$LL"
 }
-latest() { # latest — run --print --latest in $L; sets out, err, status
-  out=$(cd "$L" && timeout 120 bash "$NS" --print --latest 2>"$TMP/lerr"); status=$?
+latest() { # latest — run --print --handoff $LL in $L; sets out, err, status
+  out=$(cd "$L" && timeout 120 bash "$NS" --print --handoff "$LL" 2>"$TMP/lerr"); status=$?
   err=$(cat "$TMP/lerr")
 }
 close_m1() { # a roadmap whose M1 is closed
@@ -542,7 +542,7 @@ printf '# P\n\n**Spec:** docs/dforge/specs/p.md\n**Execution:** inline — `clau
   > "$H/docs/dforge/plans/2026-11-01-p.md"
 git -C "$H" add -A && git -C "$H" commit -qm init
 printf '# SDD ledger — plan: docs/dforge/plans/2026-11-01-p.md\nTask 1: complete (x)\nTask 2: complete (x)\n' > "$H/.dforge/sdd/2026-11-01-p/progress.md"
-hstored() { printf '# Handoff\n\n## Next session\n\n**Status:** Plan stored status.\n**Next:** Resume at Task 1 (One).\n%s\n' "$1" > "$H/.dforge/handoff/latest.md"; }
+hstored() { printf '# Handoff\n\n## Next session\n\n**Status:** Plan stored status.\n**Next:** Resume at Task 1 (One).\n%s\n' "$1" > "$H/.dforge/handoff/2026-11-01-p.md"; }
 section() { (cd "$H" && timeout 100 bash "${1:-$AUDIT}" 2>/dev/null) | sed -n '/^## Handoff/,/^$/p'; }
 hstored "<!-- next-step: kind=plan done=0 closed=0 subject=docs/dforge/plans/2026-11-01-p.md at=1 -->"
 SEC=$(section)
@@ -553,8 +553,8 @@ lacks "A14: the stale stored Next line is not printed" "$SEC" "Resume at Task 1 
 printf '# Completed plans\n\n- 2026-11-01 — `docs/dforge/plans/2026-11-01-p.md` — merged\n' > "$H/docs/dforge/plans/completed.md"
 hstored "<!-- next-step: kind=plan done=0 closed=0 subject=docs/dforge/plans/2026-11-01-p.md at=1 -->"
 SEC=$(section)
-has "A14: exit 6 removes the finished handoff" "$SEC" "removed finished handoff $H/.dforge/handoff/latest.md"
-check "A14: the finished handoff is gone" "$([ -e "$H/.dforge/handoff/latest.md" ] && echo yes || echo no)" no
+has "A14: exit 6 removes the finished handoff" "$SEC" "removed finished handoff $H/.dforge/handoff/2026-11-01-p.md"
+check "A14: the finished handoff is gone" "$([ -e "$H/.dforge/handoff/2026-11-01-p.md" ] && echo yes || echo no)" no
 lacks "A14: exit 6 prints no Next line" "$SEC" "**Next:**"
 hstored "<!-- next-step: kind=plan done=1 closed=0 subject=docs/dforge/plans/missing.md at=1 -->"
 SEC=$(section)
@@ -659,9 +659,9 @@ sleep 1
 git -C "$TRP" pull -q --ff-only "$SECOND" HEAD
 check "A16: roadmap.md and completed.md moved only through a pull: not held" "$(stop_at s-a16b "$TRP" 'Pulled.')" ""
 
-# A17: a hand-typed block does not release a transition turn while latest.md is writable and stale
+# A17: a hand-typed block does not release a transition turn while the handoff is writable and stale
 mkdir -p "$TRP/.dforge/handoff"
-printf '# Handoff\n\n## Next session\n\n**Status:** old\n**Next:** old\n' > "$TRP/.dforge/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\n**Status:** old\n**Next:** old\n' > "$TRP/.dforge/handoff/stored.md"
 sleep 1; prompt s-a17 "$TRP"
 sleep 1
 printf -- '- 2026-11-17 `docs/dforge/plans/2026-11-17-r.md` — merged into `main`\n' >> "$TRP/docs/dforge/plans/completed.md"
@@ -676,7 +676,7 @@ printf '# SDD ledger — plan: docs/dforge/plans/2026-10-08-example.md\nTask 1: 
 check "A17: a ledger turn whose first stop carries a hand-typed block is held" "$(decision "$(stop_at s-a17b "$TRP" "$BLOCK")")" block
 # Control: the block next-step wrote this turn releases it.
 sleep 1
-printf '# Handoff\n\n## Next session\n\n**Status:** x\n**Next:** x\n' > "$TRP/.dforge/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\n**Status:** x\n**Next:** x\n' > "$TRP/.dforge/handoff/stored.md"
 check "A17: control — a block next-step wrote this turn releases it" "$(stop_at s-a17b "$TRP" "$BLOCK")" ""
 rm -rf "$WS"
 

@@ -1024,7 +1024,7 @@ check "A13: --target from the primary names the worktree's handoff" "$(cd "$REPO
 rm -f "$WA_H"
 check "A13: --target writes nothing" "$(cd "$WA" && bash "$SCRIPT" --target "$PLAN_REL" >/dev/null; [ -f "$WA_H" ] && echo yes || echo no)" "no"
 check "A13: --target for adhoc work names this checkout's" "$(cd "$WB" && CLAUDE_CODE_SESSION_ID=$S0 bash "$SCRIPT" --target --adhoc --phase build --next x)" "$WB_ROOT/.dforge/handoff/adhoc-a0000000.md"
-(cd "$REPO" && bash "$SCRIPT" --target --latest >/dev/null 2>&1); check "A13: --target with --latest is a usage error" "$?" "2"
+(cd "$REPO" && bash "$SCRIPT" --target --handoff "$REPO/x.md" >/dev/null 2>&1); check "A13: --target with --handoff is a usage error" "$?" "2"
 (cd "$REPO" && bash "$SCRIPT" --target docs/plans/missing.md >/dev/null 2>&1); check "A13: --target of a missing plan exits 2" "$?" "2"
 # A13, every mode: --target names exactly the file the same call then writes.
 # Paths as git spells them (C:/… on Windows Git Bash), as --target prints them.

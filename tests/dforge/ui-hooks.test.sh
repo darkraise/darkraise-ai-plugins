@@ -186,7 +186,7 @@ mkdir -p "$HOME/.claude/dforge/sessions/turns"
 printf 'status=Plan p: 1 of 2 tasks complete.\nnext=Resume at Task 2 (Two).\n' > "$HOME/.claude/dforge/sessions/turns/u-9.next"
 check "ui_turn_released_on_record: a hand-typed block with another Next is still held" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** x')")" "block"
 check "ui_turn_released_on_record: the block whose Next the record holds stands down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** Resume at Task 2 (Two).')")" "none"
-rm -f .dforge/handoff/latest.md
+rm -f .dforge/handoff/stored.md
 mkdir -p .dforge/sdd/ui-plan
 printf '# SDD ledger — plan: docs/ui-plan.md\nTask 2: waiting — which colour?\n' > .dforge/sdd/ui-plan/progress.md
 check "a ledger ending on a waiting line stands down" "$(decision "$(stop u-9 'Which colour should the button be?')")" "none"
@@ -270,14 +270,14 @@ git -C "$REPO" commit -q --allow-empty -am 'before the worktree cases'
 UWT="$TMP/u-wt"; git -C "$REPO" worktree add -q -b u-wt "$UWT"; mkdir -p "$UWT/.dforge/handoff"
 sleep 1; prompt u-wt2
 printf '// change wt2\n' >> "$REPO/src/App.tsx"; git -C "$REPO" commit -qam 'ui change wt2'
-sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.\n' > "$UWT/.dforge/handoff/latest.md"
+sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.\n' > "$UWT/.dforge/handoff/stored.md"
 check "A7: the worktree's block releases" "$(decision "$(stop u-wt2 $'## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.')")" "none"
-printf '# Handoff\n\n## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.\n' > "$UWT/.dforge/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.\n' > "$UWT/.dforge/handoff/stored.md"
 sleep 1; prompt u-wt3
 printf '// change wt3\n' >> "$REPO/src/App.tsx"; git -C "$REPO" commit -qam 'ui change wt3'
 USTALE=$'## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.'
 check "A16: a worktree block written before the turn does not release" "$(decision "$(stop u-wt3 "$USTALE")")" "block"
-sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.\n' > "$UWT/.dforge/handoff/latest.md"
+sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.\n' > "$UWT/.dforge/handoff/stored.md"
 check "A16: the same block rewritten this turn releases" "$(decision "$(stop u-wt3 "$USTALE")")" "none"
 git -C "$REPO" worktree remove --force "$UWT"
 

@@ -717,7 +717,7 @@ function preKeyedLoadState(file) {
   return { checkpoint: raw.checkpoint, checkpointAt: held };
 }
 
-test("converts single checkpoint: latest.md's hash is kept under the key the migration gives it", () => {
+test("converts single checkpoint: an older layout's handoff hash is kept under the key the migration gives it", () => {
   const mirror = scratch("dms-keyed-state-");
   const file = path.join(mirror, ".sync-state.json");
   const latest = "# Handoff\n<!-- next-step: kind=plan subject=docs/dforge/plans/P.md at=1795000000 -->\n";
@@ -727,18 +727,13 @@ test("converts single checkpoint: latest.md's hash is kept under the key the mig
   write(file, JSON.stringify({ version: 1, documents: {}, ledgers: {}, checkpoint: hash, checkpointAt: null, conflicts: [], pendingLinks: [] }));
   const state = loadState(file);
   assert.deepEqual({ ...state.checkpoints }, { P: hash });
-  assert.equal(state.checkpoint, hash, "latest.md's readers still find its hash");
   state.checkpoints["D"] = sha256(Buffer.from("# Draft handoff\n"));
   saveState(file, state);
   const saved = JSON.parse(fs.readFileSync(file, "utf8"));
-  assert.equal(saved.checkpoint, hash);
+  assert.equal(saved.checkpoint, null, "this dforge syncs no older-layout handoff, so an older plugin compares nothing");
   assert.deepEqual(saved.checkpoints, { P: hash, D: sha256(Buffer.from("# Draft handoff\n")) });
-  assert.equal(preKeyedLoadState(file).checkpoint, hash);
+  assert.equal(preKeyedLoadState(file).checkpoint, null, "an older plugin still loads the state");
   assert.deepEqual({ ...loadState(file).checkpoints }, saved.checkpoints);
-  fs.rmSync(path.join(mirror, "work", "handoff", "latest.md"));
-  saveState(file, loadState(file));
-  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).checkpoint, null, "with latest.md gone an older plugin compares nothing");
-  assert.equal(preKeyedLoadState(file).checkpoint, null);
 });
 
 test("converts single checkpoint: a hash no handoff carries is dropped", () => {

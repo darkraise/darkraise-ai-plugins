@@ -101,7 +101,7 @@ git init -q -b main "$REPO"
 git -C "$REPO" commit -q --allow-empty -m init
 mkdir -p "$REPO/.dforge/handoff"
 # The compacted session's own handoff: its marker names the session (s-9).
-printf '# Handoff\n\n## Next session\n\n**Next:** Resume at Task 4 (Four).\n<!-- next-step: kind=adhoc session=s-9 done=0 closed=0 subject=- at=%s -->\n' "$(date +%s)" > "$REPO/.dforge/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\n**Next:** Resume at Task 4 (Four).\n<!-- next-step: kind=adhoc session=s-9 done=0 closed=0 subject=- at=%s -->\n' "$(date +%s)" > "$REPO/.dforge/handoff/adhoc-s9000000.md"
 TR="$TMP/transcript.jsonl"
 MSYS_NO_PATHCONV=1 jq -cn '{type:"user",isSidechain:false,origin:{kind:"human"},message:{role:"user",content:"keep the API stable"}}' > "$TR"
 compact_payload() {
@@ -167,7 +167,7 @@ check "no roadmap: nothing injected" "$(grep -c '^Roadmap:' <<<"$startup_ctx")" 
 
 # --- the compaction snapshot shows only the session's handoff ---
 git -C "$REPO" worktree add -q -b hc "$TMP/hc"; mkdir -p "$TMP/hc/.dforge/handoff"
-printf '# Handoff\n\n## Next session\n\n**Next:** hc next\n<!-- next-step: kind=adhoc session=s-hc done=0 closed=0 subject=- at=%s -->\n' "$(date +%s)" > "$TMP/hc/.dforge/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\n**Next:** hc next\n<!-- next-step: kind=adhoc session=s-hc done=0 closed=0 subject=- at=%s -->\n' "$(date +%s)" > "$TMP/hc/.dforge/handoff/adhoc-0c000000.md"
 hc_compact=$(compact_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
 check "the compaction snapshot shows only the session's handoff" "$(grep -c 'hc next' <<<"$hc_compact"):$(grep -c 'Resume at Task 4 (Four)' <<<"$hc_compact")" "0:1"
 git -C "$REPO" worktree remove --force "$TMP/hc"

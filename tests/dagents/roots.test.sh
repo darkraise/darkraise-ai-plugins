@@ -30,8 +30,8 @@ WT=$(git -C "$TMP/wt" rev-parse --show-toplevel)
 # --- no config ---
 check "no config: docs root" "$(cd "$REPO" && dagents_docs_root)" "$TOP/docs/dagents"
 check "no config: a worktree's ledger dir" "$(cd "$WT" && dagents_ledger_dir p1)" "$WT/.dagents/sdd/p1"
-check "no config: latest.md from a worktree" "$(cd "$WT" && dagents_latest_file)" "$WT/.dagents/handoff/latest.md"
-check "no config: latest.md from the primary" "$(cd "$REPO" && dagents_latest_file)" "$TOP/.dagents/handoff/latest.md"
+check "no config: a handoff from a worktree" "$(cd "$WT" && dagents_handoff_file P)" "$WT/.dagents/handoff/P.md"
+check "no config: a handoff from the primary" "$(cd "$REPO" && dagents_handoff_file P)" "$TOP/.dagents/handoff/P.md"
 check "no config: a DIR argument" "$(dagents_docs_root "$WT")" "$WT/docs/dagents"
 check "outside git: local under the directory" "$(cd "$TMP" && dagents_docs_root)" "$TMP/docs/dagents"
 
@@ -43,7 +43,7 @@ printf '{"handoffTokens": 300000, "darkmemEnabled": true, "darkmem": {"repos": {
 printf '{"%s":{"documents":"darkmem","progress":"darkmem"}}\n' "$TOP" > "$HOME/.dagents/stores.json"
 check "leftover keys: docs root" "$(cd "$REPO" && PATH="$TMP/marknode:$PATH" dagents_docs_root)" "$TOP/docs/dagents"
 check "leftover keys: ledger dir" "$(cd "$REPO" && PATH="$TMP/marknode:$PATH" dagents_ledger_dir p1)" "$TOP/.dagents/sdd/p1"
-check "leftover keys: latest.md from a worktree" "$(cd "$WT" && PATH="$TMP/marknode:$PATH" dagents_latest_file)" "$WT/.dagents/handoff/latest.md"
+check "leftover keys: a handoff from a worktree" "$(cd "$WT" && PATH="$TMP/marknode:$PATH" dagents_handoff_file P)" "$WT/.dagents/handoff/P.md"
 check "leftover keys: node is not started" "$([ -e "$TMP/node-ran" ] && echo ran || echo skipped)" "skipped"
 rm -rf "$TMP/node-ran" "$HOME/.dagents"
 
@@ -51,12 +51,10 @@ rm -rf "$TMP/node-ran" "$HOME/.dagents"
 for where in "$TOP" "$WT"; do
   label="from $(basename "$where")"
   want_docs="$where/docs/dagents"
-  want_ledger="$where/.dagents/sdd/p1" want_latest="$where/.dagents/handoff/latest.md"
+  want_ledger="$where/.dagents/sdd/p1" want_handoff="$where/.dagents/handoff/P.md"
   check "$label: docs root" "$(cd "$where" && dagents_docs_root)" "$want_docs"
   check "$label: ledger dir" "$(cd "$where" && dagents_ledger_dir p1)" "$want_ledger"
-  check "$label: latest.md" "$(cd "$where" && dagents_latest_file)" "$want_latest"
-  check "$label: every checkout's handoff" "$(cd "$where" && dagents_latest_files | tr '\n' ' ')" \
-    "$TOP/.dagents/handoff/latest.md $WT/.dagents/handoff/latest.md "
+  check "$label: a handoff" "$(cd "$where" && dagents_handoff_file P)" "$want_handoff"
   check "$label: the workspace stays local" "$(cd "$where" && dagents_workspace p1)" "$where/.dagents/sdd/p1"
   check "$label: a document name" "$(cd "$where" && dagents_resolve docs/dagents/plans/p1.md)" "$want_docs/plans/p1.md"
   check "$label: a pre-2.0 document name" "$(cd "$where" && dagents_resolve docs/superpowers/plans/p1.md)" "$want_docs/plans/p1.md"
@@ -113,10 +111,10 @@ check "dforge root key" "$(dagents_name_key docs/dforge)" "docs/dagents"
 check "spellings: key, then dforge first" "$(dagents_name_spellings docs/dagents/plans/x.md | tr '\n' '|')" "docs/dagents/plans/x.md|docs/dforge/plans/x.md|docs/forge/plans/x.md|docs/superpowers/plans/x.md|"
 check "dforge citation resolves" "$(cd "$TOP" && dagents_resolve docs/dforge/plans/x.md)" "$(cd "$TOP" && dagents_docs_root)/plans/x.md"
 
-# --- dagents_latest_files skips a worktree whose directory is gone ---
+# --- dagents_handoff_files skips a worktree whose directory is gone ---
 git -C "$REPO" worktree add -q -b gone "$TMP/gone"
 rm -rf "$TMP/gone"
-check "latest files: a missing worktree is skipped" "$(cd "$REPO" && dagents_latest_files | grep -c gone)" "0"
+check "handoff files: a missing worktree is skipped" "$(cd "$REPO" && dagents_handoff_files | grep -c gone)" "0"
 git -C "$REPO" worktree prune
 
 # --- keyed handoff files (C1, C2, C3) ---
@@ -142,24 +140,11 @@ printf 'x\n' > "$REPO/.dagents/handoff/P.md"
 printf 'x\n' > "$WT/.dagents/handoff/Q.md"
 printf 'session=s\n' > "$REPO/.dagents/handoff/claims/Q"
 printf 'n\n' > "$REPO/.dagents/handoff/notes/Q.md"
-check "handoff_files_lists_every_checkout: dagents-path handoffs" "$(cd "$WT" && bash "$FP" handoffs)" \
-  "$(printf '%s\n%s\n%s' "$TOP/.dagents/handoff/P.md" "$TOP/.dagents/handoff/latest.md" "$WT/.dagents/handoff/Q.md")"
+printf 'x\n' > "$REPO/.dagents/handoff/a b.md"
+check "handoff_files_lists_every_checkout: dagents-path handoffs, never latest.md or a name that is no key" "$(cd "$WT" && bash "$FP" handoffs)" \
+  "$(printf '%s\n%s' "$TOP/.dagents/handoff/P.md" "$WT/.dagents/handoff/Q.md")"
+check "handoff_files_lists_every_checkout: dagents-path latest is gone" "$(cd "$REPO" && bash "$FP" latest >/dev/null 2>&1; echo $?)" "2"
 rm -rf "$REPO/.dagents/handoff" "$WT/.dagents/handoff"
-
-# latest_file_transition (C15): until every reader moves to keyed handoffs,
-# the latest file is the checkout's newest handoff, else its latest.md path.
-mkdir -p "$REPO/.dagents/handoff/notes" "$WT/.dagents/handoff"
-printf 'd\n' > "$REPO/.dagents/handoff/D.md"; touch -t 202601010000 "$REPO/.dagents/handoff/D.md"
-printf 'p\n' > "$REPO/.dagents/handoff/P.md"; touch -t 202601020000 "$REPO/.dagents/handoff/P.md"
-printf 'n\n' > "$REPO/.dagents/handoff/notes/N.md"
-check "latest_file_transition: the newest keyed handoff" "$(cd "$REPO" && dagents_latest_file)" "$TOP/.dagents/handoff/P.md"
-touch -t 202601030000 "$REPO/.dagents/handoff/D.md"
-check "latest_file_transition: follows the newest write" "$(cd "$REPO" && dagents_latest_file)" "$TOP/.dagents/handoff/D.md"
-check "latest_file_transition: a checkout with none names its latest.md" "$(cd "$WT" && dagents_latest_file)" "$WT/.dagents/handoff/latest.md"
-printf 'q\n' > "$WT/.dagents/handoff/Q.md"
-check "latest_file_transition: every checkout's newest" "$(cd "$REPO" && dagents_latest_files | tr '\n' ' ')" "$TOP/.dagents/handoff/D.md $WT/.dagents/handoff/Q.md "
-rm -rf "$REPO/.dagents/handoff" "$WT/.dagents/handoff"
-check "latest_file_transition: no handoff names latest.md" "$(cd "$REPO" && dagents_latest_file)" "$TOP/.dagents/handoff/latest.md"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -174,7 +174,7 @@ export function gatherLocalProgress(cfg) {
   }
   const primaryState = dforgeDir("state", cfg.repoRoot);
   for (const { name, file, rel } of handoffFiles(path.join(primaryState, "handoff"), problems)) {
-    if (name !== "latest.md" && handoffKey(name, "") === null) problems.push(`${file}: not a usable handoff key`);
+    if (handoffKey(name) === null) problems.push(`${file}: not a usable handoff key`);
     else files.push({ kind: "checkpoint", name, file, stateDir: primaryState, rel });
   }
   const sources = [];
@@ -296,7 +296,7 @@ async function fileHandoff(context, item) {
   const { cfg, client } = context;
   const body = decodeUtf8(item.buffer);
   const hash = sha256(item.buffer);
-  const key = handoffKey(item.name, body);
+  const key = handoffKey(item.name);
   const unsent = why => ({ hash, key, at: null, workstream: null, detail: `${item.name} ${why}; copied to the mirror, not sent` });
   if (handoffMarker(body)?.kind === "adhoc") return unsent("is an unplanned handoff");
   const target = checkpointTarget(body, { marker: true });
@@ -440,10 +440,8 @@ export async function progressToDarkmem(context) {
     } else if (isPlanDocument(item)) {
       state.documents[item.uri] = sha256(item.buffer);
     } else {
-      // latest.md keeps its hash in checkpoint too, as push keeps it.
       const filed = filedHandoffs.get(item.rel);
       if (filed.key !== null) state.checkpoints[filed.key] = filed.hash;
-      if (item.name === "latest.md") state.checkpoint = filed.hash;
       if (filed.at !== null) recordCheckpointAt(state, filed.workstream, filed.at);
     }
   }

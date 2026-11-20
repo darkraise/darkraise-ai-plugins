@@ -716,7 +716,7 @@ describe('plugin-review-fixes: ledger states, notifications and the run card', (
 describe('plugin-review-fixes: resume offer, model switch snapshot and session changes', () => {
   test('A40: under documentStore=darkmem the resume offer clears once every row of its register is resolved', async ($, on) => {
     const MIRROR = '/home/me/.dforge/mirror/shop'
-    const MODE = [`documents\tdarkmem\t${MIRROR}/dforge`, 'progress\tlocal\t/home/me/code/shop/.dforge/sdd\t/home/me/code/shop/.dforge/handoff/latest.md', 'project\tshop', ''].join('\n')
+    const MODE = [`documents\tdarkmem\t${MIRROR}/dforge`, 'progress\tlocal\t/home/me/code/shop/.dforge/sdd\t/home/me/code/shop/.dforge/handoff', 'project\tshop', ''].join('\n')
     const STORED = `${MIRROR}/dforge/registers/r.md`
     const files: NonNullable<World['files']> = {
       '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 },

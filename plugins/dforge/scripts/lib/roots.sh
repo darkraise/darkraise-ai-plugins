@@ -1,7 +1,8 @@
 # Sourced. Where a repository's two dforge families live (darkmem store
 # options spec §2): documents (the docs directory) and progress (plan ledgers,
-# their handoff.md, and latest.md), each in the checkout or in the darkmem
-# mirror, as `darkmem-config.mjs --mode` resolves them. Defines functions only.
+# their handoff.md, and the handoff files), each in the checkout or in the
+# darkmem mirror, as `darkmem-config.mjs --mode` resolves them. Defines
+# functions only.
 #
 # Every helper takes an optional trailing DIR naming the checkout (default: the
 # working directory). The resolution is cached per HOME and checkout in shell
@@ -14,7 +15,7 @@
 _ROOTS_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 _DFORGE_KEY="" _DFORGE_TOP="" _DFORGE_DOCS_STORE="" _DFORGE_DOCS_ROOT=""
-_DFORGE_PROGRESS_STORE="" _DFORGE_LEDGER_ROOT="" _DFORGE_LATEST="" _DFORGE_PROJECT=""
+_DFORGE_PROGRESS_STORE="" _DFORGE_LEDGER_ROOT="" _DFORGE_HANDOFF_DIR="" _DFORGE_PROJECT=""
 
 # Node prints native paths; Git Bash compares them in git's C:/… form, which
 # is always long: git expands an 8.3 short name such as RUNNER~1 in a TEMP
@@ -56,7 +57,7 @@ _dforge_local() { # DIR TOP
   _DFORGE_DOCS_ROOT=$(dforge_dir docs "$base")
   _DFORGE_PROGRESS_STORE=local
   _DFORGE_LEDGER_ROOT="$(dforge_dir state "$base")/sdd"
-  _DFORGE_LATEST="$(dforge_dir state "$base")/handoff/latest.md"
+  _DFORGE_HANDOFF_DIR="$(dforge_dir state "$base")/handoff"
   _DFORGE_PROJECT=""
 }
 
@@ -108,13 +109,13 @@ dforge_stores_init() { # [DIR]
     printf '%s\n' "$out" >&2
     exit 2
   fi
-  _DFORGE_DOCS_STORE="" _DFORGE_DOCS_ROOT="" _DFORGE_PROGRESS_STORE="" _DFORGE_LEDGER_ROOT="" _DFORGE_LATEST="" _DFORGE_PROJECT=""
+  _DFORGE_DOCS_STORE="" _DFORGE_DOCS_ROOT="" _DFORGE_PROGRESS_STORE="" _DFORGE_LEDGER_ROOT="" _DFORGE_HANDOFF_DIR="" _DFORGE_PROJECT=""
   while IFS=$'\t' read -r kind store root extra; do
     case $kind in
       documents) _DFORGE_DOCS_STORE=$store _DFORGE_DOCS_ROOT=$(_dforge_path "$root") ;;
       progress)
         _DFORGE_PROGRESS_STORE=$store _DFORGE_LEDGER_ROOT=$(_dforge_path "$root")
-        _DFORGE_LATEST=$(_dforge_path "$extra")
+        _DFORGE_HANDOFF_DIR=$(_dforge_path "$extra")
         ;;
       project) _DFORGE_PROJECT=$store ;;
     esac
@@ -123,7 +124,7 @@ dforge_stores_init() { # [DIR]
   # the plugin path holds a symbolic link) would leave every root empty, and
   # the helpers would print paths under /.
   if [ -z "$_DFORGE_DOCS_STORE" ] || [ -z "$_DFORGE_DOCS_ROOT" ] || [ -z "$_DFORGE_PROGRESS_STORE" ] \
-     || [ -z "$_DFORGE_LEDGER_ROOT" ] || [ -z "$_DFORGE_LATEST" ]; then
+     || [ -z "$_DFORGE_LEDGER_ROOT" ] || [ -z "$_DFORGE_HANDOFF_DIR" ]; then
     printf 'roots.sh: darkmem-config.mjs --mode printed no roots for %s\n' "$dir" >&2
     exit 2
   fi
@@ -134,21 +135,6 @@ dforge_docs_root() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_DOCS_R
 dforge_docs_store() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_DOCS_STORE"; }
 dforge_progress_store() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_PROGRESS_STORE"; }
 dforge_ledger_root() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_LEDGER_ROOT"; }
-# dforge_latest_file [DIR] — DIR's checkout's newest handoff (the mirror's for
-# the primary while progress is darkmem), or its latest.md path when it has
-# none: readers not yet moved to keyed handoffs keep finding one.
-dforge_latest_file() { dforge_stores_init "${1:-}"; _dforge_newest_handoff "${_DFORGE_LATEST%/*}"; }
-
-# _dforge_newest_handoff DIR — the most recently written DIR/*.md, else
-# DIR/latest.md.
-_dforge_newest_handoff() {
-  local f newest=""
-  for f in "$1"/*.md; do
-    [ -f "$f" ] || continue
-    if [ -z "$newest" ] || [ "$f" -nt "$newest" ]; then newest=$f; fi
-  done
-  printf '%s\n' "${newest:-$1/latest.md}"
-}
 dforge_ledger_dir() { dforge_stores_init "${2:-}"; printf '%s/%s\n' "$_DFORGE_LEDGER_ROOT" "$1"; } # SLUG [DIR]
 
 # dforge_project [DIR] — the darkmem project the repository is mapped to;
@@ -160,39 +146,25 @@ dforge_workspace() { # SLUG [DIR]
   printf '%s/sdd/%s\n' "$(dforge_dir state "${_DFORGE_TOP:-${2:-$PWD}}")" "$1"
 }
 
-# dforge_latest_files [DIR] — every checkout's newest handoff (dforge_latest_file), one per line, in
-# `git worktree list` order, skipping a worktree whose directory is gone. Only
-# the primary's can be in the mirror, so a linked worktree's starts no node.
-dforge_latest_files() {
-  local wt first=1
-  dforge_stores_init "${1:-}"
-  [ -n "$_DFORGE_TOP" ] || return 0
-  git -C "$(dr_native_path "$_DFORGE_TOP")" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p' |
-  while IFS= read -r wt; do
-    wt=$(_dforge_path "$wt")
-    if [ -n "$first" ]; then
-      first=""
-      [ -d "$wt" ] && dforge_latest_file "$wt"
-    elif [ -d "$wt" ]; then
-      _dforge_newest_handoff "$(dforge_dir state "$wt")/handoff"
-    fi
-  done
-  return 0
-}
-
 # dforge_handoff_file KEY [DIR] — the handoff file of KEY for DIR's checkout:
 # in the darkmem mirror for the primary while progress is kept there (the
-# directory latest.md resolves to), otherwise under the checkout's state
-# directory. Exit 2 for a key that is no plain file name, or is latest.
+# mirror's work/handoff), otherwise under the checkout's state directory.
+# Exit 2 for a key that is no plain file name, or is latest.
 dforge_handoff_file() {
   local key=$1
-  if [[ ! $key =~ ^[A-Za-z0-9._-]+$ ]] || [ "$key" = latest ]; then
+  if ! _dforge_handoff_key "$key"; then
     printf 'handoff: invalid key %s\n' "$key" >&2
     return 2
   fi
   dforge_stores_init "${2:-}"
-  printf '%s/%s.md\n' "${_DFORGE_LATEST%/*}" "$key"
+  printf '%s/%s.md\n' "$_DFORGE_HANDOFF_DIR" "$key"
 }
+
+# _dforge_handoff_key KEY — status 0 when KEY can name a handoff file. A file
+# whose name is no key (an older layout's, which dforge-migrate renames) is
+# not a handoff.
+_dforge_handoff_key() { [[ $1 =~ ^[A-Za-z0-9._-]+$ ]] && [ "$1" != latest ]; }
+_dforge_handoff_listed() { local key=${1##*/}; [ -f "$1" ] && _dforge_handoff_key "${key%.md}"; }
 
 # dforge_handoff_key_check KIND KEY — exit 2 when KEY cannot name a handoff of
 # KIND: a plan or draft key that starts adhoc- or is latest, or an adhoc key
@@ -208,11 +180,11 @@ dforge_handoff_key_check() {
 
 # dforge_handoff_files [DIR] — every handoff/*.md of every checkout, in `git
 # worktree list` order, then the mirror's while progress is darkmem; never the
-# claims/ or notes/ contents.
+# claims/ or notes/ contents, nor a file whose name is no handoff key.
 dforge_handoff_files() {
   local wt f mirror=""
   dforge_stores_init "${1:-}"
-  # From a linked worktree latest.md is local; the ledger root is the mirror's.
+  # From a linked worktree the handoff directory is local; the ledger root is the mirror's.
   [ "$_DFORGE_PROGRESS_STORE" = darkmem ] && mirror="${_DFORGE_LEDGER_ROOT%/*}/handoff"
   if [ -n "$_DFORGE_TOP" ]; then
     git -C "$(dr_native_path "$_DFORGE_TOP")" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p' |
@@ -220,13 +192,13 @@ dforge_handoff_files() {
       wt=$(_dforge_path "$wt")
       [ -d "$wt" ] || continue
       for f in "$(dforge_dir state "$wt")"/handoff/*.md; do
-        [ -f "$f" ] && printf '%s\n' "$f"
+        _dforge_handoff_listed "$f" && printf '%s\n' "$f"
       done
     done
   fi
   if [ -n "$mirror" ]; then
     for f in "$mirror"/*.md; do
-      [ -f "$f" ] && printf '%s\n' "$f"
+      _dforge_handoff_listed "$f" && printf '%s\n' "$f"
     done
   fi
   return 0

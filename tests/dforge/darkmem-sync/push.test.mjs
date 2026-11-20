@@ -277,9 +277,9 @@ test("a plan directory whose name cannot be a workstream key fails the push", as
   assert.match(result.stdout, /failed: .*bad name: not a usable workstream key/);
 });
 
-test("latest.md goes up as a checkpoint on the plan its State names, or on --handoff with --workstream", async t => {
+test("a handoff goes up as a checkpoint on the plan its State names, or on --handoff with --workstream", async t => {
   const s = await setup(t);
-  const latest = path.join(s.workRoot, "handoff", "latest.md");
+  const latest = path.join(s.workRoot, "handoff", "stored.md");
   write(latest, "# Handoff — 2026-09-24 (phase stop)\n\n## State\n- Plan: `docs/superpowers/plans/p1.md`; ledger: `x`\n");
   assert.equal((await s.push()).code, 0);
   const p1 = s.stub.db.workstreams.find(w => w.key === "p1");
@@ -290,14 +290,14 @@ test("latest.md goes up as a checkpoint on the plan its State names, or on --han
   write(latest, "# Handoff\n\n## State\n- unplanned work\n");
   const unnamed = await s.push();
   assert.equal(unnamed.code, 1);
-  assert.match(unnamed.stdout, /failed: handoff\/latest\.md: its State section names no plan or draft; push again with --handoff \S+latest\.md --workstream KEY/);
+  assert.match(unnamed.stdout, /failed: handoff\/stored\.md: its State section names no plan or draft; push again with --handoff \S+stored\.md --workstream KEY/);
   assert.equal((await s.push("--handoff", latest, "--workstream", "adhoc")).code, 0);
   assert.equal(s.stub.db.workstreams.find(w => w.key === "adhoc").entries[0].kind, "checkpoint");
   write(latest, "# Handoff\n\n## State\n- Draft: `docs/superpowers/specs/d-design.md`\n");
   s.stub.db.failures.push({ method: "POST", path: "/api/v1/worklog/entries", status: 502, commit: true });
   const lost = await s.push();
   assert.equal(lost.code, 1);
-  assert.match(lost.stdout, /^failed: handoff\/latest\.md: darkmem answered 502: injected failure$/m);
+  assert.match(lost.stdout, /^failed: handoff\/stored\.md: darkmem answered 502: injected failure$/m);
   await s.seed.append({ project: "proj", workstream: "d-design", entries: [{ kind: "checkpoint", body: "# Handoff from another machine\n" }] });
   assert.equal((await s.push()).code, 0);
   const draft = s.stub.db.workstreams.find(w => w.key === "d-design");
@@ -355,6 +355,17 @@ test("a handoff whose name is no usable key fails alone and the state still load
   assert.doesNotMatch(status.stdout + status.stderr, /valid sync state/);
 });
 
+test("an older layout's latest.md is not sent: the migration renames it", async t => {
+  const s = await setup(t);
+  const note = "# Handoff\n\n## Next session\n\n**Status:** s\n**Next:** n\n<!-- next-step: kind=plan done=0 closed=0 subject=docs/dforge/plans/p1.md at=1 -->\n";
+  write(path.join(s.workRoot, "handoff", "latest.md"), note);
+  const result = await s.push();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^failed: handoff\/latest\.md: not a usable handoff key; .*dforge-migrate/m);
+  assert.equal(s.stub.db.workstreams.flatMap(w => w.entries).filter(e => e.kind === "checkpoint").length, 0);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(s.mirror, ".sync-state.json"), "utf8")).checkpoint, null);
+});
+
 test("workstream flag needs handoff", async t => {
   const s = await setup(t);
   write(path.join(s.workRoot, "handoff", "P.md"), "# Handoff\n\n## State\n- Plan: `docs/dforge/plans/P.md`\n");
@@ -369,13 +380,13 @@ test("workstream flag needs handoff", async t => {
 
 test("a push from a linked worktree says its handoff stays local (spec A11)", async t => {
   const s = await setup(t);
-  write(path.join(s.workRoot, "handoff", "latest.md"), "# Handoff\n\n## State\n- Plan: `docs/superpowers/plans/p1.md`\n");
+  write(path.join(s.workRoot, "handoff", "stored.md"), "# Handoff\n\n## State\n- Plan: `docs/superpowers/plans/p1.md`\n");
   const worktree = path.join(scratch("dms-push-wt-"), "wt");
   git(s.repo, "worktree", "add", "-q", "-b", "wt", worktree);
-  write(path.join(worktree, ".dforge", "handoff", "latest.md"), "# Handoff\n\n## State\n- Plan: `docs/superpowers/plans/p2.md`\n");
+  write(path.join(worktree, ".dforge", "handoff", "stored.md"), "# Handoff\n\n## State\n- Plan: `docs/superpowers/plans/p2.md`\n");
   const result = await run(["push"], { cwd: worktree, env: s.env });
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, new RegExp(`^worktree handoff stays local: ${path.join(worktree, ".dforge", "handoff", "latest.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m"));
+  assert.match(result.stdout, new RegExp(`^worktree handoff stays local: ${path.join(worktree, ".dforge", "handoff", "stored.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m"));
   assert.equal(s.stub.db.workstreams.find(w => w.key === "p2"), undefined);
   const primary = await s.push();
   assert.doesNotMatch(primary.stdout, /worktree handoff stays local/);
@@ -494,7 +505,7 @@ test("a 503 on one document names its uri, and the other documents, the ledger a
   write(path.join(s.docsRoot, "a.md"), "a\n");
   write(path.join(s.docsRoot, "b.md"), "b\n");
   write(path.join(s.workRoot, "sdd", "p1", "progress.md"), "one\n");
-  write(path.join(s.workRoot, "handoff", "latest.md"), "# Handoff\n\n## State\n- Plan: `docs/superpowers/plans/p1.md`\n");
+  write(path.join(s.workRoot, "handoff", "stored.md"), "# Handoff\n\n## State\n- Plan: `docs/superpowers/plans/p1.md`\n");
   s.stub.db.failures.push({ method: "POST", path: "/api/v1/documents", status: 503 });
   const result = await s.push();
   assert.equal(result.code, 1);
@@ -574,7 +585,7 @@ test("a checkpoint filed a microsecond before the last synced one is not taken f
 
 test("a checkpoint whose answer was lost is found after a push to another workstream", async t => {
   const s = await setup(t);
-  const latest = path.join(s.workRoot, "handoff", "latest.md");
+  const latest = path.join(s.workRoot, "handoff", "stored.md");
   const p1 = "# Handoff\n\n## State\n- Plan: `docs/dforge/plans/p1.md`\n";
   write(latest, p1);
   s.stub.db.failures.push({ method: "POST", path: "/api/v1/worklog/entries", status: 502, commit: true });
@@ -595,7 +606,7 @@ test("a checkpoint whose answer was lost is found after a push to another workst
 
 test("a note returned to an earlier workstream is filed again, so the newest checkpoint is that note", async t => {
   const s = await setup(t);
-  const latest = path.join(s.workRoot, "handoff", "latest.md");
+  const latest = path.join(s.workRoot, "handoff", "stored.md");
   const plan = name => `# Handoff\n\n## State\n- Plan: \`docs/dforge/plans/${name}.md\`\n`;
   for (const name of ["p1", "p2", "p1"]) {
     write(latest, plan(name));
@@ -621,8 +632,8 @@ test("an old state file's single checkpointAt stands for a workstream until it i
   write(path.join(s.mirror, ".sync-state.json"), JSON.stringify({
     version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: old, conflicts: [], pendingLinks: [], prefix: "dforge",
   }));
-  write(path.join(s.workRoot, "handoff", "latest.md"), "# X\n");
-  const result = await s.push("--handoff", path.join(s.workRoot, "handoff", "latest.md"), "--workstream", "p1");
+  write(path.join(s.workRoot, "handoff", "stored.md"), "# X\n");
+  const result = await s.push("--handoff", path.join(s.workRoot, "handoff", "stored.md"), "--workstream", "p1");
   assert.equal(result.code, 0, result.stdout);
   assert.match(result.stdout, / 1 checkpoints;/, "the old value is the floor: X filed before it is not this note");
   const entries = s.stub.db.workstreams[0].entries;
@@ -723,7 +734,7 @@ test("push sends only the applied families, a plan's handoff.md with progress, a
   assert.equal(documents.code, 0, documents.stdout + documents.stderr);
   assert.deepEqual(uris(), ["dforge/specs/a.md"]);
   assert.equal(s.stub.db.workstreams.length, 0);
-  const refused = await s.push("--handoff", path.join(s.workRoot, "handoff", "latest.md"), "--workstream", "p1");
+  const refused = await s.push("--handoff", path.join(s.workRoot, "handoff", "stored.md"), "--workstream", "p1");
   assert.equal(refused.code, 2);
   assert.match(refused.stderr, /--handoff needs progress applied darkmem/);
   records({ documents: "local", progress: "darkmem" });
@@ -855,9 +866,9 @@ test("a document darkmem stores with other bytes is sent once, and the next pull
 
 const COMPLETE_NOTE = "# Handoff — 2026-11-16\n\n## Next session\n\n**Status:** Plan `docs/dforge/plans/P.md` is complete.\n**Next:** Nothing — no register holds an unresolved row.\n<!-- next-step: kind=complete done=1 closed=0 subject=docs/dforge/plans/P.md at=1763251200 -->\n";
 
-test("a complete latest.md is pushed under the project workstream", async t => {
+test("a complete handoff is pushed under the project workstream", async t => {
   const s = await setup(t);
-  write(path.join(s.workRoot, "handoff", "latest.md"), COMPLETE_NOTE);
+  write(path.join(s.workRoot, "handoff", "stored.md"), COMPLETE_NOTE);
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /names no plan or draft/);
@@ -867,10 +878,10 @@ test("a complete latest.md is pushed under the project workstream", async t => {
   assert.deepEqual(project.properties ?? {}, {});
 });
 
-test("a project latest.md with stale notes is filed by its marker", async t => {
+test("a project handoff with stale notes is filed by its marker", async t => {
   const s = await setup(t);
   const note = "# Handoff — 2026-11-16\n\n## State\n- Plan: `docs/dforge/plans/Q.md`; ledger: `x`\n\n## Next session\n\n**Status:** Project: milestone M1 is open.\n**Next:** Write the plan for docs/dforge/specs/s.md with dforge:writing-plans.\n<!-- next-step: kind=project done=2 closed=0 subject=- at=1763251200 -->\n";
-  write(path.join(s.workRoot, "handoff", "latest.md"), note);
+  write(path.join(s.workRoot, "handoff", "stored.md"), note);
   const result = await s.push();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.equal(s.stub.db.workstreams.find(w => w.key === "project").entries.length, 1);

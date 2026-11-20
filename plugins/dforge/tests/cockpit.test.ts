@@ -5681,7 +5681,7 @@ describe('resume offer', () => {
     const MIRROR = '/home/me/.dforge/mirror/shop'
     const MODE = [
       `documents\tdarkmem\t${MIRROR}/dforge`,
-      'progress\tlocal\t/home/me/code/shop/.dforge/sdd\t/home/me/code/shop/.dforge/handoff/latest.md',
+      'progress\tlocal\t/home/me/code/shop/.dforge/sdd\t/home/me/code/shop/.dforge/handoff',
       'project\tshop',
       '',
     ].join('\n')
@@ -5957,7 +5957,7 @@ describe('cockpit roots', () => {
   const MIRROR = '/home/me/.dforge/mirror/shop'
   const MODE = [
     `documents\tdarkmem\t${MIRROR}/superpowers`,
-    `progress\tdarkmem\t${MIRROR}/work/sdd\t${MIRROR}/work/handoff/latest.md`,
+    `progress\tdarkmem\t${MIRROR}/work/sdd\t${MIRROR}/work/handoff`,
     'project\tshop',
     '',
   ].join('\n')
@@ -5976,10 +5976,10 @@ describe('cockpit roots', () => {
   test('reads the roots --mode prints', () => {
     expect(parseModeLines(MODE)).toEqual({
       docs: { store: 'darkmem', root: `${MIRROR}/superpowers` },
-      progress: { store: 'darkmem', ledgerRoot: `${MIRROR}/work/sdd`, latestFile: `${MIRROR}/work/handoff/latest.md`, handoffDir: `${MIRROR}/work/handoff` },
+      progress: { store: 'darkmem', ledgerRoot: `${MIRROR}/work/sdd`, handoffDir: `${MIRROR}/work/handoff` },
       project: 'shop',
     })
-    expect(parseModeLines('documents\tlocal\t/r/docs/dforge\nprogress\tlocal\t/r/.dforge/sdd\t/r/.dforge/handoff/latest.md\n')?.project).toBeNull()
+    expect(parseModeLines('documents\tlocal\t/r/docs/dforge\nprogress\tlocal\t/r/.dforge/sdd\t/r/.dforge/handoff\n')?.project).toBeNull()
     expect(parseModeLines(PORCELAIN)).toBeNull()
     expect(parseModeLines('documents\tlocal\t/r/docs/dforge\n')).toBeNull()
     expect(parseModeLines('documents\telsewhere\t/r\nprogress\tlocal\t/a\t/b\n')).toBeNull()

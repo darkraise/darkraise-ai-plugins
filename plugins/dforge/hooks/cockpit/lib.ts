@@ -1654,7 +1654,7 @@ export function parseModeLines(text: string): CockpitRoots | null {
     if (kind === 'project' && store) project = store
     if (store !== 'local' && store !== 'darkmem') continue
     if (kind === 'documents' && root) docs = { store, root }
-    if (kind === 'progress' && root && extra) progress = { store, ledgerRoot: root, latestFile: extra, handoffDir: extra.replace(/[\\/][^\\/]*$/, '') }
+    if (kind === 'progress' && root && extra) progress = { store, ledgerRoot: root, handoffDir: extra }
   }
   return docs === null || progress === null ? null : { docs, progress, project }
 }

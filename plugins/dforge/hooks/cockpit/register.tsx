@@ -141,7 +141,8 @@ const FRAME_MIN_COLUMNS = 48
 const HANDOFF_PROMPT =
   'Finish the task in flight through its completion line, then hand off with the dforge handoff skill. Start no new task.'
 function resumePrompt(): string {
-  return `Resume the work in ${S.latestName ?? '.dforge/handoff/latest.md'} with the dforge resume-execution skill. Before anything else, claim it with dforge's \`scripts/handoff claim\` on that file.`
+  if (S.latestName === null) return `Resume the work with the dforge resume-execution skill. Before anything else, claim the handoff it reads with dforge's \`scripts/handoff claim\`.`
+  return `Resume the work in ${S.latestName} with the dforge resume-execution skill. Before anything else, claim it with dforge's \`scripts/handoff claim\` on that file.`
 }
 // A handoff older than this is not offered for resuming.
 const RESUME_WITHIN = 3 * 86_400_000

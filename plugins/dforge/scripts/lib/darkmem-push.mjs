@@ -415,16 +415,14 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
   const buffer = fs.readFileSync(file);
   const hash = sha256(buffer);
   const body = decodeUtf8(buffer);
-  const key = body ? handoffKey(name, body) : null;
-  // latest.md keeps its hash in checkpoint too, which status and pull read.
-  const isLatest = name === "latest.md";
-  if ((key !== null && state.checkpoints[key] === hash) || (isLatest && hash === state.checkpoint)) return;
+  const key = body ? handoffKey(name) : null;
+  if (key !== null && state.checkpoints[key] === hash) return;
   if (!body) {
     report.failures.push(`${rel}: empty or not UTF-8 text, not pushed`);
     return;
   }
-  if (key === null && !isLatest) {
-    report.failures.push(`${rel}: not a usable handoff key; rename it to letters, digits, '.', '_' or '-'`);
+  if (key === null) {
+    report.failures.push(`${rel}: not a usable handoff key; rename it to letters, digits, '.', '_' or '-' (dforge-migrate renames an older layout's handoff)`);
     return;
   }
   // An unplanned handoff belongs to no workstream until --handoff names it.
@@ -441,8 +439,7 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
     return;
   }
   const synced = () => {
-    if (key !== null) state.checkpoints[key] = hash;
-    if (isLatest) state.checkpoint = hash;
+    state.checkpoints[key] = hash;
   };
   // The same note already filed since this workstream's last synced checkpoint
   // (an earlier push whose answer was lost, even behind another client's

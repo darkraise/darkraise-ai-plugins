@@ -190,7 +190,7 @@ if the next budget line says `handoff`, run the dagents handoff skill.'
     esac
   done
   # Sections 1-2 are never dropped, but s2 (the Next session block, copied
-  # verbatim from latest.md) is unbounded — truncate it as a last resort so
+  # verbatim from the handoff) is unbounded — truncate it as a last resort so
   # the "at most CAP characters" contract holds even for an oversized handoff.
   # The cut ledgers stay when they fit beside section 1.
   if [ "${#out}" -gt "$cap" ]; then

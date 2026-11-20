@@ -51,7 +51,7 @@ mkdir -p "$WT/.dforge/sdd/plan"
 mkdir -p "$REPO/.dforge/handoff"
 # The session's own handoff: its marker names the session (s-snap).
 printf '# Handoff\n\n## State\nstate\n\n## Next session\n\n**Next:** Resume at Task 2 (Two).\n<!-- next-step: kind=adhoc session=s-snap done=0 closed=0 subject=- at=%s -->\n\n## Do not\nKeep out of the snapshot.\n' "$(date +%s)" \
-  > "$REPO/.dforge/handoff/latest.md"
+  > "$REPO/.dforge/handoff/stored.md"
 
 prompt() { jq -cn --arg c "$1" '{type:"user",isSidechain:false,origin:{kind:"human"},message:{role:"user",content:$c}}'; }
 tool() { # tool <name> <path> [isSidechain]
@@ -140,7 +140,7 @@ has "explicit cap: ledger kept" "$out" "Task 2: fix round 1/5"
 TS="$TMP/ts.jsonl"
 jq -nc --arg t "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" '{type:"user",timestamp:$t,message:{role:"user",content:"go"}}' > "$TS"
 jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"Process: fast (session) — spikes"}]}}' >> "$TS"
-touch -d '-2 hours' "$REPO/.dforge/handoff/latest.md" "$WT/.dforge/sdd/plan/progress.md"
+touch -d '-2 hours' "$REPO/.dforge/handoff/stored.md" "$WT/.dforge/sdd/plan/progress.md"
 out=$(snapshot_build "$TS" "$REPO" "" s-other)
 lacks "another session's handoff is left out" "$out" "**Next:** Resume at Task 2 (Two)."
 has "a session-scoped fast line is carried" "$out" "Process: fast (session) — spikes"
@@ -148,7 +148,7 @@ out=$(snapshot_build "$TS" "$REPO")
 lacks "no session id: no handoff" "$out" "**Next:** Resume at Task 2 (Two)."
 out=$(snapshot_build "$TS" "$REPO" "" s-snap)
 has "this session's handoff is kept though older than the session" "$out" "**Next:** Resume at Task 2 (Two)."
-touch "$REPO/.dforge/handoff/latest.md"
+touch "$REPO/.dforge/handoff/stored.md"
 out=$(snapshot_build "$TS" "$REPO" "" s-snap)
 has "this session's handoff is kept" "$out" "**Next:** Resume at Task 2 (Two)."
 has "its age is stated" "$out" "(0m old)"
@@ -159,7 +159,7 @@ has "a small cap keeps the ledger's newest line" "$out" "$(tr -d '\r' < "$WT/.df
 # --- an oversized Next session block: s1+s2 alone still fits under cap ---
 LONG_NEXT=$(printf '%08000d' 0)
 printf '# Handoff\n\n## State\nstate\n\n## Next session\n\n**Next:** %s\n<!-- next-step: kind=adhoc session=s-snap done=0 closed=0 subject=- at=1 -->\n\n## Do not\nKeep out.\n' "$LONG_NEXT" \
-  > "$REPO/.dforge/handoff/latest.md"
+  > "$REPO/.dforge/handoff/stored.md"
 out=$(snapshot_build "$T" "$REPO" "" s-snap)
 check "oversized handoff: at most 5500 characters" "$([ "${#out}" -le 5500 ] && echo yes || echo no)" "yes"
 check "oversized handoff: heading kept" "$(sed -n 1p <<<"$out")" "## Compaction snapshot"
@@ -167,24 +167,24 @@ has "oversized handoff: its block is kept, cut" "$out" "**Next:** 0000"
 
 git -C "$REPO" worktree remove --force "$WT" >/dev/null 2>&1
 
-# --- progress kept in darkmem: the mirror's ledgers and latest.md ---
+# --- progress kept in darkmem: the mirror's ledgers and handoffs ---
 . "$HERE/fixtures/darkmem-stores.sh"
 SH="$TMP/stores-home"; mkdir -p "$SH"
 M=$(stores_home "$SH" "$REPO" proj local darkmem)
 mkdir -p "$M/work/sdd/mp"
 printf '# SDD ledger — plan: docs/dforge/plans/mp.md\nTask 1: complete (commits a..b, review clean)\n' > "$M/work/sdd/mp/progress.md"
-printf '# Handoff\n\n## Next session\n\n**Next:** the mirror note\n<!-- next-step: kind=adhoc session=s-m done=0 closed=0 subject=- at=1 -->\n' > "$M/work/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\n**Next:** the mirror note\n<!-- next-step: kind=adhoc session=s-m done=0 closed=0 subject=- at=1 -->\n' > "$M/work/handoff/stored.md"
 out=$(HOME=$SH snapshot_ledgers "$REPO")
 has "darkmem progress: the mirror's ledger" "$out" "### Ledger \`$M/work/sdd/mp/progress.md\` (plan \`docs/dforge/plans/mp.md\`)"
 check "darkmem progress: listed once" "$(grep -c '^### Ledger' <<<"$out")" "1"
-has "darkmem progress: the mirror's latest.md" "$(HOME=$SH snapshot_latest "$REPO" s-m)" "**Next:** the mirror note"
+has "darkmem progress: the mirror's handoff" "$(HOME=$SH snapshot_latest "$REPO" s-m)" "**Next:** the mirror note"
 
 # --- the snapshot drops the marker and ages from its at ---
 AREPO="$TMP/aged"
 git init -q -b main "$AREPO"
 mkdir -p "$AREPO/.dforge/handoff"
 printf '# Handoff\n\n## Next session\n\n**Next:** aged note\n<!-- next-step: kind=adhoc session=s-a done=0 closed=0 subject=- at=%s -->\n' "$(( $(date +%s) - 7200 ))" \
-  > "$AREPO/.dforge/handoff/latest.md"
+  > "$AREPO/.dforge/handoff/stored.md"
 out=$(snapshot_latest "$AREPO" s-a)
 lacks "aged: the marker is dropped" "$out" "<!-- next-step:"
 has "aged: the age comes from the marker" "$out" " (2h old)"

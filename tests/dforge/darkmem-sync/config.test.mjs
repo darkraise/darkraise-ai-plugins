@@ -23,8 +23,7 @@ test("no config file and no record keep both families local in the checkout", ()
   assert.deepEqual(stores.documents, { configured: "local", applied: "local", root: path.join(repo, "docs", "dforge") });
   assert.deepEqual(stores.progress, {
     configured: "local", applied: "local",
-    ledgerRoot: path.join(repo, ".dforge", "sdd"), latestFile: path.join(repo, ".dforge", "handoff", "latest.md"),
-    handoffDir: path.join(repo, ".dforge", "handoff"),
+    ledgerRoot: path.join(repo, ".dforge", "sdd"), handoffDir: path.join(repo, ".dforge", "handoff"),
   });
 });
 
@@ -36,8 +35,7 @@ test("a mapped repository applies each family as its record says", () => {
   assert.deepEqual(stores.documents, { configured: "darkmem", applied: "darkmem", root: path.join(mirror, "dforge") });
   assert.deepEqual(stores.progress, {
     configured: "darkmem", applied: "local",
-    ledgerRoot: path.join(repo, ".dforge", "sdd"), latestFile: path.join(repo, ".dforge", "handoff", "latest.md"),
-    handoffDir: path.join(repo, ".dforge", "handoff"),
+    ledgerRoot: path.join(repo, ".dforge", "sdd"), handoffDir: path.join(repo, ".dforge", "handoff"),
   });
   assert.deepEqual(stores.sync, {
     project: "proj", enabled: true, url: "http://darkmem.test:8000", apiKey: KEY, keyEnv: "DARKMEM_API_KEY",
@@ -45,7 +43,7 @@ test("a mapped repository applies each family as its record says", () => {
   });
   const both = resolveStores({ cwd: repo, env: makeHome({ repo }).env });
   assert.equal(both.progress.ledgerRoot, path.join(path.dirname(both.documents.root), "work", "sdd"));
-  assert.equal(both.progress.latestFile, path.join(path.dirname(both.documents.root), "work", "handoff", "latest.md"));
+  assert.equal(both.progress.handoffDir, path.join(path.dirname(both.documents.root), "work", "handoff"));
 });
 
 test("the configured store: the mapping entry, then the global key, then darkmem", () => {
@@ -188,7 +186,7 @@ test("a pre-2.0 checkout's directories and home are not read", () => {
   assert.equal(stores.progress.ledgerRoot, path.join(repo, ".dforge", "sdd"));
 });
 
-test("a linked worktree keeps local families and latest.md in itself", () => {
+test("a linked worktree keeps local families and its handoffs in itself", () => {
   const repo = makeRepo();
   const { env } = makeHome({ repo, stores: { documents: "local", progress: "local" } });
   const worktree = path.join(scratch("dms-wt-"), "wt");
@@ -197,37 +195,8 @@ test("a linked worktree keeps local families and latest.md in itself", () => {
   assert.equal(stores.sync.project, "proj");
   assert.equal(stores.documents.root, path.join(worktree, "docs", "dforge"));
   assert.equal(stores.progress.ledgerRoot, path.join(worktree, ".dforge", "sdd"));
-  assert.equal(stores.progress.latestFile, path.join(worktree, ".dforge", "handoff", "latest.md"));
-  assert.equal(resolveStores({ cwd: repo, env }).progress.latestFile, path.join(repo, ".dforge", "handoff", "latest.md"));
-});
-
-test("under darkmem progress only the primary's latest.md is in the mirror", () => {
-  const repo = makeRepo();
-  const { env, mirror } = makeHome({ repo, stores: { documents: "local", progress: "darkmem" } });
-  const worktree = path.join(scratch("dms-wt-"), "wt");
-  git(repo, "worktree", "add", "-q", "-b", "wt", worktree);
-  assert.equal(resolveStores({ cwd: repo, env }).progress.latestFile, path.join(mirror, "work", "handoff", "latest.md"));
-  assert.equal(resolveStores({ cwd: worktree, env }).progress.latestFile, path.join(worktree, ".dforge", "handoff", "latest.md"));
-});
-
-test("latestFile transition: the newest keyed handoff, else latest.md", () => {
-  const repo = makeRepo();
-  const { env, mirror } = makeHome({ repo, stores: { documents: "local", progress: "darkmem" } });
-  const worktree = path.join(scratch("dms-wt-"), "wt");
-  git(repo, "worktree", "add", "-q", "-b", "wt", worktree);
-  const own = path.join(mirror, "work", "handoff");
-  fs.mkdirSync(path.join(own, "notes"), { recursive: true });
-  fs.writeFileSync(path.join(own, "D.md"), "d\n");
-  fs.utimesSync(path.join(own, "D.md"), new Date("2026-01-01T00:00:00Z"), new Date("2026-01-01T00:00:00Z"));
-  fs.writeFileSync(path.join(own, "P.md"), "p\n");
-  fs.utimesSync(path.join(own, "P.md"), new Date("2026-01-02T00:00:00Z"), new Date("2026-01-02T00:00:00Z"));
-  fs.writeFileSync(path.join(own, "notes", "N.md"), "n\n");
-  assert.equal(resolveStores({ cwd: repo, env }).progress.latestFile, path.join(own, "P.md"));
-  assert.equal(resolveStores({ cwd: worktree, env }).progress.latestFile, path.join(worktree, ".dforge", "handoff", "latest.md"));
-  const local = path.join(worktree, ".dforge", "handoff");
-  fs.mkdirSync(local, { recursive: true });
-  fs.writeFileSync(path.join(local, "Q.md"), "q\n");
-  assert.equal(resolveStores({ cwd: worktree, env }).progress.latestFile, path.join(local, "Q.md"));
+  assert.equal(stores.progress.handoffDir, path.join(worktree, ".dforge", "handoff"));
+  assert.equal(resolveStores({ cwd: repo, env }).progress.handoffDir, path.join(repo, ".dforge", "handoff"));
 });
 
 test("progress handoff dir: the mirror's for the primary under darkmem, the worktree's own otherwise", () => {
@@ -267,7 +236,7 @@ test("--mode prints each family's applied store and roots and the project; a Con
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, [
     `documents\tlocal\t${path.join(repo, "docs", "dforge")}`,
-    `progress\tdarkmem\t${path.join(mirror, "work", "sdd")}\t${path.join(mirror, "work", "handoff", "latest.md")}`,
+    `progress\tdarkmem\t${path.join(mirror, "work", "sdd")}\t${path.join(mirror, "work", "handoff")}`,
     "project\tproj",
     "",
   ].join("\n"));
@@ -287,7 +256,7 @@ test("--mode DIR resolves that checkout from anywhere; an unmapped one prints no
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, [
     `documents\tdarkmem\t${path.join(mirror, "dforge")}`,
-    `progress\tdarkmem\t${path.join(mirror, "work", "sdd")}\t${path.join(mirror, "work", "handoff", "latest.md")}`,
+    `progress\tdarkmem\t${path.join(mirror, "work", "sdd")}\t${path.join(mirror, "work", "handoff")}`,
     "project\tproj",
     "",
   ].join("\n"));
@@ -314,7 +283,7 @@ test("--mode runs through a symlinked plugin path", () => {
   assert.match(result.stdout, /^documents\t/);
 });
 
-test("a submodule is its own repository: mapped by its top level, latest.md in its own checkout", () => {
+test("a submodule is its own repository: mapped by its top level, its handoffs in its own checkout", () => {
   const outer = makeRepo();
   const inner = makeRepo();
   git(outer, "-c", "protocol.file.allow=always", "submodule", "add", "-q", inner, "sub");
@@ -323,7 +292,7 @@ test("a submodule is its own repository: mapped by its top level, latest.md in i
   const result = spawnSync(process.execPath, [MODULE, "--mode"], { cwd: sub, env, encoding: "utf8", timeout: 10000 });
   assert.equal(result.status, 0, result.stderr);
   const lines = result.stdout.split("\n");
-  assert.equal(lines[1].split("\t")[3], path.join(sub, ".dforge", "handoff", "latest.md"));
+  assert.equal(lines[1].split("\t")[3], path.join(sub, ".dforge", "handoff"));
   assert.equal(lines[2], "project\tproj", "the submodule's mapping is found");
   assert.equal(resolveStores({ cwd: sub, env }).repoRoot, sub);
 });

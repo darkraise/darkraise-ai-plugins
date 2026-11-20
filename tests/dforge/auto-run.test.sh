@@ -39,7 +39,7 @@ ar() {
   # A clearing session's handoff names it, as next-step writes it: a
   # design-phase clear reads the one whose marker names the run's session, and
   # with a plan attached the clear reads the keyed file next-step --target names.
-  local h="$REPO/.dforge/handoff/latest.md" plan
+  local h="$REPO/.dforge/handoff/stored.md" plan
   if [ "${1:-}" = --session ] && { [ "${3:-}" = clear ] || [ "${3:-}" = switch ]; } && [ -f "$h" ]; then
     { grep -v '^<!-- next-step: ' "$h"; printf '<!-- next-step: kind=adhoc session=%s done=0 closed=0 subject=- at=%s -->\n' "$2" "$(date +%s)"; } > "$h.tmp" && mv "$h.tmp" "$h"
     plan=$(jq -r '.plan // empty' "$STATE" 2>/dev/null)
@@ -226,7 +226,7 @@ check "ruling list" "$(ar --session s-1 ruling list | paste -sd'|' -)" "Fable: k
 ar --session s-1 clear --phase >/dev/null 2>&1; status=$?
 check "clear without a handoff file: exit 1, nothing pending" "$status:$(field pending)" "1:null"
 mkdir -p "$REPO/.dforge/handoff"
-cat > "$REPO/.dforge/handoff/latest.md" <<'EOF'
+cat > "$REPO/.dforge/handoff/stored.md" <<'EOF'
 # Handoff
 
 ## Next session
@@ -621,13 +621,13 @@ ar --session s-1 phase final
 ar --session s-1 phase finish
 # The prompt next-step writes for a clean final review (next-step.test.sh).
 finish_prompt='Resume `docs/plan.md` with dforge:resume-execution. Run dforge:finishing-a-development-branch.'
-cp "$REPO/.dforge/handoff/latest.md" "$TMP/latest.keep"
-sed "s|^Execute docs/plan.md with dforge:executing-plans\.$|$finish_prompt|" "$TMP/latest.keep" > "$REPO/.dforge/handoff/latest.md"
+cp "$REPO/.dforge/handoff/stored.md" "$TMP/latest.keep"
+sed "s|^Execute docs/plan.md with dforge:executing-plans\.$|$finish_prompt|" "$TMP/latest.keep" > "$REPO/.dforge/handoff/stored.md"
 ar --session s-1 clear --phase; status=$?
 check "finishing's clear: exit 0, phase finish, clear pending" "$status:$(field phase):$(field pending)" "0:finish:clear"
 check "finishing's clear: no self-resume" "$(field resumes)" "0"
 check "finishing's clear: next-step's finishing prompt" "$(field resumePrompt)" "$finish_prompt"
-cp "$TMP/latest.keep" "$REPO/.dforge/handoff/latest.md"
+cp "$TMP/latest.keep" "$REPO/.dforge/handoff/stored.md"
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 
 # --- the plan, final and finish phases never hand off ---
@@ -774,11 +774,11 @@ rmdir "$REPO/docs/r-stuck.md.tmp"
 # --- clear checks whose prompt it stores (row 32) ---
 ar --session s-1 attach --plan docs/plan.md
 mkdir -p "$REPO/.dforge/handoff"
-printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/other.md` with dforge:resume-execution.\n```\n' > "$REPO/.dforge/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/other.md` with dforge:resume-execution.\n```\n' > "$REPO/.dforge/handoff/stored.md"
 pending_before=$(field pending) resumes_before=$(field resumes)
 ar --session s-1 clear >/dev/null 2>&1; status=$?
 check "clear: another plan's prompt is refused, nothing booked" "$status:$(field pending):$(field resumes)" "4:$pending_before:$resumes_before"
-printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/myplan.md` with dforge:resume-execution.\n```\n' > "$REPO/.dforge/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/myplan.md` with dforge:resume-execution.\n```\n' > "$REPO/.dforge/handoff/stored.md"
 ar --session s-1 clear >/dev/null 2>&1; status=$?
 check "clear: a plan whose name only ends in this one's is another plan" "$status:$(field pending):$(field resumes)" "4:$pending_before:$resumes_before"
 # --- clear reads the attached plan's handoff (spec A8) ---

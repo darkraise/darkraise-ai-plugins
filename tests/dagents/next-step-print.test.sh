@@ -170,7 +170,7 @@ check "auto run: the first prompt reads unchanged" "$(ar_fenced "$REPO/.dagents/
 check "auto run: the launch command reads unchanged" "$(ar_fenced "$REPO/.dagents/handoff/2026-11-01-demo.md" 'Launch in ')" "$launch"
 has "auto run: the launch command is the plan's" "$launch" "claude --model sonnet --effort high"
 
-# --- --print --latest ---
+# --- --print --handoff on a stored block in the plan's handoff file ---
 L="$TMP/latest"
 lfixture() { # lfixture — a fresh repository in $L with plan P (3 tasks) and completed.md of one entry
   rm -rf "$L"; git init -q -b main "$L"
@@ -184,15 +184,15 @@ lfixture() { # lfixture — a fresh repository in $L with plan P (3 tasks) and c
   } > "$LD/plans/2026-11-01-p.md"
   printf '# Completed plans\n\n- 2026-10-01 — `docs/dagents/plans/2026-10-01-a.md` — merged\n' > "$LD/plans/completed.md"
   git -C "$L" add -A && git -C "$L" commit -qm init
-  LL="$L/.dagents/handoff/latest.md"
+  LL="$L/.dagents/handoff/2026-11-01-p.md"
 }
 P=docs/dagents/plans/2026-11-01-p.md
-stored() { # stored <marker or empty> [status line] [next line] — write latest.md by hand
+stored() { # stored <marker or empty> [status line] [next line] — write $LL by hand
   { printf '# Handoff\n\n## Notes\n\nmine\n\n## Next session\n\n**Status:** %s\n**Next:** %s\n' "${2:-Stored status.}" "${3:-Stored next.}"
     [ -z "$1" ] || printf '%s\n' "$1"; } > "$LL"
 }
-latest() { # latest — run --print --latest in $L; sets out, err, status
-  out=$(cd "$L" && timeout 120 bash "$SCRIPT" --print --latest 2>"$TMP/lerr"); status=$?
+latest() { # latest [FILE] — run --print --handoff FILE (default $LL) in $L; sets out, err, status
+  out=$(cd "$L" && timeout 120 bash "$SCRIPT" --print --handoff "${1:-$LL}" 2>"$TMP/lerr"); status=$?
   err=$(cat "$TMP/lerr")
 }
 index_p() { printf -- '- 2026-11-10 — `%s` — merged\n' "$P" >> "$LD/plans/completed.md"; }
@@ -283,21 +283,21 @@ printf '# R\n\n**Source:** s\n**Covers:** -\n\n| # | Item | Assigned | Acceptanc
 LA="$L/.dagents/handoff/adhoc-a0000000.md"
 (cd "$L" && CLAUDE_CODE_SESSION_ID=$S0 timeout 120 bash "$SCRIPT" --host codex --project >/dev/null 2>&1)
 has "latest host: a Codex write names its host in the marker" "$(grep '^<!-- next-step: ' "$LA")" " host=codex "
-latest
+latest "$LA"
 has "latest host: a Codex project block recomputes with the Codex launch" "$out" "codex -m"
 lacks "latest host: a Codex project block names no Claude launch" "$out" "claude --model"
 (cd "$L" && CLAUDE_CODE_SESSION_ID=$S0 timeout 120 bash "$SCRIPT" --project >/dev/null 2>&1)
 lacks "latest host: a Claude write adds no host word" "$(grep '^<!-- next-step: ' "$LA")" "host="
 
 rm -f "$L/.dagents/handoff/"*.md; latest
-check "latest edges: no latest.md exits 6" "$status" 6
+check "latest edges: no handoff file exits 6" "$status" 6
 printf '# Handoff\n\n## Notes\n\nx\n' > "$LL"; latest
 check "latest edges: no Next session section exits 6" "$status" 6
-(cd "$L" && timeout 60 bash "$SCRIPT" --latest >/dev/null 2>&1); check "latest edges: --latest without --print is a usage error" "$?" 2
+(cd "$L" && timeout 60 bash "$SCRIPT" --print --latest >/dev/null 2>&1); check "latest edges: --latest is no option" "$?" 2
 stored "<!-- next-step: kind=plan done=1 closed=0 subject=docs/dagents/plans/missing.md at=1 -->"; latest
 check "latest edges: a missing plan passes exit 2 through" "$status" 2
 
-# --- --print --latest: complete markers, an indexed plan, malformed markers ---
+# --- --print --handoff: complete markers, an indexed plan, malformed markers ---
 lfixture
 index_p
 want=$(cd "$L" && bash "$SCRIPT" --print --complete "$P" 2>/dev/null | grep '^\*\*Next:\*\*')
@@ -402,7 +402,7 @@ git -C "$L" add -A && git -C "$L" commit -qm index
 git -C "$L" worktree add -q --detach "$TMP/latest-wt" HEAD~1
 (cd "$TMP/latest-wt" && CLAUDE_CODE_SESSION_ID=$S0 timeout 60 bash "$SCRIPT" --adhoc --phase build --next "Fix the thing." >/dev/null 2>&1)
 has "counts: a block written in an older worktree counts the primary's index" "$(LATEST="$TMP/latest-wt/.dagents/handoff/adhoc-a0000000.md" section_last)" " done=2 "
-out=$(cd "$TMP/latest-wt" && timeout 120 bash "$SCRIPT" --print --latest 2>/dev/null); status=$?
+out=$(cd "$TMP/latest-wt" && timeout 120 bash "$SCRIPT" --print --handoff "$TMP/latest-wt/.dagents/handoff/adhoc-a0000000.md" 2>/dev/null); status=$?
 check "counts: that block is not superseded in its worktree" "$status" 0
 git -C "$L" worktree remove --force "$TMP/latest-wt"
 
@@ -423,7 +423,7 @@ t0=${EPOCHREALTIME:-$(date +%s)}
 latest
 t1=${EPOCHREALTIME:-$(date +%s)}
 ms=$(awk -v a="$t0" -v b="$t1" 'BEGIN { printf "%d", (b - a) * 1000 }')
-printf 'next-step-print: --print --latest took %s ms\n' "$ms"
+printf 'next-step-print: --print --handoff took %s ms\n' "$ms"
 check "timing: the recompute exits 0" "$status" 0
 has "timing: the follow-up route is computed" "$out" "write a follow-up plan"
 if [ "$(uname -s)" = Linux ]; then

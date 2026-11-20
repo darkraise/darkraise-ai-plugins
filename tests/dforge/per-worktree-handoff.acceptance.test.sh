@@ -122,8 +122,8 @@ opening() { # opening <T> <branch text> — the first sentences of every prompt
 # ---------------------------------------------------------------- A1
 fixture
 W1=$(wt w1)
-check "A1: latest in a linked worktree is the worktree's" "$(cd "$W1" && bash "$PATHP" latest)" "$W1/$STATE/handoff/latest.md"
-check "A1: latest in the primary is the primary's" "$(cd "$TOP" && bash "$PATHP" latest)" "$TOP/$STATE/handoff/latest.md"
+check "A1: the handoff in a linked worktree is the worktree's" "$(cd "$W1" && CLAUDE_CODE_SESSION_ID=$S_NS bash "$PATHP" handoff --adhoc --phase build --next x)" "$W1/$STATE/handoff/adhoc-${S_NS:0:8}.md"
+check "A1: the handoff in the primary is the primary's" "$(cd "$TOP" && CLAUDE_CODE_SESSION_ID=$S_NS bash "$PATHP" handoff --adhoc --phase build --next x)" "$TOP/$STATE/handoff/adhoc-${S_NS:0:8}.md"
 
 # ---------------------------------------------------------------- A2
 fixture
@@ -250,9 +250,9 @@ ns "$TOP" --adhoc --phase build --next go
 old=$(cat "$(handoff "$TOP")")
 printf '%s\n' "${old//Start in /First enter the existing worktree and start in }" > "$(handoff "$TOP")"
 before=$(digest "$(handoff "$TOP")")
-check "A12: dforge-path latest in the primary names its newest handoff" "$(cd "$TOP" && bash "$PATHP" latest)" "$TOP/$STATE/handoff/adhoc-${S_NS:0:8}.md"
-ns "$TOP" --print --latest
-check "A12: next-step --print --latest reads the primary's file" "$RC" 0
+check "A12: dforge-path handoffs in the primary lists its handoff" "$(cd "$TOP" && bash "$PATHP" handoffs)" "$TOP/$STATE/handoff/adhoc-${S_NS:0:8}.md"
+ns "$TOP" --print --handoff "$(handoff "$TOP")"
+check "A12: next-step --print --handoff reads the primary's file" "$RC" 0
 has "A12: the recomputed block carries the stored Next" "$OUT" "**Next:** go."
 check "A12: reading it changed nothing" "$(digest "$(handoff "$TOP")")" "$before"
 AUDIT=$(cd "$TOP" && timeout 60 bash "$SCRIPTS/repo-audit" 2>&1)
@@ -293,8 +293,8 @@ for args in "" "--adhoc --phase build" "$DOCS/plans/missing.md" "--complete $DOC
   check "A13: --target exits as the real call does (${args:-no arguments})" "$tgt" "$real"
   check "A13: that exit is 2 (${args:-no arguments})" "$real" 2
 done
-ns "$W1" --target --latest
-check "A13: --target with --latest is a usage error" "$RC" 2
+ns "$W1" --target --handoff "$(handoff "$W1")"
+check "A13: --target with --handoff is a usage error" "$RC" 2
 
 # ---------------------------------------------------------------- A15
 # Each piece of work has its own handoff: --complete and --kept write their
@@ -515,8 +515,8 @@ fixture
 HOME_SAVE=$HOME; export HOME="$TMP/hm$n"; mkdir -p "$HOME"
 W1=$(wt w1)
 MIRROR=$(stores_home "$HOME" "$R" proj local darkmem)
-check "A11: darkmem: a linked worktree's handoff is local" "$(cd "$W1" && bash "$PATHP" latest)" "$W1/$STATE/handoff/latest.md"
-check "A11: darkmem: the primary's handoff is the mirror's file" "$(cd "$TOP" && bash "$PATHP" latest)" "$MIRROR/work/handoff/latest.md"
+check "A11: darkmem: a linked worktree's handoff is local" "$(cd "$W1" && CLAUDE_CODE_SESSION_ID=$S_NS bash "$PATHP" handoff --adhoc --phase build --next x)" "$W1/$STATE/handoff/adhoc-${S_NS:0:8}.md"
+check "A11: darkmem: the primary's handoff is the mirror's file" "$(cd "$TOP" && CLAUDE_CODE_SESSION_ID=$S_NS bash "$PATHP" handoff --adhoc --phase build --next x)" "$MIRROR/work/handoff/adhoc-${S_NS:0:8}.md"
 
 # A14: the plan's workspace is in a worktree, the primary holds one too
 mkdir -p "$MIRROR/work/sdd/$PA"

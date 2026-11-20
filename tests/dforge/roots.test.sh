@@ -32,8 +32,8 @@ WT=$(git -C "$TMP/wt" rev-parse --show-toplevel)
 check "no config: docs root" "$(cd "$REPO" && dforge_docs_root)" "$TOP/docs/dforge"
 check "no config: stores" "$(cd "$REPO" && dforge_docs_store) $(cd "$REPO" && dforge_progress_store)" "local local"
 check "no config: a worktree's ledger dir" "$(cd "$WT" && dforge_ledger_dir p1)" "$WT/.dforge/sdd/p1"
-check "no config: latest.md from a worktree" "$(cd "$WT" && dforge_latest_file)" "$WT/.dforge/handoff/latest.md"
-check "no config: latest.md from the primary" "$(cd "$REPO" && dforge_latest_file)" "$TOP/.dforge/handoff/latest.md"
+check "no config: a handoff from a worktree" "$(cd "$WT" && dforge_handoff_file P)" "$WT/.dforge/handoff/P.md"
+check "no config: a handoff from the primary" "$(cd "$REPO" && dforge_handoff_file P)" "$TOP/.dforge/handoff/P.md"
 check "no config: a DIR argument" "$(dforge_docs_root "$WT")" "$WT/docs/dforge"
 check "outside git: local under the directory" "$(cd "$TMP" && dforge_docs_root)" "$TMP/docs/dforge"
 
@@ -43,7 +43,7 @@ printf '#!/bin/sh\n: > "%s"\nexit 1\n' "$TMP/node-ran" > "$TMP/marknode/node"
 chmod +x "$TMP/marknode/node"
 printf '{"handoffTokens": 300000, "darkmemEnabled": true}\n' > "$HOME/.dforge/config.json"
 check "settings only: docs root" "$(cd "$REPO" && PATH="$TMP/marknode:$PATH" dforge_docs_root)" "$TOP/docs/dforge"
-check "settings only: latest.md from a worktree" "$(cd "$WT" && PATH="$TMP/marknode:$PATH" dforge_latest_file)" "$WT/.dforge/handoff/latest.md"
+check "settings only: a handoff from a worktree" "$(cd "$WT" && PATH="$TMP/marknode:$PATH" dforge_handoff_file P)" "$WT/.dforge/handoff/P.md"
 check "settings only: node is not started" "$([ -e "$TMP/node-ran" ] && echo ran || echo skipped)" "skipped"
 printf '{"darkmem": {}}\n' > "$HOME/.dforge/config.json"
 (cd "$REPO" && PATH="$TMP/marknode:$PATH" dforge_docs_root > /dev/null 2>&1)
@@ -66,12 +66,12 @@ for docs in local darkmem; do
       else
         want_ledger="$where/.dforge/sdd/p1"
       fi
-      if [ "$progress" = darkmem ] && [ "$where" = "$TOP" ]; then want_latest="$MIRROR/work/handoff/latest.md"
-      else want_latest="$where/.dforge/handoff/latest.md"; fi
+      if [ "$progress" = darkmem ] && [ "$where" = "$TOP" ]; then want_handoff="$MIRROR/work/handoff/P.md"
+      else want_handoff="$where/.dforge/handoff/P.md"; fi
       check "$label: stores" "$(cd "$where" && dforge_docs_store) $(cd "$where" && dforge_progress_store)" "$docs $progress"
       check "$label: docs root" "$(cd "$where" && dforge_docs_root)" "$want_docs"
       check "$label: ledger dir" "$(cd "$where" && dforge_ledger_dir p1)" "$want_ledger"
-      check "$label: latest.md" "$(cd "$where" && dforge_latest_file)" "$want_latest"
+      check "$label: a handoff" "$(cd "$where" && dforge_handoff_file P)" "$want_handoff"
       check "$label: the workspace stays local" "$(cd "$where" && dforge_workspace p1)" "$where/.dforge/sdd/p1"
       check "$label: a document name" "$(cd "$where" && dforge_resolve docs/dforge/plans/p1.md)" "$want_docs/plans/p1.md"
       check "$label: a pre-2.0 document name" "$(cd "$where" && dforge_resolve docs/superpowers/plans/p1.md)" "$want_docs/plans/p1.md"
@@ -81,8 +81,6 @@ for docs in local darkmem; do
       check "$label: a working file round-trips" "$(cd "$where" && dforge_name "$where/.dforge/x.md")" ".dforge/x.md"
       check "$label: a name stays a name" "$(cd "$where" && dforge_name ./docs/dforge/specs/s.md)" "docs/dforge/specs/s.md"
       check "$label: an outside path stays" "$(cd "$where" && dforge_name /elsewhere/superpowers/a.md)" "/elsewhere/superpowers/a.md"
-      check "$label: every checkout's handoff" "$(cd "$where" && dforge_latest_files | tr '\n' ' ')" \
-        "$( [ "$progress" = darkmem ] && printf '%s ' "$MIRROR/work/handoff/latest.md" || printf '%s ' "$TOP/.dforge/handoff/latest.md")$WT/.dforge/handoff/latest.md "
     done
   done
 done
@@ -204,10 +202,10 @@ else
   check "no node, nothing applied: still local" "$(cd "$REPO" && _DFORGE_KEY= PATH="$NONODE_PATH" dforge_ledger_dir p1)" "$TOP/.dforge/sdd/p1"
 fi
 
-# --- dforge_latest_files skips a worktree whose directory is gone ---
+# --- dforge_handoff_files skips a worktree whose directory is gone ---
 git -C "$REPO" worktree add -q -b gone "$TMP/gone"
 rm -rf "$TMP/gone"
-check "latest files: a missing worktree is skipped" "$(cd "$REPO" && dforge_latest_files | grep -c gone)" "0"
+check "handoff files: a missing worktree is skipped" "$(cd "$REPO" && dforge_handoff_files | grep -c gone)" "0"
 git -C "$REPO" worktree prune
 
 # --- keyed handoff files (C1, C2, C3) ---
@@ -236,26 +234,14 @@ printf 'x\n' > "$REPO/.dforge/handoff/P.md"
 printf 'x\n' > "$WT/.dforge/handoff/Q.md"
 printf 'session=s\n' > "$REPO/.dforge/handoff/claims/Q"
 printf 'n\n' > "$REPO/.dforge/handoff/notes/Q.md"
+printf 'x\n' > "$REPO/.dforge/handoff/a b.md"
 check "handoff_files_lists_every_checkout: dforge-path handoffs" "$(cd "$WT" && bash "$FP" handoffs)" \
-  "$(printf '%s\n%s\n%s' "$TOP/.dforge/handoff/P.md" "$TOP/.dforge/handoff/latest.md" "$WT/.dforge/handoff/Q.md")"
-check "handoff_files_lists_every_checkout: dforge_handoff_files" "$(cd "$REPO" && dforge_handoff_files)" \
-  "$(printf '%s\n%s\n%s' "$TOP/.dforge/handoff/P.md" "$TOP/.dforge/handoff/latest.md" "$WT/.dforge/handoff/Q.md")"
+  "$(printf '%s\n%s' "$TOP/.dforge/handoff/P.md" "$WT/.dforge/handoff/Q.md")"
+check "handoff_files_lists_every_checkout: dforge_handoff_files, never latest.md or a name that is no key" "$(cd "$REPO" && dforge_handoff_files)" \
+  "$(printf '%s\n%s' "$TOP/.dforge/handoff/P.md" "$WT/.dforge/handoff/Q.md")"
+check "handoff_files_lists_every_checkout: dforge-path latest is gone" "$(cd "$REPO" && bash "$FP" latest >/dev/null 2>&1; echo $?)" "2"
 
-# latest_file_transition (C15): until every reader moves to keyed handoffs,
-# the latest file is the checkout's newest handoff, else its latest.md path.
 rm -rf "$REPO/.dforge/handoff" "$WT/.dforge/handoff"
-mkdir -p "$REPO/.dforge/handoff/notes" "$WT/.dforge/handoff"
-printf 'd\n' > "$REPO/.dforge/handoff/D.md"; touch -t 202601010000 "$REPO/.dforge/handoff/D.md"
-printf 'p\n' > "$REPO/.dforge/handoff/P.md"; touch -t 202601020000 "$REPO/.dforge/handoff/P.md"
-printf 'n\n' > "$REPO/.dforge/handoff/notes/N.md"
-check "latest_file_transition: the newest keyed handoff" "$(cd "$REPO" && dforge_latest_file)" "$TOP/.dforge/handoff/P.md"
-touch -t 202601030000 "$REPO/.dforge/handoff/D.md"
-check "latest_file_transition: follows the newest write" "$(cd "$REPO" && dforge_latest_file)" "$TOP/.dforge/handoff/D.md"
-check "latest_file_transition: a checkout with none names its latest.md" "$(cd "$WT" && dforge_latest_file)" "$WT/.dforge/handoff/latest.md"
-printf 'q\n' > "$WT/.dforge/handoff/Q.md"
-check "latest_file_transition: every checkout's newest" "$(cd "$REPO" && dforge_latest_files | tr '\n' ' ')" "$TOP/.dforge/handoff/D.md $WT/.dforge/handoff/Q.md "
-rm -rf "$REPO/.dforge/handoff" "$WT/.dforge/handoff"
-check "latest_file_transition: no handoff names latest.md" "$(cd "$REPO" && dforge_latest_file)" "$TOP/.dforge/handoff/latest.md"
 mkdir -p "$WT/.dforge/handoff"; printf 'x\n' > "$WT/.dforge/handoff/Q.md"
 
 MIRROR=$(stores_home "$HOME" "$REPO" superpowers local darkmem)
