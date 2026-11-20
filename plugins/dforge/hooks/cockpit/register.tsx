@@ -474,7 +474,12 @@ export const register: Register = on => {
     S.watchdog = $.clock.every(WATCHDOG_MS, () => void watchdogTick($).catch(() => undefined))
     S.poll?.cancel()
     S.poll = $.clock.every(POLL_MS, () => void pollTick($).catch(() => undefined))
-    await readSession($, true)
+    S.isStarting = true
+    try {
+      await readSession($, true)
+    } finally {
+      S.isStarting = false
+    }
     await sweepSnapshots($).catch((error: unknown) => $.ui.toast(`dforge: the check for model switch snapshots other sessions left failed: ${error instanceof Error ? error.message : String(error)}.`))
     await writeSessionState($)
 
@@ -2825,6 +2830,7 @@ const S = {
   // The poll's timer, whether a tick is running, how many ran, and when the slower readings last ran.
   poll: null as Timer | null,
   isPolling: false,
+  isStarting: false,
   polls: 0,
   // The settings' autoCompactWindow, read at the start and after each main
   // turn rather than on every tool call.
@@ -4536,7 +4542,9 @@ async function readSession($: EngineInterface, isStart: boolean) {
  * every DETAIL_EVERY ticks the slower readings and the auto run.
  */
 async function pollTick($: EngineInterface) {
-  if (S.isPolling) return
+  // Until the start's read lands the session reads as unread, and a second
+  // read would reset its caches and supersede the start's run read.
+  if (S.isPolling || S.isStarting) return
   S.isPolling = true
   try {
     const seen = await read($, sessionRead)

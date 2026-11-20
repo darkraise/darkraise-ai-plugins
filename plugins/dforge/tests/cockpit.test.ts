@@ -5906,6 +5906,16 @@ describe('cockpit roots', () => {
     expect(await ui.find({ key: 'plan-roots' })).toBeUndefined()
   })
 
+  test('a poll tick during a slow start does not read the session again', async ($, on) => {
+    const files = checkoutFiles()
+    const modeRuns: string[] = []
+    const clock = world(on, { ...SIGNED_IN, files, modeOut: 'missing', modeRuns })
+    signedIn(on, files)
+    await $.session.start(START)
+    await clock.advance(10_000)
+    expect(modeRuns).toEqual(['/home/me/code/shop'])
+  })
+
   for (const [name, modeOut] of [
     ['a run that fails at once without naming node', 'rejects'],
     ['an exit 127', { exitCode: 127, stdout: '', stderr: 'sh: 1: node: not found\n' }],
