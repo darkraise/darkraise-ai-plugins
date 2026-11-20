@@ -85,6 +85,10 @@ check "claim_edges: a missing file is not claimed" "$([ -e "$CLAIMS/missing" ] &
 printf 'x\n' > "$HD/a b.md"
 out=$(as S2 claim "$HD/a b.md" 2>&1); rc=$?
 check "claim_edges: an invalid key exits 2" "$rc:$out" "2:handoff: invalid key a b"
+printf 'x\n' > "$HD/latest.md"
+out=$(as S2 claim "$HD/latest.md" 2>&1); rc=$?
+check "claim_edges: the older layout's latest.md is no key" "$rc:$out" "2:handoff: invalid key latest"
+check "claim_edges: and is not claimed" "$([ -e "$CLAIMS/latest" ] && echo claimed || echo none)" "none"
 handoff_md "$HD/N.md" adhoc
 out=$(cd "$REPO" && bash "$H" claim "$HD/N.md"); rc=$?
 check "claim_edges: no session id exits 0" "$rc" "0"
