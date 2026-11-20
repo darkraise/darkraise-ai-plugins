@@ -76,8 +76,9 @@
 #   <!-- next-step: kind=<kind> [branch=<name> or branch=detached:<sha>] key=<key> session=<id or -> [host=codex] done=<n> closed=<n> subject=<name or -> at=<epoch> -->
 #   host=codex appears only for a Codex block; --print --handoff without --host
 #   recomputes for the host it names.
-# Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
-#       the handoff could not be written; 5 background work this session started
+# Exit: 0 ok; 2 usage or missing file, or a --print --handoff FILE whose
+#       Next session section or marker cannot be read; 3 plan has no tasks;
+#       4 block printed but the handoff could not be written; 5 background work this session started
 #       is still running (scripts/in-flight): nothing printed or written
 #       (never under --print); 6 --print --handoff has nothing to resume
 #       (nothing on stdout, at most one reason on stderr): a plan in
@@ -403,6 +404,8 @@ draft_planned() {
 # one.
 if [ "$latest_mode" -eq 1 ]; then
   gone() { printf 'next-step: %s\n' "$1" >&2; exit 6; }
+  # A handoff it cannot read is not a finished one: exit 2, so no reader deletes it.
+  unreadable() { printf 'next-step: %s\n' "$1" >&2; exit 2; }
   latest=$handoff_file
   case $latest in /* | [A-Za-z]:[\\/]*) ;; *) latest="$PWD/$latest" ;; esac
   [ -f "$latest" ] || gone "no handoff at $latest"
@@ -410,7 +413,7 @@ if [ "$latest_mode" -eq 1 ]; then
     /^## Next session[ \t]*$/ { on = 1; print; next }
     on && /^## / { exit }
     on')
-  [ -n "$stored" ] || gone "$latest has no Next session section"
+  [ -n "$stored" ] || unreadable "$latest has no Next session section"
   marker=$(grep -E '^<!-- next-step: .* -->$' <<<"$stored" | tail -n 1 || true)
   stored=$(grep -vE '^<!-- next-step: ' <<<"$stored" | awk 'NF { last = NR } { line[NR] = $0 } END { for (i = 1; i <= last; i++) print line[i] }')
   stored_block() { printf '%s\n%s\n' "$stored" "$marker"; exit 0; }
@@ -432,11 +435,11 @@ if [ "$latest_mode" -eq 1 ]; then
       host=codex) [ "$host_given" -eq 1 ] || host=codex ;;
     esac
   done
-  case $m_done$m_closed in *[!0-9]*) gone "malformed marker counts: $marker" ;; esac
+  case $m_done$m_closed in *[!0-9]*) unreadable "malformed marker counts: $marker" ;; esac
   case $m_kind in
     plan|complete|kept|draft)
-      case $m_subject in -*|*[[:cntrl:]]*|'') gone "malformed marker subject: $m_subject" ;; esac
-      case $m_subject in *.md) ;; *) gone "malformed marker subject: $m_subject" ;; esac ;;
+      case $m_subject in -*|*[[:cntrl:]]*|'') unreadable "malformed marker subject: $m_subject" ;; esac
+      case $m_subject in *.md) ;; *) unreadable "malformed marker subject: $m_subject" ;; esac ;;
   esac
   self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
   terminal_gone=0
@@ -466,7 +469,7 @@ if [ "$latest_mode" -eq 1 ]; then
         detached:*) kept_ref="${m_branch#detached:}^{commit}" ;;
         *) kept_ref="refs/heads/$m_branch" ;;
       esac
-      case $m_branch in -*|detached:-*) gone "malformed marker branch: $m_branch" ;; esac
+      case $m_branch in -*|detached:-*) unreadable "malformed marker branch: $m_branch" ;; esac
       git -C "$primary" rev-parse --verify --quiet "$kept_ref" >/dev/null || gone "the kept branch $m_branch is gone"
       ! git -C "$primary" merge-base --is-ancestor "$kept_ref" HEAD 2>/dev/null || gone "the kept branch $m_branch is merged"
       stored_block ;;
@@ -475,7 +478,7 @@ if [ "$latest_mode" -eq 1 ]; then
       ! draft_planned "$root" "$m_subject" || gone "a plan's Spec line names the draft $m_subject"
       stored_block ;;
     adhoc) stored_block ;;
-    *) gone "unknown marker kind: ${m_kind:-none}" ;;
+    *) unreadable "unknown marker kind: ${m_kind:-none}" ;;
   esac
 fi
 

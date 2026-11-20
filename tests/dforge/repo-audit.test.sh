@@ -199,6 +199,10 @@ SECTION=$(handoff_section)
 has "handoff: a failed recompute is named" "$SECTION" "- stored, not recomputed: next-step: no such file"
 has "handoff: a failed recompute prints the stored Status" "$SECTION" "- **Status:** Plan stored status."
 has "handoff: a failed recompute prints the stored Next" "$SECTION" "- **Next:** Resume at Task 2 (Two)."
+# A marker next-step cannot read is no finished handoff: it is kept and listed.
+hstored "<!-- next-step: kind=plan done=1x closed=0 subject=docs/dforge/plans/2026-11-01-p.md at=1 -->"
+has "handoff: a malformed marker is listed as stored" "$(handoff_section)" "- stored, not recomputed: next-step: malformed marker counts"
+check "handoff: a malformed marker's handoff is kept" "$([ -f "$H/.dforge/handoff/2026-11-01-p.md" ] && echo kept || echo removed)" "kept"
 
 # --- every checkout's handoff (spec A10) ---
 A10="$TMP/a10"; git -C "$REPO" worktree add -q -b a10 "$A10"

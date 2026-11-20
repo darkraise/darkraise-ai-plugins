@@ -291,7 +291,7 @@ lacks "latest host: a Claude write adds no host word" "$(grep '^<!-- next-step: 
 rm -f "$L/.dforge/handoff/"*.md; latest
 check "latest edges: no handoff file exits 6" "$status" 6
 printf '# Handoff\n\n## Notes\n\nx\n' > "$LL"; latest
-check "latest edges: no Next session section exits 6" "$status" 6
+check "latest edges: no Next session section is unreadable, exit 2" "$status" 2
 (cd "$L" && timeout 60 bash "$SCRIPT" --print --latest >/dev/null 2>&1); check "latest edges: --latest is no option" "$?" 2
 stored "<!-- next-step: kind=plan done=1 closed=0 subject=docs/dforge/plans/missing.md at=1 -->"; latest
 check "latest edges: a missing plan passes exit 2 through" "$status" 2
@@ -313,12 +313,15 @@ has "latest plan: the reason is named" "$err" "the plan is finished"
 for bad in --latest -x docs/dforge/plans/p.txt; do
   stored "<!-- next-step: kind=plan done=1 closed=0 subject=$bad at=1 -->" "Plan \`$P\`: 0 of 3 tasks complete." "Start at Task 1 (One)."
   latest
-  check "latest edges: the subject $bad exits 6" "$status" 6
+  check "latest edges: the subject $bad is unreadable, exit 2" "$status" 2
   has "latest edges: the subject $bad is named malformed" "$err" "malformed marker subject"
 done
 stored "<!-- next-step: kind=adhoc done=1x closed=0 subject=- at=1 -->"
 latest
-check "latest edges: non-numeric counts exit 6" "$status" 6
+check "latest edges: non-numeric counts are unreadable, exit 2" "$status" 2
+stored "<!-- next-step: kind=bogus done=0 closed=0 subject=- at=1 -->"
+latest
+check "latest edges: an unknown kind is unreadable, exit 2" "$status" 2
 
 # --- --print --handoff FILE: per-kind exit 6 (C10) ---
 handoff() { # handoff FILE — run --print --handoff FILE in $L; sets out, err, status
