@@ -202,6 +202,17 @@ test('a context read only from the transcript prints no reset line, since only t
   assert.equal(fs.existsSync(path.join(root, '.dflow/reset.json')), false);
 });
 
+test('a transcript moved by entering a worktree is found by its session id', t => {
+  const root = makeProject(t);
+  dflow(root, ['status']);
+  const file = path.join(root, '.dflow/state.json');
+  const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+  fs.writeFileSync(file, JSON.stringify({ ...state, transcripts: { 'sess-a': path.join(root, '.transcripts/gone/sess-a.jsonl') } }));
+  write(root, '.test-home/.claude/projects/worktree/sess-a.jsonl', `${JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 162000 } } })}\n`);
+  assert.match(dflow(root, ['context'], { env: { CLAUDE_CODE_SESSION_ID: 'sess-a' } }).stdout, /context 162k/);
+  assert.match(dflow(root, ['context'], { env: { CLAUDE_CODE_SESSION_ID: 'sess-b' } }).stdout, /^context size unknown/);
+});
+
 test('state written by another command while verify runs survives done', t => {
   const root = makeProject(t);
   // The verify stands in for a gate or merge saved during a long verify.

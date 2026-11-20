@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { readText } from './util.mjs';
 
@@ -89,9 +90,25 @@ export function contextSize(ctx, state) {
     return { tokens: live.tokens, window: live.window ?? null, source: 'mod' };
   }
   const session = ctx.env.CLAUDE_CODE_SESSION_ID;
-  const transcript = session ? state.transcripts?.[session] : state.transcript;
+  const transcript = session ? sessionTranscript(ctx, state, session) : state.transcript;
   const tokens = transcript ? transcriptContext(transcript) : null;
   return tokens === null ? null : { tokens, window: null, source: 'transcript' };
+}
+
+// Entering a worktree moves the transcript to the worktree's project directory,
+// leaving the recorded path dangling; Claude Code names the file by session id.
+function sessionTranscript(ctx, state, session) {
+  const recorded = state.transcripts?.[session];
+  if (recorded && fs.existsSync(recorded)) return recorded;
+  const projects = path.join(ctx.env.CLAUDE_CONFIG_DIR || path.join(ctx.env.HOME || os.homedir(), '.claude'), 'projects');
+  let names = [];
+  try {
+    names = fs.readdirSync(projects);
+  } catch {
+    return null;
+  }
+  const found = names.map(name => path.join(projects, name, `${session}.jsonl`)).filter(file => fs.existsSync(file));
+  return found.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0] ?? null;
 }
 
 export function formatTokens(tokens) {
