@@ -20,7 +20,16 @@
 # ~/.dagents/) when it is installed, and copies the dforge 4.x settings
 # dagents defines; it lists the DFORGE_* and DR_* variables to rename. dagents
 # keeps nothing in darkmem: no darkmem setting is carried over, and darkmem
-# data is never moved, copied or deleted.
+# data is never moved, copied or deleted. Then every checkout's
+# handoff/latest.md is renamed to the key its next-step marker gives
+# (parallel-session handoff spec §8): the basename of the plan or draft its
+# subject names, else adhoc-legacy-<marker at, else mtime>. An existing
+# <key>.md is never overwritten: the pair is refused and latest.md stays. A
+# later run moves a latest.md an older plugin writes after this one.
+#
+# dagents-migrate --legacy-handoffs writes nothing: it prints one
+# "<path>\t<marker subject or ->" line per latest.md still in a checkout,
+# which session start and repo-audit name as an older layout.
 #
 # A checkout holding an older state directory and .dagents/ is merged file by
 # file: a file or empty directory only the old one has moves, an identical
@@ -51,10 +60,15 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/native-path.sh"
 . "$HERE/lib/dagents-dir.sh"
+. "$HERE/lib/roots.sh"
 
-dry=0
-if [ "${1:-}" = --dry-run ]; then dry=1; shift; fi
-[ $# -le 1 ] || { echo "usage: dagents-migrate [--dry-run] [DIR]" >&2; exit 2; }
+usage() { echo "usage: dagents-migrate [--dry-run] [DIR] | dagents-migrate --legacy-handoffs" >&2; exit 2; }
+dry=0 legacy_only=0
+case ${1:-} in
+  --dry-run) dry=1; shift ;;
+  --legacy-handoffs) [ $# -eq 1 ] || usage; legacy_only=1; shift ;;
+esac
+[ $# -le 1 ] || usage
 dir=${1:-$PWD}
 
 if command -v timeout >/dev/null 2>&1; then g() { timeout 60 git "$@"; }; else g() { git "$@"; }; fi
@@ -450,6 +464,66 @@ report_dforge() {
   done <<<"$listed"
 }
 
+# legacy_handoffs — every checkout's latest.md. The listing runs in a
+# subshell: roots.sh exits on a settings error, which must not end a
+# migration part-way.
+legacy_handoffs() {
+  local listed
+  listed=$(dagents_handoff_files "$root") || return 1
+  printf '%s\n' "$listed" | tr -d '\r' | grep '/latest\.md$' || true
+}
+
+# marker_of FILE — FILE's last next-step marker line, or nothing.
+marker_of() { grep -a '^<!-- next-step: ' -- "$1" 2>/dev/null | tr -d '\r' | grep ' -->$' | tail -n 1; }
+subject_of() { sed -n 's/.* subject=\(.*\) at=-\{0,1\}[0-9][0-9]* -->$/\1/p' <<<"$1"; }
+
+# migrate_latest FILE — FILE (a latest.md) renamed to the key its marker
+# gives, as next-step keys a handoff: the plan's or draft's basename from its
+# subject, else adhoc-legacy-<marker at, else mtime>.
+migrate_latest() {
+  local f=$1 m kind subject at key target
+  m=$(marker_of "$f")
+  kind=$(sed -n 's/^<!-- next-step: kind=\([^ ]*\).*/\1/p' <<<"$m")
+  subject=$(subject_of "$m")
+  at=$(sed -n 's/.* at=\(-\{0,1\}[0-9][0-9]*\) -->$/\1/p' <<<"$m")
+  key=""
+  if [ -n "$subject" ] && [ "$subject" != - ]; then
+    key=${subject//\\//}; key=${key##*/}; key=${key%.md}
+    [ "$kind" = draft ] || kind=plan
+    if [[ ! $key =~ ^[A-Za-z0-9._-]+$ ]] || ! dagents_handoff_key_check "$kind" "$key"; then
+      printf 'dagents-migrate: %s names %s, which is no usable handoff key; migrated as unplanned\n' "$f" "$subject"
+      key=""
+    fi
+  fi
+  if [ -z "$key" ]; then
+    [ -n "$at" ] || at=$(stat -c %Y -- "$f" 2>/dev/null || stat -f %m -- "$f" 2>/dev/null) \
+      || { refuse "could not read the modification time of $f"; return; }
+    key="adhoc-legacy-$at"
+  fi
+  target=${f%/*}/$key.md
+  # FILE is <checkout>/<state>/handoff/latest.md: nothing is renamed through
+  # a link out of its checkout.
+  if ! writable "${f%/*/*/*}" "$f"; then
+    refuse "$f is reached through a symbolic link; rename it to $key.md by hand"
+  elif [ -e "$target" ] || [ -L "$target" ]; then
+    refuse "$f is the handoff for $key, and $target already exists; keep one by hand, then run dagents-migrate again"
+  elif [ "$dry" -eq 1 ] || mv -- "$f" "$target"; then
+    done_move "$f" "$target"
+  else
+    refuse "could not move $f to $target"
+  fi
+}
+
+if [ "$legacy_only" -eq 1 ]; then
+  legacy=$(legacy_handoffs) || exit 2
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    subject=$(subject_of "$(marker_of "$f")")
+    printf '%s\t%s\n' "$f" "${subject:--}"
+  done <<<"$legacy"
+  exit 0
+fi
+
 while IFS= read -r wt; do
   [ -n "$wt" ] && [ -d "$wt" ] && checkouts+=("$wt")
 done < <(g -C "$root" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
@@ -560,6 +634,15 @@ if [ -f "$HERE/lib/dagents-home-migrate.mjs" ]; then
       fi
     fi
   fi
+fi
+
+# After the home moved, so the settings are read from ~/.dagents.
+if legacy=$(legacy_handoffs); then
+  while IFS= read -r f; do
+    [ -z "$f" ] || migrate_latest "$f"
+  done <<<"$legacy"
+else
+  refuse "the handoff files could not be listed, so no latest.md was renamed; run dagents-migrate again once dagents-config reads the settings"
 fi
 
 for i in "${!reported_paths[@]}"; do

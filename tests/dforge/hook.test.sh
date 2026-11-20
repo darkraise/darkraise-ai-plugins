@@ -217,6 +217,15 @@ check "older layout: the migration line is injected" \
   "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$lg_out" | grep -cF "dforge: this repository still uses an older layout ($(git -C "$REPO" rev-parse --show-toplevel)/.superpowers); run the dforge:migrate skill (/dforge:migrate)")" "1"
 rm -rf "$REPO/.superpowers"
 
+# --- a latest.md an older plugin wrote is named, with its subject and the migrate skill ---
+mkdir -p "$TMP/lh/.dforge/handoff"
+git init -q -b main "$TMP/lh"
+printf '# Handoff\n<!-- next-step: kind=plan session=- done=0 closed=0 subject=docs/dforge/plans/old.md at=1 -->\n' > "$TMP/lh/.dforge/handoff/latest.md"
+lh_ctx=$(MSYS_NO_PATHCONV=1 jq -n --arg cwd "$TMP/lh" '{hook_event_name:"SessionStart",session_id:"s-lh",cwd:$cwd,source:"startup"}' \
+  | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
+check "older layout notice: session start names a remaining latest.md with its subject" \
+  "$(grep -cxF "dforge: $(git -C "$TMP/lh" rev-parse --show-toplevel)/.dforge/handoff/latest.md is a handoff in an older layout (subject docs/dforge/plans/old.md); run the dforge:migrate skill (/dforge:migrate)" <<<"$lh_ctx")" "1"
+
 # --- workflow settings ride in every session as one line ---
 if command -v node >/dev/null 2>&1; then
   HOME_S="$TMP/s"; mkdir -p "$HOME_S/.dforge"

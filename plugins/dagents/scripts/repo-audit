@@ -37,6 +37,9 @@ echo "- Branch: \`$branch\` at $head$tracking"
 echo "- $("$here/context-size" 2>/dev/null)"
 legacy=$( { dagents_legacy_layout "$root"; [ "$root" = "$primary" ] || dagents_legacy_layout "$primary"; } | sort -u | paste -sd, - | sed 's/,/, /g')
 [ -z "$legacy" ] || echo "- dagents: this repository still uses an older layout ($legacy); run the dagents:migrate skill (/dagents:migrate)"
+(cd "$root" && bash "$here/dagents-migrate" --legacy-handoffs 2>/dev/null) | tr -d '\r' | while IFS=$'\t' read -r lh_path lh_subject; do
+  [ -z "$lh_path" ] || echo "- dagents: $lh_path is a handoff in an older layout (subject $lh_subject); run the dagents:migrate skill (/dagents:migrate)"
+done
 if dagents_dforge4_layout "$root" || { [ "$root" != "$primary" ] && dagents_dforge4_layout "$primary"; }; then
   echo "- dagents: dforge 4.x layout found (docs/dforge or .dforge); run the dagents:migrate skill (/dagents:migrate) to move it to dagents' names"
 fi

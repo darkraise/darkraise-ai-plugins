@@ -156,10 +156,13 @@ fi
 legacy_line=""
 if [ -n "$roadmap_root" ]; then
   legacy=$(dforge_legacy_layout "$roadmap_root" | paste -sd, - | sed 's/,/, /g' | tr -d '\001-\037')
-  if [ -n "$legacy" ]; then
-    legacy_line="dforge: this repository still uses an older layout ($legacy); run the dforge:migrate skill (/dforge:migrate)"
-    context="${context}\n\n$(escape_for_json "$legacy_line")"
-  fi
+  [ -z "$legacy" ] || legacy_line="dforge: this repository still uses an older layout ($legacy); run the dforge:migrate skill (/dforge:migrate)"
+  # A handoff an older plugin wrote, which only the migrate script names.
+  while IFS=$'\t' read -r lh_path lh_subject; do
+    [ -n "$lh_path" ] || continue
+    legacy_line="${legacy_line:+$legacy_line$'\n'}dforge: $lh_path is a handoff in an older layout (subject $lh_subject); run the dforge:migrate skill (/dforge:migrate)"
+  done < <(cd "$roadmap_root" && bash "$SCRIPT_DIR/dforge-migrate" --legacy-handoffs 2>/dev/null | tr -d '\001-\010\013-\037')
+  [ -z "$legacy_line" ] || context="${context}\n\n$(escape_for_json "$legacy_line")"
 fi
 
 # A darkmem store applied with no node to read it: every script exits 2 from

@@ -159,12 +159,15 @@ has "lettered: the task total is unknown" "$out" "- \`docs/lettered.md\` in \`$R
 rm -rf "$REPO/docs/lettered.md" "$REPO/.dforge/sdd/lettered"
 
 # --- an older directory is named with the skill that moves it ---
-check "4.0 layout: no migration line" "$(grep -c 'older layout' <<<"$out")" "0"
+check "4.0 layout: no migration line" "$(grep -c 'still uses an older layout' <<<"$out")" "0"
 W2="$TMP/wt2"
 git -C "$REPO" worktree add -q --detach "$W2"
 W2_ROOT="$(git -C "$W2" rev-parse --show-toplevel)"
-mkdir -p "$REPO/.superpowers" "$W2/docs/superpowers"
+mkdir -p "$REPO/.superpowers" "$W2/docs/superpowers" "$W2/.dforge/handoff"
+printf '# Handoff\n<!-- next-step: kind=plan session=- done=0 closed=0 subject=docs/dforge/plans/old.md at=1 -->\n' > "$W2/.dforge/handoff/latest.md"
 out=$(cd "$W2" && bash "$SCRIPT" 2>&1)
+has "older layout notice: a remaining latest.md is named with its subject and the migrate skill" "$out" \
+  "- dforge: $W2_ROOT/.dforge/handoff/latest.md is a handoff in an older layout (subject docs/dforge/plans/old.md); run the dforge:migrate skill (/dforge:migrate)"
 has "older layout: the worktree's and the primary's directories, with the migrate command" "$out" \
   "- dforge: this repository still uses an older layout ($ROOT/.superpowers, $W2_ROOT/docs/superpowers); run the dforge:migrate skill (/dforge:migrate)"
 git -C "$REPO" worktree remove --force "$W2" >/dev/null 2>&1

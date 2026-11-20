@@ -35,6 +35,10 @@ migrate() { # migrate SCRIPT [ARGS…] — run SCRIPT; its output, stderr includ
 export HOME="$TMP/home"; mkdir -p "$HOME"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
 
+# handoff_in DIR — the one handoff in DIR's .dforge/handoff/: the migrated
+# latest.md, now under its migration key.
+handoff_in() { cat "$1"/.dforge/handoff/adhoc-legacy-*.md 2>/dev/null; }
+
 repo() { # repo DIR — a repository with one commit
   git init -q -b main "$1"
   git -C "$1" commit -q --allow-empty -m init
@@ -70,7 +74,7 @@ check "primary: the rename is staged" "$(git -C "$R" status --porcelain -- docs 
 check "primary: .gitignore rewritten" "$(head -n 1 "$R/.gitignore")" ".dforge/"
 check "primary: .gitattributes rewritten" "$(sed -n 2p "$R/.gitattributes")" "docs/dforge/** linguist-documentation"
 check "primary: info/exclude rewritten" "$(tail -n 1 "$R/.git/info/exclude")" "docs/dforge/local/"
-check "worktree: .dforge holds the handoff" "$(cat "$W/.dforge/handoff/latest.md" 2>/dev/null)" "handoff"
+check "worktree: .dforge holds the handoff" "$(handoff_in "$W")" "handoff"
 check "worktree: docs moved from its own branch" "$(exists "$W/docs/dforge/plans/p.md")" "yes"
 check "worktree: git dir state moved" "$(exists "$WG/dforge/tasks")" "yes"
 check "worktree: dr-superpowers gone" "$(exists "$WG/dr-superpowers")" "no"
@@ -192,7 +196,7 @@ check "dr-forge: the active plan's prefixes rewritten" "$(cat "$F/docs/dforge/pl
   $'> REQUIRED SUB-SKILL: dforge:subagent-driven-development\n**Implementer:** `dforge:impl-sonnet-low`\nsee dforge:executing-plans'
 check "dr-forge: a finished plan keeps its text" "$(cat "$F/docs/dforge/plans/done.md")" "**Implementer:** dr-forge:impl-sonnet-low"
 check "dr-forge: a spec keeps its text" "$(cat "$F/docs/dforge/specs/s.md")" "use dr-forge:brainstorming"
-check "dr-forge: the handoff note's prefixes rewritten" "$(cat "$F/.dforge/handoff/latest.md")" "Resume with dforge:resume-execution"
+check "dr-forge: the handoff note's prefixes rewritten" "$(handoff_in "$F")" "Resume with dforge:resume-execution"
 check "dr-forge: names the staged rename" "$(grep -c "^commit: $F: the staged rename docs/forge/ -> docs/dforge/" <<<"$out")" "1"
 check "dr-forge: names the rewritten plan" "$(grep -c "^commit: $F: docs/dforge/plans/active.md$" <<<"$out")" "1"
 check "dr-forge: the state move printed" "$(grep -cxF "moved $F/.forge -> $F/.dforge" <<<"$out")" "1"
@@ -330,7 +334,7 @@ check "refused note, dry: the .dforge note listed" "$(grep -cxF "would rewrite t
 out=$(migrate "$FM" "$HN" 2>&1); code=$?
 check "refused note: exit 1" "$code" "1"
 check "refused note: the note left behind keeps its text" "$(cat "$HN/.forge/handoff/latest.md")" "old dr-forge:resume-execution"
-check "refused note: the .dforge note rewritten" "$(cat "$HN/.dforge/handoff/latest.md")" "new dforge:resume-execution"
+check "refused note: the .dforge note rewritten" "$(handoff_in "$HN")" "new dforge:resume-execution"
 HM="$TMP/handoff-moves"
 repo "$HM"
 mkdir -p "$HM/.forge/handoff" "$HM/.dforge"
@@ -338,7 +342,7 @@ printf 'dr-forge:resume-execution\n' > "$HM/.forge/handoff/latest.md"
 out=$(migrate "$FM" --dry-run "$HM" 2>&1)
 check "moving note, dry: listed" "$(grep -cxF "would rewrite the plugin prefixes in $HM/.forge/handoff/latest.md" <<<"$out")" "1"
 bash "$FM" "$HM" > /dev/null 2>&1
-check "moving note: rewritten once moved" "$(cat "$HM/.dforge/handoff/latest.md")" "dforge:resume-execution"
+check "moving note: rewritten once moved" "$(handoff_in "$HM")" "dforge:resume-execution"
 
 # --- docs/forge/ beside docs/dforge/: refused, and no plan is rewritten ---
 K="$TMP/forge-both-docs"
@@ -451,6 +455,8 @@ bash "$FM" "$LL" > /dev/null 2>&1
 check "links: a linked handoff note is not rewritten" "$(cat "$TMP/outside/note.md")" "dr-forge:resume-execution"
 check "links: a linked .gitignore is not rewritten" "$(cat "$TMP/outside/ignore")" ".forge/"
 check "links: a state directory linked outside is not rewritten" "$(cat "$TMP/outside/state/handoff/latest.md")" "dr-forge:resume-execution"
+check "links: a linked latest.md is not renamed through the link" "$( [ -L "$L/.dforge/handoff/latest.md" ] && echo yes || echo no)" "yes"
+check "links: a latest.md in a state directory linked outside is not renamed" "$(ls "$TMP/outside/state/handoff")" "latest.md"
 
 # --- --dry-run: every action listed, nothing written in the checkout or the home ---
 snapshot() { # snapshot DIR... — every path and file checksum under DIR, the git index aside
@@ -557,7 +563,7 @@ check "refusing home, dry: not called unfinished" "$(grep -c 'did not finish' <<
 P="$TMP/plugin/scripts"
 mkdir -p "$P/lib"
 cp "$FM" "$P/dforge-migrate"
-cp "$HERE/../../plugins/dforge/scripts/lib/native-path.sh" "$P/lib/"
+for lib in native-path.sh roots.sh dforge-dir.sh; do cp "$HERE/../../plugins/dforge/scripts/lib/$lib" "$P/lib/"; done
 H="$TMP/home-step"
 repo "$H"
 check "no dforge-home-migrate: nothing to do" "$(migrate "$P/dforge-migrate" "$H")" "dforge-migrate: nothing to migrate in $H"
@@ -598,6 +604,60 @@ mkdir -p "$NH/.dr-forge"
 out=$(HOME="$NH" PATH="$NB" migrate "$P/dforge-migrate" "$H" 2>&1); code=$?
 check "no node, dr-forge home present: exit 1" "$code" "1"
 check "no node, dr-forge home present: refused" "$(grep -c 'refused: node is not on PATH' <<<"$out")" "1"
+
+# --- latest.md is renamed to the key its marker gives (spec §8, A14) ---
+. "$HERE/fixtures/darkmem-stores.sh"
+LH="$TMP/lh-home"; mkdir -p "$LH"
+L="$TMP/lrepo"
+repo "$L"
+LW="$TMP/lwt"
+git -C "$L" worktree add -q -b lside "$LW"
+LT=$(git -C "$L" rev-parse --show-toplevel)
+LWT=$(git -C "$LW" rev-parse --show-toplevel)
+LM=$(stores_home "$LH" "$L" lproj local darkmem)
+marked() { # marked KIND SUBJECT AT — a handoff whose last marker carries them
+  printf '# Handoff\n\n<!-- next-step: kind=%s session=- done=0 closed=0 subject=%s at=%s -->\n' "$1" "$2" "$3"
+}
+mkdir -p "$L/.dforge/handoff/claims" "$LW/.dforge/handoff" "$LM/work/handoff"
+marked plan docs/dforge/plans/p1.md 1700000000 > "$L/.dforge/handoff/latest.md"
+marked draft docs/dforge/specs/d1-design.md 1700000001 > "$LW/.dforge/handoff/latest.md"
+marked adhoc - 1700000002 > "$LM/work/handoff/latest.md"
+out=$(HOME="$LH" migrate "$FM" "$L"); code=$?
+check "renames latest by subject: exit 0" "$code" "0"
+check "renames latest by subject: a plan's in the primary" "$(grep -cxF "moved $LT/.dforge/handoff/latest.md -> $LT/.dforge/handoff/p1.md" <<<"$out")" "1"
+check "renames latest by subject: a draft's in a worktree" "$(grep -cxF "moved $LWT/.dforge/handoff/latest.md -> $LWT/.dforge/handoff/d1-design.md" <<<"$out")" "1"
+check "renames latest by subject: an unplanned one in the mirror" "$(grep -cxF "moved $LM/work/handoff/latest.md -> $LM/work/handoff/adhoc-legacy-1700000002.md" <<<"$out")" "1"
+check "renames latest by subject: contents kept" "$(cat "$L/.dforge/handoff/p1.md")" "$(marked plan docs/dforge/plans/p1.md 1700000000)"
+check "renames latest by subject: no latest.md left" "$(find "$L/.dforge" "$LW/.dforge" "$LM/work" -name latest.md | wc -l | tr -d ' ')" "0"
+
+# A second run moves what an older plugin wrote after the first: a marker-less
+# file takes its mtime, and a subject whose basename the key rule refuses is
+# migrated as unplanned, with a line naming it.
+printf '# Handoff\n\nno marker\n' > "$L/.dforge/handoff/latest.md"
+touch -d @1700000500 "$L/.dforge/handoff/latest.md"
+marked plan docs/dforge/plans/adhoc-x.md 1700000600 > "$LW/.dforge/handoff/latest.md"
+marked plan docs/dforge/plans/p2.md 1700000700 > "$LM/work/handoff/latest.md"
+out=$(HOME="$LH" migrate "$FM" "$L"); code=$?
+check "idempotent reappearance: exit 0" "$code" "0"
+check "idempotent reappearance: a marker-less one takes its mtime" "$(grep -cxF "moved $LT/.dforge/handoff/latest.md -> $LT/.dforge/handoff/adhoc-legacy-1700000500.md" <<<"$out")" "1"
+check "idempotent reappearance: a plan's in the mirror" "$(grep -cxF "moved $LM/work/handoff/latest.md -> $LM/work/handoff/p2.md" <<<"$out")" "1"
+check "renames latest by subject: a refused subject is migrated as unplanned" "$(grep -cxF "moved $LWT/.dforge/handoff/latest.md -> $LWT/.dforge/handoff/adhoc-legacy-1700000600.md" <<<"$out")" "1"
+check "renames latest by subject: the refused subject is named" "$(grep -cxF "dforge-migrate: $LWT/.dforge/handoff/latest.md names docs/dforge/plans/adhoc-x.md, which is no usable handoff key; migrated as unplanned" <<<"$out")" "1"
+
+# A plan's <key>.md that exists is never overwritten: the pair is refused.
+marked plan docs/dforge/plans/p1.md 1700000800 > "$L/.dforge/handoff/latest.md"
+legacy=$(cd "$LW" && HOME="$LH" migrate "$FM" --legacy-handoffs); code=$?
+check "legacy handoffs: exit 0" "$code" "0"
+check "legacy handoffs: one line with the marker subject" "$legacy" "$(printf '%s\t%s' "$LT/.dforge/handoff/latest.md" docs/dforge/plans/p1.md)"
+check "legacy handoffs: read-only" "$(cat "$L/.dforge/handoff/latest.md")" "$(marked plan docs/dforge/plans/p1.md 1700000800)"
+out=$(cd "$LW" && HOME="$LH" migrate "$FM" --legacy-handoffs extra); code=$?
+check "legacy handoffs: the single argument" "$code" "2"
+out=$(HOME="$LH" migrate "$FM" "$L"); code=$?
+check "refuses collision: exit 1" "$code" "1"
+check "refuses collision: the pair is reported" "$(grep -cxF "dforge-migrate: refused: $LT/.dforge/handoff/latest.md is the handoff for p1, and $LT/.dforge/handoff/p1.md already exists; keep one by hand, then run dforge-migrate again" <<<"$out")" "1"
+check "refuses collision: latest.md stays" "$(cat "$L/.dforge/handoff/latest.md")" "$(marked plan docs/dforge/plans/p1.md 1700000800)"
+check "refuses collision: p1.md is not overwritten" "$(cat "$L/.dforge/handoff/p1.md")" "$(marked plan docs/dforge/plans/p1.md 1700000000)"
+check "refuses collision: claims stay" "$(exists "$L/.dforge/handoff/claims")" "yes"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

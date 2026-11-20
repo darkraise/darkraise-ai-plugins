@@ -37,6 +37,10 @@ migrate() { # migrate SCRIPT [ARGS…] — run SCRIPT; its output, stderr includ
 export HOME="$TMP/home"; mkdir -p "$HOME"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
 
+# handoff_in DIR — the one handoff in DIR's .dagents/handoff/: the migrated
+# latest.md, now under its migration key.
+handoff_in() { cat "$1"/.dagents/handoff/adhoc-legacy-*.md 2>/dev/null; }
+
 repo() { # repo DIR — a repository with one commit
   git init -q -b main "$1"
   git -C "$1" commit -q --allow-empty -m init
@@ -72,7 +76,7 @@ check "primary: the rename is staged" "$(git -C "$R" status --porcelain -- docs 
 check "primary: .gitignore rewritten" "$(head -n 1 "$R/.gitignore")" ".dagents/"
 check "primary: .gitattributes rewritten" "$(sed -n 2p "$R/.gitattributes")" "docs/dagents/** linguist-documentation"
 check "primary: info/exclude rewritten" "$(tail -n 1 "$R/.git/info/exclude")" "docs/dagents/local/"
-check "worktree: .dagents holds the handoff" "$(cat "$W/.dagents/handoff/latest.md" 2>/dev/null)" "handoff"
+check "worktree: .dagents holds the handoff" "$(handoff_in "$W")" "handoff"
 check "worktree: docs moved from its own branch" "$(exists "$W/docs/dagents/plans/p.md")" "yes"
 check "worktree: git dir state moved" "$(exists "$WG/dagents/tasks")" "yes"
 check "worktree: dr-superpowers gone" "$(exists "$WG/dr-superpowers")" "no"
@@ -194,7 +198,7 @@ check "dr-forge: the active plan's prefixes rewritten" "$(cat "$F/docs/dagents/p
   $'> REQUIRED SUB-SKILL: dagents:subagent-driven-development\n**Implementer:** `dagents:impl-sonnet-low`\nsee dagents:executing-plans'
 check "dr-forge: a finished plan keeps its text" "$(cat "$F/docs/dagents/plans/done.md")" "**Implementer:** dr-forge:impl-sonnet-low"
 check "dr-forge: a spec keeps its text" "$(cat "$F/docs/dagents/specs/s.md")" "use dr-forge:brainstorming"
-check "dr-forge: the handoff note's prefixes rewritten" "$(cat "$F/.dagents/handoff/latest.md")" "Resume with dagents:resume-execution"
+check "dr-forge: the handoff note's prefixes rewritten" "$(handoff_in "$F")" "Resume with dagents:resume-execution"
 check "dr-forge: names the staged rename" "$(grep -c "^commit: $F: the staged rename docs/forge/ -> docs/dagents/" <<<"$out")" "1"
 check "dr-forge: names the rewritten plan" "$(grep -c "^commit: $F: docs/dagents/plans/active.md$" <<<"$out")" "1"
 check "dr-forge: the state move printed" "$(grep -cxF "moved $F/.forge -> $F/.dagents" <<<"$out")" "1"
@@ -332,7 +336,7 @@ check "refused note, dry: the .dagents note listed" "$(grep -cxF "would rewrite 
 out=$(migrate "$FM" "$HN" 2>&1); code=$?
 check "refused note: exit 1" "$code" "1"
 check "refused note: the note left behind keeps its text" "$(cat "$HN/.forge/handoff/latest.md")" "old dr-forge:resume-execution"
-check "refused note: the .dagents note rewritten" "$(cat "$HN/.dagents/handoff/latest.md")" "new dagents:resume-execution"
+check "refused note: the .dagents note rewritten" "$(handoff_in "$HN")" "new dagents:resume-execution"
 HM="$TMP/handoff-moves"
 repo "$HM"
 mkdir -p "$HM/.forge/handoff" "$HM/.dagents"
@@ -340,7 +344,7 @@ printf 'dr-forge:resume-execution\n' > "$HM/.forge/handoff/latest.md"
 out=$(migrate "$FM" --dry-run "$HM" 2>&1)
 check "moving note, dry: listed" "$(grep -cxF "would rewrite the plugin prefixes in $HM/.forge/handoff/latest.md" <<<"$out")" "1"
 bash "$FM" "$HM" > /dev/null 2>&1
-check "moving note: rewritten once moved" "$(cat "$HM/.dagents/handoff/latest.md")" "dagents:resume-execution"
+check "moving note: rewritten once moved" "$(handoff_in "$HM")" "dagents:resume-execution"
 
 # --- docs/forge/ beside docs/dagents/: refused, and no plan is rewritten ---
 K="$TMP/forge-both-docs"
@@ -453,6 +457,8 @@ bash "$FM" "$LL" > /dev/null 2>&1
 check "links: a linked handoff note is not rewritten" "$(cat "$TMP/outside/note.md")" "dr-forge:resume-execution"
 check "links: a linked .gitignore is not rewritten" "$(cat "$TMP/outside/ignore")" ".forge/"
 check "links: a state directory linked outside is not rewritten" "$(cat "$TMP/outside/state/handoff/latest.md")" "dr-forge:resume-execution"
+check "links: a linked latest.md is not renamed through the link" "$( [ -L "$L/.dagents/handoff/latest.md" ] && echo yes || echo no)" "yes"
+check "links: a latest.md in a state directory linked outside is not renamed" "$(ls "$TMP/outside/state/handoff")" "latest.md"
 
 # --- --dry-run: every action listed, nothing written in the checkout or the home ---
 snapshot() { # snapshot DIR... — every path and file checksum under DIR, the git index aside
@@ -583,7 +589,7 @@ check "refusing home, dry: not called unfinished" "$(grep -c 'did not finish' <<
 P="$TMP/plugin/scripts"
 mkdir -p "$P/lib"
 cp "$FM" "$P/dagents-migrate"
-cp "$HERE/../../plugins/dagents/scripts/lib/native-path.sh" "$HERE/../../plugins/dagents/scripts/lib/dagents-dir.sh" "$P/lib/"
+for lib in native-path.sh dagents-dir.sh roots.sh; do cp "$HERE/../../plugins/dagents/scripts/lib/$lib" "$P/lib/"; done
 H="$TMP/home-step"
 repo "$H"
 check "no dagents-home-migrate: nothing to do" "$(migrate "$P/dagents-migrate" "$H")" "dagents-migrate: nothing to migrate in $H"
@@ -675,8 +681,8 @@ check "dforge: exit 0" "$code" "0"
 check "dforge: ledger moved" "$(head -n 1 "$D/.dagents/sdd/p1/progress.md" 2>/dev/null)" "# SDD ledger — plan: docs/dforge/plans/p1.md"
 check "dforge: docs moved and staged" "$(git -C "$D" status --porcelain -- docs | cut -c1-2 | sort -u | tr -d ' ')" "R"
 check "dforge: git-dir state moved" "$(exists "$DG/dagents/locks")$(exists "$DG/dforge")" "yesno"
-check "dforge worktree: state moved" "$(exists "$DW/.dagents/handoff/latest.md")$(exists "$DW/.dforge")" "yesno"
-check "dforge worktree: handoff prefix rewritten" "$(cat "$DW/.dagents/handoff/latest.md")" "next: dagents:executing-plans"
+check "dforge worktree: state moved" "$( [ -n "$(handoff_in "$DW")" ] && echo yes || echo no)$(exists "$DW/.dforge")" "yesno"
+check "dforge worktree: handoff prefix rewritten" "$(handoff_in "$DW")" "next: dagents:executing-plans"
 check "dforge worktree: git-dir state moved" "$(exists "$DWG/dagents/tasks")$(exists "$DWG/dforge")" "yesno"
 check "dforge: active plan prefixes rewritten" "$(grep -c 'dagents:' "$D/docs/dagents/plans/p1.md")" "3"
 check "dforge: ignore twin added, original kept" "$(tr '\n' '|' < "$D/.gitignore")" ".dforge/|.dagents/|"
@@ -766,6 +772,48 @@ check "4.x layout: session start names it" "$(cd "$J" && printf '%s' "$ev" | HOM
 check "4.x layout: repo-audit names it" "$(cd "$J" && HOME="$TMP/detect-home" bash "$HERE/../../plugins/dagents/scripts/repo-audit" 2>&1 | seen)" "yes"
 check "dforge 5 layout: repo-audit does not name it" "$(cd "$F" && HOME="$TMP/detect-home" bash "$HERE/../../plugins/dagents/scripts/repo-audit" 2>&1 | seen)" "no"
 check "migrated project: repo-audit does not name it" "$(cd "$D" && HOME="$TMP/detect-home" bash "$HERE/../../plugins/dagents/scripts/repo-audit" 2>&1 | seen)" "no"
+
+# --- latest.md is renamed to the key its marker gives (spec §8, A14) ---
+LH="$TMP/lh-home"; mkdir -p "$LH"
+L="$TMP/lrepo"
+repo "$L"
+LW="$TMP/lwt"
+git -C "$L" worktree add -q -b lside "$LW"
+LT=$(git -C "$L" rev-parse --show-toplevel)
+LWT=$(git -C "$LW" rev-parse --show-toplevel)
+marked() { # marked KIND SUBJECT AT — a handoff whose last marker carries them
+  printf '# Handoff\n\n<!-- next-step: kind=%s session=- done=0 closed=0 subject=%s at=%s -->\n' "$1" "$2" "$3"
+}
+mkdir -p "$L/.dagents/handoff/claims" "$LW/.dagents/handoff"
+marked plan docs/dagents/plans/p1.md 1700000000 > "$L/.dagents/handoff/latest.md"
+marked draft docs/dagents/specs/d1-design.md 1700000001 > "$LW/.dagents/handoff/latest.md"
+out=$(HOME="$LH" migrate "$FM" "$L"); code=$?
+check "renames latest by subject: exit 0" "$code" "0"
+check "renames latest by subject: a plan's in the primary" "$(grep -cxF "moved $LT/.dagents/handoff/latest.md -> $LT/.dagents/handoff/p1.md" <<<"$out")" "1"
+check "renames latest by subject: a draft's in a worktree" "$(grep -cxF "moved $LWT/.dagents/handoff/latest.md -> $LWT/.dagents/handoff/d1-design.md" <<<"$out")" "1"
+check "renames latest by subject: contents kept" "$(cat "$L/.dagents/handoff/p1.md")" "$(marked plan docs/dagents/plans/p1.md 1700000000)"
+marked adhoc - 1700000002 > "$LW/.dagents/handoff/latest.md"
+printf '# Handoff\n\nno marker\n' > "$L/.dagents/handoff/latest.md"
+touch -d @1700000500 "$L/.dagents/handoff/latest.md"
+out=$(HOME="$LH" migrate "$FM" "$L"); code=$?
+check "idempotent reappearance: exit 0" "$code" "0"
+check "idempotent reappearance: a marker-less one takes its mtime" "$(grep -cxF "moved $LT/.dagents/handoff/latest.md -> $LT/.dagents/handoff/adhoc-legacy-1700000500.md" <<<"$out")" "1"
+check "renames latest by subject: subject - is unplanned" "$(grep -cxF "moved $LWT/.dagents/handoff/latest.md -> $LWT/.dagents/handoff/adhoc-legacy-1700000002.md" <<<"$out")" "1"
+marked plan docs/dagents/plans/adhoc-x.md 1700000600 > "$LW/.dagents/handoff/latest.md"
+marked plan docs/dagents/plans/p1.md 1700000800 > "$L/.dagents/handoff/latest.md"
+legacy=$(cd "$LW" && HOME="$LH" migrate "$FM" --legacy-handoffs); code=$?
+check "legacy handoffs: exit 0" "$code" "0"
+check "legacy handoffs: a line per file with its marker subject" "$legacy" "$(printf '%s\t%s\n%s\t%s' "$LT/.dagents/handoff/latest.md" docs/dagents/plans/p1.md "$LWT/.dagents/handoff/latest.md" docs/dagents/plans/adhoc-x.md)"
+out=$(cd "$LW" && HOME="$LH" migrate "$FM" --legacy-handoffs extra); code=$?
+check "legacy handoffs: the single argument" "$code" "2"
+out=$(HOME="$LH" migrate "$FM" "$L"); code=$?
+check "refuses collision: exit 1" "$code" "1"
+check "refuses collision: the pair is reported" "$(grep -cxF "dagents-migrate: refused: $LT/.dagents/handoff/latest.md is the handoff for p1, and $LT/.dagents/handoff/p1.md already exists; keep one by hand, then run dagents-migrate again" <<<"$out")" "1"
+check "refuses collision: latest.md stays" "$(cat "$L/.dagents/handoff/latest.md")" "$(marked plan docs/dagents/plans/p1.md 1700000800)"
+check "refuses collision: p1.md is not overwritten" "$(cat "$L/.dagents/handoff/p1.md")" "$(marked plan docs/dagents/plans/p1.md 1700000000)"
+check "renames latest by subject: a refused subject is migrated as unplanned" "$(grep -cxF "moved $LWT/.dagents/handoff/latest.md -> $LWT/.dagents/handoff/adhoc-legacy-1700000600.md" <<<"$out")" "1"
+check "renames latest by subject: the refused subject is named" "$(grep -cxF "dagents-migrate: $LWT/.dagents/handoff/latest.md names docs/dagents/plans/adhoc-x.md, which is no usable handoff key; migrated as unplanned" <<<"$out")" "1"
+check "refuses collision: claims stay" "$(exists "$L/.dagents/handoff/claims")" "yes"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

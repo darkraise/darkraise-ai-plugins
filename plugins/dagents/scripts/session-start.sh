@@ -138,10 +138,13 @@ fi
 legacy_line=""
 if [ -n "$roadmap_root" ]; then
   legacy=$(dagents_legacy_layout "$roadmap_root" | paste -sd, - | sed 's/,/, /g' | tr -d '\001-\037')
-  if [ -n "$legacy" ]; then
-    legacy_line="dagents: this repository still uses an older layout ($legacy); run the dagents:migrate skill (/dagents:migrate)"
-    context="${context}\n\n$(escape_for_json "$legacy_line")"
-  fi
+  [ -z "$legacy" ] || legacy_line="dagents: this repository still uses an older layout ($legacy); run the dagents:migrate skill (/dagents:migrate)"
+  # A handoff an older plugin wrote, which only the migrate script names.
+  while IFS=$'\t' read -r lh_path lh_subject; do
+    [ -n "$lh_path" ] || continue
+    legacy_line="${legacy_line:+$legacy_line$'\n'}dagents: $lh_path is a handoff in an older layout (subject $lh_subject); run the dagents:migrate skill (/dagents:migrate)"
+  done < <(cd "$roadmap_root" && bash "$SCRIPT_DIR/dagents-migrate" --legacy-handoffs 2>/dev/null | tr -d '\001-\010\013-\037')
+  [ -z "$legacy_line" ] || context="${context}\n\n$(escape_for_json "$legacy_line")"
 fi
 
 # A dforge 4.x project keeps its work under docs/dforge and .dforge, which
