@@ -549,9 +549,12 @@ test("a checkpoint filed a microsecond before the last synced one is not taken f
   x.created_at = "2026-09-25T10:00:00.000001+00:00";
   y.created_at = "2026-09-25T10:00:00.000002+00:00";
   assert.equal((await run(["pull"], { cwd: s.repo, env: s.env })).code, 0);
-  assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "# Y\n");
-  write(path.join(s.workRoot, "handoff", "latest.md"), "# X\n");
-  const result = await s.push("--handoff", path.join(s.workRoot, "handoff", "latest.md"), "--workstream", "p1");
+  // An unmarked checkpoint is pulled under the migration's adhoc-legacy key.
+  const [name] = fs.readdirSync(path.join(s.workRoot, "handoff"));
+  const pulled = path.join(s.workRoot, "handoff", name);
+  assert.equal(read(pulled), "# Y\n");
+  write(pulled, "# X\n");
+  const result = await s.push("--handoff", pulled, "--workstream", "p1");
   assert.equal(result.code, 0, result.stdout);
   assert.match(result.stdout, /1 checkpoints/);
   assert.deepEqual(s.stub.db.workstreams[0].entries.map(e => e.body), ["# X\n", "# Y\n", "# X\n"]);
@@ -594,7 +597,9 @@ test("a note returned to an earlier workstream is filed again, so the newest che
   const other = makeHome({ repo: s.repo, url: s.stub.url });
   const pulled = await run(["pull"], { cwd: s.repo, env: other.env });
   assert.equal(pulled.code, 0, pulled.stdout + pulled.stderr);
-  assert.equal(read(path.join(other.workRoot, "handoff", "latest.md")), plan("p1"));
+  const names = fs.readdirSync(path.join(other.workRoot, "handoff"));
+  assert.equal(names.length, 1, "a fresh mirror takes the single newest checkpoint");
+  assert.equal(read(path.join(other.workRoot, "handoff", names[0])), plan("p1"));
 });
 
 test("an old state file's single checkpointAt stands for a workstream until it is pushed", async t => {

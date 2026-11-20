@@ -752,3 +752,14 @@ test("converts single checkpoint: a hash no handoff carries is dropped", () => {
   write(file, JSON.stringify({ version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpoints: { "../x": sha256(Buffer.from("x")) }, checkpointAt: null, conflicts: [], pendingLinks: [] }));
   assert.throws(() => loadState(file), StateError);
 });
+
+test("status reports each modified handoff against its own key's synced hash", () => {
+  const { roots } = mirror();
+  const state = emptyState();
+  const handoffs = path.join(roots.workRoot, "handoff");
+  write(path.join(handoffs, "P.md"), "P changed\n");
+  write(path.join(handoffs, "D.md"), "D synced\n");
+  state.checkpoints.P = sha256("P synced\n");
+  state.checkpoints.D = sha256("D synced\n");
+  assert.deepEqual(localChanges(roots, state).filter(line => line.includes("handoff/")), ["modified: handoff/P.md"]);
+});

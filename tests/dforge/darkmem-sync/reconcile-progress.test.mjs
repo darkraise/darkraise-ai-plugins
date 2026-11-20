@@ -940,17 +940,18 @@ for (const [what, plant, code] of [["a directory", file => fs.mkdirSync(file, { 
   });
 }
 
-test("a mirror that lost latest.md takes darkmem's newest checkpoint again before the move back", async t => {
+test("a handoff the mirror deleted after its sync is not pulled back before the move back", async t => {
   const s = await setup(t, "local");
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: LEDGER("p1") }, { kind: "checkpoint", body: LATEST }] });
   assert.equal((await run(["pull"], { cwd: s.repo, env: s.env })).code, 0);
-  const mirrored = path.join(s.workRoot, "handoff", "latest.md");
-  assert.equal(read(mirrored), LATEST);
-  fs.rmSync(mirrored);
+  const handoffs = path.join(s.workRoot, "handoff");
+  const [name] = fs.readdirSync(handoffs);
+  assert.equal(read(path.join(handoffs, name)), LATEST);
+  fs.rmSync(path.join(handoffs, name));
   const result = await s.reconcile();
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^darkmem-sync reconcile: progress moved to local$/m);
-  assert.equal(read(path.join(s.repo, ".dforge", "handoff", "latest.md")), LATEST);
+  assert.equal(fs.existsSync(path.join(s.repo, ".dforge", "handoff", name)), false, "a superseded or consumed handoff stays gone");
 });
 
 for (const [what, plant, code] of [["a directory", file => fs.mkdirSync(file, { recursive: true }), "EISDIR"], ["a named pipe", namedPipe, "EFTYPE"]]) {

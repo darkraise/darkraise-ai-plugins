@@ -55,11 +55,15 @@ test("A11: pull writes only the primary's handoff under the mirror, from the pri
   write(s.worktreeFile, "# Handoff\n\nWORKTREE-LOCAL-MARKER\n");
   const fromWorktree = await run(["pull"], { cwd: s.worktree, env: s.env });
   assert.equal(fromWorktree.code, 0, fromWorktree.stdout + fromWorktree.stderr);
-  assert.match(read(s.primaryFile), /DARKMEM-CHECKPOINT-MARKER/);
+  // An unmarked checkpoint lands in the mirror under the migration's adhoc-legacy key.
+  const mirrorHandoffs = path.dirname(s.primaryFile);
+  const pulled = () => fs.readdirSync(mirrorHandoffs).map(name => read(path.join(mirrorHandoffs, name)));
+  assert.equal(pulled().length, 1);
+  assert.match(pulled()[0], /DARKMEM-CHECKPOINT-MARKER/);
   assert.equal(read(s.worktreeFile), "# Handoff\n\nWORKTREE-LOCAL-MARKER\n", "pull leaves the worktree's handoff alone");
   fs.rmSync(s.worktreeFile);
   const fromPrimary = await run(["pull"], { cwd: s.repo, env: s.env });
   assert.equal(fromPrimary.code, 0, fromPrimary.stdout + fromPrimary.stderr);
   assert.equal(fs.existsSync(s.worktreeFile), false, "pull never creates a worktree's handoff");
-  assert.match(read(s.primaryFile), /DARKMEM-CHECKPOINT-MARKER/);
+  assert.match(pulled()[0], /DARKMEM-CHECKPOINT-MARKER/);
 });

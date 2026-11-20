@@ -868,7 +868,19 @@ export function localChanges(roots, state) {
     else if (buffer.length > record.offset) lines.push(`unpushed: sdd/${slug}/progress.md (${buffer.length - record.offset} bytes)`);
   }
   for (const dir of unsupportedPlanDirs(roots.workRoot)) lines.push(`unsupported: ${dir} (not a usable workstream key)`);
-  const latest = path.join(roots.workRoot, "handoff", "latest.md");
-  if (fs.existsSync(latest) && sha256(fs.readFileSync(latest)) !== state.checkpoint) lines.push("modified: handoff/latest.md");
+  // Each handoff against its key's synced hash; latest.md against checkpoint,
+  // the hash its readers keep until the migration renames it.
+  const dir = path.join(roots.workRoot, "handoff");
+  let names = [];
+  try {
+    names = fs.readdirSync(dir, { withFileTypes: true }).filter(entry => entry.isFile() && entry.name.endsWith(".md")).map(entry => entry.name).sort();
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  for (const name of names) {
+    const buffer = fs.readFileSync(path.join(dir, name));
+    const synced = name === "latest.md" ? state.checkpoint : state.checkpoints?.[handoffKey(name, "")];
+    if (sha256(buffer) !== synced) lines.push(`modified: handoff/${name}`);
+  }
   return lines;
 }

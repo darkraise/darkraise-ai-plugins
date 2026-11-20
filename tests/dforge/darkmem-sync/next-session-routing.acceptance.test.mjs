@@ -76,14 +76,13 @@ for (const mode of ["--complete", "--project"]) {
     assert.equal(checkpoints[0].body, text, "carrying the keyed handoff as written");
     const finished = stub.db.workstreams.find(w => w.key === "2026-11-01-p1");
     assert.equal((finished?.entries ?? []).filter(e => e.kind === "checkpoint").length, 0, "none under the finished plan's workstream");
-    t.todo("pull of keyed handoffs: Task 14");
-    return;
 
     // A different machine: a fresh checkout, a fresh home, the same darkmem.
     const repo2 = plannedRepo();
     const home2 = makeHome({ repo: repo2, url: stub.url, stores: { documents: "local", progress: "darkmem" } });
     const pulled = await run(["pull"], { cwd: repo2, env: home2.env });
     assert.equal(pulled.code, 0, pulled.stdout + pulled.stderr);
-    assert.equal(read(path.join(home2.workRoot, "handoff", "latest.md")), text, "the second mirror receives latest.md");
+    assert.equal(read(path.join(home2.workRoot, "handoff", path.basename(keyed))), text, "the second mirror receives the keyed handoff");
+    assert.equal(fs.existsSync(path.join(home2.workRoot, "handoff", "latest.md")), false, "and no latest.md");
   });
 }
