@@ -65,7 +65,7 @@ notes() { # notes <key> <text> — the notes file the handoff skill writes (C14)
 ns() { # ns <session> <dir> <args...> — next-step run as <session> in <dir>; sets OUT and RC
   OUT=$(cd "$2" && CLAUDE_CODE_SESSION_ID=$1 timeout 90 bash "$NS" "${@:3}" 2>"$TMP/stderr"); RC=$?
 }
-files() { local f; for f in "$1"/*; do [ -f "$f" ] && printf '%s ' "${f##*/}"; done; } # files <dir> — its plain files' names
+files() { local f; for f in "$1"/*; do [ -f "$f" ] && printf '%s\n' "${f##*/}"; done | LC_ALL=C sort | tr '\n' ' '; } # files <dir> — its plain files' names, in C order
 notes_of() { awk '/^## Next session/ { exit } { print }' "$1"; } # notes_of <handoff> — everything above the block
 marker_of() { grep -E '^<!-- next-step: ' "$1" | tail -n 1; }
 
@@ -267,22 +267,30 @@ has "terminal_blocks: its block is written" "$(cat "$HD/$P.md" 2>/dev/null)" "Ta
 
 # ---------------------------------------------------------------- first_prompt_claims
 fixture
+claims_its_handoff() { # claims_its_handoff NAME FILE — OUT's first prompt names FILE as its handoff and claims that file
+  has "$1 names its handoff" "$OUT" "its handoff is \`$2\`."
+  has "$1 claims it" "$OUT" "Before anything else, claim it with dagents' \`scripts/handoff claim\` on that file."
+}
+ns "$S1" "$TOP" --target "$DOCS/plans/$P.md"; T=$OUT
 ns "$S1" "$TOP" --print "$DOCS/plans/$P.md"
-has "first_prompt_claims: a plan's prompt claims its handoff" "$OUT" "scripts/handoff claim"
+claims_its_handoff "first_prompt_claims: a plan's prompt" "$T"
 ns "$S1" "$TOP" --print --kept "$DOCS/plans/$P.md"
-has "first_prompt_claims: a kept plan's prompt" "$OUT" "scripts/handoff claim"
+claims_its_handoff "first_prompt_claims: a kept plan's prompt" "$T"
+ns "$S1" "$TOP" --target --draft "$DOCS/specs/D.md" --next "Write the plan"; T=$OUT
 ns "$S1" "$TOP" --print --draft "$DOCS/specs/D.md" --next "Write the plan"
-has "first_prompt_claims: a draft's prompt" "$OUT" "scripts/handoff claim"
+claims_its_handoff "first_prompt_claims: a draft's prompt" "$T"
+ns "$S1" "$TOP" --target --adhoc --phase build --next "Finish item C"; T=$OUT
 ns "$S1" "$TOP" --adhoc --phase build --next "Finish item C"
-has "first_prompt_claims: an adhoc prompt" "$OUT" "scripts/handoff claim"
-ns "$S1" "$TOP" --print --handoff "$HD/adhoc-${S1:0:8}.md"
-has "first_prompt_claims: a recomputed prompt" "$OUT" "scripts/handoff claim"
+claims_its_handoff "first_prompt_claims: an adhoc prompt" "$T"
+ns "$S1" "$TOP" --print --handoff "$T"
+claims_its_handoff "first_prompt_claims: a recomputed prompt" "$T"
 ns "" "$TOP" --host codex --print --draft "$DOCS/specs/D.md" --next "Write the plan"
 lacks "first_prompt_claims: a Codex draft prompt has no claim clause" "$OUT" "scripts/handoff claim"
 ns "" "$TOP" --host codex --print --adhoc --phase build --next "Finish item C"
 lacks "first_prompt_claims: nor a Codex adhoc prompt" "$OUT" "scripts/handoff claim"
 k=$(grep -o 'adhoc-[0-9a-f]\{8\}\.md' <<<"$OUT" | head -n 1)
-has "first_prompt_claims: which names the key to pass" "$OUT" "--key ${k%.md}"
+check "first_prompt_claims: a Codex adhoc prompt names an adhoc handoff" "$([ -n "$k" ] && echo named)" "named"
+has "first_prompt_claims: and the key to pass" "$OUT" "When you hand off, pass \`--key ${k%.md}\` to next-step."
 
 # ---------------------------------------------------------------- turn_record_written
 fixture
