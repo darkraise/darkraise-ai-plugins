@@ -237,9 +237,12 @@ export function handoffMarker(text) {
 
 // The key a mirror handoff's checkpoint hash is kept under: its file name, or
 // for a latest.md the plan or draft its marker names, as the migration keys
-// it; null for a latest.md naming neither.
+// it; null for a latest.md naming neither, or a name the key rule refuses.
 export function handoffKey(name, text) {
-  if (name !== "latest.md") return name.slice(0, -".md".length);
+  if (name !== "latest.md") {
+    const key = name.slice(0, -".md".length);
+    return validKey(key) && key !== "latest" ? key : null;
+  }
   const subject = handoffMarker(text)?.subject;
   const key = subject && path.posix.basename(subject.replace(/\\/g, "/"), ".md");
   return key && validKey(key) ? key : null;

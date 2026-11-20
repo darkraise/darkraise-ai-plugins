@@ -423,6 +423,10 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
     report.failures.push(`${rel}: empty or not UTF-8 text, not pushed`);
     return;
   }
+  if (key === null && !isLatest) {
+    report.failures.push(`${rel}: not a usable handoff key; rename it to letters, digits, '.', '_' or '-'`);
+    return;
+  }
   // An unplanned handoff belongs to no workstream until --handoff names it.
   if (!isNamed && handoffMarker(body)?.kind === "adhoc") return;
   const target = checkpointTarget(body, { marker: true });

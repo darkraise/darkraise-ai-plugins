@@ -178,6 +178,26 @@ test("pulled key rules: a marker key the rule refuses is skipped with a note, an
   assert.match(result.stdout, /^skipped: workstream W's checkpoint names no usable handoff key; not pulled$/m);
   assert.deepEqual(fs.readdirSync(path.join(s.workRoot, "handoff")), ["P.md"]);
   assert.equal(read(handoffFile(s, "P")), keyed("P", "# from X\n"), "the newer created_at wins");
+  const again = await s.pull();
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.equal(read(handoffFile(s, "P")), keyed("P", "# from X\n"), "the older checkpoint naming P is not written on a later pull");
+  assert.doesNotMatch(again.stdout, /^skipped:/m, "a refused key's note is printed once");
+});
+
+test("a marker key the state's key rule refuses, such as .., is skipped and the state still loads", async t => {
+  const s = await setup(t);
+  syncedLongAgo(s);
+  for (const [ws, key] of [["W1", ".."], ["W2", "."], ["W3", "latest"]]) {
+    const body = `# Bad\n<!-- next-step: kind=adhoc key=${key} session=- done=0 closed=0 subject=- at=1795000000 -->\n`;
+    await s.seed.append({ project: "proj", workstream: ws, entries: [{ kind: "checkpoint", body }] });
+  }
+  const result = await s.pull();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal((result.stdout.match(/^skipped:/gm) ?? []).length, 3);
+  assert.equal(fs.existsSync(path.join(s.workRoot, "handoff")), false);
+  const status = await run(["status"], { cwd: s.repo, env: s.env });
+  assert.equal(status.code, 0, status.stdout + status.stderr);
+  assert.doesNotMatch(status.stdout + status.stderr, /valid sync state/);
 });
 
 test("an unpushed edit to a handoff holds until darkmem has a newer checkpoint, which then conflicts alone", async t => {
@@ -355,7 +375,9 @@ test("checkpoints a microsecond apart are ordered by darkmem's clock, not rounde
   assert.equal((await s.pull()).code, 0);
   assert.equal(read(handoffFile(s, "k")), keyed("k", "# C\n"), "p2 is listed first, and C is newer than B by one microsecond");
   assert.equal(s.state().checkpointAt, "2026-09-25T10:00:00.000003+00:00", "the string is the newest date");
-  assert.deepEqual(s.state().checkpointAtByWorkstream, { p1: "2026-09-25T10:00:00.000003+00:00", "*": "2026-09-25T10:00:00.000001+00:00" });
+  assert.deepEqual(s.state().checkpointAtByWorkstream, {
+    p1: "2026-09-25T10:00:00.000003+00:00", "*": "2026-09-25T10:00:00.000001+00:00", p2: "2026-09-25T10:00:00.000002+00:00",
+  }, "B, the older of two naming k, is recorded as seen");
 });
 
 test("a mirror that never synced a checkpoint takes only the single newest, and closing its workstream changes nothing", async t => {

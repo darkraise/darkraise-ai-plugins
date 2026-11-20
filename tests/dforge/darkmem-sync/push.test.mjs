@@ -343,6 +343,18 @@ test("pushes each keyed handoff under its workstream (parallel-session handoff A
   assert.deepEqual(bodies("side"), [notes["adhoc-1234abcd.md"]]);
 });
 
+test("a handoff whose name is no usable key fails alone and the state still loads", async t => {
+  const s = await setup(t);
+  write(path.join(s.workRoot, "handoff", ".md"), "# Handoff\n\n## State\n- Plan: `docs/dforge/plans/p1.md`\n");
+  write(path.join(s.workRoot, "handoff", "P.md"), "# Handoff\n\n## State\n- Plan: `docs/dforge/plans/P.md`\n");
+  const result = await s.push();
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^failed: handoff\/\.md: not a usable handoff key/m);
+  assert.match(result.stdout, / 1 checkpoints;/);
+  const status = await run(["status"], { cwd: s.repo, env: s.env });
+  assert.doesNotMatch(status.stdout + status.stderr, /valid sync state/);
+});
+
 test("workstream flag needs handoff", async t => {
   const s = await setup(t);
   write(path.join(s.workRoot, "handoff", "P.md"), "# Handoff\n\n## State\n- Plan: `docs/dforge/plans/P.md`\n");

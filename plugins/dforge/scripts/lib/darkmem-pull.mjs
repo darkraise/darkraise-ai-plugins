@@ -226,15 +226,17 @@ export async function pullLedgers({ client, roots, state, persist, report }, wor
 // The handoff key a pulled checkpoint is written under: its marker's key=, or
 // for a checkpoint without one the key the migration gives a latest.md (the
 // plan or draft its marker names, else adhoc-legacy-<marker at, else the
-// checkpoint's time>). Null when that key fails the handoff key rule.
+// checkpoint's time>). Null when that key fails the handoff key rule, which
+// adds "latest" to the state's own key rule, or when no time can be read.
 export function pulledKey(body, createdAt) {
   const last = (body.match(/^<!-- next-step: .* -->\r?$/gm) ?? []).at(-1);
   // key= runs to the next named word, so a key holding a space is read whole and refused.
   const named = last && / key=(.*?)(?= [a-z]+=| -->|$)/.exec(last.replace(/ subject=.*$/, ""))?.[1];
-  const at = (last && / at=(-?\d+) -->/.exec(last)?.[1]) ?? String(Math.floor(isoMicros(createdAt) / 1e6));
+  const micros = isoMicros(createdAt);
+  const at = (last && / at=(-?\d+) -->/.exec(last)?.[1]) ?? (micros === null ? null : String(Math.floor(micros / 1e6)));
   const subject = handoffMarker(body)?.subject;
-  const key = named ?? (subject ? path.posix.basename(subject.replace(/\\/g, "/"), ".md") : `adhoc-legacy-${at}`);
-  return /^[A-Za-z0-9._-]+$/.test(key) && key !== "latest" ? key : null;
+  const key = named ?? (subject ? path.posix.basename(subject.replace(/\\/g, "/"), ".md") : at === null ? null : `adhoc-legacy-${at}`);
+  return validKey(key) && key !== "latest" ? key : null;
 }
 
 // Each open workstream's newest checkpoint is its handoff, written to
@@ -272,15 +274,27 @@ async function pullCheckpoints({ cfg, client, roots, state, persist, report, out
   if (unread || found.length === 0) return;
   const newer = (a, b) => isoMicros(a.checkpoint.created_at) > isoMicros(b.checkpoint.created_at);
   const candidates = isFirst ? [found.reduce((best, one) => (newer(one, best) ? one : best))] : found;
+  // A checkpoint that is not written (a refused key, or the older of two
+  // naming one key) is recorded as seen, so a later pull neither repeats its
+  // note nor writes it over the newer handoff.
+  const seen = one => {
+    recordCheckpointAt(state, one.workstream, one.checkpoint.created_at);
+    persist();
+  };
   const byKey = new Map();
   for (const one of candidates) {
     const key = pulledKey(one.checkpoint.body, one.checkpoint.created_at);
     if (key === null) {
       out(`skipped: workstream ${one.workstream}'s checkpoint names no usable handoff key; not pulled`);
+      seen(one);
       continue;
     }
     const held = byKey.get(key);
-    if (!held || newer(one, held)) byKey.set(key, one);
+    if (held && !newer(one, held)) seen(one);
+    else {
+      if (held) seen(held);
+      byKey.set(key, one);
+    }
   }
   for (const [key, { checkpoint, workstream }] of byKey) {
     const rel = `handoff/${key}.md`;
