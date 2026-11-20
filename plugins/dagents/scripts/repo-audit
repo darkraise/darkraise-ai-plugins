@@ -136,22 +136,33 @@ handoff_checkout() { # FILE — the checkout whose next-step recomputes FILE
   _dagents_path "$top"
 }
 
-# remove_finished FILE KEY — run under the claims lock, so a claim taken since
-# the listing counts: status 3 when a live session other than this one holds
-# KEY, else rm's.
+mtime_of() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null; }
+
+# remove_finished FILE KEY MTIME — run under the claims lock, so a claim taken
+# or a block written since the recompute counts: status 3 when a live session
+# other than this one holds KEY, 4 when FILE changed since it read MTIME, else
+# rm's. The claim goes too once no listed copy of KEY is left, so a claim this
+# session took never makes another session's next-step refuse the key.
 remove_finished() {
-  local held
+  local held f key kind age claim
   held=$(claim_session "$2")
   if [ -n "$held" ] && [ "$held" != "$sid" ] && ! session_gone "$held"; then return 3; fi
-  rm -f -- "$1"
+  [ "$(mtime_of "$1")" = "$3" ] || return 4
+  rm -f -- "$1" || return 1
+  while IFS=$'\t' read -r f key kind age claim; do
+    [ "$key" = "$2" ] && [ -e "$f" ] && return 0
+  done <<<"$handoffs"
+  [ ! -f "$claims/$2" ] || rm -f -- "$claims/$2"
 }
 
-stored_lines() { tr -d '\r' < "$1" | grep -E '^\*\*(Status|Next):\*\*' | sed 's/^/- /'; }
+status_lines() { tr -d '\r' | grep -E '^\*\*(Status|Next):\*\*' | sed 's/^/- /'; }
+stored_lines() { status_lines < "$1"; }
+note_stale() { [ "$2" -le 1209600 ] || stale+="- $(session_age_text "$2") \`$1\`"$'\n'; }
 
 # show_handoff FILE KEY KIND AGE CLAIM MINE — one handoff's lines; FILE goes
 # on the stale list when it stays and is older than 14 days.
 show_handoff() {
-  local f=$1 key=$2 kind=$3 age=$4 claim=$5 mine=$6 line co out rc=0 rrc=0 reason first mtime since
+  local f=$1 key=$2 kind=$3 age=$4 claim=$5 mine=$6 line co out rc=0 rrc=0 reason first mtime since before
   listed=1
   line="- \`$f\` — key $key, kind $kind, $(session_age_text "$age") old, $claim"
   [ "$mine" -eq 0 ] || line="$line (this session's)"
@@ -162,10 +173,11 @@ show_handoff() {
         echo "$line"
         echo "- stored (kind $kind is not recomputed)"
         stored_lines "$f"
-        [ "$age" -le 1209600 ] || stale+="- $(session_age_text "$age") \`$f\`"$'\n'
+        note_stale "$f" "$age"
         return
       fi ;;
   esac
+  before=$(mtime_of "$f")
   if co=$(handoff_checkout "$f"); then
     out=$(cd "$co" && bash "$here/with-timeout" 20 bash "$here/next-step" --print --handoff "$f" 2>&1 </dev/null) || rc=$?
   else
@@ -175,18 +187,19 @@ show_handoff() {
     0)
       echo "$line"
       echo "- recomputed from the repository"
-      grep -E '^\*\*(Status|Next):\*\*' <<<"$out" | sed 's/^/- /'
+      status_lines <<<"$out"
       ;;
     6)
       reason=$(grep -m 1 '^next-step: ' <<<"$out" | sed 's/^next-step: //')
       reason=${reason:-nothing to resume}
       case $kind in
         plan|draft|complete|kept)
-          if [ -d "$claims" ]; then dr_locked "$claims/" remove_finished "$f" "$key" || rrc=$?
-          else remove_finished "$f" "$key" || rrc=$?; fi
+          if [ -d "$claims" ]; then dr_locked "$claims/" remove_finished "$f" "$key" "$before" || rrc=$?
+          else remove_finished "$f" "$key" "$before" || rrc=$?; fi
           case $rrc in
             0) echo "- removed finished handoff $f — $reason"; return ;;
             3) echo "$line"; echo "- finished, kept while a live session claims it: $reason" ;;
+            4) echo "$line"; echo "- finished, kept: it was rewritten during this audit ($reason)" ;;
             *) echo "$line"; echo "- finished, but it could not be removed: $reason" ;;
           esac
           stored_lines "$f" ;;
@@ -201,14 +214,22 @@ show_handoff() {
       ;;
   esac
   if [ "$mine" -eq 1 ]; then
-    mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")
+    mtime=$(mtime_of "$f")
     since=$(git -C "$root" log -n 500 --format=%ct HEAD 2>/dev/null | awk -v t="$mtime" '$1 > t' | grep -c . || true)
     echo "- Commits on this checkout's HEAD since it was written: $since"
   fi
-  [ "$age" -le 1209600 ] || stale+="- $(session_age_text "$age") \`$f\`"$'\n'
+  note_stale "$f" "$age"
 }
 
-handoffs=$(bash "$here/handoff" list "$root" | tr -d '\r')
+# A listing that fails or hangs is named, never read as "no handoffs".
+list_rc=0
+listing=$(bash "$here/with-timeout" 20 bash "$here/handoff" list "$root" 2>&1 </dev/null | tr -d '\r') || list_rc=$?
+handoffs=$(grep $'\t' <<<"$listing")
+if [ "$list_rc" -ne 0 ]; then
+  listed=1
+  first=$(grep -v $'\t' <<<"$listing" | grep -m 1 .)
+  echo "- handoff list failed (exit $list_rc): ${first:-no message}; the handoffs below may be incomplete"
+fi
 own=""
 if [ -n "$sid" ]; then
   own=$(while IFS=$'\t' read -r f key kind age claim; do

@@ -341,7 +341,7 @@ has "A16: its stored Next line" "$HSEC" "- **Next:** Fin live next."
 check "A16: the adhoc handoff is byte-identical" "$(cmp -s "$TMP/adhoc-before" "$CH/adhoc-eeeeeeee.md" && echo same || echo changed)" "same"
 check "A16: stale handoffs, with age and path" "$STALE" "## Stale handoffs
 - 20d \`$CH/adhoc-eeeeeeee.md\`"
-check "A16: claims stay" "$(ls "$CH/claims" | sort | paste -sd' ' -)" "fin-gone fin-live fin-own"
+check "A16: a removed handoff's own or gone claim goes, a live one stays" "$(ls "$CH/claims" | sort | paste -sd' ' -)" "fin-live"
 # A handoff whose recompute fails some other way is listed as stored, never deleted.
 kh "$CH/broken.md" plan - docs/dforge/plans/missing.md "Broken status." "Broken next."
 audit "$C"
@@ -366,6 +366,24 @@ has "A20: the draft is listed" "$HSEC" "- \`$U/.dforge/handoff/d-design.md\` —
 audit "$U"
 check "A20: from the primary, too" "$(ls "$U/.dforge/handoff" | sort | paste -sd' ' -)" "adhoc-ffffffff.md d-design.md"
 git -C "$U" worktree remove --force "$UW"
+
+# A listing that fails is named, not read as "no handoffs"; a handoff
+# rewritten between its recompute and its removal stays.
+FX="$TMP/fx"; rm -rf "$FX"; mkdir -p "$FX"
+cp -R "$(dirname "$SCRIPT")" "$FX/scripts"
+[ ! -d "$(dirname "$SCRIPT")/../config" ] || cp -R "$(dirname "$SCRIPT")/../config" "$FX/config"
+printf '#!/usr/bin/env bash\necho "handoff: boom" >&2\nexit 3\n' > "$FX/scripts/handoff"
+out=$(cd "$C" && bash "$FX/scripts/repo-audit" 2>&1)
+HSEC=$(sed -n '/^## Handoff/,/^## /p' <<<"$out")
+has "fix: a failed listing is named" "$HSEC" "- handoff list failed (exit 3): handoff: boom"
+check "fix: a failed listing never says none" "$(grep -c '^- none$' <<<"$HSEC")" "0"
+cp "$(dirname "$SCRIPT")/handoff" "$FX/scripts/handoff"
+RW="$TMP/rw"; krepo "$RW"; RW=$(git -C "$RW" rev-parse --show-toplevel)
+kh "$RW/.dforge/handoff/rewritten.md" plan - docs/dforge/plans/2026-11-02-fin.md "s" "n"
+printf '#!/usr/bin/env bash\ntouch -d 2000-01-01 "$3"\necho "next-step: the plan is finished: x" >&2\nexit 6\n' > "$FX/scripts/next-step"
+out=$(cd "$RW" && bash "$FX/scripts/repo-audit" 2>&1)
+check "fix: a handoff rewritten during the audit stays" "$([ -e "$RW/.dforge/handoff/rewritten.md" ] && echo yes || echo no)" "yes"
+has "fix: and says so" "$out" "- finished, kept: it was rewritten during this audit (the plan is finished: x)"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
