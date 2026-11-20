@@ -123,9 +123,11 @@ out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$P/scripts/task-brief" docs/plan.md 3 2>/
 check "task-brief: an auto run replaces the tail limit" "$(tail -n 1 <<<"$out")" \
   "budget (auto): 500k of 465k (107%) — compact — source: record"
 rm -f "$L"
+cp "$T" "$HOME/.claude/projects/$KEY/s-2.jsonl"
 out=$(CLAUDE_CODE_SESSION_ID=s-2 bash "$P/scripts/task-brief" docs/plan.md 1 2>/dev/null)
 check "task-brief: another session keeps the task budget" "$(tail -n 1 <<<"$out")" \
-  "budget: 500k of 465k (107%) — handoff — source: record?"
+  "budget: 500k of 465k (107%) — handoff — source: record"
+rm -f "$HOME/.claude/projects/$KEY/s-2.jsonl"
 bash "$P/scripts/auto-run" --session s-1 stop >/dev/null
 
 # --- a missing task still fails the way it did ---

@@ -297,8 +297,20 @@ has "two sessions: the second measures its own transcript" "$out" "budget: 50k o
 check "two sessions: the second's source is its own record" "$(src)" "record"
 rm -f "$SESS/by-id/s-a.json"
 CLAUDE_CODE_SESSION_ID=s-a run
-has "no own record: falls back to the cwd record" "$out" "budget: 50k of"
-check "no own record: the cwd record of another session is flagged" "$(src)" "record?"
+has "no own record: the transcript is found by session id" "$out" "budget: 300k of"
+check "no own record: its source is the session's own" "$(src)" "record"
+# Entering a worktree moves the transcript to the worktree's project directory
+# and leaves the record's path dangling.
+MOVED="$HOME/.claude/projects/elsewhere"
+mkdir -p "$MOVED" && mv "$TA" "$MOVED/s-a.jsonl"
+jq -n --arg tp "$TA" '{session_id:"s-a",transcript_path:$tp}' > "$SESS/by-id/s-a.json"
+CLAUDE_CODE_SESSION_ID=s-a run
+has "moved transcript: measured where it now lives" "$out" "budget: 300k of"
+check "moved transcript: its source is the session's own" "$(src)" "record"
+rm -rf "$MOVED"
+CLAUDE_CODE_SESSION_ID=s-a run
+check "no own transcript: another session's record is not measured" "$status:$out" \
+  "3:budget: unknown — unknown — no transcript found"
 rm -rf "$SESS/by-id" "$TA" "$TB"
 record s-1 "$T"
 
@@ -614,8 +626,10 @@ check "auto, high: compact at 90% of the window" "$status:$out" "6:budget (auto,
 asst 690000 > "$AUTO_T"
 run
 check "auto: a compaction that left 85% of the window hands off" "$status:$out" "5:budget (auto, high): 690k of 720k (95%) — handoff — source: record"
+asst 690000 > "$PROJ/auto-2.jsonl"
 CLAUDE_CODE_SESSION_ID=auto-2 run
-check "auto: another session keeps the task budget" "$status:$out" "5:budget: 690k of 465k (148%) — handoff — source: record?"
+check "auto: another session keeps the task budget" "$status:$out" "5:budget: 690k of 465k (148%) — handoff — source: record"
+rm -f "$PROJ/auto-2.jsonl"
 asst 0 > "$AUTO_T"
 run
 has "auto: an unreadable size names the run's limit" "$out" "budget (auto, high): unknown of 720k — unknown — no usage entry in"
