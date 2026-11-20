@@ -733,7 +733,9 @@ refuse_if_held() {
   now=$(date +%s) at=$(claim_field "$file" at)
   [[ $at =~ ^[0-9]+$ ]] || at=$now
   if bash "$(cd "$(dirname "$0")" && pwd)/auto-run" status > /dev/null 2>&1; then
-    bash "$(cd "$(dirname "$0")" && pwd)/auto-run" stop --reason "handoff $key is held by ${held:0:8}" > /dev/null 2>&1 || true
+    local stop_rc=0
+    bash "$(cd "$(dirname "$0")" && pwd)/auto-run" stop --reason "handoff $key is held by ${held:0:8}" > /dev/null 2>&1 || stop_rc=$?
+    [ "$stop_rc" -eq 0 ] || printf 'next-step: auto-run stop failed (status %s); the run is still active\n' "$stop_rc" >&2
   fi
   fail 7 "handoff $key is held by ${held:0:8} (live, claimed $(session_age_text $(( now > at ? now - at : 0 ))) ago)"
 }

@@ -114,6 +114,16 @@ out=$(as "$S3" claim "$HD/W.md"); rc=$?
 check "C16: a held claim still exits 3" "$rc" "3"
 check "C16: the run is stopped" "$(jq -r '.active' "$TOP/.dforge/sdd/auto-run.json")" "false"
 check "C16: with the claim as its reason" "$(jq -r '.stopped // empty' "$TOP/.dforge/sdd/auto-run.json")" "handoff W is held by $(printf '%s' "$S2" | cut -c1-8)"
+# A stop that cannot take the run's lock is said, not swallowed.
+(cd "$REPO" && bash "$AR" --session "$S3" start --spec "$SPEC" --isolation in-place --force > /dev/null 2>&1)
+sleep 30 & holder=$!
+LOCKD="$TOP/.dforge/sdd/auto-run.json.lockd"
+mkdir "$LOCKD" && printf '%s\n' "$holder" > "$LOCKD/pid" && uname -n > "$LOCKD/host"
+out=$(DFORGE_FLOCK=no-such-flock DR_LOCK_TENTHS=5 as "$S3" claim "$HD/W.md" 2>&1); rc=$?
+kill "$holder"; wait "$holder" 2>/dev/null; rm -f "$LOCKD/pid" "$LOCKD/host"; rmdir "$LOCKD"
+check "C16: with the run's lock held, the claim still exits 3" "$rc" "3"
+check "C16: and says the stop failed" "$(grep -c '^handoff: auto-run stop failed (status [0-9]*); the run is still active$' <<<"$out")" "1"
+check "C16: the run is still active" "$(jq -r '.active' "$TOP/.dforge/sdd/auto-run.json")" "true"
 
 # list_reports_claim_states
 rm -rf "$HD" "$WT/.dforge/handoff"

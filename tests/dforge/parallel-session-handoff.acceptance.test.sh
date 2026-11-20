@@ -180,6 +180,16 @@ check "held_claim_refuses_write: in an auto run the write still exits 7" "$RC" "
 check "held_claim_refuses_write: and stops S3's run first" "$(jq -r '.active' "$TOP/$STATE/sdd/auto-run.json")" "false"
 check "held_claim_refuses_write: naming the key and the holder" "$(jq -r '.stopped // empty' "$TOP/$STATE/sdd/auto-run.json")" "handoff D is held by ${S2:0:8}"
 check "held_claim_refuses_write: the claim is still S2's" "$(sed -n 1p "$HD/claims/D")" "session=$S2"
+# A stop that cannot take the run's lock is said, not swallowed.
+(cd "$TOP" && timeout 30 bash "$SCRIPTS/auto-run" --session "$S3" start --spec "$DOCS/specs/D.md" --isolation in-place --force > /dev/null 2>&1)
+sleep 30 & holder=$!
+LOCKD="$TOP/$STATE/sdd/auto-run.json.lockd"
+mkdir "$LOCKD" && printf '%s\n' "$holder" > "$LOCKD/pid" && uname -n > "$LOCKD/host"
+DFORGE_FLOCK=no-such-flock DR_LOCK_TENTHS=5 ns "$S3" "$TOP" --draft "$DOCS/specs/D.md" --next "Write the plan"
+kill "$holder"; wait "$holder" 2>/dev/null; rm -f "$LOCKD/pid" "$LOCKD/host"; rmdir "$LOCKD"
+check "held_claim_refuses_write: with the run's lock held, the write still exits 7" "$RC" "7"
+check "held_claim_refuses_write: and says the stop failed" "$(grep -c '^next-step: auto-run stop failed (status [0-9]*); the run is still active$' "$TMP/stderr")" "1"
+check "held_claim_refuses_write: the run is still active" "$(jq -r '.active' "$TOP/$STATE/sdd/auto-run.json")" "true"
 ns "$S2" "$TOP" --draft "$DOCS/specs/D.md" --next "Write the plan"
 check "held_claim_refuses_write: the holder itself writes" "$RC" "0"
 check "held_claim_refuses_write: and so releases its claim" "$(exists "$HD/claims/D")" "no"

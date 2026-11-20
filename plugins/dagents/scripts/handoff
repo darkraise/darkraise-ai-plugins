@@ -64,7 +64,7 @@ take_claim() {
 
 cmd_claim() {
   [ $# -eq 1 ] || usage
-  local file=$1 key dir out status sid=${CLAUDE_CODE_SESSION_ID:-}
+  local file=$1 key dir out status stop_rc sid=${CLAUDE_CODE_SESSION_ID:-}
   key=$(basename "$file" .md)
   if [[ ! $key =~ ^[A-Za-z0-9._-]+$ ]] || [ "$key" = latest ]; then
     echo "handoff: invalid key $key" >&2
@@ -80,7 +80,9 @@ cmd_claim() {
   status=$?
   [ -n "$out" ] && printf '%s\n' "$out"
   if [ "$status" -eq 3 ] && bash "$HERE/auto-run" status > /dev/null 2>&1; then
-    bash "$HERE/auto-run" stop --reason "handoff $key is held by $(sed -n 's/^held by \([^ ]*\).*/\1/p' <<<"$out")" > /dev/null
+    stop_rc=0
+    bash "$HERE/auto-run" stop --reason "handoff $key is held by $(sed -n 's/^held by \([^ ]*\).*/\1/p' <<<"$out")" > /dev/null || stop_rc=$?
+    [ "$stop_rc" -eq 0 ] || echo "handoff: auto-run stop failed (status $stop_rc); the run is still active" >&2
   fi
   exit "$status"
 }
