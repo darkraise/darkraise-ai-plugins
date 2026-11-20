@@ -73,10 +73,14 @@ cmd_claim() {
   fi
   if [ ! -f "$file" ]; then echo "no handoff file at $file"; exit 0; fi
   if [ -z "$sid" ]; then echo "claims are Claude Code only; not claimed"; exit 0; fi
-  # A mirror file lies outside every checkout; its claim is the working
-  # directory's repository's.
-  dir=$(claims_dir "$(dirname "$file")") || dir=$(claims_dir "$PWD") ||
-    { echo "handoff: $file is in no git repository" >&2; exit 2; }
+  # A mirror file is the working directory's repository's, even when the
+  # mirror sits inside some other repository (a HOME kept in git).
+  dforge_stores_init "$PWD"
+  if [ "$_DFORGE_PROGRESS_STORE" = darkmem ] && [ "$(_dforge_path "$(dirname "$file")")" = "${_DFORGE_LEDGER_ROOT%/*}/handoff" ]; then
+    dir=$(claims_dir "$PWD")
+  else
+    dir=$(claims_dir "$(dirname "$file")") || dir=$(claims_dir "$PWD")
+  fi || { echo "handoff: $file is in no git repository" >&2; exit 2; }
   mkdir -p "$dir" || { echo "handoff: cannot create $dir" >&2; exit 1; }
   dforge_self_ignore "${dir%/handoff/claims}"
   out=$(dr_locked "$dir/" take_claim "$dir/$key" "$key" "$sid")

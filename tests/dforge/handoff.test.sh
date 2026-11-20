@@ -146,6 +146,13 @@ check "darkmem: list --checkout of the primary names the mirror's" "$(cd "$WT" &
 check "darkmem: list --checkout of a worktree does not" "$(cd "$WT" && bash "$H" list --checkout | grep -c "M.md")" "0"
 out=$(cd "$WT" && CLAUDE_CODE_SESSION_ID=$S2 bash "$H" claim "$MIRROR/work/handoff/M.md"); rc=$?
 check "darkmem: a mirror handoff is claimed in the primary" "$rc:$(sed -n 1p "$CLAIMS/M")" "0:session=$S2"
+git init -q "$HOME"
+handoff_md "$MIRROR/work/handoff/G.md" plan
+out=$(cd "$WT" && CLAUDE_CODE_SESSION_ID=$S2 bash "$H" claim "$MIRROR/work/handoff/G.md"); rc=$?
+check "darkmem: a HOME kept in git does not take the mirror's claim" "$rc:$(sed -n 1p "$CLAIMS/G" 2>/dev/null)" "0:session=$S2"
+check "darkmem: no claim inside the HOME repository" "$([ -e "$HOME/.dforge/handoff/claims/G" ] && echo there || echo none)" "none"
+check "darkmem: list sees that claim" "$(cd "$WT" && bash "$H" list | awk -F'\t' '$2 == "G" { print $5 }')" "claimed S2000000 live"
+rm -rf "$HOME/.git"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
