@@ -41,9 +41,9 @@ ar() {
   # with a plan attached the clear reads the keyed file next-step --target names.
   local h="$REPO/.dforge/handoff/stored.md" plan
   if [ "${1:-}" = --session ] && { [ "${3:-}" = clear ] || [ "${3:-}" = switch ]; } && [ -f "$h" ]; then
-    { grep -v '^<!-- next-step: ' "$h"; printf '<!-- next-step: kind=adhoc session=%s done=0 closed=0 subject=- at=%s -->\n' "$2" "$(date +%s)"; } > "$h.tmp" && mv "$h.tmp" "$h"
+    { grep -v '^<!-- next-step: ' "$h"; printf '<!-- next-step: kind=adhoc session=%s done=0 closed=0 subject=- at=%s -->\n' "$2" "$(date +%s)"; } > "$h.tmp.$BASHPID" && mv "$h.tmp.$BASHPID" "$h"
     plan=$(jq -r '.plan // empty' "$STATE" 2>/dev/null)
-    [ -z "$plan" ] || [ ! -f "$REPO/$plan" ] || cp "$h" "$REPO/.dforge/handoff/$(basename "$plan")"
+    [ -z "$plan" ] || [ ! -f "$REPO/$plan" ] || { cp "$h" "$h.cp.$BASHPID" && mv "$h.cp.$BASHPID" "$REPO/.dforge/handoff/$(basename "$plan")"; }
   fi
   (cd "$REPO" && bash "$AR" "$@")
 }
