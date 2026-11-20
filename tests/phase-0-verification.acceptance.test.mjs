@@ -254,6 +254,9 @@ test('A10: release.mjs --validated exits 0 and releases nothing when HEAD differ
   gitIn(dir, 'init', '-q', '--bare', '-b', 'main', origin);
   mkdirSync(repo);
   gitIn(repo, 'init', '-q', '-b', 'main');
+  // release.mjs commits with no -c identity, and a hosted runner has none to guess.
+  gitIn(repo, 'config', 'user.name', 't');
+  gitIn(repo, 'config', 'user.email', 't@example.invalid');
   gitIn(repo, 'remote', 'add', 'origin', origin);
   mkdirSync(join(repo, 'scripts'));
   mkdirSync(join(repo, '.claude-plugin'));
