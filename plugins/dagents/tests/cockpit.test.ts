@@ -5697,6 +5697,22 @@ describe('resume offer', () => {
     expect(await band.find({ type: 'Text', text: /Next: C-NEXT$/ })).toBeDefined()
   })
 
+  test('judges claims from the claim files when handoff list fails', async ($, on) => {
+    const files: NonNullable<World['files']> = {
+      [`${HANDOFFS}/a.md`]: { text: keyedNote('A-NEXT', 'Resume a.'), mtimeMs: 990_000 },
+      [`${HANDOFFS}/claims/a`]: claimOf('sess-live'),
+      '/home/me/.claude/dagents/sessions/cockpit/sess-live': { text: '1000\n', mtimeMs: 990_000 },
+      [`${HANDOFFS}/b.md`]: { text: keyedNote('B-NEXT', 'Resume b.'), mtimeMs: 980_000 },
+      [`${HANDOFFS}/claims/b`]: claimOf('sess-gone'),
+      [`${HANDOFFS}/c.md`]: { text: keyedNote('C-NEXT', 'Resume c.'), mtimeMs: 970_000 },
+    }
+    const w = await keyedWorld($, on, files, { handoffListOut: { exitCode: 3, stdout: '' } })
+    // a's claimant has a fresh heartbeat; b's has none, so b is open.
+    expect(w.nextStepHandoffs).toEqual([`${HANDOFFS}/b.md`])
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await band.find({ type: 'Text', text: /Next: B-NEXT$/ })).toBeDefined()
+  })
+
   test('after Resume, an older handoff is not offered in its place', async ($, on) => {
     const files: NonNullable<World['files']> = {
       [`${HANDOFFS}/b.md`]: { text: keyedNote('B-NEXT', 'Resume b.'), mtimeMs: 980_000 },
