@@ -269,10 +269,12 @@ cleared session; dagents:handoff does not end the run. In order:
 1. When the spec's `## Decisions` holds a `Finish: <action>` line,
    `scripts/finish-choice set <action> --plan PLAN_FILE`.
 2. dagents:handoff steps 0-3: reconcile background agents and shells, commit
-   the plan and the spec, and update the handoff notes. Do not end the session.
-3. `scripts/next-step PLAN_FILE`. Exit 5 means background work is still
+   the plan and the spec, and write the handoff's notes file. Do not end the
+   session.
+3. `scripts/next-step --notes <notes> PLAN_FILE`, `<notes>` being the file
+   step 2 wrote. Exit 5 means background work is still
    listed: run `scripts/in-flight`, wait for or stop each launch it lists, and
-   run `scripts/next-step PLAN_FILE` again; a second exit 5 runs
+   run the same `scripts/next-step --notes <notes> PLAN_FILE` again; a second exit 5 runs
    `scripts/auto-run stop --reason "background work still running at the switch: <next-step's message>"`
    and ends as Stopping says. Any other nonzero exit means the handoff was
    not written: run `scripts/auto-run stop --reason "the handoff file could
@@ -315,8 +317,8 @@ handoff it would read is an older one. Run `scripts/auto-run stop
 --reason "the handoff file could not be written"` and end as Stopping says.
 
 If it exits 5, background work is still listed and nothing was written: run
-`scripts/in-flight`, wait for or stop each launch it lists, and run
-`scripts/next-step PLAN_FILE` again, as §The switch step 3 does. A second
+`scripts/in-flight`, wait for or stop each launch it lists, and run the same
+`scripts/next-step --notes <notes> PLAN_FILE` again, as §The switch step 3 does. A second
 exit 5 runs
 `scripts/auto-run stop --reason "background work still running at the clear: <next-step's message>"`
 and ends as Stopping says; do not run `scripts/auto-run clear`.
@@ -353,7 +355,8 @@ sends one Discord `blocked` notice when a run stops with a reason.
 Finishing runs in a session of its own. At the entry of
 dagents:finishing-a-development-branch, a run whose phase is not `finish` runs,
 in order, `scripts/auto-run phase finish`, dagents:handoff steps 0-3 (do not
-end the session), `scripts/next-step PLAN_FILE` and
+end the session), `scripts/next-step --notes <notes> PLAN_FILE` with the
+notes file handoff step 3 wrote, and
 `scripts/auto-run clear --phase`, and ends the turn with `Auto run: clearing`.
 A commit in handoff step 2 moves HEAD and costs one suite run at finishing's
 first step. `next-step`'s exits 4 and 5 are handled as §Clears says; a nonzero
