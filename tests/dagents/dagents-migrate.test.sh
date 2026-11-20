@@ -794,16 +794,20 @@ check "renames latest by subject: a draft's in a worktree" "$(grep -cxF "moved $
 check "renames latest by subject: contents kept" "$(cat "$L/.dagents/handoff/p1.md")" "$(marked plan docs/dagents/plans/p1.md 1700000000)"
 marked adhoc - 1700000002 > "$LW/.dagents/handoff/latest.md"
 printf '# Handoff\n\nno marker\n' > "$L/.dagents/handoff/latest.md"
-touch -d @1700000500 "$L/.dagents/handoff/latest.md"
+TZ=UTC touch -t 202311142221.40 "$L/.dagents/handoff/latest.md"
 out=$(HOME="$LH" migrate "$FM" "$L"); code=$?
 check "idempotent reappearance: exit 0" "$code" "0"
 check "idempotent reappearance: a marker-less one takes its mtime" "$(grep -cxF "moved $LT/.dagents/handoff/latest.md -> $LT/.dagents/handoff/adhoc-legacy-1700000500.md" <<<"$out")" "1"
 check "renames latest by subject: subject - is unplanned" "$(grep -cxF "moved $LWT/.dagents/handoff/latest.md -> $LWT/.dagents/handoff/adhoc-legacy-1700000002.md" <<<"$out")" "1"
+marked plan docs/dagents/plans/p2.md 1700000650 > "$LW/.dagents/handoff/latest.md"
+out=$(HOME="$LH" migrate "$FM" "$L"); code=$?
+check "idempotent reappearance: a later plan's moves" "$code:$(grep -cxF "moved $LWT/.dagents/handoff/latest.md -> $LWT/.dagents/handoff/p2.md" <<<"$out")" "0:1"
 marked plan docs/dagents/plans/adhoc-x.md 1700000600 > "$LW/.dagents/handoff/latest.md"
 marked plan docs/dagents/plans/p1.md 1700000800 > "$L/.dagents/handoff/latest.md"
 legacy=$(cd "$LW" && HOME="$LH" migrate "$FM" --legacy-handoffs); code=$?
 check "legacy handoffs: exit 0" "$code" "0"
 check "legacy handoffs: a line per file with its marker subject" "$legacy" "$(printf '%s\t%s\n%s\t%s' "$LT/.dagents/handoff/latest.md" docs/dagents/plans/p1.md "$LWT/.dagents/handoff/latest.md" docs/dagents/plans/adhoc-x.md)"
+check "legacy handoffs: read-only" "$(cat "$L/.dagents/handoff/latest.md")" "$(marked plan docs/dagents/plans/p1.md 1700000800)"
 out=$(cd "$LW" && HOME="$LH" migrate "$FM" --legacy-handoffs extra); code=$?
 check "legacy handoffs: the single argument" "$code" "2"
 out=$(HOME="$LH" migrate "$FM" "$L"); code=$?

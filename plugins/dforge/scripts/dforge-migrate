@@ -22,8 +22,9 @@
 # latest.md an older plugin writes after this one.
 #
 # dforge-migrate --legacy-handoffs writes nothing: it prints one
-# "<path>\t<marker subject or ->" line per latest.md still in a checkout or
-# the mirror, which session start and repo-audit name as an older layout.
+# "<path>\t<subject>" line per latest.md still in a checkout or the mirror,
+# which session start and repo-audit name as an older layout; <subject> is
+# the marker's subject when it is a plain .md path, else -.
 #
 # A checkout holding an older state directory and .dforge/ is merged file by
 # file: a file or empty directory only the old one has moves, an identical
@@ -370,12 +371,20 @@ rewrite_active_plans() {
 }
 
 # legacy_handoffs — every checkout's latest.md and, while progress is in
-# darkmem, the mirror's. The listing runs in a subshell: roots.sh exits on a
-# settings error, which must not end a migration part-way.
+# darkmem, the mirror's, named here rather than through roots' handoff
+# listing, which stops listing latest.md once every reader is keyed. It runs
+# in a subshell: roots.sh exits on a settings error, which must not end a
+# migration part-way.
 legacy_handoffs() {
-  local listed
-  listed=$(dforge_handoff_files "$root") || return 1
-  printf '%s\n' "$listed" | tr -d '\r' | grep '/latest\.md$' || true
+  (
+    dforge_stores_init "$root" || exit 2
+    while IFS= read -r wt; do
+      f="$(dforge_dir state "$(_dforge_path "$wt")")/handoff/latest.md"
+      if [ -f "$f" ] || [ -L "$f" ]; then printf '%s\n' "$f"; fi
+    done < <(g -C "$root" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p')
+    f="${_DFORGE_LEDGER_ROOT%/*}/handoff/latest.md"
+    if [ "$_DFORGE_PROGRESS_STORE" = darkmem ] && { [ -f "$f" ] || [ -L "$f" ]; }; then printf '%s\n' "$f"; fi
+  )
 }
 
 # marker_of FILE — FILE's last next-step marker line, or nothing.
@@ -386,9 +395,13 @@ subject_of() { sed -n 's/.* subject=\(.*\) at=-\{0,1\}[0-9][0-9]* -->$/\1/p' <<<
 # gives, as next-step keys a handoff: the plan's or draft's basename from its
 # subject, else adhoc-legacy-<marker at, else mtime>.
 migrate_latest() {
-  local f=$1 m kind subject at key target
+  local f=$1 m kind subject at key target word
   m=$(marker_of "$f")
-  kind=$(sed -n 's/^<!-- next-step: kind=\([^ ]*\).*/\1/p' <<<"$m")
+  kind=""
+  # Words are read by name (C9), never by position; set -f keeps them unglobbed.
+  set -f
+  for word in ${m%% subject=*}; do case $word in kind=*) kind=${word#kind=} ;; esac; done
+  set +f
   subject=$(subject_of "$m")
   at=$(sed -n 's/.* at=\(-\{0,1\}[0-9][0-9]*\) -->$/\1/p' <<<"$m")
   key=""
@@ -424,7 +437,10 @@ if [ "$legacy_only" -eq 1 ]; then
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     subject=$(subject_of "$(marker_of "$f")")
-    printf '%s\t%s\n' "$f" "${subject:--}"
+    # Session start puts the line in the model's context: a subject that is
+    # not a plain .md path, which a repository file could fake, is withheld.
+    [[ $subject =~ ^[A-Za-z0-9._/-]+\.md$ ]] && [ "${#subject}" -le 200 ] || subject=-
+    printf '%s\t%s\n' "$f" "$subject"
   done <<<"$legacy"
   exit 0
 fi
