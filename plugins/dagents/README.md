@@ -381,10 +381,14 @@ set — brainstorming through finishing-a-development-branch — frozen at upstr
 frontmatter, and writing-plans and subagent-driven-development use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
 `context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
-action and keeps `.dagents/handoff/latest.md` pointing at it. Each checkout
-keeps its own: `next-step` writes the one in the checkout the next session
-works in (a plan's worktree while it runs), and its first prompt opens by
-naming that checkout. Disable the
+action and writes it into a handoff per piece of work,
+`.dagents/handoff/<key>.md` (the plan's or draft's basename, or
+`adhoc-<session>` for unplanned work). Each checkout keeps its own: `next-step`
+writes the one in the checkout the next session works in (a plan's worktree
+while it runs), and its first prompt opens by naming that checkout and that
+file. The session that resumes a handoff claims it first (`scripts/handoff
+claim`), so a second session in the same repository neither resumes nor
+overwrites it. Disable the
 upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
@@ -473,10 +477,11 @@ that turn wrote a plan ledger (`.dagents/sdd/*/progress.md`), recorded a plan
 in `plans/completed.md` or closed a milestone in `roadmap.md`. If it did and
 the last message carries no ending, the hook blocks the stop once and tells
 Claude which one is missing. A `## Next session` block counts only when
-`next-step` wrote it this turn: its `**Next:**` line matches the `latest.md`
+`next-step` wrote it this turn: its `**Next:**` line matches the turn record
+`next-step` keeps for this session (`~/.claude/dagents/sessions/turns/<session>.next`)
 written since the turn started, or its `**Status:**` and `**Next:**` lines
-both match another checkout's `latest.md` written this turn, since `next-step`
-writes the handoff of the checkout the next session works in. A block Claude
+both match a handoff in any checkout written this turn, which is what
+releases a turn with no session id. A block Claude
 typed or reworded is held. The retry passes, except under the background-work
 hold below and in an auto run, and without `jq`, a stamp, or a ledger or
 transition this turn, the hook does nothing. While an agent or
@@ -586,7 +591,7 @@ needs. dagents hands off instead.
   with `budget: 312k of 465k (67%) — ok — source: record`, so the controller
   checks before every task and every review at no extra request;
   `scripts/context-size` prints it on demand. At `handoff`, the `handoff`
-  skill writes `latest.md` and the plan's `handoff.md` and ends with the
+  skill writes the plan's handoff and its `handoff.md` and ends with the
   resume guide from `scripts/next-step`.
 - **Stops.** A saved plan outside an auto run (an auto run clears the session
   and goes on) is a hard stop.
@@ -758,8 +763,9 @@ desktop window joins the session, unless you closed it.
   tool starts. **⇣ Compact** stays on the card, and **↪ Hand off** appears in
   `dagents` sessions.
 - **Resumable work** is a card at the top of the pane, framed in the accent
-  color, when the session checkout's `.dagents/handoff/latest.md` is under
-  three days old and its
+  color, when one of the session checkout's handoffs (`.dagents/handoff/*.md`)
+  is under three days old, unclaimed or claimed by a session that is gone,
+  and its
   `## Next session` block has a first prompt to paste (a finished plan, or a
   task blocked on your ruling, has none). It names the note's age and its
   **Next:** line, and **Resume** (`r`) queues the prompt that resumes it. The

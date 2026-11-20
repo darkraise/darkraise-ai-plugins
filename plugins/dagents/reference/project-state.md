@@ -76,7 +76,7 @@ is edited by a human or by an approved bootstrap, never silently.
 `scripts/review-record`, one file per plan; nothing deletes it, and
 dagents:distilling-docs never touches it.
 
-## Where `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` are
+## Where `<state>`, `<docs>`, `<ledger dir>` and `<handoff>` are
 
 `<state>` is `.dagents/` and `<docs>` is `docs/dagents/`. A repository that still
 has a pre-3.0 directory is moved with `bash <plugin-root>/scripts/dagents-migrate`
@@ -88,13 +88,49 @@ All four are in the checkout:
 |---|---|
 | `<docs>` | `<worktree>/docs/dagents` |
 | `<ledger dir>` | `<worktree>/<state>/sdd/<plan-basename>` |
-| `<latest.md>` | `<checkout>/<state>/handoff/latest.md` |
+| `<handoff>` | `<checkout>/<state>/handoff/<key>.md` |
 
-Each checkout keeps its own `<latest.md>`. `scripts/next-step` writes the
-handoff of the checkout the next session works in: for a plan in flight, the
-worktree holding its ledger; once the plan is complete, the primary's;
-otherwise the checkout it runs in. Its first prompt opens by naming that
-checkout and its handoff. `scripts/repo-audit` lists every checkout's.
+Each piece of work has its own `<handoff>`, named by its key: the plan's or
+the design draft's basename, or `adhoc-<the first 8 characters of the session
+id>` for unplanned work and for a block written with no plan in hand
+(`--project`). `scripts/next-step` writes it in the checkout the next session
+works in: for a plan in flight, the worktree holding its ledger; once the plan
+is complete, the primary's; otherwise the checkout it runs in. Writing a key
+deletes that key's handoff in every other checkout, so one copy remains. Its
+first prompt opens by naming that checkout and that file.
+`scripts/repo-audit` lists every checkout's handoffs and removes the finished
+ones; `bash <plugin-root>/scripts/handoff list` lists them with their claims.
+
+A handoff's notes are written first to `<checkout>/<state>/handoff/notes/<key>.md`
+in the session's own checkout, and `next-step --notes` moves them into the
+handoff and deletes the notes file.
+
+**Claims.** A session that resumes a handoff claims it before anything else:
+`bash <plugin-root>/scripts/handoff claim <handoff>` writes
+`<primary>/<state>/handoff/claims/<key>`, one claim for the repository
+whichever checkout holds the file. Exit 3 means another live session holds
+it: stop and ask. `scripts/next-step` refuses with exit 7 to write a key
+another live session holds, and releases this session's claim once it writes.
+In an auto run both scripts stop the run themselves before they exit. When
+this session claimed one handoff and writes another key with `--notes`, the
+claimed handoff is consumed (deleted), unless it is a plan or design draft
+still in progress; an `adhoc-` handoff is deleted only that way.
+
+Claims have limits:
+
+- A claim belongs to the session id that took it (`CLAUDE_CODE_SESSION_ID`).
+  `/clear` starts a new id, and `/resume` takes back the resumed
+  conversation's own id, so a claim taken under one id reads as another
+  session's until that session reads as gone.
+- A session reads as gone when its cockpit heartbeat is older than
+  `AR_BEAT_SECONDS`, or, with no heartbeat, when its transcript has gone
+  unwritten for `AR_STALE_MINUTES`; a quiet session without the cockpit can
+  lose its claim to the next `handoff claim`.
+- Codex has no session id: it claims nothing, and its unplanned handoff keeps
+  one file only through the `--key` its first prompt names.
+- Claims are local to one machine.
+- Two sessions deliberately working one plan share its ledger and branch; the
+  claim refusal is the only guard.
 
 A plan's workspace (`scripts/sdd-workspace`: briefs, reports, review
 packages) is in the checkout too. A plan's ledger is
@@ -102,7 +138,7 @@ packages) is in the checkout too. A plan's ledger is
 its amendments `<ledger dir>/amendments.md`.
 
 Every script resolves these through `scripts/lib/roots.sh`; a skill resolves
-them with `bash <plugin-root>/scripts/dagents-path state|docs [RELATIVE] | ledger <plan-basename> | latest`
+them with `bash <plugin-root>/scripts/dagents-path state|docs [RELATIVE] | ledger <plan-basename> | handoff <next-step mode arguments>`
 before it reads or writes, never by spelling a path. `dagents-path` answers for
 the checkout it runs in; for a path written under another root, such as
 `<worktree>/<state>/…`, run it from that root:

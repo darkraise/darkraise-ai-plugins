@@ -175,7 +175,7 @@ relaxed mode do not apply to it. Finishing runs in a session of its own.
 
 After more than an hour idle the one-hour prompt cache is cold: the next
 request re-writes the whole context at twice the input price. Start a fresh
-session from `latest.md` rather than continuing (Claude Code also offers
+session from its handoff rather than continuing (Claude Code also offers
 "Resume from summary" in that case), and hand off before a planned break.
 
 While the session waits on background work outside an auto run, the cockpit

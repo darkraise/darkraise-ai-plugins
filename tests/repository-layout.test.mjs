@@ -295,10 +295,8 @@ test('the three workflow-guard copies are byte-identical', async t => {
 
 // A18 (2026-11-20 parallel-session handoff spec): handoffs are keyed files, and
 // only the migrate scripts, which rename an older checkout's latest.md, name it.
-// Skills, references and READMEs are rewritten by the plan's last task.
 test('no reader names latest.md', () => {
   const allowed = new Set(['plugins/dforge/scripts/dforge-migrate', 'plugins/dagents/scripts/dagents-migrate']);
-  const pending = rel => /^plugins\/[^/]+\/(skills|reference)\//.test(rel) || /^plugins\/[^/]+\/README\.md$/.test(rel);
   const walk = rel => {
     const full = resolve(root, rel);
     if (!existsSync(full)) return [];
@@ -307,7 +305,7 @@ test('no reader names latest.md', () => {
   };
   const named = ['dforge', 'dagents']
     .flatMap(plugin => ['scripts', 'hooks', 'skills', 'reference', 'types', 'README.md'].flatMap(part => walk(`plugins/${plugin}/${part}`)))
-    .filter(rel => !allowed.has(rel) && !pending(rel))
+    .filter(rel => !allowed.has(rel))
     .filter(rel => /latest\.md|latest_file|latestFile/.test(readFileSync(resolve(root, rel), 'latin1')));
   assert.deepEqual(named, []);
 });

@@ -7,17 +7,27 @@ description: Use when continuing a plan's execution in a fresh session after a h
 
 **Announce at start:** "I'm using the resume-execution skill to pick up <plan>."
 
-The durable record — `latest.md`, the ledger, `handoff.md` and git — is the
+The durable record — the plan's handoff, the ledger, `handoff.md` and git — is the
 authority. Your context is empty by design: do not reconstruct the previous
 session from memory or from a summary.
 
 ## Steps
 
-1. **Orient in one call.** Run `scripts/repo-audit` (see using-dforge §Session Budget). Read
-   the handoff the first prompt names by its absolute path; only when it
-   names none, read this checkout's `<latest.md>`, the first path the audit
-   prints under `## Handoff`.
-2. **Verify the worktree** named in latest.md's `## State` against
+1. **Orient and claim.** Run `scripts/repo-audit` (see using-dforge §Session Budget).
+   The handoff is the file the first prompt names by its absolute path; only
+   when it names none, it is the path
+   `bash <plugin-root>/scripts/dforge-path handoff PLAN_FILE` prints. Claim it
+   before anything else: `scripts/handoff claim <the handoff>`.
+   - Exit 0: this session holds it. A `no handoff file at <path>` note means
+     nothing was written there yet; the ledger and `git log` are the record.
+   - Exit 3 from the claim (`held by <id8> (live, claimed <age> ago)`), or
+     exit 7 from `dforge-path handoff`: another live session is working this
+     plan. Stop and ask your human partner; in an auto run the script has
+     already stopped the run.
+
+   Then read the handoff.
+2. **Verify the worktree** named in the handoff's `## State` (with no handoff
+   file, the checkout that path is in) against
    `git worktree list --porcelain`. Normalise both paths before comparing:
    forward slashes, lowercase drive letter, no trailing slash
    (`D:\Repos\x`, `D:/Repos/x` and `/d/Repos/x` are one path).
@@ -51,7 +61,7 @@ session from memory or from a summary.
    way, and yield to `handoff.md` wherever both speak. Neither is an error when
    absent. See [project-state.md](../../reference/project-state.md).
 5. **Continue** with what the `**Next:**` line of
-   `scripts/next-step --print PLAN_FILE` says, not latest.md's (it recomputes
+   `scripts/next-step --print PLAN_FILE` says, not the handoff's (it recomputes
    the step from the plan and ledger and writes nothing):
    - Start or resume at Task N: invoke dforge:executing-plans. Its ledger
      recovery takes over.

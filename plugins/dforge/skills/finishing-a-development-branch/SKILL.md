@@ -363,14 +363,14 @@ the next program sub-project or roadmap epic with its launch command and
 first prompt, the milestone audit when the current milestone has nothing open,
 or that the program or roadmap is complete, or that the plan records no
 follow-on work. It
-also rewrites `<latest.md>` to
-match, so a fresh session finds the same answer. If it exits 4, say the
-handoff file could not be written.
+also rewrites the plan's `<handoff>` to match (removes it when nothing
+follows). If it exits 4, say the handoff file could not be written.
 
 The last thing in your final message is that block, verbatim. Without a
 plan file, when something follows (a register row this work left open, a
 finding awaiting a ruling), run
-`scripts/next-step --adhoc --phase <design|build> --next "<what follows>"` —
+`scripts/next-step --adhoc --phase <design|build> --next "<what follows>"`
+(plus `--notes <file>` when Step 6 wrote one) —
 `design` when what follows is rulings, a spec or a plan — and end with the
 block it prints, verbatim. When nothing follows, run
 `scripts/finish-choice clear` (the choice is used up) and end with: "No plan
