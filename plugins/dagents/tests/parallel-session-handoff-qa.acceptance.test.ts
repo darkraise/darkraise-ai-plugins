@@ -5,7 +5,7 @@ import type { On, RenderElement, SessionMessage } from 'claude-code'
 import type { SettingsFile } from '../hooks/cockpit/config'
 import { SCHEMA, settingWritten } from '../hooks/cockpit/config'
 
-// Acceptance tests for docs/dforge/specs/2026-11-20-parallel-session-handoff-design.md,
+// Acceptance tests for docs/dagents/specs/2026-11-20-parallel-session-handoff-design.md,
 // the cockpit parts of A9 and A20, written from the spec's Acceptance section:
 // the resume offer is the newest handoff of the session's checkout that is
 // unclaimed or claimed by a gone session and does not recompute to exit 6; a
