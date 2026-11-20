@@ -630,6 +630,213 @@ check "A21: the auto run is stopped after the refusal" "$(arfield active)" "fals
 has "A21: the stop reason names the key" "$(arfield stopped)" "D"
 has "A21: the stop reason names the holder" "$(arfield stopped)" "$(id8 $S2)"
 
+# ---------------------------------------------------------------- A14
+# A latest.md as an older plugin wrote it: a marker naming kind and subject.
+legacy() { # legacy <dir> <kind> <subject or -> <at> [marker?] — <dir>/latest.md
+  mkdir -p "$1"
+  { printf '# Handoff\n\nlegacy notes for %s\n\n## Next session\n\n**Status:** old status\n**Next:** old next\n' "$3"
+    [ "${5:-marker}" = nomarker ] || printf '<!-- next-step: kind=%s branch=main done=1 closed=0 subject=%s at=%s -->\n' "$2" "$3" "$4"; } > "$1/latest.md"
+}
+migrate() { # migrate <dir> — the migrate script; sets OUT (stdout and stderr), RC
+  OUT=$(cd "$1" && timeout 120 bash "$SCRIPTS/$MIGRATE" "$1" 2>&1); RC=$?
+}
+fixture
+W=$(wt w)
+legacy "$HD" plan "$DOCS/plans/$PA.md" 1700000001
+legacy "$W/$STATE/handoff" draft "$DOCS/specs/D.md" 1700000002
+OUT=$(cd "$TOP" && timeout 60 bash "$SCRIPTS/$MIGRATE" --legacy-handoffs 2>&1)
+has "A14: before migrating, --legacy-handoffs names the primary's latest.md with its subject" "$OUT" "$HD/latest.md"
+has "A14: ... and its subject" "$OUT" "$DOCS/plans/$PA.md"
+audit $S1 "$TOP"
+has "A14: repo-audit names a remaining latest.md" "$OUT" "$HD/latest.md"
+has "A14: ... with its subject" "$OUT" "$DOCS/plans/$PA.md"
+has "A14: ... as an older layout" "$OUT" "older layout"
+OUT=$(cd "$TOP" && jq -n --arg sid "$S1" --arg cwd "$TOP" '{hook_event_name:"SessionStart",session_id:$sid,cwd:$cwd,source:"startup"}' \
+  | CLAUDE_CODE_SESSION_ID=$S1 timeout 120 bash "$SESSION_START" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext')
+has "A14: session start names a remaining latest.md" "$OUT" "$HD/latest.md"
+has "A14: ... with its subject" "$OUT" "$DOCS/plans/$PA.md"
+has "A14: ... as an older layout" "$OUT" "older layout"
+migrate "$TOP"
+check "A14: migrating exits 0" "$RC" "0"
+check "A14: a plan's latest.md becomes <plan-slug>.md" "$(exists "$HD/$PA.md") $(exists "$HD/latest.md")" "yes no"
+check "A14: a draft's latest.md in a worktree becomes <draft-basename>.md" "$(exists "$W/$STATE/handoff/D.md") $(exists "$W/$STATE/handoff/latest.md")" "yes no"
+has "A14: the migrated file keeps its content" "$(cat "$HD/$PA.md")" "legacy notes for $DOCS/plans/$PA.md"
+audit $S1 "$TOP"
+lacks "A14: after migrating, repo-audit names no older layout" "$OUT" "older layout"
+
+fixture
+legacy "$HD" adhoc - 1700000003
+migrate "$TOP"
+check "A14: subject - becomes adhoc-legacy-<marker at>.md" "$(exists "$HD/adhoc-legacy-1700000003.md") $(exists "$HD/latest.md")" "yes no"
+fixture
+legacy "$HD" adhoc - 0 nomarker
+touch -d @1690000000 "$HD/latest.md"
+migrate "$TOP"
+check "A14: no marker becomes adhoc-legacy-<mtime>.md" "$(exists "$HD/adhoc-legacy-1690000000.md") $(exists "$HD/latest.md")" "yes no"
+
+# An existing plan or draft key is never overwritten.
+fixture
+ns $S1 "$TOP" "$DOCS/plans/$PA.md"
+keep=$(digest "$HD/$PA.md")
+legacy "$HD" plan "$DOCS/plans/$PA.md" 1700000004
+legacy_before=$(digest "$HD/latest.md")
+migrate "$TOP"
+check "A14: an existing plan key is not overwritten" "$(digest "$HD/$PA.md")" "$keep"
+check "A14: ... latest.md is left" "$(digest "$HD/latest.md")" "$legacy_before"
+has "A14: ... the pair is reported: the key's file" "$OUT" "$HD/$PA.md"
+has "A14: ... the pair is reported: latest.md" "$OUT" "$HD/latest.md"
+fixture
+ns $S1 "$TOP" --draft "$DOCS/specs/D.md" --next "x"
+keep=$(digest "$HD/D.md")
+legacy "$HD" draft "$DOCS/specs/D.md" 1700000005
+legacy_before=$(digest "$HD/latest.md")
+migrate "$TOP"
+check "A14: an existing draft key is not overwritten" "$(digest "$HD/D.md")" "$keep"
+check "A14: ... latest.md is left" "$(digest "$HD/latest.md")" "$legacy_before"
+has "A14: ... the pair is reported" "$OUT" "$HD/D.md"
+
+# A latest.md an older plugin writes after the migration is moved by the next run.
+fixture
+legacy "$HD" plan "$DOCS/plans/$PA.md" 1700000006
+migrate "$TOP"
+check "A14: the first run moves the plan's latest.md" "$(exists "$HD/$PA.md")" "yes"
+legacy "$HD" plan "$DOCS/plans/$PB.md" 1700000007
+migrate "$TOP"
+check "A14: a plan latest.md that reappears is moved by the second run" "$(exists "$HD/$PB.md") $(exists "$HD/latest.md")" "yes no"
+legacy "$HD" adhoc - 1700000008
+migrate "$TOP"
+check "A14: an unplanned latest.md that reappears is moved by the third run" "$(exists "$HD/adhoc-legacy-1700000008.md") $(exists "$HD/latest.md")" "yes no"
+migrate "$TOP"
+check "A14: a run with nothing to move exits 0" "$RC" "0"
+
+if [ "$PLUGIN" = dforge ]; then
+  fixture
+  HOME_SAVE=$HOME; export HOME="$TMP/hm$n"; mkdir -p "$HOME"
+  MIRROR=$(stores_home "$HOME" "$R" proj local darkmem)
+  legacy "$MIRROR/work/handoff" draft "$DOCS/specs/E.md" 1700000009
+  migrate "$TOP"
+  check "A14: darkmem: the mirror's latest.md becomes <key>.md" "$(exists "$MIRROR/work/handoff/E.md") $(exists "$MIRROR/work/handoff/latest.md")" "yes no"
+  export HOME=$HOME_SAVE
+fi
+
+# ---------------------------------------------------------------- A16
+# Cleanup, run by repo-audit.
+fixture
+W=$(wt w)
+# A plan handoff whose plan is then recorded in completed.md.
+ns $S1 "$TOP" "$DOCS/plans/$PA.md"
+completed "$PA"
+# A draft handoff whose draft is then deleted, one a plan's Spec line names, one only a Program line names, one still live.
+printf '# x\n\n**Spec:** %s/specs/E.md\n\n### Task 1: One\n\nBody.\n' "$DOCS" > "$D/plans/2026-11-05-names-e.md"
+printf '# x\n\n**Program:** %s/specs/D1-design.md — sub-project 1 of 2 — next: x\n**Spec:** %s/specs/S.md\n\n### Task 1: One\n\nBody.\n' "$DOCS" "$DOCS" > "$D/plans/2026-11-06-program-d1.md"
+: > "$D/specs/gone.md"
+ns $S1 "$TOP" --draft "$DOCS/specs/gone.md" --next "x";      rm -f "$D/specs/gone.md"
+ns $S1 "$TOP" --draft "$DOCS/specs/E.md" --next "x"
+ns $S1 "$TOP" --draft "$DOCS/specs/D1-design.md" --next "x"
+ns $S1 "$TOP" --draft "$DOCS/specs/D.md" --next "x"
+# A complete handoff whose recomputed block becomes terminal.
+ledger "$W" "$PG" 'Task 1: complete (commits a..b, review clean)'; completed "$PG"
+ns $S1 "$W" --complete "$DOCS/plans/$PG.md"
+check "A16: the complete handoff is written first" "$(exists "$HD/$PG.md")" "yes"
+printf '# %s\n\n**Spec:** %s/specs/S.md\n**Execution:** inline — `claude --model sonnet --effort high` — small\n\n### Task 1: One\n\nBody.\n' "$PG" "$DOCS" > "$D/plans/$PG.md"
+# A completed plan's handoff a live other session claims, and an adhoc handoff.
+ns $S1 "$TOP" "$DOCS/plans/$PB.md"; completed "$PB"
+hc $S2 "$TOP" claim "$HD/$PB.md"; beat $S2 0
+ns $S3 "$TOP" --adhoc --phase build --next "unplanned work"
+ADHOC="$HD/adhoc-$(id8 $S3).md"
+age_files 20 "$ADHOC"
+adhoc_digest=$(digest "$ADHOC")
+audit $S1 "$TOP"
+audit_out=$OUT
+check "A16: repo-audit exits 0" "$RC" "0"
+check "A16: a plan handoff whose plan is in completed.md is deleted" "$(exists "$HD/$PA.md")" "no"
+has "A16: ... with a removed finished handoff line" "$audit_out" "removed finished handoff $HD/$PA.md"
+check "A16: a draft handoff whose draft is gone is deleted" "$(exists "$HD/gone.md")" "no"
+has "A16: ... with a removed finished handoff line" "$audit_out" "removed finished handoff $HD/gone.md"
+check "A16: a draft handoff a plan's Spec line names is deleted" "$(exists "$HD/E.md")" "no"
+has "A16: ... with a removed finished handoff line" "$audit_out" "removed finished handoff $HD/E.md"
+check "A16: a draft handoff only a Program line names is kept" "$(exists "$HD/D1-design.md")" "yes"
+lacks "A16: ... with no removal line" "$audit_out" "removed finished handoff $HD/D1-design.md"
+check "A16: a live draft's handoff is kept" "$(exists "$HD/D.md")" "yes"
+check "A16: a complete handoff whose recomputed block is terminal is deleted" "$(exists "$HD/$PG.md")" "no"
+has "A16: ... with a removed finished handoff line" "$audit_out" "removed finished handoff $HD/$PG.md"
+check "A16: a finished plan's handoff a live other session claims is kept" "$(exists "$HD/$PB.md")" "yes"
+lacks "A16: ... with no removal line" "$audit_out" "removed finished handoff $HD/$PB.md"
+has "A16: ... and listed with its claim state" "$(section "$audit_out" "Handoff")" "$(id8 $S2) live"
+check "A16: an adhoc handoff is never deleted by cleanup" "$(exists "$ADHOC")" "yes"
+check "A16: ... and is not modified" "$(digest "$ADHOC")" "$adhoc_digest"
+stale=$(section "$audit_out" "Stale handoffs")
+has "A16: a handoff older than 14 days is listed under Stale handoffs" "$stale" "$ADHOC"
+check "A16: ... with its age" "$(grep -F -- "$ADHOC" <<<"$stale" | grep -cE '[0-9]+d')" "1"
+lacks "A16: a handoff cleanup removed is not listed as stale" "$stale" "$HD/$PA.md"
+lacks "A16: a handoff younger than 14 days is not listed as stale" "$stale" "$HD/D.md"
+# An old handoff that cleanup keeps is listed too.
+age_files 30 "$HD/D1-design.md"
+audit $S1 "$TOP"
+has "A16: an old draft handoff cleanup keeps is listed as stale" "$(section "$OUT" "Stale handoffs")" "$HD/D1-design.md"
+check "A16: ... and is not deleted for its age" "$(exists "$HD/D1-design.md")" "yes"
+
+# After a terminal --complete block for K, no copy of K remains.
+fixture
+W=$(wt w)
+ns $S1 "$TOP" "$DOCS/plans/$PB.md"
+mkdir -p "$W/$STATE/handoff"; cp "$HD/$PB.md" "$W/$STATE/handoff/$PB.md"
+check "A16: the key has copies in the primary and the worktree" "$(exists "$HD/$PB.md") $(exists "$W/$STATE/handoff/$PB.md")" "yes yes"
+completed "$PB"
+ns $S2 "$TOP" --complete "$DOCS/plans/$PB.md"
+has "A16: the --complete block is terminal" "$OUT" "Nothing —"
+check "A16: no copy of the key remains in the primary" "$(exists "$HD/$PB.md")" "no"
+check "A16: no copy of the key remains in the worktree" "$(exists "$W/$STATE/handoff/$PB.md")" "no"
+if [ "$PLUGIN" = dforge ]; then
+  fixture
+  HOME_SAVE=$HOME; export HOME="$TMP/hm$n"; mkdir -p "$HOME"
+  MIRROR=$(stores_home "$HOME" "$R" proj local darkmem)
+  W=$(wt w)
+  ns $S1 "$TOP" "$DOCS/plans/$PB.md"
+  mkdir -p "$W/$STATE/handoff"; cp "$MIRROR/work/handoff/$PB.md" "$W/$STATE/handoff/$PB.md"
+  completed "$PB"
+  ns $S2 "$TOP" --complete "$DOCS/plans/$PB.md"
+  check "A16: darkmem: no copy of the key remains in the mirror or the worktree" "$(exists "$MIRROR/work/handoff/$PB.md") $(exists "$W/$STATE/handoff/$PB.md")" "no no"
+  export HOME=$HOME_SAVE
+fi
+
+# A terminal --project block leaves the session's adhoc- file byte-identical.
+fixture
+ns $S1 "$TOP" --adhoc --phase build --next "unplanned work"
+before=$(digest "$HD/adhoc-$(id8 $S1).md")
+ns $S1 "$TOP" --project
+has "A16: the --project block is terminal" "$OUT" "Nothing —"
+check "A16: a terminal --project block exits 0" "$RC" "0"
+check "A16: the session's adhoc file is byte-identical" "$(digest "$HD/adhoc-$(id8 $S1).md")" "$before"
+check "A16: no other handoff is written" "$(handoffs_in "$HD")" "1"
+
+# ---------------------------------------------------------------- A20
+for variant in program terminal; do
+  fixture
+  W=$(wt w)
+  ns $S1 "$TOP" --draft "$DOCS/specs/D.md" --next "draft design work"
+  ns $S2 "$TOP" --adhoc --phase build --next "unplanned build work"
+  d_sum=$(digest "$HD/D.md"); a_sum=$(digest "$HD/adhoc-$(id8 $S2).md")
+  if [ "$variant" = program ]; then P=$PG; else P=$PB; fi
+  ledger "$W" "$P" 'Task 1: complete (commits a..b, review clean)' 'Task 2: complete (commits c..d, review clean)'
+  completed "$P"
+  ns $S3 "$W" --complete "$DOCS/plans/$P.md"
+  check "A20: $variant: the other session's --complete exits 0" "$RC" "0"
+  audit $S3 "$W"
+  check "A20: $variant: repo-audit exits 0" "$RC" "0"
+  check "A20: $variant: the draft handoff survives, unchanged" "$(exists "$HD/D.md") $(digest "$HD/D.md")" "yes $d_sum"
+  check "A20: $variant: the adhoc handoff survives, unchanged" "$(exists "$HD/adhoc-$(id8 $S2).md") $(digest "$HD/adhoc-$(id8 $S2).md")" "yes $a_sum"
+  check "A20: $variant: handoff list still shows both, unclaimed" \
+    "$(cd "$TOP" && bash "$HANDOFF" list | awk -F'\t' '$2 == "D" || $2 == "adhoc-'"$(id8 $S2)"'" { print $2 ":" $3 ":" $5 }' | LC_ALL=C sort | paste -sd, -)" \
+    "D:draft:unclaimed,adhoc-$(id8 $S2):adhoc:unclaimed"
+done
+
+# ---------------------------------------------------------------- A18
+# Only the migrate script names latest.md: every other script, hook, skill, command and agent is clean.
+naming=$(cd "$PLUGIN_ROOT" && grep -rIlF 'latest.md' scripts hooks skills commands agents 2>/dev/null | grep -vxF "scripts/$MIGRATE" | LC_ALL=C sort | paste -sd' ' -)
+check "A18: no plugin script, hook or skill outside $MIGRATE names latest.md" "$naming" ""
+check "A18: control: the migrate script does name it" "$(cd "$PLUGIN_ROOT" && grep -cF 'latest.md' "scripts/$MIGRATE" | awk '{ print ($1 > 0) ? "yes" : "no" }')" "yes"
+
 # ---------------------------------------------------------------- end
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
