@@ -280,6 +280,9 @@ arun s-12 phase plan >/dev/null
 mkdir -p "$R12/docs/plans"
 { cat "$R12/docs/plan.md"; } > "$R12/docs/plans/other.md"
 (cd "$R12" && bash "$S/next-step" docs/plans/other.md >/dev/null 2>&1)
+# The clear reads the attached plan's keyed file (spec 2026-11-20 A13): put the
+# other plan's block there.
+cp "$(cd "$R12" && bash "$S/next-step" --target docs/plans/other.md)" "$(cd "$R12" && bash "$S/next-step" --target docs/plan.md)"
 arun s-12 clear >/dev/null 2>"$TMP/err"; rc=$?
 check "A12: clear refuses a latest.md prompt for another plan (exit 4)" "$rc" "4"
 has "A12: the refusal says the prompt names another plan" "$(cat "$TMP/err")" "another plan"

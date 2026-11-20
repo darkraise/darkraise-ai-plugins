@@ -415,6 +415,25 @@ ar_fenced() {
   ' "$1"
 }
 
+# ar_owner_handoff DIR SID — the newest handoff of any checkout or the mirror
+# (dforge_handoff_files) whose next-step marker carries session=SID.
+ar_owner_handoff() {
+  local f m word words mt best="" best_mt=-1 found
+  [ -n "$2" ] || return 0
+  while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    m=$(tr -d '\r' < "$f" | grep -E '^<!-- next-step: .* -->$' | tail -n 1)
+    m=${m#<!-- next-step: }
+    read -ra words <<<"${m%% subject=*}"
+    found=0
+    for word in ${words[@]+"${words[@]}"}; do [ "$word" = "session=$2" ] && found=1; done
+    [ "$found" -eq 1 ] || continue
+    mt=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null) || mt=0
+    if [ "${mt:-0}" -gt "$best_mt" ]; then best=$f best_mt=${mt:-0}; fi
+  done < <(dforge_handoff_files "$1")
+  [ -z "$best" ] || printf '%s\n' "$best"
+}
+
 # ar_handoff — the first prompt and launch from the handoff scripts/next-step
 # just wrote, into AR_PROMPT, AR_MODEL and AR_EFFORT.
 ar_handoff() {
@@ -426,12 +445,15 @@ ar_handoff() {
   # The attached plan's handoff is the one next-step wrote for it, from this
   # checkout: where T falls can depend on where next-step runs.
   plan=$(ar_get plan)
-  [ -z "$plan" ] || latest=$(cd "$here" && bash "$AR_LIB_DIR/../next-step" --target "$plan" 2>/dev/null) || latest=""
-  # Until auto-run reads keyed handoffs, a plan whose handoff was never
-  # written reads the newest one, as latest.md was read.
-  [ -n "$latest" ] && [ -f "$latest" ] || latest=$(dforge_latest_file "$here")
-  [ -f "$latest" ] && AR_PROMPT=$(ar_fenced "$latest" 'Paste as the first prompt:')
-  [ -n "$AR_PROMPT" ] || { echo "auto-run: no first prompt in $latest; run scripts/next-step first" >&2; return 1; }
+  if [ -n "$plan" ]; then
+    latest=$(cd "$here" && bash "$AR_LIB_DIR/../next-step" --target "$plan" 2>/dev/null) || latest=""
+  else
+    # A design-phase clear: the newest handoff whose marker names the run's
+    # owner session, read by name; another session's handoff is never resumed.
+    latest=$(ar_owner_handoff "$here" "$(ar_get session)")
+  fi
+  [ -n "$latest" ] && [ -f "$latest" ] && AR_PROMPT=$(ar_fenced "$latest" 'Paste as the first prompt:')
+  [ -n "$AR_PROMPT" ] || { echo "auto-run: no first prompt in ${latest:-any handoff of this run}; run scripts/next-step first" >&2; return 1; }
   launch=$(ar_fenced "$latest" 'Launch in ' | head -n 1)
   if [[ $launch =~ claude\ --model\ ([^ ]+)\ --effort\ ([^ ]+) ]]; then
     AR_MODEL=${BASH_REMATCH[1]} AR_EFFORT=${BASH_REMATCH[2]}
