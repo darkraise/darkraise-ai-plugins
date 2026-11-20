@@ -134,7 +134,21 @@ dforge_docs_root() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_DOCS_R
 dforge_docs_store() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_DOCS_STORE"; }
 dforge_progress_store() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_PROGRESS_STORE"; }
 dforge_ledger_root() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_LEDGER_ROOT"; }
-dforge_latest_file() { dforge_stores_init "${1:-}"; printf '%s\n' "$_DFORGE_LATEST"; }
+# dforge_latest_file [DIR] — DIR's checkout's newest handoff (the mirror's for
+# the primary while progress is darkmem), or its latest.md path when it has
+# none: readers not yet moved to keyed handoffs keep finding one.
+dforge_latest_file() { dforge_stores_init "${1:-}"; _dforge_newest_handoff "${_DFORGE_LATEST%/*}"; }
+
+# _dforge_newest_handoff DIR — the most recently written DIR/*.md, else
+# DIR/latest.md.
+_dforge_newest_handoff() {
+  local f newest=""
+  for f in "$1"/*.md; do
+    [ -f "$f" ] || continue
+    if [ -z "$newest" ] || [ "$f" -nt "$newest" ]; then newest=$f; fi
+  done
+  printf '%s\n' "${newest:-$1/latest.md}"
+}
 dforge_ledger_dir() { dforge_stores_init "${2:-}"; printf '%s/%s\n' "$_DFORGE_LEDGER_ROOT" "$1"; } # SLUG [DIR]
 
 # dforge_project [DIR] — the darkmem project the repository is mapped to;
@@ -146,7 +160,7 @@ dforge_workspace() { # SLUG [DIR]
   printf '%s/sdd/%s\n' "$(dforge_dir state "${_DFORGE_TOP:-${2:-$PWD}}")" "$1"
 }
 
-# dforge_latest_files [DIR] — every checkout's latest.md, one per line, in
+# dforge_latest_files [DIR] — every checkout's newest handoff (dforge_latest_file), one per line, in
 # `git worktree list` order, skipping a worktree whose directory is gone. Only
 # the primary's can be in the mirror, so a linked worktree's starts no node.
 dforge_latest_files() {
@@ -160,7 +174,7 @@ dforge_latest_files() {
       first=""
       [ -d "$wt" ] && dforge_latest_file "$wt"
     elif [ -d "$wt" ]; then
-      printf '%s/handoff/latest.md\n' "$(dforge_dir state "$wt")"
+      _dforge_newest_handoff "$(dforge_dir state "$wt")/handoff"
     fi
   done
   return 0

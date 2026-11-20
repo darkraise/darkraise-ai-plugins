@@ -775,8 +775,8 @@ git -C "$REPO" add docs/wplan.md && git -C "$REPO" -c user.name=t -c user.email=
 ARW="$TMP/ar-wt"; git -C "$REPO" worktree add -q -b ar-wt "$ARW"
 mkdir -p "$ARW/.dforge/sdd/wplan" "$ARW/.dforge/handoff" "$REPO/.dforge/sdd/wplan"
 printf '# SDD ledger — plan: docs/wplan.md\nTask 1: in progress\n' > "$ARW/.dforge/sdd/wplan/progress.md"
-printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/wplan.md` with dforge:resume-execution. From W.\n```\n' > "$ARW/.dforge/handoff/latest.md"
-printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nContinue `docs/wplan.md` with dforge:executing-plans. From the primary.\n```\n' > "$REPO/.dforge/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/wplan.md` with dforge:resume-execution. From W.\n```\n' > "$ARW/.dforge/handoff/wplan.md"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nContinue `docs/wplan.md` with dforge:executing-plans. From the primary.\n```\n' > "$REPO/.dforge/handoff/wplan.md"
 ar --session s-1 attach --plan docs/wplan.md
 ar --session s-1 clear --phase >/dev/null 2>&1; status=$?
 check "A8: clear in the primary reads the worktree's handoff" "$status:$(field resumePrompt)" "0:Resume \`docs/wplan.md\` with dforge:resume-execution. From W."

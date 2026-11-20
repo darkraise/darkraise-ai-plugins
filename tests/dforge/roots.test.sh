@@ -3,7 +3,7 @@
 # checkout and from a linked worktree, and names round-trip in all four
 # combinations, including a checkout and a project both named superpowers.
 set -uo pipefail
-unset CLAUDE_CONFIG_DIR CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CLAUDE_PROJECT_DIR CLAUDE_CODE_SESSION_ID
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/../../plugins/dforge/scripts/lib/roots.sh"
@@ -240,6 +240,23 @@ check "handoff_files_lists_every_checkout: dforge-path handoffs" "$(cd "$WT" && 
   "$(printf '%s\n%s\n%s' "$TOP/.dforge/handoff/P.md" "$TOP/.dforge/handoff/latest.md" "$WT/.dforge/handoff/Q.md")"
 check "handoff_files_lists_every_checkout: dforge_handoff_files" "$(cd "$REPO" && dforge_handoff_files)" \
   "$(printf '%s\n%s\n%s' "$TOP/.dforge/handoff/P.md" "$TOP/.dforge/handoff/latest.md" "$WT/.dforge/handoff/Q.md")"
+
+# latest_file_transition (C15): until every reader moves to keyed handoffs,
+# the latest file is the checkout's newest handoff, else its latest.md path.
+rm -rf "$REPO/.dforge/handoff" "$WT/.dforge/handoff"
+mkdir -p "$REPO/.dforge/handoff/notes" "$WT/.dforge/handoff"
+printf 'd\n' > "$REPO/.dforge/handoff/D.md"; touch -t 202601010000 "$REPO/.dforge/handoff/D.md"
+printf 'p\n' > "$REPO/.dforge/handoff/P.md"; touch -t 202601020000 "$REPO/.dforge/handoff/P.md"
+printf 'n\n' > "$REPO/.dforge/handoff/notes/N.md"
+check "latest_file_transition: the newest keyed handoff" "$(cd "$REPO" && dforge_latest_file)" "$TOP/.dforge/handoff/P.md"
+touch -t 202601030000 "$REPO/.dforge/handoff/D.md"
+check "latest_file_transition: follows the newest write" "$(cd "$REPO" && dforge_latest_file)" "$TOP/.dforge/handoff/D.md"
+check "latest_file_transition: a checkout with none names its latest.md" "$(cd "$WT" && dforge_latest_file)" "$WT/.dforge/handoff/latest.md"
+printf 'q\n' > "$WT/.dforge/handoff/Q.md"
+check "latest_file_transition: every checkout's newest" "$(cd "$REPO" && dforge_latest_files | tr '\n' ' ')" "$TOP/.dforge/handoff/D.md $WT/.dforge/handoff/Q.md "
+rm -rf "$REPO/.dforge/handoff" "$WT/.dforge/handoff"
+check "latest_file_transition: no handoff names latest.md" "$(cd "$REPO" && dforge_latest_file)" "$TOP/.dforge/handoff/latest.md"
+mkdir -p "$WT/.dforge/handoff"; printf 'x\n' > "$WT/.dforge/handoff/Q.md"
 
 MIRROR=$(stores_home "$HOME" "$REPO" superpowers local darkmem)
 printf 'x\n' > "$MIRROR/work/handoff/M.md"

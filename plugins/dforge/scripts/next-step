@@ -10,18 +10,29 @@
 # here rather than remembered by the model: small executors reliably forget to
 # say it, and a hand-written handoff goes stale the moment work moves on.
 #
-# Usage: next-step [--host claude|codex] [--print|--target] [--complete|--kept] PLAN_FILE
-#        next-step [--host claude|codex] [--print|--target] --draft DRAFT_FILE --next ACTION
-#        next-step [--host claude|codex] [--print|--target] --adhoc --phase design|build --next ACTION
-#        next-step [--host claude|codex] [--print|--target] --project [--keep-notes]
+# Usage: next-step [--host claude|codex] [--print|--target] [--notes FILE] [--complete|--kept] PLAN_FILE
+#        next-step [--host claude|codex] [--print|--target] [--notes FILE] --draft DRAFT_FILE --next ACTION
+#        next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --adhoc --phase design|build --next ACTION
+#        next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --project
 #        next-step [--host claude|codex] --print --handoff FILE | --latest
+# The handoff is <checkout>/<state>/handoff/<key>.md (scripts/lib/roots.sh
+# dforge_handoff_file): the key is the plan's or the draft's basename, and for
+# --adhoc and --project adhoc-<the first 8 characters of
+# CLAUDE_CODE_SESSION_ID>.
 #   --print     compute and print the block only: write, create and delete
 #               nothing, and skip the background-work check.
+#   --notes     FILE's content becomes the handoff's notes, above the block,
+#               and FILE is deleted once the handoff is written. Without it a
+#               handoff already at the key keeps its notes and only its Next
+#               session section is replaced. Ignored by --print and --target.
+#   --key       the adhoc-<8 hex> or adhoc-legacy-* key of an --adhoc or
+#               --project handoff when no session id is set: --target mints
+#               one, and the write takes it back. A usage error with a session
+#               id or another mode; an --adhoc or --project write with neither
+#               exits 2.
 #   --complete  the plan is finished and its branch integrated; the ledger may
-#               already be deleted. Replaces the handoff wholesale unless
-#               it holds another session's block (another plan's, or adhoc or
-#               project work): then only its Next session section, said on
-#               stderr.
+#               already be deleted. Without --notes, replaces the handoff
+#               wholesale.
 #   --kept      finishing kept the plan's branch as-is: integration is still
 #               pending, so the block names the branch, its worktree and the
 #               finish choices still open, and reads no register or roadmap.
@@ -33,30 +44,29 @@
 #               handing off; DRAFT_FILE is the authority and ACTION names the
 #               next step and its skill.
 #   --adhoc     unplanned work (a chat-approved change or a punch list, with no
-#               plan or draft file) is handing off; the notes in latest.md are
-#               the authority. --phase design launches the planning model,
+#               plan or draft file) is handing off; the notes in its handoff
+#               are the authority. --phase design launches the planning model,
 #               --phase build the execution model.
 #   --project   no plan is in hand (between plans, or after a milestone close):
 #               the block comes from the current milestone's registers, or
-#               every register when no milestone is current. Replaces latest.md
-#               wholesale unless --keep-notes, which keeps the notes above it.
+#               every register when no milestone is current.
 #   --handoff   recompute the block the handoff FILE holds from what its
 #               marker names (requires --print), and print it with the marker
 #               last; its first prompt names FILE as the handoff. --latest is
-#               --handoff with this checkout's latest.md.
+#               --handoff with this checkout's newest handoff.
 #   --target    print the absolute path of the handoff the same call would
 #               write, and exit 0: write nothing, and skip the background-work
 #               check. A usage error with --latest.
 #   --host      which client the next session launches; default claude. A plan
 #               states its own host in its header, so the flag serves the paths
 #               that have no plan to read.
-# latest.md's Next session section ends with a marker line the printed block
-# never carries, naming what the block was computed from:
-#   <!-- next-step: kind=<kind> [branch=<name> or branch=detached:<sha>] [host=codex] done=<n> closed=<n> subject=<name or -> at=<epoch> -->
+# The handoff's Next session section ends with a marker line the printed block
+# never carries, naming what the block was computed from and who wrote it:
+#   <!-- next-step: kind=<kind> [branch=<name> or branch=detached:<sha>] key=<key> session=<id or -> [host=codex] done=<n> closed=<n> subject=<name or -> at=<epoch> -->
 #   host=codex appears only for a Codex block; --print --latest without --host
 #   recomputes for the host it names.
 # Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
-#       latest.md could not be written; 5 background work this session started
+#       the handoff could not be written; 5 background work this session started
 #       is still running (scripts/in-flight): nothing printed or written
 #       (never under --print); 6 --print --handoff has nothing to resume
 #       (nothing on stdout, at most one reason on stderr): a plan in
@@ -75,20 +85,29 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--host claude|codex] [--print|--target] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print|--target] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print|--target] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print|--target] --project [--keep-notes] | next-step [--host claude|codex] --print --handoff FILE | --latest"; }
+usage() { fail 2 "usage: next-step [--host claude|codex] [--print|--target] [--notes FILE] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print|--target] [--notes FILE] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --project | next-step [--host claude|codex] --print --handoff FILE | --latest"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/route.sh"
 
-# --host and --print are pulled out wherever they sit so the remaining
-# arguments keep their strict positional contract.
-host=claude host_given=0 print_only=0 target_only=0
+# --host, --print, --target, --notes and --key are pulled out wherever they
+# sit so the remaining arguments keep their strict positional contract.
+host=claude host_given=0 print_only=0 target_only=0 notes_file="" key_arg=""
 hostless=()
 while [ $# -gt 0 ]; do
   case $1 in
     --print) print_only=1; shift ;;
     --target) target_only=1; shift ;;
+    --notes)
+      [ $# -ge 2 ] && [ -n "$2" ] || usage
+      notes_file=$2; shift 2
+      case $notes_file in /* | [A-Za-z]:[\\/]*) ;; *) notes_file="$PWD/$notes_file" ;; esac
+      ;;
+    --key)
+      [ $# -ge 2 ] && [ -n "$2" ] || usage
+      key_arg=$2; shift 2
+      ;;
     --host)
       [ $# -ge 2 ] || usage
       case $2 in claude|codex) host=$2 host_given=1 ;; *) usage ;; esac
@@ -207,7 +226,7 @@ plan_name() {
   printf '%s\n' "$name"
 }
 
-complete=0 kept=0 draft=0 adhoc=0 project=0 keep_notes=0 latest_mode=0 handoff_file="" phase="" next_action=""
+complete=0 kept=0 draft=0 adhoc=0 project=0 latest_mode=0 handoff_file="" phase="" next_action=""
 case "${1:-}" in
   --latest | --handoff)
     latest_mode=1
@@ -217,7 +236,6 @@ case "${1:-}" in
     ;;
   --project)
     project=1; shift
-    if [ "${1:-}" = --keep-notes ]; then keep_notes=1; shift; fi
     [ $# -eq 0 ] || usage
     ;;
   --complete) complete=1; shift ;;
@@ -235,6 +253,15 @@ case "${1:-}" in
     next_action=$4
     ;;
 esac
+[ "$latest_mode" -eq 0 ] || { [ -z "$notes_file" ] && [ -z "$key_arg" ]; } || usage
+# --key names an adhoc handoff for a caller with no session id to key it by.
+if [ -n "$key_arg" ]; then
+  { [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ]; } && [ -z "${CLAUDE_CODE_SESSION_ID:-}" ] || usage
+  dforge_handoff_key_check adhoc "$key_arg" || usage
+fi
+if [ -n "$notes_file" ] && [ "$print_only" -eq 0 ] && [ "$target_only" -eq 0 ] && [ ! -f "$notes_file" ]; then
+  fail 2 "no notes file at $notes_file"
+fi
 
 # collect_rows — read register paths on stdin; set open_rows (route_rows'
 # input lines), reg_list and outside_ms, against current_ms and ms_regs.
@@ -302,8 +329,30 @@ else
 fi
 
 dforge_stores_init "$root"
+
+# The handoff's key (spec §1). A key taken from the session id is held only to
+# the file-name rule: ids from other clients and tests need not be hex.
+session_id=${CLAUDE_CODE_SESSION_ID:-} key=""
+if [ "$latest_mode" -eq 1 ]; then :
+elif [ "$print_only" -eq 1 ] && [ -n "${DFORGE_NEXT_STEP_HANDOFF:-}" ]; then
+  # A recompute names the file it recomputes, whatever its name (latest.md
+  # included), so its key is never checked.
+  key=$(basename "$DFORGE_NEXT_STEP_HANDOFF" .md)
+elif [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ]; then
+  if [ -n "$session_id" ]; then key="adhoc-${session_id:0:8}"
+  elif [ -n "$key_arg" ]; then key=$key_arg
+  elif [ "$print_only" -eq 1 ] || [ "$target_only" -eq 1 ]; then key="adhoc-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
+  else fail 2 "an --adhoc or --project handoff needs CLAUDE_CODE_SESSION_ID or --key KEY (next-step --target prints one)"
+  fi
+else
+  key=$slug
+  if [ "$draft" -eq 1 ]; then key_kind=draft; else key_kind=plan; fi
+  dforge_handoff_key_check "$key_kind" "$key" || fail 2 "handoff: invalid key $key"
+fi
 # The draft and adhoc prompts name it; their T is this checkout.
-latest_shown=$(dforge_latest_file)
+if [ "$print_only" -eq 1 ] && [ -n "${DFORGE_NEXT_STEP_HANDOFF:-}" ]; then own_handoff=$DFORGE_NEXT_STEP_HANDOFF
+elif [ -n "$key" ]; then own_handoff=$(dforge_handoff_file "$key" 2>/dev/null) || fail 2 "handoff: invalid key $key"
+fi
 
 # handoff_target — T, the checkout the next session works in (spec §2). A
 # mirror ledger has no checkout of its own: the one holding its workspace
@@ -411,10 +460,10 @@ fi
 
 if [ "$adhoc" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
-  status_line="Unplanned work: the notes in \`$latest_shown\` are the authority."
+  status_line="Unplanned work: the notes in \`$own_handoff\` are the authority."
   next_line=$next_action
   launch_cmd=$(launch_for "$phase")
-  prompt="Continue the unplanned work recorded in \`$latest_shown\`: $next_action"
+  prompt="Continue the unplanned work recorded in \`$own_handoff\`: $next_action"
 elif [ "$project" -eq 1 ]; then
   launch=0 rel=""
   roadmap=$(roadmap_file "$root")
@@ -456,7 +505,7 @@ elif [ "$draft" -eq 1 ]; then
   status_line="Design in progress: \`$rel\` is the authority."
   next_line=$next_action
   launch_cmd=$(launch_for design)
-  prompt="Continue from \`$rel\` (the authority): $next_action Read \`$latest_shown\` first."
+  prompt="Continue from \`$rel\` (the authority): $next_action Read \`$own_handoff\` first."
 else
   tasks=$(plan_tasks "$plan")
   [ -n "$tasks" ] || fail 3 "no tasks in ${plan} (no heading matching 'Task N')"
@@ -647,7 +696,7 @@ fi
 dir=$(handoff_target)
 # A recompute of a named handoff (--print --handoff) names that file.
 if [ "$print_only" -eq 1 ] && [ -n "${DFORGE_NEXT_STEP_HANDOFF:-}" ]; then handoff=$DFORGE_NEXT_STEP_HANDOFF
-else handoff=$(dforge_stores_init "$dir"; dforge_latest_file "$dir"); fi
+else handoff=$(dforge_stores_init "$dir"; dforge_handoff_file "$key" "$dir"); fi
 if [ "$target_only" -eq 1 ]; then printf '%s\n' "$handoff"; exit 0; fi
 
 # Every prompt opens on T: an auto run's cockpit pastes it into a cleared
@@ -713,36 +762,21 @@ else marker_kind=plan marker_subject=$rel
 fi
 read -r marker_done marker_closed < <(handoff_counts "$primary")
 marker_host=""; [ "$host" != codex ] || marker_host=" host=codex"
-marker="<!-- next-step: kind=$marker_kind$marker_host done=$marker_done closed=$marker_closed subject=$marker_subject at=$(date +%s) -->"
-# replaces_own_block — true when --complete or --kept may replace the handoff
-# wholesale: it holds no marker, or the marker is this plan's, a completed
-# plan's, or a finished plan's. Anything else is another session's live block,
-# whose notes stay; held_subject names it (its kind when the subject is -).
-replaces_own_block() {
-  local held h_kind h_subject
-  held=$(tr -d '\r' < "$handoff" | grep -E '^<!-- next-step: .* -->$' | tail -n 1 || true)
-  [ -n "$held" ] || return 0
-  held=${held#<!-- next-step: }; held=${held% -->}; held=${held% at=*}
-  h_subject=${held#* subject=}
-  h_kind=${held#kind=}; h_kind=${h_kind%% *}
-  [ "$h_kind" != complete ] && [ "$h_subject" != "$rel" ] || return 0
-  [ "$h_subject" = - ] || ! plan_finished "$root" "$h_subject" || return 0
-  held_subject=$h_subject
-  [ "$held_subject" != - ] || held_subject=$h_kind
-  return 1
-}
+marker="<!-- next-step: kind=$marker_kind key=$key session=${session_id:--}$marker_host done=$marker_done closed=$marker_closed subject=$marker_subject at=$(date +%s) -->"
 # Read, merged and replaced under the handoff's lock, so a concurrent writer's
 # notes are never overwritten with the copy read before them.
 write_handoff() {
   local tmp status=0 wholesale=0
-  case $handoff in */.dforge/handoff/latest.md) dforge_state_ignore "${handoff%/.dforge/handoff/latest.md}" ;; esac
+  case $handoff in */.dforge/handoff/*.md) dforge_state_ignore "${handoff%/.dforge/handoff/*}" ;; esac
   tmp=$(mktemp) || return 1
-  if [ ! -f "$handoff" ] || { [ "$project" -eq 1 ] && [ "$keep_notes" -eq 0 ]; }; then wholesale=1
-  elif [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ]; then
-    if replaces_own_block; then wholesale=1
-    else printf 'next-step: replaced the block for %s\n' "$held_subject" >&3; fi
-  fi
-  if [ "$wholesale" -eq 1 ]; then
+  if [ ! -f "$handoff" ] || [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ]; then wholesale=1; fi
+  if [ -n "$notes_file" ]; then
+    # The notes as given, without their trailing blank lines, then the block.
+    { printf '# Handoff — %s\n\n' "$today"
+      tr -d '\r' < "$notes_file" | awk 'NF { last = NR } { line[NR] = $0 } END { for (i = 1; i <= last; i++) print line[i]; if (last) print "" }'
+      printf '%s\n%s\n' "$block" "$marker"
+    } > "$tmp" || status=1
+  elif [ "$wholesale" -eq 1 ]; then
     printf '# Handoff — %s\n\n%s\n%s\n' "$today" "$block" "$marker" > "$tmp" || status=1
   else
     # Replace only the Next session section; the rest is the session's own notes.
@@ -760,6 +794,7 @@ write_handoff() {
 if ! { mkdir -p "$(dirname "$handoff")" && handoff_lock=$(dr_lock_base "$handoff"); } 2>/dev/null; then
   fail 4 "could not write $handoff — copy the block above into it by hand"
 fi
-if ! dr_locked "$handoff_lock" write_handoff 3>&2 2>/dev/null; then
+if ! dr_locked "$handoff_lock" write_handoff 2>/dev/null; then
   fail 4 "could not write $handoff — copy the block above into it by hand"
 fi
+[ -z "$notes_file" ] || rm -f "$notes_file"

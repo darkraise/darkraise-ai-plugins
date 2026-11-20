@@ -126,6 +126,30 @@ export function writeApplied(env, repoRoot, applied, where = {}) {
   }, ConfigError);
 }
 
+// The most recently written handoff in DIR, else DIR/latest.md: readers not
+// yet moved to keyed handoffs (the cockpit's offer) keep finding one.
+function newestHandoff(dir) {
+  let newest = null;
+  let newestTime = -Infinity;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    // No handoff directory yet.
+  }
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    const file = path.join(dir, entry.name);
+    // A handoff deleted since the listing (a concurrent supersede) is skipped.
+    const time = fs.statSync(file, { throwIfNoEntry: false })?.mtimeMs;
+    if (time !== undefined && time > newestTime) {
+      newest = file;
+      newestTime = time;
+    }
+  }
+  return newest ?? path.join(dir, "latest.md");
+}
+
 export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
   const repoRoot = primaryRoot(cwd);
   const worktreeRoot = native(git(cwd, ["rev-parse", "--show-toplevel"]));
@@ -145,8 +169,8 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
         ? path.join(sync.mirror, "work", "sdd")
         : worktreeRoot && path.join(dforgeDir("state", worktreeRoot), "sdd"),
       latestFile: applied.progress === "darkmem" && samePath(worktreeRoot, repoRoot)
-        ? path.join(sync.mirror, "work", "handoff", "latest.md")
-        : worktreeRoot && path.join(dforgeDir("state", worktreeRoot), "handoff", "latest.md"),
+        ? newestHandoff(path.join(sync.mirror, "work", "handoff"))
+        : worktreeRoot && newestHandoff(path.join(dforgeDir("state", worktreeRoot), "handoff")),
     },
     sync,
   });

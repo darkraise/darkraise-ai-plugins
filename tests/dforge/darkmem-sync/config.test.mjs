@@ -208,6 +208,26 @@ test("under darkmem progress only the primary's latest.md is in the mirror", () 
   assert.equal(resolveStores({ cwd: worktree, env }).progress.latestFile, path.join(worktree, ".dforge", "handoff", "latest.md"));
 });
 
+test("latestFile transition: the newest keyed handoff, else latest.md", () => {
+  const repo = makeRepo();
+  const { env, mirror } = makeHome({ repo, stores: { documents: "local", progress: "darkmem" } });
+  const worktree = path.join(scratch("dms-wt-"), "wt");
+  git(repo, "worktree", "add", "-q", "-b", "wt", worktree);
+  const own = path.join(mirror, "work", "handoff");
+  fs.mkdirSync(path.join(own, "notes"), { recursive: true });
+  fs.writeFileSync(path.join(own, "D.md"), "d\n");
+  fs.utimesSync(path.join(own, "D.md"), new Date("2026-01-01T00:00:00Z"), new Date("2026-01-01T00:00:00Z"));
+  fs.writeFileSync(path.join(own, "P.md"), "p\n");
+  fs.utimesSync(path.join(own, "P.md"), new Date("2026-01-02T00:00:00Z"), new Date("2026-01-02T00:00:00Z"));
+  fs.writeFileSync(path.join(own, "notes", "N.md"), "n\n");
+  assert.equal(resolveStores({ cwd: repo, env }).progress.latestFile, path.join(own, "P.md"));
+  assert.equal(resolveStores({ cwd: worktree, env }).progress.latestFile, path.join(worktree, ".dforge", "handoff", "latest.md"));
+  const local = path.join(worktree, ".dforge", "handoff");
+  fs.mkdirSync(local, { recursive: true });
+  fs.writeFileSync(path.join(local, "Q.md"), "q\n");
+  assert.equal(resolveStores({ cwd: worktree, env }).progress.latestFile, path.join(local, "Q.md"));
+});
+
 test("an unmapped repository and no git repository are local", () => {
   const repo = makeRepo();
   const other = makeRepo();

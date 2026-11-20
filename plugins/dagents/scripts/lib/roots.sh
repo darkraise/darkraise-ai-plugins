@@ -50,7 +50,21 @@ dagents_stores_init() { # [DIR]
 
 dagents_docs_root() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_DOCS_ROOT"; }
 dagents_ledger_root() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_LEDGER_ROOT"; }
-dagents_latest_file() { dagents_stores_init "${1:-}"; printf '%s\n' "$_DAGENTS_LATEST"; }
+# dagents_latest_file [DIR] — DIR's checkout's newest handoff, or its
+# latest.md path when it has none: readers not yet moved to keyed handoffs
+# keep finding one.
+dagents_latest_file() { dagents_stores_init "${1:-}"; _dagents_newest_handoff "${_DAGENTS_LATEST%/*}"; }
+
+# _dagents_newest_handoff DIR — the most recently written DIR/*.md, else
+# DIR/latest.md.
+_dagents_newest_handoff() {
+  local f newest=""
+  for f in "$1"/*.md; do
+    [ -f "$f" ] || continue
+    if [ -z "$newest" ] || [ "$f" -nt "$newest" ]; then newest=$f; fi
+  done
+  printf '%s\n' "${newest:-$1/latest.md}"
+}
 dagents_ledger_dir() { dagents_stores_init "${2:-}"; printf '%s/%s\n' "$_DAGENTS_LEDGER_ROOT" "$1"; } # SLUG [DIR]
 
 dagents_workspace() { # SLUG [DIR]
@@ -58,7 +72,7 @@ dagents_workspace() { # SLUG [DIR]
   printf '%s/sdd/%s\n' "$(dagents_dir state "${_DAGENTS_TOP:-${2:-$PWD}}")" "$1"
 }
 
-# dagents_latest_files [DIR] — every checkout's latest.md, one per line, in
+# dagents_latest_files [DIR] — every checkout's newest handoff (dagents_latest_file), one per line, in
 # `git worktree list` order, skipping a worktree whose directory is gone.
 dagents_latest_files() {
   local wt
@@ -67,7 +81,7 @@ dagents_latest_files() {
   git -C "$(dr_native_path "$_DAGENTS_TOP")" worktree list --porcelain 2>/dev/null | tr -d '\r' | sed -n 's/^worktree //p' |
   while IFS= read -r wt; do
     wt=$(_dagents_path "$wt")
-    [ -d "$wt" ] && printf '%s/handoff/latest.md\n' "$(dagents_dir state "$wt")"
+    [ -d "$wt" ] && _dagents_newest_handoff "$(dagents_dir state "$wt")/handoff"
   done
   return 0
 }

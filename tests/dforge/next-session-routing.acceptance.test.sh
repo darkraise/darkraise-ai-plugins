@@ -88,9 +88,11 @@ roadmap() { # roadmap <register name>... — M1 (MVP) open on the first register
   } > "$D/roadmap.md"
   : > "$D/specs/shop.md"
 }
-ns() { # ns <args...> — run next-step in $R; sets OUT, NEXT, STATUS, PROMPT, RC
+# The session every ns run is: an --adhoc or --project write keys its handoff by it.
+S_NS=a1b2c3d4-0000-0000-0000-000000000000
+ns() { # ns <args...> — run next-step in $R as session S_NS; sets OUT, NEXT, STATUS, PROMPT, RC
   commit_all "$R" >/dev/null 2>&1 || true
-  OUT=$(cd "$R" && timeout 90 bash "$NS" "$@" 2>&1); RC=$?
+  OUT=$(cd "$R" && CLAUDE_CODE_SESSION_ID=$S_NS timeout 90 bash "$NS" "$@" 2>&1); RC=$?
   NEXT=$(grep '^\*\*Next:\*\*' <<<"$OUT")
   STATUS=$(grep '^\*\*Status:\*\*' <<<"$OUT")
   PROMPT=$(awk '/^Paste as the first prompt:/ { on = 1; next } on && /^```$/ { if (f) exit; f = 1; next } f' <<<"$OUT")
@@ -377,6 +379,8 @@ section_last() { awk '/^## Next session[ \t\r]*$/ { on = 1; next } on && /^## / 
 for entry in "plan|$P11|$P11" "complete|--complete $P11|$P11" "kept|--kept $P11|$P11" "project|--project|-" "draft|--draft docs/dforge/specs/D.md --next x|docs/dforge/specs/D.md" "adhoc|--adhoc --phase build --next x|-"; do
   IFS='|' read -r kind args subject <<<"$entry"
   [ "$kind" != plan ] || args=$P11
+  # shellcheck disable=SC2086
+  LATEST=$(cd "$R" && CLAUDE_CODE_SESSION_ID=$S_NS bash "$NS" --target $args)
   rm -f "$LATEST"
   before=$EPOCHSECONDS
   # shellcheck disable=SC2086
@@ -519,7 +523,7 @@ lfixture
 mkdir -p "$L/.dforge/sdd/2026-11-01-p"
 printf '# SDD ledger — plan: %s\nTask 1: complete (x)\nTask 2: complete (x)\n' "$LP" > "$L/.dforge/sdd/2026-11-01-p/progress.md"
 (cd "$L" && timeout 60 bash "$NS" "$LP" >/dev/null 2>&1)
-has "A28: next-step stored a Status that counts completed tasks" "$(cat "$LL")" "2 of 3 tasks complete"
+has "A28: next-step stored a Status that counts completed tasks" "$(cat "$L/.dforge/handoff/2026-11-01-p.md")" "2 of 3 tasks complete"
 latest
 check "A28: with the ledger present the block recomputes" "$status" 0
 has "A28: and resumes at Task 3" "$out" "Task 3"

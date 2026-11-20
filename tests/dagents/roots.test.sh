@@ -3,7 +3,7 @@
 # from a linked worktree, and names round-trip, including a checkout named
 # superpowers.
 set -uo pipefail
-unset CLAUDE_CONFIG_DIR CLAUDE_PROJECT_DIR
+unset CLAUDE_CONFIG_DIR CLAUDE_PROJECT_DIR CLAUDE_CODE_SESSION_ID
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/../../plugins/dagents/scripts/lib/roots.sh"
@@ -145,6 +145,21 @@ printf 'n\n' > "$REPO/.dagents/handoff/notes/Q.md"
 check "handoff_files_lists_every_checkout: dagents-path handoffs" "$(cd "$WT" && bash "$FP" handoffs)" \
   "$(printf '%s\n%s\n%s' "$TOP/.dagents/handoff/P.md" "$TOP/.dagents/handoff/latest.md" "$WT/.dagents/handoff/Q.md")"
 rm -rf "$REPO/.dagents/handoff" "$WT/.dagents/handoff"
+
+# latest_file_transition (C15): until every reader moves to keyed handoffs,
+# the latest file is the checkout's newest handoff, else its latest.md path.
+mkdir -p "$REPO/.dagents/handoff/notes" "$WT/.dagents/handoff"
+printf 'd\n' > "$REPO/.dagents/handoff/D.md"; touch -t 202601010000 "$REPO/.dagents/handoff/D.md"
+printf 'p\n' > "$REPO/.dagents/handoff/P.md"; touch -t 202601020000 "$REPO/.dagents/handoff/P.md"
+printf 'n\n' > "$REPO/.dagents/handoff/notes/N.md"
+check "latest_file_transition: the newest keyed handoff" "$(cd "$REPO" && dagents_latest_file)" "$TOP/.dagents/handoff/P.md"
+touch -t 202601030000 "$REPO/.dagents/handoff/D.md"
+check "latest_file_transition: follows the newest write" "$(cd "$REPO" && dagents_latest_file)" "$TOP/.dagents/handoff/D.md"
+check "latest_file_transition: a checkout with none names its latest.md" "$(cd "$WT" && dagents_latest_file)" "$WT/.dagents/handoff/latest.md"
+printf 'q\n' > "$WT/.dagents/handoff/Q.md"
+check "latest_file_transition: every checkout's newest" "$(cd "$REPO" && dagents_latest_files | tr '\n' ' ')" "$TOP/.dagents/handoff/D.md $WT/.dagents/handoff/Q.md "
+rm -rf "$REPO/.dagents/handoff" "$WT/.dagents/handoff"
+check "latest_file_transition: no handoff names latest.md" "$(cd "$REPO" && dagents_latest_file)" "$TOP/.dagents/handoff/latest.md"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

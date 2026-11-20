@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # next-step --print computes the block and changes nothing; a normal run
-# writes the block into latest.md followed by a marker line naming what the
+# writes the block into its keyed handoff followed by a marker line naming what the
 # block was computed from, which the printed block never carries.
 set -uo pipefail
 
@@ -58,6 +58,8 @@ cp "$D/registers/m2.md" "$D/registers/m1.md"
 } > "$D/roadmap.md"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm init
 LATEST="$REPO/.dforge/handoff/latest.md"
+# The session the adhoc and project writes run as.
+S0=a0000000-0000-0000-0000-000000000000
 FINISH="$REPO/.dforge/sdd/finish.json"
 
 snapshot() { # snapshot — hashes, mtimes and the file list under .dforge
@@ -94,9 +96,9 @@ has "in flight: --print prints the block" "$out" "## Next session"
 out=$(cd "$REPO" && timeout 60 bash "$TMP/scripts/next-step" "$PLAN" 2>&1)
 check "in flight: a plain run still refuses" "$?" 5
 
-# --- latest.md carries the marker and the block does not ---
-MARK_RE='^<!-- next-step: kind=(plan|complete|kept|draft|adhoc)( branch=[^ ]+)? done=[0-9]+ closed=[0-9]+ subject=.+ at=[0-9]+ -->$'
-section_last() { # the last non-blank line of latest.md's Next session section
+# --- the handoff carries the marker and the block does not ---
+MARK_RE='^<!-- next-step: kind=(plan|complete|kept|draft|adhoc)( branch=[^ ]+)? key=[A-Za-z0-9._-]+ session=[^ ]+ done=[0-9]+ closed=[0-9]+ subject=.+ at=[0-9]+ -->$'
+section_last() { # the last non-blank line of $LATEST's Next session section
   awk '/^## Next session[ \t\r]*$/ { on = 1; next } on && /^## / { exit } on && NF { last = $0 } END { print last }' "$LATEST"
 }
 for mode in plan complete kept draft adhoc; do
@@ -107,10 +109,13 @@ for mode in plan complete kept draft adhoc; do
     draft) args=(--draft docs/dforge/specs/draft.md --next "x") subject=docs/dforge/specs/draft.md ;;
     adhoc) args=(--adhoc --phase build --next "x") subject=- ;;
   esac
-  out=$(cd "$REPO" && timeout 60 bash "$SCRIPT" "${args[@]}" 2>&1)
+  LATEST=$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=$S0 timeout 60 bash "$SCRIPT" --target "${args[@]}")
+  out=$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=$S0 timeout 60 bash "$SCRIPT" "${args[@]}" 2>&1)
   check "marker $mode: exits 0" "$?" 0
   lacks "marker $mode: the printed block has no marker" "$out" "<!-- next-step:"
   last=$(section_last)
+  has "marker $mode: the key is the file's name" "$last" " key=$(basename "$LATEST" .md) "
+  has "marker $mode: the session is named" "$last" " session=$S0 "
   check "marker $mode: the section ends with a well-formed marker" "$(grep -cE "$MARK_RE" <<<"$last")" 1
   has "marker $mode: the kind is named" "$last" "kind=$mode "
   has "marker $mode: done counts completed.md entries" "$last" " done=2 "
@@ -160,8 +165,8 @@ out=$(cd "$REPO" && timeout 60 bash "$SCRIPT" "$PLAN" 2>&1)
 . "$HERE/../../plugins/dforge/scripts/lib/auto-run.sh"
 prompt=$(awk '/^Paste as the first prompt:/ { on = 1; next } on && /^```$/ { if (f) exit; f = 1; next } f' <<<"$out")
 launch=$(awk '/^Launch in / { on = 1; next } on && /^```$/ { if (f) exit; f = 1; next } f' <<<"$out")
-check "auto run: the first prompt reads unchanged" "$(ar_fenced "$LATEST" 'Paste as the first prompt:')" "$prompt"
-check "auto run: the launch command reads unchanged" "$(ar_fenced "$LATEST" 'Launch in ')" "$launch"
+check "auto run: the first prompt reads unchanged" "$(ar_fenced "$REPO/.dforge/handoff/2026-11-01-demo.md" 'Paste as the first prompt:')" "$prompt"
+check "auto run: the launch command reads unchanged" "$(ar_fenced "$REPO/.dforge/handoff/2026-11-01-demo.md" 'Launch in ')" "$launch"
 has "auto run: the launch command is the plan's" "$launch" "claude --model sonnet --effort high"
 
 # --- --print --latest ---
@@ -274,15 +279,16 @@ done
 
 lfixture
 printf '# R\n\n**Source:** s\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Thing | - | - | open | - |\n' > "$LD/registers/r.md"
-(cd "$L" && timeout 120 bash "$SCRIPT" --host codex --project >/dev/null 2>&1)
-has "latest host: a Codex write names its host in the marker" "$(grep '^<!-- next-step: ' "$LL")" " host=codex "
+LA="$L/.dforge/handoff/adhoc-a0000000.md"
+(cd "$L" && CLAUDE_CODE_SESSION_ID=$S0 timeout 120 bash "$SCRIPT" --host codex --project >/dev/null 2>&1)
+has "latest host: a Codex write names its host in the marker" "$(grep '^<!-- next-step: ' "$LA")" " host=codex "
 latest
 has "latest host: a Codex project block recomputes with the Codex launch" "$out" "codex -m"
 lacks "latest host: a Codex project block names no Claude launch" "$out" "claude --model"
-(cd "$L" && timeout 120 bash "$SCRIPT" --project >/dev/null 2>&1)
-lacks "latest host: a Claude write adds no host word" "$(grep '^<!-- next-step: ' "$LL")" "host="
+(cd "$L" && CLAUDE_CODE_SESSION_ID=$S0 timeout 120 bash "$SCRIPT" --project >/dev/null 2>&1)
+lacks "latest host: a Claude write adds no host word" "$(grep '^<!-- next-step: ' "$LA")" "host="
 
-rm -f "$LL"; latest
+rm -f "$L/.dforge/handoff/"*.md; latest
 check "latest edges: no latest.md exits 6" "$status" 6
 printf '# Handoff\n\n## Notes\n\nx\n' > "$LL"; latest
 check "latest edges: no Next session section exits 6" "$status" 6
@@ -379,7 +385,7 @@ git -C "$L" checkout -q --detach
 printf 'y\n' > "$L/y.txt" && git -C "$L" add y.txt && git -C "$L" commit -qm detached
 sha=$(git -C "$L" rev-parse --short HEAD)
 (cd "$L" && timeout 60 bash "$SCRIPT" --kept "$P" >/dev/null 2>&1)
-has "kept detached: the marker records the commit" "$(LATEST=$LL section_last)" "kind=kept branch=detached:$sha "
+has "kept detached: the marker records the commit" "$(LATEST=$L/.dforge/handoff/2026-11-01-p.md section_last)" "kind=kept branch=detached:$sha "
 git -C "$L" checkout -q main
 latest
 check "kept detached: an unmerged commit exits 0" "$status" 0
@@ -393,8 +399,8 @@ lfixture
 printf -- '- 2026-10-02 — `docs/dforge/plans/2026-10-02-b.md` — merged\n' >> "$LD/plans/completed.md"
 git -C "$L" add -A && git -C "$L" commit -qm index
 git -C "$L" worktree add -q --detach "$TMP/latest-wt" HEAD~1
-(cd "$TMP/latest-wt" && timeout 60 bash "$SCRIPT" --adhoc --phase build --next "Fix the thing." >/dev/null 2>&1)
-has "counts: a block written in an older worktree counts the primary's index" "$(LATEST="$TMP/latest-wt/.dforge/handoff/latest.md" section_last)" " done=2 "
+(cd "$TMP/latest-wt" && CLAUDE_CODE_SESSION_ID=$S0 timeout 60 bash "$SCRIPT" --adhoc --phase build --next "Fix the thing." >/dev/null 2>&1)
+has "counts: a block written in an older worktree counts the primary's index" "$(LATEST="$TMP/latest-wt/.dforge/handoff/adhoc-a0000000.md" section_last)" " done=2 "
 out=$(cd "$TMP/latest-wt" && timeout 120 bash "$SCRIPT" --print --latest 2>/dev/null); status=$?
 check "counts: that block is not superseded in its worktree" "$status" 0
 git -C "$L" worktree remove --force "$TMP/latest-wt"

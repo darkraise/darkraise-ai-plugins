@@ -3,7 +3,7 @@
 # from a gone session, and a listing of every checkout's handoffs with their
 # claim states.
 set -uo pipefail
-unset CLAUDE_CONFIG_DIR CLAUDE_PROJECT_DIR CLAUDE_CODE_SESSION_ID
+unset CLAUDE_CONFIG_DIR CLAUDE_PROJECT_DIR CLAUDE_CODE_SESSION_ID AR_SESSION
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 H="$HERE/../../plugins/dforge/scripts/handoff"

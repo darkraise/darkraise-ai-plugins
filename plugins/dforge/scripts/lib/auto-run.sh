@@ -427,7 +427,9 @@ ar_handoff() {
   # checkout: where T falls can depend on where next-step runs.
   plan=$(ar_get plan)
   [ -z "$plan" ] || latest=$(cd "$here" && bash "$AR_LIB_DIR/../next-step" --target "$plan" 2>/dev/null) || latest=""
-  [ -n "$latest" ] || latest=$(dforge_latest_file "$here")
+  # Until auto-run reads keyed handoffs, a plan whose handoff was never
+  # written reads the newest one, as latest.md was read.
+  [ -n "$latest" ] && [ -f "$latest" ] || latest=$(dforge_latest_file "$here")
   [ -f "$latest" ] && AR_PROMPT=$(ar_fenced "$latest" 'Paste as the first prompt:')
   [ -n "$AR_PROMPT" ] || { echo "auto-run: no first prompt in $latest; run scripts/next-step first" >&2; return 1; }
   launch=$(ar_fenced "$latest" 'Launch in ' | head -n 1)

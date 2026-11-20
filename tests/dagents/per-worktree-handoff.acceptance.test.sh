@@ -93,12 +93,23 @@ ledger() { # ledger <checkout> <slug> <lines...> — a ledger whose identity lin
 workspace() { # workspace <checkout> <slug> — the plan review's workspace: files, no ledger
   mkdir -p "$1/$STATE/sdd/$2"; printf 'lint\n' > "$1/$STATE/sdd/$2/lint.md"
 }
-handoff() { printf '%s/%s/handoff/latest.md' "$1" "$STATE"; }
-seed() { # seed <checkout> <text> — a handoff another session left
-  mkdir -p "$(dirname "$(handoff "$1")")"; printf '%s\n' "$2" > "$(handoff "$1")"
+handoff() { # handoff <checkout> — its newest handoff, else its latest.md path (C15)
+  local d="$1/$STATE/handoff" f newest=""
+  for f in "$d"/*.md; do
+    [ -f "$f" ] || continue
+    if [ -z "$newest" ] || [ "$f" -nt "$newest" ]; then newest=$f; fi
+  done
+  printf '%s' "${newest:-$d/latest.md}"
 }
+seed() { # seed <checkout> <text> — the latest.md another session left
+  mkdir -p "$1/$STATE/handoff"; printf '%s\n' "$2" > "$1/$STATE/handoff/latest.md"
+}
+clear_handoffs() { local c; for c; do rm -f "$c/$STATE/handoff/"*.md; done; } # clear_handoffs <checkout...>
+# The session an ns run is, unless SID names another: an --adhoc or --project
+# write keys its handoff by it.
+S_NS=a1b2c3d4-0000-0000-0000-000000000000
 ns() { # ns <dir> <args...> — next-step run in <dir>; sets OUT, ERR, RC
-  OUT=$(cd "$1" && timeout 90 bash "$NS" "${@:2}" 2>"$TMP/stderr"); RC=$?
+  OUT=$(cd "$1" && CLAUDE_CODE_SESSION_ID=${SID:-$S_NS} timeout 90 bash "$NS" "${@:2}" 2>"$TMP/stderr"); RC=$?
   ERR=$(cat "$TMP/stderr")
 }
 prompt_of() { awk '/^Paste as the first prompt:/ { on = 1; next } on && /^```$/ { if (f) exit; f = 1; next } f' <<<"$1"; }
@@ -181,10 +192,10 @@ else
 fi
 WIN="$TMP/winbin"; mkdir -p "$WIN"
 printf '#!/bin/sh\nfor a; do last=$a; done\nprintf "%%s\\n" "$last"\n' > "$WIN/cygpath"; chmod +x "$WIN/cygpath"
-OUT=$(cd "$WQ" && PATH="$WIN:$PATH" timeout 90 bash "$NS" --adhoc --phase build --next go 2>/dev/null)
+OUT=$(cd "$WQ" && PATH="$WIN:$PATH" CLAUDE_CODE_SESSION_ID=$S_NS timeout 90 bash "$NS" --adhoc --phase build --next go 2>/dev/null)
 cmd=$(launch_of "$OUT")
 check "A4: with cygpath on PATH the command carries no cd prefix" "$cmd" "claude --model sonnet --effort high"
-OUT=$(cd "$WQ" && PATH="$WIN:$PATH" timeout 90 bash "$NS" --host codex --adhoc --phase build --next go 2>/dev/null)
+OUT=$(cd "$WQ" && PATH="$WIN:$PATH" CLAUDE_CODE_SESSION_ID=$S_NS timeout 90 bash "$NS" --host codex --adhoc --phase build --next go 2>/dev/null)
 case $(launch_of "$OUT") in "codex "*) pre=no ;; *) pre=yes ;; esac
 check "A4: with cygpath on PATH a codex command carries no cd prefix" "$pre" no
 
@@ -239,13 +250,13 @@ ns "$TOP" --adhoc --phase build --next go
 old=$(cat "$(handoff "$TOP")")
 printf '%s\n' "${old//Start in /First enter the existing worktree and start in }" > "$(handoff "$TOP")"
 before=$(digest "$(handoff "$TOP")")
-check "A12: dforge-path latest in the primary is the unchanged path" "$(cd "$TOP" && bash "$PATHP" latest)" "$TOP/$STATE/handoff/latest.md"
+check "A12: dagents-path latest in the primary names its newest handoff" "$(cd "$TOP" && bash "$PATHP" latest)" "$TOP/$STATE/handoff/adhoc-${S_NS:0:8}.md"
 ns "$TOP" --print --latest
 check "A12: next-step --print --latest reads the primary's file" "$RC" 0
 has "A12: the recomputed block carries the stored Next" "$OUT" "**Next:** go."
 check "A12: reading it changed nothing" "$(digest "$(handoff "$TOP")")" "$before"
 AUDIT=$(cd "$TOP" && timeout 60 bash "$SCRIPTS/repo-audit" 2>&1)
-has "A12: repo-audit lists the primary's handoff" "$AUDIT" "\`$TOP/$STATE/handoff/latest.md\`"
+has "A12: repo-audit lists the primary's handoff" "$AUDIT" "\`$TOP/$STATE/handoff/adhoc-${S_NS:0:8}.md\`"
 has "A12: repo-audit shows its Next line" "$AUDIT" "**Next:** go."
 
 # ---------------------------------------------------------------- A13
@@ -253,10 +264,10 @@ fixture
 W1=$(wt w1)
 ledger "$W1" "$PA" 'Task 1: complete (commits a..b, review clean)'
 tree() { (cd "$TOP" && find . -path ./.git -prune -o -type f -print | sort; cd "$W1" && find . -path ./.git -prune -o -type f -print | sort | sed 's#^#W1:#'); }
-written() { local f; for f in "$(handoff "$TOP")" "$(handoff "$W1")"; do [ -f "$f" ] && printf '%s ' "$f"; done; }
+written() { local f; for f in "$TOP/$STATE/handoff/"*.md "$W1/$STATE/handoff/"*.md; do [ -f "$f" ] && printf '%s ' "$f"; done; }
 for args in "$DOCS/plans/$PA.md" "--complete $DOCS/plans/$PA.md" "--kept $DOCS/plans/$PA.md" \
   "--draft $DOCS/specs/S.md --next x" "--adhoc --phase build --next x" "--project"; do
-  rm -f "$(handoff "$TOP")" "$(handoff "$W1")"
+  clear_handoffs "$TOP" "$W1"
   files_before=$(tree)
   # shellcheck disable=SC2086
   ns "$W1" --target $args; trc=$RC; target=$OUT
@@ -266,13 +277,13 @@ for args in "$DOCS/plans/$PA.md" "--complete $DOCS/plans/$PA.md" "--kept $DOCS/p
   ns "$W1" $args
   check "A13: --target names the file the call then writes ($args)" "$(written)" "$target "
 done
-rm -f "$(handoff "$TOP")" "$(handoff "$W1")"
+clear_handoffs "$TOP" "$W1"
 rm -rf "$TMP/stubplugin" && cp -R "$SCRIPTS/.." "$TMP/stubplugin"
 printf '#!/usr/bin/env bash\nprintf -- "- shell b1 10:00 idle 1m sleep\\n"\nexit 1\n' > "$TMP/stubplugin/scripts/in-flight"
 (cd "$W1" && timeout 60 bash "$TMP/stubplugin/scripts/next-step" "$DOCS/plans/$PA.md" >/dev/null 2>&1)
 check "A13: with background work a plain run exits 5" "$?" 5
 t=$(cd "$W1" && timeout 60 bash "$TMP/stubplugin/scripts/next-step" --target "$DOCS/plans/$PA.md" 2>/dev/null); rc=$?
-check "A13: with background work --target exits 0 and names the path" "$rc:$t" "0:$(handoff "$W1")"
+check "A13: with background work --target exits 0 and names the path" "$rc:$t" "0:$W1/$STATE/handoff/$PA.md"
 rm -rf "$TMP/stubplugin"
 for args in "" "--adhoc --phase build" "$DOCS/plans/missing.md" "--complete $DOCS/plans/missing.md"; do
   # shellcheck disable=SC2086
@@ -286,6 +297,8 @@ ns "$W1" --target --latest
 check "A13: --target with --latest is a usage error" "$RC" 2
 
 # ---------------------------------------------------------------- A15
+# Each piece of work has its own handoff: --complete and --kept write their
+# plan's and leave another live block, with its notes, in its own file.
 fixture
 W1=$(wt w1)
 mkdir -p "$TOP/$STATE/sdd/$PB"
@@ -293,64 +306,34 @@ ledger "$TOP" "$PB" 'Task 1: complete (commits a..b, review clean)'
 notes() { # notes <handoff file> — keep-me notes above the Next session section
   awk '/^## Next session/ && !d { print "## Notes\nKEEP-ME-NOTES\n"; d = 1 } { print }' "$1" > "$1.new" && mv "$1.new" "$1"
 }
-# --complete: the primary's handoff holds a live plan's block
 ns "$TOP" "$DOCS/plans/$PB.md"
-notes "$(handoff "$TOP")"
-ns "$W1" --complete "$DOCS/plans/$PA.md"
-check "A15: --complete exits 0 over another live block" "$RC" 0
-h=$(cat "$(handoff "$TOP")")
-has "A15: --complete keeps the notes" "$h" "KEEP-ME-NOTES"
-has "A15: --complete writes the new block" "$h" "Plan \`$DOCS/plans/$PA.md\` is complete."
-check "A15: --complete leaves one Next session section" "$(grep -c '^## Next session' "$(handoff "$TOP")")" 1
-lacks "A15: --complete drops the displaced block" "$h" "$PB"
-has "A15: --complete names the displaced subject on stderr" "$ERR" "$PB"
-# a subject of "-" is named by its kind
+notes "$TOP/$STATE/handoff/$PB.md"
+before=$(digest "$TOP/$STATE/handoff/$PB.md")
 ns "$TOP" --adhoc --phase build --next go
-notes "$(handoff "$TOP")"
+notes "$TOP/$STATE/handoff/adhoc-${S_NS:0:8}.md"
+before_adhoc=$(digest "$TOP/$STATE/handoff/adhoc-${S_NS:0:8}.md")
 ns "$W1" --complete "$DOCS/plans/$PA.md"
-has "A15: --complete keeps the notes of an adhoc block" "$(cat "$(handoff "$TOP")")" "KEEP-ME-NOTES"
-has "A15: --complete names the kind for a subject of -" "$ERR" "adhoc"
-ns "$TOP" --project
-notes "$(handoff "$TOP")"
-ns "$W1" --complete "$DOCS/plans/$PA.md"
-has "A15: --complete names a project block by its kind" "$ERR" "project"
-# --kept: the worktree's handoff holds another live plan's block
+check "A15: --complete exits 0 beside other live blocks" "$RC" 0
+has "A15: --complete writes its plan's own handoff" "$(cat "$TOP/$STATE/handoff/$PA.md")" "Plan \`$DOCS/plans/$PA.md\` is complete."
+check "A15: --complete leaves another plan's handoff byte-identical" "$(digest "$TOP/$STATE/handoff/$PB.md")" "$before"
+check "A15: --complete leaves an adhoc handoff byte-identical" "$(digest "$TOP/$STATE/handoff/adhoc-${S_NS:0:8}.md")" "$before_adhoc"
+lacks "A15: --complete names no displaced block" "$ERR" "replaced the block"
 mkdir -p "$W1/$STATE/sdd/$PB"
 ledger "$W1" "$PB" 'Task 1: complete (commits a..b, review clean)'
 ns "$W1" "$DOCS/plans/$PB.md"
-notes "$(handoff "$W1")"
+notes "$W1/$STATE/handoff/$PB.md"
+before=$(digest "$W1/$STATE/handoff/$PB.md")
 ns "$W1" --kept "$DOCS/plans/$PA.md"
-check "A15: --kept exits 0 over another live block" "$RC" 0
-h=$(cat "$(handoff "$W1")")
-has "A15: --kept keeps the notes" "$h" "KEEP-ME-NOTES"
-has "A15: --kept writes the kept block" "$h" "$DOCS/plans/$PA.md"
-check "A15: --kept leaves one Next session section" "$(grep -c '^## Next session' "$(handoff "$W1")")" 1
-lacks "A15: --kept drops the displaced block" "$h" "$PB"
-has "A15: --kept names the displaced subject on stderr" "$ERR" "$PB"
-ns "$W1" --adhoc --phase build --next go
-notes "$(handoff "$W1")"
+check "A15: --kept exits 0 beside another live block" "$RC" 0
+has "A15: --kept writes its plan's own handoff" "$(cat "$W1/$STATE/handoff/$PA.md")" "$DOCS/plans/$PA.md"
+check "A15: --kept leaves another plan's handoff byte-identical" "$(digest "$W1/$STATE/handoff/$PB.md")" "$before"
+# Its own plan's handoff is replaced wholesale, notes and all.
+notes "$W1/$STATE/handoff/$PA.md"
 ns "$W1" --kept "$DOCS/plans/$PA.md"
-has "A15: --kept names the kind for a subject of -" "$ERR" "adhoc"
-# a marker of kind complete is replaced wholesale
-ns "$TOP" --complete "$DOCS/plans/$PB.md"
-notes "$(handoff "$TOP")"
+check "A15: --kept replaces its own handoff wholesale (notes gone)" "$(grep -c 'KEEP-ME-NOTES' "$W1/$STATE/handoff/$PA.md")" 0
+notes "$TOP/$STATE/handoff/$PA.md"
 ns "$W1" --complete "$DOCS/plans/$PA.md"
-lacks "A15: a complete marker is replaced wholesale (notes gone)" "$(cat "$(handoff "$TOP")")" "KEEP-ME-NOTES"
-lacks "A15: a complete marker is replaced without the displaced notice" "$ERR" "replaced the block"
-seed "$W1" "$(printf '# Handoff\n\n## Notes\nKEEP-ME-NOTES\n\n## Next session\n\n**Status:** old\n**Next:** old\n\n<!-- next-step: kind=complete done=1 closed=0 subject=%s/plans/%s.md at=1700000000 -->' "$DOCS" "$PB")"
-ns "$W1" --kept "$DOCS/plans/$PA.md"
-check "A15: --kept replaces a complete marker wholesale (notes gone)" "$(grep -c 'KEEP-ME-NOTES' "$(handoff "$W1")")" 0
-lacks "A15: --kept over a complete marker prints no displaced notice" "$ERR" "replaced the block"
-# a marker for a finished plan is replaced wholesale
-fixture
-W1=$(wt w1)
-seed "$TOP" "$(printf '# Handoff\n\n## Notes\nKEEP-ME-NOTES\n\n## Next session\n\n**Status:** old\n**Next:** old\n\n<!-- next-step: kind=resume done=1 closed=0 subject=%s/plans/%s.md at=1700000000 -->' "$DOCS" "$PC")"
-ns "$W1" --complete "$DOCS/plans/$PA.md"
-check "A15: a finished plan's marker is replaced wholesale (notes gone)" "$(grep -c 'KEEP-ME-NOTES' "$(handoff "$TOP")")" 0
-lacks "A15: a finished plan's marker is replaced without the displaced notice" "$ERR" "replaced the block"
-seed "$W1" "$(printf '# Handoff\n\n## Notes\nKEEP-ME-NOTES\n\n## Next session\n\n**Status:** old\n**Next:** old\n\n<!-- next-step: kind=resume done=1 closed=0 subject=%s/plans/%s.md at=1700000000 -->' "$DOCS" "$PC")"
-ns "$W1" --kept "$DOCS/plans/$PA.md"
-check "A15: --kept replaces a finished plan's marker wholesale (notes gone)" "$(grep -c 'KEEP-ME-NOTES' "$(handoff "$W1")")" 0
+check "A15: --complete replaces its own handoff wholesale (notes gone)" "$(grep -c 'KEEP-ME-NOTES' "$TOP/$STATE/handoff/$PA.md")" 0
 
 # ---------------------------------------------------------------- A7, A16
 sidn=0
@@ -464,10 +447,10 @@ done
 # ---------------------------------------------------------------- A10
 fixture
 W1=$(wt w1); W2=$(wt w2); W3=$(wt w3); W4=$(wt w4); W5=$(wt w5)
-ns "$W1" --adhoc --phase build --next own-work
-ns "$W2" --adhoc --phase build --next other-work
-ns "$W3" --adhoc --phase build --next stale-work
-ns "$TOP" --adhoc --phase build --next primary-work
+SID=a1000001-0000-0000-0000-000000000000 ns "$W1" --adhoc --phase build --next own-work
+SID=a1000002-0000-0000-0000-000000000000 ns "$W2" --adhoc --phase build --next other-work
+SID=a1000003-0000-0000-0000-000000000000 ns "$W3" --adhoc --phase build --next stale-work
+SID=a1000004-0000-0000-0000-000000000000 ns "$TOP" --adhoc --phase build --next primary-work
 rm -rf "$W5"
 touch -d '4 days ago' "$(handoff "$W3")"
 sed -i "s/at=[0-9]*/at=$(( $(date +%s) - 3 * 86400 ))/" "$(handoff "$W2")"
