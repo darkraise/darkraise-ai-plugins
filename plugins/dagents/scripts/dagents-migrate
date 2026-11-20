@@ -495,7 +495,7 @@ rewrite_moved() {
     *" host=codex "*) case $key in adhoc-*) clause="When you hand off, pass \`--key $key\` to next-step. " ;; esac ;;
     *) clause="Before anything else, claim it with dagents' \`scripts/handoff claim\` on that file. " ;;
   esac
-  tmp="$file.migrate.$$"
+  tmp=$(mktemp "$file.dagents-migrate.XXXXXX") || return 1
   OLD=$old NEW=$file CLAUSE=$clause awk '
     {
       out = ""; s = $0
