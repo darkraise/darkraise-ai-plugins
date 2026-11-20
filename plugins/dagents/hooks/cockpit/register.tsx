@@ -3414,7 +3414,7 @@ async function offerHandoffs($: EngineInterface, dir: string): Promise<OfferHand
   const found: OfferHandoff[] = []
   for (const entry of (await $.fs.list(dir).catch(() => null)) ?? []) {
     const key = entry.name.slice(0, -3)
-    // The key rule of scripts/lib/roots.sh: an older layout's latest.md is not a
+    // The key rule of scripts/lib/roots.sh: an older layout's file is not a
     // handoff, and `scripts/handoff claim` refuses it.
     if (!entry.name.endsWith('.md') || !/^[A-Za-z0-9._-]+$/.test(key) || key === 'latest') continue
     const path = `${dir}/${entry.name}`
