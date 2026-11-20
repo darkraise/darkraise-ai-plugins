@@ -137,6 +137,8 @@ under `ok` is not a reason to stop.
   After compaction steps resume the final phase from the ledger.
   In an auto run finishing clears the session first.
 - **Budget:** a `handoff` verdict at any checkpoint.
+- **Red suite at finishing:** dforge:finishing-a-development-branch Step 1
+  hands off with the repair as the next action.
 - **Codex:** the count rule above.
 
 Every stop runs dforge:handoff.

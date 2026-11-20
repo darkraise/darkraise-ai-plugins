@@ -43,6 +43,8 @@ cleanly."
   Return to the step that invoked this skill,
   which runs `scripts/auto-run clear` and ends the turn (auto-run.md §Clears).
   This skill never runs `scripts/auto-run clear` itself.
+- dforge:finishing-a-development-branch finds the suite failing at Step 1:
+  it names step 4's call.
 - Your human partner says they are stepping away for more than an hour, or
   asks you to stop. Reconcile live children first, exactly as step 0 says:
   wait for them, or stop them and record a Ruling. Tell your partner which you

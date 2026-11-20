@@ -93,19 +93,21 @@ the same HEAD, with a clean tree then and now, for the same command: a fix
 wave's passing run at this HEAD stands, and any other tree runs the suite.
 Its exit code is the verdict.
 
-**If tests fail**, report the failures and stop — the menu comes after a
-green suite:
+**If tests fail**, hand off and stop:
+dforge:handoff steps 0-3 (`State` names the failing tests), then
+
+```bash
+scripts/next-step --adhoc --phase build --next "Fix the tests failing in State, then re-run dforge:finishing-a-development-branch."
+```
+
+never `next-step PLAN_FILE`, which leads straight back here. End with this,
+then the block verbatim:
 
 ```
 Tests failing (<N> failures). Must fix before completing:
 
 [Show the digest's failing lines]
-
-Next: fix these failures, then re-run dforge:finishing-a-development-branch.
 ```
-
-Do not run `scripts/next-step` here: the branch is not ready to integrate, and
-it would send the next session straight back into this skill.
 
 **If tests pass:** continue to Step 1b.
 
