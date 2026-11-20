@@ -66,9 +66,6 @@ for (const mode of ["--complete", "--project"]) {
     const text = read(keyed);
     assert.match(text, /^## Next session$/m);
     assert.doesNotMatch(text, /^## State$/m, "the block has no State section naming a plan");
-    t.todo("push and pull of keyed handoffs: Task 13 re-enables push, Task 14 pull");
-    return;
-
     const pushed = await run(["push"], { cwd: repo, env: home.env });
     assert.equal(pushed.code, 0, pushed.stdout + pushed.stderr);
     assert.doesNotMatch(pushed.stdout, /^failed:/m);
@@ -76,9 +73,11 @@ for (const mode of ["--complete", "--project"]) {
     assert.ok(project, "darkmem holds a workstream named project");
     const checkpoints = project.entries.filter(e => e.kind === "checkpoint");
     assert.equal(checkpoints.length, 1, "one checkpoint under it");
-    assert.equal(checkpoints[0].body, text, "carrying latest.md as written");
+    assert.equal(checkpoints[0].body, text, "carrying the keyed handoff as written");
     const finished = stub.db.workstreams.find(w => w.key === "2026-11-01-p1");
     assert.equal((finished?.entries ?? []).filter(e => e.kind === "checkpoint").length, 0, "none under the finished plan's workstream");
+    t.todo("pull of keyed handoffs: Task 14");
+    return;
 
     // A different machine: a fresh checkout, a fresh home, the same darkmem.
     const repo2 = plannedRepo();

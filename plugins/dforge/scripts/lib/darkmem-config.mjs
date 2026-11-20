@@ -171,6 +171,9 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
       latestFile: applied.progress === "darkmem" && samePath(worktreeRoot, repoRoot)
         ? newestHandoff(path.join(sync.mirror, "work", "handoff"))
         : worktreeRoot && newestHandoff(path.join(dforgeDir("state", worktreeRoot), "handoff")),
+      handoffDir: applied.progress === "darkmem" && samePath(worktreeRoot, repoRoot)
+        ? path.join(sync.mirror, "work", "handoff")
+        : worktreeRoot && path.join(dforgeDir("state", worktreeRoot), "handoff"),
     },
     sync,
   });

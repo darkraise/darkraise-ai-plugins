@@ -153,8 +153,8 @@ export function ledgerFiles(workRoot) {
 // ("constructor", "__proto__"), so both are prototype-free dictionaries.
 export function emptyState() {
   return {
-    version: 1, documents: Object.create(null), ledgers: Object.create(null), checkpoint: null, checkpointAt: null,
-    conflicts: [], pendingLinks: [],
+    version: 1, documents: Object.create(null), ledgers: Object.create(null), checkpoint: null, checkpoints: Object.create(null),
+    checkpointAt: null, conflicts: [], pendingLinks: [],
   };
 }
 
@@ -222,8 +222,54 @@ export function recordCheckpointAt(state, workstream, at) {
   state.checkpointAt = record;
 }
 
+// The mirror's handoff directory, beside the state file at the mirror's root.
+const handoffDirOf = stateFile => path.join(path.dirname(stateFile), "work", "handoff");
+
+// The last next-step marker of a handoff: its kind, and its subject (null for
+// `-`). Words are read by name; subject= runs to the closing at=.
+export function handoffMarker(text) {
+  const last = (text.match(/^<!-- next-step: .* -->\r?$/gm) ?? []).at(-1);
+  if (!last) return null;
+  const kind = /^<!-- next-step: kind=(\S+)/.exec(last)?.[1] ?? null;
+  const subject = / subject=(.*) at=-?\d+ -->\r?$/.exec(last)?.[1] ?? "-";
+  return { kind, subject: subject === "-" ? null : subject };
+}
+
+// The key a mirror handoff's checkpoint hash is kept under: its file name, or
+// for a latest.md the plan or draft its marker names, as the migration keys
+// it; null for a latest.md naming neither.
+export function handoffKey(name, text) {
+  if (name !== "latest.md") return name.slice(0, -".md".length);
+  const subject = handoffMarker(text)?.subject;
+  const key = subject && path.posix.basename(subject.replace(/\\/g, "/"), ".md");
+  return key && validKey(key) ? key : null;
+}
+
+// The key of the mirror handoff whose content hashes to `hash`; null for none.
+function keyHashing(dir, hash) {
+  let names;
+  try {
+    names = fs.readdirSync(dir).filter(name => name.endsWith(".md")).sort();
+  } catch {
+    return null;
+  }
+  for (const name of names) {
+    let buffer;
+    try {
+      buffer = fs.readFileSync(path.join(dir, name));
+    } catch {
+      continue;
+    }
+    if (sha256(buffer) === hash) return handoffKey(name, buffer.toString("utf8"));
+  }
+  return null;
+}
+
 // A missing state file is a fresh mirror. An unreadable or malformed one is an
 // error, not a fresh start: forgetting a ledger's offset would re-send lines.
+// checkpoints holds each mirror handoff's synced hash by key; a state an older
+// dforge wrote holds one checkpoint, kept under the key of the handoff it
+// hashes to, or dropped. checkpoint stays the hash of latest.md for its readers.
 export function loadState(file) {
   try {
     fs.statSync(file);
@@ -240,11 +286,15 @@ export function loadState(file) {
   const documents = dictOf(raw?.documents, (uri, hash) => isHash(hash));
   const ledgers = dictOf(raw?.ledgers, isLedgerRecord);
   const checkpointAt = checkpointAtRecord(raw?.checkpointAt, raw?.checkpointAtByWorkstream);
+  const checkpoints = raw?.checkpoints === undefined
+    ? Object.create(null)
+    : dictOf(raw.checkpoints, (key, hash) => validKey(key) && isHash(hash));
   // Each command's own conflicts (darkmem-sync.mjs recordConflicts); absent
   // in a state written before it was kept.
   const conflictsBy = raw?.conflictsBy === undefined ? undefined : dictOf(raw.conflictsBy, (name, lines) => isLines(lines));
   const valid = raw?.version === 1 && documents && ledgers
     && (raw.checkpoint === null || isHash(raw.checkpoint))
+    && checkpoints !== null
     && checkpointAt !== undefined
     && isLines(raw.conflicts)
     && conflictsBy !== null
@@ -253,8 +303,12 @@ export function loadState(file) {
     && (raw.prefix === undefined || raw.prefix === DOC_PREFIX || raw.prefix === "forge")
     && (raw.remote === undefined || (typeof raw.remote?.url === "string" && typeof raw.remote?.project === "string"));
   if (!valid) throw new StateError(`${file} does not hold a valid sync state; ${REBUILD}`);
+  if (raw.checkpoint !== null) {
+    const key = keyHashing(handoffDirOf(file), raw.checkpoint);
+    if (key !== null && checkpoints[key] === undefined) checkpoints[key] = raw.checkpoint;
+  }
   const state = {
-    version: 1, documents, ledgers, checkpoint: raw.checkpoint, checkpointAt, conflicts: raw.conflicts,
+    version: 1, documents, ledgers, checkpoint: raw.checkpoint, checkpoints, checkpointAt, conflicts: raw.conflicts,
     pendingLinks: raw.pendingLinks ?? [],
   };
   // Set once darkmem was checked for older (superpowers/ or forge/) uris
@@ -278,7 +332,7 @@ export function checkRemote(file, state, url, project) {
     return;
   }
   const isEmpty = Object.keys(state.documents).length === 0 && Object.keys(state.ledgers).length === 0
-    && (state.checkpoint ?? null) === null && state.pendingLinks.length === 0;
+    && (state.checkpoint ?? null) === null && Object.keys(state.checkpoints ?? {}).length === 0 && state.pendingLinks.length === 0;
   if (isEmpty && (state.remote.url !== url || state.remote.project !== project)) {
     state.remote = { url, project };
     delete state.prefix;
@@ -327,15 +381,18 @@ export function writeFileAtomic(file, data, root) {
 // dforge 4.1.0 refuses a checkpointAt that is not null or a string and ignores
 // fields it does not know, so the per-workstream record is saved beside a
 // string checkpointAt holding its newest date. loadState trusts the record
-// only while that string is still its newest date.
-function savedForm(state) {
+// only while that string is still its newest date. An older dforge reads
+// checkpoint as latest.md's synced hash, so it is null once latest.md is gone.
+function savedForm(state, file) {
+  const isLatest = fs.existsSync(path.join(handoffDirOf(file), "latest.md"));
+  const saved = { ...state, checkpoint: isLatest ? (state.checkpoint ?? null) : null, checkpoints: state.checkpoints ?? Object.create(null) };
   const held = state.checkpointAt;
-  if (held === null || typeof held === "string") return state;
-  return { ...state, checkpointAt: newestCheckpointAt(state), checkpointAtByWorkstream: held };
+  if (held === null || typeof held === "string") return saved;
+  return { ...saved, checkpointAt: newestCheckpointAt(state), checkpointAtByWorkstream: held };
 }
 
 export function saveState(file, state) {
-  writeFileAtomic(file, `${JSON.stringify(savedForm(state), null, 2)}\n`);
+  writeFileAtomic(file, `${JSON.stringify(savedForm(state, file), null, 2)}\n`);
 }
 
 function processAlive(pid) {
@@ -763,13 +820,15 @@ export function propertiesFor(roots, slug, namedPath) {
 
 // What a handoff note is about: the plan or draft its `## State` section names
 // on a `- Plan:` or `- Draft:` line, as {slug, path}, or null. With `marker`,
-// a note whose last next-step marker reads kind=complete or kind=project is
-// the project's, whatever `## State` it kept from before.
+// its last next-step marker decides first: kind=complete or kind=project is
+// the project's, whatever `## State` it kept from before, and a plan, draft or
+// kept marker's subject names the plan or draft.
 export function checkpointTarget(text, { marker = false } = {}) {
-  if (marker) {
-    const last = (text.match(/^<!-- next-step: .* -->\r?$/gm) ?? []).at(-1);
-    const kind = last && /^<!-- next-step: kind=(\S+)/.exec(last)[1];
-    if (kind === "complete" || kind === "project") return { slug: "project", path: null };
+  const mark = marker ? handoffMarker(text) : null;
+  if (mark?.kind === "complete" || mark?.kind === "project") return { slug: "project", path: null };
+  if (mark?.subject && ["plan", "draft", "kept"].includes(mark.kind)) {
+    const slug = path.posix.basename(mark.subject.replace(/\\/g, "/"), ".md");
+    if (validKey(slug)) return { slug, path: mark.subject };
   }
   const state = /^## State[ \t]*\r?\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(text);
   if (!state) return null;

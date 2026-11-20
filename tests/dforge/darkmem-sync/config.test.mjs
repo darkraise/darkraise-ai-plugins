@@ -24,6 +24,7 @@ test("no config file and no record keep both families local in the checkout", ()
   assert.deepEqual(stores.progress, {
     configured: "local", applied: "local",
     ledgerRoot: path.join(repo, ".dforge", "sdd"), latestFile: path.join(repo, ".dforge", "handoff", "latest.md"),
+    handoffDir: path.join(repo, ".dforge", "handoff"),
   });
 });
 
@@ -36,6 +37,7 @@ test("a mapped repository applies each family as its record says", () => {
   assert.deepEqual(stores.progress, {
     configured: "darkmem", applied: "local",
     ledgerRoot: path.join(repo, ".dforge", "sdd"), latestFile: path.join(repo, ".dforge", "handoff", "latest.md"),
+    handoffDir: path.join(repo, ".dforge", "handoff"),
   });
   assert.deepEqual(stores.sync, {
     project: "proj", enabled: true, url: "http://darkmem.test:8000", apiKey: KEY, keyEnv: "DARKMEM_API_KEY",
@@ -226,6 +228,15 @@ test("latestFile transition: the newest keyed handoff, else latest.md", () => {
   fs.mkdirSync(local, { recursive: true });
   fs.writeFileSync(path.join(local, "Q.md"), "q\n");
   assert.equal(resolveStores({ cwd: worktree, env }).progress.latestFile, path.join(local, "Q.md"));
+});
+
+test("progress handoff dir: the mirror's for the primary under darkmem, the worktree's own otherwise", () => {
+  const repo = makeRepo();
+  const { env, mirror } = makeHome({ repo, stores: { documents: "local", progress: "darkmem" } });
+  const worktree = path.join(scratch("dms-wt-"), "wt");
+  git(repo, "worktree", "add", "-q", "-b", "wt", worktree);
+  assert.equal(resolveStores({ cwd: repo, env }).progress.handoffDir, path.join(mirror, "work", "handoff"));
+  assert.equal(resolveStores({ cwd: worktree, env }).progress.handoffDir, path.join(worktree, ".dforge", "handoff"));
 });
 
 test("an unmapped repository and no git repository are local", () => {

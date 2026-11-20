@@ -6,7 +6,7 @@ import { createClient } from "../../../plugins/dforge/scripts/lib/darkmem-client
 import { STUB_KEY, sha, startStub } from "./stub-server.mjs";
 import { makeHome, makeRepo, read, run, write } from "./helpers.mjs";
 
-const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace] | restore NAME | revision NAME | reconcile\n";
+const USAGE = "usage: darkmem-sync status | pull | push [--handoff FILE [--workstream KEY]] | import [--replace] | restore NAME | revision NAME | reconcile\n";
 
 async function setup(t, stubOptions = {}) {
   const stub = await startStub(stubOptions);

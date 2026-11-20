@@ -29,7 +29,7 @@ test("A11: push run from the primary sends the primary's handoff and not the wor
   const s = await setup(t);
   write(s.primaryFile, "# Handoff\n\nPRIMARY-HANDOFF-MARKER\n");
   write(s.worktreeFile, "# Handoff\n\nWORKTREE-HANDOFF-MARKER\n");
-  const result = await run(["push", "--workstream", "ws-primary"], { cwd: s.repo, env: s.env });
+  const result = await run(["push", "--handoff", s.primaryFile, "--workstream", "ws-primary"], { cwd: s.repo, env: s.env });
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.equal(checkpoints(s.stub, "ws-primary").length, 1);
   assert.match(checkpoints(s.stub, "ws-primary")[0].body, /PRIMARY-HANDOFF-MARKER/);
@@ -41,7 +41,7 @@ test("A11: push run from a linked worktree prints that its handoff stays local a
   const s = await setup(t);
   write(s.primaryFile, "# Handoff\n\nPRIMARY-HANDOFF-MARKER\n");
   write(s.worktreeFile, "# Handoff\n\nWORKTREE-HANDOFF-MARKER\n");
-  const result = await run(["push", "--workstream", "ws-primary"], { cwd: s.worktree, env: s.env });
+  const result = await run(["push", "--handoff", s.primaryFile, "--workstream", "ws-primary"], { cwd: s.worktree, env: s.env });
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.ok(result.stdout.split("\n").includes(`worktree handoff stays local: ${s.worktreeFile}`), result.stdout);
   assert.doesNotMatch(sentBodies(s.stub), /WORKTREE-HANDOFF-MARKER/);
