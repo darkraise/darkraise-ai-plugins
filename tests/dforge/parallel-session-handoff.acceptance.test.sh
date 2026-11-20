@@ -291,5 +291,33 @@ ns "$S2" "$TOP" --print --adhoc --phase build --next "Finish item C"
 ns "$S2" "$TOP" --target --adhoc --phase build --next "Finish item C"
 check "turn_record_written: no record without a session id, nor for --print or --target" "$(ls -A "$TR" 2>/dev/null | wc -l | tr -d ' ')" "0"
 
+# ---------------------------------------------------------------- adhoc_never_superseded
+fixture
+worktree
+A="$HD/adhoc-${S1:0:8}.md"
+notes "adhoc-${S1:0:8}" "S1 primary notes"
+ns "$S1" "$TOP" --adhoc --phase build --next "Finish item C" --notes "$HD/notes/adhoc-${S1:0:8}.md"
+a1=$(digest "$A")
+ns "$S1" "$W" --adhoc --phase build --next "Go on in the worktree"
+check "adhoc_never_superseded: the worktree write exits 0" "$RC" "0"
+check "adhoc_never_superseded: it writes the worktree's adhoc handoff" "$(exists "$W/$STATE/handoff/adhoc-${S1:0:8}.md")" "yes"
+check "adhoc_never_superseded: the primary's, with its notes, is byte-identical" "$(digest "$A")" "$a1"
+lacks "adhoc_never_superseded: nothing is superseded" "$(cat "$TMP/stderr")" "superseded"
+
+# ---------------------------------------------------------------- claims_lock_not_had
+if command -v flock > /dev/null 2>&1; then
+  fixture
+  mkdir -p "$HD/claims"
+  exec 8>> "$HD/claims/.lock"
+  flock 8
+  OUT=$(cd "$TOP" && CLAUDE_CODE_SESSION_ID=$S1 DR_LOCK_TENTHS=1 timeout 90 bash "$NS" --adhoc --phase build --next "Finish item C" 2>"$TMP/stderr"); RC=$?
+  exec 8>&-
+  check "claims_lock_not_had: exits 4" "$RC" "4"
+  check "claims_lock_not_had: the block is printed once" "$(grep -c '^## Next session' <<<"$OUT")" "1"
+  has "claims_lock_not_had: it names the lock as the cause" "$OUT" "(the claims lock in $HD/claims was not had)"
+  check "claims_lock_not_had: nothing is written" "$(exists "$HD/adhoc-${S1:0:8}.md")" "no"
+  check "claims_lock_not_had: the turn record is written" "$(sed -n 2p "$HOME/.claude/$PLUGIN/sessions/turns/$(printf '%s' "$S1" | tr -c 'A-Za-z0-9' '-').next")" "next=Finish item C."
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

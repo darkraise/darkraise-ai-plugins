@@ -63,7 +63,8 @@
 # A write holds the repository's claims lock (<primary>/<state>/handoff/claims,
 # which scripts/handoff claim writes) from the claim check through the write:
 # it exits 7 when another live session claims the key, removes the key's
-# handoff from every other checkout and the mirror (superseded), releases this
+# handoff from every other checkout and the mirror (superseded; never an
+# adhoc- key's, which only a consume deletes), releases this
 # session's claim on the key, and releases the handoffs this session claimed
 # under other keys, deleting them (consumed) when --notes carries their open
 # items and they name no unfinished plan or draft. A terminal block (a
@@ -1003,12 +1004,15 @@ case $next_line in "Nothing — "*) if [ "$complete" -eq 1 ] || [ "$project" -eq
 
 # hand_off — run under the claims lock (spec §3), from the claim check through
 # the write, supersede, release and consume; the handoff's own lock nests
-# inside. Exits 0, 4 or 7 only, so 1 means the lock was not had.
+# inside. It exits 0, 4 or 7, and records in $progress_file how far it got, so
+# any other status is told apart: the lock not had, or the body stopping.
 hand_off() {
   set +e
   local f
+  [ -z "$progress_file" ] || echo locked > "$progress_file"
   refuse_if_held
   printf '%s\n' "$block"
+  [ -z "$progress_file" ] || echo printed > "$progress_file"
   write_turn_record
   # The no-plan finish record has done its job once finishing has an outcome;
   # left behind, the next unplanned finish would act on it without asking.
@@ -1036,10 +1040,15 @@ hand_off() {
     fail 4 "could not write $handoff — copy the block above into it by hand"
   fi
   [ -z "$notes_file" ] || rm -f "$notes_file"
-  # A key has one handoff: the one just written, in the checkout that resumes it.
-  while IFS= read -r f; do
-    [ "$f" -ef "$handoff" ] || { rm -f "$f" && printf 'next-step: superseded %s\n' "$f" >&2; }
-  done < <(copies_of "$key")
+  # A key has one handoff: the one just written, in the checkout that resumes
+  # it. An adhoc- handoff is the exception: only a consume deletes one, since
+  # its notes are the only record of unplanned work.
+  case $key in
+    adhoc-*) ;;
+    *) while IFS= read -r f; do
+         [ "$f" -ef "$handoff" ] || { rm -f "$f" && printf 'next-step: superseded %s\n' "$f" >&2; }
+       done < <(copies_of "$key") ;;
+  esac
   release_claim "$key"
   consume_claims
   exit 0
@@ -1051,10 +1060,18 @@ if ! { mkdir -p "$claims" && dagents_self_ignore "${claims%/handoff/claims}"; } 
   fail 4 "could not write $handoff (no claims directory $claims) — copy the block above into it by hand"
 fi
 status=0
+progress_file=$(mktemp 2>/dev/null) || progress_file=""
 dr_locked "$claims/" hand_off || status=$?
+reached=""
+if [ -n "$progress_file" ]; then reached=$(cat "$progress_file" 2>/dev/null); rm -f "$progress_file"; fi
 case $status in
   0|4|7) exit "$status" ;;
 esac
+case $reached in
+  printed) fail 4 "could not write $handoff: next-step stopped (status $status) after printing the block — copy the block above into it by hand" ;;
+  locked) cause="next-step stopped (status $status) under the claims lock" ;;
+  *) cause="the claims lock in $claims was not had" ;;
+esac
 printf '%s\n' "$block"
 write_turn_record
-fail 4 "could not write $handoff (the claims lock in $claims was not had) — copy the block above into it by hand"
+fail 4 "could not write $handoff ($cause) — copy the block above into it by hand"
