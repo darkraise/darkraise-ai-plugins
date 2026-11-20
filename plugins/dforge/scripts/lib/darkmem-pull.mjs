@@ -248,7 +248,7 @@ export function pulledKey(body, createdAt) {
 // that never synced a checkpoint takes the single newest. A pull never writes
 // another key's file, nor over local edits that have not been pushed; of two
 // workstreams naming one key the newer checkpoint is written.
-async function pullCheckpoints({ cfg, client, roots, state, persist, report, out }, open) {
+export async function pullCheckpoints({ cfg, client, roots, state, persist, report, out }, open) {
   const isFirst = state.checkpointAt === null;
   if (!isFirst && typeof state.checkpointAt === "object" && state.checkpointAt["*"] === undefined) {
     state.checkpointAt["*"] = newestCheckpointAt(state);
