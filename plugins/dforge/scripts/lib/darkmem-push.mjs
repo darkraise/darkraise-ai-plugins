@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { HttpError, failItem } from "./darkmem-client.mjs";
 import {
-  DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, archiveUri, caseGroups, checkpointAtOf, checkpointTarget, decodeUtf8,
+  DOC_PREFIX, EMPTY_SHA, MAX_ENTRIES_PER_APPEND, MAX_ENTRY_CHARS, UsageError, archiveUri, caseGroups, checkpointAtOf, checkpointTarget, decodeUtf8, handoffKey, handoffMarker,
   familiesOf, isArchiveUri, isoMicros, ledgerEntries, ledgerFiles, ledgerPlanPath, listDocumentFiles, pathToUri, propertiesFor, sha256, splitAtLimit,
   recordCheckpointAt, unsupportedPlanDirs, uriFamily, uriProblem, uriToLocal, utcStamp, utf8Fault, validKey,
 } from "./darkmem-mirror.mjs";
@@ -380,52 +380,78 @@ async function pushLedgers(context) {
   }
 }
 
-async function pushCheckpoint(context, named) {
-  // Only the primary's latest.md lives in the mirror; a linked worktree's
-  // stays in the worktree, so its path differs from the mirror's file.
-  const own = context.cfg.progress?.latestFile;
-  if (own && own !== path.join(context.roots.workRoot, "handoff", "latest.md")) context.out(`worktree handoff stays local: ${own}`);
-  try {
-    await sendCheckpoint(context, named);
-  } catch (error) {
-    failItem(context.report, "handoff/latest.md", error);
+// Every mirror handoff goes up as a checkpoint on its own workstream, each
+// key's synced hash kept in checkpoints. A linked worktree's handoffs stay in
+// the worktree, outside the mirror. With --handoff, only that file goes up,
+// on --workstream when one is named.
+async function pushCheckpoints(context, only, named) {
+  const own = context.cfg.progress?.handoffDir;
+  const dir = path.join(context.roots.workRoot, "handoff");
+  if (own && own !== dir) {
+    for (const name of handoffNames(own)) context.out(`worktree handoff stays local: ${path.join(own, name)}`);
+  }
+  for (const name of only === undefined ? handoffNames(dir) : [path.basename(only)]) {
+    try {
+      await sendCheckpoint(context, name, only !== undefined, named);
+    } catch (error) {
+      failItem(context.report, `handoff/${name}`, error);
+    }
   }
 }
 
-async function sendCheckpoint({ cfg, client, roots, state, persist, report }, named) {
-  const file = path.join(roots.workRoot, "handoff", "latest.md");
+function handoffNames(dir) {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true }).filter(entry => entry.isFile() && entry.name.endsWith(".md")).map(entry => entry.name).sort();
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
+async function sendCheckpoint({ cfg, client, roots, state, persist, report }, name, isNamed, named) {
+  const rel = `handoff/${name}`;
+  const file = path.join(roots.workRoot, "handoff", name);
   if (!fs.existsSync(file)) return;
   const buffer = fs.readFileSync(file);
   const hash = sha256(buffer);
-  if (hash === state.checkpoint) return;
   const body = decodeUtf8(buffer);
+  const key = body ? handoffKey(name) : null;
+  if (key !== null && state.checkpoints[key] === hash) return;
   if (!body) {
-    report.failures.push("handoff/latest.md: empty or not UTF-8 text, not pushed");
+    report.failures.push(`${rel}: empty or not UTF-8 text, not pushed`);
     return;
   }
+  if (key === null) {
+    report.failures.push(`${rel}: not a usable handoff key; rename it to letters, digits, '.', '_' or '-' (dforge-migrate renames an older layout's handoff)`);
+    return;
+  }
+  // An unplanned handoff belongs to no workstream until --handoff names it.
+  if (!isNamed && handoffMarker(body)?.kind === "adhoc") return;
   const target = checkpointTarget(body, { marker: true });
   const workstream = named ?? target?.slug;
   if (!workstream) {
-    report.failures.push("handoff/latest.md: its State section names no plan or draft; push again with --workstream KEY");
+    report.failures.push(`${rel}: its State section names no plan or draft; push again with --handoff ${file} --workstream KEY`);
     return;
   }
   const chars = [...body].length;
   if (chars > MAX_ENTRY_CHARS) {
-    report.failures.push(`handoff/latest.md: ${chars} characters, over the ${MAX_ENTRY_CHARS} one checkpoint holds`);
+    report.failures.push(`${rel}: ${chars} characters, over the ${MAX_ENTRY_CHARS} one checkpoint holds`);
     return;
   }
+  const synced = () => {
+    state.checkpoints[key] = hash;
+  };
   // The same note already filed since this workstream's last synced checkpoint
   // (an earlier push whose answer was lost, even behind another client's
   // checkpoint or this mirror's push to another workstream) is recorded, not
   // filed twice. The entry recorded at that time is already acknowledged, so
   // only a newer one can be a lost answer.
   const existing = await client.resume(cfg.project, workstream);
-  const synced = checkpointAtOf(state, workstream);
-  const since = (synced && isoMicros(synced)) ?? -Infinity;
+  const since = (checkpointAtOf(state, workstream) && isoMicros(checkpointAtOf(state, workstream))) ?? -Infinity;
   const filed = existing && (await client.entries(existing.workstream.id, "checkpoint"))
     .find(entry => isoMicros(entry.created_at) > since && sha256(Buffer.from(entry.body, "utf8")) === hash);
   if (filed) {
-    state.checkpoint = hash;
+    synced();
     recordCheckpointAt(state, workstream, filed.created_at);
     persist();
     return;
@@ -436,10 +462,10 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
     answer = await client.append({ project: cfg.project, workstream, properties, entries: [{ kind: "checkpoint", body }] });
   } catch (error) {
     if (!(error instanceof HttpError && error.status === 422)) throw error;
-    report.failures.push(`handoff/latest.md: darkmem refused it: ${error.detail}`);
+    report.failures.push(`${rel}: darkmem refused it: ${error.detail}`);
     return;
   }
-  state.checkpoint = hash;
+  synced();
   recordCheckpointAt(state, workstream, answer.workstream.last_entry_at);
   persist();
   report.counts.checkpoints += 1;
@@ -447,14 +473,20 @@ async function sendCheckpoint({ cfg, client, roots, state, persist, report }, na
 
 export async function push(context) {
   const named = context.options["--workstream"];
+  const only = context.options["--handoff"];
   if (named !== undefined && !validKey(named)) throw new UsageError(`--workstream ${JSON.stringify(named)} is not a workstream key`);
+  if (named !== undefined && only === undefined) throw new UsageError("--workstream needs --handoff FILE, the one handoff it files");
   const families = familiesOf(context.roots);
-  if (named !== undefined && !families.progress) throw new UsageError("--workstream needs progress applied darkmem; latest.md is local");
+  if (only !== undefined && !families.progress) throw new UsageError("--handoff needs progress applied darkmem; the handoffs are local");
+  const dir = path.join(context.roots.workRoot, "handoff");
+  if (only !== undefined && (path.dirname(path.resolve(only)) !== dir || !only.endsWith(".md") || !fs.existsSync(path.resolve(only)))) {
+    throw new UsageError(`--handoff ${JSON.stringify(only)} is not a handoff in ${dir}`);
+  }
   Object.assign(context.report.counts, { documents: 0, "ledger entries": 0, checkpoints: 0 });
   if (families.progress) for (const uri of [...context.state.pendingLinks]) await linkHandoff(context, uri);
   const manifest = await pushDocuments(context);
   if (families.documents) await archiveDeleted(context, manifest);
   if (!families.progress) return;
   await pushLedgers(context);
-  await pushCheckpoint(context, named);
+  await pushCheckpoints(context, only, named);
 }

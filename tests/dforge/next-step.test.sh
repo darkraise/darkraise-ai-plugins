@@ -3,6 +3,7 @@
 # resume, final review, next sub-project, program done, no follow-on — and
 # keep the primary checkout's handoff file pointing at it.
 set -uo pipefail
+unset CLAUDE_CODE_SESSION_ID
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="$HERE/../../plugins/dforge/scripts/next-step"
@@ -35,7 +36,11 @@ PLAN_REL="docs/plans/2026-01-01-demo.md"
 PLAN="$REPO/$PLAN_REL"
 LEDGER_DIR="$REPO/.dforge/sdd/2026-01-01-demo"
 LEDGER_SHOWN="$ROOT/.dforge/sdd/2026-01-01-demo/progress.md"
-HANDOFF="$REPO/.dforge/handoff/latest.md"
+HANDOFF="$REPO/.dforge/handoff/2026-01-01-demo.md"
+# The session the adhoc and project cases run as, and their handoff.
+S0=a0000000-0000-0000-0000-000000000000
+AD_H="$ROOT/.dforge/handoff/adhoc-a0000000.md"
+DRAFT_H="$ROOT/.dforge/handoff/draft.md"
 mkdir -p "$REPO/docs/plans"
 
 write_plan() { # write_plan <file> <execution line> <program line or empty>
@@ -186,13 +191,13 @@ rm -f "$HANDOFF"
 run "$WT" "$PLAN_REL"
 has "worktree: reads the worktree ledger" "$out" "1 of 3 tasks complete"
 has "worktree: launch dir is the worktree" "$out" "Launch in \`$WT_ROOT\`:"
-check "worktree: handoff written in the worktree" "$([ -f "$WT_ROOT/.dforge/handoff/latest.md" ] && echo yes || echo no)" "yes"
+check "worktree: handoff written in the worktree" "$([ -f "$WT_ROOT/.dforge/handoff/2026-01-01-demo.md" ] && echo yes || echo no)" "yes"
 check "worktree: no handoff in the primary" "$([ -f "$HANDOFF" ] && echo yes || echo no)" "no"
-rm -f "$WT_ROOT/.dforge/handoff/latest.md"
+rm -f "$WT_ROOT/.dforge/handoff/2026-01-01-demo.md"
 mkdir -p "$WT/.dforge/sdd" "$REPO/.dforge/sdd"
 printf '{"action":"pr"}\n' > "$WT/.dforge/sdd/finish.json"
 printf '{"action":"pr"}\n' > "$REPO/.dforge/sdd/finish.json"
-run "$WT" --adhoc --phase build --next "Ship the fix"
+CLAUDE_CODE_SESSION_ID=$S0 run "$WT" --adhoc --phase build --next "Ship the fix"
 check "worktree: adhoc clears the no-plan record finish-choice wrote there" "$([ -e "$WT/.dforge/sdd/finish.json" ] && echo kept || echo gone)" "gone"
 check "worktree: adhoc clears the primary's no-plan record too" "$([ -e "$REPO/.dforge/sdd/finish.json" ] && echo kept || echo gone)" "gone"
 # The primary finds a worktree's ledger, so the cases below start from none.
@@ -207,6 +212,27 @@ has "unwritable handoff: block still printed" "$out" "**Next:** Start at Task 1 
 has "unwritable handoff: says so on stderr" "$(cat "$TMP/stderr")" "could not write"
 has "unwritable handoff: says so on stdout" "$out" "next-step: could not write"
 rm -f "$REPO/.dforge/handoff"
+# A write that fails keeps the notes file: it is deleted only after a write.
+printf 'not a dir' > "$REPO/.dforge/handoff"
+printf 'session notes\n' > "$TMP/notes-4.md"
+run "$REPO" --notes "$TMP/notes-4.md" "$PLAN_REL"
+check "unwritable handoff: with --notes, exits 4" "$status" "4"
+check "unwritable handoff: the notes file is kept as it was" "$(cat "$TMP/notes-4.md" 2>/dev/null)" "session notes"
+rm -f "$REPO/.dforge/handoff"
+target=$(cd "$REPO" && bash "$SCRIPT" --target "$PLAN_REL")
+mkdir -p "$target"
+run "$REPO" --notes "$TMP/notes-4.md" "$PLAN_REL"
+check "handoff path is a directory: with --notes, exits 4" "$status" "4"
+check "handoff path is a directory: the notes file is kept as it was" "$(cat "$TMP/notes-4.md" 2>/dev/null)" "session notes"
+rmdir "$target"
+# Notes that are the handoff itself are refused: the write would delete them.
+run "$REPO" "$PLAN_REL"
+before=$(cat "$target")
+run "$REPO" --notes "$target" "$PLAN_REL"
+check "notes naming the handoff: exits 2" "$status" "2"
+has "notes naming the handoff: says why" "$(cat "$TMP/stderr")" "--notes names the handoff itself"
+check "notes naming the handoff: the handoff is left as it was" "$(cat "$target" 2>/dev/null)" "$before"
+rm -f "$target" "$TMP/notes-4.md"
 
 # --- final review clean: finishing is next ---
 ledger 'Task 1: complete (x)' 'Task 2: complete (x)' 'Task 3: complete (x)' "Final review: clean (commits a1b2c3d..$(git -C "$REPO" rev-parse --short HEAD))"
@@ -219,14 +245,14 @@ rm -rf "$LEDGER_DIR"
 # --- draft mode: a design phase hands off ---
 mkdir -p "$REPO/docs/specs" "$REPO/.dforge/handoff"
 printf '# Draft\n' > "$REPO/docs/specs/draft.md"
-printf '# Handoff\n\n## State\nKeep me.\n\n## Next session\nOld block.\n' > "$HANDOFF"
+printf '# Handoff\n\n## State\nKeep me.\n\n## Next session\nOld block.\n' > "$DRAFT_H"
 run "$REPO" --draft docs/specs/draft.md --next "Write the implementation plan with dforge:writing-plans"
 check "draft: exits 0" "$status" "0"
 has "draft: status names the authority" "$out" "**Status:** Design in progress: \`docs/specs/draft.md\` is the authority."
 has "draft: next action gains a full stop" "$out" "**Next:** Write the implementation plan with dforge:writing-plans."
 has "draft: planning launch command" "$out" "claude --model opus --effort high"
-has "draft: prompt" "$out" "Continue from \`docs/specs/draft.md\` (the authority): Write the implementation plan with dforge:writing-plans. Read \`$ROOT/.dforge/handoff/latest.md\` first."
-hand=$(cat "$HANDOFF")
+has "draft: prompt" "$out" "Continue from \`docs/specs/draft.md\` (the authority): Write the implementation plan with dforge:writing-plans. Read \`$DRAFT_H\` first."
+hand=$(cat "$DRAFT_H")
 has "draft: handoff keeps the notes" "$hand" "Keep me."
 lacks "draft: handoff drops the stale block" "$hand" "Old block."
 run "$REPO" --draft docs/specs/draft.md
@@ -234,19 +260,19 @@ check "draft without --next: exits 2" "$status" "2"
 run "$REPO" --draft docs/specs/missing.md --next "x"
 check "draft of a missing file: exits 2" "$status" "2"
 
-# --- adhoc mode: unplanned work hands off, latest.md is the authority ---
-printf '# Handoff\n\n## State\nItem C unscoped.\n\n## Next session\nOld block.\n' > "$HANDOFF"
-run "$REPO" --adhoc --phase design --next "Scope item C with dforge:brainstorming"
+# --- adhoc mode: unplanned work hands off, its handoff is the authority ---
+printf '# Handoff\n\n## State\nItem C unscoped.\n\n## Next session\nOld block.\n' > "$AD_H"
+CLAUDE_CODE_SESSION_ID=$S0 run "$REPO" --adhoc --phase design --next "Scope item C with dforge:brainstorming"
 check "adhoc design: exits 0" "$status" "0"
-has "adhoc: status names the authority" "$out" "**Status:** Unplanned work: the notes in \`$ROOT/.dforge/handoff/latest.md\` are the authority."
+has "adhoc: status names the authority" "$out" "**Status:** Unplanned work: the notes in \`$AD_H\` are the authority."
 has "adhoc: next action gains a full stop" "$out" "**Next:** Scope item C with dforge:brainstorming."
 has "adhoc design: opus launch command" "$out" "claude --model opus --effort high"
-has "adhoc: prompt" "$out" "Continue the unplanned work recorded in \`$ROOT/.dforge/handoff/latest.md\`: Scope item C with dforge:brainstorming."
-hand=$(cat "$HANDOFF")
+has "adhoc: prompt" "$out" "Continue the unplanned work recorded in \`$AD_H\`: Scope item C with dforge:brainstorming."
+hand=$(cat "$AD_H")
 has "adhoc: handoff keeps the notes" "$hand" "Item C unscoped."
 lacks "adhoc: handoff drops the stale block" "$hand" "Old block."
 check "adhoc: the state directory ignores itself" "$(git -C "$REPO" status --porcelain --untracked-files=all -- .dforge)" ""
-run "$REPO" --adhoc --phase build --next "Commit items A and B"
+CLAUDE_CODE_SESSION_ID=$S0 run "$REPO" --adhoc --phase build --next "Commit items A and B"
 check "adhoc build: exits 0" "$status" "0"
 has "adhoc build: sonnet launch command" "$out" "claude --model sonnet --effort high"
 lacks "adhoc build: no opus launch command" "$out" "claude --model opus"
@@ -436,6 +462,7 @@ cat > "$BLK" <<'PLAN'
 ### Task 3: Third
 PLAN
 BLK_LEDGER="$REPO/.dforge/sdd/2026-01-01-blocked"
+BLK_H="$REPO/.dforge/handoff/2026-01-01-blocked.md"
 mkdir -p "$BLK_LEDGER"
 {
   echo "# SDD ledger — plan: docs/plans/2026-01-01-blocked.md"
@@ -451,22 +478,22 @@ has "blocked: status names the task" "$out" "1 of 3 tasks complete; Task 2 is BL
 has "blocked: next carries the decision" "$out" "Your human partner decides: whether the export keeps the legacy field."
 lacks "blocked: no start or resume instruction" "$out" "Resume at Task"
 lacks "blocked: no launch command" "$out" "Launch in"
-has "blocked: latest.md carries the block" "$(cat "$REPO/.dforge/handoff/latest.md")" "Task 2 is BLOCKED"
+has "blocked: the handoff carries the block" "$(cat "$BLK_H")" "Task 2 is BLOCKED"
 printf '%s\n' "Task 2: BLOCKED — ruling seat — pick the store - sqlite or files" >> "$BLK_LEDGER/progress.md"
 run "$REPO" docs/plans/2026-01-01-blocked.md
 has "blocked: a decision with a dash of its own is carried whole" "$out" "Your human partner decides: pick the store - sqlite or files."
 
 # Writers share no temporary path: one another writer left behind, or holds,
 # does not stop this one, and two at once leave one well-formed block.
-mkdir -p "$REPO/.dforge/handoff/latest.md.tmp"
+mkdir -p "$BLK_H.tmp"
 run "$REPO" docs/plans/2026-01-01-blocked.md
 check "handoff: another writer's temporary path does not block the write" "$status" "0"
-rmdir "$REPO/.dforge/handoff/latest.md.tmp"
+rmdir "$BLK_H.tmp"
 (cd "$REPO" && bash "$SCRIPT" docs/plans/2026-01-01-blocked.md >/dev/null 2>&1) &
 (cd "$REPO" && bash "$SCRIPT" docs/plans/2026-01-01-blocked.md >/dev/null 2>&1) &
 wait
-check "handoff: concurrent writers leave one Next session block" "$(grep -c '^## Next session' "$REPO/.dforge/handoff/latest.md")" "1"
-check "handoff: no temporary file is left beside it" "$(ls -A "$REPO/.dforge/handoff" | grep -cv '^latest.md$')" "0"
+check "handoff: concurrent writers leave one Next session block" "$(grep -c '^## Next session' "$BLK_H")" "1"
+check "handoff: no temporary file is left beside it" "$(ls -A "$REPO/.dforge/handoff" | grep -cvE '\.md$|^claims$')" "0"
 # A note another writer adds to the handoff while next-step holds its copy must
 # survive: the slowed awk delivers the merged copy two seconds after it read
 # the file, and the other writer appends under the same lock meanwhile.
@@ -484,10 +511,10 @@ rm -f "$TMP/awk-read"
 (cd "$REPO" && PATH="$SLOW_BIN:$PATH" bash "$SCRIPT" docs/plans/2026-01-01-blocked.md >/dev/null 2>&1) &
 for _ in $(seq 100); do [ -e "$TMP/awk-read" ] && break; sleep 0.1; done
 ( . "$HERE/../../plugins/dforge/scripts/lib/lock.sh"
-  dr_locked "$(dr_lock_base "$REPO/.dforge/handoff/latest.md")" bash -c 'printf "\n## Notes\nkept by the other writer\n" >> "$1"' _ "$REPO/.dforge/handoff/latest.md" )
+  dr_locked "$(dr_lock_base "$BLK_H")" bash -c 'printf "\n## Notes\nkept by the other writer\n" >> "$1"' _ "$BLK_H" )
 wait
-check "handoff: a note added during the write is kept" "$(grep -c 'kept by the other writer' "$REPO/.dforge/handoff/latest.md")" "1"
-check "handoff: and one Next session block remains" "$(grep -c '^## Next session' "$REPO/.dforge/handoff/latest.md")" "1"
+check "handoff: a note added during the write is kept" "$(grep -c 'kept by the other writer' "$BLK_H")" "1"
+check "handoff: and one Next session block remains" "$(grep -c '^## Next session' "$BLK_H")" "1"
 
 # --- Codex host: the launch command names the Codex client, not Claude ---
 # The session knows its host (native-codex.md identifies it from callable tool
@@ -496,18 +523,18 @@ check "handoff: and one Next session block remains" "$(grep -c '^## Next session
 CODEX_DESIGN='codex -m gpt-6.1-sol -c model_reasoning_effort=high'
 CODEX_BUILD='codex -m gpt-6.1-sol -c model_reasoning_effort=high'
 
-run "$REPO" --adhoc --phase design --host codex --next "Scope item C with dforge:brainstorming"
+run "$REPO" --adhoc --key adhoc-c0dec0de --phase design --host codex --next "Scope item C with dforge:brainstorming"
 check "adhoc design on codex: exits 0" "$status" "0"
 has "adhoc design on codex: sol launch command" "$out" "$CODEX_DESIGN"
 lacks "adhoc design on codex: no astra launch command" "$out" "gpt-6-astra"
 lacks "adhoc design on codex: no claude launch command" "$out" "claude --model"
-run "$REPO" --adhoc --phase build --host codex --next "Commit items A and B"
+run "$REPO" --adhoc --key adhoc-c0dec0de --phase build --host codex --next "Commit items A and B"
 check "adhoc build on codex: exits 0" "$status" "0"
 has "adhoc build on codex: sol launch command" "$out" "$CODEX_BUILD"
 run "$REPO" --draft docs/specs/draft.md --host codex --next "Write the implementation plan with dforge:writing-plans"
 check "draft on codex: exits 0" "$status" "0"
 has "draft on codex: sol launch command" "$out" "$CODEX_DESIGN"
-run "$REPO" --adhoc --phase build --host claude --next "Commit items A and B"
+run "$REPO" --adhoc --key adhoc-c0dec0de --phase build --host claude --next "Commit items A and B"
 has "an explicit --host claude: keeps the claude launch command" "$out" "claude --model sonnet --effort high"
 run "$REPO" --adhoc --phase build --host gemini --next "x"
 check "an unknown --host: exits 2" "$status" "2"
@@ -973,10 +1000,11 @@ out=$(cd "$SR" && HOME=$SH bash "$SCRIPT" docs/dforge/plans/2026-02-02-mirror.md
 check "darkmem: exit 0" "$?" "0"
 has "darkmem: the plan is named" "$out" "docs/dforge/plans/2026-02-02-mirror.md"
 has "darkmem: the mirror ledger is read" "$out" "ledger \`$M/work/sdd/2026-02-02-mirror/progress.md\`"
-check "darkmem: latest.md is written to the mirror" \
-  "$(grep -c '^## Next session' "$M/work/handoff/latest.md")" "1"
-check "darkmem: only latest.md and dotfiles sit beside it" "$(ls -A "$M/work/handoff" | grep -v '^\.' | tr '\n' ' ')" "latest.md "
-check "darkmem: nothing is written in the checkout" "$([ -e "$SR/.dforge/handoff/latest.md" ] && echo yes || echo no)" "no"
+check "darkmem: the plan's handoff is written to the mirror" \
+  "$(grep -c '^## Next session' "$M/work/handoff/2026-02-02-mirror.md")" "1"
+check "darkmem: only that handoff and dotfiles sit beside it" "$(ls -A "$M/work/handoff" | grep -v '^\.' | tr '\n' ' ')" "2026-02-02-mirror.md "
+# Claims stay in the checkout, never in the mirror (spec §4).
+check "darkmem: nothing but the claims is written in the checkout" "$(ls -A "$SR/.dforge/handoff" 2>/dev/null | tr '\n' ' ')" "claims "
 
 # --- per-worktree handoffs (spec A2, A3, A6, A13, A14) ---
 # The Keep as-is block left a ledger for this plan in the primary; plan_ledger_any
@@ -994,7 +1022,7 @@ git -C "$REPO" add "$PLAN_REL" "$OTHER_REL" docs/dforge/registers/demo.md && git
 WA="$TMP/wa"; WB="$TMP/wb"
 git -C "$REPO" worktree add -q -b wa "$WA"; git -C "$REPO" worktree add -q -b wb "$WB"
 WA_ROOT=$(git -C "$WA" rev-parse --show-toplevel); WB_ROOT=$(git -C "$WB" rev-parse --show-toplevel)
-WA_H="$WA_ROOT/.dforge/handoff/latest.md"; WB_H="$WB_ROOT/.dforge/handoff/latest.md"
+WA_H="$WA_ROOT/.dforge/handoff/2026-01-01-demo.md"; WB_H="$WB_ROOT/.dforge/handoff/2026-01-02-other.md"
 # The primary holds both plans' workspaces, as a plan review leaves them.
 mkdir -p "$REPO/.dforge/sdd/2026-01-01-demo" "$REPO/.dforge/sdd/2026-01-02-other" \
   "$WA/.dforge/sdd/2026-01-01-demo" "$WB/.dforge/sdd/2026-01-02-other"
@@ -1016,21 +1044,22 @@ check "A3: from the primary, the primary's handoff is not written" "$([ -f "$HAN
 check "A13: --target from the primary names the worktree's handoff" "$(cd "$REPO" && bash "$SCRIPT" --target "$PLAN_REL")" "$WA_H"
 rm -f "$WA_H"
 check "A13: --target writes nothing" "$(cd "$WA" && bash "$SCRIPT" --target "$PLAN_REL" >/dev/null; [ -f "$WA_H" ] && echo yes || echo no)" "no"
-check "A13: --target for adhoc work names this checkout's" "$(cd "$WB" && bash "$SCRIPT" --target --adhoc --phase build --next x)" "$WB_H"
-(cd "$REPO" && bash "$SCRIPT" --target --latest >/dev/null 2>&1); check "A13: --target with --latest is a usage error" "$?" "2"
+check "A13: --target for adhoc work names this checkout's" "$(cd "$WB" && CLAUDE_CODE_SESSION_ID=$S0 bash "$SCRIPT" --target --adhoc --phase build --next x)" "$WB_ROOT/.dforge/handoff/adhoc-a0000000.md"
+(cd "$REPO" && bash "$SCRIPT" --target --handoff "$REPO/x.md" >/dev/null 2>&1); check "A13: --target with --handoff is a usage error" "$?" "2"
 (cd "$REPO" && bash "$SCRIPT" --target docs/plans/missing.md >/dev/null 2>&1); check "A13: --target of a missing plan exits 2" "$?" "2"
 # A13, every mode: --target names exactly the file the same call then writes.
 # Paths as git spells them (C:/… on Windows Git Bash), as --target prints them.
-written() { local f; for f in "$ROOT/.dforge/handoff/latest.md" "$WA_H" "$WB_H"; do [ -f "$f" ] && printf '%s ' "$f"; done; }
+written() { local f; for f in "$ROOT/.dforge/handoff/"*.md "$WA_ROOT/.dforge/handoff/"*.md "$WB_ROOT/.dforge/handoff/"*.md; do [ -f "$f" ] && printf '%s ' "$f"; done; }
+clear_handoffs() { rm -f "$ROOT/.dforge/handoff/"*.md "$WA_ROOT/.dforge/handoff/"*.md "$WB_ROOT/.dforge/handoff/"*.md; }
 for args in "$PLAN_REL" "--complete $PLAN_REL" "--kept $PLAN_REL" "--draft $OTHER_REL --next x" "--adhoc --phase build --next x" "--project"; do
-  rm -f "$HANDOFF" "$WA_H" "$WB_H"
+  clear_handoffs
   # shellcheck disable=SC2086
-  t=$(cd "$WA" && bash "$SCRIPT" --target $args 2>/dev/null)
+  t=$(cd "$WA" && CLAUDE_CODE_SESSION_ID=$S0 bash "$SCRIPT" --target $args 2>/dev/null)
   # shellcheck disable=SC2086
-  run "$WA" $args
+  CLAUDE_CODE_SESSION_ID=$S0 run "$WA" $args
   check "A13: --target names the file written ($args)" "$(written)" "$t "
 done
-rm -f "$HANDOFF" "$WA_H" "$WB_H"
+clear_handoffs
 # A13: background work running never stops --target (the stub in-flight reports a live launch).
 rm -rf "$TMP/stubscripts" && cp -R "$(dirname "$SCRIPT")" "$TMP/stubscripts"
 printf '#!/usr/bin/env bash\nprintf -- "- shell b1 10:00 idle 1m sleep\\n"\nexit 1\n' > "$TMP/stubscripts/in-flight"
@@ -1059,7 +1088,7 @@ if [ -n "$a4_pre" ]; then
   rm -f "$TMP/started"; (cd / && PATH="$TMP/stub:$PATH" bash -c "$launch")
   check "A4: the launch starts in the worktree" "$(cat "$TMP/started" 2>/dev/null)" "$(cd "$WA" && pwd -P)"
   ODD="$TMP/it's here"; git -C "$REPO" worktree add -q -b odd "$ODD"
-  run "$ODD" --adhoc --phase build --next x
+  CLAUDE_CODE_SESSION_ID=$S0 run "$ODD" --adhoc --phase build --next x
   rm -f "$TMP/started"; (cd / && PATH="$TMP/stub:$PATH" bash -c "$(launch_of "$out")")
   check "A4: a path with a space and a quote survives" "$(cat "$TMP/started" 2>/dev/null)" "$(cd "$ODD" && pwd -P)"
   printf '#!/bin/sh\nfor a; do last=$a; done\nprintf "%%s\\n" "$last"\n' > "$TMP/stub/cygpath"; chmod +x "$TMP/stub/cygpath"
@@ -1072,41 +1101,37 @@ write_plan "$WA/$PLAN_REL" '**Execution:** inline — codex gpt-6.1-sol / high �
 run "$WA" "$PLAN_REL"
 check "A4: a Codex launch gets the same prefix" "$(launch_of "$out")" "${a4_pre}codex -m gpt-6.1-sol -c model_reasoning_effort=high"
 git -C "$WA" checkout -q -- "$PLAN_REL"
-start="Start in \`$WA_ROOT\` (branch wa); its handoff is \`$WA_H\`. If your working directory is not \`$WA_ROOT\`, enter it first."
 for args in "$PLAN_REL" "--draft $OTHER_REL --next x" "--adhoc --phase build --next x" "--project" "--kept $PLAN_REL"; do
-  run "$WA" $args
+  # shellcheck disable=SC2086
+  h=$(cd "$WA" && CLAUDE_CODE_SESSION_ID=$S0 bash "$SCRIPT" --target $args)
+  start="Start in \`$WA_ROOT\` (branch wa); its handoff is \`$h\`. If your working directory is not \`$WA_ROOT\`, enter it first."
+  # shellcheck disable=SC2086
+  CLAUDE_CODE_SESSION_ID=$S0 run "$WA" $args
   has "A5: prompt opens with Start in ($args)" "$out" "$start"
   lacks "A5: no First enter ($args)" "$out" "First enter the existing worktree"
 done
 run "$WA" --complete "$PLAN_REL"
 has "A5: complete's prompt starts in the primary" "$out" "Start in \`$ROOT\`"
 git -C "$WA" checkout -q --detach
-run "$WA" --adhoc --phase build --next x
+CLAUDE_CODE_SESSION_ID=$S0 run "$WA" --adhoc --phase build --next x
 has "A5: a detached checkout" "$out" "Start in \`$WA_ROOT\` (detached at \`$(git -C "$WA" rev-parse --short HEAD)\`)"
 git -C "$WA" checkout -q wa
-printf '# Handoff\n\n## State\nKeep these notes.\n\n## Next session\n\n**Next:** other\n<!-- next-step: kind=adhoc done=0 closed=0 subject=- at=1 -->\n' > "$HANDOFF"
-run "$WA" --complete "$PLAN_REL"
-has "A15: complete over another live block keeps the notes" "$(cat "$HANDOFF")" "Keep these notes."
-lacks "A15: and replaces its block" "$(cat "$HANDOFF")" "**Next:** other"
-has "A15: stderr names the kind" "$(cat "$TMP/stderr")" "next-step: replaced the block for adhoc"
+# --complete and --kept replace their plan's handoff wholesale, or with the
+# notes --notes gives; --keep-notes is retired.
 printf '# Handoff\n\n## State\nOld notes.\n\n## Next session\n\n**Next:** x\n<!-- next-step: kind=plan done=0 closed=0 subject=%s at=1 -->\n' "$PLAN_REL" > "$HANDOFF"
 run "$WA" --complete "$PLAN_REL"
-lacks "A15: its own plan's block is replaced wholesale" "$(cat "$HANDOFF")" "Old notes."
-printf '# Handoff\n\n## State\nOld notes.\n\n## Next session\n\n**Next:** x\n<!-- next-step: kind=complete done=0 closed=0 subject=%s at=1 -->\n' "$OTHER_REL" > "$HANDOFF"
-run "$WA" --complete "$PLAN_REL"
-lacks "A15: a complete marker is replaced wholesale" "$(cat "$HANDOFF")" "Old notes."
-mkdir -p "${WA_H%/*}"
-printf '# Handoff\n\n## State\nWA notes.\n\n## Next session\n\n**Next:** y\n<!-- next-step: kind=plan done=0 closed=0 subject=%s at=1 -->\n' "$OTHER_REL" > "$WA_H"
-run "$WA" --kept "$PLAN_REL"
-has "A15: kept over another plan's block keeps the notes" "$(cat "$WA_H")" "WA notes."
-has "A15: stderr names the subject" "$(cat "$TMP/stderr")" "next-step: replaced the block for $OTHER_REL"
-CM="$WA/$(dirname "$OTHER_REL")/completed.md"; rm -f "$TMP/cm.bak"; [ ! -f "$CM" ] || cp "$CM" "$TMP/cm.bak"
-printf -- '- 2026-01-02 `%s` — merged into `main`\n' "$OTHER_REL" >> "$CM"
-printf '# Handoff\n\n## State\nFinished notes.\n\n## Next session\n\n**Next:** y\n<!-- next-step: kind=plan done=0 closed=0 subject=%s at=1 -->\n' "$OTHER_REL" > "$WA_H"
-run "$WA" --kept "$PLAN_REL"
-lacks "A15: a finished plan's block is replaced wholesale" "$(cat "$WA_H")" "Finished notes."
-lacks "A15: and stderr names no replaced block" "$(cat "$TMP/stderr")" "replaced the block"
-if [ -f "$TMP/cm.bak" ]; then mv "$TMP/cm.bak" "$CM"; else rm -f "$CM"; fi
+lacks "A15: --complete replaces its plan's handoff wholesale" "$(cat "$HANDOFF")" "Old notes."
+check "A15: and says nothing on stderr" "$(cat "$TMP/stderr")" ""
+mkdir -p "$WA_ROOT/.dforge/handoff/notes"
+printf '## State\nFresh notes.\n\n' > "$WA_ROOT/.dforge/handoff/notes/2026-01-01-demo.md"
+printf '# Handoff\n\n## State\nWA notes.\n\n## Next session\n\n**Next:** y\n' > "$WA_H"
+run "$WA" --kept --notes "$WA_ROOT/.dforge/handoff/notes/2026-01-01-demo.md" "$PLAN_REL"
+lacks "A15: --kept replaces its handoff" "$(cat "$WA_H")" "WA notes."
+has "A15: with the notes --notes gives" "$(cat "$WA_H")" "Fresh notes."
+check "A15: the notes file is deleted" "$([ -e "$WA_ROOT/.dforge/handoff/notes/2026-01-01-demo.md" ] && echo kept || echo gone)" "gone"
+check "A15: the notes sit above one block" "$(awk '/Fresh notes/ { n = NR } /^## Next session/ { b = NR } END { print (n < b) }' "$WA_H"):$(grep -c '^## Next session' "$WA_H")" "1:1"
+CLAUDE_CODE_SESSION_ID=$S0 run "$WA" --project --keep-notes
+check "A15: --keep-notes is a usage error" "$status" "2"
 rm -f "$HANDOFF" "$WA_H"
 # A14: darkmem progress, ledger in the mirror; the primary also holds the workspace.
 . "$HERE/fixtures/darkmem-stores.sh"
@@ -1118,7 +1143,7 @@ run "$REPO" "$PLAN_REL"
 has "A14: darkmem: launches in the worktree holding the workspace" "$out" "Launch in \`$WA_ROOT\`:"
 has "A14: darkmem: the prompt starts in the worktree" "$out" "Start in \`$WA_ROOT\`"
 check "A14: darkmem: the worktree's handoff is written" "$([ -f "$WA_H" ] && echo yes || echo no)" "yes"
-check "A14: darkmem: the mirror's handoff is not written" "$([ -f "$MIRROR/work/handoff/latest.md" ] && echo yes || echo no)" "no"
+check "A14: darkmem: the mirror's handoff is not written" "$([ -f "$MIRROR/work/handoff/2026-01-01-demo.md" ] && echo yes || echo no)" "no"
 # Both worktrees hold the workspace: the calling one is T, not the first listed.
 mkdir -p "$WB/.dforge/sdd/2026-01-01-demo"; rm -f "$WA_H" "$WB_H"
 run "$WB" "$PLAN_REL"
@@ -1130,6 +1155,42 @@ run "$WB" "$PLAN_REL"
 has "A14: darkmem: only the primary holding the workspace launches there" "$out" "Launch in \`$ROOT\`:"
 check "A14: darkmem: the calling worktree's handoff is not written" "$([ -f "$WB_H" ] && echo yes || echo no)" "no"
 rm -rf "$HOME/.dforge"
+
+# --- key_fallback_without_session_id (A17): no session id, so --target mints a
+# key and the write takes it back with --key ---
+t=$(cd "$REPO" && bash "$SCRIPT" --target --adhoc --phase build --next x 2>/dev/null); status=$?
+k=$(basename "$t" .md)
+check "key_fallback_without_session_id: --target exits 0" "$status" "0"
+check "key_fallback_without_session_id: --target mints adhoc-<8 hex>" "$(grep -cE '^adhoc-[0-9a-f]{8}$' <<<"$k")" "1"
+check "key_fallback_without_session_id: in this checkout's handoff directory" "$(dirname "$t")" "$ROOT/.dforge/handoff"
+run "$REPO" --adhoc --key "$k" --phase build --next x
+check "key_fallback_without_session_id: --adhoc --key writes it" "$status:$([ -f "$t" ] && echo written)" "0:written"
+has "key_fallback_without_session_id: its marker names the key and no session" "$(cat "$t" 2>/dev/null)" "kind=adhoc key=$k session=- "
+before=$(ls "$ROOT/.dforge/handoff")
+run "$REPO" --adhoc --phase build --next x
+check "key_fallback_without_session_id: --adhoc alone exits 2" "$status" "2"
+check "key_fallback_without_session_id: and writes nothing" "$(ls "$ROOT/.dforge/handoff")" "$before"
+CLAUDE_CODE_SESSION_ID=$S0 run "$REPO" --adhoc --key "$k" --phase build --next x
+check "key_fallback_without_session_id: --key with a session id exits 2" "$status" "2"
+run "$REPO" --key "$k" "$PLAN_REL"
+check "key_fallback_without_session_id: --key with a plan exits 2" "$status" "2"
+run "$REPO" --adhoc --key adhoc-zz --phase build --next x
+check "key_fallback_without_session_id: --key adhoc-zz exits 2" "$status" "2"
+run "$REPO" --project --key adhoc-legacy-main
+check "key_fallback_without_session_id: --project --key adhoc-legacy-* is accepted" "$status:$([ -f "$ROOT/.dforge/handoff/adhoc-legacy-main.md" ] && echo written)" "0:written"
+run "$REPO" --notes "$TMP/no-such-notes.md" "$PLAN_REL"
+check "key_fallback_without_session_id: --notes naming no file exits 2" "$status" "2"
+rm -f "$t" "$ROOT/.dforge/handoff/adhoc-legacy-main.md"
+
+# --- dforge_path_handoff_matches_target (A1): dforge-path handoff prints what
+# next-step --target prints ---
+PATHCMD="$(dirname "$SCRIPT")/dforge-path"
+for args in "$PLAN_REL" "--draft $OTHER_REL --next x" "--adhoc --phase build --next x"; do
+  # shellcheck disable=SC2086
+  want=$(cd "$WA" && CLAUDE_CODE_SESSION_ID=$S0 bash "$SCRIPT" --target $args)
+  # shellcheck disable=SC2086
+  check "dforge_path_handoff_matches_target ($args)" "$(cd "$WA" && CLAUDE_CODE_SESSION_ID=$S0 bash "$PATHCMD" handoff $args)" "$want"
+done
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

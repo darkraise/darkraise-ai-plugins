@@ -66,7 +66,7 @@ With the darkmem MCP, prefer its `code_search` over Explore subagents.
 - The goal is a finished plan; the budget only guards against auto-compaction. `scripts/task-brief`, `scripts/review-package` and `scripts/context-size` print a budget line. `ok`: continue at any percentage; `handoff`: finish the task in flight, then use dagents:handoff. See [session-budget.md](../../reference/session-budget.md).
 - Picking up earlier work: run `scripts/repo-audit` first; a plan with a ledger resumes through dagents:resume-execution.
 - After compaction, trust the snapshot, ledger and `git log` over the summary.
-- `<state>`, `<docs>`, `<ledger dir>` and `<latest.md>` in these skills: `bash <plugin-root>/scripts/dagents-path state|docs [RELATIVE]|ledger <plan>|latest` prints each in the checkout it runs in ([project-state.md](../../reference/project-state.md)).
+- `<state>`, `<docs>`, `<ledger dir>` and `<handoff>` in these skills: `bash <plugin-root>/scripts/dagents-path state|docs [RELATIVE]|ledger <plan>|handoff <next-step mode arguments>` prints each in the checkout it runs in ([project-state.md](../../reference/project-state.md)).
 
 ## Platform and Precedence
 

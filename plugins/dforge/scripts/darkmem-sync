@@ -4,7 +4,7 @@
 # With darkmemEnabled on, a repository mapped in ~/.dforge/config.json
 # syncs a mirror at ~/.dforge/mirror/<project>/: dforge/ (specs, plans,
 # registers, notes) while its documents are applied darkmem,
-# work/sdd/<plan>/{progress.md,handoff.md} and work/handoff/latest.md while its
+# work/sdd/<plan>/{progress.md,handoff.md} and work/handoff/<key>.md while its
 # progress is. ~/.dforge/stores.json records the applied stores;
 # documentStore and progressSource choose them. reconcile moves each family
 # whose configured store differs from its applied store, or prints a line
@@ -17,7 +17,7 @@
 # prints one line and does nothing, and only reconcile and status act while a
 # family is still in the mirror.
 #
-# Usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace] | restore NAME | revision NAME | reconcile
+# Usage: darkmem-sync status | pull | push [--handoff FILE [--workstream KEY]] | import [--replace] | restore NAME | revision NAME | reconcile
 # Exit: 0 done, or no family applied darkmem; 1 conflicts, refused or failed
 #       items, a refused restore, revision or reconcile move, or another sync
 #       holds the mirror; 2 usage, a malformed config, stores or state file, or import in

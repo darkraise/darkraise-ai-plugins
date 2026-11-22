@@ -71,10 +71,10 @@ auto_pending=$([ -n "$root" ] && cd "$root" 2>/dev/null && bash "${SCRIPT_DIR}/a
 . "${SCRIPT_DIR}/lib/ask-marker.sh"
 # In a subshell, so a malformed config costs only this check, never the hook.
 sdd=$(dforge_ledger_root "$root") || sdd=""
-latest=""
 # A turn that merged a plan or closed a milestone ends on next-step's block for
 # that transition, ledger or not: completed.md or roadmap.md changed this turn,
-# after latest.md was last written, and not by a pull (with documents in the
+# after next-step last printed a block for this session (its turn record), and
+# not by a pull (with documents in the
 # checkout: still uncommitted, or committed since the stamp); the roadmap only
 # when it now closes more milestones than at the turn's start.
 transition="" docs=""
@@ -84,19 +84,19 @@ if [ -f "$stamp" ]; then
   read -r docs_store docs < <(dforge_stores_init "$root" && printf '%s %s\n' "$_DFORGE_DOCS_STORE" "$_DFORGE_DOCS_ROOT")
   turn_head=$(tr -d '\r' < "$stamp.refs" 2>/dev/null | TOP=$root awk -F'\t' 'NR > 2 && $2 == ENVIRON["TOP"] { print $1; exit }')
   at_start() { [ -n "$turn_head" ] && git -C "$root" show "$turn_head:${1#"$root"/}" 2>/dev/null | tr -d '\r'; }
-  # FILE changed this turn after HANDOFF was last written: the primary's for a
-  # merged plan (next-step --complete writes it), this checkout's for the
-  # roadmap (--project).
-  changed_here() { # FILE HANDOFF
+  # FILE changed this turn after next-step last printed a block for this
+  # session, terminal blocks included (they write no handoff).
+  turn_record=$(ending_turn_record "$session_id")
+  changed_here() { # FILE
     local commit_at
     [ -f "$1" ] && [ "$1" -nt "$stamp" ] || return 1
-    ! [ "$2" -nt "$1" ] || return 1
+    ! [ "$turn_record" -nt "$1" ] || return 1
     [ "$docs_store" = local ] || return 0
     [ -n "$(git -C "$root" status --porcelain -- "$1" 2>/dev/null)" ] && return 0
     commit_at=$(git -C "$root" log -1 --format=%ct -- "$1" 2>/dev/null)
     [ "${commit_at:-0}" -ge "$stamp_at" ]
   }
-  if [ -n "$docs" ] && changed_here "$docs/plans/completed.md" "$(dforge_latest_file "$(plan_primary_root "$root" || printf '%s' "$root")")"; then
+  if [ -n "$docs" ] && changed_here "$docs/plans/completed.md"; then
     added=$(awk 'NR == FNR { seen[$0]; next } !($0 in seen) && /`/ { line = $0 } END { print line }' \
       <(at_start "$docs/plans/completed.md") <(tr -d '\r' < "$docs/plans/completed.md"))
     [ -n "$added" ] || added=$(tr -d '\r' < "$docs/plans/completed.md" | grep '`' | tail -n 1)
@@ -104,7 +104,7 @@ if [ -f "$stamp" ]; then
     # The name goes into a command the model runs: only a plain path stays.
     [[ "$plan" =~ ^[A-Za-z0-9._/-]+\.md$ ]] || plan=PLAN_FILE
     transition="complete $plan"
-  elif [ -n "$docs" ] && changed_here "$docs/roadmap.md" "$(dforge_latest_file "$root")"; then
+  elif [ -n "$docs" ] && changed_here "$docs/roadmap.md"; then
     if [ "$docs_store" = local ]; then
       . "${SCRIPT_DIR}/lib/roadmap.sh"
       closed_now=$(roadmap_rows "$docs/roadmap.md" | awk -F'\t' '$5 == "closed"' | grep -c . || true)
@@ -133,7 +133,7 @@ last=$(last_message "$stdin_json" "$transcript_path")
 # next-step wrote it this turn (lib/next-ending.sh), never hand-typed. The
 # first ledger without its ending names the reason.
 ends_with() { local e; for e in "$@"; do case "$last" in *"$e"*) return 0 ;; esac; done; return 1; }
-wrote_block() { [ -n "$latest" ] || latest=$(dforge_latest_file "$root"); ending_released_any "$last" "$stamp" "$latest" "$root"; }
+wrote_block() { ending_released_any "$last" "$stamp" "$session_id" "$root"; }
 ledger="" clean=0
 [ -d "$sdd" ] || sdd=""
 ws="$(dforge_dir state "$root")/sdd"

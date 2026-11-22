@@ -610,7 +610,7 @@ describe('plugin-review-fixes: the judge write guard', () => {
 })
 
 const WEBHOOK = 'https://discord.com/api/webhooks/123456789012/abcDEF_token-x'
-const LATEST = '/home/me/code/shop/.dforge/handoff/latest.md'
+const HANDOFF = '/home/me/code/shop/.dforge/handoff/stored.md'
 const REGISTER = '/home/me/code/shop/docs/dforge/registers/r.md'
 const registerOf = (states: string[]) =>
   ['# Register', '', '**Source:** test', '**Covers:** -', '', '| # | Item | Assigned | Acceptance | State | Note |', '|---|---|---|---|---|---|', ...states.map((state, i) => `| ${i + 1} | item ${i + 1} | - | - | ${state} | - |`), ''].join('\n')
@@ -716,14 +716,14 @@ describe('plugin-review-fixes: ledger states, notifications and the run card', (
 describe('plugin-review-fixes: resume offer, model switch snapshot and session changes', () => {
   test('A40: under documentStore=darkmem the resume offer clears once every row of its register is resolved', async ($, on) => {
     const MIRROR = '/home/me/.dforge/mirror/shop'
-    const MODE = [`documents\tdarkmem\t${MIRROR}/dforge`, 'progress\tlocal\t/home/me/code/shop/.dforge/sdd\t/home/me/code/shop/.dforge/handoff/latest.md', 'project\tshop', ''].join('\n')
+    const MODE = [`documents\tdarkmem\t${MIRROR}/dforge`, 'progress\tlocal\t/home/me/code/shop/.dforge/sdd\t/home/me/code/shop/.dforge/handoff', 'project\tshop', ''].join('\n')
     const STORED = `${MIRROR}/dforge/registers/r.md`
     const files: NonNullable<World['files']> = {
       '/home/me/.dforge/stores.json': { text: '{}', mtimeMs: 1 },
-      [LATEST]: { text: rulingHandoffOf('docs/dforge/registers/r.md'), mtimeMs: 900_000 },
+      [HANDOFF]: { text: rulingHandoffOf('docs/dforge/registers/r.md'), mtimeMs: 900_000 },
       [STORED]: { text: registerOf(['done', 'open']), mtimeMs: 1 },
     }
-    // next-step --print --latest fails, so the stored note and its register check stand.
+    // next-step --print --handoff fails, so the stored note and its register check stand.
     on('process.run', { argv: /\/scripts\/next-step$/ } as never, (() => ({ value: { exitCode: 1, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })) as never)
     world(on, { ...SIGNED_IN, files, modeOut: { exitCode: 0, stdout: MODE, stderr: '' } })
     signedIn(on, files)

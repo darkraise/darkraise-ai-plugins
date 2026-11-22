@@ -258,22 +258,28 @@ project --print --project
 has "project closed: every milestone is closed" "$STATUS" "**Status:** Project: every milestone is closed."
 has "project closed: a register outside the milestones routes" "$NEXT" "\`Search\`: write its spec in a fresh session."
 
-# --- --project replaces latest.md unless told to keep notes ---
+# --- --project writes the session's handoff: it keeps the notes there, and
+# --notes replaces them ---
 fixture
 register r "$X" "1|Search|Search|open"
-LATEST="$R/.dforge/handoff/latest.md"
+S0=a0000000-0000-0000-0000-000000000000
+LATEST="$R/.dforge/handoff/adhoc-a0000000.md"
 mkdir -p "$(dirname "$LATEST")"
-printf '# Handoff\n\n## State\n\nold notes\n\n## Next session\n\nOld block.\n' > "$LATEST"
-project --project
-lacks "project write: the notes are replaced" "$(cat "$LATEST")" "## State"
-has "project write: the marker names the project" "$(grep '^<!-- next-step:' "$LATEST")" "kind=project done=0 closed=0 subject=- at="
-awk '/^## Next session/ { print "## State"; print ""; print "kept notes"; print "" } { print }' "$LATEST" > "$LATEST.new" && mv "$LATEST.new" "$LATEST"
-project --project --keep-notes
+printf '# Handoff\n\n## State\n\nkept notes\n\n## Next session\n\nOld block.\n' > "$LATEST"
+CLAUDE_CODE_SESSION_ID=$S0 project --project
 kept=$(cat "$LATEST")
-has "project keep-notes: the notes survive" "$kept" "kept notes"
+has "project keep: the notes survive" "$kept" "kept notes"
+lacks "project keep: the old block is replaced" "$kept" "Old block."
 check_above=$(awk '/^kept notes$/ { n = NR } /^## Next session/ { b = NR } END { print (n && b && n < b) ? "above" : "not above" }' "$LATEST")
-has "project keep-notes: the notes sit above the block" "$check_above" "above"
-has "project keep-notes: the marker names the project" "$(grep '^<!-- next-step:' "$LATEST")" "kind=project done=0 closed=0 subject=- at="
+has "project keep: the notes sit above the block" "$check_above" "above"
+has "project write: the marker names the project" "$(grep '^<!-- next-step:' "$LATEST")" "kind=project key=adhoc-a0000000 session=$S0 done=0 closed=0 subject=- at="
+printf '## State\n\nnew notes\n' > "$TMP/notes.md"
+CLAUDE_CODE_SESSION_ID=$S0 project --project --notes "$TMP/notes.md"
+lacks "project notes: the old notes are replaced" "$(cat "$LATEST")" "kept notes"
+has "project notes: by the given ones" "$(cat "$LATEST")" "new notes"
+check "project notes: the notes file is deleted" "$([ -e "$TMP/notes.md" ] && echo kept || echo gone)" "gone"
+CLAUDE_CODE_SESSION_ID=$S0 project --project --keep-notes
+has "project: --keep-notes is a usage error" "$OUT" "usage: next-step"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

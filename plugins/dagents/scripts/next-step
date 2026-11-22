@@ -10,18 +10,29 @@
 # here rather than remembered by the model: small executors reliably forget to
 # say it, and a hand-written handoff goes stale the moment work moves on.
 #
-# Usage: next-step [--host claude|codex] [--print|--target] [--complete|--kept] PLAN_FILE
-#        next-step [--host claude|codex] [--print|--target] --draft DRAFT_FILE --next ACTION
-#        next-step [--host claude|codex] [--print|--target] --adhoc --phase design|build --next ACTION
-#        next-step [--host claude|codex] [--print|--target] --project [--keep-notes]
-#        next-step [--host claude|codex] --print --latest
+# Usage: next-step [--host claude|codex] [--print|--target] [--notes FILE] [--complete|--kept] PLAN_FILE
+#        next-step [--host claude|codex] [--print|--target] [--notes FILE] --draft DRAFT_FILE --next ACTION
+#        next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --adhoc --phase design|build --next ACTION
+#        next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --project
+#        next-step [--host claude|codex] --print --handoff FILE
+# The handoff is <checkout>/<state>/handoff/<key>.md (scripts/lib/roots.sh
+# dagents_handoff_file): the key is the plan's or the draft's basename, and for
+# --adhoc and --project adhoc-<the first 8 characters of
+# CLAUDE_CODE_SESSION_ID>.
 #   --print     compute and print the block only: write, create and delete
 #               nothing, and skip the background-work check.
+#   --notes     FILE's content becomes the handoff's notes, above the block,
+#               and FILE is deleted once the handoff is written. Without it a
+#               handoff already at the key keeps its notes and only its Next
+#               session section is replaced. Ignored by --print and --target.
+#   --key       the adhoc-<8 hex> or adhoc-legacy-* key of an --adhoc or
+#               --project handoff when no session id is set: --target mints
+#               one, and the write takes it back. A usage error with a session
+#               id or another mode; an --adhoc or --project write with neither
+#               exits 2.
 #   --complete  the plan is finished and its branch integrated; the ledger may
-#               already be deleted. Replaces the handoff wholesale unless
-#               it holds another session's block (another plan's, or adhoc or
-#               project work): then only its Next session section, said on
-#               stderr.
+#               already be deleted. Without --notes, replaces the handoff
+#               wholesale.
 #   --kept      finishing kept the plan's branch as-is: integration is still
 #               pending, so the block names the branch, its worktree and the
 #               finish choices still open, and reads no register or roadmap.
@@ -33,31 +44,50 @@
 #               handing off; DRAFT_FILE is the authority and ACTION names the
 #               next step and its skill.
 #   --adhoc     unplanned work (a chat-approved change or a punch list, with no
-#               plan or draft file) is handing off; the notes in latest.md are
-#               the authority. --phase design launches the planning model,
+#               plan or draft file) is handing off; the notes in its handoff
+#               are the authority. --phase design launches the planning model,
 #               --phase build the execution model.
 #   --project   no plan is in hand (between plans, or after a milestone close):
 #               the block comes from the current milestone's registers, or
-#               every register when no milestone is current. Replaces latest.md
-#               wholesale unless --keep-notes, which keeps the notes above it.
-#   --latest    recompute the block latest.md holds from what its marker
-#               names (requires --print), and print it with the marker last.
+#               every register when no milestone is current.
+#   --handoff   recompute the block the handoff FILE holds from what its
+#               marker names (requires --print), and print it with the marker
+#               last; its first prompt names FILE as the handoff.
 #   --target    print the absolute path of the handoff the same call would
 #               write, and exit 0: write nothing, and skip the background-work
-#               check. A usage error with --latest.
+#               check. A usage error with --handoff.
 #   --host      which client the next session launches; default claude. A plan
 #               states its own host in its header, so the flag serves the paths
 #               that have no plan to read.
-# latest.md's Next session section ends with a marker line the printed block
-# never carries, naming what the block was computed from:
-#   <!-- next-step: kind=<kind> [branch=<name> or branch=detached:<sha>] [host=codex] done=<n> closed=<n> subject=<name or -> at=<epoch> -->
-#   host=codex appears only for a Codex block; --print --latest without --host
+# A write holds the repository's claims lock (<primary>/<state>/handoff/claims,
+# which scripts/handoff claim writes) from the claim check through the write:
+# it exits 7 when another live session claims the key, removes the key's
+# handoff from every other checkout and the mirror (superseded; never an
+# adhoc- key's, which only a consume deletes), releases this
+# session's claim on the key, and releases the handoffs this session claimed
+# under other keys, deleting them (consumed) when --notes carries their open
+# items and they name no unfinished plan or draft. A terminal block (a
+# "Nothing —" Next line of --complete or --project) is printed, not written,
+# and a terminal --complete removes every copy of the key. Each block a write
+# prints is recorded for the Stop hooks in
+# ~/.claude/dagents/sessions/turns/<session>.next.
+# The handoff's Next session section ends with a marker line the printed block
+# never carries, naming what the block was computed from and who wrote it:
+#   <!-- next-step: kind=<kind> [branch=<name> or branch=detached:<sha>] key=<key> session=<id or -> [host=codex] done=<n> closed=<n> subject=<name or -> at=<epoch> -->
+#   host=codex appears only for a Codex block; --print --handoff without --host
 #   recomputes for the host it names.
-# Exit: 0 ok; 2 usage or missing file; 3 plan has no tasks; 4 block printed but
-#       latest.md could not be written; 5 background work this session started
+# Exit: 0 ok; 2 usage or missing file, or a --print --handoff FILE whose
+#       Next session section or marker cannot be read; 3 plan has no tasks;
+#       4 block printed but the handoff could not be written; 5 background work this session started
 #       is still running (scripts/in-flight): nothing printed or written
-#       (never under --print); 6 --print --latest has nothing to resume
-#       (nothing on stdout, at most one reason on stderr).
+#       (never under --print); 6 --print --handoff has nothing to resume
+#       (nothing on stdout, at most one reason on stderr): a plan in
+#       completed.md, or whose ledger is gone and is unrecorded; a draft a
+#       plan's Spec line names, or that is gone; a complete or project block
+#       whose recomputed Next is terminal; a kept branch merged or gone. An
+#       adhoc handoff is never superseded; 7 another live session claims the
+#       handoff's key: nothing printed or written (--target too), and this
+#       session's auto run is stopped first.
 set -euo pipefail
 
 # Failures print on stdout as well as stderr. A session that surfaces only
@@ -69,20 +99,30 @@ fail() { # fail EXIT MESSAGE
   exit "$1"
 }
 
-usage() { fail 2 "usage: next-step [--host claude|codex] [--print|--target] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print|--target] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print|--target] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print|--target] --project [--keep-notes] | next-step [--host claude|codex] --print --latest"; }
+usage() { fail 2 "usage: next-step [--host claude|codex] [--print|--target] [--notes FILE] [--complete|--kept] PLAN_FILE | next-step [--host claude|codex] [--print|--target] [--notes FILE] --draft DRAFT_FILE --next ACTION | next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --adhoc --phase design|build --next ACTION | next-step [--host claude|codex] [--print|--target] [--notes FILE] [--key KEY] --project | next-step [--host claude|codex] --print --handoff FILE"; }
 . "$(cd "$(dirname "$0")" && pwd)/lib/plan.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/roadmap.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/lock.sh"
 . "$(cd "$(dirname "$0")" && pwd)/lib/route.sh"
+. "$(cd "$(dirname "$0")" && pwd)/lib/session-live.sh"
 
-# --host and --print are pulled out wherever they sit so the remaining
-# arguments keep their strict positional contract.
-host=claude host_given=0 print_only=0 target_only=0
+# --host, --print, --target, --notes and --key are pulled out wherever they
+# sit so the remaining arguments keep their strict positional contract.
+host=claude host_given=0 print_only=0 target_only=0 notes_file="" key_arg=""
 hostless=()
 while [ $# -gt 0 ]; do
   case $1 in
     --print) print_only=1; shift ;;
     --target) target_only=1; shift ;;
+    --notes)
+      [ $# -ge 2 ] && [ -n "$2" ] || usage
+      notes_file=$2; shift 2
+      case $notes_file in /* | [A-Za-z]:[\\/]*) ;; *) notes_file="$PWD/$notes_file" ;; esac
+      ;;
+    --key)
+      [ $# -ge 2 ] && [ -n "$2" ] || usage
+      key_arg=$2; shift 2
+      ;;
     --host)
       [ $# -ge 2 ] || usage
       case $2 in claude|codex) host=$2 host_given=1 ;; *) usage ;; esac
@@ -210,15 +250,17 @@ execution_skill() { # execution_skill EXECUTION_LINE
   fi
 }
 
-complete=0 kept=0 draft=0 adhoc=0 project=0 keep_notes=0 latest_mode=0 phase="" next_action=""
+complete=0 kept=0 draft=0 adhoc=0 project=0 latest_mode=0 handoff_file="" phase="" next_action=""
 case "${1:-}" in
-  --latest)
-    latest_mode=1; shift
+  --handoff)
+    latest_mode=1
+    { [ $# -ge 2 ] && [ -n "$2" ]; } || usage
+    handoff_file=$2
+    shift 2
     { [ $# -eq 0 ] && [ "$print_only" -eq 1 ] && [ "$target_only" -eq 0 ]; } || usage
     ;;
   --project)
     project=1; shift
-    if [ "${1:-}" = --keep-notes ]; then keep_notes=1; shift; fi
     [ $# -eq 0 ] || usage
     ;;
   --complete) complete=1; shift ;;
@@ -236,6 +278,15 @@ case "${1:-}" in
     next_action=$4
     ;;
 esac
+[ "$latest_mode" -eq 0 ] || { [ -z "$notes_file" ] && [ -z "$key_arg" ]; } || usage
+# --key names an adhoc handoff for a caller with no session id to key it by.
+if [ -n "$key_arg" ]; then
+  { [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ]; } && [ -z "${CLAUDE_CODE_SESSION_ID:-}" ] || usage
+  dagents_handoff_key_check adhoc "$key_arg" || usage
+fi
+if [ -n "$notes_file" ] && [ "$print_only" -eq 0 ] && [ "$target_only" -eq 0 ] && [ ! -f "$notes_file" ]; then
+  fail 2 "no notes file at $notes_file"
+fi
 
 # collect_rows — read register paths on stdin; set open_rows (route_rows'
 # input lines), reg_list and outside_ms, against current_ms and ms_regs.
@@ -303,8 +354,30 @@ else
 fi
 
 dagents_stores_init "$root"
+
+# The handoff's key (spec §1). A key taken from the session id is held only to
+# the file-name rule: ids from other clients and tests need not be hex.
+session_id=${CLAUDE_CODE_SESSION_ID:-} key=""
+if [ "$latest_mode" -eq 1 ]; then :
+elif [ "$print_only" -eq 1 ] && [ -n "${DAGENTS_NEXT_STEP_HANDOFF:-}" ]; then
+  # A recompute names the file it recomputes, whatever its name, so its key
+  # is never checked.
+  key=$(basename "$DAGENTS_NEXT_STEP_HANDOFF" .md)
+elif [ "$adhoc" -eq 1 ] || [ "$project" -eq 1 ]; then
+  if [ -n "$session_id" ]; then key="adhoc-${session_id:0:8}"
+  elif [ -n "$key_arg" ]; then key=$key_arg
+  elif [ "$print_only" -eq 1 ] || [ "$target_only" -eq 1 ]; then key="adhoc-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
+  else fail 2 "an --adhoc or --project handoff needs CLAUDE_CODE_SESSION_ID or --key KEY (next-step --target prints one)"
+  fi
+else
+  key=$slug
+  if [ "$draft" -eq 1 ]; then key_kind=draft; else key_kind=plan; fi
+  dagents_handoff_key_check "$key_kind" "$key" || fail 2 "handoff: invalid key $key"
+fi
 # The draft and adhoc prompts name it; their T is this checkout.
-latest_shown=$(dagents_latest_file)
+if [ "$print_only" -eq 1 ] && [ -n "${DAGENTS_NEXT_STEP_HANDOFF:-}" ]; then own_handoff=$DAGENTS_NEXT_STEP_HANDOFF
+elif [ -n "$key" ]; then own_handoff=$(dagents_handoff_file "$key" 2>/dev/null) || fail 2 "handoff: invalid key $key"
+fi
 
 # handoff_target — T, the checkout the next session works in (spec §2).
 handoff_target() {
@@ -314,17 +387,33 @@ handoff_target() {
   else printf '%s\n' "$root"; fi
 }
 
-# --print --latest: the stored block, recomputed from what its marker names
-# when the repository can answer it, so a reader never replays a stale one.
+# draft_planned ROOT DRAFT — a plan's Spec line names DRAFT; a Program line
+# alone does not, since a program's draft outlives each of its plans.
+draft_planned() {
+  local want name file sub spec
+  want=$(dagents_name_key "$2")
+  while IFS=$'\t' read -r name file sub; do
+    spec=$(tr -d '\r' < "$file" | sed -n 's/^\*\*Spec:\*\*[[:space:]]*//p' | head -n 1 | sed 's/^`\([^`]*\)`.*/\1/; s/[[:space:]].*//')
+    [ "$(dagents_name_key "$spec")" = "$want" ] && return 0
+  done < <(_spec_plan_files "$1" "$2")
+  return 1
+}
+
+# --print --handoff FILE: the stored block, recomputed from what its marker
+# names when the repository can answer it, so a reader never replays a stale
+# one.
 if [ "$latest_mode" -eq 1 ]; then
   gone() { printf 'next-step: %s\n' "$1" >&2; exit 6; }
-  latest=$(dagents_latest_file)
-  [ -f "$latest" ] || gone "no latest.md at $latest"
+  # A handoff it cannot read is not a finished one: exit 2, so no reader deletes it.
+  unreadable() { printf 'next-step: %s\n' "$1" >&2; exit 2; }
+  latest=$handoff_file
+  case $latest in /* | [A-Za-z]:[\\/]*) ;; *) latest="$PWD/$latest" ;; esac
+  [ -f "$latest" ] || gone "no handoff at $latest"
   stored=$(tr -d '\r' < "$latest" | awk '
     /^## Next session[ \t]*$/ { on = 1; print; next }
     on && /^## / { exit }
     on')
-  [ -n "$stored" ] || gone "latest.md has no Next session section"
+  [ -n "$stored" ] || unreadable "$latest has no Next session section"
   marker=$(grep -E '^<!-- next-step: .* -->$' <<<"$stored" | tail -n 1 || true)
   stored=$(grep -vE '^<!-- next-step: ' <<<"$stored" | awk 'NF { last = NR } { line[NR] = $0 } END { for (i = 1; i <= last; i++) print line[i] }')
   stored_block() { printf '%s\n%s\n' "$stored" "$marker"; exit 0; }
@@ -346,54 +435,59 @@ if [ "$latest_mode" -eq 1 ]; then
       host=codex) [ "$host_given" -eq 1 ] || host=codex ;;
     esac
   done
-  case $m_done$m_closed in *[!0-9]*) gone "malformed marker counts: $marker" ;; esac
+  case $m_done$m_closed in *[!0-9]*) unreadable "malformed marker counts: $marker" ;; esac
   case $m_kind in
     plan|complete|kept|draft)
-      case $m_subject in -*|*[[:cntrl:]]*|'') gone "malformed marker subject: $m_subject" ;; esac
-      case $m_subject in *.md) ;; *) gone "malformed marker subject: $m_subject" ;; esac ;;
+      case $m_subject in -*|*[[:cntrl:]]*|'') unreadable "malformed marker subject: $m_subject" ;; esac
+      case $m_subject in *.md) ;; *) unreadable "malformed marker subject: $m_subject" ;; esac ;;
   esac
   self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
-  recompute() { # recompute ARGS... — this script's own --print block, then the marker
+  terminal_gone=0
+  recompute() { # recompute ARGS... — this script's own --print block, naming the handoff, then the marker
     local out status=0
-    out=$(cd "$root" && bash "$self" --host "$host" --print "$@") || status=$?
+    out=$(cd "$root" && DAGENTS_NEXT_STEP_HANDOFF=$latest bash "$self" --host "$host" --print "$@") || status=$?
     if [ "$status" -ne 0 ]; then printf '%s\n' "$out"; exit "$status"; fi
+    if [ "$terminal_gone" -eq 1 ] && grep -q '^\*\*Next:\*\* Nothing — ' <<<"$out"; then
+      gone "the recomputed block is terminal"
+    fi
     printf '%s\n%s\n' "$out" "$marker"
     exit 0
   }
-  read -r now_done now_closed < <(handoff_counts "$primary")
   case $m_kind in
     plan)
+      plan_finished "$root" "$m_subject" && gone "the plan is finished: $m_subject"
       if grep -qE '^\*\*Status:\*\* .*[1-9][0-9]* of [0-9]+ tasks complete' <<<"$stored" \
          && ! plan_ledger_any "$root" "$m_subject" >/dev/null && ! plan_finished "$root" "$m_subject"; then
         gone "the ledger is gone and the plan is unrecorded: $m_subject"
       fi
       recompute "$m_subject" ;;
-    complete) recompute --complete "$m_subject" ;;
-    project) recompute --project ;;
+    complete) terminal_gone=1; recompute --complete "$m_subject" ;;
+    project) terminal_gone=1; recompute --project ;;
     kept)
       plan_finished "$root" "$m_subject" && recompute --complete "$m_subject"
       case $m_branch in
         detached:*) kept_ref="${m_branch#detached:}^{commit}" ;;
         *) kept_ref="refs/heads/$m_branch" ;;
       esac
-      case $m_branch in -*|detached:-*) gone "malformed marker branch: $m_branch" ;; esac
+      case $m_branch in -*|detached:-*) unreadable "malformed marker branch: $m_branch" ;; esac
       git -C "$primary" rev-parse --verify --quiet "$kept_ref" >/dev/null || gone "the kept branch $m_branch is gone"
       ! git -C "$primary" merge-base --is-ancestor "$kept_ref" HEAD 2>/dev/null || gone "the kept branch $m_branch is merged"
       stored_block ;;
-    draft|adhoc)
-      { [ "$now_done" -gt "$m_done" ] || [ "$now_closed" -gt "$m_closed" ]; } && gone "a plan or a milestone closed since the block was written"
-      [ "$m_kind" != draft ] || [ -z "$(spec_plans "$root" "$m_subject")" ] || gone "a plan names the draft $m_subject"
+    draft)
+      [ -f "$(dagents_resolve "$m_subject" "$root")" ] || gone "the draft $m_subject is gone"
+      ! draft_planned "$root" "$m_subject" || gone "a plan's Spec line names the draft $m_subject"
       stored_block ;;
-    *) gone "unknown marker kind: ${m_kind:-none}" ;;
+    adhoc) stored_block ;;
+    *) unreadable "unknown marker kind: ${m_kind:-none}" ;;
   esac
 fi
 
 if [ "$adhoc" -eq 1 ]; then
   case $next_action in *[.!?]) ;; *) next_action="$next_action." ;; esac
-  status_line="Unplanned work: the notes in \`$latest_shown\` are the authority."
+  status_line="Unplanned work: the notes in \`$own_handoff\` are the authority."
   next_line=$next_action
   launch_cmd=$(launch_for "$phase")
-  prompt="Continue the unplanned work recorded in \`$latest_shown\`: $next_action"
+  prompt="Continue the unplanned work recorded in \`$own_handoff\`: $next_action"
 elif [ "$project" -eq 1 ]; then
   launch=0 rel=""
   roadmap=$(roadmap_file "$root")
@@ -435,7 +529,7 @@ elif [ "$draft" -eq 1 ]; then
   status_line="Design in progress: \`$rel\` is the authority."
   next_line=$next_action
   launch_cmd=$(launch_for design)
-  prompt="Continue from \`$rel\` (the authority): $next_action Read \`$latest_shown\` first."
+  prompt="Continue from \`$rel\` (the authority): $next_action Read \`$own_handoff\` first."
 else
   tasks=$(plan_tasks "$plan")
   [ -n "$tasks" ] || fail 3 "no tasks in ${plan} (no heading matching 'Task N')"
@@ -736,8 +830,35 @@ fi
 # T's handoff is resolved in a subshell, so the cached roots stay this
 # checkout's.
 dir=$(handoff_target)
-handoff=$(dagents_stores_init "$dir"; dagents_latest_file "$dir")
-if [ "$target_only" -eq 1 ]; then printf '%s\n' "$handoff"; exit 0; fi
+# A recompute of a named handoff (--print --handoff) names that file.
+if [ "$print_only" -eq 1 ] && [ -n "${DAGENTS_NEXT_STEP_HANDOFF:-}" ]; then handoff=$DAGENTS_NEXT_STEP_HANDOFF
+else handoff=$(dagents_stores_init "$dir"; dagents_handoff_file "$key" "$dir"); fi
+
+# Claims (spec §4): one directory for the repository, in the primary checkout,
+# whatever checkout holds the handoff; scripts/handoff claim writes them.
+claims="$(dagents_dir state "$(dr_native_path "$primary")")/handoff/claims"
+claim_field() { tr -d '\r' < "$1" | sed -n "s/^$2=//p" | head -n 1; }
+
+# refuse_if_held — exit 7 when another live session holds the key's claim,
+# after stopping this session's auto run (C16), so nothing is written over the
+# work that session resumed.
+refuse_if_held() {
+  local file="$claims/$key" held at now
+  [ -n "$key" ] && [ -f "$file" ] || return 0
+  held=$(claim_field "$file" session)
+  [ -n "$held" ] && [ "$held" != "$session_id" ] || return 0
+  ! session_gone "$held" || return 0
+  now=$(date +%s) at=$(claim_field "$file" at)
+  [[ $at =~ ^[0-9]+$ ]] || at=$now
+  if bash "$(cd "$(dirname "$0")" && pwd)/auto-run" status > /dev/null 2>&1; then
+    local stop_rc=0
+    bash "$(cd "$(dirname "$0")" && pwd)/auto-run" stop --reason "handoff $key is held by ${held:0:8}" > /dev/null 2>&1 || stop_rc=$?
+    [ "$stop_rc" -eq 0 ] || printf 'next-step: auto-run stop failed (status %s); the run is still active\n' "$stop_rc" >&2
+  fi
+  fail 7 "handoff $key is held by ${held:0:8} (live, claimed $(session_age_text $(( now > at ? now - at : 0 ))) ago)"
+}
+
+if [ "$target_only" -eq 1 ]; then refuse_if_held; printf '%s\n' "$handoff"; exit 0; fi
 
 # Every prompt opens on T: an auto run's cockpit pastes it into a cleared
 # session where no launch line ran, so the prompt itself says where to work.
@@ -745,7 +866,12 @@ if [ -n "$prompt" ]; then
   t_branch=$(git -C "$dir" branch --show-current 2>/dev/null | tr -d '\r')
   if [ -n "$t_branch" ]; then t_where="branch $t_branch"
   else t_where="detached at \`$(git -C "$dir" rev-parse --short HEAD 2>/dev/null | tr -d '\r')\`"; fi
-  prompt="Start in \`$dir\` ($t_where); its handoff is \`$handoff\`. If your working directory is not \`$dir\`, enter it first. $prompt"
+  # A Claude session claims the handoff it resumes; Codex has no session id to
+  # claim with, so its next write names the key instead.
+  claim_clause=""
+  if [ "$host" = claude ]; then claim_clause="Before anything else, claim it with dagents' \`scripts/handoff claim\` on that file. "
+  else case $key in adhoc-*) claim_clause="When you hand off, pass \`--key $key\` to next-step. " ;; esac; fi
+  prompt="Start in \`$dir\` ($t_where); its handoff is \`$handoff\`. If your working directory is not \`$dir\`, enter it first. $claim_clause$prompt"
 fi
 
 # A block printed over running work invites ending the session it would die
@@ -773,16 +899,7 @@ block=$(
     printf '\nPaste as the first prompt:\n\n```\n%s\n```\n' "$prompt"
   fi
 )
-printf '%s\n' "$block"
-[ "$print_only" -eq 0 ] || exit 0
-
-# The no-plan finish record has done its job once finishing has an outcome;
-# left behind, the next unplanned finish would act on it without asking.
-# finish-choice writes it under the checkout it runs in, a linked worktree
-# included, so both that checkout's and the primary's are cleared.
-if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ "$adhoc" -eq 1 ]; then
-  rm -f "$(dagents_dir state "$root")/sdd/finish.json" "$(dagents_dir state "$primary")/sdd/finish.json"
-fi
+if [ "$print_only" -eq 1 ]; then printf '%s\n' "$block"; exit 0; fi
 
 today=$(date -u +%Y-%m-%d)
 if [ "$adhoc" -eq 1 ]; then marker_kind=adhoc marker_subject=-
@@ -796,36 +913,21 @@ else marker_kind=plan marker_subject=$rel
 fi
 read -r marker_done marker_closed < <(handoff_counts "$primary")
 marker_host=""; [ "$host" != codex ] || marker_host=" host=codex"
-marker="<!-- next-step: kind=$marker_kind$marker_host done=$marker_done closed=$marker_closed subject=$marker_subject at=$(date +%s) -->"
-# replaces_own_block — true when --complete or --kept may replace the handoff
-# wholesale: it holds no marker, or the marker is this plan's, a completed
-# plan's, or a finished plan's. Anything else is another session's live block,
-# whose notes stay; held_subject names it (its kind when the subject is -).
-replaces_own_block() {
-  local held h_kind h_subject
-  held=$(tr -d '\r' < "$handoff" | grep -E '^<!-- next-step: .* -->$' | tail -n 1 || true)
-  [ -n "$held" ] || return 0
-  held=${held#<!-- next-step: }; held=${held% -->}; held=${held% at=*}
-  h_subject=${held#* subject=}
-  h_kind=${held#kind=}; h_kind=${h_kind%% *}
-  [ "$h_kind" != complete ] && [ "$h_subject" != "$rel" ] || return 0
-  [ "$h_subject" = - ] || ! plan_finished "$root" "$h_subject" || return 0
-  held_subject=$h_subject
-  [ "$held_subject" != - ] || held_subject=$h_kind
-  return 1
-}
+marker="<!-- next-step: kind=$marker_kind key=$key session=${session_id:--}$marker_host done=$marker_done closed=$marker_closed subject=$marker_subject at=$(date +%s) -->"
 # Read, merged and replaced under the handoff's lock, so a concurrent writer's
 # notes are never overwritten with the copy read before them.
 write_handoff() {
   local tmp status=0 wholesale=0
-  case $handoff in */.dagents/handoff/latest.md) dagents_state_ignore "${handoff%/.dagents/handoff/latest.md}" ;; esac
+  case $handoff in */.dagents/handoff/*.md) dagents_state_ignore "${handoff%/.dagents/handoff/*}" ;; esac
   tmp=$(mktemp) || return 1
-  if [ ! -f "$handoff" ] || { [ "$project" -eq 1 ] && [ "$keep_notes" -eq 0 ]; }; then wholesale=1
-  elif [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ]; then
-    if replaces_own_block; then wholesale=1
-    else printf 'next-step: replaced the block for %s\n' "$held_subject" >&3; fi
-  fi
-  if [ "$wholesale" -eq 1 ]; then
+  if [ ! -f "$handoff" ] || [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ]; then wholesale=1; fi
+  if [ -n "$notes_file" ]; then
+    # The notes as given, without their trailing blank lines, then the block.
+    { printf '# Handoff — %s\n\n' "$today"
+      tr -d '\r' < "$notes_file" | awk 'NF { last = NR } { line[NR] = $0 } END { for (i = 1; i <= last; i++) print line[i]; if (last) print "" }'
+      printf '%s\n%s\n' "$block" "$marker"
+    } > "$tmp" || status=1
+  elif [ "$wholesale" -eq 1 ]; then
     printf '# Handoff — %s\n\n%s\n%s\n' "$today" "$block" "$marker" > "$tmp" || status=1
   else
     # Replace only the Next session section; the rest is the session's own notes.
@@ -840,9 +942,144 @@ write_handoff() {
   rm -f "$tmp"
   return "$status"
 }
-if ! { mkdir -p "$(dirname "$handoff")" && handoff_lock=$(dr_lock_base "$handoff"); } 2>/dev/null; then
-  fail 4 "could not write $handoff — copy the block above into it by hand"
+
+# The turn record (C13): the Stop hooks release a turn that ends on this block,
+# written or not. Without a session id there is no turn to name.
+write_turn_record() {
+  [ -n "$session_id" ] || return 0
+  local f
+  f="${HOME:-}/.claude/dagents/sessions/turns/$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9' '-').next"
+  { mkdir -p "${f%/*}" && printf 'status=%s\nnext=%s\n' "$status_line" "$next_line" > "$f.$$" && mv -f "$f.$$" "$f"; } 2>/dev/null \
+    || { rm -f "$f.$$"; printf 'next-step: could not write the turn record %s\n' "$f" >&2; }
+}
+
+# copies_of KEY — every handoff of KEY in every checkout and the mirror.
+copies_of() {
+  local f
+  while IFS= read -r f; do [ "${f##*/}" != "$1.md" ] || printf '%s\n' "$f"; done < <(dagents_handoff_files "$root")
+}
+
+release_claim() { # release_claim KEY — remove this session's claim on KEY
+  local f="$claims/$1"
+  if [ -n "$session_id" ] && [ -f "$f" ] && [ "$(claim_field "$f" session)" = "$session_id" ]; then rm -f "$f"; fi
+}
+
+# handoff_unfinished FILE — FILE's marker names a plan not in completed.md, or
+# a draft that exists and no plan's Spec line names: work a consume must keep.
+handoff_unfinished() {
+  local m kind="" subject word
+  m=$(tr -d '\r' < "$1" | grep -E '^<!-- next-step: .* -->$' | tail -n 1)
+  m=${m#<!-- next-step: }; m=${m% -->}; m=${m% at=*}
+  subject=${m#* subject=}
+  for word in ${m%% subject=*}; do case $word in kind=*) kind=${word#kind=} ;; esac; done
+  case $kind in
+    plan|kept) ! plan_finished "$root" "$subject" ;;
+    draft) [ -f "$(dagents_resolve "$subject" "$root")" ] && ! draft_planned "$root" "$subject" ;;
+    *) return 1 ;;
+  esac
+}
+
+# consume_claims — the handoffs this session claimed under other keys: with
+# --notes the new handoff carries their open items, so they go, unless they
+# name unfinished work; without --notes they stay. Either way the claim goes.
+consume_claims() {
+  local c k f keep paths
+  [ -n "$session_id" ] || return 0
+  for c in "$claims"/*; do
+    [ -f "$c" ] || continue
+    k=${c##*/}
+    [ "$k" != "$key" ] && [ "$(claim_field "$c" session)" = "$session_id" ] || continue
+    keep=1 paths=()
+    [ -z "$notes_file" ] || keep=0
+    while IFS= read -r f; do
+      paths+=("$f")
+      [ "$keep" -eq 1 ] || ! handoff_unfinished "$f" || keep=1
+    done < <(copies_of "$k")
+    for f in ${paths[@]+"${paths[@]}"}; do
+      if [ "$keep" -eq 1 ]; then printf 'next-step: kept %s (released)\n' "$f" >&2
+      elif rm -f "$f"; then printf 'next-step: consumed %s (claimed by this session)\n' "$f" >&2; fi
+    done
+    rm -f "$c"
+  done
+}
+
+# A terminal block (C11) has nothing to resume: it is printed, never written.
+terminal=0
+case $next_line in "Nothing — "*) if [ "$complete" -eq 1 ] || [ "$project" -eq 1 ]; then terminal=1; fi ;; esac
+
+# hand_off — run under the claims lock (spec §3), from the claim check through
+# the write, supersede, release and consume; the handoff's own lock nests
+# inside. It exits 0, 4 or 7, and records in $progress_file how far it got, so
+# any other status is told apart: the lock not had, or the body stopping.
+hand_off() {
+  set +e
+  local f
+  [ -z "$progress_file" ] || echo locked > "$progress_file"
+  refuse_if_held
+  printf '%s\n' "$block"
+  [ -z "$progress_file" ] || echo printed > "$progress_file"
+  write_turn_record
+  # The no-plan finish record has done its job once finishing has an outcome;
+  # left behind, the next unplanned finish would act on it without asking.
+  # finish-choice writes it under the checkout it runs in, a linked worktree
+  # included, so both that checkout's and the primary's are cleared.
+  if [ "$complete" -eq 1 ] || [ "$kept" -eq 1 ] || [ "$adhoc" -eq 1 ]; then
+    rm -f "$(dagents_dir state "$root")/sdd/finish.json" "$(dagents_dir state "$primary")/sdd/finish.json"
+  fi
+  if [ "$terminal" -eq 1 ]; then
+    # A finished plan's handoffs go everywhere; a terminal --project leaves the
+    # session's adhoc handoff as it was.
+    if [ "$complete" -eq 1 ]; then
+      while IFS= read -r f; do
+        if rm -f "$f"; then printf 'next-step: removed %s (terminal block)\n' "$f" >&2; fi
+      done < <(copies_of "$key")
+    fi
+    release_claim "$key"
+    if [ -n "$notes_file" ] && rm -f "$notes_file"; then
+      printf 'next-step: deleted notes %s (terminal block)\n' "$notes_file" >&2
+    fi
+    exit 0
+  fi
+  if ! { mkdir -p "$(dirname "$handoff")" && handoff_lock=$(dr_lock_base "$handoff"); } 2>/dev/null \
+     || ! dr_locked "$handoff_lock" write_handoff 2>/dev/null; then
+    fail 4 "could not write $handoff — copy the block above into it by hand"
+  fi
+  [ -z "$notes_file" ] || rm -f "$notes_file"
+  # A key has one handoff: the one just written, in the checkout that resumes
+  # it. An adhoc- handoff is the exception: only a consume deletes one, since
+  # its notes are the only record of unplanned work.
+  case $key in
+    adhoc-*) ;;
+    *) while IFS= read -r f; do
+         [ "$f" -ef "$handoff" ] || { rm -f "$f" && printf 'next-step: superseded %s\n' "$f" >&2; }
+       done < <(copies_of "$key") ;;
+  esac
+  release_claim "$key"
+  consume_claims
+  exit 0
+}
+
+if ! { mkdir -p "$claims" && dagents_self_ignore "${claims%/handoff/claims}"; } 2>/dev/null; then
+  printf '%s\n' "$block"
+  write_turn_record
+  fail 4 "could not write $handoff (no claims directory $claims) — copy the block above into it by hand"
 fi
-if ! dr_locked "$handoff_lock" write_handoff 3>&2 2>/dev/null; then
-  fail 4 "could not write $handoff — copy the block above into it by hand"
-fi
+# The notes file is deleted once the handoff is written, so notes that are the
+# handoff itself would delete what was just written.
+if [ -n "$notes_file" ] && [ "$notes_file" -ef "$handoff" ]; then fail 2 "--notes names the handoff itself: $handoff"; fi
+status=0
+progress_file=$(mktemp 2>/dev/null) || progress_file=""
+dr_locked "$claims/" hand_off || status=$?
+reached=""
+if [ -n "$progress_file" ]; then reached=$(cat "$progress_file" 2>/dev/null); rm -f "$progress_file"; fi
+case $status in
+  0|4|7) exit "$status" ;;
+esac
+case $reached in
+  printed) fail 4 "could not write $handoff: next-step stopped (status $status) after printing the block — copy the block above into it by hand" ;;
+  locked) cause="next-step stopped (status $status) under the claims lock" ;;
+  *) cause="the claims lock in $claims was not had" ;;
+esac
+printf '%s\n' "$block"
+write_turn_record
+fail 4 "could not write $handoff ($cause) — copy the block above into it by hand"

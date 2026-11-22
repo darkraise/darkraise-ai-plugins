@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # next-step --print computes the block and changes nothing; a normal run
-# writes the block into latest.md followed by a marker line naming what the
+# writes the block into its keyed handoff followed by a marker line naming what the
 # block was computed from, which the printed block never carries.
 set -uo pipefail
 
@@ -58,6 +58,8 @@ cp "$D/registers/m2.md" "$D/registers/m1.md"
 } > "$D/roadmap.md"
 git -C "$REPO" add -A && git -C "$REPO" commit -qm init
 LATEST="$REPO/.dagents/handoff/latest.md"
+# The session the adhoc and project writes run as.
+S0=a0000000-0000-0000-0000-000000000000
 FINISH="$REPO/.dagents/sdd/finish.json"
 
 snapshot() { # snapshot — hashes, mtimes and the file list under .dagents
@@ -95,9 +97,9 @@ has "in flight: --print prints the block" "$out" "## Next session"
 out=$(cd "$REPO" && timeout 60 bash "$TMP/scripts/next-step" "$PLAN" 2>&1)
 check "in flight: a plain run still refuses" "$?" 5
 
-# --- latest.md carries the marker and the block does not ---
-MARK_RE='^<!-- next-step: kind=(plan|complete|kept|draft|adhoc)( branch=[^ ]+)? done=[0-9]+ closed=[0-9]+ subject=.+ at=[0-9]+ -->$'
-section_last() { # the last non-blank line of latest.md's Next session section
+# --- the handoff carries the marker and the block does not ---
+MARK_RE='^<!-- next-step: kind=(plan|complete|kept|draft|adhoc)( branch=[^ ]+)? key=[A-Za-z0-9._-]+ session=[^ ]+ done=[0-9]+ closed=[0-9]+ subject=.+ at=[0-9]+ -->$'
+section_last() { # the last non-blank line of $LATEST's Next session section
   awk '/^## Next session[ \t\r]*$/ { on = 1; next } on && /^## / { exit } on && NF { last = $0 } END { print last }' "$LATEST"
 }
 for mode in plan complete kept draft adhoc; do
@@ -108,10 +110,13 @@ for mode in plan complete kept draft adhoc; do
     draft) args=(--draft docs/dagents/specs/draft.md --next "x") subject=docs/dagents/specs/draft.md ;;
     adhoc) args=(--adhoc --phase build --next "x") subject=- ;;
   esac
-  out=$(cd "$REPO" && timeout 60 bash "$SCRIPT" "${args[@]}" 2>&1)
+  LATEST=$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=$S0 timeout 60 bash "$SCRIPT" --target "${args[@]}")
+  out=$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=$S0 timeout 60 bash "$SCRIPT" "${args[@]}" 2>&1)
   check "marker $mode: exits 0" "$?" 0
   lacks "marker $mode: the printed block has no marker" "$out" "<!-- next-step:"
   last=$(section_last)
+  has "marker $mode: the key is the file's name" "$last" " key=$(basename "$LATEST" .md) "
+  has "marker $mode: the session is named" "$last" " session=$S0 "
   check "marker $mode: the section ends with a well-formed marker" "$(grep -cE "$MARK_RE" <<<"$last")" 1
   has "marker $mode: the kind is named" "$last" "kind=$mode "
   has "marker $mode: done counts completed.md entries" "$last" " done=2 "
@@ -161,11 +166,11 @@ out=$(cd "$REPO" && timeout 60 bash "$SCRIPT" "$PLAN" 2>&1)
 . "$HERE/../../plugins/dagents/scripts/lib/auto-run.sh"
 prompt=$(awk '/^Paste as the first prompt:/ { on = 1; next } on && /^```$/ { if (f) exit; f = 1; next } f' <<<"$out")
 launch=$(awk '/^Launch in / { on = 1; next } on && /^```$/ { if (f) exit; f = 1; next } f' <<<"$out")
-check "auto run: the first prompt reads unchanged" "$(ar_fenced "$LATEST" 'Paste as the first prompt:')" "$prompt"
-check "auto run: the launch command reads unchanged" "$(ar_fenced "$LATEST" 'Launch in ')" "$launch"
+check "auto run: the first prompt reads unchanged" "$(ar_fenced "$REPO/.dagents/handoff/2026-11-01-demo.md" 'Paste as the first prompt:')" "$prompt"
+check "auto run: the launch command reads unchanged" "$(ar_fenced "$REPO/.dagents/handoff/2026-11-01-demo.md" 'Launch in ')" "$launch"
 has "auto run: the launch command is the plan's" "$launch" "claude --model sonnet --effort high"
 
-# --- --print --latest ---
+# --- --print --handoff on a stored block in the plan's handoff file ---
 L="$TMP/latest"
 lfixture() { # lfixture — a fresh repository in $L with plan P (3 tasks) and completed.md of one entry
   rm -rf "$L"; git init -q -b main "$L"
@@ -179,15 +184,15 @@ lfixture() { # lfixture — a fresh repository in $L with plan P (3 tasks) and c
   } > "$LD/plans/2026-11-01-p.md"
   printf '# Completed plans\n\n- 2026-10-01 — `docs/dagents/plans/2026-10-01-a.md` — merged\n' > "$LD/plans/completed.md"
   git -C "$L" add -A && git -C "$L" commit -qm init
-  LL="$L/.dagents/handoff/latest.md"
+  LL="$L/.dagents/handoff/2026-11-01-p.md"
 }
 P=docs/dagents/plans/2026-11-01-p.md
-stored() { # stored <marker or empty> [status line] [next line] — write latest.md by hand
+stored() { # stored <marker or empty> [status line] [next line] — write $LL by hand
   { printf '# Handoff\n\n## Notes\n\nmine\n\n## Next session\n\n**Status:** %s\n**Next:** %s\n' "${2:-Stored status.}" "${3:-Stored next.}"
     [ -z "$1" ] || printf '%s\n' "$1"; } > "$LL"
 }
-latest() { # latest — run --print --latest in $L; sets out, err, status
-  out=$(cd "$L" && timeout 120 bash "$SCRIPT" --print --latest 2>"$TMP/lerr"); status=$?
+latest() { # latest [FILE] — run --print --handoff FILE (default $LL) in $L; sets out, err, status
+  out=$(cd "$L" && timeout 120 bash "$SCRIPT" --print --handoff "${1:-$LL}" 2>"$TMP/lerr"); status=$?
   err=$(cat "$TMP/lerr")
 }
 index_p() { printf -- '- 2026-11-10 — `%s` — merged\n' "$P" >> "$LD/plans/completed.md"; }
@@ -200,14 +205,14 @@ has "latest adhoc: matching counts print the stored block" "$out" "**Next:** Sto
 check "latest adhoc: the marker is the last line" "$(tail -n 1 <<<"$out")" "<!-- next-step: kind=adhoc done=1 closed=0 subject=- at=1 -->"
 printf -- '- 2026-10-02 — `docs/dagents/plans/2026-10-02-b.md` — merged\n' >> "$LD/plans/completed.md"
 latest
-check "latest adhoc: a newer completed plan supersedes it" "$status" 6
-check "latest adhoc: superseded prints nothing" "$out" ""
+check "latest adhoc: a newer completed plan never supersedes it" "$status" 0
+has "latest adhoc: the stored block is still printed" "$out" "**Next:** Stored next."
 lfixture
 printf '# M1\n\n**Source:** roadmap\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | E | - | - | done | - |\n' > "$LD/registers/m1.md"
 printf '# R\n\n**Product:** p\n**Spec:** docs/dagents/specs/demo.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | One | x | docs/dagents/registers/m1.md | closed | audit |\n' > "$LD/roadmap.md"
 stored "<!-- next-step: kind=adhoc done=1 closed=0 subject=- at=1 -->"
 latest
-check "latest adhoc: a newly closed milestone supersedes it" "$status" 6
+check "latest adhoc: a newly closed milestone never supersedes it" "$status" 0
 
 lfixture
 printf '# D\n' > "$LD/specs/D.md"
@@ -268,50 +273,105 @@ for kind in plan project; do
   touch -t 200101010000 "$LL"
   before=$( (cd "$L" && find .dagents -print | LC_ALL=C sort); digest "$LL"; mtime "$LL")
   latest
-  check "latest $kind: exits 0" "$status" 0
+  # With no register the project block is terminal (C10): exit 6.
+  check "latest $kind: exits $( [ "$kind" = plan ] && echo 0 || echo 6)" "$status" "$( [ "$kind" = plan ] && echo 0 || echo 6)"
   check "latest $kind: changes nothing" "$( (cd "$L" && find .dagents -print | LC_ALL=C sort); digest "$LL"; mtime "$LL")" "$before"
 done
 
 lfixture
 printf '# R\n\n**Source:** s\n**Covers:** -\n\n| # | Item | Assigned | Acceptance | State | Note |\n|---|---|---|---|---|---|\n| 1 | Thing | - | - | open | - |\n' > "$LD/registers/r.md"
-(cd "$L" && timeout 120 bash "$SCRIPT" --host codex --project >/dev/null 2>&1)
-has "latest host: a Codex write names its host in the marker" "$(grep '^<!-- next-step: ' "$LL")" " host=codex "
-latest
+LA="$L/.dagents/handoff/adhoc-a0000000.md"
+(cd "$L" && CLAUDE_CODE_SESSION_ID=$S0 timeout 120 bash "$SCRIPT" --host codex --project >/dev/null 2>&1)
+has "latest host: a Codex write names its host in the marker" "$(grep '^<!-- next-step: ' "$LA")" " host=codex "
+latest "$LA"
 has "latest host: a Codex project block recomputes with the Codex launch" "$out" "codex -m"
 lacks "latest host: a Codex project block names no Claude launch" "$out" "claude --model"
-(cd "$L" && timeout 120 bash "$SCRIPT" --project >/dev/null 2>&1)
-lacks "latest host: a Claude write adds no host word" "$(grep '^<!-- next-step: ' "$LL")" "host="
+(cd "$L" && CLAUDE_CODE_SESSION_ID=$S0 timeout 120 bash "$SCRIPT" --project >/dev/null 2>&1)
+lacks "latest host: a Claude write adds no host word" "$(grep '^<!-- next-step: ' "$LA")" "host="
 
-rm -f "$LL"; latest
-check "latest edges: no latest.md exits 6" "$status" 6
+rm -f "$L/.dagents/handoff/"*.md; latest
+check "latest edges: no handoff file exits 6" "$status" 6
 printf '# Handoff\n\n## Notes\n\nx\n' > "$LL"; latest
-check "latest edges: no Next session section exits 6" "$status" 6
-(cd "$L" && timeout 60 bash "$SCRIPT" --latest >/dev/null 2>&1); check "latest edges: --latest without --print is a usage error" "$?" 2
+check "latest edges: no Next session section is unreadable, exit 2" "$status" 2
+(cd "$L" && timeout 60 bash "$SCRIPT" --print --latest >/dev/null 2>&1); check "latest edges: --latest is no option" "$?" 2
 stored "<!-- next-step: kind=plan done=1 closed=0 subject=docs/dagents/plans/missing.md at=1 -->"; latest
 check "latest edges: a missing plan passes exit 2 through" "$status" 2
 
-# --- --print --latest: complete markers, an indexed plan, malformed markers ---
+# --- --print --handoff: complete markers, an indexed plan, malformed markers ---
 lfixture
 index_p
 want=$(cd "$L" && bash "$SCRIPT" --print --complete "$P" 2>/dev/null | grep '^\*\*Next:\*\*')
 stored "<!-- next-step: kind=complete done=2 closed=0 subject=$P at=1 -->"
 latest
-check "latest complete: exits 0" "$status" 0
-has "latest complete: recomputes the --complete block" "$out" "$want"
+check "latest complete: a terminal --complete block exits 6" "$status" 6
+check "latest complete: the recomputed Next is terminal" "${want#\*\*Next:\*\* Nothing — }" "the plan records no follow-on work."
+check "latest complete: nothing on stdout" "$out" ""
 want=$(cd "$L" && bash "$SCRIPT" --print "$P" 2>/dev/null | grep '^\*\*Next:\*\*')
 stored "<!-- next-step: kind=plan done=1 closed=0 subject=$P at=1 -->" "Plan \`$P\`: 2 of 3 tasks complete (ledger \`x\`)." "Resume at Task 3 (Three)."
 latest
-check "latest plan: an indexed plan with no ledger recomputes" "$status" 0
-has "latest plan: an indexed plan with no ledger prints its block" "$out" "$want"
+check "latest plan: a plan in completed.md exits 6" "$status" 6
+has "latest plan: the reason is named" "$err" "the plan is finished"
 for bad in --latest -x docs/dagents/plans/p.txt; do
   stored "<!-- next-step: kind=plan done=1 closed=0 subject=$bad at=1 -->" "Plan \`$P\`: 0 of 3 tasks complete." "Start at Task 1 (One)."
   latest
-  check "latest edges: the subject $bad exits 6" "$status" 6
+  check "latest edges: the subject $bad is unreadable, exit 2" "$status" 2
   has "latest edges: the subject $bad is named malformed" "$err" "malformed marker subject"
 done
 stored "<!-- next-step: kind=adhoc done=1x closed=0 subject=- at=1 -->"
 latest
-check "latest edges: non-numeric counts exit 6" "$status" 6
+check "latest edges: non-numeric counts are unreadable, exit 2" "$status" 2
+stored "<!-- next-step: kind=bogus done=0 closed=0 subject=- at=1 -->"
+latest
+check "latest edges: an unknown kind is unreadable, exit 2" "$status" 2
+
+# --- --print --handoff FILE: per-kind exit 6 (C10) ---
+handoff() { # handoff FILE — run --print --handoff FILE in $L; sets out, err, status
+  out=$(cd "$L" && timeout 120 bash "$SCRIPT" --print --handoff "$1" 2>"$TMP/lerr"); status=$?
+  err=$(cat "$TMP/lerr")
+}
+hstore() { # hstore FILE MARKER — a handoff written by hand
+  mkdir -p "$(dirname "$1")"
+  printf '# Handoff\n\n## Next session\n\n**Status:** Stored status.\n**Next:** Stored next.\n%s\n' "$2" > "$1"
+}
+lfixture
+HD="$L/.dagents/handoff"
+printf '# D\n' > "$LD/specs/D.md"
+hstore "$HD/D.md" "<!-- next-step: kind=draft key=D session=- done=1 closed=0 subject=docs/dagents/specs/D.md at=1 -->"
+handoff "$HD/D.md"
+check "handoff_exit6_per_kind: a draft with no plan exits 0" "$status" 0
+printf -- '- 2026-10-02 — `docs/dagents/plans/2026-10-02-b.md` — merged\n' >> "$LD/plans/completed.md"
+handoff "$HD/D.md"
+check "handoff_exit6_per_kind: a draft after done= grew exits 0" "$status" 0
+{ printf '# Q\n\n**Spec:** docs/dagents/specs/demo.md\n**Program:** docs/dagents/specs/D.md — sub-project 1\n'
+  printf '**Execution:** inline — `claude --model sonnet --effort high` — small\n\n### Task 1: One\n\nBody.\n'; } > "$LD/plans/2026-11-03-q.md"
+handoff "$HD/D.md"
+check "handoff_exit6_per_kind: a draft named only by a Program line exits 0" "$status" 0
+sed 's#docs/dagents/specs/demo.md#docs/dagents/specs/D.md#' "$L/$P" > "$LD/plans/2026-11-02-d.md"
+handoff "$HD/D.md"
+check "handoff_exit6_per_kind: a draft named by a Spec line exits 6" "$status" 6
+rm -f "$LD/plans/2026-11-02-d.md" "$LD/specs/D.md"
+handoff "$HD/D.md"
+check "handoff_exit6_per_kind: a deleted draft exits 6" "$status" 6
+has "handoff_exit6_per_kind: the deleted draft is named" "$err" "is gone"
+hstore "$HD/adhoc-0a1b2c3d.md" "<!-- next-step: kind=adhoc key=adhoc-0a1b2c3d session=- done=0 closed=0 subject=- at=1 -->"
+handoff "$HD/adhoc-0a1b2c3d.md"
+check "handoff_exit6_per_kind: an adhoc handoff exits 0" "$status" 0
+lfixture
+HD="$L/.dagents/handoff"
+index_p
+hstore "$HD/C.md" "<!-- next-step: kind=complete key=2026-11-01-p session=- done=2 closed=0 subject=$P at=1 -->"
+(cd "$L" && timeout 60 bash "$SCRIPT" --handoff "$HD/C.md" >/dev/null 2>&1)
+check "handoff: --handoff without --print is a usage error" "$?" 2
+
+# handoff_prompt_names_file
+lfixture
+HD="$L/.dagents/handoff"
+hstore "$HD/D.md" "<!-- next-step: kind=plan key=2026-11-01-p session=- done=1 closed=0 subject=$P at=1 -->"
+handoff "$HD/D.md"
+check "handoff_prompt_names_file: exits 0" "$status" 0
+has "handoff_prompt_names_file: the first prompt names the file" "$out" "its handoff is \`$HD/D.md\`"
+handoff .dagents/handoff/D.md
+has "handoff_prompt_names_file: a relative file is named absolute" "$out" "its handoff is \`$L/.dagents/handoff/D.md\`"
 
 # --- a kept detached HEAD is recorded as a commit and recomputed as one ---
 lfixture
@@ -319,7 +379,7 @@ git -C "$L" checkout -q --detach
 printf 'y\n' > "$L/y.txt" && git -C "$L" add y.txt && git -C "$L" commit -qm detached
 sha=$(git -C "$L" rev-parse --short HEAD)
 (cd "$L" && timeout 60 bash "$SCRIPT" --kept "$P" >/dev/null 2>&1)
-has "kept detached: the marker records the commit" "$(LATEST=$LL section_last)" "kind=kept branch=detached:$sha "
+has "kept detached: the marker records the commit" "$(LATEST=$L/.dagents/handoff/2026-11-01-p.md section_last)" "kind=kept branch=detached:$sha "
 git -C "$L" checkout -q main
 latest
 check "kept detached: an unmerged commit exits 0" "$status" 0
@@ -333,9 +393,9 @@ lfixture
 printf -- '- 2026-10-02 — `docs/dagents/plans/2026-10-02-b.md` — merged\n' >> "$LD/plans/completed.md"
 git -C "$L" add -A && git -C "$L" commit -qm index
 git -C "$L" worktree add -q --detach "$TMP/latest-wt" HEAD~1
-(cd "$TMP/latest-wt" && timeout 60 bash "$SCRIPT" --adhoc --phase build --next "Fix the thing." >/dev/null 2>&1)
-has "counts: a block written in an older worktree counts the primary's index" "$(LATEST="$TMP/latest-wt/.dagents/handoff/latest.md" section_last)" " done=2 "
-out=$(cd "$TMP/latest-wt" && timeout 120 bash "$SCRIPT" --print --latest 2>/dev/null); status=$?
+(cd "$TMP/latest-wt" && CLAUDE_CODE_SESSION_ID=$S0 timeout 60 bash "$SCRIPT" --adhoc --phase build --next "Fix the thing." >/dev/null 2>&1)
+has "counts: a block written in an older worktree counts the primary's index" "$(LATEST="$TMP/latest-wt/.dagents/handoff/adhoc-a0000000.md" section_last)" " done=2 "
+out=$(cd "$TMP/latest-wt" && timeout 120 bash "$SCRIPT" --print --handoff "$TMP/latest-wt/.dagents/handoff/adhoc-a0000000.md" 2>/dev/null); status=$?
 check "counts: that block is not superseded in its worktree" "$status" 0
 git -C "$L" worktree remove --force "$TMP/latest-wt"
 
@@ -356,7 +416,7 @@ t0=${EPOCHREALTIME:-$(date +%s)}
 latest
 t1=${EPOCHREALTIME:-$(date +%s)}
 ms=$(awk -v a="$t0" -v b="$t1" 'BEGIN { printf "%d", (b - a) * 1000 }')
-printf 'next-step-print: --print --latest took %s ms\n' "$ms"
+printf 'next-step-print: --print --handoff took %s ms\n' "$ms"
 check "timing: the recompute exits 0" "$status" 0
 has "timing: the follow-up route is computed" "$out" "write a follow-up plan"
 if [ "$(uname -s)" = Linux ]; then

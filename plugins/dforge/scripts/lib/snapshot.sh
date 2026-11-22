@@ -23,39 +23,46 @@ _snapshot_mtime() { # FILE — modification time in epoch seconds, or nothing
   printf '%s' "$t"
 }
 
-# _snapshot_start TRANSCRIPT — the session's start: its first timestamp, in
-# epoch seconds, or nothing.
-_snapshot_start() {
-  head -n 200 "$1" 2>/dev/null | tr -d '\r' | "${DFORGE_JQ:-jq}" -R -r -n '
-    first(inputs | fromjson? | objects | .timestamp? | strings
-          | (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 | floor)?) // empty' 2>/dev/null
-}
-
-# snapshot_latest CWD [START] — the Next session block of this repository's
-# latest.md, headed with its age. With START (epoch seconds), only when this
-# session wrote it: latest.md, or the ledger of a plan its block names, changed
-# at or after START. A handoff from another session would steer this one.
+# snapshot_latest CWD SID — the Next session block of this session's handoff,
+# headed with its path and age: the newest handoff of any checkout or the
+# mirror (dforge_handoff_files) whose claim (<primary>/<state>/handoff/claims/
+# <key>) or marker session= names SID. Nothing without SID, or when SID has no
+# handoff: another session's handoff would steer this one.
 snapshot_latest() {
-  local latest block mt at keep=1 ledger _where lm plan_rel age="" d
-  latest=$(dforge_latest_file "$1") || return 0
-  [ -f "$latest" ] || return 0
+  local sid=${2:-} claims="" primary f key held m word words mine best="" best_mt=-1 latest block mt at age="" d
+  [ -n "$sid" ] || return 0
+  primary=$(plan_primary_root "$1" 2>/dev/null | tr -d '\r') || primary=""
+  [ -z "$primary" ] || claims="$(dforge_dir state "$(dr_native_path "$primary")")/handoff/claims"
+  while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    key=$(basename "$f" .md)
+    held=""
+    if [ -n "$claims" ] && [ -f "$claims/$key" ]; then
+      held=$(tr -d '\r' < "$claims/$key" | sed -n 's/^session=//p' | head -n 1)
+    fi
+    mine=0
+    if [ "$held" = "$sid" ]; then
+      mine=1
+    else
+      m=$(tr -d '\r' < "$f" | grep -E '^<!-- next-step: .* -->$' | tail -n 1)
+      m=${m#<!-- next-step: }
+      read -ra words <<<"${m%% subject=*}"
+      for word in ${words[@]+"${words[@]}"}; do
+        [ "$word" = "session=$sid" ] && mine=1
+      done
+    fi
+    [ "$mine" -eq 1 ] || continue
+    mt=$(_snapshot_mtime "$f") || mt=0
+    if [ "$mt" -gt "$best_mt" ]; then best=$f best_mt=$mt; fi
+  done < <(dforge_handoff_files "$1")
+  [ -n "$best" ] || return 0
+  latest=$best
   block=$(tr -d '\r' < "$latest" | awk '/^## Next session/ { f = 1; next } f && /^## / { exit } f')
   mt=$(_snapshot_mtime "$latest") || mt=""
   # next-step's marker names when the block was computed; a later edit of the
   # notes moves the mtime, not that.
   at=$(sed -nE 's/^<!-- next-step: .* at=([0-9]+) -->$/\1/p' <<<"$block" | tail -n 1)
   block=$(grep -vE '^<!-- next-step: ' <<<"$block" || true)
-  if [ -n "${2:-}" ] && [ -n "$mt" ] && [ "$mt" -lt "$2" ]; then
-    keep=0
-    while IFS=$'\t' read -r ledger _where; do
-      [ -n "$ledger" ] || continue
-      lm=$(_snapshot_mtime "$ledger") || continue
-      [ "$lm" -ge "$2" ] || continue
-      plan_rel=$(ledger_plan "$ledger")
-      if [ -n "$plan_rel" ] && grep -qF -- "$plan_rel" <<<"$block"; then keep=1; break; fi
-    done < <(dforge_ledger_files "$1")
-  fi
-  [ "$keep" = 1 ] || return 0
   if [ -n "${at:-$mt}" ]; then
     d=$(( $(date +%s) - ${at:-$mt} ))
     [ "$d" -ge 0 ] || d=0
@@ -138,12 +145,13 @@ snapshot_transcript_sections() {
   ' 2>/dev/null
 }
 
-# snapshot_build TRANSCRIPT CWD [CAP] — the markdown snapshot, at most CAP
-# characters (default SNAPSHOT_CAP). Sections 6, 5, 4 are dropped whole, in
-# that order, until it fits; then section 3 is cut to each ledger's heading and
-# newest lines, rulings first; sections 1-2 are never dropped.
+# snapshot_build TRANSCRIPT CWD [CAP] [SID] — the markdown snapshot, at most
+# CAP characters (default SNAPSHOT_CAP), its handoff section session SID's own
+# (snapshot_latest). Sections 6, 5, 4 are dropped whole, in that order, until
+# it fits; then section 3 is cut to each ledger's heading and newest lines,
+# rulings first; sections 1-2 are never dropped.
 snapshot_build() {
-  local tp=${1:-} cwd=${2:-$PWD} cap=${3:-$SNAPSHOT_CAP} s1 s2 s3 s4="" s5="" s6="" raw out part step start="" fast
+  local tp=${1:-} cwd=${2:-$PWD} cap=${3:-$SNAPSHOT_CAP} sid=${4:-} s1 s2 s3 s4="" s5="" s6="" raw out part step fast
   s1='## Compaction snapshot
 
 This session was just compacted. Trust this snapshot, the ledger and `git log`
@@ -153,7 +161,6 @@ if the next budget line says `handoff`, run the dforge handoff skill.'
   if [ -n "$tp" ] && command -v "${DFORGE_JQ:-jq}" >/dev/null 2>&1; then
     if command -v cygpath >/dev/null 2>&1; then tp=$(cygpath -u "$tp"); fi
     if [ -f "$tp" ]; then
-      start=$(_snapshot_start "$tp")
       # A session-scoped fast line may sit before what the summary keeps.
       if fast_mode_on "$tp"; then
         fast=$(tail -n 3000 "$tp" | tr -d '\r' | "${DFORGE_JQ:-jq}" -R -r 'fromjson? | objects
@@ -168,7 +175,7 @@ if the next budget line says `handoff`, run the dforge handoff skill.'
       s6=$(printf '%s\n' "$raw" | awk '/^@@6$/ { f = 1; next } f')
     fi
   fi
-  s2=$(snapshot_latest "$cwd" "$start")
+  s2=$(snapshot_latest "$cwd" "$sid")
   s3=$(snapshot_ledgers "$cwd")
   for step in 6 5 4 8:5 8:0 4:0 2:0 1:0 end; do
     out=""
@@ -182,7 +189,7 @@ if the next budget line says `handoff`, run the dforge handoff skill.'
     esac
   done
   # Sections 1-2 are never dropped, but s2 (the Next session block, copied
-  # verbatim from latest.md) is unbounded — truncate it as a last resort so
+  # verbatim from the handoff) is unbounded — truncate it as a last resort so
   # the "at most CAP characters" contract holds even for an oversized handoff.
   # The cut ledgers stay when they fit beside section 1.
   if [ "${#out}" -gt "$cap" ]; then

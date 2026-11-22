@@ -16,6 +16,14 @@ async function setup(t, stubOptions = {}) {
   return { stub, repo, ...home, seed, state, pull: () => run(["pull"], { cwd: repo, env: home.env }) };
 }
 
+// A handoff checkpoint whose marker names its key, as next-step writes one.
+const keyed = (key, text) => `${text}<!-- next-step: kind=plan key=${key} session=- done=0 closed=0 subject=docs/dforge/plans/${key}.md at=1795000000 -->\n`;
+// A sync state that synced a checkpoint long ago, so every newer one is pulled.
+const syncedLongAgo = s => write(path.join(s.mirror, ".sync-state.json"), JSON.stringify({
+  version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: "2000-01-01T00:00:00Z", conflicts: [], pendingLinks: [], prefix: "dforge",
+}));
+const handoffFile = (s, key) => path.join(s.workRoot, "handoff", `${key}.md`);
+
 const fetches = stub => stub.db.requests.filter(r => r.path === "/api/v1/documents/by-uri").length;
 
 test("pull writes documents and handoff notes under the prefix, and records their hashes", async t => {
@@ -103,46 +111,110 @@ test("a ledger ahead locally is kept; a diverged one is a conflict", async t => 
   assert.equal(read(file), "one\ntwo\n");
 });
 
-test("latest.md takes the newest checkpoint across open workstreams, by darkmem's clock", async t => {
+test("pulls each workstream into its key file (parallel-session handoff A15)", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# older\n" }] });
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# newest\n" }] });
-  assert.equal((await s.pull()).code, 0);
-  const latest = path.join(s.workRoot, "handoff", "latest.md");
-  assert.equal(read(latest), "# newest\n");
+  syncedLongAgo(s);
+  await s.seed.append({ project: "proj", workstream: "P", entries: [{ kind: "checkpoint", body: keyed("P", "# P one\n") }] });
+  await s.seed.append({ project: "proj", workstream: "D", entries: [{ kind: "checkpoint", body: keyed("D", "# D one\n") }] });
+  const first = await s.pull();
+  assert.equal(first.code, 0, first.stdout + first.stderr);
+  assert.equal(read(handoffFile(s, "P")), keyed("P", "# P one\n"));
+  assert.equal(read(handoffFile(s, "D")), keyed("D", "# D one\n"));
+  assert.equal(fs.existsSync(path.join(s.workRoot, "handoff", "latest.md")), false);
   const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  fs.utimesSync(latest, future, future);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# later still\n" }] });
-  assert.equal((await s.pull()).code, 0);
-  assert.equal(read(latest), "# later still\n", "a file's mtime never hides a newer checkpoint");
-  assert.equal(s.state().checkpoint, sha("# later still\n"));
+  fs.utimesSync(handoffFile(s, "P"), future, future);
+  const dBefore = fs.statSync(handoffFile(s, "D")).mtimeMs;
+  await s.seed.append({ project: "proj", workstream: "P", entries: [{ kind: "checkpoint", body: keyed("P", "# P two\n") }] });
+  const second = await s.pull();
+  assert.match(second.stdout, / 1 checkpoints;/);
+  assert.equal(read(handoffFile(s, "P")), keyed("P", "# P two\n"), "a file's mtime never hides a newer checkpoint");
+  assert.equal(fs.statSync(handoffFile(s, "D")).mtimeMs, dBefore, "another key's file is not touched");
+  assert.equal(s.state().checkpoints.P, sha(keyed("P", "# P two\n")));
 });
 
-test("a deleted latest.md comes back on the next pull though darkmem's checkpoint is unchanged", async t => {
+test("no resurrection: a handoff deleted after its sync is not pulled back", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# synced\n" }] });
+  syncedLongAgo(s);
+  await s.seed.append({ project: "proj", workstream: "D", entries: [{ kind: "checkpoint", body: keyed("D", "# synced\n") }] });
   assert.equal((await s.pull()).code, 0);
-  const latest = path.join(s.workRoot, "handoff", "latest.md");
-  fs.rmSync(latest);
+  fs.rmSync(handoffFile(s, "D"));
   const result = await s.pull();
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, / 1 checkpoints;/);
-  assert.equal(read(latest), "# synced\n");
+  assert.match(result.stdout, / 0 checkpoints;/);
+  assert.equal(fs.existsSync(handoffFile(s, "D")), false, "a superseded or consumed handoff stays gone");
 });
 
-test("an unpushed edit to latest.md holds until darkmem has a newer checkpoint, which is then a conflict", async t => {
+test("baseline without star: an open workstream with no entry of its own is measured from the record's newest", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# synced\n" }] });
-  await s.pull();
-  const latest = path.join(s.workRoot, "handoff", "latest.md");
-  write(latest, "# edited here\n");
+  await s.seed.append({ project: "proj", workstream: "D", entries: [{ kind: "checkpoint", body: keyed("D", "# D old\n") }] });
+  await s.seed.append({ project: "proj", workstream: "P", entries: [{ kind: "checkpoint", body: keyed("P", "# P\n") }] });
+  const pAt = s.stub.db.workstreams.find(w => w.key === "P").entries[0].created_at;
+  write(path.join(s.mirror, ".sync-state.json"), JSON.stringify({
+    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: pAt, checkpointAtByWorkstream: { P: pAt },
+    conflicts: [], pendingLinks: [], prefix: "dforge",
+  }));
+  const first = await s.pull();
+  assert.equal(first.code, 0, first.stdout + first.stderr);
+  assert.equal(fs.existsSync(handoffFile(s, "D")), false, "D's checkpoint is older than P's recorded time");
+  assert.equal(fs.existsSync(handoffFile(s, "P")), false, "P's is already synced");
+  assert.equal(s.state().checkpointAtByWorkstream["*"], pAt, "the first pull stores the baseline under *");
+  await s.seed.append({ project: "proj", workstream: "D", entries: [{ kind: "checkpoint", body: keyed("D", "# D new\n") }] });
   assert.equal((await s.pull()).code, 0);
-  assert.equal(read(latest), "# edited here\n");
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# newer\n" }] });
+  assert.equal(read(handoffFile(s, "D")), keyed("D", "# D new\n"));
+});
+
+test("pulled key rules: a marker key the rule refuses is skipped with a note, and of two naming one key the newer is written", async t => {
+  const s = await setup(t);
+  syncedLongAgo(s);
+  const bad = "# Bad\n<!-- next-step: kind=adhoc key=a b session=- done=0 closed=0 subject=- at=1795000000 -->\n";
+  await s.seed.append({ project: "proj", workstream: "W", entries: [{ kind: "checkpoint", body: bad }] });
+  await s.seed.append({ project: "proj", workstream: "X", entries: [{ kind: "checkpoint", body: keyed("P", "# from X\n") }] });
+  await s.seed.append({ project: "proj", workstream: "Y", entries: [{ kind: "checkpoint", body: keyed("P", "# from Y\n") }] });
+  const [x, y] = ["X", "Y"].map(key => s.stub.db.workstreams.find(w => w.key === key).entries[0]);
+  x.created_at = "2026-09-25T10:00:00.000002+00:00";
+  y.created_at = "2026-09-25T10:00:00.000001+00:00";
+  const result = await s.pull();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^skipped: workstream W's checkpoint names no usable handoff key; not pulled$/m);
+  assert.deepEqual(fs.readdirSync(path.join(s.workRoot, "handoff")), ["P.md"]);
+  assert.equal(read(handoffFile(s, "P")), keyed("P", "# from X\n"), "the newer created_at wins");
+  const again = await s.pull();
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.equal(read(handoffFile(s, "P")), keyed("P", "# from X\n"), "the older checkpoint naming P is not written on a later pull");
+  assert.doesNotMatch(again.stdout, /^skipped:/m, "a refused key's note is printed once");
+});
+
+test("a marker key the state's key rule refuses, such as .., is skipped and the state still loads", async t => {
+  const s = await setup(t);
+  syncedLongAgo(s);
+  for (const [ws, key] of [["W1", ".."], ["W2", "."], ["W3", "latest"]]) {
+    const body = `# Bad\n<!-- next-step: kind=adhoc key=${key} session=- done=0 closed=0 subject=- at=1795000000 -->\n`;
+    await s.seed.append({ project: "proj", workstream: ws, entries: [{ kind: "checkpoint", body }] });
+  }
+  const result = await s.pull();
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal((result.stdout.match(/^skipped:/gm) ?? []).length, 3);
+  assert.equal(fs.existsSync(path.join(s.workRoot, "handoff")), false);
+  const status = await run(["status"], { cwd: s.repo, env: s.env });
+  assert.equal(status.code, 0, status.stdout + status.stderr);
+  assert.doesNotMatch(status.stdout + status.stderr, /valid sync state/);
+});
+
+test("an unpushed edit to a handoff holds until darkmem has a newer checkpoint, which then conflicts alone", async t => {
+  const s = await setup(t);
+  syncedLongAgo(s);
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: keyed("p1", "# synced\n") }] });
+  await s.pull();
+  write(handoffFile(s, "p1"), "# edited here\n");
+  assert.equal((await s.pull()).code, 0);
+  assert.equal(read(handoffFile(s, "p1")), "# edited here\n");
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: keyed("p1", "# newer\n") }] });
+  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: keyed("p2", "# p2\n") }] });
   const result = await s.pull();
   assert.equal(result.code, 1);
-  assert.match(result.stdout, /conflict: handoff\/latest\.md: changed locally, and darkmem holds a newer checkpoint/);
-  assert.equal(read(latest), "# edited here\n");
+  assert.match(result.stdout, /conflict: handoff\/p1\.md: changed locally, and darkmem holds a newer checkpoint/);
+  assert.equal(read(handoffFile(s, "p1")), "# edited here\n");
+  assert.equal(read(handoffFile(s, "p2")), keyed("p2", "# p2\n"), "the other key still lands");
 });
 
 test("an edit that lands while a document is being fetched is kept and reported", async t => {
@@ -271,82 +343,82 @@ test("a failed document fetch names its uri and the pull goes on; a failed manif
 test("a failed ledger or checkpoint read names its item and the rest still pull", async t => {
   const s = await setup(t);
   await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }] });
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: "two\n" }, { kind: "checkpoint", body: "# p2\n" }] });
+  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "ledger", body: "two\n" }, { kind: "checkpoint", body: keyed("p2", "# p2\n") }] });
   s.stub.db.failures.push({ method: "GET", path: `/api/v1/worklog/workstreams/${s.stub.db.workstreams[1].id}/entries`, status: 503 });
   const ledger = await s.pull();
   assert.equal(ledger.code, 1);
   assert.match(ledger.stdout, /^failed: sdd\/p2\/progress\.md: darkmem answered 503: injected failure$/m);
   assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), "one\n");
-  assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "# p2\n");
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# p1\n" }] });
+  assert.equal(read(handoffFile(s, "p2")), keyed("p2", "# p2\n"));
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: keyed("p1", "# p1\n") }] });
   s.stub.db.failures.push({ method: "GET", path: "/api/v1/worklog/resume", status: 503 });
   const resumes = () => s.stub.db.requests.filter(r => r.path === "/api/v1/worklog/resume").length;
   const before = resumes();
   const checkpoint = await s.pull();
   assert.equal(resumes() - before, 2, "the other workstream's checkpoint is still read");
   assert.equal(checkpoint.code, 1);
-  assert.match(checkpoint.stdout, /^failed: handoff\/latest\.md: darkmem answered 503: injected failure \(reading workstream p2\); not pulled$/m);
-  assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "# p2\n", "without every checkpoint the newest is unknown");
+  assert.match(checkpoint.stdout, /^failed: handoff checkpoint of workstream p\d: darkmem answered 503: injected failure; no handoff pulled$/m);
+  assert.equal(fs.existsSync(handoffFile(s, "p1")), false, "without every checkpoint a newer one naming the same key may be missed");
   assert.equal(read(path.join(s.workRoot, "sdd", "p2", "progress.md")), "two\n");
 });
 
 test("checkpoints a microsecond apart are ordered by darkmem's clock, not rounded to the millisecond", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# A\n" }] });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: keyed("k", "# A\n") }] });
   s.stub.db.workstreams[0].entries[0].created_at = "2026-09-25T10:00:00.000001+00:00";
   assert.equal((await s.pull()).code, 0);
-  const latest = path.join(s.workRoot, "handoff", "latest.md");
-  assert.equal(read(latest), "# A\n");
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# C\n" }] });
+  assert.equal(read(handoffFile(s, "k")), keyed("k", "# A\n"));
+  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: keyed("k", "# B\n") }] });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: keyed("k", "# C\n") }] });
   s.stub.db.workstreams[1].entries[0].created_at = "2026-09-25T10:00:00.000002+00:00";
   s.stub.db.workstreams[0].entries[1].created_at = "2026-09-25T10:00:00.000003+00:00";
   assert.equal((await s.pull()).code, 0);
-  assert.equal(read(latest), "# C\n", "p2 is listed first, and C is newer than B by one microsecond");
+  assert.equal(read(handoffFile(s, "k")), keyed("k", "# C\n"), "p2 is listed first, and C is newer than B by one microsecond");
   assert.equal(s.state().checkpointAt, "2026-09-25T10:00:00.000003+00:00", "the string is the newest date");
-  assert.deepEqual(s.state().checkpointAtByWorkstream, { p1: "2026-09-25T10:00:00.000003+00:00" });
+  assert.deepEqual(s.state().checkpointAtByWorkstream, {
+    p1: "2026-09-25T10:00:00.000003+00:00", "*": "2026-09-25T10:00:00.000001+00:00", p2: "2026-09-25T10:00:00.000002+00:00",
+  }, "B, the older of two naming k, is recorded as seen");
 });
 
-test("latest.md stays the newest stop when the workstream that filed it closes", async t => {
+test("a mirror that never synced a checkpoint takes only the single newest, and closing its workstream changes nothing", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# C\n" }] });
+  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: keyed("p2", "# B\n") }] });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: keyed("p1", "# C\n") }] });
   assert.equal((await s.pull()).code, 0);
-  const latest = path.join(s.workRoot, "handoff", "latest.md");
-  assert.equal(read(latest), "# C\n");
+  assert.equal(read(handoffFile(s, "p1")), keyed("p1", "# C\n"));
+  assert.equal(fs.existsSync(handoffFile(s, "p2")), false);
   s.stub.db.workstreams.find(w => w.key === "p1").state = "closed";
   assert.equal((await s.pull()).code, 0);
-  assert.equal(read(latest), "# C\n", "p2's older checkpoint does not replace p1's newer one");
+  assert.equal(read(handoffFile(s, "p1")), keyed("p1", "# C\n"));
+  assert.equal(fs.existsSync(handoffFile(s, "p2")), false, "p2's checkpoint is older than the one synced");
 });
 
 test("an old state file's single checkpointAt gates a pull, which then records the workstream", async t => {
   const s = await setup(t);
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: "# A\n" }] });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "checkpoint", body: keyed("p1", "# A\n") }] });
   const filed = s.stub.db.workstreams[0].entries[0].created_at;
   const old = new Date(Date.parse(filed) + 500).toISOString();
   write(path.join(s.mirror, ".sync-state.json"), JSON.stringify({
-    version: 1, documents: {}, ledgers: {}, checkpoint: sha("# synced\n"), checkpointAt: old, conflicts: [], pendingLinks: [], prefix: "dforge",
+    version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpointAt: old, conflicts: [], pendingLinks: [], prefix: "dforge",
   }));
-  const latest = path.join(s.workRoot, "handoff", "latest.md");
-  write(latest, "# synced\n");
   assert.equal((await s.pull()).code, 0);
-  assert.equal(read(latest), "# synced\n", "a checkpoint older than the old value is not taken");
-  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: "# B\n" }] });
+  assert.equal(fs.existsSync(handoffFile(s, "p1")), false, "a checkpoint older than the old value is not taken");
+  await s.seed.append({ project: "proj", workstream: "p2", entries: [{ kind: "checkpoint", body: keyed("p2", "# B\n") }] });
   assert.equal((await s.pull()).code, 0);
-  assert.equal(read(latest), "# B\n");
+  assert.equal(read(handoffFile(s, "p2")), keyed("p2", "# B\n"));
   const recorded = s.stub.db.workstreams[1].entries[0].created_at;
   assert.equal(s.state().checkpointAt, recorded, "an older dforge reads a string");
   assert.deepEqual(s.state().checkpointAtByWorkstream, { "*": old, p2: recorded });
 });
 
-test("a latest.md that cannot be read is one failure, and the rest of the pull still lands", async t => {
+test("a handoff that cannot be read is one failure, and the rest of the pull still lands", async t => {
   const s = await setup(t);
   await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }, { kind: "checkpoint", body: "# p1\n" }] });
-  fs.mkdirSync(path.join(s.workRoot, "handoff", "latest.md"), { recursive: true });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }, { kind: "checkpoint", body: keyed("p1", "# p1\n") }] });
+  fs.mkdirSync(handoffFile(s, "p1"), { recursive: true });
   const result = await s.pull();
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /^failed: handoff\/latest\.md: could not be read \(EISDIR\); not pulled$/m);
+  assert.match(result.stdout, /^failed: handoff\/p1\.md: could not be read \(EISDIR\); not pulled$/m);
   assert.equal((result.stdout.match(/^failed:/gm) ?? []).length, 1);
   assert.equal(read(path.join(s.docsRoot, "a.md")), "a\n");
   assert.equal(read(path.join(s.workRoot, "sdd", "p1", "progress.md")), "one\n");
@@ -362,7 +434,7 @@ for (const [name, block] of [
     await s.seed.putDocument({ project: "proj", uri: "dforge/t.md", content: "t\n" });
     await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
     await s.seed.append({ project: "proj", workstream: "k", entries: [{ kind: "ledger", body: "k\n" }] });
-    await s.seed.append({ project: "proj", workstream: "m", entries: [{ kind: "ledger", body: "m\n" }, { kind: "checkpoint", body: "# m\n" }] });
+    await s.seed.append({ project: "proj", workstream: "m", entries: [{ kind: "ledger", body: "m\n" }, { kind: "checkpoint", body: keyed("m", "# m\n") }] });
     block(path.join(s.workRoot, "sdd", "k", "progress.md"));
     const result = await s.pull();
     assert.equal(result.code, 1, result.stdout + result.stderr);
@@ -373,25 +445,25 @@ for (const [name, block] of [
     assert.match(result.stdout, /darkmem-sync pull: 1 documents, 1 ledgers, 1 checkpoints; 1 conflicts, 1 failures/);
     assert.equal(read(path.join(s.docsRoot, "a.md")), "a\n");
     assert.equal(read(path.join(s.workRoot, "sdd", "m", "progress.md")), "m\n");
-    assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "# m\n");
+    assert.equal(read(handoffFile(s, "m")), keyed("m", "# m\n"));
     assert.equal(s.state().ledgers.k, undefined);
   });
 }
 
-test("a latest.md that cannot be written is one failure, and the rest of the pull still lands", async t => {
+test("a handoff that cannot be written is one failure, and the rest of the pull still lands", async t => {
   const s = await setup(t);
   await s.seed.putDocument({ project: "proj", uri: "dforge/a.md", content: "a\n" });
-  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }, { kind: "checkpoint", body: "# p1\n" }] });
+  await s.seed.append({ project: "proj", workstream: "p1", entries: [{ kind: "ledger", body: "one\n" }, { kind: "checkpoint", body: keyed("p1", "# p1\n") }] });
   // The atomic write's temporary file cannot be made where a directory stands.
-  fs.mkdirSync(path.join(s.workRoot, "handoff", ".latest.md.tmp"), { recursive: true });
+  fs.mkdirSync(path.join(s.workRoot, "handoff", ".p1.md.tmp"), { recursive: true });
   const result = await s.pull();
   assert.equal(result.code, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stderr, /unexpected error/);
-  assert.match(result.stdout, /^failed: handoff\/latest\.md: could not be written \(\w+\); not pulled$/m);
+  assert.match(result.stdout, /^failed: handoff\/p1\.md: could not be written \(\w+\); not pulled$/m);
   assert.equal((result.stdout.match(/^failed:/gm) ?? []).length, 1);
   assert.match(result.stdout, /darkmem-sync pull: 1 documents, 1 ledgers, 0 checkpoints; 0 conflicts, 1 failures/);
-  assert.equal(fs.existsSync(path.join(s.workRoot, "handoff", "latest.md")), false);
-  assert.equal(s.state().checkpoint, null);
+  assert.equal(fs.existsSync(handoffFile(s, "p1")), false);
+  assert.equal(s.state().checkpoints.p1, undefined);
 });
 
 test("a sync state that cannot be saved after a ledger is written still stops the pull with exit 2", async t => {
@@ -435,7 +507,9 @@ test("a checkpoint from a workstream key the directory rule refuses is pulled on
   const first = await s.pull();
   assert.equal(first.code, 0, first.stdout + first.stderr);
   assert.match(first.stdout, / 1 checkpoints;/);
-  assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), "# Foo\n");
+  const [name] = fs.readdirSync(path.join(s.workRoot, "handoff"));
+  assert.match(name, /^adhoc-legacy-\d+\.md$/, "a checkpoint with no marker takes the migration's key");
+  assert.equal(read(path.join(s.workRoot, "handoff", name)), "# Foo\n");
   const second = await s.pull();
   assert.equal(second.code, 0, second.stdout + second.stderr);
   assert.match(second.stdout, / 0 checkpoints;/);
@@ -739,11 +813,11 @@ test("a second mirror receives the project checkpoint", async t => {
   const s = await setup(t);
   const repo = makeRepo();
   const first = makeHome({ repo, url: s.stub.url });
-  const note = "# Handoff — 2026-11-16\n\n## Next session\n\n**Status:** Plan `docs/dforge/plans/P.md` is complete.\n**Next:** Nothing — no register holds an unresolved row.\n<!-- next-step: kind=complete done=1 closed=0 subject=docs/dforge/plans/P.md at=1763251200 -->\n";
-  write(path.join(first.workRoot, "handoff", "latest.md"), note);
+  const note = "# Handoff — 2026-11-16\n\n## Next session\n\n**Status:** Plan `docs/dforge/plans/P.md` is complete.\n**Next:** Nothing — no register holds an unresolved row.\n<!-- next-step: kind=complete key=P session=- done=1 closed=0 subject=docs/dforge/plans/P.md at=1763251200 -->\n";
+  write(path.join(first.workRoot, "handoff", "P.md"), note);
   const pushed = await run(["push"], { cwd: repo, env: first.env });
   assert.equal(pushed.code, 0, pushed.stdout + pushed.stderr);
   const result = await s.pull();
   assert.equal(result.code, 0, result.stdout + result.stderr);
-  assert.equal(read(path.join(s.workRoot, "handoff", "latest.md")), note);
+  assert.equal(read(path.join(s.workRoot, "handoff", "P.md")), note);
 });

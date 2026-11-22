@@ -1,6 +1,6 @@
 // The progress family's moves (darkmem store options spec §4): every
 // checkout's plan ledgers and handoff notes, and the primary checkout's
-// latest.md, into darkmem; and the mirror's back into the primary checkout.
+// handoffs, into darkmem; and the mirror's back into the primary checkout.
 // Nothing is deleted: a source is moved to a dated backup only after its
 // copy reads back identical.
 import { spawnSync } from "node:child_process";
@@ -10,16 +10,29 @@ import { HttpError, TransportError } from "./darkmem-client.mjs";
 import { dforgeDir } from "./darkmem-config.mjs";
 import { importLedger } from "./darkmem-import.mjs";
 import {
-  DOC_PREFIX, checkpointTarget, decodeUtf8, isoMicros, ledgerPieces, listDocumentFiles, newestCheckpointAt, propertiesFor,
+  DOC_PREFIX, checkpointTarget, decodeUtf8, handoffKey, handoffMarker, ledgerPieces, listDocumentFiles, propertiesFor,
   recordCheckpointAt, sha256, unsupportedPlanDirs, uriFamily, utcStamp, validKey, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
-import { pullDocuments, pullLedgers, remoteLedger } from "./darkmem-pull.mjs";
+import { pullCheckpoints, pullDocuments, pullLedgers, remoteLedger } from "./darkmem-pull.mjs";
 import { inProgressReason, planFinished } from "./darkmem-reconcile.mjs";
 
 // A handoff note and an amendments file are both per-plan documents beside a ledger.
 const isPlanDocument = item => item.kind === "handoff" || item.kind === "amendments";
 
 const local = (base, rel) => path.join(base, ...rel.split("/"));
+
+// Every *.md entry of a handoff directory, whatever its type, so the read
+// names one that is not a regular file; claims/ and notes/ are not handoffs.
+function handoffFiles(dir, problems) {
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch (error) {
+    if (error.code !== "ENOENT") problems.push(`${dir}: could not be listed (${error.code})`);
+    return [];
+  }
+  return names.filter(name => name.endsWith(".md")).sort().map(name => ({ name, file: path.join(dir, name), rel: `handoff/${name}` }));
+}
 
 // `file`'s bytes, read without blocking on a FIFO or device: it throws an
 // error whose code is EISDIR for a directory, EFTYPE for any other file that
@@ -160,8 +173,10 @@ export function gatherLocalProgress(cfg) {
     }
   }
   const primaryState = dforgeDir("state", cfg.repoRoot);
-  const latest = path.join(primaryState, "handoff", "latest.md");
-  if (fs.existsSync(latest)) files.push({ kind: "latest", file: latest, stateDir: primaryState, rel: "handoff/latest.md" });
+  for (const { name, file, rel } of handoffFiles(path.join(primaryState, "handoff"), problems)) {
+    if (handoffKey(name) === null) problems.push(`${file}: not a usable handoff key`);
+    else files.push({ kind: "checkpoint", name, file, stateDir: primaryState, rel });
+  }
   const sources = [];
   const byRel = new Map();
   for (const item of files) {
@@ -267,38 +282,25 @@ const checkoutRoots = (cfg, stateDir) => ({
   worktreeRoot: path.dirname(stateDir),
 });
 
-// The newest checkpoint darkmem holds across `workstreams`, with the key of
-// the workstream that holds it as `workstream`, or null.
-async function newestCheckpoint({ cfg, client }, workstreams) {
-  let newest = null;
-  for (const ws of workstreams) {
-    const checkpoint = (await client.resume(cfg.project, ws.key))?.checkpoint;
-    if (checkpoint && (!newest || isoMicros(checkpoint.created_at) > isoMicros(newest.created_at))) newest = { ...checkpoint, workstream: ws.key };
-  }
-  return newest;
-}
-
-// latest.md becomes a checkpoint of the plan or draft it names, so other
-// machines receive it. The workstream follows that plan: an append reopens a
-// closed one, so it stays open while the plan is active, and it is closed once
-// completed.md records the plan, whether this append opened it or found it.
-// One that names neither is copied unsent, dated at darkmem's newest
-// checkpoint so a pull only replaces it with a newer one. Answers
-// { hash, at, workstream, detail }, `workstream` naming the key `at` was read
-// from (null with a null `at`), or { problem } when darkmem reads it back
-// different.
-async function fileLatest(context, item) {
+// A handoff becomes a checkpoint of the workstream push files it under (its
+// marker's plan or draft, or project for a finished or project block, else
+// the plan or draft its State section names), so other machines receive it.
+// A plan's workstream follows that plan: an append reopens a closed one, so it
+// stays open while the plan is active, and it is closed once completed.md
+// records the plan, whether this append opened it or found it. An unplanned
+// handoff, or one naming no workstream, is copied unsent and dates nothing: a
+// pull never writes over another key's file. Answers
+// { hash, key, at, workstream, detail }, with a null `at` and `workstream`
+// for an unsent one, or { problem } when darkmem reads it back different.
+async function fileHandoff(context, item) {
   const { cfg, client } = context;
   const body = decodeUtf8(item.buffer);
   const hash = sha256(item.buffer);
-  const target = checkpointTarget(body);
-  if (!target) {
-    const newest = await newestCheckpoint(context, await client.workstreams(cfg.project));
-    return {
-      hash, at: newest?.created_at ?? null, workstream: newest?.workstream ?? null,
-      detail: "latest.md names no plan or draft; copied to the mirror, not sent",
-    };
-  }
+  const key = handoffKey(item.name);
+  const unsent = why => ({ hash, key, at: null, workstream: null, detail: `${item.name} ${why}; copied to the mirror, not sent` });
+  if (handoffMarker(body)?.kind === "adhoc") return unsent("is an unplanned handoff");
+  const target = checkpointTarget(body, { marker: true });
+  if (!target) return unsent("names no plan or draft");
   const before = await client.resume(cfg.project, target.slug);
   let at = before?.checkpoint && sha256(Buffer.from(before.checkpoint.body, "utf8")) === hash ? before.checkpoint.created_at : null;
   if (!at) {
@@ -306,13 +308,13 @@ async function fileLatest(context, item) {
     const answer = await client.append({ project: cfg.project, workstream: target.slug, properties, entries: [{ kind: "checkpoint", body }] });
     at = answer.workstream.last_entry_at;
   }
-  if (planFinished(cfg, path.dirname(item.stateDir), target.path)) {
+  if (target.path && planFinished(cfg, path.dirname(item.stateDir), target.path)) {
     const after = await client.resume(cfg.project, target.slug);
     if (after.workstream.state !== "closed") await client.updateWorkstream(after.workstream.id, { state: "closed", retain: true });
   }
   const filed = (await client.resume(cfg.project, target.slug))?.checkpoint;
-  if (!filed || sha256(Buffer.from(filed.body, "utf8")) !== hash) return { problem: "handoff/latest.md: darkmem's checkpoint reads back different" };
-  return { hash, at, workstream: target.slug, detail: `latest.md filed as a checkpoint of ${target.slug}` };
+  if (!filed || sha256(Buffer.from(filed.body, "utf8")) !== hash) return { problem: `${item.rel}: darkmem's checkpoint reads back different` };
+  return { hash, key, at, workstream: target.slug, detail: `${item.name} filed as a checkpoint of ${target.slug}` };
 }
 
 // The symbolic links between a checkout and its progress files. A source is
@@ -353,7 +355,7 @@ export async function progressToDarkmem(context) {
   const report = scratchReport();
   const ids = new Map();
   const lastSeqs = new Map();
-  let latest = null;
+  const filedHandoffs = new Map();
   try {
     const checked = await checkProgressTargets(context, sources);
     if (checked.problems.length) return refuse("darkmem or the mirror already holds different progress", checked.problems);
@@ -396,10 +398,10 @@ export async function progressToDarkmem(context) {
       }
     }
     if (differing.length) return refuse("a read-back of darkmem's copies differs; nothing was moved locally", differing);
-    const latestItem = sources.find(item => item.kind === "latest");
-    if (latestItem) {
-      latest = await fileLatest(context, latestItem);
-      if (latest.problem) return refuse("a read-back of darkmem's copies differs; nothing was moved locally", [latest.problem]);
+    for (const item of sources.filter(item => item.kind === "checkpoint")) {
+      const filed = await fileHandoff(context, item);
+      if (filed.problem) return refuse("a read-back of darkmem's copies differs; nothing was moved locally", [filed.problem]);
+      filedHandoffs.set(item.rel, filed);
     }
   } catch (error) {
     return darkmemRefusal(error, report.failures);
@@ -438,9 +440,9 @@ export async function progressToDarkmem(context) {
     } else if (isPlanDocument(item)) {
       state.documents[item.uri] = sha256(item.buffer);
     } else {
-      state.checkpoint = latest.hash;
-      if (latest.at === null) state.checkpointAt = null;
-      else recordCheckpointAt(state, latest.workstream, latest.at);
+      const filed = filedHandoffs.get(item.rel);
+      if (filed.key !== null) state.checkpoints[filed.key] = filed.hash;
+      if (filed.at !== null) recordCheckpointAt(state, filed.workstream, filed.at);
     }
   }
   persist();
@@ -484,47 +486,11 @@ export async function progressToDarkmem(context) {
     moved: true,
     details: [
       `${count("ledger")} ledgers, ${count("handoff")} handoff notes and ${count("amendments")} amendments files in darkmem`,
-      ...(latest ? [latest.detail] : []),
+      ...[...filedHandoffs.values()].map(filed => filed.detail),
       ...[...backups].map(dir => `sources moved to ${dir}`),
       ...unignored.map(({ file, code }) => `${file} could not be written (${code})`),
     ],
   };
-}
-
-// The latest.md file for `newest`, unless the mirror's copy is newer or holds
-// a local edit; pull's rule, applied across every workstream. A mirror that
-// lost latest.md takes darkmem's newest again, however old.
-function renderCheckpoint({ state, persist, report }, workRoot, newest) {
-  if (!newest) return;
-  const file = path.join(workRoot, "handoff", "latest.md");
-  const synced = newestCheckpointAt(state);
-  if (fs.existsSync(file) && synced && isoMicros(newest.created_at) <= isoMicros(synced)) return;
-  const remote = Buffer.from(newest.body, "utf8");
-  const hash = sha256(remote);
-  let current = null;
-  try {
-    current = sha256(readNoFollow(file));
-  } catch (error) {
-    if (error.code !== "ENOENT") {
-      report.failures.push(`handoff/latest.md: could not be read (${error.code})`);
-      return;
-    }
-  }
-  if (current !== null && current !== hash && current !== state.checkpoint) {
-    report.conflicts.push("handoff/latest.md: changed locally, and darkmem holds a newer checkpoint");
-    return;
-  }
-  try {
-    if (current !== hash) writeFileAtomic(file, remote, path.dirname(workRoot));
-    state.checkpoint = hash;
-    recordCheckpointAt(state, newest.workstream, newest.created_at);
-    persist();
-  } catch (error) {
-    // persist's StateError, or a bug, propagates.
-    if (!error?.syscall) throw error;
-    report.failures.push(`handoff/latest.md: could not be written (${error.code})`);
-    report.partial = true;
-  }
 }
 
 // A file's bytes, or null when it does not exist; never read through a link.
@@ -608,9 +574,10 @@ function mirrorRefusal(lines, outcome) {
 
 // The mirror is brought up to darkmem first. A pull renders only open
 // workstreams, and every imported ledger is closed, so this renders every
-// workstream's ledger and the newest checkpoint across all of them; darkmem
-// keeps its copy. Offline (darkmem disabled, unmapped or not answering) the
-// mirror is copied as it stands.
+// workstream's ledger, and each workstream's checkpoint newer than the one
+// this mirror last synced for it, as a pull would; darkmem keeps its copy.
+// Offline (darkmem disabled, unmapped or not answering) the mirror is copied
+// as it stands.
 export async function progressToLocal(context, { offline = null } = {}) {
   const { cfg, client, state, persist } = context;
   const workRoot = path.join(cfg.mirror, "work");
@@ -626,7 +593,7 @@ export async function progressToLocal(context, { offline = null } = {}) {
       await pullDocuments(pulling);
       const every = await client.workstreams(cfg.project);
       await pullLedgers(pulling, every);
-      renderCheckpoint(pulling, workRoot, await newestCheckpoint(context, every));
+      await pullCheckpoints(pulling, every);
     } catch (error) {
       return darkmemRefusal(error);
     }
@@ -643,8 +610,7 @@ export async function progressToLocal(context, { offline = null } = {}) {
     ...ledgersIn(workRoot).map(({ slug, file }) => ({ file, rel: `sdd/${slug}/progress.md` })),
     ...listDocumentFiles(roots).map(({ file }) => ({ file, rel: `sdd/${path.basename(path.dirname(file))}/${path.basename(file)}` })),
   ];
-  const latest = path.join(workRoot, "handoff", "latest.md");
-  if (fs.existsSync(latest)) sources.push({ file: latest, rel: "handoff/latest.md" });
+  for (const { file, rel } of handoffFiles(path.join(workRoot, "handoff"), problems)) sources.push({ file, rel });
   // Copies and equality reads must not follow a link out of the checkout.
   const stateRel = path.relative(cfg.repoRoot, stateDir).split(path.sep).join("/");
   const links = linksBelow(cfg.repoRoot, stateRel, sources.map(item => item.rel));
@@ -727,7 +693,9 @@ export async function progressToLocal(context, { offline = null } = {}) {
   }
   state.ledgers = Object.create(null);
   state.checkpoint = null;
-  state.checkpointAt = null;
+  state.checkpoints = Object.create(null);
+  // checkpointAt stays: the checkpoints this mirror has seen are still seen,
+  // so a later pull does not bring back a handoff superseded or consumed here.
   state.pendingLinks = [];
   for (const uri of Object.keys(state.documents)) {
     if (uriFamily(uri) === "progress") delete state.documents[uri];

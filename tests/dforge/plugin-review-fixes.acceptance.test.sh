@@ -224,8 +224,8 @@ check "A8: the prose still syncs the records afterwards" "$(sed -n "${l_after},$
 R11="$TMP/snap"
 mkrepo "$R11"
 mkdir -p "$R11/.dforge/handoff" "$R11/.dforge/sdd/plan"
-printf '# Handoff\n\n## Next session\n\n**Next:** Resume docs/other-plan.md at Task 9 (OTHERPLAN-MARK).\n' > "$R11/.dforge/handoff/latest.md"
-touch -d '3 hours ago' "$R11/.dforge/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\n**Next:** Resume docs/other-plan.md at Task 9 (OTHERPLAN-MARK).\n' > "$R11/.dforge/handoff/stored.md"
+touch -d '3 hours ago' "$R11/.dforge/handoff/stored.md"
 snap_payload() { # snap_payload <transcript>
   jq -n --arg tp "$1" --arg cwd "$R11" '{hook_event_name:"SessionStart",session_id:"s-snap",transcript_path:$tp,cwd:$cwd,source:"compact"}'
 }
@@ -235,13 +235,14 @@ jq -cn --arg ts "$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%S.000Z)" \
 out=$(snap_payload "$TR11" | bash "$S/session-start.sh" 2>/dev/null)
 ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out")
 has "A11: the snapshot is built" "$ctx" "## Compaction snapshot"
-lacks "A11: a latest.md naming another plan that predates the session is omitted" "$ctx" "OTHERPLAN-MARK"
-printf '# Handoff\n\n## Next session\n\n**Next:** Resume docs/plan.md at Task 2 (OWNPLAN-MARK).\n' > "$R11/.dforge/handoff/latest.md"
-touch -d '3 hours ago' "$R11/.dforge/handoff/latest.md"
+lacks "A11: a handoff naming another plan that predates the session is omitted" "$ctx" "OTHERPLAN-MARK"
+# Spec 2026-11-20 §5: the snapshot shows the handoff this session claimed or wrote.
+printf '# Handoff\n\n## Next session\n\n**Next:** Resume docs/plan.md at Task 2 (OWNPLAN-MARK).\n<!-- next-step: kind=plan session=s-snap done=1 closed=0 subject=docs/plan.md at=1 -->\n' > "$R11/.dforge/handoff/stored.md"
+touch -d '3 hours ago' "$R11/.dforge/handoff/stored.md"
 printf '# SDD ledger — plan: docs/plan.md\nTask 1: complete (commits a..b, review clean)\n' > "$R11/.dforge/sdd/plan/progress.md"
 out=$(snap_payload "$TR11" | bash "$S/session-start.sh" 2>/dev/null)
 ctx=$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$out")
-has "A11: a latest.md naming a plan whose ledger this session wrote is kept" "$ctx" "OWNPLAN-MARK"
+has "A11: a handoff whose marker names this session is kept, however old" "$ctx" "OWNPLAN-MARK"
 # Over the cap: the ledger's newest lines survive.
 pad=$(printf 'x%.0s' $(seq 1 600))
 {
@@ -275,12 +276,15 @@ arun s-12 start --spec docs/spec12.md --register docs/r12.md >/dev/null
 check "A12: start --register fills **Covers:** - with the spec" "$(grep -c '^\*\*Covers:\*\* docs/spec12.md$' "$R12/docs/r12.md")" "1"
 arun s-12 attach --plan docs/plan.md >/dev/null
 arun s-12 phase plan >/dev/null
-# latest.md written for another plan.
+# A handoff written for another plan.
 mkdir -p "$R12/docs/plans"
 { cat "$R12/docs/plan.md"; } > "$R12/docs/plans/other.md"
 (cd "$R12" && bash "$S/next-step" docs/plans/other.md >/dev/null 2>&1)
+# The clear reads the attached plan's keyed file (spec 2026-11-20 A13): put the
+# other plan's block there.
+cp "$(cd "$R12" && bash "$S/next-step" --target docs/plans/other.md)" "$(cd "$R12" && bash "$S/next-step" --target docs/plan.md)"
 arun s-12 clear >/dev/null 2>"$TMP/err"; rc=$?
-check "A12: clear refuses a latest.md prompt for another plan (exit 4)" "$rc" "4"
+check "A12: clear refuses a handoff prompt for another plan (exit 4)" "$rc" "4"
 has "A12: the refusal says the prompt names another plan" "$(cat "$TMP/err")" "another plan"
 check "A12: and leaves no clear pending" "$(arun s-12 pending)" "none"
 # A run whose owner is gone is stopped from another session.
@@ -501,7 +505,8 @@ check "A18: a later Process: line naming another path turns the hooks back on" "
 sleep 1; u_prompt u-22
 printf '// change 3\n' >> "$R17/src/App.tsx"; git -C "$R17" commit -qam 'ui change 3'
 check "A22: a UI change with no proof is held" "$(decision "$(u_stop u-22 'Task 2 is done.')")" "block"
-sleep 1; mkdir -p "$R17/.dforge/handoff"; printf '# Handoff\n\n## Next session\n\n**Next:** x\n' > "$R17/.dforge/handoff/latest.md"
+# The turn record next-step writes for the session's printed block (C13).
+sleep 1; printf 'status=x\nnext=x\n' > "$TURNS/u-22.next"
 check "A22: a stop carrying ## Next session passes" "$(decision "$(u_stop u-22 $'Done.\n\n## Next session\n\n**Next:** x')")" "none"
 mkdir -p "$R17/.dforge/sdd/ui-plan"
 printf '# SDD ledger — plan: docs/ui-plan.md\nTask 2: waiting — which colour?\n' > "$R17/.dforge/sdd/ui-plan/progress.md"
@@ -523,7 +528,7 @@ printf '// change wt1\n' >> "$R17/src/App.tsx"; git -C "$R17" commit -qam 'ui ch
 check "ui-turn-end A7: held on a UI change" "$(decision "$(u_stop u-wt1 'Done.')")" "block"
 sleep 1; u_prompt u-wt2
 printf '// change wt2\n' >> "$R17/src/App.tsx"; git -C "$R17" commit -qam 'ui change wt2'
-sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.\n' > "$UWT/.dforge/handoff/latest.md"
+sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.\n' > "$UWT/.dforge/handoff/stored.md"
 check "ui-turn-end A7: the worktree's block releases" "$(decision "$(u_stop u-wt2 $'## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.')")" "none"
 git -C "$R17" worktree remove --force "$UWT"
 

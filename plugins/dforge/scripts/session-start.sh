@@ -124,19 +124,15 @@ if [ -n "$roadmap_root" ] && [ -f "$(dforge_docs_root "$roadmap_root")/roadmap.m
   fi
 fi
 
-# Other checkouts' recent handoffs, counted only: the compaction snapshot
-# keeps to the session's own, and repo-audit lists them.
+# Open handoffs of every checkout and the mirror, counted only: unclaimed or
+# claimed by a gone session, and younger than three days. repo-audit lists,
+# recomputes and cleans them; nothing here recomputes or deletes.
 handoffs_line=""
 if [ -n "$roadmap_root" ]; then
-  own_latest=$(dforge_latest_file "$roadmap_root")
-  others=0
-  while IFS= read -r other; do
-    [ -f "$other" ] || continue
-    ! [ -f "$own_latest" ] || ! [ "$other" -ef "$own_latest" ] || continue
-    [ -n "$(find "$other" -mmin -4320 2>/dev/null)" ] && others=$((others + 1))
-  done < <(dforge_latest_files "$roadmap_root")
-  if [ "$others" -ge 1 ]; then
-    handoffs_line="$others other checkouts hold a handoff (scripts/repo-audit lists them)."
+  open_handoffs=$(bash "${SCRIPT_DIR}/with-timeout" 10 bash "${SCRIPT_DIR}/handoff" list "$roadmap_root" 2>/dev/null </dev/null \
+    | tr -d '\r' | awk -F'\t' '$4 < 259200 && ($5 == "unclaimed" || $5 ~ / gone$/)' | grep -c . || true)
+  if [ "${open_handoffs:-0}" -ge 1 ]; then
+    handoffs_line="$open_handoffs open handoffs (scripts/repo-audit lists them)."
     context="${context}\n\n$(escape_for_json "$handoffs_line")"
   fi
 fi
@@ -160,10 +156,13 @@ fi
 legacy_line=""
 if [ -n "$roadmap_root" ]; then
   legacy=$(dforge_legacy_layout "$roadmap_root" | paste -sd, - | sed 's/,/, /g' | tr -d '\001-\037')
-  if [ -n "$legacy" ]; then
-    legacy_line="dforge: this repository still uses an older layout ($legacy); run the dforge:migrate skill (/dforge:migrate)"
-    context="${context}\n\n$(escape_for_json "$legacy_line")"
-  fi
+  [ -z "$legacy" ] || legacy_line="dforge: this repository still uses an older layout ($legacy); run the dforge:migrate skill (/dforge:migrate)"
+  # A handoff an older plugin wrote, which only the migrate script names.
+  while IFS=$'\t' read -r lh_path lh_subject; do
+    [ -n "$lh_path" ] || continue
+    legacy_line="${legacy_line:+$legacy_line$'\n'}dforge: $lh_path is a handoff in an older layout (subject $lh_subject); run the dforge:migrate skill (/dforge:migrate)"
+  done < <(cd "$roadmap_root" && bash "$SCRIPT_DIR/dforge-migrate" --legacy-handoffs 2>/dev/null | tr -d '\001-\010\013-\037')
+  [ -z "$legacy_line" ] || context="${context}\n\n$(escape_for_json "$legacy_line")"
 fi
 
 # A darkmem store applied with no node to read it: every script exits 2 from
@@ -220,7 +219,7 @@ if grep -qE '"source"[[:space:]]*:[[:space:]]*"compact"' <<<"$stdin_json" \
     # Transcript text can carry raw C0 controls (pasted terminal output with
     # ANSI codes); JSON forbids them unescaped and escape_for_json only covers
     # the newline, carriage return and tab it re-encodes.
-    snapshot=$(snapshot_build "$transcript_path" "${cwd:-$PWD}" "$cap" 2>/dev/null \
+    snapshot=$(snapshot_build "$transcript_path" "${cwd:-$PWD}" "$cap" "${session_id:-}" 2>/dev/null \
       | tr -d '\001-\010\013\014\016-\037' || true)
     if [ -n "$snapshot" ]; then
       context="${context}\n\n$(escape_for_json "$snapshot")"

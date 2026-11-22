@@ -36,6 +36,15 @@ beat() { # beat <session> [age in seconds]: the heartbeat a live cockpit writes
 # Every call through ar has a live cockpit in the session it names.
 ar() {
   [ "${1:-}" != --session ] || beat "$2"
+  # A clearing session's handoff names it, as next-step writes it: a
+  # design-phase clear reads the one whose marker names the run's session, and
+  # with a plan attached the clear reads the keyed file next-step --target names.
+  local h="$REPO/.dagents/handoff/stored.md" plan
+  if [ "${1:-}" = --session ] && { [ "${3:-}" = clear ] || [ "${3:-}" = switch ]; } && [ -f "$h" ]; then
+    { grep -v '^<!-- next-step: ' "$h"; printf '<!-- next-step: kind=adhoc session=%s done=0 closed=0 subject=- at=%s -->\n' "$2" "$(date +%s)"; } > "$h.tmp.$BASHPID" && mv "$h.tmp.$BASHPID" "$h"
+    plan=$(jq -r '.plan // empty' "$STATE" 2>/dev/null)
+    [ -z "$plan" ] || [ ! -f "$REPO/$plan" ] || { cp "$h" "$h.cp.$BASHPID" && mv "$h.cp.$BASHPID" "$REPO/.dagents/handoff/$(basename "$plan")"; }
+  fi
   (cd "$REPO" && bash "$AR" "$@")
 }
 # The same, from the linked worktree $TMP/side (made below): where an auto
@@ -210,7 +219,7 @@ check "ruling list" "$(ar --session s-1 ruling list | paste -sd'|' -)" "Fable: k
 ar --session s-1 clear --phase >/dev/null 2>&1; status=$?
 check "clear without a handoff file: exit 1, nothing pending" "$status:$(field pending)" "1:null"
 mkdir -p "$REPO/.dagents/handoff"
-cat > "$REPO/.dagents/handoff/latest.md" <<'EOF'
+cat > "$REPO/.dagents/handoff/stored.md" <<'EOF'
 # Handoff
 
 ## Next session
@@ -230,6 +239,9 @@ Paste as the first prompt:
 Execute docs/plan.md with dagents:subagent-driven-development.
 ```
 EOF
+# The plans clears attach: next-step --target needs the plan file.
+mkdir -p "$REPO/docs"
+for f in plan other; do [ -f "$REPO/docs/$f.md" ] || printf '# Plan\n\n### Task 1: One\n' > "$REPO/docs/$f.md"; done
 ar --session s-1 clear --phase; status=$?
 check "clear --phase: exit 0" "$status" "0"
 check "clear --phase: pending clear, awaiting a rebind" "$(field pending) $(field rebind)" "clear true"
@@ -597,13 +609,13 @@ ar --session s-1 phase final
 ar --session s-1 phase finish
 # The prompt next-step writes for a clean final review (next-step.test.sh).
 finish_prompt='Resume `docs/plan.md` with dagents:resume-execution. Run dagents:finishing-a-development-branch.'
-cp "$REPO/.dagents/handoff/latest.md" "$TMP/latest.keep"
-sed "s|^Execute docs/plan.md with dagents:subagent-driven-development\.$|$finish_prompt|" "$TMP/latest.keep" > "$REPO/.dagents/handoff/latest.md"
+cp "$REPO/.dagents/handoff/stored.md" "$TMP/latest.keep"
+sed "s|^Execute docs/plan.md with dagents:subagent-driven-development\.$|$finish_prompt|" "$TMP/latest.keep" > "$REPO/.dagents/handoff/stored.md"
 ar --session s-1 clear --phase; status=$?
 check "finishing's clear: exit 0, phase finish, clear pending" "$status:$(field phase):$(field pending)" "0:finish:clear"
 check "finishing's clear: no self-resume" "$(field resumes)" "0"
 check "finishing's clear: next-step's finishing prompt" "$(field resumePrompt)" "$finish_prompt"
-cp "$TMP/latest.keep" "$REPO/.dagents/handoff/latest.md"
+cp "$TMP/latest.keep" "$REPO/.dagents/handoff/stored.md"
 ar --session s-1 start --spec "$SPEC" --register docs/r.md --force >/dev/null
 
 # --- the plan, final and finish phases never hand off ---
@@ -750,11 +762,11 @@ rmdir "$REPO/docs/r-stuck.md.tmp"
 # --- clear checks whose prompt it stores (row 32) ---
 ar --session s-1 attach --plan docs/plan.md
 mkdir -p "$REPO/.dagents/handoff"
-printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/other.md` with dagents:resume-execution.\n```\n' > "$REPO/.dagents/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/other.md` with dagents:resume-execution.\n```\n' > "$REPO/.dagents/handoff/stored.md"
 pending_before=$(field pending) resumes_before=$(field resumes)
 ar --session s-1 clear >/dev/null 2>&1; status=$?
 check "clear: another plan's prompt is refused, nothing booked" "$status:$(field pending):$(field resumes)" "4:$pending_before:$resumes_before"
-printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/myplan.md` with dagents:resume-execution.\n```\n' > "$REPO/.dagents/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/myplan.md` with dagents:resume-execution.\n```\n' > "$REPO/.dagents/handoff/stored.md"
 ar --session s-1 clear >/dev/null 2>&1; status=$?
 check "clear: a plan whose name only ends in this one's is another plan" "$status:$(field pending):$(field resumes)" "4:$pending_before:$resumes_before"
 # --- clear reads the attached plan's handoff (spec A8) ---
@@ -763,8 +775,8 @@ git -C "$REPO" add docs/wplan.md && git -C "$REPO" -c user.name=t -c user.email=
 ARW="$TMP/ar-wt"; git -C "$REPO" worktree add -q -b ar-wt "$ARW"
 mkdir -p "$ARW/.dagents/sdd/wplan" "$ARW/.dagents/handoff" "$REPO/.dagents/sdd/wplan"
 printf '# SDD ledger — plan: docs/wplan.md\nTask 1: in progress\n' > "$ARW/.dagents/sdd/wplan/progress.md"
-printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/wplan.md` with dagents:resume-execution. From W.\n```\n' > "$ARW/.dagents/handoff/latest.md"
-printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nContinue `docs/wplan.md` with dagents:executing-plans. From the primary.\n```\n' > "$REPO/.dagents/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nResume `docs/wplan.md` with dagents:resume-execution. From W.\n```\n' > "$ARW/.dagents/handoff/wplan.md"
+printf '# Handoff\n\n## Next session\n\nPaste as the first prompt:\n\n```\nContinue `docs/wplan.md` with dagents:executing-plans. From the primary.\n```\n' > "$REPO/.dagents/handoff/wplan.md"
 ar --session s-1 attach --plan docs/wplan.md
 ar --session s-1 clear --phase >/dev/null 2>&1; status=$?
 check "A8: clear in the primary reads the worktree's handoff" "$status:$(field resumePrompt)" "0:Resume \`docs/wplan.md\` with dagents:resume-execution. From W."
@@ -828,6 +840,52 @@ for suite in "$HERE"/*.sh; do
 done
 check "scan: this suite is found" "$(case "$found " in *" auto-run.test.sh "*) echo found ;; *) echo missed ;; esac)" "found"
 check "every suite that runs the run-control scripts sets or unsets both session variables" "${unnamed# }" ""
+
+# --- keyed handoffs: the clear reads the run's own (spec A13), a held claim
+# stops the run (A21, C16) ---
+SA=abcdef01-0000-4000-8000-000000000001 OTHER=fedcba98-0000-4000-8000-000000000002
+khandoff() { # khandoff <file> <session> <prompt>
+  mkdir -p "${1%/*}"
+  printf '# Handoff\n\n## Next session\n\n**Status:** s\n**Next:** n\n\nLaunch in `/work`:\n\n```\nclaude --model opus --effort high\n```\n\nPaste as the first prompt:\n\n```\n%s\n```\n<!-- next-step: kind=adhoc key=%s session=%s done=0 closed=0 subject=- at=%s -->\n' \
+    "$3" "$(basename "$1" .md)" "$2" "$(date +%s)" > "$1"
+}
+REPO="$TMP/keyed"; git init -q -b main "$REPO"; printf '.dagents/\n' > "$REPO/.gitignore"
+mkdir -p "$REPO/docs"; printf '# K\n\n### Task 1: One\n' > "$REPO/docs/k.md"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm init
+STATE="$REPO/.dagents/sdd/auto-run.json"
+# clear_reads_keyed_plan_handoff
+ar --session "$SA" start --spec "$SPEC" --register docs/r.md --force >/dev/null
+ar --session "$SA" attach --plan docs/k.md
+target=$(cd "$REPO" && bash "$HERE/../../plugins/dagents/scripts/next-step" --target docs/k.md)
+khandoff "$target" "$SA" "Resume docs/k.md (KEYED-PLAN-PROMPT)."
+khandoff "$REPO/.dagents/handoff/adhoc-abcdef01.md" "$SA" "NEWER-ADHOC-PROMPT"
+touch -d '1 hour ago' "$target"
+ar --session "$SA" clear --phase; status=$?
+check "A13: with a plan, clear reads the next-step --target file" "$status:$(field resumePrompt)" "0:Resume docs/k.md (KEYED-PLAN-PROMPT)."
+# clear_without_plan_reads_owner_handoff
+ar --session "$SA" start --spec "$SPEC" --register docs/r.md --force >/dev/null
+rm -f "$target"
+touch -d '1 hour ago' "$REPO/.dagents/handoff/adhoc-abcdef01.md"
+khandoff "$REPO/.dagents/handoff/adhoc-fedcba98.md" "$OTHER" "OTHER-SESSION-PROMPT"
+ar --session "$SA" clear --phase; status=$?
+check "A13: without a plan, clear reads the handoff whose marker names the owner" "$status:$(field resumePrompt)" "0:NEWER-ADHOC-PROMPT"
+rm -f "$REPO/.dagents/handoff/adhoc-abcdef01.md"
+ar --session "$SA" start --spec "$SPEC" --register docs/r.md --force >/dev/null
+ar --session "$SA" clear --phase >/dev/null 2>&1; status=$?
+check "A13: another session's handoff is never read" "$status:$(field pending)" "1:null"
+# held_claim_stops_run
+beat "$OTHER"
+mkdir -p "$REPO/.dagents/handoff/claims"
+printf 'session=%s\nat=%s\n' "$OTHER" "$(date +%s)" > "$REPO/.dagents/handoff/claims/adhoc-fedcba98"
+ar --session "$SA" start --spec "$SPEC" --register docs/r.md --force >/dev/null
+out=$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=$SA AR_SESSION=$SA bash "$HERE/../../plugins/dagents/scripts/handoff" claim "$REPO/.dagents/handoff/adhoc-fedcba98.md" 2>&1); status=$?
+check "A21: handoff claim of a live-held key exits 3" "$status" "3"
+check "A21: and stops the run with the key and holder" "$(field active):$(field stopped)" "false:handoff adhoc-fedcba98 is held by fedcba98"
+printf 'session=%s\nat=%s\n' "$OTHER" "$(date +%s)" > "$REPO/.dagents/handoff/claims/adhoc-abcdef01"
+ar --session "$SA" start --spec "$SPEC" --register docs/r.md --force >/dev/null
+out=$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=$SA AR_SESSION=$SA bash "$HERE/../../plugins/dagents/scripts/next-step" --adhoc --phase build --next x 2>&1); status=$?
+check "A21: next-step on a live-held key exits 7" "$status" "7"
+check "A21: and stops the run with the key and holder" "$(field active):$(field stopped)" "false:handoff adhoc-abcdef01 is held by fedcba98"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

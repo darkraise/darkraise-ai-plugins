@@ -107,7 +107,7 @@ finished unless `scripts/roadmap status` shows it `closed`. Say what
    reader and do not change the recommendation.
 9. **Next.** Run `scripts/next-step --project` and end the message with the
    block it prints, verbatim: the next milestone's first open epic, or that
-   every milestone is closed. If it exits 4, say `latest.md` could not be
+   every milestone is closed. If it exits 4, say the handoff could not be
    written.
 
 ## Red Flags

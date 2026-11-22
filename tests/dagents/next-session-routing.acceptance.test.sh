@@ -88,9 +88,11 @@ roadmap() { # roadmap <register name>... — M1 (MVP) open on the first register
   } > "$D/roadmap.md"
   : > "$D/specs/shop.md"
 }
-ns() { # ns <args...> — run next-step in $R; sets OUT, NEXT, STATUS, PROMPT, RC
+# The session every ns run is: an --adhoc or --project write keys its handoff by it.
+S_NS=a1b2c3d4-0000-0000-0000-000000000000
+ns() { # ns <args...> — run next-step in $R as session S_NS; sets OUT, NEXT, STATUS, PROMPT, RC
   commit_all "$R" >/dev/null 2>&1 || true
-  OUT=$(cd "$R" && timeout 90 bash "$NS" "$@" 2>&1); RC=$?
+  OUT=$(cd "$R" && CLAUDE_CODE_SESSION_ID=$S_NS timeout 90 bash "$NS" "$@" 2>&1); RC=$?
   NEXT=$(grep '^\*\*Next:\*\*' <<<"$OUT")
   STATUS=$(grep '^\*\*Status:\*\*' <<<"$OUT")
   PROMPT=$(awk '/^Paste as the first prompt:/ { on = 1; next } on && /^```$/ { if (f) exit; f = 1; next } f' <<<"$OUT")
@@ -286,7 +288,7 @@ register m2 "$X" "1|Epic|-|open"
 : > "$D/specs/shop.md"
 commit_all "$R"
 P6=docs/dagents/plans/2026-11-01-demo.md
-LATEST="$R/.dagents/handoff/latest.md"
+LATEST="$R/.dagents/handoff/stored.md"
 FINISH="$R/.dagents/sdd/finish.json"
 snap() { # snap — the tree outside .git and the home directory, with digests and mtimes
   (cd "$R" && find . -path ./.git -prune -o -print | LC_ALL=C sort)
@@ -310,12 +312,12 @@ modes=(
   "adhoc-build|--adhoc --phase build --next x"
   "adhoc-design|--adhoc --phase design --next x"
   "codex|--host codex --project"
-  "latest-project|--latest"
-  "latest-complete|--latest"
-  "latest-kept|--latest"
-  "latest-draft|--latest"
-  "latest-adhoc|--latest"
-  "latest-plan|--latest"
+  "latest-project|--handoff $LATEST"
+  "latest-complete|--handoff $LATEST"
+  "latest-kept|--handoff $LATEST"
+  "latest-draft|--handoff $LATEST"
+  "latest-adhoc|--handoff $LATEST"
+  "latest-plan|--handoff $LATEST"
 )
 for entry in "${modes[@]}"; do
   name=${entry%%|*}; args=${entry#*|}
@@ -338,16 +340,16 @@ for entry in "${modes[@]}"; do
   # shellcheck disable=SC2086
   (cd "$R" && timeout 90 bash "$TMP/stubscripts/next-step" --print $args >"$TMP/o6" 2>"$TMP/e6"); rc=$?
   case $rc in 0|6) ok=ok ;; *) ok="exit $rc" ;; esac
-  check "A6: --print $name exits 0 (or 6 for --latest), never 5" "$ok" ok
+  check "A6: --print $name exits 0 (or 6 for --handoff), never 5" "$ok" ok
   check "A6: --print $name leaves every file and mtime alone" "$(snap)" "$before"
-  check "A6: --print $name keeps latest.md byte-identical" "$(digest "$LATEST")" "$digest_before"
-  check "A6: --print $name keeps latest.md's mtime" "$(mtime "$LATEST")" "$mtime_before"
+  check "A6: --print $name keeps the handoff byte-identical" "$(digest "$LATEST")" "$digest_before"
+  check "A6: --print $name keeps the handoff's mtime" "$(mtime "$LATEST")" "$mtime_before"
   check "A6: --print $name keeps finish.json" "$(cat "$FINISH")" '{"action":"merge"}'
   check "A6: --print $name keeps finish.json's mtime" "$(mtime "$FINISH")" "$mtime_before"
 done
 rm -rf "$R/.dagents"
 before=$(snap)
-for entry in "plan|$P6" "complete|--complete $P6" "project|--project" "adhoc|--adhoc --phase build --next x" "latest|--latest"; do
+for entry in "plan|$P6" "complete|--complete $P6" "project|--project" "adhoc|--adhoc --phase build --next x" "handoff|--handoff $LATEST"; do
   name=${entry%%|*}; args=${entry#*|}
   # shellcheck disable=SC2086
   (cd "$R" && timeout 90 bash "$TMP/stubscripts/next-step" --print $args >/dev/null 2>&1); rc=$?
@@ -374,11 +376,13 @@ register m2 "$X" "1|Epic|-|open"
 : > "$D/specs/shop.md"
 commit_all "$R"
 P11=docs/dagents/plans/2026-11-01-p.md
-LATEST="$R/.dagents/handoff/latest.md"
+LATEST="$R/.dagents/handoff/stored.md"
 section_last() { awk '/^## Next session[ \t\r]*$/ { on = 1; next } on && /^## / { exit } on && NF { last = $0 } END { print last }' "$LATEST"; }
 for entry in "plan|$P11|$P11" "complete|--complete $P11|$P11" "kept|--kept $P11|$P11" "project|--project|-" "draft|--draft docs/dagents/specs/D.md --next x|docs/dagents/specs/D.md" "adhoc|--adhoc --phase build --next x|-"; do
   IFS='|' read -r kind args subject <<<"$entry"
   [ "$kind" != plan ] || args=$P11
+  # shellcheck disable=SC2086
+  LATEST=$(cd "$R" && CLAUDE_CODE_SESSION_ID=$S_NS bash "$NS" --target $args)
   rm -f "$LATEST"
   before=$EPOCHSECONDS
   # shellcheck disable=SC2086
@@ -429,15 +433,15 @@ lfixture() { # lfixture — $L with plan P (3 tasks) and completed.md of one ent
   } > "$LD/plans/2026-11-01-p.md"
   printf '# Completed plans\n\n- 2026-10-01 — `docs/dagents/plans/2026-10-01-a.md` — merged\n' > "$LD/plans/completed.md"
   git -C "$L" add -A && git -C "$L" commit -qm init
-  LL="$L/.dagents/handoff/latest.md"
+  LL="$L/.dagents/handoff/2026-11-01-p.md"
 }
 LP=docs/dagents/plans/2026-11-01-p.md
 stored() { # stored <marker or empty> [status] [next]
   { printf '# Handoff\n\n## Notes\n\nmine\n\n## Next session\n\n**Status:** %s\n**Next:** %s\n' "${2:-Stored status.}" "${3:-Stored next.}"
     [ -z "$1" ] || printf '%s\n' "$1"; } > "$LL"
 }
-latest() { # latest — run --print --latest in $L; sets out, err, status
-  out=$(cd "$L" && timeout 120 bash "$NS" --print --latest 2>"$TMP/lerr"); status=$?
+latest() { # latest — run --print --handoff $LL in $L; sets out, err, status
+  out=$(cd "$L" && timeout 120 bash "$NS" --print --handoff "$LL" 2>"$TMP/lerr"); status=$?
   err=$(cat "$TMP/lerr")
 }
 close_m1() { # a roadmap whose M1 is closed
@@ -445,7 +449,9 @@ close_m1() { # a roadmap whose M1 is closed
   printf '# R\n\n**Product:** p\n**Spec:** docs/dagents/specs/demo.md\n\n| M | Name | Exit criteria | Register | State | Note |\n|---|---|---|---|---|---|\n| M1 | One | x | docs/dagents/registers/m1.md | closed | audit |\n' > "$LD/roadmap.md"
 }
 
-# A10
+# A10, as the parallel-session handoff spec's C10 revised it: neither an
+# adhoc nor a draft block is superseded by a newer completed plan or a closed
+# milestone; a draft goes only when a plan's Spec line names it or it is gone.
 for kind in adhoc draft; do
   lfixture
   : > "$LD/specs/D.md"
@@ -455,14 +461,14 @@ for kind in adhoc draft; do
   check "A10: $kind with matching counts exits 0" "$status" 0
   printf -- '- 2026-10-02 — `docs/dagents/plans/2026-10-02-b.md` — merged\n' >> "$LD/plans/completed.md"
   latest
-  check "A10: $kind followed by one more completed.md entry exits 6" "$status" 6
-  check "A10: $kind superseded prints nothing on stdout" "$out" ""
+  check "A10: $kind followed by one more completed.md entry still exits 0" "$status" 0
+  check "A10: $kind still prints its stored block" "$(grep -c '^\*\*Next:\*\*' <<<"$out")" "1"
   lfixture
   : > "$LD/specs/D.md"
   close_m1
   stored "<!-- next-step: kind=$kind done=1 closed=0 subject=$subj at=1 -->"
   latest
-  check "A10: $kind followed by one more closed milestone exits 6" "$status" 6
+  check "A10: $kind followed by one more closed milestone still exits 0" "$status" 0
 done
 lfixture
 close_m1
@@ -519,7 +525,7 @@ lfixture
 mkdir -p "$L/.dagents/sdd/2026-11-01-p"
 printf '# SDD ledger — plan: %s\nTask 1: complete (x)\nTask 2: complete (x)\n' "$LP" > "$L/.dagents/sdd/2026-11-01-p/progress.md"
 (cd "$L" && timeout 60 bash "$NS" "$LP" >/dev/null 2>&1)
-has "A28: next-step stored a Status that counts completed tasks" "$(cat "$LL")" "2 of 3 tasks complete"
+has "A28: next-step stored a Status that counts completed tasks" "$(cat "$L/.dagents/handoff/2026-11-01-p.md")" "2 of 3 tasks complete"
 latest
 check "A28: with the ledger present the block recomputes" "$status" 0
 has "A28: and resumes at Task 3" "$out" "Task 3"
@@ -538,7 +544,7 @@ printf '# P\n\n**Spec:** docs/dagents/specs/p.md\n**Execution:** inline — `cla
   > "$H/docs/dagents/plans/2026-11-01-p.md"
 git -C "$H" add -A && git -C "$H" commit -qm init
 printf '# SDD ledger — plan: docs/dagents/plans/2026-11-01-p.md\nTask 1: complete (x)\nTask 2: complete (x)\n' > "$H/.dagents/sdd/2026-11-01-p/progress.md"
-hstored() { printf '# Handoff\n\n## Next session\n\n**Status:** Plan stored status.\n**Next:** Resume at Task 1 (One).\n%s\n' "$1" > "$H/.dagents/handoff/latest.md"; }
+hstored() { printf '# Handoff\n\n## Next session\n\n**Status:** Plan stored status.\n**Next:** Resume at Task 1 (One).\n%s\n' "$1" > "$H/.dagents/handoff/2026-11-01-p.md"; }
 section() { (cd "$H" && timeout 100 bash "${1:-$AUDIT}" 2>/dev/null) | sed -n '/^## Handoff/,/^$/p'; }
 hstored "<!-- next-step: kind=plan done=0 closed=0 subject=docs/dagents/plans/2026-11-01-p.md at=1 -->"
 SEC=$(section)
@@ -546,10 +552,11 @@ has "A14: the lines are labelled recomputed" "$SEC" "recomputed from the reposit
 has "A14: the recomputed Status line is printed" "$SEC" "- **Status:** Plan \`docs/dagents/plans/2026-11-01-p.md\`: 2 of 3 tasks complete"
 has "A14: the recomputed Next line is printed, not the stored one" "$SEC" "Resume at Task 3"
 lacks "A14: the stale stored Next line is not printed" "$SEC" "Resume at Task 1 (One)."
-printf '# Completed plans\n\n- 2026-10-01 — `docs/dagents/plans/2026-10-01-a.md` — merged\n' > "$H/docs/dagents/plans/completed.md"
-hstored "<!-- next-step: kind=adhoc done=0 closed=0 subject=- at=1 -->"
+printf '# Completed plans\n\n- 2026-11-01 — `docs/dagents/plans/2026-11-01-p.md` — merged\n' > "$H/docs/dagents/plans/completed.md"
+hstored "<!-- next-step: kind=plan done=0 closed=0 subject=docs/dagents/plans/2026-11-01-p.md at=1 -->"
 SEC=$(section)
-has "A14: exit 6 says nothing is to resume" "$SEC" "nothing to resume"
+has "A14: exit 6 removes the finished handoff" "$SEC" "removed finished handoff $H/.dagents/handoff/2026-11-01-p.md"
+check "A14: the finished handoff is gone" "$([ -e "$H/.dagents/handoff/2026-11-01-p.md" ] && echo yes || echo no)" no
 lacks "A14: exit 6 prints no Next line" "$SEC" "**Next:**"
 hstored "<!-- next-step: kind=plan done=1 closed=0 subject=docs/dagents/plans/missing.md at=1 -->"
 SEC=$(section)
@@ -656,9 +663,9 @@ sleep 1
 git -C "$TRP" pull -q --ff-only "$SECOND" HEAD
 check "A16: roadmap.md and completed.md moved only through a pull: not held" "$(stop_at s-a16b "$TRP" 'Pulled.')" ""
 
-# A17: a hand-typed block does not release a transition turn while latest.md is writable and stale
+# A17: a hand-typed block does not release a transition turn while the handoff is writable and stale
 mkdir -p "$TRP/.dagents/handoff"
-printf '# Handoff\n\n## Next session\n\n**Status:** old\n**Next:** old\n' > "$TRP/.dagents/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\n**Status:** old\n**Next:** old\n' > "$TRP/.dagents/handoff/stored.md"
 sleep 1; prompt s-a17 "$TRP"
 sleep 1
 printf -- '- 2026-11-17 `docs/dagents/plans/2026-11-17-r.md` — merged into `main`\n' >> "$TRP/docs/dagents/plans/completed.md"
@@ -673,7 +680,7 @@ printf '# SDD ledger — plan: docs/dagents/plans/2026-10-08-example.md\nTask 1:
 check "A17: a ledger turn whose first stop carries a hand-typed block is held" "$(decision "$(stop_at s-a17b "$TRP" "$BLOCK")")" block
 # Control: the block next-step wrote this turn releases it.
 sleep 1
-printf '# Handoff\n\n## Next session\n\n**Status:** x\n**Next:** x\n' > "$TRP/.dagents/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\n**Status:** x\n**Next:** x\n' > "$TRP/.dagents/handoff/stored.md"
 check "A17: control — a block next-step wrote this turn releases it" "$(stop_at s-a17b "$TRP" "$BLOCK")" ""
 rm -rf "$WS"
 
@@ -701,49 +708,22 @@ sleep 1
 printf '# SDD ledger — plan: docs/dagents/plans/2026-10-11-other.md\nTask 1: complete (commits a..b, review clean)\n' > "$OW/.dagents/sdd/2026-10-11-other/progress.md"
 check "A19: another worktree's ledger written during the turn never holds it" "$(stop_at s-a19 "$DM" 'Task 1 is done.')" ""
 
-# A29: latest.md cannot be written, so the heading alone releases a held turn.
-UNSH=0
-if command -v unshare >/dev/null 2>&1 && unshare -m true >/dev/null 2>&1; then UNSH=1; fi
-if [ "$UNSH" = 1 ]; then
-  W29="$TMP/w29"
-  git init -q -b main "$W29"
-  mkdir -p "$W29/.dagents/handoff" "$W29/.dagents/sdd/2026-10-08-example" "$W29/docs/dagents/plans"
-  printf '.dagents/\n' > "$W29/.gitignore"
-  printf '# Completed plans\n' > "$W29/docs/dagents/plans/completed.md"
-  tcommit "$W29" init
-  printf '# Handoff\n\n## Next session\n\n**Status:** old\n**Next:** old\n' > "$W29/.dagents/handoff/latest.md"
-  touch -t 200101010000 "$W29/.dagents/handoff/latest.md"
-  sleep 1; prompt s-a29 "$W29"
-  sleep 1
-  printf '# SDD ledger — plan: docs/dagents/plans/2026-10-08-example.md\nTask 1: complete (commits a..b, review clean)\n' > "$W29/.dagents/sdd/2026-10-08-example/progress.md"
-  check "A29: control — a writable latest.md does not accept the heading" "$(decision "$(stop_at s-a29 "$W29" "$BLOCK")")" block
-  # Read-only bind mount of the handoff directory, in a private mount namespace.
-  cat > "$TMP/stop-json.sh" <<'STOPJSON'
-#!/usr/bin/env bash
-# stop-json.sh END SESSION CWD MESSAGE
-jq -n --arg sid "$2" --arg cwd "$3" --arg msg "$4" \
-  '{hook_event_name:"Stop",session_id:$sid,cwd:$cwd,transcript_path:"",stop_hook_active:false,last_assistant_message:$msg}' | bash "$1"
-STOPJSON
-  ro_stop() { # ro_stop <session> <cwd> <message>
-    unshare -m bash -c '
-      mount --bind "$1/.dagents/handoff" "$1/.dagents/handoff" && mount -o remount,ro,bind "$1/.dagents/handoff" || exit 99
-      shift
-      exec bash "$@"
-    ' _ "$W29" "$TMP/stop-json.sh" "$END" "$1" "$2" "$3"
-  }
-  out=$(ro_stop s-a29 "$W29" "$BLOCK"); rc=$?
-  check "A29: an unwritable latest.md: the heading releases the held turn" "$out" ""
-  # Absent latest.md in an unwritable directory.
-  rm -f "$W29/.dagents/handoff/latest.md"
-  sleep 1; prompt s-a29b "$W29"
-  sleep 1
-  printf 'Task 2: complete (commits a..b, review clean)\n' >> "$W29/.dagents/sdd/2026-10-08-example/progress.md"
-  check "A29: control — an absent latest.md in a writable directory holds" "$(decision "$(stop_at s-a29b "$W29" "$BLOCK")")" block
-  out=$(ro_stop s-a29b "$W29" "$BLOCK")
-  check "A29: an absent latest.md in an unwritable directory: the heading releases" "$out" ""
-else
-  echo "skip - A29: no private mount namespace (unshare -m) on this host"
-fi
+# A29: next-step that cannot write the handoff prints the block (exit 4) and
+# still writes the session's turn record (C13), which releases the held turn;
+# the heading alone never does.
+W29="$TMP/w29"
+git init -q -b main "$W29"
+mkdir -p "$W29/.dagents/sdd/2026-10-08-example" "$W29/docs/dagents/plans"
+printf '.dagents/\n' > "$W29/.gitignore"
+printf '# Completed plans\n' > "$W29/docs/dagents/plans/completed.md"
+tcommit "$W29" init
+sleep 1; prompt s-a29 "$W29"
+sleep 1
+printf '# SDD ledger — plan: docs/dagents/plans/2026-10-08-example.md\nTask 1: complete (commits a..b, review clean)\n' > "$W29/.dagents/sdd/2026-10-08-example/progress.md"
+check "A29: control — the heading alone does not release the held turn" "$(decision "$(stop_at s-a29 "$W29" "$BLOCK")")" block
+sleep 1
+printf 'status=x\nnext=x\n' > "$HOME/.claude/dagents/sessions/turns/s-a29.next"
+check "A29: the turn record of a block next-step could not write releases the held turn" "$(stop_at s-a29 "$W29" "$BLOCK")" ""
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

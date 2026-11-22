@@ -151,8 +151,8 @@ exactly as dagents:handoff step 0 says: wait for them, or `TaskStop`
 them and record a Ruling. Tell your partner which you did. Then run
 `scripts/next-step PLAN_FILE` (see using-dagents §Session Budget) as your
 last action. The last thing in your final message is the block it prints,
-verbatim. It also rewrites the `## Next session` section of
-`<latest.md>`; if it exits 4, say the handoff
+verbatim. It also rewrites the `## Next session` section of the plan's
+`<handoff>`; if it exits 4, say the handoff
 file could not be written. When the plan finishes,
 dagents:finishing-a-development-branch runs it instead.
 

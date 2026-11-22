@@ -86,22 +86,26 @@ cleanly."
    - Design phase (brainstorming, a spec, a plan in progress): save the draft
      file. It is the authority.
    - Unplanned work (a change designed in chat, or a punch list, with no plan
-     or draft file): the notes in `latest.md` are the authority, so step 3's
+     or draft file): the notes in its handoff are the authority, so step 3's
      `State` must carry every item.
 2. **Commit the plan and the spec** if either has uncommitted changes, in a
    `docs(<scope>): …` commit of their own. Never commit `<state>/`.
-3. **Write the notes sections of `latest.md`** in the handoff of the
-   checkout the next session works in: the path `scripts/next-step --target
-   <the arguments step 4 will pass>` prints. Each checkout keeps its own
-   `latest.md`, and a plan in flight hands off into its worktree's, which may
-   not be this session's.
-   Replace everything above `## Next session` with exactly these sections,
-   each under 15 lines:
+3. **Write the handoff's notes.** Run `scripts/next-step --target <the
+   arguments step 4 will pass>`: it prints the handoff the next session reads,
+   `<checkout>/<state>/handoff/<key>.md` in the checkout that session works
+   in, which for a plan in flight is its worktree and may not be this
+   session's. The file's basename without `.md` is the key. Write the notes to
+   `notes/<key>.md` under `bash <plugin-root>/scripts/dagents-path state handoff`,
+   in this session's checkout; step 4 moves them into the handoff and deletes
+   the notes file. If `--target` exits 7, another live session holds that
+   key: report the line it printed and ask your human partner how to go on
+   (in an auto run the script has already stopped the run). Write exactly
+   these sections, each under 15 lines (next-step adds the dated
+   `# Handoff` heading above them):
 
    ```markdown
-   # Handoff — <YYYY-MM-DD> (<budget | phase stop | Codex count | owner request>)
-
    ## State
+   - Stopped for: <budget | phase stop | Codex count | owner request>
    - Worktree: `<absolute worktree path>` (branch `<branch>`, HEAD `<sha7>`)
    - Plan: `<plan name>`; ledger: `<ledger dir>/progress.md`; handoff: `<ledger dir>/handoff.md`
    - <one line on where the work stands>
@@ -119,21 +123,37 @@ cleanly."
    For unplanned work, `State` lists each item with its state: implemented
    and uncommitted, committed, awaiting feedback (with the link), or
    unscoped.
-4. **Run `scripts/next-step`** (see using-dagents §Session Budget):
-   - Execution: `scripts/next-step PLAN_FILE`.
-   - Design phase: `scripts/next-step --draft DRAFT_FILE --next "<the next action, naming its skill>"`,
+   When this session began by claiming another handoff, step 4 consumes
+   it: next-step deletes the claimed one once the new one is written, unless
+   it is a plan or design draft still in progress. So carry every open item of
+   a claimed `adhoc-` handoff into `State` first.
+4. **Run `scripts/next-step --notes <the notes file step 3 wrote>`** (see
+   using-dagents §Session Budget), with the same arguments step 3 passed to
+   `--target`:
+   - Execution: `scripts/next-step --notes <notes> PLAN_FILE`.
+   - Design phase: `scripts/next-step --notes <notes> --draft DRAFT_FILE --next "<the next action, naming its skill>"`,
      for example `--next "Write the implementation plan with dagents:writing-plans."`
-   - Unplanned work: `scripts/next-step --adhoc --phase <design|build> --next "<the next action, naming its skill>"`.
+     Once a plan file exists, DRAFT_FILE is the plan.
+   - Unplanned work: `scripts/next-step --notes <notes> --adhoc --phase <design|build> --next "<the next action, naming its skill>"`.
      The phase is `design` when the next action, or any item the next
      session may pick up, is unscoped or awaits a design decision or
      feedback; otherwise `build`.
    - Between plans on a roadmap or register project:
-     `scripts/next-step --project --keep-notes`, preferred over `--adhoc`
-     there. It routes from the roadmap and registers and replaces only the
-     `## Next session` section of `latest.md`.
-   It prints the `## Next session` block and writes it into the same
-   `latest.md` step 3 wrote. Its first prompt opens by naming that checkout
-   and its handoff. If it exits 4, say `latest.md` could not be written.
+     `scripts/next-step --notes <notes> --project`, preferred over `--adhoc`
+     there. It routes from the roadmap and registers.
+   With no session id (Codex, or a shell outside Claude Code), the
+   unplanned-work and between-plans calls carry `--key <key>`: when this
+   session resumed an `adhoc-` handoff, the key its first prompt names, on
+   step 3's `--target` call and on this one; otherwise the key step 3's
+   `--target` printed, on this call.
+   It prints the `## Next session` block and writes the handoff step 3
+   named: the notes, then the block. Its first prompt opens by naming that
+   checkout and that handoff. A terminal block (its Next line starts
+   `Nothing —`) is printed, not written, and the notes file is deleted. Once
+   the handoff is written, this session's claim on it is released: the
+   handoff belongs to the next session. If it exits 4, say the handoff could
+   not be written. If it exits 7, another live session took the key since
+   step 3: report the line it printed and ask, as step 3 does.
 
    Then record the session's durable facts
    ([project-state.md](../../reference/project-state.md) §Durable facts).
@@ -145,7 +165,9 @@ cleanly."
    then the block, verbatim, as the last thing. The block is the resume guide:
    the launch command, the directory to launch it in, and the first prompt.
    A caller that continues in this session instead, as a light plan of 1-3
-   tasks with room does, stops after step 4.
+   tasks with room does, stops after step 4 and claims the handoff step 4
+   wrote, `scripts/handoff claim <that file>`, so the plan it executes is
+   never unclaimed.
 
 ## handoff.md
 

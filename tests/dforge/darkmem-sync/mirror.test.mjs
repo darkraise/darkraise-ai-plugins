@@ -696,3 +696,65 @@ test("refuseLinkedDirs accepts a directory whose name starts with two dots and r
   assert.throws(() => refuseLinkedDirs(root, path.dirname(root)), /is not under/);
   assert.throws(() => refuseLinkedDirs(root, path.join(root, "..", "elsewhere")), /is not under/);
 });
+
+// loadState's validation as it stood before checkpoints (parallel-session
+// handoff spec §7): the saved state must still load in a session on that version.
+function preKeyedLoadState(file) {
+  const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+  const isHash = value => typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+  const isStamp = value => typeof value === "string" && !Number.isNaN(Date.parse(value));
+  const dictOf = (value, check) => value !== null && typeof value === "object" && !Array.isArray(value) && Object.entries(value).every(([k, v]) => check(k, v));
+  const stampDict = value => (dictOf(value, (key, at) => key !== "" && isStamp(at)) ? value : null);
+  const held = raw.checkpointAt === null || isStamp(raw.checkpointAt) ? raw.checkpointAt : stampDict(raw.checkpointAt) ?? undefined;
+  const isRecord = raw.checkpointAtByWorkstream === undefined || stampDict(raw.checkpointAtByWorkstream) !== null;
+  const isLines = value => Array.isArray(value) && value.every(line => typeof line === "string");
+  const valid = raw.version === 1 && dictOf(raw.documents, (uri, hash) => isHash(hash)) && dictOf(raw.ledgers, () => true)
+    && (raw.checkpoint === null || isHash(raw.checkpoint))
+    && held !== undefined && isRecord
+    && isLines(raw.conflicts)
+    && (raw.pendingLinks === undefined || (Array.isArray(raw.pendingLinks) && raw.pendingLinks.every(uri => typeof uri === "string")));
+  if (!valid) throw new Error(`${file} does not hold a valid sync state`);
+  return { checkpoint: raw.checkpoint, checkpointAt: held };
+}
+
+test("converts single checkpoint: an older layout's handoff hash is kept under the key the migration gives it", () => {
+  const mirror = scratch("dms-keyed-state-");
+  const file = path.join(mirror, ".sync-state.json");
+  const latest = "# Handoff\n<!-- next-step: kind=plan subject=docs/dforge/plans/P.md at=1795000000 -->\n";
+  write(path.join(mirror, "work", "handoff", "latest.md"), latest);
+  write(path.join(mirror, "work", "handoff", "D.md"), "# Draft handoff\n");
+  const hash = sha256(Buffer.from(latest));
+  write(file, JSON.stringify({ version: 1, documents: {}, ledgers: {}, checkpoint: hash, checkpointAt: null, conflicts: [], pendingLinks: [] }));
+  const state = loadState(file);
+  assert.deepEqual({ ...state.checkpoints }, { P: hash });
+  state.checkpoints["D"] = sha256(Buffer.from("# Draft handoff\n"));
+  saveState(file, state);
+  const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.equal(saved.checkpoint, null, "this dforge syncs no older-layout handoff, so an older plugin compares nothing");
+  assert.deepEqual(saved.checkpoints, { P: hash, D: sha256(Buffer.from("# Draft handoff\n")) });
+  assert.equal(preKeyedLoadState(file).checkpoint, null, "an older plugin still loads the state");
+  assert.deepEqual({ ...loadState(file).checkpoints }, saved.checkpoints);
+});
+
+test("converts single checkpoint: a hash no handoff carries is dropped", () => {
+  const mirror = scratch("dms-keyed-drop-");
+  const file = path.join(mirror, ".sync-state.json");
+  write(path.join(mirror, "work", "handoff", "latest.md"), "# Unplanned\n");
+  write(file, JSON.stringify({ version: 1, documents: {}, ledgers: {}, checkpoint: sha256(Buffer.from("# Older\n")), checkpointAt: null, conflicts: [], pendingLinks: [] }));
+  assert.deepEqual({ ...loadState(file).checkpoints }, {});
+  write(file, JSON.stringify({ version: 1, documents: {}, ledgers: {}, checkpoint: sha256(Buffer.from("# Unplanned\n")), checkpointAt: null, conflicts: [], pendingLinks: [] }));
+  assert.deepEqual({ ...loadState(file).checkpoints }, {}, "a latest.md naming no plan or draft has no key");
+  write(file, JSON.stringify({ version: 1, documents: {}, ledgers: {}, checkpoint: null, checkpoints: { "../x": sha256(Buffer.from("x")) }, checkpointAt: null, conflicts: [], pendingLinks: [] }));
+  assert.throws(() => loadState(file), StateError);
+});
+
+test("status reports each modified handoff against its own key's synced hash", () => {
+  const { roots } = mirror();
+  const state = emptyState();
+  const handoffs = path.join(roots.workRoot, "handoff");
+  write(path.join(handoffs, "P.md"), "P changed\n");
+  write(path.join(handoffs, "D.md"), "D synced\n");
+  state.checkpoints.P = sha256("P synced\n");
+  state.checkpoints.D = sha256("D synced\n");
+  assert.deepEqual(localChanges(roots, state).filter(line => line.includes("handoff/")), ["modified: handoff/P.md"]);
+});

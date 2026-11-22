@@ -56,7 +56,7 @@ check "dagents-path: ledger, local" "$(cd "$G" && HOME=$H bash "$FP" ledger p1)"
 check "dagents-path: ledger of a plan path" "$(cd "$G" && HOME=$H bash "$FP" ledger docs/dagents/plans/2026-10-19-greet.md)" "$TOP/.dagents/sdd/2026-10-19-greet"
 check "dagents-path: ledger of a backslashed plan path" "$(cd "$G" && HOME=$H bash "$FP" ledger 'docs\dagents\plans\2026-10-19-greet.md')" "$TOP/.dagents/sdd/2026-10-19-greet"
 check "dagents-path: ledger of a bare plan file name" "$(cd "$G" && HOME=$H bash "$FP" ledger 2026-10-19-greet.md)" "$TOP/.dagents/sdd/2026-10-19-greet"
-check "dagents-path: latest, local" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$TOP/.dagents/handoff/latest.md"
+check "dagents-path: handoff, local" "$(cd "$G" && HOME=$H CLAUDE_CODE_SESSION_ID=a0000000-0000 bash "$FP" handoff --adhoc --phase build --next x)" "$TOP/.dagents/handoff/adhoc-a0000000.md"
 # A home holding darkmem settings and a stores.json from an older build reads
 # as any other: every root stays in the checkout.
 mkdir -p "$H/.dagents"
@@ -64,7 +64,7 @@ printf '{"darkmemEnabled":true,"documentStore":"darkmem","darkmem":{"url":"http:
 printf '{"%s":{"documents":"darkmem","progress":"darkmem"}}\n' "$TOP" > "$H/.dagents/stores.json"
 check "dagents-path: docs, leftover darkmem settings" "$(cd "$G" && HOME=$H bash "$FP" docs plans/p1.md)" "$TOP/docs/dagents/plans/p1.md"
 check "dagents-path: ledger, leftover darkmem settings" "$(cd "$G" && HOME=$H bash "$FP" ledger p1)" "$TOP/.dagents/sdd/p1"
-check "dagents-path: latest, leftover darkmem settings" "$(cd "$G" && HOME=$H bash "$FP" latest)" "$TOP/.dagents/handoff/latest.md"
+check "dagents-path: handoff, leftover darkmem settings" "$(cd "$G" && HOME=$H CLAUDE_CODE_SESSION_ID=a0000000-0000 bash "$FP" handoff --adhoc --phase build --next x)" "$TOP/.dagents/handoff/adhoc-a0000000.md"
 rm -f "$H/.dagents/config.json" "$H/.dagents/stores.json"
 check "dagents-path: state" "$(cd "$G" && HOME=$H bash "$FP" state)" "$TOP/.dagents"
 check "dagents-path: name" "$(cd "$G" && HOME=$H bash "$FP" name "$TOP/docs/dagents/plans/p1.md")" "docs/dagents/plans/p1.md"

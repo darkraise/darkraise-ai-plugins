@@ -18,6 +18,7 @@ check() { # check <name> <got> <want>
 TMP="$(mktemp -d)"
 export WORKFLOW_GUARD_CLAUDE_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_MANAGED_DIR="$TMP/workflow-guard" WORKFLOW_GUARD_PROJECT_DIR="$TMP/workflow-guard"
 trap 'rm -rf "$TMP"' EXIT
+unset CLAUDE_CODE_SESSION_ID AR_SESSION
 
 payload() {
   MSYS_NO_PATHCONV=1 jq -n --arg tp '/tmp/fake-transcript.jsonl' --arg cwd 'D:\repo\example' \
@@ -105,7 +106,8 @@ REPO="$TMP/repo"
 git init -q -b main "$REPO"
 git -C "$REPO" commit -q --allow-empty -m init
 mkdir -p "$REPO/.dagents/handoff"
-printf '# Handoff\n\n## Next session\n\n**Next:** Resume at Task 4 (Four).\n' > "$REPO/.dagents/handoff/latest.md"
+# The compacted session's own handoff: its marker names the session (s-9).
+printf '# Handoff\n\n## Next session\n\n**Next:** Resume at Task 4 (Four).\n<!-- next-step: kind=adhoc session=s-9 done=0 closed=0 subject=- at=%s -->\n' "$(date +%s)" > "$REPO/.dagents/handoff/adhoc-s9000000.md"
 TR="$TMP/transcript.jsonl"
 MSYS_NO_PATHCONV=1 jq -cn '{type:"user",isSidechain:false,origin:{kind:"human"},message:{role:"user",content:"keep the API stable"}}' > "$TR"
 compact_payload() {
@@ -169,16 +171,48 @@ check "roadmap: survives compaction alongside the snapshot" "$(grep -c '^Roadmap
 check "roadmap: still under the 10,000-character hook cap" "$([ "${#rm_ctx}" -lt 10000 ] && echo yes || echo no)" "yes"
 check "no roadmap: nothing injected" "$(grep -c '^Roadmap:' <<<"$startup_ctx")" "0"
 
-# --- other checkouts' handoffs are counted on every source (spec A10) ---
+# --- the compaction snapshot shows only the session's handoff ---
 git -C "$REPO" worktree add -q -b hc "$TMP/hc"; mkdir -p "$TMP/hc/.dagents/handoff"
-printf '# Handoff\n\n## Next session\n\n**Next:** hc next\n' > "$TMP/hc/.dagents/handoff/latest.md"
-hc_start=$(startup_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
-check "count line on startup" "$(grep -c '^1 other checkouts hold a handoff [(]scripts/repo-audit lists them)\.$' <<<"$hc_start")" "1"
+printf '# Handoff\n\n## Next session\n\n**Next:** hc next\n<!-- next-step: kind=adhoc session=s-hc done=0 closed=0 subject=- at=%s -->\n' "$(date +%s)" > "$TMP/hc/.dagents/handoff/adhoc-0c000000.md"
 hc_compact=$(compact_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
 check "the compaction snapshot shows only the session's handoff" "$(grep -c 'hc next' <<<"$hc_compact"):$(grep -c 'Resume at Task 4 (Four)' <<<"$hc_compact")" "0:1"
-touch -d '4 days ago' "$TMP/hc/.dagents/handoff/latest.md"
-check "no count line for a handoff older than three days" "$(grep -c 'other checkouts hold a handoff' <<<"$(startup_payload | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')")" "0"
 git -C "$REPO" worktree remove --force "$TMP/hc"
+
+# --- open_handoffs_count (spec A10): unclaimed or gone-claimed handoffs younger
+# than three days, in every checkout, counted on every source; none deleted ---
+OC="$TMP/oc"; git init -q -b main "$OC"; git -C "$OC" commit -q --allow-empty -m init
+OC=$(git -C "$OC" rev-parse --show-toplevel)
+git -C "$OC" worktree add -q -b ocw "$TMP/ocw"; OCW=$(git -C "$TMP/ocw" rev-parse --show-toplevel)
+mkdir -p "$OC/.dagents/handoff/claims" "$OC/docs/dagents/plans" "$OCW/.dagents/handoff"
+och() { # och <file> <kind> <subject>
+  printf '# Handoff\n\n## Next session\n\n**Next:** n\n<!-- next-step: kind=%s key=%s session=- done=0 closed=0 subject=%s at=%s -->\n' \
+    "$2" "$(basename "$1" .md)" "$3" "$(date +%s)" > "$1"
+}
+och "$OC/.dagents/handoff/adhoc-0000000a.md" adhoc -
+och "$OCW/.dagents/handoff/adhoc-0000000b.md" adhoc -
+och "$OC/.dagents/handoff/adhoc-0000000c.md" adhoc -
+printf 'session=s-live\nat=%s\n' "$(date +%s)" > "$OC/.dagents/handoff/claims/adhoc-0000000c"
+mkdir -p "$HOME_D/.claude/dagents/sessions/cockpit"; date +%s > "$HOME_D/.claude/dagents/sessions/cockpit/s-live"
+printf '# Completed plans\n\n- 2026-11-01 — `docs/dagents/plans/2026-11-01-old.md` — merged\n' > "$OC/docs/dagents/plans/completed.md"
+och "$OC/.dagents/handoff/2026-11-01-old.md" plan docs/dagents/plans/2026-11-01-old.md
+touch -d '4 days ago' "$OC/.dagents/handoff/2026-11-01-old.md"
+oc_before=$(cd "$OC" && find .dagents/handoff "$OCW/.dagents/handoff" -name '*.md' | sort)
+oc_payload() { # oc_payload <source>
+  MSYS_NO_PATHCONV=1 jq -n --arg tp "$TR" --arg cwd "$OC" --arg src "$1" \
+    '{hook_event_name:"SessionStart",session_id:"s-oc",transcript_path:$tp,cwd:$cwd,source:$src}'
+}
+for src in startup compact; do
+  oc_ctx=$(oc_payload "$src" | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
+  check "A10 count: $src counts two open handoffs" "$(grep -c '^2 open handoffs [(]scripts/repo-audit lists them)\.$' <<<"$oc_ctx")" "1"
+done
+check "A10 count: no handoff is deleted" "$(cd "$OC" && find .dagents/handoff "$OCW/.dagents/handoff" -name '*.md' | sort)" "$oc_before"
+printf 'session=s-gone\nat=%s\n' "$(date +%s)" > "$OC/.dagents/handoff/claims/adhoc-0000000a"
+oc_ctx=$(oc_payload startup | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
+check "A10 count: a gone session's claim still counts" "$(grep -c '^2 open handoffs ' <<<"$oc_ctx")" "1"
+touch -d '4 days ago' "$OC/.dagents/handoff/adhoc-0000000a.md" "$OCW/.dagents/handoff/adhoc-0000000b.md"
+oc_ctx=$(oc_payload startup | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
+check "A10 count: no line when none is open" "$(grep -c 'open handoffs' <<<"$oc_ctx")" "0"
+git -C "$OC" worktree remove --force "$OCW"
 
 # --- an older directory left behind is named, with the skill that moves it ---
 check "4.0 layout: no migration line" "$(grep -c 'still uses an older layout' <<<"$rm_ctx")" "0"
@@ -188,6 +222,15 @@ check "older layout: output stays valid JSON" "$(jq -e . >/dev/null 2>&1 <<<"$lg
 check "older layout: the migration line is injected" \
   "$(jq -r '.hookSpecificOutput.additionalContext // ""' <<<"$lg_out" | grep -cF "dagents: this repository still uses an older layout ($(git -C "$REPO" rev-parse --show-toplevel)/.superpowers); run the dagents:migrate skill (/dagents:migrate)")" "1"
 rm -rf "$REPO/.superpowers"
+
+# --- a latest.md an older plugin wrote is named, with its subject and the migrate skill ---
+mkdir -p "$TMP/lh/.dagents/handoff"
+git init -q -b main "$TMP/lh"
+printf '# Handoff\n<!-- next-step: kind=plan session=- done=0 closed=0 subject=docs/dagents/plans/old.md at=1 -->\n' > "$TMP/lh/.dagents/handoff/latest.md"
+lh_ctx=$(MSYS_NO_PATHCONV=1 jq -n --arg cwd "$TMP/lh" '{hook_event_name:"SessionStart",session_id:"s-lh",cwd:$cwd,source:"startup"}' \
+  | HOME="$HOME_D" bash "$SCRIPT" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')
+check "older layout notice: session start names a remaining latest.md with its subject" \
+  "$(grep -cxF "dagents: $(git -C "$TMP/lh" rev-parse --show-toplevel)/.dagents/handoff/latest.md is a handoff in an older layout (subject docs/dagents/plans/old.md); run the dagents:migrate skill (/dagents:migrate)" <<<"$lh_ctx")" "1"
 
 # --- workflow settings ride in every session as one line ---
 if command -v node >/dev/null 2>&1; then

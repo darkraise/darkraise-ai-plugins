@@ -144,9 +144,9 @@ export function resolveStores({ cwd = process.cwd(), env = process.env } = {}) {
       ledgerRoot: applied.progress === "darkmem"
         ? path.join(sync.mirror, "work", "sdd")
         : worktreeRoot && path.join(dforgeDir("state", worktreeRoot), "sdd"),
-      latestFile: applied.progress === "darkmem" && samePath(worktreeRoot, repoRoot)
-        ? path.join(sync.mirror, "work", "handoff", "latest.md")
-        : worktreeRoot && path.join(dforgeDir("state", worktreeRoot), "handoff", "latest.md"),
+      handoffDir: applied.progress === "darkmem" && samePath(worktreeRoot, repoRoot)
+        ? path.join(sync.mirror, "work", "handoff")
+        : worktreeRoot && path.join(dforgeDir("state", worktreeRoot), "handoff"),
     },
     sync,
   });
@@ -256,7 +256,7 @@ function syncOf(env, mapped, project, mirror, enabled) {
 export function modeLines(stores) {
   const lines = [
     `documents\t${stores.documents.applied}\t${stores.documents.root}`,
-    `progress\t${stores.progress.applied}\t${stores.progress.ledgerRoot}\t${stores.progress.latestFile}`,
+    `progress\t${stores.progress.applied}\t${stores.progress.ledgerRoot}\t${stores.progress.handoffDir}`,
   ];
   if (stores.sync?.enabled) lines.push(`project\t${stores.sync.project}`);
   return lines;

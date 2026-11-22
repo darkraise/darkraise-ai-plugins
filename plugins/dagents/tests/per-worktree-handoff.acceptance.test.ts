@@ -9,7 +9,7 @@ import { SCHEMA, settingWritten } from '../hooks/cockpit/config'
 // the cockpit statements A9 and A12. The engine below is the same set of event
 // answers the other cockpit suites use: it records what the plugin writes, runs,
 // toasts and submits, and the tests reach the plugin only through the engine's
-// events. A run of `scripts/next-step --print --latest` is answered by the
+// events. A run of `scripts/next-step --print --handoff` is answered by the
 // test, in turn.
 
 const BAND = {
@@ -120,9 +120,9 @@ type World = {
   modeRuns?: string[]
   /** The primary checkout `git rev-parse --git-common-dir` points into; the session's repository unless said. */
   primary?: string
-  /** What each `next-step --print --latest` run answers, in turn: an exit and its stdout, `timeout`, `hang` (never settles) or a function that settles it later; with none left, exit 6. */
+  /** What each `next-step --print --handoff` run answers, in turn: an exit and its stdout, `timeout`, `hang` (never settles) or a function that settles it later; with none left, exit 6. */
   nextSteps?: ({ exitCode: number; stdout: string } | 'timeout' | 'hang' | { later: Promise<{ exitCode: number; stdout: string }> })[]
-  /** Each `next-step --print --latest` run, as the engine saw it. */
+  /** Each `next-step --print --handoff` run, as the engine saw it. */
   nextStepRuns?: { argv: string; cwd: string; timeoutMs: number | undefined }[]
   /** How many next-step runs are in flight now, and the most that ever were. */
   inFlight?: { now: number; max: number }
@@ -248,7 +248,7 @@ function world(on: On, w: World) {
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('process.run', (_$, e) => {
     const argv = e.argv.join(' ')
-    if (argv.includes('/scripts/next-step') && argv.includes('--print --latest')) {
+    if (argv.includes('/scripts/next-step') && argv.includes('--print --handoff')) {
       const extra = { cwd: '', timeoutMs: (e as unknown as { init?: { timeoutMs?: number } }).init?.timeoutMs }
       w.nextStepRuns?.push({ argv, cwd: extra.cwd ?? '', timeoutMs: extra.timeoutMs })
       const out = w.nextSteps?.shift() ?? { exitCode: 6, stdout: '' }
@@ -471,8 +471,8 @@ async function settle(clock: ReturnType<typeof world>) {
 
 const PRIMARY = '/home/me/code/shop'
 const WORKTREE = '/home/me/code/shop-w1'
-const PRIMARY_LATEST = `${PRIMARY}/.dagents/handoff/latest.md`
-const WORKTREE_LATEST = `${WORKTREE}/.dagents/handoff/latest.md`
+const PRIMARY_HANDOFF = `${PRIMARY}/.dagents/handoff/stored.md`
+const WORKTREE_HANDOFF = `${WORKTREE}/.dagents/handoff/stored.md`
 const PLAN = 'docs/dagents/plans/2026-10-14-band.md'
 
 const marker = (at: number) => `<!-- next-step: kind=plan done=0 closed=0 subject=${PLAN} at=${at} -->`
@@ -517,8 +517,8 @@ async function begin($: Parameters<TestBody>[0], on: On, o: Begin) {
 describe('per-worktree-handoff: the cockpit reads its own checkout (A9, A12)', () => {
   test("A9: a worktree session's resume offer is built from the worktree's handoff, not the primary's", async ($, on) => {
     const files = {
-      [WORKTREE_LATEST]: { text: stored('WORKTREE-STORED-NEXT', 'Worktree stored prompt.', 900), mtimeMs: 900_000 },
-      [PRIMARY_LATEST]: { text: stored('PRIMARY-STORED-NEXT', 'Primary stored prompt.', 900), mtimeMs: 900_000 },
+      [WORKTREE_HANDOFF]: { text: stored('WORKTREE-STORED-NEXT', 'Worktree stored prompt.', 900), mtimeMs: 900_000 },
+      [PRIMARY_HANDOFF]: { text: stored('PRIMARY-STORED-NEXT', 'Primary stored prompt.', 900), mtimeMs: 900_000 },
       [WORKTREE]: { text: '', kind: 'dir' as const, mtimeMs: 1 },
     }
     const w = await begin($, on, { files, cwd: WORKTREE, checkout: WORKTREE, nextSteps: [{ exitCode: 1, stdout: '' }] })
@@ -533,21 +533,21 @@ describe('per-worktree-handoff: the cockpit reads its own checkout (A9, A12)', (
 
   test("A9: the resume prompt of a worktree session names the worktree's handoff by absolute path", async ($, on) => {
     const files = {
-      [WORKTREE_LATEST]: { text: stored('WORKTREE-STORED-NEXT', null, 900), mtimeMs: 900_000 },
-      [PRIMARY_LATEST]: { text: stored('PRIMARY-STORED-NEXT', null, 900), mtimeMs: 900_000 },
+      [WORKTREE_HANDOFF]: { text: stored('WORKTREE-STORED-NEXT', null, 900), mtimeMs: 900_000 },
+      [PRIMARY_HANDOFF]: { text: stored('PRIMARY-STORED-NEXT', null, 900), mtimeMs: 900_000 },
       [WORKTREE]: { text: '', kind: 'dir' as const, mtimeMs: 1 },
     }
     const w = await begin($, on, { files, cwd: WORKTREE, checkout: WORKTREE, nextSteps: [{ exitCode: 1, stdout: '' }] })
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     await band.press({ key: 'band-resume' })
     expect(w.prompts).toHaveLength(1)
-    expect(w.prompts[0]).toContain(WORKTREE_LATEST)
-    expect(w.prompts[0]).not.toContain(PRIMARY_LATEST)
+    expect(w.prompts[0]).toContain(WORKTREE_HANDOFF)
+    expect(w.prompts[0]).not.toContain(PRIMARY_HANDOFF)
   })
 
   test("A9: a handoff in the primary raises no offer in a worktree session", async ($, on) => {
     const files = {
-      [PRIMARY_LATEST]: { text: stored('PRIMARY-STORED-NEXT', 'Primary stored prompt.', 900), mtimeMs: 900_000 },
+      [PRIMARY_HANDOFF]: { text: stored('PRIMARY-STORED-NEXT', 'Primary stored prompt.', 900), mtimeMs: 900_000 },
       [WORKTREE]: { text: '', kind: 'dir' as const, mtimeMs: 1 },
     }
     const w = await begin($, on, { files, cwd: WORKTREE, checkout: WORKTREE, nextSteps: [exit0('Recomputed.', 'p', 950)] })
@@ -556,12 +556,12 @@ describe('per-worktree-handoff: the cockpit reads its own checkout (A9, A12)', (
     expect(await band.find({ key: 'band-resume' })).toBeUndefined()
     expect(await ui.find({ key: 'resume-card' })).toBeUndefined()
     expect(JSON.stringify(await band.drawn())).not.toContain('PRIMARY-STORED-NEXT')
-    expect(w.nextStepRuns.filter(run => run.argv.includes('--print --latest'))).toHaveLength(0)
+    expect(w.nextStepRuns.filter(run => run.argv.includes('--print --handoff'))).toHaveLength(0)
   })
 
   test("A12: a primary session reads the primary's handoff as before", async ($, on) => {
     const files = {
-      [PRIMARY_LATEST]: { text: stored('PRIMARY-STORED-NEXT', 'Primary stored prompt.', 900), mtimeMs: 900_000 },
+      [PRIMARY_HANDOFF]: { text: stored('PRIMARY-STORED-NEXT', 'Primary stored prompt.', 900), mtimeMs: 900_000 },
     }
     const w = await begin($, on, { files, cwd: PRIMARY, checkout: PRIMARY, nextSteps: [{ exitCode: 1, stdout: '' }] })
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -572,13 +572,13 @@ describe('per-worktree-handoff: the cockpit reads its own checkout (A9, A12)', (
 
   test("A12: the primary session's resume prompt names the primary's handoff path", async ($, on) => {
     const files = {
-      [PRIMARY_LATEST]: { text: stored('PRIMARY-STORED-NEXT', null, 900), mtimeMs: 900_000 },
+      [PRIMARY_HANDOFF]: { text: stored('PRIMARY-STORED-NEXT', null, 900), mtimeMs: 900_000 },
     }
     const w = await begin($, on, { files, cwd: PRIMARY, checkout: PRIMARY, nextSteps: [{ exitCode: 1, stdout: '' }] })
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     await band.press({ key: 'band-resume' })
     expect(w.prompts).toHaveLength(1)
-    expect(w.prompts[0]).toContain(PRIMARY_LATEST)
+    expect(w.prompts[0]).toContain(PRIMARY_HANDOFF)
   })
 })
 

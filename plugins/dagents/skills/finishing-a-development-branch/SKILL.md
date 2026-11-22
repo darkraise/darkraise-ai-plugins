@@ -22,7 +22,7 @@ through `scripts/ask "<question>"`; end on the question.
 When `scripts/auto-run status` exits 0
 ([auto-run.md](../../reference/auto-run.md)) and its phase is not `finish`, run
 `scripts/auto-run phase finish` (exit 4: `scripts/auto-run stop --reason "<path> is a carried path and was committed"` (no path: `--reason "git could not check the carried paths"`), and stop),
-dagents:handoff steps 0-3, `scripts/next-step PLAN_FILE` and `scripts/auto-run clear --phase`, and end the turn with `Auto run: clearing`.
+dagents:handoff steps 0-3, `scripts/next-step --notes <notes> PLAN_FILE` and `scripts/auto-run clear --phase`, and end on `Auto run: clearing`.
 In phase `finish`, follow this skill with these changes:
 
 - **Step 3** asks nothing: the base branch is
@@ -368,14 +368,14 @@ the next program sub-project or roadmap epic with its launch command and
 first prompt, the milestone audit when the current milestone has nothing open,
 or that the program or roadmap is complete, or that the plan records no
 follow-on work. It
-also rewrites `<latest.md>` to
-match, so a fresh session finds the same answer. If it exits 4, say the
-handoff file could not be written.
+also rewrites the plan's `<handoff>` to match. On exit 4, say the handoff
+file could not be written.
 
 The last thing in your final message is that block, verbatim. Without a
 plan file, when something follows (a register row this work left open, a
 finding awaiting a ruling), run
-`scripts/next-step --adhoc --phase <design|build> --next "<what follows>"` —
+`scripts/next-step --adhoc --phase <design|build> --next "<what follows>"`
+(plus `--notes <file>` when Step 6 wrote one) —
 `design` when what follows is rulings, a spec or a plan — and end with the
 block it prints, verbatim. When nothing follows, run
 `scripts/finish-choice clear` (the choice is used up) and end with: "No plan

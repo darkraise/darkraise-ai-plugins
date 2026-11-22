@@ -16,7 +16,7 @@ import { push } from "./darkmem-push.mjs";
 import { leftoverLines, pendingFamilies, reconcile, stayLine } from "./darkmem-reconcile.mjs";
 import { migrateMirrorLocked, migrateServer } from "./dforge-home-migrate.mjs";
 
-const USAGE = "usage: darkmem-sync status | pull | push [--workstream KEY] | import [--replace] | restore NAME | revision NAME | reconcile";
+const USAGE = "usage: darkmem-sync status | pull | push [--handoff FILE [--workstream KEY]] | import [--replace] | restore NAME | revision NAME | reconcile";
 
 const familyLine = (name, family) => `${name}: configured ${family.configured}, applied ${family.applied}${family.applied === "darkmem" ? "" : ", not synced"}`;
 
@@ -132,7 +132,7 @@ async function restore(context) {
 const COMMANDS = {
   status: { options: {}, positional: 0, needsKey: false, syncsFamilies: false, recordsConflicts: false, summary: false, run: status },
   pull: { options: {}, positional: 0, needsKey: true, syncsFamilies: true, recordsConflicts: true, summary: true, run: pull },
-  push: { options: { "--workstream": true }, positional: 0, needsKey: true, syncsFamilies: true, recordsConflicts: true, summary: true, run: push },
+  push: { options: { "--handoff": true, "--workstream": true }, positional: 0, needsKey: true, syncsFamilies: true, recordsConflicts: true, summary: true, run: push },
   import: { options: { "--replace": false }, positional: 0, needsKey: true, syncsFamilies: false, recordsConflicts: false, summary: true, run: importRepository },
   reconcile: { options: {}, positional: 0, needsKey: false, syncsFamilies: false, recordsConflicts: false, summary: false, run: reconcile },
   restore: {

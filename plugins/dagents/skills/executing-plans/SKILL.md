@@ -145,7 +145,7 @@ first reconcile live children as dagents:handoff step 0 says: wait for them,
 or `TaskStop` them and record a Ruling, and tell your partner which. Then run
 `scripts/next-step PLAN_FILE` (using-dagents §Session Budget) last, and end
 your final message with the block it prints, verbatim. It also rewrites that
-block in the next session's checkout's `<latest.md>`; on exit 4, say it could
+block in the plan's `<handoff>` in the next session's checkout; on exit 4, say it could
 not be written. When the plan finishes,
 dagents:finishing-a-development-branch runs it instead.
 

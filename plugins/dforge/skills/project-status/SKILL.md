@@ -8,7 +8,8 @@ description: Use when asked what to do next, where the project stands, whether t
 **Announce at start:** "I'm using the project-status skill to report where this project stands."
 
 One screen: where the repository stands, what is open, and the single next step.
-This skill writes nothing — not `latest.md`, not a workspace, not a ledger. It
+This skill writes nothing — not a handoff, not a workspace, not a ledger;
+only `scripts/repo-audit` removes finished handoffs. It
 calls `scripts/next-step` only with `--print`, which writes nothing. See
 [project-state.md](../../reference/project-state.md) for the files it reads.
 
@@ -16,11 +17,11 @@ calls `scripts/next-step` only with `--print`, which writes nothing. See
 
 1. **Orient in one call.** Run `scripts/repo-audit`
    (see using-dforge §Session Budget). It gives branch and HEAD, worktrees, dirty files, plans with
-   ledgers, every checkout's handoff, and recent commits. Each checkout keeps
-   its own `latest.md`: the audit recomputes this session's and prints each
-   other checkout's as stored, with its branch. List them all in the report
-   as the audit prints them; the handoff you recommend from is the session's
-   own.
+   ledgers, every checkout's handoffs, and recent commits. Each piece of work
+   has its own handoff: the audit recomputes this session's own (the newest
+   it claimed or wrote) and lists every other with its age and claim state.
+   List them all in the report as the audit prints them; the handoff you
+   recommend from is the session's own.
 2. **Route out if execution is live.** If a ledger has incomplete tasks and no
    task's last line is `BLOCKED`, name the plan and the task reached and route
    to dforge:resume-execution. Stop there: this skill orients a session

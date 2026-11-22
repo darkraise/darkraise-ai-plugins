@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { failItem } from "./darkmem-client.mjs";
 import {
-  DOC_PREFIX, caseGroups, familiesOf, isArchiveUri, isoMicros, newestCheckpointAt, recordCheckpointAt, refuseLinkedDirs, sha256, uriFamily, uriProblem,
+  DOC_PREFIX, caseGroups, checkpointAtOf, familiesOf, handoffMarker, isArchiveUri, isoMicros, newestCheckpointAt, recordCheckpointAt, refuseLinkedDirs, sha256, uriFamily, uriProblem,
   uriToLocal, validKey, writeFileAtomic,
 } from "./darkmem-mirror.mjs";
 import { readRegular } from "./darkmem-progress-move.mjs";
@@ -223,60 +223,110 @@ export async function pullLedgers({ client, roots, state, persist, report }, wor
   }
 }
 
-// latest.md is the most recent stop: the newest checkpoint across the open
-// workstreams, taken when it is newer than the newest checkpoint this mirror
-// synced in any workstream (by darkmem's own timestamps, never the file's
-// mtime) and never over local edits that have not been pushed.
-async function pullCheckpoint({ cfg, client, roots, state, persist, report }, open) {
-  let newest = null;
-  let newestKey = null;
+// The handoff key a pulled checkpoint is written under: its marker's key=, or
+// for a checkpoint without one the key the migration gives an older layout's
+// handoff (the plan or draft its marker names, else adhoc-legacy-<marker at,
+// else the checkpoint's time>). Null when that key fails the handoff key rule, which
+// adds "latest" to the state's own key rule, or when no time can be read.
+export function pulledKey(body, createdAt) {
+  const last = (body.match(/^<!-- next-step: .* -->\r?$/gm) ?? []).at(-1);
+  // key= runs to the next named word, so a key holding a space is read whole and refused.
+  const named = last && / key=(.*?)(?= [a-z]+=| -->|$)/.exec(last.replace(/ subject=.*$/, ""))?.[1];
+  const micros = isoMicros(createdAt);
+  const at = (last && / at=(-?\d+) -->/.exec(last)?.[1]) ?? (micros === null ? null : String(Math.floor(micros / 1e6)));
+  const subject = handoffMarker(body)?.subject;
+  const key = named ?? (subject ? path.posix.basename(subject.replace(/\\/g, "/"), ".md") : at === null ? null : `adhoc-legacy-${at}`);
+  return validKey(key) && key !== "latest" ? key : null;
+}
+
+// Each open workstream's newest checkpoint is its handoff, written to
+// work/handoff/<key>.md when it is newer than the checkpoint this mirror last
+// synced for that workstream (by darkmem's own timestamps, never the file's
+// mtime): its own checkpointAt, else the record's "*", else the record's
+// newest, which the first pull after the upgrade stores under "*". A handoff
+// superseded or consumed here is therefore not pulled back. Only a mirror
+// that never synced a checkpoint takes the single newest. A pull never writes
+// another key's file, nor over local edits that have not been pushed; of two
+// workstreams naming one key the newer checkpoint is written.
+export async function pullCheckpoints({ cfg, client, roots, state, persist, report, out }, open) {
+  const isFirst = state.checkpointAt === null;
+  if (!isFirst && typeof state.checkpointAt === "object" && state.checkpointAt["*"] === undefined) {
+    state.checkpointAt["*"] = newestCheckpointAt(state);
+    persist();
+  }
+  const found = [];
   let unread = false;
   for (const ws of open) {
     let checkpoint;
     try {
       checkpoint = (await client.resume(cfg.project, ws.key))?.checkpoint;
     } catch (error) {
-      failItem(report, "handoff/latest.md", error, ` (reading workstream ${ws.key}); not pulled`);
+      failItem(report, `handoff checkpoint of workstream ${ws.key}`, error, "; no handoff pulled");
       unread = true;
       continue;
     }
-    if (checkpoint && (!newest || isoMicros(checkpoint.created_at) > isoMicros(newest.created_at))) {
-      newest = checkpoint;
-      newestKey = ws.key;
-    }
+    if (!checkpoint) continue;
+    const since = isFirst ? null : checkpointAtOf(state, ws.key);
+    if (since && isoMicros(checkpoint.created_at) <= isoMicros(since)) continue;
+    found.push({ checkpoint, workstream: ws.key });
   }
-  // Without every workstream's checkpoint the newest is unknown.
-  if (!newest || unread) return;
-  const file = path.join(roots.workRoot, "handoff", "latest.md");
-  // A mirror that lost latest.md takes darkmem's newest again, however old.
-  const synced = newestCheckpointAt(state);
-  if (synced && isoMicros(newest.created_at) <= isoMicros(synced) && fs.existsSync(file)) return;
-  const remote = Buffer.from(newest.body, "utf8");
-  const remoteHash = sha256(remote);
-  let local;
-  try {
-    local = localHash(file);
-  } catch (error) {
-    report.failures.push(`handoff/latest.md: could not be read (${error.code}); not pulled`);
-    report.partial = true;
-    return;
-  }
-  if (local !== null && local !== remoteHash && local !== state.checkpoint) {
-    report.conflicts.push(`handoff/latest.md: changed locally, and darkmem holds a newer checkpoint; ${RESOLVE}`);
-    return;
-  }
-  try {
-    if (local !== remoteHash) {
-      writeFileAtomic(file, remote, mirrorOf(roots));
-      report.counts.checkpoints += 1;
-    }
-    state.checkpoint = remoteHash;
-    recordCheckpointAt(state, newestKey, newest.created_at);
+  // Without every workstream's checkpoint a newer one naming the same key may be missed.
+  if (unread || found.length === 0) return;
+  const newer = (a, b) => isoMicros(a.checkpoint.created_at) > isoMicros(b.checkpoint.created_at);
+  const candidates = isFirst ? [found.reduce((best, one) => (newer(one, best) ? one : best))] : found;
+  // A checkpoint that is not written (a refused key, or the older of two
+  // naming one key) is recorded as seen, so a later pull neither repeats its
+  // note nor writes it over the newer handoff.
+  const seen = one => {
+    recordCheckpointAt(state, one.workstream, one.checkpoint.created_at);
     persist();
-  } catch (error) {
-    if (!error?.syscall) throw error;
-    report.failures.push(`handoff/latest.md: could not be written (${error.code}); not pulled`);
-    report.partial = true;
+  };
+  const byKey = new Map();
+  for (const one of candidates) {
+    const key = pulledKey(one.checkpoint.body, one.checkpoint.created_at);
+    if (key === null) {
+      out(`skipped: workstream ${one.workstream}'s checkpoint names no usable handoff key; not pulled`);
+      seen(one);
+      continue;
+    }
+    const held = byKey.get(key);
+    if (held && !newer(one, held)) seen(one);
+    else {
+      if (held) seen(held);
+      byKey.set(key, one);
+    }
+  }
+  for (const [key, { checkpoint, workstream }] of byKey) {
+    const rel = `handoff/${key}.md`;
+    const file = path.join(roots.workRoot, "handoff", `${key}.md`);
+    const remote = Buffer.from(checkpoint.body, "utf8");
+    const remoteHash = sha256(remote);
+    let local;
+    try {
+      local = localHash(file);
+    } catch (error) {
+      report.failures.push(`${rel}: could not be read (${error.code}); not pulled`);
+      report.partial = true;
+      continue;
+    }
+    if (local !== null && local !== remoteHash && local !== state.checkpoints[key]) {
+      report.conflicts.push(`${rel}: changed locally, and darkmem holds a newer checkpoint; ${RESOLVE}`);
+      continue;
+    }
+    try {
+      if (local !== remoteHash) {
+        writeFileAtomic(file, remote, mirrorOf(roots));
+        report.counts.checkpoints += 1;
+      }
+      state.checkpoints[key] = remoteHash;
+      recordCheckpointAt(state, workstream, checkpoint.created_at);
+      if (isFirst) recordCheckpointAt(state, "*", checkpoint.created_at);
+      persist();
+    } catch (error) {
+      if (!error?.syscall) throw error;
+      report.failures.push(`${rel}: could not be written (${error.code}); not pulled`);
+      report.partial = true;
+    }
   }
 }
 
@@ -293,5 +343,5 @@ export async function pull(context) {
     return;
   }
   await pullLedgers(context, open);
-  await pullCheckpoint(context, open);
+  await pullCheckpoints(context, open);
 }

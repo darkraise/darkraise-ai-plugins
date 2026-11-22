@@ -175,10 +175,12 @@ check "a UI change with no proof: held" "$(decision "$(stop u-9 'Task 2 is done.
 # Only the block next-step wrote this turn is a handoff: one typed by hand is not.
 check "a hand-typed Next session block does not stand down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** x')")" "block"
 sleep 1
-mkdir -p .dagents/handoff
-printf '# Handoff\n\n## Next session\n\n**Next:** x\n' > .dagents/handoff/latest.md
-check "a Next session block stands down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** x')")" "none"
-rm -f .dagents/handoff/latest.md
+# The turn record next-step writes for the session (C13), no handoff file.
+mkdir -p "$HOME/.claude/dagents/sessions/turns"
+printf 'status=Plan p: 1 of 2 tasks complete.\nnext=Resume at Task 2 (Two).\n' > "$HOME/.claude/dagents/sessions/turns/u-9.next"
+check "ui_turn_released_on_record: a hand-typed block with another Next is still held" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** x')")" "block"
+check "ui_turn_released_on_record: the block whose Next the record holds stands down" "$(decision "$(stop u-9 $'Done.\n\n## Next session\n\n**Next:** Resume at Task 2 (Two).')")" "none"
+rm -f .dagents/handoff/stored.md
 BGT="$TMP/ui-bg.jsonl"
 jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"toolu_w",name:"Bash",input:{description:"Suite",command:"npm test",run_in_background:true}}]}}' > "$BGT"
 jq -nc '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:"toolu_w",content:"Command running in background with ID: w1. Output is being written to: /tmp/w1.output."}]}}' >> "$BGT"
@@ -250,14 +252,14 @@ printf '// change wt1\n' >> "$REPO/src/App.tsx"; git -C "$REPO" commit -qam 'ui 
 check "A7: held on a UI change" "$(decision "$(stop u-wt1 'Done.')")" "block"
 sleep 1; prompt u-wt2
 printf '// change wt2\n' >> "$REPO/src/App.tsx"; git -C "$REPO" commit -qam 'ui change wt2'
-sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.\n' > "$UWT/.dagents/handoff/latest.md"
+sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.\n' > "$UWT/.dagents/handoff/stored.md"
 check "A7: the worktree's block releases" "$(decision "$(stop u-wt2 $'## Next session\n\n**Status:** ui wt\n**Next:** Prove the UI in the worktree.')")" "none"
-printf '# Handoff\n\n## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.\n' > "$UWT/.dagents/handoff/latest.md"
+printf '# Handoff\n\n## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.\n' > "$UWT/.dagents/handoff/stored.md"
 sleep 1; prompt u-wt3
 printf '// change wt3\n' >> "$REPO/src/App.tsx"; git -C "$REPO" commit -qam 'ui change wt3'
 USTALE=$'## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.'
 check "A16: a worktree block written before the turn does not release" "$(decision "$(stop u-wt3 "$USTALE")")" "block"
-sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.\n' > "$UWT/.dagents/handoff/latest.md"
+sleep 1; printf '# Handoff\n\n## Next session\n\n**Status:** ui stale\n**Next:** Prove the UI before this turn.\n' > "$UWT/.dagents/handoff/stored.md"
 check "A16: the same block rewritten this turn releases" "$(decision "$(stop u-wt3 "$USTALE")")" "none"
 git -C "$REPO" worktree remove --force "$UWT"
 

@@ -328,10 +328,14 @@ set — brainstorming through finishing-a-development-branch — frozen at upstr
 frontmatter, and writing-plans and executing-plans use the plugin's own
 `scripts/sdd-workspace`, `task-brief`, `review-package`, `next-step`,
 `context-size`, `repo-audit`, `plan-lint`, and `plan-amend` — `next-step` ends every session with its next
-action and keeps `.dforge/handoff/latest.md` pointing at it. Each checkout
-keeps its own: `next-step` writes the one in the checkout the next session
-works in (a plan's worktree while it runs), and its first prompt opens by
-naming that checkout. Disable the
+action and writes it into a handoff per piece of work,
+`.dforge/handoff/<key>.md` (the plan's or draft's basename, or
+`adhoc-<session>` for unplanned work). Each checkout keeps its own: `next-step`
+writes the one in the checkout the next session works in (a plan's worktree
+while it runs), and its first prompt opens by naming that checkout and that
+file. The session that resumes a handoff claims it first (`scripts/handoff
+claim`), so a second session in the same repository neither resumes nor
+overwrites it. Disable the
 upstream `superpowers` plugin: same-named skills in two enabled plugins can
 double-trigger.
 
@@ -420,10 +424,11 @@ that turn wrote a plan ledger (`.dforge/sdd/*/progress.md`), recorded a plan
 in `plans/completed.md` or closed a milestone in `roadmap.md`. If it did and
 the last message carries no ending, the hook blocks the stop once and tells
 Claude which one is missing. A `## Next session` block counts only when
-`next-step` wrote it this turn: its `**Next:**` line matches the `latest.md`
+`next-step` wrote it this turn: its `**Next:**` line matches the turn record
+`next-step` keeps for this session (`~/.claude/dforge/sessions/turns/<session>.next`)
 written since the turn started, or its `**Status:**` and `**Next:**` lines
-both match another checkout's `latest.md` written this turn, since `next-step`
-writes the handoff of the checkout the next session works in. A block Claude
+both match a handoff in any checkout written this turn, which is what
+releases a turn with no session id. A block Claude
 typed or reworded is held. A plan's turn may also end on a question to you
 that the ledger's last line records (`Task <N>: waiting — <question>`). The
 retry passes, except under the background-work hold below and in an auto run,
@@ -523,7 +528,7 @@ needs. dforge hands off instead.
   with `budget: 312k of 465k (67%) — ok — source: record`, so the controller
   checks before every task and every review at no extra request;
   `scripts/context-size` prints it on demand. At `handoff`, the `handoff`
-  skill writes `latest.md` and the plan's `handoff.md` and ends with the
+  skill writes the plan's handoff and its `handoff.md` and ends with the
   resume guide from `scripts/next-step`.
 - **Stops.** A saved plan outside an auto run (an auto run clears the session
   and goes on) is a hard stop.
@@ -538,10 +543,10 @@ needs. dforge hands off instead.
   `autoCompactWindow` and the model's window; see
   [session-budget.md](reference/session-budget.md) for the numbers and the
   full Stops table.
-- **Resuming.** `resume-execution` runs `scripts/repo-audit` — one read-only
-  snapshot of branch, worktrees, dirty files, plans in flight and handoff
-  staleness — verifies the worktree, and hands control back to the plan's
-  execution skill.
+- **Resuming.** `resume-execution` runs `scripts/repo-audit` — one snapshot
+  of branch, worktrees, dirty files, plans in flight and handoff staleness,
+  which also deletes the handoffs left with nothing to resume — verifies the
+  worktree, and hands control back to the plan's execution skill.
 - **Compaction.** The SessionStart hook appends a snapshot of what summaries
   drop. Compaction fires at about 93-96% of `autoCompactWindow`, so set the
   window to suit you — the budget follows it, 465k at 650000 — and paste the
@@ -729,8 +734,9 @@ desktop window joins the session, unless you closed it.
   tool starts. **⇣ Compact** stays on the card, and **↪ Hand off** appears in
   `dforge` sessions.
 - **Resumable work** is a card at the top of the pane, framed in the accent
-  color, when the session checkout's `.dforge/handoff/latest.md` is under
-  three days old and its
+  color, when one of the session checkout's handoffs (`.dforge/handoff/*.md`)
+  is under three days old, unclaimed or claimed by a session that is gone,
+  and its
   `## Next session` block has a first prompt to paste (a finished plan, or a
   task blocked on your ruling, has none). It names the note's age and its
   **Next:** line, and **Resume** (`r`) queues the prompt that resumes it. The

@@ -17,8 +17,8 @@ async function setup(t) {
   const seed = createClient({ url: stub.url, apiKey: STUB_KEY, runKey: "seed" });
   const worktree = path.join(scratch("dms-a11-wt-"), "wt");
   git(repo, "worktree", "add", "-q", "-b", "wt", worktree);
-  const primaryFile = path.join(home.workRoot, "handoff", "latest.md");
-  const worktreeFile = path.join(worktree, ".dforge", "handoff", "latest.md");
+  const primaryFile = path.join(home.workRoot, "handoff", "stored.md");
+  const worktreeFile = path.join(worktree, ".dforge", "handoff", "stored.md");
   return { stub, repo, worktree, seed, primaryFile, worktreeFile, ...home };
 }
 
@@ -29,7 +29,7 @@ test("A11: push run from the primary sends the primary's handoff and not the wor
   const s = await setup(t);
   write(s.primaryFile, "# Handoff\n\nPRIMARY-HANDOFF-MARKER\n");
   write(s.worktreeFile, "# Handoff\n\nWORKTREE-HANDOFF-MARKER\n");
-  const result = await run(["push", "--workstream", "ws-primary"], { cwd: s.repo, env: s.env });
+  const result = await run(["push", "--handoff", s.primaryFile, "--workstream", "ws-primary"], { cwd: s.repo, env: s.env });
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.equal(checkpoints(s.stub, "ws-primary").length, 1);
   assert.match(checkpoints(s.stub, "ws-primary")[0].body, /PRIMARY-HANDOFF-MARKER/);
@@ -41,7 +41,7 @@ test("A11: push run from a linked worktree prints that its handoff stays local a
   const s = await setup(t);
   write(s.primaryFile, "# Handoff\n\nPRIMARY-HANDOFF-MARKER\n");
   write(s.worktreeFile, "# Handoff\n\nWORKTREE-HANDOFF-MARKER\n");
-  const result = await run(["push", "--workstream", "ws-primary"], { cwd: s.worktree, env: s.env });
+  const result = await run(["push", "--handoff", s.primaryFile, "--workstream", "ws-primary"], { cwd: s.worktree, env: s.env });
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.ok(result.stdout.split("\n").includes(`worktree handoff stays local: ${s.worktreeFile}`), result.stdout);
   assert.doesNotMatch(sentBodies(s.stub), /WORKTREE-HANDOFF-MARKER/);
@@ -55,11 +55,15 @@ test("A11: pull writes only the primary's handoff under the mirror, from the pri
   write(s.worktreeFile, "# Handoff\n\nWORKTREE-LOCAL-MARKER\n");
   const fromWorktree = await run(["pull"], { cwd: s.worktree, env: s.env });
   assert.equal(fromWorktree.code, 0, fromWorktree.stdout + fromWorktree.stderr);
-  assert.match(read(s.primaryFile), /DARKMEM-CHECKPOINT-MARKER/);
+  // An unmarked checkpoint lands in the mirror under the migration's adhoc-legacy key.
+  const mirrorHandoffs = path.dirname(s.primaryFile);
+  const pulled = () => fs.readdirSync(mirrorHandoffs).map(name => read(path.join(mirrorHandoffs, name)));
+  assert.equal(pulled().length, 1);
+  assert.match(pulled()[0], /DARKMEM-CHECKPOINT-MARKER/);
   assert.equal(read(s.worktreeFile), "# Handoff\n\nWORKTREE-LOCAL-MARKER\n", "pull leaves the worktree's handoff alone");
   fs.rmSync(s.worktreeFile);
   const fromPrimary = await run(["pull"], { cwd: s.repo, env: s.env });
   assert.equal(fromPrimary.code, 0, fromPrimary.stdout + fromPrimary.stderr);
   assert.equal(fs.existsSync(s.worktreeFile), false, "pull never creates a worktree's handoff");
-  assert.match(read(s.primaryFile), /DARKMEM-CHECKPOINT-MARKER/);
+  assert.match(pulled()[0], /DARKMEM-CHECKPOINT-MARKER/);
 });

@@ -256,9 +256,8 @@ compaction that was booked (`pending` is `after-compact`): while a `clear` or
   line names the spec). In
   `execute` and `final`, follow the After compaction steps of the execution
   skill the plan's Execution line names, for the plan `status` names: its
-  workspace, ledger and `git log` are the authority. Each checkout keeps its
-  own `latest.md`, and the one here can predate the run, so do not resume
-  from it. When the line says the size
+  workspace, ledger and `git log` are the authority. A handoff in this
+  checkout can predate the run, so do not resume from it. When the line says the size
   is unknown, record that with `scripts/auto-run ruling add`.
 - `handoff`: follow Clears.
 
@@ -270,17 +269,19 @@ cleared session; dagents:handoff does not end the run. In order:
 1. When the spec's `## Decisions` holds a `Finish: <action>` line,
    `scripts/finish-choice set <action> --plan PLAN_FILE`.
 2. dagents:handoff steps 0-3: reconcile background agents and shells, commit
-   the plan and the spec, and update the handoff notes. Do not end the session.
-3. `scripts/next-step PLAN_FILE`. Exit 5 means background work is still
+   the plan and the spec, and write the handoff's notes file. Do not end the
+   session.
+3. `scripts/next-step --notes <notes> PLAN_FILE`, `<notes>` being the file
+   step 2 wrote. Exit 5 means background work is still
    listed: run `scripts/in-flight`, wait for or stop each launch it lists, and
-   run `scripts/next-step PLAN_FILE` again; a second exit 5 runs
+   run the same `scripts/next-step --notes <notes> PLAN_FILE` again; a second exit 5 runs
    `scripts/auto-run stop --reason "background work still running at the switch: <next-step's message>"`
-   and ends as Stopping says. Any other nonzero exit means `latest.md` was
+   and ends as Stopping says. Any other nonzero exit means the handoff was
    not written: run `scripts/auto-run stop --reason "the handoff file could
    not be written"` and end as Stopping says.
 4. `scripts/auto-run switch`, which also sets the phase to `execute`. It exits
-   4 without an attached plan, or when the first prompt in `latest.md` names
-   another plan; on exit 4 or any other nonzero exit, stop the run the same
+   4 without an attached plan, or when the first prompt in the plan's handoff
+   names another plan; on exit 4 or any other nonzero exit, stop the run the same
    way. On exit 0, end the turn with
    `Auto run: switching` as its last line.
 
@@ -298,8 +299,9 @@ either stage is retried once in that stage; the second stops the run.
 The step that hands off owns the clear; dagents:handoff itself never runs it.
 Run dagents:handoff first (`scripts/auto-run clear` reads the first prompt
 and launch command `scripts/next-step` wrote to the attached plan's handoff,
-the `latest.md` `scripts/next-step --target` names: the checkout the next
-session works in, its first prompt naming that checkout), then:
+the file `scripts/next-step --target` names: the checkout the next session
+works in, its first prompt naming that checkout; with no plan attached, the
+newest handoff whose marker names this run's session), then:
 
 - **A compaction that left too much:** `scripts/auto-run clear`.
 - **A plan that left inline mode before this change** (a ledger dagents:executing-plans' recovery.md sends to dagents:subagent-driven-development): `scripts/auto-run clear --phase`. A phase clear never counts as a self-resume.
@@ -311,12 +313,12 @@ started under `autoRun=ask` also writes its plan in the session that wrote the
 spec.
 
 If `scripts/next-step` exits 4, do not run `scripts/auto-run clear`: the
-`latest.md` it would read is an older handoff's. Run `scripts/auto-run stop
+handoff it would read is an older one. Run `scripts/auto-run stop
 --reason "the handoff file could not be written"` and end as Stopping says.
 
 If it exits 5, background work is still listed and nothing was written: run
-`scripts/in-flight`, wait for or stop each launch it lists, and run
-`scripts/next-step PLAN_FILE` again, as §The switch step 3 does. A second
+`scripts/in-flight`, wait for or stop each launch it lists, and run the same
+`scripts/next-step --notes <notes> PLAN_FILE` again, as §The switch step 3 does. A second
 exit 5 runs
 `scripts/auto-run stop --reason "background work still running at the clear: <next-step's message>"`
 and ends as Stopping says; do not run `scripts/auto-run clear`.
@@ -342,7 +344,10 @@ ends as finished. Run it, then end as the attended flow would, when:
 - `scripts/next-step` exits 5 a second time during a clear (see Clears).
 
 When `scripts/auto-run clear` exits 5, or the cockpit's prompt says the run
-stopped, it has already stopped: end with the next-step block. The cockpit
+stopped, it has already stopped: end with the next-step block. A handoff
+another live session holds stops the run the same way: `scripts/handoff claim`
+(exit 3) and `scripts/next-step` (exit 7) run `scripts/auto-run stop --reason
+"handoff <key> is held by <id8>"` themselves, so report the holder and ask. The cockpit
 sends one Discord `blocked` notice when a run stops with a reason.
 
 ## Finishing
@@ -350,7 +355,8 @@ sends one Discord `blocked` notice when a run stops with a reason.
 Finishing runs in a session of its own. At the entry of
 dagents:finishing-a-development-branch, a run whose phase is not `finish` runs,
 in order, `scripts/auto-run phase finish`, dagents:handoff steps 0-3 (do not
-end the session), `scripts/next-step PLAN_FILE` and
+end the session), `scripts/next-step --notes <notes> PLAN_FILE` with the
+notes file handoff step 3 wrote, and
 `scripts/auto-run clear --phase`, and ends the turn with `Auto run: clearing`.
 A commit in handoff step 2 moves HEAD and costs one suite run at finishing's
 first step. `next-step`'s exits 4 and 5 are handled as §Clears says; a nonzero
