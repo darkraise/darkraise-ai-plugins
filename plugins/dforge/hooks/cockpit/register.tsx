@@ -148,7 +148,7 @@ function resumePrompt(): string {
 const RESUME_WITHIN = 3 * 86_400_000
 // What an auto run's compaction keeps (reference/auto-run.md).
 const AUTO_COMPACT_INSTRUCTIONS =
-  'Preserve verbatim: the worktree path; the plan, ledger, handoff and auto-run state file paths; the current HEAD; every Ruling: line; and the auto run pending decisions. Name the task in progress and its fix round.'
+  'Preserve verbatim: the worktree path; the plan, ledger, handoff and auto-run state file paths; the current HEAD; the auto run pending decisions; and Ruling: lines, keeping rulings only for the task in flight and plan-wide rulings. Give one line per finished task, or point to the ledger. Name the task in progress and its fix round. Keep the summary to at most 1,500 words.'
 // A failed stage is tried again after this long; a live turn or background work defers it as long.
 const AUTO_RETRY_MS = 5_000
 // The restored default model is written this many times at most, each write

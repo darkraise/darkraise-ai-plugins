@@ -188,8 +188,10 @@ Claude Code re-reads the project-root CLAUDE.md after compaction and uses a
 # Compact instructions
 
 Preserve verbatim: the worktree path; the plan, ledger and handoff paths; the
-current HEAD; every owner constraint and prohibition; every `Ruling:` line; and
-every open question. Name the task in progress and its fix round.
+current HEAD; every owner constraint and prohibition; every open question; and
+`Ruling:` lines, keeping rulings only for the task in flight and plan-wide
+rulings. Give one line per finished task, or point to the ledger. Name the
+task in progress and its fix round. Keep the summary to at most 1,500 words.
 ```
 
 `scripts/repo-audit` reports whether the section is present.

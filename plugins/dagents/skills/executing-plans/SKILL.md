@@ -85,6 +85,11 @@ here is host-neutral - inline mode
 dispatches nothing but the ruling seat, delegated tasks, risk-3 task reviews
 and the final review.
 
+## Lookups
+
+Put independent lookups in one turn (parallel tool calls, or one Bash call
+with several patterns) and read line ranges, not whole files.
+
 ## Overview
 
 Execute a plan yourself, task by task, with the whole-branch final review as
@@ -93,8 +98,9 @@ the gate.
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
 **Why this mode.** An `inline` line (`executionMode=inline`, or on request)
-runs here; the default is subagent mode. This session has read the code,
-which a subagent would rebuild. You implement every task that
+runs here; the default is subagent mode. The session reads each task's files
+through its brief and keeps them, where a subagent would rebuild them; an auto
+run starts in a cleared session. You implement every task that
 carries no `**Executor:**` line, heavy tasks included.
 The `**Execution:**` line's model and effort cover the hardest task you
 implement, at least high effort when a task has risk 3 or the plan offloads one.
@@ -116,14 +122,12 @@ is yours to implement, and a judge reviews it before its complete line: run
 loop for it. On a Codex host, which writes no such line, the trigger is an
 `**Evaluation:**` line reading `risk=3`.
 
-**Why no per-task review of your own tasks.** Risk 3 is the one exception, and
-the session review loop is its gate. What catches the rest is the plan's own
-verification steps, your self-review of each diff, and one broad review of the
-whole branch.
+**Why no per-task review of your own tasks.** Risk 3 is the exception. The rest
+is caught by the plan's verification steps, your self-review of each diff and
+one broad review of the branch.
 
-**Continuous execution.** Do not pause between tasks to check in. "Should I
-continue?" prompts and progress summaries waste your human partner's time -
-they asked you to execute the plan, so do.
+**Continuous execution.** Do not pause between tasks to check in or summarize
+progress: you were asked to execute the plan.
 
 Read [ruling-seat.md](references/ruling-seat.md) for when to rule on a mechanical problem yourself.
 
