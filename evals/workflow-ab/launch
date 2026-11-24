@@ -103,7 +103,7 @@ end_run() { # end_run OUTCOME
   local bound=$sid
   if [ "$1" != finished ]; then
     [ -f "$state_file" ] && bound=$(jq -r --arg s "$sid" '.session // $s' < "$state_file" 2>/dev/null)
-    ar "${bound:-$sid}" stop >> "$dir/out/seed.log" 2>&1
+    ar "${bound:-$sid}" stop --reason "workflow-ab: $1" >> "$dir/out/seed.log" 2>&1
   fi
   cleanup
   printf '%s\n' "$1" > "$dir/state"
@@ -183,7 +183,8 @@ while :; do
     watch)
       if [ -f "$state_file" ]; then
         current=$(jq -r '.session // empty' < "$state_file" 2>/dev/null)
-        if [ -n "$current" ] && ! grep -qxF "$current" "$dir/sessions"; then
+        # The nested session writes this file: only a plain session id is kept.
+        if [[ $current =~ ^[A-Za-z0-9-]+$ ]] && ! grep -qxF "$current" "$dir/sessions"; then
           printf '%s\n' "$current" >> "$dir/sessions"
         fi
         if [ -n "$(jq -r '.stopped // empty' < "$state_file" 2>/dev/null)" ]; then outcome=stopped; break; fi

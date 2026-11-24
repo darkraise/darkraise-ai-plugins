@@ -33,10 +33,9 @@ proj="$WAB_CLAUDE_CONFIG/projects/$(printf '%s' "$clone" | tr -c 'A-Za-z0-9' '-'
 copied=0
 while IFS= read -r sid; do
   [ -n "$sid" ] || continue
-  if [ ! -f "$proj/$sid.jsonl" ]; then
-    wab_log "no transcript for session $sid in $proj"
-    continue
-  fi
+  [[ $sid =~ ^[A-Za-z0-9-]+$ ]] || wab_die 1 "not a session id in $dir/sessions: $sid"
+  # A run missing one of its sessions would enter the comparison undercounted.
+  [ -f "$proj/$sid.jsonl" ] || wab_die 1 "no transcript for session $sid in $proj"
   cp -p "$proj/$sid.jsonl" "$tdir/" || wab_die 1 "cannot copy the transcript of $sid"
   if [ -d "$proj/$sid/subagents" ]; then
     mkdir -p "$tdir/$sid" && cp -Rp "$proj/$sid/subagents" "$tdir/$sid/" \
@@ -57,7 +56,10 @@ args=(--transcripts "$tdir" --plan "$clone/$plan" --repo "$clone" --format json)
 [ -z "$ledger" ] || [ ! -f "$ledger" ] || args+=(--ledger "$ledger" --workspace "$(dirname "$ledger")")
 spec=$(sed -n -E 's/^\*\*Spec:\*\*[ \t]*`?([^` \t]+).*/\1/p' "$clone/$plan" 2>/dev/null | head -n 1)
 if [ -n "$spec" ]; then
-  register=$(grep -lF -- "$(basename "$spec")" $(grep -l '^\*\*Covers:\*\*' "$clone/docs/$arm/registers"/*.md 2>/dev/null) /dev/null 2>/dev/null | head -n 1)
+  register=""
+  for f in "$clone/docs/$arm/registers"/*.md; do
+    grep -q '^\*\*Covers:\*\*' "$f" 2>/dev/null && grep -qF -- "$(basename "$spec")" "$f" && { register=$f; break; }
+  done
   [ -z "$register" ] || args+=(--register "$register")
 fi
 [ ! -f "$clone/docs/$arm/reviews/$slug.md" ] || args+=(--review-record "$clone/docs/$arm/reviews/$slug.md")

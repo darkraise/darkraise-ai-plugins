@@ -266,7 +266,7 @@ touch "$TMP/hang"
 MAXS=2 launch dforge 6
 check "launch_timeout: exits 0" "$status" "0"
 check "launch_timeout: timed-out" "$(cat "$WAB_ROOT/dforge-6/state")" "timed-out"
-check "launch_timeout: stops the bound run" "$(cat "$TMP/auto-run.log")" "--session $(head -n 1 "$WAB_ROOT/dforge-6/sessions") stop"
+check "launch_timeout: stops the bound run" "$(cat "$TMP/auto-run.log")" "--session $(head -n 1 "$WAB_ROOT/dforge-6/sessions") stop --reason workflow-ab: timed-out"
 check "launch_timeout: kills its own tmux session" "$(grep -c '^kill-session -t =wab-dforge-6$' "$TMP/tmux.log")" "1"
 sleep 1
 check "launch_timeout: the nested session is gone" "$(kill -0 "$(cat "$TMP/claude.pid")" 2>/dev/null && echo alive || echo gone)" "gone"
@@ -280,7 +280,7 @@ for _ in $(seq 50); do [ -f "$TMP/tmux-wab-dforge-11.pid" ] && break; sleep 0.2;
 kill -TERM $(pgrep -f "evals/workflow-ab/launch dforge 11$")
 wait "$lpid" 2>/dev/null
 check "launch_interrupted: a signalled launch writes stopped and stops its run" \
-  "$(cat "$WAB_ROOT/dforge-11/state") $(grep -c ' stop$' "$TMP/auto-run.log") $([ -f "$TMP/tmux-wab-dforge-11.pid" ] && echo left || echo killed)" "stopped 1 killed"
+  "$(cat "$WAB_ROOT/dforge-11/state") $(grep -c ' stop --reason workflow-ab: stopped$' "$TMP/auto-run.log") $([ -f "$TMP/tmux-wab-dforge-11.pid" ] && echo left || echo killed)" "stopped 1 killed"
 
 # --- settings_repair_after_kill ---
 cfg="$TMP/repair-config"
