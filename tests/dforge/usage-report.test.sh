@@ -100,7 +100,7 @@ J=$(node "$REPORT" --markers "$FX/splits/repo/state/sdd/usage-markers.tsv" --tra
 check "splits_and_all_plans: both plans" "$(q "$J" '[.plans[].plan]')" '["docs/plans/p.md","docs/plans/q.md"]'
 check "splits_and_all_plans: by model" "$(q "$J" '.plans[0].byModel | map_values([.input, .cost])')" \
   '{"claude-opus-5-5":[10,0.00004],"claude-sonnet-5-5":[20,0.00004]}'
-check "splits_and_all_plans: by repository" "$(q "$J" '.plans[0].byRepo | to_entries | map([(.key | sub(".*/fixtures/"; "")), .value.input, .value.cost])')" \
+check "splits_and_all_plans: by repository" "$(q "$J" '.plans[0].byRepo | to_entries | map([(.key | gsub("\\\\"; "/") | sub(".*/fixtures/"; "")), .value.input, .value.cost])')" \
   '[["usage/splits/repo",30,0.00008]]'
 
 # --- wait_seconds ---
