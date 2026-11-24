@@ -160,6 +160,8 @@ has "a final review uses its schema" "$(args)" "agy-final-review-schema.json"
 check "a final review writes its text" "$(cat "$TMP/out.json")" "No findings."
 has "the final prompt carries the branch diff" "$(cat "$TMP/out.json.prompt")" "+final"
 lacks "the final prompt never sends agy to git" "$(cat "$TMP/out.json.prompt")" "Review the branch diff from"
+check "the final prompt opens with the headless line" "$(head -n 1 "$TMP/out.json.prompt")" \
+  "headless mode denies shell commands; review from the files given"
 STUB_AGY_MODE=final-review run --kind final --base nosuchsha
 has "a final review of an unknown base fails" "$out" "status=FAILED"
 has "an unknown base names error" "$out" "reason=error"
