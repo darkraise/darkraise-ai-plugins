@@ -402,7 +402,42 @@ ar_task_complete() {
     echo "auto-run: $reason; the run has stopped. End as reference/auto-run.md §Stopping says." >&2
     return 5
   fi
-  ar_update '.resumes = 0 | .stalls = 0 | .stalledAt = null | .compactionsSinceTask = 0 | .setupDue = false'
+  ar_update '.resumes = 0 | .stalls = 0 | .stalledAt = null | .compactionsSinceTask = 0 | .setupDue = false' || return $?
+  ar_sweep_closes
+  # The run's budget line last, so a compact verdict is the last thing the
+  # session reads; its verdict never changes this exit.
+  CLAUDE_CODE_SESSION_ID=${CLAUDE_CODE_SESSION_ID:-${AR_SESSION:-}} \
+    bash "$(dirname "${BASH_SOURCE[0]}")/../context-size" 2>/dev/null
+  return 0
+}
+
+# ar_sweep_closes — a close marker for every complete task the marker file
+# lacks one for, so a usage report never runs a task's slice to the next
+# open. Needs usage-marker.sh; never fails.
+ar_sweep_closes() {
+  declare -F um_mark >/dev/null || return 0
+  local plan ledger markers rel closed line n range deferred
+  plan=$(ar_get plan)
+  [ -n "$plan" ] || return 0
+  plan=$(plan_locate "$plan")
+  [ -f "$plan" ] || return 0
+  ledger=$(plan_ledger "$plan")
+  [ -n "$ledger" ] && [ -f "$ledger" ] || return 0
+  markers="$(dagents_dir state "$(ctx_primary_root 2>/dev/null)")/sdd/usage-markers.tsv"
+  rel=$(_um_plan_rel "$plan")
+  closed=""
+  [ ! -f "$markers" ] || closed=$(UM_PLAN=$rel awk -F'\t' '{ sub(/\r$/, "") } $2 == "close" && $6 == ENVIRON["UM_PLAN"] { print $7 }' "$markers" 2>/dev/null)
+  while IFS= read -r line; do
+    [[ $line =~ ^Task\ ([0-9]+):\ complete\ \((.*) ]] || continue
+    n=${BASH_REMATCH[1]} range="" deferred=""
+    ! grep -qx "$n" <<<"$closed" || continue
+    case ${BASH_REMATCH[2]} in
+      'commits '*) range=${BASH_REMATCH[2]#commits }; range=${range%%[,)]*} ;;
+      'deferred by the auto run)'*) deferred=1 ;;
+    esac
+    um_mark close "$plan" "$n" "" auto-run:task-complete "$range" "$deferred"
+  done < <(tr -d '\r' < "$ledger")
+  return 0
 }
 
 # ar_fenced FILE PREFIX — the first fenced block after the first line that

@@ -128,7 +128,26 @@ out=$(CLAUDE_CODE_SESSION_ID=s-2 bash "$P/scripts/task-brief" docs/plan.md 1 2>/
 check "task-brief: another session keeps the task budget" "$(tail -n 1 <<<"$out")" \
   "budget: 500k of 465k (107%) — handoff — source: record"
 rm -f "$HOME/.claude/projects/$KEY/s-2.jsonl"
-bash "$P/scripts/auto-run" --session s-1 stop >/dev/null
+
+# --- task_complete_prints_auto_line: the run's line comes last ---
+usage() { printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-5-5","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' "$1" > "$T"; }
+usage 300000
+out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$P/scripts/auto-run" task-complete 2>/dev/null); status=$?
+check "task_complete_prints_auto_line: exit 0 under budget" "$status" "0"
+check "task_complete_prints_auto_line: the last line is the run's line" "$(tail -n 1 <<<"$out")" \
+  "budget (auto): 300k of 465k (64%) — ok — source: record"
+usage 500000
+out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$P/scripts/auto-run" task-complete 2>/dev/null); status=$?
+check "task_complete_prints_auto_line: exit 0 over the limit" "$status" "0"
+check "task_complete_prints_auto_line: the last line says compact" "$(tail -n 1 <<<"$out")" \
+  "budget (auto): 500k of 465k (107%) — compact — source: record"
+# A completion on the run's base branch in the execute phase stops the run.
+AUTO_STATE="$REPO/.dagents/sdd/auto-run.json"
+jq '.phase = "execute"' "$AUTO_STATE" > "$AUTO_STATE.tmp" && mv "$AUTO_STATE.tmp" "$AUTO_STATE"
+out=$(CLAUDE_CODE_SESSION_ID=s-1 bash "$P/scripts/auto-run" task-complete 2>/dev/null); status=$?
+check "task_complete_prints_auto_line: a stopped run exits 5" "$status" "5"
+check "task_complete_prints_auto_line: a stopped run prints no budget line" "$(grep -c '^budget' <<<"$out")" "0"
+bash "$P/scripts/auto-run" --session s-1 stop >/dev/null 2>&1
 
 # --- a missing task still fails the way it did ---
 bash "$P/scripts/task-brief" docs/plan.md 9 >/dev/null 2>&1; status=$?

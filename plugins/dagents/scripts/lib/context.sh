@@ -339,8 +339,16 @@ ctx_log_observation() {
   base="$(dagents_dir state "$primary")/sdd"
   mkdir -p "$base" 2>/dev/null || return 0
   dagents_self_ignore "$base"
-  sid=$(head -n 1 "${CTX_ROLLOUT:-}" 2>/dev/null | tr -d '\r' \
-    | ctx_jq -r '.payload.session_id // empty' 2>/dev/null)
+  # A Claude row carries its session (CLAUDE_CODE_SESSION_ID, else the
+  # transcript's name), so its briefs pair by session.
+  if [ "${CTX_SOURCE:-}" = rollout ]; then
+    sid=$(head -n 1 "${CTX_ROLLOUT:-}" 2>/dev/null | tr -d '\r' \
+      | ctx_jq -r '.payload.session_id // empty' 2>/dev/null)
+  elif [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    sid=$CLAUDE_CODE_SESSION_ID
+  elif [ -n "${CTX_TRANSCRIPT:-}" ]; then
+    sid=$(basename "$CTX_TRANSCRIPT" .jsonl)
+  fi
   printf '%s\t%s\t%s\t%s\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${DAGENTS_BUDGET_CALLER:-direct}" "$sid" \
     >> "$base/budget-log.tsv" 2>/dev/null || return 0
@@ -396,6 +404,7 @@ ctx_line() {
   local budget="" model="" tokens bk tk pct found=0 claude="" rollout=""
   local label=budget extra=0
   local limit=task auto=0 width=1 regime mode finishing=0
+  CTX_TOKENS=""
   mode=$(dagents_setting handoffMode strict)
   if [ "${1:-}" = final ]; then
     label="budget (final)" finishing=1
@@ -442,6 +451,7 @@ ctx_line() {
       echo "$label: unknown — unknown — no usage entry in $rollout"
       return 3
     fi
+    export CTX_TOKENS=$tokens
     ctx_log_observation "$tokens"
     tk=$(( (tokens + 500) / 1000 ))
     # No denominator: no Codex budget has been set yet, and the verdict stays
@@ -483,6 +493,8 @@ ctx_line() {
   if ! tokens=$(ctx_measure "$CTX_TRANSCRIPT"); then
     echo "$label: unknown of ${bk}k — unknown — no usage entry in $CTX_TRANSCRIPT"; return 3
   fi
+  export CTX_TOKENS=$tokens
+  ctx_log_observation "$tokens"
   if [ "$auto" = 1 ]; then
     ctx_auto_line "$tokens" "$model" "$width"
     return

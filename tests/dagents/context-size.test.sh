@@ -530,7 +530,8 @@ check "log: --header mode writes the header tag" "$(awk -F'\t' 'END {print $3}' 
 rm -rf "$CODEX_HOME"; unset CODEX_HOME
 rm -f "$LOG"
 run
-check "log: a Claude measurement writes no row" "$([ -f "$LOG" ] && echo yes || echo no)" "no"
+check "log: a Claude measurement writes a row" "$(wc -l < "$LOG" 2>/dev/null | tr -d ' ')" "1"
+check "log: a Claude row carries the transcript's session" "$(awk -F'\t' 'END {print $4}' "$LOG")" "$(basename "$(jq -r .transcript_path < "$SESS/$KEY.json")" .jsonl)"
 
 # --- reading the observations back ---
 # The growth between two briefs is one task's cost. A negative delta is a
@@ -665,6 +666,25 @@ run --final
 check "--final after the last task: the phase moves to final" "$status:$(jq -r '"\(.phase) \(.setupDue)"' "$AUTO_STATE")" "0:final false"
 (cd "$REPO" && bash "$HERE/../../plugins/dagents/scripts/auto-run" --session auto-1 stop)
 unset DAGENTS_BUDGET CLAUDE_CODE_SESSION_ID
+
+# --- observations_pair_claude_rows: Claude budget lines pair by session ---
+LOG="$REPO/.dagents/sdd/budget-log.tsv"
+OBS_T="$PROJ/s1.jsonl"
+obs_pair() { # obs_pair LABEL
+  rm -f "$LOG"
+  asst 100000 > "$OBS_T"
+  CLAUDE_CODE_SESSION_ID=s1 DAGENTS_BUDGET_CALLER=task-brief:1 run
+  asst 130000 > "$OBS_T"
+  CLAUDE_CODE_SESSION_ID=s1 DAGENTS_BUDGET_CALLER=task-brief:2 run
+  check "observations_pair_claude_rows ($1): rows carry s1" "$(awk -F'\t' '{print $4}' "$LOG" | tr '\n' ' ')" "s1 s1 "
+  run --observations
+  has "observations_pair_claude_rows ($1): the pair" "$out" "s1  Task 1 -> Task 2  +30k"
+}
+obs_pair plain
+date +%s > "$HOME/.claude/dagents/sessions/cockpit/s1"
+(cd "$REPO" && bash "$HERE/../../plugins/dagents/scripts/auto-run" --session s1 start --spec docs/s.md --register docs/r.md --force >/dev/null)
+obs_pair "auto run"
+(cd "$REPO" && bash "$HERE/../../plugins/dagents/scripts/auto-run" --session s1 stop >/dev/null)
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

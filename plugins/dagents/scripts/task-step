@@ -785,8 +785,10 @@ do_start() {
   base7=${base:0:7}
   bash "$HERE/sdd-workspace" "$plan" >/dev/null || exit 2
 
+  # Each brief's budget line writes that task's open marker.
   for n in "${ids[@]}"; do
-    out=$(bash "$HERE/task-brief" "$plan" "$n"); rc=$?
+    out=$(USAGE_MARK=open USAGE_MARK_PLAN=$plan USAGE_MARK_TASKS=$n USAGE_MARK_CALLER="task-step:$n" \
+      bash "$HERE/task-brief" "$plan" "$n"); rc=$?
     [ "$rc" -eq 0 ] || { printf '%s\n' "$out" >&2; exit "$rc"; }
     if [ "$n" = "$first" ]; then budget=$(budget_of <<<"$out"); fi
   done

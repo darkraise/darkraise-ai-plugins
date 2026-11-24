@@ -207,6 +207,9 @@ While a run is bound to this session, every budget line but
   `scripts/auto-run task-complete`, then end the turn as Ending a turn says.
   In the wave loop, lower the width while `--wave` says `compact`, as on
   `handoff`; at width 1, compact.
+  `scripts/auto-run task-complete` prints the run's line last (exit 0
+  whatever the verdict): `compact` there means ending the turn on
+  `Auto run: compacting` before the next task opens.
 - `handoff` (exit 5): the last compaction left too much behind. Finish the
   task in flight, then follow Clears.
 

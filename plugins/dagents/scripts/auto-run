@@ -5,6 +5,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/context.sh"
 . "$HERE/lib/auto-run.sh"
+. "$HERE/lib/usage-marker.sh"
 
 usage() {
   cat >&2 <<'EOF'

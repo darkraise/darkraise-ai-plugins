@@ -228,6 +228,7 @@ export const windowsSeconds = {
   'tests/dagents/ui-proof.test.sh': 195,
   'tests/dagents/ui-ux-skill.acceptance.test.sh': 362,
   'tests/dagents/ui-ux-skill.test.sh': 10,
+  'tests/dagents/usage-marker.test.sh': 40,
   'tests/dagents/wave.test.sh': 110,
   'tests/dagents/with-timeout.test.sh': 20,
   'tests/dagents/wording-pin-deletion.acceptance.test.sh': 20,

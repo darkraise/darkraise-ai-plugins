@@ -79,7 +79,9 @@ What changes here:
   prints, in place of the partial-commits clause, and its register row's note
   names the same ref. Other tasks keep running.
 - **Each task:** right after its `Task N: complete` line, run
-  `scripts/auto-run task-complete`. After each wave, or each task in
+  `scripts/auto-run task-complete`; it ends on the run's budget line, and on
+  `compact` the turn ends on `Auto run: compacting` before the next task
+  opens. After each wave, or each task in
   sequential mode, run the Fable batch when `scripts/auto-run decision list`
   prints anything. When that line leaves every task with its `complete` line
   (in subagent mode, after the last wave's merge), run

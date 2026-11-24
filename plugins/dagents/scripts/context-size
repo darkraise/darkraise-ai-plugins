@@ -22,6 +22,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/lib/context.sh"
+. "$HERE/lib/usage-marker.sh"
 
 if [ "${1:-}" = --observations ]; then
   shift
@@ -44,6 +45,8 @@ fi
 
 ctx_line "${mode[@]}"
 status=$?
+# A task marker a caller asked for (USAGE_MARK, scripts/lib/usage-marker.sh).
+um_mark_request "${CTX_TOKENS:-}"
 if [ "${CTX_SOURCE:-}" = guessed ]; then
   echo "context-size: no usable session record; measured the newest transcript for this directory — a guess" >&2
 fi
