@@ -393,6 +393,28 @@ another live session holds stops the run the same way: `scripts/handoff claim`
 "handoff <key> is held by <id8>"` themselves, so report the holder and ask. The cockpit
 sends one Discord `blocked` notice when a run stops with a reason.
 
+## Resuming
+
+`scripts/auto-run resume` reactivates a stopped run and binds it to the
+calling session, which needs a live cockpit, as `start` does. It keeps the
+phase, base branch, plan, register, isolation, branch and run totals, sets the
+stall, resume, failure and API-error counts and `compactionsSinceTask` to 0,
+clears the pending stage, and moves the stop to `stopHistory`
+(`{reason, at, resumedAt}`). It records the resuming plugin's version and root
+and prints the status line.
+
+It refuses with exit 4, naming why, when:
+
+- the run is active, or it finished (stopped with no reason);
+- the stop was a workspace guard or a carried path (`stoppedKind` `guard` or
+  `carried`; for an older run, the reason `task-complete` wrote);
+- a carried path was committed since the run's branch began, in any phase;
+- in the execute phase once Setup is done, or in the final phase, a task step
+  here would trip the guard (resume from the run's workspace), or the work is
+  gone: an in-place run's branch, or a worktree run's plan worktree.
+
+Exit 2 means this session has no live cockpit.
+
 ## Finishing
 
 Finishing runs in a session of its own. At the entry of

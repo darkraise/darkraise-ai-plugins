@@ -28,6 +28,7 @@ esac
 usage() {
   cat >&2 <<'EOF'
 usage: auto-run [--session ID] start --spec P [--register R] [--isolation worktree|in-place] [--force]
+       auto-run [--session ID] resume
        auto-run [--session ID] status | pending | task-complete | resumed | switch | stalled | carried
        auto-run [--session ID] setup-branch NAME
        auto-run [--session ID] compacted
@@ -108,6 +109,11 @@ case $cmd in
     esac
     [ -n "$AR_SESSION" ] || { echo "auto-run: no session id; CLAUDE_CODE_SESSION_ID is unset and no --session was given" >&2; exit 2; }
     ar_start "$spec" "$register" "$force" "$isolation"
+    ;;
+  resume)
+    [ $# -eq 0 ] || usage
+    [ -n "$AR_SESSION" ] || { echo "auto-run: no session id; CLAUDE_CODE_SESSION_ID is unset and no --session was given" >&2; exit 2; }
+    ar_resume
     ;;
   status) [ $# -eq 0 ] || usage; bound; ar_status && api_rungs ;;
   pending) [ $# -eq 0 ] || usage; bound; ar_pending ;;

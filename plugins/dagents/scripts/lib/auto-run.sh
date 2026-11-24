@@ -171,8 +171,9 @@ ar_start() {
     phase: "spec", regime: "normal", pending: null, resumePrompt: null, launch: null,
     failures: 0, compactions: 0, resumes: 0, decisions: [], rulings: [],
     setupDue: false, stalls: 0, stalledAt: null, compactionsSinceTask: 0,
-    isolation: $iso, branch: null, branchBase: null, carried: null
-  }' || return $?
+    isolation: $iso, branch: null, branchBase: null, carried: null,
+    version: $version, root: $root
+  }' --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT" || return $?
   # A register opened at the spec review before the spec existed may still
   # cover nothing, and next-step finds a register only through its Covers.
   [ -z "$regfile" ] && [ -n "$register" ] && regfile=$(dagents_resolve "$register" "$top")
@@ -185,6 +186,80 @@ ar_start() {
       }
   fi
   printf '%s\n' "$register"
+}
+
+# The plugin this library belongs to, as a run records the plugin it ran on.
+AR_PLUGIN_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+ar_plugin_version() { ar_jq -r '.version // empty' < "$AR_PLUGIN_ROOT/.claude-plugin/plugin.json"; }
+
+# ar_resume — reactivate the stopped run for AR_SESSION (reference/auto-run.md
+# §Resuming). Return 2 without a live cockpit, 4 with the reason on stderr
+# when the run cannot resume.
+ar_resume() {
+  local path age
+  path=$(ar_path) || { echo "auto-run: not inside a git repository" >&2; return 2; }
+  age=$(ar_beat_age "$AR_SESSION") && [ "$age" -le "$AR_BEAT_SECONDS" ] \
+    || { echo "auto-run: no live cockpit in this session" >&2; return 2; }
+  [ -f "$path" ] || { echo "auto-run: there is no auto run to resume" >&2; return 4; }
+  dr_locked "$path" _ar_resume_locked "$path" || return $?
+  ar_status
+}
+
+_ar_resume_locked() {
+  local path=$1 stopped kind phase setup hit rc branch plan found
+  ar_jq -e '.active == true' < "$path" >/dev/null 2>&1 \
+    && { echo "auto-run: the run is active, not stopped" >&2; return 4; }
+  stopped=$(ar_get stopped)
+  [ -n "$stopped" ] || { echo "auto-run: the run finished; there is nothing to resume" >&2; return 4; }
+  kind=$(ar_get stoppedKind)
+  # A run stopped before stoppedKind existed is known by the reasons
+  # ar_task_complete writes.
+  if [ -z "$kind" ]; then
+    case $stopped in
+      "a task was completed "*) kind=guard ;;
+      "carried path "*" was committed" | "git could not check the carried paths") kind=carried ;;
+    esac
+  fi
+  case $kind in
+    guard) echo "auto-run: the run stopped on a workspace guard ($stopped) and cannot resume" >&2; return 4 ;;
+    carried) echo "auto-run: the run stopped on a carried path ($stopped) and cannot resume" >&2; return 4 ;;
+  esac
+  hit=$(ar_carried_hit)
+  rc=$?
+  case $rc in
+    0) echo "auto-run: carried path $hit was committed; the run cannot resume" >&2; return 4 ;;
+    2) echo "auto-run: git could not check the carried paths; the run cannot resume" >&2; return 4 ;;
+  esac
+  phase=$(ar_get phase)
+  setup=$(ar_get setupDue)
+  if { [ "$phase" = execute ] && [ "$setup" != true ]; } || [ "$phase" = final ]; then
+    if ar_guard; then
+      case $AR_GUARD_RULE in
+        1) echo "auto-run: HEAD is the run's base branch; resume from the run's workspace" >&2 ;;
+        2) echo "auto-run: HEAD is off the run's branch $(ar_get branch); resume on it" >&2 ;;
+        *) echo "auto-run: this is the primary checkout of a worktree run; resume from its worktree" >&2 ;;
+      esac
+      return 4
+    fi
+    if [ "$(ar_get isolation)" = in-place ]; then
+      branch=$(ar_get branch)
+      git show-ref --verify --quiet "refs/heads/$branch" \
+        || { echo "auto-run: the run's branch $branch is gone" >&2; return 4; }
+    else
+      plan=$(ar_get plan)
+      found=""
+      [ -z "$plan" ] || found=$(plan_ledger_any "$(git rev-parse --show-toplevel)" "$plan")
+      [ -n "$found" ] && [ -d "${found#*$'\t'}" ] \
+        || { echo "auto-run: the plan's worktree is gone (plan ${plan:-none})" >&2; return 4; }
+    fi
+  fi
+  ar_put "$path" '.active = true | .session = $s | .rebind = false
+    | .stopHistory = ((.stopHistory // []) + [{reason: .stopped, at: (.stoppedAt // null), resumedAt: $now}])
+    | .stopped = null | .stoppedAt = null | .stoppedKind = null
+    | .stalls = 0 | .resumes = 0 | .failures = 0 | .apiErrors = 0 | .compactionsSinceTask = 0
+    | .stalledAt = null | .pending = null | .resumePrompt = null | .launch = null
+    | .version = $version | .root = $root' \
+    --arg s "$AR_SESSION" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg version "$(ar_plugin_version)" --arg root "$AR_PLUGIN_ROOT"
 }
 
 ar_status() {
@@ -294,8 +369,10 @@ ar_carried_hit() {
   return 1
 }
 
-ar_stop() { # ar_stop [REASON]
-  ar_update '.active = false | .stopped = (if $r == "" then null else $r end) | .pending = null' --arg r "${1:-}"
+ar_stop() { # ar_stop [REASON [KIND]] — KIND guard or carried marks a stop resume refuses
+  ar_update '.active = false | .stopped = (if $r == "" then null else $r end) | .pending = null
+    | .stoppedAt = $now | .stoppedKind = (if $k == "" then null else $k end)' \
+    --arg r "${1:-}" --arg k "${2:-}" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 
 # ar_stop_stale — stop, from any session, an active run whose owner is gone
@@ -380,15 +457,17 @@ ar_enter_final() {
 # is the user's change: the run stops (return 5) rather than finish there. The
 # spec and plan phases belong in the primary checkout.
 ar_task_complete() {
-  local phase reason="" hit rc
+  local phase reason="" kind hit rc
   phase=$(ar_get phase)
   if { [ "$phase" = execute ] || [ "$phase" = final ]; } && ar_guard; then
+    kind=guard
     case $AR_GUARD_RULE in
       1) reason="a task was completed on the run's base branch" ;;
       2) reason="a task was completed off the run's branch" ;;
       *) reason="a task was completed in the primary checkout" ;;
     esac
   else
+    kind=carried
     hit=$(ar_carried_hit)
     rc=$?
     if [ "$rc" = 0 ]; then
@@ -398,7 +477,7 @@ ar_task_complete() {
     fi
   fi
   if [ -n "$reason" ]; then
-    ar_stop "$reason" || return $?
+    ar_stop "$reason" "$kind" || return $?
     echo "auto-run: $reason; the run has stopped. End as reference/auto-run.md §Stopping says." >&2
     return 5
   fi

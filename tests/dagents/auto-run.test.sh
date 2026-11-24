@@ -887,5 +887,93 @@ out=$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=$SA AR_SESSION=$SA bash "$HERE/../../
 check "A21: next-step on a live-held key exits 7" "$status" "7"
 check "A21: and stops the run with the key and holder" "$(field active):$(field stopped)" "false:handoff adhoc-abcdef01 is held by fedcba98"
 
+# --- resume: each case in its own repository on branch b, based on main ---
+PROOT="$(cd "$HERE/../../plugins/dagents" && pwd)"
+PVERSION=$(jq -r .version "$PROOT/.claude-plugin/plugin.json")
+rs_repo() { # rs_repo DIR
+  git init -q -b main "$1"
+  git -C "$1" commit -q --allow-empty -m init
+  git -C "$1" switch -q -c b
+  mkdir -p "$1/.dagents/sdd"
+}
+rs_state() { # rs_state DIR FILTER — a run of session s1, changed by FILTER
+  jq -n --arg spec "$SPEC" '{active: true, session: "s1", rebind: true, stopped: null, startedAt: "2026-01-01T00:00:00Z",
+    spec: $spec, plan: "docs/p.md", register: "docs/r.md", base: "main", phase: "execute", regime: "normal",
+    pending: "compact", resumePrompt: "p", launch: {at: 1}, failures: 1, compactions: 7, resumes: 2, decisions: [],
+    rulings: [], setupDue: false, stalls: 3, stalledAt: "2026-01-01T00:00:00Z", compactionsSinceTask: 2, apiErrors: 4,
+    isolation: "in-place", branch: "b", branchBase: null, carried: null} | '"$2" > "$1/.dagents/sdd/auto-run.json"
+}
+rs() { local d=$1; shift; beat "$2"; (cd "$d" && bash "$AR" "$@"); }
+rs_resume() { # rs_resume DIR — resume from s2 with a live beat; sets status, out and err
+  beat s2
+  out=$(cd "$1" && bash "$AR" --session s2 resume 2>"$TMP/err"); status=$?
+}
+reason() { [ -s "$TMP/err" ] && echo said || echo silent; }
+
+# --- resume_reactivates ---
+D="$TMP/rs1"; rs_repo "$D"; rs_state "$D" .
+rs "$D" --session s1 stop --reason x >/dev/null 2>&1
+rs_resume "$D"
+check "resume_reactivates: exit 0" "$status" "0"
+check "resume_reactivates: prints the status line" "$(grep -c '^auto run: execute — ' <<<"$out")" "1"
+check "resume_reactivates: the run is kept and bound to s2" \
+  "$(jq -c '[.active, .session, .phase, .base, .plan, .register, .isolation, .compactions, .branch]' "$D/.dagents/sdd/auto-run.json")" \
+  '[true,"s2","execute","main","docs/p.md","docs/r.md","in-place",7,"b"]'
+check "resume_reactivates: the cap counters reset" \
+  "$(jq -c '[.stalls, .resumes, .failures, .apiErrors, .compactionsSinceTask, .stalledAt, .pending, .resumePrompt, .launch, .rebind, .stopped]' "$D/.dagents/sdd/auto-run.json")" \
+  '[0,0,0,0,0,null,null,null,null,false,null]'
+check "resume_reactivates: the stop moves to stopHistory" \
+  "$(jq -c '[(.stopHistory | length), .stopHistory[0].reason, (.stopHistory[0].at | type), (.stopHistory[0].resumedAt | type)]' "$D/.dagents/sdd/auto-run.json")" \
+  '[1,"x","string","string"]'
+check "resume_reactivates: the calling plugin's version and root" \
+  "$(jq -r '"\(.version) \(.root)"' "$D/.dagents/sdd/auto-run.json")" "$PVERSION $PROOT"
+
+# --- resume_refusals ---
+D="$TMP/rs2"; rs_repo "$D"; rs_state "$D" .
+rs_resume "$D"
+check "resume_refusals: an active run: exit 4 with the reason" "$status:$(reason)" "4:said"
+rs_state "$D" '.active = false'
+rs_resume "$D"
+check "resume_refusals: a finished run: exit 4 with the reason" "$status:$(reason)" "4:said"
+rs_state "$D" .
+git -C "$D" switch -q main
+rs "$D" --session s1 task-complete >/dev/null 2>&1
+check "resume_refusals: a task completed on the base records a guard stop" "$(jq -r .stoppedKind "$D/.dagents/sdd/auto-run.json")" "guard"
+git -C "$D" switch -q b
+rs_resume "$D"
+check "resume_refusals: a guard stop: exit 4 with the reason" "$status:$(reason)" "4:said"
+rs_state "$D" '.active = false | .stopped = "a task was completed on the run'"'"'s base branch"'
+rs_resume "$D"
+check "resume_refusals: an older guard stop, by its reason: exit 4" "$status:$(reason)" "4:said"
+rs_state "$D" '.active = false | .stopped = "x" | .branch = "gone"'
+rs_resume "$D"
+check "resume_refusals: the run's branch is gone: exit 4 with the reason" "$status:$(reason)" "4:said"
+rs_state "$D" '.active = false | .stopped = "carried path c was committed" | .stoppedKind = "carried"'
+rs_resume "$D"
+check "resume_refusals: a carried stop: exit 4 with the reason" "$status:$(reason)" "4:said"
+rs_state "$D" '.active = false | .stopped = "x" | .phase = "plan" | .carried = ["c.txt"]'
+jq --arg bb "$(git -C "$D" rev-parse HEAD)" '.branchBase = $bb' "$D/.dagents/sdd/auto-run.json" > "$TMP/st" && mv "$TMP/st" "$D/.dagents/sdd/auto-run.json"
+printf 'c\n' > "$D/c.txt"; git -C "$D" add c.txt; git -C "$D" commit -q -m c
+rs_resume "$D"
+check "resume_refusals: a carried path committed since the stop: exit 4 with the reason" "$status:$(reason)" "4:said"
+D="$TMP/rs3"; rs_repo "$D"; git -C "$D" switch -q main
+git -C "$D" worktree add -q "$TMP/rs3-wt" -b w
+rs_state "$D" '.active = false | .stopped = "x" | .isolation = "worktree" | .branch = null'
+git -C "$D" worktree remove --force "$TMP/rs3-wt"
+rs_resume "$D"
+check "resume_refusals: a worktree run whose worktree is gone: exit 4 with the reason" "$status:$(reason)" "4:said"
+(cd "$D" && bash "$AR" --session s9 resume) >/dev/null 2>&1; status=$?
+check "resume_refusals: no live beat: exit 2" "$status" "2"
+
+# --- resume_early_phase ---
+D="$TMP/rs4"; rs_repo "$D"; git -C "$D" switch -q main
+rs_state "$D" '.active = false | .stopped = "x" | .isolation = "worktree" | .branch = null | .phase = "plan" | .plan = null'
+rs_resume "$D"
+check "resume_early_phase: a worktree run stopped in the plan phase resumes from the primary" "$status" "0"
+D="$TMP/rs5"; rs_repo "$D"
+rs_state "$D" '.active = false | .stopped = "x" | .phase = "spec" | .plan = null | .branch = "gone"'
+rs_resume "$D"
+check "resume_early_phase: an in-place run stopped in the spec phase resumes without its branch" "$status" "0"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
