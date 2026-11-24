@@ -3517,12 +3517,6 @@ async function markPartial($: EngineInterface) {
   await writeSessionState($)
 }
 
-// Each WATCHDOG_MS: the heartbeat, then a wake-up for a bound run nothing
-// else will carry on. A turn that ended on an error, or without its sentinel
-// and unheld, arms no stage, and a pending stage can lose its timer. Never
-// while a turn, background work, a stage or an Esc holds the session, and
-// never within STALL_MS of the latest of this session's start, its last
-// turn's end, the last stage and the last nudge.
 // A main turn of the bound run that ended on an API error (the transcript's last
 // model record says isApiErrorMessage) is booked apart from stalls, and the
 // session is prompted again from a timer, never inside the turn's hook. The
@@ -3538,8 +3532,16 @@ async function bookApiError($: EngineInterface) {
   S.apiErrorTimer = $.clock.after(code === 5 ? 0 : API_ERROR_RETRY_MS, () => {
     S.apiErrorTimer = null
     if (code === 5) void endStoppedRun($).catch(() => undefined)
-    else if (!S.isTurnLive) void $.prompt.submit({ text: apiErrorPrompt($.plugin.root), asUser: true }).catch(() => undefined)
+    else void retryAfterApiError($).catch(() => undefined)
   })
+}
+
+// The run can stop, or a turn start, while the retry waits.
+async function retryAfterApiError($: EngineInterface) {
+  if (S.isTurnLive) return
+  const auto = await readAutoRun($)
+  if (auto === null || !auto.active || S.isTurnLive) return
+  await $.prompt.submit({ text: apiErrorPrompt($.plugin.root), asUser: true }).catch(() => undefined)
 }
 
 // Whether the session transcript's last model record is an API error; only
@@ -3571,6 +3573,12 @@ async function endedOnApiError($: EngineInterface): Promise<boolean> {
   return false
 }
 
+// Each WATCHDOG_MS: the heartbeat, then a wake-up for a bound run nothing
+// else will carry on. A turn that ended on an error, or without its sentinel
+// and unheld, arms no stage, and a pending stage can lose its timer. Never
+// while a turn, background work, a stage or an Esc holds the session, and
+// never within STALL_MS of the latest of this session's start, its last
+// turn's end, the last stage and the last nudge.
 async function watchdogTick($: EngineInterface) {
   await beat($)
   if (S.heldDone !== null && !S.isMainTurn && (await $.clock.now()) - S.heldDone.heldAt > DEFER_CAP_MS) {
@@ -3737,6 +3745,8 @@ async function stopStaleRun($: EngineInterface) {
 }
 
 async function stopAutoRun($: EngineInterface) {
+  S.apiErrorTimer?.cancel()
+  S.apiErrorTimer = null
   await autoRunCall($, await $.session.id(), ['stop', '--reason', 'owner pressed Stop auto'])
   await trackAutoRun($)
   // The resume offer is not recomputed during a run: recompute it now.
