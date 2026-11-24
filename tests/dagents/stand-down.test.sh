@@ -55,5 +55,12 @@ check "node missing: no guard output on stderr" "$(printf '%s' "$no_node_err" | 
 check "node missing: the session start prints what it prints with node and no conflict" "$no_node_out" "$with_node"
 check "node missing: the session start still injects the entry point" "$(printf '%s' "$no_node_out" | grep -c 'using-dagents')" "1"
 
+# A hung dagents-migrate --legacy-handoffs holds the session start only to its bound.
+cp -R "$ROOT" "$TMP/hung-migrate"
+printf '#!/usr/bin/env bash\nexec sleep 60\n' > "$TMP/hung-migrate/scripts/dagents-migrate"
+started=$SECONDS
+out=$(event startup SessionStart | (cd "$TMP/project" && CLAUDE_PLUGIN_ROOT="$TMP/hung-migrate" bash "$TMP/hung-migrate/scripts/session-start.sh" 2>/dev/null))
+check "a hung migrate: the entry skill is still injected" "$(printf '%s' "$out" | grep -c 'using-dagents')" "1"
+check "a hung migrate: session start ends within its bound" "$(( SECONDS - started < 25 ))" "1"
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

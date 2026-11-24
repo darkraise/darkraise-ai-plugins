@@ -161,7 +161,7 @@ if [ -n "$roadmap_root" ]; then
   while IFS=$'\t' read -r lh_path lh_subject; do
     [ -n "$lh_path" ] || continue
     legacy_line="${legacy_line:+$legacy_line$'\n'}dforge: $lh_path is a handoff in an older layout (subject $lh_subject); run the dforge:migrate skill (/dforge:migrate)"
-  done < <(cd "$roadmap_root" && bash "$SCRIPT_DIR/dforge-migrate" --legacy-handoffs 2>/dev/null | tr -d '\001-\010\013-\037')
+  done < <(cd "$roadmap_root" && bash "${SCRIPT_DIR}/with-timeout" 10 bash "$SCRIPT_DIR/dforge-migrate" --legacy-handoffs 2>/dev/null </dev/null | tr -d '\001-\010\013-\037')
   [ -z "$legacy_line" ] || context="${context}\n\n$(escape_for_json "$legacy_line")"
 fi
 
