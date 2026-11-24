@@ -402,9 +402,14 @@ seat() { # seat MODE — one task review from the work tree as session cr1
   printf '0' > "$CR/calls"
   mkdir -p "$DAGENTS_CODEX_SESSION_DIR"
   printf '{"session_id":"cr1","usable":true,"review":true,"lane":true,"reason":"ok","plugin_version":"1.0.3"}\n' > "$DAGENTS_CODEX_SESSION_DIR/cr1.json"
-  PATH="$CR/bin:$PATH" CODEX_REVIEW_GATE="$CR/gate" CODEX_REVIEW_LADDER="$CR/ladder.md" CLAUDE_CONFIG_DIR="$CR/config" CLAUDE_PROJECT_DIR= \
+  # As codex-review.test.sh runs the runner on Windows: Git Bash converting
+  # paths for native programs, and a PATH entry in its own spelling (a C: in
+  # PATH splits at the colon).
+  local bin=$CR/bin
+  command -v cygpath >/dev/null 2>&1 && bin=$(cygpath -u "$bin")
+  env -u MSYS_NO_PATHCONV PATH="$bin:$PATH" CODEX_REVIEW_GATE="$CR/gate" CODEX_REVIEW_LADDER="$CR/ladder.md" CLAUDE_CONFIG_DIR="$CR/config" CLAUDE_PROJECT_DIR= \
     DAGENTS_CODEX_POLICY="$CR/policy.json" CLAUDE_CODE_SESSION_ID=cr1 STUB_MODE="$1" STUB_CALL_FILE="$CR/calls" \
-    bash "$P/scripts/run-codex-review.sh" --kind task --cwd "$CR/work" --out "$CR/o.json" --prompt "$CR/p.txt" 2>/dev/null
+    bash "$P/scripts/run-codex-review.sh" --kind task --cwd "$CR/work" --out "$CR/o.json" --prompt "$CR/p.txt" 2>"$CR/err"
 }
 ncalls() { cat "$CR/calls" 2>/dev/null || echo 0; }
 mkdir -p "$(dirname "$RUNSTATE")"
@@ -412,6 +417,7 @@ jq -n '{active: true, session: "cr1", phase: "execute", decisions: [], rulings: 
 seat quota >/dev/null
 check "A14: a quota failure in an auto run is recorded under reviewSkips for the codex family, for 5 hours" \
   "$(jq -c '[.reviewSkips[0].family, (.reviewSkips[0].until - .reviewSkips[0].failedAt)]' "$RUNSTATE")" '["codex",18000]'
+[ "$fail" -eq "$G4" ] || sed 's/^/# A14 seat stderr: /' "$CR/err"
 out=$(seat ok)
 check "A14: inside the window the family is skipped as quota-skip and nothing launches" "$(grep -c 'status=SKIPPED .* reason=quota-skip' <<<"$out"):$(ncalls)" "1:0"
 jq '.reviewSkips[0].until = 1' "$RUNSTATE" > "$RUNSTATE.tmp" && mv "$RUNSTATE.tmp" "$RUNSTATE"
