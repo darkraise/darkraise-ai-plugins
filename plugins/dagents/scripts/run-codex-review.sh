@@ -20,6 +20,7 @@ PLAN_SCHEMA="$HERE/../criteria/codex-plan-review-schema.json"
 GATE="${CODEX_REVIEW_GATE:-$HERE/codex-gate}"
 . "$HERE/lib/executor-session.sh"
 . "$HERE/lib/timeout.sh"
+. "$HERE/lib/native-path.sh"
 
 die() { printf 'run-codex-review: %s\n' "$1" >&2; exit 2; }
 
@@ -202,7 +203,7 @@ run_seat() { # run_seat <model> <effort> <seconds> <log-prefix>; echoes the resu
       schemaPath:(if $schema == "" then null else $schema end),
       sandbox:"read-only", resumeThreadId:null, persistThread:false,
       threadName:null, deadlineMs:$deadline}')
-  printf '%s' "$request" | "$DAGENTS_TIMEOUT" $(( $3 + 60 )) node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$4.stderr"
+  printf '%s' "$request" | "$DAGENTS_TIMEOUT" $(( $3 + 60 )) node "$(dr_native_path "$HERE/lib/codex-client.mjs")" "$plugin_root" 2>"$4.stderr"
 }
 
 # --kind final ships no --prompt of its own: the round is defined by the branch.

@@ -16,6 +16,7 @@ source "$HERE/lib/task-state.sh"
 source "$HERE/lib/task-execution.sh"
 source "$HERE/lib/executor-session.sh"
 source "$HERE/lib/timeout.sh"
+source "$HERE/lib/native-path.sh"
 
 VALID_EFFORTS="low medium high xhigh"
 
@@ -254,7 +255,7 @@ plugin_root=${plugin_line#*root=}
 
 dr_task_update '.phase = "running" | .processes = []' || die 'cannot persist running phase'
 
-result=$(build_request | "$DAGENTS_TIMEOUT" $((timeout_s + 60)) node "$HERE/lib/codex-client.mjs" "$plugin_root" 2>"$report.stderr")
+result=$(build_request | "$DAGENTS_TIMEOUT" $((timeout_s + 60)) node "$(dr_native_path "$HERE/lib/codex-client.mjs")" "$plugin_root" 2>"$report.stderr")
 client_rc=$?
 # A node that died before printing leaves $result empty, and every jq below would
 # then fail and take the runner with it. One guard here covers all of them. It
