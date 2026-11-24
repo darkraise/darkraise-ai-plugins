@@ -173,5 +173,137 @@ cd "$HERE"
 check "A4 (task-close, marker path a directory): same exit code" "$s_c" "$s_c2"
 check "A4 (task-close, marker path a directory): same stdout apart from the paths" "${o_c//$RC/R}" "${o_c2//$RC2/R}"
 
+# --- transcript and marker fixture builders (the report's inputs are plain files) ---
+tsx() { printf '2026-01-01T%02d:%02d:%02dZ' "$(( $1 / 3600 ))" "$(( ($1 / 60) % 60 ))" "$(( $1 % 60 ))"; }
+rec_user() { # rec_user FILE SECONDS [TEXT] — a user record
+  jq -nc --arg t "$(tsx "$2")" --arg x "${3:-go}" '{type:"user",isSidechain:false,timestamp:$t,message:{role:"user",content:$x}}' >> "$1"
+}
+rec_asst() { # rec_asst FILE SECONDS ID MODEL IN CR C5 C1 OUT [CONTENT_JSON [SIDECHAIN]]
+  jq -nc --arg t "$(tsx "$2")" --arg id "$3" --arg m "$4" --argjson i "$5" --argjson cr "$6" --argjson c5 "$7" --argjson c1 "$8" \
+    --argjson o "$9" --argjson content "${10:-[]}" --argjson side "${11:-false}" \
+    '{type:"assistant",isSidechain:$side,timestamp:$t,message:{id:$id,model:$m,role:"assistant",content:$content,
+      usage:{input_tokens:$i,cache_read_input_tokens:$cr,cache_creation_input_tokens:($c5+$c1),cache_creation:{ephemeral_5m_input_tokens:$c5,ephemeral_1h_input_tokens:$c1},output_tokens:$o}}}' >> "$1"
+}
+rec_compact() { # rec_compact FILE SECONDS PRE POST DURATION_MS
+  jq -nc --arg t "$(tsx "$2")" --argjson pre "$3" --argjson post "$4" --argjson d "$5" \
+    '{type:"system",subtype:"compact_boundary",isSidechain:false,content:"Conversation compacted",timestamp:$t,compactMetadata:{trigger:"auto",preTokens:$pre,postTokens:$post,durationMs:$d}}' >> "$1"
+}
+tool_bash() { jq -nc --arg id "$1" --arg c "$2" '{type:"tool_use",id:$id,name:"Bash",input:{command:$c}}'; }
+tool_agent() { jq -nc --arg id "$1" --arg t "$2" '{type:"tool_use",id:$id,name:"Agent",input:{subagent_type:$t,description:"d",prompt:"p"}}'; }
+tool_read() { jq -nc --arg id "$1" --arg f "$2" '{type:"tool_use",id:$id,name:"Read",input:{file_path:$f}}'; }
+rec_result() { # rec_result FILE SECONDS TOOL_USE_ID CHARS — a tool result of CHARS characters
+  jq -nc --arg t "$(tsx "$2")" --arg id "$3" --arg x "$(head -c "$4" < /dev/zero | tr '\0' 'x')" \
+    '{type:"user",isSidechain:false,timestamp:$t,message:{role:"user",content:[{type:"tool_result",tool_use_id:$id,content:$x}]}}' >> "$1"
+}
+sz() { wc -c < "$1" | tr -d ' '; }
+mrow() { # mrow FILE SECONDS EVENT PLAN N SID TRANSCRIPT SIZE CTX CALLER [RANGE [DEFERRED]]
+  printf '%s\t%s\tdforge\t%s\t/plugin\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$(tsx "$2")" "$3" "$VERSION" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11:-}" "${12:-}" >> "$1"
+}
+
+# --- A5, A22, A25, A29: one transcript, one marked task, every field a literal ---
+RP="$TMP/rp"; newrepo "$RP"
+cat > "$RP/docs/plans/rp.md" <<'EOF'
+# Report fixture
+
+**Goal:** Report.
+
+## Global Constraints
+
+- None.
+
+### Task 1: one
+
+**Files:** `src/a.sh`, `src/b.sh`
+
+Body.
+
+### Task 2: two
+
+Body.
+EOF
+git -C "$RP" add docs; git -C "$RP" commit -q -m rp
+PROJ="$HOME/.claude/projects/-rp"; mkdir -p "$PROJ"
+TR="$PROJ/sr.jsonl"; : > "$TR"
+MK="$RP/.dforge/sdd/usage-markers.tsv"; mkdir -p "$(dirname "$MK")"; : > "$MK"
+rec_user "$TR" 0 "before the task"
+rec_asst "$TR" 5 pre claude-opus-5-5 1 1111 0 0 1 '[]'
+mrow "$MK" 10 open docs/plans/rp.md 1 sr "$TR" "$(sz "$TR")" 40000 task-brief:1
+rec_user "$TR" 11
+rec_asst "$TR" 20 m1 claude-opus-5-5 11 20001 1301 0 7 "[$(tool_bash b1 'grep -n foo src/a.sh'), $(tool_read r1 "$RP/src/a.sh")]"
+rec_asst "$TR" 21 m1 claude-opus-5-5 11 20001 1301 0 41 "[$(tool_bash b1 'grep -n foo src/a.sh'), $(tool_read r1 "$RP/src/a.sh")]"
+rec_result "$TR" 22 r1 4000
+rec_asst "$TR" 30 m2 claude-opus-5-5 13 30003 0 1707 29 "[$(tool_read r2 "$RP/src/a.sh"), $(tool_bash b2 'sed -n 1,20p src/b.sh'), $(tool_bash b3 'rg -n bar src/zzz.sh'), $(tool_bash b4 'git status')]"
+rec_result "$TR" 31 r2 4000
+rec_compact "$TR" 35 61000 5200 123000
+rec_asst "$TR" 40 m3 claude-opus-5-5 17 9011 0 2309 31 "[$(tool_bash b5 'bash scripts/run-codex-task.sh p.md 1'), $(tool_bash b5b 'bash scripts/run-codex-task.sh p.md 1 --retry'), $(tool_bash b5c 'bash scripts/run-agy-task.sh p.md 1'), $(tool_bash b5d 'bash scripts/run-codex-review.sh r.md'), $(tool_bash b5e 'bash scripts/run-agy-review.sh r.md'), $(tool_bash b5f 'bash scripts/run-review-panel r.md'), $(tool_bash b7 'bash scripts/run-api-judge x'), $(tool_agent a1 dforge:impl-sonnet-high), $(tool_bash b6 'bash scripts/task-step rereview p.md 1')]"
+mrow "$MK" 50 close docs/plans/rp.md 1 sr "$TR" "$(sz "$TR")" 61234 task-close:1 abc1234..def5678
+rec_asst "$TR" 55 post claude-opus-5-5 2 2222 0 0 3 '[]'
+SUB="$PROJ/sr/subagents"; mkdir -p "$SUB"
+rec_asst "$SUB/agent-a1.jsonl" 25 sa1 claude-sonnet-5-5 100 0 0 0 50 '[]' true
+printf '{"agentType":"dforge:judge-opus"}' > "$SUB/agent-a1.meta.json"
+rec_asst "$SUB/agent-a1.jsonl" 26 sa1 claude-sonnet-5-5 100 0 0 0 50 '[]' true
+
+
+J=$(cd "$RP" && bash "$REPORT" --format json 2>"$TMP/a5.err")
+T='.plans[0].tasks[0]'
+# vals EXPR — every scalar under EXPR, one JSON array; key REGEX — the first value whose key matches
+vals() { jq -c "[$2 | .. | scalars]" <<<"$1" 2>/dev/null; }
+has_val() { jq -e --argjson v "$3" "[$2 | .. | scalars] | any(. == \$v)" <<<"$1" >/dev/null 2>&1 && echo yes || echo no; }
+key() { jq -c --arg r "$3" "[$2 | to_entries[] | select(.key | test(\$r; \"i\")) | .value][0]" <<<"$1" 2>/dev/null; }
+near() { jq -e --argjson v "$3" "[$2 | .. | numbers] | any((. - \$v) | fabs < 0.0000015)" <<<"$1" >/dev/null 2>&1 && echo yes || echo no; }
+
+# --- A5 ---
+check "A5: one closed task is reported" "$(jq -c '.plans[0].tasks | length' <<<"$J")" "1"
+check "A5: turns (a repeated message id counts once)" "$(key "$J" "$T" '^turns$')" "3"
+check "A5: input tokens" "$(has_val "$J" "$T" 41)" "yes"
+check "A5: cache read" "$(has_val "$J" "$T" 59015)" "yes"
+check "A5: cache write, 5 minute" "$(has_val "$J" "$T" 1301)" "yes"
+check "A5: cache write, 1 hour" "$(has_val "$J" "$T" 4016)" "yes"
+check "A5: output tokens (the repeated id keeps its maximum, 41, not 7 or 48)" "$(has_val "$J" "$T" 101)" "yes"
+check "A5: output is never the double-counted 108" "$(has_val "$J" "$T" 108)" "no"
+check "A5: model" "$(vals "$J" "$T" | jq -c 'index("claude-opus-5-5") != null')" "true"
+check "A5: lookups (grep, two Reads, sed -n, rg; git status is not one)" "$(key "$J" "$T" '^lookups$')" "5"
+READ_TOK=$(key "$J" "$T" 'read.?tokens')
+check "A5: Read tokens, for two 4000-character results, between 1000 and 4000"   "$([ "${READ_TOK:-0}" -ge 1000 ] 2>/dev/null && [ "${READ_TOK:-0}" -le 4000 ] && echo yes || echo "no: $READ_TOK")" "yes"
+check "A5: repeat whole-file reads" "$(key "$J" "$T" 'repeat')" "1"
+check "A5: a compaction with its seconds (123000 ms or 123 s)"   "$(jq -e "[$T | .compactions[]? | .. | scalars] | (any(. == 123000) or any(. == 123))" <<<"$J" >/dev/null 2>&1 && echo yes || echo no)" "yes"
+check "A5: context at open and at close" "$(has_val "$J" "$T" 40000)/$(has_val "$J" "$T" 61234)" "yes/yes"
+SUBJ=$(jq -c "$T | [.. | objects | select(has(\"dforge:judge-opus\"))][0][\"dforge:judge-opus\"]" <<<"$J" 2>/dev/null)
+check "A5: subagent usage by agent type, a repeated id once (100 in, 50 out)"   "$(jq -c '[.. | scalars] | [any(. == 100), any(. == 50), any(. == 200), any(. == 100) and (map(select(. == 100)) | length == 1)]' <<<"$SUBJ" 2>/dev/null)" "[true,true,false,true]"
+check "A5: subagent cost at the Sonnet 5.5 rate (700 micro-dollars)" "$(near "$SUBJ" '.' 0.0007)" "yes"
+# Task cost: the main-chain tokens at Opus 5.5 rates from the prices file, plus the subagent's.
+EXPECT=$(jq -n --slurpfile p "$P/reference/api-prices.json" '$p[0].models["claude-opus-5-5"] as $m | (41*$m.input + 59015*$m.cacheRead + 1301*$m.cacheWrite5m + 4016*$m.cacheWrite1h + 101*$m.output) / 1000000 + 0.0007')
+check "A5: task cost" "$(near "$J" "$T | .cost" "$EXPECT")" "yes"
+check "A5: a task is not charged for a subagent outside its window (one subagent file)" "$(jq -c "[$T | .. | objects | select(has(\"dforge:judge-opus\"))] | length" <<<"$J")" "1"
+
+# --- A25: dispatch counts and fix rounds come from the transcript alone ---
+check "A25: no ledger or review record exists for the fixture" "$(find "$RP/.dforge" -name progress.md | wc -l | tr -d ' '):$(ls "$RP/docs/dforge/reviews" 2>/dev/null | wc -l | tr -d ' ')" "0:0"
+DSP=$(key "$J" "$T" '^dispatch')
+dfam() { jq -c --arg r "$1" '[to_entries[] | select(.key | test($r; "i")) | .value] | add' <<<"$DSP" 2>/dev/null; }
+check "A25: codex executor dispatches (two)" "$(dfam 'codex.*task')" "2"
+check "A25: agy executor dispatches" "$(dfam 'agy.*task')" "1"
+check "A25: codex review dispatches" "$(dfam 'codex.*review')" "1"
+check "A25: agy review dispatches" "$(dfam 'agy.*review')" "1"
+check "A25: review panel dispatches" "$(dfam 'panel')" "1"
+check "A25: run-api-judge dispatches" "$(dfam 'api.?judge')" "1"
+check "A25: Agent calls by agent type" "$(dfam 'impl-sonnet-high')" "1"
+check "A25: fix rounds from task-step rereview calls" "$(key "$J" "$T" 'fix.?rounds')" "1"
+
+# --- A22: lookups that hit a file the task's **Files:** line names ---
+JP=$(cd "$RP" && bash "$REPORT" --plan docs/plans/rp.md --format json 2>/dev/null)
+check "A22: share of lookups on named files (4 of 5)" "$([ "$(has_val "$JP" "$T" 0.8)" = yes ] || [ "$(has_val "$JP" "$T" 80)" = yes ] && echo yes || echo "no: $(key "$JP" "$T" 'share')")" "yes"
+
+# --- A29: outside bucket, cost per completed task, growth, postTokens ---
+check "A29: growth is the sum of positive context changes (10410; the drop is not netted)" "$(key "$J" "$T" 'growth')" "10410"
+check "A29: postTokens and the first request's context after the compaction" "$(has_val "$J" "$T" 5200)/$(has_val "$J" "$T" 11337)" "yes/yes"
+OUT=$(key "$J" '.plans[0]' '^outside')
+OUT_COST=$(jq -n --slurpfile p "$P/reference/api-prices.json" '$p[0].models["claude-opus-5-5"] as $m | (2*$m.input + 2222*$m.cacheRead + 3*$m.output) / 1000000')
+check "A29: an outside-tasks bucket holds the usage after the close" "$(near "$OUT" '.' "$OUT_COST")" "yes"
+SEG=$(jq -c "$T | .cost" <<<"$J")
+check "A29: segment-only cost per completed task, beside the other figure" "$(near "$J" '.plans[0] | del(.tasks, .outside, .byModel, .byRepo)' "$SEG")" "yes"
+WITH=$(jq -n --argjson a "$SEG" --argjson b "$OUT_COST" '$a + $b')
+check "A29: cost per completed task is (segments + outside) / completed" "$(near "$J" '.plans[0] | del(.tasks, .outside, .byModel, .byRepo)' "$WITH")" "yes"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
