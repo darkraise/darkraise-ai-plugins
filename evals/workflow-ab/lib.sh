@@ -41,3 +41,41 @@ wab_run_dir() { # wab_run_dir ARM RUN
 }
 
 wab_plugin_dir() { printf '%s/plugins/%s\n' "$WAB_PLUGINS" "$1"; }
+
+# wab_env RUN_DIR — set WAB_ENV to the nested session's whole environment, for
+# `env -i "${WAB_ENV[@]}" …`: a scratch home, the owner's config directory for
+# the login only, and git and gh with no way to reach a network remote.
+wab_env() {
+  local dir=$1
+  mkdir -p "$dir/gh" "$dir/guard"
+  WAB_ENV=(
+    "PATH=$PATH" "HOME=$dir/home" "TERM=xterm-256color" "LANG=${LANG:-C.UTF-8}"
+    "IS_SANDBOX=1" "CLAUDE_CONFIG_DIR=$WAB_CLAUDE_CONFIG"
+    "GIT_ALLOW_PROTOCOL=file" "GIT_SSH_COMMAND=false" "GIT_TERMINAL_PROMPT=0"
+    "GH_CONFIG_DIR=$dir/gh" "WORKFLOW_GUARD_CLAUDE_DIR=$dir/guard"
+    "GOCACHE=$dir/gocache"
+  )
+}
+
+# Accepting the bypass prompt writes skipDangerousModePermissionPrompt into the
+# owner's settings.json even with user settings sources off. launch records
+# whether the key was there before in WAB_ROOT/settings-repair; this removes a
+# key the harness saw appear, and runs at the start of every command so a
+# killed launch's removal is finished by the next one.
+wab_settings_repair() {
+  local marker="$WAB_ROOT/settings-repair" file before tmp
+  [ -f "$marker" ] || return 0
+  before=$(sed -n 's/^keyBefore=//p' "$marker")
+  file=$(sed -n 's/^file=//p' "$marker")
+  if [ "$before" = absent ] && [ -f "$file" ] \
+    && jq -e 'has("skipDangerousModePermissionPrompt")' < "$file" >/dev/null 2>&1; then
+    tmp=$(mktemp "$file.wab.XXXXXX") || return 1
+    if jq 'del(.skipDangerousModePermissionPrompt)' < "$file" > "$tmp" && chmod --reference="$file" "$tmp"; then
+      mv -f "$tmp" "$file" || { rm -f "$tmp"; return 1; }
+    else
+      rm -f "$tmp"
+      return 1
+    fi
+  fi
+  rm -f "$marker"
+}

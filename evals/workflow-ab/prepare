@@ -26,6 +26,7 @@ wab_check_root
 [ -n "$WAB_SOURCE" ] && [ -n "$WAB_BASE" ] && [ -n "$WAB_PLAN" ] \
   || wab_die 2 "WAB_SOURCE, WAB_BASE and WAB_PLAN are required"
 command -v jq >/dev/null 2>&1 || wab_die 1 "jq is required"
+wab_settings_repair || wab_die 1 "cannot remove skipDangerousModePermissionPrompt left by an earlier launch"
 
 dir=$(wab_run_dir "$arm" "$run")
 [ ! -e "$dir" ] || wab_die 1 "$dir exists: remove it to prepare this run again"

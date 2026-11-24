@@ -177,5 +177,129 @@ prep dforge 5
 check "prepare_source_untouched: prepare exits 0" "$status" "0"
 check "prepare_source_untouched: status, remotes, refs, worktrees, stashes and HEAD unchanged" "$(snapshot)" "$before"
 
+# --- launch: stubs for tmux, claude and the arm's auto-run ---
+cat > "$TMP/tmux" <<EOF
+#!/usr/bin/env bash
+T=$TMP
+printf '%s\n' "\$*" >> "\$T/tmux.log"
+cmd=\$1
+shift
+name=""
+for ((i = 1; i <= \$#; i++)); do
+  case \${!i} in -t|-s) j=\$((i + 1)); name=\${!j#=}; name=\${name%:}; break ;; esac
+done
+case \$cmd in
+  new-session) setsid bash -c "\${!#}" >/dev/null 2>&1 & echo \$! > "\$T/tmux-\$name.pid" ;;
+  has-session) [ -f "\$T/tmux-\$name.pid" ]; exit \$? ;;
+  list-panes) cat "\$T/tmux-\$name.pid" ;;
+  kill-session) p=\$(cat "\$T/tmux-\$name.pid" 2>/dev/null) && kill -TERM -- "-\$p" 2>/dev/null; rm -f "\$T/tmux-\$name.pid" ;;
+  capture-pane) cat "\$T/pane.txt" 2>/dev/null ;;
+esac
+exit 0
+EOF
+cat > "$TMP/claude-rec" <<EOF
+#!/usr/bin/env bash
+T=$TMP
+if [ "\${1:-}" = --version ]; then echo "9.9.9 (Claude Code)"; exit 0; fi
+printf '%s\n' "\$@" > "\$T/claude.argv"
+env > "\$T/claude.env"
+echo \$\$ > "\$T/claude.pid"
+[ -e "\$T/hang" ] && exec sleep 300
+exit 0
+EOF
+STUB_PLUGINS="$TMP/stub-plugins"
+mkdir -p "$STUB_PLUGINS/plugins/dforge/scripts"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> %q\n' "$TMP/auto-run.log" > "$STUB_PLUGINS/plugins/dforge/scripts/auto-run"
+chmod +x "$TMP/tmux" "$TMP/claude-rec"
+export WAB_TMUX="$TMP/tmux"
+launch() { # launch ARM RUN [ARGS...] — out and status, with every stub and WAB_MAX_SECONDS ${MAXS:-3}
+  out=$(WAB_PLUGINS="$STUB_PLUGINS" WAB_CLAUDE="$TMP/claude-rec" WAB_MAX_SECONDS="${MAXS:-3}" bash "$WAB/launch" "$@" 2>&1); status=$?
+}
+envval() { sed -n "s/^$1=//p" "$TMP/claude.env"; }
+empty_dir() { [ -d "$1" ] && [ -z "$(ls -A "$1")" ] && echo empty || echo not-empty; }
+
+# --- launch_environment ---
+run1="$WAB_ROOT/dforge-1"
+GH_TOKEN=x GITHUB_TOKEN=x SSH_AUTH_SOCK=x ANTHROPIC_API_KEY=x OPENAI_API_KEY=x WAB_LEAK=x launch dforge 1
+check "launch_environment: launch exits 0" "$status" "0"
+check "launch_environment: the session environment" \
+  "$(envval IS_SANDBOX)|$(envval HOME)|$(envval CLAUDE_CONFIG_DIR)|$(envval GIT_ALLOW_PROTOCOL)|$(envval GIT_SSH_COMMAND)|$(envval GIT_TERMINAL_PROMPT)|$(envval GH_CONFIG_DIR)" \
+  "1|$run1/home|$TMP/claude-config|file|false|0|$run1/gh"
+check "launch_environment: GH_CONFIG_DIR and WORKFLOW_GUARD_CLAUDE_DIR are empty directories" \
+  "$(empty_dir "$(envval GH_CONFIG_DIR)") $(empty_dir "$(envval WORKFLOW_GUARD_CLAUDE_DIR)")" "empty empty"
+check "launch_environment: no tokens, sockets, API keys or other inherited variables" \
+  "$(grep -cE '^(GH_TOKEN|GITHUB_TOKEN|SSH_AUTH_SOCK|ANTHROPIC_API_KEY|OPENAI_API_KEY|WAB_LEAK)=' "$TMP/claude.env")" "0"
+argv=$(cat "$TMP/claude.argv")
+argafter() { awk -v a="$1" 'p { print; exit } $0 == a { p = 1 }' <<<"$argv"; }
+check "launch_environment: --setting-sources project,local" "$(argafter --setting-sources)" "project,local"
+check "launch_environment: --settings holds only the bypass-prompt key" "$(jq -c . "$(argafter --settings)")" '{"skipDangerousModePermissionPrompt":true}'
+check "launch_environment: --plugin-dir is the arm's plugin" "$(argafter --plugin-dir)" "$STUB_PLUGINS/plugins/dforge"
+check "launch_environment: --dangerously-skip-permissions" "$(grep -cx -- --dangerously-skip-permissions <<<"$argv")" "1"
+sid=$(argafter --session-id)
+check "launch_environment: --session-id is a uuid recorded in sessions" \
+  "$([[ $sid =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] && echo uuid) $(head -n 1 "$run1/sessions")" "uuid $sid"
+check "launch_environment: tmux only touches wab- sessions" \
+  "$(awk '{ for (i = 1; i < NF; i++) if ($i == "-t" || $i == "-s") { n = $(i + 1); sub(/^=/, "", n); if (n !~ /^wab-/) print n } }' "$TMP/tmux.log")" ""
+check "launch_environment: no beat in time: timed-out" "$(cat "$run1/state")" "timed-out"
+
+# --- launch_push_blocked ---
+pushed=$( (. "$WAB/lib.sh"; wab_env "$run1"; cd "$run1/clone" && env -i "${WAB_ENV[@]}" git push ssh://example.invalid/x HEAD) >/dev/null 2>&1; echo $?)
+check "launch_push_blocked: an ssh push fails in the launch environment" "$([ "$pushed" -ne 0 ] && echo refused)" "refused"
+check "launch_push_blocked: the clone has no remote" "$(git -C "$run1/clone" remote)" ""
+
+# --- launch_one_plugin ---
+rm -f "$WAB_ROOT/dforge-7/clone/.claude/settings.local.json" "$TMP/claude.argv"
+launch dforge 7
+check "launch_one_plugin: another enabled plugin refuses the launch" "$status $out" "1 workflow-ab: plugins other than dforge are enabled: other@market"
+check "launch_one_plugin: before claude runs" "$([ -e "$TMP/claude.argv" ] && echo ran || echo not-run)" "not-run"
+
+# --- launch_timeout ---
+: > "$TMP/auto-run.log"
+: > "$TMP/tmux.log"
+touch "$TMP/hang"
+MAXS=2 launch dforge 6
+check "launch_timeout: exits 0" "$status" "0"
+check "launch_timeout: timed-out" "$(cat "$WAB_ROOT/dforge-6/state")" "timed-out"
+check "launch_timeout: stops the bound run" "$(cat "$TMP/auto-run.log")" "--session $(head -n 1 "$WAB_ROOT/dforge-6/sessions") stop"
+check "launch_timeout: kills its own tmux session" "$(grep -c '^kill-session -t =wab-dforge-6$' "$TMP/tmux.log")" "1"
+sleep 1
+check "launch_timeout: the nested session is gone" "$(kill -0 "$(cat "$TMP/claude.pid")" 2>/dev/null && echo alive || echo gone)" "gone"
+
+# --- a launch stopped by a signal ---
+: > "$TMP/auto-run.log"
+prep dforge 11
+(MAXS=60 launch dforge 11) &
+lpid=$!
+for _ in $(seq 50); do [ -f "$TMP/tmux-wab-dforge-11.pid" ] && break; sleep 0.2; done
+kill -TERM $(pgrep -f "evals/workflow-ab/launch dforge 11$")
+wait "$lpid" 2>/dev/null
+check "launch_interrupted: a signalled launch writes stopped and stops its run" \
+  "$(cat "$WAB_ROOT/dforge-11/state") $(grep -c ' stop$' "$TMP/auto-run.log") $([ -f "$TMP/tmux-wab-dforge-11.pid" ] && echo left || echo killed)" "stopped 1 killed"
+
+# --- settings_repair_after_kill ---
+cfg="$TMP/repair-config"
+mkdir -p "$cfg"
+printf '{\n  "model": "opus",\n  "theme": "dark"\n}\n' > "$cfg/settings.json"
+cp "$cfg/settings.json" "$TMP/settings.orig"
+(WAB_CLAUDE_CONFIG="$cfg" MAXS=60 launch dforge 4) &
+lpid=$!
+for _ in $(seq 50); do [ -f "$WAB_ROOT/dforge-4/settings-key" ] && [ -f "$TMP/tmux-wab-dforge-4.pid" ] && break; sleep 0.2; done
+check "settings_repair_after_kill: launch records keyBefore=absent" "$(cat "$WAB_ROOT/dforge-4/settings-key")" "keyBefore=absent"
+jq '. + {"skipDangerousModePermissionPrompt": true}' < "$cfg/settings.json" > "$cfg/settings.json.new" && mv "$cfg/settings.json.new" "$cfg/settings.json"
+kill_tree() { local c; for c in $(pgrep -P "$1"); do kill_tree "$c"; done; kill -KILL "$1" 2>/dev/null; }
+kill_tree "$lpid"
+wait "$lpid" 2>/dev/null
+p=$(cat "$TMP/tmux-wab-dforge-4.pid" 2>/dev/null) && kill -KILL -- "-$p" 2>/dev/null
+rm -f "$TMP/tmux-wab-dforge-4.pid"
+check "settings_repair_after_kill: the killed launch left the key" "$(jq .skipDangerousModePermissionPrompt "$cfg/settings.json")" "true"
+WAB_CLAUDE_CONFIG="$cfg" prep dforge 10
+check "settings_repair_after_kill: the next prepare runs" "$status" "0"
+check "settings_repair_after_kill: and removes the key, every other byte equal" "$(cmp -s "$cfg/settings.json" "$TMP/settings.orig" && echo equal || echo differs)" "equal"
+printf '{\n  "skipDangerousModePermissionPrompt": true,\n  "theme": "dark"\n}\n' > "$cfg/settings.json"
+cp "$cfg/settings.json" "$TMP/settings.orig"
+WAB_CLAUDE_CONFIG="$cfg" MAXS=2 launch dforge 5
+check "settings_repair_after_kill: a key present before is kept" "$(cat "$WAB_ROOT/dforge-5/settings-key") $(cmp -s "$cfg/settings.json" "$TMP/settings.orig" && echo equal || echo differs)" "keyBefore=present equal"
+rm -f "$TMP/hang"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

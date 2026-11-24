@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+# launch ARM RUN [--max-minutes N] — run a prepared replay: a nested Claude
+# Code session in the harness's own tmux session, seeded into an unattended
+# auto run through the arm's own switch path, then watched until the run
+# finishes, stops or runs out of time. Parameters: README.md.
+# Exit: 0 the run ended (state says how); 1 failed; 2 usage.
+set -uo pipefail
+
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+
+usage() { wab_die 2 "usage: launch ARM RUN [--max-minutes N]"; }
+[ $# -ge 2 ] || usage
+arm=$1 run=$2
+shift 2
+max_minutes=720
+while [ $# -gt 0 ]; do
+  case $1 in
+    --max-minutes) [ $# -ge 2 ] && [[ $2 =~ ^[1-9][0-9]*$ ]] || usage; max_minutes=$2; shift 2 ;;
+    *) usage ;;
+  esac
+done
+wab_check_arm "$arm"
+case $run in ''|*/*|.|..) usage ;; esac
+wab_check_root
+command -v jq >/dev/null 2>&1 || wab_die 1 "jq is required"
+wab_settings_repair || wab_die 1 "cannot remove skipDangerousModePermissionPrompt left by an earlier launch"
+
+dir=$(wab_run_dir "$arm" "$run")
+clone="$dir/clone"
+[ -f "$dir/arm.json" ] || wab_die 1 "$dir is not prepared: run prepare $arm $run first"
+if [ -s "$dir/state" ]; then
+  wab_die 1 "$dir was already launched or failed its check (state: $(cat "$dir/state")); prepare a new run"
+fi
+plan=$(jq -r .plan < "$dir/arm.json")
+plugin=$(wab_plugin_dir "$arm")
+max_seconds=${WAB_MAX_SECONDS:-$((max_minutes * 60))}
+[[ $max_seconds =~ ^[1-9][0-9]*$ ]] || wab_die 2 "WAB_MAX_SECONDS must be a whole number of at least 1"
+name="wab-$arm-$run"
+# Session commands take =NAME; pane commands need =NAME: (its active pane).
+pane="=$name:"
+state_file="$clone/.$arm/sdd/auto-run.json"
+
+# --- exactly the arm's plugin: nothing the clone's project settings enable ---
+settings_files=()
+for f in "$clone/.claude/settings.json" "$clone/.claude/settings.local.json"; do
+  [ -f "$f" ] && settings_files+=("$f")
+done
+others=""
+if [ ${#settings_files[@]} -gt 0 ]; then
+  others=$(jq -s -r --arg arm "$arm" '(map(.enabledPlugins // {}) | add // {}) | to_entries[]
+    | select(.value == true and (.key | split("@")[0]) != $arm) | .key' "${settings_files[@]}" \
+    | paste -sd, - | sed 's/,/, /g')
+fi
+[ -z "$others" ] || wab_die 1 "plugins other than $arm are enabled: $others"
+
+# --- the owner's settings.json: was the bypass key there before? ---
+owner_settings="$WAB_CLAUDE_CONFIG/settings.json"
+key_before=absent
+if [ -f "$owner_settings" ] && jq -e 'has("skipDangerousModePermissionPrompt")' < "$owner_settings" >/dev/null 2>&1; then
+  key_before=present
+fi
+mkdir -p "$WAB_ROOT"
+printf 'keyBefore=%s\nfile=%s\n' "$key_before" "$owner_settings" > "$WAB_ROOT/settings-repair"
+printf 'keyBefore=%s\n' "$key_before" > "$dir/settings-key"
+
+printf '{"skipDangerousModePermissionPrompt":true}\n' > "$dir/claude-settings.json"
+sid=$(tr 'A-F' 'a-f' < /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen | tr 'A-F' 'a-f')
+[ -n "$sid" ] || wab_die 1 "cannot make a session id"
+printf '%s\n' "$sid" > "$dir/sessions"
+
+wab_env "$dir"
+{
+  printf '#!/usr/bin/env bash\ncd %q || exit 1\nexec env -i' "$clone"
+  for kv in "${WAB_ENV[@]}"; do printf ' %q' "$kv"; done
+  printf ' %q' "$WAB_CLAUDE" --dangerously-skip-permissions --setting-sources project,local \
+    --settings "$dir/claude-settings.json" --plugin-dir "$plugin" --session-id "$sid"
+  printf '\n'
+} > "$dir/launcher.sh"
+
+tm() { "$WAB_TMUX" "$@"; }
+"$WAB_TMUX" has-session -t "=$name" 2>/dev/null && wab_die 1 "tmux session $name already exists"
+
+pane_pid=""
+kill_tree() { # kill_tree PID — the process and every descendant, children first
+  local child
+  for child in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$child"; done
+  kill -TERM "$1" 2>/dev/null
+}
+outcome="" launched=0
+cleanup() {
+  if [ -n "$pane_pid" ]; then
+    tm kill-session -t "=$name" 2>/dev/null
+    kill_tree "$pane_pid"
+    pane_pid=""
+  fi
+  wab_settings_repair
+}
+# A launch killed by a signal still stops its run and says so in state.
+end_run() { # end_run OUTCOME
+  local bound=$sid
+  if [ "$1" != finished ]; then
+    [ -f "$state_file" ] && bound=$(jq -r --arg s "$sid" '.session // $s' < "$state_file" 2>/dev/null)
+    ar "${bound:-$sid}" stop >> "$dir/out/seed.log" 2>&1
+  fi
+  cleanup
+  printf '%s\n' "$1" > "$dir/state"
+  launched=0
+}
+on_exit() {
+  if [ "$launched" -eq 1 ]; then end_run stopped; else cleanup; fi
+}
+trap on_exit EXIT
+trap 'exit 143' TERM INT HUP
+
+printf 'running\n' > "$dir/state"
+launched=1
+tm new-session -d -s "$name" -x 160 -y 45 "bash $(printf %q "$dir/launcher.sh")" || wab_die 1 "cannot start tmux session $name"
+pane_pid=$(tm list-panes -t "=$name" -F '#{pane_pid}' 2>/dev/null | head -n 1)
+
+ar() { # ar ARGS... — the arm's auto-run, bound to SESSION, in the launch environment
+  local session=$1
+  shift
+  (cd "$clone" && env -i "${WAB_ENV[@]}" bash "$plugin/scripts/auto-run" --session "$session" "$@")
+}
+arm_script() { # arm_script NAME ARGS... — another arm script in the launch environment
+  local script=$1
+  shift
+  (cd "$clone" && env -i "${WAB_ENV[@]}" bash "$plugin/scripts/$script" "$@")
+}
+path_value() { # path_value LABEL FILE — the path a **LABEL:** line names
+  awk -v p="**$1:**" 'index($0, p) == 1 { v = substr($0, length(p) + 1); sub(/^[ \t]+/, "", v); print v; exit }' "$2" \
+    | sed -E 's/^(`([^`]+)`|([^ \t]+)).*/\2\3/'
+}
+seed() {
+  local spec
+  spec=$(path_value Spec "$clone/$plan")
+  {
+    ar "$sid" start --spec "${spec:-$plan}" --isolation in-place \
+      && ar "$sid" phase plan \
+      && ar "$sid" attach --plan "$plan" \
+      && arm_script next-step "$plan" \
+      && ar "$sid" switch
+  } >> "$dir/out/seed.log" 2>&1
+}
+
+beat="$dir/home/.claude/$arm/sessions/cockpit/$sid"
+started=$(date +%s)
+stage=startup trusted=0 bypassed=0
+while :; do
+  now=$(date +%s)
+  if [ $((now - started)) -ge "$max_seconds" ]; then outcome=timed-out; break; fi
+  case $stage in
+    startup)
+      screen=$(tm capture-pane -p -t "$pane" 2>/dev/null)
+      if [ "$trusted" -eq 0 ] && grep -qiE 'trust (the files in )?this folder|Do you trust' <<<"$screen"; then
+        tm send-keys -t "$pane" Down Enter; trusted=1
+      elif [ "$bypassed" -eq 0 ] && grep -qi 'Bypass Permissions mode' <<<"$screen"; then
+        tm send-keys -t "$pane" Down Enter; bypassed=1
+      fi
+      if [ -f "$beat" ]; then
+        if seed; then
+          tm send-keys -t "$pane" -l 'Reply with exactly this one line and nothing else: Auto run: switching'
+          tm send-keys -t "$pane" Enter
+          jq '.seeded = "switch path"' < "$dir/arm.json" > "$dir/arm.json.new" && mv "$dir/arm.json.new" "$dir/arm.json"
+          stage=watch
+        else
+          jq '.seeded = "failed"' < "$dir/arm.json" > "$dir/arm.json.new" && mv "$dir/arm.json.new" "$dir/arm.json"
+          wab_log "seeding through the switch path failed (log: $dir/out/seed.log)"
+          outcome=stopped
+          break
+        fi
+      fi
+      wait_for=2
+      ;;
+    watch)
+      if [ -f "$state_file" ]; then
+        current=$(jq -r '.session // empty' < "$state_file" 2>/dev/null)
+        if [ -n "$current" ] && ! grep -qxF "$current" "$dir/sessions"; then
+          printf '%s\n' "$current" >> "$dir/sessions"
+        fi
+        if [ -n "$(jq -r '.stopped // empty' < "$state_file" 2>/dev/null)" ]; then outcome=stopped; break; fi
+        if [ "$(jq -r '[.active, .phase] | map(tostring) | join(" ")' < "$state_file" 2>/dev/null)" = "false finish" ]; then
+          outcome=finished
+          break
+        fi
+      fi
+      wait_for=30
+      ;;
+  esac
+  left=$((max_seconds - ($(date +%s) - started)))
+  [ "$left" -lt "$wait_for" ] && wait_for=$((left > 0 ? left : 1))
+  sleep "$wait_for"
+done
+
+end_run "$outcome"
+wab_log "$name: $outcome"

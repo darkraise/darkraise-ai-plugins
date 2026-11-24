@@ -46,6 +46,35 @@ creates `<WAB_ROOT>/<ARM>-<RUN>/` and refuses an existing one.
   writes `check-failed` to `state` and exits 1. Run it before any model
   spend on a large plan.
 
+```
+evals/workflow-ab/launch ARM RUN [--max-minutes N]
+```
+
+Runs a prepared replay. Exactly the arm's plugin may load: `launch` exits 1
+when the clone's project settings enable any other. It starts the tmux
+session `wab-<ARM>-<RUN>` (the only tmux session it touches) running Claude
+Code in the clone under `env -i` with:
+
+- `HOME=<run>/home`, `IS_SANDBOX=1`, and `CLAUDE_CONFIG_DIR` set to the
+  owner's config directory for the login only (credentials are never copied);
+- `GIT_ALLOW_PROTOCOL=file`, `GIT_SSH_COMMAND=false`, `GIT_TERMINAL_PROMPT=0`,
+  an empty `GH_CONFIG_DIR`, an empty `WORKFLOW_GUARD_CLAUDE_DIR`, and no
+  token, ssh agent or API key;
+- `--setting-sources project,local`, `--settings` holding
+  `{"skipDangerousModePermissionPrompt":true}`,
+  `--plugin-dir <WAB_PLUGINS>/plugins/<ARM>` and a known `--session-id`.
+
+It accepts the folder-trust prompt, waits for the cockpit's heartbeat, then
+seeds the run through the arm's own switch path (`auto-run start`, `phase
+plan`, `attach --plan`, `next-step`, `switch`, and a first prompt answered
+`Auto run: switching`). Every session id the run binds is appended to
+`sessions`. Every 30 seconds it reads the run's `auto-run.json`: `finished`
+once the run is inactive in its finish phase with no stop reason, `stopped`
+when it has one. At `--max-minutes` (default 720; `WAB_MAX_SECONDS` overrides
+it) it stops the bound run, kills its tmux session and the session's process
+tree, and writes `timed-out`. A launch killed by a signal stops the run the
+same way and writes `stopped`.
+
 ## Parameters (environment)
 
 | Name | Default | Meaning |
@@ -59,20 +88,41 @@ creates `<WAB_ROOT>/<ARM>-<RUN>/` and refuses an existing one.
 | `WAB_DFORGE_CONFIG` | `~/.dforge/config.json` | owner's dforge config (read only) |
 | `WAB_CLAUDE` | `/root/.local/bin/claude` | the `claude` binary |
 | `WAB_TMUX` | `tmux` | the `tmux` binary |
+| `WAB_MAX_SECONDS` | `--max-minutes` × 60 | the launch's wall-clock limit (tests) |
 
 ## Run directory
 
 `<WAB_ROOT>/<ARM>-<RUN>/` holds `clone/`, `home/`, `arm.json`,
 `plan.orig.md` (the plan as the source holds it), `out/` (`plan-lint.txt`,
-the check logs) and, once a check fails or a launch starts, `state`.
+the check logs, `seed.log`), `launcher.sh`, `claude-settings.json`,
+`sessions`, `settings-key` and, once a check fails or a launch starts,
+`state` (`check-failed`, `running`, `finished`, `stopped` or `timed-out`).
 
 ## Writes outside scratch
 
 `prepare` writes nothing outside `WAB_ROOT`; it only reads the source, the
-owner's dforge config and the owner's Claude settings.
+owner's dforge config and the owner's Claude settings. A launch writes the
+nested sessions' transcripts and project entry under the owner's config
+directory. Accepting the bypass prompt would write
+`skipDangerousModePermissionPrompt` into the owner's `settings.json`: `launch`
+records in `WAB_ROOT/settings-repair` whether the key was there before, and
+when it was not, its exit, or the start of the next `prepare` or `launch`
+after a killed one, removes the key with an atomic rewrite that leaves every
+other byte as it was.
 
 ## Tests
 
 `tests/dforge/workflow-ab.test.sh` builds a source from `fixture/`, a
 two-task plan in one wave with `dforge:impl-*` Implementer lines and an
 unqualified `**Items:**` citation. It runs on Linux only.
+
+## Verified
+
+On 2026-11-24, with Claude Code 2.1.331 and both plugins at this
+repository's HEAD, `prepare --check` and `launch --max-minutes 90` ran the
+fixture under each arm, one after the other: both runs were seeded through
+the arm's own switch path (`arm.json` `"seeded": "switch path"`), bound three
+sessions each (seeding, execution, finishing), and ended `finished`: dforge in
+5 minutes, dagents in 9. The owner's `settings.json` hashed the same before
+and after both runs (it already held `skipDangerousModePermissionPrompt`, so
+the repair had nothing to remove), and neither clone gained a remote.
