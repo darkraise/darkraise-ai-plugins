@@ -10,6 +10,8 @@
 # dispatch that does not use the status contract. A blocked agent's next stop is
 # checked as a DONE reply even when it has no `**Status:**` line, unless it says
 # BLOCKED or NEEDS_CONTEXT in its text or in its report's first status line.
+# A report whose first non-empty line begins `# UI proof:` (a UI walkthrough's)
+# passes without those sections.
 # It runs no tests and makes no network call.
 #
 # <state>/impl-stop-gate/<agent_id> holds the block count (line 1), the
@@ -118,6 +120,11 @@ if [ -n "$report" ]; then
     missing+=("the report file \`$report\` does not exist")
   else
     body=$(tr -d '\r' < "$file")
+    # A UI walkthrough's proof report follows its own contract, not this one.
+    if [[ $(awk 'NF { sub(/[ \t]+$/, ""); print; exit }' <<<"$body") == "# UI proof:"* ]]; then
+      if awaiting_counter; then clear_awaiting; fi
+      exit 0
+    fi
     grep -qE '^## Discovered issues \(not fixed\)[[:space:]]*$' <<<"$body" || missing+=("the report lacks \`## Discovered issues (not fixed)\`")
     grep -qE '^## Assumptions made[[:space:]]*$' <<<"$body" || missing+=("the report lacks \`## Assumptions made\`")
     if ! grep -qE '^## Verified[[:space:]]*$' <<<"$body"; then

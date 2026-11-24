@@ -319,5 +319,15 @@ check "the description mentions the gate" "$(jq -r .description "$HOOKS" | grep 
 gate "$(jq -c --arg c "$REPO" '.cwd = $c' "$FIXTURE")"
 check "the observed input drives the gate: it acts and finds no report" "$CODE|$(has "$ERR" 'does not exist')" "2|1"
 
+# --- ui_proof_exempt: a UI walkthrough's proof report carries no ## Verdict ---
+printf '\n# UI proof: checkout flow\n\nScreenshots: a.png\n' > "$TMP/ui-proof.md"
+gate "$(input dagents:impl-sonnet-high u-1 "**Status:** DONE
+Report: $TMP/ui-proof.md")"
+check "ui_proof_exempt: a report opening # UI proof: passes" "$CODE|$OUT|$ERR" "0||"
+printf '# Notes\n\nScreenshots: a.png\n' > "$TMP/notes.md"
+gate "$(input dagents:impl-sonnet-high u-2 "**Status:** DONE
+Report: $TMP/notes.md")"
+check "ui_proof_exempt: a report opening # Notes is still refused" "$CODE" "2"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

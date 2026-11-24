@@ -4,8 +4,9 @@
 # one stderr line, which the subagent receives as its next instruction) when
 # the reply's last `Report: <path>` line names a path that is not absolute, a
 # file that does not exist, or a file whose first non-empty line is not
-# `## Verdict` (the Acceptance QA report). Every other stop passes: other agent
-# types, and any reply with no `Report:` line, such as a UI walkthrough's.
+# `## Verdict` (the Acceptance QA report) or `# UI proof:` (a UI walkthrough's
+# proof report). Every other stop passes: other agent types, and any reply
+# with no `Report:` line.
 # It runs no tests and makes no network call.
 #
 # <state>/impl-stop-gate/<agent_id> holds the block count (line 1), the
@@ -100,7 +101,8 @@ if [ "${#missing[@]}" -eq 0 ]; then
     missing+=("the report file \`$report\` does not exist")
   else
     first=$(tr -d '\r' < "$file" | awk 'NF { sub(/[ \t]+$/, ""); print; exit }')
-    [ "$first" = "## Verdict" ] || missing+=("the report \`$report\` does not open with \`## Verdict\`")
+    # A UI walkthrough's proof report carries no verdict.
+    [[ $first == "# UI proof:"* ]] || [ "$first" = "## Verdict" ] || missing+=("the report \`$report\` does not open with \`## Verdict\`")
   fi
 fi
 if [ "${#missing[@]}" -eq 0 ]; then

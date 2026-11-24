@@ -752,7 +752,7 @@ parse_report() {
     }
     sect == "Findings" && /^- / {
       if (tolower($0) ~ /^- none\.?[ \t]*$/) next
-      if ($0 !~ /^- \[(Critical|Important|Minor)\] [^ ].*:[0-9]+(-[0-9]+)? (—|-) .+$/) err("line " NR " is not a finding line: " $0)
+      if ($0 !~ /^- \[(Critical|Important|Minor)\] [^ ].*:[0-9]+(-[0-9]+)?(\([^() ]+\))? (—|-) .+$/) err("line " NR " is not a finding line: " $0)
       rest = substr($0, 4); sev = rest; sub(/\].*$/, "", sev)
       rest = substr(rest, length(sev) + 3)
       # A batch review prefixed findings with the task; one task has no prefix.
@@ -761,8 +761,10 @@ parse_report() {
       if (sev != "Minor") serious[task]++
       # The path may hold spaces, so the location ends at the first
       # ":<line> — " rather than at the first space.
-      match(rest, /:[0-9]+(-[0-9]+)? (—|-) /)
+      match(rest, /:[0-9]+(-[0-9]+)?(\([^() ]+\))? (—|-) /)
       loc = substr(rest, 1, RSTART + RLENGTH - 1); sub(/ (—|-) $/, "", loc)
+      # A slip such as ":71-76(diff)" names the range before its parenthetical.
+      sub(/\([^() ]+\)$/, "", loc)
       one = substr(rest, RSTART + RLENGTH)
       match(loc, /:[0-9]+(-[0-9]+)?$/)
       out[++no] = "F\t" sev "\t" task "\t" substr(loc, 1, RSTART - 1) "\t" substr(loc, RSTART + 1) "\t" one

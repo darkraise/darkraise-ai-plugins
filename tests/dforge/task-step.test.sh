@@ -976,6 +976,25 @@ rr_run verdict docs/plan.md 99
 check "verdict: no such task exits 3" "$rr_rc" "3"
 rr_run verdict docs/codex-plan.md 1
 check "verdict: a Host: codex plan exits 2" "$rr_rc" "2"
+# --- verdict_line_ref_parenthetical: a judge's slip after the line range (A15) ---
+rr_reset
+vd_report "$RR_WS/task-1-review-report.md" <<'REPORT'
+|## Verdict
+|spec: pass
+|quality: changes
+|scores: spec 15 / scope 15 / verification 12 / quality 9
+|
+|## Findings
+|- [Important] plugins/x.sh:71-76(diff) — off by one
+|- [Minor] plugins/y.sh:3(diff) — naming
+|
+|## Cannot verify
+|- none
+REPORT
+rr_run verdict docs/plan.md 1
+check "verdict_line_ref_parenthetical: exit 0" "$rr_rc" "0"
+check "verdict_line_ref_parenthetical: the finding names lines 71-76" "$(grep -E '^Important ' <<<"$rr_out")" "Important 1 plugins/x.sh:71-76 — off by one"
+check "verdict_line_ref_parenthetical: the fix file bullet" "$(first_block "$RR_WS/task-1-fix-1.md")" "- plugins/x.sh:71-76: off by one;"
 fi
 
 # A step-state write that fails stops the step instead of passing silently.
@@ -993,5 +1012,6 @@ if want start; then
   check "review: a review head that cannot be recorded fails" "$rc:$(grep -c 'cannot update' "$TMP/err")" "2:1"
   rmdir "$WS/task-5-step.json.tmp"
 fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
