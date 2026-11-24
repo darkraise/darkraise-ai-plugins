@@ -115,9 +115,10 @@ named() { # named DIR — every path under DIR with dforge in its name
 }
 # Git Bash spells $TMP as /tmp/…, C:/…, C:\… or with the 8.3 user name, and
 # the files hold several of those, so a world's path is matched by $TMP's leaf.
+# A usage marker row carries the UTC time of its mark.
 sums() { # sums DIR — a checksum per file under DIR
   local leaf=${TMP##*/}
-  ( cd "$1" && find . -type f -not -path './.git/*' | sort | while IFS= read -r f; do printf '%s %s\n' "$(sed -E "s#[^[:space:]'\`]*${leaf//./\\.}[/\\][a-z]*#@W#g; s#at=[0-9]*#at=N#" "$f" | cksum)" "$f"; done )
+  ( cd "$1" && find . -type f -not -path './.git/*' | sort | while IFS= read -r f; do printf '%s %s\n' "$(sed -E "s#[^[:space:]'\`]*${leaf//./\\.}[/\\][a-z]*#@W#g; s#at=[0-9]*#at=N#; s#[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z#TIME#g" "$f" | cksum)" "$f"; done )
 }
 
 # --- A7: dagents reads and writes none of dforge's names ---------------------
