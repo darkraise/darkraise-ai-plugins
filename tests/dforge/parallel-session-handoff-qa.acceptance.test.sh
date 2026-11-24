@@ -414,8 +414,9 @@ recomputed_next=$(grep -m1 '^\*\*Next:\*\*' <<<"$OUT")
 audit $S1 "$TOP"
 hs=$(section "$OUT" "Handoff")
 check "A10: repo-audit exits 0" "$RC" "0"
-for pair in "$HD/$PA.md:$PA:plan" "$HD/D.md:D:draft" "$W/$STATE/handoff/adhoc-$(id8 $S2).md:adhoc-$(id8 $S2):adhoc"; do
-  p=${pair%%:*}; rest=${pair#*:}; k=${rest%%:*}; kind=${rest#*:}
+# | separates the fields: a Windows path holds a drive letter's colon.
+for pair in "$HD/$PA.md|$PA|plan" "$HD/D.md|D|draft" "$W/$STATE/handoff/adhoc-$(id8 $S2).md|adhoc-$(id8 $S2)|adhoc"; do
+  p=${pair%%|*}; rest=${pair#*|}; k=${rest%%|*}; kind=${rest#*|}
   line=$(grep -F -- "$p" <<<"$hs" | head -n 1)
   has "A10: the audit lists $p" "$hs" "$p"
   has "A10: $k's line names its key" "$line" "$k"
